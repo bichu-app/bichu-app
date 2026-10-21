@@ -9,9 +9,11 @@
 //       nenhuma requisição sai. O servidor instalado responde 400 abaixo de
 //       três caracteres, e descobrir isso por faixa vermelha no meio de alguém
 //       escrevendo um nome é o produto discutindo com quem digita;
-//   (c) **o resultado não traz foto nem identificador interno** — emenda 5 item
-//       2 do ADR-0010 e item 6. Medida de dois lados: o que a tela desenha, e o
-//       que o modelo sabe ler;
+//   (c) **o resultado TRAZ foto, e nada além dela** — isca INVERTIDA em
+//       21/10/2026 por decisão do cliente (*"o resultado tras foto sim, para
+//       identificar usuarios com nomes parecidos."*). Ela media a ausência;
+//       passa a medir a presença, com contrapeso de que nenhum quinto campo
+//       veio junto e nenhum identificador interno entrou (ADR-0010 item 6);
 //   (d) **não há gatilho de filtro nesta aba** — cidade e bairro a emenda 2
 //       recusa, contagem de pets viraria critério de busca, e sobra ordenar por
 //       nome, que é opção única;
@@ -34,6 +36,7 @@ import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -48,17 +51,23 @@ http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
   );
 }
 
+/// A URL da derivada `thumb`, como o servidor a monta.
+const String _urlDaFoto = 'https://midia.exemplo.test/u/ab/cdef/thumb.jpg';
+
 Map<String, dynamic> _pessoa({
   required String apelido,
   String? nome,
   int pets = 2,
   int conexoes = 38,
+  /// Nulo reproduz quem não tem foto pronta -- o caso da inicial no círculo.
+  String? foto = _urlDaFoto,
 }) {
   return <String, dynamic>{
     'handle': apelido,
     'display_name': nome,
     'pets_count': pets,
     'connections_count': conexoes,
+    'photo_icon_url': foto,
   };
 }
 
@@ -142,6 +151,21 @@ Future<void> _montar(
   );
   await tester.pumpAndSettle();
 }
+
+/// A largura que o nome recebe no cartão, em 320 dp **nesta bancada**.
+///
+/// **MEDIDO em 21/10/2026: 218,0 dp**, e travado. A conta fecha: 320 de tela,
+/// menos `BichuEspaco.e4` de cada lado do cartão (32), menos o círculo de 56,
+/// menos `BichuEspaco.e3` de respiro (12) — sobram 220 de restrição, e o
+/// parágrafo recebe 218.
+///
+/// **O número é DESTA bancada, e não da aba montada**: aqui o cartão é filho
+/// direto de um `Scaffold`, e dentro da seção `Rede` ele ainda perde a margem
+/// de corpo de `BichuLayout.margemCelular` em cada lado. O que o caso mede não
+/// é o valor absoluto — é que ele é **o mesmo com foto e sem foto**, porque o
+/// círculo tem 56 dp nos dois casos. O absoluto está travado por cima disso,
+/// para acusar o dia em que alguém mexer no `Row` do cartão.
+const double _larguraDoNomeEm320 = 218;
 
 /// Quantas vezes a busca de pessoas foi perguntada.
 int get _buscas =>
@@ -350,17 +374,27 @@ void main() {
     );
   });
 
-  group('ISCA (c) -- o resultado nao traz foto nem identificador interno', () {
-    testWidgets('a tela desenha a inicial no circulo, e nenhuma imagem', (
+  // A ISCA (c) FOI **INVERTIDA** EM 21/10/2026, E NÃO APAGADA.
+  //
+  // O QUE ELA DIZIA: *"a tela desenha a inicial no círculo, e nenhuma imagem"*,
+  // e o motivo escrito era a emenda 5 item 2 do ADR-0010 — *"a foto não sai
+  // para quem não é conexão aceita"*.
+  //
+  // **O cliente emendou a própria decisão**, literal: *"o resultado tras foto
+  // sim, para identificar usuarios com nomes parecidos."* Com só o nome, duas
+  // `Maria Silva` são indistinguíveis, e numa busca cujo propósito é achar uma
+  // pessoa específica que você conhece isso transforma a lista em adivinhação.
+  //
+  // **Apagar a isca teria deixado a superfície sem proteção nenhuma**, e é
+  // assim que o quinto campo entra sem ninguém notar. Ela guardava um LIMITE; o
+  // limite mudou, e agora ela guarda o limite novo: a foto aparece, **e nada
+  // além dela**.
+  group('ISCA (c) -- o resultado TRAZ foto, e NADA alem dela', () {
+    testWidgets('a foto aparece no circulo, e e a derivada do servidor', (
       tester,
     ) async {
-      // PARA DESLIGAR E VER REPROVAR: em
-      // `CartaoDePessoaEncontrada._circuloDaInicial`, troque o `Text` da
-      // inicial por `ImagemDaRede(url: 'https://exemplo.test/foto.jpg')`.
-      //
-      // A emenda 5 item 2 do ADR-0010 diz que a foto não sai para quem não é
-      // conexão aceita, e resultado de busca é por construção lista de
-      // não-conexões.
+      // PARA DESLIGAR E VER REPROVAR: em `CartaoDePessoaEncontrada._avatar`,
+      // devolva sempre `_circuloDaInicial(...)`.
       await _montar(
         tester,
         resultados: <Map<String, dynamic>>[
@@ -372,37 +406,78 @@ void main() {
       await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
 
+      final imagens = tester.widgetList<ImagemDaRede>(
+        find.byType(ImagemDaRede),
+      );
+      expect(
+        imagens,
+        hasLength(1),
+        reason: 'REPROVA: o resultado não desenha a foto da pessoa. O cliente '
+            'pediu o rosto para desempatar nomes parecidos.',
+      );
+      expect(
+        imagens.first.url,
+        _urlDaFoto,
+        reason: 'REPROVA: a imagem desenhada não é a URL que o servidor '
+            'mandou. O app não monta endereço de mídia.',
+      );
+      expect(
+        imagens.first.descricao,
+        isNull,
+        reason: 'REPROVA: o avatar não é decorativo. O nome é lido ao lado, e '
+            'um leitor de tela anunciaria "foto de Marina, Marina".',
+      );
+      expect(
+        find.text('M'),
+        findsNothing,
+        reason: 'REPROVA: a inicial foi desenhada junto com a foto. É uma ou a '
+            'outra, no mesmo círculo.',
+      );
+    });
+
+    testWidgets('CONTRAPESO: sem foto pronta, a inicial no circulo volta', (
+      tester,
+    ) async {
+      // A inicial **não foi apagada** quando a foto entrou: foto em
+      // `processing` ou `rejected` não sai do servidor, e o círculo vazio
+      // pareceria imagem que não carregou. É o recurso da emenda 3.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina', foto: null),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
       expect(
         find.byType(ImagemDaRede),
         findsNothing,
-        reason: 'REPROVA: há imagem de rede no resultado de busca. A foto não '
-            'sai para quem não é conexão aceita (emenda 5, item 2).',
-      );
-      expect(
-        find.byType(Image),
-        findsNothing,
-        reason: 'REPROVA: há imagem no resultado de busca.',
+        reason: 'REPROVA: a tela tentou desenhar imagem para quem não tem foto '
+            'pronta.',
       );
       expect(
         find.text('M'),
         findsOneWidget,
-        reason: 'REPROVA: a inicial no círculo não foi desenhada. Ela é o '
-            'recurso que a emenda 3 manda usar com quem não é conexão.',
+        reason: 'REPROVA: a inicial no círculo não voltou. Círculo vazio parece '
+            'imagem que não carregou.',
       );
     });
 
-    test('o modelo nao sabe ler foto nem referencia publica', () {
+    test('o modelo le a foto, e NADA alem dos cinco campos', () {
       // ISCA DO LADO DO MODELO, e ela é a que sobrevive a um redesenho da
-      // tela: o contrato não tem campo de foto aqui, nem nulo, e um campo nulo
-      // seria pior que a ausência porque convidaria alguém a preenchê-lo.
+      // tela. Ela mede as duas metades da emenda: a foto entra, e o que não
+      // entrou continua fora.
       final pessoa = PessoaEncontrada.doJson(<String, dynamic>{
         'handle': 'marina-vet',
         'display_name': 'Marina',
         'pets_count': 2,
         'connections_count': 38,
-        // O servidor NÃO manda nada disto. Estão aqui para provar que, se um
+        'photo_icon_url': _urlDaFoto,
+        // O servidor NÃO manda estes dois. Estão aqui para provar que, se um
         // dia mandasse, o app não os leria.
-        'photo_icon_url': 'https://exemplo.test/foto.jpg',
         'public_ref': 'ABCDEFGHIJKLMNOPQRSTUV',
         'id': '0193f2d4-0000-7000-8000-000000000000',
       });
@@ -411,24 +486,92 @@ void main() {
       expect(pessoa.petsCount, 2);
       expect(pessoa.connectionsCount, 38);
       expect(
-        pessoa.inicial,
-        'M',
-        reason: 'REPROVA: a inicial não sai do nome de leitura.',
+        pessoa.photoIconUrl,
+        _urlDaFoto,
+        reason: 'REPROVA: o modelo não lê a foto que o contrato passou a '
+            'mandar.',
       );
-      // Não há getter de foto nem de referência pública para conferir: a
-      // ausência é a prova. O que este caso trava é a adição de um — quem
-      // acrescentar `photoIconUrl` a `PessoaEncontrada` precisa apagar esta
-      // afirmação, e apagá-la é um ato deliberado no diff.
+      // Não há getter de referência pública nem de identificador para
+      // conferir: a ausência é a prova. O que este caso trava é a adição de um
+      // — quem acrescentar `publicRef` a `PessoaEncontrada` precisa apagar
+      // esta afirmação, e apagá-la é um ato deliberado no diff.
       expect(
         PessoaEncontrada(
           handle: 'x-apelido',
           displayName: null,
           petsCount: 0,
           connectionsCount: 0,
+          photoIconUrl: null,
         ).inicial,
         'X',
-        reason: 'REPROVA: quem não tem nome ficou sem letra. A queda é o '
-            'apelido, e o `@` não é letra de ninguém.',
+        reason: 'REPROVA: quem não tem nome nem foto ficou sem letra. A queda é '
+            'o apelido, e o `@` não é letra de ninguém.',
+      );
+    });
+
+    testWidgets('o nome tem a MESMA largura com foto e sem foto', (
+      tester,
+    ) async {
+      // **A MEDIÇÃO QUE O DESENHO PEDIA.** O avatar come espaço do nome, e o
+      // nome é o que a pessoa está lendo — então a pergunta é se o nome passou
+      // a cortar onde cabia.
+      //
+      // **A resposta é não, e o motivo é estrutural:** o círculo já existia com
+      // 56 dp porque a inicial morava nele. A foto substitui o CONTEÚDO do
+      // círculo, não a geometria. Este caso trava isso: a largura que o
+      // parágrafo do nome recebe é a mesma nos dois casos, em 320 dp.
+      //
+      // Se um dia precisar encolher, **o avatar encolhe e o nome não**.
+      tester.view.physicalSize = const Size(960, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      final larguras = <bool, double>{};
+      // **UM TERMO DIFERENTE POR RODADA, e isso não é capricho:** `pumpWidget`
+      // com o mesmo tipo de widget reaproveita o `State`, então o termo
+      // APLICADO sobrevive à segunda montagem -- a lupa diria "a busca já é
+      // esta" e não aplicaria. É a mesma pegadinha que o caso das duas
+      // plaquinhas deste repositório já pagou.
+      final termos = <bool, String>{true: 'maria', false: 'silva'};
+      for (final comFoto in <bool>[true, false]) {
+        await _montar(
+          tester,
+          resultados: <Map<String, dynamic>>[
+            _pessoa(
+              apelido: 'maria-silva',
+              nome: 'Maria Silva',
+              foto: comFoto ? _urlDaFoto : null,
+            ),
+          ],
+        );
+        await tester.enterText(
+          find.byType(TextField).first,
+          termos[comFoto]!,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+
+        final paragrafo = tester.renderObject<RenderParagraph>(
+          find.text('Maria Silva'),
+        );
+        larguras[comFoto] = paragrafo.constraints.maxWidth;
+      }
+
+      expect(
+        larguras[true],
+        closeTo(larguras[false]!, 0.01),
+        reason: 'REPROVA: o nome recebeu larguras diferentes com foto '
+            '(${larguras[true]} dp) e sem foto (${larguras[false]} dp). O '
+            'círculo tem 56 dp nos dois casos, e a foto troca o conteúdo dele '
+            'e não a geometria -- se a largura mudou, alguém mexeu no `Row`.',
+      );
+      expect(
+        larguras[true],
+        closeTo(_larguraDoNomeEm320, 0.5),
+        reason: 'REPROVA: o nome recebe ${larguras[true]} dp em 320 dp, e a '
+            'bancada mediu $_larguraDoNomeEm320. O que mudou foi a geometria '
+            'do cartão, e o número aqui é o que trava isso.',
       );
     });
   });

@@ -93,6 +93,7 @@ interface LinhaDaBusca {
   readonly handle: string;
   readonly display_name: string | null;
   readonly pets_count: string | number;
+  readonly photo_key: string | null;
   readonly connections_count: string | number;
   readonly total: string | number;
 }
@@ -144,6 +145,28 @@ export function construtorDaBuscaDePessoas(
            AND conta_habilitada(uc.requester_user_id)
            AND conta_habilitada(uc.addressee_user_id))`.as('connections_count'),
     )
+    // A FOTO, derivada `thumb` (cliente, 21/10/2026).
+    //
+    // **`thumb_key` e nao `public_key`**: `public_key` e a `card` de 512 px, e
+    // ela custa cerca de 51 KB por rosto -- numa pagina de vinte resultados
+    // isso e rede e memoria de uma lista que a pessoa rola. Mesma escolha, e
+    // pelo mesmo motivo, da foto do participante da conversa.
+    //
+    // **`status = 'ready'` E `thumb_key IS NOT NULL`**: foto em `processing`
+    // nao tem derivada, e foto `rejected` nao sai para ninguem. O predicado
+    // mora aqui e nao na borda -- a borda nao tem como saber a diferenca entre
+    // "nao ha foto" e "a foto nao esta pronta", nem precisa.
+    //
+    // **`user_photo` e o proposito**: `catalog_images` serve foto de pet, item
+    // de loja e foto de pessoa, e sem o proposito a subconsulta devolveria a
+    // imagem errada no dia em que uma conta tivesse as duas.
+    .select(
+      sql<string | null>`(SELECT foto.thumb_key FROM catalog_images foto
+         WHERE foto.id = u.photo_image_id
+           AND foto.purpose = 'user_photo'
+           AND foto.status = 'ready'
+           AND foto.thumb_key IS NOT NULL)`.as('photo_key'),
+    )
     .select(sql<number>`count(*) OVER ()`.as('total'))
     // O casamento: nome OU apelido, as duas pela MESMA normalização do índice.
     .where(
@@ -176,6 +199,7 @@ function comoPessoa(linha: LinhaDaBusca): PessoaEncontrada {
     // deste repositorio pega**, porque nenhum confere o CORPO da resposta.
     petsCount: Number(linha.pets_count),
     connectionsCount: Number(linha.connections_count),
+    photoKey: linha.photo_key,
   };
 }
 

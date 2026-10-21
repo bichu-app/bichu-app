@@ -386,7 +386,7 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     }
   });
 
-  void it('ISCA -- `photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao DOIS', () => {
+  void it('ISCA -- `photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao TRES', () => {
     // A varredura e sobre o CONTRATO, e nao sobre esta fatia: ela reprova
     // qualquer resposta nova que ganhe o campo, de qualquer frente.
     //
@@ -404,13 +404,25 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
         // Emenda 3 (19/10/2026): a conversa mediada. Objeto INLINE -- e e por
         // isso que esta varredura desce a arvore.
         'components.schemas.Conversation.properties.participants.items',
+        // **O TERCEIRO (21/10/2026), e ele e o unico que NAO exige conexao
+        // aceita.** O cliente emendou a emenda 5 item 2: *"o resultado tras
+        // foto sim, para identificar usuarios com nomes parecidos."* Os tres
+        // freios que sustentam isso -- conta obrigatoria, piso de tres
+        // caracteres, campo vazio nao lista ninguem -- estao escritos no
+        // `$description` do campo e no portao irmao
+        // (`foto-de-pessoa-nao-sai-em-publico.test.ts`).
+        //
+        // **Ele nao abre caminho para a VITRINE.** `showcase` continua presente
+        // so quando `connection_state` e `connected`, e os casos desta fatia
+        // que medem aquilo nao mudaram de linha.
+        'components.schemas.PersonSearchResult',
         // Emenda 5 (20/10/2026): o autor de uma publicacao, e com ele o autor
         // de um COMENTARIO -- que reusa o mesmo schema de proposito.
         'components.schemas.PublicationAuthor',
       ].sort(),
       'a foto de pessoa ganhou hospedeiro novo, ou perdeu um. O ADR-0010 a limita as ' +
-        'superficies das emendas 3 e 5, por nome, e abrir uma terceira e decisao do ' +
-        'cliente -- nao de quem implementa',
+        'superficies das emendas 3 e 5 e a emenda de 21/10/2026 (o resultado da busca), ' +
+        'por nome, e abrir uma quarta e decisao do cliente -- nao de quem implementa',
     );
   });
 

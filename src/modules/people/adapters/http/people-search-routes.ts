@@ -47,7 +47,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
-import type { UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { BuscaDePessoas } from '../../application/busca-de-pessoas.js';
 import type { PessoaEncontrada } from '../../ports/busca-de-pessoas-repository.js';
 
@@ -100,6 +100,8 @@ export interface Autenticador {
 export interface DependenciasDasRotasDeBusca {
   readonly busca: BuscaDePessoas;
   readonly autenticador: Autenticador;
+  /** A raiz publica da midia, de onde a URL da foto e montada. */
+  readonly baseDeMidia: AbsoluteUrl;
 }
 
 interface QueryDaBusca {
@@ -137,9 +139,13 @@ async function chamador(
 /**
  * Uma pessoa como `PersonSearchResult` a declara: **quatro campos**.
  *
- * **Sem `photo`**, e a ausência tem dono: a emenda 5 item 2 do ADR-0010 nega o
- * rosto a quem **não** é conexão aceita, e resultado de busca é por construção
- * lista de não-conexões. **Sem `public_ref`**: ele existe em `PersonProfile`
+ * **COM `photo_icon_url` desde 21/10/2026**, e este parágrafo dizia o
+ * contrário: ele explicava a ausência pela emenda 5 item 2 do ADR-0010. **O
+ * cliente emendou a própria decisão** — *"o resultado tras foto sim, para
+ * identificar usuarios com nomes parecidos."* A derivada é a `thumb`, a menor
+ * que existe, e os três freios que tornam isso defensável (conta obrigatória,
+ * piso de três caracteres, campo vazio não lista ninguém) estão no cabeçalho da
+ * porta. **Sem `public_ref`**: ele existe em `PersonProfile`
  * porque aquela tela hospeda denunciar e bloquear, e esta não hospeda nenhuma
  * das três. **Sem `connection_state`**: o estado é por par, e vinte estados por
  * requisição é o material de que uma lista de conexões é feita do lado de fora.
@@ -149,12 +155,26 @@ async function chamador(
  * repositório confere o CORPO da resposta, então a única forma de medir o
  * conjunto de chaves em suíte é chamar a projeção.
  */
-export function comoRespostaDaPessoa(pessoa: PessoaEncontrada): Record<string, unknown> {
+export function comoRespostaDaPessoa(
+  pessoa: PessoaEncontrada,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
   return {
     handle: pessoa.handle,
     display_name: pessoa.displayName,
     pets_count: pessoa.petsCount,
     connections_count: pessoa.connectionsCount,
+    // A URL e montada AQUI, na borda, com o dominio de midia do ambiente -- o
+    // banco guarda chave de objeto e nunca endereco (§11.1 proibicao 9). Mesma
+    // divisao da conversa mediada e do autor de publicacao.
+    //
+    // **A chave vem SEMPRE, com nulo quando nao ha foto pronta.** Chave que
+    // aparece e desaparece faria o cliente distinguir ausencia de nulo sem que a
+    // diferenca significasse algo.
+    photo_icon_url:
+      pessoa.photoKey === null
+        ? null
+        : `${baseDeMidia.replace(/\/$/, '')}/${pessoa.photoKey}`,
   };
 }
 
@@ -187,7 +207,9 @@ export function registrarRotasDeBuscaDePessoas(
         .status(200)
         .header('Cache-Control', SEM_CACHE)
         .send({
-          items: pagina.itens.map(comoRespostaDaPessoa),
+          items: pagina.itens.map((pessoa) =>
+            comoRespostaDaPessoa(pessoa, deps.baseDeMidia),
+          ),
           total: pagina.total,
           page,
           limit,

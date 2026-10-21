@@ -22,9 +22,10 @@
  * | contagem de conexões | emenda 2, o "sinal de confiança" do plano 4-B |
  * | apelido | é a referência pública da pessoa, e é o endereço do perfil |
  *
+ * | foto (`thumb`) | **emenda do cliente de 21/10/2026**, que inverte a emenda 5 item 2: *"o resultado tras foto sim, para identificar usuarios com nomes parecidos."* Ver abaixo |
+ *
  * | **Não** sai | Por quê |
  * |---|---|
- * | **foto** | emenda 5 item 2: a foto não sai para quem **não** é conexão aceita — e resultado de busca é, por construção, lista de não-conexões |
  * | `public_ref` | ele existe em `PersonProfile` porque **aquela tela** hospeda denunciar e bloquear (as três operações são endereçadas por `userRef`). A busca não hospeda nenhuma das três, então aqui ele não tem dono — e referência pública sem uso é superfície de graça |
  * | qualquer UUID | ADR-0010 item 6 |
  * | cidade, bairro, telefone, e-mail, nascimento | o cliente não mencionou nenhum em 19/10 nem em 20/10, e os itens 1, 3 e 4 do ADR-0010 |
@@ -39,13 +40,28 @@
  * toca um resultado abre o perfil, e é lá que o estado aparece, uma pessoa por
  * vez.
  *
- * ## A foto, e por que ela não é um `undefined` a preencher depois
+ * ## A FOTO ENTROU EM 21/10/2026, E ESTE CABEÇALHO DIZIA O CONTRÁRIO
  *
- * Não há campo de foto em [PessoaEncontrada], e não é omissão: a emenda 5 item 2
- * do ADR-0010 nega o rosto a quem não é conexão aceita. Resultado de busca é
- * lista de quem quem busca **não** conhece — se conhecesse, não precisaria
- * buscar. Um campo nulo aqui seria pior que a ausência, porque convidaria
- * alguém a preenchê-lo no dia em que a busca passasse a casar conexões também.
+ * O parágrafo que estava aqui explicava a **ausência** de campo de foto pela
+ * emenda 5 item 2 do ADR-0010 — *"a foto não sai para quem não é conexão
+ * aceita"*. **O cliente emendou a própria decisão**, literal: *"o resultado tras
+ * foto sim, para identificar usuarios com nomes parecidos."*
+ *
+ * O motivo é o desenho da tela: com só o nome, duas `Maria Silva` são
+ * indistinguíveis, e numa busca cujo propósito é achar **uma pessoa específica
+ * que você conhece** tirar a foto transforma a lista em adivinhação.
+ *
+ * **Os TRÊS FREIOS que tornam isso defensável** — e eles são a diferença entre
+ * busca e catálogo de rostos — são: a busca **exige conta**, há **piso de três
+ * caracteres**, e **`q` vazio nunca lista ninguém**. Quem vê a foto já sabe
+ * aproximadamente quem procura; ninguém folheia.
+ *
+ * **A derivada é a `thumb`, a menor que existe.** A `card` custa cerca de 51 KB
+ * por rosto, e numa página de vinte isso é rede e memória de uma lista que a
+ * pessoa rola.
+ *
+ * **O que NÃO entrou junto:** nada. Quatro campos passaram a cinco, e
+ * `public_ref`, `connection_state` e qualquer UUID continuam fora.
  *
  * ## O que esta porta NÃO oferece, e não pode ganhar
  *
@@ -69,6 +85,16 @@ import type { UserId } from '../../../shared/types/brands.js';
  * estado da conexão para alguém copiar sem **acrescentar campo neste arquivo**.
  */
 export interface PessoaEncontrada {
+  /**
+   * A chave de objeto da derivada **`thumb`** da foto, ou `null` quando não há
+   * foto pronta.
+   *
+   * **Chave, e não URL.** O banco guarda chave de objeto e a borda monta o
+   * endereço com a base de mídia do ambiente — a mesma divisão da conversa
+   * mediada e do autor de publicação. Guardar URL aqui amarraria o resultado ao
+   * domínio do dia.
+   */
+  readonly photoKey: string | null;
   /** O apelido. Referência pública, e o endereço do perfil. */
   readonly handle: string;
   /**

@@ -11,25 +11,62 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
 
 /// Um resultado da busca de pessoas, com a ação de pedir conexão e **os
 /// quatro estados da relação**.
 ///
-/// ## O CÍRCULO É A INICIAL, E NÃO HÁ FOTO — ISTO É LIMITE, NÃO ESCOLHA
+/// ## O CÍRCULO LEVA A FOTO, E ISSO EMENDA A EMENDA 5 ITEM 2 (21/10/2026)
 ///
-/// A **emenda 5 item 2 do ADR-0010** diz, com estas palavras, que a foto não
-/// sai para quem não é conexão aceita, e que o perfil de não-conexão *"continua
-/// com nome, contagem de pets e contagem de conexões, sem foto"*. Resultado de
-/// busca é **por construção** uma lista de não-conexões: se quem busca
-/// conhecesse a pessoa, não precisaria buscar.
+/// **Este bloco dizia o contrário, e a inversão é do cliente.** Até 21/10/2026
+/// o círculo era só a inicial, pela emenda 5 item 2 do ADR-0010 — *"a foto não
+/// sai para quem não é conexão aceita"*. O cliente emendou a própria decisão,
+/// literal: *"o resultado tras foto sim, para identificar usuarios com nomes
+/// parecidos."*
 ///
-/// E não há como desenhar foto aqui mesmo querendo: `PersonSearchResult` não
-/// tem campo de foto, nem nulo. **A ausência do campo é o freio**, e um campo
-/// nulo seria pior — convidaria alguém a preenchê-lo.
+/// **O argumento é de uso, e ele é bom:** com só o nome, duas `Maria Silva` são
+/// indistinguíveis. Numa busca cujo propósito é achar **uma pessoa específica
+/// que você conhece**, tirar a foto transforma a lista em adivinhação — e a
+/// pessoa pede conexão à errada, que é um erro que ninguém desfaz sem atrito.
 ///
-/// A inicial no círculo **não é um substituto de segunda classe**: é o recurso
-/// que a emenda 3 já manda usar com quem não é conexão (*"fica a inicial ou o
-/// glifo genérico"*), e é o mesmo desenho que a lista de conversas usa.
+/// ## OS TRÊS FREIOS QUE TORNAM ISSO DEFENSÁVEL
+///
+/// Eles são a diferença entre **busca** e **catálogo de rostos**, e nenhum é
+/// enfeite. **Se algum dos três cair, esta decisão fica apoiada em nada** — e o
+/// rosto no resultado tem de cair com ele:
+///
+/// 1. **A busca exige conta.** `searchPeople` é `bearerAuth` sem alternativa
+///    vazia, e esta aba desenha `ConviteParaEntrar` no corpo quando o servidor
+///    responde 401. Não há rosto alcançável sem conta.
+/// 2. **Piso de três caracteres.** `PessoasApi.minimoDaBusca`, cobrado em dois
+///    lugares: a lupa não habilita abaixo dele, e a porta não pergunta. Um
+///    padrão mais curto não produz trigrama e casaria quase todo mundo.
+/// 3. **Campo vazio nunca lista ninguém.** Não existe "listar todos" — `q`
+///    ausente devolve página vazia **sem requisição**. O estado inicial da aba
+///    não tem um único rosto.
+///
+/// Somados: quem vê a foto **já sabe aproximadamente quem procura**, e não é
+/// alguém folheando. É isso, e não a quantidade de pixels, que separa esta tela
+/// de um diretório de pessoas.
+///
+/// ## A DERIVADA É A MENOR, E A INICIAL NÃO FOI APAGADA
+///
+/// `photo_icon_url` é a **`thumb`**, e a escolha é medida: a `card` custa cerca
+/// de 51 KB por rosto, e numa página de vinte isso é rede e memória de uma
+/// lista que a pessoa rola. Mesmo critério do círculo de 32 dp da barra.
+///
+/// **Quem não tem foto pronta continua com a inicial no círculo** — o recurso
+/// que a emenda 3 manda usar (*"fica a inicial ou o glifo genérico"*). Foto em
+/// `processing` ou `rejected` não sai do servidor, então aqui não há estado a
+/// desenhar: ou há URL, ou há letra.
+///
+/// ## A GEOMETRIA NÃO MUDOU, E ISSO FOI MEDIDO
+///
+/// O círculo já existia com 56 dp porque a inicial morava nele. A foto
+/// **substitui o conteúdo do círculo, não a geometria**: o nome recebe
+/// exatamente a largura que recebia antes, e nada passou a cortar onde cabia.
+/// O caso `o nome tem a MESMA largura com foto e sem foto` mede os dois lados
+/// em 320 dp e trava o número.
 ///
 /// ## OS QUATRO ESTADOS, E DE ONDE CADA UM VEM
 ///
@@ -121,6 +158,12 @@ class CartaoDePessoaEncontrada extends StatefulWidget {
   /// pessoa.
   static const String inicialDeQuemNaoTem = '·';
 
+  /// O lado do círculo — **e ele não mudou quando a foto entrou**.
+  ///
+  /// Eram 56 dp com a inicial dentro, e continuam 56 dp com a foto. A medição
+  /// está no caso de widget: o nome recebe a mesma largura nos dois casos, e
+  /// por isso não houve o que encolher. Se um dia precisar encolher, **o avatar
+  /// encolhe e o nome não** — o nome é o que a pessoa está lendo.
   static const double ladoDoCirculo = 56;
 
   static String rotuloDePets(int quantos) =>
@@ -298,7 +341,7 @@ class _EstadoDoCartaoDePessoaEncontrada
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  _circuloDaInicial(cores, textos),
+                  _avatar(cores, textos),
                   const SizedBox(width: BichuEspaco.e3),
                   Expanded(child: _identificacao(cores, textos)),
                 ],
@@ -312,8 +355,34 @@ class _EstadoDoCartaoDePessoaEncontrada
     );
   }
 
-  /// O círculo com a inicial. **Decorativo**: o nome já é lido ao lado, e um
-  /// leitor de tela que anunciasse a letra leria "M, Marina".
+  /// O avatar: **a foto quando há uma, a inicial quando não há.**
+  ///
+  /// **Decorativo nos dois casos**, e isso é deliberado: o nome é lido ao lado,
+  /// e um leitor de tela que anunciasse os dois leria "M, Marina" ou "foto de
+  /// Marina, Marina". O rótulo do cartão inteiro já é o nome da pessoa.
+  ///
+  /// `ImagemDaRede` cuida de carregando, falha e raio, e o `simboloDeFalha` é o
+  /// de pessoa: um retrato que não carrega pede outro desenho que uma fachada
+  /// que não carrega.
+  Widget _avatar(BichuCores cores, TextTheme textos) {
+    final url = widget.pessoa.photoIconUrl;
+    if (url == null || url.isEmpty) return _circuloDaInicial(cores, textos);
+    return ExcludeSemantics(
+      child: ClipOval(
+        child: ImagemDaRede(
+          url: url,
+          descricao: null,
+          largura: CartaoDePessoaEncontrada.ladoDoCirculo,
+          simboloDeFalha: Icons.person_outline,
+        ),
+      ),
+    );
+  }
+
+  /// O círculo com a inicial — **a queda de quem não tem foto pronta**.
+  ///
+  /// Ela não foi apagada quando a foto entrou: é o recurso que a emenda 3 manda
+  /// usar, e foto em `processing` ou `rejected` não sai do servidor.
   Widget _circuloDaInicial(BichuCores cores, TextTheme textos) {
     final inicial = widget.pessoa.inicial.isEmpty
         ? CartaoDePessoaEncontrada.inicialDeQuemNaoTem

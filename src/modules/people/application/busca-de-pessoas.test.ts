@@ -23,7 +23,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { UserId } from '../../../shared/types/brands.js';
+import type { AbsoluteUrl, UserId } from '../../../shared/types/brands.js';
 import { MINIMO_DE_CARACTERES_DA_BUSCA } from '../domain/termo-de-busca.js';
 import type {
   BuscaDePessoasRepository,
@@ -39,7 +39,14 @@ const MARINA: PessoaEncontrada = {
   displayName: 'Marina',
   petsCount: 2,
   connectionsCount: 7,
+  photoKey: 'u/ab/cdef0123456789/thumb.jpg',
 };
+
+/** A mesma pessoa SEM foto pronta -- o caso em que a chave sai nula. */
+const MARINA_SEM_FOTO: PessoaEncontrada = { ...MARINA, photoKey: null };
+
+/** A raiz de midia da bancada. Ela nao e o dominio de producao de proposito. */
+const MIDIA = 'https://midia.exemplo.test' as AbsoluteUrl;
 
 interface Bancada {
   readonly servico: BuscaDePessoas;
@@ -159,28 +166,56 @@ void describe('campo vazio NUNCA lista ninguem', () => {
   });
 });
 
-void describe('o resultado da busca devolve nome e as duas contagens, e NADA mais', () => {
+void describe('o resultado da busca devolve nome, as duas contagens e a foto -- e NADA mais', () => {
   /**
    * **A isca do recorte**, e ela é por **conjunto exato de chaves** e não por
    * "não contém foto": uma asserção que só negasse `photo` passaria no dia em
    * que alguém acrescentasse `photo_url`, `avatar`, `city` ou `public_ref`.
    */
-  void it('ISCA: o conjunto de chaves e EXATAMENTE quatro', () => {
-    const corpo = comoRespostaDaPessoa(MARINA);
+  void it('ISCA: o conjunto de chaves e EXATAMENTE cinco', () => {
+    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
     assert.deepEqual(
       Object.keys(corpo).sort(),
-      ['connections_count', 'display_name', 'handle', 'pets_count'],
+      ['connections_count', 'display_name', 'handle', 'pets_count', 'photo_icon_url'],
       'o recorte do resultado e LIMITE e nao escolha de tela: emenda 2 do ADR-0010 ' +
-        '(nome e as duas contagens) mais o apelido, que e a referencia publica.',
+        '(nome e as duas contagens), o apelido -- que e a referencia publica -- e a ' +
+        'FOTO, pela emenda do cliente de 21/10/2026. Um sexto campo e superficie nova ' +
+        'de dado de pessoa, e precisa de decisao dele.',
     );
   });
 
-  void it('ISCA: NAO sai foto, em nenhuma grafia (emenda 5 item 2 do ADR-0010)', () => {
-    const corpo = comoRespostaDaPessoa(MARINA);
+  // ESTA ISCA FOI **INVERTIDA** EM 21/10/2026, E NAO APAGADA.
+  //
+  // O QUE ELA DIZIA: *"NAO sai foto, em nenhuma grafia (emenda 5 item 2 do
+  // ADR-0010)"*, e varria dez grafias possiveis para provar a ausencia.
+  //
+  // **O cliente emendou a propria decisao**, literal: *"o resultado tras foto
+  // sim, para identificar usuarios com nomes parecidos."* Com so o nome, duas
+  // `Maria Silva` sao indistinguiveis.
+  //
+  // **Apagar a isca teria deixado a superficie sem protecao nenhuma**, e e
+  // assim que o sexto campo entra sem ninguem notar. Ela guardava um LIMITE; o
+  // limite mudou, e agora ela guarda o limite novo: a foto sai, **e so ela** --
+  // nenhuma outra grafia, nenhum identificador, e a derivada e a menor que
+  // existe.
+  void it('ISCA INVERTIDA: a foto SAI, e e a derivada `thumb` montada na borda', () => {
+    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+    assert.equal(
+      corpo['photo_icon_url'],
+      'https://midia.exemplo.test/u/ab/cdef0123456789/thumb.jpg',
+      'a URL e montada na BORDA a partir da chave de objeto: o banco guarda ' +
+        'chave e nunca endereco, e a base e a do ambiente.',
+    );
+  });
+
+  void it('ISCA: a foto sai SO como `photo_icon_url`, e nenhuma outra grafia entrou', () => {
+    // O contrapeso da inversao: a emenda abriu UM campo, com UM nome -- o mesmo
+    // das emendas 3 e 5. As outras nove grafias continuam proibidas, e e isso
+    // que impede a derivada grande, a vitrine e a legenda de entrarem de carona.
+    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
     for (const proibida of [
       'photo',
       'photo_url',
-      'photo_icon_url',
       'avatar',
       'avatar_url',
       'grid_url',
@@ -191,14 +226,28 @@ void describe('o resultado da busca devolve nome e as duas contagens, e NADA mai
     ]) {
       assert.ok(
         !Object.prototype.hasOwnProperty.call(corpo, proibida),
-        `o resultado tem \`${proibida}\`: a emenda 5 item 2 nega o rosto a quem NAO e ` +
-          'conexao aceita, e resultado de busca e por construcao lista de nao-conexoes.',
+        `o resultado tem \`${proibida}\`: a emenda de 21/10/2026 abriu UM campo, ` +
+          '`photo_icon_url`, com a derivada `thumb`. Qualquer outra grafia e ' +
+          'superficie nova -- e `grid_url`/`open_url` sao da vitrine, que continua ' +
+          'sendo so de conexao aceita.',
       );
     }
   });
 
+  void it('sem foto pronta a chave VEM, com nulo', () => {
+    // Chave que aparece e desaparece faria o cliente distinguir ausencia de
+    // nulo sem que a diferenca significasse algo. A tela cai para a inicial no
+    // circulo, que e o recurso da emenda 3.
+    const corpo = comoRespostaDaPessoa(MARINA_SEM_FOTO, MIDIA);
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(corpo, 'photo_icon_url'),
+      'a chave da foto desapareceu do corpo de quem nao tem foto',
+    );
+    assert.equal(corpo['photo_icon_url'], null);
+  });
+
   void it('ISCA: NAO sai identificador interno, nem `public_ref`', () => {
-    const corpo = comoRespostaDaPessoa(MARINA);
+    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
     for (const proibido of ['id', 'user_id', 'owner_user_id', 'uuid', 'public_ref']) {
       assert.ok(
         !Object.prototype.hasOwnProperty.call(corpo, proibido),
@@ -219,7 +268,7 @@ void describe('o resultado da busca devolve nome e as duas contagens, e NADA mai
   });
 
   void it('ISCA: NAO sai recorte geografico, contato nem estado da conexao', () => {
-    const corpo = comoRespostaDaPessoa(MARINA);
+    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
     for (const proibido of [
       'city',
       'state',
@@ -245,16 +294,16 @@ void describe('o resultado da busca devolve nome e as duas contagens, e NADA mai
 
   /** Sem esta isca, as de cima passariam por a projecao devolver pouco por acaso. */
   void it('ISCA: a varredura de chaves REPROVA um campo acrescentado depois', () => {
-    const comVazamento = { ...comoRespostaDaPessoa(MARINA), photo_url: 'https://exemplo/x.jpg' };
+    const comVazamento = { ...comoRespostaDaPessoa(MARINA, MIDIA), photo_url: 'https://exemplo/x.jpg' };
     assert.notDeepEqual(
       Object.keys(comVazamento).sort(),
-      ['connections_count', 'display_name', 'handle', 'pets_count'],
+      ['connections_count', 'display_name', 'handle', 'pets_count', 'photo_icon_url'],
       'a isca passou: a varredura nao enxerga uma chave nova na projecao.',
     );
   });
 
   void it('nome nulo sai como nulo, e a CHAVE vem sempre', () => {
-    const corpo = comoRespostaDaPessoa({ ...MARINA, displayName: null });
+    const corpo = comoRespostaDaPessoa({ ...MARINA, displayName: null }, MIDIA);
     assert.ok(
       Object.prototype.hasOwnProperty.call(corpo, 'display_name'),
       'a chave vem sempre: com nulo a tela cai para `@handle`, e omitir a chave ' +

@@ -187,15 +187,21 @@ class PerfilDePessoa {
 /// | `connection_state` | o perfil é de UMA pessoa; numa lista, vinte estados por requisição são o material de que uma lista de conexões se faz do lado de fora |
 /// | `connection_ref` | `ref` de aresta existe quando há aresta, e resultado de busca é lista de quem ainda não é conexão |
 ///
-/// ## E NÃO HÁ FOTO, em campo nenhum
+/// ## A FOTO SAI AQUI, E ESTE BLOCO DIZIA O CONTRÁRIO (21/10/2026)
 ///
-/// A **emenda 5 item 2 do ADR-0010** diz que a foto não sai para quem não é
-/// conexão aceita, e resultado de busca é **por construção** lista de
-/// não-conexões — se quem busca conhecesse a pessoa, não precisaria buscar. O
-/// contrato não tem campo de foto aqui, nem nulo, e este modelo também não:
-/// um campo nulo seria pior que a ausência, porque convidaria alguém a
-/// preenchê-lo. Quem desenha o círculo usa a **inicial**, que é o recurso que
-/// a emenda 3 já manda usar com quem não é conexão.
+/// Até 21/10/2026 este modelo não tinha foto, e o parágrafo aqui citava a
+/// **emenda 5 item 2 do ADR-0010** — *"a foto não sai para quem não é conexão
+/// aceita"*. **O cliente emendou a própria decisão**, literal: *"o resultado
+/// tras foto sim, para identificar usuarios com nomes parecidos."*
+///
+/// Com só o nome, duas `Maria Silva` são indistinguíveis. Numa busca cujo
+/// propósito é achar **uma pessoa específica que você conhece**, tirar a foto
+/// transforma a lista em adivinhação.
+///
+/// É a derivada **`thumb`**, a menor que o contrato devolve. Os três freios que
+/// separam isso de um catálogo de rostos estão no cabeçalho de
+/// `CartaoDePessoaEncontrada`. E [inicial] **não foi apagada**: ela é a queda de
+/// quem não tem foto pronta, e é o recurso que a emenda 3 manda usar.
 ///
 /// **Nenhum identificador interno** (ADR-0010 item 6): o que endereça a pessoa
 /// é o apelido.
@@ -205,6 +211,7 @@ class PessoaEncontrada {
     required this.displayName,
     required this.petsCount,
     required this.connectionsCount,
+    required this.photoIconUrl,
   });
 
   factory PessoaEncontrada.doJson(Map<String, dynamic> json) {
@@ -213,6 +220,7 @@ class PessoaEncontrada {
       displayName: json['display_name'] as String?,
       petsCount: json['pets_count'] as int,
       connectionsCount: json['connections_count'] as int,
+      photoIconUrl: json['photo_icon_url'] as String?,
     );
   }
 
@@ -235,6 +243,17 @@ class PessoaEncontrada {
   /// Quantas conexões aceitas. **O número, nunca a lista** — é o "sinal de
   /// confiança" do plano 4-B.
   final int connectionsCount;
+
+  /// A **derivada `thumb`** da foto da pessoa, ou nulo quando não há foto
+  /// pronta.
+  ///
+  /// A menor derivada que existe, e a escolha é do contrato: a `card` custa
+  /// cerca de 51 KB por rosto, e numa página de vinte resultados isso é rede e
+  /// memória de uma lista que a pessoa rola.
+  ///
+  /// **A chave vem sempre, com nulo quando não há** — foto em `processing` ou
+  /// `rejected` não sai. Nulo cai para [inicial], e não para um quadrado vazio.
+  final String? photoIconUrl;
 
   /// Como a pessoa é escrita no cartão. **O nome primeiro, o apelido é a
   /// queda**, igual a [PerfilDePessoa.nomeParaLer]: o cartão leva ao perfil, e

@@ -160,9 +160,10 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     const linhas = contrato.match(/^\s+photo_icon_url:\s*$/gm) ?? [];
     assert.equal(
       linhas.length,
-      2,
-      'o número de declarações de `photo_icon_url` mudou. Duas são as emendas 3 e 5; ' +
-        'QUEM SÃO está no caso da lista fechada, e é lá que uma terceira reprova',
+      3,
+      'o número de declarações de `photo_icon_url` mudou. TRÊS são as emendas 3, 5 e a ' +
+        'de 21/10/2026 (o resultado da busca); QUEM SÃO está no caso da lista fechada, ' +
+        'e é lá que uma quarta reprova',
     );
     const conversa = JSON.stringify(spec.components.schemas['Conversation']);
     assert.match(conversa, /photo_icon_url/, 'a emenda 3 perdeu o hospedeiro dela');
@@ -255,7 +256,7 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     assert.equal(ocorrencias.length, 2, 'um `photo:` a mais é uma superfície a mais');
   });
 
-  void it('`photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao DOIS', () => {
+  void it('`photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao TRES', () => {
     // **ESTE CASO SUBSTITUI UMA CONTAGEM POR UMA LISTA, e a diferença é o
     // ponto.** Até 20/10/2026 a emenda 3 tinha UM hospedeiro e um `assert.equal`
     // de contagem bastava. A emenda 5 trouxe o segundo, e subir o número de 1
@@ -306,16 +307,30 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
         // Emenda 3 (19/10/2026): a conversa mediada, entre conexões aceitas.
         // Objeto INLINE, e é por isso que a varredura desce a árvore.
         'components.schemas.Conversation.properties.participants.items',
+        // **O TERCEIRO HOSPEDEIRO (21/10/2026), e ele é o ÚNICO que não exige
+        // conexão aceita.** O cliente emendou a emenda 5 item 2: *"o resultado
+        // tras foto sim, para identificar usuarios com nomes parecidos."* Com
+        // só o nome, duas `Maria Silva` são indistinguíveis.
+        //
+        // **O que torna isto defensável são TRÊS FREIOS**, e eles são a
+        // diferença entre busca e catálogo de rostos: a busca exige conta
+        // (`bearerAuth` sem alternativa vazia), há piso de três caracteres, e
+        // `q` vazio devolve lista vazia — não existe "listar todos". Quem vê a
+        // foto já sabe aproximadamente quem procura.
+        //
+        // Se algum dos três cair, esta entrada tem de sair com ele.
+        'components.schemas.PersonSearchResult',
         // Emenda 5 (20/10/2026): o autor de uma publicação do Mural. O
         // predicado da emenda 3 é satisfeito por construção ali — a linha do
         // tempo só devolve publicação de conexão aceita.
         'components.schemas.PublicationAuthor',
       ].sort(),
       'a foto de pessoa ganhou hospedeiro novo, ou perdeu um. O ADR-0010 a limita ' +
-        'às superfícies das emendas 3 e 5, por nome, e abrir uma terceira é decisão ' +
-        'do cliente — não de quem implementa. `FinderConversation.participants` NÃO ' +
-        'está nesta lista, e a ausência é estrutural: ele serve o achador SEM CONTA, ' +
-        'que não tem conexão com ninguém.',
+        'às superfícies das emendas 3 e 5 e à emenda de 21/10/2026 (o resultado da ' +
+        'busca), por nome, e abrir uma quarta é decisão do cliente — não de quem ' +
+        'implementa. `FinderConversation.participants` NÃO está nesta lista, e a ' +
+        'ausência é estrutural: ele serve o achador SEM CONTA, que não tem conexão ' +
+        'com ninguém.',
     );
   });
 

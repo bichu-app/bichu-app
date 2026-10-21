@@ -10617,14 +10617,41 @@ export interface components {
          *     | `connection_state` | o perfil e de UMA pessoa. Numa lista, vinte estados por requisicao sao o material de que uma lista de conexoes se faz do lado de fora |
          *     | `connection_ref` | idem: `ref` de aresta existe quando ha aresta, e resultado de busca e lista de quem ainda nao e conexao |
          *
-         *     **E NAO HA FOTO EM NENHUM DOS DOIS** para quem nao e conexao: e a
-         *     **emenda 5 item 2 do ADR-0010**, e resultado de busca e por construcao
-         *     lista de nao-conexoes -- se quem busca conhecesse a pessoa, nao
-         *     precisaria buscar. Nao ha aqui um campo de foto nulo a preencher
-         *     depois: um campo nulo seria pior que a ausencia, porque convidaria
-         *     alguem a preenche-lo.
+         *     ## A FOTO SAI AQUI, E ISSO EMENDA A EMENDA 5 ITEM 2 (21/10/2026)
          *
-         *     **Nenhum UUID** (ADR-0010 item 6).
+         *     **Ate 21/10/2026 este schema nao tinha foto**, e a ausencia citava a
+         *     emenda 5 item 2 -- *"a foto nao sai para quem nao e conexao aceita"*.
+         *     **O cliente emendou a propria decisao**, literal: *"o resultado tras
+         *     foto sim, para identificar usuarios com nomes parecidos."*
+         *
+         *     O motivo dele e o desenho da tela: com so o nome, duas `Maria Silva` sao
+         *     indistinguiveis, e numa busca cujo proposito e achar **uma pessoa
+         *     especifica que voce conhece** tirar a foto transforma a lista em
+         *     adivinhacao.
+         *
+         *     ### OS TRES FREIOS QUE TORNAM ISSO DEFENSAVEL
+         *
+         *     Eles sao a diferenca entre **busca** e **catalogo de rostos**, e nenhum
+         *     e enfeite:
+         *
+         *     1. **a busca exige conta** -- `bearerAuth` sem alternativa vazia;
+         *     2. **piso de tres caracteres** -- um padrao mais curto nao produz
+         *        trigrama e casaria quase todo mundo;
+         *     3. **`q` ausente ou vazio devolve lista vazia** -- nao existe "listar
+         *        todos", e isso e estrutural: a porta de persistencia exige
+         *        `termo: string`.
+         *
+         *     Somados: quem ve a foto e alguem que **ja sabe aproximadamente quem
+         *     procura**, e nao alguem folheando. Sem os tres a decisao fica apoiada em
+         *     nada, e a foto aqui vira o catalogo que o plano 4-B recusou.
+         *
+         *     ### O QUE **NAO** mudou junto
+         *
+         *     Quatro campos passaram a cinco, e **nada alem da foto entrou**:
+         *     `public_ref` continua fora, `connection_state` continua fora, e nenhum
+         *     UUID entra (ADR-0010 item 6). A derivada e a **menor** que existe --
+         *     `thumb` --, e nao ha estado de moderacao: foto que nao esta `ready` nao
+         *     sai, e por isso nao ha estado a desenhar.
          */
         PersonSearchResult: {
             /**
@@ -10655,6 +10682,33 @@ export interface components {
              *     *"Lista de conexoes | nunca | nunca"*). E o "sinal de confianca".
              */
             connections_count: number;
+            /**
+             * Format: uri
+             * @description **A foto da pessoa, para desempatar nomes parecidos** -- decisao do
+             *     cliente de 21/10/2026, literal: *"o resultado tras foto sim, para
+             *     identificar usuarios com nomes parecidos."*
+             *
+             *     **E a derivada `thumb`, a MENOR que existe**, e a escolha foi
+             *     medida: a `card` custa cerca de 51 KB por rosto, e numa pagina de
+             *     vinte resultados isso e rede e memoria de uma lista que a pessoa
+             *     rola. Mesmo criterio do circulo de 32 dp da barra de topo.
+             *
+             *     **O mesmo nome e a mesma forma das emendas 3 e 5**, de proposito:
+             *     escalar, `uri`, anulavel, sem estado de moderacao. Um objeto aqui
+             *     abriria espaco para `status` e `rejection_reason`, que sao assunto
+             *     entre o dono da foto e quem modera -- e `MyPhoto` nao e alcancado
+             *     por `$ref` justamente para os dois nao voltarem.
+             *
+             *     **Nulo quando nao ha foto pronta**, e a chave vem SEMPRE: `null`
+             *     escalar nao afirma nada alem de *"nao ha foto aqui"*, e chave que
+             *     aparece e desaparece faria o cliente distinguir ausencia de nulo sem
+             *     que a diferenca significasse algo. A tela cai para a inicial no
+             *     circulo, que e o recurso da emenda 3.
+             *
+             *     **Foto em `processing` ou `rejected` nao sai**: o predicado e
+             *     `status = 'ready'` e `thumb_key IS NOT NULL`, na clausula `WHERE`.
+             */
+            photo_icon_url: string | null;
         };
         /**
          * @description A pagina da busca de pessoas. Numerada com total, como as outras

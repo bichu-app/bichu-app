@@ -1289,8 +1289,13 @@ export async function main(): Promise<void> {
     });
     // 20/10/2026. A BUSCA DE PESSOAS, com os freios do cliente: piso de 3
     // caracteres, campo vazio nao lista ninguem, teto `[account, q]` por conta,
-    // e resposta limitada a nome, apelido e duas contagens -- sem foto (emenda 5
-    // item 2 do ADR-0010).
+    // e resposta limitada a nome, apelido, duas contagens **e a foto**.
+    //
+    // **A FOTO ENTROU EM 21/10/2026**, e este comentario dizia "sem foto
+    // (emenda 5 item 2)". O cliente emendou a propria decisao: *"o resultado
+    // tras foto sim, para identificar usuarios com nomes parecidos."* Os tres
+    // freios acima sao o que separa isso de um catalogo de rostos, e e por isso
+    // que eles continuam listados aqui.
     //
     // **Nenhuma porta entra desligada**: `handles`, `users`, `pets`,
     // `user_connections`, `bloqueio_entre` e
@@ -1298,6 +1303,9 @@ export async function main(): Promise<void> {
     // e os indices trigrama vem da `20261020000012`.
     registrarRotasDeBuscaDePessoas(escopo, {
       busca: new BuscaDePessoas({ busca: criarBuscaDePessoasRepository(db) }),
+      // A FOTO NO RESULTADO (cliente, 21/10/2026): a derivada `thumb`, com a
+      // URL montada na borda a partir da chave de objeto.
+      baseDeMidia: config.mediaPublicBaseUrl,
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
