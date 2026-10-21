@@ -10,6 +10,7 @@ import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../formato/cep.dart';
 import '../../formato/telefone.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
@@ -551,7 +552,26 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
                     ],
                     if (_faixa != null) ...<Widget>[
                       const SizedBox(height: BichuEspaco.e6),
-                      FaixaDeAviso(texto: _faixa!.texto),
+                      // A SAIDA DA MENSAGEM VEM COM ELA, e passar so `texto:`
+                      // desfazia metade de uma decisao do cliente.
+                      //
+                      // Esta tela nasceu numa frente e o portao
+                      // `toda_faixa_de_erro_tem_saida_test.dart` nasceu em
+                      // OUTRA, na mesma onda: nenhuma das duas via a outra, e
+                      // foi a uniao que mostrou a 13a faixa muda. No
+                      // `401 unauthenticated` a faixa sem acao e uma tarja
+                      // vermelha com o icone e MAIS NADA -- o cliente mandou
+                      // tirar o TEXTO em 18/10/2026 e MANTER o botao `Entrar`.
+                      //
+                      // `saidaDaMensagem` devolve `null` para rotulo de
+                      // OPERACAO, e `FaixaDeAviso` so desenha o botao com
+                      // rotulo E callback: rotulo de operacao nao vira botao
+                      // morto.
+                      FaixaDeAviso(
+                        texto: _faixa!.texto,
+                        rotuloDaAcao: _faixa!.acao,
+                        aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+                      ),
                     ],
                   ],
                 ),
