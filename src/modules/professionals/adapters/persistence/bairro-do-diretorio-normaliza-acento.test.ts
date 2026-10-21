@@ -119,6 +119,7 @@ const ENTRADA_DO_JARDIM_AMERICA: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Jardim América',
   phoneE164: '+5511910981784',
+  siteUrl: null,
   verificacoes: [],
   distanciaEmMetros: null,
   logoPublicKey: null,

@@ -45,6 +45,7 @@ function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio 
     state: 'SP',
     neighborhood: 'Pinheiros',
     phoneE164: '+551130612200',
+    siteUrl: null,
     verificacoes: [],
     distanciaEmMetros: null,
     logoPublicKey: null,
@@ -155,21 +156,28 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 });
 
 void describe('a projecao publica da entrada', () => {
-  void it('devolve doze campos, e nenhum a mais', () => {
-    // DOZE desde a uniao de 18/10/2026, e os dois ultimos vieram de ramos
-    // DIFERENTES: `logo_url` da liberacao das imagens do profissional e
-    // `entity_kind` do eixo do tipo de entidade. As duas justificativas
-    // ficam, porque as duas listas fechadas sao a mesma lista.
-    // Eram dez ate 18/10/2026; `logo_url` entrou com a liberacao das imagens do
+  void it('devolve treze campos, e nenhum a mais', () => {
+    // TREZE desde 21/10/2026, e cada acrescimo veio de um ramo DIFERENTE. As
+    // justificativas ficam todas, porque as listas fechadas sao a mesma lista.
+    //
+    // Eram DEZ ate 18/10/2026. `logo_url` entrou com a liberacao das imagens do
     // profissional no aplicativo. **`photo_url` NAO esta aqui, e e o ponto desta
     // lista fechada**: a faixa de 1280 x 720 pertence a pagina do local, e esta
     // projecao e a que a LISTAGEM usa. Quem a acrescentar aqui reprova.
     //
-    // ERA DEZ ate 18/10/2026. `entity_kind` e o decimo primeiro, e e o UNICO
-    // acrescentado pelo eixo proprio do tipo de entidade
+    // `entity_kind` e o decimo primeiro, do eixo proprio do tipo de entidade
     // (`20261018000012`) -- esta lista e o que impede a entrada de ONG de
     // trazer carona: se a projecao passar a devolver quem convidou, quem e o
     // titular, a coordenada ou o `id`, este caso cai antes de qualquer portao.
+    //
+    // `site_url` e o DECIMO TERCEIRO (`20261020000014`, decisao do cliente de
+    // 21/10/2026), e ele esta aqui -- e nao so no detalhe -- por ser um CANAL DE
+    // CONTATO, ao lado de `phone_e164` e pela mesma razao: a entidade o publicou
+    // de proposito para ser procurada (ADR-0011 secao 4). Nao e dado pessoal que
+    // escapou, e e por isso que nao segue a regra de `photo_url`.
+    //
+    // (Doze seria o numero se `site_url` ficasse so no detalhe; a contagem
+    // mudou com a decisao, e nao por acomodacao a um teste que reprovou.)
     const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }), URL_DE_MIDIA);
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
@@ -181,6 +189,7 @@ void describe('a projecao publica da entrada', () => {
       'logo_url',
       'neighborhood',
       'phone_e164',
+      'site_url',
       'slug',
       'state',
       'verification',

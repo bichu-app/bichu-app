@@ -58,6 +58,7 @@
  * continuam sendo escritas pelo fluxo de verificacao, que nao passa por aqui.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
+import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { TipoDeEntidade, TipoDeProfissional } from './entrada-do-diretorio.js';
 import {
   evidenciasAprovadas,
@@ -173,6 +174,12 @@ export interface EntradaAdministrativa {
   readonly complement: string | null;
   readonly phoneE164: string | null;
   /**
+   * O SITE (cliente, 21/10/2026). Nulo quando a entidade nao informou, e nulo e
+   * o estado normal. `faltasParaPublicar` **nao o cobra**: ver o comentario de
+   * `FaltaParaPublicar`.
+   */
+  readonly siteUrl: string | null;
+  /**
    * A LOGO e a FOTO (cliente, 18/10/2026). Nulas quando nao ha, e nulo e o
    * estado normal: a entrada existe, publica e aparece em `Perto` sem nenhuma
    * das duas -- `faltasParaPublicar` nao as cobra, de proposito.
@@ -220,6 +227,8 @@ export interface CriacaoDaEntrada {
   readonly street_number?: string;
   readonly complement?: string;
   readonly phone_e164?: string;
+  /** O site do estabelecimento, com `https://`. Opcional. Ver `errosDoSiteDaEntrada`. */
+  readonly site_url?: string;
   /** O `upload_id` de um envio `directory_logo` desta sessao do painel. Opcional. */
   readonly logo_upload_id?: string;
   /** O `upload_id` de um envio `directory_photo`. Opcional. */
@@ -248,6 +257,8 @@ export interface EdicaoDaEntrada {
   readonly street_number?: string | null;
   readonly complement?: string | null;
   readonly phone_e164?: string | null;
+  /** `null` APAGA o site, ausente nao mexe. Apagar nunca despublica a entrada. */
+  readonly site_url?: string | null;
   /** `null` TIRA a imagem, ausente nao mexe, `upload_id` novo TROCA. */
   readonly logo_upload_id?: string | null;
   readonly photo_upload_id?: string | null;
@@ -302,10 +313,22 @@ function valorResultante(doCorpo: string | null | undefined, gravado: string | n
  * quebraria uma entrada ja publicada. Tres copias seriam tres definicoes de
  * "completo", e o ADR-0023 secao 2 existe por causa disso.
  *
- * `phone_e164` e hoje o UNICO canal de contato que a tabela tem. Site, e-mail,
- * WhatsApp e rede social nao existem como coluna, e a regra vai ter de crescer
- * junto com elas -- quando crescer, "ao menos um" passa a ser uma disjuncao, e
- * este e o lugar onde ela cresce.
+ * `phone_e164` e o UNICO canal que a publicacao COBRA, e desde 21/10/2026 isso
+ * deixou de ser a mesma coisa que "o unico canal que a tabela tem": `site_url`
+ * passou a existir (`20261020000014`).
+ *
+ * **`site_url` NAO foi acrescentado a esta regua, e a ausencia e deliberada.** O
+ * comentario anterior aqui prometia que, quando houvesse coluna, "ao menos um"
+ * viraria uma disjuncao. A coluna existe e a disjuncao NAO foi feita: trocar
+ * "precisa de telefone" por "precisa de telefone OU site" muda QUAIS entradas
+ * podem ir ao ar, e isso e decisao de produto que ninguem tomou. Cumpri-la por
+ * conta propria faria o pedido do cliente ("acrescente o campo de site")
+ * publicar entradas que antes nao publicavam.
+ *
+ * Consequencia, dita em voz alta: entrada com site e sem telefone continua NAO
+ * publicavel. E-mail, WhatsApp e rede social continuam sem coluna.
+ *
+ * Este segue sendo o lugar onde a disjuncao cresce, no dia em que for decidida.
  */
 export function faltasParaPublicar(
   atual: Pick<EntradaAdministrativa, 'slug' | 'city' | 'state' | 'phoneE164'>,
@@ -437,6 +460,40 @@ export function errosDaUf(campo: string, valor: string): ProblemFieldError[] {
  */
 export const FORMA_DO_TELEFONE = /^\+[1-9][0-9]{7,14}$/;
 
+/**
+ * O TETO DO SITE: `length('https://') + 253`, o mesmo numero que o contrato
+ * declara em `DirectoryEntrySiteUrl.maxLength` e que `LIMITE_DO_SITE` espelha
+ * no painel (`admin/src/endereco/enderecos.ts`). 253 e o teto de um nome de
+ * dominio.
+ */
+export const TETO_DO_SITE = 'https://'.length + 253;
+
+/**
+ * O SITE do estabelecimento (cliente, 21/10/2026).
+ *
+ * **Nao ha regra nova aqui, e e isso que esta funcao existe para garantir.**
+ * Ela delega inteiramente a `errosDoEnderecoCompleto`
+ * (`src/shared/url/endereco-completo.ts`), que e A AUTORIDADE do padrao de URL
+ * decidido pelo cliente em 17/10/2026: `https` so, esquema ausente RECUSADO com
+ * a frase que ensina, sem espaco, sem credencial, sem IP e sem host local.
+ *
+ * Uma segunda definicao -- regex propria aqui, ou `CHECK` com padrao no banco --
+ * divergiria da primeira no dia em que o padrao mudasse, e o lado mais frouxo
+ * venceria porque e o que nao reclama. Por isso o `CHECK` da coluna
+ * (`professionals_site_tamanho`) e so de TAMANHO.
+ *
+ * `prefixo: 'site_url'` faz os `code` sairem como `site_url_not_https`,
+ * `site_url_length`, `site_url_invalid`, `site_url_has_credentials`,
+ * `site_url_ip_literal` e `site_url_local_host` -- os MESMOS que o painel ja
+ * conhece, porque o parceiro da `Loja` usa o mesmo prefixo.
+ *
+ * **NAO NORMALIZA**: devolve erros ou nada, e nunca um valor corrigido. O texto
+ * que a pessoa conferiu na tela e o que vai para a coluna.
+ */
+export function errosDoSiteDaEntrada(campo: string, valor: string): ProblemFieldError[] {
+  return errosDoEnderecoCompleto(campo, valor, { prefixo: 'site_url', teto: TETO_DO_SITE });
+}
+
 export function errosDoTelefone(campo: string, valor: string): ProblemFieldError[] {
   return FORMA_DO_TELEFONE.test(valor.trim())
     ? []
@@ -508,6 +565,7 @@ export interface EntradaProjetada {
   readonly street_number: string | null;
   readonly complement: string | null;
   readonly phone_e164: string | null;
+  readonly site_url: string | null;
   readonly logo: ImagemProjetada | null;
   readonly photo: ImagemProjetada | null;
   readonly status: StatusDaEntrada;
@@ -550,6 +608,10 @@ export function projetarEntradaAdministrativa(
     street_number: entrada.streetNumber,
     complement: entrada.complement,
     phone_e164: entrada.phoneE164,
+    // O SITE sai CRU, exatamente como foi gravado: o formulario do painel
+    // reabre o campo com o texto que foi aprovado na tela. Nao e normalizado
+    // aqui nem na escrita.
+    site_url: entrada.siteUrl,
     // A logo e a foto saem NESTA projecao, que e a do painel. A projecao do
     // aplicativo e outra funcao, em outro arquivo, e ela NAO as tem: imagem de
     // estabelecimento em superficie publica depende de decisao do cliente

@@ -105,6 +105,7 @@ const ENTRADA_DE_SAO_PAULO: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Brooklin',
   phoneE164: '+5511910981784',
+  siteUrl: null,
   verificacoes: [],
   distanciaEmMetros: null,
   logoPublicKey: null,

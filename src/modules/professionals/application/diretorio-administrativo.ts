@@ -39,6 +39,7 @@ import {
   errosDaUf,
   errosDeTexto,
   errosDoCep,
+  errosDoSiteDaEntrada,
   errosDoTelefone,
   MAXIMO_DA_CIDADE,
   MAXIMO_DO_BAIRRO,
@@ -188,6 +189,7 @@ function errosDaForma(campos: {
   street_number?: string | null | undefined;
   complement?: string | null | undefined;
   phone_e164?: string | null | undefined;
+  site_url?: string | null | undefined;
 }): ProblemFieldError[] {
   const erros: ProblemFieldError[] = [];
   if (campos.display_name !== undefined) {
@@ -226,6 +228,12 @@ function errosDaForma(campos: {
   }
   if (campos.phone_e164 !== undefined && campos.phone_e164 !== null) {
     erros.push(...errosDoTelefone('phone_e164', campos.phone_e164));
+  }
+  // O SITE (cliente, 21/10/2026). `null` apaga e nao tem forma a conferir, como
+  // os demais. Quem decide o formato e `errosDoSiteDaEntrada`, que delega ao
+  // validador de `shared/url` -- nao ha regra de URL escrita neste arquivo.
+  if (campos.site_url !== undefined && campos.site_url !== null) {
+    erros.push(...errosDoSiteDaEntrada('site_url', campos.site_url));
   }
   return erros;
 }
@@ -329,6 +337,10 @@ export class DiretorioAdministrativo {
           streetNumber: aparado(corpo.street_number) ?? null,
           complement: aparado(corpo.complement) ?? null,
           phoneE164: aparado(corpo.phone_e164) ?? null,
+          // O site e APARADO e nada mais: aparar espaco das pontas nao muda o
+          // endereco, e o validador recusa espaco no meio. Nenhuma outra
+          // normalizacao -- nao se acrescenta esquema nem se tira `www`.
+          siteUrl: aparado(corpo.site_url) ?? null,
           logoImageId,
           photoImageId,
           status: STATUS_INICIAL,
@@ -385,6 +397,7 @@ export class DiretorioAdministrativo {
           ? {}
           : { complement: aparado(patch.complement) ?? null }),
         ...(patch.phone_e164 === undefined ? {} : { phone_e164: aparado(patch.phone_e164) ?? null }),
+        ...(patch.site_url === undefined ? {} : { site_url: aparado(patch.site_url) ?? null }),
       };
 
       const decidido = planejarEdicao(atual, normalizado);
@@ -417,6 +430,7 @@ export class DiretorioAdministrativo {
           : { streetNumber: normalizado.street_number }),
         ...(normalizado.complement === undefined ? {} : { complement: normalizado.complement }),
         ...(normalizado.phone_e164 === undefined ? {} : { phoneE164: normalizado.phone_e164 }),
+        ...(normalizado.site_url === undefined ? {} : { siteUrl: normalizado.site_url }),
         // A logo e a foto: ausente nao mexe, `null` TIRA, `upload_id` novo
         // TROCA. A confirmacao acontece aqui dentro, na transacao da escrita.
         ...(patch.logo_upload_id === undefined

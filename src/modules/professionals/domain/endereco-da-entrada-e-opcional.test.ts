@@ -53,6 +53,7 @@ const AUTONOMO: EntradaAdministrativa = {
   streetNumber: null,
   complement: null,
   phoneE164: '+5511987654321',
+  siteUrl: null,
   status: 'published',
   source: 'import',
   claimStatus: 'unclaimed',

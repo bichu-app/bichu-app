@@ -109,6 +109,7 @@ import {
   MAXIMO_DO_MOTIVO,
   MINIMO_DO_MOTIVO,
   projetarIndicacao,
+  siteDaIndicacao,
   telefoneDaIndicacao,
   type IndicacaoNaFila,
   type IndicacaoProjetada,
@@ -346,6 +347,15 @@ export class FilaDeIndicacoes {
       logoImageId: null,
       photoImageId: null,
       phoneE164: telefone,
+      // O SITE PASSOU A SER COPIADO (21/10/2026). Ate a `20261020000014` nao
+      // havia coluna de destino e o endereco indicado se perdia aqui -- a
+      // indicacao era aprovada, a entrada nascia sem canal e o site morria na
+      // fila. Ver `siteDaIndicacao`.
+      //
+      // Nao ha "site do corpo" com precedencia como ha para o telefone: quem
+      // aprova nao digita site nesta tela, e acrescentar o campo nela nao foi
+      // pedido. Quem quiser corrigir usa a edicao da entrada.
+      siteUrl: siteDaIndicacao(indicacao),
       status,
       source: ORIGEM_DO_PAINEL,
       claimStatus: TITULARIDADE_DO_PAINEL,

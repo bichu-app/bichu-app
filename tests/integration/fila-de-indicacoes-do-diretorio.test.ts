@@ -322,6 +322,26 @@ void describe('a fila de indicações do Perto, contra Postgres', () => {
     const noAr = await fila.aprovar(autor, outra, { slug: slugB, phone_e164: '+551130612200' });
     assert.equal(noAr.entry.status, 'published');
     assert.equal(noAr.entry.phone_e164, '+551130612200');
+
+    // O SITE INDICADO SOBREVIVE A APROVACAO desde 21/10/2026, e esta assercao e
+    // o conserto medido que justificou a coluna `professionals.site_url`
+    // (`20261020000014`).
+    //
+    // ANTES DELA: `directory_suggestions` aceitava `contact_kind = 'website'`
+    // desde 17/10, VALIDAVA o endereco com o mesmo validador da escrita do
+    // painel, e a aprovacao nao tinha onde copia-lo -- este mesmo caso de teste
+    // aprovava uma indicacao de site e a entrada nascia SEM site, sem ninguem
+    // notar. O dado era coletado, validado e descartado.
+    assert.equal(
+      noAr.entry.site_url,
+      'https://exemplo.invalid/contato',
+      'o site indicado pela comunidade chega a entrada, em vez de morrer na fila',
+    );
+
+    // A ISCA DO CANAL DECLARADO: a indicacao de INSTAGRAM nao viaja pelo campo
+    // de site. O destino sai do `contact_kind` DECLARADO e nunca do formato do
+    // valor -- adivinhar poria `@perfil` na coluna que a tela abre como URL.
+    assert.equal(rascunho.entry.site_url, null, 'instagram nao vira site');
   });
 
   /**

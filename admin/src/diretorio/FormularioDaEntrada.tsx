@@ -9,6 +9,12 @@ import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { cepDosOitoDigitos, cepEmOitoDigitos } from '../formato/cep.ts';
+import {
+  LIMITE_DO_SITE,
+  MENSAGEM_DO_SITE,
+  mensagemDoSite,
+  type CodigoDoSite,
+} from '../endereco/enderecos.ts';
 import { telefoneDoE164, telefoneEmE164 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
@@ -55,6 +61,16 @@ interface Valores {
   /** Com mascara brasileira. O E.164 sai de `telefoneEmE164`, no `salvar`. */
   telefone: string;
   /**
+   * O SITE do estabelecimento (cliente, 21/10/2026), **cru e nao normalizado**:
+   * o endereco completo com `https://`, como a pessoa conferiu na tela.
+   *
+   * Sem mascara e sem reparo, ao contrario de [telefone] e [cep]: o padrao de
+   * URL do produto RECUSA esquema ausente em vez de completa-lo, e acrescentar
+   * `https://` aqui seria gravar uma coisa diferente da que foi digitada. Quem
+   * decide a recusa e `mensagemDoSite`, que espelha o servidor.
+   */
+  site: string;
+  /**
    * A logo e a foto guardam **o que a pessoa fez**, e nao a imagem gravada:
    *
    * - `undefined`: ela nao tocou no campo, e a imagem gravada (`entrada.logo` /
@@ -86,6 +102,7 @@ type Campo =
   | 'e-numero'
   | 'e-complemento'
   | 'e-telefone'
+  | 'e-site'
   | 'e-logo'
   | 'e-foto';
 
@@ -103,6 +120,7 @@ const ROTULOS: Record<Campo, string> = {
   'e-numero': 'Número',
   'e-complemento': 'Complemento',
   'e-telefone': 'Telefone comercial',
+  'e-site': 'Site',
   'e-logo': 'Logo',
   'e-foto': 'Foto do local',
 };
@@ -121,6 +139,7 @@ const ORDEM: Campo[] = [
   'e-complemento',
   'e-bairro',
   'e-telefone',
+  'e-site',
   'e-logo',
   'e-foto',
 ];
@@ -140,6 +159,7 @@ const VAZIO: Valores = {
   numero: '',
   complemento: '',
   telefone: '',
+  site: '',
   logoUploadId: undefined,
   fotoUploadId: undefined,
   situacao: 'draft',
@@ -200,6 +220,16 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
     e['e-telefone'] = 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
   }
+  // O SITE (cliente, 21/10/2026). Vazio nao erra; o que foi digitado passa pelo
+  // espelho do servidor, que devolve a frase JA PRONTA -- inclusive a que
+  // distingue "falta o https://" de "troque http:// por https://". Nao ha mapa
+  // de `code` aqui de proposito: `mensagemDoSite` e quem sabe desambiguar, e
+  // reescrever as frases neste arquivo seria a segunda definicao que o pedido
+  // do cliente proibiu. Mesmo idioma de `FormularioDeParceiro`.
+  if (v.site.trim() !== '') {
+    const recusa = mensagemDoSite(v.site);
+    if (recusa !== null) e['e-site'] = recusa;
+  }
   return e;
 }
 
@@ -243,6 +273,9 @@ function valoresDa(entrada: Entrada): Valores {
     // NAO e completar em silencio o que a pessoa digitou -- e exibir o que a
     // escrita ja validou, como o formulario do parceiro faz com `https://`.
     telefone: telefoneDoE164(entrada.phone_e164),
+    // O SITE sai e volta CRU: nao ha gramatica de exibicao a montar, porque o
+    // que esta gravado ja e o endereco completo que a pessoa aprovou.
+    site: entrada.site_url ?? '',
     // A logo e a foto GRAVADAS sao lidas de `entrada.logo` / `entrada.photo` e
     // vao direto para a previa do campo (`salva`); aqui elas nascem
     // `undefined`, que quer dizer "a pessoa nao tocou nestes campos". Guardar o
@@ -297,10 +330,19 @@ function valoresDa(entrada: Entrada): Valores {
  * **Os quatro campos sao opcionais, e isso e o ponto.** Um profissional
  * autonomo tem como "endereco" a propria casa; um campo obrigatorio o tornaria
  * incadastravel ou o obrigaria a publicar onde mora.
- * - **Nenhum site, e-mail, WhatsApp, rede social, horario de funcionamento nem
- *   foto.** Nenhuma dessas colunas existe em `professionals`. O padrao de site
- *   do produto (endereco completo com `https://`) nao tem onde ser aplicado
- *   aqui enquanto nao houver coluna.
+ * - **O SITE PASSOU A SER PEDIDO**, em 21/10/2026 (decisao do cliente), e esta
+ *   frase substitui a anterior, que o listava entre os que "nao tem coluna". A
+ *   `20261020000014` criou `professionals.site_url` e o padrao de site do
+ *   produto (endereco completo com `https://`, esquema ausente RECUSADO) passou
+ *   a ter onde ser aplicado -- pelo espelho de `endereco/enderecos.ts`, sem
+ *   segunda definicao.
+ *
+ *   **Ele NAO substitui o telefone para publicar.** `missing_to_publish`
+ *   continua cobrando `phone_e164`, e entrada com site e sem telefone segue nao
+ *   publicavel: virar a regua em "site OU telefone" e decisao de produto que
+ *   ninguem tomou.
+ * - **Nenhum e-mail, WhatsApp, rede social, horario de funcionamento nem
+ *   foto de perfil de rede.** Nenhuma dessas colunas existe em `professionals`.
  * - **ONG.** Nao ha valor para organizacao em `professionals.kind`. Decisao 9.1
  *   pendente, e o seletor de atividade diz isso em voz alta.
  */
@@ -482,6 +524,7 @@ export default function FormularioDaEntrada() {
               ? {}
               : { complement: ou(valores.complemento) as string }),
             ...(telefone === null ? {} : { phone_e164: telefone }),
+            ...(ou(valores.site) === null ? {} : { site_url: ou(valores.site) as string }),
             // No cadastro so existe envio NOVO: nao ha imagem gravada para
             // remover, e `null` nao e valor aceito no corpo de criacao.
             ...(typeof valores.logoUploadId === 'string'
@@ -531,6 +574,10 @@ export default function FormularioDaEntrada() {
         // Compara o E.164, que e o que o servidor guarda: trocar `(11) 3061-2200`
         // por `11 3061 2200` nao e mudanca de telefone.
         ...(telefone !== (entrada.phone_e164 ?? null) ? { phone_e164: telefone } : {}),
+        // O SITE compara TEXTO contra TEXTO, e nao host contra host como faz o
+        // formulario do parceiro: aqui a coluna guarda a URL inteira, entao
+        // trocar o caminho E mudanca de site. `null` apaga.
+        ...(ou(valores.site) !== (entrada.site_url ?? null) ? { site_url: ou(valores.site) } : {}),
         // Imagem: a chave so entra quando a pessoa MEXEU no campo. Envio novo
         // vai como `upload_id`; remover manda `null`, e apagar o que nunca
         // existiu nao e mudanca -- por isso `null` so vai quando havia imagem
@@ -608,8 +655,15 @@ export default function FormularioDaEntrada() {
         else if (erro.field === 'phone_e164') {
           e['e-telefone'] =
             erro.code === 'required'
-              ? 'Uma entrada no ar precisa de um telefone: hoje ele é o único canal de contato do cadastro.'
+              ? 'Uma entrada no ar precisa de um telefone: hoje ele é o único canal de contato que a publicação cobra.'
               : 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
+        } else if (erro.field === 'site_url') {
+          // AQUI o mapa de `code` e o certo, e nao `mensagemDoSite`: a recusa
+          // veio do SERVIDOR, com o motivo ja decidido, e reconferir o texto
+          // localmente poderia discordar dele. `MENSAGEM_DO_SITE` e o mesmo mapa
+          // que o formulario do parceiro usa.
+          e['e-site'] =
+            MENSAGEM_DO_SITE[erro.code as CodigoDoSite] ?? MENSAGEM_DO_SITE.site_url_invalid;
         }
       }
       if (Object.keys(e).length) return mostrar(e);
@@ -900,7 +954,18 @@ export default function FormularioDaEntrada() {
           erro={erros['e-telefone']}
           erroDeForma={erroDoTelefone}
           aoMudarErroDeForma={setErroDoTelefone}
-          ajuda="Com DDD. É o único canal de contato do cadastro hoje, e precisa estar preenchido para a entrada aparecer em Perto."
+          ajuda="Com DDD. É o canal que a publicação cobra: precisa estar preenchido para a entrada aparecer em Perto."
+        />
+
+        <CampoDeTexto
+          id="e-site"
+          dataCy="entrada-site"
+          rotulo="Site"
+          valor={valores.site}
+          aoMudar={(v) => mudar({ site: v })}
+          maximo={LIMITE_DO_SITE}
+          erro={erros['e-site']}
+          ajuda="Opcional. O endereço completo, começando com https:// — por exemplo https://clinicasantabarbara.com.br/contato. Aparece no app ao lado do telefone. Não substitui o telefone para publicar."
         />
 
         {/* Duas imagens, e DOIS campos: a logo e quadrada e pequena, a foto e

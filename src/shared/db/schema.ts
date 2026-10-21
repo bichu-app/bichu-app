@@ -1386,6 +1386,25 @@ export interface ProfessionalsTable {
   state: string | null;
   neighborhood: string | null;
   /**
+   * O SITE do estabelecimento, acrescentado pela migracao `20261020000014`
+   * (decisao do cliente de 21/10/2026).
+   *
+   * **A URL INTEIRA, e nao o host** -- a diferenca deliberada em relacao a
+   * `store_partners.host`: a tela ABRE este endereco como esta, e cortar o
+   * caminho levaria quem toca para a raiz do dominio.
+   *
+   * **NAO E NORMALIZADA.** O `CHECK` da coluna
+   * (`professionals_site_tamanho`) e so de TAMANHO; esquema, host e credencial
+   * sao conferidos na aplicacao por `errosDoEnderecoCompleto`
+   * (`src/shared/url/endereco-completo.ts`), que e a autoridade unica.
+   *
+   * Sai em `DirectoryEntrySummary` e `DirectoryEntryDetail`, ao lado de
+   * `phone_e164` e pela mesma razao: canal publicado de proposito pela
+   * entidade. **Nao entra em `faltasParaPublicar`**: a publicacao continua
+   * cobrando o telefone.
+   */
+  site_url: string | null;
+  /**
    * O ENDERECO DE RUA, acrescentado pela migracao `20261018000001`.
    *
    * Os quatro existem porque a decisao 9.2 foi respondida pelo cliente em

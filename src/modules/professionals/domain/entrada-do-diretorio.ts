@@ -75,6 +75,13 @@ export interface EntradaDoDiretorio {
   readonly state: string | null;
   readonly neighborhood: string | null;
   readonly phoneE164: string | null;
+  /**
+   * O SITE (cliente, 21/10/2026). A URL inteira, como gravada -- nunca so o
+   * host e nunca normalizada. Sai ao lado de `phoneE164` e pela mesma razao:
+   * canal que a entidade publicou de proposito para ser procurada (ADR-0011
+   * secao 4).
+   */
+  readonly siteUrl: string | null;
   readonly verificacoes: readonly VerificacaoDaEntidade[];
   /**
    * Metros cruas, como o banco as calculou. **Nulo** quando a entrada nao tem
@@ -111,6 +118,7 @@ export interface EntradaPublica {
   readonly neighborhood: string | null;
   readonly about: string | null;
   readonly phone_e164: string | null;
+  readonly site_url: string | null;
   readonly verification: VerificacaoPublica;
   readonly distance_m: number | null;
   readonly logo_url: string | null;
@@ -168,6 +176,7 @@ export function projetarEntrada(
     neighborhood: entrada.neighborhood,
     about: entrada.about,
     phone_e164: entrada.phoneE164,
+    site_url: entrada.siteUrl,
     verification: {
       level: nivelDerivado(entrada.verificacoes),
       evidence_kinds: evidenciasAprovadas(entrada.verificacoes),

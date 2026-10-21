@@ -126,6 +126,7 @@ interface LinhaDaEntrada {
   street_number: string | null;
   complement: string | null;
   phone_e164: string | null;
+  site_url: string | null;
   status: StatusDaEntrada;
   source: OrigemDaEntrada;
   claim_status: TitularidadeDaEntrada;
@@ -182,6 +183,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     streetNumber: l.street_number,
     complement: l.complement,
     phoneE164: l.phone_e164,
+    siteUrl: l.site_url,
     logo: comoImagem(l.logo_status, l.logo_public_key, l.logo_rejection_reason),
     photo: comoImagem(l.photo_status, l.photo_public_key, l.photo_rejection_reason),
     status: l.status,
@@ -215,6 +217,7 @@ const COLUNAS = [
   'professionals.street_number as street_number',
   'professionals.complement as complement',
   'professionals.phone_e164 as phone_e164',
+  'professionals.site_url as site_url',
   'professionals.status as status',
   'professionals.source as source',
   'professionals.claim_status as claim_status',
@@ -352,6 +355,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             street_number: nova.streetNumber,
             complement: nova.complement,
             phone_e164: nova.phoneE164,
+            site_url: nova.siteUrl,
             logo_image_id: nova.logoImageId,
             photo_image_id: nova.photoImageId,
             status: nova.status,
@@ -391,6 +395,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             ...(mudanca.streetNumber === undefined ? {} : { street_number: mudanca.streetNumber }),
             ...(mudanca.complement === undefined ? {} : { complement: mudanca.complement }),
             ...(mudanca.phoneE164 === undefined ? {} : { phone_e164: mudanca.phoneE164 }),
+            ...(mudanca.siteUrl === undefined ? {} : { site_url: mudanca.siteUrl }),
             // `null` TIRA o ponteiro da imagem e nao apaga objeto no balde.
             ...(mudanca.logoImageId === undefined ? {} : { logo_image_id: mudanca.logoImageId }),
             ...(mudanca.photoImageId === undefined ? {} : { photo_image_id: mudanca.photoImageId }),

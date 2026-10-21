@@ -8556,6 +8556,27 @@ export interface components {
              */
             phone_e164?: string | null;
             /**
+             * Format: uri
+             * @description O **site do estabelecimento** (decisao do cliente de 21/10/2026),
+             *     a URL inteira e pronta para abrir -- nunca so o host. Nulo quando a
+             *     entidade nao informou, e nulo e o estado normal da maioria das
+             *     entradas.
+             *
+             *     Sai ao lado de `phone_e164` e pela mesma razao: e um canal de
+             *     contato que a entidade publicou DE PROPOSITO para ser procurada
+             *     (ADR-0011 secao 4), e nao um dado pessoal que escapou. Como ele,
+             *     **so pode existir porque a operacao exige conta**.
+             *
+             *     **OPCIONAL no schema, e isso e deliberado**: o APK publicado le esta
+             *     resposta e nao conhece este campo. Campo novo em resposta e aditivo;
+             *     exigi-lo nao seria.
+             *
+             *     O formato e garantido na escrita (`DirectoryEntrySiteUrl`): sempre
+             *     `https://`, nunca normalizado. Quem desenha pode abrir o valor como
+             *     esta.
+             */
+            site_url?: string | null;
+            /**
              * @description A pontuacao agregada, **para o cartao da lista mostrar a media e a
              *     quantidade** -- o cliente pediu os dois "na lista e na pagina"
              *     (18/10/2026).
@@ -9260,15 +9281,57 @@ export interface components {
          */
         DirectoryEntryClaimStatus: "unclaimed" | "claim_pending" | "claimed" | "disputed";
         /**
+         * Format: uri
+         * @description O **site do estabelecimento**, a URL inteira (decisao do cliente de
+         *     21/10/2026). Opcional em toda superficie; nulo quer dizer "nao
+         *     informou".
+         *
+         *     **FORMATO, e ele NAO E NORMALIZADO:** `https://` obrigatorio e esquema
+         *     AUSENTE e **recusado** -- `cobasi.com.br` nao e aceito nem completado,
+         *     e a recusa vem com a frase que ensina (`400 validation-failed`,
+         *     `code: site_url_not_https`, "Escreva o endereco completo, comecando com
+         *     https://."). `http://` recusa com "Troque http:// por https://.".
+         *     Tambem recusam: espaco (`site_url_invalid`), controle bidirecional
+         *     (`bidi_control`), `usuario:senha` (`site_url_has_credentials`), literal
+         *     de IP (`site_url_ip_literal`) e host local ou sem ponto
+         *     (`site_url_local_host`); fora da faixa, `site_url_length`.
+         *
+         *     O que a pessoa conferiu na tela e o que fica gravado: o servidor **nao
+         *     acrescenta esquema, nao tira `www` e nao corta caminho nem query**. O
+         *     padrao e o mesmo de `AdminStorePartnerInput.site_url` e a autoridade e
+         *     uma so (`src/shared/url/endereco-completo.ts`), espelhada no painel.
+         *
+         *     **Guarda a URL inteira, e nao o host** -- a diferenca deliberada em
+         *     relacao a `AdminStorePartner`, que devolve `host`: lá o destino e
+         *     montado a partir de `target_path`, e aqui a tela ABRE este endereco como
+         *     esta. Cortar o caminho levaria quem toca para a raiz do dominio em vez
+         *     da pagina que o estabelecimento indicou.
+         *
+         *     `261` e `length('https://') + 253`.
+         */
+        DirectoryEntrySiteUrl: string;
+        /**
          * @description Um campo que falta para a entrada poder ir ao ar. `slug` esta na lista
          *     porque `DirectoryEntrySummary.slug` e `required` na listagem do
          *     aplicativo: uma entrada publicada sem endereco publico nao teria como
          *     ser serializada, e o defeito apareceria como erro de serializacao em
          *     producao, longe de quem o causou.
          *
-         *     `phone_e164` e hoje o **unico** canal de contato que a tabela tem: nao
-         *     existe coluna para site, e-mail, WhatsApp nem rede social. Quando
-         *     existirem, "ao menos um canal" passa a ser uma disjuncao.
+         *     `phone_e164` e o **unico canal que a publicacao COBRA**, e desde
+         *     21/10/2026 isso nao e mais a mesma coisa que "o unico canal que a tabela
+         *     tem": `site_url` passou a existir (`20261020000014`, decisao do
+         *     cliente).
+         *
+         *     **`site_url` NAO entra nesta lista, e a ausencia e deliberada.** A frase
+         *     anterior aqui prometia que, quando houvesse coluna, "ao menos um canal"
+         *     passaria a ser uma disjuncao. A coluna existe e a disjuncao **nao foi
+         *     feita**: transformar a regua de publicacao em "site OU telefone" e
+         *     decisao de produto que ninguem tomou, e cumpri-la por conta propria
+         *     mudaria, sem pedido, quais entradas podem ir ao ar. Fica registrado
+         *     aqui como pendente, e nao como resolvido.
+         *
+         *     Consequencia pratica, dita em voz alta: entrada com site e sem telefone
+         *     continua NAO publicavel.
          * @enum {string}
          */
         AdminDirectoryEntryMissingField: "slug" | "city" | "state" | "phone_e164";
@@ -9348,6 +9411,7 @@ export interface components {
              *     manda E.164.
              */
             phone_e164?: string;
+            site_url?: components["schemas"]["DirectoryEntrySiteUrl"];
         };
         /**
          * @description A edicao. `null` **apaga** o campo e ausente **nao mexe** -- a
@@ -9382,6 +9446,12 @@ export interface components {
             /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
             phone_e164?: string | null;
             /**
+             * @description `null` **apaga** o site e ausente **nao mexe**, como os demais.
+             *     Apagar o site nunca despublica a entrada: ele nao e canal cobrado
+             *     pela publicacao.
+             */
+            site_url?: components["schemas"]["DirectoryEntrySiteUrl"] | null;
+            /**
              * @description **Sem este campo o estado nao muda.** E assim que "editar nao
              *     despublica" deixa de ser uma frase: nao existe caminho que mexa em
              *     `status` sem o corpo ter pedido.
@@ -9414,6 +9484,7 @@ export interface components {
             street_number?: string | null;
             complement?: string | null;
             phone_e164?: string | null;
+            site_url?: string | null;
             /**
              * @description A logo da entidade, quadrada. `status: processing` enquanto o worker
              *     nao terminou, e `url` nula nesse intervalo: a tela mostra o lugar da
@@ -9529,10 +9600,15 @@ export interface components {
          *     anterior, que dizia que "foto nao e coluna de `professionals`". Era
          *     verdade e deixou de ser: a migracao `20261018000008` criou
          *     `logo_image_id` e `photo_image_id`, e o cliente liberou as duas para o
-         *     aplicativo em 18/10/2026. Site, e-mail, WhatsApp, redes sociais e
-         *     horario continuam sem coluna e continuam fora -- declarar campo que
-         *     ninguem pode preencher produziria uma tela com linhas vazias
-         *     permanentes.
+         *     aplicativo em 18/10/2026.
+         *
+         *     **O SITE TAMBEM PASSOU A EXISTIR**, em 21/10/2026
+         *     (`20261020000014`, decisao do cliente), e por isso `site_url` esta aqui
+         *     -- a frase anterior o listava junto com os que "continuam sem coluna".
+         *     **E-mail, WhatsApp, redes sociais e horario continuam sem coluna e
+         *     continuam fora**, pela razao que valia para o site e deixou de valer:
+         *     declarar campo que ninguem pode preencher produz uma tela com linhas
+         *     vazias permanentes.
          *
          *     **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
          *     quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
@@ -9555,6 +9631,27 @@ export interface components {
              *     `src/tools/portao-contrato-publico.ts`.
              */
             phone_e164?: string | null;
+            /**
+             * Format: uri
+             * @description O **site do estabelecimento** (decisao do cliente de 21/10/2026),
+             *     a URL inteira e pronta para abrir -- nunca so o host. Nulo quando a
+             *     entidade nao informou, e nulo e o estado normal da maioria das
+             *     entradas.
+             *
+             *     Sai ao lado de `phone_e164` e pela mesma razao: e um canal de
+             *     contato que a entidade publicou DE PROPOSITO para ser procurada
+             *     (ADR-0011 secao 4), e nao um dado pessoal que escapou. Como ele,
+             *     **so pode existir porque a operacao exige conta**.
+             *
+             *     **OPCIONAL no schema, e isso e deliberado**: o APK publicado le esta
+             *     resposta e nao conhece este campo. Campo novo em resposta e aditivo;
+             *     exigi-lo nao seria.
+             *
+             *     O formato e garantido na escrita (`DirectoryEntrySiteUrl`): sempre
+             *     `https://`, nunca normalizado. Quem desenha pode abrir o valor como
+             *     esta.
+             */
+            site_url?: string | null;
             /**
              * Format: uri
              * @description A LOGO, a MESMA de `DirectoryEntrySummary.logo_url` e com a mesma

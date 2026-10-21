@@ -78,6 +78,7 @@ const ENTRADA: EntradaDoDiretorio = {
   state: 'SP',
   neighborhood: 'Pinheiros',
   phoneE164: '+551130612200',
+  siteUrl: null,
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,

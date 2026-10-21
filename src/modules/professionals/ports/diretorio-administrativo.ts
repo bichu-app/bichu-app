@@ -93,6 +93,7 @@ export interface NovaEntrada {
   readonly streetNumber: string | null;
   readonly complement: string | null;
   readonly phoneE164: string | null;
+  readonly siteUrl: string | null;
   /**
    * `catalog_images.id` da logo e da foto, ja CONFIRMADAS nesta mesma
    * transacao. Nulas quando a entrada nasce sem imagem, que e o normal.
@@ -127,6 +128,7 @@ export interface MudancaDaEntrada {
   readonly streetNumber?: string | null;
   readonly complement?: string | null;
   readonly phoneE164?: string | null;
+  readonly siteUrl?: string | null;
   /**
    * `catalog_images.id` resolvido pelo caso de uso, ou `null` para TIRAR a
    * imagem. Ausente nao mexe -- a mesma distincao dos demais campos.

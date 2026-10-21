@@ -95,6 +95,7 @@ interface LinhaDaEntrada {
   state: string | null;
   neighborhood: string | null;
   phone_e164: string | null;
+  site_url: string | null;
   evidencias: TipoDeEvidencia[] | null;
   distancia_em_metros: number | null;
   logo_public_key: string | null;
@@ -230,6 +231,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
     state: l.state,
     neighborhood: l.neighborhood,
     phoneE164: l.phone_e164,
+    siteUrl: l.site_url,
     // Toda evidencia que chega aqui ja passou pelo `decision = 'approved'` da
     // subconsulta. O campo e repetido porque o dominio nao acredita na consulta:
     // `nivelDerivado` filtra de novo, e e isso que faz a regra valer tambem em
@@ -546,6 +548,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         'state',
         'neighborhood',
         'phone_e164',
+        'site_url',
         EVIDENCIAS_APROVADAS.as('evidencias'),
         sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
         // A LOGO, e SO a logo. `photo_image_id` nao e selecionado aqui de
@@ -602,6 +605,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
           'state',
           'neighborhood',
           'phone_e164',
+          'site_url',
           EVIDENCIAS_APROVADAS.as('evidencias'),
           sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
           // AS DUAS no detalhe: a logo entra pela projecao comum da entrada, a
