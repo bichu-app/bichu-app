@@ -55,10 +55,15 @@ import '../../widgets/seletor_de_lista.dart';
 /// Tres pecas do contrato, e nenhuma delas e nova aqui:
 /// `createMyPhotoUploadIntent` (prefixo `people/`, HEIC aceito),
 /// `MeUpdate.photo_upload_id` para amarrar a foto a conta, e `Me.photo` para
-/// le-la de volta. **O selo nao e imagem**: ele e `Me.email_verified`, o mesmo
-/// conceito que o resto do produto usa, desenhado em cima da foto. Gravar o
-/// selo dentro do JPEG faria a imagem mentir no dia em que a pessoa trocasse
-/// de e-mail.
+/// le-la de volta. **O selo nao e imagem**: ele e
+/// `Me.contact_channel_verified`, o mesmo campo e a mesma regua que os OUTROS
+/// veem desta conta, desenhado em cima da foto. Gravar o selo dentro do JPEG
+/// faria a imagem mentir no dia em que a pessoa trocasse de e-mail.
+///
+/// **Era `Me.email_verified` ate 21/10/2026** -- ver o cabecalho de
+/// `_SeloDeValidado`, no fim deste arquivo, para por que a troca aconteceu e
+/// por que `email_verified` continua existindo e sendo lido aqui, na linha de
+/// situacao do e-mail.
 ///
 /// **A foto e visivel SO AO DONO.** `Me.photo` e a unica resposta do contrato
 /// que a traz, `getMe` exige `bearerAuth` sem alternativa vazia, e a decisao

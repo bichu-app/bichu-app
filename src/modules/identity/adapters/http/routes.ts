@@ -579,8 +579,9 @@ export function registrarRotasDeIdentidade(
    *
    * Ela saiu daqui em 18/10/2026 para poder ser medida sem subir Fastify: as
    * duas regras novas sao de OMISSAO (a foto sai so nesta resposta; o selo e
-   * `email_verified` e nao um campo de escrita), e regra de omissao se mede mal
-   * por injecao de requisicao.
+   * derivado na leitura -- `contact_channel_verified` desde 21/10/2026 -- e nao
+   * um campo de escrita), e regra de omissao se mede mal por injecao de
+   * requisicao.
    */
   const comoRespostaDoPerfil = (conta: Conta, foto: FotoDoPerfil | null): Record<string, unknown> =>
     projetarMeuPerfil(conta, foto, deps.urlDeMidia);

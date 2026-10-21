@@ -5414,7 +5414,9 @@ paths:
 
         **Quem ve a foto: so o dono.** Ela sai em `getMe` e em nenhuma outra
         resposta. O selo de validado nao e enviado nem escolhido aqui -- ele e
-        `Me.email_verified`.
+        `Me.contact_channel_verified`, derivado na leitura (era
+        `Me.email_verified` ate 21/10/2026, quando o cliente mandou unificar a
+        regua do selo do dono com a dos outros).
       x-rate-limit:
         - dimension: [account]
           limit: 20
@@ -17166,11 +17168,16 @@ components:
         tambem: o original fica no armazenamento privado e nunca e servido ao
         cliente, aqui como na foto de pet.
 
-        **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e `Me.email_verified`, que ja
-        existia e e o MESMO conceito que o resto do produto usa. A moldura do app
-        desenha o selo em cima da foto quando `email_verified` e verdadeiro, e
-        nao desenha quando e falso. Gravar o selo dentro do JPEG faria a imagem
-        mentir no dia em que a pessoa trocasse de e-mail.
+        **O SELO DE VALIDADO NAO ESTA AQUI.** Ele e
+        `Me.contact_channel_verified`, o MESMO campo e a MESMA regua que os
+        outros veem desta conta. A moldura do app desenha o selo em cima da foto
+        quando ele e verdadeiro, e nao desenha quando e falso. Gravar o selo
+        dentro do JPEG faria a imagem mentir no dia em que a pessoa trocasse de
+        e-mail.
+
+        **Era `Me.email_verified` ate 21/10/2026**, e aquilo era so e-mail
+        enquanto o selo de terceiro era e-mail OU telefone: duas reguas para o
+        mesmo selo, iguais hoje so porque nada grava `phone_verified_at`.
       required: [status]
       properties:
         status:
