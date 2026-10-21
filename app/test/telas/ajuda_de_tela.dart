@@ -546,6 +546,16 @@ DepositoEmMemoria depositoLogado({
   /// que preenche o bairro em F3.1 sem geocodificar nada (criterio 2 da
   /// BICHUS-21); nula, o campo abre vazio e com o foco dentro dele.
   RegiaoDeReferencia? regiaoDeReferencia,
+  /// `Me.display_name`. **Nulo e o estado normal e e o padrao**: 2 das 7
+  /// contas de homologacao nao tem nome, e o avatar da barra cai no glifo de
+  /// pessoa quando ele falta. Quem mede a INICIAL passa um nome.
+  String? nome,
+  /// `Me.photo.url`: a foto que a propria pessoa cadastrou.
+  ///
+  /// **Nulo e o padrao**, e o avatar da barra cai na inicial (ou no glifo). Ela
+  /// viaja em `SessionResponse.user`, entao ela esta na sessao desde o login --
+  /// e e por isso que ela entra AQUI, no deposito, e nao numa resposta de rede.
+  String? fotoUrl,
 }) {
   final deposito = DepositoEmMemoria()
     ..gravar(
@@ -562,6 +572,8 @@ DepositoEmMemoria depositoLogado({
           pendencias: pendencias,
           podeAbrirCaso: true,
           regiaoDeReferencia: regiaoDeReferencia,
+          nome: nome,
+          fotoUrl: fotoUrl,
         ),
       ),
     );
