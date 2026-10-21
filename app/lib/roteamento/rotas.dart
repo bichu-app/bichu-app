@@ -1325,7 +1325,12 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // Rota IRMA da caixa e nao filha: a caixa a empilha com `push`, e voltar
       // devolve a pessoa a lista com a linha ja dizendo `Lido`. O `ref` do
       // caminho e o do COMUNICADO, e nao o da notificacao.
-      _comBarraFixa(
+      // `GoRoute` CRU, e nao `_comBarraFixa`: esta e uma pagina INTERNA, e a
+      // decisao do cliente de 20/10 e que a barra de baixo fica "apenas nas
+      // paginas de primeiro plano". A caixa de avisos e primeiro plano (ela e
+      // o destino do sino); o comunicado e aberto por uma LINHA dela, que e
+      // conteudo -- a mesma relacao de `/mensagens` com `/mensagens/:id`.
+      GoRoute(
         path: RotasDoComunicado.comunicado,
         builder: (context, estado) => PaginaDoComunicado(
           ref: estado.pathParameters[RotasDoComunicado.parametroDoRef]!,

@@ -158,6 +158,17 @@ const List<TelaEmpilhada> telasDePrimeiroPlano = <TelaEmpilhada>[
 /// nenhuma por um controle da casca. **Se o cliente discordar, e esta lista
 /// que ele corrige** -- oito linhas, nao vinte e sete telas.
 const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
+  // -- A pagina do comunicado (20/10/2026) -------------------------------
+  (
+    nome: 'a pagina do comunicado',
+    endereco: '/avisos/comunicados/comunic0Ref123456789',
+    padrao: '/avisos/comunicados/:comunicadoRef',
+    motivo: 'MESMA relacao de `/mensagens` com a conversa: a caixa de avisos e '
+        'primeiro plano (destino do sino) e esta pagina e aberta por uma LINHA '
+        'dela, que e conteudo. Ela e o unico destino "pagina interna" da '
+        'caixa, porque `broadcast` e o unico tipo de aviso sem destino '
+        'natural -- os outros levam a uma tela que ja existia.',
+  ),
   // -- O exemplo literal dele -------------------------------------------
   (
     nome: 'a conversa',
