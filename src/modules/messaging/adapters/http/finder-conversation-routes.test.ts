@@ -255,6 +255,15 @@ function bancada(cenario: Cenario = {}): Bancada {
   registrarRotasDoAchador(app, {
     conversas: new ConversaDoAchadorService({
       repositorio,
+      // BICHUS-35. A foto nao e exercida por esta bancada: ela mede as quatro
+      // rotas e a forma do corpo. Quem mede a foto do lado sem conta e
+      // `application/conversa-do-achador.test.ts`. O duble REJEITA em vez de
+      // devolver nulo -- um nulo faria um caso que passasse a anexar foto ficar
+      // verde medindo o caminho sem foto.
+      fotos: {
+        porUploadId: () => Promise.reject(new Error('fora desta bancada')),
+        pelaReferenciaDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+      },
       ids,
       clock,
       trilha: {
@@ -271,6 +280,11 @@ function bancada(cenario: Cenario = {}): Bancada {
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
+    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+    // deixaria a isca da invariante verde com a chave do original gravada.
+    assinarFoto: (chave: string) =>
+      Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     clock,
   });
 

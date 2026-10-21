@@ -37,7 +37,9 @@ export const STATUS_DO_PROBLEMA = {
   'tag-code-malformed':              400,
   'unsupported-media-type':          415, // quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir
   'verification-token-expired':      410, // token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu
-  'upload-not-received':             409, // o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar
+  'upload-not-received':             409, // o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar. BICHUS-35: tambem responde o envio de mensagem cuja foto anexada ficou em `sanitize_status = 'ausente'` -- a intencao foi assinada e os bytes nunca chegaram, que e o MESMO fato
+  'photo-not-ready':                 409, // BICHUS-35: a foto anexada a mensagem da conversa mediada existe e a higiene dela ainda nao terminou (`sanitize_status = 'pendente'`). Tipo PROPRIO e nao `validation-failed`: o corpo esta correto, nada precisa ser corrigido, e a saida e tentar de novo em segundos mostrando 'preparando a foto'. Separado de `photo-rejected`, que e a outra saida da mesma anexacao e nunca melhora com o tempo. A mensagem NAO e gravada: gravar o texto sem a foto deixaria a pessoa achando que a foto entrou
+  'photo-rejected':                  409, // BICHUS-35: a higiene RECUSOU a foto anexada (`sanitize_status = 'recusada'`), porque os BYTES nao sao imagem que o produto abra, ou a imagem e grande demais, ou e animada. O `detail` carrega o motivo que o trabalhador ja gravou em `sanitize_rejection_reason`, e nao um texto redigido de novo nesta borda -- duas redacoes do mesmo motivo divergem. Separado de `photo-not-ready`: tentar de novo com a MESMA foto nunca vai passar, e a saida e escolher outra
   'precondition-failed':             412, // ADR-0027: `If-Match` nao corresponde a versao atual do recurso do backoffice. Outra pessoa salvou depois da leitura, e nada foi gravado
   'captcha-rejected':                403, // ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)
   'method-not-allowed':              405, // ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do "nao fui eu", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)
@@ -49,7 +51,7 @@ export const STATUS_DO_PROBLEMA = {
   'postal-code-lookup-unavailable':  503, // BICHUS-9.2: os dois servicos publicos de CEP (ViaCEP e a reserva BrasilAPI) falharam ou nao responderam no prazo. Separado de `not-found`, que e 404, porque a saida da tela e a MESMA -- digitar o endereco a mao -- e a FRASE nao e: `not-found` diz 'este CEP nao existe' e este diz 'nao conseguimos consultar agora, tente de novo'. Nenhum dos dois impede salvar o cadastro
 } as const;
 
-/** União fechada dos 39 tipos declarados no contrato. */
+/** União fechada dos 41 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

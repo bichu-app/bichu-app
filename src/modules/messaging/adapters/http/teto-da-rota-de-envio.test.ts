@@ -106,6 +106,11 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
     // Entrou com a emenda 3 do ADR-0010 (19/10/2026). Os resolvedores de teto
     // nao a tocam -- eles precisam do chamador e de mais nada --, e por isso
     // ela segue a mesma forma dos vizinhos deste objeto.
+    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+    // deixaria a isca da invariante verde com a chave do original gravada.
+    assinarFoto: (chave: string) =>
+      Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: undefined as unknown as DependenciasDasRotasDeConversa['baseDeMidia'],
   };
 }

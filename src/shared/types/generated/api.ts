@@ -8082,6 +8082,58 @@ export interface components {
         Conversation: {
             /** Format: uuid */
             id?: string;
+            /**
+             * Format: uuid
+             * @description O AVISO que abriu esta conversa (`conversations.found_report_id`,
+             *     `NOT NULL UNIQUE` -- um aviso, uma conversa).
+             *
+             *     **Existe para que o TUTOR consiga anexar foto.** O corpo de
+             *     `createFoundReportPhotoUploadIntent` EXIGE `found_report_id`, e o
+             *     tutor nao e o relator do aviso: o aviso nao aparece em
+             *     `listFoundReports` (que e do relator) e `case_id` e o caso de
+             *     perdido, nao o aviso. Sem este campo o tutor tem a autorizacao e
+             *     **nao tem de onde tirar o argumento** -- a simetria da conversa
+             *     mediada ficaria correta no servidor e morta na tela.
+             *
+             *     **`FinderConversation` NAO tem este campo, e nao pode ganhar.** O
+             *     token do achador JA endereca o aviso, e e por isso que
+             *     `createFinderPhotoUploadIntent` nao pede id nenhum. Por-lo la
+             *     entregaria um UUIDv7 -- com o instante de criacao dentro -- a quem
+             *     nao tem conta, que e exatamente o que o SEC-001 proibe.
+             */
+            found_report_id?: string;
+            /**
+             * @description **Uma foto que ESTE chamador enviar chega a ser lida pelo outro
+             *     lado?** Informacao de EXPECTATIVA, nao de permissao: o envio e
+             *     aceito, a mensagem e gravada e o proprio remetente ve a foto.
+             *     O que este campo diz e o ALCANCE.
+             *
+             *     `false` hoje em um caso so: o outro lado e o achador **sem
+             *     conta**. A URL assinada de leitura leva a chave do objeto no
+             *     caminho, e a chave da foto pedida por quem TEM conta leva o
+             *     `found_report_id` dentro -- servi-la entregaria um UUIDv7 a quem
+             *     nao tem conta, que e o que o SEC-001 proibe. Entao a superficie
+             *     do achador sem conta responde `photo_url: null` para a foto do
+             *     tutor.
+             *
+             *     Sem este campo isso e defeito de EXPECTATIVA: o tutor manda a
+             *     foto do pet, nao recebe reacao nenhuma e fica esperando resposta
+             *     de quem nao viu nada. O servidor e o unico que sabe, porque a
+             *     tela nao tem como deduzir.
+             *
+             *     **O sentido contrario FUNCIONA**: a foto do achador sem conta
+             *     chega ao tutor (a chave dela e `found-reports/sem-conta/...`, sem
+             *     identificador), e e o sentido que o aplicativo ja promete em
+             *     texto entregue.
+             *
+             *     `true` quando o achador tem conta, e `true` sempre no dia em que
+             *     a leitura do achador sem conta ganhar um caminho opaco. O campo
+             *     **continua declarado** nesse dia: tira-lo quebraria quem ja o le.
+             *
+             *     **`FinderConversation` nao tem este campo**, pela mesma razao de
+             *     `found_report_id`: aquele lado nao decide nada com ele.
+             */
+            photo_reaches_other_side: boolean;
             /** Format: uuid */
             case_id?: string | null;
             pet_display_name?: string;
@@ -16115,6 +16167,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * @description A FOTO, opcional, pelo `upload_ref` que
+                     *     `createFinderPhotoUploadIntent` devolveu.
+                     *
+                     *     **Opaco, e nao o `upload_id` do outro lado.** Quem chama
+                     *     aqui nao tem conta, e o `id` da intencao e UUIDv7:
+                     *     carrega o instante de criacao e nao sai para quem nao tem
+                     *     conta (SEC-001). Mesma referencia que
+                     *     `PATCH /v1/finder/found-report` aceita.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava. O trabalhador reescreve a
+                     *     imagem do zero, sem metadado nenhum, grava a derivada em
+                     *     balde privado e **substitui o original**, que e a copia
+                     *     que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A referencia tem de ser do **mesmo aviso** deste token. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma referencia que nao existe.
+                     */
+                    photo_upload_ref?: string;
                 };
             };
         };
@@ -16130,6 +16212,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
              *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
@@ -16565,6 +16662,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * Format: uuid
+                     * @description A FOTO, opcional, pelo `upload_id` que
+                     *     `createFoundReportPhotoUploadIntent` devolveu.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava -- e quem acha costuma achar
+                     *     perto de onde mora. O trabalhador confere os BYTES,
+                     *     reescreve a imagem do zero sem metadado nenhum, grava a
+                     *     derivada em balde privado e **substitui o original**, que
+                     *     e a copia que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A intencao tem de ser do **mesmo aviso** desta conversa. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma intencao que nao existe.
+                     *
+                     *     O teto de tres fotos por aviso (SEC-009, `lifetime`) e
+                     *     **compartilhado** entre o tutor e o achador: ele conta
+                     *     intencoes do AVISO, nao de cada pessoa.
+                     */
+                    photo_upload_id?: string;
                 };
             };
         };
@@ -16580,6 +16707,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Conversa encerrada ou bloqueada. */
             410: {
                 headers: {

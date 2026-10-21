@@ -61,6 +61,7 @@ import type {
 } from '../../ports/conversation-repository.js';
 import { decodificarCursor, limiteEfetivo } from '../../domain/paginacao.js';
 import type { AbsoluteUrl, ConversationId, UserId } from '../../../../shared/types/brands.js';
+import type { AssinadorDeFoto } from '../../ports/assinador-de-foto.js';
 
 export const rotaDeListagemDeConversas = defineRoute({
   operationId: 'listConversations',
@@ -217,6 +218,13 @@ export interface DependenciasDasRotasDeConversa {
    * `person-profile-routes.ts`.
    */
   readonly baseDeMidia: AbsoluteUrl;
+  /**
+   * O assinador da foto da MENSAGEM (BICHUS-35). Separado de `baseDeMidia`,
+   * que monta URL de derivada PUBLICA: esta foto esta em balde privado e sai
+   * assinada, com validade curta (criterio 9 -- ela e vista pelo tutor dentro
+   * da conversa mediada, e so).
+   */
+  readonly assinarFoto: AssinadorDeFoto;
 }
 
 /**
@@ -359,13 +367,39 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
  * Aqui a decisão de expor é sempre uma decisão — que é exatamente o que uma
  * conversa desenhada para não entregar telefone nem endereço exige.
  */
-function comoResposta(
+/**
+ * Exportada para a bancada que confere o CORPO da resposta
+ * (`o-aviso-sai-para-quem-tem-conta.test.ts`). Nenhum portao deste repositorio
+ * confere corpo de RESPOSTA -- o validador de contrato confere o da requisicao
+ * --, entao a unica forma de provar o que sai e montar e ler.
+ */
+export async function comoResposta(
   conversa: ConversaVisivel,
   baseDeMidia: AbsoluteUrl,
-): Record<string, unknown> {
+  assinar: AssinadorDeFoto,
+): Promise<Record<string, unknown>> {
   const base = baseDeMidia.replace(/\/$/, '');
   return {
     id: conversa.id,
+    // O AVISO desta conversa. **So na vista autenticada** -- ela ja entrega
+    // `id` e `case_id` como UUID, e este e mais um id da PROPRIA conversa de
+    // quem chamou. `FinderConversation` nao tem e nao pode ganhar: o token do
+    // achador ja endereca o aviso, e entregar UUIDv7 a quem nao tem conta e o
+    // que o SEC-001 proibe.
+    //
+    // Sem este campo o tutor nao consegue pedir intencao de foto: o corpo de
+    // `createFoundReportPhotoUploadIntent` EXIGE `found_report_id`, e o tutor
+    // nao e o relator -- o aviso nao aparece na lista dele, e `case_id` e o
+    // caso de perdido, nao o aviso.
+    found_report_id: conversa.foundReportId,
+    // O ALCANCE DA FOTO, e ele e informacao de EXPECTATIVA e nao de
+    // permissao: hoje a foto do tutor nao e lida pelo achador SEM conta
+    // (guarda de SEC-001 em `domain/leitura-da-foto.ts`), e sem este campo o
+    // tutor manda a foto e fica esperando resposta de quem nao viu nada. O
+    // servidor e o unico que sabe disso.
+    //
+    // **So na vista autenticada**, como `found_report_id`.
+    photo_reaches_other_side: conversa.fotoAlcancaOutroLado,
     case_id: conversa.caseId,
     pet_display_name: conversa.petDisplayName,
     status: conversa.status,
@@ -388,7 +422,10 @@ function comoResposta(
       handle: p.handle,
       photo_icon_url: p.photoKey === null ? null : `${base}/${p.photoKey}`,
     })),
-    messages: conversa.messages.map(comoMensagem),
+    // `Promise.all` e nao um laco: as assinaturas sao locais (HMAC, sem rede
+    // no adaptador S3) e independentes entre si, e serializa-las faria a
+      // pagina de 20 mensagens pagar 20 esperas por nada.
+    messages: await Promise.all(conversa.messages.map((m) => comoMensagem(m, assinar))),
     // A LEITURA (BICHUS-278). Os tres saem do servico, que os leu do banco:
     // nenhum deles e calculado aqui, e nenhum e calculado no cliente.
     unread: conversa.naoLida,
@@ -399,15 +436,38 @@ function comoResposta(
   };
 }
 
-function comoMensagem(mensagem: MensagemGravada): Record<string, unknown> {
+/**
+ * A URL ASSINADA da foto da mensagem, ou `null`.
+ *
+ * **Nenhuma consulta de estado aqui, e isso e consequencia da invariante da
+ * escrita** (`ports/foto-da-conversa.ts`): o que esta em `photo_object_key` ja
+ * e a derivada higienizada, sem EXIF. Chave presente significa chave limpa, e
+ * por isso a leitura nao precisa perguntar a `upload_intents` se pode servir.
+ * Se a escrita pudesse gravar o original, esta funcao teria de fazer um `JOIN`
+ * -- e a leitura que esquecesse o `JOIN` serviria a coordenada de GPS sem nada
+ * acusar.
+ *
+ * **Assinada e nao publica**: o balde e privado (criterio 9). A validade e o
+ * motivo dela estao em `domain/leitura-da-foto.ts`.
+ */
+async function urlDaFoto(
+  mensagem: MensagemGravada,
+  assinar: AssinadorDeFoto,
+): Promise<string | null> {
+  if (mensagem.photoObjectKey === null) return null;
+  return assinar(mensagem.photoObjectKey);
+}
+
+async function comoMensagem(
+  mensagem: MensagemGravada,
+  assinar: AssinadorDeFoto,
+): Promise<Record<string, unknown>> {
   return {
     id: mensagem.id,
     sender_role: mensagem.senderRole,
     body: mensagem.body,
     redactions: mensagem.redactions.map((r) => ({ kind: r.kind, hint: r.hint })),
-    // A foto entra com a mídia do achado; nulo é o valor verdadeiro hoje, e uma
-    // URL inventada seria uma promessa que o cliente descobre quebrada na tela.
-    photo_url: null,
+    photo_url: await urlDaFoto(mensagem, assinar),
     created_at: mensagem.createdAt.toISOString(),
   };
 }
@@ -425,7 +485,9 @@ export function registrarRotasDeConversas(
       const pagina = paginaDaListaDaQuery(request);
       const pagina_ = await deps.conversas.listar(chamador, pagina);
       return reply.status(200).send({
-        items: pagina_.items.map((c) => comoResposta(c, deps.baseDeMidia)),
+        items: await Promise.all(
+          pagina_.items.map((c) => comoResposta(c, deps.baseDeMidia, deps.assinarFoto)),
+        ),
         // O TOTAL DO RECORTE, e nao o tamanho da pagina: a linha de resumo da
         // listagem no aplicativo diz quantas conversas existem, e `items.length`
         // diria `10` a quem tem 57.
@@ -488,7 +550,7 @@ export function registrarRotasDeConversas(
         chamador,
         paginaDaQuery(request),
       );
-      return reply.status(200).send(comoResposta(conversa, deps.baseDeMidia));
+      return reply.status(200).send(await comoResposta(conversa, deps.baseDeMidia, deps.assinarFoto));
     },
   );
 
@@ -503,7 +565,13 @@ export function registrarRotasDeConversas(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
       const conversationId = conversaDoCaminho(request);
-      const corpo = request.body as { body: string };
+      // `photo_upload_id` e OPCIONAL no contrato. O corpo desta operacao nao e
+      // fechado (`additionalProperties: false` nao esta declarado), e o Fastify
+      // monta o Ajv com `removeAdditional: true`: um campo que NAO estivesse no
+      // schema seria apagado em silencio antes de chegar aqui, e o envio
+      // gravaria a mensagem sem a foto sem nada acusar. E por isso que o campo
+      // ter entrado no contrato e condicao, e nao documentacao.
+      const corpo = request.body as { body: string; photo_upload_id?: string };
 
       const resposta = await executarComIdempotencia(
         deps.idempotencia,
@@ -524,7 +592,15 @@ export function registrarRotasDeConversas(
         },
         async () => ({
           status: 201,
-          body: comoMensagem(await deps.conversas.enviar(conversationId, corpo.body, chamador)),
+          body: await comoMensagem(
+            await deps.conversas.enviar(
+              conversationId,
+              corpo.body,
+              chamador,
+              corpo.photo_upload_id,
+            ),
+            deps.assinarFoto,
+          ),
         }),
       );
 

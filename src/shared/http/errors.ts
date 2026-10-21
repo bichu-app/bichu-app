@@ -548,6 +548,50 @@ export const problemas = {
     }),
 
   /**
+   * 409. A foto anexada à mensagem existe e a HIGIENE dela não terminou.
+   *
+   * A mensagem **não é gravada**. Gravar o texto sem a foto é a pior falha
+   * possível desta tela: a pessoa acredita ter mandado a prova de que está com
+   * o animal, e o outro lado nunca a vê.
+   *
+   * Tipo próprio e não `validation-failed`: o corpo está correto e não há nada
+   * para a pessoa corrigir. A saída é tentar de novo em segundos, e é para isso
+   * que o aplicativo precisa distinguir este caso — ele mostra "preparando a
+   * foto" em vez de um erro.
+   *
+   * **Caso raro, e a raridade é medida.** Desde 19/10/2026 o aplicativo envia os
+   * bytes quando a pessoa ESCOLHE a foto, e o toque de confirmar só carrega o
+   * identificador: quando a mensagem é postada, a higiene em geral já terminou.
+   * A corrida existe e por isso tem nome; nada caro deve ser construído em
+   * volta dela.
+   */
+  fotoAindaNaoEstaPronta: (): AppError =>
+    new AppError('photo-not-ready', 'A foto ainda está sendo preparada', {
+      detail: 'Falta pouco. Tente enviar de novo em alguns segundos.',
+    }),
+
+  /**
+   * 409. A higiene RECUSOU os bytes da foto anexada.
+   *
+   * `detail` é o motivo que o trabalhador já gravou em
+   * `upload_intents.sanitize_rejection_reason` — lido de lá e **não redigido de
+   * novo aqui**. Os textos de recusa existem num lugar só (`TEXTO_DA_RECUSA`,
+   * em `higienizar-foto-do-achado.ts`), e duas redações do mesmo motivo
+   * divergem na primeira que alguém ajustar.
+   *
+   * Separado de `photo-not-ready`: tentar de novo com a MESMA foto nunca vai
+   * passar, e a saída é escolher outra. Um tipo só faria a tela oferecer "tentar
+   * de novo" justamente no caso em que tentar de novo não resolve.
+   */
+  fotoRecusadaNaHigiene: (motivo: string): AppError =>
+    new AppError('photo-rejected', 'Essa foto não pôde ser enviada', {
+      // Vazio não acontece (o CHECK `upload_intents_higiene_coerente` exige o
+      // motivo neste estado), mas um `detail` vazio seria pior que ausente: a
+      // tela mostraria um balão em branco.
+      detail: motivo.trim() === '' ? 'Escolha outra foto e tente de novo.' : motivo,
+    }),
+
+  /**
    * Teto de cinco tags ativas por pet (ADR-0004). O tutor revoga uma e emite
    * outra; não há caminho de aumento por autoatendimento.
    *

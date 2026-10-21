@@ -215,11 +215,19 @@ export function construtorDoEnriquecimento(
  *
  * A forma óbvia seria `WHERE found_report_id = :achado AND user_id = :dono`, e
  * ela responde a pergunta errada de um jeito que passa despercebido: `user_id`
- * em `upload_intents` é **quem pediu a intenção**, não quem é dono do aviso. Os
- * dois coincidem hoje porque só o relator consegue pedir — mas isso é uma
- * garantia que mora em OUTRA consulta (`construtorDaLeitura`, chamada antes), e
- * uma autorização que depende de outra chamada ter acontecido é a autorização
- * num `if`, com mais passos.
+ * em `upload_intents` é **quem pediu a intenção**, não quem é dono do aviso.
+ *
+ * **Desde a BICHUS-35 eles NÃO coincidem mais**, e é por isso que a observação
+ * deixou de ser teórica: o tutor do pet também pede intenção de foto (a conversa
+ * mediada é simétrica), e o achador sem conta pede com `user_id` NULO. Contar
+ * por `upload_intents.user_id` daria a cada pessoa o seu próprio teto de três,
+ * e o SEC-009 diz **três por AVISO**. A contagem aqui é do aviso inteiro, as
+ * duas espécies juntas, e é isso que faz o teto ser compartilhado.
+ *
+ * O predicado do chamador é o mesmo `OR` de [construtorDoAvisoParaFoto] — o
+ * relator ou o tutor do pet —, e ele continua no `WHERE`: uma contagem
+ * autorizada por outra chamada ter acontecido é a autorização num `if`, com
+ * mais passos.
  *
  * Com o `JOIN` e o `whereRef`, a pergunta vira a certa e vira sozinha: *"quantas
  * intenções existem PARA ESTE AVISO, sendo este aviso DESTA CONTA"*. Sem a
@@ -234,9 +242,73 @@ export function construtorDaContagemDeFotos(db: DbExecutor, achado: FoundReportI
     .innerJoin('found_reports', (join) =>
       join.onRef('found_reports.id', '=', 'upload_intents.found_report_id'),
     )
+    .leftJoin('pets', 'pets.id', 'found_reports.pet_id')
     .select(({ fn }) => fn.countAll<number>().as('total'))
     .where('found_reports.id', '=', achado)
-    .where('found_reports.reporter_user_id', '=', dono);
+    .where((eb) =>
+      eb.or([
+        eb('found_reports.reporter_user_id', '=', dono),
+        eb('pets.owner_user_id', '=', dono),
+      ]),
+    );
+}
+
+/**
+ * O AVISO, para quem pode ANEXAR FOTO A ELE: o relator **ou** o tutor do pet.
+ *
+ * ## Por que existe uma segunda leitura, e nao um parametro em [construtorDaLeitura]
+ *
+ * `construtorDaLeitura` autoriza `GET`, `PATCH` e `statusDoRelator`, e nas
+ * tres a regra e e continua sendo **so o relator**: o aviso e a declaracao de
+ * quem achou o animal, e o tutor nao edita o que outra pessoa declarou. Trocar
+ * aquela consulta por esta ampliaria tres autorizacoes para resolver uma, e as
+ * outras duas nao foram decididas por ninguem.
+ *
+ * ## A juncao responde "quem e o tutor" DENTRO deste modulo
+ *
+ * `found_reports.pet_id` -> `pets.owner_user_id`. Nao ha travessia de
+ * fronteira: nenhuma linha daqui importa de `messaging`, e a conversa nem
+ * aparece nesta consulta. E deliberado -- fazer a autorizacao da foto depender
+ * de `messaging` acoplaria o modulo que GUARDA o aviso ao modulo que o
+ * CONVERSA, e a pergunta "de quem e este pet" nunca foi de `messaging`.
+ *
+ * `leftJoin` e nao `innerJoin`: o aviso de animal SEM plaquinha tem
+ * `pet_id` nulo (achado avulso, `20260922000010`). Com `innerJoin` o
+ * relator desses avisos perderia a autorizacao que ele JA TEM hoje -- a
+ * ampliacao viraria uma restricao, em silencio, justamente no caminho que mais
+ * usa foto.
+ *
+ * O `OR` esta no `WHERE` e nao num `if` depois (ADR-0021): a consulta que
+ * alcancaria o aviso de um terceiro nao existe neste arquivo.
+ */
+export function construtorDoAvisoParaFoto(
+  db: DbExecutor,
+  achado: FoundReportId,
+  chamador: UserId,
+) {
+  return db
+    .selectFrom('found_reports')
+    .leftJoin('pets', 'pets.id', 'found_reports.pet_id')
+    .select([
+      'found_reports.id',
+      'found_reports.origin',
+      'found_reports.status',
+      'found_reports.species',
+      'found_reports.size',
+      'found_reports.found_city',
+      'found_reports.found_neighborhood',
+      'found_reports.found_at',
+      sql<boolean>`(found_reports.photo_upload_id IS NOT NULL)`.as('tem_foto'),
+      'found_reports.notes',
+      'found_reports.created_at',
+    ])
+    .where('found_reports.id', '=', achado)
+    .where((eb) =>
+      eb.or([
+        eb('found_reports.reporter_user_id', '=', chamador),
+        eb('pets.owner_user_id', '=', chamador),
+      ]),
+    );
 }
 
 // ===========================================================================
@@ -420,6 +492,16 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
 
     async buscarDoRelator(achado: FoundReportId, dono: UserId): Promise<AchadoGravado | null> {
       const linha = (await construtorDaLeitura(db, achado, dono).executeTakeFirst()) as
+        | LinhaDoAchado
+        | undefined;
+      return linha === undefined ? null : comoAchado(linha);
+    },
+
+    async avisoParaAnexarFoto(
+      achado: FoundReportId,
+      chamador: UserId,
+    ): Promise<AchadoGravado | null> {
+      const linha = (await construtorDoAvisoParaFoto(db, achado, chamador).executeTakeFirst()) as
         | LinhaDoAchado
         | undefined;
       return linha === undefined ? null : comoAchado(linha);

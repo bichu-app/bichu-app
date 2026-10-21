@@ -54,6 +54,7 @@ import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { criarConversationRepository } from '../../src/modules/messaging/adapters/persistence/kysely-conversation-repository.js';
+import { criarFotoDaConversa } from '../../src/modules/messaging/adapters/persistence/kysely-foto-da-conversa.js';
 import { ConversationService } from '../../src/modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../../src/modules/messaging/adapters/http/conversation-routes.js';
 import { escoparRotas } from '../../src/shared/http/registrar-rota.js';
@@ -274,6 +275,11 @@ async function servidorPara(quemChama: UserId) {
   registrarRotasDeConversas(escopo, {
     conversas: new ConversationService({
       repositorio: criarConversationRepository(db),
+      // BICHUS-35. Este arquivo mede `photo_icon_url` -- a foto de PERFIL do
+      // outro participante --, que e outro campo e outra decisao. A foto da
+      // MENSAGEM usa o adaptador de verdade, porque so a leitura e exercida
+      // aqui e ela nao passa por esta porta.
+      fotos: criarFotoDaConversa(db),
       // O gerador de ids NÃO é exercido por nenhuma das duas LEITURAS. Ele está
       // aqui porque o serviço o exige no construtor, e um objeto completo é mais
       // honesto do que uma marca de tipo: se um caminho de leitura passar a
@@ -291,6 +297,11 @@ async function servidorPara(quemChama: UserId) {
     contrato: carregarContrato('api/openapi.yaml'),
     idempotencia: idempotenciaInerte,
     clock: { now: () => AGORA },
+    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
+    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
+    // deixaria a isca da invariante verde com a chave do original gravada.
+    assinarFoto: (chave: string) =>
+      Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: BASE_DE_MIDIA,
   });
   });

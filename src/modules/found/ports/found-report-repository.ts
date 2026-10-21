@@ -110,6 +110,35 @@ export interface FoundReportRepository {
   /** `null` quando não existe **ou não é do chamador**. Nunca 403 (ADR-0021). */
   buscarDoRelator(achado: FoundReportId, dono: UserId): Promise<AchadoGravado | null>;
 
+  /**
+   * O aviso, para quem pode ANEXAR FOTO a ele: o relator **ou o tutor do pet**.
+   *
+   * ## Por que esta autorização é mais larga que a de [buscarDoRelator]
+   *
+   * A conversa mediada é SIMÉTRICA: os dois lados mandam foto, e nenhum depende
+   * de o outro ter mandado primeiro (BICHUS-35, critério 9). O tutor do pet não
+   * é o relator do aviso — quem relata é quem achou o animal —, então com
+   * [buscarDoRelator] ele recebia 404 e **não tinha nenhum caminho** para obter
+   * intenção de foto. A simetria estava no contrato e não existia no código.
+   *
+   * ## O que ela NÃO amplia
+   *
+   * Só a foto. `GET`, `PATCH` e `statusDoRelator` continuam em
+   * [buscarDoRelator]: o aviso é a declaração de quem achou o animal, e o tutor
+   * não edita o que outra pessoa declarou.
+   *
+   * ## Sem travessia de fronteira
+   *
+   * "Quem é o tutor" se responde com `found_reports.pet_id` ->
+   * `pets.owner_user_id`, dentro do próprio módulo `found`. A conversa não
+   * entra na consulta, e este módulo continua sem importar nada de
+   * `messaging`.
+   *
+   * `null` quando não existe, não é de nenhum dos dois, ou o aviso é avulso e
+   * o chamador não é o relator. Nunca 403 (ADR-0021).
+   */
+  avisoParaAnexarFoto(achado: FoundReportId, chamador: UserId): Promise<AchadoGravado | null>;
+
   listarDoRelator(dono: UserId, limite: number, cursor: string | null): Promise<Pagina<AchadoGravado>>;
 
   /**
@@ -135,6 +164,23 @@ export interface FoundReportRepository {
    * de propósito: cada intenção assina uma autorização de escrita que não se
    * desfaz dentro da validade, então três intenções já são três escritas
    * possíveis no bucket, tenham elas sido confirmadas ou não.
+   *
+   * ## O TETO É COMPARTILHADO entre o tutor e o achador, e isto é consequência
+   *
+   * A contagem é do **aviso**, as duas espécies juntas
+   * (`found_report_photo` e `finder_photo`) — ela sempre foi, porque o
+   * `WHERE` nunca filtrou por `upload_intents.user_id` (ver o cabeçalho do
+   * construtor). Até a BICHUS-35 isso não tinha consequência visível, porque só
+   * o relator conseguia pedir intenção. Agora que o tutor também pede, as três
+   * fotos do aviso são três no total: se o achador gastar as três, **o tutor não
+   * manda nenhuma**, e vice-versa.
+   *
+   * **O número não foi mudado** (continua 3, SEC-009). A consequência está
+   * registrada aqui porque ela é de produto e não de implementação: se três
+   * compartilhadas se mostrarem poucas, quem decide o número é o cliente.
+   *
+   * `dono` é o relator **ou o tutor do pet**, o mesmo predicado de
+   * [avisoParaAnexarFoto]: a autorização continua no `WHERE`.
    */
   contarIntencoesDeFoto(achado: FoundReportId, dono: UserId): Promise<number>;
 

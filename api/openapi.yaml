@@ -361,7 +361,9 @@ x-problem-types:
   - { slug: tag-code-malformed,            status: 400 }
   - { slug: unsupported-media-type,        status: 415, note: "quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir" }
   - { slug: verification-token-expired,    status: 410, note: "token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu" }
-  - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar" }
+  - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar. BICHUS-35: tambem responde o envio de mensagem cuja foto anexada ficou em `sanitize_status = 'ausente'` -- a intencao foi assinada e os bytes nunca chegaram, que e o MESMO fato" }
+  - { slug: photo-not-ready,               status: 409, note: "BICHUS-35: a foto anexada a mensagem da conversa mediada existe e a higiene dela ainda nao terminou (`sanitize_status = 'pendente'`). Tipo PROPRIO e nao `validation-failed`: o corpo esta correto, nada precisa ser corrigido, e a saida e tentar de novo em segundos mostrando 'preparando a foto'. Separado de `photo-rejected`, que e a outra saida da mesma anexacao e nunca melhora com o tempo. A mensagem NAO e gravada: gravar o texto sem a foto deixaria a pessoa achando que a foto entrou" }
+  - { slug: photo-rejected,                status: 409, note: "BICHUS-35: a higiene RECUSOU a foto anexada (`sanitize_status = 'recusada'`), porque os BYTES nao sao imagem que o produto abra, ou a imagem e grande demais, ou e animada. O `detail` carrega o motivo que o trabalhador ja gravou em `sanitize_rejection_reason`, e nao um texto redigido de novo nesta borda -- duas redacoes do mesmo motivo divergem. Separado de `photo-not-ready`: tentar de novo com a MESMA foto nunca vai passar, e a saida e escolher outra" }
   - { slug: precondition-failed,           status: 412, note: "ADR-0027: `If-Match` nao corresponde a versao atual do recurso do backoffice. Outra pessoa salvou depois da leitura, e nada foi gravado" }
   - { slug: captcha-rejected,              status: 403, note: "ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)" }
   - { slug: method-not-allowed,            status: 405, note: "ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do \"nao fui eu\", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)" }
@@ -3643,6 +3645,37 @@ paths:
               required: [body]
               properties:
                 body: { type: string, minLength: 1, maxLength: 1000 }
+                photo_upload_ref:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{22}$'
+                  description: |
+                    A FOTO, opcional, pelo `upload_ref` que
+                    `createFinderPhotoUploadIntent` devolveu.
+
+                    **Opaco, e nao o `upload_id` do outro lado.** Quem chama
+                    aqui nao tem conta, e o `id` da intencao e UUIDv7:
+                    carrega o instante de criacao e nao sai para quem nao tem
+                    conta (SEC-001). Mesma referencia que
+                    `PATCH /v1/finder/found-report` aceita.
+
+                    **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                    a pessoa enviou. Foto de celular carrega coordenada de GPS
+                    no EXIF, e num produto de pet perdido isso entrega onde
+                    quem achou o animal estava. O trabalhador reescreve a
+                    imagem do zero, sem metadado nenhum, grava a derivada em
+                    balde privado e **substitui o original**, que e a copia
+                    que carregava a coordenada.
+
+                    Enquanto essa higiene nao terminar, o envio responde
+                    `409 photo-not-ready` e **nao grava a mensagem**;
+                    recusada, `409 photo-rejected`; sem bytes,
+                    `409 upload-not-received`. Em nenhum dos tres a mensagem
+                    entra sem a foto: quem anexou precisa saber que ela nao
+                    entrou.
+
+                    A referencia tem de ser do **mesmo aviso** deste token. A
+                    de outro aviso e recusada em `400`, com a mesma resposta
+                    de uma referencia que nao existe.
       responses:
         '201':
           description: Mensagem enviada.
@@ -3651,6 +3684,16 @@ paths:
               schema: { $ref: '#/components/schemas/FinderMessage' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '409':
+          description: |
+            A foto anexada nao esta pronta para entrar na conversa:
+            `photo-not-ready` (higiene em andamento, tente de novo),
+            `photo-rejected` (os bytes nao servem, escolha outra) ou
+            `upload-not-received` (os bytes nunca chegaram). A mensagem
+            **nao foi gravada** em nenhum dos tres.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '410':
           description: |
             Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
@@ -4253,6 +4296,36 @@ paths:
               required: [body]
               properties:
                 body: { type: string, minLength: 1, maxLength: 1000 }
+                photo_upload_id:
+                  type: string
+                  format: uuid
+                  description: |
+                    A FOTO, opcional, pelo `upload_id` que
+                    `createFoundReportPhotoUploadIntent` devolveu.
+
+                    **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                    a pessoa enviou. Foto de celular carrega coordenada de GPS
+                    no EXIF, e num produto de pet perdido isso entrega onde
+                    quem achou o animal estava -- e quem acha costuma achar
+                    perto de onde mora. O trabalhador confere os BYTES,
+                    reescreve a imagem do zero sem metadado nenhum, grava a
+                    derivada em balde privado e **substitui o original**, que
+                    e a copia que carregava a coordenada.
+
+                    Enquanto essa higiene nao terminar, o envio responde
+                    `409 photo-not-ready` e **nao grava a mensagem**;
+                    recusada, `409 photo-rejected`; sem bytes,
+                    `409 upload-not-received`. Em nenhum dos tres a mensagem
+                    entra sem a foto: quem anexou precisa saber que ela nao
+                    entrou.
+
+                    A intencao tem de ser do **mesmo aviso** desta conversa. A
+                    de outro aviso e recusada em `400`, com a mesma resposta
+                    de uma intencao que nao existe.
+
+                    O teto de tres fotos por aviso (SEC-009, `lifetime`) e
+                    **compartilhado** entre o tutor e o achador: ele conta
+                    intencoes do AVISO, nao de cada pessoa.
       responses:
         '201':
           description: Mensagem enviada.
@@ -4261,6 +4334,16 @@ paths:
               schema: { $ref: '#/components/schemas/Message' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            A foto anexada nao esta pronta para entrar na conversa:
+            `photo-not-ready` (higiene em andamento, tente de novo),
+            `photo-rejected` (os bytes nao servem, escolha outra) ou
+            `upload-not-received` (os bytes nunca chegaram). A mensagem
+            **nao foi gravada** em nenhum dos tres.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '410':
           description: Conversa encerrada ou bloqueada.
           content:
@@ -13899,7 +13982,7 @@ components:
 
     Conversation:
       type: object
-      required: [status, participants, messages, unread]
+      required: [status, participants, messages, unread, photo_reaches_other_side]
       description: |
         Vista do chamador **autenticado**. O achador sem conta recebe
         `FinderConversation`, que e outro schema e nao tem `id` nem `case_id`
@@ -13908,6 +13991,58 @@ components:
         primeira refatoracao.
       properties:
         id: { type: string, format: uuid }
+        found_report_id:
+          type: string
+          format: uuid
+          description: |
+            O AVISO que abriu esta conversa (`conversations.found_report_id`,
+            `NOT NULL UNIQUE` -- um aviso, uma conversa).
+
+            **Existe para que o TUTOR consiga anexar foto.** O corpo de
+            `createFoundReportPhotoUploadIntent` EXIGE `found_report_id`, e o
+            tutor nao e o relator do aviso: o aviso nao aparece em
+            `listFoundReports` (que e do relator) e `case_id` e o caso de
+            perdido, nao o aviso. Sem este campo o tutor tem a autorizacao e
+            **nao tem de onde tirar o argumento** -- a simetria da conversa
+            mediada ficaria correta no servidor e morta na tela.
+
+            **`FinderConversation` NAO tem este campo, e nao pode ganhar.** O
+            token do achador JA endereca o aviso, e e por isso que
+            `createFinderPhotoUploadIntent` nao pede id nenhum. Por-lo la
+            entregaria um UUIDv7 -- com o instante de criacao dentro -- a quem
+            nao tem conta, que e exatamente o que o SEC-001 proibe.
+        photo_reaches_other_side:
+          type: boolean
+          description: |
+            **Uma foto que ESTE chamador enviar chega a ser lida pelo outro
+            lado?** Informacao de EXPECTATIVA, nao de permissao: o envio e
+            aceito, a mensagem e gravada e o proprio remetente ve a foto.
+            O que este campo diz e o ALCANCE.
+
+            `false` hoje em um caso so: o outro lado e o achador **sem
+            conta**. A URL assinada de leitura leva a chave do objeto no
+            caminho, e a chave da foto pedida por quem TEM conta leva o
+            `found_report_id` dentro -- servi-la entregaria um UUIDv7 a quem
+            nao tem conta, que e o que o SEC-001 proibe. Entao a superficie
+            do achador sem conta responde `photo_url: null` para a foto do
+            tutor.
+
+            Sem este campo isso e defeito de EXPECTATIVA: o tutor manda a
+            foto do pet, nao recebe reacao nenhuma e fica esperando resposta
+            de quem nao viu nada. O servidor e o unico que sabe, porque a
+            tela nao tem como deduzir.
+
+            **O sentido contrario FUNCIONA**: a foto do achador sem conta
+            chega ao tutor (a chave dela e `found-reports/sem-conta/...`, sem
+            identificador), e e o sentido que o aplicativo ja promete em
+            texto entregue.
+
+            `true` quando o achador tem conta, e `true` sempre no dia em que
+            a leitura do achador sem conta ganhar um caminho opaco. O campo
+            **continua declarado** nesse dia: tira-lo quebraria quem ja o le.
+
+            **`FinderConversation` nao tem este campo**, pela mesma razao de
+            `found_report_id`: aquele lado nao decide nada com ele.
         case_id: { type: string, format: uuid, nullable: true }
         pet_display_name: { type: string }
         status: { type: string, enum: [open, blocked, closed] }
