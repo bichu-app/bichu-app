@@ -169,6 +169,80 @@ function percorrer(
 }
 
 /**
+ * O texto do arquivo **sem comentario**, preservando a contagem de linhas.
+ *
+ * ## Por que isto existe
+ *
+ * Em 21/10/2026 este portao reprovou a onda 4 com TRES achados de
+ * `created_by_user_id`, e os tres eram COMENTARIO. Um deles diz, literalmente,
+ * *"`created_by_user_id` continua fora desta lista"* -- ou seja: o portao
+ * acusava a prosa que documenta a invariante que ele existe para defender.
+ *
+ * Apagar os comentarios deixaria o portao verde e tiraria a documentacao da
+ * regra: seria trocar o conserto pelo silencio. O defeito e da LEITURA.
+ *
+ * ## O que ele faz, e o que NAO faz
+ *
+ * Troca por espaco o conteudo de `//` ate o fim da linha e de `/* ... *\/`,
+ * **fora de literal de texto**. Mantem `\n`, porque o achado reporta NUMERO DE
+ * LINHA e um corte que encurtasse o arquivo moveria a linha reportada.
+ *
+ * Nome de coluna dentro de STRING continua sendo achado, e isso e deliberado:
+ * `select('created_by_user_id')` e codigo, nao prosa.
+ *
+ * **O limite, dito em voz alta:** nao distingue `/` de divisao de `/` de
+ * literal de expressao regular. Uma regex contendo `//` ou `/*` seria tratada
+ * como comeco de comentario. Nao existe nenhuma em `src/` hoje, e o caso que
+ * importa -- a coluna citada em codigo de verdade -- tem isca propria logo
+ * abaixo.
+ */
+export function semComentarios(texto: string): string {
+  let saida = '';
+  let i = 0;
+  let aspas: string | null = null;
+  while (i < texto.length) {
+    const c = texto[i] as string;
+    const proximo = texto[i + 1];
+    if (aspas !== null) {
+      saida += c;
+      if (c === '\\' && i + 1 < texto.length) {
+        saida += texto[i + 1] as string;
+        i += 2;
+        continue;
+      }
+      if (c === aspas) aspas = null;
+      i += 1;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      aspas = c;
+      saida += c;
+      i += 1;
+      continue;
+    }
+    if (c === '/' && proximo === '/') {
+      while (i < texto.length && texto[i] !== '\n') {
+        saida += ' ';
+        i += 1;
+      }
+      continue;
+    }
+    if (c === '/' && proximo === '*') {
+      while (i < texto.length && !(texto[i] === '*' && texto[i + 1] === '/')) {
+        saida += texto[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      saida += i < texto.length ? '  ' : '';
+      i += 2;
+      continue;
+    }
+    saida += c;
+    i += 1;
+  }
+  return saida;
+}
+
+/**
  * Procura o nome da coluna no código que roda no servidor.
  *
  * **O alcance desta varredura é o nome literal, e isso precisa ser dito em voz
@@ -183,10 +257,12 @@ export function inspecionarFontes(
 ): Achado[] {
   const achados: Achado[] = [];
   for (const arquivo of arquivos) {
+    // SEM COMENTARIO. Ver `semComentarios`: a prosa que documenta a invariante
+    // nao e violacao dela, e o numero de linha continua o do arquivo real.
+    const codigo = semComentarios(arquivo.conteudo);
     for (const proibida of proibidas) {
-      if (!arquivo.conteudo.includes(proibida)) continue;
-      const linha =
-        arquivo.conteudo.split('\n').findIndex((texto) => texto.includes(proibida)) + 1;
+      if (!codigo.includes(proibida)) continue;
+      const linha = codigo.split('\n').findIndex((texto) => texto.includes(proibida)) + 1;
       achados.push({
         onde: `${arquivo.caminho}:${linha}`,
         coluna: proibida,

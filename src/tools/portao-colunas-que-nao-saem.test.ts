@@ -18,6 +18,7 @@ import {
   inspecionarContrato,
   inspecionarFontes,
   lerColunasQueNaoSaem,
+  semComentarios,
 } from './portao-colunas-que-nao-saem.js';
 
 const PROIBIDA = new Set(['created_by_user_id']);
@@ -239,6 +240,113 @@ void describe('o código de servidor', () => {
       PROIBIDA,
     );
     assert.deepEqual(achados, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// COMENTÁRIO NÃO É CÓDIGO — as duas direções, e as duas são obrigatórias
+// ---------------------------------------------------------------------------
+//
+// Em 21/10/2026 este portão reprovou a onda 4 com três achados de
+// `created_by_user_id`, e os três eram COMENTÁRIO. Um deles diz, literalmente,
+// "`created_by_user_id` continua fora desta lista": o portão acusava a prosa
+// que documenta a invariante que ele existe para defender.
+//
+// **As duas direções estão aqui de propósito.** A que passa prova que o falso
+// positivo morreu; a que REPROVA prova que o conserto não deixou o portão
+// cego — e essa é a que importa mais, porque portão cego é o mesmo defeito
+// virado do outro lado, e esse não dá sinal nenhum.
+void describe('comentário não é código, e código continua sendo código', () => {
+  void it('NÃO acusa a coluna citada em comentário de linha', () => {
+    const achados = inspecionarFontes(
+      [
+        {
+          caminho: 'src/modules/network/domain/encontro-da-rede.ts',
+          conteudo: [
+            '// A ORIGEM, e **não a autoria**: `admin` ou `community`.',
+            '// `created_by_user_id` continua fora desta lista.',
+            "const campos = ['origin'];",
+          ].join('\n'),
+        },
+      ],
+      PROIBIDA,
+    );
+    assert.deepEqual(
+      achados,
+      [],
+      'achado falso: a prosa que DOCUMENTA a invariante foi lida como violação dela',
+    );
+  });
+
+  void it('NÃO acusa a coluna citada em comentário de bloco nem em `/** */`', () => {
+    const achados = inspecionarFontes(
+      [
+        {
+          caminho: 'src/modules/network/domain/encontro-da-rede.ts',
+          conteudo: [
+            '/**',
+            ' * **Não é o autor.** `created_by_user_id` nunca sai do servidor.',
+            ' */',
+            'export const origem = 1;',
+            '/* created_by_user_id também aqui */',
+          ].join('\n'),
+        },
+      ],
+      PROIBIDA,
+    );
+    assert.deepEqual(achados, [], 'achado falso: comentário de bloco lido como código');
+  });
+
+  void it('REPROVA a coluna em código DEPOIS de um comentário que a cita', () => {
+    // A isca do cego: se a limpeza comesse código junto com a prosa, este caso
+    // ficaria verde e o portão teria morrido em silêncio.
+    const achados = inspecionarFontes(
+      [
+        {
+          caminho: 'src/modules/network/adapters/http/mapper.ts',
+          conteudo: [
+            '// `created_by_user_id` nunca sai do servidor.',
+            'export const corpo = { created_by_user_id: linha.created_by_user_id };',
+          ].join('\n'),
+        },
+      ],
+      PROIBIDA,
+    );
+    assert.equal(achados.length, 1, 'o portão ficou CEGO: coluna em código de verdade não acusou');
+    assert.match(
+      achados[0]?.onde ?? '',
+      /mapper\.ts:2/,
+      'o número de linha não é o do arquivo real: a limpeza encurtou o texto',
+    );
+  });
+
+  void it('REPROVA a coluna dentro de literal de texto, que é código e não prosa', () => {
+    const achados = inspecionarFontes(
+      [
+        {
+          caminho: 'src/modules/network/adapters/persistence/repo.ts',
+          conteudo: "const q = select('created_by_user_id'); // e nao e comentario",
+        },
+      ],
+      PROIBIDA,
+    );
+    assert.equal(
+      achados.length,
+      1,
+      'a coluna num literal de texto é `select(...)` de verdade, e tem de acusar',
+    );
+  });
+
+  void it('`semComentarios` preserva a contagem de linhas', () => {
+    // O achado reporta NÚMERO DE LINHA. Um corte que encurtasse o arquivo
+    // moveria a linha reportada e mandaria quem lê procurar no lugar errado.
+    const texto = ['// um', '/* dois', '   ainda dois */', 'const tres = 3;'].join('\n');
+    assert.equal(
+      semComentarios(texto).split('\n').length,
+      texto.split('\n').length,
+      'a limpeza mudou o número de linhas',
+    );
+    assert.match(semComentarios(texto), /const tres = 3;/, 'a limpeza comeu o código');
   });
 });
 

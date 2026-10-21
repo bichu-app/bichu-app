@@ -264,8 +264,38 @@ function chavesLidas(corpo) {
  * na medicao que precedeu este portao, e falso positivo aqui e o defeito caro:
  * portao que reprova o codigo certo e portao que alguem desliga.
  */
+/**
+ * As chaves cuja presenca a classe TESTA com `is` antes de usar.
+ *
+ * ## Por que isto existe
+ *
+ * Em 21/10/2026 este portao reprovou a onda 4 dizendo que o app lia `Me.photo`
+ * "sem admitir nulo". O codigo e:
+ *
+ *     json['photo'] is Map<String, dynamic>
+ *         ? (json['photo'] as Map<String, dynamic>)['url']
+ *         : null,
+ *
+ * O molde `as` nao anulavel existe, mas ele esta DENTRO do ramo verdadeiro de
+ * um `is` sobre a MESMA chave: ausente, nulo e tipo errado caem todos no `null`
+ * do outro ramo. **O codigo estava certo e o portao estava cego** -- e a prosa
+ * acima daquela linha diz exatamente por que a guarda existe (um `as Map?` cru
+ * sobre outro tipo derrubaria o LOGIN).
+ *
+ * **O limite, dito em voz alta:** basta UMA guarda `is` sobre a chave no corpo
+ * da classe para ela sair do conjunto. Uma classe que guardasse a chave num
+ * lugar e a moldasse sem guarda noutro passaria. Fechar isso exigiria casar o
+ * molde com o ramo do ternario, o que e analise de sintaxe e nao cabe no
+ * escopo deste conserto. O caso que importa -- molde nao anulavel SEM nenhuma
+ * guarda -- continua reprovando, e tem isca propria.
+ */
+function chavesComGuardaIs(corpo) {
+  return new Set([...corpo.matchAll(/\bjson\['([^']+)'\]\s+is\s+/g)].map((m) => m[1]));
+}
+
 function chavesSemNulo(corpo) {
   const saida = new Set();
+  const guardadas = chavesComGuardaIs(corpo);
   const re = /\bjson\['([^']+)'\]\s+as\s+/g;
   let m;
   while ((m = re.exec(corpo)) !== null) {
@@ -278,7 +308,9 @@ function chavesSemNulo(corpo) {
       else if (profundidade === 0 && !/[A-Za-z0-9_$. ]/.test(c)) break;
       i += 1;
     }
-    if (corpo[i] !== "?") saida.add(m[1]);
+    // Guarda por `is` sobre a MESMA chave tira o molde do conjunto: ver
+    // `chavesComGuardaIs`.
+    if (corpo[i] !== "?" && !guardadas.has(m[1])) saida.add(m[1]);
   }
   return [...saida];
 }
@@ -692,6 +724,39 @@ function autoteste() {
       components: { schemas: { PetInput: { required: ["name"], properties: { name: {} } } } },
     },
     esperado: null,
+  });
+
+  // AS DUAS DIRECOES DA GUARDA POR `is` (21/10/2026).
+  //
+  // A que PASSA prova que o falso positivo de `Me.photo` morreu. A que REPROVA
+  // prova que o conserto nao deixou o portao cego -- e essa e a que importa
+  // mais: portao cego e o mesmo defeito virado do outro lado, e esse nao da
+  // sinal nenhum.
+  iscas.push({
+    nome: "guarda-por-is-nao-e-leitura-sem-nulo",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/Pet` do contrato.",
+        "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    return Pet(nome: json['name'] is Map<String, dynamic> ? (json['name'] as Map<String, dynamic>)['url'] : null);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: null,
+  });
+
+  iscas.push({
+    nome: "molde-sem-nulo-e-SEM-guarda-continua-reprovando",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/Pet` do contrato.",
+        "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    return Pet(nome: (json['name'] as Map<String, dynamic>)['url']);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: "campo-opcional-lido-como-obrigatorio",
+    nomeia: "name",
   });
 
   iscas.push({
