@@ -16115,6 +16115,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * @description A FOTO, opcional, pelo `upload_ref` que
+                     *     `createFinderPhotoUploadIntent` devolveu.
+                     *
+                     *     **Opaco, e nao o `upload_id` do outro lado.** Quem chama
+                     *     aqui nao tem conta, e o `id` da intencao e UUIDv7:
+                     *     carrega o instante de criacao e nao sai para quem nao tem
+                     *     conta (SEC-001). Mesma referencia que
+                     *     `PATCH /v1/finder/found-report` aceita.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava. O trabalhador reescreve a
+                     *     imagem do zero, sem metadado nenhum, grava a derivada em
+                     *     balde privado e **substitui o original**, que e a copia
+                     *     que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A referencia tem de ser do **mesmo aviso** deste token. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma referencia que nao existe.
+                     */
+                    photo_upload_ref?: string;
                 };
             };
         };
@@ -16130,6 +16160,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
              *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
@@ -16565,6 +16610,36 @@ export interface operations {
             content: {
                 "application/json": {
                     body: string;
+                    /**
+                     * Format: uuid
+                     * @description A FOTO, opcional, pelo `upload_id` que
+                     *     `createFoundReportPhotoUploadIntent` devolveu.
+                     *
+                     *     **So entra a derivada HIGIENIZADA**, e nunca o arquivo que
+                     *     a pessoa enviou. Foto de celular carrega coordenada de GPS
+                     *     no EXIF, e num produto de pet perdido isso entrega onde
+                     *     quem achou o animal estava -- e quem acha costuma achar
+                     *     perto de onde mora. O trabalhador confere os BYTES,
+                     *     reescreve a imagem do zero sem metadado nenhum, grava a
+                     *     derivada em balde privado e **substitui o original**, que
+                     *     e a copia que carregava a coordenada.
+                     *
+                     *     Enquanto essa higiene nao terminar, o envio responde
+                     *     `409 photo-not-ready` e **nao grava a mensagem**;
+                     *     recusada, `409 photo-rejected`; sem bytes,
+                     *     `409 upload-not-received`. Em nenhum dos tres a mensagem
+                     *     entra sem a foto: quem anexou precisa saber que ela nao
+                     *     entrou.
+                     *
+                     *     A intencao tem de ser do **mesmo aviso** desta conversa. A
+                     *     de outro aviso e recusada em `400`, com a mesma resposta
+                     *     de uma intencao que nao existe.
+                     *
+                     *     O teto de tres fotos por aviso (SEC-009, `lifetime`) e
+                     *     **compartilhado** entre o tutor e o achador: ele conta
+                     *     intencoes do AVISO, nao de cada pessoa.
+                     */
+                    photo_upload_id?: string;
                 };
             };
         };
@@ -16580,6 +16655,21 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            /**
+             * @description A foto anexada nao esta pronta para entrar na conversa:
+             *     `photo-not-ready` (higiene em andamento, tente de novo),
+             *     `photo-rejected` (os bytes nao servem, escolha outra) ou
+             *     `upload-not-received` (os bytes nunca chegaram). A mensagem
+             *     **nao foi gravada** em nenhum dos tres.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Conversa encerrada ou bloqueada. */
             410: {
                 headers: {
