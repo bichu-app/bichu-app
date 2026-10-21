@@ -29,6 +29,7 @@ import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
+import '../telas/conexoes/convide_tutores.dart';
 import '../telas/conexoes/tela_pedidos_de_conexao.dart';
 import '../telas/seguranca/tela_de_bloqueados.dart';
 import '../api/pessoas_api.dart';
@@ -80,6 +81,31 @@ abstract final class Rotas {
   /// todos eles de uma vez.
   static const String pets = '/pets';
   static const String rede = '/rede';
+
+  /// O nome do parametro de consulta que diz **em qual aba a `Rede` abre**.
+  ///
+  /// Ele existe por um motivo medido, e nao por generalidade: a aba `Usuarios`
+  /// e a terceira, e em 320 dp ela nasce 40% visivel -- a 200% de escala, fora
+  /// da tela. O caminho que destrava a conexao nao pode depender de a pessoa
+  /// descobrir que a barra de abas rola, e o estado vazio do Mural e o lugar
+  /// por onde todo mundo passa no primeiro dia.
+  ///
+  /// **Parametro de consulta e nao rota propria** (`/rede/usuarios`): a aba e
+  /// conteudo da secao, nao destino. Uma rota por aba poria tres enderecos para
+  /// a mesma tela e faria o slot da barra de baixo depender de qual deles foi
+  /// usado -- e [CascaFixa.slotDaRota] casa pelo PRIMEIRO segmento, que
+  /// continua sendo `rede` nas tres.
+  ///
+  /// Valor desconhecido e **ignorado**, e a `Rede` abre em `Eventos`: um
+  /// endereco velho ou digitado errado nao e motivo para tela de erro.
+  static const String parametroDaAbaDaRede = 'aba';
+
+  /// O endereco da `Rede` **aberta na aba `Usuarios`**.
+  ///
+  /// Montado aqui e nao na tela que o usa: quem precisa dele e o estado vazio
+  /// do Mural, e endereco composto na tela e o que faz dois lugares escreverem
+  /// a mesma URL de formas diferentes.
+  static const String redeNaBuscaDePessoas = '$rede?$parametroDaAbaDaRede=usuarios';
 
   /// O encontro da `Rede`, sob o ramo da secao: a barra de abas continua, e
   /// voltar devolve a agenda.
@@ -306,6 +332,22 @@ abstract final class Rotas {
   /// constante existe para a casca, aquela para a area, e um caso confere que
   /// as duas dizem a mesma coisa.
   static const String mensagens = '/mensagens';
+
+  /// `Convide tutores` — a tela de trazer tutores para o Bichu.
+  ///
+  /// **SOB `/mensagens`, e nao sob `/perfil`**, por decisao do cliente de
+  /// 21/10/2026: a secao e o `AuAu`. [CascaFixa.slotDaRota] casa pelo PRIMEIRO
+  /// segmento, entao e o caminho que mantem o slot do AuAu aceso enquanto esta
+  /// tela esta na frente -- que e o que o prototipo aprovado desenha.
+  ///
+  /// **Nao e `/rede/indicacoes/...`, e a distancia e deliberada**: "indicacao"
+  /// neste produto e indicar PROFISSIONAL ao diretorio, e aquelas duas rotas sao
+  /// dela. Duas funcoes diferentes vizinhas no endereco sao duas funcoes
+  /// diferentes vizinhas na gaveta.
+  ///
+  /// EMPILHADA, e interna: ela e aberta por um item do corpo do AuAu, e nao pela
+  /// barra. Classificada em `telasInternas` do portao de barra fixa.
+  static const String convidarTutores = '/mensagens/convide-tutores';
 
   /// A CAIXA DE NOTIFICACOES (18/10/2026): o conteudo do sino.
   ///
@@ -1229,6 +1271,22 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `Meus dados` e `Meus achados` acima -- a barra de baixo continua
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
+      // `AuAu` > `Convide tutores` (21/10/2026). Declarada ANTES da area de
+      // mensagens e antes da rota com `:conversaId`: o `go_router` casa na
+      // ordem de registro, e `/mensagens/convide-tutores` casaria
+      // `/mensagens/:conversaId` com `conversaId = 'convide-tutores'` se
+      // viesse depois -- a tela da conversa abriria pedindo uma conversa que
+      // nao existe.
+      //
+      // **Irma da casca e nao sub-rota do ramo**: ela cobre a barra de baixo e
+      // voltar devolve a pessoa ao AuAu. E `ConvitesApi` vem do `Escopo`, como
+      // as outras camadas de API -- a mesma instancia que o leitor de QR usa
+      // para resolver um convite lido.
+      GoRoute(
+        path: Rotas.convidarTutores,
+        builder: (context, estado) =>
+            TelaDeConvidarTutores(convites: Escopo.of(context).convites),
+      ),
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
       _comBarraFixa(
         path: RotasDeMensagens.area,

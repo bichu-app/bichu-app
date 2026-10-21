@@ -45,6 +45,11 @@ const String _urlDaGrade = 'https://midia.test/grade/TREZENTOS-E-VINTE.jpg';
 /// O que a tela pediu ao servidor, na ordem.
 final List<String> chamadas = <String>[];
 
+/// Os CORPOS enviados, na ordem. Eles existem porque a reversao de 20/10/2026
+/// trouxe DUAS credenciais para a mesma operacao, e o que separa os dois
+/// caminhos nao e a rota -- e o que vai dentro.
+final List<String> corpos = <String>[];
+
 http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
   return http.Response(
     jsonEncode(corpo),
@@ -93,9 +98,11 @@ Future<void> _montar(
   bool podeAgir = true,
 }) async {
   chamadas.clear();
+  corpos.clear();
   AppConfig.limparParaTeste();
   final cliente = MockClient((http.Request pedido) async {
     chamadas.add('${pedido.method} ${pedido.url.path}');
+    if (pedido.body.isNotEmpty) corpos.add(pedido.body);
     if (pedido.url.path.contains('/people/')) {
       if (status != 200) {
         // O `type` casa com o status DE PROPOSITO: `ProblemTipo` sai do `type`
@@ -445,19 +452,60 @@ void main() {
   // A PORTA DE PEDIR CONEXÃO
   // ------------------------------------------------------------------
 
-  testWidgets('ISCA: SEM convite na mao, a porta de pedir conexao NAO e desenhada', (
+  // ESTE CASO FOI **INVERTIDO** EM 21/10/2026, E NÃO APAGADO.
+  //
+  // O QUE ELE DIZIA: *"SEM convite na mão, a porta de pedir conexão NÃO é
+  // desenhada"*, e o motivo escrito era que *"`POST /connections` recebe um
+  // TOKEN DE CONVITE, nunca um apelido, e não existe emissor de convite em
+  // produção: um botão aqui desenharia um caminho que o servidor recusa com
+  // 404"*.
+  //
+  // **As duas metades daquele motivo deixaram de valer, e por decisões
+  // diferentes:** o cliente reverteu a recusa do apelido em 20/10/2026 (o
+  // `ConnectionInvite` do contrato passou a ser um `oneOf` de uma das duas
+  // credenciais), e o emissor de convite PASSOU A EXISTIR — é
+  // `issueConnectionInvite`, que alimenta o QR de `Convide tutores`.
+  //
+  // O que o caso mede agora é o outro lado da mesma afirmação: a porta aparece
+  // nos dois casos, e **a credencial que viaja é diferente em cada um**. É essa
+  // diferença que o servidor grava como procedência (`invite_link` contra
+  // `people_search`), e mandar o apelido de quem chegou por um convite
+  // registraria uma busca que não houve.
+  testWidgets('SEM convite na mao, a porta aparece e pede por APELIDO', (
     tester,
   ) async {
-    // `POST /connections` recebe um TOKEN DE CONVITE, nunca um apelido, e não
-    // existe emissor de convite em produção: um botão aqui desenharia um
-    // caminho que o servidor recusa com 404.
     await _montar(tester, perfil: _perfil(estado: 'none'));
-    expect(find.text('Pedir conexão'), findsNothing);
+    expect(
+      find.text('Pedir conexão'),
+      findsOneWidget,
+      reason: 'REPROVA: a porta de pedir não aparece sem convite. Desde '
+          '20/10/2026 o pedido aceita apelido, e esta tela é o destino da aba '
+          '`Usuários` -- sem o botão, o cartão de resultado levaria a uma '
+          'página sem ação.',
+    );
+
+    await tester.tap(find.text('Pedir conexão'));
+    await tester.pumpAndSettle();
+
+    expect(
+      corpos.last,
+      contains('"handle"'),
+      reason: 'REPROVA: o pedido sem convite não foi por apelido. Corpos: '
+          '$corpos',
+    );
+    expect(
+      corpos.last,
+      isNot(contains('invite_token')),
+      reason: 'REPROVA: o corpo levou as duas credenciais. O `oneOf` do '
+          'contrato recusa corpo com as duas e corpo com nenhuma.',
+    );
   });
 
-  testWidgets('CONTRAPESO: COM convite na mao, a porta aparece e chama `POST /connections`', (
+  testWidgets('CONTRAPESO: COM convite na mao, a porta pede por TOKEN', (
     tester,
   ) async {
+    // **O token GANHA quando existe**, e a escolha não é indiferente: é ele
+    // que o servidor grava como procedência.
     await _montar(
       tester,
       perfil: _perfil(estado: 'none'),
@@ -472,6 +520,17 @@ void main() {
       isTrue,
       reason: 'esta é a primeira tela do app a chamar `ConexoesApi.pedir`, e é por aqui que H′ e H″ ligam',
     );
+    expect(
+      corpos.last,
+      contains('"invite_token"'),
+      reason: 'REPROVA: com convite na mão o corpo não levou o token. '
+          'Corpos: $corpos',
+    );
+    expect(
+      corpos.last,
+      isNot(contains('handle')),
+      reason: 'REPROVA: o corpo levou as duas credenciais.',
+    );
   });
 
   testWidgets('ISCA: sem e-mail verificado a porta de pedir NAO aparece, com convite ou sem', (
@@ -479,13 +538,26 @@ void main() {
   ) async {
     // A MESMA porta de `podeCriarNaComunidade`: pedir conexão é ação de
     // comunidade, e política nova não foi inventada aqui.
-    await _montar(
-      tester,
-      perfil: _perfil(estado: 'none'),
-      tokenDoConvite: 'convite-de-teste',
-      podeAgir: false,
-    );
-    expect(find.text('Pedir conexão'), findsNothing);
+    //
+    // **Esta é a guarda que SOBREVIVEU à reversão de 20/10/2026**, e é por
+    // isso que o caso ficou: o que caiu foi a exigência do convite, e não a da
+    // permissão. Os dois caminhos passam por ela.
+    for (final comConvite in <bool>[true, false]) {
+      await _montar(
+        tester,
+        perfil: _perfil(estado: 'none'),
+        tokenDoConvite: comConvite ? 'convite-de-teste' : null,
+        podeAgir: false,
+      );
+      expect(
+        find.text('Pedir conexão'),
+        findsNothing,
+        reason: 'REPROVA: com comConvite=$comConvite e sem e-mail verificado a '
+            'porta de pedir apareceu. A régua é sessão E e-mail confirmado, a '
+            'mesma de `podeCriarNaComunidade`, e a trava de verdade é do '
+            'servidor.',
+      );
+    }
   });
 
   // ------------------------------------------------------------------

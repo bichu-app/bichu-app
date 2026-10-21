@@ -419,8 +419,30 @@ class AbaPets extends StatelessWidget {
 class AbaRede extends StatelessWidget {
   const AbaRede({super.key});
 
+  /// Qual aba o endereco pede, ou nulo quando ele nao pede nenhuma.
+  ///
+  /// **A leitura mora AQUI, e nao dentro de [SecaoDaRede]**, e a diferenca nao
+  /// e estetica: os ramos da casca ficam MONTADOS (o `IndexedStack` deixa o
+  /// inativo em `Offstage`), e um `GoRouterState.of` lido de dentro de um ramo
+  /// inativo devolve o endereco da tela que esta na FRENTE -- a `Rede` leria o
+  /// `?aba=` de quem esta no Mural. Aqui a leitura acontece no rebuild que o
+  /// roteador provoca, e o valor desce por parametro.
+  ///
+  /// Valor desconhecido devolve nulo, e a secao abre em `Eventos`.
+  static AbaDaSecaoRede? abaPedidaPor(BuildContext context) {
+    final pedida = GoRouterState.of(
+      context,
+    ).uri.queryParameters[Rotas.parametroDaAbaDaRede];
+    if (pedida == null) return null;
+    for (final aba in AbaDaSecaoRede.values) {
+      if (aba.name == pedida) return aba;
+    }
+    return null;
+  }
+
   @override
-  Widget build(BuildContext context) => const SecaoDaRede();
+  Widget build(BuildContext context) =>
+      SecaoDaRede(abaInicial: abaPedidaPor(context));
 }
 
 /// **`AbaPerto` NAO EXISTE MAIS, e a ausencia e o contrato (19/10/2026).**

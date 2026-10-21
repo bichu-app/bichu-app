@@ -168,6 +168,9 @@ import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../conexoes/convide_tutores.dart';
+import '../../widgets/item_de_menu.dart';
+import '../../roteamento/rotas.dart';
 import '../../widgets/imagem_da_rede.dart';
 
 /// Os enderecos da area de mensagens, num lugar so.
@@ -742,6 +745,37 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
           )
         : const SizedBox.shrink();
 
+    // A PORTA DE `Convide tutores`, NO TOPO DO CORPO DO AuAu (21/10/2026).
+    //
+    // **Ela mora aqui porque o cliente decidiu que a secao e o AuAu**, e nao o
+    // Perfil: *"no AuAu como tela empilhada, nao no Perfil"*. O Perfil ja e
+    // pilha de menus, e no mesmo dia ele mandou dividir aquela lista por
+    // topicos em vez de acrescentar a sexta linha nela.
+    //
+    // **SEM CONTA ELA NAO NASCE, e nao fica desabilitada.** Emitir convite e
+    // `bearerAuth` sem alternativa vazia: a rota responderia 401, e uma porta
+    // cujo desfecho e uma recusa e o que o criterio 2 da BICHUS-62 proibe. O
+    // ramo de `_faltaConta` sai antes desta linha, entao a guarda e estrutural
+    // e nao um `if` de visibilidade.
+    //
+    // **No TOPO e nao no pe**, ao contrario da porta de `Minhas indicacoes` na
+    // aba `Comunidade`: lá o conteudo e uma lista publica longa e a porta e
+    // historico pessoal; aqui a lista e a propria caixa da pessoa, cresce por
+    // rolagem infinita, e uma porta no pe so apareceria para quem rolasse ate o
+    // fim das conversas -- que e o oposto de quem ainda nao tem nenhuma.
+    final porta = Padding(
+      padding: const EdgeInsets.fromLTRB(
+        BichuEspaco.e4,
+        BichuEspaco.e2,
+        BichuEspaco.e4,
+        0,
+      ),
+      child: ItemDeMenu(
+        rotulo: TelaDeConvidarTutores.titulo,
+        aoTocar: () => context.push(Rotas.convidarTutores),
+      ),
+    );
+
     if (_conversas.isEmpty) {
       // DOIS VAZIOS DIFERENTES, e a frase diz qual dos dois e. Com termo
       // aplicado a pessoa TEM mensagens: dizer "voce ainda nao tem mensagens"
@@ -754,6 +788,7 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           barra,
+          porta,
           Padding(
             padding: const EdgeInsets.all(BichuEspaco.e4),
             child: Text(vazio, style: Theme.of(context).textTheme.bodyLarge),
@@ -766,6 +801,7 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         barra,
+        porta,
         Expanded(
           child: ListView.separated(
             controller: _rolagem,

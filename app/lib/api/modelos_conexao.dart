@@ -176,3 +176,132 @@ enum CaixaDePedidos {
 
   final String codigo;
 }
+
+/// `#/components/schemas/ConnectionInviteIssued` — o convite recém-emitido.
+///
+/// ## O token em claro existe NESTA RESPOSTA e em lugar nenhum mais
+///
+/// O banco guarda os 32 bytes do SHA-256 (`connection_invites.token_hash`),
+/// então nem o servidor nem um despejo do banco o recuperam depois. Quem
+/// perde, emite outro — e emitir **revoga o anterior**.
+///
+/// Por isso este objeto é tratado como credencial pela tela que o recebe: ele
+/// não é guardado em disco, não vai para registro de telemetria e não
+/// sobrevive à sessão.
+///
+/// ## Não há URL e não há imagem aqui, e as duas ausências são do contrato
+///
+/// *"O QR e o link são o mesmo token em dois transportes, e quem os monta é a
+/// tela: devolver URL absoluta amarraria o convite ao domínio do dia."* O
+/// servidor emite um token e mais nada — ele não sabe o que é um QR.
+///
+/// **E não há contagem de quantas pessoas usaram o convite**: seria a lista de
+/// quem viu o perfil de alguém, reduzida a um número.
+class ConviteEmitido {
+  const ConviteEmitido({required this.inviteToken, required this.expiresAt});
+
+  factory ConviteEmitido.doJson(Map<String, dynamic> json) {
+    return ConviteEmitido(
+      inviteToken: json['invite_token'] as String,
+      expiresAt: DateTime.parse(json['expires_at'] as String),
+    );
+  }
+
+  /// O token: 256 bits de CSPRNG em base64url, **reusável por várias
+  /// pessoas**.
+  ///
+  /// Reusável e não de uso único, e o motivo está na migração
+  /// `20261020000012`: compartilhar num grupo é o caso de uso, e uso único
+  /// funcionaria para a primeira pessoa e falharia **calado** para todas as
+  /// outras — sem que quem compartilhou soubesse, porque a falha acontece na
+  /// tela de outra pessoa. O freio do volume não é o uso único: são os tetos
+  /// de conexões, de pendentes e de pedidos por dia, cobrados em **cada**
+  /// pedido que o convite gera. Um link reusado não compra conexão nenhuma,
+  /// porque o aceite continua obrigatório.
+  final String inviteToken;
+
+  /// Quando o convite para de resolver: **30 dias** após a emissão.
+  ///
+  /// O mesmo prazo do pedido pendente — dois prazos para "quanto tempo uma
+  /// intenção de conexão sobrevive" obrigariam a defender os dois. Depois
+  /// desta data o token responde o **mesmo 404** de um token inexistente, e a
+  /// tela não tem como distinguir os dois.
+  final DateTime expiresAt;
+}
+
+/// Por que o servidor recusou um pedido de conexão, quando a recusa é um
+/// **teto** e não um 404.
+///
+/// Local: o contrato declara `Problem.errors[].code` como `type: string` sem
+/// lista fechada — é um campo aberto por desenho, porque cada operação tem o
+/// seu conjunto de códigos e uma enumeração global envelheceria a cada rota
+/// nova. Esta lista é a dos códigos que **`requestConnection` e
+/// `acceptConnection`** produzem, e ela está escrita aqui, e não espalhada em
+/// `if`s de tela, porque os seis precisam de frases diferentes e cinco deles
+/// não são "tentar de novo".
+///
+/// ## Por que isto não é 429, e por que a distinção importa na tela
+///
+/// Teto de produto sai como **400 `validation-failed`**, com o código em
+/// `errors[]`. O 429 é outro bicho: é o teto de *requisições por hora*, e ele
+/// vem com `Retry-After`. Uma tela que tratasse os dois pelo status mostraria
+/// "o servidor está fora, tente de novo" para quem bateu num limite de 24
+/// horas — mandando a pessoa repetir a única coisa que não resolve.
+///
+/// ## A ordem de avaliação do servidor é fixa, e a tela não a reproduz
+///
+/// O servidor devolve **um** código, o primeiro que casa. A tela lê o que
+/// chegou; ela não soma condições nem adivinha qual teto estava mais perto.
+enum RecusaDoPedidoDeConexao {
+  /// Quem pede já chegou ao teto de conexões aceitas.
+  tetoDeConexoes('connection_limit_reached'),
+
+  /// **O outro lado** está cheio. A frase não diz o número da outra pessoa:
+  /// quantas conexões alguém tem é dela, e a contagem já aparece no cartão
+  /// porque a própria pessoa a publica — o teto dela, não.
+  tetoDeConexoesDeQuemRecebe('addressee_connection_limit_reached'),
+
+  /// Pendentes enviados ao mesmo tempo. **Não é teto de hoje**: ele se
+  /// resolve quando alguém responde, e não quando o dia virar.
+  tetoDePendentes('pending_limit_reached'),
+
+  /// **O teto do dia**, em janela corrida de 24 horas. Corrida e não "até a
+  /// meia-noite", senão os pedidos de dois dias caberiam em dois minutos na
+  /// virada. Recusado e cancelado contam, senão cancelar seria a forma de
+  /// burlar o teto.
+  tetoDoDia('daily_limit_reached'),
+
+  /// A recusa anterior ainda está em descanso. **A tela não diz que houve
+  /// recusa**, e é o único caso em que o código sabe mais do que a frase pode
+  /// contar: dizer "ela recusou você" é exatamente o que o produto não dá.
+  emDescanso('connection_resting'),
+
+  /// Corrida: a cláusula `WHERE` barrou o que a aplicação aprovou, porque já
+  /// existe aresta viva entre os dois. **Não é falha**: o estado que a pessoa
+  /// queria já está lá, e o conserto é reler.
+  jaExiste('connection_exists');
+
+  const RecusaDoPedidoDeConexao(this.codigo);
+
+  /// O valor que chega em `errors[].code`.
+  final String codigo;
+
+  /// O `field` que carrega o código quando o pedido foi **por apelido**.
+  static const String campoDoApelido = 'handle';
+
+  /// O `field` quando o pedido foi **por token de convite**.
+  static const String campoDoToken = 'invite_token';
+
+  /// Devolve **nulo para código desconhecido**, e não um valor de queda.
+  ///
+  /// Mesma regra de [EstadoDaConexao.porCodigo], pelo mesmo motivo: não há
+  /// valor seguro para onde cair, e uma tela que mapeasse o desconhecido para
+  /// "teto do dia" afirmaria um limite que ninguém informou. Quem recebe nulo
+  /// mostra a mensagem genérica de validação, que é verdadeira.
+  static RecusaDoPedidoDeConexao? porCodigo(String? codigo) {
+    for (final recusa in RecusaDoPedidoDeConexao.values) {
+      if (recusa.codigo == codigo) return recusa;
+    }
+    return null;
+  }
+}

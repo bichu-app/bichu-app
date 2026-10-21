@@ -260,6 +260,20 @@ enum SecaoComConta {
     retomada: 'Entre de novo para ver quem atende perto de você.',
   ),
 
+  /// `GET /v1/people` — a aba `Usuarios` da `Rede`.
+  ///
+  /// **A rota e `bearerAuth` sem alternativa vazia**, e por isso a aba
+  /// inteira precisa deste convite: nao ha busca de pessoas alcancavel sem
+  /// conta, em estado nenhum. O ganho nao promete lista de gente -- promete
+  /// o que a conexao destrava, que e o Mural.
+  buscaDePessoas(
+    titulo: 'Encontre quem você já conhece',
+    ganho: 'Entre para buscar os seus vizinhos pelo nome ou pelo apelido e '
+        'pedir conexão. O Mural mostra o que as suas conexões publicam, e as '
+        'suas publicações aparecem para elas.',
+    retomada: 'Entre de novo para buscar pessoas.',
+  ),
+
   /// `GET /v1/conversations` — a area de mensagens.
   mensagens(
     titulo: 'Suas conversas ficam aqui',

@@ -1303,9 +1303,10 @@ void main() {
       final rede = redeComAgenda();
       rede.respostas['POST /v1/auth/logout'] = (_) => http.Response('', 204);
       await abrirRede(tester, rede: rede);
-      expect(find.byType(Tab), findsNWidgets(2));
+      expect(find.byType(Tab), findsNWidgets(3));
       expect(find.widgetWithText(Tab, 'Eventos'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Comunidade'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Usuários'), findsOneWidget);
       // **Fica em `Eventos` de proposito.** O caso antigo tocava em `Meus
       // pedidos` antes de sair, porque era a aba que desaparecia; tocar em
       // `Comunidade` agora desmontaria esta lista, e a assercao de `when`
@@ -1317,9 +1318,13 @@ void main() {
 
       expect(
         find.byType(Tab),
-        findsNWidgets(2),
+        findsNWidgets(3),
         reason: 'REPROVA: o numero de abas da secao mudou com a sessao. Desde '
-            '19/10/2026 sao duas, `Eventos` e `Comunidade`, com conta e sem.',
+            '21/10/2026 sao TRES -- `Eventos`, `Comunidade` e `Usuários` --, '
+            'com conta e sem. A de `Usuários` exige conta na ROTA, e e o corpo '
+            'dela que desenha o convite para entrar: esconder a aba faria o '
+            '`TabController` voltar a ser recriado no logout, que e exatamente '
+            'o defeito que este caso existe para acusar.',
       );
       expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
       expect(find.widgetWithText(Tab, 'Próximos'), findsNothing);

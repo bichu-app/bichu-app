@@ -11,6 +11,7 @@ import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
 import 'api/conexoes_api.dart';
+import 'api/convites_api.dart';
 import 'api/devices_api.dart';
 import 'api/diretorio_api.dart';
 import 'api/loja_api.dart';
@@ -259,6 +260,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final PetsApi _pets;
   late final CasosApi _casos;
   late final ConexoesApi _conexoes;
+  late final ConvitesApi _convites;
   late final MeApi _me;
   late final AchadosApi _achados;
   late final DiretorioApi _diretorio;
@@ -326,6 +328,9 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _casos = CasosApi(_api);
     // A porta das conexoes, do mesmo `ApiClient` das outras (uniao 18/10/2026).
     _conexoes = ConexoesApi(_api);
+    // O convite do proprio perfil: o que alimenta o QR de `Convide tutores` e
+    // o que o leitor resolve quando le um.
+    _convites = ConvitesApi(_api);
     // As rotas `tags: [me]`, ligadas pela tela de dados pessoais (18/10/2026).
     // Antes dela nenhuma tela chamava `GET /me` nem `PATCH /me`.
     _me = MeApi(_api);
@@ -809,6 +814,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       pets: _pets,
       casos: _casos,
       conexoes: _conexoes,
+      convites: _convites,
       me: _me,
       diretorio: _diretorio,
       loja: _loja,

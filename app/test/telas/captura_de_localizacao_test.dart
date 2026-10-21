@@ -49,6 +49,7 @@ import 'package:bichu/sessao/contadores_de_nao_lido.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/conexoes_api.dart';
+import 'package:bichu/api/convites_api.dart';
 import 'package:bichu/api/me_api.dart';
 import 'package:bichu/api/notificacoes_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
@@ -138,6 +139,9 @@ Future<_Caixa> _montar(
       // A porta das conexoes entrou no escopo na uniao de 18/10/2026, junto
       // com a rota de `Pedidos de conexao`.
       conexoes: ConexoesApi(api),
+      // O convite do proprio perfil entrou no escopo com `Convide tutores` e
+      // com a resolucao do convite no leitor de QR (21/10/2026).
+      convites: ConvitesApi(api),
       // As rotas `tags: [me]` entraram no escopo com `Perfil` > `Meus dados`.
       me: MeApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.

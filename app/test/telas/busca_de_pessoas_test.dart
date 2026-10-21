@@ -1,0 +1,676 @@
+// A aba `Usuários` da `Rede`: a busca de pessoas e o cartão de resultado.
+//
+// As iscas deste arquivo, pelo nome do caso:
+//
+//   (a) **campo vazio não lista ninguém** — nenhuma chamada sai, e nada é
+//       desenhado. Não existe "listar todos", e um estado inicial povoado seria
+//       a listagem de pessoas que a reversão de 20/10/2026 não autorizou;
+//   (b) **a busca com menos que o piso NÃO busca** — a lupa não habilita e
+//       nenhuma requisição sai. O servidor instalado responde 400 abaixo de
+//       três caracteres, e descobrir isso por faixa vermelha no meio de alguém
+//       escrevendo um nome é o produto discutindo com quem digita;
+//   (c) **o resultado não traz foto nem identificador interno** — emenda 5 item
+//       2 do ADR-0010 e item 6. Medida de dois lados: o que a tela desenha, e o
+//       que o modelo sabe ler;
+//   (d) **não há gatilho de filtro nesta aba** — cidade e bairro a emenda 2
+//       recusa, contagem de pets viraria critério de busca, e sobra ordenar por
+//       nome, que é opção única;
+//   (e) **o teto do dia substitui a ação, e não a desabilita** — critério 2 da
+//       BICHUS-62.
+//
+// Todo esperado está escrito por extenso, com acento: nenhum `expect` compara o
+// texto renderizado com a constante que o produz.
+
+import 'dart:convert';
+
+import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/conexoes_api.dart';
+import 'package:bichu/api/modelos_pessoa.dart';
+import 'package:bichu/api/pessoas_api.dart';
+import 'package:bichu/config/app_config.dart';
+import 'package:bichu/telas/rede/busca_de_pessoas.dart';
+import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/barra_de_listagem.dart';
+import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/imagem_da_rede.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+const String _urlBase = 'https://api.exemplo.test';
+
+http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
+  return http.Response(
+    jsonEncode(corpo),
+    status,
+    headers: <String, String>{'content-type': 'application/json; charset=utf-8'},
+  );
+}
+
+Map<String, dynamic> _pessoa({
+  required String apelido,
+  String? nome,
+  int pets = 2,
+  int conexoes = 38,
+}) {
+  return <String, dynamic>{
+    'handle': apelido,
+    'display_name': nome,
+    'pets_count': pets,
+    'connections_count': conexoes,
+  };
+}
+
+Map<String, dynamic> _pagina(List<Map<String, dynamic>> itens) {
+  return <String, dynamic>{
+    'items': itens,
+    'total': itens.length,
+    'page': 1,
+    'limit': 20,
+  };
+}
+
+Map<String, dynamic> _resumo({int restamHoje = 7}) {
+  return <String, dynamic>{
+    'connected_count': 12,
+    'pending_sent_count': 2,
+    'requests_received_count': 1,
+    'remaining_requests_today': restamHoje,
+    'connection_limit': 150,
+  };
+}
+
+/// O que a tela pediu ao servidor, na ordem. É sobre isto que as iscas (a) e
+/// (b) trabalham: elas afirmam o que a tela **não** pediu.
+final List<String> chamadas = <String>[];
+
+/// Os corpos enviados, para a isca de que o pedido vai por APELIDO.
+final List<String> corpos = <String>[];
+
+Future<void> _montar(
+  WidgetTester tester, {
+  List<Map<String, dynamic>> resultados = const <Map<String, dynamic>>[],
+  int restamHoje = 7,
+  String estadoDoPedido = 'pending_sent',
+}) async {
+  chamadas.clear();
+  corpos.clear();
+  AppConfig.limparParaTeste();
+  final cliente = MockClient((http.Request pedido) async {
+    chamadas.add('${pedido.method} ${pedido.url.path}?${pedido.url.query}');
+    if (pedido.body.isNotEmpty) corpos.add(pedido.body);
+    final caminho = pedido.url.path;
+    if (caminho.endsWith('/connections/summary')) {
+      return _json(_resumo(restamHoje: restamHoje));
+    }
+    if (caminho.endsWith('/people')) return _json(_pagina(resultados));
+    if (caminho.endsWith('/connections') && pedido.method == 'POST') {
+      return _json(<String, dynamic>{
+        'ref': 'aresta-1',
+        'state': estadoDoPedido,
+        'requested_at': '2026-10-21T12:00:00.000Z',
+        'person': <String, dynamic>{
+          'handle': 'marina-vet',
+          'display_name': 'Marina',
+        },
+      }, status: 201);
+    }
+    if (pedido.method == 'DELETE') return http.Response('', 204);
+    return _json(<String, dynamic>{}, status: 404);
+  });
+
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
+    cliente: cliente,
+    tokenDeAcesso: () async => 'token-de-teste',
+  );
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: BichuTheme.claro,
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: BuscaDePessoas(
+            pessoas: PessoasApi(api),
+            conexoes: ConexoesApi(api),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Quantas vezes a busca de pessoas foi perguntada.
+int get _buscas =>
+    chamadas.where((c) => c.startsWith('GET /v1/people?')).length;
+
+void main() {
+  testWidgets('o campo de busca existe ANTES de qualquer busca', (tester) async {
+    // **Esta aba é a única do app que desenha `LinhaDeBuscaDaListagem` em vez
+    // de `BarraDeListagem`**, e o motivo está no cabeçalho de
+    // `BuscaDePessoas.build`: a barra não se desenha com `total == 0` e sem
+    // recorte aplicado, e aqui esse é o estado NORMAL de abertura, porque não
+    // existe "listar todos". Sem o campo a aba não tem controle nenhum.
+    //
+    // PARA DESLIGAR E VER REPROVAR: troque `LinhaDeBuscaDaListagem` por
+    // `BarraDeListagem` em `BuscaDePessoas.build`.
+    await _montar(tester);
+
+    expect(
+      find.byType(TextField),
+      findsOneWidget,
+      reason: 'REPROVA: a aba abriu sem campo de busca. Não existe "listar '
+          'todos" no contrato, então sem o campo a pessoa não tem como fazer a '
+          'única coisa que esta aba existe para fazer.',
+    );
+    expect(
+      find.text('0 pessoas'),
+      findsNothing,
+      reason: 'REPROVA: a tela escreveu uma contagem antes de alguém buscar. '
+          '"0 pessoas" ali é a tela afirmando um resultado que ninguém pediu.',
+    );
+  });
+
+  group('ISCA (a) -- campo vazio NAO lista ninguem', () {
+    testWidgets('nenhuma chamada de busca sai na abertura da aba', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: em `BuscaDePessoas._agendarLeituraDoTeto`,
+      // acrescente `unawaited(_buscar(''))` ao lado de `_lerOTeto()`.
+      await _montar(tester);
+
+      expect(
+        _buscas,
+        0,
+        reason: 'REPROVA: a aba perguntou a busca sem ninguém digitar nada. '
+            'Não existe "listar todos" no contrato, e um resultado inicial '
+            'seria a listagem de pessoas que a reversão de 20/10/2026 não '
+            'autorizou.',
+      );
+      expect(
+        find.text('Procure quem você já conhece'),
+        findsOneWidget,
+        reason: 'REPROVA: o estado inicial não é o de antes de buscar.',
+      );
+      expect(
+        find.byType(BotaoPrimario),
+        findsNothing,
+        reason: 'REPROVA: há ação de pedir conexão sem resultado na tela. '
+            'Sem pessoa encontrada não há a quem pedir.',
+      );
+    });
+
+    testWidgets('a lupa diz que nada foi digitado, e nao aplica', (
+      tester,
+    ) async {
+      await _montar(tester);
+
+      expect(
+        find.byTooltip('Buscar, nada digitado'),
+        findsOneWidget,
+        reason: 'REPROVA: a lupa não diz por que não aplica. Quem usa leitor '
+            'de tela não vê o botão apagado.',
+      );
+    });
+  });
+
+  group('ISCA (b) -- menos que o piso NAO busca', () {
+    testWidgets('duas letras: a lupa nao habilita e nenhuma chamada sai', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: em `BuscaDePessoas._controleDaBusca`,
+      // troque `minimoDeCaracteres: PessoasApi.minimoDaBusca` por `1`.
+      //
+      // O piso é 3 e não é gosto: o índice é GIN trigrama, e um padrão com
+      // menos de três caracteres não produz trigrama nenhum.
+      await _montar(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'ma');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byTooltip('Buscar, faltam 1 letra'),
+        findsOneWidget,
+        reason: 'REPROVA: com duas letras a lupa não diz quantas faltam para '
+            'o piso de três.',
+      );
+
+      await tester.tap(find.byTooltip('Buscar, faltam 1 letra'));
+      await tester.pumpAndSettle();
+
+      expect(
+        _buscas,
+        0,
+        reason: 'REPROVA: a aba perguntou a busca com menos de três '
+            'caracteres. O servidor instalado responde 400 nesse caso, e a '
+            'pessoa veria faixa vermelha no meio de escrever um nome.',
+      );
+    });
+
+    testWidgets('a porta tambem recusa, e sem rede: o piso e dos DOIS lados', (
+      tester,
+    ) async {
+      // O freio da tela é a lupa; o freio da porta é este. Dois freios porque
+      // o primeiro é de interface e some no dia em que outra tela chamar a
+      // mesma porta.
+      AppConfig.limparParaTeste();
+      var perguntou = false;
+      final api = ApiClient(
+        config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
+        cliente: MockClient((_) async {
+          perguntou = true;
+          return _json(_pagina(<Map<String, dynamic>>[]));
+        }),
+        tokenDeAcesso: () async => 'token-de-teste',
+      );
+
+      final pagina = await PessoasApi(api).buscar('ma');
+
+      expect(
+        perguntou,
+        isFalse,
+        reason: 'REPROVA: `PessoasApi.buscar` perguntou com dois caracteres.',
+      );
+      expect(
+        pagina.itens,
+        isEmpty,
+        reason: 'REPROVA: a página devolvida abaixo do piso não é vazia.',
+      );
+      expect(
+        pagina.total,
+        0,
+        reason: 'REPROVA: o total abaixo do piso não é zero.',
+      );
+    });
+  });
+
+  testWidgets('tres letras: busca, e o cartao diz nome, apelido e contagens', (
+    tester,
+  ) async {
+    await _montar(
+      tester,
+      resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', pets: 2, conexoes: 38),
+      ],
+    );
+
+    await tester.enterText(find.byType(TextField).first, 'marina');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(_buscas, 1, reason: 'REPROVA: a lupa não perguntou uma vez.');
+    expect(
+      chamadas.any((c) => c.contains('q=marina')),
+      isTrue,
+      reason: 'REPROVA: o termo não viajou em `q`. Chamadas: $chamadas',
+    );
+    expect(find.text('Marina'), findsOneWidget);
+    expect(
+      find.text('@marina-vet'),
+      findsOneWidget,
+      reason: 'REPROVA: o apelido não aparece. Ele é mais certeiro que o nome '
+          'quando há quatro Marinas.',
+    );
+    expect(
+      find.text('2 pets · 38 conexões'),
+      findsOneWidget,
+      reason: 'REPROVA: as duas contagens da emenda 2 não aparecem juntas.',
+    );
+  });
+
+  testWidgets('nada encontrado e outro estado, e nao a lista vazia', (
+    tester,
+  ) async {
+    await _montar(tester);
+
+    await tester.enterText(find.byType(TextField).first, 'marinna vet');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nada com esse nome'), findsOneWidget);
+    expect(
+      find.text('Procure quem você já conhece'),
+      findsNothing,
+      reason: 'REPROVA: depois de buscar a tela voltou ao estado de antes de '
+          'buscar. São dois estados diferentes: um é "não pedi nada", o outro '
+          'é "pedi e não casou".',
+    );
+    expect(
+      find.textContaining('não existe'),
+      findsNothing,
+      reason: 'REPROVA: a tela afirma que a pessoa não existe. Conta '
+          'desabilitada, apelido de pet e quem bloqueou quem busca somem do '
+          'resultado pelo mesmo caminho, e distinguir isso entregaria a '
+          'informação que gera retaliação.',
+    );
+  });
+
+  group('ISCA (c) -- o resultado nao traz foto nem identificador interno', () {
+    testWidgets('a tela desenha a inicial no circulo, e nenhuma imagem', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: em
+      // `CartaoDePessoaEncontrada._circuloDaInicial`, troque o `Text` da
+      // inicial por `ImagemDaRede(url: 'https://exemplo.test/foto.jpg')`.
+      //
+      // A emenda 5 item 2 do ADR-0010 diz que a foto não sai para quem não é
+      // conexão aceita, e resultado de busca é por construção lista de
+      // não-conexões.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(ImagemDaRede),
+        findsNothing,
+        reason: 'REPROVA: há imagem de rede no resultado de busca. A foto não '
+            'sai para quem não é conexão aceita (emenda 5, item 2).',
+      );
+      expect(
+        find.byType(Image),
+        findsNothing,
+        reason: 'REPROVA: há imagem no resultado de busca.',
+      );
+      expect(
+        find.text('M'),
+        findsOneWidget,
+        reason: 'REPROVA: a inicial no círculo não foi desenhada. Ela é o '
+            'recurso que a emenda 3 manda usar com quem não é conexão.',
+      );
+    });
+
+    test('o modelo nao sabe ler foto nem referencia publica', () {
+      // ISCA DO LADO DO MODELO, e ela é a que sobrevive a um redesenho da
+      // tela: o contrato não tem campo de foto aqui, nem nulo, e um campo nulo
+      // seria pior que a ausência porque convidaria alguém a preenchê-lo.
+      final pessoa = PessoaEncontrada.doJson(<String, dynamic>{
+        'handle': 'marina-vet',
+        'display_name': 'Marina',
+        'pets_count': 2,
+        'connections_count': 38,
+        // O servidor NÃO manda nada disto. Estão aqui para provar que, se um
+        // dia mandasse, o app não os leria.
+        'photo_icon_url': 'https://exemplo.test/foto.jpg',
+        'public_ref': 'ABCDEFGHIJKLMNOPQRSTUV',
+        'id': '0193f2d4-0000-7000-8000-000000000000',
+      });
+
+      expect(pessoa.handle, 'marina-vet');
+      expect(pessoa.petsCount, 2);
+      expect(pessoa.connectionsCount, 38);
+      expect(
+        pessoa.inicial,
+        'M',
+        reason: 'REPROVA: a inicial não sai do nome de leitura.',
+      );
+      // Não há getter de foto nem de referência pública para conferir: a
+      // ausência é a prova. O que este caso trava é a adição de um — quem
+      // acrescentar `photoIconUrl` a `PessoaEncontrada` precisa apagar esta
+      // afirmação, e apagá-la é um ato deliberado no diff.
+      expect(
+        PessoaEncontrada(
+          handle: 'x-apelido',
+          displayName: null,
+          petsCount: 0,
+          connectionsCount: 0,
+        ).inicial,
+        'X',
+        reason: 'REPROVA: quem não tem nome ficou sem letra. A queda é o '
+            'apelido, e o `@` não é letra de ninguém.',
+      );
+    });
+  });
+
+  testWidgets('ISCA (d) -- NAO ha gatilho de filtro nesta aba', (tester) async {
+    // PARA DESLIGAR E VER REPROVAR: em `BuscaDePessoas.build`, passe
+    // `ordenacao: ControleDeOrdenacao(opcoes: [...], efetiva: 'nome')` para a
+    // `BarraDeListagem`.
+    //
+    // Isto CONTRARIA o padrão de listagem desta casa, e a contrariedade está
+    // escrita no cabeçalho de `BuscaDePessoas` com os quatro candidatos e o
+    // motivo de cada recusa: cidade e bairro a emenda 2 recusa, contagem de
+    // pets viraria critério de busca, e ordenar por nome é opção única.
+    await _montar(
+      tester,
+      resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+      ],
+    );
+    await tester.enterText(find.byType(TextField).first, 'marina');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byIcon(Icons.tune),
+      findsNothing,
+      reason: 'REPROVA: nasceu gatilho de recorte na busca de pessoas. Um '
+          'controle que abre uma folha sem nada para mudar é toque sem '
+          'desfecho, que é o critério 2 da BICHUS-62.',
+    );
+    final linha = tester.widget<LinhaDeBuscaDaListagem>(
+      find.byType(LinhaDeBuscaDaListagem),
+    );
+    expect(
+      linha.filtro,
+      isNull,
+      reason: 'REPROVA: a aba passou um controle de filtro à linha de busca.',
+    );
+    expect(
+      linha.ordenacao,
+      isNull,
+      reason: 'REPROVA: a aba passou um controle de ordenação à linha de '
+          'busca.',
+    );
+  });
+
+  group('o cartao pede conexao por APELIDO, e aprende o estado da resposta', () {
+    testWidgets('o corpo leva `handle`, e nunca identificador interno', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Pedir conexão'));
+      await tester.pumpAndSettle();
+
+      expect(
+        corpos.last,
+        '{"handle":"marina-vet"}',
+        reason: 'REPROVA: o pedido não foi por apelido. O `oneOf` do contrato '
+            'recusa corpo com as duas credenciais e corpo com nenhuma, e '
+            'identificador de pessoa não existe em operação nenhuma.',
+      );
+      expect(
+        find.text('Pedido enviado, aguardando aceite'),
+        findsOneWidget,
+        reason: 'REPROVA: o cartão não passou ao estado que o servidor '
+            'devolveu.',
+      );
+      expect(
+        find.text('Pedir conexão'),
+        findsNothing,
+        reason: 'REPROVA: a ação de pedir continua ao lado do estado. Ninguém '
+            'pede duas vezes.',
+      );
+      expect(find.text('Cancelar'), findsOneWidget);
+    });
+
+    testWidgets('quem ja era conexao descobre no 201, e nao num palpite', (
+      tester,
+    ) async {
+      // A busca NÃO devolve `connection_state` -- "numa lista, vinte estados
+      // por requisição são o material de que uma lista de conexões se faz do
+      // lado de fora". O cartão nasce em `nenhum` e aprende do pedido, que é
+      // idempotente e devolve a aresta que já existia.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+        ],
+        estadoDoPedido: 'connected',
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pedir conexão'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Já é sua conexão'),
+        findsOneWidget,
+        reason: 'REPROVA: o cartão não leu `state: connected` da resposta.',
+      );
+    });
+
+    testWidgets('quem pediu primeiro vira Aceitar e Recusar, e nao Pedir', (
+      tester,
+    ) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'rafa-pug', nome: 'Rafael'),
+        ],
+        estadoDoPedido: 'pending_received',
+      );
+      await tester.enterText(find.byType(TextField).first, 'rafael');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pedir conexão'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pediu conexão com você'), findsOneWidget);
+      expect(find.text('Aceitar'), findsOneWidget);
+      expect(find.text('Recusar'), findsOneWidget);
+      expect(
+        find.text('Pedir conexão'),
+        findsNothing,
+        reason: 'REPROVA: o cartão oferece pedir a quem já pediu. Seriam duas '
+            'arestas para a mesma relação.',
+      );
+    });
+  });
+
+  testWidgets('ISCA (e) -- o teto do dia SUBSTITUI a acao, e nao a desabilita', (
+    tester,
+  ) async {
+    // PARA DESLIGAR E VER REPROVAR: em `CartaoDePessoaEncontrada._areaDeAcao`,
+    // no `case null`, troque o `break` do teto por um `BotaoPrimario` com
+    // `aoTocar: null`.
+    //
+    // O critério 2 da BICHUS-62 proíbe renderizar ação sem destino **nem
+    // habilitada nem desabilitada**: controle desabilitado continua se
+    // anunciando e continua sem desfecho.
+    await _montar(
+      tester,
+      resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'camila-rex', nome: 'Camila'),
+      ],
+      restamHoje: 0,
+    );
+    await tester.enterText(find.byType(TextField).first, 'camila');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Você já enviou os pedidos de hoje. Amanhã cabem mais.'),
+      findsOneWidget,
+      reason: 'REPROVA: o teto do dia não aparece escrito. Descobrir um limite '
+          'de 24 horas por um 400 depois de apertar o botão é descobrir depois '
+          'de apertar.',
+    );
+    expect(
+      find.text('Pedir conexão'),
+      findsNothing,
+      reason: 'REPROVA: a ação de pedir continua desenhada com o teto fechado.',
+    );
+    for (final botao in tester.widgetList<BotaoPrimario>(
+      find.byType(BotaoPrimario),
+    )) {
+      expect(
+        botao.aoTocar,
+        isNotNull,
+        reason: 'REPROVA: há `BotaoPrimario` com `aoTocar: null` na tela. '
+            'Botão desabilitado é proibido pelo critério 2 da BICHUS-62.',
+      );
+    }
+  });
+
+  testWidgets('o teto NAO esconde a acao quando o resumo nao pudo ser lido', (
+    tester,
+  ) async {
+    // Nulo e zero são coisas diferentes: zero é a afirmação do servidor de que
+    // o teto fechou; nulo é a ausência de afirmação. Esconder a ação por não
+    // ter conseguido ler o resumo tiraria do ar a única coisa que a aba existe
+    // para fazer.
+    chamadas.clear();
+    corpos.clear();
+    AppConfig.limparParaTeste();
+    final api = ApiClient(
+      config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
+      cliente: MockClient((http.Request pedido) async {
+        if (pedido.url.path.endsWith('/connections/summary')) {
+          return _json(<String, dynamic>{}, status: 500);
+        }
+        if (pedido.url.path.endsWith('/people')) {
+          return _json(
+            _pagina(<Map<String, dynamic>>[
+              _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+            ]),
+          );
+        }
+        return _json(<String, dynamic>{}, status: 404);
+      }),
+      tokenDeAcesso: () async => 'token-de-teste',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BichuTheme.claro,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: BuscaDePessoas(
+              pessoas: PessoasApi(api),
+              conexoes: ConexoesApi(api),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'marina');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Pedir conexão'),
+      findsOneWidget,
+      reason: 'REPROVA: a falha de leitura do resumo escondeu a ação. "Não '
+          'consegui perguntar" não é "o teto fechou".',
+    );
+  });
+}
