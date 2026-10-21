@@ -14,6 +14,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../widgets/item_de_menu.dart';
 import 'vitrine_de_fotos.dart';
 import '../../formato/telefone.dart';
@@ -878,7 +879,11 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           ],
           if (_faixa != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e6),
-            FaixaDeAviso(texto: _faixa!.texto),
+            FaixaDeAviso(
+              texto: _faixa!.texto,
+              rotuloDaAcao: _faixa!.acao,
+              aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
+            ),
           ],
           // A PORTA DA VITRINE DE FOTOS (uniao de 18/10/2026).
           //

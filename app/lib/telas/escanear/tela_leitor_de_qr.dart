@@ -11,6 +11,7 @@ import '../../dispositivo/camera_e_galeria.dart';
 import '../../dispositivo/leitor_de_qr.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
+import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -1045,7 +1046,23 @@ class _Visor extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      if (faixa != null) FaixaDeAviso(texto: faixa!.texto),
+                      // A SAIDA SAI DA MENSAGEM. Nos quatro desfechos de
+                      // `GET /v1/tags/{code}` o catalogo declara
+                      // `acao: Registrar achado` com
+                      // `proximaAcao: registrarAchadoAvulso`, e
+                      // `saidaDaMensagem` **nao** resolve esse membro --
+                      // devolve `null`, e a faixa nao desenha botao. E o
+                      // certo: esta tela ja oferece `Registrar achado` com
+                      // botao PROPRIO (ver `_abrirSobreposta` acima), que
+                      // abre a sobreposta sem sair da camera. Acrescentar o
+                      // ramo em `saidaDaMensagem` poria DOIS botoes iguais
+                      // na mesma tela.
+                      if (faixa != null)
+                        FaixaDeAviso(
+                          texto: faixa!.texto,
+                          rotuloDaAcao: faixa!.acao,
+                          aoTocarNaAcao: saidaDaMensagem(context, faixa!),
+                        ),
                       // O criterio 3, **sem sair da camera**: a faixa aparece
                       // por cima do visor e some sozinha.
                       if (aviso != null) ...<Widget>[
@@ -1364,7 +1381,11 @@ class _Digitacao extends StatelessWidget {
           ),
           if (faixa != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e6),
-            FaixaDeAviso(texto: faixa!.texto),
+            FaixaDeAviso(
+              texto: faixa!.texto,
+              rotuloDaAcao: faixa!.acao,
+              aoTocarNaAcao: saidaDaMensagem(context, faixa!),
+            ),
           ],
         ],
       ),
