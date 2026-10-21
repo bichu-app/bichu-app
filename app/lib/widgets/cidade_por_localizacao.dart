@@ -275,10 +275,18 @@ class CidadeDoAparelho extends ChangeNotifier {
             AvisoDaCidadeDoAparelho.semPermissao,
           MotivoDeNaoTerCidade.servicoDesligado =>
             AvisoDaCidadeDoAparelho.servicoDesligado,
+          // CODIGO DE FIO DA ONDA 4: `tetoDeUsoEstourado` virou
+          // `falhaDoServico` na frente da reserva e do prazo, e ela
+          // acrescentou `resolucaoSemResposta`. As duas frentes nao se
+          // cruzaram em linha nenhuma, entao a uniao compilava quebrada: este
+          // `switch` e exaustivo. A classificacao e a MESMA de
+          // `telas/perdido/lista_de_perdidos.dart`, que a propria frente do
+          // renome escreveu -- os seis sao "nao deu agora".
           MotivoDeNaoTerCidade.semFixNoPrazo ||
           MotivoDeNaoTerCidade.indisponivel ||
           MotivoDeNaoTerCidade.geocoderAusente ||
-          MotivoDeNaoTerCidade.tetoDeUsoEstourado ||
+          MotivoDeNaoTerCidade.falhaDoServico ||
+          MotivoDeNaoTerCidade.resolucaoSemResposta ||
           MotivoDeNaoTerCidade.semResultado =>
             AvisoDaCidadeDoAparelho.naoDescoberta,
         };

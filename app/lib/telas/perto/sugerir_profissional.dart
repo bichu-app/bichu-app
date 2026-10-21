@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../api/busca_de_cep.dart';
+import '../../api/estados_brasileiros.dart';
 import '../../formato/cep.dart';
 import '../../api/diretorio_api.dart';
 import '../../api/falhas.dart';
@@ -178,6 +179,12 @@ class TelaSugerirProfissional extends StatefulWidget {
 
   static const String rotuloDoCep = 'CEP';
 
+  /// O rotulo do campo de estado, que deixou de ser `UF` digitada.
+  static const String rotuloDoEstado = 'Estado';
+
+  /// O que o seletor mostra enquanto nada foi escolhido.
+  static const String escolherOEstado = 'Escolher na lista';
+
   /// **Diz que o CEP e guardado, e para quem.** A pessoa esta informando o
   /// endereco de um terceiro: esconder que o valor fica salvo seria o tipo de
   /// omissao que a faixa de revisao desta tela existe para nao fazer.
@@ -213,7 +220,10 @@ enum _Impedimento {
   semNome('Diga o nome do lugar ou da pessoa.'),
   semAtividade('Escolha o que eles fazem.'),
   semCidade('Diga a cidade.'),
-  semUf('Diga o estado, com duas letras.'),
+  // **"Escolha", e nao "digite com duas letras"**: o estado deixou de ser
+  // sigla digitada e passou a ser uma escolha na lista de 27, e um motivo que
+  // manda digitar manda a pessoa procurar um campo de texto que nao existe.
+  semUf('Escolha o estado.'),
   semTipoDeContato('Escolha como entrar em contato.'),
   semContato('Preencha o contato público.');
 
@@ -227,9 +237,19 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
-  final TextEditingController _uf = TextEditingController();
   final TextEditingController _contato = TextEditingController();
   final TextEditingController _recado = TextEditingController();
+
+  /// A sigla do estado escolhida na lista de 27, ou nulo.
+  ///
+  /// **Escolha e nao digitacao, e isso conserta DADO e nao so atrito.**
+  /// `DirectorySuggestionInput.state` e `pattern: '^[A-Z]{2}$'`, mas o campo
+  /// digitado de dois caracteres aceitava `SA`, `XX` e qualquer par de letras
+  /// -- e quem indica uma clinica de outra cidade nao tem por que saber a
+  /// sigla dela. A lista mostra o NOME e guarda a SIGLA, que e a mesma decisao
+  /// de 17/10/2026 ja construida em `perfil/tela_dados_pessoais`,
+  /// `pet/tela_solicitar_plaquinha` e `localizacao/captura_de_localizacao`.
+  String? _uf;
 
   AtividadeDoDiretorio? _atividade;
   TipoDeContatoPublico? _tipoDeContato;
@@ -260,7 +280,10 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     if (regiao == null) return;
     _bairro.text = regiao.bairro ?? '';
     _cidade.text = regiao.cidade ?? '';
-    _uf.text = regiao.uf ?? '';
+    // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
+    // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
+    // `siglaDeEstadoValida`.
+    _uf = siglaDeEstadoValida(regiao.uf);
   }
 
   @override
@@ -269,7 +292,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     _cep.dispose();
     _bairro.dispose();
     _cidade.dispose();
-    _uf.dispose();
     _contato.dispose();
     _recado.dispose();
     super.dispose();
@@ -322,8 +344,13 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       if (endereco == null) return;
       _preencherSeVazio(_bairro, endereco.bairro, 'neighborhood');
       _preencherSeVazio(_cidade, endereco.cidade, 'city');
-      if (endereco.uf.length == 2) {
-        _preencherSeVazio(_uf, endereco.uf, 'state');
+      // **Escolha vazia recebe; escolha feita fica** -- a mesma regra dos dois
+      // controladores acima, agora sobre um `String?` em vez de um campo de
+      // texto. O que a pessoa escolheu vence o que a base devolve.
+      final uf = siglaDeEstadoValida(endereco.uf);
+      if (_uf == null && uf != null) {
+        _uf = uf;
+        _errosDeCampo = <String, String>{..._errosDeCampo}..remove('state');
       }
     });
   }
@@ -372,7 +399,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     if (_nome.text.trim().length < 2) return _Impedimento.semNome;
     if (_atividade == null) return _Impedimento.semAtividade;
     if (_cidade.text.trim().length < 2) return _Impedimento.semCidade;
-    if (_uf.text.trim().length != 2) return _Impedimento.semUf;
+    if (_uf == null) return _Impedimento.semUf;
     if (_tipoDeContato == null) return _Impedimento.semTipoDeContato;
     if (_contato.text.trim().length < 3) return _Impedimento.semContato;
     return null;
@@ -391,7 +418,10 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       nome: _nome.text.trim(),
       atividade: _atividade!,
       cidade: _cidade.text.trim(),
-      uf: _uf.text.trim().toUpperCase(),
+      // Sem `trim` e sem `toUpperCase`: o valor vem de `estadosBrasileiros`,
+      // que guarda a sigla ja em maiuscula e sem espaco. As duas chamadas
+      // existiam porque o campo era digitado.
+      uf: _uf!,
       tipoDeContato: _tipoDeContato!,
       contato: _contato.text.trim(),
       bairro: _bairro.text.trim(),
@@ -543,6 +573,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   exemplo: 'Clínica Veterinária Bichinho',
                   capitalizacao: TextCapitalization.words,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                 ),
                 const SizedBox(height: BichuEspaco.e4),
                 SeletorDeLista(
@@ -595,6 +626,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   ],
                   correcaoAutomatica: false,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                   // No oitavo digito a busca sai sozinha. Sem botao `Buscar`:
                   // um botao a mais e um passo a mais para quem so quer os
                   // campos preenchidos, e nao buscar e desfecho valido.
@@ -610,35 +642,38 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   _linhaDaBusca(textos),
                 ],
                 const SizedBox(height: BichuEspaco.e4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      child: BichuField(
-                        rotulo: 'Cidade',
-                        controlador: _cidade,
-                        aoMudar: _aoDigitar,
-                        erro: _errosDeCampo['city'],
-                        limite: 80,
-                        capitalizacao: TextCapitalization.words,
-                        habilitado: !enviando,
-                      ),
-                    ),
-                    const SizedBox(width: BichuEspaco.e3),
-                    SizedBox(
-                      width: 96,
-                      child: BichuField(
-                        rotulo: 'UF',
-                        controlador: _uf,
-                        aoMudar: _aoDigitar,
-                        erro: _errosDeCampo['state'],
-                        limite: 2,
-                        capitalizacao: TextCapitalization.characters,
-                        correcaoAutomatica: false,
-                        habilitado: !enviando,
-                      ),
-                    ),
-                  ],
+                BichuField(
+                  rotulo: 'Cidade',
+                  controlador: _cidade,
+                  aoMudar: _aoDigitar,
+                  erro: _errosDeCampo['city'],
+                  limite: 80,
+                  capitalizacao: TextCapitalization.words,
+                  habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
+                ),
+                const SizedBox(height: BichuEspaco.e4),
+                // **Lista de 27, e nao sigla digitada**, pela mesma decisao de
+                // 17/10/2026 que ja vale em `Meus dados`, no pedido da
+                // plaquinha e no registro de achado. Ela conserta DADO e nao
+                // so atrito -- ver o campo `_uf`.
+                //
+                // **Fora da `Row` da cidade**, e nao na `SizedBox` de 96 px
+                // onde a sigla ficava: o seletor mostra o NOME do estado
+                // ("Rio Grande do Norte"), que nao cabe em 96 px. O campo que
+                // ele substituiu cabia porque mostrava duas letras.
+                SeletorDeLista(
+                  rotulo: TelaSugerirProfissional.rotuloDoEstado,
+                  estadoInicial: TelaSugerirProfissional.escolherOEstado,
+                  itens: estadosBrasileiros,
+                  selecionado: _uf,
+                  erro: _errosDeCampo['state'],
+                  habilitado: !enviando,
+                  aoSelecionar: (codigo) => setState(() {
+                    _uf = codigo;
+                    _erro = null;
+                    _errosDeCampo = const <String, String>{};
+                  }),
                 ),
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
@@ -650,6 +685,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   limite: 80,
                   capitalizacao: TextCapitalization.words,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 Semantics(
@@ -693,6 +729,12 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                       : TextInputType.text,
                   correcaoAutomatica: false,
                   habilitado: !enviando && tipo != null,
+                  // **`done` e nao `next`: e o ULTIMO campo de uma linha da
+                  // tela.** O que vem depois e `Por que você indica`, que e
+                  // texto corrido e nao recebe acao -- `next` aqui poria a
+                  // flecha de avancar numa travessia que termina no proprio
+                  // campo seguinte sem desfecho.
+                  acaoDeTeclado: TextInputAction.done,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 BichuField(
@@ -710,6 +752,15 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   ajuda: 'Só quem confere lê. Não aparece no Perto.',
                   capitalizacao: TextCapitalization.sentences,
                   habilitado: !enviando,
+                  // **Sem `acaoDeTeclado`, e e decisao e nao esquecimento.**
+                  // `linhas: 3` faz o Flutter usar `TextInputType.multiline`,
+                  // e ali a tecla de retorno INSERE LINHA --
+                  // `TextInputAction.newline` e o desfecho certo de quem
+                  // escreve um paragrafo. Declarar `done` aqui tiraria a
+                  // quebra de linha. Quem fecha o teclado em campo de texto
+                  // corrido e a faixa `Concluir` de
+                  // `widgets/barra_do_teclado.dart`, que e mecanismo de todo o
+                  // app e nao desta tela.
                 ),
               ],
             ),

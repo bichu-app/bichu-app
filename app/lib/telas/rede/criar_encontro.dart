@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
+import '../../api/busca_de_cep.dart';
+import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/envio_de_foto.dart';
@@ -9,6 +12,7 @@ import '../../api/problem.dart';
 import '../../api/rede_api.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../formato/cep.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -17,6 +21,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// **Criar um encontro da `Rede`** (`createNetworkEvent`, ADR-0025 emenda 3).
@@ -172,6 +177,50 @@ class TelaCriarEncontro extends StatefulWidget {
 
   static const String abrirAjustes = 'Abrir os ajustes';
 
+  // ---------------------------------------------------------------------------
+  // O CEP, que e CAMPO DE BUSCA e nao campo do corpo
+  // ---------------------------------------------------------------------------
+  //
+  // Esta era a unica tela de endereco do app sem ele. `BuscaDeCep` ja serve
+  // quatro (`perfil/tela_dados_pessoais`, `pet/tela_solicitar_plaquinha`,
+  // `perto/sugerir_profissional` e `localizacao/captura_de_localizacao`), e
+  // aqui ele troca TRES teclados por um: bairro, cidade e estado saem da busca
+  // de uma vez.
+  //
+  // **Ele nao viaja no corpo, em nenhum ramo.**
+  // `CommunityNetworkEventPlaceInput` declara `additionalProperties: false` e
+  // os quatro campos que aceita (`place_name`, `neighborhood`, `city`,
+  // `state`); um `postal_code` a mais seria `400` em cima de um formulario
+  // inteiro preenchido. O lugar de um encontro e logradouro PUBLICO (ADR-0027
+  // item 13) e o endereco por extenso e campo do painel -- guardar o CEP de
+  // uma praca aqui seria inventar coluna.
+
+  static const String rotuloDoCep = 'CEP';
+
+  /// **Diz o que o campo faz e que ele NAO vai junto.** Sem esta segunda
+  /// metade o campo pareceria endereco do evento, que e exatamente o que o
+  /// ADR-0027 item 13 nao quer nesta tela.
+  static const String ajudaDoCep =
+      'Preenche bairro, cidade e estado. Você pode mudar depois. O CEP não '
+      'é publicado.';
+
+  /// Os tres desfechos da busca. **Nenhum e erro de formulario**: nenhum marca
+  /// campo, nenhum entra em `_Impedimento` e nenhum impede o envio -- o CEP
+  /// nao e campo do corpo, e o pior desfecho quer dizer "digite voce mesmo".
+  static const String buscandoOCep = 'Buscando o endereço…';
+
+  static const String cepNaoEncontrado =
+      'CEP não encontrado. Preencha abaixo.';
+
+  static const String buscaIndisponivel =
+      'A busca de CEP está fora do ar. Preencha abaixo.';
+
+  /// O rotulo do campo de estado, que deixou de ser `UF` digitada.
+  static const String rotuloDoEstado = 'Estado';
+
+  /// O que o seletor mostra enquanto nada foi escolhido.
+  static const String escolherOEstado = 'Escolher na lista';
+
   @override
   State<TelaCriarEncontro> createState() => _TelaCriarEncontroState();
 }
@@ -188,7 +237,10 @@ enum _Impedimento {
   semLugar('Diga o nome do lugar.'),
   semBairro('Diga o bairro.'),
   semCidade('Diga a cidade.'),
-  semUf('Diga o estado, com duas letras.'),
+  // **"Escolha", e nao "digite com duas letras"**: o estado deixou de ser
+  // sigla digitada e passou a ser uma escolha na lista de 27, e um motivo que
+  // manda digitar manda a pessoa procurar um campo de texto que nao existe.
+  semUf('Escolha o estado.'),
   semData('Escolha o dia e a hora.'),
   dataNoPassado('O evento precisa ser no futuro.'),
   fimAntesDoComeco('O fim não pode ser antes do começo.'),
@@ -213,10 +265,33 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   final TextEditingController _titulo = TextEditingController();
   final TextEditingController _resumo = TextEditingController();
   final TextEditingController _lugar = TextEditingController();
+
+  /// **Campo de busca, e nao campo do corpo.** Ver o bloco do CEP em
+  /// [TelaCriarEncontro].
+  final TextEditingController _cep = TextEditingController();
+
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
-  final TextEditingController _uf = TextEditingController();
   final TextEditingController _observacoes = TextEditingController();
+
+  /// A sigla do estado escolhida na lista de 27, ou nulo.
+  ///
+  /// **Escolha e nao digitacao, e isso conserta DADO e nao so atrito.**
+  /// `CommunityNetworkEventPlaceInput.state` e `pattern: '^[A-Z]{2}$'`, e um
+  /// campo de dois caracteres aceita `SA`, `XX` e o `SP` com acento que o
+  /// teclado de maiusculas oferece -- tudo com dois caracteres, tudo gravavel.
+  /// A lista mostra o NOME e guarda a SIGLA, que e a mesma decisao de
+  /// `localizacao/captura_de_localizacao.dart`, de `perfil/tela_dados_pessoais`
+  /// e de `pet/tela_solicitar_plaquinha` (cliente, 17/10/2026).
+  String? _uf;
+
+  /// O que a ultima busca de CEP devolveu. **Nunca desabilita nada**: serve so
+  /// para a linha de texto embaixo do campo.
+  ResultadoDaBusca? _buscaDoCep;
+  bool _buscandoOCep = false;
+
+  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
+  String _cepJaBuscado = '';
 
   /// O `alt_text` da capa. **Nao e legenda** e nao e desenhado sobre a foto:
   /// `CommunityNetworkEventCoverInput.alt_text` e rotulo para leitor de tela.
@@ -286,6 +361,11 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// primeiros abrem seletor de data e nao recebem teclado, e o texto da capa
   /// vive dentro de [_BlocoDaCapa] -- para ele a ancora leva ao bloco, que e o
   /// que poe o campo na tela.
+  ///
+  /// **`place.state` TAMBEM fica de fora, desde 21/10/2026**: ele deixou de ser
+  /// campo de texto e virou `SeletorDeLista`, que nao recebe teclado. Ele
+  /// continua em [_ordemDosCampos] -- a ancora ainda rola ate o seletor --, mas
+  /// um `FocusNode` aqui seria foco pedido a um widget que nao aceita foco.
   final Map<String, FocusNode> _focos = <String, FocusNode>{
     for (final String chave in <String>[
       'title',
@@ -293,7 +373,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       'place.place_name',
       'place.neighborhood',
       'place.city',
-      'place.state',
       'notes',
     ])
       chave: FocusNode(),
@@ -318,7 +397,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     if (regiao == null) return;
     _bairro.text = regiao.bairro ?? '';
     _cidade.text = regiao.cidade ?? '';
-    _uf.text = regiao.uf ?? '';
+    // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
+    // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
+    // `siglaDeEstadoValida`, que explica por que `length == 2` nao basta.
+    _uf = siglaDeEstadoValida(regiao.uf);
   }
 
   @override
@@ -326,9 +408,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     _titulo.dispose();
     _resumo.dispose();
     _lugar.dispose();
+    _cep.dispose();
     _bairro.dispose();
     _cidade.dispose();
-    _uf.dispose();
     _observacoes.dispose();
     _textoDaCapa.dispose();
     for (final FocusNode foco in _focos.values) {
@@ -345,6 +427,95 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
         _errosDeCampo = const <String, String>{};
       });
 
+  static final RegExp _soDigitos = RegExp(r'[^0-9]');
+
+  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
+  ///
+  /// As tres regras sao as do pedido do cliente de 17/10/2026, e elas ja estao
+  /// construidas em `perto/sugerir_profissional.dart` e em
+  /// `localizacao/captura_de_localizacao.dart` -- esta e a mesma forma, e nao
+  /// uma quarta redacao dela:
+  ///
+  /// 1. **so campo vazio recebe.** O que a pessoa escreveu vence o que a base
+  ///    devolve -- inclusive o bairro, a cidade e o estado que esta tela ja
+  ///    preencheu da regiao de referencia do tutor em
+  ///    [didChangeDependencies]. A base erra, e quem esta olhando o lugar e a
+  ///    pessoa;
+  /// 2. **nada fica bloqueado depois da busca.** Os tres seguem editaveis: CEP
+  ///    generico de cidade nao traz bairro;
+  /// 3. **nada aqui pode impedir `Criar evento`.** Nenhum caminho desta funcao
+  ///    marca erro de campo, mexe em `_impedimento` ou desabilita o botao.
+  ///
+  /// O `logradouro` que a busca devolve e **descartado**, e aqui a razao e mais
+  /// forte que nas outras telas: nao ha campo de rua nesta tela e nao deve
+  /// haver. O lugar de um encontro e logradouro PUBLICO e nunca residencia
+  /// (ADR-0027 item 13), e `place.place_name` e recusado pelo servidor com
+  /// `address_in_place_name` quando traz endereco embutido.
+  ///
+  /// **Nada aqui e geocodificado** (ADR-0006): o CEP vira TEXTO -- bairro,
+  /// cidade e UF --, nunca coordenada.
+  Future<void> _buscarOCep() async {
+    final cep = _cep.text.replaceAll(_soDigitos, '');
+    if (cep.length != 8 || cep == _cepJaBuscado) return;
+    _cepJaBuscado = cep;
+
+    setState(() {
+      _buscandoOCep = true;
+      _buscaDoCep = null;
+    });
+
+    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
+    if (!mounted) return;
+
+    setState(() {
+      _buscandoOCep = false;
+      _buscaDoCep = resposta.resultado;
+      final endereco = resposta.endereco;
+      if (endereco == null) return;
+      _preencherSeVazio(_bairro, endereco.bairro, 'place.neighborhood');
+      _preencherSeVazio(_cidade, endereco.cidade, 'place.city');
+      // **Escolha vazia recebe; escolha feita fica** -- a mesma regra dos dois
+      // controladores acima. A sigla vem de servico de TERCEIRO, entao ela
+      // passa pela lista antes de entrar.
+      final uf = siglaDeEstadoValida(endereco.uf);
+      if (_uf == null && uf != null) {
+        _uf = uf;
+        _errosDeCampo = <String, String>{..._errosDeCampo}
+          ..remove('place.state');
+      }
+    });
+  }
+
+  /// Campo vazio recebe; campo escrito fica. E o erro do campo que acabou de
+  /// ser preenchido sai junto -- deixar "Diga o bairro." embaixo de um bairro
+  /// preenchido seria a tela discutindo consigo mesma.
+  void _preencherSeVazio(
+    TextEditingController campo,
+    String valor,
+    String chave,
+  ) {
+    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    campo.text = valor;
+    _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
+  }
+
+  /// A linha que conta o que a busca fez. **Nenhum destes estados e erro.**
+  Widget _linhaDaBusca(TextTheme textos) {
+    if (_buscandoOCep) {
+      return Text(
+        TelaCriarEncontro.buscandoOCep,
+        style: textos.bodySmall,
+      );
+    }
+    final texto = switch (_buscaDoCep) {
+      ResultadoDaBusca.naoEncontrado => TelaCriarEncontro.cepNaoEncontrado,
+      ResultadoDaBusca.indisponivel => TelaCriarEncontro.buscaIndisponivel,
+      _ => null,
+    };
+    if (texto == null) return const SizedBox.shrink();
+    return Text(texto, style: textos.bodySmall);
+  }
+
   _Impedimento? get _impedimento {
     final usuario = Escopo.of(context).sessao.usuario;
     if (usuario == null) return _Impedimento.semConta;
@@ -354,7 +525,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     if (_lugar.text.trim().length < 2) return _Impedimento.semLugar;
     if (_bairro.text.trim().length < 2) return _Impedimento.semBairro;
     if (_cidade.text.trim().length < 2) return _Impedimento.semCidade;
-    if (_uf.text.trim().length != 2) return _Impedimento.semUf;
+    if (_uf == null) return _Impedimento.semUf;
     final comeca = _comeca;
     if (comeca == null) return _Impedimento.semData;
     if (!comeca.isAfter(widget.agora())) return _Impedimento.dataNoPassado;
@@ -545,7 +716,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       nomeDoLugar: _lugar.text.trim(),
       bairro: _bairro.text.trim(),
       cidade: _cidade.text.trim(),
-      uf: _uf.text.trim().toUpperCase(),
+      // Sem `trim` e sem `toUpperCase`: o valor vem de `estadosBrasileiros`,
+      // que guarda a sigla ja em maiuscula e sem espaco. As duas chamadas
+      // existiam porque o campo era digitado.
+      uf: _uf!,
       comecaEm: _comeca!,
       terminaEm: _termina,
       observacoes: _observacoes.text.trim(),
@@ -789,6 +963,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   exemplo: 'Caminhada no parque',
                   capitalizacao: TextCapitalization.sentences,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                 ),
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
@@ -802,6 +977,15 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   linhas: 2,
                   capitalizacao: TextCapitalization.sentences,
                   habilitado: !enviando,
+                  // **Sem `acaoDeTeclado`, e e decisao e nao esquecimento.**
+                  // `linhas: 2` faz o Flutter usar `TextInputType.multiline`,
+                  // e ali a tecla de retorno INSERE LINHA --
+                  // `TextInputAction.newline` e o desfecho certo de quem
+                  // escreve texto corrido. Declarar `next` aqui tiraria a
+                  // quebra de linha de um campo de duas linhas. Quem fecha o
+                  // teclado em campo de texto corrido e a faixa `Concluir` de
+                  // `widgets/barra_do_teclado.dart`, que e mecanismo de todo o
+                  // app e nao desta tela.
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 Semantics(
@@ -824,7 +1008,63 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   exemplo: 'Praça da Harmonia',
                   capitalizacao: TextCapitalization.words,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                 ),
+                const SizedBox(height: BichuEspaco.e4),
+                // **O CEP vem ANTES dos tres campos que ele preenche**, e a
+                // ordem e o proprio recurso: quem digita primeiro o CEP nao
+                // digita o resto. Ele e **opcional**, nao entra em
+                // `_impedimento` e **nao viaja no corpo** -- ver o bloco do
+                // CEP em `TelaCriarEncontro`.
+                BichuField(
+                  rotulo: TelaCriarEncontro.rotuloDoCep,
+                  controlador: _cep,
+                  opcional: true,
+                  // 9 e nao 8: o `maxLength` do campo conta o HIFEN da
+                  // mascara, e com 8 o ultimo digito seria cortado em
+                  // silencio -- o CEP ficaria errado na tela e a busca sairia
+                  // com sete digitos.
+                  limite: limiteDoCep,
+                  tipoDeTeclado: TextInputType.number,
+                  ajuda: TelaCriarEncontro.ajudaDoCep,
+                  // **A mascara, e nao `digitsOnly`** (cliente, 18/10:
+                  // "coloque mascara no campo cep de todos os formularios").
+                  // Ela mostra `01310-100`, aceita digitacao continua sem
+                  // hifen, descarta o que nao e digito -- e **nao valida
+                  // nada**.
+                  formatadores: const <TextInputFormatter>[MascaraDeCep()],
+                  correcaoAutomatica: false,
+                  habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
+                  // **SEM `autofill`, e sem `AutofillGroup` em volta do
+                  // formulario -- e esta e a unica tela de CEP do app em que a
+                  // ausencia e deliberada.**
+                  //
+                  // `AutofillHints.postalCode` oferece o CEP de CASA de quem
+                  // esta digitando. Aqui o CEP e de uma praca, e o campo
+                  // existe para achar o bairro DELA: a sugestao do sistema
+                  // preencheria o endereco da pessoa num formulario que
+                  // publica o lugar para a comunidade inteira, que e
+                  // exatamente o que o ADR-0027 item 13 ("logradouro publico,
+                  // nunca residencia") nao quer nesta tela.
+                  //
+                  // O pedido da plaquinha e o oposto e por isso ele TEM o
+                  // grupo: ali o endereco e o de casa de propósito, porque e
+                  // onde a plaquinha chega.
+                  // No oitavo digito a busca sai sozinha. Sem botao `Buscar`:
+                  // um botao a mais e um passo a mais para quem so quer os
+                  // campos preenchidos, e nao buscar e desfecho valido.
+                  aoMudar: (valor) {
+                    _aoDigitar(valor);
+                    _buscarOCep();
+                  },
+                ),
+                // O que a busca disse, e **so isso**: nao marca campo e nao
+                // desabilita nada.
+                if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+                  const SizedBox(height: BichuEspaco.e2),
+                  _linhaDaBusca(textos),
+                ],
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
                   key: _ancoras['place.neighborhood'],
@@ -836,41 +1076,54 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   limite: 60,
                   capitalizacao: TextCapitalization.words,
                   habilitado: !enviando,
+                  acaoDeTeclado: TextInputAction.next,
                 ),
                 const SizedBox(height: BichuEspaco.e4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      child: BichuField(
-                        key: _ancoras['place.city'],
-                        foco: _focos['place.city'],
-                        rotulo: 'Cidade',
-                        controlador: _cidade,
-                        aoMudar: _aoDigitar,
-                        erro: _errosDeCampo['place.city'],
-                        limite: 60,
-                        capitalizacao: TextCapitalization.words,
-                        habilitado: !enviando,
-                      ),
-                    ),
-                    const SizedBox(width: BichuEspaco.e3),
-                    SizedBox(
-                      width: 96,
-                      child: BichuField(
-                        key: _ancoras['place.state'],
-                        foco: _focos['place.state'],
-                        rotulo: 'UF',
-                        controlador: _uf,
-                        aoMudar: _aoDigitar,
-                        erro: _errosDeCampo['place.state'],
-                        limite: 2,
-                        capitalizacao: TextCapitalization.characters,
-                        correcaoAutomatica: false,
-                        habilitado: !enviando,
-                      ),
-                    ),
-                  ],
+                BichuField(
+                  key: _ancoras['place.city'],
+                  foco: _focos['place.city'],
+                  rotulo: 'Cidade',
+                  controlador: _cidade,
+                  aoMudar: _aoDigitar,
+                  erro: _errosDeCampo['place.city'],
+                  limite: 60,
+                  capitalizacao: TextCapitalization.words,
+                  habilitado: !enviando,
+                  // **`done` e nao `next`: e o ULTIMO campo de digitacao do
+                  // bloco do "Onde".** Depois dele vem o seletor de estado,
+                  // que nao recebe teclado, e os dois seletores de data. `next`
+                  // aqui empurraria o foco para um botao e deixaria o teclado
+                  // na tela sem nada para digitar.
+                  acaoDeTeclado: TextInputAction.done,
+                ),
+                const SizedBox(height: BichuEspaco.e4),
+                // **Lista de 27, e nao sigla digitada**, pela mesma decisao de
+                // 17/10/2026 que ja vale em `Meus dados`, no pedido da
+                // plaquinha e no registro de achado. Ela conserta DADO e nao
+                // so atrito -- ver o campo `_uf`.
+                //
+                // **Fora da `Row` da cidade**, e nao numa `SizedBox` de 96 px
+                // ao lado dela: o seletor mostra o NOME do estado
+                // ("Rio Grande do Norte"), que nao cabe em 96 px, e o campo
+                // que o substituiu cabia porque mostrava duas letras.
+                // **A ANCORA FICA, O FOCO NAO.** `place.state` continua em
+                // `_ordemDosCampos`, entao a recusa do servidor ainda ROLA
+                // ate aqui; o `FocusNode` saiu de `_focos` porque seletor
+                // nao recebe teclado -- igual a `starts_at` e `ends_at`.
+                // Manter nos dois pediria foco a um widget que nao aceita.
+                SeletorDeLista(
+                  key: _ancoras['place.state'],
+                  rotulo: TelaCriarEncontro.rotuloDoEstado,
+                  estadoInicial: TelaCriarEncontro.escolherOEstado,
+                  itens: estadosBrasileiros,
+                  selecionado: _uf,
+                  erro: _errosDeCampo['place.state'],
+                  habilitado: !enviando,
+                  aoSelecionar: (codigo) => setState(() {
+                    _uf = codigo;
+                    _erro = null;
+                    _errosDeCampo = const <String, String>{};
+                  }),
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 Semantics(
@@ -911,6 +1164,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   ajuda: 'Sem telefone, e-mail ou link.',
                   capitalizacao: TextCapitalization.sentences,
                   habilitado: !enviando,
+                  // **Sem `acaoDeTeclado`**, pelo mesmo motivo de
+                  // `O que vai acontecer`: `linhas: 3` e texto corrido, e a
+                  // tecla de retorno dele e a quebra de linha. Ele e o ultimo
+                  // campo da tela e o desfecho dele e a faixa `Concluir`.
                 ),
               ],
             ),
@@ -1115,6 +1372,9 @@ class _BlocoDaCapa extends StatelessWidget {
             ajuda: TelaCriarEncontro.ajudaDoTextoDaCapa,
             capitalizacao: TextCapitalization.sentences,
             habilitado: !enviando,
+            // Campo intermediario: **avanca**. Ele e o primeiro da tela, e o
+            // proximo e `Nome do evento`.
+            acaoDeTeclado: TextInputAction.next,
           ),
         ],
       ],

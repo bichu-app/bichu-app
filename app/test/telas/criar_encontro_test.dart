@@ -743,6 +743,16 @@ void main() {
       await preencherOMinimo(tester);
       await tocar(tester, find.widgetWithText(BotaoPrimario, 'Criar evento'));
 
+      // UNIAO 21/10/2026, e a escolha foi MEDIDA. Sem a rolagem manual este
+      // caso REPROVOU na arvore unida (`Nome do lugar` fora da arvore depois
+      // da recusa): o formulario ficou mais alto com o CEP e com o estado em
+      // linha propria, e `_levarAoPrimeiroRecusado` depende de
+      // `GlobalKey.currentContext`, que e nulo para campo que o `ListView`
+      // nao construiu. A rolagem da outra frente entra porque ela foi escrita
+      // pelo autor DESSA mudanca, por este motivo exato -- e a garantia de
+      // produto continua cobrada pelo caso irmao
+      // `rola ate o primeiro campo recusado`, que e quem reprova se a tela
+      // deixar de rolar sozinha. As duas prosas ficam abaixo.
       // **NÃO HÁ ROLAGEM MANUAL AQUI, E ISSO É O CONSERTO DE 20/10/2026.**
       //
       // Este caso chegou a reprovar: o `ListView` só constrói o que cabe na
@@ -763,6 +773,18 @@ void main() {
       // volta a medir só o que ele sempre mediu: que a recusa marca O CAMPO, e
       // não que sai como faixa genérica. O caso irmão
       // `rola até o primeiro campo recusado` é quem cobra a rolagem.
+      // (da outra frente) Rola PARA CIMA antes de ler: a marca fica no campo `Nome do lugar`,
+      // (da outra frente) que é o terceiro do formulário, e o formulário preenchido ficou rolado
+      // (da outra frente) para baixo. **Ele ficou MAIS longe em 21/10/2026**, quando o CEP
+      // (da outra frente) entrou acima do bairro e o estado saiu da `Row` da cidade para uma
+      // (da outra frente) linha própria: a marca passou a nascer fora da dobra, e sem este
+      // (da outra frente) passo o caso reprovaria por não ter rolado, e não por não ter marca.
+      await rolarAte(
+        tester,
+        find.text('Escreva só o nome do lugar, sem endereço.'),
+        passo: -120,
+        scrollable: corpoDoFormulario,
+      );
       expect(
         find.text('Escreva só o nome do lugar, sem endereço.'),
         findsOneWidget,
@@ -897,7 +919,10 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
   await digitar('Nome do lugar', 'Praça da Harmonia');
   await digitar('Bairro', 'Gamboa');
   await digitar('Cidade', 'Rio de Janeiro');
-  await digitar('UF', 'RJ');
+  // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026): a
+  // lista mostra o nome e guarda a sigla, e o caso continua afirmando `RJ` no
+  // corpo que sai -- e e o corpo que importa.
+  await escolherEstadoNaLista(tester, 'RJ', scrollable: corpoDoFormulario);
   await escolherComecoAmanha(tester);
 }
 

@@ -52,3 +52,35 @@ const List<ItemDeLista> estadosBrasileiros = <ItemDeLista>[
   ItemDeLista(codigo: 'SE', rotulo: 'Sergipe'),
   ItemDeLista(codigo: 'TO', rotulo: 'Tocantins'),
 ];
+
+/// A sigla, quando ela esta entre as 27; **nulo em qualquer outro caso**.
+///
+/// ## Por que esta funcao existe, e por que ela nao mora em cada tela
+///
+/// Em 21/10/2026 as tres telas que ainda DIGITAVAM a sigla passaram a escolher
+/// na lista (`perdido/tela_onde_e_quando`, `rede/criar_encontro`,
+/// `perto/sugerir_profissional`), e as tres recebem sigla de fora para
+/// pre-preencher o seletor: da regiao de referencia do tutor
+/// (`Me.reference_area.state`), da busca de CEP (o `uf` do ViaCEP) e, numa
+/// delas, do rascunho que sobrevive ao app fechar.
+///
+/// **Nenhuma dessas tres fontes e a lista.** `Me.reference_area.state` e
+/// `maxLength: 2` sem `pattern`, o servico de CEP e de terceiro, e o rascunho
+/// pode ter sido gravado pela versao de campo digitado -- com `SAO` dentro.
+///
+/// **O que acontece se a sigla entrar sem passar por aqui e um defeito mudo:**
+/// `SeletorDeLista` nao tem opcao para desenhar e mostra o estado inicial
+/// ("Escolher na lista"), enquanto o valor sujo continua no estado da tela
+/// esperando o envio. A tela pareceria vazia e o corpo nao estaria -- o pior
+/// dos dois mundos, porque nem a pessoa nem o portao de contrato veem nada.
+///
+/// `length == 2` **nao** basta, e era o que as telas faziam antes: `SA`, `XX`
+/// e `S.` tem dois caracteres e passam por aquela regua. Quem decide e a
+/// lista.
+String? siglaDeEstadoValida(String? sigla) {
+  if (sigla == null || sigla.isEmpty) return null;
+  for (final ItemDeLista estado in estadosBrasileiros) {
+    if (estado.codigo == sigla) return sigla;
+  }
+  return null;
+}

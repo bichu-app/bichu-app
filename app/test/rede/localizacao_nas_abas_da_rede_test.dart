@@ -927,7 +927,8 @@ void main() {
         MotivoDeNaoTerCidade.semFixNoPrazo,
         MotivoDeNaoTerCidade.indisponivel,
         MotivoDeNaoTerCidade.geocoderAusente,
-        MotivoDeNaoTerCidade.tetoDeUsoEstourado,
+        // Renomeado para `falhaDoServico` em 20/10/2026 (onda 4).
+        MotivoDeNaoTerCidade.falhaDoServico,
         MotivoDeNaoTerCidade.semResultado,
       ]) {
         final resolvedor = CidadeDoAparelho(
