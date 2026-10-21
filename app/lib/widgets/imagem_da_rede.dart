@@ -141,18 +141,24 @@ class ImagemDaRede extends StatelessWidget {
           ),
         );
 
-        // Decorativa: nenhuma parada de foco, nenhum anuncio. Com rotulo: uma
-        // parada, anunciada como imagem.
+        // Com rotulo: uma parada, anunciada como imagem. **O rotulo vale
+        // TAMBEM quando ha [aoTocarNaFalha]**, e a primeira versao disto
+        // errava aqui: ela devolvia o conteudo cru sempre que havia toque de
+        // falha, e a foto da conversa -- que passa `descricao` -- ficava sem
+        // nome acessivel no caminho em que ela CARREGA. O `Semantics` nao
+        // bloqueia descendentes (so `excludeSemantics: true` bloqueia), entao
+        // o botao do estado de falha continua alcancavel dentro dele.
+        if (descricao != null) {
+          return Semantics(image: true, label: descricao, child: conteudo);
+        }
+        // Decorativa: nenhuma parada de foco, nenhum anuncio.
         //
-        // **`ExcludeSemantics` nao cobre o estado de falha quando ele e
-        // controle**: um botao dentro de `ExcludeSemantics` desaparece para o
-        // leitor de tela, e quem nao ve a tela perderia o unico caminho de
-        // buscar a foto de novo. E por isso que a falha com toque carrega a
-        // propria semantica, dentro do `errorBuilder`, e nao e embrulhada aqui.
-        if (aoTocarNaFalha != null) return conteudo;
-        return descricao == null
+        // **`ExcludeSemantics` so entra sem [aoTocarNaFalha]**: um botao
+        // dentro dele desaparece para o leitor de tela, e quem nao ve a tela
+        // perderia o unico caminho de buscar a foto de novo.
+        return aoTocarNaFalha == null
             ? ExcludeSemantics(child: conteudo)
-            : Semantics(image: true, label: descricao, child: conteudo);
+            : conteudo;
       },
     );
   }

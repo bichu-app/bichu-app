@@ -651,6 +651,21 @@ void main() {
           );
         }
 
+        // A LEGENDA E O NOME ACESSIVEL DA IMAGEM, e nao so um texto embaixo
+        // dela. Sem isto, quem usa leitor de tela receberia a imagem sem a
+        // ressalva -- e a ressalva e o ponto inteiro desta decisao. Medido: a
+        // primeira versao de `ImagemDaRede.aoTocarNaFalha` devolvia o conteudo
+        // cru e engolia o rotulo justamente no caminho em que a foto carrega.
+        expect(
+          semanticaDaTela(tester),
+          contains('diz ter encontrado'),
+          reason:
+              'REPROVA: a foto da conversa nao tem NOME ACESSIVEL com a '
+              'ressalva. Quem nao ve a tela recebe "imagem" e nada mais, e a '
+              'frase que diz que o app nao atesta aquilo nao chega a essa '
+              'pessoa.',
+        );
+
         // CONTRAPESO 1: a legenda ESTA na tela. Sem ele, todos os
         // `isNot(contains(...))` acima passariam numa tela sem legenda nenhuma
         // -- e uma imagem sem ressalva e pior que uma ressalva mal escrita.
