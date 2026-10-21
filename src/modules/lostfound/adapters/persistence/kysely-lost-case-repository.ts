@@ -22,6 +22,7 @@
  */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import type {
   AtualizacaoDoCaso,
@@ -132,7 +133,7 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
           EXISTS (
             SELECT 1 FROM users u
              WHERE u.id = ${dono}
-               AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
+               AND ${canalDeContatoConfirmadoNoSql('u')}
           ) AS tem_canal
       `.execute(db);
 
@@ -183,7 +184,7 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
           EXISTS (
             SELECT 1 FROM users u
              WHERE u.id = ${dono}
-               AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
+               AND ${canalDeContatoConfirmadoNoSql('u')}
           ) AS tem_canal,
           -- A area de referencia do PROPRIO chamador, em texto. Nada aqui
           -- atravessa contas, e nada aqui enumera os outros pets dele: a

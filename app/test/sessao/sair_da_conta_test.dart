@@ -58,6 +58,7 @@ Sessao _sessaoAberta() => Sessao(
         id: 'usuario-de-teste',
         email: 'marina@exemplo.com.br',
         emailVerificado: true,
+        canalConfirmado: true,
         pendencias: <PendenciaDeCadastro>[],
         podeAbrirCaso: true,
       ),

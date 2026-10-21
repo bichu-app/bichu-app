@@ -20,10 +20,18 @@ export interface UsersTable {
   id: string;
   email: string;
   /**
-   * O instante da verificacao do e-mail. **E ELE o selo de validado** que o
-   * cliente pediu em 18/10/2026 ("um selo na foto dele, se ele estiver
-   * validado"): o conceito ja existe e ja sai como `Me.email_verified`. Nao ha
-   * nem pode haver uma segunda coluna dizendo a mesma coisa.
+   * O instante da verificacao do e-mail. **E UMA DAS DUAS COLUNAS do selo de
+   * validado** que o cliente pediu em 18/10/2026 ("um selo na foto dele, se ele
+   * estiver validado"): a outra e `phone_verified_at`, e a regua e
+   * `canalDeContatoConfirmado` (`shared/db/canal-de-contato-confirmado.ts`), a
+   * fonte unica desde 21/10/2026. Nao ha nem pode haver uma coluna de selo:
+   * ele e derivado na leitura, sempre.
+   *
+   * **Este comentario dizia "E ELE o selo"**, e aquilo era o defeito: com so
+   * esta coluna, o selo do DONO (`Me.email_verified`) era e-mail e o selo que
+   * os OUTROS veem era e-mail OU telefone. Hoje `Me.email_verified` continua
+   * saindo e continua falando SO desta coluna -- o selo e
+   * `Me.contact_channel_verified`.
    */
   email_verified_at: Date | null;
   /**

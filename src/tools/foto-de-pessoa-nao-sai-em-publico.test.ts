@@ -382,6 +382,13 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     // validada, que é o mesmo defeito do `verification_level` do profissional:
     // perfil que declara o próprio nível torna a verificação decorativa.
     assert.ok(!bloco.includes('email_verified'), 'selo não é campo de escrita');
+    // **Pelo NOME, e não só pelo sufixo `verified:`.** O selo do dono passou a
+    // ser `contact_channel_verified` em 21/10/2026, e um campo de escrita com
+    // esse nome é o mesmo defeito do `verification_level` do profissional.
+    assert.ok(
+      !bloco.includes('contact_channel_verified'),
+      'selo não é campo de escrita',
+    );
     assert.ok(!bloco.includes('verified:'), 'selo não é campo de escrita');
   });
 });

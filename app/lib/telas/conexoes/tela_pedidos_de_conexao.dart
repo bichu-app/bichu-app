@@ -13,6 +13,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_segmentado.dart';
+import '../../widgets/selo_de_validado.dart';
 
 /// **Os pedidos de conexão.** A única tela desta fatia, e a lista que ela
 /// mostra é de **pedidos** — nunca de conexões.
@@ -307,6 +308,25 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
   /// dois estados o nome **volta a ser texto puro**: um destino montado com
   /// nulo abriria `/pessoa/null`, e um rótulo de botão sem desfecho é o toque
   /// que não leva a lugar nenhum.
+  ///
+  /// ## O SELO FICA AQUI DENTRO, e por que isto e uniao e nao escolha
+  ///
+  /// Duas frentes da onda 4 mexeram nesta linha: uma a transformou em CONTROLE
+  /// (48 dp, `push` para o perfil, nome acessivel de botao) e a outra lhe deu o
+  /// SELO DE VALIDADO. As duas coisas cabem na mesma linha, e cabem nos dois
+  /// caminhos deste ajudante -- com apelido e sem.
+  ///
+  /// **O selo sai IGUAL no pedido recebido e no enviado**, porque e atributo da
+  /// conta e nao algo que o aceite libere: condiciona-lo faria a mesma pessoa
+  /// aparecer validada no perfil e nao aqui, que e a divergencia que a regua
+  /// unica existe para impedir.
+  ///
+  /// `nomeParaLer` pode ser nulo (as duas pontas de nome sao anulaveis no
+  /// contrato) e cai para `semNome`. **O selo nao cai com ele**: o booleano e
+  /// sobre a CONTA, e uma conta sem nome de exibicao pode ter confirmado o
+  /// e-mail. E ele tambem nao cai com a AUSENCIA DE APELIDO, que e o caminho em
+  /// que esta linha nao e tocavel -- selo e sobre a conta, toque e sobre haver
+  /// perfil para abrir, e as duas condicoes sao independentes.
   Widget _nomeDeQuemPediu(
     BichuCores cores,
     TextTheme textos,
@@ -314,19 +334,42 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
   ) {
     final nome = pedido.person.nomeParaLer ?? TelaDePedidosDeConexao.semNome;
     final estilo = textos.titleMedium?.copyWith(color: cores.textPrimary);
+    final comSelo = pedido.person.canalConfirmado;
     final apelido = pedido.person.handle;
     // Vazio tratado como ausente, pelo mesmo motivo de
     // `ligarPortaDoPerfilDoParticipante`: `Rotas.perfilDe('')` devolveria
     // `/pessoa/`, que e a rota de outra coisa.
     if (apelido == null || apelido.isEmpty) {
-      return Text(nome, style: estilo);
+      return NomeComSelo(nome: nome, comSelo: comSelo, estilo: estilo);
     }
 
     return Semantics(
       button: true,
-      label: TelaDePedidosDeConexao.rotuloDoPerfilDe(nome),
-      // O texto de dentro nao diz nada que o rotulo acima nao diga, e
-      // anunciado ao lado dele e ruido na mesma parada de foco.
+      // **O SELO ENTRA NO ROTULO, e isto e consequencia MEDIDA da uniao.**
+      //
+      // `excludeSemantics: true` apaga a semantica dos descendentes, e com o
+      // selo desenhado aqui dentro ele apagava o anuncio DELE: medido, o leitor
+      // de tela recebia so `Abrir o perfil de @ana-do-bairro` e a conta
+      // validada deixava de existir para quem nao ve a tela. Nas outras tres
+      // superficies (Mural, comentario, perfil) o `NomeComSelo` nao fica dentro
+      // de `excludeSemantics` e o selo se anuncia sozinho -- esta era a unica
+      // que o engolia.
+      //
+      // A justificativa original do `excludeSemantics` -- *"o texto de dentro
+      // nao diz nada que o rotulo acima nao diga"* -- **deixou de ser verdade**
+      // no dia em que passou a haver selo dentro. Tirar o `excludeSemantics`
+      // anunciaria o nome DUAS vezes na mesma parada, que e o ruido que ele
+      // existe para evitar; entao o selo sobe para o rotulo e a parada continua
+      // sendo uma.
+      //
+      // Esta e a forma que o proprio caso do selo previu, na prosa dele:
+      // *"a linha do pedido e um no de semantica unico, entao o leitor de tela
+      // anuncia `@ana-do-bairro, Contato confirmado` numa parada so"* -- e e por
+      // isso que ele cobra o rotulo com `contains` e nao com igualdade.
+      label: comSelo
+          ? '${TelaDePedidosDeConexao.rotuloDoPerfilDe(nome)}, '
+              '${SeloDeValidado.rotulo}'
+          : TelaDePedidosDeConexao.rotuloDoPerfilDe(nome),
       excludeSemantics: true,
       child: InkWell(
         // `push` e nao `go`: o perfil COBRE esta tela, e voltar dele tem de
@@ -340,7 +383,7 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
           // esta acima do piso do M3 e do SC 2.5.8.
           constraints: const BoxConstraints(minHeight: 48),
           alignment: Alignment.centerLeft,
-          child: Text(nome, style: estilo),
+          child: NomeComSelo(nome: nome, comSelo: comSelo, estilo: estilo),
         ),
       ),
     );

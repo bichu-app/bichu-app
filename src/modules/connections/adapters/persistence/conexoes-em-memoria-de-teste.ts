@@ -75,6 +75,15 @@ export interface PessoaDeTeste {
    * ninguém escrevê-lo.
    */
   readonly petComFotoPronta?: boolean;
+  /**
+   * O SELO DE VALIDADO. `true` reproduz
+   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
+   *
+   * **Opcional, e o padrão é `false`**: conta que o teste nunca mencionou não é
+   * conta validada, e um padrão `true` faria toda esta suíte nascer com selo —
+   * a isca de "sem canal confirmado o selo não aparece" ficaria verde sem medir.
+   */
+  readonly canalVerificado?: boolean;
 }
 
 export interface BancadaDeConexoes {
@@ -115,6 +124,11 @@ export function conexoesEmMemoria(
       outraPessoa: {
         apelido: pessoa?.apelido ?? null,
         nomeDeExibicao: pessoa?.nomeDeExibicao ?? null,
+        // **`false` quando a conta nao esta no dublê**, e nao `true`: na duvida o
+        // selo NAO nasce. Um padrao `true` faria todo caso desta suite nascer
+        // validado e a isca de "sem canal confirmado o selo nao aparece" ficaria
+        // verde sem medir nada.
+        canalVerificado: pessoa?.canalVerificado ?? false,
       },
     };
   }
@@ -289,7 +303,16 @@ export function conexoesEmMemoria(
       // mencionou nao e uma conta desabilitada.
       for (const lado of [parcial.pedinte, parcial.destinatario]) {
         if (!estado.has(lado)) {
-          estado.set(lado, { id: lado, apelido: null, nomeDeExibicao: null, habilitada: true });
+          estado.set(lado, {
+            id: lado,
+            apelido: null,
+            nomeDeExibicao: null,
+            habilitada: true,
+            // Ver `PessoaDeTeste.canalVerificado`: quem a bancada semeia sem
+            // dizer nada NAO e validado. O padrao oposto ao de `habilitada`, e
+            // de proposito: desabilitar e um ato, validar tambem.
+            canalVerificado: false,
+          });
         }
       }
       sequencia += 1;

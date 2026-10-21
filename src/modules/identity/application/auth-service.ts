@@ -1434,7 +1434,9 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
      * proíbe avatar na `Rede` por nome, e o contrato diz por extenso que
      * `Conversation.participants` nunca traz foto de perfil.
      *
-     * **O selo de validado não passa por aqui.** Ele é `emailVerifiedAt`, que
+     * **O selo de validado não passa por aqui.** Ele é derivado na leitura,
+     * pela fonte única da régua (`canalDeContatoConfirmado`), e sai como
+     * `contact_channel_verified`. O que esta rota move é `emailVerifiedAt`, que
      * a resposta já projeta como `email_verified` — nenhum campo novo, nenhuma
      * escolha de quem envia a foto.
      *

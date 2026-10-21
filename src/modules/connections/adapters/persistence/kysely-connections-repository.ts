@@ -40,6 +40,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import type { ArestaGuardada, EstadoGuardado } from '../../domain/conexao.js';
@@ -72,6 +73,32 @@ import type {
 const instanteComoData = comoData;
 
 /**
+ * **O SELO DE VALIDADO da outra ponta**, derivado no SQL a partir do alias
+ * `outro` (`users`), que as três projeções de aresta deste arquivo já têm.
+ *
+ * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` vem da
+ * **FONTE ÚNICA** (`canalDeContatoConfirmadoNoSql`, em
+ * `shared/db/canal-de-contato-confirmado.ts`), a mesma que o `SELECT` do perfil
+ * de pessoa, o do Mural e os quatro 409 `contact-channel-unverified` usam. Este
+ * cabeçalho dizia antes que a cópia da condição era deliberada; o motivo que
+ * ele dava — duas definições de "validado" são duas réguas — era o motivo para
+ * a cópia **não** existir. Na prática isso é e-mail: nada em `src/` grava
+ * `phone_verified_at`.
+ *
+ * **As duas colunas de data ficam dentro da expressão e nunca na lista de
+ * saída**: o que sai é o booleano, e a data de confirmação não é assunto de
+ * terceiro. É por isso que `canal_verificado` entra na lista FECHADA de
+ * apelidos de saída que `autorizacao-na-clausula-where.test.ts` cobra, e
+ * `email_verified_at` não.
+ *
+ * **Escrito UMA vez e interpolado nas três projeções** (listagem, pedido novo e
+ * aceite). Três cópias seriam três lugares onde uma correção pode faltar, e a
+ * aresta recém-criada sairia diferente da mesma aresta relida na página
+ * seguinte.
+ */
+const CANAL_VERIFICADO_DO_OUTRO = canalDeContatoConfirmadoNoSql('outro');
+
+/**
  * As colunas que uma aresta projeta, **e só elas**.
  *
  * `requester_user_id` e `addressee_user_id` **não** estão na lista: elas são
@@ -88,7 +115,8 @@ const COLUNAS_DA_ARESTA = sql`
       c.expires_at                            AS expires_at,
       c.rest_until                            AS rest_until,
       outro.display_name                      AS display_name,
-      (to_jsonb(outro) ->> 'handle')          AS handle
+      (to_jsonb(outro) ->> 'handle')          AS handle,
+      ${CANAL_VERIFICADO_DO_OUTRO}            AS canal_verificado
 `;
 
 /** A junção que resolve "a outra ponta", com `conta_habilitada` nos dois lados. */
@@ -114,6 +142,8 @@ interface LinhaDaAresta {
   readonly rest_until: Date | null;
   readonly display_name: string | null;
   readonly handle: string | null;
+  /** O selo de validado da outra ponta. Ver [CANAL_VERIFICADO_DO_OUTRO]. */
+  readonly canal_verificado: boolean;
 }
 
 function comoAresta(linha: LinhaDaAresta): ArestaGuardada {
@@ -124,7 +154,11 @@ function comoAresta(linha: LinhaDaAresta): ArestaGuardada {
     pedidoEm: linha.requested_at.getTime() as Instant,
     expiraEm: linha.expires_at.getTime() as Instant,
     descansoAte: linha.rest_until === null ? null : (linha.rest_until.getTime() as Instant),
-    outraPessoa: { apelido: linha.handle, nomeDeExibicao: linha.display_name },
+    outraPessoa: {
+      apelido: linha.handle,
+      nomeDeExibicao: linha.display_name,
+      canalVerificado: linha.canal_verificado,
+    },
   };
 }
 
@@ -338,7 +372,8 @@ export function construtorDoPedido(
       i.expires_at                         AS expires_at,
       i.rest_until                         AS rest_until,
       outro.display_name                   AS display_name,
-      (to_jsonb(outro) ->> 'handle')       AS handle
+      (to_jsonb(outro) ->> 'handle')       AS handle,
+      ${CANAL_VERIFICADO_DO_OUTRO}         AS canal_verificado
     FROM inserida i
     JOIN users outro ON outro.id = i.addressee_user_id
   `.compile(db);
@@ -392,7 +427,8 @@ export function construtorDoAceite(
       a.expires_at                         AS expires_at,
       a.rest_until                         AS rest_until,
       outro.display_name                   AS display_name,
-      (to_jsonb(outro) ->> 'handle')       AS handle
+      (to_jsonb(outro) ->> 'handle')       AS handle,
+      ${CANAL_VERIFICADO_DO_OUTRO}         AS canal_verificado
     FROM aceita a
     JOIN users outro ON outro.id = a.requester_user_id
   `.compile(db);

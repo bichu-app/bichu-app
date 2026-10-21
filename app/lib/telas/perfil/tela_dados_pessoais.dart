@@ -29,6 +29,7 @@ import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
+import '../../widgets/selo_de_validado.dart';
 import '../../widgets/seletor_de_lista.dart';
 
 /// `Perfil` › `Meus dados`: os dados pessoais do tutor.
@@ -55,10 +56,15 @@ import '../../widgets/seletor_de_lista.dart';
 /// Tres pecas do contrato, e nenhuma delas e nova aqui:
 /// `createMyPhotoUploadIntent` (prefixo `people/`, HEIC aceito),
 /// `MeUpdate.photo_upload_id` para amarrar a foto a conta, e `Me.photo` para
-/// le-la de volta. **O selo nao e imagem**: ele e `Me.email_verified`, o mesmo
-/// conceito que o resto do produto usa, desenhado em cima da foto. Gravar o
-/// selo dentro do JPEG faria a imagem mentir no dia em que a pessoa trocasse
-/// de e-mail.
+/// le-la de volta. **O selo nao e imagem**: ele e
+/// `Me.contact_channel_verified`, o mesmo campo e a mesma regua que os OUTROS
+/// veem desta conta, desenhado em cima da foto. Gravar o selo dentro do JPEG
+/// faria a imagem mentir no dia em que a pessoa trocasse de e-mail.
+///
+/// **Era `Me.email_verified` ate 21/10/2026** -- ver o cabecalho de
+/// `_SeloDeValidado`, no fim deste arquivo, para por que a troca aconteceu e
+/// por que `email_verified` continua existindo e sendo lido aqui, na linha de
+/// situacao do e-mail.
 ///
 /// **A foto e visivel SO AO DONO.** `Me.photo` e a unica resposta do contrato
 /// que a traz, `getMe` exige `bearerAuth` sem alternativa vazia, e a decisao
@@ -768,7 +774,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             recusada: lido.fotoRecusada,
             motivoDaRecusa: lido.motivoDaRecusaDaFoto,
             escolhida: _fotoEscolhida,
-            validado: lido.usuario.emailVerificado,
+            validado: lido.usuario.canalConfirmado,
             permissao: _permissaoDaCamera,
             enviando: _enviandoAFoto,
             aoTirar: _tirarAFoto,
@@ -1132,8 +1138,15 @@ class _BlocoDaFoto extends StatelessWidget {
 
   final FotoLocal? escolhida;
 
-  /// `Me.email_verified`. **O selo e isto, e nada mais**: nao vem da imagem,
-  /// nao e escolhido pelo app e nao e gravado no JPEG.
+  /// `Me.contact_channel_verified`. **O selo e isto, e nada mais**: nao vem da
+  /// imagem, nao e escolhido pelo app e nao e gravado no JPEG.
+  ///
+  /// **Era `Me.email_verified` ate 21/10/2026**, e a troca e a decisao do
+  /// cliente daquele dia: *"Unificar agora, nas duas -- a mesma regua (e-mail
+  /// OU telefone) nos dois lugares, antes de telefone existir."* Com
+  /// `email_verified` aqui o dono via uma regua (so e-mail) e os outros viam
+  /// outra (e-mail OU telefone) -- iguais hoje so porque nada grava
+  /// `phone_verified_at`.
   final bool validado;
 
   final EstadoDaPermissao permissao;
@@ -1310,21 +1323,53 @@ class _QuadradoSemFoto extends StatelessWidget {
   }
 }
 
-/// O selo de validado, **sobre** a foto.
+/// O selo de validado do DONO, **sobre** a foto.
 ///
-/// `Me.email_verified` e a unica fonte. O anel de cor de superficie existe
-/// porque o selo pousa em cima de uma imagem de conteudo desconhecido: sem ele
-/// um escudo verde sobre um fundo verde desaparece.
+/// `Me.contact_channel_verified` e a unica fonte. O anel de cor de superficie
+/// existe porque o selo pousa em cima de uma imagem de conteudo desconhecido:
+/// sem ele um escudo verde sobre um fundo verde desaparece.
 ///
 /// **Com rotulo**, e nao decorativo: a validacao e informacao que nao esta
 /// escrita em nenhum outro lugar desta tela, e um icone sem rotulo e um dado
 /// que quem usa leitor de tela nao recebe.
+///
+/// ## O ROTULO E O DE [SeloDeValidado], E NAO UM PROPRIO
+///
+/// Ele dizia **"Conta validada"** ate 21/10/2026, e prometia mais do que o dado
+/// entrega -- pelo mesmo motivo que travou o rotulo do selo que os OUTROS veem:
+/// *"nao estamos validando documentos de faco, apenas e-mail por enquanto"*
+/// (cliente, 21/10/2026). "Validada" nao diz O QUE foi validado, e quem usa
+/// leitor de tela recebe SO o rotulo.
+///
+/// Agora ele e `SeloDeValidado.rotulo`, a MESMA constante do selo de terceiro.
+/// Nao e economia de linha: e a mesma regua com o mesmo nome, e o rotulo
+/// proprio desta tela era o segundo lugar onde a redacao podia divergir. A
+/// varredura de palavras proibidas de `app/test/widgets/selo_de_validado_test`
+/// cobra esta constante, e desde hoje cobra o rotulo DESTA tela pelo mesmo
+/// caminho -- ver `app/test/widgets/palavras_proibidas_no_rotulo.dart`.
+///
+/// **A frase e "Contato confirmado", e ela NAO NOMEIA O MEIO.** Decisao do
+/// cliente no mesmo 21/10/2026, e **posterior** a aprovacao de "E-mail
+/// confirmado" daquele dia: *"tem que dizer que o usuario esta confirmado,
+/// independente do meio"*. A ordem das duas esta escrita no cabecalho de
+/// [SeloDeValidado], porque sem ela alguem reverte achando que conserta.
+///
+/// **E e por isso que o rotulo do selo nao colide com a linha do e-mail desta
+/// tela.** [_EmailDeLeitura] diz "E-mail confirmado" e tem de continuar
+/// dizendo: ela fala do e-mail, e nomear o canal ali e o conteudo dela. Com o
+/// selo dizendo a mesma frase -- e ele disse, por algumas horas --, o leitor de
+/// tela anunciava duas vezes e nenhum `find` por rotulo distinguia as duas. O
+/// caso `ISCA: o rotulo do selo NAO e a frase da linha do e-mail` prende isso.
+///
+/// **O desenho continua diferente de [SeloDeValidado]** (anel, 24 dp, sobre a
+/// foto), e a diferenca esta escrita no cabecalho daquela classe: aqui o selo
+/// pousa sobre uma imagem, la ao lado de um nome.
 class _SeloDeValidado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     return Semantics(
-      label: _TextosDosDados.contaValidada,
+      label: SeloDeValidado.rotulo,
       child: Container(
         padding: const EdgeInsets.all(BichuEspaco.e1),
         decoration: BoxDecoration(
@@ -1507,8 +1552,10 @@ abstract final class _TextosDosDados {
   /// de cima de proposito: a pessoa precisa saber qual das duas esta vendo.
   static const String aFotoEscolhida = 'A foto que você escolheu';
 
-  /// O rotulo do selo. O icone nao fala.
-  static const String contaValidada = 'Conta validada';
+  // **NAO HA CONSTANTE DE ROTULO DO SELO AQUI, e a ausencia e a regra.**
+  // Ela existia ("Conta validada") e prometia mais do que o dado entrega. O
+  // rotulo do selo e `SeloDeValidado.rotulo`, um lugar so para as duas telas
+  // -- ver o cabecalho de `_SeloDeValidado`.
 
   /// O rotulo do simbolo de processamento no lugar da foto. O icone tambem
   /// nao fala.

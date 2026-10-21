@@ -45,6 +45,13 @@
 ///   não permissão de expor onde a pessoa mora.
 /// - **Nenhuma lista de conexões.** Só a contagem. A lista não aparece a
 ///   ninguém, nem ao dono (plano 4-B), e não existe no contrato.
+///
+/// ## O que entrou depois, e por decisão
+///
+/// **O SELO DE VALIDADO** (`contact_channel_verified`), pela emenda do ADR-0010
+/// de 21/10/2026. A lista de campos acima é FECHADA e a emenda 2 a fechou; o
+/// selo só entra porque a emenda nova NOMEIA `PersonProfile` — não porque ele
+/// "cabia".
 library;
 
 import 'modelos_conexao.dart';
@@ -97,6 +104,7 @@ class PerfilDePessoa {
     required this.connectionsCount,
     required this.connectionState,
     required this.connectionRef,
+    required this.canalConfirmado,
     required this.vitrine,
   });
 
@@ -118,6 +126,10 @@ class PerfilDePessoa {
           ? null
           : EstadoDaConexao.porCodigo(json['connection_state'] as String?),
       connectionRef: json['connection_ref'] as String?,
+      // **Padrão `false`: na dúvida o selo NÃO nasce.** O campo é obrigatório no
+      // contrato e sai nos QUATRO estados de conexão; este padrão é o que o app
+      // faz se um dia ele faltar.
+      canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
       // **Ausente e `[]` são coisas diferentes, e a tela depende disso.**
       // Ausente é "você não pode ver"; `[]` é "esta conexão não tem foto".
       // Mapear ausente para lista vazia aqui apagaria a distinção antes de a
@@ -151,6 +163,25 @@ class PerfilDePessoa {
 
   /// O `ref` da **aresta**, nulo quando não há aresta viva. Nunca de uma pessoa.
   final String? connectionRef;
+
+  /// **O SELO DE VALIDADO** — `contact_channel_verified`, emenda do ADR-0010 de
+  /// 21/10/2026, decisão do cliente.
+  ///
+  /// O que ele prova é **um canal de contato confirmado**
+  /// (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
+  /// servidor), que é a MESMA régua dos quatro 409
+  /// `contact-channel-unverified`. **Na prática é e-mail**, porque nada no
+  /// servidor grava a confirmação de telefone — e é por isso que o rótulo que a
+  /// tela desenha diz "e-mail confirmado" e nunca "verificado" nem "confiável".
+  ///
+  /// **`false` não desenha nada**, e não desenha um selo apagado: selo cinza ao
+  /// lado do nome diria "esta conta foi reprovada", e `false` significa que
+  /// ninguém conferiu nada.
+  ///
+  /// **Chega nos QUATRO estados de conexão**, ao contrário de [vitrine]: a
+  /// vitrine é conteúdo que a pessoa publicou para quem ela aceitou, e o selo é
+  /// atributo da conta, que vale igual para quem chega pelo apelido.
+  final bool canalConfirmado;
 
   /// As fotos, ou **nulo quando quem olha não pode vê-las**. Lista vazia é uma
   /// conexão sem foto.

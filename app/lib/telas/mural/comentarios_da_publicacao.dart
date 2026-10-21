@@ -10,7 +10,8 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/marca_da_pessoa.dart';
+import '../../widgets/selo_de_validado.dart';
 import '../casca_com_abas.dart';
 
 /// OS COMENTARIOS de uma publicacao — decisao do cliente de 19/10/2026,
@@ -366,51 +367,44 @@ class _Comentario extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final url = comentario.autor.urlDoIcone;
-    final inicial = comentario.autor.nomeExibido.trim();
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (url == null || url.isEmpty)
-          Container(
-            width: ladoDoIcone,
-            height: ladoDoIcone,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: cores.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: ExcludeSemantics(
-              child: Text(
-                inicial.isEmpty ? '·' : inicial.characters.first.toUpperCase(),
-                style: textos.bodyMedium?.copyWith(color: cores.primary),
-              ),
-            ),
-          )
-        else
-          ImagemDaRede(
-            url: url,
-            // DECORATIVA: o nome esta ao lado, e rotular a imagem faria o leitor
-            // de tela anunciar a pessoa duas vezes na mesma parada de foco.
-            descricao: null,
-            largura: ladoDoIcone,
-            proporcao: 1,
-            raio: ladoDoIcone / 2,
-            simboloDeFalha: Icons.person_outline,
-          ),
+        // **A TERCEIRA SUPERICIE DO CIRCULO DE PESSOA, e e ela que motivou a
+        // extracao (21/10/2026).** O cabecalho de `_FotoDoAutor`, no Mural, dizia
+        // *"No dia em que aparecer a terceira superficie, este widget e o irmao
+        // dele viram um so, em `lib/widgets/`"*. Era aqui: este circulo era a
+        // terceira copia das mesmas linhas, escrita inline.
+        //
+        // O que continua desta tela e o LADO: 32 dp, menor que os 40 do cartao,
+        // e a `bodyMedium` da inicial que acompanha o lado.
+        MarcaDaPessoa(
+          urlDoIcone: comentario.autor.urlDoIcone,
+          inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
+          lado: ladoDoIcone,
+          estiloDaInicial: textos.bodyMedium,
+        ),
         const SizedBox(width: BichuEspaco.e3),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(
-                comentario.autor.nomeExibido,
-                style: textos.labelLarge,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              // O NOME, COM O SELO DE VALIDADO AO LADO — emenda do ADR-0010 de
+              // 21/10/2026, decisao do cliente: *"os usuarios que validados deve
+              // ter um simbolo em frente de seu nome nos posts, comentarios"*.
+              //
+              // **AQUI O SELO CABE EM TODAS AS LARGURAS MEDIDAS**, e e o unico
+              // dos quatro lugares em que isso e verdade: a linha do comentario
+              // nao divide largura com um `⋮` fixo nem com um titulo de barra, e
+              // o nome usa `labelLarge`, que e menor que o `titleMedium` do
+              // cartao. A medicao esta em
+              // `app/test/widgets/selo_de_validado_test.dart`, com os numeros.
+              NomeComSelo(
+                nome: comentario.autor.nomeExibido,
+                comSelo: comentario.autor.canalConfirmado,
+                estilo: textos.labelLarge,
               ),
               const SizedBox(height: BichuEspaco.e1),
               // O texto como a pessoa escreveu. Sem recorte e sem tratamento de

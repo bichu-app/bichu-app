@@ -55,6 +55,7 @@
  */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type {
   EnderecoComercial,
@@ -469,9 +470,10 @@ const AVALIACAO_VISIVEL = sql<boolean>`(
 /**
  * O estado da conta para AVALIAR, pela mesma regua de criar encontro.
  *
- * **COPIADA de `estadoParaCriarEncontro`** de `kysely-network-repository.ts`: o
- * mesmo `EXISTS` com o mesmo `OR`, e-mail OU telefone verificado. Preenchido e
- * nao verificado nao conta. O cliente definiu a regra para criar evento ("so
+ * **A regua vem da FONTE UNICA** (`canalDeContatoConfirmadoNoSql`, em
+ * `shared/db/canal-de-contato-confirmado.ts`), e nao mais copiada de
+ * `estadoParaCriarEncontro`: e-mail OU telefone verificado. Preenchido e nao
+ * verificado nao conta. O cliente definiu a regra para criar evento ("so
  * usuarios com os dados validados conseguem criar eventos") e mandou aplicar a
  * mesma aqui -- entao ela e a mesma expressao, e nao uma segunda interpretacao
  * dela.
@@ -482,7 +484,7 @@ const AVALIACAO_VISIVEL = sql<boolean>`(
 const TEM_CANAL_VERIFICADO = (chamador: UserId) => sql<boolean>`EXISTS (
   SELECT 1 FROM users u
    WHERE u.id = ${chamador}::uuid
-     AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
+     AND ${canalDeContatoConfirmadoNoSql('u')}
 )`;
 
 interface LinhaDaPontuacao {

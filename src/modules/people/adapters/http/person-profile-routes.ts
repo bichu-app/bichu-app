@@ -237,6 +237,11 @@ export function comoResposta(
     display_name: perfil.displayName,
     pets_count: perfil.petsCount,
     connections_count: perfil.connectionsCount,
+    // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026). Fora do bloco
+    // condicional da vitrine de propósito: ele sai nos QUATRO estados de
+    // conexão, porque é atributo da conta e não conteúdo que ela publicou para
+    // quem aceitou.
+    contact_channel_verified: perfil.canalVerificado,
     connection_state: perfil.connectionState,
     connection_ref: perfil.connectionRef,
     ...(perfil.vitrine === undefined

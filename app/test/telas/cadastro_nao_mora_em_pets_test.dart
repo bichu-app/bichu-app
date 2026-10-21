@@ -132,6 +132,7 @@ DepositoEmMemoria _depositoComPendencia() {
           id: 'u-pendente',
           email: 'marina@exemplo.com.br',
           emailVerificado: false,
+          canalConfirmado: false,
           pendencias: const <PendenciaDeCadastro>[
             PendenciaDeCadastro.verificacaoDeEmail,
           ],

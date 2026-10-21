@@ -77,6 +77,7 @@ class Usuario {
     required this.id,
     required this.email,
     required this.emailVerificado,
+    required this.canalConfirmado,
     required this.pendencias,
     required this.podeAbrirCaso,
     this.nome,
@@ -88,7 +89,34 @@ class Usuario {
 
   final String id;
   final String email;
+
+  /// `email_verified`: **o e-mail desta conta foi confirmado**, e so isso.
+  ///
+  /// **NAO e o selo de validado** -- isso e [canalConfirmado]. Quem le este
+  /// campo e a linha "E-mail confirmado / E-mail nao confirmado" ao lado do
+  /// endereco, na tela de dados pessoais, que fala do e-mail.
   final bool emailVerificado;
+
+  /// `contact_channel_verified`: **O SELO DE VALIDADO**, pela mesma regua que
+  /// os OUTROS veem desta conta.
+  ///
+  /// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
+  /// servidor, derivado numa fonte unica
+  /// (`shared/db/canal-de-contato-confirmado.ts`) e com o MESMO nome de campo
+  /// que `PublicationAuthor`, `PersonProfile` e `ConnectionPerson`.
+  ///
+  /// **Entrou em 21/10/2026 por decisao do cliente**: *"Unificar agora, nas
+  /// duas -- a mesma regua (e-mail OU telefone) nos dois lugares, antes de
+  /// telefone existir."* Antes disto o selo do dono era [emailVerificado], que
+  /// e so e-mail, e o selo que os outros veem era e-mail OU telefone. As duas
+  /// coincidiam porque nada no servidor grava `phone_verified_at` -- no dia em
+  /// que telefone confirmar, a mesma conta apareceria validada para os outros e
+  /// nao para si.
+  ///
+  /// **O padrao de ausencia e `false`**, como em todo booleano deste arquivo: o
+  /// APK publicado nao conhece o campo, e um selo que aparecesse por omissao
+  /// seria o pior dos dois erros.
+  final bool canalConfirmado;
 
   /// Endereco novo aguardando confirmacao, quando ha troca em curso.
   final String? emailPendente;
@@ -153,6 +181,7 @@ class Usuario {
       id: json['id'] as String,
       email: json['email'] as String,
       emailVerificado: json['email_verified'] as bool? ?? false,
+      canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
       emailPendente: json['pending_email'] as String?,
       emailEntregavel: json['email_deliverable'] as bool? ?? true,
       nome: json['display_name'] as String?,

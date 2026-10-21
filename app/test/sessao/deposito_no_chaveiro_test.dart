@@ -53,6 +53,7 @@ Sessao _sessao() => Sessao(
         id: '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01',
         email: 'tutora@exemplo.invalid',
         emailVerificado: true,
+        canalConfirmado: true,
         nome: 'Tutora',
         pendencias: [],
         podeAbrirCaso: true,

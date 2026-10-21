@@ -326,10 +326,15 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     // Ancora no CONJUNTO e não em "não contém X": lista de proibidos falha
     // exatamente no item que ninguém previu, e falha para verde. Campo novo
     // aqui é decisão do cliente, e este caso é onde ela aparece.
+    // `contact_channel_verified` entrou em 21/10/2026 pela emenda do ADR-0010 --
+    // decisao do cliente, e a emenda NOMEIA este schema. Ele esta nesta lista e
+    // nao na de proibidos logo abaixo porque e um BOOLEANO sobre a conta: ele
+    // nao identifica, nao localiza e nao conta nada de pet.
     assert.deepEqual(propriedadesDe('PersonProfile').sort(), [
       'connection_ref',
       'connection_state',
       'connections_count',
+      'contact_channel_verified',
       'display_name',
       'handle',
       'pets_count',

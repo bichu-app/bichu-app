@@ -15,6 +15,8 @@ import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/marca_da_pessoa.dart';
+import '../../widgets/selo_de_validado.dart';
 import 'comentarios_da_publicacao.dart';
 import '../casca_com_abas.dart';
 
@@ -667,12 +669,22 @@ class _CartaoDaPublicacao extends StatelessWidget {
             children: <Widget>[
               _FotoDoAutor(autor: publicacao.autor),
               const SizedBox(width: BichuEspaco.e3),
+              // O NOME, COM O SELO DE VALIDADO AO LADO quando a conta tem canal
+              // de contato confirmado — emenda do ADR-0010 de 21/10/2026,
+              // decisao do cliente: *"os usuarios que validados deve ter um
+              // simbolo em frente de seu nome nos posts"*.
+              //
+              // **O selo custa 24 dp de largura** (`SeloDeValidado.custoDeLargura`),
+              // e e o NOME que paga: `NomeComSelo` poe o texto num `Flexible`,
+              // entao ele encolhe com `…` e o selo fica. Um nome com `…` ainda e
+              // legivel; um selo que desaparece e informacao perdida. A medicao
+              // dessa troca a 320, 375 e 430 dp esta em
+              // `app/test/widgets/selo_de_validado_test.dart`.
               Expanded(
-                child: Text(
-                  publicacao.autor.nomeExibido,
-                  style: textos.titleMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: NomeComSelo(
+                  nome: publicacao.autor.nomeExibido,
+                  comSelo: publicacao.autor.canalConfirmado,
+                  estilo: textos.titleMedium,
                 ),
               ),
               _menu(context),
@@ -763,8 +775,11 @@ class _CartaoDaPublicacao extends StatelessWidget {
 /// em [ImagemDaRede], e e ela que pinta nos dois lugares. O que se repete aqui
 /// sao as poucas linhas da inicial de reserva.
 ///
-/// **No dia em que aparecer a terceira superficie**, este widget e o irmao dele
-/// viram um so, em `lib/widgets/` — e ai o lugar certo e aquele, nao aqui.
+/// **A TERCEIRA SUPERFICIE APARECEU, E A EXTRACAO ACONTECEU (21/10/2026).** O
+/// desenho mora agora em `widgets/marca_da_pessoa.dart`, que e o lugar que o
+/// paragrafo acima nomeou. Este widget ficou — ele e o que decide, PARA O MURAL,
+/// o lado de 40 dp e a ausencia de toque, e as duas decisoes sao desta tela e
+/// nao do desenho.
 class _FotoDoAutor extends StatelessWidget {
   const _FotoDoAutor({required this.autor});
 
@@ -777,9 +792,6 @@ class _FotoDoAutor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final url = autor.urlDoIcone;
-
     // **A FOTO NAO E UM CONTROLE, e a ausencia de toque e deliberada.**
     //
     // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
@@ -787,43 +799,13 @@ class _FotoDoAutor extends StatelessWidget {
     // nulo; um circulo que se anuncia como botao e nao leva a lugar nenhum e o
     // toque sem desfecho que o criterio 2 da BICHUS-62 proibe. Quem trouxer o
     // toque para o perfil traz com ele o estado de apelido nulo.
-    if (url == null || url.isEmpty) {
-      final inicial = autor.nomeExibido.trim();
-      return Container(
-        width: lado,
-        height: lado,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: cores.primaryContainer,
-          shape: BoxShape.circle,
-        ),
-        // DECORATIVA para o leitor de tela: o nome esta ao lado, na mesma
-        // linha, e rotular a inicial faria ele anunciar a pessoa duas vezes na
-        // mesma parada de foco.
-        child: ExcludeSemantics(
-          child: Text(
-            inicial.isEmpty ? '·' : inicial.characters.first.toUpperCase(),
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: cores.primary),
-          ),
-        ),
-      );
-    }
-
-    return ImagemDaRede(
-      url: url,
-      // DECORATIVA, pelo mesmo motivo da inicial acima.
-      descricao: null,
-      // E este numero que vira `cacheWidth` dentro de `ImagemDaRede`.
-      largura: lado,
-      proporcao: 1,
-      // Circulo: metade do lado.
-      raio: lado / 2,
-      // O retrato de uma pessoa falhando pede outro desenho que uma fachada
-      // falhando.
-      simboloDeFalha: Icons.person_outline,
+    //
+    // **E por isso que nao se embrulha nada aqui**: `MarcaDaPessoa` desenha e
+    // nao toca, e e `MarcaNeutraDoParticipante` que poe o `InkWell` por fora.
+    return MarcaDaPessoa(
+      urlDoIcone: autor.urlDoIcone,
+      inicial: MarcaDaPessoa.letraDe(autor.nomeExibido),
+      lado: lado,
     );
   }
 }

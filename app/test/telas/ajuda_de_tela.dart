@@ -569,6 +569,11 @@ DepositoEmMemoria depositoLogado({
           id: id,
           email: email,
           emailVerificado: emailVerificado,
+          // O SELO. A `Usuario` de teste espelha o e-mail aqui porque e o que
+          // toda conta real faz hoje: nada no servidor grava
+          // `phone_verified_at`. Quem precisa separar os dois e
+          // `foto_do_usuario_e_selo_test.dart`, e ele monta a resposta crua.
+          canalConfirmado: emailVerificado,
           emailEntregavel: emailEntregavel,
           emailPendente: emailPendente,
           pendencias: pendencias,

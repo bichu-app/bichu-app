@@ -73,6 +73,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import type { Database } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
@@ -123,6 +124,30 @@ const FOTO_PRONTA = 'ready' as const;
  */
 const PROPOSITO_DA_FOTO_DE_PESSOA: PropositoDaImagem = 'user_photo';
 
+/**
+ * **O SELO DE VALIDADO do autor**, derivado no SQL a partir do alias `a`
+ * (`users`), que as tres leituras de autor deste arquivo já têm.
+ *
+ * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` vem da
+ * **FONTE ÚNICA** (`canalDeContatoConfirmadoNoSql`, em
+ * `shared/db/canal-de-contato-confirmado.ts`). Este cabeçalho dizia antes que a
+ * condição era *cópia* da de `kysely-canal-verificado-do-chamador.ts` e que a
+ * cópia era deliberada; o motivo que ele dava — duas definições de "validado"
+ * são duas réguas — era exatamente o motivo para a cópia **não** existir, e em
+ * 21/10/2026 o cliente mandou unificar. Na prática isso é e-mail: nada em
+ * `src/` grava `phone_verified_at`.
+ *
+ * **Escrito UMA vez e usado nas três leituras** (linha do tempo, lista de
+ * comentários e o autor do comentário recém-criado). Três cópias da expressão
+ * seriam três lugares onde uma correção pode faltar, e o cartão recém-criado
+ * apareceria diferente dos outros da mesma lista — que é a razão escrita no
+ * cabeçalho de `autorDoComentario`.
+ *
+ * **`COALESCE` não é necessário**, e o motivo está escrito na fonte única: `a`
+ * vem de `INNER JOIN users`, então a linha existe.
+ */
+const CANAL_VERIFICADO_DO_AUTOR = canalDeContatoConfirmadoNoSql('a');
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A forma do endereço público, a mesma que o `CHECK` do banco cobra. */
@@ -146,6 +171,8 @@ interface LinhaDoComentario {
   readonly handle: string | null;
   readonly display_name: string;
   readonly autor_thumb_key: string | null;
+  /** O selo de validado do autor. Ver [CANAL_VERIFICADO_DO_AUTOR]. */
+  readonly canal_verificado: boolean;
   readonly minha: boolean;
 }
 
@@ -159,6 +186,8 @@ interface LinhaDaLinhaDoTempo {
   readonly display_name: string;
   /** A `thumb` 176 da foto do AUTOR (Emenda 5). Nula nos tres estados do JOIN. */
   readonly autor_thumb_key: string | null;
+  /** O selo de validado do autor. Ver [CANAL_VERIFICADO_DO_AUTOR]. */
+  readonly canal_verificado: boolean;
   readonly minha: boolean;
   /**
    * `count(*)` do Postgres e `bigint`, e o driver o entrega como **CADEIA**.
@@ -289,6 +318,7 @@ export function construtorDaLinhaDoTempo(
       'a.display_name as display_name',
       'fa.thumb_key as autor_thumb_key',
     ])
+    .select(CANAL_VERIFICADO_DO_AUTOR.as('canal_verificado'))
     .select(sql<boolean>`p.author_user_id = ${quemOlha}::uuid`.as('minha'))
     // ------------------------------------------------------------------
     // AS CONTAGENS (20/10/2026, decisao do cliente de 19/10)
@@ -537,6 +567,7 @@ export function construtorDosComentarios(
       'a.display_name as display_name',
       'fa.thumb_key as autor_thumb_key',
     ])
+    .select(CANAL_VERIFICADO_DO_AUTOR.as('canal_verificado'))
     .select(sql<boolean>`k.author_user_id = ${quemOlha}::uuid`.as('minha'))
     .where('k.publication_id', '=', publicacaoId)
     .where('k.deleted_at', 'is', null)
@@ -645,6 +676,7 @@ function comoPublicacaoNaLinha(linha: LinhaDaLinhaDoTempo): PublicacaoNaLinha {
     handle: linha.handle,
     displayName: linha.display_name,
     autorThumbKey: chaveOuNulo(linha.autor_thumb_key),
+    canalVerificado: linha.canal_verificado,
     minha: linha.minha,
     // `Number` AQUI, e nao mais acima: a conversao e da borda do banco, e
     // deixa-la subir faria a contagem sair como cadeia no JSON. Ver o
@@ -893,6 +925,7 @@ async function autorDoComentario(
   readonly handle: string | null;
   readonly displayName: string;
   readonly autorThumbKey: ObjectKey | null;
+  readonly canalVerificado: boolean;
 }> {
   const linha = await executor
     .selectFrom('users as a')
@@ -911,12 +944,19 @@ async function autorDoComentario(
       'a.display_name as display_name',
       'fa.thumb_key as autor_thumb_key',
     ])
+    .select(CANAL_VERIFICADO_DO_AUTOR.as('canal_verificado'))
     .where('a.id', '=', quem)
     .executeTakeFirst();
   return {
     handle: linha?.handle ?? null,
     displayName: linha?.display_name ?? '',
     autorThumbKey: chaveOuNulo(linha?.autor_thumb_key ?? null),
+    // **`false` quando a linha nao veio**, e nao `true`: a conta de quem acabou
+    // de comentar existe (a escrita passou), entao este caminho e teorico --
+    // mas na duvida o selo NAO nasce. Um padrao `true` afirmaria validacao de
+    // uma leitura que falhou, e e exatamente a mentira que o rotulo nao pode
+    // contar. Mesma direcao do padrao `false` de `minha`.
+    canalVerificado: linha?.canal_verificado ?? false,
   };
 }
 
@@ -928,6 +968,7 @@ function comoComentario(linha: LinhaDoComentario): ComentarioVisivel {
     handle: linha.handle,
     displayName: linha.display_name,
     autorThumbKey: chaveOuNulo(linha.autor_thumb_key),
+    canalVerificado: linha.canal_verificado,
     meu: linha.minha,
   };
 }
@@ -1043,6 +1084,7 @@ export function criarPublicacoesRepository(
             handle: autorLido.handle,
             displayName: autorLido.displayName,
             autorThumbKey: autorLido.autorThumbKey,
+            canalVerificado: autorLido.canalVerificado,
             meu: true,
           },
           total: await contarComentarios(trx, alvo),

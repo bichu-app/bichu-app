@@ -21,11 +21,14 @@ import 'package:bichu/config/app_config.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/selo_de_validado.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import '../widgets/palavras_proibidas_no_rotulo.dart';
 
 const String _urlBase = 'https://api.exemplo.test';
 
@@ -42,12 +45,19 @@ Map<String, dynamic> _pedido({
   required String estado,
   String? apelido,
   String? nome,
+  // **Padrao `false`**: pessoa que o caso nao mencionou nao e pessoa validada, e
+  // um padrao `true` faria a isca do selo ausente ficar verde sem medir nada.
+  bool validado = false,
 }) {
   return <String, dynamic>{
     'ref': ref,
     'state': estado,
     'requested_at': '2026-10-17T12:00:00.000Z',
-    'person': <String, dynamic>{'handle': apelido, 'display_name': nome},
+    'person': <String, dynamic>{
+      'handle': apelido,
+      'display_name': nome,
+      'contact_channel_verified': validado,
+    },
   };
 }
 
@@ -503,6 +513,76 @@ void main() {
         );
       },
     );
+  });
+  // As duas frentes da onda 4 ACRESCENTARAM grupo aqui, cada uma o seu, e os
+  // dois medem coisas independentes da mesma tela: o toque no nome (acima) e o
+  // selo ao lado do nome (abaixo). A uniao e os dois -- `_pedido` ja nasceu com
+  // `validado` e `_montar` com `enviados`, as duas pontas vindas da outra
+  // frente sem conflito.
+
+  // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026)
+  // =========================================================================
+
+  testWidgets('SELO: com canal confirmado, o selo aparece ao lado do nome do pedido', (
+    tester,
+  ) async {
+    await _montar(tester, recebidos: <Map<String, dynamic>>[
+      _pedido(ref: 'r1', estado: 'pending_received', apelido: 'ana-do-bairro', validado: true),
+    ]);
+    expect(find.byType(SeloDeValidado), findsOneWidget);
+    expect(find.text('@ana-do-bairro'), findsOneWidget);
+  });
+
+  testWidgets('SELO: ISCA -- sem canal confirmado, nenhuma roseta na caixa de pedidos', (
+    tester,
+  ) async {
+    await _montar(tester, recebidos: <Map<String, dynamic>>[
+      _pedido(ref: 'r1', estado: 'pending_received', apelido: 'ana-do-bairro'),
+    ]);
+    expect(find.byType(SeloDeValidado), findsNothing);
+    expect(find.byIcon(Icons.verified), findsNothing);
+  });
+
+  testWidgets('SELO: o pedido ENVIADO mostra o selo igual ao recebido', (tester) async {
+    // **O aceite nao muda o selo.** Ele e atributo da conta, e sai igual nos dois
+    // estados — como `display_name` ja sai. O que o aceite muda e o que as
+    // OUTRAS superficies passam a mostrar, nao isto.
+    await _montar(tester, recebidos: const <Map<String, dynamic>>[], enviados: <Map<String, dynamic>>[
+      _pedido(ref: 'r2', estado: 'pending_sent', apelido: 'bia-do-parque', validado: true),
+    ]);
+    await tester.tap(find.text('Enviados'));
+    await tester.pumpAndSettle();
+    expect(find.text('@bia-do-parque'), findsOneWidget);
+    expect(find.byType(SeloDeValidado), findsOneWidget);
+  });
+
+  testWidgets('SELO: a pessoa SEM nome e SEM apelido tambem pode ter selo', (tester) async {
+    // A tela cai para "Pessoa sem nome", que e texto DELA. **O selo nao cai
+    // junto**: o booleano e sobre a conta, e uma conta sem nome de exibicao pode
+    // ter confirmado o e-mail.
+    await _montar(tester, recebidos: <Map<String, dynamic>>[
+      _pedido(ref: 'r1', estado: 'pending_received', validado: true),
+    ]);
+    expect(find.text('Pessoa sem nome'), findsOneWidget);
+    expect(find.byType(SeloDeValidado), findsOneWidget);
+  });
+
+  testWidgets('SELO: o rotulo acessivel e `SeloDeValidado.rotulo`, e nada alem', (tester) async {
+    await _montar(tester, recebidos: <Map<String, dynamic>>[
+      _pedido(ref: 'r1', estado: 'pending_received', apelido: 'ana-do-bairro', validado: true),
+    ]);
+    // **`contains` e nao igualdade, e a diferenca e do CARTAO e nao do selo**:
+    // a linha do pedido e um no de semantica unico, entao o leitor de tela
+    // anuncia "@ana-do-bairro, Contato confirmado" numa parada so. O que este
+    // caso cobra e que a frase do selo chegue INTEIRA e que nenhuma palavra
+    // proibida apareca — a igualdade exata do rotulo do widget e medida em
+    // `test/widgets/selo_de_validado_test.dart`, onde nao ha no de fora.
+    final String rotulo = tester.getSemantics(find.byType(SeloDeValidado)).label;
+    // A CONSTANTE, e nunca o literal: um rotulo so para as quatro superficies.
+    expect(rotulo, contains(SeloDeValidado.rotulo));
+    // A VARREDURA COMPARTILHADA, no lugar da lista curta de quatro palavras
+    // que morava aqui e que nao proibia nomear canal.
+    conferirRotuloDoSelo(rotulo, onde: 'o pedido de conexao');
   });
 }
 
