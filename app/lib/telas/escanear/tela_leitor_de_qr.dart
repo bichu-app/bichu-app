@@ -419,6 +419,32 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
   }
 
+  /// Abre o campo de digitacao. **SEM pedir o foco**, e isto e o pedido do
+  /// cliente de 20/10/2026.
+  ///
+  /// O relato, literal: *"quando abre a pagina para digitar o codigo do pet, no
+  /// ios o teclado vem aberto e sobrepoe os botoes embaixo, traga essa pagina,
+  /// sem selecionar o input para nao ter esse problema"*.
+  ///
+  /// **Dos tres pedidos de foco desta tela, so este era na ABERTURA.** Os
+  /// outros dois sao de recuperacao -- [_enviarODigitado] quando a forma nao
+  /// fecha, e [_voltarAoCampo] quando o servidor recusa o codigo --, e naqueles
+  /// o foco e certo: a pessoa ja esta digitando e precisa continuar de onde
+  /// parou, sem tocar o campo de novo a cada tentativa. Os dois continuam
+  /// pedindo foco, e os dois tem isca.
+  ///
+  /// **O que isto NAO conserta, e por que a barra mudou junto.** Tirar o foco
+  /// evita o teclado subir sozinho; no instante em que a pessoa toca o campo
+  /// ele sobe, e a barra de acao ficava atras dele do mesmo jeito -- o que o
+  /// cliente descreveu ("sobrepoe os botoes embaixo") e a causa, e o foco
+  /// automatico era so o gatilho mais visivel dela. O conserto da causa esta
+  /// no `build`.
+  ///
+  /// **Custo declarado:** quem vem aqui para digitar paga um toque a mais, no
+  /// campo. Esta e a tela de quem achou um animal na rua, onde toque custa
+  /// caro, e por isso o custo esta escrito e nao escondido: com a barra agora
+  /// acima do teclado, devolver o `requestFocus()` desta linha nao reabre o
+  /// defeito do cliente. A decisao de devolve-lo e dele.
   void _irParaDigitacao() {
     _ofertaManual?.cancel();
     setState(() {
@@ -427,7 +453,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       // que esta abrindo agora.
       _erroDoCampo = null;
     });
-    _focoDoCodigo.requestFocus();
   }
 
   /// O texto que a pessoa le para cada motivo de [FormaDoCodigo].
@@ -656,6 +681,19 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     return Scaffold(
       // Sem `appBar`: ver a nota da classe. A saida vem sobreposta, logo
       // abaixo, e nao numa barra de topo.
+      //
+      // A BARRA SOBE COM O TECLADO, E O RECUO MORA DENTRO DELA. Sem ele a
+      // barra fica atras do teclado e `Continuar`, `Digitar de novo` e
+      // `Como achei este animal` viram botoes inalcancaveis: e o defeito que o
+      // cliente mediu no iPhone dele em 20/10/2026 ("o teclado ... sobrepoe os
+      // botoes embaixo").
+      //
+      // **NAO PONHA UM `Padding` DE TECLADO AQUI DE NOVO.** Ele nasceu nesta
+      // linha, quando esta era a unica tela com o defeito, e subiu para
+      // [BarraDeAcaoFixa] quando o cliente achou a segunda (`Meus dados`, no
+      // mesmo dia). Sao 13 as telas que trazem aquela barra junto com campo de
+      // texto, e o conserto e um so, la. Os dois juntos dariam recuo DOBRADO:
+      // a barra subiria duas vezes a altura do teclado.
       bottomNavigationBar: BarraDeAcaoFixa(acoes: _acoes()),
       body: Stack(
         children: <Widget>[

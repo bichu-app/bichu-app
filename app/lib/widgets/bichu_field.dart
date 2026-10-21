@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../acessibilidade/anunciar.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'barra_do_teclado.dart';
 
 /// O campo de formulario do Bichu.
 ///
@@ -145,7 +146,20 @@ class BichuField extends StatelessWidget {
           filho: _comNomeAcessivel(
             rotulo: rotulo,
             visivel: rotuloVisivel,
-            filho: TextField(
+            filho: _comBarraDoTeclado(
+              // SO EM TEXTO CORRIDO. Campo de uma linha ja tem desfecho na
+              // propria tecla de retorno (`done` desenha o certo, `next` a
+              // flecha), e o teclado do sistema tem UMA tecla de retorno com
+              // 13 rotulos possiveis -- `next` e `previous` existem como
+              // rotulo, mas so um cabe nela. Quem precisa de faixa e o campo
+              // em que a tecla insere linha em vez de concluir: ver
+              // `widgets/barra_do_teclado.dart`.
+              //
+              // `obscurecer` entra na conta porque o campo de senha forca uma
+              // linha so logo abaixo, e um campo de senha com faixa de
+              // travessia seria faixa num campo que nunca precisa dela.
+              textoCorrido: linhas > 1 && !obscurecer,
+              filho: TextField(
             controller: controlador,
             focusNode: foco,
             enabled: habilitado,
@@ -162,6 +176,38 @@ class BichuField extends StatelessWidget {
             autocorrect: correcaoAutomatica,
             textCapitalization: capitalizacao,
             textInputAction: acaoDeTeclado,
+            // TOCAR FORA FECHA O TECLADO, e esta linha e o que liga isso no
+            // celular.
+            //
+            // **O Flutter recusa este gesto no telefone de proposito**, e nao
+            // por esquecimento: `EditableText._defaultOnTapOutside` tem um
+            // `switch` por plataforma em que Android, iOS e Fuchsia caem num
+            // `break` -- so desktop desfoca. Sem este `onTapOutside`, nenhum
+            // dos campos do app fecha o teclado por toque fora: medido, 0 de
+            // 22 telas.
+            //
+            // **E o conserto dos becos sem saida.** Levantado em 20/10/2026
+            // sobre a arvore inteira: 65 campos de texto em 22 telas, e em 7
+            // delas o teclado subia e nao descia -- 16 campos sao de texto
+            // corrido, e num campo de varias linhas a tecla de retorno insere
+            // linha em vez de concluir. No Android o botao voltar salvava a
+            // pessoa; no iOS nao ha equivalente, e e literalmente o defeito de
+            // iOS que o cliente relatou duas vezes no mesmo dia.
+            //
+            // **Tocar em OUTRO CAMPO continua NAO fechando, e isso e certo.**
+            // Quem decide e o `groupId` do `TextFieldTapRegion` que o
+            // `EditableText` desenha em volta de si: ele e a propria classe
+            // `EditableText` para todos os campos, entao um campo esta DENTRO
+            // da regiao do outro e o toque nem chega aqui. E o que faz a troca
+            // entre campos de um formulario nao piscar o teclado. Ha caso
+            // proprio medindo os dois lados.
+            //
+            // `primaryFocus`, e nao `FocusScope.of(context).unfocus()`: o que
+            // fecha o teclado e o no que esta com o foco, e ele pode nao estar
+            // no escopo deste `context` quando o campo vive dentro de folha
+            // modal.
+            onTapOutside: (PointerDownEvent _) =>
+                FocusManager.instance.primaryFocus?.unfocus(),
             onSubmitted: aoEnviar,
             onChanged: aoMudar,
             style: textos.bodyLarge?.copyWith(color: cores.textPrimary),
@@ -178,6 +224,7 @@ class BichuField extends StatelessWidget {
               // contador do M3 some quando ha `errorText`, que e justamente
               // quando a pessoa precisa dele.
               counterText: '',
+            ),
             ),
             ),
           ),
@@ -207,6 +254,18 @@ class BichuField extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Embala o campo com a faixa de `Concluir` **so quando ele e texto corrido**.
+///
+/// Com [textoCorrido] falso nao ha no nenhum a mais na arvore -- nem um
+/// `Focus`, nem um `State` --, e isso e o contrapeso escrito como codigo: os
+/// 49 campos de uma linha do app nao pagam nada pelo conserto dos 16 de texto
+/// corrido, e nao ganham um segundo controle para o que a tecla de retorno
+/// deles ja resolve.
+Widget _comBarraDoTeclado({required bool textoCorrido, required Widget filho}) {
+  if (!textoCorrido) return filho;
+  return AcessorioDeTextoCorrido(child: filho);
 }
 
 /// Da ao campo sem rotulo visivel um nome acessivel, e nada mais.

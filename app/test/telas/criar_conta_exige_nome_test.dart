@@ -219,13 +219,30 @@ void main() {
     testWidgets('o `done` do teclado tambem recusa, e diz O QUE FAZER',
         (tester) async {
       await abrirCriarConta(tester);
+      // **O ACEITE VEM ANTES DE DIGITAR, desde 20/10/2026**, e a ordem passou
+      // a importar por um motivo de produto.
+      //
+      // `BichuField` ganhou `onTapOutside`: tocar fora de um campo FECHA o
+      // teclado, nos 65 campos do app. Era o conserto dos 7 becos em que o
+      // teclado subia e nao descia -- o Flutter recusa esse gesto no telefone
+      // de proposito, e no iOS nao ha botao voltar para salvar a pessoa.
+      //
+      // O aceite e um controle FORA dos campos. Marcando-o depois de digitar,
+      // o teclado fecha ali: a conexao de entrada de texto se encerra, e o
+      // `receiveAction` abaixo nao tem a quem entregar o `done`. **No aparelho
+      // essa sequencia deixou de existir** -- quem toca no aceite nao tem mais
+      // teclado na tela para apertar `done` depois.
+      //
+      // O que o caso mede nao mudou: a guarda do nome no caminho do TECLADO,
+      // que o botao bloqueado nao alcanca. So a ordem de chegada mudou, para
+      // ser uma sequencia que existe.
+      await marcarOAceite(tester);
       // A data vai preenchida e o NOME nao: o que este caso mede e a guarda do
       // nome no caminho do TECLADO, e sem a data a recusa viria da data.
       await tester.enterText(campoNascimento, nascimentoValido);
       await tester.enterText(campoEmail, 'marina@exemplo.com.br');
       await tester.enterText(campoSenha, 'coleira-azul-do-bidu-2026');
       await tester.pumpAndSettle();
-      await marcarOAceite(tester);
 
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();

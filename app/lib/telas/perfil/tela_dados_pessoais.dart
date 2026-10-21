@@ -744,7 +744,16 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final cores = BichuColors.of(context).cores;
     final lido = _lido!;
 
-    return SingleChildScrollView(
+    // O GRUPO DE PREENCHIMENTO AUTOMATICO, e ele nao e decoracao.
+    //
+    // **Medido no canal em 20/10/2026**: com as dicas e SEM este grupo, o
+    // `TextInput.setClient` sai com `autofill.hints` do campo focado e com
+    // `fields: null` -- o sistema sabe o que aquele campo e, e nao sabe que os
+    // outros existem. Com o grupo, `fields` sai preenchido, que e o que deixa
+    // uma sugestao preencher endereco, bairro e cidade de uma vez em vez de um
+    // campo por toque.
+    return AutofillGroup(
+      child: SingleChildScrollView(
       padding: const EdgeInsets.all(BichuEspaco.e4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -769,9 +778,15 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           const SizedBox(height: BichuEspaco.e6),
           _campo(
             chave: _CamposDosDados.nome,
+            autofill: const <String>[AutofillHints.name],
+            acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.nome,
             controlador: _nome,
             limite: 80,
+            // Nome de PESSOA: `name` e a variante de teclado de nome do
+            // sistema. A sugestao do iOS em si vem de `autofillHints`, que
+            // este campo nao declara.
+            tipoDeTeclado: TextInputType.name,
             capitalizacao: TextCapitalization.words,
           ),
           // O APELIDO (`@`), nesta tela desde 18/10/2026 (cliente: *"vai estar
@@ -785,6 +800,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           // enquanto se digita, e nao valida nada.
           _campo(
             chave: _CamposDosDados.apelido,
+            acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.apelido,
             controlador: _apelido,
             limite: maximoDoApelido,
@@ -800,6 +816,8 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           const SizedBox(height: BichuEspaco.e4),
           _campo(
             chave: _CamposDosDados.telefone,
+            autofill: const <String>[AutofillHints.telephoneNumber],
+            acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.telefone,
             controlador: _telefone,
             limite: limiteDoTelefone,
@@ -818,6 +836,8 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           _grupo(_TextosDosDados.suaRegiao, textos),
           _campo(
             chave: _CamposDosDados.cep,
+            autofill: const <String>[AutofillHints.postalCode],
+            acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.cep,
             controlador: _cep,
             limite: limiteDoCep,
@@ -843,13 +863,25 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           ],
           _campo(
             chave: _CamposDosDados.bairro,
+            autofill: const <String>[AutofillHints.sublocality],
+            acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.bairro,
             controlador: _bairro,
             limite: 80,
             capitalizacao: TextCapitalization.words,
           ),
+          // CIDADE E O ULTIMO CAMPO DE TEXTO DESTA TELA, e por isso e o unico
+          // com `done`. Sao SEIS os campos que abrem teclado -- nome, apelido,
+          // telefone, CEP, bairro e cidade --, nesta ordem; o e-mail e
+          // [_EmailDeLeitura], que e texto e nao campo, e o estado e
+          // [SeletorDeLista], que abre uma lista e nao o teclado. Depois de
+          // cidade nao ha nada para onde `next` avancar, e `done` e o "icone
+          // de certo" que o cliente pediu: ele fecha o teclado e devolve a
+          // tela, com o `Salvar` ja visivel.
           _campo(
             chave: _CamposDosDados.cidade,
+            autofill: const <String>[AutofillHints.addressCity],
+            acaoDeTeclado: TextInputAction.done,
             rotulo: _TextosDosDados.cidade,
             controlador: _cidade,
             limite: 80,
@@ -905,6 +937,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -923,11 +956,33 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   /// Existe para os seis campos nao serem seis repeticoes do mesmo bloco:
   /// repeticao e onde um `erro:` fica para tras e um campo passa a recusar
   /// calado.
+  ///
+  /// **[acaoDeTeclado] e OBRIGATORIO, e e de proposito.** Ele decide a tecla
+  /// de desfecho do teclado do sistema -- `next` avanca para o proximo campo,
+  /// `done` fecha o teclado --, e e o pedido do cliente de 20/10/2026: *"em
+  /// alguns outros aplicativos, vem um icone de certo nativo no proprio
+  /// teclado, que permite com que o usuario feche o teclado nativo do
+  /// celular"*. Obrigatorio porque o parametro opcional com padrao poe a
+  /// decisao em quem **nao** esta olhando: um setimo campo acrescentado depois
+  /// de [_CamposDosDados.cidade] herdaria o `next` em silencio e o `done`
+  /// ficaria no meio do formulario, com a pessoa sem como avancar. Exigido, o
+  /// compilador pergunta.
   Widget _campo({
     required String chave,
     required String rotulo,
     required TextEditingController controlador,
     required int limite,
+    required TextInputAction acaoDeTeclado,
+    /// As dicas de preenchimento do SISTEMA (iOS e Android).
+    ///
+    /// **E `autofillHints` que liga a sugestao, e NAO `tipoDeTeclado`.** O
+    /// tipo escolhe qual teclado abre; a sugestao de dado salvo vem daqui.
+    /// Medido no canal (`TextInput.setClient`): com as dicas, o argumento
+    /// `autofill.hints` sai preenchido; sem elas, nao sai.
+    ///
+    /// Mesmo padrao de `conta/tela_entrar.dart` e `conta/tela_criar_conta.
+    /// dart`, que ja declaravam e-mail, senha, nome e data.
+    List<String> autofill = const <String>[],
     String? ajuda,
     String? exemplo,
     TextInputType? tipoDeTeclado,
@@ -940,6 +995,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       child: BichuField(
         rotulo: rotulo,
         controlador: controlador,
+        autofill: autofill,
         limite: limite,
         ajuda: ajuda,
         erro: _erros[chave],
@@ -948,6 +1004,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         tipoDeTeclado: tipoDeTeclado,
         capitalizacao: capitalizacao,
         formatadores: formatadores,
+        // A tecla de desfecho do teclado do sistema. Com `done`, quem fecha o
+        // teclado e o proprio `EditableText`: sem `onEditingComplete` ele
+        // chama `focusNode.unfocus()` para `done`, e sem foco o teclado desce.
+        // Nao ha codigo nosso no caminho, e por isso nao ha o que esquecer de
+        // chamar.
+        acaoDeTeclado: acaoDeTeclado,
         // Digitar e a correcao: o erro sai do campo no primeiro toque, e nao
         // so quando a pessoa tenta salvar de novo.
         aoMudar: (valor) {

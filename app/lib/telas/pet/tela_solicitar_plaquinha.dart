@@ -406,12 +406,23 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     TextCapitalization capitalizacao = TextCapitalization.none,
     List<TextInputFormatter>? formatadores,
     ValueChanged<String>? aoMudarTambem,
+    /// As dicas de preenchimento do SISTEMA (iOS e Android).
+    ///
+    /// **E `autofillHints` que liga a sugestao, e NAO `tipoDeTeclado`.** O
+    /// tipo escolhe qual teclado abre; a sugestao de endereco salvo vem
+    /// daqui. Medido no canal (`TextInput.setClient`): com as dicas, o
+    /// argumento `autofill.hints` sai preenchido; sem elas, nao sai.
+    ///
+    /// Mesmo padrao de `conta/tela_entrar.dart` e `conta/tela_criar_conta.
+    /// dart`, que ja declaravam e-mail, senha, nome e data.
+    List<String> autofill = const <String>[],
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
       child: BichuField(
         rotulo: rotulo,
         controlador: controlador,
+        autofill: autofill,
         opcional: opcional,
         limite: limite,
         erro: _erros[chave],
@@ -494,7 +505,18 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
         ],
       ),
       body: SafeArea(
-        child: _carregando
+        // O GRUPO DE PREENCHIMENTO AUTOMATICO do endereco de entrega.
+        //
+        // **Medido no canal em 20/10/2026**: com as dicas e SEM o grupo, o
+        // `TextInput.setClient` sai com `autofill.hints` do campo focado e
+        // `fields: null` -- o sistema sabe o que aquele campo e, e nao sabe
+        // que os outros existem. Com o grupo, `fields` sai preenchido, que e o
+        // que deixa UMA sugestao preencher rua, bairro e cidade de uma vez.
+        //
+        // Em volta do ramo inteiro, e nao so da lista: envolver o `?:` por
+        // dentro poria o grupo a nascer e morrer a cada troca de fase.
+        child: AutofillGroup(
+          child: _carregando
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(BichuEspaco.e4),
@@ -540,10 +562,15 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         rotulo: _TextosDaPlaquinha.destinatario,
                         controlador: _destinatario,
                         limite: 120,
+                        autofill: const <String>[AutofillHints.name],
+                        // Nome de PESSOA: `name` e a variante de teclado de
+                        // nome do sistema.
+                        tipoDeTeclado: TextInputType.name,
                         capitalizacao: TextCapitalization.words,
                       ),
                       _campo(
                         chave: _CamposDoPedido.cep,
+                        autofill: const <String>[AutofillHints.postalCode],
                         rotulo: _TextosDaPlaquinha.cep,
                         controlador: _cep,
                         limite: limiteDoCep,
@@ -572,9 +599,20 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                       ],
                       _campo(
                         chave: _CamposDoPedido.logradouro,
+                        autofill: const <String>[
+                          AutofillHints.streetAddressLine1,
+                        ],
                         rotulo: _TextosDaPlaquinha.logradouro,
                         controlador: _logradouro,
                         limite: 120,
+                        // `streetAddress` liga a variante de teclado de
+                        // endereco do sistema. **A sugestao de endereco
+                        // inteiro do iOS depende de `autofillHints`, e nao
+                        // deste tipo** -- este campo nao declara nenhuma, e
+                        // acrescenta-las e mudanca de outra ordem (vale para
+                        // os 4 campos de endereco das 2 telas que tem
+                        // endereco). Fica dito para quem for fazer.
+                        tipoDeTeclado: TextInputType.streetAddress,
                         capitalizacao: TextCapitalization.words,
                       ),
                       _campo(
@@ -582,10 +620,20 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         rotulo: _TextosDaPlaquinha.numero,
                         controlador: _numero,
                         limite: 20,
+                        // NUMERO DA CASA: teclado de numero. Era o campo de
+                        // teclado errado do levantamento de 20/10/2026 -- ele
+                        // abria o alfabeto inteiro para quem vai digitar
+                        // tres digitos. `number` e nao `digitsOnly`: ha
+                        // endereco com `123-A` e com `s/n`, e um filtro de
+                        // digito recusaria os dois em silencio.
+                        tipoDeTeclado: TextInputType.number,
                         exemplo: _TextosDaPlaquinha.exemploDoNumero,
                       ),
                       _campo(
                         chave: _CamposDoPedido.complemento,
+                        autofill: const <String>[
+                          AutofillHints.streetAddressLine2,
+                        ],
                         rotulo: _TextosDaPlaquinha.complemento,
                         controlador: _complemento,
                         limite: 80,
@@ -593,6 +641,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                       ),
                       _campo(
                         chave: _CamposDoPedido.bairro,
+                        autofill: const <String>[AutofillHints.sublocality],
                         rotulo: _TextosDaPlaquinha.bairro,
                         controlador: _bairro,
                         limite: 80,
@@ -600,6 +649,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                       ),
                       _campo(
                         chave: _CamposDoPedido.cidade,
+                        autofill: const <String>[AutofillHints.addressCity],
                         rotulo: _TextosDaPlaquinha.cidade,
                         controlador: _cidade,
                         limite: 80,
@@ -622,6 +672,9 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                       const SizedBox(height: BichuEspaco.e4),
                       _campo(
                         chave: _CamposDoPedido.telefone,
+                        autofill: const <String>[
+                          AutofillHints.telephoneNumber,
+                        ],
                         rotulo: _TextosDaPlaquinha.telefone,
                         controlador: _telefone,
                         limite: limiteDoTelefone,
@@ -654,6 +707,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                   ],
                 ),
               ),
+        ),
       ),
     );
   }
