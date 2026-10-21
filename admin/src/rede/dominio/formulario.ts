@@ -119,6 +119,26 @@ export interface EstadoDoFormulario {
   estrutura: Estrutura[];
 }
 
+/**
+ * O que vem marcado na caixa "o que levar" de um encontro NOVO (decisao do
+ * cliente, 20/10/2026): agua, guia e saquinho.
+ *
+ * Sao os tres que valem para qualquer encontro de cachorro em lugar publico, e
+ * por isso o padrao poupa tres cliques em todo cadastro em vez de adivinhar.
+ * **`vaccination_card` fica de fora por decisao explicita dele** -- exigir
+ * carteira de vacinacao e escolha do organizador, e marca-la por padrao faria
+ * o painel pedir documento em encontro que nao pede.
+ *
+ * Os outros quatro (`water_bowl`, `treats`, `towel`, `toy`) ele nao citou, e
+ * continuam desmarcados como estavam.
+ *
+ * **Isto e padrao de CRIACAO, nunca de edicao.** `formularioDoEncontro` monta o
+ * estado a partir de `bring_items` do encontro salvo e nao passa por aqui: um
+ * padrao que alcancasse a edicao remarcaria, ao reabrir, exactamente o que o
+ * organizador desmarcou de proposito.
+ */
+export const ITENS_MARCADOS_POR_PADRAO: readonly ItemParaLevar[] = ['water', 'leash', 'poop_bags'];
+
 /** Padroes do contrato: todos os portes, qualquer idade, vacina exigida, sem area cercada, publico e gratuito. */
 export function formularioVazio(): EstadoDoFormulario {
   return {
@@ -138,7 +158,7 @@ export function formularioVazio(): EstadoDoFormulario {
     pago: false,
     valor: '',
     unidade: 'per_pet',
-    levar: [],
+    levar: [...ITENS_MARCADOS_POR_PADRAO],
     observacoes: '',
     portes: ['P', 'M', 'G', 'GG'],
     idade: 'any',
