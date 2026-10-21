@@ -55,6 +55,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../dispositivo/diretivas_dart.dart';
+
 /// O diretorio de telas, relativo a raiz de `app/` (de onde `flutter test`
 /// roda).
 const String _telas = 'lib/telas';
@@ -124,7 +126,34 @@ Map<String, String> _fontesDasTelas() {
 /// achar que falta saida onde ela esta.
 List<_Faixa> _faixasDeMensagem(Map<String, String> fontes) {
   final achadas = <_Faixa>[];
-  fontes.forEach((caminho, fonte) {
+  fontes.forEach((caminho, bruto) {
+    // ===================================================================
+    // 21/10/2026 -- A VARREDURA LIA COMENTARIO COMO CODIGO, DE TRES JEITOS
+    // ===================================================================
+    //
+    // Ela percorria o fonte BRUTO. Isso dava tres leituras erradas, e as
+    // tres sao silenciosas:
+    //
+    //   1. um `FaixaDeAviso(` COMENTADO -- o exemplo numa nota, o trecho que
+    //      alguem desligou -- entrava na lista como montagem de verdade. Sem
+    //      `rotuloDaAcao:` nos argumentos dele, o portao REPROVAVA uma tela
+    //      que nao tem defeito nenhum;
+    //   2. `rotuloDaAcao:` ou `aoTocarNaAcao:` escrito num comentario DENTRO
+    //      dos argumentos satisfazia `temRotulo`/`temToque`. Uma faixa que de
+    //      fato jogou a saida fora PASSAVA -- e esse e o furo que este portao
+    //      existe para fechar;
+    //   3. o equilibrio de parenteses contava `(` e `)` de comentario e de
+    //      literal. Um `texto: 'tudo bem :)'` desconta um nivel que nunca foi
+    //      aberto, e o recorte dos argumentos termina ANTES do fim da
+    //      montagem -- o que faz o portao nao achar a saida que esta la.
+    //
+    // `mascaraSemComentarios` troca comentario (e, aqui, o conteudo dos
+    // literais) por espaco **sem mudar comprimento nem numero de linha**. A
+    // posicao continua valendo no fonte original, que e o que o `linha:`
+    // reportado precisa. Mascarar literal e obrigatorio AQUI porque esta
+    // varredura EQUILIBRA DELIMITADOR; quem so procura identificador nao deve
+    // mascarar.
+    final fonte = mascaraSemComentarios(bruto, mascararLiterais: true);
     if (!fonte.contains('MensagensDeErro.de(')) return;
     for (final m in RegExp(r'FaixaDeAviso\(').allMatches(fonte)) {
       var i = m.end;
@@ -207,6 +236,115 @@ const Map<String, String> _dispensas = <String, String>{
 };
 
 void main() {
+  // =========================================================================
+  // AS ISCAS DA LEITURA -- AS DUAS DIRECOES, E A SEGUNDA E A QUE IMPORTA MAIS
+  // =========================================================================
+  //
+  // A varredura e alimentada A MAO aqui: `_faixasDeMensagem` recebe um mapa de
+  // fontes, entao a isca nao precisa escrever no disco nem depender do que
+  // `lib/` tem hoje.
+  //
+  // A primeira direcao prova que o falso positivo morreu. A segunda prova que a
+  // mascara NAO cegou o portao -- e essa e a que decide se o conserto valeu:
+  // trocar `mascaraSemComentarios` por `(f, {mascararLiterais}) => ""` apagaria
+  // o portao inteiro em silencio, e so uma isca de REPROVA acusa isso.
+  group('a leitura da varredura: comentario nao e montagem', () {
+    test('NAO acha a `FaixaDeAviso(` que esta COMENTADA', () {
+      final achadas = _faixasDeMensagem(<String, String>{
+        'lib/telas/isca.dart': '''
+final m = MensagensDeErro.de(erro);
+// FaixaDeAviso(texto: m.texto)
+/* FaixaDeAviso(texto: m.texto) */
+void nada() {}
+''',
+      });
+      expect(
+        achadas,
+        isEmpty,
+        reason:
+            'achado FALSO: montagem COMENTADA entrou na lista. Sem '
+            '`rotuloDaAcao:` nela, o portao reprovaria uma tela sem defeito '
+            'nenhum -- e o comentario costuma ser justamente a nota que '
+            'explica por que aquela faixa nao existe mais.',
+      );
+    });
+
+    test('ACHA a montagem de verdade, e ve que ela esta SEM saida', () {
+      final achadas = _faixasDeMensagem(<String, String>{
+        'lib/telas/isca.dart': '''
+final m = MensagensDeErro.de(erro);
+// Nota que cita FaixaDeAviso( para explicar o portao.
+Widget b() => FaixaDeAviso(texto: m.texto);
+''',
+      });
+      expect(
+        achadas,
+        hasLength(1),
+        reason:
+            'o portao ficou CEGO: a montagem de verdade deixou de ser achada. '
+            'Uma mascara gulosa -- apagar a LINHA que tenha `//` -- da '
+            'exatamente este resultado.',
+      );
+      expect(achadas.single.linha, 3,
+          reason:
+              'a LINHA reportada saiu do lugar: a mascara mudou comprimento ou '
+              'comeu `\n`, e o relatorio passa a apontar para outro trecho.');
+      expect(achadas.single.temRotulo, isFalse);
+      expect(achadas.single.temToque, isFalse);
+    });
+
+    test('`rotuloDaAcao:` COMENTADO dentro dos argumentos NAO conta como saida',
+        () {
+      // Esta e a direcao cega, e e a pior das duas: aqui o portao APROVA uma
+      // faixa que de fato jogou a saida fora.
+      final achadas = _faixasDeMensagem(<String, String>{
+        'lib/telas/isca.dart': '''
+final m = MensagensDeErro.de(erro);
+Widget b() => FaixaDeAviso(
+      texto: m.texto,
+      // rotuloDaAcao: m.acao,
+      // aoTocarNaAcao: () {},
+    );
+''',
+      });
+      expect(achadas, hasLength(1));
+      expect(
+        achadas.single.temRotulo,
+        isFalse,
+        reason:
+            'o portao APROVOU uma faixa cuja saida esta COMENTADA. Prosa nao '
+            'desenha botao: essa faixa chega ao usuario sem saida.',
+      );
+      expect(achadas.single.temToque, isFalse);
+    });
+
+    test('parentese dentro de LITERAL nao corta o recorte dos argumentos', () {
+      // O `:)` fecha um nivel que nunca foi aberto. Sem mascarar o literal, o
+      // recorte terminava antes do `rotuloDaAcao:` e o portao cobrava uma
+      // saida que esta escrita logo abaixo.
+      final achadas = _faixasDeMensagem(<String, String>{
+        'lib/telas/isca.dart': """
+final m = MensagensDeErro.de(erro);
+Widget b() => FaixaDeAviso(
+      texto: m.texto,
+      rodape: 'tudo bem :)',
+      rotuloDaAcao: m.acao,
+      aoTocarNaAcao: () {},
+    );
+""",
+      });
+      expect(achadas, hasLength(1));
+      expect(
+        achadas.single.temRotulo,
+        isTrue,
+        reason:
+            'o recorte dos argumentos foi cortado por um `)` que mora DENTRO '
+            'de uma string. A saida existe e o portao nao a viu.',
+      );
+      expect(achadas.single.temToque, isTrue);
+    });
+  });
+
   group('toda faixa de erro tem saida', () {
     test(
       'nenhuma faixa de `MensagensDeErro` descarta a saida dela',
