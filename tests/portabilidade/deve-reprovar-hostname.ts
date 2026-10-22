@@ -16,3 +16,24 @@ export const apiLocal = "http://192.168.0.10:3000"; // isca: literal de IP priva
 export const apiNoLaptop = "http://localhost:3000/v1/pets"; // isca: literal `localhost`
 export const bancoNoLoopback = "http://127.0.0.1:5432"; // isca: literal 127.0.0.1
 export const bindDeDesenvolvimento = "http://0.0.0.0:8080"; // isca: literal 0.0.0.0
+
+// A REGRESSAO DE 21/10/2026, em forma de isca. O commit `e62064c6` escreveu um
+// host de verdade (`clinicasantabarbara.com.br`, dominio registravel de
+// terceiro) dentro do TEXTO DE AJUDA do campo "Site" do formulario do
+// diretorio, em `admin/src/diretorio/FormularioDaEntrada.tsx`. Um achado, e com
+// ele `portoes rapidos` vermelho e os outros onze jobs `skipping`: nenhum PR do
+// repositorio conseguia veredito, para as tres sessoes.
+//
+// O conserto foi no CODIGO -- a frase passou a usar `clinica.exemplo.test`, o
+// host de documentacao que o formulario irmao da Loja ja usava
+// (`admin/src/loja/FormularioDeParceiro.tsx`, mesmo campo) e que o contrato
+// documenta (`api/openapi.yaml`, `https://parceiro.exemplo.test`).
+//
+// ESTA LINHA EXISTE PARA QUE ESSE CONSERTO NAO TENHA CEGADO O PORTAO. Prosa
+// dentro de STRING nao e comentario: ela vai no pacote que chega ao navegador,
+// e o portao nao tem como distingui-la de uma URL que o codigo busca. Entao
+// host de verdade em texto de ajuda tem de continuar REPROVANDO. O par negativo
+// dela -- o MESMO formato de frase com o host de documentacao, que tem de passar
+// -- esta em `nao-deve-reprovar-comentario.ts`.
+export const textoDeAjudaComHostDeVerdade =
+  "Opcional. O endereço completo, começando com https:// — por exemplo https://clinicasantabarbara.com.br/contato."; // isca: host literal em URL absoluta
