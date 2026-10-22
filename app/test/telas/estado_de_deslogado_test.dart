@@ -106,6 +106,25 @@ Map<String, dynamic> paginaDoDiretorioVazia() => const <String, dynamic>{
       'applied_filters': <String, String>{'scope': 'all'},
     };
 
+/// A rede que responde [resposta] as DUAS leituras do `Mural`, e 404 no resto.
+///
+/// **As duas, e nao so a linha do tempo.** `tela_do_mural.dart` chama
+/// `linhaDoTempo()` e `minhasPublicacoes()` em sequencia dentro do MESMO
+/// `try`: um caso que respondesse 404 a segunda estaria medindo o 404 dela, e
+/// nao o 401 que ele se propoe a medir — e passaria, porque 404 tambem produz
+/// faixa.
+Future<http.Response> Function(http.Request) redeDoMural(
+  http.Response Function(http.Request) resposta,
+) {
+  return (req) async {
+    final chave = '${req.method} ${req.url.path}';
+    if (chave == 'GET /v1/timeline' || chave == 'GET /v1/me/publications') {
+      return resposta(req);
+    }
+    return problema('not-found', 404);
+  };
+}
+
 /// A rede que responde [resposta] ao diretorio e as conversas, e 404 no resto.
 ///
 /// 404 no resto, e nao 200 vazio: um caso que dependesse de uma chamada nao
@@ -322,6 +341,139 @@ void main() {
       );
       expect(find.byType(FaixaDeAviso), findsOneWidget);
       expect(find.text('Atualizar'), findsOneWidget);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('ISCA (d): o `Mural` deslogado DIZ ALGUMA COISA, e nenhuma faixa dele '
+      'fica muda', () {
+    // MECANISMO: o ramo `if (_faltaConta)` de `build` somado a
+    // `_faltaConta = faltaConta(falha)` no `catch` de `_carregarAgora`, em
+    // `lib/telas/mural/tela_do_mural.dart`.
+    //
+    // DESLIGADO (`_faltaConta` fixo em `false`, ou o `catch` voltando a
+    // `_faixa = MensagensDeErro.de(falha)` para toda falha), o Mural deslogado
+    // volta a desenhar uma `FaixaDeAviso` com **`texto: ''`** — o catalogo
+    // devolve string vazia para `unauthenticated` desde 18/10/2026 — e o que
+    // chega a pessoa e o icone de erro, o botao `Entrar` e NENHUMA FRASE.
+    //
+    // **O caso nao cobra o texto do 401**, e a distincao e o ponto: o que ele
+    // cobra e que a faixa nao fique MUDA e que a tela diga alguma coisa. Um
+    // caso que exigisse a frase *"entre na sua conta para continuar"* de volta
+    // pressionaria a proxima pessoa a desfazer a decisao do cliente de 18/10
+    // para ficar verde — e e exatamente por isso que
+    // `toda_faixa_de_erro_tem_saida_test.dart` mede a saida e nunca a frase.
+
+    testWidgets('o convite ocupa o lugar da faixa, e a faixa muda nao existe',
+        (tester) async {
+      await abrirOApp(tester, rede: redeDoMural((_) => semConta()));
+      await abrirAAba(tester, 'Mural');
+
+      exigirEstadoDeSessao(
+        tester,
+        estado: EstadoDaSessao.deslogado,
+        motivo: MotivoSemConta.nuncaEntrou,
+      );
+
+      // A FAIXA MUDA, NOMEADA, **E ANTES DE TUDO**. A ordem nao e estetica:
+      // com o mecanismo desligado a tela nao tem `ConviteParaEntrar` nenhum,
+      // entao uma asercao de convite posta aqui aborta o caso primeiro e o
+      // laco abaixo nunca roda -- e eu estaria relatando como isca provada um
+      // laco que nenhuma isca derrubou. Medido: com a ordem invertida a
+      // reprova vinha de *"Found 0 widgets with type ConviteParaEntrar"*, e
+      // nao da faixa muda, que e o defeito relatado.
+      //
+      // Nao basta "nao ha faixa": o que o defeito produzia era uma faixa com
+      // `texto` vazio, e e esse objeto que este laco procura. Ele sobrevive a
+      // um futuro em que o Mural passe a ter faixa legitima para OUTRA falha.
+      for (final f in tester.widgetList<FaixaDeAviso>(
+        find.byType(FaixaDeAviso),
+      )) {
+        expect(
+          f.texto,
+          isNotEmpty,
+          reason: 'REPROVA: faixa MUDA no Mural deslogado — `FaixaDeAviso` '
+              'com `texto` vazio. E a *falha calada* de '
+              '`faixa_de_aviso.dart`: a pessoa ve o icone e o botao e nenhuma '
+              'frase. O conserto nao e devolver o texto do 401 (removido pelo '
+              'cliente em 18/10/2026): e mandar o 401 para '
+              '`ConviteParaEntrar`, como nas outras quinze superficies.',
+        );
+      }
+      expect(
+        find.byType(FaixaDeAviso),
+        findsNothing,
+        reason: 'REPROVA: sem conta nao e erro, e o Mural esta desenhando '
+            'faixa de aviso para um 401.',
+      );
+      expect(find.byType(ConviteParaEntrar), findsOneWidget);
+      expect(
+        find.text('Tentar de novo'),
+        findsNothing,
+        reason: 'REPROVA: o Mural esta oferecendo `Tentar de novo` a quem nao '
+            'tem conta. A tentativa seguinte sai igualmente sem '
+            '`Authorization` e volta o mesmo 401.',
+      );
+
+      // A MICROCOPY, por extenso e com acento — e nao comparada com a
+      // constante que a produz.
+      expect(find.text('O Mural é das suas conexões'), findsOneWidget);
+      expect(
+        frasesDoConvite(tester).join(' | '),
+        contains('Entre para ver o que as suas conexões publicam'),
+      );
+      // AS DUAS PORTAS: quem nunca entrou ve as duas.
+      expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
+      expect(find.text('Criar conta'), findsOneWidget);
+    });
+
+    testWidgets(
+        'CONTRAPESO: com 500 o Mural VOLTA a mostrar faixa, e ela tem frase',
+        (tester) async {
+      // **Sem este caso o de cima e vacuo nas duas direcoes.** Ele provaria
+      // apenas que a palavra `Tentar de novo` nao existe mais no Mural (verde
+      // se alguem apagasse a faixa da tela inteira) e que o laco da faixa
+      // muda nao reprova (verde porque nao ha faixa nenhuma para iterar, que
+      // e como um `for` sobre lista vazia passa sem medir nada).
+      //
+      // Aqui a MESMA busca tem de achar: ha faixa, ela tem frase, e o convite
+      // NAO aparece.
+      await abrirOApp(tester, rede: redeDoMural((_) => servidorFora()));
+      await abrirAAba(tester, 'Mural');
+
+      exigirEstadoDeSessao(
+        tester,
+        estado: EstadoDaSessao.deslogado,
+        motivo: MotivoSemConta.nuncaEntrou,
+      );
+
+      expect(
+        find.byType(ConviteParaEntrar),
+        findsNothing,
+        reason: 'REPROVA: um 500 nao e falta de conta. `faltaConta` decide '
+            'pelo `next_action` do corpo `problem+json`, e um 500 nao traz '
+            'nenhum — trocar o Mural por um convite para entrar porque o '
+            'servidor caiu diria a quem esta logada que a conta dela nao '
+            'existe.',
+      );
+
+      final faixas = tester.widgetList<FaixaDeAviso>(
+        find.byType(FaixaDeAviso),
+      );
+      expect(
+        faixas,
+        hasLength(1),
+        reason: 'REPROVA NO CONTRAPESO: o 500 nao produziu faixa no Mural. O '
+            'caso de cima passa a ser vacuo: ele itera uma lista vazia e '
+            'aprova sem medir nada.',
+      );
+      expect(
+        faixas.single.texto,
+        isNotEmpty,
+        reason: 'REPROVA NO CONTRAPESO: a faixa do 500 esta MUDA tambem. '
+            'Entao o laco do caso de cima nunca teria como reprovar, e o '
+            'portao nao mede o que diz medir.',
+      );
     });
   });
 

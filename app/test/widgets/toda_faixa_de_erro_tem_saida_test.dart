@@ -476,6 +476,147 @@ Widget b() => FaixaDeAviso(
       );
     });
 
+    // =======================================================================
+    // A OUTRA METADE DO MESMO DEFEITO, e por que ela NAO se mede pelo texto
+    // =======================================================================
+    //
+    // 22/10/2026. O Mural deslogado foi relatado com *"a tarja que convida a
+    // entrar aparece sem texto nenhum -- so o icone e o link"*. E a MESMA
+    // forma de defeito que os casos acima guardam, e os casos acima
+    // APROVARAM: a faixa do Mural tinha `rotuloDaAcao` e `aoTocarNaAcao`
+    // desde 20/10 -- a saida estava la --, e o que faltava era a frase.
+    //
+    // **E este portao continua sem medir frase, de proposito.** O texto do
+    // `401 unauthenticated` e `''` por decisao do cliente de 18/10/2026, e um
+    // caso que cobrasse texto de faixa pressionaria a proxima pessoa a
+    // desfazer aquela decisao, em TODAS as telas, para ficar verde. O
+    // cabecalho deste arquivo ja dizia isso, e segue valendo.
+    //
+    // O conserto certo nao e devolver a frase: e o 401 **sair do caminho de
+    // faixa**. Quem decidiu isso foi o cliente, em 19/10/2026, depois de
+    // testar no iPhone -- *"mas tem que ter uma pagina de deslogado, nao da
+    // para mostrar so uma mensagem de erro para atualizar"* --, e o objeto
+    // dessa decisao e `ConviteParaEntrar`, com um `SecaoComConta` por
+    // superficie murada. O Mural era a ultima superficie murada sem entrada no
+    // catalogo, e por isso ele caia no ramo de erro.
+    //
+    // Entao o que este caso cobra e a LIGACAO, e nao a redacao: toda entrada
+    // do catalogo de superficies muradas esta de fato ligada a alguma tela. E
+    // text-blind, nao encosta na decisao de 18/10, e reprova no dia em que
+    // alguem desfizer uma das dezesseis conversoes -- inclusive a do Mural.
+    //
+    // **O QUE ELE NAO PEGA, dito por extenso:** uma superficie murada que
+    // nunca ganhe entrada no catalogo. Foi exatamente assim que o Mural passou
+    // -- nao havia `SecaoComConta.mural` para ficar orfa. Fechar esse furo
+    // pede um mapa de rota-de-contrato para tela (`security: [bearerAuth]` sem
+    // alternativa vazia em `api/openapi.yaml`, cruzado com a `*_api.dart` que
+    // a tela usa), e esse mapa NAO existe neste portao.
+    //
+    // DESLIGAR PARA VER REPROVAR -- medido:
+    //   apague a linha `ConviteParaEntrar(secao: SecaoComConta.mural)` de
+    //   `lib/telas/mural/tela_do_mural.dart`
+    //   -> reprova `toda superficie murada do catalogo esta ligada a uma tela`,
+    //      nomeando `mural`.
+    test('toda superficie murada do catalogo esta ligada a uma tela', () {
+      final catalogo = File('lib/widgets/convite_para_entrar.dart');
+      expect(
+        catalogo.existsSync(),
+        isTrue,
+        reason: 'REPROVA: `${catalogo.path}` nao existe. O catalogo de '
+            'superficies muradas mudou de lugar, e este caso ficaria verde '
+            'por vazio.',
+      );
+
+      // As entradas DECLARADAS, lidas do corpo do `enum` e nao de uma lista
+      // escrita aqui: uma lista a mao concordaria com qualquer recorte futuro.
+      final fonteDoCatalogo = mascaraSemComentarios(
+        catalogo.readAsStringSync(),
+        mascararLiterais: true,
+      );
+      final corpo = RegExp(
+        r'enum SecaoComConta\s*\{(.*?)\n\}',
+        dotAll: true,
+      ).firstMatch(fonteDoCatalogo);
+      expect(
+        corpo,
+        isNotNull,
+        reason: 'REPROVA: nao achei o corpo de `enum SecaoComConta`. A '
+            'varredura quebrou, e varredura quebrada aprova em silencio.',
+      );
+      final declaradas = RegExp(r'^  ([a-z][A-Za-z0-9]*)\(', multiLine: true)
+          .allMatches(corpo!.group(1)!)
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      // CONTRAPESO: o `enum` tem entradas de verdade. Sem ele, uma expressao
+      // regular quebrada deixaria o conjunto vazio e o caso verde -- que e a
+      // forma mais facil de um portao de omissao nao medir nada.
+      expect(
+        declaradas.length,
+        greaterThanOrEqualTo(16),
+        reason: 'REPROVA NO CONTRAPESO: li ${declaradas.length} entrada(s) de '
+            '`SecaoComConta`. Em 22/10/2026 eram DEZESSEIS, contadas. Menos '
+            'que isso e a leitura do `enum` quebrada.',
+      );
+
+      // As entradas USADAS, em `lib/` inteiro e nao so em `lib/telas`: o
+      // convite aparece tambem na folha curta de `widgets/`. O proprio
+      // catalogo nao conta -- e la que elas sao declaradas.
+      final usadas = <String>{};
+      for (final f in Directory('lib').listSync(recursive: true)) {
+        if (f is! File || !f.path.endsWith('.dart')) continue;
+        if (f.path == catalogo.path) continue;
+        final fonte = mascaraSemComentarios(
+          f.readAsStringSync(),
+          mascararLiterais: true,
+        );
+        for (final m
+            in RegExp(r'SecaoComConta\.([a-z][A-Za-z0-9]*)').allMatches(fonte)) {
+          usadas.add(m.group(1)!);
+        }
+      }
+
+      // CONTRAPESO: a varredura de uso achou algo. Um `lib/` lido como vazio
+      // deixaria TODA entrada orfa e o caso reprovaria por motivo errado.
+      //
+      // **O PISO E FOLGADO DE PROPOSITO, e isto foi medido.** Com o piso em
+      // DEZESSEIS -- o numero exato de hoje --, desligar UMA ligacao derrubava
+      // este contrapeso em vez da asercao de orfas, e o relatorio dizia *"a
+      // varredura de uso quebrou"* quando o que havia acontecido era
+      // precisamente o defeito que o caso existe para nomear. Medido em
+      // 22/10/2026 trocando `SecaoComConta.mural` por `.mensagens` no Mural:
+      // reprovava aqui, com a mensagem errada, e a lista de orfas nunca era
+      // impressa. O piso tem de separar "a varredura morreu" de "uma tela
+      // perdeu a ligacao", e por isso ele e DEZ e nao dezesseis.
+      expect(
+        usadas.length,
+        greaterThanOrEqualTo(10),
+        reason: 'REPROVA NO CONTRAPESO: achei apenas ${usadas.length} '
+            'referencia(s) distinta(s) a `SecaoComConta` em `lib/`. Este piso '
+            'e folgado -- ele separa "a varredura morreu" de "uma ligacao '
+            'caiu", que a asercao de orfas abaixo nomeia. Abaixo de dez, o '
+            'que quebrou foi a leitura.',
+      );
+
+      final orfas = declaradas.difference(usadas).toList()..sort();
+      expect(
+        orfas,
+        isEmpty,
+        reason: 'REPROVA: ${orfas.length} superficie(s) do catalogo de '
+            'deslogado nao estao ligadas a tela nenhuma -- '
+            '${orfas.join(', ')}. Cada entrada de `SecaoComConta` existe '
+            'porque uma superficie MURADA precisa dizer o que ela e a quem '
+            'nao tem conta; uma entrada orfa significa que aquela superficie '
+            'voltou a mandar o `401 unauthenticated` para `FaixaDeAviso`, e o '
+            'catalogo devolve `texto: \'\'` para ele desde 18/10/2026 -- '
+            'ou seja, o icone de erro e MAIS NADA sobre o botao `Entrar`. Foi '
+            'esse o relato do Mural deslogado em 22/10/2026. O conserto NAO e '
+            'devolver o texto do 401: e `if (faltaConta(falha))` no `catch` da '
+            'carga e `ConviteParaEntrar(secao: ...)` no `build`, como nas '
+            'outras quinze.',
+      );
+    });
+
     test('as dispensas sao DUAS, e cada uma existe no disco', () {
       // A lista e escrita a mao de proposito: derivar "toda tela que
       // intercepta" deixaria o portao concordar com qualquer recorte futuro.
