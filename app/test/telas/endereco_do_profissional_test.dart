@@ -144,8 +144,28 @@ void main() {
         reason: 'REPROVA: o CEP cru na tela. O servidor guarda oito dígitos e '
             'quem lê espera `05422-030`.',
       );
-      // E a linha de LUGAR continua embaixo: o endereco nao a substitui.
-      expect(texto, contains('Pinheiros'));
+      // **A LINHA DE LUGAR DEIXOU DE FICAR EMBAIXO, EM 22/10/2026.**
+      //
+      // Esta assercao dizia o contrario -- `contains('Pinheiros')`, com a nota
+      // *"a linha de LUGAR continua embaixo: o endereco nao a substitui"*. Era
+      // verdade e o cliente reverteu, contando o que via: *"tem o bairro
+      // abaixo do titulo, o endereco la embaixo na descricao e o bairro
+      // novamente. Deixe apenas o endereco embaixo do titulo e clicavel."*
+      //
+      // **Havendo logradouro, ele SUBSTITUI a linha de lugar** -- e e a mesma
+      // logica que a decisao de 21/10 ja usava para o TOQUE (`um botao, nunca
+      // dois`, no controle mais preciso), agora valendo tambem para o TEXTO.
+      //
+      // A contagem mora em
+      // `test/telas/listagem_e_pagina_do_profissional_test.dart`, que conta a
+      // linha com escopo na pagina; aqui basta a ausencia.
+      expect(
+        texto,
+        isNot(contains('Pinheiros')),
+        reason: 'REPROVA: a linha `Pinheiros · São Paulo · SP` voltou a ser '
+            'desenhada tendo logradouro na tela. Ela era a TERCEIRA ocorrência '
+            'do mesmo lugar que o cliente contou em 22/10/2026.',
+      );
     });
 
     testWidgets('o leitor de tela anuncia a AÇÃO antes do endereço', (
@@ -475,16 +495,29 @@ void main() {
       );
     });
 
-    testWidgets('a linha do endereço é a ÚNICA ação nova: o botão `Ligar` e a '
-        'linha de lugar continuam como eram', (tester) async {
+    testWidgets('o botão `Ligar` continua como era, e o número continua fora', (
+      tester,
+    ) async {
       // Contrapeso. Uma tela que ganhasse o endereco e perdesse o telefone
       // teria passado nos casos acima e quebrado o pedido de 18/10.
+      //
+      // **O TITULO E A ASSERCAO DE LUGAR MUDARAM EM 22/10/2026.** Ele dizia
+      // *"a linha do endereco e a UNICA acao nova: o botao `Ligar` e a linha de
+      // lugar continuam como eram"* e afirmava `contains('Pinheiros')`. A
+      // linha de lugar **deixou** de continuar como era -- havendo logradouro
+      // ela nao e desenhada --, e manter a frase antiga aqui faria o arquivo
+      // afirmar o contrario do que o produto faz. O que este caso guarda e o
+      // CONTRAPESO, que nao mudou: o telefone.
       await abrirOLocal(
         tester,
         rede: redeDoLocal(detalhe: detalheComEndereco()),
       );
       expect(find.text(PaginaDoLocal.rotuloDeLigar), findsOneWidget);
-      expect(textoVisivel(tester), contains('Pinheiros'));
+      // ANCORA: a pagina esta cheia (sem ela o `isNot` abaixo passa no vazio).
+      expect(
+        textoVisivel(tester),
+        contains('Rua Teodoro Sampaio, 1020 - Sala 3'),
+      );
       // E o numero continua FORA da tela (pedido de 19/10).
       expect(textoVisivel(tester), isNot(contains('11987654321')));
     });

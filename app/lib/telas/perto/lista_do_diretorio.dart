@@ -834,20 +834,12 @@ class CartaoDoDiretorio extends StatelessWidget {
   /// acerta.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
-  /// A media e a quantidade na mesma linha: `4,3 · 128 avaliações`.
-  ///
-  /// **Nula em dois casos, e nos dois o cartao nao desenha nada**: `rating`
-  /// ausente na resposta (o campo e opcional no contrato, de proposito) e
-  /// `count == 0`. Em nenhum deles aparece "0,0" nem estrela vazia -- zero se
-  /// le como "pessimo", e um local que ninguem avaliou nao e pessimo.
-  static String? pontuacaoEmTexto(PontuacaoDoLocal? pontuacao) {
-    if (pontuacao == null || !pontuacao.temAvaliacoes) return null;
-    final media = pontuacao.mediaEmTexto;
-    if (media == null) return null;
-    return '$media · ${pontuacao.quantidadeEmTexto}';
-  }
-
   /// A distancia em texto, ou nulo.
+  ///
+  /// **NAO e mais desenhada por este cartao** (cliente, 22/10/2026), e continua
+  /// aqui porque `_Cabecalho` da pagina do local a le -- ver a prosa de `build`.
+  /// Mover a funcao para la junto com a linha teria trocado uma definicao por
+  /// duas no dia em que a listagem a quisesse de volta.
   ///
   /// O servidor arredonda a 100 m, que e a grade em que o produto quantiza a
   /// localizacao (ADR-0006): precisao maior nao existe na origem, e escrever
@@ -865,12 +857,36 @@ class CartaoDoDiretorio extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
+    // CINCO COISAS, E SO ELAS (cliente, 22/10/2026): *"a listagem dos
+    // profissionais deve ser apenas o logo, nome, segmento, endereco e botao
+    // de ligar, remova as informacoes adicionais, deixe apenas na pagina
+    // interna"*.
+    //
+    // **O que saiu, e onde cada um ja estava na pagina interna** -- conferido
+    // ANTES de remover, porque *"deixe apenas na pagina interna"* pressupoe
+    // que la ja tem, e remover o que nao estivesse la seria apagar o dado do
+    // produto:
+    //
+    // | saiu do cartao            | ja estava em `pagina_do_local.dart`      |
+    // |---------------------------|------------------------------------------|
+    // | media e contagem          | `_BlocoDaPontuacao`, secao `Avaliacoes`  |
+    // | distancia (`a 1,2 km`)    | `_Cabecalho`, linha `schedule_outlined`  |
+    // | `about` (a apresentacao)  | `_Informacoes`, `_Corpo`                 |
+    // | selo do que foi verificado| `_Cabecalho`, `_Selo`                    |
+    //
+    // Os quatro continuam chegando na resposta e continuam lidos por
+    // `EntradaDoDiretorio`: **o contrato nao mudou, a PINTURA mudou.** Pedir
+    // ao servidor que pare de manda-los seria mudar o contrato por causa de um
+    // desenho, e a pagina do local usa os mesmos campos.
+    //
+    // O `endereco` dos cinco e [EntradaDoDiretorio.linhaDeLugar] -- bairro,
+    // cidade e UF. **E o unico endereco que a LISTAGEM tem**:
+    // `DirectoryEntrySummary` nao declara `street`, e as quatro colunas de
+    // endereco comercial saem so em `DirectoryEntryDetail` (21/10/2026). O app
+    // nao inventa endereco que o servidor nao manda.
     final atividade = entrada.atividade?.rotulo;
     final lugar = entrada.linhaDeLugar;
-    final distancia = distanciaEmTexto(entrada.distanciaEmMetros);
-    final verificacao = entrada.verificacao.oQueFoiVerificado;
     final telefone = entrada.telefoneE164;
-    final pontuacao = pontuacaoEmTexto(entrada.pontuacao);
     final logo = entrada.logoUrl;
 
     return Container(
@@ -961,29 +977,10 @@ class CartaoDoDiretorio extends StatelessWidget {
                           ?.copyWith(color: cores.textSecondary),
                     ),
                   ],
-                  // A media e a quantidade, quando ha. **Cartao sem `rating` e
-                  // cartao com zero avaliacao nao desenham linha nenhuma**:
-                  // ver `pontuacaoEmTexto`.
-                  if (pontuacao != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Row(
-                      children: <Widget>[
-                        ExcludeSemantics(
-                          child: Icon(
-                            Icons.star,
-                            size: BichuEspaco.e4,
-                            color: cores.primary,
-                          ),
-                        ),
-                        const SizedBox(width: BichuEspaco.e1),
-                        Text(
-                          pontuacao,
-                          style: textos.bodyMedium
-                              ?.copyWith(color: cores.textPrimary),
-                        ),
-                      ],
-                    ),
-                  ],
+                  // O ENDERECO que a listagem tem: bairro, cidade e UF. **A
+                  // ULTIMA linha de texto do cartao** -- a media, a distancia,
+                  // a apresentacao e o selo sairam em 22/10/2026 e a tabela na
+                  // prosa de `build` diz onde cada um ficou.
                   if (lugar != null) ...<Widget>[
                     const SizedBox(height: BichuEspaco.e1),
                     Text(
@@ -991,22 +988,6 @@ class CartaoDoDiretorio extends StatelessWidget {
                       style: textos.bodyMedium
                           ?.copyWith(color: cores.textSecondary),
                     ),
-                  ],
-                  if (distancia != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      distancia,
-                      style: textos.bodyMedium
-                          ?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
-                  if (entrada.sobre != null && entrada.sobre!.isNotEmpty) ...[
-                    const SizedBox(height: BichuEspaco.e2),
-                    Text(entrada.sobre!, style: textos.bodyMedium),
-                  ],
-                  if (verificacao != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e2),
-                    _Selo(texto: verificacao),
                   ],
                 ],
               ),
@@ -1055,38 +1036,17 @@ class CartaoDoDiretorio extends StatelessWidget {
   }
 }
 
-/// O selo de verificacao. **Diz o que foi verificado, nunca so "verificado".**
-///
-/// A BICHUS-165 nao passou por selo generico, e este widget so e construido
-/// quando ha texto: `VerificacaoDaEntrada.oQueFoiVerificado` devolve nulo em
-/// `none` e tambem quando o nivel afirma algo sem listar a prova.
-class _Selo extends StatelessWidget {
-  const _Selo({required this.texto});
-
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: BichuEspaco.e3,
-        vertical: BichuEspaco.e1,
-      ),
-      decoration: BoxDecoration(
-        color: cores.surfaceSunken,
-        borderRadius: BorderRadius.circular(BichuRaio.full),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
-      child: Text(
-        texto,
-        style: textos.labelSmall?.copyWith(color: cores.textPrimary),
-      ),
-    );
-  }
-}
+// O SELO SAIU DAQUI EM 22/10/2026, e com ele o widget `_Selo` deste arquivo.
+//
+// Ele dizia O QUE foi verificado (`Verificado: CNPJ, CRMV`) e nunca so
+// "verificado" -- a BICHUS-165 nao passou por selo generico. **Essa regra nao
+// foi revogada: ela mudou de tela.** O cliente tirou as informacoes adicionais
+// do cartao e o selo e uma delas; quem o desenha agora e `_Selo` de
+// `pagina_do_local.dart`, no `_Cabecalho`, com o mesmo texto e a mesma regra.
+//
+// Apagado em vez de deixado sem uso: widget privado que ninguem constroi
+// reprova em `unused_element` e, pior, convida a proxima pessoa a reacender a
+// linha sem saber que foi decisao tira-la.
 
 /// O esqueleto de uma entrada: tres barras dentro da mesma moldura do cartao.
 ///

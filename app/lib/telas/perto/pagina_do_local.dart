@@ -24,6 +24,7 @@ import '../../widgets/icone_do_inscrito.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
+import '../../widgets/visualizador_de_imagem.dart';
 import '../casca_com_abas.dart';
 import 'lista_do_diretorio.dart';
 
@@ -153,6 +154,110 @@ class PaginaDoLocal extends StatefulWidget {
   /// repeti-lo dentro dele era a terceira vez que a mesma tela dizia a mesma
   /// palavra.
   static const String rotuloDeLigar = 'Ligar';
+
+  /// O que o toque na foto principal FAZ. Vai em `hint`, e nao no nome: o nome
+  /// e [fotoDe], e o leitor de tela espera a acao na dica.
+  ///
+  /// A mesma palavra da capa do encontro e da vitrine do perfil
+  /// (`Ampliar`): tres palavras para o mesmo gesto fariam o app parecer ter
+  /// tres recursos.
+  static const String dicaDeAmpliarAFoto = 'Ampliar';
+
+  // -- Compartilhar o local (cliente, 22/10/2026) ---------------------------
+  //
+  // Pedido literal: *"adicione um botao compartilhar igual tem na pagina de
+  // eventos"*.
+  //
+  // **"IGUAL" FOI LIDO COMO FORMA, E A FORMA FOI COPIADA INTEIRA** de
+  // `telas/rede/encontro_da_rede.dart` (21/10/2026), que por sua vez copiou a
+  // da ficha do pet perdido (20/10/2026): `BotaoSecundario` na primeira dobra
+  // logo depois do titulo, rotulo `Compartilhar`, nome acessivel dizendo DE
+  // QUE, saida por `SaidaDoApp.compartilharTexto` (a folha do sistema,
+  // `ACTION_SEND`), e aviso quando ela nao abre. Nenhum pacote novo: quem fala
+  // com a folha e a porta em `dispositivo/`, e tela nenhuma importa
+  // `share_plus` -- o portao de `porta_nao_contornada_test.dart` proibe.
+  //
+  // **A TERCEIRA COPIA DESTAS FRASES, E ISSO ESTA REGISTRADO EM VEZ DE
+  // ESCONDIDO.** `TelaDoEncontro.falhaDoCompartilhar` e
+  // `TextosDoDetalhe.folhaNaoAbriu` ja sao, hoje, a MESMA frase em duas
+  // constantes; esta e a terceira, caractere por caractere. O precedente desta
+  // casa para convergir isso e `dispositivo/textos_do_app_de_mapas.dart`, que
+  // nasceu porque a mesma acao tinha TRES redacoes de mapa -- e ele proprio
+  // registra que *"unificar e mudar redacao sao dois trabalhos"*. Entao:
+  // **nao ha redacao nova aqui**, e o caso
+  // `as tres superficies dizem a MESMA frase` de
+  // `test/telas/listagem_e_pagina_do_profissional_test.dart` compara as tres
+  // constantes para que a QUARTA nao possa divergir em silencio. Unificar num
+  // arquivo de `dispositivo/` e o trabalho seguinte, e ele toca duas telas que
+  // nao sao deste pedido.
+
+  /// O rotulo da acao. **`Compartilhar`, a mesma palavra do encontro e da
+  /// ficha do pet**, e nao `Compartilhar no WhatsApp`: quem decide o que a
+  /// folha lista e o sistema.
+  static const String rotuloDeCompartilhar = 'Compartilhar';
+
+  /// O nome acessivel: diz DE QUE a acao e, porque o leitor de tela le os
+  /// rotulos fora de contexto.
+  static String compartilharAcessivel(String nome) =>
+      'Compartilhar o local $nome';
+
+  /// Quando a folha do sistema nao abriu. **Nao diz "WhatsApp"** e nao manda
+  /// instalar nada: a unica coisa que o app sabe aqui e que ela nao abriu.
+  static const String falhaDoCompartilhar =
+      'Não conseguimos abrir as opções de compartilhamento agora. '
+      'Tente de novo.';
+
+  /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
+  ///
+  /// ## NAO HA LINK, E ISSO FOI MEDIDO E NAO SUPOSTO
+  ///
+  /// O encontro ganhou `share_url` em 21/10/2026 porque ganhou **pagina
+  /// publica** no mesmo dia. O profissional **nao tem**: em `api/openapi.yaml`,
+  /// `DirectoryEntryDetail` nao declara `share_url` nem `public_url` (as
+  /// ocorrencias de `share_url` no arquivo sao do caso de pet perdido e do
+  /// encontro), e nao ha rota publica de entrada de diretorio.
+  ///
+  /// **Entao o texto sai SEM endereco, e o app nao monta um.** Um literal
+  /// `'/profissional/' + slug` aqui viraria link morto num binario instalado
+  /// que nao se corrige -- e botao que manda link morto por WhatsApp e pior
+  /// que botao nenhum. No dia em que o campo existir, ele entra como entrou no
+  /// encontro: campo do servidor, uma linha, sem APK novo.
+  ///
+  /// **A REDACAO E A MINIMA VERDADEIRA, e ela pode ser revista pelo cliente.**
+  /// Ela nao promete recurso nenhum e nao convida a nada que o produto nao
+  /// faca: `Encontrei no Bichu.` afirma um fato. A frase do encontro
+  /// (`Encontrei no Bichu. Vamos juntos?`) nao serve aqui -- `vamos juntos`
+  /// convida para um evento com dia e hora, e um profissional nao tem nenhum
+  /// dos dois.
+  ///
+  /// ## O QUE NAO ENTRA, DE PROPOSITO
+  ///
+  /// - **o telefone comercial**: `phone_e164` so existe porque a operacao
+  ///   exige conta (ADR-0011 secao 4), e esta mensagem e lida por quem nao
+  ///   tem. O produto nem o PINTA na tela desde 19/10/2026;
+  /// - **o logradouro e o complemento**: [lugar] e a linha publica de bairro,
+  ///   cidade e UF -- a MESMA que a listagem mostra. O endereco de porta sai
+  ///   so em `DirectoryEntryDetail`, que exige conta, e o complemento e a
+  ///   parte que localiza a porta de alguem. Mesma fronteira que o encontro
+  ///   desenhou quando deixou `street_address` fora da mensagem dele;
+  /// - **a nota e a quantidade de avaliacoes**: nao foram pedidas, e uma media
+  ///   fora de contexto e numero sem o histograma que o explica.
+  static String mensagemDeCompartilhar({
+    required String nome,
+    String? atividade,
+    String? lugar,
+  }) {
+    return '$nome\n'
+        '${atividade == null ? '' : '$atividade\n'}'
+        '${lugar == null ? '' : '$lugar\n'}'
+        'Encontrei no Bichu.';
+  }
+
+  /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
+  /// quando o destino escolhido e um aplicativo de e-mail. Nos destinos que nao
+  /// tem assunto -- WhatsApp, Telegram, copiar -- o sistema o ignora, e ele nao
+  /// aparece duplicado no corpo.
+  static String assuntoDeCompartilhar(String nome) => 'Encontrei no Bichu: $nome';
 
   // O ROTULO DO MAPA E A FRASE DE FALHA NAO MORAM MAIS AQUI.
   //
@@ -628,6 +733,36 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
+  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do local.
+  ///
+  /// **A recusa aparece em `SnackBar`, e nao em faixa**, que e onde esta tela
+  /// difere da ficha do pet -- de proposito. A acao vizinha desta pagina
+  /// ([_abrirNoMapa]) ja recusa assim, e as duas sao a mesma coisa para quem
+  /// olha: uma saida do aparelho que nao abriu. Dois desenhos de recusa na
+  /// mesma tela fariam a pessoa procurar a diferenca que nao existe. E e a
+  /// mesma escolha que o encontro fez (`_avisar`).
+  ///
+  /// **Nao ha tratamento de "WhatsApp nao instalado"**: quem decide o que a
+  /// folha lista e o sistema, e perguntar o que esta instalado exigiria
+  /// `QUERY_ALL_PACKAGES` no Android 11+.
+  Future<void> _compartilharOLocal(DetalheDoLocal detalhe) async {
+    final abriu = await SaidaDoApp.atual.compartilharTexto(
+      texto: PaginaDoLocal.mensagemDeCompartilhar(
+        nome: detalhe.nome,
+        atividade: detalhe.atividade?.rotulo,
+        // A linha PUBLICA de lugar, e nao o logradouro. Ver a prosa de
+        // `mensagemDeCompartilhar`.
+        lugar: detalhe.linhaDeLugar,
+      ),
+      assunto: PaginaDoLocal.assuntoDeCompartilhar(detalhe.nome),
+    );
+    if (!abriu && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text(PaginaDoLocal.falhaDoCompartilhar)),
+      );
+    }
+  }
+
   // -------------------------------------------------------------------------
   // A minha avaliacao
   // -------------------------------------------------------------------------
@@ -940,12 +1075,46 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         _FaixaDoLocal(url: foto, nome: detalhe.nome),
         const SizedBox(height: BichuEspaco.e4),
       ],
-      _Margem(child: _Cabecalho(detalhe: detalhe, aoLigar: _ligar)),
+      _Margem(
+        child: _Cabecalho(
+          detalhe: detalhe,
+          aoLigar: _ligar,
+          aoAbrirNoMapa: _abrirNoMapa,
+        ),
+      ),
+      // `Compartilhar` (cliente, 22/10/2026: *"adicione um botao compartilhar
+      // igual tem na pagina de eventos"*).
+      //
+      // **POR QUE AQUI, E NAO NA BARRA DE TOPO**: e o mesmo lugar do encontro,
+      // e pela mesma razao registrada la -- na PRIMEIRA DOBRA, logo depois do
+      // titulo e do contato, que e o momento em que a pessoa decide se manda o
+      // local para alguem. O slot de acao da barra desta pagina fica vazio de
+      // proposito (ver o `AppBar` de `build`), e por o botao la o esconderia
+      // atras de um menu.
+      //
+      // **`BotaoSecundario` e nao primario**, tambem como o encontro: a acao
+      // principal desta tela e `Ligar`, que e `BotaoPrimario` tres linhas
+      // acima. Dois botoes cheios na mesma dobra fariam a pessoa escolher pela
+      // posicao.
+      //
+      // **SEM TRAVA DE ESTADO, e a ausencia e medida**: o encontro esconde a
+      // acao no cancelado e no encerrado porque convidar para um evento que
+      // nao vai acontecer manda gente a um lugar vazio. Entrada de diretorio
+      // nao tem esses estados -- o que sai de `/directory/entries/{slug}` esta
+      // publicado, e `404` cai na fase `naoEncontrado`, que nem chega aqui.
+      const SizedBox(height: BichuEspaco.e4),
+      _Margem(
+        child: BotaoSecundario(
+          rotulo: PaginaDoLocal.rotuloDeCompartilhar,
+          nomeAcessivel: PaginaDoLocal.compartilharAcessivel(detalhe.nome),
+          aoTocar: () => _compartilharOLocal(detalhe),
+        ),
+      ),
       const _Divisor(),
       _Secao(
         icone: Icons.notes_outlined,
         titulo: PaginaDoLocal.tituloDasInformacoes,
-        child: _Informacoes(detalhe: detalhe, aoAbrirNoMapa: _abrirNoMapa),
+        child: _Informacoes(detalhe: detalhe),
       ),
       const _Divisor(),
       _Secao(
@@ -1161,15 +1330,58 @@ class _FaixaDoLocal extends StatelessWidget {
   static const double proporcao = 16 / 9;
 
   @override
-  Widget build(BuildContext context) => ImagemDaRede(
-        url: url,
-        descricao: PaginaDoLocal.fotoDe(nome),
-        proporcao: proporcao,
-        // Sem raio: de borda a borda, raio arredondaria contra a borda da
-        // tela e deixaria quatro cantos de fundo aparecendo.
-        raio: BichuRaio.none,
-        simboloDeFalha: Icons.storefront_outlined,
-      );
+  Widget build(BuildContext context) {
+    final imagem = ImagemDaRede(
+      url: url,
+      descricao: PaginaDoLocal.fotoDe(nome),
+      proporcao: proporcao,
+      // Sem raio: de borda a borda, raio arredondaria contra a borda da
+      // tela e deixaria quatro cantos de fundo aparecendo.
+      raio: BichuRaio.none,
+      simboloDeFalha: Icons.storefront_outlined,
+    );
+
+    // **A FOTO PRINCIPAL AMPLIA AO TOQUE** (cliente, 22/10/2026: *"coloque
+    // link na imagem principal para aumentar e tornar um carrosel de imagens,
+    // caso tenha mais do que uma foto cadastrada"*).
+    //
+    // **REUSO, e nao caminho novo**: quem abre e
+    // `widgets/visualizador_de_imagem.dart`, o MESMO da capa do encontro
+    // (20/10/2026) e da vitrine de fotos do perfil. Ele ganhou lista e indice
+    // inicial em 22/10 para servir as tres superficies; um segundo ampliador
+    // aqui seria a duplicacao que o cliente ja cobrou em outro assunto.
+    //
+    // **A LISTA TEM UM ELEMENTO, E ISSO E O CONTRATO E NAO UMA SIMPLIFICACAO.**
+    // `DirectoryEntryDetail` declara UM `photo_url` (mais `logo_url`, que e
+    // logo e nao foto) e nao ha galeria de entrada de diretorio em rota
+    // nenhuma: medido em `api/openapi.yaml`, as quatro rotas publicas de
+    // `/directory/entries` nao devolvem lista de imagens. Entao a metade
+    // `carrosel` do pedido **nao tem dado que a acenda hoje** -- o mecanismo
+    // esta de pe e medido no visualizador, e acende sem APK novo no dia em que
+    // o contrato ganhar a galeria, trocando esta lista de um elemento pela
+    // dele. A logo NAO entra aqui: logo nao e foto do lugar, e enfia-la num
+    // carrossel de fotos inventaria produto.
+    //
+    // **UM no semantico, e nao dois.** `ImagemDaRede` ja poe `descricao` na
+    // imagem; sem `excludeSemantics` o leitor de tela anunciaria o nome da
+    // foto e depois o botao, como se fossem duas coisas. O nome e o da foto, a
+    // funcao e `button`, e o que o toque FAZ vai em `hint` -- que e onde o
+    // leitor de tela espera a acao. Mesma forma da capa do encontro.
+    return Semantics(
+      button: true,
+      label: PaginaDoLocal.fotoDe(nome),
+      hint: PaginaDoLocal.dicaDeAmpliarAFoto,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => VisualizadorDeImagem.abrirVarias(
+          context,
+          urls: <String>[url],
+          textoAlternativo: PaginaDoLocal.fotoDe(nome),
+        ),
+        child: imagem,
+      ),
+    );
+  }
 }
 
 /// Nome, atividade, lugar, distancia, **o que foi verificado** e `Ligar`.
@@ -1194,10 +1406,21 @@ class _FaixaDoLocal extends StatelessWidget {
 /// desenhada acima e o tipo esta escrito em palavras na linha da atividade:
 /// um terceiro lugar dizendo a mesma coisa seria ruido.
 class _Cabecalho extends StatelessWidget {
-  const _Cabecalho({required this.detalhe, required this.aoLigar});
+  const _Cabecalho({
+    required this.detalhe,
+    required this.aoLigar,
+    required this.aoAbrirNoMapa,
+  });
 
   final DetalheDoLocal detalhe;
   final Future<void> Function(String telefoneE164) aoLigar;
+
+  /// Recebe o TEXTO da busca, ja montado, e repassa a
+  /// `SaidaDoApp.abrirEnderecoNoAppDeMapas` -- a mesma porta do encontro.
+  ///
+  /// **Subiu de `_Informacoes` para ca em 22/10/2026**, com a linha que ele
+  /// serve. Ver a prosa de `build`.
+  final Future<void> Function(String endereco) aoAbrirNoMapa;
 
   @override
   Widget build(BuildContext context) {
@@ -1206,6 +1429,12 @@ class _Cabecalho extends StatelessWidget {
 
     final atividade = detalhe.atividade?.rotulo;
     final lugar = detalhe.linhaDeLugar;
+    final endereco = detalhe.endereco.porExtenso;
+    final busca = detalhe.endereco.textoParaBuscaNoMapa(
+      bairro: detalhe.bairro,
+      cidade: detalhe.cidade,
+      estado: detalhe.estado,
+    );
     // A MESMA formatacao do cartao da listagem, e de proposito: o servidor
     // arredonda a 100 m (ADR-0006) e `2,73 km` inventaria dois digitos.
     final distancia =
@@ -1222,7 +1451,23 @@ class _Cabecalho extends StatelessWidget {
             children: <Widget>[
               if (detalhe.fotoUrl == null)
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  // **ALINHADOS NA VERTICAL** (cliente, 22/10/2026: *"Alinhe o
+                  // titulo do estabelecimento e a imagem na vertical"*).
+                  //
+                  // `center` e nao `start`, e a diferenca e visivel: o quadrado
+                  // tem `larguraFotoSm` (56 dp) e a linha do titulo tem a
+                  // altura de `headlineSmall` (~32 dp), entao com `start` o
+                  // nome encostava no topo de um quadrado mais alto que ele e
+                  // sobrava um vao embaixo do texto. Centrar no eixo cruzado e
+                  // o que "alinhar na vertical" significa numa `Row`.
+                  //
+                  // **O cartao da listagem continua em `start`, de proposito**:
+                  // lá o quadrado e do mesmo tamanho mas o titulo e
+                  // `titleMedium` e tem uma pilha de linhas embaixo dele, e
+                  // centrar o conjunto desalinharia o nome das linhas que o
+                  // seguem. O pedido fala do "titulo do estabelecimento", que e
+                  // esta tela.
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
                     IconeDoInscrito(
                       atividade: detalhe.atividade,
@@ -1253,9 +1498,70 @@ class _Cabecalho extends StatelessWidget {
                       textos.labelLarge?.copyWith(color: cores.textSecondary),
                 ),
               ],
-              if (lugar != null) ...<Widget>[
+              // O LUGAR APARECE **UMA** VEZ NA PAGINA, EMBAIXO DO TITULO, E
+              // E CLICAVEL (cliente, 22/10/2026).
+              //
+              // Ele contou o que via: *"tem o bairro abaixo do titulo, o
+              // endereco la embaixo na descricao e o bairro novamente. Deixe
+              // apenas o endereco embaixo do titulo e clicavel."* Eram TRES
+              // linhas do mesmo lugar -- esta (bairro), a do logradouro em
+              // `_Informacoes` e a de bairro de novo em `_Informacoes` --, e
+              // passaram a ser uma, aqui.
+              //
+              // **ISTO NAO DESFAZ A DECISAO DE 21/10/2026, e e a continuacao
+              // dela.** A regra `um botao, nunca dois` de
+              // `local_do_encontro.dart` dizia qual das duas linhas e o
+              // controle; o item 5 diz quantas linhas existem. As duas valem
+              // juntas, e a composicao e a mesma de antes:
+              //
+              // 1. **com logradouro** -- a linha dele e o controle, e a de
+              //    lugar nao e desenhada (antes ela ficava embaixo; era a
+              //    terceira ocorrencia que o cliente contou);
+              // 2. **sem logradouro** -- a linha de lugar e o controle. E o
+              //    caso do autonomo, e e a MAIORIA das entradas;
+              // 3. **sem nenhum dos dois** -- nenhuma linha, e nenhum
+              //    controle. Nao precisa de codigo: nao ha `else`.
+              //
+              // Num e noutro ha **exatamente um** alvo de mapa na pagina, e
+              // `aoAbrirNoMapa` e a porta unica (`geo:0,0?q=<texto>`) --
+              // *"o maps padrao do usuario"* e o seletor que o Android abre, e
+              // nao uma escolha nossa (ADR-0006: o Bichu nao geocodifica).
+              //
+              // O rotulo ANUNCIADO poe a acao antes do dado
+              // (`Abrir no mapa: Rua X, 1020`): quem ouve o endereco primeiro
+              // precisa da linha inteira para descobrir que ela leva a algum
+              // lugar. As duas condicoes de cada bloco sao a MESMA
+              // (`temEnderecoDeRua`) e estao as duas escritas porque o tipo nao
+              // as liga -- sem a segunda, o uso de `busca` seria uma aposta.
+              if (endereco != null && busca != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e3),
-                _LinhaComIcone(icone: Icons.place_outlined, texto: lugar),
+                Semantics(
+                  button: true,
+                  label: '${TextosDoAppDeMapas.rotuloDoEndereco}: $endereco',
+                  onTap: () => aoAbrirNoMapa(busca),
+                  excludeSemantics: true,
+                  child: InkWell(
+                    onTap: () => aoAbrirNoMapa(busca),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: BichuAlvoDeToque.critico,
+                      ),
+                      child: _LinhaComIcone(
+                        icone: Icons.map_outlined,
+                        texto: endereco,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else if (lugar != null) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e3),
+                _LinhaComIcone(
+                  icone: Icons.place_outlined,
+                  texto: lugar,
+                  aoTocar: () => aoAbrirNoMapa(lugar),
+                  rotuloAcessivel:
+                      '${TextosDoAppDeMapas.rotuloDoEndereco}: $lugar',
+                ),
               ],
               // Distancia nula **nao escreve linha nenhuma**: nem "distância
               // indisponível", nem traco. Ela e nula com frequencia aqui, e
@@ -1340,16 +1646,9 @@ class _Cabecalho extends StatelessWidget {
 /// coluna, e nenhum deles e desenhado aqui: espaco reservado ensinaria quem le
 /// que o dado vem.
 class _Informacoes extends StatelessWidget {
-  const _Informacoes({required this.detalhe, required this.aoAbrirNoMapa});
+  const _Informacoes({required this.detalhe});
 
   final DetalheDoLocal detalhe;
-
-  /// Recebe o TEXTO da busca, ja montado, e repassa a
-  /// `SaidaDoApp.abrirEnderecoNoAppDeMapas` -- a mesma porta do encontro.
-  ///
-  /// Sem logradouro quem chega aqui e a linha de lugar, que e o controle nesse
-  /// caso. Ver a prosa de `build`.
-  final Future<void> Function(String endereco) aoAbrirNoMapa;
 
   static const String semSobre =
       'Este local ainda não escreveu uma apresentação.';
@@ -1357,13 +1656,6 @@ class _Informacoes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sobre = detalhe.sobre;
-    final lugar = detalhe.linhaDeLugar;
-    final endereco = detalhe.endereco.porExtenso;
-    final busca = detalhe.endereco.textoParaBuscaNoMapa(
-      bairro: detalhe.bairro,
-      cidade: detalhe.cidade,
-      estado: detalhe.estado,
-    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1375,65 +1667,26 @@ class _Informacoes extends StatelessWidget {
           _Corpo(texto: sobre)
         else
           const _Corpo(texto: semSobre),
-        // **UM BOTAO, NUNCA DOIS** -- a regra e de `local_do_encontro.dart`, e
-        // foi a outra frente desta onda que a trouxe para esta tela. A uniao
-        // das duas a violava: as duas punham toque, uma no logradouro e outra
-        // na linha de lugar, dois alvos para a MESMA acao na mesma rolagem.
+        // **AS DUAS LINHAS DE LUGAR SAIRAM DAQUI EM 22/10/2026**, e esta
+        // secao voltou a ser so a apresentacao.
         //
-        // Das tres composicoes possiveis so uma respeita a regra sem derruba-la,
-        // e e esta. O produto confirma: havendo logradouro e ELE que a pessoa
-        // quer abrir -- `Rua X, 52` leva ao lugar certo e `Bairro, Cidade - UF`
-        // leva ao centro do bairro. Pôr o toque na linha MENOS precisa tendo a
-        // mais precisa na tela seria o pior dos dois.
-        // CASO 1: ha endereco de rua. A linha e o controle, e o rotulo
-        // ANUNCIADO diz a acao antes do endereco --
-        // `<TextosDoAppDeMapas.rotuloDoEndereco>: Rua Teodoro Sampaio, 1020`
-        // --, porque um leitor de tela que anuncia
-        // o endereco primeiro faz a pessoa ouvir a linha inteira para descobrir
-        // que ela e tocavel. Mesma forma do botao do encontro.
+        // Elas eram duas das TRES ocorrencias do mesmo lugar que o cliente
+        // contou: *"tem o bairro abaixo do titulo, o endereco la embaixo na
+        // descricao e o bairro novamente. Deixe apenas o endereco embaixo do
+        // titulo e clicavel."* **Esta secao e a `descricao` das palavras
+        // dele**, e era dentro dela que o endereco morava -- o que ele pediu
+        // no item 4 (*"deve ser um campo separado"*) e exatamente tira-lo de
+        // dentro da apresentacao e por como irmao do titulo.
         //
-        // As duas condicoes sao a MESMA (`temEnderecoDeRua`), e as duas estao
-        // escritas porque o tipo nao as liga: sem a segunda, o `!` abaixo seria
-        // uma aposta.
-        if (endereco != null && busca != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e4),
-          Semantics(
-            button: true,
-            label: '${TextosDoAppDeMapas.rotuloDoEndereco}: $endereco',
-            onTap: () => aoAbrirNoMapa(busca),
-            excludeSemantics: true,
-            child: InkWell(
-              onTap: () => aoAbrirNoMapa(busca),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minHeight: BichuAlvoDeToque.critico,
-                ),
-                child: _LinhaComIcone(
-                  icone: Icons.map_outlined,
-                  texto: endereco,
-                ),
-              ),
-            ),
-          ),
-        ],
-        // CASO 2: a linha de lugar, com ou sem endereco acima dela. CASO 3 e a
-        // ausencia das duas, e ele nao precisa de codigo: nao ha `else`.
-        if (lugar != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e4),
-          _LinhaComIcone(
-            icone: Icons.place_outlined,
-            texto: lugar,
-            // CASO 2: ela e o controle **so quando nao ha logradouro**. Com
-            // logradouro na tela, o toque mora lá e aqui nao ha nenhum: e o
-            // `um botao, nunca dois` da prosa acima, escrito em uma condicao.
-            // O `assert` de `_LinhaComIcone` cobra que toque e nome andem
-            // juntos, e os dois saem pela mesma condicao.
-            aoTocar: endereco == null ? () => aoAbrirNoMapa(lugar) : null,
-            rotuloAcessivel: endereco == null
-                ? '${TextosDoAppDeMapas.rotuloDoEndereco}: $lugar'
-                : null,
-          ),
-        ],
+        // **A regra `um botao, nunca dois` de 21/10/2026 nao mudou de
+        // conteudo, mudou de endereco**: ela agora mora inteira no
+        // `_Cabecalho`, nas duas condicoes do bloco de lugar. O que NAO existe
+        // mais e esta secao ter alvo de mapa -- se um voltar para ca, havera
+        // dois na mesma rolagem, e e isso que o caso
+        // `ISCA — um controle de mapa, nunca dois` reprova.
+        //
+        // **E-mail, WhatsApp, redes e horario continuam sem coluna** e
+        // continuam fora: espaco reservado ensinaria quem le que o dado vem.
       ],
     );
   }
