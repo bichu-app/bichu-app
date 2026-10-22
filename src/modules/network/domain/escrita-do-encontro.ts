@@ -26,7 +26,6 @@ import {
   errosDoEnderecoCompleto,
   hostDoEndereco,
 } from '../../../shared/url/endereco-completo.js';
-import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +39,24 @@ import type { Instant } from '../../../shared/types/brands.js';
  * (ADR-0025 emenda 3). A migracao `20261001000005` o tirou do `CHECK`.
  */
 export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
+/**
+ * `admin` ou `community`, o `CHECK` `network_events_origem_conhecida`
+ * (ADR-0025 emenda 3). **Declarado aqui, e nao importado de
+ * `shared/db/schema.ts`**, pela mesma razao que `Visibilidade`,
+ * `UnidadeDoValor` e `PublicacaoAdministrativa` logo acima e abaixo: este
+ * arquivo e compilado TAMBEM pelo backoffice, que roda `npm ci` so em
+ * `admin/` e nao tem as dependencias do back-end. Um `import type` de
+ * `schema.ts` arrasta o `import type ... from 'kysely'` dele para dentro do
+ * programa do painel, e `admin: npm run build` reprova com TS2307 -- sem
+ * nada de errado no painel nem no dominio. Medido em 21/10/2026.
+ *
+ * O que impede a copia de se afastar do banco NAO e a confianca: o
+ * adaptador `kysely-rede-administrativa.ts` le `origin` com o tipo de
+ * `schema.ts` e o atribui a `EncontroAdministrativo.origem`, com este tipo.
+ * Se os dois conjuntos se afastarem, o `tsc` do back-end reprova naquela
+ * atribuicao -- que e onde o desvio realmente machuca.
+ */
+export type OrigemDoEncontro = 'admin' | 'community';
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
