@@ -66,16 +66,45 @@ abstract final class TextosDoAchado {
 
   // -- Os campos ------------------------------------------------------------
 
-  static const String rotuloDaEspecie = 'O que é o bicho?';
-  static const String rotuloDoPorte = 'Do tamanho de quê?';
+  /// A ESPECIE NAO TEM ROTULO VISIVEL (cliente, 22/10/2026).
+  ///
+  /// O pedido, palavra por palavra: *"retirar 'o que é o bicho' porque o
+  /// titulo já tras isso, mas **mantenha cachorro, gato e outro**"*. Ele esta
+  /// certo: o titulo do passo 1 ja pergunta
+  /// ([tituloDoPasso1], *"Qual o animalzinho está perdido?"*), e a linha
+  /// *"O que é o bicho?"* logo abaixo fazia a mesma pergunta de novo.
+  ///
+  /// **O que saiu foi o ROTULO; as opcoes ficaram.** Cao, gato e outro
+  /// continuam sendo os tres segmentos, e `achado_textos_enxugados_test.dart`
+  /// cobra as tres presentes DEPOIS de o rotulo sair -- porque "apagar a
+  /// pergunta" e "apagar o campo" sao a mesma linha de codigo neste widget.
+  ///
+  /// **E O GRUPO CONTINUA TENDO NOME PARA QUEM NAO VE A TELA.**
+  /// `GrupoSegmentado` usa o mesmo `rotulo` no `Text` visivel e no
+  /// `Semantics.label`, e a prosa dele diz por que: sem o nome do grupo, o
+  /// leitor de tela anuncia *"Cão"* sozinho e nao ha como saber qual era a
+  /// pergunta. Entao o visivel saiu e o nome ficou -- e ele nao e a frase
+  /// removida, que seria a mesma redundancia por outro canal: e uma palavra,
+  /// a que a propria prosa de `GrupoSegmentado` usa de exemplo.
+  static const String nomeDaEspecie = 'Espécie';
+
+  /// O porte, na redacao que ele ditou em 22/10/2026.
+  ///
+  /// Era *"Do tamanho de quê?"*. A troca e dele, palavra por palavra:
+  /// *"trocar 'tamanho de quê?' por 'Qual é o porte?'"*.
+  static const String rotuloDoPorte = 'Qual é o porte?';
   static const String rotuloDoSexo = 'Macho ou fêmea?';
   static const String rotuloDaRaca = 'Raça';
   static const String rotuloDaCor = 'Cor';
   static const String escolherNaLista = 'Escolher na lista';
 
-  /// A ajuda da raca e da cor, dita junto do campo.
-  static const String listaSoSeVoceSouber =
-      'Só se você souber. Em branco funciona.';
+  // A AJUDA DA RACA E DA COR SAIU (cliente, 22/10/2026): *"retirar 'só se você
+  // souber, em branco funciona'"*. Ela dizia duas vezes o que o campo ja
+  // mostra: os dois seletores continuam com `estadoInicial` igual a
+  // `Escolher na lista` -- ou seja, visivelmente sem escolha -- e nenhum dos
+  // dois entra em `impedimentoDoPasso1`, porque raca e cor sao opcionais no
+  // contrato. Nada ficou exigido que nao era, e nenhuma instrucao de acao se
+  // perdeu: a frase nao ensinava a fazer nada, ela tranquilizava.
 
   static const String rotuloDeOnde = 'Onde você achou?';
   static const String rotuloDeQuando = 'Quando?';
@@ -147,9 +176,28 @@ abstract final class TextosDoAchado {
   /// pessoa parar de procurar caminho.
   static const String tituloDaFila = 'Vamos registrar quando a conexão voltar';
 
+  /// O corpo do desfecho, ENXUGADO em 22/10/2026 (*"tem muito texto, vamos
+  /// resumir isso"*).
+  ///
+  /// **O que saiu foi uma REPETICAO LITERAL, e nao uma informacao.** A segunda
+  /// frase era *"Quem confirma se é o mesmo animal é o tutor, nunca o Bichu
+  /// sozinho."* -- palavra por palavra o fim de [oQueOTutorRecebe], que as
+  /// duas telas desenham poucos centimetros abaixo, no bloco
+  /// `Quem foi avisado`. A mesma sentenca aparecia DUAS vezes na mesma tela,
+  /// nas duas telas (`/achado-registrado` e `/achados/:id`).
+  ///
+  /// **A copia que ficou e a de [oQueOTutorRecebe]**, e a escolha nao e
+  /// sorteio: a confirmacao humana e a parte delicada do bloco
+  /// `Quem foi avisado`, cuja prosa registra por que ele nao pode prometer
+  /// entrega -- tirar a frase de lá e que seria perda.
+  ///
+  /// **E a primeira frase NAO saiu**, embora seja uma promessa: ela e o
+  /// antecedente que [avisoNoCelularNaoFunciona] corrige na mesma tela
+  /// (*"Quando a gente diz que te avisa, é aqui dentro do aplicativo"*).
+  /// Apagar o *"a gente te avisa"* deixaria a correcao falando sozinha, sobre
+  /// uma promessa que a tela nao faz mais.
   static const String registradoCorpo =
-      'Se aparecer um tutor procurando um pet parecido, a gente te avisa. '
-      'Quem confirma se é o mesmo animal é o tutor, nunca o Bichu sozinho.';
+      'Se aparecer um tutor procurando um pet parecido, a gente te avisa.';
 
   /// O corpo da fila, com a promessa que a fila de fato cumpre.
   static const String filaCorpo =
@@ -160,9 +208,16 @@ abstract final class TextosDoAchado {
   ///
   /// *"achado sem foto vale menos, mas vale"* -- e por isso a frase diz o que
   /// falta sem sugerir que o achado nao existe.
+  ///
+  /// **ENXUGADA em 22/10/2026**: saiu *"e a foto entra na conversa quando o
+  /// tutor aparecer"*. Esta faixa so e desenhada com `resultado.foto != null`,
+  /// e nesse exato estado a tela acabou de escrever [fotoSoNaConversa] --
+  /// *"Mostrada só ao tutor, na conversa."* -- duas linhas acima, debaixo do
+  /// quadro da foto. "Na conversa", "ao tutor": era a mesma frase em outra
+  /// ordem. O que a faixa tem de proprio -- que o ENVIO ainda nao aconteceu e
+  /// que o achado vale sem ele, que e o criterio 4 -- ficou inteiro.
   static const String fotoAindaNaoSubiu =
-      'A foto ainda não foi enviada. O achado já vale sem ela, e a foto entra '
-      'na conversa quando o tutor aparecer.';
+      'A foto ainda não foi enviada. O achado já vale sem ela.';
 
   static const String semFoto = 'Você registrou este achado sem foto.';
 

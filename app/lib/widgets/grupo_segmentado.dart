@@ -31,9 +31,27 @@ class GrupoSegmentado<T> extends StatelessWidget {
     required this.aoSelecionar,
     super.key,
     this.erro,
+    this.rotuloVisivel = true,
   });
 
   final String rotulo;
+
+  /// Desenha o [rotulo] como `Text` acima dos segmentos. **O padrao e `true`,
+  /// e com ele nada muda**: os 7 outros grupos deste app nao passam este
+  /// campo e continuam exatamente como estavam.
+  ///
+  /// `false` esconde a LINHA e **nao o nome**: o [rotulo] continua indo para
+  /// `Semantics.label`, porque e dele que depende o anuncio
+  /// "Espécie, Cão, selecionado" em vez de "Cão" -- e e por isso que este
+  /// campo existe em vez de a tela passar `rotulo: ''`. Um grupo de radio sem
+  /// nome e um grupo que, para quem nao ve a tela, nao tem pergunta.
+  ///
+  /// O primeiro e unico uso e a especie em F3.5, por pedido do cliente de
+  /// 22/10/2026: o titulo do passo ja fazia a pergunta, e o rotulo a repetia
+  /// logo abaixo. **So use quando houver, na tela, um cabecalho que diga a
+  /// mesma coisa** -- esconder o rotulo de um grupo solto deixa a pessoa que
+  /// VE a tela sem a pergunta.
+  final bool rotuloVisivel;
   final List<OpcaoSegmentada<T>> opcoes;
   final T? selecionado;
   final ValueChanged<T> aoSelecionar;
@@ -53,11 +71,13 @@ class GrupoSegmentado<T> extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            rotulo,
-            style: textos.labelLarge?.copyWith(color: cores.textPrimary),
-          ),
-          const SizedBox(height: BichuEspaco.e2),
+          if (rotuloVisivel) ...<Widget>[
+            Text(
+              rotulo,
+              style: textos.labelLarge?.copyWith(color: cores.textPrimary),
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+          ],
           Wrap(
             spacing: BichuAlvoDeToque.gapMin,
             runSpacing: BichuAlvoDeToque.gapMin,

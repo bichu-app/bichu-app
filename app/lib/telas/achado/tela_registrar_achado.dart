@@ -542,7 +542,12 @@ class _Passo1 extends StatelessWidget {
         ],
         const SizedBox(height: BichuEspaco.e6),
         GrupoSegmentado<Especie>(
-          rotulo: TextosDoAchado.rotuloDaEspecie,
+          // **SEM ROTULO VISIVEL** (cliente, 22/10/2026): o titulo do passo 1
+          // ja faz a pergunta, e a linha abaixo dele a fazia de novo. Ver a
+          // prosa de `TextosDoAchado.nomeDaEspecie`: as tres opcoes ficam, e
+          // o grupo continua tendo NOME para o leitor de tela.
+          rotulo: TextosDoAchado.nomeDaEspecie,
+          rotuloVisivel: false,
           selecionado: rascunho.especie,
           opcoes: <OpcaoSegmentada<Especie>>[
             for (final e in Especie.values)
@@ -561,7 +566,9 @@ class _Passo1 extends StatelessWidget {
         SeletorDeLista(
           rotulo: TextosDoAchado.rotuloDaRaca,
           estadoInicial: TextosDoAchado.escolherNaLista,
-          ajuda: TextosDoAchado.listaSoSeVoceSouber,
+          // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"retirar 'só se
+          // você souber, em branco funciona'"*. O campo continua opcional e
+          // continua dizendo `Escolher na lista` enquanto nada foi escolhido.
           itens: racas,
           // Desabilitado sem especie, porque a lista e POR especie, e
           // desabilitado sem lista, porque nao ha o que escolher.
@@ -576,7 +583,9 @@ class _Passo1 extends StatelessWidget {
         SeletorDeLista(
           rotulo: TextosDoAchado.rotuloDaCor,
           estadoInicial: TextosDoAchado.escolherNaLista,
-          ajuda: TextosDoAchado.listaSoSeVoceSouber,
+          // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"retirar 'só se
+          // você souber, em branco funciona'"*. O campo continua opcional e
+          // continua dizendo `Escolher na lista` enquanto nada foi escolhido.
           // **Rotulada em texto, nunca amostra de cor sem nome** (criterio 2).
           itens: cores,
           habilitado: cores.isNotEmpty,

@@ -214,7 +214,39 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
       ),
       body: SafeArea(
         top: false,
-        bottom: false,
+        // **`bottom` FICA LIGADO, E E O CONSERTO DE 22/10/2026.**
+        //
+        // A queixa, palavra por palavra: *"alem do botao escanear a plaquinha
+        // que fica quebrado atras do menu nativo do celular e nao da para
+        // clicar"*.
+        //
+        // Esta tela **nao tem `bottomNavigationBar`**, e e so isso que a
+        // separa do desfecho. O `Scaffold` encolhe o `body` pelo que a
+        // `bottomNavigationBar` ocupa -- e e dentro DELA que
+        // `BarraDeAcaoFixa` aplica a sua `SafeArea`, que ja esta correta e
+        // **nao foi tocada**: 20 telas dependem daquela familia. Aqui nao ha
+        // barra nenhuma para consumir o recuo, entao `bottom: false` --
+        // copiado das telas que TEM barra -- jogava fora o unico recuo que
+        // existia, e o `ListView` passava a ter viewport ate o chao fisico da
+        // tela.
+        //
+        // MEDIDO em 390 x 844 dp com 48 dp de barra do sistema, rolado ate
+        // `maxScrollExtent`:
+        //
+        //   tela                    viewport   botao em       chao visivel
+        //   /achado-registrado      591 dp     595..635 dp    796 dp  (ok)
+        //   /achados/:id (aqui)     780 dp     784..824 dp    796 dp  (-28)
+        //
+        // 28 dp dos 40 dp de altura do botao ficavam atras da barra de
+        // navegacao do sistema -- e o toque naquela faixa pertence ao
+        // sistema, nao ao app. Com o recuo ligado o viewport para em 732 dp e
+        // o retangulo inteiro cabe acima de 796.
+        //
+        // **E a isca disto nao pode ser um toque.** `tocarSemRolar` usa
+        // `warnIfMissed: false`, e com ele um toque "passa" sobre widget
+        // coberto -- foi assim que o botao atras do teclado ficou verde. A
+        // isca de `achado_botao_escanear_alcancavel_test.dart` afirma
+        // RETANGULO dentro da area visivel, com a area do sistema descontada.
         // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
         // aplicativo de atualizar a pagina conforme o usuario puxa a pagina
         // para baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app --
