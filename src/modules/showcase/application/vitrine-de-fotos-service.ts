@@ -25,7 +25,6 @@
  */
 import type { UserId } from '../../../shared/types/brands.js';
 import type { Clock } from '../../../shared/ports/index.js';
-import { problemas } from '../../../shared/http/errors.js';
 import {
   recusarDimensaoDeclaradaPequena,
   type AutorizacaoDeCapa,
@@ -35,6 +34,7 @@ import type { DbExecutor } from '../../../shared/db/pool.js';
 import {
   TETO_DE_FOTOS_DA_VITRINE,
   conferirVitrinePedida,
+  recusarTetoDaVitrine,
   type FotoPedidaNaVitrine,
 } from '../domain/vitrine-de-fotos.js';
 import type { FotoDaVitrine, VitrineRepository } from '../ports/vitrine-repository.js';
@@ -98,13 +98,7 @@ export class VitrineDeFotos {
     // faz a tela dizer "você já tem nove" em vez de o envio subir e sumir.
     const atuais = await this.deps.vitrine.listar(dono);
     if (atuais.length >= TETO_DE_FOTOS_DA_VITRINE) {
-      throw problemas.validacao([
-        {
-          field: 'photos',
-          code: 'maximum',
-          message: `No máximo ${String(TETO_DE_FOTOS_DA_VITRINE)} fotos na vitrine.`,
-        },
-      ]);
+      recusarTetoDaVitrine();
     }
 
     const envio = await this.deps.envios.preparar(

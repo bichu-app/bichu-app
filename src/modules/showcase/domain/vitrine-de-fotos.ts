@@ -68,6 +68,31 @@ import type { ProblemFieldError } from '../../../shared/http/problem.js';
  */
 export const TETO_DE_FOTOS_DA_VITRINE = 9;
 
+/**
+ * A recusa do teto, com a FRASE que a pessoa le -- em uma fonte so.
+ *
+ * MEDIDO em 21/10/2026: esta recusa estava escrita duas vezes, aqui e em
+ * `application/vitrine-de-fotos-service.ts`, identicas. **As duas CONFERENCIAS
+ * continuam duas**, e isso e o desenho que o cabecalho deste arquivo explica:
+ * o servico confere ANTES de assinar (para a tela dizer "voce ja tem nove" em
+ * vez de o envio subir e sumir) e o dominio confere na ESCRITA. Momentos
+ * diferentes, motivos diferentes.
+ *
+ * O que nao precisava ser dois era a RESPOSTA: o campo, o codigo e a frase.
+ * "Dois lugares conferindo o MESMO numero e o desenho; dois numeros e o
+ * defeito" -- e duas redacoes da mesma frase sao o mesmo defeito, um nivel
+ * acima do numero.
+ */
+export function recusarTetoDaVitrine(): never {
+  throw problemas.validacao([
+    {
+      field: 'photos',
+      code: 'maximum',
+      message: `No máximo ${String(TETO_DE_FOTOS_DA_VITRINE)} fotos na vitrine.`,
+    },
+  ]);
+}
+
 /** De 2 a 150 caracteres, o mesmo intervalo do `CHECK` e das outras galerias. */
 const MINIMO_DO_TEXTO_ALTERNATIVO = 2;
 const MAXIMO_DO_TEXTO_ALTERNATIVO = 150;
@@ -108,13 +133,7 @@ export function conferirVitrinePedida(
   // quem o chamador controla, e uma décima foto aceita aqui só falharia no
   // `CHECK` do banco, como erro sem campo e sem motivo.
   if (fotos.length > TETO_DE_FOTOS_DA_VITRINE) {
-    throw problemas.validacao([
-      {
-        field: 'photos',
-        code: 'maximum',
-        message: `No máximo ${String(TETO_DE_FOTOS_DA_VITRINE)} fotos na vitrine.`,
-      },
-    ]);
+    recusarTetoDaVitrine();
   }
 
   const erros: ProblemFieldError[] = [];
