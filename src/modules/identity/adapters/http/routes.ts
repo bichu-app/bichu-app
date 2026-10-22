@@ -25,7 +25,7 @@ import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-
 import type { Conta, FotoDoPerfil } from '../../ports/identity-repository.js';
 import { projetarMeuPerfil } from '../../domain/resposta-do-perfil.js';
 import { problemas } from '../../../../shared/http/errors.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { corpoAusenteEhCorpoVazio } from '../../../../shared/http/corpo-opcional.js';
 import type { AuthService, Autenticado } from '../../application/auth-service.js';
 import type { ContextoDaRequisicao } from '../../application/dependencies.js';
@@ -482,22 +482,6 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   const token = cabecalho.slice('Bearer '.length).trim();
   if (token === '') throw problemas.naoAutenticado();
   return token;
-}
-
-/**
- * Schema de corpo tirado da própria especificação. Uma fonte só: schemas de
- * OpenAPI 3.1 são JSON Schema, e o Fastify valida com JSON Schema. Validação
- * escrita à mão em paralelo à spec é a segunda definição que diverge.
- */
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /**

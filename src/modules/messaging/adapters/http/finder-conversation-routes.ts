@@ -37,7 +37,7 @@ import {
   exigenciaDeIdempotencia,
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import {
   resolvedorDoTokenDoAchador,
   tokenDoAchador,
@@ -118,17 +118,6 @@ export interface DependenciasDasRotasDoAchador {
 
 function origemDe(request: FastifyRequest): OrigemDoPedido {
   return { correlationId: request.id, ip: request.ip };
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /** `FinderConversation`, campo a campo. Sem `id`, sem `case_id`. */

@@ -46,7 +46,7 @@ import type {
   PedidoDaConta,
   RecorteNoTempo,
 } from '../../ports/network-repository.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
 import type { DisponibilidadeDaPagina } from '../../../lostfound/ports/disponibilidade-da-pagina.js';
@@ -275,17 +275,6 @@ export interface DependenciasDasRotasDaRede {
    * `identity/ports`, `identity` le `media/ports`).
    */
   readonly paginas: DisponibilidadeDaPagina;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
-    );
-  }
-  return schema;
 }
 
 interface QueryDaAgenda {

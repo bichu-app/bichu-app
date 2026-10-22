@@ -31,7 +31,7 @@ import {
   exigenciaDeIdempotencia,
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { FoundReportService } from '../../application/found-report-service.js';
 import { rotuloDaArea, type AchadoGravado } from '../../domain/registro-de-achado.js';
@@ -118,17 +118,6 @@ export interface DependenciasDasRotasDeAchado {
   readonly idempotencia: Idempotencia;
   readonly contrato: Contrato;
   readonly clock: Clock;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */

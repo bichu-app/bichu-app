@@ -37,7 +37,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { PetId, UserId } from '../../../../shared/types/brands.js';
 import type { Autenticador } from '../../ports/autenticador.js';
 import type { PedidoDoTutor } from '../../ports/pedido-de-plaquinha.js';
@@ -81,22 +81,6 @@ export interface DependenciasDoPedidoDePlaquinha {
   readonly pedidos: PedidoDePlaquinhaService;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
-}
-
-/**
- * Schema de corpo tirado da propria especificacao, como nas outras rotas deste
- * modulo. Validacao escrita a mao em paralelo a spec e a segunda definicao que
- * diverge.
- */
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 async function contaDoChamador(

@@ -55,7 +55,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { SugestaoDoDiretorio } from '../../application/sugestao-do-diretorio.js';
 import type { CorpoDaSugestaoDoDiretorio } from '../../domain/sugestao-do-diretorio.js';
 import type { RevisaoDaIndicacao } from '../../domain/fila-de-indicacoes.js';
@@ -133,16 +133,6 @@ export interface DependenciasDaRotaDeSugestao {
 }
 
 /** O esquema do corpo, do contrato e pelo `operationId`. */
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
-    );
-  }
-  return schema;
-}
 
 export function registrarRotaDeSugestaoDoDiretorio(
   app: RegistradorDeRotas,

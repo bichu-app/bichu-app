@@ -35,7 +35,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import {
   executarComIdempotencia,
   exigenciaDeIdempotencia,
@@ -227,17 +227,6 @@ async function contaDoTeto(
   } catch {
     return undefined;
   }
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 export function registrarRotasDeTransferencia(

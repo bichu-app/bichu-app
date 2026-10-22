@@ -27,7 +27,7 @@ import {
   exigenciaDeIdempotencia,
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { corpoAusenteEhCorpoVazio } from '../../../../shared/http/corpo-opcional.js';
 import {
   hashDeAgente,
@@ -193,28 +193,6 @@ function enderecoDaImagemDoQr(
 /** Chamador que passou pelo token. `userId` é definido, e o tipo diz isso. */
 interface ChamadorComConta extends Chamador {
   readonly userId: UserId;
-}
-
-/**
- * Schema de corpo tirado da própria especificação. Uma fonte só: schemas de
- * OpenAPI 3.1 são JSON Schema, e o Fastify valida com JSON Schema. Validação
- * escrita à mão em paralelo à spec é a segunda definição que diverge.
- *
- * **Quinta cópia desta função no repositório** (as outras estão em `identity`,
- * `pets`, `lostfound` e `media`, idênticas). Ela é copiada e não importada
- * porque foi assim que as quatro anteriores nasceram; extrair para
- * `shared/http/` vale a pena e toca quatro módulos de uma vez, o que não cabe
- * nesta correção.
- */
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /**

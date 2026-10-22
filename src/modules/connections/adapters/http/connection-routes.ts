@@ -57,7 +57,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { ConexaoEntrePessoas } from '../../application/conexao-entre-pessoas.js';
 import type { DirecaoDoPedido } from '../../ports/connections-repository.js';
@@ -133,17 +133,6 @@ interface QueryDasCaixas {
   readonly direction?: DirecaoDoPedido;
   readonly page?: number;
   readonly limit?: number;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
-    );
-  }
-  return schema;
 }
 
 function tokenDoCabecalho(request: FastifyRequest): string {

@@ -14,7 +14,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import {
   resolvedorDoTokenDoAchador,
   tokenDoAchador,
@@ -52,17 +52,6 @@ export const rotaDaFotoDoAchador = defineRoute({
 export interface DependenciasDasRotasDoAvisoDoAchador {
   readonly avisos: AvisoDoAchadorService;
   readonly contrato: Contrato;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /** `FinderFoundReportView`, campo a campo. */
