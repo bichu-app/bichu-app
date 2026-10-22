@@ -196,7 +196,7 @@ A Loja é navegável **sem conta**, a lista é a mesma para todo mundo e **não 
 Algumas partes do Bichu estão sendo construídas e **ainda não coletam nada**. Antes de cada uma entrar no ar, esta política será atualizada com o que ela trata, para quê e por quanto tempo:
 
 - a conversa pelo site para quem achou um pet e não tem conta, em que a pessoa poderá deixar, se quiser, um nome e um e-mail para receber a resposta do tutor;
-- os eventos criados pela comunidade, com confirmação de presença (check-in) e galeria de fotos;
+- os eventos criados pela comunidade, com galeria de fotos;
 - as avaliações de profissionais do diretório;
 - os pontos, que serão só para quem tem conta;
 - a lista pública de pets perdidos da cidade.
