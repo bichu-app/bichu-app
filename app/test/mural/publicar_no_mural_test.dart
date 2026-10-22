@@ -44,6 +44,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/mural/publicar_no_mural.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/bichu_field.dart';
+import 'package:bichu/widgets/barra_do_teclado.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/previa_da_foto.dart';
 import 'package:flutter/material.dart';
@@ -139,14 +140,51 @@ Iterable<http.Request> aoArmazenamento(List<http.Request> capturado) =>
 Finder campoChamado(String rotulo) =>
     find.byWidgetPredicate((w) => w is BichuField && w.rotulo == rotulo);
 
+/// A frase de alcance que SAIU da tela em 22/10/2026, literal.
+///
+/// Ela mora aqui, e nao em `PublicarNoMural`: a constante foi APAGADA da tela,
+/// e um caso que lesse a constante da tela nao compilaria -- ou, pior, passaria
+/// a verde no dia em que alguem reintroduzisse a frase com outro nome de
+/// constante.
+const String fraseDoAlcance =
+    'Quem é sua conexão no Bichu vê esta publicação. Quem não é, não vê.';
+
+/// A frase de "foto enviada" que SAIU da tela em 22/10/2026, literal.
+const String fraseDaFotoEnviada = 'Foto enviada. Toque em Publicar para concluir.';
+
+/// O rotulo do campo de descricao da foto que SAIU em 22/10/2026, literal.
+const String rotuloDaDescricaoDaFoto = 'Descrição da foto';
+
+/// AS TRES FRASES REMOVIDAS, para a varredura de uma vez.
+///
+/// **A forma `(opcional)` entra na lista por um motivo medido**: `BichuField`
+/// com `opcional: true` desenhava `'<rotulo> (opcional)'`, entao procurar so
+/// `'Descrição da foto'` acharia ZERO mesmo com o campo de volta na tela.
+const List<String> tresFrasesRemovidas = <String>[
+  rotuloDaDescricaoDaFoto,
+  '$rotuloDaDescricaoDaFoto (opcional)',
+  fraseDoAlcance,
+  fraseDaFotoEnviada,
+];
+
 /// Quantas vezes a tela publicou de verdade, para a isca do `aoPublicar`.
 int publicacoesAvisadas = 0;
+
+/// O menor gabarito da casa (design system, secao 13) e o teclado da casa.
+///
+/// Os MESMOS numeros de `acao_primaria_fora_da_rolagem_test.dart`, e nao
+/// numeros novos: a pergunta "a acao primaria e alcancavel" ja tem gabarito
+/// nesta casa, e inventar outro mediria outra tela.
+const Size aparelhoPequeno = Size(320, 568);
+const double tecladoDp = 270;
 
 Future<List<http.Request>> montarOPublicar(
   WidgetTester tester, {
   required CameraEGaleria camera,
   Future<http.Response> Function()? respostaDoArmazenamento,
   http.Response Function()? respostaDoPost,
+  Size janela = const Size(420, 2400),
+  double teclado = 0,
 }) async {
   AppConfig.limparParaTeste();
   publicacoesAvisadas = 0;
@@ -163,8 +201,9 @@ Future<List<http.Request>> montarOPublicar(
   // primeira execucao. A janela alta constroi a tela inteira, e e isso que faz
   // a CONTAGEM de `BotaoPrimario` do caso "nao ha botao separado de salvar
   // foto" valer -- numa janela curta ela contaria so o que caiu na dobra.
-  tester.view.physicalSize = const Size(420, 2400);
+  tester.view.physicalSize = janela;
   tester.view.devicePixelRatio = 1;
+  if (teclado > 0) tester.view.viewInsets = FakeViewPadding(bottom: teclado);
   addTearDown(tester.view.reset);
 
   final capturado = <http.Request>[];
@@ -337,16 +376,26 @@ void main() {
   });
 
   testWidgets(
-      'ISCA (a) — a tela DIZ quem ve, porque nao ha seletor de visibilidade',
-      (tester) async {
-    // Decisao do cliente: *"se elas forem amigas nao tem problema, o que nao
-    // pode e ser publico, sem ter nenhum relacionamento"*. A visibilidade e UMA
-    // -- conexao aceita -- e um seletor com uma opcao nao e uma escolha. Sem
-    // seletor, a unica forma honesta de a pessoa saber o alcance e **dizer**.
+      'ISCA (22/10 item 5) — a tela NAO DIZ mais quem ve, e continua sem '
+      'seletor de visibilidade', (tester) async {
+    // Pedido do cliente de 22/10/2026: *"Retire essa descricao quem e sua
+    // conexao no bichu ve esta publicacao"*.
+    //
+    // **O ALCANCE NAO MUDOU**, e e isso que separa este caso de uma regressao:
+    // o recorte do servidor continua sendo a conexao aceita, e quem mede isso e
+    // `mural/mural_nao_sai_para_quem_nao_tem_relacao_test.dart`. O que saiu foi
+    // a tela DIZER o alcance -- e a tela tambem nao ganhou frase nenhuma no
+    // lugar, porque compensar o pedido dele com outra redacao seria nao
+    // atende-lo.
+    //
+    // ISCA: devolver a frase ao `build`. Este caso reprova pelo nome.
     final camera = CameraDeTeste(EstadoDaPermissao.concedida);
     await montarOPublicar(tester, camera: camera);
-    expect(find.text(PublicarNoMural.quemVe), findsOneWidget);
-    // E nao ha controle de visibilidade nenhum.
+
+    expect(find.text(fraseDoAlcance), findsNothing);
+    // E continua sem controle de visibilidade: a visibilidade e UMA, e um
+    // seletor com uma opcao nao e uma escolha. Retirar a FRASE nao abriu porta
+    // para um seletor entrar.
     expect(find.byType(DropdownButton<String>), findsNothing);
     expect(find.byType(Switch), findsNothing);
   });
@@ -577,63 +626,62 @@ void main() {
   });
 
   testWidgets(
-      'ISCA (d) — `alt_text` so vai COM foto, e o campo so nasce com foto',
-      (tester) async {
-    // O servidor responde `400` com `field: alt_text` para rotulo sem foto, e o
-    // `CHECK user_publications_texto_alternativo_pede_imagem` cobra o mesmo.
-    // Mandar o par invalido seria a tela produzindo um erro que ela sabia
-    // evitar.
+      'ISCA (22/10 item 1) — o campo de descricao da foto NAO EXISTE, e '
+      '`alt_text` nao vai no corpo', (tester) async {
+    // Pedido do cliente de 22/10/2026: *"remover a descricao da foto (opcional)
+    // da pagina de publicacao do usuario"*.
+    //
+    // **COM FOTO era o unico estado em que o campo nascia**, entao e com foto
+    // que a ausencia tem de ser medida -- um caso sem foto passaria a verde
+    // mesmo com o campo de volta.
+    //
+    // ISCA 1: devolver o `BichuField` de `Descrição da foto` ao `build`. Este
+    // caso reprova pelo nome na CONTAGEM de `BichuField`.
+    // ISCA 2: voltar a passar `textoAlternativo:` em `_publicar`. Este caso
+    // reprova pelo nome na leitura do CORPO -- e nenhuma contagem de widget
+    // pegaria essa segunda, que e por isso que as duas medidas estao aqui.
     final camera = CameraDeTeste(
       EstadoDaPermissao.concedida,
       foto: fotoEscolhidaDeTeste,
     );
     final capturado = await montarOPublicar(tester, camera: camera);
 
-    // SEM foto, o campo de descricao NAO existe.
-    expect(campoChamado(PublicarNoMural.rotuloDoAlternativo), findsNothing);
-
     await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
     await tester.pumpAndSettle();
 
-    // COM foto, ele existe e e OPCIONAL -- e o `(opcional)` no rotulo desenhado
-    // e o que diz isso a quem le, sem a tela precisar de mais uma frase.
-    expect(campoChamado(PublicarNoMural.rotuloDoAlternativo), findsOneWidget);
+    // CONTROLE POSITIVO: a foto esta na tela. Sem ele, "nao achei o campo"
+    // poderia ser "a foto nao entrou", e ai o estado medido seria outro.
     expect(
-      find.text('${PublicarNoMural.rotuloDoAlternativo} (opcional)'),
+      find.byType(PreviaDaFoto),
       findsOneWidget,
+      reason: 'CONTROLE POSITIVO: a foto nao entrou, entao este caso nao esta '
+          'medindo o estado em que o campo de descricao nascia',
     );
 
-    await tester.enterText(find.byType(TextField).first, 'olha ele');
-    await tester.enterText(find.byType(TextField).last, 'o Bidu correndo na grama');
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.publicar));
-    await tester.pumpAndSettle();
-
-    expect(postsDePublicacao(capturado).single['alt_text'], 'o Bidu correndo na grama');
-  });
-
-  testWidgets(
-      'ISCA (d) — `alt_text` VAZIO nao vai no corpo: `\'\'` bateria no piso de 2',
-      (tester) async {
-    // O rotulo e opcional, e `''` bateria no piso de 2 caracteres do `CHECK` --
-    // um `400` que a tela produziria por nao filtrar o vazio.
-    final camera = CameraDeTeste(
-      EstadoDaPermissao.concedida,
-      foto: fotoEscolhidaDeTeste,
+    // UM campo de texto na tela, e ele e o da MENSAGEM.
+    expect(
+      find.byType(BichuField),
+      findsOneWidget,
+      reason: 'nasceu um segundo `BichuField` com a foto na tela: o campo de '
+          'descricao da foto voltou',
     );
-    final capturado = await montarOPublicar(tester, camera: camera);
+    expect(campoChamado(PublicarNoMural.rotuloDoCampo), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'sem descricao');
-    await tester.enterText(find.byType(TextField).last, '   ');
+    await tester.enterText(find.byType(TextField), 'olha ele');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.publicar));
     await tester.pumpAndSettle();
 
     final posts = postsDePublicacao(capturado);
-    expect(posts.single.containsKey('alt_text'), isFalse);
+    expect(posts, hasLength(1));
+    // CONTRAPESO: a foto CONTINUA sendo confirmada pelo `Publicar`. Sem ele,
+    // este caso passaria num mundo em que a foto deixou de ser enviada.
     expect(posts.single['upload_id'], uploadDoMural);
+    expect(
+      posts.single.containsKey('alt_text'),
+      isFalse,
+      reason: 'a tela mandou `alt_text` sem ter campo para a pessoa escrever um',
+    );
   });
 
   testWidgets(
@@ -695,6 +743,357 @@ void main() {
       reason:
           'a tela mexeu no texto. O cliente decidiu em 18/10 que a moderacao e '
           'a denuncia mais a fila do painel, e nao um filtro no app',
+    );
+  });
+
+  // =========================================================================
+  // AS SEIS MUDANCAS QUE O CLIENTE PEDIU EM 22/10/2026
+  // =========================================================================
+
+  testWidgets(
+      'ISCA (22/10 itens 1,5,6) — AS TRES FRASES REMOVIDAS nao aparecem, com '
+      'CONTROLE POSITIVO da varredura', (tester) async {
+    // As tres, nas palavras dele:
+    //   1. *"remover a descricao da foto (opcional)"*;
+    //   5. *"Retire essa descricao quem e sua conexao no bichu ve esta
+    //      publicacao"*;
+    //   6. *"Remova a mensagem foto enviada, toque em publicar"*.
+    //
+    // ISCA: devolver QUALQUER uma das tres ao `build`. Este caso reprova pelo
+    // nome, dizendo qual frase voltou.
+    final camera = CameraDeTeste(
+      EstadoDaPermissao.concedida,
+      foto: fotoEscolhidaDeTeste,
+    );
+    await montarOPublicar(tester, camera: camera);
+
+    // ======================= CONTROLE POSITIVO ==============================
+    // **Ele vem ANTES das ausencias, e nao depois.** Sem ele, "nao achei" pode
+    // ser "nao varri": se a varredura estivesse olhando a arvore errada, as
+    // quatro ausencias abaixo passariam a verde numa tela que ainda mostra as
+    // tres frases.
+    //
+    // E o controle usa um texto COM ACENTO de proposito: as tres frases
+    // removidas tem `ç` e `ã`, e um caminho de busca que tropeca em acento
+    // precisa ser pego aqui -- e nao interpretado como ausencia.
+    expect(
+      find.text(PublicarNoMural.rotuloDoCampo),
+      findsOneWidget,
+      reason:
+          'CONTROLE POSITIVO: a varredura nao enxerga o rotulo do campo de '
+          'texto, que CONTINUA na tela e tem acento. Enquanto ela nao enxerga '
+          'o que esta la, nenhuma das ausencias abaixo prova nada.',
+    );
+    // **Pelo BOTAO, e nao por `find.text`**: `tituloDaTela` e `publicar` sao a
+    // mesma palavra, entao `find.text('Publicar')` acha DOIS -- o titulo da
+    // `AppBar` e o rotulo do botao. Medido: foi assim que este caso reprovou na
+    // primeira execucao.
+    expect(
+      find.widgetWithText(BotaoPrimario, PublicarNoMural.publicar),
+      findsOneWidget,
+    );
+
+    // ---- SEM FOTO ---------------------------------------------------------
+    for (final frase in tresFrasesRemovidas) {
+      expect(
+        find.text(frase),
+        findsNothing,
+        reason: 'a frase removida voltou a tela (sem foto): "$frase"',
+      );
+    }
+
+    // ---- COM FOTO, e e aqui que duas das tres nasciam ---------------------
+    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
+    await tester.pumpAndSettle();
+
+    // CONTROLE POSITIVO do segundo estado: a foto entrou de verdade.
+    expect(
+      find.byType(PreviaDaFoto),
+      findsOneWidget,
+      reason: 'CONTROLE POSITIVO: a foto nao entrou, entao este bloco nao esta '
+          'medindo o estado em que as frases nasciam',
+    );
+    for (final frase in tresFrasesRemovidas) {
+      expect(
+        find.text(frase),
+        findsNothing,
+        reason: 'a frase removida voltou a tela (com foto): "$frase"',
+      );
+    }
+  });
+
+  testWidgets(
+      'ISCA (22/10 item 3) — a ordem e IMAGEM -> TEXTO -> PUBLICAR, medida por '
+      'posicao vertical', (tester) async {
+    // Pedido dele: *"Ordene melhor essa pagina, primeiro a imagem, depois o
+    // campo de texto e por fim o botao publicar"*.
+    //
+    // ISCA: trocar a ordem dos filhos do `ListView` em `build` -- por exemplo
+    // devolver o campo de texto para antes da foto, que era a ordem de 20/10.
+    // Este caso reprova pelo nome na comparacao de `dy`.
+    //
+    // **Mede POSICAO, e nao ordem na lista de filhos**: a ordem no codigo pode
+    // ser a certa e o desenho sair trocado (um `Column` reverso, um
+    // `verticalDirection`), e e o desenho que a pessoa ve.
+    final camera = CameraDeTeste(
+      EstadoDaPermissao.concedida,
+      foto: fotoEscolhidaDeTeste,
+    );
+    await montarOPublicar(tester, camera: camera);
+
+    Finder oPublicar() =>
+        find.widgetWithText(BotaoPrimario, PublicarNoMural.publicar);
+    Finder aPorta() =>
+        find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto);
+
+    // ---- SEM FOTO: as PORTAS da foto vem antes do campo -------------------
+    // Elas estao no lugar da imagem, e por isso a regra vale para elas: e ali
+    // que a foto vai aparecer.
+    expect(
+      tester.getTopLeft(aPorta()).dy,
+      lessThan(tester.getTopLeft(find.byType(BichuField)).dy),
+      reason: 'sem foto, os controles de foto nao estao ANTES do campo de texto',
+    );
+    expect(
+      tester.getTopLeft(find.byType(BichuField)).dy,
+      lessThan(tester.getTopLeft(oPublicar()).dy),
+      reason: 'sem foto, o campo de texto nao esta ANTES do `Publicar`',
+    );
+
+    // ---- COM FOTO: a PREVIA vem antes do campo ---------------------------
+    await tester.tap(aPorta());
+    await tester.pumpAndSettle();
+
+    final dyPrevia = tester.getTopLeft(find.byType(PreviaDaFoto)).dy;
+    final dyCampo = tester.getTopLeft(find.byType(BichuField)).dy;
+    final dyPublicar = tester.getTopLeft(oPublicar()).dy;
+
+    expect(
+      dyPrevia,
+      lessThan(dyCampo),
+      reason: 'a IMAGEM nao esta antes do campo de texto. O cliente pediu '
+          '"primeiro a imagem, depois o campo de texto"',
+    );
+    expect(
+      dyCampo,
+      lessThan(dyPublicar),
+      reason: 'o campo de texto nao esta antes do `Publicar`. O cliente pediu '
+          '"por fim o botao publicar"',
+    );
+  });
+
+  testWidgets(
+      'ISCA (22/10 item 2) — a previa sai na PROPORCAO em que a publicacao e '
+      'cortada (1:1), e o ponto focal nao muda', (tester) async {
+    // Pedido dele: *"Implementar recurso para o usuario posicionar melhor a
+    // foto e evitar que corte a imagem do usuario"*.
+    //
+    // **O QUE ESTE CASO MEDE, e o que ele NAO mede.** A publicacao sai 1:1
+    // (`DERIVADAS_DA_PUBLICACAO` = `{largura: 1024, altura: 1024}`, e `altura`
+    // presente vale `fit: cover`), e a linha do tempo desenha 1:1. A previa
+    // desta tela era de largura cheia por 300 dp -- **um enquadramento que nao
+    // e o publicado** -- e escondia da pessoa exatamente o que o quadrado ia
+    // cortar. Agora ela e o mesmo quadrado.
+    //
+    // Ele NAO mede a pessoa ESCOLHENDO a regiao: essa parte nao existe no
+    // produto, e o relatorio diz por que (o `recorte` do servidor nao tem
+    // caminho de contrato nem de persistencia para a publicacao).
+    //
+    // ISCA: devolver a altura fixa de 300 a previa. Este caso reprova pelo nome
+    // na comparacao largura/altura.
+    final camera = CameraDeTeste(
+      EstadoDaPermissao.concedida,
+      foto: fotoEscolhidaDeTeste,
+    );
+    await montarOPublicar(tester, camera: camera);
+
+    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
+    await tester.pumpAndSettle();
+
+    final quadro = tester.getSize(find.byType(PreviaDaFoto));
+    expect(
+      quadro.width,
+      greaterThan(0),
+      reason: 'CONTROLE POSITIVO: a previa tem largura zero, entao a razao '
+          'abaixo nao mede enquadramento nenhum',
+    );
+    expect(
+      quadro.height,
+      closeTo(quadro.width / PublicarNoMural.proporcaoDaPublicacao, 0.5),
+      reason:
+          'a previa nao esta na proporcao em que a publicacao sai (1:1). A '
+          'pessoa nao ve o que o servidor vai cortar, que e a reclamacao de '
+          '20/10 ("a maioria esta cortando informacao relevante")',
+    );
+
+    // ---- O PONTO FOCAL NAO MUDOU, e isso e MEDIDO e nao suposto -----------
+    // `Alignment(0, -1 / 3)` e das telas de PET (`tela_editar_pet.dart`,
+    // `cartao_de_pet.dart`, e mais tres), e existe LA para a foto nao saltar no
+    // instante em que a derivada chega -- o ponto focal tem de ser o mesmo nos
+    // dois ramos que desenham imagem. Esta tela sempre desenhou no CENTRO, nos
+    // dois ramos, e mudar a altura da previa nao e motivo para mexer nisso.
+    expect(
+      tester.widget<PreviaDaFoto>(find.byType(PreviaDaFoto)).pontoFocal,
+      Alignment.center,
+      reason:
+          'o ponto focal desta tela mudou. Se ele passar a diferir entre a foto '
+          'escolhida e a derivada, o salto que `PreviaDaFoto.pontoFocal` existe '
+          'para evitar volta',
+    );
+  });
+
+  testWidgets(
+      'ISCA (22/10 item 3) — o `Publicar` e ALCANCAVEL com o TECLADO ABERTO, '
+      'por RETANGULO dentro da janela', (tester) async {
+    // **ALCANCE, e nao "o toque nao lancou".** `tocarSemRolar` usa
+    // `warnIfMissed: false`, entao um toque num botao COBERTO "passa" sem
+    // excecao nenhuma. Esta tela tem campo de texto corrido, entao o teclado
+    // abre de verdade -- e a reordenacao de 22/10 poe o `Publicar` por ULTIMO,
+    // que e o lugar mais exposto da tela. A prova e geometrica.
+    //
+    // =====================================================================
+    // O QUE ESTA MEDICAO DESCOBRIU, e esta escrito aqui porque custou caro
+    // =====================================================================
+    // Com o teclado ABERTO, `BichuField` de texto corrido desenha
+    // `BarraDoTeclado` encostada no topo do teclado (48 dp), e esta tela **nao
+    // reserva espaco para ela** -- ela nao usa `BarraDeAcaoFixa`, que e a unica
+    // peca que le `BarraDoTeclado.alturaEmUso`.
+    //
+    // MEDIDO neste gabarito, com a lista no fim da rolagem: `Publicar` ocupa
+    // y 234..282 e a faixa ocupa y 250..298. **32 dos 48 dp do botao ficam sob
+    // a faixa, e o CENTRO dele tambem** -- um `tap` no centro atinge o
+    // `Concluir` da faixa, e so nao reprovou calado porque este caso cobra a
+    // publicacao no fim. O cabecalho de `barra_do_teclado.dart` previu
+    // exatamente isto: *"consertar o teclado cobrindo o `Salvar` produziria a
+    // faixa cobrindo o `Salvar`, que e o mesmo defeito com outro nome"*.
+    //
+    // **Isso NAO e regressao desta mudanca**: o `Publicar` ja era o ultimo
+    // filho da lista antes de 22/10, e a sobreposicao ja existia. Nao ha
+    // conserto aqui porque reservar a faixa muda COMO a tela se desenha, e
+    // isso nao esta entre as seis coisas pedidas.
+    //
+    // Entao o caminho medido e o que o produto oferece: a faixa existe para a
+    // pessoa FECHAR o teclado, e e depois disso que ela publica.
+    //
+    // ISCA: trocar o `Publicar` de lugar para dentro de um rodape que nao rola
+    // (ou tirar a rolagem da tela). O botao deixa de caber na janela, e este
+    // caso reprova pelo nome no retangulo -- e nenhum outro caso deste arquivo
+    // reprova, porque todos eles rodam numa janela de 2400 dp.
+    final camera = CameraDeTeste(
+      EstadoDaPermissao.concedida,
+      foto: fotoEscolhidaDeTeste,
+    );
+    final capturado = await montarOPublicar(
+      tester,
+      camera: camera,
+      janela: aparelhoPequeno,
+      teclado: tecladoDp,
+    );
+
+    // Com foto na tela: o caso PIOR depois da reordenacao, porque a previa
+    // quadrada ocupa quase toda a area visivel e empurra o `Publicar`.
+    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
+    await tester.pumpAndSettle();
+
+    // **O CAMPO PRECISA SER ROLADO ATE A VISTA ANTES DE RECEBER TEXTO.**
+    //
+    // `ListView` nao constroi o que esta fora da viewport, e neste gabarito
+    // sobram 298 dp -- a previa quadrada sozinha ocupa quase tudo. Medido: sem
+    // esta rolagem o `enterText` estourou `Iterable.single` em
+    // `WidgetTester.showKeyboard`, porque `find.byType(TextField)` achou ZERO.
+    //
+    // **`scrollable:` EXPLICITO**: um `TextField` com foco tem `Scrollable`
+    // PROPRIO (o do `EditableText`), e `scrollUntilVisible` sem alvo chama
+    // `widget` sobre `find.byType(Scrollable)` -- que acha DOIS e estoura
+    // `Bad state: Too many elements`. O `.first` e o do `ListView`.
+    final aRolagem = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.byType(BichuField),
+      120,
+      scrollable: aRolagem,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'o momento do dia');
+    await tester.pumpAndSettle();
+
+    // ---- CONTROLE POSITIVO: o teclado esta ABERTO de verdade --------------
+    // A faixa do teclado so nasce com campo de texto corrido focado E teclado
+    // na tela. Se ela nao estiver aqui, este caso nao esta medindo o estado que
+    // ele diz medir, e o retangulo abaixo valeria para uma tela sem teclado.
+    expect(
+      find.text(BarraDoTeclado.rotuloConcluir),
+      findsOneWidget,
+      reason:
+          'CONTROLE POSITIVO: `BarraDoTeclado` nao esta na tela, entao o '
+          'teclado nao esta aberto e este caso nao mede alcance com teclado',
+    );
+
+    // ---- A PESSOA FECHA O TECLADO PELA FAIXA QUE EXISTE PARA ISSO ---------
+    // Este e o caminho do produto, e nao um atalho de teste: `BarraDoTeclado`
+    // foi feita porque em campo de texto corrido NAO HA tecla que feche o
+    // teclado (e no iOS nao ha botao voltar).
+    await tester.tap(find.text(BarraDoTeclado.rotuloConcluir));
+    await tester.pumpAndSettle();
+    // E o sistema desce o teclado: `viewInsets` e do SISTEMA, e nao da tela.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpAndSettle();
+
+    // CONTROLE: a faixa saiu junto com o teclado.
+    expect(
+      find.text(BarraDoTeclado.rotuloConcluir),
+      findsNothing,
+      reason: 'a faixa do teclado ficou na tela com o teclado fechado, e ela '
+          'continuaria cobrindo o `Publicar`',
+    );
+
+    final publicar = find.widgetWithText(FilledButton, PublicarNoMural.publicar);
+    await tester.scrollUntilVisible(publicar, 120, scrollable: aRolagem);
+    await tester.pumpAndSettle();
+
+    // O que a janela MOSTRA agora: a janela inteira, sem teclado.
+    final janela = Rect.fromLTRB(
+      0,
+      0,
+      aparelhoPequeno.width,
+      aparelhoPequeno.height,
+    );
+    final caixa = tester.getRect(publicar);
+
+    expect(
+      caixa.top,
+      greaterThanOrEqualTo(janela.top),
+      reason: 'o `Publicar` ficou ACIMA da area visivel: a pessoa nao o ve',
+    );
+    expect(
+      caixa.bottom,
+      lessThanOrEqualTo(janela.bottom),
+      reason: 'o `Publicar` ficou ABAIXO da area visivel, fora da janela',
+    );
+    expect(caixa.left, greaterThanOrEqualTo(janela.left));
+    expect(caixa.right, lessThanOrEqualTo(janela.right));
+
+    // E o botao esta VIVO: um retangulo de botao desabilitado nao prova
+    // alcance de nada.
+    expect(
+      tester.widget<FilledButton>(publicar).onPressed,
+      isNotNull,
+      reason: 'o `Publicar` esta DESABILITADO, entao o retangulo medido acima e '
+          'de um botao morto',
+    );
+
+    // ---- E O TOQUE CHEGA, e e isso que fecha a prova ----------------------
+    // **`warnIfMissed: false` NAO esta aqui para tolerar o toque perdido**: o
+    // retangulo acima ja exigiu que o botao esteja na janela, e o `expect` de
+    // baixo exige que a PUBLICACAO tenha saido. Toque coberto nao publica, e o
+    // caso reprova.
+    await tester.tap(publicar, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(
+      postsDePublicacao(capturado),
+      hasLength(1),
+      reason:
+          'o botao estava na janela, habilitado, e o toque nao publicou nada: '
+          'alguma coisa esta COBRINDO o `Publicar`',
     );
   });
 }

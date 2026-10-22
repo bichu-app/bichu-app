@@ -18,7 +18,16 @@ import '../../widgets/previa_da_foto.dart';
 ///
 /// Pedido dele, de 20/10/2026, literal: *"na secao do mural, nao tem a caixa de
 /// texto para o usuario escrever uma mensagem, subir uma foto e publicar o
-/// conteudo."* Esta tela e as tres coisas, nessa ordem, numa tela so.
+/// conteudo."* Esta tela e as tres coisas, numa tela so.
+///
+/// ## A ORDEM, e ela e pedido dele de 22/10/2026
+///
+/// *"Ordene melhor essa pagina, primeiro a imagem, depois o campo de texto e
+/// por fim o botao publicar"*. Entao: **imagem -> texto -> `Publicar`**, e e
+/// essa a ordem dos filhos do `ListView` em [_PublicarNoMuralState.build].
+///
+/// A ordem de 20/10 era a inversa (texto primeiro), e ela tambem era dele --
+/// *"escrever uma mensagem, subir uma foto"*. A de 22/10 e mais nova e manda.
 ///
 /// ## O PADRAO DE FOTO, e ele e decisao dele de 19/10/2026
 ///
@@ -65,7 +74,23 @@ import '../../widgets/previa_da_foto.dart';
 /// - **nenhum lugar, nenhuma cidade, nenhum mapa** (ADR-0006: nao ha
 ///   geocodificacao);
 /// - **nenhuma mencao a pessoa.** O contrato nao tem campo, e nao ha busca de
-///   pessoas neste produto.
+///   pessoas neste produto;
+/// - **nenhum campo de descricao da foto.** Pedido dele de 22/10/2026:
+///   *"remover a descricao da foto (opcional) da pagina de publicacao do
+///   usuario"*. `user_publications.alt_text` e a coluna continuam aceitando o
+///   rotulo, e `EscritaDoMural.publicar` continua com o parametro: o que saiu
+///   foi a FORMA de a pessoa escrever um, e esta tela deixou de mandar
+///   `alt_text`. **Consequencia, e ela e dele e nao minha**: a foto publicada
+///   nao tem mais rotulo para leitor de tela;
+/// - **nenhuma frase dizendo quem ve a publicacao.** Pedido dele de 22/10/2026:
+///   *"Retire essa descricao quem e sua conexao no bichu ve esta publicacao"*.
+///   O ALCANCE NAO MUDOU -- o recorte do servidor continua sendo a conexao
+///   aceita (`mural_nao_sai_para_quem_nao_tem_relacao_test.dart`); o que saiu
+///   foi a tela DIZER isso. Nenhuma frase nova entrou no lugar, de proposito:
+///   compensar o pedido dele com outra redacao seria nao atende-lo;
+/// - **nenhuma mensagem de "foto enviada".** Pedido dele de 22/10/2026:
+///   *"Remova a mensagem foto enviada, toque em publicar"*. A previa da foto na
+///   tela e o que diz que ela chegou.
 class PublicarNoMural extends StatefulWidget {
   const PublicarNoMural({
     required this.escrita,
@@ -91,29 +116,33 @@ class PublicarNoMural extends StatefulWidget {
   static const int tetoDoTexto = 280;
 
   static const String tituloDaTela = 'Publicar';
-  static const String rotuloDoCampo = 'Sua mensagem';
+  static const String rotuloDoCampo = 'Conte esse momento';
   static const String exemploDoCampo = 'O que está acontecendo?';
   static const String tirarFoto = 'Tirar uma foto';
   static const String escolherDaGaleria = 'Escolher da galeria';
-  static const String rotuloDoAlternativo = 'Descrição da foto';
-  static const String ajudaDoAlternativo =
-      'Para quem usa leitor de tela. Opcional.';
   static const String publicar = 'Publicar';
   static const String textoObrigatorio = 'Escreva uma mensagem para publicar.';
-  static const String fotoPronta = 'Foto enviada. Toque em Publicar para concluir.';
   static const String fotoSemSinal =
       'A foto não subiu: sem conexão. Escolha a foto de novo.';
   static const String fotoRecusada =
       'Essa foto não foi aceita. Tente outra, de até 5 MB.';
   static const String publicada = 'Publicado.';
 
-  /// A explicacao de quem ve o que, dita NA TELA e antes de publicar.
+  /// A PROPORCAO em que a publicacao sai, e ela e **1:1** -- medida, nao
+  /// suposta.
   ///
-  /// Ela existe porque a visibilidade nao e escolhivel: sem um seletor, a unica
-  /// forma honesta de a pessoa saber o alcance do que ela escreve e **dizer**. E
-  /// e o alcance literal do recorte do servidor, nao uma aproximacao.
-  static const String quemVe =
-      'Quem é sua conexão no Bichu vê esta publicação. Quem não é, não vê.';
+  /// `DERIVADAS_DA_PUBLICACAO` (`src/modules/media/domain/derivadas.ts`) declara
+  /// UMA derivada, `{largura: 1024, altura: 1024}`, e `altura` presente vale
+  /// `fit: cover` no processador: **a foto sai QUADRADA**. A linha do tempo
+  /// desenha o mesmo 1:1 (`ImagemDaRede(..., proporcao: 1)`,
+  /// `tela_do_mural.dart`).
+  ///
+  /// A previa desta tela mostrava um retangulo de largura cheia por 300 dp --
+  /// **um enquadramento que nao e o que vai ser publicado**. Numa foto de
+  /// celular em pe isso esconde exatamente o que o quadrado vai cortar, e e
+  /// disso que o cliente reclamou. A previa quadrada nao escolhe o corte: ela
+  /// para de esconder que ele existe.
+  static const double proporcaoDaPublicacao = 1;
 
   @override
   State<PublicarNoMural> createState() => _PublicarNoMuralState();
@@ -121,7 +150,6 @@ class PublicarNoMural extends StatefulWidget {
 
 class _PublicarNoMuralState extends State<PublicarNoMural> {
   final TextEditingController _texto = TextEditingController();
-  final TextEditingController _alternativo = TextEditingController();
 
   FotoLocal? _escolhida;
 
@@ -133,7 +161,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
   bool _enviando = false;
   bool _publicando = false;
   MensagemDeErro? _faixa;
-  String? _confirmacao;
   String? _erroDoTexto;
 
   @override
@@ -147,7 +174,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
   void dispose() {
     _texto.removeListener(_textoMudou);
     _texto.dispose();
-    _alternativo.dispose();
     super.dispose();
   }
 
@@ -214,7 +240,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
       setState(() {
         _escolhida = null;
         _uploadPendente = null;
-        _confirmacao = null;
         _faixa = MensagemDeErro(texto: recusa);
       });
       anunciar(context, recusa);
@@ -224,7 +249,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     setState(() {
       _escolhida = foto;
       _uploadPendente = null;
-      _confirmacao = null;
       _faixa = null;
       _enviando = true;
     });
@@ -247,7 +271,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
       switch (desfecho) {
         case DesfechoDoEnvio.enviada:
           _uploadPendente = destino.uploadId;
-          _confirmacao = PublicarNoMural.fotoPronta;
         case DesfechoDoEnvio.semSinal:
           // **A previa SAI quando o envio falha**: o `Publicar` nao teria o que
           // gravar, e manter um retrato na tela depois de um envio que nao
@@ -260,24 +283,8 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
       }
     });
     if (!mounted) return;
-    anunciar(
-      context,
-      desfecho == DesfechoDoEnvio.enviada
-          ? PublicarNoMural.fotoPronta
-          : (_faixa?.texto ?? ''),
-    );
-  }
-
-  /// O rotulo acessivel a mandar, ou **nulo**.
-  ///
-  /// Nulo em dois casos, e os dois importam: sem foto (o servidor responde
-  /// `400` com `field: alt_text`, e mandar o par invalido seria a tela
-  /// produzindo um erro que ela sabia evitar) e com o campo vazio (o rotulo e
-  /// opcional, e `''` bateria no piso de 2 caracteres do `CHECK`).
-  String? _rotuloDaFoto() {
-    if (_uploadPendente == null) return null;
-    final rotulo = _alternativo.text.trim();
-    return rotulo.isEmpty ? null : rotulo;
+    final aviso = _faixa?.texto;
+    if (aviso != null) anunciar(context, aviso);
   }
 
   /// Tira a foto escolhida **sem publicar nada**.
@@ -289,8 +296,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     setState(() {
       _escolhida = null;
       _uploadPendente = null;
-      _alternativo.clear();
-      _confirmacao = null;
     });
   }
 
@@ -305,17 +310,18 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     setState(() {
       _publicando = true;
       _faixa = null;
-      _confirmacao = null;
     });
 
     try {
+      // **`alt_text` NAO VAI, e a ausencia e o pedido do cliente de 22/10/2026**:
+      // *"remover a descricao da foto (opcional) da pagina de publicacao do
+      // usuario"*. Sem campo nao ha o que mandar, e `textoAlternativo` fica
+      // omitido -- o parametro continua na porta (`EscritaDoMural.publicar`)
+      // porque a coluna e o contrato continuam aceitando o rotulo; o que saiu
+      // foi a forma de a PESSOA escrever um.
       await widget.escrita.publicar(
         texto: _texto.text.trim(),
         uploadId: _uploadPendente,
-        // O rotulo **so vale com foto**: sem `upload_id` o servidor responde
-        // `400` com `field: alt_text`, e mandar o par invalido seria a tela
-        // produzindo um erro que ela sabia evitar.
-        textoAlternativo: _rotuloDaFoto(),
       );
       if (!mounted) return;
       // **`_publicando` volta a `false` ANTES de fechar**, e nao e detalhe: a
@@ -330,7 +336,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
         _uploadPendente = null;
       });
       _texto.clear();
-      _alternativo.clear();
       widget.aoPublicar?.call();
       anunciar(context, PublicarNoMural.publicada);
       if (!mounted) return;
@@ -350,13 +355,20 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     }
   }
 
+  /// A ORDEM DA TELA, e ela e pedido do cliente de 22/10/2026:
+  /// *"Ordene melhor essa pagina, primeiro a imagem, depois o campo de texto e
+  /// por fim o botao publicar"*.
+  ///
+  /// **A faixa de erro fica ACIMA das tres**, e isso nao contraria a ordem: ela
+  /// nao e conteudo da publicacao, e uma mensagem sobre a tela. Empurra-la para
+  /// baixo da imagem poria o motivo da falha fora da primeira dobra, que e o
+  /// defeito que `FaixaDeAviso` existe para nao ter.
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final local = _escolhida;
     final faixa = _faixa;
-    final confirmacao = _confirmacao;
 
     return Scaffold(
       appBar: AppBar(title: const Text(PublicarNoMural.tituloDaTela)),
@@ -373,45 +385,36 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
               const SizedBox(height: BichuEspaco.e4),
             ],
 
-            // A CAIXA DE TEXTO, primeira coisa da tela: e ela que o cliente
-            // disse que faltava, e e por ela que a pessoa comeca.
-            BichuField(
-              rotulo: PublicarNoMural.rotuloDoCampo,
-              controlador: _texto,
-              exemplo: PublicarNoMural.exemploDoCampo,
-              erro: _erroDoTexto,
-              habilitado: !_ocupado,
-              // Cinco linhas visiveis e o campo crescendo: 280 caracteres em
-              // uma linha so esconderiam o comeco do que a pessoa escreveu.
-              linhas: 5,
-              capitalizacao: TextCapitalization.sentences,
-              // **SEM `limite`**, e a ausencia e deliberada: `maxLength` do
-              // Material TRUNCA no teclado, e truncar em silencio apaga o que a
-              // pessoa escreveu. O contador abaixo diz quanto falta, e o
-              // `Publicar` e quem recusa — com o motivo visivel.
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            _contador(textos, cores),
-
-            const SizedBox(height: BichuEspaco.e4),
-            // QUEM VE, dito na tela. Ver `PublicarNoMural.quemVe`.
-            Text(
-              PublicarNoMural.quemVe,
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
-
-            const SizedBox(height: BichuEspaco.e6),
-
-            // A FOTO. Previa do arquivo LOCAL, por `PreviaDaFoto` — nunca
-            // `Image.file` cru, que nao trata `cacheWidth` nem `errorBuilder`.
+            // =================================================================
+            // 1. A IMAGEM
+            // =================================================================
+            //
+            // Previa do arquivo LOCAL, por `PreviaDaFoto` -- nunca `Image.file`
+            // cru, que nao trata `cacheWidth` nem `errorBuilder`.
+            //
+            // **QUADRADA, e o quadrado e medido e nao escolhido**: ver
+            // `PublicarNoMural.proporcaoDaPublicacao`. A peca nao foi tocada --
+            // ela ja aceita a altura por parametro, e e o `LayoutBuilder` que
+            // transforma a largura disponivel na altura que fecha o 1:1.
             if (local != null || _enviando) ...<Widget>[
               _enviando && local == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : PreviaDaFoto(
-                      foto: local,
-                      descricao: _alternativo.text.trim().isEmpty
-                          ? 'Foto escolhida'
-                          : _alternativo.text.trim(),
+                  ? const SizedBox(
+                      height: 200,
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : LayoutBuilder(
+                      builder: (context, limites) => PreviaDaFoto(
+                        foto: local,
+                        descricao: 'Foto escolhida',
+                        // `maxWidth` infinito nao acontece dentro de um
+                        // `ListView` vertical, que da a largura da viewport.
+                        // O 300 e a altura de antes, e so existe para o caso
+                        // de esta tela um dia ser desenhada sem largura.
+                        altura: limites.maxWidth.isFinite
+                            ? limites.maxWidth /
+                                PublicarNoMural.proporcaoDaPublicacao
+                            : 300,
+                      ),
                     ),
               const SizedBox(height: BichuEspaco.e2),
               if (_uploadPendente != null)
@@ -420,30 +423,13 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
                   child: const Text('Remover a foto'),
                 ),
               const SizedBox(height: BichuEspaco.e4),
-              // O rotulo acessivel da foto, **opcional**. Ver a decisao no
-              // comentario da coluna `user_publications.alt_text`: aqui a
-              // mensagem e obrigatoria e o leitor de tela sempre tem o que
-              // anunciar, ao contrario da capa do encontro.
-              if (_uploadPendente != null)
-                BichuField(
-                  rotulo: PublicarNoMural.rotuloDoAlternativo,
-                  controlador: _alternativo,
-                  ajuda: PublicarNoMural.ajudaDoAlternativo,
-                  opcional: true,
-                  habilitado: !_ocupado,
-                  linhas: 2,
-                  capitalizacao: TextCapitalization.sentences,
-                ),
-              const SizedBox(height: BichuEspaco.e4),
             ],
 
-            if (confirmacao != null) ...<Widget>[
-              FaixaDeAviso(texto: confirmacao, peso: PesoDaFaixa.informativo),
-              const SizedBox(height: BichuEspaco.e4),
-            ],
-
-            // AS DUAS PORTAS DA FOTO. Elas nao publicam nada: escolher envia, e
-            // `Publicar` confirma.
+            // AS DUAS PORTAS DA FOTO, e elas sobem junto com a imagem: o
+            // cliente pediu a imagem PRIMEIRO, e o lugar de escolher a foto e
+            // onde a foto vai aparecer -- nao depois do texto.
+            //
+            // Elas nao publicam nada: escolher envia, e `Publicar` confirma.
             if (local == null && !_enviando) ...<Widget>[
               BotaoPrimario(
                 rotulo: PublicarNoMural.tirarFoto,
@@ -459,9 +445,35 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
               const SizedBox(height: BichuEspaco.e6),
             ],
 
-            // **A UNICA ACAO DE CONFIRMACAO DA TELA.** Ver o cabecalho: nao ha
-            // botao separado de salvar foto, e foi esse o defeito relatado duas
-            // vezes.
+            // =================================================================
+            // 2. O CAMPO DE TEXTO
+            // =================================================================
+            BichuField(
+              rotulo: PublicarNoMural.rotuloDoCampo,
+              controlador: _texto,
+              exemplo: PublicarNoMural.exemploDoCampo,
+              erro: _erroDoTexto,
+              habilitado: !_ocupado,
+              // Cinco linhas visiveis e o campo crescendo: 280 caracteres em
+              // uma linha so esconderiam o comeco do que a pessoa escreveu.
+              linhas: 5,
+              capitalizacao: TextCapitalization.sentences,
+              // **SEM `limite`**, e a ausencia e deliberada: `maxLength` do
+              // Material TRUNCA no teclado, e truncar em silencio apaga o que a
+              // pessoa escreveu. O contador abaixo diz quanto falta, e o
+              // `Publicar` e quem recusa -- com o motivo visivel.
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+            _contador(textos, cores),
+
+            const SizedBox(height: BichuEspaco.e6),
+
+            // =================================================================
+            // 3. O BOTAO PUBLICAR, **a UNICA acao de confirmacao da tela.**
+            // =================================================================
+            //
+            // Ver o cabecalho: nao ha botao separado de salvar foto, e foi esse
+            // o defeito relatado duas vezes.
             BotaoPrimario(
               rotulo: PublicarNoMural.publicar,
               carregando: _publicando,
