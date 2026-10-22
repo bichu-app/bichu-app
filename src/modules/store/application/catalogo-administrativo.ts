@@ -27,8 +27,7 @@ import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { AuditAction, AuditEvent } from '../../audit/ports/audit-log.js';
 import {
-  DIMENSAO_MINIMA,
-  dimensaoDeclaradaAbaixoDaMinima,
+  recusarDimensaoDeclaradaPequena,
   type PreparadorDeEnvioDeCatalogo,
   type PropositoDaImagem,
 } from '../../media/ports/imagem-de-catalogo.js';
@@ -1118,20 +1117,7 @@ export class CatalogoAdministrativo {
    * enviado nao e alcancado por nada, e a politica morre em dez minutos.
    */
   async autorizarEnvioDeCatalogo(autor: Autor, corpo: CorpoDeIntencao): Promise<IntencaoAutorizada> {
-    // A dimensao declarada ANTES de assinar: recusar depois deixaria uma
-    // politica assinada valendo dez minutos para um arquivo que ja se sabe ruim.
-    const abaixo = dimensaoDeclaradaAbaixoDaMinima(corpo.purpose, corpo.width, corpo.height);
-    if (abaixo.length > 0) {
-      const minima = DIMENSAO_MINIMA[corpo.purpose];
-      throw problemas.imagemPequenaDemais(
-        minima,
-        abaixo.map((field) => ({
-          field,
-          code: 'minimum',
-          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
-        })),
-      );
-    }
+    recusarDimensaoDeclaradaPequena(corpo.purpose, corpo.width, corpo.height);
     const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size, corpo.purpose);
 
     await this.deps.repositorio.emTransacao(async (tx) => {

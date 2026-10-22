@@ -14,6 +14,7 @@
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
+import { problemas } from '../../../shared/http/errors.js';
 import { TIPOS_ACEITOS, comoObjectKey, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
 
 /**
@@ -198,6 +199,50 @@ export function dimensaoDeclaradaAbaixoDaMinima(
   if (largura !== undefined && largura < minima.largura) campos.push('width');
   if (altura !== undefined && altura < minima.altura) campos.push('height');
   return campos;
+}
+
+/**
+ * Recusa a dimensao DECLARADA abaixo da minima do proposito, com
+ * `422 image-too-small` -- e esta e a UNICA redacao desta recusa.
+ *
+ * ## O que foi medido, e por que isto virou funcao
+ *
+ * Em 21/10/2026, sobre `f60ba3fc`, este bloco estava escrito **cinco vezes**:
+ * em `capa-de-encontro-da-comunidade.ts`, `foto-do-proprio-usuario.ts`,
+ * `mural-service.ts`, `vitrine-de-fotos-service.ts` e
+ * `catalogo-administrativo.ts`. Normalizando so a EXPRESSAO do proposito (que
+ * e a unica coisa que legitimamente muda entre os cinco), as cinco copias sao
+ * identicas em execucao -- a unica diferenca de texto era uma virgula de
+ * formatacao em `mural-service.ts`.
+ *
+ * Nao e duplicacao de enfeite: dentro do bloco esta a FRASE que o usuario le
+ * (`Mínimo de N pixels.`) e o CODIGO de campo (`minimum`) que o app usa para
+ * decidir onde pintar o erro. Cinco redacoes da mesma frase e como se chegou
+ * as cinco do rotulo do selo: a sexta superficie copia a que estava mais perto.
+ *
+ * ## A conferencia e a DECLARADA, e nao a real
+ *
+ * `width`/`height` sao opcionais e vem do navegador, que pode mentir. Quem
+ * decide de verdade e o worker, lendo os bytes. Esta recusa existe para nao
+ * assinar uma politica valida por dez minutos para um arquivo que ja se sabe
+ * ruim -- por isso ela roda ANTES de `preparar`, em todos os cinco chamadores.
+ */
+export function recusarDimensaoDeclaradaPequena(
+  purpose: PropositoDaImagem,
+  largura: number | undefined,
+  altura: number | undefined,
+): void {
+  const abaixo = dimensaoDeclaradaAbaixoDaMinima(purpose, largura, altura);
+  if (abaixo.length === 0) return;
+  const minima = DIMENSAO_MINIMA[purpose];
+  throw problemas.imagemPequenaDemais(
+    minima,
+    abaixo.map((field) => ({
+      field,
+      code: 'minimum',
+      message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
+    })),
+  );
 }
 
 /**

@@ -40,8 +40,7 @@ import type { IdGenerator } from '../../../shared/ports/index.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {
-  DIMENSAO_MINIMA,
-  dimensaoDeclaradaAbaixoDaMinima,
+  recusarDimensaoDeclaradaPequena,
   type AutorizacaoDeCapa,
   type PreparadorDeEnvioDeCatalogo,
 } from '../../media/ports/imagem-de-catalogo.js';
@@ -128,24 +127,7 @@ export class Mural {
     dono: UserId,
     corpo: CorpoDaIntencaoDaPublicacao,
   ): Promise<AutorizacaoDeCapa> {
-    // A dimensão declarada ANTES de assinar: recusar depois deixaria uma
-    // política assinada valendo dez minutos para um arquivo já sabido ruim.
-    const abaixo = dimensaoDeclaradaAbaixoDaMinima(
-      PROPOSITO_DA_PUBLICACAO,
-      corpo.width,
-      corpo.height,
-    );
-    if (abaixo.length > 0) {
-      const minima = DIMENSAO_MINIMA[PROPOSITO_DA_PUBLICACAO];
-      throw problemas.imagemPequenaDemais(
-        minima,
-        abaixo.map((field) => ({
-          field,
-          code: 'minimum',
-          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
-        })),
-      );
-    }
+    recusarDimensaoDeclaradaPequena(PROPOSITO_DA_PUBLICACAO, corpo.width, corpo.height);
 
     // **NÃO HÁ TETO DE PUBLICAÇÕES A CONFERIR AQUI**, ao contrário da vitrine.
     // A vitrine confere as nove antes de assinar porque assinar a décima

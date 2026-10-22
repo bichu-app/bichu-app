@@ -27,8 +27,7 @@ import type { UserId } from '../../../shared/types/brands.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import { problemas } from '../../../shared/http/errors.js';
 import {
-  DIMENSAO_MINIMA,
-  dimensaoDeclaradaAbaixoDaMinima,
+  recusarDimensaoDeclaradaPequena,
   type AutorizacaoDeCapa,
   type PreparadorDeEnvioDeCatalogo,
 } from '../../media/ports/imagem-de-catalogo.js';
@@ -92,20 +91,7 @@ export class VitrineDeFotos {
   }
 
   async autorizarEnvio(dono: UserId, corpo: CorpoDaIntencaoDaVitrine): Promise<AutorizacaoDeCapa> {
-    // A dimensão declarada ANTES de assinar: recusar depois deixaria uma
-    // política assinada valendo dez minutos para um arquivo já sabido ruim.
-    const abaixo = dimensaoDeclaradaAbaixoDaMinima(PROPOSITO_DA_VITRINE, corpo.width, corpo.height);
-    if (abaixo.length > 0) {
-      const minima = DIMENSAO_MINIMA[PROPOSITO_DA_VITRINE];
-      throw problemas.imagemPequenaDemais(
-        minima,
-        abaixo.map((field) => ({
-          field,
-          code: 'minimum',
-          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
-        })),
-      );
-    }
+    recusarDimensaoDeclaradaPequena(PROPOSITO_DA_VITRINE, corpo.width, corpo.height);
     // O TETO DE FOTOS, conferido aqui também: assinar a décima autorização
     // seria entregar uma política de escrita que a vitrine nunca vai aceitar, e
     // o objeto ficaria no balde até o varredor passar. Conferir antes é o que

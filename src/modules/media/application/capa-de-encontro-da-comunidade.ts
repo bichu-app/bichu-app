@@ -24,13 +24,11 @@
  * e chamada de rede a um servico externo, e segurar conexao do banco esperando
  * por ela e o que esgota o pool num pico.
  */
-import { problemas } from '../../../shared/http/errors.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {
-  DIMENSAO_MINIMA,
-  dimensaoDeclaradaAbaixoDaMinima,
+  recusarDimensaoDeclaradaPequena,
   type AutorizacaoDeCapa,
   type PreparadorDeEnvioDeCatalogo,
 } from '../ports/imagem-de-catalogo.js';
@@ -65,20 +63,7 @@ export class CapaDeEncontroDaComunidade {
   constructor(private readonly deps: DependenciasDaCapaDeEncontro) {}
 
   async autorizar(autor: UserId, corpo: CorpoDaIntencaoDeCapa): Promise<AutorizacaoDeCapa> {
-    // A dimensao declarada ANTES de assinar: recusar depois deixaria uma
-    // politica assinada valendo dez minutos para um arquivo que ja se sabe ruim.
-    const abaixo = dimensaoDeclaradaAbaixoDaMinima('network_event', corpo.width, corpo.height);
-    if (abaixo.length > 0) {
-      const minima = DIMENSAO_MINIMA['network_event'];
-      throw problemas.imagemPequenaDemais(
-        minima,
-        abaixo.map((field) => ({
-          field,
-          code: 'minimum',
-          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
-        })),
-      );
-    }
+    recusarDimensaoDeclaradaPequena('network_event', corpo.width, corpo.height);
     const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size, 'network_event');
     await this.deps.registrarIntencao(this.deps.db, {
       id: envio.uploadId,
