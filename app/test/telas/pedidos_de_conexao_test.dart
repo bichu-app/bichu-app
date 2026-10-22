@@ -151,7 +151,7 @@ void main() {
       _pedido(ref: 'r1', estado: 'pending_received'),
     ]);
 
-    expect(find.text('Pessoa sem nome'), findsOneWidget);
+    expect(find.text('Usuário sem nome'), findsOneWidget);
   });
 
   testWidgets('ISCA (b): a tela NÃO mostra, e NÃO pede, a lista de conexões', (tester) async {
@@ -463,7 +463,7 @@ void main() {
           _pedido(ref: 'r1', estado: 'pending_received'),
         ]);
 
-        expect(find.text('Pessoa sem nome'), findsOneWidget);
+        expect(find.text('Usuário sem nome'), findsOneWidget);
         expect(
           _semanticaDaTela(tester),
           isNot(contains('Abrir o perfil de')),
@@ -472,7 +472,7 @@ void main() {
               'conseguiu nomear.',
         );
 
-        await tester.tap(find.text('Pessoa sem nome'));
+        await tester.tap(find.text('Usuário sem nome'));
         await tester.pumpAndSettle();
 
         expect(_textoDaTela(tester), isNot(contains('perfil aberto')));
@@ -563,7 +563,7 @@ void main() {
     await _montar(tester, recebidos: <Map<String, dynamic>>[
       _pedido(ref: 'r1', estado: 'pending_received', validado: true),
     ]);
-    expect(find.text('Pessoa sem nome'), findsOneWidget);
+    expect(find.text('Usuário sem nome'), findsOneWidget);
     expect(find.byType(SeloDeValidado), findsOneWidget);
   });
 

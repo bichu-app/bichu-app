@@ -46,7 +46,7 @@ export const ESTRUTURAS: Record<Estrutura, string> = {
   public_restroom_nearby: 'Banheiro público próximo',
   shade: 'Sombra',
   benches: 'Bancos',
-  dog_water_fountain: 'Bebedouro para cães',
+  dog_water_fountain: 'Bebedouro para cachorros',
   parking_nearby: 'Estacionamento próximo',
 };
 

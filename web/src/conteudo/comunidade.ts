@@ -9,7 +9,7 @@ export const COMUNIDADE = {
     sobretitulo: 'Comunidade',
     titulo: 'Os pets do bairro e as pessoas que cuidam deles.',
     lead: 'No Bichu, a comunidade se encontra na praça e indica os profissionais em quem confia, sem mostrar o endereço de ninguém.',
-    alt: 'Ilustração de três mulheres fazendo carinho num cão numa praça, com um gato ao lado, bandeirinhas, árvores e prédios ao fundo.',
+    alt: 'Ilustração de três mulheres fazendo carinho num cachorro numa praça, com um gato ao lado, bandeirinhas, árvores e prédios ao fundo.',
   },
 
   eventos: {
@@ -25,7 +25,7 @@ export const COMUNIDADE = {
     exemplo: {
       nota: 'Exemplo ilustrativo',
       data: 'Sábado, 9h',
-      titulo: 'Evento de cães na praça',
+      titulo: 'Evento de cachorros na praça',
       // P.2.2: versao segura, exemplo generico que nao coincide com lugar real.
       lugar: 'Praça do Coreto · seu bairro',
       vao: '12 pessoas vão',

@@ -549,21 +549,21 @@ export default function FormularioDoEncontro() {
         aoMudar={(v) => mudar('portes', v)}
         erro={erroDe('portes')}
       />
-      <GrupoDeRadios rotulo="Idade dos cães *" nome="idade" opcoes={IDADES} valor={f.idade} aoMudar={(v) => mudar('idade', v)} />
+      <GrupoDeRadios rotulo="Idade dos cachorros *" nome="idade" opcoes={IDADES} valor={f.idade} aoMudar={(v) => mudar('idade', v)} />
       <div className="row2">
         <SimOuNao
           rotulo="Vacinação em dia exigida *"
           nome="vacina"
           valor={f.vacina}
           aoMudar={(v) => mudar('vacina', v)}
-          ajuda="Sim: o app mostra “Vacinação em dia” em Para quais cães."
+          ajuda="Sim: o app mostra “Vacinação em dia” em Para quais cachorros."
         />
         <SimOuNao
-          rotulo="O local tem área cercada para cães soltos *"
+          rotulo="O local tem área cercada para cachorros soltos *"
           nome="cercada"
           valor={f.cercada}
           aoMudar={(v) => mudar('cercada', v)}
-          ajuda="Muda uma linha dos cuidados no app: com área cercada, o cão pode ficar solto dentro dela; sem, fica na guia o tempo todo."
+          ajuda="Muda uma linha dos cuidados no app: com área cercada, o cachorro pode ficar solto dentro dela; sem, fica na guia o tempo todo."
         />
       </div>
       <GrupoDeCaixas

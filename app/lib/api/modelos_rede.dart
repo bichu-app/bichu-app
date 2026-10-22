@@ -257,7 +257,7 @@ enum EstruturaDoLocal {
   banheiroPublicoProximo('public_restroom_nearby', 'Banheiro público próximo'),
   sombra('shade', 'Sombra'),
   bancos('benches', 'Bancos'),
-  bebedouroParaCaes('dog_water_fountain', 'Bebedouro para cães'),
+  bebedouroParaCaes('dog_water_fountain', 'Bebedouro para cachorros'),
   estacionamentoProximo('parking_nearby', 'Estacionamento próximo');
 
   const EstruturaDoLocal(this.codigo, this.rotulo);

@@ -822,7 +822,7 @@ void main() {
         'Gratuito',
         'Pago',
         'Cidade',
-        'Porte do cão',
+        'Porte do cachorro',
         'Pequeno',
         'Gigante',
         'Distância',

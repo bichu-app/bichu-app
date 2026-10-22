@@ -106,7 +106,7 @@ enum AlvoDaDenuncia {
 /// Antes e nao depois: quem esta decidindo se denuncia precisa saber que a
 /// outra pessoa nao e avisada *enquanto decide*. Depois do envio ela seria um
 /// alivio; antes, ela e o que faz a pessoa conseguir tocar no botao.
-const String oOutroNaoEAvisado = 'A outra pessoa não fica sabendo que você denunciou.';
+const String oOutroNaoEAvisado = 'O outro usuário não fica sabendo que você denunciou.';
 
 /// O que a tela diz depois do envio.
 ///
@@ -198,7 +198,7 @@ class PessoaBloqueada {
     return semNome;
   }
 
-  static const String semNome = 'Pessoa sem nome';
+  static const String semNome = 'Usuário sem nome';
 }
 
 /// `#/components/schemas/MyBlockPage` do contrato.

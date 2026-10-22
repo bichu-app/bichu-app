@@ -219,7 +219,7 @@ class TelaLeitorDeQr extends StatefulWidget {
   /// **Ela nao manda tentar de novo com o mesmo QR**, porque nao resolveria: o
   /// que resolve e a outra pessoa gerar um convite novo.
   static const String conviteNaoVale =
-      'Este convite não vale mais. Peça um novo para a pessoa.';
+      'Este convite não vale mais. Peça um novo para o usuário.';
 
   /// DEDUZIDO, e e a pergunta fechada desta entrega.
   ///

@@ -167,7 +167,7 @@ class TelaDeConvidarTutores extends StatefulWidget {
   /// **Para quem não tem o Bichu, nada funciona hoje, e a tela não promete que
   /// funciona.** Essa limitação é conhecida e foi levada ao cliente.
   static const String oQrEDeAppParaApp =
-      'Peça para a pessoa abrir o Bichu e escanear daqui. A câmera comum do '
+      'Peça para o usuário abrir o Bichu e escanear daqui. A câmera comum do '
       'celular não abre este código.';
 
   /// A ação de emitir, para quem ainda não tem convite nesta sessão.

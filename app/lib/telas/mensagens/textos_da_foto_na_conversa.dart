@@ -137,7 +137,7 @@ abstract final class TextosDaFotoNaConversa {
   /// explica por que o aplicativo nao consegue abrir a foto para aquela pessoa.
   static const String aFotoNaoChegaDoOutroLado =
       'Quem está do outro lado não tem conta no Bichu e não consegue abrir '
-      'fotos. O que você escrever, essa pessoa lê.';
+      'fotos. O que você escrever, esse usuário lê.';
 
   /// A marca na mensagem JA ENVIADA, no fio de quem a mandou.
   ///
@@ -145,7 +145,7 @@ abstract final class TextosDaFotoNaConversa {
   /// vermelha aqui diria que algo deu errado, e nada deu -- a foto subiu, foi
   /// gravada e esta na conversa. O que esta linha impede e o tutor ficar
   /// esperando reacao de quem nao viu nada.
-  static const String essaPessoaNaoVeFotos = 'Esta pessoa não vê fotos.';
+  static const String essaPessoaNaoVeFotos = 'Este usuário não vê fotos.';
 
   /// A legenda da foto que a PROPRIA pessoa mandou.
   static const String fotoQueVoceEnviou = 'Foto que você enviou.';

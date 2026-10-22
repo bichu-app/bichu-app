@@ -70,10 +70,10 @@ class TelaDeBloqueados extends StatefulWidget {
 
   final SegurancaApi seguranca;
 
-  static const String titulo = 'Pessoas bloqueadas';
+  static const String titulo = 'Usuários bloqueados';
   static const String vazio = 'Você não bloqueou ninguém';
   static const String explicacaoDoVazio =
-      'Quando você bloquear alguém, essa pessoa aparece aqui e você pode '
+      'Quando você bloquear alguém, esse usuário aparece aqui e você pode '
       'desbloqueá-la por este caminho.';
   static const String falhaAoCarregar =
       'Não conseguimos carregar a sua lista agora.';

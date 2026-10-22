@@ -223,7 +223,7 @@ void main() {
 
       for (final t in <String>[
         'Sobre o evento',
-        'Para quais cães',
+        'Para quais cachorros',
         'Todos os portes',
         'Qualquer idade',
         'Vacinação em dia',
@@ -232,12 +232,12 @@ void main() {
         'Saquinhos para cocô',
         'Cuidados no evento',
         'Recolha o cocô e descarte em local adequado.',
-        'Na área cercada, o cão pode ficar solto. Fora dela, na guia.',
-        'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por '
+        'Na área cercada, o cachorro pode ficar solto. Fora dela, na guia.',
+        'Se o seu cachorro parecer desconfortável, afaste-se do grupo com ele por '
             'um tempo.',
         'Fêmea no cio fica em casa.',
         'Acessibilidade e estrutura',
-        'Área cercada para cães soltos',
+        'Área cercada para cachorros soltos',
         'Sombra',
         'Observações',
       ]) {
@@ -515,7 +515,7 @@ void main() {
       final tela = textoDaTela(tester);
       expect(tela, isNot(contains('Adicionar ao calendário')));
       expect(tela, isNot(contains('Cuidados no evento')));
-      expect(tela, isNot(contains('Para quais cães')));
+      expect(tela, isNot(contains('Para quais cachorros')));
       expect(find.byKey(LocalDoEncontro.chaveDoMapa), findsNothing);
       // Ha coordenada, e ela nao e usada: a pergunta nem sai.
       expect(rede.chamadasA('GET /v1/network/events/$slugPublico/location'), isEmpty);

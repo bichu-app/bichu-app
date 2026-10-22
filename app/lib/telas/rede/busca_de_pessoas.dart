@@ -117,7 +117,7 @@ class BuscaDePessoas extends StatefulWidget {
 
   /// O rótulo do campo. Diz **as duas coisas que a busca aceita**, porque uma
   /// pessoa que não sabe que o apelido serve busca pelo nome e desiste.
-  static const String rotuloDaBusca = 'Buscar pessoas por nome ou apelido';
+  static const String rotuloDaBusca = 'Buscar usuários por nome ou apelido';
 
   static const String tituloAntesDeBuscar = 'Procure quem você já conhece';
 
@@ -144,11 +144,11 @@ class BuscaDePessoas extends StatefulWidget {
       'Confira a escrita, ou busque pelo apelido. Quem não tem conta no Bichu '
       'não aparece aqui.';
 
-  static const String carregando = 'Buscando pessoas';
+  static const String carregando = 'Buscando usuários';
 
   static const SubstantivoDaListagem substantivo = SubstantivoDaListagem(
-    singular: 'pessoa',
-    plural: 'pessoas',
+    singular: 'usuário',
+    plural: 'usuários',
   );
 
   @override

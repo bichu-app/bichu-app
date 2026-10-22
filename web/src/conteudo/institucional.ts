@@ -8,7 +8,7 @@ export const COMO_FUNCIONA = {
   hero: {
     titulo: 'Como funciona',
     lead: 'O Bichu é a rede dos pets do seu bairro. Você cadastra o seu pet, encontra quem mora perto e, se ele sumir, a rede procura com você.',
-    alt: 'Ilustração de três pessoas abraçadas a um cão e a um gato, com árvores e prédios ao fundo.',
+    alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
   },
   passosTitulo: 'Os passos',
   // P.3.2: ordem da home. O numero aparece porque a ordem e informacao.
@@ -49,7 +49,7 @@ export const SOBRE = {
     titulo: 'Sobre o Bichu',
     manuscrito: 'Pets conectam pessoas.',
     lead: 'O Bichu é a rede dos pets: uma comunidade de tutores do mesmo bairro, para encontrar quem mora perto, trocar indicação e cuidar dos pets juntos.',
-    alt: 'Ilustração de três mulheres com um cão e um gato numa praça.',
+    alt: 'Ilustração de três mulheres com um cachorro e um gato numa praça.',
   },
   // P.5.2 "Por que existe": versao segura, o bloco sai.
   naoFaz: {

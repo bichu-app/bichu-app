@@ -207,7 +207,7 @@ void main() {
     expect(find.byType(ImagemDaRede), findsNothing);
     expect(find.text('As fotos aparecem para quem é conexão.'), findsOneWidget);
     // E o estado está dito: a pessoa precisa saber que há uma decisão pendente.
-    expect(find.text('Esta pessoa quer se conectar com você.'), findsOneWidget);
+    expect(find.text('Este usuário quer se conectar com você.'), findsOneWidget);
   });
 
   testWidgets('CONTRAPESO (a): conexao aceita ve a grade, e com a derivada de 320', (
@@ -247,7 +247,7 @@ void main() {
       tester,
       perfil: _perfil(estado: 'connected', ref: 'r1', vitrine: <Map<String, dynamic>>[]),
     );
-    expect(find.text('Esta pessoa ainda não publicou fotos.'), findsOneWidget);
+    expect(find.text('Este usuário ainda não publicou fotos.'), findsOneWidget);
     expect(find.text('As fotos aparecem para quem é conexão.'), findsNothing);
     expect(find.byType(ImagemDaRede), findsNothing);
   });
@@ -374,7 +374,7 @@ void main() {
   ) async {
     await _montar(tester, perfil: _perfil(estado: 'none'), status: 404);
 
-    expect(find.text('Não encontramos esta pessoa.'), findsOneWidget);
+    expect(find.text('Não encontramos este usuário.'), findsOneWidget);
     // **NENHUMA explicação do motivo.** Os cinco caminhos do 404 são
     // indistinguíveis de propósito: descobrir que foi bloqueado é o que gera
     // retaliação.
@@ -406,7 +406,7 @@ void main() {
   ) async {
     // Sem ele, a isca (d) passaria numa tela que sempre diz "não encontramos".
     await _montar(tester, perfil: _perfil(estado: 'none'));
-    expect(find.text('Não encontramos esta pessoa.'), findsNothing);
+    expect(find.text('Não encontramos este usuário.'), findsNothing);
     expect(find.text('Marina'), findsWidgets);
   });
 
@@ -414,7 +414,7 @@ void main() {
     tester,
   ) async {
     await _montar(tester, perfil: _perfil(estado: 'none'), status: 500);
-    expect(find.text('Não encontramos esta pessoa.'), findsNothing);
+    expect(find.text('Não encontramos este usuário.'), findsNothing);
     expect(find.text('Tentar de novo'), findsOneWidget);
   });
 

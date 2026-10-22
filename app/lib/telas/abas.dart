@@ -903,7 +903,7 @@ class AbaPerfil extends StatelessWidget {
             // "ver os bloqueados"; vem DESFAZER um bloqueio. Isso e ajuste da
             // propria conta, do mesmo tipo de `Meus dados`.
             ItemDeMenu(
-              rotulo: 'Pessoas bloqueadas',
+              rotulo: 'Usuários bloqueados',
               aoTocar: () => context.push(Rotas.pessoasBloqueadas),
             ),
             const SizedBox(height: BichuEspaco.e6),
@@ -920,7 +920,7 @@ class AbaPerfil extends StatelessWidget {
             // **O nome nao e `Achados`**, que seria o nome do OBJETO e deixaria
             // `Escanear uma tag` de fora do sentido: ler a plaquinha de um
             // cachorro na rua ainda nao e um achado registrado.
-            const TituloDeGrupoDeMenu('Bichos na rua'),
+            const TituloDeGrupoDeMenu('Pets na rua'),
             // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
             // cliente pediu. Um leitor so; o destino da leitura sai das regras
             // dos tres cenarios de QR e **nunca** da aba de origem.
