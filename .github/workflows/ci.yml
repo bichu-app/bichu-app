@@ -1567,11 +1567,58 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: admin/package-lock.json
+          # OS DOIS LOCKFILES na chave do cache: o passo `dependencias do
+          # servidor`, abaixo, instala tambem a arvore da raiz. Chave presa so
+          # ao lockfile do backoffice baixaria a raiz inteira toda execucao.
+          cache-dependency-path: |
+            admin/package-lock.json
+            package-lock.json
 
       - name: dependencias (npm ci)
         working-directory: admin
         run: npm ci --no-audit --no-fund
+
+      # POR QUE A RAIZ TAMBEM, num job que constroi `admin/`.
+      #
+      # Tres testes do backoffice leem o dominio do SERVIDOR para reprovar
+      # quando os dois lados se afastarem -- a conferencia do painel tem de dar
+      # a mesma resposta que a do servidor, caso a caso (D59):
+      # `admin/test/rede/observacoes-contra-o-servidor.test.ts`,
+      # `links-contra-o-servidor.test.ts` e `dominio.test.ts` importam
+      # `src/modules/network/domain/escrita-do-encontro.ts`, que chega a
+      # `src/shared/db/schema.ts`, que abre com `import type { ColumnType,
+      # Generated, Selectable } from 'kysely'`.
+      #
+      # O `teste` acima nunca sentiu falta: `import type` e apagado na
+      # transpilacao do vitest. Quem sente e o `tsc -b` do `build`, que
+      # typecheca os tres projetos de `admin/tsconfig.json` -- entre eles o
+      # `test`, que inclui `test`. E a resolucao de um arquivo sob `src/` sobe
+      # de `src/shared/db/` para `<repo>/node_modules`, NAO para
+      # `admin/node_modules`: declarar `kysely` em `admin/package.json` nao
+      # conserta. Medido em 21/10/2026, com `kysely@0.29.6` dentro de
+      # `admin/node_modules`: o mesmo TS2307. Com `kysely` na raiz, e so ele,
+      # `tsc -b` sai 0.
+      #
+      # Sem este passo, `npm run build` dentro de `admin/` sai 2 com
+      # `../src/shared/db/schema.ts(13,56): error TS2307: Cannot find module
+      # 'kysely'`. Nao e regressao de PR nenhum: a arvore de `f60ba3fc` reprova
+      # igual, com `npm ci` so em `admin/`. Ficou invisivel enquanto `rapidos`
+      # estava vermelho e os outros onze jobs ficavam `skipping`.
+      #
+      # A ALTERNATIVA RECUSADA era tirar `test` do que o `tsc -b` do build
+      # percorre (`tsc -b tsconfig.app.json tsconfig.node.json`, a forma do
+      # `build:imagem`). Ela deixa o job verde e tira os testes do backoffice
+      # inteiros do typecheck da esteira -- o afrouxamento que este passo
+      # existe para nao fazer. O `build:imagem` pode: dentro da imagem nao ha
+      # `src/`, e o contexto do Dockerfile e `admin/` e so ele.
+      #
+      # `--ignore-scripts`: o unico pacote da raiz com script de instalacao e o
+      # `cypress`, cujo binario (~100 MB) nenhum passo deste job executa. O que
+      # se busca aqui sao as DECLARACOES de tipo do servidor, nao runtime.
+      - name: dependencias do servidor (os testes de paridade leem `src/`)
+        run: |
+          [ -f package-lock.json ] || { echo "::error::sem package-lock.json na raiz. O projeto \`test\` de admin/tsconfig.json typecheca codigo de \`src/\`, e sem a arvore da raiz o tipo de \`kysely\` nao resolve"; exit 1; }
+          npm ci --ignore-scripts --no-audit --no-fund
 
       - name: lint
         working-directory: admin
