@@ -12,6 +12,7 @@ import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
+import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
@@ -176,6 +177,19 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
 
   bool _carregando = true;
   MensagemDeErro? _faixa;
+
+  /// A falha da carga e **falta de conta**, e nao defeito.
+  ///
+  /// Separado de [_faixa] de proposito: os dois estados desenham coisas
+  /// diferentes e nao podem ser o mesmo campo. Quem le `/timeline` sem conta
+  /// recebe `401 unauthenticated` com `next_action: sign_in`, e o catalogo
+  /// devolve para ele `texto: ''` desde 18/10/2026 — entao mandar este 401
+  /// para [FaixaDeAviso] desenhava **o icone de erro e mais nada** sobre o
+  /// botao `Entrar`. Quem decide e `faltaConta`, pelo `next_action` do corpo
+  /// `problem+json`, e nunca um `switch` no status: sem rede a pessoa pode
+  /// estar perfeitamente logada, e trocar o Mural dela por um convite diria
+  /// que a conta nao existe porque o elevador nao tem sinal.
+  bool _faltaConta = false;
 
   /// ---------------------------------------------------------------------
   /// A FOTO QUE AINDA ESTA SENDO PROCESSADA, E A RELEITURA QUE A ALCANCA
@@ -448,6 +462,9 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
       setState(() {
         _carregando = true;
         _faixa = null;
+        // Baixa junto com a faixa: a carga ruidosa mostra a roda, e nao o
+        // convite da tentativa anterior por cima de uma leitura em curso.
+        _faltaConta = false;
       });
     }
     try {
@@ -462,13 +479,29 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
         _linha = linha.itens;
         _tenhoPublicacao = minhas.itens.isNotEmpty;
         _carregando = false;
+        // **A BANDEIRA NAO FICA PRESA ENTRE CARGAS.** Quem entra pela tela de
+        // login e volta ao Mural faz uma carga que da certo; sem baixar a
+        // bandeira aqui, a pessoa continuaria vendo o convite para entrar
+        // depois de ter entrado. A carga silenciosa nao passa pelo `setState`
+        // de cima, entao limpar so la nao alcanca este caminho.
+        _faltaConta = false;
       });
       _agendarReleituraSeAFotoAindaProcessa(minhas.itens);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
         _carregando = false;
-        _faixa = MensagensDeErro.de(falha);
+        // SEM CONTA NAO E ERRO. Antes de 22/10/2026 esta linha era
+        // `_faixa = MensagensDeErro.de(falha)` para **toda** falha, inclusive o
+        // `401 unauthenticated` — e e dai que saia a tarja do Mural deslogado
+        // com o icone, o botao `Entrar` e nenhuma frase. A metade da SAIDA foi
+        // consertada em 20/10 (`rotuloDaAcao` + `aoTocarNaAcao`); a metade da
+        // FRASE nao tinha conserto possivel por aqui, porque o texto do
+        // catalogo e `''` por decisao do cliente de 18/10 e **nao volta**. O
+        // conserto e o mesmo das outras quinze superficies muradas: o 401 sai
+        // do caminho de erro e vai para `ConviteParaEntrar`.
+        _faltaConta = faltaConta(falha);
+        _faixa = _faltaConta ? null : MensagensDeErro.de(falha);
       });
     }
   }
@@ -503,6 +536,21 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   Widget build(BuildContext context) {
     final faixa = _faixa;
     final linha = _linha;
+
+    // SEM CONTA VEM ANTES DE TUDO, como na area de mensagens: nao ha linha do
+    // tempo para mostrar, nao ha `Tentar de novo` que funcione — a tentativa
+    // seguinte sai igualmente sem `Authorization` e volta o mesmo 401 — e o
+    // que a pessoa precisa saber e o que esta secao e.
+    //
+    // **O convite nao e uma [FaixaDeAviso]**, e a forma diz isso: fundo
+    // rebaixado e borda fina do estado vazio, sem icone de erro, sem borda de
+    // 2 px e sem botao de recarregar.
+    if (_faltaConta) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: BichuEspaco.e4),
+        child: ConviteParaEntrar(secao: SecaoComConta.mural),
+      );
+    }
 
     if (faixa != null) {
       return Padding(

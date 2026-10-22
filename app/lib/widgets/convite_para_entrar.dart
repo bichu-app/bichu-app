@@ -274,6 +274,55 @@ enum SecaoComConta {
     retomada: 'Entre de novo para buscar pessoas.',
   ),
 
+  /// `GET /v1/timeline` — a linha do tempo do `Mural`.
+  ///
+  /// **A ultima superficie murada que ainda mostrava o 401 cru**, e ela ficou
+  /// de fora das doze de 19/10 e das tres de 20/10 por omissao, nao por
+  /// decisao: `tela_do_mural.dart` mandava toda `FalhaDeChamada` para
+  /// `MensagensDeErro.de`, e o catalogo devolve `texto: ''` para
+  /// `unauthenticated` desde 18/10. O que a pessoa deslogada via era o icone
+  /// de erro e o botao `Entrar`, **sem uma frase** — a *falha calada* de
+  /// `faixa_de_aviso.dart`, com a metade da saida ja consertada em 20/10 e a
+  /// metade da frase nunca escrita.
+  ///
+  /// **O muro e do servidor**, e nao do produto: `getMyTimeline` declara
+  /// `security: [bearerAuth]` **sem alternativa vazia** em `api/openapi.yaml` e
+  /// responde `401` — ao contrario de `GET /v1/network/events` e
+  /// `GET /v1/store/items`, que respondem 200 sem conta e por isso nao tem
+  /// entrada neste catalogo.
+  ///
+  /// **O texto nao e a frase que o cliente mandou remover.** O que saiu em
+  /// 18/10 foi *"entre na sua conta para continuar. O que você escreveu esta
+  /// salvo aqui."*, do catalogo de erro, e ela nao volta aqui nem em lugar
+  /// nenhum. Isto e o que esta classe faz nas outras quinze superficies: dizer
+  /// o que a secao e e o que a pessoa ganha entrando.
+  ///
+  /// **O ganho promete o recorte que o contrato entrega, e nada alem.**
+  /// `getMyTimeline` e "as publicacoes vivas de quem e CONEXAO ACEITA de quem
+  /// chama, mais as de quem chama" — por isso o texto fala de conexao e nunca
+  /// de seguir, que `getMyTimeline` nao implementa, e nunca de "a comunidade
+  /// inteira", que seria o oposto do recorte.
+  ///
+  /// **O ganho NAO promete publicar**, e a omissao e a mesma de [meusEventos]:
+  /// publicar exige, alem da conta, e-mail confirmado — `podeCriarNaComunidade`
+  /// (`telas/abas.dart`) e sessao **e** `emailVerificado`, e sem isso a acao
+  /// de publicar nao nasce na barra. Um ganho que dissesse *"entre para
+  /// publicar"* seria desfeito no toque seguinte, para quem entrasse com o
+  /// e-mail pendente. O que o texto afirma e o que vale para toda conta: o que
+  /// ela passa a LER, e quem passa a ver o que ela escrever.
+  ///
+  /// **A segunda frase e a que ja estava escrita e revista** — ela e a mesma
+  /// ideia de [buscaDePessoas], *"o Mural mostra o que as suas conexoes
+  /// publicam, e as suas publicacoes aparecem para elas"*, e nao uma redacao
+  /// nova inventada aqui. A redacao segue aberta a revisao do cliente.
+  mural(
+    titulo: 'O Mural é das suas conexões',
+    ganho: 'Entre para ver o que as suas conexões publicam. As suas '
+        'publicações aparecem para as pessoas com quem você se conectou, e '
+        'não para quem não é conexão.',
+    retomada: 'Entre de novo para ver o Mural.',
+  ),
+
   /// `GET /v1/conversations` — a area de mensagens.
   mensagens(
     titulo: 'Suas conversas ficam aqui',
