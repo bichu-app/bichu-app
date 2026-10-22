@@ -9,6 +9,7 @@ import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../formato/cep.dart';
+import '../../formulario/origem_dos_valores.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -108,6 +109,27 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   /// O CEP que a última busca usou, para não repetir a chamada a cada tecla.
   String _cepJaBuscado = '';
 
+  /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
+  /// substituir e o que não pode.
+  ///
+  /// ## ESTA TELA NASCEU SEM ISTO, e o defeito corrompia o endereço guardado
+  ///
+  /// Medido na revisão de **21/10/2026**: sendo o "lugar só" de editar, ela abre
+  /// preenchida pela conta — e então **nada está vazio**. `_preencherSeVazio`
+  /// lido como `isEmpty` puro desligava a busca de CEP por completo: quem mudava
+  /// de casa digitava o CEP novo e **guardava rua, bairro, cidade e UF antigos**,
+  /// em silêncio, com a tela dizendo `Endereço guardado.`
+  ///
+  /// É o pior desfecho possível desta tela: o recurso existe para a plaquinha
+  /// chegar no endereço certo, e sem isto ela ia para o **anterior** — sem a
+  /// pessoa ter como saber.
+  ///
+  /// **O mecanismo é o MESMO de `telas/pet/tela_solicitar_plaquinha.dart`**, que
+  /// já o tinha e já estava medido, e não um segundo escrito aqui. Ele mora em
+  /// [OrigemDosValores] (`formulario/origem_dos_valores.dart`), com as duas
+  /// decisões do cliente que reconcilia.
+  final OrigemDosValores _origem = OrigemDosValores();
+
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`. Uma estrutura só para a validação local e para a do
   /// servidor: duas listas de erro divergiriam na mensagem.
@@ -195,6 +217,33 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     // `tela_dados_pessoais.dart` registra para o telefone do perfil.
     _telefone.text = telefoneDoE164(endereco.telefone);
     _uf = endereco.uf.isEmpty ? null : endereco.uf;
+    // Todo campo que a CONTA trouxe preenchido passa a ser "valor da conta", e
+    // então CEDE à busca de CEP. Campo que veio vazio não é anotado: para ele a
+    // regra de 17/10 (`isEmpty`) já basta.
+    //
+    // **A ATRIBUIÇÃO ACIMA CONTINUA DIRETA de propósito.** Esta função também
+    // roda com o ECO do `PUT`, e ali ela PRECISA sobrescrever: o servidor
+    // normaliza (CEP sem máscara, UF em maiúscula, bordas sem espaço), e
+    // `OrigemDosValores.doGuardado`, que pula campo já escrito, deixaria a tela
+    // mostrando o digitado em vez do guardado. O que `doGuardado` protege — a
+    // leitura voltando depois de a pessoa começar a digitar — não existe aqui:
+    // o corpo da tela é um `CircularProgressIndicator` enquanto `_carregando`.
+    //
+    // E o que foi guardado agora É dado de conta: no próximo CEP ele cede, como
+    // o endereço que o primeiro pedido de plaquinha guarda.
+    for (final (chave, valor) in <(String, String)>[
+      (_CamposDoEndereco.destinatario, endereco.destinatario),
+      (_CamposDoEndereco.cep, endereco.cep),
+      (_CamposDoEndereco.logradouro, endereco.logradouro),
+      (_CamposDoEndereco.numero, endereco.numero),
+      (_CamposDoEndereco.complemento, endereco.complemento ?? ''),
+      (_CamposDoEndereco.bairro, endereco.bairro),
+      (_CamposDoEndereco.cidade, endereco.cidade),
+      (_CamposDoEndereco.uf, endereco.uf),
+      (_CamposDoEndereco.telefone, endereco.telefone),
+    ]) {
+      _origem.anotarDaConta(chave, temValor: valor.isNotEmpty);
+    }
     // O CEP que já está na tela conta como buscado: abrir a tela não deve
     // disparar uma chamada a serviço de terceiro para confirmar um endereço que
     // a própria pessoa escreveu.
@@ -229,17 +278,27 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
       _preencherSeVazio(_logradouro, endereco.logradouro, _CamposDoEndereco.logradouro);
       _preencherSeVazio(_bairro, endereco.bairro, _CamposDoEndereco.bairro);
       _preencherSeVazio(_cidade, endereco.cidade, _CamposDoEndereco.cidade);
-      if (_uf == null && endereco.uf.length == 2) {
+      // A MESMA regra, para o valor que não é um `TextEditingController`.
+      // **Sem ela a UF ficava em `SP`** com a rua, o bairro e a cidade já
+      // trocados para o Rio — um endereço misturado de duas cidades, guardado
+      // na conta.
+      if (_origem.podeVirDaBusca(_CamposDoEndereco.uf, vazio: _uf == null) &&
+          endereco.uf.length == 2) {
         _uf = endereco.uf;
+        _origem.soltar(_CamposDoEndereco.uf);
         _erros.remove(_CamposDoEndereco.uf);
       }
     });
   }
 
+  /// Preenche o campo quando ele está vazio **ou quando ainda carrega o valor
+  /// que veio da conta**, sem a pessoa ter tocado nele.
+  ///
+  /// Valor da pessoa **vence** a base (17/10, intacta), valor da conta **cede**
+  /// à base. Quem distingue os dois é [OrigemDosValores]; por que são duas
+  /// condições e não uma, está escrito lá.
   void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
-    _erros.remove(chave);
+    if (_origem.daBusca(campo, valor, chave)) _erros.remove(chave);
   }
 
   /// Valida **campo por campo**, e devolve os erros todos de uma vez.
@@ -399,7 +458,11 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
         // confirmação de "guardado" também — ela falaria de um estado que a
         // pessoa acabou de mudar.
         aoMudar: (valor) {
-          if (_erros.containsKey(chave) || _salvou) {
+          // O TOQUE DA PESSOA SOLTA O CAMPO do valor que veio da conta: daí em
+          // diante o que está ali é dela, e a busca de CEP não o substitui mais
+          // — a regra de 17/10, intacta. Ver `_preencherSeVazio`.
+          final soltou = _origem.soltar(chave);
+          if (_erros.containsKey(chave) || _salvou || soltou) {
             setState(() {
               _erros.remove(chave);
               _salvou = false;
@@ -532,6 +595,9 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
                       habilitado: !_salvando,
                       aoSelecionar: (escolhido) => setState(() {
                         _uf = escolhido;
+                        // Escolher a UF a mão solta o campo do valor que veio da
+                        // conta, como o toque num campo de texto.
+                        _origem.soltar(_CamposDoEndereco.uf);
                         _erros.remove(_CamposDoEndereco.uf);
                         _salvou = false;
                       }),

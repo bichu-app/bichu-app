@@ -770,4 +770,130 @@ void main() {
       );
     });
   });
+
+  // ========================================================================
+  // I. A RECONCILIACAO NA TELA DE EDITAR: o defeito que corrompia o guardado
+  // ========================================================================
+  //
+  // Medido na revisao de 21/10/2026. A tela do PEDIDO ganhou a reconciliacao
+  // (grupo E) e a tela de EDITAR nasceu sem ela -- e e a tela de editar que
+  // ESCREVE na conta. Sendo o "lugar so", ela abre preenchida pela conta, e
+  // entao nada esta vazio: `_preencherSeVazio` lido como `isEmpty` puro
+  // desligava a busca de CEP por completo.
+  //
+  // O desfecho: quem mudava de casa digitava o CEP novo e GUARDAVA rua, bairro,
+  // cidade e UF antigos, em silencio, com a tela dizendo `Endereco guardado.`
+  // -- a plaquinha indo para o endereco ANTERIOR, sem a pessoa ter como saber.
+  //
+  // As iscas aqui CONTAM O CORPO DO `PUT`, e nao olham a tela: o que corrompe o
+  // dado guardado e o que viaja na rede, e uma asercao sobre o campo na tela
+  // nao enxerga o que foi escrito.
+  group('I. a busca de CEP sobre a tela de editar o endereco guardado', () {
+    testWidgets(
+        'ISCA — CEP novo SUBSTITUI rua, bairro, cidade e UF que vieram da conta',
+        (tester) async {
+      // DESLIGUE A RECONCILIACAO E ESTE CASO REPROVA: o `PUT` sai com
+      // `Rua Guardada do Teste` / `Bairro Guardado` / `Cidade Guardada` / `SP`
+      // debaixo do CEP NOVO -- o endereco corrompido, guardado com 200.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
+      await irPara(tester, Rotas.enderecoDeEntrega);
+
+      // A tela abriu com o endereco da conta: a linha de base da isca.
+      expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste');
+      expect(_ufSelecionada(tester), 'SP');
+
+      // Mudou de casa: digita SO o CEP novo, que e o que a pessoa faz.
+      await _digitar(tester, 'CEP', '01311000');
+      expect(registro.chamadasDeCep, isNotEmpty, reason: 'CONTROLE POSITIVO: a busca saiu');
+
+      await tocar(tester, find.text('Guardar endereço'));
+
+      expect(registro.putsDoEndereco, hasLength(1), reason: 'CONTROLE POSITIVO: guardou');
+      final corpo = json.decode(registro.corposDoPut.single) as Map<String, dynamic>;
+      expect(corpo['postal_code'], '01311000');
+      expect(
+        corpo['street'],
+        'Avenida Da Base',
+        reason: 'GUARDOU A RUA ANTIGA debaixo do CEP NOVO. O valor que veio da '
+            'CONTA tem de ceder a base: ele e conveniencia, e nao algo que a '
+            'pessoa escreveu nesta sessao. A plaquinha iria para o endereco '
+            'anterior, e a tela disse que salvou',
+      );
+      expect(corpo['neighborhood'], 'Bairro Da Base', reason: 'guardou o bairro antigo');
+      expect(corpo['city'], 'Cidade Da Base', reason: 'guardou a cidade antiga');
+      expect(
+        corpo['state'],
+        'RJ',
+        reason: 'guardou a UF antiga. Pior desfecho possivel: `SP` com a rua, o '
+            'bairro e a cidade do Rio -- um endereco misturado de duas cidades',
+      );
+    });
+
+    testWidgets('ISCA — mas o que a PESSOA digitou nao e substituido (17/10, intacta)',
+        (tester) async {
+      // A outra metade, e sem ela a correcao acima teria afrouxado a decisao de
+      // 17/10: *"o que a pessoa ja escreveu vence o que a base devolve"*. Uma
+      // correcao que trocasse `isEmpty` por "sempre sobrescreve" passaria na
+      // isca de cima e REPROVARIA aqui.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
+      await irPara(tester, Rotas.enderecoDeEntrega);
+
+      // Escreve a rua A MAO, escolhe a UF A MAO, e so depois mexe no CEP.
+      await _digitar(tester, 'Rua', 'A Rua Que Eu Escrevi');
+      // `escolherEstadoNaLista` e nao um toque a mao: a folha dos 27 ROLA, e o
+      // nome do estado tambem casa o campo `Cidade` atras dela. As tres
+      // armadilhas estao escritas no proprio ajudante.
+      await escolherEstadoNaLista(tester, 'MG');
+      await _digitar(tester, 'CEP', '01311000');
+      expect(registro.chamadasDeCep, isNotEmpty, reason: 'CONTROLE POSITIVO: a busca saiu');
+
+      await tocar(tester, find.text('Guardar endereço'));
+
+      expect(registro.putsDoEndereco, hasLength(1), reason: 'CONTROLE POSITIVO: guardou');
+      final corpo = json.decode(registro.corposDoPut.single) as Map<String, dynamic>;
+      expect(
+        corpo['street'],
+        'A Rua Que Eu Escrevi',
+        reason: 'a base sobrescreveu o que a PESSOA digitou, e guardou. A '
+            'decisao de 17/10 e que o que ela escreveu vence -- ela esta olhando '
+            'o endereco dela, e a base erra',
+      );
+      expect(
+        corpo['state'],
+        'MG',
+        reason: 'a base sobrescreveu a UF que a PESSOA escolheu a mao',
+      );
+      // E o campo em que ela NAO mexeu cede, no mesmo passo: as duas regras
+      // convivem campo a campo, e nao tela a tela.
+      expect(corpo['neighborhood'], 'Bairro Da Base');
+      expect(corpo['city'], 'Cidade Da Base');
+    });
+
+    testWidgets(
+        'CONTROLE POSITIVO — sem mexer no CEP, o caminho normal guarda o que a conta trouxe',
+        (tester) async {
+      // A reconciliacao nao pode ter virado "a base sobrescreve sempre": quem
+      // abre a tela, corrige UM campo e guarda tem de guardar o resto como
+      // estava. Sem busca de CEP nenhuma, nada se mexe.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
+      await irPara(tester, Rotas.enderecoDeEntrega);
+
+      await _digitar(tester, 'Número', '1001');
+      await tocar(tester, find.text('Guardar endereço'));
+
+      expect(registro.chamadasDeCep, isEmpty, reason: 'ninguem mexeu no CEP');
+      expect(registro.putsDoEndereco, hasLength(1));
+      final corpo = json.decode(registro.corposDoPut.single) as Map<String, dynamic>;
+      expect(corpo['street_number'], '1001');
+      expect(corpo['street'], 'Rua Guardada do Teste');
+      expect(corpo['neighborhood'], 'Bairro Guardado');
+      expect(corpo['city'], 'Cidade Guardada');
+      expect(corpo['state'], 'SP');
+      expect(corpo['postal_code'], '04538132');
+      expect(find.text('Endereço guardado.'), findsOneWidget);
+    });
+  });
 }
