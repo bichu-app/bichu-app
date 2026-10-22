@@ -250,6 +250,7 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
     // não é sobre isso, então a função é contada e não observada. O caso que
     // PROVA a remoção, lendo a linha de `user_devices` depois, é

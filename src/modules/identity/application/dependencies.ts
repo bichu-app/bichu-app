@@ -106,6 +106,25 @@ export interface DependenciasDeIdentidade {
    * escrito, e o e-mail é lido horas depois.
    */
   readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * Monta a URL pública de uma chave de mídia.
+   *
+   * Entrou em 21/10/2026, para `SessionResponse.user.photo`: `Me.photo` está no
+   * contrato desde 18/10 e a projeção da sessão não a entregava, então o avatar
+   * da barra do app caía na inicial do nome em todas as páginas -- calado,
+   * porque cair na inicial é desfecho legítimo da cadeia foto → inicial → glifo.
+   *
+   * **A URL é montada na LEITURA, nunca gravada** (ADR-0007 §11.1 proibição 9):
+   * `MEDIA_PUBLIC_BASE_URL` é configuração, e uma URL absoluta no banco
+   * amarraria cada linha ao domínio do dia. Mesma função que `routes.ts` já
+   * recebe para `getMe`, e é de propósito que seja a MESMA: duas formas de
+   * montar a mesma URL divergiriam, e a que divergiria seria a menos olhada.
+   *
+   * **Obrigatória, e não opcional**, pelo mesmo motivo de `removerPushDaConta`:
+   * a composição que esquecesse dela devolveria sessão sem foto em silêncio, que
+   * é literalmente o defeito que ela entrou para consertar.
+   */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 export interface AvisoAoTitular {

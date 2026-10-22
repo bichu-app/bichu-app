@@ -174,6 +174,7 @@ function montar(nomeAtual: string | null): Bancada {
   };
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     removerPushDaConta: () => Promise.resolve(0),
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio,

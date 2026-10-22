@@ -28,7 +28,7 @@ import { AppError } from '../../../shared/http/errors.js';
 import type { AbsoluteUrl, OpaqueToken } from '../../../shared/types/brands.js';
 import { INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
-import type { IdentityRepository } from '../ports/identity-repository.js';
+import type { FotoDoPerfil, IdentityRepository } from '../ports/identity-repository.js';
 import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
@@ -62,6 +62,16 @@ function naoDeveriaTerChegado(nome: string): never {
 /** Toda porta de escrita e de leitura recusa: o caminho não pode chegar a nenhuma. */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
+    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
+    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
+    // avatar da barra do app caia na inicial do nome em todas as paginas.
+    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
+    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
+    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
+    override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
+      return Promise.resolve(null);
+    }
+
     protected recusar(nome: string): never {
       return naoDeveriaTerChegado(nome);
     }
@@ -94,6 +104,7 @@ function montar(): Bancada {
   };
 
   const servico = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
     // não é sobre isso, então a função é contada e não observada. O caso que
     // PROVA a remoção, lendo a linha de `user_devices` depois, é

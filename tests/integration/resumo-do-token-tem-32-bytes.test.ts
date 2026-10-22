@@ -280,6 +280,7 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // Nenhum caso deste arquivo derruba sessao nem le `user_devices`.
     removerPushDaConta: () => Promise.resolve(0),
     apagarLocalizacaoDaSessao: (dono, familia) =>

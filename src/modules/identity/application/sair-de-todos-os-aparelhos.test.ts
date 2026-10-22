@@ -57,6 +57,7 @@ import { gerarHashDeSenha } from '../domain/password.js';
 import type {
   Conta,
   CredencialLocal,
+  FotoDoPerfil,
   MotivoDeRevogacao,
   NovoRefresh,
   RefreshArmazenado,
@@ -133,6 +134,16 @@ function naoUsado(nome: string): never {
 }
 
 class BancoDeMentira extends RepositorioQueRecusaTudo {
+  // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
+  // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
+  // avatar da barra do app caia na inicial do nome em todas as paginas.
+  // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
+  // porta responde em vez de recusar. `null` e a resposta certa: o dublê
+  // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
+  override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
+    return Promise.resolve(null);
+  }
+
   protected recusar(nome: string): never {
     return naoUsado(nome);
   }
@@ -372,6 +383,7 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
   };
 
   const servico = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
     // resposta honesta de "não havia localização gravada".
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),

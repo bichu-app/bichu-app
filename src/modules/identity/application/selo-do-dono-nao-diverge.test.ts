@@ -81,7 +81,7 @@ const PROJECOES: ReadonlyArray<{
   },
   {
     nome: 'projetarConta (SessionResponse.user)',
-    montar: (c) => projetarConta(c) as unknown as Record<string, unknown>,
+    montar: (c) => projetarConta(c, null) as unknown as Record<string, unknown>,
   },
 ];
 
@@ -213,7 +213,7 @@ void describe('o selo do dono não diverge do selo que os outros veem', () => {
         phoneVerifiedAt: linha.phoneVerifiedAt,
       });
       const doPerfil = projetarMeuPerfil(c, null, URL_DE_MIDIA);
-      const daSessao = projetarConta(c) as unknown as Record<string, unknown>;
+      const daSessao = projetarConta(c, null) as unknown as Record<string, unknown>;
       assert.equal(
         doPerfil['contact_channel_verified'],
         daSessao['contact_channel_verified'],

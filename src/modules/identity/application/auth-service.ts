@@ -44,6 +44,7 @@ import {
 import { comoFamiliaDeSessao } from '../ports/localizacao-de-referencia-repository.js';
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
+import { projetarFotoDoPerfil, type FotoProjetada } from '../domain/resposta-do-perfil.js';
 import type { Mensagem } from '../ports/mailer.js';
 import { comoIso } from '../../../shared/time/clock.js';
 
@@ -320,6 +321,18 @@ export function montarAvisoDeTrocaConcluida(
 }
 
 export function criarAuthService(deps: DependenciasDeIdentidade) {
+  /**
+   * A foto desta conta, já com a URL montada, para `SessionResponse.user.photo`.
+   *
+   * **A MESMA leitura e a MESMA projeção de `getMe`** (`minhaFoto` +
+   * `projetarFotoDoPerfil`), e não uma segunda: o contrato aponta os dois para o
+   * schema `Me`, e duas projeções da mesma foto divergiriam -- a que divergisse
+   * seria esta, que é a menos olhada das duas.
+   */
+  async function fotoDaSessao(dono: UserId): Promise<FotoProjetada | null> {
+    return projetarFotoDoPerfil(await deps.repositorio.fotoDoPerfil(dono), deps.urlDeMidia);
+  }
+
   /**
    * Gera o token, guarda o HASH, e manda o valor em claro pelo e-mail.
    *
@@ -911,7 +924,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // (BICHUS-73) — era este o defeito de BICHUS-147.
       await enviarVerificacaoDoCadastro(conta, contexto);
 
-      return projetarSessao(conta, par, agora);
+      return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
     async entrar(entrada: EntradaDeLogin, contexto: ContextoDaRequisicao): Promise<SessionView> {
@@ -983,7 +996,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         resourceId: conta.id,
         metadata: { stay_signed_in: entrada.staySignedIn },
       });
-      return projetarSessao(conta, par, agora);
+      return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
     /**
@@ -1153,6 +1166,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           refreshExpiresAt: prazos.expiresAt,
         },
         agora,
+        await fotoDaSessao(conta.id),
       );
     },
 
@@ -1601,7 +1615,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         metadata: { purpose: proposito },
       });
 
-      return projetarSessao(conta, par, agora);
+      return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
     /**

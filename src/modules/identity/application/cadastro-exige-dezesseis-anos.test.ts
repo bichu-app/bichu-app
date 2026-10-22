@@ -132,7 +132,13 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     // As duas portas da FOTO entraram em 18/10/2026, pela development. Elas
     // recusam como todas as outras: nenhum caso deste arquivo e sobre foto, e
     // chegar la seria o cadastro fazendo coisa que a idade nao pede.
-    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
+    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
+    // avatar da barra do app caia na inicial do nome em todas as paginas.
+    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
+    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
+    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
+    fotoDoPerfil: () => Promise.resolve(null),
     trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
   };
 }
@@ -236,6 +242,7 @@ function montar(aceitandoEscrita = false, instante: Instant = INSTANTE_FIXO): Ba
     : { enviar: () => naoDeveriaTerChegado('Mailer.enviar') };
 
   const servico = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     removerPushDaConta: () => Promise.resolve(0),
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio,
