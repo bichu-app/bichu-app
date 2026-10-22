@@ -480,46 +480,58 @@ dispensas:
   # `Makefile`. O registro fica em `docs/07-devops.md` secao 5.3.
 
   # ---------------------------------------------------------------------
-  # RESTAURADO NA EMENDA DE 07/10: estas cinco chegaram em c4b3945
-  # (feat/admin-sem-senha-ao-salvar), que TRUNCOU este arquivo de 475 para
-  # 34 linhas e levou com ele `apk-assinado` e as datadas de 15/10. A
-  # emenda nao deu conflito porque o outro lado nao tocou o arquivo depois
-  # do ancestral comum: o git pegou a unica mudanca, e a unica mudanca era
-  # a perda. Quem acusou foi `verificar-borda-local`, no fechamento.
-  # As cinco entrariam de todo modo; o que nao podia era o resto sair.
+  # AS CINCO DISPENSAS `oasdiff-sem-senha-*` SAIRAM EM 21/10/2026, E NAO FORAM
+  # REDATADAS. Elas venciam HOJE, e sair no dia do vencimento e o unico desfecho
+  # que a propria regra deste arquivo admite.
+  #
+  # ELAS ERAM: `oasdiff-sem-senha-retire-admin-store-item`,
+  # `-remove-admin-network-event`, `-relocate-admin-network-event`,
+  # `-cancel-admin-network-event` e `-change-admin-network-event-access`.
+  #
+  # O MOTIVO ESCRITO NELAS JA ESTAVA CUMPRIDO, e isso foi conferido e nao
+  # suposto. Elas diziam, verbatim: "Vencem em 21/10/2026: depois do merge a base
+  # carrega o contrato novo". O merge aconteceu: em `70f4aa34`
+  # (`origin/development`, a base da comparacao do portao) as cinco operacoes
+  # declaram `security: adminSession + adminCsrf` e NAO declaram `adminReauth` --
+  # conferido linha por linha em `api/openapi.yaml` nas cinco. A mudanca de 07/10
+  # (ADR-0027 item 23) esta na base ha duas semanas, entao `api-security-removed`
+  # nao tem mais como ser acusado: o lado antigo e o lado novo da comparacao
+  # dizem a mesma coisa. As cinco passaram a dispensar quebras que nao existem.
+  #
+  # POR QUE SAIR E NAO RENOVAR, e a frase e deste arquivo: dispensa que sobrevive
+  # ao merge "esta escondendo outra coisa e precisa SAIR, nao ser redatada".
+  # Renovar o prazo transformaria cinco entradas inertes em cinco entradas
+  # perpetuas, que e o estado que `verificar_dispensas.py` existe para impedir.
+  #
+  # ALEM DE INERTES, ELAS ERAM UM GATILHO: `restam < 0` reprova, e com
+  # `vence_em: 2026-10-21` as cinco medem `0d` hoje e `VENCIDA` amanha -- cinco
+  # reprovacoes de `verificar-dispensas` por prazo vencido, no portao LOCAL, por
+  # causa de um portao remoto que nao executa. Medido neste commit: antes, exit 0
+  # com as cinco em `[0d]`; depois, exit 0 com treze entradas e nenhuma mencao a
+  # `sem-senha`.
+  #
+  # POR QUE APAGAR AQUI NAO E A ARMADILHA DO `apk-assinado`:
+  # `verificar_borda_local.py:227` consulta SO os portoes `apk-assinado` e `ios`
+  # e reprova quando nao acha a entrada. Os cinco nomes acima nao eram
+  # consultados por ela nem por mais nada: conferido em 21/10 por varredura da
+  # arvore inteira, eles apareciam unicamente neste arquivo. Apagar nao derruba
+  # `verificar-borda-local`.
+  #
+  # O VEREDITO DO `oasdiff` NAO E DESTA MAQUINA, e isso precisa ficar escrito:
+  # o portao de quebra de contrato roda so em `pull_request`, depende do
+  # `docker run tufin/oasdiff` e nao existe alvo local no `Makefile`. O `oasdiff`
+  # NAO FOI EXECUTADO para este commit. O que foi conferido aqui foi o CONTRATO
+  # na base -- as cinco operacoes sem `adminReauth` --, que e o fato de que a
+  # quebra deixou de existir. Quem da o veredito e a esteira.
+  #
+  # REGISTRO QUE NAO SAI COM AS DISPENSAS, porque e sobre o arquivo e nao sobre
+  # elas: as cinco chegaram em `c4b3945` (feat/admin-sem-senha-ao-salvar), que
+  # TRUNCOU este arquivo de 475 para 34 linhas e levou com ele `apk-assinado` e
+  # as datadas de 15/10. A emenda de 07/10 nao deu conflito porque o outro lado
+  # nao tocou o arquivo depois do ancestral comum: o git pegou a unica mudanca, e
+  # a unica mudanca era a perda. Quem acusou foi `verificar-borda-local`, no
+  # fechamento.
   # ---------------------------------------------------------------------
-  # Escritas do painel sem reautenticacao, 07/10/2026 (decisao do cliente,
-  # ADR-0027 item 23). O oasdiff acusa `api-security-removed` (ERR) porque o
-  # conjunto `adminCsrf AND adminReauth AND adminSession` vira `adminCsrf AND
-  # adminSession` -- e um requisito a MENOS, compativel para quem chama: o
-  # painel que ainda mandar `X-Admin-Reauth-Token` continua aceito. Medido com
-  # tufin/oasdiff:v1.32.1: sao exatamente estas cinco.
-  # Vencem em 21/10/2026: depois do merge a base carrega o contrato novo.
-  - portao: oasdiff-sem-senha-retire-admin-store-item
-    mudanca: "api-security-removed retireAdminStoreItem"
-    motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
-    responsavel: squad
-    vence_em: 2026-10-21
-  - portao: oasdiff-sem-senha-remove-admin-network-event
-    mudanca: "api-security-removed removeAdminNetworkEvent"
-    motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
-    responsavel: squad
-    vence_em: 2026-10-21
-  - portao: oasdiff-sem-senha-relocate-admin-network-event
-    mudanca: "api-security-removed relocateAdminNetworkEvent"
-    motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
-    responsavel: squad
-    vence_em: 2026-10-21
-  - portao: oasdiff-sem-senha-cancel-admin-network-event
-    mudanca: "api-security-removed cancelAdminNetworkEvent"
-    motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
-    responsavel: squad
-    vence_em: 2026-10-21
-  - portao: oasdiff-sem-senha-change-admin-network-event-access
-    mudanca: "api-security-removed changeAdminNetworkEventAccess"
-    motivo: "adminReauth sai do security por decisao do cliente de 07/10 (ADR-0027 item 23); requisito a menos, compativel com quem ainda manda o token"
-    responsavel: squad
-    vence_em: 2026-10-21
 
   # ---------------------------------------------------------------------
   # NOME DE EXIBICAO OBRIGATORIO, 18/10/2026 (decisao do cliente). Verbatim:
