@@ -284,6 +284,7 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // AS DUAS LINHAS ABAIXO SAO DA MESCLA, e nao deste caso. Este arquivo foi
     // escrito em 29/09/2026, quando `DependenciasDeIdentidade` ainda nao exigia
     // `removerPushDaConta` nem `apagarLocalizacaoDaSessao`; o tronco passou a

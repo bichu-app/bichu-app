@@ -10,6 +10,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../formulario/origem_dos_valores.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../roteamento/saida_da_mensagem.dart';
@@ -101,30 +102,14 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   String? _petEscolhido;
   String? _uf;
 
-  /// Os campos que AINDA carregam o valor que veio do endereço guardado da
-  /// conta, sem a pessoa ter mexido.
+  /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
+  /// substituir e o que não pode.
   ///
-  /// ## POR QUE ESTE CONJUNTO EXISTE, e ele reconcilia duas decisões do cliente
-  ///
-  /// A de **17/10** diz que a busca de CEP *"só preenche campo vazio: o que a
-  /// pessoa já escreveu vence o que a base devolve"*. A de **21/10** diz que o
-  /// formulário *"nasce preenchido"* com o endereço guardado.
-  ///
-  /// Juntas e sem este conjunto, a segunda MATA a primeira: com tudo
-  /// pré-preenchido, nada está vazio, e a busca de CEP não preenche mais nada
-  /// nunca. Quem mudou de casa digitaria o CEP novo e ficaria com a rua
-  /// antiga na tela — sem nada ter dado erro, e com a plaquinha indo para o
-  /// endereço de antes.
-  ///
-  /// O conjunto separa as duas coisas que `isNotEmpty` confundia: **o que a
-  /// PESSOA escreveu** (vence a base, como ele decidiu) e **o que a CONTA
-  /// trouxe** (é conveniência, e a base pode substituir). Um campo sai daqui no
-  /// primeiro toque da pessoa nele, e daí em diante vale a regra de 17/10.
-  ///
-  /// **Isto é escolha de engenharia e está relatada como tal.** Ele decidiu as
-  /// duas pontas; a reconciliação entre elas não estava escrita em nenhum
-  /// lugar.
-  final Set<String> _aindaComOValorGuardado = <String>{};
+  /// **O mecanismo é um só**, compartilhado com
+  /// `telas/perfil/tela_endereco_de_entrega.dart`: o raciocínio inteiro — as
+  /// duas decisões do cliente que ele reconcilia, e o que acontece sem ele —
+  /// está em [OrigemDosValores], em `formulario/origem_dos_valores.dart`.
+  final OrigemDosValores _origem = OrigemDosValores();
 
   /// Havia endereço guardado na conta quando esta tela abriu?
   ///
@@ -308,7 +293,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       );
       if (_uf == null && guardado.uf.length == 2) {
         _uf = guardado.uf;
-        _aindaComOValorGuardado.add(_CamposDoPedido.uf);
+        _origem.anotarDaConta(_CamposDoPedido.uf, temValor: true);
         _erros.remove(_CamposDoPedido.uf);
       }
       // O CEP que veio da conta conta como já buscado: abrir a tela não deve
@@ -377,7 +362,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   ///
   /// E isso e automatico, nao precisa de codigo: no pedido seguinte a tela abre,
   /// [_carregarOEnderecoGuardado] le este endereco e marca os campos em
-  /// [_aindaComOValorGuardado]. Entao ele CEDE a busca de CEP, como todo dado de
+  /// [OrigemDosValores]. Entao ele CEDE a busca de CEP, como todo dado de
   /// conta -- e nao vence, como venceria se tivesse sido digitado naquela
   /// sessao. A separacao de origem que o cliente confirmou fica intacta.
   ///
@@ -404,10 +389,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   }
 
   void _preencherDoGuardado(TextEditingController campo, String valor, String chave) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
-    _aindaComOValorGuardado.add(chave);
-    _erros.remove(chave);
+    if (_origem.doGuardado(campo, valor, chave)) _erros.remove(chave);
   }
 
   /// Busca o endereco do CEP e preenche o que estiver VAZIO.
@@ -452,10 +434,10 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       // da conta" reprovou aqui primeiro**: a UF ficava em `SP` com a rua, o
       // bairro e a cidade ja trocados para o Rio -- um endereco misturado de
       // duas cidades, que e o pior desfecho possivel deste formulario.
-      final ufAindaDaConta = _aindaComOValorGuardado.contains(_CamposDoPedido.uf);
-      if ((_uf == null || ufAindaDaConta) && endereco.uf.length == 2) {
+      if (_origem.podeVirDaBusca(_CamposDoPedido.uf, vazio: _uf == null) &&
+          endereco.uf.length == 2) {
         _uf = endereco.uf;
-        _aindaComOValorGuardado.remove(_CamposDoPedido.uf);
+        _origem.soltar(_CamposDoPedido.uf);
         _erros.remove(_CamposDoPedido.uf);
       }
     });
@@ -464,31 +446,11 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// Preenche o campo quando ele está vazio **ou quando ainda carrega o valor
   /// que veio do endereço guardado**, sem a pessoa ter tocado nele.
   ///
-  /// ## A SEGUNDA CONDIÇÃO É NOVA (21/10/2026), e sem ela a busca de CEP morria
-  ///
-  /// A regra de 17/10 é *"só preenche campo vazio: o que a pessoa já escreveu
-  /// vence o que a base devolve"*, e ela protege o que a PESSOA escreveu. Com o
-  /// formulário nascendo preenchido pela conta, nada fica vazio — e a regra,
-  /// lida como `isEmpty`, passaria a proteger também o que a CONTA trouxe,
-  /// desligando a busca de CEP por completo.
-  ///
-  /// O efeito seria o pior possível: quem mudou de casa digita o CEP novo, a
-  /// busca devolve a rua nova, e a tela mantém a rua antiga em silêncio.
-  ///
-  /// Então são duas coisas e não uma: valor da pessoa **vence** a base (17/10,
-  /// intacta), valor da conta **cede** à base. `_aindaComOValorGuardado` é
-  /// quem as distingue, e um campo sai de lá no primeiro toque.
+  /// Valor da pessoa **vence** a base (17/10, intacta), valor da conta **cede**
+  /// à base. Quem distingue os dois é [OrigemDosValores]; por que as duas
+  /// condições e não uma, está escrito lá.
   void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
-    if (valor.isEmpty) return;
-    final vazio = campo.text.trim().isEmpty;
-    final aindaDaConta = _aindaComOValorGuardado.contains(chave);
-    if (!vazio && !aindaDaConta) return;
-    campo.text = valor;
-    // Substituído pela base: deixa de ser "o valor da conta". Se a pessoa
-    // digitar o CEP antigo de novo, o que está na tela agora é o da base, e
-    // sobrescrevê-lo seria a tela discutindo consigo mesma.
-    _aindaComOValorGuardado.remove(chave);
-    _erros.remove(chave);
+    if (_origem.daBusca(campo, valor, chave)) _erros.remove(chave);
   }
 
   /// Valida **campo por campo**, e devolve os erros todos de uma vez.
@@ -702,7 +664,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
           // O TOQUE DA PESSOA SOLTA O CAMPO do endereço guardado: daí em diante
           // o que está ali é dela, e a busca de CEP não o substitui mais --
           // que é a regra de 17/10, intacta. Ver `_preencherSeVazio`.
-          final soltou = _aindaComOValorGuardado.remove(chave);
+          final soltou = _origem.soltar(chave);
           if (_erros.containsKey(chave) || soltou) {
             setState(() => _erros.remove(chave));
           }
@@ -937,7 +899,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                           _uf = escolhido;
                           // Escolher a UF a mão solta o campo do endereço
                           // guardado, como o toque num campo de texto.
-                          _aindaComOValorGuardado.remove(_CamposDoPedido.uf);
+                          _origem.soltar(_CamposDoPedido.uf);
                           _erros.remove(_CamposDoPedido.uf);
                         }),
                       ),

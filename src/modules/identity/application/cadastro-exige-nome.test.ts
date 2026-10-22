@@ -46,7 +46,7 @@ import { AppError } from '../../../shared/http/errors.js';
 import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/types/brands.js';
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
-import type { Conta, IdentityRepository, NovaConta } from '../ports/identity-repository.js';
+import type { Conta, FotoDoPerfil, IdentityRepository, NovaConta } from '../ports/identity-repository.js';
 import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { TokenSigner } from '../ports/token-signer.js';
@@ -81,6 +81,16 @@ function naoDeveriaTerChegado(nome: string): never {
  */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
+    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
+    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
+    // avatar da barra do app caia na inicial do nome em todas as paginas.
+    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
+    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
+    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
+    override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
+      return Promise.resolve(null);
+    }
+
     protected recusar(nome: string): never {
       return naoDeveriaTerChegado(nome);
     }
@@ -133,6 +143,18 @@ function montar(aceitandoEscrita = false): Bancada {
   const repositorio: IdentityRepository = aceitandoEscrita
     ? {
         ...repositorioQueRecusaTudo(),
+        // **A FOTO PRECISA SER LISTADA AQUI, e o motivo e o espalhamento.**
+        // `repositorioQueRecusaTudo()` devolve INSTANCIA DE CLASSE, e `...` copia
+        // so propriedade propria e enumeravel -- metodo de classe mora no
+        // prototipo e NAO vem. O objeto daqui tem exatamente as portas escritas
+        // abaixo, e nenhuma outra.
+        //
+        // O `tsc` nao pega: o tipo do espalhamento inclui os membros herdados,
+        // entao a compilacao passa e a falta aparece em tempo de execucao, como
+        // `deps.repositorio.fotoDoPerfil is not a function`. Foi assim que ela
+        // apareceu em 21/10/2026, quando a projecao da sessao passou a ler a
+        // foto: este era o UNICO caso do repositorio que espalhava a classe.
+        fotoDoPerfil: () => Promise.resolve(null),
         criarContaLocal: (nova: NovaConta) => {
           recebidas.push(nova);
           return Promise.resolve(contaRecemCriada(nova.displayName ?? null));
@@ -176,6 +198,7 @@ function montar(aceitandoEscrita = false): Bancada {
     : { enviar: () => naoDeveriaTerChegado('Mailer.enviar') };
 
   const servico = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     removerPushDaConta: () => Promise.resolve(0),
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio,

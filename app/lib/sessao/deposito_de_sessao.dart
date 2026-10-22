@@ -93,6 +93,24 @@ class DepositoNoChaveiro implements DepositoDeSessao {
         'pending_profile_fields':
             sessao.usuario.pendencias.map((p) => p.valor).toList(),
         'can_open_lost_case': sessao.usuario.podeAbrirCaso,
+        // A FOTO, pela MESMA chave do contrato (`Me.photo.url`), para que
+        // `Usuario.doJson` a leia na volta sem um segundo formato.
+        //
+        // **Sem esta linha o avatar da barra voltava para a inicial no arranque
+        // seguinte**, mesmo com o servidor mandando a foto: `gravar` guardava
+        // oito campos e `photo` nao era um deles, entao `ler` reconstruia um
+        // `Usuario` com `fotoUrl` nulo. E o MESMO defeito que o cliente relatou
+        // em 20/10/2026, pela segunda porta -- e tao calado quanto a primeira,
+        // porque cair na inicial e desfecho legitimo da cadeia
+        // foto -> inicial -> glifo.
+        //
+        // `null` em vez de objeto quando nao ha foto: `Usuario.doJson` recorta
+        // `photo` por `is Map`, entao nulo, ausente e tipo errado valem o mesmo
+        // -- sem foto. Guardar `{'url': null}` daria o mesmo desfecho e diria
+        // menos.
+        'photo': sessao.usuario.fotoUrl == null
+            ? null
+            : <String, dynamic>{'url': sessao.usuario.fotoUrl},
       },
     };
     return _chaveiro.write(key: _chave, value: jsonEncode(json));

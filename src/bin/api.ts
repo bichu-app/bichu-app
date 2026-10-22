@@ -365,6 +365,10 @@ export async function main(): Promise<void> {
   });
 
   const auth = criarAuthService({
+    // A FOTO EM `SessionResponse.user.photo` (21/10/2026): a MESMA funcao que
+    // as rotas recebem, de proposito -- duas formas de montar a mesma URL
+    // divergiriam, e a que divergisse seria a menos olhada.
+    urlDeMidia: (chave: string) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
     repositorio: repositorioDeIdentidade,
     assinador,
     trilha,

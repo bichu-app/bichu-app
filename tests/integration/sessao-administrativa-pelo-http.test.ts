@@ -166,6 +166,7 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
   });
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
     // e sobre a SESSAO ADMINISTRATIVA, entao a funcao e contada e nao
     // observada. Quem PROVA a remocao, lendo `user_devices` depois, e

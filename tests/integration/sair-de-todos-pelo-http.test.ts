@@ -333,6 +333,7 @@ before(async () => {
   });
 
   const auth = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-021: o repositório REAL, e não um dublê. Estes casos têm banco de pé,
     // e um dublê aqui faria o apagamento do logout parecer exercitado sem nunca
     // tocar a tabela.

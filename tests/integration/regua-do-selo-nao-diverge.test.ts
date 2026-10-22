@@ -164,7 +164,7 @@ async function oQueODonoVe(conta: UserId): Promise<{ perfil: boolean; sessao: bo
   const lida = await repo.buscarContaPorId(conta);
   assert.ok(lida !== undefined, 'a conta da massa não foi lida');
   const doPerfil = projetarMeuPerfil(lida, null, (chave) => `https://img.test/${chave}`);
-  const daSessao = projetarConta(lida);
+  const daSessao = projetarConta(lida, null);
   return {
     perfil: doPerfil['contact_channel_verified'] as boolean,
     sessao: daSessao.contact_channel_verified,

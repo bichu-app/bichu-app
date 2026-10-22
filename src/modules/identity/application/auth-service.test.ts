@@ -31,6 +31,7 @@ import { gerarHashDeSenha } from '../domain/password.js';
 import type {
   Conta,
   CredencialLocal,
+  FotoDoPerfil,
   MotivoDeRevogacao,
   NovoRefresh,
   PropositoDoToken,
@@ -96,6 +97,16 @@ interface RedefinicaoPendente {
 }
 
 class RepositorioFalso extends RepositorioQueRecusaTudo {
+  // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
+  // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
+  // avatar da barra do app caia na inicial do nome em todas as paginas.
+  // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
+  // porta responde em vez de recusar. `null` e a resposta certa: o dublê
+  // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
+  override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
+    return Promise.resolve(null);
+  }
+
   protected recusar(nome: string): never {
     return naoUsado(nome);
   }
@@ -349,6 +360,7 @@ function montar(opcoes: {
   };
 
   const servico = criarAuthService({
+    urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
     // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
     // não é sobre isso, então a função é contada e não observada. O caso que
     // PROVA a remoção, lendo a linha de `user_devices` depois, é
