@@ -17,6 +17,14 @@ import {
   type EncontroDaRede,
   type EncontroPublico,
 } from '../../src/dominio/telas-do-encontro.ts';
+import { HOME } from '../../src/conteudo/home.ts';
+import { COMUNIDADE } from '../../src/conteudo/comunidade.ts';
+import {
+  COMO_FUNCIONA,
+  PARA_PROFISSIONAIS,
+  SOBRE,
+  CONTATO_PAGINA,
+} from '../../src/conteudo/institucional.ts';
 import { tipoDeProblema as tipo } from './hosts.ts';
 
 const problema = (status: number, slug: string, extra: Record<string, unknown> = {}, retry: string | null = null) =>
@@ -255,4 +263,122 @@ test('a entrada: gratuito, pago com unidade, e unidade desconhecida', () => {
   } as unknown as EncontroPublico['admission'];
   assert.doesNotMatch(textoDaEntrada(futuro), /whatever/);
   assert.match(textoDaEntrada(futuro), /10,00/);
+});
+
+// ---------------------------------------------------------------------------
+// ISCA -- AS PAGINAS INSTITUCIONAIS NAO PROMETEM O QUE NAO EXISTE
+// ---------------------------------------------------------------------------
+//
+// Mesmo mecanismo da isca da pagina do encontro (varredura achatada, NFD, sem
+// caixa), aqui apontado para os textos de /, /comunidade, /como-funciona,
+// /para-profissionais, /sobre e /contato.
+//
+// NOTA DE MESCLA: quando a branch `conserto/frase-falsa-endereco-encontro`
+// entrar, este arquivo tera DUAS varreduras equivalentes (`textosDaPagina` /
+// `semAcento` la, `textosDoConteudo` / `semSinais` aqui). Elas devem virar UMA,
+// com a lista de modulos como parametro. Os nomes aqui sao distintos de
+// proposito, para a mescla nao redeclarar identificador.
+
+/**
+ * Todo texto que estes modulos de conteudo podem escrever, achatado numa lista.
+ *
+ * Varre os objetos INTEIROS, e nao chaves escolhidas a mao, porque a promessa
+ * falsa pode voltar em qualquer rotulo, e uma isca que olha uma chave so nao
+ * vigia a pagina: vigia aquela chave.
+ */
+function textosDoConteudo(valor: unknown, saida: string[] = []): string[] {
+  if (typeof valor === 'string') saida.push(valor);
+  else if (Array.isArray(valor)) for (const v of valor) textosDoConteudo(v, saida);
+  else if (typeof valor === 'function') saida.push('\u0000FUNCAO');
+  else if (valor && typeof valor === 'object') {
+    for (const v of Object.values(valor)) textosDoConteudo(v, saida);
+  }
+  return saida;
+}
+
+/** Sem acento e em minuscula: `presença` e `presenca` sao a mesma palavra aqui. */
+const semSinais = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/**
+ * O ato NAO EXISTE nesta versao. Check-in, contagem de presentes e galeria da
+ * comunidade sairam da migracao E DO CONTRATO por decisao do cliente (ADR-0027
+ * item 12.4): `network_event_checkins`, `checkInNetworkEvent` e `checkin_count`
+ * nao estao em `api/openapi.yaml`, nenhuma das 23 operacoes `*NetworkEvent*` e
+ * de presenca, nenhuma das 10 rotas `/network/...` tem check-in, e
+ * `NetworkEventPublic` nao tem campo de presenca nenhum.
+ */
+const PROIBIDO = /confirm|presenc|check[ -]?in/;
+
+/** "12 pessoas vao", "8 pessoas confirmadas": contagem de presentes que o contrato nao da. */
+const CONTAGEM_DE_GENTE = /\d+\s*pessoas?\s*(vao|vai|confirmad|presente)/;
+
+const MODULOS = {
+  HOME,
+  COMUNIDADE,
+  COMO_FUNCIONA,
+  PARA_PROFISSIONAIS,
+  SOBRE,
+  CONTATO_PAGINA,
+};
+
+test('ISCA -- as paginas institucionais nao prometem check-in nem lista de presenca', () => {
+  const textos = textosDoConteudo(MODULOS);
+
+  // ---- CONTROLES POSITIVOS -------------------------------------------------
+  // Sem eles, uma varredura que devolvesse lista vazia -- export renomeado,
+  // `import` trocado, achatamento quebrado -- passaria para sempre, e a isca
+  // nao estaria vigiando nada.
+  assert.ok(textos.length >= 120, `REPROVA (controle): a varredura achou so ${textos.length} textos.`);
+
+  // Uma frase conhecida de CADA modulo varrido: prova que nenhum deles caiu
+  // fora do alcance da varredura.
+  for (const [modulo, frase] of [
+    ['home.ts', 'Pets conectam pessoas.'],
+    ['comunidade.ts', 'O que ninguém vê num evento'],
+    ['institucional.ts (COMO_FUNCIONA)', 'A identidade do seu pet'],
+    ['institucional.ts (PARA_PROFISSIONAIS)', 'Para profissionais'],
+    ['institucional.ts (SOBRE)', 'Sobre'],
+    ['institucional.ts (CONTATO_PAGINA)', 'Contato'],
+  ] as const) {
+    assert.ok(
+      textos.some((t) => t.includes(frase)),
+      `REPROVA (controle): a varredura nao enxerga "${frase}", de ${modulo}.`,
+    );
+  }
+
+  // Valor que virou funcao sairia da varredura em silencio: acusa em vez disso.
+  assert.ok(
+    !textos.includes('\u0000FUNCAO'),
+    'REPROVA (controle): um texto de conteudo virou funcao. A varredura nao a executa, ' +
+      'entao o texto dela NAO esta sendo vigiado -- ensine a varredura a chama-la.',
+  );
+
+  // Os detectores precisam detectar: sem isto, um `PROIBIDO` quebrado deixaria
+  // a varredura verde com a promessa falsa de volta na pagina.
+  assert.match(semSinais('Você faz check-in quando chega'), PROIBIDO);
+  assert.match(semSinais('A lista de presença mostra quem foi'), PROIBIDO);
+  assert.match(semSinais('para quem confirma presença'), PROIBIDO);
+  assert.match(semSinais('12 pessoas vão'), CONTAGEM_DE_GENTE);
+  assert.doesNotMatch(semSinais('Eventos em praças e parques'), PROIBIDO);
+
+  // ---- A ISCA --------------------------------------------------------------
+  const promessas = textos.filter((t) => PROIBIDO.test(semSinais(t)));
+  assert.deepEqual(
+    promessas,
+    [],
+    'REPROVA: uma pagina publica voltou a anunciar check-in ou confirmacao de presenca ' +
+      `(${JSON.stringify(promessas)}). O ato NAO EXISTE: check-in e lista de presenca ` +
+      'sairam da migracao e do contrato por decisao do cliente (ADR-0027 item 12.4), ' +
+      '`checkInNetworkEvent` nao esta em api/openapi.yaml e `NetworkEventPublic` nao tem ' +
+      'campo de presenca. Anunciar o que nao existe e o defeito; a pagina mais curta ganha.',
+  );
+
+  const contagens = textos.filter((t) => CONTAGEM_DE_GENTE.test(semSinais(t)));
+  assert.deepEqual(
+    contagens,
+    [],
+    'REPROVA: uma pagina publica voltou a mostrar contagem de pessoas no evento ' +
+      `(${JSON.stringify(contagens)}). Nao existe campo de presenca em ` +
+      '`NetworkEventPublic`: o numero nao tem de onde sair.',
+  );
 });

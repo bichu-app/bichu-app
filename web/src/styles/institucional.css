@@ -368,13 +368,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .cartao-evento__data { font-weight: var(--font-weight-semibold); color: var(--cor-primary); font-variant-numeric: tabular-nums; }
 .cartao-evento__linha, .cartao-profissional__linha { display: flex; gap: var(--space-2); align-items: center; color: var(--cor-text-secondary); }
 .cartao-evento__linha .icone { color: var(--cor-primary); }
-.cartao-evento__checkin {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  min-height: var(--target-min); padding-inline: var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--cor-surface-sunken); color: var(--cor-text-secondary);
-  font-weight: var(--font-weight-semibold);
-}
 .cartao-evento__galeria { display: grid; gap: var(--space-3); width: 100%; margin-top: var(--space-2); }
 .cartao-evento__galeria h4 { font-size: var(--type-label-lg-size); line-height: var(--type-label-lg-line); }
 .cartao-evento .grade-posts img { border-color: var(--cor-surface-sunken); }

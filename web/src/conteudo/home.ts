@@ -20,7 +20,7 @@ export const HOME = {
       {
         chave: 'eventos',
         titulo: 'Eventos no bairro',
-        texto: 'Eventos em praças e parques para juntar os pets do bairro, criados pela equipe do Bichu e pela própria comunidade, com check-in e galeria de fotos.',
+        texto: 'Eventos em praças e parques para juntar os pets do bairro, criados pela equipe do Bichu e pela própria comunidade, com galeria de fotos.',
         link: { href: '#rede', texto: 'Como funcionam os eventos' },
       },
       {
@@ -35,10 +35,9 @@ export const HOME = {
   rede: {
     sobretitulo: 'Rede',
     titulo: 'Na Rede, os pets do bairro se encontram na praça.',
-    lead: 'Eventos em praças e parques, criados pela equipe do Bichu e pela própria comunidade. Você faz check-in quando chega, e as fotos ficam juntas na página do evento.',
+    lead: 'Eventos em praças e parques, criados pela equipe do Bichu e pela própria comunidade. As fotos ficam juntas na página do evento.',
     passos: [
       { icone: 'park', titulo: 'Eventos no bairro', texto: 'Passeios e eventos em praças e parques. O lugar aparece pelo nome da praça e do bairro, sem mapa.' },
-      { icone: 'how_to_reg', titulo: 'Check-in no evento', texto: 'Chegou, faz o check-in pelo app. A página do evento mostra quantas pessoas fizeram check-in, nunca quem.' },
       { icone: 'photo_library', titulo: 'Galeria do evento', texto: 'As fotos ficam na página do evento, sem o nome de quem enviou.' },
     ],
     // P.1.3: versao segura, sem a linha do bairro.
