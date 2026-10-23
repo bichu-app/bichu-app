@@ -9,6 +9,7 @@ import '../../dispositivo/camera_e_galeria.dart';
 import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -28,6 +29,49 @@ import '../../widgets/previa_da_foto.dart';
 ///
 /// A ordem de 20/10 era a inversa (texto primeiro), e ela tambem era dele --
 /// *"escrever uma mensagem, subir uma foto"*. A de 22/10 e mais nova e manda.
+///
+/// ## O `Publicar` FORA DA ROLAGEM, e este e o conserto de 22/10/2026
+///
+/// **O defeito, medido.** Com o teclado aberto, `BichuField` de texto corrido
+/// anexa `BarraDoTeclado` -- uma faixa de 48 dp encostada no topo do teclado,
+/// desenhada num `Overlay`, ou seja **POR CIMA do `Scaffold`**. Esta tela
+/// desenhava o `Publicar` como ULTIMO filho do `ListView` e **nao reservava
+/// espaco para a faixa**, porque nao usava `BarraDeAcaoFixa` -- a unica peca
+/// que le `BarraDoTeclado.alturaEmUso`.
+///
+/// Medido em 320 x 568 dp com teclado de 270, com a lista no fim da rolagem:
+///
+///     Publicar        y 234..282
+///     BarraDoTeclado  y 250..298
+///     -> 32 dos 48 dp do botao, INCLUINDO O CENTRO, sob a faixa
+///
+/// **Um toque no centro atingia o `Concluir` da faixa, e a publicacao nao
+/// saia.** Silencioso: a pessoa digita, toca em `Publicar` e nada acontece.
+/// Confirmado por duas evidencias independentes -- o aviso de teste de toque
+/// do Flutter e o `POST /v1/me/publications` nao acontecendo.
+///
+/// **E o proprio codigo previu isto.** O cabecalho de `barra_do_teclado.dart`
+/// diz, com estas palavras: *"consertar o teclado cobrindo o `Salvar`
+/// produziria a faixa cobrindo o `Salvar`, que e o mesmo defeito com outro
+/// nome"*. Nao era regressao da reordenacao de 22/10: o `Publicar` ja era o
+/// ultimo filho antes dela.
+///
+/// **O conserto reusa a peca, e NAO a muda.** `BarraDeAcaoFixa` ja recua
+/// `viewInsets.bottom + BarraDoTeclado.alturaEmUso` desde 20/10/2026, e serve
+/// outras 21 telas desta arvore -- mexer nela para consertar esta seria mexer
+/// em 22. O `Publicar` mudou de SLOT: saiu do `ListView` e entrou em
+/// `Scaffold.bottomNavigationBar`, que e o unico lugar em que o `Scaffold`
+/// **nao** zera `viewInsets` e, portanto, o unico de onde a barra consegue ler
+/// o teclado.
+///
+/// **E isso MUDA como a tela se desenha, e a mudanca esta declarada.** Antes:
+/// o botao rolava com o conteudo, ganhava `e6` de respiro acima e so existia
+/// na arvore quando a rolagem o alcancava -- em 320 x 568 o `ListView` nem o
+/// CONSTRUIA com a previa quadrada na tela. Depois: ele esta sempre na arvore
+/// e sempre visivel, sobre uma superficie com fio no topo e area segura
+/// propria, e o corpo rolavel perde a altura que a barra ocupa. A ordem que o
+/// cliente pediu nao se perde -- imagem, texto, `Publicar` continua sendo a
+/// leitura de cima para baixo.
 ///
 /// ## O PADRAO DE FOTO, e ele e decisao dele de 19/10/2026
 ///
@@ -465,25 +509,31 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
             ),
             const SizedBox(height: BichuEspaco.e2),
             _contador(textos, cores),
-
-            const SizedBox(height: BichuEspaco.e6),
-
-            // =================================================================
-            // 3. O BOTAO PUBLICAR, **a UNICA acao de confirmacao da tela.**
-            // =================================================================
-            //
-            // Ver o cabecalho: nao ha botao separado de salvar foto, e foi esse
-            // o defeito relatado duas vezes.
-            BotaoPrimario(
-              rotulo: PublicarNoMural.publicar,
-              carregando: _publicando,
-              // **Desabilitado so por FORMA, nunca por sessao**: quem chega
-              // aqui passou por `podeCriarNaComunidade` na porta da secao, e um
-              // controle que recusa calado e pior que um que recusa dizendo.
-              aoTocar: _ocupado || !_temTexto || !_cabe ? null : _publicar,
-            ),
           ],
         ),
+      ),
+      // =====================================================================
+      // 3. O BOTAO PUBLICAR, **a UNICA acao de confirmacao da tela.**
+      // =====================================================================
+      //
+      // Ver o cabecalho: nao ha botao separado de salvar foto, e foi esse o
+      // defeito relatado duas vezes.
+      //
+      // **ELE VIVE NA `BarraDeAcaoFixa`, e nao no fim do `ListView`** -- ver a
+      // secao "O `Publicar` FORA DA ROLAGEM" do cabecalho desta classe para o
+      // numero que decidiu. A ordem que o cliente pediu continua intacta: ele
+      // segue sendo o ultimo elemento de cima para baixo, agora ancorado.
+      bottomNavigationBar: BarraDeAcaoFixa(
+        acoes: <Widget>[
+          BotaoPrimario(
+            rotulo: PublicarNoMural.publicar,
+            carregando: _publicando,
+            // **Desabilitado so por FORMA, nunca por sessao**: quem chega
+            // aqui passou por `podeCriarNaComunidade` na porta da secao, e um
+            // controle que recusa calado e pior que um que recusa dizendo.
+            aoTocar: _ocupado || !_temTexto || !_cabe ? null : _publicar,
+          ),
+        ],
       ),
     );
   }

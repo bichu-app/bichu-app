@@ -943,42 +943,39 @@ void main() {
   });
 
   testWidgets(
-      'ISCA (22/10 item 3) — o `Publicar` e ALCANCAVEL com o TECLADO ABERTO, '
-      'por RETANGULO dentro da janela', (tester) async {
-    // **ALCANCE, e nao "o toque nao lancou".** `tocarSemRolar` usa
-    // `warnIfMissed: false`, entao um toque num botao COBERTO "passa" sem
-    // excecao nenhuma. Esta tela tem campo de texto corrido, entao o teclado
-    // abre de verdade -- e a reordenacao de 22/10 poe o `Publicar` por ULTIMO,
-    // que e o lugar mais exposto da tela. A prova e geometrica.
+      'ISCA (22/10 item 3) — com o TECLADO ABERTO o `Publicar` esta INTEIRO '
+      'ACIMA da faixa, e o toque PUBLICA', (tester) async {
+    // **ALCANCE POR RETANGULO, e nao "o toque nao lancou".** `tocarSemRolar`
+    // deste repositorio usa `warnIfMissed: false`, e um `tap` num botao
+    // COBERTO "passa" sem excecao nenhuma -- ja aconteceu neste app com um
+    // botao atras do teclado, e o caso ficava verde. Entao a prova e
+    // geometrica E de efeito: o retangulo do botao inteiro dentro da janela
+    // DESCONTADA a faixa, e a publicacao contada do outro lado.
     //
     // =====================================================================
-    // O QUE ESTA MEDICAO DESCOBRIU, e esta escrito aqui porque custou caro
+    // O DEFEITO QUE ESTE CASO FECHA, medido em 22/10/2026
     // =====================================================================
-    // Com o teclado ABERTO, `BichuField` de texto corrido desenha
-    // `BarraDoTeclado` encostada no topo do teclado (48 dp), e esta tela **nao
-    // reserva espaco para ela** -- ela nao usa `BarraDeAcaoFixa`, que e a unica
-    // peca que le `BarraDoTeclado.alturaEmUso`.
+    // `BichuField` de texto corrido anexa `BarraDoTeclado` -- 48 dp
+    // encostados no topo do teclado, num `Overlay`, POR CIMA do `Scaffold`.
+    // Esta tela desenhava o `Publicar` como ULTIMO filho do `ListView` e nao
+    // reservava espaco para a faixa, porque nao usava `BarraDeAcaoFixa`.
     //
-    // MEDIDO neste gabarito, com a lista no fim da rolagem: `Publicar` ocupa
-    // y 234..282 e a faixa ocupa y 250..298. **32 dos 48 dp do botao ficam sob
-    // a faixa, e o CENTRO dele tambem** -- um `tap` no centro atinge o
-    // `Concluir` da faixa, e so nao reprovou calado porque este caso cobra a
-    // publicacao no fim. O cabecalho de `barra_do_teclado.dart` previu
-    // exatamente isto: *"consertar o teclado cobrindo o `Salvar` produziria a
-    // faixa cobrindo o `Salvar`, que e o mesmo defeito com outro nome"*.
+    // MEDIDO neste gabarito, com a lista no fim da rolagem:
     //
-    // **Isso NAO e regressao desta mudanca**: o `Publicar` ja era o ultimo
-    // filho da lista antes de 22/10, e a sobreposicao ja existia. Nao ha
-    // conserto aqui porque reservar a faixa muda COMO a tela se desenha, e
-    // isso nao esta entre as seis coisas pedidas.
+    //     Publicar        y 234..282
+    //     BarraDoTeclado  y 250..298
+    //     -> 32 dos 48 dp do botao, INCLUINDO O CENTRO, sob a faixa
     //
-    // Entao o caminho medido e o que o produto oferece: a faixa existe para a
-    // pessoa FECHAR o teclado, e e depois disso que ela publica.
+    // Um toque no centro atingia o `Concluir` da faixa e a publicacao **nao
+    // saia** -- silencioso. O cabecalho de `barra_do_teclado.dart` previu
+    // isto: *"a faixa cobrindo o `Salvar`, que e o mesmo defeito com outro
+    // nome"*.
     //
-    // ISCA: trocar o `Publicar` de lugar para dentro de um rodape que nao rola
-    // (ou tirar a rolagem da tela). O botao deixa de caber na janela, e este
-    // caso reprova pelo nome no retangulo -- e nenhum outro caso deste arquivo
-    // reprova, porque todos eles rodam numa janela de 2400 dp.
+    // ISCA: tire o `bottomNavigationBar` desta tela e devolva o `Publicar`
+    // para o fim do `ListView` (ou troque `BarraDeAcaoFixa` por um
+    // `Container` qualquer, que nao le `BarraDoTeclado.alturaEmUso`). Este
+    // caso reprova PELO NOME no retangulo, dizendo quantos dp ficaram sob a
+    // faixa -- e, se o retangulo passasse, a contagem do `POST` reprovaria.
     final camera = CameraDeTeste(
       EstadoDaPermissao.concedida,
       foto: fotoEscolhidaDeTeste,
@@ -990,22 +987,23 @@ void main() {
       teclado: tecladoDp,
     );
 
-    // Com foto na tela: o caso PIOR depois da reordenacao, porque a previa
-    // quadrada ocupa quase toda a area visivel e empurra o `Publicar`.
-    await tester.tap(find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto));
+    // Com foto na tela: o caso PIOR, porque a previa quadrada ocupa quase
+    // toda a area visivel.
+    await tester.tap(
+      find.widgetWithText(BotaoPrimario, PublicarNoMural.tirarFoto),
+    );
     await tester.pumpAndSettle();
 
     // **O CAMPO PRECISA SER ROLADO ATE A VISTA ANTES DE RECEBER TEXTO.**
-    //
-    // `ListView` nao constroi o que esta fora da viewport, e neste gabarito
-    // sobram 298 dp -- a previa quadrada sozinha ocupa quase tudo. Medido: sem
-    // esta rolagem o `enterText` estourou `Iterable.single` em
-    // `WidgetTester.showKeyboard`, porque `find.byType(TextField)` achou ZERO.
+    // `ListView` nao constroi o que esta fora da viewport. Medido: sem esta
+    // rolagem o `enterText` estourou `Iterable.single` em
+    // `WidgetTester.showKeyboard`, porque `find.byType(TextField)` achou
+    // ZERO.
     //
     // **`scrollable:` EXPLICITO**: um `TextField` com foco tem `Scrollable`
-    // PROPRIO (o do `EditableText`), e `scrollUntilVisible` sem alvo chama
-    // `widget` sobre `find.byType(Scrollable)` -- que acha DOIS e estoura
-    // `Bad state: Too many elements`. O `.first` e o do `ListView`.
+    // PROPRIO (o do `EditableText`), e `scrollUntilVisible` sem alvo acha
+    // DOIS e estoura `Bad state: Too many elements`. O `.first` e o do
+    // `ListView`.
     final aRolagem = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
       find.byType(BichuField),
@@ -1016,84 +1014,104 @@ void main() {
     await tester.enterText(find.byType(TextField), 'o momento do dia');
     await tester.pumpAndSettle();
 
-    // ---- CONTROLE POSITIVO: o teclado esta ABERTO de verdade --------------
-    // A faixa do teclado so nasce com campo de texto corrido focado E teclado
-    // na tela. Se ela nao estiver aqui, este caso nao esta medindo o estado que
-    // ele diz medir, e o retangulo abaixo valeria para uma tela sem teclado.
+    // ---- CONTROLE POSITIVO (1): a faixa esta DESENHADA na tela -----------
+    // Sem ela, este caso mediria alcance numa tela sem teclado e a banda
+    // descontada abaixo seria uma banda vazia -- o caso ficaria verde pelo
+    // motivo errado, que e exatamente como esta classe de defeito passou.
     expect(
       find.text(BarraDoTeclado.rotuloConcluir),
       findsOneWidget,
       reason:
           'CONTROLE POSITIVO: `BarraDoTeclado` nao esta na tela, entao o '
-          'teclado nao esta aberto e este caso nao mede alcance com teclado',
+          'teclado nao esta aberto e este caso nao mede alcance com teclado '
+          'nenhum.',
     );
 
-    // ---- A PESSOA FECHA O TECLADO PELA FAIXA QUE EXISTE PARA ISSO ---------
-    // Este e o caminho do produto, e nao um atalho de teste: `BarraDoTeclado`
-    // foi feita porque em campo de texto corrido NAO HA tecla que feche o
-    // teclado (e no iOS nao ha botao voltar).
-    await tester.tap(find.text(BarraDoTeclado.rotuloConcluir));
-    await tester.pumpAndSettle();
-    // E o sistema desce o teclado: `viewInsets` e do SISTEMA, e nao da tela.
-    tester.view.viewInsets = FakeViewPadding.zero;
-    await tester.pumpAndSettle();
-
-    // CONTROLE: a faixa saiu junto com o teclado.
+    // ---- CONTROLE POSITIVO (2): a faixa RESERVOU altura ------------------
+    // `alturaEmUso` e o valor que `BarraDeAcaoFixa` le. Zero aqui significa
+    // que o campo nao e de texto corrido (ou que a faixa nao se anexou), e
+    // entao nao ha reserva nenhuma a conferir.
     expect(
-      find.text(BarraDoTeclado.rotuloConcluir),
-      findsNothing,
-      reason: 'a faixa do teclado ficou na tela com o teclado fechado, e ela '
-          'continuaria cobrindo o `Publicar`',
+      BarraDoTeclado.alturaEmUso.value,
+      BarraDoTeclado.altura,
+      reason:
+          'CONTROLE POSITIVO: `BarraDoTeclado.alturaEmUso` vale '
+          '${BarraDoTeclado.alturaEmUso.value} e nao '
+          '${BarraDoTeclado.altura}. Sem reserva declarada nao ha o que '
+          '`BarraDeAcaoFixa` desconte, e o retangulo abaixo passaria por '
+          'acidente.',
     );
 
-    final publicar = find.widgetWithText(FilledButton, PublicarNoMural.publicar);
-    await tester.scrollUntilVisible(publicar, 120, scrollable: aRolagem);
-    await tester.pumpAndSettle();
+    // ---- O RETANGULO, descontada a faixa ---------------------------------
+    final double chaoVisivel = aparelhoPequeno.height - tecladoDp; // 298
+    final double tetoDaFaixa = chaoVisivel - BarraDoTeclado.altura; // 250
 
-    // O que a janela MOSTRA agora: a janela inteira, sem teclado.
-    final janela = Rect.fromLTRB(
-      0,
-      0,
-      aparelhoPequeno.width,
-      aparelhoPequeno.height,
+    final publicar =
+        find.widgetWithText(FilledButton, PublicarNoMural.publicar);
+    expect(
+      publicar,
+      findsOneWidget,
+      reason:
+          'REPROVA: o `Publicar` nao esta na arvore neste gabarito. O que '
+          'nao e construido nao pode ser tocado, nao recebe foco e nao e '
+          'lido por leitor de tela.',
     );
     final caixa = tester.getRect(publicar);
 
     expect(
-      caixa.top,
-      greaterThanOrEqualTo(janela.top),
-      reason: 'o `Publicar` ficou ACIMA da area visivel: a pessoa nao o ve',
+      caixa.bottom,
+      lessThanOrEqualTo(tetoDaFaixa + 0.5),
+      reason:
+          'REPROVA: o `Publicar` ocupa y ${caixa.top.toStringAsFixed(1)}..'
+          '${caixa.bottom.toStringAsFixed(1)} e a faixa do teclado ocupa '
+          '${tetoDaFaixa.toStringAsFixed(1)}..'
+          '${chaoVisivel.toStringAsFixed(1)} -- o botao desce POR BAIXO da '
+          'faixa. Medido em 22/10/2026 antes do conserto: botao em 234..282, '
+          'faixa em 250..298, 32 dos 48 dp cobertos INCLUINDO O CENTRO. Um '
+          'toque no centro atinge o `Concluir` da faixa e a publicacao nao '
+          'sai, sem excecao nenhuma: a pessoa digita, toca e nada acontece. '
+          'A saida e `BarraDeAcaoFixa` no slot `bottomNavigationBar`, que ja '
+          'recua `viewInsets.bottom + BarraDoTeclado.alturaEmUso`.',
     );
     expect(
-      caixa.bottom,
-      lessThanOrEqualTo(janela.bottom),
-      reason: 'o `Publicar` ficou ABAIXO da area visivel, fora da janela',
+      caixa.top,
+      greaterThanOrEqualTo(-0.5),
+      reason: 'REPROVA: o `Publicar` ficou ACIMA da janela: a pessoa nao o ve',
     );
-    expect(caixa.left, greaterThanOrEqualTo(janela.left));
-    expect(caixa.right, lessThanOrEqualTo(janela.right));
+    expect(caixa.left, greaterThanOrEqualTo(-0.5));
+    expect(
+      caixa.right,
+      lessThanOrEqualTo(aparelhoPequeno.width + 0.5),
+      reason: 'REPROVA: o `Publicar` passou da largura da janela',
+    );
 
-    // E o botao esta VIVO: um retangulo de botao desabilitado nao prova
+    // E o botao esta VIVO: o retangulo de um botao desabilitado nao prova
     // alcance de nada.
     expect(
       tester.widget<FilledButton>(publicar).onPressed,
       isNotNull,
-      reason: 'o `Publicar` esta DESABILITADO, entao o retangulo medido acima e '
-          'de um botao morto',
+      reason:
+          'REPROVA: o `Publicar` esta DESABILITADO, entao o retangulo medido '
+          'acima e de um botao morto.',
     );
 
-    // ---- E O TOQUE CHEGA, e e isso que fecha a prova ----------------------
-    // **`warnIfMissed: false` NAO esta aqui para tolerar o toque perdido**: o
-    // retangulo acima ja exigiu que o botao esteja na janela, e o `expect` de
-    // baixo exige que a PUBLICACAO tenha saido. Toque coberto nao publica, e o
-    // caso reprova.
+    // ---- CONTROLE POSITIVO (3): A ACAO ACONTECE --------------------------
+    // **Isto e o que fecha a prova, e nao o retangulo.** O retangulo diz que
+    // o botao esta num lugar alcancavel; a contagem do `POST` diz que o
+    // toque CHEGOU nele. `warnIfMissed: false` nao tolera nada aqui: se
+    // alguma coisa estiver cobrindo o botao, o `expect` abaixo reprova.
     await tester.tap(publicar, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(
       postsDePublicacao(capturado),
       hasLength(1),
       reason:
-          'o botao estava na janela, habilitado, e o toque nao publicou nada: '
-          'alguma coisa esta COBRINDO o `Publicar`',
+          'REPROVA: o botao estava na janela, acima da faixa e habilitado, e '
+          'o toque NAO publicou nada (sairam '
+          '${postsDePublicacao(capturado).length} `POST '
+          '/v1/me/publications`). Alguma coisa esta COBRINDO o `Publicar` -- '
+          'e para quem esta na tela isso e indistinguivel de um botao '
+          'quebrado.',
     );
   });
 }
