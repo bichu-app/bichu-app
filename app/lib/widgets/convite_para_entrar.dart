@@ -401,6 +401,23 @@ enum SecaoComConta {
     retomada: 'Entre de novo para ver os seus pedidos de conexão.',
   ),
 
+  /// `GET /v1/connections` — a tela `Conexoes` (cliente, 22/10/2026).
+  ///
+  /// **A rota e `bearerAuth` sem alternativa vazia**, e aqui o muro e mais que
+  /// do servidor: sem conta nao existe "as proprias conexoes". Nao ha recorte
+  /// publico desta tela a oferecer, e por isso ela nao tem estado degradado --
+  /// o corpo inteiro vira este convite.
+  ///
+  /// **O ganho nao promete lista de gente**, e nao pode: a lista que esta tela
+  /// mostra e a DA PROPRIA CONTA, e quem nao tem conta nao tem conexoes para
+  /// ver. Ele promete o que a conexao destrava.
+  minhasConexoes(
+    titulo: 'As suas conexões ficam aqui',
+    ganho: 'Entre para ver quem já é sua conexão, abrir o perfil de cada '
+        'pessoa e acompanhar o que elas publicam no Mural.',
+    retomada: 'Entre de novo para ver as suas conexões.',
+  ),
+
   /// A pagina de um encontro da `Rede` — `/rede/encontros/<slug>`.
   ///
   /// **ESTA ENTRADA E A UNICA DO CATALOGO CUJA ROTA DE SERVIDOR RESPONDE

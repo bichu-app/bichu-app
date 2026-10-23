@@ -407,7 +407,7 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
     }
   });
 
-  void it('ISCA -- `photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao TRES', () => {
+  void it('ISCA -- `photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao QUATRO', () => {
     // A varredura e sobre o CONTRATO, e nao sobre esta fatia: ela reprova
     // qualquer resposta nova que ganhe o campo, de qualquer frente.
     //
@@ -440,10 +440,22 @@ void describe('ISCA (b): o AUTOR da publicacao sai sem foto e sem pet', () => {
         // Emenda 5 (20/10/2026): o autor de uma publicacao, e com ele o autor
         // de um COMENTARIO -- que reusa o mesmo schema de proposito.
         'components.schemas.PublicationAuthor',
+        // **O QUARTO (22/10/2026): a lista das PROPRIAS conexoes.** O cliente
+        // emendou a propria decisao de 18/10 -- *"o usuario pode abrir a lista
+        // de usuarios que e sua conexao"*. Todo mundo nesta lista JA aceitou
+        // quem chama, por predicado da clausula `WHERE` (`state = 'accepted'`),
+        // entao ele e menos exposto que o terceiro e nao mais.
+        //
+        // **Ele nao abre caminho para a VITRINE** tampouco: `ConnectedPerson`
+        // tem os CINCO campos de `PersonSearchResult` e mais nenhum, e o portao
+        // `conexao-nao-expoe-lista-nem-identificador.test.ts` compara os dois
+        // conjuntos por nome.
+        'components.schemas.ConnectedPerson',
       ].sort(),
       'a foto de pessoa ganhou hospedeiro novo, ou perdeu um. O ADR-0010 a limita as ' +
-        'superficies das emendas 3 e 5 e a emenda de 21/10/2026 (o resultado da busca), ' +
-        'por nome, e abrir uma quarta e decisao do cliente -- nao de quem implementa',
+        'superficies das emendas 3 e 5, a emenda de 21/10/2026 (o resultado da busca) e ' +
+        'a de 22/10/2026 (a lista das proprias conexoes), por nome, e abrir uma quinta ' +
+        'e decisao do cliente -- nao de quem implementa',
     );
   });
 
@@ -594,7 +606,7 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
     return total;
   }
 
-  void it('`connections` continua com CINCO, `people` tem TRES e `safety` SEIS', () => {
+  void it('`connections` tem SEIS, `people` tem TRES e `safety` SEIS', () => {
     // As tres sao fechadas por portao ou por desenho, e o Mural tem etiqueta
     // propria justamente para nao encostar nelas. Este caso e o aviso de que
     // alguem encostou.
@@ -605,11 +617,18 @@ void describe('ISCA (b): as etiquetas fechadas nao foram tocadas', () => {
     // `resolveConnectionInvite` (a mesma leitura de perfil, enderecada pelo
     // token do convite). O numero continua FECHADO -- uma quarta reprova aqui.
     //
-    // **`connections` continua com CINCO, e isso nao e coincidencia**: o
-    // caminho por apelido entrou como campo no CORPO de `requestConnection`, e
-    // as duas operacoes do convite ficaram na etiqueta `connection-invites`
-    // justamente para nao encostar neste numero.
-    assert.equal(contarEtiqueta('connections'), 5, 'a etiqueta `connections` mudou de tamanho');
+    // **`connections` PASSOU DE CINCO PARA SEIS EM 22/10/2026**, e este
+    // comentario dizia que ela *"continua com CINCO"*. O cliente emendou a
+    // propria decisao de 18/10/2026, literal: *"o usuario pode abrir a lista de
+    // usuarios que e sua conexao"*. A sexta e `listMyConnections`
+    // (`GET /connections`), a lista do PROPRIO DONO -- e a de TERCEIRO continua
+    // nao existindo.
+    //
+    // **O numero continua FECHADO, e a setima reprova aqui.** O que o ajuste
+    // mudou foi UMA operacao, pelo nome; o caminho por apelido continua sendo
+    // campo no CORPO de `requestConnection`, e as duas operacoes do convite
+    // continuam na etiqueta `connection-invites` para nao encostar neste numero.
+    assert.equal(contarEtiqueta('connections'), 6, 'a etiqueta `connections` mudou de tamanho');
     assert.equal(contarEtiqueta('people'), 3, 'a etiqueta `people` mudou de tamanho');
     assert.equal(contarEtiqueta('safety'), 6, 'a etiqueta `safety` mudou de tamanho');
     assert.equal(

@@ -29,10 +29,13 @@ import {
   TETO_DE_PENDENTES_ENVIADOS,
 } from '../../domain/teto-de-conexoes.js';
 import type {
+  ArestaComApelido,
   ConnectionsRepository,
   Encerramento,
   NovoPedido,
+  PaginaDeConexoes,
   PaginaDePedidos,
+  RecorteDeConexoes,
   RecortePedidos,
 } from '../../ports/connections-repository.js';
 
@@ -84,6 +87,23 @@ export interface PessoaDeTeste {
    * a isca de "sem canal confirmado o selo não aparece" ficaria verde sem medir.
    */
   readonly canalVerificado?: boolean;
+  /**
+   * Quantos pets não apagados, para a lista das próprias conexões (22/10/2026).
+   *
+   * **Opcional, e o padrão é `0`**: conta que o teste nunca mencionou não tem
+   * pet, e um padrão diferente de zero faria a isca da contagem ficar verde sem
+   * ninguém escrever o número.
+   */
+  readonly pets?: number;
+  /**
+   * A chave da derivada `thumb` da foto, ou `null`. Reproduz o predicado
+   * `status = 'ready' AND thumb_key IS NOT NULL` da consulta de verdade.
+   *
+   * **Opcional, e o padrão é `null`**: na dúvida não há foto, pela mesma razão
+   * do selo — um padrão com chave faria a isca de "sem foto pronta sai nulo"
+   * ficar verde sem medir nada.
+   */
+  readonly chaveDaFoto?: string | null;
 }
 
 export interface BancadaDeConexoes {
@@ -275,6 +295,73 @@ export function conexoesEmMemoria(
         itens: todas.slice(inicio, inicio + recorte.limite).map((l) => comoAresta(l, quemChama)),
         total: todas.length,
       });
+    },
+
+    /**
+     * **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026).
+     *
+     * Reproduz de propósito, e só, o que a consulta faz: `accepted`,
+     * `conta_habilitada` nos **dois** lados (via [viva]), **sem apelido fica
+     * fora** (a consulta de verdade filtra `handle IS NOT NULL`, porque cada
+     * linha é uma porta para o perfil), e a ordem por nome e depois por apelido.
+     *
+     * **Não há argumento de pessoa**, como na porta: quem quisesse a lista de
+     * outra conta teria de acrescentar parâmetro, e o lugar onde isso se vê é a
+     * porta.
+     */
+    conexoes: (quemChama: UserId, recorte: RecorteDeConexoes): Promise<PaginaDeConexoes> => {
+      const todas = linhas
+        .filter((l) => l.estado === 'accepted' && viva(l))
+        .filter((l) => l.pedinte === quemChama || l.destinatario === quemChama)
+        .map((l) => estado.get(l.pedinte === quemChama ? l.destinatario : l.pedinte))
+        .filter((pessoa): pessoa is PessoaDeTeste => pessoa !== undefined)
+        // **Sem apelido nao entra**: a consulta de verdade cobra
+        // `handle IS NOT NULL`, porque a linha e uma porta para o perfil e o
+        // perfil e enderecado pelo apelido.
+        .filter((pessoa) => pessoa.apelido !== null)
+        .sort(
+          (a, b) =>
+            (a.nomeDeExibicao ?? '').localeCompare(b.nomeDeExibicao ?? '') ||
+            (a.apelido ?? '').localeCompare(b.apelido ?? ''),
+        );
+      const inicio = (recorte.pagina - 1) * recorte.limite;
+      return Promise.resolve({
+        itens: todas.slice(inicio, inicio + recorte.limite).map((pessoa) => ({
+          apelido: pessoa.apelido as string,
+          nomeDeExibicao: pessoa.nomeDeExibicao,
+          petsCount: pessoa.pets ?? 0,
+          connectionsCount: contarConexoesDe(pessoa.id),
+          photoKey: pessoa.chaveDaFoto ?? null,
+        })),
+        total: todas.length,
+      });
+    },
+
+    /**
+     * As arestas entre quem chama e uma lista de apelidos (22/10/2026).
+     *
+     * Reproduz o recorte da consulta: `conta_habilitada` nos dois lados (via
+     * [viva]) e `accepted` **ou** pendente ainda na validade. **A projeção do
+     * estado não é daqui** — quem projeta é `estadoNoApp`, no leitor.
+     */
+    arestasPorApelido: (
+      quemChama: UserId,
+      apelidos: readonly string[],
+      agora: Instant,
+    ): Promise<readonly ArestaComApelido[]> => {
+      const procurados = new Set(apelidos);
+      const achadas: ArestaComApelido[] = [];
+      for (const l of linhas) {
+        if (!viva(l)) continue;
+        if (l.pedinte !== quemChama && l.destinatario !== quemChama) continue;
+        if (l.estado !== 'accepted' && l.expiraEm <= Number(agora)) continue;
+        const outroLado = l.pedinte === quemChama ? l.destinatario : l.pedinte;
+        const apelido = estado.get(outroLado)?.apelido;
+        if (apelido === null || apelido === undefined) continue;
+        if (!procurados.has(apelido)) continue;
+        achadas.push({ apelido, aresta: comoAresta(l, quemChama) });
+      }
+      return Promise.resolve(achadas);
     },
 
     estaConectado: (um: UserId, outro: UserId) =>

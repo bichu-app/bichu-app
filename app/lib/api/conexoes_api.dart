@@ -4,19 +4,35 @@ import 'modelos_conexao.dart';
 /// As operações da conexão entre pessoas que o app consome (`tags:
 /// [connections]`).
 ///
-/// ## Seis operações, e a ausência de uma sétima é o desenho
+/// ## SETE operações desde 22/10/2026, e a sétima é a lista do próprio dono
 ///
-/// **Não existe `listarConexoes`, e não pode existir.** A lista de conexões não
-/// aparece a ninguém, nem a quem é conectado (plano 4-B: *"Lista de conexões |
-/// nunca | nunca"*), e o contrato não tem a operação. O que o dono vê sobre as
-/// próprias conexões é [resumo] — só números.
+/// **`listarConexoes` EXISTE, e este cabeçalho afirmava o contrário.** Ele dizia
+/// *"Não existe `listarConexoes`, e não pode existir. A lista de conexões não
+/// aparece a ninguém, nem a quem é conectado"*. **O cliente emendou a própria
+/// decisão de 18/10/2026**, literal:
+///
+/// > *"o usuário pode abrir a lista de usuários que é sua conexão"*
+///
+/// | | antes | agora |
+/// |---|---|---|
+/// | a própria lista, para o próprio dono | nunca | [listarConexoes] |
+/// | a lista de **TERCEIRO** | nunca | **continua NUNCA** |
+///
+/// **Não há método para a lista de outra pessoa, e não há como escrevê-lo
+/// daqui**: `GET /connections` não tem parâmetro de pessoa, e quem chama vem do
+/// token. Tocar as *"N conexões"* no perfil de alguém continua não levando a
+/// lugar nenhum.
+///
+/// [resumo] continua existindo ao lado de [listarConexoes]: a tela diz *"Você
+/// tem N de 150 conexões"* com o número e lista com a página.
 ///
 /// **Não existe "seguir"**: a conexão é simétrica e o grafo é um só.
 ///
 /// ## Todas levam token
 ///
-/// `bearerAuth` sem alternativa vazia nas seis. Não há superfície de conexão
-/// navegável sem conta, em estado nenhum.
+/// `bearerAuth` sem alternativa vazia nas sete. Não há superfície de conexão
+/// navegável sem conta, em estado nenhum — e a lista das próprias conexões é o
+/// caso mais óbvio disso, porque sem conta não existe "as próprias".
 ///
 /// ## [pedir] e [pedirPorApelido]: DUAS credenciais, nunca as duas juntas
 ///
@@ -103,6 +119,23 @@ class ConexoesApi {
       idempotencyKey: idempotencyKey,
     );
     return Conexao.doJson(json);
+  }
+
+  /// `listMyConnections`: **as PRÓPRIAS conexões aceitas** (cliente,
+  /// 22/10/2026).
+  ///
+  /// **Sem parâmetro de pessoa**, e isso é o desenho: a conta vem do token, e
+  /// não há como pedir a lista de outra pessoa a partir deste método.
+  ///
+  /// Só conexões **aceitas** — pendente vive em [pedidos], nas duas caixas.
+  /// Conta desabilitada de qualquer um dos dois lados sai da lista sem a linha
+  /// ser apagada.
+  Future<PaginaDeConexoes> listarConexoes({int pagina = 1, int limite = 20}) async {
+    final json = await _api.get(
+      '/connections',
+      query: <String, String>{'page': '$pagina', 'limit': '$limite'},
+    );
+    return PaginaDeConexoes.doJson(json);
   }
 
   /// `listMyConnectionRequests`. Uma das **duas** caixas.

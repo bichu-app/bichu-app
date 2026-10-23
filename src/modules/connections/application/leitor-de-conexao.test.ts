@@ -123,17 +123,42 @@ void describe('criarLeitorDeConexao', () => {
     assert.equal(await leitor.estaConectado(ANA, CARLA), false);
   });
 
-  void it('ISCA -- a porta NAO oferece escrita, e nao ha como alcancar o repositorio por ela', () => {
-    // O repositório inteiro tem `pedir`, `aceitar`, `encerrar` e
-    // `desfazerPorBloqueio`. **Nada disso atravessa esta porta**, e é por isso
-    // que a fatia G pode receber a conexão sem poder mudá-la.
+  /**
+   * **A porta tem QUATRO métodos desde 22/10/2026, e eram três.**
+   * `estadosPorApelido` entrou com a decisão do cliente que autorizou a lista
+   * das próprias conexões, e ela serve ao estado do par nos resultados da
+   * busca. **A conferência continua sendo igualdade de conjunto**, então um
+   * quinto método reprova exatamente como o quarto reprovava ontem.
+   *
+   * **E `conexoes` está na lista de proibidos, que é a parte que importa.** O
+   * repositório ganhou `conexoes` em 22/10/2026 — a lista das próprias conexões
+   * —, e ela **não atravessa esta porta**: a lista é servida à rota do próprio
+   * módulo, e nenhum outro módulo a alcança. É a fronteira que
+   * `src/architecture.rules.mjs` impõe a `people`, e é ela que impede a lista
+   * de virar, de fora, a lista de conexões de terceiro.
+   */
+  void it('ISCA -- a porta NAO oferece escrita NEM a lista, e nao ha como alcancar o repositorio', () => {
     const { leitor } = bancada();
+    // A ordem e a de `Array.sort()` sobre os nomes: `estaConectado` vem antes
+    // de `estadosPorApelido` porque `C` (0x43) < `d` (0x64).
     assert.deepEqual(Object.keys(leitor).sort(), [
       'arestaVivaEntre',
       'contarConexoes',
       'estaConectado',
+      'estadosPorApelido',
     ]);
-    for (const escrita of ['pedir', 'aceitar', 'encerrar', 'desfazerPorBloqueio', 'pedidos']) {
+    for (const escrita of [
+      'pedir',
+      'aceitar',
+      'encerrar',
+      'desfazerPorBloqueio',
+      'pedidos',
+      // A LISTA DAS PROPRIAS CONEXOES (22/10/2026). Ela existe no repositorio e
+      // na rota deste modulo, e **nao aqui**: quem a quisesse de fora teria de
+      // acrescentar metodo na porta, que e o lugar onde alguem ve.
+      'conexoes',
+      'arestasPorApelido',
+    ]) {
       assert.equal(
         (leitor as unknown as Record<string, unknown>)[escrita],
         undefined,

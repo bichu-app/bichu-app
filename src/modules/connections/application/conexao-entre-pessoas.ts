@@ -39,8 +39,16 @@
  *
  * ## O que este arquivo não tem
  *
- * Nenhuma listagem de conexões, nenhuma sugestão de "quem você talvez conheça",
- * nenhum "seguir", nenhuma escrita em `user_blocks`. **E nenhuma busca:** a
+ * Nenhuma **sugestão** de "quem você talvez conheça", nenhum "seguir", nenhuma
+ * escrita em `user_blocks`.
+ *
+ * **A LISTAGEM DAS PRÓPRIAS CONEXÕES PASSOU A EXISTIR EM 22/10/2026**, e este
+ * parágrafo dizia *"nenhuma listagem de conexões"*. O cliente emendou a própria
+ * decisão de 18/10/2026: *"o usuário pode abrir a lista de usuários que é sua
+ * conexão"*. Ela é [ConexaoEntrePessoas.conexoes], **só do próprio dono** — e a
+ * de terceiro continua não existindo, porque não há argumento de pessoa a
+ * passar. Sugestão de quem conhecer continua fora: ela é a enumeração servida
+ * pelo produto, e a `20261018000030` já a recusa nominalmente. **E nenhuma busca:** a
  * busca é de `people` (`GET /v1/people`), e este arquivo só recebe um apelido já
  * escolhido — ele não lista, não casa texto e não sabe quem existe. E nenhum
  * aviso: a caixa de
@@ -65,6 +73,7 @@ import {
 import type {
   ConnectionsRepository,
   DirecaoDoPedido,
+  PaginaDeConexoes,
   PaginaDePedidos,
 } from '../ports/connections-repository.js';
 import type { LeitorDeBloqueio } from '../ports/leitor-de-bloqueio.js';
@@ -322,6 +331,36 @@ export class ConexaoEntrePessoas {
       .map((aresta: ArestaGuardada) => projetarConexao(aresta, agora, comoIso))
       .filter((p): p is ConexaoProjetada => p !== undefined);
     return { itens, total: encontrados.total };
+  }
+
+  /**
+   * **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026: *"o usuário pode
+   * abrir a lista de usuários que é sua conexão"*).
+   *
+   * ## Este método é curto, e isso é o desenho
+   *
+   * Ele não projeta nada: a forma que a porta devolve
+   * (`PessoaConectada`) já é o recorte final, e **os cinco campos são os cinco
+   * da busca**. Não há um `map` aqui onde um sexto campo pudesse ser montado, e
+   * não há decisão de estado a tomar — ao contrário de [pedidos], que chama
+   * `projetarConexao` porque pendente e recusado se projetam diferente. Aqui
+   * tudo é `accepted`, por predicado da cláusula `WHERE`.
+   *
+   * **A autorização não está aqui**, e não pode estar: `quemChama` entra na
+   * cláusula `WHERE` do repositório (ADR-0021), ao lado das duas pontas da
+   * aresta. Não existe neste método um `if` que escolha de quem é a lista, e é
+   * por isso que a lista de terceiro não nasce de um descuido daqui — ela
+   * precisaria de um **argumento novo**, neste arquivo e na porta.
+   *
+   * Quem não tem conta não chega: a rota exige `bearerAuth` sem alternativa
+   * vazia, e o 401 vem antes de qualquer consulta.
+   */
+  async conexoes(
+    contexto: ContextoDoChamador,
+    pagina: number,
+    limite: number,
+  ): Promise<PaginaDeConexoes> {
+    return this.deps.conexoes.conexoes(contexto.userId, { pagina, limite });
   }
 
   /**

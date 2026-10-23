@@ -1,26 +1,42 @@
 /**
  * As rotas da conexão entre pessoas (fatia F).
  *
- * ## Cinco operações, e a ausência de uma sexta é o desenho
+ * ## SEIS operações desde 22/10/2026, e a sexta é a lista do próprio dono
  *
  * | | |
  * |---|---|
  * | `POST /connections` | pedir, **por convite ou por apelido** |
+ * | `GET /connections` | **as PRÓPRIAS conexões aceitas** (22/10/2026) |
  * | `GET /connections/requests` | as duas caixas de pedidos |
  * | `GET /connections/summary` | os **números** da própria conta |
  * | `POST /connections/{ref}/acceptance` | aceitar |
  * | `DELETE /connections/{ref}` | recusar, cancelar ou desfazer |
  *
- * **Continuam sendo CINCO**, e isso não é coincidência: a decisão do cliente de
- * 20/10/2026 acrescentou um **caminho** a `requestConnection`, não uma operação.
- * `conexao-nao-expoe-lista-nem-identificador.test.ts` cobra o número exato, e as
- * operações do convite ficaram na etiqueta `connection-invites` justamente para
- * não afrouxá-lo.
+ * **`GET /connections` EXISTE DESDE 22/10/2026**, e este cabeçalho afirmava o
+ * contrário: ele dizia *"Não existe `GET /connections`. A lista de conexões não
+ * aparece a ninguém, nem a quem é conectado"*. **O cliente emendou a própria
+ * decisão de 18/10/2026**, literal:
  *
- * **Não existe `GET /connections`.** A lista de conexões não aparece a ninguém,
- * nem a quem é conectado (plano 4-B: *"Lista de conexões | nunca | nunca"*), e a
- * ausência é vigiada por `conexao-nao-expoe-lista-nem-identificador.test.ts` —
- * que lê o contrato e reprova qualquer operação nova com esta etiqueta.
+ * > *"o usuário pode abrir a lista de usuários que é sua conexão"*
+ *
+ * **A emenda é exata, e a metade não emendada continua valendo inteira:**
+ *
+ * | | antes | agora |
+ * |---|---|---|
+ * | a própria lista, para o próprio dono | nunca | **PODE** |
+ * | a lista de **TERCEIRO** | nunca | **continua NUNCA** |
+ *
+ * Não há rota de lista endereçada a uma pessoa neste arquivo, e não pode haver:
+ * `listMyConnections` não tem parâmetro de caminho, e quem chama vem do
+ * `bearerAuth`. `conexao-nao-expoe-lista-nem-identificador.test.ts` foi
+ * **ajustado pelo nome** — ele abriu `listMyConnections` e passou a cobrar três
+ * coisas novas: nenhuma operação de conexão endereçada por pessoa,
+ * `ConnectedPersonPage` com uma porta só, e o recorte da lista igual ao da
+ * busca. O número exato de operações continua cobrado, agora em seis.
+ *
+ * **As operações do convite continuam na etiqueta `connection-invites`**, e a
+ * busca de pessoas em `people`: o número desta etiqueta é um mecanismo, e a
+ * forma de respeitá-lo nunca foi afrouxá-lo.
  *
  * **O nome do portão estava errado neste cabeçalho até 20/10/2026**: ele citava
  * um `sem-lista-de-conexoes.test.ts` que **nunca existiu** em nenhuma ref deste
@@ -40,9 +56,11 @@
  *
  * ## Todas exigem conta, e o 401 vem antes de qualquer consulta
  *
- * `bearerAuth` **sem alternativa vazia** nas cinco. A coluna "sem conta" da
+ * `bearerAuth` **sem alternativa vazia** nas seis. A coluna "sem conta" da
  * tabela 4-B é vazia inteira, e isso é arquitetura e não escolha de tela: não
- * existe rota de conexão alcançável sem conta, em estado nenhum.
+ * existe rota de conexão alcançável sem conta, em estado nenhum — e a lista das
+ * próprias conexões é o caso mais óbvio disso, porque sem conta não existe "as
+ * próprias".
  *
  * ## O que este arquivo NÃO decide
  *
@@ -58,9 +76,12 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
-import type { UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { ConexaoEntrePessoas } from '../../application/conexao-entre-pessoas.js';
-import type { DirecaoDoPedido } from '../../ports/connections-repository.js';
+import type {
+  DirecaoDoPedido,
+  PessoaConectada,
+} from '../../ports/connections-repository.js';
 
 /** Os tetos são os do contrato, COPIADOS de lá. */
 export const rotaDoPedidoDeConexao = defineRoute({
@@ -75,6 +96,25 @@ export const rotaDasCaixasDePedidos = defineRoute({
   operationId: 'listMyConnectionRequests',
   method: 'get',
   path: '/connections/requests',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * **A lista das PRÓPRIAS conexões** (cliente, 22/10/2026).
+ *
+ * O teto é o das duas leituras irmãs — 600/h por conta —, e é o mesmo por uma
+ * razão e não por simetria: as três são leitura da própria conta, numa tela que
+ * a pessoa reabre. **Não há dimensão `q`** porque não há busca aqui: a lista não
+ * recebe termo, e sem termo não há varredura a limitar.
+ *
+ * **Efeitos vazios**: é leitura. E **não há parâmetro de caminho**, que é o que
+ * torna a lista de terceiro inexprimível nesta rota.
+ */
+export const rotaDasPropriasConexoes = defineRoute({
+  operationId: 'listMyConnections',
+  method: 'get',
+  path: '/connections',
   effects: [],
   rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
@@ -123,6 +163,13 @@ export interface DependenciasDasRotasDeConexao {
   readonly conexoes: ConexaoEntrePessoas;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
+  /**
+   * A raiz pública da mídia, de onde a URL da foto é montada — **entrou em
+   * 22/10/2026 com `listMyConnections`**, que é a primeira resposta de conexão
+   * a carregar foto. A mesma dependência, com o mesmo nome, de
+   * `DependenciasDasRotasDeBusca`.
+   */
+  readonly baseDeMidia: AbsoluteUrl;
 }
 
 interface CaminhoDaConexao {
@@ -133,6 +180,44 @@ interface QueryDasCaixas {
   readonly direction?: DirecaoDoPedido;
   readonly page?: number;
   readonly limit?: number;
+}
+
+/** A paginação da lista das próprias conexões. **Sem direção e sem pessoa.** */
+interface PaginacaoSimples {
+  readonly page?: number;
+  readonly limit?: number;
+}
+
+/**
+ * Uma conexão como `ConnectedPerson` a declara: **os CINCO campos de
+ * `PersonSearchResult`** (cliente, 22/10/2026).
+ *
+ * **Ser conexão aceita não abre campo aqui**, e a igualdade com o recorte da
+ * busca é medida no contrato pelo portão. Sem `public_ref` (esta lista não
+ * hospeda denunciar nem bloquear), sem `connection_ref` (desfazer mora no
+ * perfil), sem `connection_state` (seria a constante `connected` em toda linha)
+ * e sem UUID (ADR-0010 item 6).
+ *
+ * **Exportada para a isca**, como `comoRespostaDaPessoa` da busca: nenhum portão
+ * deste repositório confere o CORPO da resposta, então a única forma de medir o
+ * conjunto de chaves em suíte é chamar a projeção.
+ */
+export function comoRespostaDaConexao(
+  pessoa: PessoaConectada,
+  baseDeMidia: AbsoluteUrl,
+): Record<string, unknown> {
+  return {
+    handle: pessoa.apelido,
+    display_name: pessoa.nomeDeExibicao,
+    pets_count: pessoa.petsCount,
+    connections_count: pessoa.connectionsCount,
+    // A URL e montada na BORDA, com o dominio de midia do ambiente -- o banco
+    // guarda chave de objeto e nunca endereco. A chave vem SEMPRE, com nulo
+    // quando nao ha foto pronta: chave que aparece e desaparece faria o cliente
+    // distinguir ausencia de nulo sem que a diferenca significasse algo.
+    photo_icon_url:
+      pessoa.photoKey === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${pessoa.photoKey}`,
+  };
 }
 
 function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
@@ -250,7 +335,39 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** Só números, e só da própria conta. É o que existe no lugar da lista. */
+  /**
+   * **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026).
+   *
+   * **Nenhum parâmetro de caminho e nenhum filtro de pessoa**: só `page` e
+   * `limit`. Quem chama vem do `bearerAuth`, e é ele que entra na cláusula
+   * `WHERE` do repositório — não há nesta borda um valor de pessoa que alguém
+   * pudesse mandar, e é isso que mantém a lista de terceiro inexprimível.
+   *
+   * **A URL da foto é montada AQUI**, com a base de mídia do ambiente: o banco
+   * guarda chave de objeto e nunca endereço (§11.1 proibição 9). A mesma divisão
+   * da busca de pessoas, e a projeção é exportada pela mesma razão que a dela —
+   * nenhum portão deste repositório confere o CORPO da resposta, então a única
+   * forma de medir o conjunto de chaves em suíte é chamar a projeção.
+   */
+  registrarRota(
+    app,
+    rotaDasPropriasConexoes,
+    { resolvedores: porConta },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const query = (request.query ?? {}) as PaginacaoSimples;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO;
+      const pagina = await deps.conexoes.conexoes(await contexto(request, deps), page, limit);
+      return reply.header('Cache-Control', SEM_CACHE).send({
+        items: pagina.itens.map((pessoa) => comoRespostaDaConexao(pessoa, deps.baseDeMidia)),
+        total: pagina.total,
+        page,
+        limit,
+      });
+    },
+  );
+
+  /** Só números, e só da própria conta. É o que a tela mostra ao lado da lista. */
   registrarRota(
     app,
     rotaDoResumoDeConexoes,

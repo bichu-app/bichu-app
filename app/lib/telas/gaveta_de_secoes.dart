@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import 'conexoes/tela_minhas_conexoes.dart';
 import 'conexoes/tela_pedidos_de_conexao.dart';
 import 'seguranca/tela_de_bloqueados.dart';
 import '../theme/bichu_colors.dart';
@@ -592,6 +593,41 @@ abstract final class RegistroDeSubDestinos {
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.pedidosDeConexao,
         icone: Icons.person_add_alt_outlined,
+      ),
+      // **`Conexoes` (22/10/2026), por decisao do cliente**: *"o usuario pode
+      // abrir a lista de usuarios que e sua conexao"*. Ela emenda uma decisao
+      // dele mesmo, de 18/10/2026, que dizia que a lista nao aparecia a
+      // ninguem -- nem ao dono.
+      //
+      // **UM nome e UM destino, e os dois distintos dos de cima.** Este arquivo
+      // proibe dois nomes para o mesmo destino, e aqui nao ha reuso: `Conexoes`
+      // vai para `Rotas.minhasConexoes` e `Pedidos de conexao` continua indo
+      // para `Rotas.pedidosDeConexao`. As duas telas respondem perguntas
+      // diferentes -- quem ESPERA decisao, e quem JA e conexao --, e o
+      // raciocinio inteiro esta no cabecalho de `TelaDeMinhasConexoes`.
+      //
+      // **Em `Perfil` e nao em `Rede`**, pela MESMA razao da linha de cima: a
+      // lista e das MINHAS conexoes (`GET /connections` exige conta e a
+      // autorizacao mora no `WHERE`), e o "meu" mora em `Perfil`.
+      //
+      // **O nome e `Conexoes`** -- o cliente ofereceu tres (`contatos`,
+      // `amigos`, `conexoes`) e este e o termo do contrato (`connections`,
+      // `ConnectedPerson`) e o que o resto do app ja escreve.
+      //
+      // O GLIFO, pelo procedimento que a assercao do construtor manda: familia
+      // embutida e nenhum outro item DESTA secao (`Rotas.perfil`) com o mesmo
+      // `codePoint`. Os quatro que ja moram aqui sao `note_add_outlined`
+      // (0xf22e), `qr_code_scanner` (0xe4f7), `manage_accounts_outlined`
+      // (0xf1ac) e `person_add_alt_outlined` (0xf276).
+      // `people_outline` (0xe7fc): um CONJUNTO de pessoas, que e exatamente o
+      // que esta lista e -- e o contraste com `person_add_alt_outlined` (UMA
+      // pessoa sendo acrescentada) e o que separa as duas linhas no olho.
+      SubDestino(
+        rotulo: TelaDeMinhasConexoes.titulo,
+        forma: FormaDoSubDestino.destino,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.minhasConexoes,
+        icone: Icons.people_outline,
       ),
       // **SEGUNDA LINHA NOVA (19/10/2026), pela mesma razao da de cima**: a UX
       // 27.5.5 fechou em 21/09 e nao tem linha para esta -- bloquear alguem e

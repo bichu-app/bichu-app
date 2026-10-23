@@ -50,7 +50,8 @@ import {
   vigiarParametrosDasRotas,
 } from '../../../../shared/http/validacao-de-parametros.js';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
-import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
+import type { EstadoNoApp } from '../../../connections/ports/conexao.js';
 import { BuscaDePessoas } from '../../application/busca-de-pessoas.js';
 import { MINIMO_DE_CARACTERES_DA_BUSCA } from '../../domain/termo-de-busca.js';
 import type {
@@ -104,7 +105,19 @@ async function bancada(): Promise<Bancada> {
   await app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotasDeBuscaDePessoas(escopo, {
-        busca: new BuscaDePessoas({ busca: repositorio }),
+        busca: new BuscaDePessoas({
+          busca: repositorio,
+          // **Sem aresta nenhuma**: este arquivo mede o PISO da busca, e o
+          // estado da conexao (22/10/2026) nao entra na conta. Um dublê que
+          // devolvesse estado faria estes casos medirem duas coisas.
+          conexoes: {
+            estaConectado: () => Promise.resolve(false),
+            contarConexoes: () => Promise.resolve(0),
+            arestaVivaEntre: () => Promise.resolve(undefined),
+            estadosPorApelido: () => Promise.resolve(new Map<string, EstadoNoApp>()),
+          },
+          clock: { now: () => 0 as Instant },
+        }),
         autenticador: {
           autenticar: (token: string) => {
             autenticacoes.push(token);

@@ -32,6 +32,7 @@
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/perfil/meus_eventos.dart';
@@ -1059,11 +1060,14 @@ void main() {
       final inventario = RegistroDeSubDestinos.todos;
       expect(
         inventario,
-        hasLength(53),
+        hasLength(54),
         reason: 'REPROVA: o inventário de 27.5 tem ${inventario.length} '
             'linha(s). Ele tinha 52 e foi a 53 em 19/10: as oito linhas de '
             '`Perto` mudaram de chave para `Rede` (a contagem não muda com '
-            'isso) e o `Mural` entrou com UMA linha. A gaveta foi OCULTADA e '
+            'isso) e o `Mural` entrou com UMA linha. **Foi a 54 em 22/10/2026**: '
+            '`Conexões` em `Perfil`, por decisão do cliente -- *"o usuário pode '
+            'abrir a lista de usuários que é sua conexão"* --, que emenda a '
+            'decisão dele mesmo de 18/10. A gaveta foi OCULTADA e '
             'não apagada -- a palavra do cliente é "por enquanto" --, e '
             'apagar o inventário é o que tornaria a reinstalação uma '
             'reescrita.',
@@ -1074,7 +1078,7 @@ void main() {
   // =========================================================================
   // ISCA (g) — OS SETE ITENS VIVOS CONTINUAM ALCANÇÁVEIS
   // =========================================================================
-  group('(g) os sete itens vivos continuam alcançáveis', () {
+  group('(g) os oito itens vivos continuam alcançáveis', () {
     // ======================================================================
     // A ISCA QUE IMPORTA MAIS, e por quê
     // ======================================================================
@@ -1099,7 +1103,7 @@ void main() {
     // DESLIGAMENTO: apague qualquer um dos sete controles -- a opção da folha
     // de `Pets` ou o `ItemDeMenu` de `Perfil`. UM caso deste grupo reprova, e
     // ele nomeia o item.
-    test('são SETE, e a lista é lida do registro e não escrita à mão', () {
+    test('são OITO, e a lista é lida do registro e não escrita à mão', () {
       // A guarda contra o verde por vazio: os sete casos abaixo citam rótulos
       // à mão, e um registro que mudasse de tamanho os deixaria medindo um
       // subconjunto sem ninguém notar.
@@ -1107,23 +1111,31 @@ void main() {
           .where((d) => d.viraItem)
           .map((d) => d.rotulo)
           .toList();
+      // SETE -> OITO em 22/10/2026: `Conexões`, por decisão do cliente.
       expect(
         vivos,
-        hasLength(7),
+        hasLength(8),
         reason: 'REPROVA: o registro tem ${vivos.length} item(ns) vivo(s) e '
-            'não 7: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
+            'não 8: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
             'Item novo sem caso aqui é função que pode desaparecer no próximo '
             'diff grande, porque a gaveta já não a mostra.',
       );
-      // E são SEIS destinos distintos: `Escanear uma tag` aparece em duas
+      // E são SETE destinos distintos: `Escanear uma tag` aparece em duas
       // seções do inventário, legitimamente (a porta primária em `Pets` e a de
       // conta em `Perfil`), e o destino das duas é o mesmo.
+      //
+      // **SEIS -> SETE em 22/10/2026**, e os DOIS números subiram juntos: isso
+      // é o que prova que `Conexões` é um destino NOVO e não um segundo nome
+      // para um que já existia. Se só o primeiro tivesse subido, o item novo
+      // apontaria para um lugar que já tinha nome -- e é exatamente isso que
+      // `gaveta_de_secoes.dart` proíbe.
       expect(
         vivos.toSet(),
-        hasLength(6),
-        reason: 'REPROVA: os sete itens vivos apontam para '
-            '${vivos.toSet().length} destinos distintos, e são 6 -- '
-            '`Escanear uma tag` tem duas linhas de propósito.',
+        hasLength(7),
+        reason: 'REPROVA: os oito itens vivos apontam para '
+            '${vivos.toSet().length} destinos distintos, e são 7 -- '
+            '`Escanear uma tag` tem duas linhas de propósito, e é a ÚNICA '
+            'duplicata legítima.',
       );
     });
 
@@ -1425,9 +1437,17 @@ void main() {
     // caminho do app ate `Cancelar` um encontro -- a resposta da agenda nao
     // diz de quem o encontro e (item 7 do ADR-0010), entao quem criou um nao
     // teria como voltar a ele.
+    //
+    // **`Conexões` ENTROU EM 22/10/2026, por decisão do cliente** -- *"o
+    // usuário pode abrir a lista de usuários que é sua conexão"*. Ela emenda uma
+    // decisão dele mesmo, de 18/10, que dizia que a lista não aparecia a
+    // ninguém, nem ao dono. O item nasce com caso de alcance **no mesmo
+    // commit**, que é exatamente o que as três linhas acima tiveram de
+    // aprender na união do lote.
     for (final (rotulo, tela) in <(String, Type)>[
       ('Meus dados', TelaDadosPessoais),
       ('Pedidos de conexão', TelaDePedidosDeConexao),
+      (TelaDeMinhasConexoes.titulo, TelaDeMinhasConexoes),
       ('Pessoas bloqueadas', TelaDeBloqueados),
       (MeusEventos.titulo, MeusEventos),
     ]) {

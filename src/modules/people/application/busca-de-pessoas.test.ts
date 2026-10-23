@@ -23,7 +23,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { AbsoluteUrl, UserId } from '../../../shared/types/brands.js';
+import type { Clock } from '../../../shared/ports/index.js';
+import type { AbsoluteUrl, Instant, UserId } from '../../../shared/types/brands.js';
+import type { EstadoNoApp, LeitorDeConexao } from '../../connections/ports/conexao.js';
 import { MINIMO_DE_CARACTERES_DA_BUSCA } from '../domain/termo-de-busca.js';
 import type {
   BuscaDePessoasRepository,
@@ -62,7 +64,38 @@ function montar(resultado: readonly PessoaEncontrada[] = [MARINA]): Bancada {
       return Promise.resolve({ itens: resultado, total: resultado.length });
     },
   };
-  return { servico: new BuscaDePessoas({ busca }), termos };
+  return { servico: new BuscaDePessoas({ busca, conexoes: SEM_ARESTA, clock: RELOGIO }), termos };
+}
+
+/**
+ * **A porta de conexão sem nenhuma aresta** — o estado de todo mundo é `none`.
+ *
+ * Este dublê é o padrão desta bancada **de propósito**: o caso central da busca
+ * é achar quem ainda NÃO é conexão, e um dublê que devolvesse estado faria toda
+ * isca de recorte nascer com um valor que ninguém escreveu. Os casos que medem
+ * o estado montam o próprio mapa (ver `comEstados`).
+ */
+const SEM_ARESTA: LeitorDeConexao = {
+  estaConectado: () => Promise.resolve(false),
+  contarConexoes: () => Promise.resolve(0),
+  arestaVivaEntre: () => Promise.resolve(undefined),
+  estadosPorApelido: () => Promise.resolve(new Map<string, EstadoNoApp>()),
+};
+
+const RELOGIO: Clock = { now: () => 0 as Instant };
+
+/** Uma bancada cujo leitor devolve os estados pedidos, por apelido. */
+function comEstados(
+  resultado: readonly PessoaEncontrada[],
+  estados: ReadonlyMap<string, EstadoNoApp>,
+): BuscaDePessoas {
+  return new BuscaDePessoas({
+    busca: {
+      buscar: () => Promise.resolve({ itens: resultado, total: resultado.length }),
+    },
+    conexoes: { ...SEM_ARESTA, estadosPorApelido: () => Promise.resolve(estados) },
+    clock: RELOGIO,
+  });
 }
 
 void describe('o piso de tres caracteres da busca de pessoas', () => {
@@ -172,11 +205,18 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
    * "não contém foto": uma asserção que só negasse `photo` passaria no dia em
    * que alguém acrescentasse `photo_url`, `avatar`, `city` ou `public_ref`.
    */
-  void it('ISCA: o conjunto de chaves e EXATAMENTE cinco', () => {
-    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+  void it('ISCA: o conjunto de chaves e EXATAMENTE seis', () => {
+    const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     assert.deepEqual(
       Object.keys(corpo).sort(),
-      ['connections_count', 'display_name', 'handle', 'pets_count', 'photo_icon_url'],
+      [
+        'connection_state',
+        'connections_count',
+        'display_name',
+        'handle',
+        'pets_count',
+        'photo_icon_url',
+      ],
       'o recorte do resultado e LIMITE e nao escolha de tela: emenda 2 do ADR-0010 ' +
         '(nome e as duas contagens), o apelido -- que e a referencia publica -- e a ' +
         'FOTO, pela emenda do cliente de 21/10/2026. Um sexto campo e superficie nova ' +
@@ -199,7 +239,7 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
   // nenhuma outra grafia, nenhum identificador, e a derivada e a menor que
   // existe.
   void it('ISCA INVERTIDA: a foto SAI, e e a derivada `thumb` montada na borda', () => {
-    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+    const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     assert.equal(
       corpo['photo_icon_url'],
       'https://midia.exemplo.test/u/ab/cdef0123456789/thumb.jpg',
@@ -212,7 +252,7 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     // O contrapeso da inversao: a emenda abriu UM campo, com UM nome -- o mesmo
     // das emendas 3 e 5. As outras nove grafias continuam proibidas, e e isso
     // que impede a derivada grande, a vitrine e a legenda de entrarem de carona.
-    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+    const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     for (const proibida of [
       'photo',
       'photo_url',
@@ -238,7 +278,7 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     // Chave que aparece e desaparece faria o cliente distinguir ausencia de
     // nulo sem que a diferenca significasse algo. A tela cai para a inicial no
     // circulo, que e o recurso da emenda 3.
-    const corpo = comoRespostaDaPessoa(MARINA_SEM_FOTO, MIDIA);
+    const corpo = comoRespostaDaPessoa({ ...MARINA_SEM_FOTO, estadoDaConexao: 'none' }, MIDIA);
     assert.ok(
       Object.prototype.hasOwnProperty.call(corpo, 'photo_icon_url'),
       'a chave da foto desapareceu do corpo de quem nao tem foto',
@@ -247,7 +287,7 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
   });
 
   void it('ISCA: NAO sai identificador interno, nem `public_ref`', () => {
-    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+    const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     for (const proibido of ['id', 'user_id', 'owner_user_id', 'uuid', 'public_ref']) {
       assert.ok(
         !Object.prototype.hasOwnProperty.call(corpo, proibido),
@@ -267,8 +307,29 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     }
   });
 
-  void it('ISCA: NAO sai recorte geografico, contato nem estado da conexao', () => {
-    const corpo = comoRespostaDaPessoa(MARINA, MIDIA);
+  /**
+   * **ESTA ISCA PERDEU UM ITEM EM 22/10/2026, E SÓ UM.**
+   *
+   * `connection_state` estava nesta lista, e estava com razão: até 22/10/2026 o
+   * contrato explicava a ausência com *"numa lista, vinte estados por
+   * requisição são o material de que uma lista de conexões se faz do lado de
+   * fora"*. **O cliente emendou a própria decisão de 18/10/2026**, literal:
+   *
+   * > *"o usuário pode abrir a lista de usuários que é sua conexão"*
+   *
+   * Com `listMyConnections` autorizada, o dono já obtém o conjunto das suas
+   * conexões por uma rota legítima — então o estado nos resultados da busca
+   * **dele** não entrega nada novo, e é o que conserta o defeito que ele
+   * relatou: *"após eu ter aceito, ainda aparece para solicitar conexão a um
+   * usuário que ja foi adicionado e aceito"*.
+   *
+   * **Os outros treze itens continuam proibidos, inteiros**, e `connection_ref`
+   * entre eles: `ref` de aresta é o que deixa desfazer, e desfazer mora no
+   * perfil de uma pessoa — não numa lista. O caso logo abaixo é o que cobra o
+   * estado novo pelo nome, para a troca não ser uma subtração.
+   */
+  void it('ISCA: NAO sai recorte geografico, contato nem `ref` de aresta', () => {
+    const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     for (const proibido of [
       'city',
       'state',
@@ -281,9 +342,9 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
       'phone_e164',
       'birth_date',
       'last_name',
-      'connection_state',
       'connection_ref',
       'followers_count',
+      'public_ref',
     ]) {
       assert.ok(
         !Object.prototype.hasOwnProperty.call(corpo, proibido),
@@ -292,18 +353,146 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     }
   });
 
+  /**
+   * **O contrapeso da troca**: `connection_state` saiu da lista de proibidos, e
+   * este caso é o que o cobra no lugar. Sem ele a troca teria sido uma
+   * subtração — a superfície ficaria sem nada dizendo o que aquele campo pode e
+   * não pode valer.
+   */
+  void it('o estado da conexao SAI, com os quatro valores e NUNCA `declined`', async () => {
+    const servico = comEstados(
+      [MARINA],
+      new Map<string, EstadoNoApp>([['marina-vet', 'connected']]),
+    );
+    const pagina = await servico.buscar(QUEM_BUSCA, 'marina', 1, 20);
+    const primeira = pagina.itens[0];
+    assert.notEqual(primeira, undefined, 'a bancada devolveu pagina vazia');
+    assert.equal(primeira?.estadoDaConexao, 'connected');
+    assert.equal(
+      comoRespostaDaPessoa(primeira, MIDIA)['connection_state'],
+      'connected',
+      'o estado tem de atravessar a projecao da borda, e nao so o caso de uso',
+    );
+  });
+
+  /**
+   * **A ISCA DO `none`, e ela é a que guarda a recusa silenciosa.**
+   *
+   * Apelido ausente do mapa vira `none`, e os três motivos vêm fundidos de
+   * `estadoNoApp`: nunca houve nada, o pendente expirou, e a recusa está em
+   * descanso. **Um quarto valor aqui seria o "ela recusou você"** que o desenho
+   * recusa — e é por isso que o caso cobra o conjunto de valores possíveis, e
+   * não só que `none` apareça.
+   */
+  void it('ISCA: apelido sem aresta vira `none`, e `declined` nao e exprimivel', async () => {
+    const servico = comEstados([MARINA], new Map<string, EstadoNoApp>());
+    const pagina = await servico.buscar(QUEM_BUSCA, 'marina', 1, 20);
+    assert.equal(pagina.itens[0]?.estadoDaConexao, 'none');
+
+    // O conjunto fechado: os tres de `ConnectionAppState` mais `none`. O
+    // contrato declara exatamente estes quatro, e `declined` nao esta entre
+    // eles -- nem aqui, nem em `EstadoNoApp`.
+    const DO_CONTRATO = ['connected', 'none', 'pending_received', 'pending_sent'];
+    assert.ok(
+      !DO_CONTRATO.includes('declined'),
+      'a isca passou: `declined` entrou no conjunto de valores, e a recusa deixou de ser silenciosa.',
+    );
+    for (const estado of ['pending_sent', 'pending_received', 'connected'] as const) {
+      const comEstado = comEstados([MARINA], new Map<string, EstadoNoApp>([['marina-vet', estado]]));
+      const uma = await comEstado.buscar(QUEM_BUSCA, 'marina', 1, 20);
+      assert.ok(DO_CONTRATO.includes(uma.itens[0]?.estadoDaConexao ?? ''));
+    }
+  });
+
+  /**
+   * **UMA consulta de estado para a página inteira**, e não uma por resultado.
+   *
+   * A Emenda 3 do ADR-0010 registra, para a foto na conversa, que perguntar a
+   * aresta por item seriam vinte idas ao banco por rolada. Sem este caso, uma
+   * reescrita que trocasse `estadosPorApelido` por `arestaVivaEntre` num laço
+   * passaria em tudo o mais — ela devolve o mesmo estado.
+   */
+  void it('ISCA: o estado da pagina custa UMA pergunta, e nao uma por pessoa', async () => {
+    let perguntas = 0;
+    let apelidosPerguntados: readonly string[] = [];
+    const servico = new BuscaDePessoas({
+      busca: {
+        // Dois apelidos DISTINTOS: com o mesmo, a conferencia da lista
+        // perguntada passaria sem provar que as duas pessoas entraram nela.
+        buscar: () =>
+          Promise.resolve({
+            itens: [MARINA, { ...MARINA_SEM_FOTO, handle: 'bia-tutora' }],
+            total: 2,
+          }),
+      },
+      conexoes: {
+        ...SEM_ARESTA,
+        estadosPorApelido: (_quem, apelidos) => {
+          perguntas += 1;
+          apelidosPerguntados = apelidos;
+          return Promise.resolve(new Map<string, EstadoNoApp>());
+        },
+        arestaVivaEntre: () => {
+          throw new Error('a busca NAO pergunta aresta por pessoa');
+        },
+      },
+      clock: RELOGIO,
+    });
+    const pagina = await servico.buscar(QUEM_BUSCA, 'marina', 1, 20);
+    assert.equal(pagina.itens.length, 2);
+    assert.equal(perguntas, 1, 'duas pessoas, UMA pergunta de estado');
+    assert.deepEqual([...apelidosPerguntados], [MARINA.handle, 'bia-tutora']);
+  });
+
+  /**
+   * **Página vazia não pergunta estado nenhum**, e isto não é otimização: é a
+   * mesma propriedade que o resto deste arquivo mede para o piso de três
+   * caracteres — a consulta **não acontece**.
+   */
+  void it('ISCA: consulta abaixo do piso nao pergunta estado ao modulo de conexao', async () => {
+    let perguntas = 0;
+    const servico = new BuscaDePessoas({
+      busca: {
+        buscar: () => {
+          throw new Error('abaixo do piso a busca nao e chamada');
+        },
+      },
+      conexoes: {
+        ...SEM_ARESTA,
+        estadosPorApelido: () => {
+          perguntas += 1;
+          return Promise.resolve(new Map<string, EstadoNoApp>());
+        },
+      },
+      clock: RELOGIO,
+    });
+    const pagina = await servico.buscar(QUEM_BUSCA, 'ma', 1, 20);
+    assert.deepEqual(pagina.itens, []);
+    assert.equal(perguntas, 0, 'sem resultado nao ha estado a perguntar');
+  });
+
   /** Sem esta isca, as de cima passariam por a projecao devolver pouco por acaso. */
   void it('ISCA: a varredura de chaves REPROVA um campo acrescentado depois', () => {
-    const comVazamento = { ...comoRespostaDaPessoa(MARINA, MIDIA), photo_url: 'https://exemplo/x.jpg' };
+    const comVazamento = {
+      ...comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA),
+      photo_url: 'https://exemplo/x.jpg',
+    };
     assert.notDeepEqual(
       Object.keys(comVazamento).sort(),
-      ['connections_count', 'display_name', 'handle', 'pets_count', 'photo_icon_url'],
+      [
+        'connection_state',
+        'connections_count',
+        'display_name',
+        'handle',
+        'pets_count',
+        'photo_icon_url',
+      ],
       'a isca passou: a varredura nao enxerga uma chave nova na projecao.',
     );
   });
 
   void it('nome nulo sai como nulo, e a CHAVE vem sempre', () => {
-    const corpo = comoRespostaDaPessoa({ ...MARINA, displayName: null }, MIDIA);
+    const corpo = comoRespostaDaPessoa({ ...MARINA, displayName: null, estadoDaConexao: 'none' }, MIDIA);
     assert.ok(
       Object.prototype.hasOwnProperty.call(corpo, 'display_name'),
       'a chave vem sempre: com nulo a tela cai para `@handle`, e omitir a chave ' +
