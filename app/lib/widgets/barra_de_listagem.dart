@@ -614,6 +614,24 @@ class ControleDeBusca {
   /// acessivel dela diz quantas letras faltam.
   final int minimoDeCaracteres;
 
+  /// Quantas letras faltam para o piso, **na redacao de UM lugar so**.
+  ///
+  /// Nulo quando nao falta nenhuma, e **nulo tambem com campo vazio**: "faltam
+  /// 3 letras" sobre campo em branco seria cobrar quem ainda nao comecou.
+  ///
+  /// Existe publico porque DOIS desenhos dizem a mesma contagem: o nome
+  /// acessivel da lupa aqui dentro, e o vazio que `BuscaDePessoas` desenha
+  /// abaixo do piso. Duas copias da frase divergem no dia em que alguem mexer
+  /// numa delas -- e quem le o produto veria a tela e o leitor de tela
+  /// contando letras diferentes.
+  String? get faltamLetras {
+    final digitado = controlador.text.trim();
+    if (digitado.isEmpty) return null;
+    final faltam = minimoDeCaracteres - digitado.length;
+    if (faltam <= 0) return null;
+    return 'faltam $faltam ${faltam == 1 ? 'letra' : 'letras'}';
+  }
+
   /// A frase que o componente escreve sob o campo, ou nulo.
   String? get avisoDeAlcance => switch (alcance) {
         AlcanceDaBusca.servidor => null,
@@ -951,8 +969,17 @@ class CampoDeBuscaDaListagem extends StatelessWidget {
     if (_podeAplicar) return 'Buscar';
     if (_aAplicar == null) return 'Buscar, nada digitado';
     if (_aAplicar == busca.termoAplicado) return 'Buscar, a busca já é esta';
-    final faltam = busca.minimoDeCaracteres - _digitado.length;
-    return 'Buscar, faltam $faltam ${faltam == 1 ? 'letra' : 'letras'}';
+    // **A contagem vem de [ControleDeBusca.faltamLetras], e nao de uma conta
+    // feita aqui.** O texto renderizado nao mudou nesta troca -- as iscas de
+    // `loja_com_dados`, `agenda_da_rede`, `barra_de_listagem_aplica` e
+    // `busca_de_pessoas` continuam esperando `Buscar, faltam 1 letra` --, e o
+    // que mudou e haver um dono da frase.
+    final faltam = busca.faltamLetras;
+    if (faltam != null) return 'Buscar, $faltam';
+    // Inalcancavel: os tres ramos acima cobrem todo caso em que a lupa nao
+    // aplica. Existe porque [ControleDeBusca.faltamLetras] e anulavel por
+    // construcao, e 'Buscar, null' seria pior que o verbo sozinho.
+    return 'Buscar';
   }
 }
 

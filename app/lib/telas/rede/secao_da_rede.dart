@@ -473,6 +473,13 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
             // `escopo.api`, como `rotas.dart` ja faz para o perfil de pessoa.
             pessoas: PessoasApi(escopo.api),
             conexoes: escopo.conexoes,
+            // **`logado` NAO ramifica o corpo**, e o paragrafo acima continua
+            // valendo: ele entra como dado porque a aba guarda estado de busca
+            // que a troca de sessao invalida -- o `_termoAplicado` do 401 que
+            // deixava a lupa morta depois de entrar. Ver `BuscaDePessoas.logado`.
+            // O `AnimatedBuilder` desta tela, que ja escuta a sessao, e o que
+            // faz o valor novo chegar.
+            logado: logado,
           ),
         ];
     }
