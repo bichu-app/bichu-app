@@ -76,7 +76,7 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { Autenticador } from '../../ports/autenticador.js';
 import type { EnderecoGuardadoRepository } from '../../ports/endereco-guardado.js';
@@ -116,17 +116,6 @@ export interface DependenciasDoEnderecoGuardado {
 
 /** O corpo, como o schema do contrato (`DeliveryAddress`) ja o validou. */
 type CorpoDoEnderecoGuardado = DeliveryAddressDoContrato;
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
-}
 
 /**
  * MEMOIZADA por requisicao, pelo mesmo motivo das rotas de localizacao: o teto

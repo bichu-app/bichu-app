@@ -33,7 +33,7 @@ import {
   exigenciaDeIdempotencia,
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { PetService, EntradaDoPet } from '../../application/pet-service.js';
 import type { PetGravado } from '../../ports/pet-repository.js';
@@ -187,17 +187,6 @@ function comoRespostaDoPet(
     created_at: pet.createdAt.toISOString(),
     updated_at: pet.updatedAt.toISOString(),
   };
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /**

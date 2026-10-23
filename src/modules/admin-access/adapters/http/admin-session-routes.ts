@@ -10,7 +10,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import {
   defineRoute,
@@ -102,14 +102,6 @@ export const rotaDoNaoFuiEuAdministrativo = defineRoute({
 export interface DependenciasDasRotasDaSessaoAdministrativa {
   readonly sessoes: SessaoAdministrativaService;
   readonly contrato: Contrato;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(`Operacao ${operationId} sem corpo application/json no contrato. Corrija a especificacao.`);
-  }
-  return schema;
 }
 
 /**

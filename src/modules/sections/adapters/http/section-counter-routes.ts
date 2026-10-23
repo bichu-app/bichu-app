@@ -27,7 +27,7 @@
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
@@ -124,23 +124,6 @@ async function contaDoTeto(
   } catch {
     return undefined;
   }
-}
-
-/**
- * O esquema do corpo, do CONTRATO e nunca escrito a mao. Mesma forma da funcao
- * homonima de `conversation-routes.ts`: operacao que declara corpo e nao tem
- * esquema e defeito de especificacao, e estourar no REGISTRO -- na subida, nao
- * no pedido -- e o que impede a rota de nascer aceitando qualquer coisa.
- */
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 interface BuscaDosContadores {

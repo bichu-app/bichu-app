@@ -41,13 +41,11 @@
  * chamada de rede a um servico externo, e segurar conexao do banco esperando
  * por ela e o que esgota o pool num pico.
  */
-import { problemas } from '../../../shared/http/errors.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {
-  DIMENSAO_MINIMA,
-  dimensaoDeclaradaAbaixoDaMinima,
+  recusarDimensaoDeclaradaPequena,
   type AutorizacaoDeCapa,
   type PreparadorDeEnvioDeCatalogo,
 } from '../ports/imagem-de-catalogo.js';
@@ -83,20 +81,7 @@ export class FotoDoProprioUsuario {
   constructor(private readonly deps: DependenciasDaFotoDoUsuario) {}
 
   async autorizar(autor: UserId, corpo: CorpoDaIntencaoDeFoto): Promise<AutorizacaoDeCapa> {
-    // A dimensao declarada ANTES de assinar: recusar depois deixaria uma
-    // politica assinada valendo dez minutos para um arquivo que ja se sabe ruim.
-    const abaixo = dimensaoDeclaradaAbaixoDaMinima('user_photo', corpo.width, corpo.height);
-    if (abaixo.length > 0) {
-      const minima = DIMENSAO_MINIMA['user_photo'];
-      throw problemas.imagemPequenaDemais(
-        minima,
-        abaixo.map((field) => ({
-          field,
-          code: 'minimum',
-          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
-        })),
-      );
-    }
+    recusarDimensaoDeclaradaPequena('user_photo', corpo.width, corpo.height);
     // `preparar` e quem recusa o tipo fora da lista (415) e o BYTE_SIZE ACIMA DE
     // 5 MB (400), **no servidor**, antes de assinar -- e e ele tambem que poe o
     // mesmo teto dentro da politica assinada, que e o que impede o envio direto

@@ -45,7 +45,7 @@ import {
   exigenciaDeIdempotencia,
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import type {
@@ -346,17 +346,6 @@ export function resolvedoresDoEnvio(deps: DependenciasDasRotasDeConversa): {
     conversation_participant: (request) => participanteDoTeto(request, deps),
     account: (request) => contaDoTeto(request, deps),
   };
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
-    );
-  }
-  return schema;
 }
 
 /**

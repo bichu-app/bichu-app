@@ -75,7 +75,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { ConexaoEntrePessoas } from '../../application/conexao-entre-pessoas.js';
 import type {
@@ -220,16 +220,11 @@ export function comoRespostaDaConexao(
   };
 }
 
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
-    );
-  }
-  return schema;
-}
+// `corpoDe` NAO mora mais aqui: ele veio de `shared/http/contract.js` na
+// refatoracao de 21/10 que juntou 29 copias numa fonte so. A copia local que
+// esta frente trazia era identica em assinatura, logica e mensagem -- conferido
+// linha a linha antes de sair --, e manter as duas e justamente o defeito que a
+// fonte unica existe para fechar.
 
 function tokenDoCabecalho(request: FastifyRequest): string {
   const cabecalho = request.headers.authorization;

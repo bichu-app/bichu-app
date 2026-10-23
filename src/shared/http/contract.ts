@@ -83,6 +83,51 @@ export interface Contrato {
   parameterSchemas(operationId: string): EsquemasDeParametros;
 }
 
+/**
+ * Schema de corpo tirado da própria especificação. **Uma fonte só.**
+ *
+ * Schemas de OpenAPI 3.1 são JSON Schema, e o Fastify valida com JSON Schema.
+ * Validação escrita à mão em paralelo à spec é a segunda definição que diverge.
+ *
+ * ## Por que esta função mora AQUI, e não em cada arquivo de rotas
+ *
+ * Medido em 21/10/2026, sobre `f60ba3fc`: esta função estava declarada
+ * **29 vezes**, uma em cada arquivo de rotas, e as 29 cópias tinham **três
+ * redações** da mesma mensagem:
+ *
+ * - 19 cópias com a frase longa e a continuação em acento grave;
+ * - 9 cópias com a MESMA frase e a continuação em aspa simples (igual em
+ *   execução, diferente no arquivo — a divergência que o `eslint` não vê);
+ * - 1 cópia em `admin-session-routes.ts` com **outra frase**, sem acentos e
+ *   sem a parte que diz o que fazer ("Corrija a especificação, não o código").
+ *
+ * As três concordavam no que FAZEM e discordavam no que DIZEM, que é como esta
+ * classe de defeito sempre começa. A trigésima cópia seria a quarta redação.
+ *
+ * A mensagem é de quem MANTÉM, e não de quem usa o app: ela só existe quando o
+ * contrato não declara corpo para uma operação cuja rota espera um, e nesse
+ * caso o registro da rota falha na subida. Nenhuma resposta de rota a carrega.
+ *
+ * Estourar no REGISTRO -- na subida, e não no pedido -- é o que impede a rota
+ * de nascer aceitando qualquer coisa. Esta frase vinha do comentário de
+ * `pedido-de-plaquinha-routes.ts`, e ela documenta a invariante: por isso ela
+ * desceu para cá em vez de ser apagada com a cópia.
+ *
+ * `tag-routes.ts` já trazia a dívida escrita, quando eram CINCO: *"extrair para
+ * `shared/http/` vale a pena e toca quatro módulos de uma vez, o que não cabe
+ * nesta correção"*. Não couberam, e as cinco viraram 29.
+ */
+export function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
+    );
+  }
+  return schema;
+}
+
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }

@@ -51,7 +51,7 @@
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
@@ -116,17 +116,6 @@ interface CorpoDoRascunho {
 interface QueryDaLista {
   readonly page?: number;
   readonly limit?: number;
-}
-
-function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
-  const schema = contrato.requestBodySchema(operationId);
-  if (schema === undefined) {
-    throw new Error(
-      `Operação ${operationId} não declara corpo de requisição em application/json ` +
-        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
-    );
-  }
-  return schema;
 }
 
 /** `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave (ADR-0027 item 20.2). */
