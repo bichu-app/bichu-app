@@ -18,6 +18,7 @@ import 'package:bichu/widgets/faixa_de_aviso.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../api/pets_api_listar_test.dart'
@@ -566,7 +567,21 @@ void main() {
   });
 
   group('criterio 14 — os 20 do teto aparecem, e a tela rola', () {
-    testWidgets('vinte cartoes na arvore, sem paginacao', (tester) async {
+    // ===================================================================
+    // ESTE CRITERIO MUDOU DE TELA EM 22/10/2026, E NAO FOI REVOGADO
+    // ===================================================================
+    //
+    // Ele media "vinte cartoes na arvore" **na secao do `Perfil`**, e ali a
+    // resposta passou a ser TRES: o cliente pediu o teto e o `Ver todos`
+    // (*"quando a quantidade de pets do usuario for maior do que 3"*). A
+    // propriedade -- "os 20 do teto do contrato aparecem, sem paginacao, e a
+    // tela rola ate o ultimo" -- continua valendo **na pagina**, que e onde a
+    // lista inteira mora agora.
+    //
+    // **Mover era a unica saida honesta.** Apagar o caso perderia a unica
+    // medida de que o teto de 20 do contrato cabe na tela; deixa-lo onde
+    // estava o faria cobrar da secao o contrario do que o cliente pediu.
+    testWidgets('vinte cartoes na PAGINA, sem paginacao', (tester) async {
       await abrirOPerfil(
         tester,
         rede: redeComPets(<Map<String, dynamic>>[
@@ -575,14 +590,324 @@ void main() {
         ]),
       );
 
+      // Na secao, tres -- e e o `Ver todos` que leva ao resto.
+      expect(find.byType(CartaoDePet), findsNWidgets(3));
+      await tocar(tester, find.text(MeusPets.rotuloDeVerTodos));
+
       expect(find.byType(CartaoDePet), findsNWidgets(20));
-      // Sem controle de paginacao em lugar nenhum.
+      // Sem controle de paginacao em lugar nenhum. **`Ver todos` nao esta
+      // nesta lista porque nao e paginacao**: ele nao cresce a lista, ele
+      // troca de tela -- e na pagina ele nao existe mais (teto nulo).
       for (final proibido in <String>['Ver mais', 'Carregar mais', 'Próxima']) {
         expect(find.text(proibido), findsNothing);
       }
+      expect(
+        find.text(MeusPets.rotuloDeVerTodos),
+        findsNothing,
+        reason: 'REPROVA: a pagina da lista inteira oferece `Ver todos`. Ela '
+            'JA e todos: o botao ali seria um destino que nao leva a parte '
+            'nenhuma, e e o que `teto: null` existe para impedir.',
+      );
       // E o ultimo e alcancavel rolando.
       await rolarAte(tester, find.text('Pet 19'));
       expect(find.text('Pet 19'), findsOneWidget);
+    });
+  });
+
+  // =====================================================================
+  // O PEDIDO DE 22/10/2026 — `Ver todos`, o teto de tres e a pagina
+  // =====================================================================
+  //
+  // Literal: *"no menu do perfil do usuario, onde lista os pets, inclua um
+  // botao ver todos no canto direito, na frente do meus pets, quando a
+  // quantidade de pets do usuario for maior do que 3. E caso o usuario clique
+  // no ver todos, abre uma pagina, com a listagem de todos os pets dele"*.
+  //
+  // Sao TRES mecanismos, e cada um tem a isca que o derruba escrita no caso:
+  //   1. o teto de tres na secao;
+  //   2. o botao, e a fronteira `> 3` nas DUAS pontas;
+  //   3. a pagina, que mostra o que a secao escondeu.
+  group('22/10/2026 — `Ver todos` quando ha mais de tres pets', () {
+    List<Map<String, dynamic>> nPets(int n) => <Map<String, dynamic>>[
+          for (var i = 1; i <= n; i++)
+            petDoContrato(id: 'p-$i', nome: 'Pet $i'),
+        ];
+
+    testWidgets('com QUATRO pets: o botao existe e a secao mostra TRES',
+        (tester) async {
+      // DESLIGAMENTO DO TETO: em `abas.dart`, tire o
+      // `teto: MeusPets.tetoDoPerfil` da chamada de `MeusPets`. Este caso
+      // reprova em `findsNWidgets(3)` dizendo que achou 4.
+      //
+      // DESLIGAMENTO DO BOTAO: em `meus_pets.dart`, troque
+      // `if (_temMaisQueOTeto)` por `if (false)`. Este caso reprova no
+      // `findsOneWidget` do rotulo.
+      await abrirOPerfil(tester, rede: redeComPets(nPets(4)));
+
+      expect(
+        find.byType(CartaoDePet),
+        findsNWidgets(3),
+        reason: 'REPROVA: a conta tem 4 pets e a secao do `Perfil` desenhou '
+            '${find.byType(CartaoDePet).evaluate().length} cartoes. O cliente '
+            'pediu o teto em 22/10, e sem ele o `Ver todos` nao transborda '
+            'nada.',
+      );
+      expect(find.text(MeusPets.rotuloDeVerTodos), findsOneWidget);
+      // E o QUARTO e o que ficou de fora: a identidade do que foi escondido
+      // importa, e nao so a contagem. `findsNothing` aqui e o que prova que o
+      // corte e no FIM da lista e nao no meio.
+      expect(find.text('Pet 1'), findsOneWidget);
+      expect(find.text('Pet 2'), findsOneWidget);
+      expect(find.text('Pet 3'), findsOneWidget);
+      expect(find.text('Pet 4'), findsNothing);
+    });
+
+    testWidgets(
+        'CONTROLE POSITIVO: com TRES pets nao ha botao, e os tres aparecem',
+        (tester) async {
+      // **ESTE CASO E O QUE IMPEDE O BOTAO DE NASCER SEMPRE.** Um
+      // `Ver todos` incondicional passaria pelo caso de quatro acima sem um
+      // arranhao; e aqui que ele morre.
+      //
+      // DESLIGAMENTO: em `meus_pets.dart`, troque o `>` de
+      // `_pets.length > teto` por `>=`. Este caso reprova dizendo que o botao
+      // apareceu com tres pets -- e o de quatro continua verde, que e
+      // exatamente por que os dois precisam existir.
+      await abrirOPerfil(tester, rede: redeComPets(nPets(3)));
+
+      expect(
+        find.byType(CartaoDePet),
+        findsNWidgets(3),
+        reason: 'REPROVA: com tres pets a secao esconde algum. O teto e tres, '
+            'e tres nao e "mais de tres".',
+      );
+      expect(
+        find.text(MeusPets.rotuloDeVerTodos),
+        findsNothing,
+        reason: 'REPROVA: o botao `Ver todos` apareceu com TRES pets. O '
+            'cliente escreveu *"quando a quantidade de pets do usuario for '
+            'maior do que 3"*, e com tres a pagina mostraria exatamente a '
+            'mesma lista -- um destino que nao leva a parte nenhuma. A '
+            'fronteira e `>`, nunca `>=`.',
+      );
+    });
+
+    // A FRONTEIRA VARRIDA, e nao as duas pontas que alguem lembrou.
+    //
+    // Um `>=` passa pelo caso de quatro; um `> 2` passaria pelas DUAS pontas
+    // se elas fossem 2 e 4. So a varredura de 0 a 5 fixa o numero.
+    //
+    // **Um caso por numero, e nao um laco dentro de um caso.** Medido: o laco
+    // reprovava em "com 1 pets a secao desenhou 0 cartoes" -- `abrirOApp`
+    // chamado duas vezes no mesmo `tester` nao entrega a segunda arvore
+    // assentada, e a reprovacao seria do arranjo do teste e nao do produto.
+    // Caso separado tambem nomeia a ponta que quebrou no relatorio.
+    for (final (quantos, esperado) in <(int, bool)>[
+      (0, false),
+      (1, false),
+      (2, false),
+      (3, false),
+      (4, true),
+      (5, true),
+    ]) {
+      testWidgets(
+        'fronteira: com $quantos pets o botao '
+        '${esperado ? 'APARECE' : 'NAO aparece'}',
+        (tester) async {
+          await abrirOPerfil(tester, rede: redeComPets(nPets(quantos)));
+          expect(
+            find.text(MeusPets.rotuloDeVerTodos),
+            esperado ? findsOneWidget : findsNothing,
+            reason: 'REPROVA: com $quantos pets o botao `Ver todos` '
+                '${esperado ? 'nao aparece' : 'aparece'}. A unica fronteira '
+                'que o cliente escreveu e "maior do que 3".',
+          );
+          final visiveis = find.byType(CartaoDePet).evaluate().length;
+          expect(
+            visiveis,
+            quantos < MeusPets.tetoDoPerfil ? quantos : MeusPets.tetoDoPerfil,
+            reason: 'REPROVA: com $quantos pets a secao desenhou $visiveis '
+                'cartoes.',
+          );
+        },
+      );
+    }
+
+    testWidgets('o toque no botao abre a pagina, e ela mostra TODOS',
+        (tester) async {
+      // DESLIGAMENTO: em `meus_pets.dart`, troque o `onPressed` do botao por
+      // `() {}`. Este caso reprova no endereco do roteador.
+      await abrirOPerfil(tester, rede: redeComPets(nPets(7)));
+
+      await tocar(tester, find.text(MeusPets.rotuloDeVerTodos));
+
+      // (1) O ROTEADOR ESTA NA PAGINA. Medido pelo endereco, e nao pelo tipo:
+      // um `findsNWidgets(7)` sozinho passaria se o botao, em vez de navegar,
+      // apenas tirasse o teto da propria secao -- e o cliente pediu
+      // *"abre uma pagina"*.
+      expect(
+        GoRouterState.of(
+          tester.element(find.byType(Scaffold).first),
+        ).uri.path,
+        Rotas.meusPets,
+        reason: 'REPROVA: o toque em `Ver todos` nao levou a '
+            '${Rotas.meusPets}.',
+      );
+      expect(find.byType(TelaDeTodosOsPets), findsOneWidget);
+
+      // (2) TODOS OS SETE, e a identidade dos quatro que a secao escondia.
+      expect(find.byType(CartaoDePet), findsNWidgets(7));
+      for (var i = 1; i <= 7; i++) {
+        expect(
+          find.text('Pet $i'),
+          findsOneWidget,
+          reason: 'REPROVA: `Pet $i` nao esta na pagina de TODOS os pets. Os '
+              'quatro que a secao escondeu (4 a 7) sao o motivo de a pagina '
+              'existir: sem eles ela e a secao com outro nome.',
+        );
+      }
+    });
+
+    testWidgets(
+        'ISCA DO WIDGET COMPARTILHADO: a pagina reprova se ganhar teto',
+        (tester) async {
+      // **A ISCA E DO COMPARTILHAMENTO, e nao da pagina.** A secao e a pagina
+      // sao o MESMO `MeusPets`, separados so por `teto`. O risco dessa escolha
+      // e um so: alguem mover o teto para dentro do widget (um `teto` com
+      // valor padrao 3 em vez de nulo, ou o corte escrito em `_cartoes` sem
+      // olhar `widget.teto`) e a PAGINA passar a esconder pet calada -- ela
+      // continuaria abrindo, continuaria rolando, e so mostraria menos.
+      //
+      // DESLIGAMENTO: em `meus_pets.dart`, troque a assinatura para
+      // `this.teto = MeusPets.tetoDoPerfil`. A secao segue verde em todos os
+      // casos acima e **este** reprova, nomeando os pets que desapareceram.
+      await abrirOPerfil(tester, rede: redeComPets(nPets(20)));
+      await tocar(tester, find.text(MeusPets.rotuloDeVerTodos));
+
+      final naPagina = find.byType(CartaoDePet).evaluate().length;
+      expect(
+        naPagina,
+        20,
+        reason: 'REPROVA: a pagina de TODOS os pets mostra $naPagina de 20. '
+            'Ela e `MeusPets` com `teto: null`, e um teto que vaze para dentro '
+            'do widget a transforma numa segunda secao -- o defeito que o '
+            'compartilhamento de uma fonte so existe para nao ter duas vezes.',
+      );
+      // E nenhum dos 20 some: a contagem sozinha nao distingue "20 cartoes"
+      // de "os 20 certos".
+      await rolarAte(tester, find.text('Pet 20'));
+      expect(find.text('Pet 20'), findsOneWidget);
+    });
+
+    testWidgets('o botao e ALCANCAVEL: retangulo dentro da janela e 48 dp',
+        (tester) async {
+      // 320 dp e a largura que reprova (UX 27.2.1): e nela que o titulo
+      // `Meus pets` e o botao disputam a linha, e um `Row` sem `Expanded` no
+      // titulo transbordaria ou empurraria o botao para fora da janela.
+      tester.view.physicalSize = const Size(960, 2000);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final erros = <FlutterErrorDetails>[];
+      final anterior = FlutterError.onError;
+      FlutterError.onError = erros.add;
+      try {
+        await abrirOPerfil(tester, rede: redeComPets(nPets(4)));
+      } finally {
+        FlutterError.onError = anterior;
+      }
+      expect(
+        erros.where((e) => '${e.exception}'.contains('overflowed')),
+        isEmpty,
+        reason: 'REPROVA: a linha do cabecalho transbordou em 320 dp. O '
+            '`Expanded` no titulo e o que faz `Meus pets` ceder espaco ao '
+            '`Ver todos` em vez de empurra-lo.',
+      );
+
+      final botao = find.widgetWithText(
+        TextButton,
+        MeusPets.rotuloDeVerTodos,
+      );
+      expect(botao, findsOneWidget);
+
+      // **ALCANCE POR RETANGULO, e nao "o toque nao lancou".** Um toque pode
+      // "passar" com o widget fora da janela ou coberto; a medida honesta e o
+      // retangulo do alvo contra o retangulo da janela.
+      final r = tester.getRect(botao);
+      final janela = tester.view.physicalSize / tester.view.devicePixelRatio;
+      expect(
+        r.left >= 0 &&
+            r.top >= 0 &&
+            r.right <= janela.width &&
+            r.bottom <= janela.height,
+        isTrue,
+        reason: 'REPROVA: o `Ver todos` esta em $r, fora da janela de '
+            '${janela.width} x ${janela.height} dp. Botao que o polegar nao '
+            'alcanca e botao que nao existe.',
+      );
+
+      // E O CANTO DIREITO, que e onde ele foi pedido: *"um botao ver todos no
+      // canto direito"*. Medido contra o titulo, e nao contra um numero: o
+      // botao termina depois de o titulo terminar, e encosta na borda.
+      final titulo = tester.getRect(find.text(MeusPets.titulo));
+      expect(
+        r.left,
+        greaterThan(titulo.left),
+        reason: 'REPROVA: o `Ver todos` nao esta a DIREITA do titulo '
+            '`Meus pets`. Ele foi pedido *"no canto direito, na frente do meus '
+            'pets"*.',
+      );
+
+      // **GUARDA, E NAO ISCA PROVADA DE CODIGO MEU** -- e a distincao esta
+      // medida. A primeira versao do botao escrevia `minimumSize: Size(48,48)`
+      // no estilo; tirar aquela linha **nao derrubou caso nenhum**, porque o
+      // piso ja vem do `MaterialTapTargetSize.padded`, que e o padrao do
+      // `TextButton`. O `minimumSize` saiu por redundante.
+      //
+      // O caso continua porque o que ele mede CAI: com
+      // `tapTargetSize: MaterialTapTargetSize.shrinkWrap` no estilo o alvo vai
+      // a **33,7 dp** e este caso reprova, sozinho. Ele guarda o padrao
+      // herdado contra o dia em que alguem o encolher aqui ou no tema.
+      final tamanho = tamanhoDoAlvo(tester, botao);
+      expect(
+        tamanho.height,
+        greaterThanOrEqualTo(pisoMinimo),
+        reason: 'REPROVA: o `Ver todos` mede ${tamanho.height} dp de altura, '
+            'abaixo do piso de $pisoMinimo dp (SC 2.5.8). O piso vem do '
+            '`MaterialTapTargetSize.padded` do `TextButton`: se alguem o '
+            'trocou por `shrinkWrap` -- aqui ou no tema --, o alvo cai a '
+            'volta de 34 dp e e isto que esta reprovando.',
+      );
+      exigirRotuloAnunciavel(
+        tester,
+        MeusPets.rotuloDeVerTodos,
+        na: 'Perfil > Meus pets',
+      );
+    });
+
+    testWidgets('a REDACAO e a do cliente, palavra por palavra',
+        (tester) async {
+      // `Ver todos` e nao `Ver tudo`, `Ver mais` nem `Ver todos os pets`. Ele
+      // escreveu *"inclua um botao ver todos"*, e a redacao de tela nao e de
+      // quem implementa. **E o vocabulario em vigor**: `bicho` nao aparece em
+      // texto de tela, e `pet` e a palavra.
+      await abrirOPerfil(tester, rede: redeComPets(nPets(4)));
+      expect(find.text('Ver todos'), findsOneWidget);
+      for (final errado in <String>[
+        'Ver tudo',
+        'Ver todos os pets',
+        'Ver todos os bichos',
+        'Ver mais',
+        'Todos os bichos',
+      ]) {
+        expect(
+          find.text(errado),
+          findsNothing,
+          reason: 'REPROVA: a tela diz "$errado". O cliente escreveu '
+              '"ver todos", e `bicho` saiu do vocabulario do produto.',
+        );
+      }
     });
   });
 

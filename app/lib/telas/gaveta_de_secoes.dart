@@ -500,10 +500,30 @@ abstract final class RegistroDeSubDestinos {
       ),
       SubDestino(
         rotulo: 'Meus pets',
-        // Construido (BICHUS-62) e **sem endereco proprio**: e um bloco
-        // dentro da aba `Perfil`. Um item de gaveta precisaria de uma rota
-        // que nao existe, e inventa-la aqui seria criar endereco para uma
-        // tela que nao ha.
+        // Construido (BICHUS-62) e **conteudo da secao**: e um bloco dentro da
+        // aba `Perfil`, e a aba ja o mostra.
+        //
+        // **O ENDERECO PASSOU A EXISTIR EM 22/10/2026, E A FORMA NAO MUDOU.**
+        // Este comentario dizia que "um item de gaveta precisaria de uma rota
+        // que nao existe"; `Rotas.meusPets` existe desde o pedido do cliente
+        // daquele dia (*"caso o usuario clique no ver todos, abre uma pagina,
+        // com a listagem de todos os pets dele"*). A afirmacao ficou falsa e
+        // foi corrigida aqui -- mas a linha continua `conteudoDaSecao`, por
+        // duas razoes independentes:
+        //
+        // 1. **ainda E conteudo da secao.** O bloco continua desenhado no
+        //    corpo do `Perfil`, agora com teto de tres cartoes. A pagina nao
+        //    substituiu a secao; ela e o transbordo dela.
+        // 2. **promove-la poria DUAS PORTAS no mesmo lugar.** Com
+        //    `forma: destino` esta linha viraria item de gaveta, e a gaveta do
+        //    `Perfil` mostraria `Meus pets` apontando para a mesma pagina que
+        //    o `Ver todos` do corpo abre -- dois nomes para o mesmo destino,
+        //    que e o que a prosa de `Meus dados`, oito linhas abaixo, proibe
+        //    com estas palavras. O cliente pediu um botao na linha do titulo,
+        //    e nao um item de menu.
+        //
+        // Quem quiser o item de gaveta precisa decidir qual das duas portas
+        // morre, e isso e pedido de produto, nao arrumacao de registro.
         forma: FormaDoSubDestino.conteudoDaSecao,
         estado: EstadoDoSubDestino.existe,
       ),

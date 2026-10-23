@@ -99,56 +99,60 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO, 18 mencoes)
 ///
 /// E a causa que a mensagem deste portao manda aceitar -- *arquivo novo que a
-/// cita* --, e nao substituicao descuidada: nenhum arquivo preexistente de
-/// `app/lib` mudou de contagem (a lista de diferencas tem UMA linha).
-/// O metodo da medicao tem CONTROLE POSITIVO: a mesma contagem, aplicada a
-/// `bdae03e1`, devolveu 2672 -- exatamente o numero que estava travado aqui.
+/// cita* --, e nao substituicao descuidada.
 ///
-/// O LOTE DE TEXTOS DE 22/10/2026 (`b4407f63`) media 2672 -> 2686 na PROPRIA
-/// ponta, saldo de +14. A redacao que a frente deixou aqui atribuia esse saldo
-/// a quatro arquivos, com `+17` na vitrine da Loja. **A atribuicao estava
-/// errada em dois arquivos, e o total estava certo** -- medido na ponta
-/// `b4407f63` com o metodo deste portao:
-///   +15 telas/loja/vitrine_da_loja.dart        (28 -> 43, e nao 28 -> 45)
-///    +2 telas/rede/secao_da_rede.dart          (6 -> 8, nao declarado pela frente)
-///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34)
-///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26)
-///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76)
-/// A soma e a mesma (+14), e por isso o numero travado da frente estava certo
-/// enquanto a explicacao dele nao estava. Fica registrado porque a proxima
-/// uniao vai ler esta prosa, e nao a medicao.
+/// ---------------------------------------------------------------------------
+/// ATUALIZADO NA MESCLA DA ONDA 8 (23/10/2026): 2690 -> 2706.
+/// ---------------------------------------------------------------------------
+/// **TRES valores travados colidiram aqui, e NENHUM dos tres servia:** 2690
+/// (a `development` da onda 7), 2686 (`textos/lote-22-10`) e 2674
+/// (`feat/ver-todos-pets`). Somar os deltas seria palpite. O valor foi CONTADO
+/// SOBRE A ARVORE MESCLADA, arquivo por arquivo, e fecha exatamente contra
+/// `bdae03e1` (2672):
 ///
-/// ATUALIZADO NA MESCLA DA ONDA 8 (23/10/2026): 2690 -> 2704 nesta entrada.
-/// **Nenhum dos tres valores travados que colidiram servia** -- 2690 (a
-/// `development` da onda 7), 2686 (`textos/lote-22-10`) e 2674
-/// (`feat/ver-todos-pets`) --, e somar os deltas seria palpite. O valor foi
-/// CONTADO SOBRE A ARVORE MESCLADA, arquivo por arquivo, e fecha exatamente
-/// contra `bdae03e1` (2672):
 ///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO -- onda 7)
 ///   +15 telas/loja/vitrine_da_loja.dart        (28 -> 43 -- textos)
-///    +2 telas/rede/secao_da_rede.dart          (6 -> 8  -- textos)
+///    +2 telas/rede/secao_da_rede.dart          (6  -> 8  -- textos)
 ///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34 -- textos)
 ///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26 -- textos)
 ///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76 -- textos)
-/// Soma: +32, e 2672 + 32 = 2704. Os conjuntos de arquivos da onda 7 e do lote
-/// de textos sao DISJUNTOS, e por isso aqui a soma coincide com a medicao --
-/// o que e resultado da medicao, e nao a razao dela.
+///    +2 telas/perfil/meus_pets.dart            (31 -> 33 -- ver-todos-pets)
 ///
-/// `notif/pedido-conexao` nao mexe na contagem: medida na ponta `b5376b23`,
+/// Soma: +34, e 2672 + 34 = 2706. Sao SETE arquivos e nenhum deles e tocado
+/// por mais de uma das tres frentes -- os conjuntos sao disjuntos. Por isso
+/// aqui a soma dos deltas coincide com a medicao, e isso e RESULTADO da
+/// medicao e nao substituto dela: se duas frentes tivessem mexido no mesmo
+/// arquivo, a soma mentiria e a contagem nao.
+///
+/// `notif/pedido-conexao` nao entra nesta conta: medida na ponta `b5376b23`,
 /// ela devolve 2672, identica a base. A frente nao toca `app/lib/telas`.
 ///
+/// **A ATRIBUICAO QUE O LOTE DE TEXTOS DEIXOU ESCRITA ESTAVA ERRADA EM DOIS
+/// ARQUIVOS, e o total dela estava certo.** A frente declarava `+17` na
+/// vitrine da Loja e nao declarava `telas/rede/secao_da_rede.dart`. Medido na
+/// propria ponta `b4407f63` com o metodo deste portao: a Loja e 28 -> 43
+/// (`+15`) e `secao_da_rede.dart` e 6 -> 8 (`+2`). A soma e a mesma (+14), e
+/// por isso o numero 2686 que ela travava estava correto enquanto a
+/// explicacao nao estava. Fica registrado porque a proxima uniao vai ler esta
+/// prosa antes de medir.
+///
 /// CONTROLE POSITIVO DO METODO, em QUATRO pontos onde a resposta ja era
-/// conhecida, todos reproduzidos EXATAMENTE: `bdae03e1` -> 2672, `49ca33de` ->
-/// 2690, `b4407f63` -> 2686, `a9478e4e` -> 2674. Acerta nos quatro lugares
-/// onde a resposta era conhecida, e so por isso vale aqui, onde nao era.
+/// conhecida, todos reproduzidos EXATAMENTE pela mesma contagem que produziu
+/// 2706: `bdae03e1` -> 2672, `49ca33de` -> 2690, `b4407f63` -> 2686,
+/// `a9478e4e` -> 2674. Acerta nos quatro lugares onde a resposta era
+/// conhecida, e so por isso vale aqui, onde nao era. O controle NAO foi feito
+/// so contra a base de proposito: validar so contra `bdae03e1` aprovaria o
+/// procedimento sobre a arvore errada.
 ///
-/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: `app/lib` tem 217 `.dart`
-/// na base e 218 nesta arvore, e a unica diferenca na LISTA e o acrescimo de
-/// `telas/conexoes/tela_minhas_conexoes.dart`, que veio da onda 7. Arvore que
-/// perdesse arquivo poderia fechar o total por compensacao.
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 217 `.dart` em
+/// `bdae03e1` e 218 nesta arvore, e contra a lista de `49ca33de` (218) o
+/// `diff` e VAZIO. O unico arquivo que a onda 8 acrescenta a `app/lib` e
+/// nenhum: as tres frentes mudam conteudo, e so a onda 7 criara arquivo ali.
 ///
-/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA: `petu` nao aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2704;
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2706;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

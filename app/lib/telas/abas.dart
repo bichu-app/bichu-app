@@ -749,9 +749,24 @@ class AbaPerfil extends StatelessWidget {
             // o caminho mais critico do produto. Subir o bloco para o topo
             // ABRE esse caminho em vez de fecha-lo -- ele era o ultimo da
             // pagina, abaixo de tres linhas de menu.
+            // **O TETO DE TRES E O `Ver todos`** (22/10/2026, pedido do
+            // cliente): *"onde lista os pets, inclua um botao ver todos no
+            // canto direito, na frente do meus pets, quando a quantidade de
+            // pets do usuario for maior do que 3"*.
+            //
+            // O numero mora em `MeusPets.tetoDoPerfil` e nao escrito aqui: um
+            // literal `3` neste arquivo e outro no teste divergiriam no dia em
+            // que ele pedisse quatro. O botao aparece com MAIS de tres, abre
+            // `Rotas.meusPets` e la o MESMO widget desenha a lista inteira --
+            // nao ha segunda lista de pet.
+            //
+            // **O teto nao encurtou a leitura**: `GET /pets` continua vindo
+            // inteiro, e e o que faz a secao saber que ha mais e o cache
+            // servir as duas telas.
             MeusPets(
               key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
               cache: Escopo.of(context).cacheDeMeusPets,
+              teto: MeusPets.tetoDoPerfil,
             ),
             // O VAO ENTRE BLOCOS, `e6`, que e o que a casca usa entre a linha
             // de reforco e o corpo e o que `Meus pets` usa entre os cartoes e
