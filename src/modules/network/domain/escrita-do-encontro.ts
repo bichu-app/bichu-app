@@ -26,8 +26,8 @@ import {
   errosDoEnderecoCompleto,
   hostDoEndereco,
 } from '../../../shared/url/endereco-completo.js';
-import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
+import type { components } from '../../../shared/types/generated/api.js';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -40,6 +40,58 @@ import type { Instant } from '../../../shared/types/brands.js';
  * (ADR-0025 emenda 3). A migracao `20261001000005` o tirou do `CHECK`.
  */
 export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
+/**
+ * `admin` ou `community`, o `CHECK` `network_events_origem_conhecida`
+ * (ADR-0025 emenda 3).
+ *
+ * **VEM DO CONTRATO, e nao de `shared/db/schema.ts`.** `api/openapi.yaml` e a
+ * fonte unica que manda em back-end, aplicativo, backoffice e site, e este
+ * enum ja esta la (`NetworkEventOrigin`): ancorado nele, `verify:types` cobra
+ * a diferenca a cada execucao da esteira. Declarar a uniao aqui, com os
+ * valores escritos a mao, seria uma quarta casa capaz de discordar do
+ * contrato sem ninguem ver.
+ *
+ * **POR QUE NAO `import type` DE `shared/db/schema.ts`**, que e a casa
+ * canonica dos 46 enums de coluna: este arquivo e compilado TAMBEM pelo
+ * backoffice. Tres testes do painel o leem de proposito, para conferir o
+ * validador do painel contra o do servidor caso a caso
+ * (`admin/test/rede/observacoes-contra-o-servidor.test.ts`,
+ * `links-contra-o-servidor.test.ts` e `dominio.test.ts`), e o job `backoffice`
+ * roda `npm ci` so em `admin/`. A primeira linha de codigo de `schema.ts` e
+ * `import type { ColumnType, Generated, Selectable } from 'kysely'`, e o
+ * `tsc -b` do `npm run build` do painel segue a corrente: `admin: npm run
+ * build` reprovava com `TS2307` apontando para `schema.ts(13,56)` -- sem nada
+ * de errado no painel nem no dominio. Medido em 21/10/2026. O `vitest` nunca
+ * reclamou porque o esbuild descarta importacao de tipo.
+ *
+ * Desde 21/10/2026 o job `backoffice` instala tambem a arvore da raiz, entao
+ * esse modo de falha deixou de existir na esteira. A ancoragem no contrato
+ * continua valendo pelo primeiro motivo, nao por este.
+ *
+ * **A GUARDA DESTA UNIAO E ASSIMETRICA, e a metade que falta custa caro.**
+ * Medido em 21/10/2026, acrescentando um valor de um lado so:
+ *
+ *   - o esquema cresce e o contrato fica para tras: o `tsc` do back-end
+ *     reprova (exit 2, `TS2322` em `kysely-rede-administrativa.ts(189,5)`),
+ *     onde o adaptador le `origin` com o tipo de `schema.ts` e o atribui a
+ *     `EncontroAdministrativo.origem`. Esta e a direcao que importa no dia a
+ *     dia, porque e o `CHECK` do banco que cresce;
+ *   - o contrato cresce e o esquema fica para tras: NENHUM PORTAO PEGA.
+ *     `tsc --noEmit` sai 0, `eslint` sai 0 e a suite unitaria da raiz passa
+ *     inteira (3940 casos em 286 arquivos, 0 reprovaram). Quem recusa e o
+ *     `CHECK` `network_events_origem_conhecida`, no INSERT, em producao: o
+ *     defeito aparece como 500, e nao como esteira vermelha.
+ *
+ * Portanto: **ao acrescentar um valor a `NetworkEventOrigin` no contrato,
+ * abra a migracao no mesmo passo.** Nada neste repositorio vai lembrar.
+ *
+ * A mesma divida existe, maior, logo abaixo: `Visibilidade`, `UnidadeDoValor`
+ * e `PublicacaoAdministrativa` SEGUEM sendo copias literais, escritas a mao,
+ * de `VisibilidadeDoEncontro`, `UnidadeDoValor` e `PublicacaoDoEncontro` de
+ * `schema.ts`. Esta uniao era a quarta da mesma forma; ancorar as outras tres
+ * nao foi feito aqui, de proposito, para o conserto nao crescer sozinho.
+ */
+export type OrigemDoEncontro = components['schemas']['NetworkEventOrigin'];
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
