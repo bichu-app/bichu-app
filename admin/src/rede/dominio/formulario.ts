@@ -30,6 +30,7 @@ import type {
 import { handleDoInstagram, mensagemDoInstagram, MENSAGEM_DO_LINK, recusaDoLinkDoConvite } from './links.ts';
 import { unidadeComoAparece } from './rotulos.ts';
 import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.ts';
+import { tamanhoComoOServidor } from './texto.ts';
 
 export const LIMITE_DE_FOTOS = 8;
 export const LIMITE_DAS_OBSERVACOES = 500;
@@ -251,19 +252,13 @@ export interface ErroDeCampo {
 export type Modo = 'novo' | 'editar';
 
 /**
- * Tamanho como o servidor conta (`errosDeTexto`: `[...valor.trim()].length`) e
- * como o banco guarda: code points, e nao unidades UTF-16. Um emoji conta 1, e
- * um acento combinado (e + U+0301) conta 2, igual la.
+ * As duas contagens moram em `./texto.ts`, que nao tem nenhum `import`, para
+ * que a suite da raiz possa importa-las e provar, caso a caso, que elas contam
+ * igual ao servidor (`src/modules/network/domain/paridade-com-o-backoffice.test.ts`).
+ * Reexportadas aqui porque `FormularioDoEncontro.tsx` e a suite do painel ja as
+ * importavam deste arquivo.
  */
-export function tamanhoComoOServidor(t: string): number {
-  return [...t.trim()].length;
-}
-
-/** O texto cortado em `max` code points, sem partir um par substituto ao meio. */
-export function cortarEmCodePoints(t: string, max: number): string {
-  const cp = [...t];
-  return cp.length <= max ? t : cp.slice(0, max).join('');
-}
+export { cortarEmCodePoints, tamanhoComoOServidor } from './texto.ts';
 
 const entre = (t: string, min: number, max: number) => {
   const n = tamanhoComoOServidor(t);

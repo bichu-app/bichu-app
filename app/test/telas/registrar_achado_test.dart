@@ -647,6 +647,74 @@ void main() {
   //
   // Sem texto de apoio: o contador basta (pedido do cliente de 18/10/2026).
   // -------------------------------------------------------------------------
+  // ===========================================================================
+  // A REDACAO DO ROTULO DO RECADO (cliente, 22/10/2026)
+  // ===========================================================================
+  // Literal: *"Altere a frase para: Alguma coisa que ajude a reconhecer para
+  // Alguma caracteristica especifica que ajude a identifica-lo."*
+  //
+  // **O caso le a FRASE e nao a constante**, e e a unica vez neste arquivo em
+  // que isso e certo: os outros casos usam `TextosDoAchado.rotuloDaObservacao`
+  // justamente para nao manter uma segunda copia da redacao -- eles medem o
+  // CAMPO. Este mede a REDACAO, que e o que o cliente decidiu, e uma copia que
+  // leia a constante passaria com qualquer texto dentro dela.
+  //
+  // DESLIGAR PARA VER REPROVAR: em
+  // `lib/telas/achado/textos_do_achado.dart`, devolva `rotuloDaObservacao` a
+  // frase antiga (`'Alguma coisa que ajude a reconhecer?'`). Este caso
+  // reprova nos dois `expect`.
+  testWidgets('o rotulo do recado e a frase que o cliente escreveu',
+      (tester) async {
+    await abrirOApp(
+      tester,
+      rede: _Rede().call,
+      deposito: depositoLogado(),
+      localizacao: localizacaoConcedida(),
+    );
+    await irPara(tester, Rotas.registrarAchado);
+    await rolarAte(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cão'));
+    await rolarAte(tester, find.text('Médio'));
+    await tocar(tester, find.text('Médio'));
+    await avancarParaOPasso2(tester);
+
+    // CONTROLE POSITIVO: o passo 2 esta na tela E o campo do recado foi
+    // construido. Este formulario tem dois passos e o campo so existe no
+    // segundo -- um `findsNothing` sozinho ficaria verde no passo 1, que e
+    // outro motivo. A rolagem e pelo CAMPO (como os outros casos deste
+    // arquivo fazem) e nao pela frase: rolar ate a frase que o caso esta
+    // medindo tornaria a propria rolagem parte da afirmacao.
+    await rolarAte(tester, _campo(TextosDoAchado.rotuloDaObservacao));
+    expect(
+      _campo(TextosDoAchado.rotuloDaObservacao),
+      findsOne,
+      reason: 'REPROVA: o campo do recado nao esta montado. Sem ele os '
+          '`expect` de redacao nao medem texto de tela.',
+    );
+
+    // **`textContaining` e nao `text`, e a razao e o sufixo `(opcional)`.** O
+    // recado e opcional no contrato, e `BichuField` compoe o rotulo desenhado
+    // como `'$rotulo (opcional)'` -- entao o no da tela diz
+    // `'...identificá-lo. (opcional)'`. O caso mede a frase DELE dentro do
+    // rotulo, e nao a composicao, que e decisao do campo e nao da redacao.
+    expect(
+      find.textContaining(
+        'Alguma característica específica que ajude a identificá-lo.',
+      ),
+      findsOne,
+      reason:
+          'REPROVA: o rotulo do recado nao e a frase que o cliente pediu em '
+          '22/10/2026. A redacao e DELE, literal, inclusive o ponto final -- '
+          'ela deixou de ser pergunta e virou pedido.',
+    );
+    expect(
+      find.textContaining('Alguma coisa que ajude a reconhecer'),
+      findsNothing,
+      reason: 'REPROVA: a frase antiga voltou. Ela PERGUNTAVA se havia algo, '
+          'e quem responde "sim" na cabeca nao escreve nada no campo.',
+    );
+  });
+
   group('ISCA — o contador do recado nao promete mais que o servidor aceita', () {
     testWidgets('o contador do recado abre em `0/500`', (tester) async {
       await abrirOApp(

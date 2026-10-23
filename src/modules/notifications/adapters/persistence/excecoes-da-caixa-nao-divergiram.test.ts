@@ -50,7 +50,7 @@
  * dispensavel.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -91,12 +91,58 @@ function valoresDaFuncao(sql: string, nome: string): string[] {
   return [...lista[1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
 }
 
-/** Os valores do `CHECK` de `notification_items.item_kind`. */
-function tiposDoCheck(sql: string): string[] {
-  const inicio = sql.indexOf('notification_items_tipo_conhecido');
-  assert.notEqual(inicio, -1, 'REPROVA: nao achei o CHECK de item_kind na migracao');
-  const trecho = sql.slice(inicio, inicio + 900);
-  return [...trecho.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+/**
+ * Os valores do `CHECK` de `notification_items.item_kind`, **da migracao mais
+ * recente que o define**.
+ *
+ * Ler so a `20261018000020` deixaria esta isca cega para o caminho mais
+ * provavel de divergencia: um tipo NOVO entra por `DROP CONSTRAINT` /
+ * `ADD CONSTRAINT` numa migracao posterior (foi assim que `connection_requested`
+ * entrou, pela `20261020000018`), e a lista da migracao original nao muda.
+ * A isca passaria comparando o dominio novo com o `CHECK` velho e reprovando --
+ * ou, pior, aprovando um dominio que esqueceu o tipo.
+ *
+ * A SUBIDA, e nao a descida: a descida tambem escreve
+ * `ADD CONSTRAINT notification_items_tipo_conhecido`, com a lista ANTIGA. Por
+ * isso o corte em `-- Down Migration` acontece antes da varredura.
+ *
+ * E a ancora e o `CHECK` e nao o NOME da restricao, porque o nome aparece em
+ * tres formas que nao carregam lista -- `DROP CONSTRAINT`, `ADD CONSTRAINT` na
+ * linha anterior ao `CHECK`, e `COMMENT ON CONSTRAINT`. Ancorar no nome
+ * encontrava o comentario, nao achava valor nenhum ali e caia para a migracao
+ * antiga **em silencio**: medido, e e exatamente a cegueira que esta isca
+ * existe para nao ter.
+ */
+function tiposDoCheck(): string[] {
+  const dir = resolve(process.cwd(), 'migrations');
+  const candidatas = readdirSync(dir)
+    .filter((n) => n.endsWith('.sql'))
+    .sort()
+    .reverse();
+  for (const nome of candidatas) {
+    const sql = readFileSync(resolve(dir, nome), 'utf8');
+    const descida = sql.indexOf('-- Down Migration');
+    const subida = descida === -1 ? sql : sql.slice(0, descida);
+    const inicio = subida.lastIndexOf('CHECK (item_kind IN (');
+    if (inicio === -1) continue;
+    assert.ok(
+      subida.includes('notification_items_tipo_conhecido'),
+      `REPROVA: ${nome} define o CHECK de item_kind sem a restricao nomeada ` +
+        '`notification_items_tipo_conhecido`. A restricao foi renomeada, e `conjunto-exato-dos-' +
+        'checks.test.ts` procura o nome antigo no catalogo -- ele reprovaria dizendo que a ' +
+        'restricao desapareceu',
+    );
+    const fim = subida.indexOf('))', inicio);
+    assert.notEqual(fim, -1, `REPROVA: o CHECK de item_kind em ${nome} nao fecha`);
+    const valores = [...subida.slice(inicio, fim).matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    assert.ok(valores.length > 0, `REPROVA: o CHECK de item_kind em ${nome} esta sem valores`);
+    return valores;
+  }
+  assert.fail(
+    'REPROVA: nenhuma migracao define a lista do CHECK de item_kind. Se a coluna foi renomeada, ' +
+      'esta isca ficou cega e precisa acompanhar o nome novo -- uma isca que nao acha o alvo ' +
+      'aprova tudo em silencio',
+  );
 }
 
 void describe('as excecoes da caixa nao divergiram do banco', () => {
@@ -135,7 +181,7 @@ void describe('as excecoes da caixa nao divergiram do banco', () => {
   void it('2. TIPOS_DE_AVISO e o CHECK de item_kind dizem o mesmo', () => {
     assert.deepEqual(
       [...TIPOS_DE_AVISO].sort(),
-      tiposDoCheck(migracao()).sort(),
+      tiposDoCheck().sort(),
       'REPROVA: os tipos do dominio e os do CHECK divergiram. Um tipo que o dominio conhece e o ' +
         'banco recusa estoura na insercao do gatilho; um que o banco aceita e o dominio nao ' +
         'conhece chega a borda como valor fora do enum do contrato',

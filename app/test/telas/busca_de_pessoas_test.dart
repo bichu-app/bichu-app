@@ -1114,8 +1114,15 @@ void main() {
         reason: 'REPROVA: campo vazio virou "nada encontrado". Ninguem buscou, '
             'entao nao ha resultado nenhum a afirmar.',
       );
+      // **PELA CONSTANTE, e nao pela frase escrita a mao.** Ela estava
+      // literal aqui e a frase mudou em 22/10/2026 (ela dizia *"...e toque na
+      // lupa."*, e mandar tocar deixou de ser verdade quando a busca passou a
+      // disparar por pausa de digitacao). Uma copia da redacao num `expect` e
+      // uma segunda redacao que ninguem lembra de atualizar: este caso mede o
+      // ESTADO -- que a tela voltou ao vazio de abertura --, e qual e a frase
+      // desse estado e decisao de `BuscaDePessoas`.
       expect(
-        find.text('Digite o nome ou o apelido de alguém e toque na lupa.'),
+        find.text(BuscaDePessoas.explicacaoAntesDeBuscar),
         findsOneWidget,
         reason: 'REPROVA: o campo vazio nao voltou ao estado de abertura. Com '
             'nada digitado nao ha letras a cobrar de quem nem comecou.',
@@ -1390,6 +1397,187 @@ void main() {
               'no servidor e nunca recebido de quem chama.',
         );
       }
+    });
+  });
+
+  // ===========================================================================
+  // O LOTE DE TEXTOS DE 22/10/2026: o fim de lista, e a dica que mentia
+  // ===========================================================================
+  group('os textos de 22/10/2026', () {
+    // DESLIGAR PARA VER REPROVAR: em `_fimDaLista`
+    // (`lib/telas/rede/busca_de_pessoas.dart`), devolva as frases antigas --
+    // `'Uma pessoa com esse nome.'` e
+    // `'Você viu todas as $total pessoas com esse nome.'`. Os dois casos
+    // abaixo reprovam, um por ramo, E o portao de vocabulario reprova junto
+    // (`nenhum texto de usuario de app/lib escreve bicho, cao ou pessoa`),
+    // porque a excecao que liberava as duas linhas saiu com esta edicao.
+    testWidgets('UM resultado: a frase do cliente, literal', (tester) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO: o resultado chegou. Sem ele nao ha fim de lista
+      // nenhum para medir, e um `findsNothing` ficaria verde por vazio.
+      expect(
+        find.text('Marina'),
+        findsOneWidget,
+        reason: 'REPROVA: a busca nao trouxe resultado, entao nao ha fim de '
+            'lista nesta tela e os dois `expect` de baixo nao medem texto -- '
+            'medem ausencia de tela.',
+      );
+
+      expect(
+        find.text('Um usuário encontrado em sua busca.'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o fim de lista com UM resultado nao escreve a frase que '
+            'o cliente pediu em 22/10/2026 -- *"Troque o texto Uma pessoa com '
+            'esse nome para Um usuario encontrado em sua busca."*. A redacao '
+            'e DELE, literal.',
+      );
+      expect(
+        find.textContaining('com esse nome.'),
+        findsNothing,
+        reason: 'REPROVA: a frase antiga ("Uma pessoa com esse nome.") voltou '
+            'ao fim da lista.',
+      );
+    });
+
+    testWidgets('VARIOS resultados: o par nao desencontrou', (tester) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+          _pessoa(apelido: 'marina-souza', nome: 'Marina Souza'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Marina Souza'),
+        findsOneWidget,
+        reason: 'REPROVA (controle positivo): os dois resultados nao '
+            'chegaram.',
+      );
+
+      // **O PLURAL E DERIVADO DA REDACAO DELE, e nao da troca generica de
+      // vocabulario.** A troca mecanica daria *"Você viu todas as 2 usuários
+      // com esse nome."*, que erra o fim da frase E a concordancia. Os dois
+      // ramos sao o mesmo fim-de-lista, e e por isso que os dois casos moram
+      // juntos: mudar um so deixa o par divergente, que foi exatamente o
+      // motivo de uma frente anterior ter deixado os DOIS intocados.
+      expect(
+        find.text('Você viu todos os 2 usuários encontrados em sua busca.'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o fim de lista com varios resultados nao acompanhou o '
+            'singular. Esta linha e DERIVADA da redacao do cliente (ela pode '
+            'ser revista por ele), mas ela nao pode divergir do ramo de um '
+            'resultado: os dois sao a mesma frase vista de dois lados.',
+      );
+      expect(
+        find.textContaining('pessoas com esse nome'),
+        findsNothing,
+        reason: 'REPROVA: a frase antiga do plural voltou.',
+      );
+    });
+
+    // O CLIENTE CORTOU A SEGUNDA FRASE EM 23/10/2026, palavras dele: *"Tire a
+    // parte a busca acontece sozinha ou toque na lupa."*
+    //
+    // **A VERSAO ANTERIOR DESTE CASO EXIGIA A PALAVRA `lupa` NA DICA** (um
+    // `contains('lupa'), isTrue`), e aquela exigencia era MINHA e nao dele --
+    // esta escrito no proprio `reason` que ela substituia. Ele leu a frase e
+    // cortou; a exigencia cai com ela. **Nenhuma decisao do cliente esta sendo
+    // desfeita aqui**: o que ele decidira sobre esta linha era que a busca
+    // dispara ao digitar, e a frase curta nao contradiz isso.
+    //
+    // **E A PREOCUPACAO QUE AQUELA ASSERCAO CARREGAVA NAO FOI JOGADA FORA, ela
+    // MUDOU DE LUGAR.** Ela existia para a tela nao esconder um controle que
+    // continua funcionando. Reescrita como `findsNothing` sobre a palavra
+    // `lupa`, ela passaria no vazio -- a frase inteira que a continha saiu, e
+    // uma ausencia sobre texto que deixou de existir e verdadeira sem medir
+    // nada. Entao ela passa a medir o WIDGET: a lupa esta na arvore, montada e
+    // alcancavel, no mesmo estado de abertura em que a dica aparece.
+    //
+    // DESLIGAR PARA VER REPROVAR, por tres caminhos independentes:
+    //   1. em `BuscaDePessoas`, devolva a segunda frase a
+    //      `explicacaoAntesDeBuscar` -> reprova em `uma frase so`;
+    //   2. devolva o texto de 22/10 (`'... e toque na lupa.'`) -> reprova em
+    //      `nao manda mais TOCAR`;
+    //   3. em `BarraDeListagem`, nao desenhe `_LupaQueAplica` -> reprova em
+    //      `a lupa continua na tela`.
+    testWidgets('a dica de abertura e UMA frase so, e nao fala mais da lupa',
+        (tester) async {
+      await _montar(tester);
+
+      final dica = BuscaDePessoas.explicacaoAntesDeBuscar;
+
+      // CONTROLE POSITIVO: a dica esta na tela. Os `expect` de conteudo abaixo
+      // leem a constante, e sem este o caso mediria uma cadeia e nao uma tela.
+      expect(
+        find.text(dica),
+        findsOneWidget,
+        reason: 'REPROVA: o estado de abertura nao pinta a dica.',
+      );
+
+      // `uma frase so`: o pedido dele foi pela SEGUNDA frase, e contar pontos
+      // e o que distingue "a dica encurtou" de "a dica trocou de redacao".
+      // **A redacao em si continua podendo ser revista por ele** -- o que este
+      // caso trava e o tamanho, nao as palavras.
+      expect(
+        dica.split('.').where((p) => p.trim().isNotEmpty).length,
+        1,
+        reason:
+            'REPROVA: a dica de abertura tem mais de uma frase ("$dica"). O '
+            'cliente cortou a segunda em 23/10/2026: *"Tire a parte a busca '
+            'acontece sozinha ou toque na lupa."*',
+      );
+
+      // `nao manda mais TOCAR`: a afirmacao de 22/10 que mentia. Ela continua
+      // cobrada porque a frase curta nao e a unica redacao possivel -- a
+      // proxima revisao dele pode alongar a dica de novo, e ela nao pode
+      // voltar a EXIGIR o toque.
+      expect(
+        dica.contains('toque na lupa'),
+        isFalse,
+        reason:
+            'REPROVA: a dica voltou a mandar tocar na lupa. A busca dispara ao '
+            'digitar desde 22/10/2026, por pausa de 400 ms '
+            '(`BuscaDePessoas.esperaAntesDeBuscar`): quem obedecesse ao texto '
+            'tocaria uma lupa que a espera ja ia resolver.',
+      );
+
+      // `a lupa continua na tela`: ANCORADO EM WIDGET, e e esta linha que
+      // impede este caso de ser uma ausencia que passa no vazio. O estado e o
+      // MESMO em que a dica aparece -- campo vazio, nada buscado --, e e por
+      // isso que o nome acessivel e o de `nada digitado`.
+      expect(
+        find.byTooltip('Buscar, nada digitado'),
+        findsOneWidget,
+        reason:
+            'REPROVA: a lupa saiu da TELA. O cliente tirou a mencao a ela da '
+            'frase, e nao o controle da barra: ele continua montado e continua '
+            'aplicando na hora.',
+      );
+      expect(
+        find.byIcon(Icons.search),
+        findsOneWidget,
+        reason:
+            'REPROVA: o glifo da lupa nao esta na arvore. Segundo caminho para '
+            'a mesma ausencia, por icone e nao por rotulo: trocar o nome '
+            'acessivel nao pode deixar este caso verde sem lupa nenhuma.',
+      );
     });
   });
 }

@@ -279,8 +279,44 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
           {/*
             Texto de quem organiza. Sai como TEXTO e nunca como marcacao: o
             Astro escapa por padrao, e nao ha `set:html` nesta pagina.
+
+            ------------------------------------------------------------------
+            `texto-com-linhas` (cliente, 22/10/2026)
+            ------------------------------------------------------------------
+            Literal: *"O campo de observacoes da pagina de detalhes do evento,
+            deve aceitar quebras de linha, para nao deixar as informacoes todas
+            juntas"*.
+
+            **ERA ESTA PAGINA, E NAO O APP, e isto foi MEDIDO e nao deduzido.**
+            O caminho inteiro da quebra de linha foi conferido ponta a ponta:
+
+              - o campo que escreve aceita `\n` (`criar_encontro.dart`,
+                `linhas: 3` e sem `acaoDeTeclado`, entao a tecla de retorno
+                insere linha);
+              - o `.trim()` do envio tira so as pontas;
+              - o servidor nao a remove (`errosDasObservacoes` recusa contato e
+                pagamento e mede tamanho; nao mexe em controle que nao seja
+                bidirecional);
+              - o `CHECK` do banco e so de tamanho
+                (`char_length(btrim(notes)) BETWEEN 2 AND 500`);
+              - o app PINTA as linhas: sonda com tres linhas duras num `Text`
+                mediu quatro linhas de paragrafo e 72 dp de altura.
+
+            O que colapsava era o HTML, aqui: num `<p>` sem `white-space`, `\n`
+            e espaco em branco comum e o navegador junta tudo numa linha -- que
+            e exatamente "as informacoes todas juntas".
+
+            **`pre-line` e nao `pre`**: ele preserva a quebra e continua
+            colapsando o resto do espaco em branco E continua quebrando por
+            largura. `pre` manteria a indentacao do texto digitado e tiraria a
+            quebra automatica, o que daria rolagem horizontal no telefone.
+
+            **Classe propria e nao `white-space` em `.texto-grande`**: essa
+            classe e usada em nove lugares de texto editorial (home, sobre,
+            contato, comunidade...), e nenhum deles vem de campo digitado por
+            terceiro.
           */}
-          <p class="texto-grande">{e.notes}</p>
+          <p class="texto-grande texto-com-linhas">{e.notes}</p>
         </section>
       )}
 

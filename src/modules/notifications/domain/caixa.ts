@@ -31,8 +31,11 @@
  * E **`friend_post` nao existe e nao vai existir aqui**: post de amigo e da
  * Petline, por decisao de desenho -- 150 conexoes a uma publicacao por semana
  * dariam cerca de 21 avisos por dia, e o aviso da plaquinha chegaria na 22a
- * posicao. (Medido de passagem: nao existe tabela de conexao entre pessoas
- * neste banco, entao a Petline tambem nao tem de onde sair ainda.)
+ * posicao. (A frase que vinha aqui -- *"nao existe tabela de conexao entre
+ * pessoas neste banco"* -- caducou na `20261018000030`: `user_connections`
+ * existe, e e dela que `connection_requested` nasce. O que continua valendo e
+ * a decisao: **post de amigo** nao entra no sino. Pedido de conexao e outra
+ * coisa -- ele e dirigido a UMA pessoa e e acionavel, e e um por par.)
  */
 export const TIPOS_DE_AVISO = [
   'tag_scanned',
@@ -45,6 +48,18 @@ export const TIPOS_DE_AVISO = [
   'suggestion_decided',
   'tag_request_updated',
   'broadcast',
+  /**
+   * Alguem pediu conexao, e quem RECEBEU o pedido e avisado (cliente,
+   * 22/10/2026: *"quando o usuario me adicionou, nao apareceu na notificacao
+   * que eu tinha uma solicitacao de amizade"*).
+   *
+   * Entrou pela `20261020000018`, copiando a forma inteira de
+   * `event_join_requested` -- gatilho na fonte, autor so para agrupar, destino
+   * resolvido por `notificacao_destino`. **Nao ha o par do aceite**
+   * (`event_join_decided` e o molde dele, e ele existe): o aviso de "sua
+   * solicitacao foi aceita" depende de decisao do cliente que ainda nao voltou.
+   */
+  'connection_requested',
 ] as const;
 
 export type TipoDeAviso = (typeof TIPOS_DE_AVISO)[number];
@@ -96,6 +111,14 @@ export const DESTINOS_DO_AVISO = [
   'directory_suggestion',
   'collar_tag_request',
   'broadcast',
+  /**
+   * A tela *"Pedidos de conexao"* (`/conexoes/pedidos`), que existe desde
+   * 18/10. A chave e `user_connections.ref` -- opaca, 22 caracteres
+   * base64url --, e a tela e a LISTA e nao o item, como `directory_suggestion`
+   * ja e: `rotas.dart` leva a lista e o `ref` viaja porque o contrato promete
+   * que `destination` e `destination_ref` andam juntos.
+   */
+  'connection_request',
 ] as const;
 
 export type DestinoDoAviso = (typeof DESTINOS_DO_AVISO)[number];

@@ -135,13 +135,23 @@ describe('validação do formulário', () => {
     expect(validar({ ...preenchido(), resumo: 'a'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['resumo']);
   });
 
-  it('ISCA: o tamanho conta code points, como o servidor (🐶 conta 1; e + acento combinado conta 2)', async () => {
-    const { errosDeTexto } = await import('../../../src/modules/network/domain/escrita-do-encontro.ts');
-    const casos = ['🐶'.repeat(200), '🐶'.repeat(201), 'e\u0301'.repeat(100), 'e\u0301'.repeat(100) + 'x', '  ' + '🐶'.repeat(200) + '  '];
-    for (const resumo of casos) {
-      const servidor = errosDeTexto('summary', resumo, 2, 200).length === 0;
+  // Que o SERVIDOR responde o mesmo para estes cinco textos e provado na suite
+  // da raiz, em `src/modules/network/domain/paridade-com-o-backoffice.test.ts`:
+  // de dentro de `admin/` nao da para olhar para o servidor, porque o job do
+  // backoffice roda `npm ci` so aqui, e o `kysely` que aquele import alcanca
+  // nao existe na resolucao de la. Aqui fica a outra metade da corrente: que
+  // `validar` usa de fato a contagem em code points, e nao o `length` do UTF-16.
+  it('ISCA: o tamanho conta code points (🐶 conta 1; e + acento combinado conta 2)', () => {
+    const casos: [string, boolean][] = [
+      ['🐶'.repeat(200), true],
+      ['🐶'.repeat(201), false],
+      ['e\u0301'.repeat(100), true],
+      ['e\u0301'.repeat(100) + 'x', false],
+      ['  ' + '🐶'.repeat(200) + '  ', true],
+    ];
+    for (const [resumo, aceita] of casos) {
       const painel = !validar({ ...preenchido(), resumo }, 'novo', AGORA).some((e) => e.campo === 'resumo');
-      expect(painel, `${[...resumo].length} code points: servidor ${servidor ? 'aceita' : 'recusa'}`).toBe(servidor);
+      expect(painel, `${[...resumo.trim()].length} code points`).toBe(aceita);
     }
     expect(tamanhoComoOServidor('🐶')).toBe(1);
     expect(tamanhoComoOServidor('e\u0301')).toBe(2);

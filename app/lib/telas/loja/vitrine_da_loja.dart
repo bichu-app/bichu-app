@@ -114,6 +114,39 @@ class VitrineDaLoja extends StatefulWidget {
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
+  /// O CONVITE DA VITRINE, **redacao do cliente (22/10/2026), literal**:
+  /// *"Na pagina da loja inclua a frase: Ajude a mantermos o Bichu gratuito e
+  /// ainda ganhe descontos comprando em nossas lojas parceiras. Adicione o
+  /// cupom de desconto chamado: bichu"*.
+  ///
+  /// **A frase e dele palavra por palavra, inclusive `mantermos`.** Nao foi
+  /// corrigida para `mantermos o Bichu` -> `manter o Bichu`: microcopia e
+  /// decisao dele, e a concordancia da frase e redacao, nao defeito.
+  ///
+  /// **ELA NAO DESFAZ A REMOCAO DE 17/10.** O que saiu daquela vez foi
+  /// [avisoDeQueNaoSomosOVendedor] -- *"Remova o bloco a compra e feita no site
+  /// do parceiro"* --, que e afirmacao juridica sobre QUEM VENDE. Esta e outro
+  /// texto, com outro assunto, pedido cinco dias depois. As duas decisoes
+  /// coexistem: o aviso continua sem ser desenhado em lugar nenhum.
+  static const String conviteDaVitrine =
+      'Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando '
+      'em nossas lojas parceiras.';
+
+  /// O cupom, e **o rotulo e meu** -- ele deu o codigo (`bichu`), nao a frase
+  /// que o apresenta. Pode ser revisto por ele.
+  ///
+  /// **`bichu` em minuscula, exatamente como ele escreveu.** Cupom e codigo, e
+  /// codigo nao se "arruma": quem digita no site do parceiro digita o que esta
+  /// escrito aqui.
+  ///
+  /// **NAO HA CUPOM NO CONTRATO, e isto foi medido** -- `coupon` e `cupom` nao
+  /// aparecem em `api/openapi.yaml`. Entao ele e texto desta tela e nao dado de
+  /// servidor: nao ha validade, nao ha por-parceiro e nao ha como esta tela
+  /// saber se ele ainda vale. Se ele passar a ter dono no servidor, o lugar de
+  /// trocar e esta constante.
+  static const String rotuloDoCupom = 'Cupom de desconto';
+  static const String codigoDoCupom = 'bichu';
+
   /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
   ///
   /// Nao diz "desta região" como a de `Perto`: a vitrine e a mesma para todo
@@ -347,6 +380,19 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
         // juridica (criterio 6 da BICHUS-185), e apagar a frase junto com o
         // widget tiraria do repositorio a unica copia do que o produto
         // afirmava.
+        // O CONVITE E O CUPOM (cliente, 22/10/2026). Ver
+        // `VitrineDaLoja.conviteDaVitrine` para a redacao dele e para a razao
+        // de isto NAO desfazer a remocao de 17/10.
+        //
+        // **ACIMA DA BARRA DE LISTAGEM, e nao dentro dela.** A barra e busca,
+        // filtro e ordenacao -- controles --, e o padrao em vigor e que eles
+        // ficam no topo do CORPO da tela. Este texto nao e controle: ele e a
+        // primeira coisa que a pagina diz, e e por isso que ele vem antes. Ele
+        // nao depende de `pagina`: a frase vale com a vitrine carregada,
+        // vazia, filtrada ou em falha. Pendurada no `if` da barra, ela sumiria
+        // justamente nos estados em que nao ha produto na tela -- que e quando
+        // sobra espaco para ela.
+        const _ConviteComCupom(),
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
@@ -913,6 +959,83 @@ class _EsqueletoDeItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: cores.surfaceSunken,
         borderRadius: BorderRadius.circular(BichuRaio.lg),
+      ),
+    );
+  }
+}
+
+/// O CONVITE DA VITRINE E O CUPOM, numa peca so (cliente, 22/10/2026).
+///
+/// A redacao da frase e dele e esta em [VitrineDaLoja.conviteDaVitrine]; o
+/// codigo do cupom tambem (`bichu`). **O DESENHO E MEU** -- ele pediu a frase
+/// e o cupom, nao disse como apresenta-los --, e pode ser revisto por ele.
+///
+/// **Por que os dois no MESMO bloco.** A frase promete desconto e o cupom e
+/// como se obtem o desconto: separados, a promessa ficaria no topo e o meio de
+/// cumpri-la perdido em outro lugar da tela. Juntos, quem le a frase ja tem o
+/// codigo na linha de baixo.
+///
+/// **O codigo e SELECIONAVEL, e nao so pintado.** Ele e para ser digitado no
+/// site do parceiro, e um cupom que a pessoa nao consegue copiar e um cupom
+/// que ela erra. `SelectableText` e o unico no desta peca que precisa disso.
+///
+/// **Sem botao de copiar**, e a ausencia e deliberada: copiar para a area de
+/// transferencia exigiria uma confirmacao visivel para nao ser toque sem
+/// desfecho (criterio 2 da BICHUS-62), e isso e um mecanismo novo numa tela que
+/// o cliente pediu para enxugar. O texto selecionavel resolve o caso sem
+/// inventar estado.
+///
+/// **SEM MOLDURA E SEM FUNDO, e a razao foi MEDIDA.** A primeira versao
+/// desenhava um bloco de `surfaceSunken` com 16 dp de recuo em volta e as duas
+/// linhas separadas: ela custava cerca de 145 dp no TOPO de uma lista de
+/// produtos, e empurrou o titulo do primeiro cartao para fora da area visivel
+/// -- `loja_carrossel_nao_sai_test` reprovou tocando num titulo que ja nao
+/// estava alcancavel. Esta versao e texto corrido em `bodySmall` com o cupom na
+/// mesma linha do rotulo: ela diz as duas coisas que o cliente pediu e nao
+/// gasta a dobra da tela, que pertence aos produtos.
+class _ConviteComCupom extends StatelessWidget {
+  const _ConviteComCupom();
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: BichuEspaco.e3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            VitrineDaLoja.conviteDaVitrine,
+            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+          ),
+          const SizedBox(height: BichuEspaco.e1),
+          // O rotulo e o codigo em DOIS nos na MESMA linha, e nao num
+          // `'Cupom: bichu'` montado: quem usa leitor de tela ouve o rotulo e
+          // depois o codigo, e o codigo precisa de no proprio para ser
+          // selecionado sem arrastar o rotulo junto.
+          Row(
+            children: <Widget>[
+              Text(
+                VitrineDaLoja.rotuloDoCupom,
+                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+              ),
+              const SizedBox(width: BichuEspaco.e1),
+              // `Flexible` e nao `Expanded`: o codigo tem cinco letras e nao
+              // tem por que ocupar o resto da linha, mas a 200% de escala ele
+              // precisa poder encolher em vez de estourar a `Row`.
+              Flexible(
+                child: SelectableText(
+                  VitrineDaLoja.codigoDoCupom,
+                  style: textos.labelLarge?.copyWith(
+                    color: cores.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

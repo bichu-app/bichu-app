@@ -1366,30 +1366,36 @@ class _Conteudo extends StatelessWidget {
         // ESTADOS, e nunca a mesma acao em dois lugares.
         ..._acaoDeEstadoDoPet(context),
 
-        // 4. Sinais, nunca truncado.
+        // ---------------------------------------------------------------------
+        // A ORDEM DESTES DOIS BLOCOS FOI INVERTIDA (cliente, 22/10/2026)
+        // ---------------------------------------------------------------------
+        // Literal: *"Na pagina do perfil do pet, inverta os sinais
+        // particulares com a qr da plaquinha."*
         //
-        // **O ROTULO VIROU `Sinais particulares`** (cliente, 18/10/2026): ele
-        // leu `Sinais` aqui e perguntou o que era. Ver
-        // `TextosDoDetalhe.rotuloDosSinais` -- a constante e a do formulario
-        // que preenche o campo, e nao uma segunda redacao.
-        _CartaoDeTexto(
-          titulo: TextosDoDetalhe.rotuloDosSinais,
-          texto: pet.sinaisParticulares,
-          vazio: TextosDoDetalhe.semSinais,
-        ),
+        // Era `4. Sinais` e depois `5. QR`; agora o QR vem primeiro. Os dois
+        // blocos trocaram **com os seus acompanhantes**, e isso nao e liberdade
+        // minha -- e o que mantem cada par junto:
+        //
+        //   - `Cuidados` continua logo abaixo de `Sinais particulares`: os dois
+        //     sao `_CartaoDeTexto` do cadastro do animal, e sao o mesmo
+        //     assunto;
+        //   - o link de `Acompanhar a plaquinha` continua logo abaixo do QR,
+        //     pelo motivo que ja estava escrito na linha dele -- *"os dois
+        //     falam da mesma plaquinha"*.
+        //
+        // **O que NAO mudou:** as acoes destrutivas seguem por ultimo e
+        // separadas por mais de 16 dp de qualquer outro alvo (7.6.3), e
+        // `Marcar como perdido` segue acima de tudo isto.
+        // ---------------------------------------------------------------------
 
-        if (pet.cuidados != null && pet.cuidados!.isNotEmpty) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e4),
-          _CartaoDeTexto(titulo: 'Cuidados', texto: pet.cuidados),
-        ],
-
-        // 5. O QR DA PLAQUINHA (cliente, 18/10): "traga tambem o qr-code
+        // 4. O QR DA PLAQUINHA (cliente, 18/10): "traga tambem o qr-code
         // para o usuario conseguir escanear".
         //
-        // Abaixo dos campos e acima das destrutivas: ele e informacao do pet,
-        // e nao acao sobre ele. O conteudo do QR, o motivo de ele vir desenhado
-        // do servidor e o motivo de o rotulo acessivel nao ser o codigo estao
-        // em `QrDaPlaquinha`, porque e la que a proxima pessoa vai mexer.
+        // Acima dos campos de texto desde 22/10 e **ainda** acima das
+        // destrutivas: ele e informacao do pet, e nao acao sobre ele. O
+        // conteudo do QR, o motivo de ele vir desenhado do servidor e o motivo
+        // de o rotulo acessivel nao ser o codigo estao em `QrDaPlaquinha`,
+        // porque e la que a proxima pessoa vai mexer.
         const SizedBox(height: BichuEspaco.e6),
         Semantics(
           header: true,
@@ -1422,6 +1428,29 @@ class _Conteudo extends StatelessWidget {
             rotulo: TextosDoDetalhe.acompanharPlaquinha,
             aoTocar: aoAcompanharPlaquinha,
           ),
+        ],
+
+        // 5. Sinais, nunca truncado. **Abaixo do QR desde 22/10/2026** -- ver
+        // a nota da inversao, acima.
+        //
+        // **O ROTULO VIROU `Sinais particulares`** (cliente, 18/10/2026): ele
+        // leu `Sinais` aqui e perguntou o que era. Ver
+        // `TextosDoDetalhe.rotuloDosSinais` -- a constante e a do formulario
+        // que preenche o campo, e nao uma segunda redacao.
+        //
+        // O vao e `e6` e nao `e4`: ele separa dois ASSUNTOS (a plaquinha e o
+        // cadastro do animal), e e a mesma medida que ja separava o QR do que
+        // vinha antes dele.
+        const SizedBox(height: BichuEspaco.e6),
+        _CartaoDeTexto(
+          titulo: TextosDoDetalhe.rotuloDosSinais,
+          texto: pet.sinaisParticulares,
+          vazio: TextosDoDetalhe.semSinais,
+        ),
+
+        if (pet.cuidados != null && pet.cuidados!.isNotEmpty) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          _CartaoDeTexto(titulo: 'Cuidados', texto: pet.cuidados),
         ],
 
         // As acoes destrutivas, em texto, no fim, e separadas por mais de

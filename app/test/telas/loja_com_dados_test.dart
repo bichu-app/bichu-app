@@ -773,6 +773,28 @@ void main() {
       ),
     );
 
+    // **`Cupom` E `Desconto` SAIRAM DESTA LISTA em 22/10/2026, e a saida e
+    // pedido do cliente -- com mecanismo no lugar, e nao com silencio.**
+    //
+    // Literal: *"Na pagina da loja inclua a frase: Ajude a mantermos o Bichu
+    // gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.
+    // Adicione o cupom de desconto chamado: bichu"*. As duas palavras que esta
+    // lista proibia estao na frase que ele escreveu.
+    //
+    // **O QUE A LISTA GUARDA NAO MUDOU.** O invariante e que o Bichu nao e
+    // comercio: nao ha carrinho, nao ha pedido, nao ha pagamento e nao ha
+    // checkout DENTRO do app -- a compra acontece no site do parceiro. Um
+    // cupom que a pessoa digita no site do parceiro nao cria nenhuma dessas
+    // quatro coisas aqui: ele nao tem estado, nao tem valor, nao tem validade
+    // e nao fala com servidor nenhum (medido: `coupon` e `cupom` nao existem
+    // em `api/openapi.yaml`). As dez palavras que SOBRARAM sao as que
+    // descrevem comercio proprio, e elas continuam proibidas.
+    //
+    // **E as duas nao ficaram liberadas em qualquer lugar:** o caso de baixo
+    // cobra que elas aparecam SO no bloco que o cliente pediu. Tirar as duas
+    // da lista sem esse caso seria trocar um portao por nada -- e `Desconto`
+    // passava por ACIDENTE antes dele, porque a frase dele escreve
+    // `descontos` em minuscula e `find.textContaining` e sensivel a caixa.
     for (final palavra in <String>[
       'Carrinho',
       'carrinho',
@@ -782,8 +804,6 @@ void main() {
       'Finalizar',
       'Pagamento',
       'Frete',
-      'Cupom',
-      'Desconto',
       'De R\$',
       'menor preço',
     ]) {
@@ -808,6 +828,141 @@ void main() {
       find.textContaining('O Bichu não é o vendedor'),
       findsNothing,
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // O CONVITE E O CUPOM (cliente, 22/10/2026)
+  // -------------------------------------------------------------------------
+  // Literal: *"Na pagina da loja inclua a frase: Ajude a mantermos o Bichu
+  // gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.
+  // Adicione o cupom de desconto chamado: bichu"*.
+  //
+  // Dois casos, e eles sao as duas metades da mesma decisao: o primeiro cobra
+  // que a frase e o cupom ESTAO la, com a redacao dele; o segundo cobra que as
+  // duas palavras que sairam da lista de comercio aparecem **so aqui**.
+  group('o convite e o cupom da vitrine', () {
+    // DESLIGAR PARA VER REPROVAR: em `lib/telas/loja/vitrine_da_loja.dart`,
+    // apague a linha `const _ConviteComCupom(),` do `build`. Os tres `expect`
+    // reprovam, e o controle positivo continua passando -- que e o que separa
+    // "o bloco saiu" de "a tela nao abriu".
+    testWidgets('a frase e o cupom estao na tela, com a redacao dele',
+        (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
+        ),
+      );
+
+      // CONTROLE POSITIVO, e ele vem PRIMEIRO. Esta tela tem estado de
+      // carregando, de vazio, de vazio filtrado e de falha, e em tres deles
+      // nao ha produto nenhum pintado: um `findsOneWidget` que falhasse
+      // sozinho nao diria se a frase saiu ou se a vitrine nem chegou.
+      expect(
+        find.byType(BarraDeListagem),
+        findsOneWidget,
+        reason:
+            'REPROVA: a vitrine nao esta montada (nao ha barra de listagem). '
+            'Sem isto os `expect` de baixo nao medem o bloco do convite -- '
+            'eles medem se a tela existe.',
+      );
+
+      expect(
+        find.text(VitrineDaLoja.conviteDaVitrine),
+        findsOneWidget,
+        reason:
+            'REPROVA: a frase que o cliente pediu em 22/10/2026 nao esta na '
+            'vitrine. A redacao e DELE, palavra por palavra (inclusive '
+            '`mantermos`), e esta em `VitrineDaLoja.conviteDaVitrine`.',
+      );
+      expect(
+        find.text(VitrineDaLoja.rotuloDoCupom),
+        findsOneWidget,
+        reason: 'REPROVA: o rotulo do cupom saiu da vitrine.',
+      );
+      expect(
+        find.text(VitrineDaLoja.codigoDoCupom),
+        findsOneWidget,
+        reason:
+            'REPROVA: o codigo `${VitrineDaLoja.codigoDoCupom}` nao esta na '
+            'tela. Ele e o cupom que o cliente nomeou, em minuscula como ele '
+            'o escreveu -- cupom e codigo, e codigo nao se arruma.',
+      );
+    });
+
+    // DESLIGAR PARA VER REPROVAR: no bloco `_ConviteComCupom`, troque
+    // `VitrineDaLoja.rotuloDoCupom` por uma cadeia que escreva `Cupom` em
+    // outro no (ou ponha `'Desconto'` em qualquer outro texto da tela): este
+    // caso reprova nomeando o texto intruso.
+    testWidgets('`Cupom` e `desconto` aparecem SO no bloco do convite',
+        (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
+        ),
+      );
+
+      // Os tres textos que o cliente autorizou. Qualquer outro no da tela que
+      // escreva uma das duas palavras e comercio entrando pela porta que a
+      // frase dele abriu.
+      final autorizados = <String>{
+        VitrineDaLoja.conviteDaVitrine,
+        VitrineDaLoja.rotuloDoCupom,
+        VitrineDaLoja.codigoDoCupom,
+      };
+
+      // **MINUSCULO nos dois lados**: `find.textContaining` e sensivel a
+      // caixa, e foi por isso que `Desconto` passava por acidente antes deste
+      // caso -- a frase dele escreve `descontos`.
+      // **`Text` E `SelectableText`, e os DOIS sao obrigatorios aqui.** O
+      // codigo do cupom e `SelectableText` -- ele existe para ser copiado e
+      // digitado no site do parceiro --, e `SelectableText` NAO constroi um
+      // `Text`. Uma varredura so de `Text` nao enxergaria justamente o no que
+      // escreve a palavra mais sensivel desta tela: foi o controle positivo
+      // abaixo que pegou isso, na primeira execucao deste caso.
+      final todos = <String>{
+        for (final e in find.byType(Text).evaluate())
+          ?(e.widget as Text).data,
+        for (final e in find.byType(SelectableText).evaluate())
+          ?(e.widget as SelectableText).data,
+      };
+
+      final intrusos = <String>[];
+      for (final texto in todos) {
+        if (autorizados.contains(texto)) continue;
+        final baixo = texto.toLowerCase();
+        if (baixo.contains('cupom') || baixo.contains('desconto')) {
+          intrusos.add('  "$texto"');
+        }
+      }
+
+      // CONTROLE POSITIVO da propria varredura: ela TEM de ver os textos
+      // autorizados. Uma varredura que achasse zero no passaria no vazio.
+      final vistos = todos;
+      expect(
+        vistos.intersection(autorizados),
+        hasLength(autorizados.length),
+        reason:
+            'REPROVA: a varredura nao enxergou os ${autorizados.length} '
+            'textos autorizados do bloco do convite, entao o `isEmpty` de '
+            'baixo nao prova nada -- ela nao esta lendo a tela. Vistos: '
+            '${vistos.intersection(autorizados)}',
+      );
+
+      expect(
+        intrusos,
+        isEmpty,
+        reason:
+            'REPROVA: `Cupom`/`desconto` apareceram FORA do bloco que o '
+            'cliente pediu:\n${intrusos.join('\n')}\n\n'
+            'As duas palavras sairam da lista de `nao ha carrinho, pedido '
+            'nem pagamento na tela` por pedido dele de 22/10/2026, e saíram '
+            'SO para a frase e o cupom que ele escreveu. O invariante que '
+            'aquela lista guarda continua valendo: o Bichu nao e o comercio, '
+            'e a compra acontece no site do parceiro.',
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

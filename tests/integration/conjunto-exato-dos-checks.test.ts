@@ -718,9 +718,12 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     valores: ['pessoa', 'pet', 'reservado'],
   },
 
-  // 20261018000020, a caixa de notificacoes. Os DEZ tipos de item. `broadcast`
-  // e o comunicado do painel e e o unico que nao nasce de um fato do tutor.
-  // Espelha o `enum` de `NotificationItem.item_kind` no contrato.
+  // 20261018000020, a caixa de notificacoes, AMPLIADA pela 20261020000018. Os
+  // ONZE tipos de item. `broadcast` e o comunicado do painel e e o unico que
+  // nao nasce de um fato do tutor; `connection_requested` entrou em 22/10/2026
+  // (cliente: "quando o usuario me adicionou, nao apareceu na notificacao que
+  // eu tinha uma solicitacao de amizade"). Espelha o `enum` de
+  // `NotificationItem.item_kind` no contrato.
   'public.notification_items.notification_items_tipo_conhecido': {
     coluna: 'item_kind',
     valores: [
@@ -734,6 +737,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'suggestion_decided',
       'tag_request_updated',
       'broadcast',
+      'connection_requested',
     ],
   },
 
