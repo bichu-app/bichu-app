@@ -908,7 +908,7 @@ pin-digests: ## reresolve os digests das imagens do compose e de todo Dockerfile
 	@# Sem `pipefail`, `grep` que nao acha nada sai 1, o `sort` sai 0 e o
 	@# `while` nao executa: o alvo termina VERDE tendo conferido ZERO
 	@# referencias, que e o estado em que ele mais precisava falar.
-	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' $(wildcard compose.yaml Dockerfile */Dockerfile infra/*/Dockerfile) | sort -u | while read -r ref; do \
+	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' $(wildcard compose.yaml infra/integracao/compose.integracao.yaml Dockerfile */Dockerfile infra/*/Dockerfile) | sort -u | while read -r ref; do \
 	  tag=$${ref%@*}; \
 	  novo=$$(docker buildx imagetools inspect "$$tag" --format '{{.Manifest.Digest}}' 2>/dev/null); \
 	  if [ -n "$$novo" ]; then echo "$$tag -> $$novo"; else echo "$$tag -> NAO RESOLVEU"; fi; \

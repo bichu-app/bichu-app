@@ -149,11 +149,13 @@ services:
     # isolada e o unico lugar onde ela aparece limpa).
     #
     # O MESMO digest do compose.yaml da raiz, pelo mesmo motivo do `db`: provar
-    # o comportamento de um armazenamento que ninguem roda nao prova nada. E o
-    # MinIO NAO esta no Docker Hub (`minio/minio` responde "pull access
-    # denied"); a imagem oficial vive no quay.io. Quem for atualizar vai
-    # esbarrar nisso e achar que e credencial.
-    image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # o comportamento de um armazenamento que ninguem roda nao prova nada.
+    #
+    # E o espelho NOSSO, nao o quay.io: a MinIO arquivou o projeto comunitario
+    # em 21/10/2026 e os dois registros fecharam o pull anonimo. O porque
+    # inteiro, com as medicoes e a procedencia dos bytes, esta no `objeto` do
+    # compose.yaml da raiz -- e la que se mexe primeiro; aqui so acompanha.
+    image: southamerica-east1-docker.pkg.dev/bichu-app-508914/espelhos-de-terceiros/minio:RELEASE.2025-09-07T16-13-09Z@sha256:fef3b9cf8ce1bcb83cd30b9a41273c8585855c0a269fa97cf297c6615745b969
     mem_limit: 320m
     command: server /data --console-address ":9001"
     environment:
@@ -202,7 +204,7 @@ services:
     # sobe em lugar nenhum. O que `tests/integration/foto-de-ponta-a-ponta.test.ts`
     # afirma sobre leitura anonima so vale porque a politica conferida aqui e a
     # que dev e homologacao aplicam.
-    image: quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    image: southamerica-east1-docker.pkg.dev/bichu-app-508914/espelhos-de-terceiros/mc:RELEASE.2025-08-13T08-35-41Z@sha256:b13adbe0366ec9311957246a2303d69f561f224e58a6eed6687e25db27791bc5
     mem_limit: 128m
     depends_on:
       objeto:
