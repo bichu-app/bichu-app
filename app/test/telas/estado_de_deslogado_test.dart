@@ -41,6 +41,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:bichu/roteamento/rotas.dart';
+
 import 'ajuda_de_tela.dart';
 
 // ---------------------------------------------------------------------------
@@ -148,6 +150,28 @@ Future<http.Response> Function(http.Request) redeDasDuasSecoes(
     if (chave == 'GET /v1/directory/entries' ||
         chave == 'GET /v1/conversations' ||
         req.url.path.startsWith('/v1/conversations/')) {
+      return resposta(req);
+    }
+    return problema('not-found', 404);
+  };
+}
+
+/// A rede que responde [resposta] a `GET /v1/connections` e 404 no resto.
+///
+/// **A rota de conexoes PRECISA de um esboco proprio**, e nao da para reusar os
+/// dois de cima: `redeDasDuasSecoes` responde 404 a ela, e 404 tambem produz
+/// faixa de aviso -- entao um caso que a usasse ficaria verde medindo o 404
+/// errado, que e exatamente a classe de defeito que o cabecalho de
+/// `redeDoMural` descreve.
+///
+/// O resumo (`GET /v1/connections/summary`) responde o MESMO: a tela pede os
+/// dois em paralelo, e sem a conta nenhum dos dois tem resposta a dar.
+Future<http.Response> Function(http.Request) redeDasConexoes(
+  http.Response Function(http.Request) resposta,
+) {
+  return (req) async {
+    final chave = '${req.method} ${req.url.path}';
+    if (chave == 'GET /v1/connections' || chave == 'GET /v1/connections/summary') {
       return resposta(req);
     }
     return problema('not-found', 404);
@@ -816,6 +840,104 @@ void main() {
       );
       expect(find.byType(FaixaDeAviso), findsOneWidget);
       expect(find.text('Atualizar'), findsOneWidget);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('a tela `Conexões` deslogada convida a entrar, e nao mostra erro', () {
+    // **ESTE GRUPO FECHA UM "NAO SEI" DECLARADO (22/10/2026).**
+    //
+    // `test/telas/minhas_conexoes_test.dart` prova a ESCOLHA DO RAMO -- o 401
+    // leva ao convite e nao a faixa de erro --, e prova pela excecao que
+    // `ConviteParaEntrar` levanta naquela bancada: ele exige o `Escopo` do
+    // `main()`, e aquela bancada monta a tela sozinha, como a de `Pedidos de
+    // conexao`. O que ela NAO alcanca e o TEXTO, que vem do catalogo
+    // (`SecaoComConta.minhasConexoes`).
+    //
+    // Aqui o app inteiro esta montado, entao o `Escopo` existe e o texto
+    // aparece. E a entrada do catalogo deixa de ser orfa medida so pela
+    // varredura de `toda_faixa_de_erro_tem_saida_test.dart`, que conta
+    // referencias em `lib/` -- contar referencia nao prova que alguem ve.
+    //
+    // MECANISMO: o ramo `if (_faltaConta)` de
+    // `lib/telas/conexoes/tela_minhas_conexoes.dart`. Desligado, a tela volta a
+    // desenhar `FaixaDeAviso` com a frase de falha de carga.
+    testWidgets('`Conexões` mostra o convite, e nenhuma faixa de erro',
+        (tester) async {
+      // Tela alta: a rota e empilhada e o convite tem titulo, ganho e DOIS
+      // botoes -- na bancada padrao o `Criar conta` fica fora da janela.
+      tester.view.physicalSize = const Size(1125, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await abrirOApp(tester, rede: redeDasConexoes((_) => semConta()));
+
+      exigirEstadoDeSessao(
+        tester,
+        estado: EstadoDaSessao.deslogado,
+        motivo: MotivoSemConta.nuncaEntrou,
+      );
+
+      // A rota e EMPILHADA (`push`), como a de `Pedidos de conexao`: ela nao e
+      // aba, e nao se chega nela por `NavigationDestination`.
+      await irPara(tester, Rotas.minhasConexoes);
+
+      expect(find.byType(ConviteParaEntrar), findsOneWidget);
+      expect(
+        find.byType(FaixaDeAviso),
+        findsNothing,
+        reason: 'REPROVA: a tela de quem nao tem conta esta desenhando uma '
+            'faixa de aviso. Sem conta nao e erro -- e aqui e mais que isso: '
+            'sem conta nao existe "as proprias conexoes".',
+      );
+      expect(
+        find.textContaining('Não conseguimos carregar as suas conexões'),
+        findsNothing,
+        reason: 'REPROVA: o 401 esta caindo no texto de falha de carga.',
+      );
+      expect(
+        find.text('Você ainda não tem conexões'),
+        findsNothing,
+        reason: 'REPROVA: a tela afirmou que a lista esta vazia a quem nao tem '
+            'conta. "Voce ainda nao tem conexoes" e "voce nao tem conta" sao '
+            'afirmacoes diferentes, e a primeira seria mentira.',
+      );
+
+      // A MICROCOPY DO CATALOGO, por extenso -- e e isto que nenhuma outra
+      // bancada alcanca.
+      expect(find.text('As suas conexões ficam aqui'), findsOneWidget);
+      expect(
+        frasesDoConvite(tester).join(' | '),
+        contains('Entre para ver quem já é sua conexão'),
+      );
+      // AS DUAS PORTAS, e nao uma.
+      expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
+      expect(find.text('Criar conta'), findsOneWidget);
+    });
+
+    /// **O CONTRAPESO, e sem ele o caso de cima e vacuo.** Ele provaria apenas
+    /// que a frase de falha nao existe mais em lugar nenhum do app.
+    testWidgets('CONTRAPESO: com 500, `Conexões` VOLTA a mostrar faixa de erro',
+        (tester) async {
+      tester.view.physicalSize = const Size(1125, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await abrirOApp(tester, rede: redeDasConexoes((_) => servidorFora()));
+      await irPara(tester, Rotas.minhasConexoes);
+
+      expect(
+        find.byType(ConviteParaEntrar),
+        findsNothing,
+        reason: 'REPROVA: o convite apareceu numa falha de LEITURA. Um 500 nao '
+            'e falta de conta, e dizer "entre na sua conta" a quem esta '
+            'logado manda a pessoa resolver o problema errado.',
+      );
+      expect(find.byType(FaixaDeAviso), findsOneWidget);
+      expect(
+        find.textContaining('Não conseguimos carregar as suas conexões'),
+        findsOneWidget,
+      );
     });
   });
 }
