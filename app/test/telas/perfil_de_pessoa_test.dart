@@ -636,12 +636,137 @@ void main() {
     tester,
   ) async {
     await _montar(tester, perfil: _perfil(estado: 'none', nome: null));
-    // DUAS vezes, e as duas sao as mesmas de qualquer tela desta casa: o
-    // titulo da barra de topo e o nome no corpo. **Nao ha uma terceira** -- a
-    // linha de apoio com `@apelido` e condicional a existir nome de exibicao, e
-    // sem nome `nomeParaLer` JA e o apelido. Tres seria a duplicacao que o
-    // cliente vem apontando, e e por isso que este caso conta.
-    expect(find.text('@$_apelido'), findsNWidgets(2));
+    // UMA vez, e o numero caiu de DOIS em 23/10/2026.
+    //
+    // Ele era dois porque a barra de topo tambem pintava o nome; a barra passou
+    // a dizer `Perfil` (pedido do cliente, ver
+    // `TelaDePerfilDePessoa.tituloDaBarra`) e sobrou o nome do CORPO. **A razao
+    // original deste caso nao mudou** -- ele existe para a linha de apoio
+    // `@apelido` nao repetir o nome quando os dois sao a mesma cadeia --, e com
+    // a barra fora da conta ele a mede mais de perto: dois aqui voltaria a ser
+    // exatamente a duplicacao que o cliente vem apontando.
+    expect(
+      find.text('@$_apelido'),
+      findsOneWidget,
+      reason: 'REPROVA: o apelido aparece '
+          '${tester.widgetList(find.text('@$_apelido')).length} vezes. Com a '
+          'barra dizendo `Perfil`, o unico no legitimo e o nome do corpo -- a '
+          'linha de apoio e condicional a existir nome de exibicao, e sem nome '
+          '`nomeParaLer` JA e o apelido.',
+    );
+    // E ele esta no CORPO, e nao na barra: sem esta linha o caso acima ficaria
+    // verde com o apelido de volta ao titulo e o corpo vazio.
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('@$_apelido'),
+      ),
+      findsNothing,
+      reason: 'REPROVA: o apelido voltou para a barra de topo.',
+    );
+  });
+
+  // =========================================================================
+  // O TITULO DA BARRA E `Perfil`, E O NOME E O TITULO DA PAGINA (cliente,
+  // 23/10/2026)
+  //
+  // Literal: *"a barra principal fica perfil e logo abaixo o titulo da pagina
+  // fica o nome do usuário do jeito que esta atualmente. Me refiro na pagina
+  // que outro usuário acessa, que mostra a vitrine com as publicações do
+  // usuário."*
+  //
+  // **A segunda metade ja estava feita antes deste dia**, e foi medida antes de
+  // se mexer em nada: `NomeComSelo` sempre foi o primeiro elemento de `_corpo`.
+  // O que mudou e a barra. Por isso os casos abaixo medem OS DOIS LADOS: sem o
+  // de baixo, tirar o nome da barra e esquecer de o ter embaixo passaria verde.
+  //
+  // **O CONTROLE DE VAZAMENTO NAO MORA AQUI, e isso e deliberado.** Quem cobra
+  // que a tela da PROPRIA conta nao virou `Perfil` e
+  // `test/telas/navegacao_mensagens_e_avatar_test.dart`, no grupo `o titulo da
+  // tela da conta` -- ele monta o app inteiro e afirma `findsNothing` para a
+  // palavra `Perfil` no `AppBar` daquela tela. Repetir a afirmacao aqui, num
+  // arquivo que monta `TelaDePerfilDePessoa` sozinha e nunca ve `AbaPerfil`,
+  // seria um caso que nao tem como reprovar pelo vazamento que diz vigiar.
+  // =========================================================================
+
+  testWidgets('ISCA: a barra de topo diz `Perfil`, e NAO o nome da pessoa', (
+    tester,
+  ) async {
+    await _montar(tester, perfil: _perfil(estado: 'none'));
+
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text(TelaDePerfilDePessoa.tituloDaBarra),
+      ),
+      findsOneWidget,
+      reason: 'REPROVA: a barra de topo nao pinta '
+          '"${TelaDePerfilDePessoa.tituloDaBarra}".',
+    );
+    // A AUSENCIA, e ela NAO passa no vazio: o contrapeso logo abaixo prova que
+    // `Marina` esta na arvore: o que este `expect` mede e o LUGAR dela.
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Marina')),
+      findsNothing,
+      reason: 'REPROVA: o nome da pessoa voltou para a barra de topo. O '
+          'cliente pediu a palavra `Perfil` ali e o nome logo abaixo, como '
+          'titulo da pagina (23/10/2026).',
+    );
+    expect(
+      find.text('Marina'),
+      findsWidgets,
+      reason: 'CONTRAPESO: sem isto, a ausencia acima ficaria verde numa tela '
+          'que nao desenhou nome nenhum.',
+    );
+  });
+
+  testWidgets('ISCA: o nome fica ABAIXO da barra, e com a aparencia que ja '
+      'tinha', (tester) async {
+    await _montar(tester, perfil: _perfil(estado: 'none'));
+
+    // ANCORADO EM WIDGET e nao so em literal: quem pinta o nome do corpo e
+    // `NomeComSelo`, e e dele que o selo depende.
+    final noNome = find.byType(NomeComSelo);
+    expect(
+      noNome,
+      findsOneWidget,
+      reason: 'REPROVA: o nome do corpo nao e `NomeComSelo`.',
+    );
+    expect(
+      find.descendant(of: noNome, matching: find.text('Marina')),
+      findsOneWidget,
+      reason: 'REPROVA: `NomeComSelo` nao carrega o nome da pessoa.',
+    );
+    expect(
+      find.ancestor(of: noNome, matching: find.byType(AppBar)),
+      findsNothing,
+      reason: 'REPROVA: o titulo da pagina esta DENTRO da barra. O cliente '
+          'pediu "logo abaixo".',
+    );
+
+    // GEOMETRIA: `abaixo` medido em pixel, e nao deduzido da arvore. Uma barra
+    // e um corpo que trocassem de lugar na tela manteriam a arvore intacta.
+    final fimDaBarra = tester.getRect(find.byType(AppBar)).bottom;
+    final comecoDoNome = tester.getRect(noNome).top;
+    expect(
+      comecoDoNome,
+      greaterThanOrEqualTo(fimDaBarra),
+      reason: 'REPROVA: o nome comeca em y=$comecoDoNome e a barra termina em '
+          'y=$fimDaBarra -- ele nao esta ABAIXO dela.',
+    );
+
+    // `do jeito que esta atualmente`: o estilo e o que a tela ja usava
+    // (`titleLarge` do tema), e nao um estilo novo inventado para a mudanca.
+    // **Lido do tema e nao escrito a mao aqui**: numero solto neste caso seria
+    // uma segunda fonte da verdade sobre tipografia.
+    final contexto = tester.element(noNome);
+    expect(
+      tester.widget<NomeComSelo>(noNome).estilo?.fontSize,
+      Theme.of(contexto).textTheme.titleLarge?.fontSize,
+      reason: 'REPROVA: o titulo da pagina trocou de tamanho. O cliente pediu '
+          'o nome "do jeito que esta atualmente", e o que ele ja era e '
+          '`titleLarge`.',
+    );
   });
 
   testWidgets('a tela pede UMA coisa ao servidor, e nao varre nada', (tester) async {

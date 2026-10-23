@@ -131,6 +131,37 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// desenha a porta de pedir.
   final String? tokenDoConvite;
 
+  /// **O TÍTULO DA BARRA DE TOPO DESTA TELA É A PALAVRA `Perfil`**, e não o
+  /// nome da pessoa (cliente, 23/10/2026).
+  ///
+  /// Palavras dele, literais: *"a barra principal fica perfil e logo abaixo o
+  /// titulo da pagina fica o nome do usuário do jeito que esta atualmente. Me
+  /// refiro na pagina que outro usuário acessa, que mostra a vitrine com as
+  /// publicações do usuário."*
+  ///
+  /// **A SEGUNDA METADE DO PEDIDO JÁ ESTAVA FEITA, e isso foi medido antes de
+  /// mexer em qualquer coisa.** O nome já era o primeiro elemento do corpo —
+  /// [NomeComSelo] em `titleLarge`, logo abaixo da barra (ver [_corpo]) —,
+  /// desde a fatia G desta tela. O que havia de errado era o nome aparecer
+  /// **duas vezes**: na barra e no corpo. Então o conserto é de um lado só, a
+  /// barra, e o *"do jeito que esta atualmente"* dele é cumprido por não se
+  /// tocar no nome do corpo: ele continua exatamente o que era, com o mesmo
+  /// estilo e o mesmo selo.
+  ///
+  /// **ISTO NÃO ALCANÇA A TELA DA PRÓPRIA CONTA, e a separação é estrutural e
+  /// não disciplina.** A seção `Perfil` do dono é `AbaPerfil`
+  /// (`telas/abas.dart`), que monta a barra por `TelaDeAba`
+  /// (`telas/casca_com_abas.dart`) e tira o título de `tituloDaTelaDaConta` —
+  /// outro arquivo, outro widget, outra função. Esta tela monta um `Scaffold`
+  /// e um `AppBar` próprios e **não usa `TelaDeAba`**: não há parâmetro a
+  /// passar porque não há componente compartilhado entre as duas barras. A
+  /// decisão do cliente de 19/10 (*"a tela do usuario, deve ter como titulo da
+  /// pagina na barra principal o slug do usuario"*) continua valendo intacta,
+  /// e quem a cobra é
+  /// `test/telas/navegacao_mensagens_e_avatar_test.dart` — que afirma
+  /// `findsNothing` para a palavra `Perfil` no `AppBar` **daquela** tela.
+  static const String tituloDaBarra = 'Perfil';
+
   static const String naoEncontramos = 'Não encontramos este usuário.';
   static const String falhaAoCarregar = 'Não conseguimos carregar este perfil agora.';
   static const String falhaAoAgir = 'Não conseguimos registrar isso agora.';
@@ -286,8 +317,12 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
 
     return Scaffold(
       appBar: AppBar(
-        // O título é o nome da pessoa, como na tela da própria conta.
-        title: Text(perfil?.nomeParaLer ?? '@${widget.apelido}'),
+        // **`Perfil`, e não o nome da pessoa** (cliente, 23/10/2026). O nome é
+        // o título da PÁGINA, logo abaixo desta barra, e quem o pinta é
+        // `NomeComSelo` no topo de `_corpo` — onde ele já estava. Ver
+        // [TelaDePerfilDePessoa.tituloDaBarra] para o pedido inteiro e para a
+        // razão pela qual isto não alcança a tela da própria conta.
+        title: const Text(TelaDePerfilDePessoa.tituloDaBarra),
         actions: <Widget>[
           // **O "⋮" EM TODOS OS ESTADOS DO PERFIL**, menos quando não há alvo:
           // sem `public_ref` não há a quem endereçar denúncia nem bloqueio, e

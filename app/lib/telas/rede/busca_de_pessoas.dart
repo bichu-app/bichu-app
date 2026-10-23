@@ -212,13 +212,24 @@ class BuscaDePessoas extends StatefulWidget {
   /// lupa. Quem obedecesse ao texto tocaria uma lupa que a espera ja ia
   /// resolver sozinha.
   ///
-  /// **A lupa continua na frase porque ela continua funcionando**, e dizer so
-  /// "digite" apagaria da tela o controle que ainda esta la e ainda aplica na
-  /// hora -- ver a secao `A BUSCA DISPARA AO DIGITAR` no cabecalho. A frase
-  /// descreve o que acontece, e oferece o atalho; ela nao pede mais nada.
+  /// **E ELE MANDOU TIRAR A SEGUNDA FRASE EM 23/10/2026**, palavras dele:
+  /// *"Tire a parte a busca acontece sozinha ou toque na lupa."*
+  ///
+  /// O paragrafo que estava aqui defendia a mencao a lupa -- *"a lupa continua
+  /// na frase porque ela continua funcionando"* -- e essa defesa era MINHA, nao
+  /// dele. Ele leu a frase na tela e cortou. **Nenhuma decisao dele esta sendo
+  /// desfeita**: a redacao desta linha nunca foi pedido seu, e a unica coisa
+  /// que ele havia decidido sobre ela era que a busca dispara ao digitar, que e
+  /// justamente o que a frase curta nao contradiz.
+  ///
+  /// **A LUPA NAO SAIU DA TELA, so da frase.** O controle continua montado e
+  /// continua aplicando na hora (ver a secao `A BUSCA DISPARA AO DIGITAR` no
+  /// cabecalho), e e por isso que o caso que vigiava isto passou a medir o
+  /// WIDGET em vez do texto: afirmar no texto que a lupa existe deixou de ser
+  /// possivel, e trocar a afirmacao por um `findsNothing` sobre a palavra seria
+  /// uma afirmacao que passa no vazio.
   static const String explicacaoAntesDeBuscar =
-      'Digite o nome ou o apelido de alguém. A busca acontece sozinha, ou '
-      'toque na lupa.';
+      'Digite o nome ou o apelido de alguém.';
 
   static const String tituloNadaEncontrado = 'Nada com esse nome';
 

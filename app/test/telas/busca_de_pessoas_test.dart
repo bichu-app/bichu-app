@@ -1492,11 +1492,32 @@ void main() {
       );
     });
 
-    // DESLIGAR PARA VER REPROVAR: em `BuscaDePessoas`, devolva
-    // `explicacaoAntesDeBuscar` ao texto antigo
-    // (`'Digite o nome ou o apelido de alguém e toque na lupa.'`). Este caso
-    // reprova dizendo que a dica voltou a EXIGIR o toque.
-    testWidgets('a dica de abertura nao manda mais TOCAR na lupa',
+    // O CLIENTE CORTOU A SEGUNDA FRASE EM 23/10/2026, palavras dele: *"Tire a
+    // parte a busca acontece sozinha ou toque na lupa."*
+    //
+    // **A VERSAO ANTERIOR DESTE CASO EXIGIA A PALAVRA `lupa` NA DICA** (um
+    // `contains('lupa'), isTrue`), e aquela exigencia era MINHA e nao dele --
+    // esta escrito no proprio `reason` que ela substituia. Ele leu a frase e
+    // cortou; a exigencia cai com ela. **Nenhuma decisao do cliente esta sendo
+    // desfeita aqui**: o que ele decidira sobre esta linha era que a busca
+    // dispara ao digitar, e a frase curta nao contradiz isso.
+    //
+    // **E A PREOCUPACAO QUE AQUELA ASSERCAO CARREGAVA NAO FOI JOGADA FORA, ela
+    // MUDOU DE LUGAR.** Ela existia para a tela nao esconder um controle que
+    // continua funcionando. Reescrita como `findsNothing` sobre a palavra
+    // `lupa`, ela passaria no vazio -- a frase inteira que a continha saiu, e
+    // uma ausencia sobre texto que deixou de existir e verdadeira sem medir
+    // nada. Entao ela passa a medir o WIDGET: a lupa esta na arvore, montada e
+    // alcancavel, no mesmo estado de abertura em que a dica aparece.
+    //
+    // DESLIGAR PARA VER REPROVAR, por tres caminhos independentes:
+    //   1. em `BuscaDePessoas`, devolva a segunda frase a
+    //      `explicacaoAntesDeBuscar` -> reprova em `uma frase so`;
+    //   2. devolva o texto de 22/10 (`'... e toque na lupa.'`) -> reprova em
+    //      `nao manda mais TOCAR`;
+    //   3. em `BarraDeListagem`, nao desenhe `_LupaQueAplica` -> reprova em
+    //      `a lupa continua na tela`.
+    testWidgets('a dica de abertura e UMA frase so, e nao fala mais da lupa',
         (tester) async {
       await _montar(tester);
 
@@ -1510,26 +1531,52 @@ void main() {
         reason: 'REPROVA: o estado de abertura nao pinta a dica.',
       );
 
-      // **O QUE O TEXTO TEM DE DIZER, e nao a frase exata**: a redacao desta
-      // linha e MINHA (o cliente nao a escreveu) e pode ser revista por ele.
-      // O que NAO pode voltar e a afirmacao falsa.
+      // `uma frase so`: o pedido dele foi pela SEGUNDA frase, e contar pontos
+      // e o que distingue "a dica encurtou" de "a dica trocou de redacao".
+      // **A redacao em si continua podendo ser revista por ele** -- o que este
+      // caso trava e o tamanho, nao as palavras.
       expect(
-        dica.contains('e toque na lupa'),
+        dica.split('.').where((p) => p.trim().isNotEmpty).length,
+        1,
+        reason:
+            'REPROVA: a dica de abertura tem mais de uma frase ("$dica"). O '
+            'cliente cortou a segunda em 23/10/2026: *"Tire a parte a busca '
+            'acontece sozinha ou toque na lupa."*',
+      );
+
+      // `nao manda mais TOCAR`: a afirmacao de 22/10 que mentia. Ela continua
+      // cobrada porque a frase curta nao e a unica redacao possivel -- a
+      // proxima revisao dele pode alongar a dica de novo, e ela nao pode
+      // voltar a EXIGIR o toque.
+      expect(
+        dica.contains('toque na lupa'),
         isFalse,
         reason:
-            'REPROVA: a dica voltou a dizer "e toque na lupa", que EXIGE o '
-            'toque. A busca dispara ao digitar desde 22/10/2026, por pausa de '
-            '400 ms (`BuscaDePessoas.esperaAntesDeBuscar`): quem obedecesse '
-            'ao texto tocaria uma lupa que a espera ja ia resolver.',
+            'REPROVA: a dica voltou a mandar tocar na lupa. A busca dispara ao '
+            'digitar desde 22/10/2026, por pausa de 400 ms '
+            '(`BuscaDePessoas.esperaAntesDeBuscar`): quem obedecesse ao texto '
+            'tocaria uma lupa que a espera ja ia resolver.',
+      );
+
+      // `a lupa continua na tela`: ANCORADO EM WIDGET, e e esta linha que
+      // impede este caso de ser uma ausencia que passa no vazio. O estado e o
+      // MESMO em que a dica aparece -- campo vazio, nada buscado --, e e por
+      // isso que o nome acessivel e o de `nada digitado`.
+      expect(
+        find.byTooltip('Buscar, nada digitado'),
+        findsOneWidget,
+        reason:
+            'REPROVA: a lupa saiu da TELA. O cliente tirou a mencao a ela da '
+            'frase, e nao o controle da barra: ele continua montado e continua '
+            'aplicando na hora.',
       );
       expect(
-        dica.toLowerCase().contains('lupa'),
-        isTrue,
+        find.byIcon(Icons.search),
+        findsOneWidget,
         reason:
-            'REPROVA: a lupa saiu da dica. Ela CONTINUA existindo e continua '
-            'aplicando na hora -- apagar a mencao esconderia da pessoa um '
-            'controle que esta na tela. O conserto era a frase mentir, e nao '
-            'a lupa existir.',
+            'REPROVA: o glifo da lupa nao esta na arvore. Segundo caminho para '
+            'a mesma ausencia, por icone e nao por rotulo: trocar o nome '
+            'acessivel nao pode deixar este caso verde sem lupa nenhuma.',
       );
     });
   });
