@@ -557,7 +557,7 @@ void main() {
   });
 
   testWidgets('SELO: a pessoa SEM nome e SEM apelido tambem pode ter selo', (tester) async {
-    // A tela cai para "Pessoa sem nome", que e texto DELA. **O selo nao cai
+    // A tela cai para "Usuário sem nome", que e texto DELA. **O selo nao cai
     // junto**: o booleano e sobre a conta, e uma conta sem nome de exibicao pode
     // ter confirmado o e-mail.
     await _montar(tester, recebidos: <Map<String, dynamic>>[
