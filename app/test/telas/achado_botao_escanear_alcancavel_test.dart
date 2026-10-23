@@ -96,12 +96,14 @@
 
 import 'dart:convert';
 
+import 'package:bichu/achado/rascunho_do_achado.dart';
 import 'package:bichu/api/modelos_achado.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/resultado_do_achado.dart';
 import 'package:bichu/telas/achado/textos_do_achado.dart';
+import 'package:bichu/widgets/botao_primario.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -553,5 +555,211 @@ void main() {
             'mandou enxugar em 22/10/2026. Textos vistos: $textos',
       );
     });
+  });
+
+  // =========================================================================
+  // 4. O PASSO 1 PERDEU O MOTIVO VISIVEL, E NAO PERDEU O MOTIVO
+  // =========================================================================
+  //
+  // A DECISAO DO CLIENTE, 22/10/2026, tomada com as duas opcoes e os custos na
+  // mesa: **tirar o texto, manter a trava.** O `Continuar` continua
+  // desabilitado ate haver especie e porte, sem a linha visivel dizendo por
+  // que.
+  //
+  // E a engenharia que vai junto: **ele pediu o texto fora da tela, nao pediu
+  // a tela muda para quem nao ve**. O motivo passou para o nome acessivel do
+  // botao desabilitado, na redacao que `ImpedimentoDeRegistrar` ja carrega.
+  //
+  // Sao TRES afirmacoes, e elas se seguram umas as outras:
+  //
+  //   a) o texto visivel saiu          -> o pedido dele;
+  //   b) a trava ficou                 -> a parte que ele mandou manter;
+  //   c) o motivo existe em ALGUM canal -> o que impede a proxima edicao de
+  //      transformar "tirei o texto" em "ninguem sabe por que nao da para
+  //      continuar".
+  //
+  // (c) e deliberadamente permissiva quanto ao CANAL: ela aceita visivel OU
+  // acessivel. Uma isca que exigisse o nome acessivel especificamente
+  // engessaria a decisao de produto -- se amanha ele mandar o texto voltar a
+  // tela, (c) continua certa e so (a) muda. O que (c) nunca aceita e ZERO
+  // canais, que e o unico desfecho que deixa a pessoa sem saber.
+
+  group('ISCA — o passo 1 tira o texto e NAO tira o motivo', () {
+    Future<void> abrirOPasso1(WidgetTester tester) async {
+      _telaAlta(tester);
+      await abrirOApp(tester, deposito: depositoLogado(), rede: _rede);
+      await irPara(tester, Rotas.registrarAchado);
+    }
+
+    /// O `Continuar` da barra de baixo. Ha exatamente um `BotaoPrimario` no
+    /// passo 1: o `IndexedStack` mantem os dois passos MONTADOS, mas o
+    /// `Registrar achado` do passo 2 vive na BARRA, e a barra e uma so.
+    Finder oContinuar() =>
+        find.widgetWithText(BotaoPrimario, TextosDoAchado.continuar);
+
+    bool travado(WidgetTester tester) =>
+        tester.widget<BotaoPrimario>(oContinuar()).aoTocar == null;
+
+    testWidgets('o motivo do passo 1 saiu da tela, e a trava ficou', (
+      tester,
+    ) async {
+      await abrirOPasso1(tester);
+
+      // (b) A TRAVA, no estado em que ela existe.
+      expect(
+        travado(tester),
+        isTrue,
+        reason:
+            'REPROVA: o `Continuar` do passo 1 esta habilitado com o '
+            'formulario em branco. O cliente mandou TIRAR O TEXTO e MANTER A '
+            'TRAVA em 22/10/2026 -- e `species` e `size` sao `required` em '
+            '`StrayFoundReportInput`, entao soltar a trava manda a pessoa ao '
+            'passo 2 para descobrir no fim que faltava o comeco.',
+      );
+
+      final textos = varredura(tester);
+
+      // CONTROLE POSITIVO: a varredura enxerga o titulo do passo, que CONTINUA
+      // na tela. Sem isto, os dois `isFalse` abaixo passariam com a arvore
+      // vazia -- e arvore vazia e o estado normal de um `ListView` cujo
+      // trecho medido nao foi construido.
+      controlePositivo(textos, TextosDoAchado.tituloDoPasso1);
+
+      // (a) O TEXTO SAIU -- as duas frases do passo 1, pelas constantes, que
+      // e o que `impedimentoDoPasso1` pode devolver.
+      for (final i in <ImpedimentoDeRegistrar>[
+        ImpedimentoDeRegistrar.semEspecie,
+        ImpedimentoDeRegistrar.semPorte,
+      ]) {
+        expect(
+          textos.any((t) => t.contains(i.texto)),
+          isFalse,
+          reason:
+              'REPROVA: a tela ainda ESCREVE "${i.texto}". O cliente decidiu '
+              'em 22/10/2026 tirar o texto visivel do passo 1 e manter a '
+              'trava. O motivo nao desapareceu -- ele mora no nome acessivel '
+              'do botao, e quem mede isso e o caso irmao deste grupo. '
+              'Textos vistos: $textos',
+        );
+      }
+
+      // E A TRAVA ABRE quando os dois campos que ela cobra sao respondidos.
+      // Sem esta metade, "a trava ficou" ficaria verde com um botao
+      // permanentemente morto, que e um defeito pior que o original.
+      await tocar(tester, find.text(Especie.cao.rotulo));
+      expect(
+        travado(tester),
+        isTrue,
+        reason:
+            'REPROVA: o `Continuar` abriu so com a especie. O porte tambem e '
+            '`required` no contrato.',
+      );
+      await tocar(tester, find.text(Porte.medio.rotulo));
+      expect(
+        travado(tester),
+        isFalse,
+        reason:
+            'REPROVA: o `Continuar` continua travado com especie E porte '
+            'escolhidos. A trava virou um botao morto, e um botao que nunca '
+            'abre e pior que um botao sem motivo.',
+      );
+    });
+
+    testWidgets(
+      'o botao desabilitado NUNCA fica sem motivo — nem visivel, nem acessivel',
+      (tester) async {
+        await abrirOPasso1(tester);
+        // `dispose()` EXPLICITO no fim, e nao `addTearDown`: a verificacao de
+        // `SemanticsHandle` vivo do flutter_test roda ANTES dos `tearDown`, e
+        // com `addTearDown` este caso reprovou com "A SemanticsHandle was
+        // active at the end of the test" DEPOIS de todas as afirmacoes dele
+        // passarem -- reprovacao que nao fala do assunto do caso. E o mesmo
+        // jeito de `test/a11y/acao_de_controle_test.dart`.
+        final handle = tester.ensureSemantics();
+
+        for (final caso in <(String, ImpedimentoDeRegistrar)>[
+          ('em branco', ImpedimentoDeRegistrar.semEspecie),
+          ('so com a especie', ImpedimentoDeRegistrar.semPorte),
+        ]) {
+          final (quando, esperado) = caso;
+
+          // A ANCORA: so faz sentido cobrar motivo de botao TRAVADO. Sem ela,
+          // este caso passaria sobre um botao habilitado -- que nao precisa
+          // de motivo nenhum -- e nao mediria nada.
+          expect(
+            travado(tester),
+            isTrue,
+            reason:
+                'REPROVA (ancora, $quando): o `Continuar` nao esta travado '
+                'neste estado, e um botao que funciona nao precisa explicar '
+                'nada. A isca nao mediu o que se propunha.',
+          );
+
+          final dados =
+              tester.getSemantics(oContinuar()).getSemanticsData();
+          final nomeAcessivel = dados.label;
+          final visivel = varredura(tester);
+
+          final noNome = nomeAcessivel.contains(esperado.texto);
+          final naTela = visivel.any((t) => t.contains(esperado.texto));
+
+          expect(
+            noNome || naTela,
+            isTrue,
+            reason:
+                'REPROVA ($quando): o `Continuar` esta DESABILITADO e nao '
+                'diz por que em canal nenhum. O nome acessivel e '
+                '"$nomeAcessivel" e nao contem "${esperado.texto}", e a tela '
+                'nao escreve a frase tampouco. Botao cinza e mudo e o '
+                'desfecho que a decisao de 22/10/2026 NAO autorizou: o '
+                'cliente mandou tirar o TEXTO DA TELA, e nao deixar quem '
+                'navega por leitor de tela sem saber o que falta. O tipo '
+                '`ImpedimentoDeRegistrar` existe para que botao desabilitado '
+                'nunca fique sem motivo -- se o motivo tem de sair dos dois '
+                'canais, isso e decisao dele e nao conserto de ninguem.',
+          );
+
+          // SC 2.5.3: o nome acessivel tem de CONTER o rotulo visivel, senao
+          // comando de voz nao aciona o controle. E a regra que a prosa de
+          // `BotaoPrimario.nomeAcessivel` manda seguir, e a forma facil de
+          // errar e passar SO o motivo.
+          if (noNome) {
+            expect(
+              nomeAcessivel.startsWith(TextosDoAchado.continuar),
+              isTrue,
+              reason:
+                  'REPROVA ($quando): o nome acessivel e "$nomeAcessivel" e '
+                  'nao comeca pelo rotulo visivel '
+                  '"${TextosDoAchado.continuar}". SC 2.5.3 exige que o rotulo '
+                  'esteja contido no nome: sem isso, quem usa comando de voz '
+                  'diz "Continuar" e o sistema nao encontra o controle.',
+            );
+          }
+
+          // **A REDACAO E A DO ENUM, E NAO UMA SEGUNDA.** Esta afirmacao e o
+          // que impede a proxima edicao de escrever uma copia da frase no
+          // nome acessivel: ela compara o que o botao anuncia com o que
+          // `ImpedimentoDeRegistrar` carrega, e divergir reprova.
+          if (noNome) {
+            expect(
+              nomeAcessivel,
+              '${TextosDoAchado.continuar}. ${esperado.texto}',
+              reason:
+                  'REPROVA ($quando): o nome acessivel nao e o rotulo mais a '
+                  'frase do enum. Uma segunda redacao da mesma recusa '
+                  'divergiria da do passo 2 na primeira correcao de virgula '
+                  '-- e este projeto ja pagou isso em rotulo e em frase de '
+                  'mapa.',
+            );
+          }
+
+          if (quando == 'em branco') {
+            await tocar(tester, find.text(Especie.cao.rotulo));
+          }
+        }
+
+        handle.dispose();
+      },
+    );
   });
 }

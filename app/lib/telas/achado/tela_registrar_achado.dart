@@ -447,12 +447,53 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
   Widget _barra(BichuCores cores, DateTime agora) {
     if (_passo == 0) {
       final impedimento = _rascunho.impedimentoDoPasso1();
+      // =====================================================================
+      // O PASSO 1 PERDEU O MOTIVO VISIVEL, E NAO PERDEU O MOTIVO
+      // (decisao do cliente, 22/10/2026)
+      // =====================================================================
+      //
+      // Ele pediu *"remova essa funcionalidade, deixe apenas o botao
+      // continuar"*, e a frase era ambigua entre duas coisas que a medicao
+      // separou: o TEXTO do impedimento e a TRAVA que ele explica. Medido,
+      // antes de perguntar:
+      //
+      //   em branco        Continuar desabilitado, tela diz `semEspecie`
+      //   so especie       Continuar desabilitado, tela diz `semPorte`
+      //   especie + porte  Continuar HABILITADO, nenhum texto
+      //
+      // Com as duas opcoes e os custos na mesa ele decidiu: **tirar o texto,
+      // manter a trava.** Entao `_MotivoDoBloqueio` saiu DAQUI -- e so daqui:
+      // o passo 2 continua com o motivo visivel, porque a decisao foi sobre
+      // o `Continuar` e nao sobre o `Registrar achado`.
+      //
+      // **E A TELA NAO FICOU MUDA PARA QUEM NAO VE.** Ele pediu o texto fora
+      // da tela; nao pediu um botao cinza sem explicacao para quem navega por
+      // leitor de tela. O motivo passa a viajar no NOME ACESSIVEL do botao
+      // desabilitado, que e um canal que `BotaoPrimario` ja tinha
+      // (`nomeAcessivel`) e que nao desenha um pixel.
+      //
+      // **A REDACAO E A DO `ImpedimentoDeRegistrar`, e nao uma segunda.** A
+      // frase sai de `impedimento.texto` -- a mesma que o passo 2 ainda
+      // escreve e a mesma que `porta_da_frente_test.dart` ancora. Este
+      // projeto ja pagou redacao duplicada em rotulo e em frase de mapa, e
+      // uma copia aqui divergiria na primeira correcao de virgula.
+      //
+      // **COMECA PELO ROTULO VISIVEL, por SC 2.5.3** (o nome acessivel tem de
+      // CONTER o rotulo, senao comando de voz nao aciona o controle). A prosa
+      // de `nomeAcessivel` em `BotaoPrimario` manda exatamente isso: comecar
+      // pelo rotulo e acrescentar contexto depois dele. Dai
+      // `'Continuar. <motivo>'`, e nunca so o motivo.
+      //
+      // `enabled` e `onTap` do no de semantica seguem a acao, que e nula aqui
+      // -- entao o leitor de tela anuncia o nome E o estado desabilitado, sem
+      // oferecer um toque que nao responde.
       return BarraDeAcaoFixa(
         acoes: <Widget>[
-          if (impedimento != null)
-            _MotivoDoBloqueio(texto: impedimento.texto, cor: cores.textPrimary),
           BotaoPrimario(
             rotulo: TextosDoAchado.continuar,
+            nomeAcessivel: impedimento == null
+                ? null
+                : '${TextosDoAchado.continuar}. ${impedimento.texto}',
             aoTocar:
                 impedimento != null ? null : () => setState(() => _passo = 1),
           ),
