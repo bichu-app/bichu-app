@@ -34,7 +34,7 @@ import '../../widgets/faixa_de_aviso.dart';
 /// descreva:
 ///
 /// - o **nome de exibição**, ou `@apelido` quando não há nome, ou
-///   `Pessoa sem nome` quando não há os dois;
+///   `Usuário sem nome` quando não há os dois;
 /// - o **apelido** como segunda linha, quando há nome — ele é o identificador
 ///   estável, e é o que desempata dois homônimos bloqueados;
 /// - **quando você bloqueou**, que é o ato de quem lê e não dado da outra
