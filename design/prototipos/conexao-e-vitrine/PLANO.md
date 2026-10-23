@@ -835,9 +835,34 @@ A régua é a frase dele: **relação contra público** — e não "logado contr
 | Vitrine | — | só a contagem | as até 9 fotos | 404 |
 | Timeline / publicações | — | **não** | sim | 404 |
 | Encontros em comum | — | não | só o número | 404 |
-| Lista de conexões | — | **nunca** | **nunca** | 404 |
+| Lista de conexões **de terceiro** | — | **nunca** | **nunca** | 404 |
+| Lista das **próprias** conexões | — | **o dono, e só ele** | idem | — |
 | E-mail, telefone, CEP, coordenada | nunca | nunca | nunca | nunca |
 | Qualquer UUID | nunca | nunca | nunca | nunca |
+
+> **EMENDA DE 22/10/2026 — A LINHA `Lista de conexões` FOI PARTIDA EM DUAS, POR DECISÃO DO
+> CLIENTE.** Até essa data ela era uma linha só, com **nunca** nas duas colunas, e dizia a
+> decisão dele de 18/10/2026. Ele emendou a própria decisão, literal:
+>
+> > *"o usuário pode abrir a lista de usuários que é sua conexão"*
+>
+> A emenda é **exata**, e é por isso que a linha virou duas em vez de mudar de valor:
+>
+> | | antes | agora |
+> |---|---|---|
+> | a própria lista, para o próprio dono | nunca | **PODE** — `listMyConnections` (`GET /connections`) |
+> | a lista de **TERCEIRO** | nunca | **continua NUNCA** |
+>
+> **Tocar as *"12 conexões"* no perfil de outra pessoa continua não levando a lugar nenhum**,
+> e a pergunta sobre isso segue pendente com ele desde 19/10/2026. O motivo da proibição nunca
+> foi o dono: *"a lista, mostrada a um estranho, entregaria a rede social de alguém a quem não
+> tem relação com ela"*.
+>
+> **O recorte de cada pessoa na lista do dono é o MESMO do resultado da busca** — nome,
+> apelido, contagem de pets, contagem de conexões e a foto (esta pela emenda dele de
+> 21/10/2026). Ser conexão aceita não abre campo ali: o que o aceite abre são as outras linhas
+> desta tabela. O portão `conexao-nao-expoe-lista-nem-identificador.test.ts` compara os dois
+> conjuntos por nome, e reprova uma lista de terceiro em quatro casos nomeados.
 
 **A coluna "sem conta" é vazia inteira, e isso é arquitetura e não escolha de tela:** não
 existe rota de perfil de pessoa alcançável sem conta, em estado nenhum. É o que mantém os dez
