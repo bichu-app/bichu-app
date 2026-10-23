@@ -817,7 +817,9 @@ export type TipoDeAvisoDaCaixa =
   | 'event_cancelled'
   | 'suggestion_decided'
   | 'tag_request_updated'
-  | 'broadcast';
+  | 'broadcast'
+  /** Alguem pediu conexao (`20261020000018`). Vai para QUEM RECEBEU o pedido. */
+  | 'connection_requested';
 
 /**
  * Quando esta conta viu a lista pela ultima vez (migracao `20261018000020`).
