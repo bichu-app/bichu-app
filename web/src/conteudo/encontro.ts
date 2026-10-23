@@ -118,9 +118,27 @@ export const ENCONTRO = {
       + 'são combinados por aqui.',
   },
 
-  /** O endereco do lugar NAO sai desta pagina. Ver `linhaDoLugar`. */
+  /**
+   * O endereco do lugar NAO sai desta pagina. Ver `linhaDoLugar`.
+   *
+   * **"para quem tem conta", e nao "para quem confirma presenca"** (21/10/2026).
+   * A frase anterior afirmava duas coisas falsas:
+   *
+   *   1. **O ato nao existe.** Check-in e lista de presenca sairam desta versao
+   *      por decisao do cliente (ADR-0027 12.4): `checkInNetworkEvent` nao esta
+   *      no contrato, e `app/lib/telas/rede/encontro_da_rede.dart` nao tem o
+   *      fluxo. A frase mandava a pessoa fazer uma coisa que nao ha onde fazer.
+   *   2. **Nao ha grupo restrito.** `getNetworkEventLocation` exige
+   *      `bearerAuth` e nada mais: QUALQUER conta le o endereco de um encontro
+   *      publico, nao so quem fez algo. Dizer o contrario prometia ao
+   *      organizador uma protecao que o contrato nao da.
+   *
+   * O que a frase NAO pode voltar a dizer esta na isca
+   * `a frase do endereco nao promete confirmacao de presenca` em
+   * `tests/unidade/telas-do-encontro.test.ts`.
+   */
   semEndereco:
-    'O endereço completo fica no aplicativo, para quem confirma presença.',
+    'O endereço completo fica no aplicativo, para quem tem conta.',
 
   /**
    * A TELA UNICA das seis situacoes em que nao ha encontro para mostrar (ver

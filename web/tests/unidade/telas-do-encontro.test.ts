@@ -17,6 +17,7 @@ import {
   type EncontroDaRede,
   type EncontroPublico,
 } from '../../src/dominio/telas-do-encontro.ts';
+import { ENCONTRO as T, ROTULOS as R } from '../../src/conteudo/encontro.ts';
 import { tipoDeProblema as tipo } from './hosts.ts';
 
 const problema = (status: number, slug: string, extra: Record<string, unknown> = {}, retry: string | null = null) =>
@@ -255,4 +256,69 @@ test('a entrada: gratuito, pago com unidade, e unidade desconhecida', () => {
   } as unknown as EncontroPublico['admission'];
   assert.doesNotMatch(textoDaEntrada(futuro), /whatever/);
   assert.match(textoDaEntrada(futuro), /10,00/);
+});
+
+// ---------------------------------------------------------------------------
+// ISCA (b) -- A PAGINA NAO PROMETE O QUE NAO EXISTE
+// ---------------------------------------------------------------------------
+
+/**
+ * Todo texto que a pagina do encontro pode escrever, achatado numa lista.
+ *
+ * Varre `ENCONTRO` e `ROTULOS` inteiros -- e nao so a frase do endereco --
+ * porque a promessa falsa pode voltar em qualquer rotulo, e uma isca que olha
+ * uma chave so nao vigia a pagina: vigia aquela chave. As funcoes sao
+ * chamadas, porque o texto delas tambem sai no HTML.
+ */
+function textosDaPagina(valor: unknown, saida: string[] = []): string[] {
+  if (typeof valor === 'string') saida.push(valor);
+  else if (Array.isArray(valor)) for (const v of valor) textosDaPagina(v, saida);
+  else if (typeof valor === 'function') {
+    for (const args of [['Passeio matinal', 'Pinheiros, São Paulo - SP'], [true], [false]]) {
+      try {
+        textosDaPagina((valor as (...a: unknown[]) => unknown)(...args), saida);
+      } catch {
+        // Assinatura que nao casa com estes argumentos: as outras cobrem.
+      }
+    }
+  } else if (valor && typeof valor === 'object') {
+    for (const v of Object.values(valor)) textosDaPagina(v, saida);
+  }
+  return saida;
+}
+
+/** Sem acento e em minuscula: `presença` e `presenca` sao a mesma palavra aqui. */
+const semAcento = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+test('ISCA -- a frase do endereco nao promete confirmacao de presenca', () => {
+  const textos = textosDaPagina({ ENCONTRO: T, ROTULOS: R });
+
+  // CONTROLE POSITIVO: sem ele, uma varredura que devolvesse lista vazia --
+  // chave renomeada, `import` trocado, achatamento quebrado -- passaria para
+  // sempre, e a isca nao estaria vigiando nada.
+  assert.ok(textos.length >= 30, `REPROVA (controle): a varredura achou so ${textos.length} textos.`);
+  assert.ok(
+    textos.some((t) => t.includes('O endereço completo fica no aplicativo')),
+    'REPROVA (controle): a varredura nao enxerga a frase do endereco, que e justamente ' +
+      'a linha que esta isca existe para vigiar.',
+  );
+
+  // Check-in, lista de presenca e `checkInNetworkEvent` SAIRAM desta versao por
+  // decisao do cliente (ADR-0027 12.4), e o endereco sai em
+  // `getNetworkEventLocation`, que exige `bearerAuth` E NADA MAIS -- qualquer
+  // conta le o endereco de um encontro publico. Prometer "para quem confirma
+  // presenca" descreve um ato que nao existe E um grupo restrito que nao
+  // existe, numa pagina publica onde se decide se vai ao encontro.
+  const proibido = /confirm|presenc|check[ -]?in/;
+  const promessas = textos.filter((t) => proibido.test(semAcento(t)));
+  assert.deepEqual(
+    promessas,
+    [],
+    'REPROVA: a pagina publica do encontro voltou a falar de confirmacao de presenca ' +
+      `(${JSON.stringify(promessas)}). O ato NAO EXISTE nesta versao -- check-in e lista ` +
+      'de presenca sairam por decisao do cliente (ADR-0027 12.4), `checkInNetworkEvent` ' +
+      'nao esta no contrato --, e dizer "para quem confirma presenca" promete ainda uma ' +
+      'restricao que o contrato nao da: `getNetworkEventLocation` exige `bearerAuth` e ' +
+      'nada mais. O endereco fica no aplicativo PARA QUEM TEM CONTA.',
+  );
 });
