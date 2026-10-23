@@ -89,6 +89,7 @@
 
 import 'package:bichu/api/modelos_diretorio.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
+import 'package:bichu/sessao/localizacao_da_sessao.dart';
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/cidade_por_localizacao.dart';
@@ -854,7 +855,7 @@ void main() {
   group('o resolvedor da cidade, sem montar tela', () {
     test('na abertura, resolve so com a permissao JA concedida', () async {
       final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.naoPedida);
-      final resolvedor = CidadeDoAparelho(porta);
+      final resolvedor = CidadeDoAparelho(LocalizacaoDaSessao(porta));
       final trocou = await resolvedor.resolverNaAbertura();
       expect(trocou, isFalse);
       expect(resolvedor.cidade, isNull);
@@ -877,7 +878,7 @@ void main() {
 
     test('na abertura concedida, a cidade chega em silencio', () async {
       final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
-      final resolvedor = CidadeDoAparelho(porta);
+      final resolvedor = CidadeDoAparelho(LocalizacaoDaSessao(porta));
       expect(await resolvedor.resolverNaAbertura(), isTrue);
       expect(resolvedor.cidade, 'Sao Paulo');
       expect(resolvedor.aviso, isNull);
@@ -888,7 +889,7 @@ void main() {
       final porta = LocalizacaoDeTeste(
         PermissaoDeLocalizacao.negadaPermanentemente,
       );
-      final resolvedor = CidadeDoAparelho(porta);
+      final resolvedor = CidadeDoAparelho(LocalizacaoDaSessao(porta));
       expect(await resolvedor.resolverPorToque(), isFalse);
       expect(porta.abriuAjustes, isTrue);
       expect(
@@ -909,7 +910,7 @@ void main() {
         PermissaoDeLocalizacao.concedida,
         servico: false,
       );
-      final resolvedor = CidadeDoAparelho(porta);
+      final resolvedor = CidadeDoAparelho(LocalizacaoDaSessao(porta));
       expect(await resolvedor.resolverPorToque(), isFalse);
       expect(
         resolvedor.aviso,
@@ -932,9 +933,11 @@ void main() {
         MotivoDeNaoTerCidade.semResultado,
       ]) {
         final resolvedor = CidadeDoAparelho(
-          LocalizacaoDeTeste(
-            PermissaoDeLocalizacao.concedida,
-            resultadoDaCidade: CidadeNaoResolvida(motivo),
+          LocalizacaoDaSessao(
+            LocalizacaoDeTeste(
+              PermissaoDeLocalizacao.concedida,
+              resultadoDaCidade: CidadeNaoResolvida(motivo),
+            ),
           ),
         );
         expect(await resolvedor.resolverPorToque(), isFalse);
@@ -954,7 +957,7 @@ void main() {
       // vezes e comum (voltar para a aba), e recarregar a lista sem recorte
       // novo e uma chamada a rota por nada.
       final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
-      final resolvedor = CidadeDoAparelho(porta);
+      final resolvedor = CidadeDoAparelho(LocalizacaoDaSessao(porta));
       expect(await resolvedor.resolverNaAbertura(), isTrue);
       expect(
         await resolvedor.resolverNaAbertura(),

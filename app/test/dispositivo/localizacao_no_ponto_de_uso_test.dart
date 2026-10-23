@@ -89,9 +89,17 @@ const Map<String, String> _quemPodeUsarAPorta = <String, String>{
   //    com a reserva. Nao ha um `switch` de motivo nesta tela -- ha um
   //    `case CidadeNaoResolvida(): return`. O lugar unico onde os motivos sao
   //    distinguidos continua sendo a porta.
+  //
+  // **EM 22/10/2026 ESTA TELA DEIXOU DE FALAR COM A PORTA**, e o nome fica na
+  // lista por outro motivo: ela continua importando o arquivo pelos TIPOS
+  // (`PermissaoDeLocalizacao`, `MotivoDeNaoTerCidade`, `CidadeResolvida`), que
+  // e o caso legitimo de `modelos_localizacao.dart` logo acima. Quem fala com o
+  // aparelho por ela agora e `sessao/localizacao_da_sessao.dart` -- e e por
+  // isso que a trava ESTREITA (`_formasDeObterAPorta`) nao casa mais aqui: ela
+  // mede a CHAMADA, e esta tela nao faz nenhuma.
   'telas/perdido/lista_de_perdidos.dart':
-      'resolve a CIDADE para preencher o filtro (ADR-0006 emenda 1); nao '
-          'captura ponto e nao distingue motivo',
+      'importa os TIPOS para distinguir os motivos na tela; quem fala com o '
+          'aparelho por ela e `sessao/localizacao_da_sessao.dart` (22/10/2026)',
   // ACRESCENTADO EM 20/10/2026, e deliberadamente -- decisao do cliente:
   // *"nos eventos e na comunidade, voce tambem deve trazer os mais proximos da
   // localizacao, utilizar a mesma inteligencia do pets"*. A emenda 1 do
@@ -114,6 +122,28 @@ const Map<String, String> _quemPodeUsarAPorta = <String, String>{
   // num `CidadeNaoResolvida`, e o agrupamento em QUATRO frases aqui e sobre as
   // duas saidas que a caixa oferece (tentar de novo, ou escolher no filtro) --
   // nao sobre a causa, que continua sendo assunto da porta.
+  // ACRESCENTADO EM 22/10/2026, e deliberadamente -- decisao do cliente:
+  // *"quando o usuario autorizar a localizacao, em qualquer uma das paginas,
+  // voce deve utilizar ela para todas as secoes, e nao ficar perguntando na
+  // secao pets, depois rede"*; e, sobre onde: *"ele deve manter a localizacao
+  // na sessao"*.
+  //
+  // **ESTE NOME FAZ A LISTA ENCOLHER, e nao crescer.** Antes dele cada secao
+  // chamava `cidadeAproximada` por conta propria -- medido em 22/10: duas
+  // resolucoes para andar `Rede` -> `Pets`, uma por secao, com `pedir()` em
+  // zero. Agora ha UM lugar que guarda o que o aparelho respondeu e responde a
+  // todas as secoes; `lista_de_perdidos.dart` e `cidade_por_localizacao.dart`
+  // passaram a falar com ELE, e nao mais com a porta.
+  //
+  // **Ele nao distingue motivo e nao grava nada.** Os nove motivos continuam
+  // colapsados pela porta e distinguidos pelas telas; e nada do que ele guarda
+  // vai para disco ou chaveiro -- ver o grupo `nada de localizacao fica no
+  // aparelho` deste mesmo arquivo, e o cabecalho de
+  // `sessao/localizacao_da_sessao.dart` para por que a permissao revogada com
+  // o app fechado e a razao de nao persistir.
+  'sessao/localizacao_da_sessao.dart':
+      'guarda o que o aparelho ja respondeu e serve TODAS as secoes (cliente, '
+          '22/10/2026); nada aqui vai para o disco',
   'widgets/cidade_por_localizacao.dart':
       'e a peca que resolve a CIDADE para o filtro das listagens (ADR-0006 '
           'emenda 1); as secoes nao nomeiam a porta, elas constroem a peca',

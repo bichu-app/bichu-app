@@ -172,9 +172,28 @@ Future<void> tocarEmRegistrar(WidgetTester tester) async {
   await tocar(tester, botao);
 }
 
-/// A localizacao concedida, que devolve um ponto e nada de texto.
+/// A localizacao concedida, que devolve um ponto **e a cidade dele**.
+///
+/// **A CIDADE PASSOU A VIR EM 22/10/2026**, por decisao do cliente: *"quando o
+/// usuario autoriza a localizacao ao encontrar um pet, voce deve prencher o
+/// formulario com as informacoes"*. O duble resolve `Sao Paulo` a partir do
+/// ponto, que e o sentido que a emenda 1 do ADR-0006 autoriza -- e por isso
+/// quem concede o GPS e nao digita nada **ja tem rotulo de area** (a cidade),
+/// onde antes nao tinha nenhum.
 LocalizacaoDeTeste localizacaoConcedida() =>
     LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+
+/// A localizacao concedida cujo nome de cidade **nao da para descobrir**.
+///
+/// Ponto sim, cidade nao: o geocoder da plataforma sem cota, o aparelho sem
+/// geocoder, o lugar sem nome de cidade. **E ela que mantem a isca do aviso de
+/// area viva** depois de 22/10 -- com a cidade resolvida nao ha o que avisar, e
+/// um caso que insistisse no aviso estaria cobrando o defeito antigo.
+LocalizacaoDeTeste localizacaoSemCidade() => LocalizacaoDeTeste(
+      PermissaoDeLocalizacao.concedida,
+      resultadoDaCidade:
+          const CidadeNaoResolvida(MotivoDeNaoTerCidade.falhaDoServico),
+    );
 
 void main() {
   // -------------------------------------------------------------------------
@@ -385,15 +404,30 @@ void main() {
   // `lib/telas/achado/tela_registrar_achado.dart`, faca `_avisoDoLugar`
   // devolver `null` sempre.
   // Medido em 22/09/2026: **1 caso reprova**.
+  //
+  // **O GATILHO MUDOU EM 22/10/2026, e o aviso nao mudou de sentido.** Por
+  // decisao do cliente, a cidade resolvida da coordenada passa a nascer no
+  // campo -- entao quem concede o GPS normalmente JA tem rotulo de area, e o
+  // aviso nao tem o que dizer. Ele continua existindo para quem concede o GPS
+  // e fica **sem cidade descoberta** (geocoder sem cota, aparelho sem
+  // geocoder, lugar sem nome): ali o achado chega sem rotulo de verdade, e
+  // calar seria deixar a pessoa descobrir depois.
+  //
+  // **O aviso fala de BAIRRO e o preenchimento automatico traz CIDADE**, e
+  // essa diferenca e deliberada: coordenada -> bairro e o que a emenda 1 do
+  // ADR-0006 nao autoriza (*"a emenda fala de cidade"*). Se o produto quiser o
+  // aviso de volta para quem tem cidade e nao tem bairro, isso e decisao de
+  // produto e nao foi tomada aqui -- esta relatada.
   // -------------------------------------------------------------------------
   group('ISCA — quem so da o GPS fica sem bairro, e a tela avisa', () {
-    testWidgets('com ponto e sem texto, a tela explica o que o tutor vai ver',
+    testWidgets(
+        'sem cidade descoberta, a tela explica o que o tutor vai ver',
         (tester) async {
       await abrirOApp(
         tester,
         rede: _Rede().call,
         deposito: depositoLogado(),
-        localizacao: localizacaoConcedida(),
+        localizacao: localizacaoSemCidade(),
       );
       await irPara(tester, Rotas.registrarAchado);
       await preencherOMinimo(tester, digitarACidade: false);
@@ -422,6 +456,39 @@ void main() {
       // E o outro estado, para a frase nao virar decoracao permanente.
       expect(find.text(TextosDoAchado.semCoordenada), findsNothing);
     });
+
+    testWidgets(
+      'com a CIDADE vinda da localizacao, o aviso do rotulo nao aparece',
+      (tester) async {
+        // **O OUTRO LADO, e ele e o pedido de 22/10/2026.** A pessoa autoriza,
+        // nao digita nada, e o formulario nasce com a cidade -- entao ha rotulo
+        // de area e nao ha o que avisar.
+        //
+        // Sem este caso, o grupo ficaria medindo so o caminho da falha, e
+        // alguem poderia "consertar" o aviso de volta para sempre sem nenhum
+        // caso acusar.
+        await abrirOApp(
+          tester,
+          rede: _Rede().call,
+          deposito: depositoLogado(),
+          localizacao: localizacaoConcedida(),
+        );
+        await irPara(tester, Rotas.registrarAchado);
+        await preencherOMinimo(tester, digitarACidade: false);
+
+        expect(
+          find.text(TextosDoAchado.semRotuloDeArea),
+          findsNothing,
+          reason:
+              'REPROVA: a pessoa autorizou a localizacao, a cidade foi '
+              'descoberta e preenchida no formulario, e a tela continua '
+              'dizendo que o tutor vai ver a distancia e nao o bairro. Com '
+              'cidade ha `area_label` (`rotuloDaArea` le `city` e '
+              '`neighborhood`), e o aviso passou a falar de um problema que '
+              'nao existe mais nesse caminho.',
+        );
+      },
+    );
 
     testWidgets('com bairro digitado, o aviso do rotulo some', (tester) async {
       await abrirOApp(

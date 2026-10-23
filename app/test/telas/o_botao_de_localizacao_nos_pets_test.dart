@@ -81,7 +81,8 @@ List<String> get asQuatroFrases => <String>[
 ///
 /// Existe para um caso que nenhum dublê de resposta imediata alcança: o que a
 /// tela mostra ENQUANTO o aparelho mede. No aparelho esse intervalo gasta até
-/// os doze segundos de `prazoDaResolucao` mais a ida ao serviço de plataforma,
+/// os doze segundos de `prazoDaMedicaoDaCidade` mais a ida ao serviço de
+/// plataforma,
 /// e doze segundos sem nada na tela são doze segundos em que o botão "não está
 /// funcionando".
 class LocalizacaoQueDemora implements Localizacao {
@@ -556,7 +557,7 @@ void main() {
 
     testWidgets('ISCA: a tela diz `$fraseProcurando` ENQUANTO mede',
         (tester) async {
-      // O aparelho pode gastar os doze segundos de `prazoDaResolucao` mais a
+      // O aparelho pode gastar os doze segundos de `prazoDaMedicaoDaCidade` mais a
       // ida ao serviço de plataforma. Sem esta frase, o intervalo inteiro é
       // "o botão não está funcionando".
       //
@@ -733,9 +734,15 @@ void main() {
       // pendurar era invisível; com a frase na tela, pendurar é uma frase que
       // nunca sai, e isso é pior que o silêncio que esta frente consertou.
       //
-      // DESLIGANDO: tire o `.timeout(tetoDaEsperaDaResolucao, ...)` de
-      // `_resolverEAplicar`. Este caso reprova continuando a dizer
+      // DESLIGANDO: tire o `.timeout(tetoDaEsperaDaCidade, ...)` de
+      // `LocalizacaoDaSessao.cidade`. Este caso reprova continuando a dizer
       // `$fraseProcurando` depois de minutos de relógio.
+      //
+      // **O TETO MUDOU DE ARQUIVO EM 22/10/2026**: ele vivia em
+      // `_resolverEAplicar`, nesta tela, e agora mora com a unica espera pelo
+      // aparelho (`sessao/localizacao_da_sessao.dart`). Um teto POR TELA sobre
+      // um `Future` compartilhado desistiria so para a tela que o declarou e
+      // deixaria o pendurado valendo para as outras secoes.
       final pedidos = <http.Request>[];
       final porta = LocalizacaoQueDemora('Sao Paulo');
       await abrir(tester, localizacao: porta, pedidos: pedidos);

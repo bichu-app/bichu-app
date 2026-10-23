@@ -46,31 +46,20 @@ import 'package:flutter/material.dart';
 
 import '../dispositivo/localizacao.dart';
 import '../escopo.dart';
+import '../sessao/localizacao_da_sessao.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
-/// O prazo da resolucao da cidade.
-///
-/// Generoso de proposito, e **a tela nao espera por ele**: a lista ja esta
-/// pintada com os mais recentes quando a resolucao comeca. O prazo existe para
-/// a tentativa nao ficar pendurada no aparelho que nao fixa.
-///
-/// O MESMO valor de `prazoDaResolucao` da pagina de pets, e de proposito: dois
-/// prazos para a mesma medicao dariam duas experiencias da mesma permissao.
-const Duration prazoDaCidadeDoAparelho = Duration(seconds: 12);
 
-/// O TETO DA ESPERA DA TELA, e ele existe porque [prazoDaCidadeDoAparelho]
-/// **nao cobre a resolucao inteira**.
-///
-/// Medido em 20/10/2026 no pacote: `cidadeAproximada` repassa o prazo a
-/// `pontoAproximado`, que o entrega ao `timeLimit` do `geolocator` -- e depois
-/// chama `isPresent()` e `placemarkFromCoordinates` **sem prazo nenhum**. Um
-/// canal de plataforma que nao responde penduraria a espera para sempre, e com
-/// `Procurando sua localizacao...` na tela isso vira uma frase que nunca sai.
-///
-/// O dobro do prazo da medicao: a resolucao legitima gasta o prazo do ponto
-/// MAIS a ida ao servico de plataforma, e estreitar daria desistencia em cima
-/// de tentativa boa.
-const Duration tetoDaEsperaDaCidadeDoAparelho = Duration(seconds: 24);
+// **OS DOIS PRAZOS DESTA PECA SAIRAM DAQUI (22/10/2026), e nao foram
+// perdidos.** Eles viviam aqui E em `lista_de_perdidos.dart`, com os MESMOS
+// valores e dois nomes -- `prazoDaCidadeDoAparelho`/`prazoDaResolucao` e
+// `tetoDaEsperaDaCidadeDoAparelho`/`tetoDaEsperaDaResolucao`. Agora a espera
+// pelo aparelho acontece num lugar so, e os prazos moram com ela:
+// `prazoDaMedicaoDaCidade` e `tetoDaEsperaDaCidade`, em
+// `sessao/localizacao_da_sessao.dart`.
+//
+// Duas copias do mesmo prazo nao eram enfeite: elas davam DUAS experiencias da
+// mesma permissao assim que alguem ajustasse uma e esquecesse a outra.
 
 /// O que a caixa diz quando ha algo a dizer.
 ///
@@ -104,7 +93,7 @@ enum AvisoDaCidadeDoAparelho {
 /// **sem montar tela**, e os dois caminhos de resolucao (abertura e toque) sao
 /// medidos direto. Quem o usa escuta e redesenha.
 class CidadeDoAparelho extends ChangeNotifier {
-  CidadeDoAparelho(this._porta);
+  CidadeDoAparelho(this._sessao);
 
   /// A porta vem do [Escopo], e **e esta peca que a pega -- nao a tela**.
   ///
@@ -118,14 +107,23 @@ class CidadeDoAparelho extends ChangeNotifier {
   /// portao, e nao um por secao -- que e exatamente o que a lista curta quer
   /// dizer.
   factory CidadeDoAparelho.doEscopo(BuildContext context) =>
-      CidadeDoAparelho(Escopo.of(context).localizacao);
+      CidadeDoAparelho(Escopo.of(context).localizacaoDaSessao);
 
-  final Localizacao _porta;
-
-  String? _cidade;
+  /// A LOCALIZACAO DA SESSAO, e nao a porta do aparelho.
+  ///
+  /// **E esta troca que faz a autorizacao valer para todas as secoes**
+  /// (cliente, 22/10/2026). Esta peca continua sendo uma por secao -- ela tem
+  /// estado de TELA, a frase da caixa e o `procurando` -- mas a MEMORIA do que
+  /// o aparelho respondeu passou a ser uma so, do app inteiro. A segunda secao
+  /// aberta recebe a cidade ja resolvida sem tocar no aparelho, e por isso a
+  /// caixa nem aparece nela.
+  final LocalizacaoDaSessao _sessao;
 
   /// A cidade resolvida pelo aparelho, ou nulo. **Nome, nunca coordenada.**
-  String? get cidade => _cidade;
+  ///
+  /// Vem da sessao, e nao de um campo desta peca: duas secoes abertas na mesma
+  /// sessao leem o MESMO valor, que e o requisito de 22/10.
+  String? get cidade => _sessao.cidadeDoAparelho;
 
   AvisoDaCidadeDoAparelho? _aviso;
 
@@ -135,7 +133,6 @@ class CidadeDoAparelho extends ChangeNotifier {
   /// A resolucao esta correndo.
   bool get procurando => _aviso == AvisoDaCidadeDoAparelho.procurando;
 
-  PermissaoDeLocalizacao? _permissao;
 
   /// **Da para OFERECER a localizacao neste aparelho.**
   ///
@@ -155,7 +152,8 @@ class CidadeDoAparelho extends ChangeNotifier {
   /// quadro e saindo no seguinte, numa compilacao em que ela nunca poderia
   /// servir.
   bool get podeOferecer =>
-      _permissao != null && _permissao != PermissaoDeLocalizacao.indisponivel;
+      _sessao.permissao != null &&
+      _sessao.permissao != PermissaoDeLocalizacao.indisponivel;
 
   bool _descartado = false;
 
@@ -180,9 +178,8 @@ class CidadeDoAparelho extends ChangeNotifier {
   /// Devolve `true` quando a cidade mudou -- e o sinal de recarregar.
   Future<bool> resolverNaAbertura() async {
     if (procurando) return false;
-    final permissao = await _porta.estado();
+    final permissao = await _sessao.estado();
     if (_descartado) return false;
-    _permissao = permissao;
     // `podeOferecer` acabou de mudar: a caixa depende dele.
     _anunciar();
     if (permissao != PermissaoDeLocalizacao.concedida) return false;
@@ -214,22 +211,20 @@ class CidadeDoAparelho extends ChangeNotifier {
     _aviso = AvisoDaCidadeDoAparelho.procurando;
     _anunciar();
 
-    final antes = await _porta.estado();
+    final antes = await _sessao.estado();
     if (_descartado) return false;
-    _permissao = antes;
     if (antes == PermissaoDeLocalizacao.negadaPermanentemente) {
       // Abrir os ajustes e o certo -- pedir de novo nao abre dialogo nenhum --,
       // e a tela DIZ isso: quem volta dos ajustes sem liberar, e quem nao chega
       // a sair do app, lia o nada.
       _aviso = AvisoDaCidadeDoAparelho.semPermissao;
       _anunciar();
-      await _porta.abrirAjustesDoSistema();
+      await _sessao.abrirAjustesDoSistema();
       return false;
     }
 
-    final depois = await _porta.pedir();
+    final depois = await _sessao.pedir();
     if (_descartado) return false;
-    _permissao = depois;
     switch (depois) {
       case PermissaoDeLocalizacao.negada:
       case PermissaoDeLocalizacao.negadaPermanentemente:
@@ -253,16 +248,20 @@ class CidadeDoAparelho extends ChangeNotifier {
 
   /// A resolucao em si, pelos dois caminhos.
   Future<bool> _resolver({required bool porToque}) async {
-    // **O `timeout` nao e rede sobre rede.** Ver [tetoDaEsperaDaCidadeDoAparelho]:
+    // **O `timeout` nao e rede sobre rede.** Ver `tetoDaEsperaDaCidade`:
     // o prazo que a porta recebe cobre a MEDICAO do ponto, e nao a resolucao do
     // nome da cidade, que nao tem prazo em pacote nenhum.
-    final resultado = await _porta
-        .cidadeAproximada(prazo: prazoDaCidadeDoAparelho)
-        .timeout(
-          tetoDaEsperaDaCidadeDoAparelho,
-          onTimeout: () =>
-              const CidadeNaoResolvida(MotivoDeNaoTerCidade.semFixNoPrazo),
-        );
+    // **O TETO MUDOU DE LUGAR, e nao desapareceu.** Ele vive agora em
+    // `LocalizacaoDaSessao.cidade` (ver `tetoDaEsperaDaCidade` la), junto com a
+    // guarda de "ja resolvida" e a de "resolucao em voo" -- as tres precisam
+    // ficar do mesmo lado, senao um `Future` pendurado seria compartilhado por
+    // todas as secoes em vez de por nenhuma.
+    //
+    // `forcar: porToque`: a abertura ACEITA a cidade que outra secao ja
+    // resolveu -- e exatamente isso que o cliente pediu em 22/10. O toque pede
+    // medicao nova, porque e um ato da pessoa querendo tentar de novo.
+    final anterior = _sessao.cidadeDoAparelho;
+    final resultado = await _sessao.cidade(forcar: porToque);
     if (_descartado) return false;
     switch (resultado) {
       case CidadeNaoResolvida(motivo: final motivo):
@@ -293,8 +292,7 @@ class CidadeDoAparelho extends ChangeNotifier {
         _anunciar();
         return false;
       case CidadeResolvida(cidade: final cidade):
-        final trocou = cidade != _cidade;
-        _cidade = cidade;
+        final trocou = cidade != anterior;
         _aviso = null;
         _anunciar();
         return trocou;

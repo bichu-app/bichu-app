@@ -68,12 +68,18 @@
 import 'dart:async';
 
 import 'package:bichu/dispositivo/localizacao.dart';
-// A TELA entra aqui por UM caso so: o que cobra que o prazo da porta estoure
-// ANTES do teto da tela. Os dois numeros tem de ser comparados em algum lugar,
-// e compara-los exige ver os dois -- um comentario dizendo "este e menor"
-// seria a mesma prosa nao medida que esta frente inteira veio consertar.
-import 'package:bichu/telas/perdido/lista_de_perdidos.dart'
-    show tetoDaEsperaDaResolucao;
+// O TETO DE FORA entra aqui por UM caso so: o que cobra que o prazo da porta
+// estoure ANTES dele. Os dois numeros tem de ser comparados em algum lugar, e
+// compara-los exige ver os dois -- um comentario dizendo "este e menor" seria a
+// mesma prosa nao medida que esta frente inteira veio consertar.
+//
+// **A IMPORTACAO MUDOU DE ARQUIVO EM 22/10/2026, e o caso nao mudou de
+// assunto.** O teto vivia em `telas/perdido/lista_de_perdidos.dart`
+// (`tetoDaEsperaDaResolucao`) e tinha um gemeo de valor identico na peca da
+// `Rede`; com a espera pelo aparelho acontecendo num lugar so, ele passou a
+// morar com ela.
+import 'package:bichu/sessao/localizacao_da_sessao.dart'
+    show tetoDaEsperaDaCidade;
 // `Placemark` vem do pacote, e importa-lo AQUI e deliberado: a porta nao o
 // reexporta, e passar a reexportar poria `locationFromAddress` ao alcance de
 // todo arquivo que importa a porta -- o oposto do que a camada 1 de
@@ -362,7 +368,9 @@ void main() {
   /// ====================================================================
   ///
   /// `placemarkFromCoordinates` era um `await` cru dentro de um `try`, e o
-  /// unico teto que existia vivia no CHAMADOR (`tetoDaEsperaDaResolucao`, na
+  /// unico teto que existia vivia no CHAMADOR (hoje `tetoDaEsperaDaCidade`,
+  /// em `sessao/localizacao_da_sessao.dart`; antes de 22/10/2026 era
+  /// `tetoDaEsperaDaResolucao`, na
   /// tela dos Pets). A tela estava coberta; a PORTA nao -- qualquer outro
   /// chamador futuro penduraria sem limite, e quem escreve a segunda tela nao
   /// tem como saber que precisa lembrar de um `.timeout`.
@@ -457,12 +465,12 @@ void main() {
 
     /// O PRAZO DA PORTA ESTOURA ANTES DO DA TELA, e isso e deliberado: quem
     /// desiste primeiro e quem sabe dizer em que ETAPA foi.
-    test('o prazo da porta e menor que o teto da tela dos Pets', () {
+    test('o prazo da porta e menor que o teto de fora', () {
       expect(
         prazo,
-        lessThan(tetoDaEsperaDaResolucao),
+        lessThan(tetoDaEsperaDaCidade),
         reason: 'REPROVA: o prazo da porta (${prazo.inSeconds}s) nao e menor '
-            'que o teto da tela (${tetoDaEsperaDaResolucao.inSeconds}s). Com '
+            'que o teto de fora (${tetoDaEsperaDaCidade.inSeconds}s). Com '
             'ele maior, quem desiste primeiro e a tela, e o motivo especifico '
             'da etapa do geocoder nunca chega ao relato -- o prazo da porta '
             'passaria a ser codigo morto.',

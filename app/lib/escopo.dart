@@ -20,6 +20,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
@@ -62,6 +63,7 @@ class Escopo extends InheritedWidget {
     required this.oportunidades,
     required this.vigiaDeAviso,
     required this.localizacao,
+    required this.localizacaoDaSessao,
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
@@ -215,6 +217,20 @@ class Escopo extends InheritedWidget {
   /// inteiro funciona" -- ficaria sustentado por uma frase.
   final Localizacao localizacao;
 
+  /// O QUE O APARELHO JA DISSE, compartilhado por TODAS as secoes.
+  ///
+  /// Decisao do cliente, 22/10/2026: *"quando o usuario autorizar a
+  /// localizacao, em qualquer uma das paginas, voce deve utilizar ela para
+  /// todas as secoes"*. Antes disto cada secao construia a sua propria
+  /// descoberta e guardava o resultado em si mesma -- medido: duas resolucoes
+  /// para andar `Rede` -> `Pets`, e a caixa do app voltando a aparecer na
+  /// segunda quando a tentativa dela falhava.
+  ///
+  /// Fica no escopo pelo motivo que a propria peca tem: e UMA por app, e e
+  /// isso que a faz valer para todas. Ver
+  /// `sessao/localizacao_da_sessao.dart`.
+  final LocalizacaoDaSessao localizacaoDaSessao;
+
   final ControladorDeSessao sessao;
 
   /// A guarda de acao (UX 8.3): o envelope de intencao pendente e a execucao
@@ -327,6 +343,7 @@ class Escopo extends InheritedWidget {
       oportunidades != anterior.oportunidades ||
       vigiaDeAviso != anterior.vigiaDeAviso ||
       localizacao != anterior.localizacao ||
+      localizacaoDaSessao != anterior.localizacaoDaSessao ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||

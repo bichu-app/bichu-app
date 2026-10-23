@@ -1710,8 +1710,11 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///    cidade nao descoberta e cidade descoberta sem pet nenhum deixaram de ser
 ///    desfechos mudos. A resolucao de ABERTURA segue muda nos oito motivos, e a
 ///    assimetria e decisao: la ninguem pediu nada.
-/// 3. **O teto da espera** (`tetoDaEsperaDaResolucao`), que fecha a lacuna que
-///    o proprio conserto abriria: `prazoDaResolucao` cobre a MEDICAO do ponto
+/// 3. **O teto da espera** (`tetoDaEsperaDaCidade`, em
+///    `sessao/localizacao_da_sessao.dart` desde 22/10/2026; antes era
+///    `tetoDaEsperaDaResolucao`, na tela dos pets), que fecha a lacuna que
+///    o proprio conserto abriria: `prazoDaMedicaoDaCidade` cobre a MEDICAO do
+///    ponto
 ///    e nao a resolucao do nome da cidade, e nao ha `timeout` em lugar nenhum
 ///    do `geocoding` nem do `geocoding_android` (varrido). Sem teto,
 ///    `Procurando sua localizacao...` seria uma frase que nunca sai.

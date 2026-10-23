@@ -1390,33 +1390,40 @@ void main() {
           ]),
         ),
       );
-      // **DUAS, E NAO UMA, DESDE 20/10/2026 -- e o numero e do APP e nao desta
-      // tela.** Decisao do cliente: *"nos eventos e na comunidade, voce tambem
-      // deve trazer os mais proximos da localizacao, utilizar a mesma
-      // inteligencia do pets"*. `Rotas.destinoDoArranque` sempre devolve
-      // `rede`, entao a aba `Eventos` monta ANTES desta tela em toda abertura e
-      // resolve a cidade dela; esta tela resolve a sua em seguida. O contador
-      // do duble e por PORTA, e nao por tela, e por isso ele soma as duas.
+      // **VOLTOU A UMA EM 22/10/2026, e a frente anterior previu isto por
+      // escrito.** O comentario que estava aqui dizia: *"O numero volta a 1
+      // quando esta tela adotar a peca compartilhada [...] ai a resolucao passa
+      // a ser uma por abertura do APP, e nao uma por secao. Isso toca
+      // `lista_de_perdidos.dart` e ficou FORA desta frente"*. Foi o que
+      // aconteceu.
       //
-      // **NAO "CONSERTE" ESTE NUMERO DE VOLTA PARA 1.** O teto de uso do
-      // geocoder continua protegido, e isso foi conferido na porta e nao
-      // presumido: `LocalizacaoPorGeolocator._cidadeGuardadaPara` devolve a
-      // cidade guardada quando o aparelho nao saiu da celula de ~100 m, entao a
-      // segunda chamada NAO vai ao servico de plataforma -- **o que dobrou foi
-      // a MEDICAO DO PONTO, e nao a geocodificacao**. Trocar 2 por 1 aqui nao
-      // economiza nada: so reprova um app que esta correto.
+      // Decisao do cliente, 22/10/2026: *"quando o usuario autorizar a
+      // localizacao, em qualquer uma das paginas, voce deve utilizar ela para
+      // todas as secoes"*; e, sobre onde, *"ele deve manter a localizacao na
+      // sessao"*. A espera pelo aparelho mora agora em
+      // `sessao/localizacao_da_sessao.dart`, uma por app: a aba `Eventos` do
+      // arranque resolve, e esta tela **recebe a cidade ja resolvida sem tocar
+      // no aparelho**.
       //
-      // **O numero volta a 1 quando esta tela adotar a peca compartilhada**
-      // (`widgets/cidade_por_localizacao.dart`), que e a mesma que `Eventos`
-      // usa: ai a resolucao passa a ser uma por abertura do APP, e nao uma por
-      // secao. Isso toca `lista_de_perdidos.dart` e ficou FORA desta frente, de
-      // propósito -- outro agente esta no arquivo.
+      // **ENTAO UM NAO E ECONOMIA DE GEOCODER -- e economia de MEDICAO DE
+      // PONTO.** A nota anterior ja tinha conferido que a segunda chamada nao
+      // ia ao servico de plataforma (`LocalizacaoPorGeolocator.
+      // _cidadeGuardadaPara` devolve a cidade guardada dentro da celula de
+      // ~100 m); o que era pago duas vezes era o fix de GPS, e era ele que
+      // falhava na segunda secao e fazia a caixa `Usar minha localizacao`
+      // voltar a aparecer para quem ja havia autorizado.
+      //
+      // **NAO "CONSERTE" ESTE NUMERO DE VOLTA PARA 2.** Duas resolucoes numa
+      // abertura significa que o estado da sessao deixou de ser compartilhado,
+      // e e o defeito que o cliente relatou. Quem cobra isso pelo nome e
+      // `test/rede/localizacao_vale_para_todas_as_secoes_test.dart`.
       expect(
         porta.vezesQueResolveu,
-        2,
+        1,
         reason: 'REPROVA: a porta resolveu ${porta.vezesQueResolveu} vezes numa '
-            'abertura, e o esperado sao DUAS (a aba `Eventos` do arranque e '
-            'esta tela) -- ver a nota acima. O que este caso continua cobrando '
+            'abertura, e o esperado e UMA -- a localizacao da sessao e '
+            'compartilhada por todas as secoes desde 22/10/2026 (ver a nota '
+            'acima). O que este caso continua cobrando '
             'e que a RECARGA que a cidade dispara nao dispare outra resolucao: '
             'tres ou mais significa que ela voltou a disparar.',
       );

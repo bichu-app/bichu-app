@@ -41,7 +41,10 @@
 // verdade, e este arquivo continua valendo pelo que ele cobre: a peca, e nao
 // a tela que a hospeda.
 
+import 'dart:async';
+
 import 'package:bichu/api/api_client.dart';
+import 'package:bichu/api/busca_de_cep.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/contadores_api.dart';
 import 'package:bichu/api/conversas_api.dart';
@@ -67,6 +70,7 @@ import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
+import 'package:bichu/sessao/localizacao_da_sessao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
 import 'package:bichu/sessao/contador_de_avisos.dart';
@@ -104,6 +108,10 @@ Future<_Caixa> _montar(
   WidgetTester tester, {
   required Localizacao localizacao,
   PontoDeUsoDaLocalizacao pontoDeUso = PontoDeUsoDaLocalizacao.marcarPerdido,
+  /// A busca de CEP. **Entra por aqui so onde o caso a exercita**: o padrao do
+  /// `Escopo` e a de verdade, que sem cliente injetado so sai da maquina quando
+  /// alguem digita oito digitos -- e nenhum caso fazia isso antes de 22/10.
+  BuscaDeCep? buscaDeCep,
 }) async {
   AppConfig.limparParaTeste();
   final config = AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste);
@@ -192,6 +200,8 @@ Future<_Caixa> _montar(
         devices: devices,
       ),
       localizacao: localizacao,
+      localizacaoDaSessao: LocalizacaoDaSessao(localizacao),
+      buscaDeCep: buscaDeCep ?? const BuscaDeCep(),
       sessao: sessao,
       guarda: guarda,
       cacheDeMeusPets: CacheDeMeusPets(),
@@ -295,6 +305,47 @@ Future<void> _escolherOEstado(WidgetTester tester, String sigla) async {
     await tester.pumpAndSettle();
   }
   await tocar(tester, opcao);
+}
+
+/// A porta cuja RESOLUCAO DE CIDADE a gente solta na mao.
+///
+/// Ela existe para um caso que nao se produz de outro jeito: **a pessoa
+/// digitando a cidade ENQUANTO a localizacao e resolvida**. O ponto chega
+/// primeiro (e so ele destrava os campos), e o nome da cidade chega segundos
+/// depois -- e e exatamente nessa janela que o pre-preenchimento pode passar
+/// por cima do que ela acabou de escrever.
+class _PortaComCidadeNaMao implements Localizacao {
+  final Completer<ResultadoDaCidade> cidadeChega =
+      Completer<ResultadoDaCidade>();
+
+  @override
+  Future<PermissaoDeLocalizacao> estado() async =>
+      PermissaoDeLocalizacao.concedida;
+
+  @override
+  Future<PermissaoDeLocalizacao> pedir() async =>
+      PermissaoDeLocalizacao.concedida;
+
+  @override
+  Future<void> abrirAjustesDoSistema() async {}
+
+  @override
+  Future<bool> servicoLigado() async => true;
+
+  @override
+  Future<ResultadoDaCaptura> pontoAproximado({required Duration prazo}) async =>
+      const CapturaComPonto(
+        PontoCapturado(
+          lat: -23.5505,
+          lon: -46.6333,
+          precisaoEmMetros: 240,
+          origem: OrigemDoPonto.deviceGps,
+        ),
+      );
+
+  @override
+  Future<ResultadoDaCidade> cidadeAproximada({required Duration prazo}) =>
+      cidadeChega.future;
 }
 
 void main() {
@@ -542,7 +593,19 @@ void main() {
         tester,
         find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
       );
-      expect(caixa.onde, isA<OndePorPonto>());
+      // **`OndeComPontoEArea` E NAO `OndePorPonto`, e a mudanca e de 22/10/2026.**
+      //
+      // Esta linha afirmava `OndePorPonto`, e era verdade enquanto a captura
+      // deixava os campos vazios. Com a decisao do cliente de 22/10 -- *"quando
+      // o usuario autoriza a localizacao ao encontrar um pet, voce deve
+      // prencher o formulario com as informacoes"* -- a cidade resolvida da
+      // coordenada nasce no campo, e ai o "onde" tem ponto E area.
+      //
+      // **O que este caso mede nao mudou**: as tres afirmacoes abaixo, depois
+      // da troca pelo bairro, continuam exigindo que a COORDENADA desapareca.
+      // Esta linha e so o estado de partida, e ela precisa dizer a verdade --
+      // uma afirmacao de partida errada reprovaria o caso pelo motivo errado.
+      expect(caixa.onde, isA<OndeComPontoEArea>());
 
       await tocar(tester, find.text(TextosDaLocalizacao.trocarPeloBairro));
       await _digitarArea(tester);
@@ -673,6 +736,291 @@ void main() {
   // -------------------------------------------------------------------------
   // A antessala, nos dois pontos de uso (criterios 3 e 4)
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // O FORMULARIO NASCE PREENCHIDO -- cliente, 22/10/2026
+  // -------------------------------------------------------------------------
+  //
+  // Palavra por palavra: *"quando o usuario autoriza a localizacao ao encontrar
+  // um pet, voce deve prencher o formulario com as informacoes, para caso o
+  // usuario queira corrigir ou alterar, nessa pagina, vamos utilizar apenas
+  // como uma facilidade para ele nao ter que preencher todos os campos"*.
+  //
+  // TRES TRAVAS, e a terceira e o ADR:
+  //
+  //  1. **e facilidade, nao imposicao**: tudo continua editavel -- os casos do
+  //     `caso 3` acima ja cobram isso e continuam valendo;
+  //  2. **o que a PESSOA digitou vence** o preenchimento automatico (decisao do
+  //     cliente de 17/10/2026, *"a busca de CEP so preenche campo vazio -- o
+  //     que a pessoa ja escreveu vence"*). O mecanismo e o COMPARTILHADO,
+  //     `formulario/origem_dos_valores.dart`, e nao um segundo escrito aqui:
+  //     esta peca tinha um `_preencherSeVazio` proprio, que e a leitura
+  //     `isEmpty` pura que aquele arquivo existe para consertar -- num
+  //     formulario que nasce cheio, nada esta vazio e a busca de CEP nunca mais
+  //     preenche nada;
+  //  3. **coordenada -> cidade e permitido; coordenada -> bairro NAO**
+  //     (ADR-0006, emenda 1, a tabela do que ela nao autoriza: *"a emenda fala
+  //     de cidade. Bairro e mais fino que o que a pessoa escolheu entregar"*).
+  //
+  // DESLIGAR PARA VER REPROVAR -- medido, com o nome do caso
+  // -------------------------------------------------------
+  //  a. Em `lib/telas/localizacao/captura_de_localizacao.dart`, apague a linha
+  //     `unawaited(_preencherACidadeDaLocalizacao());` do ramo
+  //     `case CapturaComPonto`.
+  //     -> reprova `a cidade da localizacao autorizada NASCE no campo` e, de
+  //        quebra, `\`Trocar pelo bairro digitado\` descarta a coordenada` --
+  //        aquele caso afirma o estado de PARTIDA (`OndeComPontoEArea`), que
+  //        passa a ser falso sem o preenchimento.
+  //     -> **NAO reprova** `o que a PESSOA digitou NAO e sobrescrito`, e essa
+  //        assimetria e o ponto: aquele caso mede a precedencia, e sem
+  //        preenchimento nenhum nao ha precedencia a medir. Por isso os dois
+  //        existem.
+  //  b. No mesmo arquivo, troque `_origem.doGuardado(_cidade, ...)` de
+  //     `_preencherACidadeDaLocalizacao` por `_cidade.text = resultado.cidade;`
+  //     -- o atalho que parece igual.
+  //     -> reprova `o que a PESSOA digitou NAO e sobrescrito pela localizacao`,
+  //        e so ele.
+  //  d. No mesmo arquivo, troque `unawaited(_preencherACidadeDaLocalizacao());`
+  //     por `_cidade.text = '${ponto.lat},${ponto.lon}';` -- a coordenada indo
+  //     para o campo que viaja em `city`.
+  //     -> reprova `ISCA -- nenhuma coordenada entra em campo do formulario`,
+  //        `a coordenada NUNCA e mostrada na tela` (caso 4) e `a cidade da
+  //        localizacao autorizada NASCE no campo`. Os TRES juntos sao o
+  //        contrapeso do ADR-0010: o campo nao carrega coordenada, a tela nao a
+  //        mostra, e o que o campo carrega e um nome de cidade.
+  //  c. No mesmo arquivo, acrescente
+  //     `_origem.doGuardado(_bairro, resultado.cidade, _chaveBairro);` em
+  //     `_preencherACidadeDaLocalizacao` -- derivar area da coordenada.
+  //     -> reprova `ISCA -- o bairro NAO e derivado da coordenada`.
+  group('o formulario do achado nasce preenchido (22/10/2026)', () {
+    testWidgets('a cidade da localizacao autorizada NASCE no campo',
+        (tester) async {
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await _montar(
+        tester,
+        localizacao: porta,
+        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+      );
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+
+      expect(
+        tester.widget<TextField>(_campo(TextosDaLocalizacao.rotuloCidade))
+            .controller
+            ?.text,
+        'Sao Paulo',
+        reason:
+            'REPROVA: a pessoa autorizou a localizacao e o campo `Cidade` '
+            'abriu VAZIO. O cliente pediu em 22/10 que o formulario nasca '
+            'preenchido, "apenas como uma facilidade para ele nao ter que '
+            'preencher todos os campos" -- e a cidade e o unico campo que o '
+            'contrato exige para o "onde" existir (`Area.required: [city]`).',
+      );
+    });
+
+    testWidgets('o que a PESSOA digitou NAO e sobrescrito pela localizacao',
+        (tester) async {
+      // A decisao de 17/10/2026, intacta: *"o que a pessoa ja escreveu vence"*.
+      // Aqui ela e medida na janela que de verdade existe -- o ponto chega e os
+      // campos aparecem ANTES de o nome da cidade ser resolvido.
+      final porta = _PortaComCidadeNaMao();
+      await _montar(
+        tester,
+        localizacao: porta,
+        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+      );
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+
+      // Os campos estao na tela e a resolucao ainda corre: ela digita.
+      await tester.enterText(
+        _campo(TextosDaLocalizacao.rotuloCidade),
+        'Campinas',
+      );
+      await tester.pumpAndSettle();
+
+      // Agora a localizacao responde, com OUTRA cidade.
+      porta.cidadeChega.complete(CidadeResolvida('Sao Paulo'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(_campo(TextosDaLocalizacao.rotuloCidade))
+            .controller
+            ?.text,
+        'Campinas',
+        reason:
+            'REPROVA: a localizacao passou por cima do que a PESSOA digitou. '
+            'Decisao do cliente de 17/10/2026: o que ela escreveu vence o '
+            'preenchimento automatico -- ela esta olhando o lugar onde achou o '
+            'animal, e a plataforma erra. O mecanismo que separa "veio da '
+            'conveniencia" de "ela escreveu" e `OrigemDosValores`, e um '
+            '`_cidade.text = ...` cru o contorna.',
+      );
+    });
+
+    testWidgets('ISCA -- o bairro NAO e derivado da coordenada (ADR-0006 '
+        'emenda 1)', (tester) async {
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await _montar(
+        tester,
+        localizacao: porta,
+        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+      );
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+
+      expect(
+        tester.widget<TextField>(_campo(TextosDaLocalizacao.rotuloBairro))
+            .controller
+            ?.text,
+        isEmpty,
+        reason:
+            'REPROVA: o campo `Bairro` nasceu preenchido a partir da '
+            'coordenada. A emenda 1 do ADR-0006 autoriza UM sentido e UM nivel '
+            '-- coordenada -> nome de CIDADE --, e a tabela do que ela nao '
+            'autoriza nomeia este caso: *"coordenada -> bairro: a emenda fala '
+            'de cidade. Bairro e mais fino que o que a pessoa escolheu '
+            'entregar"*. O bairro continua sendo o campo que a PESSOA preenche.',
+      );
+    });
+
+    testWidgets(
+      'o CEP nao sobrescreve o que a PESSOA corrigiu num campo pre-preenchido',
+      (tester) async {
+        // **ESTE CASO E A OUTRA METADE DE `OrigemDosValores`, e sem ele o reuso
+        // ficava pela metade.**
+        //
+        // A sequencia que o defeito exige, e ela e realista: a localizacao
+        // preenche `Cidade`; a pessoa CORRIGE para a cidade onde achou o
+        // animal; depois digita o CEP do lugar. Se o campo continuar marcado
+        // como "cedido", a busca de CEP passa por cima da correcao dela -- a
+        // decisao de 17/10/2026 ao contrario, e em silencio.
+        //
+        // Quem conserta e `_origem.soltar(...)` no `aoMudar` dos campos.
+        //
+        // DESLIGAR PARA VER REPROVAR: apague
+        // `aoMudar: (_) => _origem.soltar(_chaveCidade),` do campo `Cidade` em
+        // `lib/telas/localizacao/captura_de_localizacao.dart`.
+        // -> reprova ESTE caso, e so ele.
+        final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+        await _montar(
+          tester,
+          localizacao: porta,
+          pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+          buscaDeCep: BuscaDeCep(
+            cliente: MockClient((req) async {
+              // A forma do ViaCEP, que e o servico PRINCIPAL: a reserva nao e
+              // consultada quando este responde `encontrado`.
+              //
+              // **SEM `expect` AQUI DENTRO, e isso custou uma reprova
+              // fantasma:** um `expect` dentro do `MockClient` corre fora da
+              // chamada do caso e, falhando, derruba o caso com a mensagem de
+              // OUTRA afirmacao -- o caso reprovou dizendo que o bairro nao
+              // tinha sido preenchido, e o bairro estava certo. Dublê
+              // responde; quem afirma e o caso.
+              return http.Response(
+                '{"logradouro":"Rua X","bairro":"Centro",'
+                '"localidade":"Santos","uf":"SP"}',
+                200,
+                headers: <String, String>{
+                  'content-type': 'application/json; charset=utf-8',
+                },
+              );
+            }),
+          ),
+        );
+        await tocar(
+          tester,
+          find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+        );
+
+        // A localizacao preencheu `Sao Paulo`; ela corrige para `Campinas`.
+        await tester.enterText(
+          _campo(TextosDaLocalizacao.rotuloCidade),
+          'Campinas',
+        );
+        await tester.pumpAndSettle();
+
+        // E agora digita o CEP, que devolve `Santos`.
+        await tester.enterText(_campo(TextosDaLocalizacao.rotuloCep), '11010001');
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.widget<TextField>(_campo(TextosDaLocalizacao.rotuloCidade))
+              .controller
+              ?.text,
+          'Campinas',
+          reason:
+              'REPROVA: a busca de CEP sobrescreveu a cidade que a PESSOA '
+              'corrigiu. O campo saiu de "valor da localizacao" no primeiro '
+              'toque dela nele, e dali em diante vale a regra de 17/10/2026: o '
+              'que ela escreveu VENCE o que a base devolve. Sem '
+              '`OrigemDosValores.soltar` no `aoMudar`, o campo continua '
+              'marcado como cedido e o CEP o troca em silencio.',
+        );
+        // E o BAIRRO, que ninguem tocou, RECEBE -- senao este caso estaria
+        // medindo "a busca de CEP nao funciona", que e o outro defeito.
+        expect(
+          tester.widget<TextField>(_campo(TextosDaLocalizacao.rotuloBairro))
+              .controller
+              ?.text,
+          'Centro',
+          reason:
+              'REPROVA: a busca de CEP nao preencheu o bairro, que estava '
+              'VAZIO. Lido como `isEmpty` puro num formulario que nasce cheio, '
+              'o CEP para de preencher qualquer coisa -- e ai o caso de cima '
+              'ficaria verde pelo motivo errado.',
+        );
+      },
+    );
+
+    testWidgets('ISCA -- nenhuma coordenada entra em campo do formulario',
+        (tester) async {
+      // Irmao do caso `a coordenada NUNCA e mostrada na tela` (caso 4), e NAO
+      // o mesmo: aquele varre o texto RENDERIZADO, este varre o CONTEUDO DOS
+      // CAMPOS -- que e o que viaja para o servidor e, dali, para a projecao
+      // publica. Um `lat,lon` escrito no campo `Cidade` sairia em `city`.
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await _montar(
+        tester,
+        localizacao: porta,
+        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+      );
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+
+      for (final rotulo in <String>[
+        TextosDaLocalizacao.rotuloBairro,
+        TextosDaLocalizacao.rotuloCidade,
+        TextosDaLocalizacao.rotuloCep,
+      ]) {
+        final texto = tester
+                .widget<TextField>(_campo(rotulo))
+                .controller
+                ?.text ??
+            '';
+        for (final pedaco in <String>['23.55', '46.63', '23,55', '46,63']) {
+          expect(
+            texto.contains(pedaco),
+            isFalse,
+            reason:
+                'REPROVA: o campo `$rotulo` carrega "$pedaco". Coordenada nao '
+                'entra em campo de formulario: o que esta nos campos viaja no '
+                'corpo e aparece na projecao publica, e o nivel maximo que o '
+                'produto expoe e bairro e cidade (ADR-0010 itens 4 e 5).',
+          );
+        }
+      }
+    });
+  });
+
   group('a antessala diz o que os criterios 3 e 4 mandam', () {
     testWidgets('F3.1 (marcar perdido) usa o texto do criterio 3',
         (tester) async {
