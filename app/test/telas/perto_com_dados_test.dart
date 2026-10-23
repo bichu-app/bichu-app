@@ -261,7 +261,7 @@ void main() {
   // 1. A lista aparece, com o que o cartao TEM
   // -------------------------------------------------------------------------
   group('a secao Perto mostra o diretorio', () {
-    testWidgets('cada entrada vira um cartao com nome, atividade e lugar',
+    testWidgets('cada entrada vira um cartao com nome, atividade e bairro',
         (tester) async {
       await abrirPerto(
         tester,
@@ -287,13 +287,40 @@ void main() {
       expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
       expect(find.text('Clínica Santa Bárbara'), findsOneWidget);
       expect(find.text('Clínica'), findsOneWidget);
-      expect(find.text('Pinheiros · São Paulo · SP'), findsOneWidget);
+      // **SO O BAIRRO, desde 22/10/2026** (cliente: *"na listagem exibe so o
+      // bairro e na pagina interna o endereco completo com o clique para
+      // abrir o mapa"*, com o motivo *"a cidade na listagem nao e
+      // necessario, porque ja vai estar filtrado pela localizacao do
+      // usuario"*). Estas tres linhas afirmavam `Pinheiros · São Paulo · SP`
+      // e `Vila Madalena · São Paulo · SP`.
+      //
+      // Cidade e UF **continuam na pagina interna**, e quem mede as duas
+      // metades e `listagem_e_pagina_do_profissional_test.dart`.
+      expect(find.text('Pinheiros'), findsOneWidget);
       expect(find.text('Banho e tosa'), findsOneWidget);
-      expect(find.text('Vila Madalena · São Paulo · SP'), findsOneWidget);
+      expect(find.text('Vila Madalena'), findsOneWidget);
+      // E a linha nao traz cidade nem UF coladas no bairro: `findsOneWidget`
+      // sobre `Pinheiros` passaria com a linha de tres partes inteira, porque
+      // `find.text` casa o texto EXATO -- mas esta assercao e a que diz, em
+      // caso de reprova, o que voltou.
+      expect(find.textContaining('· São Paulo'), findsNothing);
     });
 
-    testWidgets('o selo diz O QUE foi verificado, e nao apenas "verificado"',
-        (tester) async {
+    // O SELO SAIU DO CARTAO EM 22/10/2026, e este caso virou do avesso.
+    //
+    // Ele afirmava `find.text('Verificado: CNPJ, CRMV') findsOneWidget` NA
+    // LISTAGEM. O cliente pediu *"a listagem dos profissionais deve ser apenas
+    // o logo, nome, segmento, endereco e botao de ligar, remova as informacoes
+    // adicionais, deixe apenas na pagina interna"*, e o selo e uma das
+    // adicionais.
+    //
+    // **A regra que ele media NAO foi revogada**: o selo continua dizendo O
+    // QUE foi verificado e nunca so "Verificado" (BICHUS-165), e quem a mede
+    // agora e `test/telas/listagem_e_pagina_do_profissional_test.dart`, no
+    // caso `e os quatro continuam na PÁGINA INTERNA` -- que confere o texto
+    // por extenso lá. **Trocar presenca por ausencia aqui sem aquele caso lá
+    // seria apagar a regra em vez de move-la.**
+    testWidgets('o selo NAO aparece mais na listagem', (tester) async {
       await abrirPerto(
         tester,
         rede: redeDoDiretorio(
@@ -304,10 +331,22 @@ void main() {
         ),
       );
 
-      // Escrito por extenso: a BICHUS-165 nao passou por selo generico, e o
-      // que reprova e a interface dizer "Verificado" sem dizer o que.
-      expect(find.text('Verificado: CNPJ, CRMV'), findsOneWidget);
-      expect(find.text('Verificado'), findsNothing);
+      // ANCORA: o cartao existe e a verificacao CHEGOU na resposta -- sem as
+      // duas, os `findsNothing` abaixo passariam sobre o vazio.
+      expect(find.byType(CartaoDoDiretorio), findsOneWidget);
+      expect(
+        tester
+            .widget<CartaoDoDiretorio>(find.byType(CartaoDoDiretorio))
+            .entrada
+            .verificacao
+            .oQueFoiVerificado,
+        'Verificado: CNPJ, CRMV',
+        reason: 'REPROVA POR VAZIO: a entrada chegou à tela SEM verificação, '
+            'então não desenhar o selo não mede decisão nenhuma.',
+      );
+
+      expect(find.text('Verificado: CNPJ, CRMV'), findsNothing);
+      expect(find.textContaining('Verificado'), findsNothing);
     });
 
     testWidgets(
@@ -619,7 +658,26 @@ void main() {
       expect(find.textContaining(' km'), findsNothing);
     });
 
-    testWidgets('com distancia, o texto respeita a grade de 100 m',
+    // A DISTANCIA SAIU DO CARTAO EM 22/10/2026 (mesmo pedido do selo), e este
+    // caso se dividiu em dois.
+    //
+    // Ele media DUAS coisas de uma vez: a REGRA de formatacao (grade de 100 m)
+    // e a PINTURA dela no cartao. So a segunda mudou. Separa-las e o que
+    // impede a regra de ir embora junto com a linha -- `distanciaEmTexto`
+    // continua sendo a fonte da distancia na PAGINA do local
+    // (`_Cabecalho`), e e lá que a pintura e medida agora
+    // (`listagem_e_pagina_do_profissional_test.dart`).
+    test('a REGRA continua: o texto respeita a grade de 100 m', () {
+      // O servidor arredonda a 100 m, que e a grade em que o produto quantiza
+      // a localizacao (ADR-0006). `2,73 km` inventaria dois digitos.
+      expect(CartaoDoDiretorio.distanciaEmTexto(700), 'a 700 m');
+      expect(CartaoDoDiretorio.distanciaEmTexto(2700), 'a 2,7 km');
+      expect(CartaoDoDiretorio.distanciaEmTexto(999), 'a 999 m');
+      expect(CartaoDoDiretorio.distanciaEmTexto(1000), 'a 1,0 km');
+      expect(CartaoDoDiretorio.distanciaEmTexto(null), isNull);
+    });
+
+    testWidgets('e a PINTURA saiu: com distancia, o cartao nao a escreve',
         (tester) async {
       await abrirPerto(
         tester,
@@ -638,10 +696,19 @@ void main() {
         ),
       );
 
-      // O servidor arredonda a 100 m, que e a grade em que o produto quantiza
-      // a localizacao (ADR-0006). `2,73 km` inventaria dois digitos.
-      expect(find.text('a 700 m'), findsOneWidget);
-      expect(find.text('a 2,7 km'), findsOneWidget);
+      // ANCORA: os dois cartoes existem e as distancias CHEGARAM.
+      expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
+      expect(
+        find.byType(CartaoDoDiretorio).evaluate().map(
+              (e) => (e.widget as CartaoDoDiretorio).entrada.distanciaEmMetros,
+            ),
+        <int>[700, 2700],
+        reason: 'REPROVA POR VAZIO: as entradas chegaram sem distância, então '
+            'não desenhá-la não mede decisão nenhuma.',
+      );
+
+      expect(find.text('a 700 m'), findsNothing);
+      expect(find.text('a 2,7 km'), findsNothing);
     });
   });
 
