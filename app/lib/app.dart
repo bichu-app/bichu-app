@@ -28,6 +28,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
 import 'sessao/contador_de_avisos.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
@@ -277,6 +278,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final LeitorDeQr _leitorDeQr;
   late final Avisos _avisos;
   late final Localizacao _localizacao;
+  late final LocalizacaoDaSessao _localizacaoDaSessao;
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
@@ -451,6 +453,12 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // grade de ~100 m que a emenda 1 do ADR-0006 exige). Objeto com estado nao
     // e `const`, e a instancia aqui e uma por processo de qualquer forma.
     _localizacao = widget.localizacao ?? LocalizacaoPorGeolocator();
+    // **UMA instancia por app, e e ela que faz a autorizacao valer para TODAS
+    // as secoes** (cliente, 22/10/2026). A porta continua sendo uma; o que
+    // faltava era um lugar que GUARDASSE o que ela ja respondeu. Ver
+    // `sessao/localizacao_da_sessao.dart`, inclusive por que nada disto vai
+    // para o disco.
+    _localizacaoDaSessao = LocalizacaoDaSessao(_localizacao);
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -845,6 +853,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       oportunidades: _oportunidades,
       vigiaDeAviso: _vigiaDeAviso,
       localizacao: _localizacao,
+      localizacaoDaSessao: _localizacaoDaSessao,
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,

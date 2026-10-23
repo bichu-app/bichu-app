@@ -13,6 +13,7 @@ import '../../api/perdidos_api.dart';
 import '../../escopo.dart';
 import '../../dispositivo/localizacao.dart';
 import '../../roteamento/rotas.dart';
+import '../../sessao/localizacao_da_sessao.dart';
 import '../../sessao/cidade_escolhida.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -343,7 +344,7 @@ class ListaDePerdidos extends StatefulWidget {
   /// O que a pessoa lê ENQUANTO o aparelho mede.
   ///
   /// Não é uma das quatro: é o que falta entre o toque e a resposta. O prazo
-  /// da resolução é de [prazoDaResolucao], e no aparelho ele é gasto de
+  /// da resolução é de `prazoDaMedicaoDaCidade`, e no aparelho ele é gasto de
   /// verdade — doze segundos sem sinal nenhum na tela são doze segundos em que
   /// o botão "não está funcionando".
   static const String avisoProcurando = 'Procurando sua localização…';
@@ -374,43 +375,20 @@ class ListaDePerdidos extends StatefulWidget {
 /// ser obrigatória: não há mais pergunta a fazer antes de listar.
 enum _Fase { carregando, lista, falha }
 
-/// O prazo da resolucao da cidade.
-///
-/// Generoso de proposito: a tela NAO espera por ele -- a lista ja esta pintada
-/// com a reserva quando a resolucao comeca. O prazo existe para a tentativa
-/// nao ficar pendurada para sempre no aparelho que nao fixa, e nao para a
-/// pessoa esperar.
-const Duration prazoDaResolucao = Duration(seconds: 12);
-
-/// O TETO DA ESPERA DA TELA, e ele existe porque [prazoDaResolucao] **não
-/// cobre a resolução inteira.**
-///
-/// Medido em 20/10/2026 no pacote: `cidadeAproximada` repassa o prazo a
-/// `pontoAproximado`, que o entrega ao `timeLimit` do `geolocator` — e depois
-/// chamava `isPresent()` e o geocoder **sem prazo nenhum**. Não há `timeout` em
-/// lugar nenhum do `geocoding` nem do `geocoding_android` (varrido: zero
-/// ocorrência de `timeout` no pacote). Um canal de plataforma que não responde
-/// penduraria a espera para sempre.
-///
-/// **A PORTA GANHOU PRAZO PRÓPRIO NO MESMO DIA, e este teto FICA.** Ver
-/// `LocalizacaoPorGeolocator.prazoDoGeocoder`: o conserto certo era na porta,
-/// porque qualquer outro chamador futuro penduraria igual e quem escreve a
-/// segunda tela não tem como saber que precisa lembrar de um `.timeout`. Os dois
-/// não são redundantes, e a diferença é de ALCANCE: o da porta cobre a etapa do
-/// geocoder e nomeia o motivo; este cobre a chamada inteira, inclusive um
-/// travamento em qualquer linha da porta que não seja o geocoder — e inclusive
-/// num dublê de tela que não seja a porta de produção. O da porta é menor de
-/// propósito, e há caso cobrando isso
-/// (`test/dispositivo/cidade_da_localizacao_test.dart`): quem desiste primeiro é
-/// quem sabe dizer em que etapa foi.
-///
-/// Enquanto o toque não dizia nada, isso era invisível — o nada não tem prazo.
-/// Com `Procurando sua localização…` na tela, pendurar virou **uma frase que
-/// nunca sai**, e isso é pior que o silêncio que esta frente foi consertar. O
-/// teto é o dobro do prazo da medição: a resolução legítima gasta o prazo do
-/// ponto MAIS a ida ao serviço de plataforma, e estreitar daria desistência em
-/// cima de tentativa boa.
-const Duration tetoDaEsperaDaResolucao = Duration(seconds: 24);
+// **OS DOIS PRAZOS DESTA TELA SAIRAM DAQUI (22/10/2026), e nao foram
+// perdidos.** `prazoDaResolucao` e `tetoDaEsperaDaResolucao` tinham gemeos de
+// valor identico em `widgets/cidade_por_localizacao.dart`, e o motivo era que
+// as DUAS esperas pelo aparelho existiam -- uma por secao. Com uma espera so
+// (`sessao/localizacao_da_sessao.dart`), os prazos moram junto dela:
+// `prazoDaMedicaoDaCidade` e `tetoDaEsperaDaCidade`.
+//
+// O teto da PORTA (`LocalizacaoPorGeolocator.prazoDoGeocoder`, 10 s) continua
+// existindo e continua menor de proposito -- os dois nao sao redundantes, e a
+// diferenca e de ALCANCE: o da porta cobre a etapa do geocoder e NOMEIA o
+// motivo; o da sessao cobre a chamada inteira, inclusive um travamento em
+// qualquer linha da porta que nao seja o geocoder, e inclusive num duble de
+// tela. Quem desiste primeiro e quem sabe dizer em que etapa foi, e ha caso
+// cobrando essa ordem (`test/dispositivo/cidade_da_localizacao_test.dart`).
 
 /// De onde veio a cidade que esta valendo. E o que a tela MOSTRA.
 enum _OrigemDaCidade {
@@ -669,12 +647,18 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   /// **Só resolve com a permissão JÁ concedida.** Pedir aqui abriria o diálogo
   /// do sistema como efeito colateral de abrir a seção.
   Future<void> _resolverACidade() async {
-    final porta = Escopo.of(context).localizacao;
-    final permissao = await porta.estado();
+    // **A SESSAO, e nao a porta.** Cliente, 22/10/2026: *"quando o usuario
+    // autorizar a localizacao, em qualquer uma das paginas, voce deve utilizar
+    // ela para todas as secoes"*. Se outra secao ja resolveu a cidade nesta
+    // sessao, `cidade()` a devolve **sem tocar no aparelho** -- e esta tela
+    // abre com ela em vez de descobrir de novo e, falhando, oferecer a caixa a
+    // quem ja autorizou. Ver `sessao/localizacao_da_sessao.dart`.
+    final sessao = Escopo.of(context).localizacaoDaSessao;
+    final permissao = await sessao.estado();
     if (!mounted) return;
     setState(() => _permissao = permissao);
     if (permissao != PermissaoDeLocalizacao.concedida) return;
-    await _resolverEAplicar(porta, porToque: false);
+    await _resolverEAplicar(sessao, porToque: false);
   }
 
   /// O caminho do TOQUE: pede a permissão e, concedida, resolve.
@@ -689,9 +673,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // vale (ver [_LinhaDoRecorte.aoUsarLocalizacao]), e esta guarda cobre o
     // toque que escapa entre o gesto e o quadro.
     if (_aviso == _AvisoDaLocalizacao.procurando) return;
-    final porta = Escopo.of(context).localizacao;
+    final sessao = Escopo.of(context).localizacaoDaSessao;
     // **A TELA RESPONDE AO TOQUE ANTES DE TER RESPOSTA.** `cidadeAproximada`
-    // pode gastar os doze segundos de [prazoDaResolucao] mais a ida ao serviço
+    // pode gastar os doze segundos de `prazoDaMedicaoDaCidade` mais a ida ao serviço
     // de plataforma, e doze segundos sem nada na tela são doze segundos em que
     // o botão "não está funcionando".
     setState(() {
@@ -701,7 +685,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
       _detalheDoAviso = null;
       _aviso = _AvisoDaLocalizacao.procurando;
     });
-    final antes = await porta.estado();
+    final antes = await sessao.estado();
     if (!mounted) return;
     if (antes == PermissaoDeLocalizacao.negadaPermanentemente) {
       // Abrir os ajustes continua sendo o certo — pedir de novo não abre
@@ -713,10 +697,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
             .codigo;
         _aviso = _AvisoDaLocalizacao.semPermissao;
       });
-      await porta.abrirAjustesDoSistema();
+      await sessao.abrirAjustesDoSistema();
       return;
     }
-    final depois = await porta.pedir();
+    final depois = await sessao.pedir();
     if (!mounted) return;
     setState(() => _permissao = depois);
     switch (depois) {
@@ -746,7 +730,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
       case PermissaoDeLocalizacao.concedida:
         break;
     }
-    await _resolverEAplicar(porta, porToque: true);
+    await _resolverEAplicar(sessao, porToque: true);
   }
 
   /// Resolve a cidade e aplica, **por um dos DOIS caminhos**.
@@ -777,29 +761,30 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   /// [_cidadeEmUso] devolveria a cidade digitada e a resolução continuaria sem
   /// efeito.
   Future<void> _resolverEAplicar(
-    Localizacao porta, {
+    LocalizacaoDaSessao sessao, {
     required bool porToque,
   }) async {
-    // **O `timeout` NÃO é rede sobre rede.** Ver [tetoDaEsperaDaResolucao]: o
+    // **O `timeout` NÃO é rede sobre rede.** Ver `tetoDaEsperaDaCidade`: o
     // prazo que a porta recebe cobre a MEDIÇÃO do ponto, e não a resolução do
     // nome da cidade, que não tem prazo em pacote nenhum.
     //
     // **O motivo da desistência deixou de ser `semFixNoPrazo` em 20/10/2026.**
     // Aquele é o aparelho não fixando a posição, e ele tem prazo próprio
-    // ([prazoDaResolucao]) dentro da porta. ESTE é o teto de fora, e ele
+    // (`prazoDaMedicaoDaCidade`) dentro da porta. ESTE é o teto de fora, e ele
     // estoura quando o serviço de plataforma não responde — com os dois no
     // mesmo valor, "o GPS não pegou" e "a Apple não respondeu" chegavam
     // indistinguíveis no relato de quem usa o app, e as duas têm conserto
     // diferente. **Sem `const`**: o detalhe interpola o prazo.
-    final resultado = await porta
-        .cidadeAproximada(prazo: prazoDaResolucao)
-        .timeout(
-          tetoDaEsperaDaResolucao,
-          onTimeout: () => CidadeNaoResolvida(
-            MotivoDeNaoTerCidade.resolucaoSemResposta,
-            detalhe: 'teto de ${tetoDaEsperaDaResolucao.inSeconds}s na tela',
-          ),
-        );
+    // **O PRAZO E O TETO MUDARAM DE LUGAR, e nao desapareceram**: os dois
+    // vivem agora em `LocalizacaoDaSessao.cidade`, junto com a guarda de "ja
+    // resolvida" e a de "resolucao em voo". As tres precisam ficar do mesmo
+    // lado: um teto nesta tela sobre um `Future` compartilhado desistiria
+    // **para esta tela** e deixaria o pendurado valendo para as outras.
+    //
+    // `forcar: porToque`: a ABERTURA aceita a cidade que outra secao desta
+    // sessao ja resolveu -- e o pedido de 22/10 inteiro. O TOQUE pede medicao
+    // nova, porque quem toca esta pedindo para tentar de novo.
+    final resultado = await sessao.cidade(forcar: porToque);
     if (!mounted) return;
     switch (resultado) {
       case CidadeNaoResolvida(motivo: final motivo, detalhe: final detalhe):
@@ -1329,7 +1314,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   VoidCallback? get _acaoDoAviso => switch (_aviso) {
         _AvisoDaLocalizacao.semPermissao ||
         _AvisoDaLocalizacao.servicoDesligado =>
-          () => Escopo.of(context).localizacao.abrirAjustesDoSistema(),
+          () => Escopo.of(context)
+              .localizacaoDaSessao
+              .abrirAjustesDoSistema(),
         _AvisoDaLocalizacao.cidadeNaoDescoberta => _pedirEResolver,
         _AvisoDaLocalizacao.cidadeSemNome ||
         _AvisoDaLocalizacao.procurando ||

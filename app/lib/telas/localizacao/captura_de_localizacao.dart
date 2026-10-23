@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +10,8 @@ import '../../api/estados_brasileiros.dart';
 import '../../api/modelos_localizacao.dart';
 import '../../dispositivo/localizacao.dart';
 import '../../escopo.dart';
+import '../../formulario/origem_dos_valores.dart';
+import '../../sessao/localizacao_da_sessao.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
@@ -144,6 +148,41 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
   String _cepJaBuscado = '';
 
+  /// AS CHAVES DOS TRES CAMPOS do `Onde`, para [OrigemDosValores].
+  ///
+  /// Texto solto repetido em cinco lugares erra no sexto, e o erro e silencioso
+  /// -- uma chave torta faz o campo nunca ser reconhecido como "cedido", e o
+  /// preenchimento simplesmente nao acontece.
+  static const String _chaveBairro = 'bairro';
+  static const String _chaveCidade = 'cidade';
+  static const String _chaveUf = 'uf';
+
+  /// DE ONDE VEIO O VALOR DE CADA CAMPO -- o mecanismo COMPARTILHADO, e nao um
+  /// segundo.
+  ///
+  /// `formulario/origem_dos_valores.dart`, o mesmo que
+  /// `tela_solicitar_plaquinha.dart` e `tela_endereco_de_entrega.dart` usam.
+  /// Ele reconcilia duas decisoes do cliente que, juntas e sem ele, se matam:
+  ///
+  /// - **17/10/2026**: a busca de CEP *"so preenche campo vazio -- o que a
+  ///   pessoa ja escreveu vence"*;
+  /// - **22/10/2026**, nesta tela: *"quando o usuario autoriza a localizacao ao
+  ///   encontrar um pet, voce deve preencher o formulario com as informacoes,
+  ///   para caso o usuario queira corrigir ou alterar [...] apenas como uma
+  ///   facilidade para ele nao ter que preencher todos os campos"*.
+  ///
+  /// **Esta tela tinha o `_preencherSeVazio` dela, e era a armadilha exata que
+  /// aquele arquivo existe para resolver:** lido como `isEmpty` puro, um
+  /// formulario que nasce preenchido nunca tem campo vazio, e a busca de CEP
+  /// deixa de preencher qualquer coisa para sempre. Quem acha um animal, digita
+  /// o CEP do lugar e fica com a cidade da LOCALIZACAO na tela nao tem como
+  /// saber que o CEP foi ignorado.
+  ///
+  /// A separacao, entao: o que a **localizacao** (ou a regiao do tutor) trouxe
+  /// **cede** ao CEP; o que a **pessoa** digitou **vence**. Um campo sai de
+  /// "cedido" no primeiro toque dela nele.
+  final OrigemDosValores _origem = OrigemDosValores();
+
   /// A sigla escolhida na lista de estados, ou nulo.
   ///
   /// **Campo de estado, e nao `TextEditingController`** (cliente, 17/10/2026):
@@ -239,9 +278,18 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
       // **`_ponto` nao e tocado aqui, em nenhum ramo.** Se a pessoa deu a
       // localizacao, ela continua valendo e o CEP so acrescenta o rotulo de
       // area que a coordenada nao tem -- que e o caso `OndeComPontoEArea`.
-      _preencherSeVazio(_bairro, endereco.bairro);
-      _preencherSeVazio(_cidade, endereco.cidade);
-      _uf ??= siglaDeEstadoValida(endereco.uf);
+      // `daBusca` e nao `doGuardado`: o CEP SUBSTITUI o que a localizacao e a
+      // regiao trouxeram, e **nao** substitui o que a pessoa digitou. E a
+      // reconciliacao de `OrigemDosValores`, e sem ela nada seria preenchido
+      // num formulario que nasce cheio.
+      _origem.daBusca(_bairro, endereco.bairro, _chaveBairro);
+      _origem.daBusca(_cidade, endereco.cidade, _chaveCidade);
+      final ufDaBusca = siglaDeEstadoValida(endereco.uf);
+      if (ufDaBusca != null &&
+          _origem.podeVirDaBusca(_chaveUf, vazio: _uf == null)) {
+        _uf = ufDaBusca;
+        _origem.anotarDaConta(_chaveUf, temValor: false);
+      }
     });
     // Fora do `setState`: os controladores ja notificam `_publicar` ao mudar,
     // mas `_uf` nao -- e sem esta chamada uma UF preenchida pelo CEP ficaria
@@ -249,11 +297,7 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     _publicar();
   }
 
-  /// Campo vazio recebe; campo escrito fica.
-  void _preencherSeVazio(TextEditingController campo, String valor) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
-  }
+
 
   /// A regiao de referencia do tutor nos campos que estao VAZIOS.
   ///
@@ -281,12 +325,16 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   void _preencherDaRegiaoDeReferencia() {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return;
-    _preencherSeVazio(_bairro, regiao.bairro ?? '');
-    _preencherSeVazio(_cidade, regiao.cidade ?? '');
+    _origem.doGuardado(_bairro, regiao.bairro ?? '', _chaveBairro);
+    _origem.doGuardado(_cidade, regiao.cidade ?? '', _chaveCidade);
     // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
     // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
     // `siglaDeEstadoValida`.
-    _uf ??= siglaDeEstadoValida(regiao.uf);
+    final ufDaRegiao = siglaDeEstadoValida(regiao.uf);
+    if (ufDaRegiao != null && _uf == null) {
+      _uf = ufDaRegiao;
+      _origem.anotarDaConta(_chaveUf, temValor: true);
+    }
   }
 
   /// A linha que conta o que a busca fez. **Nenhum destes estados e erro.**
@@ -360,9 +408,71 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           _fase = _Fase.comPonto;
         });
         _publicar();
+        // **A TELA NAO ESPERA POR ISTO**, e e de proposito: os campos ja estao
+        // na tela, editaveis, e o ponto ja basta para `Registrar`. A cidade
+        // chega depois e cai num campo vazio -- ou nao cai, se a pessoa comecou
+        // a digitar nesse meio-tempo.
+        unawaited(_preencherACidadeDaLocalizacao());
       case CapturaSemPonto(:final motivo):
         _irParaODigitado(motivo);
     }
+  }
+
+  /// A CIDADE DA LOCALIZACAO AUTORIZADA, nos campos que estao vazios.
+  ///
+  /// Decisao do cliente, 22/10/2026: *"quando o usuario autoriza a localizacao
+  /// ao encontrar um pet, voce deve preencher o formulario com as informacoes,
+  /// para caso o usuario queira corrigir ou alterar, nessa pagina, vamos
+  /// utilizar apenas como uma facilidade para ele nao ter que preencher todos
+  /// os campos"*.
+  ///
+  /// ## SO A CIDADE, e a ausencia do bairro e o ADR, nao desleixo
+  ///
+  /// ADR-0006, **emenda 1** (19/10/2026): o unico sentido autorizado e
+  /// **coordenada -> nome de cidade**, e a tabela do que ela **nao** autoriza e
+  /// explicita em duas linhas que decidem esta funcao:
+  ///
+  /// - **coordenada -> bairro**: *"a emenda fala de cidade. Bairro e mais fino
+  ///   que o que a pessoa escolheu entregar"*. Entao o bairro continua sendo o
+  ///   campo que a PESSOA preenche, e o texto acima dos campos ja diz isso;
+  /// - **coordenada -> endereco ou rua**: nao ha campo de rua aqui, e nao deve
+  ///   haver.
+  ///
+  /// A UF tambem **nao** e derivada, e isso e uma escolha conservadora
+  /// declarada: a emenda e uma frase sobre o **nome da cidade**, e alargar uma
+  /// decisao do cliente por conta propria nao e trabalho meu. O campo continua
+  /// opcional (`Area.required: [city]`), e a lista de 27 esta a um toque.
+  ///
+  /// ## Nada de coordenada fica, e nada de coordenada aparece
+  ///
+  /// Esta funcao escreve **texto** num `TextEditingController`. A coordenada
+  /// nasce e morre dentro da porta; `lat`/`lon` nao entram em campo nenhum, nao
+  /// sao mostrados e nao vao para disco.
+  ///
+  /// ## O teto, e por que nao e um `try`
+  ///
+  /// Ela chama `LocalizacaoDaSessao.cidade`, que ja tem
+  /// [tetoDaEsperaDaCidade] por cima -- e **um `Future` que nunca completa nao
+  /// lanca**, entao `catch` aqui nao cobriria o canal de plataforma pendurado.
+  /// Como a sessao guarda o que ja resolveu, a secao que a pessoa abriu antes
+  /// costuma ter pago esta medicao: aqui ela volta sem tocar no aparelho.
+  Future<void> _preencherACidadeDaLocalizacao() async {
+    final resultado = await Escopo.of(context).localizacaoDaSessao.cidade();
+    if (!mounted) return;
+    if (resultado is! CidadeResolvida) return;
+    // `doGuardado` e nao atribuicao: campo JA ESCRITO fica. **O que a pessoa
+    // digitou vence** (cliente, 17/10/2026) -- e durante os segundos da
+    // medicao ela pode muito bem ter digitado a cidade. E o campo fica marcado
+    // como "cedido", para a busca de CEP ainda poder corrigi-lo.
+    final preencheu = _origem.doGuardado(
+      _cidade,
+      resultado.cidade,
+      _chaveCidade,
+    );
+    if (!preencheu) return;
+    // O controlador notifica `_publicar` ao mudar, mas o `setState` e o que
+    // repinta o rotulo e o erro deste campo.
+    setState(() {});
   }
 
   /// Vai para o campo de bairro **com o teclado aberto** (criterio 5), **a nao
@@ -554,6 +664,13 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           foco: comFoco ? _focoDoBairro : null,
           opcional: true,
           capitalizacao: TextCapitalization.words,
+          // **O TOQUE DA PESSOA SOLTA O CAMPO**, e sem isto o mecanismo
+          // compartilhado fica pela metade: um campo que a localizacao (ou a
+          // regiao do tutor) preencheu continua marcado como "cedido", e a
+          // busca de CEP passaria por cima do que a PESSOA acabou de corrigir
+          // ali -- a decisao de 17/10/2026 ao contrario. A mesma ligacao de
+          // `tela_solicitar_plaquinha.dart` e `tela_endereco_de_entrega.dart`.
+          aoMudar: (_) => _origem.soltar(_chaveBairro),
         ),
         const SizedBox(height: BichuEspaco.e4),
         BichuField(
@@ -572,6 +689,8 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           opcional: _ponto != null,
           capitalizacao: TextCapitalization.words,
           erro: _faltaACidade ? TextosDaLocalizacao.cidadeObrigatoria : null,
+          // Ver o campo de bairro, acima: o toque da pessoa solta o campo.
+          aoMudar: (_) => _origem.soltar(_chaveCidade),
         ),
         const SizedBox(height: BichuEspaco.e4),
         // **Lista de 27, e nao sigla digitada** (cliente, 17/10/2026). Quem
@@ -592,7 +711,12 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           // campo deixaria dois formatos de "pode ficar vazio" na mesma tela.
           ajuda: TextosDaLocalizacao.estadoEmBrancoFunciona,
           aoSelecionar: (codigo) {
-            setState(() => _uf = codigo);
+            setState(() {
+              _uf = codigo;
+              // Escolher a UF a mao solta o campo, como o toque num campo de
+              // texto: dali em diante o valor e dela e o CEP nao o troca.
+              _origem.soltar(_chaveUf);
+            });
             _publicar();
           },
         ),

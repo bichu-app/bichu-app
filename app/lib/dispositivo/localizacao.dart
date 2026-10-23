@@ -856,7 +856,9 @@ class LocalizacaoPorGeolocator implements Localizacao {
   /// ## O PRAZO DA PORTA PARA O GEOCODER, e por que ele nao e o do chamador
   ///
   /// `placemarkFromCoordinates` era um `await` cru dentro de um `try`, e o unico
-  /// teto que existia vivia no CHAMADOR (`tetoDaEsperaDaResolucao`, em
+  /// teto que existia vivia no CHAMADOR (hoje `tetoDaEsperaDaCidade`, em
+  /// `sessao/localizacao_da_sessao.dart`; antes de 22/10/2026 era
+  /// `tetoDaEsperaDaResolucao`, em
   /// `lib/telas/perdido/lista_de_perdidos.dart`). Isso ja bastava para a tela
   /// dos Pets e nao bastava para a porta: **qualquer outro chamador futuro
   /// pendurava sem limite**, e quem escreve a segunda tela nao tem como saber
