@@ -18,6 +18,14 @@ import {
   type EncontroPublico,
 } from '../../src/dominio/telas-do-encontro.ts';
 import { ENCONTRO as T, ROTULOS as R } from '../../src/conteudo/encontro.ts';
+import { HOME } from '../../src/conteudo/home.ts';
+import { COMUNIDADE } from '../../src/conteudo/comunidade.ts';
+import {
+  COMO_FUNCIONA,
+  PARA_PROFISSIONAIS,
+  SOBRE,
+  CONTATO_PAGINA,
+} from '../../src/conteudo/institucional.ts';
 import { tipoDeProblema as tipo } from './hosts.ts';
 
 const problema = (status: number, slug: string, extra: Record<string, unknown> = {}, retry: string | null = null) =>
@@ -259,28 +267,47 @@ test('a entrada: gratuito, pago com unidade, e unidade desconhecida', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ISCA (b) -- A PAGINA NAO PROMETE O QUE NAO EXISTE
+// ISCA -- AS PAGINAS PUBLICAS NAO PROMETEM O QUE NAO EXISTE
+// ---------------------------------------------------------------------------
+//
+// MESCLA (onda 6, 22/10/2026): aqui havia DUAS varreduras equivalentes, uma de
+// cada frente -- `textosDaPagina`/`semAcento`, da frase do endereco, e
+// `textosDoConteudo`/`semSinais`, das paginas institucionais. Os nomes eram
+// distintos DE PROPOSITO, para a mescla nao redeclarar identificador, e a
+// propria frente deixou escrito que na uniao elas deveriam virar UMA. Viraram:
+// abaixo ha UMA varredura e UM normalizador, e cada isca passa o seu conjunto
+// de modulos. Os DOIS casos continuam de pe, cada um com os seus controles.
 // ---------------------------------------------------------------------------
 
 /**
- * Todo texto que a pagina do encontro pode escrever, achatado numa lista.
+ * Todo texto que os modulos de conteudo dados podem escrever, achatado numa
+ * lista.
  *
- * Varre `ENCONTRO` e `ROTULOS` inteiros -- e nao so a frase do endereco --
- * porque a promessa falsa pode voltar em qualquer rotulo, e uma isca que olha
- * uma chave so nao vigia a pagina: vigia aquela chave. As funcoes sao
- * chamadas, porque o texto delas tambem sai no HTML.
+ * Varre os objetos INTEIROS -- e nao chaves escolhidas a mao -- porque a
+ * promessa falsa pode voltar em qualquer rotulo, e uma isca que olha uma chave
+ * so nao vigia a pagina: vigia aquela chave.
+ *
+ * Funcao recebe os DOIS tratamentos que as duas frentes pediam, e eles nao se
+ * excluem: ela e CHAMADA com os conjuntos de argumentos conhecidos, porque o
+ * texto que ela devolve tambem sai no HTML; e se NENHUMA chamada vingar, entra
+ * a sentinela `\u0000FUNCAO`, porque um texto que virou funcao fora do alcance
+ * da varredura deixaria de ser vigiado em silencio. Unir as duas assim nao
+ * enfraquece nenhuma das iscas: fortalece as duas.
  */
 function textosDaPagina(valor: unknown, saida: string[] = []): string[] {
   if (typeof valor === 'string') saida.push(valor);
   else if (Array.isArray(valor)) for (const v of valor) textosDaPagina(v, saida);
   else if (typeof valor === 'function') {
+    let alcancada = false;
     for (const args of [['Passeio matinal', 'Pinheiros, São Paulo - SP'], [true], [false]]) {
       try {
         textosDaPagina((valor as (...a: unknown[]) => unknown)(...args), saida);
+        alcancada = true;
       } catch {
         // Assinatura que nao casa com estes argumentos: as outras cobrem.
       }
     }
+    if (!alcancada) saida.push('\u0000FUNCAO');
   } else if (valor && typeof valor === 'object') {
     for (const v of Object.values(valor)) textosDaPagina(v, saida);
   }
@@ -289,6 +316,28 @@ function textosDaPagina(valor: unknown, saida: string[] = []): string[] {
 
 /** Sem acento e em minuscula: `presença` e `presenca` sao a mesma palavra aqui. */
 const semAcento = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+/**
+ * O ato NAO EXISTE nesta versao. Check-in, contagem de presentes e galeria da
+ * comunidade sairam da migracao E DO CONTRATO por decisao do cliente (ADR-0027
+ * item 12.4): `network_event_checkins`, `checkInNetworkEvent` e `checkin_count`
+ * nao estao em `api/openapi.yaml`, nenhuma das 23 operacoes `*NetworkEvent*` e
+ * de presenca, nenhuma das 10 rotas `/network/...` tem check-in, e
+ * `NetworkEventPublic` nao tem campo de presenca nenhum.
+ */
+const PROIBIDO = /confirm|presenc|check[ -]?in/;
+
+/** "12 pessoas vao", "8 pessoas confirmadas": contagem de presentes que o contrato nao da. */
+const CONTAGEM_DE_GENTE = /\d+\s*pessoas?\s*(vao|vai|confirmad|presente)/;
+
+const MODULOS = {
+  HOME,
+  COMUNIDADE,
+  COMO_FUNCIONA,
+  PARA_PROFISSIONAIS,
+  SOBRE,
+  CONTATO_PAGINA,
+};
 
 test('ISCA -- a frase do endereco nao promete confirmacao de presenca', () => {
   const textos = textosDaPagina({ ENCONTRO: T, ROTULOS: R });
@@ -303,14 +352,18 @@ test('ISCA -- a frase do endereco nao promete confirmacao de presenca', () => {
       'a linha que esta isca existe para vigiar.',
   );
 
+  // Os detectores precisam detectar: sem isto, um `PROIBIDO` quebrado deixaria
+  // a varredura verde com a promessa falsa de volta na pagina.
+  assert.match(semAcento('para quem confirma presença'), PROIBIDO);
+  assert.doesNotMatch(semAcento('Eventos em praças e parques'), PROIBIDO);
+
   // Check-in, lista de presenca e `checkInNetworkEvent` SAIRAM desta versao por
   // decisao do cliente (ADR-0027 12.4), e o endereco sai em
   // `getNetworkEventLocation`, que exige `bearerAuth` E NADA MAIS -- qualquer
   // conta le o endereco de um encontro publico. Prometer "para quem confirma
   // presenca" descreve um ato que nao existe E um grupo restrito que nao
   // existe, numa pagina publica onde se decide se vai ao encontro.
-  const proibido = /confirm|presenc|check[ -]?in/;
-  const promessas = textos.filter((t) => proibido.test(semAcento(t)));
+  const promessas = textos.filter((t) => PROIBIDO.test(semAcento(t)));
   assert.deepEqual(
     promessas,
     [],
@@ -320,5 +373,69 @@ test('ISCA -- a frase do endereco nao promete confirmacao de presenca', () => {
       'nao esta no contrato --, e dizer "para quem confirma presenca" promete ainda uma ' +
       'restricao que o contrato nao da: `getNetworkEventLocation` exige `bearerAuth` e ' +
       'nada mais. O endereco fica no aplicativo PARA QUEM TEM CONTA.',
+  );
+});
+
+test('ISCA -- as paginas institucionais nao prometem check-in nem lista de presenca', () => {
+  const textos = textosDaPagina(MODULOS);
+
+  // ---- CONTROLES POSITIVOS -------------------------------------------------
+  // Sem eles, uma varredura que devolvesse lista vazia -- export renomeado,
+  // `import` trocado, achatamento quebrado -- passaria para sempre, e a isca
+  // nao estaria vigiando nada.
+  assert.ok(textos.length >= 120, `REPROVA (controle): a varredura achou so ${textos.length} textos.`);
+
+  // Uma frase conhecida de CADA modulo varrido: prova que nenhum deles caiu
+  // fora do alcance da varredura.
+  for (const [modulo, frase] of [
+    ['home.ts', 'Pets conectam pessoas.'],
+    ['comunidade.ts', 'O que ninguém vê num evento'],
+    ['institucional.ts (COMO_FUNCIONA)', 'A identidade do seu pet'],
+    ['institucional.ts (PARA_PROFISSIONAIS)', 'Para profissionais'],
+    ['institucional.ts (SOBRE)', 'Sobre'],
+    ['institucional.ts (CONTATO_PAGINA)', 'Contato'],
+  ] as const) {
+    assert.ok(
+      textos.some((t) => t.includes(frase)),
+      `REPROVA (controle): a varredura nao enxerga "${frase}", de ${modulo}.`,
+    );
+  }
+
+  // Valor que virou funcao INALCANCAVEL sairia da varredura em silencio: acusa
+  // em vez disso. A varredura unificada CHAMA a funcao quando algum dos
+  // conjuntos de argumentos vinga, e so marca a sentinela quando nenhum vinga.
+  assert.ok(
+    !textos.includes('\u0000FUNCAO'),
+    'REPROVA (controle): um texto de conteudo virou funcao que a varredura nao consegue ' +
+      'chamar, entao o texto dela NAO esta sendo vigiado -- ensine a varredura a chama-la.',
+  );
+
+  // Os detectores precisam detectar: sem isto, um `PROIBIDO` quebrado deixaria
+  // a varredura verde com a promessa falsa de volta na pagina.
+  assert.match(semAcento('Você faz check-in quando chega'), PROIBIDO);
+  assert.match(semAcento('A lista de presença mostra quem foi'), PROIBIDO);
+  assert.match(semAcento('para quem confirma presença'), PROIBIDO);
+  assert.match(semAcento('12 pessoas vão'), CONTAGEM_DE_GENTE);
+  assert.doesNotMatch(semAcento('Eventos em praças e parques'), PROIBIDO);
+
+  // ---- A ISCA --------------------------------------------------------------
+  const promessas = textos.filter((t) => PROIBIDO.test(semAcento(t)));
+  assert.deepEqual(
+    promessas,
+    [],
+    'REPROVA: uma pagina publica voltou a anunciar check-in ou confirmacao de presenca ' +
+      `(${JSON.stringify(promessas)}). O ato NAO EXISTE: check-in e lista de presenca ` +
+      'sairam da migracao e do contrato por decisao do cliente (ADR-0027 item 12.4), ' +
+      '`checkInNetworkEvent` nao esta em api/openapi.yaml e `NetworkEventPublic` nao tem ' +
+      'campo de presenca. Anunciar o que nao existe e o defeito; a pagina mais curta ganha.',
+  );
+
+  const contagens = textos.filter((t) => CONTAGEM_DE_GENTE.test(semAcento(t)));
+  assert.deepEqual(
+    contagens,
+    [],
+    'REPROVA: uma pagina publica voltou a mostrar contagem de pessoas no evento ' +
+      `(${JSON.stringify(contagens)}). Nao existe campo de presenca em ` +
+      '`NetworkEventPublic`: o numero nao tem de onde sair.',
   );
 });
