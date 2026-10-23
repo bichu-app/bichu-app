@@ -152,11 +152,16 @@ const List<TelaEmpilhada> telasDePrimeiroPlano = <TelaEmpilhada>[
 /// *"as paginas internas, pode manter como esta"* -- elas voltaram a ser
 /// `GoRoute` irma da casca, que e como estavam antes de hoje.
 ///
-/// **AS OITO AMBIGUAS ESTAO AQUI, e cada uma diz por que.** Sao as que a regra
+/// **AS NOVE AMBIGUAS ESTAO AQUI, e cada uma diz por que.** Sao as que a regra
 /// "lista fica" puxaria para o primeiro plano: todas sao alcancadas por um
 /// `ItemDeMenu` do CORPO do Perfil ou por um controle do corpo de uma secao, e
 /// nenhuma por um controle da casca. **Se o cliente discordar, e esta lista
-/// que ele corrige** -- oito linhas, nao vinte e sete telas.
+/// que ele corrige** -- nove linhas, nao vinte e oito telas.
+///
+/// **A nona entrou em 22/10/2026**: `/perfil/pets`, a pagina do `Ver todos`.
+/// Ela e a primeira das ambiguas aberta por um BOTAO de linha de titulo em vez
+/// de um `ItemDeMenu`, e isso nao muda a conta -- o criterio e quem abre
+/// (conteudo, nao casca), e nao a forma do controle.
 const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
   // -- A pagina do comunicado (20/10/2026) -------------------------------
   (
@@ -187,7 +192,7 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     motivo: 'exemplo literal dele: *"ao clicar na mensagem tira a barra"*. '
         'Aberta por uma LINHA da lista de mensagens, que e conteudo.',
   ),
-  // -- As OITO AMBIGUAS: listas, abertas pelo CORPO do Perfil ------------
+  // -- As NOVE AMBIGUAS: listas, abertas pelo CORPO do Perfil ------------
   (
     nome: 'meus dados',
     endereco: '/perfil/dados',
@@ -252,6 +257,18 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     endereco: '/adocoes',
     padrao: '/adocoes',
     motivo: 'AMBIGUA. E lista, e e aberta de dentro do corpo de `Pets`.',
+  ),
+  // -- A NONA AMBIGUA (22/10/2026, pedido do cliente) --------------------
+  (
+    nome: 'todos os meus pets',
+    endereco: '/perfil/pets',
+    padrao: '/perfil/pets',
+    motivo: 'AMBIGUA, e a nona: e LISTA -- o que puxa para primeiro plano --, '
+        'e e aberta pelo `Ver todos` da linha de titulo do bloco `Meus pets`, '
+        'que e CONTEUDO do corpo do Perfil. Quem abre decide, e nao o que a '
+        'tela mostra: ele disse *"ao clicar no perfil mantem a barra"*, e o '
+        'que se toca DENTRO dele nao mantem. Irma exata de `Meus achados` e '
+        '`Meus eventos`, que entraram por esta mesma conta.',
   ),
   // -- Detalhe de UM item: o lado facil do principio dele ----------------
   (
@@ -428,7 +445,11 @@ const Map<String, String> subRotasDeRamo = <String, String>{
   'produtos/:slug': 'a ficha de um produto, sob o ramo da `Loja`. Mesma razao.',
 };
 
-/// As 31 telas empilhadas, nos dois grupos, para os casos que percorrem todas.
+/// As 32 telas empilhadas, nos dois grupos, para os casos que percorrem todas.
+///
+/// **Eram 31 ate 22/10/2026**, quando o `Ver todos` do bloco `Meus pets`
+/// ganhou pagina (`/perfil/pets`) e ela entrou como a NONA ambigua -- interna
+/// pela mesma conta das oito, porque quem a abre e o corpo do Perfil.
 ///
 /// **Eram 29 ate a mescla do terceiro lote de 20/10/2026**, que classificou
 /// DUAS rotas novas, as duas como INTERNAS: a ficha do encontro, que a frente

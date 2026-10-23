@@ -93,7 +93,26 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// `bichu.app` 12, `app.bichu` 2, `BichuEspaco` 1048, `BichuColors` 231,
 /// `Bichu` 1979. O que mudou foi a QUANTIDADE DE LINHAS que citam a marca,
 /// por tela que enxugou e tela que cresceu, e nao a marca.
-const int ocorrenciasDeBichu = 2672;
+/// 22/10/2026, `Ver todos` em `Meus pets`: **2672 -> 2674, e os dois sao
+/// token de espacamento em codigo novo.**
+///
+/// O pedido do cliente (*"inclua um botao ver todos no canto direito"*) poe um
+/// botao na linha de titulo do bloco e uma pagina com a lista inteira. As duas
+/// ocorrencias novas estao as duas em `telas/perfil/meus_pets.dart` (31 -> 33),
+/// e sao:
+///
+///   +1  `BichuEspaco.e2` -- o vao do botao, igualado ao do cabecalho
+///   +1  `BichuEspaco.e4` -- o `padding` da `ListView` da pagina nova
+///
+/// Nenhum outro arquivo de `app/lib` mudou de contagem: `telas/abas.dart`
+/// (33 -> 33), `telas/gaveta_de_secoes.dart` (19 -> 19) e
+/// `roteamento/rotas.dart` (15 -> 15) foram editados **sem** mexer no numero
+/// de linhas que citam a marca.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, e foi medido: `petu` nao aparece
+/// em `app/lib` (zero casamentos, `grep -o -i`), e o que entrou foi referencia
+/// a token do design system -- nao texto de usuario e nao renomeacao.
+const int ocorrenciasDeBichu = 2674;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
