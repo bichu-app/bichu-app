@@ -87,7 +87,7 @@ No Bichu, é proibido:
 
 Estas funções ainda não estão no ar. As regras abaixo valem a partir do dia em que cada uma entrar.
 
-**Eventos da comunidade.** Eventos são criados por pessoas da comunidade, e não pelo Bichu. Quem cria o evento responde por ele: pelo lugar, pela segurança e pelas autorizações necessárias. O Bichu não organiza, não fiscaliza e não garante nenhum evento. Leve o seu pet só se ele estiver com a saúde em dia e for seguro para ele e para os outros. A lista de presença mostra a quantidade de pessoas confirmadas. Na galeria, publique só fotos que você tirou e em que as pessoas aceitaram aparecer.
+**Eventos da comunidade.** Eventos são criados por pessoas da comunidade, e não pelo Bichu. Quem cria o evento responde por ele: pelo lugar, pela segurança e pelas autorizações necessárias. O Bichu não organiza, não fiscaliza e não garante nenhum evento. Leve o seu pet só se ele estiver com a saúde em dia e for seguro para ele e para os outros. Na galeria, publique só fotos que você tirou e em que as pessoas aceitaram aparecer.
 
 **Avaliações de profissionais.** Avalie só quem atendeu você de verdade, conte a sua experiência com honestidade e não avalie a si mesmo, a concorrentes nem a quem tem relação com você. O profissional pode responder. Quando o Bichu mostra que um profissional foi verificado, a tela diz **o que** foi verificado, e só isso. O Bichu não presta serviço veterinário nem nenhum outro serviço do diretório, e não garante o trabalho de nenhum profissional.
 
