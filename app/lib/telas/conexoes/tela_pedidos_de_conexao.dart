@@ -73,7 +73,7 @@ class TelaDePedidosDeConexao extends StatefulWidget {
   final ConexoesApi conexoes;
 
   static const String titulo = 'Pedidos de conexão';
-  static const String semNome = 'Pessoa sem nome';
+  static const String semNome = 'Usuário sem nome';
   static const String vazioRecebidos = 'Nenhum pedido esperando você';
   static const String vazioEnviados = 'Você não tem pedidos esperando resposta';
   static const String falhaAoCarregar = 'Não conseguimos carregar seus pedidos agora.';

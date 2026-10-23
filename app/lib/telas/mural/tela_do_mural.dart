@@ -125,7 +125,7 @@ class CorpoDoMural extends StatefulWidget {
   /// uma barra rolavel: em 320 dp ela nasce 40% visivel, e a 200% de escala
   /// nasce fora da tela. Este vazio e o lugar por onde todo mundo passa no
   /// primeiro dia. Os dois caminhos existem; este e o que de fato se usa.
-  static const String buscarPessoas = 'Buscar pessoas';
+  static const String buscarPessoas = 'Buscar usuários';
 
   static const String tituloSemPublicacao = 'As publicações ficam aqui';
   static const String explicacaoSemPublicacao =

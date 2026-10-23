@@ -1428,7 +1428,7 @@ void main() {
     for (final (rotulo, tela) in <(String, Type)>[
       ('Meus dados', TelaDadosPessoais),
       ('Pedidos de conexão', TelaDePedidosDeConexao),
-      ('Pessoas bloqueadas', TelaDeBloqueados),
+      ('Usuários bloqueados', TelaDeBloqueados),
       (MeusEventos.titulo, MeusEventos),
     ]) {
       testWidgets(

@@ -11,7 +11,7 @@ export const HOME = {
     // P.1.1: a frase manuscrita trocou para a assinatura da marca.
     manuscrito: 'Pets conectam pessoas.',
     lead: 'Uma comunidade de tutores do mesmo bairro: eventos com os pets e profissionais indicados e avaliados por quem mora perto.',
-    alt: 'Ilustração de três pessoas abraçadas a um cão e a um gato, com árvores e prédios ao fundo.',
+    alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
   },
 
   pilares: {

@@ -102,7 +102,7 @@ export default function ListaDeEncontros() {
     <header className="pghead">
       <div>
         <h1 className="t-headline">Rede</h1>
-        <p className="t-body-sm c-sec">Eventos presenciais de cães em praças e parques.</p>
+        <p className="t-body-sm c-sec">Eventos presenciais de cachorros em praças e parques.</p>
       </div>
       <Link className="btn pri" to="/rede/novo">
         <Icone nome="add" tamanho="s20" />

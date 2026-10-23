@@ -197,7 +197,7 @@ class CartaoDePessoaEncontrada extends StatefulWidget {
       case RecusaDoPedidoDeConexao.tetoDeConexoesDeQuemRecebe:
         // **Não diz o número da outra pessoa.** Quantas conexões ela tem é
         // dela, e o teto dela não é informação que alguém pediu para dar.
-        return 'Essa pessoa não pode receber novas conexões agora.';
+        return 'Esse usuário não pode receber novas conexões agora.';
       case RecusaDoPedidoDeConexao.tetoDePendentes:
         return 'Você tem muitos pedidos esperando resposta. Espere um deles '
             'ser respondido.';
@@ -270,7 +270,7 @@ class _EstadoDoCartaoDePessoaEncontrada
     if (falha.tipo == ProblemTipo.naoEncontrado) {
       // O 404 funde seis motivos, e a tela não desfaz a ambiguidade: descobrir
       // que foi bloqueado é o que gera retaliação.
-      return 'Não encontramos esta pessoa.';
+      return 'Não encontramos este usuário.';
     }
     final campo =
         falha.problem.campo(RecusaDoPedidoDeConexao.campoDoApelido)?.codigo;

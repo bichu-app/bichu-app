@@ -441,7 +441,7 @@ void main() {
     await digitar(
       tester,
       TelaCriarEncontro.rotuloDoTextoDaCapa,
-      'Cães correndo na grama',
+      'Cachorros correndo na grama',
     );
     await preencherOMinimo(tester);
 
@@ -472,7 +472,7 @@ void main() {
     );
     expect(
       capa['alt_text'],
-      'Cães correndo na grama',
+      'Cachorros correndo na grama',
       reason: 'REPROVA: o corpo levou `cover_image` sem `alt_text`. O esquema '
           'declara os DOIS como obrigatorios, e o servidor responde 400 '
           'depois de a pessoa ter esperado o envio inteiro.',

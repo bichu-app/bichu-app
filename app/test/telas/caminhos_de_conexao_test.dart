@@ -306,7 +306,7 @@ void main() {
       await abrirOApp(tester, rede: rede, deposito: depositoLogado());
       await abrirAAba(tester, 'Mural');
 
-      final botao = find.text('Buscar pessoas');
+      final botao = find.text('Buscar usuários');
       expect(
         botao,
         findsOneWidget,

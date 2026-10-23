@@ -299,7 +299,7 @@ void main() {
           <Map<String, dynamic>>[linha(publicRef: refDeAnonima)],
         ], chamadas: chamadas),
       );
-      expect(find.text('Pessoa sem nome'), findsOneWidget);
+      expect(find.text('Usuário sem nome'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, TelaDeBloqueados.desbloquear), findsOneWidget);
     },
   );

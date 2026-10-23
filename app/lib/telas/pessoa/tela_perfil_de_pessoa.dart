@@ -131,7 +131,7 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// desenha a porta de pedir.
   final String? tokenDoConvite;
 
-  static const String naoEncontramos = 'Não encontramos esta pessoa.';
+  static const String naoEncontramos = 'Não encontramos este usuário.';
   static const String falhaAoCarregar = 'Não conseguimos carregar este perfil agora.';
   static const String falhaAoAgir = 'Não conseguimos registrar isso agora.';
   static const String pedirConexao = 'Pedir conexão';
@@ -140,7 +140,7 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   static const String cancelarPedido = 'Cancelar pedido';
   static const String desfazerConexao = 'Desfazer conexão';
   static const String pedidoEnviado = 'Pedido enviado. Ela decide quando responder.';
-  static const String pedidoRecebido = 'Esta pessoa quer se conectar com você.';
+  static const String pedidoRecebido = 'Este usuário quer se conectar com você.';
   static const String souConexao = 'Vocês estão conectados.';
 
   /// **A frase do estado de estranho**, e ela diz o que falta e não o que é
@@ -151,7 +151,7 @@ class TelaDePerfilDePessoa extends StatefulWidget {
 
   /// O vazio de quem **é** conexão. Diferente da frase acima de propósito: uma
   /// diria "você não pode ver" para quem pode.
-  static const String conexaoSemFoto = 'Esta pessoa ainda não publicou fotos.';
+  static const String conexaoSemFoto = 'Este usuário ainda não publicou fotos.';
 
   /// O lado da célula, em dp — **o mesmo da vitrine do dono**, e por isso a
   /// mesma derivada de 320 px serve: 104 dp dão 312 px reais a 3x.

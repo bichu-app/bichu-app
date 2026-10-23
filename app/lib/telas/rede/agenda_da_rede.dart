@@ -1004,7 +1004,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       grupos.add(
         GrupoDeFiltro(
           chave: 'size',
-          titulo: 'Porte do cão',
+          titulo: 'Porte do cachorro',
           selecionado: r.porte?.valor,
           opcoes: <OpcaoDeRecorte>[
             for (final p in Porte.values)

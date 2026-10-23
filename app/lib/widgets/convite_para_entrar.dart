@@ -271,7 +271,7 @@ enum SecaoComConta {
     ganho: 'Entre para buscar os seus vizinhos pelo nome ou pelo apelido e '
         'pedir conexão. O Mural mostra o que as suas conexões publicam, e as '
         'suas publicações aparecem para elas.',
-    retomada: 'Entre de novo para buscar pessoas.',
+    retomada: 'Entre de novo para buscar usuários.',
   ),
 
   /// `GET /v1/timeline` — a linha do tempo do `Mural`.
@@ -318,7 +318,7 @@ enum SecaoComConta {
   mural(
     titulo: 'O Mural é das suas conexões',
     ganho: 'Entre para ver o que as suas conexões publicam. As suas '
-        'publicações aparecem para as pessoas com quem você se conectou, e '
+        'publicações aparecem para os usuários com quem você se conectou, e '
         'não para quem não é conexão.',
     retomada: 'Entre de novo para ver o Mural.',
   ),
@@ -484,7 +484,7 @@ enum SecaoComConta {
   /// e um convite que repetisse o apelido confirmaria a existencia da pessoa a
   /// quem ainda nao tem permissao para saber disso.
   paginaDaPessoa(
-    titulo: 'Esta página é de uma pessoa da comunidade',
+    titulo: 'Esta página é de um usuário da comunidade',
     ganho: 'Entre para ver quem é, os pets dela e as conexões que vocês têm '
         'em comum, e pedir conexão.',
     retomada: 'Entre de novo para ver esta página.',

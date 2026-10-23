@@ -1449,7 +1449,7 @@ class _BlocoDaCapa extends StatelessWidget {
             erro: erroDoTexto,
             // `maxLength: 150` do contrato, e nao um numero escolhido aqui.
             limite: 150,
-            exemplo: 'Cães correndo na grama do parque',
+            exemplo: 'Cachorros correndo na grama do parque',
             // D59: o servidor recusa telefone, e-mail, link e chave PIX em
             // `cover_image.alt_text` tambem. Dito antes, e nao descoberto pelo
             // 400.

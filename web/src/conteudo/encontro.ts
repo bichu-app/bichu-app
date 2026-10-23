@@ -30,7 +30,7 @@ export const ROTULOS = {
     public_restroom_nearby: 'Banheiro público próximo',
     shade: 'Sombra',
     benches: 'Bancos',
-    dog_water_fountain: 'Bebedouro para cães',
+    dog_water_fountain: 'Bebedouro para cachorros',
     parking_nearby: 'Estacionamento próximo',
   } as Record<string, string>,
   /** `NetworkEventBringItem`. */
@@ -84,8 +84,8 @@ export const ENCONTRO = {
   todosOsPortes: 'Todos os portes',
   portes: (lista: string) => `Portes ${lista}`,
   vacinaExigida: 'Carteira de vacinação em dia é exigida.',
-  areaCercada: 'O local tem área cercada para cães soltos.',
-  semAreaCercada: 'Não há área cercada: mantenha o cão na guia.',
+  areaCercada: 'O local tem área cercada para cachorros soltos.',
+  semAreaCercada: 'Não há área cercada: mantenha o cachorro na guia.',
 
   /**
    * O cartao de cuidados. As MESMAS quatro frases do aplicativo (UX 28.7.1),
@@ -96,9 +96,9 @@ export const ENCONTRO = {
   cuidadosLista: (areaCercada: boolean) => [
     'Recolha o cocô e descarte em local adequado.',
     areaCercada
-      ? 'Na área cercada, o cão pode ficar solto. Fora dela, na guia.'
-      : 'Mantenha o cão na guia o tempo todo.',
-    'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por um tempo.',
+      ? 'Na área cercada, o cachorro pode ficar solto. Fora dela, na guia.'
+      : 'Mantenha o cachorro na guia o tempo todo.',
+    'Se o seu cachorro parecer desconfortável, afaste-se do grupo com ele por um tempo.',
     'Fêmea no cio fica em casa.',
   ],
 

@@ -520,7 +520,7 @@ void main() {
 
       expect(find.byType(ConviteParaEntrar), findsOneWidget);
       expect(
-        find.text('Esta página é de uma pessoa da comunidade'),
+        find.text('Esta página é de um usuário da comunidade'),
         findsOneWidget,
       );
       expect(find.byType(FaixaDeAviso), findsNothing);

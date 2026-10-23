@@ -246,9 +246,9 @@ class TelaDoEncontro extends StatefulWidget {
   static List<String> cuidados({required bool areaCercada}) => <String>[
         'Recolha o cocô e descarte em local adequado.',
         areaCercada
-            ? 'Na área cercada, o cão pode ficar solto. Fora dela, na guia.'
-            : 'Mantenha o cão na guia o tempo todo.',
-        'Se o seu cão parecer desconfortável, afaste-se do grupo com ele por '
+            ? 'Na área cercada, o cachorro pode ficar solto. Fora dela, na guia.'
+            : 'Mantenha o cachorro na guia o tempo todo.',
+        'Se o seu cachorro parecer desconfortável, afaste-se do grupo com ele por '
             'um tempo.',
         'Fêmea no cio fica em casa.',
       ];
@@ -862,7 +862,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         );
       }
       if (vivo) {
-        secao(Icons.pets_outlined, 'Para quais cães', _ParaQuaisCaes(c: conteudo));
+        secao(Icons.pets_outlined, 'Para quais cachorros', _ParaQuaisCaes(c: conteudo));
         if (conteudo.oQueLevar.isNotEmpty) {
           secao(
             Icons.backpack_outlined,
@@ -880,7 +880,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
           ),
         );
         final estrutura = <String>[
-          if (conteudo.areaCercadaParaSoltar) 'Área cercada para cães soltos',
+          if (conteudo.areaCercadaParaSoltar) 'Área cercada para cachorros soltos',
           for (final e in conteudo.estrutura) e.rotulo,
         ];
         if (estrutura.isNotEmpty) {
