@@ -41,6 +41,8 @@ import {
   construtorDaArestaPorRef,
   construtorDaContagemDeConexoes,
   construtorDaContagemDeConvidados,
+  construtorDasArestasPorApelido,
+  construtorDasConexoes,
   construtorDasContagens,
   construtorDoAceite,
   construtorDoDesfazerPorBloqueio,
@@ -99,6 +101,14 @@ const TODAS = {
       limite: 20,
       agora: AGORA,
     }),
+  // **AS DUAS DE 22/10/2026.** Elas entram neste mapa e nao ao lado dele: e
+  // estar AQUI que as poe debaixo de todas as varreduras deste arquivo --
+  // `conta_habilitada` nos dois lados, nenhuma coluna de conta projetada, a
+  // lista fechada de apelidos de saida e o molde explicito de tempo. Um
+  // construtor novo fora do mapa fica fora dos quatro de uma vez, em silencio.
+  listaDasProprias: () => construtorDasConexoes(semBanco, CHAMADOR, { pagina: 1, limite: 20 }),
+  arestasPorApelido: () =>
+    construtorDasArestasPorApelido(semBanco, CHAMADOR, ['bia-vet', 'carla-ong'], AGORA),
 } as const;
 
 void describe('quem chama entra no WHERE, e não num `if`', () => {
@@ -157,6 +167,14 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
     'parConectado',
     'pedidosRecebidos',
     'pedidosEnviados',
+    // AS DUAS DE 22/10/2026. A lista das PROPRIAS conexoes e a leitura de
+    // estado por apelido reusam `juncaoDaAresta`, e e por isso que passam --
+    // mas elas precisam estar NOMEADAS aqui: medido em 22/10/2026, sem estes
+    // dois nomes uma versao da lista que trocasse a juncao por um `FROM` cru,
+    // perdendo `conta_habilitada` E o recorte por quem chama, passava nas 55
+    // conferencias deste arquivo em silencio.
+    'listaDasProprias',
+    'arestasPorApelido',
   ] as const;
 
   for (const nome of PRECISAM) {
@@ -170,6 +188,83 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
       );
       assert.match(sql, /conta_habilitada\([^)]*requester_user_id\)/i);
       assert.match(sql, /conta_habilitada\([^)]*addressee_user_id\)/i);
+    });
+  }
+
+  /**
+   * **O RECORTE POR QUEM CHAMA, nas duas leituras de LISTA** — e este caso
+   * nasceu de uma isca que não caiu.
+   *
+   * Em 22/10/2026, com a lista das próprias conexões recém-escrita, a mutação
+   * que trocava `juncaoDaAresta` por um `FROM user_connections` cru passava nas
+   * 55 conferências deste arquivo. Ela perdia **duas** coisas de uma vez: o
+   * `conta_habilitada` dos dois lados (que o caso de cima agora cobra, com os
+   * dois nomes novos na lista) e o **predicado das duas pontas contra quem
+   * chama** — que nenhum caso cobrava em lote, porque até então toda leitura de
+   * lista era de pedidos e o caso do `ref` cobria as outras uma por uma.
+   *
+   * Sem o predicado das duas pontas, `GET /connections` devolveria a tabela
+   * inteira para qualquer conta. É o vazamento exato que a emenda do cliente de
+   * 22/10/2026 **não** autorizou: ele abriu a lista do dono, não a de todos.
+   */
+  for (const nome of ['listaDasProprias', 'arestasPorApelido', 'pedidosRecebidos', 'pedidosEnviados'] as const) {
+    void it(`\`${nome}\` cobra as DUAS pontas contra quem chama, no WHERE`, () => {
+      const { sql } = TODAS[nome]();
+      assert.match(
+        sql,
+        /\(c\.requester_user_id = quem\.id or c\.addressee_user_id = quem\.id\)/i,
+        `\`${nome}\` nao recorta por quem chama: uma leitura de LISTA sem este predicado ` +
+          'devolve a tabela inteira para qualquer conta. A emenda do cliente de 22/10/2026 ' +
+          'abriu a lista do DONO, nao a de todos.',
+      );
+    });
+  }
+
+  /**
+   * **ISCA do caso de cima.** Sem ela, aquele `assert.match` passaria por as
+   * consultas de hoje terem a forma certa — e não por a expressão saber
+   * reconhecer a forma errada.
+   */
+  void it('ISCA: a conferencia do recorte REPROVA um `FROM` sem as duas pontas', () => {
+    const semRecorte = semBanco
+      .selectFrom('user_connections as c')
+      .select('c.ref')
+      .where('c.state', '=', 'accepted')
+      .compile();
+    assert.doesNotMatch(
+      semRecorte.sql,
+      /\(c\.requester_user_id = quem\.id or c\.addressee_user_id = quem\.id\)/i,
+      'a isca passou: a expressao casa ate numa consulta sem recorte por quem chama, ' +
+        'entao a conferencia acima nao mede nada.',
+    );
+  });
+
+  /**
+   * **`conta_habilitada` NA ARESTA, e não em qualquer subconsulta** — e este
+   * caso nasceu de uma isca que caiu pela metade.
+   *
+   * Medido em 22/10/2026: a mutação que trocava `juncaoDaAresta` por um `FROM`
+   * cru na lista das próprias conexões **continuava passando** no caso genérico
+   * de `conta_habilitada`, porque a subconsulta que conta as conexões da OUTRA
+   * pessoa (`connections_count`) chama a função duas vezes sobre `uc` — o
+   * alias dela. A expressão genérica não distingue a aresta que está sendo
+   * lida da aresta que está sendo contada.
+   *
+   * Então este caso cobra o alias: `c`, que é a aresta de [juncaoDaAresta]. É a
+   * diferença entre *"a função aparece no SQL"* e *"a linha que sai passou por
+   * ela"*.
+   */
+  for (const nome of ['listaDasProprias', 'arestasPorApelido'] as const) {
+    void it(`\`${nome}\` chama \`conta_habilitada\` sobre a ARESTA LIDA (alias \`c\`)`, () => {
+      const { sql } = TODAS[nome]();
+      assert.match(
+        sql,
+        /conta_habilitada\(c\.requester_user_id\)/i,
+        `\`${nome}\`: a chamada tem de ser sobre \`c\`, a aresta de \`juncaoDaAresta\`. ` +
+          'Uma chamada numa subconsulta de contagem satisfaz a varredura generica sem ' +
+          'recortar nenhuma linha da saida -- medido em 22/10/2026.',
+      );
+      assert.match(sql, /conta_habilitada\(c\.addressee_user_id\)/i);
     });
   }
 
@@ -356,6 +451,19 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     // `invited_joined_count` no contrato: contagem nao diz QUEM.
     'convidados',
     'conectados',
+    // OS TRES DA LISTA DAS PROPRIAS CONEXOES (22/10/2026), e os tres sao os
+    // MESMOS campos que `PersonSearchResult` ja entrega na busca -- nome,
+    // apelido e as duas contagens, mais a foto. **Campo novo em resposta e
+    // decisao de privacidade**, e a decisao e a do cliente: *"o usuario pode
+    // abrir a lista de usuarios que e sua conexao"*.
+    //
+    // As duas contagens sao `count(*)`, do mesmo tipo de `conexoes` e
+    // `pendentes`: contagem nao diz QUEM. E `photo_key` e CHAVE de objeto e
+    // nunca URL -- a borda monta o endereco com a base de midia do ambiente
+    // (§11.1 proibicao 9).
+    'pets_count',
+    'connections_count',
+    'photo_key',
     'id',
   ]);
 

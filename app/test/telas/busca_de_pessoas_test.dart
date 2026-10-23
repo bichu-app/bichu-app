@@ -62,6 +62,13 @@ Map<String, dynamic> _pessoa({
   int conexoes = 38,
   /// Nulo reproduz quem não tem foto pronta -- o caso da inicial no círculo.
   String? foto = _urlDaFoto,
+  /// `connection_state`, que entrou no contrato em **22/10/2026**.
+  ///
+  /// **O padrão é `none`, e não `connected`**: o caso central da busca é achar
+  /// quem ainda NÃO é conexão, e um padrão diferente faria as vinte iscas deste
+  /// arquivo nascerem com um estado que ninguém escreveu -- e a isca do botão
+  /// `Pedir conexão` ficaria verde sem medir nada.
+  String estado = 'none',
 }) {
   return <String, dynamic>{
     'handle': apelido,
@@ -69,6 +76,7 @@ Map<String, dynamic> _pessoa({
     'pets_count': pets,
     'connections_count': conexoes,
     'photo_icon_url': foto,
+    'connection_state': estado,
   };
 }
 
@@ -523,6 +531,8 @@ void main() {
         'pets_count': 2,
         'connections_count': 38,
         'photo_icon_url': _urlDaFoto,
+        // O SEXTO campo, de 22/10/2026.
+        'connection_state': 'none',
         // O servidor NÃO manda estes dois. Estão aqui para provar que, se um
         // dia mandasse, o app não os leria.
         'public_ref': 'ABCDEFGHIJKLMNOPQRSTUV',
@@ -865,6 +875,12 @@ void main() {
           'consegui perguntar" não é "o teto fechou".',
     );
   });
+  // UNIAO DE 22/10/2026 (onda 7): os DOIS lotes de casos abaixo convivem.
+  // A `development` trouxe os tres consertos da busca que digita; a frente
+  // da lista das proprias conexoes trouxe o botao certo ao lado de quem ja
+  // aceitou. Os dois lados acrescentavam grupo no MESMO ponto do arquivo e
+  // terminavam apoiados no mesmo fecho, por isso colidiram. Nada foi
+  // descartado: o fecho do primeiro grupo passou a ser explicito.
   // ===========================================================================
   // OS TRES CONSERTOS DE 22/10/2026
   //
@@ -1216,6 +1232,164 @@ void main() {
         reason: 'REPROVA: entrar na conta disparou uma busca por conta '
             'propria. Entrar nao e pedir uma busca.',
       );
+    });
+  });
+
+
+  // =========================================================================
+  // O BOTÃO ERRADO AO LADO DE QUEM JÁ ACEITOU (defeito relatado pelo cliente)
+  // =========================================================================
+  //
+  // Palavras dele: *"após eu ter aceito, ainda aparece para solicitar conexão
+  // a um usuário que ja foi adicionado e aceito"*.
+  //
+  // **A causa era estrutural, e não um `if` esquecido:** `PersonSearchResult`
+  // omitia `connection_state` de propósito, e o contrato dizia por quê --
+  // *"numa lista, vinte estados por requisição são o material de que uma lista
+  // de conexões se faz do lado de fora"*. Sem o estado, o cartão **não tinha
+  // como saber** que o aceite já havia acontecido, e nascia com `_estado` nulo
+  // -- que é o cartão de estranho, com `Pedir conexão`.
+  //
+  // **O conserto só ficou possível em 22/10/2026**, quando o cliente autorizou
+  // a lista das próprias conexões: com `GET /connections`, o dono já obtém o
+  // conjunto por uma rota legítima, então devolvê-lo recortado na busca DELE
+  // não entrega nada novo.
+  //
+  // DESLIGAMENTO: troque `late EstadoDaConexao? _estado =
+  // widget.pessoa.estadoDaConexao` por `EstadoDaConexao? _estado` em
+  // `cartao_de_pessoa_encontrada.dart`. O primeiro caso abaixo reprova.
+  group('BICHUS — o botão não aparece ao lado de quem já é conexão', () {
+    testWidgets('com `connected`, o cartão diz que JÁ é conexão e NÃO oferece pedir',
+        (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'connected'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Marina'), findsOneWidget, reason: 'a pessoa está na lista');
+      expect(
+        find.text('Pedir conexão'),
+        findsNothing,
+        reason: 'REPROVA: o defeito voltou. É o relato literal do cliente -- *"após eu '
+            'ter aceito, ainda aparece para solicitar conexão a um usuário que ja foi '
+            'adicionado e aceito"*.',
+      );
+      expect(find.text('Já é sua conexão'), findsOneWidget);
+    });
+
+    /// **O CONTRAPESO, e sem ele o caso de cima é vácuo.** Ele provaria apenas
+    /// que `Pedir conexão` não existe mais em lugar nenhum da tela.
+    testWidgets('CONTRAPESO: com `none`, o botão de pedir VOLTA a aparecer', (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'none'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pedir conexão'), findsOneWidget);
+      expect(find.text('Já é sua conexão'), findsNothing);
+    });
+
+    /// Os dois pendentes também chegam do resultado, e cada um desenha o seu
+    /// cartão: `Cancelar` para o que eu mandei, `Aceitar`/`Recusar` para o que
+    /// me chegou. Sem isto, o conserto valeria só para `connected`.
+    testWidgets('`pending_sent` desenha `Cancelar`, e NÃO `Pedir conexão`', (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'pending_sent'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pedir conexão'), findsNothing);
+      expect(find.text('Pedido enviado, aguardando aceite'), findsOneWidget);
+    });
+
+    testWidgets('`pending_received` desenha `Aceitar` e `Recusar`', (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'pending_received'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pedir conexão'), findsNothing);
+      expect(find.text('Aceitar'), findsOneWidget);
+      expect(find.text('Recusar'), findsOneWidget);
+    });
+
+    /// **A RECUSA CONTINUA SILENCIOSA, e este caso é o que a guarda.**
+    ///
+    /// `declined` **não existe** em `connection_state`: o servidor projeta a
+    /// recusa como `pending_sent` para quem pediu enquanto a validade corre, e
+    /// depois ela desaparece. Se um servidor mandasse `declined`, o app **não o
+    /// entenderia** -- `porCodigo` devolve nulo -- e o cartão voltaria a ser o
+    /// de estranho. É a ordem certa de errar: a ação continua oferecida e o
+    /// servidor recusa se precisar; o que NÃO pode acontecer é a tela escrever
+    /// "ela recusou você".
+    testWidgets('ISCA: um `declined` inventado nao produz rotulo de recusa', (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'declined'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      for (final proibido in <String>[
+        'Recusado',
+        'Recusou',
+        'Ela recusou você',
+        'Pedido recusado',
+        'Negado',
+      ]) {
+        expect(
+          find.text(proibido),
+          findsNothing,
+          reason: 'REPROVA: a tela escreveu "$proibido". A recusa é silenciosa, e o app '
+              'não tem estado, rótulo nem ramo de tela para ela.',
+        );
+      }
+      // Codigo desconhecido cai em nulo, e nulo e o cartao de estranho.
+      expect(find.text('Pedir conexão'), findsOneWidget);
+    });
+
+    /// **O estado vem do SERVIDOR, e não de uma suposição da tela** — e nenhuma
+    /// pessoa a mais entra na busca por causa dele: a chamada continua sendo
+    /// `GET /v1/people` com `q`, e nada mais.
+    testWidgets('o estado NAO custa chamada nova: a busca continua sendo UMA', (tester) async {
+      await _montar(tester, resultados: <Map<String, dynamic>>[
+        _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'connected'),
+        _pessoa(apelido: 'bia-vet', nome: 'Bia', estado: 'none'),
+      ]);
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      final buscas = chamadas.where((String c) => c.contains('/people?')).length;
+      expect(
+        buscas,
+        1,
+        reason: 'REPROVA: a tela fez $buscas buscas. O estado vem DENTRO do resultado, e '
+            'uma chamada por pessoa seria vinte idas ao banco por rolada -- a razão que '
+            'a Emenda 3 do ADR-0010 registra para a foto na conversa.',
+      );
+      for (final chamada in chamadas) {
+        expect(
+          chamada.contains('connection_state'),
+          isFalse,
+          reason: 'REPROVA: a tela mandou `connection_state` ao servidor. Ele é DERIVADO '
+              'no servidor e nunca recebido de quem chama.',
+        );
+      }
     });
   });
 }

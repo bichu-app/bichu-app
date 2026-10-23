@@ -124,6 +124,14 @@ function bancada(
     },
     contarConexoes: () => Promise.resolve(conexoesDaPessoa),
     estaConectado: () => Promise.resolve(aresta?.estado === 'connected'),
+    // **O perfil NAO pergunta estado em lote**, e o dublê o declara levantando:
+    // a porta ganhou `estadosPorApelido` em 22/10/2026 para a BUSCA. Responder
+    // em silencio aqui deixaria passar um perfil que o chamasse -- e o contador
+    // `perguntasDeAresta` deste arquivo, que mede UMA pergunta por tela,
+    // continuaria em um.
+    estadosPorApelido: () => {
+      throw new Error('o perfil de UMA pessoa nao pergunta estado em lote');
+    },
   };
 
   const perfis: PerfilDePessoaRepository = {

@@ -227,23 +227,78 @@ O item 6 **não** é emendado: o perfil é endereçado pelo **apelido**
 `users.public_ref` — opaco, sorteado, 22 símbolos, que denunciar e bloquear já
 usam. Nenhum UUID.
 
-## As conexões: a CONTAGEM, e esta é uma interpretação a confirmar
+## As conexões: a CONTAGEM no perfil de terceiro, e a LISTA para o próprio dono
 
 O cliente escreveu "conexões" numa lista de coisas que se vê. **Foi lido como a
 contagem, e não como a lista de quem são**, e a leitura está declarada aqui
 porque ela não é óbvia:
 
-- a lista de conexões **não aparece a ninguém, nem ao dono** (plano 4-B:
-  *"Lista de conexões | nunca | nunca"*), não existe no contrato, não existe
-  `GET /connections`, e o portão `sem-lista-de-conexoes.test.ts` reprova
-  operação nova que devolva pessoas conectadas;
+- a lista de conexões **de terceiro não aparece a ninguém**, não existe no
+  contrato, e o portão `conexao-nao-expoe-lista-nem-identificador.test.ts`
+  reprova operação nova que devolva as pessoas conectadas **de outra conta**;
 - contagem não diz **quem**, e é exatamente essa diferença que a torna mostrável
   onde a lista não é. Ela é o "sinal de confiança" do plano 4-B;
 - a lista, mostrada a um estranho, entregaria a rede social de alguém a quem não
   tem relação com ela — e isso ele não pediu.
 
-**Pendência de confirmação com o cliente**, nestes termos: *"conexões" no perfil
-de outra pessoa é o número (`12 conexões`), e não a lista de quem são. Confirma?*
+### EMENDA DE 22/10/2026 — A LISTA DAS PRÓPRIAS CONEXÕES EXISTE
+
+**Esta seção dizia que a lista *"não aparece a ninguém, nem ao dono"*, e dizia
+com razão: era a decisão do cliente de 18/10/2026. Ele emendou a própria
+decisão**, literal:
+
+> *"o usuário pode abrir a lista de usuários que é sua conexão"*
+
+A emenda é **exata**, e as duas metades precisam ficar escritas separadas
+porque elas têm destinos diferentes:
+
+| | antes | agora |
+|---|---|---|
+| a própria lista, para o próprio dono | nunca | **PODE** — `listMyConnections` (`GET /connections`) |
+| a lista de **TERCEIRO** | nunca | **continua NUNCA** |
+
+**O motivo da proibição nunca foi o dono**, e é por isso que metade dela cai
+sem a outra: o terceiro parágrafo acima diz *"a lista, mostrada a um estranho,
+entregaria a rede social de alguém a quem não tem relação com ela"* — e o dono
+não é estranho à própria rede.
+
+**O que a lista do dono mostra de cada pessoa é o MESMO recorte do resultado da
+busca** (`PersonSearchResult`): nome, apelido, contagem de pets, contagem de
+conexões e a foto — esta pela emenda de 21/10/2026. **Ser conexão aceita não
+abre campo ali**: nenhum identificador interno (item 6), nenhum `public_ref`,
+nenhum `ref` de aresta. O portão compara os dois conjuntos de propriedades por
+nome.
+
+**O NOME DO PORTÃO ESTAVA ERRADO NESTA SEÇÃO, e vale corrigir junto**: ela
+citava um `sem-lista-de-conexoes.test.ts` que **nunca existiu** em nenhuma ref
+deste repositório. O portão existe e funciona, com outro nome —
+`src/tools/conexao-nao-expoe-lista-nem-identificador.test.ts`. Citação errada é
+pior que nenhuma: ela manda quem for conferir procurar um arquivo ausente e
+concluir que não havia portão.
+
+### `connection_state` no RESULTADO DA BUSCA (22/10/2026), e o defeito que ele conserta
+
+A mesma decisão destravou um defeito que o cliente relatou e que **não tinha
+conserto possível antes dela**: *"após eu ter aceito, ainda aparece para
+solicitar conexão a um usuário que ja foi adicionado e aceito"*.
+
+`PersonSearchResult` omitia o estado da conexão de propósito, e a razão escrita
+era *"numa lista, vinte estados por requisição são o material de que uma lista
+de conexões se faz do lado de fora"*. **Com a lista própria autorizada, esse
+argumento cai para o próprio dono**: ele já obtém o conjunto das suas conexões
+por uma rota legítima, então devolvê-lo recortado nos resultados da busca
+**dele** não entrega nada novo. É sempre o par com quem busca — nunca a relação
+entre duas outras pessoas —, a ausência é `none` e funde "nunca houve nada",
+"expirou" e "em descanso", e **`declined` não existe**: a recusa continua
+silenciosa.
+
+### A pendência de 19/10 CONTINUA ABERTA
+
+**Tocar as *"12 conexões"* no perfil de outra pessoa continua não levando a
+lugar nenhum.** A pergunta segue pendente com o cliente desde 19/10/2026,
+nestes termos: *"conexões" no perfil de outra pessoa é o número
+(`12 conexões`), e não a lista de quem são. Confirma?* A emenda de 22/10 **não**
+a responde: ela é sobre a lista do dono, e o perfil de terceiro não foi tocado.
 
 ## O que NÃO sai, e cada ausência tem dono
 

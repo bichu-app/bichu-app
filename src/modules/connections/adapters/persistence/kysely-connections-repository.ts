@@ -53,10 +53,14 @@ import {
   type ContagensDaConta,
 } from '../../domain/teto-de-conexoes.js';
 import type {
+  ArestaComApelido,
   ConnectionsRepository,
   Encerramento,
   NovoPedido,
+  PaginaDeConexoes,
   PaginaDePedidos,
+  PessoaConectada,
+  RecorteDeConexoes,
   RecortePedidos,
 } from '../../ports/connections-repository.js';
 
@@ -577,6 +581,199 @@ export function construtorDosPedidos(
   `.compile(db);
 }
 
+/**
+ * A linha de [construtorDasArestasPorApelido]: o apelido mais as colunas de
+ * estado da aresta. **Sem `ref`, sem coluna de conta.**
+ */
+interface LinhaDaArestaPorApelido {
+  readonly handle: string;
+  readonly state: EstadoGuardado;
+  readonly sou_quem_pediu: boolean;
+  readonly requested_at: Date;
+  readonly expires_at: Date;
+  readonly rest_until: Date | null;
+}
+
+/**
+ * A linha que a lista das próprias conexões devolve.
+ *
+ * **Sem `ref`, sem `state` e sem nenhuma coluna de conta** — ver o cabeçalho de
+ * [construtorDasConexoes]. As duas contagens vêm como `string | number` porque
+ * `count(*)` do Postgres é `bigint` e o driver o entrega como cadeia.
+ */
+interface LinhaDaConexao {
+  readonly handle: string;
+  readonly display_name: string | null;
+  readonly pets_count: string | number;
+  readonly connections_count: string | number;
+  readonly photo_key: string | null;
+  readonly total: string | number;
+}
+
+/**
+ * **A LISTA DAS PRÓPRIAS CONEXÕES ACEITAS** (cliente, 22/10/2026: *"o usuário
+ * pode abrir a lista de usuários que é sua conexão"*).
+ *
+ * ## O que esta consulta tem a mais que [construtorDosPedidos], e por quê
+ *
+ * As duas percorrem a mesma aresta pela mesma [juncaoDaAresta] — e é isso que
+ * garante que `conta_habilitada` nos dois lados e o predicado das duas pontas
+ * não possam divergir entre a caixa de pedidos e esta lista. O que muda é o
+ * recorte (`c.state = 'accepted'`) e a **projeção da pessoa**: três subconsultas
+ * correlacionadas, que a caixa de pedidos não tem.
+ *
+ * | Coluna | De onde, e por que assim |
+ * |---|---|
+ * | `pets_count` | subconsulta correlacionada sobre `pets`, a MESMA de `kysely-busca-de-pessoas.ts` |
+ * | `connections_count` | idem sobre `user_connections`, com `conta_habilitada` nos dois lados — é o "sinal de confiança" |
+ * | `photo_key` | a derivada **`thumb`** de `catalog_images`, com `purpose = 'user_photo'` |
+ *
+ * **Subconsulta correlacionada e NÃO `LEFT JOIN` com `GROUP BY`**, e a razão é
+ * de vazamento e não de desempenho: com junção, `p.name` fica a um caractere de
+ * distância de quem mexer aqui, e nome de pet é proibido pelo item 7 do
+ * ADR-0010. É o mesmo arranjo, pelo mesmo motivo, de `kysely-perfil-de-pessoa.ts`.
+ *
+ * ## O apelido sai pela MESMA costura da caixa de pedidos, e filtra a linha
+ *
+ * `to_jsonb(outro) ->> 'handle'` é a leitura que [COLUNAS_DA_ARESTA] já usa
+ * neste arquivo, e usar a mesma aqui não é economia: duas leituras do mesmo
+ * apelido na mesma camada são duas chances de uma delas quebrar sozinha quando
+ * a coluna mudar. O cabeçalho deste arquivo explica a costura.
+ *
+ * **Quem não tem apelido NÃO entra nesta lista**, e é deliberado: cada linha é
+ * uma porta para o perfil, o perfil é endereçado pelo apelido
+ * (`getPersonProfile`), e uma linha sem apelido seria uma porta que não abre —
+ * `users.handle` é anulável, e as contas de teste de 18/10/2026 continuam sem
+ * apelido. Na caixa de pedidos ele é anulável porque lá a linha **não** é uma
+ * porta: ela é uma decisão a tomar, e se toma sem sair da tela.
+ *
+ * A consequência vale dita: esta lista pode ter menos linhas que
+ * `connected_count`, e a diferença são exatamente as conexões sem apelido. O
+ * `total` desta consulta conta o MESMO conjunto que ela pagina — os dois saem
+ * do mesmo `count(*) OVER ()` —, então a tela nunca promete uma página que não
+ * existe.
+ *
+ * ## O que NÃO é selecionado, e a ausência é a defesa
+ *
+ * **Nenhum `users.id`, nenhum `public_ref`, nenhum `c.ref` e nenhum `c.state`.**
+ * O `ref` da aresta ficaria a um passo de pôr o botão de desfazer numa lista que
+ * a pessoa rola com o polegar; quem desfaz abre o perfil, e lá
+ * `getPersonProfile` já entrega o `ref`. E `c.state` não sai porque ele é a
+ * constante `'accepted'` nesta consulta, por predicado.
+ *
+ * **O total vem na MESMA consulta**, por `count(*) OVER ()`: duas consultas com
+ * os mesmos predicados são duas chances de a página e o total discordarem sem
+ * nada acusar.
+ *
+ * **A ordenação é por nome e depois por apelido** — a mesma da busca, e pelo
+ * mesmo motivo de `handle` ser único: a ordem fica total, e a paginação não
+ * repete nem perde linha entre páginas. Não há ordenação por data de aceite:
+ * ela existe na tabela, mas "quem virou sua conexão mais recentemente" é um
+ * sinal sobre a relação que ninguém pediu para dar.
+ */
+export function construtorDasConexoes(
+  db: Kysely<Database>,
+  quemChama: UserId,
+  recorte: RecorteDeConexoes,
+): CompiledQuery<LinhaDaConexao> {
+  const deslocamento = (recorte.pagina - 1) * recorte.limite;
+  return sql<LinhaDaConexao>`
+    SELECT
+      (to_jsonb(outro) ->> 'handle')        AS handle,
+      outro.display_name                    AS display_name,
+      (SELECT count(*) FROM pets p
+         WHERE p.owner_user_id = outro.id AND p.deleted_at IS NULL)
+                                            AS pets_count,
+      (SELECT count(*) FROM user_connections uc
+         WHERE uc.state = 'accepted'
+           AND (uc.requester_user_id = outro.id OR uc.addressee_user_id = outro.id)
+           AND conta_habilitada(uc.requester_user_id)
+           AND conta_habilitada(uc.addressee_user_id))
+                                            AS connections_count,
+      (SELECT foto.thumb_key FROM catalog_images foto
+         WHERE foto.id = outro.photo_image_id
+           AND foto.purpose = 'user_photo'
+           AND foto.status = 'ready'
+           AND foto.thumb_key IS NOT NULL)
+                                            AS photo_key,
+      count(*) OVER ()                      AS total
+    ${juncaoDaAresta(quemChama)}
+      AND c.state = 'accepted'
+      AND (to_jsonb(outro) ->> 'handle') IS NOT NULL
+    ORDER BY outro.display_name ASC, (to_jsonb(outro) ->> 'handle') ASC
+    LIMIT ${recorte.limite} OFFSET ${deslocamento}
+  `.compile(db);
+}
+
+/**
+ * **AS ARESTAS ENTRE QUEM CHAMA E UMA LISTA DE APELIDOS**, numa consulta só —
+ * o estado da conexão nos resultados da busca (cliente, 22/10/2026).
+ *
+ * ## Uma consulta para a página inteira, e por quê
+ *
+ * A Emenda 3 do ADR-0010 registra, para a foto na conversa, que perguntar a
+ * aresta por item seriam vinte idas ao banco por rolada. O mesmo vale aqui: o
+ * argumento é a lista de apelidos da página, e o `= ANY` resolve as vinte de
+ * uma vez.
+ *
+ * ## O que ela devolve, e o que ela NÃO decide
+ *
+ * Devolve a aresta **guardada** — `state`, `expires_at`, `rest_until` e
+ * `sou_quem_pediu` —, e **não** o estado do app. Quem projeta é `estadoNoApp`,
+ * no `application/` deste módulo: a regra de que recusado se projeta como
+ * `pending_sent` só para quem pediu, e só dentro da validade, é a que mantém a
+ * recusa silenciosa, e ela tem **um** lugar. Escrevê-la aqui em SQL seria a
+ * segunda resposta para a mesma pergunta, e a segunda é a que fica velha.
+ *
+ * **Reusa [juncaoDaAresta]**, e isso é o que garante que `conta_habilitada` nos
+ * dois lados e o predicado das duas pontas sejam os MESMOS da caixa de pedidos
+ * e da lista de conexões. Quem desabilitou a conta não produz estado nenhum, e
+ * o botão da busca volta a ser "pedir" — que é o certo, porque a pessoa também
+ * saiu da busca.
+ *
+ * **Nenhum `users.id` e nenhum `c.ref` saem.** O que sai é o apelido com que
+ * quem chama perguntou, mais as colunas de estado da aresta.
+ */
+export function construtorDasArestasPorApelido(
+  db: Kysely<Database>,
+  quemChama: UserId,
+  apelidos: readonly string[],
+  agora: Instant,
+): CompiledQuery<LinhaDaArestaPorApelido> {
+  const instante = instanteComoData(agora);
+  return sql<LinhaDaArestaPorApelido>`
+    SELECT
+      (to_jsonb(outro) ->> 'handle')         AS handle,
+      c.state                                AS state,
+      (c.requester_user_id = quem.id)        AS sou_quem_pediu,
+      c.requested_at                         AS requested_at,
+      c.expires_at                           AS expires_at,
+      c.rest_until                           AS rest_until
+    ${juncaoDaAresta(quemChama)}
+      AND (to_jsonb(outro) ->> 'handle') = ANY(${apelidos}::text[])
+      AND (c.state = 'accepted' OR c.expires_at > ${instante}::timestamptz)
+  `.compile(db);
+}
+
+/**
+ * A linha crua como [PessoaConectada].
+ *
+ * **As duas contagens vêm como CADEIA**: `count(*)` do Postgres é `bigint`, e o
+ * driver o entrega como texto. A conversão é da borda do banco — deixá-la subir
+ * faria `pets_count` sair como `"3"` no JSON, que o contrato declara `integer` e
+ * que **nenhum portão deste repositório pega**, porque nenhum confere o CORPO da
+ * resposta. É a mesma conversão, pelo mesmo motivo, de `comoPessoa` na busca.
+ */
+function comoPessoaConectada(linha: LinhaDaConexao): PessoaConectada {
+  return {
+    apelido: linha.handle,
+    nomeDeExibicao: linha.display_name,
+    petsCount: comoNumero(linha.pets_count),
+    connectionsCount: comoNumero(linha.connections_count),
+    photoKey: linha.photo_key,
+  };
+}
+
 export function criarConnectionsRepository(db: Kysely<Database>): ConnectionsRepository {
   async function umaAresta(consulta: CompiledQuery<LinhaDaAresta>): Promise<ArestaGuardada | undefined> {
     const { rows } = await db.executeQuery(consulta);
@@ -627,6 +824,51 @@ export function criarConnectionsRepository(db: Kysely<Database>): ConnectionsRep
       const { rows } = await db.executeQuery(construtorDosPedidos(db, quemChama, recorte));
       return {
         itens: rows.map(comoAresta),
+        total: rows[0] === undefined ? 0 : comoNumero(rows[0].total),
+      };
+    },
+
+    /**
+     * As PRÓPRIAS conexões aceitas (cliente, 22/10/2026). **Só quem chama entra
+     * na consulta**, e não há um segundo argumento de pessoa a passar.
+     */
+    /**
+     * As arestas entre quem chama e uma lista de apelidos (22/10/2026). **A
+     * projeção do estado NÃO é daqui** — ver [construtorDasArestasPorApelido].
+     */
+    async arestasPorApelido(
+      quemChama: UserId,
+      apelidos: readonly string[],
+      agora: Instant,
+    ): Promise<readonly ArestaComApelido[]> {
+      const { rows } = await db.executeQuery(
+        construtorDasArestasPorApelido(db, quemChama, apelidos, agora),
+      );
+      return rows.map((linha) => ({
+        apelido: linha.handle,
+        aresta: {
+          // **`ref` vazio, e isto e deliberado.** Esta consulta nao seleciona
+          // `c.ref`: ele e o que deixa desfazer, e desfazer mora no perfil de
+          // uma pessoa -- nao numa lista. Quem consome e `estadoNoApp`, que le
+          // `estado`, `expiraEm` e `souQuemPediu`, e nunca o `ref`.
+          ref: '',
+          estado: linha.state,
+          souQuemPediu: linha.sou_quem_pediu,
+          pedidoEm: linha.requested_at.getTime() as Instant,
+          expiraEm: linha.expires_at.getTime() as Instant,
+          descansoAte:
+            linha.rest_until === null ? null : (linha.rest_until.getTime() as Instant),
+          outraPessoa: { apelido: linha.handle, nomeDeExibicao: null, canalVerificado: false },
+        },
+      }));
+    },
+
+    async conexoes(quemChama: UserId, recorte: RecorteDeConexoes): Promise<PaginaDeConexoes> {
+      const { rows } = await db.executeQuery(construtorDasConexoes(db, quemChama, recorte));
+      return {
+        itens: rows.map(comoPessoaConectada),
+        // `count(*) OVER ()` nao vem em pagina vazia -- nao ha linha que o
+        // carregue. Zero e a leitura certa, como na busca de pessoas.
         total: rows[0] === undefined ? 0 : comoNumero(rows[0].total),
       };
     },

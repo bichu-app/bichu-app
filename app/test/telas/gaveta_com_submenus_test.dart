@@ -1059,7 +1059,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 53 linhas, 17 destinos e 6 atalhos vivos', () {
+    test('o inventario de 27.5 tem 54 linhas, 18 destinos e 8 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -1117,11 +1117,18 @@ void main() {
       // elas mudaram de chave para `Rotas.rede`, que absorveu o conteudo. A
       // 27.5 e um INVENTARIO, e apagar linha porque a secao mudou de nome faz
       // o documento mentir sobre o que o produto tem.
+      // 53 -> 54 em 22/10/2026: `Conexoes` em `Perfil`, por DECISAO DO CLIENTE
+      // -- *"o usuario pode abrir a lista de usuarios que e sua conexao"*.
+      // **Linha NOVA e nao mudanca de estado**, e pela mesma razao das duas de
+      // 19/10: a UX 27.5.5 fechou em 21/09, e a lista das proprias conexoes era
+      // PROIBIDA por escrito ate 22/10 -- nao havia linha para subir, porque a
+      // decisao anterior dizia "nunca, nem ao dono". Ela nasce `existe` porque
+      // `TelaDeMinhasConexoes` e `/conexoes` entram no MESMO commit da linha.
       expect(
         todos.length,
-        53,
+        54,
         reason:
-            'REPROVA: o inventario de 27.5 saiu de 53 linhas e foi para '
+            'REPROVA: o inventario de 27.5 saiu de 54 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -1133,11 +1140,15 @@ void main() {
       // 15 -> 16 em 19/10: `Pedidos de conexao`, que e `destino` porque a tela
       // tem `Scaffold`, barra de saida e endereco proprio.
       // 16 -> 17 em 19/10: `Pessoas bloqueadas`, `destino` pelo mesmo motivo.
+      // 17 -> 18 em 22/10/2026: `Conexoes`, `destino` pelo mesmo motivo das
+      // outras -- a tela tem `Scaffold`, barra de saida e endereco proprio. Ela
+      // NAO e um bloco da aba, e nao e um terceiro segmento da tela de pedidos:
+      // as duas razoes estao no cabecalho de `TelaDeMinhasConexoes`.
       expect(
         destinos.length,
-        17,
+        18,
         reason:
-            'REPROVA: os destinos de MENU sairam de 17 e foram para '
+            'REPROVA: os destinos de MENU sairam de 18 e foram para '
             '${destinos.length}. A maioria das 48 linhas nunca foi item de '
             'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
             'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
@@ -1165,11 +1176,15 @@ void main() {
       // SEIS -> SETE em 19/10: `Pessoas bloqueadas` entrou `existe` COM rota,
       // pela mesma razao -- `TelaDeBloqueados` e `/perfil/bloqueados` entram no
       // mesmo commit da linha, e o caso de registro no roteador confere.
+      // SETE -> OITO em 22/10/2026: `Conexoes` entrou `existe` COM rota, e e a
+      // subida que a mensagem abaixo chama de caminho normal -- a tela do outro
+      // lado existe e esta registrada no roteador, o que o caso `toda rota de
+      // item vivo esta REGISTRADA no roteador` confere.
       expect(
         vivos.length,
-        7,
+        8,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 7 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 8 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',

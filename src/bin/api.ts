@@ -1319,12 +1319,22 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       contrato,
+      // 22/10/2026. A base de midia entrou com `listMyConnections`: ela e a
+      // primeira resposta de conexao a carregar FOTO, e a URL e montada na
+      // borda porque o banco guarda chave de objeto e nunca endereco.
+      baseDeMidia: config.mediaPublicBaseUrl,
     });
+    // 22/10/2026. A etiqueta `connections` passou a ter SEIS operacoes: o
+    // cliente emendou a propria decisao de 18/10 e autorizou a lista das
+    // PROPRIAS conexoes -- *"o usuario pode abrir a lista de usuarios que e sua
+    // conexao"*. A lista de TERCEIRO continua nao existindo.
+    //
     // 20/10/2026. O CONVITE DO PROPRIO PERFIL: emitir e revogar. O que alimenta
     // o link do WhatsApp e o QR -- que sao o MESMO token em dois transportes.
     //
     // Etiqueta `connection-invites` e nao `connections`, porque aquela e fechada
-    // em cinco operacoes e o portao cobra o numero exato.
+    // em SEIS operacoes e o portao cobra o numero exato. O ajuste de 22/10/2026
+    // abriu UMA operacao pelo nome, e nao o numero.
     registrarRotasDeConvite(escopo, {
       convites: new ConviteDoPerfil({
         convites: criarEmissorDeConvite(db, ids),
@@ -1350,7 +1360,15 @@ export async function main(): Promise<void> {
     // `perfil_ocultado_para_quem_denunciou` estao todas em `origin/development`,
     // e os indices trigrama vem da `20261020000012`.
     registrarRotasDeBuscaDePessoas(escopo, {
-      busca: new BuscaDePessoas({ busca: criarBuscaDePessoasRepository(db) }),
+      busca: new BuscaDePessoas({
+        busca: criarBuscaDePessoasRepository(db),
+        // O ESTADO DO PAR EM CADA RESULTADO (cliente, 22/10/2026), que conserta
+        // o botao de "pedir conexao" aparecendo ao lado de quem ja aceitou. A
+        // porta e `connections/ports/conexao.ts` e mais nenhuma camada de
+        // `connections` -- e o que `src/architecture.rules.mjs` impoe a `people`.
+        conexoes: criarLeitorDeConexao(conexoesDaComunidade),
+        clock: systemClock,
+      }),
       // A FOTO NO RESULTADO (cliente, 21/10/2026): a derivada `thumb`, com a
       // URL montada na borda a partir da chave de objeto.
       baseDeMidia: config.mediaPublicBaseUrl,

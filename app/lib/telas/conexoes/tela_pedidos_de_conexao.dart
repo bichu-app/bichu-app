@@ -18,19 +18,32 @@ import '../../widgets/selo_de_validado.dart';
 /// **Os pedidos de conexão.** A única tela desta fatia, e a lista que ela
 /// mostra é de **pedidos** — nunca de conexões.
 ///
-/// ## Por que não existe uma tela de "minhas conexões"
+/// ## A TELA DE "MINHAS CONEXÕES" PASSOU A EXISTIR EM 22/10/2026
 ///
-/// Porque a lista de conexões **não aparece a ninguém, nem a quem é
-/// conectado** (plano 4-B, decisão do cliente de 18/10/2026). Não é que ela
-/// ficou para depois: ela não existe no contrato, não existe no repositório e
-/// não existe aqui. O que o dono vê sobre as próprias conexões é o **número**,
-/// na linha de resumo do topo — e número não diz **quem**, que é exatamente a
-/// diferença que o torna mostrável onde a lista não é.
+/// Esta seção dizia *"Por que não existe uma tela de 'minhas conexões'"*, e
+/// explicava que a lista *"não aparece a ninguém, nem a quem é conectado"*
+/// (plano 4-B, decisão do cliente de 18/10/2026). **O cliente emendou a própria
+/// decisão**, literal: *"o usuário pode abrir a lista de usuários que é sua
+/// conexão"*.
 ///
-/// ## Por que não existe campo de busca
+/// Ela é `TelaDeMinhasConexoes`, em `tela_minhas_conexoes.dart`, com rota
+/// própria — **e não um terceiro segmento desta tela**. A razão é de desenho e
+/// está escrita lá: caixa de pedidos é o que **espera decisão**, e conexão
+/// aceita não espera nada. Um terceiro segmento ao lado de `Recebidos` e
+/// `Enviados` poria no mesmo controle duas perguntas diferentes.
 ///
-/// Busca de pessoas não existe neste produto: **o dano mora na enumeração**, não
-/// no perfil. O padrão de listagem desta casa põe busca, filtro e ordenação no
+/// **Esta tela não mudou de trabalho**: ela continua mostrando **pedidos**, e o
+/// que o dono vê aqui sobre as conexões aceitas continua sendo o **número**, na
+/// linha de resumo do topo. A isca `ISCA (b)` de
+/// `test/telas/pedidos_de_conexao_test.dart` continua valendo inteira, sem uma
+/// linha mudada: esta tela não pede `GET /connections` e não escreve
+/// "Conexões".
+///
+/// ## Por que não existe campo de busca AQUI
+///
+/// A busca de PESSOAS existe desde 20/10/2026, e ela é a aba `Usuários` da
+/// `Rede` — não esta tela. O que não cabe aqui é filtrar **pedidos** por pessoa:
+/// **o dano mora na enumeração**, não no perfil. O padrão de listagem desta casa põe busca, filtro e ordenação no
 /// topo do corpo da tela — e aqui o que cabe no topo é o **filtro** (qual caixa)
 /// e o resumo. Sem busca, e sem seletor de ordem: a ordem é fixa, mais recentes
 /// primeiro, porque qualquer recorte por pessoa aqui seria uma superfície de

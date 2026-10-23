@@ -9,14 +9,17 @@
  *
  * ## O que esta porta NÃO oferece, e não pode ganhar
  *
- * - **Nenhuma operação que devolva a LISTA de conexões de alguém.** Nem de
- *   terceiro, nem do próprio dono. Está no desenho (plano 4-B: *"Lista de
- *   conexões | nunca | nunca"*), e está aqui no código: não existe método que
- *   devolva um conjunto de pessoas. O que existe é **contagem** e o **predicado
- *   de par**.
+ * - **Nenhuma operação que devolva a LISTA de conexões de alguém**, nem do
+ *   próprio dono. Isto continua verdadeiro **depois** da emenda do cliente de
+ *   22/10/2026, e a razão é de fronteira: a lista das próprias conexões existe
+ *   (`listMyConnections`), mas ela é **do módulo**, servida por
+ *   `ConnectionsRepository.conexoes` à rota dele. **Nenhum outro módulo a
+ *   alcança**, porque esta porta — a única que os outros enxergam — não a
+ *   oferece. Quem precisasse dela de fora teria de **acrescentar método neste
+ *   arquivo**, que é o lugar onde alguém vê.
  * - **Nenhuma busca de pessoas, nenhuma sugestão, nenhuma enumeração.**
- * - **Nenhum `UserId` em saída.** Os dois métodos recebem contas e devolvem
- *   `boolean` ou `number`.
+ * - **Nenhum `UserId` em saída.** Os métodos recebem contas e devolvem
+ *   `boolean`, `number` ou estado de aresta.
  *
  * ## Quem consome
  *
@@ -29,6 +32,20 @@
  *   `ConexaoSobBloqueio`.
  */
 import type { EstadoNoApp } from '../domain/conexao.js';
+
+/**
+ * **O estado da aresta, REEXPORTADO pela porta** — e a reexportação é a
+ * fronteira funcionando, não conveniência.
+ *
+ * `src/architecture.rules.mjs` deixa `people` conversar com `connections`
+ * **só** por este arquivo, e o `eslint` reprova `people` importando
+ * `connections/domain` (medido em 22/10/2026: as duas bancadas da busca
+ * reprovaram em `arquitetura/fronteira-de-modulo` ao nomear `EstadoNoApp`
+ * direto do domínio). Quem consome [LeitorDeConexao.estadosPorApelido] precisa
+ * nomear o tipo do que recebe; sem esta linha, nomeá-lo seria furar a
+ * fronteira — ou a porta devolveria `string`, que é pior.
+ */
+export type { EstadoNoApp };
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 export interface LeitorDeConexao {
@@ -78,6 +95,49 @@ export interface LeitorDeConexao {
     outro: UserId,
     agora: Instant,
   ): Promise<ArestaVivaDoPar | undefined>;
+
+  /**
+   * **O estado da aresta entre `quemOlha` e CADA um destes apelidos**, numa
+   * consulta só. Apelido sem aresta viva simplesmente **não aparece no mapa**.
+   *
+   * ## Por que ela existe: o botão errado na busca
+   *
+   * O cliente relatou, por escrito: *"após eu ter aceito, ainda aparece para
+   * solicitar conexão a um usuário que ja foi adicionado e aceito"*. A causa era
+   * estrutural — `PersonSearchResult` omitia `connection_state` de propósito,
+   * porque *"numa lista, vinte estados por requisição são o material de que uma
+   * lista de conexões se faz do lado de fora"*. **Esse argumento caiu em
+   * 22/10/2026**, e caiu pela decisão do próprio cliente: com
+   * `listMyConnections` autorizada, o dono já obtém o conjunto das suas conexões
+   * por uma rota legítima, então devolvê-lo recortado nos resultados da busca
+   * **dele** não entrega nada novo.
+   *
+   * ## Três coisas que esta porta garante, e nenhuma é disciplina de quem chama
+   *
+   * 1. **Só o par com `quemOlha`.** O estado é entre quem olha e cada apelido, e
+   *    não há forma de perguntar a relação entre duas OUTRAS pessoas. Isto não
+   *    abre a lista de conexões de terceiro: quem chama já sabe quem são as
+   *    próprias conexões, e as de mais ninguém.
+   * 2. **A recusa continua silenciosa.** O estado sai de `estadoNoApp`, a MESMA
+   *    função de [arestaVivaEntre], e não de uma segunda regra escrita em SQL:
+   *    recusado se projeta como `pending_sent` para quem pediu enquanto a
+   *    validade corre, e desaparece depois — indistinguível de um pedido que
+   *    ninguém respondeu. **Não existe `declined` no vocabulário de saída.**
+   * 3. **Nenhum `UserId` e nenhum `ref` de aresta.** A chave do mapa é o
+   *    **apelido**, que quem chama já tinha na mão para perguntar. O `ref` fica
+   *    fora de propósito: ele é o que deixa desfazer, e desfazer mora no perfil
+   *    de uma pessoa — não numa lista que se rola com o polegar.
+   *
+   * **UMA consulta para a página inteira**, e não uma por pessoa: a Emenda 3 do
+   * ADR-0010 registra, para a foto na conversa, que perguntar a aresta por item
+   * seriam vinte idas ao banco por rolada. O mesmo vale aqui, e é por isso que o
+   * argumento é uma lista e não um apelido.
+   */
+  estadosPorApelido(
+    quemOlha: UserId,
+    apelidos: readonly string[],
+    agora: Instant,
+  ): Promise<ReadonlyMap<string, EstadoNoApp>>;
 }
 
 /** O que [LeitorDeConexao.arestaVivaEntre] devolve: estado e `ref` da ARESTA. */

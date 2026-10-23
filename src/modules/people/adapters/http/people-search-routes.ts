@@ -74,8 +74,10 @@ import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/
 import { problemas } from '../../../../shared/http/errors.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
-import type { BuscaDePessoas } from '../../application/busca-de-pessoas.js';
-import type { PessoaEncontrada } from '../../ports/busca-de-pessoas-repository.js';
+import type {
+  BuscaDePessoas,
+  PessoaEncontradaComEstado,
+} from '../../application/busca-de-pessoas.js';
 
 /**
  * **Os tetos são os do contrato, COPIADOS de lá**, e são DOIS — o mesmo arranjo
@@ -163,7 +165,20 @@ async function chamador(
 }
 
 /**
- * Uma pessoa como `PersonSearchResult` a declara: **quatro campos**.
+ * Uma pessoa como `PersonSearchResult` a declara: **seis campos**.
+ *
+ * **`connection_state` ENTROU EM 22/10/2026, e este cabeçalho dizia o
+ * contrário**: ele explicava a ausência com *"o estado é por par, e vinte
+ * estados por requisição é o material de que uma lista de conexões é feita do
+ * lado de fora"*. Aquele argumento caiu no dia em que o cliente autorizou a
+ * lista das próprias conexões — com `listMyConnections`, o dono já obtém o
+ * conjunto por uma rota legítima, e devolvê-lo recortado na busca **dele** não
+ * entrega nada novo. É o conserto do defeito que ele relatou: *"após eu ter
+ * aceito, ainda aparece para solicitar conexão a um usuário que ja foi
+ * adicionado e aceito"*.
+ *
+ * **`none` é a ausência, e `declined` não existe**: a projeção é `estadoNoApp`,
+ * a mesma do perfil, e a recusa continua silenciosa.
  *
  * **COM `photo_icon_url` desde 21/10/2026**, e este parágrafo dizia o
  * contrário: ele explicava a ausência pela emenda 5 item 2 do ADR-0010. **O
@@ -173,16 +188,15 @@ async function chamador(
  * piso de três caracteres, campo vazio não lista ninguém) estão no cabeçalho da
  * porta. **Sem `public_ref`**: ele existe em `PersonProfile`
  * porque aquela tela hospeda denunciar e bloquear, e esta não hospeda nenhuma
- * das três. **Sem `connection_state`**: o estado é por par, e vinte estados por
- * requisição é o material de que uma lista de conexões é feita do lado de fora.
- * **Sem UUID** (ADR-0010 item 6).
+ * das três. **Sem UUID** (ADR-0010 item 6). **Sem `connection_ref`**: o `ref` da
+ * aresta é o que deixa desfazer, e desfazer mora no perfil — não numa lista.
  *
  * **Exportada para a isca**, como `comoResposta` do perfil: nenhum portão deste
  * repositório confere o CORPO da resposta, então a única forma de medir o
  * conjunto de chaves em suíte é chamar a projeção.
  */
 export function comoRespostaDaPessoa(
-  pessoa: PessoaEncontrada,
+  pessoa: PessoaEncontradaComEstado,
   baseDeMidia: AbsoluteUrl,
 ): Record<string, unknown> {
   return {
@@ -190,6 +204,10 @@ export function comoRespostaDaPessoa(
     display_name: pessoa.displayName,
     pets_count: pessoa.petsCount,
     connections_count: pessoa.connectionsCount,
+    // O ESTADO DO PAR (22/10/2026). **Derivado no servidor e nunca recebido de
+    // quem chama**, como em `PersonProfile`. `none` e a ausencia de aresta que
+    // se projete, e ela funde os tres motivos de propósito.
+    connection_state: pessoa.estadoDaConexao,
     // A URL e montada AQUI, na borda, com o dominio de midia do ambiente -- o
     // banco guarda chave de objeto e nunca endereco (§11.1 proibicao 9). Mesma
     // divisao da conversa mediada e do autor de publicacao.

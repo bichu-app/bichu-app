@@ -93,7 +93,24 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// `bichu.app` 12, `app.bichu` 2, `BichuEspaco` 1048, `BichuColors` 231,
 /// `Bichu` 1979. O que mudou foi a QUANTIDADE DE LINHAS que citam a marca,
 /// por tela que enxugou e tela que cresceu, e nao a marca.
-const int ocorrenciasDeBichu = 2672;
+/// ATUALIZADO NA MESCLA DA ONDA 7 (22/10/2026): 2672 -> 2690. O saldo de +18
+/// foi medido ARQUIVO POR ARQUIVO entre `bdae03e1` (a `development`) e a
+/// arvore mesclada, e fecha exatamente num unico arquivo:
+///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO, 18 mencoes)
+///
+/// E a causa que a mensagem deste portao manda aceitar -- *arquivo novo que a
+/// cita* --, e nao substituicao descuidada: nenhum arquivo preexistente de
+/// `app/lib` mudou de contagem (a lista de diferencas tem UMA linha).
+/// O metodo da medicao tem CONTROLE POSITIVO: a mesma contagem, aplicada a
+/// `bdae03e1`, devolveu 2672 -- exatamente o numero que estava travado aqui.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`, `admin/src` nem `web/src`; em `app/test` as unicas
+/// ocorrencias sao a prosa deste proprio portao e do seu teste, e a unica de
+/// `src` esta dentro da palavra `perpetuo`. As ancoras da marca seguiram o
+/// arquivo novo, todas para cima e nenhuma para baixo -- `bichu.app` 12 -> 13,
+/// `app.bichu` 2 (igual), `BichuEspaco` 1048 -> 1062, `BichuColors` 231 -> 234.
+const int ocorrenciasDeBichu = 2690;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

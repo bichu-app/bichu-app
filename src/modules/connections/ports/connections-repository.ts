@@ -14,12 +14,28 @@
  * desabilitada de qualquer um dos dois lados e par bloqueado são o MESMO
  * `undefined`** — que a borda transforma no mesmo 404, nunca 403.
  *
- * ## Nenhum método devolve um conjunto de pessoas
+ * ## UM método devolve as conexões, e ele é DO PRÓPRIO DONO (22/10/2026)
  *
- * `pedidosRecebidos` e `pedidosEnviados` devolvem **pedidos**, que é outra
- * coisa: pedido pendente é um dos três caminhos que o desenho reconhece como
- * relação (plano 4-B), e sem saber quem pediu não se decide nada. **Não existe
- * método de listar conexões** — nem de terceiro, nem do próprio dono.
+ * Este cabeçalho dizia, até 22/10/2026, que *"não existe método de listar
+ * conexões — nem de terceiro, nem do próprio dono"*. **O cliente emendou a
+ * própria decisão de 18/10/2026**, literal: *"o usuário pode abrir a lista de
+ * usuários que é sua conexão"*. O método é [ConnectionsRepository.conexoes], e
+ * a emenda é exata:
+ *
+ * | | antes | agora |
+ * |---|---|---|
+ * | as PRÓPRIAS conexões | não existia método | [ConnectionsRepository.conexoes] |
+ * | as conexões de TERCEIRO | nunca | **continua não existindo** |
+ *
+ * **A lista de terceiro não é exprimível nesta porta, e isso não é disciplina:**
+ * `conexoes` recebe `quemChama` e devolve as conexões DELE, e não há um segundo
+ * argumento de pessoa para alguém passar. Quem quisesse a lista de outra conta
+ * teria de **acrescentar parâmetro neste arquivo**, que é exatamente o lugar
+ * onde alguém vê.
+ *
+ * `pedidos` continua devolvendo **pedidos**, que é outra coisa: `accepted` não
+ * entra em nenhuma das duas caixas, e é essa linha que mantém as duas listas
+ * separadas — a que espera decisão e a que já decidiu.
  */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { ArestaGuardada, OrigemDoPedido } from '../domain/conexao.js';
@@ -31,6 +47,57 @@ export type DirecaoDoPedido = 'received' | 'sent';
 export interface PaginaDePedidos {
   readonly itens: readonly ArestaGuardada[];
   readonly total: number;
+}
+
+/**
+ * **Uma pessoa na lista das PRÓPRIAS conexões** (cliente, 22/10/2026).
+ *
+ * Os **cinco** campos são os de `PessoaEncontrada` (a busca), e o limite é o
+ * mesmo de propósito: ser conexão aceita não abre campo nesta lista. O que o
+ * aceite abre está nas OUTRAS superfícies — a vitrine, o mural, o bairro no
+ * perfil —, cada uma com o próprio predicado. O portão
+ * `conexao-nao-expoe-lista-nem-identificador.test.ts` compara os dois conjuntos
+ * no contrato, por nome.
+ *
+ * **Nenhum `UserId`, nenhum `public_ref` e nenhum `ref` de aresta.** O que
+ * endereça cada linha é o **apelido**, que é o endereço do perfil; e desfazer
+ * não mora aqui, então o `ref` da aresta não tem dono nesta forma.
+ */
+export interface PessoaConectada {
+  /** O apelido. **Não anulável**: conexão sem apelido não tem perfil a abrir. */
+  readonly apelido: string;
+  /** O nome de exibição, **anulável** — a coluna é anulável em `users`. */
+  readonly nomeDeExibicao: string | null;
+  /** Quantos pets, **e nada além do número** (emenda 2 do ADR-0010). */
+  readonly petsCount: number;
+  /** Quantas conexões aceitas daquela pessoa. **O número, nunca a lista.** */
+  readonly connectionsCount: number;
+  /**
+   * A chave de objeto da derivada **`thumb`**, ou `null` sem foto pronta.
+   *
+   * **Chave, e não URL**: o banco guarda chave e a borda monta o endereço com a
+   * base de mídia do ambiente (§11.1 proibição 9). A mesma divisão de
+   * `PessoaEncontrada.photoKey`.
+   */
+  readonly photoKey: string | null;
+}
+
+/** Uma aresta guardada, com o apelido pelo qual ela foi perguntada. */
+export interface ArestaComApelido {
+  readonly apelido: string;
+  readonly aresta: ArestaGuardada;
+}
+
+/** Uma página das próprias conexões aceitas. Numerada, como as irmãs. */
+export interface PaginaDeConexoes {
+  readonly itens: readonly PessoaConectada[];
+  readonly total: number;
+}
+
+/** O recorte da lista das próprias conexões. **Sem pessoa, e sem termo.** */
+export interface RecorteDeConexoes {
+  readonly pagina: number;
+  readonly limite: number;
 }
 
 export interface RecortePedidos {
@@ -116,6 +183,40 @@ export interface ConnectionsRepository {
 
   /** Os pedidos de uma das duas caixas. Nunca conexões. */
   pedidos(quemChama: UserId, recorte: RecortePedidos): Promise<PaginaDePedidos>;
+
+  /**
+   * **As conexões ACEITAS de `quemChama` — as dele, e de mais ninguém**
+   * (cliente, 22/10/2026: *"o usuário pode abrir a lista de usuários que é sua
+   * conexão"*).
+   *
+   * **Não há argumento de pessoa**, e é isso que torna a lista de terceiro
+   * inexprimível em vez de proibida: o único `UserId` que entra é quem chama, e
+   * ele entra na cláusula `WHERE` (ADR-0021) como as duas pontas da aresta.
+   *
+   * Só `accepted`, com `conta_habilitada` nos **dois** lados — o mesmo recorte
+   * de [contagens], para que o total desta lista e `connected_count` não possam
+   * divergir. Pendente não entra: ele é das caixas de pedidos.
+   */
+  conexoes(quemChama: UserId, recorte: RecorteDeConexoes): Promise<PaginaDeConexoes>;
+
+  /**
+   * **As arestas entre `quemChama` e cada um destes apelidos**, numa consulta
+   * só. Serve a `LeitorDeConexao.estadosPorApelido` — o estado da conexão nos
+   * resultados da busca (22/10/2026).
+   *
+   * Devolve a aresta **guardada**, e não o estado do app: a projeção é
+   * `estadoNoApp`, e ela é do domínio deste módulo. Uma segunda definição dela
+   * em SQL seria a segunda resposta para "a recusa é silenciosa?" — e a segunda
+   * é a que alguém esquece de corrigir.
+   *
+   * O apelido vem no resultado porque é a chave com que quem chama perguntou;
+   * **nenhum `UserId` sai**.
+   */
+  arestasPorApelido(
+    quemChama: UserId,
+    apelidos: readonly string[],
+    agora: Instant,
+  ): Promise<readonly ArestaComApelido[]>;
 
   /** O predicado de par, para as fatias G e J. Ver `ports/conexao.ts`. */
   estaConectado(um: UserId, outro: UserId): Promise<boolean>;

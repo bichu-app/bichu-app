@@ -14,9 +14,17 @@
 /// - **Não há `declined`.** O contrato não manda recusa ao app: para quem
 ///   pediu, o recusado chega como `pending_sent`. Não existe estado, rótulo nem
 ///   ramo de tela para recusa, e a isca de `test/telas/` reprova se aparecer.
-/// - **Não há lista de conexões.** Não existe modelo de "minhas conexões", e
-///   não pode existir: a lista não aparece a ninguém, nem ao dono (plano 4-B).
-///   O que existe é [ResumoDeConexoes], que é só números.
+/// - **A LISTA DAS PRÓPRIAS CONEXÕES EXISTE DESDE 22/10/2026.** Este item dizia
+///   *"Não há lista de conexões. Não existe modelo de 'minhas conexões', e não
+///   pode existir"*, e dizia com razão — era a decisão do cliente de 18/10. **Ele
+///   emendou a própria decisão**, literal: *"o usuário pode abrir a lista de
+///   usuários que é sua conexão"*. O modelo é [PessoaConectada], e a página é
+///   [PaginaDeConexoes]. [ResumoDeConexoes] continua existindo ao lado dela: a
+///   tela diz *"Você tem N de 150 conexões"* com o número, e lista com a página.
+///
+///   **A lista de TERCEIRO continua não existindo**, e não há modelo para ela:
+///   `ConnectedPerson` é o que a conta recebe sobre as PRÓPRIAS conexões, e não
+///   existe operação que devolva as de outra pessoa.
 /// - **Não há "seguir".** Nenhum campo, nenhum estado, nenhuma contagem de
 ///   seguidores: a conexão é simétrica, e o grafo é um só.
 /// - **Não há avatar.** A lista fechada de onde o avatar pode aparecer é
@@ -154,6 +162,112 @@ class PaginaDePedidosDeConexao {
   }
 
   final List<Conexao> items;
+  final int total;
+  final int page;
+  final int limit;
+}
+
+/// `#/components/schemas/ConnectedPerson`.
+///
+/// **Uma pessoa na lista das PRÓPRIAS conexões** (cliente, 22/10/2026: *"o
+/// usuário pode abrir a lista de usuários que é sua conexão"*).
+///
+/// ## Os CINCO campos são os de [PessoaEncontrada], e isso é medido
+///
+/// Nome, apelido, contagem de pets, contagem de conexões e a foto — os mesmos
+/// de `PersonSearchResult`. **Ser conexão aceita não abre campo nesta lista**: o
+/// que o aceite abre está nas OUTRAS telas (a vitrine, o mural, o bairro no
+/// perfil), cada uma com o próprio predicado. O portão
+/// `conexao-nao-expoe-lista-nem-identificador.test.ts` compara os dois conjuntos
+/// no contrato, por nome.
+///
+/// **Classe própria e não reúso de [PessoaEncontrada]**, e a razão é de leitura
+/// de JSON: `PersonSearchResult` ganhou `connection_state` em 22/10/2026, e
+/// `ConnectedPerson` **não** o tem — nesta lista ele seria a constante
+/// `connected` em toda linha. Reusar a classe faria `doJson` procurar uma chave
+/// que esta resposta não manda.
+///
+/// **Nenhum identificador interno** (ADR-0010 item 6), e nenhum `ref` de
+/// aresta: desfazer mora no perfil, e é lá que `getPersonProfile` entrega o
+/// `ref`.
+class PessoaConectada {
+  const PessoaConectada({
+    required this.handle,
+    required this.displayName,
+    required this.petsCount,
+    required this.connectionsCount,
+    required this.photoIconUrl,
+  });
+
+  factory PessoaConectada.doJson(Map<String, dynamic> json) {
+    return PessoaConectada(
+      handle: json['handle'] as String,
+      displayName: json['display_name'] as String?,
+      petsCount: json['pets_count'] as int,
+      connectionsCount: json['connections_count'] as int,
+      photoIconUrl: json['photo_icon_url'] as String?,
+    );
+  }
+
+  /// O apelido. **Não anulável**: cada linha é uma porta para o perfil, e o
+  /// perfil é endereçado pelo apelido. Conexão sem apelido não entra na lista.
+  final String handle;
+
+  /// O nome de exibição, **anulável no contrato**. A tela cai para `@handle`.
+  final String? displayName;
+
+  /// **A contagem, e nada além do número** (emenda 2 do ADR-0010).
+  final int petsCount;
+
+  /// Quantas conexões aceitas **daquela pessoa**. O número, nunca a lista.
+  final int connectionsCount;
+
+  /// A derivada **`thumb`** da foto, ou nulo quando não há foto pronta.
+  final String? photoIconUrl;
+
+  /// Como a pessoa é escrita na linha. **O nome primeiro, o apelido é a
+  /// queda** — a mesma regra de `PessoaEncontrada.nomeParaLer`, porque a linha
+  /// leva ao perfil e duas telas chamando a mesma pessoa por nomes diferentes
+  /// seria o app duvidando de si mesmo no meio de uma navegação.
+  String get nomeParaLer {
+    final nome = displayName;
+    if (nome != null && nome.trim().isNotEmpty) return nome;
+    return '@$handle';
+  }
+
+  /// A letra do círculo, que é o que substitui a foto quando não há.
+  String get inicial {
+    final texto = nomeParaLer.replaceFirst('@', '').trim();
+    if (texto.isEmpty) return '?';
+    return texto.substring(0, 1).toUpperCase();
+  }
+}
+
+/// `#/components/schemas/ConnectedPersonPage`.
+///
+/// **A segunda coleção de pessoas desta família**, depois de
+/// [PaginaDePedidosDeConexao], e a única de conexões ACEITAS. `total` é o
+/// conjunto inteiro e não a página: a tela mostra quantas conexões a conta tem
+/// e pagina de 20 em 20.
+class PaginaDeConexoes {
+  const PaginaDeConexoes({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.limit,
+  });
+
+  factory PaginaDeConexoes.doJson(Map<String, dynamic> json) {
+    final crus = (json['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+    return PaginaDeConexoes(
+      items: crus.map(PessoaConectada.doJson).toList(growable: false),
+      total: json['total'] as int,
+      page: json['page'] as int,
+      limit: json['limit'] as int,
+    );
+  }
+
+  final List<PessoaConectada> items;
   final int total;
   final int page;
   final int limit;

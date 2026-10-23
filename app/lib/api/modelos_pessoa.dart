@@ -243,6 +243,7 @@ class PessoaEncontrada {
     required this.petsCount,
     required this.connectionsCount,
     required this.photoIconUrl,
+    this.estadoDaConexao,
   });
 
   factory PessoaEncontrada.doJson(Map<String, dynamic> json) {
@@ -252,6 +253,16 @@ class PessoaEncontrada {
       petsCount: json['pets_count'] as int,
       connectionsCount: json['connections_count'] as int,
       photoIconUrl: json['photo_icon_url'] as String?,
+      // **`none` VIRA NULO, e nao um valor de enum.** `EstadoDaConexao` nao
+      // tem `none` -- ele e a AUSENCIA de aresta, e o cartao ja trata nulo
+      // como "nenhuma relacao". Acrescentar `none` ao enum mudaria a caixa de
+      // pedidos, onde "nenhuma relacao" nao e um estado possivel.
+      //
+      // E codigo DESCONHECIDO tambem cai em nulo, por `porCodigo`: nao ha
+      // valor seguro para onde cair, e a tela nao afirma nada sobre um estado
+      // que nao entende. Ela volta a oferecer `Pedir conexao`, e o servidor
+      // recusa se precisar -- que e a ordem certa de errar.
+      estadoDaConexao: EstadoDaConexao.porCodigo(json['connection_state'] as String?),
     );
   }
 
@@ -274,6 +285,38 @@ class PessoaEncontrada {
   /// Quantas conexões aceitas. **O número, nunca a lista** — é o "sinal de
   /// confiança" do plano 4-B.
   final int connectionsCount;
+
+  /// **A RELAÇÃO ENTRE QUEM BUSCA E ESTA PESSOA** — `connection_state`, que
+  /// entrou no contrato em **22/10/2026**.
+  ///
+  /// ## O defeito que este campo conserta
+  ///
+  /// O cliente relatou, por escrito: *"após eu ter aceito, ainda aparece para
+  /// solicitar conexão a um usuário que ja foi adicionado e aceito"*. A causa
+  /// era **estrutural**: `PersonSearchResult` omitia o estado de propósito, e o
+  /// contrato dizia por quê — *"numa lista, vinte estados por requisição são o
+  /// material de que uma lista de conexões se faz do lado de fora"*. Sem ele, o
+  /// cartão não tinha como saber que o aceite já havia acontecido, e desenhava
+  /// `Pedir conexão` ao lado de quem já era conexão.
+  ///
+  /// **O argumento caiu no dia em que o cliente autorizou a lista das próprias
+  /// conexões** (22/10/2026): com `GET /connections`, o dono já obtém o
+  /// conjunto por uma rota legítima, então o estado nos resultados da busca
+  /// **dele** não entrega nada novo.
+  ///
+  /// ## Nulo é `none`, e nulo é também "não entendi"
+  ///
+  /// `EstadoDaConexao` tem três valores e **não tem `none`**: a ausência de
+  /// aresta é a ausência do valor. Os dois caminhos que dão nulo — o servidor
+  /// mandando `none`, e o servidor mandando um código que este build não
+  /// conhece — levam ao MESMO cartão de estranho, com `Pedir conexão`. É a
+  /// ordem certa de errar: a ação continua oferecida e o servidor recusa se
+  /// precisar.
+  ///
+  /// **Nunca `declined`.** O servidor projeta a recusa como `pending_sent` para
+  /// quem pediu enquanto a validade corre, e depois ela desaparece — e por isso
+  /// não há rótulo nem ramo de tela para recusa.
+  final EstadoDaConexao? estadoDaConexao;
 
   /// A **derivada `thumb`** da foto da pessoa, ou nulo quando não há foto
   /// pronta.

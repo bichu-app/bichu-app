@@ -89,6 +89,13 @@ function montar(opcoes: { conviteResolve: boolean; pessoaExiste?: boolean }) {
     estaConectado: () => Promise.resolve(false),
     contarConexoes: () => Promise.resolve(7),
     arestaVivaEntre: (): Promise<ArestaVivaDoPar | undefined> => Promise.resolve(undefined),
+    // **O perfil NAO usa `estadosPorApelido`**, e o dublê o declara levantando:
+    // a porta ganhou o metodo em 22/10/2026 para a BUSCA, e um dublê que o
+    // respondesse em silencio deixaria passar um perfil que começasse a
+    // perguntar estado em lote -- vinte idas ao banco por tela de uma pessoa.
+    estadosPorApelido: () => {
+      throw new Error('o perfil de UMA pessoa nao pergunta estado em lote');
+    },
   };
   const convites: ResolvedorDeConvite = {
     resolver: () =>

@@ -224,7 +224,19 @@ class _EstadoDoCartaoDePessoaEncontrada
   /// perfil: `none` não existe em [EstadoDaConexao], e confundir "nenhuma
   /// relação" com "não entendi o estado" faria a tela desenhar o cartão de
   /// estranho para um valor que o servidor passou a mandar.
-  EstadoDaConexao? _estado;
+  ///
+  /// **ELE NASCE DO RESULTADO DA BUSCA DESDE 22/10/2026, e antes nascia
+  /// SEMPRE NULO.** É este `= widget.pessoa.estadoDaConexao` que conserta o
+  /// defeito que o cliente relatou — *"após eu ter aceito, ainda aparece para
+  /// solicitar conexão a um usuário que ja foi adicionado e aceito"*. Ver
+  /// [PessoaEncontrada.estadoDaConexao] para por que o campo existe agora e não
+  /// antes.
+  ///
+  /// **`late final` seria errado, e `initState` é o lugar.** O campo continua
+  /// mutável porque [_agir] o relê do que o servidor devolveu: a pessoa pode
+  /// pedir, aceitar ou desfazer sem sair da lista, e aí o valor do resultado da
+  /// busca ficou velho.
+  late EstadoDaConexao? _estado = widget.pessoa.estadoDaConexao;
 
   /// O `ref` da **aresta**, nunca da pessoa. Nulo quando não há aresta viva.
   String? _ref;

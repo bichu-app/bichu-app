@@ -14,6 +14,7 @@ import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'conexoes/tela_minhas_conexoes.dart';
 import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
@@ -1003,6 +1004,18 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: 'Pedidos de conexão',
               aoTocar: () => context.push(Rotas.pedidosDeConexao),
+            ),
+            // `Conexoes` (22/10/2026), por decisao do cliente: *"o usuario pode
+            // abrir a lista de usuarios que e sua conexao"*.
+            //
+            // **Logo DEPOIS dos pedidos, e a ordem e deliberada**: o pedido e o
+            // que espera decisao e a conexao e o que ja decidiu, entao a ordem
+            // do menu segue a do tempo. E as DUAS linhas existem porque sao
+            // DOIS destinos -- `gaveta_de_secoes.dart` proibe dois nomes para o
+            // mesmo lugar, e aqui ha um nome por lugar.
+            ItemDeMenu(
+              rotulo: TelaDeMinhasConexoes.titulo,
+              aoTocar: () => context.push(Rotas.minhasConexoes),
             ),
             // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
             //

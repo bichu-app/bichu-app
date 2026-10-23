@@ -241,6 +241,18 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     motivo: 'AMBIGUA, mesma conta.',
   ),
   (
+    nome: 'as minhas conexoes',
+    endereco: '/conexoes',
+    padrao: '/conexoes',
+    motivo: 'AMBIGUA, mesma conta -- e ela nasceu em 22/10/2026, por decisao do '
+        'cliente: *"o usuario pode abrir a lista de usuarios que e sua '
+        'conexao"*. E LISTA, o que puxa para primeiro plano, e e aberta por '
+        '`ItemDeMenu` no corpo do Perfil e pela gaveta -- que e o que decide, '
+        'como em `Meus achados` e nos pedidos de conexao. Se o cliente quiser '
+        'alguma das nove no primeiro plano, esta e candidata ao lado de '
+        '`Meus eventos`.',
+  ),
+  (
     nome: 'minhas indicacoes',
     endereco: '/rede/indicacoes',
     padrao: '/rede/indicacoes',

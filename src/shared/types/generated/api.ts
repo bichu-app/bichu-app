@@ -3851,7 +3851,56 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * A lista das PROPRIAS conexoes aceitas
+         * @description **A lista das conexoes do proprio dono, e de mais ninguem.** Decisao do
+         *     cliente de 22/10/2026, literal:
+         *
+         *     > *"o usuario pode abrir a lista de usuarios que e sua conexao"*
+         *
+         *     ## ISTO EMENDA UMA DECISAO DELE MESMO, DE 18/10/2026
+         *
+         *     Ate 22/10/2026 este contrato dizia, em quatro lugares, que a lista de
+         *     conexoes **nao aparecia a ninguem, nem ao dono** -- a etiqueta
+         *     `connections`, a descricao de `listMyConnectionRequests`, o
+         *     `adr/ADR-0010` e a tabela 4-B do plano. **O cliente emendou a propria
+         *     decisao**, e a emenda e exata: a **propria** lista passou de *nunca* a
+         *     *pode*; a lista de **terceiro** continua *nunca*.
+         *
+         *     **Nao existe, e nao pode nascer, a lista de conexoes de outra pessoa.**
+         *     Nao ha parametro de pessoa aqui, nao ha caminho `/people/{handle}/
+         *     connections`, e `conexao-nao-expoe-lista-nem-identificador.test.ts`
+         *     reprova qualquer das duas formas. O motivo da proibicao nunca foi o
+         *     dono: *"a lista, mostrada a um estranho, entregaria a rede social de
+         *     alguem a quem nao tem relacao com ela"* (ADR-0010).
+         *
+         *     ## QUEM SAI, e e so quem aceitou
+         *
+         *     **So `accepted`, e so do chamador.** Pendente **nao** entra aqui -- ele
+         *     vive nas duas caixas de `listMyConnectionRequests`, e misturar os dois
+         *     faria a lista responder "quem sao minhas conexoes" com gente que ainda
+         *     nao decidiu. Conta desabilitada de qualquer um dos dois lados sai da
+         *     lista sem a linha ser apagada, como ja sai de `connected_count`.
+         *
+         *     **A autorizacao e a clausula `WHERE`** (ADR-0021): nao existe consulta
+         *     aqui que alcance a aresta de quem nao e uma das duas pontas, e por isso
+         *     nao existe caminho que produza 403. Quem nao tem conta recebe **401**; o
+         *     que nao e seu e indistinguivel do que nao existe.
+         *
+         *     ## O RECORTE DE CADA PESSOA E O MESMO DA BUSCA
+         *
+         *     `ConnectedPerson` traz os **cinco** campos de `PersonSearchResult` --
+         *     nome, apelido, contagem de pets, contagem de conexoes e a foto (esta por
+         *     decisao do cliente de 21/10/2026, que tambem emendou uma decisao dele
+         *     mesmo). **Nenhum identificador interno** (ADR-0010 item 6): nem UUID,
+         *     nem `public_ref`, nem `connection_ref`.
+         *
+         *     **O limite e o MESMO de proposito, e ele e medido**: o portao compara os
+         *     dois conjuntos de propriedades por nome. Ser conexao aceita nao abre
+         *     campo que a busca nao da -- o que o aceite abre esta nas OUTRAS
+         *     superficies (a vitrine, o mural, o perfil), e nao aqui.
+         */
+        get: operations["listMyConnections"];
         put?: never;
         /**
          * Pedir conexao a partir de um convite
@@ -3902,13 +3951,22 @@ export interface paths {
          * @description Uma das **duas caixas de pedidos** da propria conta: `received` (o que
          *     chegou e espera decisao) e `sent` (o que a conta enviou).
          *
-         *     **Esta NAO e a lista de conexoes, e a lista de conexoes nao existe neste
-         *     contrato** -- nem de terceiro, nem do proprio dono. Pedido aceito **nao
-         *     aparece em nenhuma das duas caixas**, e e essa linha que impede a lista
-         *     de conexoes de nascer por descuido dentro de uma caixa de pedidos. O que
-         *     o dono tem sobre as proprias conexoes e a **contagem**, em
-         *     `getMyConnectionSummary`: contagem nao diz QUEM, e e essa diferenca que
-         *     a torna publicavel onde a lista nao e.
+         *     **Esta NAO e a lista de conexoes.** Pedido aceito **nao aparece em
+         *     nenhuma das duas caixas**, e a separacao continua valendo: caixa de
+         *     pedidos e o que espera decisao, e conexao aceita nao espera nada.
+         *
+         *     **A LISTA DE CONEXOES PASSOU A EXISTIR EM 22/10/2026**, e este
+         *     paragrafo dizia o contrario -- ele afirmava que *"a lista de conexoes
+         *     nao existe neste contrato -- nem de terceiro, nem do proprio dono"*. **O
+         *     cliente emendou a propria decisao de 18/10/2026**, literal: *"o usuario
+         *     pode abrir a lista de usuarios que e sua conexao"*. Ela e
+         *     `listMyConnections` (`GET /connections`), **so do proprio dono**, e a
+         *     lista de TERCEIRO continua nao existindo.
+         *
+         *     O que o dono tem sobre as proprias conexoes, alem da lista, e a
+         *     **contagem**, em `getMyConnectionSummary`: contagem nao diz QUEM, e e
+         *     essa diferenca que a torna publicavel no perfil de terceiro, onde a
+         *     lista nao e.
          *
          *     `received` traz so pendente vivo. `sent` traz pendente **e recusado**
          *     dentro da validade, os dois com `state: pending_sent` -- e e assim que a
@@ -7343,6 +7401,110 @@ export interface components {
          */
         ConnectionRequestPage: {
             items: components["schemas"]["Connection"][];
+            total: number;
+            page: number;
+            limit: number;
+        };
+        /**
+         * @description Uma pessoa **na lista das proprias conexoes** (`listMyConnections`,
+         *     decisao do cliente de 22/10/2026).
+         *
+         *     ## O RECORTE E O MESMO DE `PersonSearchResult`, E ISSO E MEDIDO
+         *
+         *     Os **cinco** campos sao os cinco da busca: nome, apelido, contagem de
+         *     pets, contagem de conexoes e a foto. **Nao e coincidencia nem copia por
+         *     simetria estetica**: o portao
+         *     `conexao-nao-expoe-lista-nem-identificador.test.ts` compara os dois
+         *     conjuntos de propriedades por nome, e um campo que entrasse aqui sem
+         *     entrar la reprova.
+         *
+         *     **Ser conexao aceita nao abre campo nesta lista.** O que o aceite abre
+         *     esta nas OUTRAS superficies -- a vitrine de fotos, o mural, o bairro no
+         *     perfil --, e cada uma delas tem o proprio predicado. Uma lista de
+         *     conexoes que mostrasse mais que a busca faria o aceite pagar duas vezes,
+         *     e o segundo pagamento seria num lugar que ninguem decidiu.
+         *
+         *     ## O QUE NAO ENTRA
+         *
+         *     **Nenhum identificador interno** (ADR-0010 item 6): nem UUID, nem
+         *     `public_ref`, nem `connection_ref`. As tres ausencias tem dono:
+         *
+         *     | Nao sai | Por que |
+         *     |---|---|
+         *     | `public_ref` | ele existe em `PersonProfile` porque AQUELA tela hospeda denunciar e bloquear, enderecados por `userRef`. Esta lista nao hospeda nenhuma das tres, e referencia publica sem uso e superficie de graca |
+         *     | `connection_ref` | o `ref` da aresta e o que deixa desfazer sem uma segunda leitura, e **desfazer nao mora aqui**: quem quer desfazer abre o perfil, onde `getPersonProfile` ja entrega o `ref`. Trazer o `ref` de 20 arestas por requisicao poria o botao de desfazer numa lista que a pessoa rola com o polegar |
+         *     | `connection_state` | nesta lista ele seria a constante `connected` em toda linha, por construcao. Campo que nunca varia nao carrega informacao, e seria uma segunda fonte de verdade sobre o que a lista inteira ja quer dizer |
+         *
+         *     **Nao sai `contact_channel_verified`**, ao contrario de
+         *     `ConnectionPerson`: aquele e o selo da caixa de PEDIDOS, onde a pessoa
+         *     decide se aceita um estranho e o selo e um dos sinais dessa decisao.
+         *     Aqui a decisao ja foi tomada.
+         */
+        ConnectedPerson: {
+            /**
+             * @description O apelido. **Nao e anulavel aqui**, como em `PersonSearchResult` e ao
+             *     contrario de `ConnectionPerson.handle`: a consulta le `handles`, e e
+             *     o apelido o endereco do perfil que cada linha abre. Conexao de quem
+             *     nao tem apelido nao tem para onde levar, e nao entra na lista.
+             */
+            handle: string;
+            /**
+             * @description O nome de exibicao. **Primeiro nome ou apelido**, nunca sobrenome
+             *     (ADR-0010 item 3). **Anulavel**, pela mesma razao de
+             *     `PersonSearchResult`: a coluna e anulavel em `users`, e sumir com a
+             *     conexao por falta de nome a apagaria da lista por um campo que ela
+             *     nao preencheu. A tela cai para `@handle`.
+             */
+            display_name: string | null;
+            /**
+             * @description **Quantos pets, e nada alem do numero** (emenda 2 do ADR-0010).
+             *     Nenhum atributo de pet acompanha: nome, miniatura, slug e link
+             *     continuam proibidos pelo item 7.
+             */
+            pets_count: number;
+            /**
+             * @description Quantas conexoes aceitas **daquela pessoa**. **O numero, nunca a
+             *     lista** -- e aqui a distincao e a propria emenda de 22/10/2026: o
+             *     dono abre a lista DELE, e o que ele ve de cada conexao continua
+             *     sendo a contagem DELA. A lista de terceiro continua nao existindo.
+             */
+            connections_count: number;
+            /**
+             * Format: uri
+             * @description A foto da pessoa, derivada **`thumb`** -- a MESMA escolha e o MESMO
+             *     nome de `PersonSearchResult.photo_icon_url` (cliente, 21/10/2026). A
+             *     `card` custa cerca de 51 KB por rosto, e numa lista que a pessoa
+             *     rola isso e rede e memoria.
+             *
+             *     **Nulo quando nao ha foto pronta, e a chave vem SEMPRE**: o
+             *     predicado e `status = 'ready'` e `thumb_key IS NOT NULL`, na
+             *     clausula `WHERE`. A tela cai para a inicial no circulo.
+             */
+            photo_icon_url: string | null;
+        };
+        /**
+         * @description A pagina das **proprias** conexoes aceitas. Numerada com total, como as
+         *     outras listagens desta casa.
+         *
+         *     **E a SEGUNDA colecao de pessoas da familia da conexao**, depois de
+         *     `ConnectionRequestPage`, e e a unica de conexoes ACEITAS. As duas
+         *     existem por razoes diferentes, e o portao nomeia as duas: a de pedidos
+         *     porque sem saber quem pediu nao se decide nada, e esta porque o cliente
+         *     a pediu em 22/10/2026. **Nenhuma terceira nasce sem passar pelo portao.**
+         */
+        ConnectedPersonPage: {
+            items: components["schemas"]["ConnectedPerson"][];
+            /**
+             * @description Quantas conexoes aceitas a propria conta tem. **Sai da MESMA
+             *     consulta que `items` pagina**, por `count(*) OVER ()`, e nao de uma
+             *     segunda: duas consultas com os mesmos predicados sao duas chances de
+             *     a pagina e o total discordarem sem nada acusar.
+             *
+             *     E o mesmo numero de `ConnectionSummary.connected_count`, e tem de
+             *     ser -- os dois contam `accepted` com `conta_habilitada` nos dois
+             *     lados. Numeros diferentes na mesma tela seriam dois predicados
+             *     divergindo.
+             */
             total: number;
             page: number;
             limit: number;
@@ -11113,8 +11275,8 @@ export interface components {
             contact_channel_verified: boolean;
         };
         /**
-         * @description Uma pessoa como a BUSCA a entrega: **quatro campos, e nada mais**
-         *     (decisao do cliente de 20/10/2026).
+         * @description Uma pessoa como a BUSCA a entrega: **seis campos, e nada mais**
+         *     (decisao do cliente de 20/10/2026, emendada em 21/10 e em 22/10/2026).
          *
          *     **O recorte e LIMITE e nao escolha de tela**, e cada ausencia tem dono.
          *     Compare com `PersonProfile`, que tem sete campos: as tres diferencas
@@ -11123,8 +11285,41 @@ export interface components {
          *     | Falta aqui | Esta em `PersonProfile` porque |
          *     |---|---|
          *     | `public_ref` | AQUELA tela hospeda denunciar e bloquear, e as tres operacoes sao enderecadas por `userRef`. A busca nao hospeda nenhuma das tres, e referencia publica sem uso e superficie de graca |
-         *     | `connection_state` | o perfil e de UMA pessoa. Numa lista, vinte estados por requisicao sao o material de que uma lista de conexoes se faz do lado de fora |
-         *     | `connection_ref` | idem: `ref` de aresta existe quando ha aresta, e resultado de busca e lista de quem ainda nao e conexao |
+         *     | `connection_ref` | `ref` de aresta e o que deixa DESFAZER, e desfazer mora no perfil de uma pessoa -- nao numa lista que se rola com o polegar. Quem desfaz abre o perfil, e `getPersonProfile` entrega o `ref` la |
+         *
+         *     ## `connection_state` SAI AQUI DESDE 22/10/2026, E ISSO CONSERTA UM DEFEITO
+         *
+         *     **Ate 22/10/2026 este schema NAO tinha o estado**, e a ausencia citava,
+         *     por escrito, que *"numa lista, vinte estados por requisicao sao o
+         *     material de que uma lista de conexoes se faz do lado de fora"*.
+         *
+         *     **Aquele argumento caiu, e caiu por decisao do proprio cliente**: em
+         *     22/10/2026 ele autorizou a lista das PROPRIAS conexoes
+         *     (`listMyConnections`), literal: *"o usuario pode abrir a lista de
+         *     usuarios que e sua conexao"*. Com a lista autorizada, o dono ja obtem o
+         *     conjunto das suas conexoes por uma rota legitima, entao devolve-lo
+         *     recortado nos resultados da busca DELE **nao entrega nada novo**.
+         *
+         *     **O que ele conserta** e um defeito que o cliente relatou e que nao
+         *     tinha conserto possivel antes: *"apos eu ter aceito, ainda aparece para
+         *     solicitar conexao a um usuario que ja foi adicionado e aceito"*. Sem o
+         *     estado, a tela nao tinha como saber que o aceite ja aconteceu, e
+         *     desenhava o botao de pedir ao lado de quem ja era conexao.
+         *
+         *     ### O QUE O ESTADO NAO ABRE, e cada linha e o mesmo par
+         *
+         *     | | |
+         *     |---|---|
+         *     | e sempre o par com **quem busca** | nunca a relacao entre duas OUTRAS pessoas, entao nao e a lista de conexoes de terceiro por outra porta |
+         *     | `pending_sent`, `pending_received` | ja estavam nas duas caixas de `listMyConnectionRequests` |
+         *     | `connected` | ja esta em `listMyConnections` desde 22/10/2026 |
+         *     | ausencia (`none`) | funde "nunca houve nada", "o pendente expirou" e "a recusa esta em descanso" -- nao afirma nada sobre ninguem |
+         *     | **nunca `declined`** | a projecao e `estadoNoApp`, a MESMA do perfil: a recusa sai como `pending_sent` para quem pediu enquanto a validade corre, e depois desaparece |
+         *
+         *     **Uma consulta para a pagina inteira**, e nao uma por resultado: ver
+         *     `LeitorDeConexao.estadosPorApelido`. Nenhuma pessoa a mais entra na
+         *     busca por causa deste campo -- os seis predicados da clausula `WHERE`
+         *     sao os mesmos, e quem nao aparece continua sem aparecer.
          *
          *     ## A FOTO SAI AQUI, E ISSO EMENDA A EMENDA 5 ITEM 2 (21/10/2026)
          *
@@ -11156,9 +11351,10 @@ export interface components {
          *
          *     ### O QUE **NAO** mudou junto
          *
-         *     Quatro campos passaram a cinco, e **nada alem da foto entrou**:
-         *     `public_ref` continua fora, `connection_state` continua fora, e nenhum
-         *     UUID entra (ADR-0010 item 6). A derivada e a **menor** que existe --
+         *     Quatro campos passaram a cinco, e **nada alem da foto entrou naquele
+         *     dia**: `public_ref` continua fora e nenhum UUID entra (ADR-0010 item 6).
+         *     `connection_state` entrou **no dia seguinte**, por outra decisao dele --
+         *     ver a secao abaixo. A derivada e a **menor** que existe --
          *     `thumb` --, e nao ha estado de moderacao: foto que nao esta `ready` nao
          *     sai, e por isso nao ha estado a desenhar.
          */
@@ -11191,6 +11387,29 @@ export interface components {
              *     *"Lista de conexoes | nunca | nunca"*). E o "sinal de confianca".
              */
             connections_count: number;
+            /**
+             * @description **A relacao entre quem busca e esta pessoa** -- decisao do cliente de
+             *     22/10/2026, junto com `listMyConnections`. **Derivada no servidor** e
+             *     nunca recebida de quem chama.
+             *
+             *     **A MESMA lista de valores de `PersonProfile.connection_state`, e
+             *     pelas mesmas razoes.** Ela esta escrita em linha, e nao por `$ref`,
+             *     porque `none` nao existe em `ConnectionAppState`: acrescenta-lo la
+             *     mudaria a caixa de pedidos, onde "nenhuma relacao" nao e um estado
+             *     possivel.
+             *
+             *     `none` cobre junto "nunca houve nada", "o pedido expirou" e "a recusa
+             *     ainda esta em descanso", e a fusao e deliberada pela mesma razao do
+             *     204 de `endConnection`: um valor proprio para recusado seria o *"ela
+             *     recusou voce"* que o desenho nao da. **Nao existe `declined`** neste
+             *     enum, e nao e omissao -- a projecao e `estadoNoApp`.
+             *
+             *     **Para que ele serve na tela**: o botao. Sem ele a busca desenhava
+             *     *"Pedir conexao"* ao lado de quem ja era conexao aceita, que e o
+             *     defeito que o cliente relatou.
+             * @enum {string}
+             */
+            connection_state: "none" | "pending_sent" | "pending_received" | "connected";
             /**
              * Format: uri
              * @description **A foto da pessoa, para desempatar nomes parecidos** -- decisao do
@@ -19339,6 +19558,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyNetworkEventJoinRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyConnections: {
+        parameters: {
+            query?: {
+                page?: number;
+                /** @description O mesmo teto de 20 por pagina das irmas. Com 150 conexoes no maximo, sao 8 paginas. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pagina das proprias conexoes aceitas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectedPersonPage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

@@ -30,6 +30,7 @@ import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
 import '../telas/conexoes/convide_tutores.dart';
+import '../telas/conexoes/tela_minhas_conexoes.dart';
 import '../telas/conexoes/tela_pedidos_de_conexao.dart';
 import '../telas/seguranca/tela_de_bloqueados.dart';
 import '../api/pessoas_api.dart';
@@ -368,6 +369,22 @@ abstract final class Rotas {
 
   /// `Pedidos de conexao` (18/10/2026): as duas caixas, recebidos e enviados.
   static const String pedidosDeConexao = '/conexoes/pedidos';
+
+  /// **`Conexoes` (22/10/2026): a lista das PROPRIAS conexoes aceitas.**
+  ///
+  /// Decisao do cliente, literal: *"o usuario pode abrir a lista de usuarios
+  /// que e sua conexao"* -- e ela emenda uma decisao dele mesmo, de 18/10/2026,
+  /// que dizia que a lista nao aparecia a ninguem, nem ao dono.
+  ///
+  /// **Rota propria, e nao um parametro de [pedidosDeConexao]**: caixa de
+  /// pedidos e o que espera decisao, e conexao aceita nao espera nada. O
+  /// raciocinio inteiro esta no cabecalho de `TelaDeMinhasConexoes`.
+  ///
+  /// **`/conexoes` e nao `/conexoes/minhas`**: nao existe, e nao pode existir,
+  /// `/conexoes/<apelido>` -- a lista de TERCEIRO continua "nunca". Com uma so
+  /// lista possivel, o qualificador "minhas" no endereco sugeriria que ha
+  /// outra.
+  static const String minhasConexoes = '/conexoes';
 
   /// **O PERFIL DE OUTRA PESSOA** (19/10/2026, fatia G).
   ///
@@ -1454,6 +1471,14 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.pedidosDeConexao,
         builder: (context, estado) =>
             TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
+      ),
+      // AS PROPRIAS CONEXOES (22/10/2026). Rota IRMA da de pedidos, e nao
+      // filha: as duas respondem perguntas diferentes, e o cabecalho de
+      // `TelaDeMinhasConexoes` tem as tres razoes.
+      GoRoute(
+        path: Rotas.minhasConexoes,
+        builder: (context, estado) =>
+            TelaDeMinhasConexoes(conexoes: Escopo.of(context).conexoes),
       ),
       // PESSOAS BLOQUEADAS (19/10/2026). A porta e construida AQUI a partir do
       // `ApiClient` do `Escopo`, como a da vitrine e as do perfil de pessoa:

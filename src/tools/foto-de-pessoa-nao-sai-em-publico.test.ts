@@ -160,10 +160,10 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     const linhas = contrato.match(/^\s+photo_icon_url:\s*$/gm) ?? [];
     assert.equal(
       linhas.length,
-      3,
-      'o número de declarações de `photo_icon_url` mudou. TRÊS são as emendas 3, 5 e a ' +
-        'de 21/10/2026 (o resultado da busca); QUEM SÃO está no caso da lista fechada, ' +
-        'e é lá que uma quarta reprova',
+      4,
+      'o número de declarações de `photo_icon_url` mudou. QUATRO são as emendas 3, 5, a ' +
+        'de 21/10/2026 (o resultado da busca) e a de 22/10/2026 (a lista das PRÓPRIAS ' +
+        'conexões); QUEM SÃO está no caso da lista fechada, e é lá que uma quinta reprova',
     );
     const conversa = JSON.stringify(spec.components.schemas['Conversation']);
     assert.match(conversa, /photo_icon_url/, 'a emenda 3 perdeu o hospedeiro dela');
@@ -256,7 +256,7 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     assert.equal(ocorrencias.length, 2, 'um `photo:` a mais é uma superfície a mais');
   });
 
-  void it('`photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao TRES', () => {
+  void it('`photo_icon_url` tem uma LISTA FECHADA de hospedeiros, e sao QUATRO', () => {
     // **ESTE CASO SUBSTITUI UMA CONTAGEM POR UMA LISTA, e a diferença é o
     // ponto.** Até 20/10/2026 a emenda 3 tinha UM hospedeiro e um `assert.equal`
     // de contagem bastava. A emenda 5 trouxe o segundo, e subir o número de 1
@@ -304,6 +304,18 @@ void describe('a foto de pessoa não sai em resposta pública (contrato)', () =>
     assert.deepEqual(
       hospedeiros.sort(),
       [
+        // **O QUARTO HOSPEDEIRO (22/10/2026), e ele exige conexao ACEITA -- por
+        // construcao.** O cliente emendou a propria decisao de 18/10/2026,
+        // literal: *"o usuario pode abrir a lista de usuarios que e sua
+        // conexao"*. Esta lista e `listMyConnections`, e **todo mundo nela ja
+        // aceitou quem chama**: a clausula `WHERE` cobra `state = 'accepted'`
+        // com as duas pontas sendo quem chama e a pessoa.
+        //
+        // Por isso ele e MENOS exposto que o terceiro, e nao mais: a emenda de
+        // 21/10 abriu a foto para quem NAO e conexao (o resultado da busca), e
+        // esta a abre para quem JA e. Se a lista um dia deixar de cobrar
+        // `accepted`, esta entrada tem de sair com o predicado.
+        'components.schemas.ConnectedPerson',
         // Emenda 3 (19/10/2026): a conversa mediada, entre conexões aceitas.
         // Objeto INLINE, e é por isso que a varredura desce a árvore.
         'components.schemas.Conversation.properties.participants.items',
