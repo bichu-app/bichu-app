@@ -238,10 +238,10 @@ void main() {
           'única coisa que esta aba existe para fazer.',
     );
     expect(
-      find.text('0 pessoas'),
+      find.text('0 usuários'),
       findsNothing,
       reason: 'REPROVA: a tela escreveu uma contagem antes de alguém buscar. '
-          '"0 pessoas" ali é a tela afirmando um resultado que ninguém pediu.',
+          '"0 usuários" ali é a tela afirmando um resultado que ninguém pediu.',
     );
   });
 
@@ -1013,7 +1013,7 @@ void main() {
         reason: 'REPROVA: a busca de linha de base nao desenhou a pessoa, '
             'entao o caso nao tem o que medir.',
       );
-      expect(find.text('1 pessoa'), findsOneWidget);
+      expect(find.text('1 usuário'), findsOneWidget);
 
       final buscasAntes = _buscas;
       await tester.enterText(find.byType(TextField).first, 'li');
@@ -1035,7 +1035,7 @@ void main() {
             'errada, e foi exatamente o que o cliente descreveu.',
       );
       expect(
-        find.text('1 pessoa'),
+        find.text('1 usuário'),
         findsNothing,
         reason: 'REPROVA: a contagem da busca anterior ficou na tela.',
       );

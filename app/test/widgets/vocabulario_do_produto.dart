@@ -73,7 +73,27 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// Medido em 22/10/2026 sobre `4a8cf72d`, antes e depois das tres trocas, com
 /// o mesmo resultado -- que e a prova de que as trocas nao tocaram a marca.
-const int ocorrenciasDeBichu = 2675;
+///
+/// ATUALIZADO NA MESCLA DA ONDA 6 (22/10/2026): 2675 -> 2672. O numero acima
+/// foi medido sobre `4a8cf72d` + a troca de vocabulario SOZINHA; a arvore
+/// mesclada tem mais sete entradas, e quatro delas mexeram em arquivos de
+/// `app/lib` que citam a marca. O saldo de -3 foi medido ARQUIVO POR ARQUIVO,
+/// comparando a ponta do vocabulario (aa0be5df) com o commit de mescla, e
+/// fecha exatamente:
+///   -4  telas/mural/publicar_no_mural.dart      (19 -> 15)
+///   -11 telas/perto/lista_do_diretorio.dart     (42 -> 31)
+///   +5  telas/perto/pagina_do_local.dart        (132 -> 137)
+///   +7  widgets/visualizador_de_imagem.dart     (16 -> 23)
+///   +0  sessao/localizacao_da_sessao.dart       (arquivo novo, 0 mencoes)
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, e isso foi medido e nao suposto:
+/// `petu` nao aparece em `app/lib`, `app/test`, `src`, `admin/src` nem
+/// `web/src` (as unicas ocorrencias sao a prosa deste proprio portao, que
+/// descreve a armadilha), e as ancoras da marca estao todas de pe --
+/// `bichu.app` 12, `app.bichu` 2, `BichuEspaco` 1048, `BichuColors` 231,
+/// `Bichu` 1979. O que mudou foi a QUANTIDADE DE LINHAS que citam a marca,
+/// por tela que enxugou e tela que cresceu, e nao a marca.
+const int ocorrenciasDeBichu = 2672;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
