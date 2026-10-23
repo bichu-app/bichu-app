@@ -413,12 +413,33 @@ void describe('o aviso de pedido de conexao, contra um Postgres de verdade', () 
           'esta no `WHERE` e a recusa e 404 e NUNCA 403 (ADR-0021) -- um 403 confirmaria que ' +
           'aquele `ref` existe, e no caso de um pedido de conexao confirmaria que ele foi feito',
       );
+      // A comparacao e do corpo INTEIRO menos `correlation_id` e `instance`, e
+      // as duas excecoes sao medidas e nao conveniencia: o primeiro e o id da
+      // REQUISICAO (um por chamada, por desenho) e o segundo e a URL chamada,
+      // que o chamador ja conhece porque foi ele que a escreveu. Nenhum dos
+      // dois diz nada sobre o `ref`. Tudo o mais -- `type`, `title`, `status`,
+      // `detail`, `errors` -- tem de bater, porque e ai que um oraculo moraria:
+      // um 404 com `detail` diferente continua contando, so mais discreto.
+      const POR_REQUISICAO = new Set(['correlation_id', 'instance']);
+      const semOQueEhPorRequisicao = (corpo: Record<string, unknown>): string =>
+        JSON.stringify(
+          Object.entries(corpo)
+            .filter(([chave]) => !POR_REQUISICAO.has(chave))
+            .sort(([a], [b]) => a.localeCompare(b)),
+        );
       assert.equal(
-        alheio.cru,
-        inexistente.cru,
-        'REPROVA: o 404 do aviso ALHEIO difere do 404 do `ref` que nunca existiu. Um 404 com ' +
-          '`detail` diferente continua sendo um oraculo, so mais discreto -- e a mesma licao de ' +
+        semOQueEhPorRequisicao(alheio.corpo),
+        semOQueEhPorRequisicao(inexistente.corpo),
+        'REPROVA: o 404 do aviso ALHEIO difere do 404 do `ref` que nunca existiu em algo que ' +
+          'nao e `correlation_id` nem `instance`. Um 404 com `detail` diferente continua sendo ' +
+          'um oraculo, so mais discreto -- a mesma licao de ' +
           '`indistinguibilidade-do-pedido-por-apelido.test.ts`',
+      );
+      assert.deepEqual(
+        Object.keys(alheio.corpo).sort(),
+        Object.keys(inexistente.corpo).sort(),
+        'REPROVA: os dois 404 nao tem os MESMOS campos. Um campo presente so num deles e um ' +
+          'oraculo pela forma do corpo, sem precisar de valor nenhum',
       );
 
       // CONTRAPESO: o caminho FUNCIONA para quem e dono, na mesma execucao --
@@ -444,9 +465,21 @@ void describe('o aviso de pedido de conexao, contra um Postgres de verdade', () 
         WHERE id = $1`,
       [fonte.idDaAresta],
     );
-    // Garante o estado de partida: o aviso existe e esta LIDO (caso 5 o marcou).
+    // O ESTADO DE PARTIDA E MONTADO AQUI, e nao herdado do caso 5. Herdar
+    // tornaria este caso dependente da ORDEM, e uma reprovacao no caso 5 viraria
+    // uma reprovacao aqui que nao fala do mecanismo deste caso -- foi o que
+    // aconteceu na primeira medicao, e um caso que reprova pelo defeito do
+    // vizinho e um caso que nao se consegue ler.
+    const refDoAviso = oAviso((await caixaDe(recebedor)).linhas).ref;
+    const marcada = await chamar('POST', `/me/notifications/${refDoAviso}/read`, recebedor);
+    assert.equal(marcada.status, 204, 'REPROVA: nao consegui marcar o aviso como lido');
     const antes = oAviso((await caixaDe(recebedor)).linhas);
-    assert.equal(antes.read, true, 'REPROVA: a linha de partida deste caso nao esta lida');
+    assert.equal(
+      antes.read,
+      true,
+      'REPROVA: a linha nao ficou lida depois do 204. Sem o estado de partida este caso nao ' +
+        'consegue afirmar que o pedido REFEITO zerou `read_at`',
+    );
 
     const refeito = await pedirConexao(pedinte, recebedor, new Date());
     assert.notEqual(
