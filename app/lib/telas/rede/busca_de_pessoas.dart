@@ -64,23 +64,74 @@ import 'cartao_de_pessoa_encontrada.dart';
 /// recortar, o lugar é aqui e os dois parâmetros voltam a ter valor** — nada
 /// mais precisa mudar.
 ///
-/// ## A BUSCA NÃO ACONTECE A CADA TECLA, e isso é medido
+/// ## A BUSCA DISPARA AO DIGITAR, COM ESPERA — e a espera É o freio
 ///
-/// [BarraDeListagem] não tem *debounce*: ela aplica na lupa e no
-/// `TextInputAction.search`, e **nada dispara ao digitar**. A prosa do contrato
-/// supõe o contrário (*"a tela chama a busca a cada tecla"*), e o desenho desta
-/// casa ganha, por duas medições:
+/// **Esta seção substitui a que justificava a ausência de *debounce*, e a
+/// reversão é do cliente (22/10/2026).** O que havia antes era medido e
+/// continua registrado abaixo; o que ele viu foi outra coisa — digitou o nome,
+/// nada aconteceu, e concluiu que a busca não funciona. Medido no aparelho no
+/// mesmo dia, por contadores de rede com controle positivo e negativo: digitar
+/// `souza` não gerava **um byte**; tocar a lupa gerava. O servidor estava certo
+/// em tudo (`q=lima` → `total=1`, acento casando nos dois sentidos, a foto
+/// saindo, 401 sem token).
 ///
-/// 1. **O servidor instalado responde 400 abaixo de três caracteres**, e não
-///    lista vazia como a prosa do contrato promete: o vigia de parâmetros copia
-///    o `minLength: 3` para o `querystring` da rota. Busca a cada tecla
-///    mostraria faixa vermelha no meio de alguém escrevendo um nome. (O app não
-///    chega a esse ponto: [PessoasApi.buscar] não pergunta abaixo do piso.)
-/// 2. **O teto é de 60 consultas por hora por conta.** Uma tecla por consulta
-///    gasta o teto de uma pessoa normal em poucos nomes.
+/// A tela agora busca **por pausa de digitação, nunca por letra**:
+/// [BuscaDePessoas.esperaAntesDeBuscar], 400 ms depois da última tecla. **A
+/// lupa continua existindo e continua aplicando na hora** — quem não quer
+/// esperar toca, e o toque cancela a espera pendente para que um pedido não
+/// custe duas consultas.
 ///
-/// E a lupa **não habilita** abaixo do piso, o que faz o freio ser visível em
-/// vez de silencioso — o nome acessível dela diz quantas letras faltam.
+/// **Os três freios de 20/10/2026 não mudaram de lugar**: só dispara acima do
+/// piso de [PessoasApi.minimoDaBusca], campo vazio nunca lista ninguém, e a
+/// lupa continua não habilitando abaixo do piso — o nome acessível dela diz
+/// quantas letras faltam, e desde 22/10 **a tela escreve a mesma contagem**
+/// (ver [_explicacaoDoVazio]).
+///
+/// ### UMA DAS DUAS JUSTIFICATIVAS ANTIGAS MORREU
+///
+/// A prosa daqui dava duas razões. **A primeira deixou de ser verdade**: ela
+/// dizia que *"o servidor instalado responde 400 abaixo de três caracteres"*, e
+/// isso foi consertado — hoje a rota responde **200 com lista vazia**
+/// (`o-piso-da-busca-nao-recusa-na-borda.test.ts` no lado do servidor; medido
+/// de ponta a ponta em 22/10 com `q=a` e `q=ab`). Buscar ao digitar já não
+/// mostraria faixa vermelha no meio de alguém escrevendo um nome. **Ela saiu
+/// daqui porque passou a mentir.**
+///
+/// **A segunda é a que decide, e é a única que vale: o teto de 60 consultas
+/// por hora por conta.** Está em `people-search-routes.ts`, na entrada
+/// `rateLimit` da dimensão `[account, q]` de `searchPeople` — e `q` ali marca
+/// **presença** de busca e não o termo digitado, então as 60 contam *toda*
+/// consulta e não as repetições de um termo. (A outra entrada, `[account]` com
+/// 120/h, é o teto da rota.) Buscar a cada letra queimaria o teto em segundos.
+///
+/// **A espera é exatamente o que respeita esse teto**: ela faz uma *pausa* — e
+/// não uma letra — valer uma consulta.
+///
+/// ### DE ONDE VEM 400 ms: o que foi medido, e o que não foi
+///
+/// A espera **não é escolha de gosto nem duração de animação**. Medido na
+/// bancada em 22/10/2026 (o arquivo de medição não ficou; os números abaixo são
+/// o que ele imprimiu), com `souza` digitado letra por letra:
+///
+/// | o que | medido |
+/// |---|---|
+/// | a borda da espera | 399 ms depois da tecla → **0** consultas; 400 ms → **1** |
+/// | `souza` a 80, 150, 250, 350 ou 399 ms por tecla | **1** consulta — 60 nomes por hora de teto |
+/// | `souza` a 400, 450 ou 600 ms por tecla | **3** consultas — 20 nomes por hora |
+/// | `souza` com a espera em `Duration.zero` | **3** consultas (as duas primeiras letras estão abaixo do piso e nunca perguntam) |
+///
+/// **A medição mostra que a espera é o orçamento de cadência, um para um**: ela
+/// absorve exatamente as pausas menores que ela, e um nome digitado mais devagar
+/// do que isso volta a custar três consultas — o mesmo que não ter espera
+/// nenhuma. Daí o número: 400 ms compra a faixa inteira até 399 ms por tecla;
+/// 300 ms compraria só até 299, e deixaria quem digita entre 300 e 399 ms por
+/// tecla pagando triplo sem saber por quê. **A escolha de 400 e não de 300 é
+/// julgamento e não medição** — ver o parágrafo seguinte.
+///
+/// **O que NÃO foi medido, e por isso não está afirmado aqui**: a cadência real
+/// de digitação de uma pessoa neste produto, e o tempo de ida e volta da rota
+/// no aparelho — as duas coisas decidiriam o limite de cima da espera, e
+/// nenhuma das duas sai de uma bancada de widget.
 ///
 /// ## O CARTÃO NÃO TEM FOTO, e o contrato não tem o campo
 ///
@@ -104,6 +155,7 @@ class BuscaDePessoas extends StatefulWidget {
   const BuscaDePessoas({
     required this.pessoas,
     required this.conexoes,
+    required this.logado,
     super.key,
   });
 
@@ -114,6 +166,27 @@ class BuscaDePessoas extends StatefulWidget {
   final PessoasApi pessoas;
 
   final ConexoesApi conexoes;
+
+  /// Há sessão agora. **Entra como DADO, e não como ramo de desenho.**
+  ///
+  /// Esta aba desenha o mesmo corpo logada e deslogada, e quem decide o que
+  /// aparece continua sendo a resposta do servidor — `secao_da_rede.dart` diz,
+  /// e continua valendo, que ramificar o corpo por `logado` criaria a segunda
+  /// regra de "quem pode buscar". Não é isso que este campo faz: ele não
+  /// escolhe widget nenhum. Ele existe porque **a mudança de sessão invalida o
+  /// estado da busca**, e o estado da busca mora aqui dentro — ver
+  /// [_EstadoDaBuscaDePessoas.didUpdateWidget] para o defeito que isso
+  /// conserta.
+  final bool logado;
+
+  /// Quanto a tela espera, depois da última tecla, antes de buscar.
+  ///
+  /// **400 ms, e o número está justificado na seção "A BUSCA DISPARA AO
+  /// DIGITAR, COM ESPERA" do cabeçalho desta classe.** Não é gosto, e não é
+  /// animação: é o que transforma uma *pausa* em uma consulta, que é como o
+  /// teto de 60/h continua sendo respeitado depois de a busca passar a
+  /// disparar ao digitar.
+  static const Duration esperaAntesDeBuscar = Duration(milliseconds: 400);
 
   /// O rótulo do campo. Diz **as duas coisas que a busca aceita**, porque uma
   /// pessoa que não sabe que o apelido serve busca pelo nome e desiste.
@@ -188,8 +261,66 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
   bool _visivel = false;
   bool _cargaAgendada = false;
 
+  /// A espera em curso entre a última tecla e a busca, ou nulo.
+  ///
+  /// **Cancelada em `dispose`**, e isso não é zelo: um `Timer` pendente quando
+  /// a árvore cai reprova a bancada inteira com *"a Timer is still pending"*,
+  /// e no aparelho ele buscaria para uma tela que já saiu.
+  Timer? _espera;
+
+  /// O texto da última notificação que MEXEU no texto.
+  ///
+  /// [TextEditingController] avisa também quando só a seleção ou o cursor
+  /// muda — tocar no campo, mover o caret, perder o foco. Sem esta comparação
+  /// cada um desses avisos reiniciaria a espera, e a busca de quem parou de
+  /// digitar e tocou no próprio texto nunca sairia.
+  String _ultimoTexto = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _campo.addListener(_aoDigitar);
+  }
+
   @override
   Future<void> aoArrastarParaAtualizar() => _recarregar();
+
+  /// **ENTRAR NA CONTA INVALIDA O ESTADO DA BUSCA.** Conserta um defeito medido.
+  ///
+  /// Reproduzido em 22/10/2026: deslogado, buscar `lima` responde 401, o corpo
+  /// troca para [ConviteParaEntrar], a pessoa entra pela porta `Entrar` e volta
+  /// à aba — e a aba **continuava desenhando o convite, já logada**, com a lupa
+  /// morta. Tocar nela não gerava byte nenhum.
+  ///
+  /// A causa não era o convite: era `_podeAplicar` de
+  /// [CampoDeBuscaDaListagem]. [_termoAplicado] tinha ficado com `'lima'` do
+  /// 401, o texto digitado continuava `'lima'`, e "o digitado é igual ao
+  /// aplicado" é precisamente a condição em que a lupa **não** habilita. O
+  /// único jeito de sair era mudar o texto.
+  ///
+  /// **O conserto é na causa**: [_termoAplicado] é o termo que PRODUZIU a lista
+  /// que está na tela, e uma lista produzida sem conta não é a lista desta
+  /// conta. Quando a sessão muda, aquele termo deixou de ter produzido coisa
+  /// alguma, e [_limparABusca] é o que diz isso. O texto digitado fica — a
+  /// pessoa escreveu e não apagou —, e com o aplicado em nulo a lupa volta a
+  /// habilitar sem ninguém mexer numa letra.
+  ///
+  /// **Vale nos dois sentidos**, e sair é o mesmo argumento: a lista da conta
+  /// que saiu não é lista de quem ficou no aparelho.
+  ///
+  /// **A tela não busca sozinha aqui.** Entrar na conta não é pedir uma busca,
+  /// e gastar uma das 60 consultas da hora por um login seria a tela decidindo
+  /// pela pessoa. O que ela recupera é a capacidade de pedir.
+  @override
+  void didUpdateWidget(BuscaDePessoas anterior) {
+    super.didUpdateWidget(anterior);
+    if (anterior.logado == widget.logado) return;
+    _espera?.cancel();
+    _limparABusca();
+    // O teto de pedidos da conta nova não é o da anterior, e deslogado ele
+    // nem pôde ser lido.
+    _agendarLeituraDoTeto();
+  }
 
   @override
   void didChangeDependencies() {
@@ -217,6 +348,8 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
 
   @override
   void dispose() {
+    _espera?.cancel();
+    _campo.removeListener(_aoDigitar);
     _campo.dispose();
     super.dispose();
   }
@@ -287,7 +420,72 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     }
   }
 
+  /// A reação à tecla: **agenda**, e nunca busca na hora.
+  ///
+  /// Os três freios de 20/10/2026 continuam aqui, e nenhum deles mudou de
+  /// lugar: acima do piso de [PessoasApi.minimoDaBusca] e **só** acima dele;
+  /// campo vazio não agenda nada; e uma consulta por **pausa**, não por letra.
+  ///
+  /// O ramo abaixo do piso faz a segunda coisa que o cliente pediu em
+  /// 22/10/2026: **o resultado velho sai da tela**. Medido antes do conserto:
+  /// com `li` no campo a aba seguia mostrando *"1 pessoa — Ana Souza"* da busca
+  /// anterior, com a lupa apagada e sem dizer por quê — *"digita um nome novo,
+  /// toca, e aparece a pessoa errada"*. [_limparABusca] é o que tira a lista, e
+  /// o que ocupa o lugar dela diz quantas letras faltam (ver
+  /// [_explicacaoDoVazio]).
+  void _aoDigitar() {
+    final texto = _campo.text;
+    if (texto == _ultimoTexto) return;
+    _ultimoTexto = texto;
+    _espera?.cancel();
+
+    final digitado = texto.trim();
+    if (digitado.length < PessoasApi.minimoDaBusca) {
+      // Nada é agendado, e o que estava na tela sai. `setState` no ramo de
+      // baixo porque a contagem de letras que falta é desenhada no corpo e
+      // muda a cada tecla, mesmo quando não havia lista para limpar.
+      if (_termoAplicado != null || _fase != _Fase.antesDeBuscar) {
+        _limparABusca();
+      } else {
+        setState(() {});
+      }
+      return;
+    }
+
+    // Já é esta a lista na tela: a espera não existe para repetir a consulta
+    // que acabou de sair.
+    if (digitado == _termoAplicado) {
+      setState(() {});
+      return;
+    }
+
+    _espera = Timer(BuscaDePessoas.esperaAntesDeBuscar, () {
+      if (!mounted) return;
+      // **Relê o campo no fim da espera, e não usa o termo de quando ela
+      // começou.** As duas divergem sempre que a última tecla chega durante a
+      // espera, que é o caso comum de digitar um nome.
+      final termo = _campo.text.trim();
+      if (termo.length < PessoasApi.minimoDaBusca) return;
+      if (termo == _termoAplicado) return;
+      unawaited(_buscar(termo));
+    });
+    setState(() {});
+  }
+
+  /// A explicação do vazio: a contagem de letras **quando ela existe**.
+  ///
+  /// **A frase não é escrita aqui.** Ela vem de [ControleDeBusca.faltamLetras],
+  /// que é a mesma que o nome acessível da lupa já dizia — uma redação só, e
+  /// esta tela só a põe de pé. Nulo acima do piso e com campo vazio, e aí o
+  /// vazio volta a ser o de abertura.
+  String? _explicacaoDoVazio() {
+    final faltam = _controleDaBusca().faltamLetras;
+    if (faltam == null) return null;
+    return '${faltam[0].toUpperCase()}${faltam.substring(1)}.';
+  }
+
   void _limparABusca() {
+    _espera?.cancel();
     setState(() {
       _fase = _Fase.antesDeBuscar;
       _termoAplicado = null;
@@ -349,6 +547,11 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
       termoAplicado: _termoAplicado,
       minimoDeCaracteres: PessoasApi.minimoDaBusca,
       aoAplicar: (termo) {
+        // **A LUPA CONTINUA APLICANDO NA HORA**, e cancela a espera: quem não
+        // quer esperar os 400 ms toca, e a espera pendente buscaria o mesmo
+        // termo de novo logo depois — duas consultas do mesmo teto para um
+        // pedido só.
+        _espera?.cancel();
         if (termo == null) {
           _limparABusca();
           return;
@@ -425,11 +628,17 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
         // **CAMPO VAZIO NÃO LISTA NINGUÉM.** Não há chamada, não há lista e não
         // há "sugestões de quem seguir": um estado inicial povoado seria a
         // listagem de pessoas que a reversão não autorizou.
-        return const <Widget>[
-          SizedBox(height: BichuEspaco.e8),
+        //
+        // **E É AQUI QUE O RESULTADO VELHO NÃO ESTÁ.** Abaixo do piso a tela
+        // cai nesta fase (ver [_aoDigitar]), então a lista anterior saiu — e a
+        // explicação troca para a contagem de letras que falta, em vez de
+        // repetir "toque na lupa" sobre uma lupa que não pode habilitar.
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e8),
           EstadoVazio(
             titulo: BuscaDePessoas.tituloAntesDeBuscar,
-            explicacao: BuscaDePessoas.explicacaoAntesDeBuscar,
+            explicacao:
+                _explicacaoDoVazio() ?? BuscaDePessoas.explicacaoAntesDeBuscar,
           ),
         ];
 

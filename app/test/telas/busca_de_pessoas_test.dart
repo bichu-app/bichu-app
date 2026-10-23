@@ -34,6 +34,7 @@ import 'package:bichu/telas/rede/busca_de_pessoas.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/faixa_de_aviso.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -98,12 +99,41 @@ final List<String> chamadas = <String>[];
 /// Os corpos enviados, para a isca de que o pedido vai por APELIDO.
 final List<String> corpos = <String>[];
 
+/// A sessao da bancada. Trocar o valor refaz a aba **no mesmo lugar da
+/// arvore**, que e a condicao do defeito do estado preso: o `State` sobrevive,
+/// e com ele o `_termoAplicado` do 401.
+final ValueNotifier<bool> sessao = ValueNotifier<bool>(true);
+
+/// A casca que leva a troca de sessao a aba, como `secao_da_rede.dart` faz com
+/// o `AnimatedBuilder` sobre o `ControladorDeSessao`.
+class _AbaComSessao extends StatelessWidget {
+  const _AbaComSessao({required this.pessoas, required this.conexoes});
+
+  final PessoasApi pessoas;
+  final ConexoesApi conexoes;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: sessao,
+      builder: (context, logado, _) => BuscaDePessoas(
+        pessoas: pessoas,
+        conexoes: conexoes,
+        logado: logado,
+      ),
+    );
+  }
+}
+
 Future<void> _montar(
   WidgetTester tester, {
   List<Map<String, dynamic>> resultados = const <Map<String, dynamic>>[],
   int restamHoje = 7,
   String estadoDoPedido = 'pending_sent',
+  bool logado = true,
+  int statusDaBusca = 200,
 }) async {
+  sessao.value = logado;
   chamadas.clear();
   corpos.clear();
   AppConfig.limparParaTeste();
@@ -114,7 +144,24 @@ Future<void> _montar(
     if (caminho.endsWith('/connections/summary')) {
       return _json(_resumo(restamHoje: restamHoje));
     }
-    if (caminho.endsWith('/people')) return _json(_pagina(resultados));
+    if (caminho.endsWith('/people')) {
+      if (statusDaBusca != 200) {
+        // **O 401 DESTA BANCADA VAI SEM `next_action`, E ISSO E DELIBERADO.**
+        //
+        // Com `sign_in` no corpo, `faltaConta` fica verdadeiro e o corpo troca
+        // para `ConviteParaEntrar` -- que le `Escopo.of(context).sessao` e
+        // ESTOURA aqui, porque esta aba e montada por parametro justamente
+        // para nao construir as vinte e oito dependencias do escopo. O que o
+        // caso de estado preso mede e `_termoAplicado`, que fica igual nos dois
+        // ramos: o da faixa e o do convite passam pelo mesmo `catch`.
+        return _json(<String, dynamic>{
+          'type': 'about:blank',
+          'title': 'unauthenticated',
+          'status': statusDaBusca,
+        }, status: statusDaBusca);
+      }
+      return _json(_pagina(resultados));
+    }
     if (caminho.endsWith('/connections') && pedido.method == 'POST') {
       return _json(<String, dynamic>{
         'ref': 'aresta-1',
@@ -141,7 +188,7 @@ Future<void> _montar(
       theme: BichuTheme.claro,
       home: Scaffold(
         body: SingleChildScrollView(
-          child: BuscaDePessoas(
+          child: _AbaComSessao(
             pessoas: PessoasApi(api),
             conexoes: ConexoesApi(api),
           ),
@@ -798,6 +845,7 @@ void main() {
             child: BuscaDePessoas(
               pessoas: PessoasApi(api),
               conexoes: ConexoesApi(api),
+              logado: true,
             ),
           ),
         ),
@@ -816,5 +864,358 @@ void main() {
       reason: 'REPROVA: a falha de leitura do resumo escondeu a ação. "Não '
           'consegui perguntar" não é "o teto fechou".',
     );
+  });
+  // ===========================================================================
+  // OS TRES CONSERTOS DE 22/10/2026
+  //
+  // O cliente concluiu que a busca nao funciona porque digitar nao fazia nada.
+  // Medido no aparelho no mesmo dia, por contadores de rede com controle
+  // positivo e negativo: digitar `souza` nao gerava **um byte**; tocar a lupa
+  // gerava. O servidor estava certo em tudo -- `q=lima` devolvia `total=1`,
+  // acento casava nos dois sentidos, `q=a` e `q=ab` devolviam lista vazia com
+  // 200, e sem token dava 401.
+  //
+  // Os tres casos abaixo sao, em ordem: a busca que dispara ao digitar e nao a
+  // cada letra; o resultado velho que sai da tela abaixo do piso; e a lupa que
+  // volta a viver depois de alguem entrar na conta.
+  // ===========================================================================
+
+  group('CONSERTO 1 -- dispara ao digitar, COM espera', () {
+    testWidgets('acima do piso, UMA busca sai depois da espera', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: apague
+      // `_campo.addListener(_aoDigitar);` de `BuscaDePessoas.initState`.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'ana-souza', nome: 'Ana Souza'),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'souza');
+      await tester.pump();
+
+      // CONTROLE NEGATIVO DA ESPERA: antes dela vencer nao ha consulta. Sem
+      // esta metade, "uma busca" tambem passaria para uma tela que buscasse na
+      // tecla, e seria o teto de 60/h que pagaria a conta.
+      expect(
+        _buscas,
+        0,
+        reason: 'REPROVA: a busca saiu NA TECLA, sem esperar a pausa. Cada '
+            'letra vira uma consulta do teto de 60/h, e `souza` sozinho '
+            'custaria tres.',
+      );
+
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        _buscas,
+        0,
+        reason: 'REPROVA: a espera venceu antes dos 400 ms declarados em '
+            '`BuscaDePessoas.esperaAntesDeBuscar`.',
+      );
+
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO: a consulta sai, e o resultado chega na tela. Sem
+      // isto "nao disparou" seria indistinguivel de "nada funciona nesta
+      // bancada".
+      expect(
+        _buscas,
+        1,
+        reason: 'REPROVA: digitar acima do piso nao disparou a busca depois da '
+            'espera. E exatamente o que o cliente viu: digitou o nome e nada '
+            'aconteceu.',
+      );
+      expect(
+        find.text('Ana Souza'),
+        findsOneWidget,
+        reason: 'REPROVA: a busca disparou e o resultado nao chegou na tela.',
+      );
+    });
+
+    testWidgets('cinco letras digitadas geram UMA busca, e nao cinco', (
+      tester,
+    ) async {
+      // **ESTE E O CASO QUE PROTEGE O TETO DE 60 CONSULTAS POR HORA.**
+      //
+      // PARA DESLIGAR E VER REPROVAR: troque
+      // `BuscaDePessoas.esperaAntesDeBuscar` por `Duration.zero`. Sem espera a
+      // conta sao tres consultas (`sou`, `souz`, `souza` -- as duas primeiras
+      // letras estao abaixo do piso e nunca perguntam), e vinte nomes fecham a
+      // hora de uma pessoa normal.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'ana-souza', nome: 'Ana Souza'),
+        ],
+      );
+
+      // Cinco teclas, com 120 ms entre elas: abaixo dos 400 ms da espera, que
+      // e o que faz as cinco virarem UMA pausa.
+      for (final parcial in <String>['s', 'so', 'sou', 'souz', 'souza']) {
+        await tester.enterText(find.byType(TextField).first, parcial);
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(
+        _buscas,
+        1,
+        reason: 'REPROVA: cinco teclas geraram $_buscas buscas, e nao uma. O '
+            'teto de `searchPeople` e 60 por hora por conta na dimensao '
+            '[account, q], e `q` marca PRESENCA de busca -- as 60 contam toda '
+            'consulta. Uma consulta por tecla queima o teto em segundos.',
+      );
+
+      // CONTROLE POSITIVO DO CONTADOR: uma pausa de verdade no meio produz
+      // DUAS buscas. Sem esta metade, um contador quebrado (ou uma tela que
+      // nao busca nunca) passaria o `expect` acima com qualquer numero.
+      await tester.enterText(find.byType(TextField).first, 'souzas');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(
+        _buscas,
+        2,
+        reason: 'REPROVA: a segunda pausa nao produziu a segunda busca. O caso '
+            'acima nao mede nada se a tela simplesmente nunca buscar.',
+      );
+    });
+  });
+
+  group('CONSERTO 2 -- abaixo do piso, o resultado velho SAI da tela', () {
+    testWidgets('com duas letras a lista anterior sai, e a tela diz o que falta', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: em `BuscaDePessoas._aoDigitar`, troque o
+      // ramo abaixo do piso por `return;` -- sem `_limparABusca()` e sem
+      // `setState`. E o estado medido em 22/10/2026: *"digita um nome novo,
+      // toca, e aparece a pessoa errada"*.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'ana-souza', nome: 'Ana Souza'),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'souza');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO: o resultado velho EXISTE antes de ser tirado. Sem
+      // esta linha, "Ana Souza nao esta na tela" passaria numa tela que nunca
+      // desenhou ninguem.
+      expect(
+        find.text('Ana Souza'),
+        findsOneWidget,
+        reason: 'REPROVA: a busca de linha de base nao desenhou a pessoa, '
+            'entao o caso nao tem o que medir.',
+      );
+      expect(find.text('1 pessoa'), findsOneWidget);
+
+      final buscasAntes = _buscas;
+      await tester.enterText(find.byType(TextField).first, 'li');
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pumpAndSettle();
+
+      expect(
+        _buscas,
+        buscasAntes,
+        reason: 'REPROVA: a tela perguntou a busca com duas letras. O piso de '
+            'tres e do indice trigrama, e abaixo dele nao ha trigrama nenhum '
+            'para casar.',
+      );
+      expect(
+        find.text('Ana Souza'),
+        findsNothing,
+        reason: 'REPROVA: o resultado da busca ANTERIOR continua na tela com '
+            'duas letras no campo. Quem digita um nome novo e toca ve a pessoa '
+            'errada, e foi exatamente o que o cliente descreveu.',
+      );
+      expect(
+        find.text('1 pessoa'),
+        findsNothing,
+        reason: 'REPROVA: a contagem da busca anterior ficou na tela.',
+      );
+      expect(
+        find.text('Faltam 1 letra.'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela tirou a lista e nao disse por que. A contagem '
+            'de letras e a MESMA frase que o nome acessivel da lupa ja dizia '
+            '(`ControleDeBusca.faltamLetras`), e nao uma segunda redacao.',
+      );
+    });
+
+    testWidgets('campo vazio nao dispara e nao lista ninguem', (tester) async {
+      // PARA DESLIGAR E VER REPROVAR: em `BuscaDePessoas._aoDigitar`, apague o
+      // `if (digitado.length < PessoasApi.minimoDaBusca)` inteiro. A tela entao
+      // aplica o termo vazio, e desenha `Nada com esse nome` com `0 pessoas`
+      // sobre uma busca que ninguem pediu.
+      //
+      // O ZERO BYTE do campo vazio e GUARDA, e nao isca provada: mesmo com o
+      // freio desta tela removido, `PessoasApi.buscar` devolve
+      // `PaginaDeBuscaDePessoas.semBusca` sem tocar na rede (ver a isca `a
+      // porta tambem recusa, e sem rede`). Sao dois freios, e o de baixo nao
+      // cai junto com o de cima.
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'ana-souza', nome: 'Ana Souza'),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'souza');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Ana Souza'),
+        findsOneWidget,
+        reason: 'CONTROLE POSITIVO: sem a busca de linha de base nao ha o que '
+            'limpar.',
+      );
+
+      final buscasAntes = _buscas;
+      await tester.enterText(find.byType(TextField).first, '');
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pumpAndSettle();
+
+      expect(
+        _buscas,
+        buscasAntes,
+        reason: 'REPROVA: a tela perguntou a busca com o campo vazio. Nao '
+            'existe "listar todos" no contrato.',
+      );
+      expect(
+        find.text('Ana Souza'),
+        findsNothing,
+        reason: 'REPROVA: o campo vazio continua listando gente.',
+      );
+      expect(
+        find.text('Nada com esse nome'),
+        findsNothing,
+        reason: 'REPROVA: campo vazio virou "nada encontrado". Ninguem buscou, '
+            'entao nao ha resultado nenhum a afirmar.',
+      );
+      expect(
+        find.text('Digite o nome ou o apelido de alguém e toque na lupa.'),
+        findsOneWidget,
+        reason: 'REPROVA: o campo vazio nao voltou ao estado de abertura. Com '
+            'nada digitado nao ha letras a cobrar de quem nem comecou.',
+      );
+    });
+  });
+
+  group('CONSERTO 3 -- entrar na conta invalida o estado da busca', () {
+    testWidgets('depois de entrar, a lupa volta a funcionar sem mudar o texto', (
+      tester,
+    ) async {
+      // PARA DESLIGAR E VER REPROVAR: apague o corpo de
+      // `_EstadoDaBuscaDePessoas.didUpdateWidget` (deixe so a chamada a
+      // `super`). **E assim que o defeito foi reproduzido antes do conserto**:
+      // `_termoAplicado` guarda o `lima` que produziu o 401, o texto digitado
+      // continua `lima`, e "digitado igual a aplicado" e exatamente a condicao
+      // em que `_podeAplicar` de `CampoDeBuscaDaListagem` NAO habilita a lupa.
+      // O unico jeito de sair era mudar o texto.
+      //
+      // O QUE ESTA BANCADA NAO MEDE: o ramo do `ConviteParaEntrar` (ver o 401
+      // sem `next_action` em `_montar`). A causa e a mesma -- os dois ramos do
+      // `catch` deixam `_termoAplicado` igual --, mas quem quiser medir o
+      // convite sumindo depois do login precisa do app montado com `Escopo`.
+      await _montar(tester, logado: false, statusDaBusca: 401);
+
+      await tester.enterText(find.byType(TextField).first, 'lima');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      final buscasDoDeslogado = _buscas;
+
+      // CONTROLE POSITIVO: o 401 de verdade saiu e chegou na tela. Sem isto
+      // "a lupa destravou" passaria numa bancada onde nada falhou.
+      expect(
+        buscasDoDeslogado,
+        1,
+        reason: 'CONTROLE POSITIVO: a busca do deslogado nao saiu, entao nao '
+            'ha 401 nem estado preso a destravar.',
+      );
+      expect(
+        find.byType(FaixaDeAviso),
+        findsOneWidget,
+        reason: 'CONTROLE POSITIVO: a recusa do servidor nao virou estado de '
+            'falha na tela.',
+      );
+      // O ESTADO PRESO, medido: a lupa esta morta com o texto que a pessoa
+      // escreveu, porque o termo do 401 ficou registrado como aplicado.
+      expect(
+        find.byTooltip('Buscar, a busca já é esta'),
+        findsOneWidget,
+        reason: 'CONTROLE POSITIVO: a lupa nao esta no estado preso que o '
+            'conserto desfaz, e o caso nao mede nada.',
+      );
+
+      // A pessoa entra pela porta `Entrar` e volta a aba. Em producao e o
+      // `AnimatedBuilder` de `secao_da_rede.dart` que traz o valor novo; a aba
+      // NAO sai do lugar dela na arvore, e e por isso que o `State` -- e o
+      // `_termoAplicado` dentro dele -- sobrevive ao login.
+      sessao.value = true;
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byTooltip('Buscar'),
+        findsOneWidget,
+        reason: 'REPROVA: a lupa continua morta depois de entrar, com o mesmo '
+            'texto no campo. Era preciso mudar o texto para sair, e e esse o '
+            'defeito.',
+      );
+      expect(
+        find.byType(FaixaDeAviso),
+        findsNothing,
+        reason: 'REPROVA: a aba continua desenhando a recusa do deslogado com '
+            'a sessao aberta. A falha e consequencia de um pedido de OUTRA '
+            'sessao, e nao um resultado desta.',
+      );
+
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO do toque: a lupa nao esta so pintada de viva.
+      expect(
+        _buscas,
+        buscasDoDeslogado + 1,
+        reason: 'REPROVA: a lupa habilitou e o toque nao gerou consulta -- '
+            'zero byte, que foi o que o contador de rede mediu no aparelho.',
+      );
+    });
+
+    testWidgets('entrar NAO busca sozinho: o login nao gasta consulta', (
+      tester,
+    ) async {
+      // CONTRAPESO do caso acima. O conserto devolve a CAPACIDADE de pedir, e
+      // nao o pedido: gastar uma das 60 consultas da hora por um login seria a
+      // tela decidindo por quem nao pediu nada.
+      //
+      // PARA DESLIGAR E VER REPROVAR: acrescente
+      // `unawaited(_buscar(_campo.text.trim()))` ao fim de `didUpdateWidget`.
+      await _montar(tester, logado: false, statusDaBusca: 401);
+
+      await tester.enterText(find.byType(TextField).first, 'lima');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      final antes = _buscas;
+      sessao.value = true;
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pumpAndSettle();
+
+      expect(
+        _buscas,
+        antes,
+        reason: 'REPROVA: entrar na conta disparou uma busca por conta '
+            'propria. Entrar nao e pedir uma busca.',
+      );
+    });
   });
 }
