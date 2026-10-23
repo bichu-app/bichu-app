@@ -851,6 +851,9 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
           _Links(
             convite: conteudo.urlDoConvite,
             instagram: conteudo.urlDoInstagram,
+            // `admission.kind` do contrato, lido pela sessao normal do
+            // encontro: e ele que escolhe entre `Retirar` e `Comprar`.
+            gratuito: conteudo.entrada.tipo == TipoDeEntrada.gratuito,
           ),
         );
       }
@@ -1375,12 +1378,36 @@ class _EsqueletoDoEncontro extends StatelessWidget {
 /// **Sem moldura vazia**: a secao nao e montada quando os dois sao nulos, e
 /// aqui cada linha depende do seu link. Abrem no navegador do aparelho.
 class _Links extends StatelessWidget {
-  const _Links({required this.convite, required this.instagram});
+  const _Links({
+    required this.convite,
+    required this.instagram,
+    required this.gratuito,
+  });
 
   final Uri? convite;
   final Uri? instagram;
 
-  static const String rotuloDoConvite = 'Comprar convite';
+  /// Se a entrada deste encontro e `free`. Decide entre os dois rotulos de
+  /// [rotuloDoConvite].
+  final bool gratuito;
+
+  /// O rotulo do link do ingresso, **nos dois estados** (cliente, 22/10/2026):
+  /// *"O botao de comprar convite, deve ser alterado para Comprar Ingresso,
+  /// porem caso o evento seja gratuito, temos que alterar para Retirar
+  /// Ingresso."*
+  ///
+  /// **O CONDICIONAL NAO ESTA BLOQUEADO, e isto foi MEDIDO e nao suposto.** O
+  /// contrato ja sabe se o encontro e gratuito: `NetworkEventAdmission.kind` e
+  /// um enum fechado `[free, paid]` com `price` anulavel ao lado, o app o le em
+  /// `EntradaDoEncontro.doJson` (`api/modelos_rede.dart`) e o expoe como
+  /// `TipoDeEntrada.gratuito`/`.pago`. **Nenhum campo novo de servidor foi
+  /// preciso**, e nenhuma linha de `openapi.yaml` mudou nesta edicao.
+  ///
+  /// `Convite` virou `Ingresso` nos DOIS ramos: o substantivo e dele, e deixar
+  /// `Comprar convite` no ramo pago faria a mesma linha mudar de palavra com o
+  /// preco.
+  static String rotuloDoConvite({required bool gratuito}) =>
+      gratuito ? 'Retirar Ingresso' : 'Comprar Ingresso';
   static const String rotuloDoInstagram = 'Instagram';
   static const String falhaAoAbrir = 'Não conseguimos abrir o link.';
 
@@ -1399,7 +1426,11 @@ class _Links extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (c != null) _LinhaDeLink(rotulo: rotuloDoConvite, link: c),
+        if (c != null)
+          _LinhaDeLink(
+            rotulo: rotuloDoConvite(gratuito: gratuito),
+            link: c,
+          ),
         if (c != null && i != null) const SizedBox(height: BichuEspaco.e2),
         if (i != null) _LinhaDeLink(rotulo: rotuloDoInstagram, link: i),
       ],

@@ -1446,7 +1446,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             escrita: porta,
             camera: escopo.camera,
             envio: escopo.envioDeFoto,
-            aoAbrirMeusPets: () => GoRouter.of(context).go(Rotas.perfil),
+            // **SEM `aoAbrirMeusPets`**: o atalho que ele ligava saiu da
+            // vitrine por pedido do cliente em 22/10/2026, e o parametro saiu
+            // com ele. `Meus pets` continua alcancavel pelo primeiro bloco da
+            // secao `Perfil`, que e de onde se chega a esta tela.
           );
         },
       ),

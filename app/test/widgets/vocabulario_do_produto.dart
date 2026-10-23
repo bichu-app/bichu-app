@@ -93,7 +93,32 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// `bichu.app` 12, `app.bichu` 2, `BichuEspaco` 1048, `BichuColors` 231,
 /// `Bichu` 1979. O que mudou foi a QUANTIDADE DE LINHAS que citam a marca,
 /// por tela que enxugou e tela que cresceu, e nao a marca.
-const int ocorrenciasDeBichu = 2672;
+///
+/// ATUALIZADO NO LOTE DE TEXTOS DE 22/10/2026: 2672 -> 2686. O saldo de **+14**
+/// foi medido ARQUIVO POR ARQUIVO, comparando a base (`bdae03e1`) com a arvore
+/// desta frente, e fecha exatamente:
+///   +17 telas/loja/vitrine_da_loja.dart        (28 -> 45)
+///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34)
+///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26)
+///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76)
+///
+/// **Os +17 da Loja sao UMA mencao da marca a quem usa o app e dezesseis
+/// referencias de codigo e de prosa.** O cliente pediu em 22/10 a frase *"Ajude
+/// a mantermos o Bichu gratuito..."*, que e a unica ocorrencia NOVA que alguem
+/// le na tela; o resto e o bloco que a desenha (`BichuEspaco`, `BichuRaio`,
+/// `BichuColors`, `VitrineDaLoja.`) e o comentario que explica por que a frase
+/// nao desfaz a remocao de 17/10. Os -3, -1 e +1 sao linhas de prosa e de
+/// token em blocos que sairam (o atalho dos pets, a linha de conexao) e no que
+/// trocou de lugar (o QR do pet).
+///
+/// **A ARMADILHA CONTINUA NAO DISPARADA, e isto foi medido de novo e nao
+/// presumido:** `petu` aparece em DOIS arquivos de toda a arvore -- a prosa
+/// deste proprio portao e `src/modules/tags/ports/pedido-de-plaquinha.ts`, onde
+/// e substring de outra palavra --, e nenhuma linha ACRESCENTADA por esta
+/// frente o escreve. As ancoras estao de pe e cresceram so pelo bloco novo:
+/// `bichu.app` 13, `app.bichu` 2, `BichuEspaco` 1054, `BichuColors` 234,
+/// `Bichu` 2024.
+const int ocorrenciasDeBichu = 2686;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
@@ -205,16 +230,25 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
   'lib/api/modelos_pet.dart': <String>['C\u00e3o'],
 
   // ---- 3. REDACAO PROPRIA, PEDIDA PELO CLIENTE ----
-
-  // O cliente pediu, na mesma rodada, `Uma pessoa com esse nome` ->
-  // `Um usuario encontrado em sua busca`. A troca generica daria `Um usuario
-  // com esse nome`, que **contraria o que ele escreveu**. As DUAS linhas ficam:
-  // elas sao os dois ramos de `_fimDaLista` (um resultado / varios), e mudar so
-  // a segunda deixaria o par divergente antes de ele decidir a primeira.
-  'lib/telas/rede/busca_de_pessoas.dart': <String>[
-    'Uma pessoa com esse nome.',
-    'Voc\u00ea viu todas as ',
-  ],
+  //
+  // **ESTA SECAO ESTA VAZIA, e o vazio e o desfecho da unica entrada que ela
+  // tinha.** Era `lib/telas/rede/busca_de_pessoas.dart`, com os dois ramos de
+  // `_fimDaLista` -- `Uma pessoa com esse nome.` e `Voce viu todas as `. Os
+  // dois ficaram liberados porque o cliente havia pedido a redacao do PRIMEIRO
+  // (*"Troque o texto Uma pessoa com esse nome para Um usuario encontrado em
+  // sua busca."*) e mudar so o segundo desencontraria o par.
+  //
+  // **Em 22/10/2026 os dois mudaram juntos** e nenhum escreve mais `pessoa`:
+  // o singular saiu com a redacao literal dele, e o plural foi derivado dela
+  // (`Voce viu todos os N usuarios encontrados em sua busca.`) -- a derivacao
+  // esta justificada na prosa de `_fimDaLista`, e e ela que pode ser revista,
+  // nao esta excecao. Com os literais trocados, a excecao ficaria liberando
+  // texto que nao existe: `liberadoPorExcecao` casa por PREFIXO nos dois
+  // sentidos, entao uma entrada orfa nao fica so inofensiva -- ela passa a
+  // poder liberar uma frase futura que comece igual.
+  //
+  // A secao fica escrita, e nao apagada, porque a terceira razao continua
+  // valendo para a proxima redacao que ele pedir.
 };
 
 /// Os literais de cadeia de Dart, nas quatro formas de aspas.

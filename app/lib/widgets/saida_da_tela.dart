@@ -45,9 +45,30 @@ class SaidaDaTela extends StatelessWidget {
     super.key,
     this.escape = Rotas.pets,
     this.resultado,
+    this.cor,
   });
 
   final TipoDeSaida tipo;
+
+  /// A cor do glifo, quando o fundo atras dele **nao e superficie do tema**.
+  ///
+  /// **Nulo e o normal e e o padrao**: o controle pinta em
+  /// `cores.textPrimary`, que e o que contrasta com a superficie em que quase
+  /// toda tela o desenha.
+  ///
+  /// Ele existe por um pedido do cliente de 22/10/2026 -- *"Na tela de
+  /// escanear o qr-code do pet ou do usuario, o x para fechar deve ser branco,
+  /// em algumas paginas ele esta ficando cinza ou preto e nao esta dando muita
+  /// leitura"*. O leitor de QR desenha esta saida **sobreposta a imagem da
+  /// camera**, e ali `textPrimary` e o cinza-escuro do tema claro: o glifo
+  /// desaparece no video.
+  ///
+  /// **E por isso que ele e parametro e nao uma troca dentro desta classe.** A
+  /// mesma `SaidaDaTela` e desenhada por telas de formulario e de conta, sobre
+  /// superficie clara: branco fixo aqui resolveria o leitor e apagaria o
+  /// controle em todas as outras. Quem sabe o que ha atras do glifo e a tela,
+  /// e e ela que diz.
+  final Color? cor;
 
   /// O valor que [BuildContext.pop] devolve a quem empilhou a tela.
   ///
@@ -107,7 +128,7 @@ class SaidaDaTela extends StatelessWidget {
         minHeight: BichuAlvoDeToque.critico,
       ),
       padding: EdgeInsets.zero,
-      color: BichuColors.of(context).cores.textPrimary,
+      color: cor ?? BichuColors.of(context).cores.textPrimary,
       focusColor: BichuColors.of(context).cores.focusRing,
       style: IconButton.styleFrom(
         minimumSize: const Size.square(BichuAlvoDeToque.critico),

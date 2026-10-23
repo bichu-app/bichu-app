@@ -194,15 +194,31 @@ class BuscaDePessoas extends StatefulWidget {
 
   static const String tituloAntesDeBuscar = 'Procure quem você já conhece';
 
-  /// A explicação do estado inicial, e ela tem **uma frase**.
+  /// A explicação do estado inicial, e ela tem **duas frases curtas** — era
+  /// uma até 22/10/2026, e a segunda só existe porque a primeira deixou de
+  /// poder dizer as duas coisas (ver abaixo).
   ///
   /// A versão do protótipo trazia, abaixo do vazio, um bloco `Como funciona`
   /// com três linhas de ensino. Ele não entrou: o cliente removeu os textos de
   /// apoio das telas em 18/10/2026 (*"isso está deixando o app poluído"*), e
   /// três parágrafos explicando o que é conexão são exatamente isso. O que
   /// sobra é o que a pessoa precisa para agir agora.
+  ///
+  /// **ELA MENTIA DESDE 22/10/2026, e a redacao desta linha e MINHA** -- o
+  /// cliente nao a escreveu, e ela pode ser revista por ele. O texto antigo
+  /// era *"Digite o nome ou o apelido de alguem e toque na lupa."*, e ele
+  /// exigia o toque: a busca passou a disparar **ao digitar**, por pausa de
+  /// 400 ms ([esperaAntesDeBuscar]), e a frase continuou mandando tocar na
+  /// lupa. Quem obedecesse ao texto tocaria uma lupa que a espera ja ia
+  /// resolver sozinha.
+  ///
+  /// **A lupa continua na frase porque ela continua funcionando**, e dizer so
+  /// "digite" apagaria da tela o controle que ainda esta la e ainda aplica na
+  /// hora -- ver a secao `A BUSCA DISPARA AO DIGITAR` no cabecalho. A frase
+  /// descreve o que acontece, e oferece o atalho; ela nao pede mais nada.
   static const String explicacaoAntesDeBuscar =
-      'Digite o nome ou o apelido de alguém e toque na lupa.';
+      'Digite o nome ou o apelido de alguém. A busca acontece sozinha, ou '
+      'toque na lupa.';
 
   static const String tituloNadaEncontrado = 'Nada com esse nome';
 
@@ -632,7 +648,7 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
         // **E É AQUI QUE O RESULTADO VELHO NÃO ESTÁ.** Abaixo do piso a tela
         // cai nesta fase (ver [_aoDigitar]), então a lista anterior saiu — e a
         // explicação troca para a contagem de letras que falta, em vez de
-        // repetir "toque na lupa" sobre uma lupa que não pode habilitar.
+        // repetir a frase da lupa sobre uma lupa que não pode habilitar.
         return <Widget>[
           const SizedBox(height: BichuEspaco.e8),
           EstadoVazio(
@@ -717,8 +733,23 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
   /// faixa vazia seria pior que esta frase: ela se anuncia e nao diz nada.
   static const String _falhaSemTexto = 'Não foi possível buscar agora.';
 
+  /// O fim da lista, **nos dois ramos, e eles mudam JUNTOS**.
+  ///
+  /// **O singular e redacao do cliente (22/10/2026), literal**: *"Troque o
+  /// texto Uma pessoa com esse nome para Um usuario encontrado em sua busca."*
+  ///
+  /// **O plural e DERIVADO dele, e nao da troca generica de vocabulario** --
+  /// esta linha pode ser revista por ele. A troca mecanica
+  /// `pessoa(s)`->`usuario(s)` daria *"Voce viu todas as N usuarios com esse
+  /// nome."*, que contraria o que ele escreveu em duas coisas de uma vez: o
+  /// fim da frase (`com esse nome` em vez de `encontrado em sua busca`) e a
+  /// concordancia (`todas as` com `usuarios`). Os dois ramos sao o mesmo
+  /// fim-de-lista visto de dois lados, e uma frente anterior deixou os DOIS
+  /// intocados de proposito para nao desencontrar o par -- a excecao deles em
+  /// `excecoesDoVocabulario` existia exatamente por isso, e saiu com esta
+  /// edicao.
   String _fimDaLista(int total) {
-    if (total == 1) return 'Uma pessoa com esse nome.';
-    return 'Você viu todas as $total pessoas com esse nome.';
+    if (total == 1) return 'Um usuário encontrado em sua busca.';
+    return 'Você viu todos os $total usuários encontrados em sua busca.';
   }
 }

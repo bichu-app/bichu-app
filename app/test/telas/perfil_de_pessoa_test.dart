@@ -601,8 +601,34 @@ void main() {
 
   testWidgets('CONEXAO ACEITA: desfazer, e nenhum pedido a mais', (tester) async {
     await _montar(tester, perfil: _perfil(estado: 'connected', ref: 'r1'));
-    expect(find.text('Vocês estão conectados.'), findsOneWidget);
-    expect(find.text('Desfazer conexão'), findsOneWidget);
+
+    // **A LINHA `Vocês estão conectados.` SAIU** (cliente, 22/10/2026):
+    // *"Retire o texto vocês estão conectados."*
+    //
+    // O `expect` foi INVERTIDO e nao apagado. Um texto que um pedido do
+    // cliente remove e exatamente o que precisa de alguem cobrando a ausencia:
+    // sem este caso ele volta na primeira edicao deste ramo, e volta calado.
+    //
+    // **E o `Desfazer conexão` abaixo e o CONTROLE POSITIVO deste
+    // `findsNothing`.** So quem E conexao ve esse botao; se ele estivesse
+    // ausente, o `findsNothing` de cima estaria medindo "a tela nao desenhou o
+    // ramo de conectado" em vez de "a frase saiu" -- duas coisas diferentes
+    // com o mesmo resultado verde.
+    expect(
+      find.text('Vocês estão conectados.'),
+      findsNothing,
+      reason: 'REPROVA: a linha "Vocês estão conectados." voltou ao perfil. '
+          'O cliente pediu a remocao dela em 22/10/2026, e o estado continua '
+          'dito pelo botao `Desfazer conexão` -- que so aparece para quem e '
+          'conexao, e que tambem RESOLVE o vinculo em vez de so afirma-lo.',
+    );
+    expect(
+      find.text('Desfazer conexão'),
+      findsOneWidget,
+      reason: 'REPROVA: o ramo de conexao aceita nao desenhou `Desfazer '
+          'conexão`. Sem ele o `findsNothing` acima nao prova que a frase '
+          'saiu: prova que o ramo nao foi desenhado.',
+    );
     expect(find.text('Pedir conexão'), findsNothing);
   });
 
