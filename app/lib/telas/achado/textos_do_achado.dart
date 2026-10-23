@@ -109,8 +109,16 @@ abstract final class TextosDoAchado {
   static const String rotuloDeOnde = 'Onde você achou?';
   static const String rotuloDeQuando = 'Quando?';
 
+  /// **A REDACAO E DO CLIENTE (22/10/2026), literal**: *"Altere a frase para:
+  /// Alguma coisa que ajude a reconhecer para Alguma caracteristica especifica
+  /// que ajude a identifica-lo."*
+  ///
+  /// O rotulo deixou de ser pergunta e virou pedido, e o ponto final e dele:
+  /// `Alguma coisa que ajude a reconhecer?` perguntava se havia algo, e quem
+  /// responde "sim" na cabeca nao escreve nada no campo. A frase nova diz **o
+  /// que escrever**.
   static const String rotuloDaObservacao =
-      'Alguma coisa que ajude a reconhecer?';
+      'Alguma característica específica que ajude a identificá-lo.';
 
   static const String exemploDaObservacao =
       'coleira azul sem placa, mancha branca no peito, mancava da pata '

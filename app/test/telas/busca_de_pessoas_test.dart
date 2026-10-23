@@ -1114,8 +1114,15 @@ void main() {
         reason: 'REPROVA: campo vazio virou "nada encontrado". Ninguem buscou, '
             'entao nao ha resultado nenhum a afirmar.',
       );
+      // **PELA CONSTANTE, e nao pela frase escrita a mao.** Ela estava
+      // literal aqui e a frase mudou em 22/10/2026 (ela dizia *"...e toque na
+      // lupa."*, e mandar tocar deixou de ser verdade quando a busca passou a
+      // disparar por pausa de digitacao). Uma copia da redacao num `expect` e
+      // uma segunda redacao que ninguem lembra de atualizar: este caso mede o
+      // ESTADO -- que a tela voltou ao vazio de abertura --, e qual e a frase
+      // desse estado e decisao de `BuscaDePessoas`.
       expect(
-        find.text('Digite o nome ou o apelido de alguém e toque na lupa.'),
+        find.text(BuscaDePessoas.explicacaoAntesDeBuscar),
         findsOneWidget,
         reason: 'REPROVA: o campo vazio nao voltou ao estado de abertura. Com '
             'nada digitado nao ha letras a cobrar de quem nem comecou.',
@@ -1390,6 +1397,140 @@ void main() {
               'no servidor e nunca recebido de quem chama.',
         );
       }
+    });
+  });
+
+  // ===========================================================================
+  // O LOTE DE TEXTOS DE 22/10/2026: o fim de lista, e a dica que mentia
+  // ===========================================================================
+  group('os textos de 22/10/2026', () {
+    // DESLIGAR PARA VER REPROVAR: em `_fimDaLista`
+    // (`lib/telas/rede/busca_de_pessoas.dart`), devolva as frases antigas --
+    // `'Uma pessoa com esse nome.'` e
+    // `'Você viu todas as $total pessoas com esse nome.'`. Os dois casos
+    // abaixo reprovam, um por ramo, E o portao de vocabulario reprova junto
+    // (`nenhum texto de usuario de app/lib escreve bicho, cao ou pessoa`),
+    // porque a excecao que liberava as duas linhas saiu com esta edicao.
+    testWidgets('UM resultado: a frase do cliente, literal', (tester) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      // CONTROLE POSITIVO: o resultado chegou. Sem ele nao ha fim de lista
+      // nenhum para medir, e um `findsNothing` ficaria verde por vazio.
+      expect(
+        find.text('Marina'),
+        findsOneWidget,
+        reason: 'REPROVA: a busca nao trouxe resultado, entao nao ha fim de '
+            'lista nesta tela e os dois `expect` de baixo nao medem texto -- '
+            'medem ausencia de tela.',
+      );
+
+      expect(
+        find.text('Um usuário encontrado em sua busca.'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o fim de lista com UM resultado nao escreve a frase que '
+            'o cliente pediu em 22/10/2026 -- *"Troque o texto Uma pessoa com '
+            'esse nome para Um usuario encontrado em sua busca."*. A redacao '
+            'e DELE, literal.',
+      );
+      expect(
+        find.textContaining('com esse nome.'),
+        findsNothing,
+        reason: 'REPROVA: a frase antiga ("Uma pessoa com esse nome.") voltou '
+            'ao fim da lista.',
+      );
+    });
+
+    testWidgets('VARIOS resultados: o par nao desencontrou', (tester) async {
+      await _montar(
+        tester,
+        resultados: <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina'),
+          _pessoa(apelido: 'marina-souza', nome: 'Marina Souza'),
+        ],
+      );
+      await tester.enterText(find.byType(TextField).first, 'marina');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Buscar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Marina Souza'),
+        findsOneWidget,
+        reason: 'REPROVA (controle positivo): os dois resultados nao '
+            'chegaram.',
+      );
+
+      // **O PLURAL E DERIVADO DA REDACAO DELE, e nao da troca generica de
+      // vocabulario.** A troca mecanica daria *"Você viu todas as 2 usuários
+      // com esse nome."*, que erra o fim da frase E a concordancia. Os dois
+      // ramos sao o mesmo fim-de-lista, e e por isso que os dois casos moram
+      // juntos: mudar um so deixa o par divergente, que foi exatamente o
+      // motivo de uma frente anterior ter deixado os DOIS intocados.
+      expect(
+        find.text('Você viu todos os 2 usuários encontrados em sua busca.'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o fim de lista com varios resultados nao acompanhou o '
+            'singular. Esta linha e DERIVADA da redacao do cliente (ela pode '
+            'ser revista por ele), mas ela nao pode divergir do ramo de um '
+            'resultado: os dois sao a mesma frase vista de dois lados.',
+      );
+      expect(
+        find.textContaining('pessoas com esse nome'),
+        findsNothing,
+        reason: 'REPROVA: a frase antiga do plural voltou.',
+      );
+    });
+
+    // DESLIGAR PARA VER REPROVAR: em `BuscaDePessoas`, devolva
+    // `explicacaoAntesDeBuscar` ao texto antigo
+    // (`'Digite o nome ou o apelido de alguém e toque na lupa.'`). Este caso
+    // reprova dizendo que a dica voltou a EXIGIR o toque.
+    testWidgets('a dica de abertura nao manda mais TOCAR na lupa',
+        (tester) async {
+      await _montar(tester);
+
+      final dica = BuscaDePessoas.explicacaoAntesDeBuscar;
+
+      // CONTROLE POSITIVO: a dica esta na tela. Os `expect` de conteudo abaixo
+      // leem a constante, e sem este o caso mediria uma cadeia e nao uma tela.
+      expect(
+        find.text(dica),
+        findsOneWidget,
+        reason: 'REPROVA: o estado de abertura nao pinta a dica.',
+      );
+
+      // **O QUE O TEXTO TEM DE DIZER, e nao a frase exata**: a redacao desta
+      // linha e MINHA (o cliente nao a escreveu) e pode ser revista por ele.
+      // O que NAO pode voltar e a afirmacao falsa.
+      expect(
+        dica.contains('e toque na lupa'),
+        isFalse,
+        reason:
+            'REPROVA: a dica voltou a dizer "e toque na lupa", que EXIGE o '
+            'toque. A busca dispara ao digitar desde 22/10/2026, por pausa de '
+            '400 ms (`BuscaDePessoas.esperaAntesDeBuscar`): quem obedecesse '
+            'ao texto tocaria uma lupa que a espera ja ia resolver.',
+      );
+      expect(
+        dica.toLowerCase().contains('lupa'),
+        isTrue,
+        reason:
+            'REPROVA: a lupa saiu da dica. Ela CONTINUA existindo e continua '
+            'aplicando na hora -- apagar a mencao esconderia da pessoa um '
+            'controle que esta na tela. O conserto era a frase mentir, e nao '
+            'a lupa existir.',
+      );
     });
   });
 }

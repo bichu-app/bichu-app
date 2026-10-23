@@ -142,9 +142,29 @@ Future<http.Response> redeDasCincoListagens(http.Request req) async {
 const double abaUsuariosA200 = 154.62;
 
 /// Os rótulos das abas que a tela da frente pinta, na ordem desenhada.
-List<String> abasNaTela(WidgetTester tester) => tester
-    .widgetList<Tab>(find.byType(Tab))
-    .map((t) => t.text ?? '')
+///
+/// **Lido do `Text` DENTRO da aba, e não de `Tab.text`** (22/10/2026). As abas
+/// da `Rede` ganharam glifo por pedido do cliente, e um `Tab` que leva glifo
+/// **ao lado** do rótulo passa os dois num `child:` -- `Tab.text` fica nulo e
+/// este ajudante devolvia três cadeias vazias.
+///
+/// A troca não é só conserto: ler a propriedade do widget era justamente o que
+/// a prosa de `gruposDaFolha`, logo abaixo, diz para não fazer. O rótulo que
+/// importa é o que está pintado.
+List<String> abasNaTela(WidgetTester tester) => find
+    .byType(Tab)
+    .evaluate()
+    .map(
+      (aba) => tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byWidget(aba.widget),
+              matching: find.byType(Text),
+            ),
+          )
+          .map((t) => t.data ?? '')
+          .join(),
+    )
     .toList(growable: false);
 
 /// Os títulos dos grupos da folha de filtro ABERTA.

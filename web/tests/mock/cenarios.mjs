@@ -103,6 +103,14 @@ export const CENARIOS = {
         status: 'upcoming',
         amenities: ['shade', 'benches', 'dog_water_fountain'],
         bring_items: ['water', 'water_bowl', 'leash', 'poop_bags'],
+        // **COM QUEBRA DE LINHA DE VERDADE, e as tres linhas sao o ponto.**
+        // O cliente pediu em 22/10/2026 que as observacoes aceitem quebra de
+        // linha *"para nao deixar as informacoes todas juntas"*. Num `<p>`
+        // comum o navegador colapsa `\n` em espaco: as tres frases sairiam
+        // numa linha so. O caso de `telas-do-encontro` e o e2e do encontro
+        // medem a ALTURA do paragrafo contra a altura de uma linha, e e por
+        // isso que este exemplo precisa de mais de uma.
+        notes: 'Chegue 10 minutos antes.\nLeve agua para o seu cachorro.\nSe chover forte, fica para o sabado seguinte.',
       },
     },
     // `not-found` e o que o contrato responde para `slug` inexistente,

@@ -33,9 +33,13 @@ import '../../widgets/visualizador_de_imagem.dart';
 /// registrada e recusar para sempre. Nao e omissao a ser preenchida depois.
 ///
 /// **Os pets nao entram aqui.** Foto de pet mora em `pet_photos`, com o ciclo
-/// de vida do cadastro do animal; esta tela REFERENCIA os pets e abre a pagina
-/// deles por [aoAbrirMeusPets]. Copiar a foto do pet para a vitrine criaria
+/// de vida do cadastro do animal. Copiar a foto do pet para a vitrine criaria
 /// duas fotos do mesmo animal que divergem na primeira troca.
+///
+/// **E a tela nao aponta mais para a pagina deles**: o atalho que dizia isso em
+/// palavras saiu por pedido do cliente em 22/10/2026 (a nota esta no `build`).
+/// A separacao entre as duas midias continua inteira -- o que saiu foi a linha
+/// que a explicava, e nao a regra.
 ///
 /// ## O PESO DA TELA, que e o motivo de a derivada de 320 px existir
 ///
@@ -65,7 +69,6 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
     required this.camera,
     required this.envio,
     super.key,
-    this.aoAbrirMeusPets,
   });
 
   /// A LEITURA, e nao a `VitrineApi` inteira.
@@ -95,9 +98,13 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
   /// O unico caminho de bytes do app. Parametro pelo mesmo motivo.
   final EnvioDeFoto envio;
 
-  /// Abre `Meus pets`. **Referencia, e nao inclusao**: a foto do pet nao entra
-  /// na vitrine. Nulo nao desenha o atalho.
-  final VoidCallback? aoAbrirMeusPets;
+  // `aoAbrirMeusPets` SAIU (cliente, 22/10/2026).
+  //
+  // Ele existia para UMA coisa: desenhar o atalho de `Meus pets` no pe da
+  // vitrine, e nulo nao o desenhava. Com a frase removida (ver a nota no
+  // `build`) o parametro nao tem mais o que ligar -- mantido, seria porta de
+  // entrada publica que nao faz nada, e a proxima pessoa a passaria achando
+  // que ela ainda desenha o atalho.
 
   /// O lado da celula, em dp. 104 dp — tres colunas com folga numa tela de
   /// 360 dp, e o numero de que saem os 312 px reais a 3x.
@@ -482,10 +489,34 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
               // acrescenta.
               _bloco(cores, textos),
             ],
-            if (widget.aoAbrirMeusPets != null) ...[
-              const SizedBox(height: BichuEspaco.e4),
-              _atalhoDosPets(cores, textos),
-            ],
+            // ---------------------------------------------------------------
+            // O ATALHO DOS PETS SAIU INTEIRO (cliente, 22/10/2026)
+            // ---------------------------------------------------------------
+            // Literal: *"remova essa frase dentro de minhas fotos, as fotos
+            // dos seus pets ficam na pagina de cada um"*.
+            //
+            // **SAIU A LINHA INTEIRA, e nao so o texto dela.** A frase ERA o
+            // atalho: a linha tinha um `Text` e um `chevron_right` dentro de um
+            // `InkWell`, e nada mais. Apagar so o texto deixaria uma seta
+            // tocavel sem nome nenhum -- controle sem rotulo acessivel, que e o
+            // SC 4.1.2, e alvo de 100% da largura que nao diz para onde vai.
+            //
+            // **E NENHUM CAMINHO SE FECHOU, e isto foi conferido:** `Meus
+            // pets` continua sendo o primeiro bloco da secao `Perfil` (a ordem
+            // que o cliente fixou em 18/10), que e de onde se chega a esta
+            // vitrine. O atalho era um segundo caminho para o lugar de onde a
+            // pessoa veio.
+            //
+            // **A frase nao era pedido dele**, e isto foi medido antes de
+            // apagar: ela existe desde o commit mais antigo que esta arvore
+            // alcanca neste arquivo (`62e0a4d3`, 18/10) e nenhum commit a
+            // introduz com citacao do cliente. Ela ATRAVESSOU a remocao dos
+            // textos de apoio de 18/10 (*"isso esta deixando o app poluido"*)
+            // sem ser removida -- e e essa remocao que ele esta completando
+            // aqui, nao revertendo.
+            //
+            // `aoAbrirMeusPets` saiu junto com ela: ver a nota do construtor.
+            // ---------------------------------------------------------------
           ],
         ),
         ),
@@ -783,25 +814,4 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  Widget _atalhoDosPets(BichuCores cores, TextTheme textos) {
-    // REFERENCIA, e nao inclusao. A foto do pet mora em `pet_photos` e tem o
-    // ciclo de vida do cadastro do animal; a vitrine aponta para a pagina dele.
-    return InkWell(
-      onTap: widget.aoAbrirMeusPets,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'As fotos dos seus pets ficam na página de cada um.',
-                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-              ),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
-      ),
-    );
-  }
 }

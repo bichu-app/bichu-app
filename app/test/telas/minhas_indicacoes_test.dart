@@ -242,10 +242,22 @@ void main() {
       await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
       await tester.pumpAndSettle();
 
+      // Do `Text` DENTRO da aba, e nao de `Tab.text`: as abas da `Rede`
+      // ganharam glifo em 22/10/2026 e passam rotulo e glifo num `child:`.
       final rotulos = find
           .byType(Tab)
           .evaluate()
-          .map((e) => (e.widget as Tab).text ?? '')
+          .map(
+            (aba) => tester
+                .widgetList<Text>(
+                  find.descendant(
+                    of: find.byWidget(aba.widget),
+                    matching: find.byType(Text),
+                  ),
+                )
+                .map((t) => t.data ?? '')
+                .join(),
+          )
           .toList();
       expect(
         rotulos,

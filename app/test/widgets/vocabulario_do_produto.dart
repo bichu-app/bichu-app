@@ -104,13 +104,51 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// O metodo da medicao tem CONTROLE POSITIVO: a mesma contagem, aplicada a
 /// `bdae03e1`, devolveu 2672 -- exatamente o numero que estava travado aqui.
 ///
-/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
-/// aparece em `app/lib`, `admin/src` nem `web/src`; em `app/test` as unicas
-/// ocorrencias sao a prosa deste proprio portao e do seu teste, e a unica de
-/// `src` esta dentro da palavra `perpetuo`. As ancoras da marca seguiram o
-/// arquivo novo, todas para cima e nenhuma para baixo -- `bichu.app` 12 -> 13,
-/// `app.bichu` 2 (igual), `BichuEspaco` 1048 -> 1062, `BichuColors` 231 -> 234.
-const int ocorrenciasDeBichu = 2690;
+/// O LOTE DE TEXTOS DE 22/10/2026 (`b4407f63`) media 2672 -> 2686 na PROPRIA
+/// ponta, saldo de +14. A redacao que a frente deixou aqui atribuia esse saldo
+/// a quatro arquivos, com `+17` na vitrine da Loja. **A atribuicao estava
+/// errada em dois arquivos, e o total estava certo** -- medido na ponta
+/// `b4407f63` com o metodo deste portao:
+///   +15 telas/loja/vitrine_da_loja.dart        (28 -> 43, e nao 28 -> 45)
+///    +2 telas/rede/secao_da_rede.dart          (6 -> 8, nao declarado pela frente)
+///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34)
+///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26)
+///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76)
+/// A soma e a mesma (+14), e por isso o numero travado da frente estava certo
+/// enquanto a explicacao dele nao estava. Fica registrado porque a proxima
+/// uniao vai ler esta prosa, e nao a medicao.
+///
+/// ATUALIZADO NA MESCLA DA ONDA 8 (23/10/2026): 2690 -> 2704 nesta entrada.
+/// **Nenhum dos tres valores travados que colidiram servia** -- 2690 (a
+/// `development` da onda 7), 2686 (`textos/lote-22-10`) e 2674
+/// (`feat/ver-todos-pets`) --, e somar os deltas seria palpite. O valor foi
+/// CONTADO SOBRE A ARVORE MESCLADA, arquivo por arquivo, e fecha exatamente
+/// contra `bdae03e1` (2672):
+///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO -- onda 7)
+///   +15 telas/loja/vitrine_da_loja.dart        (28 -> 43 -- textos)
+///    +2 telas/rede/secao_da_rede.dart          (6 -> 8  -- textos)
+///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34 -- textos)
+///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26 -- textos)
+///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76 -- textos)
+/// Soma: +32, e 2672 + 32 = 2704. Os conjuntos de arquivos da onda 7 e do lote
+/// de textos sao DISJUNTOS, e por isso aqui a soma coincide com a medicao --
+/// o que e resultado da medicao, e nao a razao dela.
+///
+/// `notif/pedido-conexao` nao mexe na contagem: medida na ponta `b5376b23`,
+/// ela devolve 2672, identica a base. A frente nao toca `app/lib/telas`.
+///
+/// CONTROLE POSITIVO DO METODO, em QUATRO pontos onde a resposta ja era
+/// conhecida, todos reproduzidos EXATAMENTE: `bdae03e1` -> 2672, `49ca33de` ->
+/// 2690, `b4407f63` -> 2686, `a9478e4e` -> 2674. Acerta nos quatro lugares
+/// onde a resposta era conhecida, e so por isso vale aqui, onde nao era.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: `app/lib` tem 217 `.dart`
+/// na base e 218 nesta arvore, e a unica diferenca na LISTA e o acrescimo de
+/// `telas/conexoes/tela_minhas_conexoes.dart`, que veio da onda 7. Arvore que
+/// perdesse arquivo poderia fechar o total por compensacao.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA: `petu` nao aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2704;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
@@ -222,16 +260,25 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
   'lib/api/modelos_pet.dart': <String>['C\u00e3o'],
 
   // ---- 3. REDACAO PROPRIA, PEDIDA PELO CLIENTE ----
-
-  // O cliente pediu, na mesma rodada, `Uma pessoa com esse nome` ->
-  // `Um usuario encontrado em sua busca`. A troca generica daria `Um usuario
-  // com esse nome`, que **contraria o que ele escreveu**. As DUAS linhas ficam:
-  // elas sao os dois ramos de `_fimDaLista` (um resultado / varios), e mudar so
-  // a segunda deixaria o par divergente antes de ele decidir a primeira.
-  'lib/telas/rede/busca_de_pessoas.dart': <String>[
-    'Uma pessoa com esse nome.',
-    'Voc\u00ea viu todas as ',
-  ],
+  //
+  // **ESTA SECAO ESTA VAZIA, e o vazio e o desfecho da unica entrada que ela
+  // tinha.** Era `lib/telas/rede/busca_de_pessoas.dart`, com os dois ramos de
+  // `_fimDaLista` -- `Uma pessoa com esse nome.` e `Voce viu todas as `. Os
+  // dois ficaram liberados porque o cliente havia pedido a redacao do PRIMEIRO
+  // (*"Troque o texto Uma pessoa com esse nome para Um usuario encontrado em
+  // sua busca."*) e mudar so o segundo desencontraria o par.
+  //
+  // **Em 22/10/2026 os dois mudaram juntos** e nenhum escreve mais `pessoa`:
+  // o singular saiu com a redacao literal dele, e o plural foi derivado dela
+  // (`Voce viu todos os N usuarios encontrados em sua busca.`) -- a derivacao
+  // esta justificada na prosa de `_fimDaLista`, e e ela que pode ser revista,
+  // nao esta excecao. Com os literais trocados, a excecao ficaria liberando
+  // texto que nao existe: `liberadoPorExcecao` casa por PREFIXO nos dois
+  // sentidos, entao uma entrada orfa nao fica so inofensiva -- ela passa a
+  // poder liberar uma frase futura que comece igual.
+  //
+  // A secao fica escrita, e nao apagada, porque a terceira razao continua
+  // valendo para a proxima redacao que ele pedir.
 };
 
 /// Os literais de cadeia de Dart, nas quatro formas de aspas.

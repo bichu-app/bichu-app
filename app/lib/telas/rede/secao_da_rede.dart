@@ -28,9 +28,33 @@ import 'busca_de_pessoas.dart';
 /// a mesma parede que recusou `Mensagens` (103,67 dp). `Rede` pede 45,08 e
 /// cabe nos tres. Como ABA ela nao disputa slot de 64 dp: a aba recebe a
 /// largura do proprio texto (ver `isScrollable` em [SecaoDaRede]).
+/// ## O GLIFO DE CADA ABA (cliente, 22/10/2026)
+///
+/// Literal: *"na secao rede, nas abas eventos, comunidade e usuarios, vamos
+/// trazer um icone para deixar mais bonito"*. **A ESCOLHA DOS TRES GLIFOS E
+/// MINHA e pode ser revista por ele** -- ele pediu icone, nao disse quais.
+///
+/// Cada um foi escolhido pelo CONTEUDO da aba e nao pela estetica:
+///
+///   - `event` para `Eventos` -- o calendario marcado, que e o objeto da aba;
+///   - `place` para `Comunidade` -- o alfinete. Ele e o glifo que ESTE conteudo
+///     ja carregava: `Perto` era uma secao da barra com
+///     `CampoSemantico.lugar`, e quando ela virou esta aba em 19/10/2026 o
+///     campo saiu do enum junto (ver a prosa de [CampoSemantico]). O conteudo
+///     nao mudou, so o lugar dele, e o alfinete volta com ele;
+///   - `person_search` para `Usuarios` -- a cabeca COM a lupa, e nao `groups`
+///     nem `people`. Os dois ultimos desenham cabecas, que e exatamente o que
+///     `groups` desenha na barra para a secao `Rede` inteira: um deles aqui
+///     poria o mesmo desenho duas vezes na mesma tela, uma na barra e outra
+///     numa aba dela. A lupa tambem diz o que a aba FAZ, que e buscar.
+///
+/// **O campo semantico da barra nao se aplica**, e isto nao e descuido: o
+/// registro de [CampoSemantico] e de SECAO, e a prosa dele diz com todas as
+/// letras que *aba NAO declara campo semantico*. O portao `glifos_da_barra`
+/// varre `CascaComAbas.destinos`, e nenhuma destas tres entra lá.
 enum AbaDaSecaoRede {
-  eventos('Eventos'),
-  comunidade('Comunidade'),
+  eventos('Eventos', Icons.event_outlined),
+  comunidade('Comunidade', Icons.place_outlined),
 
   /// A ABA QUE ENTROU EM 21/10/2026, e o pedido dele e literal: *"na aba rede,
   /// temos que ter uma aba de usuarios, e o campo buscar para encontrar e
@@ -63,11 +87,14 @@ enum AbaDaSecaoRede {
   /// `Comunidade` poria `Usuarios` inteira na tela, mas empurraria o diretorio
   /// -- que e conteudo publico, alcancavel sem conta -- para tras de uma aba
   /// que exige conta.
-  usuarios('Usuários');
+  usuarios('Usuários', Icons.person_search_outlined);
 
-  const AbaDaSecaoRede(this.rotulo);
+  const AbaDaSecaoRede(this.rotulo, this.glifo);
 
   final String rotulo;
+
+  /// O glifo da aba. Ver a prosa acima do enum: a escolha e minha.
+  final IconData glifo;
 }
 
 /// A SECAO `Rede` INTEIRA: a casca de aba, as duas abas e a acao flutuante.
@@ -299,9 +326,46 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
             // tudo o que esta abaixo dela.
             tabAlignment: TabAlignment.start,
             onTap: (i) => _trocarAba(AbaDaSecaoRede.values[i]),
+            // **O GLIFO FICA AO LADO DO ROTULO, e a horizontal e o que
+            // mantem a ALTURA desta barra.** O cliente pediu o icone em
+            // 22/10/2026.
+            //
+            // **A vertical foi tentada primeiro e MEDIDA a reprovar.** Com
+            // `Tab(icon:, text:)` o M3 empilha e pede 72 dp de altura; a 200%
+            // de escala de fonte a linha do rotulo cresce e a pilha estoura a
+            // propria aba -- `RenderFlex overflowed by 2.0 pixels on the
+            // bottom`, em CINCO casos de 200% de quatro arquivos
+            // (`casca_de_cinco_secoes`, `gaveta_com_submenus`,
+            // `barra_fixa_em_toda_tela`, `widget_test`). Qualquer altura fixa
+            // tem a mesma falha mais adiante na escala: o que nao cabe nao e
+            // o numero, e a altura fixa.
+            //
+            // **Deitado, a aba cresce para o LADO -- e e a dimensao que esta
+            // barra tem de sobra**, porque ela e `isScrollable`. A altura
+            // continua sendo `BichuAlvoDeToque.min`, que e o que os casos de
+            // 200% ja mediam e continuam medindo.
+            //
+            // **O CUSTO E DE LARGURA, e ele esta medido e nao escondido**: ver
+            // o caso `o glifo das abas nao empurra `Usuários` para fora da
+            // tela` em `test/rede/glifos_das_abas_da_rede_test.dart`, que mede
+            // onde a terceira aba comeca a 320 dp antes e depois do glifo.
             tabs: <Widget>[
               for (final a in AbaDaSecaoRede.values)
-                Tab(height: BichuAlvoDeToque.min, text: a.rotulo),
+                Tab(
+                  height: BichuAlvoDeToque.min,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      // 20 dp e nao 24: o glifo aqui acompanha uma linha de
+                      // texto e nao e alvo proprio, e cada dp dele e dp que
+                      // empurra a terceira aba para fora de uma tela de
+                      // 320 dp. O alvo de toque continua sendo a aba inteira.
+                      Icon(a.glifo, size: 20),
+                      const SizedBox(width: BichuEspaco.e1),
+                      Text(a.rotulo),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: BichuEspaco.e4),

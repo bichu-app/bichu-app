@@ -64,6 +64,13 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
   .titulo-item { font-size: var(--type-title-lg-size); line-height: var(--type-title-lg-line); }
 }
 .texto-grande { font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line); }
+/* Texto DIGITADO por quem organiza, em que a quebra de linha e informacao
+   (cliente, 22/10/2026). Num `<p>` comum o navegador colapsa `\n` em espaco e
+   junta tudo numa linha. `pre-line` preserva SO a quebra: o resto do espaco em
+   branco continua colapsando e a linha continua quebrando por largura -- `pre`
+   manteria a indentacao e tiraria a quebra automatica, dando rolagem
+   horizontal no telefone. Composta com uma classe de tamanho, nunca sozinha. */
+.texto-com-linhas { white-space: pre-line; }
 .texto-pequeno { font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
 .sobretitulo {
   font-family: var(--type-overline-family);
