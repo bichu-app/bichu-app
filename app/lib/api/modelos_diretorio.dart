@@ -267,13 +267,24 @@ class EntradaDoDiretorio {
   /// forma da chave antes de montar a URL.
   final String? logoUrl;
 
-  /// A linha de lugar: bairro, cidade e UF, sem separador orfao.
-  ///
-  /// Os tres campos sao anulaveis no contrato, e juntar a mao produz
-  /// `" · São Paulo · "` no dia em que o bairro vier nulo. Aqui a lista e
-  /// filtrada antes de unir.
-  String? get linhaDeLugar =>
-      linhaDeLugarDe(bairro: bairro, cidade: cidade, estado: estado);
+  // A LINHA DE LUGAR DE TRES PARTES SAIU DAQUI EM 22/10/2026.
+  //
+  // Este getter devolvia `bairro · cidade · UF` e tinha UM leitor: o cartao do
+  // `Perto`. O cliente pediu *"na listagem exibe so o bairro e na pagina
+  // interna o endereco completo"*, e o cartao passou a chamar
+  // [linhaDeLugarDe] com um argumento so.
+  //
+  // **Apagado, e nao deixado sem leitor**, porque o risco aqui tem nome:
+  // [DetalheDoLocal] tem um getter com o MESMO NOME que continua devolvendo as
+  // tres partes -- e deve continuar, porque a pagina interna mostra as tres.
+  // Dois getters `linhaDeLugar` com significados diferentes no mesmo arquivo,
+  // um deles sem nenhum leitor, e um convite a `entrada.linhaDeLugar` voltar
+  // ao cartao por completacao automatica, desfazendo o pedido sem ninguem
+  // decidir que fosse desfeito. O analisador nao avisa: getter publico sem
+  // leitor nao e `unused_element`.
+  //
+  // Quem quiser a linha composta de um resumo chama [linhaDeLugarDe] com os
+  // tres campos, que continuam todos aqui.
 
   static EntradaDoDiretorio doJson(Map<String, dynamic> json) {
     final slug = json['slug'];

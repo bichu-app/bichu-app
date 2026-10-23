@@ -879,13 +879,38 @@ class CartaoDoDiretorio extends StatelessWidget {
     // ao servidor que pare de manda-los seria mudar o contrato por causa de um
     // desenho, e a pagina do local usa os mesmos campos.
     //
-    // O `endereco` dos cinco e [EntradaDoDiretorio.linhaDeLugar] -- bairro,
-    // cidade e UF. **E o unico endereco que a LISTAGEM tem**:
-    // `DirectoryEntrySummary` nao declara `street`, e as quatro colunas de
-    // endereco comercial saem so em `DirectoryEntryDetail` (21/10/2026). O app
-    // nao inventa endereco que o servidor nao manda.
+    // O `endereco` dos cinco e **SO O BAIRRO** (cliente, 22/10/2026, quando
+    // perguntado o que ele queria por endereco na listagem): *"na listagem
+    // exibe so o bairro e na pagina interna o endereco completo com o clique
+    // para abrir o mapa"*.
+    //
+    // Antes desta linha o cartao escrevia `Pinheiros · São Paulo · SP`, os
+    // tres rotulos de `DirectoryEntrySummary`. **A cidade e a UF nao foram
+    // apagadas do produto**: elas continuam na pagina interna, na linha de
+    // lugar do `_Cabecalho` (e no texto de compartilhar), e o caso
+    // `cidade e UF saem da listagem e CONTINUAM na pagina interna` mede as
+    // duas metades.
+    //
+    // **`linhaDeLugarDe` com UM argumento, e nao `entrada.bairro` cru**, e a
+    // escolha e de robustez e nao de estilo: ela filtra string vazia (`''` e
+    // `'   '` viram nulo) e devolve nulo quando nao sobra nada. O servidor
+    // promete nulo e nao promete nunca mandar vazio -- e `Text('')` desenharia
+    // uma linha em branco de altura cheia entre o segmento e o `Ligar`, que e
+    // o defeito que ninguem olha duas vezes. A regra continua tendo UMA
+    // definicao, lida pelas duas telas.
+    //
+    // **SEM BAIRRO NAO HA LINHA, e nao ha recuo para cidade.** Medido no
+    // contrato: `neighborhood`, `city` e `state` sao os TRES `nullable: true`
+    // em `DirectoryEntrySummary`, e nenhum esta em `required` -- entao bairro
+    // nulo e estado possivel e nao erro. Cair para cidade seria inventar um
+    // recuo que ele nao pediu, e dizer `São Paulo` onde ele pediu bairro faria
+    // a listagem parecer ter a informacao que nao tem. **E e a regra desta
+    // casa, aplicada sem excecao**: distancia nula nao escreve linha,
+    // `rating` ausente nao desenha linha, local sem foto nao tem faixa vazia.
+    // O cartao de uma entrada sem bairro tem quatro itens em vez de cinco, e o
+    // caso `ISCA — o cartao minimo` mede que ele continua de pe.
     final atividade = entrada.atividade?.rotulo;
-    final lugar = entrada.linhaDeLugar;
+    final bairro = linhaDeLugarDe(bairro: entrada.bairro);
     final telefone = entrada.telefoneE164;
     final logo = entrada.logoUrl;
 
@@ -977,14 +1002,15 @@ class CartaoDoDiretorio extends StatelessWidget {
                           ?.copyWith(color: cores.textSecondary),
                     ),
                   ],
-                  // O ENDERECO que a listagem tem: bairro, cidade e UF. **A
-                  // ULTIMA linha de texto do cartao** -- a media, a distancia,
-                  // a apresentacao e o selo sairam em 22/10/2026 e a tabela na
-                  // prosa de `build` diz onde cada um ficou.
-                  if (lugar != null) ...<Widget>[
+                  // O ENDERECO que a listagem tem: **so o bairro**. **A ULTIMA
+                  // linha de texto do cartao** -- a media, a distancia, a
+                  // apresentacao e o selo sairam em 22/10/2026, e a cidade e a
+                  // UF sairam no mesmo dia; a prosa de `build` diz onde cada
+                  // um ficou.
+                  if (bairro != null) ...<Widget>[
                     const SizedBox(height: BichuEspaco.e1),
                     Text(
-                      lugar,
+                      bairro,
                       style: textos.bodyMedium
                           ?.copyWith(color: cores.textSecondary),
                     ),

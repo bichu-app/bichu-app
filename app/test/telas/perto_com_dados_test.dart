@@ -261,7 +261,7 @@ void main() {
   // 1. A lista aparece, com o que o cartao TEM
   // -------------------------------------------------------------------------
   group('a secao Perto mostra o diretorio', () {
-    testWidgets('cada entrada vira um cartao com nome, atividade e lugar',
+    testWidgets('cada entrada vira um cartao com nome, atividade e bairro',
         (tester) async {
       await abrirPerto(
         tester,
@@ -287,9 +287,23 @@ void main() {
       expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
       expect(find.text('Clínica Santa Bárbara'), findsOneWidget);
       expect(find.text('Clínica'), findsOneWidget);
-      expect(find.text('Pinheiros · São Paulo · SP'), findsOneWidget);
+      // **SO O BAIRRO, desde 22/10/2026** (cliente: *"na listagem exibe so o
+      // bairro e na pagina interna o endereco completo com o clique para
+      // abrir o mapa"*, com o motivo *"a cidade na listagem nao e
+      // necessario, porque ja vai estar filtrado pela localizacao do
+      // usuario"*). Estas tres linhas afirmavam `Pinheiros · São Paulo · SP`
+      // e `Vila Madalena · São Paulo · SP`.
+      //
+      // Cidade e UF **continuam na pagina interna**, e quem mede as duas
+      // metades e `listagem_e_pagina_do_profissional_test.dart`.
+      expect(find.text('Pinheiros'), findsOneWidget);
       expect(find.text('Banho e tosa'), findsOneWidget);
-      expect(find.text('Vila Madalena · São Paulo · SP'), findsOneWidget);
+      expect(find.text('Vila Madalena'), findsOneWidget);
+      // E a linha nao traz cidade nem UF coladas no bairro: `findsOneWidget`
+      // sobre `Pinheiros` passaria com a linha de tres partes inteira, porque
+      // `find.text` casa o texto EXATO -- mas esta assercao e a que diz, em
+      // caso de reprova, o que voltou.
+      expect(find.textContaining('· São Paulo'), findsNothing);
     });
 
     // O SELO SAIU DO CARTAO EM 22/10/2026, e este caso virou do avesso.

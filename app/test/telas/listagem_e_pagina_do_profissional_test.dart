@@ -54,11 +54,13 @@
 // visualizador, e que a folha do sistema recebeu o texto que recebeu.
 
 import 'package:bichu/dispositivo/saida_do_app.dart';
+import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/dispositivo/textos_do_app_de_mapas.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
 import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/telas/rede/encontro_da_rede.dart';
+import 'package:bichu/widgets/cidade_por_localizacao.dart';
 import 'package:bichu/widgets/icone_do_inscrito.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:bichu/widgets/visualizador_de_imagem.dart';
@@ -273,20 +275,284 @@ void main() {
         contains('Clínica'),
         reason: 'REPROVA: o cartão perdeu o segmento (`kind` do contrato).',
       );
+      // (4) O ENDEREÇO DA LISTAGEM É **SÓ O BAIRRO** (cliente, 22/10/2026:
+      // *"na listagem exibe só o bairro e na pagina interna o endereço
+      // completo com o clique para abrir o mapa"*).
+      //
+      // `DirectoryEntrySummary` não declara `street` -- as quatro colunas de
+      // endereço comercial só saem em `DirectoryEntryDetail` --, então o
+      // `endereço` que a listagem pode mostrar vem de `neighborhood`, e é
+      // esse o que ele quis.
       expect(
         texto,
-        contains('Pinheiros · São Paulo · SP'),
-        reason: 'REPROVA: o cartão perdeu a linha de lugar. **Ela é o '
-            '`endereço` que a LISTAGEM tem**: `DirectoryEntrySummary` não '
-            'declara `street` -- as quatro colunas de endereço comercial só '
-            'saem em `DirectoryEntryDetail` (21/10/2026), e o app não inventa '
-            'endereço que o servidor não manda.',
+        contains('Pinheiros'),
+        reason: 'REPROVA: o cartão perdeu o bairro. Ele é o `endereço` que a '
+            'LISTAGEM tem, e o quarto dos cinco itens que o cliente mandou '
+            'ficar.',
+      );
+      // E a linha é o bairro SOZINHO: `contains('Pinheiros')` passaria com a
+      // linha de três partes inteira na tela, que é exactamente o estado
+      // anterior a este pedido.
+      expect(
+        texto,
+        isNot(contains('Pinheiros ·')),
+        reason: 'REPROVA: o bairro continua colado em cidade e UF. O cliente '
+            'pediu *"só o bairro"*, e `contains(\'Pinheiros\')` sozinho '
+            'passaria com `Pinheiros · São Paulo · SP` inteiro desenhado.',
       );
       // (5) o botão de ligar.
       expect(
         find.text(CartaoDoDiretorio.rotuloDeLigar),
         findsOneWidget,
         reason: 'REPROVA: o cartão perdeu o botão `Ligar`.',
+      );
+    });
+
+    testWidgets('cidade e UF saem da listagem e CONTINUAM na página interna', (
+      tester,
+    ) async {
+      // A OUTRA METADE DO CORTE. O cliente deu o motivo: *"a cidade na
+      // listagem não é necessario, porque já vai estar filtrado pela
+      // localização do usuário"*. **Necessário na listagem**, e não no
+      // produto: medir só a ausência aprovaria apagar a cidade de todo lugar.
+      await abrirPerto(tester, rede: soAListagem());
+      final naListagem = textoVisivel(tester);
+
+      // ÂNCORA: a cidade e a UF CHEGARAM na resposta -- sem isto, não as
+      // desenhar não mede decisão nenhuma.
+      final entrada = tester
+          .widget<CartaoDoDiretorio>(find.byType(CartaoDoDiretorio))
+          .entrada;
+      expect(entrada.cidade, 'São Paulo');
+      expect(entrada.estado, 'SP');
+
+      expect(
+        naListagem,
+        isNot(contains('São Paulo')),
+        reason: 'REPROVA: a cidade continua no cartão.',
+      );
+      expect(
+        naListagem,
+        isNot(contains(' · SP')),
+        reason: 'REPROVA: a UF continua no cartão.',
+      );
+    });
+
+    testWidgets('e na página interna a linha continua com as três partes', (
+      tester,
+    ) async {
+      await abrirOLocal(
+        tester,
+        rede: redeDoLocal(detalhe: detalheComTudo()),
+        alta: true,
+      );
+      expect(
+        textoDaPagina(tester),
+        contains('Pinheiros · São Paulo · SP'),
+        reason: 'REPROVA: a página interna perdeu cidade e UF. O corte de '
+            '22/10/2026 é da LISTAGEM -- *"na listagem exibe só o bairro e na '
+            'pagina interna o endereço completo"* --, e a página é onde a '
+            'informação ficou.',
+      );
+    });
+
+    // ISCA — O CARTÃO MÍNIMO, e ele ficou mais provável com este corte.
+    //
+    // Cortar cidade e UF aumenta a chance de um cartão sem linha de lugar: antes
+    // bastava QUALQUER um dos três campos para a linha existir, e agora o
+    // bairro é o único que a produz. Os três são `nullable: true` em
+    // `DirectoryEntrySummary` e nenhum está em `required` -- medido no
+    // contrato.
+    //
+    // **Este caso não existia, e a ausência dele foi relatada antes de ser
+    // coberta.** O que ele guarda: o cartão mínimo (logo ausente, segmento
+    // desconhecido, bairro ausente, telefone ausente) **continua de pé e
+    // continua na lista**, em vez de virar uma moldura vazia ou derrubar a
+    // página inteira por causa de uma entrada.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `lista_do_diretorio.dart`, troque o
+    // `IconeDoInscrito` do `else` por `const SizedBox.shrink()`. O cartão
+    // mínimo fica com o nome e NADA mais, e o terceiro `expect` reprova.
+    testWidgets('ISCA — o cartão mínimo: só glifo e nome, e a lista fica de pé',
+        (tester) async {
+      await abrirPerto(
+        tester,
+        rede: (req) async {
+          if (req.url.path == '/v1/directory/entries' && req.method == 'GET') {
+            return json200(
+              paginaDoContrato(
+                <Map<String, dynamic>>[
+                  // SEM bairro, SEM telefone, SEM logo, e com um `kind` que
+                  // ESTA versao do app não conhece -- os quatro ao mesmo
+                  // tempo, porque é a convivência deles que produz o cartão
+                  // mínimo. Cidade e UF vêm na resposta de propósito: elas
+                  // NÃO resgatam a linha depois do corte, e é isso que o
+                  // segundo `expect` prova.
+                  <String, dynamic>{
+                    ...entradaDoContrato(
+                      slug: 'so-o-nome',
+                      displayName: 'Adestrador sem bairro',
+                      neighborhood: null,
+                      level: 'none',
+                      evidence: const <String>[],
+                    ),
+                    'kind': 'atividade-que-o-app-nao-conhece',
+                  },
+                  // Uma segunda entrada COMPLETA: se a mínima derrubasse a
+                  // listagem, esta desapareceria junto, e um teste com uma
+                  // entrada só não distinguiria "cartão vazio" de "lista
+                  // quebrada".
+                  entradaCompleta(),
+                ],
+                distanciaDisponivel: true,
+              ),
+            );
+          }
+          return problema('not-found', 404);
+        },
+      );
+
+      // (1) OS DOIS cartões existem: a entrada mínima não derrubou a lista.
+      expect(
+        find.byType(CartaoDoDiretorio),
+        findsNWidgets(2),
+        reason: 'REPROVA: a listagem perdeu cartão por causa de uma entrada '
+            'sem bairro, sem telefone, sem logo e com atividade desconhecida. '
+            'Nenhuma dessas quatro é erro: são os estados normais de uma '
+            'entrada recém-indicada e de uma atividade nova no servidor.',
+      );
+      expect(find.text('Adestrador sem bairro'), findsOneWidget);
+
+      final minimo = find.ancestor(
+        of: find.text('Adestrador sem bairro'),
+        matching: find.byType(CartaoDoDiretorio),
+      );
+
+      // (2) SEM BAIRRO NÃO HÁ LINHA DE LUGAR, e cidade e UF não a resgatam.
+      // **É aqui que o corte de 22/10 muda o produto**: antes dele esta
+      // entrada mostraria `São Paulo · SP`.
+      final doMinimo = textoDe(tester, minimo);
+      expect(
+        doMinimo,
+        isNot(contains('São Paulo')),
+        reason: 'REPROVA: a cidade apareceu como recuo do bairro ausente. O '
+            'cliente pediu *"só o bairro"*, e cair para cidade seria inventar '
+            'um recuo que ele não pediu.',
+      );
+
+      // (3) E O CARTÃO NÃO É UMA MOLDURA VAZIA: ele tem o glifo do tipo e o
+      // nome. `glifoDoInscrito` nunca devolve nulo -- nem para um valor de
+      // `enum` que esta versão do app não conhece, que é o caso desta massa.
+      expect(
+        find.descendant(of: minimo, matching: find.byType(IconeDoInscrito)),
+        findsOneWidget,
+        reason: 'REPROVA: o cartão mínimo não tem nem o glifo do tipo. Sem '
+            'ele sobra o nome sozinho numa moldura, e quem olha não sabe se a '
+            'entrada é clínica, loja ou pessoa.',
+      );
+      // E ele continua levando à página interna, que é onde o endereço
+      // completo mora: cartão sem linha de lugar não é cartão sem destino.
+      expect(
+        find.descendant(of: minimo, matching: find.byType(InkWell)),
+        findsWidgets,
+        reason: 'REPROVA: o cartão mínimo perdeu o toque que abre a página do '
+            'local. É justamente ele que mais precisa dela.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // MEDIÇÃO ABERTA — onde a cidade em uso aparece, depois do corte
+  // =========================================================================
+  group('MEDIÇÃO ABERTA — a cidade em uso não aparece na tela da listagem', () {
+    // **ESTE GRUPO NÃO AFIRMA QUE O PRODUTO ESTÁ CERTO. Ele registra o que
+    // foi medido, para que a decisão seja do cliente e não de um descuido.**
+    //
+    // O corte de cidade e UF do cartão tem uma razão que o cliente deu e
+    // confirmou: *"sempre recortada por cidade, por mais que o usuário possa
+    // mudar no filtro"* -- repetir a cidade em trinta cartões é ruído se ela
+    // está no contexto da tela. **A razão depende de a cidade estar VISÍVEL em
+    // algum lugar**, senão a informação não muda de lugar: ela desaparece.
+    //
+    // Medido, e é o que este caso prova: **com cidade em uso, a caixa de
+    // localização se ESCONDE** (`cidadeEmUso != null` devolve
+    // `SizedBox.shrink()`), e a única linha visível da `BarraDeListagem` é
+    // `<N> resultados · <ordem>`, que não carrega cidade. O valor da cidade
+    // vive dentro da FOLHA de filtros, que está fechada.
+    //
+    // Então, depois de a cidade resolver, a tela mostra cartões `Pinheiros`
+    // sem nada dizendo de que cidade -- até alguém abrir o filtro. **Não
+    // acrescentei nada**: pôr a cidade no topo é pedido novo, pequeno, e é
+    // decisão dele. Este caso é o alarme se mudar.
+    testWidgets('com cidade em uso, a caixa de localização se esconde', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          // `BichuTheme.claro` NAO e enfeite: `BichuColors.of` reprova fora
+          // dele, e sem o tema o caso de cima passaria pelo motivo errado --
+          // a caixa "nao aparece" porque o build estourou, e nao porque ela
+          // decidiu se esconder. Foi exactamente o que o CONTROLE POSITIVO
+          // pegou na primeira execucao: 0 widgets, com a caixa correta.
+          theme: BichuTheme.claro,
+          home: const Scaffold(
+            body: CaixaDeLocalizacao(
+              cidadeEmUso: 'São Paulo',
+              explicacao: ListaDoDiretorio.explicacaoSemCidade,
+              podeOferecer: true,
+              aviso: null,
+              aoUsarLocalizacao: null,
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('São Paulo'),
+        findsNothing,
+        reason: 'MUDOU: a caixa de localização passou a dizer a cidade em uso. '
+            'Isso FECHA o vão relatado em 22/10/2026 (cartão sem cidade e '
+            'nada na tela dizendo qual) -- se foi decisão do cliente, apague '
+            'este grupo; se foi acidente, ele é bem-vindo e o relatório '
+            'precisa saber.',
+      );
+      expect(
+        find.text(ListaDoDiretorio.explicacaoSemCidade),
+        findsNothing,
+        reason: 'REPROVA: a caixa diz `Mostrando profissionais de todas as '
+            'cidades` havendo cidade em uso, que é o contrário da verdade.',
+      );
+    });
+
+    testWidgets('CONTROLE POSITIVO: SEM cidade em uso, a caixa aparece e fala',
+        (tester) async {
+      // Sem este controle, o caso acima passaria com a `CaixaDeLocalizacao`
+      // quebrada -- um widget que nunca desenha nada satisfaz qualquer
+      // `findsNothing`.
+      await tester.pumpWidget(
+        MaterialApp(
+          // `BichuTheme.claro` NAO e enfeite: `BichuColors.of` reprova fora
+          // dele, e sem o tema o caso de cima passaria pelo motivo errado --
+          // a caixa "nao aparece" porque o build estourou, e nao porque ela
+          // decidiu se esconder. Foi exactamente o que o CONTROLE POSITIVO
+          // pegou na primeira execucao: 0 widgets, com a caixa correta.
+          theme: BichuTheme.claro,
+          home: const Scaffold(
+            body: CaixaDeLocalizacao(
+              cidadeEmUso: null,
+              explicacao: ListaDoDiretorio.explicacaoSemCidade,
+              podeOferecer: true,
+              aviso: null,
+              aoUsarLocalizacao: null,
+            ),
+          ),
+        ),
+      );
+      expect(
+        find.text(ListaDoDiretorio.explicacaoSemCidade),
+        findsOneWidget,
+        reason: 'REPROVA POR VAZIO: a caixa não desenha nem sem cidade, então '
+            'o caso acima não mede esconder-se.',
       );
     });
   });
