@@ -877,6 +877,12 @@ void ligarPortaDoDestinoDoAviso() {
       // enderecada por pet e nao por pedido.
       DestinoDoAviso.pedidoDaPlaquinha => Rotas.acompanharPlaquinhaDe(ref),
       DestinoDoAviso.comunicado => RotasDoComunicado.de(ref),
+      // O PEDIDO DE CONEXAO nao tem rota por item, como a indicacao:
+      // `pedidosDeConexao` e a LISTA, e e nela que o pedido e aceito ou
+      // recusado. O servidor manda o `ref` opaco da aresta porque o contrato
+      // promete que `destination` e `destination_ref` andam juntos, e a guarda
+      // acima o exige -- mas a lista nao o usa, e a decisao esta no contrato.
+      DestinoDoAviso.pedidosDeConexao => Rotas.pedidosDeConexao,
     };
   };
 }
