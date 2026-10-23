@@ -54,7 +54,31 @@ import '../perdido/quando_foi_visto.dart';
 /// Acrescentar um item aqui e acrescentar uma exigencia ao formulario.
 enum ImpedimentoDeRegistrar {
   semEspecie('Diga se é cachorro, gato ou outro bicho.'),
-  semPorte('Diga o tamanho, do jeito que deu para ver.'),
+
+  /// **`porte` E NAO `tamanho`, e a troca e UMA PALAVRA (cliente,
+  /// 22/10/2026).**
+  ///
+  /// Era *"Diga o tamanho, do jeito que deu para ver."*. Ele escolheu a
+  /// palavra deste campo no mesmo dia -- *"Altere o texto do tamanho de quê?
+  /// para Qual é o porte?"* --, e o rotulo visivel virou
+  /// `TextosDoAchado.rotuloDoPorte`, *"Qual é o porte?"*. Deixar o motivo em
+  /// *"tamanho"* manteria DUAS palavras para o mesmo campo na mesma tela.
+  ///
+  /// **E a inconsistencia tinha deixado de ser so de texto.** Desde que o
+  /// passo 1 passou a carregar o motivo no nome acessivel do `Continuar`
+  /// desabilitado, esta frase e **o que o leitor de tela ANUNCIA**: quem ve a
+  /// tela lia "porte" e quem nao ve ouvia "tamanho" -- mesmo campo,
+  /// vocabulario diferente, e a diferenca aparecendo so para quem depende do
+  /// leitor.
+  ///
+  /// O resto da frase ficou intacto de proposito: trocar mais que a palavra
+  /// seria redacao nova, e redacao e decisao dele.
+  ///
+  /// **Vale nos DOIS passos, e isso e vantagem e nao efeito colateral**:
+  /// `impedimentoEm` consulta `impedimentoDoPasso1` primeiro, entao esta
+  /// frase pode aparecer tanto no nome acessivel do `Continuar` quanto no
+  /// motivo visivel do `Registrar achado`. E o mesmo campo nas duas.
+  semPorte('Diga o porte, do jeito que deu para ver.'),
   semOnde('Diga onde você achou: use a localização ou escreva a cidade.'),
   semQuando('Diga quando você achou.'),
   semData('Escolha a data em que você achou.'),
