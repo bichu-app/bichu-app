@@ -317,10 +317,11 @@ void main() {
     // OS ESTADOS, ESCOLHIDOS PELO PIOR CASO E NAO PELO BONITO.
     //
     // As larguras citadas foram MEDIDAS nesta maquina, com as fontes do
-    // produto carregadas, a 390 dp: a coluna de texto tem 258 dp, o segmento
-    // mais LARGO dos seis e `Banho e tosa` (86,09 dp -- e nao `Veterinário`,
-    // que tem 71,84 dp apesar do mesmo tanto de letra), e o orcamento do
-    // TEXTO do bairro na mesma linha e `226 - largura(segmento)` dp.
+    // produto carregadas, a 390 dp: a coluna de texto tem 258 dp e o segmento
+    // mais LARGO dos seis e `Hospedagem` (88,37 dp) -- com 10 caracteres, e
+    // nao `Banho e tosa`, que tem 12 e mede 86,09. No pior segmento a
+    // fronteira medida fica entre 131,3 dp (divide a linha) e 137,3 dp
+    // (desce).
     final estados = <_Estado>[
       _Estado(
         legenda: 'Curto + curto — o caso que motiva a ideia',
@@ -332,23 +333,22 @@ void main() {
         ),
       ),
       _Estado(
-        legenda: 'Pior segmento + o MAIOR bairro que ainda cabe '
-            '(137,3 de 139,9 dp)',
+        legenda: 'Pior segmento (Hospedagem) + bairro que CABE — 131,3 dp',
         entrada: _entrada(
-          slug: 'banho-cabe',
-          nome: 'Banho do Tobias',
-          atividade: AtividadeDoDiretorio.groomer,
-          bairro: 'Vila Nova Conceição',
+          slug: 'hospedagem-cabe',
+          nome: 'Hospedagem da Ana',
+          atividade: AtividadeDoDiretorio.sitter,
+          bairro: 'Parque Anhanguera',
           logo: _urlDaLogo,
         ),
       ),
       _Estado(
-        legenda: 'Pior segmento + bairro que NÃO cabe (155,9 de 139,9 dp) '
+        legenda: 'Pior segmento + bairro que NÃO cabe (155,9 dp) '
             '— é AQUI que os três diferem',
         entrada: _entrada(
-          slug: 'banho-nao-cabe',
-          nome: 'Banho do Tobias',
-          atividade: AtividadeDoDiretorio.groomer,
+          slug: 'hospedagem-nao-cabe',
+          nome: 'Hospedagem da Ana',
+          atividade: AtividadeDoDiretorio.sitter,
           bairro: 'Jardim Chácara Inglesa',
           logo: _urlDaLogo,
         ),

@@ -1065,13 +1065,40 @@ class CartaoDoDiretorio extends StatelessWidget {
                             //
                             // **O risco e todo do lado do bairro, e isso foi
                             // medido e nao suposto.** O segmento e lista
-                            // FECHADA de seis (`AtividadeDoDiretorio`), o
-                            // maior tem 12 caracteres (`Veterinário`,
-                            // `Banho e tosa`) e ele nao cresce -- o cartao o
-                            // le por `porCodigo`, nao por texto do servidor.
+                            // FECHADA de seis (`AtividadeDoDiretorio`) e nao
+                            // cresce -- o cartao o le por `porCodigo`, nao por
+                            // texto do servidor. As seis larguras, medidas a
+                            // 390 dp com as fontes do produto:
+                            //
+                            //     Hospedagem    88,37   <- o mais LARGO
+                            //     Banho e tosa  86,09
+                            //     Adestrador    73,73
+                            //     Veterinário   71,84
+                            //     Passeador     69,98
+                            //     Clínica       44,67
+                            //
+                            // **Letra nao prediz largura, e esta tabela e a
+                            // prova**: `Hospedagem` tem 10 caracteres e e mais
+                            // larga que `Banho e tosa`, que tem 12. Quem
+                            // escolher "o pior segmento" contando caractere
+                            // escolhe errado -- eu escolhi, e um segundo
+                            // controle pegou.
+                            //
                             // O bairro e texto LIVRE, vem do CEP, e nao tem
                             // teto. `Conjunto Habitacional Teotônio Vilela`
-                            // existe em São Paulo e tem 37 caracteres.
+                            // existe em São Paulo e tem 37 caracteres, 236 dp.
+                            //
+                            // **A FRONTEIRA E MEDIDA, e nao calculada.** A
+                            // coluna de texto tem 258 dp a 390 dp de tela. No
+                            // pior segmento (`Hospedagem`), `Parque
+                            // Anhanguera` (131,3 dp) divide a linha e `Vila
+                            // Nova Conceição` (137,3 dp) desce: a fronteira
+                            // esta ENTRE os dois. Uma conta de
+                            // `258 - segmento - vaos` daria 137,6 e estaria
+                            // errada do lado perigoso -- `spacing` e minimo e
+                            // nao exato, e o `Wrap` arredonda. Por isso nenhum
+                            // caso de teste trava um numero: eles travam o
+                            // COMPORTAMENTO nas duas direcoes.
                             //
                             // **`Wrap` e nao `Row`, e e aqui que esta a
                             // decisao.** Com `Row` a linha so tem duas

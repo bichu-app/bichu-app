@@ -580,14 +580,27 @@ void main() {
     //
     // ## POR QUE ESTES CASOS NAO TRAVAM UM NUMERO DE CARACTERES
     //
-    // Porque caractere NAO e a unidade, e isso foi medido. A 390 dp a coluna
-    // de texto tem 258 dp e o orcamento do bairro e `226 - largura(segmento)`:
-    // 139,9 dp depois de `Banho e tosa` (o segmento mais LARGO dos seis, com
-    // 86,09 dp), 154,2 depois de `Veterinário` (71,84) e 181,3 depois de
-    // `Clínica` (44,67). Com `Veterinário`, `Vila Sônia da Boa Vista` (23
-    // caracteres, 151,9 dp) CABE e `Vila Nova Cachoeirinha` (22 caracteres,
-    // 154,0 dp) NAO -- menos letra e mais largura. Um caso que travasse "ate N
-    // caracteres" seria falso no dia seguinte.
+    // Porque caractere NAO e a unidade, e isso foi medido duas vezes -- a
+    // segunda porque a primeira estava errada.
+    //
+    // A 390 dp a coluna de texto tem 258 dp. Os seis segmentos, medidos com as
+    // fontes do produto: `Hospedagem` 88,37 dp (o mais LARGO), `Banho e tosa`
+    // 86,09, `Adestrador` 73,73, `Veterinário` 71,84, `Passeador` 69,98,
+    // `Clínica` 44,67. **`Hospedagem` tem 10 caracteres e e mais larga que
+    // `Banho e tosa`, que tem 12** -- a primeira medicao desta entrega elegeu
+    // `Banho e tosa` como pior caso contando LETRA, e so o controle que mediu
+    // os seis derrubou isso.
+    //
+    // E do lado do bairro vale o mesmo: com `Veterinário`, `Vila Sônia da Boa
+    // Vista` (23 caracteres, 151,9 dp) CABE e `Vila Nova Cachoeirinha` (22
+    // caracteres, 154,0 dp) NAO.
+    //
+    // **A fronteira tambem nao e calculavel.** No pior segmento,
+    // `Parque Anhanguera` (131,3 dp) divide a linha e `Vila Nova Conceição`
+    // (137,3 dp) desce; uma conta de `258 - segmento - vaos` daria 137,6 e
+    // estaria errada do lado perigoso. Nenhum caso daqui trava um numero:
+    // eles travam o COMPORTAMENTO nas duas direcoes, que e o que nao muda com
+    // a versao da fonte nem com a largura da tela.
     //
     // Entao o que estes casos travam e o COMPORTAMENTO nas duas direcoes:
     // couber, uma linha; nao couber, desce inteiro. A fronteira em dp muda com
@@ -683,9 +696,11 @@ void main() {
         'ISCA — o bairro que NAO cabe DESCE inteiro, e nunca e cortado',
         (tester) async {
       _telaDeCelular(tester);
-      // `Banho e tosa` (86,09 dp) e o pior segmento, e `Jardim Chácara
-      // Inglesa` (155,9 dp) passa dos 139,9 dp de orcamento. O par foi
-      // escolhido por medicao, nao por tamanho aparente.
+      // `Hospedagem` (88,37 dp) e o pior segmento dos seis -- medido, nao
+      // contado por letra -- e `Jardim Chácara Inglesa` (155,9 dp) passa com
+      // folga da fronteira medida (entre 131,3 e 137,3 dp). A folga e
+      // deliberada: um par que raspasse a fronteira viraria caso intermitente
+      // na proxima versao da fonte.
       const String bairroLongo = 'Jardim Chácara Inglesa';
       await abrirPerto(
         tester,
@@ -694,9 +709,9 @@ void main() {
             <Map<String, dynamic>>[
               <String, dynamic>{
                 ...entradaDoContrato(
-                  slug: 'banho-do-tobias',
-                  kind: 'groomer',
-                  displayName: 'Banho do Tobias',
+                  slug: 'hospedagem-da-ana',
+                  kind: 'sitter',
+                  displayName: 'Hospedagem da Ana',
                   neighborhood: bairroLongo,
                 ),
                 'logo_url': _logoDoLugar,
@@ -707,9 +722,9 @@ void main() {
         ),
       );
 
-      final cartao = _cartaoDe('Banho do Tobias');
+      final cartao = _cartaoDe('Hospedagem da Ana');
       final segmento =
-          find.descendant(of: cartao, matching: find.text('Banho e tosa'));
+          find.descendant(of: cartao, matching: find.text('Hospedagem'));
       final bairro =
           find.descendant(of: cartao, matching: find.text(bairroLongo));
       expect(
@@ -727,7 +742,7 @@ void main() {
         doBairro.topo,
         greaterThanOrEqualTo(doSegmento.base),
         reason: 'REPROVA: o bairro de 155,9 dp ficou na MESMA linha de um '
-            'segmento de 86,09 dp, numa coluna de 258 dp. Ou ele foi cortado, '
+            'segmento de 88,37 dp, numa coluna de 258 dp. Ou ele foi cortado, '
             'ou esta estourando a coluna -- as duas sao defeito.',
       );
 
