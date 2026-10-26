@@ -152,7 +152,41 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// ---------------------------------------------------------------------------
+/// 2706 -> 2714 em 23/10/2026 (BICHUS-278, os icones da barra)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO POR TROCA DE VOCABULARIO: tres arquivos a
+/// citam a mais, e a conta fecha nos tres.** Medido arquivo por arquivo com o
+/// metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de todo `.dart`
+/// de `app/lib`, recursivo, comentario incluido):
+///
+///   * `telas/casca_com_abas.dart`  51 -> 53  (**+2**)
+///   * `theme/icones_da_barra.g.dart`  novo   (**+1**)
+///   * `widgets/icone_da_barra.dart`   novo   (**+5**)
+///
+/// Soma +8, e 2706 + 8 = 2714. As DUAS de `casca_com_abas.dart` sao as unicas
+/// linhas novas daquele arquivo que escrevem a palavra, e as duas estao em
+/// mensagem de `assert`: *"DESTINO DA BARRA DESENHA O DO BICHU"* e *"Ou o
+/// desenho do Bichu"*. As cinco de `widgets/icone_da_barra.dart` sao
+/// `BichuTheme` (duas, em prosa), `BichuColors` (uma, em prosa), o importe
+/// `theme/bichu_colors.dart` e a chamada `BichuColors.of`. A de
+/// `theme/icones_da_barra.g.dart` e `BichuTheme` na prosa do gerador.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre a arvore LIMPA
+/// da base `d590ce2a` ANTES de qualquer edicao, devolveu EXATAMENTE 2706 --
+/// o valor que a linha travava. Reproduzir o numero conhecido antes de medir o
+/// desconhecido e o que faz esta troca valer; sem isso eu estaria travando o
+/// resultado do meu script e nao a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 218 `.dart` na
+/// base e 220 aqui, e os DOIS a mais sao exatamente os dois arquivos novos
+/// listados acima. Nenhum arquivo saiu.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2714;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

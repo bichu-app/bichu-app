@@ -9,7 +9,9 @@ import '../widgets/arrastar_para_atualizar.dart';
 import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../theme/icones_da_barra.g.dart';
 import '../widgets/barra_de_listagem.dart';
+import '../widgets/icone_da_barra.dart';
 import '../widgets/imagem_da_rede.dart';
 import '../widgets/marca.dart';
 
@@ -126,16 +128,44 @@ class DestinoDeNavegacao {
     required this.rotulo,
     required this.reforcoAcessivel,
     required this.reforcoDaPagina,
-    required this.icone,
-    required this.iconeSelecionado,
     required this.rota,
     required this.estado,
     required this.campoSemantico,
+    this.desenho,
+    this.desenhoSelecionado,
+    this.icone,
+    this.iconeSelecionado,
     this.naBarra = true,
     this.ehRamo = true,
     this.destinoProvisorio,
     this.contagem,
-  });
+  }) : assert(
+         (desenho == null) == (desenhoSelecionado == null),
+         'MEIO PAR DE DESENHO. Contorno em repouso e preenchido no '
+         'selecionado e o M3, e e o que as cinco abas fazem: declarar so um '
+         'dos dois e uma aba que nao muda de desenho ao ser tocada, defeito '
+         'que so aparece no aparelho.',
+       ),
+       assert(
+         (icone == null) == (iconeSelecionado == null),
+         'MEIO PAR DE GLIFO. Mesmo motivo do par de desenho.',
+       ),
+       assert(
+         (desenho == null) != (icone == null),
+         'UM DESTINO TEM UMA FONTE DE ARTE, E SO UMA. Ou o desenho do Bichu '
+         '(`desenho`), ou um glifo do Material (`icone`) -- nunca os dois, e '
+         'nunca nenhum. Declarar os dois seria a segunda fonte da verdade do '
+         'que a aba mostra, e e exatamente o estado que deixou os dez SVG do '
+         'cliente parados numa pasta enquanto a barra pintava o Material.',
+       ),
+       assert(
+         !naBarra || desenho != null,
+         'DESTINO DA BARRA DESENHA O DO BICHU. Os cinco slots sao os desenhos '
+         'dele (`design/icones-da-barra/`), por decisao dele: glifo generico '
+         'do Material num slot da barra e o defeito que esta fiacao veio '
+         'fechar. Destino FORA da barra (`Perfil`) continua podendo declarar '
+         '`icone`, porque nao ha SVG para ele e nenhum slot o pinta.',
+       );
 
   /// Se este destino e um ramo do `IndexedStack` de `rotas.dart`.
   ///
@@ -231,8 +261,39 @@ class DestinoDeNavegacao {
   /// o respiro de 24 dp quando ela e vazia.
   final String reforcoDaPagina;
 
-  final IconData icone;
-  final IconData iconeSelecionado;
+  /// O DESENHO DO CLIENTE, nos dois estados. Nulo fora da barra.
+  ///
+  /// **Esta e a arte dos cinco slots**, vinda de `design/icones-da-barra/` pelo
+  /// gerador `app/tool/gen_icones_da_barra.dart`. Ate 23/10/2026 a barra
+  /// pintava `Icons.pets`, `Icons.groups`, `Icons.dynamic_feed`,
+  /// `Icons.shopping_bag` e `Icons.chat` -- cinco glifos do Material Symbols
+  /// -- enquanto os dez SVG dele ficavam numa pasta que nada no app abria.
+  /// Nao era divergencia de desenho: era fiacao que nunca existiu.
+  ///
+  /// **A JUSTIFICATIVA DE CADA GLIFO DO MATERIAL FICOU INTEIRA ACIMA, de
+  /// proposito.** Ela nao virou lixo: a patinha legitima, a recusa de
+  /// `storefront`, a eliminacao dentro da familia fechada ate `dynamic_feed`,
+  /// o balao unico em vez de `forum` -- cada uma dessas decisoes DESCREVE o
+  /// campo semantico que a secao ocupa, e o campo continua valendo e continua
+  /// com portao. O que mudou e de onde a forma vem; o que a forma significa foi
+  /// escolhido antes e nao foi reaberto. Quem apagar aquela prosa apaga o
+  /// motivo de `CampoSemantico` existir.
+  final DesenhoDoIcone? desenho;
+  final DesenhoDoIcone? desenhoSelecionado;
+
+  /// O glifo do Material, nos dois estados. **Nulo na barra.**
+  ///
+  /// Sobra UM destino com este campo, e e `Perfil`: ele saiu da barra em 19/10
+  /// e nao ha SVG dele na pasta do cliente. Ele tambem nao e PINTADO em lugar
+  /// nenhum hoje -- a porta dele virou a foto da barra de topo
+  /// ([AvatarDaConta]) --, e o campo fica porque e ele que faz `Perfil`
+  /// participar do portao de glifos distintos junto com os outros cinco.
+  ///
+  /// O `assert` do construtor impede que um destino da barra volte a declarar
+  /// este campo, e `test/telas/icones_da_barra_test.dart` reprova pelo nome do
+  /// caso quando algum tenta.
+  final IconData? icone;
+  final IconData? iconeSelecionado;
 
   /// O endereco do ramo. Estado que merece link tem endereco (F5).
   final String rota;
@@ -390,8 +451,8 @@ class CascaComAbas extends StatefulWidget {
       // possivel por outro motivo em 22/09**: o alfinete foi para `Perto`
       // (BICHUS-233), e duas secoes vizinhas nao dividem a mesma forma. O
       // desejo morre aqui, e isto esta escrito para nao ser reaberto.
-      icone: Icons.pets_outlined,
-      iconeSelecionado: Icons.pets,
+      desenho: IconesDaBarra.pets,
+      desenhoSelecionado: IconesDaBarra.petsSelecionado,
       rota: Rotas.pets,
       // O leitor de QR responde ao toque e leva a tela de verdade: a secao
       // satisfaz o criterio (a) de 25.7.3.
@@ -445,8 +506,8 @@ class CascaComAbas extends StatefulWidget {
       // da `Rede` sao TEXTO (`Eventos` e `Comunidade`), porque aba de texto
       // nao precisa transferir significado para forma como o slot de 64 dp
       // precisa.
-      icone: Icons.groups_outlined,
-      iconeSelecionado: Icons.groups,
+      desenho: IconesDaBarra.rede,
+      desenhoSelecionado: IconesDaBarra.redeSelecionado,
       rota: Rotas.rede,
       // `GET /network/events` (ADR-0025). A casca honesta saiu da TELA e
       // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
@@ -542,8 +603,8 @@ class CascaComAbas extends StatefulWidget {
       // corpo das paginas, nominalmente, em 18/10/2026. Uma secao nova nao
       // repoe o que ele acabou de mandar tirar.
       reforcoDaPagina: '',
-      icone: Icons.dynamic_feed_outlined,
-      iconeSelecionado: Icons.dynamic_feed,
+      desenho: IconesDaBarra.mural,
+      desenhoSelecionado: IconesDaBarra.muralSelecionado,
       rota: Rotas.mural,
       estado: EstadoDaSecao.casca,
       campoSemantico: CampoSemantico.publicacao,
@@ -557,8 +618,8 @@ class CascaComAbas extends StatefulWidget {
       // plaquinha do Bichu. Prometer aqui um item que a lista nunca vai ter e
       // a mesma classe de defeito do estado vazio que mente.
       reforcoDaPagina: '',
-      icone: Icons.shopping_bag_outlined,
-      iconeSelecionado: Icons.shopping_bag,
+      desenho: IconesDaBarra.loja,
+      desenhoSelecionado: IconesDaBarra.lojaSelecionado,
       rota: Rotas.loja,
       // **`existe`, e nao `planejada`, desde a vitrine.**
       //
@@ -618,8 +679,8 @@ class CascaComAbas extends StatefulWidget {
       // nunca apareceu em tela e e a segunda metade do nome que o leitor de
       // tela anuncia na barra.
       reforcoDaPagina: '',
-      icone: Icons.chat_outlined,
-      iconeSelecionado: Icons.chat,
+      desenho: IconesDaBarra.auau,
+      desenhoSelecionado: IconesDaBarra.auauSelecionado,
       // **A AREA DE MENSAGENS E DE OUTRO AGENTE, e ela nao existe nesta
       // arvore.** O cliente de conversa, a lista e o envio estao sendo
       // construidos como destino independente, com rota propria. Nao ha tela
@@ -1000,11 +1061,11 @@ class BarraDeBaixo extends StatelessWidget {
                       // TalkBack (UX 27.7, regra 2). `Icon` sem
                       // `semanticLabel` ja nao entra.
                       icon: DistintivoDaAba(
-                        glifo: Icon(destino.icone),
+                        glifo: IconeDaBarra(destino.desenho!),
                         naoLidas: naoLidasDe(destino),
                       ),
                       selectedIcon: DistintivoDaAba(
-                        glifo: Icon(destino.iconeSelecionado),
+                        glifo: IconeDaBarra(destino.desenhoSelecionado!),
                         naoLidas: naoLidasDe(destino),
                       ),
                       label: destino.rotulo,

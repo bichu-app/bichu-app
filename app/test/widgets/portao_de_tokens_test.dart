@@ -66,6 +66,26 @@ const List<String> arquivosDaHistoria = <String>[
   'lib/telas/rede/busca_de_pessoas.dart',
   'lib/telas/rede/cartao_de_pessoa_encontrada.dart',
   'lib/telas/conexoes/convide_tutores.dart',
+  // O PINTOR DOS ICONES DA BARRA (BICHUS-278, 23/10/2026). Ele e um
+  // `CustomPainter` que monta `Paint()` a mao, que e o lugar mais facil do app
+  // para um hex entrar sem ninguem notar -- `qr_do_convite.dart`, logo abaixo,
+  // e a prova de que isso acontece.
+  //
+  // **Ele NAO escreve cor nenhuma, e e por isso que ele entra na lista e nao
+  // na excecao**: a tinta vem do `IconTheme` que o `NavigationBar` resolve por
+  // estado, e o unico fallback e `BichuColors...textPrimary`, que e papel e
+  // nao valor. A regra de cor desta frente e cumprida ao contrario -- o
+  // gerador REPROVA hexadecimal no SVG de origem --, e esta linha e o cinto
+  // do lado do Dart.
+  //
+  // **`lib/theme/icones_da_barra.g.dart` NAO entra, e a ausencia e
+  // deliberada:** ele e gerado, o cabecalho dele diz NAO EDITE, e ele e feito
+  // de COORDENADAS -- `cx: 7.5`, `lado: 24.0` --, que a conferencia de
+  // espacamento deste portao leria como numero solto. Quem guarda a cor dele e
+  // `_recusaCorEscrita` no gerador, e quem guarda a geometria e
+  // `test/telas/icones_da_barra_test.dart`, que compara forma por forma com o
+  // SVG.
+  'lib/widgets/icone_da_barra.dart',
   // **`qr_do_convite.dart` NAO entra nesta lista, e a ausencia e deliberada.**
   // Ele e o unico widget novo que escreve cor a mao, e as duas cores dele sao
   // LEGITIMAS: preto e branco puros, cor por funcao optica do paragrafo 19.5.1
