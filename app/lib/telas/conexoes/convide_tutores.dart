@@ -193,22 +193,67 @@ class TelaDeConvidarTutores extends StatefulWidget {
   /// A ação de emitir, para quem ainda não tem convite nesta sessão.
   static const String criarOConvite = 'Criar o meu QR de convite';
 
-  static const String trocarOConvite = 'Trocar o meu QR';
-
-  /// O aviso de que trocar mata o anterior. **Antes do toque, e não depois**:
-  /// emitir revoga o convite que estava valendo, e quem já tinha o antigo não
-  /// chega mais ao seu perfil.
-  static const String trocarMataOAnterior =
-      'Trocar apaga o QR de agora. Quem já escaneou o antigo não chega mais ao '
-      'seu perfil.';
-
-  static const String apagarOConvite = 'Apagar o meu QR';
-
-  static const String apagarNaoDesfazConexao =
-      'Apagar fecha a porta e não desfaz conexão: quem já pediu continua na sua '
-      'caixa de pedidos.';
-
-  /// O que a tela diz depois de apagar.
+  /// ## `Trocar o meu QR` e `Apagar o meu QR` FORAM TIRADAS, e a ausência é a
+  /// decisão
+  ///
+  /// **Pedido do cliente, 22/10/2026, literal:** *"O usuário não gera o
+  /// qr-code dele… não deve ter a ação de trocar o qr-code dele ou de
+  /// apagar."* Ele repetiu em 26/10 que as ações continuavam no aparelho.
+  ///
+  /// Esta tela tinha as DUAS, e eram os dois únicos controles de QR do app que
+  /// o tutor podia acionar sobre o SEU próprio código:
+  ///
+  ///   - `Trocar o meu QR` (`BotaoSecundario` -> `_emitir()`), que reemitia e
+  ///     com isso revogava o anterior;
+  ///   - `Apagar o meu QR` (`BotaoSecundario` -> `_apagar()` ->
+  ///     `ConvitesApi.revogar`, `revokeConnectionInvite`).
+  ///
+  /// As duas saíram, com os avisos que as acompanhavam. **Saiu a PORTA, e não
+  /// a capacidade:** `ConvitesApi.revogar` continua em
+  /// `api/convites_api.dart` e `revokeConnectionInvite` continua em
+  /// `api/openapi.yaml`, intocados — as decisões do cliente de 17/10
+  /// (*"apenas desabilite na plataforma"*) e de 26/10 (*"não apague nada,
+  /// mantenha e corrija a política"*) mandam não arrancar capacidade de
+  /// servidor para resolver um pedido de tela, e mexer no contrato tem portão
+  /// de compatibilidade.
+  ///
+  /// **`Criar o meu QR de convite` FICOU, e isso é uma ressalva PARADA no
+  /// cliente, não um descuido.**
+  ///
+  /// Em 26/10 ele deu a metade positiva da regra: *"o usuário não deve criar o
+  /// qr-code, ele deve ser criado **automaticamente** quando o usuário se
+  /// cadastrar ou ele cadastrar seu pet"*. Para o QR DO PET isso já é verdade
+  /// e não há ação de criar (`TelaPetCadastrado` emite em
+  /// `didChangeDependencies`, sem toque). **Para o QR DA PESSOA, que é este,
+  /// hoje não é alcançável sem mexer no contrato**, e isto foi MEDIDO em
+  /// `api/openapi.yaml` e não lido de comentário — as operações de convite são
+  /// três, e só três:
+  ///
+  ///   - `issueConnectionInvite` (emitir, linha 7268);
+  ///   - `revokeConnectionInvite` (revogar, linha 7343);
+  ///   - `resolveConnectionInvite` (linha 7378), que é o lado de QUEM
+  ///     ESCANEIA — resolve um token lido, e não lê o seu.
+  ///
+  /// **Não existe operação de LEITURA do próprio convite.** O token em claro
+  /// existe uma única vez, na resposta da emissão, porque o banco guarda só o
+  /// SHA-256 (ver [oQrNaoVoltaDepois]). Então, sem `Criar`, esta tela não
+  /// teria QR nenhum para mostrar; e emitir sozinha na abertura revogaria o
+  /// convite anterior a cada visita — exatamente o dano que `Trocar` causava,
+  /// agora sem ninguém ter pedido.
+  ///
+  /// **Os dois caminhos que resolveriam passam pelo `openapi.yaml`**, que tem
+  /// portão de compatibilidade: (1) uma rota nova de leitura do próprio
+  /// convite; ou (2) o servidor emitir um convite no cadastro da conta e
+  /// `issueConnectionInvite` passar a devolver o vigente em vez de trocá-lo —
+  /// que muda a semântica da operação de hoje. **Qual dos dois é decisão do
+  /// cliente**, e a ação de criar fica até ele decidir.
+  ///
+  /// **OS RÓTULOS DELAS NÃO FICARAM COMO CONSTANTE MORTA**, e isso é de
+  /// propósito: constante de rótulo sobrando é um `BotaoSecundario` de
+  /// distância de o controle voltar, e voltaria sem nenhum texto novo no
+  /// arquivo. Religá-las exige escrever o rótulo de novo — mudança visível em
+  /// revisão, que é o que a isca
+  /// `app/test/telas/sem_acao_de_qr_do_usuario_test.dart` cobra.
   static const String apagado = 'Você não tem QR de convite valendo agora.';
 
   /// **O QR não é lido de volta, e por isso ele não sobrevive a fechar a
@@ -235,7 +280,6 @@ class TelaDeConvidarTutores extends StatefulWidget {
 class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
   ConviteEmitido? _convite;
   bool _emitindo = false;
-  bool _apagando = false;
   String? _falha;
 
   /// Quantas pessoas a conta trouxe, ou **nulo quando ninguém contou**.
@@ -293,31 +337,6 @@ class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
       if (!mounted) return;
       setState(() {
         _emitindo = false;
-        _falha = MensagensDeErro.de(falha).texto;
-      });
-    }
-  }
-
-  Future<void> _apagar() async {
-    if (_apagando) return;
-    setState(() {
-      _apagando = true;
-      _falha = null;
-    });
-    try {
-      await widget.convites.revogar();
-      if (!mounted) return;
-      // **O 204 é idempotente**: sem convite ativo também é 204. A tela não
-      // distingue os dois, porque o efeito desejado — não existe QR meu
-      // valendo — foi alcançado nos dois casos.
-      setState(() {
-        _convite = null;
-        _apagando = false;
-      });
-    } on FalhaDeChamada catch (falha) {
-      if (!mounted) return;
-      setState(() {
-        _apagando = false;
         _falha = MensagensDeErro.de(falha).texto;
       });
     }
@@ -428,31 +447,9 @@ class _EstadoDeConvidarTutores extends State<TelaDeConvidarTutores> {
           TelaDeConvidarTutores.oQrNaoVoltaDepois,
           style: textos.bodySmall?.copyWith(color: cores.textMuted),
         ),
-        const SizedBox(height: BichuEspaco.e6),
-        // **Os dois controles ficam embaixo do QR, e o aviso vem ANTES de cada
-        // um**: os dois matam o que está circulando, e o texto é o que separa
-        // "quero outro" de "não quero nenhum".
-        Text(
-          TelaDeConvidarTutores.trocarMataOAnterior,
-          style: textos.bodySmall?.copyWith(color: cores.textMuted),
-        ),
-        const SizedBox(height: BichuEspaco.e2),
-        BotaoSecundario(
-          rotulo: TelaDeConvidarTutores.trocarOConvite,
-          carregando: _emitindo,
-          aoTocar: () => unawaited(_emitir()),
-        ),
-        const SizedBox(height: BichuEspaco.e4),
-        Text(
-          TelaDeConvidarTutores.apagarNaoDesfazConexao,
-          style: textos.bodySmall?.copyWith(color: cores.textMuted),
-        ),
-        const SizedBox(height: BichuEspaco.e2),
-        BotaoSecundario(
-          rotulo: TelaDeConvidarTutores.apagarOConvite,
-          carregando: _apagando,
-          aoTocar: () => unawaited(_apagar()),
-        ),
+        // **NADA DEPOIS DO QR, e a ausência é o desenho.** `Trocar o meu QR` e
+        // `Apagar o meu QR` ficavam aqui, cada uma com o seu aviso, e as duas
+        // saíram pelo pedido de 22/10. Ver [TelaDeConvidarTutores.apagado].
       ],
     ];
   }
