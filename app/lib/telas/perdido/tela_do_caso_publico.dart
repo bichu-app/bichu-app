@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../achado/rascunho_do_achado.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_perdido.dart';
@@ -53,12 +52,20 @@ import 'cartao_do_perdido.dart';
 /// `POST /found-reports` (`createStrayFoundReport`) com o `share_token` do
 /// caso, que vincula o achado direto a ele."*
 ///
-/// E **esse fluxo ja existe inteiro no app**: `Rotas.registrarAchado` com um
-/// [RascunhoDoAchado] que carrega o token. A faixa de aviso de push
-/// (`widgets/aviso_que_chegou.dart`) empurra exatamente isso ha tempo, com o
-/// mesmo campo. Nada aqui reimplementa registro de achado, e nada aqui monta
-/// corpo de pedido: esta tela e uma porta, e a porta leva ao formulario que o
-/// produto ja tem.
+/// E **esse fluxo ja existe inteiro no app**. O que mudou em 26/10/2026 foi
+/// QUAL tela recebe o toque: ele vai para `Rotas.encontreiEstePet`, que
+/// pergunta so onde, quando, o recado e a foto, e NAO para
+/// `Rotas.registrarAchado`, que pergunta tambem especie, porte, raca e cor --
+/// os quatro que o cadastro deste pet ja respondeu. O defeito era esse, e o
+/// cliente o relatou com todas as letras: *"se ele encontrou o pet, ele nao
+/// tem que cadastrar as informacoes novamente"*. A faixa de aviso de push
+/// (`widgets/aviso_que_chegou.dart`) continua empurrando `registrarAchado`
+/// com o `shareToken`, e isso **nao e o mesmo caminho**: ela nao tem o caso
+/// lido na mao, so o token.
+///
+/// Nada aqui reimplementa registro de achado, e nada aqui monta corpo de
+/// pedido: esta tela e uma porta, e a porta leva ao formulario que o produto
+/// ja tem.
 ///
 /// ---------------------------------------------------------------------------
 /// ## A REGRA DE QUEM VE A ACAO E DO SERVIDOR, E NAO DESTA TELA
@@ -208,13 +215,33 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
       (falha.problem.tipo == ProblemTipo.casoEncerrado ||
           falha.problem.status == 410);
 
-  /// A porta do achado, **com** o token: e ele que vincula o achado a ESTE
-  /// caso em vez de deixar o cruzamento por atributos descobrir.
+  /// A porta do achado, **com o caso inteiro**.
+  ///
+  /// =========================================================================
+  /// O DESTINO MUDOU EM 26/10/2026, E A MUDANCA E DEFEITO RELATADO PELO
+  /// CLIENTE -- palavra dele:
+  ///
+  ///   *"nao subiu o fluxo de quando clicar no pet, nao levar ele para a
+  ///   pagina de registrar um achado, porque SE ELE ENCONTROU O PET, ELE NAO
+  ///   TEM QUE CADASTRAR AS INFORMACOES NOVAMENTE"*
+  /// =========================================================================
+  ///
+  /// Antes isto levava a `Rotas.registrarAchado` (F3.5) com um
+  /// `RascunhoDoAchado` que carregava **so o `shareToken`** -- e F3.5 pergunta
+  /// especie, porte, raca e cor. Quem achou um pet IDENTIFICADO, com cadastro
+  /// e caso aberto, era obrigado a redigitar o que o sistema ja sabia.
+  ///
+  /// O destino agora e [Rotas.encontreiEstePet], e o `extra` e o
+  /// [CasoPerdidoPublico.perdido] que esta tela ACABOU de ler: dele saem
+  /// `species`, `size` e o `share_token` do corpo, sem ninguem digitar nada.
+  /// O contrato garante os tres -- `PublicLostPet` declara `share_token`,
+  /// `species` e `size` como `required`.
+  ///
+  /// **O caso tem de estar carregado para o botao existir**, e ele esta: este
+  /// metodo so e alcancavel de `_Fase.carregado`, onde `_caso` nao e nulo. O
+  /// `!` abaixo e dessa invariante, e nao de otimismo.
   void _encontrei() {
-    context.push(
-      Rotas.registrarAchado,
-      extra: RascunhoDoAchado(shareToken: widget.shareToken),
-    );
+    context.push(Rotas.encontreiEstePet, extra: _caso!.perdido);
   }
 
   /// A porta do achado **sem** token, no caminho do 410.
