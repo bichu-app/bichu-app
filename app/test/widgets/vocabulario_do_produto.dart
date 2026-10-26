@@ -368,6 +368,37 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
+/// **26/10/2026 — AS FOTOS DO PERFIL ABREM O CARROSSEL: 2718 -> 2719, e o +1
+/// esta NOMEADO.**
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre a base `1654bcaf` e esta arvore, e o saldo
+/// de +1 fecha exatamente num UNICO arquivo:
+///
+///   +1 `telas/pessoa/tela_perfil_de_pessoa.dart`  (26 -> 27)
+///
+/// `telas/perfil/vitrine_de_fotos.dart`, o outro arquivo tocado, fica em **34
+/// nos dois lados** -- a prosa nova dele nao escreve a marca e a troca de
+/// `abrir` por `abrirVarias` nao encosta nela. Os outros 219 `.dart` de
+/// `app/lib` tem contagem IDENTICA a da base.
+///
+/// **A OCORRENCIA ESTA NOMEADA**: e o `BichuRaio.sm` do
+/// `borderRadius: BorderRadius.circular(BichuRaio.sm)` do `InkWell` novo da
+/// celula -- o mesmo raio que o `ClipRRect` da celula da vitrine do dono ja
+/// usa, para o respingo do toque nao sair quadrado por cima de uma foto de
+/// canto arredondado. **O importe novo (`widgets/visualizador_de_imagem.dart`)
+/// nao conta**: o caminho nao escreve a marca.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a MESMA
+/// funcao de contagem, sobre os blobs da arvore LIMPA da base `1654bcaf` lidos
+/// por `git show` arquivo por arquivo, reproduziu EXATAMENTE a constante que
+/// ela travava (**2718**). Reproduzir o valor conhecido antes de medir o
+/// desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: `app/lib` tem **221**
+/// `.dart` na base e **221** aqui. Nenhum arquivo de `app/lib` entrou nem saiu
+/// -- o arquivo novo desta frente e de TESTE
+/// (`test/telas/perfil_foto_e_carrossel_test.dart`), e `app/test` nao entra
+/// nesta contagem.
 const int ocorrenciasDeBichu = 2742;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.

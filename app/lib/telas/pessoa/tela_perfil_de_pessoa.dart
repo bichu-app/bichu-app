@@ -18,6 +18,7 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/selo_de_validado.dart';
+import '../../widgets/visualizador_de_imagem.dart';
 import '../seguranca/menu_do_perfil.dart';
 
 /// **O PERFIL DE OUTRA PESSOA** — a tela que o cliente disse não ter subido
@@ -215,6 +216,14 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// O vazio de quem **é** conexão. Diferente da frase acima de propósito: uma
   /// diria "você não pode ver" para quem pode.
   static const String conexaoSemFoto = 'Este usuário ainda não publicou fotos.';
+
+  /// O que o toque na célula faz. **Vai em `hint`, e não no nome** — o leitor
+  /// de tela espera a AÇÃO ali, e o NOME da célula é o texto alternativo da
+  /// foto. A palavra é a MESMA de `VitrineDeFotosDoUsuario.dicaDeAmpliar`, e a
+  /// repetição é deliberada: as duas grades são telas diferentes, e importar a
+  /// constante de uma para a outra faria a tela de terceiro depender da tela
+  /// do dono por uma palavra.
+  static const String dicaDeAmpliar = 'Ampliar';
 
   /// O lado da célula, em dp — **o mesmo da vitrine do dono**, e por isso a
   /// mesma derivada de 320 px serve: 104 dp dão 312 px reais a 3x.
@@ -662,7 +671,8 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         crossAxisSpacing: TelaDePerfilDePessoa.vaoDaGrade,
         childAspectRatio: 1,
       ),
-      itemBuilder: (context, indice) => _celula(fotos[indice]),
+      // A LISTA INTEIRA, e nao a foto dela sozinha: ver [_celula].
+      itemBuilder: (context, indice) => _celula(fotos, indice),
     );
   }
 
@@ -692,14 +702,65 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   ///
   /// **`gridUrl` e nunca `openUrl`**: a derivada de 1024 px é 1,6x mais dado do
   /// que a célula pinta, e a grade desenha até nove de uma vez.
-  Widget _celula(FotoDoPerfil foto) {
-    return ImagemDaRede(
+  ///
+  /// ## O TOQUE ENTROU EM 26/10/2026, E A CÉLULA NÃO TINHA NENHUM
+  ///
+  /// Pedido do cliente, repetido: *"na pagina do perfil do usuário, as fotos
+  /// publicadas devem ser clicaveis e abrir no tamanho maior com um botão para
+  /// avançar ou retroceder para a proxima imagem, isso eu já tinha te pedido
+  /// tambem"*.
+  ///
+  /// Esta grade **não tinha `onTap` nenhum**: era uma [ImagemDaRede] pelada. A
+  /// derivada de 1024 px já viajava em `showcase[].open_url` desde que a tela
+  /// nasceu — e nada no app a desenhava.
+  ///
+  /// **A guarda da URL ausente não se repete aqui, e a razão é do contrato**:
+  /// [FotoDoPerfil.openUrl] **não é anulável** (ao contrário de
+  /// `FotoDaVitrineLida.urlAberta`), porque o servidor só manda foto de
+  /// terceiro com as duas derivadas prontas — foto em `processing` ou
+  /// `rejected` não entra nesta lista. Ainda assim o índice é contado na lista
+  /// FILTRADA e não na da grade: [VisualizadorDeImagem.abrirVarias] descarta
+  /// URL em branco antes de empilhar a rota, e um `open_url: ""` que escapasse
+  /// do contrato encurtaria a lista e faria o toque na terceira célula abrir a
+  /// quarta foto. O custo de contar certo é uma passada em até nove itens.
+  Widget _celula(List<FotoDoPerfil> fotos, int indice) {
+    final foto = fotos[indice];
+
+    final imagem = ImagemDaRede(
       url: foto.gridUrl,
       descricao: foto.altText,
       raio: BichuRaio.sm,
       // O retrato de uma pessoa falhando pede outro desenho que uma fachada
       // falhando, e é por isso que este símbolo é parâmetro.
       simboloDeFalha: Icons.photo_outlined,
+    );
+
+    final abertas = <String>[];
+    var inicial = 0;
+    for (var i = 0; i < fotos.length; i++) {
+      final url = fotos[i].openUrl;
+      if (url.trim().isEmpty) continue;
+      if (i == indice) inicial = abertas.length;
+      abertas.add(url);
+    }
+
+    // **SEM `excludeSemantics`**: o nome acessível da célula é o texto
+    // alternativo da foto, que vem de dentro da [ImagemDaRede]. Este
+    // `Semantics` só acrescenta a FUNÇÃO (botão) e a AÇÃO (`hint`) — excluir o
+    // de dentro trocaria o nome da foto pelo silêncio.
+    return Semantics(
+      button: true,
+      hint: TelaDePerfilDePessoa.dicaDeAmpliar,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(BichuRaio.sm),
+        onTap: () => VisualizadorDeImagem.abrirVarias(
+          context,
+          urls: abertas,
+          textoAlternativo: foto.altText,
+          inicial: inicial,
+        ),
+        child: imagem,
+      ),
     );
   }
 }
