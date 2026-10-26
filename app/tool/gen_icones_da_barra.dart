@@ -26,11 +26,17 @@
 //    reprova por dez arquivos a mais -- e ele esta CERTO em reprovar: a pasta
 //    dele e de marca, e estes dez nao sao a marca.
 //
-// 2. **O portao dele exige `M`, `C` e `Z`, e so.** Os dez usam `L` -- todos os
-//    dez, sem excecao -- porque icone de contorno em 24 dp e feito de retas
-//    (os bigodes do `pets`, o risco do `auau`, a aba da `loja`). Dois deles
-//    (`rede`) nao usam `d` nenhum: desenham `<circle>`. O derivador da marca
-//    nao emite nem uma coisa nem outra, e `caminhoDaMarca` nao sabe le-las.
+// 2. **O portao dele exige `M`, `C` e `Z`, e so.** CONTADO arquivo por
+//    arquivo, por leitor de `d` e nao por `grep`: **OITO dos dez usam `L`**
+//    -- `mural` 14 cada, `auau` 7 e 6, `loja` 5 cada, `pets` 4 cada --,
+//    porque icone de contorno em 24 dp e feito de retas (os bigodes do
+//    `pets`, o risco do `auau`, a aba da `loja`). **Os outros DOIS sao os
+//    `rede`, e eles nao usam `L` nenhum**: o `d` deles e so `M`, `C` e `Z`
+//    -- compativel, por acaso -- e o desenho de verdade esta em DOIS
+//    `<circle>`, que o derivador da marca nunca emite e que `caminhoDaMarca`
+//    nao sabe ler. Ou seja: os dez reprovam, mas nao todos pelo mesmo
+//    motivo, e dizer "todos usam `L`" seria falso. Esta linha ja esteve
+//    errada: a primeira versao dela afirmava os dez, e a contagem corrigiu.
 //
 // 3. **O gerador dele cobra COR DE TOKEN no arquivo.** Ele casa
 //    `<g id="..." fill="#RRGGBB">`, procura o primitivo em `design/tokens.json`
