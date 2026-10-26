@@ -685,20 +685,29 @@ void main() {
     //
     // A decisao e de 26/10/2026 (*"o arraste limitada as bordas"*) e ja tem
     // iscas em `test/widgets/visualizador_de_imagem_test.dart`. **Elas montam
-    // o visualizador solto.** Ligar o carrossel aqui torna o comportamento
-    // alcancavel de verdade pela vitrine, e este caso confirma que ele
-    // continua valendo DEPOIS do empilhamento pela grade -- a rota de baixo
-    // montada, o `PageView` no meio, tres fotos.
+    // o visualizador solto**, e este caso confirma que o comportamento
+    // continua valendo quando quem empilha a rota e a VITRINE -- com a grade
+    // montada embaixo.
     //
-    // Ele NAO reescreve aquele grupo e nao mexe no visualizador.
+    // **COM UMA FOTO, E ISSO NAO E conveniencia.** Aquele arquivo mediu em
+    // 26/10 que, dentro do `PageView`, nenhum arrasto que se conseguiu
+    // construir move a imagem: o `Scrollable` do carrossel ganha a arena de
+    // gestos. Um caso de tres fotos aqui passaria com a moldura INFINITA
+    // tambem -- medido, e e por isso que ele esta abaixo marcado como GUARDA.
+    // O defeito do cliente vive na arvore de uma foto, e e nela que esta isca
+    // morde.
+    //
+    // **DESLIGAR PARA VER REPROVAR:** em
+    // `app/lib/widgets/visualizador_de_imagem.dart`, troque
+    // `boundaryMargin: EdgeInsets.zero` por
+    // `const EdgeInsets.all(double.infinity)`. (Esta frente NAO mexe naquele
+    // arquivo: a troca foi aplicada, medida e desfeita.)
     // -----------------------------------------------------------------------
     testWidgets(
       'aberta pela vitrine, a foto NAO ampliada nao anda com o arrasto',
       (tester) async {
         await _montarAVitrine(tester, <Map<String, dynamic>>[
           _fotoDoDono(posicao: 0, grade: _grade1, aberta: _aberta1),
-          _fotoDoDono(posicao: 1, grade: _grade2, aberta: _aberta2),
-          _fotoDoDono(posicao: 2, grade: _grade3, aberta: _aberta3),
         ]);
         await tester.tap(find.byType(ImagemDaRede).first);
         await tester.pumpAndSettle();
@@ -726,6 +735,46 @@ void main() {
               'limitado as bordas e decisao do cliente de 26/10/2026, e ligar '
               'o carrossel aqui nao pode ter aberto folga infinita.',
         );
+        expect(depois.bottom, closeTo(antes.bottom, 0.5));
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // GUARDA, E NAO ISCA -- dito com o nome para ninguem se enganar.
+    //
+    // **Ele passa com a moldura INFINITA tambem**, e isso foi MEDIDO nesta
+    // frente em 26/10/2026: com tres fotos a arvore tem `PageView`, o
+    // `Scrollable` dele ganha a arena de gestos e o arrasto nao alcanca o
+    // `InteractiveViewer`. E a mesma conclusao que
+    // `test/widgets/visualizador_de_imagem_test.dart` registra no seu proprio
+    // caso de guarda.
+    //
+    // Fica porque e a barreira do dia em que o carrossel passar a entregar o
+    // arrasto ao ampliador -- mas nao conta como prova de nada.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'GUARDA — com TRES fotos o arrasto tambem nao desloca a imagem',
+      (tester) async {
+        await _montarAVitrine(tester, <Map<String, dynamic>>[
+          _fotoDoDono(posicao: 0, grade: _grade1, aberta: _aberta1),
+          _fotoDoDono(posicao: 1, grade: _grade2, aberta: _aberta2),
+          _fotoDoDono(posicao: 2, grade: _grade3, aberta: _aberta3),
+        ]);
+        await tester.tap(find.byType(ImagemDaRede).first);
+        await tester.pumpAndSettle();
+
+        final foto = _fotoAmpliada();
+        final antes = pintado(tester, foto);
+        await tester.drag(
+          find.byType(InteractiveViewer).first,
+          const Offset(-137, -151),
+        );
+        await tester.pumpAndSettle();
+        final depois = pintado(tester, foto);
+
+        expect(depois.left, closeTo(antes.left, 0.5));
+        expect(depois.top, closeTo(antes.top, 0.5));
+        expect(depois.right, closeTo(antes.right, 0.5));
         expect(depois.bottom, closeTo(antes.bottom, 0.5));
       },
     );
