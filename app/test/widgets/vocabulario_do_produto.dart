@@ -186,7 +186,44 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2714;
+/// ---------------------------------------------------------------------------
+/// 2714 -> 2722 em 26/10/2026 (BICHUS-278, o CARIMBO DE BUILD)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO POR TROCA DE VOCABULARIO: dois arquivos a
+/// citam a mais, e a conta fecha nos dois.** Medido arquivo por arquivo com o
+/// metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de todo `.dart`
+/// de `app/lib`, recursivo, comentario incluido):
+///
+///   * `widgets/carimbo_do_build.dart`  novo      (**+5**)
+///   * `config/app_config.dart`         2 -> 5    (**+3**)
+///
+/// Soma +8, e 2714 + 8 = 2722. As cinco de `widgets/carimbo_do_build.dart` sao
+/// os importes `theme/bichu_colors.dart` e `theme/bichu_tokens.g.dart`, a
+/// chamada `BichuColors.of`, `BichuEspaco` e a citacao de `/etc/bichu/commit`
+/// na prosa. As tres de `config/app_config.dart` sao `/etc/bichu/commit` de
+/// novo e duas de `BICHUS-210` na prosa do campo novo.
+///
+/// **`telas/abas.dart` nao entra, e o zero e medido e nao suposto**: 33 antes e
+/// 33 depois. A unica linha que ela ganhou e
+/// `import '../widgets/carimbo_do_build.dart';`, que nao escreve a palavra --
+/// e e por isso que a conta tem de ser por ARQUIVO e nao por intuicao.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de qualquer edicao: a mesma
+/// contagem sobre a arvore LIMPA da base `d590ce2a` devolveu EXATAMENTE 2706,
+/// que era o valor travado naquela arvore. E o `+8` da frente dos icones,
+/// reconstruido pelo mesmo metodo, reproduziu o 2714 desta linha. Reproduzir
+/// os dois numeros conhecidos antes de escrever o desconhecido e o que faz
+/// esta troca valer: sem isso eu estaria travando o resultado do meu script.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 218 `.dart` na
+/// base `d590ce2a`, 220 com os dois da frente dos icones e 221 aqui, e o UNICO
+/// a mais e `widgets/carimbo_do_build.dart`. Nenhum arquivo saiu.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2722;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
