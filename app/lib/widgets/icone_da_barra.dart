@@ -24,9 +24,11 @@
 // `widgets/marca.dart` ja tem um leitor de `d`, e reusa-lo foi a primeira
 // ideia. Ele NAO serve, e alargar ele seria pior que escrever este:
 //
-//   * ele aceita `M`, `C` e `Z` e LANCA em qualquer outro comando. Os dez
-//     icones usam `L` -- todos os dez --, porque contorno de 24 dp e feito de
-//     retas;
+//   * ele aceita `M`, `C` e `Z` e LANCA em qualquer outro comando. **OITO dos
+//     dez usam `L`** (contado por leitor de `d`: `mural` 14 cada, `auau` 7 e
+//     6, `loja` 5 cada, `pets` 4 cada), porque contorno de 24 dp e feito de
+//     retas. Os dois `rede` nao usam `L` -- eles desenham `<circle>`, que
+//     `caminhoDaMarca` tambem nao sabe ler;
 //   * essa recusa dele e uma PROTECAO da marca, e nao uma limitacao: o portao
 //     `vetor_da_marca_test.dart` cobra que os SVG da marca so tenham `M`, `C` e
 //     `Z`, e o `FormatException` de `caminhoDaMarca` e o segundo cinto da
