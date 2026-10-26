@@ -680,7 +680,11 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
         // celula tem a mesma proporcao e nao sobra faixa vazia.
         childAspectRatio: 1,
       ),
-      itemBuilder: (context, indice) => _celula(fotos[indice], cores, textos),
+      // **A LISTA INTEIRA vai para a celula, e nao a foto dela sozinha**
+      // (cliente, 26/10/2026). Ver [_celula] para o porque: sem a lista, o
+      // toque abre o visualizador com UMA URL e o carrossel que ele tem fica
+      // inalcancavel daqui.
+      itemBuilder: (context, indice) => _celula(fotos, indice, cores, textos),
     );
   }
 
@@ -709,7 +713,43 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   /// ESTADO em texto. Envolve-la num `InkWell` faria um quadrado que pinta
   /// respingo, se anuncia como botao e abre uma tela preta. A guarda e a
   /// ausencia da URL, e nao o enum: `ready` sem derivada e estado possivel.
-  Widget _celula(FotoDaVitrineLida foto, BichuCores cores, TextTheme textos) {
+  ///
+  /// ## O CARROSSEL ESTAVA AQUI E NAO ERA ALCANCAVEL (26/10/2026)
+  ///
+  /// O cliente repetiu o pedido de 22/10 porque ele nao tinha sido atendido
+  /// desta tela: *"as fotos publicadas devem ser clicaveis e abrir no tamanho
+  /// maior com um botão para avançar ou retroceder para a proxima imagem, isso
+  /// eu já tinha te pedido tambem"*.
+  ///
+  /// E ele estava certo, e o defeito era de UMA linha: a celula chamava
+  /// `VisualizadorDeImagem.abrir`, que recebe **uma** URL. O visualizador
+  /// ganhou `PageView`, setas e contador em 22/10 -- e com lista de um
+  /// elemento ele nao desenha nenhum dos tres, de proposito (um carrossel de
+  /// um promete navegacao que nao tem para onde ir). Entao a foto abria
+  /// ampliada, sozinha, e **nao havia como avancar**: o carrossel existia no
+  /// app e nunca era alcancado por esta tela.
+  ///
+  /// Agora a celula chama [VisualizadorDeImagem.abrirVarias] com a vitrine
+  /// INTEIRA e o indice da foto tocada.
+  ///
+  /// ## O INDICE E CONTADO NA LISTA FILTRADA, E ISSO NAO E DETALHE
+  ///
+  /// [VisualizadorDeImagem.abrirVarias] **descarta URL em branco** antes de
+  /// empilhar a rota (`Image.network('')` lanca, e branco e o que chega de
+  /// uma derivada ainda em processamento). Entao passar o indice da GRADE
+  /// seria um defeito silencioso: uma foto `processing` na posicao 0 encurta a
+  /// lista em um, e tocar a terceira celula abriria a quarta foto.
+  ///
+  /// A mesma varredura que monta as URLs conta o indice, numa passada: quem
+  /// nao tem [FotoDaVitrineLida.urlAberta] nao entra na lista **e nao ocupa
+  /// posicao nela**.
+  Widget _celula(
+    List<FotoDaVitrineLida> fotos,
+    int indice,
+    BichuCores cores,
+    TextTheme textos,
+  ) {
+    final foto = fotos[indice];
     final moldura = BoxDecoration(
       color: cores.surfaceSunken,
       borderRadius: BorderRadius.circular(BichuRaio.sm),
@@ -753,6 +793,17 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     final aberta = foto.urlAberta;
     if (aberta == null || aberta.isEmpty) return conteudo;
 
+    // AS URLS ABERTAS e o indice da tocada DENTRO delas, numa passada so.
+    // Ver a prosa acima: o indice da grade nao serve porque a lista encurta.
+    final abertas = <String>[];
+    var inicial = 0;
+    for (var i = 0; i < fotos.length; i++) {
+      final url = fotos[i].urlAberta;
+      if (url == null || url.trim().isEmpty) continue;
+      if (i == indice) inicial = abertas.length;
+      abertas.add(url);
+    }
+
     // **SEM `excludeSemantics`, ao contrario da capa do evento**, e a
     // diferenca e de conteudo e nao de gosto: ali dentro ha DOIS nos que
     // valem -- o texto alternativo da foto e o rotulo `Capa` --, e excluir
@@ -763,10 +814,15 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       hint: VitrineDeFotosDoUsuario.dicaDeAmpliar,
       child: InkWell(
         borderRadius: BorderRadius.circular(BichuRaio.sm),
-        onTap: () => VisualizadorDeImagem.abrir(
+        onTap: () => VisualizadorDeImagem.abrirVarias(
           context,
-          url: aberta,
+          urls: abertas,
+          // **O texto alternativo e o da foto TOCADA**, e e o que o
+          // visualizador documenta: ele tem um campo para o conjunto, nao um
+          // por item, porque nenhuma das superficies de hoje traz `alt_text`
+          // por foto ali dentro.
           textoAlternativo: foto.textoAlternativo,
+          inicial: inicial,
         ),
         child: conteudo,
       ),
