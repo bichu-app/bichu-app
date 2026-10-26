@@ -1134,100 +1134,140 @@ class CartaoDoDiretorio extends StatelessWidget {
                             // ele, um bairro maior que a coluna INTEIRA
                             // quebra dentro do proprio texto, com o pin
                             // ancorado na primeira linha.
-                            if (atividade != null || bairro != null) ...<Widget>[
+                            // SEGMENTO E BAIRRO EM LINHAS SEPARADAS, SEMPRE.
+                            //
+                            // **Escolha do cliente, 26/10/2026**, depois de
+                            // ver os tres arranjos desenhados lado a lado. Ele
+                            // tinha levantado a alternativa com as proprias
+                            // palavras -- *"como o texto e curto, nao faz
+                            // sentido ficar o segmento do lado esquerdo e o
+                            // bairro do lado direito ou corre muito o risco do
+                            // texto ser grande e quebrar a linha?"* --, os
+                            // tres foram construidos e medidos, e ele ficou
+                            // com ESTE.
+                            //
+                            // ## O QUE FOI RECUSADO, E POR QUE ISTO ESTA AQUI
+                            //
+                            // Duas variantes de UMA linha foram construidas,
+                            // rasterizadas e descartadas. Elas nao voltam por
+                            // engano porque o motivo esta escrito:
+                            //
+                            // - **uma linha com CORTE** (`Row` +
+                            //   `TextOverflow.ellipsis`): escrevia
+                            //   `Jardim Chácara In…` e
+                            //   `Conjunto Habitacion…`. Os bairros longos do
+                            //   Brasil se parecem no COMECO (`Jardim ...`,
+                            //   `Vila ...`, `Conjunto Habitacional ...`) e e o
+                            //   fim que os distingue: cortar pela direita
+                            //   apaga a parte que decide se vale ligar. **E a
+                            //   unica das tres que perde informacao.**
+                            // - **uma linha com QUEDA** (`Wrap` de largura
+                            //   cheia com `spaceBetween`): nao perdia
+                            //   caractere e economizava 16 dp por cartao
+                            //   quando cabia (150 dp contra 166). Ficou pelo
+                            //   caminho na escolha dele, e nao por defeito.
+                            //
+                            // ## A TABELA QUE A PROXIMA PESSOA VAI PRECISAR
+                            //
+                            // Ela nao governa mais nada NESTE arranjo -- aqui
+                            // o bairro tem a coluna inteira --, e esta aqui
+                            // porque quem tentar a linha unica de novo vai
+                            // precisar dela e vai cair no mesmo buraco em que
+                            // eu cai. As seis larguras, medidas a 390 dp com
+                            // as fontes do produto:
+                            //
+                            //     Hospedagem    88,37   <- o mais LARGO
+                            //     Banho e tosa  86,09
+                            //     Adestrador    73,73
+                            //     Veterinário   71,84
+                            //     Passeador     69,98
+                            //     Clínica       44,67
+                            //
+                            // **Eu elegi o pior segmento contando LETRA e
+                            // errei.** `Banho e tosa` tem 12 caracteres e
+                            // `Hospedagem` tem 10, e e `Hospedagem` que e mais
+                            // larga. A alegacao chegou a entrar no codigo e na
+                            // legenda de uma imagem que ia para o cliente; o
+                            // que a derrubou foi um controle que mediu os
+                            // SEIS, e nao revisao.
+                            //
+                            // O mesmo vale do lado do bairro, que e texto
+                            // LIVRE e vem do CEP: com `Veterinário`,
+                            // `Vila Sônia da Boa Vista` (23 caracteres,
+                            // 151,9 dp) cabia numa linha em que
+                            // `Vila Nova Cachoeirinha` (22 caracteres,
+                            // 154,0 dp) nao cabia. **Caractere nao prediz
+                            // largura. Meca.**
+                            if (atividade != null) ...<Widget>[
                               const SizedBox(height: BichuEspaco.e1),
-                              // **`width: double.infinity` NAO e ruido, e
-                              // sem ele o `spaceBetween` nao faz nada.** A
-                              // `Column` do `Expanded` tem
-                              // `crossAxisAlignment: start`, entao ela passa
-                              // largura FROUXA aos filhos, e um `Wrap` com
-                              // largura frouxa encolhe ate o conteudo: sem
-                              // sobra na corrida, `spaceBetween` nao tem o
-                              // que distribuir e o bairro fica grudado no
-                              // segmento, no meio da linha, em vez de
-                              // encostado na direita.
-                              //
-                              // Isto nao foi deduzido. O caso `segmento e
-                              // bairro dividem a MESMA linha quando cabem`
-                              // reprovou dizendo `sobram 59,0 dp entre o fim
-                              // do bairro e a borda do cartao`, e o painel
-                              // da imagem mostrava o mesmo defeito.
-                              SizedBox(
-                                width: double.infinity,
-                                child: Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: BichuEspaco.e3,
-                                  runSpacing: BichuEspaco.e1,
-                                  children: <Widget>[
-                                    if (atividade != null)
-                                      Text(
-                                        atividade,
-                                        style: textos.bodyMedium?.copyWith(
-                                          color: cores.textSecondary,
-                                        ),
+                              Text(
+                                atividade,
+                                style: textos.bodyMedium
+                                    ?.copyWith(color: cores.textSecondary),
+                              ),
+                            ],
+                            // O ENDERECO que a listagem tem: **so o bairro**,
+                            // e desde 26/10 **com o pin do mapa**. **A ULTIMA
+                            // linha de texto do cartao** -- a media, a
+                            // distancia, a apresentacao e o selo sairam em
+                            // 22/10/2026, e a cidade e a UF sairam no mesmo
+                            // dia; a prosa de `build` diz onde cada um ficou.
+                            //
+                            // **`Icons.place_outlined`, por precedente e nao
+                            // por gosto**: e o pin de lugar DESTE app, 6
+                            // ocorrencias no proprio `lib/` antes desta linha,
+                            // entre elas a linha de bairro do `_Cabecalho` de
+                            // `pagina_do_local.dart` -- a PAGINA INTERNA deste
+                            // mesmo cartao -- e a linha de area de
+                            // `cartao_do_perdido.dart`, que e um cartao de
+                            // listagem com icone e texto. Nenhum vetor novo
+                            // entrou: e a familia embutida do Flutter 3.47.4.
+                            // Eliminados: `location_on` e `place` (as versoes
+                            // CHEIAS -- o cartao nao tem outro icone cheio);
+                            // `map_outlined`, que `pagina_do_local.dart`
+                            // reserva para o endereco CLICAVEL, e o bairro
+                            // daqui nao abre mapa; `near_me` e `my_location`,
+                            // que significam a posicao de QUEM OLHA.
+                            //
+                            // **O PIN NAO EXISTE SEM BAIRRO.** Ele esta DENTRO
+                            // do `if (bairro != null)`: a regra de 22/10 e que
+                            // sem bairro nao ha linha, e um pin orfao seria uma
+                            // linha. A aba `comunidade` tambem desenha
+                            // `place_outlined` na barra, entao quem medir a
+                            // ausencia TEM de recortar pelo cartao -- um
+                            // `find.byIcon` na tela inteira acha o da aba e
+                            // passa por engano.
+                            //
+                            // **`Expanded` e nao `Flexible` solto**: o bairro
+                            // ocupa a coluna inteira e QUEBRA em mais linhas
+                            // quando precisa, sem `maxLines` e sem `overflow`.
+                            // `Conjunto Habitacional Teotônio Vilela` (37
+                            // caracteres) usa duas linhas e nao perde letra.
+                            //
+                            // Tamanho e cor em token (`BichuEspaco.e4`,
+                            // `cores.textSecondary`), os mesmos de `_Linha` de
+                            // `cartao_do_perdido.dart`. O texto continua
+                            // `bodyMedium`, o mesmo de antes do pin.
+                            if (bairro != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Icon(
+                                    Icons.place_outlined,
+                                    size: BichuEspaco.e4,
+                                    color: cores.textSecondary,
+                                  ),
+                                  const SizedBox(width: BichuEspaco.e1),
+                                  Expanded(
+                                    child: Text(
+                                      bairro,
+                                      style: textos.bodyMedium?.copyWith(
+                                        color: cores.textSecondary,
                                       ),
-                                    // O ENDERECO que a listagem tem: **so o
-                                    // bairro**, e desde 26/10 **com o pin do
-                                    // mapa**. A media, a distancia, a
-                                    // apresentacao e o selo sairam em
-                                    // 22/10/2026, e a cidade e a UF sairam no
-                                    // mesmo dia; a prosa de `build` diz onde
-                                    // cada um ficou.
-                                    //
-                                    // **`Icons.place_outlined`, por precedente
-                                    // e nao por gosto**: e o pin de lugar DESTE
-                                    // app, 6 ocorrencias no proprio `lib/`
-                                    // antes desta linha, entre elas a linha de
-                                    // bairro do `_Cabecalho` de
-                                    // `pagina_do_local.dart` -- a PAGINA
-                                    // INTERNA deste mesmo cartao -- e a linha
-                                    // de area de `cartao_do_perdido.dart`.
-                                    // Eliminados: `location_on` e `place` (as
-                                    // versoes cheias; o cartao nao tem outro
-                                    // icone cheio); `map_outlined`, que
-                                    // `pagina_do_local.dart` reserva para o
-                                    // endereco CLICAVEL -- o bairro daqui nao
-                                    // abre mapa; `near_me` e `my_location`, que
-                                    // significam a posicao de QUEM OLHA.
-                                    //
-                                    // **O PIN NAO EXISTE SEM BAIRRO**: ele esta
-                                    // dentro do `if (bairro != null)`, e nao ao
-                                    // lado. A aba `comunidade` tambem desenha
-                                    // `place_outlined` na barra, entao quem
-                                    // medir a ausencia TEM de recortar pelo
-                                    // cartao.
-                                    //
-                                    // Tamanho e cor em token (`BichuEspaco.e4`,
-                                    // `cores.textSecondary`), os mesmos de
-                                    // `_Linha` de `cartao_do_perdido.dart`.
-                                    if (bairro != null)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Icon(
-                                            Icons.place_outlined,
-                                            size: BichuEspaco.e4,
-                                            color: cores.textSecondary,
-                                          ),
-                                          const SizedBox(
-                                            width: BichuEspaco.e1,
-                                          ),
-                                          Flexible(
-                                            child: Text(
-                                              bairro,
-                                              style:
-                                                  textos.bodyMedium?.copyWith(
-                                                color: cores.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ],

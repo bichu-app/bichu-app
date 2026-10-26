@@ -274,7 +274,7 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2722;
+const int ocorrenciasDeBichu = 2721;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
