@@ -314,50 +314,71 @@ void main() {
     addTearDown(() => HttpOverrides.global = null);
 
     final chave = GlobalKey();
+    // OS ESTADOS, ESCOLHIDOS PELO PIOR CASO E NAO PELO BONITO.
+    //
+    // As larguras citadas foram MEDIDAS nesta maquina, com as fontes do
+    // produto carregadas, a 390 dp: a coluna de texto tem 258 dp, o segmento
+    // mais LARGO dos seis e `Banho e tosa` (86,09 dp -- e nao `Veterinário`,
+    // que tem 71,84 dp apesar do mesmo tanto de letra), e o orcamento do
+    // TEXTO do bairro na mesma linha e `226 - largura(segmento)` dp.
     final estados = <_Estado>[
       _Estado(
-        legenda: 'Com logo, com bairro',
+        legenda: 'Curto + curto — o caso que motiva a ideia',
         entrada: _entrada(
-          slug: 'clinica-santa-barbara',
+          slug: 'clinica-centro',
           nome: 'Clínica Santa Bárbara',
+          bairro: 'Centro',
           logo: _urlDaLogo,
         ),
       ),
       _Estado(
-        legenda: 'Sem logo — o glifo do tipo (veterinário)',
+        legenda: 'Pior segmento + o MAIOR bairro que ainda cabe '
+            '(137,3 de 139,9 dp)',
         entrada: _entrada(
-          slug: 'vet-do-bairro',
-          nome: 'Veterinário do Bairro',
-          atividade: AtividadeDoDiretorio.vet,
-        ),
-      ),
-      _Estado(
-        legenda: 'Com logo, SEM bairro',
-        entrada: _entrada(
-          slug: 'banho-do-tobias',
+          slug: 'banho-cabe',
           nome: 'Banho do Tobias',
           atividade: AtividadeDoDiretorio.groomer,
+          bairro: 'Vila Nova Conceição',
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'Pior segmento + bairro que NÃO cabe (155,9 de 139,9 dp) '
+            '— é AQUI que os três diferem',
+        entrada: _entrada(
+          slug: 'banho-nao-cabe',
+          nome: 'Banho do Tobias',
+          atividade: AtividadeDoDiretorio.groomer,
+          bairro: 'Jardim Chácara Inglesa',
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'O extremo — 37 caracteres, 236 dp',
+        entrada: _entrada(
+          slug: 'extremo',
+          nome: 'Veterinário do Bairro',
+          atividade: AtividadeDoDiretorio.vet,
+          bairro: 'Conjunto Habitacional Teotônio Vilela',
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'Sem bairro — só o segmento na linha',
+        entrada: _entrada(
+          slug: 'sem-bairro',
+          nome: 'Clínica Santa Bárbara',
           bairro: null,
           logo: _urlDaLogo,
         ),
       ),
       _Estado(
-        legenda: 'O cartão mínimo — sem logo, sem bairro, sem telefone',
+        legenda: 'Sem logo — o glifo do tipo ocupa o lugar',
         entrada: _entrada(
-          slug: 'adestrador-sem-nada',
-          nome: 'Adestrador sem bairro',
-          atividade: AtividadeDoDiretorio.trainer,
-          bairro: null,
-          telefone: null,
-        ),
-      ),
-      _Estado(
-        legenda: 'Nome longo — com logo e com bairro',
-        entrada: _entrada(
-          slug: 'nome-longo',
-          nome: 'Clínica Veterinária e Hospital de Especialidades '
-              'Santa Bárbara de Pinheiros',
-          logo: _urlDaLogo,
+          slug: 'sem-logo',
+          nome: 'Veterinário do Bairro',
+          atividade: AtividadeDoDiretorio.vet,
+          bairro: 'Pinheiros',
         ),
       ),
     ];

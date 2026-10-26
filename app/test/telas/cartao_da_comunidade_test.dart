@@ -126,6 +126,21 @@ Finder _cartaoDe(String nome) => find.ancestor(
   );
 }
 
+/// Poe a janela do teste em **390 dp de largura**, que e a de um iPhone 14 /
+/// Pixel 7 -- e nao os 800 dp do padrao do `flutter test`.
+///
+/// **Isto nao e enfeite de realismo: a 800 dp metade destes casos nao mede
+/// nada.** A coluna de texto do cartao teria 668 dp em vez de 258, e o
+/// segmento e o bairro caberiam juntos com 469 dp de folga -- um arranjo de
+/// uma linha e um de duas ficariam indistinguiveis, e a isca do bairro que
+/// nao cabe nunca chegaria a nao caber. Medido: foi exatamente assim que
+/// estes casos passaram verdes pela primeira vez, sem olhar para nada.
+void _telaDeCelular(WidgetTester tester) {
+  tester.view.physicalSize = const Size(390 * 3, 2400 * 3);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+}
+
 void main() {
   // ==========================================================================
   // 1. O SEGMENTO ENTRA NO BLOCO DO NOME
@@ -145,6 +160,7 @@ void main() {
     //     reprova; o de alinhamento nao.
     testWidgets('o segmento comeca DEPOIS do fim do nome, por geometria',
         (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -195,6 +211,7 @@ void main() {
     });
 
     testWidgets('e ALINHADO com o nome, e nao debaixo da logo', (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -243,15 +260,31 @@ void main() {
             'exatamente o vazio que o cliente reclamou.',
       );
 
-      // (2) O BAIRRO TAMBEM, e junto com o pin: a linha inteira recua.
+      // (2) O BAIRRO TAMBEM RECUA PARA DENTRO DA COLUNA.
+      //
+      // **REAPONTADA em 26/10/2026, segunda rodada.** Ate o arranjo de uma
+      // linha, esta assercao lia `bairro.esquerda > nome.esquerda` e era
+      // verdadeira porque o pin empurrava o texto 20 dp para a direita --
+      // ou seja, ela media a PRESENCA DO PIN com cara de alinhamento, e a
+      // isca que tirava o pin a derrubava junto. Agora o bairro divide a
+      // linha com o segmento e fica ENCOSTADO NA DIREITA, entao a pergunta
+      // certa e outra: ele comeca dentro da coluna e termina dentro dela.
+      //
+      // Nao foi afrouxada: continua sendo coordenada pintada, e continua
+      // reprovando no arranjo antigo, em que o bairro comecava na borda
+      // ESQUERDA do cartao -- 68 dp a esquerda da coluna.
       expect(
         doBairro.esquerda,
-        greaterThan(doNome.esquerda),
+        greaterThanOrEqualTo(doNome.esquerda),
         reason: 'REPROVA: o texto do bairro comeca em ${doBairro.esquerda} dp, '
-            'que nao esta a direita do nome (${doNome.esquerda} dp). Dentro da '
-            'coluna o texto do bairro fica DEPOIS do pin, entao ele comeca '
-            'mais a direita que o nome; na borda do cartao ele comecaria '
-            'antes.',
+            'a esquerda do inicio da coluna de texto (${doNome.esquerda} dp). '
+            'Ele saiu da coluna e voltou para a borda do cartao.',
+      );
+      expect(
+        doBairro.direita,
+        lessThanOrEqualTo(_caixa(tester, cartao).direita),
+        reason: 'REPROVA: o texto do bairro termina em ${doBairro.direita} dp, '
+            'depois da borda direita do cartao.',
       );
 
       // (3) E A COLUNA COMECA DEPOIS DA LOGO, e nao em cima dela. Sem isto, um
@@ -276,6 +309,7 @@ void main() {
     // reprova no `findsOneWidget` do pin.
     testWidgets('o pin esta NA linha do bairro, e a esquerda dele',
         (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -354,6 +388,7 @@ void main() {
     // tire o `Icon` de dentro do `if (bairro != null)` e desenhe-o como irmao
     // da `Column`, sempre. Este caso reprova; o caso acima NAO.
     testWidgets('ISCA — sem bairro nao ha pin orfao no cartao', (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -438,6 +473,7 @@ void main() {
     // coluna tivesse desalinhado de novo.
     testWidgets('o centro da logo bate com o centro do bloco de texto',
         (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -468,8 +504,20 @@ void main() {
       // O BLOCO e do topo do nome a base da ultima linha de texto. Nao e a
       // `Column` por `find.byType`: o cartao tem varias, e pegar `.first`
       // mediria a do cartao e nao a do `Expanded`.
+      // **REAPONTADA em 26/10/2026, segunda rodada.** No arranjo de duas
+      // linhas o bairro era sempre a ultima linha, e `doBairro.base` bastava.
+      // No arranjo de uma linha o segmento e o bairro dividem a corrida e
+      // suas caixas tem alturas diferentes, entao a base do bloco e a MAIOR
+      // das duas -- ler so o bairro mediria o bloco errado por alguns dp e a
+      // assercao de centro passaria a reprovar por motivo falso.
+      final doSegmentoAqui = _caixa(
+        tester,
+        find.descendant(of: cartao, matching: find.text('Clínica')),
+      );
       final topoDoBloco = doNome.topo;
-      final baseDoBloco = doBairro.base;
+      final baseDoBloco = doBairro.base > doSegmentoAqui.base
+          ? doBairro.base
+          : doSegmentoAqui.base;
       final centroDoBloco = (topoDoBloco + baseDoBloco) / 2;
       final centroDaLogo = (daImagem.topo + daImagem.base) / 2;
 
@@ -494,19 +542,278 @@ void main() {
             'inferencia nossa -- ver a prosa do topo do arquivo.)',
       );
 
-      // E A LOGO NAO ENCOSTA NO TOPO: a asserção de centro ja implica isto
-      // quando o bloco e mais alto que a logo, e esta linha diz o defeito pelo
-      // nome na mensagem de reprovacao.
+      // O GUARDA QUE DA PODER A ASSERÇÃO ACIMA, e ele e o que sobrou de uma
+      // linha que estava ERRADA.
+      //
+      // Ate a segunda rodada de 26/10/2026 havia aqui um
+      // `daImagem.topo > topoDoBloco` -- "a logo nao encosta no topo". Aquilo
+      // so era verdade enquanto o bloco fosse MAIS ALTO que a logo, que era o
+      // caso do arranjo de tres linhas. Com o segmento e o bairro na mesma
+      // linha o bloco tem 48 dp contra os 56 da logo, e e a LOGO que passa a
+      // sobrar para os dois lados: a linha reprovava um desenho correto.
+      //
+      // O que importa de verdade e outra coisa: **se a logo e o bloco tivessem
+      // a mesma altura, `center` e `start` pintariam igual** e a asserção de
+      // centro acima nao distinguiria nada. Entao o guarda mede a DIFERENCA de
+      // altura, que e a condicao para o eixo ser observavel.
+      final alturaDaLogo = daImagem.base - daImagem.topo;
+      final alturaDoBloco = baseDoBloco - topoDoBloco;
       expect(
-        daImagem.topo,
-        greaterThan(topoDoBloco),
-        reason: 'REPROVA: o topo da logo (${daImagem.topo} dp) coincide com o '
-            'topo do bloco ($topoDoBloco dp) ou esta acima dele: ela esta '
-            'grudada no topo, que e o desenho de ate 26/10/2026.',
+        (alturaDaLogo - alturaDoBloco).abs(),
+        greaterThan(2),
+        reason: 'REPROVA POR VAZIO: a logo tem $alturaDaLogo dp e o bloco '
+            '$alturaDoBloco dp. Com alturas iguais, `CrossAxisAlignment.center` '
+            'e `CrossAxisAlignment.start` pintam exatamente o mesmo, e a '
+            'asserção de centro acima fica verde sem medir o eixo.',
       );
     });
   });
 
+  // ==========================================================================
+  // 3-BIS. SEGMENTO E BAIRRO NA MESMA LINHA, E O QUE ACONTECE QUANDO NAO CABE
+  // ==========================================================================
+  group('PEDIDO DE 26/10 (2a rodada) — uma linha enquanto couber', () {
+    // Pedido do cliente depois de ver a imagem de duas linhas: *"como o texto
+    // e curto, nao faz sentido ficar o segmento do lado esquerdo e o bairro do
+    // lado direito ou corre muito o risco do texto ser grande e quebrar a
+    // linha?"*
+    //
+    // ## POR QUE ESTES CASOS NAO TRAVAM UM NUMERO DE CARACTERES
+    //
+    // Porque caractere NAO e a unidade, e isso foi medido. A 390 dp a coluna
+    // de texto tem 258 dp e o orcamento do bairro e `226 - largura(segmento)`:
+    // 139,9 dp depois de `Banho e tosa` (o segmento mais LARGO dos seis, com
+    // 86,09 dp), 154,2 depois de `Veterinário` (71,84) e 181,3 depois de
+    // `Clínica` (44,67). Com `Veterinário`, `Vila Sônia da Boa Vista` (23
+    // caracteres, 151,9 dp) CABE e `Vila Nova Cachoeirinha` (22 caracteres,
+    // 154,0 dp) NAO -- menos letra e mais largura. Um caso que travasse "ate N
+    // caracteres" seria falso no dia seguinte.
+    //
+    // Entao o que estes casos travam e o COMPORTAMENTO nas duas direcoes:
+    // couber, uma linha; nao couber, desce inteiro. A fronteira em dp muda com
+    // a fonte e com a largura da tela, e nao e contrato.
+    //
+    // **A massa e de bairro brasileiro de verdade**, e nao de `aaaa...`: os
+    // nomes longos daqui se parecem no COMECO (`Jardim ...`, `Vila ...`,
+    // `Conjunto Habitacional ...`), que e exatamente o que torna o corte pela
+    // direita ruim -- e massa sintetica esconderia isso.
+
+    // DESLIGAR PARA VER REPROVAR: em `lib/telas/perto/lista_do_diretorio.dart`
+    // troque o `Wrap` por uma `Column` com os dois filhos, que e o arranjo de
+    // duas linhas da primeira rodada. Este caso reprova dizendo os dois topos.
+    testWidgets('segmento e bairro dividem a MESMA linha quando cabem',
+        (tester) async {
+      _telaDeCelular(tester);
+      await abrirPerto(
+        tester,
+        rede: redeComDetalhe(
+          listagem: paginaDoContrato(
+            <Map<String, dynamic>>[
+              <String, dynamic>{
+                ...entradaDoContrato(
+                  displayName: 'Clínica Santa Bárbara',
+                  neighborhood: 'Centro',
+                ),
+                'logo_url': _logoDoLugar,
+              },
+            ],
+            distanciaDisponivel: true,
+          ),
+        ),
+      );
+
+      final cartao = _cartaoDe('Clínica Santa Bárbara');
+      final segmento =
+          find.descendant(of: cartao, matching: find.text('Clínica'));
+      final bairro = find.descendant(of: cartao, matching: find.text('Centro'));
+      expect(segmento, findsOneWidget);
+      expect(bairro, findsOneWidget);
+
+      final doSegmento = _caixa(tester, segmento);
+      final doBairro = _caixa(tester, bairro);
+      final doPin = _caixa(
+        tester,
+        find.descendant(of: cartao, matching: find.byIcon(Icons.place_outlined)),
+      );
+
+      // (1) MESMA LINHA: as faixas verticais se cruzam. Nao e igualdade de
+      // topo -- `WrapCrossAlignment.center` alinha os CENTROS, e as duas
+      // caixas tem alturas diferentes.
+      expect(
+        doBairro.topo,
+        lessThan(doSegmento.base),
+        reason: 'REPROVA: o bairro comeca em ${doBairro.topo} dp, abaixo do '
+            'fim do segmento (${doSegmento.base} dp) -- eles estao em linhas '
+            'diferentes. Com `Clínica` (44,67 dp) e `Centro` (44,67 dp) sobra '
+            'folga de mais de 130 dp na coluna: se estes dois nao dividem a '
+            'linha, nenhum par divide.',
+      );
+      expect(doBairro.base, greaterThan(doSegmento.topo));
+
+      // (2) O SEGMENTO A ESQUERDA, O BAIRRO A DIREITA, nas palavras dele.
+      expect(
+        doPin.esquerda,
+        greaterThan(doSegmento.direita),
+        reason: 'REPROVA: o pin comeca em ${doPin.esquerda} dp, antes do fim '
+            'do segmento (${doSegmento.direita} dp): o bloco do bairro nao '
+            'esta a direita do segmento.',
+      );
+
+      // (3) E ENCOSTADO NA DIREITA, que e o que `spaceBetween` faz e uma
+      // `Row` comum nao faria. Sem esta assercao, os dois grudados a esquerda
+      // passariam em (1) e (2).
+      final doCartao = _caixa(tester, cartao);
+      final folgaADireita = doCartao.direita - doBairro.direita;
+      expect(
+        folgaADireita,
+        lessThan(24),
+        reason: 'REPROVA: sobram $folgaADireita dp entre o fim do bairro e a '
+            'borda do cartao. O cliente pediu o bairro *"do lado direito"*, e '
+            'o recheio do cartao e 16 dp -- folga muito maior que isso quer '
+            'dizer que o bairro ficou colado no segmento, no meio da linha.',
+      );
+    });
+
+    // DESLIGAR PARA VER REPROVAR: em `lib/telas/perto/lista_do_diretorio.dart`
+    // troque o `Wrap` por uma `Row` com `mainAxisAlignment.spaceBetween` e
+    // ponha `maxLines: 1, overflow: TextOverflow.ellipsis` no `Text` do
+    // bairro -- que e a variante A, a do CORTE. Este caso reprova nas duas
+    // assercoes, e e ele que separa as duas respostas possiveis ao pedido.
+    testWidgets(
+        'ISCA — o bairro que NAO cabe DESCE inteiro, e nunca e cortado',
+        (tester) async {
+      _telaDeCelular(tester);
+      // `Banho e tosa` (86,09 dp) e o pior segmento, e `Jardim Chácara
+      // Inglesa` (155,9 dp) passa dos 139,9 dp de orcamento. O par foi
+      // escolhido por medicao, nao por tamanho aparente.
+      const String bairroLongo = 'Jardim Chácara Inglesa';
+      await abrirPerto(
+        tester,
+        rede: redeComDetalhe(
+          listagem: paginaDoContrato(
+            <Map<String, dynamic>>[
+              <String, dynamic>{
+                ...entradaDoContrato(
+                  slug: 'banho-do-tobias',
+                  kind: 'groomer',
+                  displayName: 'Banho do Tobias',
+                  neighborhood: bairroLongo,
+                ),
+                'logo_url': _logoDoLugar,
+              },
+            ],
+            distanciaDisponivel: true,
+          ),
+        ),
+      );
+
+      final cartao = _cartaoDe('Banho do Tobias');
+      final segmento =
+          find.descendant(of: cartao, matching: find.text('Banho e tosa'));
+      final bairro =
+          find.descendant(of: cartao, matching: find.text(bairroLongo));
+      expect(
+        bairro,
+        findsOneWidget,
+        reason: 'REPROVA POR VAZIO: o bairro longo nao esta na arvore. Sem ele '
+            'as duas assercoes abaixo nao medem nada.',
+      );
+
+      final doSegmento = _caixa(tester, segmento);
+      final doBairro = _caixa(tester, bairro);
+
+      // (1) DESCEU: nao couber nao pode virar linha apertada.
+      expect(
+        doBairro.topo,
+        greaterThanOrEqualTo(doSegmento.base),
+        reason: 'REPROVA: o bairro de 155,9 dp ficou na MESMA linha de um '
+            'segmento de 86,09 dp, numa coluna de 258 dp. Ou ele foi cortado, '
+            'ou esta estourando a coluna -- as duas sao defeito.',
+      );
+
+      // (2) E NAO FOI CORTADO. A assercao de geometria acima NAO cobre isto
+      // sozinha: `find.text` acha o `Text` pela string que ele RECEBEU, e um
+      // `Text` com `overflow: ellipsis` continua carregando a string inteira
+      // enquanto pinta `Jardim Chácara In…`. Entao aqui se le o widget.
+      final widgetDoBairro = tester.widget<Text>(bairro);
+      expect(
+        widgetDoBairro.overflow,
+        anyOf(isNull, isNot(TextOverflow.ellipsis)),
+        reason: 'REPROVA: o `Text` do bairro tem '
+            '`overflow: ${widgetDoBairro.overflow}`. Os bairros longos do '
+            'Brasil se parecem no COMECO (`Jardim ...`, `Vila ...`, `Conjunto '
+            'Habitacional ...`): cortar pela direita apaga justamente a parte '
+            'que diz a quem olha se vale ligar.',
+      );
+      expect(
+        widgetDoBairro.maxLines,
+        isNull,
+        reason: 'REPROVA: o `Text` do bairro esta preso em '
+            '${widgetDoBairro.maxLines} linha(s). Sem teto de linha, um bairro '
+            'maior que a coluna INTEIRA quebra dentro do proprio texto em vez '
+            'de sumir.',
+      );
+
+      // (3) E NADA SAIU DO CARTAO.
+      final doCartao = _caixa(tester, cartao);
+      expect(doBairro.direita, lessThanOrEqualTo(doCartao.direita));
+      expect(doBairro.base, lessThanOrEqualTo(doCartao.base));
+    });
+
+    // O EXTREMO: um bairro maior que a coluna inteira. 37 caracteres, 236 dp
+    // numa coluna de 258 -- ele cabe na largura, mas nao sobra linha para o
+    // segmento. Sem o `Flexible` de dentro do `Row` do bairro, este caso
+    // estoura.
+    testWidgets('bairro maior que a coluna quebra DENTRO do proprio texto',
+        (tester) async {
+      _telaDeCelular(tester);
+      const String extremo = 'Conjunto Habitacional Teotônio Vilela';
+      await abrirPerto(
+        tester,
+        rede: redeComDetalhe(
+          listagem: paginaDoContrato(
+            <Map<String, dynamic>>[
+              <String, dynamic>{
+                ...entradaDoContrato(
+                  slug: 'extremo',
+                  kind: 'vet',
+                  displayName: 'Veterinário do Bairro',
+                  neighborhood: extremo,
+                ),
+                'logo_url': _logoDoLugar,
+              },
+            ],
+            distanciaDisponivel: true,
+          ),
+        ),
+      );
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'REPROVA: montar o cartao com o bairro de 37 caracteres '
+            'levantou excecao -- estouro de `Row` ou de `Wrap` conta aqui.',
+      );
+
+      final cartao = _cartaoDe('Veterinário do Bairro');
+      final doBairro = _caixa(
+        tester,
+        find.descendant(of: cartao, matching: find.text(extremo)),
+      );
+      final doCartao = _caixa(tester, cartao);
+
+      // Quebrou em mais de uma linha, e e isso que o `Flexible` compra.
+      expect(
+        doBairro.base - doBairro.topo,
+        greaterThan(30),
+        reason: 'REPROVA POR VAZIO: o bairro de 37 caracteres ocupou '
+            '${doBairro.base - doBairro.topo} dp de altura, ou seja UMA linha. '
+            'Ou a massa parou de ser extrema, ou ele esta sendo cortado.',
+      );
+      expect(doBairro.direita, lessThanOrEqualTo(doCartao.direita));
+      expect(doBairro.base, lessThanOrEqualTo(doCartao.base));
+    });
+  });
   // ==========================================================================
   // 4. OS DOIS CONTROLES POSITIVOS: O CARTAO SEM LOGO, E AS DUAS ACOES
   // ==========================================================================
@@ -518,6 +825,7 @@ void main() {
     testWidgets(
         'CONTROLE POSITIVO — sem logo o cartao desenha, e o glifo do tipo '
         'ocupa o MESMO lugar', (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -613,6 +921,7 @@ void main() {
     // reprova no `find.byType(PaginaDoLocal)`.
     testWidgets('CONTROLE POSITIVO — o cartao continua levando a pagina interna',
         (tester) async {
+      _telaDeCelular(tester);
       await abrirPerto(
         tester,
         rede: redeComDetalhe(
@@ -658,6 +967,7 @@ void main() {
     // `abertos` vazia.
     testWidgets('CONTROLE POSITIVO — `Ligar` continua abrindo o discador',
         (tester) async {
+      _telaDeCelular(tester);
       final abertos = <String>[];
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(_canalDoLauncher, (chamada) async {
@@ -724,6 +1034,7 @@ void main() {
     // mesma coluna, e e aqui que um `Expanded` esquecido estoura.
     testWidgets('o nome longo quebra, e nada passa da borda do cartao',
         (tester) async {
+      _telaDeCelular(tester);
       const nomeLongo =
           'Clínica Veterinária e Hospital de Especialidades Santa Bárbara '
           'de Pinheiros';
