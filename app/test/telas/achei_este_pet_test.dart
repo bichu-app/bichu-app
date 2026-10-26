@@ -326,7 +326,16 @@ void main() {
         );
 
         for (final entrada in _controlesDoAnimal.entries) {
-          await rolarAte(tester, entrada.value);
+          // **O `try` nao e zelo, e foi MEDIDO.** Com o controle de porte
+          // apagado de F3.5, `rolarAte` nao acha o alvo, roda a lista inteira
+          // e estoura `StateError: Bad state: No element` -- o caso reprova,
+          // mas reprova dizendo isso, e nao QUAL controle sumiu nem por que
+          // isso importa. Engolido o estouro, o `expect` abaixo fala.
+          try {
+            await rolarAte(tester, entrada.value);
+          } on StateError {
+            // Segue: quem responde e o `expect`, com a frase inteira.
+          }
           expect(
             entrada.value,
             findsOneWidget,
