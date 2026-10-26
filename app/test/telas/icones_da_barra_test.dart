@@ -43,12 +43,14 @@
 // slot certo, com a geometria do arquivo, e troca no estado selecionado.
 
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/theme/icones_da_barra.g.dart';
 import 'package:bichu/widgets/icone_da_barra.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -536,6 +538,142 @@ void main() {
             'contorno, `selectedIcon` nao esta recebendo '
             '`desenhoSelecionado`; se veio toda preenchida, os dois campos '
             'estao trocados.',
+      );
+    });
+  });
+
+  group('ISCA 6 — o pintor emite TINTA, e o preenchido emite mais', () {
+    // ===================================================================
+    // O QUE ESTA SECAO ACRESCENTA, e por que ela nao e luxo
+    // ===================================================================
+    //
+    // As cinco iscas acima provam que o ARQUIVO certo chega ao SLOT certo com
+    // a geometria certa. Nenhuma delas prova que algo aparece na tela: um
+    // pintor que escalasse por zero, que pintasse transparente ou que
+    // ignorasse todas as formas passaria em todas elas, porque todas leem
+    // dados e nao pixels.
+    //
+    // **E o app NAO foi executado nesta rodada.** Isto e o mais perto que dá
+    // para chegar sem aparelho: o widget de PRODUCAO e montado, rasterizado
+    // pelo mesmo `Canvas` do app por um `RepaintBoundary`, e a tinta e
+    // CONTADA. O arranjo e o de `test/marca/variante_reduzida_test.dart`, que
+    // ja rasteriza a marca por este motivo.
+    //
+    // O QUE ELA AINDA NAO DIZ: se o desenho esta BONITO, se a patinha le como
+    // patinha, se os bigodes do `pets` sobrevivem a 24 dp num aparelho de
+    // verdade. Isso e olho humano, e nao houve.
+
+    /// Quantos pixels de tinta o widget de producao emite, em `lado` px.
+    Future<int> tinta(WidgetTester tester, DesenhoDoIcone desenho,
+        {double lado = 96}) async {
+      await tester.pumpWidget(
+        Center(
+          child: RepaintBoundary(
+            child: IconTheme(
+              // Preto opaco e tamanho fixo: a conta e de COBERTURA, e a cor
+              // de verdade vem do `iconTheme` do tema em producao.
+              data: IconThemeData(color: const Color(0xFF000000), size: lado),
+              child: IconeDaBarra(desenho),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final limite = tester.renderObject<RenderRepaintBoundary>(
+        find.byType(RepaintBoundary).first,
+      );
+
+      // `runAsync` NAO E ENFEITE, e custou uma execucao pendurada.
+      //
+      // `toImage()` entrega o trabalho ao rasterizador do motor, que vive FORA
+      // da zona de tempo falso de `testWidgets`. Chamado direto, o `await`
+      // espera um `Future` que a zona falsa nunca completa: a suite pendura
+      // SEM MENSAGEM, e eu tive de matar a execucao para descobrir. Dentro de
+      // `runAsync` o tempo e o de verdade e o `Future` resolve.
+      //
+      // E por isso que `test/marca/variante_reduzida_test.dart` nao precisa
+      // disto: ele usa `Picture.toImage` num `test()` comum, sem zona falsa.
+      // Aqui o widget de PRODUCAO tem de ser montado, entao a zona existe.
+      final pintados = await tester.runAsync(() async {
+        final imagem = await limite.toImage();
+        final dados =
+            await imagem.toByteData(format: ui.ImageByteFormat.rawRgba);
+        if (dados == null) return null;
+        var n = 0;
+        for (var i = 3; i < dados.lengthInBytes; i += 4) {
+          if (dados.getUint8(i) > 8) n++;
+        }
+        return n;
+      });
+      if (pintados == null) {
+        fail('REPROVA: a rasterizacao devolveu nulo. Sem pixels nao ha o que '
+            'contar, e um zero aqui seria indistinguivel de um icone vazio.');
+      }
+      return pintados;
+    }
+
+    testWidgets('os dez emitem tinta, e nenhum sai em branco', (tester) async {
+      final vazios = <String>[];
+      for (final e in IconesDaBarra.porArquivo.entries) {
+        final n = await tinta(tester, e.value);
+        if (n < 50) vazios.add('${e.key} ($n px)');
+      }
+      expect(
+        vazios,
+        isEmpty,
+        reason: 'REPROVA: ${vazios.join('; ')} sai praticamente em BRANCO. O '
+            'registro pode estar perfeito e o pintor nao desenhar nada — '
+            'escala zero, tinta transparente ou forma ignorada. Nenhuma das '
+            'iscas que leem dados pegaria isso.',
+      );
+    });
+
+    testWidgets('o preenchido emite MAIS tinta que o contorno, nos cinco pares',
+        (tester) async {
+      final errados = <String>[];
+      for (final slot in ordemDosSlots) {
+        final par = _artePorSlot[slot]!;
+        final contorno = await tinta(
+          tester,
+          IconesDaBarra.porArquivo[par.$1]!,
+        );
+        final preenchido = await tinta(
+          tester,
+          IconesDaBarra.porArquivo[par.$2]!,
+        );
+        if (preenchido <= contorno) {
+          errados.add('$slot (contorno $contorno px, preenchido $preenchido px)');
+        }
+      }
+      expect(
+        errados,
+        isEmpty,
+        reason: 'REPROVA: ${errados.join('; ')} — a arte de selecionado NAO '
+            'cobre mais area que a de repouso. E o `fill` nao chegando ao '
+            'canvas: `GrupoDoIcone.preenchido` diz `true` e o pintor so '
+            'contorna. A isca 4 nao pega isso, porque ela le o dado e nao o '
+            'pixel.',
+      );
+    });
+
+    testWidgets('CONTROLE POSITIVO: desenho sem forma conta ZERO tinta',
+        (tester) async {
+      // Sem ele, um contador que devolvesse um numero alto para QUALQUER
+      // coisa passaria nos dois casos acima. A isca precisa provar que a
+      // conta DISTINGUE tinta de ausencia de tinta.
+      const vazio = DesenhoDoIcone(
+        arquivo: 'vazio-de-mentira.svg',
+        rotuloDaArte: 'nada',
+        lado: 24,
+        espessura: 2,
+        grupos: <GrupoDoIcone>[],
+      );
+      expect(
+        await tinta(tester, vazio),
+        0,
+        reason: 'REPROVA: a conta de tinta devolveu pixel para um desenho SEM '
+            'forma nenhuma. Ela nao esta medindo o desenho.',
       );
     });
   });
