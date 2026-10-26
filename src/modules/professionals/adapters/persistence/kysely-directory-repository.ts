@@ -777,6 +777,16 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       };
     },
 
+    async temCanalVerificadoParaAvaliar(chamador: UserId): Promise<boolean> {
+      // O MESMO fragmento de `gravarMinhaAvaliacao`, e nao um segundo
+      // predicado escrito a mao: duas definicoes de "canal verificado"
+      // divergiriam na primeira vez que a regra mudasse.
+      const canal = await sql<{ tem_canal: boolean }>`
+        SELECT ${TEM_CANAL_VERIFICADO(chamador)} AS tem_canal
+      `.execute(db);
+      return canal.rows[0]?.tem_canal === true;
+    },
+
     async gravarMinhaAvaliacao(
       slug: string,
       chamador: UserId,
