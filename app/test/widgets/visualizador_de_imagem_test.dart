@@ -98,6 +98,19 @@ List<String> urlsPedidas(WidgetTester tester) {
   return urls;
 }
 
+/// A foto DESENHADA dentro do visualizador, e so a dela.
+///
+/// Escopado em `VisualizadorDeImagem` de proposito: nas telas que o empilham a
+/// rota de baixo continua montada, e um `find.byType(Image)` solto acharia
+/// tambem a imagem da ficha -- que nao se move e aprovaria o caso no lugar
+/// errado.
+Finder fotoDoVisualizador() => find
+    .descendant(
+      of: find.byType(VisualizadorDeImagem),
+      matching: find.byType(Image),
+    )
+    .first;
+
 void main() {
   // -------------------------------------------------------------------------
   group('UMA foto: amplia, e NAO e carrossel', () {
@@ -450,6 +463,224 @@ void main() {
       // O `Fechar` e as setas continuam la: a saida nao depende da foto.
       expect(find.byTooltip(VisualizadorDeImagem.rotuloDeFechar), findsOneWidget);
       expect(find.byTooltip(VisualizadorDeImagem.rotuloDeProxima), findsOneWidget);
+    });
+  });
+  // -------------------------------------------------------------------------
+  // A IMAGEM FICA FIXA (26/10/2026), e o arrasto NAO a leva embora.
+  //
+  // Pedido do cliente, literal: *"tem um bug quando amplia a foto dos eventos
+  // e dos estabelecimentos, o usuario consegue arrastar a imagem para varias
+  // posicoes, a imagem deve ficar fixa e so mudar de foto caso tenha mais do
+  // que uma cadastrada."*
+  //
+  // O DEFEITO ERA `boundaryMargin: EdgeInsets.all(double.infinity)` com
+  // `panEnabled` no padrao, que e `true`. `InteractiveViewer` **nao tem volta
+  // elastica**: o comentario que estava no codigo dizia *"a imagem ampliada
+  // pode ser arrastada para fora da moldura e volta sozinha"*, e essa frase
+  // era falsa. Com moldura infinita, um arrasto de UM dedo na foto nem
+  // ampliada estacionava a imagem onde a pessoa largou -- e ela ficava torta
+  // ate alguem fechar a tela.
+  //
+  // POR QUE A MEDIDA E A POSICAO DESENHADA, e nao uma propriedade so:
+  // `localToGlobal` atravessa o `Transform` que o `InteractiveViewer` aplica,
+  // entao `getTopLeft` ANDA quando o enquadramento anda. E o sintoma que o
+  // cliente viu com o dedo, e nao um nome de campo que pode mudar.
+  //
+  // DESLIGAR PARA VER REPROVAR: em `_ImagemAmpliavelState.build`, de
+  // `lib/widgets/visualizador_de_imagem.dart`, tire a linha
+  // `panEnabled: false` -- ou devolva `boundaryMargin` para
+  // `EdgeInsets.all(double.infinity)`.
+  group('A IMAGEM FICA FIXA: o arrasto nao a tira de lugar', () {
+    testWidgets('UMA foto: o arrasto diagonal nao move a imagem', (
+      tester,
+    ) async {
+      await abrirO(tester, urls: const <String>[foto1]);
+
+      // ANCORA: ha UMA foto desenhada dentro do visualizador. Sem ela, um
+      // `getTopLeft` que nao acha nada ESTOURA em vez de aprovar no vazio --
+      // mas a ancora diz, na saida, que a tela certa estava aberta.
+      final foto = fotoDoVisualizador();
+      expect(foto, findsOneWidget);
+
+      final antes = tester.getTopLeft(foto);
+      await tester.drag(find.byType(InteractiveViewer), const Offset(-137, -151));
+      await tester.pumpAndSettle();
+      final depois = tester.getTopLeft(foto);
+
+      expect(
+        depois,
+        antes,
+        reason: 'REPROVA: a foto ampliada ANDOU com o arrasto -- saiu de '
+            '$antes e parou em $depois. O cliente pediu o contrário em '
+            '26/10/2026: *"o usuario consegue arrastar a imagem para varias '
+            'posicoes, a imagem deve ficar fixa"*. `InteractiveViewer` não '
+            'tem volta elástica: onde o dedo larga, ali ela fica.',
+      );
+    });
+
+    // GUARDA, E NAO ISCA PROVADA -- dito com o nome para ninguem se enganar.
+    //
+    // **Este caso PASSA tambem na base defeituosa**, medido em 26/10/2026:
+    // dentro do `PageView` nenhum arrasto que se conseguiu construir movia a
+    // imagem, nem na vertical nem direto no `InteractiveViewer`. O
+    // `Scrollable` do carrossel ganha a arena de gestos e o arrasto nunca
+    // chega ao ampliador. Ou seja: **o defeito do cliente vive na arvore de
+    // UMA foto**, que e justamente a que as tres telas produzem hoje.
+    //
+    // Ele fica porque e a barreira do dia em que uma galeria de verdade acender
+    // o carrossel -- mas nao conta como prova de nada, e nenhum numero deste
+    // arquivo deve ser lido como se contasse.
+    testWidgets('GUARDA — no carrossel o arrasto vertical nao move a imagem', (
+      tester,
+    ) async {
+      await abrirO(tester, urls: const <String>[foto1, foto2]);
+
+      final foto = fotoDoVisualizador();
+      expect(foto, findsOneWidget);
+
+      final antes = tester.getTopLeft(foto);
+      await tester.drag(find.byType(PageView), const Offset(0, -190));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(foto),
+        antes,
+        reason: 'REPROVA: dentro do carrossel a foto andou na vertical. A '
+            'queixa do cliente é a mesma nas duas árvores, porque as duas '
+            'passam pelo MESMO `_ImagemAmpliavel`.',
+      );
+      // E nao paginou: arrasto vertical nao e troca de foto.
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 0, total: 2)),
+        findsOneWidget,
+        reason: 'REPROVA: o arrasto VERTICAL trocou de foto.',
+      );
+    });
+
+    testWidgets('o mecanismo esta no `InteractiveViewer`, e em TODOS eles', (
+      tester,
+    ) async {
+      // A propriedade, DEPOIS do comportamento: ela diz POR QUE a imagem ficou
+      // parada, e pega o caso em que alguem acerta uma arvore e esquece a
+      // outra. `findsWidgets` nao bastaria -- aqui cada um e conferido.
+      await abrirO(tester, urls: const <String>[foto1, foto2, foto3]);
+
+      final visualizadores =
+          tester.widgetList<InteractiveViewer>(find.byType(InteractiveViewer));
+      expect(
+        visualizadores,
+        isNotEmpty,
+        reason: 'REPROVA: não há `InteractiveViewer` na árvore -- a ampliação '
+            'sumiu, e o caso abaixo aprovaria no vazio.',
+      );
+      for (final v in visualizadores) {
+        expect(
+          v.panEnabled,
+          isFalse,
+          reason: 'REPROVA: o arrasto de um dedo voltou a mover a imagem.',
+        );
+        expect(
+          v.boundaryMargin,
+          EdgeInsets.zero,
+          reason: 'REPROVA: a moldura voltou a ser infinita. Com moldura '
+              'infinita a imagem pode parar em qualquer lugar e não volta: '
+              '`InteractiveViewer` não tem volta elástica.',
+        );
+      }
+    });
+
+    testWidgets('o toque duplo continua ampliando: fixa nao e imovel', (
+      tester,
+    ) async {
+      // A imagem fica FIXA, e nao proibida de ampliar. O toque duplo e a
+      // alternativa de ponteiro unico da pinca (SC 2.5.1) e e ele que leva a
+      // pessoa ao canto que ela quer ver de perto -- continua sendo o caminho
+      // depois do conserto, e sem este caso o conserto poderia ter matado a
+      // ampliacao inteira sem ninguem notar.
+      await abrirO(tester, urls: const <String>[foto1]);
+      final foto = fotoDoVisualizador();
+      // **`getSize` NAO serve aqui, e isso custou uma reprovacao falsa em
+      // 26/10/2026**: ele devolve o tamanho de LAYOUT, que o `Transform` do
+      // `InteractiveViewer` nao toca -- 800x600 antes e 800x600 depois de
+      // ampliar 2,5x. A extensao PINTADA e a diferenca entre dois pontos
+      // globais, e `localToGlobal` atravessa o `Transform`.
+      final antes = tester.getBottomRight(foto) - tester.getTopLeft(foto);
+
+      await tester.tap(find.byType(InteractiveViewer));
+      // 50 ms: acima do `kDoubleTapMinTime` (40 ms) e bem abaixo do
+      // `kDoubleTapTimeout` (300 ms), escrito em numero para o caso nao
+      // depender de uma constante de gestos importada so por ele.
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byType(InteractiveViewer));
+      await tester.pumpAndSettle();
+
+      final depois = tester.getBottomRight(foto) - tester.getTopLeft(foto);
+      expect(
+        depois.dx,
+        greaterThan(antes.dx),
+        reason: 'REPROVA: o toque duplo não amplia mais -- a foto pintava '
+            '${antes.dx} de largura e continua pintando ${depois.dx}. Travar '
+            'o arrasto não pode ter levado a ampliação junto: ela é o pedido '
+            'de 20/10/2026, *"a foto principal deve ser clicada e '
+            'ampliada"*, e depois do conserto o toque duplo é o ÚNICO jeito '
+            'de reenquadrar.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CONTROLE POSITIVO DA TROCA DE FOTO (26/10/2026).
+  //
+  // **Sem este caso o conserto do arrasto poderia ter matado a navegacao e
+  // nenhuma asercao negativa acusaria.** Os casos acima provam que a imagem
+  // NAO anda; este prova que a FOTO troca quando ha mais de uma -- que e a
+  // segunda metade literal do pedido, *"so mudar de foto caso tenha mais do
+  // que uma cadastrada"*.
+  //
+  // Ele mede os DOIS caminhos (seta e arrasto horizontal) e mede a URL
+  // DESENHADA, e nao so o contador: um numero que anda sozinho aprovaria um
+  // carrossel que nao troca de imagem.
+  group('CONTROLE POSITIVO — com DUAS fotos a troca funciona', () {
+    testWidgets('a seta troca a foto DESENHADA, e nao so o contador', (
+      tester,
+    ) async {
+      await abrirO(tester, urls: const <String>[foto1, foto2]);
+      expect(urlsPedidas(tester), <String>[foto1]);
+
+      await tester.tap(find.byTooltip(VisualizadorDeImagem.rotuloDeProxima));
+      await tester.pumpAndSettle();
+
+      expect(
+        urlsPedidas(tester),
+        contains(foto2),
+        reason: 'CONTROLE POSITIVO REPROVOU: a seta não troca mais a foto. Se '
+            'este caso reprova junto com os de imagem fixa, o conserto do '
+            'arrasto levou a navegação embora.',
+      );
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 1, total: 2)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('o arrasto HORIZONTAL troca a foto desenhada', (tester) async {
+      await abrirO(tester, urls: const <String>[foto1, foto2]);
+
+      await tester.drag(find.byType(PageView), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      expect(
+        urlsPedidas(tester),
+        contains(foto2),
+        reason: 'CONTROLE POSITIVO REPROVOU: o arrasto horizontal não pagina '
+            'mais. Travar o arrasto da IMAGEM não pode ter travado o do '
+            'carrossel -- o gesto do cliente é o mesmo dedo, e é a diferença '
+            'entre "a imagem fica fixa" e "a tela travou".',
+      );
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 1, total: 2)),
+        findsOneWidget,
+      );
     });
   });
 }

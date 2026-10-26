@@ -612,6 +612,67 @@ void main() {
       expect(find.text(tituloPublico), findsOneWidget);
     });
 
+    // A IMAGEM DA CAPA AMPLIADA FICA FIXA (26/10/2026).
+    //
+    // Queixa do cliente, literal: *"tem um bug quando amplia a foto dos
+    // eventos e dos estabelecimentos, o usuario consegue arrastar a imagem
+    // para varias posicoes, a imagem deve ficar fixa"*. O defeito era
+    // `panEnabled` no padrao com `boundaryMargin` infinito em
+    // `widgets/visualizador_de_imagem.dart`: `InteractiveViewer` nao tem volta
+    // elastica, e a foto ficava onde o dedo largasse.
+    //
+    // **O CASO VIVE AQUI, E NAO SO NO VISUALIZADOR**, porque o cliente nomeou
+    // ESTA tela. O mecanismo e compartilhado; a conta e desta superficie.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `_ImagemAmpliavelState.build`, de
+    // `lib/widgets/visualizador_de_imagem.dart`, tire `panEnabled: false`.
+    // MEDIDO em 26/10/2026 com ele fora: a capa saia de `Offset(0.0, 0.0)` e
+    // parava em `Offset(-118.9, -131.0)`.
+    testWidgets('a capa ampliada NAO se arrasta para fora de lugar', (
+      tester,
+    ) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: comCapa()),
+      );
+      await tester.tap(find.byType(ImagemDoEncontroOuBanner));
+      await tester.pumpAndSettle();
+
+      // ANCORA DUPLA: o visualizador abriu, e a foto DELE esta na arvore. A
+      // rota de baixo continua montada, entao o `Finder` e escopado -- a
+      // imagem da ficha nao se move e aprovaria o caso no lugar errado.
+      expect(find.byType(VisualizadorDeImagem), findsOneWidget);
+      final foto = find
+          .descendant(
+            of: find.byType(VisualizadorDeImagem),
+            matching: find.byType(Image),
+          )
+          .first;
+      expect(foto, findsOneWidget);
+
+      final antes = tester.getTopLeft(foto);
+      await tester.drag(
+        find.descendant(
+          of: find.byType(VisualizadorDeImagem),
+          matching: find.byType(InteractiveViewer),
+        ),
+        const Offset(-137, -151),
+      );
+      await tester.pumpAndSettle();
+      final depois = tester.getTopLeft(foto);
+
+      expect(
+        depois,
+        antes,
+        reason: 'REPROVA: a capa ampliada do encontro ANDOU com o arrasto -- '
+            'saiu de $antes e parou em $depois. O cliente pediu o contrário '
+            'em 26/10/2026, e `InteractiveViewer` não tem volta elástica: '
+            'onde o dedo larga, ali ela fica até alguém fechar a tela.',
+      );
+    });
+
     testWidgets('ficha sem foto não oferece toque', (tester) async {
       // `images` vazia e `coverBannerUrl` nulo sao o padrao da fixture, e sao
       // o estado NORMAL de um encontro sem imagem -- nao um caso de borda.

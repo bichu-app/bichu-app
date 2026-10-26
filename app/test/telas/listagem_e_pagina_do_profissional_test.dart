@@ -740,6 +740,64 @@ void main() {
       expect(find.byTooltip(VisualizadorDeImagem.rotuloDeProxima), findsNothing);
     });
 
+    // A FOTO AMPLIADA DO LOCAL FICA FIXA (26/10/2026).
+    //
+    // Queixa do cliente, literal: *"tem um bug quando amplia a foto dos
+    // eventos e dos estabelecimentos, o usuario consegue arrastar a imagem
+    // para varias posicoes, a imagem deve ficar fixa"*. ESTA e a tela do
+    // "estabelecimento" na frase dele.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `_ImagemAmpliavelState.build`, de
+    // `lib/widgets/visualizador_de_imagem.dart`, tire `panEnabled: false`.
+    // MEDIDO em 26/10/2026 com ele fora: a foto saia de `Offset(0.0, 0.0)` e
+    // parava em `Offset(-118.9, -131.0)`.
+    testWidgets('a foto ampliada do local NAO se arrasta para fora de lugar', (
+      tester,
+    ) async {
+      await abrirOLocal(
+        tester,
+        rede: redeDoLocal(
+          detalhe: <String, dynamic>{
+            ...detalheComTudo(),
+            'photo_url': fotoDoLugar,
+          },
+        ),
+      );
+      await tester.tap(find.byType(ImagemDaRede));
+      await tester.pumpAndSettle();
+
+      // ANCORA DUPLA: o visualizador abriu, e a foto DELE esta na arvore. O
+      // `Finder` e escopado porque a rota de baixo continua montada, e a
+      // faixa da pagina nao se move -- ela aprovaria o caso no lugar errado.
+      expect(find.byType(VisualizadorDeImagem), findsOneWidget);
+      final foto = find
+          .descendant(
+            of: find.byType(VisualizadorDeImagem),
+            matching: find.byType(Image),
+          )
+          .first;
+      expect(foto, findsOneWidget);
+
+      final antes = tester.getTopLeft(foto);
+      await tester.drag(
+        find.descendant(
+          of: find.byType(VisualizadorDeImagem),
+          matching: find.byType(InteractiveViewer),
+        ),
+        const Offset(-137, -151),
+      );
+      await tester.pumpAndSettle();
+      final depois = tester.getTopLeft(foto);
+
+      expect(
+        depois,
+        antes,
+        reason: 'REPROVA: a foto ampliada do local ANDOU com o arrasto -- saiu '
+            'de $antes e parou em $depois. `InteractiveViewer` não tem volta '
+            'elástica: onde o dedo larga, ali ela fica.',
+      );
+    });
+
     // A ISCA DE `DUAS FOTOS VIRAM CARROSSEL` **NAO MORA AQUI**, e isso e
     // deliberado.
     //
