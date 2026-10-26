@@ -1,3 +1,23 @@
+// ===========================================================================
+// DESLIGADO EM 26/10/2026 -- E ELE FICOU SEM CHAMADOR EM `lib/`
+// ===========================================================================
+//
+// **MEDIDO, e nao suposto: nada em `app/lib/` importa este arquivo hoje.** A
+// barra voltou aos glifos do Material (o cliente reprovou o desenho --
+// *"tava muito feio o icone do cachorro"*), e `casca_com_abas.dart` deixou de
+// importar o pintor. Quem o alcanca e `test/telas/icones_da_barra_test.dart`,
+// que o monta e rasteriza para provar que ele emite tinta.
+//
+// Isto e codigo de producao sem chamador em producao, e e deliberado -- mas
+// alguem tem razao em chamar isso de codigo morto. **A troca foi consciente:**
+// o caminho SVG -> Dart -> pixel esta medido e provado, e reconstrui-lo no dia
+// da arte aprovada custaria mais do que mante-lo coberto. Se a decisao for
+// apagar, o que sai e este arquivo MAIS o gerador, os dez SVG, o alvo do
+// `make` e o portao -- e nao so este.
+//
+// **COMO RELIGAR:** `fonteAtivaDaBarra` para `desenhoDoCliente` e os cinco
+// destinos de volta para `desenho`/`desenhoSelecionado`, no mesmo commit.
+//
 // O PINTOR DOS ICONES DA BARRA DE BAIXO.
 //
 // Ele existe porque os desenhos do cliente existiam e o app nao os lia: a

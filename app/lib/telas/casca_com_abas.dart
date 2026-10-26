@@ -11,7 +11,12 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../theme/icones_da_barra.g.dart';
 import '../widgets/barra_de_listagem.dart';
-import '../widgets/icone_da_barra.dart';
+// `../widgets/icone_da_barra.dart` NAO e importado aqui hoje, e a ausencia e
+// parte do desligamento de 26/10/2026: a barra pinta `Icon(...)` do Material
+// enquanto nao houver desenho aprovado, e importe nao usado reprova em
+// `unused_import`. O pintor continua no repositorio, coberto por
+// `test/telas/icones_da_barra_test.dart`. **Para religar:** volte este importe
+// e troque [fonteAtivaDaBarra] para `desenhoDoCliente`.
 import '../widgets/imagem_da_rede.dart';
 import '../widgets/marca.dart';
 
@@ -51,6 +56,57 @@ enum EstadoDaSecao { existe, casca, planejada }
 /// (`chat`, que desenha UM BALAO): `dynamic_feed` desenha CARTOES EMPILHADOS,
 /// que e a forma de "a pilha do que chegou" e nao de gente nem de fala.
 enum CampoSemantico { animal, comunidade, publicacao, compra, conta, conversa }
+
+/// De onde a barra de baixo tira a ARTE dos cinco slots.
+///
+/// ## Por que isto e um enum e nao um booleano morto no codigo
+///
+/// Em 23/10/2026 a barra passou a desenhar os dez SVG de
+/// `design/icones-da-barra/`. Em **26/10/2026 o cliente reprovou o desenho**:
+/// *"eu vi sim o icone e reprovei porque tava muito feio o icone do
+/// cachorro"*. Ele ja os tinha visto antes de a fiacao existir -- o que
+/// faltava nao era o app ler os desenhos, era desenho APROVADO.
+///
+/// A fiacao **nao foi apagada**: o gerador (`tool/gen_icones_da_barra.dart`),
+/// os dez SVG, o pintor (`widgets/icone_da_barra.dart`) e o portao
+/// (`test/telas/icones_da_barra_test.dart`) continuam de pe e continuam
+/// cobertos. O que mudou e UMA linha: [fonteAtivaDaBarra].
+///
+/// ## O que esta chave compra
+///
+/// Sem ela, voltar ao Material seria apagar a ligacao, e o dia do desenho
+/// aprovado seria reconstruir tudo -- inclusive as iscas. Com ela, os dois
+/// estados sao PUROS e declarados, e o portao cobra que o registro concorde
+/// com o que esta declarado aqui. **Trocar a chave sem trocar os cinco slots
+/// REPROVA, e trocar os cinco slots sem trocar a chave REPROVA** -- a isca
+/// funciona nas duas direcoes, que e o que faz dela isca e nao enfeite.
+///
+/// O que ela NAO permite e MISTURA: uns slots com desenho e outros com glifo.
+/// Isso nao e um estado de transicao valido -- e uma barra com duas
+/// linguagens visuais --, e quem cobra isso e
+/// `exigirFonteDeArteUniforme`, porque a mistura e propriedade da LISTA e nao
+/// de um destino sozinho.
+enum FonteDaArteDaBarra {
+  /// Os dez SVG de `design/icones-da-barra/`, pelo gerador e pelo pintor.
+  desenhoDoCliente,
+
+  /// Os glifos do Material Symbols, a familia fechada do design system 10.1.
+  glifoDoMaterial,
+}
+
+/// A fonte de arte que a barra usa HOJE.
+///
+/// **`glifoDoMaterial` desde 26/10/2026, por reprovacao do cliente.** A
+/// justificativa de CADA um dos cinco glifos continua escrita no registro,
+/// slot por slot, e nunca saiu de la: ela descreve o CAMPO SEMANTICO que a
+/// secao ocupa, e o campo tem portao proprio.
+///
+/// **Para voltar aos desenhos quando houver arte aprovada:** troque esta linha
+/// para `desenhoDoCliente` e troque `icone`/`iconeSelecionado` por
+/// `desenho`/`desenhoSelecionado` nos cinco destinos de [CascaComAbas.destinos].
+/// Nada mais -- o pintor, o gerador e as iscas ja estao prontos, e o portao
+/// vai cobrar que os dois lados andem juntos.
+const FonteDaArteDaBarra fonteAtivaDaBarra = FonteDaArteDaBarra.glifoDoMaterial;
 
 /// Qual build esta sendo montado (UX 25.7.3).
 ///
@@ -157,15 +213,41 @@ class DestinoDeNavegacao {
          'nunca nenhum. Declarar os dois seria a segunda fonte da verdade do '
          'que a aba mostra, e e exatamente o estado que deixou os dez SVG do '
          'cliente parados numa pasta enquanto a barra pintava o Material.',
-       ),
-       assert(
-         !naBarra || desenho != null,
-         'DESTINO DA BARRA DESENHA O DO BICHU. Os cinco slots sao os desenhos '
-         'dele (`design/icones-da-barra/`), por decisao dele: glifo generico '
-         'do Material num slot da barra e o defeito que esta fiacao veio '
-         'fechar. Destino FORA da barra (`Perfil`) continua podendo declarar '
-         '`icone`, porque nao ha SVG para ele e nenhum slot o pinta.',
-       );
+       )
+       // ---------------------------------------------------------------
+       // O QUARTO `assert` SAIU em 26/10/2026, e nao por conveniencia
+       // ---------------------------------------------------------------
+       //
+       // Ele dizia `!naBarra || desenho != null`: todo slot da barra desenha
+       // o do cliente. Eu o escrevi em 23/10 e ele era a trava mais forte
+       // desta classe -- `CascaComAbas.destinos` e `const`, entao ele
+       // reprovava em tempo de COMPILACAO.
+       //
+       // **Ele estava guardando a coisa errada.** O cliente reprovou o
+       // desenho em 26/10 (*"tava muito feio o icone do cachorro"*), e o
+       // `assert` passou a impedir o conserto: ele tornava o estado CERTO
+       // inconstruivel. Trava que recusa o estado certo e trava que alguem
+       // apaga com pressa, e e melhor ela sair com motivo escrito.
+       //
+       // **O QUE ENTROU NO LUGAR, e cobre mais e nao menos:** a regra que
+       // importa nunca foi "slot usa desenho" -- era **"a barra nao mistura
+       // as duas linguagens"**. E isso um `assert` de construtor NAO consegue
+       // ver: mistura e propriedade da LISTA, e cada destino sozinho esta
+       // sempre bem-formado. A regra mora em `exigirFonteDeArteUniforme`
+       // (`test/telas/icones_da_barra_test.dart`), que cobra os cinco slots
+       // na MESMA fonte e que essa fonte seja a declarada em
+       // [fonteAtivaDaBarra].
+       //
+       // E ela ficou MELHOR como portao do que era como `assert`: a mistura
+       // agora e construivel, entao a isca derruba o mecanismo de verdade.
+       // Enquanto o `assert` existia, a regra equivalente era GUARDA -- eu
+       // mesmo registrei isso na entrega de 23/10, e a diferenca aparece
+       // agora.
+       //
+       // Os TRES que ficaram seguem valendo e seguem sendo de objeto: par de
+       // desenho completo, par de glifo completo, e uma fonte de arte por
+       // destino.
+       ;
 
   /// Se este destino e um ramo do `IndexedStack` de `rotas.dart`.
   ///
@@ -261,37 +343,42 @@ class DestinoDeNavegacao {
   /// o respiro de 24 dp quando ela e vazia.
   final String reforcoDaPagina;
 
-  /// O DESENHO DO CLIENTE, nos dois estados. Nulo fora da barra.
+  /// O DESENHO DO CLIENTE, nos dois estados. **Nulo em TODOS hoje.**
   ///
-  /// **Esta e a arte dos cinco slots**, vinda de `design/icones-da-barra/` pelo
-  /// gerador `app/tool/gen_icones_da_barra.dart`. Ate 23/10/2026 a barra
-  /// pintava `Icons.pets`, `Icons.groups`, `Icons.dynamic_feed`,
-  /// `Icons.shopping_bag` e `Icons.chat` -- cinco glifos do Material Symbols
-  /// -- enquanto os dez SVG dele ficavam numa pasta que nada no app abria.
-  /// Nao era divergencia de desenho: era fiacao que nunca existiu.
+  /// O campo existe e nao esta em uso, e isso e deliberado. A arte vem de
+  /// `design/icones-da-barra/` pelo gerador `app/tool/gen_icones_da_barra.dart`
+  /// e e pintada por `widgets/icone_da_barra.dart`; as duas pecas estao de pe
+  /// e cobertas por `test/telas/icones_da_barra_test.dart`.
   ///
-  /// **A JUSTIFICATIVA DE CADA GLIFO DO MATERIAL FICOU INTEIRA ACIMA, de
-  /// proposito.** Ela nao virou lixo: a patinha legitima, a recusa de
-  /// `storefront`, a eliminacao dentro da familia fechada ate `dynamic_feed`,
-  /// o balao unico em vez de `forum` -- cada uma dessas decisoes DESCREVE o
-  /// campo semantico que a secao ocupa, e o campo continua valendo e continua
-  /// com portao. O que mudou e de onde a forma vem; o que a forma significa foi
-  /// escolhido antes e nao foi reaberto. Quem apagar aquela prosa apaga o
-  /// motivo de `CampoSemantico` existir.
+  /// **POR QUE ESTA DESLIGADO (26/10/2026):** o cliente reprovou o desenho --
+  /// *"eu vi sim o icone e reprovei porque tava muito feio o icone do
+  /// cachorro"*. Ele ja os tinha visto ANTES de a fiacao existir; o que
+  /// faltava nunca foi o app ler os SVG, era desenho APROVADO. A fiacao de
+  /// 23/10 estava tecnicamente certa e ligou arte recusada.
+  ///
+  /// **COMO RELIGAR quando houver desenho aprovado:** troque
+  /// [fonteAtivaDaBarra] para `desenhoDoCliente` e, nos cinco destinos da
+  /// barra, troque `icone`/`iconeSelecionado` por `desenho`/`desenhoSelecionado`.
+  /// Nada mais. O portao cobra que os dois lados andem juntos, e nas duas
+  /// direcoes.
   final DesenhoDoIcone? desenho;
   final DesenhoDoIcone? desenhoSelecionado;
 
-  /// O glifo do Material, nos dois estados. **Nulo na barra.**
+  /// O glifo do Material, nos dois estados. **E o que a barra pinta hoje.**
   ///
-  /// Sobra UM destino com este campo, e e `Perfil`: ele saiu da barra em 19/10
-  /// e nao ha SVG dele na pasta do cliente. Ele tambem nao e PINTADO em lugar
-  /// nenhum hoje -- a porta dele virou a foto da barra de topo
-  /// ([AvatarDaConta]) --, e o campo fica porque e ele que faz `Perfil`
-  /// participar do portao de glifos distintos junto com os outros cinco.
+  /// Os CINCO slots e o `Perfil` declaram este campo. A justificativa de cada
+  /// glifo esta escrita slot por slot no registro acima -- a patinha legitima,
+  /// a recusa de `storefront`, a eliminacao dentro da familia fechada ate
+  /// `dynamic_feed`, o balao unico em vez de `forum` -- e **nenhuma daquelas
+  /// decisoes foi reaberta**: cada uma descreve o CAMPO SEMANTICO que a secao
+  /// ocupa, e o campo tem portao proprio. Elas sobreviveram ao desligamento de
+  /// 23/10 e ao religamento de 26/10 porque nunca foram sobre a fonte da
+  /// forma.
   ///
-  /// O `assert` do construtor impede que um destino da barra volte a declarar
-  /// este campo, e `test/telas/icones_da_barra_test.dart` reprova pelo nome do
-  /// caso quando algum tenta.
+  /// `Perfil` esta FORA da barra e nao e pintado em lugar nenhum -- a porta
+  /// dele virou a foto da barra de topo ([AvatarDaConta]). O campo fica porque
+  /// e ele que faz `Perfil` participar do portao de artes distintas junto com
+  /// os outros cinco.
   final IconData? icone;
   final IconData? iconeSelecionado;
 
@@ -451,8 +538,8 @@ class CascaComAbas extends StatefulWidget {
       // possivel por outro motivo em 22/09**: o alfinete foi para `Perto`
       // (BICHUS-233), e duas secoes vizinhas nao dividem a mesma forma. O
       // desejo morre aqui, e isto esta escrito para nao ser reaberto.
-      desenho: IconesDaBarra.pets,
-      desenhoSelecionado: IconesDaBarra.petsSelecionado,
+      icone: Icons.pets_outlined,
+      iconeSelecionado: Icons.pets,
       rota: Rotas.pets,
       // O leitor de QR responde ao toque e leva a tela de verdade: a secao
       // satisfaz o criterio (a) de 25.7.3.
@@ -506,8 +593,8 @@ class CascaComAbas extends StatefulWidget {
       // da `Rede` sao TEXTO (`Eventos` e `Comunidade`), porque aba de texto
       // nao precisa transferir significado para forma como o slot de 64 dp
       // precisa.
-      desenho: IconesDaBarra.rede,
-      desenhoSelecionado: IconesDaBarra.redeSelecionado,
+      icone: Icons.groups_outlined,
+      iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
       // `GET /network/events` (ADR-0025). A casca honesta saiu da TELA e
       // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
@@ -603,8 +690,8 @@ class CascaComAbas extends StatefulWidget {
       // corpo das paginas, nominalmente, em 18/10/2026. Uma secao nova nao
       // repoe o que ele acabou de mandar tirar.
       reforcoDaPagina: '',
-      desenho: IconesDaBarra.mural,
-      desenhoSelecionado: IconesDaBarra.muralSelecionado,
+      icone: Icons.dynamic_feed_outlined,
+      iconeSelecionado: Icons.dynamic_feed,
       rota: Rotas.mural,
       estado: EstadoDaSecao.casca,
       campoSemantico: CampoSemantico.publicacao,
@@ -618,8 +705,8 @@ class CascaComAbas extends StatefulWidget {
       // plaquinha do Bichu. Prometer aqui um item que a lista nunca vai ter e
       // a mesma classe de defeito do estado vazio que mente.
       reforcoDaPagina: '',
-      desenho: IconesDaBarra.loja,
-      desenhoSelecionado: IconesDaBarra.lojaSelecionado,
+      icone: Icons.shopping_bag_outlined,
+      iconeSelecionado: Icons.shopping_bag,
       rota: Rotas.loja,
       // **`existe`, e nao `planejada`, desde a vitrine.**
       //
@@ -679,8 +766,8 @@ class CascaComAbas extends StatefulWidget {
       // nunca apareceu em tela e e a segunda metade do nome que o leitor de
       // tela anuncia na barra.
       reforcoDaPagina: '',
-      desenho: IconesDaBarra.auau,
-      desenhoSelecionado: IconesDaBarra.auauSelecionado,
+      icone: Icons.chat_outlined,
+      iconeSelecionado: Icons.chat,
       // **A AREA DE MENSAGENS E DE OUTRO AGENTE, e ela nao existe nesta
       // arvore.** O cliente de conversa, a lista e o envio estao sendo
       // construidos como destino independente, com rota propria. Nao ha tela
@@ -1061,11 +1148,11 @@ class BarraDeBaixo extends StatelessWidget {
                       // TalkBack (UX 27.7, regra 2). `Icon` sem
                       // `semanticLabel` ja nao entra.
                       icon: DistintivoDaAba(
-                        glifo: IconeDaBarra(destino.desenho!),
+                        glifo: Icon(destino.icone),
                         naoLidas: naoLidasDe(destino),
                       ),
                       selectedIcon: DistintivoDaAba(
-                        glifo: IconeDaBarra(destino.desenhoSelecionado!),
+                        glifo: Icon(destino.iconeSelecionado),
                         naoLidas: naoLidasDe(destino),
                       ),
                       label: destino.rotulo,

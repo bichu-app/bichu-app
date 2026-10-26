@@ -94,54 +94,80 @@ const Map<String, (String, String)> _artePorSlot = <String, (String, String)>{
 // AS REGRAS, isoladas para a prova negativa poder exercita-las
 // ===========================================================================
 
-/// Nenhum destino da barra declara glifo do Material.
+/// A barra nao MISTURA as duas linguagens de arte, e usa a declarada.
 ///
-/// O destino FORA da barra (`Perfil`) continua podendo: nao ha SVG dele, e
-/// nenhum slot o pinta. A regra e sobre o SLOT, e nao sobre o registro.
-void exigirSoDesenhoDoCliente(List<DestinoDeNavegacao> destinos) {
-  // O guarda contra o verde por vazio: uma lista sem slot satisfaz "nenhum
-  // slot usa Material" trivialmente, e aprovaria sem olhar para nada.
+/// ## Por que esta regra substituiu "todo slot usa o desenho do cliente"
+///
+/// Em 23/10 eu escrevi o oposto disto: um `assert` no construtor de
+/// `DestinoDeNavegacao` exigindo `desenho != null` em todo slot da barra. Ele
+/// era forte -- `CascaComAbas.destinos` e `const`, entao reprovava em tempo de
+/// COMPILACAO -- e estava guardando a coisa errada. Em 26/10 o cliente
+/// reprovou o desenho (*"tava muito feio o icone do cachorro"*), e aquele
+/// `assert` passou a impedir o conserto: ele tornava o estado CERTO
+/// inconstruivel.
+///
+/// **A regra que importa nunca foi "slot usa desenho".** Era: a barra nao
+/// desenha metade de uma fonte e metade da outra. Cinco slots, uma linguagem.
+/// Isso nao e defeito de um destino -- cada um sozinho esta bem-formado --, e
+/// um `assert` de construtor por definicao nao ve. **E propriedade da LISTA**,
+/// e por isso mora aqui.
+///
+/// ## E ela ficou melhor como portao do que era como `assert`
+///
+/// Com o `assert`, a mistura era inconstruivel, entao a regra equivalente era
+/// **GUARDA**: nenhuma isca a derrubava. Eu registrei isso na entrega de
+/// 23/10. Agora a mistura E construivel, e a prova negativa abaixo derruba
+/// este mecanismo de verdade -- ele virou **ISCA**.
+///
+/// [esperada] e a fonte declarada em `fonteAtivaDaBarra`. A regra cobra as
+/// duas direcoes: registro que discorda da chave reprova, e chave que discorda
+/// do registro reprova. Trocar so um dos dois nao atravessa.
+void exigirFonteDeArteUniforme(
+  List<DestinoDeNavegacao> destinos,
+  FonteDaArteDaBarra esperada,
+) {
+  // O guarda contra o verde por vazio: uma lista sem slot nao mistura nada, e
+  // aprovaria sem nunca ter olhado para a barra.
   final daBarra = destinos.where((d) => d.naBarra).toList();
   expect(
     daBarra.length,
     greaterThanOrEqualTo(1),
     reason: 'REPROVA: a lista nao tem nenhum destino `naBarra`. Sem slot nao '
-        'ha o que conferir, e afirmar "nenhum slot usa glifo do Material" '
+        'ha fonte de arte para conferir, e afirmar "a barra nao mistura" '
         'seria verde por nao ter o que olhar.',
   );
 
-  final comMaterial = <String>[];
-  final semDesenho = <String>[];
+  final comDesenho = <String>[];
+  final comGlifo = <String>[];
   for (final d in daBarra) {
-    if (d.icone != null || d.iconeSelecionado != null) {
-      comMaterial.add('${d.rotulo} (${d.icone}, ${d.iconeSelecionado})');
-    }
-    if (d.desenho == null || d.desenhoSelecionado == null) {
-      semDesenho.add(d.rotulo);
-    }
+    if (d.desenho != null) comDesenho.add(d.rotulo);
+    if (d.icone != null) comGlifo.add(d.rotulo);
   }
 
   expect(
-    comMaterial,
-    isEmpty,
-    reason: 'REPROVA: ${comMaterial.join('; ')} declara glifo do Material num '
-        'slot da barra.\n'
-        'O cliente pediu os icones DELE, e eles existem em $_pasta/ -- dez '
-        'arquivos, cinco pares. Um glifo generico no meio dos cinco e '
-        'exatamente o estado que esta fiacao veio fechar: os desenhos estavam '
-        'prontos e a barra pintava o Material porque nada os lia.\n'
-        'Se falta desenho para um slot novo, o conserto NAO e pegar um '
-        '`Icons.*` parecido: e pedir o desenho. Desenho passa pelo Figma '
-        'antes do codigo.',
+    comDesenho.isEmpty || comGlifo.isEmpty,
+    isTrue,
+    reason: 'REPROVA: a barra MISTURA as duas fontes de arte.\n'
+        '  com desenho do cliente: ${comDesenho.join(', ')}\n'
+        '  com glifo do Material:  ${comGlifo.join(', ')}\n'
+        'Cinco slots, UMA linguagem. Meia barra de cada e o que o cliente veria '
+        'como dois apps na mesma fileira -- e e o estado em que uma troca '
+        'parcial deixa o produto. Para trocar a fonte, troque '
+        '`fonteAtivaDaBarra` E os cinco destinos na mesma edicao.',
   );
 
+  final atual = comDesenho.isNotEmpty
+      ? FonteDaArteDaBarra.desenhoDoCliente
+      : FonteDaArteDaBarra.glifoDoMaterial;
   expect(
-    semDesenho,
-    isEmpty,
-    reason: 'REPROVA: ${semDesenho.join(', ')} esta na barra sem desenho nos '
-        'dois estados. Slot sem arte pinta nada, e `IconeDaBarra` estoura no '
-        '`!` em vez de desenhar um buraco -- o que e melhor, mas acontece no '
-        'aparelho e nao aqui.',
+    atual,
+    esperada,
+    reason: 'REPROVA: o registro desenha por `${atual.name}` e '
+        '`fonteAtivaDaBarra` declara `${esperada.name}`.\n'
+        'A chave e o registro andam JUNTOS: ela existe para que o estado da '
+        'barra seja uma decisao declarada num lugar, e nao algo que se descobre '
+        'lendo cinco destinos. Trocar so a chave, ou so os destinos, reprova '
+        'aqui -- nas duas direcoes.',
   );
 }
 
@@ -222,6 +248,29 @@ void exigirParSelecionadoDistinto(List<DestinoDeNavegacao> destinos) {
 }
 
 // ===========================================================================
+
+/// Os cinco pares de arte como destinos de mentira, para a isca 4.
+///
+/// **`naBarra: false` NAO e detalhe:** estes nao sao slots, sao um empacotador
+/// que deixa `exigirParSelecionadoDistinto` ser a MESMA funcao que a prova
+/// negativa exercita. Uma copia da regra aqui provaria que a copia reprova, e
+/// nao que a regra reprova.
+List<DestinoDeNavegacao> paresDaArte() {
+  return <DestinoDeNavegacao>[
+    for (final slot in ordemDosSlots)
+      DestinoDeNavegacao(
+        rotulo: slot,
+        reforcoAcessivel: 'par de arte, so do portao',
+        reforcoDaPagina: '',
+        rota: Rotas.pets,
+        estado: EstadoDaSecao.existe,
+        campoSemantico: CampoSemantico.animal,
+        naBarra: false,
+        desenho: IconesDaBarra.porArquivo[_artePorSlot[slot]!.$1],
+        desenhoSelecionado: IconesDaBarra.porArquivo[_artePorSlot[slot]!.$2],
+      ),
+  ];
+}
 
 Directory _raizDoRepositorio() {
   var dir = Directory.current.absolute;
@@ -378,78 +427,164 @@ void main() {
     });
   });
 
-  group('ISCA 2 — cada desenho esta no destino certo', () {
-    test('os cinco slots usam a arte com o nome deles', () {
-      final visiveis = CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia);
+  group('ISCA 2 — a arte dos dez esta rotulada para o slot certo', () {
+    // ESTE GRUPO DEIXOU DE LER O REGISTRO em 26/10/2026, e a mudanca e de
+    // escopo e nao de forca.
+    //
+    // Entre 23/10 e 26/10 ele cobrava que os cinco slots usassem a arte com o
+    // nome deles. Com a barra de volta ao Material, o registro nao carrega
+    // arte nenhuma -- cobrar isso ali reprovaria o estado certo.
+    //
+    // **O que ele cobra agora e o que continua verdade e continua valioso: os
+    // dez arquivos estao rotulados para os cinco slots, prontos para o dia do
+    // desenho aprovado.** Sem isto, a pasta poderia silenciosamente perder o
+    // par de um slot, ou dois arquivos poderiam apontar para o mesmo, e so
+    // descobririamos no religar.
+    test('os dez cobrem os cinco slots, um par cada', () {
       expect(
-        visiveis,
-        hasLength(5),
-        reason: 'REPROVA: a barra tem ${visiveis.length} slots e nao cinco.',
+        IconesDaBarra.porArquivo,
+        hasLength(10),
+        reason: 'REPROVA: `IconesDaBarra.porArquivo` tem '
+            '${IconesDaBarra.porArquivo.length} entradas e nao dez.',
       );
-
       final porSlot = <String, (String, String)>{
-        for (final d in visiveis)
-          d.rotulo: (d.desenho!.arquivo, d.desenhoSelecionado!.arquivo),
+        for (final e in _artePorSlot.entries) e.key: e.value,
       };
       expect(
-        porSlot,
-        _artePorSlot,
-        reason: 'REPROVA: um desenho foi para o slot errado.\n'
-            'Encontrado: $porSlot\n'
-            'Esperado:   $_artePorSlot\n'
-            'Arte trocada de aba e o defeito que nenhuma suite de widget pega '
-            'sozinha: as duas abas continuam desenhando algo, e so quem '
-            'conhece os desenhos ve que a sacola esta no `Mural`.',
+        porSlot.keys.toList(),
+        ordemDosSlots,
+        reason: 'REPROVA: a tabela de arte nao cobre os cinco slots, ou nao '
+            'na ordem do cliente.',
+      );
+      final declarados = <String>[
+        for (final par in _artePorSlot.values) ...<String>[par.$1, par.$2],
+      ];
+      expect(
+        declarados.toSet(),
+        IconesDaBarra.porArquivo.keys.toSet(),
+        reason: 'REPROVA: a tabela de arte e os dez gerados divergem. Arte que '
+            'nao tem slot, ou slot que aponta para arquivo que nao existe, '
+            'so apareceria no dia do religar.',
+      );
+      expect(
+        declarados,
+        hasLength(declarados.toSet().length),
+        reason: 'REPROVA: dois slots apontam para o MESMO arquivo de arte.',
       );
     });
 
-    test('o `aria-label` da arte concorda com o rotulo do slot', () {
-      // Uma segunda amarra, e por outro caminho: o nome do ARQUIVO poderia
-      // bater e o conteudo dele ser outro desenho. O `aria-label` vive dentro
-      // do SVG e e a unica coisa no arquivo que diz o que ele e.
-      for (final d in CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia)) {
+    test('o `aria-label` de cada arte nomeia o slot dela', () {
+      // A amarra que o nome do arquivo nao da: o `aria-label` vive DENTRO do
+      // SVG e e a unica coisa no arquivo que diz o que ele e. Nome de arquivo
+      // certo com conteudo de outro desenho passa por tudo menos por aqui.
+      for (final slot in ordemDosSlots) {
+        final par = _artePorSlot[slot]!;
         expect(
-          d.desenho!.rotuloDaArte,
-          d.rotulo,
-          reason: 'REPROVA: o slot `${d.rotulo}` desenha uma arte que se '
-              'declara `${d.desenho!.rotuloDaArte}`.',
+          IconesDaBarra.porArquivo[par.$1]!.rotuloDaArte,
+          slot,
+          reason: 'REPROVA: ${par.$1} se declara '
+              '`${IconesDaBarra.porArquivo[par.$1]!.rotuloDaArte}` e deveria '
+              'nomear o slot `$slot`.',
         );
         expect(
-          d.desenhoSelecionado!.rotuloDaArte,
-          '${d.rotulo}, selecionado',
-          reason: 'REPROVA: a arte selecionada do slot `${d.rotulo}` se '
-              'declara `${d.desenhoSelecionado!.rotuloDaArte}`.',
+          IconesDaBarra.porArquivo[par.$2]!.rotuloDaArte,
+          '$slot, selecionado',
+          reason: 'REPROVA: ${par.$2} se declara '
+              '`${IconesDaBarra.porArquivo[par.$2]!.rotuloDaArte}`.',
         );
       }
     });
   });
 
-  group('ISCA 3 — a barra nao volta ao glifo do Material, e a ordem e dele',
-      () {
-    test('nenhum destino da barra declara glifo do Material', () {
-      exigirSoDesenhoDoCliente(CascaComAbas.destinos);
+  group('ISCA 3 — a barra nao mistura as duas fontes, e a ordem e dele', () {
+    test('a barra usa UMA fonte de arte, e e a declarada', () {
+      exigirFonteDeArteUniforme(CascaComAbas.destinos, fonteAtivaDaBarra);
     });
 
-    test('`Perfil` e o UNICO com glifo, e ele esta fora da barra', () {
-      // A contraparte do caso acima: sem ela, apagar `icone` de `Perfil`
-      // tambem deixaria o portao verde, e o registro perderia a entrada que
-      // faz `Perfil` participar do portao de artes distintas.
-      final comGlifo =
-          CascaComAbas.destinos.where((d) => d.icone != null).toList();
+    test('hoje a fonte declarada e o glifo do Material', () {
+      // O ESTADO DE HOJE, escrito por extenso e num caso proprio.
+      //
+      // `exigirFonteDeArteUniforme` cobra que registro e chave CONCORDEM -- e
+      // os dois concordariam tambem se alguem trocasse OS DOIS para
+      // `desenhoDoCliente`. Este caso e o que exige a DECISAO: o cliente
+      // reprovou o desenho em 26/10/2026, e religar e decisao dele, nao de
+      // quem mexe no codigo.
+      //
+      // **Quando houver desenho aprovado, este caso muda numa linha** -- e e
+      // de proposito que ele TENHA de mudar: a troca passa a ter nome e data
+      // no diff, em vez de acontecer calada.
       expect(
-        comGlifo.map((d) => d.rotulo).toList(),
-        <String>['Perfil'],
-        reason: 'REPROVA: o conjunto de destinos com glifo do Material mudou. '
-            'Hoje e so `Perfil`, e ele esta fora da barra desde 19/10 — nao '
-            'ha SVG dele na pasta do cliente, e nenhum slot o pinta.',
+        fonteAtivaDaBarra,
+        FonteDaArteDaBarra.glifoDoMaterial,
+        reason: 'REPROVA: `fonteAtivaDaBarra` saiu de `glifoDoMaterial`. Em '
+            '26/10/2026 o cliente reprovou o desenho: "eu vi sim o icone e '
+            'reprovei porque tava muito feio o icone do cachorro". A fiacao '
+            'dos SVG esta de pe e DESLIGADA de proposito; religar precisa de '
+            'desenho aprovado por ele, e desenho passa pelo Figma antes do '
+            'codigo.',
       );
+    });
+
+    test('os slots declaram a arte medida da fonte ATIVA', () {
+      // ESTE CASO ERA CEGO A FONTE, e o controle positivo do religar pegou.
+      //
+      // A primeira versao cobrava os DOZE `IconData` sempre -- e no religar
+      // completo (chave + cinco slots) ela reprovava, porque os cinco passam
+      // a ter `icone` nulo. Eu tinha afirmado que religar nao custaria
+      // reescrever portao; o controle positivo mostrou que custaria DOIS
+      // casos, e este era um deles. Agora ele segue a chave.
+      //
+      // `Perfil` fica FORA do `switch` de proposito: ele esta fora da barra,
+      // nao tem SVG, e o glifo dele nao muda com a fonte da barra.
+      final perfil = CascaComAbas.destinos.singleWhere((d) => !d.naBarra);
       expect(
-        comGlifo.single.naBarra,
-        isFalse,
-        reason: 'REPROVA: `Perfil` voltou para a barra trazendo o glifo do '
-            'Material. Se ele volta a ter slot, ele precisa de desenho — e '
-            'desenho passa pelo Figma antes do codigo.',
+        <IconData?>[perfil.icone, perfil.iconeSelecionado],
+        <IconData?>[Icons.account_circle_outlined, Icons.account_circle],
+        reason: 'REPROVA: o glifo de `Perfil` mudou. Ele esta fora da barra '
+            'desde 19/10 e nao acompanha a fonte de arte dos cinco slots.',
       );
+
+      final daBarra = CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia);
+      expect(daBarra, hasLength(5));
+
+      switch (fonteAtivaDaBarra) {
+        case FonteDaArteDaBarra.glifoDoMaterial:
+          // Os dez valores conferidos contra
+          // `d590ce2a:app/lib/telas/casca_com_abas.dart` -- o estado ANTES da
+          // fiacao de 23/10 --, e nao copiados de relato. Cada escolha tem
+          // justificativa escrita no registro, e nenhuma foi reaberta.
+          expect(
+            <String, List<IconData?>>{
+              for (final d in daBarra)
+                d.rotulo: <IconData?>[d.icone, d.iconeSelecionado],
+            },
+            <String, List<IconData?>>{
+              'Pets': <IconData?>[Icons.pets_outlined, Icons.pets],
+              'Rede': <IconData?>[Icons.groups_outlined, Icons.groups],
+              'Mural': <IconData?>[
+                Icons.dynamic_feed_outlined,
+                Icons.dynamic_feed,
+              ],
+              'Loja': <IconData?>[
+                Icons.shopping_bag_outlined,
+                Icons.shopping_bag,
+              ],
+              'AuAu': <IconData?>[Icons.chat_outlined, Icons.chat],
+            },
+            reason: 'REPROVA: um slot da barra mudou de glifo.',
+          );
+        case FonteDaArteDaBarra.desenhoDoCliente:
+          // O espelho, para o dia do religar: cada slot desenha a arte com o
+          // nome dele. `_artePorSlot` e a mesma tabela que a isca 2 usa.
+          expect(
+            <String, (String, String)>{
+              for (final d in daBarra)
+                d.rotulo: (d.desenho!.arquivo, d.desenhoSelecionado!.arquivo),
+            },
+            _artePorSlot,
+            reason: 'REPROVA: um desenho foi para o slot errado.',
+          );
+      }
     });
 
     test('a ordem dos cinco destinos e a do cliente', () {
@@ -457,18 +592,27 @@ void main() {
     });
   });
 
-  group('ISCA 4 — o estado selecionado troca o desenho', () {
-    test('os cinco trocam de arte, e de contorno para preenchido', () {
-      exigirParSelecionadoDistinto(CascaComAbas.destinos);
+  group('ISCA 4 — nos dez, o selecionado troca o desenho', () {
+    // ESTE GRUPO DEIXOU DE LER O REGISTRO em 26/10, pelo mesmo motivo da isca
+    // 2, e passou a ler os dez pares direto. A afirmacao e a MESMA e continua
+    // valendo: contorno em repouso, PREENCHIDO no selecionado. Ela e o que
+    // faz a aba aberta ser identificavel sem depender de cor (criterio 7), e
+    // e o que o religar vai precisar que ainda seja verdade.
+    test('os cinco pares trocam de arte, e de contorno para preenchido', () {
+      exigirParSelecionadoDistinto(paresDaArte());
     });
   });
 
-  group('ISCA 5 — a barra MONTADA desenha os dele, e nenhum `Icon`', () {
-    // As quatro acima leem o REGISTRO. Esta monta o app e olha a arvore: o
-    // registro poderia estar perfeito e `BarraDeBaixo` continuar pintando
-    // `Icon(...)`, que foi literalmente o estado anterior a esta mudanca —
-    // os desenhos existiam e a barra nao os lia.
-    testWidgets('a barra tem cinco `IconeDaBarra` e nenhum `Icon` em slot',
+  group('ISCA 5 — a barra MONTADA pinta a fonte declarada, e so ela', () {
+    // As iscas acima leem DADOS. Esta monta o app e olha a arvore: o registro
+    // e a chave poderiam concordar perfeitamente e `BarraDeBaixo` continuar
+    // pintando a outra coisa -- foi literalmente o estado anterior a 23/10
+    // (arte existia, barra nao a lia) e e o risco simetrico agora.
+    //
+    // **Ela e guiada por `fonteAtivaDaBarra`**, entao serve os dois estados
+    // sem ser reescrita: no dia do religar ela passa a cobrar
+    // `IconeDaBarra` sozinha, sem ninguem tocar neste arquivo.
+    testWidgets('a barra pinta cinco da fonte ativa e zero da outra',
         (tester) async {
       await abrirOApp(tester, rede: _redeVazia());
 
@@ -480,66 +624,82 @@ void main() {
             'caso nao confere nada.',
       );
 
-      expect(
-        find.descendant(of: barra, matching: find.byType(IconeDaBarra)),
-        findsNWidgets(5),
-        reason: 'REPROVA: a barra montada nao tem os cinco desenhos do '
-            'cliente. E ESTE o caso que mede o defeito original: ate '
-            '23/10/2026 o registro e a arte existiam e a barra pintava '
-            '`Icon(destino.icone)` — cinco glifos do Material.',
-      );
+      final deDesenho =
+          find.descendant(of: barra, matching: find.byType(IconeDaBarra));
+      final deGlifo = find.descendant(of: barra, matching: find.byType(Icon));
 
-      expect(
-        find.descendant(of: barra, matching: find.byType(Icon)),
-        findsNothing,
-        reason: 'REPROVA: a barra montada ainda pinta um `Icon` do Material. '
-            'O cliente pediu os desenhos dele nos cinco slots.',
-      );
+      switch (fonteAtivaDaBarra) {
+        case FonteDaArteDaBarra.glifoDoMaterial:
+          expect(
+            deGlifo,
+            findsNWidgets(5),
+            reason: 'REPROVA: a barra montada nao tem os cinco glifos do '
+                'Material, e `fonteAtivaDaBarra` diz que e isso que ela '
+                'desenha.',
+          );
+          expect(
+            deDesenho,
+            findsNothing,
+            reason: 'REPROVA: a barra montada ainda pinta `IconeDaBarra`. O '
+                'cliente reprovou o desenho em 26/10, e a chave declara '
+                '`glifoDoMaterial` -- a arvore discorda dos dois.',
+          );
+        case FonteDaArteDaBarra.desenhoDoCliente:
+          expect(
+            deDesenho,
+            findsNWidgets(5),
+            reason: 'REPROVA: a barra montada nao tem os cinco desenhos do '
+                'cliente, e a chave diz que e isso que ela desenha.',
+          );
+          expect(
+            deGlifo,
+            findsNothing,
+            reason: 'REPROVA: a barra montada ainda pinta `Icon` do Material.',
+          );
+      }
     });
 
-    testWidgets('a aba aberta desenha a arte PREENCHIDA, e as outras nao',
+    testWidgets('a aba aberta pinta o estado SELECIONADO, e as outras nao',
         (tester) async {
-      // A troca de estado medida na arvore, e nao no registro: o
-      // `NavigationDestination` tem `icon` e `selectedIcon`, e quem escolhe
-      // entre os dois e o componente. Trocar os dois de lugar passaria em
-      // todos os casos acima e desenharia a barra ao contrario.
+      // A troca de estado medida na arvore: `NavigationDestination` tem `icon`
+      // e `selectedIcon`, e quem escolhe entre os dois e o componente.
+      // Trocar os dois de lugar passaria em todo o resto e desenharia a barra
+      // ao contrario.
       await abrirOApp(tester, rede: _redeVazia());
-
-      final pintados = tester
-          .widgetList<IconeDaBarra>(
-            find.descendant(
-              of: find.byType(NavigationBar),
-              matching: find.byType(IconeDaBarra),
-            ),
-          )
-          .map((w) => w.desenho.arquivo)
-          .toList();
 
       // A aba de ARRANQUE e a `Rede` (`Rotas.destinoDoArranque`), e nao a
       // primeira da barra: as duas decisoes sao independentes.
       final arranque = CascaComAbas.destinos
           .singleWhere((d) => d.rota == Rotas.rede)
           .rotulo;
-      final esperado = <String>[
-        for (final slot in ordemDosSlots)
-          slot == arranque
-              ? _artePorSlot[slot]!.$2
-              : _artePorSlot[slot]!.$1,
+
+      final pintados = tester
+          .widgetList<Icon>(
+            find.descendant(
+              of: find.byType(NavigationBar),
+              matching: find.byType(Icon),
+            ),
+          )
+          .map((w) => w.icon)
+          .toList();
+
+      final esperado = <IconData?>[
+        for (final d in CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia))
+          d.rotulo == arranque ? d.iconeSelecionado : d.icone,
       ];
 
       expect(
         pintados,
         esperado,
-        reason: 'REPROVA: a barra montada nao desenha o preenchido SO na aba '
+        reason: 'REPROVA: a barra montada nao pinta o selecionado SO na aba '
             'aberta.\n'
             '  pintado:  $pintados\n'
             '  esperado: $esperado\n'
-            'A aba de arranque e `$arranque`. Se a lista veio toda em '
-            'contorno, `selectedIcon` nao esta recebendo '
-            '`desenhoSelecionado`; se veio toda preenchida, os dois campos '
-            'estao trocados.',
+            'A aba de arranque e `$arranque`. Se veio tudo em contorno, '
+            '`selectedIcon` nao recebe `iconeSelecionado`; se veio tudo '
+            'preenchido, os dois campos estao trocados.',
       );
-    });
+    }, skip: fonteAtivaDaBarra != FonteDaArteDaBarra.glifoDoMaterial);
   });
 
   group('ISCA 6 — o pintor emite TINTA, e o preenchido emite mais', () {
@@ -705,27 +865,139 @@ void main() {
     }
 
     // =====================================================================
-    // QUEM GUARDA O GLIFO DO MATERIAL: o `assert`, e nao a funcao
+    // A MISTURA ERA GUARDA E VIROU ISCA, e isto e o registro da troca
     // =====================================================================
     //
-    // **ISTO FOI DESCOBERTO ARMANDO A ISCA, e nao decidido antes.** A primeira
-    // versao destes dois casos chamava `exigirSoDesenhoDoCliente` com um slot
-    // defeituoso e esperava `TestFailure`. Os dois REPROVARAM, e por um motivo
-    // que corrige o desenho: o `assert` de `DestinoDeNavegacao` estourou
-    // ANTES, no construtor, e o portao nunca chegou a ser chamado.
+    // Em 23/10 esta secao media um `assert` do construtor
+    // (`!naBarra || desenho != null`) porque a regra "slot nao usa Material"
+    // era inconstruivel -- `const` mais `assert` reprovava em COMPILACAO. Eu
+    // declarei na entrega daquele dia que a funcao equivalente era **GUARDA**,
+    // sem defeito construivel que a derrubasse.
     //
-    // A conclusao honesta: **um slot da barra com glifo do Material nao e
-    // construivel**, e `CascaComAbas.destinos` e `const` -- ou seja, repor
-    // `Icons.pets` num slot NAO COMPILA. Essa e a garantia mais forte que
-    // existe aqui, e ela e do `assert`.
+    // Em 26/10 aquele `assert` saiu (o cliente reprovou o desenho, e a trava
+    // passou a impedir o conserto). A regra que ficou --
+    // `exigirFonteDeArteUniforme` -- cobra MISTURA, e mistura **e**
+    // construivel. Entao os casos abaixo derrubam o mecanismo de verdade: ela
+    // deixou de ser guarda e virou isca.
     //
-    // Entao os casos abaixo medem o `assert`, que e o mecanismo que de fato
-    // dispara. E `exigirSoDesenhoDoCliente` fica declarada pelo que ela e:
-    // **GUARDA, e nao isca** -- segundo cinto para um destino montado em tempo
-    // de execucao, com mensagem legivel, mas sem defeito construivel que a
-    // derrube. A isca provada da MESMA propriedade e a 5, que monta a barra e
-    // conta os `Icon` na arvore.
-    test('o construtor RECUSA glifo do Material num slot da barra', () {
+    // Os TRES `assert` que sobraram continuam de objeto, e dois deles seguem
+    // armados aqui.
+    test('a barra MISTURADA reprova, nomeando os dois lados', () {
+      // O estado em que uma troca PARCIAL deixa o produto: alguem troca a
+      // `Pets` para o desenho novo e para no meio. O portao acusa, e acusa
+      // dizendo quem esta de cada lado.
+      final misturada = <DestinoDeNavegacao>[
+        slot(
+          'Pets',
+          desenho: IconesDaBarra.pets,
+          desenhoSelecionado: IconesDaBarra.petsSelecionado,
+        ),
+        slot('Rede', icone: Icons.groups_outlined, iconeSelecionado: Icons.groups),
+      ];
+      expect(
+        () => exigirFonteDeArteUniforme(
+          misturada,
+          FonteDaArteDaBarra.glifoDoMaterial,
+        ),
+        throwsA(isA<TestFailure>()),
+        reason: 'REPROVA: o portao aprovou uma barra com um slot de desenho e '
+            'um de glifo. Meia barra de cada e duas linguagens visuais na '
+            'mesma fileira, e e exatamente onde uma troca parcial para.',
+      );
+    });
+
+    test('o registro que discorda da CHAVE reprova', () {
+      // A segunda direcao, e e ela que faz a chave valer. Sem este caso,
+      // `fonteAtivaDaBarra` seria comentario: alguem trocaria os cinco slots
+      // e deixaria a chave velha, e nada acusaria.
+      final soDesenho = <DestinoDeNavegacao>[
+        slot(
+          'Pets',
+          desenho: IconesDaBarra.pets,
+          desenhoSelecionado: IconesDaBarra.petsSelecionado,
+        ),
+        slot(
+          'Rede',
+          desenho: IconesDaBarra.rede,
+          desenhoSelecionado: IconesDaBarra.redeSelecionado,
+        ),
+      ];
+      expect(
+        () => exigirFonteDeArteUniforme(
+          soDesenho,
+          FonteDaArteDaBarra.glifoDoMaterial,
+        ),
+        throwsA(isA<TestFailure>()),
+        reason: 'REPROVA: o registro desenha os SVG e a chave diz '
+            '`glifoDoMaterial`, e o portao aprovou. A chave virou comentario.',
+      );
+    });
+
+    test('a CHAVE que discorda do registro reprova', () {
+      // A direcao espelhada: barra toda no Material e chave dizendo desenho.
+      final soGlifo = <DestinoDeNavegacao>[
+        slot('Pets', icone: Icons.pets_outlined, iconeSelecionado: Icons.pets),
+        slot('Rede', icone: Icons.groups_outlined, iconeSelecionado: Icons.groups),
+      ];
+      expect(
+        () => exigirFonteDeArteUniforme(
+          soGlifo,
+          FonteDaArteDaBarra.desenhoDoCliente,
+        ),
+        throwsA(isA<TestFailure>()),
+        reason: 'REPROVA: a chave diz `desenhoDoCliente` e a barra pinta '
+            'Material, e o portao aprovou.',
+      );
+    });
+
+    test('CONTROLE POSITIVO: os dois estados PUROS passam', () {
+      // Sem ele, um portao que reprovasse TUDO passaria nos tres casos acima
+      // e o dia do religar seria reescrever isto. A isca tem de provar que a
+      // regra DISTINGUE, e nao so que ela reclama. **E este caso e tambem a
+      // promessa que eu assumi:** o estado do desenho aprovado ja passa hoje,
+      // sem ninguem tocar neste arquivo.
+      final soGlifo = <DestinoDeNavegacao>[
+        slot('Pets', icone: Icons.pets_outlined, iconeSelecionado: Icons.pets),
+        slot('Rede', icone: Icons.groups_outlined, iconeSelecionado: Icons.groups),
+      ];
+      final soDesenho = <DestinoDeNavegacao>[
+        slot(
+          'Pets',
+          desenho: IconesDaBarra.pets,
+          desenhoSelecionado: IconesDaBarra.petsSelecionado,
+        ),
+        slot(
+          'Rede',
+          desenho: IconesDaBarra.rede,
+          desenhoSelecionado: IconesDaBarra.redeSelecionado,
+        ),
+      ];
+      expect(
+        () => exigirFonteDeArteUniforme(
+          soGlifo,
+          FonteDaArteDaBarra.glifoDoMaterial,
+        ),
+        returnsNormally,
+        reason: 'REPROVA: o portao recusou a barra toda no Material, que e o '
+            'estado de HOJE.',
+      );
+      expect(
+        () => exigirFonteDeArteUniforme(
+          soDesenho,
+          FonteDaArteDaBarra.desenhoDoCliente,
+        ),
+        returnsNormally,
+        reason: 'REPROVA: o portao recusou a barra toda no desenho do cliente, '
+            'que e o estado do dia do religar. Se este caso reprova, religar '
+            'vai custar reescrever o portao -- e era justamente isso que esta '
+            'chave existe para evitar.',
+      );
+    });
+
+    test('o construtor RECUSA glifo E desenho no mesmo destino', () {
+      // Dos quatro `assert` de 23/10, este e um dos tres que ficaram: um
+      // destino tem UMA fonte de arte. Declarar as duas seria a segunda fonte
+      // da verdade do que a aba mostra.
       expect(
         () => slot(
           'Pets',
@@ -735,30 +1007,28 @@ void main() {
           iconeSelecionado: Icons.pets,
         ),
         throwsA(isA<AssertionError>()),
-        reason: 'REPROVA: deu para construir um slot da barra declarando '
-            '`Icons.pets` AO LADO do desenho. E a segunda fonte da verdade do '
-            'que a aba mostra.',
+        reason: 'REPROVA: deu para construir um destino declarando `Icons.pets` '
+            'AO LADO do desenho.',
       );
     });
 
-    test('o construtor RECUSA slot da barra SEM desenho', () {
+    test('o construtor RECUSA destino SEM arte nenhuma', () {
       expect(
-        () => slot(
-          'Pets',
-          icone: Icons.pets_outlined,
-          iconeSelecionado: Icons.pets,
-        ),
+        () => slot('Pets'),
         throwsA(isA<AssertionError>()),
-        reason: 'REPROVA: deu para construir um slot da barra com SO o glifo '
-            'do Material. E o estado exato de 22/10/2026, e ele precisa nao '
-            'compilar.',
+        reason: 'REPROVA: deu para construir um destino sem arte nenhuma. A '
+            'aba pintaria nada, e o portao de artes distintas veria dois '
+            'nulos como iguais.',
       );
     });
 
-    test('o construtor ACEITA o slot certo - controle positivo', () {
-      // Sem ele, um `assert` que recusasse TUDO passaria nos dois casos acima
-      // e o registro de producao nao compilaria. Isca sem controle positivo
-      // nao prova que a regra DISTINGUE; prova so que ela reclama.
+    test('o construtor ACEITA os dois arranjos puros - controle positivo', () {
+      // Sem ele, um `assert` que recusasse tudo passaria nos dois casos acima.
+      expect(
+        () => slot('Pets', icone: Icons.pets_outlined, iconeSelecionado: Icons.pets),
+        returnsNormally,
+        reason: 'REPROVA: o `assert` recusou glifo puro, que e o estado de hoje.',
+      );
       expect(
         () => slot(
           'Pets',
@@ -766,20 +1036,21 @@ void main() {
           desenhoSelecionado: IconesDaBarra.petsSelecionado,
         ),
         returnsNormally,
-        reason: 'REPROVA: o `assert` recusou o arranjo CERTO -- desenho nos '
-            'dois estados e nenhum glifo.',
+        reason: 'REPROVA: o `assert` recusou desenho puro, que e o estado do '
+            'dia do religar.',
       );
     });
 
     test('lista sem slot REPROVA pelo guarda, e nao passa em silencio', () {
-      // Este continua sendo isca de verdade sobre a funcao: lista vazia E
-      // construivel, e sem o guarda ela aprovaria sem olhar para nada.
       expect(
-        () => exigirSoDesenhoDoCliente(const <DestinoDeNavegacao>[]),
+        () => exigirFonteDeArteUniforme(
+          const <DestinoDeNavegacao>[],
+          FonteDaArteDaBarra.glifoDoMaterial,
+        ),
         throwsA(isA<TestFailure>()),
         reason: 'REPROVA: o portao ficou VERDE sobre uma lista sem slot. '
-            'Lista vazia nao tem slot com Material, e e assim que um portao '
-            'aprova todo dia sem nunca ter olhado para a barra.',
+            'Lista vazia nao mistura nada, e e assim que um portao aprova todo '
+            'dia sem nunca ter olhado para a barra.',
       );
     });
 

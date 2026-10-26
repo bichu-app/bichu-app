@@ -1093,39 +1093,36 @@ void main() {
       final mensagens = CascaComAbas.destinos.firstWhere(
         (d) => d.campoSemantico == CampoSemantico.conversa,
       );
-      // 23/10/2026: O BALAO CONTINUA, E AGORA E O DELE.
+      // O BALAO CONTINUA, e em 26/10/2026 ele voltou a ser o do Material.
       //
-      // Este caso cobrava `Icons.chat`, e a escolha daquele glifo foi medida:
-      // `chat_bubble` e balao vazio de comentario solto e `forum` sao dois
-      // baloes que se fundem em 24 dp. A razao de o glifo nao poder ficar
-      // ambiguo NAO mudou -- com um rotulo que nao diz a funcao, ele e o unico
-      // sinal visivel que diz "mensagem" --, e por isso este caso continua
-      // existindo em vez de ser apagado. O que mudou e a fonte da forma:
-      // `design/icones-da-barra/auau.svg` e UM balao com um risco dentro.
+      // A escolha do glifo foi medida e NAO foi reaberta: `chat_bubble` e
+      // balao vazio de comentario solto e `forum` sao dois baloes que se
+      // fundem em 24 dp. A razao de ele nao poder ficar ambiguo tambem nao
+      // mudou -- com um rotulo que nao diz a funcao (`AuAu` e palavra de
+      // marca), o glifo e o unico sinal visivel que diz "mensagem".
       //
-      // **O DESENHO NAO E CONFERIDO AQUI, e a divisao e deliberada:** que o
-      // arquivo certo foi para este destino e afirmacao de
-      // `test/telas/icones_da_barra_test.dart`, que le os dez SVG. Aqui mede-se
-      // o que ESTE arquivo sempre mediu: a secao de mensagens tem arte propria
-      // nos dois estados, e ela nao e glifo generico.
-      expect(
-        mensagens.desenho?.arquivo,
-        'auau.svg',
-        reason: 'REPROVA: a secao de mensagens em repouso nao desenha '
-            '`auau.svg`. O balao e o unico sinal visivel que diz "mensagem" '
-            'numa aba cujo rotulo e palavra de marca.',
-      );
-      expect(
-        mensagens.desenhoSelecionado?.arquivo,
-        'auau-selecionado.svg',
-        reason: 'REPROVA: a secao de mensagens selecionada nao desenha '
-            '`auau-selecionado.svg`.',
-      );
+      // Em 23/10 este caso passou a cobrar `auau.svg`, o desenho do cliente.
+      // Em 26/10 ele REPROVOU o desenho (*"tava muito feio o icone do
+      // cachorro"*) e os cinco slots voltaram ao Material. O caso volta a
+      // cobrar `Icons.chat`, e a volta e literal: os dois valores foram
+      // conferidos contra `d590ce2a:app/lib/telas/casca_com_abas.dart`.
       expect(
         <IconData?>[mensagens.icone, mensagens.iconeSelecionado],
-        <IconData?>[null, null],
-        reason: 'REPROVA: a secao de mensagens voltou a declarar glifo do '
-            'Material. O cliente pediu os desenhos DELE nos cinco slots.',
+        <IconData?>[Icons.chat_outlined, Icons.chat],
+        reason: 'REPROVA: o glifo da secao de mensagens nao e mais o balao '
+            '`chat`. `chat_bubble` e balao vazio de comentario solto e '
+            '`forum` sao dois baloes que se fundem em 24 dp -- e justamente '
+            'aqui o glifo nao pode ficar ambiguo, porque o rotulo nao diz a '
+            'funcao.',
+      );
+      expect(
+        <Object?>[mensagens.desenho, mensagens.desenhoSelecionado],
+        <Object?>[null, null],
+        reason: 'REPROVA: a secao de mensagens voltou a declarar desenho do '
+            'cliente. A fiacao existe e esta desligada desde 26/10 por '
+            'reprovacao dele; religar e trocar `fonteAtivaDaBarra` E os cinco '
+            'slots juntos, e nao um destino sozinho -- o portao de fonte '
+            'uniforme reprova a mistura.',
       );
     });
 
