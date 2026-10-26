@@ -274,7 +274,43 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2718;
+/// ---------------------------------------------------------------------------
+/// 26/10/2026: 2718 -> **2716**, e os dois que sairam NAO sao da marca
+/// ---------------------------------------------------------------------------
+/// O lote das duas correcoes do cliente (tirar as acoes de QR do usuario, e
+/// por a foto de quem falou em cada fala) mexeu em dois arquivos de
+/// `app/lib/telas`, e o saldo foi **-2**.
+///
+/// CONTADO ARQUIVO POR ARQUIVO, e a diferenca esta localizada nos dois -- nao
+/// e um total que fechou por compensacao:
+///
+///   `telas/conexoes/convide_tutores.dart`    32 -> 28  (-4)
+///   `telas/mensagens/tela_da_conversa.dart`  35 -> 37  (+2)
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA.** Os quatro que sairam do
+/// convite sao referencias a `BichuEspaco.` dos dois `BotaoSecundario` e dos
+/// dois avisos que foram removidos com eles -- o token do design system casa
+/// com a agulha porque ela ignora caixa, e nao porque alguem escreveu a marca
+/// ali. Os dois que entraram na conversa sao os `BichuEspaco.` do respiro da
+/// marca de quem falou. Texto de usuario com a palavra `Bichu` nao foi tocado
+/// em nenhum dos dois arquivos.
+///
+/// CONTROLE DO METODO, feito ANTES de medir o novo: o mesmo script, sobre a
+/// arvore LIMPA da base (`1654bcaf`, lendo cada arquivo por
+/// `git show "${SHA}:${caminho}"`), reproduziu EXATAMENTE a constante que ela
+/// travava -- **2718** em 221 arquivos. Reproduzir o valor conhecido antes de
+/// medir o desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 221 `.dart` na base e 221 no disco, e o
+/// `diff` entre as duas listas ORDENADAS de caminhos saiu vazio (0 linhas).
+/// Nenhum arquivo entrou, saiu ou foi renomeado -- os dois arquivos NOVOS
+/// deste lote sao de `app/test`, que esta fora desta varredura.
+///
+/// A ARMADILHA CONTINUA AUSENTE, medida e nao suposta: `petu` nao aparece em
+/// `app/lib` (busca sem distincao de caixa, saida vazia). **Com controle
+/// positivo da sonda**, porque busca negativa passa no vazio: a mesma busca
+/// trocando a agulha por `bichu` devolve 186 arquivos.
+const int ocorrenciasDeBichu = 2716;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
