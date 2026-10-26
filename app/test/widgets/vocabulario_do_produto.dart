@@ -274,7 +274,38 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2718;
+/// ---
+///
+/// **26/10/2026, BICHUS-278 — O PADRAO DE IDENTIFICACAO (foto + nome + selo).**
+/// 2718 -> **2717**, e o -1 esta explicado ARQUIVO POR ARQUIVO (soma = -1,
+/// exatamente a diferenca; numero que fecha por compensacao e numero que mente):
+///
+/// | arquivo | base | agora | delta |
+/// |---|---|---|---|
+/// | `telas/conexoes/tela_minhas_conexoes.dart` | 18 | 15 | **-3** |
+/// | `widgets/ficha_da_pessoa.dart` (NOVO) | 0 | 2 | **+2** |
+/// | `telas/seguranca/tela_de_bloqueados.dart` | 17 | 17 | 0 |
+///
+/// O -3 e a REMOCAO DE CODIGO MORTO: `_avatar` e `_circuloDaInicial` da lista
+/// de conexoes eram a QUARTA copia do circulo de foto-ou-inicial, e sairam
+/// porque `FichaDaPessoa` (que compoe `MarcaDaPessoa`) faz as duas coisas. O
+/// +2 e o arquivo novo do padrao. **A marca nao foi apagada de nenhum texto de
+/// usuario**: as tres mudancas sao de identificador de token (`BichuCores`,
+/// `BichuEspaco`), e nenhuma toca literal que a pessoa le.
+///
+/// CONTROLE POSITIVO, feito ANTES de medir o novo: o mesmo metodo sobre a
+/// arvore LIMPA da base (`git show "${SHA}:<arquivo>"` para os 221 `.dart` de
+/// `app/lib`, `grep -oi bichu`) reproduziu EXATAMENTE a constante que ela
+/// travava — **2718**. Duas medicoes anteriores minhas deram 2047 e 2610 e as
+/// duas estavam ERRADAS pelo mesmo motivo: eu havia usado `grep -o "Bichu"`
+/// **com caixa**, e esta contagem e `caseSensitive: false`. O controle positivo
+/// foi o que pegou meu erro, e nao o portao.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: `app/lib` tem **221** `.dart` na base e
+/// **222** aqui, e a diferenca e UM arquivo, nomeado --
+/// `lib/widgets/ficha_da_pessoa.dart`. Nenhum arquivo saiu e nenhum foi
+/// renomeado.
+const int ocorrenciasDeBichu = 2717;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

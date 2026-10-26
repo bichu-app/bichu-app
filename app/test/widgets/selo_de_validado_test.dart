@@ -579,7 +579,14 @@ void main() {
               'golpe do falso achador, e a linha ja corta hoje sem selo (442 dp pedidos '
               'contra 287 de vao). Ver o cabecalho deste grupo antes de mudar isto.',
         );
-        for (final String nome in <String>['SeloDeValidado', 'NomeComSelo']) {
+        // `FichaDaPessoa` entra nesta lista em 26/10/2026, e a razao e um buraco
+        // que ela abriria: ela COMPOE `NomeComSelo`, entao usa-la em mensagens
+        // acenderia o selo aqui **sem importar `selo_de_validado.dart` e sem
+        // construir `NomeComSelo`** — e as duas conferencias acima passariam.
+        // O padrao de identificacao e desejavel em toda listagem e e cobrado por
+        // `padrao_de_identificacao_test.dart`; mensagens e a excecao que espera
+        // decisao do cliente, e enquanto ela espera e esta isca que manda.
+        for (final String nome in <String>['SeloDeValidado', 'NomeComSelo', 'FichaDaPessoa']) {
           expect(
             fonte.contains(RegExp('(?<![A-Za-z_])$nome\\s*\\(')),
             isFalse,
