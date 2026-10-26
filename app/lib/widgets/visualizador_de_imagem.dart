@@ -550,26 +550,35 @@ class _ImagemAmpliavelState extends State<_ImagemAmpliavel> {
         // ate alguem fechar a tela. Medido na arvore antes do conserto: a foto
         // saia de `Offset(0, 0)` e parava em `Offset(-118.9, -131.0)`.
         //
-        // **O ARRASTO SAI, E A AMPLIACAO FICA.** O que leva a pessoa ao canto
-        // que ela quer ver de perto e o TOQUE DUPLO, que amplia no ponto
-        // tocado (ver `_alternar`) -- ele ja era a alternativa de ponteiro
-        // unico da pinca pelo SC 2.5.1, e agora e tambem o unico caminho de
-        // reenquadrar. A pinca continua ligada, e o teto de 4x nao mudou.
+        // **O CONSERTO E A MOLDURA, E NAO DESLIGAR O ARRASTO** (cliente,
+        // 26/10/2026, respondendo a pergunta que a primeira versao deixou
+        // aberta: *"o arraste limitada as bordas"*).
         //
-        // **NAO HA PARAMETRO, e a medicao e a razao.** As TRES superficies que
-        // abrem este visualizador -- capa do encontro
-        // (`telas/rede/encontro_da_rede.dart`), foto do local
-        // (`telas/perto/pagina_do_local.dart`) e vitrine do perfil
-        // (`telas/perfil/vitrine_de_fotos.dart`) -- tinham o MESMO defeito
-        // pelo mesmo caminho, e em nenhuma delas estacionar a foto torta e
-        // desejavel. Um parametro aqui seria um interruptor que ninguem
-        // pediria em `true`.
-        panEnabled: false,
-        // **E A MOLDURA FECHA NO TAMANHO DA FOTO**, que e o padrao do
-        // `InteractiveViewer`. Com `panEnabled: false` o arrasto ja nao
-        // translada, mas a pinca AINDA translada pelo ponto focal: sem esta
-        // linha, uma pinca na borda ainda poderia parar a foto fora do lugar
-        // -- o mesmo defeito por outra porta.
+        // A primeira tentativa desligou o arrasto (`panEnabled: false`) e foi
+        // longe demais: ela tirava tambem o passeio DENTRO da foto ampliada,
+        // que e para que serve ampliar. O que ele quer sao as duas coisas de
+        // uma vez, e `boundaryMargin` sozinho entrega as duas:
+        //
+        //   * **sem ampliar** a foto cabe exatamente na moldura, entao nao ha
+        //     folga para onde arrastar e o gesto nao desloca NADA -- que e a
+        //     queixa original dele, palavra por palavra;
+        //   * **ampliada** ha folga, o dedo passeia, e o deslocamento PARA na
+        //     borda em vez de continuar: nunca sobra vazio na tela e a foto
+        //     nunca foge para fora.
+        //
+        // **E A MOLDURA E O PADRAO DO `InteractiveViewer`** -- `EdgeInsets`
+        // zero significa limites do tamanho e da posicao exatos do filho. O
+        // que estava escrito era `EdgeInsets.all(double.infinity)`, moldura
+        // infinita, e era isso o defeito: sem limite nenhum, qualquer arrasto
+        // levava a foto para qualquer lugar e ela NAO voltava. O comentario
+        // que acompanhava a linha dizia que ela *"volta sozinha"*, e essa
+        // frase era falsa: `InteractiveViewer` nao tem volta elastica.
+        //
+        // `panEnabled` fica EXPLICITO em `true` mesmo sendo o padrao: ele foi
+        // `false` por um dia nesta linha, e quem vier atras precisa ver que
+        // estar ligado e decisao do cliente e nao distracao. Quem segura a
+        // imagem e a moldura.
+        panEnabled: true,
         boundaryMargin: EdgeInsets.zero,
         clipBehavior: Clip.none,
         child: widget.child,
