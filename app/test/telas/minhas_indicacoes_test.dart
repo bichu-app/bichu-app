@@ -249,7 +249,7 @@ List<String> motivosNaTela() {
 }
 
 void main() {
-  group('a porta no pé da aba `Comunidade`', () {
+  group('a porta: saiu da aba `Comunidade`, mora no menu do `Perfil`', () {
     testWidgets('a `Rede` tem DUAS abas, `Eventos` primeiro', (tester) async {
       // `Eventos` é a primeira e a principal: é o conteúdo histórico da seção
       // e é onde o arranque do app abre. `Comunidade` é o que era `Perto`.
