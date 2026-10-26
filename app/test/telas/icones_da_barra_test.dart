@@ -525,26 +525,66 @@ void main() {
       );
     });
 
-    test('os cinco slots declaram os glifos medidos, e `Perfil` o dele', () {
-      // Os doze valores conferidos contra
-      // `d590ce2a:app/lib/telas/casca_com_abas.dart` -- o estado ANTES da
-      // fiacao de 23/10 --, e nao copiados de relato. Cada escolha tem
-      // justificativa escrita no registro, e nenhuma foi reaberta.
-      final porRotulo = <String, List<IconData?>>{
-        for (final d in CascaComAbas.destinos)
-          d.rotulo: <IconData?>[d.icone, d.iconeSelecionado],
-      };
-      expect(porRotulo, <String, List<IconData?>>{
-        'Pets': <IconData?>[Icons.pets_outlined, Icons.pets],
-        'Rede': <IconData?>[Icons.groups_outlined, Icons.groups],
-        'Mural': <IconData?>[Icons.dynamic_feed_outlined, Icons.dynamic_feed],
-        'Loja': <IconData?>[Icons.shopping_bag_outlined, Icons.shopping_bag],
-        'AuAu': <IconData?>[Icons.chat_outlined, Icons.chat],
-        'Perfil': <IconData?>[
-          Icons.account_circle_outlined,
-          Icons.account_circle,
-        ],
-      });
+    test('os slots declaram a arte medida da fonte ATIVA', () {
+      // ESTE CASO ERA CEGO A FONTE, e o controle positivo do religar pegou.
+      //
+      // A primeira versao cobrava os DOZE `IconData` sempre -- e no religar
+      // completo (chave + cinco slots) ela reprovava, porque os cinco passam
+      // a ter `icone` nulo. Eu tinha afirmado que religar nao custaria
+      // reescrever portao; o controle positivo mostrou que custaria DOIS
+      // casos, e este era um deles. Agora ele segue a chave.
+      //
+      // `Perfil` fica FORA do `switch` de proposito: ele esta fora da barra,
+      // nao tem SVG, e o glifo dele nao muda com a fonte da barra.
+      final perfil = CascaComAbas.destinos.singleWhere((d) => !d.naBarra);
+      expect(
+        <IconData?>[perfil.icone, perfil.iconeSelecionado],
+        <IconData?>[Icons.account_circle_outlined, Icons.account_circle],
+        reason: 'REPROVA: o glifo de `Perfil` mudou. Ele esta fora da barra '
+            'desde 19/10 e nao acompanha a fonte de arte dos cinco slots.',
+      );
+
+      final daBarra = CascaComAbas.visiveisEm(ConfiguracaoDeBuild.referencia);
+      expect(daBarra, hasLength(5));
+
+      switch (fonteAtivaDaBarra) {
+        case FonteDaArteDaBarra.glifoDoMaterial:
+          // Os dez valores conferidos contra
+          // `d590ce2a:app/lib/telas/casca_com_abas.dart` -- o estado ANTES da
+          // fiacao de 23/10 --, e nao copiados de relato. Cada escolha tem
+          // justificativa escrita no registro, e nenhuma foi reaberta.
+          expect(
+            <String, List<IconData?>>{
+              for (final d in daBarra)
+                d.rotulo: <IconData?>[d.icone, d.iconeSelecionado],
+            },
+            <String, List<IconData?>>{
+              'Pets': <IconData?>[Icons.pets_outlined, Icons.pets],
+              'Rede': <IconData?>[Icons.groups_outlined, Icons.groups],
+              'Mural': <IconData?>[
+                Icons.dynamic_feed_outlined,
+                Icons.dynamic_feed,
+              ],
+              'Loja': <IconData?>[
+                Icons.shopping_bag_outlined,
+                Icons.shopping_bag,
+              ],
+              'AuAu': <IconData?>[Icons.chat_outlined, Icons.chat],
+            },
+            reason: 'REPROVA: um slot da barra mudou de glifo.',
+          );
+        case FonteDaArteDaBarra.desenhoDoCliente:
+          // O espelho, para o dia do religar: cada slot desenha a arte com o
+          // nome dele. `_artePorSlot` e a mesma tabela que a isca 2 usa.
+          expect(
+            <String, (String, String)>{
+              for (final d in daBarra)
+                d.rotulo: (d.desenho!.arquivo, d.desenhoSelecionado!.arquivo),
+            },
+            _artePorSlot,
+            reason: 'REPROVA: um desenho foi para o slot errado.',
+          );
+      }
     });
 
     test('a ordem dos cinco destinos e a do cliente', () {
