@@ -224,6 +224,32 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
 /// ---------------------------------------------------------------------------
+/// 2718 -> 2742 em 26/10/2026 (ACHEI ESTE PET, defeito relatado pelo cliente:
+/// *"se ele encontrou o pet, ele nao tem que cadastrar as informacoes
+/// novamente"*). **+24, e os 24 foram contados ARQUIVO POR ARQUIVO**, nao
+/// deduzidos do total:
+///
+///   `app/lib/telas/achado/tela_encontrei_este_pet.dart`   0 -> 23  (nasce)
+///   `app/lib/achado/envio_do_achado.dart`                 0 ->  2  (nasce)
+///   `app/lib/telas/achado/tela_registrar_achado.dart`    38 -> 37  (-1)
+///   `app/lib/telas/achado/textos_do_achado.dart`          7 ->  7
+///   `app/lib/telas/perdido/tela_do_caso_publico.dart`    22 -> 22
+///   `app/lib/roteamento/rotas.dart`                      15 -> 15
+///
+/// 23 + 2 - 1 = 24, e 2718 + 24 = 2742. A varredura passou de 221 para 223
+/// arquivos `.dart`, que sao exatamente os dois que nasceram.
+///
+/// **O -1 esta EXPLICADO, e nao arredondado**: e UMA mencao a `BICHUS-31` (a
+/// que explica por que a fila offline nao pode mostrar tela de sucesso) que
+/// SAIU de `_registrar` quando o envio foi extraido, e ENTROU em
+/// `envio_do_achado.dart` -- onde ela e citada duas vezes, no cabecalho e no
+/// ramo da fila. Nenhuma ocorrencia foi apagada; uma mudou de arquivo.
+///
+/// CONTROLE DO METODO: o mesmo contador, rodado sobre a arvore LIMPA da base
+/// (`1654bcaf`) ANTES de qualquer edicao, devolveu EXATAMENTE 2718 em 221
+/// arquivos -- o valor que esta linha travava. Reproduzir o conhecido antes de
+/// medir o desconhecido e o que faz este numero valer.
+///
 /// 2722 -> 2718 em 26/10/2026 (BICHUS-278, A UNIAO: arraste + convite)
 /// ---------------------------------------------------------------------------
 ///
@@ -274,7 +300,7 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2718;
+const int ocorrenciasDeBichu = 2742;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

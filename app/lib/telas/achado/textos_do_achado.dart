@@ -167,6 +167,80 @@ abstract final class TextosDoAchado {
 
   static const String registrar = 'Registrar achado';
 
+  // -------------------------------------------------------------------------
+  // `TelaEncontreiEstePet`: quem achou um pet QUE ESTA NA LISTA DE PERDIDOS
+  // -------------------------------------------------------------------------
+  //
+  // **DEFEITO RELATADO PELO CLIENTE (26/10/2026), palavra dele**: *"se ele
+  // encontrou o pet, ele nao tem que cadastrar as informacoes novamente"*.
+  //
+  // O toque em `Encontrei este animal` na pagina do caso caia em F3.5, que
+  // pergunta especie, cor e porte -- os tres dados que o cadastro do pet JA
+  // responde e que a projecao publica do caso JA traz. Estes textos sao os da
+  // tela que substitui aquele destino. Eles NAO substituem os de F3.5: o
+  // achado avulso continua perguntando tudo, porque la nao ha pet nenhum
+  // identificado do outro lado.
+
+  /// O titulo da barra da tela nova.
+  ///
+  /// **Nao carrega o nome do pet**, pela mesma razao de
+  /// `TelaDoCasoPublico.titulo`: a barra que troca de titulo no meio do
+  /// carregamento e o que o 11.23.4 evita. Aqui o nome JA chegou (ele vem no
+  /// `extra`, nao de uma segunda leitura), mas o titulo fica igual ao da
+  /// pagina de onde a pessoa veio -- duas barras com o mesmo assunto e nomes
+  /// diferentes fazem quem navega por leitor de tela achar que mudou de
+  /// assunto.
+  static const String tituloDeEncontrei = 'Achei este pet';
+
+  /// A headline, com o nome do pet. **`pet_display_name` e obrigatorio em
+  /// `PublicLostPet`**, entao nao ha ramo sem nome para desenhar.
+  static String chamadaDeEncontrei(String nome) => 'Você achou o $nome.';
+
+  /// A frase que diz POR QUE a tela nao pergunta o animal.
+  ///
+  /// Ela existe para a pessoa nao procurar os campos que faltam. Um
+  /// formulario que simplesmente nao tem o campo de especie e
+  /// indistinguivel, para quem preencheu o outro ontem, de um formulario que
+  /// perdeu o campo.
+  static const String oQueJaSabemos =
+      'A gente já sabe quem ele é. Conte só o que só você sabe.';
+
+  /// O rotulo do cartao de identificacao do pet.
+  static const String rotuloDeQuemE = 'O pet que você achou';
+
+  /// A descricao da foto do pet, para leitor de tela.
+  static String fotoDoPetDoCaso(String nome) => 'Foto do $nome';
+
+  /// A linha de especie e porte do cartao, **somente leitura**.
+  ///
+  /// Os dois valem `species` e `size` de `StrayFoundReportInput`, e e dai que
+  /// eles vao para o corpo -- nao de um campo que alguem preencheu. Mostrar os
+  /// dois nao e enfeite: e o que permite a pessoa dizer "nao e este animal" e
+  /// voltar, que e a unica conferencia que ela consegue fazer.
+  static String especieEPorte(String especie, String porte) =>
+      '$especie · $porte';
+
+  /// O rotulo do recado, nesta tela.
+  ///
+  /// **Diferente do de F3.5 de proposito.** La o campo pede sinais que ajudem
+  /// a IDENTIFICAR o animal, porque ninguem sabe quem ele e. Aqui a
+  /// identificacao esta feita, e o que falta e o estado dele e o combinado --
+  /// que e outra pergunta, e o mesmo rotulo nas duas faria esta tela pedir de
+  /// novo, por escrito, a descricao que o cliente mandou parar de pedir.
+  static const String rotuloDoRecado = 'Quer deixar um recado para o tutor?';
+
+  static const String exemploDoRecado =
+      'está bem, está comigo em casa, pode me procurar à tarde';
+
+  /// O rotulo do botao de envio.
+  ///
+  /// **`Avisar o tutor` e nao `Registrar achado`**: o que a pessoa quer e que
+  /// o tutor saiba, e `x-effects: [notifies]` de `createStrayFoundReport` diz
+  /// que e isso que a operacao faz. O desfecho continua sendo
+  /// `TelaAchadoRegistrado`, que ja e honesta sobre quem foi avisado e sobre
+  /// a confirmacao humana que ainda falta -- nao ha promessa nova aqui.
+  static const String avisarOTutor = 'Avisar o tutor';
+
   // -- A tela do achado registrado -----------------------------------------
 
   /// O titulo da barra de topo do desfecho.

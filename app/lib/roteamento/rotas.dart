@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/mural_api.dart';
+import '../api/modelos_perdido.dart';
 import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../intencao/caso_de_perdido_como_intencao.dart';
@@ -57,6 +58,7 @@ import '../telas/perdido/tela_onde_e_quando.dart';
 import '../telas/achado/resultado_do_achado.dart';
 import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
+import '../telas/achado/tela_encontrei_este_pet.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
@@ -728,6 +730,24 @@ abstract final class Rotas {
   /// O desfecho de F3.5, nos dois estados (registrado e na fila).
   static const String achadoRegistrado = '/achados/registrado';
 
+  /// **Achei ESTE pet**: o destino de `Encontrei este animal` na pagina
+  /// publica de um caso (defeito relatado pelo cliente em 26/10/2026).
+  ///
+  /// Antes o toque caia em [registrarAchado], que pergunta especie, cor e
+  /// porte -- *"se ele encontrou o pet, ele nao tem que cadastrar as
+  /// informacoes novamente"*. Esta rota leva a tela que pergunta **so** onde,
+  /// quando, o recado e a foto; o animal vem do caso.
+  ///
+  /// **Nao e a tela de retorno de nenhum envelope.** `F3.5` continua
+  /// apontando para [registrarAchado], e de proposito: um registro que FALHOU
+  /// volta para o formulario, que e onde o rascunho mora inteiro (incluindo o
+  /// `share_token`, que `RascunhoDoAchado.campos()` carrega). Mandar a volta
+  /// para ca exigiria o caso publico de novo, e ele nao esta no envelope.
+  ///
+  /// **A ordem importa**: declarada ANTES de `/achados/:achadoId`, pelo mesmo
+  /// motivo de `/achados/novo`.
+  static const String encontreiEstePet = '/achados/encontrei';
+
   /// O padrao do achado pelo endereco dele. Use [achadoDe] para montar.
   static const String achado = '/achados/:achadoId';
 
@@ -1281,6 +1301,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           return TelaRegistrarAchado(
             rascunho: extra is RascunhoDoAchado ? extra : null,
           );
+        },
+      ),
+      // **ACHEI ESTE PET** (defeito do cliente, 26/10/2026). Declarada junto
+      // das outras duas de `/achados/...` e ANTES de `/achados/:achadoId`.
+      GoRoute(
+        path: Rotas.encontreiEstePet,
+        builder: (context, estado) {
+          final extra = estado.extra;
+          // **Sem o caso nao ha tela**, e a saida nao e um formulario em
+          // branco desta: e F3.5, o achado AVULSO. Quem chega aqui por link
+          // direto ou por aparelho que recarregou o app nao tem pet
+          // identificado nenhum do outro lado, e desenhar o cartao de leitura
+          // vazio seria afirmar um pet que ninguem leu. O achado avulso e o
+          // caminho honesto, e e o mesmo que o `next_action` do contrato
+          // nomeia quando o caso nao esta mais aberto.
+          if (extra is! PerdidoPublico) return const TelaRegistrarAchado();
+          return TelaEncontreiEstePet(perdido: extra);
         },
       ),
       GoRoute(

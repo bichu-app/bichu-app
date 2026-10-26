@@ -19,8 +19,9 @@
 //
 //  - grupo 1: devolva `aoTocar` a nulo em `lista_de_perdidos.dart`, ou aponte
 //    `casoPublico` para outra coisa;
-//  - grupo 2: troque o destino do `Encontrei este animal` por uma chamada
-//    propria, ou tire o `shareToken` do `RascunhoDoAchado`;
+//  - grupo 2: devolva o destino do `Encontrei este animal` para
+//    `Rotas.registrarAchado` (o defeito de 26/10), ou tire o `extra` do
+//    `push`;
 //  - grupo 3: ignore `can_report_sighting` e desenhe o botao sempre;
 //  - grupo 4: trate o 410 como erro generico (com `Tentar de novo`);
 //  - grupo 5: tire o `Encontrei meu pet` de `_acaoDeEstadoDoPet`;
@@ -39,6 +40,7 @@
 import 'dart:convert';
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/achado/tela_encontrei_este_pet.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
 import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
@@ -340,20 +342,40 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // GRUPO 2 — `Encontrei este animal` REAPROVEITA o fluxo de achado que existe
+  // GRUPO 2 — `Encontrei este animal` leva a quem NAO redigita o cadastro
   //
-  // PARA VER REPROVANDO: troque o `context.push(Rotas.registrarAchado, ...)` de
-  // `_encontrei` por uma chamada propria (um `POST` montado na tela), ou tire o
-  // `shareToken` do `RascunhoDoAchado`. O primeiro caso perde a tela de
-  // destino; o segundo perde o vinculo com ESTE caso.
+  // =========================================================================
+  // ESTE GRUPO MEDIA O DEFEITO, E AGORA MEDE O CONSERTO (26/10/2026).
   //
-  // O vinculo e o que o contrato manda usar, e esta escrito em
+  // Ele exigia que o toque abrisse `TelaRegistrarAchado` -- F3.5, o achado
+  // AVULSO --, e e exatamente isso que o cliente relatou como defeito:
+  //
+  //   *"nao subiu o fluxo de quando clicar no pet, nao levar ele para a
+  //   pagina de registrar um achado, porque SE ELE ENCONTROU O PET, ELE NAO
+  //   TEM QUE CADASTRAR AS INFORMACOES NOVAMENTE"*
+  //
+  // F3.5 pergunta especie, raca, cor, sexo e porte, e os cinco ja estao
+  // respondidos: o pet tem cadastro e `PublicLostPet` entrega `species` e
+  // `size` como campos OBRIGATORIOS. O destino passou a ser
+  // `Rotas.encontreiEstePet`.
+  //
+  // O que este grupo continua medindo, e e o que ele sempre mediu de verdade:
+  // a acao EXISTE (pedido literal do cliente de 18/10) e ela NAO reimplementa
+  // registro de achado. O vinculo com ESTE caso -- `share_token` no corpo --
+  // e medido no fio em `achei_este_pet_test.dart`, que tambem carrega o
+  // CONTROLE POSITIVO de F3.5 continuar perguntando os cinco campos.
+  // =========================================================================
+  //
+  // PARA VER REPROVANDO: devolva `_encontrei` para `Rotas.registrarAchado`,
+  // ou tire o `extra` do `push` (a rota cai no achado avulso sem o caso).
+  //
+  // O caminho e o que o contrato manda usar, e esta escrito em
   // `can_report_sighting`: *"o toque leva a `POST /found-reports` com o
   // `share_token` do caso, que vincula o achado direto a ele"*.
   // -------------------------------------------------------------------------
-  group('a acao do achador leva ao fluxo de achado que ja existe', () {
+  group('a acao do achador leva a tela que nao pergunta duas vezes', () {
     testWidgets(
-      'ISCA -- `Encontrei este animal` abre o registro de achado COM o token',
+      'ISCA -- `Encontrei este animal` abre `TelaEncontreiEstePet`, com o pet',
       (tester) async {
         final registro = _Registro();
         await abrirPets(tester, rede: _redeDaListagemEDoCaso(registro));
@@ -369,22 +391,27 @@ void main() {
         );
         await tocar(tester, acao);
 
-        final formulario = find.byType(TelaRegistrarAchado);
+        final tela = find.byType(TelaEncontreiEstePet);
         expect(
-          formulario,
+          tela,
           findsOneWidget,
-          reason: 'REPROVA: a acao nao levou ao registro de achado. O fluxo '
-              'ja existe inteiro (`Rotas.registrarAchado`), e a faixa de push '
-              'de um caso ja o empurrava com o mesmo campo. Uma segunda '
-              'implementacao de registro de achado e a segunda fonte da mesma '
-              'regra.',
+          reason: 'REPROVA: a acao nao levou a `TelaEncontreiEstePet`.',
         );
         expect(
-          tester.widget<TelaRegistrarAchado>(formulario).rascunho?.shareToken,
+          find.byType(TelaRegistrarAchado),
+          findsNothing,
+          reason: 'REPROVA: o toque voltou a cair em F3.5, o achado AVULSO. '
+              'ESTE e o defeito que o cliente relatou em 26/10/2026: F3.5 '
+              'pergunta especie, raca, cor, sexo e porte, e quem achou um pet '
+              'com cadastro nao tem que responder nada disso.',
+        );
+        expect(
+          tester.widget<TelaEncontreiEstePet>(tela).perdido.shareToken,
           tokenDeMel,
-          reason: 'REPROVA: o rascunho chegou ao formulario SEM o '
-              '`share_token`. Sem ele o achado nao fica vinculado a ESTE caso '
-              'e depende do cruzamento por atributos descobrir -- que e '
+          reason: 'REPROVA: a tela chegou SEM o caso, ou com outro. E do '
+              '`PerdidoPublico` que saem `species`, `size` e o `share_token` '
+              'do corpo -- sem ele o achado nao fica vinculado a ESTE caso e '
+              'depende do cruzamento por atributos descobrir, que e '
               'exatamente o que o campo existe para dispensar.',
         );
       },

@@ -398,6 +398,17 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     motivo: 'formulario, aberto do menu do Perfil.',
   ),
   (
+    nome: 'achei este pet',
+    endereco: '/achados/encontrei',
+    padrao: '/achados/encontrei',
+    // **PAGINA INTERNA, pelo mesmo criterio de `/achados/novo`**: e um
+    // formulario, e ele e aberto de dentro da pagina publica de um caso. Quem
+    // esta com o animal no colo preenchendo `onde` e `quando` nao esta
+    // navegando entre secoes, e a barra de baixo no meio disso e um convite a
+    // perder o preenchimento.
+    motivo: 'formulario, aberto da pagina publica de um caso perdido.',
+  ),
+  (
     nome: 'o achado registrado',
     endereco: '/achados/registrado',
     padrao: '/achados/registrado',

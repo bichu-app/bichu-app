@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../achado/envio_do_achado.dart';
 import '../../achado/rascunho_do_achado.dart';
-import '../../api/achados_api.dart';
 import '../../api/api_client.dart';
 import '../../api/falhas.dart';
-import '../../api/fila_offline.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
-import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
-import '../../intencao/achado_como_intencao.dart';
 import '../../perdido/quando_foi_visto.dart';
-import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -27,7 +22,6 @@ import '../../widgets/saida_da_tela.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../localizacao/antessala_de_localizacao.dart';
 import '../localizacao/captura_de_localizacao.dart';
-import 'resultado_do_achado.dart';
 import 'textos_do_achado.dart';
 
 /// **F3.5 — Registrar um achado avulso, sem QR.** A tela desta historia.
@@ -229,119 +223,31 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
   // -------------------------------------------------------------------------
 
   Future<void> _registrar() async {
-    final escopo = Escopo.of(context);
-    final agora = widget.agora();
-    final especie = _rascunho.especie;
-    final porte = _rascunho.porte;
-    final onde = _rascunho.onde;
-    final achadoEm = _rascunho.instanteEm(agora);
-    if (especie == null || porte == null || onde == null || achadoEm == null) {
-      // Defesa de programacao: o botao so habilita com os quatro. Chegar aqui
-      // sem eles e caminho de automacao ou de teclado fisico, e a tela responde
-      // a coisa certa em vez de montar um corpo pela metade.
-      return;
-    }
     _rascunho.observacao = _observacao.text;
-
-    // **Deslogada: a guarda assume ANTES da viagem de rede** (criterio 3).
-    //
-    // Nao e otimizacao: um POST sem token volta 401, e tratar o 401 seria
-    // esperar o servidor dizer o que o app ja sabe -- na rua, com o sinal que
-    // ha. O envelope guarda tudo, inclusive o caminho da foto, e depois de
-    // autenticar o achado e REGISTRADO e a pessoa cai na tela do achado. Ela
-    // nao ve a home e nao digita nada duas vezes.
-    if (!escopo.sessao.logado) {
-      await escopo.guarda.guardar(
-        intencaoDeRegistrarAchado(_rascunho, criadaEm: agora),
-      );
-      if (!mounted) return;
-      context.push(Rotas.entrar);
-      return;
-    }
-
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
-    final corpo = AchadosApi.corpoDeRegistro(
-      especie: especie,
-      porte: porte,
-      achadoEm: achadoEm,
-      onde: onde,
-      sexo: _rascunho.sexo,
-      racaCodigo: _rascunho.racaCodigo,
-      corCodigo: _rascunho.corCodigo,
-      versaoDaReferencia: _rascunho.versaoDaReferencia,
-      observacao: _rascunho.observacao,
-      shareToken: _rascunho.shareToken,
+    // **O ENVIO NAO MORA MAIS AQUI.** Ele foi para `achado/envio_do_achado.dart`
+    // quando `TelaEncontreiEstePet` nasceu (26/10/2026, o defeito de redigitar
+    // especie, cor e porte de um pet que ja tem cadastro): as duas telas tem os
+    // MESMOS cinco desfechos -- conta que falta, rede caida, sessao vencida,
+    // falha de api e registro --, e uma segunda copia deles envelheceria calada,
+    // porque nenhum teste de uma tela le a outra. O comportamento desta tela
+    // nao mudou em nada: os cinco ramos sao os mesmos, na mesma ordem.
+    await enviarAchado(
+      context: context,
+      rascunho: _rascunho,
+      agora: widget.agora(),
+      chave: chave,
+      aoComecar: () => setState(() {
+        _fase = _Fase.enviando;
+        _erro = null;
+        _erroInicial = null;
+      }),
+      aoFalhar: (erro) => setState(() {
+        _fase = _Fase.preenchendo;
+        _erro = erro;
+      }),
+      aoVoltarDoLogin: () => setState(() => _fase = _Fase.preenchendo),
     );
-
-    setState(() {
-      _fase = _Fase.enviando;
-      _erro = null;
-      _erroInicial = null;
-    });
-
-    try {
-      final achado = await escopo.achados.registrar(
-        corpo: corpo,
-        idempotencyKey: chave,
-      );
-      if (!mounted) return;
-      context.pushReplacement(
-        Rotas.achadoRegistrado,
-        extra: ResultadoDoAchado.registrado(
-          achado: achado,
-          foto: _rascunho.foto,
-        ),
-      );
-    } on FalhaDeConexao {
-      // **A acao vai para a fila, e a tela diz que ela foi para a fila.**
-      // O criterio 2 da BICHUS-31 proibe tela de sucesso para o que nao
-      // aconteceu: "achado registrado" seria mentira, e a pessoa pararia de
-      // procurar caminho por acreditar que o aviso saiu.
-      //
-      // **A foto nao vai junto**, e a tela diz isso tambem: o corpo
-      // enfileirado e o corpo do contrato, e o upload da foto exige um achado
-      // que ainda nao existe. Achado sem foto vale menos, mas vale.
-      await escopo.fila.enfileirar(
-        AcaoEnfileirada(
-          id: ApiClient.novaChaveDeIdempotencia(),
-          metodo: 'POST',
-          caminho: AchadosApi.caminhoDeRegistro,
-          corpo: corpo,
-          // A MESMA chave. Ver [_chave].
-          idempotencyKey: chave,
-          criadaEm: agora,
-        ),
-      );
-      if (!mounted) return;
-      context.pushReplacement(
-        Rotas.achadoRegistrado,
-        extra: ResultadoDoAchado.naFila(foto: _rascunho.foto),
-      );
-    } on FalhaDaApi catch (falha) {
-      if (!mounted) return;
-      if (falha.tipo == ProblemTipo.naoAutenticado ||
-          falha.tipo == ProblemTipo.tokenExpirado) {
-        // A sessao caiu entre abrir a tela e tocar no botao. Mesmo caminho do
-        // deslogado: o envelope guarda, e o achado e registrado depois.
-        await escopo.guarda.guardar(
-          intencaoDeRegistrarAchado(_rascunho, criadaEm: agora),
-        );
-        if (!mounted) return;
-        context.push(Rotas.entrar);
-        setState(() => _fase = _Fase.preenchendo);
-        return;
-      }
-      setState(() {
-        _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
-      });
-    } on FalhaDeChamada catch (falha) {
-      if (!mounted) return;
-      setState(() {
-        _fase = _Fase.preenchendo;
-        _erro = MensagensDeErro.de(falha);
-      });
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -462,7 +368,7 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
       //   especie + porte  Continuar HABILITADO, nenhum texto
       //
       // Com as duas opcoes e os custos na mesa ele decidiu: **tirar o texto,
-      // manter a trava.** Entao `_MotivoDoBloqueio` saiu DAQUI -- e so daqui:
+      // manter a trava.** Entao `MotivoDoBloqueioDoAchado` saiu DAQUI -- e so daqui:
       // o passo 2 continua com o motivo visivel, porque a decisao foi sobre
       // o `Continuar` e nao sobre o `Registrar achado`.
       //
@@ -505,7 +411,7 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     return BarraDeAcaoFixa(
       acoes: <Widget>[
         if (impedimento != null)
-          _MotivoDoBloqueio(texto: impedimento.texto, cor: cores.textPrimary),
+          MotivoDoBloqueioDoAchado(texto: impedimento.texto, cor: cores.textPrimary),
         BotaoPrimario(
           rotulo: TextosDoAchado.registrar,
           critico: true,
@@ -663,7 +569,7 @@ class _Passo1 extends StatelessWidget {
           },
         ),
         const SizedBox(height: BichuEspaco.e6),
-        _BlocoDaFoto(
+        BlocoDaFotoDoAchado(
           foto: rascunho.foto,
           permissao: permissaoDaCamera,
           aoTirar: aoTirarFoto,
@@ -725,7 +631,7 @@ class _Passo2 extends StatelessWidget {
         ),
         if (rascunho.quando?.pedeCalendario ?? false) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),
-          _DataEscolhida(
+          DataEscolhidaDoAchado(
             data: rascunho.dataEscolhida,
             aoTrocar: aoEscolherData,
           ),
@@ -773,13 +679,14 @@ class _Passo2 extends StatelessWidget {
 }
 
 /// O bloco da foto: a camera primeiro, sempre.
-class _BlocoDaFoto extends StatelessWidget {
-  const _BlocoDaFoto({
+class BlocoDaFotoDoAchado extends StatelessWidget {
+  const BlocoDaFotoDoAchado({
     required this.foto,
     required this.permissao,
     required this.aoTirar,
     required this.aoEscolher,
     required this.aoAbrirAjustes,
+    super.key,
   });
 
   final FotoLocal? foto;
@@ -874,8 +781,12 @@ class _BlocoDaFoto extends StatelessWidget {
 }
 
 /// O motivo do botao desabilitado, anunciado quando aparece e quando muda.
-class _MotivoDoBloqueio extends StatelessWidget {
-  const _MotivoDoBloqueio({required this.texto, required this.cor});
+class MotivoDoBloqueioDoAchado extends StatelessWidget {
+  const MotivoDoBloqueioDoAchado({
+    required this.texto,
+    required this.cor,
+    super.key,
+  });
 
   final String texto;
   final Color cor;
@@ -898,8 +809,12 @@ class _MotivoDoBloqueio extends StatelessWidget {
 /// **Ela e mostrada, e nao so guardada.** Sem esta linha, `Outra data` fica
 /// selecionada sem a tela dizer qual data, e quem fechou o calendario por
 /// engano nao tem como descobrir o que ficou gravado.
-class _DataEscolhida extends StatelessWidget {
-  const _DataEscolhida({required this.data, required this.aoTrocar});
+class DataEscolhidaDoAchado extends StatelessWidget {
+  const DataEscolhidaDoAchado({
+    required this.data,
+    required this.aoTrocar,
+    super.key,
+  });
 
   final DateTime? data;
   final VoidCallback aoTrocar;
