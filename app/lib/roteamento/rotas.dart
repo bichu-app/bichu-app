@@ -340,19 +340,50 @@ abstract final class Rotas {
 
   /// `Convide tutores` — a tela de trazer tutores para o Bichu.
   ///
-  /// **SOB `/mensagens`, e nao sob `/perfil`**, por decisao do cliente de
-  /// 21/10/2026: a secao e o `AuAu`. [CascaFixa.slotDaRota] casa pelo PRIMEIRO
-  /// segmento, entao e o caminho que mantem o slot do AuAu aceso enquanto esta
-  /// tela esta na frente -- que e o que o prototipo aprovado desenha.
+  /// **SOB `/perfil` DESDE 26/10/2026, e era `/mensagens/convide-tutores`.** A
+  /// tela saiu do corpo do AuAu e passou a ser alcancada pelo menu do Perfil,
+  /// por pedido do cliente feito DUAS VEZES -- 22/10/2026, *"Mova o convite
+  /// tutores para a pagina do perfil"*, e 26/10/2026, *"retirar o convite
+  /// tutores das mensagens, deixar apenas na menu do perfil do usuario"*. Isso
+  /// emenda a decisao dele de 21/10/2026 (*"no AuAu como tela empilhada, nao no
+  /// Perfil"*), que foi o que pos este endereco sob `/mensagens`.
+  ///
+  /// **O ENDERECO FOI RENOMEADO PORQUE RENOMEAR AQUI NAO CUSTA NADA, e isso
+  /// foi MEDIDO e nao suposto.** Nada aponta para esta rota de fora do app:
+  ///
+  ///  1. o app **nao abre por link** -- so `MAIN`/`LAUNCHER`, nenhum
+  ///     `intent-filter` de `VIEW` e `assetlinks.json` vazio, como o cabecalho
+  ///     de `widgets/qr_do_convite.dart` ja registrava;
+  ///  2. o QR do convite carrega o **token cru** (43 simbolos ao portador), e
+  ///     nao uma URL -- renomear rota nao invalida convite nenhum ja emitido;
+  ///  3. `convide-tutores` nao aparece em `app/android/` nem em `app/ios/`
+  ///     (medido), entao nenhum manifesto reclama;
+  ///  4. nao ha migracao: endereco de tela nao e dado guardado.
+  ///
+  /// O custo inteiro foram tres arquivos -- esta constante, o `GoRoute` abaixo
+  /// e a entrada de `telasInternas` do portao de barra fixa.
+  ///
+  /// **E RENOMEAR APAGOU UMA ARMADILHA em vez de criar uma.** Enquanto o
+  /// endereco era `/mensagens/convide-tutores`, ele SO funcionava por estar
+  /// registrado antes de `/mensagens/:conversaId` -- fora de ordem, o
+  /// `go_router` abriria a conversa `'convide-tutores'`, que nao existe. Sob
+  /// `/perfil` essa dependencia de ordem deixa de existir: **nao ha nenhuma
+  /// rota `/perfil/:algo`** no produto (medido -- as oito rotas sob `/perfil`
+  /// tem todas segmento literal), entao nada pode captura-la.
+  ///
+  /// `slotDaRota` nao entra nesta conta, e vale dizer por que: esta tela esta
+  /// em `telasInternas` do portao de barra fixa, ou seja ela **nao mostra barra
+  /// de baixo nenhuma**. Nao ha slot para acender, e o primeiro segmento do
+  /// endereco nao muda nada do que a pessoa ve.
   ///
   /// **Nao e `/rede/indicacoes/...`, e a distancia e deliberada**: "indicacao"
   /// neste produto e indicar PROFISSIONAL ao diretorio, e aquelas duas rotas sao
   /// dela. Duas funcoes diferentes vizinhas no endereco sao duas funcoes
   /// diferentes vizinhas na gaveta.
   ///
-  /// EMPILHADA, e interna: ela e aberta por um item do corpo do AuAu, e nao pela
-  /// barra. Classificada em `telasInternas` do portao de barra fixa.
-  static const String convidarTutores = '/mensagens/convide-tutores';
+  /// EMPILHADA, e interna: ela e aberta por um `ItemDeMenu` do corpo do Perfil,
+  /// e nao pela barra. Classificada em `telasInternas` do portao de barra fixa.
+  static const String convidarTutores = '/perfil/convide-tutores';
 
   /// A CAIXA DE NOTIFICACOES (18/10/2026): o conteudo do sino.
   ///
@@ -1418,17 +1449,30 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `Meus dados` e `Meus achados` acima -- a barra de baixo continua
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
-      // `AuAu` > `Convide tutores` (21/10/2026). Declarada ANTES da area de
-      // mensagens e antes da rota com `:conversaId`: o `go_router` casa na
-      // ordem de registro, e `/mensagens/convide-tutores` casaria
-      // `/mensagens/:conversaId` com `conversaId = 'convide-tutores'` se
-      // viesse depois -- a tela da conversa abriria pedindo uma conversa que
-      // nao existe.
+      // `Perfil` > `Convide tutores`. **Era `AuAu` > ... ate 26/10/2026**, e a
+      // troca e pedido do cliente repetido duas vezes (22/10 e 26/10); a
+      // decisao de 21/10 que a punha no AuAu esta citada ao lado das outras
+      // duas em `Rotas.convidarTutores`, em `telas/abas.dart` e em
+      // `telas/mensagens/area_de_mensagens.dart`.
+      //
+      // **A ORDEM DE REGISTRO DEIXOU DE IMPORTAR PARA ESTA ROTA, e esta linha
+      // existia por causa dela.** Enquanto o endereco era
+      // `/mensagens/convide-tutores`, ele TINHA de vir antes de
+      // `/mensagens/:conversaId`: o `go_router` casa na ordem de registro, e
+      // fora de ordem a tela da conversa abriria pedindo a conversa
+      // `'convide-tutores'`, que nao existe. Sob `/perfil` nao ha nada que a
+      // possa capturar -- **nao existe rota `/perfil/:algo`** no produto, e as
+      // oito rotas sob `/perfil` tem todas segmento literal.
+      //
+      // Ela continua declarada AQUI, antes da area de mensagens, e isso agora e
+      // so arrumacao: as quatro rotas desta uniao ficam juntas. Mover nao
+      // quebra, e deixar junto e mais facil de ler.
       //
       // **Irma da casca e nao sub-rota do ramo**: ela cobre a barra de baixo e
-      // voltar devolve a pessoa ao AuAu. E `ConvitesApi` vem do `Escopo`, como
-      // as outras camadas de API -- a mesma instancia que o leitor de QR usa
-      // para resolver um convite lido.
+      // voltar devolve a pessoa a tela da conta, que e de onde o item do menu
+      // a abre. E `ConvitesApi` vem do `Escopo`, como as outras camadas de API
+      // -- a mesma instancia que o leitor de QR usa para resolver um convite
+      // lido.
       GoRoute(
         path: Rotas.convidarTutores,
         builder: (context, estado) => TelaDeConvidarTutores(

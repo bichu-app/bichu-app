@@ -223,7 +223,58 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2722;
+/// ---------------------------------------------------------------------------
+/// 2722 -> 2718 em 26/10/2026 (BICHUS-278, A UNIAO: arraste + convite)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO FOI SUBSTITUIDA: a porta do convite SAIU do corpo do AuAu.**
+/// O cliente mandou, duas vezes, tirar `Convide tutores` das mensagens e
+/// deixar a porta so no menu do Perfil.
+///
+/// **ESTE VALOR FOI RECALCULADO SOBRE A ARVORE UNIDA, e nao e nenhum dos dois
+/// lados do conflito nem a soma de deltas relatados.** Os dois lados existiam:
+/// a base `f7678f4c` travava **2722** e o ramo `feat/convite-tutores-no-perfil`
+/// travava **2702** -- e o 2702 e um numero de RAMO, medido sobre a base
+/// `cc9f2767` (que valia 2706) e que nao conhece o carimbo de build nem os
+/// icones da barra. Travar 2702 na uniao reprovaria; travar 2722 esconderia a
+/// saida da porta. O valor da uniao e 2722 - 4 = **2718**, e o -4 foi MEDIDO
+/// sobre a arvore unida, nao somado de relato.
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre a base `f7678f4c` e esta arvore, e o
+/// saldo de -4 fecha exatamente num UNICO arquivo:
+///
+///   -4 `telas/mensagens/area_de_mensagens.dart`  (24 -> 20)
+///
+/// Todos os outros 220 `.dart` de `app/lib` tem contagem IDENTICA a da base.
+///
+/// **AS QUATRO OCORRENCIAS ESTAO NOMEADAS, e a quarta e a interessante:** tres
+/// sao `BichuEspaco` (uma `BichuEspaco.e2` e duas `BichuEspaco.e4`, do
+/// `EdgeInsets.fromLTRB` do `Padding` que embrulhava o `ItemDeMenu` do convite)
+/// e a quarta e **`BICHUS-62`**, a chave da issue citada na prosa que saiu
+/// junto. A agulha e `RegExp('bichu', caseSensitive: false)`, e `BICHUS` CASA
+/// com ela -- chave de Jira conta como ocorrencia da marca neste portao, e quem
+/// contar so os `BichuEspaco` acha 3 e fica devendo 1.
+///
+/// Nada ENTROU: a prosa nova dos arquivos editados nao escreve a marca.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a MESMA
+/// contagem, sobre a arvore LIMPA da base `f7678f4c`, reproduziu EXATAMENTE a
+/// constante que ela travava (**2722**) -- por TRES caminhos que concordaram
+/// (`grep -oi` arquivo por arquivo, `re.findall` com `IGNORECASE` sobre o
+/// disco, e o mesmo sobre os blobs lidos da ref por `git show`). Reproduzir o
+/// valor conhecido antes de medir o desconhecido e o que faz esta linha valer;
+/// sem isso eu estaria travando o resultado do meu script e nao a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem **221** `.dart`
+/// na base e **221** aqui, e o `diff` entre as duas listas ordenadas saiu
+/// VAZIO. As contas foram feitas pelos dois lados: `set(base)-set(agora)` e
+/// `set(agora)-set(base)` sao os dois VAZIOS. Nenhum arquivo entrou, saiu ou
+/// foi renomeado.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2718;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

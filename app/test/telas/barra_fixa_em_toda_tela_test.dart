@@ -174,15 +174,24 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
         'caixa, porque `broadcast` e o unico tipo de aviso sem destino '
         'natural -- os outros levam a uma tela que ja existia.',
   ),
-  // -- `AuAu` > `Convide tutores` (21/10/2026) ---------------------------
+  // -- `Perfil` > `Convide tutores` (26/10/2026) -------------------------
+  //
+  // **O ENDERECO MUDOU, A CLASSIFICACAO NAO.** Era
+  // `/mensagens/convide-tutores` e e `/perfil/convide-tutores` desde 26/10:
+  // o cliente mandou tirar a porta das mensagens e deixar `apenas na menu do
+  // perfil do usuario` (26/10), repetindo o que pediu em 22/10. Ela continua
+  // INTERNA, e agora pela conta das OUTRAS ambiguas e nao por uma propria:
+  // ela passou a ser aberta por um `ItemDeMenu` do CORPO do Perfil, que e
+  // literalmente o criterio das nove.
   (
     nome: 'convide tutores',
-    endereco: '/mensagens/convide-tutores',
-    padrao: '/mensagens/convide-tutores',
-    motivo: 'Aberta por um item do CORPO do AuAu, e nao pela barra -- mesma '
-        'conta das oito ambiguas do Perfil. E ela mostra um QR de 200 dp, que '
-        'e o conteudo da tela: uma barra fixa por cima disputaria espaco com o '
-        'unico elemento que precisa ser fotografado por outro aparelho.',
+    endereco: '/perfil/convide-tutores',
+    padrao: '/perfil/convide-tutores',
+    motivo: 'Aberta por um `ItemDeMenu` do CORPO do Perfil (grupo '
+        '`Comunidade`), e nao pela barra -- a mesma conta das nove ambiguas. '
+        'E ela mostra um QR de 200 dp, que e o conteudo da tela: uma barra '
+        'fixa por cima disputaria espaco com o unico elemento que precisa ser '
+        'fotografado por outro aparelho.',
   ),
   // -- O exemplo literal dele -------------------------------------------
   (
