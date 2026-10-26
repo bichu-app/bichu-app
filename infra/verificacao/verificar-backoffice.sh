@@ -56,7 +56,35 @@ dc() {
   docker compose -p "$projeto" --env-file "$trabalho/sonda.env" \
     -f compose.yaml -f infra/verificacao/compose.sonda-do-backoffice.yaml "$@"
 }
-limpar() { dc down -v --remove-orphans >/dev/null 2>&1 || true; rm -rf "$trabalho"; }
+# O `.env` DA RAIZ precisa EXISTIR, mesmo que vazio, e nao e o `sonda.env` acima.
+# Sao duas coisas diferentes: `--env-file` alimenta a INTERPOLACAO do compose, e
+# `env_file:` de servico e lido na hora de montar o modelo do projeto. A `edge`
+# tem `depends_on: [api, midia, objeto]`, a `midia` tem `env_file: [.env]`, e o
+# compose RESOLVE o `env_file` das dependencias mesmo com `--no-deps` -- o
+# `--no-deps` impede de SUBIR, nao de resolver. No laptop o arquivo existe e o
+# passo 4 sempre passou; na esteira nao existe, e o `up` reprovava com
+# "env file .../.env not found" antes de criar container nenhum (medido em
+# 23/10, job `backoffice`, primeira vez que a esteira chegou neste passo).
+#
+# VAZIO basta, e vazio e o que fica: nenhum dos tres servicos que sobem le
+# `.env` -- a `api` do eco tem `env_file: !reset []` na sobreposicao, e
+# `admin-web` e `edge` nunca tiveram (o passo 5 prova isso no runtime). Nao ha
+# valor para inventar aqui, e por isso nao ha segredo para vazar.
+#
+# Criado SO se faltar, e apagado no fim SO se foi este script que criou: o
+# `.env` de quem desenvolve tem token do Postmark e credencial de verdade
+# (`.gitignore`, linha 8), e este script nao o le, nao o sobrescreve e nao o
+# apaga. `.env` e ignorado pelo git, entao o criado aqui nao suja a arvore.
+env_criado=0
+if [ ! -e .env ]; then : > .env; env_criado=1; fi
+
+# O `.env` sai DEPOIS do `down`: derrubar a pilha tambem resolve o modelo do
+# projeto, e sem o arquivo o `down` nao limparia nada.
+limpar() {
+  dc down -v --remove-orphans >/dev/null 2>&1 || true
+  if [ "${env_criado:-0}" = 1 ]; then rm -f .env; fi
+  rm -rf "$trabalho"
+}
 trap limpar EXIT
 
 echo "== 1. autoteste da sonda"

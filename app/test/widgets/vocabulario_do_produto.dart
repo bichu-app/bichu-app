@@ -99,18 +99,60 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO, 18 mencoes)
 ///
 /// E a causa que a mensagem deste portao manda aceitar -- *arquivo novo que a
-/// cita* --, e nao substituicao descuidada: nenhum arquivo preexistente de
-/// `app/lib` mudou de contagem (a lista de diferencas tem UMA linha).
-/// O metodo da medicao tem CONTROLE POSITIVO: a mesma contagem, aplicada a
-/// `bdae03e1`, devolveu 2672 -- exatamente o numero que estava travado aqui.
+/// cita* --, e nao substituicao descuidada.
+///
+/// ---------------------------------------------------------------------------
+/// ATUALIZADO NA MESCLA DA ONDA 8 (23/10/2026): 2690 -> 2706.
+/// ---------------------------------------------------------------------------
+/// **TRES valores travados colidiram aqui, e NENHUM dos tres servia:** 2690
+/// (a `development` da onda 7), 2686 (`textos/lote-22-10`) e 2674
+/// (`feat/ver-todos-pets`). Somar os deltas seria palpite. O valor foi CONTADO
+/// SOBRE A ARVORE MESCLADA, arquivo por arquivo, e fecha exatamente contra
+/// `bdae03e1` (2672):
+///
+///   +18 telas/conexoes/tela_minhas_conexoes.dart  (arquivo NOVO -- onda 7)
+///   +15 telas/loja/vitrine_da_loja.dart        (28 -> 43 -- textos)
+///    +2 telas/rede/secao_da_rede.dart          (6  -> 8  -- textos)
+///    -3 telas/perfil/vitrine_de_fotos.dart     (37 -> 34 -- textos)
+///    -1 telas/pessoa/tela_perfil_de_pessoa.dart (27 -> 26 -- textos)
+///    +1 telas/pet/tela_detalhe_do_pet.dart     (75 -> 76 -- textos)
+///    +2 telas/perfil/meus_pets.dart            (31 -> 33 -- ver-todos-pets)
+///
+/// Soma: +34, e 2672 + 34 = 2706. Sao SETE arquivos e nenhum deles e tocado
+/// por mais de uma das tres frentes -- os conjuntos sao disjuntos. Por isso
+/// aqui a soma dos deltas coincide com a medicao, e isso e RESULTADO da
+/// medicao e nao substituto dela: se duas frentes tivessem mexido no mesmo
+/// arquivo, a soma mentiria e a contagem nao.
+///
+/// `notif/pedido-conexao` nao entra nesta conta: medida na ponta `b5376b23`,
+/// ela devolve 2672, identica a base. A frente nao toca `app/lib/telas`.
+///
+/// **A ATRIBUICAO QUE O LOTE DE TEXTOS DEIXOU ESCRITA ESTAVA ERRADA EM DOIS
+/// ARQUIVOS, e o total dela estava certo.** A frente declarava `+17` na
+/// vitrine da Loja e nao declarava `telas/rede/secao_da_rede.dart`. Medido na
+/// propria ponta `b4407f63` com o metodo deste portao: a Loja e 28 -> 43
+/// (`+15`) e `secao_da_rede.dart` e 6 -> 8 (`+2`). A soma e a mesma (+14), e
+/// por isso o numero 2686 que ela travava estava correto enquanto a
+/// explicacao nao estava. Fica registrado porque a proxima uniao vai ler esta
+/// prosa antes de medir.
+///
+/// CONTROLE POSITIVO DO METODO, em QUATRO pontos onde a resposta ja era
+/// conhecida, todos reproduzidos EXATAMENTE pela mesma contagem que produziu
+/// 2706: `bdae03e1` -> 2672, `49ca33de` -> 2690, `b4407f63` -> 2686,
+/// `a9478e4e` -> 2674. Acerta nos quatro lugares onde a resposta era
+/// conhecida, e so por isso vale aqui, onde nao era. O controle NAO foi feito
+/// so contra a base de proposito: validar so contra `bdae03e1` aprovaria o
+/// procedimento sobre a arvore errada.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 217 `.dart` em
+/// `bdae03e1` e 218 nesta arvore, e contra a lista de `49ca33de` (218) o
+/// `diff` e VAZIO. O unico arquivo que a onda 8 acrescenta a `app/lib` e
+/// nenhum: as tres frentes mudam conteudo, e so a onda 7 criara arquivo ali.
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
-/// aparece em `app/lib`, `admin/src` nem `web/src`; em `app/test` as unicas
-/// ocorrencias sao a prosa deste proprio portao e do seu teste, e a unica de
-/// `src` esta dentro da palavra `perpetuo`. As ancoras da marca seguiram o
-/// arquivo novo, todas para cima e nenhuma para baixo -- `bichu.app` 12 -> 13,
-/// `app.bichu` 2 (igual), `BichuEspaco` 1048 -> 1062, `BichuColors` 231 -> 234.
-const int ocorrenciasDeBichu = 2690;
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2706;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
@@ -222,16 +264,25 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
   'lib/api/modelos_pet.dart': <String>['C\u00e3o'],
 
   // ---- 3. REDACAO PROPRIA, PEDIDA PELO CLIENTE ----
-
-  // O cliente pediu, na mesma rodada, `Uma pessoa com esse nome` ->
-  // `Um usuario encontrado em sua busca`. A troca generica daria `Um usuario
-  // com esse nome`, que **contraria o que ele escreveu**. As DUAS linhas ficam:
-  // elas sao os dois ramos de `_fimDaLista` (um resultado / varios), e mudar so
-  // a segunda deixaria o par divergente antes de ele decidir a primeira.
-  'lib/telas/rede/busca_de_pessoas.dart': <String>[
-    'Uma pessoa com esse nome.',
-    'Voc\u00ea viu todas as ',
-  ],
+  //
+  // **ESTA SECAO ESTA VAZIA, e o vazio e o desfecho da unica entrada que ela
+  // tinha.** Era `lib/telas/rede/busca_de_pessoas.dart`, com os dois ramos de
+  // `_fimDaLista` -- `Uma pessoa com esse nome.` e `Voce viu todas as `. Os
+  // dois ficaram liberados porque o cliente havia pedido a redacao do PRIMEIRO
+  // (*"Troque o texto Uma pessoa com esse nome para Um usuario encontrado em
+  // sua busca."*) e mudar so o segundo desencontraria o par.
+  //
+  // **Em 22/10/2026 os dois mudaram juntos** e nenhum escreve mais `pessoa`:
+  // o singular saiu com a redacao literal dele, e o plural foi derivado dela
+  // (`Voce viu todos os N usuarios encontrados em sua busca.`) -- a derivacao
+  // esta justificada na prosa de `_fimDaLista`, e e ela que pode ser revista,
+  // nao esta excecao. Com os literais trocados, a excecao ficaria liberando
+  // texto que nao existe: `liberadoPorExcecao` casa por PREFIXO nos dois
+  // sentidos, entao uma entrada orfa nao fica so inofensiva -- ela passa a
+  // poder liberar uma frase futura que comece igual.
+  //
+  // A secao fica escrita, e nao apagada, porque a terceira razao continua
+  // valendo para a proxima redacao que ele pedir.
 };
 
 /// Os literais de cadeia de Dart, nas quatro formas de aspas.

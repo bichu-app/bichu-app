@@ -16,6 +16,7 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../avisos/aviso_de_cadastro_incompleto.dart';
 import '../../widgets/item_de_menu.dart';
 import '../../widgets/moldura.dart';
+import '../../widgets/saida_da_tela.dart';
 import '../casca_com_abas.dart';
 
 /// O cache de leitura de `GET /pets`, do criterio 7 da BICHUS-62.
@@ -89,11 +90,59 @@ class CacheDeMeusPets {
 /// - **Feed, estatistica, novidade e painel** (criterio 8). E uma lista de
 ///   pets.
 class MeusPets extends StatefulWidget {
-  const MeusPets({required this.cache, super.key});
+  const MeusPets({
+    required this.cache,
+    this.teto,
+    this.comCabecalho = true,
+    super.key,
+  });
 
   /// Injetado, e nao criado aqui dentro: o cache precisa sobreviver a
   /// reconstrucao do widget, e um teste precisa conseguir prepara-lo.
   final CacheDeMeusPets cache;
+
+  /// QUANTOS CARTOES O BLOCO DESENHA, no maximo. Nulo mostra todos.
+  ///
+  /// Pedido do cliente, 22/10/2026: *"no menu do perfil do usuario, onde lista
+  /// os pets, inclua um botao ver todos no canto direito, na frente do meus
+  /// pets, quando a quantidade de pets do usuario for maior do que 3. E caso o
+  /// usuario clique no ver todos, abre uma pagina, com a listagem de todos os
+  /// pets dele"*.
+  ///
+  /// **A SECAO DO PERFIL PASSA [tetoDoPerfil]; A PAGINA NAO PASSA NADA.** E a
+  /// unica diferenca entre as duas, e e de proposito: um parametro de teto faz
+  /// das duas o MESMO widget, e duas listas de pet escritas a mao divergiriam
+  /// no dia em que alguem corrigisse uma -- exatamente o que [_cartoes] ja
+  /// dizia do `Cadastrar meu pet` construido em dois lugares.
+  ///
+  /// **`null` nao e "zero" e nao e "sem corte por acaso":** e a afirmacao de
+  /// que quem montou este bloco quer a lista inteira. O teto do contrato (20
+  /// pets por conta) continua sendo o unico outro limite.
+  final int? teto;
+
+  /// Se o bloco desenha o proprio [TituloDeGrupoDeMenu].
+  ///
+  /// **Falso so na pagina**, e nao por economia: a pagina ja se titula na
+  /// barra de topo, e um `Meus pets` logo abaixo de `Meus pets` seria o
+  /// segundo cabecalho com a mesma palavra na mesma tela -- o desvio 3 que a
+  /// prosa de [build] mediu e corrigiu em 18/10.
+  final bool comCabecalho;
+
+  /// O TETO DA SECAO DO PERFIL: tres.
+  ///
+  /// **Escrito aqui e lido pelo chamador**, e nao repetido em `abas.dart`: o
+  /// numero e do pedido do cliente e a fronteira dele e medida em
+  /// `meus_pets_test.dart` nas duas pontas (com 3 nao ha botao, com 4 ha).
+  /// Dois literais `3` em arquivos diferentes divergiriam no dia em que ele
+  /// pedisse quatro.
+  static const int tetoDoPerfil = 3;
+
+  /// O rotulo do botao, **palavra por palavra do cliente**.
+  ///
+  /// `Ver todos` e nao `Ver tudo`, nem `Ver todos os pets`: ele escreveu
+  /// *"inclua um botao ver todos"*, e a redacao de tela nao e de quem
+  /// implementa.
+  static const String rotuloDeVerTodos = 'Ver todos';
 
   /// O titulo do estado vazio (criterio 11).
   ///
@@ -325,6 +374,30 @@ class _MeusPetsState extends State<MeusPets>
   /// foram para ser titulados por ele; so um foi ligado. Ele ja carrega
   /// `Semantics(header: true)` e o vao de `e2`, entao o `SizedBox` daqui saiu
   /// -- vao de cabecalho e do cabecalho, e dois donos divergem.
+  /// Se o `Ver todos` entra na arvore AGORA.
+  ///
+  /// ## A FRONTEIRA E `>`, E ELA E LITERAL (cliente, 22/10/2026)
+  ///
+  /// *"quando a quantidade de pets do usuario for maior do que 3"*. Com TRES
+  /// pets nao ha botao -- os tres caberiam na secao e o botao abriria uma
+  /// pagina com exatamente a mesma lista, que e um destino que nao leva a
+  /// parte nenhuma. Com QUATRO ha. As duas pontas estao medidas em
+  /// `meus_pets_test.dart`, e a de 3 e o controle positivo: sem ela, um botao
+  /// que nascesse SEMPRE passaria pelo caso de 4.
+  ///
+  /// **`>` e nao `>=`**, e a diferenca nao e estilo: `>=` poria o botao com
+  /// tres pets, que e o erro que o cliente encontraria no primeiro toque --
+  /// ele vai testar com os pets que ele tem.
+  ///
+  /// **E a condicao olha [_pets], e nao a resposta do servidor.** Em
+  /// `falhaComCache` o que esta na tela e o cache, e o botao tem de concordar
+  /// com o que a pessoa esta vendo: prometer "todos" a partir de um numero que
+  /// nao esta na tela seria oferecer uma pagina que mostra outra coisa.
+  bool get _temMaisQueOTeto {
+    final teto = widget.teto;
+    return teto != null && _pets.length > teto;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -332,8 +405,60 @@ class _MeusPetsState extends State<MeusPets>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const TituloDeGrupoDeMenu(MeusPets.titulo),
+        if (widget.comCabecalho) _cabecalho(),
         ..._corpo(cores),
+      ],
+    );
+  }
+
+  /// A LINHA DO CABECALHO: `Meus pets` a esquerda, `Ver todos` a direita.
+  ///
+  /// *"um botao ver todos no canto direito, na frente do meus pets"* -- `na
+  /// frente de` aqui e **na mesma linha**, encostado na borda oposta, e nao
+  /// "antes de": o `canto direito` da propria frase fixa o lado.
+  ///
+  /// **O `TituloDeGrupoDeMenu` continua sendo quem titula**, e nao um `Text`
+  /// novo ao lado de um botao: ele carrega o `Semantics(header: true)` e o vao
+  /// de `e2` que a prosa de [build] mediu em 18/10, e remonta-los a mao aqui
+  /// seria a quarta forma de cabecalho que aquela correcao veio tirar da tela.
+  /// Ele entra num [Expanded] para que o titulo ceda espaco ao botao em 320 dp
+  /// em vez de transbordar.
+  ///
+  /// **O botao e `TextButton` e nao `BotaoPrimario`:** a acao primaria desta
+  /// secao e `Cadastrar meu pet`, que e o `FilledButton` que um portao cobra
+  /// nos dois estados da lista. Duas tintas de marca na mesma secao fariam o
+  /// `Ver todos` -- que e navegacao, nao criacao -- disputar a atencao com
+  /// ela.
+  ///
+  /// **O PISO DE 48 dp VEM HERDADO, e eu MEDI de onde.** A primeira versao
+  /// deste botao escrevia `minimumSize: Size(48, 48)` no estilo, com a prosa
+  /// afirmando que sem ele o `TextButton` ficaria nos 36 dp do Material. **A
+  /// afirmacao era falsa:** tirar o `minimumSize` nao derrubou caso nenhum --
+  /// o alvo continuou em 48 dp. Quem o da e o
+  /// `MaterialTapTargetSize.padded`, que e o padrao do botao. Trocar esse
+  /// padrao por `shrinkWrap` derruba o alvo a **33,7 dp** e reprova o caso `o
+  /// botao e ALCANCAVEL`, entao a medida do caso vale -- o que nao valia era o
+  /// codigo que eu tinha escrito para ela. O `minimumSize` saiu por ser
+  /// redundante, e o caso ficou como **guarda do padrao herdado**.
+  ///
+  /// `pisoMinimo` e nao `pisoCritico` pela mesma conta que o caso de
+  /// acessibilidade desta tela ja escreve: `Perfil` > `Meus pets` nao e
+  /// nenhuma das quatro superficies criticas do 6.5.
+  Widget _cabecalho() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        const Expanded(child: TituloDeGrupoDeMenu(MeusPets.titulo)),
+        if (_temMaisQueOTeto)
+          Padding(
+            // O `TituloDeGrupoDeMenu` carrega `e2` embaixo; sem o mesmo vao
+            // aqui o botao desce meio passo em relacao ao titulo.
+            padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
+            child: TextButton(
+              onPressed: () => context.push(Rotas.meusPets),
+              child: const Text(MeusPets.rotuloDeVerTodos),
+            ),
+          ),
       ],
     );
   }
@@ -477,12 +602,31 @@ class _MeusPetsState extends State<MeusPets>
 
   /// Os cartoes, um por pet, na ordem em que o servidor mandou.
   ///
-  /// Sem paginacao e sem corte: o contrato fixa o teto em 20 pets por conta e
-  /// a `ListView` da `TelaDeAba` ja rola (criterio 14). Um `ListView` aninhado
-  /// aqui dentro criaria uma segunda area de rolagem dentro da primeira.
+  /// Sem paginacao: o contrato fixa o teto em 20 pets por conta e a `ListView`
+  /// da `TelaDeAba` ja rola (criterio 14). Um `ListView` aninhado aqui dentro
+  /// criaria uma segunda area de rolagem dentro da primeira.
+  ///
+  /// ## O CORTE DE [MeusPets.teto] (22/10/2026, pedido do cliente)
+  ///
+  /// **E corte de DESENHO e nao de BUSCA.** `_carregar` continua pedindo
+  /// `GET /pets` inteiro e `_pets` continua guardando a conta inteira: e o que
+  /// permite a [_temMaisQueOTeto] saber que ha mais, e o que faz o cache
+  /// servir as duas telas. Buscar menos para mostrar menos exigiria uma
+  /// segunda chamada quando a pagina abrisse, e a pagina veria um numero
+  /// diferente do da secao enquanto ela nao voltasse.
+  ///
+  /// **O criterio 14 nao foi revogado, mudou de tela.** "Os 20 do teto
+  /// aparecem, e a tela rola" e hoje propriedade da pagina
+  /// ([TelaDeTodosOsPets], onde [MeusPets.teto] e nulo), e e la que o caso que
+  /// o media passou a medi-lo. Na secao do `Perfil` a propriedade e a nova: no
+  /// maximo tres, e o `Ver todos` quando ha mais.
   List<Widget> _cartoes() {
     final saida = <Widget>[];
-    for (var i = 0; i < _pets.length; i++) {
+    final teto = widget.teto;
+    final quantos = teto == null
+        ? _pets.length
+        : (_pets.length < teto ? _pets.length : teto);
+    for (var i = 0; i < quantos; i++) {
       if (i > 0) saida.add(const SizedBox(height: BichuEspaco.e3));
       final pet = _pets[i];
       saida.add(
@@ -510,6 +654,113 @@ class _MeusPetsState extends State<MeusPets>
       );
     }
     return saida;
+  }
+}
+
+/// `Perfil` › `Meus pets` › **a lista inteira** (22/10/2026, pedido do
+/// cliente).
+///
+/// Literal: *"caso o usuario clique no ver todos, abre uma pagina, com a
+/// listagem de todos os pets dele"*.
+///
+/// ## ELA NAO TEM LISTA PROPRIA, E ISSO E O PONTO
+///
+/// O corpo desta pagina e **[MeusPets] sem teto**: o mesmo widget que a secao
+/// do `Perfil` desenha, com `teto: null` em vez de
+/// [MeusPets.tetoDoPerfil]. Nao ha um segundo `for` sobre `_pets`, um segundo
+/// `CartaoDePet`, um segundo tratamento de falha nem um segundo cache.
+///
+/// **A alternativa medida era copiar [MeusPets] e tirar o corte**, e ela
+/// quebra no dia seguinte: as seis fases do bloco (carregando com e sem cache,
+/// lista vazia, lista cheia, falha com cache, falha sem cache), a porta de
+/// `Cadastrar meu pet` em cinco delas, a trava de dono do cache e o convite
+/// para entrar sao todos comportamento que teria de existir duas vezes. Este
+/// produto reduziu 48 copias a 15 em 21/10 e o cliente ja reclamou de codigo
+/// duplicado por recurso; uma lista de pet so pode ter um dono.
+///
+/// **O que esta pagina acrescenta e so o que ela e dona:** a moldura
+/// (`Scaffold`, barra de topo com saida, rolagem propria) e o gesto de
+/// atualizar. Nada de conteudo.
+///
+/// ## O TITULO E `Meus pets`, E ELE PODE SER REVISTO PELO CLIENTE
+///
+/// Ele nao escreveu titulo para esta pagina -- pediu o botao e disse que ele
+/// "abre uma pagina, com a listagem de todos os pets dele". [MeusPets.titulo]
+/// e o **minimo**: e a palavra que ele ja usou para a secao (*"na frente do
+/// meus pets"*), e e a mesma que o `ConviteParaEntrar` e a gaveta ja dizem
+/// para esta lista. Inventar `Todos os meus pets` seria escrever redacao de
+/// tela, que nao e de quem implementa, e poria **dois nomes para a mesma
+/// lista** a um toque de distancia. **Pergunta aberta para ele.**
+///
+/// ## A BARRA DE BAIXO NAO FICA, e a classificacao esta escrita
+///
+/// Pagina INTERNA pela regra de 20/10: quem a abre e o `Ver todos` do CORPO do
+/// `Perfil`, e nao um controle da casca -- a mesma conta das oito ambiguas de
+/// `barra_fixa_em_toda_tela_test.dart`, onde ela entrou como a nona. O
+/// `escape` e [Rotas.perfil], como em `Meus dados`: quem cai aqui sem pilha
+/// volta para a tela que tem o botao.
+class TelaDeTodosOsPets extends StatefulWidget {
+  const TelaDeTodosOsPets({super.key});
+
+  @override
+  State<TelaDeTodosOsPets> createState() => _TelaDeTodosOsPetsState();
+}
+
+class _TelaDeTodosOsPetsState extends State<TelaDeTodosOsPets> {
+  /// O SLOT que [MeusPets] ja sabe preencher.
+  ///
+  /// **O gesto de arrastar vem pelo caminho que ja existe, e nao por um
+  /// segundo.** [MeusPets] usa o mixin `PublicaAAtualizacao`, que publica a
+  /// busca em `SlotDeAtualizacao.maybeOf(context)`; na casca das abas quem
+  /// provê o slot e `TelaDeAba`. Aqui quem provê e esta pagina, e
+  /// `ArrastarParaAtualizar.doSlot` le a busca no momento do arrasto.
+  ///
+  /// **Um `ArrastarParaAtualizar(aoAtualizar: ...)` nao serviria:** a busca e
+  /// `_carregar`, que e privado do `State` de [MeusPets]. Expo-lo para esta
+  /// tela seria um segundo caminho para dentro daquele estado -- e o slot e
+  /// exatamente o arranjo que o app ja usa para "estado que e da lista,
+  /// desenhado por quem e dono do espaco".
+  final RecargaDaSecao _recarga = RecargaDaSecao();
+
+  @override
+  void dispose() {
+    _recarga.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const BarraDeConta(
+        titulo: MeusPets.titulo,
+        saida: TipoDeSaida.voltar,
+        escape: Rotas.perfil,
+      ),
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: SlotDeAtualizacao(
+          recarga: _recarga,
+          child: ArrastarParaAtualizar.doSlot(
+            recarga: _recarga,
+            child: ListView(
+              padding: const EdgeInsets.all(BichuEspaco.e4),
+              addSemanticIndexes: false,
+              children: <Widget>[
+                // **`teto` nulo: a lista INTEIRA.** E `comCabecalho: false`
+                // porque a barra de topo acima ja diz `Meus pets` -- dois
+                // cabecalhos com a mesma palavra na mesma tela e o desvio que
+                // a correcao de 18/10 veio tirar daqui.
+                MeusPets(
+                  cache: Escopo.of(context).cacheDeMeusPets,
+                  comCabecalho: false,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

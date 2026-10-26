@@ -534,168 +534,127 @@ dispensas:
   # ---------------------------------------------------------------------
 
   # ---------------------------------------------------------------------
-  # NOME DE EXIBICAO OBRIGATORIO, 18/10/2026 (decisao do cliente). Verbatim:
-  # "atualizar o contrato para tornar o nome obrigatorio / nao permitir
-  # atualizar o cadastro, se nao tiver algum nome cadastrado".
+  # AS SEIS DISPENSAS `oasdiff-*` DE 18/10 SAIRAM EM 26/10/2026, E NAO FORAM
+  # REDATADAS. Elas venciam em 25/10, e sair e o unico desfecho que a propria
+  # regra deste arquivo admite.
   #
-  # A QUEBRA E INTENCIONAL, e por isso ela esta aqui em vez de reescrita: o
-  # campo passa a ser EXIGIDO onde era opcional, e nao ha forma compativel de
-  # exigir o que antes nao se exigia. Cliente antigo que nao manda a chave
-  # passa a receber 400 `validation-failed` com `code: required`.
+  # ELAS ERAM: `oasdiff-nome-obrigatorio-no-cadastro`,
+  # `oasdiff-nome-sem-string-vazia-no-cadastro`,
+  # `oasdiff-nome-nao-pode-ser-apagado-no-perfil`,
+  # `oasdiff-recado-do-achado-500-com-conta`,
+  # `oasdiff-versao-de-lista-do-achado-no-teto-do-banco` e
+  # `oasdiff-data-de-nascimento-obrigatoria-no-cadastro`.
   #
-  # O QUE ISSO CUSTA, DITO EM VOZ ALTA: o APK que esta em aparelho hoje pode
-  # deixar de conseguir criar conta se a tela dele nao mandar o nome. Resolve
-  # com APK novo, e o cliente sabia disso quando decidiu.
+  # O MOTIVO ESCRITO NELAS JA ESTAVA CUMPRIDO. Cinco diziam, verbatim: "CAI
+  # QUANDO o merge em development levar o contrato novo para a base da
+  # comparacao". O merge aconteceu: a base do portao e `origin/<base_ref>` do
+  # PR (`.github/workflows/ci.yml`, passo "compatibilidade contra main"), que
+  # para o PR #61 e `origin/development`, e ela carrega as seis mudancas. As
+  # seis passaram a dispensar quebras que a comparacao nao produz mais.
   #
-  # POR QUE A DECISAO: conta sem nome aparece as OUTRAS pessoas como "Tutor"
-  # ou "Quem achou" (`src/modules/messaging/domain/conversa-mediada.ts`), e
-  # isso prejudica o reconhecimento do pet -- que e o produto inteiro. Medido
-  # em homologacao em 18/10: 2 contas sem nome de 7.
+  # E O VEREDITO DO `oasdiff` E DESTA MAQUINA, ao contrario do registro das
+  # cinco `sem-senha` acima: rodado em 26/10 com `tufin/oasdiff:v1.32.1`,
+  # `breaking` de `origin/development` (`49ca33de`) contra esta arvore, saida
+  # `--format json` -- 2 entradas, UMA em nivel 3 (ERR), e ela e
+  # `response-property-enum-value-added listNotifications`, que e a mudanca da
+  # dispensa de baixo. NENHUMA das seis aparece. Quem da o veredito final
+  # continua sendo a esteira, que roda o mesmo comando com o mesmo digest.
   #
-  # SAO TRES ENTRADAS E NAO UMA, e nao por gosto: o juizo
-  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada com
-  # exatamente um par `id da regra` + `operationId`, e recusa dispensa que
-  # valha para "tudo que vier desta rota". Medido com tufin/oasdiff:v1.32.1
-  # contra `e636f69c`: sao exatamente estas tres.
+  # CONTROLE POSITIVO, porque sonda negativa sozinha nao vale: com uma quebra
+  # em nivel ERR forjada e sem dispensa que a nomeie,
+  # `verificar_quebras_de_contrato.py` sai 1 e a REPROVA PELO NOME. O portao
+  # nao ficou cego com a saida das seis; ele voltou ao rigor.
   #
-  # VENCEM EM 25/10/2026, e o prazo nao e cerimonia: depois do merge em
-  # `development` a base da comparacao ja carrega o contrato novo e o portao
-  # fica quieto sozinho. Se estas entradas ainda estiverem aqui depois disso,
-  # elas estao escondendo outra coisa e precisam SAIR, nao ser redatadas.
-  - portao: oasdiff-nome-obrigatorio-no-cadastro
-    mudanca: "request-property-became-required registerUser"
-    motivo: "display_name entra em required no cadastro por decisao do cliente de 18/10/2026 (verbatim: \"atualizar o contrato para tornar o nome obrigatorio\"). Quebra INTENCIONAL: exigir o que era opcional nao tem forma compativel. Conta sem nome aparece aos outros como \"Tutor\"/\"Quem achou\" (conversa-mediada.ts) e prejudica o reconhecimento do pet; 2 de 7 contas de hml estavam nesse estado em 18/10. CUSTO ACEITO: o APK em campo pode deixar de criar conta ate sair APK novo. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
-    responsavel: cliente
-    vence_em: 2026-10-25
-  - portao: oasdiff-nome-sem-string-vazia-no-cadastro
-    mudanca: "request-property-min-length-set registerUser"
-    motivo: "display_name ganha minLength 1 no cadastro, pela mesma decisao do cliente de 18/10/2026. Sem o piso, `required` aceitaria display_name: \"\" e a conta nasceria sem nome com o campo preenchido -- o caso so com espaco (\"   \") passa pelo schema de qualquer forma e quem o recusa e o servidor, depois do trim. Quebra INTENCIONAL, mesmo custo de APK da entrada acima. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
-    responsavel: cliente
-    vence_em: 2026-10-25
-  - portao: oasdiff-nome-nao-pode-ser-apagado-no-perfil
-    mudanca: "request-property-min-length-set updateMe"
-    motivo: "display_name ganha minLength 1 em MeUpdate por decisao do cliente de 18/10/2026 (verbatim: \"nao permitir atualizar o cadastro, se nao tiver algum nome cadastrado\"). Fecha a assimetria que sobrava: o cadastro passou a exigir o nome e a atualizacao continuava deixando APAGA-LO com display_name: \"\", e a tela de Meus dados oferecia isso em texto. Quebra INTENCIONAL. NAO E BECO: a conta sem nome continua podendo PREENCHER o nome e salvar -- o servidor recusa o PATCH que omite o nome de quem nao tem nenhum, e aceita o que o preenche. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
-    responsavel: cliente
-    vence_em: 2026-10-25
-
-  # O RECADO DO ACHADO ALINHADO EM 500. UMA entrada, para UMA operacao.
+  # POR QUE SAIR E NAO RENOVAR, e a frase e deste arquivo: dispensa que
+  # sobrevive ao merge "esta escondendo outra coisa e precisa SAIR, nao ser
+  # redatada". Renovar exigiria escrever um motivo afirmando que a quebra
+  # existe, e ela nao existe. Dispensa cuja razao deixou de valer e pior que
+  # dispensa nenhuma.
   #
-  # `FoundReportEnrichment.message` declarava `maxLength: 1000`. A coluna onde
-  # esse texto e gravado,
-  # `found_reports.notes`, SEMPRE recusou acima de 500
-  # (`found_reports_notes_tamanho`, migracao 20260917000007 linha 210). O texto
-  # entre 501 e 1000 passava pela validacao do contrato e morria no banco: quem
-  # avisa recebia ERRO DE SERVIDOR em vez de recusa explicada, e o recado se
-  # perdia -- com o animal na mao de quem estava tentando ajudar.
+  # ALEM DE INERTES, ELAS ERAM UM GATILHO: `restam < 0` reprova, e em 26/10 as
+  # seis mediam `VENCIDA` -- seis reprovacoes de `verificar-dispensas` no job
+  # `rapidos`, de que o job `contrato` depende, por causa de quebras que a
+  # comparacao nao produz. Medido nos DOIS relogios, porque
+  # `verificar_dispensas.py` usa `date.today()` LOCAL e a esteira roda em UTC:
+  # antes, exit 1 com as seis nomeadas no relogio local e com `TZ=UTC`, saidas
+  # byte-identicas; depois, exit 0 nos dois.
   #
-  # Nao e aperto de regra, e o contrato parando de prometer o que o banco nunca
-  # aceitou: a mudanca ALINHA O CONTRATO A REALIDADE e remove um erro de
-  # servidor. Nenhum texto que hoje e gravado deixa de caber, porque o que nao
-  # cabia nunca foi gravado. `StrayFoundReportInput.notes` ja estava em 500 pelo
-  # mesmo motivo, com a mesma frase na descricao; estas duas ficaram atras.
+  # POR QUE APAGAR AQUI NAO E A ARMADILHA DO `apk-assinado`:
+  # `verificar_borda_local.py:227` consulta SO os portoes `apk-assinado` e
+  # `ios` e reprova quando nao acha a entrada. Os seis nomes acima nao eram
+  # consultados por ela nem por mais nada: conferido em 26/10 com `git grep`
+  # sobre a arvore rastreada inteira, eles apareciam unicamente neste arquivo,
+  # com `apk-assinado` (4 arquivos, entre eles `verificar_borda_local.py`) como
+  # controle positivo da sonda. Apagar nao derruba `verificar-borda-local`.
   #
-  # DECISAO LITERAL DO CLIENTE, 18/10/2026: "pode corrigir o contrato e aceitar
-  # os 500 caracteres". Por isso `responsavel: cliente`.
-  #
-  # A ROTA IRMA NAO ENTRA AQUI, e foi medida: `enrichFinderFoundReport` usa um
-  # schema PROPRIO (`FinderFoundReportEnrichment`) e o `message` dele NAO vai
-  # para `found_reports.notes` -- vai para a conversa mediada, em
-  # `mediated_messages.body`, cujo CHECK aceita 4000 (`aviso-do-achador.ts`,
-  # "para onde vai cada campo"). Lá 1000 esta correto e casa com `body` de
-  # `postFinderMessage`, o mesmo destino; apertar para 500 cortaria pela metade
-  # o recado de quem avisa SEM CONTA sem corrigir descasamento nenhum.
-  #
-  # Medido com tufin/oasdiff:v1.32.1: e exatamente esta uma -- o juizo casa um
-  # par regra+operacao por entrada e recusa dispensa que valha para a rota
-  # inteira.
-  # Vence em 25/10/2026, pela razao das vizinhas: depois do merge a base
-  # carrega o contrato novo e a quebra deixa de existir.
-  - portao: oasdiff-recado-do-achado-500-com-conta
-    mudanca: "request-property-max-length-decreased enrichFoundReport"
-    motivo: "o contrato declarava maxLength 1000 em FoundReportEnrichment.message e a coluna found_reports.notes sempre recusou acima de 500 (found_reports_notes_tamanho); entre 501 e 1000 o texto passava pela validacao e estourava no banco como erro de servidor. Alinha o contrato a realidade e remove um erro de servidor; nenhum texto hoje gravado deixa de caber. Decisao literal do cliente de 18/10/2026"
-    responsavel: cliente
-    vence_em: 2026-10-25
-
+  # A DISPENSA DE BAIXO NAO SAI, e isso e deliberado:
+  # `oasdiff-aviso-de-pedido-de-conexao-na-caixa` (`responsavel: squad`, vence
+  # em 30/10) e a unica que ainda faz trabalho -- e ela que aceita a unica
+  # quebra em nivel ERR que a comparacao produz hoje. Tira-la reprovaria o
+  # portao de contrato. Ela tambem e consultada por
+  # `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart`.
   # ---------------------------------------------------------------------
-  # VERSAO DE LISTA DO ACHADO COM TETO DECLARADO, 18/10/2026.
-  #
-  # O QUE ESTAVA MEDIDO: `StrayFoundReportInput.ref_data_version` nao tinha
-  # `maxLength` NENHUM no contrato, contra
-  # `found_reports.ref_data_version` com `CHECK ... BETWEEN 1 AND 40`
-  # (`found_reports_ref_data_version_tamanho`, migracao 20260922000010). 41
-  # caracteres em `POST /v1/found-reports` passavam pela validacao do schema e
-  # morriam no `CHECK` -- erro de servidor, nao recusa explicada. E havia
-  # ASSIMETRIA: o caminho equivalente do cadastro de pet devolvia 400, porque
-  # `pet-service.ts` confere a versao contra `ref_data_versions` antes de
-  # gravar; o do achado nao conferia nada.
-  #
-  # POR QUE A QUEBRA ESTA AQUI EM VEZ DE REESCRITA: por o teto onde nao havia
-  # teto e quebra por definicao (`request-property-max-length-set`) -- o
-  # contrato antigo prometia aceitar 41, e nao ha forma compativel de deixar
-  # de prometer isso. O que o contrato prometia, porem, o banco NUNCA cumpriu:
-  # quem mandava 41 recebia 500, e nao 201. A mudanca alinha o contrato a
-  # realidade e troca o erro de servidor por `validation-failed` com o limite
-  # na mensagem, que e o unico desfecho que o cliente consegue tratar.
-  #
-  # E UMA ENTRADA SO, e foi conferido e nao suposto: o juizo
-  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada com
-  # exatamente um par `id da regra` + `operationId`. Medido com
-  # tufin/oasdiff:v1.32.1 contra `3f9a57c2` (origin/development): "1 changes:
-  # 1 error, 0 warning, 0 info", e o unico par e
-  # `request-property-max-length-set createStrayFoundReport`.
-  #
-  # O PISO (`minLength: 1`, que a coluna tambem cobra) NAO entrou: `""` tem o
-  # mesmo defeito de 500 e nao foi medido nesta rodada. Fica dito aqui para
-  # nao passar por resolvido.
-  #
-  # VENCE EM 25/10/2026, pelo mesmo motivo das vizinhas: depois do merge em
-  # `development` a base da comparacao carrega o contrato novo e o portao fica
-  # quieto sozinho. Se esta entrada ainda estiver aqui depois disso, ela esta
-  # escondendo outra coisa e precisa SAIR, nao ser redatada.
-  - portao: oasdiff-versao-de-lista-do-achado-no-teto-do-banco
-    mudanca: "request-property-max-length-set createStrayFoundReport"
-    motivo: "StrayFoundReportInput.ref_data_version ganha maxLength 40 para igualar found_reports.ref_data_version, que sempre recusou acima de 40 (CHECK found_reports_ref_data_version_tamanho, de 1 a 40, migracao 20260922000010). O contrato nao declarava limite nenhum e o banco recusava: 41 caracteres em POST /v1/found-reports viravam erro de servidor, enquanto o caminho equivalente de PetInput ja devolvia 400. A mudanca ALINHA O CONTRATO A REALIDADE e remove um erro de servidor -- quem mandava 41 nunca recebeu 201, recebia 500. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
-    responsavel: cliente
-    vence_em: 2026-10-25
 
-  # IDADE MINIMA DE 16 ANOS, 18/10/2026 (decisao do cliente). Verbatim:
-  # "coloque maiores de 16 anos".
+  # `connection_requested` ENTRA NO ENUM DE RESPOSTA DE `listNotifications`,
+  # 23/10/2026 (commit 45380f6b, `api/openapi.yaml:21322`).
   #
-  # A QUEBRA E INTENCIONAL, e por isso ela esta aqui em vez de reescrita: um
-  # campo NOVO entra em `required`, e nao ha forma compativel de exigir o que
-  # antes nao existia. Cliente antigo que nao manda a chave passa a receber
-  # 400 `validation-failed` com `code: required`.
+  # O oasdiff acusa `response-property-enum-value-added` em nivel ERR porque
+  # acrescentar valor a enum de RESPOSTA e, no caso geral, quebra de cliente:
+  # quem desserializa com lista fechada estoura. Aqui a quebra e TEORICA, e
+  # isso foi MEDIDO nos tres consumidores, nao deduzido:
   #
-  # O QUE ISSO CUSTA, DITO EM VOZ ALTA: o APK que esta em aparelho hoje NAO
-  # TEM campo de data de nascimento, entao ele deixa de conseguir criar conta
-  # assim que esta spec subir. Resolve com APK novo. E o mesmo custo que
-  # `display_name` cobrou no mesmo dia, e o cliente o aceitou nos dois casos.
+  #   1. APP. `TipoDeAviso.porCodigo` (`app/lib/api/modelos_notificacao.dart`)
+  #      cai em `TipoDeAviso.desconhecido`, cujo rotulo e `Aviso`. Medido na
+  #      arvore `bdae03e1` -- que e `45380f6b^`, a arvore de que saiu o APK
+  #      `bdae03e1-hml-app-arm64-v8a-release-enxuto.apk`: 6 casos verdes em
+  #      `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart`. A linha
+  #      APARECE na caixa, com assunto e data, e NAO e tocavel (o
+  #      `DestinoDoAviso` novo cai em nulo, que e o mesmo estado de
+  #      `destination: null`). Nenhuma excecao. Medido tambem NO BINARIO:
+  #      `strings` no `libapp.so` daquele APK da 0 ocorrencias de
+  #      `connection_requested` e 0 de `connection_request`, com `broadcast`
+  #      (3) e `tag_scanned` (1) como controles positivos -- o APK em campo de
+  #      fato NAO conhece os dois valores novos, e tolera.
+  #      A sentinela existe desde `6a43ae2f`, que e o commit que CRIOU a caixa:
+  #      nao existe build com caixa de notificacoes e sem ela.
+  #   2. WEB e 3. BACKOFFICE. Nao consomem a rota: `listNotifications`,
+  #      `me/notifications`, `NotificationKind`, `NotificationItem` e
+  #      `NotificationPage` dao ZERO ocorrencias em `web/src` e `admin/src`
+  #      fora de `src/api/generated/`, com 8 ocorrencias DENTRO do gerado como
+  #      controle positivo da sonda. E os tres `generated/api.ts` sao
+  #      declaracao pura: 0 `export const|function|class|enum` contra 5
+  #      `export type|interface`. Tipo de TypeScript nao valida nada em tempo
+  #      de execucao, entao valor novo em enum nao tem como estourar la.
   #
-  # POR QUE A DECISAO: antes disto NAO HAVIA FREIO DE IDADE NENHUM -- sem
-  # coluna em `users`, sem campo no contrato, sem campo na tela -- e a nossa
-  # propria politica de privacidade confessava isso por escrito no item 10
-  # ("Hoje o cadastro nao confere a idade").
+  # O QUE ESTA ENTRADA AFROUXA MAIS DO QUE PARECE, dito em voz alta: o juizo
+  # casa o par `id da regra` + `operationId`, e nao o VALOR acrescentado.
+  # Enquanto ela estiver aqui, QUALQUER valor novo em QUALQUER enum de
+  # resposta de `listNotifications` passa calado -- inclusive um que o app nao
+  # tolere. E o preco do mecanismo que existe, e e a razao do prazo curto.
   #
-  # E UMA ENTRADA SO, e isso foi MEDIDO e nao suposto: o juizo
-  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada
-  # com exatamente um par `id da regra` + `operationId`, e recusa dispensa que
-  # valha para toda a rota. Rodado com tufin/oasdiff:v1.32.1 contra
-  # `e636f69c`, o veredito literal foi "1 changes: 1 error, 0 warning, 0
-  # info", com um unico par: `new-required-request-property registerUser`.
-  # Note que a regra NAO e `request-property-became-required` (a de
-  # `display_name`, que ja existia e virou obrigatorio): aqui a propriedade
-  # NASCE obrigatoria, e o oasdiff a classifica em outra regra.
+  # A TOLERANCIA FICOU PRESA POR TESTE, e isso e o que torna esta dispensa
+  # honesta: antes desta rodada NENHUM caso da suite alimentava `kind`
+  # desconhecido, entao a sentinela podia sair num refactor sem nada reprovar.
+  # `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart` passa a
+  # reprovar se ela sair. ISCA MEDIDA: com `porCodigo` lancando em vez de cair
+  # na sentinela, 5 dos 6 casos reprovam pelo nome, e a caixa INTEIRA vira a
+  # faixa "O Bichu esta fora do ar por alguns minutos" com `Tentar de novo` --
+  # nao e uma linha feia, e a tela toda.
   #
-  # O resto da regra NAO E QUEBRA DE CONTRATO e por isso nao aparece aqui:
-  # recusar menor de 16, data no futuro e data absurda e trabalho do servidor
-  # dentro de um 400 que `registerUser` ja declarava.
+  # O AVISO de nivel 2 (`connection_request` em `NotificationDestination`) NAO
+  # precisa de dispensa: o juizo so reprova nivel >= 3. Fica dito para nao
+  # parecer esquecido.
   #
-  # VENCE EM 25/10/2026, e o prazo nao e cerimonia: depois do merge em
-  # `development` a base da comparacao ja carrega o contrato novo e o portao
-  # fica quieto sozinho. Se esta entrada ainda estiver aqui depois disso, ela
-  # esta escondendo outra coisa e precisa SAIR, nao ser redatada.
-  - portao: oasdiff-data-de-nascimento-obrigatoria-no-cadastro
-    mudanca: "new-required-request-property registerUser"
-    motivo: "birth_date entra como propriedade nova e obrigatoria no cadastro por decisao do cliente de 18/10/2026 (verbatim: \"coloque maiores de 16 anos\"). Quebra INTENCIONAL: exigir um campo que nao existia nao tem forma compativel. Antes disto nao havia freio de idade em nenhuma camada -- sem coluna em users, sem campo no contrato, sem campo na tela -- e a politica de privacidade afirmava por escrito que \"hoje o cadastro nao confere a idade\" (item 10). CUSTO ACEITO: o APK em campo nao tem o campo e deixa de criar conta ate sair APK novo, o mesmo custo que display_name cobrou no mesmo dia. A idade e calculada NO SERVIDOR, no fuso America/Sao_Paulo, e nao ha campo de idade no contrato de proposito. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
-    responsavel: cliente
-    vence_em: 2026-10-25
+  # VENCE EM 30/10/2026. O motivo do prazo e o das vizinhas -- depois do merge
+  # em `development` a base da comparacao carrega o contrato novo e o portao
+  # fica quieto sozinho --, com uma semana em vez de dois dias por uma razao
+  # medida: `verificar_dispensas.py` usa `date.today()` LOCAL e a esteira roda
+  # em UTC, e esta maquina e UTC-3, entao ha 3h por dia em que os dois
+  # relogios discordam da data. Prazo colado no dia do merge aprova aqui e
+  # reprova la. Se esta entrada ainda estiver aqui depois do merge, ela esta
+  # escondendo outra coisa e precisa SAIR, nao ser redatada.
+  - portao: oasdiff-aviso-de-pedido-de-conexao-na-caixa
+    mudanca: "response-property-enum-value-added listNotifications"
+    motivo: "connection_requested entra no enum NotificationKind da resposta 200 de listNotifications (45380f6b, openapi.yaml:21322) para o pedido de conexao aparecer na caixa. Acrescentar valor a enum de resposta e quebra no caso geral, e aqui ela e TEORICA nos tres consumidores, medido e nao deduzido: o app cai em TipoDeAviso.desconhecido com rotulo Aviso e a linha aparece com assunto e data sem ser tocavel (6 casos verdes rodados na arvore bdae03e1, que e 45380f6b^ e e a arvore do APK que esta em campo; e strings no libapp.so daquele APK da 0 ocorrencias de connection_requested, com broadcast e tag_scanned como controle positivo); web e backoffice nao consomem a rota (0 ocorrencias fora de src/api/generated) e os tres generated/api.ts sao declaracao pura, sem nada que valide enum em execucao. AFROUXA MAIS DO QUE PARECE: o juizo casa id da regra + operationId e nao o valor, entao qualquer valor novo em enum de resposta de listNotifications passa calado enquanto isto estiver aqui -- e a razao do prazo curto. A tolerancia ficou presa em app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart, que antes nao existia: isca medida, com a sentinela desligada 5 dos 6 casos reprovam e a caixa INTEIRA vira faixa de erro. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
+    responsavel: squad
+    vence_em: 2026-10-30

@@ -249,8 +249,20 @@ void main() {
       }
     });
 
-    testWidgets('OS PETS NAO ENTRAM: a tela REFERENCIA a pagina deles', (tester) async {
-      var abriu = false;
+    // A FRASE DOS PETS SAIU (cliente, 22/10/2026): *"remova essa frase dentro
+    // de minhas fotos, as fotos dos seus pets ficam na pagina de cada um"*.
+    //
+    // Este caso media o contrario -- que a frase estava la e que tocar nela
+    // abria `Meus pets`. Ele foi INVERTIDO em vez de apagado: a frase que um
+    // pedido do cliente remove e exatamente a que precisa de alguem cobrando a
+    // ausencia, senao ela volta na primeira edicao desta tela (foi o que
+    // aconteceu com cinco redacoes de um rotulo de selo no mesmo dia).
+    //
+    // **E ele carrega o CONTROLE POSITIVO junto**, no mesmo caso e de
+    // proposito: "nao achei a frase" e indistinguivel de "nao desenhei a tela"
+    // -- e esta tela tem seis estados, cinco dos quais nao desenhariam texto
+    // nenhum. O `expect` do titulo e o que separa as duas coisas.
+    testWidgets('A FRASE DOS PETS SAIU, e a tela continua desenhada', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: BichuTheme.claro,
@@ -259,15 +271,38 @@ void main() {
             escrita: const EscritaQueNinguemChama(),
             camera: const CameraNaoEmbarcada(),
             envio: envioQueNaoSai(),
-            aoAbrirMeusPets: () => abriu = true,
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('página de cada um'), findsOneWidget);
-      await tester.tap(find.textContaining('página de cada um'));
-      expect(abriu, isTrue, reason: 'referencia, e nao copia: foto de pet mora em `pet_photos`');
+      // CONTROLE POSITIVO: a varredura ESTA olhando uma tela montada.
+      expect(
+        find.text(VitrineDeFotosDoUsuario.tituloDaTela),
+        findsOneWidget,
+        reason:
+            'REPROVA: a tela nao desenhou nem o proprio titulo. Sem isto, o '
+            '`findsNothing` abaixo nao prova que a frase saiu -- ele prova '
+            'que nada foi desenhado, que e outra coisa.',
+      );
+
+      expect(
+        find.textContaining('página de cada um'),
+        findsNothing,
+        reason:
+            'REPROVA: a frase "As fotos dos seus pets ficam na página de cada '
+            'um." voltou a esta tela. O cliente pediu a remocao dela em '
+            '22/10/2026, e a linha INTEIRA saiu com ela -- o `chevron_right` '
+            'ao lado era alvo sem rotulo acessivel sem a frase.',
+      );
+      expect(
+        find.byIcon(Icons.chevron_right),
+        findsNothing,
+        reason:
+            'REPROVA: a seta do atalho ficou sem a frase que a nomeava. '
+            'Controle tocavel sem nome acessivel e o SC 4.1.2, e era por isso '
+            'que a linha saiu inteira e nao so o texto.',
+      );
     });
   });
 

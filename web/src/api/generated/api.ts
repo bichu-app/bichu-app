@@ -13905,10 +13905,26 @@ export interface components {
          *
          *     **`friend_post` nao existe e nao vai existir aqui**: post de amigo e da
          *     Petline, por decisao de desenho (21 avisos por dia empurrariam a
-         *     plaquinha para a 22a posicao).
+         *     plaquinha para a 22a posicao). **`connection_requested` nao e disso:**
+         *     post de amigo e um a cada publicacao de cada uma das 150 conexoes;
+         *     pedido de conexao e dirigido a UMA pessoa, e acionavel e e um por par.
+         *
+         *     **`connection_requested` (22/10/2026)**, cliente, literal: *"quando o
+         *     usuario me adicionou, nao apareceu na notificacao que eu tinha uma
+         *     solicitacao de amizade. Isso precisa aparecer na notificacao"*. Vai para
+         *     **quem RECEBEU** o pedido e nunca para quem pediu, e `subject` leva o
+         *     nome de quem pediu -- apelido com arroba quando ha, nome de exibicao
+         *     quando nao ha, nulo quando nao ha nenhum dos dois, pela mesma regra que
+         *     a tela de pedidos de conexao ja usa.
+         *
+         *     **O par do aceite ainda NAO existe.** `event_join_decided` e o molde
+         *     dele e esta aqui ha tres dias, entao a forma existe; o aviso de *"sua
+         *     solicitacao foi aceita"* depende de decisao do cliente, levantada em
+         *     22/10 e ainda sem resposta. A ausencia e pendencia declarada, nao
+         *     esquecimento.
          * @enum {string}
          */
-        NotificationKind: "tag_scanned" | "found_reported" | "match_suggested" | "neighborhood_alert" | "event_join_requested" | "event_join_decided" | "event_cancelled" | "suggestion_decided" | "tag_request_updated" | "broadcast";
+        NotificationKind: "tag_scanned" | "found_reported" | "match_suggested" | "neighborhood_alert" | "event_join_requested" | "event_join_decided" | "event_cancelled" | "suggestion_decided" | "tag_request_updated" | "broadcast" | "connection_requested";
         /**
          * @description Um COMUNICADO como o dono da caixa o le -- titulo, corpo e quando foi
          *     disparado.
@@ -13946,6 +13962,7 @@ export interface components {
          *     | `directory_suggestion` | a indicacao | `ref` (opaco) |
          *     | `collar_tag_request` | acompanhar a plaquinha | `pets.id` (UUID) |
          *     | `broadcast` | a pagina do comunicado | `ref` (opaco) |
+         *     | `connection_request` | pedidos de conexao | `ref` da aresta (opaco) |
          *
          *     **`collar_tag_request` carrega o PET e nao o pedido, de proposito.** A
          *     tela de acompanhamento e enderecada por pet
@@ -13959,9 +13976,17 @@ export interface components {
          *     texto precisa de onde ser lido. Os outros levam a tela que a pessoa
          *     realmente quer, que e o que o cliente pediu ao oferecer "a pagina
          *     interna **ou** o link".
+         *
+         *     **`connection_request` leva a LISTA e nao ao item**, como
+         *     `directory_suggestion`: a tela de pedidos de conexao e enderecada sem
+         *     chave (`/conexoes/pedidos`), e o `ref` da aresta viaja porque o contrato
+         *     promete que `destination` e `destination_ref` andam juntos. O `ref` e o
+         *     opaco de 22 caracteres que a conexao ja tem -- **nenhum UUID interno sai
+         *     aqui**, e o pedido ja respondido sai com os dois campos NULOS, porque ele
+         *     nao esta mais naquela lista.
          * @enum {string}
          */
-        NotificationDestination: "pet" | "found_report" | "public_case" | "network_event" | "directory_suggestion" | "collar_tag_request" | "broadcast";
+        NotificationDestination: "pet" | "found_report" | "public_case" | "network_event" | "directory_suggestion" | "collar_tag_request" | "broadcast" | "connection_request";
         /**
          * @description Uma linha da caixa. **Nao traz imagem nenhuma** -- sem avatar e sem foto
          *     de pet, de proposito, para nao trazer a foto a uma quarta superficie. E

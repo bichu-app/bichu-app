@@ -46,6 +46,7 @@ import '../telas/notificacoes/caixa_de_notificacoes.dart';
 import '../telas/notificacoes/comunicado.dart';
 import '../telas/perfil/meus_achados.dart';
 import '../telas/perfil/meus_eventos.dart';
+import '../telas/perfil/meus_pets.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
@@ -482,6 +483,34 @@ abstract final class Rotas {
   /// o mesmo criterio que poe `achados` sob `perfil`.
   static const String meusEventos = '/perfil/eventos';
 
+  /// `Perfil` > `Meus pets`, a lista INTEIRA (22/10/2026, pedido do cliente).
+  ///
+  /// Literal: *"no menu do perfil do usuario, onde lista os pets, inclua um
+  /// botao ver todos no canto direito, na frente do meus pets, quando a
+  /// quantidade de pets do usuario for maior do que 3. E caso o usuario clique
+  /// no ver todos, abre uma pagina, com a listagem de todos os pets dele"*.
+  ///
+  /// **A SECAO CONTINUA SENDO CONTEUDO DA ABA, e este endereco nao a
+  /// substitui.** O bloco `Meus pets` do corpo do `Perfil` passou a mostrar no
+  /// maximo tres cartoes, e este e o destino do `Ver todos` que aparece quando
+  /// ha mais. Os dois desenham o MESMO widget ([MeusPets], com e sem teto): uma
+  /// segunda lista de pet divergiria da primeira na primeira correcao de
+  /// filtro, e este produto reduziu 48 copias a 15 em 21/10 justamente por
+  /// isso.
+  ///
+  /// **E UMA PORTA SO, e por isso o inventario de sub-destinos NAO ganhou
+  /// item.** `RegistroDeSubDestinos` mantem `Meus pets` como
+  /// `conteudoDaSecao`: promove-lo a `destino` poria na gaveta um item
+  /// `Meus pets` apontando para o mesmo lugar que o `Ver todos` do corpo, e
+  /// `gaveta_de_secoes.dart` diz, palavra por palavra, que *"dois nomes para o
+  /// mesmo destino e pior que divergir do documento"*. O que o registro ganhou
+  /// foi a correcao do comentario que afirmava nao haver rota.
+  ///
+  /// `/perfil/pets` e nao `/pets`: `/pets` e a ABA de pets perdidos da regiao,
+  /// e `/pets/:petId` ja casaria o resto. `pets` sob `perfil` diz de quem a
+  /// lista e -- o mesmo criterio de [meusAchados] e [meusEventos].
+  static const String meusPets = '/perfil/pets';
+
   /// `Perfil` > `Pessoas bloqueadas` (19/10/2026, decisao do cliente).
   ///
   /// **ESTE E O UNICO CAMINHO DE VOLTA DE UM BLOQUEIO.** O bloqueio e simetrico
@@ -894,6 +923,12 @@ void ligarPortaDoDestinoDoAviso() {
       // enderecada por pet e nao por pedido.
       DestinoDoAviso.pedidoDaPlaquinha => Rotas.acompanharPlaquinhaDe(ref),
       DestinoDoAviso.comunicado => RotasDoComunicado.de(ref),
+      // O PEDIDO DE CONEXAO nao tem rota por item, como a indicacao:
+      // `pedidosDeConexao` e a LISTA, e e nela que o pedido e aceito ou
+      // recusado. O servidor manda o `ref` opaco da aresta porque o contrato
+      // promete que `destination` e `destination_ref` andam juntos, e a guarda
+      // acima o exige -- mas a lista nao o usa, e a decisao esta no contrato.
+      DestinoDoAviso.pedidosDeConexao => Rotas.pedidosDeConexao,
     };
   };
 }
@@ -1360,6 +1395,20 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.meusEventos,
         builder: (context, estado) => const MeusEventos(),
       ),
+      // `Perfil` > `Meus pets`, a lista INTEIRA (22/10/2026, pedido do
+      // cliente). Irma das duas de cima, e PAGINA INTERNA: quem a abre e o
+      // `Ver todos` do CORPO do Perfil, e nao um controle da casca -- a mesma
+      // conta das oito ambiguas de `barra_fixa_em_toda_tela_test.dart`, onde
+      // ela esta classificada como a nona.
+      //
+      // **Sem parametro no construtor**, como `MeusAchados` e `MeusEventos`:
+      // a tela tira o `CacheDeMeusPets` do `Escopo`, que e o MESMO cache da
+      // secao do Perfil. Dois caches para a mesma lista mostrariam numeros
+      // diferentes para a mesma conta a um toque de distancia.
+      GoRoute(
+        path: Rotas.meusPets,
+        builder: (context, estado) => const TelaDeTodosOsPets(),
+      ),
       // -- AS QUATRO ROTAS DA UNIAO DE 18/10/2026 ---------------------------
       //
       // As quatro telas chegaram prontas, de frentes diferentes, e nenhuma
@@ -1463,7 +1512,10 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             escrita: porta,
             camera: escopo.camera,
             envio: escopo.envioDeFoto,
-            aoAbrirMeusPets: () => GoRouter.of(context).go(Rotas.perfil),
+            // **SEM `aoAbrirMeusPets`**: o atalho que ele ligava saiu da
+            // vitrine por pedido do cliente em 22/10/2026, e o parametro saiu
+            // com ele. `Meus pets` continua alcancavel pelo primeiro bloco da
+            // secao `Perfil`, que e de onde se chega a esta tela.
           );
         },
       ),

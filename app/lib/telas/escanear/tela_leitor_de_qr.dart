@@ -805,14 +805,37 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           // Canto superior esquerdo: e onde o polegar procura a saida. Ela
           // fica POR CIMA de todos os estados, e por isso nenhum deles pode
           // desenhar texto nos primeiros [alturaDaSaidaSobreposta] dp.
-          const SafeArea(
+          SafeArea(
             child: Padding(
-              padding: EdgeInsets.all(BichuEspaco.e2),
+              padding: const EdgeInsets.all(BichuEspaco.e2),
               child: Align(
                 alignment: Alignment.topLeft,
                 // `fechar` e nao `voltar`: o leitor e um destino, e nao um
                 // passo de um assistente.
-                child: SaidaDaTela(tipo: TipoDeSaida.fechar),
+                child: SaidaDaTela(
+                  tipo: TipoDeSaida.fechar,
+                  // **BRANCO SO SOBRE O VISOR** (cliente, 22/10/2026): *"o x
+                  // para fechar deve ser branco, em algumas paginas ele esta
+                  // ficando cinza ou preto e nao esta dando muita leitura"*.
+                  //
+                  // O que ele leu e verdade, e e deste estado: `procurando` e
+                  // o UNICO dos seis em que a imagem da camera ocupa a tela
+                  // atras deste glifo, e sobre video o `textPrimary` do tema
+                  // claro -- um cinza-escuro -- e justamente o que nao da
+                  // leitura.
+                  //
+                  // **NOS OUTROS CINCO O FUNDO E SUPERFICIE CLARA DO TEMA**
+                  // (`consultando` desenha `SizedBox.expand`, e
+                  // `permissaoNegada`, `semLeitor`, `semConexao` e `digitando`
+                  // desenham conteudo normal). Branco fixo ali reproduziria o
+                  // defeito dele ao contrario -- glifo branco em fundo claro
+                  // nao se le --, e e por isso que a cor segue o ESTADO e nao
+                  // a tela. O pedido dele nao fez essa distincao; ela e minha,
+                  // e esta no relatorio para ele decidir.
+                  cor: _estado == EstadoDoLeitor.procurando
+                      ? Colors.white
+                      : null,
+                ),
               ),
             ),
           ),

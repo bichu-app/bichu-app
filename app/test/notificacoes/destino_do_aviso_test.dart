@@ -15,7 +15,7 @@
 //       contrapeso: no caminho bom o corpo aparece, entao o caso do 404 nao
 //       esta verde por tela vazia.
 //
-// Os sete destinos do contrato estao todos aqui, um por caso nomeado: um
+// Os OITO destinos do contrato estao todos aqui, um por caso nomeado: um
 // destino novo que entre no contrato sem endereco reprova pelo nome dele.
 
 import 'dart:convert';
@@ -121,6 +121,20 @@ void main() {
       );
     });
 
+    test(
+      'ISCA: `connection_request` vai para a lista de pedidos de conexao',
+      () {
+        expect(
+          enderecoDe(DestinoDoAviso.pedidosDeConexao, 'con3x0Ref123456789012'),
+          '/conexoes/pedidos',
+          reason: 'REPROVA: o aviso de pedido de conexao precisa levar a tela '
+              'PEDIDOS DE CONEXAO, que e onde o pedido e aceito ou recusado '
+              '(cliente, 22/10/2026). Nao ha rota por item -- a lista e o '
+              'lugar certo, como na indicacao.',
+        );
+      },
+    );
+
     test('ISCA: `broadcast` vai para a pagina do comunicado', () {
       expect(
         enderecoDe(DestinoDoAviso.comunicado, 'comunic0Ref123456789'),
@@ -182,12 +196,12 @@ void main() {
       },
     );
 
-    test('o contrato tem SETE destinos, e todos tem endereco', () {
+    test('o contrato tem OITO destinos, e todos tem endereco', () {
       // Um destino novo no contrato, sem endereco aqui, reprova neste caso --
       // e nao num `switch` que o compilador aceitaria com `default`.
       expect(
         DestinoDoAviso.values.length,
-        7,
+        8,
         reason: 'REPROVA: o numero de destinos mudou. Se um destino entrou no '
             'contrato, ele precisa de endereco em '
             '`ligarPortaDoDestinoDoAviso` e de uma isca nomeada aqui.',

@@ -28,7 +28,7 @@
 /// o numero certo e o que o servidor sabe.
 library;
 
-/// `#/components/schemas/NotificationKind` do contrato: os dez tipos de aviso.
+/// `#/components/schemas/NotificationKind` do contrato: os onze tipos de aviso.
 ///
 /// A lista e FECHADA no contrato, e o rotulo de cada valor mora aqui porque e
 /// a palavra que a pessoa le na linha da caixa -- uma por tipo, escrita uma
@@ -51,6 +51,7 @@ enum TipoDeAviso {
   respostaDaIndicacao('suggestion_decided', 'Resposta à sua indicação'),
   pedidoDaPlaquinha('tag_request_updated', 'Novidade no pedido da plaquinha'),
   comunicado('broadcast', 'Recado do Bichu'),
+  pedidoDeConexao('connection_requested', 'Pedido de conexão'),
   desconhecido('', 'Aviso');
 
   const TipoDeAviso(this.codigo, this.rotulo);
@@ -96,7 +97,8 @@ enum DestinoDoAviso {
   encontro('network_event'),
   indicacao('directory_suggestion'),
   pedidoDaPlaquinha('collar_tag_request'),
-  comunicado('broadcast');
+  comunicado('broadcast'),
+  pedidosDeConexao('connection_request');
 
   const DestinoDoAviso(this.codigo);
 

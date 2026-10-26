@@ -131,6 +131,37 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// desenha a porta de pedir.
   final String? tokenDoConvite;
 
+  /// **O TÍTULO DA BARRA DE TOPO DESTA TELA É A PALAVRA `Perfil`**, e não o
+  /// nome da pessoa (cliente, 23/10/2026).
+  ///
+  /// Palavras dele, literais: *"a barra principal fica perfil e logo abaixo o
+  /// titulo da pagina fica o nome do usuário do jeito que esta atualmente. Me
+  /// refiro na pagina que outro usuário acessa, que mostra a vitrine com as
+  /// publicações do usuário."*
+  ///
+  /// **A SEGUNDA METADE DO PEDIDO JÁ ESTAVA FEITA, e isso foi medido antes de
+  /// mexer em qualquer coisa.** O nome já era o primeiro elemento do corpo —
+  /// [NomeComSelo] em `titleLarge`, logo abaixo da barra (ver [_corpo]) —,
+  /// desde a fatia G desta tela. O que havia de errado era o nome aparecer
+  /// **duas vezes**: na barra e no corpo. Então o conserto é de um lado só, a
+  /// barra, e o *"do jeito que esta atualmente"* dele é cumprido por não se
+  /// tocar no nome do corpo: ele continua exatamente o que era, com o mesmo
+  /// estilo e o mesmo selo.
+  ///
+  /// **ISTO NÃO ALCANÇA A TELA DA PRÓPRIA CONTA, e a separação é estrutural e
+  /// não disciplina.** A seção `Perfil` do dono é `AbaPerfil`
+  /// (`telas/abas.dart`), que monta a barra por `TelaDeAba`
+  /// (`telas/casca_com_abas.dart`) e tira o título de `tituloDaTelaDaConta` —
+  /// outro arquivo, outro widget, outra função. Esta tela monta um `Scaffold`
+  /// e um `AppBar` próprios e **não usa `TelaDeAba`**: não há parâmetro a
+  /// passar porque não há componente compartilhado entre as duas barras. A
+  /// decisão do cliente de 19/10 (*"a tela do usuario, deve ter como titulo da
+  /// pagina na barra principal o slug do usuario"*) continua valendo intacta,
+  /// e quem a cobra é
+  /// `test/telas/navegacao_mensagens_e_avatar_test.dart` — que afirma
+  /// `findsNothing` para a palavra `Perfil` no `AppBar` **daquela** tela.
+  static const String tituloDaBarra = 'Perfil';
+
   static const String naoEncontramos = 'Não encontramos este usuário.';
   static const String falhaAoCarregar = 'Não conseguimos carregar este perfil agora.';
   static const String falhaAoAgir = 'Não conseguimos registrar isso agora.';
@@ -141,7 +172,20 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   static const String desfazerConexao = 'Desfazer conexão';
   static const String pedidoEnviado = 'Pedido enviado. Ela decide quando responder.';
   static const String pedidoRecebido = 'Este usuário quer se conectar com você.';
-  static const String souConexao = 'Vocês estão conectados.';
+
+  // A LINHA `Vocês estão conectados.` SAIU (cliente, 22/10/2026): *"Retire o
+  // texto vocês estão conectados."*
+  //
+  // **Ela nao era pedido dele**, e isto foi conferido antes de apagar: ela
+  // nasceu com a fatia G do perfil de terceiro (`108b6832`), que cita o
+  // cliente sobre O QUE SE VE no perfil de quem nao e conexao -- nunca sobre
+  // esta frase. Nao ha decisao dele sendo desfeita aqui.
+  //
+  // **E o estado continua dito, por quem nao e texto de apoio.** O ramo
+  // `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e so quem **é**
+  // conexao ve esse botao: a acao afirma o vinculo melhor que a frase, porque
+  // ela tambem o resolve. O que saiu foi a linha que repetia em palavras o que
+  // o botao abaixo dela ja dizia.
 
   /// **A frase do estado de estranho**, e ela diz o que falta e não o que é
   /// proibido: a vitrine não é um recurso bloqueado, é uma coisa que a conexão
@@ -273,8 +317,12 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
 
     return Scaffold(
       appBar: AppBar(
-        // O título é o nome da pessoa, como na tela da própria conta.
-        title: Text(perfil?.nomeParaLer ?? '@${widget.apelido}'),
+        // **`Perfil`, e não o nome da pessoa** (cliente, 23/10/2026). O nome é
+        // o título da PÁGINA, logo abaixo desta barra, e quem o pinta é
+        // `NomeComSelo` no topo de `_corpo` — onde ele já estava. Ver
+        // [TelaDePerfilDePessoa.tituloDaBarra] para o pedido inteiro e para a
+        // razão pela qual isto não alcança a tela da própria conta.
+        title: const Text(TelaDePerfilDePessoa.tituloDaBarra),
         actions: <Widget>[
           // **O "⋮" EM TODOS OS ESTADOS DO PERFIL**, menos quando não há alvo:
           // sem `public_ref` não há a quem endereçar denúncia nem bloqueio, e
@@ -465,9 +513,12 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         ];
 
       case EstadoDaConexao.conectado:
+        // **SEM LINHA DE ESTADO**, e a ausencia e pedido do cliente de
+        // 22/10/2026 (ver a nota de `Vocês estão conectados.` no cabecalho).
+        // O botao e o primeiro elemento deste ramo agora, e nao ha vao antes
+        // dele: o `SizedBox` que ficava aqui separava a frase do botao, e sem
+        // a frase ele seria recuo no topo do bloco.
         return <Widget>[
-          _linhaDeEstado(TelaDePerfilDePessoa.souConexao, cores, textos),
-          const SizedBox(height: BichuEspaco.e3),
           BotaoSecundario(
             rotulo: TelaDePerfilDePessoa.desfazerConexao,
             carregando: _agindo,

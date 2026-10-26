@@ -386,8 +386,11 @@ void main() {
         logado: false,
       );
 
-      await rolarAte(tester, find.text('Comprar convite'));
-      await tester.tap(find.text('Comprar convite'));
+      // `encontroPublico` monta `admission.kind: 'free'`, entao o rotulo
+      // deste caso e o do ramo GRATUITO -- ver o grupo
+      // `o rotulo do ingresso` no fim deste arquivo.
+      await rolarAte(tester, find.text('Retirar Ingresso'));
+      await tester.tap(find.text('Retirar Ingresso'));
       await tester.pumpAndSettle();
       await rolarAte(tester, find.text('Instagram'));
       await tester.tap(find.text('Instagram'));
@@ -410,7 +413,8 @@ void main() {
       );
 
       expect(find.text('Links'), findsNothing);
-      expect(find.text('Comprar convite'), findsNothing);
+      expect(find.text('Retirar Ingresso'), findsNothing);
+      expect(find.text('Comprar Ingresso'), findsNothing);
       expect(find.text('Instagram'), findsNothing);
     });
 
@@ -1047,6 +1051,123 @@ void main() {
         hasLength(1),
         reason: 'REPROVA: o botão existe na árvore mas não recebe toque numa '
             'tela de 390 x 844 -- alguma coisa está por cima dele.',
+      );
+    });
+  });
+
+  _grupoDoRotuloDoIngresso();
+}
+
+// =============================================================================
+// O ROTULO DO INGRESSO, NOS DOIS ESTADOS (cliente, 22/10/2026)
+// =============================================================================
+// Literal: *"O botao de comprar convite, deve ser alterado para Comprar
+// Ingresso, porem caso o evento seja gratuito, temos que alterar para Retirar
+// Ingresso."*
+//
+// **O CONDICIONAL NAO ESTAVA BLOQUEADO, e isto foi medido antes de escrever
+// uma linha:** `NetworkEventAdmission.kind` e um enum fechado `[free, paid]`
+// no contrato, com `price` anulavel ao lado, e o app ja o lia
+// (`EntradaDoEncontro.doJson`). Nenhum campo novo de servidor foi preciso e
+// `api/openapi.yaml` nao mudou.
+//
+// **Os dois casos sao um par e moram juntos.** Um rotulo condicional com um
+// ramo so medido e um rotulo que ninguem sabe se troca: o segundo caso e o
+// que prova que a condicao EXISTE, e nao que o texto foi trocado por outro
+// fixo.
+void _grupoDoRotuloDoIngresso() {
+  group('o rotulo do ingresso', () {
+    // DESLIGAR PARA VER REPROVAR: em `_Links.rotuloDoConvite`
+    // (`lib/telas/rede/encontro_da_rede.dart`), devolva um valor fixo --
+    // `'Comprar Ingresso'` nos dois ramos. ESTE caso reprova e o de baixo
+    // passa, que e o que separa "a condicao sumiu" de "o texto esta errado".
+    testWidgets('evento GRATUITO: `Retirar Ingresso`', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(
+          encontro: encontroPublico(
+            admissionKind: 'free',
+            ticketUrl: 'https://ingresso.exemplo.test/gratuito',
+          ),
+        ),
+      );
+
+      // CONTROLE POSITIVO: a secao `Links` existe. Sem link nao ha rotulo
+      // nenhum, e os dois `expect` de baixo ficariam verdes por vazio -- e e
+      // exatamente o estado que o caso `sem links não há seção Links` mede.
+      await rolarAte(tester, find.text('Links'));
+      expect(
+        find.text('Links'),
+        findsOneWidget,
+        reason: 'REPROVA: a secao `Links` nao esta na tela, entao nao ha '
+            'rotulo de ingresso para medir.',
+      );
+
+      expect(
+        find.text('Retirar Ingresso'),
+        findsOneWidget,
+        reason:
+            'REPROVA: num evento com `admission.kind: free` o rotulo nao e '
+            '`Retirar Ingresso`. O cliente pediu os DOIS rotulos em '
+            '22/10/2026, e este e o do ramo gratuito -- cobrar pagamento de '
+            'quem entra de graca e o pior dos dois erros.',
+      );
+      expect(
+        find.text('Comprar Ingresso'),
+        findsNothing,
+        reason: 'REPROVA: o evento gratuito manda COMPRAR.',
+      );
+      expect(
+        find.textContaining('convite'),
+        findsNothing,
+        reason: 'REPROVA: a palavra `convite` voltou ao rotulo. O cliente '
+            'trocou o substantivo para `Ingresso` nos dois ramos.',
+      );
+    });
+
+    // DESLIGAR PARA VER REPROVAR: mesma troca do caso acima, mas fixando
+    // `'Retirar Ingresso'`. ESTE caso reprova.
+    testWidgets('evento PAGO: `Comprar Ingresso`', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(
+          encontro: encontroPublico(
+            admissionKind: 'paid',
+            price: <String, dynamic>{
+              'amount': 3000,
+              'currency': 'BRL',
+              'unit': 'per_person',
+            },
+            ticketUrl: 'https://ingresso.exemplo.test/pago',
+          ),
+        ),
+      );
+
+      await rolarAte(tester, find.text('Links'));
+      expect(
+        find.text('Links'),
+        findsOneWidget,
+        reason: 'REPROVA (controle positivo): a secao `Links` nao esta na '
+            'tela.',
+      );
+
+      expect(
+        find.text('Comprar Ingresso'),
+        findsOneWidget,
+        reason:
+            'REPROVA: num evento com `admission.kind: paid` o rotulo nao e '
+            '`Comprar Ingresso`.',
+      );
+      expect(
+        find.text('Retirar Ingresso'),
+        findsNothing,
+        reason: 'REPROVA: o evento pago manda RETIRAR, e quem chegar no site '
+            'do organizador vai encontrar um valor a pagar que a tela do '
+            'Bichu nao avisou.',
       );
     });
   });
