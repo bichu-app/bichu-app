@@ -536,9 +536,41 @@ class _ImagemAmpliavelState extends State<_ImagemAmpliavel> {
         transformationController: _enquadramento,
         minScale: 1,
         maxScale: VisualizadorDeImagem.ampliacaoMaxima,
-        // A imagem ampliada pode ser arrastada para fora da moldura e volta
-        // sozinha; sem isto, ampliar numa borda prende o canto fora da tela.
-        boundaryMargin: const EdgeInsets.all(double.infinity),
+        // **A IMAGEM FICA FIXA** (cliente, 26/10/2026: *"tem um bug quando
+        // amplia a foto dos eventos e dos estabelecimentos, o usuario
+        // consegue arrastar a imagem para varias posicoes, a imagem deve
+        // ficar fixa e so mudar de foto caso tenha mais do que uma
+        // cadastrada"*).
+        //
+        // **O QUE ESTAVA ESCRITO AQUI ERA FALSO, e foi medido.** O comentario
+        // anterior dizia que a imagem arrastada *"volta sozinha"*;
+        // `InteractiveViewer` **nao tem volta elastica**. Com `panEnabled` no
+        // padrao (`true`) e moldura infinita, um arrasto de UM dedo na foto
+        // nem ampliada a estacionava onde a pessoa largou, e ela ficava torta
+        // ate alguem fechar a tela. Medido na arvore antes do conserto: a foto
+        // saia de `Offset(0, 0)` e parava em `Offset(-118.9, -131.0)`.
+        //
+        // **O ARRASTO SAI, E A AMPLIACAO FICA.** O que leva a pessoa ao canto
+        // que ela quer ver de perto e o TOQUE DUPLO, que amplia no ponto
+        // tocado (ver `_alternar`) -- ele ja era a alternativa de ponteiro
+        // unico da pinca pelo SC 2.5.1, e agora e tambem o unico caminho de
+        // reenquadrar. A pinca continua ligada, e o teto de 4x nao mudou.
+        //
+        // **NAO HA PARAMETRO, e a medicao e a razao.** As TRES superficies que
+        // abrem este visualizador -- capa do encontro
+        // (`telas/rede/encontro_da_rede.dart`), foto do local
+        // (`telas/perto/pagina_do_local.dart`) e vitrine do perfil
+        // (`telas/perfil/vitrine_de_fotos.dart`) -- tinham o MESMO defeito
+        // pelo mesmo caminho, e em nenhuma delas estacionar a foto torta e
+        // desejavel. Um parametro aqui seria um interruptor que ninguem
+        // pediria em `true`.
+        panEnabled: false,
+        // **E A MOLDURA FECHA NO TAMANHO DA FOTO**, que e o padrao do
+        // `InteractiveViewer`. Com `panEnabled: false` o arrasto ja nao
+        // translada, mas a pinca AINDA translada pelo ponto focal: sem esta
+        // linha, uma pinca na borda ainda poderia parar a foto fora do lugar
+        // -- o mesmo defeito por outra porta.
+        boundaryMargin: EdgeInsets.zero,
         clipBehavior: Clip.none,
         child: widget.child,
       ),
