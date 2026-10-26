@@ -40,7 +40,6 @@ import 'package:bichu/api/modelos_conversa.dart';
 import 'package:bichu/dispositivo/distintivo_do_aplicativo.dart';
 import 'package:bichu/sessao/contadores_de_nao_lido.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
-import 'package:bichu/widgets/icone_da_barra.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader;
@@ -306,11 +305,13 @@ Future<void> montarBarraComSelo(
               for (final destino in destinos)
                 NavigationDestination(
                   icon: DistintivoDaAba(
-                    // `IconeDaBarra` e nao `Icon(destino.icone)`: `icone` e
-                    // nulo nos cinco slots desde 23/10/2026, e `Icon(null)`
-                    // pinta nada. O distintivo e medido POR CIMA do glifo, e
-                    // um glifo vazio mediria a folga de uma caixa vazia.
-                    glifo: IconeDaBarra(destino.desenho!),
+                    // DE VOLTA A `Icon(destino.icone)` em 26/10/2026: o
+                    // cliente reprovou o desenho, os cinco slots voltaram ao
+                    // Material e `desenho` e nulo outra vez -- o `!` daqui
+                    // estourava. O distintivo e medido POR CIMA do glifo, e
+                    // o que importa para esta medida e que o glifo tenha os
+                    // 24 dp de sempre, qualquer que seja a fonte dele.
+                    glifo: Icon(destino.icone),
                     naoLidas: naoLidasDe != null
                         ? naoLidasDe(destino)
                         : (destino.campoSemantico == CampoSemantico.conversa

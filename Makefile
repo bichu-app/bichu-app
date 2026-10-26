@@ -744,7 +744,12 @@ verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.jso
 # **Este alvo existe para ninguem escrever o `.g.dart` a mao.** O arquivo diz
 # NAO EDITE no cabecalho, e quem precisar mexer num icone mexe no SVG e roda
 # isto.
-gerar-icones-da-barra: ## regera app/lib/theme/icones_da_barra.g.dart de design/icones-da-barra/*.svg
+# DESLIGADO EM 26/10/2026: o cliente reprovou o desenho ("tava muito feio o
+# icone do cachorro") e a barra voltou aos glifos do Material. Este alvo
+# continua funcionando e o gerado continua commitado e conferido pela suite --
+# o que mudou e `fonteAtivaDaBarra` em app/lib/telas/casca_com_abas.dart, que
+# nao pinta mais os SVG. Religar e trocar aquela chave E os cinco destinos.
+gerar-icones-da-barra: ## regera app/lib/theme/icones_da_barra.g.dart de design/icones-da-barra/*.svg (DESLIGADO na barra desde 26/10)
 	cd app && dart run tool/gen_icones_da_barra.dart
 
 # O SITE (web/, ADR-0028, item 8). Gemeo local do passo de tokens do job `web`:

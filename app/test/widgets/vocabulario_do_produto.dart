@@ -274,7 +274,40 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2718;
+/// ---------------------------------------------------------------------------
+/// 2718 -> 2717 em 26/10/2026 (BICHUS-278, a barra volta ao Material)
+/// ---------------------------------------------------------------------------
+///
+/// **UMA ocorrencia saiu, e eu sei exatamente qual.** Medido arquivo por
+/// arquivo com o metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de
+/// todo `.dart` de `app/lib`, recursivo, comentario incluido): o unico arquivo
+/// que mudou e `telas/casca_com_abas.dart`, de **53 para 52**.
+///
+/// A linha que saiu, verbatim, e a mensagem do quarto `assert`:
+/// *"DESTINO DA BARRA DESENHA O DO BICHU. Os cinco slots sao os desenhos "*.
+/// Aquele `assert` exigia desenho do cliente em todo slot da barra; o cliente
+/// reprovou o desenho em 26/10 e a trava passou a impedir o conserto, entao
+/// ela saiu (a regra equivalente, sobre MISTURA, virou portao de lista em
+/// `test/telas/icones_da_barra_test.dart`).
+///
+/// A outra mensagem que cita a marca -- *"Ou o desenho do Bichu"*, do terceiro
+/// `assert` -- **ficou**, porque aquele `assert` ficou. O `diff` das linhas que
+/// casam `/bichu/i` naquele arquivo tem exatamente uma remocao e nenhuma
+/// adicao.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre a arvore LIMPA
+/// da base `1654bcaf` ANTES de qualquer edicao, devolveu EXATAMENTE 2718 -- o
+/// valor que a linha travava.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: `app/lib` tem **221** `.dart` na base e 221
+/// aqui. Nenhum arquivo entrou nem saiu -- em particular,
+/// `theme/icones_da_barra.g.dart` e `widgets/icone_da_barra.dart`
+/// **continuam no lugar**: a fiacao dos icones foi DESLIGADA, nao apagada, e
+/// os dois seguem cobertos por portao.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2717;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

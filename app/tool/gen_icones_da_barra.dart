@@ -1,3 +1,31 @@
+// ===========================================================================
+// DESLIGADO EM 26/10/2026 -- O CLIENTE REPROVOU O DESENHO
+// ===========================================================================
+//
+// **Este gerador funciona, esta coberto por portao, e o que ele produz NAO
+// esta em uso.** A barra de baixo voltou aos glifos do Material Symbols.
+//
+// A razao, nas palavras dele: *"eu vi sim o icone e reprovei porque tava muito
+// feio o icone do cachorro"*. Ele ja tinha visto os dez SVG ANTES de esta
+// fiacao existir. O que faltava nunca foi o app LER os desenhos -- era desenho
+// APROVADO. A fiacao de 23/10 estava tecnicamente correta e ligou arte
+// recusada, e isso chegou ao APK que ele tem na mao.
+//
+// **POR QUE ISTO NAO FOI APAGADO:** o caminho SVG -> Dart -> pintura foi
+// medido e esta provado (ver `test/telas/icones_da_barra_test.dart`). Apagar
+// custaria reconstruir tudo, inclusive as iscas, no dia em que houver arte
+// aprovada. O que foi desligado e UMA linha: `fonteAtivaDaBarra`, em
+// `lib/telas/casca_com_abas.dart`.
+//
+// **COMO RELIGAR:** troque `fonteAtivaDaBarra` para `desenhoDoCliente` e, nos
+// cinco destinos da barra, troque `icone`/`iconeSelecionado` por
+// `desenho`/`desenhoSelecionado`. O portao cobra que os dois lados andem
+// juntos, nas duas direcoes, e o caso
+// `CONTROLE POSITIVO: os dois estados PUROS passam` ja prova hoje que aquele
+// estado atravessa sem reescrever portao nenhum.
+//
+// Desenho novo passa pelo Figma antes do codigo, e a aprovacao e dele.
+//
 // Gerador dos DEZ icones da barra de baixo.
 //
 // Le os SVG de `design/icones-da-barra/` **na raiz do repositorio** e escreve

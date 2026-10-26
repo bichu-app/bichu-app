@@ -42,7 +42,6 @@ import 'dart:io';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
-import 'package:bichu/widgets/icone_da_barra.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
@@ -161,12 +160,12 @@ Future<void> abrirAGavetaDaSecao(
           destinations: <Widget>[
             for (final destino in secoesDaBarra)
               NavigationDestination(
-                // `IconeDaBarra` e nao `Icon`: desde 23/10/2026 destino da
-                // barra declara desenho do cliente e `icone` e nulo, e
-                // `Icon(null)` compila e pinta NADA -- o andaime desta isca
-                // continuaria de pe com cinco slots vazios, que e o jeito de
-                // uma medicao de modalidade medir a arvore errada sem acusar.
-                icon: IconeDaBarra(destino.desenho!),
+                // DE VOLTA A `Icon` em 26/10/2026, com o desligamento da
+                // fiacao: `desenho` e nulo nos cinco slots e o `!` estourava.
+                // O andaime continua honesto porque `icone` NAO e nulo --
+                // `Icon(null)` e que deixaria cinco slots vazios medindo a
+                // arvore errada sem acusar.
+                icon: Icon(destino.icone),
                 label: destino.rotulo,
               ),
           ],
