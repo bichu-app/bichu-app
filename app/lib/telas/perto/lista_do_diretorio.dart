@@ -970,8 +970,68 @@ class CartaoDoDiretorio extends StatelessWidget {
                   // proposito: ele e o estado "a logo existe e NAO carregou",
                   // que nao e o mesmo estado que "nao ha logo". Dois estados
                   // diferentes, dois simbolos diferentes.
+                  // ===================================================
+                  // O ARRANJO DE 26/10/2026: O TEXTO AO LADO DA LOGO
+                  // ===================================================
+                  //
+                  // Pedido do cliente, nas palavras dele: *"melhore a pagina
+                  // da listagem da comunidade, depois que tiramos a descricao
+                  // ficou feia e vazia. Coloque o segmento abaixo do
+                  // titulo/nome, coloque o bairro com o pin do mapa"*.
+                  //
+                  // **O segmento JA estava abaixo do nome em ordem de
+                  // leitura** -- e e justamente por isso que o pedido nao era
+                  // sobre a ordem. Ate 26/10 a `Row` da logo tinha SO o nome,
+                  // e o segmento e o bairro vinham como irmaos da `Row`,
+                  // dentro da `Column` do cartao: eles comecavam na borda
+                  // ESQUERDA do cartao, debaixo da logo, e nao debaixo do
+                  // nome. O desenho era este:
+                  //
+                  //     [logo] Clinica Santa Barbara
+                  //     Clinica
+                  //     Pinheiros
+                  //
+                  // Duas linhas soltas sob um quadrado de 56 dp, com o nome
+                  // pendurado sozinho no alto a 68 dp da esquerda. **E esse
+                  // vazio que ele viu**, e ele apareceu em 22/10, quando a
+                  // media, a distancia, a apresentacao e o selo sairam: com
+                  // sete linhas o bloco se sustentava, com tres ele nao.
+                  //
+                  // Agora o segmento e o bairro entram na MESMA `Column` do
+                  // nome, dentro do `Expanded`:
+                  //
+                  //     [logo] Clinica Santa Barbara
+                  //            Clinica
+                  //            (pin) Pinheiros
+                  //
+                  // **Nada entrou e nada saiu**: sao os mesmos cinco itens de
+                  // 22/10 (logo, nome, segmento, bairro, `Ligar`). O que
+                  // mudou e o recuo -- e o recuo e o que transforma tres
+                  // linhas soltas num bloco. Trazer de volta qualquer um dos
+                  // quatro que sairam seria desfazer o pedido anterior dele
+                  // para consertar a aparencia, e o grupo `ITEM 1 — ISCA` de
+                  // `listagem_e_pagina_do_profissional_test.dart` reprova se
+                  // alguem tentar.
+                  //
+                  // **`CrossAxisAlignment.center`, e aqui esta a juncao com o
+                  // pedido de 22/10**: *"Alinhe o titulo do estabelecimento e
+                  // a imagem na vertical"*. Aquele pedido foi atendido no
+                  // `_Cabecalho` de `pagina_do_local.dart` e NAO aqui -- esta
+                  // `Row` continuou em `CrossAxisAlignment.start` ate hoje, e
+                  // com `start` a logo encosta no topo de um bloco de texto
+                  // mais alto que ela. Com o segmento e o bairro agora dentro
+                  // do `Expanded`, o bloco tem 3 linhas contra os 61,6 dp da
+                  // logo, e a diferenca entre `start` e `center` deixou de ser
+                  // sutil. **Atender os dois pedidos separados teria exigido
+                  // mexer nesta mesma `Row` duas vezes**, e por isso eles
+                  // viraram um trabalho so.
+                  //
+                  // O que o eixo NAO e: nao e `stretch` (esticaria a logo ate
+                  // a altura do texto, e a proporcao de `foto/sm` e token) nem
+                  // `baseline` (alinharia a base do nome com a base de um
+                  // quadrado que nao tem base de texto).
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       if (logo != null)
                         ImagemDaRede(
@@ -990,31 +1050,98 @@ class CartaoDoDiretorio extends StatelessWidget {
                         ),
                       const SizedBox(width: BichuEspaco.e3),
                       Expanded(
-                        child: Text(entrada.nome, style: textos.titleMedium),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(entrada.nome, style: textos.titleMedium),
+                            if (atividade != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Text(
+                                atividade,
+                                style: textos.bodyMedium
+                                    ?.copyWith(color: cores.textSecondary),
+                              ),
+                            ],
+                            // O ENDERECO que a listagem tem: **so o bairro**,
+                            // e desde 26/10 **com o pin do mapa**. **A ULTIMA
+                            // linha de texto do cartao** -- a media, a
+                            // distancia, a apresentacao e o selo sairam em
+                            // 22/10/2026, e a cidade e a UF sairam no mesmo
+                            // dia; a prosa de `build` diz onde cada um ficou.
+                            //
+                            // **`Icons.place_outlined`, e a escolha e por
+                            // precedente e nao por gosto.** Ele e o pin de
+                            // lugar DESTE app, medido no proprio `lib/`: 6
+                            // ocorrencias antes desta linha, entre elas a
+                            // linha de bairro do `_Cabecalho` de
+                            // `pagina_do_local.dart` -- que e a PAGINA INTERNA
+                            // deste mesmo cartao -- e a linha de area de
+                            // `cartao_do_perdido.dart`, que e um cartao de
+                            // listagem com icone e texto. O cartao e a pagina
+                            // do mesmo local passam a dizer bairro com o mesmo
+                            // simbolo. **Nenhum vetor novo entrou**:
+                            // `place_outlined` e da familia embutida do
+                            // Flutter 3.47.4, igual aos glifos de
+                            // `IconeDoInscrito`.
+                            //
+                            // Eliminados dentro da familia: `location_on` e
+                            // `place` (as versoes CHEIAS -- o cartao nao tem
+                            // outro icone cheio, e `local_do_encontro.dart` as
+                            // usa sobre MAPA, onde o pin preenchido e marcador
+                            // e nao rotulo); `map_outlined`, que
+                            // `pagina_do_local.dart` reserva para o endereco
+                            // CLICAVEL que abre o mapa -- e o bairro daqui nao
+                            // abre mapa, usar o mesmo glifo prometeria um
+                            // toque que nao existe; `near_me` e `my_location`,
+                            // que significam a posicao de QUEM OLHA, e nao a
+                            // do local.
+                            //
+                            // **O PIN NAO EXISTE SEM BAIRRO.** Ele esta DENTRO
+                            // do `if (bairro != null)`, e nao ao lado dele: a
+                            // regra de 22/10 e que sem bairro nao ha linha, e
+                            // um pin orfao seria uma linha. A aba `comunidade`
+                            // tambem desenha `place_outlined` na barra
+                            // (`AbaDaSecaoRede.comunidade`), entao quem medir
+                            // a ausencia deste pin TEM de recortar pelo cartao
+                            // -- `find.byIcon` na tela inteira acha o da aba e
+                            // passa por engano.
+                            //
+                            // **Tamanho e cor em token, nao em numero solto**:
+                            // `BichuEspaco.e4` (16 dp) e `cores.textSecondary`
+                            // sao exatamente os de `_Linha` de
+                            // `cartao_do_perdido.dart`, que e o par
+                            // icone+texto secundario que esta casa ja usa em
+                            // cartao de listagem. O estilo do texto continua
+                            // `bodyMedium`, o MESMO de antes desta mudanca: o
+                            // pedido foi acrescentar o pin, nao reescalar o
+                            // bairro.
+                            if (bairro != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Icon(
+                                    Icons.place_outlined,
+                                    size: BichuEspaco.e4,
+                                    color: cores.textSecondary,
+                                  ),
+                                  const SizedBox(width: BichuEspaco.e1),
+                                  Expanded(
+                                    child: Text(
+                                      bairro,
+                                      style: textos.bodyMedium?.copyWith(
+                                        color: cores.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  if (atividade != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      atividade,
-                      style: textos.bodyMedium
-                          ?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
-                  // O ENDERECO que a listagem tem: **so o bairro**. **A ULTIMA
-                  // linha de texto do cartao** -- a media, a distancia, a
-                  // apresentacao e o selo sairam em 22/10/2026, e a cidade e a
-                  // UF sairam no mesmo dia; a prosa de `build` diz onde cada
-                  // um ficou.
-                  if (bairro != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      bairro,
-                      style: textos.bodyMedium
-                          ?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
                 ],
               ),
             ),
