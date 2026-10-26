@@ -466,7 +466,58 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2742;
+/// ---------------------------------------------------------------------------
+/// 26/10/2026: a UNIAO das sete entregas do dia -- 2718 -> **2739**
+/// ---------------------------------------------------------------------------
+/// Os blocos acima descrevem o saldo de cada frente MEDIDO EM ISOLAMENTO, sobre
+/// a base `1654bcaf`. Nenhum deles vale para a uniao, e o numero travado aqui
+/// NAO e nenhum dos sete: eram 2742 (nº1), 2716 (nº2), 2718 (nº3), 2717 (nº4),
+/// 2719 (nº5), 2717 (nº6) e 2718 (nº7).
+///
+/// CONTADO ARQUIVO POR ARQUIVO, porque o total nao e prova -- a nº7 fechou o
+/// dela em 2718 por COMPENSACAO (+1 num arquivo, -1 em outro) e um total
+/// parado esconderia isso. QUATRO arquivos ENTRARAM (+28):
+///
+///   `achado/envio_do_achado.dart`                 +2   (nº1)
+///   `telas/achado/tela_encontrei_este_pet.dart`  +23   (nº1)
+///   `telas/mural/porta_do_perfil_do_autor.dart`   +1   (nº7)
+///   `widgets/ficha_da_pessoa.dart`                +2   (nº6)
+///
+/// NENHUM arquivo saiu. SETE mudaram de contagem (-7 no saldo):
+///
+///   `telas/achado/tela_registrar_achado.dart`   38 -> 37  (-1, nº1)
+///   `telas/casca_com_abas.dart`                 53 -> 52  (-1, nº4)
+///   `telas/conexoes/convide_tutores.dart`       32 -> 28  (-4, nº2)
+///   `telas/conexoes/tela_minhas_conexoes.dart`  18 -> 15  (-3, nº6)
+///   `telas/mensagens/tela_da_conversa.dart`     35 -> 37  (+2, nº2)
+///   `telas/pessoa/tela_perfil_de_pessoa.dart`   26 -> 27  (+1, nº5)
+///   `telas/rede/secao_da_rede.dart`              8 ->  7  (-1, nº7)
+///
+/// +28 -0 -7 = **+21**, e 2718 + 21 = 2739. A CONFERENCIA FECHA PELOS DOIS
+/// LADOS: os saldos que as sete frentes declararam em isolamento somam
+/// +24 -2 +0 -1 +1 -1 +0 = +21, o mesmo numero. A compensacao da nº7 aparece
+/// aqui localizada nos dois arquivos, e nao como um zero.
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA.** Os que sairam sao referencias a
+/// `BichuEspaco.` de widgets removidos (a agulha ignora caixa e casa com o token
+/// do design system), nao texto de usuario com a palavra `Bichu`.
+///
+/// MEDIDO POR DOIS PROGRAMAS INDEPENDENTES que concordaram no total E na
+/// distribuicao por arquivo: um em Python e um em Node, cada um refazendo a
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa. O `diff` das
+/// duas saidas por arquivo saiu VAZIO.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos dois
+/// programas, sobre a arvore LIMPA da base, reproduziram EXATAMENTE a constante
+/// que ela travava -- **2718** em 221 arquivos, com as duas distribuicoes
+/// identicas. Reproduzir o valor conhecido antes de medir o desconhecido e o
+/// que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 221 `.dart` em `app/lib` na base e 225 na
+/// uniao, com os quatro novos nomeados acima e nenhum removido ou renomeado.
+/// `app/lib` nao tem nenhum symlink, entao a caminhada recursiva nao depende de
+/// seguir link.
+const int ocorrenciasDeBichu = 2739;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
