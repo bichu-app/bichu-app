@@ -970,8 +970,68 @@ class CartaoDoDiretorio extends StatelessWidget {
                   // proposito: ele e o estado "a logo existe e NAO carregou",
                   // que nao e o mesmo estado que "nao ha logo". Dois estados
                   // diferentes, dois simbolos diferentes.
+                  // ===================================================
+                  // O ARRANJO DE 26/10/2026: O TEXTO AO LADO DA LOGO
+                  // ===================================================
+                  //
+                  // Pedido do cliente, nas palavras dele: *"melhore a pagina
+                  // da listagem da comunidade, depois que tiramos a descricao
+                  // ficou feia e vazia. Coloque o segmento abaixo do
+                  // titulo/nome, coloque o bairro com o pin do mapa"*.
+                  //
+                  // **O segmento JA estava abaixo do nome em ordem de
+                  // leitura** -- e e justamente por isso que o pedido nao era
+                  // sobre a ordem. Ate 26/10 a `Row` da logo tinha SO o nome,
+                  // e o segmento e o bairro vinham como irmaos da `Row`,
+                  // dentro da `Column` do cartao: eles comecavam na borda
+                  // ESQUERDA do cartao, debaixo da logo, e nao debaixo do
+                  // nome. O desenho era este:
+                  //
+                  //     [logo] Clinica Santa Barbara
+                  //     Clinica
+                  //     Pinheiros
+                  //
+                  // Duas linhas soltas sob um quadrado de 56 dp, com o nome
+                  // pendurado sozinho no alto a 68 dp da esquerda. **E esse
+                  // vazio que ele viu**, e ele apareceu em 22/10, quando a
+                  // media, a distancia, a apresentacao e o selo sairam: com
+                  // sete linhas o bloco se sustentava, com tres ele nao.
+                  //
+                  // Agora o segmento e o bairro entram na MESMA `Column` do
+                  // nome, dentro do `Expanded`:
+                  //
+                  //     [logo] Clinica Santa Barbara
+                  //            Clinica
+                  //            (pin) Pinheiros
+                  //
+                  // **Nada entrou e nada saiu**: sao os mesmos cinco itens de
+                  // 22/10 (logo, nome, segmento, bairro, `Ligar`). O que
+                  // mudou e o recuo -- e o recuo e o que transforma tres
+                  // linhas soltas num bloco. Trazer de volta qualquer um dos
+                  // quatro que sairam seria desfazer o pedido anterior dele
+                  // para consertar a aparencia, e o grupo `ITEM 1 — ISCA` de
+                  // `listagem_e_pagina_do_profissional_test.dart` reprova se
+                  // alguem tentar.
+                  //
+                  // **`CrossAxisAlignment.center`, e aqui esta a juncao com o
+                  // pedido de 22/10**: *"Alinhe o titulo do estabelecimento e
+                  // a imagem na vertical"*. Aquele pedido foi atendido no
+                  // `_Cabecalho` de `pagina_do_local.dart` e NAO aqui -- esta
+                  // `Row` continuou em `CrossAxisAlignment.start` ate hoje, e
+                  // com `start` a logo encosta no topo de um bloco de texto
+                  // mais alto que ela. Com o segmento e o bairro agora dentro
+                  // do `Expanded`, o bloco tem 3 linhas contra os 61,6 dp da
+                  // logo, e a diferenca entre `start` e `center` deixou de ser
+                  // sutil. **Atender os dois pedidos separados teria exigido
+                  // mexer nesta mesma `Row` duas vezes**, e por isso eles
+                  // viraram um trabalho so.
+                  //
+                  // O que o eixo NAO e: nao e `stretch` (esticaria a logo ate
+                  // a altura do texto, e a proporcao de `foto/sm` e token) nem
+                  // `baseline` (alinharia a base do nome com a base de um
+                  // quadrado que nao tem base de texto).
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       if (logo != null)
                         ImagemDaRede(
@@ -990,31 +1050,231 @@ class CartaoDoDiretorio extends StatelessWidget {
                         ),
                       const SizedBox(width: BichuEspaco.e3),
                       Expanded(
-                        child: Text(entrada.nome, style: textos.titleMedium),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(entrada.nome, style: textos.titleMedium),
+                            // SEGMENTO E BAIRRO NA MESMA LINHA, COM QUEDA.
+                            //
+                            // Pedido do cliente de 26/10/2026, depois de ver
+                            // a imagem da versao de duas linhas: *"como o
+                            // texto e curto, nao faz sentido ficar o segmento
+                            // do lado esquerdo e o bairro do lado direito ou
+                            // corre muito o risco do texto ser grande e
+                            // quebrar a linha?"*
+                            //
+                            // **O risco e todo do lado do bairro, e isso foi
+                            // medido e nao suposto.** O segmento e lista
+                            // FECHADA de seis (`AtividadeDoDiretorio`) e nao
+                            // cresce -- o cartao o le por `porCodigo`, nao por
+                            // texto do servidor. As seis larguras, medidas a
+                            // 390 dp com as fontes do produto:
+                            //
+                            //     Hospedagem    88,37   <- o mais LARGO
+                            //     Banho e tosa  86,09
+                            //     Adestrador    73,73
+                            //     Veterinário   71,84
+                            //     Passeador     69,98
+                            //     Clínica       44,67
+                            //
+                            // **Letra nao prediz largura, e esta tabela e a
+                            // prova**: `Hospedagem` tem 10 caracteres e e mais
+                            // larga que `Banho e tosa`, que tem 12. Quem
+                            // escolher "o pior segmento" contando caractere
+                            // escolhe errado -- eu escolhi, e um segundo
+                            // controle pegou.
+                            //
+                            // O bairro e texto LIVRE, vem do CEP, e nao tem
+                            // teto. `Conjunto Habitacional Teotônio Vilela`
+                            // existe em São Paulo e tem 37 caracteres, 236 dp.
+                            //
+                            // **A FRONTEIRA E MEDIDA, e nao calculada.** A
+                            // coluna de texto tem 258 dp a 390 dp de tela. No
+                            // pior segmento (`Hospedagem`), `Parque
+                            // Anhanguera` (131,3 dp) divide a linha e `Vila
+                            // Nova Conceição` (137,3 dp) desce: a fronteira
+                            // esta ENTRE os dois. Uma conta de
+                            // `258 - segmento - vaos` daria 137,6 e estaria
+                            // errada do lado perigoso -- `spacing` e minimo e
+                            // nao exato, e o `Wrap` arredonda. Por isso nenhum
+                            // caso de teste trava um numero: eles travam o
+                            // COMPORTAMENTO nas duas direcoes.
+                            //
+                            // **`Wrap` e nao `Row`, e e aqui que esta a
+                            // decisao.** Com `Row` a linha so tem duas
+                            // saidas quando o bairro nao cabe: cortar com
+                            // reticencias ou estourar. Cortar perde
+                            // informacao que decide se vale ligar -- quem
+                            // mora na Vila Nova Conceicao nao reconhece
+                            // `Vila Nova Conc…`, e os bairros longos do
+                            // Brasil se parecem JUSTAMENTE no comeco
+                            // (`Jardim ...`, `Vila ...`, `Conjunto
+                            // Habitacional ...`). Com `Wrap` a linha e UMA
+                            // enquanto couber, que e o pedido dele, e vira
+                            // DUAS quando nao couber, que e o desenho de
+                            // ontem -- nenhum caractere some em caso nenhum.
+                            //
+                            // `spaceBetween` poe o segmento na esquerda e o
+                            // bairro na direita quando os dois dividem a
+                            // linha; quando o bairro desce, ele fica sozinho
+                            // na corrida de baixo e `spaceBetween` o encosta
+                            // na esquerda, alinhado com o segmento.
+                            //
+                            // `spacing` e o vao MINIMO entre os dois, e nao
+                            // o vao: `spaceBetween` distribui a sobra. Sem
+                            // ele, segmento e bairro poderiam encostar no
+                            // exato ponto em que a linha enche.
+                            //
+                            // **O `Flexible` de dentro nao e redundante.**
+                            // `Wrap` da aos filhos `maxWidth` igual a largura
+                            // dele, entao o item do bairro sozinho nunca
+                            // estoura -- mas sem o `Flexible` o `Text` ficaria
+                            // com largura intrinseca e o `Row` de
+                            // `mainAxisSize: min` passaria do limite. Com
+                            // ele, um bairro maior que a coluna INTEIRA
+                            // quebra dentro do proprio texto, com o pin
+                            // ancorado na primeira linha.
+                            // SEGMENTO E BAIRRO EM LINHAS SEPARADAS, SEMPRE.
+                            //
+                            // **Escolha do cliente, 26/10/2026**, depois de
+                            // ver os tres arranjos desenhados lado a lado. Ele
+                            // tinha levantado a alternativa com as proprias
+                            // palavras -- *"como o texto e curto, nao faz
+                            // sentido ficar o segmento do lado esquerdo e o
+                            // bairro do lado direito ou corre muito o risco do
+                            // texto ser grande e quebrar a linha?"* --, os
+                            // tres foram construidos e medidos, e ele ficou
+                            // com ESTE.
+                            //
+                            // ## O QUE FOI RECUSADO, E POR QUE ISTO ESTA AQUI
+                            //
+                            // Duas variantes de UMA linha foram construidas,
+                            // rasterizadas e descartadas. Elas nao voltam por
+                            // engano porque o motivo esta escrito:
+                            //
+                            // - **uma linha com CORTE** (`Row` +
+                            //   `TextOverflow.ellipsis`): escrevia
+                            //   `Jardim Chácara In…` e
+                            //   `Conjunto Habitacion…`. Os bairros longos do
+                            //   Brasil se parecem no COMECO (`Jardim ...`,
+                            //   `Vila ...`, `Conjunto Habitacional ...`) e e o
+                            //   fim que os distingue: cortar pela direita
+                            //   apaga a parte que decide se vale ligar. **E a
+                            //   unica das tres que perde informacao.**
+                            // - **uma linha com QUEDA** (`Wrap` de largura
+                            //   cheia com `spaceBetween`): nao perdia
+                            //   caractere e economizava 16 dp por cartao
+                            //   quando cabia (150 dp contra 166). Ficou pelo
+                            //   caminho na escolha dele, e nao por defeito.
+                            //
+                            // ## A TABELA QUE A PROXIMA PESSOA VAI PRECISAR
+                            //
+                            // Ela nao governa mais nada NESTE arranjo -- aqui
+                            // o bairro tem a coluna inteira --, e esta aqui
+                            // porque quem tentar a linha unica de novo vai
+                            // precisar dela e vai cair no mesmo buraco em que
+                            // eu cai. As seis larguras, medidas a 390 dp com
+                            // as fontes do produto:
+                            //
+                            //     Hospedagem    88,37   <- o mais LARGO
+                            //     Banho e tosa  86,09
+                            //     Adestrador    73,73
+                            //     Veterinário   71,84
+                            //     Passeador     69,98
+                            //     Clínica       44,67
+                            //
+                            // **Eu elegi o pior segmento contando LETRA e
+                            // errei.** `Banho e tosa` tem 12 caracteres e
+                            // `Hospedagem` tem 10, e e `Hospedagem` que e mais
+                            // larga. A alegacao chegou a entrar no codigo e na
+                            // legenda de uma imagem que ia para o cliente; o
+                            // que a derrubou foi um controle que mediu os
+                            // SEIS, e nao revisao.
+                            //
+                            // O mesmo vale do lado do bairro, que e texto
+                            // LIVRE e vem do CEP: com `Veterinário`,
+                            // `Vila Sônia da Boa Vista` (23 caracteres,
+                            // 151,9 dp) cabia numa linha em que
+                            // `Vila Nova Cachoeirinha` (22 caracteres,
+                            // 154,0 dp) nao cabia. **Caractere nao prediz
+                            // largura. Meca.**
+                            if (atividade != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Text(
+                                atividade,
+                                style: textos.bodyMedium
+                                    ?.copyWith(color: cores.textSecondary),
+                              ),
+                            ],
+                            // O ENDERECO que a listagem tem: **so o bairro**,
+                            // e desde 26/10 **com o pin do mapa**. **A ULTIMA
+                            // linha de texto do cartao** -- a media, a
+                            // distancia, a apresentacao e o selo sairam em
+                            // 22/10/2026, e a cidade e a UF sairam no mesmo
+                            // dia; a prosa de `build` diz onde cada um ficou.
+                            //
+                            // **`Icons.place_outlined`, por precedente e nao
+                            // por gosto**: e o pin de lugar DESTE app, 6
+                            // ocorrencias no proprio `lib/` antes desta linha,
+                            // entre elas a linha de bairro do `_Cabecalho` de
+                            // `pagina_do_local.dart` -- a PAGINA INTERNA deste
+                            // mesmo cartao -- e a linha de area de
+                            // `cartao_do_perdido.dart`, que e um cartao de
+                            // listagem com icone e texto. Nenhum vetor novo
+                            // entrou: e a familia embutida do Flutter 3.47.4.
+                            // Eliminados: `location_on` e `place` (as versoes
+                            // CHEIAS -- o cartao nao tem outro icone cheio);
+                            // `map_outlined`, que `pagina_do_local.dart`
+                            // reserva para o endereco CLICAVEL, e o bairro
+                            // daqui nao abre mapa; `near_me` e `my_location`,
+                            // que significam a posicao de QUEM OLHA.
+                            //
+                            // **O PIN NAO EXISTE SEM BAIRRO.** Ele esta DENTRO
+                            // do `if (bairro != null)`: a regra de 22/10 e que
+                            // sem bairro nao ha linha, e um pin orfao seria uma
+                            // linha. A aba `comunidade` tambem desenha
+                            // `place_outlined` na barra, entao quem medir a
+                            // ausencia TEM de recortar pelo cartao -- um
+                            // `find.byIcon` na tela inteira acha o da aba e
+                            // passa por engano.
+                            //
+                            // **`Expanded` e nao `Flexible` solto**: o bairro
+                            // ocupa a coluna inteira e QUEBRA em mais linhas
+                            // quando precisa, sem `maxLines` e sem `overflow`.
+                            // `Conjunto Habitacional Teotônio Vilela` (37
+                            // caracteres) usa duas linhas e nao perde letra.
+                            //
+                            // Tamanho e cor em token (`BichuEspaco.e4`,
+                            // `cores.textSecondary`), os mesmos de `_Linha` de
+                            // `cartao_do_perdido.dart`. O texto continua
+                            // `bodyMedium`, o mesmo de antes do pin.
+                            if (bairro != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Icon(
+                                    Icons.place_outlined,
+                                    size: BichuEspaco.e4,
+                                    color: cores.textSecondary,
+                                  ),
+                                  const SizedBox(width: BichuEspaco.e1),
+                                  Expanded(
+                                    child: Text(
+                                      bairro,
+                                      style: textos.bodyMedium?.copyWith(
+                                        color: cores.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  if (atividade != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      atividade,
-                      style: textos.bodyMedium
-                          ?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
-                  // O ENDERECO que a listagem tem: **so o bairro**. **A ULTIMA
-                  // linha de texto do cartao** -- a media, a distancia, a
-                  // apresentacao e o selo sairam em 22/10/2026, e a cidade e a
-                  // UF sairam no mesmo dia; a prosa de `build` diz onde cada
-                  // um ficou.
-                  if (bairro != null) ...<Widget>[
-                    const SizedBox(height: BichuEspaco.e1),
-                    Text(
-                      bairro,
-                      style: textos.bodyMedium
-                          ?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
                 ],
               ),
             ),
