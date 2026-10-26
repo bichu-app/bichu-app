@@ -73,9 +73,7 @@ import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 
-import 'ajuda_de_tela.dart';
 import 'icone_do_inscrito_test.dart' show detalheDoContrato, redeComDetalhe;
 import 'perto_com_dados_test.dart'
     show abrirPerto, entradaDoContrato, paginaDoContrato;
@@ -503,7 +501,7 @@ void main() {
         daImagem.topo,
         greaterThan(topoDoBloco),
         reason: 'REPROVA: o topo da logo (${daImagem.topo} dp) coincide com o '
-            'topo do bloco (${topoDoBloco} dp) ou esta acima dele: ela esta '
+            'topo do bloco ($topoDoBloco dp) ou esta acima dele: ela esta '
             'grudada no topo, que e o desenho de ate 26/10/2026.',
       );
     });
