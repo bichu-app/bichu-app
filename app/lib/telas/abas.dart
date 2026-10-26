@@ -8,6 +8,7 @@ import '../theme/bichu_tokens.g.dart';
 import '../api/mural_api.dart';
 import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/botao_primario.dart';
+import '../widgets/carimbo_do_build.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
 import '../widgets/marca.dart';
@@ -1052,6 +1053,29 @@ class AbaPerfil extends StatelessWidget {
             // encerrar a sessao nao e um item de `Conta` entre outros, e por-lo
             // dentro daquele grupo o enterraria no meio da pagina.
             _ItemDeSair(sessao: sessao),
+            // O CARIMBO DE BUILD, no PE da pagina (26/10/2026).
+            //
+            // **Ele vem depois de `Sair da conta` e isso NAO contradiz o
+            // pedido do cliente** (*"o sair da conta deve ser sempre a ultima
+            // opcao do menu"*): carimbo nao e opcao de menu. Ele nao e
+            // `ItemDeMenu`, nao tem `onTap`, nao navega para lugar nenhum e
+            // nao tem alvo de toque -- e um rodape de texto, da mesma familia
+            // do "versao x.y" que vive no pe de tela de ajuste de qualquer
+            // aplicativo. `exigirSairPorUltimo`
+            // (`perfil_ordem_dos_itens_test.dart`) varre `ItemDeMenu`,
+            // `TituloDeGrupoDeMenu`, `CartaoDePet` e `FilledButton`: a cauda
+            // de OPCOES continua terminando em `Sair da conta`, e e isso que
+            // o pedido protege.
+            //
+            // **POR QUE AQUI, e nao numa tela de `Sobre`.** Nao existe tela de
+            // `Sobre` neste aplicativo -- medido: nenhum arquivo de
+            // `app/lib/telas` tem `sobre` no nome, e `Termos` esta `planejada`
+            // no registro de sub-destinos. Criar uma tela nova para uma linha
+            // de texto poria o carimbo atras de um toque e de uma rota, e o
+            // ponto dele e o cliente conseguir LER o valor sem esforco e me
+            // dizer qual e. `Perfil` e a aba que ele ja abre; o pe dela e o
+            // lugar mais raso que existe.
+            const CarimboDoBuild(),
           ],
         );
       },
