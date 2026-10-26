@@ -316,59 +316,22 @@ void main() {
     final chave = GlobalKey();
     // OS ESTADOS, ESCOLHIDOS PELO PIOR CASO E NAO PELO BONITO.
     //
-    // As larguras citadas foram MEDIDAS nesta maquina, com as fontes do
-    // produto carregadas, a 390 dp: a coluna de texto tem 258 dp e o segmento
-    // mais LARGO dos seis e `Hospedagem` (88,37 dp) -- com 10 caracteres, e
-    // nao `Banho e tosa`, que tem 12 e mede 86,09. No pior segmento a
-    // fronteira medida fica entre 131,3 dp (divide a linha) e 137,3 dp
-    // (desce).
+    // O arranjo e o de DUAS LINHAS, escolhido pelo cliente em 26/10/2026
+    // depois de ver os tres desenhados lado a lado. Aqui o bairro tem a coluna
+    // INTEIRA (258 dp a 390 dp), entao a largura do segmento nao o limita e
+    // nao existe "cabe / nao cabe" -- o que existe e "quebra em mais linhas",
+    // e nunca corte.
+    //
+    // Os nomes de bairro sao brasileiros de verdade, e nao `aaaa...`: os
+    // longos daqui se parecem no COMECO (`Jardim ...`, `Vila ...`, `Conjunto
+    // Habitacional ...`), e foi isso que fez a variante do CORTE ser recusada.
     final estados = <_Estado>[
       _Estado(
-        legenda: 'Curto + curto — o caso que motiva a ideia',
+        legenda: 'Com logo e com bairro — o caso comum',
         entrada: _entrada(
           slug: 'clinica-centro',
           nome: 'Clínica Santa Bárbara',
           bairro: 'Centro',
-          logo: _urlDaLogo,
-        ),
-      ),
-      _Estado(
-        legenda: 'Pior segmento (Hospedagem) + bairro que CABE — 131,3 dp',
-        entrada: _entrada(
-          slug: 'hospedagem-cabe',
-          nome: 'Hospedagem da Ana',
-          atividade: AtividadeDoDiretorio.sitter,
-          bairro: 'Parque Anhanguera',
-          logo: _urlDaLogo,
-        ),
-      ),
-      _Estado(
-        legenda: 'Pior segmento + bairro que NÃO cabe (155,9 dp) '
-            '— é AQUI que os três diferem',
-        entrada: _entrada(
-          slug: 'hospedagem-nao-cabe',
-          nome: 'Hospedagem da Ana',
-          atividade: AtividadeDoDiretorio.sitter,
-          bairro: 'Jardim Chácara Inglesa',
-          logo: _urlDaLogo,
-        ),
-      ),
-      _Estado(
-        legenda: 'O extremo — 37 caracteres, 236 dp',
-        entrada: _entrada(
-          slug: 'extremo',
-          nome: 'Veterinário do Bairro',
-          atividade: AtividadeDoDiretorio.vet,
-          bairro: 'Conjunto Habitacional Teotônio Vilela',
-          logo: _urlDaLogo,
-        ),
-      ),
-      _Estado(
-        legenda: 'Sem bairro — só o segmento na linha',
-        entrada: _entrada(
-          slug: 'sem-bairro',
-          nome: 'Clínica Santa Bárbara',
-          bairro: null,
           logo: _urlDaLogo,
         ),
       ),
@@ -379,6 +342,45 @@ void main() {
           nome: 'Veterinário do Bairro',
           atividade: AtividadeDoDiretorio.vet,
           bairro: 'Pinheiros',
+        ),
+      ),
+      _Estado(
+        legenda: 'Bairro de 22 caracteres — uma linha, inteiro',
+        entrada: _entrada(
+          slug: 'bairro-longo',
+          nome: 'Hospedagem da Ana',
+          atividade: AtividadeDoDiretorio.sitter,
+          bairro: 'Jardim Chácara Inglesa',
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'Bairro de 37 caracteres — quebra em duas, sem cortar',
+        entrada: _entrada(
+          slug: 'extremo',
+          nome: 'Veterinário do Bairro',
+          atividade: AtividadeDoDiretorio.vet,
+          bairro: 'Conjunto Habitacional Teotônio Vilela',
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'Sem bairro — não há linha, e não há pin órfão',
+        entrada: _entrada(
+          slug: 'sem-bairro',
+          nome: 'Clínica Santa Bárbara',
+          bairro: null,
+          logo: _urlDaLogo,
+        ),
+      ),
+      _Estado(
+        legenda: 'Nome longo — quebra, e a logo continua centrada no bloco',
+        entrada: _entrada(
+          slug: 'nome-longo',
+          nome: 'Clínica Veterinária e Hospital de Especialidades '
+              'Santa Bárbara de Pinheiros',
+          bairro: 'Vila Nova Conceição',
+          logo: _urlDaLogo,
         ),
       ),
     ];
