@@ -152,7 +152,41 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// ---------------------------------------------------------------------------
+/// ATUALIZADO EM 26/10/2026: 2706 -> 2702. BICHUS-278.
+/// ---------------------------------------------------------------------------
+/// **A MARCA NAO FOI SUBSTITUIDA: a porta do convite SAIU do corpo do AuAu.**
+/// O cliente mandou, duas vezes, tirar `Convide tutores` das mensagens e
+/// deixar a porta so no menu do Perfil (22/10 e 26/10/2026).
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre a base (`cc9f2767`) e esta arvore, e o
+/// saldo de -4 fecha exatamente num UNICO arquivo:
+///
+///   -4 telas/mensagens/area_de_mensagens.dart  (24 -> 20)
+///
+/// **AS QUATRO OCORRENCIAS ESTAO NOMEADAS, e a quarta e a interessante:**
+/// tres sao `BichuEspaco` (o `EdgeInsets.fromLTRB` do `Padding` que embrulhava
+/// o `ItemDeMenu` do convite: `e4`, `e2`, `e4`) e a quarta e **`BICHUS-62`**,
+/// a chave da issue citada na prosa que saiu junto. A agulha e
+/// `RegExp('bichu', caseSensitive: false)`, e `BICHUS` CASA com ela -- chave
+/// de Jira conta como ocorrencia da marca neste portao, e quem contar so os
+/// `BichuEspaco` acha 3 e fica devendo 1.
+///
+/// Nada ENTROU: a prosa nova dos tres arquivos editados nao escreve a marca.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a MESMA
+/// contagem, sobre a arvore limpa da base, reproduziu EXATAMENTE a constante
+/// que ela travava (2706). Reproduzir o valor conhecido e o que faz esta linha
+/// valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem **218** `.dart`
+/// na base e **218** aqui, e as listas sao IGUAIS (nenhum arquivo entrou, saiu
+/// ou foi renomeado). A conta foi feita pelos dois lados: `set(base)-set(agora)`
+/// e `set(agora)-set(base)` sao os dois VAZIOS.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA: `petu` nao aparece em `app/lib`.
+const int ocorrenciasDeBichu = 2702;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

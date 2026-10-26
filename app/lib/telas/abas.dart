@@ -14,6 +14,7 @@ import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'conexoes/convide_tutores.dart';
 import 'conexoes/tela_minhas_conexoes.dart';
 import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
@@ -1031,6 +1032,43 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: TelaDeMinhasConexoes.titulo,
               aoTocar: () => context.push(Rotas.minhasConexoes),
+            ),
+            // **`Convide tutores` ENTROU AQUI (26/10/2026), e e a METADE QUE A
+            // PESSOA VE.** Ele pediu duas vezes: 22/10/2026, *"Mova o convite
+            // tutores para a pagina do perfil"*; e 26/10/2026, *"retirar o
+            // convite tutores das mensagens, deixar apenas na menu do perfil
+            // do usuario"*. Isto emenda a decisao dele de 21/10/2026
+            // (*"no AuAu como tela empilhada, nao no Perfil"*), que e a que
+            // ainda esta escrita em `mensagens/area_de_mensagens.dart` -- as
+            // tres datas estao citadas nos dois arquivos de proposito, porque
+            // sem as duas novas ao lado da velha alguem reverte isto achando
+            // que esta consertando um defeito.
+            //
+            // **E ESTE MENU, e nao a gaveta, que cumpre o pedido.** A linha
+            // reservada `Convidar vizinhos` de `gaveta_de_secoes.dart` subiu
+            // no mesmo commit, mas a gaveta esta OCULTA desde 19/10: se a
+            // porta tivesse ido so para la, `retirar das mensagens` teria
+            // deixado a tela SEM PORTA NENHUMA -- que e exatamente como
+            // `Pedidos de conexao` passou de 18/10 a 19/10 sem o cliente ver
+            // nada. A porta de verdade e esta, alcancada pela FOTO da barra de
+            // topo.
+            //
+            // **NO GRUPO `Comunidade`, e DEPOIS de `Conexoes`.** O grupo e o
+            // que e MEU dentro da `Rede`, e as tres linhas de gente ficam
+            // juntas na ordem do tempo: quem ESPERA decisao (`Pedidos`), quem
+            // JA e conexao (`Conexoes`), e quem ainda NAO esta no produto
+            // (este). `Meus eventos` continua a ultima do grupo porque ela e a
+            // unica que fala de encontro e nao de gente -- *"a minha gente e
+            // os encontros"*, nesta ordem, e o que o cabecalho do grupo diz.
+            //
+            // **Nenhuma linha existente mudou de lugar.** O cliente mandou
+            // dividir este menu por topicos em 21/10 e ele JA esta dividido
+            // (`Conta`, `Pets na rua`, `Comunidade`); reordenar o que ja esta
+            // decidido nao foi pedido, e `perfil_ordem_dos_itens_test.dart`
+            // guarda a ordem que ele determinou.
+            ItemDeMenu(
+              rotulo: TelaDeConvidarTutores.titulo,
+              aoTocar: () => context.push(Rotas.convidarTutores),
             ),
             // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
             //

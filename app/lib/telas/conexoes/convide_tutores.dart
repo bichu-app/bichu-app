@@ -32,14 +32,34 @@ import '../casca_com_abas.dart';
 /// cliente escreveu em 21/10/2026, e "tutores" é mais exato — o que o produto
 /// quer é quem tem pet, e não quem mora perto.
 ///
-/// ## A TELA MORA NO AuAu, E NÃO NO PERFIL (decisão dele, 21/10/2026)
+/// ## A TELA MORA NO PERFIL (decisão dele, 22/10 e 26/10/2026)
 ///
-/// Tela **empilhada** sob `/mensagens`, que é a seção `AuAu` da barra de baixo:
-/// [CascaFixa.slotDaRota] casa pelo **primeiro segmento**, então o slot do AuAu
-/// continua aceso enquanto esta tela está na frente — que é o que o protótipo
-/// aprovado desenha. O Perfil já é pilha de menus (Meus pets, Meus achados,
-/// Meus eventos, Meus dados) e pôr mais um lá seria a sexta linha de uma lista
-/// que o cliente mandou dividir por tópicos no mesmo dia.
+/// **ELA MOROU NO AuAu ATÉ 26/10/2026, e a decisão que a punha lá era dele
+/// também.** As três datas ficam escritas juntas de propósito, porque a
+/// primeira contradiz as outras duas e é a mais nova que vale:
+///
+/// - **21/10/2026**: *"no AuAu como tela empilhada, nao no Perfil"*. Foi o que
+///   pôs a porta no topo do corpo do AuAu e este endereço sob `/mensagens`.
+/// - **22/10/2026**: *"Mova o convite tutores para a pagina do perfil"*.
+/// - **26/10/2026**, com a outra metade dita: *"retirar o convite tutores das
+///   mensagens, deixar apenas na menu do perfil do usuário"*.
+///
+/// Hoje ela é tela **empilhada** sob `/perfil/convide-tutores`, aberta por um
+/// `ItemDeMenu` do grupo `Comunidade` do menu do Perfil (`AbaPerfil`, em
+/// `telas/abas.dart`). **Não há porta no AuAu**, e uma isca reprova se ela
+/// voltar: `o convite NAO esta no corpo do AuAu`, em
+/// `test/telas/convite_tutores_no_perfil_test.dart`.
+///
+/// `slotDaRota` deixou de fazer parte do raciocínio, e a prosa antiga daqui o
+/// usava: esta tela está em `telasInternas` do portão de barra fixa, ou seja
+/// **não mostra barra de baixo nenhuma**. Não há slot para acender, e nunca
+/// houve — o primeiro segmento do endereço não muda nada do que a pessoa vê.
+///
+/// **O pedido de dividir o menu do Perfil por tópicos (21/10) foi atendido
+/// antes desta linha, e não por ela**: `AbaPerfil` já é dividido em `Conta`,
+/// `Pets na rua` e `Comunidade`, e a porta entrou DENTRO de um grupo. O que
+/// não é dividido por tópicos é o inventário de `gaveta_de_secoes.dart`, que
+/// é uma lista plana e está oculto desde 19/10.
 ///
 /// ## O QUE A TELA TEM, E A ORDEM É A DO PROTÓTIPO
 ///

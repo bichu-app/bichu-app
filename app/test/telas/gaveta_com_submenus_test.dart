@@ -1180,11 +1180,21 @@ void main() {
       // subida que a mensagem abaixo chama de caminho normal -- a tela do outro
       // lado existe e esta registrada no roteador, o que o caso `toda rota de
       // item vivo esta REGISTRADA no roteador` confere.
+      // OITO -> NOVE em 26/10/2026: `Convide tutores`. **E A UNICA DAS SUBIDAS
+      // DESTA LISTA QUE NAO E LINHA NOVA**, e a diferenca e o ponto: a UX
+      // 27.5.5 reservou `Convidar vizinhos` e a deixou `planejada`, e esta e a
+      // linha que subiu -- com o rotulo que o cliente escreveu em 21/10
+      // (`Convide tutores`), que e mais exato. Por isso `todos` continua 54 e
+      // `destinos` continua 18: nada entrou no inventario, uma linha so
+      // atravessou de `porConstruir` para ca, e `porConstruir` cai de 10 para
+      // 9 no mesmo movimento. A tela e a rota ja existiam desde 21/10; o que
+      // mudou em 26/10 foi POR ONDE se chega nela, por pedido do cliente
+      // repetido duas vezes (22/10 e 26/10).
       expect(
         vivos.length,
-        8,
+        9,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 8 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 9 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -1198,11 +1208,15 @@ void main() {
       // a mensagem abaixo exige para a queda nao ser um nome que desapareceu.
       // OITO -> DEZ em 19/10, pelas duas linhas de `Adoções` que desceram de
       // `existe` para `planejada`. Elas continuam NOMEADAS no inventario.
+      // DEZ -> NOVE em 26/10/2026: `Convidar vizinhos` saiu desta lista para a
+      // de vivos, com o rotulo `Convide tutores`. `vivos` subiu junto, que e a
+      // condicao que a mensagem abaixo exige para a queda nao ser um nome que
+      // desapareceu da tela.
       expect(
         porConstruir.length,
-        10,
+        9,
         reason:
-            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 10 e '
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
@@ -1774,9 +1788,14 @@ void main() {
       // Desligar = devolver o paragrafo que nomeia os pendentes.
       //
       // Roadmap em menu tem um custo que nao e de gosto: `Mensagens`,
-      // `Doações`, `Carrinho e pedido`, `Meus pedidos`, `Convidar vizinhos`,
-      // `Notificações`, `Transferir um pet` e `Termos` sao OITO telas que o
-      // app nao tem. Quem le oito nomes num menu tenta tocar em algum.
+      // `Doações`, `Carrinho e pedido`, `Meus pedidos`, `Notificações`,
+      // `Transferir um pet` e `Termos` sao SETE telas que o app nao tem. Quem
+      // le sete nomes num menu tenta tocar em algum.
+      //
+      // Eram OITO ate 26/10/2026: `Convidar vizinhos` saiu desta lista porque a
+      // linha reservada SUBIU -- a tela existe desde 21/10 (`Convide tutores`,
+      // `TelaDeConvidarTutores`) e em 26/10 ela ganhou porta no Perfil, por
+      // pedido do cliente. Mesmo movimento de `Editar o perfil` em 18/10.
       //
       // Eram nove ate 18/10/2026: `Editar o perfil` saiu desta lista porque a
       // tela foi construida (`Meus dados`, `/perfil/dados`) e a linha virou

@@ -32,6 +32,7 @@
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/telas/conexoes/convide_tutores.dart';
 import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
@@ -1098,7 +1099,7 @@ void main() {
   // =========================================================================
   // ISCA (g) — OS SETE ITENS VIVOS CONTINUAM ALCANÇÁVEIS
   // =========================================================================
-  group('(g) os oito itens vivos continuam alcançáveis', () {
+  group('(g) os nove itens vivos continuam alcançáveis', () {
     // ======================================================================
     // A ISCA QUE IMPORTA MAIS, e por quê
     // ======================================================================
@@ -1123,7 +1124,7 @@ void main() {
     // DESLIGAMENTO: apague qualquer um dos sete controles -- a opção da folha
     // de `Pets` ou o `ItemDeMenu` de `Perfil`. UM caso deste grupo reprova, e
     // ele nomeia o item.
-    test('são OITO, e a lista é lida do registro e não escrita à mão', () {
+    test('são NOVE, e a lista é lida do registro e não escrita à mão', () {
       // A guarda contra o verde por vazio: os sete casos abaixo citam rótulos
       // à mão, e um registro que mudasse de tamanho os deixaria medindo um
       // subconjunto sem ninguém notar.
@@ -1132,11 +1133,24 @@ void main() {
           .map((d) => d.rotulo)
           .toList();
       // SETE -> OITO em 22/10/2026: `Conexões`, por decisão do cliente.
+      // OITO -> NOVE em 26/10/2026: `Convide tutores`, por decisão do cliente
+      // repetida duas vezes (22/10, *"Mova o convite tutores para a pagina do
+      // perfil"*, e 26/10, *"retirar o convite tutores das mensagens, deixar
+      // apenas na menu do perfil do usuario"*).
+      //
+      // **ELE É O ÚNICO DESTA LISTA QUE JÁ TINHA PORTA ANTES DE ENTRAR AQUI, e
+      // a porta era em OUTRA seção.** Os outros oito subiram porque não tinham
+      // caminho nenhum; este TINHA -- um `ItemDeMenu` no topo do corpo do AuAu
+      // --, e o cliente mandou mover. Por isso a casa nova dele neste grupo
+      // mede as DUAS metades, e não só a chegada: o caso
+      // `` `Convide tutores` é alcançável pela FOTO da barra de topo `` prova
+      // que a porta nova abre a tela, e as iscas de
+      // `convite_tutores_no_perfil_test.dart` provam que a velha não voltou.
       expect(
         vivos,
-        hasLength(8),
+        hasLength(9),
         reason: 'REPROVA: o registro tem ${vivos.length} item(ns) vivo(s) e '
-            'não 8: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
+            'não 9: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
             'Item novo sem caso aqui é função que pode desaparecer no próximo '
             'diff grande, porque a gaveta já não a mostra.',
       );
@@ -1149,11 +1163,16 @@ void main() {
       // para um que já existia. Se só o primeiro tivesse subido, o item novo
       // apontaria para um lugar que já tinha nome -- e é exatamente isso que
       // `gaveta_de_secoes.dart` proíbe.
+      // **SETE -> OITO em 26/10/2026, e os DOIS números subiram juntos de
+      // novo**: é isso que prova que `Convide tutores` é um destino NOVO neste
+      // menu e não um segundo nome para um que já existia. A rota dele
+      // (`/perfil/convide-tutores`) não era apontada por nenhum item vivo --
+      // ela era empurrada pelo corpo do AuAu, que não é item de gaveta.
       expect(
         vivos.toSet(),
-        hasLength(7),
-        reason: 'REPROVA: os oito itens vivos apontam para '
-            '${vivos.toSet().length} destinos distintos, e são 7 -- '
+        hasLength(8),
+        reason: 'REPROVA: os nove itens vivos apontam para '
+            '${vivos.toSet().length} destinos distintos, e são 8 -- '
             '`Escanear uma tag` tem duas linhas de propósito, e é a ÚNICA '
             'duplicata legítima.',
       );
@@ -1541,6 +1560,63 @@ void main() {
         },
       );
     }
+
+    testWidgets('`Convide tutores` é alcançável pela FOTO da barra de topo',
+        (tester) async {
+      tester.view.physicalSize = const Size(1170, 7800);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      // A CASA NOMEADA DO ITEM QUE ENTROU EM 26/10/2026, que e o que o caso de
+      // contagem deste grupo cobra de todo item vivo.
+      //
+      // **A porta dele MUDOU DE SECAO, e nao nasceu.** Ate 26/10 a tela era
+      // aberta por um `ItemDeMenu` no topo do corpo do AuAu; o cliente mandou
+      // tira-la de la e deixar *"apenas na menu do perfil do usuario"*. Entao
+      // aqui a conta e a mesma dos outros oito -- o caminho humano existe --,
+      // e a metade que falta (a porta velha NAO voltou) e medida em
+      // `convite_tutores_no_perfil_test.dart`, isca (a) e isca (b).
+      //
+      // O DESTINO E MEDIDO PELO TIPO DA TELA, e nao pelo rotulo: um caso que
+      // so achasse o texto ficaria verde com o item na tela e sem destino.
+      await abrirOApp(
+        tester,
+        rede: redeDasCincoListagens,
+        deposito: depositoLogado(),
+      );
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AvatarDaConta));
+      await tester.pumpAndSettle();
+
+      final item = find.widgetWithText(
+        ItemDeMenu,
+        TelaDeConvidarTutores.titulo,
+      );
+      await tester.scrollUntilVisible(item, 200);
+      expect(
+        item,
+        findsOneWidget,
+        reason: 'REPROVA: `${TelaDeConvidarTutores.titulo}` nao esta no menu '
+            'da conta. Ele saiu do corpo do AuAu em 26/10/2026 por pedido do '
+            'cliente, e sair de LA sem chegar AQUI deixa a tela sem porta '
+            'humana nenhuma -- do mesmo jeito que `Pedidos de conexao` ficou '
+            'de 18/10 a 19/10, que e o buraco que este grupo existe para '
+            'vigiar.',
+      );
+
+      await tester.ensureVisible(item);
+      await tester.pumpAndSettle();
+      await tester.tap(item);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(TelaDeConvidarTutores),
+        findsOneWidget,
+        reason: 'REPROVA: o toque no item nao abriu `TelaDeConvidarTutores`. '
+            'O item existir e o destino abrir sao duas afirmacoes, e so a '
+            'segunda prova que a porta nova nao e um beco.',
+      );
+    });
 
     testWidgets('`Sair da conta` é alcançável pela FOTO da barra de topo',
         (tester) async {
