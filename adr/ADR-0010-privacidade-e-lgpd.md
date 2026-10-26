@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1, 2, 3, 4 e 5
+**Status:** aceito, com emendas 1, 2, 3, 4, 5 e 6
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -37,6 +37,19 @@ mesmo predicado da emenda 3, que ali é satisfeito **por construção**: o Mural
 só mostra publicação de conexão aceita. Nada mais muda: a foto continua fora da
 denúncia, fora de toda projeção pública, e o Mural **não** ganha lista de
 pessoas. Ver o fim do documento.
+
+**Emenda 6, 26/10/2026 (decisão do cliente):** **não há apagamento por prazo.**
+O dado é mantido **enquanto durar a finalidade** descrita para ele, e a tabela
+**"Retenção, por dado"** da redação original — que é proposta do squad, e não
+decisão do cliente — fica **superada no que ela diz de prazo de apagamento**.
+Ela continua valendo como mapa de finalidade, de observação e de mínimo de
+guarda. Esta emenda é a continuação direta da decisão de 17/10 (*"Mantenha a
+foto e não delete os dados do usuário, apenas desabilite na plataforma e filtro
+as páginas"*), que já havia tornado inócuo o expurgo de conta: o que era
+exceção da conta passa a ser a regra do produto. **Duas coisas que ela não
+toca:** a rotação da chave do HMAC do IP a cada 90 dias, que é higiene de
+segurança e não retenção, e os 12 meses das mensagens, que são guarda
+**mínima** e que a decisão de hoje reforça. Ver o fim do documento.
 
 ## Contexto
 
@@ -744,3 +757,130 @@ ADR-0021 proíbe.
 aparece no cartão do Mural, redonda, no tamanho de ícone. Ela NÃO aparece em
 nenhum outro lugar novo — nem na denúncia, nem para quem não é sua conexão.
 Confirma?"*
+
+
+---
+
+# EMENDA 6, 26/10/2026 (decisão do cliente) — NÃO HÁ APAGAMENTO POR PRAZO
+
+## A decisão, literal
+
+> *"não apague nada, mantenha e corrija a política"*
+
+Ela chega sobre uma política publicada que prometia prazos, e o pedido tem duas
+metades: **não construir expurgo** e **corrigir o texto**. A segunda metade é o
+trabalho; a primeira é a ausência dele.
+
+## O que ela decide
+
+1. **Nenhum dado do produto é apagado por decurso de prazo.** Onde a redação
+   original fixava um número de dias ou de meses para apagar, aquele número
+   deixa de ser prazo de apagamento.
+2. **A guarda é amarrada à finalidade**, e não a um contador. O dado fica
+   enquanto durar a finalidade descrita para ele. Onde a finalidade tem fim
+   natural — o dado morre com a conta, com o pet, com a plaquinha —, o fim
+   natural é o limite, e ele está escrito dado por dado na política publicada.
+3. **A tabela "Retenção, por dado" desta ADR fica superada no que diz prazo de
+   apagamento.** Ela não é revogada: continua sendo o mapa de qual finalidade
+   sustenta cada dado, e continua carregando os dois mínimos do item 5 abaixo.
+   O que ela perde é a leitura "no dia N isto é apagado".
+
+**Por que ela não reescreve a tabela original.** A tabela nasceu sem a marca
+"(decisão do cliente)" no título, e por isso ela é proposta do squad, não
+decisão dele. Emenda que apaga proposta apaga também o registro de que a
+proposta existiu e de que ela foi superada por uma decisão — e é exatamente
+esse registro que uma auditoria de LGPD vai querer ler.
+
+## O que ela NÃO decide, e portanto continua inteiro
+
+1. **A rotação da chave do HMAC do IP a cada 90 dias** (item "Leituras da tag"
+   da tabela) **continua valendo**. Ela não é prazo de guarda: é higiene de
+   chave, e o que ela protege é a impossibilidade de reverter o código para o
+   endereço. Trocar a chave não apaga leitura nenhuma — e confundir as duas
+   coisas seria desligar uma defesa a pretexto de cumprir esta emenda.
+2. **Os 12 meses das mensagens da conversa mediada continuam**, e eles são
+   guarda **mínima**: a conversa é a prova das duas pessoas em caso de denúncia
+   de extorsão pelo golpe do falso achador. Guardar por mais tempo cumpre o
+   mínimo; guardar por menos o descumpre. A decisão de hoje **reforça** esta
+   linha, e não a contradiz.
+3. **A trilha de auditoria continua em 24 meses, e com apagamento de verdade.**
+   Ela é o único expurgo por prazo que sobrevive a esta emenda, e sobrevive por
+   ser o contrário de retenção de dado do titular: é a prova de que o pedido
+   dele foi atendido, sob obrigação legal e exercício regular de direitos.
+4. **A localização de referência continua em 30 dias, e com apagamento de
+   verdade.** Ela é tratada por **consentimento**, o titular a revoga nas
+   configurações, e o vencimento é parte da promessa de "só a última, sem
+   histórico".
+5. **A decisão de 17/10 não é reescrita.** *"Mantenha a foto e não delete os
+   dados do usuário, apenas desabilite na plataforma e filtro as páginas para
+   que esse usuário não seja mais encontrado em nenhuma pagina ou
+   funcionalidade"*. A de hoje é coerente com ela e a generaliza: lá a conta
+   excluída ficava desabilitada em vez de apagada; aqui nenhum dado é apagado
+   por prazo. O mecanismo também é o mesmo — o que faz o dado desaparecer do
+   produto é **cláusula de consulta**, não ausência de linha.
+6. **O direito do art. 18 continua.** Esta emenda decide que o produto não
+   apaga **por prazo**; ela não decide que o titular não pode pedir eliminação.
+   O pedido do art. 18, VI, continua existindo e **não tem hoje implementação
+   em código**: ele é procedimento conduzido por pessoa, a partir do
+   privacidade@bichu.app. Isso está dito na política publicada, nestes termos, e
+   não suavizado.
+
+## A ressalva jurídica, que foi dita ao cliente antes da decisão
+
+Foi dito a ele, e fica registrado aqui: **"mantido indefinidamente" é posição
+mais fraca que prazo definido sob a LGPD**, porque a lei trata a eliminação após
+o fim da finalidade como regra (art. 15 e art. 16) e porque o dado do achador é
+**dado de terceiro sem conta**, colhido com finalidade única. Ele decidiu assim
+mesmo, com o risco na mesa, e a decisão é dele.
+
+A consequência de redação segue daí, e ela não é cosmética: o texto publicado
+amarra a guarda **à finalidade**, que é o que a lei pede, em vez de dizer
+"guardamos para sempre". A diferença entre *"mantido enquanto a finalidade X
+durar"* e *"mantido indefinidamente"* é precisamente o que um advogado vai
+olhar — e escrever a segunda forma seria piorar a posição do cliente sem que
+ele tenha pedido isso.
+
+## A célula que ficou desconfortável, e ela está dita em voz alta
+
+Uma linha da política não fecha: **"quem recebeu cada alerta e quando"**. A
+finalidade registrada em código é uma só — o teto de 3 alertas por pessoa em
+24 h (`lostfound/ports/registro-de-disparos.ts`) —, e `alert_recipients` tem
+três colunas e nenhuma varredura. A finalidade termina em 24 horas; o dado
+fica. Não há segunda finalidade escrita que sustente a guarda.
+
+A política publicada diz isso com estas palavras, e não uma frase bonita: *"o
+teto de 3 alertas olha só as últimas 24 horas, e o registro continua existindo
+depois disso"*. **Esta é a pergunta a levar de volta ao cliente**, e ela é
+específica: ou se declara uma segunda finalidade para o registro de disparo, ou
+ele é o único lugar onde um prazo continua fazendo sentido.
+
+## O que o repositório afirmava, e que esta emenda torna falso
+
+Levantado em 26/10 e corrigido onde dava, com o que não dava nomeado:
+
+| Onde | O que afirma | Situação |
+|---|---|---|
+| `web/src/conteudo/juridico/privacidade.md` | dez células de prazo com *"Ainda não definido"*, e *"apagados da base em até 30 dias"* na exclusão de conta | **corrigido** nesta entrega |
+| esta tabela "Retenção, por dado" | prazos de apagamento para sete dados | **superada** por esta emenda, no que diz prazo |
+| `adr/ADR-0007-…md` seção "Ciclo de vida" | três expurgos de foto: 30 dias após excluir pet ou conta, e 30 dias após encerrar o caso do achador | **superada** pela emenda 2 daquela ADR, escrita nesta entrega. Nenhum dos três existia em código |
+| `migrations/20260917000007_…sql:150` | `COMMENT ON TABLE tag_scans`: *"Retencao de 90 dias (docs/03-arquitetura.md 4.3); o expurgo entra com o worker"* | **não corrigível por edição da migração**, que já rodou. Ver abaixo |
+| `src/shared/db/schema.ts` e `tags/adapters/persistence/kysely-tag-repository.ts` | comentários dizendo que a retenção dos scans é de 90 dias | **corrigido** nesta entrega |
+| `api/openapi.yaml` | *"Exclusao logica imediata, expurgo definitivo em 30 dias"* em `deleteMyAccount` | **não tocado nesta entrega**. Ver abaixo |
+
+**O comentário da migração.** `COMMENT ON TABLE tag_scans` está numa migração de
+17/09 que já foi aplicada; reescrever o arquivo não muda o banco e faria o
+carimbo mentir. Corrigi-lo exige **uma migração nova** que rode
+`COMMENT ON TABLE tag_scans IS '…'` com o texto certo. Ela **não foi escrita
+aqui**, de propósito: a decisão de hoje não pediu migração, e número de migração
+é recurso disputado entre as três sessões deste repositório. O comentário também
+cita `docs/03-arquitetura.md 4.3`, que não é rastreado pelo git — a referência
+não resolve nem antes nem depois desta emenda.
+
+**O contrato.** `api/openapi.yaml` descreve `deleteMyAccount` como *"expurgo
+definitivo em 30 dias"*, o que deixou de ser verdade em 17/10. A descrição
+atravessa para `src/shared/types/generated/api.ts`, `web/src/api/generated/api.ts`
+e `admin/src/api/generated/api.ts` por geração. Não foi corrigido aqui porque as
+seis dispensas `oasdiff-*` venceram em 25/10 e outra frente está medindo o
+portão de contrato; mexer na descrição agora entra no diff dela. **É a terceira
+pergunta a levar de volta**, e a primeira a resolver depois que aquela frente
+fechar.
