@@ -93,6 +93,16 @@ import '../dispositivo/diretivas_dart.dart';
 const String _urlBase = 'https://api.teste.bichu';
 const String _token = 'KJ8M4QRS7TVW2XYZ';
 
+/// A ULTIMA COISA DO BLOCO DO CONVITE, e o controle positivo de que a regiao
+/// onde os dois botoes moravam esta **construida**.
+///
+/// `Trocar` e `Apagar` vinham DEPOIS deste texto. Se ele esta na arvore, o pe
+/// do bloco esta montado, e um botao reposto ali tambem estaria -- e e so com
+/// isso provado que o `findsNothing` dos casos vale alguma coisa.
+final Finder fimDoBloco = find.textContaining(
+  'O QR aparece aqui enquanto esta tela',
+);
+
 /// A FONTE da tela, lida do disco.
 ///
 /// O caso (2) mede o ARQUIVO e nao a arvore de widgets: e a unica forma de
@@ -105,6 +115,23 @@ void main() {
   late List<String> chamadas;
 
   Future<void> montar(WidgetTester tester) async {
+    // ===================================================================
+    // A TELA ALTA NAO E CONVENIENCIA: SEM ELA ESTE ARQUIVO MENTIA
+    // ===================================================================
+    // **MEDIDO, com os dois botoes repostos**: os casos (1) e (3) ficaram
+    // VERDES com o defeito na tela. A causa nao era o localizador -- era a
+    // `ListView`. Ela constroi por demanda, e `Trocar`/`Apagar` ficavam ABAIXO
+    // da dobra numa tela de 600 dp: nunca eram construidos, `find.byType` nao
+    // os achava, e o `findsNothing` passava **no vazio** -- exatamente a
+    // armadilha da assercao negativa.
+    //
+    // 1600 dp de altura fazem o bloco do convite inteiro caber e ser
+    // construido. O caso confirma que caiu, pelo controle positivo
+    // [fimDoBloco], em vez de supor que caiu.
+    tester.view.physicalSize = const Size(375 * 3, 1600 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
     chamadas = <String>[];
     AppConfig.limparParaTeste();
     final cliente = MockClient((http.Request pedido) async {
@@ -191,6 +218,19 @@ void main() {
           'estado vazio seria medir o vazio.',
     );
 
+    // CONTROLE POSITIVO DA CONSTRUCAO -- e sem ele este caso ja ficou verde
+    // com o defeito na tela. Ver o comentario em `montar`.
+    expect(
+      fimDoBloco,
+      findsOneWidget,
+      reason:
+          'Controle positivo: o pe do bloco do convite tem de estar '
+          'construido. `Trocar` e `Apagar` vinham DEPOIS deste texto, e numa '
+          'tela baixa a `ListView` nao os constroi -- o `findsNothing` abaixo '
+          'passaria no vazio, que e como este caso ficou verde na primeira '
+          'tentativa de provar a isca.',
+    );
+
     // A ASSERCAO. Ancorada no TIPO `BotaoSecundario`: `Trocar` e `Apagar`
     // eram os dois unicos desta tela, entao qualquer rotulo que reponha uma
     // delas reprova aqui -- renomear nao escapa.
@@ -267,6 +307,18 @@ void main() {
       reason:
           'Controle positivo: a emissao tem de ter saido. Sem ela a lista de '
           'chamadas esta vazia e a ausencia do DELETE nao prova nada.',
+    );
+
+    // CONTROLE POSITIVO DA CONSTRUCAO: o pe do bloco esta montado, entao os
+    // botoes que tocamos abaixo sao TODOS os que existem. Sem ele o laco
+    // tocaria em nada numa tela baixa e o caso ficaria verde no vazio.
+    expect(
+      fimDoBloco,
+      findsOneWidget,
+      reason:
+          'Controle positivo: o pe do bloco do convite tem de estar '
+          'construido, senao o laco de toques abaixo nao alcanca a regiao '
+          'onde `Apagar o meu QR` morava.',
     );
 
     // TOCA EM TUDO o que a tela oferece neste estado. Com qualquer das duas

@@ -49,9 +49,11 @@
 //       `AvatarDaConta`) satisfaz o caso (1) e reprova este, porque ele exige
 //       que as duas urls sejam DIFERENTES e cada uma a do seu papel.
 //   (3) `a fala do SISTEMA nao recebe marca de pessoa` -- contrapeso: ele
-//       reprova se alguem "completar a cobertura" pondo marca em tudo. Com o
-//       mecanismo desligado ele passa, e e por isso que ele nao conta como
-//       isca da foto: ele e o freio.
+//       reprova se alguem "completar a cobertura" pondo marca em tudo.
+//       **MEDIDO: com o mecanismo desligado ele TAMBEM reprova**, e nao por
+//       causa da assercao negativa dele -- e pelo CONTROLE DA SONDA que ele
+//       carrega (a fala de quem achou TEM de ter marca). Era de esperar que
+//       ele passasse no vazio; ele nao passa, e e o controle que impede.
 //   (4) `sem foto, a inicial e a de QUEM FALOU` -- reprova por nao achar as
 //       marcas. Prova a queda para a inicial, que e o estado NORMAL desta tela
 //       (conversa com estranho: `photo_icon_url` chega nula).
