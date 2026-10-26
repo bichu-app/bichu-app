@@ -402,10 +402,15 @@ export function criarTagRepository(db: Db): TagRepository {
     /**
      * O scan e o contador andam juntos.
      *
-     * `scan_count` poderia sair de um `count(*)` sobre `tag_scans`, mas a
-     * retenção dos scans é de 90 dias: no dia do expurgo o contador da tag
-     * andaria para trás sozinho. O contador é cumulativo, a tabela é a
-     * evidência recente, e as duas coisas são diferentes.
+     * `scan_count` poderia sair de um `count(*)` sobre `tag_scans`, mas o
+     * contador é cumulativo e a tabela é a evidência: são duas coisas
+     * diferentes, e um `count(*)` as confundiria.
+     *
+     * O motivo escrito aqui antes era outro — *"a retenção dos scans é de 90
+     * dias, e no dia do expurgo o contador andaria para trás"*. Aquele expurgo
+     * nunca existiu, e a emenda 6 do ADR-0010 (26/10/2026, decisão do cliente)
+     * decidiu que ele não vai existir: não há apagamento por prazo. A separação
+     * continua certa pela razão que sobrou, e não pela que caiu.
      */
     async registrarScan(scan: NovoScan): Promise<void> {
       await db.transaction().execute(async (trx) => {

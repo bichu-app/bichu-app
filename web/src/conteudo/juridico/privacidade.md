@@ -29,7 +29,11 @@ Escrevemos do jeito mais direto que conseguimos. Onde uma regra ainda não está
 
 As bases legais citadas estão no art. 7º da Lei Geral de Proteção de Dados (Lei 13.709/2018, a LGPD).
 
-Sobre prazos: onde está escrito **"ainda não definido"**, é porque hoje o Bichu não apaga aquele dado automaticamente depois de um prazo. Ele fica guardado até a conta ser excluída, ou até você pedir. Estamos corrigindo isso, e esta política será atualizada quando os prazos passarem a valer.
+Sobre prazos: **o Bichu não apaga dado por prazo.** A coluna "por quanto tempo" não traz um contador: ela diz qual é a finalidade que sustenta a guarda, e o dado fica enquanto essa finalidade durar. Onde o dado tem um fim natural, o fim está escrito — "enquanto a conta existir", "enquanto o pet estiver cadastrado". Onde não há fim natural, dizemos que o dado fica, em vez de prometer um prazo que não acontece.
+
+Três prazos são exceção, e eles estão escritos como número porque de fato apagam: a sua localização de referência (30 dias), o código de acesso ao aviso de quem achou (30 dias) e a trilha de auditoria (24 meses).
+
+Guardar sem prazo não tira o seu direito. Pelo art. 18 da LGPD você pode pedir a eliminação dos seus dados, e o pedido vai para **privacidade@bichu.app** (item 9).
 
 ### 4.1 A sua conta
 
@@ -40,27 +44,27 @@ Sobre prazos: onde está escrito **"ainda não definido"**, é porque hoje o Bic
 | Nome de exibição | Como você aparece dentro do app, por exemplo na conversa com quem achou o seu pet. Não aparece em página pública | Execução de contrato | Enquanto a conta existir |
 | Telefone (opcional) | Contato da conta. **Nunca aparece para ninguém**, nem para quem acha o seu pet | Execução de contrato | Enquanto a conta existir |
 | Região de referência em texto (CEP, bairro, cidade e UF, todos opcionais) | Mostrar o que é da sua região | Execução de contrato | Enquanto a conta existir |
-| Data de nascimento | Cumprir a idade mínima de 16 anos: calculamos a sua idade no servidor e recusamos o cadastro de quem tem menos. **Nunca aparece para ninguém**, nem em página pública | Execução de contrato | [JURÍDICO: prazo a definir. Hoje a data é guardada junto da conta e apagada com ela; falta decidir se pode ser descartada depois da conferência] |
+| Data de nascimento | Cumprir a idade mínima de 16 anos: calculamos a sua idade no servidor e recusamos o cadastro de quem tem menos. **Nunca aparece para ninguém**, nem em página pública | Execução de contrato | Enquanto a conta existir. Ela não é descartada depois da conferência: é ela que prova que a idade mínima foi conferida |
 | Versão dos termos que você aceitou e a data | Saber o que você aceitou | Exercício regular de direitos (art. 7º, VI) | Enquanto a conta existir |
 
-Quando a conta é excluída, ela deixa de funcionar na hora e os dados acima são apagados da base em até 30 dias. Veja também o item 9.
+Quando a conta é excluída, ela deixa de funcionar na hora e deixa de ser encontrada em qualquer página ou função do Bichu. Os dados acima **não são apagados da base**: a conta fica desabilitada, e é a desabilitação que faz você desaparecer do produto. Isso é uma escolha nossa, e está dita com todas as letras no item 9, junto do que você pode pedir.
 
 ### 4.2 Sessão e segurança da conta
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Registros de sessão: identificação do aparelho, o nome do navegador ou do app (user agent) e um resumo do endereço IP | Manter você conectado, perceber uso indevido da conta e permitir o "Não fui eu" | Execução de contrato e legítimo interesse em segurança (art. 7º, IX) | Ainda não definido |
-| Códigos de confirmação de e-mail, de redefinição de senha e de reautenticação | Confirmar que é você | Execução de contrato | Guardados só como resumo criptográfico. O registro fica até a conta ser excluída: ainda não definido |
+| Registros de sessão: identificação do aparelho, o nome do navegador ou do app (user agent) e um resumo do endereço IP | Manter você conectado, perceber uso indevido da conta e permitir o "Não fui eu" | Execução de contrato e legítimo interesse em segurança (art. 7º, IX) | Enquanto a conta existir. Encerrar a sessão marca o registro como revogado e **não o apaga**: é ele que responde "de que aparelho entraram na minha conta, e quando". Não há apagamento por prazo |
+| Códigos de confirmação de e-mail, de redefinição de senha e de reautenticação | Confirmar que é você | Execução de contrato | Guardados só como resumo criptográfico. Cada código vence sozinho e deixa de funcionar; o registro de que ele foi emitido e usado fica enquanto a conta existir, porque é ele que mostra quem pediu a troca de senha. Não há apagamento por prazo |
 
 A sessão no app dura até **180 dias**. Em "Sair de todos os aparelhos" você encerra todas as sessões de uma vez.
 
-**Sobre o endereço IP.** Nas tabelas do produto, o IP nunca é guardado como está: ele é cortado (os últimos números são descartados) e passa por uma função criptográfica com chave secreta, que o transforma num código que não dá para reverter sem a chave. Já os **registros técnicos do servidor** (os logs de acesso) guardam o endereço IP completo de cada acesso, junto com o horário e o endereço da página pedida. O prazo desses registros ainda não está definido.
+**Sobre o endereço IP.** Nas tabelas do produto, o IP nunca é guardado como está: ele é cortado (os últimos números são descartados) e passa por uma função criptográfica com chave secreta, que o transforma num código que não dá para reverter sem a chave. Já os **registros técnicos do servidor** (os logs de acesso) guardam o endereço IP completo de cada acesso, junto com o horário e o endereço da página pedida. Eles não são apagados por prazo: ficam enquanto servirem para investigar abuso, fraude e falha do serviço, que é a finalidade que justifica guardá-los.
 
 ### 4.3 Os seus pets
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Nome, espécie, raça, porte, cores, sexo, se é castrado, data de nascimento aproximada, sinais particulares | Identificar o pet e ajudar no reencontro | Execução de contrato | Enquanto o pet estiver cadastrado. Pet excluído sai das telas na hora, e o registro é apagado quando a conta é excluída. Antes disso: ainda não definido |
+| Nome, espécie, raça, porte, cores, sexo, se é castrado, data de nascimento aproximada, sinais particulares | Identificar o pet e ajudar no reencontro | Execução de contrato | Enquanto o pet estiver cadastrado. Pet excluído sai das telas na hora e o registro continua guardado; excluir a conta também não o apaga. Não há apagamento por prazo |
 | Cartão de manejo (até 280 caracteres, como "é medroso, não corra atrás") | Ajudar quem está com o animal nos primeiros minutos | Execução de contrato | Igual ao acima |
 | Número do microchip e RG Animal (SinPatinhas), opcionais | Identificação | Execução de contrato | Igual ao acima |
 
@@ -75,14 +79,14 @@ O cartão de manejo **é público por natureza**: ele aparece para quem escaneia
 
 A foto original fica num armazenamento fechado, que só você acessa, por link temporário. As versões que aparecem no Bichu são geradas **sem os metadados do arquivo**, entre eles a localização de GPS que o celular grava na foto e que normalmente aponta para a sua casa. A foto tratada é publicada num endereço público difícil de adivinhar.
 
-**Aviso importante:** hoje, quando você apaga uma foto, um pet ou a conta, a foto some do Bichu, mas **o arquivo ainda não é apagado automaticamente do armazenamento**, e a versão tratada pode continuar acessível por quem já tiver o endereço exato dela. Estamos corrigindo isso. Enquanto não estiver corrigido, você pode pedir a remoção dos arquivos pelo privacidade@bichu.app.
+**Aviso importante:** quando você apaga uma foto, um pet ou a conta, a foto some do Bichu, mas **o arquivo não é apagado do armazenamento**, e a versão tratada pode continuar acessível por quem já tiver o endereço exato dela. Isso não é uma pendência nossa: é uma decisão, e o arquivo fica. Se você quer que ele saia, peça a remoção pelo privacidade@bichu.app.
 
 ### 4.5 A plaquinha (tag QR)
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
 | Código da plaquinha | Ligar a plaquinha ao seu pet | Execução de contrato | Guardado só como resumo criptográfico e, enquanto a tag estiver ativa, cifrado para você poder reimprimir. A cópia cifrada é apagada quando a tag é revogada |
-| Leituras da plaquinha: data e hora, resumo do IP cortado e resumo do navegador | Contar as leituras e perceber clonagem ou abuso da plaquinha | Legítimo interesse (art. 7º, IX) | Ainda não definido |
+| Leituras da plaquinha: data e hora, resumo do IP cortado e resumo do navegador | Contar as leituras e perceber clonagem ou abuso da plaquinha | Legítimo interesse (art. 7º, IX) | Enquanto a plaquinha existir no Bichu. A leitura é a própria evidência de clonagem e de abuso, e por isso ela fica: não há apagamento por prazo. A chave secreta que transforma o IP em código é trocada a cada 90 dias, e isso protege o dado — não é prazo de guarda |
 
 O código impresso funciona como uma chave: quem está com a plaquinha consegue avisar você. Se perder a plaquinha, revogue a tag no app e emita outra.
 
@@ -90,8 +94,8 @@ O código impresso funciona como uma chave: quem está com a plaquinha consegue 
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Onde o pet foi visto por último (um ponto no mapa, opcional, e/ou bairro, cidade e UF), quando, a descrição e o desfecho do caso | Avisar a vizinhança, cruzar com achados e registrar o reencontro | Execução de contrato | Ainda não definido. O ponto exato continua guardado depois que o caso é encerrado |
-| Quem recebeu cada alerta e quando | Não mandar mais de 3 alertas por pessoa em 24 horas | Legítimo interesse | Ainda não definido |
+| Onde o pet foi visto por último (um ponto no mapa, opcional, e/ou bairro, cidade e UF), quando, a descrição e o desfecho do caso | Avisar a vizinhança, cruzar com achados e registrar o reencontro | Execução de contrato | Enquanto o pet estiver cadastrado. O ponto exato continua guardado depois que o caso é encerrado, e não é apagado por prazo. Em página pública ele nunca aparece: o máximo é bairro e cidade (item 5) |
+| Quem recebeu cada alerta e quando | Não mandar mais de 3 alertas por pessoa em 24 horas | Legítimo interesse | Fica guardado e não é apagado por prazo. Dizemos o que isso tem de desconfortável: o teto de 3 alertas olha só as últimas 24 horas, e o registro continua existindo depois disso. Você pode pedir a eliminação dele pelo privacidade@bichu.app |
 
 **Quem recebe o alerta:** pessoas com conta que informaram uma localização válida a até **5 km** do ponto e que deixaram as notificações ligadas, até 500 pessoas por alerta. O alerta mostra o bairro, nunca o ponto. Se o caso foi aberto só com bairro e cidade, sem ponto, o alerta de 5 km não é disparado.
 
@@ -125,9 +129,9 @@ Quem escaneia a plaquinha consegue avisar o tutor **sem criar conta**, com um to
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Data e hora do aviso | Avisar o tutor | Legítimo interesse (art. 7º, IX), do tutor e do animal | Ainda não definido |
-| Recado opcional, de até 500 caracteres | Contar ao tutor o que você quiser | Consentimento (art. 7º, I): você escreve se quiser | Ainda não definido |
-| Resumo do IP cortado combinado ao resumo do navegador | Juntar num aviso só os avisos repetidos da mesma pessoa, para o tutor não ser acordado várias vezes, e perceber abuso | Legítimo interesse | Ainda não definido |
+| Data e hora do aviso | Avisar o tutor | Legítimo interesse (art. 7º, IX), do tutor e do animal | Fica guardado junto do aviso e não é apagado por prazo: é o registro de que alguém avisou e de quando, e é ele que sustenta a conversa com o tutor |
+| Recado opcional, de até 500 caracteres | Contar ao tutor o que você quiser | Consentimento (art. 7º, I): você escreve se quiser | Fica guardado junto do aviso e não é apagado por prazo. Como o recado é seu e você escreveu por vontade própria, você pode retirar o consentimento e pedir a eliminação dele pelo privacidade@bichu.app — mesmo sem ter conta |
+| Resumo do IP cortado combinado ao resumo do navegador | Juntar num aviso só os avisos repetidos da mesma pessoa, para o tutor não ser acordado várias vezes, e perceber abuso | Legítimo interesse | Fica guardado junto do aviso e não é apagado por prazo: é ele que impede o mesmo aviso de acordar o tutor várias vezes e que permite perceber abuso da plaquinha |
 | Código de acesso ao aviso | Permitir que você volte ao aviso sem ter conta | Legítimo interesse | Guardado só como resumo criptográfico, vale 30 dias |
 
 Nenhum desses dados vira cadastro, entra em lista de e-mail ou é usado para marketing.
@@ -138,7 +142,7 @@ Quem tem conta pode registrar um animal que encontrou, mesmo sem plaquinha.
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Espécie, porte, sexo, raça, cor, onde foi visto (ponto opcional e/ou bairro, cidade e UF), foto e recado | Procurar casos de pet perdido parecidos e avisar os tutores | Execução de contrato | Ainda não definido |
+| Espécie, porte, sexo, raça, cor, onde foi visto (ponto opcional e/ou bairro, cidade e UF), foto e recado | Procurar casos de pet perdido parecidos e avisar os tutores | Execução de contrato | Enquanto o achado estiver registrado. Ele continua guardado depois que o caso do pet é encerrado, e não é apagado por prazo |
 
 O cruzamento entre achados e casos é feito automaticamente, mas **ele só sugere**: quem decide se é o mesmo animal é o tutor. A foto de um achado é vista só pelo tutor, dentro da conversa, e nunca em página pública.
 
@@ -146,23 +150,23 @@ O cruzamento entre achados e casos é feito automaticamente, mas **ele só suger
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| Mensagens e fotos da conversa | Combinar o reencontro | Execução de contrato | Ainda não definido. A conversa é apagada quando a conta do tutor, ou a conta de quem avisou, é excluída |
+| Mensagens e fotos da conversa | Combinar o reencontro | Execução de contrato | Fica guardada e não é apagada por prazo. A guarda tem um mínimo de propósito — **12 meses depois do encerramento** —, porque a conversa é a prova das duas pessoas se houver denúncia de extorsão pelo golpe do falso achador. Quando a conta de um dos dois é excluída, a conversa **deixa de aparecer** para os dois, e não é apagada |
 | Leitura automática das mensagens para retirar telefone, e-mail, endereço e links | Proteger as duas pessoas do golpe do falso achador e de exposição do endereço | Legítimo interesse em prevenção a fraude (art. 7º, IX) | A mensagem é gravada já sem esses trechos. O texto original não é guardado |
 | Sinais de uso anormal, como volume alto de mensagens ou a mesma pessoa avisando muitos tutores | Reter a conversa até uma pessoa da equipe revisar | Legítimo interesse em prevenção a fraude | Enquanto a conversa existir |
 
-Se a outra pessoa excluir a conta dela, a conversa é apagada e deixa de aparecer para você também.
+Se a outra pessoa excluir a conta dela, a conversa deixa de aparecer para você também. Ela não é apagada: deixar de aparecer é o que a exclusão da conta faz.
 
 ### 4.12 Transferência de pet
 
 | O que | Para quê | Base legal | Por quanto tempo |
 |---|---|---|---|
-| E-mail da pessoa que vai receber o pet, informado por você | Enviar o convite e confirmar a transferência | Execução de contrato (com você) e legítimo interesse (em relação a quem recebe) | Ainda não definido |
+| E-mail da pessoa que vai receber o pet, informado por você | Enviar o convite e confirmar a transferência | Execução de contrato (com você) e legítimo interesse (em relação a quem recebe) | O convite para de valer em 30 dias. O registro de que ele foi enviado, com o e-mail, fica guardado e não é apagado por prazo, porque é a prova de quem autorizou a transferência do pet |
 
 Só informe o e-mail de alguém que sabe da transferência. Na sua tela, esse e-mail aparece mascarado.
 
 ### 4.13 Diretório de profissionais
 
-Profissionais e estabelecimentos só aparecem no Bichu **depois de aceitarem**. Tratamos o nome, a atividade, a descrição, a cidade, o bairro e o ponto de atendimento, o telefone comercial, o CNPJ ou o CRMV e o resultado das verificações. Os documentos enviados para verificação ficam em armazenamento fechado. Base legal: execução de contrato com o profissional. Por quanto tempo: ainda não definido.
+Profissionais e estabelecimentos só aparecem no Bichu **depois de aceitarem**. Tratamos o nome, a atividade, a descrição, a cidade, o bairro e o ponto de atendimento, o telefone comercial, o CNPJ ou o CRMV e o resultado das verificações. Os documentos enviados para verificação ficam em armazenamento fechado. Base legal: execução de contrato com o profissional. Por quanto tempo: enquanto o profissional estiver no diretório. Os dados não são apagados por prazo, e o profissional pode pedir a remoção a qualquer momento pelo privacidade@bichu.app.
 
 ### 4.14 Trilha de auditoria
 
@@ -177,7 +181,7 @@ Mandamos e-mails de confirmação de conta, redefinição de senha, avisos de se
 
 ### 4.16 Quem escreve para a gente
 
-Se você escreve para oi@bichu.app ou privacidade@bichu.app, tratamos o que você mandar para responder. Base legal: legítimo interesse, ou cumprimento de obrigação legal quando for um pedido sobre os seus dados. Por quanto tempo: ainda não definido.
+Se você escreve para oi@bichu.app ou privacidade@bichu.app, tratamos o que você mandar para responder. Base legal: legítimo interesse, ou cumprimento de obrigação legal quando for um pedido sobre os seus dados. Por quanto tempo: enquanto servir para responder a você e para provar que o pedido foi atendido. Não há apagamento por prazo.
 
 ### 4.17 O que o Bichu não coleta
 
@@ -277,9 +281,10 @@ Pelo art. 18 da LGPD, você pode pedir:
 **Exclusão da conta.** Hoje a exclusão da conta é pedida pelo privacidade@bichu.app. [PENDENTE: o botão de excluir a conta no app ainda não existe] O que acontece:
 
 - a conta deixa de funcionar na hora, as sessões são encerradas, a localização de referência é apagada e o e-mail fica livre para uma conta nova;
-- os dados da conta, dos pets, das tags, dos casos, dos achados e das conversas abertas por você são apagados da base em até **30 dias**. Até lá, se a exclusão foi um engano ou se alguém excluiu a sua conta sem você saber, fale com a gente;
-- **o que fica:** a trilha de auditoria, por 24 meses (item 4.14); os arquivos de foto, enquanto a correção descrita no item 4.4 não estiver pronta; e as cópias de segurança, até elas vencerem, em até [PRAZO DAS CÓPIAS DE SEGURANÇA — CONFIRMAR EM PRODUÇÃO] dias;
-- as conversas de que você participou também são apagadas, e a outra pessoa deixa de vê-las.
+- os dados da conta, dos pets, das tags, dos casos, dos achados e das conversas **não são apagados da base**. A conta fica desabilitada: você deixa de ser encontrado em qualquer página ou função do Bichu, e é a desabilitação, e não a ausência do registro, que faz você desaparecer do produto. Essa é uma decisão nossa, e preferimos dizê-la a prometer um apagamento que não acontece;
+- **se você quer a eliminação de fato**, peça pelo privacidade@bichu.app. O art. 18, VI, da LGPD é o seu direito, e o pedido é tratado por uma pessoa, uma a uma — não por um prazo automático;
+- **o que isso quer dizer, item por item:** a trilha de auditoria continua, e ela é a única coisa aqui que de fato é apagada por prazo, em 24 meses (item 4.14); os arquivos de foto ficam (item 4.4); e as cópias de segurança ficam até vencerem, em até [PRAZO DAS CÓPIAS DE SEGURANÇA — CONFIRMAR EM PRODUÇÃO] dias;
+- as conversas de que você participou deixam de aparecer para você e para a outra pessoa, e não são apagadas.
 
 **Cópia dos seus dados.** Hoje a cópia é preparada manualmente, a partir do pedido pelo privacidade@bichu.app. Ela traz os seus dados e as mensagens que você escreveu. Não traz dados de outras pessoas, como o nome ou o contato de quem conversou com você.
 
@@ -297,7 +302,7 @@ Pelo art. 18 da LGPD, você pode pedir:
 
 - ela serve só para cumprir a idade mínima de 16 anos, e para nada mais;
 - ela **não aparece para outras pessoas**: nem dentro do app, nem em página pública, nem para quem acha o seu pet;
-- por quanto tempo ela fica: veja o item 4.1. [JURÍDICO: definir o prazo de guarda da data de nascimento — se ela pode ser descartada depois da conferência, ou se fica enquanto a conta existir como prova da idade]
+- por quanto tempo ela fica: enquanto a conta existir (item 4.1). Ela não é descartada depois da conferência, porque é ela que prova que a idade mínima de 16 anos foi conferida.
 
 Se descobrirmos que uma conta é de alguém com menos de 16 anos, ela é suspensa e os dados dela são apagados, como na exclusão de conta (item 9). Se você é responsável por uma criança ou adolescente que usa o Bichu, ou sabe de um caso, escreva para privacidade@bichu.app.
 

@@ -1,6 +1,6 @@
 # ADR-0007: Fotos em armazenamento de objeto compatível com S3
 
-**Status:** aceito
+**Status:** aceito, com emendas 1 e 2
 **Data:** 2026-09-17
 **Revisado em:** 2026-09-17 — a nuvem deixou de ser AWS e passou a ser decisão
 adiada. A decisão de desenho não mudou; mudou de onde o armazenamento vem, e o
@@ -81,7 +81,9 @@ nova e apaga a antiga.
 **Ciclo de vida:** original mantido enquanto o pet existir; expurgo definitivo 30
 dias após a exclusão do pet ou da conta; foto de achador apagada 30 dias após o
 encerramento do caso. A expiração é executada por um job nosso, **não** por
-regra de ciclo de vida do provedor.
+regra de ciclo de vida do provedor. **Superado pela emenda 2 (26/10/2026) no que
+diz prazo de apagamento: nenhum desses três expurgos existe, e nenhum vai
+existir.**
 
 ### O que é proibido usar hoje, para não fechar a porta amanhã
 
@@ -208,3 +210,44 @@ armazenamento de desenvolvimento e da esteira.
 7. **Credencial:** HMAC da conta de serviço da VM, criada pelo cliente e
    escrita direto no `.env` do host (hml) ou no gerenciador de segredos
    (prod, ADR-0022), sem passar por agente. Papéis por bucket, nunca no projeto.
+
+---
+
+## Emenda 2 (2026-10-26): a foto NÃO é apagada por prazo (decisão do cliente)
+
+**Decisão do cliente, de 26/10, literal:** *"não apague nada, mantenha e corrija
+a política"*. Ela é a generalização da decisão dele de 17/10 — *"Mantenha a foto
+e não delete os dados do usuário, apenas desabilite na plataforma e filtro as
+páginas"* — e alcança o **Ciclo de vida** da decisão original, acima.
+
+**Os três expurgos declarados lá não existem, e não vão existir:**
+
+1. *"expurgo definitivo 30 dias após a exclusão do pet ou da conta"* — a função
+   que o fazia (`identity/application/expurgar-contas-excluidas.ts`) ficou
+   **inócua** em 17/10 e `apagarObjetosDaConta` deixou de ser chamada. O objeto
+   fica no balde;
+2. *"foto de achador apagada 30 dias após o encerramento do caso"* — nunca
+   existiu varredura que a apagasse. `found_reports.retention_until` é
+   **escrita** (`found/adapters/persistence/kysely-found-report-repository.ts`)
+   e tem índice de apoio, e **nada a lê**;
+3. a varredura do worker que continua existindo (`media.purge_expired`,
+   `varrer-envios-vencidos.ts`) apaga **envio não confirmado** — intenção de
+   upload que ninguém completou. Isso não é foto do produto e não é retenção:
+   é lixo de protocolo, e ela segue valendo.
+
+**O que a emenda NÃO toca:** o item 6 da emenda 1 (a regra inócua de envio
+incompleto, 1 dia, no bucket) continua, pelo mesmo motivo — envio incompleto
+nunca foi dado de ninguém.
+
+**A consequência de produto está dita ao usuário**, e não escondida: a política
+publicada (item 4.4) diz que apagar a foto a tira do Bichu mas **não** apaga o
+arquivo, que a versão tratada pode continuar acessível a quem já tem o endereço
+exato, e que isso é decisão e não pendência. O texto anterior dizia *"estamos
+corrigindo isso"*, e essa frase deixou de ser verdade em 17/10.
+
+**O gatilho do SEC-009 continua armado, e esta emenda o aperta.** Ele é
+*"qualquer retenção de arquivo original enviado por quem não está
+autenticado"*. A foto do achador sem conta é exatamente isso, e agora ela é
+retida **sem prazo**. O gatilho não é desarmado por esta decisão: ele fica
+disparado, e o que a decisão do cliente muda é que a resposta a ele não pode
+mais ser "o expurgo de 30 dias resolve". Ver a ADR-0010, emenda 6.
