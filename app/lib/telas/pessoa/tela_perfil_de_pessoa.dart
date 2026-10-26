@@ -169,7 +169,10 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   static const String aceitar = 'Aceitar';
   static const String recusar = 'Recusar';
   static const String cancelarPedido = 'Cancelar pedido';
-  static const String desfazerConexao = 'Desfazer conexão';
+  // `desfazerConexao` SAIU DAQUI EM 26/10/2026, e não foi renomeado: o rótulo
+  // mora agora em `MenuDoPerfil.desfazerConexao`, com o controle. Deixar a
+  // constante aqui, sem uso, convidaria a próxima pessoa a desenhar um segundo
+  // `Desfazer conexão` no corpo — que é exatamente o que o cliente tirou.
   static const String pedidoEnviado = 'Pedido enviado. Ela decide quando responder.';
   static const String pedidoRecebido = 'Este usuário quer se conectar com você.';
 
@@ -181,11 +184,27 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   // cliente sobre O QUE SE VE no perfil de quem nao e conexao -- nunca sobre
   // esta frase. Nao ha decisao dele sendo desfeita aqui.
   //
-  // **E o estado continua dito, por quem nao e texto de apoio.** O ramo
-  // `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e so quem **é**
-  // conexao ve esse botao: a acao afirma o vinculo melhor que a frase, porque
-  // ela tambem o resolve. O que saiu foi a linha que repetia em palavras o que
-  // o botao abaixo dela ja dizia.
+  // **O ARGUMENTO QUE SUSTENTAVA ESTA AUSENCIA ERA MEU, E ENVELHECEU EM
+  // 26/10/2026 -- mas a ausencia da FRASE continua sendo pedido dele.**
+  //
+  // O texto daqui dizia: *"E o estado continua dito, por quem nao e texto de
+  // apoio. O ramo `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e so
+  // quem **é** conexao ve esse botao: a acao afirma o vinculo melhor que a
+  // frase, porque ela tambem o resolve."*
+  //
+  // Esse botao **saiu do corpo** em 26/10/2026, por outro pedido dele, do MESMO
+  // dia 22/10: *"o botao desfazer conexao deve ir para os 3 pontinhos, junto
+  // com o denunciar"*. Entao o argumento acima perdeu o apoio -- nao por estar
+  // errado, mas por o controle que ele citava ter mudado de lugar.
+  //
+  // **AS DUAS DECISOES DELE CONTINUAM VALENDO, e nenhuma cancela a outra**: a
+  // frase saiu (22/10) e o botao foi para o `⋮` (22/10). O ramo de `conectado`
+  // no corpo e **vazio** hoje, e o vinculo e dito pela vitrine, que so existe
+  // para quem e conexao aceita.
+  //
+  // **Quem for devolver a frase OU o botao ao corpo apoiado no paragrafo citado
+  // acima esta revertendo dois pedidos dele com um raciocinio meu.** Ja
+  // aconteceu hoje com os icones da barra.
 
   /// **A frase do estado de estranho**, e ela diz o que falta e não o que é
   /// proibido: a vitrine não é um recurso bloqueado, é uma coisa que a conexão
@@ -340,6 +359,26 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
                 _perfil = null;
               }),
               aoMudarOBloqueio: (_) => unawaited(_carregar()),
+              // **`DESFAZER CONEXÃO` NO `⋮`** (cliente, 22/10/2026). **O
+              // RECORTE POR ESTADO MORA AQUI, e não no menu**: o `⋮` aparece
+              // nos QUATRO estados da relação (é o `if (perfil != null)` acima),
+              // então passar isto sempre ofereceria desfazer a quem não é
+              // conexão -- o espelho exato do defeito que ele cobrou na busca.
+              //
+              // `connectionRef == null` também esconde: sem `ref` de aresta não
+              // há o que encerrar, e item que falha no toque é pior que item
+              // ausente.
+              //
+              // **É o MESMO `_agir` que o botão do corpo chamava**, com a mesma
+              // chamada `encerrar(ref)` -- é isso que preserva o recarregamento
+              // do perfil, o 404 como alvo perdido e o freio de toque duplo.
+              aoDesfazerConexao:
+                  perfil.connectionState == EstadoDaConexao.conectado &&
+                          perfil.connectionRef != null
+                      ? () => _agir(
+                            () => widget.conexoes.encerrar(perfil.connectionRef!),
+                          )
+                      : null,
             ),
         ],
       ),
@@ -513,18 +552,33 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         ];
 
       case EstadoDaConexao.conectado:
-        // **SEM LINHA DE ESTADO**, e a ausencia e pedido do cliente de
-        // 22/10/2026 (ver a nota de `Vocês estão conectados.` no cabecalho).
-        // O botao e o primeiro elemento deste ramo agora, e nao ha vao antes
-        // dele: o `SizedBox` que ficava aqui separava a frase do botao, e sem
-        // a frase ele seria recuo no topo do bloco.
-        return <Widget>[
-          BotaoSecundario(
-            rotulo: TelaDePerfilDePessoa.desfazerConexao,
-            carregando: _agindo,
-            aoTocar: ref == null ? null : () => unawaited(_agir(() => widget.conexoes.encerrar(ref))),
-          ),
-        ];
+        // **O RAMO É VAZIO, e as DUAS ausências são pedido dele.**
+        //
+        // 1. **Sem linha de estado** (22/10/2026): *"Retire o texto vocês estão
+        //    conectados."*;
+        // 2. **Sem botão** (22/10/2026): *"o botão desfazer conexão deve ir
+        //    para os 3 pontinhos, junto com o denunciar"*. `Desfazer conexão`
+        //    agora é item de [MenuDoPerfil], e chega lá por
+        //    `aoDesfazerConexao` -- ver `build`, que o passa SÓ neste estado.
+        //
+        // **O ARGUMENTO QUE ESTAVA AQUI ERA MEU, E NÃO DELE -- e ele fica
+        // escrito para ninguém "consertar" isto de volta.** O comentário dizia:
+        // *"o estado continua dito, por quem não é texto de apoio. O ramo
+        // `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e só quem é
+        // conexão vê esse botão: a ação afirma o vínculo melhor que a frase,
+        // porque ela também o resolve."*
+        //
+        // Era raciocínio defensável, e foi escrito em 22/10 -- **no mesmo dia em
+        // que ele pediu o contrário**. A decisão dele é mais nova e vence; o
+        // argumento não estava errado, estava **sobreposto**. Quem for devolver
+        // o botão ao corpo apoiado nessa frase está revertendo um pedido dele
+        // com um raciocínio meu.
+        //
+        // **E o vínculo continua dito**, só não por um botão: a vitrine abaixo
+        // só existe para quem é conexão aceita (`perfil.vitrine != null`), e é
+        // ela o sinal. O que NÃO pode voltar é a linha de texto -- ele a cortou
+        // por escrito.
+        return const <Widget>[];
 
       case null:
         // SEM RELAÇÃO. **A porta de pedir deixou de depender de um convite na
