@@ -1398,6 +1398,185 @@ void main() {
         );
       }
     });
+
+    // =======================================================================
+    // A SEGUNDA BUSCA, e é aqui que o defeito SOBREVIVEU ao conserto de 22/10
+    // =======================================================================
+    //
+    // **O cliente cobrou o mesmo item em 26/10/2026**, palavras dele: *"você
+    // não resolveu o botão de pedir conexão, quando o usuário já é uma conexão,
+    // ele deve ser desfazer conexão ou não aparecer"*. E ele estava certo,
+    // apesar de os cinco casos acima estarem verdes: **todos eles fazem UMA
+    // busca**, e o que sobrava só aparece na SEGUNDA.
+    //
+    // `_estado` de `CartaoDePessoaEncontrada` é semeado UMA vez
+    // (`late EstadoDaConexao? _estado = widget.pessoa.estadoDaConexao`) e o
+    // cartão **não tem `didUpdateWidget`**. Sem `key`, o Flutter casa os filhos
+    // da lista **por posição**: a segunda busca reaproveita o `State` do cartão
+    // que ocupava aquele índice e mantém o `_estado` da pessoa ANTERIOR. O
+    // estado chegava certo do servidor e era descartado pela identidade do
+    // elemento.
+    //
+    // DESLIGAMENTO, FEITO E MEDIDO EM 26/10/2026: apague
+    // `key: ValueKey<String>(pessoa.handle)` do `CartaoDePessoaEncontrada` em
+    // `lib/telas/rede/busca_de_pessoas.dart`. Os DOIS primeiros casos abaixo
+    // reprovam pelo nome -- o primeiro com `Found 1 widget with text "Pedir
+    // conexão"` onde não devia haver nenhum, e o segundo com `Found 0` onde
+    // devia haver um. O terceiro continua verde, porque não troca de pessoa.
+    //
+    // **O CONTROLE POSITIVO NÃO ESTÁ NESTE GRUPO**, e isso é deliberado: um
+    // caso que cai junto com o mecanismo não prova que o conserto não apagou o
+    // botão de todo mundo. Quem prova isso é
+    // `CONTRAPESO: com 'none', o botão de pedir VOLTA a aparecer`, do grupo
+    // acima -- UMA busca, independente da `key`, medido VERDE nas duas
+    // condições (chave ligada e chave removida).
+    group('BICHUS — a SEGUNDA busca não herda o estado da primeira', () {
+      testWidgets(
+          'estranho e depois CONEXÃO no mesmo índice: o botão NÃO reaparece',
+          (tester) async {
+        // A MESMA lista que o `MockClient` lê a cada `GET /people`: mutá-la
+        // entre as duas buscas é o que faz a segunda devolver outra pessoa no
+        // índice 0 -- que é a condição exata do defeito.
+        final resultados = <Map<String, dynamic>>[
+          _pessoa(apelido: 'bruno-tutor', nome: 'Bruno', estado: 'none'),
+        ];
+        await _montar(tester, resultados: resultados);
+
+        await tester.enterText(find.byType(TextField).first, 'bruno');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Pedir conexão'),
+          findsOneWidget,
+          reason: 'a primeira busca tem de achar o estranho, senão a segunda '
+              'não mede herança de estado nenhuma.',
+        );
+
+        resultados
+          ..clear()
+          ..add(_pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'connected'));
+        await tester.enterText(find.byType(TextField).first, 'marina');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Marina'), findsOneWidget, reason: 'a segunda lista trocou de pessoa');
+        expect(
+          find.text('Pedir conexão'),
+          findsNothing,
+          reason: 'REPROVA: o cartão herdou o `_estado` do estranho da busca '
+              'ANTERIOR e ofereceu `Pedir conexão` a quem já é conexão aceita. '
+              'É o relato do cliente de 26/10/2026 -- *"quando o usuário já é '
+              'uma conexão"* --, sobrevivendo ao conserto de 22/10 por '
+              'identidade de elemento, e não por estado.',
+        );
+        expect(find.text('Já é sua conexão'), findsOneWidget);
+      });
+
+      /// **A OUTRA DIREÇÃO DO MESMO DEFEITO — e este caso NÃO é o controle
+      /// positivo, apesar de ter nascido com esse nome.**
+      ///
+      /// Ele corre a mesma troca invertida: conexão aceita primeiro, estranho
+      /// depois, no mesmo índice. O botão tem de **voltar**.
+      ///
+      /// **MEDIDO em 26/10/2026, e o resultado corrigiu o nome deste caso**: com
+      /// a `key` removida, ele REPROVA junto com o de cima (`Found 0 widgets
+      /// with text "Pedir conexão"`). Um caso que cai quando o mecanismo cai
+      /// não serve de controle positivo — ele é uma SEGUNDA isca, que mostra
+      /// que a herança de `_estado` por posição erra nos DOIS sentidos: ela
+      /// esconde o botão de quem precisa dele tanto quanto o oferece a quem não
+      /// precisa.
+      ///
+      /// **O CONTROLE POSITIVO de verdade é
+      /// `CONTRAPESO: com 'none', o botão de pedir VOLTA a aparecer`**, no grupo
+      /// acima: ele faz UMA busca, não depende da `key`, e foi medido VERDE com
+      /// a `key` ligada e com ela removida. É ele que prova que `Pedir conexão`
+      /// continua existindo para quem não tem relação — ou seja, que o caso de
+      /// cima não passa por o conserto ter apagado o botão de todo mundo.
+      testWidgets(
+          'a OUTRA direção: conexão e depois ESTRANHO no mesmo índice, o botão VOLTA',
+          (tester) async {
+        final resultados = <Map<String, dynamic>>[
+          _pessoa(apelido: 'marina-vet', nome: 'Marina', estado: 'connected'),
+        ];
+        await _montar(tester, resultados: resultados);
+
+        await tester.enterText(find.byType(TextField).first, 'marina');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Já é sua conexão'),
+          findsOneWidget,
+          reason: 'a primeira busca tem de achar a conexão aceita',
+        );
+        expect(find.text('Pedir conexão'), findsNothing);
+
+        resultados
+          ..clear()
+          ..add(_pessoa(apelido: 'bruno-tutor', nome: 'Bruno', estado: 'none'));
+        await tester.enterText(find.byType(TextField).first, 'bruno');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Bruno'), findsOneWidget);
+        expect(
+          find.text('Pedir conexão'),
+          findsOneWidget,
+          reason: 'REPROVA: o botão NÃO voltou para quem não tem relação -- o '
+              'cartão herdou o `connected` da conexão que ocupava este índice '
+              'na busca ANTERIOR. É o mesmo defeito do caso acima, na direção '
+              'oposta: a herança por posição esconde a ação de quem precisa '
+              'dela tanto quanto a oferece a quem não precisa.',
+        );
+        expect(find.text('Já é sua conexão'), findsNothing);
+      });
+
+      /// **A TERCEIRA DIREÇÃO: o estado APRENDIDO da ação não pode ser perdido.**
+      ///
+      /// É o que um `didUpdateWidget` que re-semeasse de `widget.pessoa`
+      /// quebraria, e é por isso que o conserto é `key` e não
+      /// `didUpdateWidget`: a lista não é recarregada depois de um pedido, então
+      /// `pessoa.estadoDaConexao` continua `none` enquanto `_estado` já
+      /// aprendeu o `pending_sent` do 201. Re-semear apagaria o aprendizado e o
+      /// botão voltaria **depois do toque**.
+      testWidgets('a MESMA pessoa conserva o estado que aprendeu do 201',
+          (tester) async {
+        await _montar(
+          tester,
+          resultados: <Map<String, dynamic>>[
+            _pessoa(apelido: 'bruno-tutor', nome: 'Bruno', estado: 'none'),
+          ],
+        );
+        await tester.enterText(find.byType(TextField).first, 'bruno');
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Buscar'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pedir conexão'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Pedido enviado, aguardando aceite'),
+          findsOneWidget,
+          reason: 'o 201 desta bancada devolve `pending_sent`',
+        );
+
+        // Um rebuild do pai com a MESMA lista -- o que a paginação faz.
+        await tester.pump();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Pedir conexão'),
+          findsNothing,
+          reason: 'REPROVA: o cartão esqueceu o estado que aprendeu da resposta '
+              'da própria ação e voltou a oferecer `Pedir conexão` depois do '
+              'toque. É o defeito que um `didUpdateWidget` re-semeando de '
+              '`widget.pessoa` introduziria.',
+        );
+      });
+    });
   });
 
   // ===========================================================================
