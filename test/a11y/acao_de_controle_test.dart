@@ -314,7 +314,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _rede);
       await irPara(tester, Rotas.cadastrarPet);
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
 
       // 3 de especie + 3 de porte + 3 de sexo + raca + voltar + `Continuar`.
       // Os segmentos abaixo da dobra entram na conta: o portao nao pula no

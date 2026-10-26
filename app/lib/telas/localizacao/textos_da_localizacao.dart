@@ -130,7 +130,10 @@ abstract final class TextosDaLocalizacao {
 
   static const String escolherOEstado = 'Escolher na lista';
 
-  static const String estadoEmBrancoFunciona = 'Em branco funciona.';
+  // `estadoEmBrancoFunciona` SAIU EM 26/10/2026, com a ajuda do campo
+  // `Estado` de `captura_de_localizacao.dart` -- cliente, 22/10/2026:
+  // *"Retire o texto so se voce souber, em branco funciona"*. A constante sai
+  // junto com o uso de proposito: constante orfa volta a ser usada.
 
   /// A cidade e o unico campo exigido, e o contrato concorda
   /// (`Area.required: [city]`).

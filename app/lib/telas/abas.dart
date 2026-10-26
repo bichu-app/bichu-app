@@ -22,6 +22,7 @@ import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
 import 'perfil/meus_eventos.dart';
 import 'perfil/meus_pets.dart';
+import 'perto/tela_de_minhas_indicacoes.dart';
 import 'rede/secao_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
 
@@ -1084,6 +1085,44 @@ class AbaPerfil extends StatelessWidget {
             ItemDeMenu(
               rotulo: MeusEventos.titulo,
               aoTocar: () => context.push(Rotas.meusEventos),
+            ),
+            // **`Minhas indicações` ENTROU AQUI (26/10/2026), e e a METADE QUE
+            // A PESSOA VE.** Cliente, 22/10/2026: *"Remova o link minhas
+            // indicacoes da pagina de comunidade"* -- e ele a quer no menu do
+            // perfil. A outra metade e a saida do pe da aba `Comunidade`, em
+            // `rede/secao_da_rede.dart`, e as duas sao o mesmo pedido: so a
+            // remocao deixaria a tela sem porta humana nenhuma.
+            //
+            // **E ESTE MENU, e nao a gaveta** -- exatamente a conta que
+            // `Convide tutores` fez tres linhas acima. A gaveta esta OCULTA
+            // desde 19/10 (`casca_com_abas.dart`), e a porta de verdade e
+            // esta, alcancada pela FOTO da barra de topo. `Minhas indicações`
+            // nunca teve linha na gaveta -- nem reservada --, entao nao havia
+            // nada para promover la.
+            //
+            // **SEM ICONE, e isso nao e omissao**: `ItemDeMenu` nao tem
+            // parametro de icone. Quem exige glifo e `SubDestino`, da gaveta
+            // (`telas/gaveta_de_secoes.dart`), e esta linha nao e um
+            // `SubDestino`. Nenhuma das onze linhas deste menu pinta icone, e
+            // acrescentar um aqui faria a unica linha diferente do conjunto.
+            //
+            // **NO GRUPO `Comunidade` e DEPOIS de `Meus eventos`.** O
+            // cabecalho do grupo e *"a minha gente e os encontros"*, e a
+            // ordem dele vai de gente para o que eu fiz: `Pedidos`,
+            // `Conexoes` e `Convide tutores` sao GENTE; `Meus eventos` e
+            // `Minhas indicações` sao O QUE EU PUS NA COMUNIDADE -- o encontro
+            // que criei e o lugar que indiquei. Por isso ela fecha o grupo em
+            // vez de se meter entre as linhas de gente.
+            //
+            // **O `if (logado)` da aba antiga NAO viajou com ela, e o motivo e
+            // estrutural e nao esquecimento**: este menu so existe logado --
+            // `AbaPerfil.build` troca o corpo inteiro quando
+            // `sessao.estado != EstadoDaSessao.logado` --, enquanto a aba
+            // `Comunidade` e navegavel sem conta e precisava declarar a regua a
+            // mao. A regua continua valendo; o que mudou e quem a aplica.
+            ItemDeMenu(
+              rotulo: TelaDeMinhasIndicacoes.titulo,
+              aoTocar: () => context.push(Rotas.minhasIndicacoes),
             ),
             const SizedBox(height: BichuEspaco.e6),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta

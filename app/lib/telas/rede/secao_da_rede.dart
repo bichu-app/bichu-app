@@ -10,7 +10,6 @@ import '../../roteamento/rotas.dart';
 import '../../sessao/controlador_de_sessao.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/acao_de_criar_flutuante.dart';
-import '../../widgets/item_de_menu.dart';
 import '../abas.dart';
 import '../casca_com_abas.dart';
 import '../perto/lista_do_diretorio.dart';
@@ -125,7 +124,7 @@ enum AbaDaSecaoRede {
 /// | `Encerrados` | **filtro** `Quando -> Encerrados` | idem |
 /// | `Meus pedidos` | **filtro** `Meu envolvimento -> Só onde eu pedi` | mesma entidade; o cartao ja pinta o estado do pedido |
 /// | `Profissionais` | **aba `Comunidade`** | e o conteudo da aba |
-/// | `Minhas indicações` | **porta propria** (`Rotas.minhasIndicacoes`) | a entidade MUDA: indicacao em analise nao e local da lista, e filtrar devolveria zero no unico caso que importa |
+/// | `Minhas indicações` | **porta propria** (`Rotas.minhasIndicacoes`), e desde 26/10/2026 ela mora no MENU DO PERFIL (`abas.dart`, `AbaPerfil`, grupo `Comunidade`) e nao mais no pe desta aba | a entidade MUDA: indicacao em analise nao e local da lista, e filtrar devolveria zero no unico caso que importa |
 ///
 /// A conta de por que as tres primeiras cabem no filtro e a quarta nao esta
 /// em `agenda_da_rede.dart` (os grupos) e em `Rotas.minhasIndicacoes` (a
@@ -178,10 +177,10 @@ class SecaoDaRede extends StatefulWidget {
 
   /// O rotulo da porta de `Minhas indicações`, no pe da aba `Comunidade`.
   ///
-  /// **A MESMA palavra da aba que ela substituiu.** Quem procurava a aba acha
-  /// a porta pelo texto; trocar a redacao aqui faria a funcao parecer removida
-  /// em vez de mudada de lugar.
-  static const String rotuloDasMinhasIndicacoes = 'Minhas indicações';
+  // `rotuloDasMinhasIndicacoes` SAIU EM 26/10/2026, com a porta. A palavra
+  // continua UMA SO, e agora a fonte unica dela e `TelaDeMinhasIndicacoes.titulo`
+  // -- que e a tela que a porta abre. Deixar a constante aqui, orfa, faria a
+  // proxima edicao desta secao reabrir a porta sem perceber.
 
   @override
   State<SecaoDaRede> createState() => _SecaoDaRedeState();
@@ -487,41 +486,26 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
       case AbaDaSecaoRede.comunidade:
         return <Widget>[
           const ListaDoDiretorio(),
-          // **A PORTA DE `Minhas indicações`, NO PE DA ABA.**
+          // **A PORTA DE `Minhas indicações` SAIU DAQUI EM 26/10/2026.**
           //
-          // Ela e o que sobrou da aba que nao caber no filtro: ver a conta
-          // inteira em `Rotas.minhasIndicacoes`. Porta, e nao filtro, porque
-          // uma indicacao em analise nao e um local da lista.
+          // Cliente, 22/10/2026: *"Remova o link minhas indicacoes da pagina
+          // de comunidade"* -- e ele a quer no menu do Perfil. As DUAS metades
+          // sao o pedido: tirar daqui sem por la deixaria a tela de
+          // `Minhas indicações` sem porta humana nenhuma, que e exatamente
+          // como `Pedidos de conexao` passou de 18/10 a 19/10 sem ele ver.
           //
-          // **No PE e nao no topo**, e pela mesma razao que a porta de
-          // `Adoções` tinha: o conteudo da aba e a lista de locais, e uma
-          // porta para a minha lista pessoal acima dela inverteria a ordem de
-          // leitura -- quem abre `Comunidade` vem ver quem atende bem, nao o
-          // historico do que indicou.
+          // **A PORTA AGORA E `telas/abas.dart`, `AbaPerfil`, grupo
+          // `Comunidade`** -- o mesmo caminho que `Convide tutores` acabou de
+          // fazer em 26/10, pela mesma razao: a gaveta esta OCULTA desde
+          // 19/10, e por-la so la seria nao por em lugar nenhum.
           //
-          // **DENTRO da aba e nao da secao**: pendurada fora das abas, ela
-          // apareceria embaixo de `Eventos` tambem, oferecendo o historico de
-          // indicacoes a quem foi ver a agenda.
-          //
-          // **SEM SESSAO ELA NAO NASCE, e nao fica desabilitada.** Sem conta
-          // nao existe "minhas indicacoes": nao ha o que listar e a rota
-          // responderia `401`. Uma porta que convidasse a entrar seria um
-          // controle cujo desfecho e uma recusa -- o mesmo criterio 2 que a
-          // aba antiga ja obedecia.
-          //
-          // **A REGUA E SESSAO, e nao `podeCriarNaComunidade`**, e a diferenca
-          // e medida: indicar e ESCREVER sobre um terceiro e o servidor exige
-          // canal verificado (`409 contact-channel-unverified`); ver as minhas
-          // e LER o que eu ja fiz, e quem indicou enquanto estava validado e
-          // depois trocou de e-mail continua tendo indicacoes na fila.
-          // Esconder a porta dela esconderia o trabalho dela mesma.
-          if (logado) ...<Widget>[
-            const SizedBox(height: BichuEspaco.e6),
-            ItemDeMenu(
-              rotulo: SecaoDaRede.rotuloDasMinhasIndicacoes,
-              aoTocar: () => context.push(Rotas.minhasIndicacoes),
-            ),
-          ],
+          // **O `if (logado)` nao precisou viajar com ela, e isso e medido e
+          // nao suposto**: o menu do Perfil so existe logado
+          // (`AbaPerfil.build` troca o corpo inteiro quando
+          // `sessao.estado != EstadoDaSessao.logado`), entao a regua de sessao
+          // que esta aba precisava declarar a mao ficou ESTRUTURAL la. Quem
+          // mover a porta de volta para ca tem de trazer o `if (logado)` de
+          // volta com ela.
         ];
       case AbaDaSecaoRede.usuarios:
         // **A ABA DESENHA O MESMO CORPO LOGADO E DESLOGADO**, e quem trata a

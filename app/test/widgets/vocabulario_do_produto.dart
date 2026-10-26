@@ -274,6 +274,43 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
+/// ---------------------------------------------------------------------------
+/// 2718 -> 2718 em 26/10/2026 (BICHUS-278, OS QUATRO CONSERTOS DE MEIO CAMINHO)
+/// ---------------------------------------------------------------------------
+///
+/// **O TOTAL NAO MUDOU, E ISSO E UMA COMPENSACAO E NAO UM ZERO.** E exatamente
+/// o modo de falhar que os paragrafos de `PRESENCA DE ARQUIVO` acima vigiam, e
+/// por isso a conta foi feita ARQUIVO POR ARQUIVO e nao pelo total:
+///
+///   * `telas/mural/porta_do_perfil_do_autor.dart`  novo   (**+1**)
+///   * `telas/rede/secao_da_rede.dart`              8 -> 7 (**-1**)
+///
+/// Soma zero, e as duas ocorrencias estao NOMEADAS. A que entrou e
+/// **`BICHUS-62`** na prosa do arquivo novo -- a agulha e
+/// `RegExp('bichu', caseSensitive: false)` e `BICHUS` CASA com ela, entao chave
+/// de Jira conta como ocorrencia da marca neste portao. A que saiu e um
+/// **`BichuEspaco.e6`**: o `const SizedBox(height: BichuEspaco.e6)` que
+/// respirava acima da porta de `Minhas indicações` no pe da aba `Comunidade`,
+/// e que saiu junto com a porta (cliente, 22/10/2026).
+///
+/// Os outros 220 `.dart` de `app/lib` tem contagem IDENTICA a da base.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a mesma
+/// contagem sobre a arvore LIMPA da base `1654bcaf` devolveu EXATAMENTE a
+/// constante que ela travava (**2718**), por DOIS caminhos que concordaram --
+/// `re.findall` com `IGNORECASE` sobre o texto cru de cada `.dart`, e
+/// `grep -oi 'bichu'` arquivo por arquivo. Os dois caminhos foram repetidos
+/// depois das edicoes e concordaram de novo em 2718.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e ela e o que salva este total: `app/lib`
+/// tem **221** `.dart` na base e **222** aqui. `set(base) - set(agora)` saiu
+/// VAZIO -- nenhum arquivo saiu -- e `set(agora) - set(base)` tem exatamente
+/// UMA entrada, `telas/mural/porta_do_perfil_do_autor.dart`. Sem esta
+/// conferencia, um arquivo apagado com uma mencao a marca e outro acrescentado
+/// com uma fecharia o mesmo 2718 e o portao ficaria verde.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
 const int ocorrenciasDeBichu = 2718;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
@@ -372,18 +409,30 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
     'Diga o nome do lugar ou da pessoa.',
   ],
 
-  // O rotulo da especie. `Cao` -> `Cachorro` e a troca de maior valor das tres
-  // -- ela entrega tambem o pedido de `cachorro, gato e outro` -- e esta
-  // BLOQUEADA por dono: 15 asserts de `find.text('Cao')` moram em cinco
-  // arquivos de teste de frente alheia (`registrar_achado_test.dart`,
-  // `registrar_achado_dois_passos_test.dart`, `cep_nos_dois_formularios_test.dart`,
-  // `localizacao_do_botao_test.dart`, `perdidos_e_meus_achados_test.dart`).
-  // Mudar o rotulo sem mudar os asserts deixa a suite vermelha; mudar os
-  // asserts e editar arquivo de outra frente. Sai na segunda passada, junto
-  // com `admin/src/loja/dominio.ts` e `web/src/dominio/texto-do-pet.ts`, que
-  // carregam o MESMO rotulo -- os tres mudam no mesmo commit ou o produto fica
-  // dizendo `Cachorro` no site e `Cao` no app.
-  'lib/api/modelos_pet.dart': <String>['C\u00e3o'],
+  // A EXCECAO DO ROTULO DA ESPECIE SAIU EM 26/10/2026, e com ela o portao
+  // passou a cobrar o pedido do cliente de 22/10 (*"Troque os textos de cao
+  // para cachorro"*) no lugar onde o rotulo de fato mora.
+  //
+  // **Era ELA, e nao a falta de portao, que mantinha `Cao` vivo no app.** A
+  // agulha `\b(cao|caes)\b` (sem acento aqui so para nao reprovar a propria
+  // prosa) sempre casou com o literal de `lib/api/modelos_pet.dart`; este mapa
+  // e que a liberava. Portao com excecao e portao desligado naquele arquivo.
+  //
+  // **A RAZAO DE 22/10 CAIU, e ela era de custo e nao de produto**: a excecao
+  // dizia "15 asserts em cinco arquivos de teste de frente alheia". A contagem
+  // de hoje e 33 asserts `find.text('Cao')` em SETE arquivos, mais tres
+  // arquivos com o rotulo dentro de uma linha composta
+  // (`meus_pets_test.dart`, `perdidos_e_meus_achados_test.dart`,
+  // `selo_de_encontrado_test.dart`). Os dez mudaram no mesmo commit do rotulo.
+  //
+  // **O QUE NAO MUDOU, e e preciso dizer**: `admin/src/loja/dominio.ts` e
+  // `web/src/dominio/texto-do-pet.ts` continuam escrevendo `Cao`. Eles sao do
+  // Backoffice e do site, que sao OUTRAS SESSOES no mesmo repositorio, e
+  // editar arquivo delas por conta propria e colisao. Este portao varre
+  // `app/lib` e nao os alcanca -- quem for cobrar os dois precisa de um portao
+  // proprio de cada frente. O servidor JA diz `Cachorro`
+  // (`migrations/20260917000003_dados-de-referencia.sql`, `ref_species`), e e
+  // o app que estava divergindo dele.
 
   // ---- 3. REDACAO PROPRIA, PEDIDA PELO CLIENTE ----
   //

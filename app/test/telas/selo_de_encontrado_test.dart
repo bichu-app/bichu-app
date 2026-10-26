@@ -356,7 +356,7 @@ void main() {
           <String>[
             'Encontrado pela comunidade',
             'Voltou',
-            'Cão · Poodle · Pequeno · Caramelo',
+            'Cachorro · Poodle · Pequeno · Caramelo',
             'Vila Mariana, São Paulo',
           ],
           reason: 'REPROVA: o cartao do reencontrado tem linha a mais, a menos, '

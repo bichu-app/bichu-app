@@ -59,7 +59,7 @@ import 'pecas_da_rede.dart';
 /// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, a linha de origem --
 /// `Cadastrado pela equipe do Bichu` ou `Cadastrado pela comunidade`, e
 /// NENHUMA quando o servidor nao disse --, selo de valor); aviso de cancelado; `Quando`; `Local`
-/// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cães`; `O que
+/// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cachorros`; `O que
 /// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
 /// `Observações`. **Sem `Quem organiza` e sem `Compartilhar`** (24.17.1 e
 /// 24.15 item 4). Sem check-in, sem galeria da comunidade e sem lista de
@@ -1141,7 +1141,7 @@ class _Pilula extends StatelessWidget {
   }
 }
 
-/// `Para quais cães`: portes, idade e `Vacinação em dia` (so quando exigida).
+/// `Para quais cachorros`: portes, idade e `Vacinação em dia` (so quando exigida).
 /// **Sem pilula de guia** (UX 28.7.2): a frase inteira esta em `Cuidados`.
 class _ParaQuaisCaes extends StatelessWidget {
   const _ParaQuaisCaes({required this.c});

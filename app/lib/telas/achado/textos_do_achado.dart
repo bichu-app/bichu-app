@@ -82,7 +82,7 @@ abstract final class TextosDoAchado {
   /// **E O GRUPO CONTINUA TENDO NOME PARA QUEM NAO VE A TELA.**
   /// `GrupoSegmentado` usa o mesmo `rotulo` no `Text` visivel e no
   /// `Semantics.label`, e a prosa dele diz por que: sem o nome do grupo, o
-  /// leitor de tela anuncia *"Cão"* sozinho e nao ha como saber qual era a
+  /// leitor de tela anuncia *"Cachorro"* sozinho e nao ha como saber qual era a
   /// pergunta. Entao o visivel saiu e o nome ficou -- e ele nao e a frase
   /// removida, que seria a mesma redundancia por outro canal: e uma palavra,
   /// a que a propria prosa de `GrupoSegmentado` usa de exemplo.
