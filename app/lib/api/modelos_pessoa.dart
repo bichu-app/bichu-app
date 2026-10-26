@@ -205,18 +205,26 @@ class PerfilDePessoa {
 /// `#/components/schemas/PersonSearchResult` — uma pessoa **como a busca a
 /// entrega**.
 ///
-/// ## Quatro campos, e as três ausências têm dono
+/// ## Seis campos, e as duas ausências têm dono
 ///
 /// Este modelo é **menor** que [PerfilDePessoa], e de propósito. Ele não
 /// reusa aquele nem herda dele: um modelo só para os dois obrigaria a tornar
-/// anuláveis os três campos que a busca não manda, e campo anulável é convite
+/// anuláveis os campos que a busca não manda, e campo anulável é convite
 /// a preencher depois.
 ///
 /// | Falta aqui | Está em [PerfilDePessoa] porque |
 /// |---|---|
 /// | `public_ref` | aquela tela hospeda denunciar e bloquear, e as três operações são endereçadas por ele. A busca não hospeda nenhuma das três, e referência pública sem uso é superfície de graça |
-/// | `connection_state` | o perfil é de UMA pessoa; numa lista, vinte estados por requisição são o material de que uma lista de conexões se faz do lado de fora |
-/// | `connection_ref` | `ref` de aresta existe quando há aresta, e resultado de busca é lista de quem ainda não é conexão |
+/// | `connection_ref` | `ref` de aresta existe quando há aresta, e é ele que deixa **desfazer** — e desfazer mora no perfil de uma pessoa, não numa lista que se rola com o polegar |
+///
+/// **`connection_state` ESTAVA NESTA TABELA, e saiu dela em 26/10/2026**: a
+/// linha dizia *"numa lista, vinte estados por requisição são o material de que
+/// uma lista de conexões se faz do lado de fora"* — e isso deixou de ser
+/// verdade em **22/10/2026**, quando o campo entrou no contrato por decisão do
+/// cliente. Ele é [estadoDaConexao], está declarado logo abaixo, e a tabela
+/// seguia afirmando a ausência do campo que o próprio arquivo lê. **Linha de
+/// documentação que contradiz o código ao lado dela é pior que linha nenhuma**:
+/// esta mandou um diagnóstico inteiro para o lugar errado em 26/10.
 ///
 /// ## A FOTO SAI AQUI, E ESTE BLOCO DIZIA O CONTRÁRIO (21/10/2026)
 ///
