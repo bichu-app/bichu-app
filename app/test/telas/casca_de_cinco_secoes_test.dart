@@ -36,6 +36,7 @@ import 'dart:ui' show Tristate;
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/rede/secao_da_rede.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/theme/icones_da_barra.g.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_colors.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
@@ -1446,8 +1447,14 @@ void main() {
         rotulo: 'Isca',
         reforcoAcessivel: 'secao de mentira, so deste caso',
         reforcoDaPagina: 'Existe para provar que o filtro de entrega filtra.',
-        icone: Icons.science_outlined,
-        iconeSelecionado: Icons.science,
+        // O DESENHO E IRRELEVANTE PARA ESTE CASO, e tem de existir: desde
+        // 23/10/2026 todo destino `naBarra` declara um desenho do cliente, e
+        // o `assert` do construtor recusa glifo do Material num slot da
+        // barra. Reusar o de `Pets` nao colide com nada -- o portao de
+        // desenhos distintos le `CascaComAbas.destinos`, nao esta lista de
+        // mentira --, e o que este caso exercita e o filtro de `estado`.
+        desenho: IconesDaBarra.pets,
+        desenhoSelecionado: IconesDaBarra.petsSelecionado,
         rota: '/isca-que-nao-existe',
         estado: EstadoDaSecao.planejada,
         campoSemantico: CampoSemantico.comunidade,

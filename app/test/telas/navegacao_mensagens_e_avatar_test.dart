@@ -1093,13 +1093,39 @@ void main() {
       final mensagens = CascaComAbas.destinos.firstWhere(
         (d) => d.campoSemantico == CampoSemantico.conversa,
       );
+      // 23/10/2026: O BALAO CONTINUA, E AGORA E O DELE.
+      //
+      // Este caso cobrava `Icons.chat`, e a escolha daquele glifo foi medida:
+      // `chat_bubble` e balao vazio de comentario solto e `forum` sao dois
+      // baloes que se fundem em 24 dp. A razao de o glifo nao poder ficar
+      // ambiguo NAO mudou -- com um rotulo que nao diz a funcao, ele e o unico
+      // sinal visivel que diz "mensagem" --, e por isso este caso continua
+      // existindo em vez de ser apagado. O que mudou e a fonte da forma:
+      // `design/icones-da-barra/auau.svg` e UM balao com um risco dentro.
+      //
+      // **O DESENHO NAO E CONFERIDO AQUI, e a divisao e deliberada:** que o
+      // arquivo certo foi para este destino e afirmacao de
+      // `test/telas/icones_da_barra_test.dart`, que le os dez SVG. Aqui mede-se
+      // o que ESTE arquivo sempre mediu: a secao de mensagens tem arte propria
+      // nos dois estados, e ela nao e glifo generico.
       expect(
-        <IconData>[mensagens.icone, mensagens.iconeSelecionado],
-        <IconData>[Icons.chat_outlined, Icons.chat],
-        reason: 'REPROVA: o glifo da secao de mensagens nao e mais o balao '
-            '`chat`. `chat_bubble` e balao vazio de comentario solto e '
-            '`forum` sao dois baloes que se fundem em 24 dp -- e justamente '
-            'aqui o glifo nao pode ficar ambiguo.',
+        mensagens.desenho?.arquivo,
+        'auau.svg',
+        reason: 'REPROVA: a secao de mensagens em repouso nao desenha '
+            '`auau.svg`. O balao e o unico sinal visivel que diz "mensagem" '
+            'numa aba cujo rotulo e palavra de marca.',
+      );
+      expect(
+        mensagens.desenhoSelecionado?.arquivo,
+        'auau-selecionado.svg',
+        reason: 'REPROVA: a secao de mensagens selecionada nao desenha '
+            '`auau-selecionado.svg`.',
+      );
+      expect(
+        <IconData?>[mensagens.icone, mensagens.iconeSelecionado],
+        <IconData?>[null, null],
+        reason: 'REPROVA: a secao de mensagens voltou a declarar glifo do '
+            'Material. O cliente pediu os desenhos DELE nos cinco slots.',
       );
     });
 
