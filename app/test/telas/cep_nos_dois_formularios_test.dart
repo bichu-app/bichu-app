@@ -242,8 +242,8 @@ Future<void> _abrirOPasso2Digitado(
     localizacao: localizacaoConcedida(),
   );
   await irPara(tester, Rotas.registrarAchado);
-  await rolarAte(tester, find.text('Cão'));
-  await tocar(tester, find.text('Cão'));
+  await rolarAte(tester, find.text('Cachorro'));
+  await tocar(tester, find.text('Cachorro'));
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
   await avancarParaOPasso2(tester);
@@ -585,8 +585,8 @@ void main() {
         localizacao: localizacaoConcedida(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);

@@ -199,31 +199,18 @@ Future<void> abrirAFolha(WidgetTester tester) async {
 }
 
 
-/// Abre `Minhas indicações` pela porta no pé da aba `Comunidade`.
+/// Abre `Minhas indicações` pela porta no MENU DO PERFIL.
+///
+/// **A PORTA MUDOU DE LUGAR EM 26/10/2026** -- ela estava no pe da aba
+/// `Comunidade` e saiu por pedido do cliente de 22/10. Quem acha a porta e
+/// `indicacoes_fix.irAtePortaNoPerfil`, e reusa-la em vez de copiar a
+/// navegacao e deliberado: duas definicoes de "onde esta a porta" divergiriam
+/// na proxima mudanca, e este arquivo mede a GAVETA e nao o caminho.
 Future<void> abrirAsMinhasIndicacoes(WidgetTester t) async {
-        await t.tap(find.widgetWithText(NavigationDestination, 'Rede'));
-        await t.pumpAndSettle();
-        await t.tap(find.widgetWithText(Tab, 'Comunidade'));
-        await t.pumpAndSettle();
-        // Pelo `ItemDeMenu` e nao pelo texto: `find.text` acha tambem o
-        // titulo da barra de topo depois de navegar.
-        final porta = find.widgetWithText(
-          ItemDeMenu,
-          SecaoDaRede.rotuloDasMinhasIndicacoes,
-        );
-        // **`ensureVisible` e nao `scrollUntilVisible`, e a troca conserta um
-        // defeito MEDIDO.** `scrollUntilVisible` sem `scrollable:` resolve o
-        // rolavel por `find.byType(Scrollable)` e exige que haja **um**; a
-        // `TabBar` da `Rede` virou ROLAVEL em 19/10 (`isScrollable: true`,
-        // para `Comunidade` nao cortar a 200%), e com ela ha DOIS rolaveis na
-        // tela -- o erro foi `Bad state: Too many elements`, que nao diz nada
-        // sobre a causa. `ensureVisible` acha o rolavel ANCESTRAL do alvo, que
-        // e sempre o certo.
-        await t.ensureVisible(porta);
-        await t.pumpAndSettle();
-        await t.tap(porta);
-        await t.pumpAndSettle();
-      }
+  final porta = await indicacoes_fix.irAtePortaNoPerfil(t);
+  await t.tap(porta);
+  await t.pumpAndSettle();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -288,7 +288,7 @@ void main() {
     await irPara(tester, Rotas.cadastrarPet);
 
     await tester.enterText(find.byType(TextField).first, 'Nina');
-    await tocar(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cachorro'));
     await tocar(tester, find.text('Médio'));
     await tocar(
       tester,

@@ -432,7 +432,7 @@ Map<String, dynamic> referenciaDeTeste() {
   return <String, dynamic>{
     'version': '2026-09-17',
     'species': <Map<String, dynamic>>[
-      <String, dynamic>{'code': 'dog', 'label': 'Cão'},
+      <String, dynamic>{'code': 'dog', 'label': 'Cachorro'},
     ],
     'breeds': <Map<String, dynamic>>[
       // Vira-lata **esta na lista**, e a ajuda do campo promete isso.
