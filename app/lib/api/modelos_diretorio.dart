@@ -606,6 +606,21 @@ class RecorteDoDiretorio {
         'page': '$pagina',
         'limit': '$limite',
       };
+
+  /// A consulta da rota PUBLICA (`listPublicDirectoryEntries`): a mesma,
+  /// **sem `sort`**.
+  ///
+  /// **Nao e a mesma consulta com um parametro a menos por economia.** Aquela
+  /// operacao nao declara `sort`, e mandar o parametro que o contrato nao tem
+  /// levaria 400 -- o que a pessoa le como o app quebrado. A ordem de la e
+  /// sempre por nome, porque `distance` mede a partir da localizacao de
+  /// referencia de quem chama, e sem conta nao existe ponto de onde medir.
+  ///
+  /// Derivada de [query] por subtracao, e nao escrita a mao: um filtro novo
+  /// acrescentado la aparece aqui no mesmo instante. Duas listas de parametros
+  /// mantidas em paralelo divergem, e a que fica para tras e a que ninguem le.
+  Map<String, String> get queryPublica =>
+      Map<String, String>.of(query)..remove('sort');
 }
 
 /// Traduz a falha de `listDirectoryEntries` que **so esta rota tem**.

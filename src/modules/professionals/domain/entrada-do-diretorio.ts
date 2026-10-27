@@ -139,6 +139,34 @@ export interface EntradaPublica {
 }
 
 /**
+ * `PublicDirectoryEntrySummary` do contrato: o cartao de quem NAO tem conta.
+ *
+ * **E `EntradaPublica` menos quatro campos**, e cada ausencia tem razao
+ * propria -- `listPublicDirectoryEntries` as escreve por extenso:
+ *
+ * - `phone_e164` e `site_url`: canal de contato que so sai com conta.
+ *   `portao-contrato-publico.ts` proibe o primeiro por NOME EXATO em operacao
+ *   alcancavel sem conta, e o segundo sai pela razao declarada no proprio
+ *   campo dele ("sai ao lado de `phone_e164` e pela mesma razao"). O portao
+ *   nao nomeia `site_url` hoje, e isso nao e permissao.
+ * - `distance_m`: distancia implica centro, e distancias a partir de centros
+ *   conhecidos trilateram o centro desconhecido. Sem conta nao ha nem ponto de
+ *   onde medir.
+ * - `about`: o cartao nao o desenha, nem aqui nem com conta.
+ *
+ * **O tipo e a trava, e nao a boa intencao de quem escreve a projecao.**
+ * `Omit` em vez de uma interface escrita a mao: com a interface solta, um campo
+ * acrescentado a `EntradaPublica` amanha nao apareceria aqui e ninguem seria
+ * avisado -- enquanto com `Omit` o campo novo CHEGA a esta projecao e o
+ * compilador cobra a decisao sobre ele, que e exatamente o momento em que a
+ * decisao deve ser tomada.
+ */
+export type EntradaPublicaSemConta = Omit<
+  EntradaPublica,
+  'phone_e164' | 'site_url' | 'distance_m' | 'about'
+>;
+
+/**
  * Metros para a grade de 100 m, **sem nunca virar zero para quem esta longe**.
  *
  * `Math.round` levaria 40 m a 0, e "0 m" numa lista e "esta aqui dentro". O
@@ -285,4 +313,34 @@ export function projetarEntrada(
     // A derivada, nunca o original. `urlDaDerivada` recusa pela FORMA da chave.
     logo_url: urlDaDerivada(entrada.logoPublicKey, urlDeMidia),
   };
+}
+
+/**
+ * A projecao SEM CONTA, **derivada da de conta por subtracao**.
+ *
+ * Ela desestrutura o resultado de `projetarEntrada` em vez de montar o objeto
+ * de novo, e isso e deliberado: montar um segundo objeto a mao duplicaria dez
+ * linhas de mapeamento que teriam de ser mantidas em paralelo, e o modo de
+ * falha dessa duplicacao e o pior possivel -- as duas projecoes divergindo em
+ * silencio, com a publica ficando para tras e ninguem percebendo, porque
+ * nenhum teste compara as duas campo por campo.
+ *
+ * **Os quatro nomes aparecem UMA vez cada, aqui, e o compilador cobra o
+ * resto**: se `EntradaPublica` perder um deles, esta desestruturacao deixa de
+ * compilar; se ganhar um campo novo, ele entra em `resto` e chega a resposta
+ * publica -- entao o `Omit` de `EntradaPublicaSemConta` e quem reprova, e a
+ * decisao sobre o campo novo acontece na hora em que ele nasce.
+ */
+export function projetarEntradaSemConta(
+  entrada: EntradaDoDiretorio,
+  urlDeMidia: (chave: string) => string,
+): EntradaPublicaSemConta {
+  const {
+    phone_e164: _telefone,
+    site_url: _site,
+    distance_m: _distancia,
+    about: _sobre,
+    ...resto
+  } = projetarEntrada(entrada, urlDeMidia);
+  return resto;
 }

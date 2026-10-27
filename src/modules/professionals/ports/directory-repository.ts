@@ -35,8 +35,18 @@ export interface RecorteDoDiretorio {
    * **Quem chama.** Nao e filtro: e de quem sai a localizacao de referencia que
    * mede a distancia. A coordenada NAO vem da requisicao (ADR-0010): endereco
    * em URL vai para log de acesso, historico do aparelho e cabecalho `Referer`.
+   *
+   * **`undefined` e a leitura SEM CONTA** (`listPublicDirectoryEntries`,
+   * 26/10/2026), e nao um descuido. Sem conta nao existe localizacao de
+   * referencia de onde medir: a lista sai por nome, `distanciaDisponivel` vem
+   * `false` e toda distancia vem nula -- o MESMO caminho de quem tem conta e
+   * nunca informou onde mora, que ja existia aqui e ja estava medido.
+   *
+   * O par com `familia` e o que decide, e nao este campo sozinho: a
+   * subconsulta do ponto precisa dos DOIS, e quem passa um sem o outro nao
+   * tem ponto. Ver `pontoDoAparelho` no adaptador.
    */
-  readonly chamador: UserId;
+  readonly chamador: UserId | undefined;
   /**
    * **De qual APARELHO de quem chama** sai esse ponto. SEC-021: a localizacao
    * de referencia deixou de ser da pessoa e passou a ser da sessao de aparelho

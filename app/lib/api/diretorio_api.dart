@@ -48,6 +48,46 @@ class DiretorioApi {
     return PaginaDoDiretorio.doJson(json);
   }
 
+  /// Uma pagina do diretorio **SEM CONTA** (`listPublicDirectoryEntries`).
+  ///
+  /// Pedido do cliente de 26/10/2026: a `Comunidade` lista para quem esta
+  /// deslogado, e pede conta no toque da pagina interna.
+  ///
+  /// **`exigeToken: false`, e aqui isso e o desenho e nao um descuido** -- o
+  /// contrario de [listar], cujo comentario acima explica por que ela exige
+  /// token. A operacao declara `security: []`: mandar o cabecalho seria criar
+  /// o 401 de token vencido numa rota que nao precisa de token.
+  ///
+  /// ## Por que uma operacao a mais, e nao a mesma com o muro mais baixo
+  ///
+  /// Porque a resposta de [listar] traz `phone_e164` e `distance_m`, e
+  /// `portao-contrato-publico.ts` proibe os dois por NOME EXATO em operacao
+  /// alcancavel sem conta -- **medido**: afrouxar o `security` daquela
+  /// operacao da dois achados nominais no portao. Tirar os campos do schema
+  /// dela quebraria o APK publicado, que os le. Uma operacao tem um schema de
+  /// resposta so, entao a projecao magra precisa de operacao propria.
+  ///
+  /// ## A MESMA pagina, lida pelo MESMO modelo
+  ///
+  /// `PublicDirectoryEntryPage` tem a forma de `DirectoryEntryPage` de
+  /// proposito, e por isso [PaginaDoDiretorio.doJson] le as duas. O cartao
+  /// deslogado nasce **sem botao de ligar** sem nenhum `if` na tela:
+  /// `phone_e164` nao vem, [EntradaDoDiretorio.telefoneE164] fica nulo, e
+  /// cartao sem telefone ja nao desenhava o botao. O mesmo vale para a
+  /// distancia.
+  ///
+  /// **Nao trata falha**, pela mesma razao escrita em [listar].
+  Future<PaginaDoDiretorio> listarPublico([
+    RecorteDoDiretorio recorte = const RecorteDoDiretorio(),
+  ]) async {
+    final json = await _api.get(
+      '/public/directory-entries',
+      query: recorte.queryPublica,
+      exigeToken: false,
+    );
+    return PaginaDoDiretorio.doJson(json);
+  }
+
   /// O caminho de `suggestDirectoryEntry`, exposto para a fila offline.
   static const String caminhoDaSugestao = '/directory/suggestions';
 

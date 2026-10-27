@@ -393,3 +393,161 @@ void describe('o parametro `q` chega ao recorte e volta para a tela', () => {
     assert.deepEqual(resposta.corpo['applied_filters'], { scope: 'all' });
   });
 });
+
+// ===========================================================================
+// `GET /public/directory-entries` -- A MESMA LISTA, SEM CONTA (27/10/2026)
+//
+// **Estes casos medem o CORPO da resposta, e nao o status.** Nenhum portao
+// deste repositorio confere corpo de resposta: `portao-contrato-publico.ts` le
+// o CONTRATO, e o validador de requisicao confere o corpo do PEDIDO. Entre o
+// schema aprovado e os bytes que saem do servidor nao havia nada -- e e
+// exatamente nesse vao que um `phone_e164` voltaria sem ninguem ver, com o
+// portao verde e o contrato certo.
+//
+// A isca de cada caso esta escrita no `reason` dele.
+// ===========================================================================
+
+/** Os quatro nomes que NAO podem sair sem conta, e por que cada um. */
+const PROIBIDOS_SEM_CONTA = [
+  // Proibidos por NOME EXATO em `portao-contrato-publico.ts`.
+  'phone_e164',
+  'distance_m',
+  // Proibido pela razao declarada no proprio campo: sai ao lado de
+  // `phone_e164` e so pode existir porque a operacao exige conta.
+  'site_url',
+  // Fora da projecao publica por decisao de produto: o cartao nao o desenha.
+  'about',
+] as const;
+
+void describe('GET /public/directory-entries: a MESMA lista, sem conta', () => {
+  void it('responde 200 SEM cabecalho de credencial', async () => {
+    const resposta = await pedir(servidor(), {
+      url: '/public/directory-entries',
+      como: null,
+    });
+    assert.equal(
+      resposta.status,
+      200,
+      'REPROVA: a lista publica do diretorio pediu conta. O pedido do cliente ' +
+        'de 26/10/2026 e que a Comunidade liste para quem esta deslogado.',
+    );
+    const itens = resposta.corpo['items'] as unknown[];
+    assert.equal(itens.length, 1, 'REPROVA: a lista publica saiu vazia.');
+  });
+
+  void it('ISCA: o corpo NAO traz telefone, distancia, site nem sobre', async () => {
+    const resposta = await pedir(servidor(), {
+      url: '/public/directory-entries',
+      como: null,
+    });
+    const [entrada] = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.ok(entrada !== undefined);
+
+    for (const campo of PROIBIDOS_SEM_CONTA) {
+      // `in` e nao `=== undefined`: a chave presente com valor nulo JA e o
+      // defeito. `{"phone_e164": null}` prova que a projecao publica esta
+      // passando pelo campo, e o dia em que o valor deixar de ser nulo nao tem
+      // portao nenhum na frente.
+      assert.equal(
+        campo in entrada,
+        false,
+        `REPROVA: \`${campo}\` saiu no corpo da lista SEM CONTA. ` +
+          'Troque `projetarEntradaSemConta` por `projetarEntrada` na rota ' +
+          'publica e este caso reprova nos quatro nomes.',
+      );
+    }
+
+    // E a busca pelo NOME no texto cru, que pega o campo aninhado que o laco
+    // acima nao alcancaria.
+    for (const campo of PROIBIDOS_SEM_CONTA) {
+      assert.equal(
+        resposta.bruto.includes(`"${campo}"`),
+        false,
+        `REPROVA: \`${campo}\` aparece no JSON cru da rota publica.`,
+      );
+    }
+  });
+
+  void it('CONTRAPESO: a MESMA entrada, COM conta, traz os quatro', async () => {
+    // **Sem este caso o de cima e vacuo.** Ele ficaria verde com a massa sem
+    // telefone, com a rota devolvendo lista vazia, ou com os quatro campos
+    // apagados das DUAS projecoes -- e a terceira hipotese seria uma quebra do
+    // APK publicado passando por melhoria de privacidade.
+    const resposta = await pedir(servidor(), { url: '/directory/entries' });
+    const [entrada] = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.ok(entrada !== undefined);
+    for (const campo of PROIBIDOS_SEM_CONTA) {
+      assert.equal(
+        campo in entrada,
+        true,
+        `REPROVA: \`${campo}\` desapareceu da resposta COM conta. O APK ` +
+          'publicado le esta resposta: campo que sai dela e quebra de contrato.',
+      );
+    }
+    assert.equal(entrada['phone_e164'], '+551130612200');
+    assert.equal(entrada['distance_m'], 2700);
+  });
+
+  void it('o que o cartao deslogado TEM: nome, atividade e lugar', async () => {
+    // O contrapeso do contrapeso: provar que a projecao magra nao ficou magra
+    // demais. Uma projecao que devolvesse so o `slug` passaria em todos os
+    // casos de ausencia acima.
+    const resposta = await pedir(servidor(), {
+      url: '/public/directory-entries',
+      como: null,
+    });
+    const [entrada] = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.ok(entrada !== undefined);
+    assert.equal(entrada['slug'], 'clinica-veterinaria-santa-barbara');
+    assert.equal(entrada['display_name'], 'Clínica Veterinária Santa Bárbara');
+    assert.equal(entrada['kind'], 'clinic');
+    assert.deepEqual(entrada['kinds'], ['clinic']);
+    assert.equal(entrada['entity_kind'], 'professional');
+    assert.equal(entrada['neighborhood'], 'Pinheiros');
+    assert.equal(entrada['city'], 'São Paulo');
+    assert.equal(entrada['state'], 'SP');
+    assert.deepEqual(entrada['verification'], {
+      level: 'document_verified',
+      evidence_kinds: ['crmv'],
+    });
+  });
+
+  void it('`distance_available` sai FALSO, e a ordem pedida ao banco e `name`', async () => {
+    // Os dois lados da mesma promessa. O campo falso sozinho ficaria verde com
+    // a consulta ordenando por distancia e o servidor mentindo na resposta; o
+    // recorte sozinho nao provaria o que a tela le.
+    recortesVistos.length = 0;
+    const resposta = await pedir(
+      servidor({ distanciaDisponivel: false }),
+      { url: '/public/directory-entries', como: null },
+    );
+    assert.equal(resposta.corpo['distance_available'], false);
+
+    const recorte = recortesVistos.at(-1);
+    assert.ok(recorte !== undefined);
+    assert.equal(
+      recorte.sort,
+      'name',
+      'REPROVA: a rota publica pediu ordem por distancia. Sem conta nao ha ' +
+        'ponto de onde medir, e ordenar por distancia numa rota publica e o ' +
+        'oraculo de posicao que o ADR-0010 itens 4 e 5 proibem.',
+    );
+    assert.equal(
+      recorte.chamador,
+      undefined,
+      'REPROVA: a rota publica inventou um chamador. Sem conta nao ha de onde ' +
+        'sair a localizacao de referencia.',
+    );
+    assert.equal(recorte.familia, undefined);
+  });
+
+  void it('nao e indexavel e nao deixa `Referer`', async () => {
+    const resposta = await servidor().inject({
+      method: 'GET',
+      url: '/public/directory-entries',
+    });
+    assert.equal(resposta.headers['x-robots-tag'], 'noindex, nofollow');
+    assert.equal(resposta.headers['referrer-policy'], 'no-referrer');
+    assert.equal(resposta.headers['cache-control'], 'no-store');
+  });
+});
