@@ -2218,7 +2218,239 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// vazios sai 0 e mente, e e por isso que a contagem vem junto.
 /// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de
 /// novo recalcula sobre a arvore MESCLADA.
-const String _arvoreDasTelas = 'CONSOLIDACAO-27-10-PENDENTE'; // PENDENTE: esta linha e trocada UMA VEZ SO, no fim desta consolidacao, pelo valor RECALCULADO sobre a arvore MESCLADA das seis. Escolher um lado do conflito perderia as telas dos outros cinco em silencio.
+/// ---------------------------------------------------------------------------
+/// 27/10/2026: A UNIAO DAS SEIS ENTREGAS -- d10e29c502 ->
+/// ede46d3971b4fdc27f988a51a5715f018ff59e9b
+/// ---------------------------------------------------------------------------
+///
+/// **RECALCULADO sobre a arvore MESCLADA, e NAO e nenhum dos seis lados do
+/// conflito.** Os lados eram `7ac0487597` (nº1 meus-eventos), `9f77560bd6`
+/// (nº2 lista-de-pets), `296322f2d2` (nº3 minhas-fotos), `edee69add0` (nº4
+/// conexoes), `73e4d697cd` (nº5 pedidos-em-abas) e `d3d492d506` (nº6
+/// mascara). AS SEIS tocam `app/lib/telas`, e por isso este portao colidiu em
+/// TODAS as seis mesclas: escolher um lado perderia as telas dos outros cinco
+/// EM SILENCIO. Conferido um por um que o valor novo nao coincide com nenhum
+/// dos seis nem com o da base.
+///
+/// OITO arquivos de `app/lib/telas` diferem da base, e os seis lados estao
+/// todos representados: `abas.dart` e `perfil/tela_dados_pessoais.dart`
+/// (nº3),
+/// `conexoes/tela_minhas_conexoes.dart` (nº4),
+/// `conexoes/tela_pedidos_de_conexao.dart` (nº5),
+/// `perdido/cartao_do_perdido.dart` e `perdido/lista_de_perdidos.dart` (nº2),
+/// `perfil/meus_eventos.dart` (nº1) e `perto/sugerir_profissional.dart`
+/// (nº6).
+/// As duas branches de `conexoes/` mexem em ARQUIVOS DIFERENTES e por isso
+/// nao
+/// colidiram entre si -- conferido, e nao suposto.
+///
+/// MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas` (a sexta mescla foi a
+/// ultima a tocar a pasta; o valor foi calculado UMA VEZ SO, depois dela) e
+/// por
+/// TRES caminhos de semeadura com DUAS RAIZES DIFERENTES, que CONCORDARAM:
+/// (1) o procedimento deste proprio portao -- `GIT_INDEX_FILE` proprio,
+/// `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree` --, raiz
+/// `7311d2a3e0`; (2) um indice VAZIO semeado SO pela enumeracao do `find` no
+/// disco (`add -A --pathspec-from-file`), raiz `f8002bfa68`, que contem
+/// APENAS
+/// `app/lib/telas` e portanto e raiz legitimamente diferente; e (3) um indice
+/// VAZIO com `add -A` sem pathspec, raiz `7311d2a3e0`. Um quarto caminho,
+/// `git rev-parse "${SHA}:app/lib/telas"` sobre o commit da uniao, deu o
+/// mesmo.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de qualquer edicao: os mesmos
+/// tres
+/// caminhos sobre a arvore LIMPA da base `11e520b7` reproduziram EXATAMENTE a
+/// constante que ela travava (d10e29c502), por raizes `10846607bc` e
+/// `2cebab9bc7`. Se nao tivessem reproduzido, o valor escrito aqui seria
+/// lixo.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito: `app/lib/telas` tem
+/// **91**
+/// arquivos na base e **91** na uniao. `git ls-tree -r --name-only` da arvore
+/// nova e o `find` do disco saem IDENTICOS (91 e 91), com guarda de lista NAO
+/// VAZIA antes de confiar no `diff` -- `diff` de duas listas vazias sai 0 e
+/// mente. NENHUMA das seis acrescentou, removeu ou renomeou arquivo em
+/// `app/lib/telas`: `git diff --diff-filter=A` deu vazio nas seis, e as seis
+/// prosas abaixo dizem 91 -> 91 independentemente.
+///
+/// AS CHAVES em "${SHA}:app/lib/telas" nao sao enfeite: sem elas o `zsh`
+/// aplica
+/// `:a` ao nome da variavel e devolve LIXO com codigo 0. E `git ls-tree`
+/// SEMPRE
+/// sai 0, entao a conferencia de presenca le a SAIDA, nunca o codigo.
+///
+/// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de
+/// novo recalcula, sobre a arvore MESCLADA e depois da ultima edicao.
+///
+/// A PROSA DAS SEIS ENTREGAS, preservada -- cada paragrafo explica uma
+/// mudanca
+/// DIFERENTE, e apagar um perderia o porque de uma entrega:
+///
+/// * nº1 `conserto/meus-eventos-link-e-texto-27-10` (lado 7ac0487597)
+///
+///   BICHUS-297 e BICHUS-298, 27/10/2026: UM arquivo mudou --
+///   `perfil/meus_eventos.dart` --, e as duas mudancas sao de TELA e nao de
+///   porta de aparelho: o cartao de `Meus eventos` ganhou o toque que leva a
+///   pagina do encontro (o cliente pediu o link; a tela tinha ZERO
+///   `Navigator`), e o texto da folha de cancelamento parou de se contradizer
+///   (o corpo dizia que `avisa a agenda` e a lista logo abaixo dizia `Ninguem
+///   recebe aviso` -- medido no servidor: `EncontroDaComunidade.cancelar`
+///   grava e registra trilha, sem disparo de notificacao em ponto nenhum).
+///   NADA aqui fala com camera, galeria, GPS nem arquivo: o criterio 10 segue
+///   de pe, e o grupo `o espirito do criterio 10` continua medindo isso
+///   sozinho. VALOR MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por
+///   DOIS caminhos de semeadura DIFERENTE que CONCORDARAM: (1) o procedimento
+///   deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add
+///   -A -- app/lib/telas`, `write-tree`), raiz `1c15498758`, e (2) um indice
+///   VAZIO populado SO do disco (`add -A` sem `read-tree`), raiz `2f22dbfab4`
+///   -- raizes DIFERENTES, mesmo `app/lib/telas`: 7ac0487597. CONTROLE
+///   POSITIVO DO METODO, feito ANTES de trocar a constante: `git rev-parse
+///   "${HEAD}:app/lib/telas"` sobre a base LIMPA (`11e520b7`) devolveu
+///   EXATAMENTE o valor que estava travado aqui (d10e29c502) -- o metodo
+///   reproduz o passado antes de eu confiar nele no presente. PRESENCA DE
+///   ARQUIVO CONFERIDA, e nao so o digito: 91 arquivos `.dart` na arvore
+///   travada e 91 no disco, e `git status --short -- app/lib/telas` lista UM
+///   modificado e nenhum criado, apagado ou renomeado. AS CHAVES em
+///   "${SHA}:app/lib/telas" nao sao enfeite: sem elas o `zsh` aplica `:a` ao
+///   nome da variavel e devolve LIXO com codigo 0. O valor anterior era a
+///   UNIAO DAS NOVE ENTREGAS de 26/10 no PR #63 (BICHUS-278); a prosa dela
+///   esta no historico deste arquivo. ESTE VALOR NAO SOBREVIVE A PROXIMA
+///   UNIAO: quem mesclar `app/lib/telas` de novo recalcula, sobre a arvore
+///   MESCLADA e depois da ultima edicao.
+///
+/// * nº2 `conserto/lista-de-pets-so-perdidos-27-10` (lado 9f77560bd6) -- a
+/// * prosa longa desta entrega esta no bloco imediatamente acima, e nao foi
+/// * repetida aqui
+///
+///   BICHUS-304, 26/10/2026: lista de pets so com os perdidos e cartao do
+///   reencontrado sem toque; ver a prosa logo acima. ANTERIOR:
+///   d10e29c50215a93fb3c2abde91452ca4e963925d
+///
+/// * nº3 `conserto/minhas-fotos-no-primeiro-nivel-27-10` (lado 296322f2d2)
+///
+///   BICHUS-278, 26/10/2026: `Minhas fotos` SAI de dentro de `Meus dados` e
+///   vira item de PRIMEIRO NIVEL do menu do `Perfil`, por decisao do cliente
+///   -- *"traga o menu minhas fotos para o menu principal"* e, perguntado
+///   qual menu, *"primeiro nivel do perfil"*. DOIS arquivos desta arvore
+///   mudam e nenhum deles fala com o aparelho: `abas.dart` ganha o
+///   `ItemDeMenu` (grupo `Conta`, depois de `Meus dados`, antes de `Usuarios
+///   bloqueados`) e o import de `perfil/vitrine_de_fotos.dart` -- de onde sai
+///   so a constante `tituloDaTela` --, e `perfil/tela_dados_pessoais.dart`
+///   perde o seu (com `Rotas.minhaVitrine`, o import da vitrine e o texto
+///   `apoioDaVitrine`, que ficou sem uso). A nota que vivia em `abas.dart`
+///   dizendo que `Minhas fotos` "nao e item deste menu e nunca foi" era
+///   REGISTRO do que a arvore tinha, e nao decisao de que nao podia ser: ela
+///   foi reescrita citando as palavras dele, e o mesmo foi feito na prosa de
+///   `tela_dados_pessoais.dart` que dizia que a linha era "decisao dele, nao
+///   fiacao". A ROTA NAO MUDOU DE ENDERECO (`/perfil/minhas-fotos`), de
+///   proposito: link que ja circula continua valendo. MEDIDO DEPOIS DA ULTIMA
+///   EDICAO em `app/lib/telas` e por DOIS caminhos de semeadura DIFERENTE que
+///   CONCORDARAM: (1) o procedimento deste proprio portao (`GIT_INDEX_FILE`
+///   proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`), que
+///   deu a raiz `10767988926f`, e (2) um indice VAZIO populado SO a partir do
+///   disco (`add -A` sem `read-tree`), que deu a raiz `4de6894b1060` --
+///   raizes DIFERENTES, e as duas devolveram o MESMO `app/lib/telas`:
+///   296322f2d2. CONTROLE POSITIVO DO METODO, feito ANTES de editar: os
+///   mesmos caminhos sobre a arvore LIMPA da base `11e520b7` reproduziram
+///   EXATAMENTE a constante que ela travava (d10e29c502). PRESENCA DE ARQUIVO
+///   CONFERIDA, e nao so o digito: `app/lib/telas` tem 91 arquivos na base e
+///   91 agora -- NENHUM entrou, saiu ou foi renomeado, e `git ls-tree -r` e o
+///   `find` do disco saem identicos (91 e 91). AS CHAVES em
+///   "${T}:app/lib/telas" nao sao enfeite: sem elas o `zsh` aplica `:a` ao
+///   nome da variavel e devolve LIXO com codigo 0. Substitui
+///   d10e29c50215a93fb3c2abde91452ca4e963925d. ESTE VALOR NAO SOBREVIVE A
+///   PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula.
+///
+/// * nº4 `conserto/conexoes-nao-carregam-27-10` (lado edee69add0)
+///
+///   BICHUS-278, 27/10/2026: o ramo `on Object` em
+///   `tela_minhas_conexoes.dart`. MUDANCA DE OUTRA HISTORIA, e nao a camera
+///   que o criterio 10 vigia: `_carregar` e `_carregarMais` capturavam SO
+///   `FalhaDeChamada`, e um 200 fora do contrato (`TypeError` em
+///   `PaginaDeConexoes.doJson`) deixava `_carregando` / `_carregandoMais`
+///   ligados PARA SEMPRE -- medido pelo `pumpAndSettle timed out` da isca com
+///   o conserto desligado. UM arquivo modificado, NENHUM criado, apagado ou
+///   renomeado: 91 arquivos na base `11e520b7` e 91 agora, conferido por `git
+///   ls-tree -r` contra o `find` do disco. MEDIDO DEPOIS DA ULTIMA EDICAO em
+///   `app/lib/telas` e por DOIS caminhos de semeadura DIFERENTE que
+///   CONCORDARAM: (1) o procedimento deste proprio portao (`GIT_INDEX_FILE`
+///   proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`),
+///   raiz `b318c43d00`, e (2) um indice VAZIO populado SO do disco (`add -A`
+///   sem `read-tree`), raiz `7697e12d28` -- raizes DIFERENTES, mesmo
+///   `app/lib/telas`: edee69add0. CONTROLE POSITIVO DO METODO, feito ANTES de
+///   trocar o valor: `git rev-parse "${BASE}:app/lib/telas"` sobre a base
+///   LIMPA reproduziu EXATAMENTE a constante que ela travava (d10e29c502). As
+///   CHAVES em "${BASE}:..." nao sao enfeite: sem elas o `zsh` aplica `:a` ao
+///   nome da variavel e devolve LIXO com codigo 0.
+///
+/// * nº5 `conserto/pedidos-de-conexao-em-abas-27-10` (lado 73e4d697cd)
+///
+///   BICHUS-307, 26/10/2026: AS CAIXAS DE PEDIDO DE CONEXAO VIRARAM ABAS,
+///   decisao do cliente -- *"pedidos de conexao, vamos trocar essas caixas de
+///   recebidos e enviados por abas, igual na pagina de rede"*. UM arquivo de
+///   `app/lib/telas` muda, `conexoes/tela_pedidos_de_conexao.dart`: o
+///   `GrupoSegmentado` de dois segmentos sai e entra uma `TabBar` de DUAS
+///   abas com `TabController` proprio, copiada de `rede/secao_da_rede.dart`
+///   (a UNICA `TabBar` do aplicativo) -- `isScrollable`, `tabAlignment:
+///   TabAlignment.start` e `Tab(height: BichuAlvoDeToque.min)`. **Nenhum
+///   arquivo nasceu, nenhum saiu e nenhum foi renomeado**: `app/lib/telas`
+///   tem 91 arquivos na base e 91 agora, conferido com `git ls-tree -r
+///   --name-only` nos dois lados e nao so pelo digito do hash. **Nenhuma
+///   porta de aparelho encostada**: o importe que SAIU e
+///   `widgets/grupo_segmentado.dart` e nenhum entrou -- a `TabBar` e do
+///   `material`, que o arquivo ja importava; nenhum plugin, nenhum canal de
+///   plataforma, nenhuma permissao, nenhum `dart:io`, e
+///   `escanear/tela_leitor_de_qr.dart` nao foi tocado; o portao estrutural de
+///   diretivas deste mesmo arquivo responde por isso sem depender desta
+///   constante. Valor MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por
+///   DOIS caminhos de semeadura DIFERENTE que CONCORDARAM: (1) o procedimento
+///   deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add
+///   -A -- app/lib/telas`, `write-tree`), raiz `ae1f73ae2b`; e (2) um indice
+///   VAZIO populado SO a partir do disco (`add -A` sem `read-tree`), raiz
+///   `5e347c37c9` -- raizes DIFERENTES, mesmo `app/lib/telas`:
+///   73e4d697cdea1e79098e6f21e0fb323421e10db4. CONTROLE POSITIVO DO METODO,
+///   feito ANTES de editar: os mesmos caminhos sobre a arvore LIMPA da base
+///   (`11e520b7`) reproduziram EXATAMENTE a constante que ela travava
+///   (d10e29c50215a93fb3c2abde91452ca4e963925d), e um terceiro caminho, `git
+///   rev-parse "${SHA}:app/lib/telas"` -- em zsh as CHAVES sao obrigatorias,
+///   sem elas o shell aplica o modificador `:a` e devolve caminho absoluto em
+///   SILENCIO --, deu o mesmo. **QUEM MESCLAR RECALCULA SOBRE A ARVORE
+///   MESCLADA**: este valor e de ramo ISOLADO sobre `11e520b7`, ha outras
+///   sessoes tocando `app/lib/telas` nesta rodada, e valor de ramo nao
+///   sobrevive a uniao. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a
+///   uniao das nove entregas de 26/10 no PR #63, logo abaixo).
+///
+/// * nº6 `conserto/mascara-de-telefone-em-todos-27-10` (lado d3d492d506)
+///
+///   BICHUS-308, 26/10/2026: MASCARA DE TELEFONE NO CAMPO QUE FALTAVA. UM
+///   unico arquivo de `app/lib/telas` mudou --
+///   `perto/sugerir_profissional.dart` --, e a mudanca NAO e de camera: e o
+///   `formatadores:` condicional do campo de contato publico, mais o ramo de
+///   E.164 no corpo e o impedimento de telefone incompleto. O criterio 10
+///   continua valendo: nenhuma tela passou a falar com o aparelho, e
+///   `CameraEGaleria` nao foi tocada. MEDIDO DEPOIS DA ULTIMA EDICAO em
+///   `app/lib/telas` e por DOIS caminhos de semeadura DIFERENTE que
+///   CONCORDARAM: (1) `git rev-parse HEAD:app/lib/telas` sobre o commit desta
+///   branch, e (2) um `GIT_INDEX_FILE` proprio e VAZIO populado SO a partir
+///   do disco (`add -A -- app/lib/telas`, `write-tree`), cuja arvore RAIZ foi
+///   `3a41b627f7` -- raiz diferente, e o mesmo `app/lib/telas`:
+///   d3d492d506222115ed8c8f1b4570d5e9bf5d0c45. CONTROLE POSITIVO DO METODO,
+///   feito ANTES de confiar no valor novo: `git rev-parse
+///   "${SHA}:app/lib/telas"` com SHA=`11e520b7` reproduziu EXATAMENTE a
+///   constante que esta linha travava
+///   (d10e29c50215a93fb3c2abde91452ca4e963925d). PRESENCA DE ARQUIVO
+///   CONFERIDA, e nao so o digito: 91 arquivos na base e 91 agora; `git
+///   ls-tree -r` e o `find` do disco saem identicos (91 e 91), e `git diff
+///   --name-only` entre base e HEAD lista UM so nome. NENHUM arquivo entrou,
+///   saiu ou foi renomeado. AS CHAVES em "${SHA}:app/lib/telas" nao sao
+///   enfeite: sem elas o `zsh` aplica `:a` ao nome da variavel e devolve LIXO
+///   com codigo 0. O VALOR ANTERIOR era
+///   d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove entregas de
+///   26/10 no PR #63); a prosa dele esta logo acima, e ESTE VALOR TAMBEM NAO
+///   SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo
+///   recalcula.
+const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

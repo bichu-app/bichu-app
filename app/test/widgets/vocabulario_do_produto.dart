@@ -601,7 +601,82 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// MEDIDO com a mesma caminhada de [dartsDeLib]: 2745 agora, 2742 em
 /// `11e520b7`. O delta de 3 confere com o `git diff` do unico arquivo de
 /// `app/lib` que esta tarefa tocou.
-const int ocorrenciasDeBichu = -1; // PENDENTE: trocado UMA VEZ SO, no fim desta consolidacao, pelo valor RECALCULADO sobre a arvore MESCLADA das seis. -1 reprova de proposito: nenhum dos lados do conflito vale para a uniao.
+/// ---------------------------------------------------------------------------
+/// 27/10/2026: a UNIAO das SEIS entregas do dia -- 2742 -> 2759
+/// ---------------------------------------------------------------------------
+///
+/// Os blocos acima descrevem o saldo de cada frente MEDIDO EM ISOLAMENTO
+/// sobre
+/// a base `11e520b7`. **Nenhum deles vale para a uniao**, e o valor daqui NAO
+/// E
+/// nenhum dos lados do conflito: eram 2752 (meus-eventos), 2746
+/// (pedidos-em-abas) e 2745 (mascara). As outras tres entregas da uniao
+/// (lista-de-pets, minhas-fotos e conexoes) nao tocaram esta constante, e o
+/// saldo medido delas e ZERO -- isso foi MEDIDO arquivo por arquivo, nao
+/// deduzido do fato de elas nao terem editado este arquivo.
+///
+/// CONFERIDO POR FORMA, E NAO POR TOTAL, que e o que este numero exige: a
+/// agulha e `RegExp('bichu', caseSensitive: false)`, `BICHUS` CONTEM `BICHU`,
+/// e
+/// por isso chave de issue em comentario CONTA como ocorrencia da marca. A
+/// decomposicao por forma SOMA EXATAMENTE o total nos dois lados (2742 na
+/// base,
+/// 2759 aqui), o que prova que nenhuma ocorrencia ficou fora da conta.
+///
+/// **NENHUMA OCORRENCIA DA MARCA SAIU.** Nenhuma forma desapareceu (ZERO) e
+/// nenhuma forma caiu de contagem (ZERO) -- as 186 formas da base continuam
+/// todas presentes, nenhuma com contagem menor. O +17 inteiro e de forma NOVA
+/// ou forma que SUBIU, e cada uma tem dono:
+///
+///   `BICHUS-297`            0 -> 4   (+4, meus-eventos)
+///   `BICHUS-298`            0 -> 2   (+2, meus-eventos)
+///   `BICHUS-62`            65 -> 67  (+2, meus-eventos)
+///   `BichuRaio.lg`         57 -> 59  (+2, meus-eventos)
+///   `BichuAlvoDeToque.min` 65 -> 69  (+4, pedidos-em-abas)
+///   `BICHUS-308`            0 -> 1   (+1, mascara)
+///   `BichuField`           65 -> 67  (+2, mascara)
+///
+/// A CONFERENCIA FECHA PELOS DOIS LADOS: +10 (meus-eventos) +4
+/// (pedidos-em-abas) +3 (mascara) = +17, e 2742 + 17 = **2759** -- o mesmo
+/// numero que as tres medicoes devolveram. Os saldos declarados em isolamento
+/// (2752 = 2742+10, 2746 = 2742+4, 2745 = 2742+3) somam o mesmo +17, e nenhum
+/// deles se cancela com outro porque os tres arquivos sao DIFERENTES.
+///
+/// MEDIDO POR TRES PROGRAMAS INDEPENDENTES que concordaram no total: um em
+/// Python (`re.findall` com `IGNORECASE`), um em Node 22 (`match(/bichu/gi)`)
+/// e
+/// um terceiro com `grep -oi bichu` arquivo por arquivo. Os dois primeiros
+/// concordaram tambem na DISTRIBUICAO POR ARQUIVO -- o `diff` das duas saidas
+/// saiu VAZIO, com guarda de saida NAO VAZIA antes de confiar nele (225
+/// linhas
+/// em cada), porque `diff` de duas saidas vazias sai 0 e mente. O caminho do
+/// `grep` carrega um contador de arquivos visitados pelo mesmo motivo: laco
+/// que
+/// nao visita ninguem devolve total ZERO e parece medicao.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos
+/// programas, sobre a arvore LIMPA da base `11e520b7` -- extraida com
+/// `git archive` para FORA do worktree, para a medicao nao ler o disco em que
+/// eu estava editando --, reproduziram EXATAMENTE a constante que ela
+/// travava:
+/// **2742** em 225 arquivos, com as distribuicoes identicas e a soma das
+/// formas
+/// igual ao total.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e ela e o que salva este total: `app/lib`
+/// tem
+/// **225** `.dart` na base e **225** na uniao. NENHUMA das seis entregas
+/// acrescentou, removeu ou renomeou arquivo em `app/lib` --
+/// `git diff --diff-filter=A` e `--diff-filter=D` entre a base e a uniao
+/// sairam
+/// VAZIOS. Sem esta conferencia, um arquivo apagado com N mencoes e outro
+/// acrescentado com N fechariam o mesmo total e o portao ficaria verde.
+/// `app/lib` continua sem symlink nenhum (os tres programas contam e avisam),
+/// entao a caminhada de [dartsDeLib] nao depende de seguir link.
+///
+/// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib` de novo
+/// reconta, sobre a arvore MESCLADA e depois da ultima edicao.
+const int ocorrenciasDeBichu = 2759; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS: RECONTADO sobre a arvore MESCLADA, nao e nenhum dos lados (2752/2746/2745), conferido POR FORMA -- zero formas sairam, zero cairam -- e a prosa de cada entrega esta preservada acima. ANTERIOR: 2742.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
