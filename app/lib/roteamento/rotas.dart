@@ -458,11 +458,21 @@ abstract final class Rotas {
     return '/pessoa/$limpo';
   }
 
-  /// `Meus dados` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
+  /// `Perfil` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
   ///
   /// Endereco proprio porque `VitrineDeFotosDoUsuario` e TELA (tem `Scaffold`
-  /// e barra), e nao um bloco de `Meus dados`. A porta esta la: o autor da
-  /// vitrine nao a pos porque o arquivo de `Meus dados` era de outro ramo.
+  /// e barra), e nao um bloco de `Meus dados`.
+  ///
+  /// **A PORTA MUDOU DE NIVEL EM 26/10/2026, E O ENDERECO NAO.** Ela nasceu
+  /// dentro de `Meus dados` (este comentario dizia `Meus dados` > `Minhas
+  /// fotos`); o cliente mandou subi-la: *"traga o menu minhas fotos para o
+  /// menu principal"* e, perguntado qual menu, *"primeiro nivel do perfil"*.
+  /// Hoje o unico `push` desta rota em `app/lib` sai do grupo `Conta` do menu
+  /// do `Perfil`, em `telas/abas.dart`.
+  ///
+  /// **O VALOR continua `/perfil/minhas-fotos`, de proposito**: mudar de lugar
+  /// no menu nao e mudar de endereco, e renomear quebraria todo link que ja
+  /// circula por uma mudanca que ninguem pediu.
   static const String minhaVitrine = '/perfil/minhas-fotos';
 
   /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
@@ -1439,8 +1449,9 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       //
       // **Sem parametro no construtor**: a tela tira a `MeApi` e a
       // `BuscaDeCep` do `Escopo`, como as vizinhas. Ela e alcancada por
-      // `ItemDeMenu` dentro de `Meus dados`, do mesmo jeito que
-      // `Minhas fotos`.
+      // `ItemDeMenu` dentro de `Meus dados` -- e e a UNICA assim desde
+      // 26/10/2026: `Minhas fotos`, que era a outra, subiu para o primeiro
+      // nivel do menu do `Perfil` por decisao do cliente daquele dia.
       GoRoute(
         path: Rotas.enderecoDeEntrega,
         builder: (context, estado) => const TelaEnderecoDeEntrega(),
