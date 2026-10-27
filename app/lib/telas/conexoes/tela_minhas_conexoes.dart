@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/conexoes_api.dart';
 import '../../api/falhas.dart';
+import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_conexao.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -201,6 +202,18 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
         _faltaConta = faltaConta(falha);
         _falha = _faltaConta ? null : TelaDeMinhasConexoes.falhaAoCarregar;
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E `FalhaDeChamada`: um corpo 200 fora do contrato estoura
+      // `TypeError` dentro de `PaginaDeConexoes.doJson` -- `handle`, `pets_count`
+      // e `connections_count` sao casts NAO anulaveis. Sem este ramo a tela
+      // ficava em `_carregando` PARA SEMPRE, que e o estado que este app nao
+      // deixa existir (`tela_do_caso_publico.dart`, mesmo padrao).
+      registrarFalhaInesperada(erro, pilha, onde: 'ao listar as minhas conexões');
+      if (!mounted) return;
+      setState(() {
+        _carregando = false;
+        _falha = MensagensDeErro.servidorFora;
+      });
     }
   }
 
@@ -232,6 +245,16 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
         // **O que já está na tela FICA.** Falhar a página seguinte não é
         // motivo para apagar as vinte que a pessoa está lendo.
         _falha = TelaDeMinhasConexoes.falhaAoCarregar;
+      });
+    } on Object catch (erro, pilha) {
+      // A MESMA lacuna da primeira pagina, e aqui o preso era `_carregandoMais`:
+      // o botao `Ver mais` ficava rodando para sempre, e `if (_carregandoMais)
+      // return` no topo trancava a porta por tras -- nem tocar de novo saia.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao listar mais conexões');
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falha = MensagensDeErro.servidorFora;
       });
     }
   }
