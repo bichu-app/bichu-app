@@ -152,7 +152,42 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// ---------------------------------------------------------------------------
+/// 2706 -> 2710 (BICHUS-278, 27/10/2026): QUATRO TOKENS DO DESIGN SYSTEM
+/// ---------------------------------------------------------------------------
+///
+/// **A marca nao mudou de tamanho por causa de texto: mudou por causa de
+/// `BichuEspaco` e `BichuColors`**, que e o caso que o comentario acima manda
+/// tratar mudando o numero e dizendo por que. Nenhuma das quatro ocorrencias e
+/// texto de usuario, nenhuma e nome de arquivo e nenhuma e dominio.
+///
+/// OS QUATRO, atribuidos um por um (`grep -oi bichu` por arquivo, base contra
+/// arvore de trabalho) -- e a soma dos deltas por arquivo fecha com o total,
+/// que e o que impede "o numero subiu quatro" de esconder "subiu cinco e caiu
+/// um":
+///
+/// - `telas/localizacao/captura_de_localizacao.dart` 23 -> 26 (+3): o
+///   `import '../../theme/bichu_colors.dart'`, um `BichuColors.of(context)` e
+///   um `BichuEspaco.e4`, que a linha de ajuda nova usa para a cor secundaria
+///   e o respiro;
+/// - `telas/perfil/meus_eventos.dart` 20 -> 21 (+1): um `BichuEspaco.e3`, o
+///   respiro antes da faixa da capa em `processing`.
+///
+/// CONTROLE POSITIVO DO PROCEDIMENTO, feito ANTES de trocar esta linha: a
+/// MESMA contagem aplicada a arvore limpa da base (`90dfaee7`, extraida por
+/// `git archive` para fora do worktree, para nao tocar em arquivo nenhum --
+/// `git stash` e proibido neste repositorio, a pilha e compartilhada entre os
+/// worktrees) reproduziu EXATAMENTE 2706. Reproduzir o valor conhecido antes
+/// de medir o desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: 218 `.dart` em `app/lib` na
+/// base e 218 aqui. As duas correcoes mudam CONTEUDO; nenhum arquivo entrou,
+/// saiu ou foi renomeado.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu`
+/// continua sem aparecer em `app/lib`.
+const int ocorrenciasDeBichu = 2710;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
