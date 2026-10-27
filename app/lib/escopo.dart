@@ -14,6 +14,7 @@ import 'api/me_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
+import 'api/cache_de_imagens.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
@@ -73,6 +74,7 @@ class Escopo extends InheritedWidget {
     required this.contadores,
     required this.contadorDeAvisos,
     required super.child,
+    this.cacheDeImagens,
     super.key,
   });
 
@@ -270,6 +272,27 @@ class Escopo extends InheritedWidget {
   /// anterior continuaria no cache global de imagem.
   final CofreDaImagemDoQr cofreDoQr;
 
+  /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296), ou **nulo**.
+  ///
+  /// **Opcional e no fim da lista de proposito.** O cabecalho da rota do perfil
+  /// de pessoa, em `roteamento/rotas.dart`, deixou a condicao escrita: campo
+  /// NOVO e obrigatorio aqui "quebraria toda tela de teste que o constroi". Com
+  /// nulo nao ha nada a esquecer, e nenhum dos arquivos de teste que existiam
+  /// mudou.
+  ///
+  /// Quem DESENHA imagem nao o le por aqui -- le o
+  /// `CacheDeImagensDoAplicativo`, que e um `InheritedWidget` proprio em
+  /// `widgets/imagem_em_cache.dart`, pelo motivo escrito la: `ImagemDaRede` e
+  /// montada isoladamente por varias telas em teste, e exigir a raiz do
+  /// aplicativo para pintar uma foto seria o avesso.
+  ///
+  /// **Ele esta aqui por causa de uma coisa so: APAGAR.** Desfazer conexao e
+  /// bloquear precisam de `esquecerPessoa`, e quem os hospeda e a tela do
+  /// perfil de pessoa, que recebe suas portas pela rota -- e a rota le o
+  /// `Escopo`. A limpeza do logout nao passa por aqui: ela esta em
+  /// `limpezasAoSair`, no `app.dart`.
+  final CacheDeImagensNoAparelho? cacheDeImagens;
+
   /// O registro de dispensas do aviso persistente de cadastro (BICHUS-75).
   ///
   /// Fica no escopo porque o aviso aparece em TRES lugares -- a faixa de
@@ -351,5 +374,6 @@ class Escopo extends InheritedWidget {
       cofreDoQr != anterior.cofreDoQr ||
       avisoDeCadastro != anterior.avisoDeCadastro ||
       contadores != anterior.contadores ||
-      contadorDeAvisos != anterior.contadorDeAvisos;
+      contadorDeAvisos != anterior.contadorDeAvisos ||
+      cacheDeImagens != anterior.cacheDeImagens;
 }

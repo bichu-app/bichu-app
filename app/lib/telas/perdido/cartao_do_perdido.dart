@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../api/cache_de_imagens.dart';
 import '../../api/modelos_perdido.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -220,6 +221,16 @@ class CartaoDoPerdido extends StatelessWidget {
                 // altura/largura, então o inverso é o que esta peça espera.
                 proporcao: 1 / BichuMoldura.proporcao,
                 raio: BichuRaio.none,
+                // O CACHE EM DISCO, escopo PÚBLICO (BICHUS-296). O cartaz de
+                // pet perdido existe para ser compartilhado — a derivada mora
+                // em balde público, sem assinatura e com cache de um ano
+                // (`chave-de-objeto.ts`) —, então não há pessoa a esquecer
+                // aqui: o que limita esta cópia é o teto de disco e o despejo.
+                //
+                // É também a tela em que o ganho que o cliente pediu aparece
+                // mais: a lista de perdidos é a que se abre primeiro e rola
+                // mais, e com a foto no aparelho ela aparece **sem rede**.
+                cache: ChaveDeImagem.publica(url),
                 simboloDeFalha: Icons.pets_outlined,
               ),
             ),

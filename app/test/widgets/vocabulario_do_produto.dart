@@ -152,7 +152,53 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// ---------------------------------------------------------------------------
+/// ATUALIZADO PELA BICHUS-296 (27/10/2026): 2706 -> 2728.
+/// ---------------------------------------------------------------------------
+/// O cache de imagem no aparelho. A causa e a que a mensagem deste portao manda
+/// aceitar -- *arquivo novo que a cita* --, e nao substituicao descuidada.
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre `90dfaee7` (a `development`) e esta
+/// arvore, pelo metodo deste portao (`RegExp('bichu', caseSensitive: false)`
+/// sobre o texto cru de cada `.dart` de `app/lib`):
+///
+///    +2 api/cache_de_imagens.dart           (0 -> 2,  ARQUIVO NOVO)
+///    +4 app.dart                            (32 -> 36)
+///    +1 escopo.dart                         (12 -> 13)
+///    +2 main.dart                           (6 -> 8)
+///    +1 roteamento/rotas.dart               (15 -> 16)
+///    +1 telas/conexoes/tela_minhas_conexoes.dart        (18 -> 19)
+///    +1 telas/mensagens/area_de_mensagens.dart          (24 -> 25)
+///    +1 telas/mural/comentarios_da_publicacao.dart      (14 -> 15)
+///    +1 telas/mural/tela_do_mural.dart                  (19 -> 20)
+///    +1 telas/perdido/cartao_do_perdido.dart            (28 -> 29)
+///    +3 telas/pessoa/tela_perfil_de_pessoa.dart         (26 -> 29)
+///    +1 telas/rede/cartao_de_pessoa_encontrada.dart     (21 -> 22)
+///    +2 widgets/imagem_da_rede.dart          (9 -> 11)
+///    +1 widgets/marca_da_pessoa.dart         (3 -> 4)
+///
+/// Soma: +22, e 2706 + 22 = 2728. As mencoes sao a prosa que cita
+/// `m.bichu.app` e `imagens-bichu` (o nome da pasta do cache) ao explicar de
+/// onde a imagem vem e onde ela para.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre `90dfaee7`,
+/// devolve **2706** -- exatamente o valor que estava travado aqui. O
+/// procedimento acerta no ponto onde a resposta ja era conhecida, e e so por
+/// isso que ele vale aqui, onde nao era.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perde arquivo
+/// pode fechar o numero por compensacao: `app/lib` tem **218** `.dart` em
+/// `90dfaee7` e **220** nesta arvore; os dois novos sao
+/// `api/cache_de_imagens.dart` e `widgets/imagem_em_cache.dart`, e **nenhum
+/// arquivo foi removido**.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Valor de ramo
+/// isolado nao sobrevive a uniao, e esta frente nao e a unica tocando
+/// `app/lib` nesta rodada.
+const int ocorrenciasDeBichu = 2728;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
@@ -190,6 +236,21 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
   'lib/telas/conta/tela_entrar.dart': <String>[
     'assets/ilustracoes/tres-pessoas-no-parque.webp',
   ],
+
+  // NOME DE PASTA NO DISCO, e nao texto de tela (BICHUS-296).
+  //
+  // `ChaveDeImagem.pastaDePessoas` e o segmento `pessoa/` do caminho onde o
+  // cache em disco guarda foto de PESSOA, separada da pasta `publica/`. E a
+  // separacao que torna `esquecerPessoa` uma remocao de diretorio, e e ela que
+  // faz a Emenda 3 do ADR-0010 valer no disco.
+  //
+  // Trocar para `usuario` nao e mudanca de microcopia: e renomear uma pasta
+  // que **ja existe no aparelho de quem tem o app instalado**. O cache ficaria
+  // orfao -- a pasta antiga sem ninguem para apagar, e `esquecerTodasAsPessoas`
+  // varrendo a nova e vazia --, e a foto da conexao de quem saiu continuaria em
+  // `pessoa/` depois do logout. Ninguem le esta palavra: ela nao aparece em
+  // tela nenhuma.
+  'lib/api/cache_de_imagens.dart': <String>['pessoa'],
 
   // Semente do apelido sugerido (`pessoa-01`). O apelido tem conjunto de
   // caracteres fechado e **nao aceita acento**: `usuario` passaria, `usuario`

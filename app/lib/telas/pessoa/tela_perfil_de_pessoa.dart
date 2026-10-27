@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../api/conexoes_api.dart';
+import '../../api/cache_de_imagens.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_conexao.dart';
@@ -109,6 +110,7 @@ class TelaDePerfilDePessoa extends StatefulWidget {
     super.key,
     this.podeAgirNaComunidade = false,
     this.tokenDoConvite,
+    this.cacheDeImagens,
   });
 
   /// O apelido, **sem o `@`**: o `@` é símbolo de leitura.
@@ -130,6 +132,26 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// O **token de convite**, quando quem abriu esta tela tem um. Nulo não
   /// desenha a porta de pedir.
   final String? tokenDoConvite;
+
+  /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296), **ou nulo**.
+  ///
+  /// Está aqui por uma razão só: **esta tela é a única que sabe a quem a foto
+  /// pertence no instante em que a permissão de vê-la termina.** Desfazer
+  /// conexão e bloquear moram aqui, e os dois endereçam a pessoa por coisas que
+  /// não servem de chave de cache — `endConnection` recebe o `ref` da aresta e
+  /// `blockPerson` recebe o `public_ref` —, enquanto a chave do cache é o
+  /// **apelido**, que é justamente o endereço desta tela (`widget.apelido`).
+  ///
+  /// Sem esta linha, desfazer conexão deixaria a foto da pessoa no disco, e a
+  /// **Emenda 3 do ADR-0010** — *"a foto aparece SÓ quando as duas pessoas já
+  /// aceitaram conexão"* — valeria só enquanto a tela não pintasse. Cache que
+  /// sobrevive à perda de permissão transforma uma decisão de privacidade do
+  /// cliente em regra de interface.
+  ///
+  /// **Opcional porque nulo não tem nada a esquecer**, e porque campo novo e
+  /// obrigatório quebraria toda tela de teste que constrói esta — a mesma razão
+  /// escrita no cabeçalho desta rota, em `roteamento/rotas.dart`.
+  final CacheDeImagensNoAparelho? cacheDeImagens;
 
   /// **O TÍTULO DA BARRA DE TOPO DESTA TELA É A PALAVRA `Perfil`**, e não o
   /// nome da pessoa (cliente, 23/10/2026).
@@ -271,6 +293,32 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     }
   }
 
+  /// **APAGA DO DISCO AS FOTOS DESTA PESSOA**, porque a permissão de vê-las
+  /// acabou de terminar.
+  ///
+  /// Chamado por [_encerrar] (recusar, cancelar e desfazer — as três passam por
+  /// `endConnection`) e pelo bloqueio. Recusar e cancelar tratam de um pedido
+  /// que **nunca** foi aceito: ali não deveria haver foto em disco, e apagar
+  /// ainda assim é o que torna a regra uma só em vez de três.
+  ///
+  /// **Antes do `_carregar()` de propósito.** O recarregamento é o que repinta
+  /// a tela sem a foto; apagar depois deixaria uma janela em que a tela já não
+  /// mostra a foto e o arquivo ainda está lá — curta, mas é a janela em que o
+  /// aplicativo fechado congelaria o arquivo no disco para sempre.
+  ///
+  /// Não lança: `esquecerPessoa` engole falha de sistema de arquivos. Uma pasta
+  /// que não sai não pode derrubar o desfazer, que é a ação que a pessoa pediu.
+  Future<void> _esquecerAsFotosDela() async {
+    await widget.cacheDeImagens?.esquecerPessoa(widget.apelido);
+  }
+
+  /// `endConnection` **e** a limpeza do cache, nesta ordem. Ver
+  /// [_esquecerAsFotosDela].
+  Future<void> _encerrar(String ref) async {
+    await widget.conexoes.encerrar(ref);
+    await _esquecerAsFotosDela();
+  }
+
   Future<void> _agir(Future<void> Function() acao) async {
     if (_agindo) return;
     setState(() {
@@ -339,7 +387,21 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
                 _perdeuOAlvo = true;
                 _perfil = null;
               }),
-              aoMudarOBloqueio: (_) => unawaited(_carregar()),
+              // BLOQUEAR TAMBÉM APAGA AS FOTOS DELA DO DISCO (BICHUS-296).
+              //
+              // Bloquear **desfaz a conexão** no servidor, e o predicado da
+              // Emenda 3 do ADR-0010 carrega `NOT bloqueio_entre` dentro dele:
+              // a partir daqui a foto não sai mais em resposta nenhuma. Um
+              // arquivo que ficasse no aparelho seria o rosto de quem a pessoa
+              // acabou de bloquear, guardado pelo aplicativo.
+              //
+              // **Só ao bloquear, e não ao desbloquear**: desbloquear não
+              // devolve conexão nenhuma (são duas escritas, e a segunda é um
+              // pedido novo), e não há nada a repovoar.
+              aoMudarOBloqueio: (bloqueada) => unawaited(() async {
+                if (bloqueada) await _esquecerAsFotosDela();
+                await _carregar();
+              }()),
             ),
         ],
       ),
@@ -497,7 +559,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
           BotaoSecundario(
             rotulo: TelaDePerfilDePessoa.recusar,
             carregando: _agindo,
-            aoTocar: ref == null ? null : () => unawaited(_agir(() => widget.conexoes.encerrar(ref))),
+            aoTocar: ref == null ? null : () => unawaited(_agir(() => _encerrar(ref))),
           ),
         ];
 
@@ -508,7 +570,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
           BotaoSecundario(
             rotulo: TelaDePerfilDePessoa.cancelarPedido,
             carregando: _agindo,
-            aoTocar: ref == null ? null : () => unawaited(_agir(() => widget.conexoes.encerrar(ref))),
+            aoTocar: ref == null ? null : () => unawaited(_agir(() => _encerrar(ref))),
           ),
         ];
 
@@ -522,7 +584,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
           BotaoSecundario(
             rotulo: TelaDePerfilDePessoa.desfazerConexao,
             carregando: _agindo,
-            aoTocar: ref == null ? null : () => unawaited(_agir(() => widget.conexoes.encerrar(ref))),
+            aoTocar: ref == null ? null : () => unawaited(_agir(() => _encerrar(ref))),
           ),
         ];
 
@@ -646,6 +708,12 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       // O retrato de uma pessoa falhando pede outro desenho que uma fachada
       // falhando, e é por isso que este símbolo é parâmetro.
       simboloDeFalha: Icons.photo_outlined,
+      // O CACHE EM DISCO, ESCOPADO NA PESSOA (BICHUS-296) — e aqui o escopo
+      // **não é opcional**. A vitrine é o que o aceite da conexão abre (ADR-0010,
+      // emenda 2): guardá-la como imagem pública a deixaria no aparelho depois de
+      // a conexão ser desfeita, que é a emenda valendo só na tela. O dono é
+      // `widget.apelido`, que é o endereço desta tela.
+      cache: ChaveDeImagem.dePessoa(foto.gridUrl, apelido: widget.apelido),
     );
   }
 }

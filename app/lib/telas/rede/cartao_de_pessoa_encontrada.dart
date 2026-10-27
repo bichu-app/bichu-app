@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../api/cache_de_imagens.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_conexao.dart';
@@ -386,6 +387,10 @@ class _EstadoDoCartaoDePessoaEncontrada
           descricao: null,
           largura: CartaoDePessoaEncontrada.ladoDoCirculo,
           simboloDeFalha: Icons.person_outline,
+          // O CACHE EM DISCO COM O DONO NA CHAVE (BICHUS-296): `handle` nao e
+          // anulavel em `PersonSearchResult`, e e ele que faz desfazer conexao
+          // e bloquear apagarem esta foto do aparelho.
+          cache: ChaveDeImagem.dePessoa(url, apelido: widget.pessoa.handle),
         ),
       ),
     );

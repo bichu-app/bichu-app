@@ -385,6 +385,8 @@ class _Comentario extends StatelessWidget {
           inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
           lado: ladoDoIcone,
           estiloDaInicial: textos.bodyMedium,
+          // O dono da foto, para o cache em disco (BICHUS-296).
+          apelido: comentario.autor.apelido,
         ),
         const SizedBox(width: BichuEspaco.e3),
         Expanded(

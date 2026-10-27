@@ -1202,6 +1202,16 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
       inicial: inicial,
       lado: tamanho,
       desligada: desligada,
+      // O DONO DA FOTO, para o cache em disco (BICHUS-296).
+      //
+      // **E a MESMA fonte do destino do toque logo abaixo**, e isso nao e
+      // coincidencia: o contrato manda `handle` e `photo_icon_url` pelo MESMO
+      // predicado da Emenda 3 do ADR-0010 -- conexao aceita, nao bloqueada.
+      // Quem nao e conexao recebe os dois nulos, e ai nao ha foto a desenhar
+      // nem a cachear. A foto do ACHADO nao passa por aqui em nenhum caminho:
+      // ela e a URL assinada de 600 s de `FinderConversation`, que este cache
+      // recusa por decisao escrita em `cache_de_imagens.dart`.
+      apelido: quemEle?.handle,
     );
 
     final destino = quemEle == null

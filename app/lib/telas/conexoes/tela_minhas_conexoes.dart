@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/conexoes_api.dart';
+import '../../api/cache_de_imagens.dart';
 import '../../api/falhas.dart';
 import '../../api/modelos_conexao.dart';
 import '../../roteamento/rotas.dart';
@@ -414,6 +415,10 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
           descricao: null,
           largura: TelaDeMinhasConexoes.ladoDoCirculo,
           simboloDeFalha: Icons.person_outline,
+          // O CACHE EM DISCO COM O DONO NA CHAVE (BICHUS-296). `handle` nao e
+          // anulavel em `ConnectedPerson` -- "conexao sem apelido nao entra na
+          // lista" --, entao toda linha desta tela cacheia.
+          cache: ChaveDeImagem.dePessoa(url, apelido: pessoa.handle),
         ),
       ),
     );

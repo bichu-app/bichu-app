@@ -1572,6 +1572,12 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             seguranca: SegurancaApi(escopo.api),
             podeAgirNaComunidade: podeCriarNaComunidade(escopo.sessao),
             tokenDoConvite: convite is String && convite.isNotEmpty ? convite : null,
+            // O CACHE DE IMAGEM (BICHUS-296), para esta tela poder APAGAR: ela
+            // hospeda desfazer conexao e bloquear, e e o unico lugar que sabe o
+            // apelido -- que e a chave do cache de foto de pessoa -- no
+            // instante em que a permissao de ver a foto termina. Nulo em teste
+            // e em build sem cache, e ai nao ha nada a esquecer.
+            cacheDeImagens: escopo.cacheDeImagens,
           );
         },
       ),
