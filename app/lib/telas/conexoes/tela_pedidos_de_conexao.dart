@@ -12,7 +12,6 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../../widgets/grupo_segmentado.dart';
 import '../../widgets/selo_de_validado.dart';
 
 /// **Os pedidos de conexão.** A única tela desta fatia, e a lista que ela
@@ -27,10 +26,15 @@ import '../../widgets/selo_de_validado.dart';
 /// conexão"*.
 ///
 /// Ela é `TelaDeMinhasConexoes`, em `tela_minhas_conexoes.dart`, com rota
-/// própria — **e não um terceiro segmento desta tela**. A razão é de desenho e
+/// própria — **e não uma terceira aba desta tela**. A razão é de desenho e
 /// está escrita lá: caixa de pedidos é o que **espera decisão**, e conexão
-/// aceita não espera nada. Um terceiro segmento ao lado de `Recebidos` e
+/// aceita não espera nada. Uma terceira aba ao lado de `Recebidos` e
 /// `Enviados` poria no mesmo controle duas perguntas diferentes.
+///
+/// **A TROCA DO SEGMENTO PELA ABA (26/10/2026) NÃO REABRIU ISTO.** O controle
+/// mudou de FORMA e continua com DUAS posições: o argumento acima é sobre a
+/// PERGUNTA que o controle faz, e não sobre o widget que a faz. A palavra
+/// "segmento" virou "aba" nestas linhas e nada mais mudou nelas.
 ///
 /// **Esta tela não mudou de trabalho**: ela continua mostrando **pedidos**, e o
 /// que o dono vê aqui sobre as conexões aceitas continua sendo o **número**, na
@@ -39,13 +43,40 @@ import '../../widgets/selo_de_validado.dart';
 /// linha mudada: esta tela não pede `GET /connections` e não escreve
 /// "Conexões".
 ///
+/// ## AS DUAS CAIXAS SÃO ABAS, E NÃO SEGMENTOS (cliente, 26/10/2026)
+///
+/// Literal: *"pedidos de conexão, vamos trocar essas caixas de recebidos e
+/// enviados por abas, igual na pagina de rede."*
+///
+/// **O destino que ele nomeia é a `TabBar` de `rede/secao_da_rede.dart`**, que
+/// é a ÚNICA `TabBar` do aplicativo — e por isso o padrão veio de lá inteiro:
+/// `isScrollable` com `tabAlignment: TabAlignment.start`, e `Tab` com
+/// `height: BichuAlvoDeToque.min`. Cada escolha dessas tem a conta medida
+/// escrita na prosa de `SecaoDaRede`, e nenhuma foi reinventada aqui.
+///
+/// **UMA DIFERENÇA DELIBERADA: não há glifo.** O ícone nas abas da `Rede` é
+/// pedido DELE, de 22/10/2026, e para AQUELA seção; a prosa de lá diz por
+/// extenso que a escolha dos glifos é de quem escreveu e pode ser revista.
+/// Inventar dois glifos aqui seria escolha minha entrando como decisão dele.
+///
+/// **AS ABAS DE `Próximos`/`Encerrados` QUE O PEDIDO CITA NÃO EXISTEM MAIS.**
+/// Elas viraram FILTRO em 19/10/2026, por decisão dele — está escrito no alto
+/// de `rede/agenda_da_rede.dart`. O que a página da `Rede` tem hoje são as
+/// abas `Eventos`/`Comunidade`/`Usuários`, de `rede/secao_da_rede.dart`, e é
+/// esse o desenho que ele viu no aparelho quando pediu "igual na pagina de
+/// rede". **O pedido vale inteiro**: ele nomeou a FORMA, e a forma está lá.
+///
+/// **TROCAR DE ABA NÃO RECARREGA A CAIXA JÁ VISTA**, e isto o segmento não
+/// fazia: cada troca dele chamava `_carregar()`, a roda substituía a lista e a
+/// caixa voltava do zero. Ver [_EstadoDosPedidos._paginas].
+///
 /// ## Por que não existe campo de busca AQUI
 ///
 /// A busca de PESSOAS existe desde 20/10/2026, e ela é a aba `Usuários` da
 /// `Rede` — não esta tela. O que não cabe aqui é filtrar **pedidos** por pessoa:
 /// **o dano mora na enumeração**, não no perfil. O padrão de listagem desta casa põe busca, filtro e ordenação no
-/// topo do corpo da tela — e aqui o que cabe no topo é o **filtro** (qual caixa)
-/// e o resumo. Sem busca, e sem seletor de ordem: a ordem é fixa, mais recentes
+/// topo do corpo da tela — e aqui o que cabe no topo é a **escolha da caixa**
+/// (as abas, desde 26/10/2026) e o resumo. Sem busca, e sem seletor de ordem: a ordem é fixa, mais recentes
 /// primeiro, porque qualquer recorte por pessoa aqui seria uma superfície de
 /// enumeração.
 ///
@@ -57,9 +88,9 @@ import '../../widgets/selo_de_validado.dart';
 /// não há de onde partir um pedido — e oferecer o controle seria desenhar um
 /// caminho que o servidor recusa com 404.
 ///
-/// ## Duas caixas, e a recusa é silenciosa nas duas
+/// ## Duas abas, e a recusa é silenciosa nas duas
 ///
-/// | Caixa | O que traz | O que a pessoa faz |
+/// | Aba | O que traz | O que a pessoa faz |
 /// |---|---|---|
 /// | `Recebidos` | pedidos que chegaram | **Aceitar** ou **Recusar** |
 /// | `Enviados` | pedidos que a conta mandou | **Cancelar** |
@@ -105,9 +136,50 @@ class TelaDePedidosDeConexao extends StatefulWidget {
   State<TelaDePedidosDeConexao> createState() => _EstadoDosPedidos();
 }
 
-class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
+class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
+    with SingleTickerProviderStateMixin {
   CaixaDePedidos _caixa = CaixaDePedidos.recebidos;
-  PaginaDePedidosDeConexao? _pagina;
+
+  /// O controlador das DUAS abas, criado UMA vez e com `initialIndex`.
+  ///
+  /// **Ele mora no estado e não no `build`**, e é isso que faz a aba escolhida
+  /// sobreviver a reconstrução — inclusive à reconstrução que acontece quando
+  /// o perfil de quem pediu é EMPILHADO por cima desta tela e depois sai. Ver
+  /// o comentário do `push` em [_nomeDeQuemPediu]: ele já dizia que voltar do
+  /// perfil tem de devolver a caixa que a pessoa estava olhando, e com um
+  /// controlador refeito a cada `build` a aba voltaria a `Recebidos`.
+  ///
+  /// `length` vem de `CaixaDePedidos.values` e não de um `2` escrito à mão:
+  /// uma caixa nova no contrato quebraria o controlador em silêncio, com a
+  /// aba existindo no `enum` e não na barra.
+  late final TabController _abas = TabController(
+    length: CaixaDePedidos.values.length,
+    initialIndex: _caixa.index,
+    vsync: this,
+  );
+
+  /// A PÁGINA JÁ CARREGADA DE CADA CAIXA, e a razão de ela ser um MAPA.
+  ///
+  /// Era um `PaginaDePedidosDeConexao?` único. Com o controle segmentado, cada
+  /// troca de caixa chamava `_carregar()`: a lista da caixa anterior era
+  /// jogada fora, a roda tomava o lugar dela e voltar mostrava a caixa **do
+  /// zero**. É a mesma perda que o comentário do `push` em [_nomeDeQuemPediu]
+  /// cita como o que `go` faria — e ela estava acontecendo pelo outro lado,
+  /// a cada toque no controle.
+  ///
+  /// Com ABAS essa perda fica visível toda hora, porque trocar de aba é gesto
+  /// de LEITURA e não de filtragem: ninguém espera que voltar para a aba de
+  /// onde veio recomece. Então a caixa já vista aparece com a lista que já
+  /// estava na mão — **sem roda e sem pergunta nova ao servidor** — e só a
+  /// caixa inédita carrega.
+  ///
+  /// **O mapa é ESVAZIADO em [_agir]**, e isso não é zelo: aceitar, recusar ou
+  /// cancelar muda a lista NO SERVIDOR, e aí o que está guardado aqui passa a
+  /// ser mentira nas duas caixas. Arrastar para atualizar também força a
+  /// pergunta, porque passa por [_carregar].
+  final Map<CaixaDePedidos, PaginaDePedidosDeConexao> _paginas =
+      <CaixaDePedidos, PaginaDePedidosDeConexao>{};
+
   ResumoDeConexoes? _resumo;
   bool _carregando = true;
   String? _falha;
@@ -122,7 +194,18 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     unawaited(_carregar());
   }
 
+  @override
+  void dispose() {
+    _abas.dispose();
+    super.dispose();
+  }
+
   Future<void> _carregar() async {
+    // A CAIXA É FIXADA AQUI, e não lida de novo depois do `await`: a resposta
+    // pode chegar DEPOIS de a pessoa trocar de aba, e sem isto a página de
+    // `Recebidos` seria guardada sob a chave de `Enviados` — a lista certa na
+    // aba errada, que é pior do que recarregar.
+    final CaixaDePedidos caixa = _caixa;
     setState(() {
       _carregando = true;
       _falha = null;
@@ -138,7 +221,7 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
       // sobe como erro assíncrono sem dono — que o teste de widget acusa como
       // reprovação e, em produção, viraria um erro solto no console. Medido em
       // 18/10/2026.
-      final pedidos = widget.conexoes.pedidos(caixa: _caixa);
+      final pedidos = widget.conexoes.pedidos(caixa: caixa);
       final resumo = widget.conexoes
           .resumo()
           .then<ResumoDeConexoes?>((ResumoDeConexoes r) => r)
@@ -147,12 +230,19 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
       final numeros = await resumo;
       if (!mounted) return;
       setState(() {
-        _pagina = pagina;
+        _paginas[caixa] = pagina;
         _resumo = numeros;
-        _carregando = false;
+        // A roda só sai se esta carga é a da aba que está na frente: a outra
+        // tem a carga dela em voo, e apagar a roda aqui mostraria o vazio
+        // dela por um quadro.
+        if (caixa == _caixa) _carregando = false;
       });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
+      // A falha de uma caixa que já não está na frente não desenha nada. A
+      // aba atual, se é inédita, tem a própria carga em voo e o próprio
+      // desfecho; se é a já vista, está mostrando a lista que tem.
+      if (caixa != _caixa) return;
       setState(() {
         _carregando = false;
         // `next_action: sign_in` do servidor. Medido:
@@ -178,6 +268,12 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
       await acao();
       if (!mounted) return;
       _emCurso.remove(ref);
+      // O GUARDADO DAS DUAS CAIXAS CAI AQUI. Aceitar tira o pedido de
+      // `Recebidos`, cancelar tira de `Enviados`, e o resumo muda nos dois
+      // casos: mostrar a outra caixa a partir do mapa depois disto seria
+      // desenhar uma lista que o servidor já não tem. `_carregar()` logo
+      // abaixo refaz a da frente; a outra refaz quando for aberta.
+      _paginas.clear();
       await _carregar();
     } on FalhaDeChamada {
       if (!mounted) return;
@@ -188,14 +284,31 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     }
   }
 
+  /// O TOQUE NA ABA. **Só a caixa inédita pergunta ao servidor.**
+  ///
+  /// Ver [_paginas] para o porquê. O `GrupoSegmentado` que esta aba substituiu
+  /// chamava `_carregar()` em TODA troca, sem exceção.
+  void _trocarCaixa(CaixaDePedidos escolhida) {
+    if (escolhida == _caixa) return;
+    final bool jaVista = _paginas.containsKey(escolhida);
+    setState(() {
+      _caixa = escolhida;
+      // O aviso de falha era da caixa ANTERIOR, e ele não atravessa a troca:
+      // "não conseguimos carregar" ao lado da lista de outra caixa afirma
+      // sobre a lista que está na tela algo que é de outra.
+      _falha = null;
+    });
+    if (!jaVista) unawaited(_carregar());
+  }
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final itens = _pagina?.items ?? const <Conexao>[];
+    final itens = _paginas[_caixa]?.items ?? const <Conexao>[];
 
-    // SEM CONTA A TELA INTEIRA E O CONVITE, e o filtro de caixa **nao**
-    // aparece: dois segmentos que nao podem mudar nada sao um controle sem
+    // SEM CONTA A TELA INTEIRA E O CONVITE, e a escolha de caixa **nao**
+    // aparece: duas abas que nao podem mudar nada sao um controle sem
     // desfecho, a mesma regra pela qual `Minhas indicações` nao e desenhada
     // deslogado. Nao ha `RefreshIndicator` tambem -- arrastar para atualizar
     // repetiria o 401.
@@ -223,25 +336,86 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
-            // O FILTRO NO TOPO DO CORPO, e não na barra: é o padrão de listagem
-            // desta casa. Dois segmentos, porque não há uma terceira caixa.
-            GrupoSegmentado<CaixaDePedidos>(
-              rotulo: 'Caixa',
-              selecionado: _caixa,
-              opcoes: const <OpcaoSegmentada<CaixaDePedidos>>[
-                OpcaoSegmentada<CaixaDePedidos>(
-                  valor: CaixaDePedidos.recebidos,
-                  rotulo: 'Recebidos',
-                ),
-                OpcaoSegmentada<CaixaDePedidos>(
-                  valor: CaixaDePedidos.enviados,
-                  rotulo: 'Enviados',
-                ),
-              ],
-              aoSelecionar: (CaixaDePedidos escolhida) {
-                setState(() => _caixa = escolhida);
-                unawaited(_carregar());
-              },
+            // O CONTROLE NO TOPO DO CORPO, e não na barra: é o padrão de
+            // listagem desta casa, e a aba herda exatamente o lugar do
+            // segmento que ela substituiu. **DUAS abas, porque não há uma
+            // terceira caixa** -- ver a prosa da classe.
+            //
+            // **ELAS FICAM DENTRO DA `ListView`, e isso é escolha e não
+            // descuido.** Em `secao_da_rede.dart` as abas ficam FORA do corpo
+            // rolante, e o motivo medido está escrito lá: a barra de listagem
+            // daquela tela desaparece em alguns estados e levaria as abas
+            // junto. **Aqui não há barra de listagem**, e o lugar do controle
+            // é o topo do corpo pelo padrão desta casa; tirá-lo da `ListView`
+            // reestruturaria a tela e passaria por cima do gesto de arrastar
+            // para atualizar, que é o pai desta lista.
+            Semantics(
+              container: true,
+              // `Caixa` era o `rotulo` do `GrupoSegmentado`, e ele continua
+              // aqui pelo motivo que está escrito lá: sem o nome do grupo,
+              // quem usa leitor de tela ouve `Recebidos` e não tem como saber
+              // qual era a pergunta. A `TabBar` do M3 já anuncia `aba 1 de 2`
+              // e o estado de selecionada -- o que ela NÃO tem é a pergunta.
+              label: 'Caixa',
+              child: TabBar(
+                controller: _abas,
+                // AS DUAS VÊM DE `secao_da_rede.dart`, e a conta foi
+                // REFEITA para ESTES dois rótulos em vez de herdada
+                // (320 dp de tela, 200% de escala de fonte):
+                //
+                // | barra | largura dada | precisa de | linhas |
+                // |---|---|---|---|
+                // | NÃO rolável (`fill`) | 112,0 dp | 252,9 / 224,8 | **2** |
+                // | `isScrollable` | 252,9 / 224,8 dp | idem | 1 |
+                //
+                // **ISTO CORRIGE O QUE EU HAVIA ESCRITO AQUI.** Eu disse que
+                // o rótulo "corta" numa barra não rolável, copiando a palavra
+                // da prosa da `Rede`. MEDIDO: **não corta** --
+                // `didExceedMaxLines` é falso e nenhuma exceção sobe. O que
+                // acontece é que ele QUEBRA EM DUAS LINHAS, com 112 dp onde
+                // pede 252,9, e o texto passa de 40,0 para 48,0 dp de altura.
+                // Logo: rolar não evita uma quebra de layout, evita que o
+                // rótulo vire duas linhas. É escolha de qualidade e não
+                // conserto de defeito, e dizer o contrário seria inventar
+                // gravidade para justificar a decisão.
+                //
+                // `tabAlignment: TabAlignment.start` porque com
+                // `isScrollable` o padrão do M3 é `startOffset`, que abre um
+                // vão de 52 dp antes da primeira aba -- somado à margem de
+                // 16 dp deste corpo, `Recebidos` nasceria a 68 dp da borda,
+                // desalinhada de tudo o que está abaixo dela.
+                //
+                // O CUSTO É DE LARGURA, e está medido e não escondido: a 200%
+                // a segunda aba termina em 541,7 dp, fora de uma tela de 320
+                // -- e é por isso mesmo que esta barra rola.
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                onTap: (int i) => _trocarCaixa(CaixaDePedidos.values[i]),
+                tabs: const <Widget>[
+                  // `height` EXPLÍCITO, amarrado ao token, e a conta está
+                  // MEDIDA (26/10/2026, neste Flutter 3.47.4):
+                  //
+                  // | `height` | caixa do `Tab` | ALVO DE TOQUE |
+                  // |---|---|---|
+                  // | ausente | 46,0 dp | **48,0 dp** |
+                  // | `BichuAlvoDeToque.min` | 48,0 dp | **50,0 dp** |
+                  //
+                  // **O alvo nunca esteve abaixo do piso**, e dizer que isto
+                  // conserta um alvo pequeno seria falso: a `TabBar` envolve
+                  // cada aba num `Padding(bottom: indicatorWeight)` por
+                  // DENTRO do `InkWell`, então o alvo é 2 dp mais alto que a
+                  // caixa do `Tab`. Sem `height` ele dá 48,0 — no piso, com
+                  // folga ZERO.
+                  //
+                  // O que o token compra é a folga e o VÍNCULO: a altura
+                  // passa a vir de `design/tokens.json` e não de
+                  // `kTextTabBarHeight`, que é constante do SDK e pode mudar
+                  // numa atualização sem ninguém reparar. É também o que o
+                  // padrão da casa faz em `rede/secao_da_rede.dart`.
+                  Tab(height: BichuAlvoDeToque.min, child: Text('Recebidos')),
+                  Tab(height: BichuAlvoDeToque.min, child: Text('Enviados')),
+                ],
+              ),
             ),
             const SizedBox(height: BichuEspaco.e4),
             if (_resumo != null) _linhaDoResumo(cores, textos, _resumo as ResumoDeConexoes),

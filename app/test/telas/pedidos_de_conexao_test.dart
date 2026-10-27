@@ -11,6 +11,14 @@
 //
 // Todo esperado está escrito por extenso, com acento: nenhum `expect` compara o
 // texto renderizado com a constante que o produz.
+//
+// **AS ISCAS DO CONTROLE FORAM REESCRITAS, E NÃO APAGADAS (BICHUS-307,
+// 26/10/2026).** O cliente trocou o grupo segmentado por abas, e os casos que
+// achavam o controle por `find.text('Enviados')` passariam a achar uma ABA sem
+// dizer nada sobre isso. Eles continuam no lugar -- `find.text` acha o `Text`
+// de dentro do `Tab` e o toque chega igual --, e o grupo `ABAS:` no fim do
+// arquivo é o que cobra a FORMA: que o controle seja `TabBar`, que sejam DUAS
+// abas e não três, e que voltar para a aba já vista não recomece a lista.
 
 import 'dart:convert';
 
@@ -21,8 +29,11 @@ import 'package:bichu/config/app_config.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/theme/bichu_tokens.g.dart';
+import 'package:bichu/widgets/grupo_segmentado.dart';
 import 'package:bichu/widgets/selo_de_validado.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -584,7 +595,351 @@ void main() {
     // que morava aqui e que nao proibia nomear canal.
     conferirRotuloDoSelo(rotulo, onde: 'o pedido de conexao');
   });
+
+  // =========================================================================
+  // AS ABAS (BICHUS-307, cliente de 26/10/2026)
+  //
+  // Literal dele: *"pedidos de conexão, vamos trocar essas caixas de recebidos
+  // e enviados por abas, igual na pagina de rede."*
+  // =========================================================================
+
+  group('ABAS: a forma do controle', () {
+    testWidgets('o controle é uma `TabBar`, e o grupo segmentado SAIU', (
+      tester,
+    ) async {
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      expect(find.byType(TabBar), findsOneWidget);
+      expect(
+        find.byType(GrupoSegmentado<CaixaDePedidos>),
+        findsNothing,
+        reason:
+            'REPROVA: a caixa continua sendo escolhida por grupo segmentado. '
+            'O cliente pediu ABAS em 26/10/2026.',
+      );
+      // Os rótulos são de ABA, e não de um controle qualquer que por acaso
+      // escreve as mesmas duas palavras.
+      expect(find.widgetWithText(Tab, 'Recebidos'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Enviados'), findsOneWidget);
+    });
+
+    testWidgets('ISCA: são DUAS abas, e NENHUMA terceira', (tester) async {
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      expect(
+        find.byType(Tab),
+        findsNWidgets(2),
+        reason:
+            'REPROVA: a tela ganhou uma terceira aba. A prosa da classe diz '
+            'por que não há: esta tela mostra PEDIDOS, conexão aceita não é '
+            'pedido, e as duas perguntas não cabem no mesmo controle.',
+      );
+      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
+      expect(barra.tabs, hasLength(2));
+      // A terceira aba teria o nome da OUTRA tela. Nenhuma palavra dela aqui.
+      for (final String proibido in <String>[
+        'Conexões',
+        'Minhas conexões',
+        'Aceitas',
+        'Aceitos',
+      ]) {
+        expect(
+          find.widgetWithText(Tab, proibido),
+          findsNothing,
+          reason: 'REPROVA: existe uma aba "$proibido" nesta tela',
+        );
+      }
+    });
+
+    testWidgets('a tela abre em `Recebidos`, e o controlador diz o mesmo', (
+      tester,
+    ) async {
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
+      expect(barra.controller?.length, 2);
+      expect(
+        barra.controller?.index,
+        CaixaDePedidos.recebidos.index,
+        reason:
+            'REPROVA: a tela não abre na caixa de recebidos. `initialIndex` '
+            'tem de sair de `_caixa`.',
+      );
+    });
+  });
+
+  group('ABAS: acessibilidade', () {
+    testWidgets('cada aba anuncia o rótulo E publica a ação de toque', (
+      tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      for (final String rotulo in <String>['Recebidos', 'Enviados']) {
+        final SemanticsNode no = tester.getSemantics(
+          find.widgetWithText(Tab, rotulo),
+        );
+        expect(
+          no.label,
+          contains(rotulo),
+          reason: 'REPROVA: a aba "$rotulo" não se anuncia',
+        );
+        expect(
+          no.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+          reason:
+              'REPROVA: a aba "$rotulo" se anuncia como controle e não '
+              'publica ação -- é a mesma falha que '
+              '`test/a11y/acao_de_controle_test.dart` reprova (WCAG 2.1 '
+              'SC 4.1.2).',
+        );
+      }
+      handle.dispose();
+    });
+
+    testWidgets('a PERGUNTA do grupo sobrevive: `Caixa` continua anunciado', (
+      tester,
+    ) async {
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      expect(
+        _semanticaDaTela(tester),
+        contains('Caixa'),
+        reason:
+            'REPROVA: o nome do grupo saiu junto com o segmento. Era o '
+            '`rotulo` do `GrupoSegmentado`, e sem ele quem usa leitor de tela '
+            'ouve "Recebidos" sem a pergunta que a palavra responde.',
+      );
+    });
+
+    testWidgets('a área TOCÁVEL da aba respeita o piso do produto', (
+      tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      for (final String rotulo in <String>['Recebidos', 'Enviados']) {
+        // **O ALVO, e não a caixa do `Tab`.** MEDIDO em 26/10/2026: a
+        // `TabBar` envolve cada aba num `Padding(bottom: indicatorWeight)`
+        // por DENTRO do `InkWell`, então o alvo é 2 dp mais alto que o `Tab`
+        // — com o token, `Tab` 48,0 e alvo 50,0; sem ele, `Tab` 46,0 e alvo
+        // 48,0. Medir o `Tab` acusaria "46 dp, abaixo do piso" sobre um alvo
+        // que estava exatamente NO piso, e seria reprovação mentirosa.
+        final double tocavel = tester
+            .getSemantics(find.widgetWithText(Tab, rotulo))
+            .rect
+            .height;
+        expect(
+          tocavel,
+          greaterThanOrEqualTo(BichuAlvoDeToque.min),
+          reason:
+              'REPROVA: o alvo de toque da aba "$rotulo" tem $tocavel dp de '
+              'altura, abaixo do piso de ${BichuAlvoDeToque.min} dp '
+              '(design system 6.5, WCAG 2.1 SC 2.5.8).',
+        );
+      }
+      handle.dispose();
+    });
+
+    testWidgets('a aba amarra a altura ao TOKEN, e não ao `kTextTabBarHeight`', (
+      tester,
+    ) async {
+      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+
+      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
+      for (final Widget aba in barra.tabs) {
+        expect(
+          (aba as Tab).height,
+          BichuAlvoDeToque.min,
+          reason:
+              'REPROVA: a altura da aba ficou por conta do SDK. MEDIDO: sem '
+              '`height` o alvo dá 48,0 dp exatos — no piso e com folga ZERO, '
+              'e preso a `kTextTabBarHeight`, que é constante do Flutter e '
+              'muda numa atualização sem ninguém reparar. O padrão da casa '
+              '(`rede/secao_da_rede.dart`) passa o token do produto.',
+        );
+      }
+    });
+  });
+
+  group('ABAS: trocar de aba e VOLTAR não recomeça a lista', () {
+    testWidgets(
+      'ISCA: voltar para a aba já vista NÃO pergunta de novo, e NÃO mostra a roda',
+      (tester) async {
+        await _montar(
+          tester,
+          recebidos: <Map<String, dynamic>>[
+            _pedido(
+              ref: 'r1',
+              estado: 'pending_received',
+              apelido: 'ana-do-bairro',
+            ),
+          ],
+          enviados: <Map<String, dynamic>>[
+            _pedido(ref: 'e1', estado: 'pending_sent', apelido: 'cleide'),
+          ],
+        );
+
+        // LINHA DE BASE MEDIDA, e não suposta: a montagem pede `Recebidos`
+        // uma vez e `Enviados` nenhuma.
+        expect(_chamadasDeLista('received'), 1);
+        expect(_chamadasDeLista('sent'), 0);
+        expect(find.text('@ana-do-bairro'), findsOneWidget);
+
+        // IDA: `Enviados` é inédita e TEM de perguntar. Sem este contrapeso o
+        // caso ficaria verde com uma tela que nunca carrega nada.
+        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.pumpAndSettle();
+        expect(
+          _chamadasDeLista('sent'),
+          1,
+          reason: 'REPROVA: a caixa inédita não foi carregada',
+        );
+        expect(find.text('@cleide'), findsOneWidget);
+
+        // VOLTA: `Recebidos` já foi vista. UM pump, de propósito -- a roda,
+        // se existisse, apareceria neste quadro e `pumpAndSettle` a esconderia.
+        await tester.tap(find.widgetWithText(Tab, 'Recebidos'));
+        await tester.pump();
+
+        expect(
+          find.byType(CircularProgressIndicator),
+          findsNothing,
+          reason:
+              'REPROVA: voltar para a aba já vista mostra a roda, e a lista '
+              'está recomeçando do zero. É a perda que o comentário do `push` '
+              'em `_nomeDeQuemPediu` já citava sobre o `go`.',
+        );
+        expect(
+          find.text('@ana-do-bairro'),
+          findsOneWidget,
+          reason: 'REPROVA: a lista de `Recebidos` não voltou com a aba',
+        );
+
+        await tester.pumpAndSettle();
+        expect(
+          _chamadasDeLista('received'),
+          1,
+          reason:
+              'REPROVA: voltar para `Recebidos` perguntou a lista ao servidor '
+              'outra vez. Foram ${_chamadasDeLista('received')} chamadas, e '
+              'a montagem já tinha feito a única que este caso aceita.',
+        );
+      },
+    );
+
+    testWidgets(
+      'CONTRAPESO: depois de ACEITAR, a outra caixa é perguntada de novo',
+      (tester) async {
+        // O guardado não pode sobreviver a uma ação: aceitar muda a lista NO
+        // SERVIDOR, e aí o que está na mão virou mentira nas duas caixas.
+        await _montar(
+          tester,
+          recebidos: <Map<String, dynamic>>[
+            _pedido(
+              ref: 'r1',
+              estado: 'pending_received',
+              apelido: 'ana-do-bairro',
+            ),
+          ],
+          enviados: <Map<String, dynamic>>[
+            _pedido(ref: 'e1', estado: 'pending_sent', apelido: 'cleide'),
+          ],
+        );
+
+        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.pumpAndSettle();
+        expect(_chamadasDeLista('sent'), 1);
+
+        await tester.tap(find.widgetWithText(Tab, 'Recebidos'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Aceitar'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.pumpAndSettle();
+        expect(
+          _chamadasDeLista('sent'),
+          2,
+          reason:
+              'REPROVA: depois da ação, `Enviados` foi desenhada a partir do '
+              'que estava guardado. O `_paginas.clear()` de `_agir` é o que '
+              'impede isso.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: ir ao perfil e VOLTAR devolve a aba `Enviados`, sem recarregar',
+      (tester) async {
+        // É ESTE o caminho que o comentário do `push` em `_nomeDeQuemPediu`
+        // protege, por extenso: *"voltar dele tem de devolver a caixa que a
+        // pessoa estava olhando -- `go` trocaria de ramo e a lista voltaria em
+        // `Recebidos` do zero"*. Com o controle virando aba, o `TabController`
+        // passou a ser a outra metade dessa promessa.
+        await _montarComRoteador(
+          tester,
+          recebidos: const <Map<String, dynamic>>[],
+          enviados: <Map<String, dynamic>>[
+            _pedido(
+              ref: 'e9',
+              estado: 'pending_sent',
+              apelido: 'carla-da-praca',
+              nome: 'Carla',
+            ),
+          ],
+        );
+
+        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.pumpAndSettle();
+        expect(_chamadasDeLista('sent'), 1);
+
+        await tester.tap(find.text('@carla-da-praca'));
+        await tester.pumpAndSettle();
+        expect(_textoDaTela(tester), contains('perfil aberto: carla-da-praca'));
+
+        GoRouter.of(
+          tester.element(find.text('perfil aberto: carla-da-praca')),
+        ).pop();
+        await tester.pumpAndSettle();
+
+        final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
+        expect(
+          barra.controller?.index,
+          CaixaDePedidos.enviados.index,
+          reason:
+              'REPROVA: voltar do perfil devolveu a tela em `Recebidos`. É '
+              'exatamente o que o comentário do `push` diz que o `go` faria, '
+              'e um `TabController` refeito a cada `build` reintroduz a perda '
+              'pelo outro lado.',
+        );
+        expect(
+          find.text('@carla-da-praca'),
+          findsOneWidget,
+          reason: 'REPROVA: a lista de `Enviados` não voltou com a aba',
+        );
+        expect(
+          _chamadasDeLista('sent'),
+          1,
+          reason: 'REPROVA: voltar do perfil recarregou a caixa do zero',
+        );
+      },
+    );
+  });
 }
+
+/// Quantas vezes a tela pediu a LISTA de uma direção.
+///
+/// **O resumo (`/connections/summary`) NÃO entra.** Ele é outra rota, e a tela
+/// o pede em paralelo com cada carga de lista; contar os dois juntos faria
+/// este número dobrar sem dizer nada sobre recarga de caixa.
+int _chamadasDeLista(String direcao) => chamadas
+    .where(
+      (String c) =>
+          c.contains('/connections/requests') &&
+          c.contains('direction=$direcao'),
+    )
+    .length;
 
 /// Todo texto desenhado pela tela, junto.
 String _textoDaTela(WidgetTester tester) {

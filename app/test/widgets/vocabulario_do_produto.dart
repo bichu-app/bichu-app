@@ -563,7 +563,34 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// entrega -- nenhum criado, removido ou renomeado, e o `diff` das duas
 /// distribuicoes aponta UMA linha. `app/lib` continua sem symlink (os dois
 /// programas avisariam), entao a caminhada nao depende de seguir link.
-const int ocorrenciasDeBichu = 2752;
+
+/// ## +4 PELA BICHUS-307 (26/10/2026): 2742 -> 2746
+/// **A MARCA NAO MUDOU, O TOKEN CRESCEU.** As caixas de pedido de conexao
+/// viraram abas por decisao do cliente, e `telas/conexoes/
+/// tela_pedidos_de_conexao.dart` passou de 19 para 23 ocorrencias. As QUATRO
+/// estao nomeadas, e nenhuma e texto de usuario com a palavra `Bichu`:
+///   1. e 2. `Tab(height: BichuAlvoDeToque.min, ...)`, uma por aba -- o piso
+///      de alvo de toque do produto, que e o que o padrao da casa
+///      (`rede/secao_da_rede.dart`) passa no `Tab` em vez de deixar a altura
+///      por conta do `kTextTabBarHeight` do SDK;
+///   3. e 4. duas mencoes a `BichuAlvoDeToque.min` na PROSA que explica a
+///      conta medida da altura da aba (46,0/48,0 dp sem o token contra
+///      48,0/50,0 dp com ele).
+/// A agulha ignora caixa e casa com o prefixo dos tokens do design system,
+/// entao token novo mexe neste numero -- e **nenhuma ocorrencia foi apagada**:
+/// o diff por arquivo tem UMA linha, e ela sobe.
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa. O `diff` das
+/// duas saidas por arquivo saiu VAZIO nas duas medicoes, com GUARDA DE ARQUIVO
+/// NAO VAZIO antes de confiar nele -- `diff` de duas saidas vazias sai 0 e
+/// mente.
+/// programas, sobre a arvore LIMPA da base (`11e520b7`, extraida por
+/// `git archive` para fora do worktree), reproduziram EXATAMENTE a constante
+/// que ela travava -- **2742** em 225 arquivos, com as duas distribuicoes
+/// identicas.
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: 225 `.dart` em `app/lib`
+/// na base e 225 agora. Nenhum nasceu, saiu ou foi renomeado -- o que este
+/// commit faz cabe num arquivo.
+const int ocorrenciasDeBichu = -1; // PENDENTE: trocado UMA VEZ SO, no fim desta consolidacao, pelo valor RECALCULADO sobre a arvore MESCLADA das seis. -1 reprova de proposito: nenhum dos lados do conflito vale para a uniao.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
