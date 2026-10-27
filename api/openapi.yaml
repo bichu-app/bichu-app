@@ -5927,6 +5927,23 @@ paths:
         `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
         (ADR-0027 12.6, decisao do cliente de 23/09/2026).
 
+        ## O cancelado nao se mistura mais ao ativo (27/10/2026)
+
+        Duas mudancas, pela decisao do cliente de 26/10/2026 -- *"os eventos
+        cancelados e que ja passaram devem vir por ultimo na listagem"*:
+
+        1. o parametro **`status`** recorta pela situacao CALCULADA, e com ele
+           da para pedir so o cancelado, ou so o que vai acontecer;
+        2. a ordem **`proximos`** passa a por o cancelado DEPOIS de todo
+           encontro ativo (ver `NetworkEventSort`).
+
+        **O cancelado continua na lista por padrao**, e isso e deliberado: sem
+        `status`, nada e recortado, exatamente como antes destas duas
+        mudancas. Quem se programou para ir precisa VER que foi cancelado --
+        esconde-lo por padrao seria apagar a informacao que o cancelamento
+        existe para dar. O que o cliente pediu foi deixar de MISTURAR, e quem
+        separa sem esconder e a ordem.
+
         ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
 
         A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
@@ -5946,6 +5963,7 @@ paths:
         - $ref: '#/components/parameters/NetworkEventAdmissionParam'
         - $ref: '#/components/parameters/NetworkEventVisibilityParam'
         - $ref: '#/components/parameters/NetworkEventSizeParam'
+        - $ref: '#/components/parameters/NetworkEventStatusParam'
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -6579,14 +6597,43 @@ paths:
         decidir, e nao de descrever. O que entra alem de capa e titulo esta
         justificado propriedade por propriedade no esquema.
 
-        ## Nao ha busca, filtro nem ordem escolhivel
+        ## Nao ha busca nem ordem escolhivel, e ha UM filtro
 
         O teto da conta e de **3 encontros ativos**
         (`community-event-limit-reached`), entao esta lista e curta por
-        construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
-        proximo para o mais distante, e depois o que passou, do mais recente
-        para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
-        para o que ainda nao terminou.
+        construcao: nao ha busca e nao ha ordem escolhivel.
+
+        **O unico recorte e `status`**, acrescentado em 27/10/2026 pela mesma
+        decisao que mudou a ordem abaixo. A frase que estava aqui -- *"nao ha
+        busca, filtro nem ordem escolhivel"* -- deixou de ser verdade nesse dia,
+        e esta reescrita e isso. **A TELA NAO O OFERECE**: `Meus eventos` nao tem
+        folha de filtro, e nenhuma foi criada, porque um controle de filtro sobre
+        uma lista de no maximo 3 encontros ativos e mais caro de ler do que a
+        lista inteira. Ele existe no contrato porque a ordem deixou de misturar o
+        cancelado, e quem consome o contrato precisa poder pedir um grupo so.
+
+        ## A ORDEM, que mudou em 27/10/2026
+
+        Sao TRES grupos, nesta ordem, e nao mais dois:
+
+        1. o que ainda nao terminou **e nao esta cancelado**, do mais proximo
+           para o mais distante -- a decisao que a tela oferece (cancelar) so
+           existe para ele;
+        2. o **cancelado** que ainda nao passou do fim previsto (rotulo
+           `cancelled`), do mais proximo para o mais distante;
+        3. o que passou, do mais recente para o mais antigo.
+
+        Antes eram dois grupos e o cancelado caia no primeiro, porque "ainda nao
+        terminou" nao olhava a publicacao. Consequencia: um encontro **cancelado**
+        para amanha ordenava ANTES de um encontro **ativo** para depois de
+        amanha, e a lista punha no alto justamente aquele sobre o qual nao ha
+        mais nada a decidir. Decisao do cliente de 26/10/2026.
+
+        **O grupo 2 nao e o fundo da lista**, e a escolha e deliberada: o rotulo
+        dele ainda e `cancelled` e nao `ended`, e o cancelamento de hoje e a
+        informacao que a propria pessoa acabou de gerar. Quando ele passa do fim
+        previsto, o rotulo vira `ended` pela regra do encerrado e ele cai no
+        grupo 3 sozinho.
       security:
         - bearerAuth: []
       x-rate-limit:
@@ -6596,6 +6643,7 @@ paths:
           on_exceed: deny_429
           note: "a lista da propria conta, no mesmo teto de `listMyNetworkEventJoinRequests`: ela recarrega a cada volta da tela e a cada arrasto para atualizar"
       parameters:
+        - $ref: '#/components/parameters/NetworkEventStatusParam'
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -12388,6 +12436,36 @@ components:
         Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
         mesmo motivo de `admission`.
       schema: { $ref: '#/components/schemas/PetSize' }
+    NetworkEventStatusParam:
+      name: status
+      in: query
+      description: |
+        A SITUACAO CALCULADA do encontro (`NetworkEventStatus`), e **nao a coluna
+        de publicacao**. A distincao e o ponto: a coluna nunca volta atras, entao
+        um encontro cancelado ha tres semanas segue cancelado NELA, enquanto o
+        rotulo que a resposta entrega para ele e `ended`. Quem pede
+        `status=cancelled` recebe os encontros que a lista rotula `Cancelado`
+        AGORA, e nao os que foram cancelados algum dia.
+
+        **Sem padrao, de proposito.** Ausente, nada e recortado, e o cancelado
+        continua na lista como antes de este parametro existir. Um
+        `default: upcoming` aqui tiraria da agenda de quem ja usa o app o
+        encontro cancelado que ela precisa ver para saber que nao vai acontecer,
+        sem ninguem ter pedido -- e e justamente a informacao que o cancelamento
+        existe para dar. Quem separa o cancelado sem esconde-lo e a ordem
+        (`NetworkEventSort`).
+
+        **Combina com `when`, e o par pode nao casar nada**: `status=upcoming`
+        com `when=past` e um recorte legitimo e vazio. `applied_filters` diz o
+        que de fato valeu, e e ele que separa "a Rede nao tem encontro" de "o seu
+        recorte esvaziou a agenda".
+
+        **Nao exclui o encontro privado.** Ao contrario de `city`, `admission` e
+        `size`, que o excluem por casarem valor oculto (ADR-0027 12.14), a
+        situacao do privado nao e oculta: o teaser dele ja a entrega
+        (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Casar por ela nao conta
+        nada que a resposta nao conte.
+      schema: { $ref: '#/components/schemas/NetworkEventStatus' }
     NetworkEventSlugParam:
       name: eventSlug
       in: path
@@ -17653,8 +17731,31 @@ components:
       type: string
       enum: [proximos, recentes]
       description: |
-        `proximos` e a data em ordem crescente; `recentes` e decrescente. **A
-        leitura publica nao ordena por distancia**: essa ordem e
+        `proximos` e a data em ordem crescente e `recentes` e decrescente.
+
+        ## `proximos` tem UMA excecao, e ela e de 27/10/2026
+
+        **O encontro rotulado `cancelled` vem depois de TODO encontro ativo**, e
+        so entao pela data. Decisao do cliente de 26/10/2026. Sem a excecao, um
+        encontro cancelado para amanha abria a agenda na frente de um encontro
+        que ainda vai acontecer depois de amanha -- a data o punha no alto, e a
+        lista destacava o que nao vai acontecer.
+
+        Dentro de cada um dos dois grupos a ordem continua sendo so a data, e o
+        desempate continua sendo o `slug`: a excecao e uma chave ANTES da data,
+        e nao uma troca de criterio.
+
+        **O rotulo e o CALCULADO** (`NetworkEventStatus`), e por isso a excecao
+        deixa de valer sozinha: passado o fim previsto, o cancelado e `ended`
+        como qualquer encerrado, e a partir dali `when` e `status` decidem se ele
+        ainda aparece.
+
+        **`recentes` NAO separa o cancelado**, e a ausencia e medida e nao
+        esquecimento: ela e a ordem do passado (`when=past`), onde o rotulo do
+        cancelado ja virou `ended` para todo mundo. Uma chave que nunca muda de
+        valor seria custo de ordenacao sem desfecho.
+
+        **A leitura publica nao ordena por distancia**: essa ordem e
         `listNearbyNetworkEvents`, com conta.
 
     NetworkEventNearbySort:

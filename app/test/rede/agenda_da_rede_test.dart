@@ -226,6 +226,63 @@ void main() {
     });
   });
 
+  // =====================================================================
+  // O FILTRO POR SITUACAO (cliente, 26/10/2026)
+  // =====================================================================
+  //
+  // *"nao existe filtro na listagem de eventos por eventos cancelados"*. O
+  // grupo `Situação` nasceu em 27/10/2026 com UMA opcao, `Cancelado`: `A vir`
+  // e `Encerrado` sao o que o grupo `Quando` ja diz, e dois controles que dao
+  // a mesma lista sao piores que um (criterio 2 da BICHUS-62).
+  group('filtro por situação', () {
+    testWidgets('ISCA -- `Cancelado` na folha manda status=cancelled',
+        (tester) async {
+      // ISCA: em `modelos_rede.dart`, em `RecorteDaRede.queryDaAgenda`,
+      // apague a linha
+      //     if (situacao != null) 'status': situacao!.codigo,
+      // Este caso reprova no parametro `status`, pelo nome.
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, logado: false);
+
+      // O CONTROLE NEGATIVO VEM PRIMEIRO, e ele e a metade que importa: sem
+      // recorte nenhum a agenda NAO manda `status`, e o cancelado continua na
+      // lista. Um `default` no parametro tiraria da agenda de quem ja usa o
+      // app o evento cancelado que ela precisa ver para saber que nao vai
+      // acontecer -- e o pedido foi deixar de MISTURAR, nao esconder.
+      final semRecorte = rede.chamadasA('GET /v1/network/events');
+      expect(semRecorte, isNotEmpty, reason: 'nada foi pedido: o caso mediria o nada');
+      expect(
+        semRecorte.last.url.queryParameters.containsKey('status'),
+        isFalse,
+        reason: 'REPROVA: a agenda recorta por situacao sem ninguem ter '
+            'pedido, e o evento cancelado desaparece da lista.',
+      );
+
+      await aplicarNaFolha(tester, <String>['Cancelado']);
+
+      expect(
+        rede.chamadasA('GET /v1/network/events').last.url.queryParameters['status'],
+        'cancelled',
+        reason: 'REPROVA: escolher `Cancelado` na folha nao recorta a agenda.',
+      );
+    });
+
+    testWidgets('a folha OFERECE `Situação` com `Cancelado`, e so ele',
+        (tester) async {
+      await abrirRede(tester, rede: redeComAgenda(), logado: false);
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+
+      final folha = textosDaFolha(tester);
+      expect(folha, isNotEmpty, reason: 'a folha de filtro não pintou nada');
+      expect(folha, contains('Situação'));
+      expect(folha, contains('Cancelado'));
+      // E NAO as outras tres do `enum` do contrato: elas duplicariam `Quando`
+      // (`A vir`/`Encerrado`) ou nao foram pedidas (`Acontecendo agora`).
+      expect(folha, isNot(contains('Acontecendo agora')));
+    });
+  });
+
   // ---------------------------------------------------------------------
   // O CARTAO: FOTO E TITULO, E NADA MAIS (cliente, 19/10/2026)
   // ---------------------------------------------------------------------
@@ -859,6 +916,12 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+      // `ensureVisible` ANTES do toque, como o `Grande` logo abaixo ja fazia.
+      // Sem ele o toque dependia de `Valor` CABER na primeira dobra da folha,
+      // e em 27/10/2026 o grupo `Situação` entrou acima e empurrou `Pago` para
+      // fora: o toque virou um aviso de `hit test` e o caso reprovou com
+      // `admission` nulo. O caso media o filtro, nao a altura da folha.
+      await tester.ensureVisible(find.text('Pago'));
       await tester.tap(find.text('Pago'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
