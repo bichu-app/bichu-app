@@ -214,17 +214,23 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     nome: 'minhas fotos',
     endereco: '/perfil/minhas-fotos',
     padrao: '/perfil/minhas-fotos',
-    motivo: 'AMBIGUA. Dois niveis dentro do Perfil: so `Meus dados` a abre. '
-        'Se `Meus dados` e interna, ela nao pode ser primeiro plano.',
+    motivo: 'o CONTEUDO a abre: um `ItemDeMenu` do corpo do Perfil. Ela era '
+        'AMBIGUA ate 26/10/2026, quando era de SEGUNDO nivel e so `Meus '
+        'dados` a abria -- o cliente mandou subi-la (*"traga o menu minhas '
+        'fotos para o menu principal"*, *"primeiro nivel do perfil"*) e a '
+        'ambiguidade acabou: ela esta no PRIMEIRO nivel e continua empilhada, '
+        'porque o discriminador e quem abre a tela e nao quantos niveis ela '
+        'tem. A classificacao nao mudou; o motivo ficou mais simples.',
   ),
   (
     nome: 'endereco de entrega',
     endereco: '/perfil/endereco-de-entrega',
     padrao: '/perfil/endereco-de-entrega',
-    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do Perfil, '
-        'e so `Meus dados` a abre, por `ItemDeMenu`. Se `Meus dados` e '
-        'interna, ela nao pode ser primeiro plano. E ela e FORMULARIO e nao '
-        'lista -- o que a regra "lista fica" nem alcanca.',
+    motivo: 'AMBIGUA, e desde 26/10/2026 a UNICA assim: dois niveis dentro do '
+        'Perfil, e so `Meus dados` a abre, por `ItemDeMenu` -- `minhas '
+        'fotos`, que era a irma, subiu para o primeiro nivel naquele dia. Se '
+        '`Meus dados` e interna, ela nao pode ser primeiro plano. E ela e '
+        'FORMULARIO e nao lista -- o que a regra "lista fica" nem alcanca.',
   ),
   (
     nome: 'meus achados',

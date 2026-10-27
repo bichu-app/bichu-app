@@ -969,15 +969,26 @@ void main() {
         deposito: depositoLogado(),
       );
       await irParaAConta(tester);
+      // ROLA ATE A PORTA, e isso entrou em 26/10/2026 sem mudar o que o caso
+      // cobra. O corpo logado da tela da conta e uma `ListView`, que so
+      // constroi o que cabe na dobra: quando o menu ganhou `Minhas fotos`
+      // (pedido do cliente: *"primeiro nivel do perfil"*), `Escanear uma tag`
+      // passou a cair FORA dela e `find` devolvia ZERO -- nao "invisivel",
+      // inexistente. A rolagem nao engole ausencia: se a porta nao estiver na
+      // lista, ela chega ao fim e o `expect` abaixo reprova do mesmo jeito.
+      await rolarAtePortaDeEscanear(tester);
 
       final porta = find.widgetWithText(ItemDeMenu, 'Escanear uma tag');
       expect(
         porta,
         findsOneWidget,
-        reason: 'REPROVA: a porta do leitor sumiu da tela da conta. Depois de '
-            '19/10 ela e a UNICA, e sem ela o caminho de quem achou um '
-            'cachorro na rua fica inalcancavel.',
+        reason: 'REPROVA: a porta do leitor sumiu da tela da conta, mesmo '
+            'rolando o menu ate o fim. Depois de 19/10 ela e a UNICA, e sem '
+            'ela o caminho de quem achou um cachorro na rua fica '
+            'inalcancavel.',
       );
+      await tester.ensureVisible(porta);
+      await tester.pumpAndSettle();
       await tester.tap(porta);
       await tester.pumpAndSettle();
       expect(

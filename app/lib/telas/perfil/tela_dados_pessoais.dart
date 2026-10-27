@@ -16,7 +16,6 @@ import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
 import '../../roteamento/saida_da_mensagem.dart';
 import '../../widgets/item_de_menu.dart';
-import 'vitrine_de_fotos.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -923,33 +922,42 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
               aoTocarNaAcao: saidaDaMensagem(context, _faixa!),
             ),
           ],
-          // A PORTA DA VITRINE DE FOTOS (uniao de 18/10/2026).
+          // A PORTA DA VITRINE DE FOTOS SAIU DAQUI (26/10/2026).
           //
-          // Ela nao estava em lugar nenhum: o autor da vitrine construiu a
-          // tela inteira e **nao pos a porta**, porque este arquivo era de
-          // outro ramo e mexer nele colidiria. Sem esta porta a tela existe,
-          // responde e nao e alcancavel por nenhum toque.
+          // Ela nasceu aqui na uniao de 18/10/2026, porque a tela da vitrine
+          // tinha sido construida sem porta nenhuma e a prosa de entao dizia
+          // que acrescentar linha ao menu de `Perfil` era *"decisao dele, nao
+          // fiacao"*. **A decisao chegou.** Cliente, 26/10/2026: *"traga o
+          // menu minhas fotos para o menu principal"*; e, perguntado qual
+          // menu, *"primeiro nivel do perfil"*.
           //
-          // AQUI e nao em `Perfil`: a lista de itens de `Perfil` e a ordem que
-          // o cliente determinou (`Meus dados`, `Escanear uma tag`, `Sair da
-          // conta`), e acrescentar uma quarta linha la e decisao dele, nao
-          // fiacao. `Meus dados` e a tela dos dados da PESSOA, e as fotos que
-          // ela mostra de si sao dado dela.
+          // Entao a linha mora agora em `telas/abas.dart`, no grupo `Conta` do
+          // menu do `Perfil`, logo depois de `Meus dados`. A razao antiga --
+          // as fotos que a pessoa mostra de si sao dado dela -- nao foi
+          // derrubada; ela so deixou de decidir o NIVEL, que era o que o
+          // cliente ainda nao tinha dito.
+          //
+          // **E ela nao fica nos dois lugares.** "Trazer para" com a porta
+          // velha de pe seriam duas portas para a mesma tela, que e o que a
+          // prosa de `Meus pets` em `gaveta_de_secoes.dart` proibe com estas
+          // palavras. O endereco (`Rotas.minhaVitrine`) nao mudou, de
+          // proposito: quem tem o link continua chegando.
           const SizedBox(height: BichuEspaco.e6),
-          ItemDeMenu(
-            rotulo: VitrineDeFotosDoUsuario.tituloDaTela,
-            apoio: _TextosDosDados.apoioDaVitrine,
-            aoTocar: () => GoRouter.of(context).push(Rotas.minhaVitrine),
-          ),
           // `Endereco de entrega` (cliente, 21/10/2026: *"um endereco de
           // entrega salvo na conta, reusado em todo pedido e editavel num
-          // lugar so"*). Irmao do item acima e pela mesma razao: e TELA, com
-          // barra e acao fixa, e nao um bloco desta.
+          // lugar so"*). **O UNICO item de menu desta tela desde 26/10/2026**:
+          // ele era irmao da porta de `Minhas fotos`, que subiu para o menu do
+          // `Perfil` naquele dia. A razao de ele ser item e nao bloco e a
+          // mesma de la: e TELA, com barra e acao fixa.
           //
-          // **AQUI e nao num segundo grupo desta tela**, e nao no `Perfil`: a
-          // lista de itens de `Perfil` e a ordem que o cliente determinou, e
-          // acrescentar linha la e decisao dele. `Meus dados` e a tela dos
-          // dados da PESSOA, e para onde a encomenda dela vai e dado dela.
+          // **AQUI e nao no `Perfil`, e isto NAO e a prosa que `Minhas fotos`
+          // tinha.** A dela dizia que acrescentar linha ao menu do `Perfil`
+          // era decisao do cliente -- e em 26/10/2026 ele decidiu, para ELA e
+          // so para ela (*"traga o menu minhas fotos para o menu principal"*,
+          // *"primeiro nivel do perfil"*). Sobre o endereco de entrega ele nao
+          // disse nada, e subir esta linha de carona seria desenhar o menu
+          // dele por conta propria. `Meus dados` e a tela dos dados da PESSOA,
+          // e para onde a encomenda dela vai e dado dela.
           //
           // Um BLOCO aqui dentro nao serviria: o `Salvar` desta tela e um ato
           // unico sobre `PATCH /v1/me`, com UMA faixa de erro e UMA de
@@ -1510,8 +1518,6 @@ abstract final class _TextosDosDados {
   /// de produto que ninguem tomou.
   static const String apoioDoEndereco =
       'Para onde mandar a plaquinha da coleira';
-
-  static const String apoioDaVitrine = 'As fotos que só você vê';
 
   static const String apelido = 'Apelido';
 

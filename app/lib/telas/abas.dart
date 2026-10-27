@@ -22,6 +22,7 @@ import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
 import 'perfil/meus_eventos.dart';
 import 'perfil/meus_pets.dart';
+import 'perfil/vitrine_de_fotos.dart';
 import 'perto/tela_de_minhas_indicacoes.dart';
 import 'rede/secao_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
@@ -898,13 +899,55 @@ class AbaPerfil extends StatelessWidget {
             // linha de apoio era ESTADO ESCRITO, e a faixa e CAMINHO.
             //
             // O rotulo `Meus dados` NAO mudou: ele esta em tres portoes e na
-            // tela `/perfil/dados` que este toque abre. **E ele e a porta de
-            // `Minhas fotos`**, que nao e item deste menu e nunca foi -- medido
-            // nesta arvore: `Rotas.minhaVitrine` sai de `tela_dados_pessoais`
-            // e de mais nenhuma tela.
+            // tela `/perfil/dados` que este toque abre.
+            //
+            // **ELE DEIXOU DE SER A PORTA DE `Minhas fotos` EM 26/10/2026.**
+            // A nota que vivia aqui dizia que `Minhas fotos` *"nao e item
+            // deste menu e nunca foi"*, e ela era REGISTRO do que a arvore
+            // tinha -- nao decisao de que nao podia ser. O cliente decidiu o
+            // contrario, e as palavras dele sao as duas: *"traga o menu
+            // minhas fotos para o menu principal"* e, quando perguntado QUAL
+            // menu, *"primeiro nivel do perfil"*. A linha abaixo e a resposta,
+            // e `tela_dados_pessoais.dart` perdeu a dela no mesmo commit --
+            // "trazer para" com a porta velha de pe seriam DUAS portas para a
+            // mesma tela, que e o que `gaveta_de_secoes.dart` proibe.
             ItemDeMenu(
               rotulo: 'Meus dados',
               aoTocar: () => context.push(Rotas.dadosPessoais),
+            ),
+            // **`Minhas fotos` ENTROU AQUI (26/10/2026), vinda de DENTRO de
+            // `Meus dados`.** Cliente, literal: *"traga o menu minhas fotos
+            // para o menu principal"*; e, perguntado qual menu, *"primeiro
+            // nivel do perfil"*. Nao e porta nova: e a MESMA porta, um nivel
+            // acima. `Rotas.minhaVitrine` nao mudou de endereco de proposito
+            // (`/perfil/minhas-fotos`), para o link que ja circula continuar
+            // valendo.
+            //
+            // **NO GRUPO `Conta`, e LOGO DEPOIS de `Meus dados`.** O grupo e
+            // *"mexer em mim"*, e a vitrine e exatamente isso: as fotos que a
+            // pessoa mostra de si sao dado dela, que e a razao com que a porta
+            // foi posta dentro de `Meus dados` em 18/10 e que continua valendo
+            // um nivel acima. Depois de `Meus dados` porque era filha dele:
+            // quem procurava a vitrine descia por ali, e a linha nova esta
+            // onde a mao dessa pessoa ja ia. E ANTES de `Usuarios bloqueados`
+            // porque aquele item fecha o grupo com o que eu RECUSEI, e a prosa
+            // dele diz isso por extenso.
+            //
+            // **NENHUMA LINHA EXISTENTE MUDOU DE LUGAR**, e isso e deliberado:
+            // a ordem deste menu e decisao do cliente de 18/10 e 21/10, e
+            // `perfil_ordem_dos_itens_test.dart` a guarda. Mover o item pedido
+            // nao e licenca para redesenhar o menu.
+            //
+            // **SEM LINHA DE APOIO, e nao e omissao.** Dentro de `Meus dados`
+            // ela tinha `apoio: 'As fotos que so voce ve'`. Aqui nenhuma das
+            // outras onze linhas tem apoio, e a razao e decisao do cliente sobre
+            // ESTE menu (18/10/2026, literal): *"na pagina do perfil, nao
+            // traga o e-mail no menu, deixe apenas o titulo meus dados"*.
+            // Trazer a linha de apoio faria a unica linha diferente do
+            // conjunto, no menu de onde ele mandou tirar exatamente isso.
+            ItemDeMenu(
+              rotulo: VitrineDeFotosDoUsuario.tituloDaTela,
+              aoTocar: () => context.push(Rotas.minhaVitrine),
             ),
             // `Pessoas bloqueadas` -- e ela tinha a GAVETA COMO UNICA PORTA
             // ate 19/10 (medido: `Rotas.pessoasBloqueadas` aparecia so em
@@ -1103,8 +1146,10 @@ class AbaPerfil extends StatelessWidget {
             // **SEM ICONE, e isso nao e omissao**: `ItemDeMenu` nao tem
             // parametro de icone. Quem exige glifo e `SubDestino`, da gaveta
             // (`telas/gaveta_de_secoes.dart`), e esta linha nao e um
-            // `SubDestino`. Nenhuma das onze linhas deste menu pinta icone, e
+            // `SubDestino`. Nenhuma das DOZE linhas deste menu pinta icone, e
             // acrescentar um aqui faria a unica linha diferente do conjunto.
+            // (Eram onze; `Minhas fotos` entrou em 26/10/2026, no grupo
+            // `Conta`, e tambem sem glifo -- a conta continua fechada.)
             //
             // **NO GRUPO `Comunidade` e DEPOIS de `Meus eventos`.** O
             // cabecalho do grupo e *"a minha gente e os encontros"*, e a
