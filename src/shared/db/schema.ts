@@ -332,6 +332,53 @@ export interface ReauthTokensTable {
   created_ip_hmac: Buffer | null;
 }
 
+export type RazaoDaRevogacaoDePasskey = 'user' | 'counter_regression' | 'account_deleted';
+
+/**
+ * Credencial WebAuthn de uma conta (BICHUS-301).
+ *
+ * SOMA a senha, nunca a substitui: passkey é presa ao aparelho, e trocar de
+ * celular sem outra porta trancaria a pessoa fora da conta.
+ */
+export interface PasskeyCredentialsTable {
+  id: Generated<string>;
+  user_id: string;
+  /** O `credential_id` cru, como o autenticador o emitiu. */
+  credential_id: Buffer;
+  /** Chave pública em COSE, em bytes: quem a usa é a biblioteca de verificação. */
+  public_key: Buffer;
+  /**
+   * Contador antirrepetição. `bigint` no banco chega como `string` pelo `pg`:
+   * 32 bits SEM sinal não cabem com folga em `number` de ponto flutuante, e
+   * converter aqui esconderia onde a conversão acontece.
+   */
+  sign_count: Generated<string>;
+  label: string | null;
+  transports: string[] | null;
+  created_at: Generated<Date>;
+  last_used_at: Date | null;
+  revoked_at: Date | null;
+  revoked_reason: RazaoDaRevogacaoDePasskey | null;
+}
+
+/**
+ * Desafio WebAuthn: prazo e USO ÚNICO.
+ *
+ * `user_id` é nulo nos desafios de ENTRADA e preenchido nos de CADASTRO — a
+ * conclusão da entrada não sabe de quem é a tentativa, de propósito, e acha a
+ * linha pelo `challenge_hash` do desafio que voltou no `clientDataJSON`.
+ */
+export interface PasskeyChallengesTable {
+  id: Generated<string>;
+  user_id: string | null;
+  purpose: 'registration' | 'authentication';
+  /** SHA-256 do desafio em base64url. É também a chave de busca. */
+  challenge_hash: Buffer;
+  expires_at: Date;
+  consumed_at: Date | null;
+  created_at: Generated<Date>;
+}
+
 export interface IdempotencyKeysTable {
   key: string;
   user_or_token_ref: string;
@@ -2660,6 +2707,8 @@ export interface Database {
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
   reauth_tokens: ReauthTokensTable;
+  passkey_credentials: PasskeyCredentialsTable;
+  passkey_challenges: PasskeyChallengesTable;
   admin_accounts: AdminAccountsTable;
   admin_sessions: AdminSessionsTable;
   admin_reauth_tokens: AdminReauthTokensTable;
