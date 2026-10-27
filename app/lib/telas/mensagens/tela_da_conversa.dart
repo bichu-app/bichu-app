@@ -345,6 +345,19 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   /// este sinalizador faz e DIZER, antes do envio.
   bool get _fotoAlcancaOOutroLado => _conversa?.fotoAlcancaOOutroLado ?? true;
 
+  /// O PAPEL DE QUEM ESTA USANDO O APP nesta conversa.
+  ///
+  /// Vem do servidor (`viewer_role`) e **nunca e deduzido aqui**: medido em
+  /// 27/10/2026, sem conexao aceita os dois participantes chegam com `handle` e
+  /// `photoIconUrl` nulos, e o corpo e identico para os dois chamadores. Ver
+  /// `Conversa.papelDoChamador`, inclusive por que o padrao e `tutor`.
+  ///
+  /// **Lido num lugar so**: o lado da bolha, o nome do titulo e a marca de
+  /// alcance da foto dependem do MESMO fato, e duas leituras poderiam discordar
+  /// entre si no mesmo quadro -- a barra diria um nome e as bolhas o outro.
+  PapelNaConversa get _papelDoChamador =>
+      _conversa?.papelDoChamador ?? PapelNaConversa.tutor;
+
   /// A legenda esta vazia. Ver [TextosDaFotoNaConversa.aFotoPrecisaDeLegenda].
   bool get _faltaLegenda => _controlador.text.trim().isEmpty;
 
@@ -668,7 +681,12 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   @override
   Widget build(BuildContext context) {
     final conversa = _conversa;
-    final outro = conversa?.outroLadoVistoPor(PapelNaConversa.tutor);
+    // O OUTRO LADO visto por QUEM ESTA CHAMANDO, e nao pelo tutor.
+    //
+    // Antes de 27/10/2026 esta linha passava `PapelNaConversa.tutor` fixo: para
+    // o achador COM conta -- que o servidor atende -- o "outro lado" era ele
+    // mesmo, e a barra mostrava o PROPRIO nome. Ver `Conversa.papelDoChamador`.
+    final outro = conversa?.outroLadoVistoPor(_papelDoChamador);
     // O TITULO E NOME + PET, e nunca o id. **Em DUAS linhas desde 20/10/2026**:
     // a composicao de uma linha so (`'$nome · $pet'`, em `headlineSmall`) pedia
     // **442,16 dp** contra **287,00 dp** de vao real em 375 dp -- cortava por
@@ -787,6 +805,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
               mensagem: mensagem,
               aoBuscarDeNovo: _carregar,
               fotoAlcancaOOutroLado: _fotoAlcancaOOutroLado,
+              papelDoChamador: _papelDoChamador,
             ),
           ),
         if (falhaDeEnvio != null)
@@ -1004,9 +1023,18 @@ class _Bolha extends StatelessWidget {
     required this.mensagem,
     required this.aoBuscarDeNovo,
     required this.fotoAlcancaOOutroLado,
+    required this.papelDoChamador,
   });
 
   final MensagemDaConversa mensagem;
+
+  /// O PAPEL DE QUEM ESTA LENDO esta conversa (`Conversation.viewer_role`).
+  ///
+  /// **Obrigatorio, e sem padrao de proposito.** Um padrao `tutor` aqui seria o
+  /// defeito de 26/10/2026 de volta no dia em que alguem construir a bolha num
+  /// caminho novo e esquecer de passar o papel -- e ele reaparece calado,
+  /// porque uma bolha no lado errado nao lanca nada.
+  final PapelNaConversa papelDoChamador;
 
   /// Rele a conversa, para as URLs assinadas virem com assinatura nova.
   ///
@@ -1028,7 +1056,7 @@ class _Bolha extends StatelessWidget {
   /// A do sistema nao e de ninguem, e marca de alcance e sobre a foto de uma
   /// pessoa. Entao o fato do canal vale so para a do tutor.
   bool get _alcancouOOutroLado =>
-      mensagem.senderRole != PapelNaConversa.tutor || fotoAlcancaOOutroLado;
+      mensagem.senderRole != papelDoChamador || fotoAlcancaOOutroLado;
 
   @override
   Widget build(BuildContext context) {
@@ -1070,9 +1098,13 @@ class _Bolha extends StatelessWidget {
       );
     }
 
-    // O TUTOR e quem usa o app com conta no caminho da plaquinha: a mensagem
-    // dele vai a direita, a de quem achou a esquerda.
-    final minha = mensagem.senderRole == PapelNaConversa.tutor;
+    // A MINHA MENSAGEM VAI A DIREITA, e "minha" e o papel de QUEM CHAMA.
+    //
+    // Antes de 27/10/2026 era `== PapelNaConversa.tutor` fixo. O alinhamento
+    // ficava funcao pura de `sender_role` -- nao invertia quando o chamador
+    // invertia --, e para o achador COM conta a bolha do OUTRO lado ia para a
+    // direita, que e o lado que a pessoa le como o dela.
+    final minha = mensagem.senderRole == papelDoChamador;
 
     return Align(
       alignment: minha ? Alignment.centerRight : Alignment.centerLeft,

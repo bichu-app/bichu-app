@@ -116,13 +116,34 @@ Map<String, dynamic> conversa({
   // conexao aceita pede os dois por nome.
   String? apelidoDoAchador,
   String? fotoDoAchador,
+  // O OUTRO LADO QUANDO QUEM CHAMA E O ACHADOR. Nulos por padrao, pela mesma
+  // razao dos do achador: o servidor so os manda para o OUTRO lado de quem
+  // chama, e o proprio lado recebe os dois nulos **por decisao** (emenda 3 do
+  // ADR-0010). Um corpo com os quatro preenchidos nao existe.
+  String? apelidoDoTutor,
+  String? fotoDoTutor,
+  // `Conversation.viewer_role` (27/10/2026): QUAL dos dois lados e quem chama.
+  //
+  // **`null` NAO manda a chave**, e e o corpo de um servidor ANTIGO -- o estado
+  // que o padrao `tutor` do modelo cobre. `'tutor'` e o padrao porque e a
+  // conversa da maioria, e porque e o que todos os casos deste arquivo
+  // escritos antes do campo mediam sem saber.
+  String? papelDeQuemChama = 'tutor',
 }) => <String, dynamic>{
   'id': id,
   'case_id': null,
   'pet_display_name': nomeDoPet,
   'status': estado,
+  // `?` e nao `if (... != null)`: o linter deste repositorio pede o marcador
+  // (`use_null_aware_elements`), e o efeito e o mesmo -- nulo NAO manda a chave.
+  'viewer_role': ?papelDeQuemChama,
   'participants': <Map<String, dynamic>>[
-    participante('tutor', nomeDoTutor),
+    participante(
+      'tutor',
+      nomeDoTutor,
+      apelido: apelidoDoTutor,
+      foto: fotoDoTutor,
+    ),
     participante(
       'finder',
       nomeDoAchador,
