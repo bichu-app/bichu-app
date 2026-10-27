@@ -6,6 +6,7 @@ import '../../api/api_client.dart';
 import '../../api/busca_de_cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../formato/cep.dart';
+import '../../formato/telefone.dart';
 import '../../api/diretorio_api.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -225,7 +226,13 @@ enum _Impedimento {
   // manda digitar manda a pessoa procurar um campo de texto que nao existe.
   semUf('Escolha o estado.'),
   semTipoDeContato('Escolha como entrar em contato.'),
-  semContato('Preencha o contato público.');
+  semContato('Preencha o contato público.'),
+  // **As MESMAS palavras de `tela_dados_pessoais` e do pedido da plaquinha**,
+  // e nao uma terceira redacao delas. Ele entrou junto com a mascara: com o
+  // campo mascarado, `(11` tem tres caracteres e passava por `semContato` --
+  // o botao ficava habilitado sobre um numero pela metade, e a recusa chegava
+  // como `400` em `public_contact.value`.
+  telefoneIncompleto('Digite DDD e número.');
 
   const _Impedimento(this.texto);
 
@@ -402,6 +409,14 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     if (_uf == null) return _Impedimento.semUf;
     if (_tipoDeContato == null) return _Impedimento.semTipoDeContato;
     if (_contato.text.trim().length < 3) return _Impedimento.semContato;
+    // **So no ramo do telefone**, e e `telefoneEmE164` quem decide -- a mesma
+    // funcao que `Meus dados`, o endereco de entrega e o pedido da plaquinha
+    // chamam. Sem esta linha a mascara pioraria o formulario em vez de
+    // melhora-lo: ela e quem faz `(11` caber em `length >= 3`.
+    if (_tipoDeContato == TipoDeContatoPublico.phone &&
+        telefoneEmE164(_contato.text) == null) {
+      return _Impedimento.telefoneIncompleto;
+    }
     return null;
   }
 
@@ -423,7 +438,18 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       // existiam porque o campo era digitado.
       uf: _uf!,
       tipoDeContato: _tipoDeContato!,
-      contato: _contato.text.trim(),
+      // **O que viaja e E.164, e nao o que esta na tela.**
+      // `DirectorySuggestionContact.value` declara, para `kind: phone`, E.164
+      // (`+5511...`); a mascara e de EXIBICAO e `(11) 98765-4321` tomaria
+      // `400`. `telefoneEmE164` e a unica funcao de `formato/telefone.dart`
+      // que produz valor de contrato, e `_impedimento` acima ja garantiu que
+      // ela nao devolve `null` aqui.
+      //
+      // Site e Instagram seguem indo CRUS: o formato deles e o que a pessoa
+      // digitou, e nao ha mascara nenhuma a desfazer.
+      contato: _tipoDeContato == TipoDeContatoPublico.phone
+          ? telefoneEmE164(_contato.text)!
+          : _contato.text.trim(),
       bairro: _bairro.text.trim(),
       cep: _cep.text.trim(),
       recado: _recado.text.trim(),
@@ -708,7 +734,35 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   erro: _errosDeCampo['public_contact.kind'],
                   habilitado: !enviando,
                   aoSelecionar: (codigo) => setState(() {
-                    _tipoDeContato = TipoDeContatoPublico.porCodigo(codigo);
+                    final novo = TipoDeContatoPublico.porCodigo(codigo);
+                    // ===========================================
+                    // TROCAR DE TIPO LIMPA O CAMPO -- e por que
+                    // ===========================================
+                    //
+                    // A mascara entra e sai com o tipo, e isso deixa um
+                    // estado que nao existia antes dela: escolher `Telefone`,
+                    // digitar `(11) 98765-4321` e trocar para `Site` deixava
+                    // parenteses e hifen DENTRO de um campo de endereco.
+                    //
+                    // **Limpar, e nao deixar a validacao recusar**, e a
+                    // decisao -- a razao e que um valor mascarado num campo
+                    // de site e lixo que a pessoa nao pediu: ela nao digitou
+                    // `(11) 98765-4321` como site, digitou como telefone, e
+                    // manter o texto a obriga a apagar caractere por
+                    // caractere o que a tela escreveu sozinha. Deixar e
+                    // recusar depois trocaria um campo vazio (que diz
+                    // `Preencha o contato público.` acima dos campos) por um
+                    // `400` do servidor nomeando `public_contact.value`.
+                    //
+                    // **Toda troca limpa, e nao so a que sai do telefone.**
+                    // Uma URL de site tambem nao e um perfil de Instagram: a
+                    // regra de uma linha ("o valor pertence ao tipo que o
+                    // produziu") nao tem excecao a lembrar depois. Limpar na
+                    // PRIMEIRA escolha nao perde nada -- o campo nasce
+                    // `habilitado: tipo != null`, entao nao havia o que
+                    // digitar antes de existir um tipo.
+                    if (novo != _tipoDeContato) _contato.clear();
+                    _tipoDeContato = novo;
                     _erro = null;
                     _errosDeCampo = const <String, String>{};
                   }),
@@ -719,7 +773,16 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   controlador: _contato,
                   aoMudar: _aoDigitar,
                   erro: _errosDeCampo['public_contact.value'],
-                  limite: 120,
+                  // **O teto segue o tipo**, pelo mesmo motivo que a mascara:
+                  // `(11) 98765-4321` sao 15 caracteres e a mascara nao deixa
+                  // passar disso, entao um contador `0 de 120` sobre um campo
+                  // de telefone mente sobre o que cabe. `limiteDoTelefone` e o
+                  // mesmo valor que os outros tres campos de telefone do app
+                  // declaram. Site e Instagram continuam em 120, que e o
+                  // `maxLength` de `DirectorySuggestionContact.value`.
+                  limite: tipo == TipoDeContatoPublico.phone
+                      ? limiteDoTelefone
+                      : 120,
                   // A ajuda muda com o tipo escolhido: o formato que o servidor
                   // vai conferir dito ANTES, e nao descoberto pelo 400.
                   ajuda: tipo?.exemplo ??
@@ -727,6 +790,41 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   tipoDeTeclado: tipo == TipoDeContatoPublico.phone
                       ? TextInputType.phone
                       : TextInputType.text,
+                  // =====================================================
+                  // A MASCARA ENTRA E SAI COM O TIPO (BICHUS-308)
+                  // =====================================================
+                  //
+                  // O cliente pediu em 26/10/2026 *"mascara de telefone em
+                  // todos os inputs que necessitam de telefone"*. Este era o
+                  // unico que faltava: o campo JA trocava o teclado para
+                  // `TextInputType.phone` quando o tipo e `phone` -- ele sabia
+                  // que era telefone e nao mascarava.
+                  //
+                  // **Condicional e nao fixa**: este campo e o mesmo para
+                  // telefone, site e Instagram. `MascaraDeTelefone` descarta
+                  // tudo o que nao e digito, entao aplicada sempre ela comeria
+                  // `https://` e `@` -- um campo de site que apaga o que se
+                  // digita e pior que um campo sem mascara. Trocar o tipo
+                  // reconstroi este `BichuField` (o seletor chama `setState`),
+                  // e e por isso que a lista nova vale na hora; `BichuField` e
+                  // `StatelessWidget` e repassa `formatadores` direto para
+                  // `inputFormatters`.
+                  //
+                  // **Esta mascara e BRASILEIRA, e isso ESTREITA o campo.**
+                  // `DirectorySuggestionContact.value` aceita E.164 de
+                  // qualquer pais, e hoje quem digitasse `+14155550123` o
+                  // mandava cru. Com a mascara nao da mais: ela descarta o `+`
+                  // e corta em onze digitos. O que decidiu foi a propria
+                  // ajuda do campo, que ja prometia so o Brasil
+                  // (`TipoDeContatoPublico.phone.exemplo` =
+                  // `'Com DDD, como +5511988887777'`) -- a tela nunca ofereceu
+                  // outro pais, e o contrato nao mudou, porque `+55...`
+                  // continua sendo E.164 valido para ele. **Esta e uma
+                  // decisao de produto e esta relatada ao cliente**, nao um
+                  // efeito colateral descoberto depois.
+                  formatadores: tipo == TipoDeContatoPublico.phone
+                      ? const <TextInputFormatter>[MascaraDeTelefone()]
+                      : null,
                   correcaoAutomatica: false,
                   habilitado: !enviando && tipo != null,
                   // **`done` e nao `next`: e o ULTIMO campo de uma linha da

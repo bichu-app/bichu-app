@@ -402,9 +402,12 @@ void main() {
       // evento, acima -- `findsNothing` num `ListView` nao serve.
       await sugerir.escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
       await rolarAte(tester, sugerir.campoDoRotulo('Telefone'));
+      // DIGITOS e nao `+55...`: `MascaraDeTelefone` entrou neste campo em
+      // 26/10/2026 (BICHUS-308) e descarta o `+`. Este caso mede TECLADO,
+      // e o teclado nao mudou.
       await tester.enterText(
         sugerir.campoDoRotulo('Telefone'),
-        '+5521988887777',
+        '21988887777',
       );
       await tester.pumpAndSettle();
       await escolherEstadoNaLista(tester, 'RJ', scrollable: _listaDoPerto);

@@ -563,7 +563,6 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// entrega -- nenhum criado, removido ou renomeado, e o `diff` das duas
 /// distribuicoes aponta UMA linha. `app/lib` continua sem symlink (os dois
 /// programas avisariam), entao a caminhada nao depende de seguir link.
-
 /// ## +4 PELA BICHUS-307 (26/10/2026): 2742 -> 2746
 /// **A MARCA NAO MUDOU, O TOKEN CRESCEU.** As caixas de pedido de conexao
 /// viraram abas por decisao do cliente, e `telas/conexoes/
@@ -590,6 +589,18 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: 225 `.dart` em `app/lib`
 /// na base e 225 agora. Nenhum nasceu, saiu ou foi renomeado -- o que este
 /// commit faz cabe num arquivo.
+
+/// ## 2742 -> 2745 em 26/10/2026, por BICHUS-308
+/// As TRES ocorrencias novas estao todas em comentario de
+/// `lib/telas/perto/sugerir_profissional.dart`, e **nenhuma e texto de
+/// usuario**: a chave `BICHUS-308` no cabecalho do campo de contato publico (a
+/// agulha ignora caixa, e `BICHUS` contem `BICHU`) e duas mencoes a
+/// `BichuField` na prosa que explica por que a mascara de telefone e
+/// condicional ao tipo escolhido. Nenhuma ocorrencia foi apagada, e nenhum
+/// arquivo de `app/lib` entrou ou saiu (225 nos dois lados).
+/// MEDIDO com a mesma caminhada de [dartsDeLib]: 2745 agora, 2742 em
+/// `11e520b7`. O delta de 3 confere com o `git diff` do unico arquivo de
+/// `app/lib` que esta tarefa tocou.
 const int ocorrenciasDeBichu = -1; // PENDENTE: trocado UMA VEZ SO, no fim desta consolidacao, pelo valor RECALCULADO sobre a arvore MESCLADA das seis. -1 reprova de proposito: nenhum dos lados do conflito vale para a uniao.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
