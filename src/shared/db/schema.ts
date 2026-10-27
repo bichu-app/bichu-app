@@ -2178,6 +2178,50 @@ export interface UserDeliveryAddressesTable {
   updated_at: Generated<Date>;
 }
 
+/**
+ * O ENDERECO DE ENTREGA DO PET (`20261027000001`).
+ *
+ * **Decisao do cliente de 27/10/2026**, nas palavras dele: *"o endereco de
+ * entrega da plaquinha tem que estar dentro do cadastro do pet"* e, com a
+ * decisao anterior na mesa, *"endereco um por pet"*. Ela **supera** a de
+ * 21/10/2026 (*"um endereco de entrega salvo na conta, reusado em todo pedido e
+ * editavel num lugar so"*), que criou `user_delivery_addresses` -- logo acima,
+ * e ainda de pe porque a decisao de 26/10/2026 e *"nao apague nada"*.
+ *
+ * **A fonte do pedido da plaquinha e esta tabela.** `user_delivery_addresses`
+ * nao e lida por pedido nenhum; ela foi a fonte da copia inicial.
+ *
+ * RESIDENCIA do usuario, e a postura nao afrouxou por mudar de dono: so o tutor
+ * le, a autorizacao mora num `JOIN` com `pets` comparando `owner_user_id` com o
+ * chamador (404 e nunca 403, ADR-0021), nao sai sem conta, **nao aparece em
+ * lista** -- e por isso o endereco nao esta em `Pet`, que sai em `listMyPets`
+ * --, nao entra na trilha e nao alimenta distancia (ADR-0006).
+ */
+export interface PetDeliveryAddressesTable {
+  /** O pet, e a chave primaria: "um endereco por pet" e a forma da tabela. */
+  pet_id: string;
+  /** Quem recebe, como vai na etiqueta. Nao e `users.display_name`. */
+  recipient_name: string;
+  /** E.164 do Brasil. Nao e `users.phone_e164`: e o telefone de quem RECEBE. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  /**
+   * Quando o tutor salvou pela ultima vez. **NAO e carimbo de expiracao** e
+   * nada o le para apagar nada. `Generated` porque a coluna tem `DEFAULT now()`
+   * e o `INSERT` do primeiro salvamento nao precisa escreve-lo.
+   */
+  updated_at: Generated<Date>;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -2724,6 +2768,7 @@ export interface Database {
    * usuario: so o dono le, nunca em lista e nunca em calculo de distancia.
    */
   user_delivery_addresses: UserDeliveryAddressesTable;
+  pet_delivery_addresses: PetDeliveryAddressesTable;
   /** VISAO, e nao tabela. Somente leitura: nada escreve aqui (`20261018000009`). */
   fila_de_moderacao: FilaDeModeracaoView;
   user_blocks: UserBlocksTable;
