@@ -2179,7 +2179,46 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `rede/`, e nao em `conexoes/`: achados por varredura de nome, que e o que a
 /// conferencia por nome existe para pegar.
 ///
-const String _arvoreDasTelas = 'd10e29c50215a93fb3c2abde91452ca4e963925d'; // BICHUS-278, 26/10/2026: A UNIAO DAS NOVE ENTREGAS DO DIA no PR #63 (base `1654bcaf`). RECALCULADO sobre a arvore MESCLADA e NAO e nenhum dos nove lados do conflito -- eram `fcd7aedbbb` (nº1 achei-este-pet), `a148dc4c45` (nº2 qr-e-foto), `ad69bd837f` (nº3 botao-conexao), `b6d624f9aa` (nº4 barra-volta-ao-material), `bd1e9b0607` (nº5 perfil-foto-e-carrossel), `c5d8d73690` (nº6 padrao-avatar-nome-selo), `e4ed3d5337` (nº7 quatro-consertos) e `e6c30f7cca` (nº9 cartao-comunidade); a nº8 (arraste limitado as bordas) ja estava DENTRO da base e nao foi mesclada -- `merge-base --is-ancestor` deu 0, e a arvore `app/lib/telas` dela e a da base. OITO das nove tocam `app/lib/telas`, e por isso este portao colide em TODA mescla: escolher um lado perderia as telas dos outros sete em silencio. MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por DOIS caminhos de semeadura DIFERENTE que CONCORDARAM: (1) o procedimento deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`), que deu a arvore raiz `7f78bf19f1`, e (2) um indice VAZIO populado SO a partir do disco (`add -A` sem `read-tree`), que deu a arvore raiz `2cebab9bc7` -- raizes DIFERENTES, e as duas devolveram o MESMO `app/lib/telas`: d10e29c502. Um terceiro caminho, `git rev-parse "${SHA}:app/lib/telas"` sobre o commit da uniao, deu o mesmo. CONTROLE POSITIVO DO METODO, feito ANTES de editar: os mesmos caminhos sobre a arvore LIMPA da base reproduziram EXATAMENTE a constante que ela travava (4dc96f46c8), por raizes `90b342deb7` e `fd6f555233`. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito: `app/lib/telas` tem 89 arquivos na base e 91 na uniao. Os DOIS que entraram sao `achado/tela_encontrei_este_pet.dart` (nº1) e `mural/porta_do_perfil_do_autor.dart` (nº7); NENHUM saiu ou foi renomeado, e a nº9 so MODIFICOU `perto/lista_do_diretorio.dart` sem acrescentar arquivo. `git ls-tree -r` e o `find` do disco saem identicos (91 e 91), com guarda de arquivo nao vazio antes de confiar no `diff` -- `diff` de dois vazios sai 0 e mente. AS CHAVES em "${T}:app/lib/telas" nao sao enfeite: sem elas o `zsh` aplica `:a` ao nome da variavel e devolve LIXO com codigo 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula.
+/// [BICHUS-304, 26/10/2026] LISTA DE PETS SO COM OS PERDIDOS, e o cartao do
+/// reencontrado sem toque. Decisao do cliente, literal: *"o filtro da pagina,
+/// deve mostrar apenas os pets perdidos, e so deve mostrar os encontrados, se o
+/// usuario filtrar. E retirar a acao de clique no pet encontrado, nao mostrar a
+/// pagina interna."* Ela SUBSTITUI a decisao dele de 20/10/2026 (*"Tambem na
+/// lista padrao"*), e as duas datas estao registradas em `_recorteDeAbertura`,
+/// em `app/lib/telas/perdido/lista_de_perdidos.dart`.
+///
+/// DOIS arquivos de `app/lib/telas` mudam, e nenhum arquivo entra nem sai:
+/// `perdido/lista_de_perdidos.dart` (o recorte de abertura passa a mandar
+/// `case_state=open`; `_temRecorteAtivo` deixa de contar `aberto` para a frase
+/// de lista vazia nao culpar o filtro de quem nao filtrou; o grupo `Estado` da
+/// folha ganha `codigoPadrao`, e o `Limpar` volta para `Perdidos` em vez de cair
+/// na uniao) e `perdido/cartao_do_perdido.dart` (`_toqueQueVale`, que recusa
+/// `aoTocar` no item com `found_by_community`).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe novo nos dois
+/// arquivos, nenhum plugin, nenhum canal de plataforma, nenhuma permissao,
+/// nenhum `dart:io`. `tela_do_caso_publico.dart` NAO foi tocado -- a fusao de
+/// privacidade do 410 (cinco motivos num codigo) fica como esta, de proposito.
+/// A FIACAO de fora de `app/lib/telas` nao mexe neste valor:
+/// `app/lib/api/modelos_perdido.dart` ganhou so prosa.
+///
+/// MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas`, por DOIS caminhos de
+/// semeadura DIFERENTE que CONCORDARAM: (1) o procedimento deste proprio portao
+/// (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`), raiz `f45d50824f`; (2) um indice VAZIO populado SO a partir do
+/// disco (`add -A` sem `read-tree`), raiz `42d584d41d`. Raizes DIFERENTES, mesmo
+/// `app/lib/telas`: 9f77560bd6. CONTROLE POSITIVO DO METODO: `git rev-parse
+/// "${SHA}:app/lib/telas"` sobre a base limpa `11e520b7` reproduziu
+/// EXATAMENTE a constante que ela travava (d10e29c502). AS CHAVES em
+/// "${T}:app/lib/telas" nao sao enfeite: sem elas o `zsh` aplica `:a` ao nome
+/// da variavel e devolve LIXO com codigo 0. PRESENCA DE ARQUIVO CONFERIDA, e nao
+/// so o digito: 91 arquivos na base, 91 agora, nos tres caminhos (`ls-tree -r`
+/// da base, `ls-tree -r` da arvore nova e `find` do disco), e o `diff` dos dois
+/// inventarios ordenados saiu vazio sobre listas de 91 linhas -- `diff` de dois
+/// vazios sai 0 e mente, e e por isso que a contagem vem junto.
+/// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de
+/// novo recalcula sobre a arvore MESCLADA.
+const String _arvoreDasTelas = '9f77560bd66bc421d1d4dc0a0e48f3b4eaa333f4'; // BICHUS-304, 26/10/2026: lista de pets so com os perdidos e cartao do reencontrado sem toque; ver a prosa logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d // BICHUS-278, 26/10/2026: A UNIAO DAS NOVE ENTREGAS DO DIA no PR #63 (base `1654bcaf`). RECALCULADO sobre a arvore MESCLADA e NAO e nenhum dos nove lados do conflito -- eram `fcd7aedbbb` (nº1 achei-este-pet), `a148dc4c45` (nº2 qr-e-foto), `ad69bd837f` (nº3 botao-conexao), `b6d624f9aa` (nº4 barra-volta-ao-material), `bd1e9b0607` (nº5 perfil-foto-e-carrossel), `c5d8d73690` (nº6 padrao-avatar-nome-selo), `e4ed3d5337` (nº7 quatro-consertos) e `e6c30f7cca` (nº9 cartao-comunidade); a nº8 (arraste limitado as bordas) ja estava DENTRO da base e nao foi mesclada -- `merge-base --is-ancestor` deu 0, e a arvore `app/lib/telas` dela e a da base. OITO das nove tocam `app/lib/telas`, e por isso este portao colide em TODA mescla: escolher um lado perderia as telas dos outros sete em silencio. MEDIDO DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por DOIS caminhos de semeadura DIFERENTE que CONCORDARAM: (1) o procedimento deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`), que deu a arvore raiz `7f78bf19f1`, e (2) um indice VAZIO populado SO a partir do disco (`add -A` sem `read-tree`), que deu a arvore raiz `2cebab9bc7` -- raizes DIFERENTES, e as duas devolveram o MESMO `app/lib/telas`: d10e29c502. Um terceiro caminho, `git rev-parse "${SHA}:app/lib/telas"` sobre o commit da uniao, deu o mesmo. CONTROLE POSITIVO DO METODO, feito ANTES de editar: os mesmos caminhos sobre a arvore LIMPA da base reproduziram EXATAMENTE a constante que ela travava (4dc96f46c8), por raizes `90b342deb7` e `fd6f555233`. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito: `app/lib/telas` tem 89 arquivos na base e 91 na uniao. Os DOIS que entraram sao `achado/tela_encontrei_este_pet.dart` (nº1) e `mural/porta_do_perfil_do_autor.dart` (nº7); NENHUM saiu ou foi renomeado, e a nº9 so MODIFICOU `perto/lista_do_diretorio.dart` sem acrescentar arquivo. `git ls-tree -r` e o `find` do disco saem identicos (91 e 91), com guarda de arquivo nao vazio antes de confiar no `diff` -- `diff` de dois vazios sai 0 e mente. AS CHAVES em "${T}:app/lib/telas" nao sao enfeite: sem elas o `zsh` aplica `:a` ao nome da variavel e devolve LIXO com codigo 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
