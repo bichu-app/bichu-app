@@ -152,7 +152,40 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// **MUDOU EM 27/10/2026: 2706 -> 2712, pelo RECADO DE ABERTURA SEM INTERNET**
+/// (pedido do cliente de 26/10). **Nao e a armadilha que este numero vigia**:
+/// a marca nao encolheu nem virou `Petu` -- medido, `petu` continua nao
+/// aparecendo em `app/lib`.
+///
+/// A CONTA, arquivo por arquivo, e ela fecha exatamente em +6:
+///
+/// - `telas/abertura/recado_na_abertura.dart` NASCE com **+11** (`BichuColors`,
+///   `BichuEspaco`, `BichuAlvoDeToque` -- esta duas vezes, no codigo e na prosa
+///   que explica o piso de toque -- e os dois importes `theme/bichu_*.dart`);
+/// - `telas/abertura/textos_da_abertura.dart` NASCE com **+3** (a palavra
+///   `Bichu` nas tres frases que a pessoa le);
+/// - `telas/atualizacao/tela_de_bloqueio_por_versao.dart` vai de **8 para 0**:
+///   ela perdeu o `build` proprio para `RecadoNaAbertura`, e com ele sairam os
+///   importes de tema e os usos de `BichuColors`/`BichuEspaco`. **O que a tela
+///   diz nao mudou** -- os textos dela continuam em
+///   `atualizacao/textos_da_atualizacao.dart`, intactos;
+/// - `telas/abertura/tela_sem_conexao.dart` e `api/sonda_de_conexao.dart`
+///   NASCEM com **0**: nenhuma das duas cita a marca.
+///
+/// 11 + 3 - 8 = +6.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de trocar o numero: a MESMA
+/// contagem (`RegExp('bichu', caseSensitive: false)` sobre todo `.dart` de
+/// `app/lib`) aplicada a arvore da base deste ramo, `90dfaee7` extraida com
+/// `git archive`, devolveu EXATAMENTE 2706 -- o valor que esta linha travava.
+/// Reproduzir o valor conhecido antes de medir o desconhecido e o que faz esta
+/// linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem **218** `.dart`
+/// em `90dfaee7` e **222** aqui, e os QUATRO de diferenca sao os quatro
+/// arquivos novos nomeados acima. Nenhum arquivo saiu nem foi renomeado.
+const int ocorrenciasDeBichu = 2712;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///

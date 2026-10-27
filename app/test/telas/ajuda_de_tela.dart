@@ -587,6 +587,43 @@ DepositoEmMemoria depositoLogado({
   return deposito;
 }
 
+/// A SONDA DE CONEXAO RESPONDIDA, para TODO caso que monta o app aqui.
+///
+/// **Por que ela nao passa pelo `rede` do caso.** Desde 26/10/2026
+/// `PortaoDeVersao` pergunta `GET /health` na abertura quando a pergunta de
+/// versao nao sai -- e em teste de widget ela nunca sai, porque
+/// `AppConfig.carregar(apiBaseUrlDeTeste: ...)` deixa `APP_VERSION` ausente.
+/// Sem esta intercepcao, os casos cujo `rede` LANCA para qualquer rota (sao
+/// 21 arquivos) passariam a abrir no recado de "sem internet", e o app que
+/// eles querem medir nao estaria na arvore. Eles reprovariam por uma tela que
+/// nao e o assunto deles.
+///
+/// **E ela nao esconde o mecanismo**: quem mede o recado de abertura e
+/// `test/abertura/abertura_sem_internet_test.dart`, que monta `BichuApp`
+/// direto e NAO passa por aqui -- entao a fiacao de producao (`app.dart`
+/// passando a sonda) continua coberta por isca.
+Future<http.Response> Function(http.Request) _comSondaDeConexao(
+  Future<http.Response> Function(http.Request) rede,
+) {
+  return (http.Request requisicao) async {
+    if (requisicao.url.path.endsWith('/health')) {
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'status': 'ok',
+          'version': '0.0.0-teste',
+          'build': <String, String>{
+            'artifact': '0000000000000000',
+            'commit': '0000000',
+          },
+        }),
+        200,
+        headers: const <String, String>{'content-type': 'application/json'},
+      );
+    }
+    return rede(requisicao);
+  };
+}
+
 /// Monta o app com a rede e a camera que o caso pedir.
 Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
@@ -687,7 +724,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
         deposito: deposito ?? DepositoEmMemoria(),
         depositoDeIntencao: envelopeEmUso,
-        clienteHttp: MockClient(rede),
+        clienteHttp: MockClient(_comSondaDeConexao(rede)),
         cacheDeMeusPets: cacheDeMeusPets,
         depositoDaCidade: depositoDaCidade ?? DepositoDaCidadeEmMemoria(),
         cofreDoQr: cofreDoQr,
