@@ -817,7 +817,21 @@ jobs:
             exit 1
           }
           gcloud auth configure-docker southamerica-east1-docker.pkg.dev --quiet
-          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          # CONTROLE POSITIVO, e ele substituiu um `gcloud auth list
+          # --filter=status:ACTIVE` que MEDIA NADA: a federacao nao registra
+          # conta no armazem do gcloud -- ela chega por
+          # `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE`, e o `auth list` respondia
+          # `WARNING: The following filter keys were not present in any
+          # resource : status`, sem nenhuma conta e com saida 0. Sonda que sai
+          # 0 sem olhar para nada e pior que sonda nenhuma.
+          #
+          # Trocar por token prova o que interessa: que a troca do token OIDC
+          # pela credencial do GCP de fato produziu algo utilizavel. Sem isto a
+          # falha so apareceria dois minutos adiante, como erro de `docker
+          # pull`. `> /dev/null` porque o token E a credencial e log de esteira
+          # e lugar publico e permanente.
+          gcloud auth print-access-token > /dev/null
+          echo "credencial do GCP resolve por federacao (token obtido, nao impresso)"
 
       - name: ambiente de teste
         run: |
