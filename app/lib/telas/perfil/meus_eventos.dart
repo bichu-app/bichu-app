@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/api_client.dart';
@@ -13,6 +15,7 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/saida_da_tela.dart';
+import '../rede/encontro_da_rede.dart';
 import '../rede/pecas_da_rede.dart';
 
 /// `Perfil` > **`Meus eventos`**: os encontros que esta conta criou.
@@ -59,10 +62,20 @@ import '../rede/pecas_da_rede.dart';
 ///    minha foto entrou?*. Esta tela e o UNICO lugar do produto onde essa
 ///    pergunta tem resposta: a capa sobe no mesmo `POST` de criar, o
 ///    processador pode recusa-la depois do `201`, `NetworkEventPublic` nao tem
-///    `rejection_reason`, a pagina de detalhe do encontro foi apagada por
-///    decisao do cliente e o cartao da agenda e foto + titulo. Outra frente
+///    `rejection_reason` e o cartao da agenda e foto + titulo. Outra frente
 ///    mediu a ausencia em 19/10 e relatou em vez de inventar campo.
+///    **A pagina de detalhe VOLTOU em 20/10/2026** (ela estava apagada quando
+///    esta linha foi escrita, e o cliente corrigiu: *"eu nao pedi pra voce
+///    remover, eu pedi para remover o clique"*), e isso NAO muda o item: a
+///    pagina publica desenha `NetworkEventPublic`, que continua sem
+///    `rejection_reason`. Esta lista segue sendo o unico lugar que responde
+///    "a minha foto entrou?".
 /// 5. **`Cancelar`** -- a acao que o cliente pediu aqui.
+/// 6. **O TOQUE NO CARTAO, que leva a pagina do encontro** -- pedido dele em
+///    27/10/2026 (BICHUS-297): *"na pagina de meus eventos, precisamos colocar
+///    o link que leva o usuario para a pagina de detalhes do evento"*. Ver
+///    [CartaoDoMeuEncontro.aoTocar], que registra as tres coisas medidas antes
+///    de ligar o toque: o cancelado, o privado e o alvo do `Cancelar`.
 ///
 /// **O que NAO entra**: lugar, resumo, observacoes, galeria, preco, portes,
 /// idade, vacinacao, area cercada, estrutura, o que levar, ingresso e
@@ -145,17 +158,46 @@ abstract final class TextosDoCancelamento {
   static const String titulo = 'Cancelar este encontro?';
 
   /// O corpo: **o que vai acontecer**, no futuro, porque nada aconteceu ainda.
+  ///
+  /// **A PALAVRA `avisa` SAIU DAQUI, e a saída é correção de pedido do
+  /// cliente** (BICHUS-298, 27/10/2026). O corpo antigo dizia *"Cancelar avisa
+  /// a agenda de que o encontro não vai mais acontecer"* e a segunda linha de
+  /// [oQueAcontece], três dedos abaixo dele, dizia `Ninguém recebe aviso`. Ele
+  /// leu as duas juntas: *"avisa a agenda de que o encontro não vai mais
+  /// acontecer, avisa quem?"*.
+  ///
+  /// **A linha contradita era a de cima, e nao a de baixo.** `avisar a agenda`
+  /// era figura de linguagem sobre uma escrita em banco, e numa folha
+  /// destrutiva ela lê como envio -- exatamente a promessa que o cabeçalho
+  /// desta classe existe para nao fazer. Quem nao é avisado é medido:
+  /// `EncontroDaComunidade.cancelar` grava a transação e registra a trilha
+  /// (`network_event.cancelled`), e nao há disparo de notificação em ponto
+  /// nenhum da operação.
+  ///
+  /// O corpo agora diz **o que de fato acontece** -- a palavra `Cancelado`
+  /// passa a aparecer na agenda -- e fecha com a ausência de aviso, para que
+  /// quem lê só a primeira frase da folha já saia sabendo que vai ter de
+  /// contar às pessoas. **Nao há aviso a inventar aqui**: fazer as pessoas
+  /// serem avisadas de verdade é contrato e servidor, e nao texto de tela.
   static const String corpo =
-      'Cancelar avisa a agenda de que o encontro não vai mais acontecer. Ele '
-      'não é apagado.';
+      'O encontro passa a aparecer como Cancelado na agenda. Ele não é '
+      'apagado, e ninguém recebe aviso.';
 
   /// As consequências, em lista. **Cada linha é uma coisa medida.**
   ///
   /// A primeira: o contrato e o servidor deixam o cancelado visível com
   /// `status` `cancelled` até o fim previsto, e depois dele ele segue a regra do
   /// encerrado (`statusDoEncontro`, decisões do cliente de 23/09 e 28/09).
+  /// **Ela encurtou com a reescrita do [corpo]** (BICHUS-298): a metade *"para
+  /// quem ia saber que nao vai mais acontecer"* repetia o que o corpo passou a
+  /// dizer na primeira frase, e lista que repete o parágrafo acima dela faz a
+  /// pessoa parar de ler a lista.
   ///
-  /// A segunda: **ninguém é avisado**. Ver o cabeçalho desta classe.
+  /// A segunda: **ninguém é avisado**. Ver o cabeçalho desta classe. **Ela
+  /// ficou LITERAL de propósito** -- é a frase que o cliente escreveu no
+  /// pedido (*"quem iria ao evento, descobrirá apenas quando abrir a
+  /// agenda"*), e ela já era a linha certa: o defeito estava no corpo, que a
+  /// contradizia.
   ///
   /// A terceira: não há operação de descancelar. Só encontro `published` se
   /// cancela, então uma segunda tentativa cai em `event_not_published`.
@@ -164,8 +206,7 @@ abstract final class TextosDoCancelamento {
   /// contrato (*"o encontro cancelado sai do teto de 3 ativos"*) e é informação
   /// útil para quem quer remarcar.
   static const List<String> oQueAcontece = <String>[
-    'O encontro fica na agenda com a palavra Cancelado até o fim previsto, '
-        'para quem ia saber que não vai mais acontecer.',
+    'Fica na agenda com a palavra Cancelado até o fim previsto.',
     'Ninguém recebe aviso. Quem ia descobre quando abrir a agenda.',
     'Não dá para desfazer. Se mudar de ideia, é marcar um encontro novo.',
     'Ele deixa de contar nos seus três encontros marcados.',
@@ -347,6 +388,27 @@ class _EstadoDeMeusEventos extends State<MeusEventos> {
     await _carregar();
   }
 
+  /// O toque no cartao: a pagina do encontro, pelo `slug` (BICHUS-297).
+  ///
+  /// **Pela MESMA porta da agenda** ([TelaDoEncontro.abrir]), e nao por um
+  /// `context.push` escrito aqui: a rota e absoluta e irma da casca desde
+  /// 20/10/2026, e um segundo lugar montando o endereco a mao e um segundo
+  /// lugar para errar quando ela se mexer de novo.
+  ///
+  /// **SEM `distanciaEmMetros`, e a ausencia e correta.** A distancia da pagina
+  /// vem de quem a leu -- `listNearbyNetworkEvents` --, e esta lista e
+  /// `listMyNetworkEvents`: `MyNetworkEvent` tem sete propriedades e nenhuma e
+  /// distancia. Passar zero ou um palpite aqui escreveria na pagina uma
+  /// distancia que ninguem mediu.
+  ///
+  /// **NAO ha guarda de sessao, porque nao ha caso sem conta.** `_carregar` so
+  /// chega em `_Fase.lista` com `sessao.logado`; deslogado a tela e
+  /// `ConviteParaEntrar` e nao ha cartao nenhum para tocar. A folha de convite
+  /// da agenda (`agenda_da_rede.dart`) existe porque a agenda e publica.
+  void _abrirODetalhe(MeuEncontro encontro) {
+    unawaited(TelaDoEncontro.abrir(context, encontro.slug));
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessao = Escopo.of(context).sessao;
@@ -421,6 +483,7 @@ class _EstadoDeMeusEventos extends State<MeusEventos> {
               encontro: _itens[i],
               lendoAVersao: _lendoAVersaoDe == _itens[i].slug,
               aoCancelar: () => _cancelar(_itens[i]),
+              aoTocar: () => _abrirODetalhe(_itens[i]),
             ),
           ],
           const SizedBox(height: BichuEspaco.e4),
@@ -443,12 +506,62 @@ class CartaoDoMeuEncontro extends StatelessWidget {
   const CartaoDoMeuEncontro({
     required this.encontro,
     required this.aoCancelar,
+    required this.aoTocar,
     super.key,
     this.lendoAVersao = false,
   });
 
   final MeuEncontro encontro;
   final VoidCallback aoCancelar;
+
+  /// O que o toque no cartao faz: a pagina do encontro (BICHUS-297).
+  ///
+  /// **Obrigatorio e nao anulavel**, como em `CartaoDoEncontro` da agenda e
+  /// pelo mesmo motivo: o criterio 2 da BICHUS-62 proibe controle sem
+  /// desfecho, e um `aoTocar` opcional deixaria o cartao voltar calado a ser
+  /// tocavel na aparencia e morto no dedo. **O cartao nao sabe para onde
+  /// leva** -- quem decide e [MeusEventos], como na agenda.
+  ///
+  /// ## O CANCELADO TEM LINK, e a decisao e medida
+  ///
+  /// Nao ha `if` de situacao aqui, e a ausencia dele e a decisao. As tres
+  /// medicoes que a sustentam:
+  ///
+  ///  1. **O servidor serve o cancelado nesta rota.** `getNetworkEvent` sai da
+  ///     MESMA `consultaBase` que `listMyNetworkEvents`
+  ///     (`publication_status IN ('published','cancelled')` mais autor com
+  ///     conta ativa, em `kysely-network-repository.ts`) -- e so dela, sem
+  ///     recorte de tempo. Todo item que esta nesta lista e, por construcao,
+  ///     alcancavel pela pagina: o corte por `ends_at` do cancelado e da
+  ///     LISTAGEM da agenda, e nao da leitura de um. O encerrado tambem passa,
+  ///     porque `encerrado` e derivado do relogio e nao e
+  ///     `publication_status`.
+  ///  2. **A pagina desenha o cancelado**, com aviso proprio acima de
+  ///     `Quando` -- ver a ordem no cabecalho de `TelaDoEncontro`.
+  ///  3. **A agenda ja leva o cancelado para la**: `_tocarNoCartao` nao olha
+  ///     situacao, e `CartaoDoEncontro.aoTocar` e obrigatorio para todos.
+  ///
+  /// Tirar o link so do cancelado criaria o cartao morto da BICHUS-62 numa
+  /// lista onde os vizinhos abrem, e e justamente no cancelado que o dono quer
+  /// conferir o que quem ia esta vendo.
+  ///
+  /// ## O PRIVADO ABRE, e a pagina ja o trata
+  ///
+  /// `MyNetworkEvent` nao tem `visibility`, entao o cartao nao saberia
+  /// escolher. E nao precisa: `getNetworkEvent` responde **teaser** para
+  /// encontro privado *"para qualquer chamador, inclusive o aprovado"* (a forma
+  /// vem do evento, e nao de quem pergunta), e `TelaDoEncontro` desenha o
+  /// `TeaserDoPrivado` com banner, titulo e dia, sem caixa de pedido e **sem
+  /// inventar frase** para um estado que o produto nao tem. A rota nao tem
+  /// guarda, como nenhuma deste app.
+  ///
+  /// Encontro privado tambem nao nasce mais por aqui: `createCommunityNetworkEvent`
+  /// nao tem `visibility` (*"todo encontro da comunidade e publico"*), e o
+  /// evento privado saiu do produto em 19/10/2026 por decisao do cliente. Um
+  /// privado nesta lista hoje so chega por `AdminNetworkEventAccessChange`, do
+  /// painel -- e nesse caso a pagina mostra o teaser, que e exatamente o que o
+  /// servidor tem a dizer.
+  final VoidCallback aoTocar;
 
   /// Enquanto a versão deste encontro está sendo lida, o botão fica
   /// desabilitado: dois toques dispararam duas folhas sobre a mesma linha.
@@ -493,78 +606,153 @@ class CartaoDoMeuEncontro extends StatelessWidget {
     // o comentario na chamada de `ImagemDoEncontroOuBanner`, abaixo.)
     final capa = encontro.capa;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cores.surface,
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
+    // **`Material` + `InkWell`, e nao `GestureDetector`, e a forma e a da
+    // agenda** (`rede/cartao_do_encontro.dart`): o respingo de tinta nasce no
+    // `Material` mais proximo, e sem ele o efeito ficaria atras da superficie
+    // opaca do cartao -- toque sem resposta visivel, que e o defeito que faz a
+    // pessoa tocar de novo. A cor e o recorte saem do `Container` para o
+    // `Material` pelo mesmo motivo; a borda fica no `Container` de dentro.
+    return Material(
+      color: cores.surface,
+      borderRadius: BorderRadius.circular(BichuRaio.lg),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // A MESMA peça da agenda, e de propósito: o encontro tem de parecer o
-          // mesmo encontro nas duas telas. Decorativa aqui (texto alternativo
-          // nulo): o rótulo do cartão, logo abaixo, já diz qual encontro é.
-          // **SEM `cancelado:`**: o parametro que pintava a capa em cinza saiu
-          // em 19/10/2026 por ser sinal exclusivamente por cor (SC 1.4.1), e a
-          // uniao do lote NAO o trouxe de volta. O `DistintivoDeSituacao`
-          // abaixo diz `Cancelado` com PALAVRA, que e o canal que vale.
-          ImagemDoEncontroOuBanner(url: capa?.url),
-          Padding(
-            padding: const EdgeInsets.all(BichuEspaco.e4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // O BLOCO DE TEXTO vai num nó só do leitor de tela, com o
-                // título PRIMEIRO. As ações ficam fora dele: um nó que
-                // misturasse texto e botão não teria como ser acionado.
-                Semantics(
-                  container: true,
-                  excludeSemantics: true,
-                  label: rotuloAcessivelDe(encontro, anoCorrente: anoCorrente),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(encontro.titulo, style: textos.titleMedium),
-                      const SizedBox(height: BichuEspaco.e1),
-                      Text(
-                        quandoDe(encontro, anoCorrente: anoCorrente),
-                        style: textos.bodySmall
-                            ?.copyWith(color: cores.textSecondary),
-                      ),
-                      if (encontro.situacao != null &&
-                          rotuloDaSituacao(encontro.situacao) != null) ...<Widget>[
-                        const SizedBox(height: BichuEspaco.e2),
-                        DistintivoDeSituacao(situacao: encontro.situacao!),
-                      ],
-                    ],
-                  ),
-                ),
-                if (capa != null && capa.recusadaComMotivo) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e3),
-                  // O MOTIVO DO SERVIDOR, literal, e nunca uma frase própria:
-                  // só o servidor sabe se o problema foi o formato, a dimensão
-                  // mínima ou um arquivo truncado, e um texto genérico deixa a
-                  // pessoa sem saber o que consertar.
-                  FaixaDeAviso(
-                    peso: PesoDaFaixa.informativo,
-                    texto: '${_FotoRecusada.rotulo} ${capa.motivoDaRecusa!}',
-                  ),
-                ],
-                if (encontro.podeCancelar) ...<Widget>[
-                  const SizedBox(height: BichuEspaco.e4),
-                  _BotaoDeCancelar(
-                    rotuloAcessivel: TextosDoCancelamento.confirmarAcessivel(
-                      encontro.titulo,
-                    ),
-                    aoTocar: lendoAVersao ? null : aoCancelar,
-                  ),
-                ],
-              ],
+      child: InkWell(
+        onTap: aoTocar,
+        borderRadius: BorderRadius.circular(BichuRaio.lg),
+        // ===================================================================
+        // `excludeFromSemantics: true`: O TOQUE DO CARTAO E DECLARADO ABAIXO,
+        // no bloco de texto, e NUNCA aqui.
+        // ===================================================================
+        //
+        // **As tres arvores abaixo foram MEDIDAS nesta entrega**, montando o
+        // cartao de verdade e lendo o que o aparelho entrega ao leitor de tela
+        // (a base, para comparar, e `11e520b7`, onde o cartao era texto):
+        //
+        //     BASE (sem link): dois irmaos, e so o `Cancelar` e acionavel
+        //       btn=false tap=false  "Encontro de domingo, Quinta, ..."
+        //       btn=true  tap=true   "Cancelar o encontro Encontro ..."
+        //
+        //     SEM esta linha: o `InkWell` publica, e nasce um no A MAIS --
+        //     acionavel, sem nome e sem `button` -- em volta dos dois
+        //       btn=false tap=TRUE  ""            <- quem foca aqui ouve NADA
+        //         btn=true  tap=true  "Encontro de domingo, ..."
+        //         btn=true  tap=true  "Cancelar o encontro ..."
+        //
+        //     COM esta linha, e com o `container: true` do `_BotaoDeCancelar`:
+        //       btn=false tap=false ""            <- inerte, o leitor pula
+        //         btn=true  tap=true  "Encontro de domingo, ..."
+        //         btn=true  tap=true  "Cancelar o encontro ..."
+        //
+        // **A linha NAO anda sozinha**: com ela e SEM o `container: true` do
+        // `_BotaoDeCancelar` (que esta nesta entrega, e so por isto) a medicao
+        // deu o no do `Cancelar` como PAI do no do cartao -- os dois controles
+        // em arvore em vez de lado a lado, que nao e o que a tela mostra. As
+        // duas mudancas sao uma coisa so.
+        //
+        // **A separacao vale nos DOIS canais, e os dois estao na isca (g).**
+        // No dedo, quem ganha a arena de gestos e o reconhecedor mais FUNDO: o
+        // `OutlinedButton` do `Cancelar` esta dentro deste `InkWell`, entao o
+        // toque nele abre a folha e NAO navega.
+        //
+        // O caminho da agenda -- deixar o `InkWell` publicar e tirar o
+        // `container: true` do bloco de texto para os dois se fundirem num no
+        // so -- funciona la porque aquele cartao nao tem segundo controle
+        // dentro dele. Aqui tem, e e o destrutivo.
+        excludeFromSemantics: true,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(BichuRaio.lg),
+            border: Border.all(
+              color: cores.outline,
+              width: BichuBorda.hairline,
             ),
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              // A MESMA peça da agenda, e de propósito: o encontro tem de parecer o
+              // mesmo encontro nas duas telas. Decorativa aqui (texto alternativo
+              // nulo): o rótulo do cartão, logo abaixo, já diz qual encontro é.
+              // **SEM `cancelado:`**: o parametro que pintava a capa em cinza saiu
+              // em 19/10/2026 por ser sinal exclusivamente por cor (SC 1.4.1), e a
+              // uniao do lote NAO o trouxe de volta. O `DistintivoDeSituacao`
+              // abaixo diz `Cancelado` com PALAVRA, que e o canal que vale.
+              ImagemDoEncontroOuBanner(url: capa?.url),
+              Padding(
+                padding: const EdgeInsets.all(BichuEspaco.e4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // O BLOCO DE TEXTO vai num nó só do leitor de tela, com o
+                    // título PRIMEIRO. As ações ficam fora dele: um nó que
+                    // misturasse texto e botão não teria como ser acionado.
+                    //
+                    // **E E ESTE NÓ QUE CARREGA O TOQUE DO CARTÃO**
+                    // (BICHUS-297), com `button` e `onTap` declarados aqui em
+                    // vez de herdados do `InkWell` de cima -- ver o bloco do
+                    // `excludeFromSemantics` nele. O `container: true` continua:
+                    // e ele que faz deste nó uma parada de foco própria, ao
+                    // lado da do `Cancelar`, em vez de um pedaço de um nó
+                    // maior.
+                    //
+                    // **O `onTap` NÃO É REDUNDÂNCIA, e esquecê-lo é a classe de
+                    // defeito que `test/a11y/acao_de_controle_test.dart`
+                    // guarda**: `excludeSemantics: true` apaga a árvore do
+                    // filho, e um nó com `button: true` sem `onTap` sai com
+                    // `btn=true tap=false` -- quem usa leitor de tela ouve que
+                    // há um botão e não tem como acioná-lo. Foi exatamente o
+                    // que o `_BotaoDeCancelar` desta tela pagou (ver o
+                    // comentário dele).
+                    Semantics(
+                      container: true,
+                      button: true,
+                      excludeSemantics: true,
+                      label: rotuloAcessivelDe(encontro, anoCorrente: anoCorrente),
+                      onTap: aoTocar,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(encontro.titulo, style: textos.titleMedium),
+                          const SizedBox(height: BichuEspaco.e1),
+                          Text(
+                            quandoDe(encontro, anoCorrente: anoCorrente),
+                            style: textos.bodySmall
+                                ?.copyWith(color: cores.textSecondary),
+                          ),
+                          if (encontro.situacao != null &&
+                              rotuloDaSituacao(encontro.situacao) != null) ...<Widget>[
+                            const SizedBox(height: BichuEspaco.e2),
+                            DistintivoDeSituacao(situacao: encontro.situacao!),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (capa != null && capa.recusadaComMotivo) ...<Widget>[
+                      const SizedBox(height: BichuEspaco.e3),
+                      // O MOTIVO DO SERVIDOR, literal, e nunca uma frase própria:
+                      // só o servidor sabe se o problema foi o formato, a dimensão
+                      // mínima ou um arquivo truncado, e um texto genérico deixa a
+                      // pessoa sem saber o que consertar.
+                      FaixaDeAviso(
+                        peso: PesoDaFaixa.informativo,
+                        texto: '${_FotoRecusada.rotulo} ${capa.motivoDaRecusa!}',
+                      ),
+                    ],
+                    if (encontro.podeCancelar) ...<Widget>[
+                      const SizedBox(height: BichuEspaco.e4),
+                      _BotaoDeCancelar(
+                        rotuloAcessivel: TextosDoCancelamento.confirmarAcessivel(
+                          encontro.titulo,
+                        ),
+                        aoTocar: lendoAVersao ? null : aoCancelar,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -594,6 +782,15 @@ class _BotaoDeCancelar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      // **`container: true` entrou em 27/10/2026 com o toque do cartao, e
+      // MEDIDO.** Sem ele, com o `InkWell` do cartao calado
+      // (`excludeFromSemantics`), a anotacao deste botao subia e virava o no
+      // PAI do no do cartao -- os dois controles em arvore em vez de irmaos.
+      // Com ele este no e uma fronteira, e a arvore sai com as duas paradas de
+      // foco lado a lado, como a tela mostra. Ver o bloco do
+      // `excludeFromSemantics` em `CartaoDoMeuEncontro`, que traz as tres
+      // arvores medidas.
+      container: true,
       button: true,
       enabled: aoTocar != null,
       label: rotuloAcessivel,

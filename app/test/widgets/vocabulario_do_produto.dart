@@ -521,7 +521,49 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// uniao, com os quatro novos nomeados acima e nenhum removido ou renomeado.
 /// `app/lib` nao tem nenhum symlink, entao a caminhada nao depende de seguir
 /// link.
-const int ocorrenciasDeBichu = 2742;
+/// ---------------------------------------------------------------------------
+/// 2742 -> 2752 (BICHUS-297 e BICHUS-298, 27/10/2026)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO -- a PROSA mudou.** Um arquivo so entrou no
+/// saldo, `telas/perfil/meus_eventos.dart`, de **20 para 30**, e as dez sao
+/// nomeaveis uma por uma:
+///
+///   - **+2 `BichuRaio`** (2 -> 4), e sao CODIGO: o cartao de `Meus eventos`
+///     ganhou o toque que leva a pagina do encontro, e a forma da agenda pede
+///     `Material` + `InkWell`, cada um com o seu
+///     `BorderRadius.circular(BichuRaio.lg)`. Token do design system, como os
+///     outros 28 deste arquivo;
+///   - **+8 chaves de issue em comentario**: `BICHUS-297` (4), `BICHUS-298`
+///     (2) e `BICHUS-62` (2). A agulha ignora caixa, e `BICHUS` contem
+///     `BICHU` -- entao citar a issue sobe esta contagem. O proprio caso ao
+///     lado desta constante diz que isto e legitimo: *"o cabecalho de varios
+///     arquivos de `app/lib` conta a historia da troca, entao varrer prosa
+///     reprovaria justamente quem documenta a regra"*.
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA**, e isto esta conferido por
+/// forma e nao por total: `BichuEspaco` 10 -> 10, `BichuColors` 3 -> 3,
+/// `bichu` (minusculo, do nome do pacote) 2 -> 2, `BichuBorda` 2 -> 2,
+/// `BichuAlvoDeToque` 1 -> 1. So `BichuRaio` subiu.
+///
+/// MEDIDO POR DOIS PROGRAMAS INDEPENDENTES que concordaram no total E na
+/// distribuicao por arquivo: um em Python e um em Node 22, cada um refazendo a
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa sobre o
+/// conteudo CRU do arquivo (esta agulha nao passa por [semProsaDeDart]). O
+/// `diff` das duas saidas por arquivo saiu VAZIO nas duas arvores, com guarda
+/// de arquivo NAO VAZIO antes de confiar nele -- 225 linhas em cada saida, e
+/// `diff` de duas saidas vazias sai 0 e mente.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos dois
+/// programas, sobre a arvore LIMPA da base (`11e520b7`, extraida com
+/// `git archive`), reproduziram EXATAMENTE a constante que ela travava --
+/// **2742** em 225 arquivos, com as duas distribuicoes identicas.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 225 `.dart` em `app/lib` na base e 225 nesta
+/// entrega -- nenhum criado, removido ou renomeado, e o `diff` das duas
+/// distribuicoes aponta UMA linha. `app/lib` continua sem symlink (os dois
+/// programas avisariam), entao a caminhada nao depende de seguir link.
+const int ocorrenciasDeBichu = 2752;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
