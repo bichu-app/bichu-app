@@ -515,6 +515,81 @@ void describe('a galeria do encontro e a conta do administrador', () => {
   });
 
   // =========================================================================
+  // DUAS IMAGENS SAEM NA ORDEM DA POSICAO (27/10/2026)
+  // =========================================================================
+  // O cliente, 26/10: *"as fotos dos eventos, quando tem mais do que uma nao
+  // esta trocando, nao tem a seta que eu pedi para avancar e retroceder"*.
+  //
+  // **O defeito era do app** -- a capa abria o visualizador com UMA url e as
+  // miniaturas nao tinham alvo de toque --, e a correcao e la. **Mas o caso de
+  // cima media a galeria com UMA imagem**, e com uma imagem a ordem nao existe:
+  // qualquer `ORDER BY` passa, inclusive nenhum. A tela agora depende de a
+  // leitura publica devolver as imagens na ordem da POSICAO, porque e o indice
+  // dela que `abrirVarias(inicial: i)` recebe -- fora de ordem, tocar na
+  // terceira miniatura abriria outra foto.
+  //
+  // **A ISCA ESTA DENTRO DO CASO, e e a ordem de INSERCAO ao contrario**: a
+  // posicao 1 e gravada primeiro e a posicao 0 depois. Uma leitura sem
+  // `ORDER BY position` devolveria a ordem fisica da tabela e reprovaria aqui;
+  // com `ORDER BY` ela devolve a capa primeiro, que e o que o contrato promete
+  // (*"a primeira da lista e a capa"*).
+  void it('a leitura publica devolve DUAS imagens na ordem da posicao, nao na de insercao', async () => {
+    const primeiro = await envio('network_event', autor.adminAccountId);
+    const segundo = await envio('network_event', autor.adminAccountId);
+    const criado = await criar({
+      images: [
+        { upload_id: primeiro, alt_text: 'A capa, na posicao 0' },
+        { upload_id: segundo, alt_text: 'A segunda, na posicao 1' },
+      ],
+    });
+    const id = await idDoEncontro(criado.recurso.slug);
+
+    const galeria = await banco.db
+      .selectFrom('network_event_images')
+      .select(['image_id', 'position'])
+      .where('event_id', '=', id)
+      .orderBy('position', 'asc')
+      .execute();
+    assert.equal(galeria.length, 2, 'as duas linhas de galeria nasceram');
+    assert.deepEqual(
+      galeria.map((l) => l.position),
+      [0, 1],
+      'as posicoes sao 0 e 1, e e sobre elas que a ordem da leitura se apoia',
+    );
+
+    // As duas ficam prontas, e a de posicao 1 PRIMEIRO -- a isca da ordem.
+    const daPosicao1 = galeria[1]?.image_id ?? '';
+    const daPosicao0 = galeria[0]?.image_id ?? '';
+    await sql`update catalog_images set status = 'ready', public_key = 'card/segunda.webp', thumb_key = 'card/segunda-thumb.webp' where id = ${daPosicao1}::uuid`.execute(
+      banco.db,
+    );
+    await sql`update catalog_images set status = 'ready', public_key = 'card/capa.webp', thumb_key = 'card/capa-thumb.webp' where id = ${daPosicao0}::uuid`.execute(
+      banco.db,
+    );
+
+    const publica = criarNetworkRepository(banco.db, ids, (c) => `https://midia.exemplo.invalid/${c}`);
+    const lida = await publica.buscarEncontro(criado.recurso.slug);
+    assert.equal(lida?.imagens.length, 2, 'as DUAS saem na leitura publica');
+    assert.deepEqual(
+      lida?.imagens.map((i) => i.textoAlternativo),
+      ['A capa, na posicao 0', 'A segunda, na posicao 1'],
+      'REPROVA: a leitura publica nao ordenou por `position`. O indice da ' +
+        'faixa `Fotos` do app e o desta lista, e fora de ordem tocar numa ' +
+        'miniatura abre outra foto.',
+    );
+    // E a MINIATURA de cada uma e a dela, e nao a da vizinha: e `thumb_url`
+    // que a faixa do detalhe pede, e trocadas elas desenhariam a foto errada
+    // ANTES de alguem tocar.
+    assert.deepEqual(
+      lida?.imagens.map((i) => i.urlDaMiniatura),
+      [
+        'https://midia.exemplo.invalid/card/capa-thumb.webp',
+        'https://midia.exemplo.invalid/card/segunda-thumb.webp',
+      ],
+    );
+  });
+
+  // =========================================================================
   // TEXTO ALTERNATIVO OPCIONAL (21/10/2026, decisao do cliente)
   // =========================================================================
   // O espelho exato do caso da `Loja`
