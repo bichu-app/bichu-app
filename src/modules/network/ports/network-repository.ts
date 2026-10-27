@@ -289,7 +289,10 @@ export interface TransacaoDaComunidade {
     readonly agora: Instant;
   }): Promise<string | undefined>;
   /** A capa na posicao 0. `null` tira a capa. */
-  definirCapa(eventoId: string, capa: { readonly imagemId: string; readonly altText: string } | null): Promise<void>;
+  definirCapa(
+    eventoId: string,
+    capa: { readonly imagemId: string; readonly altText: string | null } | null,
+  ): Promise<void>;
 }
 
 export interface NetworkRepository {
