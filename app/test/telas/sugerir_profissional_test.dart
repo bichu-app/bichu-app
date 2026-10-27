@@ -193,7 +193,14 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
   await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
 
   await rolarAte(tester, campoDoRotulo('Telefone'));
-  await tester.enterText(campoDoRotulo('Telefone'), '+5521988887777');
+  // **DIGITOS, e nao `+5521988887777`** (BICHUS-308, 26/10/2026): o campo
+  // de telefone da indicacao passou a usar `MascaraDeTelefone`, que
+  // descarta o `+` e corta em onze digitos -- colar `+5521988887777` nela
+  // deixaria `(55) 21988-8777` na tela e `+5555219888777` no corpo. O que
+  // este caso digita agora e o que uma pessoa digita no teclado numerico, e
+  // **o valor afirmado no corpo nao mudou**: `telefoneEmE164` o reconstroi
+  // como `+5521988887777`.
+  await tester.enterText(campoDoRotulo('Telefone'), '21988887777');
   await tester.pumpAndSettle();
 }
 
@@ -900,6 +907,117 @@ void main() {
         find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
       );
       expect(botao.aoTocar, isNull);
+    });
+  });
+
+  // =========================================================================
+  // A MASCARA DE TELEFONE NO CAMPO POLIMORFICO (BICHUS-308, 26/10/2026)
+  // =========================================================================
+  //
+  // O cliente pediu *"mascara de telefone em todos os inputs que necessitam
+  // de telefone"*, e este era o unico campo que faltava no app. Ele e o unico
+  // POLIMORFICO: o mesmo `BichuField` recebe telefone, site ou Instagram
+  // conforme `TipoDeContatoPublico`, entao a mascara tem de ENTRAR E SAIR com
+  // o tipo -- fixa, ela comeria `https://` e `@`.
+  //
+  // O portao de fonte (`telas/mascara_de_telefone_em_todo_campo_test.dart`)
+  // cobra que a mascara ESTEJA la, e nomeia o arquivo quando nao esta. Estes
+  // casos medem o que nenhum portao de fonte alcanca: o que a pessoa VE no
+  // campo, o que SAI no corpo e o que acontece com o texto ja digitado quando
+  // o tipo muda.
+  group('a mascara de telefone do contato publico', () {
+    testWidgets('mostra a mascara na tela e manda E.164 no corpo',
+        (tester) async {
+      final enviados = <Map<String, dynamic>>[];
+      await abrirPerto(tester, rede: redeDaIndicacao(enviados: enviados));
+      await abrirAPorta(tester);
+      await preencherOMinimo(tester);
+
+      // **O QUE A PESSOA VE.** Ela digitou `21988887777` no teclado numerico;
+      // a mascara e quem poe os parenteses, o espaco e o hifen.
+      expect(
+        tester.widget<TextField>(campoDoRotulo('Telefone')).controller?.text,
+        '(21) 98888-7777',
+        reason: 'REPROVA: o campo de telefone da indicacao nao mascara. O '
+            'cliente pediu isso DUAS vezes em oito dias (CEP em 18/10, '
+            'telefone em 26/10), e na primeira sobrou campo.',
+      );
+
+      await tocar(
+        tester,
+        find.widgetWithText(BotaoPrimario, 'Enviar indicação'),
+      );
+
+      // **O QUE SAI NO CORPO, que e outra coisa.**
+      // `DirectorySuggestionContact.value` declara E.164 para `kind: phone`:
+      // mandar `(21) 98888-7777` tomaria `400` nomeando
+      // `public_contact.value`. A mascara e de EXIBICAO.
+      final contato = enviados.single['public_contact'] as Map<String, dynamic>;
+      expect(
+        contato['value'],
+        '+5521988887777',
+        reason: 'REPROVA: a indicacao mandou para a API o texto MASCARADO. A '
+            'mascara nao decide o que vai para o servidor -- `telefoneEmE164` '
+            'decide, e e a unica funcao de `formato/telefone.dart` que produz '
+            'valor de contrato.',
+      );
+    });
+
+    testWidgets('trocar de tipo LIMPA o campo, e nao deixa mascara em site',
+        (tester) async {
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+      );
+      await abrirAPorta(tester);
+      await preencherOMinimo(tester);
+
+      // A pessoa muda de ideia DEPOIS de digitar o telefone. Sem este
+      // tratamento o campo de `Site` abriria com `(21) 98888-7777` dentro --
+      // parenteses e hifen num campo de endereco, que ela nunca digitou
+      // assim: a tela escreveu sozinha, e apagar sobraria para ela.
+      await escolherNaLista(tester, 'Como entrar em contato', 'Site');
+
+      // **A decisao e LIMPAR**, e esta escrita em `sugerir_profissional.dart`
+      // junto com a razao. A alternativa -- manter o texto e deixar a
+      // validacao recusar -- trocaria um campo vazio (que o motivo acima dos
+      // campos ja explica) por um `400` do servidor.
+      expect(
+        tester.widget<TextField>(campoDoRotulo('Site')).controller?.text,
+        isEmpty,
+        reason: 'REPROVA: o telefone mascarado sobrou dentro do campo de '
+            'Site. `inputFormatters` sai junto com o tipo, mas o TEXTO nao '
+            'sai sozinho -- quem o tira e o `clear()` do seletor.',
+      );
+    });
+
+    testWidgets('o campo de Site NAO mascara: `https://` atravessa inteiro',
+        (tester) async {
+      await abrirPerto(
+        tester,
+        rede: redeDaIndicacao(enviados: <Map<String, dynamic>>[]),
+      );
+      await abrirAPorta(tester);
+      await escolherNaLista(tester, 'Como entrar em contato', 'Site');
+      await rolarAte(tester, campoDoRotulo('Site'));
+      await tester.enterText(
+        campoDoRotulo('Site'),
+        'https://clinicabichinho.com.br',
+      );
+      await tester.pumpAndSettle();
+
+      // **O CONTRAPESO DOS DOIS CASOS ACIMA.** Eles ficariam verdes com a
+      // mascara aplicada SEMPRE; este e o que reprova nesse caso.
+      // `MascaraDeTelefone` descarta tudo o que nao e digito: aplicada aqui,
+      // ela deixaria `(11) 1234` de uma URL -- o campo comeria o que a pessoa
+      // digita, letra por letra, e isso e pior que campo sem mascara.
+      expect(
+        tester.widget<TextField>(campoDoRotulo('Site')).controller?.text,
+        'https://clinicabichinho.com.br',
+        reason: 'REPROVA: a mascara de telefone esta ligada no ramo de SITE e '
+            'comeu a URL. Ela tem de ser condicional a '
+            '`TipoDeContatoPublico.phone`.',
+      );
     });
   });
 }

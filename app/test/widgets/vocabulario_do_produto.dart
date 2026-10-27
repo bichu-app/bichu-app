@@ -521,7 +521,20 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// uniao, com os quatro novos nomeados acima e nenhum removido ou renomeado.
 /// `app/lib` nao tem nenhum symlink, entao a caminhada nao depende de seguir
 /// link.
-const int ocorrenciasDeBichu = 2742;
+/// ## 2742 -> 2745 em 26/10/2026, por BICHUS-308
+///
+/// As TRES ocorrencias novas estao todas em comentario de
+/// `lib/telas/perto/sugerir_profissional.dart`, e **nenhuma e texto de
+/// usuario**: a chave `BICHUS-308` no cabecalho do campo de contato publico (a
+/// agulha ignora caixa, e `BICHUS` contem `BICHU`) e duas mencoes a
+/// `BichuField` na prosa que explica por que a mascara de telefone e
+/// condicional ao tipo escolhido. Nenhuma ocorrencia foi apagada, e nenhum
+/// arquivo de `app/lib` entrou ou saiu (225 nos dois lados).
+///
+/// MEDIDO com a mesma caminhada de [dartsDeLib]: 2745 agora, 2742 em
+/// `11e520b7`. O delta de 3 confere com o `git diff` do unico arquivo de
+/// `app/lib` que esta tarefa tocou.
+const int ocorrenciasDeBichu = 2745;
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
