@@ -61,6 +61,8 @@ tempo continua verde depois de a regra que ela testava ser desligada.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import sys
@@ -203,6 +205,48 @@ def ler_dispensa(raiz: Path) -> bool:
     return padrao.search(arquivo.read_text(encoding="utf-8")) is not None
 
 
+# Os campos de erro que `buscar_veredito_do_sonar.py` copia de `GET /api/ce/task`
+# quando a analise termina em `FAILED`/`CANCELED`. A ordem e a de leitura: o tipo
+# classifica, a mensagem explica, a pilha localiza.
+#
+# POR QUE ESTAS TRES LINHAS EXISTEM
+# Medido em 28/10/2026: a `development` reprovava este job desde `d5c382dc`, por
+# quatro execucoes seguidas, e o log dizia apenas "a analise terminou em `FAILED`
+# no servidor". A regra `[nao-obtive]` estava CERTA -- verificacao que nao
+# consegue verificar reprova -- e era INSUFICIENTE: ela nao nomeava o que o
+# servidor disse, e a unica informacao capaz de resolver ficava do outro lado da
+# API. Buscar a tarefa por fora deu 404, e o controle positivo mostrou que a API
+# nao responde leitura anonima nem para projeto publico conhecido: a mensagem so
+# e alcancavel de dentro da esteira, com o `SONAR_TOKEN`. Ou ela aparece aqui, ou
+# ela nao aparece em lugar nenhum.
+#
+# ISTO E RELATO, E NAO POLITICA. O conjunto de regras que `julgar` devolve nao
+# muda, o veredito nao muda, e o que reprovava continua reprovando.
+#
+# AUSENTE E AUSENTE: campo que o servidor nao mandou nao imprime linha. Uma
+# linha `mensagem do erro:` vazia e pior que nenhuma -- ela parece dado e manda
+# quem le concluir que o servidor nao explicou, quando quem nao explicou fomos
+# nos. O controle positivo `veredito-sonar-analise-falhou-sem-mensagem.json`
+# guarda exatamente isso.
+ERROS_DO_SERVIDOR: list[tuple[str, str]] = [
+    ("tipo_do_erro", "tipo do erro"),
+    ("mensagem_do_erro", "mensagem do erro"),
+    ("pilha_do_erro", "pilha do erro"),
+]
+
+
+def _dizer_o_erro_do_servidor(envelope) -> None:
+    """As linhas de erro da tarefa, as que o servidor mandou e so elas."""
+    for chave, rotulo in ERROS_DO_SERVIDOR:
+        valor = envelope.get(chave)
+        if valor is None or str(valor).strip() == "":
+            continue
+        linhas = str(valor).splitlines() or [""]
+        print(f"  {rotulo}: {linhas[0]}")
+        for resto in linhas[1:]:
+            print(f"      | {resto}")
+
+
 def relatar(envelope, regras: list[str], tem_dispensa: bool) -> int:
     print("veredito do portao de qualidade do SonarCloud")
     if _envelope(envelope):
@@ -212,6 +256,7 @@ def relatar(envelope, regras: list[str], tem_dispensa: bool) -> int:
             print(f"  veredito:    {envelope.get('veredito')}")
         if envelope.get("motivo"):
             print(f"  motivo:      {envelope['motivo']}")
+        _dizer_o_erro_do_servidor(envelope)
         condicoes = envelope.get("condicoes") or []
         if condicoes:
             print(f"  as {len(condicoes)} condicoes do portao, com o valor real de cada uma:")
@@ -273,36 +318,77 @@ def relatar(envelope, regras: list[str], tem_dispensa: bool) -> int:
 # A coluna `dispensavel` e a parte que o defeito de hoje viola: o 403 reprova E
 # a dispensa nao salva. Um autoteste que so olhasse "reprovou?" ficaria verde
 # com o defeito inteiro de pe, porque hoje ele TAMBEM reprova -- e e dispensado.
-CASOS: list[tuple[str, set[str], bool, str]] = [
-    # (arquivo, regras esperadas, dispensavel, o que o caso isola)
+# AS DUAS COLUNAS DE LOG, E POR QUE ELAS NAO SAO ZELO
+# `julgar` devolve CONJUNTOS DE REGRAS, e um conjunto de regras nao prova que o
+# log diga alguma coisa. O defeito de 28/10/2026 e exatamente deste tipo: o
+# conjunto estava certo (`nao-obtive`), a reprovacao estava certa, e o relato
+# escondia a unica informacao que resolveria. Um autoteste que so comparasse
+# conjuntos ficaria verde com o defeito inteiro de pe -- como ficou, por quatro
+# execucoes.
+#
+# Por isso cada caso tambem declara o que o log PRECISA dizer e o que ele NAO
+# PODE dizer. A segunda coluna e a que guarda o par: sem ela, um relato que
+# imprimisse `mensagem do erro:` sempre, vazia inclusive, passaria pelo caso que
+# tem mensagem e inventaria dado no caso que nao tem.
+CASOS: list[tuple[str, set[str], bool, tuple[str, ...], tuple[str, ...], str]] = [
+    # (arquivo, regras esperadas, dispensavel, exigido no log, proibido no log, o que o caso isola)
     (
         "veredito-sonar-deve-aprovar.json",
         set(),
         False,
+        (),
+        ("mensagem do erro:",),
         "o portao verde: nenhuma regra dispara",
     ),
     (
         "veredito-sonar-403.json",
         {"nao-obtive"},
         False,
+        ("Um 403 nao e um veredito",),
+        ("mensagem do erro:",),
         "O DEFEITO DE HOJE: HTTP 403, veredito nunca obtido -- reprova e a dispensa NAO salva",
     ),
     (
         "veredito-sonar-transporte.json",
         {"nao-obtive"},
         False,
+        ("falhou no transporte",),
+        ("mensagem do erro:",),
         "o transporte caiu antes de qualquer HTTP -- reprova e a dispensa NAO salva",
+    ),
+    (
+        "veredito-sonar-analise-falhou.json",
+        {"nao-obtive"},
+        False,
+        ("terminou em `FAILED`", "tipo do erro: JAVA_HEAP_SPACE",
+         "mensagem do erro: Java heap space", "pilha do erro:"),
+        (),
+        "O DEFEITO DE 28/10: a analise falhou NO SERVIDOR e ele mandou a mensagem -- reprova "
+        "por `nao-obtive` como antes, e agora o log NOMEIA o que o servidor disse",
+    ),
+    (
+        "veredito-sonar-analise-falhou-sem-mensagem.json",
+        {"nao-obtive"},
+        False,
+        ("terminou em `FAILED`",),
+        ("tipo do erro:", "mensagem do erro:", "pilha do erro:"),
+        "O CONTROLE POSITIVO: a mesma analise `FAILED` SEM campos de erro -- continua "
+        "reprovando por `nao-obtive`, sem inventar mensagem e sem quebrar por campo ausente",
     ),
     (
         "veredito-sonar-negativo.json",
         {"veredito-negativo"},
         True,
+        (),
+        ("mensagem do erro:",),
         "o veredito negativo DE VERDADE, COM linha de base: so a regra do veredito dispara",
     ),
     (
         "veredito-sonar-sem-linha-de-base.json",
         {"veredito-negativo", "sem-linha-de-base"},
         True,
+        ("(SEM LINHA DE BASE)",),
+        ("mensagem do erro:",),
         "A SITUACAO REAL DE 23/09: veredito negativo E `periodo_de_codigo_novo` vazio -- "
         "duas regras, as duas dispensaveis, e o log passa a dizer o motivo verdadeiro",
     ),
@@ -310,30 +396,40 @@ CASOS: list[tuple[str, set[str], bool, str]] = [
         "veredito-sonar-aviso.json",
         {"veredito-negativo"},
         True,
+        (),
+        ("mensagem do erro:",),
         "`WARN` e veredito negativo do mesmo portao, e dispensavel pela mesma entrada",
     ),
     (
         "veredito-sonar-sem-portao.json",
         {"sem-portao-calculado"},
         False,
+        (),
+        ("mensagem do erro:",),
         "`NONE`: 200 com resposta valida e SEM portao calculado -- ausencia, nao reprovacao",
     ),
     (
         "veredito-sonar-palavra-nova.json",
         {"veredito-fora-do-vocabulario"},
         False,
+        (),
+        ("mensagem do erro:",),
         "palavra fora do vocabulario fechado: forma desconhecida REPROVA",
     ),
     (
         "veredito-sonar-sem-campo-obtido.json",
         {"envelope-fora-de-forma"},
         False,
+        (),
+        ("mensagem do erro:",),
         "o envelope sem `obtido` booleano: o juizo nao sabe nem se houve resposta",
     ),
     (
         "veredito-sonar-nao-e-objeto.json",
         {"envelope-ilegivel"},
         False,
+        (),
+        ("mensagem do erro:",),
         "o envelope que nao e um objeto JSON",
     ),
 ]
@@ -356,7 +452,7 @@ def autoteste(raiz: Path) -> int:
     falhas = 0
     print(f"autoteste do juizo do veredito do SonarCloud ({len(CASOS) + 2} casos)")
 
-    for arquivo, esperadas, deve_dispensar, descricao in CASOS:
+    for arquivo, esperadas, deve_dispensar, no_log, fora_do_log, descricao in CASOS:
         caminho = ISCAS / arquivo
         if not caminho.is_file():
             print(f"  [ FALTA   ] {arquivo}: isca ausente")
@@ -384,6 +480,44 @@ def autoteste(raiz: Path) -> int:
                 f"               a dispensa {'precisava' if deve_dispensar else 'NAO podia'} "
                 f"cobrir este desfecho, e ela {'nao cobriu' if deve_dispensar else 'cobriu'}"
             )
+            continue
+
+        # O RELATO, pelo caminho real. `relatar` roda COM a dispensa presente,
+        # que e o modo em que a esteira esta: assim o codigo de saida tambem e
+        # medido, e nenhum caso indispensavel pode passar a ser engolido em
+        # silencio. O que reprovava continua reprovando -- e agora o autoteste
+        # sabe disso pelo codigo, e nao pela leitura do conjunto de regras.
+        capturado = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(capturado):
+                codigo = relatar(envelope, sorted(regras), tem_dispensa=True)
+        except Exception as e:
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: o RELATO quebrou ({type(e).__name__}: {e}). "
+                  "Campo ausente nao pode derrubar quem conta o que aconteceu")
+            continue
+        log = capturado.getvalue()
+
+        esperado_codigo = 0 if (not regras or deve_dispensar) else 1
+        if codigo != esperado_codigo:
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: o relato saiu com {codigo} e precisava sair "
+                  f"com {esperado_codigo} (com a dispensa PRESENTE)")
+            continue
+        faltando = [f for f in no_log if f not in log]
+        if faltando:
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: o conjunto de regras esta certo e o LOG NAO "
+                  "DIZ o que quem le precisa saber")
+            for f in faltando:
+                print(f"               faltou no log: {f}")
+            continue
+        inventado = [f for f in fora_do_log if f in log]
+        if inventado:
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: o log diz o que o envelope NAO traz")
+            for f in inventado:
+                print(f"               apareceu no log sem dado por tras: {f}")
             continue
         print(f"  [    ok    ] {descricao}")
 
