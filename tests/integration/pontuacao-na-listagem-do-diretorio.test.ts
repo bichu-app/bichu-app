@@ -40,10 +40,19 @@
  *   `o numero do cartao e o da lista de avaliacoes CONCORDAM`. Este e o controle
  *   que importa: sem ele a lista mostra 1 avaliacao e o cartao diz 2.
  *
- * O controle positivo do terceiro caso foi rodado em 28/10/2026 derrubando o
- * predicado na sessao do teste (`CREATE OR REPLACE FUNCTION
- * pontuacao_do_local` sem `conta_habilitada`), e esta no proprio arquivo: ver
- * `CONTROLE_POSITIVO`.
+ * O controle positivo foi RODADO em 28/10/2026, com a suite inteira
+ * (`BICHUS313_SEM_RECORTE`, ver `CONTROLE_POSITIVO`). Placar: **798 casos em 59
+ * arquivos, 796 passaram, 2 reprovaram** -- exatamente os dois do autor
+ * desabilitado, e nenhum outro arquivo dos 59:
+ *
+ *   ✖ avaliacao de autor DESABILITADO nao entra na media nem na contagem
+ *     "a avaliacao do autor desabilitado continuou na CONTAGEM do cartao"
+ *     actual: 2, expected: 1
+ *   ✖ o numero do cartao e o da lista de avaliacoes CONCORDAM
+ *     "o cartao e o total da lista discordam"  actual: 4, expected: 3
+ *
+ * O segundo numero e o defeito inteiro numa linha: o cartao dizendo 4 sobre uma
+ * lista que mostra 3. E "128 avaliacoes" sobre uma lista de 126, em miniatura.
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
