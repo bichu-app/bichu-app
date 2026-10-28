@@ -246,6 +246,26 @@ Future<void> _digitar(WidgetTester tester, String rotulo, String valor) async {
   await tester.pumpAndSettle();
 }
 
+/// Escolhe o pet pelo NOME, no [SeletorDeLista] de `Pet`.
+///
+/// **Nao e `tocar(find.text('Nina'))`, e a primeira versao destes casos
+/// reprovou assim** (`Bad state: No element`): o `SeletorDeLista` nao desenha as
+/// opcoes na tela -- ele abre uma folha. Entao sao DOIS toques, e e a mesma
+/// forma de `escolherOEstado` em `ajuda_de_tela.dart`: o `InkWell` do seletor
+/// abre, e o `ListTile` da folha escolhe.
+Future<void> _escolherPet(WidgetTester tester, String nome) async {
+  final seletor = find.ancestor(
+    of: find.text('Pet'),
+    matching: find.byType(SeletorDeLista),
+  );
+  await tocar(tester, find.descendant(of: seletor, matching: find.byType(InkWell)));
+  await tocar(
+    tester,
+    find.descendant(of: find.byType(ListTile), matching: find.text(nome)),
+  );
+  await tester.pumpAndSettle();
+}
+
 /// O que o [SeletorDeLista] de `Estado` mostra como selecionado.
 String? _ufSelecionada(WidgetTester tester) {
   final seletor = find.ancestor(
@@ -977,8 +997,7 @@ void main() {
       expect(_textoDoCampo(tester, 'Rua'), isEmpty);
 
       // A pessoa escolhe o pet. **AGORA** ha o que ler.
-      await tocar(tester, find.text('Nina'));
-      await tester.pumpAndSettle();
+      await _escolherPet(tester, 'Nina');
 
       expect(
         registro.getsDoEndereco,
@@ -1002,8 +1021,7 @@ void main() {
       expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste',
           reason: 'CONTROLE POSITIVO: o endereco do primeiro pet chegou');
 
-      await tocar(tester, find.text('Rex'));
-      await tester.pumpAndSettle();
+      await _escolherPet(tester, 'Rex');
 
       expect(
         _textoDoCampo(tester, 'Rua'),
@@ -1029,8 +1047,7 @@ void main() {
       await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
 
       await _digitar(tester, 'Quem recebe', 'Quem Eu Escrevi A Mao');
-      await tocar(tester, find.text('Rex'));
-      await tester.pumpAndSettle();
+      await _escolherPet(tester, 'Rex');
 
       expect(
         _textoDoCampo(tester, 'Quem recebe'),
@@ -1047,7 +1064,10 @@ void main() {
       // no pet certo. Um `PUT` em `/v1/me/delivery-address` aqui seria a volta do
       // modelo da conta -- e o duble nem conhece aquela rota.
       final registro = _Registro();
-      await abrirOApp(tester, rede: _redeDeDoisPets(registro));
+      // **SEM endereco no segundo pet**: com endereco guardado o codigo esta
+      // CERTO em nao escrever (regra de 21/10, que o cliente manteve), e o caso
+      // mediria a ausencia de uma escrita que nao devia acontecer.
+      await abrirOApp(tester, rede: _redeDeDoisPets(registro, segundoTemEndereco: false));
       await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoSegundoPet);
 
       await _digitar(tester, 'Quem recebe', 'Alguem Do Segundo');
@@ -1078,9 +1098,21 @@ void main() {
 /// um daqueles casos passar a declarar um segundo pet que nao usa. O que esta
 /// rede acrescenta e exatamente o que o grupo H mede.
 ///
-/// O **segundo** pet nao tem endereco guardado, e a ausencia e proposital: ela e
-/// o que permite o caso do `PUT` provar que o primeiro pedido guarda NAQUELE pet.
-Future<http.Response> Function(http.Request) _redeDeDoisPets(_Registro registro) {
+/// `segundoTemEndereco` existe porque os casos do grupo H precisam dos DOIS
+/// estados, e **a primeira versao desta rede reprovou por nao ter o parametro**:
+/// ela dava endereco ao segundo pet sempre, e o caso do `PUT` media uma escrita
+/// que o codigo esta CERTO em nao fazer -- com endereco guardado,
+/// `_guardarSeNaoHavia` nunca escreve, nem igual (a regra de 21/10 que o
+/// cliente manteve). Entao:
+///
+/// - `true`  -- os casos da TROCA, que precisam de dois enderecos diferentes
+///   para distinguir "trocou" de "nao trocou";
+/// - `false` -- o caso do `PUT`, que precisa de um pet SEM endereco para o
+///   primeiro pedido ter o que guardar.
+Future<http.Response> Function(http.Request) _redeDeDoisPets(
+  _Registro registro, {
+  bool segundoTemEndereco = true,
+}) {
   final primeiro = petDoContrato(id: _idDoPet);
   final segundo = petDoContrato(id: _idDoSegundoPet, nome: 'Rex');
   return (req) async {
@@ -1104,6 +1136,14 @@ Future<http.Response> Function(http.Request) _redeDeDoisPets(_Registro registro)
     if (caminho == '/v1/pets/$_idDoSegundoPet/delivery-address') {
       if (req.method == 'GET') {
         registro.getsDoEndereco.add(caminho);
+        if (!segundoTemEndereco) {
+          // CORPO `null` CRU, como o contrato declara (`PetDeliveryAddress`).
+          return http.Response(
+            'null',
+            200,
+            headers: <String, String>{'content-type': 'application/json'},
+          );
+        }
         return json200(_guardadoDoSegundoPet);
       }
       if (req.method == 'PUT') {
