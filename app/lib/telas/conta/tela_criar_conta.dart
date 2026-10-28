@@ -22,6 +22,7 @@ import '../../validacao/politica_de_senha.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/convite_de_passkey.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/requisitos_da_senha.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -352,6 +353,29 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       );
       await escopo.sessao.abrir(sessao);
       if (!mounted) return;
+
+      // O CONVITE DA PASSKEY, AQUI E NAO ANTES (BICHUS-301).
+      //
+      // Pedido do cliente: _"vamos implementar apos o usuario realizar o
+      // cadastro o passkeys para que ele possa logar com credenciais
+      // digitais"_. O lugar e este por uma razao de contrato e nao de fluxo:
+      // `beginPasskeyRegistration` **exige sessao** e tira a conta do `sub` do
+      // token, entao ele so pode acontecer depois de `abrir` ter guardado o
+      // par de tokens. Oferecer antes daria 401.
+      //
+      // **NAO ha `if` nenhum em cima desta chamada, e nao pode haver.** O
+      // passo e dispensavel: `mostrarConviteDePasskey` devolve `void`, todos
+      // os seis desfechos (ativou, fechou a folha nativa, tocou `Agora nao`,
+      // arrastou para baixo, voltou pelo gesto do sistema, servidor recusou)
+      // caem na mesma linha seguinte, e o cadastro esta completo em todos.
+      // A conta JA EXISTE neste ponto -- `criarConta` respondeu 201 acima.
+      //
+      // `await` e nao fogo-e-esquece: sem ele o `pushReplacement` de baixo
+      // trocaria a rota embaixo da folha, e a folha nativa do sistema
+      // apareceria sobre uma tela que a pessoa nao pediu.
+      await mostrarConviteDePasskey(context);
+      if (!mounted) return;
+
       // `pushReplacement`, e este e o ponto de virada do fluxo: a conta **ja
       // existe** a partir daqui. Este formulario sai da pilha porque voltar a
       // ele seria uma promessa falsa -- reenviar daria 409

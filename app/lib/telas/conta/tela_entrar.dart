@@ -66,6 +66,71 @@ class _TelaEntrarState extends State<TelaEntrar> {
   String? _erroDaSenha;
 
   @override
+  void initState() {
+    super.initState();
+    // A PORTA DA PASSKEY, TENTADA AO ABRIR A TELA (BICHUS-301).
+    //
+    // Este e o caminho de MENOS interface que existe: nao ha botao `Entrar com
+    // passkey`, porque a folha do sistema operacional **aparece sozinha**
+    // quando ha credencial no aparelho, e nao aparece quando nao ha. Um botao
+    // obrigaria a tela a responder, antes do toque, se esta pessoa tem
+    // passkey -- e a tela nao sabe: a credencial e *discoverable* e quem sabe
+    // e o aparelho.
+    //
+    // **NAO ha `await` aqui, e nao pode haver**: `initState` nao e assincrono,
+    // e segurar o primeiro quadro atras de uma ida a rede deixaria a tela de
+    // entrar em branco em quem nao tem passkey nenhuma -- que e quase todo
+    // mundo. O formulario monta na hora e a tentativa corre atras dele.
+    //
+    // `addPostFrameCallback` e nao chamada direta: a tentativa usa
+    // `Escopo.of(context)`, e `dependOnInheritedWidgetOfExactType` dentro de
+    // `initState` nao e permitido.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tentarPasskey();
+    });
+  }
+
+  /// Tenta entrar com uma passkey que **ja exista** no aparelho.
+  ///
+  /// ## O QUE ESTA FUNCAO NAO FAZ, QUE E O REQUISITO
+  ///
+  /// **Quem nao tem passkey nao pode ser atrapalhado.** `tentarEntrar`
+  /// devolve `null` -- e nunca estoura -- em todos estes casos: nao ha
+  /// credencial no aparelho, a pessoa fechou a folha nativa, o aparelho nao
+  /// faz passkey, o dominio nao esta associado, a rede caiu, o servidor
+  /// respondeu 401 ou 429. Em TODOS, esta funcao nao faz absolutamente nada:
+  ///
+  /// - **nao** poe faixa de erro;
+  /// - **nao** mexe no `_email` nem no `_senha`;
+  /// - **nao** toca em `_enviando`, entao o botao `Entrar` nunca fica cinza
+  ///   nem girando por causa de uma tentativa que a pessoa nao pediu;
+  /// - **nao** rola a tela.
+  ///
+  /// O resultado e que, para quem usa senha, abrir esta tela e
+  /// indistinguivel de antes desta frente existir -- e ha isca cobrando
+  /// exatamente isso.
+  Future<void> _tentarPasskey() async {
+    final escopo = Escopo.of(context);
+    final sessao = await escopo.passkey.tentarEntrar();
+    // `null` e o caminho dominante. Sair em silencio E o comportamento certo.
+    if (sessao == null) return;
+    if (!mounted) return;
+
+    await escopo.sessao.abrir(sessao);
+    // DAQUI PARA BAIXO E O MESMO FIM DE `_entrar`, e de proposito: o contrato
+    // devolve a MESMA `SessionResponse` nas duas portas, e a secao 8.3 vale
+    // igual -- quem tocou em `Registrar achado` antes de entrar nao toca de
+    // novo porque entrou pela biometria. Duplicar as duas linhas e mais
+    // honesto que extrair um metodo: elas precisam ficar iguais, e um metodo
+    // compartilhado esconderia o dia em que uma das duas portas precisar de
+    // outro destino.
+    final destino = await escopo.guarda.executarDepoisDoLogin();
+    if (!mounted) return;
+    irParaODestinoDoLogin(context, destino);
+  }
+
+  @override
   void dispose() {
     _email.dispose();
     _senha.dispose();
