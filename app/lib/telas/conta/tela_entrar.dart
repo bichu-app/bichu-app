@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -230,6 +232,27 @@ class _TelaEntrarState extends State<TelaEntrar> {
         senha: _senha.text,
       );
       await escopo.sessao.abrir(sessao);
+      // A MARCA DO APARELHO, POSTA EM DIA -- e **sem `await`**, de proposito
+      // (28/10/2026).
+      //
+      // A entrada por passkey agora exige sinal local de que ha credencial
+      // aqui, e a marca nasce de um cadastro feito NESTE aparelho. Credencial
+      // que chegou por sincronizacao (Google Password Manager, Chaveiro do
+      // iCloud), por reinstalacao ou por restauracao de backup nao tem marca --
+      // e sem esta linha a pessoa teria passkey e um app que nunca a tentaria.
+      //
+      // `reconciliarComAConta` NAO ESTOURA e nao devolve nada que esta tela
+      // use. Esperar por ela seria por uma leitura auxiliar no caminho critico
+      // de uma entrada que **ja deu certo**: a sessao esta aberta, e segurar a
+      // navegacao atras de `listPasskeys` poria o giro do botao na frente de
+      // quem acabou de entrar. O efeito dela aparece na ABERTURA SEGUINTE da
+      // tela, que e quando o portao e consultado -- e ela tem o resto desta
+      // sessao do app para terminar.
+      //
+      // `unawaited` e nao chamada pelada: `unawaited_futures` reprova a
+      // segunda, e um `Future` esquecido sem marca nenhuma e o jeito de
+      // ninguem notar que ele existe.
+      unawaited(escopo.passkey.reconciliarComAConta());
       // O destino depois do login e a intencao pendente (UX 8.3), e nao a
       // home. **A acao guardada e executada aqui**, antes de qualquer
       // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a

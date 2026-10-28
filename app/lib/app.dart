@@ -32,6 +32,7 @@ import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/credencial_do_aparelho.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'dispositivo/passkey_neste_aparelho.dart';
 import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
 import 'sessao/contador_de_avisos.dart';
@@ -79,6 +80,7 @@ class BichuApp extends StatefulWidget {
     this.cofreDoQr,
     this.cacheDeImagens,
     this.depositoDeOportunidades,
+    this.depositoDePasskeyNoAparelho,
     this.depositoDoAvisoDeCadastro,
     this.agora,
     this.depositoDaFila,
@@ -244,6 +246,18 @@ class BichuApp extends StatefulWidget {
   /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
   final DepositoDeOportunidades? depositoDeOportunidades;
 
+  /// Onde mora a marca de "ha credencial digital neste aparelho" (28/10/2026).
+  ///
+  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
+  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o teste
+  /// de widget num `Future` que nunca resolve.
+  ///
+  /// **E e o unico jeito de um caso provar as DUAS metades da isca**: sem marca
+  /// a tela de entrar nao pode gastar requisicao nenhuma, e com marca ela tem
+  /// de entrar sem toque extra. Nenhum teste produz o segundo estado passando
+  /// pelo cadastro primeiro, porque cada `pumpWidget` e um app novo.
+  final DepositoDePasskeyNoAparelho? depositoDePasskeyNoAparelho;
+
   /// Onde o registro de dispensas do aviso persistente mora (BICHUS-75).
   ///
   /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
@@ -310,6 +324,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final LeitorDeQr _leitorDeQr;
   late final PasskeysApi _passkeys;
   late final CredencialDoAparelho _credencialDoAparelho;
+  late final PasskeyNesteAparelho _passkeyNesteAparelho;
   late final FiacaoDoPasskey _passkey;
   late final Avisos _avisos;
   late final Localizacao _localizacao;
@@ -461,9 +476,15 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _passkeys = PasskeysApi(_api);
     _credencialDoAparelho =
         widget.credencialDoAparelho ?? CredencialDoAparelhoReal();
+    _passkeyNesteAparelho = PasskeyNesteAparelho(
+      deposito:
+          widget.depositoDePasskeyNoAparelho ?? DepositoDePasskeyEmArquivo(),
+      agora: widget.agora ?? DateTime.now,
+    );
     _passkey = FiacaoDoPasskey(
       passkeys: _passkeys,
       aparelho: _credencialDoAparelho,
+      registro: _passkeyNesteAparelho,
     );
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _oportunidades = OportunidadesDeAviso(
@@ -921,6 +942,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       camera: _camera,
       leitorDeQr: _leitorDeQr,
       credencialDoAparelho: _credencialDoAparelho,
+      passkeyNesteAparelho: _passkeyNesteAparelho,
       passkey: _passkey,
       avisos: _avisos,
       avisosRecebidos: _avisosRecebidos,

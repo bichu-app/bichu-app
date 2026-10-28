@@ -36,6 +36,7 @@ import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/dispositivo/credencial_do_aparelho.dart';
+import 'package:bichu/dispositivo/passkey_neste_aparelho.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
@@ -646,6 +647,18 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// a tela de entrar tentando a passkey ao abrir, nao achando nenhuma, e nao
   /// atrapalhando a senha. Quem precisa do outro caminho passa o seu.
   CredencialDoAparelho? credencialDoAparelho,
+  /// Onde mora a marca de "ha credencial digital neste aparelho"
+  /// (28/10/2026).
+  ///
+  /// **O padrao e um deposito VAZIO, e e o padrao certo**: sem marca, a tela de
+  /// entrar nao pede desafio nenhum ao abrir -- que e o estado de quase todo
+  /// mundo e o que a maioria dos casos quer medir. Quem precisa do outro
+  /// caminho passa um `DepositoDePasskeyEmMemoria` ja marcado.
+  ///
+  /// O padrao NAO pode ser `DepositoDePasskeyEmArquivo`:
+  /// `getApplicationDocumentsDirectory` e canal de plataforma e travaria num
+  /// `Future` que nunca resolve.
+  DepositoDePasskeyNoAparelho? depositoDePasskeyNoAparelho,
   Avisos? avisos,
   /// A porta das mensagens de push. **O unico jeito de um caso exercitar os
   /// tres estados**: nao ha como pedir ao Flutter que mate o processo e o
@@ -787,6 +800,9 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         // verdade estouraria `MissingPluginException` dentro de um `Future`.
         credencialDoAparelho:
             credencialDoAparelho ?? const SemPasskeyNesteBuild(),
+        // Ver o doc do parametro: VAZIO por padrao, e nunca o de arquivo.
+        depositoDePasskeyNoAparelho:
+            depositoDePasskeyNoAparelho ?? DepositoDePasskeyEmMemoria(),
       ),
     ),
   );
