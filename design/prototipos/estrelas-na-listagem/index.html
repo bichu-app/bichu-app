@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estrelas na listagem da Comunidade — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block" rel="stylesheet">
+<style>
+:root{
+  /* Tokens de design/tokens.json, tema claro (os mesmos valores que
+     app/lib/theme/bichu_tokens.g.dart emite). Nenhum valor aqui foi
+     inventado para este protótipo. */
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --outline:#DFDED8; --outline-control:#827F73;
+  --community-fill:#A9CFBB; --action-fill:#E7B93E; --accent-fill:#E8A7A0;
+  --disabled-surface:#F4F3F1; --on-disabled:#827F73;
+  /* espaço */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px;
+  --e10:40px; --e12:48px;
+  /* raio */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px; --alvo-critico:64px;
+  /* moldura: BichuMoldura.larguraFotoSm — o quadrado da logo no cartão */
+  --logo:56px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#2A2824; color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- painel de controle ---------------- */
+.painel{
+  position:sticky; top:0; z-index:50;
+  background:#1C1B19; color:#FAFAF8;
+  padding:10px var(--e5) 8px;
+  border-bottom:1px solid #3A3833;
+  max-height:52vh; overflow-y:auto;
+}
+.painel h1{font-size:15px;margin:0 0 1px;font-weight:700;letter-spacing:.01em}
+.painel .sub{font-size:11.5px;color:#B5B2A8;margin:0 0 8px}
+.linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.linha .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8E8B82;margin-right:var(--e1)}
+.chip{
+  font:inherit;font-size:12px;font-weight:600;
+  background:#312F2A;color:#E8E6DE;border:1px solid #46433C;
+  border-radius:var(--r-full);padding:6px 12px;cursor:pointer;
+}
+.chip:hover{background:#3C3933}
+.chip[aria-pressed="true"]{background:#FAFAF8;color:#1C1B19;border-color:#FAFAF8}
+.aviso{
+  font-size:11.5px;line-height:1.5;color:#C9C6BC;background:#262420;
+  border-left:3px solid var(--action-fill);padding:8px 10px;border-radius:0 6px 6px 0;
+  margin-top:var(--e2);
+}
+.aviso.reco{border-left-color:var(--community-fill)}
+.aviso.alerta{border-left-color:#E8A7A0}
+.painel code{background:#312F2A;padding:1px 4px;border-radius:4px;font-size:11px}
+
+/* ---------------- palco ---------------- */
+.palco{display:flex;flex-wrap:wrap;gap:var(--e8);padding:var(--e8) var(--e5) 80px;justify-content:center;align-items:flex-start}
+.caso{display:none}
+.caso.ativo{display:block}
+.par{display:flex;gap:var(--e8);flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.rotulo-tela{
+  color:#E8E6DE;font-size:13px;font-weight:600;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.rotulo-tela .w{color:#8E8B82;font-weight:400;font-size:11px}
+.nota-tela{color:#A8A59B;font-size:11.5px;line-height:1.5;max-width:420px;margin:0 0 var(--e3)}
+
+/* ---------------- aparelho ---------------- */
+.aparelho{
+  width:var(--tela,412px);
+  height:760px;
+  background:var(--surface);
+  border-radius:var(--r-xl);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
+  position:relative;
+}
+
+/* ---------------- barra de topo ---------------- */
+.topo{
+  height:var(--alvo-critico);min-height:var(--alvo-critico);
+  background:var(--surface);
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--outline);
+}
+.topo .ham{width:64px;height:64px;display:grid;place-items:center;flex:0 0 64px}
+.topo .tit{
+  flex:1 1 auto;min-width:0;
+  font-size:22px;font-weight:600;line-height:28px; /* titleLg */
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topo .acao{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px;position:relative}
+.topo .foto{
+  width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--community-fill);color:var(--text-primary);
+  display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+
+/* ---------------- corpo e abas ---------------- */
+.corpo{flex:1 1 auto;overflow-y:auto;padding:var(--e4);position:relative}
+.abas{display:flex;border-bottom:1px solid var(--outline);margin:0 0 var(--e4)}
+.abas button{
+  flex:1 1 0;min-width:0;background:none;border:0;cursor:pointer;
+  font:inherit;font-size:14px;font-weight:600;color:var(--text-secondary);
+  height:var(--alvo-min);padding:0 4px;
+  border-bottom:2px solid transparent;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.abas button[aria-selected="true"]{color:var(--primary);border-bottom-color:var(--primary)}
+
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24;
+  color:var(--text-primary);
+  /* se a fonte nao carregar (sem rede) aparece o NOME do glifo, que e
+     exatamente o nome proposto -- falha que informa em vez de enganar */
+  max-width:28px;overflow:hidden;
+}
+.ms.cheio{font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}
+/* O `0..1` do eixo FILL na URL do Google Fonts NAO e enfeite: pedindo
+   `FILL@...,0` a folha entrega uma instancia ESTATICA de FILL 0, e
+   `font-variation-settings:'FILL' 1` nao faz nada -- a estrela "cheia" sai
+   vazada e o protótipo mente sobre o desenho. Medido neste arquivo. Os
+   protótipos anteriores desta pasta carregam a URL estatica. */
+.ms.p{font-size:20px;max-width:24px}
+
+/* ---------------- barra de listagem (TOPO DO CORPO, nunca na barra) ----------
+   Padrão de listagem do projeto: busca, filtro e ordenação ficam no topo do
+   corpo da tela. Esta parte do protótipo é a tela de hoje, redesenhada em
+   nada: ela está aqui só para a estrela ser julgada no lugar certo.
+*/
+.listagem{margin-bottom:var(--e2)}
+.listagem .linha1{display:flex;gap:var(--e2);align-items:center}
+.gatilho{
+  width:48px;height:48px;flex:0 0 48px;border-radius:var(--r-md);
+  border:1px solid var(--outline-control);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;position:relative;
+}
+.busca{
+  flex:1 1 auto;min-width:0;height:48px;
+  border:1px solid var(--outline-control);border-radius:var(--r-md);
+  background:var(--surface);display:flex;align-items:center;
+  padding:0 var(--e2) 0 var(--e3);gap:var(--e2);
+}
+.busca input{
+  flex:1 1 auto;min-width:0;border:0;outline:0;background:none;
+  font:inherit;font-size:16px;color:var(--text-primary);
+}
+.busca input::placeholder{color:var(--text-muted)}
+.busca .lupa{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;
+  border-radius:var(--r-sm);border:0;background:none;cursor:pointer}
+.ordem{
+  display:flex;align-items:center;gap:var(--e1);
+  font-size:13px;line-height:18px;color:var(--text-secondary);
+  margin:var(--e3) 0 var(--e2);
+}
+.ordem .ms{font-size:18px;max-width:20px;color:var(--text-secondary)}
+.ordem b{color:var(--text-primary);font-weight:600}
+.resumo{font-size:14px;line-height:20px;color:var(--text-secondary);margin:0 0 var(--e4)}
+.aviso-tela{
+  display:flex;gap:var(--e2);align-items:flex-start;
+  background:var(--surface-sunken);border-radius:var(--r-md);
+  padding:var(--e3);margin:0 0 var(--e4);
+  font-size:12px;line-height:16px;color:var(--text-secondary);
+}
+.aviso-tela .ms{font-size:18px;max-width:20px;color:var(--text-secondary);flex:0 0 20px}
+
+/* ---------------- o cartão do diretório ----------------
+   As CINCO coisas de 22/10/2026 (logo, nome, segmento, bairro, Ligar) estão
+   desenhadas exatamente como estão hoje em
+   app/lib/telas/perto/lista_do_diretorio.dart. A linha da avaliação é a
+   ÚNICA coisa nova nesta tela: ela entra como a última linha de texto, entre
+   o bairro e o botão `Ligar`, dentro da mesma parada de foco do nome.
+*/
+.local{
+  width:100%;border:1px solid var(--outline);border-radius:var(--r-lg);
+  background:var(--surface);padding:var(--e4);margin-bottom:var(--e4);
+}
+.local .tocavel{
+  display:block;text-align:left;font:inherit;color:inherit;
+  background:none;border:0;padding:0;width:100%;cursor:pointer;
+  border-radius:var(--r-md);
+}
+.local .cabeca{display:flex;align-items:flex-start;gap:var(--e3)}
+.local .logo{
+  width:var(--logo);height:var(--logo);flex:0 0 var(--logo);
+  border-radius:var(--r-sm);background:var(--surface-sunken);
+  display:grid;place-items:center;overflow:hidden;
+}
+.local .logo .ms{color:var(--text-muted)}
+.local .logo.marca{background:var(--primary-container)}
+.local .logo.marca span{font-weight:700;font-size:18px;color:var(--on-primary-container);font-family:Inter,sans-serif}
+.local .nome{
+  flex:1 1 auto;min-width:0;
+  font-size:18px;line-height:24px;font-weight:600; /* titleMedium */
+}
+.local .seg{font-size:16px;line-height:24px;color:var(--text-secondary);margin-top:var(--e1)}
+.local .bairro{font-size:16px;line-height:24px;color:var(--text-secondary);margin-top:var(--e1)}
+.local .ligar{
+  display:inline-flex;align-items:center;gap:var(--e2);
+  height:var(--alvo-min);padding:0 var(--e3);margin-top:var(--e3);
+  border:0;background:none;border-radius:var(--r-sm);cursor:pointer;
+  font:inherit;font-size:16px;font-weight:600;color:var(--primary);
+}
+.local .ligar .ms{color:var(--primary);font-size:24px}
+
+/* ============ A LINHA DA AVALIAÇÃO ============
+   Duas variações, UMA diferença: a forma da estrela. Posição, tinta, medida,
+   texto e ordem são idênticas nas duas, para o cliente comparar uma coisa só.
+
+   A TINTA DA ESTRELA É O CARMIM (`primary`), e não o dourado:
+   - a página do local já desenha estrela em `cores.primary`
+     (`_Estrelas` de pagina_do_local.dart). O cartão e a página mostram a
+     MESMA média; duas tintas para o mesmo dado seriam duas informações.
+   - o dourado do sistema é `action-fill` (`butter.400`), que dá 1,76:1 contra
+     a superfície e é SÓ PREENCHIMENTO por decisão de token. Uma estrela
+     carrega informação, então ela precisa de 3:1 (WCAG 1.4.11). `butter.500`
+     dá 2,25:1 e também não passa. O carmim dá 7,84:1.
+   A estrela vazia é `surface-sunken`, como na página do local — ver o aviso
+   do painel: ela dá 1,06:1 e praticamente não aparece.
+*/
+.aval{
+  display:flex;align-items:center;gap:var(--e2);
+  margin-top:var(--e2);flex-wrap:wrap;
+}
+.aval .media{
+  font-size:14px;line-height:18px;font-weight:600;letter-spacing:.01em; /* label */
+  color:var(--text-primary);
+}
+.aval .conta{font-size:14px;line-height:20px;color:var(--text-secondary)} /* bodySmall */
+.aval .sep{color:var(--text-muted);font-size:14px;line-height:20px}
+.aval .sem{font-size:14px;line-height:20px;color:var(--text-muted)}
+
+/* variação A: UMA estrela, cheia, e o número ao lado */
+.estrela-una{font-size:16px;max-width:18px;color:var(--primary)}
+
+/* variação B: CINCO estrelas, preenchidas por fração.
+   Mesmo desenho do produto: uma fileira vazia por baixo e uma fileira cheia
+   por cima, recortada pela fração — meia estrela sem precisar de um glifo de
+   meia estrela, que não existe em toda medida. */
+.estrelas{position:relative;display:inline-block;height:16px;line-height:16px;flex:0 0 auto}
+.estrelas .fileira{display:flex;line-height:16px}
+.estrelas .fileira .ms{font-size:16px;max-width:16px;width:16px;height:16px;line-height:16px}
+.estrelas .vazia .ms{color:var(--surface-sunken)}
+/* `left/top/bottom` e NÃO `inset:0`: com `right:0` e `width` juntos o caso é
+   sobre-restrito, e depender de qual dos dois o navegador descarta é fiação
+   que funciona por acidente. */
+.estrelas .cheia{position:absolute;left:0;top:0;bottom:0;overflow:hidden}
+.estrelas .cheia .ms{color:var(--primary)}
+
+/* ---------------- a prancheta dos estados ---------------- */
+.estado-rot{
+  font-size:11px;line-height:14px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-muted);
+  margin:var(--e5) 0 var(--e2);
+}
+.estado-rot:first-child{margin-top:0}
+.estado-nota{font-size:12px;line-height:16px;color:var(--text-secondary);margin:0 0 var(--e2)}
+
+/* ---------------- lado a lado ---------------- */
+.cab-par{
+  color:#E8E6DE;font-size:12px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;margin:0 0 var(--e2);
+}
+.cab-par.b{color:#C9C6BC}
+</style>
+</head>
+<body>
+
+<div class="painel">
+  <h1>Estrelas na listagem da Comunidade — protótipo de desenho</h1>
+  <p class="sub">Bichu · BICHUS-313 · 28/10/2026 · sobre <code>origin/development</code> em <code>675c516c</code> · substitui o Figma por autorização do cliente de 23/09 (a conta não tem cota) · pedido dele: <em>"a listagem da comunidade, vamos incluir umas estrelinhas com a avaliação de cada estabelecimento"</em></p>
+
+  <div class="linha">
+    <span class="rot">Largura</span>
+    <button class="chip" data-w="320" aria-pressed="false">320 dp</button>
+    <button class="chip" data-w="375" aria-pressed="false">375 dp</button>
+    <button class="chip" data-w="412" aria-pressed="true">412 dp</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Tela</span>
+    <button class="chip" data-t="lista" aria-pressed="true">a lista (20 cartões)</button>
+    <button class="chip" data-t="par" aria-pressed="false">A ao lado de B</button>
+    <button class="chip" data-t="estados" aria-pressed="false">os 4 estados do dado</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Variação</span>
+    <button class="chip" data-v="A" aria-pressed="true">A · uma estrela e o número</button>
+    <button class="chip" data-v="B" aria-pressed="false">B · cinco estrelas parciais</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Povoamento</span>
+    <button class="chip" data-p="hoje" aria-pressed="true">como está hoje (4 de 20 com nota)</button>
+    <button class="chip" data-p="maduro" aria-pressed="false">lista madura (18 de 20)</button>
+  </div>
+
+  <p class="aviso reco"><strong>Recomendação: a variação A</strong> — uma estrela cheia e <code>4,8 · 128 avaliações</code>. Em vinte linhas, cinco estrelas repetidas cem vezes viram a textura mais forte da tela e competem com o nome do estabelecimento, que é o que a pessoa está procurando; uma estrela só diz a mesma nota com um quinto da tinta. Troque o povoamento para <em>lista madura</em> e compare as duas: é exatamente isso que este protótipo existe para mostrar antes de virar código. <strong>Medido aqui:</strong> em 320, 375 e 412 dp a linha da avaliação cabe numa linha só nas DUAS variações, e as vinte linhas medem a MESMA altura (5.604 px a 412 dp) em A e em B — então a escolha entre elas não é de espaço nem de rolagem, é só de quanta tinta a estrela gasta.</p>
+
+  <p class="aviso"><strong>A estrela é CARMIM e não dourada, e isso é medido.</strong> A página do local já desenha a estrela em <code>primary</code> (<code>_Estrelas</code> de <code>pagina_do_local.dart</code>) — o cartão mostra a MESMA média, e duas tintas para o mesmo dado seriam duas informações. Além disso o dourado do sistema é <code>action-fill</code> (<code>butter.400</code>), que dá <strong>1,76:1</strong> contra a superfície e é só preenchimento por decisão de token; <code>butter.500</code> dá 2,25:1. Uma estrela carrega informação e precisa de 3:1. O carmim dá <strong>7,84:1</strong>.</p>
+
+  <p class="aviso alerta"><strong>O que a variação B tem contra ela, além do peso:</strong> a estrela vazia é <code>surface-sunken</code> contra <code>surface</code> — <strong>1,06:1</strong>, praticamente invisível. Então B não se lê como "4 de 5": lê-se como "quatro estrelas e um pedaço", e o denominador desaparece. Na página do local isso custa pouco, porque a média em corpo grande e o <code>de 5</code> estão ao lado. No cartão não há nenhum dos dois.</p>
+
+  <p class="aviso"><strong>O dado é o do contrato, e ele tem QUATRO estados e não dois</strong> (<code>DirectoryEntrySummary.rating</code> → <code>DirectoryRating</code>, <code>api/openapi.yaml</code>). Veja a tela <em>os 4 estados do dado</em>: <code>count &gt; 1</code>, <code>count = 1</code> (singular), <code>count = 0</code> com <code>average</code> nulo → <strong>"Ainda sem avaliações", sem estrela nenhuma</strong>, e o campo <code>rating</code> <strong>ausente</strong> → <strong>nenhuma linha</strong>. Os dois últimos são diferentes e não podem virar o mesmo desenho: ausente é "esta resposta não trouxe a agregação", zero é "ninguém avaliou ainda". A média tem uma casa decimal e vírgula, e o servidor é que arredonda.</p>
+
+  <p class="aviso alerta"><strong>Isto reabre uma decisão dele de 22/10/2026</strong>, e quem for implementar precisa saber: naquele dia o cliente pediu <em>"a listagem dos profissionais deve ser apenas o logo, nome, segmento, endereço e botão de ligar, remova as informações adicionais, deixe apenas na página interna"</em> — e a média e a contagem foram justamente uma das quatro coisas removidas. O pedido de hoje devolve uma delas. O cartão passa de cinco para <strong>seis</strong> coisas, e a prosa de <code>lista_do_diretorio.dart</code> que diz "CINCO COISAS, E SÓ ELAS" vira mentira no commit que implementar isto. As outras três (distância, apresentação, selo do verificado) <strong>continuam fora</strong>: este protótipo não as traz de volta.</p>
+
+  <p class="aviso"><strong>O que este protótipo não mexeu, de propósito:</strong> não há foto do lugar no cartão (a faixa 16:9 mora só na página do local — vinte faixas custariam 65,6 MiB de imagem decodificada; a estrela é barata, a foto não), não há mapa (17/09), a ordem e o aviso de "saiu por nome" estão como estão hoje, e busca, filtro e ordenação continuam no topo do corpo da tela e não na barra.</p>
+</div>
+
+<div class="palco">
+
+  <!-- ====================== A LISTA ====================== -->
+  <div class="caso ativo" id="caso-lista">
+    <p class="rotulo-tela">Comunidade › Perto — a lista <span class="w" data-w-eco>· 412 dp</span> <span class="w" data-v-eco>· variação A</span></p>
+    <p class="nota-tela">Vinte cartões, que é o tamanho de uma página de <code>listDirectoryEntries</code>. O peso visual da estrela só aparece em quantidade: role a lista inteira e troque a variação no painel sem rolar de volta.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Comunidade</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo" id="corpo-lista">
+        <div class="abas">
+          <button aria-selected="false">Rede</button>
+          <button aria-selected="true">Perto</button>
+          <button aria-selected="false">Grupos</button>
+        </div>
+        <div class="listagem">
+          <div class="linha1">
+            <div class="busca">
+              <input type="text" placeholder="Buscar por nome" aria-label="Buscar por nome">
+              <button class="lupa" aria-label="Buscar"><span class="ms">search</span></button>
+            </div>
+            <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+          </div>
+        </div>
+        <p class="ordem"><span class="ms">sort</span>Ordem: <b>Nome</b></p>
+        <div class="aviso-tela">
+          <span class="ms">info</span>
+          <span>A lista saiu por nome porque não há localização de referência. Mostrando profissionais de todas as cidades.</span>
+        </div>
+        <p class="resumo">34 profissionais</p>
+        <div data-lista></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== LADO A LADO ====================== -->
+  <div class="caso" id="caso-par">
+    <p class="rotulo-tela">A ao lado de B — os mesmos seis cartões <span class="w" data-w-eco>· 412 dp</span></p>
+    <p class="nota-tela">Os dois aparelhos mostram as MESMAS seis entradas, com os mesmos números. A única diferença entre eles é a forma da estrela.</p>
+    <div class="par">
+      <div>
+        <p class="cab-par">A · uma estrela e o número</p>
+        <div class="aparelho">
+          <div class="topo">
+            <div class="ham"><span class="foto">L</span></div>
+            <div class="tit">Comunidade</div>
+            <div class="acao"><span class="ms">notifications</span></div>
+          </div>
+          <div class="corpo"><div data-par="A"></div></div>
+        </div>
+      </div>
+      <div>
+        <p class="cab-par b">B · cinco estrelas parciais</p>
+        <div class="aparelho">
+          <div class="topo">
+            <div class="ham"><span class="foto">L</span></div>
+            <div class="tit">Comunidade</div>
+            <div class="acao"><span class="ms">notifications</span></div>
+          </div>
+          <div class="corpo"><div data-par="B"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== OS ESTADOS ====================== -->
+  <div class="caso" id="caso-estados">
+    <p class="rotulo-tela">Os quatro estados do dado <span class="w" data-w-eco>· 412 dp</span> <span class="w" data-v-eco>· variação A</span></p>
+    <p class="nota-tela">Cada cartão abaixo é um estado que o contrato produz, no tamanho real. O terceiro é o estado frequente de hoje, e não é erro.</p>
+    <div class="aparelho">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Comunidade</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo" id="corpo-estados"><div data-estados></div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ------------------------------------------------------------------
+     Os dados. Todos os números são de mentira, mas cada FORMA é a do
+     contrato: `average` com uma casa, nulo quando `count` é zero, e
+     `rating` ausente (aqui `rating: null`) como terceiro caso.
+     ------------------------------------------------------------------ */
+  var LISTA = [
+    {nome:'Clínica Veterinária Santa Bárbara', seg:'Clínica veterinária', bairro:'Pinheiros', sigla:'SB', tel:true,  rating:{m:4.8,  n:128}},
+    {nome:'Au Au Banho e Tosa',                seg:'Banho e tosa',        bairro:'Vila Mariana', sigla:null, tel:true,  rating:{m:4.6,  n:41}},
+    {nome:'Dra. Helena Ribeiro',               seg:'Médica veterinária',  bairro:'Itaim Bibi', sigla:'HR', tel:true,  rating:{m:5.0,  n:9}},
+    {nome:'Pet Center Tatuapé',                seg:'Petshop',             bairro:'Tatuapé',    sigla:null, tel:true,  rating:{m:3.4,  n:17}},
+    {nome:'Hospital Veterinário Anhembi',      seg:'Hospital veterinário',bairro:'Santana',    sigla:'HA', tel:true,  rating:{m:4.2,  n:63}},
+    {nome:'Banho Feliz',                       seg:'Banho e tosa',        bairro:'Butantã',    sigla:null, tel:true,  rating:{m:2.5,  n:4}},
+    {nome:'Adestrando com Carinho',            seg:'Adestramento',        bairro:'Perdizes',   sigla:'AC', tel:false, rating:{m:4.9,  n:22}},
+    {nome:'Clínica Pata Amiga',                seg:'Clínica veterinária', bairro:'Ipiranga',   sigla:null, tel:true,  rating:{m:4.1,  n:1}},
+    {nome:'Vet Express 24h',                   seg:'Hospital veterinário',bairro:'Moema',      sigla:'VE', tel:true,  rating:{m:3.9,  n:210}},
+    {nome:'Cão & Cia Hotelzinho',              seg:'Hospedagem',          bairro:'Lapa',       sigla:null, tel:true,  rating:{m:4.7,  n:35}},
+    {nome:'Dr. Rafael Mendonça',               seg:'Médico veterinário',  bairro:'Saúde',      sigla:'RM', tel:true,  rating:{m:4.4,  n:12}},
+    {nome:'Petshop do Bairro',                 seg:'Petshop',             bairro:null,         sigla:null, tel:true,  rating:{m:3.1,  n:6}},
+    {nome:'Clínica Vida Animal',               seg:'Clínica veterinária', bairro:'Jabaquara',  sigla:'VA', tel:true,  rating:{m:4.5,  n:52}},
+    {nome:'Tosa Chic',                         seg:'Banho e tosa',        bairro:'Jardins',    sigla:null, tel:true,  rating:{m:4.0,  n:28}},
+    {nome:'Agro e Pet Penha',                  seg:'Petshop',             bairro:'Penha',      sigla:null, tel:true,  rating:{m:3.7,  n:15}},
+    {nome:'Fisioterapia Animal Sul',           seg:'Fisioterapia',        bairro:'Campo Belo', sigla:'FA', tel:true,  rating:{m:4.8,  n:7}},
+    {nome:'Clínica Bichinho Bom',              seg:'Clínica veterinária', bairro:'Freguesia do Ó', sigla:null, tel:true, rating:{m:4.3, n:19}},
+    {nome:'Leva e Traz Pet',                   seg:'Transporte',          bairro:'Santo Amaro',sigla:'LT', tel:true,  rating:{m:4.6,  n:31}},
+    {nome:'Consultório Vet Norte',             seg:'Clínica veterinária', bairro:'Tucuruvi',   sigla:null, tel:true,  rating:{m:0,    n:0}},
+    {nome:'Pet Shop da Esquina',               seg:'Petshop',             bairro:'Bela Vista', sigla:null, tel:true,  rating:null}
+  ];
+
+  /* COMO ESTÁ HOJE: as avaliações nasceram em 18/10/2026. A maioria dos
+     locais não tem nota nenhuma, e é esse o desenho que vai para a rua
+     primeiro. Os índices que GUARDAM a nota no povoamento "hoje": */
+  var COM_NOTA_HOJE = [0, 4, 8, 12];
+
+  /* Os seis do lado a lado: uma nota alta, uma média, uma baixa, o singular,
+     o zero e o ausente. */
+  var SEIS = [0, 4, 5, 7, 18, 19];
+
+  var ESTADOS = [
+    {
+      rot:'1 · count maior que 1',
+      nota:'O caso cheio: média com uma casa decimal e vírgula, e a contagem no plural.',
+      dado:LISTA[0]
+    },
+    {
+      rot:'2 · count = 1',
+      nota:'Singular: `1 avaliação`, e não `1 avaliações`. Uma nota só já desenha estrela.',
+      dado:LISTA[7]
+    },
+    {
+      rot:'3 · count = 0, average nulo',
+      nota:'"Ainda sem avaliações", SEM ESTRELA NENHUMA e sem `0,0` — zero se lê como "péssimo", e um local que ninguém avaliou não é péssimo. Estado frequente, e não erro.',
+      dado:LISTA[18]
+    },
+    {
+      rot:'4 · rating AUSENTE na resposta',
+      nota:'Campo opcional no contrato: o cartão não desenha linha nenhuma. Diferente do estado 3 — ausente é "esta resposta não trouxe a agregação", zero é "ninguém avaliou". É a mesma regra do bairro nulo e da distância nula.',
+      dado:LISTA[19]
+    }
+  ];
+
+  /* ------------------------------------------------------------------
+     Formatação. Nenhuma string nova: `mediaEmTexto` e `quantidadeEmTexto`
+     são as de `PontuacaoDoLocal` em app/lib/api/modelos_diretorio.dart.
+     ------------------------------------------------------------------ */
+  function mediaEmTexto(m){ return m.toFixed(1).replace('.', ','); }
+  function quantidadeEmTexto(n){ return n === 1 ? '1 avaliação' : n + ' avaliações'; }
+  function rotuloAcessivel(r){
+    if (!r || r.n === 0) return 'Ainda sem avaliações';
+    return 'Média ' + mediaEmTexto(r.m) + ' de 5 estrelas, ' + quantidadeEmTexto(r.n);
+  }
+
+  function esc(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* A linha da avaliação, nas duas variações e nos quatro estados. */
+  function linhaDaAvaliacao(r, variacao){
+    /* Estado 4: `rating` ausente. NENHUMA LINHA. */
+    if (!r) return '';
+
+    /* Estado 3: count zero. O texto, e estrela nenhuma. */
+    if (r.n === 0) {
+      return '<p class="aval"><span class="sem">Ainda sem avaliações</span></p>';
+    }
+
+    var media = mediaEmTexto(r.m);
+    var conta = quantidadeEmTexto(r.n);
+
+    if (variacao === 'A') {
+      return '<p class="aval">'
+        + '<span class="ms cheio estrela-una" aria-hidden="true">star</span>'
+        + '<span class="media">' + media + '</span>'
+        + '<span class="sep">·</span>'
+        + '<span class="conta">' + conta + '</span>'
+        + '</p>';
+    }
+
+    var pct = (Math.max(0, Math.min(5, r.m)) / 5 * 100).toFixed(2);
+    var cinco = '';
+    for (var i = 0; i < 5; i++) cinco += '<span class="ms cheio">star</span>';
+    return '<p class="aval">'
+      + '<span class="estrelas" aria-hidden="true">'
+      +   '<span class="fileira vazia">' + cinco + '</span>'
+      +   '<span class="cheia" style="width:' + pct + '%"><span class="fileira">' + cinco + '</span></span>'
+      + '</span>'
+      + '<span class="media">' + media + '</span>'
+      + '<span class="sep">·</span>'
+      + '<span class="conta">' + conta + '</span>'
+      + '</p>';
+  }
+
+  function cartao(d, variacao){
+    var logo = d.sigla
+      ? '<span class="logo marca" aria-hidden="true"><span>' + esc(d.sigla) + '</span></span>'
+      : '<span class="logo" aria-hidden="true"><span class="ms">storefront</span></span>';
+
+    /* A parada de foco única: nome, segmento, bairro e a avaliação. O `Ligar`
+       fica FORA dela, porque é controle com destino próprio. */
+    var partes = [d.nome, d.seg];
+    if (d.bairro) partes.push(d.bairro);
+    var rot = rotuloAcessivel(d.rating);
+    if (d.rating) partes.push(rot);
+
+    return '<div class="local">'
+      + '<button class="tocavel" aria-label="' + esc(partes.join('. ')) + '">'
+      +   '<span class="cabeca">' + logo + '<span class="nome">' + esc(d.nome) + '</span></span>'
+      +   '<p class="seg">' + esc(d.seg) + '</p>'
+      +   (d.bairro ? '<p class="bairro">' + esc(d.bairro) + '</p>' : '')
+      +   linhaDaAvaliacao(d.rating, variacao)
+      + '</button>'
+      + (d.tel
+          ? '<button class="ligar" aria-label="Ligar para ' + esc(d.nome) + '"><span class="ms">call</span>Ligar</button>'
+          : '')
+      + '</div>';
+  }
+
+  /* ------------------------------------------------------------------
+     Estado do painel
+     ------------------------------------------------------------------ */
+  var variacao = 'A';
+  var povoamento = 'hoje';
+
+  function dadosDaLista(){
+    return LISTA.map(function(d, i){
+      if (povoamento === 'maduro') return d;
+      /* "hoje": só os quatro de COM_NOTA_HOJE guardam a nota; o resto vira
+         count zero, menos o último, que continua sendo o `rating` ausente. */
+      if (COM_NOTA_HOJE.indexOf(i) >= 0) return d;
+      var c = Object.assign({}, d);
+      c.rating = (d.rating === null) ? null : {m:0, n:0};
+      return c;
+    });
+  }
+
+  function pintar(){
+    var alvo = document.querySelector('[data-lista]');
+    alvo.innerHTML = dadosDaLista().map(function(d){ return cartao(d, variacao); }).join('')
+      + '<p class="resumo" style="margin:var(--e2) 0 var(--e8)">Você viu todos os 34 profissionais desta região.</p>';
+
+    ['A','B'].forEach(function(v){
+      var p = document.querySelector('[data-par="' + v + '"]');
+      p.innerHTML = SEIS.map(function(i){ return cartao(LISTA[i], v); }).join('');
+    });
+
+    document.querySelector('[data-estados]').innerHTML = ESTADOS.map(function(e){
+      return '<p class="estado-rot">' + e.rot + '</p>'
+        + '<p class="estado-nota">' + e.nota + '</p>'
+        + cartao(e.dado, variacao);
+    }).join('');
+
+    document.querySelectorAll('[data-v-eco]').forEach(function(s){
+      s.textContent = '· variação ' + variacao;
+    });
+  }
+
+  /* troca de tela */
+  var casos = Array.prototype.slice.call(document.querySelectorAll('.caso'));
+  function mostrar(id){
+    casos.forEach(function(c){ c.classList.toggle('ativo', c.id === 'caso-' + id); });
+    document.querySelectorAll('.chip[data-t]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.t === id));
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.t); });
+  });
+
+  /* largura */
+  function largura(w){
+    document.querySelectorAll('.aparelho').forEach(function(a){ a.style.setProperty('--tela', w + 'px'); });
+    document.querySelectorAll('[data-w-eco]').forEach(function(s){ s.textContent = '· ' + w + ' dp'; });
+    document.querySelectorAll('.chip[data-w]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.w === w));
+    });
+  }
+  document.querySelectorAll('.chip[data-w]').forEach(function(b){
+    b.addEventListener('click', function(){ largura(b.dataset.w); });
+  });
+
+  /* variação e povoamento: redesenham sem rolar a página, para a comparação
+     acontecer com o olho no mesmo lugar da lista. */
+  document.querySelectorAll('.chip[data-v]').forEach(function(b){
+    b.addEventListener('click', function(){
+      variacao = b.dataset.v;
+      document.querySelectorAll('.chip[data-v]').forEach(function(x){
+        x.setAttribute('aria-pressed', String(x.dataset.v === variacao));
+      });
+      pintar();
+    });
+  });
+  document.querySelectorAll('.chip[data-p]').forEach(function(b){
+    b.addEventListener('click', function(){
+      povoamento = b.dataset.p;
+      document.querySelectorAll('.chip[data-p]').forEach(function(x){
+        x.setAttribute('aria-pressed', String(x.dataset.p === povoamento));
+      });
+      pintar();
+    });
+  });
+
+  /* O toque no cartão vai para a página do local, e o `Ligar` para o
+     discador. Aqui os dois só piscam: o protótipo não tem aqueles destinos,
+     e prometer destino que não existe é o defeito que o critério 2 da
+     BICHUS-62 proíbe. */
+  document.addEventListener('click', function(ev){
+    var alvo = ev.target.closest('.tocavel, .ligar');
+    if (!alvo) return;
+    alvo.style.outline = '3px solid var(--primary)';
+    alvo.style.outlineOffset = '2px';
+    setTimeout(function(){ alvo.style.outline = ''; }, 420);
+  });
+
+  pintar();
+  largura('412');
+})();
+</script>
+</body>
+</html>
