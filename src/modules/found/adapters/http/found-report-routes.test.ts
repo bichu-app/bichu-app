@@ -63,7 +63,7 @@ import {
   FoundReportService,
   TETO_DE_BYTES_DA_FOTO_DO_ACHADO,
 } from '../../application/found-report-service.js';
-import type { AchadoGravado } from '../../domain/registro-de-achado.js';
+import type { AchadoGravado, PetCorrespondente } from '../../domain/registro-de-achado.js';
 import type { Sugestao } from '../../domain/cruzamento.js';
 import type { FoundReportRepository } from '../../ports/found-report-repository.js';
 import type { AutorizacaoDeEnvio, ObjectStorage } from '../../../media/ports/object-storage.js';
@@ -95,6 +95,22 @@ const CASO_DO_SHARE_TOKEN = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 const AGORA = 1_800_000_000_000;
 const SHARE_TOKEN = 'tok'.padEnd(24, 'x');
 
+/**
+ * A base de MÍDIA, de onde sai `matched_pet.photo_url`.
+ *
+ * `BASE_DA_WEB` existe ao lado dela e **não é usada na fiação**: ela é o engano
+ * que o caso da foto tem de poder reprovar. As duas são hosts diferentes por
+ * decisão do cliente (ver a fiação em `src/bin/api.ts`), e um endereço montado
+ * sobre a base errada é exatamente o defeito que passou em `tag-routes.ts` até
+ * `foto-na-resolucao-da-tag.test.ts` cobrar a base certa por comparação.
+ */
+const BASE_DE_MIDIA = 'https://midia.bichu.test' as AbsoluteUrl;
+const BASE_DA_WEB = 'https://www.bichu.test' as AbsoluteUrl;
+
+/** `pet_photos.card_key` como o worker a grava: 128 bits aleatórios no caminho. */
+const CHAVE_DA_CAPA = 'pets/9f2c/card/4a7b1e0d9c3f.webp';
+const NOME_DO_PET = 'Aurora';
+
 interface Cenario {
   readonly contador?: RateLimitStore;
   /**
@@ -112,6 +128,14 @@ interface Cenario {
   readonly ampliacaoDesligada?: boolean;
   readonly statusDoAchado?: AchadoGravado['status'];
   readonly fotosJaPedidas?: number;
+  /**
+   * O pet JA identificado, quando o cenario tem um.
+   *
+   * Ausente por padrao de proposito: o achado avulso cruzado por semelhanca e o
+   * caso comum, e e nele que a emenda 7 do ADR-0010 manda foto e nome NAO
+   * sairem. Quem quer a foto pede o pet.
+   */
+  readonly petCorrespondente?: PetCorrespondente | null;
 }
 
 const gravadas: Sugestao[] = [];
@@ -130,6 +154,12 @@ function achadoGravado(ajustes: Partial<AchadoGravado> = {}): AchadoGravado {
     temFoto: false,
     observacao: 'Coleira azul, sem plaquinha.',
     criadoEm: new Date(AGORA),
+    // O PADRÃO É O ACHADO AVULSO SEM PET CERTO, e isso é o estado que a emenda
+    // 7 do ADR-0010 mantém fechado: `null` aqui é o que o repositório devolve
+    // quando `COALESCE(pet_id, lost_cases.pet_id)` não achou linha. Os casos
+    // que exigem a foto e o nome **pedem** o pet explicitamente, e é por isso
+    // que eles medem alguma coisa.
+    petCorrespondente: null,
     ...ajustes,
   };
 }
@@ -152,6 +182,7 @@ function repositorio(cenario: Cenario): FoundReportRepository {
     criar: (novo) =>
       Promise.resolve(
         achadoGravado({
+          petCorrespondente: cenario.petCorrespondente ?? null,
           id: novo.id,
           especie: novo.especie,
           porte: novo.porte,
@@ -163,17 +194,31 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       ),
     buscarDoRelator: (achado, dono) =>
       Promise.resolve(
-        meu(achado, dono) ? achadoGravado({ status: cenario.statusDoAchado ?? 'open' }) : null,
+        meu(achado, dono)
+          ? achadoGravado({
+              status: cenario.statusDoAchado ?? 'open',
+              petCorrespondente: cenario.petCorrespondente ?? null,
+            })
+          : null,
       ),
     listarDoRelator: (dono, limite) =>
       Promise.resolve({
-        itens: dono === RELATOR ? [achadoGravado()].slice(0, limite) : [],
+        itens:
+          dono === RELATOR
+            ? [achadoGravado({ petCorrespondente: cenario.petCorrespondente ?? null })].slice(
+                0,
+                limite,
+              )
+            : [],
         proximoCursor: null,
       }),
     enriquecer: (achado, dono, mudanca) =>
       Promise.resolve(
         meu(achado, dono) && (cenario.statusDoAchado ?? 'open') !== 'closed'
-          ? achadoGravado({ observacao: mudanca.observacao ?? null })
+          ? achadoGravado({
+              observacao: mudanca.observacao ?? null,
+              petCorrespondente: cenario.petCorrespondente ?? null,
+            })
           : null,
       ),
     statusDoRelator: (achado, dono) =>
@@ -272,6 +317,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
+    baseDeMidia: BASE_DE_MIDIA,
     // O contrato DE VERDADE: é ele que decide o schema do corpo, e uma cópia
     // aqui deixaria de acusar mudança na spec.
     contrato: carregarContrato('api/openapi.yaml'),
@@ -1175,5 +1221,275 @@ void describe('o teto de `ref_data_version` é o da coluna, e a recusa diz o lim
       'a recusa não diz qual é o limite. Sem o número, quem chamou não sabe para quanto ' +
         'encurtar e tenta de novo às cegas',
     );
+  });
+});
+
+// ===========================================================================
+// EMENDA 7 DO ADR-0010 (28/10/2026): A FOTO E O NOME DO PET
+// ===========================================================================
+//
+// A QUEIXA, repetida pelo cliente: o achado registrado aparece **sem foto nem
+// nome do pet**. A AUTORIZAÇÃO, hoje, literal: *"pode colocar a foto e o nome
+// do pet."*
+//
+// A frase não disse onde, e o recorte é da emenda: foto e nome saem nos dois
+// caminhos em que **quem lê já sabe qual animal é** — a plaquinha foi lida
+// (`origin: 'tag_scan'`), ou a pessoa colou o `share_token` que o tutor
+// publicou. No achado **avulso**, cruzado por semelhança, não saem: o cliente
+// mediu o golpe do falso achador em 20/10/2026, e foto e nome de um palpite da
+// máquina são o insumo que falta ao golpista para "achei seu pet" soar
+// verdadeiro.
+//
+// ## O QUE ESTE BLOCO MEDE, E O QUE ELE NÃO PODE MEDIR
+//
+// Aqui o repositório é **dublê**: ele devolve o pet que o caso lhe manda
+// devolver. Então este bloco prova que a BORDA projeta `matched_pet` quando o
+// recebe, e que ela não o inventa quando não recebe — o que é a metade de
+// cima da entrega.
+//
+// A metade de baixo — que a CONSULTA de verdade não traz o pet no achado
+// avulso — não é observável daqui, e um `JOIN` em `match_candidates`
+// acrescentado amanhã passaria por este arquivo inteiro. Ela é medida em
+// `../persistence/so-o-pet-certo-sai-no-achado.test.ts`, no SQL compilado.
+// Os dois arquivos juntos são a prova; nenhum deles sozinho é.
+//
+// ## DESLIGAR PARA VER REPROVAR -- medido (28/10/2026, Node 22.23.2)
+//
+// Linha de base deste arquivo: **48 casos, 48 passam, 0 reprovam.**
+//
+// | o que foi desligado em `found-report-routes.ts` | `fail` |
+// |---|---|
+// | `matched_pet` fixo em `null` (volta ao defeito de 28/10) | 5 |
+// | `matched_pet` montado SEMPRE, ignorando o nulo (alarga a emenda) | 1 |
+//
+// As duas linhas são o ponto, e elas reprovam casos DIFERENTES. A primeira
+// derruba os quatro casos de presença **e a isca do sentido contrário** -- que
+// é o que impede os casos de ausência de ficarem verdes sobre uma rota que
+// simplesmente não sabe projetar o pet. A segunda derruba só o caso de
+// ausência, e é a que importa para a privacidade: ela é a prova de que, no
+// achado avulso, a foto e o nome **não saem** porque a decisão diz que não
+// saem, e não por acidente de implementação.
+
+const PET_IDENTIFICADO = { nome: NOME_DO_PET, chaveDaFoto: CHAVE_DA_CAPA };
+
+void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () => {
+  void it('`matched_pet` traz o nome e a capa montada sobre a base de MÍDIA', async () => {
+    const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
+    const { status, corpo } = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: { ...CORPO_MINIMO, share_token: SHARE_TOKEN },
+    });
+    await app.close();
+
+    assert.equal(status, 201);
+    const pet = corpo['matched_pet'] as Record<string, unknown> | null;
+    assert.ok(
+      pet !== null && pet !== undefined,
+      'REPROVA: `matched_pet` não veio no 201 do registro. É a queixa do ' +
+        'cliente palavra por palavra — "não tem foto do pet" — e a autorização ' +
+        'de 28/10/2026 foi "pode colocar a foto e o nome do pet". Este corpo é ' +
+        'a PRIMEIRA resposta que a tela do achado lê.',
+    );
+    assert.equal(
+      pet['display_name'],
+      NOME_DO_PET,
+      `REPROVA: o nome do pet não saiu. Veio "${String(pet['display_name'])}".`,
+    );
+    assert.equal(
+      pet['photo_url'],
+      `${BASE_DE_MIDIA}/${CHAVE_DA_CAPA}`,
+      'REPROVA: a capa não é o endereço da chave sobre a base de MÍDIA. Veio ' +
+        `"${String(pet['photo_url'])}".`,
+    );
+  });
+
+  void it('a base é a de MÍDIA, e não a da web — elas são hosts diferentes por decisão', async () => {
+    // Sem este caso, o anterior ficaria satisfeito por qualquer base. As duas
+    // são hosts diferentes por decisão do cliente (ver a fiação em
+    // `src/bin/api.ts`), e montar sobre a errada é o defeito que passou em
+    // `tag-routes.ts` até `foto-na-resolucao-da-tag.test.ts` cobrar a certa.
+    const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
+    const { corpo, bruto } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
+    await app.close();
+
+    const pet = corpo['matched_pet'] as Record<string, unknown>;
+    assert.ok(
+      String(pet['photo_url']).startsWith(BASE_DE_MIDIA),
+      `REPROVA: a capa não sai sobre a base de MÍDIA. Veio "${String(pet['photo_url'])}".`,
+    );
+    assert.ok(
+      !bruto.includes(BASE_DA_WEB),
+      'REPROVA: o corpo carrega a base da WEB. A capa do pet mora no host de ' +
+        'mídia, e as duas bases são diferentes de propósito — apontar a tela ' +
+        `para o host errado pede uma derivada que não existe lá. Corpo: ${bruto}`,
+    );
+  });
+
+  void it('sem capa pronta, o nome sai e `photo_url` é nulo', async () => {
+    // O contrapeso: sem ele, os casos acima poderiam ser satisfeitos por um
+    // endereço constante. `null` aqui significa "este pet não tem capa pronta",
+    // nunca "a rota não sabe responder" — e `display_name` é `required` no
+    // contrato, então ele continua saindo.
+    const app = servidor({ petCorrespondente: { nome: NOME_DO_PET, chaveDaFoto: null } });
+    const { corpo } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
+    await app.close();
+
+    const pet = corpo['matched_pet'] as Record<string, unknown>;
+    assert.equal(pet['display_name'], NOME_DO_PET, 'REPROVA: o nome sumiu junto com a foto.');
+    assert.equal(
+      pet['photo_url'],
+      null,
+      'REPROVA: sem capa pronta a rota devolveu um endereço. Montar o endereço ' +
+        'de um objeto que o worker não gravou é prometer uma foto que vai dar ' +
+        `404. Veio "${String(pet['photo_url'])}".`,
+    );
+  });
+
+  void it('o detalhe e a LISTA trazem o pet, e não só o 201 do registro', async () => {
+    // A tela "Meus achados" lê a lista, e o cliente reclamou das duas. Um
+    // conserto que só alcançasse o 201 deixaria a lista como estava.
+    const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
+    const lista = await pedir(app, { url: '/found-reports' });
+    await app.close();
+
+    const itens = lista.corpo['items'] as Record<string, unknown>[];
+    assert.ok(itens.length > 0, 'REPROVA NA ÂNCORA: a lista veio vazia.');
+    const pet = itens[0]?.['matched_pet'] as Record<string, unknown> | null;
+    assert.ok(
+      pet !== null && pet !== undefined,
+      'REPROVA: a LISTA de achados não traz o pet. É a tela "Meus achados", e ' +
+        'ela é metade da queixa do cliente.',
+    );
+    assert.equal(itens[0]?.['matched_pet'] === null, false);
+    assert.equal(pet['display_name'], NOME_DO_PET);
+  });
+});
+
+void describe('emenda 7: no achado AVULSO, a foto e o nome NÃO saem', () => {
+  void it('`matched_pet` é nulo, e nem o nome nem a chave da capa aparecem no corpo', async () => {
+    // `servidor()` sem `petCorrespondente` é o achado avulso: é o que o
+    // repositório devolve quando `COALESCE(pet_id, lost_cases.pet_id)` não acha
+    // linha, e é o caso COMUM do produto.
+    const app = servidor();
+    const criado = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: CORPO_MINIMO,
+    });
+    const detalhe = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
+    const lista = await pedir(app, { url: '/found-reports' });
+    await app.close();
+
+    for (const [onde, resposta] of [
+      ['o 201 do registro', criado],
+      ['o detalhe', detalhe],
+      ['a lista', lista],
+    ] as const) {
+      // ÂNCORA PRIMEIRO. `assert(!bruto.includes('Aurora'))` fica verde com a
+      // rota caída, com 404 e com corpo vazio — é o portão cego que este
+      // repositório já produziu mais de uma vez. Então todo caso de ausência
+      // daqui ancora no que TEM de existir antes de cobrar o que não pode.
+      assert.equal(
+        resposta.status,
+        onde === 'o 201 do registro' ? 201 : 200,
+        `REPROVA NA ÂNCORA: ${onde} não respondeu. Ausência medida sobre ` +
+          'resposta que não veio não significa nada.',
+      );
+      assert.ok(
+        resposta.bruto.includes('stray_report'),
+        `REPROVA NA ÂNCORA: ${onde} não traz o achado avulso. Conserte a ` +
+          `âncora antes de ler o resto. Corpo: ${resposta.bruto}`,
+      );
+
+      assert.ok(
+        !resposta.bruto.includes(NOME_DO_PET),
+        `REPROVA: ${onde} entregou o NOME do pet num achado avulso. O vínculo ` +
+          'aqui só poderia vir de `match_candidates`, com ' +
+          '`link_origin = "attribute_match"` — um PALPITE da máquina, que ' +
+          'sugere e não confirma (BICHUS-35, critério 7). O cliente mediu o ' +
+          'golpe do falso achador em 20/10/2026: nome e foto de uma ' +
+          'correspondência palpitada são exatamente o que falta ao golpista ' +
+          `para "achei seu pet" soar verdadeiro. Corpo: ${resposta.bruto}`,
+      );
+      assert.ok(
+        !resposta.bruto.includes(CHAVE_DA_CAPA),
+        `REPROVA: ${onde} entregou a chave da CAPA do pet num achado avulso. ` +
+          `Mesma razão do nome, e a foto é o insumo mais caro. Corpo: ${resposta.bruto}`,
+      );
+      assert.ok(
+        !resposta.bruto.includes(BASE_DE_MIDIA),
+        `REPROVA: ${onde} carrega um endereço de mídia do pet num achado ` +
+          `avulso. Corpo: ${resposta.bruto}`,
+      );
+    }
+
+    assert.equal(
+      criado.corpo['matched_pet'],
+      null,
+      'REPROVA: `matched_pet` não é `null` no achado avulso. O contrato o ' +
+        'declara anulável e o nulo aqui NÃO é "ainda não temos": ele é a ' +
+        'decisão.',
+    );
+    assert.equal(detalhe.corpo['matched_pet'], null);
+  });
+
+  void it('ISCA NO SENTIDO CONTRÁRIO: com o pet no cenário, o MESMO corpo passa a trazê-los', async () => {
+    // ESTE CASO É O QUE FAZ O DE CIMA MEDIR ALGUMA COISA.
+    //
+    // As três ausências acima ficariam verdes para sempre se a borda nunca
+    // soubesse projetar o pet — por um campo com nome errado, por uma projeção
+    // que devolve `undefined`, por um `matched_pet` que o serializador come. Aí
+    // o arquivo estaria medindo a INCAPACIDADE da rota, e não a decisão de
+    // privacidade, e ninguém saberia a diferença.
+    //
+    // Então aqui o MESMO corpo, pelas MESMAS três superfícies, com a única
+    // diferença sendo o pet no cenário: as agulhas que lá têm de estar ausentes
+    // aqui têm de estar presentes. Uma das duas direções reprova em qualquer
+    // defeito que apague a projeção, e a outra em qualquer defeito que a
+    // alargue.
+    const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
+    const criado = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: CORPO_MINIMO,
+    });
+    const detalhe = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
+    const lista = await pedir(app, { url: '/found-reports' });
+    await app.close();
+
+    for (const [onde, resposta] of [
+      ['o 201 do registro', criado],
+      ['o detalhe', detalhe],
+      ['a lista', lista],
+    ] as const) {
+      assert.ok(
+        resposta.bruto.includes(NOME_DO_PET),
+        `REPROVA: ${onde} NÃO traz o nome do pet nem quando o pet está ` +
+          'identificado. Enquanto este caso não passar, o caso de ausência ' +
+          'acima não prova a decisão de privacidade — ele só prova que esta ' +
+          `rota não sabe projetar o pet. Corpo: ${resposta.bruto}`,
+      );
+      assert.ok(
+        resposta.bruto.includes(CHAVE_DA_CAPA),
+        `REPROVA: ${onde} NÃO traz a capa do pet nem quando ele está ` +
+          `identificado. Mesma razão. Corpo: ${resposta.bruto}`,
+      );
+    }
+  });
+
+  void it('o nulo do pet não arrasta os outros campos do achado', async () => {
+    // `matched_pet: null` não pode ter custo: o resto da resposta é o que a
+    // tela já desenhava, e uma projeção que explodisse no nulo transformaria o
+    // caso comum do produto em tela vazia.
+    const app = servidor();
+    const { status, corpo } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
+    await app.close();
+
+    assert.equal(status, 200);
+    assert.equal(corpo['origin'], 'stray_report');
+    assert.equal(corpo['status'], 'open');
+    assert.equal(corpo['area_label'], 'Pinheiros, São Paulo');
+    assert.equal(corpo['photo_url'], null, 'REPROVA: o `photo_url` do ACHADOR mudou de valor.');
   });
 });

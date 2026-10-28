@@ -23,13 +23,16 @@ import 'api/fotos_pendentes.dart';
 import 'api/cache_de_imagens.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/passkeys_api.dart';
 import 'api/sonda_de_conexao.dart';
 import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/credencial_do_aparelho.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'dispositivo/passkey_neste_aparelho.dart';
 import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
 import 'sessao/contador_de_avisos.dart';
@@ -51,6 +54,7 @@ import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
+import 'sessao/fiacao_do_passkey.dart';
 import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'telas/atualizacao/portao_de_versao.dart';
@@ -66,6 +70,7 @@ class BichuApp extends StatefulWidget {
     this.clienteHttp,
     this.camera,
     this.leitorDeQr,
+    this.credencialDoAparelho,
     this.avisos,
     this.mensagensDePush,
     this.localizacao,
@@ -75,6 +80,7 @@ class BichuApp extends StatefulWidget {
     this.cofreDoQr,
     this.cacheDeImagens,
     this.depositoDeOportunidades,
+    this.depositoDePasskeyNoAparelho,
     this.depositoDoAvisoDeCadastro,
     this.agora,
     this.depositoDaFila,
@@ -130,6 +136,20 @@ class BichuApp extends StatefulWidget {
   /// certa, e nao um remendo. Os casos que precisam de uma leitura passam o
   /// duble de `test/telas/ajuda_de_tela.dart`.
   final LeitorDeQr? leitorDeQr;
+
+  /// A folha de credencial do sistema, ou `null` para a de verdade.
+  ///
+  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera e a
+  /// do leitor de QR. Em producao e nulo e vale [CredencialDoAparelhoReal]; o
+  /// teste de widget passa um duble, porque o pacote `passkeys` fala por canal
+  /// de plataforma e canal de plataforma nao existe em `flutter test`.
+  ///
+  /// **O padrao NAO e um duble que recusa.** Era tentador deixar
+  /// `SemPasskeyNesteBuild` como padrao para o teste nao precisar passar nada,
+  /// e seria o mesmo defeito que `CameraNaoEmbarcada` como padrao ja foi:
+  /// producao rodaria com a porta desligada e nenhuma isca acusaria, porque
+  /// toda isca estaria medindo o duble.
+  final CredencialDoAparelho? credencialDoAparelho;
 
   /// Injetavel para teste. Em producao e [AvisosPorFirebase] quando o `main()`
   /// conseguiu inicializar o Firebase, e [AvisosNaoEmbarcados] quando nao.
@@ -226,6 +246,18 @@ class BichuApp extends StatefulWidget {
   /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
   final DepositoDeOportunidades? depositoDeOportunidades;
 
+  /// Onde mora a marca de "ha credencial digital neste aparelho" (28/10/2026).
+  ///
+  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
+  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o teste
+  /// de widget num `Future` que nunca resolve.
+  ///
+  /// **E e o unico jeito de um caso provar as DUAS metades da isca**: sem marca
+  /// a tela de entrar nao pode gastar requisicao nenhuma, e com marca ela tem
+  /// de entrar sem toque extra. Nenhum teste produz o segundo estado passando
+  /// pelo cadastro primeiro, porque cada `pumpWidget` e um app novo.
+  final DepositoDePasskeyNoAparelho? depositoDePasskeyNoAparelho;
+
   /// Onde o registro de dispensas do aviso persistente mora (BICHUS-75).
   ///
   /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
@@ -290,6 +322,10 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final DevicesApi _devices;
   late final CameraEGaleria _camera;
   late final LeitorDeQr _leitorDeQr;
+  late final PasskeysApi _passkeys;
+  late final CredencialDoAparelho _credencialDoAparelho;
+  late final PasskeyNesteAparelho _passkeyNesteAparelho;
+  late final FiacaoDoPasskey _passkey;
   late final Avisos _avisos;
   late final Localizacao _localizacao;
   late final LocalizacaoDaSessao _localizacaoDaSessao;
@@ -437,6 +473,19 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       pets: _pets,
     );
     _leitorDeQr = widget.leitorDeQr ?? const LeitorDeQrDoAparelho();
+    _passkeys = PasskeysApi(_api);
+    _credencialDoAparelho =
+        widget.credencialDoAparelho ?? CredencialDoAparelhoReal();
+    _passkeyNesteAparelho = PasskeyNesteAparelho(
+      deposito:
+          widget.depositoDePasskeyNoAparelho ?? DepositoDePasskeyEmArquivo(),
+      agora: widget.agora ?? DateTime.now,
+    );
+    _passkey = FiacaoDoPasskey(
+      passkeys: _passkeys,
+      aparelho: _credencialDoAparelho,
+      registro: _passkeyNesteAparelho,
+    );
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _oportunidades = OportunidadesDeAviso(
       deposito: widget.depositoDeOportunidades ??
@@ -875,6 +924,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     return Escopo(
       api: _api,
       auth: _auth,
+      passkeys: _passkeys,
       pets: _pets,
       casos: _casos,
       conexoes: _conexoes,
@@ -891,6 +941,9 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       devices: _devices,
       camera: _camera,
       leitorDeQr: _leitorDeQr,
+      credencialDoAparelho: _credencialDoAparelho,
+      passkeyNesteAparelho: _passkeyNesteAparelho,
+      passkey: _passkey,
       avisos: _avisos,
       avisosRecebidos: _avisosRecebidos,
       oportunidades: _oportunidades,

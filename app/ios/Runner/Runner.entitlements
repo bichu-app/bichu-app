@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Associated Domains, e SO `webcredentials` (BICHUS-301).
+
+	  `webcredentials:<host>` e o que autoriza o iOS a entregar passkey deste
+	  `RP ID` a este app. Sem esta entrada o
+	  `ASAuthorizationPlatformPublicKeyCredentialProvider` nao abre folha
+	  nenhuma -- e NAO da erro: a folha simplesmente nao aparece, que e
+	  indistinguivel de "esta pessoa nao tem passkey".
+
+	  OS DOIS HOSTS, num binario so. O `RP ID` e o hostname de `WEB_BASE_URL`,
+	  entao ele MUDA por ambiente: `hml.bichu.app` em homologacao e `bichu.app`
+	  em producao. Um `webcredentials` por ambiente exigiria dois entitlements
+	  e dois alvos; listar os dois no mesmo binario e o que faz o mesmo APK/IPA
+	  servir os dois, do mesmo jeito que o Android ja faz.
+
+	  NAO HA `applinks` AQUI, de proposito. Deep link no iOS e outra frente e
+	  esta dormente por decisao do cliente; `applinks.details` continua vazio
+	  no `apple-app-site-association`, e declarar `applinks:` aqui pediria uma
+	  associacao que o arquivo do servidor nao concede -- o iOS cacheia
+	  associacao quebrada, e um `applinks` que nao resolve e pior que nenhum.
+	-->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:hml.bichu.app</string>
+		<string>webcredentials:bichu.app</string>
+	</array>
+</dict>
+</plist>

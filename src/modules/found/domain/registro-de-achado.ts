@@ -188,6 +188,13 @@ export function rotuloDaArea(onde: OndeFoiAchado): string | null {
  *   agrupar; devolver o caso a que um achado se ligou contaria ao autor do achado
  *   qual pet de qual tutor está sendo procurado, antes de qualquer confirmação
  *   humana.
+ *
+ *   **A emenda 7 do ADR-0010 (28/10/2026) não mexeu nesta linha.** Ela abriu a
+ *   FOTO e o NOME do pet — `petCorrespondente` abaixo —, e os três
+ *   identificadores continuam fora, pelo mesmo motivo de sempre: nome e foto
+ *   dizem *qual animal é este*, e um UUID diz *onde ele mora no banco*. O que
+ *   a emenda derrubou foi a leitura larga de que item 7 proibiria qualquer
+ *   atributo do pet; ele proíbe **agrupar**, e um achado tem um pet só.
  * - **contagem de achados da conta.** O repositório a tem na mão ao paginar, e
  *   devolvê-la "porque já está ali" seria a propriedade a mais que o portão de
  *   contrato, que só procura o que sumiu, não veria.
@@ -204,4 +211,74 @@ export interface AchadoGravado {
   readonly temFoto: boolean;
   readonly observacao: string | null;
   readonly criadoEm: Date;
+  /**
+   * O pet que este achado JÁ identificou — e `null` quando o único vínculo
+   * possível seria um **palpite** do cruzamento.
+   *
+   * ## De onde ele vem, e por que são só dois caminhos
+   *
+   * A consulta resolve o pet por
+   * `COALESCE(found_reports.pet_id, lost_cases.pet_id via found_reports.case_id)`,
+   * e as duas colunas têm dono medido:
+   *
+   * - `pet_id` é escrito **só** por `registrarAviso` em
+   *   `kysely-tag-repository.ts`, junto com `origin: 'tag_scan'` — a plaquinha
+   *   foi lida, e quem registrou chegou pela página daquele animal;
+   * - `case_id` é escrito **só** pelo `INSERT` de `criar`, a partir do
+   *   `share_token` (critério 10) — a pessoa colou o link que o tutor
+   *   publicou, e aquele link já mostra foto e nome.
+   *
+   * Nos dois, quem lê **já sabe qual animal é**: foto e nome não contam nada
+   * novo. É por isso que a emenda 7 os libera aqui e não em geral.
+   *
+   * ## O achado avulso fica nulo POR CONSTRUÇÃO, e não por um `if`
+   *
+   * No achado avulso cruzado por semelhança o vínculo não mora em
+   * `found_reports`: ele mora em `match_candidates`, com
+   * `link_origin = 'attribute_match'` e `status = 'suggested'`. **Nenhuma
+   * consulta desta porta toca `match_candidates`** — a consulta que traria a
+   * foto e o nome de uma correspondência palpitada não existe.
+   *
+   * O risco que isso fecha é nominal e foi medido pelo cliente em 20/10/2026:
+   * no golpe do falso achador um estranho diz "achei seu pet" para extorquir o
+   * tutor. Foto e nome de um palpite da máquina seriam exatamente o insumo que
+   * falta para a frase soar verdadeira — e o cruzamento **sugere**, não
+   * confirma (BICHUS-35, critério 7).
+   */
+  readonly petCorrespondente: PetCorrespondente | null;
+}
+
+/**
+ * O pet já identificado de um achado: o que a tela desenha, e nada que a
+ * enderece no banco.
+ *
+ * `chaveDaFoto` é `pet_photos.card_key` com `status = 'ready'` — a derivada
+ * pública, nunca o original do bucket privado. Nula quando não há capa pronta,
+ * e aí a tela lê "este pet não tem foto", nunca "a rota não sabe responder".
+ */
+export interface PetCorrespondente {
+  readonly nome: string;
+  readonly chaveDaFoto: string | null;
+}
+
+/**
+ * `FoundReport.matched_pet`, campo a campo como o contrato o declara — ou
+ * `null`.
+ *
+ * Função e não objeto montado na borda, pelo mesmo motivo de `rotuloDaArea`: a
+ * mesma projeção serve o registro, o detalhe, a lista e o enriquecimento, e
+ * quatro cópias divergiriam na primeira vez que uma delas mudasse. O endereço é
+ * montado só a partir de chave presente, então endereço para objeto que ninguém
+ * gravou continua não existindo.
+ */
+export function matchedPetDaResposta(
+  pet: PetCorrespondente | null,
+  baseDeMidia: string,
+): { readonly display_name: string; readonly photo_url: string | null } | null {
+  if (pet === null) return null;
+  return {
+    display_name: pet.nome,
+    photo_url:
+      pet.chaveDaFoto === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${pet.chaveDaFoto}`,
+  };
 }

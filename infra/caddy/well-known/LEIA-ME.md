@@ -107,17 +107,93 @@ criterio 8 proibe. Nao foi resolvido aqui porque iOS esta dormente por decisao
 do cliente (so Android, BICHUS-253) e porque escolher entre os dois desenhos e
 de quem coordena. Fica dito para nao sumir.
 
-## Por que `applinks.details` e `webcredentials.apps` continuam VAZIOS
+## `webcredentials.apps` E `applinks.details` CONTINUAM VAZIOS: o iOS esta PENDENTE da conta Apple do cliente
 
-O `appID` depende do Team ID, que depende da conta Apple Developer, que nao
-existe (dispensa `ios` em `.github/quality-gates.yml`, **vence em 2026-10-31** --
-quatro dias depois desta atualizacao). Esta esperando insumo de fora.
+**Estado em 28/10/2026, dito por extenso.** O app ja esta inteiramente fiado
+para passkey no iOS (ver "O par do lado do app", abaixo). O que falta nao e
+codigo: e **o Team ID**, e ele depende de uma identidade de equipe no Apple
+Developer que **o cliente ainda nao conseguiu criar**. Ele pediu, nesta data,
+para **deixar o iOS pendente**.
 
-`webcredentials.apps` e o campo que o iOS le para passkey, equivalente ao
-`get_login_creds` do Android. Esta vazio pelo MESMO motivo e nao por esquecimento:
-sem Team ID nao ha `appID` para escrever. **O `RP ID` escolhido (`bichu.app`) ja
-serve iOS** -- ver abaixo --, entao quando a conta Apple existir basta preencher
-este array, sem tocar em credencial nenhuma ja emitida.
+```json
+"webcredentials": { "apps": [] }
+```
+
+**O valor que entra aqui quando a conta existir** e um so, nesta forma:
+
+```json
+"webcredentials": { "apps": ["<TEAM_ID>.app.bichu"] }
+```
+
+onde `<TEAM_ID>` e o Team ID de verdade da conta Apple Developer do cliente, e
+`app.bichu` e o `PRODUCT_BUNDLE_IDENTIFIER` do alvo `Runner` -- o mesmo
+`app.bichu` que o `assetlinks.json` usa como `package_name` no Android.
+
+### SEM ESSA LINHA O PASSKEY NO iOS FALHA EM SILENCIO
+
+E a parte que mais importa deste arquivo, e por isso esta em voz alta: com
+`webcredentials.apps` vazio, **nao ha erro e nao ha log**. O
+`ASAuthorizationPlatformPublicKeyCredentialProvider` simplesmente **nao abre
+folha nenhuma**, e do lado do app esse desfecho e
+`SemCredencialNoAparelho` -- exatamente o mesmo que "esta pessoa nunca
+cadastrou uma passkey". O app nao tem como distinguir os dois, e **nao deve**:
+e o mesmo caminho que leva quem usa senha de volta ao formulario, intacto.
+
+Ou seja: nao existe sintoma. Nao ha nada na tela, nada no console e nada no
+canal de observabilidade que diga "o iOS esta sem associacao". A unica forma de
+saber e conferir **este arquivo**, servido, no host do `RP ID`.
+
+### POR QUE VAZIO, E NAO UM VALOR DE ESPERA
+
+Houve um valor aqui por algumas horas em 28/10/2026 -- `B7N53534HS.app.bichu`,
+lido do `project.pbxproj` nao comitado da pasta de trabalho do cliente. **Ele
+nao e um Team ID valido**: sobrou de alguma tentativa, e o cliente confirmou que
+a identidade de equipe nao existe. O valor foi retirado, e a razao vale escrita
+porque a tentacao de repetir isso e grande:
+
+**arquivo servido declarando um Team ID que nao existe e PIOR que arquivo
+vazio.** O vazio e honesto -- ele diz "o iOS nao esta ligado", e e o que este
+texto confirma. O preenchido com valor falso **parece configurado**: o proximo a
+olhar conclui que o iOS esta pronto, e so descobre o contrario depois de gastar
+uma tarde atras de uma falha que, como esta dito acima, **nao tem sintoma**.
+
+Nao ha valor de espera aceitavel aqui. Ou e o Team ID de verdade, ou e vazio.
+
+### `applinks.details` continua vazio por OUTRO motivo, e nao pelo mesmo
+
+Deep link no iOS e outra frente e continua dormente por decisao do cliente. O
+conflito descrito acima -- a borda servindo 200 com `applinks.details` vazio,
+que o criterio 8 proibe -- segue exatamente onde estava, e escolher entre os
+dois desenhos continua sendo de quem coordena.
+
+### O par do lado do app JA ESTA FEITO, e nao e trabalho a refazer
+
+`webcredentials.apps` sozinho nunca bastaria: o binario precisa declarar o
+Associated Domains, e o app precisa chamar a API nativa. As duas coisas estao
+prontas e comitadas (BICHUS-301):
+
+- `app/ios/Runner/Runner.entitlements` declara
+  `com.apple.developer.associated-domains` com `webcredentials:hml.bichu.app` e
+  `webcredentials:bichu.app` -- os dois hosts num binario so, porque o `RP ID` e
+  o hostname de `WEB_BASE_URL` e portanto muda por ambiente;
+- `CODE_SIGN_ENTITLEMENTS` aponta para ele nos dois xcconfig
+  (`app/ios/Flutter/Debug.xcconfig` e `Release.xcconfig`), e nao no
+  `project.pbxproj` -- ver o comentario la, que explica a colisao com a
+  assinatura nao comitada do cliente;
+- o pacote `passkeys` 2.23.1 e federado, e o lado iOS dele
+  (`passkeys_darwin` 0.4.5) fala com o
+  `ASAuthorizationPlatformPublicKeyCredentialProvider`. O app chama a MESMA
+  funcao nas duas plataformas.
+
+**Entao o caminho de ligar o iOS, quando a conta Apple existir, e: UMA LINHA
+neste arquivo e um deploy da borda.** Nada de codigo. Nada de build diferente.
+O entitlement ja esta no binario e a chamada nativa ja esta no Dart.
+
+**E o Android nao e afetado por nada disto.** O `assetlinks.json` ao lado tem a
+digital de debug **de verdade**, medida, com
+`delegate_permission/common.get_login_creds`, e esta servido em
+`hml.bichu.app` -- que e o host do `RP ID` de homologacao. O Android nao le este
+arquivo.
 
 ## O `RP ID` do passkey, e por que ele e o HOSTNAME
 

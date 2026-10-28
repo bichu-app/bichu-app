@@ -282,6 +282,38 @@ dependencies:
   # subir de `dev` para producao nao o afeta.
   crypto: ^3.0.6
 
+  # A folha nativa de passkey das DUAS plataformas (BICHUS-301). O app NAO
+  # desenha interface de credencial: quem pede a biometria/PIN e o sistema
+  # operacional, e este pacote e so o fio ate ele.
+  #
+  # PLUGIN FEDERADO, e e por isso que ele serve Android e iOS com um unico
+  # ponto de chamada no Dart:
+  #
+  #   | plataforma | pacote de implementacao | API nativa por tras                               |
+  #   |------------|-------------------------|---------------------------------------------------|
+  #   | Android    | `passkeys_android`      | Credential Manager (`createCredential`/`getCredential`) |
+  #   | iOS        | `passkeys_darwin`       | `ASAuthorizationPlatformPublicKeyCredentialProvider`    |
+  #
+  # Escrever os dois canais a mao seria escrever duas vezes o parse de
+  # `PublicKeyCredential` -- e o lado do cliente erra em base64url, que e
+  # exatamente o erro que o servidor so acusa depois, longe da causa.
+  #
+  # VERSAO EXATA, SEM `^`, e de proposito e contra o estilo do resto deste
+  # arquivo. O pacote traz CODIGO NATIVO nas duas plataformas, e um `^` deixa
+  # `pub get` trocar o canal nativo numa maquina diferente da que mediu. O
+  # fluxo de passkey nao tem como ser provado por teste de widget (a folha e do
+  # sistema), entao a unica garantia que sobra e a versao nao se mover sozinha.
+  #
+  # NAO EXIGE CORBADO. O pacote `passkeys` e a camada de plataforma crua e
+  # aceita *relying party* proprio -- o que fala com o Corbado e o
+  # `corbado_auth`, que NAO esta aqui. O nosso *relying party* e o servidor do
+  # Bichu, com `@simplewebauthn/server`.
+  #
+  # `minSdk` CONFERE: `passkeys_android` pede `androidx.credentials`, que exige
+  # API 23, e o `minSdk` do projeto e 24 (medido: `FlutterExtension.minSdkVersion`
+  # no Flutter 3.47.4, que e o que `app/android/app/build.gradle.kts` herda).
+  passkeys: 2.23.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -64,6 +66,71 @@ class _TelaEntrarState extends State<TelaEntrar> {
   MensagemDeErro? _faixa;
   String? _erroDoEmail;
   String? _erroDaSenha;
+
+  @override
+  void initState() {
+    super.initState();
+    // A PORTA DA PASSKEY, TENTADA AO ABRIR A TELA (BICHUS-301).
+    //
+    // Este e o caminho de MENOS interface que existe: nao ha botao `Entrar com
+    // passkey`, porque a folha do sistema operacional **aparece sozinha**
+    // quando ha credencial no aparelho, e nao aparece quando nao ha. Um botao
+    // obrigaria a tela a responder, antes do toque, se esta pessoa tem
+    // passkey -- e a tela nao sabe: a credencial e *discoverable* e quem sabe
+    // e o aparelho.
+    //
+    // **NAO ha `await` aqui, e nao pode haver**: `initState` nao e assincrono,
+    // e segurar o primeiro quadro atras de uma ida a rede deixaria a tela de
+    // entrar em branco em quem nao tem passkey nenhuma -- que e quase todo
+    // mundo. O formulario monta na hora e a tentativa corre atras dele.
+    //
+    // `addPostFrameCallback` e nao chamada direta: a tentativa usa
+    // `Escopo.of(context)`, e `dependOnInheritedWidgetOfExactType` dentro de
+    // `initState` nao e permitido.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tentarPasskey();
+    });
+  }
+
+  /// Tenta entrar com uma passkey que **ja exista** no aparelho.
+  ///
+  /// ## O QUE ESTA FUNCAO NAO FAZ, QUE E O REQUISITO
+  ///
+  /// **Quem nao tem passkey nao pode ser atrapalhado.** `tentarEntrar`
+  /// devolve `null` -- e nunca estoura -- em todos estes casos: nao ha
+  /// credencial no aparelho, a pessoa fechou a folha nativa, o aparelho nao
+  /// faz passkey, o dominio nao esta associado, a rede caiu, o servidor
+  /// respondeu 401 ou 429. Em TODOS, esta funcao nao faz absolutamente nada:
+  ///
+  /// - **nao** poe faixa de erro;
+  /// - **nao** mexe no `_email` nem no `_senha`;
+  /// - **nao** toca em `_enviando`, entao o botao `Entrar` nunca fica cinza
+  ///   nem girando por causa de uma tentativa que a pessoa nao pediu;
+  /// - **nao** rola a tela.
+  ///
+  /// O resultado e que, para quem usa senha, abrir esta tela e
+  /// indistinguivel de antes desta frente existir -- e ha isca cobrando
+  /// exatamente isso.
+  Future<void> _tentarPasskey() async {
+    final escopo = Escopo.of(context);
+    final sessao = await escopo.passkey.tentarEntrar();
+    // `null` e o caminho dominante. Sair em silencio E o comportamento certo.
+    if (sessao == null) return;
+    if (!mounted) return;
+
+    await escopo.sessao.abrir(sessao);
+    // DAQUI PARA BAIXO E O MESMO FIM DE `_entrar`, e de proposito: o contrato
+    // devolve a MESMA `SessionResponse` nas duas portas, e a secao 8.3 vale
+    // igual -- quem tocou em `Registrar achado` antes de entrar nao toca de
+    // novo porque entrou pela biometria. Duplicar as duas linhas e mais
+    // honesto que extrair um metodo: elas precisam ficar iguais, e um metodo
+    // compartilhado esconderia o dia em que uma das duas portas precisar de
+    // outro destino.
+    final destino = await escopo.guarda.executarDepoisDoLogin();
+    if (!mounted) return;
+    irParaODestinoDoLogin(context, destino);
+  }
 
   @override
   void dispose() {
@@ -165,6 +232,27 @@ class _TelaEntrarState extends State<TelaEntrar> {
         senha: _senha.text,
       );
       await escopo.sessao.abrir(sessao);
+      // A MARCA DO APARELHO, POSTA EM DIA -- e **sem `await`**, de proposito
+      // (28/10/2026).
+      //
+      // A entrada por passkey agora exige sinal local de que ha credencial
+      // aqui, e a marca nasce de um cadastro feito NESTE aparelho. Credencial
+      // que chegou por sincronizacao (Google Password Manager, Chaveiro do
+      // iCloud), por reinstalacao ou por restauracao de backup nao tem marca --
+      // e sem esta linha a pessoa teria passkey e um app que nunca a tentaria.
+      //
+      // `reconciliarComAConta` NAO ESTOURA e nao devolve nada que esta tela
+      // use. Esperar por ela seria por uma leitura auxiliar no caminho critico
+      // de uma entrada que **ja deu certo**: a sessao esta aberta, e segurar a
+      // navegacao atras de `listPasskeys` poria o giro do botao na frente de
+      // quem acabou de entrar. O efeito dela aparece na ABERTURA SEGUINTE da
+      // tela, que e quando o portao e consultado -- e ela tem o resto desta
+      // sessao do app para terminar.
+      //
+      // `unawaited` e nao chamada pelada: `unawaited_futures` reprova a
+      // segunda, e um `Future` esquecido sem marca nenhuma e o jeito de
+      // ninguem notar que ele existe.
+      unawaited(escopo.passkey.reconciliarComAConta());
       // O destino depois do login e a intencao pendente (UX 8.3), e nao a
       // home. **A acao guardada e executada aqui**, antes de qualquer
       // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a
