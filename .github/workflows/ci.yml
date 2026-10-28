@@ -737,8 +737,101 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [codigo, contrato]
+    # `id-token: write` E O QUE FAZ O WIF EXISTIR, e e o esquecimento que
+    # derruba este job sem dizer a causa. Sem esta linha o GitHub NAO emite o
+    # token OIDC e `google-github-actions/auth` reprova com "unable to get
+    # ACTIONS_ID_TOKEN_REQUEST_URL" -- uma mensagem que fala de variavel de
+    # ambiente e nao de permissao, e que manda procurar no lugar errado.
+    #
+    # Declarar `permissions:` NO JOB SUBSTITUI o bloco do topo do arquivo para
+    # este job, e nao soma. Por isso `contents: read` e `pull-requests: read`
+    # estao repetidos aqui: sem `contents: read` o `actions/checkout` perde o
+    # acesso ao proprio repositorio, e omitir `pull-requests: read` tiraria em
+    # silencio o que o job tinha antes desta mudanca.
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      # POR QUE ESTE JOB AUTENTICA NO GCP, E POR QUE SEM CHAVE.
+      #
+      # `compose.yaml` puxa `minio` (linha 169) e `mc` (linha 241) do NOSSO
+      # espelho em `southamerica-east1-docker.pkg.dev/bichu-app-508914/
+      # espelhos-de-terceiros`, que e PRIVADO. Sem credencial o `objeto_init`
+      # reprovava com `denied: Unauthenticated request. Unauthenticated
+      # requests do not have permission
+      # "artifactregistry.repositories.downloadArtifacts"` -- e a esteira nunca
+      # autenticou no GCP: `git grep workload_identity` em `.github/workflows`
+      # devolvia zero.
+      #
+      # Abrir o espelho NAO e uma saida: a politica de organizacao
+      # `constraints/iam.allowedPolicyMemberDomains` recusa `allUsers`
+      # ("User allUsers is not in permitted organization"), medido na mao.
+      # Entao o caminho e credencial, e credencial aqui e Workload Identity
+      # Federation -- federacao e nao chave:
+      #
+      #   - NAO existe segredo neste repositorio para isto. Nada a vazar em
+      #     log, nada a rotacionar, nada que sobreviva ao fim do job. Uma
+      #     chave JSON de conta de servico seria um arquivo permanente, com
+      #     valor fora daqui, guardado em `secrets` -- exatamente o que o
+      #     resto deste arquivo evita a mao em cada variavel descartavel.
+      #   - quem pode assumir a conta esta escrito no PROVEDOR, e nao aqui: o
+      #     `attributeCondition` do provedor `bichu-app` exige
+      #     `assertion.repository=='bichu-app/bichu-app'`, entao um fork nao
+      #     alcanca a conta nem com o workflow na mao.
+      #
+      # CONSEQUENCIA EM FORK, E ELA E DE PRODUTO: em `pull_request` vindo de
+      # fork o GitHub nao emite o token OIDC (nem com `id-token: write`), e
+      # este passo reprova. Hoje nao ha fork no fluxo -- os PRs nascem de
+      # branch do proprio repositorio --, e por isso isto esta escrito e nao
+      # contornado. Contornar seria um `continue-on-error` aqui, e o topo
+      # deste arquivo explica porque nao.
+      #
+      # Acao fixada por SHA, e nao por `v2`: tag se move, e uma acao que
+      # recebe o token OIDC e troca por credencial do GCP e o ultimo lugar
+      # onde se quer codigo que mudou sem ninguem pedir.
+      - name: credencial do GCP por federacao, sem chave no repositorio
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: projects/469413493555/locations/global/workloadIdentityPools/github/providers/bichu-app
+          service_account: bichu-cd@bichu-app-508914.iam.gserviceaccount.com
+
+      # O `auth` acima deixa a credencial em disco e aponta
+      # `GOOGLE_APPLICATION_CREDENTIALS` para ela; o `docker` NAO le isso
+      # sozinho. Este passo escreve o `credHelper` do host do registry no
+      # `~/.docker/config.json`, e e ele que faz o `docker compose up` abaixo
+      # puxar do espelho autenticado. Precisa vir ANTES de qualquer `build` ou
+      # `up`.
+      #
+      # O `command -v` existe porque o ajudante e um BINARIO separado: com
+      # `configure-docker` escrito e o binario fora do PATH, o pull falha com
+      # "error getting credentials", que fala de credencial e nao de arquivo
+      # faltando. Medido neste runner: `ubuntu-24.04` traz Google Cloud CLI
+      # 588.0.0 pre-instalada, e e de la que o ajudante vem.
+      - name: o docker sabe pedir credencial ao gcloud
+        run: |
+          command -v docker-credential-gcloud > /dev/null || {
+            echo "::error::docker-credential-gcloud nao esta no PATH. Sem ele \`configure-docker\` escreve um ajudante que nao existe e o pull do espelho falha como se fosse credencial errada"
+            exit 1
+          }
+          gcloud auth configure-docker southamerica-east1-docker.pkg.dev --quiet
+          # CONTROLE POSITIVO, e ele substituiu um `gcloud auth list
+          # --filter=status:ACTIVE` que MEDIA NADA: a federacao nao registra
+          # conta no armazem do gcloud -- ela chega por
+          # `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE`, e o `auth list` respondia
+          # `WARNING: The following filter keys were not present in any
+          # resource : status`, sem nenhuma conta e com saida 0. Sonda que sai
+          # 0 sem olhar para nada e pior que sonda nenhuma.
+          #
+          # Trocar por token prova o que interessa: que a troca do token OIDC
+          # pela credencial do GCP de fato produziu algo utilizavel. Sem isto a
+          # falha so apareceria dois minutos adiante, como erro de `docker
+          # pull`. `> /dev/null` porque o token E a credencial e log de esteira
+          # e lugar publico e permanente.
+          gcloud auth print-access-token > /dev/null
+          echo "credencial do GCP resolve por federacao (token obtido, nao impresso)"
 
       - name: ambiente de teste
         run: |
