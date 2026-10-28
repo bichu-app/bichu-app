@@ -118,7 +118,14 @@
 //     -> reprova `a data vem de found_at, e nao de um relogio`.
 //  5. Em `lib/telas/achado/tela_achado_registrado.dart`, apague o bloco
 //     `if (achado?.petCorrespondente != null) ...`.
-//     -> reprova `com pet certo, a foto e o nome do pet aparecem`.
+//     -> reprova TRES, **medido em 28/10/2026**: `com pet certo, a foto e o
+//        nome do pet aparecem` ("a tela nao escreve o nome do pet"),
+//        `sem capa pronta o nome sai e nenhum quadro nasce` e
+//        `o achado avulso nao reserva espaco para o cartao do pet` -- este
+//        ultimo NA ANCORA, que e a ancora fazendo o trabalho dela.
+//        **E `no achado avulso o pet NAO aparece` fica VERDE**, o que e
+//        correto e e a razao de a isca ter dois sentidos: ausencia continua
+//        ausente numa tela que apagou a entrega inteira.
 //  6. No mesmo arquivo, troque a condicao daquele bloco por
 //     `if (achado != null)` e o conteudo por um
 //     `_CartaoDoPetCorrespondente(pet: achado!.petCorrespondente ??
