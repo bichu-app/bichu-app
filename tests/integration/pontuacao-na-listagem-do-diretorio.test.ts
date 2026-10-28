@@ -250,8 +250,12 @@ void describe(
       // falsy, e zero e precisamente o valor que nao pode sair daqui -- numa
       // escala de 1 a 5 ele se le como "pessimo", e um local que ninguem
       // avaliou nao e pessimo.
+      // O "nao e zero" vem ANTES do "e nulo": depois do `strictEqual(null)` o
+      // TypeScript ja estreitou o tipo para `null`, e a comparacao com zero
+      // viraria uma assercao que o compilador sabe impossivel -- o `eslint`
+      // reprova, e com razao: ela deixaria de medir qualquer coisa.
+      assert.notStrictEqual(r.average, 0, 'media zero: um local sem avaliacao nao e "pessimo"');
       assert.strictEqual(r.average, null, 'media de local sem avaliacao tem de ser NULA');
-      assert.notStrictEqual(r.average as number | null, 0);
       assert.deepEqual(r.histogram, { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 });
     });
 
