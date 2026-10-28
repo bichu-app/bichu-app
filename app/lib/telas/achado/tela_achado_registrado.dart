@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/modelos_achado.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -8,6 +9,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bloco_de_informacao.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'resultado_do_achado.dart';
@@ -48,6 +50,35 @@ import 'textos_do_achado.dart';
 ///
 /// Sem foto, o estado continua dito em TEXTO -- o criterio 4 pede o estado
 /// visivel, e *"achado sem foto vale menos, mas vale"*.
+///
+/// ## A FOTO E O NOME DO PET, que sao OUTRA foto -- 28/10/2026
+///
+/// O paragrafo acima continua certo sobre `FoundReport.photo_url`, e **errado
+/// se lido sobre a resposta inteira**. A foto do ACHADOR nao tem derivada a
+/// pedir; a do PET tem, e e outra foto, de outro lado da conversa, com outra
+/// decisao de privacidade atras dela.
+///
+/// Decisao do cliente, literal: *"pode colocar a foto e o nome do pet."* Ela
+/// esta na emenda 7 do ADR-0010, no nome dele, e responde a MESMA queixa de
+/// 18/10 que deu origem a esta tela. O que a destravava era uma leitura larga
+/// do item 7 daquela ADR -- o item proibe *"outros pets do mesmo tutor, e
+/// qualquer coisa que permita agrupa-los"*, e um achado tem um pet so. **A
+/// leitura larga nao volta.**
+///
+/// Entao a tela desenha `matched_pet` quando ele vem: `ImagemDaRede` com a
+/// capa do pet e o nome dele, no MESMO cartao que
+/// `tela_encontrei_este_pet.dart` ja desenha na trilha da plaquinha -- a mesma
+/// pasta, os mesmos tokens, os mesmos textos (`rotuloDeQuemE`,
+/// `fotoDoPetDoCaso`). Nenhum desenho novo entrou nesta entrega.
+///
+/// **E ELE NAO VEM SEMPRE, e a ausencia e normal.** O servidor so o manda
+/// quando quem le JA SABE qual animal e (plaquinha lida, ou link que o tutor
+/// publicou). No achado avulso cruzado por SEMELHANCA ele volta nulo -- foto e
+/// nome de um palpite da maquina seriam o insumo que falta ao golpe do falso
+/// achador que o cliente mediu em 20/10/2026. Nesse caminho o cartao
+/// simplesmente **nao nasce**: nao ha quadro cinza, nao ha linha de "sem pet"
+/// e nao ha espaco reservado -- a tela de 26/10 foi reduzida a duas linhas de
+/// corpo justamente para caber bem assim.
 ///
 /// ## A TELA NAO DIZ QUE O TUTOR FOI AVISADO, e o bloco existe para isso
 ///
@@ -120,6 +151,23 @@ class TelaAchadoRegistrado extends StatelessWidget {
               ),
             ),
             const SizedBox(height: BichuEspaco.e6),
+            // ================================================================
+            // O PET A QUE ESTE ACHADO JA ESTA LIGADO: a foto e o nome.
+            //
+            // **Antes da foto do achador, de proposito.** As duas imagens sao
+            // do mesmo animal por lados opostos da conversa, e a que responde
+            // "de quem e este bichinho" vem primeiro -- quem leu uma plaquinha
+            // ou colou o link de um tutor abriu esta tela para ver isto.
+            //
+            // **A condicao e a regra inteira.** `petCorrespondente` nulo e o
+            // achado avulso cruzado por semelhanca, e ali nada aparece: ver a
+            // prosa da classe. `achado` nulo e o estado de FILA, em que o
+            // servidor nao viu o registro e nao ha pet para ligar a nada.
+            // ================================================================
+            if (achado?.petCorrespondente != null) ...<Widget>[
+              _CartaoDoPetCorrespondente(pet: achado!.petCorrespondente!),
+              const SizedBox(height: BichuEspaco.e6),
+            ],
             // ================================================================
             // A FOTO DO PET, que e a primeira coisa que faltava.
             //
@@ -283,6 +331,84 @@ class TelaAchadoRegistrado extends StatelessWidget {
                   child: const Text(TextosDoAchado.voltarParaOsPets),
                 ),
               ],
+      ),
+    );
+  }
+}
+
+
+/// O cartao de LEITURA do pet ja identificado: a capa e o nome.
+///
+/// **E o mesmo cartao de `tela_encontrei_este_pet.dart`**, na mesma pasta: o
+/// `surfaceAlt` com `BichuRaio.md`, a imagem de 72 dp a esquerda, o rotulo
+/// `rotuloDeQuemE` acima do nome. Reusar a composicao ja aprovada em vez de
+/// desenhar um cartao proprio e o que mantem as duas telas do achado falando a
+/// mesma lingua -- nesta casa tela e componente passam pelo Figma antes do
+/// codigo, e isto nao e componente novo.
+///
+/// Ele tem DUAS linhas e nao quatro porque `matched_pet` tem dois campos:
+/// `display_name` e `photo_url`. Nao ha especie nem porte a escrever aqui, e
+/// inventar as linhas com o que a tela nao recebeu seria a tela afirmando
+/// sobre um pet que ela nao leu.
+class _CartaoDoPetCorrespondente extends StatelessWidget {
+  const _CartaoDoPetCorrespondente({required this.pet});
+
+  final PetCorrespondenteDoAchado pet;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final url = pet.urlDaFoto;
+
+    return Container(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      decoration: BoxDecoration(
+        color: cores.surfaceAlt,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // **SEM CAPA NAO NASCE QUADRO**, e e a mesma escolha do cartao
+          // irmao: `photo_url` e anulavel no contrato, `ImagemDaRede` recebe
+          // `url` nao anulavel de proposito, e um retangulo cinza ao lado do
+          // nome diria "faltou carregar" sobre um pet que pode simplesmente
+          // nao ter capa. O cartao encurta e o nome -- que e obrigatorio no
+          // contrato -- continua la, que e a metade da entrega que nunca
+          // depende de imagem.
+          //
+          // **E a tela NAO escreve "a foto esta em preparo".**
+          // `FoundReportMatchedPet` nao tem campo de estado: a URL nula e
+          // "sem capa pronta" e cobre tanto o pet sem foto quanto a derivada
+          // ainda em processamento. A faixa informativa de `Meus eventos`
+          // existe porque LA o modelo carrega `emPreparo`; aqui ela seria
+          // verdade em metade dos casos e mentira na outra.
+          if (url != null) ...<Widget>[
+            ImagemDaRede(
+              url: url,
+              descricao: TextosDoAchado.fotoDoPetDoCaso(pet.nome),
+              largura: 72,
+              simboloDeFalha: Icons.pets_outlined,
+            ),
+            const SizedBox(width: BichuEspaco.e4),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  TextosDoAchado.rotuloDeQuemE,
+                  style: textos.labelMedium?.copyWith(
+                    color: cores.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: BichuEspaco.e1),
+                Text(pet.nome, style: textos.titleMedium),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

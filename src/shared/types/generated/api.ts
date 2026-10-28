@@ -9210,11 +9210,94 @@ export interface components {
             found_at?: string;
             /** Format: uri */
             photo_url?: string | null;
+            /**
+             * @description O pet a que este achado JA esta ligado, com a foto e o nome -- e
+             *     **nulo quando o vinculo veio de semelhanca**.
+             *
+             *     Autorizacao do cliente, 28/10/2026, literal: *"pode colocar a foto
+             *     e o nome do pet."* Ela destrava o item 7 do ADR-0010 (emenda 7), e
+             *     o escopo e o da emenda e nao o da frase: sai nos DOIS caminhos em
+             *     que quem le JA SABE qual animal e, e so neles.
+             *
+             *     **Sai** quando `origin: tag_scan` (a plaquinha foi lida, e quem
+             *     registrou veio da pagina daquele pet) ou quando o achado foi ligado
+             *     a um caso pelo `share_token` (a pessoa colou o link que o tutor
+             *     publicou, e aquele link ja carrega foto e nome). Nos dois, foto e
+             *     nome nao contam nada novo a quem le.
+             *
+             *     **NAO sai** no achado avulso cruzado por semelhanca
+             *     (`match_candidates.link_origin: attribute_match`). O risco e
+             *     nominal e foi medido pelo cliente em 20/10/2026: no golpe do falso
+             *     achador um estranho diz "achei seu pet" para extorquir o tutor.
+             *     Entregar foto e nome de uma correspondencia que **a maquina
+             *     palpitou** daria ao golpista exatamente o insumo que falta para a
+             *     frase soar verdadeira -- e o cruzamento SUGERE, nao confirma
+             *     (BICHUS-35, criterio 7). Por isso o nulo aqui nao e "ainda nao
+             *     temos": ele e a decisao.
+             *
+             *     ## ATENCAO: `MatchCandidate.found_report` EMBUTE ESTE SCHEMA
+             *
+             *     `MatchCandidate` referencia `FoundReport` inteiro, e por isso este
+             *     campo passou a ser **declaravel** na lista de candidatos que o TUTOR
+             *     le (`listLostCaseCandidates`, `decideLostCaseCandidate`).
+             *
+             *     **Ele NAO e emitido ali, e nao pode passar a ser.** Conferido em
+             *     28/10/2026: `comoRespostaDoCandidato`, em
+             *     `src/modules/lostfound/adapters/http/lost-case-routes.ts`, monta
+             *     `found_report` campo a campo e nao inclui `matched_pet` -- e aquela
+             *     projecao e separada de `comoResposta` do modulo `found`, entao
+             *     acrescentar o campo la seria uma edicao deliberada, nunca um efeito
+             *     colateral desta.
+             *
+             *     Por que nao pode: naquela lista o achado chega ao tutor **por
+             *     semelhanca** (e o cruzamento que o trouxe). Se aquele mesmo achado
+             *     tiver pet certo por outro caminho -- uma plaquinha lida, ou o link
+             *     de OUTRO tutor --, emitir `matched_pet` ali mostraria a foto e o
+             *     nome do pet de um terceiro a quem so devia ver "um animal parecido
+             *     com o meu". Seria dado de terceiro entregue a pedido de quem nao tem
+             *     relacao com ele, e nenhum portao desta casa confere corpo de
+             *     resposta.
+             *
+             *     A emenda 7 do ADR-0010 poe isso no "o que esta emenda NAO decide",
+             *     que aquela ADR trata como critério de reprovacao em revisao de PR.
+             */
+            matched_pet?: components["schemas"]["FoundReportMatchedPet"] | null;
             notes?: string | null;
             /** Format: uuid */
             conversation_id?: string | null;
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description A foto e o nome do pet JA identificado, para a tela do achado.
+         *
+         *     **Nenhum identificador.** Nao ha `pet_id`, `case_id` nem `owner_*`: o
+         *     item 6 do ADR-0010 nao e emendado e continua proibindo UUID em
+         *     superficie de leitura, e a emenda 7 abriu a FOTO e o NOME, que e o que
+         *     o cliente pediu. Quem recebe isto e quem registrou o achado, numa
+         *     operacao com `bearerAuth`.
+         */
+        FoundReportMatchedPet: {
+            /**
+             * @description O nome do pet, como `pets.name` o guarda. E o MESMO campo que
+             *     `FinderConversation.pet_display_name` e
+             *     `FinderFoundReportView.pet_display_name` ja entregam na trilha da
+             *     plaquinha desde a BICHUS-41: esta emenda nao inventa uma superficie
+             *     nova para o nome, ela o leva a resposta que a tela do achado le.
+             */
+            display_name: string;
+            /**
+             * Format: uri
+             * @description A capa do pet, montada sobre a base de MIDIA. So de `card_key` com
+             *     `status = 'ready'`: endereco para objeto que ninguem gravou nao
+             *     existe, e sem capa pronta o valor e nulo -- que a tela le como
+             *     "este pet nao tem foto", nunca como "a rota nao sabe".
+             *
+             *     Nao confundir com o `photo_url` do proprio `FoundReport`, que e a
+             *     foto que o ACHADOR tirou e continua nula fora da conversa mediada
+             *     (criterio 9). Sao fotos de lados opostos da mesma conversa.
+             */
+            photo_url?: string | null;
         };
         /**
          * @description O que o achador sem conta ve do proprio aviso. Sem id interno, sem dado

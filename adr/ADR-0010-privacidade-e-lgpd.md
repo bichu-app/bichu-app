@@ -1,6 +1,6 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito, com emendas 1, 2, 3, 4, 5 e 6
+**Status:** aceito, com emendas 1, 2, 3, 4, 5, 6 e 7
 **Data:** 2026-09-17
 
 **Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
@@ -884,3 +884,193 @@ seis dispensas `oasdiff-*` venceram em 25/10 e outra frente está medindo o
 portão de contrato; mexer na descrição agora entra no diff dela. **É a terceira
 pergunta a levar de volta**, e a primeira a resolver depois que aquela frente
 fechar.
+
+# EMENDA 7, 28/10/2026 (decisão do cliente) — A FOTO E O NOME DO PET NO ACHADO
+
+## A decisão, literal
+
+> *"pode colocar a foto e o nome do pet."*
+
+Ela responde a uma queixa que o cliente repetiu, e que ele já tinha escrito por
+extenso em 18/10/2026: *"Na página 'achado registrado' não mostra muita
+informação, não tem foto do pet ou alguma informação útil"*. A entrega de 18/10
+pôs ali a foto que **o próprio achador** tirou e cortou o texto excedente; o que
+continuava faltando era a foto e o nome do **pet cadastrado** — o animal que o
+tutor registrou, com o nome que ele deu.
+
+**Esta emenda é a decisão dele, e não uma recomendação do squad.** O item 7
+original é decisão dele; esta emenda também, e por isso ela leva a data e as
+palavras dele no título.
+
+## O que ela abre, e por que ela é emenda e não revogação
+
+O item 7 proíbe *"outros pets do mesmo tutor, e qualquer coisa que permita
+agrupá-los"*. A leitura que vigorava no código era mais larga que a letra:
+`registro-de-achado.ts` citava "o ADR-0010 item 7 proíbe agrupar" para manter
+**todo** atributo de pet fora da resposta do achado. Agrupar, porém, é uma
+afirmação sobre **dois ou mais** pets — e um achado tem um pet só. A foto e o
+nome de um animal não dizem que ele e outro animal têm o mesmo tutor.
+
+Então o item 7 **não é revogado e não é afrouxado**: ele continua proibindo
+exatamente o que proibia. O que esta emenda derruba é a leitura larga dele.
+
+E o item 6 **não é tocado**: `pet_id`, `case_id`, `reporter_user_id` e qualquer
+UUID continuam fora, aqui como em todo lugar. A diferença é a que o produto
+sente: nome e foto dizem *qual animal é este*; um UUID diz *onde ele mora no
+banco*, e é ordenável.
+
+## O ESCOPO, que é da emenda e não da frase
+
+A frase do cliente não disse onde. O recorte foi proposto pelo squad com o
+risco na mesa, e é este — **a foto e o nome saem nos dois caminhos em que quem
+lê JÁ SABE qual animal é, e só neles**:
+
+| caminho | o que o leitor já tem na mão | sai? |
+|---|---|---|
+| **plaquinha lida** (`found_reports.origin = 'tag_scan'`) | ele chegou pela página daquele pet, que já mostra foto e nome | **sim** |
+| **link do tutor** (`found_reports.case_id`, vindo do `share_token`) | ele colou o link que o tutor publicou, e aquele link já carrega foto e nome | **sim** |
+| **achado avulso cruzado por semelhança** (`match_candidates.link_origin = 'attribute_match'`) | nada: a correspondência é um palpite da máquina | **não** |
+
+Nos dois primeiros, foto e nome **não contam nada novo** a quem lê: negá-los
+não protegia ninguém, e só fazia a tela parecer quebrada — que é a queixa.
+
+## O RISCO, por extenso, e ele é a razão da terceira linha
+
+No achado avulso a foto e o nome não saem, e o risco que isso fecha é nominal e
+**foi medido pelo próprio cliente em 20/10/2026**, quando ele descartou a
+recompensa ao ver o mesmo vetor: o **golpe do falso achador**.
+
+O golpe é este. Um estranho descobre que um animal está perdido. Ele procura o
+tutor e diz "achei seu pet", e a partir daí pede dinheiro para devolver um
+animal que não tem. O que separa o golpe de uma tentativa que não convence é
+**quanto o estranho consegue descrever o animal**. Um tutor desesperado que ouve
+o nome certo do pet, e vê a foto certa, acredita.
+
+No caminho do cruzamento por semelhança, é o servidor que oferece a
+correspondência — e ele a oferece com base em porte, cor, raça, proximidade e
+tempo, com corte de score em 0,45. **O cruzamento SUGERE; ele não confirma**
+(BICHUS-35, critério 7; seção 4.10 de `docs/03-arquitetura.md`). Devolver foto e
+nome junto com uma sugestão seria o produto entregando, a quem registrou um
+achado qualquer, o insumo exato que falta para o golpe soar verdadeiro — e
+entregando antes de qualquer confirmação humana, para alguém que no pior caso é
+o golpista.
+
+Dito do jeito mais curto: nos dois primeiros caminhos a pessoa já sabe qual
+animal é, e esconder é teatro. No terceiro, quem saberia é a máquina — e ela
+está palpitando.
+
+**O risco que o cliente aceita ao abrir os dois primeiros.** Quem lê uma
+plaquinha alcança a foto e o nome daquele pet sem conta nenhuma, e isso já era
+verdade antes desta emenda (`resolveTagCode`, e `pet_display_name` em
+`FinderFoundReportView` e `FinderConversation` desde a BICHUS-41). A emenda não
+abre superfície nova para esse caminho: ela leva o mesmo dado à resposta que a
+tela do achado lê. Quem colar um `share_token` válido vê foto e nome do caso
+daquele token — e o link é público por decisão, porque é ele que faz o cartaz
+funcionar. O que fica aberto, então, é: **alguém que colete plaquinhas ou links
+alheios consegue montar uma lista de animais com foto e nome.** Isso já era
+possível antes desta emenda pelas páginas públicas, e o que a limita é o item 7
+continuar proibindo agrupar por tutor, mais os tetos de registro (10 achados por
+conta em 24 h).
+
+## Onde a autorização mora, e por que não é um `if`
+
+O recorte não é um `if` na borda. Ele é a **consulta**.
+
+`kysely-found-report-repository.ts` resolve o pet por
+`COALESCE(found_reports.pet_id, lost_cases.pet_id via found_reports.case_id)`, e
+as duas colunas têm dono medido no repositório: `pet_id` é escrito **só** por
+`registrarAviso` em `kysely-tag-repository.ts`, junto de `origin: 'tag_scan'`;
+`case_id` é escrito **só** pelo `INSERT` de `criar`, a partir do `share_token`.
+Os dois únicos `UPDATE` daquele arquivo não tocam nenhuma das duas, e nada mais
+no código escreve nelas. Então *"tem pet certo"* e *"veio de plaquinha ou de
+link do tutor"* são a **mesma condição**, e ela é a desta emenda.
+
+**`match_candidates` não aparece em nenhuma das cinco leituras do achado**, e a
+ausência é o desenho: a consulta que traria foto e nome de uma correspondência
+palpitada **não existe**. É a mesma forma de argumento das emendas 3 e 5 — não é
+um predicado que um refatoramento apaga, é uma consulta que ninguém escreveu.
+
+Medido em `src/modules/found/adapters/persistence/so-o-pet-certo-sai-no-achado.test.ts`,
+sobre o SQL compilado das cinco leituras, com controle positivo para a agulha e
+cinco desligamentos que reprovam. E em
+`src/modules/found/adapters/http/found-report-routes.test.ts`, nos dois
+sentidos: montar `matched_pet` sempre reprova o caso de ausência, e fixá-lo em
+`null` reprova os quatro de presença mais a isca contrária.
+
+## O que exatamente passa a sair, e onde
+
+`FoundReport.matched_pet` (novo), em `createStrayFoundReport`,
+`getFoundReport`, `listMyFoundReports` e `enrichFoundReport` — **todas com
+`bearerAuth`**. Dentro dele, dois campos e nenhum a mais:
+
+- `display_name` — `pets.name`. É o mesmo dado que `FinderFoundReportView` e
+  `FinderConversation` já entregam na trilha da plaquinha;
+- `photo_url` — a capa, de `pet_photos.card_key` com `status = 'ready'`,
+  `is_primary` e não apagada, montada sobre a base de **mídia**. Nula sem capa
+  pronta, e então a tela lê "este pet não tem foto", nunca "a rota não sabe".
+
+**Nenhuma superfície sem conta ganha campo.** O `portao-contrato-publico.ts`
+percorre só operação alcançável sem conta, e nenhuma das quatro é. Os nomes
+`display_name` e `photo_url` não estão em `CAMPOS_PROIBIDOS` — e não precisam
+estar, porque aquela lista é sobre contato e coordenada.
+
+**`FoundReport.photo_url` não muda e continua nulo.** Ele é a foto que o
+**achador** tirou, e o critério 9 a mantém dentro da conversa mediada. São fotos
+de lados opostos da mesma conversa, e confundi-las faria a tela mostrar a foto
+errada para a pessoa errada.
+
+## O que esta emenda NÃO decide, e portanto continua proibido
+
+1. **Nada sai no achado avulso cruzado por semelhança.** Nem nome, nem foto, nem
+   miniatura, nem espécie do pet correspondente, nem a existência da
+   correspondência. Estender isso exige evidência nova e decisão dele — não
+   zelo nem conveniência de tela;
+2. **nenhum identificador**, em nenhum dos caminhos: `pet_id`, `case_id`,
+   `pet_slug`, `share_token` de volta, `owner_*`. O item 6 fica inteiro;
+3. **nada sobre o TUTOR.** Não entra nome, apelido, foto de perfil, canal nem a
+   existência de outros pets dele. O que saiu foi o **animal**;
+4. **nenhum outro pet.** Um achado tem um pet, e `matched_pet` é um objeto e não
+   uma lista — o item 7 continua proibindo agrupar, e esta emenda depende
+   exatamente dessa distinção para existir;
+5. **nenhuma lista pública de achados com foto.** A emenda alcança a resposta
+   de quem registrou o achado, autenticada, e mais nada;
+6. **o `photo_url` do achador continua fechado** fora da conversa mediada
+   (critério 9), e esta emenda não reabre o assunto;
+7. **a tela do aplicativo não está entregue nesta rodada.** Contrato e servidor
+   estão, com as iscas; `app/lib/telas/achado/` ainda lê `matched_pet` como
+   nulo. Enquanto não ler, a queixa do cliente **continua visível para ele** —
+   é a primeira coisa a fechar, e está dita aqui para não passar por entregue;
+8. **`matched_pet` NÃO sai na lista de candidatos do tutor**, e isto é o item
+   mais fácil de furar sem querer. `MatchCandidate.found_report` referencia
+   `FoundReport` **inteiro**, então o campo passou a ser *declarável* em
+   `listLostCaseCandidates` e `decideLostCaseCandidate` — as duas rotas que o
+   tutor usa para ver "animais parecidos com o meu".
+
+   **Conferido em 28/10/2026:** `comoRespostaDoCandidato`, em
+   `src/modules/lostfound/adapters/http/lost-case-routes.ts`, monta
+   `found_report` campo a campo e **não** inclui `matched_pet`. Aquela projeção
+   é separada da do módulo `found`, então pôr o campo lá seria uma edição
+   deliberada — não um efeito colateral desta emenda. Hoje **não vaza**.
+
+   **Por que não pode passar a vazar:** naquela lista o achado chega ao tutor
+   *por semelhança* — foi o cruzamento que o trouxe. Se aquele mesmo achado
+   tiver pet certo por outro caminho (uma plaquinha lida, ou o link de **outro**
+   tutor), emitir `matched_pet` ali mostraria a foto e o nome do pet de um
+   terceiro a quem só devia ver "um animal parecido com o meu". É dado de
+   terceiro entregue a quem não tem relação com ele, e **nenhum portão desta
+   casa confere corpo de resposta** — quem pegaria isso é revisão de PR, e é
+   por isso que está escrito aqui e na descrição do campo no contrato.
+
+   A medição que falta, e que fica nomeada: um caso de rota sobre
+   `listLostCaseCandidates` cobrando a ausência de `matched_pet` no corpo. Não
+   existe teste HTTP daquela rota hoje (só os de autorização em persistência e
+   o de serviço), e construir a bancada dele não caberia nesta entrega sem
+   deixar o resto afirmado em vez de medido.
+
+## A pergunta a levar de volta ao cliente
+
+Nestes termos: *"a foto e o nome do pet aparecem no achado quando você leu a
+plaquinha ou colou o link que o tutor publicou. **Não** aparecem quando o
+sistema só achou um pet parecido, porque aí quem está adivinhando é a máquina —
+e foi esse o caminho do golpe do falso achador que você mediu em 20/10.
+Confirma?"*
