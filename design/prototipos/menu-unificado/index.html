@@ -382,6 +382,7 @@ body{
   border:12px solid #000;background:#fff;
 }
 .qr-modulos::before{top:0;left:0}
+.qr-modulos i{position:absolute;bottom:0;left:0;width:28%;height:28%;border:12px solid #000;background:#fff}
 .qr-modulos::after{top:0;right:0}
 .qr-legenda{font-size:13px;line-height:18px;color:var(--text-secondary);margin-top:var(--e3);text-align:center}
 .qr-placar{
@@ -803,3 +804,286 @@ body{
       </div>
     </div>
   </div>
+
+  <!-- ==================================================================
+       CASO F: `Achados`, COM LISTA E COM O BOTAO FIXO NO TOPO DO CORPO
+       ================================================================== -->
+  <div class="caso" id="f-achados">
+    <div class="coluna">
+      <p class="rotulo-tela">Achados — com lista <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">A tela abre <b>na listagem dos seus achados</b>, com <code>Registrar um achado avulso</code> <b>fixo no topo do corpo</b> — escolha dele, e é onde o padrão de listagem deste projeto manda pôr controle: <b>no topo do corpo, nunca na barra</b>. <b>Role a lista</b>: o botão fica.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Achados</div>
+        </div>
+        <div class="corpo">
+          <div class="barra-de-corpo">
+            <button class="botao"><span class="ms" style="color:var(--on-primary)">add</span>Registrar um achado avulso</button>
+          </div>
+          <div class="achado">
+            <span class="estado">Possível tutor encontrado</span>
+            <div class="tt">Achado pela plaquinha</div>
+            <div class="ln">Vila Mariana, São Paulo</div>
+            <div class="ln">Achado em 26/10/2026</div>
+          </div>
+          <div class="achado">
+            <span class="estado">Em análise</span>
+            <div class="tt">Achado que você registrou</div>
+            <div class="ln">Pinheiros, São Paulo</div>
+            <div class="ln">Achado em 24/10/2026</div>
+          </div>
+          <div class="achado">
+            <span class="estado">Encerrado</span>
+            <div class="tt">Achado que você registrou</div>
+            <div class="ln">Região não informada</div>
+            <div class="ln">Achado em 19/10/2026</div>
+          </div>
+          <div class="achado">
+            <span class="estado">Encerrado</span>
+            <div class="tt">Achado pela plaquinha</div>
+            <div class="ln">Tatuapé, São Paulo</div>
+            <div class="ln">Achado em 11/10/2026</div>
+          </div>
+          <p class="rodape-lista">Você registrou 4 achados.</p>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Por que FIXO e não só no topo:</b> com 20 itens e <code>Carregar mais</code>, um botão que rola embora obriga a voltar ao início para registrar o próximo achado — e quem registra um achado costuma estar na rua, com um animal na mão. <code>position: sticky</code> dentro do corpo que rola; a lista passa por baixo, e o chão opaco com borda existe para o texto do primeiro cartão não aparecer atrás do botão.
+        <ul>
+          <li><b>O RÓTULO MUDOU, e é a perda que eu reporto:</b> o item do menu dizia <code>Registrar achado avulso</code> e aqui o botão diz <code>Registrar um achado avulso</code>. Mantive a palavra <b>avulso</b> de propósito — a prosa de <code>abas.dart</code> diz que o rótulo é o mesmo que a folha pintava <em>“porque quem usava a ação acha pelo texto”</em>, e esta é a <b>terceira</b> casa dela em oito dias.</li>
+          <li><b>O TÍTULO DA TELA TEM DE VIRAR <code>Achados</code> JUNTO.</b> Hoje <code>MeusAchados.titulo</code> é <code>'Meus achados'</code> e serve de rótulo do menu <b>e</b> de título da barra — uma constante para os dois, porque quem procura a função pelo nome do menu precisa ver o mesmo nome na barra da tela que abriu. Menu dizendo <code>Achados</code> e barra dizendo <code>Meus achados</code> quebraria isso.</li>
+          <li><b>O estado em palavra e nunca em cor sozinha</b> (SC 1.4.1): <code>Em análise</code>, <code>Possível tutor encontrado</code>, <code>Encerrado</code>, <code>Registrado</code> — os quatro de <code>MeusAchados.rotuloDoEstado</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO G: `Achados` VAZIA -- o botao TEM de continuar visivel e obvio
+       ================================================================== -->
+  <div class="caso" id="g-achados-vazia">
+    <div class="coluna">
+      <p class="rotulo-tela">Achados — <b>lista vazia</b> <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">Este é o estado de <b>toda conta nova</b>, e é onde a unificação pode machucar mais: a função de registrar perdeu a linha de menu dela, e se o botão se escondesse aqui a função não teria <b>porta nenhuma</b> para quem nunca registrou um achado.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Achados</div>
+        </div>
+        <div class="corpo">
+          <div class="barra-de-corpo">
+            <button class="botao"><span class="ms" style="color:var(--on-primary)">add</span>Registrar um achado avulso</button>
+          </div>
+          <div class="vazio">
+            <div class="t">Você ainda não registrou nenhum achado.</div>
+            <div class="e">Achou um animal na rua? Leia a plaquinha dele em <b>Escanear uma tag</b>, ou registre o achado no botão acima.</div>
+          </div>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>O botão é o MESMO botão, no MESMO lugar, com o MESMO rótulo.</b> Ele não cresce, não muda de tinta e não troca de texto para <em>“Registrar o seu primeiro achado”</em>: botão que muda entre o vazio e a lista é um botão que a pessoa aprende duas vezes.
+        <ul>
+          <li><b>A segunda linha do vazio é o único acréscimo meu, e ela existe por uma medição que está escrita no código:</b> <code>Registrar achado avulso</code> <b>não exige conta</b>, mas este menu só existe logado — e a porta sem conta era o alvo secundário da ação flutuante de <code>Pets</code>, que o cliente mandou sair em 20/10. A resposta dele foi <em>“O fluxo ja existe dentro do botao escanear… podemos deixar como esta”</em>. A frase aponta para <code>Escanear uma tag</code> porque é lá que aquele fluxo está, e <b>não reabre a decisão</b>.</li>
+          <li><b>O texto da primeira linha é o de hoje</b>, palavra por palavra: <code>MeusAchados.vazio</code> = <em>“Você ainda não registrou nenhum achado.”</em></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO H: O QR DENTRO DE `Meus dados`
+       Dois aparelhos: recolhido (como a pagina ABRE) e aberto (depois do
+       toque). O recolhido e o estado que responde "sem dominar a pagina".
+       ================================================================== -->
+  <div class="caso" id="h-meus-dados">
+    <div class="coluna">
+      <p class="rotulo-tela">Meus dados — como a página <b>ABRE</b> <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">O QR <b>recolhido</b>: uma linha de 48 dp, no pé da página, abaixo de <code>Salvar</code>. É uma página de dados pessoais — nada que a pessoa veio fazer fica atrás do quadrado. <b>Toque na linha</b> para abrir.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Meus dados</div>
+        </div>
+        <div class="corpo">
+          <div class="campo"><span class="rot">Nome de exibição</span><div class="cx">Leandro Panegassi</div></div>
+          <div class="campo"><span class="rot">Apelido</span><div class="cx">@leandro</div></div>
+          <div class="campo"><span class="rot">E-mail</span><div class="cx">leandro@exemplo.com</div></div>
+          <div class="campo"><span class="rot">Telefone</span><div class="cx">(11) 98888-7777</div></div>
+          <button class="botao">Salvar</button>
+
+          <p class="secao-tit">Convite</p>
+          <div class="bloco-recolhivel" data-recolhivel>
+            <button class="cab">
+              <span class="rot">Meu QR de convite<span class="ap">Para quem tem pet e ainda não está no Bichu</span></span>
+              <span class="ms sec">expand_more</span>
+            </button>
+            <div class="conteudo">
+              <div class="qr-moldura"><div class="qr-modulos"><i></i></div></div>
+              <p class="qr-legenda">Peça para o usuário abrir o Bichu e escanear daqui. A câmera comum do celular não abre este código.</p>
+              <div class="qr-placar"><span class="ms p" style="color:var(--text-primary)">volunteer_activism</span><span><b>4 tutores</b> entraram no Bichu pelo seu convite.</span></div>
+              <p class="qr-legenda">O QR aparece aqui enquanto esta seção estiver aberta. Ao voltar, toque em criar de novo — o anterior deixa de valer.</p>
+              <button class="botao sec" style="margin-top:var(--e3)">Criar o meu QR de convite</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Três decisões fazem o QR não dominar a página, e nenhuma delas é só tamanho:</b>
+        <ul>
+          <li><b>POSIÇÃO.</b> Último bloco, depois de <code>Salvar</code>. A pessoa que veio trocar o telefone nunca passa por ele.</li>
+          <li><b>ESTADO.</b> <b>Recolhido por padrão</b> — 48 dp fechado contra os 200 dp do quadrado (<code>QrDoConvite.lado</code>, que é o mesmo número de <code>QrDaPlaquinha</code> e não encolhe: QR que encolhe de uma tela para outra é QR que a câmera do vizinho pega numa e não pega na outra).</li>
+          <li><b>TINTA.</b> Chão <code>surfaceSunken</code> com borda <code>outline</code>, e não cartão <code>surface</code> com sombra. Afundado lê como gaveta de apoio; elevado leria como o assunto da tela.</li>
+          <li><b>O QUADRADO É BRANCO E PRETO, e isso não é falta de token:</b> <code>QrDoConvite</code> fixa <code>0xFFFFFFFF</code> e <code>0xFF000000</code> por <b>função óptica</b>, com a zona silenciosa de <code>e3</code>. No tema escuro o fundo da superfície é escuro, e um QR escuro sobre escuro não é lido por nada.</li>
+          <li><b>O PLACAR É PROPOSTA MINHA, NÃO DECISÃO DELE.</b> <em>“Quem você trouxe para o Bichu”</em> (<code>invited_joined_count</code>) é a outra metade da tela que morre, e matá-la sem dizer onde vai o apaga em silêncio. Virou <b>uma linha</b> dentro do bloco — não é o assunto de <code>Meus dados</code> e não merece seção própria. <b>Se ele quiser o placar fora, ele sai.</b></li>
+          <li><b><code>Criar o meu QR de convite</code> VIAJA COM O QR, e é ressalva parada nele desde 26/10.</b> Ele disse que o QR da pessoa <b>deveria ser criado automaticamente</b>; hoje isso não é alcançável sem mexer no <code>openapi.yaml</code> — não existe operação de <b>leitura</b> do próprio convite, o token em claro existe uma vez só (o banco guarda o SHA-256), e emitir na abertura revogaria o anterior a cada visita. <b>Sem este botão a seção não teria QR nenhum para mostrar.</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="coluna">
+      <p class="rotulo-tela">Meus dados — o QR <b>ABERTO</b>, rolado até o pé <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">O mesmo bloco depois do toque, com o quadrado de 200 dp, a instrução de que o QR é app-para-app, o placar e a ação de criar.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Meus dados</div>
+        </div>
+        <div class="corpo">
+          <p class="secao-tit" style="margin-top:0">Convite</p>
+          <div class="bloco-recolhivel aberto" data-recolhivel>
+            <button class="cab">
+              <span class="rot">Meu QR de convite<span class="ap">Para quem tem pet e ainda não está no Bichu</span></span>
+              <span class="ms sec">expand_less</span>
+            </button>
+            <div class="conteudo">
+              <div class="qr-moldura"><div class="qr-modulos"><i></i></div></div>
+              <p class="qr-legenda">Peça para o usuário abrir o Bichu e escanear daqui. A câmera comum do celular não abre este código.</p>
+              <div class="qr-placar"><span class="ms p" style="color:var(--text-primary)">volunteer_activism</span><span><b>4 tutores</b> entraram no Bichu pelo seu convite.</span></div>
+              <p class="qr-legenda">Vale até 27/11.</p>
+              <button class="botao sec" style="margin-top:var(--e3)">Criar o meu QR de convite</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>A frase <em>“a câmera comum do celular não abre este código”</em> não é consolo: ela é a instrução.</b> O quadrado carrega o <b>token</b> e não uma URL, por quatro medições que estão escritas em <code>qr_do_convite.dart</code> — não existe página de convite no site, o app não abre por link, e o contrato recusa montar o endereço. Sem a frase, a pessoa aponta a câmera comum, nada acontece, e ela conclui que o recurso está quebrado.
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO I: A NOTIFICACAO -- a outra metade da escolha do cliente
+       ================================================================== -->
+  <div class="caso" id="i-aviso">
+    <div class="coluna">
+      <p class="rotulo-tela">Avisos — o pedido de conexão na caixa <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">A escolha dele foi <em>“aba interna de pendentes <b>+</b> notificação”</em>, e esta é a segunda metade. Ela <b>já existe</b>: <code>connection_requested</code> está no <code>NotificationKind</code> do contrato desde 22/10. O protótipo a desenha porque é ela que impede o pedido de ficar escondido atrás de um toque — do menu, <code>Conexões</code> não mostra número nenhum.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Avisos</div>
+        </div>
+        <div class="corpo">
+          <div class="aviso-item novo" data-ir="c-pendentes">
+            <span class="gl"><span class="ms">person_add</span></span>
+            <div class="tx">
+              <div class="tt">@ana-do-bairro quer se conectar com você</div>
+              <div class="cp">Toque para aceitar ou recusar.</div>
+              <div class="qd">há 12 minutos</div>
+            </div>
+          </div>
+          <div class="aviso-item">
+            <span class="gl"><span class="ms">qr_code_scanner</span></span>
+            <div class="tx">
+              <div class="tt">Alguém leu a plaquinha do Toddy</div>
+              <div class="cp">Vila Gertrudes, São Paulo</div>
+              <div class="qd">há 3 horas</div>
+            </div>
+          </div>
+          <div class="aviso-item">
+            <span class="gl"><span class="ms">event_available</span></span>
+            <div class="tx">
+              <div class="tt">Seu pedido no encontro foi aceito</div>
+              <div class="cp">Passeio no Ibirapuera</div>
+              <div class="qd">ontem</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Toque no primeiro aviso: ele cai na aba <code>Pendentes</code> já aberta.</b>
+        <ul>
+          <li><b>Ela vai para quem RECEBEU e nunca para quem pediu</b>, e o <code>subject</code> leva o nome de quem pediu — apelido com arroba quando há, nome de exibição quando não há, nulo quando não há nenhum dos dois. É a regra que a tela de pedidos já usa.</li>
+          <li><b>O par do aceite ainda NÃO existe</b>, e a ausência é pendência declarada no contrato, não esquecimento: o aviso de <em>“sua solicitação foi aceita”</em> foi levantado em 22/10 e está <b>sem resposta dele</b>. Com <code>Pedidos de conexão</code> saindo do menu, quem <b>mandou</b> um pedido perde o lugar onde ia conferir — <b>ele agora tem um motivo novo para decidir isso</b>, e é a pergunta fechada que eu levaria.</li>
+          <li>O destino do toque é a <b>aba 2</b>, e não a aba 1: aviso que leva a uma tela onde a decisão não está visível é um toque a mais.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  function mostrar(id){
+    document.querySelectorAll('.caso').forEach(function(c){
+      c.classList.toggle('ativo', c.id === id);
+    });
+    document.querySelectorAll('.chip[data-t]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.t === id));
+    });
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.t); });
+  });
+
+  function largura(w){
+    document.documentElement.style.setProperty('--tela', w+'px');
+    document.querySelectorAll('[data-w-eco]').forEach(function(s){ s.textContent = '· '+w+' dp'; });
+    document.querySelectorAll('.chip[data-w]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.w === w));
+    });
+  }
+  document.querySelectorAll('.chip[data-w]').forEach(function(b){
+    b.addEventListener('click', function(){ largura(b.dataset.w); });
+  });
+  largura('412');
+
+  /* As ABAS de `Conexoes` e qualquer coisa marcada com `data-ir` trocam o caso
+     -- cada aba e cada estado dela e um caso proprio do palco, porque o
+     protótipo mostra os ESTADOS e nao simula o aplicativo. */
+  document.querySelectorAll('[data-aba]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.aba); });
+  });
+  document.querySelectorAll('[data-ir]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.ir); });
+  });
+
+  /* O bloco do QR abre e fecha de verdade: e o estado recolhido que responde
+     "sem dominar a pagina", e ele precisa ser tocavel para o cliente sentir
+     a diferenca entre 48 dp e 200 dp. */
+  document.querySelectorAll('[data-recolhivel] > .cab').forEach(function(c){
+    c.addEventListener('click', function(){
+      var bloco = c.parentElement;
+      bloco.classList.toggle('aberto');
+      var gl = c.querySelector('.ms');
+      if (gl) gl.textContent = bloco.classList.contains('aberto') ? 'expand_less' : 'expand_more';
+    });
+  });
+
+  /* O segmento `Recebidos`/`Enviados` so pisca: `Enviados` NAO esta desenhado
+     de proposito -- o lado enviado da unificacao e decisao aberta do cliente, e
+     desenhar uma tela que ele nao decidiu seria propor por conta propria. */
+  document.querySelectorAll('.seg').forEach(function(s){
+    s.addEventListener('click', function(){
+      var grupo = s.parentElement;
+      grupo.querySelectorAll('.seg').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+      s.setAttribute('aria-pressed','true');
+    });
+  });
+})();
+</script>
+</body>
+</html>
