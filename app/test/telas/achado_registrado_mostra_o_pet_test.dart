@@ -10,9 +10,13 @@
 //
 // O QUE ESTE ARQUIVO MEDE, em quatro afirmacoes independentes:
 //
-//  1. **A FOTO E DESENHADA**, e e `PreviaDaFoto` -- o arquivo do aparelho, com
-//     `cacheWidth` pela largura pintada. Nao e `ImagemDaRede`: `photo_url`
-//     volta NULO por criterio do contrato, e nao ha derivada a pedir.
+//  1. **A FOTO DO ACHADOR E DESENHADA**, e ela e `PreviaDaFoto` -- o arquivo do
+//     aparelho, com `cacheWidth` pela largura pintada. Nao e `ImagemDaRede`,
+//     porque `FoundReport.photo_url` volta NULO por criterio do contrato (o 9)
+//     e nao ha derivada DESSA foto a pedir.
+//
+//     ATENCAO AO ESCOPO DESTA AFIRMACAO -- ele mudou em 28/10/2026. Ver o
+//     bloco `O VEREDITO QUE INVERTEU` abaixo.
 //  2. **SEM foto, nenhum quadro nasce** -- e a faixa de texto continua dizendo
 //     o estado. Quadro cinza vazio diria "faltou carregar" sobre um achado que
 //     nasceu sem foto por escolha de quem o registrou.
@@ -20,6 +24,62 @@
 //     caprichada do arquivo. Ver o bloco `A ISCA NAO PODE SER CEGA` abaixo.
 //  4. **O registro aparece**: estado, regiao e data, com o nulo de `found_at`
 //     tratado sem data inventada.
+//
+// ---------------------------------------------------------------------------
+// O VEREDITO QUE INVERTEU -- 28/10/2026
+// ---------------------------------------------------------------------------
+//
+// **O QUE ESTE ARQUIVO MEDIA, e media certo:** que a foto desenhada no desfecho
+// do achado vem do APARELHO e nao da rede. A razao escrita era que
+// `FoundReport.photo_url` volta nulo por criterio do contrato -- e isso
+// continua verdade, palavra por palavra. Aquele campo e a foto que o ACHADOR
+// tirou, e o criterio 9 a mantem dentro da conversa mediada: assinar uma URL de
+// leitura dela aqui abriria a superficie que o criterio fecha.
+//
+// **O QUE ERA FALSO, e so apareceu em 28/10:** a meia-frase *"e nao ha derivada
+// a pedir"*. Ela estava escrita como afirmacao sobre a RESPOSTA INTEIRA, e nao
+// sobre aquele campo. Nessa leitura larga ela sustentava uma conclusao que o
+// contrato nao autorizava: que o achado nao tem foto nenhuma a pedir ao
+// servidor. Tem -- a do PET, que e outra foto, de outra pessoa, com outra
+// decisao de privacidade por tras.
+//
+// **POR QUE O VEREDITO INVERTEU.** Nao foi o codigo que mudou de opiniao: foi
+// uma decisao do cliente, em 28/10/2026, literal -- *"pode colocar a foto e o
+// nome do pet."* Ela responde a uma queixa que ele repetiu (a mesma de 18/10
+// que deu origem a este arquivo) e esta registrada na emenda 7 do ADR-0010, no
+// nome dele. O que a destravava era a leitura larga do item 7 daquela ADR, que
+// o codigo citava para manter todo atributo de pet fora da resposta: o item
+// proibe AGRUPAR pets de um tutor, e um achado tem um pet so.
+//
+// Desde entao `FoundReport` declara `matched_pet`, com `display_name` e
+// `photo_url` -- e essa `photo_url` **e derivada de rede, e e pedida ao
+// servidor**. Ela sai nos dois caminhos em que quem le ja sabe qual animal e (a
+// plaquinha foi lida, ou a pessoa colou o link que o tutor publicou) e NAO sai
+// no achado avulso cruzado por semelhanca, onde quem esta adivinhando e a
+// maquina -- o caminho do golpe do falso achador que o cliente mediu em
+// 20/10/2026.
+//
+// **O QUE ISSO PEDE DESTE ARQUIVO, e ainda nao esta aqui.** Os casos abaixo
+// usam `_achado()`, que e `OrigemDoAchado.achadoAvulso` com `'origin':
+// 'stray_report'` na rede -- o caminho em que a foto e o nome do pet NAO saem.
+// Para esse caminho tudo o que este arquivo afirma continua valendo, e o
+// `PreviaDaFoto` do aparelho continua sendo a unica imagem correta na tela.
+//
+// Falta o caso do OUTRO caminho: com `matched_pet` preenchido, a tela tem de
+// desenhar a capa do pet (`ImagemDaRede`, nao `PreviaDaFoto`) e escrever o nome
+// dele. Ele NAO foi escrito nesta entrega porque
+// `lib/telas/achado/tela_achado_registrado.dart` ainda nao le o campo:
+// escrever a assercao antes da tela produziria um caso vermelho no main, e
+// escrever um `findsNothing` no lugar dela produziria um portao cego -- que e o
+// defeito que o bloco seguinte existe para nao repetir.
+//
+// A fronteira esta medida do lado do servidor, nos dois sentidos:
+// `src/modules/found/adapters/http/found-report-routes.test.ts` (48 casos) e
+// `src/modules/found/adapters/persistence/so-o-pet-certo-sai-no-achado.test.ts`
+// (13 casos, sobre o SQL compilado). O que falta e a tela, e e a primeira coisa
+// a fechar -- enquanto ela nao fecha, a queixa do cliente continua VISIVEL para
+// ele, e o item 7 do "o que esta emenda NAO decide" da emenda 7 diz isso em voz
+// alta para nao passar por entregue.
 //
 // ---------------------------------------------------------------------------
 // A ISCA NAO PODE SER CEGA, e ja foi duas vezes neste repositorio
@@ -192,9 +252,13 @@ void main() {
         reason:
             'REPROVA: o desfecho do achado nao desenha a foto do pet. E a '
             'queixa de 18/10 palavra por palavra -- "nao tem foto do pet". A '
-            'foto existe: ela viaja em `ResultadoDoAchado.foto` como '
-            '`FotoLocal`, porque `FoundReport.photo_url` volta NULO por '
-            'criterio do contrato e nao ha derivada a pedir ao servidor.',
+            'foto do ACHADOR viaja em `ResultadoDoAchado.foto` como '
+            '`FotoLocal`, porque `FoundReport.photo_url` volta NULO pelo '
+            'criterio 9 -- aquela foto so e vista dentro da conversa mediada, '
+            'e nao ha derivada DELA a pedir. A capa do PET e outra foto, com '
+            'outra decisao: ela vem em `matched_pet` desde a emenda 7 do '
+            'ADR-0010 (28/10/2026), e nao neste caminho -- `_achado()` e o '
+            'achado AVULSO, onde ela nao sai.',
       );
 
       // **E a foto CERTA, e nao um quadro qualquer.** Sem esta assercao, um
