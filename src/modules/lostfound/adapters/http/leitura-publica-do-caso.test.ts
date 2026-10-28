@@ -73,6 +73,10 @@ function casoHostil(parcial: Partial<CasoPublico> = {}): CasoPublico {
   const legitimo: CasoPublico = {
     shareToken: TOKEN,
     aberto: true,
+    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
+    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
+    // o adaptador nunca produz.
+    reencontrado: false,
     petNome: `Thor ${TELEFONE_DO_TUTOR}`,
     especie: 'dog',
     porte: 'M',
@@ -402,16 +406,41 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
     }
   });
 
-  void it('o 410 das duas é LostCaseClosed no contrato, e o type emitido é o dele', async () => {
+  /**
+   * O 410 de cada operação aponta para a SUA resposta, e as duas são
+   * diferentes desde 28/10/2026.
+   *
+   * A página passou a declarar `LostCaseClosedOrReunited`, que documenta **dois**
+   * `type` -- o agradecimento do reencontrado e o `lost-case-closed` de sempre
+   * --, e o cartaz continua em `LostCaseClosed`, com um `type` só. O cartaz é
+   * papel: ele não ganhou o tipo novo, e emiti-lo por ali seria responder fora
+   * do contrato sem nenhum portão estático para acusar.
+   *
+   * **O `type` EMITIDO é medido nas duas, e com o token desconhecido**: é o
+   * motivo que não pode vazar em nenhuma das duas superfícies, e ele responde o
+   * corpo fundido de sempre, `next_action` incluído. Que o reencontrado tome o
+   * outro caminho está medido em
+   * `application/leitura-publica-do-caso.test.ts`.
+   */
+  void it('cada operação aponta para a sua resposta, e o token desconhecido fica fundido nas duas', async () => {
     const contrato = carregarContrato('api/openapi.yaml');
-    for (const [operationId, url] of [
-      ['getPublicLostCase', URL_DO_CASO],
-      ['getLostCasePoster', URL_DO_CARTAZ],
+    for (const [operationId, url, refEsperada] of [
+      ['getPublicLostCase', URL_DO_CASO, '#/components/responses/LostCaseClosedOrReunited'],
+      ['getLostCasePoster', URL_DO_CARTAZ, '#/components/responses/LostCaseClosed'],
     ] as const) {
       const respostas = contrato.operacoes.get(operationId)?.raw['responses'] as Record<string, { $ref?: string }>;
-      assert.equal(respostas['410']?.$ref, '#/components/responses/LostCaseClosed');
+      assert.equal(
+        respostas['410']?.$ref,
+        refEsperada,
+        `REPROVA: o 410 de ${operationId} não é ${refEsperada}.`,
+      );
       const resposta = await pedir(montar(() => undefined), url);
-      assert.equal(resposta.corpo['type'], `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`);
+      assert.equal(
+        resposta.corpo['type'],
+        `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`,
+        `REPROVA: ${operationId} respondeu um token DESCONHECIDO com outro ` +
+          '`type`. Distinguir confirma que o token não existe, que é enumeração.',
+      );
       assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
     }
   });

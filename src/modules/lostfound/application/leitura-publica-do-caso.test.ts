@@ -23,6 +23,10 @@ function caso(parcial: Partial<CasoPublico> = {}): CasoPublico {
   return {
     shareToken: TOKEN,
     aberto: true,
+    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
+    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
+    // o adaptador nunca produz.
+    reencontrado: false,
     petNome: 'Thor',
     especie: 'dog',
     porte: 'M',
@@ -104,5 +108,100 @@ void describe('leitura pública do caso: 200 ou 410', () => {
     const chamadas: { token: string; chamador: UserId | undefined }[] = [];
     await servico(caso(), chamadas).cartaz(TOKEN);
     assert.deepEqual(chamadas, [{ token: TOKEN, chamador: undefined }]);
+  });
+});
+
+/**
+ * O SEGUNDO 410 da página: `lost-case-reunited`, e só ele.
+ *
+ * Qual dos cinco motivos virou tipo próprio está medido em
+ * `adapters/persistence/so-o-reencontrado-ganha-nome.test.ts`, que cruza
+ * desfecho × estado do pet sem banco. Aqui o que se mede é o passo seguinte:
+ * dado um [CasoPublico] já decidido, **qual problema sai**, e que o corpo do
+ * ramo fundido não mudou nem um byte.
+ *
+ * PARA VER REPROVANDO: em `leitura-publica-do-caso.ts`, troque
+ * `caso?.reencontrado === true` por `caso !== undefined` -- o token
+ * desconhecido continua fundido (porque é `undefined`), mas o caso encerrado
+ * sem reencontro passa a agradecer, e o primeiro e o terceiro caso reprovam.
+ */
+void describe('o reencontrado é o único dos cinco que ganha nome', () => {
+  void it('o caso reencontrado agradece, e SEM next_action', async () => {
+    const problema = await problemaDe(
+      servico(caso({ aberto: false, reencontrado: true })).caso(TOKEN, undefined),
+    );
+    assert.equal(problema.status, 410);
+    assert.equal(problema.problemType, 'lost-case-reunited');
+    assert.equal(
+      problema.nextAction,
+      undefined,
+      'REPROVA: a página de agradecimento oferece uma saída. O animal está em ' +
+        'casa, quem leu não tem achado nenhum para registrar, e empurrá-la ao ' +
+        'formulário de achado era LITERALMENTE o defeito que o cliente relatou ' +
+        'três vezes.',
+    );
+  });
+
+  void it('os outros quatro motivos saem no MESMO corpo de sempre', async () => {
+    // Os quatro chegam a esta camada já fundidos pelo adaptador: `aberto:
+    // false, reencontrado: false` é o que pet excluído, falecido e arquivado
+    // produzem, e `undefined` é o token desconhecido. O que se mede aqui é que
+    // nenhum deles pega o tipo novo, e que o corpo é byte a byte o de antes.
+    const fundidos = [
+      { rotulo: 'encerrado, excluído, falecido ou arquivado', caso: caso({ aberto: false }) },
+      { rotulo: 'token desconhecido', caso: undefined },
+    ];
+
+    for (const { rotulo, caso: entrada } of fundidos) {
+      const problema = await problemaDe(servico(entrada).caso(TOKEN, undefined));
+      assert.deepEqual(
+        [problema.status, problema.problemType, problema.nextAction],
+        [410, 'lost-case-closed', 'register_stray_found_report'],
+        `REPROVA: ${rotulo} deixou de responder o 410 fundido. Quem recebe ` +
+          '`lost-case-closed` tem de continuar sabendo exatamente o que sabia ' +
+          'antes de 28/10/2026 -- nada.',
+      );
+    }
+  });
+
+  void it('o token desconhecido é indistinguível do encerrado, campo por campo', async () => {
+    // O caminho que mais importa: dizer qualquer coisa a mais sobre um token
+    // que nunca existiu confirma que ele não existe, que é enumeração.
+    const inexistente = await problemaDe(servico(undefined).caso(TOKEN, undefined));
+    const encerrado = await problemaDe(servico(caso({ aberto: false })).caso(TOKEN, undefined));
+    assert.deepEqual(
+      [inexistente.problemType, inexistente.title, inexistente.detail, inexistente.nextAction],
+      [encerrado.problemType, encerrado.title, encerrado.detail, encerrado.nextAction],
+    );
+  });
+
+  void it('o CARTAZ nunca agradece, nem com o caso reencontrado na mão', async () => {
+    // `getLostCasePoster` declara UM 410 no contrato, e emitir o tipo novo por
+    // ali seria responder fora do contrato -- e nenhum portão estático acusa
+    // isso. O cartaz é papel: quem toca no link dele chega em `/p/`.
+    const problema = await problemaDe(
+      servico(caso({ aberto: false, reencontrado: true })).cartaz(TOKEN),
+    );
+    assert.equal(
+      problema.problemType,
+      'lost-case-closed',
+      'REPROVA: o cartaz emitiu `lost-case-reunited`, que ele não declara no ' +
+        'contrato. Resposta que a rota emite tem de estar declarada.',
+    );
+  });
+
+  void it('o agradecimento não carrega nome do pet, data nem quem achou', async () => {
+    const problema = await problemaDe(
+      servico(caso({ aberto: false, reencontrado: true, petNome: 'Thor' })).caso(TOKEN, undefined),
+    );
+    const corpo = `${problema.title} ${problema.detail ?? ''}`;
+    for (const proibido of ['Thor', TOKEN, '2026', 'achou', 'encontrou por']) {
+      assert.equal(
+        corpo.includes(proibido),
+        false,
+        `REPROVA: o corpo do agradecimento traz \`${proibido}\`. O único fato ` +
+          'autorizado é "este caso terminou porque o animal voltou".',
+      );
+    }
   });
 });
