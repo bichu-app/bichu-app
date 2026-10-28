@@ -706,10 +706,16 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           estadoInicial: TextosDaLocalizacao.escolherOEstado,
           itens: estadosBrasileiros,
           selecionado: _uf,
-          // Opcional dito em TEXTO, do mesmo jeito que raca e cor: o seletor
-          // nao tem "(opcional)" no rotulo, e inventar um aqui so para este
-          // campo deixaria dois formatos de "pode ficar vazio" na mesma tela.
-          ajuda: TextosDaLocalizacao.estadoEmBrancoFunciona,
+          // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"Retire o texto so
+          // se voce souber, em branco funciona"*. A frase saiu do formulario do
+          // achado naquele dia e SOBREVIVEU aqui, que e a razao de este
+          // conserto existir.
+          //
+          // O campo continua OPCIONAL -- quem exige o `onde` e a CIDADE, e so
+          // ela (`Area.required: [city]`) -- e continua dizendo
+          // `Escolher na lista` enquanto nada foi escolhido, ou seja,
+          // visivelmente sem escolha. Nenhuma instrucao de acao se perdeu: a
+          // frase nao ensinava a fazer nada, ela tranquilizava.
           aoSelecionar: (codigo) {
             setState(() {
               _uf = codigo;

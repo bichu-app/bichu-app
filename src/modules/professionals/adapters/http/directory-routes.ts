@@ -50,6 +50,7 @@ import {
   type TipoDeProfissional,
 } from '../../domain/entrada-do-diretorio.js';
 import {
+  errosDeModeracaoDaAvaliacao,
   projetarAvaliacao,
   projetarPontuacao,
   validarDenuncia,
@@ -496,6 +497,30 @@ export function registrarRotasDoDiretorio(
       // `vigiarParametrosDasRotas`, e a terceira sao os `CHECK` da tabela.
       const { entrada, erros } = validarEntradaDaAvaliacao(request.body);
       if (entrada === undefined) throw problemas.validacao(erros);
+
+      // A MODERACAO DE PALAVRAS, e ela vem DEPOIS da trava de canal
+      // verificado -- a mesma ordem da indicacao
+      // (`application/sugestao-do-diretorio.ts`, onde o `if` do canal vem
+      // antes de `errosDaSugestao`). A regra do cliente e a mesma regra, e o
+      // app nao pode receber `400` de um lado e `409` do outro para a mesma
+      // conta sem e-mail confirmado.
+      //
+      // A consulta do canal so acontece quando a moderacao JA REPROVOU: no
+      // caminho comum, de texto limpo, esta rota continua com uma unica ida ao
+      // banco. Nada foi gravado quando se chega aqui -- a recusa e anterior ao
+      // `INSERT`, que e o unico lugar em que a recusa protege alguem: a
+      // avaliacao aparece na hora, sem fila de revisao.
+      const reprovado = errosDeModeracaoDaAvaliacao(entrada.texto);
+      if (reprovado.length > 0) {
+        if (!(await deps.diretorio.temCanalVerificadoParaAvaliar(chamador))) {
+          throw problemas.canalDeContatoNaoVerificadoParaAvaliar();
+        }
+        // O `400` NAO leva a palavra encontrada, e isso e requisito de
+        // `shared/texto/moderacao.ts`: a mensagem vem de la inteira, e esta
+        // borda nao a reescreve nem a enriquece com o texto recusado. Nada vai
+        // para log aqui, pelo mesmo motivo.
+        throw problemas.validacao([...reprovado]);
+      }
 
       const gravada = await deps.diretorio.gravarMinhaAvaliacao(
         parametro(request, 'slug'),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/mural_api.dart';
+import '../api/modelos_perdido.dart';
 import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../intencao/caso_de_perdido_como_intencao.dart';
@@ -57,6 +58,7 @@ import '../telas/perdido/tela_onde_e_quando.dart';
 import '../telas/achado/resultado_do_achado.dart';
 import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
+import '../telas/achado/tela_encontrei_este_pet.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../telas/loja/produto_da_loja.dart';
@@ -340,19 +342,50 @@ abstract final class Rotas {
 
   /// `Convide tutores` — a tela de trazer tutores para o Bichu.
   ///
-  /// **SOB `/mensagens`, e nao sob `/perfil`**, por decisao do cliente de
-  /// 21/10/2026: a secao e o `AuAu`. [CascaFixa.slotDaRota] casa pelo PRIMEIRO
-  /// segmento, entao e o caminho que mantem o slot do AuAu aceso enquanto esta
-  /// tela esta na frente -- que e o que o prototipo aprovado desenha.
+  /// **SOB `/perfil` DESDE 26/10/2026, e era `/mensagens/convide-tutores`.** A
+  /// tela saiu do corpo do AuAu e passou a ser alcancada pelo menu do Perfil,
+  /// por pedido do cliente feito DUAS VEZES -- 22/10/2026, *"Mova o convite
+  /// tutores para a pagina do perfil"*, e 26/10/2026, *"retirar o convite
+  /// tutores das mensagens, deixar apenas na menu do perfil do usuario"*. Isso
+  /// emenda a decisao dele de 21/10/2026 (*"no AuAu como tela empilhada, nao no
+  /// Perfil"*), que foi o que pos este endereco sob `/mensagens`.
+  ///
+  /// **O ENDERECO FOI RENOMEADO PORQUE RENOMEAR AQUI NAO CUSTA NADA, e isso
+  /// foi MEDIDO e nao suposto.** Nada aponta para esta rota de fora do app:
+  ///
+  ///  1. o app **nao abre por link** -- so `MAIN`/`LAUNCHER`, nenhum
+  ///     `intent-filter` de `VIEW` e `assetlinks.json` vazio, como o cabecalho
+  ///     de `widgets/qr_do_convite.dart` ja registrava;
+  ///  2. o QR do convite carrega o **token cru** (43 simbolos ao portador), e
+  ///     nao uma URL -- renomear rota nao invalida convite nenhum ja emitido;
+  ///  3. `convide-tutores` nao aparece em `app/android/` nem em `app/ios/`
+  ///     (medido), entao nenhum manifesto reclama;
+  ///  4. nao ha migracao: endereco de tela nao e dado guardado.
+  ///
+  /// O custo inteiro foram tres arquivos -- esta constante, o `GoRoute` abaixo
+  /// e a entrada de `telasInternas` do portao de barra fixa.
+  ///
+  /// **E RENOMEAR APAGOU UMA ARMADILHA em vez de criar uma.** Enquanto o
+  /// endereco era `/mensagens/convide-tutores`, ele SO funcionava por estar
+  /// registrado antes de `/mensagens/:conversaId` -- fora de ordem, o
+  /// `go_router` abriria a conversa `'convide-tutores'`, que nao existe. Sob
+  /// `/perfil` essa dependencia de ordem deixa de existir: **nao ha nenhuma
+  /// rota `/perfil/:algo`** no produto (medido -- as oito rotas sob `/perfil`
+  /// tem todas segmento literal), entao nada pode captura-la.
+  ///
+  /// `slotDaRota` nao entra nesta conta, e vale dizer por que: esta tela esta
+  /// em `telasInternas` do portao de barra fixa, ou seja ela **nao mostra barra
+  /// de baixo nenhuma**. Nao ha slot para acender, e o primeiro segmento do
+  /// endereco nao muda nada do que a pessoa ve.
   ///
   /// **Nao e `/rede/indicacoes/...`, e a distancia e deliberada**: "indicacao"
   /// neste produto e indicar PROFISSIONAL ao diretorio, e aquelas duas rotas sao
   /// dela. Duas funcoes diferentes vizinhas no endereco sao duas funcoes
   /// diferentes vizinhas na gaveta.
   ///
-  /// EMPILHADA, e interna: ela e aberta por um item do corpo do AuAu, e nao pela
-  /// barra. Classificada em `telasInternas` do portao de barra fixa.
-  static const String convidarTutores = '/mensagens/convide-tutores';
+  /// EMPILHADA, e interna: ela e aberta por um `ItemDeMenu` do corpo do Perfil,
+  /// e nao pela barra. Classificada em `telasInternas` do portao de barra fixa.
+  static const String convidarTutores = '/perfil/convide-tutores';
 
   /// A CAIXA DE NOTIFICACOES (18/10/2026): o conteudo do sino.
   ///
@@ -425,11 +458,21 @@ abstract final class Rotas {
     return '/pessoa/$limpo';
   }
 
-  /// `Meus dados` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
+  /// `Perfil` > `Minhas fotos`: a VITRINE do proprio tutor (18/10/2026).
   ///
   /// Endereco proprio porque `VitrineDeFotosDoUsuario` e TELA (tem `Scaffold`
-  /// e barra), e nao um bloco de `Meus dados`. A porta esta la: o autor da
-  /// vitrine nao a pos porque o arquivo de `Meus dados` era de outro ramo.
+  /// e barra), e nao um bloco de `Meus dados`.
+  ///
+  /// **A PORTA MUDOU DE NIVEL EM 26/10/2026, E O ENDERECO NAO.** Ela nasceu
+  /// dentro de `Meus dados` (este comentario dizia `Meus dados` > `Minhas
+  /// fotos`); o cliente mandou subi-la: *"traga o menu minhas fotos para o
+  /// menu principal"* e, perguntado qual menu, *"primeiro nivel do perfil"*.
+  /// Hoje o unico `push` desta rota em `app/lib` sai do grupo `Conta` do menu
+  /// do `Perfil`, em `telas/abas.dart`.
+  ///
+  /// **O VALOR continua `/perfil/minhas-fotos`, de proposito**: mudar de lugar
+  /// no menu nao e mudar de endereco, e renomear quebraria todo link que ja
+  /// circula por uma mudanca que ninguem pediu.
   static const String minhaVitrine = '/perfil/minhas-fotos';
 
   /// `Perfil` › `Meus dados`: os dados pessoais do tutor (18/10/2026).
@@ -696,6 +739,24 @@ abstract final class Rotas {
 
   /// O desfecho de F3.5, nos dois estados (registrado e na fila).
   static const String achadoRegistrado = '/achados/registrado';
+
+  /// **Achei ESTE pet**: o destino de `Encontrei este animal` na pagina
+  /// publica de um caso (defeito relatado pelo cliente em 26/10/2026).
+  ///
+  /// Antes o toque caia em [registrarAchado], que pergunta especie, cor e
+  /// porte -- *"se ele encontrou o pet, ele nao tem que cadastrar as
+  /// informacoes novamente"*. Esta rota leva a tela que pergunta **so** onde,
+  /// quando, o recado e a foto; o animal vem do caso.
+  ///
+  /// **Nao e a tela de retorno de nenhum envelope.** `F3.5` continua
+  /// apontando para [registrarAchado], e de proposito: um registro que FALHOU
+  /// volta para o formulario, que e onde o rascunho mora inteiro (incluindo o
+  /// `share_token`, que `RascunhoDoAchado.campos()` carrega). Mandar a volta
+  /// para ca exigiria o caso publico de novo, e ele nao esta no envelope.
+  ///
+  /// **A ordem importa**: declarada ANTES de `/achados/:achadoId`, pelo mesmo
+  /// motivo de `/achados/novo`.
+  static const String encontreiEstePet = '/achados/encontrei';
 
   /// O padrao do achado pelo endereco dele. Use [achadoDe] para montar.
   static const String achado = '/achados/:achadoId';
@@ -1252,6 +1313,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           );
         },
       ),
+      // **ACHEI ESTE PET** (defeito do cliente, 26/10/2026). Declarada junto
+      // das outras duas de `/achados/...` e ANTES de `/achados/:achadoId`.
+      GoRoute(
+        path: Rotas.encontreiEstePet,
+        builder: (context, estado) {
+          final extra = estado.extra;
+          // **Sem o caso nao ha tela**, e a saida nao e um formulario em
+          // branco desta: e F3.5, o achado AVULSO. Quem chega aqui por link
+          // direto ou por aparelho que recarregou o app nao tem pet
+          // identificado nenhum do outro lado, e desenhar o cartao de leitura
+          // vazio seria afirmar um pet que ninguem leu. O achado avulso e o
+          // caminho honesto, e e o mesmo que o `next_action` do contrato
+          // nomeia quando o caso nao esta mais aberto.
+          if (extra is! PerdidoPublico) return const TelaRegistrarAchado();
+          return TelaEncontreiEstePet(perdido: extra);
+        },
+      ),
       GoRoute(
         path: Rotas.achadoRegistrado,
         builder: (context, estado) {
@@ -1371,8 +1449,9 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       //
       // **Sem parametro no construtor**: a tela tira a `MeApi` e a
       // `BuscaDeCep` do `Escopo`, como as vizinhas. Ela e alcancada por
-      // `ItemDeMenu` dentro de `Meus dados`, do mesmo jeito que
-      // `Minhas fotos`.
+      // `ItemDeMenu` dentro de `Meus dados` -- e e a UNICA assim desde
+      // 26/10/2026: `Minhas fotos`, que era a outra, subiu para o primeiro
+      // nivel do menu do `Perfil` por decisao do cliente daquele dia.
       GoRoute(
         path: Rotas.enderecoDeEntrega,
         builder: (context, estado) => const TelaEnderecoDeEntrega(),
@@ -1418,17 +1497,30 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `Meus dados` e `Meus achados` acima -- a barra de baixo continua
       // existindo atras e voltar devolve a pessoa onde ela estava.
       //
-      // `AuAu` > `Convide tutores` (21/10/2026). Declarada ANTES da area de
-      // mensagens e antes da rota com `:conversaId`: o `go_router` casa na
-      // ordem de registro, e `/mensagens/convide-tutores` casaria
-      // `/mensagens/:conversaId` com `conversaId = 'convide-tutores'` se
-      // viesse depois -- a tela da conversa abriria pedindo uma conversa que
-      // nao existe.
+      // `Perfil` > `Convide tutores`. **Era `AuAu` > ... ate 26/10/2026**, e a
+      // troca e pedido do cliente repetido duas vezes (22/10 e 26/10); a
+      // decisao de 21/10 que a punha no AuAu esta citada ao lado das outras
+      // duas em `Rotas.convidarTutores`, em `telas/abas.dart` e em
+      // `telas/mensagens/area_de_mensagens.dart`.
+      //
+      // **A ORDEM DE REGISTRO DEIXOU DE IMPORTAR PARA ESTA ROTA, e esta linha
+      // existia por causa dela.** Enquanto o endereco era
+      // `/mensagens/convide-tutores`, ele TINHA de vir antes de
+      // `/mensagens/:conversaId`: o `go_router` casa na ordem de registro, e
+      // fora de ordem a tela da conversa abriria pedindo a conversa
+      // `'convide-tutores'`, que nao existe. Sob `/perfil` nao ha nada que a
+      // possa capturar -- **nao existe rota `/perfil/:algo`** no produto, e as
+      // oito rotas sob `/perfil` tem todas segmento literal.
+      //
+      // Ela continua declarada AQUI, antes da area de mensagens, e isso agora e
+      // so arrumacao: as quatro rotas desta uniao ficam juntas. Mover nao
+      // quebra, e deixar junto e mais facil de ler.
       //
       // **Irma da casca e nao sub-rota do ramo**: ela cobre a barra de baixo e
-      // voltar devolve a pessoa ao AuAu. E `ConvitesApi` vem do `Escopo`, como
-      // as outras camadas de API -- a mesma instancia que o leitor de QR usa
-      // para resolver um convite lido.
+      // voltar devolve a pessoa a tela da conta, que e de onde o item do menu
+      // a abre. E `ConvitesApi` vem do `Escopo`, como as outras camadas de API
+      // -- a mesma instancia que o leitor de QR usa para resolver um convite
+      // lido.
       GoRoute(
         path: Rotas.convidarTutores,
         builder: (context, estado) => TelaDeConvidarTutores(

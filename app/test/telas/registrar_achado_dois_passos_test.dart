@@ -75,8 +75,8 @@ Future<void> _voltarAoPasso1(WidgetTester tester) async {
 
 /// Preenche o passo 1 inteiro e para nele.
 Future<void> _preencherOPasso1(WidgetTester tester) async {
-  await rolarAte(tester, find.text('Cão'));
-  await tocar(tester, find.text('Cão'));
+  await rolarAte(tester, find.text('Cachorro'));
+  await tocar(tester, find.text('Cachorro'));
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
 }

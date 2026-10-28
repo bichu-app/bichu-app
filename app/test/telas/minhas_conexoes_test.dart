@@ -103,6 +103,8 @@ Future<void> _montar(
   bool listaFalha = false,
   bool semConta = false,
   bool resumoFalha = false,
+  bool corpoForaDoContrato = false,
+  bool paginaDoisForaDoContrato = false,
 }) async {
   chamadas.clear();
   caminhos.clear();
@@ -126,6 +128,21 @@ Future<void> _montar(
       }
       if (listaFalha) return _json(<String, dynamic>{}, status: 500);
       final pagina = int.tryParse(pedido.url.queryParameters['page'] ?? '1') ?? 1;
+      // **200 FORA DO CONTRATO**, e nao 4xx/5xx: `handle` chega nulo onde o
+      // modelo faz `json['handle'] as String`, e o cast estoura `TypeError` --
+      // que NAO e `FalhaDeChamada`. E o 200 desviado que o repositorio nao
+      // confere em portao nenhum.
+      if ((pagina == 1 && corpoForaDoContrato) || (pagina == 2 && paginaDoisForaDoContrato)) {
+        return _json(_pagina(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'handle': null,
+            'display_name': 'Ana',
+            'pets_count': 0,
+            'connections_count': 0,
+            'photo_icon_url': null,
+          },
+        ], total: total, page: pagina));
+      }
       return _json(
         pagina == 1
             ? _pagina(primeiraPagina, total: total)
@@ -411,5 +428,66 @@ void main() {
 
     expect(find.text('A'), findsOneWidget);
     expect(find.byType(Image), findsNothing);
+  });
+
+  /// **A TELA NAO FICA CARREGANDO PARA SEMPRE** num 200 fora do contrato.
+  ///
+  /// `_carregar` capturava so `FalhaDeChamada`. Um corpo 200 com `handle` nulo
+  /// estoura `TypeError` dentro de `PaginaDeConexoes.doJson`, que escapava dos
+  /// dois ramos e deixava `_carregando` ligado **para sempre** -- o estado que
+  /// `tela_do_caso_publico.dart` chama de *"o que este app nao deixa existir"*,
+  /// e que esta tela deixava.
+  ///
+  /// **E o outro sintoma do defeito de 26/10**, e nao o mesmo: a frase que o
+  /// cliente viu (`Nao conseguimos carregar...`) vem de 4xx/5xx. Esta lacuna
+  /// nao tem frase nenhuma, e e por isso que ela e invisivel.
+  testWidgets('200 fora do contrato NAO deixa a tela presa em carregando', (tester) async {
+    await _montar(tester, corpoForaDoContrato: true);
+
+    expect(
+      find.byType(CircularProgressIndicator),
+      findsNothing,
+      reason: 'sem o ramo `on Object`, `_carregando` ficava ligado para sempre',
+    );
+    expect(find.text('O Bichu está fora do ar por alguns minutos. Já estamos arrumando.'),
+        findsOneWidget);
+    // **O desvio foi REGISTRADO, e nao engolido.** `registrarFalhaInesperada`
+    // chama `FlutterError.reportError` de proposito: um 200 fora do contrato e
+    // defeito de servidor, e uma tela que o escondesse deixaria a causa
+    // invisivel justamente no caso em que ninguem suspeita do servidor.
+    expect(
+      tester.takeException(),
+      isA<TypeError>(),
+      reason: 'a tela registrou o desvio de contrato em vez de engolir calada',
+    );
+  });
+
+  /// A MESMA lacuna na pagina seguinte, onde o preso era `_carregandoMais`: o
+  /// `Ver mais` rodava para sempre e o `if (_carregandoMais) return` do topo
+  /// trancava a porta por tras -- nem tocar de novo saia.
+  testWidgets('200 fora do contrato na pagina 2 NAO deixa `Ver mais` rodando', (tester) async {
+    await _montar(
+      tester,
+      total: 2,
+      primeiraPagina: <Map<String, dynamic>>[_pessoa(apelido: 'ana-do-bairro', nome: 'Ana')],
+      paginaDoisForaDoContrato: true,
+    );
+
+    await tester.tap(find.text('Ver mais'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Ana'),
+      findsOneWidget,
+      reason: 'o que ja estava na tela FICA',
+    );
+    expect(
+      find.byType(CircularProgressIndicator),
+      findsNothing,
+      reason: 'sem o ramo `on Object`, `_carregandoMais` ficava ligado para sempre',
+    );
+    expect(find.text('O Bichu está fora do ar por alguns minutos. Já estamos arrumando.'),
+        findsOneWidget);
+    expect(tester.takeException(), isA<TypeError>());
   });
 }

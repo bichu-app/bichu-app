@@ -8,18 +8,22 @@ import '../theme/bichu_tokens.g.dart';
 import '../api/mural_api.dart';
 import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/botao_primario.dart';
+import '../widgets/carimbo_do_build.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
 import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'conexoes/convide_tutores.dart';
 import 'conexoes/tela_minhas_conexoes.dart';
 import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
 import 'perfil/meus_eventos.dart';
 import 'perfil/meus_pets.dart';
+import 'perfil/vitrine_de_fotos.dart';
+import 'perto/tela_de_minhas_indicacoes.dart';
 import 'rede/secao_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
 
@@ -895,13 +899,55 @@ class AbaPerfil extends StatelessWidget {
             // linha de apoio era ESTADO ESCRITO, e a faixa e CAMINHO.
             //
             // O rotulo `Meus dados` NAO mudou: ele esta em tres portoes e na
-            // tela `/perfil/dados` que este toque abre. **E ele e a porta de
-            // `Minhas fotos`**, que nao e item deste menu e nunca foi -- medido
-            // nesta arvore: `Rotas.minhaVitrine` sai de `tela_dados_pessoais`
-            // e de mais nenhuma tela.
+            // tela `/perfil/dados` que este toque abre.
+            //
+            // **ELE DEIXOU DE SER A PORTA DE `Minhas fotos` EM 26/10/2026.**
+            // A nota que vivia aqui dizia que `Minhas fotos` *"nao e item
+            // deste menu e nunca foi"*, e ela era REGISTRO do que a arvore
+            // tinha -- nao decisao de que nao podia ser. O cliente decidiu o
+            // contrario, e as palavras dele sao as duas: *"traga o menu
+            // minhas fotos para o menu principal"* e, quando perguntado QUAL
+            // menu, *"primeiro nivel do perfil"*. A linha abaixo e a resposta,
+            // e `tela_dados_pessoais.dart` perdeu a dela no mesmo commit --
+            // "trazer para" com a porta velha de pe seriam DUAS portas para a
+            // mesma tela, que e o que `gaveta_de_secoes.dart` proibe.
             ItemDeMenu(
               rotulo: 'Meus dados',
               aoTocar: () => context.push(Rotas.dadosPessoais),
+            ),
+            // **`Minhas fotos` ENTROU AQUI (26/10/2026), vinda de DENTRO de
+            // `Meus dados`.** Cliente, literal: *"traga o menu minhas fotos
+            // para o menu principal"*; e, perguntado qual menu, *"primeiro
+            // nivel do perfil"*. Nao e porta nova: e a MESMA porta, um nivel
+            // acima. `Rotas.minhaVitrine` nao mudou de endereco de proposito
+            // (`/perfil/minhas-fotos`), para o link que ja circula continuar
+            // valendo.
+            //
+            // **NO GRUPO `Conta`, e LOGO DEPOIS de `Meus dados`.** O grupo e
+            // *"mexer em mim"*, e a vitrine e exatamente isso: as fotos que a
+            // pessoa mostra de si sao dado dela, que e a razao com que a porta
+            // foi posta dentro de `Meus dados` em 18/10 e que continua valendo
+            // um nivel acima. Depois de `Meus dados` porque era filha dele:
+            // quem procurava a vitrine descia por ali, e a linha nova esta
+            // onde a mao dessa pessoa ja ia. E ANTES de `Usuarios bloqueados`
+            // porque aquele item fecha o grupo com o que eu RECUSEI, e a prosa
+            // dele diz isso por extenso.
+            //
+            // **NENHUMA LINHA EXISTENTE MUDOU DE LUGAR**, e isso e deliberado:
+            // a ordem deste menu e decisao do cliente de 18/10 e 21/10, e
+            // `perfil_ordem_dos_itens_test.dart` a guarda. Mover o item pedido
+            // nao e licenca para redesenhar o menu.
+            //
+            // **SEM LINHA DE APOIO, e nao e omissao.** Dentro de `Meus dados`
+            // ela tinha `apoio: 'As fotos que so voce ve'`. Aqui nenhuma das
+            // outras onze linhas tem apoio, e a razao e decisao do cliente sobre
+            // ESTE menu (18/10/2026, literal): *"na pagina do perfil, nao
+            // traga o e-mail no menu, deixe apenas o titulo meus dados"*.
+            // Trazer a linha de apoio faria a unica linha diferente do
+            // conjunto, no menu de onde ele mandou tirar exatamente isso.
+            ItemDeMenu(
+              rotulo: VitrineDeFotosDoUsuario.tituloDaTela,
+              aoTocar: () => context.push(Rotas.minhaVitrine),
             ),
             // `Pessoas bloqueadas` -- e ela tinha a GAVETA COMO UNICA PORTA
             // ate 19/10 (medido: `Rotas.pessoasBloqueadas` aparecia so em
@@ -1032,6 +1078,43 @@ class AbaPerfil extends StatelessWidget {
               rotulo: TelaDeMinhasConexoes.titulo,
               aoTocar: () => context.push(Rotas.minhasConexoes),
             ),
+            // **`Convide tutores` ENTROU AQUI (26/10/2026), e e a METADE QUE A
+            // PESSOA VE.** Ele pediu duas vezes: 22/10/2026, *"Mova o convite
+            // tutores para a pagina do perfil"*; e 26/10/2026, *"retirar o
+            // convite tutores das mensagens, deixar apenas na menu do perfil
+            // do usuario"*. Isto emenda a decisao dele de 21/10/2026
+            // (*"no AuAu como tela empilhada, nao no Perfil"*), que e a que
+            // ainda esta escrita em `mensagens/area_de_mensagens.dart` -- as
+            // tres datas estao citadas nos dois arquivos de proposito, porque
+            // sem as duas novas ao lado da velha alguem reverte isto achando
+            // que esta consertando um defeito.
+            //
+            // **E ESTE MENU, e nao a gaveta, que cumpre o pedido.** A linha
+            // reservada `Convidar vizinhos` de `gaveta_de_secoes.dart` subiu
+            // no mesmo commit, mas a gaveta esta OCULTA desde 19/10: se a
+            // porta tivesse ido so para la, `retirar das mensagens` teria
+            // deixado a tela SEM PORTA NENHUMA -- que e exatamente como
+            // `Pedidos de conexao` passou de 18/10 a 19/10 sem o cliente ver
+            // nada. A porta de verdade e esta, alcancada pela FOTO da barra de
+            // topo.
+            //
+            // **NO GRUPO `Comunidade`, e DEPOIS de `Conexoes`.** O grupo e o
+            // que e MEU dentro da `Rede`, e as tres linhas de gente ficam
+            // juntas na ordem do tempo: quem ESPERA decisao (`Pedidos`), quem
+            // JA e conexao (`Conexoes`), e quem ainda NAO esta no produto
+            // (este). `Meus eventos` continua a ultima do grupo porque ela e a
+            // unica que fala de encontro e nao de gente -- *"a minha gente e
+            // os encontros"*, nesta ordem, e o que o cabecalho do grupo diz.
+            //
+            // **Nenhuma linha existente mudou de lugar.** O cliente mandou
+            // dividir este menu por topicos em 21/10 e ele JA esta dividido
+            // (`Conta`, `Pets na rua`, `Comunidade`); reordenar o que ja esta
+            // decidido nao foi pedido, e `perfil_ordem_dos_itens_test.dart`
+            // guarda a ordem que ele determinou.
+            ItemDeMenu(
+              rotulo: TelaDeConvidarTutores.titulo,
+              aoTocar: () => context.push(Rotas.convidarTutores),
+            ),
             // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
             //
             // **ESTA LINHA E O UNICO CAMINHO DO APP ATE `Cancelar`.** Nada na
@@ -1046,12 +1129,75 @@ class AbaPerfil extends StatelessWidget {
               rotulo: MeusEventos.titulo,
               aoTocar: () => context.push(Rotas.meusEventos),
             ),
+            // **`Minhas indicações` ENTROU AQUI (26/10/2026), e e a METADE QUE
+            // A PESSOA VE.** Cliente, 22/10/2026: *"Remova o link minhas
+            // indicacoes da pagina de comunidade"* -- e ele a quer no menu do
+            // perfil. A outra metade e a saida do pe da aba `Comunidade`, em
+            // `rede/secao_da_rede.dart`, e as duas sao o mesmo pedido: so a
+            // remocao deixaria a tela sem porta humana nenhuma.
+            //
+            // **E ESTE MENU, e nao a gaveta** -- exatamente a conta que
+            // `Convide tutores` fez tres linhas acima. A gaveta esta OCULTA
+            // desde 19/10 (`casca_com_abas.dart`), e a porta de verdade e
+            // esta, alcancada pela FOTO da barra de topo. `Minhas indicações`
+            // nunca teve linha na gaveta -- nem reservada --, entao nao havia
+            // nada para promover la.
+            //
+            // **SEM ICONE, e isso nao e omissao**: `ItemDeMenu` nao tem
+            // parametro de icone. Quem exige glifo e `SubDestino`, da gaveta
+            // (`telas/gaveta_de_secoes.dart`), e esta linha nao e um
+            // `SubDestino`. Nenhuma das DOZE linhas deste menu pinta icone, e
+            // acrescentar um aqui faria a unica linha diferente do conjunto.
+            // (Eram onze; `Minhas fotos` entrou em 26/10/2026, no grupo
+            // `Conta`, e tambem sem glifo -- a conta continua fechada.)
+            //
+            // **NO GRUPO `Comunidade` e DEPOIS de `Meus eventos`.** O
+            // cabecalho do grupo e *"a minha gente e os encontros"*, e a
+            // ordem dele vai de gente para o que eu fiz: `Pedidos`,
+            // `Conexoes` e `Convide tutores` sao GENTE; `Meus eventos` e
+            // `Minhas indicações` sao O QUE EU PUS NA COMUNIDADE -- o encontro
+            // que criei e o lugar que indiquei. Por isso ela fecha o grupo em
+            // vez de se meter entre as linhas de gente.
+            //
+            // **O `if (logado)` da aba antiga NAO viajou com ela, e o motivo e
+            // estrutural e nao esquecimento**: este menu so existe logado --
+            // `AbaPerfil.build` troca o corpo inteiro quando
+            // `sessao.estado != EstadoDaSessao.logado` --, enquanto a aba
+            // `Comunidade` e navegavel sem conta e precisava declarar a regua a
+            // mao. A regua continua valendo; o que mudou e quem a aplica.
+            ItemDeMenu(
+              rotulo: TelaDeMinhasIndicacoes.titulo,
+              aoTocar: () => context.push(Rotas.minhasIndicacoes),
+            ),
             const SizedBox(height: BichuEspaco.e6),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
             // deve ser sempre a ultima opcao do menu"), e **fora de grupo**:
             // encerrar a sessao nao e um item de `Conta` entre outros, e por-lo
             // dentro daquele grupo o enterraria no meio da pagina.
             _ItemDeSair(sessao: sessao),
+            // O CARIMBO DE BUILD, no PE da pagina (26/10/2026).
+            //
+            // **Ele vem depois de `Sair da conta` e isso NAO contradiz o
+            // pedido do cliente** (*"o sair da conta deve ser sempre a ultima
+            // opcao do menu"*): carimbo nao e opcao de menu. Ele nao e
+            // `ItemDeMenu`, nao tem `onTap`, nao navega para lugar nenhum e
+            // nao tem alvo de toque -- e um rodape de texto, da mesma familia
+            // do "versao x.y" que vive no pe de tela de ajuste de qualquer
+            // aplicativo. `exigirSairPorUltimo`
+            // (`perfil_ordem_dos_itens_test.dart`) varre `ItemDeMenu`,
+            // `TituloDeGrupoDeMenu`, `CartaoDePet` e `FilledButton`: a cauda
+            // de OPCOES continua terminando em `Sair da conta`, e e isso que
+            // o pedido protege.
+            //
+            // **POR QUE AQUI, e nao numa tela de `Sobre`.** Nao existe tela de
+            // `Sobre` neste aplicativo -- medido: nenhum arquivo de
+            // `app/lib/telas` tem `sobre` no nome, e `Termos` esta `planejada`
+            // no registro de sub-destinos. Criar uma tela nova para uma linha
+            // de texto poria o carimbo atras de um toque e de uma rota, e o
+            // ponto dele e o cliente conseguir LER o valor sem esforco e me
+            // dizer qual e. `Perfil` e a aba que ele ja abre; o pe dela e o
+            // lugar mais raso que existe.
+            const CarimboDoBuild(),
           ],
         );
       },

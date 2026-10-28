@@ -38,6 +38,13 @@
 
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/theme/icones_da_barra.g.dart';
+// `package:flutter/material.dart` SAIU em 23/10 e VOLTOU em 26/10, e o
+// vaivem e o resumo das duas mudancas. Em 23/10 este arquivo parou de nomear
+// `Icons.*` porque a barra passou a desenhar os SVG do cliente; em 26/10 ele
+// REPROVOU o desenho e os cinco slots voltaram para a familia fechada do
+// 10.1. O importe de volta nao e regressao: e o estado declarado em
+// `fonteAtivaDaBarra`.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,16 +96,22 @@ void main() {
       );
 
       final mural = destinos.singleWhere((d) => d.rota == Rotas.mural);
+
+      // O GLIFO DO `Mural` e `dynamic_feed`, e a escolha foi por ELIMINACAO
+      // dentro da familia fechada do 10.1 -- cada recusa com dono nesta
+      // arvore: `photo_library` e a galeria do encontro, `forum` e "outras
+      // avaliacoes" na pagina do local, `notes` e `article` sao "observacoes"
+      // em tres telas, `chat` e o `AuAu` no MESMO rodape, `campaign` e o
+      // comunicado da administracao e `grid_view` e controle e nao lugar.
+      //
+      // Este caso cobrou `mural.svg` entre 23/10 e 26/10. O cliente reprovou
+      // o desenho e os cinco slots voltaram ao Material; o glifo volta a ser
+      // o cobrado, e os dois valores foram conferidos contra
+      // `d590ce2a:app/lib/telas/casca_com_abas.dart`.
       expect(
         mural.icone,
         Icons.dynamic_feed_outlined,
-        reason: 'REPROVA: `Mural` em repouso nao usa os cartoes empilhados. '
-            'O glifo foi escolhido por ELIMINACAO dentro da familia fechada '
-            'do 10.1, e cada recusa tem dono nesta arvore: `photo_library` e '
-            'a galeria do encontro, `forum` e "outras avaliacoes" na pagina '
-            'do local, `notes` e `article` sao "observacoes" em tres telas, '
-            '`chat` e o `AuAu` no MESMO rodape, `campaign` e o comunicado da '
-            'administracao e `grid_view` e controle e nao lugar.',
+        reason: 'REPROVA: `Mural` em repouso nao usa os cartoes empilhados.',
       );
       expect(
         mural.iconeSelecionado,
@@ -121,27 +134,61 @@ void main() {
             'aba `Comunidade` da `Rede` -- duas portas para o mesmo diretorio '
             'seria a segunda definicao de onde ele mora.',
       );
+      // O ALFINETE NAO PODE VOLTAR. Ele era o glifo de `Perto`, e com a
+      // secao fora ele nao tem dono -- reaproveita-lo poria dois glifos no
+      // campo que a `Rede` ja ocupa com `groups`.
+      final comAlfinete = destinos
+          .where((d) =>
+              d.icone == Icons.place_outlined ||
+              d.icone == Icons.place ||
+              d.iconeSelecionado == Icons.place_outlined ||
+              d.iconeSelecionado == Icons.place)
+          .map((d) => d.rotulo)
+          .toList();
       expect(
-        destinos.where((d) =>
-            d.icone == Icons.place_outlined || d.iconeSelecionado == Icons.place),
+        comAlfinete,
         isEmpty,
-        reason: 'REPROVA: o alfinete de localizacao continua na barra. Ele era '
-            'o glifo de `Perto`, e com a secao fora ele nao tem dono -- '
-            'reaproveita-lo em outra secao poria dois glifos no campo que a '
-            '`Rede` ja ocupa com `groups`.',
+        reason: 'REPROVA: ${comAlfinete.join(", ")} desenha o alfinete de '
+            'localizacao. Ele era o glifo de `Perto`, e a secao saiu do '
+            'registro em 19/10.',
       );
     });
 
     test('NENHUM destino da barra usa um glifo de comercio de fachada', () {
+      // O ACHADO DE 22/09: `storefront` desenhava uma fachada de loja a dois
+      // slots da sacola de `Loja`, e o cliente leu os dois como comercio.
+      //
+      // **A LISTA COBRE A FAMILIA, e nao so a constante que reclamou.** Entre
+      // 23/10 e 26/10 esta afirmacao valia por construcao (slot da barra nao
+      // podia declarar `IconData` nenhum); com a volta ao Material ela volta a
+      // ser por enumeracao, e ai enumerar SO `storefront` seria portao que
+      // envelhece calado -- `store`, `shopping_cart` e `local_mall` leem a
+      // mesma coisa. A sacola de `Loja` (`shopping_bag`) fica FORA da lista de
+      // proposito: ela e a dona legitima do campo `compra`.
       final destinos = CascaComAbas.destinos;
       expect(destinos, isNotEmpty);
 
-      final comFachada = destinos
+      final daBarra = destinos.where((d) => d.naBarra).toList();
+      expect(
+        daBarra,
+        hasLength(5),
+        reason: 'REPROVA: a barra tem ${daBarra.length} slots e nao cinco. '
+            'Sem slot nao ha o que conferir.',
+      );
+
+      const fachada = <IconData>[
+        Icons.storefront,
+        Icons.storefront_outlined,
+        Icons.store,
+        Icons.store_outlined,
+        Icons.shopping_cart,
+        Icons.shopping_cart_outlined,
+        Icons.local_mall,
+        Icons.local_mall_outlined,
+      ];
+      final comFachada = daBarra
           .where((d) =>
-              d.icone == Icons.storefront ||
-              d.icone == Icons.storefront_outlined ||
-              d.iconeSelecionado == Icons.storefront ||
-              d.iconeSelecionado == Icons.storefront_outlined)
+              fachada.contains(d.icone) || fachada.contains(d.iconeSelecionado))
           .map((d) => d.rotulo)
           .toList();
       expect(
@@ -202,19 +249,37 @@ void main() {
             'comparar, e a afirmacao seria vazia.',
       );
 
-      final emRepouso = destinos.map((d) => d.icone).toSet();
+      // A ARTE DE CADA SECAO, qualquer que seja a fonte dela.
+      //
+      // Cinco secoes trazem desenho do cliente e `Perfil` traz glifo do
+      // Material (ele esta fora da barra e nao ha SVG dele). A chave de
+      // comparacao tem de cobrir os DOIS, senao o conjunto de cinco `null`
+      // mais um glifo teria tamanho 2 e este caso reprovaria o estado certo
+      // -- foi o que ele fez na primeira passada desta mudanca.
+      //
+      // `arquivo` e nao `identityHashCode`: o nome do SVG e o que distingue
+      // duas artes, e ele aparece na mensagem de falha.
+      Object chave(DestinoDeNavegacao d, {required bool selecionado}) {
+        final desenho = selecionado ? d.desenhoSelecionado : d.desenho;
+        if (desenho != null) return 'svg:${desenho.arquivo}';
+        final glifo = selecionado ? d.iconeSelecionado : d.icone;
+        return 'material:$glifo';
+      }
+
+      final emRepouso = destinos.map((d) => chave(d, selecionado: false)).toSet();
       expect(
         emRepouso,
         hasLength(destinos.length),
-        reason: 'REPROVA: duas secoes desenham o MESMO glifo em repouso. '
-            'Glifos: ${destinos.map((d) => '${d.rotulo}=${d.icone}').join(', ')}',
+        reason: 'REPROVA: duas secoes desenham a MESMA arte em repouso. '
+            'Artes: ${destinos.map((d) => '${d.rotulo}=${chave(d, selecionado: false)}').join(', ')}',
       );
 
-      final selecionados = destinos.map((d) => d.iconeSelecionado).toSet();
+      final selecionados = destinos.map((d) => chave(d, selecionado: true)).toSet();
       expect(
         selecionados,
         hasLength(destinos.length),
-        reason: 'REPROVA: duas secoes desenham o MESMO glifo selecionado.',
+        reason: 'REPROVA: duas secoes desenham a MESMA arte selecionada. '
+            'Artes: ${destinos.map((d) => '${d.rotulo}=${chave(d, selecionado: true)}').join(', ')}',
       );
     });
   });
@@ -279,9 +344,14 @@ void main() {
           rotulo: 'Perto',
           reforcoAcessivel: 'profissionais e estabelecimentos indicados',
           reforcoDaPagina: 'irrelevante para este caso',
-          // O glifo e o campo que a barra tinha ate 22/09.
-          icone: Icons.storefront_outlined,
-          iconeSelecionado: Icons.storefront,
+          // **O DESENHO AQUI E ANDAIME, e o `assert` e que o exige.** O glifo
+          // de fachada que a barra tinha ate 22/09 (`storefront`) nao cabe
+          // mais num destino `naBarra`, e o que este caso exercita e a
+          // colisao de CAMPO -- que nao depende da arte. Reusar a arte da
+          // `Loja` aqui e deliberado: ela e justamente a secao com que
+          // `Perto` colidia.
+          desenho: IconesDaBarra.loja,
+          desenhoSelecionado: IconesDaBarra.lojaSelecionado,
           rota: Rotas.rede,
           estado: EstadoDaSecao.planejada,
           campoSemantico: CampoSemantico.compra,
@@ -290,8 +360,8 @@ void main() {
           rotulo: 'Loja',
           reforcoAcessivel: 'a loja do Bichu',
           reforcoDaPagina: 'irrelevante para este caso',
-          icone: Icons.shopping_bag_outlined,
-          iconeSelecionado: Icons.shopping_bag,
+          desenho: IconesDaBarra.loja,
+          desenhoSelecionado: IconesDaBarra.lojaSelecionado,
           rota: Rotas.loja,
           estado: EstadoDaSecao.planejada,
           campoSemantico: CampoSemantico.compra,

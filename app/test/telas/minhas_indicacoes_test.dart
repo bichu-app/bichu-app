@@ -25,6 +25,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/perto/tela_de_minhas_indicacoes.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
 import 'package:bichu/telas/rede/secao_da_rede.dart';
@@ -152,51 +153,71 @@ Future<http.Response> Function(http.Request) redeDasIndicacoes(
 /// deliberado: a porta de entrada é parte da entrega, e uma lista que só o
 /// roteador alcança é uma lista que o cliente não acha -- o defeito que esta
 /// rodada mediu em `Pedidos de conexão` e `Pessoas bloqueadas`.
+/// A porta de `Minhas indicações`, **no menu do Perfil**.
+///
+/// **A PORTA MUDOU DE LUGAR EM 26/10/2026** (cliente, 22/10: *"Remova o link
+/// minhas indicacoes da pagina de comunidade"*, e ele a quer no menu do
+/// perfil). Antes ela morava no pé da aba `Comunidade`; agora mora em
+/// `abas.dart`, `AbaPerfil`, grupo `Comunidade`.
+///
+/// **TUDO DESCE DE `AbaPerfil`, e isso não é zelo**: o
+/// `StatefulShellRoute.indexedStack` mantém as outras abas MONTADAS atrás da
+/// `Perfil`, então um `find` solto poderia casar fora da aba e o caso passaria
+/// medindo outra tela.
+Future<Finder> irAtePortaNoPerfil(WidgetTester tester) async {
+  // **SUPERFICIE ALTA, e ela conserta um defeito MEDIDO.** O menu do `Perfil` e
+  // uma coluna rolavel, e o grupo `Comunidade` -- onde a porta mora -- fica
+  // abaixo da dobra. Na superficie padrao (800x600) os `ItemDeMenu` de baixo
+  // **nao sao construidos**, e o finder nao falha dizendo "nao achei": ele
+  // estoura com `Bad state: No element` dentro de `ensureVisible`, que nao diz
+  // nada sobre a causa. Foram 15 casos deste arquivo reprovando assim.
+  //
+  // 390 x 2600 dp logicos, os mesmos numeros de
+  // `perfil_ordem_dos_itens_test.dart`, e pela mesma razao: a largura e a do
+  // aparelho que o produto mira, e a altura e folga deliberada para a pagina
+  // ficar DEITADA. O que se mede aqui e a PRESENCA da porta, nao a dobra.
+  tester.view.physicalSize = const Size(1170, 7800);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpAndSettle();
+
+  await irParaAConta(tester);
+
+  // **A ANCORA DE ESCOPO, e nao zelo**: sem ela, um dia em que `irParaAConta`
+  // levasse a outra tela, o finder abaixo daria `No element` e a mensagem nao
+  // diria que a aba nem estava na arvore.
+  expect(
+    find.byType(AbaPerfil),
+    findsOneWidget,
+    reason: 'REPROVA: a foto da barra de topo nao levou a `AbaPerfil`, entao '
+        'nao ha menu do `Perfil` onde procurar a porta.',
+  );
+
+  final porta = find.descendant(
+    of: find.byType(AbaPerfil),
+    matching: find.widgetWithText(ItemDeMenu, TelaDeMinhasIndicacoes.titulo),
+  );
+  await tester.ensureVisible(porta);
+  await tester.pumpAndSettle();
+  return porta;
+}
+
 Future<void> abrirMinhasIndicacoes(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
 }) async {
   await abrirOApp(tester, rede: rede, deposito: depositoLogado());
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
-  await tester.pumpAndSettle();
 
-  final abaDaComunidade =
-      find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo);
-  expect(
-    abaDaComunidade,
-    findsOneWidget,
-    reason: 'REPROVA: não há aba `Comunidade` na seção `Rede`. É ela que '
-        'absorveu a seção `Perto`, e é no pé dela que mora a porta de '
-        '`Minhas indicações`.',
-  );
-  await tester.tap(abaDaComunidade);
-  await tester.pumpAndSettle();
-  // **A agenda SAI de cena, e isto não é detalhe de estilo:** as duas listas
-  // publicam o ícone de filtrar no mesmo slot da casca, e com as duas montadas
-  // o ícone da barra abriria o filtro da aba de trás.
-  expect(
-    find.byType(ListaDoDiretorio),
-    findsOneWidget,
-    reason: 'REPROVA: tocar na aba `Comunidade` não montou a lista do '
-        'diretório.',
-  );
-
-  final porta = find.widgetWithText(
-    ItemDeMenu,
-    SecaoDaRede.rotuloDasMinhasIndicacoes,
-  );
-  // `ensureVisible` e nao `scrollUntilVisible`: com a `TabBar` rolavel da
-  // `Rede` ha DOIS rolaveis na tela, e `scrollUntilVisible` sem `scrollable:`
-  // exige um so (`Bad state: Too many elements`). `ensureVisible` acha o
-  // rolavel ancestral do alvo.
-  await tester.ensureVisible(porta);
-  await tester.pumpAndSettle();
+  final porta = await irAtePortaNoPerfil(tester);
   expect(
     porta,
     findsOneWidget,
-    reason: 'REPROVA: não há porta `Minhas indicações` no pé da aba '
-        '`Comunidade`. Com a aba virando porta, ela é o ÚNICO caminho humano '
-        'até a lista -- a rota existe, mas rota não é porta.',
+    reason: 'REPROVA: não há porta `Minhas indicações` no menu do `Perfil`. '
+        'Ela saiu do pé da aba `Comunidade` em 26/10/2026 por pedido do '
+        'cliente, e o pedido tem DUAS metades -- sem esta, a tela ficaria sem '
+        'porta humana nenhuma: a rota existe, mas rota não é porta, e a '
+        'gaveta está oculta desde 19/10.',
   );
   await tester.tap(porta);
   await tester.pumpAndSettle();
@@ -228,7 +249,7 @@ List<String> motivosNaTela() {
 }
 
 void main() {
-  group('a porta no pé da aba `Comunidade`', () {
+  group('a porta: saiu da aba `Comunidade`, mora no menu do `Perfil`', () {
     testWidgets('a `Rede` tem DUAS abas, `Eventos` primeiro', (tester) async {
       // `Eventos` é a primeira e a principal: é o conteúdo histórico da seção
       // e é onde o arranque do app abre. `Comunidade` é o que era `Perto`.
@@ -275,20 +296,29 @@ void main() {
     });
 
     testWidgets(
-      'ISCA: SEM CONTA a porta não aparece, e não fica desabilitada',
+      'ISCA: a porta SAIU da aba `Comunidade`, e a aba continua inteira',
       (tester) async {
-        // Sem conta não existe "minhas indicações": a rota responderia 401, e
-        // uma porta cujo desfecho é uma recusa é controle sem desfecho.
+        // Cliente, 22/10/2026: *"Remova o link minhas indicacoes da pagina de
+        // comunidade"*. Esta é a metade NEGATIVA do pedido; a positiva (a
+        // porta no menu do `Perfil`) é `abrirMinhasIndicacoes`, que é o
+        // CONTROLE POSITIVO deste par -- sem ela, "não está na Comunidade"
+        // ficaria verde com a função inalcançável.
+        //
+        // **A SESSÃO É DE QUEM TEM CONTA, de propósito.** A porta antiga
+        // nascia dentro de `if (logado)`: medir deslogado deixaria a afirmação
+        // verde pela razão ERRADA -- ela passaria mesmo com a porta de volta
+        // no lugar. Logado é o único estado em que a ausência prova a remoção.
         //
         // PARA DESLIGAR E VER REPROVAR: em `rede/secao_da_rede.dart`, no
-        // `_corpoDaAba` da aba `comunidade`, troque `if (logado)` por
-        // `if (true)`.
+        // `_corpoDaAba` da aba `comunidade`, devolva depois de
+        // `const ListaDoDiretorio(),` um
+        // `ItemDeMenu(rotulo: TelaDeMinhasIndicacoes.titulo, aoTocar: () {})`.
         await abrirOApp(
           tester,
           rede: redeDasIndicacoes(
             paginaDoContrato(const <Map<String, dynamic>>[]),
           ),
-          // SEM `deposito`: ninguém logado.
+          deposito: depositoLogado(),
         );
         await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
         await tester.pumpAndSettle();
@@ -296,21 +326,24 @@ void main() {
             .tap(find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo));
         await tester.pumpAndSettle();
 
+        // **A ÂNCORA VEM ANTES DA AUSÊNCIA.** Asserção negativa passa no
+        // vazio: se a aba não tivesse montado, `findsNothing` ficaria verde
+        // sem ter conferido nada.
         expect(
-          find.widgetWithText(
-            ItemDeMenu,
-            SecaoDaRede.rotuloDasMinhasIndicacoes,
-          ),
-          findsNothing,
-          reason: 'REPROVA: a porta `Minhas indicações` aparece para quem não '
-              'tem conta. Não há o que listar, e a rota responderia 401.',
+          find.byType(ListaDoDiretorio),
+          findsOneWidget,
+          reason: 'REPROVA: tocar na aba `Comunidade` não montou a lista do '
+              'diretório, então a ausência medida abaixo não prova nada.',
         );
-        // **AS DUAS ABAS CONTINUAM**, e isso é diferente das abas antigas:
-        // `Eventos` e `Comunidade` não são listas "minhas", então nenhuma
-        // aparece e desaparece com a sessão. Esconder a porta não esconde a
-        // seção.
         expect(find.byType(TabBar), findsOneWidget);
-        expect(find.byType(ListaDoDiretorio), findsOneWidget);
+
+        expect(
+          find.widgetWithText(ItemDeMenu, TelaDeMinhasIndicacoes.titulo),
+          findsNothing,
+          reason: 'REPROVA: a porta `Minhas indicações` continua na aba '
+              '`Comunidade`. O cliente pediu que ela saísse de lá em '
+              '22/10/2026, e ela foi para o menu do `Perfil`.',
+        );
       },
     );
 
@@ -333,21 +366,14 @@ void main() {
         ),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
-      await tester.pumpAndSettle();
-      await tester
-          .tap(find.widgetWithText(Tab, AbaDaSecaoRede.comunidade.rotulo));
-      await tester.pumpAndSettle();
-
-      final porta = find.widgetWithText(
-        ItemDeMenu,
-        SecaoDaRede.rotuloDasMinhasIndicacoes,
+      // A porta mora no MENU DO PERFIL desde 26/10/2026.
+      final porta = await irAtePortaNoPerfil(tester);
+      expect(
+        porta,
+        findsOneWidget,
+        reason: 'REPROVA: não achei a porta no menu do `Perfil`, então não há '
+            'rótulo para medir.',
       );
-      // `ensureVisible` e nao `scrollUntilVisible`: com a `TabBar` rolavel da
-      // `Rede` ha DOIS rolaveis na tela, e `scrollUntilVisible` sem
-      // `scrollable:` exige um so (`Bad state: Too many elements`).
-      await tester.ensureVisible(porta);
-      await tester.pumpAndSettle();
       final rotulos = find
           .descendant(of: porta, matching: find.byType(Text))
           .evaluate()
@@ -356,7 +382,7 @@ void main() {
           .toList();
       expect(
         rotulos,
-        <String>[SecaoDaRede.rotuloDasMinhasIndicacoes],
+        <String>[TelaDeMinhasIndicacoes.titulo],
         reason: 'REPROVA: a porta `Minhas indicações` pinta mais que o próprio '
             'rótulo -- um número, ou uma linha de apoio. Contagem só existiria '
             'honesta vindo do servidor com o predicado de conta desabilitada, '
@@ -367,16 +393,18 @@ void main() {
     testWidgets(
       'a tela tem o título da porta, e é a MESMA palavra nos três lugares',
       (tester) async {
-        // Aba, porta e título: quem procurava a aba acha a porta e a tela pelo
-        // mesmo texto. Três literais soltos divergiriam na primeira redação.
-        expect(
-          TelaDeMinhasIndicacoes.titulo,
-          SecaoDaRede.rotuloDasMinhasIndicacoes,
-          reason: 'REPROVA: o título da tela e o rótulo da porta divergiram. '
-              'Quem usava a aba `Minhas indicações` acha a função pelo texto, '
-              'e um nome novo faria a função parecer removida em vez de '
-              'mudada de lugar.',
-        );
+        // Porta e título saem da MESMA constante desde 26/10/2026, e isso é
+        // o que aquele `expect` de duas constantes comprava: a porta no menu
+        // do `Perfil` usa `TelaDeMinhasIndicacoes.titulo` literalmente, então
+        // divergir ficou impossível por construção em vez de por asserção.
+        // `SecaoDaRede.rotuloDasMinhasIndicacoes` saiu com a porta: constante
+        // órfã volta a ser usada.
+        //
+        // **A palavra continua sendo a da aba que a função teve.** Quem
+        // procurava `Minhas indicações` acha a porta e a tela pelo mesmo
+        // texto, e é isso que as duas afirmações abaixo medem de ponta a
+        // ponta: o rótulo da porta (em `irAtePortaNoPerfil`) e o título da
+        // barra da tela que ela abre.
 
         await abrirMinhasIndicacoes(
           tester,

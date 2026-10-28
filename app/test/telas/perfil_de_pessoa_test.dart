@@ -27,7 +27,9 @@ import 'package:bichu/api/pessoas_api.dart';
 import 'package:bichu/api/seguranca_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/pessoa/tela_perfil_de_pessoa.dart';
+import 'package:bichu/telas/seguranca/menu_do_perfil.dart';
 import 'package:bichu/theme/bichu_theme.dart';
+import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:bichu/widgets/selo_de_validado.dart';
 import 'package:flutter/material.dart';
@@ -609,27 +611,191 @@ void main() {
     // cliente remove e exatamente o que precisa de alguem cobrando a ausencia:
     // sem este caso ele volta na primeira edicao deste ramo, e volta calado.
     //
-    // **E o `Desfazer conexão` abaixo e o CONTROLE POSITIVO deste
-    // `findsNothing`.** So quem E conexao ve esse botao; se ele estivesse
-    // ausente, o `findsNothing` de cima estaria medindo "a tela nao desenhou o
-    // ramo de conectado" em vez de "a frase saiu" -- duas coisas diferentes
-    // com o mesmo resultado verde.
+    // **O CONTROLE POSITIVO DESTE `findsNothing` MUDOU DE LUGAR EM 26/10/2026,
+    // e NAO foi apagado.** Ele era o botao `Desfazer conexão` no CORPO; o
+    // cliente pediu que esse botao fosse para o `⋮` (*"o botao desfazer conexao
+    // deve ir para os 3 pontinhos, junto com o denunciar"*, 22/10/2026), e um
+    // controle positivo ancorado num botao que saiu do corpo passaria a medir a
+    // mudanca de lugar em vez da ausencia da frase.
+    //
+    // O novo controle positivo e o `⋮` TER o item de desfazer -- ele so nasce no
+    // estado `conectado`, entao achar o item prova que o ramo FOI desenhado,
+    // que e exatamente o que este `findsNothing` precisa ter atras dele.
     expect(
       find.text('Vocês estão conectados.'),
       findsNothing,
       reason: 'REPROVA: a linha "Vocês estão conectados." voltou ao perfil. '
-          'O cliente pediu a remocao dela em 22/10/2026, e o estado continua '
-          'dito pelo botao `Desfazer conexão` -- que so aparece para quem e '
-          'conexao, e que tambem RESOLVE o vinculo em vez de so afirma-lo.',
+          'O cliente pediu a remocao dela em 22/10/2026. O estado continua '
+          'dito sem texto de apoio: a vitrine abaixo so existe para quem e '
+          'conexao, e o `⋮` oferece `Desfazer conexão` so neste estado.',
     );
+    // CONTROLE POSITIVO: o ramo de `conectado` FOI desenhado. Sem isto o
+    // `findsNothing` de cima mediria "a tela nao desenhou nada".
+    expect(find.byType(MenuDoPerfil), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
     expect(
       find.text('Desfazer conexão'),
       findsOneWidget,
-      reason: 'REPROVA: o ramo de conexao aceita nao desenhou `Desfazer '
-          'conexão`. Sem ele o `findsNothing` acima nao prova que a frase '
-          'saiu: prova que o ramo nao foi desenhado.',
+      reason: 'REPROVA: o `⋮` do perfil de uma conexao aceita nao oferece '
+          '`Desfazer conexão`. Sem ele o `findsNothing` acima nao prova que a '
+          'frase saiu: prova que o ramo nao foi desenhado.',
     );
     expect(find.text('Pedir conexão'), findsNothing);
+  });
+
+  // =========================================================================
+  // `DESFAZER CONEXÃO` FOI PARA O `⋮` (cliente, 22/10/2026)
+  // =========================================================================
+  //
+  // Palavras dele: *"o botão desfazer conexão deve ir para os 3 pontinhos,
+  // junto com o denunciar"*. Pedido de 22/10 que **nunca foi implementado nem
+  // registrado no repositorio** -- ele voltou a cobrar o assunto em 26/10.
+  //
+  // **A ARMADILHA DESTE GRUPO, e ela e a razao de cada controle positivo
+  // abaixo:** `findsNothing` sobre item de menu e vacuamente verdadeiro com o
+  // menu FECHADO, e `findsOneWidget` sobre item de menu falha por conteudo
+  // abaixo da dobra numa bancada estreita. Entao: bancada de 1600 dp, e
+  // **nenhuma ausencia afirmada sem um item IRMAO presente na mesma arvore**
+  // provando que o menu abriu e foi populado.
+  //
+  // DESLIGAMENTO: em `tela_perfil_de_pessoa.dart`, troque `aoDesfazerConexao`
+  // por `null` na construcao de `MenuDoPerfil`. O caso do menu e o controle
+  // positivo da acao reprovam; o do corpo continua verde -- que e o que mostra
+  // que ele mede a outra metade.
+  group('BICHUS — `Desfazer conexão` saiu do corpo e entrou no `⋮`', () {
+    /// 1600 dp de altura: num `ListView` a 600 dp o item do menu pode nascer
+    /// fora da area construida, e `findsNothing` ficaria verde pelo motivo
+    /// errado. A outra frente se queimou exatamente nisso hoje.
+    Future<void> montarLargo(
+      WidgetTester tester, {
+      required String estado,
+      String? ref,
+    }) async {
+      tester.view.physicalSize = const Size(1600, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await _montar(tester, perfil: _perfil(estado: estado, ref: ref));
+    }
+
+    testWidgets('METADE 1: nao ha botao de desfazer NO CORPO', (tester) async {
+      await montarLargo(tester, estado: 'connected', ref: 'r1');
+
+      // **ANCORADO NO TIPO, e nao no rotulo.** O corpo desenha acoes com
+      // `BotaoPrimario`/`BotaoSecundario`; um `findsNothing` sobre o texto
+      // puro nao distinguiria "saiu do corpo" de "esta num menu fechado".
+      expect(
+        find.widgetWithText(BotaoSecundario, 'Desfazer conexão'),
+        findsNothing,
+        reason: 'REPROVA: `Desfazer conexão` continua sendo botao no corpo do '
+            'perfil. O cliente pediu em 22/10/2026 que ele fosse para o `⋮`.',
+      );
+      expect(find.widgetWithText(BotaoPrimario, 'Desfazer conexão'), findsNothing);
+
+      // CONTROLE POSITIVO: o ramo de `conectado` FOI construido -- o `⋮` esta
+      // na arvore e oferece o item. Sem isto, a ausencia acima seria vacua.
+      expect(find.byType(MenuDoPerfil), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('Desfazer conexão'), findsOneWidget);
+    });
+
+    testWidgets('METADE 2: o `⋮` oferece desfazer, junto de denunciar e bloquear',
+        (tester) async {
+      await montarLargo(tester, estado: 'connected', ref: 'r1');
+
+      // FECHADO: o item nao esta na arvore. Esta linha nao e a isca -- ela e o
+      // que prova que o `findsOneWidget` de baixo mede a ABERTURA do menu.
+      expect(find.text('Desfazer conexão'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Desfazer conexão'),
+        findsOneWidget,
+        reason: 'REPROVA: o `⋮` nao oferece `Desfazer conexão` a uma conexao '
+            'aceita. E o pedido literal dele de 22/10/2026.',
+      );
+      // `junto com o denunciar` -- os tres no MESMO menu, que e o que ele pediu.
+      expect(find.text('Denunciar este perfil'), findsOneWidget);
+      expect(find.text('Bloquear'), findsOneWidget);
+    });
+
+    /// **O CONTROLE POSITIVO DA ACAO, e sem ele o item pode existir e nao
+    /// desfazer nada.** As duas metades acima sao sobre ONDE o controle esta;
+    /// este e o unico que prova que tocar nele faz o que o botao do corpo fazia.
+    testWidgets('CONTROLE POSITIVO: tocar no item DESFAZ de verdade', (tester) async {
+      await montarLargo(tester, estado: 'connected', ref: 'r1');
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      chamadas.clear();
+      await tester.tap(find.text('Desfazer conexão'));
+      await tester.pumpAndSettle();
+
+      // **A MESMA chamada que o botao do corpo fazia**: `encerrar(ref)`.
+      expect(
+        chamadas.any((c) => c == 'DELETE /v1/connections/r1'),
+        isTrue,
+        reason: 'REPROVA: o item existe e nao desfaz nada. As chamadas foram '
+            '$chamadas. Mover o controle de lugar sem levar a acao e pior que '
+            'nao te-lo movido: o caminho fica mais escondido E deixa de '
+            'funcionar.',
+      );
+      // E a tela RECARREGA depois, que e o que `_agir` faz -- o estado novo vem
+      // do servidor e nao de um palpite da tela.
+      expect(
+        chamadas.any((c) => c.contains('/people/')),
+        isTrue,
+        reason: 'REPROVA: a tela nao recarregou o perfil depois de desfazer. '
+            'Quem decide o estado novo e o servidor.',
+      );
+    });
+
+    /// **RAMO POR ESTADO, e o `⋮` NAO ajuda aqui**: ele aparece nos QUATRO
+    /// estados da relacao (`if (perfil != null)` em `build`), entao sem recorte
+    /// `Desfazer conexão` apareceria para quem nao e conexao -- o espelho exato
+    /// do defeito que ele cobrou na busca.
+    testWidgets('quem NAO e conexao abre o `⋮` e NAO ve desfazer', (tester) async {
+      await montarLargo(tester, estado: 'none');
+
+      expect(find.byType(MenuDoPerfil), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      // **CONTROLE POSITIVO PRIMEIRO, e de proposito.** Se o menu nao tivesse
+      // aberto, o `findsNothing` abaixo passaria sem medir nada -- e e assim
+      // que uma isca de ausencia em menu fica verde por engano.
+      expect(
+        find.text('Denunciar este perfil'),
+        findsOneWidget,
+        reason: 'o menu tem de estar ABERTO e populado para a ausencia abaixo '
+            'valer alguma coisa',
+      );
+      expect(
+        find.text('Desfazer conexão'),
+        findsNothing,
+        reason: 'REPROVA: o `⋮` oferece desfazer a quem nao tem conexao. Nao '
+            'ha aresta para encerrar, e o toque terminaria em erro.',
+      );
+    });
+
+    testWidgets('pedido ENVIADO tambem nao ve desfazer no `⋮`', (tester) async {
+      await montarLargo(tester, estado: 'pending_sent', ref: 'r1');
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Denunciar este perfil'), findsOneWidget);
+      expect(
+        find.text('Desfazer conexão'),
+        findsNothing,
+        reason: 'REPROVA: pedido pendente nao e conexao. Quem cancela um '
+            'pedido usa `Cancelar pedido`, no corpo -- ele nao foi tocado.',
+      );
+      // E o controle do corpo para ESTE estado continua onde estava.
+      expect(find.text('Cancelar pedido'), findsOneWidget);
+    });
   });
 
   testWidgets('sem nome de exibicao a tela cai para o apelido, e nao repete a linha', (

@@ -322,7 +322,18 @@ void main() {
       );
     });
 
-    testWidgets('criar mostra o QR, o prazo e as duas saidas', (tester) async {
+    // ATUALIZADO EM 26/10/2026, E A MUDANCA E DE REGRA E NAO DE ASSERCAO.
+    //
+    // Este caso se chamava `criar mostra o QR, o prazo e as duas saidas` e
+    // exigia `Trocar o meu QR` e `Apagar o meu QR` na tela. **O cliente
+    // reverteu as duas**, em 22/10 (*"nao deve ter a acao de trocar o qr-code
+    // dele ou de apagar"*) e de novo em 26/10. As assercoes que as cobravam
+    // sairam porque elas cobravam o defeito; o que elas mediam de valido -- o
+    // QR aparece, o prazo aparece -- ficou. A regra NOVA tem isca propria em
+    // `app/test/telas/sem_acao_de_qr_do_usuario_test.dart`.
+    testWidgets('criar mostra o QR e o prazo, e nao oferece saida nenhuma', (
+      tester,
+    ) async {
       await montar(tester);
 
       await tester.tap(find.text('Criar o meu QR de convite'));
@@ -340,15 +351,6 @@ void main() {
         reason: 'REPROVA: o prazo de 30 dias não aparece. Um convite sem prazo '
             'visível é um endereço público permanente do ponto de vista de '
             'quem o compartilha.',
-      );
-      await rolarAte(tester, find.text('Apagar o meu QR'));
-      expect(find.text('Trocar o meu QR'), findsOneWidget);
-      expect(find.text('Apagar o meu QR'), findsOneWidget);
-      expect(
-        find.textContaining('Quem já escaneou o antigo não chega mais'),
-        findsOneWidget,
-        reason: 'REPROVA: a tela não avisa, ANTES do toque, que trocar mata o '
-            'QR que está circulando. Emitir revoga o anterior.',
       );
     });
 
@@ -380,33 +382,48 @@ void main() {
       );
     });
 
-    testWidgets('apagar volta ao estado sem QR, e diz que nao desfaz conexao', (
-      tester,
-    ) async {
+    // ESTE CASO FOI INVERTIDO EM 26/10/2026, e nao apagado.
+    //
+    // Ele media `apagar volta ao estado sem QR`: tocava em `Apagar o meu QR` e
+    // exigia o `DELETE`. **A acao nao existe mais** (pedido do cliente de
+    // 22/10, repetido em 26/10), entao o que ele mede agora e o contrario --
+    // que NENHUMA revogacao sai desta tela. A cobertura nao caiu de numero: o
+    // caminho do `DELETE` continua medido, pelo lado de que ele nao acontece.
+    testWidgets('com o QR na tela, NENHUMA revogacao sai', (tester) async {
       await montar(tester);
       await tester.tap(find.text('Criar o meu QR de convite'));
       await tester.pumpAndSettle();
 
-      await rolarAte(tester, find.text('Apagar o meu QR'));
+      // CONTROLE POSITIVO DA SONDA: o `POST` saiu e o QR esta na tela. Sem
+      // estas duas linhas, o `isNot(contains(...))` abaixo passaria numa tela
+      // que nunca chegou ao estado que TINHA as duas acoes.
+      expect(chamadas, contains('POST /v1/connection-invites'));
+      expect(find.byType(QrDoConvite), findsOneWidget);
 
-      expect(
-        find.textContaining('quem já pediu continua na sua caixa de pedidos'),
-        findsOneWidget,
-        reason: 'REPROVA: a tela não diz que apagar fecha a porta sem expulsar '
-            'quem entrou.',
-      );
-
-      await tocar(tester, find.text('Apagar o meu QR'));
+      // Toca em TUDO o que a tela ainda oferece neste estado. Com a acao de
+      // apagar reposta, um destes toques a aciona e o `DELETE` aparece.
+      for (final alvo in <Finder>[
+        find.byType(BotaoPrimario),
+        find.byType(BotaoSecundario),
+      ]) {
+        for (var i = 0; i < alvo.evaluate().length; i++) {
+          await tester.ensureVisible(alvo.at(i));
+          await tester.pumpAndSettle();
+          await tester.tap(alvo.at(i));
+          await tester.pumpAndSettle();
+        }
+      }
 
       expect(
         chamadas,
-        contains('DELETE /v1/connection-invites'),
-        reason: 'REPROVA: apagar não chamou a revogação.',
-      );
-      expect(find.byType(QrDoConvite), findsNothing);
-      expect(
-        find.text('Você não tem QR de convite valendo agora.'),
-        findsOneWidget,
+        isNot(contains('DELETE /v1/connection-invites')),
+        reason:
+            'REPROVA: alguma acao desta tela revogou o convite. O cliente '
+            'tirou `Apagar o meu QR` em 22/10 -- *"nao deve ter a acao de '
+            'trocar o qr-code dele ou de apagar"* --, e a capacidade do '
+            'servidor (`revokeConnectionInvite`) continua existindo de '
+            'propósito: o que saiu foi a PORTA, e nenhum toque daqui pode '
+            'alcança-la.',
       );
     });
 
@@ -432,7 +449,14 @@ void main() {
         await montar(tester);
         await tester.tap(find.text('Criar o meu QR de convite'));
         await tester.pumpAndSettle();
-        await rolarAte(tester, find.text('Apagar o meu QR'));
+        // ROLA ATE O FIM DO BLOCO DO QR. O alvo era `Apagar o meu QR`, que
+        // deixou de existir em 26/10; a ultima coisa do bloco agora e o aviso
+        // de que o QR nao volta depois, e e ele que leva a rolagem ao pe da
+        // pagina -- onde um botao de compartilhar apareceria.
+        await rolarAte(
+          tester,
+          find.textContaining('O QR aparece aqui enquanto esta tela'),
+        );
 
         expect(
           find.textContaining('Compartilhar'),

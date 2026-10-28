@@ -430,7 +430,7 @@ void main() {
         expect(find.text('Vila Mariana, São Paulo'), findsOneWidget);
         expect(find.text('Pinheiros, São Paulo'), findsOneWidget);
         // A linha de atributos do 11.3, separada por " · ".
-        expect(find.text('Cão · Poodle · Pequeno · Caramelo'), findsOneWidget);
+        expect(find.text('Cachorro · Poodle · Pequeno · Caramelo'), findsOneWidget);
         // Raca ausente SOME da linha, e nao vira travessao.
         expect(find.text('Gato · Pequeno · Preto e branco'), findsOneWidget);
         // E a linha que diz quando. O texto e relativo quando e recente.

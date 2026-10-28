@@ -17,6 +17,7 @@
 // | (d) | a entrada de `precondition-failed` em `MensagensDeErro` | `o 412 diz para recarregar, e nao a faixa generica` |
 // | (f) | qualquer linha nova que afirme aviso | `a folha NAO afirma que alguem foi avisado` |
 // | capa | o motivo do servidor na faixa da capa | `a capa recusada mostra o motivo DO SERVIDOR` |
+// | (g) | o `aoTocar` do cartao, e a separacao dele do `Cancelar` | `o toque no cartao abre a pagina do encontro` |
 //
 // **A isca (e) copia a forma da isca da frente da barra** (*"`Pessoas
 // bloqueadas` e alcancavel pela FOTO da barra de topo"*), e nao a forma
@@ -30,9 +31,11 @@ import 'dart:convert';
 import 'package:bichu/api/modelos_rede.dart';
 import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/perfil/meus_eventos.dart';
+import 'package:bichu/telas/rede/encontro_da_rede.dart';
 import 'package:bichu/widgets/folha_destrutiva.dart';
 import 'package:bichu/widgets/item_de_menu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -113,6 +116,13 @@ class _Servidor {
   /// Quantas vezes a lista foi pedida: e assim que o caso ve a recarga.
   int listagens = 0;
 
+  /// Os `slug` pedidos a `getNetworkEvent`, na ordem.
+  ///
+  /// E assim que a isca (g) ve a navegacao **pelo endereco certo**, e nao
+  /// apenas "uma tela nova apareceu": um `aoTocar` que empilhasse o encontro
+  /// errado passaria num caso que so olhasse o tipo do widget.
+  final List<String> detalhesPedidos = <String>[];
+
   bool cancelou = false;
 
   Future<http.Response> atender(http.Request req) async {
@@ -149,6 +159,17 @@ class _Servidor {
       final pronta = leituraDoDono;
       if (pronta != null) return pronta;
       return json200ComEtag(encontro ?? _meuEncontro(), etagDaLeitura);
+    }
+    // `getNetworkEvent`: o destino do toque no cartao (BICHUS-297). Sem este
+    // ramo a pagina do encontro subiria em falha, e a isca (g) ficaria medindo
+    // o 404 do servidor de mentira em vez do caminho.
+    if (caminho.startsWith('/v1/network/events/') &&
+        !caminho.endsWith('/cancellation') &&
+        !caminho.endsWith('/location') &&
+        req.method == 'GET') {
+      final pedido = caminho.substring('/v1/network/events/'.length);
+      detalhesPedidos.add(pedido);
+      return json200(encontroPublico(slug: pedido, title: _titulo));
     }
     if (caminho == '/v1/network/events/$_slug/cancellation' &&
         req.method == 'POST') {
@@ -568,6 +589,263 @@ void main() {
         findsNothing,
       );
       expect(find.text(TextosDoCancelamento.manter), findsOneWidget);
+    });
+  });
+
+  group('ISCA (g) — o cartao LEVA ao encontro, e nao engole o `Cancelar`', () {
+    // O pedido do cliente, de 27/10/2026 (BICHUS-297), literal: *"na pagina de
+    // meus eventos, precisamos colocar o link que leva o usuario para a pagina
+    // de detalhes do evento"*.
+    //
+    // ANTES DESTA ENTREGA a tela tinha ZERO `Navigator` e ZERO `push`: o unico
+    // `onTap` do arquivo era o do `_BotaoDeCancelar`. O cartao era texto.
+
+    /// O toque no corpo do cartao, pelo titulo -- que e onde o dedo cai.
+    Future<void> tocarNoCartao(WidgetTester tester) async {
+      await tester.tap(find.text(_titulo));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('o toque no cartao abre a pagina do encontro, pelo `slug`',
+        (tester) async {
+      _superficieAlta(tester);
+      final s = _Servidor();
+      await _abrirPelaFotoDaBarra(tester, s);
+
+      // Controle positivo: antes do toque nao ha pagina de encontro nenhuma, e
+      // sem esta linha o caso poderia estar olhando uma tela que ja estava la.
+      expect(find.byType(TelaDoEncontro), findsNothing);
+      expect(s.detalhesPedidos, isEmpty);
+
+      await tocarNoCartao(tester);
+
+      expect(
+        find.byType(TelaDoEncontro),
+        findsOneWidget,
+        reason: 'REPROVA: o cartao de `Meus eventos` nao leva a nenhum lugar. '
+            'E o pedido literal da BICHUS-297, e o cartao da agenda ja leva '
+            '(`CartaoDoEncontro.aoTocar`, obrigatorio pelo criterio 2 da '
+            'BICHUS-62: controle sem desfecho e proibido).',
+      );
+      expect(
+        s.detalhesPedidos,
+        <String>[_slug],
+        reason: 'REPROVA: a pagina abriu, mas nao para ESTE encontro. O '
+            '`slug` do cartao e o que `MyNetworkEvent` traz, e e ele que o '
+            'endereco tem de carregar.',
+      );
+    });
+
+    testWidgets('o encontro CANCELADO tambem abre', (tester) async {
+      // A DECISAO, e ela e medida: `getNetworkEvent` sai da MESMA
+      // `consultaBase` de `listMyNetworkEvents` -- `publication_status IN
+      // ('published','cancelled')` mais autor com conta ativa --, e sem
+      // recorte de tempo. O corte por `ends_at` do cancelado e da LISTAGEM da
+      // agenda, nao da leitura de um. Entao todo item desta lista e, por
+      // construcao, alcancavel pela pagina. A agenda ja leva o cancelado para
+      // la (`_tocarNoCartao` nao olha situacao).
+      //
+      // Tirar o link so do cancelado faria o cartao morto da BICHUS-62 numa
+      // lista onde os vizinhos abrem -- e e no cancelado que o dono quer
+      // conferir o que quem ia esta vendo.
+      _superficieAlta(tester);
+      final s = _Servidor(encontro: _meuEncontro(situacao: 'cancelled'));
+      await _abrirPelaFotoDaBarra(tester, s);
+
+      // O cancelado nao tem `Cancelar` (a regra e a do servidor), entao o
+      // toque aqui nao tem como ser o do botao.
+      expect(
+        find.text(TextosDoCancelamento.confirmar),
+        findsNothing,
+        reason: 'o caso perdeu o pressuposto: encontro cancelado nao oferece '
+            '`Cancelar`, e sem isso ele nao mede o que diz medir.',
+      );
+      await tocarNoCartao(tester);
+
+      expect(find.byType(TelaDoEncontro), findsOneWidget);
+      expect(s.detalhesPedidos, <String>[_slug]);
+    });
+
+    testWidgets('o toque do cartao NAO engole o `Cancelar`', (tester) async {
+      // O defeito que esta isca guarda: o alvo de toque do cartao inteiro
+      // cobre o do botao destrutivo. Quem queria cancelar navegaria, e quem
+      // queria ver o encontro cancelaria -- numa acao sem desfazer.
+      //
+      // No dedo quem ganha a arena de gestos e o reconhecedor mais FUNDO, e o
+      // `OutlinedButton` do `Cancelar` esta DENTRO do `InkWell` do cartao.
+      // Este caso e o que prova isso em vez de supor.
+      _superficieAlta(tester);
+      final s = _Servidor();
+      await _abrirPelaFotoDaBarra(tester, s);
+
+      await tester.tap(find.text(TextosDoCancelamento.confirmar).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(FolhaDestrutiva),
+        findsOneWidget,
+        reason: 'REPROVA: o toque no `Cancelar` nao abriu a folha. O alvo de '
+            'toque do cartao engoliu o do botao.',
+      );
+      expect(
+        find.byType(TelaDoEncontro),
+        findsNothing,
+        reason: 'REPROVA: o toque no `Cancelar` NAVEGOU. O cartao roubou o '
+            'toque do botao destrutivo, e quem queria cancelar foi levado '
+            'para outra tela.',
+      );
+      expect(s.detalhesPedidos, isEmpty);
+    });
+
+    testWidgets(
+        'a arvore de semantica tem os DOIS nos, e os dois com acao de toque',
+        (tester) async {
+      // A OUTRA METADE DA SEPARACAO, e ela nao se ve no dedo.
+      //
+      // `test/a11y/acao_de_controle_test.dart` guarda a classe de defeito
+      // `btn=true tap=false`, mas ele **nao varre esta tela** (medido: a
+      // varredura dele e `cadastrarPet`, `petCadastrado`, `detalheDoPet` e
+      // `escanear`). Entao o portao desta tela mora aqui.
+      //
+      // Dois nos DISTINTOS, cada um com nome proprio e com a acao: e isso que
+      // um `InkWell` publicando semantica em volta do cartao inteiro
+      // destruiria -- ele embrulharia o `Cancelar` num no maior e sem rotulo.
+      _superficieAlta(tester);
+      final s = _Servidor();
+      await _abrirPelaFotoDaBarra(tester, s);
+
+      // Sem o handle a arvore de semantica nao existe, e o caso passaria por
+      // nao estar olhando para nada.
+      final handle = tester.ensureSemantics();
+      try {
+        final doCartao = tester
+            .getSemantics(find.bySemanticsLabel(RegExp('^$_titulo,')))
+            .getSemanticsData();
+        final doCancelar = tester
+            .getSemantics(
+              find.bySemanticsLabel(
+                TextosDoCancelamento.confirmarAcessivel(_titulo),
+              ),
+            )
+            .getSemanticsData();
+
+        for (final par in <(String, SemanticsData)>[
+          ('o cartao', doCartao),
+          ('o `Cancelar`', doCancelar),
+        ]) {
+          expect(
+            par.$2.flagsCollection.isButton,
+            isTrue,
+            reason: 'REPROVA: ${par.$1} nao e anunciado como botao, e quem '
+                'navega por audicao nao descobre que ha para onde ir.',
+          );
+          expect(
+            par.$2.hasAction(SemanticsAction.tap),
+            isTrue,
+            reason: 'REPROVA: ${par.$1} sai com `btn=true tap=false`. Quem '
+                'usa leitor de tela ouve que existe um botao e nao tem como '
+                'acionar: `excludeSemantics: true` apaga a arvore do filho e '
+                'leva a acao junto, e `onTap` precisa ser redeclarado '
+                '(WCAG 2.1 SC 4.1.2).',
+          );
+        }
+
+        expect(
+          doCartao.label,
+          contains(_titulo),
+          reason: 'REPROVA: o no tocavel do cartao perdeu o titulo do '
+              'encontro, e o leitor de tela anunciaria um botao sem dizer de '
+              'qual encontro ele e.',
+        );
+        expect(
+          doCartao.label,
+          isNot(contains(TextosDoCancelamento.confirmar)),
+          reason: 'REPROVA: o no do cartao ABSORVEU o do `Cancelar`. Os dois '
+              'viraram um controle so, e a pessoa nao tem mais como escolher '
+              'entre abrir e cancelar.',
+        );
+
+        // =================================================================
+        // A FORMA DA ARVORE, e nao so o conteudo dos dois nos.
+        // =================================================================
+        //
+        // As tres asserções abaixo existem porque as de cima **nao
+        // distinguiam** as tres árvores medidas nesta entrega: elas passavam
+        // nas tres. Cada uma aqui reprova numa:
+        //
+        //  1. IRMAOS, e nao um dentro do outro. Com `excludeFromSemantics` no
+        //     `InkWell` e SEM o `container: true` do `_BotaoDeCancelar`, a
+        //     medicao deu o no do `Cancelar` como PAI do no do cartao.
+        //  2. NENHUM no acionavel sem nome no cartao. Sem o
+        //     `excludeFromSemantics`, o `InkWell` publica um no `tap=true` com
+        //     rótulo vazio em volta dos dois: quem foca nele ouve NADA
+        //     (WCAG 2.1 SC 4.1.2).
+        final cartao = tester.getSemantics(
+          find.bySemanticsLabel(RegExp('^$_titulo,')),
+        );
+        final cancelar = tester.getSemantics(
+          find.bySemanticsLabel(
+            TextosDoCancelamento.confirmarAcessivel(_titulo),
+          ),
+        );
+
+        bool ancestralDe(SemanticsNode possivel, SemanticsNode no) {
+          for (var p = no.parent; p != null; p = p.parent) {
+            if (p.id == possivel.id) return true;
+          }
+          return false;
+        }
+
+        expect(
+          ancestralDe(cancelar, cartao) || ancestralDe(cartao, cancelar),
+          isFalse,
+          reason: 'REPROVA: um dos dois controles e ANCESTRAL do outro na '
+              'arvore de semantica. Na tela eles estao lado a lado, e em '
+              'arvore o leitor os anuncia um dentro do outro. Medido nesta '
+              'entrega: tirar o `container: true` do `_BotaoDeCancelar` faz o '
+              'no dele virar o PAI do no do cartao.',
+        );
+
+        // O ancestral comum dos dois -- o cartao -- e tudo o que esta entre
+        // ele e os dois nos: nenhum deles pode ser acionavel sem nome.
+        final semNome = <String>[];
+        void varrer(SemanticsNode no) {
+          final d = no.getSemanticsData();
+          if (d.hasAction(SemanticsAction.tap) &&
+              d.label.trim().isEmpty &&
+              d.tooltip.trim().isEmpty &&
+              d.value.trim().isEmpty) {
+            semNome.add('#${no.id} rect=${no.rect}');
+          }
+          no.visitChildren((filho) {
+            varrer(filho);
+            return true;
+          });
+        }
+
+        var raiz = cartao.parent;
+        while (raiz != null && !ancestralDe(raiz, cancelar)) {
+          raiz = raiz.parent;
+        }
+        expect(
+          raiz,
+          isNotNull,
+          reason: 'o caso perdeu o pressuposto: os dois nos nao tem ancestral '
+              'comum, e a varredura abaixo nao olharia o cartao.',
+        );
+        varrer(raiz!);
+        expect(
+          semNome,
+          isEmpty,
+          reason: 'REPROVA: ha no(s) com acao de toque e SEM nome nenhum no '
+              'cartao: $semNome. Quem navega por leitor de tela para neles e '
+              'nao ouve nada (WCAG 2.1 SC 4.1.2). Medido nesta entrega: e o '
+              'que o `InkWell` do cartao publica quando lhe falta '
+              '`excludeFromSemantics: true`.',
+        );
+      } finally {
+        handle.dispose();
+      }
     });
   });
 

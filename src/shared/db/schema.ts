@@ -471,7 +471,15 @@ export interface PetTagsTable {
   created_at: CriadoEm;
 }
 
-/** Apenas inserção. Retenção de 90 dias. */
+/**
+ * Apenas inserção, e **sem retenção por prazo** (ADR-0010, emenda 6 de
+ * 26/10/2026: *"não apague nada"*). O desenho original previa 90 dias; o
+ * expurgo nunca existiu e agora não vai existir. A leitura fica enquanto a
+ * plaquinha existir, porque ela é a evidência de clonagem e de abuso.
+ *
+ * O que continua em 90 dias é a **rotação da chave** do HMAC do IP, e ela é
+ * higiene de chave — não prazo de guarda.
+ */
 export interface TagScansTable {
   id: string;
   tag_id: string;

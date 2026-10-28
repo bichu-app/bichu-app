@@ -214,6 +214,22 @@ export interface DirectoryRepository {
   ): Promise<AvaliacaoGravada | 'local-ausente' | 'sem-canal-verificado'>;
 
   /**
+   * Verdadeiro quando a conta tem e-mail (ou telefone) confirmado.
+   *
+   * **O MESMO predicado que `gravarMinhaAvaliacao` ja aplica por dentro**, e
+   * nao uma segunda regra: aquele continua sendo a trava que vale, porque ele
+   * e o unico que roda na mesma transacao da escrita. Este existe para a borda
+   * poder ORDENAR as recusas -- a moderacao de palavras precisa vir DEPOIS do
+   * `409`, como na indicacao, e o `409` da escrita so chega junto com a linha
+   * ja gravada.
+   *
+   * **So e consultado no caminho da RECUSA** (ver `directory-routes.ts`):
+   * texto limpo nao paga esta consulta, e o caminho comum continua com uma
+   * ida ao banco.
+   */
+  temCanalVerificadoParaAvaliar(chamador: UserId): Promise<boolean>;
+
+  /**
    * Apaga a avaliacao de `chamador` para `slug`.
    *
    * **Idempotente**: nao ter avaliacao e um resultado de sucesso (`true`), e

@@ -9,6 +9,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/ficha_da_pessoa.dart';
 
 /// **PESSOAS BLOQUEADAS** — a lista de quem esta conta bloqueou, e o único
 /// lugar de onde o desbloqueio sai.
@@ -246,21 +247,49 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            nome,
-            style: textos.titleMedium?.copyWith(color: cores.textPrimary),
-          ),
-          if (mostraOApelido) ...<Widget>[
-            const SizedBox(height: BichuEspaco.e1),
-            Text(
-              '@$apelido',
-              style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+          // **O PADRAO DE IDENTIFICACAO, e nao um `Text` com o nome.**
+          //
+          // Pedido do cliente em 26/10/2026, sobre ESTA tela: *"na listagem dos
+          // usuarios bloqueados, voce deve trazer o icone da foto do usuario
+          // tambem, ja pedi pra voce tornar isso padrao"*. Quem cobra isto de
+          // toda superficie nova e
+          // `app/test/widgets/padrao_de_identificacao_test.dart`.
+          //
+          // **`urlDaFoto` e nula AQUI PORQUE O CONTRATO NAO TEM O CAMPO**, e
+          // nao por omissao desta tela: `BlockedPerson` nao traz foto, e o
+          // contrato escreve o motivo — *"Bloqueado e o oposto de conexao
+          // aceita, e foto aqui seria emenda nova sem decisao que a
+          // sustente"*. Com nula, `FichaDaPessoa` desenha a INICIAL, que e o
+          // recurso que a emenda 3 do ADR-0010 nomeia. O lugar da foto existe;
+          // o rosto e que nao sai.
+          //
+          // **`comSelo: false` pelo mesmo motivo**, e o `false` escrito e
+          // deliberado: `BlockedPerson` nao tem `contact_channel_verified`, e
+          // um parametro omitido nao seria pergunta nenhuma. Acender o selo
+          // aqui exige emenda de contrato, e emenda e decisao do cliente.
+          FichaDaPessoa(
+            nome: nome,
+            urlDaFoto: null,
+            comSelo: false,
+            estiloDoNome: textos.titleMedium?.copyWith(color: cores.textPrimary),
+            abaixoDoNome: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (mostraOApelido) ...<Widget>[
+                  const SizedBox(height: BichuEspaco.e1),
+                  Text(
+                    '@$apelido',
+                    style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                  ),
+                ],
+                const SizedBox(height: BichuEspaco.e1),
+                Text(
+                  'Bloqueada em ${_data(pessoa.bloqueadoEm)}',
+                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: BichuEspaco.e1),
-          Text(
-            'Bloqueada em ${_data(pessoa.bloqueadoEm)}',
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
           ),
           const SizedBox(height: BichuEspaco.e2),
           // `Expanded` e nao `MainAxisAlignment.end`: o tema desta casa da aos

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/conexoes_api.dart';
 import '../../api/falhas.dart';
+import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_conexao.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -13,7 +14,7 @@ import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/ficha_da_pessoa.dart';
 
 /// **AS CONEXÕES DA PRÓPRIA CONTA.** Decisão do cliente de **22/10/2026**,
 /// literal:
@@ -201,6 +202,18 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
         _faltaConta = faltaConta(falha);
         _falha = _faltaConta ? null : TelaDeMinhasConexoes.falhaAoCarregar;
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E `FalhaDeChamada`: um corpo 200 fora do contrato estoura
+      // `TypeError` dentro de `PaginaDeConexoes.doJson` -- `handle`, `pets_count`
+      // e `connections_count` sao casts NAO anulaveis. Sem este ramo a tela
+      // ficava em `_carregando` PARA SEMPRE, que e o estado que este app nao
+      // deixa existir (`tela_do_caso_publico.dart`, mesmo padrao).
+      registrarFalhaInesperada(erro, pilha, onde: 'ao listar as minhas conexões');
+      if (!mounted) return;
+      setState(() {
+        _carregando = false;
+        _falha = MensagensDeErro.servidorFora;
+      });
     }
   }
 
@@ -232,6 +245,16 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
         // **O que já está na tela FICA.** Falhar a página seguinte não é
         // motivo para apagar as vinte que a pessoa está lendo.
         _falha = TelaDeMinhasConexoes.falhaAoCarregar;
+      });
+    } on Object catch (erro, pilha) {
+      // A MESMA lacuna da primeira pagina, e aqui o preso era `_carregandoMais`:
+      // o botao `Ver mais` ficava rodando para sempre, e `if (_carregandoMais)
+      // return` no topo trancava a porta por tras -- nem tocar de novo saia.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao listar mais conexões');
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falha = MensagensDeErro.servidorFora;
       });
     }
   }
@@ -372,24 +395,33 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
           padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
           child: Row(
             children: <Widget>[
-              _avatar(cores, textos, pessoa),
-              const SizedBox(width: BichuEspaco.e3),
+              // **O PADRAO DE IDENTIFICACAO** — foto, nome e selo num lugar so.
+              // Ver `FichaDaPessoa` e o portao
+              // `app/test/widgets/padrao_de_identificacao_test.dart`.
+              //
+              // Esta tela tinha a QUARTA copia escrita a mao do circulo de
+              // foto-ou-inicial (`_avatar` + `_circuloDaInicial`), e e essa
+              // copia que sai daqui: `MarcaDaPessoa`, dentro de `FichaDaPessoa`,
+              // ja resolve a queda para a inicial, o `cacheWidth` pela largura
+              // pintada e o simbolo de falha de retrato.
+              //
+              // **`comSelo: false` e pergunta aberta, nao decisao desta tela.**
+              // `ConnectedPerson` nao traz `contact_channel_verified` — tem os
+              // cinco campos da busca, e o selo nao e um deles. O cliente pediu
+              // o selo em TODA listagem (26/10/2026); acende-lo aqui exige o
+              // campo no contrato, que e emenda e portanto decisao dele.
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      nome,
-                      style: textos.titleMedium?.copyWith(color: cores.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${TelaDeMinhasConexoes.rotuloDePets(pessoa.petsCount)} · '
-                      '${TelaDeMinhasConexoes.rotuloDeConexoes(pessoa.connectionsCount)}',
-                      style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-                    ),
-                  ],
+                child: FichaDaPessoa(
+                  nome: nome,
+                  urlDaFoto: pessoa.photoIconUrl,
+                  comSelo: false,
+                  lado: TelaDeMinhasConexoes.ladoDoCirculo,
+                  estiloDoNome: textos.titleMedium?.copyWith(color: cores.textPrimary),
+                  abaixoDoNome: Text(
+                    '${TelaDeMinhasConexoes.rotuloDePets(pessoa.petsCount)} · '
+                    '${TelaDeMinhasConexoes.rotuloDeConexoes(pessoa.connectionsCount)}',
+                    style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                  ),
                 ),
               ),
               Icon(Icons.chevron_right, color: cores.textSecondary),
@@ -400,42 +432,11 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
-  /// O avatar: **a foto quando há uma, a inicial quando não há.**
-  ///
-  /// **Decorativo nos dois casos**, como no cartão da busca: o nome é lido ao
-  /// lado, e um leitor de tela que anunciasse os dois leria "M, Marina".
-  Widget _avatar(BichuCores cores, TextTheme textos, PessoaConectada pessoa) {
-    final url = pessoa.photoIconUrl;
-    if (url == null || url.isEmpty) return _circuloDaInicial(cores, textos, pessoa);
-    return ExcludeSemantics(
-      child: ClipOval(
-        child: ImagemDaRede(
-          url: url,
-          descricao: null,
-          largura: TelaDeMinhasConexoes.ladoDoCirculo,
-          simboloDeFalha: Icons.person_outline,
-        ),
-      ),
-    );
-  }
-
-  /// O círculo com a inicial — **a queda de quem não tem foto pronta**. Foto em
-  /// `processing` ou `rejected` não sai do servidor, e o recurso é o que a
-  /// emenda 3 do ADR-0010 manda usar.
-  Widget _circuloDaInicial(BichuCores cores, TextTheme textos, PessoaConectada pessoa) {
-    final inicial =
-        pessoa.inicial.isEmpty ? TelaDeMinhasConexoes.inicialDeQuemNaoTem : pessoa.inicial;
-    return ExcludeSemantics(
-      child: Container(
-        width: TelaDeMinhasConexoes.ladoDoCirculo,
-        height: TelaDeMinhasConexoes.ladoDoCirculo,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: cores.primaryContainer, shape: BoxShape.circle),
-        child: Text(
-          inicial,
-          style: textos.titleLarge?.copyWith(color: cores.onPrimaryContainer),
-        ),
-      ),
-    );
-  }
+  // **O AVATAR SAIU DAQUI, e a remocao e o ponto.**
+  //
+  // `_avatar` e `_circuloDaInicial` eram a QUARTA copia no app do mesmo circulo
+  // de foto-ou-inicial. `FichaDaPessoa` (que compoe `MarcaDaPessoa`) faz as
+  // duas coisas, e manter as copias era manter quatro lugares onde uma corta
+  // diferente das outras. `ladoDoCirculo` e `inicialDeQuemNaoTem` ficam: o
+  // primeiro continua sendo o tamanho desta lista, e o segundo e lido por teste.
 }

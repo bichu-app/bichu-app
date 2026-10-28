@@ -587,74 +587,37 @@ dispensas:
   # com `apk-assinado` (4 arquivos, entre eles `verificar_borda_local.py`) como
   # controle positivo da sonda. Apagar nao derruba `verificar-borda-local`.
   #
-  # A DISPENSA DE BAIXO NAO SAI, e isso e deliberado:
-  # `oasdiff-aviso-de-pedido-de-conexao-na-caixa` (`responsavel: squad`, vence
-  # em 30/10) e a unica que ainda faz trabalho -- e ela que aceita a unica
-  # quebra em nivel ERR que a comparacao produz hoje. Tira-la reprovaria o
-  # portao de contrato. Ela tambem e consultada por
-  # `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart`.
+  # A SETIMA DISPENSA TAMBEM SAIU, em 26/10/2026, e por outro motivo:
+  # `oasdiff-aviso-de-pedido-de-conexao-na-caixa` (`responsavel: squad`,
+  # `vence_em: 2026-10-30`) ficou INERTE. O motivo escrito nela dizia *"CAI
+  # QUANDO o merge em development levar o contrato novo para a base da
+  # comparacao"*, e esse merge aconteceu: `origin/development` e agora
+  # `90dfaee7`, mescla de `49ca33de` com `cc9f2767` (o PR #61), e
+  # `connection_requested` esta no enum de `api/openapi.yaml:21322` DA BASE.
+  #
+  # PROVADO, e nao deduzido, com o mesmo binario da esteira
+  # (`tufin/oasdiff:v1.32.1`, como em `ci.yml:706`):
+  #   * `oasdiff breaking` de `origin/development:api/openapi.yaml` contra a
+  #     `api/openapi.yaml` desta arvore devolveu `[]` -- ZERO quebras, de
+  #     qualquer nivel. Nao ha o que a dispensa aceite;
+  #   * `verificar_quebras_de_contrato.py` sobre esse JSON sai `APROVADO:
+  #     nenhuma quebra de contrato contra a base` -- antes E depois de a
+  #     entrada sair, com `exit 0` nos dois;
+  #   * `--autoteste` passa os 7 casos;
+  #   * CONTROLE POSITIVO, para o portao nao estar cego: um JSON FORJADO com
+  #     uma quebra de nivel 3 (`request-body-became-required`
+  #     `umaRotaQueNaoExiste`) sem dispensa nenhuma faz o portao REPROVAR com
+  #     `exit 1`, nomeando a quebra. O portao continua enxergando.
+  #
+  # POR QUE SAIR AGORA E NAO DEIXAR VENCER: em 30/10 ela derrubaria
+  # `verificar_dispensas.py`, que mora no job `rapidos`, de que os outros onze
+  # dependem -- foi exatamente o que as seis acima acabaram de fazer. E o
+  # proprio texto dela mandava: *"Se esta entrada ainda estiver aqui depois do
+  # merge, ela esta escondendo outra coisa e precisa SAIR, nao ser redatada"*.
+  #
+  # `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart` NAO depende
+  # desta entrada, e isso foi medido e nao suposto: ele cita o nome dela numa
+  # cadeia de `reason` e nao LE o arquivo (`grep` por `File(`,
+  # `readAsString` e `quality-gates` naquele arquivo sai 1). A tolerancia de
+  # `TipoDeAviso.porCodigo` continua presa pelos 6 casos dele.
   # ---------------------------------------------------------------------
-
-  # `connection_requested` ENTRA NO ENUM DE RESPOSTA DE `listNotifications`,
-  # 23/10/2026 (commit 45380f6b, `api/openapi.yaml:21322`).
-  #
-  # O oasdiff acusa `response-property-enum-value-added` em nivel ERR porque
-  # acrescentar valor a enum de RESPOSTA e, no caso geral, quebra de cliente:
-  # quem desserializa com lista fechada estoura. Aqui a quebra e TEORICA, e
-  # isso foi MEDIDO nos tres consumidores, nao deduzido:
-  #
-  #   1. APP. `TipoDeAviso.porCodigo` (`app/lib/api/modelos_notificacao.dart`)
-  #      cai em `TipoDeAviso.desconhecido`, cujo rotulo e `Aviso`. Medido na
-  #      arvore `bdae03e1` -- que e `45380f6b^`, a arvore de que saiu o APK
-  #      `bdae03e1-hml-app-arm64-v8a-release-enxuto.apk`: 6 casos verdes em
-  #      `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart`. A linha
-  #      APARECE na caixa, com assunto e data, e NAO e tocavel (o
-  #      `DestinoDoAviso` novo cai em nulo, que e o mesmo estado de
-  #      `destination: null`). Nenhuma excecao. Medido tambem NO BINARIO:
-  #      `strings` no `libapp.so` daquele APK da 0 ocorrencias de
-  #      `connection_requested` e 0 de `connection_request`, com `broadcast`
-  #      (3) e `tag_scanned` (1) como controles positivos -- o APK em campo de
-  #      fato NAO conhece os dois valores novos, e tolera.
-  #      A sentinela existe desde `6a43ae2f`, que e o commit que CRIOU a caixa:
-  #      nao existe build com caixa de notificacoes e sem ela.
-  #   2. WEB e 3. BACKOFFICE. Nao consomem a rota: `listNotifications`,
-  #      `me/notifications`, `NotificationKind`, `NotificationItem` e
-  #      `NotificationPage` dao ZERO ocorrencias em `web/src` e `admin/src`
-  #      fora de `src/api/generated/`, com 8 ocorrencias DENTRO do gerado como
-  #      controle positivo da sonda. E os tres `generated/api.ts` sao
-  #      declaracao pura: 0 `export const|function|class|enum` contra 5
-  #      `export type|interface`. Tipo de TypeScript nao valida nada em tempo
-  #      de execucao, entao valor novo em enum nao tem como estourar la.
-  #
-  # O QUE ESTA ENTRADA AFROUXA MAIS DO QUE PARECE, dito em voz alta: o juizo
-  # casa o par `id da regra` + `operationId`, e nao o VALOR acrescentado.
-  # Enquanto ela estiver aqui, QUALQUER valor novo em QUALQUER enum de
-  # resposta de `listNotifications` passa calado -- inclusive um que o app nao
-  # tolere. E o preco do mecanismo que existe, e e a razao do prazo curto.
-  #
-  # A TOLERANCIA FICOU PRESA POR TESTE, e isso e o que torna esta dispensa
-  # honesta: antes desta rodada NENHUM caso da suite alimentava `kind`
-  # desconhecido, entao a sentinela podia sair num refactor sem nada reprovar.
-  # `app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart` passa a
-  # reprovar se ela sair. ISCA MEDIDA: com `porCodigo` lancando em vez de cair
-  # na sentinela, 5 dos 6 casos reprovam pelo nome, e a caixa INTEIRA vira a
-  # faixa "O Bichu esta fora do ar por alguns minutos" com `Tentar de novo` --
-  # nao e uma linha feia, e a tela toda.
-  #
-  # O AVISO de nivel 2 (`connection_request` em `NotificationDestination`) NAO
-  # precisa de dispensa: o juizo so reprova nivel >= 3. Fica dito para nao
-  # parecer esquecido.
-  #
-  # VENCE EM 30/10/2026. O motivo do prazo e o das vizinhas -- depois do merge
-  # em `development` a base da comparacao carrega o contrato novo e o portao
-  # fica quieto sozinho --, com uma semana em vez de dois dias por uma razao
-  # medida: `verificar_dispensas.py` usa `date.today()` LOCAL e a esteira roda
-  # em UTC, e esta maquina e UTC-3, entao ha 3h por dia em que os dois
-  # relogios discordam da data. Prazo colado no dia do merge aprova aqui e
-  # reprova la. Se esta entrada ainda estiver aqui depois do merge, ela esta
-  # escondendo outra coisa e precisa SAIR, nao ser redatada.
-  - portao: oasdiff-aviso-de-pedido-de-conexao-na-caixa
-    mudanca: "response-property-enum-value-added listNotifications"
-    motivo: "connection_requested entra no enum NotificationKind da resposta 200 de listNotifications (45380f6b, openapi.yaml:21322) para o pedido de conexao aparecer na caixa. Acrescentar valor a enum de resposta e quebra no caso geral, e aqui ela e TEORICA nos tres consumidores, medido e nao deduzido: o app cai em TipoDeAviso.desconhecido com rotulo Aviso e a linha aparece com assunto e data sem ser tocavel (6 casos verdes rodados na arvore bdae03e1, que e 45380f6b^ e e a arvore do APK que esta em campo; e strings no libapp.so daquele APK da 0 ocorrencias de connection_requested, com broadcast e tag_scanned como controle positivo); web e backoffice nao consomem a rota (0 ocorrencias fora de src/api/generated) e os tres generated/api.ts sao declaracao pura, sem nada que valide enum em execucao. AFROUXA MAIS DO QUE PARECE: o juizo casa id da regra + operationId e nao o valor, entao qualquer valor novo em enum de resposta de listNotifications passa calado enquanto isto estiver aqui -- e a razao do prazo curto. A tolerancia ficou presa em app/test/notificacoes/tipo_de_aviso_desconhecido_test.dart, que antes nao existia: isca medida, com a sentinela desligada 5 dos 6 casos reprovam e a caixa INTEIRA vira faixa de erro. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
-    responsavel: squad
-    vence_em: 2026-10-30

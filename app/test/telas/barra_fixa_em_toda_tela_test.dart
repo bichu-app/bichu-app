@@ -174,15 +174,24 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
         'caixa, porque `broadcast` e o unico tipo de aviso sem destino '
         'natural -- os outros levam a uma tela que ja existia.',
   ),
-  // -- `AuAu` > `Convide tutores` (21/10/2026) ---------------------------
+  // -- `Perfil` > `Convide tutores` (26/10/2026) -------------------------
+  //
+  // **O ENDERECO MUDOU, A CLASSIFICACAO NAO.** Era
+  // `/mensagens/convide-tutores` e e `/perfil/convide-tutores` desde 26/10:
+  // o cliente mandou tirar a porta das mensagens e deixar `apenas na menu do
+  // perfil do usuario` (26/10), repetindo o que pediu em 22/10. Ela continua
+  // INTERNA, e agora pela conta das OUTRAS ambiguas e nao por uma propria:
+  // ela passou a ser aberta por um `ItemDeMenu` do CORPO do Perfil, que e
+  // literalmente o criterio das nove.
   (
     nome: 'convide tutores',
-    endereco: '/mensagens/convide-tutores',
-    padrao: '/mensagens/convide-tutores',
-    motivo: 'Aberta por um item do CORPO do AuAu, e nao pela barra -- mesma '
-        'conta das oito ambiguas do Perfil. E ela mostra um QR de 200 dp, que '
-        'e o conteudo da tela: uma barra fixa por cima disputaria espaco com o '
-        'unico elemento que precisa ser fotografado por outro aparelho.',
+    endereco: '/perfil/convide-tutores',
+    padrao: '/perfil/convide-tutores',
+    motivo: 'Aberta por um `ItemDeMenu` do CORPO do Perfil (grupo '
+        '`Comunidade`), e nao pela barra -- a mesma conta das nove ambiguas. '
+        'E ela mostra um QR de 200 dp, que e o conteudo da tela: uma barra '
+        'fixa por cima disputaria espaco com o unico elemento que precisa ser '
+        'fotografado por outro aparelho.',
   ),
   // -- O exemplo literal dele -------------------------------------------
   (
@@ -205,17 +214,23 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     nome: 'minhas fotos',
     endereco: '/perfil/minhas-fotos',
     padrao: '/perfil/minhas-fotos',
-    motivo: 'AMBIGUA. Dois niveis dentro do Perfil: so `Meus dados` a abre. '
-        'Se `Meus dados` e interna, ela nao pode ser primeiro plano.',
+    motivo: 'o CONTEUDO a abre: um `ItemDeMenu` do corpo do Perfil. Ela era '
+        'AMBIGUA ate 26/10/2026, quando era de SEGUNDO nivel e so `Meus '
+        'dados` a abria -- o cliente mandou subi-la (*"traga o menu minhas '
+        'fotos para o menu principal"*, *"primeiro nivel do perfil"*) e a '
+        'ambiguidade acabou: ela esta no PRIMEIRO nivel e continua empilhada, '
+        'porque o discriminador e quem abre a tela e nao quantos niveis ela '
+        'tem. A classificacao nao mudou; o motivo ficou mais simples.',
   ),
   (
     nome: 'endereco de entrega',
     endereco: '/perfil/endereco-de-entrega',
     padrao: '/perfil/endereco-de-entrega',
-    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do Perfil, '
-        'e so `Meus dados` a abre, por `ItemDeMenu`. Se `Meus dados` e '
-        'interna, ela nao pode ser primeiro plano. E ela e FORMULARIO e nao '
-        'lista -- o que a regra "lista fica" nem alcanca.',
+    motivo: 'AMBIGUA, e desde 26/10/2026 a UNICA assim: dois niveis dentro do '
+        'Perfil, e so `Meus dados` a abre, por `ItemDeMenu` -- `minhas '
+        'fotos`, que era a irma, subiu para o primeiro nivel naquele dia. Se '
+        '`Meus dados` e interna, ela nao pode ser primeiro plano. E ela e '
+        'FORMULARIO e nao lista -- o que a regra "lista fica" nem alcanca.',
   ),
   (
     nome: 'meus achados',
@@ -387,6 +402,17 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     endereco: '/achados/novo',
     padrao: '/achados/novo',
     motivo: 'formulario, aberto do menu do Perfil.',
+  ),
+  (
+    nome: 'achei este pet',
+    endereco: '/achados/encontrei',
+    padrao: '/achados/encontrei',
+    // **PAGINA INTERNA, pelo mesmo criterio de `/achados/novo`**: e um
+    // formulario, e ele e aberto de dentro da pagina publica de um caso. Quem
+    // esta com o animal no colo preenchendo `onde` e `quando` nao esta
+    // navegando entre secoes, e a barra de baixo no meio disso e um convite a
+    // perder o preenchimento.
+    motivo: 'formulario, aberto da pagina publica de um caso perdido.',
   ),
   (
     nome: 'o achado registrado',

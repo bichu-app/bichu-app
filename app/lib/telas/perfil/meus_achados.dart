@@ -220,7 +220,41 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
       ),
       body: SafeArea(
         top: false,
-        bottom: false,
+        // **`bottom` FICA LIGADO**, e e o mesmo conserto que
+        // `achado/tela_do_achado.dart` recebeu em 22/10/2026, pela mesma causa
+        // e com a mesma forma de medicao.
+        //
+        // Esta tela **nao tem `bottomNavigationBar`**. O `Scaffold` encolhe o
+        // `body` pelo que a barra de baixo ocupa, e e dentro de
+        // `BarraDeAcaoFixa` -- que mora nesse slot -- que a `SafeArea`
+        // inferior e aplicada. Aqui nao ha barra nenhuma no slot, entao
+        // `bottom: false` -- copiado das telas que TEM barra, no commit
+        // `f2ba257b` que criou a tela -- jogava fora o unico recuo que
+        // existia, e o `ListView` passava a ter viewport ate o chao fisico.
+        //
+        // MEDIDO em 390 x 844 dp com 48 dp de barra do sistema,
+        // `devicePixelRatio` 1, rolado ate `maxScrollExtent`:
+        //
+        //   estado da lista              ultimo controle   chao   sobra
+        //   20 itens + `Carregar mais`   780..828 dp       796     -32
+        //   20 itens, fim da lista       614..794 dp       796      +2
+        //
+        // 32 dos 48 dp de altura do `Carregar mais` caiam na faixa 796..844,
+        // que pertence a barra de navegacao do sistema -- e o toque ali e do
+        // sistema, nao do app. O estado sem cursor escapava por **2 dp**, e
+        // por acidente: o que o salvava era a altura da linha de texto de
+        // `fimDaLista` logo abaixo do ultimo cartao. Nao e margem, e sorte.
+        //
+        // **A isca disto nao pode ser um toque.** `tocarSemRolar` usa
+        // `warnIfMissed: false`, e em teste de widget nao existe barra do
+        // sistema para roubar o evento: um `tap` acerta um botao desenhado em
+        // 780..828 dp. A isca de `perfil_controles_acima_da_barra_test.dart`
+        // afirma RETANGULO dentro da area visivel, com a area do sistema
+        // descontada.
+        //
+        // `BarraDeAcaoFixa` **nao foi tocada**, pelo mesmo motivo de 22/10: a
+        // `SafeArea` dela ja esta correta, e 20 telas dependem daquela
+        // familia.
         child: AnimatedBuilder(
           animation: sessao,
           // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no

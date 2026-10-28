@@ -2937,6 +2937,46 @@ export interface paths {
          *     contencao desse caso e a denuncia e a remocao pelo administrador, que e
          *     humana e posterior.
          *
+         *     ## Moderacao de palavras (`code: inappropriate_language`)
+         *
+         *     `body` recusa xingamento e injuria **na hora da escrita**, e e a MESMA
+         *     funcao e o MESMO `code` de `suggestDirectoryEntry` (pedido do cliente,
+         *     18/10/2026: "nos campos de indicacao e recomendacao de profissionais").
+         *     O `400` ja declarado abaixo cobre a recusa, e `errors[].code` nao tem
+         *     `enum` -- este codigo nao acrescenta esquema nenhum.
+         *
+         *     **Aqui a recusa na escrita e a unica barreira anterior**, e a diferenca
+         *     com a indicacao importa: a indicacao vai para fila e passa por revisao
+         *     humana, esta **aparece na hora**. Entre o teclado e a tela de outra
+         *     pessoa nao ha ninguem, entao recusar depois nao protegeria nada.
+         *
+         *     **A ORDEM: o `409` de canal nao verificado vem ANTES da moderacao**, a
+         *     mesma ordem de `suggestDirectoryEntry`. Quem nao confirmou o e-mail
+         *     ouve o que de fato falta, em vez de ser mandado reescrever um texto que
+         *     nao poderia publicar de todo jeito. A conferencia de FORMA
+         *     (`too_long`, `html_not_allowed`) continua vindo antes do `409`: ela nao
+         *     depende da conta.
+         *
+         *     A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+         *     nem em `errors[]` nem em `detail`, e nada disso vai para log: devolve-la
+         *     transformaria o `400` em oraculo de quem quer descobrir o filtro. A
+         *     mensagem e sempre a mesma e diz o que fazer.
+         *
+         *     **Isto nao e a prova de contorno.** A lista pega palavra escrita por
+         *     extenso; frase ofensiva sem palavra proibida, palavra grudada em outra e
+         *     troca de caractere nao prevista passam, e **injuria racial nao e
+         *     pegada** -- em portugues ela e feita de palavra reaproveitada, que
+         *     colide com vocabulario de animal, de cor e de gentilico. Decisao do
+         *     cliente: "vamos comecar com um modelo de moderacao mais simples e
+         *     conforme for aumentamos". A protecao de fundo continua sendo a denuncia
+         *     e a remocao pelo painel.
+         *
+         *     Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+         *     tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+         *     (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+         *     tolerancia. **Critica negativa continua passando**: nota 1 com texto
+         *     duro e aceita.
+         *
          *     ## Avaliar perfil nao reivindicado e permitido
          *
          *     Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao

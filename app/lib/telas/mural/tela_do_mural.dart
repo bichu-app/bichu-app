@@ -19,6 +19,7 @@ import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/marca_da_pessoa.dart';
 import '../../widgets/selo_de_validado.dart';
 import 'comentarios_da_publicacao.dart';
+import 'porta_do_perfil_do_autor.dart';
 import '../casca_com_abas.dart';
 
 /// O corpo da secao `Mural`: **a linha do tempo.**
@@ -715,7 +716,20 @@ class _CartaoDaPublicacao extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              _FotoDoAutor(autor: publicacao.autor),
+              // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), e o toque
+              // mora AQUI e nao dentro de `_FotoDoAutor`: ver a prosa de
+              // `PortaDoPerfilDoAutor`. Sem apelido ela devolve a foto crua.
+              //
+              // **A FOTO LEVA ROTULO e o nome nao**: o circulo nao tem texto
+              // proprio, entao sem rotulo o leitor de tela anunciaria um botao
+              // sem dizer o que ele abre.
+              PortaDoPerfilDoAutor(
+                autor: publicacao.autor,
+                rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
+                  publicacao.autor.nomeExibido,
+                ),
+                child: _FotoDoAutor(autor: publicacao.autor),
+              ),
               const SizedBox(width: BichuEspaco.e3),
               // O NOME, COM O SELO DE VALIDADO AO LADO quando a conta tem canal
               // de contato confirmado — emenda do ADR-0010 de 21/10/2026,
@@ -728,11 +742,27 @@ class _CartaoDaPublicacao extends StatelessWidget {
               // legivel; um selo que desaparece e informacao perdida. A medicao
               // dessa troca a 320, 375 e 430 dp esta em
               // `app/test/widgets/selo_de_validado_test.dart`.
+              //
+              // **O NOME TAMBEM E PORTA** -- cliente, 22/10/2026: *"Inclua um
+              // link que seja o usuario a pagina do perfil"*. Ele e o alvo
+              // grande e o que a pessoa le; a foto sozinha seria um alvo de 40
+              // dp para o mesmo destino.
+              //
+              // **SEM `rotulo` aqui, de proposito**: trocar a semantica desta
+              // sub-arvore por uma frase apagaria o selo que `NomeComSelo`
+              // anuncia ao lado do nome.
+              //
+              // **A porta fica DENTRO do `Expanded` e nao por fora**: por fora
+              // ela embrulharia tambem o `⋮` de `_menu`, e o menu tem desfecho
+              // proprio -- um toque nele abriria o perfil.
               Expanded(
-                child: NomeComSelo(
-                  nome: publicacao.autor.nomeExibido,
-                  comSelo: publicacao.autor.canalConfirmado,
-                  estilo: textos.titleMedium,
+                child: PortaDoPerfilDoAutor(
+                  autor: publicacao.autor,
+                  child: NomeComSelo(
+                    nome: publicacao.autor.nomeExibido,
+                    comSelo: publicacao.autor.canalConfirmado,
+                    estilo: textos.titleMedium,
+                  ),
                 ),
               ),
               _menu(context),
@@ -840,16 +870,23 @@ class _FotoDoAutor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // **A FOTO NAO E UM CONTROLE, e a ausencia de toque e deliberada.**
+    // **ESTE WIDGET CONTINUA SO DESENHANDO, e o toque continua nao estando
+    // aqui dentro.** O que mudou em 26/10/2026 foi o PONTO DE USO: quem
+    // embrulha a foto no toque e `PortaDoPerfilDoAutor`, no cartao.
     //
-    // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
-    // outro lado. Aqui o cartao inteiro ja e conteudo e o apelido pode ser
-    // nulo; um circulo que se anuncia como botao e nao leva a lugar nenhum e o
-    // toque sem desfecho que o criterio 2 da BICHUS-62 proibe. Quem trouxer o
-    // toque para o perfil traz com ele o estado de apelido nulo.
+    // O paragrafo que estava escrito aqui dizia *"a ausencia de toque e
+    // deliberada"* e dava a razao: o apelido pode ser nulo, e *"um circulo que
+    // se anuncia como botao e nao leva a lugar nenhum e o toque sem desfecho
+    // que o criterio 2 da BICHUS-62 proibe"*. **A razao nao caiu -- ela foi
+    // ATENDIDA.** A mesma linha ja dizia o preco de ligar o toque (*"quem
+    // trouxer o toque para o perfil traz com ele o estado de apelido nulo"*),
+    // e e exatamente isso que `PortaDoPerfilDoAutor` faz: sem apelido ela nao
+    // monta `InkWell` nenhum e devolve esta foto crua.
     //
-    // **E por isso que nao se embrulha nada aqui**: `MarcaDaPessoa` desenha e
-    // nao toca, e e `MarcaNeutraDoParticipante` que poe o `InkWell` por fora.
+    // **A regra de camada tambem continua**: `MarcaDaPessoa` desenha e nao
+    // toca, e quem poe o `InkWell` fica por FORA -- era
+    // `MarcaNeutraDoParticipante` na conversa, e agora e
+    // `PortaDoPerfilDoAutor` no Mural.
     return MarcaDaPessoa(
       urlDoIcone: autor.urlDoIcone,
       inicial: MarcaDaPessoa.letraDe(autor.nomeExibido),

@@ -375,6 +375,58 @@ class ListaDePerdidos extends StatefulWidget {
 /// ser obrigatória: não há mais pergunta a fazer antes de listar.
 enum _Fase { carregando, lista, falha }
 
+/// O RECORTE COM QUE A PÁGINA ABRE: **`case_state=open`, só os perdidos.**
+///
+/// ---------------------------------------------------------------------------
+/// ## A DECISÃO DE 26/10/2026 SUBSTITUI A DE 20/10/2026
+///
+/// **As duas são do cliente, e a segunda reverte a primeira com o conflito na
+/// mesa.** Registrar as duas datas aqui é o ponto desta prosa: quem ler só o
+/// contrato vai achar que esta linha é um defeito.
+///
+///   - **20/10/2026.** Perguntado se o pet reencontrado devia aparecer só no
+///     filtro ou também na lista de sempre, ele respondeu, literal: *"Também
+///     na lista padrão"*. Foi essa resposta que fez o recorte de abertura ser
+///     a AUSÊNCIA de `case_state` — e a ausência, no servidor, são os abertos
+///     **mais** os reencontrados da janela de 30 dias, na mesma página, cada
+///     cartão com o seu selo. Ver `EstadoDoCasoNaLista`, que ainda documenta
+///     aquela decisão porque ela é o que explica o terceiro recorte existir.
+///   - **26/10/2026.** Ele pediu o contrário, literal: *"o filtro da pagina,
+///     deve mostrar apenas os pets perdidos, e só deve mostrar os encontrados,
+///     se o usuário filtrar"*. É a terceira vez que ele reclama desta página, e
+///     a reclamação não é sobre ordenação: foi **medido** que a página 1 sai com
+///     20 de 20 abertos (`last_seen_at DESC`, e quem voltou foi visto por
+///     último ANTES de voltar), com o primeiro reencontrado na posição 250.
+///     Quem ele viu foi um reencontrado que ele reconheceu, ou um recorte
+///     estreito — e isso não muda o pedido.
+///
+/// **Isto não é defeito consertado e não é descuido:** a decisão nova substitui
+/// a antiga, e as duas estão escritas aqui para a próxima pessoa não "consertar"
+/// esta linha de volta citando o contrato.
+///
+/// ## O QUE O PARÂMETRO CUSTA, E ONDE ESSE CUSTO FOI PAGO
+///
+/// Mandar `case_state=open` faz o servidor devolvê-lo em `applied_filters`, e
+/// `applied_filters` **passa a citar um filtro aplicado em toda página**,
+/// inclusive na que ninguém filtrou. Foi exatamente esse o defeito que o
+/// cliente reclamou em `period` em 18/10/2026, um nível acima: a tela lia
+/// "1 filtro ativo" numa lista que ninguém recortou, o distintivo da barra
+/// nascia com `1`, e a lista vazia trocava de frase.
+///
+/// O custo foi pago em DOIS lugares, e nenhum deles é novo nesta casa:
+///
+///   1. **`_EstadoDaListaDePerdidos._temRecorteAtivo`** deixou de contar
+///      `estado != null` e passou a contar só `reencontrado` — ver a prosa lá,
+///      que é quem guarda a frase de lista vazia.
+///   2. **`GrupoDeFiltro.codigoPadrao`**, que existe desde 19/10/2026 para
+///      exatamente isto: a pastilha que é a VERDADE DA LISTA fica marcada e
+///      **não** conta em `ControleDeFiltro.ativos`. Foi criada para o grupo
+///      `Quando` da `Rede`, pelo mesmo motivo, e o grupo `Estado` desta folha é
+///      o segundo a usá-la.
+const RecorteDePerdidos _recorteDeAbertura = RecorteDePerdidos(
+  estado: EstadoDoCasoNaLista.aberto,
+);
+
 // **OS DOIS PRAZOS DESTA TELA SAIRAM DAQUI (22/10/2026), e nao foram
 // perdidos.** `prazoDaResolucao` e `tetoDaEsperaDaResolucao` tinham gemeos de
 // valor identico em `widgets/cidade_por_localizacao.dart`, e o motivo era que
@@ -881,7 +933,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // chegado depois da primeira carga, e a região pode trocar com um login.
     final cidade = _cidadeEmUso;
     final atual =
-        (_recorte ?? const RecorteDePerdidos()).copiar(cidade: cidade);
+        (_recorte ?? _recorteDeAbertura).copiar(cidade: cidade);
     // **Guardada ANTES da chamada, e sem `await`.** Guardar depois perderia a
     // cidade de quem fechou o aplicativo enquanto a lista carregava, e esperar
     // a gravação atrasaria a lista por uma conveniência. Nula não apaga a
@@ -1044,32 +1096,65 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // ele diz QUAIS casos a lista traz. Lido depois de `Espécie` e `Porte`,
         // pareceria um filtro a mais sobre os perdidos.
         //
-        // **Nasce SEM pastilha marcada**, pelo mesmo motivo de `period`: nulo é
-        // a página como ela abre — e desde a segunda decisão do cliente de
-        // 20/10/2026 (*"Também na lista padrão"*) isso quer dizer os abertos
-        // **mais** os reencontrados na janela, juntos, cada cartão com o seu
-        // selo. Marcar `Perdidos` por padrão poria o parâmetro na query e o
-        // devolveria em `applied_filters`, e a linha do recorte diria que há um
-        // filtro aplicado numa página que ninguém filtrou — além de ESCONDER os
-        // reencontrados de quem nunca abriu a folha.
+        // **`Perdidos` NASCE MARCADO desde 26/10/2026**, e é a inversão do que
+        // estava escrito aqui. O parágrafo antigo dizia que marcá-lo "poria o
+        // parâmetro na query e o devolveria em `applied_filters`, e a linha do
+        // recorte diria que há um filtro aplicado numa página que ninguém
+        // filtrou — além de ESCONDER os reencontrados de quem nunca abriu a
+        // folha". **Esconder os reencontrados de quem nunca abriu a folha é
+        // literalmente o que o cliente pediu** em 26/10/2026, revertendo a
+        // decisão dele de 20/10 (ver [_recorteDeAbertura], que carrega as duas
+        // datas e as duas falas).
+        //
+        // O resto do parágrafo antigo continua verdadeiro, e é por isso que
+        // existe [GrupoDeFiltro.codigoPadrao]: com ele, a pastilha da verdade da
+        // lista fica MARCADA e **não** conta em `ControleDeFiltro.ativos`, então
+        // o distintivo da barra não nasce com `1`. É o padrão da casa desde
+        // 19/10/2026 — `Quando`/`Próximos` da `Rede` foi o primeiro caso, pelo
+        // mesmo defeito medido.
+        //
+        // ## A OPÇÃO OFERECE `reunited`, E NÃO A AUSÊNCIA
+        //
+        // **Decisão desta frente, e ela tem três razões.** O pedido é *"só deve
+        // mostrar os encontrados, se o usuário filtrar"*: o que ele quer ver são
+        // **os encontrados**, e `reunited` é o conjunto que são só eles. A
+        // ausência traria os dois, que é o recorte de 20/10 que acabou de ser
+        // revertido — oferecê-lo numa pastilha seria devolver a decisão velha
+        // pela folha. E o grupo é de escolha ÚNICA e exclusiva: uma terceira
+        // opção `Os dois` é superfície de produto que ninguém pediu.
+        //
+        // **A consequência, dita em voz alta: a união deixou de ser alcançável
+        // pela tela.** `EstadoDoCasoNaLista` nulo continua existindo e continua
+        // significando a união, porque é o que o contrato declara — o que saiu é
+        // o caminho da tela até ele. Ver `_aplicarAFolha`.
         GrupoDeFiltro(
           chave: 'case_state',
           titulo: 'Estado',
-          selecionado: base.estado?.codigo,
+          // A VERDADE DA LISTA, e não o que a pessoa escolheu: o `??` cobre o
+          // recorte que chegasse sem conjunto. Mesma forma de
+          // `_quandoEfetivo` na `Rede`.
+          selecionado: (base.estado ?? EstadoDoCasoNaLista.aberto).codigo,
+          // **ESTA LINHA É O QUE SEPARA "a verdade da lista" de "um recorte".**
+          // Sem ela o distintivo da barra nasceria com `1` numa página que
+          // ninguém filtrou. Ver `GrupoDeFiltro.codigoPadrao`.
+          codigoPadrao: EstadoDoCasoNaLista.aberto.codigo,
           opcoes: <OpcaoDeRecorte>[
             for (final e in EstadoDoCasoNaLista.values)
               OpcaoDeRecorte(codigo: e.codigo, rotulo: e.rotulo),
           ],
-          // A nota diz TRÊS coisas, e nenhuma delas é promessa: que a lista
-          // já vem com os dois, o que `Encontrados` quer dizer, e os 30 dias.
+          // A nota diz TRÊS coisas, e nenhuma delas é promessa: o que a lista
+          // traz, o que `Encontrados` quer dizer, e os 30 dias.
           //
-          // A primeira entrou com a união: sem ela, a pessoa que vê um cartão
-          // com selo na lista não entende de onde ele veio, e quem escolhe
-          // `Encontrados` e acha pouco não sabe que o resto estava junto. A
-          // terceira evita que `Encontrados` pareça "todos os que já voltaram",
-          // e a lista curta vire defeito aparente.
-          nota: 'A lista já traz os dois. Encontrados mostra só quem voltou com '
-              'a ajuda de alguém da comunidade, nos últimos 30 dias.',
+          // **A primeira frase virou o contrário em 26/10/2026.** Ela dizia *"A
+          // lista já traz os dois"*, e dizia a verdade enquanto a página abria
+          // na união. Mantê-la agora seria a folha afirmando sobre a lista o
+          // oposto do que a lista faz — e é a pior classe de texto que esta tela
+          // pode ter, porque ninguém desconfia da explicação.
+          //
+          // A terceira evita que `Encontrados` pareça "todos os que já
+          // voltaram", e a lista curta vire defeito aparente.
+          nota: 'A lista traz os perdidos. Encontrados mostra só quem voltou '
+              'com a ajuda de alguém da comunidade, nos últimos 30 dias.',
         ),
         // O bairro só entra quando há UM para oferecer, e o único que este app
         // conhece é o da própria região cadastrada. Uma lista de bairros da
@@ -1128,7 +1213,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     // campo era indistinguível de não tocar nele, e a cidade anterior
     // continuava valendo. Com o campo opcional, esvaziar é um recorte, e é o
     // caminho de volta para "todas as cidades".
-    final base = _recorte ?? const RecorteDePerdidos();
+    final base = _recorte ?? _recorteDeAbertura;
     // **A PARTIR DAQUI A ESCOLHA DELA MANDA, inclusive quando é "nenhuma".**
     // Sem esta linha, apagar o campo não teria efeito: a cidade do aparelho
     // voltaria a valer no quadro seguinte, porque nulo é indistinguível de
@@ -1156,10 +1241,28 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         // fazer com a ausência é o servidor, pelo `default: 30d` que o
         // contrato declara na rota — o app parou de escolher por ele.
         janela: JanelaDePerdidos.de(escolha.filtros['period']),
-        // **Limpar a pastilha deixa o estado NULO**, e `case_state` sai da
-        // consulta -- a página volta aos casos abertos sem dizer o nome deles.
-        // Mesma mecânica da janela logo acima, e pelo mesmo motivo.
-        estado: EstadoDoCasoNaLista.de(escolha.filtros['case_state']),
+        // **LIMPAR A PASTILHA VOLTA PARA `Perdidos`, e NÃO para a união.**
+        // Era o contrário até 26/10/2026 (`de(...)` nu, nulo saindo da
+        // consulta), e ali estava certo: nulo era a página como ela abria.
+        //
+        // **Agora nulo é o conjunto que o cliente pediu para NÃO mostrar por
+        // padrão**, e deixar o `Limpar` cair nele seria pôr os reencontrados na
+        // tela de quem acabou de pedir para tirar todos os filtros. Quem toca
+        // `Limpar` está pedindo a página como ela abre, e a página abre em
+        // [_recorteDeAbertura].
+        //
+        // **Por isso o `?? aberto`, e ele é deliberadamente diferente da
+        // janela logo acima:** `period` nulo é "qualquer janela", que é o
+        // conjunto mais largo e é o estado de abertura; `case_state` nulo é a
+        // união, que **não** é mais o estado de abertura. A mesma mecânica nos
+        // dois grupos daria desfechos opostos, e este é o lugar onde a
+        // diferença fica.
+        //
+        // É também o que fecha o círculo de `codigoPadrao` no grupo: a folha
+        // mostra `Perdidos` marcado, desmarcá-lo e aplicar devolve a MESMA
+        // página, e não há caminho de tela para a união.
+        estado: EstadoDoCasoNaLista.de(escolha.filtros['case_state']) ??
+            EstadoDoCasoNaLista.aberto,
         pagina: 1,
       ),
     );
@@ -1333,7 +1436,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     _cidadeDoAviso = null;
     _codigoDoAviso = null;
     _detalheDoAviso = null;
-    final base = _recorte ?? const RecorteDePerdidos();
+    final base = _recorte ?? _recorteDeAbertura;
     _trocarRecorte(base.copiar(cidade: null, pagina: 1));
   }
 
@@ -1351,10 +1454,30 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         base.especie != null ||
         base.porte != null ||
         base.janela != null ||
-        // O CONJUNTO CONTA como recorte, inclusive `Perdidos` dito em voz alta:
-        // quem escolheu `Encontrados` e não achou nada precisa ler que foi o
-        // recorte, e não que a comunidade nunca encontrou nenhum animal.
-        base.estado != null;
+        // O CONJUNTO CONTA como recorte **SÓ QUANDO É `Encontrados`**, e a
+        // conta mudou em 26/10/2026 junto com [_recorteDeAbertura].
+        //
+        // **Era `base.estado != null`, e com o novo recorte de abertura isso
+        // seria SEMPRE verdadeiro**: `Perdidos` passou a ser a verdade da lista
+        // e vai na consulta de toda página, inclusive na que ninguém filtrou.
+        // Com a conta antiga, a lista vazia da página que abriu sozinha diria
+        // *"Nenhum pet perdido com esse recorte."* — e o recorte do qual ela
+        // falaria é o padrão, que ninguém escolheu. A pessoa leria que o filtro
+        // dela esvaziou a lista quando o que houve é que **não há pet perdido**,
+        // e é a mesma troca de frase que `GrupoDeFiltro.codigoPadrao` existe
+        // para fechar na `Rede` (lá a frase errada era *"Nenhum evento com
+        // esses filtros"* sobre uma agenda vazia).
+        //
+        // **`reencontrado` conta**, e tem de contar: quem escolheu
+        // `Encontrados` e não achou nada precisa ler que foi o recorte, e não
+        // que a comunidade nunca encontrou nenhum animal.
+        //
+        // **`null` NÃO conta**, e a direção está certa: nulo é a união dos dois
+        // conjuntos, o conjunto mais LARGO que esta rota tem. Vazia com ele, não
+        // há o que culpar o recorte. A folha deixou de produzi-lo em 26/10
+        // (ver `_aplicarAFolha`), e esta linha é o que mantém a frase honesta
+        // se ele voltar a chegar aqui por outro caminho.
+        base.estado == EstadoDoCasoNaLista.reencontrado;
   }
 
   @override
@@ -1509,6 +1632,15 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
             // proprio `share_url` -- **nunca `/pets/:petId`**, que e enderecada
             // por UUID interno (ADR-0010, item 6), e cujo id esta
             // deliberadamente ausente desta projecao.
+            //
+            // **O DESTINO CONTINUA SENDO PASSADO PARA TODO CARTAO, e quem o
+            // RECUSA e o cartao do pet reencontrado** (cliente, 26/10/2026:
+            // *"retirar a acao de clique no pet encontrado, nao mostrar a pagina
+            // interna"*). A trava mora em `CartaoDoPerdido._toqueQueVale`, e
+            // mora la de proposito: o cartao e componente compartilhado e o
+            // criterio e um campo que ele ja le. Um `aoTocar: null` condicional
+            // aqui valeria so para esta tela, e a proxima a reaproveitar o
+            // cartao abriria a pagina do 410 de novo.
             CartaoDoPerdido(
               perdido: _itens[i],
               agora: _agora,

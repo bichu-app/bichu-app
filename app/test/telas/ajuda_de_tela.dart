@@ -26,6 +26,7 @@ import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
+import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:bichu/dispositivo/distintivo_do_aplicativo.dart';
@@ -432,7 +433,7 @@ Map<String, dynamic> referenciaDeTeste() {
   return <String, dynamic>{
     'version': '2026-09-17',
     'species': <Map<String, dynamic>>[
-      <String, dynamic>{'code': 'dog', 'label': 'Cão'},
+      <String, dynamic>{'code': 'dog', 'label': 'Cachorro'},
     ],
     'breeds': <Map<String, dynamic>>[
       // Vira-lata **esta na lista**, e a ajuda do campo promete isso.
@@ -1124,18 +1125,57 @@ Future<void> irParaAConta(WidgetTester tester) async {
 /// ponto** -- e nao em catorze lugares.
 Future<void> irAoLeitorDeQr(WidgetTester tester) async {
   await irParaAConta(tester);
+  await rolarAtePortaDeEscanear(tester);
 
   final porta = find.text('Escanear uma tag');
   expect(
     porta,
     findsWidgets,
-    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta. Desde '
-        '19/10 ela e a UNICA porta do leitor de QR, e o leitor e o caminho de '
-        'quem acha um cachorro na rua -- o mais critico do produto. Se a '
-        'porta sumiu, ele ficou inalcancavel.',
+    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta, nem '
+        'rolando o menu ate o fim. Desde 19/10 ela e a UNICA porta do leitor '
+        'de QR, e o leitor e o caminho de quem acha um cachorro na rua -- o '
+        'mais critico do produto. Se a porta sumiu, ele ficou inalcancavel.',
   );
   await tester.ensureVisible(porta.first);
   await tester.pumpAndSettle();
   await tester.tap(porta.first);
+  await tester.pumpAndSettle();
+}
+
+/// Rola o menu da tela da conta ate `Escanear uma tag` estar CONSTRUIDA.
+///
+/// **Ela entrou em 26/10/2026, e nao e conveniencia.** O corpo logado da tela
+/// da conta e uma `ListView`, que **so constroi o que cabe na dobra**: numa
+/// bancada de 800 dp de altura, item que fica abaixo dela nao tem `Element` e
+/// `find.text` devolve ZERO -- nao "invisivel", inexistente. No dia em que o
+/// menu ganhou uma linha (`Minhas fotos`, pedido do cliente: *"traga o menu
+/// minhas fotos para o menu principal"*, *"primeiro nivel do perfil"*),
+/// `Escanear uma tag` passou a cair fora da dobra e SEIS casos reprovaram de
+/// uma vez -- todos por geometria da janela, e nenhum por porta perdida.
+///
+/// **O que se mede continua sendo o mesmo**: a porta existe, e tocar nela abre
+/// o leitor. O que mudou e o ALCANCE, e alcancar rolando e o que a pessoa faz
+/// no aparelho. Esta funcao nao engole ausencia: se a porta nao estiver na
+/// lista, a rolagem chega ao fim e o `expect` de quem chamou reprova.
+///
+/// **O ramo DESLOGADO nao tem lista**: ele desenha botoes numa coluna curta, e
+/// nesse caso a porta ja esta construida -- a funcao sai na primeira linha sem
+/// tocar em `Scrollable` nenhum.
+Future<void> rolarAtePortaDeEscanear(WidgetTester tester) async {
+  final porta = find.text('Escanear uma tag');
+  if (porta.evaluate().isNotEmpty) return;
+
+  // **O `Scrollable` da ABA, e nao `.first`.** O
+  // `StatefulShellRoute.indexedStack` mantem as outras abas montadas atras
+  // desta, e `.first` pode ser o rolador de outra aba -- quando e, a rolagem
+  // arrasta a lista errada e estoura `Bad state: No element` apontando para o
+  // lugar errado. E a mesma armadilha que o parametro `scrollable` de
+  // [rolarAte] documenta.
+  final lista = find.descendant(
+    of: find.byType(AbaPerfil),
+    matching: find.byType(Scrollable),
+  );
+  if (lista.evaluate().isEmpty) return;
+  await tester.scrollUntilVisible(porta, 200, scrollable: lista.first);
   await tester.pumpAndSettle();
 }

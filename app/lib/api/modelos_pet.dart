@@ -6,7 +6,16 @@ library;
 
 /// `#/components/schemas/Species` do contrato.
 enum Especie {
-  cao('dog', 'Cão'),
+  // O ROTULO E `Cachorro` (cliente, 22/10/2026): *"Troque os textos de cao
+  // para cachorro"*. **`'dog'` e VALOR DE CONTRATO e nao muda** -- ele e o
+  // `Species` de `api/openapi.yaml` e viaja em toda requisicao; so o rotulo
+  // de exibicao, que e o que a pessoa le, virou `Cachorro`.
+  //
+  // Esta linha era a UNICA fonte do rotulo no app, e estava LIBERADA por
+  // excecao no portao de vocabulario (`test/widgets/vocabulario_do_produto.dart`)
+  // desde 22/10. A excecao SAIU no mesmo commit: enquanto ela existia, o
+  // portao que cobra `cao` -> `cachorro` ficava cego exatamente aqui.
+  cao('dog', 'Cachorro'),
   gato('cat', 'Gato'),
   outro('other', 'Outro');
 

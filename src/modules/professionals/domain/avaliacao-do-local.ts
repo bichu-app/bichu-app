@@ -29,6 +29,9 @@
  * num `if` destas funcoes. Projecao que filtra e projecao que um dia esquece.
  */
 
+import type { ProblemFieldError } from '../../../shared/http/problem.js';
+import { errosDeModeracao } from '../../../shared/texto/moderacao.js';
+
 /** O limite de `professional_reviews.body`, e o mesmo do contrato. */
 export const TAMANHO_MAXIMO_DO_TEXTO = 1500;
 
@@ -238,6 +241,46 @@ export function validarEntradaDaAvaliacao(corpo: unknown): {
 
   if (erros.length > 0 || nota === undefined) return { erros };
   return { entrada: { nota, texto }, erros: [] };
+}
+
+/**
+ * A MODERACAO DE PALAVRAS do texto da avaliacao: xingamento, injuria e o que
+ * prejudica a imagem do aplicativo. Pedido do cliente de 18/10/2026, com as
+ * mesmas palavras que cobriram a indicacao -- "nos campos de indicacao e
+ * recomendacao de profissionais".
+ *
+ * E a MESMA funcao da indicacao (`shared/texto/moderacao.ts`,
+ * `code: inappropriate_language`), import direto e nao copia: a lista de
+ * palavras, a normalizacao e a mensagem sao as de la, e esta funcao nao
+ * acrescenta nem uma palavra.
+ *
+ * ## POR QUE ELA NAO MORA DENTRO DE `validarEntradaDaAvaliacao`
+ *
+ * **Por causa da ORDEM.** `validarEntradaDaAvaliacao` roda antes de tocar o
+ * banco, e a trava de canal verificado (`409 contact-channel-unverified`)
+ * precisa vir ANTES da moderacao -- e assim que a indicacao se comporta
+ * (`application/sugestao-do-diretorio.ts`: o `if` do canal vem antes de
+ * `errosDaSugestao`), e dois comportamentos diferentes para a mesma regra do
+ * cliente fariam a tela decidir por dois caminhos onde ha um.
+ *
+ * Se a moderacao entrasse na validacao estrutural, quem nao confirmou o e-mail
+ * receberia `400` sobre o texto em vez do `409` que explica o que de fato
+ * falta. A conferencia de FORMA (`required`, `too_long`, `html_not_allowed`)
+ * continua antes do `409`, como sempre esteve: ela nao depende da conta, e e
+ * a borda quem ordena os dois.
+ *
+ * `null` nao e moderado porque nao ha texto: avaliacao de nota sozinha e
+ * legitima e e o caso comum.
+ */
+/*
+ * O tipo e `ProblemFieldError` e nao o `ErroDeCampo` local: e o tipo que
+ * `errosDeModeracao` devolve e o que `problemas.validacao` recebe, igual a
+ * indicacao. Reempacotar para o tipo local so criaria uma conversao que nao
+ * muda nada.
+ */
+export function errosDeModeracaoDaAvaliacao(texto: string | null): readonly ProblemFieldError[] {
+  if (texto === null) return [];
+  return errosDeModeracao('body', texto);
 }
 
 /** Valida o corpo de `reportDirectoryEntryReview`. */
