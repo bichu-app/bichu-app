@@ -35,6 +35,7 @@ import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
+import 'package:bichu/dispositivo/credencial_do_aparelho.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
@@ -632,6 +633,19 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   required Future<http.Response> Function(http.Request) rede,
   CameraEGaleria? camera,
   LeitorDeQr? leitorDeQr,
+  /// A folha de credencial do sistema (passkey, BICHUS-301).
+  ///
+  /// O padrao e [SemPasskeyNesteBuild], e e o padrao CERTO para a suite: o
+  /// pacote `passkeys` fala por canal de plataforma, e canal de plataforma em
+  /// teste de widget estoura `MissingPluginException` **dentro de um
+  /// `Future`** -- o formato de falha que nao aponta para a causa, o mesmo
+  /// motivo escrito no parametro da localizacao.
+  ///
+  /// `SemPasskeyNesteBuild` leva toda tela ao caminho de quem NAO tem passkey,
+  /// que e o estado de quase todo mundo e o que a maioria dos casos quer medir:
+  /// a tela de entrar tentando a passkey ao abrir, nao achando nenhuma, e nao
+  /// atrapalhando a senha. Quem precisa do outro caminho passa o seu.
+  CredencialDoAparelho? credencialDoAparelho,
   Avisos? avisos,
   /// A porta das mensagens de push. **O unico jeito de um caso exercitar os
   /// tres estados**: nao ha como pedir ao Flutter que mate o processo e o
@@ -769,6 +783,10 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         // O padrao e NULO, e `ContadoresDeNaoLido` cai no inerte: ver o doc do
         // parametro. Nenhum caso ganha um distintivo de icone de surpresa.
         distintivoDoApp: distintivoDoApp,
+        // Ver o doc do parametro: o padrao e a porta que recusa, porque a de
+        // verdade estouraria `MissingPluginException` dentro de um `Future`.
+        credencialDoAparelho:
+            credencialDoAparelho ?? const SemPasskeyNesteBuild(),
       ),
     ),
   );

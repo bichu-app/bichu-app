@@ -354,6 +354,23 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       await escopo.sessao.abrir(sessao);
       if (!mounted) return;
 
+      // O FORMULARIO PARA DE ENVIAR AQUI, ANTES DO CONVITE, E ISSO NAO E
+      // ARRUMACAO DE TESTE.
+      //
+      // `_enviando` liga o estado carregando do `BotaoPrimario`, que desenha um
+      // `CircularProgressIndicator` -- uma animacao que **nao termina**. O
+      // `finally` deste `try` so desliga o estado depois do `pushReplacement`,
+      // entao, enquanto a folha do convite estivesse aberta, o botao embaixo
+      // dela continuaria girando.
+      //
+      // Duas consequencias, e a segunda e a que importa: `pumpAndSettle`
+      // **nunca assenta** com animacao infinita na arvore, e por isso TODO caso
+      // de teste que passa pelo cadastro travaria -- medido, foram 5 casos com
+      // `pumpAndSettle timed out` antes desta linha existir. E, no aparelho, o
+      // envio ja terminou: a conta existe, o 201 chegou, e um botao que gira
+      // afirma um trabalho em curso que nao esta em curso.
+      setState(() => _enviando = false);
+
       // O CONVITE DA PASSKEY, AQUI E NAO ANTES (BICHUS-301).
       //
       // Pedido do cliente: _"vamos implementar apos o usuario realizar o
