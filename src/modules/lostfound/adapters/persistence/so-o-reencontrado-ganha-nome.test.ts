@@ -80,7 +80,7 @@ function linha(parcial: Partial<LinhaDoCasoPublico> = {}): LinhaDoCasoPublico {
     pet_excluido: false,
     do_chamador: false,
     ...parcial,
-  } as LinhaDoCasoPublico;
+  };
 }
 
 /** Os três jeitos de o ANIMAL não estar de pé, mais o jeito de estar. */

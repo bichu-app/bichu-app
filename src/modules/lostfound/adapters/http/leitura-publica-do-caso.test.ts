@@ -262,6 +262,61 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
   });
 
+  /**
+   * O CORPO REAL do agradecimento, medido pela rota e não pela camada de
+   * aplicação.
+   *
+   * Nada neste repositório confere o corpo de uma RESPOSTA -- só o da
+   * requisição é validado contra o contrato --, então um desvio de corpo no 410
+   * novo só apareceria medindo a rota. Este caso é essa medição, e ele roda
+   * sobre `casoHostil`, que planta telefone, e-mail e endereço do tutor nos
+   * campos de texto livre: se a página de agradecimento copiasse qualquer coisa
+   * do caso, o achado sairia aqui.
+   */
+  void it('caso REENCONTRADO: 410 em problem+json, agradecendo e sem next_action', async () => {
+    const bancada = montar(() => casoHostil({ aberto: false, reencontrado: true }));
+    const resposta = await pedir(bancada, URL_DO_CASO);
+
+    assert.equal(resposta.status, 410);
+    assert.match(resposta.tipo ?? '', /^application\/problem\+json/);
+    assert.equal(resposta.corpo['type'], 'https://api.exemplo.invalid/problems/lost-case-reunited');
+    assert.equal(resposta.corpo['status'], 410);
+    assert.equal(
+      resposta.corpo['next_action'],
+      undefined,
+      'REPROVA: o agradecimento saiu com saída. Empurrar quem leu ao formulário ' +
+        'de achado era o defeito que o cliente relatou três vezes.',
+    );
+    assert.deepEqual(
+      achadosDeVazamento(resposta.corpo, { plantados: PLANTADOS }),
+      [],
+      'REPROVA: o corpo do agradecimento carrega dado plantado do tutor.',
+    );
+    assert.equal(
+      JSON.stringify(resposta.corpo).includes('Thor'),
+      false,
+      'REPROVA: o agradecimento nomeia o pet. O único fato autorizado é que o ' +
+        'caso terminou porque o animal voltou.',
+    );
+  });
+
+  void it('o CARTAZ do mesmo caso reencontrado continua no 410 fundido', async () => {
+    // A rota do cartaz declara UM 410 no contrato. Medida na rota porque é
+    // a única maneira: nenhum portão estático compara o corpo emitido com o
+    // declarado.
+    const resposta = await pedir(
+      montar(() => casoHostil({ aberto: false, reencontrado: true })),
+      URL_DO_CARTAZ,
+    );
+    assert.equal(resposta.status, 410);
+    assert.equal(
+      resposta.corpo['type'],
+      `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`,
+      'REPROVA: o cartaz emitiu o tipo novo, que ele não declara.',
+    );
+    assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
+  });
+
   void it('token desconhecido: o MESMO 410, e não 404', async () => {
     const desconhecido = await pedir(montar(() => undefined), URL_DO_CASO);
     const encerrado = await pedir(montar(() => casoHostil({ aberto: false })), URL_DO_CASO);
