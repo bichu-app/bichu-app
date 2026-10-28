@@ -46,6 +46,48 @@
 // Fica dito aqui para quem for mexer.
 //
 // ===========================================================================
+// REANCORAGEM DE 27/10/2026: A ANCORA SAIU DE `Align` E FOI PARA `Row`
+// ===========================================================================
+//
+// **O que estas iscas mediam antes.** O lado da bolha pelo `alignment` de um
+// `Align` -- `Alignment.centerRight` para a fala de quem le, `centerLeft` para
+// a do outro lado --, nas duas direcoes, mais a prova em pixel.
+//
+// **O que mudou na estrutura, e nao no comportamento.** Outra entrega poe a
+// MARCA DE QUEM FALOU (`MarcaDaPessoa`) ao lado da bolha, e para isso o `Align`
+// virou `Row`: o codigo registra a troca por extenso em
+// `tela_da_conversa.dart` (*"O `Align` virou `Row`, e o alinhamento passou a
+// ser dele"*). O arquivo nao tem mais `Align` proprio nenhum.
+//
+// **E o medidor velho nao reprovava de forma honesta: ele ficava MEDINDO OUTRA
+// COISA.** Medido em 27/10/2026, a reprovacao dizia
+// `Expected: Alignment.centerRight / Actual: Alignment.center` -- ou seja,
+// `hasLength(1)` PASSAVA. O `Align` que ele achava era o que o
+// `Container(alignment: Alignment.center)` de `MarcaDaPessoa` monta por dentro
+// para centrar a inicial no circulo. Um `Align` de 32 dp que centra uma letra
+// foi lido como o widget que decide de que lado da tela a fala aparece. Se a
+// marca algum dia deixasse de ter aquele `Container`, estas iscas passariam a
+// reprovar por contagem -- e se ela ganhasse `centerRight`, passariam a ficar
+// VERDES sem medir nada.
+//
+// **O que elas medem agora, e e a MESMA propriedade.** O
+// `mainAxisAlignment` da `Row` da bolha: `MainAxisAlignment.end` para a fala de
+// quem le, `start` para a do outro lado. E a mesma decisao
+// (`minha = senderRole == papelDoChamador`), lida no widget que hoje a carrega.
+// A prova em pixel (`estaADireita`) nao mudou uma linha: ela nunca dependeu de
+// `Align`, e e ela que impede que a intencao do medidor substitua o resultado.
+//
+// **A `Row` e escolhida por ESTRUTURA, e nao por alinhamento** -- ver
+// `bolhaDa`. Filtrar as candidatas pelo `mainAxisAlignment` seria o medidor
+// procurando a resposta que ele vai cobrar.
+//
+// **Por que o veredito continua o mesmo.** O defeito de 26/10/2026 era o lado
+// ser funcao pura de `sender_role`. A isca (c) continua sendo a que o pega: o
+// MESMO corpo, mudando so `viewer_role`, tem de por a MESMA mensagem em lados
+// OPOSTOS. Reancorar nao afrouxou isso -- a versao nova REPROVA com o lado
+// fixo, e a prova esta no corpo do PR desta frente.
+//
+// ===========================================================================
 // A BANCADA E A DO ARQUIVO VIZINHO, IMPORTADA
 // ===========================================================================
 //
@@ -132,33 +174,60 @@ ServidorDeConversas servidorDaLista(Map<String, dynamic> corpo) =>
 // A MEDICAO DO LADO DA BOLHA
 // ---------------------------------------------------------------------------
 
-/// O `Align` da bolha daquela mensagem.
+/// As `Row` de bolha daquela mensagem -- zero ou uma.
 ///
 /// Pelo `ValueKey` da mensagem, e nao pelo texto: e a chave que a tela usa para
 /// identificar a bolha, e procurar pelo texto acharia tambem a previa da lista
 /// num caso futuro que montasse as duas telas.
-Align alinhamentoDa(WidgetTester tester, String idDaMensagem) {
-  final alvo = find.descendant(
-    of: find.byKey(ValueKey<String>('mensagem-$idDaMensagem')),
-    matching: find.byType(Align),
-  );
-  final achados = tester.widgetList<Align>(alvo).toList();
+///
+/// **O RECORTE E ESTRUTURAL, e isso e deliberado.** A candidata e a `Row` que
+/// tem um `ConstrainedBox` entre os FILHOS DIRETOS -- que e a forma da bolha em
+/// `tela_da_conversa.dart`: `[marca?, respiro?, ConstrainedBox(a fala)]`, com o
+/// teto de largura que paga a marca. Recortar pelo `mainAxisAlignment` seria o
+/// medidor escolhendo a candidata pela resposta que ele vai cobrar, e uma `Row`
+/// com o lado errado deixaria de ser encontrada em vez de reprovar.
+List<Row> bolhasDe(WidgetTester tester, String idDaMensagem) => tester
+    .widgetList<Row>(
+      find.descendant(
+        of: find.byKey(ValueKey<String>('mensagem-$idDaMensagem')),
+        matching: find.byType(Row),
+      ),
+    )
+    .where((r) => r.children.whereType<ConstrainedBox>().isNotEmpty)
+    .toList();
+
+/// A `Row` da bolha daquela mensagem -- a que decide o lado.
+///
+/// Era um `Align`, e virou `Row` em 27/10/2026 junto da marca de quem falou.
+/// Ver o paragrafo da reancoragem no cabecalho: o `Align` que o medidor velho
+/// achava era o do `Container(alignment: center)` de `MarcaDaPessoa`, de 32 dp,
+/// e nao o que decide de que lado da tela a fala aparece.
+Row bolhaDa(WidgetTester tester, String idDaMensagem) {
+  final achadas = bolhasDe(tester, idDaMensagem);
   expect(
-    achados,
+    achadas,
     hasLength(1),
     reason:
-        'a bolha de $idDaMensagem tem ${achados.length} `Align`. Com mais de '
-        'um, este medidor nao sabe qual deles decide o lado, e a isca poderia '
-        'ficar verde lendo o errado',
+        'a bolha de $idDaMensagem tem ${achadas.length} `Row` com um '
+        '`ConstrainedBox` por filho direto. Com mais de uma, este medidor nao '
+        'sabe qual delas decide o lado, e a isca poderia ficar verde lendo a '
+        'errada; com zero, a forma da bolha mudou de novo e o medidor tem de '
+        'ser reancorado outra vez em vez de calar',
   );
-  return achados.first;
+  return achadas.first;
 }
+
+/// O lado da bolha daquela mensagem, lido de quem hoje o decide.
+MainAxisAlignment ladoDa(WidgetTester tester, String idDaMensagem) =>
+    bolhaDa(tester, idDaMensagem).mainAxisAlignment;
 
 /// A prova FISICA: o centro do texto da bolha esta na metade direita da tela.
 ///
-/// O `alignment` acima e a intencao; isto e o pixel. Os dois juntos porque um
-/// `Align` com `centerRight` dentro de um pai estreito nao moveria nada, e a
-/// pessoa continuaria vendo a bolha no lugar errado com a isca verde.
+/// O `mainAxisAlignment` acima e a intencao; isto e o pixel. Os dois juntos
+/// porque uma `Row` com `MainAxisAlignment.end` dentro de um pai estreito nao
+/// moveria nada, e a pessoa continuaria vendo a bolha no lugar errado com a
+/// isca verde. **Este medidor atravessou a troca de `Align` para `Row` sem uma
+/// linha de mudanca**, porque ele sempre mediu o resultado e nunca o widget.
 bool estaADireita(WidgetTester tester, String texto) {
   final centroDaTela = tester.getSize(find.byType(Scaffold)).width / 2;
   return tester.getCenter(find.text(texto)).dx > centroDaTela;
@@ -177,14 +246,11 @@ void main() {
       );
 
       expect(
-        alinhamentoDa(tester, idDaDoTutor).alignment,
-        Alignment.centerRight,
+        ladoDa(tester, idDaDoTutor),
+        MainAxisAlignment.end,
         reason: 'a mensagem de quem esta lendo nao foi para o lado dela',
       );
-      expect(
-        alinhamentoDa(tester, idDaDoAchador).alignment,
-        Alignment.centerLeft,
-      );
+      expect(ladoDa(tester, idDaDoAchador), MainAxisAlignment.start);
       expect(estaADireita(tester, textoDoTutor), isTrue);
       expect(estaADireita(tester, textoDoAchador), isFalse);
     });
@@ -213,8 +279,8 @@ void main() {
       );
 
       expect(
-        alinhamentoDa(tester, idDaDoAchador).alignment,
-        Alignment.centerRight,
+        ladoDa(tester, idDaDoAchador),
+        MainAxisAlignment.end,
         reason:
             'ESTE E O DEFEITO DE 26/10/2026: o alinhamento era funcao pura de '
             '`sender_role` e nao invertia com o chamador. Quem achou o pet via '
@@ -222,8 +288,8 @@ void main() {
             'ela le como o dela',
       );
       expect(
-        alinhamentoDa(tester, idDaDoTutor).alignment,
-        Alignment.centerLeft,
+        ladoDa(tester, idDaDoTutor),
+        MainAxisAlignment.start,
         reason: 'a mensagem do OUTRO lado continuou no lado de quem le',
       );
       expect(estaADireita(tester, textoDoAchador), isTrue);
@@ -265,20 +331,14 @@ void main() {
           servidor: servidorDaConversa(conversaDasTres(papel: 'tutor')),
           rotaInicial: RotasDeMensagens.conversaDe(idDaMinha),
         );
-        final doTutorVistoPeloTutor = alinhamentoDa(
-          tester,
-          idDaDoTutor,
-        ).alignment;
+        final doTutorVistoPeloTutor = ladoDa(tester, idDaDoTutor);
 
         await abrirAMensagens(
           tester,
           servidor: servidorDaConversa(conversaDasTres(papel: 'finder')),
           rotaInicial: RotasDeMensagens.conversaDe(idDaMinha),
         );
-        final doTutorVistoPeloAchador = alinhamentoDa(
-          tester,
-          idDaDoTutor,
-        ).alignment;
+        final doTutorVistoPeloAchador = ladoDa(tester, idDaDoTutor);
 
         expect(
           doTutorVistoPeloTutor,
@@ -298,6 +358,19 @@ void main() {
       // passaria la e daria um lado ao Bichu aqui -- e atribuir a abertura do
       // aviso a um dos dois lados e afirmar que uma das duas pessoas escreveu
       // aquilo.
+      //
+      // REANCORADO EM 27/10/2026, junto dos quatro casos de cima e pela mesma
+      // razao. Ele cobrava `Align` e continuava VERDE -- mas por vazio: depois
+      // da troca para `Row` nao ha `Align` proprio em lugar nenhum do arquivo,
+      // entao a conta nao distinguia mais "o aviso nao ganhou lado" de "o
+      // widget que eu procuro nao existe mais". O aviso do sistema ganharia um
+      // lado pela `Row` da bolha, e esta conta nao veria.
+      //
+      // **A conta nova e sobre `Row`, e e a mais ampla das duas possiveis**:
+      // `findsNothing` sobre TODA `Row` da sub-arvore, e nao so sobre a que
+      // tem `ConstrainedBox`. O aviso do sistema e `Container > Column > Text`
+      // e nao tem `Row` nenhuma; cobrar a forma inteira pega tambem a versao
+      // que desse lado ao Bichu por outro arranjo de `Row`.
       for (final papel in <String>['tutor', 'finder']) {
         await abrirAMensagens(
           tester,
@@ -307,11 +380,18 @@ void main() {
         expect(
           find.descendant(
             of: find.byKey(const ValueKey<String>('mensagem-$idDaDoSistema')),
-            matching: find.byType(Align),
+            matching: find.byType(Row),
           ),
           findsNothing,
           reason:
               'a mensagem do sistema ganhou um lado com `viewer_role: $papel`',
+        );
+        expect(
+          bolhasDe(tester, idDaDoSistema),
+          isEmpty,
+          reason:
+              'a mensagem do sistema montou a `Row` de bolha -- a que carrega '
+              'o `mainAxisAlignment` -- com `viewer_role: $papel`',
         );
         expect(textoDaTela(tester), contains(textoDoSistema));
       }
@@ -401,14 +481,8 @@ void main() {
         servidor: servidorDaConversa(conversaDasTres(papel: null)),
         rotaInicial: RotasDeMensagens.conversaDe(idDaMinha),
       );
-      expect(
-        alinhamentoDa(tester, idDaDoTutor).alignment,
-        Alignment.centerRight,
-      );
-      expect(
-        alinhamentoDa(tester, idDaDoAchador).alignment,
-        Alignment.centerLeft,
-      );
+      expect(ladoDa(tester, idDaDoTutor), MainAxisAlignment.end);
+      expect(ladoDa(tester, idDaDoAchador), MainAxisAlignment.start);
     });
 
     testWidgets('CONTROLE: o fixture SEM a chave de fato nao a manda', (

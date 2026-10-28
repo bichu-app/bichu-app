@@ -8,6 +8,7 @@ import 'package:bichu/api/pessoas_api.dart';
 import 'package:bichu/api/seguranca_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/pessoa/tela_perfil_de_pessoa.dart';
+import 'package:bichu/telas/seguranca/menu_do_perfil.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:bichu/widgets/imagem_em_cache.dart';
@@ -51,16 +52,50 @@ import 'package:http/testing.dart';
 /// ## DESLIGAR PARA VER REPROVAR — a isca da privacidade
 ///
 /// Em `lib/telas/pessoa/tela_perfil_de_pessoa.dart`, troque o corpo de
-/// `_esquecerAsFotosDela` por `return;`. **MEDIDO: `+4 -1`**, e reprova **so
-/// uma**, que e a que importa:
+/// `_esquecerAsFotosDela` por `return;`. **REMEDIDO em 27/10/2026 sobre a
+/// arvore integrada: `+4 -1`**, e reprova **so uma**, que e a que importa:
 ///
-/// - `a foto de PESSOA sai do disco quando a conexao e desfeita`
+/// - `a foto de PESSOA sai do disco quando a conexao e desfeita PELO menu ⋮`
 ///
 /// Duas chaves separadas de proposito: a primeira mede que o cache existe, a
 /// segunda mede que ele **obedece a regra de visibilidade**. Uma isca que
 /// reprovasse pelos dois motivos nao distinguiria "o cache quebrou" de "a
 /// Emenda 3 do ADR-0010 deixou de valer no disco" -- e e a segunda que e a
 /// decisao desta frente.
+///
+/// ## REANCORAGEM DE 27/10/2026: `Desfazer conexão` SAIU DO CORPO DA TELA
+///
+/// **O que a isca da privacidade media antes.** Ela abria o perfil de uma
+/// conexao aceita com a foto dela JA em disco, achava `Desfazer conexão` **no
+/// corpo da tela** por `find.text`, tocava, e cobrava o arquivo fora do disco
+/// no fim -- com dois controles positivos: o arquivo presente ANTES, e a
+/// chamada `DELETE /v1/connections/r1` registrada.
+///
+/// **O que mudou na estrutura.** Outra entrega moveu o botao para o menu `⋮` da
+/// barra, por pedido do cliente de 22/10/2026 (*"leve o desfazer conexao para
+/// os 3 pontinhos, junto com o denunciar"*). O corpo da tela nao desenha mais
+/// `Desfazer conexão`, e um `PopupMenuButton` nao monta os itens dele enquanto
+/// o menu nao abre: o `find.text` achava **zero** widgets -- medido em
+/// 27/10/2026, `Found 0 widgets with text "Desfazer conexão"` -- e a isca
+/// reprovava no seu PROPRIO controle positivo, antes de chegar ao disco.
+///
+/// **O que ela mede agora, e e MAIS do que antes.** O caminho inteiro **pelo
+/// `⋮`**: abrir o menu da barra, tocar o item de desfazer, e cobrar o arquivo
+/// fora do disco. **E isso tem de ser medido exatamente assim**, porque depois
+/// do pedido de 22/10 o `⋮` e o **UNICO** caminho de desfazer que existe. A
+/// frente da integracao roteou o `aoDesfazerConexao` do menu por `_encerrar`
+/// (= `endConnection` **mais** `_esquecerAsFotosDela()`) precisamente por isso:
+/// com a chamada crua de `widget.conexoes.encerrar`, desfazer pelo `⋮` deixaria
+/// a foto no disco e a Emenda 3 valeria so enquanto a tela nao pintasse. **Uma
+/// isca nova que medisse apenas que o item EXISTE apagaria a prova dessa
+/// regra** -- ela ficaria verde sobre a chamada crua.
+///
+/// **Por que o veredito continua o mesmo.** O fato cobrado nao mudou uma
+/// virgula: um arquivo que sobrevive a perda da permissao transforma a decisao
+/// de privacidade numa regra de INTERFACE. A isca ganhou um terceiro controle
+/// positivo (o item existe no menu aberto) e uma afirmacao nova (o corpo NAO
+/// tem mais o botao, que e a decisao de 22/10), e nenhuma assercao foi
+/// afrouxada.
 ///
 /// ## POR QUE `tester.runAsync`, e nao `pumpAndSettle` sozinho
 ///
@@ -288,7 +323,9 @@ void main() {
   });
 
   group('A ISCA DA PRIVACIDADE: desfazer conexao tira o arquivo do disco', () {
-    testWidgets('a foto de PESSOA sai do disco quando a conexao e desfeita', (
+    testWidgets(
+        'a foto de PESSOA sai do disco quando a conexao e desfeita PELO menu ⋮',
+        (
       tester,
     ) async {
       // **A isca que sustenta a decisao desta frente.** A Emenda 3 do ADR-0010
@@ -296,8 +333,11 @@ void main() {
       // *"apenas quando as duas ja aceitaram conexao"*. No servidor isso e uma
       // clausula `WHERE`; no aparelho, um arquivo gravado continua gravado.
       // Este caso roda o caminho inteiro -- tela de perfil de uma conexao
-      // aceita, com a foto dela JA em disco, e o toque em `Desfazer conexão` --
-      // e cobra o arquivo fora do disco no fim.
+      // aceita, com a foto dela JA em disco, e o toque em `Desfazer conexão`
+      // **DENTRO DO MENU `⋮`**, que desde 22/10/2026 e o unico caminho que
+      // existe -- e cobra o arquivo fora do disco no fim. Ver o paragrafo da
+      // reancoragem no cabecalho: medir so que o item existe apagaria a prova
+      // de que o `⋮` passa por `_encerrar` e nao pela chamada crua.
       AppConfig.limparParaTeste();
       final pasta = _pastaNova();
       final cache = CacheDeImagensNoAparelho(pasta: () async => pasta);
@@ -353,14 +393,57 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final botao = find.text('Desfazer conexão');
+      // **A DECISAO DE 22/10/2026, AFIRMADA.** O corpo da tela nao desenha mais
+      // `Desfazer conexão`: o cliente pediu *"leve o desfazer conexao para os 3
+      // pontinhos, junto com o denunciar"*. Esta linha nao e zelo -- ela e o
+      // que impede este caso de voltar a medir um botao no corpo se alguem
+      // repuser a porta velha, e o caso continuaria verde sobre um caminho que
+      // nao e o que a pessoa usa.
       expect(
-        botao,
+        find.text(MenuDoPerfil.desfazerConexao),
+        findsNothing,
+        reason: 'REPROVA: `${MenuDoPerfil.desfazerConexao}` esta no CORPO da '
+            'tela, antes de o menu `⋮` ser aberto. Ele saiu do corpo em '
+            '22/10/2026 por pedido do cliente, e este caso mede o caminho '
+            'DELE: duas portas para a mesma acao deixariam a isca medir a que '
+            'ninguem usa.',
+      );
+
+      // **O PRIMEIRO CONTROLE POSITIVO: o `⋮` esta na barra.** Sem ele nao ha
+      // por onde desfazer, e o `expect` do arquivo no fim mediria "a tela nao
+      // desenhou o ramo de conexao aceita" em vez de "o arquivo saiu do disco"
+      // -- duas coisas diferentes com o mesmo resultado verde.
+      final menu = find.byType(MenuDoPerfil);
+      expect(
+        menu,
         findsOneWidget,
-        reason: 'O CONTROLE POSITIVO: sem o botao, o `expect` do arquivo '
-            'abaixo mediria "a tela nao desenhou o ramo de conexao aceita" em '
-            'vez de "o arquivo saiu do disco" -- duas coisas diferentes com o '
-            'mesmo resultado verde.',
+        reason: 'O CONTROLE POSITIVO: o `⋮` nao esta na barra desta tela, '
+            'entao nao ha caminho nenhum ate desfazer a conexao.',
+      );
+
+      // ABRIR O MENU. `pumpAndSettle` E SEGURO AQUI, e so aqui: a abertura do
+      // `PopupMenuButton` e uma rota com animacao que TERMINA, e nada esta em
+      // voo -- o `_carregar()` da abertura da tela ja assentou acima. Depois do
+      // toque no ITEM, nao: ver o paragrafo dos tres relogios mais abaixo.
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+
+      // **O SEGUNDO CONTROLE POSITIVO: o item existe no menu ABERTO.** O
+      // recorte por estado mora em `TelaDePerfilDePessoa.build` -- o `⋮`
+      // aparece nos quatro estados da relacao, e `aoDesfazerConexao` so e
+      // passado em `conectado` com `connectionRef` --, entao achar o item aqui
+      // tambem prova que a bancada montou o estado de conexao ACEITA, que e o
+      // unico em que a foto dela podia estar em disco.
+      final itemDeDesfazer = find.text(MenuDoPerfil.desfazerConexao);
+      expect(
+        itemDeDesfazer,
+        findsOneWidget,
+        reason: 'O SEGUNDO CONTROLE POSITIVO: o menu `⋮` abriu e nao tem '
+            '`${MenuDoPerfil.desfazerConexao}`. Ou a bancada nao montou o '
+            'estado `conectado` com `connection_ref` -- e ai nao ha conexao a '
+            'desfazer e este caso nao mede nada --, ou o item morreu e '
+            'desfazer conexao deixou de ter caminho desde que ele saiu do '
+            'corpo da tela em 22/10/2026.',
       );
 
       // **NEM `pumpAndSettle`, NEM `pump` DENTRO DE `runAsync`**, e as duas
@@ -378,8 +461,14 @@ void main() {
       // enquanto o `_carregar()` nao volta. O sintoma foi `pumpAndSettle timed
       // out`, que nao aponta para a causa. E o que este caso mede nao e a
       // arvore parada: e o ARQUIVO fora do disco.
-      await tester.tap(botao);
-      for (var volta = 0; volta < 4; volta++) {
+      //
+      // **SEIS VOLTAS E NAO QUATRO, desde a reancoragem de 27/10/2026.** Pelo
+      // `⋮` ha um quarto relogio antes dos tres: a rota do menu FECHA com
+      // animacao, e `onSelected` so dispara depois do `pop`. As duas voltas a
+      // mais pagam esse fechamento sem trocar o laco por um `pumpAndSettle`
+      // que penduraria o caso pela razao de cima.
+      await tester.tap(itemDeDesfazer);
+      for (var volta = 0; volta < 6; volta++) {
         await tester.pump();
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 50)),
