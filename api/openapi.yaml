@@ -1360,11 +1360,44 @@ paths:
         Nao exige sessao, por definicao: e a porta de entrada.
       security: []
       x-rate-limit:
+        # REVISTO EM 28/10/2026, de `ip=30/1h` para duas janelas. O numero
+        # antigo vinha da faixa das rotas de IDENTIDADE -- `login` tem
+        # `ip=10/1h` --, e essa faixa esta errada para esta operacao por duas
+        # razoes MEDIDAS, uma de risco e uma de frequencia.
+        #
+        # RISCO. A faixa de identidade existe para conter TENTATIVA DE
+        # CREDENCIAL e VAZAMENTO DE IDENTIDADE. Esta operacao nao faz nenhum
+        # dos dois: ela nao tem `requestBody`, nao recebe e-mail, e
+        # `allow_credentials` sai SEMPRE vazia (`maxItems: 0`), que e a
+        # decisao antienumeracao escrita na descricao. O que ela consome e um
+        # desafio guardado, com prazo e uso unico. O risco dela e
+        # ESGOTAMENTO DE RECURSO, nao enumeracao -- e teto de enumeracao posto
+        # sobre risco de recurso aperta o lado errado. Quem contem tentativa
+        # de credencial e `finishPasskeyAuthentication`, com `ip=20/1h`, e
+        # esse NAO se afrouxa.
+        #
+        # FREQUENCIA. O app pede o desafio ao ABRIR a tela de entrar, nao ao
+        # tocar num botao -- nao ha botao, porque a folha do sistema aparece
+        # sozinha. Isso poe a operacao na classe de frequencia de
+        # `listNetworkEvents` (`ip=300/1h`), e nao na de `login`. Com teto de
+        # 30/h, uma rede atras de NAT estourava rapido, e o 429 caia em quem
+        # entra por SENHA -- por causa de um recurso que essa pessoa nem usa.
+        #
+        # O CONSERTO DE VERDADE NAO E ESTE NUMERO, e ele entrou junto: o app
+        # passou a exigir sinal LOCAL de credencial neste aparelho antes de
+        # pedir desafio (`app/lib/dispositivo/passkey_neste_aparelho.dart`).
+        # Quem nao tem passkey -- a maioria -- nao gasta requisicao nenhuma.
+        # Este teto cobre quem TEM, mais o abuso.
         - dimension: [ip]
-          limit: 30
+          limit: 300
           window: 1h
           on_exceed: deny_429
-          note: "a dimensao so pode ser a rede: a operacao nao sabe de quem e a tentativa, e e exatamente por nao saber que ela nao vaza nada"
+          note: "a dimensao so pode ser a rede: a operacao nao sabe de quem e a tentativa, e e exatamente por nao saber que ela nao vaza nada. 300/h e a classe de frequencia de `listNetworkEvents`, e nao a de `login`: o pedido acontece ao abrir a tela de entrar, e o que ele consome e um desafio -- nao uma tentativa de credencial"
+        - dimension: [ip]
+          limit: 1500
+          window: 24h
+          on_exceed: deny_429
+          note: "a janela longa, no molde de `listPublicLostPets` (120/1h mais 600/24h). Ela limita o abuso SUSTENTADO que a janela de uma hora nao ve: 300/h repetido o dia inteiro sao 7200 desafios de um IP so, e nada expurga `passkey_challenges` hoje. A razao entre as duas janelas e a mesma 5x de `listPublicLostPets`, de proposito -- cinco horas cheias de uso legitimo numa rede grande, e nao vinte e quatro. `deny_429` nas duas: so `deny_429` recusa (`recusa()` em `aplicacao-de-teto.ts`), e janela longa com outra palavra do vocabulario seria teto declarado e nao aplicado"
       responses:
         '200':
           description: Desafio emitido.

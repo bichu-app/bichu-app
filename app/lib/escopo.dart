@@ -23,6 +23,7 @@ import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/credencial_do_aparelho.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'dispositivo/passkey_neste_aparelho.dart';
 import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
@@ -64,6 +65,7 @@ class Escopo extends InheritedWidget {
     required this.camera,
     required this.leitorDeQr,
     required this.credencialDoAparelho,
+    required this.passkeyNesteAparelho,
     required this.passkey,
     required this.avisos,
     required this.avisosRecebidos,
@@ -203,6 +205,15 @@ class Escopo extends InheritedWidget {
   /// widget precisa troca-la: o pacote `passkeys` fala por canal de
   /// plataforma, que nao existe em `flutter test`.
   final CredencialDoAparelho credencialDoAparelho;
+
+  /// O sinal LOCAL de que ha credencial digital neste aparelho (28/10/2026).
+  ///
+  /// **E o que impede a tela de entrar de gastar `beginPasskeyAuthentication`
+  /// em quem nao tem passkey** -- que e quase todo mundo. Exposto aqui, e nao
+  /// escondido dentro de [passkey], porque o teste de widget precisa dos dois
+  /// estados: com marca e sem marca sao caminhos diferentes, e um deles nao faz
+  /// requisicao nenhuma.
+  final PasskeyNesteAparelho passkeyNesteAparelho;
 
   /// A sequencia servidor-aparelho-servidor do passkey.
   ///

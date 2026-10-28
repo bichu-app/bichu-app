@@ -4,6 +4,7 @@ import 'package:bichu/api/modelos_passkey.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/credencial_do_aparelho.dart';
+import 'package:bichu/dispositivo/passkey_neste_aparelho.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:flutter/material.dart';
@@ -158,6 +159,12 @@ void main() {
   MockClient redeDe({
     bool passkeyDoServidorFunciona = true,
     int statusDoRegistroDePasskey = 201,
+    /// O que `listPasskeys` responde para `reconciliarComAConta`.
+    ///
+    /// `true` e o aparelho NOVO de quem ja tem passkey: a credencial chegou por
+    /// sincronizacao, por reinstalacao ou por restauracao de backup, e o app
+    /// ainda nao marcou nada.
+    bool contaTemPasskey = false,
   }) {
     return MockClient((req) async {
       rotas.add('${req.method} ${req.url.path}');
@@ -184,6 +191,23 @@ void main() {
           'created_at': '2026-10-28T12:00:00.000Z',
           'last_used_at': null,
         }, statusDoRegistroDePasskey);
+      }
+      if (caminho.endsWith('/auth/passkeys')) {
+        // `listPasskeys`, que `reconciliarComAConta` chama depois da entrada
+        // por SENHA. A lista vazia e o padrao: a conta de quase todo caso
+        // deste arquivo nao tem credencial nenhuma.
+        return json(<String, dynamic>{
+          'items': contaTemPasskey
+              ? <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'id': '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7a',
+                    'label': null,
+                    'created_at': '2026-10-28T12:00:00.000Z',
+                    'last_used_at': null,
+                  },
+                ]
+              : <Map<String, dynamic>>[],
+        }, 200);
       }
       if (caminho.endsWith('/auth/passkey/authentication/options')) {
         return json(opcoesDeEntrada(), 200);
@@ -238,11 +262,15 @@ void main() {
   final Finder botaoCriarConta =
       find.widgetWithText(FilledButton, 'Criar conta');
 
+  /// O registro do aparelho do caso em curso. Trocado por `abrirCriarConta`.
+  late DepositoDePasskeyEmMemoria registroDoCadastro;
+
   Future<void> abrirCriarConta(
     WidgetTester tester, {
     required CredencialDoAparelho aparelho,
     bool passkeyDoServidorFunciona = true,
   }) async {
+    registroDoCadastro = DepositoDePasskeyEmMemoria();
     rotas = <String>[];
     cadastrosDePasskey = <Map<String, dynamic>>[];
     await tester.pumpWidget(const SizedBox.shrink());
@@ -263,6 +291,9 @@ void main() {
         // caso morre em `pumpAndSettle timed out` sem dizer por que. Medido.
         depositoDeIntencao: DepositoDeIntencaoEmMemoria(),
         credencialDoAparelho: aparelho,
+        // VAZIO no comeco, como o diretorio de documentos de uma instalacao
+        // nova. O cadastro bem-sucedido e o que o preenche.
+        depositoDePasskeyNoAparelho: registroDoCadastro,
         clienteHttp: redeDe(
           passkeyDoServidorFunciona: passkeyDoServidorFunciona,
         ),
@@ -413,6 +444,36 @@ void main() {
         reason: 'REPROVA: o corpo saiu em camelCase. As rotas de `finish` '
             'conferem o corpo contra o contrato e responderiam 400.',
       );
+
+      // E O APARELHO FICOU MARCADO (28/10/2026). Sem isto, a pessoa cadastra a
+      // passkey aqui e a tela de entrar nunca a tenta: o portao continuaria
+      // fechado, e o cadastro teria sido um gesto sem efeito nenhum.
+      expect(
+        registroDoCadastro.gravacoes,
+        1,
+        reason: 'REPROVA: o cadastro deu 201 e o aparelho nao foi marcado. A '
+            'proxima abertura da tela de entrar nao pediria desafio, e a '
+            'credencial que acabou de nascer nunca seria usada.',
+      );
+      expect(registroDoCadastro.conteudo, contains('"ha_credencial":true'));
+    });
+
+    testWidgets('quem RECUSA nao deixa marca no aparelho', (tester) async {
+      // O avesso do caso acima, e ele importa porque a marca NAO VOLTA ATRAS:
+      // marcar quem recusou condenaria essa pessoa a gastar um desafio por
+      // sessao do app para sempre, sem nunca ter credencial.
+      await abrirCriarConta(tester, aparelho: folhaFechada);
+      await preencherECriar(tester);
+      await tester.tap(find.text('Ativar'));
+      await tester.pumpAndSettle();
+
+      exigirCadastroCompleto('a folha nativa foi fechada.');
+      expect(
+        registroDoCadastro.gravacoes,
+        0,
+        reason: 'REPROVA: marcou o aparelho de quem fechou a folha nativa. '
+            'Nao ha credencial aqui, e a marca nao se desfaz.',
+      );
     });
   });
 
@@ -420,11 +481,24 @@ void main() {
     Future<void> abrirEntrar(
       WidgetTester tester, {
       required CredencialDoAparelho aparelho,
+      /// A marca de "ha credencial digital neste aparelho" (28/10/2026).
+      ///
+      /// **Falso e o estado de quase todo mundo**, e o portao de
+      /// `tentarEntrar` consulta isto ANTES de ir a rede: sem marca nao se
+      /// pede desafio. Por isso o padrao e falso -- e por isso os casos que
+      /// querem exercitar a folha do sistema precisam dizer `marcado: true`.
+      bool marcado = false,
+      bool contaTemPasskey = false,
+      DepositoDePasskeyEmMemoria? registro,
     }) async {
       rotas = <String>[];
       cadastrosDePasskey = <Map<String, dynamic>>[];
       await tester.pumpWidget(
         BichuApp(
+          depositoDePasskeyNoAparelho: registro ??
+              DepositoDePasskeyEmMemoria(
+                conteudo: marcado ? '{"ha_credencial":true}' : null,
+              ),
           config: AppConfig.carregar(apiBaseUrlDeTeste: urlBase),
           deposito: DepositoEmMemoria(),
           // Ver o comentario no harness do cadastro: sem o deposito em
@@ -435,7 +509,7 @@ void main() {
           // exercita login RECUSADO, que nao chega nessa linha.
           depositoDeIntencao: DepositoDeIntencaoEmMemoria(),
           credencialDoAparelho: aparelho,
-          clienteHttp: redeDe(),
+          clienteHttp: redeDe(contaTemPasskey: contaTemPasskey),
         ),
       );
       await tester.pumpAndSettle();
@@ -444,8 +518,41 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('sem passkey no aparelho, a tela nao acusa nada', (tester) async {
-      await abrirEntrar(tester, aparelho: folhaFechada);
+    testWidgets(
+        'SEM MARCA no aparelho, abrir a tela nao gasta requisicao nenhuma',
+        (tester) async {
+      // A ISCA DO TETO (28/10/2026). O cliente pediu isto nominalmente: *"que
+      // quem nao tem passkey nao gasta requisicao"*.
+      //
+      // `aparelhoQueAceita` de proposito, e nao `folhaFechada`: o duble aqui
+      // ASSINARIA se fosse chamado. Se o portao vazar, o caso nao fica verde
+      // por acidente -- a pessoa entra por passkey e os `expect` abaixo
+      // reprovam em dois lugares.
+      await abrirEntrar(tester, aparelho: aparelhoQueAceita);
+
+      expect(
+        quantas('/auth/passkey/authentication/options'),
+        0,
+        reason: 'REPROVA: a tela pediu desafio sem sinal de credencial neste '
+            'aparelho. O desafio tem prazo e uso unico e o teto da operacao e '
+            'por IP -- atras de NAT, esta requisicao e tirada de quem USA '
+            'passkey, e o 429 cai em quem entra por SENHA.',
+      );
+      expect(
+        quantas('/auth/passkey/authentication'),
+        0,
+        reason: 'REPROVA: houve tentativa de conclusao sem desafio.',
+      );
+      expect(
+        find.widgetWithText(AppBar, 'Entrar'),
+        findsOne,
+        reason: 'REPROVA: entrou por passkey sem marca. O portao vazou.',
+      );
+    });
+
+    testWidgets('COM MARCA, a tela tenta ao abrir e nao acusa nada',
+        (tester) async {
+      await abrirEntrar(tester, aparelho: folhaFechada, marcado: true);
 
       // A tentativa ACONTECEU -- sem esta linha o caso ficaria verde com a
       // porta desligada, provando que uma tela que nao tenta nada nao
@@ -453,8 +560,9 @@ void main() {
       expect(
         quantas('/auth/passkey/authentication/options'),
         1,
-        reason: 'REPROVA: a tela de entrar nao tentou a passkey ao abrir. Sem '
-            'a tentativa, nao existe entrada por passkey -- nao ha botao.',
+        reason: 'REPROVA: a tela de entrar nao tentou a passkey ao abrir, com '
+            'marca no aparelho. Sem a tentativa, nao existe entrada por '
+            'passkey -- nao ha botao.',
       );
 
       // E NAO SOBROU NADA NA TELA. Os dois campos e o botao, do jeito que
@@ -504,7 +612,9 @@ void main() {
 
     testWidgets('o dominio nao associado tambem nao atrapalha a senha',
         (tester) async {
-      await abrirEntrar(tester, aparelho: dominioNaoAssociado);
+      // `marcado: true`: sem marca a folha do sistema nem seria consultada, e
+      // o caso mediria o portao em vez do registro da falha.
+      await abrirEntrar(tester, aparelho: dominioNaoAssociado, marcado: true);
 
       expect(find.byType(TextField), findsNWidgets(2));
       expect(find.textContaining('não conferem'), findsNothing);
@@ -512,11 +622,31 @@ void main() {
       exigirQueFoiRegistrado(tester, 'na porta da tela de entrar');
     });
 
-    testWidgets('com passkey no aparelho, a pessoa entra sem digitar',
+    testWidgets('com passkey no aparelho, a pessoa entra SEM TOQUE EXTRA',
         (tester) async {
-      await abrirEntrar(tester, aparelho: aparelhoQueAceita);
+      // A OUTRA METADE DA ISCA DO TETO. O portao nao pode ter custado a
+      // entrada sem toque de quem TEM passkey: o valor do recurso e
+      // exatamente isso.
+      final registro =
+          DepositoDePasskeyEmMemoria(conteudo: '{"ha_credencial":true}');
+      await abrirEntrar(
+        tester,
+        aparelho: aparelhoQueAceita,
+        registro: registro,
+      );
 
+      expect(
+        quantas('/auth/passkey/authentication/options'),
+        1,
+        reason: 'REPROVA: com marca no aparelho a tela nao pediu desafio.',
+      );
       expect(quantas('/auth/passkey/authentication'), 1);
+      expect(
+        registro.gravacoes,
+        0,
+        reason: 'REPROVA: `marcar()` reescreveu o arquivo num aparelho que JA '
+            'estava marcado. E escrita em disco a cada entrada, por nada.',
+      );
       expect(
         quantas('/auth/login'),
         0,
@@ -529,6 +659,127 @@ void main() {
         reason: 'REPROVA: a passkey conferiu, o servidor abriu sessao, e a '
             'pessoa continuou olhando o formulario de senha.',
       );
+    });
+  });
+
+  // ==========================================================================
+  group('ISCA — a marca do aparelho posta em dia depois da senha', () {
+    /// Entra por SENHA, no aparelho SEM marca, e devolve o registro.
+    ///
+    /// E o aparelho novo de quem trocou de celular: a credencial chegou pelo
+    /// Google Password Manager ou pelo Chaveiro do iCloud, e o diretorio de
+    /// documentos do app nasceu vazio.
+    Future<DepositoDePasskeyEmMemoria> entrarPorSenha(
+      WidgetTester tester, {
+      required bool contaTemPasskey,
+    }) async {
+      rotas = <String>[];
+      cadastrosDePasskey = <Map<String, dynamic>>[];
+      final registro = DepositoDePasskeyEmMemoria();
+      await tester.pumpWidget(
+        BichuApp(
+          depositoDePasskeyNoAparelho: registro,
+          config: AppConfig.carregar(apiBaseUrlDeTeste: urlBase),
+          deposito: DepositoEmMemoria(),
+          depositoDeIntencao: DepositoDeIntencaoEmMemoria(),
+          credencialDoAparelho: aparelhoQueAceita,
+          clienteHttp: redeDe(contaTemPasskey: contaTemPasskey),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await irParaAConta(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'marina@exemplo.com.br',
+      );
+      await tester.enterText(find.byType(TextField).at(1), 'uma frase longa');
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+      return registro;
+    }
+
+    testWidgets('a conta TEM credencial: o aparelho passa a ficar marcado',
+        (tester) async {
+      final registro = await entrarPorSenha(tester, contaTemPasskey: true);
+
+      expect(
+        quantas('/auth/passkeys'),
+        1,
+        reason: 'REPROVA: a entrada por senha nao consultou `listPasskeys`. '
+            'Sem isso, quem trocou de aparelho tem passkey e um app que nunca '
+            'a tenta -- nao ha botao para contornar o portao.',
+      );
+      expect(
+        registro.gravacoes,
+        1,
+        reason: 'REPROVA: a conta tem credencial ativa e o aparelho continuou '
+            'sem marca. A proxima abertura da tela de entrar nao tentaria a '
+            'passkey.',
+      );
+      expect(registro.conteudo, contains('"ha_credencial":true'));
+    });
+
+    testWidgets('a conta NAO tem credencial: nada e marcado',
+        (tester) async {
+      final registro = await entrarPorSenha(tester, contaTemPasskey: false);
+
+      expect(quantas('/auth/passkeys'), 1);
+      expect(
+        registro.gravacoes,
+        0,
+        reason: 'REPROVA: marcou o aparelho sem credencial nenhuma. A marca '
+            'nao volta atras, e esta pessoa passaria a gastar um desafio por '
+            'sessao do app para sempre.',
+      );
+      expect(registro.conteudo, isNull);
+    });
+
+    testWidgets('a senha entra mesmo quando `listPasskeys` responde 404',
+        (tester) async {
+      // O 404 e o que a rede deste arquivo responde no `/auth/passkeys` quando
+      // o caminho nao e previsto -- aqui ele e usado de proposito como
+      // "qualquer falha": 401, 429, rede fora. Nenhuma delas pode transformar
+      // uma entrada que DEU CERTO em erro na tela.
+      rotas = <String>[];
+      cadastrosDePasskey = <Map<String, dynamic>>[];
+      final registro = DepositoDePasskeyEmMemoria();
+      await tester.pumpWidget(
+        BichuApp(
+          depositoDePasskeyNoAparelho: registro,
+          config: AppConfig.carregar(apiBaseUrlDeTeste: urlBase),
+          deposito: DepositoEmMemoria(),
+          depositoDeIntencao: DepositoDeIntencaoEmMemoria(),
+          credencialDoAparelho: aparelhoQueAceita,
+          clienteHttp: MockClient((req) async {
+            rotas.add('${req.method} ${req.url.path}');
+            if (req.url.path.endsWith('/auth/login')) {
+              return json(corpoDaSessao(), 200);
+            }
+            return http.Response('{}', 404);
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await irParaAConta(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'marina@exemplo.com.br',
+      );
+      await tester.enterText(find.byType(TextField).at(1), 'uma frase longa');
+      await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(AppBar, 'Entrar'),
+        findsNothing,
+        reason: 'REPROVA: a senha conferiu e a pessoa ficou na tela de entrar '
+            'porque uma leitura AUXILIAR falhou.',
+      );
+      expect(registro.gravacoes, 0);
     });
   });
 }
