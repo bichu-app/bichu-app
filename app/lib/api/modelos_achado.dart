@@ -15,7 +15,9 @@
 /// - **Nao ha `case_id` nem `pet_id`.** Devolver a qual caso o achado se ligou
 ///   contaria a quem registrou qual pet de qual tutor esta sendo procurado --
 ///   antes de qualquer confirmacao humana, e para quem, no pior caso, e o
-///   falso achador (ADR-0010 item 7).
+///   falso achador (ADR-0010 item 7). **A emenda 7 daquela ADR nao muda isto**:
+///   [PetCorrespondenteDoAchado] traz FOTO e NOME e nenhum identificador, e o
+///   item 6 continua proibindo UUID em superficie de leitura.
 library;
 
 /// `#/components/schemas/FoundReport/properties/origin` do contrato.
@@ -64,6 +66,66 @@ enum StatusDoAchado {
   }
 }
 
+/// `#/components/schemas/FoundReportMatchedPet` do contrato: **a foto e o nome
+/// do pet a que este achado JA esta ligado**.
+///
+/// ## Dois campos, e a ausencia dos outros e a decisao
+///
+/// Nao ha `pet_id`, `case_id` nem `owner_*`, e nao e esquecimento do contrato:
+/// o item 6 do ADR-0010 continua proibindo UUID em superficie de leitura, e a
+/// emenda 7 (28/10/2026) abriu a FOTO e o NOME -- que e o que o cliente pediu,
+/// literal: *"pode colocar a foto e o nome do pet."*
+///
+/// ## QUANDO ELE VEM, e por que a ausencia nao e falha
+///
+/// O servidor so o manda quando quem le **JA SABE** qual animal e: a plaquinha
+/// foi lida (`origin: tag_scan`) ou a pessoa colou o link que o tutor publicou
+/// (`share_token`). No achado avulso cruzado por SEMELHANCA ele volta nulo, e
+/// esse nulo e a regra e nao um estado degradado -- foto e nome de uma
+/// correspondencia que a maquina PALPITOU dariam ao falso achador o insumo que
+/// falta para "achei seu pet" soar verdadeiro (risco medido pelo cliente em
+/// 20/10/2026). Quem desenha trata o nulo como normal, e nunca como erro.
+class PetCorrespondenteDoAchado {
+  const PetCorrespondenteDoAchado({required this.nome, this.urlDaFoto});
+
+  /// `display_name`. **Obrigatorio no contrato** (`required: [display_name]`),
+  /// e lido sem `??` pela mesma razao de `id`: pet correspondente sem nome nao
+  /// e um pet degradado, e uma resposta que a tela nao deve desenhar.
+  final String nome;
+
+  /// `photo_url`: a capa do pet, montada sobre a base de MIDIA.
+  ///
+  /// **Anulavel, e o nulo quer dizer "este pet nao tem capa pronta".** O
+  /// contrato so monta o endereco a partir de `card_key` com `status =
+  /// 'ready'`, entao endereco para objeto que ninguem gravou nao existe.
+  ///
+  /// **O contrato NAO distingue "sem capa" de "capa em preparo"** -- nao ha
+  /// campo de estado em `FoundReportMatchedPet`, so esta URL anulavel. Quem
+  /// desenha nao pode, portanto, escrever "a foto esta em preparo": seria
+  /// verdade em metade dos casos e mentira na outra. Desenha o nome e cala
+  /// sobre a foto que nao existe.
+  ///
+  /// **Nao confundir com `FoundReport.photo_url`**, que e a foto que o ACHADOR
+  /// tirou e continua nula fora da conversa mediada (criterio 9). Sao fotos de
+  /// lados opostos da mesma conversa.
+  final String? urlDaFoto;
+
+  /// **Vazio e tratado como ausente**, e isso e defesa de desenho e nao zelo:
+  /// `ImagemDaRede` recebe `url` nao anulavel de proposito e
+  /// `Image.network('')` **lanca**. Uma string vazia atravessando ate a arvore
+  /// derrubaria a tela do desfecho inteira.
+  static PetCorrespondenteDoAchado? doJson(Object? bruto) {
+    if (bruto is! Map<String, dynamic>) return null;
+    final nome = bruto['display_name'];
+    if (nome is! String || nome.isEmpty) return null;
+    final url = bruto['photo_url'];
+    return PetCorrespondenteDoAchado(
+      nome: nome,
+      urlDaFoto: url is String && url.isNotEmpty ? url : null,
+    );
+  }
+}
+
 /// O achado como o servidor o devolve.
 class AchadoRegistrado {
   const AchadoRegistrado({
@@ -75,6 +137,7 @@ class AchadoRegistrado {
     this.rotuloDaArea,
     this.observacao,
     this.conversaId,
+    this.petCorrespondente,
   });
 
   final String id;
@@ -99,6 +162,10 @@ class AchadoRegistrado {
   /// Nulo enquanto a conversa mediada nao existir nesta entrega.
   final String? conversaId;
 
+  /// `matched_pet`. **Nulo no achado avulso cruzado por semelhanca**, e ali o
+  /// nulo e a decisao e nao a falta de dado -- ver [PetCorrespondenteDoAchado].
+  final PetCorrespondenteDoAchado? petCorrespondente;
+
   /// **`id`, `origin`, `status` e `created_at` sao lidos sem `??`**, de
   /// proposito: o contrato os declara obrigatorios, e um achado sem
   /// identidade nao e um achado degradado -- e uma resposta que a tela nao
@@ -116,6 +183,7 @@ class AchadoRegistrado {
       criadoEm: DateTime.parse(json['created_at'] as String),
       observacao: json['notes'] as String?,
       conversaId: json['conversation_id'] as String?,
+      petCorrespondente: PetCorrespondenteDoAchado.doJson(json['matched_pet']),
     );
   }
 }
