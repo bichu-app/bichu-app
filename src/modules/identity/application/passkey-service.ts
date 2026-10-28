@@ -36,6 +36,8 @@ import {
 } from '@simplewebauthn/server';
 import type {
   AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
 } from '@simplewebauthn/server';
 import { createHash } from 'node:crypto';
@@ -118,7 +120,7 @@ export class PasskeyService {
    * desafio que não tem como ser concluído gastaria a biometria da pessoa para
    * depois recusar.
    */
-  async comecarCadastro(dono: DonoDaCredencial): Promise<unknown> {
+  async comecarCadastro(dono: DonoDaCredencial): Promise<PublicKeyCredentialCreationOptionsJSON> {
     const { repositorio, clock, ids, rp } = this.deps;
 
     const ativas = await repositorio.contarAtivas(dono.id);
@@ -275,7 +277,7 @@ export class PasskeyService {
    * devolver `allowCredentials` daquela conta, e a lista cheia ou vazia
    * responderia "esta conta tem passkey?" numa porta sem autenticação.
    */
-  async comecarEntrada(): Promise<unknown> {
+  async comecarEntrada(): Promise<PublicKeyCredentialRequestOptionsJSON> {
     const { repositorio, clock, ids, rp } = this.deps;
 
     const opcoes = await generateAuthenticationOptions({
