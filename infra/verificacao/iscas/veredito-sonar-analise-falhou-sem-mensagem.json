@@ -1,5 +1,5 @@
 {
-  "_isca": "ISCA -- CONTROLE POSITIVO da isca `veredito-sonar-analise-falhou.json`. Mesma analise `FAILED`, mas o servidor NAO MANDOU os campos de erro: nao ha `tipo_do_erro`, `mensagem_do_erro` nem `pilha_do_erro`. Ausente e ausente -- nao e string vazia que parece dado. Ela continua reprovando por `nao-obtive`, o log NAO pode inventar mensagem nenhuma, e o juizo nao pode quebrar por falta de campo. Sem este caso, um relato que escrevesse `mensagem do erro: ` sempre -- vazia inclusive -- passaria pela isca de cima.",
+  "_isca": "ISCA -- CONTROLE POSITIVO da isca `veredito-sonar-analise-falhou.json`. Mesma analise `FAILED`, mas o servidor NAO MANDOU os campos de erro: nao ha `tipo_do_erro` nem `mensagem_do_erro`. Ausente e ausente -- nao e string vazia que parece dado. Ela continua reprovando por `nao-obtive`, o log NAO pode inventar mensagem nenhuma, e o juizo nao pode quebrar por falta de campo. Sem este caso, um relato que escrevesse `mensagem do erro: ` sempre -- vazia inclusive -- passaria pela isca de cima.",
   "obtido": false,
   "status_http": 200,
   "motivo": "a analise terminou em `FAILED` no servidor. Ela NAO produziu veredito: isto e o SonarCloud nao tendo respondido, e nao o portao tendo reprovado",
