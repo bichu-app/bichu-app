@@ -15,7 +15,130 @@
 /// descrevem o mesmo objeto do WebAuthn, e e exatamente por serem parecidas
 /// que trocar uma pela outra nao quebra a compilacao -- apaga um campo em
 /// silencio. Este arquivo e o unico lugar do app em que as duas se encostam.
+///
+/// ## O SERVIDOR DE HOMOLOGACAO NAO FALA O QUE O CONTRATO DECLARA, E ISSO FOI
+/// MEDIDO
+///
+/// Medido em 28/10/2026 contra `https://hml.bichu.app`, que e o que esta no
+/// ar:
+///
+/// ```
+/// POST /v1/auth/passkey/authentication/options  ->  200
+/// {"rpId":"hml.bichu.app","challenge":"...","allowCredentials":[],
+///  "timeout":300000,"userVerification":"required"}
+/// ```
+///
+/// O contrato declara `rp_id`, `allow_credentials` e `user_verification`
+/// (`PasskeyAuthenticationOptions`, com os tres em `required`). O servidor
+/// manda `rpId`, `allowCredentials` e `userVerification`.
+///
+/// **A causa esta em `passkey-routes.ts`**: as duas operacoes de `options`
+/// fazem `reply.send(opcoes)` com o retorno cru de `generateRegistrationOptions`
+/// e `generateAuthenticationOptions` do `@simplewebauthn/server`, que produzem
+/// o JSON do WebAuthn -- `camelCase`. Nada converte para a grafia do contrato.
+///
+/// **E nenhum portao pega isso.** As rotas declaram `schema: { body: ... }`, e
+/// so o CORPO DA REQUISICAO e conferido contra o contrato; o corpo da RESPOSTA
+/// nao e conferido por ninguem. Por isso as duas grafias conviveram sem
+/// ninguem notar, e por isso este desvio so apareceu medindo a rota na mao.
+///
+/// **A direcao de ida esta certa e nao muda.** `finishPasskeyRegistration` e
+/// `finishPasskeyAuthentication` TEM `schema: { body: ... }`, entao o que o app
+/// ENVIA precisa estar em `snake_case` -- e esta, em `paraOContrato()`. A
+/// divergencia e so nas duas respostas de `options`.
+///
+/// ## Por que este arquivo aceita AS DUAS grafias
+///
+/// Ler so `rp_id` deixaria o passkey quebrado hoje, contra o servidor que esta
+/// no ar: o campo chegaria nulo, o `as String` estouraria `TypeError`, e
+/// `FiacaoDoPasskey` engoliria isso devolvendo `null` -- **falha silenciosa**,
+/// indistinguivel de "esta pessoa nao tem passkey".
+///
+/// Ler so `rpId` quebraria no dia em que o servidor for corrigido para a
+/// grafia que o contrato declara, do mesmo jeito calado.
+///
+/// Entao [_texto] e [_lista] aceitam as duas, e [IscaDeGrafia] existe para que
+/// a isca possa cobrar as duas direcoes em vez de uma. Isto e um REMENDO com
+/// data: o conserto de verdade e o servidor passar a responder o que o
+/// contrato declara, ou o contrato passar a declarar `camelCase` -- e nenhuma
+/// das duas coisas e desta frente, que e a fiacao do app.
 library;
+
+/// Le um campo de texto obrigatorio que pode vir em qualquer das duas grafias.
+///
+/// **Estoura com os dois nomes na mensagem quando nao acha nenhuma**, e isso
+/// e o ponto: o `as String` de um campo ausente estoura
+/// `TypeError: null is not a String`, que nao diz qual campo nem qual grafia.
+/// Esta falha chega ao canal de observabilidade dizendo exatamente o que
+/// procurar.
+String _texto(Map<String, dynamic> json, String contrato, String servidor) {
+  final valor = json[contrato] ?? json[servidor];
+  if (valor is String) return valor;
+  throw FormatException(
+    'O campo obrigatorio nao veio em nenhuma das duas grafias: '
+    '`$contrato` (o que o contrato declara) nem `$servidor` (o que o servidor '
+    'de homologacao manda). Chaves recebidas: ${json.keys.toList()}',
+  );
+}
+
+/// O mesmo para um numero obrigatorio.
+int _numero(Map<String, dynamic> json, String contrato, String servidor) {
+  final valor = json[contrato] ?? json[servidor];
+  if (valor is int) return valor;
+  throw FormatException(
+    'O campo obrigatorio nao veio em nenhuma das duas grafias: '
+    '`$contrato` nem `$servidor`. Chaves recebidas: ${json.keys.toList()}',
+  );
+}
+
+/// O mesmo para uma lista de objetos.
+///
+/// **Ausente vira lista vazia, e isto NAO e tolerancia indevida.** As duas
+/// listas que passam por aqui (`exclude_credentials` e `allow_credentials`)
+/// tem a lista vazia como valor legitimo e dominante: conta sem credencial
+/// nenhuma, e a entrada que manda `maxItems: 0` sempre. Exigir a chave faria
+/// o caso normal estourar.
+List<Map<String, dynamic>> _lista(
+  Map<String, dynamic> json,
+  String contrato,
+  String servidor,
+) {
+  final valor = json[contrato] ?? json[servidor];
+  if (valor is List) return valor.cast<Map<String, dynamic>>();
+  return const <Map<String, dynamic>>[];
+}
+
+/// Os pares de grafia que este arquivo atravessa, expostos para a isca.
+///
+/// **Existe para que a isca cobre as DUAS direcoes.** Uma isca que so
+/// montasse o JSON do servidor provaria que hoje funciona e continuaria verde
+/// no dia em que alguem apagasse o ramo do contrato; uma que so montasse o do
+/// contrato esta verde agora e o passkey esta quebrado no ar. A isca percorre
+/// esta lista e monta os dois JSONs a partir dela.
+class IscaDeGrafia {
+  const IscaDeGrafia._();
+
+  /// `{ nome no contrato: nome que o servidor manda }`.
+  ///
+  /// Os pares em que as duas grafias COINCIDEM (`challenge`, `timeout`, `rp`,
+  /// `user`, `attestation`) nao estao aqui: nao ha o que divergir neles.
+  static const Map<String, String> paresDaEntrada = <String, String>{
+    'rp_id': 'rpId',
+    'user_verification': 'userVerification',
+    'allow_credentials': 'allowCredentials',
+  };
+
+  /// O mesmo para o cadastro.
+  static const Map<String, String> paresDoCadastro = <String, String>{
+    'pub_key_cred_params': 'pubKeyCredParams',
+    'authenticator_selection': 'authenticatorSelection',
+    'exclude_credentials': 'excludeCredentials',
+    'display_name': 'displayName',
+    'authenticator_attachment': 'authenticatorAttachment',
+    'resident_key': 'residentKey',
+    'user_verification': 'userVerification',
+  };
+}
 
 /// Um algoritmo de chave publica aceito, em COSE.
 ///
@@ -45,9 +168,16 @@ class DescritorDeCredencial {
   /// O `credential_id`, base64url.
   final String id;
 
+  /// [tipo] cai em `public-key` quando a chave nao vem.
+  ///
+  /// `generateRegistrationOptions` do `@simplewebauthn/server` monta
+  /// `excludeCredentials` a partir de `{ id }` so (ver `passkey-service.ts`), e
+  /// o `type` pode nao estar no JSON. `public-key` e o unico valor que o
+  /// contrato admite no `enum`, entao o padrao nao escolhe nada: ele escreve o
+  /// unico valor possivel em vez de estourar.
   factory DescritorDeCredencial.doJson(Map<String, dynamic> json) =>
       DescritorDeCredencial(
-        tipo: json['type'] as String,
+        tipo: json['type'] as String? ?? 'public-key',
         id: json['id'] as String,
       );
 }
@@ -120,30 +250,41 @@ class OpcoesDeCadastroDePasskey {
   /// As credenciais ATIVAS da conta, para o aparelho nao cadastrar duas vezes.
   final List<DescritorDeCredencial> excluirCredenciais;
 
+  /// `rp`, `user`, `challenge`, `timeout` e `attestation` tem o MESMO nome nas
+  /// duas grafias, entao sao lidos direto. O resto passa por [_texto] e
+  /// [_lista]. Ver o cabecalho do arquivo.
   factory OpcoesDeCadastroDePasskey.doJson(Map<String, dynamic> json) {
     final rp = json['rp'] as Map<String, dynamic>;
     final usuario = json['user'] as Map<String, dynamic>;
-    final selecao = json['authenticator_selection'] as Map<String, dynamic>;
+    final selecao = (json['authenticator_selection'] ??
+        json['authenticatorSelection']) as Map<String, dynamic>;
     return OpcoesDeCadastroDePasskey(
       desafio: json['challenge'] as String,
       rpId: rp['id'] as String,
       rpNome: rp['name'] as String,
       usuarioId: usuario['id'] as String,
       usuarioEmail: usuario['name'] as String,
-      usuarioNome: usuario['display_name'] as String,
-      algoritmos: (json['pub_key_cred_params'] as List<dynamic>)
-          .cast<Map<String, dynamic>>()
+      usuarioNome: _texto(usuario, 'display_name', 'displayName'),
+      algoritmos: _lista(json, 'pub_key_cred_params', 'pubKeyCredParams')
           .map(AlgoritmoDeChave.doJson)
           .toList(),
       prazoEmMilissegundos: json['timeout'] as int,
       atestacao: json['attestation'] as String,
-      vinculoDoAutenticador: selecao['authenticator_attachment'] as String,
-      chaveResidente: selecao['resident_key'] as String,
-      verificacaoDoUsuario: selecao['user_verification'] as String,
-      excluirCredenciais: (json['exclude_credentials'] as List<dynamic>)
-          .cast<Map<String, dynamic>>()
-          .map(DescritorDeCredencial.doJson)
-          .toList(),
+      vinculoDoAutenticador: _texto(
+        selecao,
+        'authenticator_attachment',
+        'authenticatorAttachment',
+      ),
+      chaveResidente: _texto(selecao, 'resident_key', 'residentKey'),
+      verificacaoDoUsuario: _texto(
+        selecao,
+        'user_verification',
+        'userVerification',
+      ),
+      excluirCredenciais:
+          _lista(json, 'exclude_credentials', 'excludeCredentials')
+              .map(DescritorDeCredencial.doJson)
+              .toList(),
     );
   }
 }
@@ -180,14 +321,20 @@ class OpcoesDeEntradaPorPasskey {
   /// descartado e o que faz o app repassar o que vier em vez de esconder.
   final List<DescritorDeCredencial> allowCredentials;
 
+  /// `challenge` e `timeout` coincidem nas duas grafias; os outros tres
+  /// divergem. Ver o cabecalho do arquivo -- e a medicao de 28/10/2026 que
+  /// mostra `rpId` chegando do servidor onde o contrato diz `rp_id`.
   factory OpcoesDeEntradaPorPasskey.doJson(Map<String, dynamic> json) =>
       OpcoesDeEntradaPorPasskey(
         desafio: json['challenge'] as String,
-        prazoEmMilissegundos: json['timeout'] as int,
-        rpId: json['rp_id'] as String,
-        verificacaoDoUsuario: json['user_verification'] as String,
-        allowCredentials: (json['allow_credentials'] as List<dynamic>)
-            .cast<Map<String, dynamic>>()
+        prazoEmMilissegundos: _numero(json, 'timeout', 'timeout'),
+        rpId: _texto(json, 'rp_id', 'rpId'),
+        verificacaoDoUsuario: _texto(
+          json,
+          'user_verification',
+          'userVerification',
+        ),
+        allowCredentials: _lista(json, 'allow_credentials', 'allowCredentials')
             .map(DescritorDeCredencial.doJson)
             .toList(),
       );

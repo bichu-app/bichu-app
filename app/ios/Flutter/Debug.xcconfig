@@ -1,2 +1,22 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
+
+// O entitlement do Associated Domains (BICHUS-301).
+//
+// AQUI, E NAO NO `project.pbxproj`, e a escolha tem duas razoes.
+//
+// 1. O `project.pbxproj` NAO define `CODE_SIGN_ENTITLEMENTS` em nenhuma das
+//    seis configuracoes (medido: zero ocorrencias). Ajuste de xcconfig vale
+//    quando o pbxproj nao sobrescreve, entao esta linha PEGA -- e e o unico
+//    jeito de ela pegar sem reescrever o pbxproj.
+//
+// 2. O `project.pbxproj` tem alteracao NAO COMITADA na pasta de trabalho do
+//    cliente: `DEVELOPMENT_TEAM = B7N53534HS` nos TRES blocos de
+//    `buildSettings` do alvo `Runner` -- exatamente os blocos em que
+//    `CODE_SIGN_ENTITLEMENTS` entraria. Editar ali colidiria com a assinatura
+//    dele, que nao se comita. Estes dois xcconfig ele nao tocou.
+//
+// COBRE AS TRES CONFIGURACOES do alvo `Runner`: Debug le `Debug.xcconfig`, e
+// Release e Profile leem `Release.xcconfig` (medido em
+// `baseConfigurationReference`). Por isso a linha esta nos dois arquivos.
+CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements

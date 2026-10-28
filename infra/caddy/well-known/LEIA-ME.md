@@ -107,17 +107,53 @@ criterio 8 proibe. Nao foi resolvido aqui porque iOS esta dormente por decisao
 do cliente (so Android, BICHUS-253) e porque escolher entre os dois desenhos e
 de quem coordena. Fica dito para nao sumir.
 
-## Por que `applinks.details` e `webcredentials.apps` continuam VAZIOS
+## `webcredentials.apps` FOI PREENCHIDO em 28/10/2026; `applinks.details` continua VAZIO
 
-O `appID` depende do Team ID, que depende da conta Apple Developer, que nao
-existe (dispensa `ios` em `.github/quality-gates.yml`, **vence em 2026-10-31** --
-quatro dias depois desta atualizacao). Esta esperando insumo de fora.
+**O que mudou.** O cliente pediu o passkey no iOS, e isso superou a decisao de
+23/09 de "so Android por enquanto" -- **so para o passkey**, e nao para o resto
+do iOS. O insumo que faltava apareceu: ha um Team ID.
 
-`webcredentials.apps` e o campo que o iOS le para passkey, equivalente ao
-`get_login_creds` do Android. Esta vazio pelo MESMO motivo e nao por esquecimento:
-sem Team ID nao ha `appID` para escrever. **O `RP ID` escolhido (`bichu.app`) ja
-serve iOS** -- ver abaixo --, entao quando a conta Apple existir basta preencher
-este array, sem tocar em credencial nenhuma ja emitida.
+```json
+"webcredentials": { "apps": ["B7N53534HS.app.bichu"] }
+```
+
+`B7N53534HS` e o `DEVELOPMENT_TEAM`, e `app.bichu` e o
+`PRODUCT_BUNDLE_IDENTIFIER` do alvo `Runner` -- o mesmo `app.bichu` que o
+`assetlinks.json` usa como `package_name` no Android.
+
+**DE ONDE SAIU O TEAM ID, dito exatamente, porque isto precisa de confirmacao
+dele.** Ele foi lido do `app/ios/Runner.xcodeproj/project.pbxproj` **nao
+comitado** da pasta de trabalho do cliente, onde ele aparece como
+`DEVELOPMENT_TEAM = B7N53534HS` nos tres blocos do alvo `Runner`. Ele **nao
+esta em nenhum arquivo rastreado** deste repositorio, e nao foi conferido
+contra a conta Apple Developer -- nao houve acesso a ela.
+
+**Se este valor estiver errado, o passkey do iOS falha em SILENCIO:** a folha
+nativa simplesmente nao aparece, e o app nao distingue isso de "esta pessoa nao
+tem passkey". Nao ha erro, nao ha log do lado do app. Entao este e um valor a
+CONFERIR, e nao um valor medido.
+
+**`applinks.details` continua vazio de proposito.** Deep link no iOS e outra
+frente e continua dormente; a superacao vale so para o passkey. O conflito
+descrito acima -- a borda servindo 200 com `applinks.details` vazio, que o
+criterio 8 proibe -- segue exatamente onde estava, e escolher entre os dois
+desenhos continua sendo de quem coordena.
+
+**O par do lado do app.** `webcredentials.apps` sozinho nao basta: o binario
+precisa declarar o Associated Domains. Isso esta em
+`app/ios/Runner/Runner.entitlements`, com `webcredentials:hml.bichu.app` e
+`webcredentials:bichu.app` -- os dois hosts num binario so, porque o `RP ID` e o
+hostname de `WEB_BASE_URL` e portanto muda por ambiente. O entitlement e
+apontado por `CODE_SIGN_ENTITLEMENTS` nos dois xcconfig
+(`app/ios/Flutter/Debug.xcconfig` e `Release.xcconfig`), e nao no
+`project.pbxproj` -- ver o comentario la, que explica a colisao com a
+assinatura nao comitada do cliente.
+
+**E NADA DISSO ESTA NO AR AINDA.** Este arquivo e servido pela borda, e a borda
+so pega o conteudo novo num deploy -- que e roteiro manual (nao existe CD). Ate
+o deploy acontecer, `https://hml.bichu.app/.well-known/apple-app-site-association`
+continua respondendo `"apps": []`, **medido em 28/10/2026**, e o passkey do iOS
+nao funciona por mais correto que o app esteja.
 
 ## O `RP ID` do passkey, e por que ele e o HOSTNAME
 
