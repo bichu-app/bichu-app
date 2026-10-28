@@ -9,6 +9,21 @@
  * O `operationId` é o mesmo da especificação — é a chave de rastreio entre os
  * dois documentos —, e `effects` e `rateLimit` **espelham** `api/openapi.yaml`.
  * Rota com efeito e sem teto não compila.
+ *
+ * ## A GRAFIA DO CORPO DA RESPOSTA É DO CONTRATO, NUNCA DA BIBLIOTECA
+ *
+ * As quatro rotas que montam corpo à mão já escreviam `created_at` e
+ * `last_used_at`. As DUAS de `options` não: elas faziam `reply.send()` do
+ * retorno cru de `@simplewebauthn/server`, que é camelCase por natureza, e
+ * emitiam `rpId`/`userVerification`/`pubKeyCredParams` onde o contrato declara
+ * `rp_id`/`user_verification`/`pub_key_cred_params`. O app lia nulo e a falha
+ * ficava indistinguível de "esta conta não tem passkey" — ver
+ * `passkey-grafia.ts`, que faz a tradução, e `passkey-grafia.test.ts`, que
+ * compara o corpo REAL destas duas rotas com o schema declarado.
+ *
+ * Nada neste projeto valida corpo de RESPOSTA contra a especificação, então a
+ * regra aqui é de mão: **nenhuma destas seis rotas envia objeto que não foi
+ * montado na grafia do contrato.**
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -19,6 +34,10 @@ import { problemas } from '../../../../shared/http/errors.js';
 import type { AuthService, Autenticado } from '../../application/auth-service.js';
 import type { PasskeyService } from '../../application/passkey-service.js';
 import type { ContextoDaRequisicao } from '../../application/dependencies.js';
+import {
+  grafiaDasOpcoesDeCadastro,
+  grafiaDasOpcoesDeEntrada,
+} from './passkey-grafia.js';
 
 export const rotaDeInicioDoCadastroDePasskey = defineRoute({
   operationId: 'beginPasskeyRegistration',
@@ -139,7 +158,7 @@ export function registrarRotasDePasskey(
         email: conta.email,
         displayName: conta.displayName,
       });
-      return reply.status(200).send(opcoes);
+      return reply.status(200).send(grafiaDasOpcoesDeCadastro(opcoes));
     },
   );
 
@@ -174,7 +193,7 @@ export function registrarRotasDePasskey(
       // Não lê corpo nenhum, de propósito: a operação não recebe e-mail, para
       // não responder "esta conta tem passkey?" numa porta sem autenticação.
       const opcoes = await deps.passkeys.comecarEntrada();
-      return reply.status(200).send(opcoes);
+      return reply.status(200).send(grafiaDasOpcoesDeEntrada(opcoes));
     },
   );
 
