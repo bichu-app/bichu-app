@@ -9234,6 +9234,32 @@ export interface components {
              *     frase soar verdadeira -- e o cruzamento SUGERE, nao confirma
              *     (BICHUS-35, criterio 7). Por isso o nulo aqui nao e "ainda nao
              *     temos": ele e a decisao.
+             *
+             *     ## ATENCAO: `MatchCandidate.found_report` EMBUTE ESTE SCHEMA
+             *
+             *     `MatchCandidate` referencia `FoundReport` inteiro, e por isso este
+             *     campo passou a ser **declaravel** na lista de candidatos que o TUTOR
+             *     le (`listLostCaseCandidates`, `decideLostCaseCandidate`).
+             *
+             *     **Ele NAO e emitido ali, e nao pode passar a ser.** Conferido em
+             *     28/10/2026: `comoRespostaDoCandidato`, em
+             *     `src/modules/lostfound/adapters/http/lost-case-routes.ts`, monta
+             *     `found_report` campo a campo e nao inclui `matched_pet` -- e aquela
+             *     projecao e separada de `comoResposta` do modulo `found`, entao
+             *     acrescentar o campo la seria uma edicao deliberada, nunca um efeito
+             *     colateral desta.
+             *
+             *     Por que nao pode: naquela lista o achado chega ao tutor **por
+             *     semelhanca** (e o cruzamento que o trouxe). Se aquele mesmo achado
+             *     tiver pet certo por outro caminho -- uma plaquinha lida, ou o link
+             *     de OUTRO tutor --, emitir `matched_pet` ali mostraria a foto e o
+             *     nome do pet de um terceiro a quem so devia ver "um animal parecido
+             *     com o meu". Seria dado de terceiro entregue a pedido de quem nao tem
+             *     relacao com ele, e nenhum portao desta casa confere corpo de
+             *     resposta.
+             *
+             *     A emenda 7 do ADR-0010 poe isso no "o que esta emenda NAO decide",
+             *     que aquela ADR trata como critério de reprovacao em revisao de PR.
              */
             matched_pet?: components["schemas"]["FoundReportMatchedPet"] | null;
             notes?: string | null;

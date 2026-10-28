@@ -1039,7 +1039,33 @@ errada para a pessoa errada.
 7. **a tela do aplicativo não está entregue nesta rodada.** Contrato e servidor
    estão, com as iscas; `app/lib/telas/achado/` ainda lê `matched_pet` como
    nulo. Enquanto não ler, a queixa do cliente **continua visível para ele** —
-   é a primeira coisa a fechar, e está dita aqui para não passar por entregue.
+   é a primeira coisa a fechar, e está dita aqui para não passar por entregue;
+8. **`matched_pet` NÃO sai na lista de candidatos do tutor**, e isto é o item
+   mais fácil de furar sem querer. `MatchCandidate.found_report` referencia
+   `FoundReport` **inteiro**, então o campo passou a ser *declarável* em
+   `listLostCaseCandidates` e `decideLostCaseCandidate` — as duas rotas que o
+   tutor usa para ver "animais parecidos com o meu".
+
+   **Conferido em 28/10/2026:** `comoRespostaDoCandidato`, em
+   `src/modules/lostfound/adapters/http/lost-case-routes.ts`, monta
+   `found_report` campo a campo e **não** inclui `matched_pet`. Aquela projeção
+   é separada da do módulo `found`, então pôr o campo lá seria uma edição
+   deliberada — não um efeito colateral desta emenda. Hoje **não vaza**.
+
+   **Por que não pode passar a vazar:** naquela lista o achado chega ao tutor
+   *por semelhança* — foi o cruzamento que o trouxe. Se aquele mesmo achado
+   tiver pet certo por outro caminho (uma plaquinha lida, ou o link de **outro**
+   tutor), emitir `matched_pet` ali mostraria a foto e o nome do pet de um
+   terceiro a quem só devia ver "um animal parecido com o meu". É dado de
+   terceiro entregue a quem não tem relação com ele, e **nenhum portão desta
+   casa confere corpo de resposta** — quem pegaria isso é revisão de PR, e é
+   por isso que está escrito aqui e na descrição do campo no contrato.
+
+   A medição que falta, e que fica nomeada: um caso de rota sobre
+   `listLostCaseCandidates` cobrando a ausência de `matched_pet` no corpo. Não
+   existe teste HTTP daquela rota hoje (só os de autorização em persistência e
+   o de serviço), e construir a bancada dele não caberia nesta entrega sem
+   deixar o resto afirmado em vez de medido.
 
 ## A pergunta a levar de volta ao cliente
 
