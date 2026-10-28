@@ -97,6 +97,19 @@ const String armazenamentoDaCapa = 'https://armazenamento.exemplo/capa';
 /// O `upload_id` que a intencao da capa devolve.
 const String uploadDaCapa = '018f7c1e-9999-7c3d-9e4f-0000000000ca';
 
+/// O rotulo do campo de descricao da foto que SAIU em 27/10/2026, literal.
+///
+/// Ele vive aqui como literal, e nao como
+/// `TelaCriarEncontro.rotuloDoTextoDaCapa`, porque **a constante foi removida
+/// junto com o campo** -- referencia-la nao compilaria mais. Mesmo padrao de
+/// `publicar_no_mural_test.dart`, que guardou o rotulo do Mural pelo mesmo
+/// motivo em 22/10/2026.
+///
+/// **COM ACENTO, e o acento importa:** quem devolver o campo vai escrever
+/// `'Descrição da foto'`, e um `rotulo` comparado contra `'Descricao da foto'`
+/// nunca casaria -- a isca ficaria verde com o campo de volta na tela.
+const String rotuloDaDescricaoDaFoto = 'Descrição da foto';
+
 /// O que a rede recebeu, guardado.
 class CapturadoDaCapa {
   final List<http.Request> pedidos = <http.Request>[];
@@ -435,13 +448,22 @@ void main() {
       reason: 'REPROVA: escolher a foto ja criou o evento.',
     );
 
-    // O `alt_text` e OBRIGATORIO quando a capa vai no corpo
-    // (`CommunityNetworkEventCoverInput` declara `required: [upload_id,
-    // alt_text]`, `minLength: 2`), e o campo so existe com foto escolhida.
-    await digitar(
-      tester,
-      TelaCriarEncontro.rotuloDoTextoDaCapa,
-      'Cachorros correndo na grama',
+    // **O CAMPO DE DESCRICAO DA FOTO NAO EXISTE MAIS, nem com a capa
+    // escolhida e confirmada.** Ele saiu em 27/10/2026, por pedido do cliente
+    // de 26/10/2026 (*"essa porra de campo e obrigatorio na criacao do evento,
+    // tire essa merda"*).
+    //
+    // ISCA: devolver o `BichuField` de `Descrição da foto` ao `_BlocoDaCapa`.
+    // Este `expect` reprova, e e o unico lugar que o pega com FOTO na tela --
+    // que e o unico estado em que o campo aparecia.
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is BichuField && w.rotulo == rotuloDaDescricaoDaFoto,
+      ),
+      findsNothing,
+      reason: 'REPROVA: o campo da descricao da foto voltou ao bloco da capa, '
+          'com a foto escolhida. O cliente pediu a remocao dele em '
+          '26/10/2026.',
     );
     await preencherOMinimo(tester);
 
@@ -470,12 +492,27 @@ void main() {
       reason: 'REPROVA: o corpo nao levou o `upload_id` que a intencao '
           'devolveu.',
     );
+    // **O VEREDITO INVERTEU EM 27/10/2026, e aqui esta o que ele media.**
+    //
+    // Antes: este `expect` cobrava `alt_text == 'Cachorros correndo na grama'`,
+    // porque `CommunityNetworkEventCoverInput` declarava
+    // `required: [upload_id, alt_text]` com `minLength: 2` -- mandar a capa
+    // sem o texto era `400` depois de a pessoa ter esperado o envio inteiro.
+    //
+    // Agora: `alt_text` saiu do `required` (27/10/2026, pela condicao que o
+    // proprio contrato nomeava) e a tela perdeu o campo, entao **nao ha de
+    // onde tirar o texto** e o corpo nao deve inventar um. O que este caso
+    // guarda e exatamente isso: derivar `alt_text` do titulo do evento, ou
+    // mandar string vazia, sao as duas formas de "consertar" isto que
+    // gravariam no banco uma descricao que ninguem escreveu. Vazio, por sinal,
+    // continua `400`: `minLength: 2` ficou no esquema.
     expect(
-      capa['alt_text'],
-      'Cachorros correndo na grama',
-      reason: 'REPROVA: o corpo levou `cover_image` sem `alt_text`. O esquema '
-          'declara os DOIS como obrigatorios, e o servidor responde 400 '
-          'depois de a pessoa ter esperado o envio inteiro.',
+      capa.containsKey('alt_text'),
+      isFalse,
+      reason: 'REPROVA: o corpo levou `alt_text` sem a tela ter campo para a '
+          'pessoa escrever um. Ou alguem devolveu o campo, ou alguem derivou '
+          'o texto do titulo -- e o contrato diz que o titulo do evento e '
+          'outra coisa.',
     );
 
     // **UM caminho de confirmacao, e so um.** Nenhum `PATCH` e nenhuma
@@ -780,16 +817,22 @@ void main() {
           'foto, a previa desapareceu e nenhuma palavra explicou por que.',
     );
 
-    // E o campo do `alt_text` sai junto: ele nao tem o que descrever.
+    // **O QUE ESTE `expect` MEDIA ANTES, e por que o veredito nao mudou de
+    // lado aqui:** ate 27/10/2026 o campo da descricao da foto EXISTIA, mas so
+    // com capa escolhida, e este caso provava que um envio RECUSADO o tirava
+    // da tela junto com a previa -- ele nao teria o que descrever.
+    //
+    // Depois de 27/10/2026 o campo nao existe em estado NENHUM, entao a
+    // afirmacao continua verdadeira por um motivo mais forte. Ela fica de pe
+    // como isca do caminho recusado; quem quiser o veredito com FOTO na tela
+    // -- o estado em que o campo aparecia -- o encontra no caso (b).
     expect(
       find.byWidgetPredicate(
-        (w) =>
-            w is BichuField &&
-            w.rotulo == TelaCriarEncontro.rotuloDoTextoDaCapa,
+        (w) => w is BichuField && w.rotulo == rotuloDaDescricaoDaFoto,
       ),
       findsNothing,
-      reason: 'REPROVA: o campo da descricao da foto ficou na tela sem foto '
-          'nenhuma. Ele e obrigatorio SO quando a capa vai no corpo.',
+      reason: 'REPROVA: o campo da descricao da foto esta na tela. Ele saiu em '
+          '27/10/2026, a pedido do cliente, e nao volta por envio recusado.',
     );
 
     // O botao mora na BARRA FIXA, que nao rola: `tap` direto.
@@ -849,8 +892,32 @@ void main() {
     pendurado.complete(http.Response('', 204));
     await tester.pumpAndSettle();
 
-    // E depois do envio o bloqueio vira o do `alt_text`, nao o da subida.
-    expect(find.text('Escreva uma descrição para a foto.'), findsOneWidget);
+    // **O QUE ESTE TRECHO MEDIA ANTES, e por que o veredito inverteu:** ate
+    // 27/10/2026, terminado o envio, o bloqueio TROCAVA -- saia "Espere a foto
+    // terminar de subir." e entrava "Escreva uma descrição para a foto.",
+    // porque `_Impedimento.semTextoDaCapa` guardava o `required` do contrato.
+    //
+    // Esse impedimento SAIU com o campo. Com o formulario minimo preenchido e
+    // a capa no lugar, nao sobra nada a bloquear: o botao volta a ficar
+    // tocavel. Guardar isto importa porque o modo de falhar virou o oposto --
+    // antes o risco era o botao ficar vivo cedo, agora e ele ficar APAGADO
+    // para sempre, com a pessoa sem nenhum campo para preencher e sem nenhuma
+    // palavra dizendo o que falta.
+    expect(
+      find.text('Escreva uma descrição para a foto.'),
+      findsNothing,
+      reason: 'REPROVA: a tela ainda cobra a descricao da foto. O campo saiu '
+          'em 27/10/2026 e nao ha onde escrever o que ela pede.',
+    );
+    expect(
+      tester.widget<BotaoPrimario>(find.byType(BotaoPrimario)).aoTocar,
+      isNotNull,
+      reason: 'REPROVA: terminado o envio da capa, o `Criar evento` continua '
+          'APAGADO. Como o campo da descricao saiu, nao ha nada que a pessoa '
+          'possa preencher para destravar -- ela fica presa num formulario '
+          'completo.',
+    );
+    // E ele nao se autoenviou: o toque continua sendo da pessoa.
     expect(capturado.criacoes(), isEmpty);
   });
 }

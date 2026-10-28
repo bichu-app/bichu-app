@@ -280,10 +280,18 @@ export interface LugarDaComunidade {
   readonly state: string;
 }
 
-/** A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. */
+/**
+ * A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`.
+ *
+ * **`alt_text` e OPCIONAL desde 27/10/2026** (pedido do cliente de 26/10/2026,
+ * *"essa porra de campo e obrigatorio na criacao do evento, tire essa merda"*):
+ * `CommunityNetworkEventCoverInput` deixou de o declarar em `required`. Ausente
+ * grava `NULL`; presente continua de 2 a 150 e continua recusando contato e
+ * pagamento (D59). Ver o esquema em `api/openapi.yaml`.
+ */
 export interface CapaDoCorpo {
   readonly upload_id: string;
-  readonly alt_text: string;
+  readonly alt_text?: string;
 }
 
 /**
@@ -365,7 +373,7 @@ export interface NovoEncontroDaComunidade {
   readonly portes: readonly string[];
   readonly estrutura: readonly string[];
   readonly paraLevar: readonly string[];
-  readonly capa: { readonly uploadId: string; readonly altText: string } | null;
+  readonly capa: { readonly uploadId: string; readonly altText: string | null } | null;
   readonly agora: Instant;
 }
 

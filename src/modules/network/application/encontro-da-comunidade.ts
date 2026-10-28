@@ -148,6 +148,12 @@ function errosDoLugar(lugar: LugarDaComunidade): ProblemFieldError[] {
 
 function errosDaCapa(capa: CapaDoCorpo | null | undefined): ProblemFieldError[] {
   if (capa === undefined || capa === null) return [];
+  // **`alt_text` AUSENTE e valido desde 27/10/2026**, e so por isso ha um
+  // retorno vazio aqui: o contrato tirou o campo do `required` a pedido do
+  // cliente (26/10/2026). Presente e vazio NAO passa -- cai no minimo de 2 de
+  // `errosDeTextoDeUsuario`, como no catalogo --, e presente continua medido
+  // contra contato e pagamento (D59).
+  if (capa.alt_text === undefined) return [];
   return errosDeTextoDeUsuario('cover_image.alt_text', capa.alt_text, 2, TETO_DO_TEXTO_ALTERNATIVO);
 }
 
@@ -210,7 +216,10 @@ export class EncontroDaComunidade {
         capa:
           corpo.cover_image === undefined
             ? null
-            : { uploadId: corpo.cover_image.upload_id, altText: corpo.cover_image.alt_text.trim() },
+            : {
+                uploadId: corpo.cover_image.upload_id,
+                altText: corpo.cover_image.alt_text?.trim() ?? null,
+              },
         agora,
       });
       await this.aplicarCapa(tx, id, autor, corpo.cover_image ?? undefined, agora);
@@ -392,7 +401,7 @@ export class EncontroDaComunidade {
     if (imagemId === undefined) {
       throw recusa('cover_image', 'upload_not_usable', 'Essa imagem não serve para este encontro. Envie-a de novo.');
     }
-    await tx.definirCapa(eventoId, { imagemId, altText: capa.alt_text.trim() });
+    await tx.definirCapa(eventoId, { imagemId, altText: capa.alt_text?.trim() ?? null });
   }
 
   /**

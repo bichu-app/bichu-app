@@ -2450,6 +2450,38 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///   26/10 no PR #63); a prosa dele esta logo acima, e ESTE VALOR TAMBEM NAO
 ///   SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo
 ///   recalcula.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE #69 (sem campo de descricao de foto)
+///
+/// BICHUS-278, 27/10/2026: SAI O CAMPO DE DESCRICAO DA FOTO da criacao de
+/// encontro, e nada mais. SUBSTITUI 396c619d14 (a base deste trabalho,
+/// `origin/development` em `90dfaee7`), que continua sendo a base: este valor
+/// e aquele com UM blob trocado, e nenhum arquivo entrou nem saiu. O ARQUIVO,
+/// e a conta de `git diff --name-only -- app/lib/telas` tem exatamente este
+/// um: `rede/criar_encontro.dart` (o `BichuField` de `Descrição da foto` saiu
+/// do `_BlocoDaCapa`, com a constante do rotulo, a da ajuda, o
+/// `TextEditingController`, o `_Impedimento.semTextoDaCapa` e a chave
+/// `cover_image.alt_text` da ordem de campos; o pedido e do cliente,
+/// 26/10/2026, e o contrato tirou `alt_text` do `required` no mesmo dia).
+/// MEDIDO pelo procedimento deste proprio portao (`GIT_INDEX_FILE` proprio,
+/// `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse
+/// "${T}:app/lib/telas"`), DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por
+/// DOIS caminhos independentes que concordaram: o procedimento acima sobre a
+/// arvore de trabalho, e um SEGUNDO indice semeado com `read-tree
+/// origin/development` no qual so `criar_encontro.dart` foi posto por
+/// `update-index --add`. Os dois deram 94cb9bdd22. CONTROLE POSITIVO DO
+/// METODO, feito ANTES de editar o portao: `rev-parse
+/// "${BASE}:app/lib/telas"` sobre `origin/development` reproduziu EXATAMENTE
+/// a constante que ela travava (396c619d14). Reproduzir o valor conhecido
+/// antes de medir o desconhecido e o que faz esta linha valer. PRESENCA DE
+/// ARQUIVO CONFERIDA, e nao so o digito -- arvore que perdeu arquivo ainda
+/// parece valida: `app/lib/telas` tem 89 arquivos na base e 89 aqui, e o
+/// `diff` entre a lista de `git ls-tree -r --name-only` da base e o `find` do
+/// disco depois da edicao e VAZIO. Nenhum arquivo entrou, saiu ou foi
+/// renomeado: o conserto muda CONTEUDO. As CHAVES em "${T}:app/lib/telas" nao
+/// sao enfeite: sem elas o zsh aplica o modificador `:a` ao nome da variavel
+/// e devolve lixo COM SAIDA 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem
+/// mesclar `app/lib/telas` de novo recalcula, nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

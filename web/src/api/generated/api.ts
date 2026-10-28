@@ -12176,23 +12176,42 @@ export interface components {
         };
         /**
          * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
-         *     `alt_text` e **obrigatorio** aqui.
+         *     `alt_text` e **opcional** aqui desde 27/10/2026.
          *
-         *     **ATENCAO, isto DEIXOU de ser igual a galeria do painel em 21/10/2026**:
-         *     lá `alt_text` virou opcional por decisao do cliente
-         *     (`CatalogImagesInput`), e aqui ele NAO foi afrouxado. A decisao do
-         *     cliente e as medicoes que a embasaram foram sobre os formularios do
-         *     PAINEL; esta e a superficie do APP, onde quem cria o encontro e o
-         *     proprio autor, e afrouxa-la de carona repetiria exatamente o erro que a
-         *     `20261017000002` evitou quando deixou a `Rede` de fora do pedido da
-         *     `Loja`. A coluna `network_event_images.alt_text` aceita nulo desde
-         *     21/10, entao esta obrigacao e desta superficie e nao do banco: ela cai
-         *     no dia em que alguem pedir, e nao antes.
+         *     **ELE SAIU DO `required` EM 27/10/2026, e o pedido do cliente e a razao
+         *     inteira.** Palavras dele, em 26/10/2026: *"essa porra de campo e
+         *     obrigatorio na criacao do evento, tire essa merda"* -- e, no mesmo
+         *     pedido, *"remova todos os campos de descricao de foto do aplicativo,
+         *     nao iremos implementar solucoes para quem usa leitor de tela por
+         *     enquanto"*.
+         *
+         *     **Esta e a condicao que o paragrafo anterior deste esquema nomeava.**
+         *     Ele dizia que a obrigacao "cai no dia em que alguem pedir, e nao
+         *     antes", e registrava que em 21/10/2026 o afrouxamento valeu so para a
+         *     galeria do painel (`CatalogImagesInput`), porque afrouxar a `Rede` de
+         *     carona repetiria o erro que a `20261017000002` evitou ao deixar a
+         *     `Rede` de fora do pedido da `Loja`. O dia chegou, e a diferenca e
+         *     exatamente a que aquele paragrafo exigia: o pedido e DESTA superficie,
+         *     dito pelo cliente sobre a tela de criar encontro, e nao uma
+         *     generalizacao do painel.
+         *
+         *     **O CUSTO, dito e aceito:** a capa do encontro fica sem nome acessivel
+         *     escrito pelo autor quando ele nao escreve um. Quem usa leitor de tela
+         *     cai no rotulo generico (`TelaDoEncontro.nomeDaCapaSemTexto`) -- a
+         *     imagem NAO sai da arvore de acessibilidade. O cliente foi informado
+         *     desse custo em 21/10/2026, ciente e por duas vezes, e repetiu o pedido
+         *     em 26/10/2026 alcancando o app.
+         *
+         *     **`minLength: 2` FICA.** Ausente e valido; presente e vazio continua
+         *     `400`, exatamente como no catalogo. A coluna
+         *     `network_event_images.alt_text` ja aceita nulo desde a
+         *     `20261020000013` (21/10/2026), e o `CHECK` de tamanho continua valendo
+         *     quando o texto vem: **nao ha migracao nesta mudanca**.
          */
         CommunityNetworkEventCoverInput: {
             /** Format: uuid */
             upload_id: string;
-            alt_text: string;
+            alt_text?: string;
             crop?: components["schemas"]["ImageCrop"];
         };
         /**

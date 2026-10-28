@@ -676,6 +676,39 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib` de novo
 /// reconta, sobre a arvore MESCLADA e depois da ultima edicao.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE #69 (sem campo de descricao de foto)
+///
+///
+/// ## 2706 -> 2704, em 27/10/2026: A TELA PERDEU UM CAMPO
+///
+/// O numero caiu DOIS, e a causa e a prevista pelo proprio texto deste portao
+/// ("tela que saiu"): o campo de descricao da foto saiu de
+/// `telas/rede/criar_encontro.dart` (pedido do cliente de 26/10/2026, *"essa
+/// porra de campo e obrigatorio na criacao do evento, tire essa merda"*).
+///
+/// **AS DUAS OCORRENCIAS, nomeadas uma a uma** -- nao e um total que fechou por
+/// acaso. O bloco removido era, literalmente:
+///
+/// ```dart
+/// const SizedBox(height: BichuEspaco.e4),   // 1: `BichuEspaco`
+/// BichuField(                               // 2: `BichuField`
+/// ```
+///
+/// MEDIDO arquivo por arquivo, e nao so no total: `criar_encontro.dart` tem 56
+/// ocorrencias em `origin/development` (`90dfaee7`) e 54 nesta arvore; o outro
+/// arquivo de `app/lib` que esta entrega toca, `api/rede_api.dart`, tem ZERO
+/// nos dois lados. 56 - 54 = 2, e 2706 - 2 = 2704. Nenhum texto novo desta
+/// entrega escreve a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA de novo, pelo mesmo motivo de antes: `app/lib`
+/// tem 218 `.dart` em `origin/development` e 218 nesta arvore, e os unicos
+/// arquivos alterados ali sao os dois nomeados acima. Nenhum entrou nem saiu,
+/// entao o -2 nao e compensacao de arquivo perdido.
+///
+/// A ARMADILHA CONTINUA MEDIDA: `petu` nao aparece em `app/lib` (0 ocorrencias,
+/// conferido nesta arvore). O numero desceu porque uma tela encolheu, e nao
+/// porque a marca virou outra palavra.
 const int ocorrenciasDeBichu = 2759; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS: RECONTADO sobre a arvore MESCLADA, nao e nenhum dos lados (2752/2746/2745), conferido POR FORMA -- zero formas sairam, zero cairam -- e a prosa de cada entrega esta preservada acima. ANTERIOR: 2742.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
