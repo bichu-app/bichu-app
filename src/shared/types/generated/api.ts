@@ -15801,18 +15801,83 @@ export interface components {
         };
         /**
          * @description O link publico do caso nao leva mais a caso aberto. `type` e sempre
-         *     `lost-case-closed`, e cobre, **com o mesmo corpo**: caso encerrado; pet
-         *     excluido, falecido ou arquivado; e token desconhecido. A superficie
-         *     publica nao distingue o motivo, porque distinguir contaria a um estranho
-         *     o que aconteceu com o animal de outra pessoa, ou se aquele token um dia
-         *     existiu. Nao e 404 pela mesma razao da tag revogada (ADR-0004): link
-         *     impresso num cartaz nao pode terminar numa pagina sem saida.
+         *     `lost-case-closed`, e cobre, **com o mesmo corpo**: pet excluido,
+         *     falecido ou arquivado; token desconhecido; e caso encerrado SEM
+         *     reencontro. A superficie publica nao distingue entre eles, porque
+         *     distinguir contaria a um estranho o que aconteceu com o animal de outra
+         *     pessoa, ou se aquele token um dia existiu. Nao e 404 pela mesma razao da
+         *     tag revogada (ADR-0004): link impresso num cartaz nao pode terminar numa
+         *     pagina sem saida.
          *
          *     `next_action: register_stray_found_report` e a saida: quem chegou por um
          *     cartaz antigo e esta vendo um animal parecido ainda consegue registrar o
          *     achado avulso, e o cruzamento por atributos faz o resto.
+         *
+         *     **Esta e a resposta do CARTAZ** (`getLostCasePoster`), onde os cinco
+         *     motivos continuam fundidos. A pagina do caso (`getPublicLostCase`) usa
+         *     `LostCaseClosedOrReunited`, que separa UM dos cinco e deixa os outros
+         *     exatamente aqui.
          */
         LostCaseClosed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O 410 da PAGINA do caso (`getPublicLostCase`), e ele tem **dois** `type`
+         *     possiveis. Quem le decide pelo `type`, nunca pelo status.
+         *
+         *     - **`lost-case-reunited`** -- o caso terminou **porque o animal voltou**,
+         *       e o pet continua de pe. A tela agradece a preocupacao e diz que nao
+         *       precisa mais se preocupar. **Sem `next_action`**: quem le nao tem
+         *       achado nenhum para registrar.
+         *     - **`lost-case-closed`** -- **todos os outros**, com o corpo que eles
+         *       sempre tiveram: pet excluido, falecido ou arquivado; token
+         *       desconhecido; e caso encerrado sem reencontro
+         *       (`closed_not_found`, `closed_false_alarm`). Continuam indistinguiveis
+         *       entre si **e do reencontrado**.
+         *
+         *     ## POR QUE SO UM DOS CINCO SE ABRIU
+         *
+         *     Autorizacao do cliente, 28/10/2026 -- terceira vez que ele relatou que
+         *     quem abre o cartaz de um pet ja achado caia numa pagina errada, com um
+         *     botao empurrando um formulario de achado: *"crie uma pagina padrao,
+         *     agradecendo a preocupacao do usuario e avisando-o que aquele pet ja foi
+         *     encontrado, que ele nao precisa mais se preocupar."*
+         *
+         *     A autorizacao cobre esse motivo e **nenhum outro**, e os quatro que
+         *     ficaram fundidos tem razao propria para ficar:
+         *
+         *     - dizer "ja foi encontrado" de um pet **falecido** e mentira cruel;
+         *     - dizer isso de um **token desconhecido** entrega que o token nao
+         *       existe, que e enumeracao;
+         *     - **excluido** e **arquivado** sao assunto privado do tutor.
+         *
+         *     ## E TIPO, E NAO CAMPO DENTRO DO CORPO FUNDIDO
+         *
+         *     Um `reunited: true` opcional dentro de `lost-case-closed` faria a
+         *     AUSENCIA do campo significar "um dos outros quatro" -- e ler ausencia e
+         *     exatamente o oraculo que a fusao existe para negar. Com dois `type`,
+         *     quem recebe `lost-case-closed` nao sabe nada que nao soubesse antes de
+         *     28/10/2026.
+         *
+         *     ## O QUE O CORPO DO REENCONTRADO NAO TRAZ
+         *
+         *     Nem data de encerramento, nem quem achou, nem nome do pet, nem
+         *     `pet_id`, `case_id` ou `user_id` (ADR-0010, item 6). O unico fato e
+         *     "este caso terminou porque o animal voltou" -- e ele ja era legivel
+         *     **sem conta nenhuma** desde 20/10/2026, no selo `found_by_community` de
+         *     `listPublicLostPets` (Emenda 4 do ADR-0010). Aqui ele chega a quem tem o
+         *     `share_token` na mao, que e publico mais estreito que a lista publica.
+         *
+         *     O servidor so emite `lost-case-reunited` com o desfecho `closed_reunited`
+         *     **e** o pet nao excluido, nao falecido e nao arquivado: um pet que voltou
+         *     para casa e depois morreu responde `lost-case-closed`.
+         */
+        LostCaseClosedOrReunited: {
             headers: {
                 [name: string]: unknown;
             };
@@ -21443,7 +21508,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
-            410: components["responses"]["LostCaseClosed"];
+            410: components["responses"]["LostCaseClosedOrReunited"];
             429: components["responses"]["TooManyRequests"];
         };
     };
