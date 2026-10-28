@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'falhas.dart';
 
 /// O veredito do servidor sobre ESTA versao do aplicativo.
 ///
@@ -29,14 +30,53 @@ enum VereditoDeVersao {
 
 /// O que o portao de versao recebeu do servidor.
 class RespostaDeVersao {
-  const RespostaDeVersao({required this.veredito, this.loja});
+  const RespostaDeVersao({
+    required this.veredito,
+    this.loja,
+    this.servidorRespondeu = true,
+  });
 
   /// O veredito LIBERADO, sem loja. O valor de toda falha e de toda ausencia.
   const RespostaDeVersao.liberado()
       : veredito = VereditoDeVersao.liberado,
-        loja = null;
+        loja = null,
+        servidorRespondeu = true;
+
+  /// LIBERADO **e nao houve servidor do outro lado**.
+  ///
+  /// Existe pelo pedido do cliente de 26/10/2026: a abertura sem internet
+  /// precisa dizer alguma coisa. O veredito continua [VereditoDeVersao
+  /// .liberado] -- falta de rede nunca fecha o app, e essa trava nao mudou --,
+  /// mas quem chama passa a conseguir distinguir *"o servidor disse que esta
+  /// versao serve"* de *"nao deu para perguntar"*, que antes eram o MESMO
+  /// valor.
+  ///
+  /// **Era a mesma coisa, e isso era o silencio.** Ate aqui as cinco formas de
+  /// falha de [VersaoApi.consultar] devolviam um liberado indistinguivel do
+  /// liberado de verdade, e por isso ninguem acima tinha de onde tirar a
+  /// mensagem que o cliente pediu.
+  const RespostaDeVersao.semResposta()
+      : veredito = VereditoDeVersao.liberado,
+        loja = null,
+        servidorRespondeu = false;
 
   final VereditoDeVersao veredito;
+
+  /// Houve um servidor do outro lado desta pergunta.
+  ///
+  /// `false` em duas das cinco formas de falha, e **somente nelas**: sem rede
+  /// (`FalhaDeConexao`) e sem resposta no prazo (`FalhaDeTempo`). As outras
+  /// tres -- erro do servidor, corpo fora do contrato e campo ausente --
+  /// deixam `true`, porque nos tres o servidor RESPONDEU: anunciar "sem
+  /// internet" para quem recebeu um 500 seria a tela mentindo sobre o que
+  /// aconteceu, e mandaria a pessoa conferir o Wi-Fi dela por um defeito
+  /// nosso.
+  ///
+  /// **5xx entra pela sonda, nao por aqui.** `SondaDeConexao` trata 5xx como
+  /// servidor fora, e e ela quem responde pelos dois sintomas juntos; esta
+  /// pergunta e sobre versao, e um 503 nela nao e evidencia de nada sobre o
+  /// servico inteiro.
+  final bool servidorRespondeu;
 
   /// Para onde mandar a pessoa. **Nula enquanto nao houver loja**, e hoje ela
   /// e nula: o APK vai por arquivo e o iOS por cabo. Nula, a tela nao desenha
@@ -128,8 +168,18 @@ class VersaoApi {
         return const RespostaDeVersao.liberado();
       }
       return RespostaDeVersao(veredito: veredito, loja: _loja(json['store_url']));
+    } on FalhaDeConexao {
+      // SEM REDE. Libera -- a trava de 19/10 nao mudou --, e **diz** que nao
+      // houve servidor. Ver [RespostaDeVersao.semResposta].
+      return const RespostaDeVersao.semResposta();
+    } on FalhaDeTempo {
+      // A requisicao saiu e nada voltou no prazo. Para quem abriu o app isso e
+      // indistinguivel de sem rede, e o desfecho e o mesmo.
+      return const RespostaDeVersao.semResposta();
     } on Object {
-      // Os cinco casos do cabecalho chegam todos aqui, e todos liberam.
+      // Os outros tres casos do cabecalho -- erro do servidor, corpo fora do
+      // contrato, campo ausente -- chegam aqui, e todos liberam SEM afirmar
+      // que faltou internet.
       return const RespostaDeVersao.liberado();
     }
   }

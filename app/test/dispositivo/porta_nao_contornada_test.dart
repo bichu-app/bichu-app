@@ -2523,6 +2523,47 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `:a` ao nome da variavel e devolve lixo COM SAIDA 0. ESTE VALOR NAO
 /// SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula,
 /// nunca escolhe um dos lados.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 67
+///
+/// BICHUS-278, 27/10/2026: O RECADO DE ABERTURA SEM INTERNET, pedido do
+/// cliente de 26/10 (*"uma mensagem de erro, quando o usuario tentar abrir o
+/// aplicativo e nao estiver conectado na internet, ao inves de deixar parado
+/// na pagina de splashscreen"*). SUBSTITUI
+/// 396c619d14451194cf2dd4768f8c6afcc1a060e4 (os dois consertos de 23/10), que
+/// continua sendo a base deste trabalho -- este valor e aquele mais TRES
+/// blobs novos e DOIS alterados. OS CINCO ARQUIVOS, e a conta de `git status
+/// --short -- app/lib/telas` tem exatamente estes: NASCEM
+/// `abertura/recado_na_abertura.dart` (o corpo compartilhado das telas de
+/// recado de abertura), `abertura/tela_sem_conexao.dart` e
+/// `abertura/textos_da_abertura.dart`; MUDAM
+/// `atualizacao/portao_de_versao.dart` (ganha a sonda de conexao e os dois
+/// estados do recado) e `atualizacao/tela_de_bloqueio_por_versao.dart`
+/// (perdeu o `build` proprio e passou a chamar `RecadoNaAbertura` -- o TIPO
+/// continua, porque e por tipo que os portoes a procuram na arvore, e o
+/// `aoFechar` nulo e o que mantem as tres saidas dela fechadas). **Nenhuma
+/// porta de aparelho encostada**: nenhum importe de plugin, nenhum canal de
+/// plataforma, nenhuma permissao, nenhum `dart:io`; os arquivos novos
+/// importam so `material`, o tema e `widgets/botao_primario.dart`, e o link
+/// da loja continua saindo pela porta `SaidaDoApp` -- o portao de diretivas
+/// deste mesmo arquivo responde por isso sem depender desta constante. A
+/// FIACAO da sonda NAO esta aqui: ela mora em `app/lib/app.dart` e em
+/// `app/lib/api/sonda_de_conexao.dart`, os dois FORA de `app/lib/telas`, e
+/// por isso nao mexem neste valor. MEDIDO pelo procedimento deste proprio
+/// portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A --
+/// app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"` -- COM as
+/// chaves: sem elas o zsh aplica o modificador `:a` e devolve lixo COM SAIDA
+/// 0), DEPOIS DA ULTIMA EDICAO em `app/lib/telas`. CONTROLE POSITIVO DO
+/// METODO, feito ANTES de trocar a constante: `git rev-parse
+/// "90dfaee7:app/lib/telas"` sobre a base deste ramo reproduziu EXATAMENTE o
+/// valor que ela travava, 396c619d14451194cf2dd4768f8c6afcc1a060e4 --
+/// reproduzir o valor conhecido antes de medir o desconhecido e o que faz
+/// esta linha valer. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito: 89
+/// arquivos na base e 92 aqui, e o `diff` entre `git ls-tree -r --name-only`
+/// da base e o `find` do disco acusa SO as tres linhas de `abertura/`
+/// entrando. Nenhum arquivo saiu nem foi renomeado. ESTE VALOR NAO SOBREVIVE
+/// A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula sobre a
+/// arvore MESCLADA, nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

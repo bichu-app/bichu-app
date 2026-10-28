@@ -22,6 +22,7 @@ import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/sonda_de_conexao.dart';
 import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
@@ -899,6 +900,14 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
             child: PortaoDeVersao(
               versaoApi: _versao,
               versaoDoApp: widget.config.versaoDoApp,
+              // A SONDA DE CONEXAO (cliente, 26/10/2026). **Ela nao e
+              // opcional em producao**: sem ela o recado de abertura sem
+              // internet so apareceria em build com `APP_VERSION`, e o
+              // mecanismo ficaria desligado em silencio no build de iOS --
+              // que e o defeito de 19/10 que `verificar-apk.sh` existe para
+              // nao deixar voltar. O nulo do parametro serve aos casos de
+              // widget que medem versao e nao conectividade.
+              sonda: SondaDeConexao(_api),
               child: filho ?? const SizedBox.shrink(),
             ),
           );
