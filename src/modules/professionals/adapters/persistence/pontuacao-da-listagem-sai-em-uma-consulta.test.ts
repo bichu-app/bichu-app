@@ -20,6 +20,16 @@
  * prova e a IGUALDADE entre a contagem com 1 cartao e com 20 -- com N+1 elas
  * seriam 3 e 22. Os dois numeros estao no mesmo caso, de proposito.
  *
+ * ## O QUE A CONTAGEM DE CONSULTAS **NAO** PEGA
+ *
+ * Uma consulta so ja foi a resposta errada uma vez neste arquivo. Com o lateral
+ * no mesmo nivel do `where`, a rota emite as MESMAS 3 consultas -- e agrega para
+ * o recorte INTEIRO, porque o `limit` acontece depois da juncao. Medido com 400
+ * locais e 4800 avaliacoes: `Aggregate` loops=400 e 16 872 buffers, contra
+ * loops=20 e 909 com o lateral depois do `limit`. O caso
+ * `o lateral vem DEPOIS do limit` existe por isso, e e a razao pela qual ele
+ * confere POSICAO no SQL e nao quantidade.
+ *
  * ## COMO DESLIGAR O MECANISMO E VER CADA CASO REPROVAR
  *
  * Em `kysely-directory-repository.ts`:
@@ -189,7 +199,7 @@ void describe('ISCA: a pontuacao da listagem do diretorio', () => {
     const { consultas } = await listar({ cartoes: 20, comConta: true });
     const pagina = consultas.find(DA_PAGINA) ?? '';
     assert.ok(
-      pagina.includes('pontuacao_do_local(professionals.id)'),
+      pagina.includes('pontuacao_do_local(pagina.id_do_lateral)'),
       'REPROVA: a consulta da pagina nao chama `pontuacao_do_local`. Um agregado ' +
         'escrito a mao aqui seria a SEGUNDA copia do recorte ' +
         "(`status = 'published'` e `conta_habilitada(author_user_id)`), e o modo " +
@@ -200,6 +210,25 @@ void describe('ISCA: a pontuacao da listagem do diretorio', () => {
       !/avg\s*\(/i.test(pagina) && !/count\s*\(\s*\*\s*\)\s*filter/i.test(pagina),
       'REPROVA: a consulta da pagina calcula a media ou o histograma por conta ' +
         `propria. A regra mora na funcao do banco, e so la. SQL: ${pagina}`,
+    );
+  });
+
+  void it('o lateral vem DEPOIS do `limit`, e nao no nivel do `where`', async () => {
+    const { consultas } = await listar({ cartoes: 20, comConta: true });
+    const pagina = consultas.find(DA_PAGINA) ?? '';
+    const limite = pagina.indexOf('limit $');
+    const lateral = pagina.indexOf('cross join lateral');
+    assert.ok(limite !== -1 && lateral !== -1, `SQL sem limit ou sem lateral: ${pagina}`);
+    assert.ok(
+      limite < lateral,
+      'REPROVA: o lateral esta no MESMO nivel do `where`, antes do `limit`. ' +
+        'Isso NAO e N+1 -- continua uma consulta, e a contagem de consultas nao ' +
+        'o pega --, mas o `limit` acontece depois do `order by`, que acontece ' +
+        'depois da juncao: a agregacao roda para TODA entrada do recorte e ' +
+        'vinte e nove em cada trinta resultados sao jogados fora. Medido em ' +
+        '28/10/2026 com 400 locais publicados e 4800 avaliacoes: `Aggregate` ' +
+        'loops=400 e 16 872 buffers contra loops=20 e 909. O custo cresce com o ' +
+        `tamanho do CATALOGO, nao da pagina. SQL: ${pagina}`,
     );
   });
 

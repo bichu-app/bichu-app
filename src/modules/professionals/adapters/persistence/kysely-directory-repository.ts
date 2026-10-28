@@ -588,7 +588,20 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
 }
 
 /**
- * A PONTUACAO DE CADA CARTAO DA PAGINA, **na mesma consulta da pagina**.
+ * O nome da coluna interna que o lateral consome, e **so** ele.
+ *
+ * `professionals.id` e UUID interno e o ADR-0010 item 6 o proibe em saida. Ele
+ * entra na subconsulta porque `pontuacao_do_local` recebe um `uuid` -- nao ha
+ * como chamar a funcao sem ele --, e sai da projecao do lado de fora: o `select`
+ * externo nomeia as colunas da entrada uma por uma e esta nao esta entre elas.
+ * O nome anuncia para que serve, para a proxima leitura nao o copiar por
+ * engano para a resposta.
+ */
+const ID_PARA_O_LATERAL = 'id_do_lateral';
+
+/**
+ * A PONTUACAO DE CADA CARTAO, **na mesma consulta da pagina e DEPOIS do
+ * `LIMIT`**.
  *
  * ## Por que lateral, e nao vinte leituras
  *
@@ -599,6 +612,32 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
  * numero de consultas da rota **nao muda**: 3 antes, 3 depois, com 1 ou com 20
  * cartoes. Isso e medido em `pontuacao-da-listagem-sai-em-uma-consulta.test.ts`,
  * que conta o SQL compilado -- e nao e uma promessa deste comentario.
+ *
+ * ## POR QUE DEPOIS DO `LIMIT`, E ISSO FOI MEDIDO
+ *
+ * O lateral posto no MESMO nivel do `where` parece equivalente e nao e: o
+ * `LIMIT` acontece depois do `ORDER BY`, e o `ORDER BY` depois da juncao --
+ * entao a agregacao roda para TODA entrada do recorte e vinte e nove em cada
+ * trinta resultados sao jogados fora. Medido em 28/10/2026, com 400 locais
+ * publicados e 4800 avaliacoes (`EXPLAIN (ANALYZE, BUFFERS)`):
+ *
+ * | forma | `Aggregate` | buffers | tempo |
+ * |---|---|---|---|
+ * | pagina de hoje, sem agregado  | --          |     127 |  8,2 ms |
+ * | lateral junto do `where`      | loops=400   |  16 872 | 24,8 ms |
+ * | lateral DEPOIS do `limit`     | loops=20    |     909 |  9,4 ms |
+ *
+ * Nao e N+1 -- e uma consulta nos tres casos --, e e por isso que a contagem de
+ * consultas nao o pegaria: o custo cresce com o TAMANHO DO RECORTE e nao com o
+ * tamanho da pagina, e e nesse eixo que ele piora sem aviso (400 locais hoje,
+ * 10 000 depois). A subconsulta corta o recorte para os 20 cartoes antes de
+ * agregar, e e isso que o contrato quer dizer com "restrito aos no maximo 20
+ * `professional_id` da pagina".
+ *
+ * O `EXPLAIN` tambem mostra que o planejador INCORPORA a funcao (o plano traz
+ * `Aggregate` sobre `Bitmap Heap Scan on professional_reviews`, e nao um
+ * `Function Scan`): o agregado da pagina e literalmente o mesmo agregado da
+ * migracao, e nao uma chamada opaca por linha.
  *
  * ## Por que a FUNCAO, e nao um `GROUP BY` escrito aqui
  *
@@ -616,9 +655,9 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
  * zero para o local que ninguem avaliou. Um `LEFT JOIN` aqui sugeriria um lado
  * ausente que nao existe, e `CROSS JOIN` nao tem como esconder cartao nenhum.
  */
-const PONTUACAO_DO_CARTAO = sql<LinhaDaPontuacao>`pontuacao_do_local(professionals.id)`.as(
-  'pontuacao',
-);
+const PONTUACAO_DO_CARTAO = sql<LinhaDaPontuacao>`pontuacao_do_local(pagina.${sql.raw(
+  ID_PARA_O_LATERAL,
+)})`.as('pontuacao');
 
 export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRepository {
   /**
@@ -656,7 +695,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       const distanciaDisponivel = localizacao !== undefined && recorte.sort === 'distance';
 
       const ponto = pontoDoAparelho(recorte.chamador, recorte.familia, recorte.agora);
-      let pagina = construtorDaListagem(db, recorte).crossJoinLateral(PONTUACAO_DO_CARTAO).select([
+      const distancia = sql<number | null>`ST_Distance(professionals.geo, ${ponto})`;
+      let pagina = construtorDaListagem(db, recorte).select([
+        // O ID INTERNO, **so para o lateral do lado de fora chamar a funcao**.
+        // Ele nao atravessa a projecao externa: ver `ID_PARA_O_LATERAL`.
+        sql<string>`professionals.id`.as(ID_PARA_O_LATERAL),
         'slug',
         'kinds',
         'entity_kind',
@@ -668,23 +711,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         'phone_e164',
         'site_url',
         EVIDENCIAS_APROVADAS.as('evidencias'),
-        sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
+        distancia.as('distancia_em_metros'),
         // A LOGO, e SO a logo. `photo_image_id` nao e selecionado aqui de
         // proposito: a faixa de 1280 x 720 em vinte cartoes multiplicaria o peso
         // da primeira pintura da lista. A coluna nem chega a esta projecao.
         CHAVE_DA_DERIVADA('logo_image_id').as('logo_public_key'),
-        // AS SETE COLUNAS DA PONTUACAO, do lateral. Os nomes sao os que
-        // `pontuacao_do_local` declara em `RETURNS TABLE`, e sao exatamente os
-        // de `LinhaDaPontuacao` -- entao `comoPontuacao` recebe a linha da
-        // pagina SEM adaptador no meio, e a conversao de `numeric`/`bigint`
-        // (que o driver entrega como texto) continua acontecendo num lugar so.
-        'pontuacao.media',
-        'pontuacao.quantidade',
-        'pontuacao.n1',
-        'pontuacao.n2',
-        'pontuacao.n3',
-        'pontuacao.n4',
-        'pontuacao.n5',
       ]);
 
       // Entrada sem coordenada vai para o fim com `NULLS LAST`, e nao some.
@@ -692,14 +723,62 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       // ninguem consegue preencher: nao ha painel de cadastro, e a ADR-0006
       // proibe derivar o ponto do bairro.
       pagina = distanciaDisponivel
-        ? pagina.orderBy(sql`ST_Distance(professionals.geo, ${ponto}) asc nulls last`)
+        ? pagina.orderBy(sql`${distancia} asc nulls last`)
         : pagina;
 
-      const itens = await pagina
-        .orderBy('display_name')
-        .limit(recorte.limit)
-        .offset((recorte.page - 1) * recorte.limit)
-        .execute();
+      // A PAGINA FECHA AQUI -- `ORDER BY`, `LIMIT` e `OFFSET` --, e so entao a
+      // pontuacao entra. Ver `PONTUACAO_DO_CARTAO`: agregar antes do `LIMIT`
+      // faz a conta rodar para o recorte inteiro, e o preco cresce com o
+      // tamanho do CATALOGO e nao com o da pagina.
+      const comPontuacao = db
+        .selectFrom(
+          pagina
+            .orderBy('display_name')
+            .limit(recorte.limit)
+            .offset((recorte.page - 1) * recorte.limit)
+            .as('pagina'),
+        )
+        .crossJoinLateral(PONTUACAO_DO_CARTAO)
+        .select([
+          'pagina.slug',
+          'pagina.kinds',
+          'pagina.entity_kind',
+          'pagina.display_name',
+          'pagina.about',
+          'pagina.city',
+          'pagina.state',
+          'pagina.neighborhood',
+          'pagina.phone_e164',
+          'pagina.site_url',
+          'pagina.evidencias',
+          'pagina.distancia_em_metros',
+          'pagina.logo_public_key',
+          // AS SETE COLUNAS DA PONTUACAO, do lateral. Os nomes sao os que
+          // `pontuacao_do_local` declara em `RETURNS TABLE`, e sao exatamente os
+          // de `LinhaDaPontuacao` -- entao `comoPontuacao` recebe a linha da
+          // pagina SEM adaptador no meio, e a conversao de `numeric`/`bigint`
+          // (que o driver entrega como texto) continua acontecendo num lugar so.
+          'pontuacao.media',
+          'pontuacao.quantidade',
+          'pontuacao.n1',
+          'pontuacao.n2',
+          'pontuacao.n3',
+          'pontuacao.n4',
+          'pontuacao.n5',
+        ]);
+
+      // **A ORDEM TEM DE SER REAFIRMADA AQUI.** O `ORDER BY` da subconsulta
+      // escolhe QUAIS vinte linhas entram; ele nao obriga o `Nested Loop` do
+      // lado de fora a devolve-las naquela ordem, e nenhuma clausula da
+      // subconsulta atravessa a juncao. Sem estas duas linhas a lista sai na
+      // ordem que o planejador achar conveniente -- hoje a certa, amanha nao --,
+      // e o defeito apareceria como "a ordem por distancia parou de valer", sem
+      // nada no codigo tendo mudado.
+      const ordenada = distanciaDisponivel
+        ? comPontuacao.orderBy(sql`"pagina"."distancia_em_metros" asc nulls last`)
+        : comPontuacao;
+
+      const itens = await ordenada.orderBy('pagina.display_name').execute();
 
       const contagem = await construtorDaListagem(db, recorte)
         .select(sql<string>`count(*)`.as('total'))
