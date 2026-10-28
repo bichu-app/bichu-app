@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unificação de menu — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+:root{
+  /* Tokens de design/tokens.json, tema claro (bichu_tokens.g.dart).
+     ESTE E O DESIGN SYSTEM DO APP -- o "Serio". A linguagem expressiva do
+     site (ilustracao, blobs, manuscrito, patinha) NAO entra aqui. */
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --surface-inverse:#1C1B19;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --text-on-inverse:#FAFAF8;
+  --urgency:#9B330D; --urgency-container:#FBEEE9; --on-urgency-container:#8E2E0B;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --info:#1B5FA8; --info-container:#DCEAF8;
+  --outline:#DFDED8; --outline-control:#827F73;
+  --community-fill:#A9CFBB; --action-fill:#E7B93E; --accent-fill:#E8A7A0;
+  --disabled-surface:#F4F3F1; --on-disabled:#827F73;
+  /* espaco */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px;
+  --e10:40px; --e12:48px; --e16:64px;
+  /* raio */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px; --alvo-critico:64px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#2A2824; color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- painel de controle ---------------- */
+.painel{
+  position:sticky; top:0; z-index:50;
+  background:#1C1B19; color:#FAFAF8;
+  padding:10px var(--e5) 8px;
+  border-bottom:1px solid #3A3833;
+  max-height:52vh; overflow-y:auto;
+}
+.painel h1{font-size:15px;margin:0 0 1px;font-weight:700;letter-spacing:.01em}
+.painel .sub{font-size:11.5px;color:#B5B2A8;margin:0 0 8px}
+.linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.linha .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8E8B82;margin-right:var(--e1)}
+.chip{
+  font:inherit;font-size:12px;font-weight:600;
+  background:#312F2A;color:#E8E6DE;border:1px solid #46433C;
+  border-radius:var(--r-full);padding:6px 12px;cursor:pointer;
+}
+.chip:hover{background:#3C3933}
+.chip[aria-pressed="true"]{background:#FAFAF8;color:#1C1B19;border-color:#FAFAF8}
+.aviso{
+  font-size:11.5px;line-height:1.5;color:#C9C6BC;background:#262420;
+  border-left:3px solid var(--action-fill);padding:8px 10px;border-radius:0 6px 6px 0;
+  margin-top:var(--e2);
+}
+.aviso.perda{border-left-color:var(--urgency)}
+.aviso.aberto{border-left-color:var(--info)}
+.painel code{background:#312F2A;padding:1px 4px;border-radius:3px;font-size:11px}
+
+/* ---------------- palco ---------------- */
+.palco{display:flex;flex-wrap:wrap;gap:var(--e8);padding:var(--e8) var(--e5) 80px;justify-content:center;align-items:flex-start}
+.caso{display:none}
+.caso.ativo{display:flex;flex-wrap:wrap;gap:var(--e8);justify-content:center;align-items:flex-start}
+.coluna{max-width:var(--tela,412px)}
+.rotulo-tela{
+  color:#E8E6DE;font-size:13px;font-weight:600;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.rotulo-tela .w{color:#8E8B82;font-weight:400;font-size:11px}
+.nota-tela{color:#A8A59B;font-size:11.5px;line-height:1.5;max-width:var(--tela,412px);margin:0 0 var(--e3)}
+.nota-tela b{color:#E8E6DE}
+
+/* ---------------- aparelho ---------------- */
+.aparelho{
+  width:var(--tela,412px);
+  height:760px;
+  background:var(--surface);
+  border-radius:var(--r-xl);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
+  position:relative;
+}
+.aparelho.alto{height:900px}
+
+/* ---------------- barra de topo ---------------- */
+.topo{
+  height:var(--alvo-critico);min-height:var(--alvo-critico);
+  background:var(--surface);
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--outline);
+  /* titleSpacing: 0 -- decisao de 19/10 que devolveu os 16 dp do vao padrao */
+}
+.topo .ham{width:64px;height:64px;display:grid;place-items:center;flex:0 0 64px}
+.topo .tit{
+  flex:1 1 auto;min-width:0;
+  font-size:22px;font-weight:600;line-height:28px; /* titleLg */
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topo .acao{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px;position:relative}
+.topo .foto{
+  width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--community-fill);color:var(--text-primary);
+  display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.selo-ponto{
+  position:absolute;top:8px;right:8px;min-width:8px;height:8px;
+  background:var(--primary);border-radius:var(--r-full);
+  border:2px solid var(--surface);
+}
+
+/* ---------------- corpo ---------------- */
+.corpo{flex:1 1 auto;overflow-y:auto;padding:var(--e4);position:relative}
+.corpo.sem-pad{padding:0}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+  color:var(--text-primary);
+  /* se a fonte nao carregar (sem rede) aparece o NOME do glifo, que e
+     exatamente o nome proposto -- falha que informa em vez de enganar */
+  max-width:28px;overflow:hidden;
+}
+.ms.cheio{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24}
+.ms.p{font-size:20px;max-width:24px}
+.ms.g{font-size:28px;max-width:32px}
+.ms.sec{color:var(--text-secondary)}
+
+/* ---------------- barra de baixo ---------------- */
+.baixo{
+  height:80px;min-height:80px;display:flex;
+  background:var(--surface);border-top:1px solid var(--outline);
+}
+.baixo a{
+  flex:1 1 0;min-width:0;text-decoration:none;color:var(--text-muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:0 2px;
+}
+.baixo a .lab{
+  font-size:12px;line-height:16px;font-weight:500;
+  width:100%;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:clip;
+}
+.baixo a[aria-current="page"]{color:var(--primary)}
+.baixo a[aria-current="page"] .ms{color:var(--primary)}
+.baixo a[aria-current="page"] .lab{font-weight:600}
+.baixo .pilula{width:56px;height:28px;border-radius:var(--r-full);display:grid;place-items:center}
+.baixo a[aria-current="page"] .pilula{background:var(--primary-container)}
+
+/* ================ O MENU DO PERFIL ================
+   `TituloDeGrupoDeMenu` e `ItemDeMenu`, de `app/lib/telas/abas.dart`.
+   NENHUMA das doze linhas de hoje pinta icone -- `ItemDeMenu` nao tem
+   parametro de icone, e a prosa de `Minhas indicacoes` diz por extenso que
+   acrescentar um faria a unica linha diferente do conjunto. O protótipo nao
+   inventa glifo nenhum aqui. */
+.grupo-tit{
+  font-size:14px;line-height:20px;font-weight:700;
+  letter-spacing:.02em;text-transform:none;
+  color:var(--text-secondary);
+  margin:0 0 var(--e2);
+}
+.item{
+  display:flex;align-items:center;gap:var(--e3);
+  min-height:var(--alvo-min);
+  border-bottom:1px solid var(--outline);
+  background:none;border-left:0;border-right:0;border-top:0;
+  width:100%;text-align:left;font:inherit;cursor:pointer;
+  padding:var(--e3) 0;color:var(--text-primary);
+}
+.item:hover{background:var(--surface-alt)}
+.item .rot{flex:1 1 auto;min-width:0;font-size:16px;line-height:24px;font-weight:500}
+.item .cauda{display:flex;align-items:center;gap:var(--e2);flex:0 0 auto}
+.item.sair .rot{color:var(--primary);font-weight:600}
+.item.sair{border-bottom:0}
+
+/* O CONTADOR. Pastilha `primary`/`onPrimary` -- a mesma tinta do selo da
+   barra de topo, porque as duas coisas dizem "ha algo esperando voce". */
+.contador{
+  background:var(--primary);color:var(--on-primary);
+  font-size:12px;font-weight:700;line-height:1;
+  min-width:22px;height:22px;border-radius:var(--r-full);
+  display:inline-grid;place-items:center;padding:0 6px;
+}
+.contador.sobre-aba{margin-left:var(--e2)}
+
+/* o que o protótipo MARCA no menu: linha que sai, linha que nasce */
+.item.sai{position:relative;opacity:.55}
+.item.sai .rot{text-decoration:line-through;text-decoration-thickness:1px}
+.item.nasce{background:var(--primary-container);border-radius:var(--r-sm);padding-left:var(--e2);padding-right:var(--e2)}
+.marca-lateral{
+  font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-muted);flex:0 0 auto;
+}
+.marca-lateral.nova{color:var(--on-primary-container)}
+
+/* o grupo e o vao `e6` entre grupos */
+.vao6{height:var(--e6)}
+.vao4{height:var(--e4)}
+.vao2{height:var(--e2)}
+
+/* o bloco de pets, resumido: ele NAO e o assunto desta entrega e entra
+   so para o menu ser lido na altura real em que a pessoa o encontra */
+.bloco-pets{margin-bottom:var(--e6)}
+.cartao-pet{
+  display:flex;align-items:center;gap:var(--e3);
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  padding:var(--e3);margin-bottom:var(--e2);background:var(--surface);
+}
+.cartao-pet .av{width:48px;height:48px;border-radius:var(--r-full);background:var(--surface-sunken);display:grid;place-items:center;flex:0 0 48px}
+.cartao-pet .nm{font-size:16px;font-weight:600}
+.cartao-pet .at{font-size:13px;color:var(--text-secondary)}
+.botao{
+  width:100%;min-height:var(--alvo-min);border-radius:var(--r-full);
+  background:var(--primary);color:var(--on-primary);border:0;
+  font:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:var(--e2);
+}
+.botao:disabled{background:var(--disabled-surface);color:var(--on-disabled);cursor:default}
+.botao.sec{background:var(--surface);color:var(--primary);border:1px solid var(--outline-control)}
+.botao.pequeno{width:auto;padding:0 var(--e4);min-height:var(--alvo-min)}
+
+/* ---------------- abas ---------------- */
+.abas{display:flex;border-bottom:1px solid var(--outline)}
+.abas button{
+  flex:1 1 0;min-width:0;background:none;border:0;cursor:pointer;
+  font:inherit;font-size:14px;font-weight:600;color:var(--text-secondary);
+  height:var(--alvo-min);padding:0 4px;
+  border-bottom:2px solid transparent;
+  display:flex;align-items:center;justify-content:center;
+  white-space:nowrap;overflow:hidden;
+}
+.abas button[aria-selected="true"]{color:var(--primary);border-bottom-color:var(--primary)}
+.abas button[aria-selected="true"] .contador{background:var(--primary)}
+
+/* O SEGMENTO `Recebidos`/`Enviados`, DENTRO da aba `Pendentes`.
+   Ele e CHIP no topo do CORPO e nao uma segunda `TabBar`: ha uma `TabBar` so
+   neste aplicativo (`rede/secao_da_rede.dart` e a unica, e a de pedidos copiou
+   o padrao dela), e aba dentro de aba e o controle que ninguem sabe qual dos
+   dois esta mexendo. E e tambem onde o padrao de listagem do projeto manda por
+   controle: no topo do CORPO, nunca na barra. */
+.segmento{display:flex;gap:var(--e2);margin-bottom:var(--e4)}
+.seg{
+  font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  min-height:var(--alvo-min);padding:0 var(--e4);
+  border-radius:var(--r-full);border:1px solid var(--outline-control);
+  background:var(--surface);color:var(--text-secondary);
+  display:flex;align-items:center;gap:var(--e2);
+}
+.seg[aria-pressed="true"]{background:var(--primary-container);color:var(--on-primary-container);border-color:var(--on-primary-container)}
+
+/* ---------------- cartoes de pessoa ----------------
+   TRES FORMAS, e as tres sao o que o produto JA desenha hoje. A unificacao
+   nao as iguala, e o protótipo nao finge que iguala:
+     `Conexoes`  -- foto de 56 dp, nome, selo, NENHUM botao
+     `Pendentes` -- SEM FOTO (emenda 3 do ADR-0010: a foto sai entre conexoes
+                    ACEITAS, e pedido pendente e exatamente o estado em que
+                    ninguem aceitou), nome, selo, `Aceitar`/`Recusar`
+     `Bloqueados`-- SEM FOTO (`BlockedPerson` nao traz foto no contrato),
+                    nome, `Desbloquear`
+*/
+.pessoa{
+  display:flex;align-items:center;gap:var(--e3);
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  padding:var(--e3);margin-bottom:var(--e3);background:var(--surface);
+}
+.pessoa .av{
+  width:56px;height:56px;flex:0 0 56px;border-radius:var(--r-full);
+  background:var(--community-fill);display:grid;place-items:center;
+  font-weight:700;font-size:20px;color:var(--text-primary);
+}
+.pessoa .av.vazia{background:var(--surface-sunken);color:var(--text-muted)}
+.pessoa .txt{flex:1 1 auto;min-width:0}
+.pessoa .nm{font-size:16px;line-height:24px;font-weight:600;display:flex;align-items:center;gap:var(--e1);flex-wrap:wrap}
+.pessoa .ap{font-size:13px;line-height:18px;color:var(--text-secondary)}
+.pessoa .selo-val{color:var(--info);display:inline-grid;place-items:center}
+.pessoa .selo-val .ms{color:var(--info);font-size:18px;max-width:20px}
+.pessoa.decisao{flex-direction:column;align-items:stretch;gap:var(--e3)}
+.pessoa.decisao .alto{display:flex;align-items:center;gap:var(--e3)}
+.pessoa .acoes{display:flex;gap:var(--e2)}
+.pessoa .acoes .botao{flex:1 1 0}
+.pessoa .fim{flex:0 0 auto}
+
+/* ---------------- vazio ----------------
+   `_UmaLinha`: UMA linha, `surfaceSunken` com borda `outline`, e o mesmo
+   pedido do cliente de 18/10/2026 que ja governa a listagem de perdidos. */
+.vazio{
+  width:100%;padding:var(--e6);
+  background:var(--surface-sunken);
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+}
+.vazio .t{font-size:16px;line-height:24px;font-weight:600}
+.vazio .e{font-size:14px;line-height:20px;color:var(--text-secondary);margin-top:var(--e2)}
+
+/* ---------------- cartao de achado ---------------- */
+.achado{
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  padding:var(--e4);margin-bottom:var(--e4);background:var(--surface);
+}
+.achado .estado{
+  display:inline-block;background:var(--primary-container);color:var(--on-primary-container);
+  font-size:11px;font-weight:600;line-height:16px;
+  border-radius:var(--r-full);padding:var(--e1) var(--e2);
+}
+.achado .tt{font-size:16px;line-height:24px;font-weight:600;margin-top:var(--e2)}
+.achado .ln{font-size:13px;line-height:18px;color:var(--text-secondary);margin-top:var(--e1)}
+.rodape-lista{font-size:13px;line-height:18px;color:var(--text-secondary);margin-top:var(--e2)}
+
+/* ============ A BARRA FIXA DO CORPO, EM `Achados` ============
+   O botao de registrar um achado avulso fica FIXO NO TOPO DO CORPO -- escolha
+   do cliente, e e onde o padrao de listagem deste projeto manda por controle
+   (busca, filtro, ordenacao e acao de criar ficam no topo do CORPO da tela, e
+   NUNCA na barra de cima).
+   `position:sticky` com `top:0` dentro de `.corpo`, que e o elemento que rola:
+   a lista passa por baixo dele e o botao continua na tela depois de 20 itens.
+   O chao opaco e a borda existem para o texto do primeiro cartao nao aparecer
+   atras do botao durante a rolagem. */
+.barra-de-corpo{
+  position:sticky;top:0;z-index:5;
+  background:var(--surface);
+  padding:var(--e4) var(--e4) var(--e3);
+  margin:calc(var(--e4) * -1) calc(var(--e4) * -1) var(--e3);
+  border-bottom:1px solid var(--outline);
+}
+
+/* ============ O QR DENTRO DE `Meus dados` ============
+   Ele NAO pode dominar a pagina: `Meus dados` e a pagina dos dados pessoais, e
+   quem a abre vem mexer no nome, no e-mail ou no telefone. O QR e uma coisa que
+   a pessoa mostra a OUTRA pessoa, e isso acontece poucas vezes.
+   Tres decisoes sustentam isso, e as tres estao marcadas no palco:
+   1. RECOLHIDO POR PADRAO. A linha fechada ocupa 48 dp -- um `ItemDeMenu` --,
+      e os 200 dp do quadrado so existem depois de um toque deliberado.
+   2. DEPOIS DOS CAMPOS. Ele e o ULTIMO bloco da pagina, abaixo de `Salvar`:
+      nada que a pessoa veio fazer fica atras dele.
+   3. CHAO `surfaceSunken` E NAO CARTAO `surface` COM SOMBRA. Afundado le como
+      gaveta de apoio; elevado leria como o assunto da tela. */
+.bloco-recolhivel{
+  background:var(--surface-sunken);
+  border:1px solid var(--outline);
+  border-radius:var(--r-lg);
+  overflow:hidden;
+  margin-top:var(--e4);
+}
+.bloco-recolhivel > .cab{
+  display:flex;align-items:center;gap:var(--e3);
+  width:100%;min-height:var(--alvo-min);padding:var(--e3) var(--e4);
+  background:none;border:0;font:inherit;cursor:pointer;text-align:left;
+  color:var(--text-primary);
+}
+.bloco-recolhivel > .cab .rot{flex:1 1 auto;font-size:16px;line-height:24px;font-weight:600}
+.bloco-recolhivel > .cab .ap{font-size:13px;line-height:18px;color:var(--text-secondary);font-weight:400;display:block}
+.bloco-recolhivel .conteudo{padding:0 var(--e4) var(--e4);display:none}
+.bloco-recolhivel.aberto .conteudo{display:block}
+.qr-moldura{
+  width:200px;height:200px;margin:0 auto;
+  background:#FFFFFF;border:1px solid var(--outline);
+  border-radius:var(--r-sm);padding:var(--e3);
+  display:grid;place-items:center;
+}
+.qr-modulos{
+  width:100%;height:100%;
+  /* um padrao que LE como QR sem fingir ser um codigo valido: o protótipo nao
+     pode mostrar um quadrado que alguem escaneie e que nao leve a lugar nenhum */
+  background-image:
+    linear-gradient(90deg,#000 0 12.5%,transparent 12.5% 25%,#000 25% 37.5%,transparent 37.5% 50%,#000 50% 62.5%,transparent 62.5% 75%,#000 75% 87.5%,transparent 87.5% 100%),
+    linear-gradient(0deg,#000 0 12.5%,transparent 12.5% 25%,#000 25% 37.5%,transparent 37.5% 50%,#000 50% 62.5%,transparent 62.5% 75%,#000 75% 87.5%,transparent 87.5% 100%);
+  background-blend-mode:difference;
+  position:relative;
+}
+.qr-modulos::before,.qr-modulos::after{
+  content:'';position:absolute;width:28%;height:28%;
+  border:12px solid #000;background:#fff;
+}
+.qr-modulos::before{top:0;left:0}
+.qr-modulos::after{top:0;right:0}
+.qr-legenda{font-size:13px;line-height:18px;color:var(--text-secondary);margin-top:var(--e3);text-align:center}
+.qr-placar{
+  display:flex;align-items:center;gap:var(--e2);
+  font-size:14px;line-height:20px;color:var(--text-primary);
+  background:var(--success-container);border-radius:var(--r-md);
+  padding:var(--e2) var(--e3);margin-top:var(--e3);
+}
+
+/* ---------------- campo de formulario (Meus dados) ---------------- */
+.campo{margin-bottom:var(--e4)}
+.campo .rot{font-size:13px;line-height:18px;color:var(--text-secondary);display:block;margin-bottom:var(--e1)}
+.campo .cx{
+  min-height:var(--alvo-min);border:1px solid var(--outline-control);
+  border-radius:var(--r-md);padding:var(--e3);
+  font-size:16px;line-height:24px;display:flex;align-items:center;
+  background:var(--surface);
+}
+.secao-tit{font-size:14px;line-height:20px;font-weight:700;color:var(--text-secondary);margin:var(--e6) 0 var(--e3)}
+
+/* ---------------- a caixa de avisos ---------------- */
+.aviso-item{
+  display:flex;gap:var(--e3);align-items:flex-start;
+  padding:var(--e3) 0;border-bottom:1px solid var(--outline);
+}
+.aviso-item .gl{
+  width:40px;height:40px;flex:0 0 40px;border-radius:var(--r-full);
+  background:var(--primary-container);display:grid;place-items:center;
+}
+.aviso-item .gl .ms{color:var(--on-primary-container)}
+.aviso-item .tx{flex:1 1 auto;min-width:0}
+.aviso-item .tt{font-size:15px;line-height:22px;font-weight:600}
+.aviso-item .cp{font-size:13px;line-height:18px;color:var(--text-secondary);margin-top:2px}
+.aviso-item .qd{font-size:12px;line-height:16px;color:var(--text-muted);margin-top:var(--e1)}
+.aviso-item.novo{background:var(--primary-container);border-radius:var(--r-sm);padding-left:var(--e2);padding-right:var(--e2)}
+
+/* ---------------- legenda do palco ---------------- */
+.legenda{
+  max-width:var(--tela,412px);margin-top:var(--e3);
+  font-size:11.5px;line-height:1.55;color:#A8A59B;
+  background:#231F1C;border:1px solid #3A3833;border-radius:8px;padding:10px 12px;
+}
+.legenda b{color:#E8E6DE}
+.legenda ul{margin:6px 0 0;padding-left:18px}
+.legenda li{margin-bottom:3px}
+.legenda code{background:#312F2A;padding:1px 4px;border-radius:3px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="painel">
+  <h1>Unificação de menu do Perfil — protótipo de desenho</h1>
+  <p class="sub">Bichu · 28/10/2026 · <code>origin/development</code> em <code>675c516c</code> · substitui o Figma por autorização do cliente de 23/09 (a conta não tem cota) · design system do <b>app</b> (o “Sério”)</p>
+
+  <div class="linha">
+    <span class="rot">Largura</span>
+    <button class="chip" data-w="320" aria-pressed="false">320 dp</button>
+    <button class="chip" data-w="375" aria-pressed="false">375 dp</button>
+    <button class="chip" data-w="412" aria-pressed="true">412 dp</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Telas</span>
+    <button class="chip" data-t="a-menus" aria-pressed="true">menu hoje × menu novo</button>
+    <button class="chip" data-t="b-conexoes" aria-pressed="false">Conexões · aba 1</button>
+    <button class="chip" data-t="c-pendentes" aria-pressed="false">Pendentes · com pedido</button>
+    <button class="chip" data-t="d-pendentes-vazia" aria-pressed="false">Pendentes · vazia</button>
+    <button class="chip" data-t="e-bloqueados" aria-pressed="false">Bloqueados · aba 3</button>
+    <button class="chip" data-t="f-achados" aria-pressed="false">Achados · com lista</button>
+    <button class="chip" data-t="g-achados-vazia" aria-pressed="false">Achados · vazia</button>
+    <button class="chip" data-t="h-meus-dados" aria-pressed="false">QR em Meus dados</button>
+    <button class="chip" data-t="i-aviso" aria-pressed="false">a notificação</button>
+  </div>
+
+  <p class="aviso"><strong>O que o cliente decidiu (28/10/2026):</strong> conexões viram UMA entrada com três abas (<code>Conexões · Pendentes · Bloqueados</code>), <code>Usuários bloqueados</code> sai do grupo <code>Conta</code> e vira a terceira aba (<em>“devemos centralizar tudo em um unico local”</em>), achados viram UMA entrada que abre na listagem com o registrar fixo no topo do corpo, e <code>Convide tutores</code> morre com o QR indo para dentro de <code>Meus dados</code>. A escolha dele para o pedido pendente foi <em>“aba interna de pendentes + notificação”</em> — <strong>as duas coisas</strong>, e é por isso que a aba leva contador <em>e</em> o aviso existe.</p>
+
+  <p class="aviso aberto"><strong>O MENU DE HOJE NÃO TEM 8 ENTRADAS: TEM 11, e eu medi antes de desenhar.</strong> <code>abas.dart</code> declara <code>ItemDeMenu</code> doze vezes, uma delas <code>Sair da conta</code>. O briefing omitiu três linhas que existem — <code>Convide tutores</code>, <code>Meus eventos</code> e <code>Minhas indicações</code> —, e as duas últimas o cliente <strong>não citou</strong>, então elas <strong>ficam onde estão</strong>. A conta real da entrega é <strong>11 → 8</strong> (<code>Sair da conta</code> fora da conta nas duas), e as cinco que o briefing lista são as cinco das frentes tocadas. O protótipo desenha o menu <strong>inteiro</strong>, porque é a altura inteira que mede a perda de descoberta.</p>
+
+  <p class="aviso perda"><strong>A perda que mais me preocupa é <code>Usuários bloqueados</code>, e ela não é de opinião.</strong> O bloqueio é simétrico no servidor: quem bloqueia alguém passa a receber <code>404</code> no perfil dessa pessoa, e o <code>Desbloquear</code> morava dentro do menu daquele perfil — que nunca mais abre. <strong>A lista é o único lugar de onde o desbloqueio sai no aplicativo inteiro.</strong> Hoje é 1 toque e uma palavra que a pessoa procura (<code>Usuários bloqueados</code>); depois são 2 toques, e o texto que ela procura deixa de existir no menu, debaixo de uma palavra (<code>Conexões</code>) que é <em>o oposto</em> de bloquear.</p>
+
+  <p class="aviso aberto"><strong>Duas coisas não têm destino na decisão, e eu não as inventei:</strong> (1) <code>Pedidos de conexão</code> tem HOJE duas abas internas, <code>Recebidos</code> e <code>Enviados</code> (decisão dele de 26/10) — o protótipo põe as duas como <strong>chips no topo do corpo</strong> da aba <code>Pendentes</code>, porque aba dentro de aba é o controle que ninguém sabe qual dos dois está mexendo, mas <strong>qual é o certo é decisão dele</strong>; (2) a tela <code>Convide tutores</code> tem mais que o QR — ela tem o placar <em>“Quem você trouxe para o Bichu”</em> (<code>invited_joined_count</code>) e a ação <code>Criar o meu QR de convite</code>. Matar a tela sem dizer onde o placar vai o apaga em silêncio: o protótipo o põe como <strong>uma linha dentro do bloco do QR</strong>, e isso é proposta minha, não decisão dele.</p>
+
+  <p class="aviso"><strong>O que já existe e NÃO precisa ser construído:</strong> o contador sai de <code>ConnectionSummary.requests_received_count</code>, que já está no contrato; e a notificação <code>connection_requested</code> também já está lá, por decisão dele de 22/10 (<em>“quando o usuario me adicionou, nao apareceu na notificacao que eu tinha uma solicitacao de amizade”</em>). O QR é <code>app/lib/widgets/qr_do_convite.dart</code>, pronto. As três coisas são <strong>mudança de lugar</strong>.</p>
+</div>
+
+<div class="palco">
+
+  <!-- ==================================================================
+       CASO A: OS DOIS MENUS, LADO A LADO
+       E o pedido principal do coordenador, e a razao e a perda de descoberta:
+       entrada que desaparece e funcao que fica mais dificil de achar. Os dois
+       aparelhos sao a MESMA tela (`AbaPerfil`), na MESMA largura, com o MESMO
+       bloco de pets acima -- sem isso a comparacao mediria o recorte e nao o
+       menu.
+       ================================================================== -->
+  <div class="caso ativo" id="a-menus">
+
+    <div class="coluna">
+      <p class="rotulo-tela">Perfil — O MENU DE HOJE <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">Medido em <code>app/lib/telas/abas.dart</code> no commit <code>675c516c</code>: <b>onze</b> itens em três grupos, mais <code>Sair da conta</code> fora de grupo. As três linhas riscadas são as que a decisão de hoje tira do menu.</p>
+      <div class="aparelho alto">
+        <div class="topo">
+          <div class="ham"><span class="foto">L</span></div>
+          <div class="tit">Perfil</div>
+          <div class="acao"><span class="ms">notifications</span><span class="selo-ponto"></span></div>
+        </div>
+        <div class="corpo">
+
+          <div class="bloco-pets">
+            <p class="grupo-tit">Meus pets</p>
+            <div class="cartao-pet"><span class="av"><span class="ms">pets</span></span><div><div class="nm">Toddy</div><div class="at">Cão · Spitz Alemão · Pequeno</div></div></div>
+            <div class="cartao-pet"><span class="av"><span class="ms">pets</span></span><div><div class="nm">Amora</div><div class="at">Gato · Pequeno · Caramelo</div></div></div>
+            <button class="botao">Cadastrar meu pet</button>
+          </div>
+
+          <p class="grupo-tit">Conta</p>
+          <button class="item"><span class="rot">Meus dados</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Minhas fotos</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item sai"><span class="rot">Usuários bloqueados</span><span class="cauda"><span class="marca-lateral">vira aba 3</span><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+
+          <p class="grupo-tit">Pets na rua</p>
+          <button class="item"><span class="rot">Escanear uma tag</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item sai"><span class="rot">Registrar achado avulso</span><span class="cauda"><span class="marca-lateral">vira botão</span><span class="ms sec">chevron_right</span></span></button>
+          <button class="item sai"><span class="rot">Meus achados</span><span class="cauda"><span class="marca-lateral">vira “Achados”</span><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+
+          <p class="grupo-tit">Comunidade</p>
+          <button class="item sai"><span class="rot">Pedidos de conexão</span><span class="cauda"><span class="marca-lateral">vira aba 2</span><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Conexões</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item sai"><span class="rot">Convide tutores</span><span class="cauda"><span class="marca-lateral">morre</span><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Meus eventos</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Minhas indicações</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+          <button class="item sair"><span class="rot">Sair da conta</span></button>
+          <p class="rodape-lista">bichu 1.0.0 · build 675c516c</p>
+        </div>
+        <div class="baixo">
+          <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+          <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+          <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+          <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+          <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Onze itens, e cinco delas são o que esta entrega toca.</b>
+        <ul>
+          <li><b>Nenhuma linha pinta ícone à esquerda</b>, e isso é o produto de hoje: <code>ItemDeMenu</code> não tem parâmetro de ícone.</li>
+          <li><b>Nenhuma linha pinta contador</b> — <code>Pedidos de conexão</code> também não. O único sinal de que alguém está esperando é o <b>ponto na barra de topo</b>.</li>
+          <li><code>Meus eventos</code> e <code>Minhas indicações</code> <b>não foram citadas pelo cliente</b> e ficam intocadas, no mesmo lugar e na mesma ordem.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="coluna">
+      <p class="rotulo-tela">Perfil — O MENU NOVO <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela"><b>Onze itens viram sete</b> (mais <code>Sair da conta</code> nos dois). Nenhuma linha que ficou mudou de grupo nem de ordem: as três que saíram saíram, e o resto está onde estava — a ordem deste menu é decisão dele de 18/10 e 21/10, e <code>perfil_ordem_dos_itens_test.dart</code> a guarda.</p>
+      <div class="aparelho alto">
+        <div class="topo">
+          <div class="ham"><span class="foto">L</span></div>
+          <div class="tit">Perfil</div>
+          <div class="acao"><span class="ms">notifications</span><span class="selo-ponto"></span></div>
+        </div>
+        <div class="corpo">
+
+          <div class="bloco-pets">
+            <p class="grupo-tit">Meus pets</p>
+            <div class="cartao-pet"><span class="av"><span class="ms">pets</span></span><div><div class="nm">Toddy</div><div class="at">Cão · Spitz Alemão · Pequeno</div></div></div>
+            <div class="cartao-pet"><span class="av"><span class="ms">pets</span></span><div><div class="nm">Amora</div><div class="at">Gato · Pequeno · Caramelo</div></div></div>
+            <button class="botao">Cadastrar meu pet</button>
+          </div>
+
+          <p class="grupo-tit">Conta</p>
+          <button class="item nasce" data-ir="h-meus-dados"><span class="rot">Meus dados</span><span class="cauda"><span class="marca-lateral nova">+ o QR</span><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Minhas fotos</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+
+          <p class="grupo-tit">Pets na rua</p>
+          <button class="item"><span class="rot">Escanear uma tag</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item nasce" data-ir="f-achados"><span class="rot">Achados</span><span class="cauda"><span class="marca-lateral nova">2 em 1</span><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+
+          <p class="grupo-tit">Comunidade</p>
+          <button class="item nasce" data-ir="b-conexoes"><span class="rot">Conexões</span><span class="cauda"><span class="marca-lateral nova">3 em 1</span><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Meus eventos</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+          <button class="item"><span class="rot">Minhas indicações</span><span class="cauda"><span class="ms sec">chevron_right</span></span></button>
+
+          <div class="vao6"></div>
+          <button class="item sair"><span class="rot">Sair da conta</span></button>
+          <p class="rodape-lista">bichu 1.0.0 · build 675c516c</p>
+        </div>
+        <div class="baixo">
+          <a href="#"><span class="pilula"><span class="ms">dynamic_feed</span></span><span class="lab">Mural</span></a>
+          <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+          <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+          <a href="#"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+          <a href="#"><span class="pilula"><span class="ms">forum</span></span><span class="lab">AuAu</span></a>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>As três linhas em rosa são as que mudaram. Toque nelas para ir à tela.</b>
+        <ul>
+          <li><b>Nenhum grupo ficou com um item só</b>, e isso foi conferido: 2, 2 e 3. <code>Conta</code> era o órfão possível — com <code>Usuários bloqueados</code> fora, ela fica com <code>Meus dados</code> e <code>Minhas fotos</code>, que são dois.</li>
+          <li><b>E A LINHA <code>Conexões</code> CONTINUA SEM CONTADOR</b>, e isso é fiel à decisão: o contador foi pedido na <b>aba</b>. Do menu, um pedido esperando é invisível — o que avisa é a notificação e o ponto da barra de topo. <b>Se ele quiser o número aqui também, é uma pergunta fechada</b> (ver o DESENHO.md): <code>ItemDeMenu</code> hoje não tem parâmetro para isso.</li>
+          <li><b>Três palavras saem do menu e não existem em mais lugar nenhum dele:</b> <code>Usuários bloqueados</code>, <code>Registrar achado avulso</code> e <code>Pedidos de conexão</code>. Quem procurava a função lendo o texto deixa de achá-la por leitura.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
