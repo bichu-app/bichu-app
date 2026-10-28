@@ -86,6 +86,21 @@ async function criarConta(): Promise<UserId> {
   return id;
 }
 
+/**
+ * Um slug que CABE no `CHECK professionals_slug_formato`
+ * (`^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`, no maximo 30 caracteres).
+ *
+ * A primeira versao deste arquivo montava `bichus313-autor-desabilitado-<uuid8>`,
+ * com 37 caracteres: o `INSERT` reprovava por `23514` e tres casos caiam com
+ * "violates check constraint", nao pela regra que eles medem. O prefixo curto e
+ * a conferencia abaixo existem por causa disso.
+ */
+function slugDeTeste(tag: string): string {
+  const s = `b313-${tag}-${randomUUID().slice(0, 8)}`;
+  assert.ok(/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s), `slug fora do CHECK: ${s}`);
+  return s;
+}
+
 async function criarLocal(slug: string, titular: UserId): Promise<string> {
   const id = randomUUID();
   await cliente.query(
@@ -216,7 +231,7 @@ void describe(
 
     void it('a media e a contagem do cartao sao as do local', async () => {
       const quemLe = await criarConta();
-      const slug = `bichus313-com-avaliacao-${randomUUID().slice(0, 8)}`;
+      const slug = slugDeTeste('com-aval');
       const local = await criarLocal(slug, await criarConta());
       // 5, 4 e 3 -> media 4,0 exata, e tres barras distintas no histograma.
       for (const nota of [5, 4, 3]) await avaliar(local, await criarConta(), nota);
@@ -230,7 +245,7 @@ void describe(
 
     void it('a media sai com UMA casa decimal, arredondada no servidor', async () => {
       const quemLe = await criarConta();
-      const slug = `bichus313-uma-casa-${randomUUID().slice(0, 8)}`;
+      const slug = slugDeTeste('uma-casa');
       const local = await criarLocal(slug, await criarConta());
       // 5, 4, 4 -> 13/3 = 4,333... -> 4,3. Sem o `round` viria 4.333333333333.
       for (const nota of [5, 4, 4]) await avaliar(local, await criarConta(), nota);
@@ -241,7 +256,7 @@ void describe(
 
     void it('local SEM avaliacao devolve media NULA, e nunca zero', async () => {
       const quemLe = await criarConta();
-      const slug = `bichus313-sem-avaliacao-${randomUUID().slice(0, 8)}`;
+      const slug = slugDeTeste('sem-aval');
       await criarLocal(slug, await criarConta());
 
       const r = await cartao(slug, quemLe);
@@ -261,7 +276,7 @@ void describe(
 
     void it('avaliacao de autor DESABILITADO nao entra na media nem na contagem', async () => {
       const quemLe = await criarConta();
-      const slug = `bichus313-autor-desabilitado-${randomUUID().slice(0, 8)}`;
+      const slug = slugDeTeste('autor-off');
       const local = await criarLocal(slug, await criarConta());
 
       const habilitado = await criarConta();
@@ -289,7 +304,7 @@ void describe(
 
     void it('o numero do cartao e o da lista de avaliacoes CONCORDAM', async () => {
       const quemLe = await criarConta();
-      const slug = `bichus313-concordam-${randomUUID().slice(0, 8)}`;
+      const slug = slugDeTeste('concordam');
       const local = await criarLocal(slug, await criarConta());
 
       for (const nota of [5, 4, 3]) await avaliar(local, await criarConta(), nota);
