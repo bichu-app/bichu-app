@@ -34,9 +34,13 @@ import {
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { FoundReportService } from '../../application/found-report-service.js';
-import { rotuloDaArea, type AchadoGravado } from '../../domain/registro-de-achado.js';
+import {
+  matchedPetDaResposta,
+  rotuloDaArea,
+  type AchadoGravado,
+} from '../../domain/registro-de-achado.js';
 import type { Especie, Porte, Sexo } from '../../domain/cruzamento.js';
-import type { FoundReportId, Instant, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, FoundReportId, Instant, UserId } from '../../../../shared/types/brands.js';
 
 /**
  * Os dois tetos são os do contrato, copiados dele e não escolhidos aqui.
@@ -118,6 +122,15 @@ export interface DependenciasDasRotasDeAchado {
   readonly idempotencia: Idempotencia;
   readonly contrato: Contrato;
   readonly clock: Clock;
+  /**
+   * De onde sai `matched_pet.photo_url` (emenda 7 do ADR-0010).
+   *
+   * É a MESMA base do perfil público do pet e da resolução da plaquinha
+   * (`config.mediaPublicBaseUrl`), e isso é requisito e não arrumação: as três
+   * superfícies endereçam o mesmo objeto, e uma base própria aqui faria a tela
+   * do achado pedir uma derivada que não existe naquele host.
+   */
+  readonly baseDeMidia: AbsoluteUrl;
 }
 
 /** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
@@ -187,8 +200,8 @@ function instanteDeAchado(bruto: unknown): Instant {
 }
 
 /**
- * `FoundReport`, campo a campo como o contrato o declara. **Doze campos e nenhum
- * a mais.**
+ * `FoundReport`, campo a campo como o contrato o declara. **Treze campos e
+ * nenhum a mais** — doze até 28/10/2026, quando `matched_pet` entrou.
  *
  * `photo_url` sai **nulo enquanto não houver conversa mediada**, e isso é o
  * critério 9 e não uma pendência escondida: a foto do achador "é vista pelo
@@ -200,8 +213,35 @@ function instanteDeAchado(bruto: unknown): Instant {
  *
  * `conversation_id` sai nulo pelo mesmo motivo: não há conversa nesta entrega, e
  * inventar um identificador seria pior que a ausência.
+ *
+ * ## `matched_pet`: A FOTO E O NOME DO PET, QUE AGORA VÊM
+ *
+ * **Autorização do cliente, 28/10/2026, literal: *"pode colocar a foto e o nome
+ * do pet."*** Ela responde a uma queixa que ele repetiu — o achado registrado
+ * aparecia sem foto nem nome — e está registrada na emenda 7 do ADR-0010, no
+ * nome dele.
+ *
+ * **Não é o mesmo campo que `photo_url` acima, e a diferença não é detalhe:**
+ * `photo_url` é a foto que o ACHADOR tirou do animal na rua, e continua nula
+ * fora da conversa mediada; `matched_pet.photo_url` é a capa que o TUTOR
+ * cadastrou. São os dois lados da mesma conversa, e confundi-los faria a tela
+ * mostrar a foto errada para a pessoa errada.
+ *
+ * **Sai nos dois caminhos em que quem lê já sabe qual animal é, e só neles.** O
+ * recorte não está num `if` desta função: ele está na consulta
+ * (`kysely-found-report-repository.ts`), que resolve o pet por
+ * `COALESCE(pet_id, lost_cases.pet_id via case_id)` — `pet_id` só é escrito com
+ * `origin: 'tag_scan'`, `case_id` só a partir do `share_token`. No achado avulso
+ * cruzado por semelhança o vínculo mora em `match_candidates`, que **nenhuma
+ * consulta desta porta toca**: o nulo chega aqui porque a consulta que traria
+ * foto e nome de um palpite da máquina não existe.
+ *
+ * O risco está por extenso na emenda e no contrato. Em resumo: o cliente mediu o
+ * golpe do falso achador em 20/10/2026, e foto e nome de uma correspondência
+ * **sugerida** seriam o insumo que falta ao golpista para "achei seu pet" soar
+ * verdadeiro.
  */
-function comoResposta(achado: AchadoGravado): Record<string, unknown> {
+function comoResposta(achado: AchadoGravado, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   return {
     id: achado.id,
     origin: achado.origin,
@@ -214,6 +254,7 @@ function comoResposta(achado: AchadoGravado): Record<string, unknown> {
     }),
     found_at: achado.achadoEm.toISOString(),
     photo_url: null,
+    matched_pet: matchedPetDaResposta(achado.petCorrespondente, baseDeMidia),
     notes: achado.observacao,
     conversation_id: null,
     created_at: achado.criadoEm.toISOString(),
@@ -324,6 +365,7 @@ export function registrarRotasDeAchado(
               },
               relator,
             ),
+            deps.baseDeMidia,
           ),
         }),
       );
@@ -341,7 +383,7 @@ export function registrarRotasDeAchado(
       cursor ?? null,
     );
     return reply.status(200).send({
-      items: pagina.itens.map(comoResposta),
+      items: pagina.itens.map((a) => comoResposta(a, deps.baseDeMidia)),
       next_cursor: pagina.proximoCursor,
     });
   });
@@ -349,7 +391,7 @@ export function registrarRotasDeAchado(
   registrarRota(app, rotaDoAchado, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const relator = await relatorAutenticado(request, deps);
     const achado = await deps.achados.buscar(achadoDoCaminho(request), relator);
-    return reply.status(200).send(comoResposta(achado));
+    return reply.status(200).send(comoResposta(achado, deps.baseDeMidia));
   });
 
   registrarRota(
@@ -371,7 +413,7 @@ export function registrarRotasDeAchado(
         ...(corpo.location?.lat === undefined ? {} : { lat: corpo.location.lat }),
         ...(corpo.location?.lon === undefined ? {} : { lon: corpo.location.lon }),
       });
-      return reply.status(200).send(comoResposta(achado));
+      return reply.status(200).send(comoResposta(achado, deps.baseDeMidia));
     },
   );
 

@@ -1070,6 +1070,11 @@ export async function main(): Promise<void> {
     idempotencia: criarIdempotencia(db),
     contrato,
     clock: systemClock,
+    // De onde sai `matched_pet.photo_url` no achado (emenda 7 do ADR-0010,
+    // 28/10/2026). E a MESMA base da resolucao da plaquinha e do perfil publico
+    // do pet: as tres superficies mostram a capa do MESMO animal, e uma base
+    // propria aqui faria a tela do achado pedir derivada em host que nao a tem.
+    baseDeMidia: config.mediaPublicBaseUrl,
   };
 
   // BICHUS-41. "Contar mais" e a foto de quem avisou sem conta. A validade do

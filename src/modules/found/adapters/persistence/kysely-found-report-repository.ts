@@ -65,6 +65,8 @@ interface LinhaDoAchado {
   tem_foto: boolean;
   notes: string | null;
   created_at: Date;
+  pet_nome: string | null;
+  pet_chave_da_foto: string | null;
 }
 
 function comoAchado(l: LinhaDoAchado): AchadoGravado {
@@ -80,8 +82,67 @@ function comoAchado(l: LinhaDoAchado): AchadoGravado {
     temFoto: l.tem_foto,
     observacao: l.notes,
     criadoEm: l.created_at,
+    // Nome ausente é a ausência de PET, e não a de nome: `pets.name` é `NOT
+    // NULL` no banco, então um nulo aqui só sai da subconsulta não ter achado
+    // linha — isto é, o achado é avulso e não tem pet certo. A chave da foto,
+    // sozinha, não sustenta um `matched_pet`: sem nome não há o que exibir.
+    petCorrespondente:
+      l.pet_nome === null ? null : { nome: l.pet_nome, chaveDaFoto: l.pet_chave_da_foto },
   };
 }
+
+// ===========================================================================
+// O PET JÁ IDENTIFICADO — emenda 7 do ADR-0010 (28/10/2026)
+// ===========================================================================
+//
+// `COALESCE` de duas colunas, e cada uma tem dono MEDIDO neste repositório:
+//
+//  - `found_reports.pet_id` é escrito **só** por `registrarAviso` em
+//    `kysely-tag-repository.ts`, junto com `origin: 'tag_scan'`;
+//  - `found_reports.case_id` é escrito **só** pelo `INSERT` de `criar`, a
+//    partir do `share_token` (critério 10).
+//
+// Os dois únicos `UPDATE` deste arquivo (`construtorDoEnriquecimento` e o do
+// achador sem conta) não tocam nenhuma das duas, e nada mais no código escreve
+// nelas. Então "tem pet certo" e "veio de plaquinha ou de link do tutor" são a
+// MESMA condição, e ela é a da emenda.
+//
+// **`match_candidates` não aparece aqui, e a ausência é o desenho.** O vínculo
+// do achado avulso cruzado por semelhança mora lá, com
+// `link_origin = 'attribute_match'` e `status = 'suggested'` — e a consulta que
+// traria foto e nome de um palpite da máquina **não existe nesta porta**. É a
+// mesma forma de argumento das emendas 3 e 5: não é um `if` que alguém apaga
+// num refatoramento, é uma consulta que ninguém escreveu.
+//
+// SUBCONSULTA e não `JOIN`: `construtorDoAvisoParaFoto` já tem um `leftJoin`
+// em `pets` com outra finalidade (a autorização do tutor), e um segundo join
+// pela mesma tabela com outro predicado ficaria à mercê de qual dos dois o
+// leitor acha que manda. Escalar e correlacionada, cada uma devolve uma coluna
+// ou nulo.
+const PET_ALVO = sql`COALESCE(
+  found_reports.pet_id,
+  (SELECT lc.pet_id FROM lost_cases lc WHERE lc.id = found_reports.case_id)
+)`;
+
+const PET_NOME = sql<string | null>`(
+  SELECT p.name FROM pets p WHERE p.id = ${PET_ALVO} AND p.deleted_at IS NULL
+)`;
+
+/**
+ * A capa pronta do pet. Mesmos quatro predicados de `kysely-tag-repository.ts`
+ * — `is_primary`, `status = 'ready'`, não apagada —, porque as duas superfícies
+ * endereçam o mesmo objeto e divergir aqui faria a plaquinha e o achado
+ * mostrarem fotos diferentes do mesmo animal.
+ *
+ * `status = 'ready'` é o que impede endereço montado para derivada que o worker
+ * ainda não gravou.
+ */
+const PET_CHAVE_DA_FOTO = sql<string | null>`(
+  SELECT f.card_key FROM pet_photos f
+   WHERE f.pet_id = ${PET_ALVO}
+     AND f.is_primary AND f.status = 'ready' AND f.deleted_at IS NULL
+   LIMIT 1
+)`;
 
 /**
  * As colunas da leitura do relator.
@@ -94,7 +155,9 @@ const COLUNAS = sql<LinhaDoAchado>`
   id, origin, status, species, size,
   found_city, found_neighborhood, found_at,
   (photo_upload_id IS NOT NULL) AS tem_foto,
-  notes, created_at
+  notes, created_at,
+  ${PET_NOME} AS pet_nome,
+  ${PET_CHAVE_DA_FOTO} AS pet_chave_da_foto
 `;
 
 /**
@@ -120,6 +183,8 @@ export function construtorDaLeitura(db: DbExecutor, achado: FoundReportId, dono:
       sql<boolean>`(photo_upload_id IS NOT NULL)`.as('tem_foto'),
       'notes',
       'created_at',
+      PET_NOME.as('pet_nome'),
+      PET_CHAVE_DA_FOTO.as('pet_chave_da_foto'),
     ])
     .where('id', '=', achado)
     .where('reporter_user_id', '=', dono);
@@ -157,6 +222,8 @@ export function construtorDaLista(
       sql<boolean>`(photo_upload_id IS NOT NULL)`.as('tem_foto'),
       'notes',
       'created_at',
+      PET_NOME.as('pet_nome'),
+      PET_CHAVE_DA_FOTO.as('pet_chave_da_foto'),
     ])
     .where('reporter_user_id', '=', dono)
     .orderBy('created_at', 'desc')
@@ -301,6 +368,8 @@ export function construtorDoAvisoParaFoto(
       sql<boolean>`(found_reports.photo_upload_id IS NOT NULL)`.as('tem_foto'),
       'found_reports.notes',
       'found_reports.created_at',
+      PET_NOME.as('pet_nome'),
+      PET_CHAVE_DA_FOTO.as('pet_chave_da_foto'),
     ])
     .where('found_reports.id', '=', achado)
     .where((eb) =>
@@ -549,6 +618,8 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
           sql<boolean>`(photo_upload_id IS NOT NULL)`.as('tem_foto'),
           'notes',
           'created_at',
+          PET_NOME.as('pet_nome'),
+          PET_CHAVE_DA_FOTO.as('pet_chave_da_foto'),
         ])
         .executeTakeFirst();
       return resultado === undefined ? null : comoAchado(resultado);

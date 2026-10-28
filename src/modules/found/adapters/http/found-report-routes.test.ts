@@ -63,7 +63,7 @@ import {
   FoundReportService,
   TETO_DE_BYTES_DA_FOTO_DO_ACHADO,
 } from '../../application/found-report-service.js';
-import type { AchadoGravado } from '../../domain/registro-de-achado.js';
+import type { AchadoGravado, PetCorrespondente } from '../../domain/registro-de-achado.js';
 import type { Sugestao } from '../../domain/cruzamento.js';
 import type { FoundReportRepository } from '../../ports/found-report-repository.js';
 import type { AutorizacaoDeEnvio, ObjectStorage } from '../../../media/ports/object-storage.js';
@@ -95,6 +95,22 @@ const CASO_DO_SHARE_TOKEN = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 const AGORA = 1_800_000_000_000;
 const SHARE_TOKEN = 'tok'.padEnd(24, 'x');
 
+/**
+ * A base de MÍDIA, de onde sai `matched_pet.photo_url`.
+ *
+ * `BASE_DA_WEB` existe ao lado dela e **não é usada na fiação**: ela é o engano
+ * que o caso da foto tem de poder reprovar. As duas são hosts diferentes por
+ * decisão do cliente (ver a fiação em `src/bin/api.ts`), e um endereço montado
+ * sobre a base errada é exatamente o defeito que passou em `tag-routes.ts` até
+ * `foto-na-resolucao-da-tag.test.ts` cobrar a base certa por comparação.
+ */
+const BASE_DE_MIDIA = 'https://midia.bichu.test' as AbsoluteUrl;
+const BASE_DA_WEB = 'https://www.bichu.test' as AbsoluteUrl;
+
+/** `pet_photos.card_key` como o worker a grava: 128 bits aleatórios no caminho. */
+const CHAVE_DA_CAPA = 'pets/9f2c/card/4a7b1e0d9c3f.webp';
+const NOME_DO_PET = 'Aurora';
+
 interface Cenario {
   readonly contador?: RateLimitStore;
   /**
@@ -112,6 +128,14 @@ interface Cenario {
   readonly ampliacaoDesligada?: boolean;
   readonly statusDoAchado?: AchadoGravado['status'];
   readonly fotosJaPedidas?: number;
+  /**
+   * O pet JA identificado, quando o cenario tem um.
+   *
+   * Ausente por padrao de proposito: o achado avulso cruzado por semelhanca e o
+   * caso comum, e e nele que a emenda 7 do ADR-0010 manda foto e nome NAO
+   * sairem. Quem quer a foto pede o pet.
+   */
+  readonly petCorrespondente?: PetCorrespondente | null;
 }
 
 const gravadas: Sugestao[] = [];
@@ -130,6 +154,12 @@ function achadoGravado(ajustes: Partial<AchadoGravado> = {}): AchadoGravado {
     temFoto: false,
     observacao: 'Coleira azul, sem plaquinha.',
     criadoEm: new Date(AGORA),
+    // O PADRÃO É O ACHADO AVULSO SEM PET CERTO, e isso é o estado que a emenda
+    // 7 do ADR-0010 mantém fechado: `null` aqui é o que o repositório devolve
+    // quando `COALESCE(pet_id, lost_cases.pet_id)` não achou linha. Os casos
+    // que exigem a foto e o nome **pedem** o pet explicitamente, e é por isso
+    // que eles medem alguma coisa.
+    petCorrespondente: null,
     ...ajustes,
   };
 }
@@ -152,6 +182,7 @@ function repositorio(cenario: Cenario): FoundReportRepository {
     criar: (novo) =>
       Promise.resolve(
         achadoGravado({
+          petCorrespondente: cenario.petCorrespondente ?? null,
           id: novo.id,
           especie: novo.especie,
           porte: novo.porte,
@@ -163,17 +194,31 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       ),
     buscarDoRelator: (achado, dono) =>
       Promise.resolve(
-        meu(achado, dono) ? achadoGravado({ status: cenario.statusDoAchado ?? 'open' }) : null,
+        meu(achado, dono)
+          ? achadoGravado({
+              status: cenario.statusDoAchado ?? 'open',
+              petCorrespondente: cenario.petCorrespondente ?? null,
+            })
+          : null,
       ),
     listarDoRelator: (dono, limite) =>
       Promise.resolve({
-        itens: dono === RELATOR ? [achadoGravado()].slice(0, limite) : [],
+        itens:
+          dono === RELATOR
+            ? [achadoGravado({ petCorrespondente: cenario.petCorrespondente ?? null })].slice(
+                0,
+                limite,
+              )
+            : [],
         proximoCursor: null,
       }),
     enriquecer: (achado, dono, mudanca) =>
       Promise.resolve(
         meu(achado, dono) && (cenario.statusDoAchado ?? 'open') !== 'closed'
-          ? achadoGravado({ observacao: mudanca.observacao ?? null })
+          ? achadoGravado({
+              observacao: mudanca.observacao ?? null,
+              petCorrespondente: cenario.petCorrespondente ?? null,
+            })
           : null,
       ),
     statusDoRelator: (achado, dono) =>
@@ -272,6 +317,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
+    baseDeMidia: BASE_DE_MIDIA,
     // O contrato DE VERDADE: é ele que decide o schema do corpo, e uma cópia
     // aqui deixaria de acusar mudança na spec.
     contrato: carregarContrato('api/openapi.yaml'),
