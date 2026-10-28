@@ -89,6 +89,20 @@ export interface AppConfig {
    */
   readonly webBaseUrl: AbsoluteUrl;
   /**
+   * A identidade do Relying Party do passkey (BICHUS-301).
+   *
+   * `rpId` e o HOSTNAME de `webBaseUrl`, e nao uma variavel propria: e o unico
+   * parametro do WebAuthn que nao pode mudar depois, e uma variavel propria
+   * seria uma segunda fonte para alguem apontar errado. Em producao esse
+   * hostname JA E o apex; em `prod`/`preprod` a subida recusa subdominio.
+   */
+  readonly passkey: {
+    readonly rpId: string;
+    readonly rpName: string;
+    /** `android:apk-key-hash:...`, NAO uma URL. Ver o comentario na montagem. */
+    readonly origensAceitas: readonly string[];
+  };
+  /**
    * `ADMIN_ORIGIN`: a origem exata do painel (em producao, o host `admin.bichu.app` com esquema https), contra
    * a qual o `Origin` de toda escrita administrativa e comparado (ADR-0027 item
    * 3, D39). **Opcional de proposito:** sem ela o prefixo `/v1/admin` nao e
@@ -696,6 +710,101 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // ----------------------------------------------------------------------
+  // A identidade do Relying Party do passkey (BICHUS-301)
+  // ----------------------------------------------------------------------
+  //
+  // O `rpId` e o HOSTNAME de `WEB_BASE_URL`, e nao o dominio registravel. A
+  // diferenca decide se o passkey funciona em homologacao, e custou uma volta:
+  //
+  //   * quem busca `/.well-known/assetlinks.json` e o Android, e ele busca NO
+  //     HOST DO `rpId` -- nao no host da API;
+  //   * com o dominio registravel, homologacao (`WEB_BASE_URL=https://hml.bichu.app`)
+  //     daria `rpId = bichu.app`, e o Android iria buscar o arquivo no APEX --
+  //     que ainda responde pelos quatro registros A da Squarespace
+  //     (`infra/verificacao/associacao.yml`). O passkey nao funcionaria no
+  //     ambiente em que o cliente testa, e a falha seria silenciosa;
+  //   * com o hostname, cada ambiente busca no proprio host, e os tres blocos
+  //     da borda que importam `(associacao_deep_link)` ja servem o arquivo --
+  //     a origem da aplicacao (que em homologacao E `hml.bichu.app`), o apex do
+  //     site e o host da tag (ADR-0028 item 6).
+  //
+  // E em PRODUCAO o hostname JA E o apex (`WEB_BASE_URL=https://bichu.app`),
+  // entao nao se perde nada: o `rpId` de producao continua sendo `bichu.app`,
+  // que e o que faz a credencial valer em qualquer subdominio e o que serve o
+  // iOS depois por `webcredentials:bichu.app`.
+  //
+  // A GUARDA ABAIXO e o que impede o unico jeito de isso dar errado. O `rpId` e
+  // o unico parametro do WebAuthn que NAO pode mudar depois -- trocar invalida
+  // toda credencial ja emitida --, entao producao servindo de um SUBDOMINIO
+  // (por exemplo `www.bichu.app`) emitiria credencial que nao sobe para o apex,
+  // e corrigir depois exigiria invalidar todas. Em ambiente de gente de verdade
+  // a subida recusa em vez de deixar isso acontecer.
+  const passkeyRpId = hostDaWeb;
+  // `environment === 'prod'` e SO isso, e a estreiteza e deliberada -- medida,
+  // nao suposta:
+  //
+  //   * `ehAmbienteHospedado` NAO serve aqui. Ela e verdadeira quando
+  //     `NODE_ENV=production`, e os estagios de producao do `Dockerfile`
+  //     (linhas 198 e 232) definem isso na imagem que **homologacao tambem
+  //     roda**. Usa-la faria a subida de homologacao RECUSAR, porque la o host
+  //     da web e `hml.bichu.app` -- exatamente o ambiente que esta mudanca
+  //     existe para destravar;
+  //   * `preprod` fica fora pelo mesmo motivo: e ambiente de ensaio, e pode
+  //     legitimamente servir de um subdominio.
+  //
+  // E o rotulo `prod` nao e esperanca: `.env.example` ja exige `ENVIRONMENT` em
+  // `prod`/`preprod` para a chave de rotacao do JWKS, e sem ele aquela guarda
+  // reprova antes desta. Producao sem o rotulo nao sobe hoje, por outro motivo.
+  if (environment === 'prod' && passkeyRpId !== dominioRegistravel(passkeyRpId)) {
+    throw new Error(
+      `WEB_BASE_URL aponta para o subdominio "${passkeyRpId}" e o ambiente e ` +
+        `"${environment}". O \`rpId\` do passkey sairia dai, e credencial emitida para um ` +
+        `subdominio NAO vale no apex "${dominioRegistravel(passkeyRpId)}" -- enquanto o ` +
+        'contrario vale. Como o `rpId` nao pode mudar depois (trocar invalida toda ' +
+        'credencial ja emitida), producao precisa servir a web do apex.',
+    );
+  }
+
+  // As origens que o `clientDataJSON` do app Android traz.
+  //
+  // ATENCAO a quem for mexer: no Android a origem NAO e `https://bichu.app`.
+  // Ela e `android:apk-key-hash:<SHA-256 do certificado de assinatura, em
+  // base64url, sem preenchimento>` -- derivada da MESMA digital que esta em
+  // `infra/caddy/well-known/assetlinks.json`. Conferir contra uma URL aqui
+  // reprovaria toda chamada legitima do app, e o erro apareceria como
+  // "credencial invalida" no aparelho do usuario.
+  //
+  // O padrao e a digital de DEBUG, medida em 27/10 nos 31 APKs de
+  // `workspace/artefatos-app/` (todos com a mesma). Ela esta duplicada entre
+  // este arquivo e o `assetlinks.json` porque os dois consumidores sao
+  // diferentes -- o sistema operacional le o JSON da borda, o servidor le isto
+  // --, e a duplicacao esta declarada aqui em voz alta em vez de escondida:
+  // **as duas listas tem de casar, e a digital de RELEASE falta nas duas**.
+  // Ver o `LEIA-ME.md` daquela pasta.
+  const digitaisDoApk = (
+    optionalEnv('PASSKEY_ANDROID_CERT_FINGERPRINTS') ??
+    '5D:7A:C5:50:5F:C6:C4:77:28:F9:86:75:F8:F9:7E:9A:64:27:AB:95:4A:2E:B7:74:B8:FF:72:6F:CA:3F:12:55'
+  )
+    .split(',')
+    .map((d) => d.trim())
+    .filter((d) => d !== '');
+  for (const digital of digitaisDoApk) {
+    // 32 bytes em hexadecimal separado por `:`. Digital malformada aqui nao
+    // reprova nada visivel -- ela so faz toda assercao falhar --, entao a
+    // subida recusa em vez de deixar o defeito aparecer no aparelho.
+    if (!/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}$/.test(digital)) {
+      throw new Error(
+        `PASSKEY_ANDROID_CERT_FINGERPRINTS tem uma digital malformada (${digital}). ` +
+          'O formato e o do `assetlinks.json`: 32 bytes em hexadecimal separados por `:`.',
+      );
+    }
+  }
+  const passkeyOrigensAceitas = digitaisDoApk.map(
+    (digital) =>
+      `android:apk-key-hash:${Buffer.from(digital.replace(/:/g, ''), 'hex').toString('base64url')}`,
+  );
+
   const ipHmacKeyBruta = requireEnv('IP_HMAC_KEY');
   const ipHmacKey = Buffer.from(ipHmacKeyBruta, 'base64');
   if (ipHmacKey.length < 32) {
@@ -849,6 +958,11 @@ export function loadAppConfig(): AppConfig {
     publicBaseUrl,
     tagBaseUrl,
     webBaseUrl,
+    passkey: {
+      rpId: passkeyRpId,
+      rpName: 'Bichu',
+      origensAceitas: passkeyOrigensAceitas,
+    },
     adminOrigin: optionalEnv('ADMIN_ORIGIN'),
     apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
     mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),

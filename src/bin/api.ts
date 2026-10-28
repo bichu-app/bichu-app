@@ -67,6 +67,11 @@ import {
   registrarRotasDeDescoberta,
   registrarRotasDeIdentidade,
 } from '../modules/identity/adapters/http/routes.js';
+import {
+  registrarRotasDePasskey,
+} from '../modules/identity/adapters/http/passkey-routes.js';
+import { PasskeyService } from '../modules/identity/application/passkey-service.js';
+import { KyselyPasskeyRepository } from '../modules/identity/adapters/persistence/kysely-passkey-repository.js';
 import { criarAuthService } from '../modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../modules/identity/application/aviso-de-reuso.js';
 import { criarReferenceDataRepository } from '../modules/pets/adapters/persistence/kysely-reference-data-repository.js';
@@ -1152,6 +1157,20 @@ export async function main(): Promise<void> {
   // deixou de ser exprimivel, e nao depende de o portao lembrar deste nome.
   await escoparRotas(app, PREFIXO_DA_API, (escopo) => {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
+    registrarRotasDePasskey(escopo, {
+      auth,
+      contrato,
+      // Servico proprio e nao um metodo do `AuthService`: a verificacao WebAuthn
+      // nao compartilha nada com senha, e a unica costura entre os dois e
+      // `entrarComCredencialDigital`, que recebe um `UserId` JA VERIFICADO.
+      passkeys: new PasskeyService({
+        repositorio: new KyselyPasskeyRepository(db),
+        clock: systemClock,
+        ids,
+        trilha,
+        rp: config.passkey,
+      }),
+    });
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDoDiretorio(escopo, {
       diretorio: criarDirectoryRepository(db, ids),

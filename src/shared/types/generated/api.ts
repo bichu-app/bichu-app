@@ -16590,6 +16590,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     revokePasskey: {
@@ -16617,8 +16618,10 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     changePassword: {

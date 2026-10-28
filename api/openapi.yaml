@@ -1165,6 +1165,12 @@ paths:
   /auth/passkey/registration/options:
     post:
       operationId: beginPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: []
       summary: Emite o desafio para cadastrar uma credencial digital
@@ -1232,9 +1238,21 @@ paths:
   /auth/passkey/registration:
     post:
       operationId: finishPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: [verifies_secret]
       summary: Conclui o cadastro da credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto do passo que emite o desafio, e de proposito: um desafio por tentativa, e tentativa sem desafio nao existe. Numero diferente aqui deixaria uma das duas metades do cadastro recusar antes da outra"
       description: |
         Segundo passo. O app devolve a atestacao produzida pelo aparelho e o
         servidor a verifica antes de guardar a chave publica.
@@ -1437,9 +1455,21 @@ paths:
   /auth/passkeys:
     get:
       operationId: listPasskeys
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: []
       summary: Lista as credenciais digitais da conta
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "leitura da propria conta, e e a tela de gerenciar credenciais que a chama"
       description: |
         As credenciais **ativas** da conta, mais recente primeiro. Revogadas
         nao aparecem: elas continuam na base (nada e apagado, decisao do
@@ -1456,13 +1486,26 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PasskeyList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/passkeys/{passkeyId}:
     delete:
       operationId: revokePasskey
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: [irreversible_write]
       summary: Revoga uma credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "teto FOLGADO de proposito: quem perdeu o aparelho esta com pressa, e o teto nao pode ser o que impede alguem de fechar a porta. Trinta e o triplo do cadastro porque revogar e a saida de emergencia, nao a rotina"
       description: |
         **Revogar MARCA revogada, nao apaga** (decisao do cliente de 26/10:
         "nao apague nada"). A linha fica, com `revoked_at` preenchido, e deixa
@@ -1489,8 +1532,13 @@ paths:
       responses:
         '204':
           description: "Credencial revogada. Idempotente: revogar a ja revogada tambem sai 204."
+        # O `passkeyId` e `format: uuid`, entao o Ajv pode recusar antes do
+        # handler. Declarar o 400 nao e zelo: a rota JA o devolve, e contrato
+        # que omite resposta que a rota emite e contrato que mente.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/password:
     put:

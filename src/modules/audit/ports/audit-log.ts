@@ -52,6 +52,19 @@ export type AuditAction =
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
+  // Credencial digital / passkey (BICHUS-301)
+  | 'auth.passkey_registered'
+  | 'auth.passkey_revoked'
+  /**
+   * Contador de assinatura REPETIU ou RETROCEDEU: repeticao de uma assercao
+   * capturada, ou autenticador clonado. O servidor revoga a credencial por
+   * conta propria e responde o mesmo 401 de credencial invalida.
+   *
+   * E evento proprio, e nao `auth.login_failed`, porque a pergunta que ele
+   * responde e outra: `login_failed` e alguem errando a senha, e isto e sinal
+   * de que uma chave privada saiu do aparelho dela.
+   */
+  | 'auth.passkey_counter_regression'
   /**
    * Nasceu uma sessao a partir do link do e-mail, e NAO de uma senha
    * (`POST /v1/auth/email-verification/confirm`). O metadado diz qual dos dois

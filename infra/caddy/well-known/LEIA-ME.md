@@ -119,35 +119,51 @@ sem Team ID nao ha `appID` para escrever. **O `RP ID` escolhido (`bichu.app`) ja
 serve iOS** -- ver abaixo --, entao quando a conta Apple existir basta preencher
 este array, sem tocar em credencial nenhuma ja emitida.
 
-## O `RP ID` do passkey e `bichu.app`, e por que
+## O `RP ID` do passkey, e por que ele e o HOSTNAME
 
 O `RP ID` e o unico parametro do WebAuthn que **nao pode mudar depois**: trocar
 invalida toda credencial ja emitida. Por isso ele foi escolhido antes da tela e
 nao depois.
 
-`bichu.app` (o apex) porque:
+Ele e o **hostname de `WEB_BASE_URL`**, e a escolha custou uma volta que vale
+registrar, porque a resposta obvia estava errada.
 
-1. e dominio registravel, que e o que a especificacao exige;
-2. credencial de `bichu.app` vale para qualquer subdominio -- app, `www`,
-   `admin` --, enquanto credencial de um subdominio **nao** sobe para o apex;
-3. o apex ja serve este arquivo: o trecho `(associacao_deep_link)` e importado
-   pelo bloco `{$SITE_HOSTS}` do `Caddyfile`, que e o apex do site (ADR-0028);
-4. **nao inviabiliza iOS**: `Associated Domains` usa
-   `webcredentials:bichu.app` com o `apple-app-site-association` no mesmo apex,
-   que e exatamente o par que esta pasta serve.
+**Quem busca este arquivo e o Android, e ele busca NO HOST DO `RP ID`.** A
+primeira versao usava o *dominio registravel* (`bichu.app` sempre), com o
+argumento de que credencial do apex vale em qualquer subdominio. O argumento e
+verdadeiro e a escolha era ruim: em homologacao `WEB_BASE_URL` e
+`https://hml.bichu.app`, o `RP ID` sairia `bichu.app`, e o Android iria buscar o
+`assetlinks.json` **no apex** -- que ainda responde pelos quatro registros A da
+Squarespace (ver `infra/verificacao/associacao.yml`). O passkey **nao
+funcionaria no ambiente em que o cliente testa**, e a falha seria silenciosa.
 
-O que foi **rejeitado** e vale registrar: `tag.bichu.app` prenderia a credencial
-ao host da plaquinha, e `hml.bichu.app` prenderia ao ambiente de homologacao --
-nos dois casos a migracao para producao exigiria trocar o `RP ID`, isto e,
-**invalidar todas as passkeys**. Um `RP ID` de ambiente e uma armadilha de via
-unica.
+Com o hostname, cada ambiente busca no proprio host, e os tres blocos da borda
+que importam `(associacao_deep_link)` ja servem o arquivo: a origem da aplicacao
+(que em homologacao **e** `hml.bichu.app`), o apex do site e o host da tag
+(ADR-0028 item 6).
 
-**Dependencia que NAO esta resolvida:** o apex `bichu.app` ainda responde pelos
-quatro registros A da Squarespace (ver `infra/verificacao/associacao.yml`). Ate
-o passo 9 do roteiro de provisionamento acontecer, `https://bichu.app/.well-known/assetlinks.json`
-nao e servido por nos, e **o passkey nao funciona em producao** -- por DNS, nao
-por codigo. Em homologacao o caminho exercitado e o mesmo arquivo servido pelos
-tres blocos da borda.
+**E producao nao perde nada**, porque la o hostname JA E o apex
+(`WEB_BASE_URL=https://bichu.app`): o `RP ID` de producao continua sendo
+`bichu.app`, que e o que faz a credencial valer em `www` e em `admin`, e o que
+serve iOS depois por `webcredentials:bichu.app` com o
+`apple-app-site-association` no mesmo apex -- o par que esta pasta serve.
+
+**A guarda que impede o unico jeito de isso dar errado:** em `prod` e
+`preprod`, `loadAppConfig` **recusa subir** se o hostname da web nao for o
+proprio dominio registravel. Producao servindo de `www.bichu.app` emitiria
+credencial que nao sobe para o apex, e corrigir depois exigiria invalidar todas.
+
+O que foi **rejeitado**: `tag.bichu.app` prenderia a credencial ao host da
+plaquinha, e um `RP ID` fixo de ambiente (`hml.bichu.app` em producao) seria
+armadilha de via unica. A diferenca entre isso e o que esta feito e que aqui o
+valor **acompanha** o ambiente e, em producao, e o apex por construcao.
+
+**Consequencia que fica em aberto, e nao e de codigo:** credencial cadastrada em
+homologacao tem `RP ID` `hml.bichu.app` e **nao vale** em producao. Isso e o
+correto -- sao ambientes diferentes, e credencial de teste nao deve atravessar
+--, mas quem testar em homologacao e depois instalar o APK de producao vai
+precisar cadastrar de novo. Nao e defeito; e o que ter ambientes separados
+significa.
 
 `infra/verificacao/verificar_borda_local.py` acusa lista vazia a cada execucao e
 **reprova** assim que a dispensa correspondente vencer. Com a digital preenchida,
