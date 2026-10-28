@@ -35,8 +35,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bichu/api/fila_offline.dart';
-import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
