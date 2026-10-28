@@ -241,7 +241,11 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
         if codigo != 200:
             trecho = corpo[:400].decode("utf-8", "replace").replace("\n", " ")
             return nao_obtive(
-                f"a fila de analise respondeu HTTP {codigo} em {url_da_tarefa}: {trecho}",
+                # A URL que foi REALMENTE pedida, e nao a do relatorio: quem for
+                # repetir a consulta na mao precisa da que levou o
+                # `additionalFields`. Ela nao carrega segredo -- o token vai no
+                # cabecalho.
+                f"a fila de analise respondeu HTTP {codigo} em {url_com_pilha}: {trecho}",
                 status_http=codigo,
                 painel=painel,
             )
