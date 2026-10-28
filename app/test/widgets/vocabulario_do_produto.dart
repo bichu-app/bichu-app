@@ -872,6 +872,35 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// **A ARMADILHA CONTINUA VIGIADA**: nenhum literal de usuario mudou, nenhuma
 /// classe `Bichu*` foi renomeada, e `petu` continua sem aparecer em `app/lib`.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 75
+///
+/// 27/10/2026, BICHUS-303 parte 2: 2706 -> 2707, e a ocorrencia a mais e UMA,
+/// localizada e explicada.
+/// ---------------------------------------------------------------------------
+///
+/// **ONDE**, medido arquivo por arquivo e nao suposto: a contagem por arquivo
+/// desta arvore foi comparada com a da arvore limpa de `origin/development`
+/// (`90dfaee7`) com `diff`, e a saida tem UMA linha -- `lib/telas/pet/
+/// tela_editar_pet.dart`, de 29 para 30. Todos os outros 217 arquivos batem.
+///
+/// **O QUE**: um `BichuEspaco.e6` a mais. O item `Endereco de entrega` entrou em
+/// `Editar pet` (decisao do cliente de 27/10/2026, *"o endereco de entrega da
+/// plaquinha tem que estar dentro do cadastro do pet"* e *"endereco um por
+/// pet"*), e o espaco antes dele usa o token da folha. **E uso de TOKEN, e nao
+/// texto de marca:** nenhuma palavra `Bichu` visivel ao usuario entrou ou saiu.
+///
+/// **NAO E A ARMADILHA QUE ESTE NUMERO VIGIA**, e isto foi conferido e nao
+/// suposto: `petu` nao aparece em `app/lib`, e a mudanca nao e substituicao de
+/// vocabulario nenhuma -- e uma linha nova que cita um token existente.
+///
+/// **PRESENCA DE ARQUIVO CONFERIDA**, pelo mesmo motivo de sempre (arvore que
+/// perde arquivo fecha o numero por compensacao): `app/lib` tem 218 `.dart` na
+/// base e 218 aqui, e o `diff` entre as duas listas e VAZIO. Nenhum arquivo
+/// entrou, saiu ou foi renomeado em `app/lib` nesta frente.
+///
+/// **ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO**: quem mesclar recalcula sobre a
+/// arvore MESCLADA, e nunca escolhe um dos lados.
 const int ocorrenciasDeBichu = 2759; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS: RECONTADO sobre a arvore MESCLADA, nao e nenhum dos lados (2752/2746/2745), conferido POR FORMA -- zero formas sairam, zero cairam -- e a prosa de cada entrega esta preservada acima. ANTERIOR: 2742.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.

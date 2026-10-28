@@ -224,13 +224,20 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
   ),
   (
     nome: 'endereco de entrega',
-    endereco: '/perfil/endereco-de-entrega',
-    padrao: '/perfil/endereco-de-entrega',
-    motivo: 'AMBIGUA, e desde 26/10/2026 a UNICA assim: dois niveis dentro do '
-        'Perfil, e so `Meus dados` a abre, por `ItemDeMenu` -- `minhas '
-        'fotos`, que era a irma, subiu para o primeiro nivel naquele dia. Se '
-        '`Meus dados` e interna, ela nao pode ser primeiro plano. E ela e '
-        'FORMULARIO e nao lista -- o que a regra "lista fica" nem alcanca.',
+    endereco: '/pets/3f1d7a9e-0000-7000-8000-000000000001/endereco-de-entrega',
+    padrao: '/pets/:petId/endereco-de-entrega',
+    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do cadastro '
+        'do pet, e so `Editar pet` a abre, por `ItemDeMenu`. Se `Editar pet` e '
+        'interna, ela nao pode ser primeiro plano. E ela e FORMULARIO e nao '
+        'lista -- o que a regra "lista fica" nem alcanca. '
+        'MUDOU DE LUGAR EM 27/10/2026: era `/perfil/endereco-de-entrega` e o '
+        'endereco era da CONTA (cliente, 21/10/2026); ele pediu "o endereco de '
+        'entrega da plaquinha tem que estar dentro do cadastro do pet" e, com '
+        'aquela frase na mesa, decidiu "endereco um por pet". '
+        'NOTA DA UNIAO (26/10/2026): `minhas fotos` ja NAO e irma dela -- ela '
+        'subiu para o primeiro nivel do menu do Perfil naquele dia. O '
+        'parentesco que este motivo cita era verdade na base do #75; a regra '
+        'que ele mede (interna, e FORMULARIO) nao depende disso.',
   ),
   (
     nome: 'meus achados',

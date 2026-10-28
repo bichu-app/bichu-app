@@ -731,7 +731,23 @@ export interface paths {
         };
         /**
          * O endereco de entrega guardado na conta
-         * @description O endereco que o formulario da plaquinha usa para nascer preenchido.
+         * @description **SUPERADA COMO FONTE DO PEDIDO EM 27/10/2026, e nao apagada.** Ate
+         *     26/10 era este endereco que o formulario da plaquinha lia para nascer
+         *     preenchido (decisao do cliente de 21/10/2026: *"um endereco de entrega
+         *     salvo na conta, reusado em todo pedido e editavel num lugar so"*). Em
+         *     **27/10/2026**, com aquela frase posta na mesa, ele decidiu *"endereco um
+         *     por pet"*: a fonte do pedido passou a ser `getPetDeliveryAddress`, e o
+         *     registro completo das duas decisoes mora no comentario de
+         *     `/pets/{petId}/delivery-address`.
+         *
+         *     Esta operacao **continua existindo** por duas razoes, nenhuma delas
+         *     inercia: a decisao do cliente de 26/10/2026 e *"nao apague nada"*, e foi
+         *     desta tabela que a migracao `20261027000001` copiou o endereco para os
+         *     pets de cada tutor -- apagar a fonte da copia tiraria o unico registro de
+         *     onde o endereco de cada pet veio.
+         *
+         *     **Nenhum pedido de plaquinha le daqui.** Quem procura o endereco que o
+         *     formulario usa esta na operacao errada.
          *
          *     **`null` quando nao ha endereco guardado, e nao 404** -- a mesma forma
          *     de `getMyLocation`, e pelo mesmo motivo: "nunca guardei" e um estado
@@ -1532,6 +1548,66 @@ export interface paths {
         head?: never;
         /** Edita o pet */
         patch: operations["updatePet"];
+        trace?: never;
+    };
+    "/pets/{petId}/delivery-address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * O endereco de entrega guardado NESTE pet
+         * @description O endereco que o formulario da plaquinha deste pet usa para nascer
+         *     preenchido, **desde a decisao do cliente de 27/10/2026** (*"endereco um
+         *     por pet"*). Antes dela a fonte era a conta; ver o comentario acima deste
+         *     caminho, que registra as duas decisoes com as datas.
+         *
+         *     **`null` quando este pet nao tem endereco guardado, e nao 404** -- a
+         *     mesma forma de `getMyDeliveryAddress` e de `getMyLocation`, e pelo mesmo
+         *     motivo: "este pet nunca teve endereco" e um estado normal do cadastro,
+         *     nao recurso ausente. O PET ausente, esse sim, e 404.
+         *
+         *     **Leitura do tutor, e so dele.** `bearerAuth` sem alternativa vazia, e o
+         *     `WHERE` compara o dono do pet com o portador do token. Pet de outra
+         *     pessoa responde **404 e nunca 403** (ADR-0021): para quem pergunta, ele
+         *     nao existe.
+         */
+        get: operations["getPetDeliveryAddress"];
+        /**
+         * Guarda ou troca o endereco de entrega deste pet
+         * @description **`PUT` e nao `PATCH`, e o endereco inteiro vem junto.** Endereco e uma
+         *     coisa so: trocar de casa troca os nove campos de uma vez, e um `PATCH`
+         *     por campo deixaria o pet parado numa mistura de duas casas -- rua nova
+         *     com bairro antigo chega no lugar errado sem nada ter dado erro.
+         *
+         *     **Uma linha por pet**, e nao um historico: o cliente pediu *"endereco um
+         *     por pet"*, no singular. Guardar de novo sobrescreve.
+         *
+         *     **Esta rota NAO escreve o endereco da conta** (`putMyDeliveryAddress`),
+         *     e a reciproca tambem vale. Depois de 27/10/2026 o endereco da conta nao
+         *     e lido por pedido nenhum: ele continua existindo porque a decisao do
+         *     cliente de 26/10/2026 e *"nao apague nada"*, e porque foi dele que a
+         *     migracao `20261027000001` copiou o endereco para os pets de cada tutor.
+         *
+         *     **O teto e de conveniencia e nao de abuso**, igual ao de
+         *     `putMyDeliveryAddress`: guardar o proprio endereco nao vira trabalho de
+         *     ninguem, ao contrario do PEDIDO da plaquinha (3 por dia, porque cada um
+         *     vira trabalho fisico de alguem). 30 por hora impede laco de cliente
+         *     defeituoso sem atrapalhar quem corrige a rua tres vezes seguidas.
+         *
+         *     Cobranca, valor e pagamento continuam fora de escopo por decisao do
+         *     cliente, e nada aqui os introduz.
+         */
+        put: operations["putPetDeliveryAddress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/pets/{petId}/photos": {
@@ -14230,6 +14306,32 @@ export interface components {
          */
         MyDeliveryAddress: components["schemas"]["DeliveryAddress"] | null;
         /**
+         * @description O endereco de entrega guardado NESTE PET, **ou `null` quando ele nao tem
+         *     nenhum**.
+         *
+         *     **Alias anulavel de `DeliveryAddress`, e nao um segundo endereco** --
+         *     mesma forma e mesmo motivo de `MyDeliveryAddress`, que fica logo acima:
+         *     o `null` precisa estar no schema e nao so na prosa, porque um gerador de
+         *     tipo nao le descricao, e sem ele o cliente gerado nasceria com um
+         *     endereco nao-anulavel e quebraria no primeiro pet sem endereco -- que e
+         *     o estado de todo pet cadastrado DEPOIS da migracao `20261027000001`.
+         *
+         *     **Por que existem os DOIS alias, e nao um so.** Eles apontam para o
+         *     mesmo `DeliveryAddress` e poderiam ser um unico nome, mas sao duas
+         *     superficies com dois donos (`user_id` numa, `pet_id` na outra) e dois
+         *     rumos: depois da decisao do cliente de **27/10/2026** (*"endereco um por
+         *     pet"*) a fonte do pedido da plaquinha e o PET, e o da conta so continua
+         *     existindo porque a decisao de **26/10/2026** e *"nao apague nada"*. Um
+         *     nome compartilhado faria a descricao de um valer como documentacao do
+         *     outro, e e exatamente a confusao entre os dois que esta frente desfez.
+         *
+         *     `null` nao e erro e nao e recurso ausente: e o estado normal de um pet
+         *     que ainda nao teve endereco guardado, e nele o formulario da plaquinha se
+         *     comporta como antes de qualquer endereco existir. **Pet AUSENTE e 404**,
+         *     e essa e a outra metade -- o `null` fala do endereco, o 404 fala do pet.
+         */
+        PetDeliveryAddress: components["schemas"]["DeliveryAddress"] | null;
+        /**
          * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
          *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
          *
@@ -17721,6 +17823,63 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPetDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco guardado neste pet, ou `null` quando ele nao tem nenhum. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetDeliveryAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPetDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryAddress"];
+            };
+        };
+        responses: {
+            /**
+             * @description O endereco como ficou guardado (ja normalizado: CEP sem mascara, UF
+             *     em maiuscula, bordas sem espaco).
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

@@ -239,13 +239,65 @@ void describe('o endereco do profissional NAO escorrega para outra superficie', 
       );
     }
 
-    // E O FECHO: cinco, e as cinco nomeadas acima. Uma sexta e superficie nova.
+    // 6, 7 e 8 -- O ENDERECO DO PET, que entrou em 27/10/2026.
+    //
+    // **A decisao dele, com as duas datas**: em 21/10/2026 ele escolheu *"um
+    // endereco de entrega salvo na CONTA, reusado em todo pedido e editavel num
+    // lugar so"* (as referencias 3, 4 e 5 acima). Em 27/10/2026 pediu *"o
+    // endereco de entrega da plaquinha tem que estar dentro do cadastro do
+    // pet"* e, com aquela frase posta na mesa, nomeada e datada, decidiu
+    // **"endereco um por pet"**. A de 21/10 caiu, e estas tres sao a fonte do
+    // formulario do pedido.
+    //
+    // As tres sao `PetDeliveryAddress` (o `oneOf` da resposta de
+    // `getPetDeliveryAddress`) e `putPetDeliveryAddress` (o corpo e a resposta
+    // `200`). **As duas operacoes tem `security: [bearerAuth]` sem alternativa
+    // vazia**, e a autorizacao mora num `JOIN` com `pets` comparando
+    // `owner_user_id` com o portador do token: **e o TUTOR lendo e escrevendo o
+    // endereco do pet dele.** Nenhuma superficie de terceiro apareceu, e
+    // nenhuma delas e lista -- o endereco NAO esta em `Pet`, que e a projecao
+    // de `listMyPets`, exatamente por isso.
+    const doPet = spec.components.schemas.PetDeliveryAddress;
+    assert.ok(doPet, '`PetDeliveryAddress` desapareceu do contrato');
+    assert.deepEqual(
+      Object.keys(doPet.properties ?? {}),
+      [],
+      '`PetDeliveryAddress` ganhou campo PROPRIO. Ele foi autorizado como alias ' +
+        'anulavel de `DeliveryAddress` e nada mais -- mesma leitura de ' +
+        '`MyDeliveryAddress`, acima: campo proprio aqui e uma segunda definicao ' +
+        'da residencia de um tutor, e a isca do conjunto fechado nao o pega ' +
+        'justamente porque as `properties` eram vazias.',
+    );
+
+    const rotaDoPet = spec.paths['/pets/{petId}/delivery-address'];
+    assert.ok(rotaDoPet, '`/pets/{petId}/delivery-address` desapareceu do contrato');
+    for (const verbo of ['get', 'put'] as const) {
+      const operacao: { operationId?: string; security?: unknown[] } | undefined =
+        rotaDoPet[verbo];
+      assert.ok(operacao, `\`/pets/{petId}/delivery-address\` perdeu o \`${verbo}\``);
+      assert.deepEqual(
+        operacao.security,
+        [{ bearerAuth: [] }],
+        `\`${operacao.operationId ?? verbo}\` deixou de exigir conta. O endereco de ` +
+          'casa de um tutor nao tem superficie publica, e uma alternativa vazia ' +
+          'em `security` e exatamente como ela nasceria.',
+      );
+    }
+
+    // E O FECHO: oito, e as oito nomeadas acima. Uma nona e superficie nova.
+    //
+    // **O numero subiu de 5 para 8 e a isca NAO afrouxou**, pelo mesmo
+    // raciocinio que a nota do alto deste caso ja registra: o que ela guarda nao
+    // e a contagem, e que nenhuma superficie NOVA alcance a residencia de um
+    // tutor sem ser NOMEADA. As tres novas estao nomeadas, com a decisao e a
+    // data.
     assert.equal(
       referencias.length,
-      5,
-      'apareceu uma referencia a `DeliveryAddress` que nao e nenhuma das cinco ' +
+      8,
+      'apareceu uma referencia a `DeliveryAddress` que nao e nenhuma das oito ' +
         'nomeadas neste caso (duas do pedido de plaquinha, uma do alias ' +
-        '`MyDeliveryAddress`, duas de `putMyDeliveryAddress`). Toda nova ' +
+        '`MyDeliveryAddress`, duas de `putMyDeliveryAddress`, uma do alias ' +
+        '`PetDeliveryAddress` e duas de `putPetDeliveryAddress`). Toda nova ' +
         'superficie para a residencia de um tutor e decisao do cliente: ' +
         'nomeie-a aqui, com o motivo, ou tire-a do contrato.',
     );

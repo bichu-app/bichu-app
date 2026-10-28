@@ -2774,6 +2774,43 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// o zsh aplica o modificador `:a` ao nome da variavel e devolve lixo COM
 /// SAIDA 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar
 /// `app/lib/telas` de novo recalcula, nunca escolhe um dos lados.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 75
+///
+/// BICHUS-303 parte 2, 27/10/2026: O ENDERECO DE ENTREGA PASSA A SER DO PET,
+/// por decisao do cliente -- *"o endereco de entrega da plaquinha tem que
+/// estar dentro do cadastro do pet"* e, com a decisao dele de 21/10/2026
+/// posta na mesa (*"um endereco de entrega salvo na conta, reusado em todo
+/// pedido e editavel num lugar so"*), *"endereco um por pet"*. SUBSTITUI
+/// 396c619d14 (os dois consertos de 23/10), que continua sendo a base deste
+/// trabalho. A CAMERA CONTINUA ATRAS DA PORTA: esta frente nao encosta em
+/// `escanear/tela_leitor_de_qr.dart` nem em `CameraEGaleria`, e nenhuma tela
+/// mudou por causa de camera -- o criterio 10 da BICHUS-161 segue intacto. OS
+/// QUATRO ARQUIVOS, e a conta de `git diff --name-only 90dfaee7..HEAD --
+/// app/lib/telas` tem exatamente estes quatro:
+/// `perfil/tela_endereco_de_entrega.dart` (mudou de ALVO -- o formulario e o
+/// mesmo, caractere por caractere, e passou a ler e escrever o endereco DO
+/// PET por `petId`, nunca mais `/me/delivery-address`),
+/// `perfil/tela_dados_pessoais.dart` (o item `Endereco de entrega` SAIU de
+/// `Meus dados`: um atalho para um endereco que nenhum pedido le e uma linha
+/// que mente) e `pet/tela_editar_pet.dart` (o item entrou AQUI, que e o
+/// `dentro do cadastro do pet` que ele pediu) e
+/// `pet/tela_solicitar_plaquinha.dart` (o formulario do pedido passou a ler o
+/// endereco DO PET, e trocar de pet troca a fonte). MEDIDO pelo procedimento
+/// deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A
+/// -- app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`), DEPOIS
+/// DA ULTIMA EDICAO em `app/lib/telas`, e por DOIS caminhos independentes que
+/// concordaram: o procedimento acima sobre a arvore de trabalho e `git rev-
+/// parse HEAD:app/lib/telas` sobre o commit `1ff70aa6`. Os dois deram
+/// f3c564e465. As CHAVES em "${T}:app/lib/telas" nao sao enfeite: sem elas o
+/// zsh aplica o modificador `:a` ao nome da variavel e devolve lixo COM SAIDA
+/// 0. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito -- arvore que perdeu
+/// arquivo ainda parece valida: `app/lib/telas` tem 89 arquivos na base
+/// (`90dfaee7`) e 89 aqui, e o `diff` entre a lista de `git ls-tree -r
+/// --name-only` da base e o `find` do disco e VAZIO. Nenhum arquivo entrou,
+/// saiu ou foi renomeado: os quatro arquivos mudam CONTEUDO. ESTE VALOR NAO
+/// SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula,
+/// nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

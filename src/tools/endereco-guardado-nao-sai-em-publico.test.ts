@@ -406,10 +406,34 @@ void describe('o endereço guardado não sai em superfície pública (contrato)'
         'fulfillAdminCollarTagRequest',
         // A fila do painel: a administração precisa do endereço para cumprir.
         'getAdminCollarTagRequest',
-        // O endereço guardado, as duas operações do DONO (21/10/2026).
+        // O endereço guardado NA CONTA, as duas operações do DONO (21/10/2026).
+        // **Superadas como fonte do pedido em 27/10/2026** e mantidas porque a
+        // decisão dele de 26/10/2026 é *"não apague nada"*.
         'getMyDeliveryAddress',
+        // O endereço do PET, as duas operações do TUTOR (27/10/2026).
+        //
+        // Ele pediu *"o endereço de entrega da plaquinha tem que estar dentro do
+        // cadastro do pet"* e, com a frase de 21/10 posta na mesa, nomeada e
+        // datada, decidiu **"endereço um por pet"** — então a de 21/10 caiu e
+        // estas duas são a fonte do formulário do pedido.
+        //
+        // **Elas não afrouxam nada deste arquivo**: `security` é
+        // `[bearerAuth]` sem alternativa vazia nas duas, a autorização mora num
+        // `JOIN` com `pets` comparando `owner_user_id` com o portador do token
+        // (404 e nunca 403, ADR-0021), e nenhuma delas aparece em lista — o
+        // endereço NÃO está em `Pet`, que é a projeção de `listMyPets`,
+        // exatamente por isso. O caso irmão
+        // `src/tools/endereco-do-pet-nao-sai-em-publico.test.ts` cobra as duas
+        // afirmações com isca.
+        'getPetDeliveryAddress',
+        // **A LISTA É `.sort()`ada**, e foi ela que reprovou a primeira versão
+        // deste acréscimo: os dois nomes novos estavam juntos, no fim do bloco
+        // comentado, e a ordem alfabética os separa — `getPetDeliveryAddress`
+        // vem antes de `listAdminCollarTagRequests` e `putPetDeliveryAddress`
+        // depois de `putMyDeliveryAddress`. O comentário acima fala dos dois.
         'listAdminCollarTagRequests',
         'putMyDeliveryAddress',
+        'putPetDeliveryAddress',
         // O CORPO do pedido. A resposta `CollarTagRequest` não traz endereço, e
         // está escrito no schema dela.
         'requestCollarTag',

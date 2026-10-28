@@ -129,6 +129,8 @@ import {
 import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import { registrarRotasDoEnderecoGuardado } from '../modules/tags/adapters/http/endereco-guardado-routes.js';
 import { KyselyEnderecoGuardado } from '../modules/tags/adapters/persistence/kysely-endereco-guardado.js';
+import { registrarRotasDoEnderecoDoPet } from '../modules/tags/adapters/http/endereco-do-pet-routes.js';
+import { criarEnderecoDoPetRepository } from '../modules/tags/adapters/persistence/kysely-endereco-do-pet.js';
 import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { criarFotoDaConversa } from '../modules/messaging/adapters/persistence/kysely-foto-da-conversa.js';
@@ -1491,6 +1493,25 @@ export async function main(): Promise<void> {
     // de mais ninguem.
     registrarRotasDoEnderecoGuardado(escopo, {
       enderecos: new KyselyEnderecoGuardado(db),
+      autenticador: dependenciasDasRotasDeTag.autenticador,
+      contrato,
+    });
+
+    // O ENDERECO DE ENTREGA DO PET (cliente, 27/10/2026: *"endereco um por
+    // pet"*), que **supera** a decisao de 21/10/2026 registrada acima. As duas
+    // ficam lado a lado de proposito: e o MESMO tipo de dominio, e quem ler uma
+    // sem a outra concluiria que ha duas fontes concorrentes para o endereco do
+    // pedido. **Nao ha: a fonte do pedido e o PET.**
+    //
+    // A de cima NAO foi apagada porque a decisao dele de 26/10/2026 e "nao
+    // apague nada", e porque foi daquela tabela que a `20261027000001` copiou o
+    // endereco para os pets de cada tutor.
+    //
+    // Mesmo autenticador do modulo -- as duas rotas sao do tutor e de mais
+    // ninguem, e a autorizacao mora no `WHERE` do repositorio (JOIN com `pets`,
+    // 404 e nunca 403).
+    registrarRotasDoEnderecoDoPet(escopo, {
+      enderecos: criarEnderecoDoPetRepository({ db }),
       autenticador: dependenciasDasRotasDeTag.autenticador,
       contrato,
     });

@@ -488,21 +488,44 @@ abstract final class Rotas {
   /// propria: ela cobre a barra de baixo, e o `escape` dela e [perfil].
   static const String dadosPessoais = '/perfil/dados';
 
-  /// `Meus dados` > `Endereço de entrega`: o endereço guardado na conta
-  /// (21/10/2026).
+  /// `Editar pet` > `Endereço de entrega`: o endereço de entrega **daquele
+  /// pet** (27/10/2026).
   ///
-  /// **Autorizado pelo cliente nestas palavras:** *"um endereço de entrega
-  /// salvo na conta, reusado em todo pedido e editável num lugar só."* Este
-  /// endereço é o "lugar só", e `TelaEnderecoDeEntrega` é o único caminho do
-  /// app que escreve `putMyDeliveryAddress`.
+  /// ## MUDOU DE LUGAR EM 27/10/2026, e a decisão anterior CAIU
   ///
-  /// **Endereço próprio, e não bloco de `Meus dados`** — a mesma razão de
-  /// [minhaVitrine]: é TELA, com `Scaffold`, barra de saída e ação fixa. E há
-  /// uma razão a mais, que é de leitura: `Meus dados` já edita a **região de
-  /// referência**, que tem CEP, bairro, cidade e UF e alimenta cálculo de
-  /// distância. Dois blocos "CEP / Bairro / Cidade / Estado" na mesma rolagem,
-  /// um deles sendo a residência da pessoa, é confusão garantida.
-  static const String enderecoDeEntrega = '/perfil/endereco-de-entrega';
+  /// Era `/perfil/endereco-de-entrega`, e o endereço era da CONTA — autorizado
+  /// pelo cliente em **21/10/2026** nestas palavras: *"um endereço de entrega
+  /// salvo na conta, reusado em todo pedido e editável num lugar só."*
+  ///
+  /// Em **27/10/2026** ele pediu *"o endereço de entrega da plaquinha tem que
+  /// estar dentro do cadastro do pet"* e, com a frase de 21/10 posta na mesa,
+  /// nomeada e datada, decidiu: *"endereço um por pet"*. **A de 21/10 caiu.**
+  ///
+  /// Então o caminho saiu de `Meus dados` e entrou no cadastro do pet, que é
+  /// literalmente onde ele pediu que o endereço estivesse. A tela é a MESMA
+  /// (`TelaEnderecoDeEntrega`): ela mudou de alvo, não de formulário — o
+  /// cabeçalho dela registra a decisão e o destino por extenso.
+  ///
+  /// **Nada foi apagado** (decisão dele de 26/10/2026, *"não apague nada"*): as
+  /// rotas `/v1/me/delivery-address` e o endereço que as pessoas já guardaram
+  /// continuam de pé, e foi dele que a migração `20261027000001` copiou para os
+  /// pets de cada tutor. O que a conta perdeu foi o papel — **nenhum pedido de
+  /// plaquinha lê de lá.**
+  ///
+  /// **Endereço próprio, e não bloco de `Editar pet`** — a mesma razão de
+  /// [minhaVitrine]: é TELA, com `Scaffold`, barra de saída e ação fixa, e o
+  /// `Salvar` dela é um ato sobre OUTRA rota. Um botão que dispara duas chamadas
+  /// tem quatro desfechos, e as duas misturas não têm onde ser contadas.
+  static const String enderecoDeEntrega = '/pets/:petId/endereco-de-entrega';
+
+  /// O caminho de [enderecoDeEntrega] com o pet dentro.
+  ///
+  /// **Uma função, e não concatenação na chamada.** `GoRouter` casa o padrão
+  /// `:petId`, e quem navega precisa do caminho RESOLVIDO: montar à mão em cada
+  /// tela é como um `push` sai com `:petId` literal e a tela abre pedindo o
+  /// endereço de um pet chamado `:petId` — 404 sem ninguém entender por quê.
+  static String enderecoDeEntregaDoPet(String petId) =>
+      '/pets/${Uri.encodeComponent(petId)}/endereco-de-entrega';
 
   /// `Perfil` > `Meus achados`: a lista dos avisos de achado desta conta.
   ///
@@ -1447,14 +1470,26 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       // `Meus dados` > `Endereco de entrega` (21/10/2026). Irma da de cima e
       // pelo mesmo motivo: cobre a barra de baixo e volta.
       //
-      // **Sem parametro no construtor**: a tela tira a `MeApi` e a
-      // `BuscaDeCep` do `Escopo`, como as vizinhas. Ela e alcancada por
-      // `ItemDeMenu` dentro de `Meus dados` -- e e a UNICA assim desde
-      // 26/10/2026: `Minhas fotos`, que era a outra, subiu para o primeiro
-      // nivel do menu do `Perfil` por decisao do cliente daquele dia.
+      // **O `petId` vem do CAMINHO, e nao do `extra`** (cliente, 27/10/2026:
+      // *"endereco um por pet"*). `extra` nao sobrevive a um link nem a uma
+      // reabertura de processo: a tela abriria sem pet e, para ter o que
+      // mostrar, voltaria a precisar de um alvo de reserva -- que seria o
+      // endereco da CONTA, exatamente o modelo que esta decisao derrubou.
+      //
+      // A `BuscaDeCep` e a `PetsApi` continuam vindo do `Escopo`, como nas
+      // vizinhas. Ela e alcancada por `ItemDeMenu` dentro de `Editar pet`.
+      //
+      // NOTA PRESERVADA DO OUTRO LADO DA UNIAO (26/10/2026): `Minhas fotos`,
+      // que era a outra tela de dois niveis dentro do `Perfil`, subiu para o
+      // primeiro nivel do menu por decisao do cliente daquele dia. O lado que
+      // dizia isto descrevia a rota ANTIGA (`/perfil/endereco-de-entrega`,
+      // endereco da CONTA), que a decisao de 27/10 derrubou -- o fato sobre
+      // `Minhas fotos` continua valendo, o endereco dela e que mudou.
       GoRoute(
         path: Rotas.enderecoDeEntrega,
-        builder: (context, estado) => const TelaEnderecoDeEntrega(),
+        builder: (context, estado) => TelaEnderecoDeEntrega(
+          petId: estado.pathParameters['petId'] ?? '',
+        ),
       ),
       // `Perfil` > `Meus achados`. Irma da de cima e pelo mesmo motivo: ela
       // cobre a barra de baixo e volta para `Perfil`.
