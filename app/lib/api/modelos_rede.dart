@@ -883,6 +883,33 @@ abstract class ConteudoDoEncontro {
   /// O texto alternativo da capa: o da imagem de posicao 0.
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
+
+  /// AS URLS QUE O VISUALIZADOR AMPLIA, na ordem da galeria e **numa fonte so**.
+  ///
+  /// O cliente, 26/10/2026: *"as fotos dos eventos, quando tem mais do que uma
+  /// nao esta trocando, nao tem a seta que eu pedi para avancar e retroceder"*.
+  /// **O que faltava nao era o carrossel nem o dado** -- `NetworkEventImages`
+  /// traz ate OITO desde sempre, o servidor as agrega por encontro
+  /// (`kysely-network-repository.ts`, as chaves `k`/`t`/`b`/`a`) e [imagens] ja
+  /// as lia. Faltava o app ABRIR o visualizador com a lista: a capa chamava
+  /// `VisualizadorDeImagem.abrir` (UMA), e a faixa de miniaturas nao tinha alvo
+  /// de toque nenhum. Com uma so o visualizador esconde seta e contador de
+  /// proposito, entao a capa nunca mostrava seta -- nem quando havia oito
+  /// fotos.
+  ///
+  /// **A derivada e a GRANDE, e nao a da faixa.** [ImagemDoEncontro.urlParaGaleria]
+  /// serve a miniatura de 144 dp; ampliada ela seria 480 px esticados numa tela
+  /// que amplia ate 4x. Aqui vai `url` (1024 x 576), e na posicao 0 vai
+  /// [urlDoBannerDaCapa] (1280 x 720) quando ela existe: e a derivada mais nitida
+  /// da mesma imagem, e e a que a capa de borda a borda ja desenha.
+  ///
+  /// **Lista e nao conjunto, e a ORDEM e o indice**: quem toca na miniatura `i`
+  /// abre o visualizador em `inicial: i`, e isso so fecha porque esta lista tem
+  /// exatamente um elemento por item de [imagens], na mesma ordem.
+  List<String> get urlsParaAmpliar => <String>[
+        for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
+          if (i == 0) urlDoBannerDaCapa ?? imagem.url else imagem.url,
+      ];
 }
 
 /// Os campos de conteudo, lidos do mesmo jeito nas duas formas.
@@ -1030,6 +1057,16 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
   @override
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
+
+  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`. Repetido aqui porque estas
+  /// classes **implementam** o contrato em vez de estende-lo, e por isso cada
+  /// membro concreto dele precisa de corpo nas duas -- a mesma razao de
+  /// [textoAlternativoDaCapa] e de `dia` logo acima.
+  @override
+  List<String> get urlsParaAmpliar => <String>[
+        for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
+          if (i == 0) urlDoBannerDaCapa ?? imagem.url else imagem.url,
+      ];
 
   static EncontroPublico doJson(Map<String, dynamic> json) {
     final slug = json['slug'];
@@ -1222,6 +1259,16 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   @override
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
+
+  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`. Repetido aqui porque estas
+  /// classes **implementam** o contrato em vez de estende-lo, e por isso cada
+  /// membro concreto dele precisa de corpo nas duas -- a mesma razao de
+  /// [textoAlternativoDaCapa] e de `dia` logo acima.
+  @override
+  List<String> get urlsParaAmpliar => <String>[
+        for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
+          if (i == 0) urlDoBannerDaCapa ?? imagem.url else imagem.url,
+      ];
 
   static DetalhesDoPrivado doJson(Map<String, dynamic> json) {
     final slug = json['slug'];

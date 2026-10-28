@@ -21,10 +21,12 @@ import 'dart:convert';
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/conexoes_api.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -490,4 +492,185 @@ void main() {
         findsOneWidget);
     expect(tester.takeException(), isA<TypeError>());
   });
+  // -------------------------------------------------------------------------
+  // O BOTAO DE ADICIONAR (pedido do cliente de 22/10/2026)
+  // -------------------------------------------------------------------------
+  // Palavras dele: *"uma pagina com a listagem dos usuarios **e um botao para
+  // adicionar**"*. A listagem saiu em 22/10; **o botao nao**, e uma varredura
+  // de 26/10 por cinco caminhos mediu a ausencia: nem por linha, nem na tela.
+  //
+  // **A POSICAO foi escolha minha**, e por isso ela e MEDIDA e nao suposta: os
+  // casos abaixo cobram que o botao fique ACIMA da primeira linha da lista, e o
+  // comentario de `_acaoDeBuscar` guarda a razao (o pe da lista fica atras de
+  // ate sete toques em `Ver mais`, porque `GET /connections` pagina de 20 em 20
+  // com teto de 150).
+  //
+  // **E ele e UM, nunca um por linha**: o comentario de `_BotaoDeCancelar` em
+  // `telas/perfil/meus_eventos.dart` registra que botao por linha *"transforma
+  // a lista num campo minado"*, e o caso da contagem e o que impede isso de
+  // voltar.
+  //
+  // **O que estes casos NAO medem:** quantas superficies PEDEM conexao. Este
+  // botao so navega, e a contagem de portas e de
+  // `telas/onde_se_adiciona_pessoa_test.dart`, que tem um caso proprio para a
+  // fronteira.
+  group('o botão de adicionar', () {
+    testWidgets('a lista tem UM botão `Buscar usuários`, e ele fica ACIMA das linhas',
+        (tester) async {
+      await _montar(tester, primeiraPagina: <Map<String, dynamic>>[
+        _pessoa(apelido: 'ana-do-bairro', nome: 'Ana'),
+        _pessoa(apelido: 'bruno-da-vila', nome: 'Bruno'),
+        _pessoa(apelido: 'carla-do-parque', nome: 'Carla'),
+      ]);
+
+      final botao = find.text('Buscar usuários');
+
+      // 1. **UM, com TRES linhas na tela.** Esta e a metade que impede o botao
+      //    por linha de voltar: com um controle por linha haveria tres.
+      expect(
+        botao,
+        findsOneWidget,
+        reason: 'REPROVA: a tela tem ${tester.widgetList(botao).length} botões '
+            '`Buscar usuários` com três linhas. Ele é UM — botão por linha '
+            'transforma a lista num campo minado.',
+      );
+
+      // 2. **ACIMA da primeira linha**, e medido em pixel e nao por ordem de
+      //    declaracao: quem le o `build` ve a ordem da lista, mas e a geometria
+      //    que a pessoa toca.
+      final alturaDoBotao = tester.getTopLeft(botao).dy;
+      final alturaDaPrimeiraLinha = tester.getTopLeft(find.text('Ana')).dy;
+      expect(
+        alturaDoBotao,
+        lessThan(alturaDaPrimeiraLinha),
+        reason: 'REPROVA: o botão `Buscar usuários` está em $alturaDoBotao e a '
+            'primeira linha em $alturaDaPrimeiraLinha — ele desceu para o pé '
+            'do corpo. Com teto de 150 conexões paginadas de 20 em 20, o pé '
+            'fica atrás de até sete toques em `Ver mais`, e um botão de '
+            'adicionar que exige sete toques é o mesmo que ausente.',
+      );
+
+      // 3. CONTROLE POSITIVO DA GEOMETRIA: a terceira linha fica abaixo da
+      //    primeira. Sem ele, um `getTopLeft` que devolvesse zero para tudo
+      //    deixaria o caso 2 verde por empate.
+      expect(
+        tester.getTopLeft(find.text('Carla')).dy,
+        greaterThan(alturaDaPrimeiraLinha),
+        reason: 'REPROVA: as linhas não estão empilhadas na tela. A medida de '
+            'posição do caso acima não vale.',
+      );
+    });
+
+    testWidgets('no vazio o botão aparece, e DEPOIS da frase que o explica',
+        (tester) async {
+      await _montar(tester);
+
+      final botao = find.text('Buscar usuários');
+      expect(
+        botao,
+        findsOneWidget,
+        reason: 'REPROVA: o estado vazio não oferece a porta de adicionar. É '
+            'a única tela em que o passo seguinte é óbvio.',
+      );
+      // **DEPOIS da frase, e nao antes:** por a saida acima do *"você ainda
+      // não tem conexões"* poria a solução antes do problema.
+      expect(
+        tester.getTopLeft(botao).dy,
+        greaterThan(tester.getTopLeft(find.text('Você ainda não tem conexões')).dy),
+        reason: 'REPROVA: no vazio o botão ficou ACIMA da frase que o explica.',
+      );
+    });
+
+    /// **SEM CONTA ELE NAO NASCE**, e a ausencia e a unica correta: o corpo
+    /// inteiro vira o convite, e mandar quem nao tem conta para a busca de
+    /// pessoas seria oferecer uma tela que vai pedir login por cima do convite
+    /// que resolve o problema dela. A mesma fronteira de `meus_pets.dart`.
+    testWidgets('sem conta o botão NÃO nasce', (tester) async {
+      await _montar(tester, semConta: true);
+      tester.takeException();
+      expect(find.text('Buscar usuários'), findsNothing);
+    });
+
+    /// O DESTINO, medido de verdade: um roteador com dois ramos, e o toque tem
+    /// de pousar no da busca de pessoas **com a aba certa**. Um caso que so
+    /// conferisse o rotulo deixaria um botao mudo passar.
+    testWidgets('o toque leva à aba `Usuários` da Comunidade', (tester) async {
+      await _montarComRoteador(tester, primeiraPagina: <Map<String, dynamic>>[
+        _pessoa(apelido: 'ana-do-bairro', nome: 'Ana'),
+      ]);
+
+      // CONTROLE POSITIVO: o destino NAO esta na tela antes do toque.
+      expect(find.text('CHEGUEI NA REDE'), findsNothing);
+
+      await tester.tap(find.text('Buscar usuários'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('CHEGUEI NA REDE'),
+        findsOneWidget,
+        reason: 'REPROVA: o botão não levou a `Rotas.rede`.',
+      );
+      expect(
+        _abaPedida,
+        'usuarios',
+        reason: 'REPROVA: o botão chegou na `Rede` na aba "$_abaPedida". A aba '
+            '`Usuários` é a que tem a busca e o pedido de conexão; qualquer '
+            'outra deixa a pessoa a mais um toque do que ela pediu.',
+      );
+    });
+  });
+}
+
+/// A aba que a rota `/rede` recebeu no ultimo toque medido.
+String? _abaPedida;
+
+/// A mesma bancada de [_montar], **com roteador**: e o que permite medir para
+/// onde o botao leva, e nao so que ele existe.
+///
+/// Dois ramos e nada mais: `Rotas.minhasConexoes` com a tela de verdade, e
+/// `Rotas.rede` com um sentinela. Montar a casca inteira traria a barra, as
+/// cinco secoes e o `Escopo` -- e o que se mede aqui e UM toque.
+Future<void> _montarComRoteador(
+  WidgetTester tester, {
+  List<Map<String, dynamic>> primeiraPagina = const <Map<String, dynamic>>[],
+}) async {
+  _abaPedida = null;
+  chamadas.clear();
+  caminhos.clear();
+  AppConfig.limparParaTeste();
+  final cliente = MockClient((http.Request pedido) async {
+    final caminho = pedido.url.path;
+    chamadas.add('${pedido.method} $caminho?${pedido.url.query}');
+    caminhos.add(caminho);
+    if (caminho.endsWith('/connections/summary')) return _json(_resumo());
+    if (caminho.endsWith('/connections')) {
+      return _json(_pagina(primeiraPagina, total: primeiraPagina.length));
+    }
+    return _json(<String, dynamic>{}, status: 404);
+  });
+  final api = ApiClient(
+    config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
+    cliente: cliente,
+    tokenDeAcesso: () async => 'token-de-teste',
+  );
+  final roteador = GoRouter(
+    initialLocation: Rotas.minhasConexoes,
+    routes: <RouteBase>[
+      GoRoute(
+        path: Rotas.minhasConexoes,
+        builder: (_, _) => TelaDeMinhasConexoes(conexoes: ConexoesApi(api)),
+      ),
+      GoRoute(
+        path: Rotas.rede,
+        builder: (_, GoRouterState estado) {
+          _abaPedida = estado.uri.queryParameters[Rotas.parametroDaAbaDaRede];
+          return const Scaffold(body: Center(child: Text('CHEGUEI NA REDE')));
+        },
+      ),
+    ],
+  );
+  await tester.pumpWidget(
+    MaterialApp.router(theme: BichuTheme.claro, routerConfig: roteador),
+  );
+  await tester.pumpAndSettle();
 }

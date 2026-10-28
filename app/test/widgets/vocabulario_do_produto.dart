@@ -830,6 +830,25 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 /// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Valor de ramo
 /// isolado nao sobrevive a uniao, e esta frente nao e a unica tocando
 /// `app/lib` nesta rodada.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 73
+///
+/// **27/10/2026: 2706 -> 2710, e os QUATRO sao referencia de TOKEN.**
+///
+/// O botao de adicionar em `Minhas conexoes` e a galeria do evento abrindo com
+/// seta acrescentaram quatro usos de token de desenho, e **nenhum literal novo
+/// com a marca**: `+2` em `telas/conexoes/tela_minhas_conexoes.dart`
+/// (`BichuEspaco.e4`, duas vezes) e `+2` em `telas/rede/encontro_da_rede.dart`
+/// (`BichuRaio.md`, duas vezes, no alvo de toque da miniatura).
+///
+/// **MEDIDO pelos dois lados, e o controle positivo vem primeiro:** o mesmo
+/// metodo aplicado a `app/lib` de `90dfaee7` reproduziu EXATAMENTE 2706, o
+/// valor que esta linha travava; sobre a arvore deste trabalho ele da 2710. O
+/// numero de arquivos `.dart` em `app/lib` nao mudou (218 nos dois), entao o
+/// delta nao e arquivo que entrou -- e as quatro linhas nomeadas acima.
+///
+/// A armadilha que este numero vigia continua intacta: `Bichu` segue sendo a
+/// marca em todos os 2710 lugares, e nenhum deles e texto de usuario novo.
 const int ocorrenciasDeBichu = 2759; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS: RECONTADO sobre a arvore MESCLADA, nao e nenhum dos lados (2752/2746/2745), conferido POR FORMA -- zero formas sairam, zero cairam -- e a prosa de cada entrega esta preservada acima. ANTERIOR: 2742.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.

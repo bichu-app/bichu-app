@@ -110,6 +110,31 @@ class TelaDeMinhasConexoes extends StatefulWidget {
       'Não conseguimos carregar as suas conexões agora.';
   static const String verMais = 'Ver mais';
 
+  /// **O BOTAO DE ADICIONAR, pedido dele em 22/10/2026**, literal: *"uma pagina
+  /// com a listagem dos usuarios **e um botao para adicionar**"*. A listagem
+  /// saiu naquele dia; o botao nao, e isto fecha a segunda metade do pedido.
+  ///
+  /// ## O ROTULO DIZ O VERBO, e nao "adicionar"
+  ///
+  /// `abas.dart` escreve a regra com todas as letras no botao de escanear a
+  /// plaquinha (*"O ROTULO DIZ O VERBO, e nao 'adicionar'"*), e ela decide aqui:
+  /// este toque **nao adiciona ninguem** -- ele leva a aba onde se procura a
+  /// pessoa, e o pedido de conexao parte de la ou do perfil dela. Um botao
+  /// escrito `Adicionar` prometeria uma acao que a tela de destino ainda vai
+  /// pedir, e o app nao escreve `Adicionar` para pessoa em lugar nenhum: as
+  /// duas superficies que pedem conexao escrevem `Pedir conexao`.
+  ///
+  /// **E a palavra e a que o app ja usa para este mesmo destino**:
+  /// `CorpoDoMural.buscarPessoas` manda `Buscar usuarios` para
+  /// `Rotas.redeNaBuscaDePessoas` desde o vazio do Mural. Duas palavras para a
+  /// mesma porta seriam duas coisas no produto.
+  ///
+  /// Texto proprio e nao a constante do Mural, pela mesma razao de
+  /// [rotuloDoPerfilDe]: um literal compartilhado acoplaria as duas telas por
+  /// uma string, e o dia em que o Mural quiser outra frase nao e o dia em que
+  /// esta tela quer.
+  static const String buscarUsuarios = 'Buscar usuários';
+
   /// O lado do círculo da foto. **O mesmo 56 dp do cartão da busca**, e o mesmo
   /// por uma razão: as duas listas mostram a mesma pessoa com a mesma foto, e
   /// dois tamanhos fariam o rosto mudar de lugar entre uma tela e a outra.
@@ -299,21 +324,33 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
               FaixaDeAviso(texto: _falha as String),
             ],
             const SizedBox(height: BichuEspaco.e4),
-            if (_carregando)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(BichuEspaco.e8),
-                  child: CircularProgressIndicator(),
-                ),
-              )
             // Com falha o vazio NAO e anunciado: "ainda nao tem conexoes" e
             // "nao consegui perguntar" sao afirmacoes diferentes, e a primeira
             // seria mentira em cima da segunda.
-            else if (_pessoas.isEmpty && _falha == null)
+            //
+            // **A PORTA DE ADICIONAR esta nos dois ramos, e por isso o `if`
+            // envolve a lista inteira agora.** No vazio ela e a acao do proprio
+            // estado vazio, junto da frase que a explica; nas outras fases ela
+            // e a primeira linha do corpo. Um metodo so a constroi
+            // (`_acaoDeBuscar`), como `_acaoDeCadastrar` em `meus_pets.dart`:
+            // duas construcoes a mao divergiriam no dia em que alguem mexesse
+            // numa delas, e a tela ficaria com dois textos para a mesma porta.
+            if (_pessoas.isEmpty && !_carregando && _falha == null)
               _estadoVazio(cores, textos)
             else ...<Widget>[
-              ..._pessoas.map((PessoaConectada pessoa) => _linha(cores, textos, pessoa)),
-              if (_temMais) _botaoDeVerMais(),
+              _acaoDeBuscar(),
+              const SizedBox(height: BichuEspaco.e4),
+              if (_carregando)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(BichuEspaco.e8),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else ...<Widget>[
+                ..._pessoas.map((PessoaConectada pessoa) => _linha(cores, textos, pessoa)),
+                if (_temMais) _botaoDeVerMais(),
+              ],
             ],
           ],
         ),
@@ -355,8 +392,69 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
             style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
             textAlign: TextAlign.center,
           ),
+          // **A ACAO FICA COM A FRASE QUE A EXPLICA.** Nas outras fases ela e a
+          // primeira linha do corpo; aqui o estado vazio E o corpo, e por o
+          // botao acima do *"voce ainda nao tem conexoes"* poria a saida antes
+          // do problema. E a mesma forma de `EstadoVazio.acao`, usada pelo
+          // vazio do Mural e pelo de `Meus pets`.
+          const SizedBox(height: BichuEspaco.e4),
+          _acaoDeBuscar(),
         ],
       ),
+    );
+  }
+
+  /// `Buscar usuários` -- **a porta de adicionar desta tela**, construida num
+  /// lugar so.
+  ///
+  /// ## A POSICAO E ESCOLHA MINHA, e esta e a razao
+  ///
+  /// Ele pediu *"um botao para adicionar"* e nao disse onde. **Topo do corpo,
+  /// logo abaixo da linha de numeros.** Tres coisas decidiram, e a segunda e
+  /// medida:
+  ///
+  /// 1. **O padrao da casa para "lista + acao de acrescentar" e UM
+  ///    `BotaoPrimario` construido num metodo so**, presente em toda fase menos
+  ///    a de falta de conta: e o que `telas/perfil/meus_pets.dart` faz com
+  ///    `_acaoDeCadastrar`, e a FORMA aqui e copia dele -- um metodo, um
+  ///    `BotaoPrimario`, fora apenas do ramo de [ConviteParaEntrar].
+  /// 2. **A POSICAO diverge de `Meus pets`, e diverge por MEDIDA.** La a acao
+  ///    fica no PE do corpo, e pode: `GET /pets` tem teto de 20 numa conta, a
+  ///    tela nao pagina e nao ha `Ver mais` -- o pe esta sempre a uma rolagem.
+  ///    Aqui `GET /connections` pagina de 20 em 20 com teto de 150, e o pe da
+  ///    lista fica atras de ate SETE toques em `Ver mais`. Um botao de
+  ///    adicionar que exige sete toques para ser alcancado e o mesmo que
+  ///    ausente -- que e exatamente a reclamacao que este commit fecha.
+  /// 3. **O topo do corpo e o slot que esta casa reserva ao controle que opera
+  ///    a listagem** (busca, filtro e ordenacao, nunca na barra). O cabecalho
+  ///    desta classe registra que os TRES nao existem aqui porque o contrato
+  ///    nao os tem: o slot esta vago, e este controle responde a mesma pergunta
+  ///    que eles responderiam -- *"como eu chego na pessoa que estou
+  ///    procurando?"*.
+  ///
+  /// **E NAO POR LINHA.** O comentario de `_BotaoDeCancelar` em
+  /// `telas/perfil/meus_eventos.dart` registra que botao em cada linha
+  /// *"transforma a lista num campo minado"*, e o cabecalho desta classe ja
+  /// recusou `Desfazer` por linha pela mesma razao. Uma lista de 150 linhas que
+  /// se rola com o polegar nao ganha um controle por linha.
+  ///
+  /// ## ELE NAO ABRE ARESTA, e por isso nao e uma TERCEIRA porta de conexao
+  ///
+  /// Este toque so NAVEGA: nao chama `pedirPorApelido` nem `pedir`, e por isso
+  /// `test/telas/onde_se_adiciona_pessoa_test.dart` continua contando DUAS
+  /// portas -- a aba `Usuarios` e o perfil de pessoa, que sao as que ramificam
+  /// pelos quatro estados da relacao. Um campo de apelido aqui seria uma
+  /// SEGUNDA busca de pessoas sem os freios da primeira, e o cabecalho desta
+  /// classe ja o recusou com essas palavras.
+  ///
+  /// `go` e nao `push`, como no vazio do Mural: o destino e uma SECAO da casca,
+  /// e trocar de secao e trocar de ramo. `push` deixaria `Conexoes` embaixo e a
+  /// barra de baixo acesa no slot errado.
+  BotaoPrimario _acaoDeBuscar() {
+    return BotaoPrimario(
+      rotulo: TelaDeMinhasConexoes.buscarUsuarios,
+      icone: Icons.person_search_outlined,
+      aoTocar: () => context.go(Rotas.redeNaBuscaDePessoas),
     );
   }
 

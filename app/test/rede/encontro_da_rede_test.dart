@@ -749,6 +749,200 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  // A GALERIA DO EVENTO AVANCA E RETROCEDE (cliente, 26/10/2026)
+  // -------------------------------------------------------------------------
+  // Palavras dele: *"as fotos dos eventos, quando tem mais do que uma nao esta
+  // trocando, nao tem a seta que eu pedi para avancar e retroceder"*.
+  //
+  // **O QUE FALTAVA NAO ERA O CARROSSEL E NAO ERA O DADO, e os dois foram
+  // MEDIDOS antes de uma linha ser escrita:**
+  //
+  // | peca | estado em 90dfaee7 |
+  // |---|---|
+  // | `NetworkEventImages` no contrato | **existe**, ate 8, a primeira e a capa |
+  // | o servidor agregando a lista | **existe** (`kysely-network-repository.ts`) |
+  // | `ImagemDoEncontro.daLista` no app | **existe**, ja lia `images` |
+  // | a faixa `Fotos` do detalhe | **existe**, com `> 1` imagem |
+  // | setas e contador no ampliado | **existem** desde 22/10 |
+  // | **tocar numa foto da faixa** | **NAO EXISTIA** -- `Image.network` solta |
+  // | **a capa abrindo a LISTA** | **NAO** -- `abrir` montava `<String>[url]` |
+  //
+  // Com UMA url o visualizador esconde seta e contador **de proposito** (ver o
+  // cabecalho de `VisualizadorDeImagem.urls`), entao a capa de um encontro com
+  // oito fotos abria sem seta nenhuma. O defeito era de ABERTURA.
+  //
+  // **A ISCA DESTE GRUPO E O CASO DE UMA FOTO SO**, e ela vem por ultimo de
+  // proposito: ela afirma que as setas aparecem por causa do NUMERO de fotos, e
+  // nao porque elas sempre estiveram la. Sem ela, os casos de cima passariam com
+  // um visualizador que desenha seta mesmo com uma imagem -- que e o oposto do
+  // desenho e o que o cliente nao pediu.
+  group('a galeria do evento avança e retrocede', () {
+    /// Tres fotos. **A capa e a posicao 0**, e `cover_banner_url` e a derivada
+    /// de 1280 px dela: a mesma forma do grupo acima.
+    Map<String, dynamic> comTresFotos() => encontroPublico(
+          images: <Map<String, dynamic>>[
+            imagem('https://midia.exemplo.invalid/f1.jpeg', 'Cães na praça'),
+            imagem('https://midia.exemplo.invalid/f2.jpeg', 'A sombra da árvore'),
+            imagem('https://midia.exemplo.invalid/f3.jpeg', 'O bebedouro'),
+          ],
+          coverBannerUrl: 'https://midia.exemplo.invalid/f1-1280.jpeg',
+        );
+
+    testWidgets('a capa abre a galeria INTEIRA, com seta e contador', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: comTresFotos()),
+      );
+
+      expect(find.byType(VisualizadorDeImagem), findsNothing);
+      await tester.tap(find.byType(ImagemDoEncontroOuBanner));
+      await tester.pumpAndSettle();
+
+      // 1. O CONTADOR DIZ TRES. Ele e a prova de que a lista inteira chegou:
+      //    com a capa sozinha o visualizador nao desenharia contador nenhum.
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 0, total: 3)),
+        findsOneWidget,
+        reason: 'REPROVA: a capa abriu o ampliado sem o contador de 3 fotos. '
+            'Ela está chamando `abrir` (UMA imagem) e não `abrirVarias` com '
+            '`urlsParaAmpliar`.',
+      );
+
+      // 2. AS DUAS SETAS EXISTEM, com nome. E e isto que ele pediu com essas
+      //    palavras: *"a seta que eu pedi para avancar e retroceder"*.
+      expect(
+        find.byTooltip(VisualizadorDeImagem.rotuloDeProxima),
+        findsOneWidget,
+        reason: 'REPROVA: a galeria do evento abriu sem a seta de avançar.',
+      );
+      expect(
+        find.byTooltip(VisualizadorDeImagem.rotuloDeAnterior),
+        findsOneWidget,
+        reason: 'REPROVA: a galeria do evento abriu sem a seta de retroceder.',
+      );
+
+      // 3. **ELA TROCA**, que e a outra metade da reclamacao (*"nao esta
+      //    trocando"*). Tocar em avancar move o contador, e tocar em retroceder
+      //    o devolve -- o segundo toque importa porque uma seta que so avanca
+      //    deixaria a pessoa presa na ultima foto.
+      await tester.tap(find.byTooltip(VisualizadorDeImagem.rotuloDeProxima));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 1, total: 3)),
+        findsOneWidget,
+        reason: 'REPROVA: a seta de avançar não trocou a foto.',
+      );
+      await tester.tap(find.byTooltip(VisualizadorDeImagem.rotuloDeAnterior));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 0, total: 3)),
+        findsOneWidget,
+        reason: 'REPROVA: a seta de retroceder não voltou a foto.',
+      );
+    });
+
+    testWidgets('a miniatura da faixa abre NA FOTO tocada', (tester) async {
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(encontro: comTresFotos()),
+      );
+
+      // A faixa fica depois de `Sobre o evento` e dos `Links`: ela precisa de
+      // rolagem, e sem este passo o toque cairia fora da tela.
+      final terceira = find.bySemanticsLabel('O bebedouro');
+      await rolarAte(tester, terceira);
+
+      // CONTROLE POSITIVO DA FAIXA: as tres miniaturas estao na arvore com o
+      // `alt_text` de cada uma. Sem ele o caso abaixo poderia ficar verde por
+      // tocar na capa.
+      expect(
+        find.bySemanticsLabel('A sombra da árvore'),
+        findsOneWidget,
+        reason: 'REPROVA: a faixa `Fotos` não publicou o nome da segunda foto. '
+            'O toque medido abaixo não é o da miniatura.',
+      );
+
+      await tester.tap(terceira);
+      await tester.pumpAndSettle();
+
+      // **`3 de 3` e nao `1 de 3`**: e o `inicial: i` da miniatura. Um
+      // `abrirVarias` sem indice abriria na capa, e a pessoa que tocou na
+      // terceira foto veria a primeira -- o defeito que o acordo de ordem
+      // entre `imagens` e `urlsParaAmpliar` existe para impedir.
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 2, total: 3)),
+        findsOneWidget,
+        reason: 'REPROVA: tocar na TERCEIRA miniatura não abriu a terceira '
+            'foto. O `inicial` da chamada não está acompanhando o índice.',
+      );
+    });
+
+    testWidgets('ISCA: com UMA foto não nasce seta nenhuma', (tester) async {
+      // A isca do grupo. Ver a prosa acima: ela afirma que a seta vem do
+      // NUMERO de fotos.
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(
+          encontro: encontroPublico(
+            images: <Map<String, dynamic>>[
+              imagem('https://midia.exemplo.invalid/unica.jpeg', 'Cães na praça'),
+            ],
+            coverBannerUrl: 'https://midia.exemplo.invalid/unica-1280.jpeg',
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(ImagemDoEncontroOuBanner));
+      await tester.pumpAndSettle();
+
+      // O ampliado ABRIU -- este caso nao mede a ausencia da tela.
+      expect(find.byType(VisualizadorDeImagem), findsOneWidget);
+      expect(
+        find.byTooltip(VisualizadorDeImagem.rotuloDeProxima),
+        findsNothing,
+        reason: 'a isca passou: com UMA foto o visualizador desenhou seta. '
+            'Então os casos acima não provam que a seta veio da lista — e o '
+            'caminho preguiçoso (`abrirVarias` com lista de um) passaria por '
+            'eles.',
+      );
+      expect(
+        find.text(VisualizadorDeImagem.contador(atual: 0, total: 1)),
+        findsNothing,
+        reason: 'a isca passou: com UMA foto o visualizador desenhou contador.',
+      );
+    });
+
+    testWidgets('a faixa `Fotos` NÃO aparece com uma foto só', (tester) async {
+      // A fronteira: a faixa repetiria a capa, e uma secao `Fotos` com a MESMA
+      // imagem que esta acima dela e moldura vazia com outro nome.
+      await abrirEncontro(
+        tester,
+        logado: false,
+        titulo: tituloPublico,
+        rede: redeDoEncontro(
+          encontro: encontroPublico(
+            images: <Map<String, dynamic>>[
+              imagem('https://midia.exemplo.invalid/unica.jpeg', 'Cães na praça'),
+            ],
+          ),
+        ),
+      );
+      expect(
+        find.text('Fotos'),
+        findsNothing,
+        reason: 'REPROVA: a seção `Fotos` nasceu com uma imagem só, repetindo '
+            'a capa.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // A LINHA DA ORIGEM NAO MENTE (20/10/2026)
   // -------------------------------------------------------------------------
   // Ate aqui a ficha escrevia *"Cadastrado pela equipe do Bichu"*
