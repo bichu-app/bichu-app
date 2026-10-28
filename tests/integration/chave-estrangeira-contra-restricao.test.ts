@@ -877,6 +877,24 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'entao nao atravessa pessoas.',
   },
 
+  'public.pet_delivery_addresses.pet_delivery_addresses_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o endereco de entrega guardado DO PET -- a residencia do tutor. Autorizado pelo ' +
+      'cliente em 27/10/2026 ("endereco um por pet"), decisao que SUPERA a de 21/10/2026 ' +
+      '("um endereco de entrega salvo na conta"), cuja chave esta logo acima e nao foi ' +
+      'apagada (decisao dele de 26/10/2026, "nao apague nada"). ' +
+      'ESTA CLAUSULA CUMPRE A FRASE DELE DE 17/10/2026 POR INTEIRO, e e a primeira que o ' +
+      'faz: "voce so deve apagar as informacoes, caso o usuario remova o pet ou delete a ' +
+      'conta". Remover o PET cai aqui; apagar a CONTA cai aqui em cadeia, porque ' +
+      '`pets.owner_user_id` ja cascateia de `users`. No modelo da conta, "remova o pet" ' +
+      'nao apagava endereco nenhum. ' +
+      'Nao ha prazo, nao ha expiracao e nao ha varredura. Uma linha por pet (`pet_id` e a ' +
+      'chave primaria), entao nao atravessa pets nem pessoas.',
+  },
+
   // -------------------------------------------------------------------------
   // a indicacao do diretorio e a fila dela (`20261017000004`, `20261017000016`)
   // -------------------------------------------------------------------------
@@ -1286,6 +1304,36 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     colunas: ['publication_id'],
     referencia: 'public.user_publications',
     aoApagar: 'SET NULL',
+  },
+  // -------------------------------------------------------------------------
+  // credencial digital / passkey (BICHUS-301, migracao 20261027000020)
+  // -------------------------------------------------------------------------
+  // As duas sao CASCADE, e a decisao nao e de gosto: a credencial e a conta.
+  // `SET NULL` seria pior aqui do que no resto do banco -- `passkey_credentials`
+  // nao tem `CHECK` que torne `user_id` obrigatoria, entao o nulo ENTRARIA, e o
+  // resultado seria uma chave publica WebAuthn valida sem dono: ninguem para
+  // revogar, e ela continuaria verificando assercao. `NO ACTION` impediria a
+  // exclusao da conta, que e direito da pessoa.
+  //
+  // CASCADE tambem e o que o resto do esquema faz com o que pertence a conta
+  // (42 das 58 referencias a `users (id)`), e `expurgar-contas-excluidas` ja
+  // conta com isso. Revogar passkey MARCA revogada e nunca apaga (decisao do
+  // cliente de 26/10); o que apaga aqui e o EXPURGO da conta, que e outro ato.
+  'public.passkey_credentials.passkey_credentials_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as credenciais digitais da propria pessoa, com a chave publica de cada uma. Sao dela, ' +
+      'e sem a conta nao ha o que autenticar.',
+  },
+  'public.passkey_challenges.passkey_challenges_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os desafios de CADASTRO em aberto da propria pessoa. Os de ENTRADA tem `user_id` nulo ' +
+      'de proposito e nao sao alcancados por esta cascata -- eles vencem em cinco minutos.',
   },
 };
 

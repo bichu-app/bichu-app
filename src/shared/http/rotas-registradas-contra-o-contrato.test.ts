@@ -34,6 +34,9 @@ import { _decisaoDeStatus } from './validacao-de-parametros.js';
 import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
 
 import * as identidade from '../../modules/identity/adapters/http/routes.js';
+// BICHUS-301. A credencial digital (passkey), em modulo proprio: as seis
+// operacoes sao uma frente inteira, e `routes.js` ja tem mil linhas.
+import * as passkey from '../../modules/identity/adapters/http/passkey-routes.js';
 import * as localizacao from '../../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
 import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
 import * as referencia from '../../modules/pets/adapters/http/reference-data-routes.js';
@@ -70,6 +73,7 @@ import * as mural from '../../modules/publications/adapters/http/publicacao-rout
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import * as enderecoGuardado from '../../modules/tags/adapters/http/endereco-guardado-routes.js';
+import * as enderecoDoPet from '../../modules/tags/adapters/http/endereco-do-pet-routes.js';
 // 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
@@ -84,6 +88,9 @@ const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
 const MODULOS: readonly Record<string, unknown>[] = [
   identidade,
+  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem cobra:
+  // sem esta linha ele reprova contando `defineRoute` no disco.
+  passkey,
   localizacao,
   pets,
   referencia,
@@ -173,6 +180,12 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
   enderecoGuardado,
+  // O ENDERECO DE ENTREGA DO PET (cliente, 27/10/2026: *"endereco um por
+  // pet"*), que SUPERA a decisao de 21/10/2026 que criou o modulo de cima. As
+  // duas ficam na lista: o endereco da conta nao foi apagado (decisao dele de
+  // 26/10/2026, *"nao apague nada"*), ele perdeu o papel -- nenhum pedido de
+  // plaquinha le de la.
+  enderecoDoPet,
   moderacaoAdministrativa,
   // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
   // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele

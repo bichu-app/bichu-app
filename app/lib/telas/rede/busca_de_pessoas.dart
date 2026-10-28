@@ -142,15 +142,40 @@ import 'cartao_de_pessoa_encontrada.dart';
 /// é a **inicial**, que é o recurso que a emenda 3 já manda usar com quem não é
 /// conexão.
 ///
-/// ## O ESTADO DA RELAÇÃO NÃO VEM NA BUSCA, e isso decide o cartão
+/// ## O ESTADO DA RELAÇÃO VEM NA BUSCA DESDE 22/10/2026, e este bloco dizia o
+/// contrário
 ///
-/// `PersonSearchResult` **não traz `connection_state`**, de propósito: *"numa
-/// lista, vinte estados por requisição são o material de que uma lista de
-/// conexões se faz do lado de fora"*. Então o cartão nasce em `nenhum` e
-/// **aprende o estado verdadeiro da resposta da própria ação** — o pedido é
-/// idempotente e devolve a aresta que já existia, com o `state` dela. Quem já
-/// era conexão, ou já havia pedido primeiro, descobre no 201 e não num palpite
-/// da tela.
+/// **ESTA SEÇÃO MENTIA, e a mentira custou caro**: em 26/10/2026 ela foi lida
+/// como a causa do defeito que o cliente cobrou pela segunda vez, e o diagnóstico
+/// saiu errado por causa dela.
+///
+/// O texto antigo dizia que `PersonSearchResult` **não traz**
+/// `connection_state`, *"de propósito"*, citando *"numa lista, vinte estados por
+/// requisição são o material de que uma lista de conexões se faz do lado de
+/// fora"* — e concluía que o cartão nascia em `nenhum` e aprendia o estado
+/// verdadeiro só da resposta da própria ação.
+///
+/// **Nada disso é verdade desde 22/10/2026.** O cliente autorizou a lista das
+/// próprias conexões (`listMyConnections`), e com ela o argumento caiu para o
+/// próprio dono: ele já obtém o conjunto das suas conexões por uma rota
+/// legítima, então devolvê-lo recortado nos resultados da busca **dele** não
+/// entrega nada novo. A seção `connection_state` no RESULTADO DA BUSCA
+/// (22/10/2026) da emenda 2 do ADR-0010 registra a decisão, e o contrato
+/// declara o campo **obrigatório** em `PersonSearchResult`, com quatro valores
+/// (`none`, `pending_sent`, `pending_received`, `connected`).
+///
+/// **É sempre o par com quem busca — nunca a relação entre duas outras
+/// pessoas**, e é essa distinção que separa isto da lista de conexões de
+/// terceiro, que continua não existindo.
+///
+/// Então o cartão **nasce no estado que o servidor mandou**
+/// ([PessoaEncontrada.estadoDaConexao]) e segue aprendendo da resposta da
+/// própria ação, que continua idempotente. Ver `CartaoDePessoaEncontrada`: há um
+/// cartão por estado, e `connected` não oferece pedir.
+///
+/// **E a identidade do cartão na lista é o apelido** — ver a `key` em
+/// [_EstadoDaBuscaDePessoas], e o comentário lá diz por que sem ela o defeito
+/// voltava na SEGUNDA busca mesmo com o estado certo chegando do servidor.
 class BuscaDePessoas extends StatefulWidget {
   const BuscaDePessoas({
     required this.pessoas,
@@ -715,6 +740,32 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
           const SizedBox(height: BichuEspaco.e4),
           for (final pessoa in _itens) ...<Widget>[
             CartaoDePessoaEncontrada(
+              // **A CHAVE É O APELIDO, e ela é o conserto do defeito que o
+              // cliente cobrou de novo em 26/10/2026** — *"você não resolveu o
+              // botão de pedir conexão, quando o usuário já é uma conexão"*.
+              //
+              // O conserto de 22/10 (`6b124f62`) está inteiro e continua certo:
+              // `connection_state` vem do servidor, o modelo o lê e
+              // `CartaoDePessoaEncontrada` desenha um cartão por estado. **O que
+              // sobrou era de IDENTIDADE DE ELEMENTO, e não de estado.**
+              //
+              // `_estado` daquele cartão é semeado UMA vez
+              // (`late ... = widget.pessoa.estadoDaConexao`) e não há
+              // `didUpdateWidget` que o semeie de novo. Sem chave, o Flutter
+              // casa os filhos desta lista **por posição**: a segunda busca
+              // reaproveita o `State` do cartão que estava naquele índice e
+              // mantém o `_estado` da pessoa ANTERIOR. Quem buscou um estranho
+              // e depois buscou uma conexão aceita via, na segunda lista,
+              // `Pedir conexão` ao lado de quem já era conexão — o relato
+              // literal dele, sobrevivendo ao conserto do estado.
+              //
+              // Com a chave, pessoa diferente no mesmo índice ganha `State`
+              // NOVO (semeado do estado certo) e a MESMA pessoa conserva o seu
+              // — que é o que preserva o estado aprendido da resposta da ação
+              // quando a lista cresce por paginação. **Um `didUpdateWidget` que
+              // re-semeasse do `widget.pessoa` faria o contrário**: apagaria o
+              // estado aprendido no 201 e o botão voltaria depois do toque.
+              key: ValueKey<String>(pessoa.handle),
               pessoa: pessoa,
               pedidosQueAindaCabem: _pedidosQueAindaCabem,
               aoPedir: () => _pedir(pessoa),

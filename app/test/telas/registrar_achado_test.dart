@@ -132,8 +132,8 @@ Future<void> preencherOMinimo(
   // `rolarAte` antes de cada toque: o `ListView` so constroi o que cabe na
   // tela, e F3.5 e um formulario longo de proposito. Um `tap` num widget que
   // ainda nao existe reprova por um motivo que nao e o do caso.
-  await rolarAte(tester, find.text('Cão'));
-  await tocar(tester, find.text('Cão'));
+  await rolarAte(tester, find.text('Cachorro'));
+  await tocar(tester, find.text('Cachorro'));
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
   // **O formulario tem dois passos desde 17/10/2026** (pedido do cliente). O
@@ -672,8 +672,8 @@ void main() {
       localizacao: localizacaoConcedida(),
     );
     await irPara(tester, Rotas.registrarAchado);
-    await rolarAte(tester, find.text('Cão'));
-    await tocar(tester, find.text('Cão'));
+    await rolarAte(tester, find.text('Cachorro'));
+    await tocar(tester, find.text('Cachorro'));
     await rolarAte(tester, find.text('Médio'));
     await tocar(tester, find.text('Médio'));
     await avancarParaOPasso2(tester);
@@ -724,8 +724,8 @@ void main() {
         localizacao: localizacaoConcedida(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);
@@ -754,8 +754,8 @@ void main() {
         localizacao: localizacaoConcedida(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);

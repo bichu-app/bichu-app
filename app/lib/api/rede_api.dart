@@ -138,16 +138,21 @@ class RedeApi {
       if (terminaEm != null) 'ends_at': terminaEm.toUtc().toIso8601String(),
       if (observacoes != null && observacoes.isNotEmpty)
         'notes': observacoes,
-      // Os DOIS, ou nenhum: `CommunityNetworkEventCoverInput` declara
-      // `required: [upload_id, alt_text]`. Mandar so o `upload_id` e um `400`
-      // depois de a pessoa ter escolhido a foto e esperado o envio.
-      if (capaUploadId != null &&
-          capaUploadId.isNotEmpty &&
-          textoAlternativoDaCapa != null &&
-          textoAlternativoDaCapa.isNotEmpty)
+      // **O `upload_id` BASTA desde 27/10/2026.** Ate ali eram os dois ou
+      // nenhum, porque `CommunityNetworkEventCoverInput` declarava
+      // `required: [upload_id, alt_text]` e mandar so o `upload_id` era `400`.
+      // O contrato tirou `alt_text` do `required` (pedido do cliente de
+      // 26/10/2026) e a tela perdeu o campo, entao **exigir os dois aqui
+      // engoliria a capa em silencio**: a pessoa escolheria a foto, esperaria
+      // o envio e o evento nasceria sem capa nenhuma.
+      if (capaUploadId != null && capaUploadId.isNotEmpty)
         'cover_image': <String, dynamic>{
           'upload_id': capaUploadId,
-          'alt_text': textoAlternativoDaCapa,
+          // Opcional, e nenhuma tela o preenche hoje. `alt_text` vazio e `400`
+          // (`minLength: 2`), entao vazio NAO vai.
+          if (textoAlternativoDaCapa != null &&
+              textoAlternativoDaCapa.isNotEmpty)
+            'alt_text': textoAlternativoDaCapa,
         },
     };
   }

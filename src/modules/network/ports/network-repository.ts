@@ -23,7 +23,7 @@
  * (`publication_status IN ('published', 'cancelled')`), e ele mora na clausula
  * `WHERE` de cada consulta, nunca num `if` de quem chama (ADR-0021).
  */
-import type { EncontroDaRede, PontoDoEncontro } from '../domain/encontro-da-rede.js';
+import type { EncontroDaRede, PontoDoEncontro, StatusDoEncontro } from '../domain/encontro-da-rede.js';
 import type {
   MudancaDoEncontroDaComunidade,
   NovoEncontroDaComunidade,
@@ -59,6 +59,15 @@ export interface RecorteDaAgenda {
   readonly visibility?: 'public' | 'private' | undefined;
   /** Porte aceito. Exclui o privado, pelo mesmo motivo de `admission`. */
   readonly size?: string | undefined;
+  /**
+   * A SITUACAO CALCULADA (`NetworkEventStatus`), nunca a coluna de publicacao.
+   *
+   * **Ausente nao recorta, e o default e a ausencia**: o cancelado continua na
+   * lista como esta hoje. Por um default aqui tiraria da agenda de quem ja usa o
+   * app o encontro cancelado que ela precisa ver para saber que nao vai
+   * acontecer. Quem separa sem esconder e a ordem, nao este campo.
+   */
+  readonly status?: StatusDoEncontro | undefined;
   readonly when: RecorteNoTempo;
   readonly sort: OrdemDaAgenda;
   /**
@@ -86,7 +95,15 @@ export interface LocalDoEncontro {
 }
 
 /** A agenda por distancia (`listNearbyNetworkEvents`). So encontros publicos. */
-export interface RecorteDaAgendaPorDistancia extends Omit<RecorteDaAgenda, 'sort' | 'visibility'> {
+/**
+ * `status` SAI deste recorte junto de `sort` e `visibility`, e a omissao e a
+ * parte que importa: `listNearbyNetworkEvents` **nao declara o parametro** no
+ * contrato, e `listarPorDistancia` nao o aplicaria. Herdado, ele seria um campo
+ * que quem chama preenche e o servidor ignora em silencio -- o recorte sumiria
+ * sem ninguem ser avisado. Fora do tipo, passa-lo nao compila.
+ */
+export interface RecorteDaAgendaPorDistancia
+  extends Omit<RecorteDaAgenda, 'sort' | 'visibility' | 'status'> {
   readonly chamador: string;
   /**
    * **De qual APARELHO de quem chama** sai a regiao de referencia. SEC-021: a
@@ -199,15 +216,23 @@ export interface MeuEncontro extends ItemDosMeusEncontros {
 }
 
 /**
- * O recorte de `listMyNetworkEvents`: so a conta e a pagina.
+ * O recorte de `listMyNetworkEvents`: a conta, a pagina e UM filtro.
  *
- * **Nao ha busca, filtro nem ordem escolhivel**, e a ausencia e decisao: o teto
- * e de tres encontros ativos por conta, entao a lista e curta por construcao. A
- * ordem e fixa no repositorio -- o que ainda nao terminou primeiro --, e `agora`
- * existe exatamente para ela, e para o rotulo `status` concordar com a ordem.
+ * **Nao ha busca nem ordem escolhivel**, e a ausencia continua sendo decisao: o
+ * teto e de tres encontros ativos por conta, entao a lista e curta por
+ * construcao. O unico recorte e `status`, de 27/10/2026, e a TELA NAO O OFERECE
+ * -- `Meus eventos` nao tem folha de filtro. Ele existe porque a ordem deixou
+ * de misturar o cancelado, e quem consome o contrato precisa poder pedir um
+ * grupo so.
+ *
+ * A ordem e fixa no repositorio (`meusEncontrosOrdenados`, tres grupos desde
+ * 27/10/2026), e `agora` existe exatamente para ela, e para o rotulo `status`
+ * concordar com a ordem.
  */
 export interface RecorteDosMeusEncontros {
   readonly chamador: string;
+  /** O MESMO campo da agenda, pelo mesmo calculo. Ausente nao recorta. */
+  readonly status?: StatusDoEncontro | undefined;
   readonly agora: Instant;
   readonly page: number;
   readonly limit: number;
@@ -289,7 +314,10 @@ export interface TransacaoDaComunidade {
     readonly agora: Instant;
   }): Promise<string | undefined>;
   /** A capa na posicao 0. `null` tira a capa. */
-  definirCapa(eventoId: string, capa: { readonly imagemId: string; readonly altText: string } | null): Promise<void>;
+  definirCapa(
+    eventoId: string,
+    capa: { readonly imagemId: string; readonly altText: string | null } | null,
+  ): Promise<void>;
 }
 
 export interface NetworkRepository {

@@ -104,8 +104,8 @@ void main() {
     // A especie primeiro: o seletor de raca nasce DESABILITADO, porque a lista
     // e por especie. Sem este toque o `InkWell` do seletor nao tem acao, a
     // folha nao abre e a opcao nao existe para ser achada.
-    await rolarAte(tester, find.text('Cão'));
-    await tocar(tester, find.text('Cão'));
+    await rolarAte(tester, find.text('Cachorro'));
+    await tocar(tester, find.text('Cachorro'));
     await escolherRaca(tester, 'Vira-lata (SRD)');
     expect(
       tester.widget<SeletorDeLista>(find.byType(SeletorDeLista).first).selecionado,
@@ -120,7 +120,7 @@ void main() {
     testWidgets('o campo livre NAO existe antes de a opcao de saida ser '
         'escolhida', (tester) async {
       await abrirF13(tester);
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
 
       expect(
         find.text('${TextosDoCadastro.rotuloDaRacaLivre} (opcional)'),
@@ -141,7 +141,7 @@ void main() {
 
     testWidgets('escolher Outra faz o campo livre aparecer', (tester) async {
       await abrirF13(tester);
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await escolherRaca(tester, TextosDoCadastro.opcaoOutraRaca);
 
       expect(
@@ -180,7 +180,7 @@ void main() {
     testWidgets('trocar Outra por uma raca da lista apaga o texto livre',
         (tester) async {
       await abrirF13(tester);
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await escolherRaca(tester, TextosDoCadastro.opcaoOutraRaca);
 
       await tester.ensureVisible(find.byType(TextField).last);
@@ -204,7 +204,7 @@ void main() {
     testWidgets('o contador do campo livre mostra o teto de 40 do contrato',
         (tester) async {
       await abrirF13(tester);
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await escolherRaca(tester, TextosDoCadastro.opcaoOutraRaca);
 
       expect(
@@ -258,7 +258,7 @@ void main() {
     );
     // A espécie primeiro: a lista de raças é POR espécie, e sem ela não existe
     // `outro_<espécie>` para escolher.
-    await tocar(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cachorro'));
 
     await rolarAte(tester, find.text(TextosDoCadastro.digitarARaca));
     await tester.tap(find.text(TextosDoCadastro.digitarARaca));
@@ -299,7 +299,7 @@ void main() {
     );
     // A espécie primeiro: a lista de raças é POR espécie, e sem ela não existe
     // `outro_<espécie>` para escolher.
-    await tocar(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cachorro'));
 
     await rolarAte(tester, find.text(TextosDoCadastro.digitarARaca));
     await tester.tap(find.text(TextosDoCadastro.digitarARaca));
@@ -359,7 +359,7 @@ void main() {
       (tester) async {
     await abrirF13(tester);
     await tester.enterText(find.byType(TextField).first, 'Nina');
-    await tocar(tester, find.text('Cão'));
+    await tocar(tester, find.text('Cachorro'));
     await tocar(tester, find.text('Médio'));
     await tocar(
       tester,
@@ -461,7 +461,7 @@ void main() {
       await irPara(tester, Rotas.cadastrarPet, extra: rascunho);
 
       await tester.enterText(find.byType(TextField).first, 'Nina');
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await tocar(tester, find.text('Fêmea'));
@@ -524,7 +524,7 @@ void main() {
       // "limpeza" depois desta correcao.
       await abrirF13(tester);
       await tester.enterText(find.byType(TextField).first, 'Nina');
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await tocar(
         tester,
         find.widgetWithText(BotaoPrimario, TextosDoCadastro.continuar),
@@ -553,7 +553,7 @@ void main() {
       // mas "nao briga" dito numa frase evapora. Fica como caso.
       await abrirF13(tester);
       await tester.enterText(find.byType(TextField).first, 'Nina');
-      await tocar(tester, find.text('Cão'));
+      await tocar(tester, find.text('Cachorro'));
       await escolherRaca(tester, TextosDoCadastro.opcaoOutraRaca);
 
       await tester.ensureVisible(find.byType(TextField).last);

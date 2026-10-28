@@ -51,6 +51,7 @@ import 'package:bichu/intencao/intencao_pendente.dart';
 import 'package:bichu/intencao/leitura_como_intencao.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/sessao/controlador_de_sessao.dart';
+import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:bichu/telas/rede/encontro_da_rede.dart';
 import 'package:bichu/widgets/botao_primario.dart';
@@ -88,6 +89,58 @@ http.Response _semConta() => problema(
       401,
       extra: const <String, dynamic>{'next_action': 'sign_in'},
     );
+
+/// A resposta de `PublicDirectoryEntryPage` (`listPublicDirectoryEntries`).
+///
+/// **`phone_e164` e `distance_m` NAO APARECEM, e a ausencia e o contrato.**
+/// Nao estao aqui como `null`: estao FORA do objeto, porque o schema publico
+/// nao os declara. A diferenca importa para o que estes casos medem -- um
+/// duble que os mandasse nulos deixaria passar uma tela que os le, e um que os
+/// mandasse preenchidos mediria uma resposta que o servidor nao pode produzir:
+/// `portao-contrato-publico.ts` proibe os dois por NOME EXATO em operacao
+/// alcancavel sem conta.
+///
+/// `site_url` e `about` tambem ficam fora, pelas razoes escritas em
+/// `PublicDirectoryEntrySummary`.
+Map<String, dynamic> _paginaPublicaDoDiretorio() => <String, dynamic>{
+      'items': <Map<String, dynamic>>[
+        _entradaPublica(),
+        _entradaPublica(
+          slug: 'banho-do-tobias',
+          kind: 'groomer',
+          displayName: 'Banho do Tobias',
+          neighborhood: 'Vila Madalena',
+        ),
+      ],
+      'page': 1,
+      'limit': 20,
+      'total': 2,
+      // Sempre falso nesta operacao: sem conta nao existe localizacao de
+      // referencia de onde medir, entao a lista saiu por NOME.
+      'distance_available': false,
+      'applied_filters': <String, String>{'scope': 'all'},
+    };
+
+Map<String, dynamic> _entradaPublica({
+  String slug = 'clinica-santa-barbara',
+  String kind = 'clinic',
+  String displayName = 'Clínica Santa Bárbara',
+  String neighborhood = 'Pinheiros',
+}) =>
+    <String, dynamic>{
+      'slug': slug,
+      'kind': kind,
+      'kinds': <String>[kind],
+      'entity_kind': 'organization',
+      'display_name': displayName,
+      'city': 'São Paulo',
+      'state': 'SP',
+      'neighborhood': neighborhood,
+      'verification': const <String, dynamic>{
+        'level': 'document_verified',
+        'evidence_kinds': <String>['cnpj', 'crmv'],
+      },
+    };
 
 /// Um 500 **sem `next_action`**: servidor fora de verdade.
 ///
@@ -928,17 +981,27 @@ void main() {
       );
     });
 
-    testWidgets('(d-contrapeso) a aba Comunidade, que exige conta DE VERDADE, '
-        'continua com o convite de tela cheia', (tester) async {
-      // **Sem este caso os quatro de cima sao vacuos.** Eles provariam apenas
-      // que `ConviteParaEntrar` nao existe mais em lugar nenhum do app. Aqui a
-      // MESMA busca tem de achar -- e e o lugar certo dela: o diretorio
-      // responde 401 `sign_in`, o muro e do SERVIDOR, e e a LISTA inteira que
-      // nao pode ser lida.
+    // -----------------------------------------------------------------------
+    // (d5) A `Comunidade` ENTROU NESTE GRUPO em 27/10/2026.
+    //
+    // Pedido do cliente de 26/10: a aba lista para quem esta deslogado, e pede
+    // conta no toque da pagina interna. A lista passou a ser atendida por
+    // `listPublicDirectoryEntries` (`GET /v1/public/directory-entries`), que
+    // responde 200 sem conta.
+    //
+    // **A resposta deste duble NAO tem `phone_e164` nem `distance_m`**, e a
+    // ausencia e o ponto: `portao-contrato-publico.ts` proibe os dois por nome
+    // exato em operacao alcancavel sem conta -- medido, afrouxar o `security`
+    // de `listDirectoryEntries` da dois achados nominais. Um duble que os
+    // mandasse estaria medindo uma resposta que o servidor nao pode produzir.
+    // -----------------------------------------------------------------------
+    testWidgets('(d5) a aba Comunidade LISTA sem conta, e o cartão não tem '
+        'nem telefone nem distância', (tester) async {
       await abrirOApp(
         tester,
         rede: _rede(<String, http.Response Function(http.Request)>{
-          'GET /v1/directory/entries': (_) => _semConta(),
+          'GET /v1/public/directory-entries': (_) =>
+              json200(_paginaPublicaDoDiretorio()),
         }),
       );
       await abrirAComunidade(tester);
@@ -949,8 +1012,184 @@ void main() {
         motivo: MotivoSemConta.nuncaEntrou,
       );
 
+      // (1) A LISTA APARECEU. A ancora positiva deste caso: sem ela, tudo
+      // abaixo mediria uma tela em branco e ficaria verde.
+      expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
+      expect(find.text('Clínica Santa Bárbara'), findsOneWidget);
+      expect(find.text('Banho do Tobias'), findsOneWidget);
+
+      // (2) E NAO HA MURO NA LISTA. E a regressao que este grupo existe para
+      // pegar: trocar a lista por um convite esconderia o conteudo que o
+      // servidor entrega sem conta.
+      expect(
+        find.byType(ConviteParaEntrar),
+        findsNothing,
+        reason: 'REPROVA: ha muro na lista da Comunidade. '
+            '`/v1/public/directory-entries` responde 200 sem conta.',
+      );
+      expect(
+        find.byType(FaixaDeAviso),
+        findsNothing,
+        reason: 'REPROVA: a lista deslogada desenhou faixa de erro. Sem conta '
+            'nao e erro, e aqui nao houve nem 401.',
+      );
+
+      // (3) **O CARTAO DESLOGADO NAO TEM `Ligar`**, e isto e a decisao de
+      // produto desta frente, nao um efeito colateral. Publicar telefone na
+      // lista publica exigiria tornar telefone comercial um dado publico e
+      // abrir excecao nominal no portao; entao o cartao nasce sem o botao, e
+      // entrar e o que o acrescenta.
+      expect(
+        find.text(CartaoDoDiretorio.rotuloDeLigar),
+        findsNothing,
+        reason: 'REPROVA: o cartao deslogado tem botao de ligar. A resposta '
+            'publica nao traz `phone_e164`, entao um botao aqui so pode ter '
+            'vindo de telefone inventado pela tela.',
+      );
+      // E nenhuma linha de distancia, pelo mesmo motivo: a rota publica nao
+      // tem de onde medir, e `distance_available` vem falso.
+      expect(find.textContaining('a 700 m'), findsNothing);
+      expect(find.textContaining(' km'), findsNothing);
+    });
+
+    testWidgets('(d5b) o toque no cartão pede conta, e NÃO abre a página do '
+        'local', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _rede(<String, http.Response Function(http.Request)>{
+          'GET /v1/public/directory-entries': (_) =>
+              json200(_paginaPublicaDoDiretorio()),
+        }),
+      );
+      await abrirAComunidade(tester);
+
+      expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
+      final rotaAntes = _rotaAgora(tester);
+
+      // **NO BLOCO DO CARTAO, e nao num botao**: o cliente pediu o aviso no
+      // toque do CONTEUDO. `ensureVisible` antes do toque pela mesma razao de
+      // `perto_com_dados_test.dart` -- a barra de abas empurra o cartao para a
+      // dobra na janela de teste, e um `tap` seco reprovaria por posicao.
+      final alvo = find
+          .descendant(
+            of: find.widgetWithText(CartaoDoDiretorio, 'Clínica Santa Bárbara'),
+            matching: find.byType(InkWell),
+          )
+          .first;
+      await tester.ensureVisible(alvo);
+      await tester.pumpAndSettle();
+      await tester.tap(alvo);
+      await tester.pumpAndSettle();
+
+      // (1) A INFORMACAO APARECEU, e e a da PAGINA DO LOCAL -- nao a da lista.
+      // O `secao` errado aqui daria o texto do diretorio ("Quem atende bem,
+      // perto de voce"), que e o convite da LISTA e nao o do item.
       expect(find.byType(ConviteParaEntrar), findsOneWidget);
-      expect(find.text('Quem atende bem, perto de você'), findsOneWidget);
+      expect(
+        find.text('Esta página é de quem atende perto de você'),
+        findsOneWidget,
+        reason: 'REPROVA: o toque abriu o convite da LISTA e nao o da pagina '
+            'do local.',
+      );
+
+      // (2) E E A FOLHA, nao o corpo trocado. `emFolha` e lido do widget: a
+      // mesma busca acharia o convite de tela cheia, e os dois sao desenhos
+      // diferentes para muros em lugares diferentes.
+      final convite =
+          tester.widget<ConviteParaEntrar>(find.byType(ConviteParaEntrar));
+      expect(
+        convite.emFolha,
+        isTrue,
+        reason: 'REPROVA: o toque trocou o corpo pelo convite de tela cheia. '
+            'O muro e do ITEM, porque a LISTA deixou de ter muro.',
+      );
+
+      // (3) E A VOLTA E A PROPRIA PAGINA DO LOCAL, e nao `/pets`. Sem isto a
+      // pessoa entra e cai noutro lugar -- o defeito que a guarda de acao
+      // existe para evitar.
+      expect(
+        convite.rotaDeVolta,
+        '/rede/locais/clinica-santa-barbara',
+        reason: 'REPROVA: depois de entrar a pessoa nao volta para a pagina '
+            'que ela tocou.',
+      );
+
+      // (4) E A PAGINA NAO ABRIU. Medido na ROTA e no CONTEUDO: a lista
+      // continua atras da folha.
+      expect(
+        _rotaAgora(tester),
+        rotaAntes,
+        reason: 'REPROVA: o toque navegou. Deslogado ele tem de informar, '
+            'nao levar.',
+      );
+      expect(find.byType(CartaoDoDiretorio), findsNWidgets(2));
+    });
+
+    // -----------------------------------------------------------------------
+    // O CONTRAPESO DESTE GRUPO, **REESCRITO EM 27/10/2026**.
+    //
+    // ## O que ele media antes, e por que o veredito mudou
+    //
+    // Ate 27/10 este caso era a aba `Comunidade`, com este titulo: *"(d-con-
+    // trapeso) a aba Comunidade, que exige conta DE VERDADE, continua com o
+    // convite de tela cheia"*. Ele chamava `GET /v1/directory/entries`,
+    // recebia 401 `sign_in` e exigia `ConviteParaEntrar` na tela. **Estava
+    // certo**: o diretorio exigia conta na LISTAGEM inteira, porque a resposta
+    // dela traz `phone_e164` e `distance_m` e o portao proibe os dois em
+    // operacao alcancavel sem conta.
+    //
+    // O veredito mudou porque **o produto mudou de lado**, e nao porque a
+    // medicao estava errada. O cliente pediu, em 26/10, que a `Comunidade`
+    // listasse deslogada; a lista ganhou operacao publica propria, com
+    // projecao sem aqueles dois campos, e o muro desceu da LISTA para o ITEM.
+    // Os casos (d5) e (d5b) acima sao o novo veredito da mesma aba.
+    //
+    // ## Por que o contrapeso NAO foi apagado, e por que ele e o `Mural`
+    //
+    // **Sem contrapeso os cinco casos de cima ficam vacuos.** Eles provariam
+    // apenas que `ConviteParaEntrar` nao existe mais em lugar nenhum do app --
+    // um `return const SizedBox()` no lugar do widget deixaria todos verdes.
+    // Alguem tem de ACHAR o convite de tela cheia com a MESMA busca.
+    //
+    // O `Mural` e o lugar certo dele agora, pelo criterio que nao mudou: o
+    // muro e da LISTA inteira. `getMyTimeline` declara `bearerAuth` sem
+    // alternativa vazia e nao ha versao publica da linha do tempo -- uma
+    // timeline sem conta nao e uma projecao mais magra, e um conjunto vazio,
+    // porque ela SO devolve publicacao de quem chama ou de conexao `accepted`
+    // dele. Nao ha o que listar sem conta, e e por isso que este contrapeso
+    // nao vai migrar como o da `Comunidade` migrou.
+    // -----------------------------------------------------------------------
+    testWidgets('(d-contrapeso) o Mural, que exige conta DE VERDADE, continua '
+        'com o convite de tela cheia', (tester) async {
+      await abrirOApp(
+        tester,
+        rede: _rede(<String, http.Response Function(http.Request)>{
+          'GET /v1/timeline': (_) => _semConta(),
+        }),
+      );
+      await abrirAAba(tester, 'Mural');
+
+      exigirEstadoDeSessao(
+        tester,
+        estado: EstadoDaSessao.deslogado,
+        motivo: MotivoSemConta.nuncaEntrou,
+      );
+
+      // A MESMA busca dos `findsNothing` de cima tem de achar aqui.
+      expect(find.byType(ConviteParaEntrar), findsOneWidget);
+      expect(find.text('O Mural é das suas conexões'), findsOneWidget);
+
+      // E E O DE TELA CHEIA, e nao a folha: aqui o muro e da lista inteira.
+      // Sem esta linha o contrapeso ficaria verde com a folha, que e o desenho
+      // do outro caso.
+      final convite =
+          tester.widget<ConviteParaEntrar>(find.byType(ConviteParaEntrar));
+      expect(
+        convite.emFolha,
+        isFalse,
+        reason: 'REPROVA: o Mural passou a pedir conta em folha. O muro dele e '
+            'da LISTA inteira, e nao de um item dela.',
+      );
     });
   });
 
@@ -1076,10 +1315,21 @@ void main() {
         'endereço de volta, cai em /pets', (tester) async {
       // **Sem este caso o (e1) seria vacuo.** Ele passaria no dia em que o
       // login passasse a nunca sair do lugar -- e nao e disso que a volta
-      // depende. Aqui o convite e o da aba `Comunidade`, que **nao** passa
-      // `rotaDeVolta` (o muro e da lista, e voltar para uma lista que continua
-      // recusando nao seria voltar a nada), e o destino e a secao de
-      // aterrissagem, como era antes desta frente.
+      // depende. Aqui o convite e um que **nao** passa `rotaDeVolta` (o muro e
+      // da lista, e voltar para uma lista que continua recusando nao seria
+      // voltar a nada), e o destino e a secao de aterrissagem.
+      //
+      // **ERA A ABA `Comunidade`, e passou a ser o `Mural` em 27/10/2026.**
+      // Nao por gosto: a `Comunidade` deixou de ter muro na lista (ela agora
+      // chama `listPublicDirectoryEntries`, 200 sem conta), entao ela nao tem
+      // mais convite de tela cheia para servir de ponto de partida -- e, pior
+      // para este caso, o convite que ela passou a mostrar no TOQUE leva
+      // `rotaDeVolta`, que e exatamente a condicao que este contrapeso precisa
+      // NAO ter.
+      //
+      // O `Mural` serve pelo mesmo criterio de antes: `getMyTimeline` exige
+      // conta, o muro e da LISTA inteira e o convite dele nao recebe endereco
+      // de volta.
       final envelope = await abrirOApp(
         tester,
         rede: (req) async {
@@ -1087,7 +1337,7 @@ void main() {
           if (chave == 'POST /v1/auth/login') {
             return json200(_sessaoDoContrato());
           }
-          if (chave == 'GET /v1/directory/entries') return _semConta();
+          if (chave == 'GET /v1/timeline') return _semConta();
           if (chave == 'GET /v1/public/reference-data') {
             return json200(referenciaDeTeste());
           }
@@ -1116,7 +1366,7 @@ void main() {
           return problema('not-found', 404);
         },
       );
-      await abrirAComunidade(tester);
+      await abrirAAba(tester, 'Mural');
 
       exigirEstadoDeSessao(
         tester,
@@ -1125,6 +1375,18 @@ void main() {
       );
 
       expect(find.byType(ConviteParaEntrar), findsOneWidget);
+      // **E ele nao tem endereco de volta**, que e a condicao inteira deste
+      // contrapeso. Lido do widget, e nao suposto: com `rotaDeVolta` presente
+      // o caso mediria o mesmo caminho do (e1) e os dois ficariam verdes
+      // juntos, sem provar nada.
+      expect(
+        tester
+            .widget<ConviteParaEntrar>(find.byType(ConviteParaEntrar))
+            .rotaDeVolta,
+        isNull,
+        reason: 'REPROVA: o convite deste contrapeso ganhou `rotaDeVolta`. '
+            'Com ela, este caso deixa de ser o contrapeso do (e1).',
+      );
       await tester.tap(find.widgetWithText(BotaoPrimario, 'Entrar'));
       await tester.pumpAndSettle();
 

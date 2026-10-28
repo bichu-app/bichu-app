@@ -17,7 +17,7 @@ class OpcaoSegmentada<T> {
 ///
 /// **E um `radiogroup` com rotulo de grupo**, e nao uma fileira de botoes
 /// (UX, acessibilidade de F1.3/F1.4/F1.5). A diferenca importa para quem usa
-/// leitor de tela: sem o rotulo do grupo, "Cão" e anunciado sozinho e nao ha
+/// leitor de tela: sem o rotulo do grupo, "Cachorro" e anunciado sozinho e nao ha
 /// como saber que a pergunta era a especie.
 ///
 /// Maximo de tres segmentos com rotulo de uma palavra. Acima disso o rotulo
@@ -42,7 +42,7 @@ class GrupoSegmentado<T> extends StatelessWidget {
   ///
   /// `false` esconde a LINHA e **nao o nome**: o [rotulo] continua indo para
   /// `Semantics.label`, porque e dele que depende o anuncio
-  /// "Espécie, Cão, selecionado" em vez de "Cão" -- e e por isso que este
+  /// "Espécie, Cachorro, selecionado" em vez de "Cachorro" -- e e por isso que este
   /// campo existe em vez de a tela passar `rotulo: ''`. Um grupo de radio sem
   /// nome e um grupo que, para quem nao ve a tela, nao tem pergunta.
   ///
@@ -65,7 +65,7 @@ class GrupoSegmentado<T> extends StatelessWidget {
 
     return Semantics(
       // O rotulo do grupo viaja junto de cada opcao: o leitor de tela anuncia
-      // "Espécie, Cão, selecionado" em vez de "Cão".
+      // "Espécie, Cachorro, selecionado" em vez de "Cachorro".
       container: true,
       label: rotulo,
       child: Column(

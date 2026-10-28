@@ -82,10 +82,10 @@ class TelaOndeEQuando extends StatefulWidget {
   /// O que o seletor mostra enquanto nada foi escolhido.
   static const String escolherOEstado = 'Escolher na lista';
 
-  /// **"Opcional" dito em TEXTO**, e nao pela marca do rotulo: `SeletorDeLista`
-  /// nao tem `opcional`, e a mesma frase ja diz isso no seletor de estado de
-  /// `localizacao/captura_de_localizacao.dart`.
-  static const String estadoEmBrancoFunciona = 'Em branco funciona.';
+  // `estadoEmBrancoFunciona` SAIU EM 26/10/2026, com a ajuda do campo `Estado`
+  // -- cliente, 22/10/2026: *"Retire o texto so se voce souber, em branco
+  // funciona"*. A constante sai junto com o uso de proposito: constante orfa
+  // volta a ser usada.
 
   /// O campo opcional do criterio 4, palavra por palavra.
   static const String perguntaDeAjuda =
@@ -312,18 +312,23 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
             // o campo `_uf`: o seletor mostra o NOME e guarda a SIGLA, e nao
             // existe valor fora da lista.
             //
-            // **Continua opcional, e o rotulo diz a verdade**: quem exige o
-            // `onde` e a CIDADE, e so ela (`Area.required: [city]`). O
-            // "(opcional)" sai do rotulo e vira a `ajuda`, do mesmo jeito que
-            // em `localizacao/captura_de_localizacao.dart` -- `SeletorDeLista`
-            // nao tem a marca no rotulo, e inventar uma so para este campo
-            // deixaria dois formatos de "pode ficar vazio" na mesma tela.
+            // **Continua opcional**: quem exige o `onde` e a CIDADE, e so ela
+            // (`Area.required: [city]`).
+            //
+            // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"Retire o texto
+            // so se voce souber, em branco funciona"*. A frase saiu do
+            // formulario do achado naquele dia e SOBREVIVEU nesta tela e em
+            // `localizacao/captura_de_localizacao.dart` -- as duas sairam em
+            // 26/10, juntas, porque metade da troca e o que deixa duas
+            // redacoes do mesmo campo no produto.
+            //
+            // O seletor continua dizendo `Escolher na lista` enquanto nada foi
+            // escolhido, e e isso que mostra que o campo aceita vazio.
             SeletorDeLista(
               rotulo: TelaOndeEQuando.rotuloDoEstado,
               estadoInicial: TelaOndeEQuando.escolherOEstado,
               itens: estadosBrasileiros,
               selecionado: _uf,
-              ajuda: TelaOndeEQuando.estadoEmBrancoFunciona,
               aoSelecionar: (codigo) => setState(() {
                 _uf = codigo;
                 _sincronizar();

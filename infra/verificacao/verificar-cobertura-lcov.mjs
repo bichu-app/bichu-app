@@ -135,6 +135,47 @@ const SEM_SUITE_QUE_CARREGUE =
 const FERRAMENTA_FORA_DO_RUNTIME =
   'roda fora do runtime da aplicacao (regra de ESLint / gerador de tipos), em processo que nenhuma ' +
   'suite instrumenta. Entra em `sonar.sources` por estar sob `src/`; nao e codigo que chega ao usuario.';
+/*
+ * O motivo das onze de 27/10, e ele e DIFERENTE do de 22/09.
+ *
+ * Nao e "nenhuma suite chega a este modulo" por descuido de quem escreveu o
+ * teste. MEDIDO, arquivo a arquivo: cada um destes onze so e importado EM
+ * TEMPO DE EXECUCAO por `src/bin/api.ts` ou `src/bin/worker.ts` -- e os dois
+ * pontos de entrada JA estao nesta lista, como `PONTO_DE_ENTRADA`, porque
+ * medi-los exige subir o processo SOB instrumentacao. Os modulos de rota que
+ * usam os quatro de `application/` NAO contam: conferido linha a linha, as
+ * quatro importacoes sao `import type`, e o compilador as apaga -- o arquivo
+ * de rota nao carrega o servico. A suite de integracao de fato exercita parte
+ * deste codigo, mas o exercita por HTTP contra os conteineres `api` e
+ * `worker`, e esses processos rodam sem `--experimental-test-coverage`: a
+ * execucao acontece e o relatorio de cobertura dela nao existe em lugar
+ * nenhum. Nao ha relatorio a juntar -- conferido: a esteira produz DOIS lcov
+ * (`coverage/lcov.info` e `coverage/lcov-integracao.info`) e os dois ja
+ * chegam a este verificador e a `sonar.javascript.lcov.reportPaths`.
+ *
+ * DIVIDA DE TESTE REGISTRADA, e a divida tem dois enderecos:
+ *   - os quatro de `application/` (`convite-do-perfil`,
+ *     `capa-de-encontro-da-comunidade`, `foto-do-proprio-usuario` e
+ *     `seguranca-da-comunidade`) sao logica sobre portas e cabem em teste
+ *     unitario com porta falsa, sem banco: divida BARATA, e e por onde
+ *     comecar;
+ *   - os sete `kysely-*` precisam de banco de pe, e o caminho deles e a suite
+ *     de integracao importar o adaptador direto, como
+ *     `kysely-pet-repository.ts` e `kysely-lost-case-repository.ts` fizeram
+ *     para sair desta lista em 22/09.
+ *
+ * Instrumentar `api`/`worker` e recolher o relatorio na parada e entrega
+ * propria, e nao efeito colateral desta. No dia em que um teste tocar o
+ * arquivo, a invariante 2 acusa a entrada como obsoleta e ela sai.
+ */
+const SO_O_PONTO_DE_ENTRADA_CARREGA =
+  'MEDIDO em 27/10, nao suposto: este arquivo so e importado por `src/bin/api.ts` ou ' +
+  '`src/bin/worker.ts`, que estao nesta mesma lista como `PONTO_DE_ENTRADA` por nao rodarem sob ' +
+  'instrumentacao. A suite de integracao exercita parte deste codigo por HTTP contra os ' +
+  'conteineres `api`/`worker`, e esses processos nao emitem cobertura -- a execucao existe e o ' +
+  'relatorio dela nao. Nao e relatorio faltando ser juntado: a esteira produz dois lcov e os dois ' +
+  'ja chegam aqui. DIVIDA DE TESTE REGISTRADA. No dia em que um teste tocar o arquivo, esta ' +
+  'entrada passa a reprovar por obsoleta e sai da lista.';
 
 const AUSENCIAS_ACEITAS = new Map([
   // -- so tipo: o compilado nao tem uma instrucao sequer ---------------------
@@ -163,7 +204,14 @@ const AUSENCIAS_ACEITAS = new Map([
   // compilado em `dist/` e `export {};` e nada mais.
   ['src/modules/found/ports/conversa-do-achador.ts', SO_TIPO],
   ['src/modules/identity/application/dependencies.ts', SO_TIPO],
-  ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
+  // `identity/ports/identity-repository.ts` SAIU em 27/10, pela invariante 2, e
+  // o proprio verificador a acusou: o arquivo JA APARECE no relatorio. O motivo
+  // e o mesmo de `media/ports/object-storage.ts` em 28/09 -- ela DEIXOU de ser
+  // so tipo: a porta passou a exportar `EnvioDeFotoNaoServe`, uma CLASSE, que
+  // sobrevive a compilacao e instrumenta o arquivo. Conferido nos dois lados:
+  // o compilado em `dist/_tests` abre com `export class EnvioDeFotoNaoServe`, e
+  // `coverage/lcov-integracao.info` tem o `SF:` dela. Excecao que sobra depois
+  // de o teste chegar e o comeco de uma lista que so cresce.
   ['src/modules/identity/ports/mailer.ts', SO_TIPO],
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
@@ -253,6 +301,121 @@ const AUSENCIAS_ACEITAS = new Map([
       'dele importa do arquivo de origem, entao nenhuma suite carrega ESTE modulo. DIVIDA ' +
       'REGISTRADA pelo mesmo criterio dos adaptadores.',
   ],
+
+  // -- AS 37 DE 27/10, quando o job `sonar` ficou visivel -------------------
+  //
+  // Este portao esteve ESCONDIDO atras da reprovacao do job `compose, migracao
+  // do zero e pilha de pe`: enquanto `integracao` reprovava, o job `sonar` era
+  // pulado e as 37 ausencias nunca chegaram a ser ditas. Nao e vermelho novo,
+  // e o proximo da fila -- exatamente o que `CI so roda em PR` acumula.
+  //
+  // As 37 foram CLASSIFICADAS por medicao, nao por nome de diretorio: cada
+  // arquivo foi passado pelo compilador (`ts.transpileModule`, sem
+  // comentarios) e a pergunta foi se sobra UMA instrucao no JavaScript.
+  // 25 saem vazias, 12 emitem codigo. A classe decide o conserto, e os dois
+  // consertos sao diferentes.
+  //
+  // -- 25 que so declaram tipo: o compilado sai VAZIO -----------------------
+  // Nenhuma delas pode aparecer em relatorio de cobertura de runtime, por
+  // mais testes que se escreva: nao ha instrucao para instrumentar. Teste
+  // para "cobrir" uma destas seria teste que nao pode reprovar.
+  ['src/modules/addresses/ports/busca-de-cep.ts', SO_TIPO],
+  ['src/modules/connections/ports/conexao.ts', SO_TIPO],
+  ['src/modules/connections/ports/connections-repository.ts', SO_TIPO],
+  ['src/modules/connections/ports/convite-de-conexao.ts', SO_TIPO],
+  ['src/modules/lostfound/ports/contagem-de-perdidos-novos.ts', SO_TIPO],
+  ['src/modules/messaging/ports/assinador-de-foto.ts', SO_TIPO],
+  ['src/modules/messaging/ports/foto-da-conversa.ts', SO_TIPO],
+  ['src/modules/moderation/ports/fila-de-moderacao.ts', SO_TIPO],
+  ['src/modules/network/ports/contagem-de-eventos-novos.ts', SO_TIPO],
+  ['src/modules/notifications/ports/caixa-de-notificacoes.ts', SO_TIPO],
+  ['src/modules/notifications/ports/comunicados.ts', SO_TIPO],
+  ['src/modules/people/ports/busca-de-pessoas-repository.ts', SO_TIPO],
+  ['src/modules/people/ports/perfil-de-pessoa-repository.ts', SO_TIPO],
+  ['src/modules/professionals/ports/conferencias-de-texto.ts', SO_TIPO],
+  ['src/modules/professionals/ports/contagem-de-entradas-novas.ts', SO_TIPO],
+  ['src/modules/professionals/ports/directory-suggestion-repository.ts', SO_TIPO],
+  ['src/modules/professionals/ports/fila-de-indicacoes.ts', SO_TIPO],
+  ['src/modules/publications/ports/publicacoes-repository.ts', SO_TIPO],
+  ['src/modules/safety/ports/safety-repository.ts', SO_TIPO],
+  ['src/modules/sections/ports/contadores-de-secao.ts', SO_TIPO],
+  ['src/modules/sections/ports/marcadores-de-secao.ts', SO_TIPO],
+  ['src/modules/showcase/ports/vitrine-repository.ts', SO_TIPO],
+  ['src/modules/store/ports/taxonomia-da-vitrine.ts', SO_TIPO],
+  ['src/modules/tags/ports/endereco-guardado.ts', SO_TIPO],
+  ['src/modules/tags/ports/pedido-de-plaquinha.ts', SO_TIPO],
+  // -- 11 que emitem codigo e so o ponto de entrada carrega -----------------
+  // Ver o bloco de `SO_O_PONTO_DE_ENTRADA_CARREGA`, acima, para a medicao e
+  // para os dois enderecos da divida.
+  ['src/modules/app-release/adapters/persistence/kysely-politica-de-versao.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/connections/application/convite-do-perfil.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/media/adapters/persistence/kysely-fotos-do-achado.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/media/application/capa-de-encontro-da-comunidade.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/media/application/foto-do-proprio-usuario.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/notifications/adapters/persistence/kysely-comunicados.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/safety/application/seguranca-da-comunidade.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/sections/adapters/persistence/kysely-marcadores-de-secao.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/tags/adapters/persistence/kysely-leitura-do-aviso-ao-tutor.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  // -- a 12a que emite codigo, e ela e caso proprio -------------------------
+  [
+    'src/modules/app-release/ports/politica-de-versao.ts',
+    'emite UMA instrucao e nao e so tipo, entao nao cabe em `SO_TIPO` -- a porta exporta ' +
+      '`PLATAFORMAS_DO_APP`. MEDIDO em 27/10: esse const nao tem UM leitor em `src/` nem em ' +
+      '`tests/` (a unica ocorrencia do nome no repositorio e a propria declaracao), e os QUATRO ' +
+      'arquivos que importam esta porta -- `adapters/http/version-status-routes.ts`, ' +
+      '`adapters/persistence/kysely-politica-de-versao.ts`, ' +
+      '`application/veredito-de-versao.ts` e `adapters/http/version-status-routes.test.ts` -- ' +
+      'importam SO TIPO (`import type`), que o compilador apaga. Resultado: NINGUEM carrega este ' +
+      'modulo em tempo de execucao, e o teste da rota que parece cobri-lo nao o toca. O conserto ' +
+      'honesto e apagar o export morto, o que torna o arquivo so tipo; enquanto ele existir, a ' +
+      'ausencia e esta.',
+  ],
+
+  // -- AS QUATRO DA UNIAO DE 27/10 (PRs #64..#76) ---------------------------
+  //
+  // A lista das 37 acima foi calculada contra a `development` de ANTES desta
+  // uniao. As doze branches do dia trazem 15 arquivos novos a `src/`, e destes
+  // 9 sao fonte (6 sao `*.test.ts` ou tipo gerado). MEDIDO com os DOIS lcov de
+  // verdade na mao (`coverage/lcov.info` da unitaria, 4185 casos, e
+  // `coverage/lcov-integracao.info` da integracao, 793 casos): dos 9, CINCO
+  // JA APARECEM no relatorio e por isso NAO entram aqui -- `passkey-routes.ts`,
+  // `passkey-service.ts`, `domain/passkey.ts`, `endereco-do-pet-routes.ts` e
+  // `tools/portao-de-retencao-declarada.ts`. Declarar qualquer um deles faria
+  // a invariante 2 reprovar na hora, por excecao obsoleta.
+  //
+  // **A classificacao e pelo COMPILADO, nao pelo nome do diretorio**, pelo
+  // mesmo metodo do bloco das 37: cada arquivo passou por `ts.transpileModule`
+  // com `removeComments`, e a pergunta foi se sobra UMA instrucao no
+  // JavaScript. DOIS saem vazios e DOIS emitem codigo.
+  //
+  // NENHUM TESTE DE FACHADA FOI ESCRITO PARA ESTES QUATRO. Teste que nao pode
+  // reprovar e pior que ausencia, e os dois `kysely-*` ficam como DIVIDA
+  // NOMEADA, com o endereco dela escrito abaixo.
+  //
+  // -- 2 que so declaram tipo: o compilado sai `export {};` ------------------
+  ['src/modules/identity/ports/passkey-repository.ts', SO_TIPO],
+  ['src/modules/tags/ports/endereco-do-pet.ts', SO_TIPO],
+  // -- 2 que emitem codigo e so o ponto de entrada carrega -------------------
+  //
+  // MEDIDO arquivo por arquivo, e nao deduzido do diretorio: o UNICO importador
+  // de valor dos dois e `src/bin/api.ts` (linhas 74 e 133), que ja esta nesta
+  // mesma lista como `PONTO_DE_ENTRADA`. A suite de integracao exercita este
+  // codigo por HTTP contra o conteiner `api`, e aquele processo nao roda sob
+  // instrumentacao -- a execucao existe e o relatorio dela nao.
+  //
+  // **UMA ARMADILHA CONFERIDA E DESCARTADA:** uma varredura por nome acusa
+  // `src/tools/endereco-do-pet-nao-sai-em-publico.test.ts` de importar
+  // `kysely-endereco-do-pet`. NAO importa: a ocorrencia e um LITERAL DE
+  // CAMINHO que o teste le com `readFileSync` para conferir o texto da fonte.
+  // Ler o arquivo nao o carrega, e por isso ele nao aparece no relatorio.
+  //
+  // A divida dos dois e a mesma dos sete `kysely-*` de 27/10: a suite de
+  // integracao importar o adaptador direto, como `kysely-pet-repository.ts`
+  // fez em 22/09 para sair desta lista.
+  ['src/modules/identity/adapters/persistence/kysely-passkey-repository.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/tags/adapters/persistence/kysely-endereco-do-pet.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
 
   // -- ferramenta que nao roda no runtime da aplicacao -----------------------
   ['src/architecture.rules.mjs', FERRAMENTA_FORA_DO_RUNTIME],

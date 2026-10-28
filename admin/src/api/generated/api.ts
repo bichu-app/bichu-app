@@ -331,6 +331,241 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/passkey/registration/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emite o desafio para cadastrar uma credencial digital
+         * @description Primeiro dos dois passos do cadastro de passkey (BICHUS-301). O
+         *     servidor emite um desafio de uso unico e com prazo, guarda-o, e o app
+         *     o entrega ao Credential Manager do Android.
+         *
+         *     **A passkey SOMA a senha, nunca a substitui.** Passkey e presa ao
+         *     aparelho: quem troca de celular sem outra porta fica trancado fora da
+         *     conta. A senha continua valendo e `login`, `refreshSession` e
+         *     `reauthenticate` continuam existindo sem mudanca.
+         *
+         *     **Esta operacao exige sessao.** Ela acontece ao FIM do cadastro, quando
+         *     o `registerUser` ja devolveu o par de tokens, e e por isso que o
+         *     `user.id` nao vem no corpo: ele e o `sub` do token. Pedir o
+         *     identificador no corpo abriria caminho para emitir desafio para conta
+         *     alheia.
+         *
+         *     **O passo e DISPENSAVEL** (decisao do cliente, 26/10). Quem recusa a
+         *     biometria do aparelho tem de conseguir terminar o cadastro: o app
+         *     oferece `Agora nao`, nao chama esta operacao, e o cadastro esta
+         *     completo do mesmo jeito. Nenhuma pendencia de perfil nasce daqui.
+         *
+         *     `rp.id` e `bichu.app`, o apex, e **nao pode mudar depois**: trocar o
+         *     `RP ID` invalida toda credencial ja emitida. O apex serve
+         *     `/.well-known/assetlinks.json` pelo trecho `(associacao_deep_link)` do
+         *     `Caddyfile`, com a relacao `delegate_permission/common.get_login_creds`
+         *     -- sem ela o Android nao entrega credencial, e o `handle_all_urls` do
+         *     deep link NAO serve para isso.
+         *
+         *     `excludeCredentials` traz as credenciais ATIVAS da conta para o
+         *     aparelho nao cadastrar duas vezes. Isso nao vaza nada: quem chama ja
+         *     esta autenticado como o dono delas.
+         */
+        post: operations["beginPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Conclui o cadastro da credencial digital
+         * @description Segundo passo. O app devolve a atestacao produzida pelo aparelho e o
+         *     servidor a verifica antes de guardar a chave publica.
+         *
+         *     **O que e verificado, e nada disso e opcional:** a assinatura da
+         *     atestacao; o `challenge` do `clientDataJSON` contra o desafio guardado,
+         *     que e de **uso unico e com prazo**; o `type` igual a `webauthn.create`;
+         *     a `origin` contra a origem do app Android (derivada da digital do
+         *     certificado em `assetlinks.json`, e nao de uma lista escrita a mao); e
+         *     o `rpIdHash` contra o SHA-256 de `bichu.app`.
+         *
+         *     **A verificacao nao e escrita a mao.** Ela usa
+         *     `@simplewebauthn/server`, e o motivo esta no ADR pretendido: WebAuthn
+         *     pede parse de CBOR, COSE, cadeia de atestacao e curvas EC -- cada um
+         *     um lugar onde um erro de implementacao aceita credencial forjada **sem
+         *     falhar nenhum teste**, porque o caminho felizpassa igual.
+         *
+         *     O desafio e **consumido** aqui, de que jeito for: sucesso ou falha, ele
+         *     nao vale de novo. Desafio que sobrevive a uma falha e desafio que pode
+         *     ser reusado.
+         *
+         *     O `sign_count` devolvido pelo aparelho e guardado como ponto de
+         *     partida do contador antirrepeticao de `finishPasskeyAuthentication`.
+         */
+        post: operations["finishPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/authentication/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emite o desafio para entrar com credencial digital
+         * @description Primeiro dos dois passos da entrada por passkey.
+         *
+         *     **Esta operacao NAO recebe e-mail, e isso e desenho e nao esquecimento.**
+         *     A credencial e *discoverable* (`residentKey: required` no cadastro), e o
+         *     proprio aparelho sabe qual conta apresentar. Receber o e-mail obrigaria
+         *     a devolver `allowCredentials` daquela conta, e `allowCredentials` cheia
+         *     ou vazia responderia **se aquela conta tem passkey** -- um oraculo de
+         *     enumeracao numa porta sem autenticacao. O contrato ja proibe esse
+         *     vazamento em `login`, onde o 401 e identico para conta inexistente e
+         *     senha errada; aqui o vazamento seria pior, porque nem exige tentativa.
+         *
+         *     Por isso `allow_credentials` sai **sempre vazia**, para toda chamada,
+         *     com ou sem conta do outro lado.
+         *
+         *     Nao exige sessao, por definicao: e a porta de entrada.
+         */
+        post: operations["beginPasskeyAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkey/authentication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Entra com credencial digital
+         * @description Segundo passo da entrada. O app devolve a assercao e o servidor abre
+         *     sessao se ela conferir. A resposta e a **mesma** `SessionResponse` de
+         *     `login`: para o resto do app, entrar por passkey e entrar.
+         *
+         *     **O que e verificado:** a assinatura, contra a chave publica guardada
+         *     no cadastro; o `challenge`, de uso unico e com prazo; o `type` igual a
+         *     `webauthn.get`; a `origin`; o `rpIdHash`; o `userHandle`, que precisa
+         *     apontar para a conta dona da credencial; e o **contador de
+         *     assinatura**.
+         *
+         *     **O contador antirrepeticao.** Cada credencial guarda o `sign_count`
+         *     da ultima assercao aceita. Assercao com contador **menor ou igual** ao
+         *     guardado e rejeitada: ou e repeticao de uma assercao capturada, ou e
+         *     autenticador clonado. Quando isso acontece o servidor **revoga a
+         *     credencial** e registra o evento -- e responde `invalid-credentials`,
+         *     sem contar o motivo. Aparelho que sempre devolve zero (parte dos
+         *     autenticadores de plataforma, legitimamente) e tratado pela excecao
+         *     prevista na especificacao: contador guardado zero e recebido zero
+         *     passa, e so passa nesse caso.
+         *
+         *     **O 401 e identico** para credencial desconhecida, credencial revogada,
+         *     assinatura errada e contador repetido. A porta nao diz qual dos quatro
+         *     foi, pelo mesmo motivo que `login` nao diz se o e-mail existe.
+         *
+         *     `stay_signed_in` tem o mesmo efeito que em `login`: ele escolhe a
+         *     janela de inatividade do refresh, e nada mais.
+         */
+        post: operations["finishPasskeyAuthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as credenciais digitais da conta
+         * @description As credenciais **ativas** da conta, mais recente primeiro. Revogadas
+         *     nao aparecem: elas continuam na base (nada e apagado, decisao do
+         *     cliente de 26/10) e nao servem a nenhuma tela.
+         *
+         *     Nao devolve chave publica nem `credential_id` cru -- nada que sirva
+         *     para montar uma assercao. O que a tela precisa e o rotulo, quando foi
+         *     cadastrada e quando foi usada por ultimo, para a pessoa reconhecer o
+         *     aparelho que vai revogar.
+         */
+        get: operations["listPasskeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/passkeys/{passkeyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoga uma credencial digital
+         * @description **Revogar MARCA revogada, nao apaga** (decisao do cliente de 26/10:
+         *     "nao apague nada"). A linha fica, com `revoked_at` preenchido, e deixa
+         *     de contar no teto e de servir para entrar. Isso tambem e o que permite
+         *     responder honestamente depois a pergunta "esta credencial ja existiu".
+         *
+         *     `irreversible_write` porque a credencial nao volta: o padrao WebAuthn
+         *     nao tem como "desrevogar" -- a chave privada continua no aparelho, mas
+         *     a confianca nela nao se restaura sem cadastrar de novo.
+         *
+         *     **Nao exige reautenticacao.** Pelo contrato, `X-Reauth-Token` protege
+         *     operacao destrutiva, e revogar passkey parece uma. Nao exige por um
+         *     motivo concreto: quem perdeu o aparelho precisa revogar a credencial
+         *     dele, e a senha continua sendo a outra porta -- exigir a senha aqui
+         *     nao acrescenta defesa (quem esta na sessao ja passou por ela) e
+         *     acrescenta um passo no momento em que a pessoa mais precisa de pressa.
+         *     Revogar nunca TRANCA ninguem fora: a senha continua valendo, que e a
+         *     decisao 1 do BICHUS-301.
+         *
+         *     Credencial de outra conta responde **404**, nao 403, como o resto do
+         *     contrato.
+         */
+        delete: operations["revokePasskey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/password": {
         parameters: {
             query?: never;
@@ -496,7 +731,23 @@ export interface paths {
         };
         /**
          * O endereco de entrega guardado na conta
-         * @description O endereco que o formulario da plaquinha usa para nascer preenchido.
+         * @description **SUPERADA COMO FONTE DO PEDIDO EM 27/10/2026, e nao apagada.** Ate
+         *     26/10 era este endereco que o formulario da plaquinha lia para nascer
+         *     preenchido (decisao do cliente de 21/10/2026: *"um endereco de entrega
+         *     salvo na conta, reusado em todo pedido e editavel num lugar so"*). Em
+         *     **27/10/2026**, com aquela frase posta na mesa, ele decidiu *"endereco um
+         *     por pet"*: a fonte do pedido passou a ser `getPetDeliveryAddress`, e o
+         *     registro completo das duas decisoes mora no comentario de
+         *     `/pets/{petId}/delivery-address`.
+         *
+         *     Esta operacao **continua existindo** por duas razoes, nenhuma delas
+         *     inercia: a decisao do cliente de 26/10/2026 e *"nao apague nada"*, e foi
+         *     desta tabela que a migracao `20261027000001` copiou o endereco para os
+         *     pets de cada tutor -- apagar a fonte da copia tiraria o unico registro de
+         *     onde o endereco de cada pet veio.
+         *
+         *     **Nenhum pedido de plaquinha le daqui.** Quem procura o endereco que o
+         *     formulario usa esta na operacao errada.
          *
          *     **`null` quando nao ha endereco guardado, e nao 404** -- a mesma forma
          *     de `getMyLocation`, e pelo mesmo motivo: "nunca guardei" e um estado
@@ -1297,6 +1548,66 @@ export interface paths {
         head?: never;
         /** Edita o pet */
         patch: operations["updatePet"];
+        trace?: never;
+    };
+    "/pets/{petId}/delivery-address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * O endereco de entrega guardado NESTE pet
+         * @description O endereco que o formulario da plaquinha deste pet usa para nascer
+         *     preenchido, **desde a decisao do cliente de 27/10/2026** (*"endereco um
+         *     por pet"*). Antes dela a fonte era a conta; ver o comentario acima deste
+         *     caminho, que registra as duas decisoes com as datas.
+         *
+         *     **`null` quando este pet nao tem endereco guardado, e nao 404** -- a
+         *     mesma forma de `getMyDeliveryAddress` e de `getMyLocation`, e pelo mesmo
+         *     motivo: "este pet nunca teve endereco" e um estado normal do cadastro,
+         *     nao recurso ausente. O PET ausente, esse sim, e 404.
+         *
+         *     **Leitura do tutor, e so dele.** `bearerAuth` sem alternativa vazia, e o
+         *     `WHERE` compara o dono do pet com o portador do token. Pet de outra
+         *     pessoa responde **404 e nunca 403** (ADR-0021): para quem pergunta, ele
+         *     nao existe.
+         */
+        get: operations["getPetDeliveryAddress"];
+        /**
+         * Guarda ou troca o endereco de entrega deste pet
+         * @description **`PUT` e nao `PATCH`, e o endereco inteiro vem junto.** Endereco e uma
+         *     coisa so: trocar de casa troca os nove campos de uma vez, e um `PATCH`
+         *     por campo deixaria o pet parado numa mistura de duas casas -- rua nova
+         *     com bairro antigo chega no lugar errado sem nada ter dado erro.
+         *
+         *     **Uma linha por pet**, e nao um historico: o cliente pediu *"endereco um
+         *     por pet"*, no singular. Guardar de novo sobrescreve.
+         *
+         *     **Esta rota NAO escreve o endereco da conta** (`putMyDeliveryAddress`),
+         *     e a reciproca tambem vale. Depois de 27/10/2026 o endereco da conta nao
+         *     e lido por pedido nenhum: ele continua existindo porque a decisao do
+         *     cliente de 26/10/2026 e *"nao apague nada"*, e porque foi dele que a
+         *     migracao `20261027000001` copiou o endereco para os pets de cada tutor.
+         *
+         *     **O teto e de conveniencia e nao de abuso**, igual ao de
+         *     `putMyDeliveryAddress`: guardar o proprio endereco nao vira trabalho de
+         *     ninguem, ao contrario do PEDIDO da plaquinha (3 por dia, porque cada um
+         *     vira trabalho fisico de alguem). 30 por hora impede laco de cliente
+         *     defeituoso sem atrapalhar quem corrige a rua tres vezes seguidas.
+         *
+         *     Cobranca, valor e pagamento continuam fora de escopo por decisao do
+         *     cliente, e nada aqui os introduz.
+         */
+        put: operations["putPetDeliveryAddress"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/pets/{petId}/photos": {
@@ -2509,6 +2820,13 @@ export interface paths {
          *     numa rota publica eles nao podem existir. Afrouxar este `security` para
          *     `[bearerAuth, {}]` faz o portao reprovar os dois, nominalmente.
          *
+         *     **A lista deslogada da aba existe, e e outra operacao**:
+         *     `listPublicDirectoryEntries` (`GET /v1/public/directory-entries`),
+         *     com projecao propria e sem os dois campos. Esta operacao continua
+         *     exigindo conta, e o paragrafo acima continua valendo: o caminho nao
+         *     foi afrouxar este `security`, foi dar ao portao um schema que ele
+         *     aprova.
+         *
          *     **Ordenacao por distancia usa a localizacao de referencia de quem
          *     chama**, que o servidor ja guarda (BICHUS-92). Ela NAO e enviada na
          *     requisicao: coordenada em URL vai para log de acesso, para o historico
@@ -2937,6 +3255,46 @@ export interface paths {
          *     contencao desse caso e a denuncia e a remocao pelo administrador, que e
          *     humana e posterior.
          *
+         *     ## Moderacao de palavras (`code: inappropriate_language`)
+         *
+         *     `body` recusa xingamento e injuria **na hora da escrita**, e e a MESMA
+         *     funcao e o MESMO `code` de `suggestDirectoryEntry` (pedido do cliente,
+         *     18/10/2026: "nos campos de indicacao e recomendacao de profissionais").
+         *     O `400` ja declarado abaixo cobre a recusa, e `errors[].code` nao tem
+         *     `enum` -- este codigo nao acrescenta esquema nenhum.
+         *
+         *     **Aqui a recusa na escrita e a unica barreira anterior**, e a diferenca
+         *     com a indicacao importa: a indicacao vai para fila e passa por revisao
+         *     humana, esta **aparece na hora**. Entre o teclado e a tela de outra
+         *     pessoa nao ha ninguem, entao recusar depois nao protegeria nada.
+         *
+         *     **A ORDEM: o `409` de canal nao verificado vem ANTES da moderacao**, a
+         *     mesma ordem de `suggestDirectoryEntry`. Quem nao confirmou o e-mail
+         *     ouve o que de fato falta, em vez de ser mandado reescrever um texto que
+         *     nao poderia publicar de todo jeito. A conferencia de FORMA
+         *     (`too_long`, `html_not_allowed`) continua vindo antes do `409`: ela nao
+         *     depende da conta.
+         *
+         *     A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+         *     nem em `errors[]` nem em `detail`, e nada disso vai para log: devolve-la
+         *     transformaria o `400` em oraculo de quem quer descobrir o filtro. A
+         *     mensagem e sempre a mesma e diz o que fazer.
+         *
+         *     **Isto nao e a prova de contorno.** A lista pega palavra escrita por
+         *     extenso; frase ofensiva sem palavra proibida, palavra grudada em outra e
+         *     troca de caractere nao prevista passam, e **injuria racial nao e
+         *     pegada** -- em portugues ela e feita de palavra reaproveitada, que
+         *     colide com vocabulario de animal, de cor e de gentilico. Decisao do
+         *     cliente: "vamos comecar com um modelo de moderacao mais simples e
+         *     conforme for aumentamos". A protecao de fundo continua sendo a denuncia
+         *     e a remocao pelo painel.
+         *
+         *     Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+         *     tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+         *     (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+         *     tolerancia. **Critica negativa continua passando**: nota 1 com texto
+         *     duro e aceita.
+         *
          *     ## Avaliar perfil nao reivindicado e permitido
          *
          *     Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao
@@ -3357,6 +3715,23 @@ export interface paths {
          *     `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
          *     (ADR-0027 12.6, decisao do cliente de 23/09/2026).
          *
+         *     ## O cancelado nao se mistura mais ao ativo (27/10/2026)
+         *
+         *     Duas mudancas, pela decisao do cliente de 26/10/2026 -- *"os eventos
+         *     cancelados e que ja passaram devem vir por ultimo na listagem"*:
+         *
+         *     1. o parametro **`status`** recorta pela situacao CALCULADA, e com ele
+         *        da para pedir so o cancelado, ou so o que vai acontecer;
+         *     2. a ordem **`proximos`** passa a por o cancelado DEPOIS de todo
+         *        encontro ativo (ver `NetworkEventSort`).
+         *
+         *     **O cancelado continua na lista por padrao**, e isso e deliberado: sem
+         *     `status`, nada e recortado, exatamente como antes destas duas
+         *     mudancas. Quem se programou para ir precisa VER que foi cancelado --
+         *     esconde-lo por padrao seria apagar a informacao que o cancelamento
+         *     existe para dar. O que o cliente pediu foi deixar de MISTURAR, e quem
+         *     separa sem esconder e a ordem.
+         *
          *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
          *
          *     A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
@@ -3753,14 +4128,43 @@ export interface paths {
          *     decidir, e nao de descrever. O que entra alem de capa e titulo esta
          *     justificado propriedade por propriedade no esquema.
          *
-         *     ## Nao ha busca, filtro nem ordem escolhivel
+         *     ## Nao ha busca nem ordem escolhivel, e ha UM filtro
          *
          *     O teto da conta e de **3 encontros ativos**
          *     (`community-event-limit-reached`), entao esta lista e curta por
-         *     construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
-         *     proximo para o mais distante, e depois o que passou, do mais recente
-         *     para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
-         *     para o que ainda nao terminou.
+         *     construcao: nao ha busca e nao ha ordem escolhivel.
+         *
+         *     **O unico recorte e `status`**, acrescentado em 27/10/2026 pela mesma
+         *     decisao que mudou a ordem abaixo. A frase que estava aqui -- *"nao ha
+         *     busca, filtro nem ordem escolhivel"* -- deixou de ser verdade nesse dia,
+         *     e esta reescrita e isso. **A TELA NAO O OFERECE**: `Meus eventos` nao tem
+         *     folha de filtro, e nenhuma foi criada, porque um controle de filtro sobre
+         *     uma lista de no maximo 3 encontros ativos e mais caro de ler do que a
+         *     lista inteira. Ele existe no contrato porque a ordem deixou de misturar o
+         *     cancelado, e quem consome o contrato precisa poder pedir um grupo so.
+         *
+         *     ## A ORDEM, que mudou em 27/10/2026
+         *
+         *     Sao TRES grupos, nesta ordem, e nao mais dois:
+         *
+         *     1. o que ainda nao terminou **e nao esta cancelado**, do mais proximo
+         *        para o mais distante -- a decisao que a tela oferece (cancelar) so
+         *        existe para ele;
+         *     2. o **cancelado** que ainda nao passou do fim previsto (rotulo
+         *        `cancelled`), do mais proximo para o mais distante;
+         *     3. o que passou, do mais recente para o mais antigo.
+         *
+         *     Antes eram dois grupos e o cancelado caia no primeiro, porque "ainda nao
+         *     terminou" nao olhava a publicacao. Consequencia: um encontro **cancelado**
+         *     para amanha ordenava ANTES de um encontro **ativo** para depois de
+         *     amanha, e a lista punha no alto justamente aquele sobre o qual nao ha
+         *     mais nada a decidir. Decisao do cliente de 26/10/2026.
+         *
+         *     **O grupo 2 nao e o fundo da lista**, e a escolha e deliberada: o rotulo
+         *     dele ainda e `cancelled` e nao `ended`, e o cancelamento de hoje e a
+         *     informacao que a propria pessoa acabou de gerar. Quando ele passa do fim
+         *     previsto, o rotulo vira `ended` pela regra do encerrado e ele cai no
+         *     grupo 3 sozinho.
          */
         get: operations["listMyNetworkEvents"];
         put?: never;
@@ -4432,6 +4836,92 @@ export interface paths {
          *     datada desses dois ADRs, a ordem desta rota e temporal.
          */
         get: operations["listPublicLostPets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/directory-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profissionais e estabelecimentos, sem conta
+         * @description A MESMA lista da aba `Comunidade`, **lida sem conta** (pedido do
+         *     cliente, 26/10/2026: a Comunidade deve listar para quem esta deslogado,
+         *     e pedir conta no toque da pagina interna).
+         *
+         *     ## Por que operacao NOVA, e nao `security: [bearerAuth, {}]` na de conta
+         *
+         *     Foram as duas tentativas mais curtas, e as duas estao fechadas:
+         *
+         *     1. **Afrouxar o `security` de `listDirectoryEntries` reprova no
+         *        portao.** `src/tools/portao-contrato-publico.ts` proibe `phone_e164`
+         *        e `distance_m` por NOME EXATO em qualquer operacao alcancavel sem
+         *        conta, e os dois estao em `DirectoryEntrySummary`. A descricao
+         *        daquela operacao ja registra esse beco, e ela continua certa.
+         *     2. **Tirar os dois campos daquele schema quebra o APK publicado**, que
+         *        le aquela resposta. Resposta nao perde campo sem quebrar quem a le.
+         *
+         *     Uma operacao em OpenAPI tem **um** schema de resposta: nao existe forma
+         *     de a mesma operacao devolver a projecao cheia com conta e a magra sem
+         *     conta. Entao a projecao magra precisa de operacao propria, e e esta.
+         *
+         *     **O molde e a `Rede`, e nao foi inventado aqui**: os encontros ja
+         *     resolvem exatamente isto com DUAS operacoes -- `listNetworkEvents`
+         *     (`security: []`, sem distancia) e `listNearbyNetworkEvents` (com conta,
+         *     com distancia). O comentario acima de `/network/my-events` ja escreveu
+         *     a regra por extenso: operacao nova, porque mexer no `security` de uma
+         *     operacao publicada "e quebra de contrato para todo cliente publicado".
+         *
+         *     ## O que o cartao deslogado mostra, e o que ele NAO mostra
+         *
+         *     **Nome, atividade, lugar (bairro, cidade e UF), logo e selo de
+         *     verificacao.** `PublicDirectoryEntrySummary` nao tem `phone_e164`, nao
+         *     tem `site_url` e nao tem `distance_m`.
+         *
+         *     Tambem nao tem `rating`, e por um motivo diferente dos tres: a
+         *     listagem COM conta nao envia pontuacao nenhuma hoje -- o schema dela a
+         *     declara a frente da implementacao. Ver a nota no proprio
+         *     `PublicDirectoryEntrySummary`.
+         *
+         *     **A ausencia do telefone e decisao de produto, e nao limitacao
+         *     tecnica.** O botao `Ligar` do cartao so existe quando `phone_e164`
+         *     existe; publicar o telefone aqui exigiria tornar telefone comercial um
+         *     dado publico e abrir excecao NOMINAL no portao -- mudanca de
+         *     privacidade, que nao se faz para encurtar uma tela. Entao o cartao
+         *     deslogado nasce sem `Ligar`, e **entrar e o que o acrescenta**.
+         *
+         *     `site_url` sai pela razao declarada no proprio campo dele: ele "sai ao
+         *     lado de `phone_e164` e pela mesma razao", e so pode existir porque a
+         *     operacao exige conta. O portao nao o nomeia hoje -- e isso nao e
+         *     permissao. A lista de campos proibidos e o piso da conferencia, nao a
+         *     fronteira da decisao.
+         *
+         *     ## Nao ha `sort`, e a ausencia e a regra
+         *
+         *     A ordenacao e por **nome**, sempre. `sort=distance` mede a partir da
+         *     localizacao de referencia de quem chama, que o servidor guarda por
+         *     CONTA e APARELHO (SEC-021): sem conta nao existe ponto de onde medir.
+         *     E ordenar por distancia numa rota publica seria o oraculo de posicao
+         *     que o cabecalho do portao descreve -- variando o centro e lendo a ORDEM
+         *     da pagina da para trilaterar o ponto, sem um unico numero de coordenada
+         *     sair no corpo.
+         *
+         *     ## O teto e por `ip`, como nas outras rotas publicas
+         *
+         *     Nao ha conta de onde sair um balde, e teto por conta numa rota sem
+         *     conta nao conta nada. E o desenho de `listPublicLostPets`, com os
+         *     numeros dela: diretorio sem teto e a porta da raspagem, e esta e a
+         *     copia publica da lista que a rota com conta ja limita a 120/h.
+         */
+        get: operations["listPublicDirectoryEntries"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7773,6 +8263,211 @@ export interface components {
             password: string;
             stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
+        /**
+         * @description Subconjunto de `PublicKeyCredentialCreationOptions` que o app repassa
+         *     ao Credential Manager. **Todo campo binario e base64url SEM
+         *     preenchimento (`=`)**, que e o que o WebAuthn usa e o que o Android
+         *     espera; base64 comum entra silenciosamente errado no `challenge` e a
+         *     atestacao reprova depois, longe daqui.
+         */
+        PasskeyRegistrationOptions: {
+            /**
+             * @description Desafio de **uso unico** e com **prazo** (`timeout`), base64url.
+             *     Guardado no servidor e consumido em `finishPasskeyRegistration`,
+             *     de sucesso ou de falha.
+             * @example dGVzdGUtZGUtZGVzYWZpby1uYW8tdXNhci1lbS1wcm9kdWNhbw
+             */
+            challenge: string;
+            rp: {
+                /**
+                 * @description O `RP ID`. **Sempre `bichu.app`**, o apex, e **imutavel**:
+                 *     trocar invalida toda credencial ja emitida.
+                 * @example bichu.app
+                 */
+                id: string;
+                /** @example Bichu */
+                name: string;
+            };
+            user: {
+                /**
+                 * @description O `userHandle`, base64url. E o UUID interno da conta, o mesmo
+                 *     `sub` do token -- **nunca o e-mail**: o `userHandle` fica
+                 *     guardado no aparelho e e devolvido na entrada sem
+                 *     autenticacao nenhuma, entao por-lo como e-mail deixaria o
+                 *     e-mail legivel para quem tiver o aparelho na mao.
+                 * @example MDE4ZjdjMWUtN2EyYi03YzNkLTllNGYtMmIxYTBjOWQ4ZTdm
+                 */
+                id: string;
+                /**
+                 * Format: email
+                 * @description o e-mail, que e o que o seletor do aparelho mostra
+                 */
+                name: string;
+                /** @description o nome do tutor */
+                display_name: string;
+            };
+            /**
+             * @description Algoritmos aceitos, em ordem de preferencia: `-7` (ES256) e `-257`
+             *     (RS256). Sao os dois que os autenticadores de plataforma do Android
+             *     emitem; a lista e fechada aqui e no servidor, e nao herdada do que
+             *     o aparelho oferecer.
+             */
+            pub_key_cred_params: {
+                /** @enum {string} */
+                type: "public-key";
+                /** @enum {integer} */
+                alg: -7 | -257;
+            }[];
+            /**
+             * @description prazo do desafio em MILISSEGUNDOS, como o WebAuthn pede. O servidor aplica o mesmo prazo na sua copia guardada -- prazo que vive so no cliente nao e prazo.
+             * @example 300000
+             */
+            timeout: number;
+            /**
+             * @description `none` de proposito. Atestacao direta entregaria o modelo do
+             *     aparelho e exigiria validar cadeia de certificado de fabricante,
+             *     e o produto nao tem regra que dependa da marca do autenticador.
+             *     Pedir atestacao que ninguem examina e coletar dado sem uso.
+             * @enum {string}
+             */
+            attestation: "none";
+            authenticator_selection: {
+                /**
+                 * @description a credencial fica no proprio aparelho
+                 * @enum {string}
+                 */
+                authenticator_attachment: "platform";
+                /**
+                 * @description **Obrigatoriamente `required`.** E o que torna a credencial
+                 *     *discoverable* e o que permite a `beginPasskeyAuthentication`
+                 *     nao receber e-mail -- sem isso a entrada precisaria de
+                 *     `allowCredentials`, que seria um oraculo de enumeracao de
+                 *     conta.
+                 * @enum {string}
+                 */
+                resident_key: "required";
+                /**
+                 * @description biometria ou bloqueio de tela do aparelho. `required` e nao `preferred`: credencial sem verificacao do usuario nao substitui nada, e aqui ela e a porta inteira.
+                 * @enum {string}
+                 */
+                user_verification: "required";
+            };
+            /**
+             * @description As credenciais ATIVAS da conta, para o aparelho nao cadastrar duas
+             *     vezes. Nao vaza nada: quem chama ja esta autenticado como dono.
+             *     Vazia quando a conta nao tem nenhuma.
+             */
+            exclude_credentials: components["schemas"]["PasskeyDescriptor"][];
+        };
+        PasskeyDescriptor: {
+            /** @enum {string} */
+            type: "public-key";
+            /** @description o `credential_id`, base64url */
+            id: string;
+        };
+        PasskeyRegistrationRequest: {
+            /**
+             * @description O `PublicKeyCredential` devolvido pelo aparelho, com os campos
+             *     binarios em base64url.
+             */
+            credential: {
+                /** @description o `credential_id` em base64url */
+                id: string;
+                /** @description o mesmo valor; aceito porque o Credential Manager devolve os dois */
+                raw_id: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: {
+                    /** @description base64url. Dele saem `challenge`, `type` e `origin`, e os tres sao conferidos. */
+                    client_data_json: string;
+                    /** @description base64url, CBOR. Dele saem `rpIdHash`, as flags, o `sign_count` e a chave publica COSE. */
+                    attestation_object: string;
+                    /** @description informativo; guardado para a tela, nunca usado como decisao de seguranca */
+                    transports?: string[];
+                };
+            };
+            /**
+             * @description Rotulo do aparelho, escolhido pela pessoa ou sugerido pelo app
+             *     ("Celular do Leandro"). **Opcional**: sem ele o servidor guarda
+             *     nulo e a tela mostra a data. Texto livre, e e texto de usuario --
+             *     a tela escapa, como em qualquer outro campo livre do produto.
+             */
+            label?: string;
+        };
+        PasskeyAuthenticationOptions: {
+            /** @description desafio de uso unico e com prazo, base64url */
+            challenge: string;
+            /**
+             * @description prazo em MILISSEGUNDOS
+             * @example 300000
+             */
+            timeout: number;
+            /** @example bichu.app */
+            rp_id: string;
+            /** @enum {string} */
+            user_verification: "required";
+            /**
+             * @description **Sempre vazia, em toda chamada.** Nao e campo a preencher depois:
+             *     e a forma de a operacao nao responder "esta conta tem passkey?".
+             *     O aparelho acha a credencial sozinho porque ela e *discoverable*.
+             *     `maxItems: 0` esta aqui para que preencher isto um dia reprove no
+             *     portao de contrato em vez de vazar em silencio.
+             */
+            allow_credentials: components["schemas"]["PasskeyDescriptor"][];
+        };
+        PasskeyAuthenticationRequest: {
+            credential: {
+                id: string;
+                raw_id: string;
+                /** @enum {string} */
+                type: "public-key";
+                response: {
+                    /** @description base64url */
+                    client_data_json: string;
+                    /** @description base64url. Dele saem o `rpIdHash`, as flags e o `sign_count`. */
+                    authenticator_data: string;
+                    /** @description base64url */
+                    signature: string;
+                    /**
+                     * @description base64url, o `userHandle` guardado no aparelho. **Nunca e
+                     *     aceito como identificacao**: ele e conferido contra o dono
+                     *     da credencial encontrada pelo `credential_id`, e divergencia
+                     *     recusa. Tratar este campo como identidade seria aceitar
+                     *     como prova o valor que quem chama escolhe.
+                     */
+                    user_handle?: string | null;
+                };
+            };
+            /**
+             * @description o mesmo efeito que em `login`: escolhe a janela de inatividade do refresh, e nada mais
+             * @default false
+             */
+            stay_signed_in: boolean;
+        };
+        /**
+         * @description Uma credencial ATIVA, do ponto de vista da tela. **Nao traz chave
+         *     publica nem `credential_id`**: nada que sirva para montar assercao
+         *     sai desta operacao.
+         */
+        Passkey: {
+            /**
+             * Format: uuid
+             * @description identificador DA LINHA, e nao o `credential_id`. E o que `revokePasskey` recebe.
+             */
+            id: string;
+            /** @description o rotulo que a pessoa deu, ou nulo */
+            label?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description ultima entrada aceita com esta credencial, ou nulo se nunca foi usada para entrar
+             */
+            last_used_at?: string | null;
+        };
+        PasskeyList: {
+            items: components["schemas"]["Passkey"][];
+        };
         SessionResponse: {
             access_token: string;
             /** @enum {string} */
@@ -8861,6 +9556,43 @@ export interface components {
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
             /**
+             * @description **O PAPEL DE QUEM ESTA CHAMANDO nesta conversa**, e so dele.
+             *
+             *     `participants` traz SEMPRE os dois lados e **nao diz qual deles e o
+             *     chamador**. Sem este campo o cliente tem de adivinhar, e a unica
+             *     adivinhacao disponivel -- "o meu lado e o que vem sem `handle` e sem
+             *     `photo_icon_url`" -- **nao decide**: medido em 27/10/2026 contra
+             *     `participantesVisiveis`, quando nao ha conexao aceita (que e o
+             *     estado NORMAL de uma conversa de achado com um estranho) os dois
+             *     participantes saem com os dois campos nulos, e o corpo fica
+             *     **identico** para o chamador tutor e para o chamador achador.
+             *
+             *     O preco de nao ter o campo era de TELA, e estava medido: o app
+             *     assumia `tutor` fixo. Para o ACHADOR COM CONTA -- que o servidor
+             *     atende desde sempre, porque o recorte da leitura e
+             *     `tutor_user_id = chamador OR finder_user_id = chamador` -- a bolha
+             *     do OUTRO lado ia para a direita, que e o lado que a pessoa le como
+             *     o dela, e a linha da lista mostrava o PROPRIO nome sem foto
+             *     nenhuma: o proprio lado recebe `handle` e `photo_icon_url` nulos
+             *     **por decisao** (emenda 3 do ADR-0010, 19/10/2026), e a tela lia
+             *     esse nulo como se fosse do outro.
+             *
+             *     **Nao e identificador, e nao liga a conversa a uma conta**
+             *     (ADR-0010 itens 6 e 7): ele diz *"voce e este lado aqui"* a quem ja
+             *     esta autenticado, e nao diz nada sobre a outra pessoa. Quem sabe o
+             *     papel e a CONSULTA (`papel_do_chamador`, projetado no `SELECT`), e
+             *     nunca uma comparacao de id na borda -- um `if` de borda poderia
+             *     discordar do `WHERE` que deixou a conversa passar.
+             *
+             *     **`FinderConversation` NAO tem este campo e nao pode precisar
+             *     dele**: aquele schema serve o achador **sem conta**, e o papel
+             *     daquele chamador e `finder` por definicao do proprio token.
+             *
+             *     `system` nao e valor possivel: o Bichu nao chama esta rota.
+             * @enum {string}
+             */
+            viewer_role: "tutor" | "finder";
+            /**
              * @description Os dois lados humanos da conversa, montados campo a campo.
              *
              *     ## EMENDA DE 19/10/2026 (decisao do cliente): a foto entra, e SO
@@ -9470,6 +10202,100 @@ export interface components {
              * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
              *     foi informado, porque "nada filtrado" e uma informacao e nao uma
              *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O cartao da listagem **sem conta**. E `DirectoryEntrySummary` menos os
+         *     tres campos que so existem com conta: `phone_e164`, `site_url` e
+         *     `distance_m`.
+         *
+         *     **Nao e uma projecao reduzida por timidez**: cada ausencia tem a razao
+         *     escrita em `listPublicDirectoryEntries`. Os dois primeiros sao canal de
+         *     contato que so pode sair com conta -- o ADR-0011 secao 4 publica o
+         *     telefone comercial PARA SER PROCURADO, e e justamente esse campo que
+         *     `portao-contrato-publico.ts` proibe em rota sem conta. O terceiro
+         *     implica centro, e distancia a partir de centros conhecidos trilatera o
+         *     centro desconhecido.
+         *
+         *     **Nao tem `id` e nao tem `about`.** O endereco e o `slug` (ADR-0010
+         *     item 6), como no schema com conta. `about` fica fora porque o cartao
+         *     nao o desenha -- nem aqui nem com conta --, e campo que ninguem le e
+         *     peso de resposta sem leitor.
+         *
+         *     Tambem nao tem quem convidou a entidade nem quem e o titular dela, pela
+         *     mesma razao do schema com conta: as duas colunas ligam a entrada a uma
+         *     conta de pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas
+         *     inclusive como contagem e como existencia.
+         */
+        PublicDirectoryEntrySummary: {
+            slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`**, e `required` pela mesma razao
+             *     do schema com conta: ele existe para compatibilidade com o APK
+             *     publicado, e quem desenha a entrada nova usa `kinds`.
+             */
+            kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
+            entity_kind: components["schemas"]["EntityKind"];
+            display_name: string;
+            city?: string | null;
+            state?: string | null;
+            /**
+             * @description O bairro, e **ele e a granularidade mais fina que sai sem conta**:
+             *     bairro, cidade e UF, e nunca mais fino (ADR-0010, "o que a rota
+             *     publica jamais exibe", itens 4 e 5).
+             *
+             *     **Nulo e estado possivel e nao erro**, como no schema com conta: o
+             *     cartao de uma entrada sem bairro tem uma linha menos, e nao cai
+             *     para cidade -- dizer `Sao Paulo` onde se pediu bairro faria a
+             *     listagem parecer ter a informacao que nao tem.
+             */
+            neighborhood?: string | null;
+            /**
+             * Format: uri
+             * @description A logo da entidade, **a URL da derivada publica e nunca do
+             *     original**, montada na leitura a partir de `MEDIA_PUBLIC_BASE_URL`
+             *     como no schema com conta (ADR-0007 secao 11.1 proibicao 9).
+             *
+             *     Nula e o estado normal, e o cartao sem ela desenha o glifo do TIPO
+             *     -- nao um retangulo vazio.
+             *
+             *     **A foto em faixa continua fora da lista, aqui tambem**: ela e
+             *     1280 x 720 e pertence a pagina do local, e mandar a faixa em ate 20
+             *     cartoes multiplicaria o peso da primeira pintura. Logo na lista,
+             *     foto no detalhe.
+             */
+            logo_url?: string | null;
+            verification: components["schemas"]["DirectoryVerification"];
+        };
+        /**
+         * @description **A mesma forma de `DirectoryEntryPage`**, e a igualdade e deliberada:
+         *     o aplicativo le as duas respostas com o MESMO modelo
+         *     (`PaginaDoDiretorio.fromJson`), e uma forma diferente exigiria um
+         *     segundo analisador para a mesma tela.
+         */
+        PublicDirectoryEntryPage: {
+            items: components["schemas"]["PublicDirectoryEntrySummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description **Sempre `false` nesta operacao**, e ele sai mesmo assim.
+             *
+             *     Sem conta nao existe localizacao de referencia de onde medir, entao
+             *     a lista saiu por nome -- e e isso que a tela escreve. Omitir o campo
+             *     faria o cliente adivinhar a diferenca entre "nao consegui ordenar"
+             *     e "nao perguntei", que e a mesma classe de mentira barata que o zero
+             *     silencioso.
+             */
+            distance_available: boolean;
+            /**
+             * @description O recorte que de fato valeu, com `scope: all` quando nada foi
+             *     filtrado, como na rota com conta: "nada filtrado" e uma informacao
+             *     e nao uma ausencia.
              */
             applied_filters?: {
                 [key: string]: string;
@@ -10968,8 +11794,31 @@ export interface components {
          */
         NetworkEventWhen: "upcoming" | "past" | "all" | "today" | "weekend" | "next_30_days";
         /**
-         * @description `proximos` e a data em ordem crescente; `recentes` e decrescente. **A
-         *     leitura publica nao ordena por distancia**: essa ordem e
+         * @description `proximos` e a data em ordem crescente e `recentes` e decrescente.
+         *
+         *     ## `proximos` tem UMA excecao, e ela e de 27/10/2026
+         *
+         *     **O encontro rotulado `cancelled` vem depois de TODO encontro ativo**, e
+         *     so entao pela data. Decisao do cliente de 26/10/2026. Sem a excecao, um
+         *     encontro cancelado para amanha abria a agenda na frente de um encontro
+         *     que ainda vai acontecer depois de amanha -- a data o punha no alto, e a
+         *     lista destacava o que nao vai acontecer.
+         *
+         *     Dentro de cada um dos dois grupos a ordem continua sendo so a data, e o
+         *     desempate continua sendo o `slug`: a excecao e uma chave ANTES da data,
+         *     e nao uma troca de criterio.
+         *
+         *     **O rotulo e o CALCULADO** (`NetworkEventStatus`), e por isso a excecao
+         *     deixa de valer sozinha: passado o fim previsto, o cancelado e `ended`
+         *     como qualquer encerrado, e a partir dali `when` e `status` decidem se ele
+         *     ainda aparece.
+         *
+         *     **`recentes` NAO separa o cancelado**, e a ausencia e medida e nao
+         *     esquecimento: ela e a ordem do passado (`when=past`), onde o rotulo do
+         *     cancelado ja virou `ended` para todo mundo. Uma chave que nunca muda de
+         *     valor seria custo de ordenacao sem desfecho.
+         *
+         *     **A leitura publica nao ordena por distancia**: essa ordem e
          *     `listNearbyNetworkEvents`, com conta.
          * @enum {string}
          */
@@ -12136,23 +12985,42 @@ export interface components {
         };
         /**
          * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
-         *     `alt_text` e **obrigatorio** aqui.
+         *     `alt_text` e **opcional** aqui desde 27/10/2026.
          *
-         *     **ATENCAO, isto DEIXOU de ser igual a galeria do painel em 21/10/2026**:
-         *     lá `alt_text` virou opcional por decisao do cliente
-         *     (`CatalogImagesInput`), e aqui ele NAO foi afrouxado. A decisao do
-         *     cliente e as medicoes que a embasaram foram sobre os formularios do
-         *     PAINEL; esta e a superficie do APP, onde quem cria o encontro e o
-         *     proprio autor, e afrouxa-la de carona repetiria exatamente o erro que a
-         *     `20261017000002` evitou quando deixou a `Rede` de fora do pedido da
-         *     `Loja`. A coluna `network_event_images.alt_text` aceita nulo desde
-         *     21/10, entao esta obrigacao e desta superficie e nao do banco: ela cai
-         *     no dia em que alguem pedir, e nao antes.
+         *     **ELE SAIU DO `required` EM 27/10/2026, e o pedido do cliente e a razao
+         *     inteira.** Palavras dele, em 26/10/2026: *"essa porra de campo e
+         *     obrigatorio na criacao do evento, tire essa merda"* -- e, no mesmo
+         *     pedido, *"remova todos os campos de descricao de foto do aplicativo,
+         *     nao iremos implementar solucoes para quem usa leitor de tela por
+         *     enquanto"*.
+         *
+         *     **Esta e a condicao que o paragrafo anterior deste esquema nomeava.**
+         *     Ele dizia que a obrigacao "cai no dia em que alguem pedir, e nao
+         *     antes", e registrava que em 21/10/2026 o afrouxamento valeu so para a
+         *     galeria do painel (`CatalogImagesInput`), porque afrouxar a `Rede` de
+         *     carona repetiria o erro que a `20261017000002` evitou ao deixar a
+         *     `Rede` de fora do pedido da `Loja`. O dia chegou, e a diferenca e
+         *     exatamente a que aquele paragrafo exigia: o pedido e DESTA superficie,
+         *     dito pelo cliente sobre a tela de criar encontro, e nao uma
+         *     generalizacao do painel.
+         *
+         *     **O CUSTO, dito e aceito:** a capa do encontro fica sem nome acessivel
+         *     escrito pelo autor quando ele nao escreve um. Quem usa leitor de tela
+         *     cai no rotulo generico (`TelaDoEncontro.nomeDaCapaSemTexto`) -- a
+         *     imagem NAO sai da arvore de acessibilidade. O cliente foi informado
+         *     desse custo em 21/10/2026, ciente e por duas vezes, e repetiu o pedido
+         *     em 26/10/2026 alcancando o app.
+         *
+         *     **`minLength: 2` FICA.** Ausente e valido; presente e vazio continua
+         *     `400`, exatamente como no catalogo. A coluna
+         *     `network_event_images.alt_text` ja aceita nulo desde a
+         *     `20261020000013` (21/10/2026), e o `CHECK` de tamanho continua valendo
+         *     quando o texto vem: **nao ha migracao nesta mudanca**.
          */
         CommunityNetworkEventCoverInput: {
             /** Format: uuid */
             upload_id: string;
-            alt_text: string;
+            alt_text?: string;
             crop?: components["schemas"]["ImageCrop"];
         };
         /**
@@ -13624,6 +14492,32 @@ export interface components {
          *     de `UserLocation` em `getMyLocation`.
          */
         MyDeliveryAddress: components["schemas"]["DeliveryAddress"] | null;
+        /**
+         * @description O endereco de entrega guardado NESTE PET, **ou `null` quando ele nao tem
+         *     nenhum**.
+         *
+         *     **Alias anulavel de `DeliveryAddress`, e nao um segundo endereco** --
+         *     mesma forma e mesmo motivo de `MyDeliveryAddress`, que fica logo acima:
+         *     o `null` precisa estar no schema e nao so na prosa, porque um gerador de
+         *     tipo nao le descricao, e sem ele o cliente gerado nasceria com um
+         *     endereco nao-anulavel e quebraria no primeiro pet sem endereco -- que e
+         *     o estado de todo pet cadastrado DEPOIS da migracao `20261027000001`.
+         *
+         *     **Por que existem os DOIS alias, e nao um so.** Eles apontam para o
+         *     mesmo `DeliveryAddress` e poderiam ser um unico nome, mas sao duas
+         *     superficies com dois donos (`user_id` numa, `pet_id` na outra) e dois
+         *     rumos: depois da decisao do cliente de **27/10/2026** (*"endereco um por
+         *     pet"*) a fonte do pedido da plaquinha e o PET, e o da conta so continua
+         *     existindo porque a decisao de **26/10/2026** e *"nao apague nada"*. Um
+         *     nome compartilhado faria a descricao de um valer como documentacao do
+         *     outro, e e exatamente a confusao entre os dois que esta frente desfez.
+         *
+         *     `null` nao e erro e nao e recurso ausente: e o estado normal de um pet
+         *     que ainda nao teve endereco guardado, e nele o formulario da plaquinha se
+         *     comporta como antes de qualquer endereco existir. **Pet AUSENTE e 404**,
+         *     e essa e a outra metade -- o `null` fala do endereco, o 404 fala do pet.
+         */
+        PetDeliveryAddress: components["schemas"]["DeliveryAddress"] | null;
         /**
          * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
          *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
@@ -15208,10 +16102,46 @@ export interface components {
          *     mesmo motivo de `admission`.
          */
         NetworkEventSizeParam: components["schemas"]["PetSize"];
+        /**
+         * @description A SITUACAO CALCULADA do encontro (`NetworkEventStatus`), e **nao a coluna
+         *     de publicacao**. A distincao e o ponto: a coluna nunca volta atras, entao
+         *     um encontro cancelado ha tres semanas segue cancelado NELA, enquanto o
+         *     rotulo que a resposta entrega para ele e `ended`. Quem pede
+         *     `status=cancelled` recebe os encontros que a lista rotula `Cancelado`
+         *     AGORA, e nao os que foram cancelados algum dia.
+         *
+         *     **Sem padrao, de proposito.** Ausente, nada e recortado, e o cancelado
+         *     continua na lista como antes de este parametro existir. Um
+         *     `default: upcoming` aqui tiraria da agenda de quem ja usa o app o
+         *     encontro cancelado que ela precisa ver para saber que nao vai acontecer,
+         *     sem ninguem ter pedido -- e e justamente a informacao que o cancelamento
+         *     existe para dar. Quem separa o cancelado sem esconde-lo e a ordem
+         *     (`NetworkEventSort`).
+         *
+         *     **Combina com `when`, e o par pode nao casar nada**: `status=upcoming`
+         *     com `when=past` e um recorte legitimo e vazio. `applied_filters` diz o
+         *     que de fato valeu, e e ele que separa "a Rede nao tem encontro" de "o seu
+         *     recorte esvaziou a agenda".
+         *
+         *     **Nao exclui o encontro privado.** Ao contrario de `city`, `admission` e
+         *     `size`, que o excluem por casarem valor oculto (ADR-0027 12.14), a
+         *     situacao do privado nao e oculta: o teaser dele ja a entrega
+         *     (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Casar por ela nao conta
+         *     nada que a resposta nao conte.
+         */
+        NetworkEventStatusParam: components["schemas"]["NetworkEventStatus"];
         /** @description O endereco publico do encontro. */
         NetworkEventSlugParam: string;
         PetId: string;
         PhotoId: string;
+        /**
+         * @description O `id` DA LINHA devolvido por `listPasskeys`, e nao o `credential_id`.
+         *     Sao dois identificadores diferentes de proposito: o `credential_id` e
+         *     escolhido pelo autenticador e aparece em `exclude_credentials`, e usar
+         *     ele na URL poria um identificador de credencial no caminho, que vai
+         *     para log de acesso.
+         */
+        PasskeyId: string;
         TagId: string;
         CaseId: string;
         CandidateId: string;
@@ -15959,6 +16889,220 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    beginPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desafio emitido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyRegistrationOptions"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description A conta chegou ao teto de credenciais ativas. A saida e revogar uma
+             *     em `revokePasskey`.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    finishPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Credencial cadastrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            /**
+             * @description A atestacao nao foi verificada. **Nao e erro de formulario**: o
+             *     corpo esta bem formado e a saida da tela e tentar de novo ou
+             *     seguir sem passkey, porque o passo e dispensavel.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Sem sessao, **ou** o desafio expirou ou ja foi usado. O desafio
+             *     vencido sai como `token-expired` e nao como
+             *     `passkey-attestation-invalid`: a saida e pedir outro desafio, nao
+             *     desistir da credencial.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Este aparelho ja tem credencial nesta conta, ou a conta chegou ao
+             *     teto.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    beginPasskeyAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desafio emitido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyAuthenticationOptions"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    finishPasskeyAuthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAuthenticationRequest"];
+            };
+        };
+        responses: {
+            /** @description Sessao aberta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /**
+             * @description A credencial nao confere. A resposta e **identica** para credencial
+             *     desconhecida, revogada, assinatura invalida e contador repetido:
+             *     nao revela nem se a credencial existe, nem se a conta existe.
+             *
+             *     Desafio expirado ou ja usado sai como `token-expired`, que e outra
+             *     saida de tela: pedir outro desafio.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lista das credenciais ativas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    revokePasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O `id` DA LINHA devolvido por `listPasskeys`, e nao o `credential_id`.
+                 *     Sao dois identificadores diferentes de proposito: o `credential_id` e
+                 *     escolhido pelo autenticador e aparece em `exclude_credentials`, e usar
+                 *     ele na URL poria um identificador de credencial no caminho, que vai
+                 *     para log de acesso.
+                 */
+                passkeyId: components["parameters"]["PasskeyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credencial revogada. Idempotente: revogar a ja revogada tambem sai 204. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -16866,6 +18010,63 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getPetDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O endereco guardado neste pet, ou `null` quando ele nao tem nenhum. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetDeliveryAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putPetDeliveryAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryAddress"];
+            };
+        };
+        responses: {
+            /**
+             * @description O endereco como ficou guardado (ja normalizado: CEP sem mascara, UF
+             *     em maiuscula, bordas sem espaco).
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryAddress"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -19125,6 +20326,34 @@ export interface operations {
                  *     mesmo motivo de `admission`.
                  */
                 size?: components["parameters"]["NetworkEventSizeParam"];
+                /**
+                 * @description A SITUACAO CALCULADA do encontro (`NetworkEventStatus`), e **nao a coluna
+                 *     de publicacao**. A distincao e o ponto: a coluna nunca volta atras, entao
+                 *     um encontro cancelado ha tres semanas segue cancelado NELA, enquanto o
+                 *     rotulo que a resposta entrega para ele e `ended`. Quem pede
+                 *     `status=cancelled` recebe os encontros que a lista rotula `Cancelado`
+                 *     AGORA, e nao os que foram cancelados algum dia.
+                 *
+                 *     **Sem padrao, de proposito.** Ausente, nada e recortado, e o cancelado
+                 *     continua na lista como antes de este parametro existir. Um
+                 *     `default: upcoming` aqui tiraria da agenda de quem ja usa o app o
+                 *     encontro cancelado que ela precisa ver para saber que nao vai acontecer,
+                 *     sem ninguem ter pedido -- e e justamente a informacao que o cancelamento
+                 *     existe para dar. Quem separa o cancelado sem esconde-lo e a ordem
+                 *     (`NetworkEventSort`).
+                 *
+                 *     **Combina com `when`, e o par pode nao casar nada**: `status=upcoming`
+                 *     com `when=past` e um recorte legitimo e vazio. `applied_filters` diz o
+                 *     que de fato valeu, e e ele que separa "a Rede nao tem encontro" de "o seu
+                 *     recorte esvaziou a agenda".
+                 *
+                 *     **Nao exclui o encontro privado.** Ao contrario de `city`, `admission` e
+                 *     `size`, que o excluem por casarem valor oculto (ADR-0027 12.14), a
+                 *     situacao do privado nao e oculta: o teaser dele ja a entrega
+                 *     (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Casar por ela nao conta
+                 *     nada que a resposta nao conte.
+                 */
+                status?: components["parameters"]["NetworkEventStatusParam"];
                 page?: number;
                 limit?: number;
             };
@@ -19499,6 +20728,34 @@ export interface operations {
     listMyNetworkEvents: {
         parameters: {
             query?: {
+                /**
+                 * @description A SITUACAO CALCULADA do encontro (`NetworkEventStatus`), e **nao a coluna
+                 *     de publicacao**. A distincao e o ponto: a coluna nunca volta atras, entao
+                 *     um encontro cancelado ha tres semanas segue cancelado NELA, enquanto o
+                 *     rotulo que a resposta entrega para ele e `ended`. Quem pede
+                 *     `status=cancelled` recebe os encontros que a lista rotula `Cancelado`
+                 *     AGORA, e nao os que foram cancelados algum dia.
+                 *
+                 *     **Sem padrao, de proposito.** Ausente, nada e recortado, e o cancelado
+                 *     continua na lista como antes de este parametro existir. Um
+                 *     `default: upcoming` aqui tiraria da agenda de quem ja usa o app o
+                 *     encontro cancelado que ela precisa ver para saber que nao vai acontecer,
+                 *     sem ninguem ter pedido -- e e justamente a informacao que o cancelamento
+                 *     existe para dar. Quem separa o cancelado sem esconde-lo e a ordem
+                 *     (`NetworkEventSort`).
+                 *
+                 *     **Combina com `when`, e o par pode nao casar nada**: `status=upcoming`
+                 *     com `when=past` e um recorte legitimo e vazio. `applied_filters` diz o
+                 *     que de fato valeu, e e ele que separa "a Rede nao tem encontro" de "o seu
+                 *     recorte esvaziou a agenda".
+                 *
+                 *     **Nao exclui o encontro privado.** Ao contrario de `city`, `admission` e
+                 *     `size`, que o excluem por casarem valor oculto (ADR-0027 12.14), a
+                 *     situacao do privado nao e oculta: o teaser dele ja a entrega
+                 *     (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Casar por ela nao conta
+                 *     nada que a resposta nao conte.
+                 */
+                status?: components["parameters"]["NetworkEventStatusParam"];
                 page?: number;
                 limit?: number;
             };
@@ -20078,6 +21335,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicLostPetPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listPublicDirectoryEntries: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca parcial pelo NOME da entrada, tolerante a acento e a caixa,
+                 *     com o MESMO piso de tres caracteres da rota com conta e pela mesma
+                 *     razao: o indice que a atende e GIN de trigrama, e um padrao com
+                 *     menos de tres caracteres nao produz trigrama nenhum. **A tela nao
+                 *     deve enviar `q` antes do terceiro caractere**, sob pena de levar
+                 *     400 no que a pessoa le como o app quebrado.
+                 */
+                q?: string;
+                city?: string;
+                state?: string;
+                neighborhood?: string;
+                kind?: components["schemas"]["ProfessionalKind"];
+                /**
+                 * @description **Piso**, nao igualdade: pedir `contact_verified` traz
+                 *     `document_verified` junto. O mesmo da rota com conta.
+                 */
+                verification_level?: components["schemas"]["VerificationLevel"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina do diretorio sem conta. `total` alimenta "1 a 20 de 87" e
+             *     `applied_filters` alimenta a linha que explica o recorte, como na
+             *     rota com conta.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicDirectoryEntryPage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

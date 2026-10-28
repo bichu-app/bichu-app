@@ -13,13 +13,35 @@ import '../api/pets_api_listar_test.dart' show petDoContrato;
 import 'ajuda_de_tela.dart';
 
 // ---------------------------------------------------------------------------
-// O ENDERECO DE ENTREGA GUARDADO NA CONTA (cliente, 21/10/2026)
+// O ENDERECO DE ENTREGA GUARDADO NO PET (cliente, 27/10/2026)
 // ---------------------------------------------------------------------------
 //
-// Palavras dele, escolhendo esta opcao entre tres:
+// ## AS DUAS DECISOES DELE, COM AS DATAS E AS PALAVRAS -- e a de 21/10 cai
 //
-//     "Endereco guardado de verdade -- um endereco de entrega salvo na conta,
+// **21/10/2026**, escolhendo entre tres opcoes apresentadas, e e esta frase que
+// este arquivo media quando se chamava `endereco_guardado_na_conta_test.dart`:
+//
+//     "Endereco guardado de verdade -- um endereco de entrega salvo na CONTA,
 //      reusado em todo pedido e editavel num lugar so."
+//
+// **27/10/2026**, pedido dele:
+//
+//     "o endereco de entrega da plaquinha tem que estar dentro do cadastro do
+//      pet"
+//
+// e, com a frase de 21/10 posta na mesa, nomeada e datada:
+//
+//     "endereco um por pet"
+//
+// **A de 21/10 CAI e a de 27/10 vale**, e nao foi descuido dele: a decisao
+// anterior estava em maos quando a nova foi tomada. Entao este arquivo trocou de
+// NOME e de ALVO -- ele mede `/v1/pets/{petId}/delivery-address`, e **nenhum
+// caso dele toca `/v1/me/delivery-address`**, que continua existindo (decisao
+// dele de 26/10/2026, *"nao apague nada"*) e nao e lido por pedido nenhum.
+//
+// **O que NAO mudou e o que cada grupo mede**: os desfechos sao os mesmos, e a
+// razao de cada grupo e a mesma. Trocou a fonte do endereco, nao o
+// comportamento do formulario.
 //
 // O que cada grupo deste arquivo mede, e por que cada um precisa existir:
 //
@@ -33,7 +55,8 @@ import 'ajuda_de_tela.dart';
 //    tela: uma afirmacao sobre a tela nao enxerga uma escrita de rede.
 //
 // C. **SEM ENDERECO GUARDADO, O FORMULARIO SE COMPORTA COMO HOJE.** `null` nao
-//    e erro, e e o estado de TODA conta no dia em que isto entrar no ar.
+//    e erro, e e o estado de TODO pet cadastrado depois da migracao
+//    `20261027000001`.
 //
 // D. **A LEITURA FALHANDO NAO IMPEDE O PEDIDO.** O endereco guardado e
 //    conveniencia; um 500 nele nao pode travar quem quer a plaquinha.
@@ -54,6 +77,26 @@ import 'ajuda_de_tela.dart';
 
 const String _idDoPet = '3f1d7a9e-0000-7000-8000-000000000001';
 const String _refDoServidor = 'Kysr9QvB_0123456789abcd';
+
+/// O SEGUNDO pet, do grupo H. Ele existe porque *"endereco um por pet"* so pode
+/// ser medido com mais de um pet: com um unico pet, "um por pet" e "um por
+/// conta" produzem exatamente a mesma tela.
+const String _idDoSegundoPet = '3f1d7a9e-0000-7000-8000-000000000002';
+
+/// O endereco do segundo pet, DIFERENTE do primeiro em todos os campos que os
+/// casos do grupo H olham -- um valor igual nao distinguiria "trocou" de "nao
+/// trocou".
+const Map<String, dynamic> _guardadoDoSegundoPet = <String, dynamic>{
+  'recipient_name': 'Joana Do Segundo',
+  'recipient_phone': '+5521988887777',
+  'postal_code': '20040020',
+  'street': 'Rua Do Segundo Pet',
+  'street_number': '222',
+  'complement': 'casa 2',
+  'neighborhood': 'Bairro Do Segundo',
+  'city': 'Cidade Do Segundo',
+  'state': 'RJ',
+};
 
 /// Um aparelho pequeno com o teclado aberto, para o grupo G.
 const Size _aparelhoPequeno = Size(320, 568);
@@ -92,11 +135,12 @@ class _Registro {
 
 /// A rede: um pet do tutor, o pedido da plaquinha, o endereco guardado e o CEP.
 ///
-/// `guardado` nulo responde **corpo `null` cru** em `GET /v1/me/delivery-address`
-/// -- e nao `{}` --, porque e isso que o contrato declara (`MyDeliveryAddress`
-/// e `DeliveryAddress` ou `null`) e e a forma que o `ApiClient` embrulha em
-/// `{'data': null}`. Um duble que respondesse `{}` nao exercitaria a costura
-/// que `MeApi.lerEnderecoGuardado` existe para tratar.
+/// `guardado` nulo responde **corpo `null` cru** em
+/// `GET /v1/pets/{petId}/delivery-address` -- e nao `{}` --, porque e isso que o
+/// contrato declara (`PetDeliveryAddress` e `DeliveryAddress` ou `null`) e e a
+/// forma que o `ApiClient` embrulha em `{'data': null}`. Um duble que
+/// respondesse `{}` nao exercitaria a costura que `PetsApi.lerEnderecoDoPet`
+/// existe para tratar.
 Future<http.Response> Function(http.Request) _rede(
   _Registro registro, {
   Map<String, dynamic>? guardado,
@@ -122,7 +166,11 @@ Future<http.Response> Function(http.Request) _rede(
       });
     }
 
-    if (caminho == '/v1/me/delivery-address') {
+    // O ENDERECO E DO PET desde 27/10/2026. O duble nao conhece
+    // `/v1/me/delivery-address`, e a ausencia e deliberada: qualquer caso que
+    // volte a chamar aquela rota cai no 404 do fim desta funcao em vez de passar
+    // em silencio sobre a rota que a decisao aposentou.
+    if (caminho == '/v1/pets/$_idDoPet/delivery-address') {
       if (req.method == 'GET') {
         registro.getsDoEndereco.add(caminho);
         if (enderecoFora) return problema('server-error', 500);
@@ -198,6 +246,26 @@ Future<void> _digitar(WidgetTester tester, String rotulo, String valor) async {
   await tester.pumpAndSettle();
 }
 
+/// Escolhe o pet pelo NOME, no [SeletorDeLista] de `Pet`.
+///
+/// **Nao e `tocar(find.text('Nina'))`, e a primeira versao destes casos
+/// reprovou assim** (`Bad state: No element`): o `SeletorDeLista` nao desenha as
+/// opcoes na tela -- ele abre uma folha. Entao sao DOIS toques, e e a mesma
+/// forma de `escolherOEstado` em `ajuda_de_tela.dart`: o `InkWell` do seletor
+/// abre, e o `ListTile` da folha escolhe.
+Future<void> _escolherPet(WidgetTester tester, String nome) async {
+  final seletor = find.ancestor(
+    of: find.text('Pet'),
+    matching: find.byType(SeletorDeLista),
+  );
+  await tocar(tester, find.descendant(of: seletor, matching: find.byType(InkWell)));
+  await tocar(
+    tester,
+    find.descendant(of: find.byType(ListTile), matching: find.text(nome)),
+  );
+  await tester.pumpAndSettle();
+}
+
 /// O que o [SeletorDeLista] de `Estado` mostra como selecionado.
 String? _ufSelecionada(WidgetTester tester) {
   final seletor = find.ancestor(
@@ -215,12 +283,17 @@ void main() {
     testWidgets('os nove campos chegam do endereco guardado', (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      // **`extra: _idDoPet` passou a ser OBRIGATORIO aqui em 27/10/2026**, e nao
+      // e conveniencia de teste: o endereco e DO PET (*"endereco um por pet"*),
+      // entao sem pet escolhido nao ha endereco a buscar. Este caso mede quem
+      // chega de dentro do produto, com o pet em maos; quem chega por link
+      // direto e medido no caso `o endereco so e lido quando o pet e escolhido`.
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
 
       expect(
         registro.getsDoEndereco,
         hasLength(1),
-        reason: 'a tela tem de LER o endereco guardado ao abrir',
+        reason: 'a tela tem de LER o endereco DO PET ao abrir com o pet em maos',
       );
       expect(_textoDoCampo(tester, 'Quem recebe'), 'Mariana Guardada');
       expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste');
@@ -246,7 +319,7 @@ void main() {
       // sobrescreveria o que veio da conta.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
       expect(registro.chamadasDeCep, isEmpty);
     });
   });
@@ -468,7 +541,7 @@ void main() {
       // da busca de CEP passaria a achar que a pessoa escreveu algo.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
 
       expect(registro.getsDoEndereco, hasLength(1), reason: 'CONTROLE POSITIVO: a leitura ocorreu');
       for (final rotulo in <String>[
@@ -489,7 +562,7 @@ void main() {
     testWidgets('e a busca de CEP volta a preencher, como antes desta frente', (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
       await _digitar(tester, 'CEP', '01311000');
       expect(registro.chamadasDeCep, isNotEmpty, reason: 'CONTROLE POSITIVO: a busca saiu');
       expect(_textoDoCampo(tester, 'Rua'), 'Avenida Da Base');
@@ -527,7 +600,7 @@ void main() {
   //    PESSOA digitou
   // ========================================================================
   group('E. a busca de CEP sobre o formulario pre-preenchido', () {
-    testWidgets('ISCA — CEP novo SUBSTITUI o que veio da conta', (tester) async {
+    testWidgets('ISCA — CEP novo SUBSTITUI o que veio do pet', (tester) async {
       // SEM A RECONCILIACAO ESTE CASO REPROVA, e e o defeito que ela existe
       // para impedir: com tudo pre-preenchido nada esta vazio, a regra de
       // 17/10 lida como `isEmpty` desliga a busca, e quem mudou de casa digita
@@ -535,7 +608,7 @@ void main() {
       // e com a plaquinha indo para o endereco de antes.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
       expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste');
 
       await _digitar(tester, 'CEP', '01311000');
@@ -544,7 +617,7 @@ void main() {
       expect(
         _textoDoCampo(tester, 'Rua'),
         'Avenida Da Base',
-        reason: 'o valor que veio da CONTA tem de ceder a base: ele e '
+        reason: 'o valor que veio do PET tem de ceder a base: ele e '
             'conveniencia, e nao algo que a pessoa escreveu nesta sessao',
       );
       expect(_textoDoCampo(tester, 'Bairro'), 'Bairro Da Base');
@@ -558,7 +631,7 @@ void main() {
       // 17/10: *"o que a pessoa ja escreveu vence o que a base devolve"*.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.solicitarPlaquinha);
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
 
       // A pessoa escreve a rua A MAO, e so depois mexe no CEP.
       await _digitar(tester, 'Rua', 'A Rua Que Eu Escrevi');
@@ -585,7 +658,7 @@ void main() {
     testWidgets('abre com o endereco guardado', (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       expect(registro.getsDoEndereco, hasLength(1));
       expect(_textoDoCampo(tester, 'Quem recebe'), 'Mariana Guardada');
@@ -598,7 +671,7 @@ void main() {
         (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
       expect(_textoDoCampo(tester, 'Rua'), isEmpty);
       // `null` NAO e erro: e o estado normal de quem nunca guardou endereco.
       expect(find.textContaining('servidor'), findsNothing);
@@ -608,7 +681,7 @@ void main() {
         (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       await _digitar(tester, 'Quem recebe', 'Quem Recebe Aqui');
       await _digitar(tester, 'CEP', '01311000');
@@ -632,7 +705,7 @@ void main() {
     testWidgets('ISCA — campo faltando diz QUAL falta, e nao faz `PUT`', (tester) async {
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       // So o destinatario. Faltam CEP, rua, numero, bairro, cidade, UF e
       // telefone.
@@ -658,7 +731,7 @@ void main() {
       // formulario.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
       expect(find.textContaining('Apagar'), findsNothing);
       expect(find.textContaining('Remover'), findsNothing);
       expect(find.textContaining('Excluir'), findsNothing);
@@ -670,7 +743,7 @@ void main() {
       // cliente evita.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: null));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
       expect(find.textContaining('sem alterar este'), findsOneWidget);
     });
   });
@@ -716,7 +789,7 @@ void main() {
 
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       final alvo = find.text('Guardar endereço');
       expect(alvo, findsOneWidget, reason: 'o botao nem foi construido');
@@ -748,7 +821,7 @@ void main() {
 
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       final ultimo = _campoDoRotulo('Telefone de quem recebe');
       await tester.ensureVisible(ultimo);
@@ -797,7 +870,7 @@ void main() {
       // debaixo do CEP NOVO -- o endereco corrompido, guardado com 200.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       // A tela abriu com o endereco da conta: a linha de base da isca.
       expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste');
@@ -838,7 +911,7 @@ void main() {
       // isca de cima e REPROVARIA aqui.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       // Escreve a rua A MAO, escolhe a UF A MAO, e so depois mexe no CEP.
       await _digitar(tester, 'Rua', 'A Rua Que Eu Escrevi');
@@ -879,7 +952,7 @@ void main() {
       // estava. Sem busca de CEP nenhuma, nada se mexe.
       final registro = _Registro();
       await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
-      await irPara(tester, Rotas.enderecoDeEntrega);
+      await irPara(tester, Rotas.enderecoDeEntregaDoPet(_idDoPet));
 
       await _digitar(tester, 'Número', '1001');
       await tocar(tester, find.text('Guardar endereço'));
@@ -896,4 +969,213 @@ void main() {
       expect(find.text('Endereço guardado.'), findsOneWidget);
     });
   });
+
+  // ========================================================================
+  // H. UM POR PET, E A TROCA DE PET NAO MISTURA DOIS ENDERECOS
+  //    (cliente, 27/10/2026: *"endereco um por pet"*)
+  // ========================================================================
+  //
+  // **ESTE GRUPO NAO EXISTIA, e nao podia existir:** no modelo da CONTA
+  // (21/10/2026) o endereco era o mesmo para qualquer pet, entao trocar de pet
+  // nao trocava a fonte e nao havia nada a medir. Ele e a prova da unica coisa
+  // que a decisao de 27/10 acrescentou de comportamento novo.
+  group('H. um endereco por pet, e trocar de pet troca a fonte', () {
+    testWidgets('o endereco so e lido quando o pet e ESCOLHIDO (link direto)',
+        (tester) async {
+      // Quem chega por link direto nao tem pet em maos. Ler o endereco ali seria
+      // ler o endereco de quem? Nao ha pet, e nao ha endereco a buscar.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _rede(registro, guardado: _guardadoDoServidor));
+      await irPara(tester, Rotas.solicitarPlaquinha);
+
+      expect(
+        registro.getsDoEndereco,
+        isEmpty,
+        reason: 'sem pet escolhido nao ha endereco a ler, e uma leitura aqui '
+            'seria a volta do modelo da conta por outro caminho',
+      );
+      expect(_textoDoCampo(tester, 'Rua'), isEmpty);
+
+      // A pessoa escolhe o pet. **AGORA** ha o que ler.
+      await _escolherPet(tester, 'Nina');
+
+      expect(
+        registro.getsDoEndereco,
+        hasLength(1),
+        reason: 'escolher o pet tem de disparar a leitura do endereco DELE',
+      );
+      expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste');
+    });
+
+    testWidgets('ISCA — trocar de pet NAO deixa a rua do primeiro no formulario',
+        (tester) async {
+      // O DEFEITO QUE ESTA ISCA PERSEGUE, e ele e silencioso: `_preencherDoGuardado`
+      // so preenche campo VAZIO, e depois da primeira carga nada esta vazio.
+      // Sem `soltarOQueVeioDoGuardado`, o endereco do segundo pet nao entraria
+      // em campo nenhum e o pedido sairia com a rua do PRIMEIRO -- sem nada ter
+      // dado erro, e com a plaquinha do pet B indo para o endereco do pet A.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _redeDeDoisPets(registro));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      expect(_textoDoCampo(tester, 'Rua'), 'Rua Guardada do Teste',
+          reason: 'CONTROLE POSITIVO: o endereco do primeiro pet chegou');
+
+      await _escolherPet(tester, 'Rex');
+
+      expect(
+        _textoDoCampo(tester, 'Rua'),
+        'Rua Do Segundo Pet',
+        reason: 'o formulario ficou com a rua do pet ANTERIOR. Trocar de pet '
+            'troca a fonte do endereco -- e o endereco de um pet so e dele',
+      );
+      expect(_textoDoCampo(tester, 'Cidade'), 'Cidade Do Segundo');
+      expect(_ufSelecionada(tester), 'RJ');
+      expect(
+        registro.getsDoEndereco,
+        hasLength(2),
+        reason: 'uma leitura por pet: a do pet inicial e a do pet escolhido',
+      );
+    });
+
+    testWidgets('ISCA — o que a PESSOA digitou SOBREVIVE a troca de pet', (tester) async {
+      // A outra metade, e sem ela o conserto acima seria um apagador: limpar
+      // TUDO na troca de pet apagaria o que ela acabou de escrever. O toque dela
+      // ja tira o campo do conjunto `daConta`, entao ele nao e solto.
+      final registro = _Registro();
+      await abrirOApp(tester, rede: _redeDeDoisPets(registro));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Quem Eu Escrevi A Mao');
+      await _escolherPet(tester, 'Rex');
+
+      expect(
+        _textoDoCampo(tester, 'Quem recebe'),
+        'Quem Eu Escrevi A Mao',
+        reason: 'trocar de pet apagou o que a PESSOA digitou. So o que veio do '
+            'endereco guardado sai; o que ela escreveu e dela',
+      );
+      // E o que veio do guardado cedeu, como no caso acima.
+      expect(_textoDoCampo(tester, 'Rua'), 'Rua Do Segundo Pet');
+    });
+
+    testWidgets('o `PUT` do primeiro pedido vai para o CAMINHO daquele pet', (tester) async {
+      // "Um por pet" nao e so leitura: a escrita do primeiro pedido tem de cair
+      // no pet certo. Um `PUT` em `/v1/me/delivery-address` aqui seria a volta do
+      // modelo da conta -- e o duble nem conhece aquela rota.
+      final registro = _Registro();
+      // **SEM endereco no segundo pet**: com endereco guardado o codigo esta
+      // CERTO em nao escrever (regra de 21/10, que o cliente manteve), e o caso
+      // mediria a ausencia de uma escrita que nao devia acontecer.
+      await abrirOApp(tester, rede: _redeDeDoisPets(registro, segundoTemEndereco: false));
+      await irPara(tester, Rotas.solicitarPlaquinha, extra: _idDoSegundoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Alguem Do Segundo');
+      await _digitar(tester, 'CEP', '20040020');
+      await _digitar(tester, 'Rua', 'Rua Digitada');
+      await _digitar(tester, 'Número', '12');
+      await _digitar(tester, 'Bairro', 'Bairro Digitado');
+      await _digitar(tester, 'Cidade', 'Cidade Digitada');
+      await _digitar(tester, 'Telefone de quem recebe', '11987654321');
+      await tocar(tester, find.text('Pedir a plaquinha'));
+      await tester.pumpAndSettle();
+
+      expect(registro.postsDoPedido, hasLength(1), reason: 'CONTROLE POSITIVO: o pedido saiu');
+      expect(
+        registro.putsDoEndereco,
+        <String>['/v1/pets/$_idDoSegundoPet/delivery-address'],
+        reason: 'o endereco do primeiro pedido tem de ser guardado NO PET do '
+            'pedido, e em nenhum outro lugar',
+      );
+    });
+  });
+}
+
+/// DOIS pets, com DOIS enderecos diferentes -- a rede do grupo H.
+///
+/// **Separada de [_rede], e nao um parametro a mais nela:** [_rede] serve um pet
+/// e e usada por todos os outros grupos, e alargar a assinatura dela faria cada
+/// um daqueles casos passar a declarar um segundo pet que nao usa. O que esta
+/// rede acrescenta e exatamente o que o grupo H mede.
+///
+/// `segundoTemEndereco` existe porque os casos do grupo H precisam dos DOIS
+/// estados, e **a primeira versao desta rede reprovou por nao ter o parametro**:
+/// ela dava endereco ao segundo pet sempre, e o caso do `PUT` media uma escrita
+/// que o codigo esta CERTO em nao fazer -- com endereco guardado,
+/// `_guardarSeNaoHavia` nunca escreve, nem igual (a regra de 21/10 que o
+/// cliente manteve). Entao:
+///
+/// - `true`  -- os casos da TROCA, que precisam de dois enderecos diferentes
+///   para distinguir "trocou" de "nao trocou";
+/// - `false` -- o caso do `PUT`, que precisa de um pet SEM endereco para o
+///   primeiro pedido ter o que guardar.
+Future<http.Response> Function(http.Request) _redeDeDoisPets(
+  _Registro registro, {
+  bool segundoTemEndereco = true,
+}) {
+  final primeiro = petDoContrato(id: _idDoPet);
+  final segundo = petDoContrato(id: _idDoSegundoPet, nome: 'Rex');
+  return (req) async {
+    final caminho = req.url.path;
+
+    if (req.url.host == 'viacep.com.br' || req.url.host == 'brasilapi.com.br') {
+      registro.chamadasDeCep.add(req.url.toString());
+      return json200(<String, dynamic>{
+        'cep': '01311-000',
+        'logradouro': 'Avenida Da Base',
+        'bairro': 'Bairro Da Base',
+        'localidade': 'Cidade Da Base',
+        'uf': 'RJ',
+      });
+    }
+
+    if (caminho == '/v1/pets/$_idDoPet/delivery-address' && req.method == 'GET') {
+      registro.getsDoEndereco.add(caminho);
+      return json200(_guardadoDoServidor);
+    }
+    if (caminho == '/v1/pets/$_idDoSegundoPet/delivery-address') {
+      if (req.method == 'GET') {
+        registro.getsDoEndereco.add(caminho);
+        if (!segundoTemEndereco) {
+          // CORPO `null` CRU, como o contrato declara (`PetDeliveryAddress`).
+          return http.Response(
+            'null',
+            200,
+            headers: <String, String>{'content-type': 'application/json'},
+          );
+        }
+        return json200(_guardadoDoSegundoPet);
+      }
+      if (req.method == 'PUT') {
+        registro.putsDoEndereco.add(caminho);
+        registro.corposDoPut.add(req.body);
+        return json200(json.decode(req.body) as Map<String, dynamic>);
+      }
+    }
+
+    if (caminho == '/v1/pets' && req.method == 'GET') {
+      return json200(<String, dynamic>{
+        'items': <dynamic>[primeiro, segundo],
+      });
+    }
+    if (caminho.endsWith('/reference-data')) {
+      return json200(referenciaDeTeste());
+    }
+    if (caminho == '/v1/pets/$_idDoSegundoPet/tag-requests' && req.method == 'POST') {
+      registro.postsDoPedido.add(caminho);
+      registro.corposDoPedido.add(req.body);
+      return json200(<String, dynamic>{
+        'ref': _refDoServidor,
+        'status': 'pending',
+        'requested_at': '2026-10-27T12:00:00.000Z',
+        'decided_at': null,
+        'delivery_state': 'requested',
+        'tracking_code': null,
+        'shipped_at': null,
+        'delivered_at': null,
+        'notes': null,
+      });
+    }
+    return http.Response('', 404);
+  };
 }

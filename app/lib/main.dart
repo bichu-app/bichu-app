@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:path_provider/path_provider.dart';
 
+import 'api/cache_de_imagens.dart';
 import 'app.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
@@ -103,6 +105,26 @@ Future<void> arrancar({
       mensagensDePush: embarcado
           ? const MensagensDePushPorFirebase()
           : const MensagensDePushNaoEmbarcadas(),
+      // O CACHE DE IMAGEM EM DISCO (BICHUS-296, cliente 26/10/2026).
+      //
+      // **Construido AQUI e nao dentro do `BichuApp`**, e nao e organizacao: a
+      // pasta sai de `getApplicationCacheDirectory()`, um canal de plataforma
+      // que trava o `pumpAndSettle` para sempre, sem mensagem, em teste de
+      // widget. Este arquivo e o unico que nunca roda sob `flutter_test`.
+      //
+      // `getApplicationCacheDirectory` e nao `getApplicationDocumentsDirectory`:
+      // o que esta aqui e descartavel por definicao, e nos dois sistemas esta e
+      // a pasta que o sistema operacional pode limpar sozinho sob pressao de
+      // espaco -- `Library/Caches` no iOS, `getCacheDir()` no Android. Nenhum
+      // dado do usuario vive neste caminho: o original de toda imagem continua
+      // inteiro no armazenamento do servidor.
+      //
+      // A funcao e passada e nao o resultado: a resolucao acontece na primeira
+      // imagem, e nao no arranque, para nao somar um canal de plataforma ao
+      // caminho critico da abertura.
+      cacheDeImagens: CacheDeImagensNoAparelho(
+        pasta: getApplicationCacheDirectory,
+      ),
     ),
   );
 }

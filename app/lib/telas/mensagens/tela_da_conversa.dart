@@ -85,6 +85,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/marca_da_pessoa.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'area_de_mensagens.dart';
 import 'foto_na_barra_de_escrever.dart';
@@ -344,6 +345,55 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   /// **Nao desabilita nada.** A foto e gravada e vale para quem a mandou; o que
   /// este sinalizador faz e DIZER, antes do envio.
   bool get _fotoAlcancaOOutroLado => _conversa?.fotoAlcancaOOutroLado ?? true;
+
+  /// QUEM ESCREVEU esta mensagem, entre os participantes da conversa.
+  ///
+  /// **Pedido do cliente, 22/10/2026:** *"inclua o icone do perfil/foto do
+  /// usuário nas mensagens"*; e em 26/10, ao ver que não estava no aparelho:
+  /// *"você não colocou o icone da imagem a cada mensagem do usuário"*. A
+  /// palavra que decide é **"a cada"**: a foto é de cada fala, e não um
+  /// retrato no topo da conversa.
+  ///
+  /// **A foto não vem na mensagem, e é por isso que esta função existe.**
+  /// `#/components/schemas/Message` não tem foto de autor nenhuma — tem
+  /// `sender_role` e `photo_url`, e `photo_url` é a foto ANEXADA à fala (o
+  /// animal achado), não o retrato de quem falou. O retrato mora em
+  /// `Conversation.participants[].photo_icon_url`, a derivada `thumb` de 176
+  /// px. Então o casamento é pelo PAPEL: `tutor` com `tutor`, `finder` com
+  /// `finder`. **Nenhuma rota nova e nenhuma linha de contrato** — o campo já
+  /// chegava e a conversa já o lia para o título.
+  ///
+  /// **Nulo é o estado normal, e não falha.** `photoIconUrl` só vem preenchida
+  /// quando o outro lado é **conexão aceita** de quem chama (emenda 3 do
+  /// ADR-0010); ela chega nula em seis estados que esta camada de propósito
+  /// não distingue — não é conexão aceita, par bloqueado, o outro lado não tem
+  /// conta, conta desabilitada, conexão sem foto pronta, ou servidor antigo.
+  /// Com nula desenha-se a inicial, e **o recorte continua sendo do
+  /// servidor**: a tela nunca monta foto de quem a pessoa não pode ver, ela
+  /// pinta o que veio.
+  ///
+  /// Nulo também para a mensagem do sistema, por construção: `participants`
+  /// não traz `system`. Ver [_Bolha], que não desenha marca para ela.
+  ParticipanteDaConversa? _autorDe(MensagemDaConversa mensagem) {
+    final conversa = _conversa;
+    if (conversa == null) return null;
+    for (final participante in conversa.participants) {
+      if (participante.role == mensagem.senderRole) return participante;
+    }
+    return null;
+  }
+  /// O PAPEL DE QUEM ESTA USANDO O APP nesta conversa.
+  ///
+  /// Vem do servidor (`viewer_role`) e **nunca e deduzido aqui**: medido em
+  /// 27/10/2026, sem conexao aceita os dois participantes chegam com `handle` e
+  /// `photoIconUrl` nulos, e o corpo e identico para os dois chamadores. Ver
+  /// `Conversa.papelDoChamador`, inclusive por que o padrao e `tutor`.
+  ///
+  /// **Lido num lugar so**: o lado da bolha, o nome do titulo e a marca de
+  /// alcance da foto dependem do MESMO fato, e duas leituras poderiam discordar
+  /// entre si no mesmo quadro -- a barra diria um nome e as bolhas o outro.
+  PapelNaConversa get _papelDoChamador =>
+      _conversa?.papelDoChamador ?? PapelNaConversa.tutor;
 
   /// A legenda esta vazia. Ver [TextosDaFotoNaConversa.aFotoPrecisaDeLegenda].
   bool get _faltaLegenda => _controlador.text.trim().isEmpty;
@@ -668,7 +718,12 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   @override
   Widget build(BuildContext context) {
     final conversa = _conversa;
-    final outro = conversa?.outroLadoVistoPor(PapelNaConversa.tutor);
+    // O OUTRO LADO visto por QUEM ESTA CHAMANDO, e nao pelo tutor.
+    //
+    // Antes de 27/10/2026 esta linha passava `PapelNaConversa.tutor` fixo: para
+    // o achador COM conta -- que o servidor atende -- o "outro lado" era ele
+    // mesmo, e a barra mostrava o PROPRIO nome. Ver `Conversa.papelDoChamador`.
+    final outro = conversa?.outroLadoVistoPor(_papelDoChamador);
     // O TITULO E NOME + PET, e nunca o id. **Em DUAS linhas desde 20/10/2026**:
     // a composicao de uma linha so (`'$nome · $pet'`, em `headlineSmall`) pedia
     // **442,16 dp** contra **287,00 dp** de vao real em 375 dp -- cortava por
@@ -785,8 +840,10 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
             padding: const EdgeInsets.only(bottom: BichuEspaco.e3),
             child: _Bolha(
               mensagem: mensagem,
+              autor: _autorDe(mensagem),
               aoBuscarDeNovo: _carregar,
               fotoAlcancaOOutroLado: _fotoAlcancaOOutroLado,
+              papelDoChamador: _papelDoChamador,
             ),
           ),
         if (falhaDeEnvio != null)
@@ -1002,11 +1059,30 @@ class _AvisoDeConversaEncerrada extends StatelessWidget {
 class _Bolha extends StatelessWidget {
   const _Bolha({
     required this.mensagem,
+    required this.autor,
     required this.aoBuscarDeNovo,
     required this.fotoAlcancaOOutroLado,
+    required this.papelDoChamador,
   });
 
   final MensagemDaConversa mensagem;
+
+  /// QUEM ESCREVEU, para a marca ao lado da fala. Ver
+  /// `_EstadoDaTelaDaConversa._autorDe`.
+  ///
+  /// **Nulo não esconde a marca**: ele a faz cair na inicial, que é o que
+  /// `MarcaDaPessoa` já faz em toda outra superfície. Esconder a marca quando
+  /// não há foto devolveria o defeito que o cliente apontou — ele veria falas
+  /// com retrato e falas sem, e a conversa com um estranho (o caso mais comum
+  /// desta tela) é justamente a que não tem foto.
+  final ParticipanteDaConversa? autor;
+  /// O PAPEL DE QUEM ESTA LENDO esta conversa (`Conversation.viewer_role`).
+  ///
+  /// **Obrigatorio, e sem padrao de proposito.** Um padrao `tutor` aqui seria o
+  /// defeito de 26/10/2026 de volta no dia em que alguem construir a bolha num
+  /// caminho novo e esquecer de passar o papel -- e ele reaparece calado,
+  /// porque uma bolha no lado errado nao lanca nada.
+  final PapelNaConversa papelDoChamador;
 
   /// Rele a conversa, para as URLs assinadas virem com assinatura nova.
   ///
@@ -1028,7 +1104,51 @@ class _Bolha extends StatelessWidget {
   /// A do sistema nao e de ninguem, e marca de alcance e sobre a foto de uma
   /// pessoa. Entao o fato do canal vale so para a do tutor.
   bool get _alcancouOOutroLado =>
-      mensagem.senderRole != PapelNaConversa.tutor || fotoAlcancaOOutroLado;
+      mensagem.senderRole != papelDoChamador || fotoAlcancaOOutroLado;
+
+  /// O LADO DO CÍRCULO da marca de quem falou, em dp.
+  ///
+  /// **32 e não 40**, pelo mesmo critério já escrito em `MarcaDaPessoa.lado`:
+  /// 40 é o círculo do *cabeçalho de um cartão* (a publicação do Mural) e da
+  /// *linha de lista* (a área de mensagens); 32 é o da linha dentro de uma
+  /// lista — *"o comentário é uma linha dentro de uma lista, e não o cabeçalho
+  /// de um cartão"*. Uma fala é a linha, não o cartão, e é o mesmo número do
+  /// comentário do Mural pela mesma razão.
+  ///
+  /// **Ela NÃO é alvo de toque, e isso é a decisão.** O círculo da área de
+  /// mensagens abre o perfil porque lá ele é o único endereço do outro lado;
+  /// aqui a conversa JÁ tem essa porta, uma vez, no título
+  /// (`PortaDoPerfilDoParticipante`, via `titulo_da_conversa.dart`). Repetir o
+  /// destino em cada fala poria N alvos idênticos numa lista rolável — e nas
+  /// falas do estranho, que é o caso comum desta tela, `handle` é nulo e **não
+  /// há destino**: seriam círculos que se anunciam como botão sem levar a
+  /// lugar nenhum, o toque sem desfecho que o critério 2 da BICHUS-62 proíbe
+  /// por escrito.
+  static const double ladoDaMarca = 32;
+
+  /// O vão entre a marca e a bolha, em dp. Ele sai do ORÇAMENTO da bolha (ver
+  /// [_larguraMaximaDaBolha]) e não da margem da página.
+  static const double respiroDaMarca = BichuEspaco.e2;
+
+  /// A fração da largura da tela que a fala podia ocupar ANTES da marca.
+  static const double fracaoDaLargura = 0.78;
+
+  /// O que sobra para a bolha depois de a marca e o respiro serem pagos.
+  ///
+  /// **A marca não é de graça, e o número de antes não podia ficar.** A bolha
+  /// tinha `maxWidth: largura * 0.78` dentro de um `Align`; num `Row` com um
+  /// círculo de 32 e um vão de 8 ao lado, aquele mesmo teto soma
+  /// `0,78 · L + 40` e **transborda** — a listra amarela do `RenderFlex` em
+  /// toda fala longa. Os 40 dp saem do teto da bolha, e o conjunto
+  /// marca + vão + bolha continua em 0,78 da tela.
+  ///
+  /// O piso de zero é para a tela estreita absurda: `ConstrainedBox` com
+  /// `maxWidth` negativo lança.
+  static double _larguraMaximaDaBolha(double larguraDaTela) {
+    final teto =
+        larguraDaTela * fracaoDaLargura - (ladoDaMarca + respiroDaMarca);
+    return teto < 0 ? 0 : teto;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1070,15 +1190,68 @@ class _Bolha extends StatelessWidget {
       );
     }
 
-    // O TUTOR e quem usa o app com conta no caminho da plaquinha: a mensagem
-    // dele vai a direita, a de quem achou a esquerda.
-    final minha = mensagem.senderRole == PapelNaConversa.tutor;
+    // A MINHA MENSAGEM VAI A DIREITA, e "minha" e o papel de QUEM CHAMA.
+    //
+    // Antes de 27/10/2026 era `== PapelNaConversa.tutor` fixo. O alinhamento
+    // ficava funcao pura de `sender_role` -- nao invertia quando o chamador
+    // invertia --, e para o achador COM conta a bolha do OUTRO lado ia para a
+    // direita, que e o lado que a pessoa le como o dela.
+    final minha = mensagem.senderRole == papelDoChamador;
 
-    return Align(
-      alignment: minha ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
+    // A MARCA DE QUEM FALOU, uma por fala.
+    //
+    // **`MarcaDaPessoa` e não um círculo novo.** Ela é o desenho de pessoa já
+    // compartilhado pelo cartão do Mural, pelo comentário e pela área de
+    // mensagens (`widgets/marca_da_pessoa.dart`), e com ela vêm de graça a
+    // queda para a inicial, o `cacheWidth` pela largura pintada, o
+    // `simboloDeFalha` de retrato e a decisão de a imagem ser decorativa.
+    // Desenhar o segundo círculo aqui era o caminho que aquele arquivo nasceu
+    // para fechar.
+    //
+    // **A inicial sai de `autor.marcaNeutra`, e não de `MarcaDaPessoa.letraDe`
+    // sobre o nome.** As duas regras existem e divergem de propósito: a desta
+    // tela é a do contrato (a PRIMEIRA letra, nunca iniciais de sobrenome,
+    // porque o servidor promete que sobrenome não sai), e é a mesma que a
+    // linha da área de mensagens já usa para esta mesma pessoa. Trocá-la por
+    // `letraDe` faria a letra do título e a letra da fala discordarem.
+    //
+    // **E O SELO NÃO ENTRA AQUI.** O cliente pediu em 21/10 que *"nome, foto e
+    // selo"* andassem juntos em toda superfície, e a emenda do ADR-0010 do
+    // mesmo dia abriu a exceção da conversa com três medidas — esta é a única
+    // superfície onde o outro lado pode ser um ESTRANHO, é o canal do golpe do
+    // falso achador (que ele mediu em 20/10 ao recusar a recompensa), e a
+    // linha do título já corta sem selo. `MarcaDaPessoa` **não tem parâmetro
+    // de selo**, e a ausência é a defesa: acendê-lo aqui exigiria importar
+    // `widgets/selo_de_validado.dart` neste arquivo, mudança visível em
+    // revisão que o contrapeso de `app/test/widgets/selo_de_validado_test.dart`
+    // reprova. **Então o que entrou foi a FOTO, e só ela** — e o selo nas
+    // mensagens continua sendo decisão do cliente, não minha.
+    final marca = MarcaDaPessoa(
+      urlDoIcone: autor?.photoIconUrl,
+      inicial: autor?.marcaNeutra ?? '',
+      lado: ladoDaMarca,
+      estiloDaInicial: textos.bodyMedium,
+    );
+
+    // O `Align` virou `Row`, e o alinhamento passou a ser dele: a fala do
+    // tutor encosta à direita com a marca DEPOIS da bolha, a de quem achou à
+    // esquerda com a marca ANTES. **A marca fica do lado de fora**, nunca
+    // dentro da bolha: dentro, ela entraria no fluxo da legenda da foto.
+    //
+    // `CrossAxisAlignment.start` alinha a marca ao TOPO da fala. Numa bolha de
+    // várias linhas — ou com foto — o centro poria o círculo no meio de um
+    // parágrafo, longe do início da fala que ele atribui.
+    return Row(
+      mainAxisAlignment: minha ? MainAxisAlignment.end : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (!minha) ...<Widget>[
+          marca,
+          const SizedBox(width: respiroDaMarca),
+        ],
+        ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+          maxWidth: _larguraMaximaDaBolha(MediaQuery.sizeOf(context).width),
         ),
         child: Column(
           crossAxisAlignment: minha
@@ -1135,7 +1308,12 @@ class _Bolha extends StatelessWidget {
               ),
           ],
         ),
-      ),
+        ),
+        if (minha) ...<Widget>[
+          const SizedBox(width: respiroDaMarca),
+          marca,
+        ],
+      ],
     );
   }
 }

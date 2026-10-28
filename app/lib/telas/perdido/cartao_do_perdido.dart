@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../api/cache_de_imagens.dart';
 import '../../api/modelos_perdido.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -67,6 +68,46 @@ import '../../widgets/moldura.dart';
 /// `CartaoDePet` segue), e é o que vale em qualquer lugar que mostre o cartão
 /// sem ter para onde levar. Renderizar uma seta para lugar nenhum continua
 /// sendo pior que informar.
+///
+/// ---------------------------------------------------------------------------
+/// ## O CARTÃO DO REENCONTRADO NÃO TEM TOQUE (cliente, 26/10/2026)
+///
+/// Literal dele: *"E retirar a ação de clique no pet encontrado, não mostrar a
+/// pagina interna."* **É a terceira vez que ele relata este sintoma** (*"abre a
+/// página errada quando o pet foi encontrado"*), e o caminho inteiro está
+/// medido:
+///
+/// 1. o pet com `found_by_community: true` tem o caso **encerrado**;
+/// 2. o toque leva a `TelaDoCasoPublico` pelo `share_token`;
+/// 3. `getPublicLostCase` responde **410** para caso encerrado;
+/// 4. a tela cai em `_Fase.encerrado` e desenha uma faixa com **uma única
+///    ação: `Registrar um achado`** — o formulário avulso, oferecido a quem
+///    acabou de tocar num animal que já está em casa.
+///
+/// **Tirar o toque conserta o relato sem tocar na fusão de privacidade do
+/// 410**, e isso é o ponto desta solução e não um atalho: aquele 410 funde
+/// cinco motivos de propósito (encerrado, excluído, falecido, arquivado, token
+/// desconhecido), porque distingui-los diria, a quem tem um token qualquer, em
+/// qual dos cinco estados o caso está. Nada em `tela_do_caso_publico.dart` nem
+/// no contrato muda por causa desta decisão.
+///
+/// **O caminho que sobra, e sobra de propósito:** quem chega pelo `share_url`
+/// de fora do app continua caindo no 410. Esta frente não alcança isso — é
+/// decisão do cliente, em outro cartão.
+///
+/// ## POR QUE A TRAVA É AQUI, E NÃO EM QUEM CHAMA
+///
+/// O cartão é **componente compartilhado**, e o critério é um campo que ele já
+/// lê (`perdido.encontradoPelaComunidade`). Pendurada em quem chama, a trava
+/// vale só na `ListaDePerdidos` e a próxima tela que reaproveitar o cartão
+/// repete o defeito do zero — que é o mesmo raciocínio que mantém [seloDe]
+/// lendo o campo da RESPOSTA e não o conjunto que a tela pediu.
+///
+/// **[aoTocar] continua sendo recebido, e não foi removido do construtor**: ele
+/// é o destino do pet que ainda está na rua, que é a maioria dos cartões desta
+/// lista. O que mudou é que ele é **ignorado** no item marcado — e com ele o
+/// `button: true` do nó de semântica, porque anunciar botão a leitor de tela
+/// num cartão que não responde é pior que não anunciar nada.
 class CartaoDoPerdido extends StatelessWidget {
   const CartaoDoPerdido({
     required this.perdido,
@@ -83,6 +124,16 @@ class CartaoDoPerdido extends StatelessWidget {
   final DateTime agora;
 
   final VoidCallback? aoTocar;
+
+  /// O toque QUE VALE: [aoTocar], **menos o do pet que já voltou**.
+  ///
+  /// Ver o cabeçalho (cliente, 26/10/2026). Nulo aqui é lido nos DOIS lugares
+  /// que decidem o toque — o `InkWell` e o `button:` do nó de semântica —, e
+  /// essa é a razão de ser um getter e não um `if` em cada um: dois testes
+  /// separados divergem no dia em que alguém mexe num só, e o que ficaria de
+  /// fora é justamente o lado que ninguém vê na tela.
+  VoidCallback? get _toqueQueVale =>
+      perdido.encontradoPelaComunidade ? null : aoTocar;
 
   /// O selo. Uma palavra, e ela entra no rótulo acessível **por texto**: quem
   /// usa leitor de tela não recebe a cor da borda.
@@ -220,6 +271,16 @@ class CartaoDoPerdido extends StatelessWidget {
                 // altura/largura, então o inverso é o que esta peça espera.
                 proporcao: 1 / BichuMoldura.proporcao,
                 raio: BichuRaio.none,
+                // O CACHE EM DISCO, escopo PÚBLICO (BICHUS-296). O cartaz de
+                // pet perdido existe para ser compartilhado — a derivada mora
+                // em balde público, sem assinatura e com cache de um ano
+                // (`chave-de-objeto.ts`) —, então não há pessoa a esquecer
+                // aqui: o que limita esta cópia é o teto de disco e o despejo.
+                //
+                // É também a tela em que o ganho que o cliente pediu aparece
+                // mais: a lista de perdidos é a que se abre primeiro e rola
+                // mais, e com a foto no aparelho ela aparece **sem rede**.
+                cache: ChaveDeImagem.publica(url),
                 simboloDeFalha: Icons.pets_outlined,
               ),
             ),
@@ -256,15 +317,19 @@ class CartaoDoPerdido extends StatelessWidget {
       ),
     );
 
+    // **`_toqueQueVale`, e não `aoTocar`, nas TRÊS linhas abaixo.** O cartão do
+    // pet reencontrado não tem `InkWell`, não tem resposta ao toque e não se
+    // anuncia como botão — ver o cabeçalho (cliente, 26/10/2026).
+    final toque = _toqueQueVale;
     return Semantics(
       container: true,
       excludeSemantics: true,
       label: rotuloAcessivelDe(perdido, agora),
-      button: aoTocar != null,
-      child: aoTocar == null
+      button: toque != null,
+      child: toque == null
           ? conteudo
           : InkWell(
-              onTap: aoTocar,
+              onTap: toque,
               borderRadius: BorderRadius.circular(BichuRaio.lg),
               child: conteudo,
             ),

@@ -152,7 +152,756 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
 /// aparece em `app/lib`.
-const int ocorrenciasDeBichu = 2706;
+/// ---------------------------------------------------------------------------
+/// 2706 -> 2714 em 23/10/2026 (BICHUS-278, os icones da barra)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO POR TROCA DE VOCABULARIO: tres arquivos a
+/// citam a mais, e a conta fecha nos tres.** Medido arquivo por arquivo com o
+/// metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de todo `.dart`
+/// de `app/lib`, recursivo, comentario incluido):
+///
+///   * `telas/casca_com_abas.dart`  51 -> 53  (**+2**)
+///   * `theme/icones_da_barra.g.dart`  novo   (**+1**)
+///   * `widgets/icone_da_barra.dart`   novo   (**+5**)
+///
+/// Soma +8, e 2706 + 8 = 2714. As DUAS de `casca_com_abas.dart` sao as unicas
+/// linhas novas daquele arquivo que escrevem a palavra, e as duas estao em
+/// mensagem de `assert`: *"DESTINO DA BARRA DESENHA O DO BICHU"* e *"Ou o
+/// desenho do Bichu"*. As cinco de `widgets/icone_da_barra.dart` sao
+/// `BichuTheme` (duas, em prosa), `BichuColors` (uma, em prosa), o importe
+/// `theme/bichu_colors.dart` e a chamada `BichuColors.of`. A de
+/// `theme/icones_da_barra.g.dart` e `BichuTheme` na prosa do gerador.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre a arvore LIMPA
+/// da base `d590ce2a` ANTES de qualquer edicao, devolveu EXATAMENTE 2706 --
+/// o valor que a linha travava. Reproduzir o numero conhecido antes de medir o
+/// desconhecido e o que faz esta troca valer; sem isso eu estaria travando o
+/// resultado do meu script e nao a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 218 `.dart` na
+/// base e 220 aqui, e os DOIS a mais sao exatamente os dois arquivos novos
+/// listados acima. Nenhum arquivo saiu.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+/// ---------------------------------------------------------------------------
+/// 2714 -> 2722 em 26/10/2026 (BICHUS-278, o CARIMBO DE BUILD)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO POR TROCA DE VOCABULARIO: dois arquivos a
+/// citam a mais, e a conta fecha nos dois.** Medido arquivo por arquivo com o
+/// metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de todo `.dart`
+/// de `app/lib`, recursivo, comentario incluido):
+///
+///   * `widgets/carimbo_do_build.dart`  novo      (**+5**)
+///   * `config/app_config.dart`         2 -> 5    (**+3**)
+///
+/// Soma +8, e 2714 + 8 = 2722. As cinco de `widgets/carimbo_do_build.dart` sao
+/// os importes `theme/bichu_colors.dart` e `theme/bichu_tokens.g.dart`, a
+/// chamada `BichuColors.of`, `BichuEspaco` e a citacao de `/etc/bichu/commit`
+/// na prosa. As tres de `config/app_config.dart` sao `/etc/bichu/commit` de
+/// novo e duas de `BICHUS-210` na prosa do campo novo.
+///
+/// **`telas/abas.dart` nao entra, e o zero e medido e nao suposto**: 33 antes e
+/// 33 depois. A unica linha que ela ganhou e
+/// `import '../widgets/carimbo_do_build.dart';`, que nao escreve a palavra --
+/// e e por isso que a conta tem de ser por ARQUIVO e nao por intuicao.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de qualquer edicao: a mesma
+/// contagem sobre a arvore LIMPA da base `d590ce2a` devolveu EXATAMENTE 2706,
+/// que era o valor travado naquela arvore. E o `+8` da frente dos icones,
+/// reconstruido pelo mesmo metodo, reproduziu o 2714 desta linha. Reproduzir
+/// os dois numeros conhecidos antes de escrever o desconhecido e o que faz
+/// esta troca valer: sem isso eu estaria travando o resultado do meu script.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem 218 `.dart` na
+/// base `d590ce2a`, 220 com os dois da frente dos icones e 221 aqui, e o UNICO
+/// a mais e `widgets/carimbo_do_build.dart`. Nenhum arquivo saiu.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+/// ---------------------------------------------------------------------------
+/// 2718 -> 2742 em 26/10/2026 (ACHEI ESTE PET, defeito relatado pelo cliente:
+/// *"se ele encontrou o pet, ele nao tem que cadastrar as informacoes
+/// novamente"*). **+24, e os 24 foram contados ARQUIVO POR ARQUIVO**, nao
+/// deduzidos do total:
+///
+///   `app/lib/telas/achado/tela_encontrei_este_pet.dart`   0 -> 23  (nasce)
+///   `app/lib/achado/envio_do_achado.dart`                 0 ->  2  (nasce)
+///   `app/lib/telas/achado/tela_registrar_achado.dart`    38 -> 37  (-1)
+///   `app/lib/telas/achado/textos_do_achado.dart`          7 ->  7
+///   `app/lib/telas/perdido/tela_do_caso_publico.dart`    22 -> 22
+///   `app/lib/roteamento/rotas.dart`                      15 -> 15
+///
+/// 23 + 2 - 1 = 24, e 2718 + 24 = 2742. A varredura passou de 221 para 223
+/// arquivos `.dart`, que sao exatamente os dois que nasceram.
+///
+/// **O -1 esta EXPLICADO, e nao arredondado**: e UMA mencao a `BICHUS-31` (a
+/// que explica por que a fila offline nao pode mostrar tela de sucesso) que
+/// SAIU de `_registrar` quando o envio foi extraido, e ENTROU em
+/// `envio_do_achado.dart` -- onde ela e citada duas vezes, no cabecalho e no
+/// ramo da fila. Nenhuma ocorrencia foi apagada; uma mudou de arquivo.
+///
+/// CONTROLE DO METODO: o mesmo contador, rodado sobre a arvore LIMPA da base
+/// (`1654bcaf`) ANTES de qualquer edicao, devolveu EXATAMENTE 2718 em 221
+/// arquivos -- o valor que esta linha travava. Reproduzir o conhecido antes de
+/// medir o desconhecido e o que faz este numero valer.
+///
+/// 2722 -> 2718 em 26/10/2026 (BICHUS-278, A UNIAO: arraste + convite)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO FOI SUBSTITUIDA: a porta do convite SAIU do corpo do AuAu.**
+/// O cliente mandou, duas vezes, tirar `Convide tutores` das mensagens e
+/// deixar a porta so no menu do Perfil.
+///
+/// **ESTE VALOR FOI RECALCULADO SOBRE A ARVORE UNIDA, e nao e nenhum dos dois
+/// lados do conflito nem a soma de deltas relatados.** Os dois lados existiam:
+/// a base `f7678f4c` travava **2722** e o ramo `feat/convite-tutores-no-perfil`
+/// travava **2702** -- e o 2702 e um numero de RAMO, medido sobre a base
+/// `cc9f2767` (que valia 2706) e que nao conhece o carimbo de build nem os
+/// icones da barra. Travar 2702 na uniao reprovaria; travar 2722 esconderia a
+/// saida da porta. O valor da uniao e 2722 - 4 = **2718**, e o -4 foi MEDIDO
+/// sobre a arvore unida, nao somado de relato.
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre a base `f7678f4c` e esta arvore, e o
+/// saldo de -4 fecha exatamente num UNICO arquivo:
+///
+///   -4 `telas/mensagens/area_de_mensagens.dart`  (24 -> 20)
+///
+/// Todos os outros 220 `.dart` de `app/lib` tem contagem IDENTICA a da base.
+///
+/// **AS QUATRO OCORRENCIAS ESTAO NOMEADAS, e a quarta e a interessante:** tres
+/// sao `BichuEspaco` (uma `BichuEspaco.e2` e duas `BichuEspaco.e4`, do
+/// `EdgeInsets.fromLTRB` do `Padding` que embrulhava o `ItemDeMenu` do convite)
+/// e a quarta e **`BICHUS-62`**, a chave da issue citada na prosa que saiu
+/// junto. A agulha e `RegExp('bichu', caseSensitive: false)`, e `BICHUS` CASA
+/// com ela -- chave de Jira conta como ocorrencia da marca neste portao, e quem
+/// contar so os `BichuEspaco` acha 3 e fica devendo 1.
+///
+/// Nada ENTROU: a prosa nova dos arquivos editados nao escreve a marca.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a MESMA
+/// contagem, sobre a arvore LIMPA da base `f7678f4c`, reproduziu EXATAMENTE a
+/// constante que ela travava (**2722**) -- por TRES caminhos que concordaram
+/// (`grep -oi` arquivo por arquivo, `re.findall` com `IGNORECASE` sobre o
+/// disco, e o mesmo sobre os blobs lidos da ref por `git show`). Reproduzir o
+/// valor conhecido antes de medir o desconhecido e o que faz esta linha valer;
+/// sem isso eu estaria travando o resultado do meu script e nao a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem **221** `.dart`
+/// na base e **221** aqui, e o `diff` entre as duas listas ordenadas saiu
+/// VAZIO. As contas foram feitas pelos dois lados: `set(base)-set(agora)` e
+/// `set(agora)-set(base)` sao os dois VAZIOS. Nenhum arquivo entrou, saiu ou
+/// foi renomeado.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+/// ---------------------------------------------------------------------------
+/// 26/10/2026: 2718 -> **2716**, e os dois que sairam NAO sao da marca
+/// ---------------------------------------------------------------------------
+/// O lote das duas correcoes do cliente (tirar as acoes de QR do usuario, e
+/// por a foto de quem falou em cada fala) mexeu em dois arquivos de
+/// `app/lib/telas`, e o saldo foi **-2**.
+///
+/// CONTADO ARQUIVO POR ARQUIVO, e a diferenca esta localizada nos dois -- nao
+/// e um total que fechou por compensacao:
+///
+///   `telas/conexoes/convide_tutores.dart`    32 -> 28  (-4)
+///   `telas/mensagens/tela_da_conversa.dart`  35 -> 37  (+2)
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA.** Os quatro que sairam do
+/// convite sao referencias a `BichuEspaco.` dos dois `BotaoSecundario` e dos
+/// dois avisos que foram removidos com eles -- o token do design system casa
+/// com a agulha porque ela ignora caixa, e nao porque alguem escreveu a marca
+/// ali. Os dois que entraram na conversa sao os `BichuEspaco.` do respiro da
+/// marca de quem falou. Texto de usuario com a palavra `Bichu` nao foi tocado
+/// em nenhum dos dois arquivos.
+///
+/// CONTROLE DO METODO, feito ANTES de medir o novo: o mesmo script, sobre a
+/// arvore LIMPA da base (`1654bcaf`, lendo cada arquivo por
+/// `git show "${SHA}:${caminho}"`), reproduziu EXATAMENTE a constante que ela
+/// travava -- **2718** em 221 arquivos. Reproduzir o valor conhecido antes de
+/// medir o desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 221 `.dart` na base e 221 no disco, e o
+/// `diff` entre as duas listas ORDENADAS de caminhos saiu vazio (0 linhas).
+/// Nenhum arquivo entrou, saiu ou foi renomeado -- os dois arquivos NOVOS
+/// deste lote sao de `app/test`, que esta fora desta varredura.
+///
+/// A ARMADILHA CONTINUA AUSENTE, medida e nao suposta: `petu` nao aparece em
+/// `app/lib` (busca sem distincao de caixa, saida vazia). **Com controle
+/// positivo da sonda**, porque busca negativa passa no vazio: a mesma busca
+/// trocando a agulha por `bichu` devolve 186 arquivos.
+/// 2718 -> 2717 em 26/10/2026 (BICHUS-278, a barra volta ao Material)
+/// ---------------------------------------------------------------------------
+///
+/// **UMA ocorrencia saiu, e eu sei exatamente qual.** Medido arquivo por
+/// arquivo com o metodo deste proprio portao (`/bichu/i` sobre o TEXTO CRU de
+/// todo `.dart` de `app/lib`, recursivo, comentario incluido): o unico arquivo
+/// que mudou e `telas/casca_com_abas.dart`, de **53 para 52**.
+///
+/// A linha que saiu, verbatim, e a mensagem do quarto `assert`:
+/// *"DESTINO DA BARRA DESENHA O DO BICHU. Os cinco slots sao os desenhos "*.
+/// Aquele `assert` exigia desenho do cliente em todo slot da barra; o cliente
+/// reprovou o desenho em 26/10 e a trava passou a impedir o conserto, entao
+/// ela saiu (a regra equivalente, sobre MISTURA, virou portao de lista em
+/// `test/telas/icones_da_barra_test.dart`).
+///
+/// A outra mensagem que cita a marca -- *"Ou o desenho do Bichu"*, do terceiro
+/// `assert` -- **ficou**, porque aquele `assert` ficou. O `diff` das linhas que
+/// casam `/bichu/i` naquele arquivo tem exatamente uma remocao e nenhuma
+/// adicao.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre a arvore LIMPA
+/// da base `1654bcaf` ANTES de qualquer edicao, devolveu EXATAMENTE 2718 -- o
+/// valor que a linha travava.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: `app/lib` tem **221** `.dart` na base e 221
+/// aqui. Nenhum arquivo entrou nem saiu -- em particular,
+/// `theme/icones_da_barra.g.dart` e `widgets/icone_da_barra.dart`
+/// **continuam no lugar**: a fiacao dos icones foi DESLIGADA, nao apagada, e
+/// os dois seguem cobertos por portao.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+/// **26/10/2026 — AS FOTOS DO PERFIL ABREM O CARROSSEL: 2718 -> 2719, e o +1
+/// esta NOMEADO.**
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre a base `1654bcaf` e esta arvore, e o saldo
+/// de +1 fecha exatamente num UNICO arquivo:
+///
+///   +1 `telas/pessoa/tela_perfil_de_pessoa.dart`  (26 -> 27)
+///
+/// `telas/perfil/vitrine_de_fotos.dart`, o outro arquivo tocado, fica em **34
+/// nos dois lados** -- a prosa nova dele nao escreve a marca e a troca de
+/// `abrir` por `abrirVarias` nao encosta nela. Os outros 219 `.dart` de
+/// `app/lib` tem contagem IDENTICA a da base.
+///
+/// **A OCORRENCIA ESTA NOMEADA**: e o `BichuRaio.sm` do
+/// `borderRadius: BorderRadius.circular(BichuRaio.sm)` do `InkWell` novo da
+/// celula -- o mesmo raio que o `ClipRRect` da celula da vitrine do dono ja
+/// usa, para o respingo do toque nao sair quadrado por cima de uma foto de
+/// canto arredondado. **O importe novo (`widgets/visualizador_de_imagem.dart`)
+/// nao conta**: o caminho nao escreve a marca.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a MESMA
+/// funcao de contagem, sobre os blobs da arvore LIMPA da base `1654bcaf` lidos
+/// por `git show` arquivo por arquivo, reproduziu EXATAMENTE a constante que
+/// ela travava (**2718**). Reproduzir o valor conhecido antes de medir o
+/// desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: `app/lib` tem **221**
+/// `.dart` na base e **221** aqui. Nenhum arquivo de `app/lib` entrou nem saiu
+/// -- o arquivo novo desta frente e de TESTE
+/// (`test/telas/perfil_foto_e_carrossel_test.dart`), e `app/test` nao entra
+/// nesta contagem.
+/// ---
+///
+/// **26/10/2026, BICHUS-278 — O PADRAO DE IDENTIFICACAO (foto + nome + selo).**
+/// 2718 -> **2717**, e o -1 esta explicado ARQUIVO POR ARQUIVO (soma = -1,
+/// exatamente a diferenca; numero que fecha por compensacao e numero que mente):
+///
+/// | arquivo | base | agora | delta |
+/// |---|---|---|---|
+/// | `telas/conexoes/tela_minhas_conexoes.dart` | 18 | 15 | **-3** |
+/// | `widgets/ficha_da_pessoa.dart` (NOVO) | 0 | 2 | **+2** |
+/// | `telas/seguranca/tela_de_bloqueados.dart` | 17 | 17 | 0 |
+///
+/// O -3 e a REMOCAO DE CODIGO MORTO: `_avatar` e `_circuloDaInicial` da lista
+/// de conexoes eram a QUARTA copia do circulo de foto-ou-inicial, e sairam
+/// porque `FichaDaPessoa` (que compoe `MarcaDaPessoa`) faz as duas coisas. O
+/// +2 e o arquivo novo do padrao. **A marca nao foi apagada de nenhum texto de
+/// usuario**: as tres mudancas sao de identificador de token (`BichuCores`,
+/// `BichuEspaco`), e nenhuma toca literal que a pessoa le.
+///
+/// CONTROLE POSITIVO, feito ANTES de medir o novo: o mesmo metodo sobre a
+/// arvore LIMPA da base (`git show "${SHA}:<arquivo>"` para os 221 `.dart` de
+/// `app/lib`, `grep -oi bichu`) reproduziu EXATAMENTE a constante que ela
+/// travava — **2718**. Duas medicoes anteriores minhas deram 2047 e 2610 e as
+/// duas estavam ERRADAS pelo mesmo motivo: eu havia usado `grep -o "Bichu"`
+/// **com caixa**, e esta contagem e `caseSensitive: false`. O controle positivo
+/// foi o que pegou meu erro, e nao o portao.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: `app/lib` tem **221** `.dart` na base e
+/// **222** aqui, e a diferenca e UM arquivo, nomeado --
+/// `lib/widgets/ficha_da_pessoa.dart`. Nenhum arquivo saiu e nenhum foi
+/// renomeado.
+/// 2718 -> 2718 em 26/10/2026 (BICHUS-278, OS QUATRO CONSERTOS DE MEIO CAMINHO)
+/// ---------------------------------------------------------------------------
+///
+/// **O TOTAL NAO MUDOU, E ISSO E UMA COMPENSACAO E NAO UM ZERO.** E exatamente
+/// o modo de falhar que os paragrafos de `PRESENCA DE ARQUIVO` acima vigiam, e
+/// por isso a conta foi feita ARQUIVO POR ARQUIVO e nao pelo total:
+///
+///   * `telas/mural/porta_do_perfil_do_autor.dart`  novo   (**+1**)
+///   * `telas/rede/secao_da_rede.dart`              8 -> 7 (**-1**)
+///
+/// Soma zero, e as duas ocorrencias estao NOMEADAS. A que entrou e
+/// **`BICHUS-62`** na prosa do arquivo novo -- a agulha e
+/// `RegExp('bichu', caseSensitive: false)` e `BICHUS` CASA com ela, entao chave
+/// de Jira conta como ocorrencia da marca neste portao. A que saiu e um
+/// **`BichuEspaco.e6`**: o `const SizedBox(height: BichuEspaco.e6)` que
+/// respirava acima da porta de `Minhas indicações` no pe da aba `Comunidade`,
+/// e que saiu junto com a porta (cliente, 22/10/2026).
+///
+/// Os outros 220 `.dart` de `app/lib` tem contagem IDENTICA a da base.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o desconhecido: a mesma
+/// contagem sobre a arvore LIMPA da base `1654bcaf` devolveu EXATAMENTE a
+/// constante que ela travava (**2718**), por DOIS caminhos que concordaram --
+/// `re.findall` com `IGNORECASE` sobre o texto cru de cada `.dart`, e
+/// `grep -oi 'bichu'` arquivo por arquivo. Os dois caminhos foram repetidos
+/// depois das edicoes e concordaram de novo em 2718.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e ela e o que salva este total: `app/lib`
+/// tem **221** `.dart` na base e **222** aqui. `set(base) - set(agora)` saiu
+/// VAZIO -- nenhum arquivo saiu -- e `set(agora) - set(base)` tem exatamente
+/// UMA entrada, `telas/mural/porta_do_perfil_do_autor.dart`. Sem esta
+/// conferencia, um arquivo apagado com uma mencao a marca e outro acrescentado
+/// com uma fecharia o mesmo 2718 e o portao ficaria verde.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+/// ---------------------------------------------------------------------------
+/// 26/10/2026: a UNIAO das NOVE entregas do dia -- 2718 -> **2742**
+/// ---------------------------------------------------------------------------
+/// Os blocos acima descrevem o saldo de cada frente MEDIDO EM ISOLAMENTO sobre
+/// a base `1654bcaf`. Nenhum deles vale para a uniao. O numero travado aqui
+/// COINCIDE por acidente com o da nº1 (2742) e isso NAO quer dizer que um lado
+/// foi escolhido: os lados eram 2742 (nº1), 2716 (nº2), 2718 (nº3), 2717 (nº4),
+/// 2719 (nº5), 2717 (nº6), 2718 (nº7) e 2721 (nº9) -- a nº8 ja estava dentro da
+/// base. O valor daqui foi MEDIDO sobre a arvore das nove, e a coincidencia so
+/// existe porque +24 da nº1 e +21+3 da uniao dao o mesmo total.
+///
+/// CONTADO ARQUIVO POR ARQUIVO, porque o total nao e prova -- a nº7 fechou a
+/// dela em 2718 por COMPENSACAO (+1 num arquivo, -1 em outro) e um total parado
+/// esconderia isso. QUATRO arquivos ENTRARAM (+28):
+///
+///   `achado/envio_do_achado.dart`                 +2   (nº1)
+///   `telas/achado/tela_encontrei_este_pet.dart`  +23   (nº1)
+///   `telas/mural/porta_do_perfil_do_autor.dart`   +1   (nº7)
+///   `widgets/ficha_da_pessoa.dart`                +2   (nº6)
+///
+/// NENHUM arquivo saiu. OITO mudaram de contagem (-4 no saldo):
+///
+///   `telas/achado/tela_registrar_achado.dart`   38 -> 37  (-1, nº1)
+///   `telas/casca_com_abas.dart`                 53 -> 52  (-1, nº4)
+///   `telas/conexoes/convide_tutores.dart`       32 -> 28  (-4, nº2)
+///   `telas/conexoes/tela_minhas_conexoes.dart`  18 -> 15  (-3, nº6)
+///   `telas/mensagens/tela_da_conversa.dart`     35 -> 37  (+2, nº2)
+///   `telas/perto/lista_do_diretorio.dart`       31 -> 34  (+3, nº9)
+///   `telas/pessoa/tela_perfil_de_pessoa.dart`   26 -> 27  (+1, nº5)
+///   `telas/rede/secao_da_rede.dart`              8 ->  7  (-1, nº7)
+///
+/// +28 -0 -4 = **+24**, e 2718 + 24 = 2742. A CONFERENCIA FECHA PELOS DOIS
+/// LADOS: os saldos declarados em isolamento somam
+/// +24 -2 +0 -1 +1 -1 +0 +3 = +24, o mesmo numero. A compensacao da nº7 aparece
+/// localizada nos dois arquivos, e nao como um zero.
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA.** Os que sairam sao referencias a
+/// `BichuEspaco.` de widgets removidos (a agulha ignora caixa e casa com o token
+/// do design system), nao texto de usuario com a palavra `Bichu`.
+///
+/// MEDIDO POR DOIS PROGRAMAS INDEPENDENTES que concordaram no total E na
+/// distribuicao por arquivo: um em Python e um em Node, cada um refazendo a
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa. O `diff` das
+/// duas saidas por arquivo saiu VAZIO, com guarda de arquivo NAO VAZIO antes de
+/// confiar nele -- `diff` de duas saidas vazias sai 0 e mente.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos dois
+/// programas, sobre a arvore LIMPA da base, reproduziram EXATAMENTE a constante
+/// que ela travava -- **2718** em 221 arquivos, com as duas distribuicoes
+/// identicas.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 221 `.dart` em `app/lib` na base e 225 na
+/// uniao, com os quatro novos nomeados acima e nenhum removido ou renomeado.
+/// `app/lib` nao tem nenhum symlink, entao a caminhada nao depende de seguir
+/// link.
+/// ---------------------------------------------------------------------------
+/// 2742 -> 2752 (BICHUS-297 e BICHUS-298, 27/10/2026)
+/// ---------------------------------------------------------------------------
+///
+/// **A MARCA NAO MUDOU DE TAMANHO -- a PROSA mudou.** Um arquivo so entrou no
+/// saldo, `telas/perfil/meus_eventos.dart`, de **20 para 30**, e as dez sao
+/// nomeaveis uma por uma:
+///
+///   - **+2 `BichuRaio`** (2 -> 4), e sao CODIGO: o cartao de `Meus eventos`
+///     ganhou o toque que leva a pagina do encontro, e a forma da agenda pede
+///     `Material` + `InkWell`, cada um com o seu
+///     `BorderRadius.circular(BichuRaio.lg)`. Token do design system, como os
+///     outros 28 deste arquivo;
+///   - **+8 chaves de issue em comentario**: `BICHUS-297` (4), `BICHUS-298`
+///     (2) e `BICHUS-62` (2). A agulha ignora caixa, e `BICHUS` contem
+///     `BICHU` -- entao citar a issue sobe esta contagem. O proprio caso ao
+///     lado desta constante diz que isto e legitimo: *"o cabecalho de varios
+///     arquivos de `app/lib` conta a historia da troca, entao varrer prosa
+///     reprovaria justamente quem documenta a regra"*.
+///
+/// **NENHUMA OCORRENCIA DA MARCA FOI APAGADA**, e isto esta conferido por
+/// forma e nao por total: `BichuEspaco` 10 -> 10, `BichuColors` 3 -> 3,
+/// `bichu` (minusculo, do nome do pacote) 2 -> 2, `BichuBorda` 2 -> 2,
+/// `BichuAlvoDeToque` 1 -> 1. So `BichuRaio` subiu.
+///
+/// MEDIDO POR DOIS PROGRAMAS INDEPENDENTES que concordaram no total E na
+/// distribuicao por arquivo: um em Python e um em Node 22, cada um refazendo a
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa sobre o
+/// conteudo CRU do arquivo (esta agulha nao passa por [semProsaDeDart]). O
+/// `diff` das duas saidas por arquivo saiu VAZIO nas duas arvores, com guarda
+/// de arquivo NAO VAZIO antes de confiar nele -- 225 linhas em cada saida, e
+/// `diff` de duas saidas vazias sai 0 e mente.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos dois
+/// programas, sobre a arvore LIMPA da base (`11e520b7`, extraida com
+/// `git archive`), reproduziram EXATAMENTE a constante que ela travava --
+/// **2742** em 225 arquivos, com as duas distribuicoes identicas.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA: 225 `.dart` em `app/lib` na base e 225 nesta
+/// entrega -- nenhum criado, removido ou renomeado, e o `diff` das duas
+/// distribuicoes aponta UMA linha. `app/lib` continua sem symlink (os dois
+/// programas avisariam), entao a caminhada nao depende de seguir link.
+/// ## +4 PELA BICHUS-307 (26/10/2026): 2742 -> 2746
+/// **A MARCA NAO MUDOU, O TOKEN CRESCEU.** As caixas de pedido de conexao
+/// viraram abas por decisao do cliente, e `telas/conexoes/
+/// tela_pedidos_de_conexao.dart` passou de 19 para 23 ocorrencias. As QUATRO
+/// estao nomeadas, e nenhuma e texto de usuario com a palavra `Bichu`:
+///   1. e 2. `Tab(height: BichuAlvoDeToque.min, ...)`, uma por aba -- o piso
+///      de alvo de toque do produto, que e o que o padrao da casa
+///      (`rede/secao_da_rede.dart`) passa no `Tab` em vez de deixar a altura
+///      por conta do `kTextTabBarHeight` do SDK;
+///   3. e 4. duas mencoes a `BichuAlvoDeToque.min` na PROSA que explica a
+///      conta medida da altura da aba (46,0/48,0 dp sem o token contra
+///      48,0/50,0 dp com ele).
+/// A agulha ignora caixa e casa com o prefixo dos tokens do design system,
+/// entao token novo mexe neste numero -- e **nenhuma ocorrencia foi apagada**:
+/// o diff por arquivo tem UMA linha, e ela sobe.
+/// caminhada de [dartsDeLib] e a contagem sem distincao de caixa. O `diff` das
+/// duas saidas por arquivo saiu VAZIO nas duas medicoes, com GUARDA DE ARQUIVO
+/// NAO VAZIO antes de confiar nele -- `diff` de duas saidas vazias sai 0 e
+/// mente.
+/// programas, sobre a arvore LIMPA da base (`11e520b7`, extraida por
+/// `git archive` para fora do worktree), reproduziram EXATAMENTE a constante
+/// que ela travava -- **2742** em 225 arquivos, com as duas distribuicoes
+/// identicas.
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total: 225 `.dart` em `app/lib`
+/// na base e 225 agora. Nenhum nasceu, saiu ou foi renomeado -- o que este
+/// commit faz cabe num arquivo.
+
+/// ## 2742 -> 2745 em 26/10/2026, por BICHUS-308
+/// As TRES ocorrencias novas estao todas em comentario de
+/// `lib/telas/perto/sugerir_profissional.dart`, e **nenhuma e texto de
+/// usuario**: a chave `BICHUS-308` no cabecalho do campo de contato publico (a
+/// agulha ignora caixa, e `BICHUS` contem `BICHU`) e duas mencoes a
+/// `BichuField` na prosa que explica por que a mascara de telefone e
+/// condicional ao tipo escolhido. Nenhuma ocorrencia foi apagada, e nenhum
+/// arquivo de `app/lib` entrou ou saiu (225 nos dois lados).
+/// MEDIDO com a mesma caminhada de [dartsDeLib]: 2745 agora, 2742 em
+/// `11e520b7`. O delta de 3 confere com o `git diff` do unico arquivo de
+/// `app/lib` que esta tarefa tocou.
+/// ---------------------------------------------------------------------------
+/// 27/10/2026: a UNIAO das SEIS entregas do dia -- 2742 -> 2759
+/// ---------------------------------------------------------------------------
+///
+/// Os blocos acima descrevem o saldo de cada frente MEDIDO EM ISOLAMENTO
+/// sobre
+/// a base `11e520b7`. **Nenhum deles vale para a uniao**, e o valor daqui NAO
+/// E
+/// nenhum dos lados do conflito: eram 2752 (meus-eventos), 2746
+/// (pedidos-em-abas) e 2745 (mascara). As outras tres entregas da uniao
+/// (lista-de-pets, minhas-fotos e conexoes) nao tocaram esta constante, e o
+/// saldo medido delas e ZERO -- isso foi MEDIDO arquivo por arquivo, nao
+/// deduzido do fato de elas nao terem editado este arquivo.
+///
+/// CONFERIDO POR FORMA, E NAO POR TOTAL, que e o que este numero exige: a
+/// agulha e `RegExp('bichu', caseSensitive: false)`, `BICHUS` CONTEM `BICHU`,
+/// e
+/// por isso chave de issue em comentario CONTA como ocorrencia da marca. A
+/// decomposicao por forma SOMA EXATAMENTE o total nos dois lados (2742 na
+/// base,
+/// 2759 aqui), o que prova que nenhuma ocorrencia ficou fora da conta.
+///
+/// **NENHUMA OCORRENCIA DA MARCA SAIU.** Nenhuma forma desapareceu (ZERO) e
+/// nenhuma forma caiu de contagem (ZERO) -- as 186 formas da base continuam
+/// todas presentes, nenhuma com contagem menor. O +17 inteiro e de forma NOVA
+/// ou forma que SUBIU, e cada uma tem dono:
+///
+///   `BICHUS-297`            0 -> 4   (+4, meus-eventos)
+///   `BICHUS-298`            0 -> 2   (+2, meus-eventos)
+///   `BICHUS-62`            65 -> 67  (+2, meus-eventos)
+///   `BichuRaio.lg`         57 -> 59  (+2, meus-eventos)
+///   `BichuAlvoDeToque.min` 65 -> 69  (+4, pedidos-em-abas)
+///   `BICHUS-308`            0 -> 1   (+1, mascara)
+///   `BichuField`           65 -> 67  (+2, mascara)
+///
+/// A CONFERENCIA FECHA PELOS DOIS LADOS: +10 (meus-eventos) +4
+/// (pedidos-em-abas) +3 (mascara) = +17, e 2742 + 17 = **2759** -- o mesmo
+/// numero que as tres medicoes devolveram. Os saldos declarados em isolamento
+/// (2752 = 2742+10, 2746 = 2742+4, 2745 = 2742+3) somam o mesmo +17, e nenhum
+/// deles se cancela com outro porque os tres arquivos sao DIFERENTES.
+///
+/// MEDIDO POR TRES PROGRAMAS INDEPENDENTES que concordaram no total: um em
+/// Python (`re.findall` com `IGNORECASE`), um em Node 22 (`match(/bichu/gi)`)
+/// e
+/// um terceiro com `grep -oi bichu` arquivo por arquivo. Os dois primeiros
+/// concordaram tambem na DISTRIBUICAO POR ARQUIVO -- o `diff` das duas saidas
+/// saiu VAZIO, com guarda de saida NAO VAZIA antes de confiar nele (225
+/// linhas
+/// em cada), porque `diff` de duas saidas vazias sai 0 e mente. O caminho do
+/// `grep` carrega um contador de arquivos visitados pelo mesmo motivo: laco
+/// que
+/// nao visita ninguem devolve total ZERO e parece medicao.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de medir o novo: os mesmos
+/// programas, sobre a arvore LIMPA da base `11e520b7` -- extraida com
+/// `git archive` para FORA do worktree, para a medicao nao ler o disco em que
+/// eu estava editando --, reproduziram EXATAMENTE a constante que ela
+/// travava:
+/// **2742** em 225 arquivos, com as distribuicoes identicas e a soma das
+/// formas
+/// igual ao total.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e ela e o que salva este total: `app/lib`
+/// tem
+/// **225** `.dart` na base e **225** na uniao. NENHUMA das seis entregas
+/// acrescentou, removeu ou renomeou arquivo em `app/lib` --
+/// `git diff --diff-filter=A` e `--diff-filter=D` entre a base e a uniao
+/// sairam
+/// VAZIOS. Sem esta conferencia, um arquivo apagado com N mencoes e outro
+/// acrescentado com N fechariam o mesmo total e o portao ficaria verde.
+/// `app/lib` continua sem symlink nenhum (os tres programas contam e avisam),
+/// entao a caminhada de [dartsDeLib] nao depende de seguir link.
+///
+/// ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib` de novo
+/// reconta, sobre a arvore MESCLADA e depois da ultima edicao.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE #69 (sem campo de descricao de foto)
+///
+///
+/// ## 2706 -> 2704, em 27/10/2026: A TELA PERDEU UM CAMPO
+///
+/// O numero caiu DOIS, e a causa e a prevista pelo proprio texto deste portao
+/// ("tela que saiu"): o campo de descricao da foto saiu de
+/// `telas/rede/criar_encontro.dart` (pedido do cliente de 26/10/2026, *"essa
+/// porra de campo e obrigatorio na criacao do evento, tire essa merda"*).
+///
+/// **AS DUAS OCORRENCIAS, nomeadas uma a uma** -- nao e um total que fechou por
+/// acaso. O bloco removido era, literalmente:
+///
+/// ```dart
+/// const SizedBox(height: BichuEspaco.e4),   // 1: `BichuEspaco`
+/// BichuField(                               // 2: `BichuField`
+/// ```
+///
+/// MEDIDO arquivo por arquivo, e nao so no total: `criar_encontro.dart` tem 56
+/// ocorrencias em `origin/development` (`90dfaee7`) e 54 nesta arvore; o outro
+/// arquivo de `app/lib` que esta entrega toca, `api/rede_api.dart`, tem ZERO
+/// nos dois lados. 56 - 54 = 2, e 2706 - 2 = 2704. Nenhum texto novo desta
+/// entrega escreve a marca.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA de novo, pelo mesmo motivo de antes: `app/lib`
+/// tem 218 `.dart` em `origin/development` e 218 nesta arvore, e os unicos
+/// arquivos alterados ali sao os dois nomeados acima. Nenhum entrou nem saiu,
+/// entao o -2 nao e compensacao de arquivo perdido.
+///
+/// A ARMADILHA CONTINUA MEDIDA: `petu` nao aparece em `app/lib` (0 ocorrencias,
+/// conferido nesta arvore). O numero desceu porque uma tela encolheu, e nao
+/// porque a marca virou outra palavra.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 65
+///
+/// 2706 -> 2710 (BICHUS-278, 27/10/2026): QUATRO TOKENS DO DESIGN SYSTEM
+/// ---------------------------------------------------------------------------
+///
+/// **A marca nao mudou de tamanho por causa de texto: mudou por causa de
+/// `BichuEspaco` e `BichuColors`**, que e o caso que o comentario acima manda
+/// tratar mudando o numero e dizendo por que. Nenhuma das quatro ocorrencias e
+/// texto de usuario, nenhuma e nome de arquivo e nenhuma e dominio.
+///
+/// OS QUATRO, atribuidos um por um (`grep -oi bichu` por arquivo, base contra
+/// arvore de trabalho) -- e a soma dos deltas por arquivo fecha com o total,
+/// que e o que impede "o numero subiu quatro" de esconder "subiu cinco e caiu
+/// um":
+///
+/// - `telas/localizacao/captura_de_localizacao.dart` 23 -> 26 (+3): o
+///   `import '../../theme/bichu_colors.dart'`, um `BichuColors.of(context)` e
+///   um `BichuEspaco.e4`, que a linha de ajuda nova usa para a cor secundaria
+///   e o respiro;
+/// - `telas/perfil/meus_eventos.dart` 20 -> 21 (+1): um `BichuEspaco.e3`, o
+///   respiro antes da faixa da capa em `processing`.
+///
+/// CONTROLE POSITIVO DO PROCEDIMENTO, feito ANTES de trocar esta linha: a
+/// MESMA contagem aplicada a arvore limpa da base (`90dfaee7`, extraida por
+/// `git archive` para fora do worktree, para nao tocar em arquivo nenhum --
+/// `git stash` e proibido neste repositorio, a pilha e compartilhada entre os
+/// worktrees) reproduziu EXATAMENTE 2706. Reproduzir o valor conhecido antes
+/// de medir o desconhecido e o que faz esta linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: 218 `.dart` em `app/lib` na
+/// base e 218 aqui. As duas correcoes mudam CONTEUDO; nenhum arquivo entrou,
+/// saiu ou foi renomeado.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu`
+/// continua sem aparecer em `app/lib`.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 67
+///
+/// **MUDOU EM 27/10/2026: 2706 -> 2712, pelo RECADO DE ABERTURA SEM INTERNET**
+/// (pedido do cliente de 26/10). **Nao e a armadilha que este numero vigia**:
+/// a marca nao encolheu nem virou `Petu` -- medido, `petu` continua nao
+/// aparecendo em `app/lib`.
+///
+/// A CONTA, arquivo por arquivo, e ela fecha exatamente em +6:
+///
+/// - `telas/abertura/recado_na_abertura.dart` NASCE com **+11** (`BichuColors`,
+///   `BichuEspaco`, `BichuAlvoDeToque` -- esta duas vezes, no codigo e na prosa
+///   que explica o piso de toque -- e os dois importes `theme/bichu_*.dart`);
+/// - `telas/abertura/textos_da_abertura.dart` NASCE com **+3** (a palavra
+///   `Bichu` nas tres frases que a pessoa le);
+/// - `telas/atualizacao/tela_de_bloqueio_por_versao.dart` vai de **8 para 0**:
+///   ela perdeu o `build` proprio para `RecadoNaAbertura`, e com ele sairam os
+///   importes de tema e os usos de `BichuColors`/`BichuEspaco`. **O que a tela
+///   diz nao mudou** -- os textos dela continuam em
+///   `atualizacao/textos_da_atualizacao.dart`, intactos;
+/// - `telas/abertura/tela_sem_conexao.dart` e `api/sonda_de_conexao.dart`
+///   NASCEM com **0**: nenhuma das duas cita a marca.
+///
+/// 11 + 3 - 8 = +6.
+///
+/// CONTROLE POSITIVO DO METODO, feito ANTES de trocar o numero: a MESMA
+/// contagem (`RegExp('bichu', caseSensitive: false)` sobre todo `.dart` de
+/// `app/lib`) aplicada a arvore da base deste ramo, `90dfaee7` extraida com
+/// `git archive`, devolveu EXATAMENTE 2706 -- o valor que esta linha travava.
+/// Reproduzir o valor conhecido antes de medir o desconhecido e o que faz esta
+/// linha valer.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perdeu
+/// arquivo pode fechar o numero por compensacao: `app/lib` tem **218** `.dart`
+/// em `90dfaee7` e **222** aqui, e os QUATRO de diferenca sao os quatro
+/// arquivos novos nomeados acima. Nenhum arquivo saiu nem foi renomeado.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 72
+///
+/// ATUALIZADO PELA BICHUS-296 (27/10/2026): 2706 -> 2728.
+/// ---------------------------------------------------------------------------
+/// O cache de imagem no aparelho. A causa e a que a mensagem deste portao manda
+/// aceitar -- *arquivo novo que a cita* --, e nao substituicao descuidada.
+///
+/// CONTADO ARQUIVO POR ARQUIVO entre `90dfaee7` (a `development`) e esta
+/// arvore, pelo metodo deste portao (`RegExp('bichu', caseSensitive: false)`
+/// sobre o texto cru de cada `.dart` de `app/lib`):
+///
+///    +2 api/cache_de_imagens.dart           (0 -> 2,  ARQUIVO NOVO)
+///    +4 app.dart                            (32 -> 36)
+///    +1 escopo.dart                         (12 -> 13)
+///    +2 main.dart                           (6 -> 8)
+///    +1 roteamento/rotas.dart               (15 -> 16)
+///    +1 telas/conexoes/tela_minhas_conexoes.dart        (18 -> 19)
+///    +1 telas/mensagens/area_de_mensagens.dart          (24 -> 25)
+///    +1 telas/mural/comentarios_da_publicacao.dart      (14 -> 15)
+///    +1 telas/mural/tela_do_mural.dart                  (19 -> 20)
+///    +1 telas/perdido/cartao_do_perdido.dart            (28 -> 29)
+///    +3 telas/pessoa/tela_perfil_de_pessoa.dart         (26 -> 29)
+///    +1 telas/rede/cartao_de_pessoa_encontrada.dart     (21 -> 22)
+///    +2 widgets/imagem_da_rede.dart          (9 -> 11)
+///    +1 widgets/marca_da_pessoa.dart         (3 -> 4)
+///
+/// Soma: +22, e 2706 + 22 = 2728. As mencoes sao a prosa que cita
+/// `m.bichu.app` e `imagens-bichu` (o nome da pasta do cache) ao explicar de
+/// onde a imagem vem e onde ela para.
+///
+/// CONTROLE POSITIVO DO METODO: a mesma contagem, rodada sobre `90dfaee7`,
+/// devolve **2706** -- exatamente o valor que estava travado aqui. O
+/// procedimento acerta no ponto onde a resposta ja era conhecida, e e so por
+/// isso que ele vale aqui, onde nao era.
+///
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o total -- arvore que perde arquivo
+/// pode fechar o numero por compensacao: `app/lib` tem **218** `.dart` em
+/// `90dfaee7` e **220** nesta arvore; os dois novos sao
+/// `api/cache_de_imagens.dart` e `widgets/imagem_em_cache.dart`, e **nenhum
+/// arquivo foi removido**.
+///
+/// NAO E A ARMADILHA QUE ESTE NUMERO VIGIA, medido e nao suposto: `petu` nao
+/// aparece em `app/lib`.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA.** Valor de ramo
+/// isolado nao sobrevive a uniao, e esta frente nao e a unica tocando
+/// `app/lib` nesta rodada.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 73
+///
+/// **27/10/2026: 2706 -> 2710, e os QUATRO sao referencia de TOKEN.**
+///
+/// O botao de adicionar em `Minhas conexoes` e a galeria do evento abrindo com
+/// seta acrescentaram quatro usos de token de desenho, e **nenhum literal novo
+/// com a marca**: `+2` em `telas/conexoes/tela_minhas_conexoes.dart`
+/// (`BichuEspaco.e4`, duas vezes) e `+2` em `telas/rede/encontro_da_rede.dart`
+/// (`BichuRaio.md`, duas vezes, no alvo de toque da miniatura).
+///
+/// **MEDIDO pelos dois lados, e o controle positivo vem primeiro:** o mesmo
+/// metodo aplicado a `app/lib` de `90dfaee7` reproduziu EXATAMENTE 2706, o
+/// valor que esta linha travava; sobre a arvore deste trabalho ele da 2710. O
+/// numero de arquivos `.dart` em `app/lib` nao mudou (218 nos dois), entao o
+/// delta nao e arquivo que entrou -- e as quatro linhas nomeadas acima.
+///
+/// A armadilha que este numero vigia continua intacta: `Bichu` segue sendo a
+/// marca em todos os 2710 lugares, e nenhum deles e texto de usuario novo.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 74
+///
+///
+/// ## 2706 -> 2708 (BICHUS-299 + BICHUS-300, 27/10/2026)
+///
+/// **Os DOIS a mais nao sao a marca: sao a CHAVE DA ISSUE `BICHUS-62`**, citada
+/// em prosa em dois arquivos, e `BICHUS` contem `bichu` para uma varredura sem
+/// distincao de caixa. Um em `telas/rede/agenda_da_rede.dart` (18 -> 19) e um
+/// em `api/modelos_rede.dart` (2 -> 3), nos comentarios que explicam por que o
+/// grupo de filtro `Situação` oferece so `Cancelado`: `A vir` e `Encerrado`
+/// duplicariam o grupo `Quando`, que e o criterio 2 daquela issue. A base ja
+/// cita a mesma chave nos dois arquivos, entao isto segue a pratica que o
+/// numero 2706 ja media.
+///
+/// MEDIDO arquivo por arquivo contra `90dfaee7` (`git show` do blob da base
+/// contra o disco), e nao pela diferenca do total: um total que fecha por
+/// compensacao e exatamente o que este numero existe para nao aceitar. O
+/// delta e +1 e +1, nos dois arquivos que o `git diff` desta entrega toca em
+/// `app/lib`, e em nenhum outro.
+///
+/// **A ARMADILHA CONTINUA VIGIADA**: nenhum literal de usuario mudou, nenhuma
+/// classe `Bichu*` foi renomeada, e `petu` continua sem aparecer em `app/lib`.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 75
+///
+/// 27/10/2026, BICHUS-303 parte 2: 2706 -> 2707, e a ocorrencia a mais e UMA,
+/// localizada e explicada.
+/// ---------------------------------------------------------------------------
+///
+/// **ONDE**, medido arquivo por arquivo e nao suposto: a contagem por arquivo
+/// desta arvore foi comparada com a da arvore limpa de `origin/development`
+/// (`90dfaee7`) com `diff`, e a saida tem UMA linha -- `lib/telas/pet/
+/// tela_editar_pet.dart`, de 29 para 30. Todos os outros 217 arquivos batem.
+///
+/// **O QUE**: um `BichuEspaco.e6` a mais. O item `Endereco de entrega` entrou em
+/// `Editar pet` (decisao do cliente de 27/10/2026, *"o endereco de entrega da
+/// plaquinha tem que estar dentro do cadastro do pet"* e *"endereco um por
+/// pet"*), e o espaco antes dele usa o token da folha. **E uso de TOKEN, e nao
+/// texto de marca:** nenhuma palavra `Bichu` visivel ao usuario entrou ou saiu.
+///
+/// **NAO E A ARMADILHA QUE ESTE NUMERO VIGIA**, e isto foi conferido e nao
+/// suposto: `petu` nao aparece em `app/lib`, e a mudanca nao e substituicao de
+/// vocabulario nenhuma -- e uma linha nova que cita um token existente.
+///
+/// **PRESENCA DE ARQUIVO CONFERIDA**, pelo mesmo motivo de sempre (arvore que
+/// perde arquivo fecha o numero por compensacao): `app/lib` tem 218 `.dart` na
+/// base e 218 aqui, e o `diff` entre as duas listas e VAZIO. Nenhum arquivo
+/// entrou, saiu ou foi renomeado em `app/lib` nesta frente.
+///
+/// **ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO**: quem mesclar recalcula sobre a
+/// arvore MESCLADA, e nunca escolhe um dos lados.
+const int ocorrenciasDeBichu = 2795; // 27/10/2026, A UNIAO DAS DOZE BRANCHES: RECONTADO sobre a arvore MESCLADA e NAO E NENHUM DOS LADOS -- colidiram DEZ valores distintos (2706 na development e tambem em #68/#71/#76, 2759 no #64, 2742 no #63, 2704 no #69, 2710 no #65 e no #73, 2712 no #67, 2728 no #72, 2708 no #74, 2707 no #75). Somar os deltas seria palpite: varias frentes tocam os MESMOS arquivos, e quando os conjuntos se cruzam a soma mente e a contagem nao. CONTROLE POSITIVO DO METODO, feito ANTES de editar: a mesma contagem sobre a arvore limpa da base (`origin/development` em `57d3436d`) deu EXATAMENTE os 2706 que ela travava. CONFERIDO POR FORMA, e nao por total -- e esta e a conferencia que importa aqui, porque `BICHUS` contem `BICHU` e a agulha ignora caixa, entao chave de issue em comentario CONTA (sao 370 ocorrencias de `BICHUS` na base e 399 aqui, so de chave citada em prosa). As 35 formas distintas da base continuam todas presentes: NENHUMA sumiu e NENHUMA forma nova apareceu. UMA unica forma caiu de contagem, e ela esta explicada arquivo por arquivo em vez de arredondada: `BichuCores` vai de 66 para 65, porque `telas/conexoes/tela_minhas_conexoes.dart` perde DOIS (as assinaturas `_avatar(BichuCores cores, ...)` e `_circuloDaInicial(BichuCores cores, ...)`, que o #64 apagou de proposito por serem a quarta copia do circulo de foto-ou-inicial) e `telas/rede/encontro_da_rede.dart` ganha UM. Remocao deliberada de codigo duplicado, e nao marca apagada. PRESENCA DE ARQUIVO CONFERIDA: `app/lib` tem 218 `.dart` na base e 231 aqui, contados pelo `git ls-tree -r` e pela caminhada de disco do proprio portao, que concordam nos dois pontos -- o +89 nao e compensacao de arquivo perdido. A ARMADILHA QUE ESTE NUMERO VIGIA CONTINUA MEDIDA, e com controle positivo: `petu` da ZERO em `app/lib`, e a mesma varredura acha 2736 linhas com `bichu`, entao o zero e ausencia e nao cegueira. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib` de novo reconta, sobre a arvore MESCLADA e depois da ultima edicao.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
 ///
@@ -190,6 +939,21 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
   'lib/telas/conta/tela_entrar.dart': <String>[
     'assets/ilustracoes/tres-pessoas-no-parque.webp',
   ],
+
+  // NOME DE PASTA NO DISCO, e nao texto de tela (BICHUS-296).
+  //
+  // `ChaveDeImagem.pastaDePessoas` e o segmento `pessoa/` do caminho onde o
+  // cache em disco guarda foto de PESSOA, separada da pasta `publica/`. E a
+  // separacao que torna `esquecerPessoa` uma remocao de diretorio, e e ela que
+  // faz a Emenda 3 do ADR-0010 valer no disco.
+  //
+  // Trocar para `usuario` nao e mudanca de microcopia: e renomear uma pasta
+  // que **ja existe no aparelho de quem tem o app instalado**. O cache ficaria
+  // orfao -- a pasta antiga sem ninguem para apagar, e `esquecerTodasAsPessoas`
+  // varrendo a nova e vazia --, e a foto da conexao de quem saiu continuaria em
+  // `pessoa/` depois do logout. Ninguem le esta palavra: ela nao aparece em
+  // tela nenhuma.
+  'lib/api/cache_de_imagens.dart': <String>['pessoa'],
 
   // Semente do apelido sugerido (`pessoa-01`). O apelido tem conjunto de
   // caracteres fechado e **nao aceita acento**: `usuario` passaria, `usuario`
@@ -250,18 +1014,30 @@ const Map<String, List<String>> excecoesDoVocabulario = <String, List<String>>{
     'Diga o nome do lugar ou da pessoa.',
   ],
 
-  // O rotulo da especie. `Cao` -> `Cachorro` e a troca de maior valor das tres
-  // -- ela entrega tambem o pedido de `cachorro, gato e outro` -- e esta
-  // BLOQUEADA por dono: 15 asserts de `find.text('Cao')` moram em cinco
-  // arquivos de teste de frente alheia (`registrar_achado_test.dart`,
-  // `registrar_achado_dois_passos_test.dart`, `cep_nos_dois_formularios_test.dart`,
-  // `localizacao_do_botao_test.dart`, `perdidos_e_meus_achados_test.dart`).
-  // Mudar o rotulo sem mudar os asserts deixa a suite vermelha; mudar os
-  // asserts e editar arquivo de outra frente. Sai na segunda passada, junto
-  // com `admin/src/loja/dominio.ts` e `web/src/dominio/texto-do-pet.ts`, que
-  // carregam o MESMO rotulo -- os tres mudam no mesmo commit ou o produto fica
-  // dizendo `Cachorro` no site e `Cao` no app.
-  'lib/api/modelos_pet.dart': <String>['C\u00e3o'],
+  // A EXCECAO DO ROTULO DA ESPECIE SAIU EM 26/10/2026, e com ela o portao
+  // passou a cobrar o pedido do cliente de 22/10 (*"Troque os textos de cao
+  // para cachorro"*) no lugar onde o rotulo de fato mora.
+  //
+  // **Era ELA, e nao a falta de portao, que mantinha `Cao` vivo no app.** A
+  // agulha `\b(cao|caes)\b` (sem acento aqui so para nao reprovar a propria
+  // prosa) sempre casou com o literal de `lib/api/modelos_pet.dart`; este mapa
+  // e que a liberava. Portao com excecao e portao desligado naquele arquivo.
+  //
+  // **A RAZAO DE 22/10 CAIU, e ela era de custo e nao de produto**: a excecao
+  // dizia "15 asserts em cinco arquivos de teste de frente alheia". A contagem
+  // de hoje e 33 asserts `find.text('Cao')` em SETE arquivos, mais tres
+  // arquivos com o rotulo dentro de uma linha composta
+  // (`meus_pets_test.dart`, `perdidos_e_meus_achados_test.dart`,
+  // `selo_de_encontrado_test.dart`). Os dez mudaram no mesmo commit do rotulo.
+  //
+  // **O QUE NAO MUDOU, e e preciso dizer**: `admin/src/loja/dominio.ts` e
+  // `web/src/dominio/texto-do-pet.ts` continuam escrevendo `Cao`. Eles sao do
+  // Backoffice e do site, que sao OUTRAS SESSOES no mesmo repositorio, e
+  // editar arquivo delas por conta propria e colisao. Este portao varre
+  // `app/lib` e nao os alcanca -- quem for cobrar os dois precisa de um portao
+  // proprio de cada frente. O servidor JA diz `Cachorro`
+  // (`migrations/20260917000003_dados-de-referencia.sql`, `ref_species`), e e
+  // o app que estava divergindo dele.
 
   // ---- 3. REDACAO PROPRIA, PEDIDA PELO CLIENTE ----
   //

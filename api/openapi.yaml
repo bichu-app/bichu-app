@@ -394,6 +394,7 @@ x-problem-types:
   # ele e 403, e usa-lo em 401 faz o app tratar "sua senha nao confere" com o
   # mesmo caminho de "este recurso nao e seu".
   - { slug: validation-failed,             status: 400 }
+  - { slug: passkey-attestation-invalid,   status: 400, note: "a atestacao devolvida pelo aparelho nao foi verificada: assinatura, `clientDataJSON`, origem, `rpIdHash` ou `challenge` nao conferem. Separado de `validation-failed`: ali o corpo esta malformado e a saida e corrigir o formulario; aqui o corpo esta bem formado e a saida e tentar de novo ou seguir sem passkey -- e o passo e DISPENSAVEL, entao a tela nao pode tratar isso como erro de cadastro" }
   - { slug: unauthenticated,               status: 401, note: "sem token, token ausente ou assinatura invalida" }
   - { slug: invalid-credentials,           status: 401, note: "e-mail ou senha nao conferem. Corpo IDENTICO para conta inexistente e senha errada" }
   - { slug: token-expired,                 status: 401, note: "token de acesso, de renovacao ou de uso unico expirado, ja usado ou revogado" }
@@ -410,6 +411,8 @@ x-problem-types:
   - { slug: broadcast-daily-cap-reached,   status: 409, note: "teto de 3 comunicados por dia, contado da meia-noite UTC e aplicado no banco na mesma transacao da gravacao. 409 e nao 429: 429 e teto de CHAMADA, aplicado pela borda e que passa em um minuto; este e teto de PRODUTO, e a saida da pessoa e esperar amanha ou nao mandar -- tratar os dois com o mesmo tipo faria o painel oferecer 'tentar de novo' para o unico caso em que tentar de novo nao resolve" }
   - { slug: tag-limit-reached,             status: 409, note: "teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada" }
   - { slug: contact-channel-unverified,    status: 409 }
+  - { slug: passkey-already-registered,    status: 409, note: "este aparelho ja tem credencial nesta conta: o `credential_id` devolvido pela atestacao ja existe. 409 e nao 400 porque nada esta errado no pedido -- a pessoa apertou duas vezes, ou o aparelho ja havia cadastrado -- e a tela diz 'este aparelho ja esta cadastrado' em vez de 'erro'. O banco impoe pelo indice unico de `credential_id`" }
+  - { slug: passkey-limit-reached,         status: 409, note: "teto de credenciais ATIVAS por conta. Separado de `passkey-already-registered`: um diz 'este aparelho ja esta aqui' e o outro 'esta conta ja tem credenciais demais', e a saida e diferente -- no primeiro nao ha nada a fazer, no segundo e preciso revogar uma. Revogar MARCA revogada e nao apaga (decisao do cliente de 26/10), entao o teto conta `revoked_at IS NULL`" }
   - { slug: pet-photo-missing,             status: 409 }
   - { slug: transfer-not-for-this-account, status: 409 }
   - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
@@ -1159,6 +1162,384 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /auth/passkey/registration/options:
+    post:
+      operationId: beginPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: []
+      summary: Emite o desafio para cadastrar uma credencial digital
+      description: |
+        Primeiro dos dois passos do cadastro de passkey (BICHUS-301). O
+        servidor emite um desafio de uso unico e com prazo, guarda-o, e o app
+        o entrega ao Credential Manager do Android.
+
+        **A passkey SOMA a senha, nunca a substitui.** Passkey e presa ao
+        aparelho: quem troca de celular sem outra porta fica trancado fora da
+        conta. A senha continua valendo e `login`, `refreshSession` e
+        `reauthenticate` continuam existindo sem mudanca.
+
+        **Esta operacao exige sessao.** Ela acontece ao FIM do cadastro, quando
+        o `registerUser` ja devolveu o par de tokens, e e por isso que o
+        `user.id` nao vem no corpo: ele e o `sub` do token. Pedir o
+        identificador no corpo abriria caminho para emitir desafio para conta
+        alheia.
+
+        **O passo e DISPENSAVEL** (decisao do cliente, 26/10). Quem recusa a
+        biometria do aparelho tem de conseguir terminar o cadastro: o app
+        oferece `Agora nao`, nao chama esta operacao, e o cadastro esta
+        completo do mesmo jeito. Nenhuma pendencia de perfil nasce daqui.
+
+        `rp.id` e `bichu.app`, o apex, e **nao pode mudar depois**: trocar o
+        `RP ID` invalida toda credencial ja emitida. O apex serve
+        `/.well-known/assetlinks.json` pelo trecho `(associacao_deep_link)` do
+        `Caddyfile`, com a relacao `delegate_permission/common.get_login_creds`
+        -- sem ela o Android nao entrega credencial, e o `handle_all_urls` do
+        deep link NAO serve para isso.
+
+        `excludeCredentials` traz as credenciais ATIVAS da conta para o
+        aparelho nao cadastrar duas vezes. Isso nao vaza nada: quem chama ja
+        esta autenticado como o dono delas.
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "a dimensao e a conta e nao o IP: emitir desafio e barato, mas desafio guardado e escrita, e o teto existe para a fila de desafios nao virar deposito"
+      responses:
+        '200':
+          description: Desafio emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyRegistrationOptions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            A conta chegou ao teto de credenciais ativas. A saida e revogar uma
+            em `revokePasskey`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                tetoDeCredenciais:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-limit-reached
+                    title: Limite de credenciais atingido
+                    status: 409
+                    detail: Esta conta ja tem 10 credenciais ativas. Revogue uma para cadastrar outra.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/registration:
+    post:
+      operationId: finishPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: [verifies_secret]
+      summary: Conclui o cadastro da credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto do passo que emite o desafio, e de proposito: um desafio por tentativa, e tentativa sem desafio nao existe. Numero diferente aqui deixaria uma das duas metades do cadastro recusar antes da outra"
+      description: |
+        Segundo passo. O app devolve a atestacao produzida pelo aparelho e o
+        servidor a verifica antes de guardar a chave publica.
+
+        **O que e verificado, e nada disso e opcional:** a assinatura da
+        atestacao; o `challenge` do `clientDataJSON` contra o desafio guardado,
+        que e de **uso unico e com prazo**; o `type` igual a `webauthn.create`;
+        a `origin` contra a origem do app Android (derivada da digital do
+        certificado em `assetlinks.json`, e nao de uma lista escrita a mao); e
+        o `rpIdHash` contra o SHA-256 de `bichu.app`.
+
+        **A verificacao nao e escrita a mao.** Ela usa
+        `@simplewebauthn/server`, e o motivo esta no ADR pretendido: WebAuthn
+        pede parse de CBOR, COSE, cadeia de atestacao e curvas EC -- cada um
+        um lugar onde um erro de implementacao aceita credencial forjada **sem
+        falhar nenhum teste**, porque o caminho felizpassa igual.
+
+        O desafio e **consumido** aqui, de que jeito for: sucesso ou falha, ele
+        nao vale de novo. Desafio que sobrevive a uma falha e desafio que pode
+        ser reusado.
+
+        O `sign_count` devolvido pelo aparelho e guardado como ponto de
+        partida do contador antirrepeticao de `finishPasskeyAuthentication`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasskeyRegistrationRequest' }
+      responses:
+        '201':
+          description: Credencial cadastrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Passkey' }
+        '400':
+          description: |
+            A atestacao nao foi verificada. **Nao e erro de formulario**: o
+            corpo esta bem formado e a saida da tela e tentar de novo ou
+            seguir sem passkey, porque o passo e dispensavel.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                atestacaoInvalida:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-attestation-invalid
+                    title: Nao foi possivel confirmar a credencial
+                    status: 400
+                    detail: A resposta do aparelho nao foi confirmada. Tente de novo ou continue sem credencial digital.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '401':
+          description: |
+            Sem sessao, **ou** o desafio expirou ou ja foi usado. O desafio
+            vencido sai como `token-expired` e nao como
+            `passkey-attestation-invalid`: a saida e pedir outro desafio, nao
+            desistir da credencial.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                desafioVencido:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/token-expired
+                    title: O desafio expirou
+                    status: 401
+                    detail: Comece o cadastro da credencial de novo.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '409':
+          description: |
+            Este aparelho ja tem credencial nesta conta, ou a conta chegou ao
+            teto.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                jaCadastrado:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-already-registered
+                    title: Este aparelho ja esta cadastrado
+                    status: 409
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/authentication/options:
+    post:
+      operationId: beginPasskeyAuthentication
+      tags: [auth]
+      x-effects: []
+      summary: Emite o desafio para entrar com credencial digital
+      description: |
+        Primeiro dos dois passos da entrada por passkey.
+
+        **Esta operacao NAO recebe e-mail, e isso e desenho e nao esquecimento.**
+        A credencial e *discoverable* (`residentKey: required` no cadastro), e o
+        proprio aparelho sabe qual conta apresentar. Receber o e-mail obrigaria
+        a devolver `allowCredentials` daquela conta, e `allowCredentials` cheia
+        ou vazia responderia **se aquela conta tem passkey** -- um oraculo de
+        enumeracao numa porta sem autenticacao. O contrato ja proibe esse
+        vazamento em `login`, onde o 401 e identico para conta inexistente e
+        senha errada; aqui o vazamento seria pior, porque nem exige tentativa.
+
+        Por isso `allow_credentials` sai **sempre vazia**, para toda chamada,
+        com ou sem conta do outro lado.
+
+        Nao exige sessao, por definicao: e a porta de entrada.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "a dimensao so pode ser a rede: a operacao nao sabe de quem e a tentativa, e e exatamente por nao saber que ela nao vaza nada"
+      responses:
+        '200':
+          description: Desafio emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyAuthenticationOptions' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/authentication:
+    post:
+      operationId: finishPasskeyAuthentication
+      tags: [auth]
+      x-effects: [verifies_secret]
+      summary: Entra com credencial digital
+      description: |
+        Segundo passo da entrada. O app devolve a assercao e o servidor abre
+        sessao se ela conferir. A resposta e a **mesma** `SessionResponse` de
+        `login`: para o resto do app, entrar por passkey e entrar.
+
+        **O que e verificado:** a assinatura, contra a chave publica guardada
+        no cadastro; o `challenge`, de uso unico e com prazo; o `type` igual a
+        `webauthn.get`; a `origin`; o `rpIdHash`; o `userHandle`, que precisa
+        apontar para a conta dona da credencial; e o **contador de
+        assinatura**.
+
+        **O contador antirrepeticao.** Cada credencial guarda o `sign_count`
+        da ultima assercao aceita. Assercao com contador **menor ou igual** ao
+        guardado e rejeitada: ou e repeticao de uma assercao capturada, ou e
+        autenticador clonado. Quando isso acontece o servidor **revoga a
+        credencial** e registra o evento -- e responde `invalid-credentials`,
+        sem contar o motivo. Aparelho que sempre devolve zero (parte dos
+        autenticadores de plataforma, legitimamente) e tratado pela excecao
+        prevista na especificacao: contador guardado zero e recebido zero
+        passa, e so passa nesse caso.
+
+        **O 401 e identico** para credencial desconhecida, credencial revogada,
+        assinatura errada e contador repetido. A porta nao diz qual dos quatro
+        foi, pelo mesmo motivo que `login` nao diz se o e-mail existe.
+
+        `stay_signed_in` tem o mesmo efeito que em `login`: ele escolhe a
+        janela de inatividade do refresh, e nada mais.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "nao ha dimensao por conta aqui: o pedido so revela de que conta e DEPOIS de a assinatura conferir, e um teto que precisasse saber a conta antes teria de olhar o `userHandle` sem verificar nada -- que e aceitar como identificacao o campo que o atacante escolhe"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasskeyAuthenticationRequest' }
+      responses:
+        '200':
+          description: Sessao aberta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: |
+            A credencial nao confere. A resposta e **identica** para credencial
+            desconhecida, revogada, assinatura invalida e contador repetido:
+            nao revela nem se a credencial existe, nem se a conta existe.
+
+            Desafio expirado ou ja usado sai como `token-expired`, que e outra
+            saida de tela: pedir outro desafio.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                naoConfere:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: Nao foi possivel entrar com esta credencial
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                desafioVencido:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/token-expired
+                    title: O desafio expirou
+                    status: 401
+                    detail: Tente entrar de novo.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkeys:
+    get:
+      operationId: listPasskeys
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: []
+      summary: Lista as credenciais digitais da conta
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "leitura da propria conta, e e a tela de gerenciar credenciais que a chama"
+      description: |
+        As credenciais **ativas** da conta, mais recente primeiro. Revogadas
+        nao aparecem: elas continuam na base (nada e apagado, decisao do
+        cliente de 26/10) e nao servem a nenhuma tela.
+
+        Nao devolve chave publica nem `credential_id` cru -- nada que sirva
+        para montar uma assercao. O que a tela precisa e o rotulo, quando foi
+        cadastrada e quando foi usada por ultimo, para a pessoa reconhecer o
+        aparelho que vai revogar.
+      responses:
+        '200':
+          description: Lista das credenciais ativas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkeys/{passkeyId}:
+    delete:
+      operationId: revokePasskey
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: [irreversible_write]
+      summary: Revoga uma credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "teto FOLGADO de proposito: quem perdeu o aparelho esta com pressa, e o teto nao pode ser o que impede alguem de fechar a porta. Trinta e o triplo do cadastro porque revogar e a saida de emergencia, nao a rotina"
+      description: |
+        **Revogar MARCA revogada, nao apaga** (decisao do cliente de 26/10:
+        "nao apague nada"). A linha fica, com `revoked_at` preenchido, e deixa
+        de contar no teto e de servir para entrar. Isso tambem e o que permite
+        responder honestamente depois a pergunta "esta credencial ja existiu".
+
+        `irreversible_write` porque a credencial nao volta: o padrao WebAuthn
+        nao tem como "desrevogar" -- a chave privada continua no aparelho, mas
+        a confianca nela nao se restaura sem cadastrar de novo.
+
+        **Nao exige reautenticacao.** Pelo contrato, `X-Reauth-Token` protege
+        operacao destrutiva, e revogar passkey parece uma. Nao exige por um
+        motivo concreto: quem perdeu o aparelho precisa revogar a credencial
+        dele, e a senha continua sendo a outra porta -- exigir a senha aqui
+        nao acrescenta defesa (quem esta na sessao ja passou por ela) e
+        acrescenta um passo no momento em que a pessoa mais precisa de pressa.
+        Revogar nunca TRANCA ninguem fora: a senha continua valendo, que e a
+        decisao 1 do BICHUS-301.
+
+        Credencial de outra conta responde **404**, nao 403, como o resto do
+        contrato.
+      parameters:
+        - $ref: '#/components/parameters/PasskeyId'
+      responses:
+        '204':
+          description: "Credencial revogada. Idempotente: revogar a ja revogada tambem sai 204."
+        # O `passkeyId` e `format: uuid`, entao o Ajv pode recusar antes do
+        # handler. Declarar o 400 nao e zelo: a rota JA o devolve, e contrato
+        # que omite resposta que a rota emite e contrato que mente.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /auth/password:
     put:
       operationId: changePassword
@@ -1502,7 +1883,23 @@ paths:
       x-effects: []
       summary: O endereco de entrega guardado na conta
       description: |
-        O endereco que o formulario da plaquinha usa para nascer preenchido.
+        **SUPERADA COMO FONTE DO PEDIDO EM 27/10/2026, e nao apagada.** Ate
+        26/10 era este endereco que o formulario da plaquinha lia para nascer
+        preenchido (decisao do cliente de 21/10/2026: *"um endereco de entrega
+        salvo na conta, reusado em todo pedido e editavel num lugar so"*). Em
+        **27/10/2026**, com aquela frase posta na mesa, ele decidiu *"endereco um
+        por pet"*: a fonte do pedido passou a ser `getPetDeliveryAddress`, e o
+        registro completo das duas decisoes mora no comentario de
+        `/pets/{petId}/delivery-address`.
+
+        Esta operacao **continua existindo** por duas razoes, nenhuma delas
+        inercia: a decisao do cliente de 26/10/2026 e *"nao apague nada"*, e foi
+        desta tabela que a migracao `20261027000001` copiou o endereco para os
+        pets de cada tutor -- apagar a fonte da copia tiraria o unico registro de
+        onde o endereco de cada pet veio.
+
+        **Nenhum pedido de plaquinha le daqui.** Quem procura o endereco que o
+        formulario usa esta na operacao errada.
 
         **`null` quando nao ha endereco guardado, e nao 404** -- a mesma forma
         de `getMyLocation`, e pelo mesmo motivo: "nunca guardei" e um estado
@@ -2645,6 +3042,159 @@ paths:
         '204': { description: Excluido. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------------
+  # O ENDERECO DE ENTREGA DO PET -- e a decisao de 27/10/2026 que o moveu
+  # ----------------------------------------------------------------------
+  #
+  # ## AS DUAS DECISOES, com as datas e as palavras dele
+  #
+  # **21/10/2026**, escolhendo entre tres opcoes apresentadas:
+  #
+  #     "Endereco guardado de verdade -- um endereco de entrega salvo na CONTA,
+  #      reusado em todo pedido e editavel num lugar so."
+  #
+  # **27/10/2026**, depois de a contradicao com a frase acima ter sido posta na
+  # mesa para ele, nomeada e datada:
+  #
+  #     "o endereco de entrega da plaquinha tem que estar dentro do cadastro do
+  #      pet"
+  #
+  # e, confrontado com a decisao anterior:
+  #
+  #     "endereco um por pet"
+  #
+  # **A de 21/10 CAI e a de 27/10 vale.** Isto nao foi descuido dele: a
+  # contradicao foi apresentada citando a frase de 21/10 e ele decidiu com ela
+  # em maos. Quem ler `getMyDeliveryAddress` (que continua existindo, logo
+  # abaixo) sem este paragrafo vai concluir que ha duas fontes concorrentes para
+  # o mesmo endereco, e vai estar errado: **a fonte do pedido e o PET.**
+  #
+  # ## POR QUE SUB-RECURSO DO PET, e nao um campo em `PetInput`
+  #
+  # Tres medidas, nao estetica:
+  #
+  # 1. **`Pet` sai em `listMyPets`, que e lista.** Por o endereco dentro de
+  #    `PetInput`/`Pet` faria `GET /pets` projetar a RESIDENCIA do tutor
+  #    multiplicada pelo numero de pets, em toda abertura do app. O cabecalho da
+  #    `20261020000016` ja fixou a regra inversa para o endereco da conta --
+  #    *"quem quer o endereco faz JOIN, e quem nao faz nao o tem em maos"* --, e
+  #    ela nao afrouxa por o endereco mudar de dono;
+  # 2. **`PATCH updatePet` recebe `PetInput`, que exige `name`, `species` e
+  #    `size`.** Guardar o endereco por ali obrigaria a tela do endereco a
+  #    reenviar o pet inteiro, e um pet inteiro reenviado a partir de um
+  #    formulario de endereco e como um campo de cadastro volta ao valor antigo
+  #    sem ninguem ter editado nada;
+  # 3. **`PUT` e o verbo certo e `PATCH` nao e.** Endereco e uma coisa so:
+  #    trocar de casa troca os nove campos de uma vez. O mesmo raciocinio de
+  #    `putMyDeliveryAddress`, e e por isso que a forma aqui e a mesma dele.
+  #
+  # **Nenhum schema de endereco novo**: `DeliveryAddress` serve as quatro
+  # superficies, e `PetDeliveryAddress` e so o alias anulavel da leitura. Uma
+  # segunda redacao do mesmo endereco seria a segunda fonte para divergir -- e a
+  # divergencia concreta seria o endereco do pet nascer capaz de produzir um
+  # pedido que o banco recusa.
+  #
+  # ## ISTO CONTINUA SENDO A RESIDENCIA, e a postura nao afrouxou
+  #
+  # Mudou de dono, nao de classe. **So o tutor le, nunca sai sem conta, nunca
+  # aparece em lista e nunca alimenta calculo de distancia** (ADR-0006,
+  # ADR-0010). Pet de outra pessoa nao e 403 -- ele nao existe (ADR-0021), e a
+  # autorizacao mora na clausula `WHERE`, comparando o dono do pet com o
+  # portador do token. Cobrado por
+  # `src/tools/endereco-do-pet-nao-sai-em-publico.test.ts`.
+  #
+  # **O que a decisao de 17/10/2026 fixou NAO mudou**: o endereco e obrigatorio
+  # no pedido da plaquinha (`CollarTagRequestInput.delivery_address` segue
+  # `required`), e o CEP preenche rua, bairro, cidade e estado no APP (ViaCEP,
+  # BrasilAPI de reserva). Esta frente nao encosta em nenhuma das duas.
+
+  /pets/{petId}/delivery-address:
+    parameters:
+      - $ref: '#/components/parameters/PetId'
+    get:
+      operationId: getPetDeliveryAddress
+      security:
+        - bearerAuth: []
+      tags: [pets]
+      x-effects: []
+      summary: O endereco de entrega guardado NESTE pet
+      description: |
+        O endereco que o formulario da plaquinha deste pet usa para nascer
+        preenchido, **desde a decisao do cliente de 27/10/2026** (*"endereco um
+        por pet"*). Antes dela a fonte era a conta; ver o comentario acima deste
+        caminho, que registra as duas decisoes com as datas.
+
+        **`null` quando este pet nao tem endereco guardado, e nao 404** -- a
+        mesma forma de `getMyDeliveryAddress` e de `getMyLocation`, e pelo mesmo
+        motivo: "este pet nunca teve endereco" e um estado normal do cadastro,
+        nao recurso ausente. O PET ausente, esse sim, e 404.
+
+        **Leitura do tutor, e so dele.** `bearerAuth` sem alternativa vazia, e o
+        `WHERE` compara o dono do pet com o portador do token. Pet de outra
+        pessoa responde **404 e nunca 403** (ADR-0021): para quem pergunta, ele
+        nao existe.
+      responses:
+        '200':
+          description: |
+            O endereco guardado neste pet, ou `null` quando ele nao tem nenhum.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PetDeliveryAddress' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putPetDeliveryAddress
+      security:
+        - bearerAuth: []
+      tags: [pets]
+      x-effects: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+      summary: Guarda ou troca o endereco de entrega deste pet
+      description: |
+        **`PUT` e nao `PATCH`, e o endereco inteiro vem junto.** Endereco e uma
+        coisa so: trocar de casa troca os nove campos de uma vez, e um `PATCH`
+        por campo deixaria o pet parado numa mistura de duas casas -- rua nova
+        com bairro antigo chega no lugar errado sem nada ter dado erro.
+
+        **Uma linha por pet**, e nao um historico: o cliente pediu *"endereco um
+        por pet"*, no singular. Guardar de novo sobrescreve.
+
+        **Esta rota NAO escreve o endereco da conta** (`putMyDeliveryAddress`),
+        e a reciproca tambem vale. Depois de 27/10/2026 o endereco da conta nao
+        e lido por pedido nenhum: ele continua existindo porque a decisao do
+        cliente de 26/10/2026 e *"nao apague nada"*, e porque foi dele que a
+        migracao `20261027000001` copiou o endereco para os pets de cada tutor.
+
+        **O teto e de conveniencia e nao de abuso**, igual ao de
+        `putMyDeliveryAddress`: guardar o proprio endereco nao vira trabalho de
+        ninguem, ao contrario do PEDIDO da plaquinha (3 por dia, porque cada um
+        vira trabalho fisico de alguem). 30 por hora impede laco de cliente
+        defeituoso sem atrapalhar quem corrige a rua tres vezes seguidas.
+
+        Cobranca, valor e pagamento continuam fora de escopo por decisao do
+        cliente, e nada aqui os introduz.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+      responses:
+        '200':
+          description: |
+            O endereco como ficou guardado (ja normalizado: CEP sem mascara, UF
+            em maiuscula, bordas sem espaco).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryAddress' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /pets/{petId}/photos:
@@ -4725,6 +5275,13 @@ paths:
         numa rota publica eles nao podem existir. Afrouxar este `security` para
         `[bearerAuth, {}]` faz o portao reprovar os dois, nominalmente.
 
+        **A lista deslogada da aba existe, e e outra operacao**:
+        `listPublicDirectoryEntries` (`GET /v1/public/directory-entries`),
+        com projecao propria e sem os dois campos. Esta operacao continua
+        exigindo conta, e o paragrafo acima continua valendo: o caminho nao
+        foi afrouxar este `security`, foi dar ao portao um schema que ele
+        aprova.
+
         **Ordenacao por distancia usa a localizacao de referencia de quem
         chama**, que o servidor ja guarda (BICHUS-92). Ela NAO e enviada na
         requisicao: coordenada em URL vai para log de acesso, para o historico
@@ -5360,6 +5917,46 @@ paths:
         contencao desse caso e a denuncia e a remocao pelo administrador, que e
         humana e posterior.
 
+        ## Moderacao de palavras (`code: inappropriate_language`)
+
+        `body` recusa xingamento e injuria **na hora da escrita**, e e a MESMA
+        funcao e o MESMO `code` de `suggestDirectoryEntry` (pedido do cliente,
+        18/10/2026: "nos campos de indicacao e recomendacao de profissionais").
+        O `400` ja declarado abaixo cobre a recusa, e `errors[].code` nao tem
+        `enum` -- este codigo nao acrescenta esquema nenhum.
+
+        **Aqui a recusa na escrita e a unica barreira anterior**, e a diferenca
+        com a indicacao importa: a indicacao vai para fila e passa por revisao
+        humana, esta **aparece na hora**. Entre o teclado e a tela de outra
+        pessoa nao ha ninguem, entao recusar depois nao protegeria nada.
+
+        **A ORDEM: o `409` de canal nao verificado vem ANTES da moderacao**, a
+        mesma ordem de `suggestDirectoryEntry`. Quem nao confirmou o e-mail
+        ouve o que de fato falta, em vez de ser mandado reescrever um texto que
+        nao poderia publicar de todo jeito. A conferencia de FORMA
+        (`too_long`, `html_not_allowed`) continua vindo antes do `409`: ela nao
+        depende da conta.
+
+        A recusa **nao devolve a palavra encontrada** e **nao devolve a lista**,
+        nem em `errors[]` nem em `detail`, e nada disso vai para log: devolve-la
+        transformaria o `400` em oraculo de quem quer descobrir o filtro. A
+        mensagem e sempre a mesma e diz o que fazer.
+
+        **Isto nao e a prova de contorno.** A lista pega palavra escrita por
+        extenso; frase ofensiva sem palavra proibida, palavra grudada em outra e
+        troca de caractere nao prevista passam, e **injuria racial nao e
+        pegada** -- em portugues ela e feita de palavra reaproveitada, que
+        colide com vocabulario de animal, de cor e de gentilico. Decisao do
+        cliente: "vamos comecar com um modelo de moderacao mais simples e
+        conforme for aumentamos". A protecao de fundo continua sendo a denuncia
+        e a remocao pelo painel.
+
+        Pelo mesmo juizo de falso positivo, a lista **nao tem** palavra que seja
+        tambem nome proprio ou termo do dominio: `Clinica Pinto`, `cadela`
+        (femea de cao) e `cavalo crioulo` passam, e isso e requisito, nao
+        tolerancia. **Critica negativa continua passando**: nota 1 com texto
+        duro e aceita.
+
         ## Avaliar perfil nao reivindicado e permitido
 
         Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao
@@ -5927,6 +6524,23 @@ paths:
         `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
         (ADR-0027 12.6, decisao do cliente de 23/09/2026).
 
+        ## O cancelado nao se mistura mais ao ativo (27/10/2026)
+
+        Duas mudancas, pela decisao do cliente de 26/10/2026 -- *"os eventos
+        cancelados e que ja passaram devem vir por ultimo na listagem"*:
+
+        1. o parametro **`status`** recorta pela situacao CALCULADA, e com ele
+           da para pedir so o cancelado, ou so o que vai acontecer;
+        2. a ordem **`proximos`** passa a por o cancelado DEPOIS de todo
+           encontro ativo (ver `NetworkEventSort`).
+
+        **O cancelado continua na lista por padrao**, e isso e deliberado: sem
+        `status`, nada e recortado, exatamente como antes destas duas
+        mudancas. Quem se programou para ir precisa VER que foi cancelado --
+        esconde-lo por padrao seria apagar a informacao que o cancelamento
+        existe para dar. O que o cliente pediu foi deixar de MISTURAR, e quem
+        separa sem esconder e a ordem.
+
         ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
 
         A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
@@ -5946,6 +6560,7 @@ paths:
         - $ref: '#/components/parameters/NetworkEventAdmissionParam'
         - $ref: '#/components/parameters/NetworkEventVisibilityParam'
         - $ref: '#/components/parameters/NetworkEventSizeParam'
+        - $ref: '#/components/parameters/NetworkEventStatusParam'
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -6579,14 +7194,43 @@ paths:
         decidir, e nao de descrever. O que entra alem de capa e titulo esta
         justificado propriedade por propriedade no esquema.
 
-        ## Nao ha busca, filtro nem ordem escolhivel
+        ## Nao ha busca nem ordem escolhivel, e ha UM filtro
 
         O teto da conta e de **3 encontros ativos**
         (`community-event-limit-reached`), entao esta lista e curta por
-        construcao. A ordem e fixa: o que ainda nao terminou primeiro, do mais
-        proximo para o mais distante, e depois o que passou, do mais recente
-        para o mais antigo -- a decisao que a tela oferece (cancelar) so existe
-        para o que ainda nao terminou.
+        construcao: nao ha busca e nao ha ordem escolhivel.
+
+        **O unico recorte e `status`**, acrescentado em 27/10/2026 pela mesma
+        decisao que mudou a ordem abaixo. A frase que estava aqui -- *"nao ha
+        busca, filtro nem ordem escolhivel"* -- deixou de ser verdade nesse dia,
+        e esta reescrita e isso. **A TELA NAO O OFERECE**: `Meus eventos` nao tem
+        folha de filtro, e nenhuma foi criada, porque um controle de filtro sobre
+        uma lista de no maximo 3 encontros ativos e mais caro de ler do que a
+        lista inteira. Ele existe no contrato porque a ordem deixou de misturar o
+        cancelado, e quem consome o contrato precisa poder pedir um grupo so.
+
+        ## A ORDEM, que mudou em 27/10/2026
+
+        Sao TRES grupos, nesta ordem, e nao mais dois:
+
+        1. o que ainda nao terminou **e nao esta cancelado**, do mais proximo
+           para o mais distante -- a decisao que a tela oferece (cancelar) so
+           existe para ele;
+        2. o **cancelado** que ainda nao passou do fim previsto (rotulo
+           `cancelled`), do mais proximo para o mais distante;
+        3. o que passou, do mais recente para o mais antigo.
+
+        Antes eram dois grupos e o cancelado caia no primeiro, porque "ainda nao
+        terminou" nao olhava a publicacao. Consequencia: um encontro **cancelado**
+        para amanha ordenava ANTES de um encontro **ativo** para depois de
+        amanha, e a lista punha no alto justamente aquele sobre o qual nao ha
+        mais nada a decidir. Decisao do cliente de 26/10/2026.
+
+        **O grupo 2 nao e o fundo da lista**, e a escolha e deliberada: o rotulo
+        dele ainda e `cancelled` e nao `ended`, e o cancelamento de hoje e a
+        informacao que a propria pessoa acabou de gerar. Quando ele passa do fim
+        previsto, o rotulo vira `ended` pela regra do encerrado e ele cai no
+        grupo 3 sozinho.
       security:
         - bearerAuth: []
       x-rate-limit:
@@ -6596,6 +7240,7 @@ paths:
           on_exceed: deny_429
           note: "a lista da propria conta, no mesmo teto de `listMyNetworkEventJoinRequests`: ela recarrega a cada volta da tela e a cada arrasto para atualizar"
       parameters:
+        - $ref: '#/components/parameters/NetworkEventStatusParam'
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -7711,6 +8356,142 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublicLostPetPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /public/directory-entries:
+    get:
+      operationId: listPublicDirectoryEntries
+      tags: [public]
+      x-effects: [expensive_query]
+      summary: Profissionais e estabelecimentos, sem conta
+      description: |
+        A MESMA lista da aba `Comunidade`, **lida sem conta** (pedido do
+        cliente, 26/10/2026: a Comunidade deve listar para quem esta deslogado,
+        e pedir conta no toque da pagina interna).
+
+        ## Por que operacao NOVA, e nao `security: [bearerAuth, {}]` na de conta
+
+        Foram as duas tentativas mais curtas, e as duas estao fechadas:
+
+        1. **Afrouxar o `security` de `listDirectoryEntries` reprova no
+           portao.** `src/tools/portao-contrato-publico.ts` proibe `phone_e164`
+           e `distance_m` por NOME EXATO em qualquer operacao alcancavel sem
+           conta, e os dois estao em `DirectoryEntrySummary`. A descricao
+           daquela operacao ja registra esse beco, e ela continua certa.
+        2. **Tirar os dois campos daquele schema quebra o APK publicado**, que
+           le aquela resposta. Resposta nao perde campo sem quebrar quem a le.
+
+        Uma operacao em OpenAPI tem **um** schema de resposta: nao existe forma
+        de a mesma operacao devolver a projecao cheia com conta e a magra sem
+        conta. Entao a projecao magra precisa de operacao propria, e e esta.
+
+        **O molde e a `Rede`, e nao foi inventado aqui**: os encontros ja
+        resolvem exatamente isto com DUAS operacoes -- `listNetworkEvents`
+        (`security: []`, sem distancia) e `listNearbyNetworkEvents` (com conta,
+        com distancia). O comentario acima de `/network/my-events` ja escreveu
+        a regra por extenso: operacao nova, porque mexer no `security` de uma
+        operacao publicada "e quebra de contrato para todo cliente publicado".
+
+        ## O que o cartao deslogado mostra, e o que ele NAO mostra
+
+        **Nome, atividade, lugar (bairro, cidade e UF), logo e selo de
+        verificacao.** `PublicDirectoryEntrySummary` nao tem `phone_e164`, nao
+        tem `site_url` e nao tem `distance_m`.
+
+        Tambem nao tem `rating`, e por um motivo diferente dos tres: a
+        listagem COM conta nao envia pontuacao nenhuma hoje -- o schema dela a
+        declara a frente da implementacao. Ver a nota no proprio
+        `PublicDirectoryEntrySummary`.
+
+        **A ausencia do telefone e decisao de produto, e nao limitacao
+        tecnica.** O botao `Ligar` do cartao so existe quando `phone_e164`
+        existe; publicar o telefone aqui exigiria tornar telefone comercial um
+        dado publico e abrir excecao NOMINAL no portao -- mudanca de
+        privacidade, que nao se faz para encurtar uma tela. Entao o cartao
+        deslogado nasce sem `Ligar`, e **entrar e o que o acrescenta**.
+
+        `site_url` sai pela razao declarada no proprio campo dele: ele "sai ao
+        lado de `phone_e164` e pela mesma razao", e so pode existir porque a
+        operacao exige conta. O portao nao o nomeia hoje -- e isso nao e
+        permissao. A lista de campos proibidos e o piso da conferencia, nao a
+        fronteira da decisao.
+
+        ## Nao ha `sort`, e a ausencia e a regra
+
+        A ordenacao e por **nome**, sempre. `sort=distance` mede a partir da
+        localizacao de referencia de quem chama, que o servidor guarda por
+        CONTA e APARELHO (SEC-021): sem conta nao existe ponto de onde medir.
+        E ordenar por distancia numa rota publica seria o oraculo de posicao
+        que o cabecalho do portao descreve -- variando o centro e lendo a ORDEM
+        da pagina da para trilaterar o ponto, sem um unico numero de coordenada
+        sair no corpo.
+
+        ## O teto e por `ip`, como nas outras rotas publicas
+
+        Nao ha conta de onde sair um balde, e teto por conta numa rota sem
+        conta nao conta nada. E o desenho de `listPublicLostPets`, com os
+        numeros dela: diretorio sem teto e a porta da raspagem, e esta e a
+        copia publica da lista que a rota com conta ja limita a 120/h.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 120
+          window: 1h
+          on_exceed: challenge
+        - dimension: [ip]
+          limit: 600
+          window: 24h
+          on_exceed: challenge
+        - dimension: [ip, q]
+          limit: 30
+          window: 1h
+          on_exceed: challenge
+          note: "busca por texto tem teto proprio, como na listagem publica de perdidos"
+      parameters:
+        - name: q
+          in: query
+          description: |
+            Busca parcial pelo NOME da entrada, tolerante a acento e a caixa,
+            com o MESMO piso de tres caracteres da rota com conta e pela mesma
+            razao: o indice que a atende e GIN de trigrama, e um padrao com
+            menos de tres caracteres nao produz trigrama nenhum. **A tela nao
+            deve enviar `q` antes do terceiro caractere**, sob pena de levar
+            400 no que a pessoa le como o app quebrado.
+          schema: { type: string, minLength: 3, maxLength: 60 }
+        - name: city
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: state
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 2 }
+        - name: neighborhood
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/ProfessionalKind' }
+        - name: verification_level
+          in: query
+          description: |
+            **Piso**, nao igualdade: pedir `contact_verified` traz
+            `document_verified` junto. O mesmo da rota com conta.
+          schema: { $ref: '#/components/schemas/VerificationLevel' }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina do diretorio sem conta. `total` alimenta "1 a 20 de 87" e
+            `applied_filters` alimenta a linha que explica o recorte, como na
+            rota com conta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicDirectoryEntryPage' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -12388,6 +13169,36 @@ components:
         Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
         mesmo motivo de `admission`.
       schema: { $ref: '#/components/schemas/PetSize' }
+    NetworkEventStatusParam:
+      name: status
+      in: query
+      description: |
+        A SITUACAO CALCULADA do encontro (`NetworkEventStatus`), e **nao a coluna
+        de publicacao**. A distincao e o ponto: a coluna nunca volta atras, entao
+        um encontro cancelado ha tres semanas segue cancelado NELA, enquanto o
+        rotulo que a resposta entrega para ele e `ended`. Quem pede
+        `status=cancelled` recebe os encontros que a lista rotula `Cancelado`
+        AGORA, e nao os que foram cancelados algum dia.
+
+        **Sem padrao, de proposito.** Ausente, nada e recortado, e o cancelado
+        continua na lista como antes de este parametro existir. Um
+        `default: upcoming` aqui tiraria da agenda de quem ja usa o app o
+        encontro cancelado que ela precisa ver para saber que nao vai acontecer,
+        sem ninguem ter pedido -- e e justamente a informacao que o cancelamento
+        existe para dar. Quem separa o cancelado sem esconde-lo e a ordem
+        (`NetworkEventSort`).
+
+        **Combina com `when`, e o par pode nao casar nada**: `status=upcoming`
+        com `when=past` e um recorte legitimo e vazio. `applied_filters` diz o
+        que de fato valeu, e e ele que separa "a Rede nao tem encontro" de "o seu
+        recorte esvaziou a agenda".
+
+        **Nao exclui o encontro privado.** Ao contrario de `city`, `admission` e
+        `size`, que o excluem por casarem valor oculto (ADR-0027 12.14), a
+        situacao do privado nao e oculta: o teaser dele ja a entrega
+        (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Casar por ela nao conta
+        nada que a resposta nao conte.
+      schema: { $ref: '#/components/schemas/NetworkEventStatus' }
     NetworkEventSlugParam:
       name: eventSlug
       in: path
@@ -12404,6 +13215,18 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PasskeyId:
+      name: passkeyId
+      in: path
+      required: true
+      description: |
+        O `id` DA LINHA devolvido por `listPasskeys`, e nao o `credential_id`.
+        Sao dois identificadores diferentes de proposito: o `credential_id` e
+        escolhido pelo autenticador e aparece em `exclude_credentials`, e usar
+        ele na URL poria um identificador de credencial no caminho, que vai
+        para log de acesso.
+      schema: { type: string, format: uuid }
+
     TagId:
       name: tagId
       in: path
@@ -13872,6 +14695,231 @@ components:
         stay_signed_in:
           $ref: '#/components/schemas/StaySignedIn'
 
+    PasskeyRegistrationOptions:
+      type: object
+      description: |
+        Subconjunto de `PublicKeyCredentialCreationOptions` que o app repassa
+        ao Credential Manager. **Todo campo binario e base64url SEM
+        preenchimento (`=`)**, que e o que o WebAuthn usa e o que o Android
+        espera; base64 comum entra silenciosamente errado no `challenge` e a
+        atestacao reprova depois, longe daqui.
+      required: [challenge, rp, user, pub_key_cred_params, timeout, attestation, authenticator_selection, exclude_credentials]
+      properties:
+        challenge:
+          type: string
+          description: |
+            Desafio de **uso unico** e com **prazo** (`timeout`), base64url.
+            Guardado no servidor e consumido em `finishPasskeyRegistration`,
+            de sucesso ou de falha.
+          example: dGVzdGUtZGUtZGVzYWZpby1uYW8tdXNhci1lbS1wcm9kdWNhbw
+        rp:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              description: |
+                O `RP ID`. **Sempre `bichu.app`**, o apex, e **imutavel**:
+                trocar invalida toda credencial ja emitida.
+              example: bichu.app
+            name: { type: string, example: Bichu }
+        user:
+          type: object
+          required: [id, name, display_name]
+          properties:
+            id:
+              type: string
+              description: |
+                O `userHandle`, base64url. E o UUID interno da conta, o mesmo
+                `sub` do token -- **nunca o e-mail**: o `userHandle` fica
+                guardado no aparelho e e devolvido na entrada sem
+                autenticacao nenhuma, entao por-lo como e-mail deixaria o
+                e-mail legivel para quem tiver o aparelho na mao.
+              example: MDE4ZjdjMWUtN2EyYi03YzNkLTllNGYtMmIxYTBjOWQ4ZTdm
+            name: { type: string, format: email, description: "o e-mail, que e o que o seletor do aparelho mostra" }
+            display_name: { type: string, description: "o nome do tutor" }
+        pub_key_cred_params:
+          type: array
+          description: |
+            Algoritmos aceitos, em ordem de preferencia: `-7` (ES256) e `-257`
+            (RS256). Sao os dois que os autenticadores de plataforma do Android
+            emitem; a lista e fechada aqui e no servidor, e nao herdada do que
+            o aparelho oferecer.
+          items:
+            type: object
+            required: [type, alg]
+            properties:
+              type: { type: string, enum: [public-key] }
+              alg: { type: integer, enum: [-7, -257] }
+        timeout:
+          type: integer
+          description: "prazo do desafio em MILISSEGUNDOS, como o WebAuthn pede. O servidor aplica o mesmo prazo na sua copia guardada -- prazo que vive so no cliente nao e prazo."
+          example: 300000
+        attestation:
+          type: string
+          enum: [none]
+          description: |
+            `none` de proposito. Atestacao direta entregaria o modelo do
+            aparelho e exigiria validar cadeia de certificado de fabricante,
+            e o produto nao tem regra que dependa da marca do autenticador.
+            Pedir atestacao que ninguem examina e coletar dado sem uso.
+        authenticator_selection:
+          type: object
+          required: [authenticator_attachment, resident_key, user_verification]
+          properties:
+            authenticator_attachment:
+              type: string
+              enum: [platform]
+              description: "a credencial fica no proprio aparelho"
+            resident_key:
+              type: string
+              enum: [required]
+              description: |
+                **Obrigatoriamente `required`.** E o que torna a credencial
+                *discoverable* e o que permite a `beginPasskeyAuthentication`
+                nao receber e-mail -- sem isso a entrada precisaria de
+                `allowCredentials`, que seria um oraculo de enumeracao de
+                conta.
+            user_verification:
+              type: string
+              enum: [required]
+              description: "biometria ou bloqueio de tela do aparelho. `required` e nao `preferred`: credencial sem verificacao do usuario nao substitui nada, e aqui ela e a porta inteira."
+        exclude_credentials:
+          type: array
+          description: |
+            As credenciais ATIVAS da conta, para o aparelho nao cadastrar duas
+            vezes. Nao vaza nada: quem chama ja esta autenticado como dono.
+            Vazia quando a conta nao tem nenhuma.
+          items: { $ref: '#/components/schemas/PasskeyDescriptor' }
+
+    PasskeyDescriptor:
+      type: object
+      required: [type, id]
+      properties:
+        type: { type: string, enum: [public-key] }
+        id: { type: string, description: "o `credential_id`, base64url" }
+
+    PasskeyRegistrationRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: object
+          description: |
+            O `PublicKeyCredential` devolvido pelo aparelho, com os campos
+            binarios em base64url.
+          required: [id, raw_id, type, response]
+          properties:
+            id: { type: string, description: "o `credential_id` em base64url" }
+            raw_id: { type: string, description: "o mesmo valor; aceito porque o Credential Manager devolve os dois" }
+            type: { type: string, enum: [public-key] }
+            response:
+              type: object
+              required: [client_data_json, attestation_object]
+              properties:
+                client_data_json:
+                  type: string
+                  description: "base64url. Dele saem `challenge`, `type` e `origin`, e os tres sao conferidos."
+                attestation_object:
+                  type: string
+                  description: "base64url, CBOR. Dele saem `rpIdHash`, as flags, o `sign_count` e a chave publica COSE."
+                transports:
+                  type: array
+                  items: { type: string }
+                  description: "informativo; guardado para a tela, nunca usado como decisao de seguranca"
+        label:
+          type: string
+          maxLength: 60
+          description: |
+            Rotulo do aparelho, escolhido pela pessoa ou sugerido pelo app
+            ("Celular do Leandro"). **Opcional**: sem ele o servidor guarda
+            nulo e a tela mostra a data. Texto livre, e e texto de usuario --
+            a tela escapa, como em qualquer outro campo livre do produto.
+
+    PasskeyAuthenticationOptions:
+      type: object
+      required: [challenge, timeout, rp_id, user_verification, allow_credentials]
+      properties:
+        challenge:
+          type: string
+          description: "desafio de uso unico e com prazo, base64url"
+        timeout: { type: integer, example: 300000, description: "prazo em MILISSEGUNDOS" }
+        rp_id: { type: string, example: bichu.app }
+        user_verification: { type: string, enum: [required] }
+        allow_credentials:
+          type: array
+          maxItems: 0
+          description: |
+            **Sempre vazia, em toda chamada.** Nao e campo a preencher depois:
+            e a forma de a operacao nao responder "esta conta tem passkey?".
+            O aparelho acha a credencial sozinho porque ela e *discoverable*.
+            `maxItems: 0` esta aqui para que preencher isto um dia reprove no
+            portao de contrato em vez de vazar em silencio.
+          items: { $ref: '#/components/schemas/PasskeyDescriptor' }
+
+    PasskeyAuthenticationRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: object
+          required: [id, raw_id, type, response]
+          properties:
+            id: { type: string }
+            raw_id: { type: string }
+            type: { type: string, enum: [public-key] }
+            response:
+              type: object
+              required: [client_data_json, authenticator_data, signature]
+              properties:
+                client_data_json: { type: string, description: "base64url" }
+                authenticator_data: { type: string, description: "base64url. Dele saem o `rpIdHash`, as flags e o `sign_count`." }
+                signature: { type: string, description: "base64url" }
+                user_handle:
+                  type: string
+                  nullable: true
+                  description: |
+                    base64url, o `userHandle` guardado no aparelho. **Nunca e
+                    aceito como identificacao**: ele e conferido contra o dono
+                    da credencial encontrada pelo `credential_id`, e divergencia
+                    recusa. Tratar este campo como identidade seria aceitar
+                    como prova o valor que quem chama escolhe.
+        stay_signed_in:
+          type: boolean
+          default: false
+          description: "o mesmo efeito que em `login`: escolhe a janela de inatividade do refresh, e nada mais"
+
+    Passkey:
+      type: object
+      description: |
+        Uma credencial ATIVA, do ponto de vista da tela. **Nao traz chave
+        publica nem `credential_id`**: nada que sirva para montar assercao
+        sai desta operacao.
+      required: [id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "identificador DA LINHA, e nao o `credential_id`. E o que `revokePasskey` recebe."
+        label:
+          type: string
+          nullable: true
+          description: "o rotulo que a pessoa deu, ou nulo"
+        created_at: { type: string, format: date-time }
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "ultima entrada aceita com esta credencial, ou nulo se nunca foi usada para entrar"
+
+    PasskeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Passkey' }
+
     SessionResponse:
       type: object
       required: [access_token, token_type, expires_in, refresh_token, user]
@@ -15034,7 +16082,7 @@ components:
 
     Conversation:
       type: object
-      required: [status, participants, messages, unread, photo_reaches_other_side]
+      required: [status, participants, messages, unread, photo_reaches_other_side, viewer_role]
       description: |
         Vista do chamador **autenticado**. O achador sem conta recebe
         `FinderConversation`, que e outro schema e nao tem `id` nem `case_id`
@@ -15098,6 +16146,43 @@ components:
         case_id: { type: string, format: uuid, nullable: true }
         pet_display_name: { type: string }
         status: { type: string, enum: [open, blocked, closed] }
+        viewer_role:
+          type: string
+          enum: [tutor, finder]
+          description: |
+            **O PAPEL DE QUEM ESTA CHAMANDO nesta conversa**, e so dele.
+
+            `participants` traz SEMPRE os dois lados e **nao diz qual deles e o
+            chamador**. Sem este campo o cliente tem de adivinhar, e a unica
+            adivinhacao disponivel -- "o meu lado e o que vem sem `handle` e sem
+            `photo_icon_url`" -- **nao decide**: medido em 27/10/2026 contra
+            `participantesVisiveis`, quando nao ha conexao aceita (que e o
+            estado NORMAL de uma conversa de achado com um estranho) os dois
+            participantes saem com os dois campos nulos, e o corpo fica
+            **identico** para o chamador tutor e para o chamador achador.
+
+            O preco de nao ter o campo era de TELA, e estava medido: o app
+            assumia `tutor` fixo. Para o ACHADOR COM CONTA -- que o servidor
+            atende desde sempre, porque o recorte da leitura e
+            `tutor_user_id = chamador OR finder_user_id = chamador` -- a bolha
+            do OUTRO lado ia para a direita, que e o lado que a pessoa le como
+            o dela, e a linha da lista mostrava o PROPRIO nome sem foto
+            nenhuma: o proprio lado recebe `handle` e `photo_icon_url` nulos
+            **por decisao** (emenda 3 do ADR-0010, 19/10/2026), e a tela lia
+            esse nulo como se fosse do outro.
+
+            **Nao e identificador, e nao liga a conversa a uma conta**
+            (ADR-0010 itens 6 e 7): ele diz *"voce e este lado aqui"* a quem ja
+            esta autenticado, e nao diz nada sobre a outra pessoa. Quem sabe o
+            papel e a CONSULTA (`papel_do_chamador`, projetado no `SELECT`), e
+            nunca uma comparacao de id na borda -- um `if` de borda poderia
+            discordar do `WHERE` que deixou a conversa passar.
+
+            **`FinderConversation` NAO tem este campo e nao pode precisar
+            dele**: aquele schema serve o achador **sem conta**, e o papel
+            daquele chamador e `finder` por definicao do proprio token.
+
+            `system` nao e valor possivel: o Bichu nao chama esta rota.
         participants:
           type: array
           description: |
@@ -15779,6 +16864,119 @@ components:
             O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
             foi informado, porque "nada filtrado" e uma informacao e nao uma
             ausencia.
+          additionalProperties: { type: string }
+    PublicDirectoryEntrySummary:
+      type: object
+      description: |
+        O cartao da listagem **sem conta**. E `DirectoryEntrySummary` menos os
+        tres campos que so existem com conta: `phone_e164`, `site_url` e
+        `distance_m`.
+
+        **Nao e uma projecao reduzida por timidez**: cada ausencia tem a razao
+        escrita em `listPublicDirectoryEntries`. Os dois primeiros sao canal de
+        contato que so pode sair com conta -- o ADR-0011 secao 4 publica o
+        telefone comercial PARA SER PROCURADO, e e justamente esse campo que
+        `portao-contrato-publico.ts` proibe em rota sem conta. O terceiro
+        implica centro, e distancia a partir de centros conhecidos trilatera o
+        centro desconhecido.
+
+        **Nao tem `id` e nao tem `about`.** O endereco e o `slug` (ADR-0010
+        item 6), como no schema com conta. `about` fica fora porque o cartao
+        nao o desenha -- nem aqui nem com conta --, e campo que ninguem le e
+        peso de resposta sem leitor.
+
+        Tambem nao tem quem convidou a entidade nem quem e o titular dela, pela
+        mesma razao do schema com conta: as duas colunas ligam a entrada a uma
+        conta de pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas
+        inclusive como contagem e como existencia.
+      required: [slug, kind, kinds, entity_kind, display_name, verification]
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/ProfessionalKind'
+          description: |
+            **A PRIMEIRA atividade de `kinds`**, e `required` pela mesma razao
+            do schema com conta: ele existe para compatibilidade com o APK
+            publicado, e quem desenha a entrada nova usa `kinds`.
+        kinds: { $ref: '#/components/schemas/ProfessionalKinds' }
+        entity_kind: { $ref: '#/components/schemas/EntityKind' }
+        display_name: { type: string, maxLength: 120 }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
+        neighborhood:
+          type: string
+          nullable: true
+          description: |
+            O bairro, e **ele e a granularidade mais fina que sai sem conta**:
+            bairro, cidade e UF, e nunca mais fino (ADR-0010, "o que a rota
+            publica jamais exibe", itens 4 e 5).
+
+            **Nulo e estado possivel e nao erro**, como no schema com conta: o
+            cartao de uma entrada sem bairro tem uma linha menos, e nao cai
+            para cidade -- dizer `Sao Paulo` onde se pediu bairro faria a
+            listagem parecer ter a informacao que nao tem.
+        logo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A logo da entidade, **a URL da derivada publica e nunca do
+            original**, montada na leitura a partir de `MEDIA_PUBLIC_BASE_URL`
+            como no schema com conta (ADR-0007 secao 11.1 proibicao 9).
+
+            Nula e o estado normal, e o cartao sem ela desenha o glifo do TIPO
+            -- nao um retangulo vazio.
+
+            **A foto em faixa continua fora da lista, aqui tambem**: ela e
+            1280 x 720 e pertence a pagina do local, e mandar a faixa em ate 20
+            cartoes multiplicaria o peso da primeira pintura. Logo na lista,
+            foto no detalhe.
+        # `rating` NAO ESTA AQUI, e a ausencia e deliberada e medida.
+        #
+        # `DirectoryEntrySummary` o declara, mas a listagem com conta NAO o
+        # envia: `projetarEntrada` (domain/entrada-do-diretorio.ts) nao produz
+        # o campo, e so a pagina do local projeta pontuacao. Aquela declaracao
+        # esta a frente da implementacao -- e e justamente por isso que copiar
+        # o campo para um schema NOVO seria copiar a divida, declarando a um
+        # cliente novo um campo que nenhuma consulta preenche.
+        #
+        # Quando a agregacao por pagina entrar na listagem, ela entra nas DUAS
+        # projecoes no mesmo commit, e o recorte precisa ser o mesmo nas duas
+        # (`status = 'published'` e `conta_habilitada(author_user_id)`) para a
+        # media do cartao deslogado e a do logado nunca discordarem.
+        verification: { $ref: '#/components/schemas/DirectoryVerification' }
+    PublicDirectoryEntryPage:
+      type: object
+      description: |
+        **A mesma forma de `DirectoryEntryPage`**, e a igualdade e deliberada:
+        o aplicativo le as duas respostas com o MESMO modelo
+        (`PaginaDoDiretorio.fromJson`), e uma forma diferente exigiria um
+        segundo analisador para a mesma tela.
+      required: [items, page, limit, total, distance_available]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicDirectoryEntrySummary' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        distance_available:
+          type: boolean
+          description: |
+            **Sempre `false` nesta operacao**, e ele sai mesmo assim.
+
+            Sem conta nao existe localizacao de referencia de onde medir, entao
+            a lista saiu por nome -- e e isso que a tela escreve. Omitir o campo
+            faria o cliente adivinhar a diferenca entre "nao consegui ordenar"
+            e "nao perguntei", que e a mesma classe de mentira barata que o zero
+            silencioso.
+        applied_filters:
+          type: object
+          description: |
+            O recorte que de fato valeu, com `scope: all` quando nada foi
+            filtrado, como na rota com conta: "nada filtrado" e uma informacao
+            e nao uma ausencia.
           additionalProperties: { type: string }
     DirectorySuggestionContactKind:
       type: string
@@ -17653,8 +18851,31 @@ components:
       type: string
       enum: [proximos, recentes]
       description: |
-        `proximos` e a data em ordem crescente; `recentes` e decrescente. **A
-        leitura publica nao ordena por distancia**: essa ordem e
+        `proximos` e a data em ordem crescente e `recentes` e decrescente.
+
+        ## `proximos` tem UMA excecao, e ela e de 27/10/2026
+
+        **O encontro rotulado `cancelled` vem depois de TODO encontro ativo**, e
+        so entao pela data. Decisao do cliente de 26/10/2026. Sem a excecao, um
+        encontro cancelado para amanha abria a agenda na frente de um encontro
+        que ainda vai acontecer depois de amanha -- a data o punha no alto, e a
+        lista destacava o que nao vai acontecer.
+
+        Dentro de cada um dos dois grupos a ordem continua sendo so a data, e o
+        desempate continua sendo o `slug`: a excecao e uma chave ANTES da data,
+        e nao uma troca de criterio.
+
+        **O rotulo e o CALCULADO** (`NetworkEventStatus`), e por isso a excecao
+        deixa de valer sozinha: passado o fim previsto, o cancelado e `ended`
+        como qualquer encerrado, e a partir dali `when` e `status` decidem se ele
+        ainda aparece.
+
+        **`recentes` NAO separa o cancelado**, e a ausencia e medida e nao
+        esquecimento: ela e a ordem do passado (`when=past`), onde o rotulo do
+        cancelado ja virou `ended` para todo mundo. Uma chave que nunca muda de
+        valor seria custo de ordenacao sem desfecho.
+
+        **A leitura publica nao ordena por distancia**: essa ordem e
         `listNearbyNetworkEvents`, com conta.
 
     NetworkEventNearbySort:
@@ -19054,22 +20275,41 @@ components:
 
     CommunityNetworkEventCoverInput:
       type: object
-      required: [upload_id, alt_text]
+      required: [upload_id]
       additionalProperties: false
       description: |
         A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
-        `alt_text` e **obrigatorio** aqui.
+        `alt_text` e **opcional** aqui desde 27/10/2026.
 
-        **ATENCAO, isto DEIXOU de ser igual a galeria do painel em 21/10/2026**:
-        lá `alt_text` virou opcional por decisao do cliente
-        (`CatalogImagesInput`), e aqui ele NAO foi afrouxado. A decisao do
-        cliente e as medicoes que a embasaram foram sobre os formularios do
-        PAINEL; esta e a superficie do APP, onde quem cria o encontro e o
-        proprio autor, e afrouxa-la de carona repetiria exatamente o erro que a
-        `20261017000002` evitou quando deixou a `Rede` de fora do pedido da
-        `Loja`. A coluna `network_event_images.alt_text` aceita nulo desde
-        21/10, entao esta obrigacao e desta superficie e nao do banco: ela cai
-        no dia em que alguem pedir, e nao antes.
+        **ELE SAIU DO `required` EM 27/10/2026, e o pedido do cliente e a razao
+        inteira.** Palavras dele, em 26/10/2026: *"essa porra de campo e
+        obrigatorio na criacao do evento, tire essa merda"* -- e, no mesmo
+        pedido, *"remova todos os campos de descricao de foto do aplicativo,
+        nao iremos implementar solucoes para quem usa leitor de tela por
+        enquanto"*.
+
+        **Esta e a condicao que o paragrafo anterior deste esquema nomeava.**
+        Ele dizia que a obrigacao "cai no dia em que alguem pedir, e nao
+        antes", e registrava que em 21/10/2026 o afrouxamento valeu so para a
+        galeria do painel (`CatalogImagesInput`), porque afrouxar a `Rede` de
+        carona repetiria o erro que a `20261017000002` evitou ao deixar a
+        `Rede` de fora do pedido da `Loja`. O dia chegou, e a diferenca e
+        exatamente a que aquele paragrafo exigia: o pedido e DESTA superficie,
+        dito pelo cliente sobre a tela de criar encontro, e nao uma
+        generalizacao do painel.
+
+        **O CUSTO, dito e aceito:** a capa do encontro fica sem nome acessivel
+        escrito pelo autor quando ele nao escreve um. Quem usa leitor de tela
+        cai no rotulo generico (`TelaDoEncontro.nomeDaCapaSemTexto`) -- a
+        imagem NAO sai da arvore de acessibilidade. O cliente foi informado
+        desse custo em 21/10/2026, ciente e por duas vezes, e repetiu o pedido
+        em 26/10/2026 alcancando o app.
+
+        **`minLength: 2` FICA.** Ausente e valido; presente e vazio continua
+        `400`, exatamente como no catalogo. A coluna
+        `network_event_images.alt_text` ja aceita nulo desde a
+        `20261020000013` (21/10/2026), e o `CHECK` de tamanho continua valendo
+        quando o texto vem: **nao ha migracao nesta mudanca**.
       properties:
         upload_id: { type: string, format: uuid }
         alt_text: { type: string, minLength: 2, maxLength: 150 }
@@ -20947,6 +22187,35 @@ components:
         ainda nao guardou endereco, e nele o formulario da plaquinha se comporta
         exatamente como antes desta operacao existir. Mesma forma e mesmo motivo
         de `UserLocation` em `getMyLocation`.
+      oneOf:
+        - $ref: '#/components/schemas/DeliveryAddress'
+        - type: 'null'
+
+    PetDeliveryAddress:
+      description: |
+        O endereco de entrega guardado NESTE PET, **ou `null` quando ele nao tem
+        nenhum**.
+
+        **Alias anulavel de `DeliveryAddress`, e nao um segundo endereco** --
+        mesma forma e mesmo motivo de `MyDeliveryAddress`, que fica logo acima:
+        o `null` precisa estar no schema e nao so na prosa, porque um gerador de
+        tipo nao le descricao, e sem ele o cliente gerado nasceria com um
+        endereco nao-anulavel e quebraria no primeiro pet sem endereco -- que e
+        o estado de todo pet cadastrado DEPOIS da migracao `20261027000001`.
+
+        **Por que existem os DOIS alias, e nao um so.** Eles apontam para o
+        mesmo `DeliveryAddress` e poderiam ser um unico nome, mas sao duas
+        superficies com dois donos (`user_id` numa, `pet_id` na outra) e dois
+        rumos: depois da decisao do cliente de **27/10/2026** (*"endereco um por
+        pet"*) a fonte do pedido da plaquinha e o PET, e o da conta so continua
+        existindo porque a decisao de **26/10/2026** e *"nao apague nada"*. Um
+        nome compartilhado faria a descricao de um valer como documentacao do
+        outro, e e exatamente a confusao entre os dois que esta frente desfez.
+
+        `null` nao e erro e nao e recurso ausente: e o estado normal de um pet
+        que ainda nao teve endereco guardado, e nele o formulario da plaquinha se
+        comporta como antes de qualquer endereco existir. **Pet AUSENTE e 404**,
+        e essa e a outra metade -- o `null` fala do endereco, o 404 fala do pet.
       oneOf:
         - $ref: '#/components/schemas/DeliveryAddress'
         - type: 'null'

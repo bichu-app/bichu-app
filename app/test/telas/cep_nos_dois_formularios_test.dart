@@ -223,7 +223,10 @@ Future<void> _preencherORestoEEnviar(WidgetTester tester) async {
   // **O estado agora e ESCOLHA, e nao digitacao** (cliente, 17/10/2026).
   await escolherEstadoNaLista(tester, 'RJ');
   await escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
-  await _digitar(tester, 'Telefone', '+5521988887777');
+  // DIGITOS e nao `+55...`: o campo da indicacao ganhou
+  // `MascaraDeTelefone` em 26/10/2026 (BICHUS-308), e ela descarta o `+`.
+  // O corpo continua saindo como `+5521988887777`.
+  await _digitar(tester, 'Telefone', '21988887777');
   await rolarAte(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
   await tocar(tester, find.text(TelaSugerirProfissional.rotuloDeIndicar));
 }
@@ -242,8 +245,8 @@ Future<void> _abrirOPasso2Digitado(
     localizacao: localizacaoConcedida(),
   );
   await irPara(tester, Rotas.registrarAchado);
-  await rolarAte(tester, find.text('Cão'));
-  await tocar(tester, find.text('Cão'));
+  await rolarAte(tester, find.text('Cachorro'));
+  await tocar(tester, find.text('Cachorro'));
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
   await avancarParaOPasso2(tester);
@@ -585,8 +588,8 @@ void main() {
         localizacao: localizacaoConcedida(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);

@@ -332,6 +332,53 @@ export interface ReauthTokensTable {
   created_ip_hmac: Buffer | null;
 }
 
+export type RazaoDaRevogacaoDePasskey = 'user' | 'counter_regression' | 'account_deleted';
+
+/**
+ * Credencial WebAuthn de uma conta (BICHUS-301).
+ *
+ * SOMA a senha, nunca a substitui: passkey é presa ao aparelho, e trocar de
+ * celular sem outra porta trancaria a pessoa fora da conta.
+ */
+export interface PasskeyCredentialsTable {
+  id: Generated<string>;
+  user_id: string;
+  /** O `credential_id` cru, como o autenticador o emitiu. */
+  credential_id: Buffer;
+  /** Chave pública em COSE, em bytes: quem a usa é a biblioteca de verificação. */
+  public_key: Buffer;
+  /**
+   * Contador antirrepetição. `bigint` no banco chega como `string` pelo `pg`:
+   * 32 bits SEM sinal não cabem com folga em `number` de ponto flutuante, e
+   * converter aqui esconderia onde a conversão acontece.
+   */
+  sign_count: Generated<string>;
+  label: string | null;
+  transports: string[] | null;
+  created_at: Generated<Date>;
+  last_used_at: Date | null;
+  revoked_at: Date | null;
+  revoked_reason: RazaoDaRevogacaoDePasskey | null;
+}
+
+/**
+ * Desafio WebAuthn: prazo e USO ÚNICO.
+ *
+ * `user_id` é nulo nos desafios de ENTRADA e preenchido nos de CADASTRO — a
+ * conclusão da entrada não sabe de quem é a tentativa, de propósito, e acha a
+ * linha pelo `challenge_hash` do desafio que voltou no `clientDataJSON`.
+ */
+export interface PasskeyChallengesTable {
+  id: Generated<string>;
+  user_id: string | null;
+  purpose: 'registration' | 'authentication';
+  /** SHA-256 do desafio em base64url. É também a chave de busca. */
+  challenge_hash: Buffer;
+  expires_at: Date;
+  consumed_at: Date | null;
+  created_at: Generated<Date>;
+}
+
 export interface IdempotencyKeysTable {
   key: string;
   user_or_token_ref: string;
@@ -471,7 +518,15 @@ export interface PetTagsTable {
   created_at: CriadoEm;
 }
 
-/** Apenas inserção. Retenção de 90 dias. */
+/**
+ * Apenas inserção, e **sem retenção por prazo** (ADR-0010, emenda 6 de
+ * 26/10/2026: *"não apague nada"*). O desenho original previa 90 dias; o
+ * expurgo nunca existiu e agora não vai existir. A leitura fica enquanto a
+ * plaquinha existir, porque ela é a evidência de clonagem e de abuso.
+ *
+ * O que continua em 90 dias é a **rotação da chave** do HMAC do IP, e ela é
+ * higiene de chave — não prazo de guarda.
+ */
 export interface TagScansTable {
   id: string;
   tag_id: string;
@@ -2178,6 +2233,50 @@ export interface UserDeliveryAddressesTable {
   updated_at: Generated<Date>;
 }
 
+/**
+ * O ENDERECO DE ENTREGA DO PET (`20261027000001`).
+ *
+ * **Decisao do cliente de 27/10/2026**, nas palavras dele: *"o endereco de
+ * entrega da plaquinha tem que estar dentro do cadastro do pet"* e, com a
+ * decisao anterior na mesa, *"endereco um por pet"*. Ela **supera** a de
+ * 21/10/2026 (*"um endereco de entrega salvo na conta, reusado em todo pedido e
+ * editavel num lugar so"*), que criou `user_delivery_addresses` -- logo acima,
+ * e ainda de pe porque a decisao de 26/10/2026 e *"nao apague nada"*.
+ *
+ * **A fonte do pedido da plaquinha e esta tabela.** `user_delivery_addresses`
+ * nao e lida por pedido nenhum; ela foi a fonte da copia inicial.
+ *
+ * RESIDENCIA do usuario, e a postura nao afrouxou por mudar de dono: so o tutor
+ * le, a autorizacao mora num `JOIN` com `pets` comparando `owner_user_id` com o
+ * chamador (404 e nunca 403, ADR-0021), nao sai sem conta, **nao aparece em
+ * lista** -- e por isso o endereco nao esta em `Pet`, que sai em `listMyPets`
+ * --, nao entra na trilha e nao alimenta distancia (ADR-0006).
+ */
+export interface PetDeliveryAddressesTable {
+  /** O pet, e a chave primaria: "um endereco por pet" e a forma da tabela. */
+  pet_id: string;
+  /** Quem recebe, como vai na etiqueta. Nao e `users.display_name`. */
+  recipient_name: string;
+  /** E.164 do Brasil. Nao e `users.phone_e164`: e o telefone de quem RECEBE. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  /**
+   * Quando o tutor salvou pela ultima vez. **NAO e carimbo de expiracao** e
+   * nada o le para apagar nada. `Generated` porque a coluna tem `DEFAULT now()`
+   * e o `INSERT` do primeiro salvamento nao precisa escreve-lo.
+   */
+  updated_at: Generated<Date>;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -2660,6 +2759,8 @@ export interface Database {
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
   reauth_tokens: ReauthTokensTable;
+  passkey_credentials: PasskeyCredentialsTable;
+  passkey_challenges: PasskeyChallengesTable;
   admin_accounts: AdminAccountsTable;
   admin_sessions: AdminSessionsTable;
   admin_reauth_tokens: AdminReauthTokensTable;
@@ -2724,6 +2825,7 @@ export interface Database {
    * usuario: so o dono le, nunca em lista e nunca em calculo de distancia.
    */
   user_delivery_addresses: UserDeliveryAddressesTable;
+  pet_delivery_addresses: PetDeliveryAddressesTable;
   /** VISAO, e nao tabela. Somente leitura: nada escreve aqui (`20261018000009`). */
   fila_de_moderacao: FilaDeModeracaoView;
   user_blocks: UserBlocksTable;

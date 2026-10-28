@@ -753,13 +753,35 @@ Future<void> leitura() async {
     expect(tester.takeException(), isNull);
   });
 
+  // ==========================================================================
+  // EMENDA 5 (26/10/2026): A REGRA DA FOTO MUDOU, E O QUE ELA PROTEGIA FICOU
+  // ==========================================================================
+  //
+  // **ESTE CASO DIZIA "a foto do autor NAO e um controle: nenhum toque sem
+  // destino", e ele estava certo quando foi escrito.** Em 22/10/2026 o cliente
+  // pediu o contrario: *"Inclua um link que seja o usuario a pagina do
+  // perfil"*, e em 26/10 o toque entrou -- `PortaDoPerfilDoAutor`, em
+  // `telas/mural/porta_do_perfil_do_autor.dart`.
+  //
+  // **A RAZAO DO CASO ANTIGO NAO CAIU: ela foi ATENDIDA, e por isso o caso
+  // virou DOIS em vez de sair.** O que ele protegia era *"nenhum toque sem
+  // destino"* -- `Rotas.perfilDe` enderecca pelo apelido, e o apelido pode ser
+  // nulo. A porta trata o nulo: COM apelido ela monta o controle, SEM apelido
+  // devolve a foto crua. As duas metades estao medidas aqui, e apagar este caso
+  // em vez de emenda-lo teria perdido a metade que continua valendo.
+  //
+  // **A conferencia continua na SUBARVORE DA FOTO** e nao no cartao inteiro: a
+  // primeira versao exigia ZERO `InkWell` no cartao e ficou errada em 20/10,
+  // quando curtir e comentar trouxeram dois `IconButton`. Portao que reprova o
+  // controle legitimo e portao que alguem desliga.
+  //
+  // A NAVEGACAO em si nao se mede aqui -- esta bancada nao monta roteador.
+  // Ela esta em `test/mural/perfil_pelo_mural_test.dart`, com `GoRouter` de
+  // verdade e o apelido conferido no destino.
+
   testWidgets(
-      'EMENDA 5 — a foto do autor NAO e um controle: nenhum toque sem destino',
+      'EMENDA 5 — COM APELIDO a foto do autor E um controle: ela abre o perfil',
       (tester) async {
-    // Na conversa o icone abre o perfil, porque la ele e o unico endereco do
-    // outro lado. Aqui o apelido pode ser nulo, e um circulo que se anuncia
-    // como botao e nao leva a lugar nenhum e o toque sem desfecho que o
-    // criterio 2 da BICHUS-62 proibe.
     await montarOMural(
       tester,
       linha: <Map<String, dynamic>>[
@@ -770,30 +792,58 @@ Future<void> leitura() async {
         ),
       ],
     );
-    // **A CONFERENCIA E NA SUBARVORE DA FOTO, e nao no cartao inteiro.**
-    //
-    // A primeira versao deste caso exigia ZERO `InkWell` no cartao -- e isso
-    // ficou errado em 20/10, quando curtir e comentar trouxeram dois
-    // `IconButton` (que contem `InkWell`). Uma conferencia de cartao inteiro
-    // passaria a reprovar os controles LEGITIMOS, e portao que reprova o certo e
-    // portao que alguem desliga.
-    //
-    // O que importa continua valendo: **a FOTO nao e um controle.** Na conversa
-    // o icone abre o perfil, porque la ele e o unico endereco do outro lado;
-    // aqui o apelido pode ser nulo, e um circulo que se anuncia como botao e nao
-    // leva a lugar nenhum e o toque sem desfecho que o criterio 2 da BICHUS-62
-    // proibe.
     final aFoto = find.byType(ImagemDaRede);
     expect(aFoto, findsOneWidget);
     expect(
       find.ancestor(of: aFoto, matching: find.byType(InkWell)),
+      findsOneWidget,
+      reason: 'REPROVA: a foto do autor COM apelido nao e um controle. O '
+          'cliente pediu o link para o perfil em 22/10/2026, e este caso e o '
+          'contraponto do de baixo: sem ele, "sem apelido nao linka" ficaria '
+          'verde com o toque desligado nos DOIS estados.',
+    );
+  });
+
+  testWidgets(
+      'EMENDA 5 — SEM APELIDO a foto NAO e um controle: nenhum toque sem destino',
+      (tester) async {
+    // O apelido nulo e o estado normal, e nao erro: `AutorDaPublicacao.apelido`
+    // e anulavel no contrato. Um circulo que se anuncia como botao e nao leva a
+    // lugar nenhum e o toque sem desfecho que o criterio 2 da BICHUS-62 proibe
+    // -- e e exatamente o que a versao antiga deste caso guardava.
+    await montarOMural(
+      tester,
+      linha: <Map<String, dynamic>>[
+        publicacao(
+          ref: 'AaBbCcDdEeFfGgHhIiJjK1',
+          texto: 'x',
+          apelido: null,
+          urlDoIconeDoAutor: urlDoIconeDoAutorDeTeste,
+        ),
+      ],
+    );
+    // ANCORA: a foto continua DESENHADA. O que nao nasce e o controle.
+    final aFoto = find.byType(ImagemDaRede);
+    expect(
+      aFoto,
+      findsOneWidget,
+      reason: 'REPROVA: sem apelido a foto do autor desapareceu. O toque nao '
+          'nasce; o desenho continua.',
+    );
+    expect(
+      find.ancestor(of: aFoto, matching: find.byType(InkWell)),
       findsNothing,
-      reason: 'a foto do autor virou um controle, e o apelido pode ser nulo',
+      reason: 'REPROVA: a foto de um autor SEM APELIDO virou um controle, e '
+          '`Rotas.perfilDe` precisa do apelido.',
     );
     expect(
       find.ancestor(of: aFoto, matching: find.byType(GestureDetector)),
       findsNothing,
+      reason: 'REPROVA: sem apelido a foto ganhou gesto. `InkWell` contem '
+          '`GestureDetector`, entao esta linha tambem pega um `InkWell` que '
+          'tenha voltado por outro caminho.',
     );
+    expect(tester.takeException(), isNull);
   });
 
   test(

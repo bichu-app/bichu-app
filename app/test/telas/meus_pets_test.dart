@@ -113,7 +113,7 @@ void main() {
 
       expect(find.byType(CartaoDePet), findsNWidgets(2));
       expect(find.text('Nina'), findsOneWidget);
-      expect(find.text('Cão · Vira-lata (SRD) · Médio'), findsOneWidget);
+      expect(find.text('Cachorro · Vira-lata (SRD) · Médio'), findsOneWidget);
       expect(find.text('Tobias'), findsOneWidget);
       // Raca ausente **some da linha**, e nao vira travessao.
       expect(find.text('Gato · Pequeno'), findsOneWidget);

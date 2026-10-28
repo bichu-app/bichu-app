@@ -12,6 +12,7 @@ import '../../dispositivo/localizacao.dart';
 import '../../escopo.dart';
 import '../../formulario/origem_dos_valores.dart';
 import '../../sessao/localizacao_da_sessao.dart';
+import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
@@ -42,10 +43,15 @@ import 'textos_da_localizacao.dart';
 ///
 /// ## O que esta peca NUNCA faz
 ///
-/// Converter coordenada em bairro, ou bairro em coordenada. ADR-0006 proibe as
-/// duas, e o que sustenta a proibicao nao e este comentario: e
+/// Converter coordenada em **bairro**, ou bairro em coordenada. ADR-0006
+/// proibe as duas, e o que sustenta a proibicao nao e este comentario: e
 /// `sem_geocodificacao_test.dart`, e o fato de o pacote que converte nao estar
 /// no binario.
+///
+/// **BAIRRO, e nao "nome de lugar".** A emenda 1 do ADR-0006 abriu um sentido,
+/// `coordenada -> nome de cidade`, e a peca o usa -- ver a secao das duas
+/// direcoes, abaixo. Ler esta secao como "nada de coordenada vira texto" foi o
+/// que fez a cidade preenchida parecer defeito em 26/10/2026.
 ///
 /// ## O CEP, e por que ele NAO desmente o paragrafo acima
 ///
@@ -61,10 +67,24 @@ import 'textos_da_localizacao.dart';
 /// **As duas direcoes continuam fechadas, e e por construcao e nao por
 /// cuidado:**
 ///
-/// - o GPS escreve `_ponto`, e **so** `_ponto`. Ele nunca tocou e continua sem
-///   tocar em `_bairro`, `_cidade` ou `_uf` -- derivar bairro de coordenada e
-///   o que o ADR-0006 proibe, e e por isso que o terceiro caso
-///   `OndeComPontoEArea` existe: a tela PERGUNTA o bairro em vez de deduzi-lo;
+/// - o GPS escreve `_ponto` e, desde 22/10/2026, **o nome da cidade** -- e
+///   **nunca** `_bairro` ou `_uf`. A fronteira nao e "o GPS nao toca em
+///   texto": e a tabela da **emenda 1 do ADR-0006** (19/10/2026), que autoriza
+///   um unico sentido, `coordenada -> nome de cidade`, e recusa
+///   `coordenada -> bairro` em uma frase -- *"a emenda fala de cidade. Bairro e
+///   mais fino que o que a pessoa escolheu entregar"*. A UF tambem nao e
+///   derivada, e isso e escolha conservadora declarada em
+///   [_CapturaDeLocalizacaoState._preencherACidadeDaLocalizacao], que e a
+///   funcao onde isto acontece e onde a justificativa inteira mora.
+///
+///   **Este paragrafo dizia `so _ponto`, e ficou errado por quatro dias:** a
+///   cidade entrou em 22/10/2026 e o cabecalho nao acompanhou. Em 26/10 quem
+///   leu so esta secao concluiu que a cidade chegando era defeito -- era o
+///   contrario, e e por isso que a linha agora nomeia o que escreve em vez de
+///   dizer o que ela nao faz.
+///
+///   O bairro continua sendo PERGUNTADO, e e por isso que o terceiro caso
+///   `OndeComPontoEArea` existe: a tela pede o bairro em vez de deduzi-lo;
 /// - o CEP escreve `_bairro`, `_cidade` e `_uf`, e **so** eles. Ele nunca
 ///   escreve `_ponto`, nao o apaga e nao o move.
 ///
@@ -520,6 +540,31 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     switch (_fase) {
       case _Fase.escolhendo:
         return <Widget>[
+          // **O QUE CADA CAMINHO PREENCHE, dito antes do toque.**
+          //
+          // Esta linha nasceu de um relato que NAO era defeito (cliente,
+          // 26/10/2026: *"quando eu seleciono a localizacao, ele ta trazendo
+          // apenas a cidade, mas nao o cep, bairro e estado preenchidos"*). O
+          // comportamento esta certo -- ver a secao do ADR-0006 no cabecalho --,
+          // e o que faltava era a tela nao deixar a pessoa formar a expectativa
+          // errada.
+          //
+          // **ANTES dos botoes, e nao depois**, e e por isso que ela esta nesta
+          // fase e nao na `comPonto`: depois do toque a pessoa ja comparou o que
+          // esperava com o que veio e ja concluiu que faltou algo. A frase da
+          // `comPonto` (`bairroOpcionalComGps`) continua onde esta e faz outra
+          // coisa -- ela pede o bairro; esta aqui diz de onde cada campo vem.
+          //
+          // Texto comum, e nao `FaixaDeAviso`: nao ha nada a avisar. Uma faixa
+          // com icone poria aparencia de problema no caminho de quem ainda nao
+          // fez nada, e esta tela e a de quem esta com um animal na rua.
+          Text(
+            TextosDaLocalizacao.oQueCadaCaminhoPreenche,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: BichuColors.of(context).cores.textSecondary,
+                ),
+          ),
+          const SizedBox(height: BichuEspaco.e4),
           BotaoPrimario(
             rotulo: TextosDaLocalizacao.usarMinhaLocalizacao,
             aoTocar: _usarALocalizacao,
@@ -706,10 +751,16 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
           estadoInicial: TextosDaLocalizacao.escolherOEstado,
           itens: estadosBrasileiros,
           selecionado: _uf,
-          // Opcional dito em TEXTO, do mesmo jeito que raca e cor: o seletor
-          // nao tem "(opcional)" no rotulo, e inventar um aqui so para este
-          // campo deixaria dois formatos de "pode ficar vazio" na mesma tela.
-          ajuda: TextosDaLocalizacao.estadoEmBrancoFunciona,
+          // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"Retire o texto so
+          // se voce souber, em branco funciona"*. A frase saiu do formulario do
+          // achado naquele dia e SOBREVIVEU aqui, que e a razao de este
+          // conserto existir.
+          //
+          // O campo continua OPCIONAL -- quem exige o `onde` e a CIDADE, e so
+          // ela (`Area.required: [city]`) -- e continua dizendo
+          // `Escolher na lista` enquanto nada foi escolhido, ou seja,
+          // visivelmente sem escolha. Nenhuma instrucao de acao se perdeu: a
+          // frase nao ensinava a fazer nada, ela tranquilizava.
           aoSelecionar: (codigo) {
             setState(() {
               _uf = codigo;

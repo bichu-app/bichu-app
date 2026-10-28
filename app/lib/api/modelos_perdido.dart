@@ -42,6 +42,17 @@ import 'modelos_pet.dart';
 /// Decisao do cliente de 20/10/2026: *"o pet ganha um selo/filtro na pagina de
 /// pets como encontrado por 30 dias e depois ele expira e sai"*.
 ///
+/// **ATENCAO: A TELA DEIXOU DE ABRIR NA AUSENCIA EM 26/10/2026.** O paragrafo
+/// seguinte descreve o SERVIDOR, e continua inteiro verdadeiro: a ausencia de
+/// `case_state` e a uniao, e `RecorteDePerdidos.estado` continua nulo por
+/// padrao porque e o contrato que manda aqui. **O que mudou e quem a pagina de
+/// `Pets` manda:** ela abre com `aberto`, porque em 26/10/2026 o cliente
+/// reverteu a decisao de 20/10 citada abaixo (*"o filtro da pagina, deve
+/// mostrar apenas os pets perdidos, e so deve mostrar os encontrados, se o
+/// usuario filtrar"*). As duas datas e as duas falas estao em
+/// `telas/perdido/lista_de_perdidos.dart`, em `_recorteDeAbertura` --
+/// **leia aquela prosa antes de "consertar" a tela de volta citando esta.**
+///
 /// **A ausencia nao e "sem recorte", e por isso [RecorteDePerdidos.estado] e
 /// nulo por padrao em vez de valer [aberto].** Nulo e nao mandar o parametro, e
 /// nao mandar e o recorte PADRAO do servidor: os casos abertos **mais** os

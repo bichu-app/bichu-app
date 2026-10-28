@@ -1205,12 +1205,53 @@ void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
     // A metade de contrato da isca de cima. Um `author`, `mine` ou `user_id`
     // aqui seria uma porta para pedir a lista de outra pessoa, e o `WHERE` do
     // repositorio deixaria de ser o unico lugar que decide autoria.
+    //
+    // **O `$ref` E RESOLVIDO, e nao lido cru.** Em 27/10/2026 a operacao ganhou
+    // `status` por `$ref`, e `p.name` sobre um `$ref` devolve `undefined`: a
+    // lista virou `['limit','page',undefined]` e o caso reprovou -- medido.
+    // Ler o nome cru era a falha do INSTRUMENTO, e nao da protecao: um
+    // `$ref` para um parametro de autoria passaria como `undefined` e o caso
+    // ficaria verde. Resolver e o que fecha isso.
     const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
-      paths: Record<string, Record<string, { operationId?: string; parameters?: { name: string }[] }>>;
+      paths: Record<string, Record<string, { operationId?: string; parameters?: { name?: string; $ref?: string }[] }>>;
+      components?: { parameters?: Record<string, { name?: string }> };
     };
     const operacao = spec.paths['/network/my-events']?.['get'];
     assert.equal(operacao?.operationId, 'listMyNetworkEvents');
-    assert.deepEqual((operacao?.parameters ?? []).map((p) => p.name).sort(), ['limit', 'page']);
+
+    const nomes = (operacao?.parameters ?? []).map((p) => {
+      if (typeof p.name === 'string') return p.name;
+      const ref = p.$ref;
+      assert.equal(typeof ref, 'string', `parametro sem \`name\` e sem \`$ref\`: ${JSON.stringify(p)}`);
+      const chave = (ref as string).replace('#/components/parameters/', '');
+      const resolvido = spec.components?.parameters?.[chave]?.name;
+      assert.equal(
+        typeof resolvido,
+        'string',
+        `o \`$ref\` \`${ref}\` nao resolveu para um parametro com \`name\` -- ` +
+          'sem resolver, um parametro de autoria entraria nesta operacao invisivel ' +
+          'para este caso.',
+      );
+      return resolvido as string;
+    });
+
+    // `status` E O UNICO recorte, e ele nao nomeia pessoa: ele e a situacao
+    // CALCULADA do encontro (`NetworkEventStatus`). A frase do contrato que
+    // dizia "nao ha busca, filtro nem ordem escolhivel" foi reescrita no mesmo
+    // dia -- ver a descricao da operacao.
+    assert.deepEqual(nomes.slice().sort(), ['limit', 'page', 'status']);
+
+    // E a conferencia que de fato importa, independente da lista acima: nenhum
+    // nome fala de pessoa. Ela continua valendo quando alguem acrescentar o
+    // proximo recorte legitimo.
+    for (const nome of nomes) {
+      assert.doesNotMatch(
+        nome,
+        /author|autor|mine|meu|user|conta|owner|dono/i,
+        `\`${nome}\` nomeia pessoa numa operacao cuja autoria mora na clausula ` +
+          '`WHERE`. Um parametro assim e porta para pedir a lista de outra conta.',
+      );
+    }
   });
 
   void it('ISCA: a projecao do dono tem SETE propriedades, e nenhuma do corpo publico', async () => {

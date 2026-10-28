@@ -60,6 +60,7 @@ import {
   comoFamiliaDeSessao,
   type FamiliaDeSessao,
 } from '../../../identity/ports/localizacao-de-referencia-repository.js';
+import type { StatusDoEncontro } from '../../domain/encontro-da-rede.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 /** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
@@ -281,6 +282,12 @@ interface QueryDaAgenda {
   readonly q?: string;
   readonly city?: string;
   readonly when?: RecorteNoTempo;
+  /**
+   * A situacao CALCULADA. **Fora de `filtrosDaAgenda`, de proposito**: aquele
+   * objeto e espalhado nos DOIS recortes, e `listNearbyNetworkEvents` nao
+   * declara `status`. Dentro dele, o campo chegaria a um recorte que o ignora.
+   */
+  readonly status?: StatusDoEncontro;
   readonly sort?: string;
   readonly admission?: 'free' | 'paid';
   readonly visibility?: 'public' | 'private';
@@ -297,8 +304,15 @@ interface QueryDosMeusPedidos {
   readonly limit?: number;
 }
 
-/** `listMyNetworkEvents` nao aceita recorte nenhum: so a pagina. */
+/**
+ * `listMyNetworkEvents`: a pagina e, desde 27/10/2026, `status`.
+ *
+ * O tipo serve SO esta rota (medido: uma unica referencia neste arquivo), e o
+ * nome ficou do tempo em que a pagina era tudo que ela aceitava. O campo e
+ * opcional, e ausente nao recorta.
+ */
 interface QueryDaPagina {
+  readonly status?: StatusDoEncontro;
   readonly page?: number;
   readonly limit?: number;
 }
@@ -542,6 +556,7 @@ export function registrarRotasDaRede(
     const pagina = await deps.rede.listarAgenda({
       ...filtros,
       visibility: query.visibility,
+      status: query.status,
       when,
       sort,
       agora,
@@ -556,7 +571,7 @@ export function registrarRotasDaRede(
       total: pagina.total,
       effective_sort: sort,
       effective_when: when,
-      applied_filters: recortesAplicados({ ...filtros, visibility: query.visibility }),
+      applied_filters: recortesAplicados({ ...filtros, visibility: query.visibility, status: query.status }),
     });
   });
 
@@ -713,7 +728,7 @@ export function registrarRotasDaRede(
       const page = query.page ?? PAGINA_INICIAL;
       const limit = query.limit ?? TAMANHO_PADRAO;
       const agora = deps.clock.now();
-      const pagina = await deps.rede.listarMeusEncontros({ chamador, agora, page, limit });
+      const pagina = await deps.rede.listarMeusEncontros({ chamador, status: query.status, agora, page, limit });
       return reply.header('Cache-Control', SEM_CACHE).send({
         items: pagina.itens.map((item) => projetarMeuEncontro(item.encontro, item.capa, agora)),
         page,

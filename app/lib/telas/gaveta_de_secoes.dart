@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import 'conexoes/convide_tutores.dart';
 import 'conexoes/tela_minhas_conexoes.dart';
 import 'conexoes/tela_pedidos_de_conexao.dart';
 import 'seguranca/tela_de_bloqueados.dart';
@@ -566,10 +567,76 @@ abstract final class RegistroDeSubDestinos {
         // seriam duas leituras para um destino so.
         icone: Icons.qr_code_scanner,
       ),
+      // **`Convide tutores` (26/10/2026): A LINHA RESERVADA SUBIU, e nao e
+      // linha nova.** Esta e a diferenca que importa aqui, e e o caminho
+      // NORMAL desta casa -- subir o estado do sub-destino que a UX 27.5 ja
+      // nomeia, em vez de acrescentar linha. A 27.5.5 reservou
+      // `Convidar vizinhos` e a deixou `planejada`; o cabecalho de
+      // `TelaDeConvidarTutores` diz, por escrito, que esta era a linha dela:
+      // *"A UX 27.5.5 tinha a linha `Convidar vizinhos` reservada e
+      // `planejada`"*. O rotulo que entrou e o que o CLIENTE escreveu em
+      // 21/10/2026, e `tutores` e mais exato -- o que o produto quer e quem
+      // tem pet, e nao quem mora perto.
+      //
+      // **POR QUE SUBIR AQUI, DEPOIS DE ELA TER NASCIDO NO AuAu.** A porta
+      // vivia no topo do corpo do AuAu por decisao dele de 21/10/2026
+      // (*"no AuAu como tela empilhada, nao no Perfil"*). Ele mudou de ideia
+      // DUAS VEZES, e a mais nova vale: 22/10/2026, *"Mova o convite tutores
+      // para a pagina do perfil"*; e 26/10/2026, *"retirar o convite tutores
+      // das mensagens, deixar apenas na menu do perfil do usuario"*. As duas
+      // datas estao citadas de proposito -- a de 21/10 ainda esta escrita em
+      // `mensagens/area_de_mensagens.dart`, e sem as outras duas ao lado dela
+      // alguem reverte isto achando que esta consertando.
+      //
+      // **SUBIR EM VEZ DE ACRESCENTAR NAO E ARRUMACAO, E A RESPOSTA AO OUTRO
+      // PEDIDO DELE.** Em 21/10/2026 ele mandou dividir a lista do Perfil por
+      // TOPICOS em vez de deixar ela crescer. Promover a linha reservada
+      // mantem o inventario em 54 linhas e os destinos em 18: nada cresce, uma
+      // linha so muda de lado (`porConstruir` 10 -> 9, `vivos` 8 -> 9). **O
+      // pedido de dividir por topicos continua em pe e NAO foi feito aqui** --
+      // este registro e uma lista plana de propósito, e o menu que a pessoa ve
+      // (`AbaPerfil`, em `abas.dart`) ja e dividido em `Conta`, `Pets na rua` e
+      // `Comunidade`, que e onde a porta nova entrou.
+      //
+      // O GLIFO, pelo procedimento que a assercao do construtor manda: familia
+      // embutida e nenhum outro item DESTA secao (`Rotas.perfil`) com o mesmo
+      // `codePoint`. **Sao SEIS os que ja moram aqui, e nao cinco** --
+      // `note_add_outlined` (0xf22e), `qr_code_scanner` (0xe4f7),
+      // `person_add_alt_outlined` (0xf276), `people_outline` (0xe488),
+      // `block_outlined` (0xeed1) e `manage_accounts_outlined` (0xf1ac). Os
+      // valores foram LIDOS do `icons.dart` do SDK em uso (Flutter 3.47.4), e
+      // nao copiados da prosa das linhas acima: a delas diz 0xe7fc para
+      // `people_outline`, e o SDK diz 0xe488.
+      //
+      // `share_outlined` (0xf378), e a escolha tem um porque NEGATIVO que
+      // importa mais que o positivo. O glifo obvio para "convidar" seria uma
+      // pessoa com o sinal de mais, e ele esta TOMADO: `person_add_alt_outlined`
+      // e `Pedidos de conexao`. O segundo obvio seria `group_add_outlined`
+      // (0xf0d8) -- nao colide em `codePoint`, e foi RECUSADO: ele e um
+      // CONJUNTO de pessoas com o sinal de mais, e ficaria exatamente no meio
+      // do contraste que as duas linhas de cima gastaram prosa para construir
+      // (`person_add_alt_outlined`, UMA pessoa acrescentada, contra
+      // `people_outline`, um CONJUNTO). Um terceiro glifo de gente apagaria no
+      // olho a diferenca que o `codePoint` preserva no teste.
+      //
+      // `share_outlined` nomeia o ATO e nao as pessoas -- entregar o seu
+      // convite a alguem --, e por isso nao disputa leitura com nenhuma das
+      // duas. E e o que a tela de fato faz: o conteudo dela e um QR e um token
+      // ao portador, que existem para serem passados adiante.
+      //
+      // `qr_code_2` (0xe4f6) tambem foi recusado: esta secao ja tem
+      // `qr_code_scanner` (0xe4f7) em `Escanear uma tag`, e dois glifos de QR a
+      // um `codePoint` de distancia na mesma gaveta leem como a mesma viagem --
+      // que e o que este arquivo proibe.
+      //
+      // `Icons.share*` nao aparece em nenhum outro lugar de `app/lib` (medido),
+      // entao o glifo nao chega com sentido emprestado de outra tela.
       SubDestino(
-        rotulo: 'Convidar vizinhos',
+        rotulo: TelaDeConvidarTutores.titulo,
         forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.planejada,
+        estado: EstadoDoSubDestino.existe,
+        rota: Rotas.convidarTutores,
+        icone: Icons.share_outlined,
       ),
       // **LINHA NOVA (19/10/2026), e nao mudanca de estado -- a diferenca esta
       // dita aqui de proposito.** O procedimento desta casa e subir o estado do

@@ -305,6 +305,70 @@ function consultaBase(db: DbExecutor) {
 /** 23:59:59 do dia local do encontro, no fuso dele, como instante. */
 const FIM_DO_DIA_DO_CANCELADO = sql`(((e.starts_at AT TIME ZONE e.time_zone)::date + time '23:59:59') AT TIME ZONE e.time_zone)`;
 
+/**
+ * Ate quando o cancelado AINDA SE CHAMA cancelado, em SQL.
+ *
+ * E `fimDoCancelado` do dominio, campo a campo: o fim previsto, ou, sem
+ * `ends_at`, 23:59:59 do dia do encontro no fuso dele. O `COALESCE` e o que
+ * torna esta expressao util fora de `recorteNoTempo` -- la os dois casos
+ * estavam partidos em dois ramos do `OR`, porque a janela de tempo ja separava
+ * quem tem `ends_at` de quem nao tem. Aqui o rotulo e UM valor por linha.
+ */
+const FIM_DO_CANCELADO = sql`COALESCE(e.ends_at, ${FIM_DO_DIA_DO_CANCELADO})`;
+
+/**
+ * O encontro esta ROTULADO `cancelled` agora -- e nao "foi cancelado um dia".
+ *
+ * A diferenca e a razao de esta funcao existir: `publication_status` e a coluna
+ * crua e ela nunca volta atras, entao um cancelado de tres semanas atras
+ * continua `cancelled` NA COLUNA. O rotulo que o app le e `statusDoEncontro`,
+ * e para ele esse encontro e `ended`. Recortar ou ordenar pela coluna faria o
+ * servidor discordar do campo `status` que ele mesmo acabou de projetar.
+ */
+function rotuladoCancelado(agora: Date) {
+  return sql<SqlBool>`(e.publication_status = 'cancelled'
+    AND ${agora}::timestamptz <= ${FIM_DO_CANCELADO})`;
+}
+
+/**
+ * A SITUACAO CALCULADA, em SQL: a traducao fiel de `statusDoEncontro`.
+ *
+ * **Os ramos estao na mesma ordem da funcao do dominio, e a ordem importa**:
+ * `cancelled` prevalece sobre o estado temporal ate o fim previsto, e so depois
+ * dele a regra do encerrado volta a valer. Trocar os dois primeiros `WHEN`
+ * faria o cancelado de hoje sair `happening`.
+ *
+ * Os tres ultimos ramos sao `statusTemporal`: antes de comecar e `upcoming`;
+ * sem `ends_at` nao existe `happening` (ADR-0025 secao 6); com `ends_at`, ate
+ * ele e `happening`.
+ *
+ * **Por que o calculo vive no banco e nao num `filter` da aplicacao**: a
+ * contagem (`total`) e a pagina tem de concordar, e recortar em memoria
+ * depois do `LIMIT` daria uma pagina menor que o limite com `total` cheio --
+ * o defeito que a paginacao nao perdoa.
+ */
+function situacaoCalculada(agora: Date) {
+  return sql<string>`(CASE
+    WHEN ${rotuladoCancelado(agora)} THEN 'cancelled'
+    WHEN ${agora}::timestamptz < e.starts_at THEN 'upcoming'
+    WHEN e.ends_at IS NULL THEN 'ended'
+    WHEN ${agora}::timestamptz <= e.ends_at THEN 'happening'
+    ELSE 'ended'
+  END)`;
+}
+
+/**
+ * A chave de ordem que DESCE o cancelado para depois do ativo.
+ *
+ * Decisao do cliente de 26/10/2026: *"os eventos cancelados e que ja passaram
+ * devem vir por ultimo na listagem"*. `0` para todo o resto e `1` para o
+ * cancelado, entao ela entra ANTES da data e nao no lugar dela -- dentro de
+ * cada um dos dois grupos a ordem continua sendo a data.
+ */
+function chaveDoCancelado(agora: Date) {
+  return sql`(CASE WHEN ${rotuladoCancelado(agora)} THEN 1 ELSE 0 END)`;
+}
+
 /** O sabado do fim de semana corrente ou proximo, no fuso do encontro. */
 function sabadoDoFimDeSemana(agora: Date) {
   const hoje = sql`(${agora}::timestamptz AT TIME ZONE e.time_zone)::date`;
@@ -401,7 +465,120 @@ export function construtorDaAgenda(db: DbExecutor, recorte: RecorteDaAgenda) {
   if (recorte.visibility !== undefined) {
     consulta = consulta.where('e.visibility', '=', recorte.visibility);
   }
+  // O recorte por SITUACAO, e ele nao mora em `recorteOculto`: a situacao do
+  // privado nao e campo oculto. O teaser do privado ja entrega `state`
+  // (`NetworkEventPrivateTeaser`, ADR-0027 12.10), entao casar por ela nao
+  // conta nada que a resposta nao conte -- ao contrario de `city`,
+  // `admission` e `size`, que estao la justamente por entregarem.
+  if (recorte.status !== undefined) {
+    consulta = consulta.where(sql<SqlBool>`${situacaoCalculada(agora)} = ${recorte.status}`);
+  }
   return recorteOculto(consulta, recorte);
+}
+
+/**
+ * A agenda **com a ordem**, separada para o mesmo motivo de
+ * `construtorDaAgenda`: um teste a compila e le o `ORDER BY` sem subir banco.
+ *
+ * `recentes` NAO separa o cancelado, e a ausencia e deliberada: ela e a ordem
+ * do passado (`when=past`), e no passado o rotulo do cancelado ja virou
+ * `ended` para todo mundo pelo fim previsto. Uma chave que nunca muda de valor
+ * seria custo de ordenacao sem desfecho.
+ */
+export function agendaOrdenada(db: DbExecutor, recorte: RecorteDaAgenda) {
+  const base = construtorDaAgenda(db, recorte);
+  // Desempate por `slug`, que e unico: sem ele a paginacao repete e pula.
+  if (recorte.sort === 'recentes') {
+    return base.orderBy('e.starts_at', 'desc').orderBy('e.slug', 'desc');
+  }
+  return base
+    .orderBy(chaveDoCancelado(comoData(recorte.agora)), 'asc')
+    .orderBy('e.starts_at', 'asc')
+    .orderBy('e.slug', 'asc');
+}
+
+/**
+ * `listMyNetworkEvents`: os encontros desta conta (19/10/2026).
+ *
+ * ## A AUTORIA ESTA NA CLAUSULA `WHERE`, por semi-juncao
+ *
+ * `network_events_da_conta` (migracao `20261019000010`) devolve o CONJUNTO de
+ * `id` do autor, lido pelo indice, e a consulta o usa com `IN`. Nao e um
+ * predicado booleano por linha de proposito: assim a leitura por autor
+ * acontece uma vez, e nao uma por encontro visivel da tabela inteira. Funcao
+ * e nao `WHERE` escrito aqui porque o nome da coluna de autoria e reprovado
+ * neste arquivo (ver o cabecalho de `consultaBase`).
+ *
+ * ## O recorte por `status`, acrescentado em 27/10/2026
+ *
+ * O MESMO calculo da agenda (`situacaoCalculada`), e nao um segundo: a lista do
+ * dono projeta o campo `status` pela mesma funcao de dominio, entao um recorte
+ * que discordasse dele devolveria encontro cujo rotulo contradiz o filtro que o
+ * trouxe.
+ */
+export function construtorDosMeusEncontros(db: DbExecutor, recorte: RecorteDosMeusEncontros) {
+  const consulta = consultaBase(db).where(
+    sql<SqlBool>`e.id IN (SELECT id FROM network_events_da_conta(${recorte.chamador}::uuid))`,
+  );
+  if (recorte.status === undefined) return consulta;
+  return consulta.where(
+    sql<SqlBool>`${situacaoCalculada(comoData(recorte.agora))} = ${recorte.status}`,
+  );
+}
+
+/**
+ * A ordem de `Meus eventos`, e desde 27/10/2026 ela tem TRES GRUPOS.
+ *
+ * ## O que mudou, e qual defeito fechou
+ *
+ * Eram dois grupos -- "ainda nao terminou" e "passou" --, e o cancelado caia no
+ * primeiro, porque `COALESCE(ends_at, starts_at) > agora` nao olha a
+ * publicacao. Consequencia MEDIDA: um encontro **cancelado** para amanha
+ * ordenava ANTES de um encontro **ativo** para depois de amanha. A unica
+ * decisao que esta lista oferece e cancelar, e ela aparecia no alto justamente
+ * para quem nao tem mais nada a decidir. Decisao do cliente de 26/10/2026.
+ *
+ * Os tres grupos, nesta ordem:
+ *
+ * 1. **ativo que ainda nao terminou**, do mais proximo para o mais distante: e
+ *    o que corre risco de acontecer errado, e e sobre ele que a pessoa decide;
+ * 2. **cancelado que ainda se chama cancelado** (`rotuladoCancelado`), do mais
+ *    proximo para o mais distante;
+ * 3. **o que passou**, do mais recente para o mais antigo: historico se le de
+ *    tras para frente.
+ *
+ * ## Por que o cancelado e o grupo 2 e nao o fundo da lista
+ *
+ * Porque o rotulo dele ainda e `cancelled` e nao `ended`. Quando ele passa do
+ * fim previsto o rotulo vira `ended` pela regra do encerrado, e ele cai no
+ * grupo 3 **sozinho**, sem nenhuma chave aqui tratando disso. Jogar o
+ * `cancelled` de hoje para debaixo do historico de ano passado esconderia a
+ * informacao que a propria pessoa acabou de gerar.
+ *
+ * ## Por que quatro chaves, e nao uma
+ *
+ * `starts_at ASC` poria o encontro de ano passado no topo; `DESC` poria o mais
+ * distante no futuro antes do de amanha. A chave 2 e nula no grupo 3 (e o
+ * `ASC` do Postgres poe nulo no fim), e a chave 3 so tem efeito la, porque nos
+ * grupos 1 e 2 a chave 2 ja ordenou tudo.
+ */
+export function meusEncontrosOrdenados(db: DbExecutor, recorte: RecorteDosMeusEncontros) {
+  const agora = comoData(recorte.agora);
+  const cancelado = rotuladoCancelado(agora);
+  const naoTerminou = sql<SqlBool>`COALESCE(e.ends_at, e.starts_at) > ${agora}::timestamptz`;
+  // A ORDEM DOS `WHEN` IMPORTA: o cancelado e testado primeiro justamente
+  // porque ele tambem satisfaz `naoTerminou`. Invertidos, ele volta para o
+  // grupo 1 e o defeito reabre inteiro.
+  const grupo = sql`(CASE WHEN ${cancelado} THEN 1
+                          WHEN ${naoTerminou} THEN 0
+                          ELSE 2 END)`;
+  return construtorDosMeusEncontros(db, recorte)
+    .orderBy(grupo, 'asc')
+    .orderBy(sql`(CASE WHEN ${cancelado} OR ${naoTerminou} THEN e.starts_at END)`, 'asc')
+    .orderBy('e.starts_at', 'desc')
+    // O desempate estavel: sem ele, dois encontros no mesmo instante trocam de
+    // lugar entre paginas e um deles nunca aparece.
+    .orderBy('e.slug', 'asc');
 }
 
 /** A leitura do ponto: publico, ou privado com aprovacao da conta. */
@@ -477,13 +654,11 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .executeTakeFirst();
     const total = Number(contagem?.total ?? 0);
 
-    // Desempate por `slug`, que e unico: sem ele a paginacao repete e pula.
-    const ordenada =
-      recorte.sort === 'recentes'
-        ? base.orderBy('e.starts_at', 'desc').orderBy('e.slug', 'desc')
-        : base.orderBy('e.starts_at', 'asc').orderBy('e.slug', 'asc');
-
-    const linhas = (await ordenada
+    // A ORDEM vem de `agendaOrdenada`, e nao e escrita aqui: e a mesma
+    // funcao que o caso de isca compila e le. Duas escritas da mesma ordem
+    // divergem na primeira correcao, e a que o teste nao le e a que fica
+    // errada.
+    const linhas = (await agendaOrdenada(this.db, recorte)
       .select(colunasDoEncontro())
       .limit(recorte.limit)
       .offset((recorte.page - 1) * recorte.limit)
@@ -710,47 +885,20 @@ export class KyselyNetworkRepository implements NetworkRepository {
   }
 
   /**
-   * `listMyNetworkEvents`: os encontros desta conta (19/10/2026).
+   * `listMyNetworkEvents`. O recorte mora em `construtorDosMeusEncontros` e a
+   * ordem em `meusEncontrosOrdenados`, as duas no nivel do modulo: e de la que
+   * o caso de isca as compila e le, sem subir banco.
    *
-   * ## A AUTORIA ESTA NA CLAUSULA `WHERE`, por semi-juncao
-   *
-   * `network_events_da_conta` (migracao `20261019000010`) devolve o CONJUNTO de
-   * `id` do autor, lido pelo indice, e a consulta o usa com `IN`. Nao e um
-   * predicado booleano por linha de proposito: assim a leitura por autor
-   * acontece uma vez, e nao uma por encontro visivel da tabela inteira. Funcao
-   * e nao `WHERE` escrito aqui porque o nome da coluna de autoria e reprovado
-   * neste arquivo (ver o cabecalho de `consultaBase`).
-   *
-   * ## A ORDEM, e por que ela tem tres chaves
-   *
-   * A decisao que esta lista oferece -- cancelar -- so existe para o que ainda
-   * NAO terminou, e por isso esse grupo vem primeiro (chave 1). Dentro dele a
-   * ordem e crescente: o encontro de amanha e o que corre risco de acontecer
-   * errado, e ele fica no alto (chave 2, nula para o passado). O que passou vem
-   * depois, do mais recente para o mais antigo (chave 3): ele e historico, e
-   * historico se le de tras para frente.
-   *
-   * Uma chave so nao resolve: `starts_at ASC` poria o encontro de ano passado
-   * no topo, e `DESC` poria o mais distante no futuro antes do de amanha.
+   * **A contagem usa o construtor SEM a ordem**, de proposito: `ORDER BY` num
+   * `count` e trabalho que o Postgres faz e ninguem le. Os dois partem do mesmo
+   * construtor, entao `total` e a pagina concordam sobre o recorte.
    */
   async listarMeusEncontros(recorte: RecorteDosMeusEncontros): Promise<PaginaDosMeusEncontros> {
-    const agora = comoData(recorte.agora);
-    const naoTerminou = sql<SqlBool>`COALESCE(e.ends_at, e.starts_at) > ${agora}::timestamptz`;
-    const base = consultaBase(this.db).where(
-      sql<SqlBool>`e.id IN (SELECT id FROM network_events_da_conta(${recorte.chamador}::uuid))`,
-    );
-
-    const contagem = await base
+    const contagem = await construtorDosMeusEncontros(this.db, recorte)
       .select((eb) => eb.fn.countAll<string>().as('total'))
       .executeTakeFirst();
-    const linhas = (await base
+    const linhas = (await meusEncontrosOrdenados(this.db, recorte)
       .select([...colunasDoEncontro(), capaDoDono()])
-      .orderBy(sql`CASE WHEN ${naoTerminou} THEN 0 ELSE 1 END`, 'asc')
-      .orderBy(sql`CASE WHEN ${naoTerminou} THEN e.starts_at END`, 'asc')
-      .orderBy('e.starts_at', 'desc')
-      // O desempate estavel: sem ele, dois encontros no mesmo instante trocam
-      // de lugar entre paginas e um deles nunca aparece.
-      .orderBy('e.slug', 'asc')
       .limit(recorte.limit)
       .offset((recorte.page - 1) * recorte.limit)
       .execute()) as unknown as (LinhaDoEncontro & LinhaDaCapaDoDono)[];

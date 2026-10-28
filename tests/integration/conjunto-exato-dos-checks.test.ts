@@ -916,6 +916,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'page',
     valores: ['lost_case', 'network_event', 'poster'],
   },
+  // BICHUS-301, migracao 20261027000020. O proposito do desafio WebAuthn. Os
+  // dois valores sao os passos que existem, e a `CHECK`
+  // `passkey_challenges_dono_conforme_proposito` amarra cada um ao dono:
+  // `registration` exige `user_id` (ha sessao, e a credencial tem de nascer na
+  // conta certa) e `authentication` exige `user_id` NULO (nao ha sessao, e
+  // inventar dono antes de a assinatura conferir seria aceitar como
+  // identificacao o campo que quem chama escolhe). Espelha `PropositoDoDesafio`
+  // em `src/modules/identity/domain/passkey.ts` e o tipo da coluna em
+  // `src/shared/db/schema.ts`. Os tres andam juntos.
+  'public.passkey_challenges.passkey_challenges_proposito_conhecido': {
+    coluna: 'purpose',
+    valores: ['registration', 'authentication'],
+  },
 };
 
 /**
@@ -1049,6 +1062,29 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'public.user_delivery_addresses.user_delivery_addresses_cep_formato':
     "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
   'public.user_delivery_addresses.user_delivery_addresses_telefone_formato':
+    "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
+  // ------------------------------------------------------------------
+  // O ENDERECO DE ENTREGA DO PET (`20261027000001`)
+  // ------------------------------------------------------------------
+  // **Decisao do cliente de 27/10/2026** (*"endereco um por pet"*), que SUPERA
+  // a de 21/10/2026 logo acima -- e a tabela da conta nao foi apagada (decisao
+  // dele de 26/10/2026, *"nao apague nada"*), por isso as duas estao aqui.
+  //
+  // **AS DUAS EXPRESSOES SAO IDENTICAS, CARACTERE POR CARACTERE, AS DE CIMA**, e
+  // isso nao e copia por preguica: e a condicao para o endereco do pet poder
+  // PREENCHER o pedido da plaquinha. Se esta tabela aceitasse um CEP que
+  // `collar_tag_requests` recusa, o endereco do pet nasceria capaz de produzir
+  // um pedido que o banco rejeita, e a pessoa descobriria isso no botao de
+  // pedir. **Divergir aqui e o defeito; ser igual e o requisito.**
+  //
+  // **SO DOIS dos nove `CHECK` desta tabela entram aqui**, pela mesma regra de
+  // `MENCIONA_LITERAL` que a nota de cima explica: os outros sete sao
+  // `char_length(col) BETWEEN a AND b` (e `char_length(state) = 2`), que o
+  // catalogo escreve sem nenhum `'...'::text`, e declara-los faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  'public.pet_delivery_addresses.pet_delivery_addresses_cep_formato':
+    "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
+  'public.pet_delivery_addresses.pet_delivery_addresses_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
   // ------------------------------------------------------------------
   // A INDICACAO DO DIRETORIO (`20261017000004`), O CEP DELA
@@ -1681,6 +1717,28 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // bloqueado ficaria sem saida.
   'public.app_version_policy.app_version_policy_store_url_check':
     "CHECK (((store_url ~ '^https://[^[:space:]]+$'::text) AND (length(store_url) <= 300)))",
+  // ------------------------------------------------------------------
+  // CREDENCIAL DIGITAL / PASSKEY (BICHUS-301, migracao 20261027000020)
+  // ------------------------------------------------------------------
+  //
+  // Os dois abaixo mencionam literal de texto e NAO sao lista fechada simples.
+  //
+  // `passkey_credentials_razao_conhecida` E uma lista fechada por tras, mas o
+  // `IS NULL OR` na frente tira a forma simples: a coluna e nula enquanto a
+  // credencial nao foi revogada, e o envelope faz `FORMA_SIMPLES` nao casar.
+  // Cai aqui por isso, com a definicao inteira fixada -- e nao por descuido.
+  //
+  // Os OUTROS TRES CHECK destas tabelas NAO estao em registro nenhum, e isso e
+  // deliberado: `passkey_credentials_contador_nao_negativo` (`sign_count >= 0`),
+  // `passkey_credentials_revogacao_completa` (compara duas colunas entre si) e
+  // `passkey_credentials_rotulo_com_teto` (`char_length` entre 1 e 60) nao tem
+  // nenhum `'...'::text`, entao `MENCIONA_LITERAL` nao os colhe e declara-los
+  // viraria entrada fantasma -- o mesmo erro que os de `professionals`
+  // documentam acima.
+  'public.passkey_challenges.passkey_challenges_dono_conforme_proposito':
+    "CHECK ((((purpose = 'registration'::text) AND (user_id IS NOT NULL)) OR ((purpose = 'authentication'::text) AND (user_id IS NULL))))",
+  'public.passkey_credentials.passkey_credentials_razao_conhecida':
+    "CHECK (((revoked_reason IS NULL) OR (revoked_reason = ANY (ARRAY['user'::text, 'counter_regression'::text, 'account_deleted'::text]))))",
 };
 
 /**

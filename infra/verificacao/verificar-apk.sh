@@ -76,6 +76,24 @@ ENVIRONMENT="${ENVIRONMENT:-hml}"
 TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"
 TERMS_URL="${TERMS_URL:-https://bichu.app/termos}"
 PRIVACY_URL="${PRIVACY_URL:-https://bichu.app/privacidade}"
+# O COMMIT QUE GEROU O BINARIO (26/10/2026). A chave e a MESMA que o
+# `Dockerfile`, o `Makefile` e o `compose.yaml` ja exigem desde a BICHUS-210
+# para estampar o commit nos containers: um segundo nome (`GIT_SHA`,
+# `BUILD_SHA`) daria dois conceitos de "qual build e este" no mesmo produto.
+#
+# POR QUE ENTROU: medido em 26/10/2026, `GIT_SHA`, `GIT_COMMIT`, `BUILD_SHA` e
+# `COMMIT_SHA` davam ZERO ocorrencias em `app/lib` e `APP_VERSION` era `1.0.0`
+# em TODO build -- dois APKs de dias diferentes se apresentavam com o mesmo
+# nome, e o cliente relatou duas vezes que trabalho pronto "nao chegou" sem
+# haver como conferir qual commit estava no aparelho dele. Quem le o valor no
+# Dart e `AppConfig.commitDoBuild`, e quem o PINTA e `CarimboDoBuild`, no pe
+# da aba `Perfil`.
+#
+# `git rev-parse HEAD` e nao `--short`: o valor longo e o que nao colide, e o
+# recorte de dez digitos para a tela e feito no Dart. Vazio quando nao houver
+# git -- e `AppConfig` trata vazio como AUSENTE, e o carimbo DIZ na tela que o
+# build nao declarou, em vez de ficar em branco.
+BUILD_COMMIT="${BUILD_COMMIT:-$(git rev-parse HEAD 2>/dev/null || true)}"
 # O endereco dos tiles do mapa e o User-Agent que a politica do OpenStreetMap
 # pede moram em app/config/mapa.json, fora do codigo (portao de portabilidade).
 
@@ -210,7 +228,8 @@ conferir_versao_no_binario() {
     --chave ENVIRONMENT \
     --chave TERMS_VERSION \
     --chave TERMS_URL \
-    --chave PRIVACY_URL
+    --chave PRIVACY_URL \
+    --chave BUILD_COMMIT
 }
 
 # ---------------------------------------------------------------------------
@@ -586,6 +605,7 @@ rm -f "$APK"
     --dart-define=TERMS_VERSION="$TERMS_VERSION" \
     --dart-define=TERMS_URL="$TERMS_URL" \
     --dart-define=PRIVACY_URL="$PRIVACY_URL" \
+    --dart-define=BUILD_COMMIT="$BUILD_COMMIT" \
     --dart-define-from-file=config/mapa.json
   # FIM DO COMANDO DE BUILD
 ) || {

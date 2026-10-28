@@ -108,6 +108,39 @@ Map<String, dynamic> paginaDoDiretorioVazia() => const <String, dynamic>{
       'applied_filters': <String, String>{'scope': 'all'},
     };
 
+/// Uma pagina do diretorio **SEM CONTA**, no formato de
+/// `PublicDirectoryEntryPage` (`listPublicDirectoryEntries`, 27/10/2026).
+///
+/// **`phone_e164`, `site_url`, `distance_m` e `about` NAO APARECEM**, e nao
+/// aparecem nem como nulo: o schema publico nao os declara, porque
+/// `portao-contrato-publico.ts` proibe os dois primeiros por nome exato em
+/// operacao alcancavel sem conta. Um esboco que os mandasse estaria medindo
+/// uma resposta que o servidor nao pode produzir.
+Map<String, dynamic> paginaPublicaDoDiretorio() => const <String, dynamic>{
+      'items': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'slug': 'clinica-santa-barbara',
+          'kind': 'clinic',
+          'kinds': <String>['clinic'],
+          'entity_kind': 'organization',
+          'display_name': 'Clínica Santa Bárbara',
+          'city': 'São Paulo',
+          'state': 'SP',
+          'neighborhood': 'Pinheiros',
+          'verification': <String, dynamic>{
+            'level': 'document_verified',
+            'evidence_kinds': <String>['cnpj'],
+          },
+        },
+      ],
+      'page': 1,
+      'limit': 20,
+      'total': 1,
+      // Sempre falso nesta operacao: sem conta nao ha ponto de onde medir.
+      'distance_available': false,
+      'applied_filters': <String, String>{'scope': 'all'},
+    };
+
 /// A rede que responde [resposta] as DUAS leituras do `Mural`, e 404 no resto.
 ///
 /// **As duas, e nao so a linha do tempo.** `tela_do_mural.dart` chama
@@ -116,10 +149,20 @@ Map<String, dynamic> paginaDoDiretorioVazia() => const <String, dynamic>{
 /// nao o 401 que ele se propoe a medir — e passaria, porque 404 tambem produz
 /// faixa.
 Future<http.Response> Function(http.Request) redeDoMural(
-  http.Response Function(http.Request) resposta,
-) {
+  http.Response Function(http.Request) resposta, {
+  /// A resposta de `POST /v1/auth/refresh`. Nula significa "nenhum caso deste
+  /// grupo renova", e a rota responde 404 -- alto, e nao em silencio.
+  ///
+  /// Entrou em 27/10/2026 com a mudanca da `Comunidade`: a isca de sessao
+  /// expirada precisava de uma tela que AINDA ponha muro na lista inteira, e
+  /// passou a ser o `Mural`. Ver o grupo `ISCA (b)`.
+  http.Response Function(http.Request)? aoRenovar,
+}) {
   return (req) async {
     final chave = '${req.method} ${req.url.path}';
+    if (chave == 'POST /v1/auth/refresh' && aoRenovar != null) {
+      return aoRenovar(req);
+    }
     if (chave == 'GET /v1/timeline' || chave == 'GET /v1/me/publications') {
       return resposta(req);
     }
@@ -136,6 +179,10 @@ Future<http.Response> Function(http.Request) redeDasDuasSecoes(
   /// A resposta de `POST /v1/auth/refresh`. Nula significa "nenhum caso deste
   /// grupo renova", e a rota responde 404 -- alto, e nao em silencio.
   http.Response Function(http.Request)? aoRenovar,
+
+  /// A resposta de `GET /v1/public/directory-entries`. Nula devolve uma pagina
+  /// publica com uma entrada.
+  http.Response Function(http.Request)? diretorioPublico,
 }) {
   return (req) async {
     final chave = '${req.method} ${req.url.path}';
@@ -146,6 +193,17 @@ Future<http.Response> Function(http.Request) redeDasDuasSecoes(
     // nao e o assunto de nenhum caso e responde 204.
     if (chave == 'POST /v1/me/conversations-seen') {
       return http.Response('', 204);
+    }
+    // A LISTA PUBLICA DO DIRETORIO (27/10/2026): e ela que atende a
+    // `Comunidade` deslogada, e por isso ela responde 200 por padrao em vez de
+    // cair no 404 do fim.
+    //
+    // **Ela NAO passa por [resposta]**, e a separacao e o ponto: os casos
+    // deste arquivo armam `resposta` com `semConta()` para medir a rota COM
+    // conta. Se a tela voltar a chamar aquela rota deslogada, ela leva o 401 e
+    // o caso reprova -- que e exatamente o sinal que se quer.
+    if (chave == 'GET /v1/public/directory-entries') {
+      return (diretorioPublico ?? (_) => json200(paginaPublicaDoDiretorio()))(req);
     }
     if (chave == 'GET /v1/directory/entries' ||
         chave == 'GET /v1/conversations' ||
@@ -256,17 +314,42 @@ List<String> frasesDoConvite(WidgetTester tester) {
 
 void main() {
   // -------------------------------------------------------------------------
-  group('ISCA (a): deslogado, `Perto` e as mensagens convidam a entrar, e NAO '
-      'mostram erro nem botao de atualizar', () {
+  group('ISCA (a): deslogado, as mensagens convidam a entrar — e a '
+      '`Comunidade` LISTA', () {
     // MECANISMO: o ramo `if (_faltaConta)` de
-    // `lib/telas/perto/lista_do_diretorio.dart` e de
-    // `lib/telas/mensagens/area_de_mensagens.dart`. Desligados, as duas telas
-    // voltam a desenhar `FaixaDeAviso` -- no diretorio com texto VAZIO, porque
-    // o catalogo devolve `''` para `unauthenticated` desde 18/10 -- com
-    // `Atualizar` e `Tentar de novo` ao lado.
+    // `lib/telas/mensagens/area_de_mensagens.dart`. Desligado, a tela volta a
+    // desenhar `FaixaDeAviso` com `Tentar de novo` ao lado.
+    //
+    // **O TITULO DESTE GRUPO MUDOU EM 27/10/2026.** Ele dizia "`Perto` e as
+    // mensagens convidam a entrar", e as duas telas eram medidas pelo mesmo
+    // ramo. A `Comunidade` saiu desse conjunto: ela passou a listar sem conta
+    // (`listPublicDirectoryEntries`, 200) por pedido do cliente de 26/10, e o
+    // muro dela desceu da LISTA para o ITEM. O primeiro caso abaixo guarda o
+    // novo veredito dela; o convite dela, que agora e no toque, e medido em
+    // `aviso_de_login_ao_ver_detalhe_test.dart` (casos `d5` e `d5b`).
 
-    testWidgets('`Perto` mostra o convite, e nenhuma faixa de erro',
+    testWidgets('a `Comunidade` LISTA, e nao mostra convite nem faixa',
         (tester) async {
+      // **ESTE CASO MEDIA O CONTRARIO ATE 27/10/2026.** Ele se chamava
+      // "`Perto` mostra o convite, e nenhuma faixa de erro", e estava certo: o
+      // diretorio exigia conta na LISTAGEM inteira -- a resposta dela traz
+      // `phone_e164` e `distance_m`, e `portao-contrato-publico.ts` proibe os
+      // dois em operacao alcancavel sem conta. A tela recebia 401 `sign_in` e
+      // trocava o corpo pelo convite de tela cheia.
+      //
+      // O veredito mudou porque o produto mudou: o cliente pediu, em 26/10,
+      // que a `Comunidade` listasse deslogada. A lista ganhou operacao publica
+      // propria, com projecao SEM aqueles dois campos, e o muro passou a ser o
+      // do ITEM (`getDirectoryEntry` exige conta).
+      //
+      // **O convite nao desapareceu do app**, e e por isso que apagar este
+      // caso seria pior que reescreve-lo: ele aparece no TOQUE do cartao, com
+      // `rotaDeVolta`, e quem mede isso sao os casos `d5` e `d5b` de
+      // `aviso_de_login_ao_ver_detalhe_test.dart`.
+      //
+      // **`semConta()` continua armado na rota COM conta**, de proposito: se a
+      // tela voltar a chama-la deslogada, ela leva 401 e este caso reprova nas
+      // duas pontas de uma vez -- a lista desaparece e o convite reaparece.
       await abrirOApp(
         tester,
         rede: redeDasDuasSecoes((_) => semConta()),
@@ -279,31 +362,28 @@ void main() {
         motivo: MotivoSemConta.nuncaEntrou,
       );
 
-      expect(find.byType(ConviteParaEntrar), findsOneWidget);
+      // A ANCORA POSITIVA: a lista chegou. Sem ela, os tres `findsNothing`
+      // abaixo ficariam verdes com a tela em branco.
+      expect(
+        find.text('Clínica Santa Bárbara'),
+        findsOneWidget,
+        reason: 'REPROVA: a lista publica do diretorio nao chegou a tela. '
+            '`/v1/public/directory-entries` responde 200 sem conta.',
+      );
+      expect(
+        find.byType(ConviteParaEntrar),
+        findsNothing,
+        reason: 'REPROVA: ha muro na LISTA da Comunidade deslogada. O muro '
+            'desta aba e do item, e nao da lista.',
+      );
       expect(
         find.byType(FaixaDeAviso),
         findsNothing,
-        reason: 'REPROVA: a tela de quem nao tem conta esta desenhando uma '
-            'faixa de aviso. Sem conta nao e erro.',
+        reason: 'REPROVA: a lista deslogada desenhou faixa de erro. Nao houve '
+            'nem 401 aqui -- a rota publica respondeu 200.',
       );
-      expect(
-        find.text('Atualizar'),
-        findsNothing,
-        reason: 'REPROVA: ha um `Atualizar` na tela. Recarregar sai '
-            'igualmente sem conta e volta o mesmo 401 -- e o botao que o '
-            'cliente reclamou.',
-      );
+      expect(find.text('Atualizar'), findsNothing);
       expect(find.text('Tentar de novo'), findsNothing);
-
-      // A microcopy, por extenso.
-      expect(find.text('Quem atende bem, perto de você'), findsOneWidget);
-      expect(
-        frasesDoConvite(tester).join(' | '),
-        contains('Entre para ver os profissionais'),
-      );
-      // AS DUAS PORTAS, e nao uma.
-      expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
-      expect(find.text('Criar conta'), findsOneWidget);
     });
 
     testWidgets('as mensagens mostram o convite, e nenhuma faixa de erro',
@@ -344,9 +424,22 @@ void main() {
       // que a palavra `Atualizar` nao existe mais em lugar nenhum do app, o
       // que ficaria verde se alguem apagasse a faixa de erro do produto
       // inteiro. Aqui a MESMA busca tem de achar.
+      //
+      // **O 500 PRECISA SER NA ROTA PUBLICA, e isto entrou em 27/10/2026.**
+      // Deslogado, a `Comunidade` chama `listPublicDirectoryEntries`: um 500
+      // armado so na rota COM conta deixava este contrapeso medir a lista
+      // publica respondendo 200 -- nenhuma faixa, e o caso reprovando por
+      // nao achar o que ele existe para achar. Medido, e foi assim que
+      // apareceu.
+      //
+      // Os dois continuam armados: a rota com conta por causa das mensagens,
+      // que estao no mesmo grupo, e a publica por causa da lista.
       await abrirOApp(
         tester,
-        rede: redeDasDuasSecoes((_) => servidorFora()),
+        rede: redeDasDuasSecoes(
+          (_) => servidorFora(),
+          diretorioPublico: (_) => servidorFora(),
+        ),
       );
       await abrirAComunidade(tester);
 
@@ -509,13 +602,31 @@ void main() {
     // `ConviteParaEntrar`. Desligado (o campo nunca saindo de `nuncaEntrou`),
     // a tela convida quem JA TEM conta a criar uma segunda -- perdendo os
     // pets, as conversas e os achados da primeira.
+    //
+    // ## A TELA DESTE GRUPO ERA A `Comunidade`, e passou a ser o `Mural`
+    //
+    // Ate 27/10/2026 os dois casos abaixo abriam a `Comunidade`: ela punha
+    // muro na LISTA inteira, entao bastava abrir a aba para o convite de tela
+    // cheia aparecer e os textos do motivo serem legiveis.
+    //
+    // Ela deixou de servir, e por duas razoes somadas: a lista agora responde
+    // 200 sem conta (`listPublicDirectoryEntries`) e **sessao expirada e
+    // deslogado**, entao a `Comunidade` passou a LISTAR para esta pessoa em
+    // vez de pedir conta. O convite dela ainda existe, mas so no TOQUE -- e la
+    // ele vem com `rotaDeVolta`, que e outro desenho.
+    //
+    // O `Mural` serve pelo criterio que nao mudou: `getMyTimeline` exige
+    // conta, nao ha versao publica da linha do tempo e o muro e da lista
+    // inteira. **O que este grupo mede nao mudou nada**: continua sendo o
+    // MOTIVO (`sessaoCaiu` contra `nuncaEntrou`), que e do controlador de
+    // sessao e nao da tela.
 
     testWidgets('o refresh recusado leva ao convite de sessao expirada',
         (tester) async {
       await abrirOApp(
         tester,
         deposito: depositoVencido(),
-        rede: redeDasDuasSecoes(
+        rede: redeDoMural(
           (_) => semConta(),
           // O 401 que o servidor manda de verdade neste caminho. Medido:
           // `token-expired`, `title: "Entre de novo"`, `next_action: sign_in`.
@@ -526,7 +637,7 @@ void main() {
           ),
         ),
       );
-      await abrirAComunidade(tester);
+      await abrirAAba(tester, 'Mural');
 
       exigirEstadoDeSessao(
         tester,
@@ -538,7 +649,7 @@ void main() {
       expect(find.text('Sua sessão expirou'), findsOneWidget);
       expect(
         frasesDoConvite(tester).join(' | '),
-        contains('Entre de novo para ver quem atende perto de você.'),
+        contains('Entre de novo para ver o Mural.'),
       );
       expect(
         find.text('Criar conta'),
@@ -550,7 +661,7 @@ void main() {
       // A saida que existe continua existindo.
       expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
       expect(
-        find.text('Quem atende bem, perto de você'),
+        find.text('O Mural é das suas conexões'),
         findsNothing,
         reason: 'REPROVA: a tela esta explicando a secao a quem ja estava '
             'dentro dela.',
@@ -564,9 +675,9 @@ void main() {
       // botao apagado do widget. E o mesmo instrumento, no outro motivo.
       await abrirOApp(
         tester,
-        rede: redeDasDuasSecoes((_) => semConta()),
+        rede: redeDoMural((_) => semConta()),
       );
-      await abrirAComunidade(tester);
+      await abrirAAba(tester, 'Mural');
 
       exigirEstadoDeSessao(
         tester,
@@ -784,6 +895,19 @@ void main() {
     //
     // O caminho e o real: `ListaDoDiretorio` recarrega quando a aba volta a
     // aparecer (`didChangeDependencies` com `TickerMode`).
+    //
+    // ## O CASO PASSOU A SER LOGADO em 27/10/2026, e isso o fortaleceu
+    //
+    // Ele montava o app DESLOGADO e deixava a rota com conta devolver 401. Com
+    // a `Comunidade` listando sem conta (`listPublicDirectoryEntries`), o
+    // deslogado nao chama mais aquela rota: o caso parou de alcancar a
+    // bandeira que ele existe para medir.
+    //
+    // Com conta, ele alcanca -- e passou a medir algo que antes ele NAO media:
+    // que o ramo `if (_faltaConta)` **continua alcancavel** depois da mudanca.
+    // Ele e o unico caminho que sobrou ate aquele ramo: credencial que a tela
+    // julga valida e o servidor recusa (token revogado com a aba aberta).
+    // Apagar o ramo deixaria este caso reprovar, e e isso que se quer dele.
 
     testWidgets(
         'ISCA: 401 e depois um corpo fora do contrato mostra faixa, e nao o '
@@ -792,6 +916,7 @@ void main() {
       var vezes = 0;
       await abrirOApp(
         tester,
+        deposito: depositoLogado(),
         rede: redeDasDuasSecoes((http.Request req) {
           if (req.url.path != '/v1/directory/entries') {
             return json200(paginaDeConversasVazia());
@@ -804,14 +929,17 @@ void main() {
 
       exigirEstadoDeSessao(
         tester,
-        estado: EstadoDaSessao.deslogado,
+        estado: EstadoDaSessao.logado,
         motivo: MotivoSemConta.nuncaEntrou,
       );
       expect(
         find.byType(ConviteParaEntrar),
         findsOneWidget,
         reason: 'REPROVA: a primeira carga nao mostrou o convite, entao a '
-            'segunda metade deste caso nao prova que ele SAIU.',
+            'segunda metade deste caso nao prova que ele SAIU. Se o ramo '
+            '`if (_faltaConta)` de `lista_do_diretorio.dart` foi apagado com a '
+            'mudanca de 27/10, e aqui que isso aparece: ele continua sendo a '
+            'resposta certa para credencial RECUSADA.',
       );
 
       // **SAIR DA SECAO E VOLTAR, e agora sair quer dizer OUTRA SECAO.**

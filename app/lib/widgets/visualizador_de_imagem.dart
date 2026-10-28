@@ -536,9 +536,50 @@ class _ImagemAmpliavelState extends State<_ImagemAmpliavel> {
         transformationController: _enquadramento,
         minScale: 1,
         maxScale: VisualizadorDeImagem.ampliacaoMaxima,
-        // A imagem ampliada pode ser arrastada para fora da moldura e volta
-        // sozinha; sem isto, ampliar numa borda prende o canto fora da tela.
-        boundaryMargin: const EdgeInsets.all(double.infinity),
+        // **A IMAGEM FICA FIXA** (cliente, 26/10/2026: *"tem um bug quando
+        // amplia a foto dos eventos e dos estabelecimentos, o usuario
+        // consegue arrastar a imagem para varias posicoes, a imagem deve
+        // ficar fixa e so mudar de foto caso tenha mais do que uma
+        // cadastrada"*).
+        //
+        // **O QUE ESTAVA ESCRITO AQUI ERA FALSO, e foi medido.** O comentario
+        // anterior dizia que a imagem arrastada *"volta sozinha"*;
+        // `InteractiveViewer` **nao tem volta elastica**. Com `panEnabled` no
+        // padrao (`true`) e moldura infinita, um arrasto de UM dedo na foto
+        // nem ampliada a estacionava onde a pessoa largou, e ela ficava torta
+        // ate alguem fechar a tela. Medido na arvore antes do conserto: a foto
+        // saia de `Offset(0, 0)` e parava em `Offset(-118.9, -131.0)`.
+        //
+        // **O CONSERTO E A MOLDURA, E NAO DESLIGAR O ARRASTO** (cliente,
+        // 26/10/2026, respondendo a pergunta que a primeira versao deixou
+        // aberta: *"o arraste limitada as bordas"*).
+        //
+        // A primeira tentativa desligou o arrasto (`panEnabled: false`) e foi
+        // longe demais: ela tirava tambem o passeio DENTRO da foto ampliada,
+        // que e para que serve ampliar. O que ele quer sao as duas coisas de
+        // uma vez, e `boundaryMargin` sozinho entrega as duas:
+        //
+        //   * **sem ampliar** a foto cabe exatamente na moldura, entao nao ha
+        //     folga para onde arrastar e o gesto nao desloca NADA -- que e a
+        //     queixa original dele, palavra por palavra;
+        //   * **ampliada** ha folga, o dedo passeia, e o deslocamento PARA na
+        //     borda em vez de continuar: nunca sobra vazio na tela e a foto
+        //     nunca foge para fora.
+        //
+        // **E A MOLDURA E O PADRAO DO `InteractiveViewer`** -- `EdgeInsets`
+        // zero significa limites do tamanho e da posicao exatos do filho. O
+        // que estava escrito era `EdgeInsets.all(double.infinity)`, moldura
+        // infinita, e era isso o defeito: sem limite nenhum, qualquer arrasto
+        // levava a foto para qualquer lugar e ela NAO voltava. O comentario
+        // que acompanhava a linha dizia que ela *"volta sozinha"*, e essa
+        // frase era falsa: `InteractiveViewer` nao tem volta elastica.
+        //
+        // `panEnabled` fica EXPLICITO em `true` mesmo sendo o padrao: ele foi
+        // `false` por um dia nesta linha, e quem vier atras precisa ver que
+        // estar ligado e decisao do cliente e nao distracao. Quem segura a
+        // imagem e a moldura.
+        panEnabled: true,
+        boundaryMargin: EdgeInsets.zero,
         clipBehavior: Clip.none,
         child: widget.child,
       ),

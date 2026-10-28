@@ -69,6 +69,8 @@ import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/saida_do_app.dart';
 import 'package:bichu/telas/atualizacao/aviso_de_versao_nova.dart';
 import 'package:bichu/telas/atualizacao/portao_de_versao.dart';
+import 'package:bichu/telas/abertura/tela_sem_conexao.dart';
+import 'package:bichu/telas/abertura/textos_da_abertura.dart';
 import 'package:bichu/telas/atualizacao/tela_de_bloqueio_por_versao.dart';
 import 'package:bichu/telas/atualizacao/textos_da_atualizacao.dart';
 import 'package:bichu/theme/bichu_theme.dart';
@@ -398,8 +400,25 @@ void main() {
       variant: android,
     );
 
-    testWidgets('(c) sem rede, o app aparece e NAO ha bloqueio', (tester) async {
+    // ESTE CASO MUDOU EM 27/10/2026, e a mudanca e pedido do cliente.
+    //
+    // Ate 26/10 ele exigia que sem rede o app aparecesse **em silencio**, e
+    // era esse silencio que o cliente reclamou: *"uma mensagem de erro, quando
+    // o usuario tentar abrir o aplicativo e nao estiver conectado na internet,
+    // ao inves de deixar parado na pagina de splashscreen"*.
+    //
+    // **O que NAO mudou e o que este grupo existe para travar**: sem rede
+    // continua sem BLOQUEIO. A diferenca entre o recado e o bloqueio e a
+    // saida -- `Usar sem internet` entrega o app inteiro, e o caso mede isso
+    // na mesma passada, porque recado sem saida seria bloqueio por falta de
+    // rede com outro nome.
+    testWidgets('(c) sem rede, HA RECADO e NAO ha bloqueio', (tester) async {
       await tester.pumpWidget(sob(_SemRede()));
+      await tester.pumpAndSettle();
+      expect(find.byType(TelaDeBloqueioPorVersao), findsNothing);
+      expect(find.byType(TelaDeAberturaSemConexao), findsOneWidget);
+
+      await tester.tap(find.text(TextosDaAbertura.seguirSemInternet));
       await tester.pumpAndSettle();
       expect(find.text('o app inteiro'), findsOneWidget);
       expect(find.byType(TelaDeBloqueioPorVersao), findsNothing);
@@ -426,7 +445,11 @@ void main() {
       expect(find.byType(TelaDeBloqueioPorVersao), findsNothing);
     }, variant: android);
 
-    testWidgets('(c) tempo esgotado, o app aparece e NAO ha bloqueio', (tester) async {
+    // MUDOU EM 27/10/2026 pela mesma razao do caso de `sem rede` acima: a
+    // resposta que nao vem dentro do prazo e, para quem abriu o app,
+    // indistinguivel de nao ter internet -- e o cliente pediu mensagem nos
+    // dois. O BLOQUEIO continua fora, e a saida continua existindo.
+    testWidgets('(c) tempo esgotado, HA RECADO e NAO ha bloqueio', (tester) async {
       final transporte = _CabecalhoSemCorpo();
       await tester.pumpWidget(
         MaterialApp(
@@ -440,8 +463,12 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
-      expect(find.text('o app inteiro'), findsOneWidget);
       expect(find.byType(TelaDeBloqueioPorVersao), findsNothing);
+      expect(find.byType(TelaDeAberturaSemConexao), findsOneWidget);
+
+      await tester.tap(find.text(TextosDaAbertura.seguirSemInternet));
+      await tester.pumpAndSettle();
+      expect(find.text('o app inteiro'), findsOneWidget);
       await transporte.fechar();
     }, variant: android);
 

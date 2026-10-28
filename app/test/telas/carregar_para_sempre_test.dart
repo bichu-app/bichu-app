@@ -71,7 +71,35 @@ void main() {
           versaoDosTermosDeTeste: versao,
         ),
         deposito: DepositoEmMemoria(),
-        clienteHttp: MockClient(rede),
+        // `GET /health` RESPONDIDO AQUI, e nao pelo `rede` do caso.
+        //
+        // Desde 27/10/2026 `PortaoDeVersao` sonda a conectividade na abertura
+        // quando a pergunta de versao nao sai -- e aqui ela nao sai, porque
+        // `AppConfig.carregar(apiBaseUrlDeTeste: ...)` deixa `APP_VERSION`
+        // ausente. Os dois casos cujo `rede` NUNCA responde abririam no recado
+        // de "sem internet", e a tela de conta que este arquivo mede nem
+        // estaria na arvore: ele reprovaria por uma tela que nao e o assunto
+        // dele. O assunto daqui e a tela SAIR do carregando, e quem mede o
+        // recado de abertura e `test/abertura/abertura_sem_internet_test.dart`.
+        clienteHttp: MockClient((http.Request requisicao) async {
+          if (requisicao.url.path.endsWith('/health')) {
+            return http.Response(
+              jsonEncode(<String, dynamic>{
+                'status': 'ok',
+                'version': '0.0.0-teste',
+                'build': <String, String>{
+                  'artifact': '0000000000000000',
+                  'commit': '0000000',
+                },
+              }),
+              200,
+              headers: const <String, String>{
+                'content-type': 'application/json',
+              },
+            );
+          }
+          return rede(requisicao);
+        }),
       ),
     );
     await tester.pumpAndSettle();

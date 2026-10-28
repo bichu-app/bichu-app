@@ -87,13 +87,25 @@ import '../../widgets/saida_da_tela.dart';
 /// mesma foto divergem na primeira edicao -- foi o argumento que fez
 /// `FotoDoUsuario` ser removida no mesmo dia.
 ///
-/// **O `alt_text` e OBRIGATORIO**, e e por isso que esta tela ganhou um campo
-/// em vez de inventar um texto: `CommunityNetworkEventCoverInput` declara
-/// `required: [upload_id, alt_text]`, com `minLength: 2`, e a razao escrita no
-/// contrato -- *"a imagem sem texto alternativo e a imagem que nao existe para
-/// quem usa leitor de tela"*. Derivar o texto do titulo gravaria o nome do
-/// evento como descricao da foto, que e outra coisa. O campo so aparece quando
-/// ha capa.
+/// **NAO HA CAMPO DE DESCRICAO DA FOTO, e a ausencia e o pedido do cliente de
+/// 26/10/2026**: *"essa porra de campo e obrigatorio na criacao do evento,
+/// tire essa merda"*, dentro de *"remova todos os campos de descricao de foto
+/// do aplicativo, nao iremos implementar solucoes para quem usa leitor de tela
+/// por enquanto"*.
+///
+/// Ate 27/10/2026 o campo existia porque o contrato o exigia:
+/// `CommunityNetworkEventCoverInput` declarava `required: [upload_id,
+/// alt_text]`, e mandar a capa sem o texto era `400`. **O contrato foi
+/// afrouxado no mesmo dia**, pela condicao que ele mesmo nomeava (*"ela cai no
+/// dia em que alguem pedir, e nao antes"*), e so por isso o campo pode sair:
+/// `cover_image` agora vai com `upload_id` sozinho. `alt_text` continua
+/// EXISTINDO no esquema como opcional, de 2 a 150 -- a tela e que deixou de
+/// ter de onde preenche-lo.
+///
+/// **O custo, que e dele e nao meu:** a capa fica sem nome acessivel escrito
+/// pelo autor, e quem usa leitor de tela cai no rotulo generico de
+/// `TelaDoEncontro.nomeDaCapaSemTexto`. A imagem NAO sai da arvore de
+/// acessibilidade.
 ///
 /// **A recusa por TIPO e dita antes do envio**, por `recusaDeTipoDaFoto` com
 /// `tiposDeFotoAceitosSemHeic`: o enum desta rota e mais estreito que o da foto
@@ -155,10 +167,9 @@ class TelaCriarEncontro extends StatefulWidget {
 
   static const String escolherDaGaleria = 'Escolher da galeria';
 
-  static const String rotuloDoTextoDaCapa = 'Descrição da foto';
-
-  static const String ajudaDoTextoDaCapa =
-      'Para quem usa leitor de tela. Sem telefone, e-mail ou link.';
+  // `rotuloDoTextoDaCapa` e `ajudaDoTextoDaCapa` SAIRAM em 27/10/2026, com o
+  // campo de descricao da foto (pedido do cliente de 26/10/2026). Nao os
+  // devolva sem o pedido de volta: o contrato nao cobra mais `alt_text`.
 
   static const String aCapaEscolhida = 'A foto que você escolheu';
 
@@ -244,13 +255,9 @@ enum _Impedimento {
   semData('Escolha o dia e a hora.'),
   dataNoPassado('O evento precisa ser no futuro.'),
   fimAntesDoComeco('O fim não pode ser antes do começo.'),
-  // **So vale quando HA capa enviada**, e e por isso que ele vem depois de
-  // tudo: a capa e opcional, e um evento sem foto e estado normal
-  // (`cover_image_url` nulo, e a agenda desenha o banner da marca). O que nao
-  // e normal e mandar `cover_image` sem `alt_text`: o esquema declara os dois
-  // como obrigatorios, e o servidor responde `400` depois de a pessoa ter
-  // esperado o envio inteiro.
-  semTextoDaCapa('Escreva uma descrição para a foto.'),
+  // `semTextoDaCapa` SAIU em 27/10/2026, com o campo. Ele existia porque
+  // `cover_image` sem `alt_text` era `400`; o contrato afrouxou e mandar so o
+  // `upload_id` passou a ser corpo valido, entao nao ha mais o que bloquear.
   // A foto esta subindo. Criar agora mandaria o `upload_id` que ainda nao
   // existe -- ou, pior, nenhum -- e publicaria o evento sem a capa que a
   // pessoa escolheu, sem dizer nada.
@@ -293,10 +300,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
   String _cepJaBuscado = '';
 
-  /// O `alt_text` da capa. **Nao e legenda** e nao e desenhado sobre a foto:
-  /// `CommunityNetworkEventCoverInput.alt_text` e rotulo para leitor de tela.
-  final TextEditingController _textoDaCapa = TextEditingController();
-
   DateTime? _comeca;
   DateTime? _termina;
 
@@ -337,8 +340,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// Ela existe escrita porque a recusa chega num mapa, e mapa nao tem ordem:
   /// sem esta lista, "o primeiro campo recusado" seria o primeiro que o
   /// servidor tivesse resolvido mandar.
+  //
+  // **`cover_image.alt_text` SAIU em 27/10/2026**, com o campo: a tela nunca
+  // mais manda `alt_text`, entao o servidor nunca mais recusa esse `field`.
   static const List<String> _ordemDosCampos = <String>[
-    'cover_image.alt_text',
     'title',
     'summary',
     'place.place_name',
@@ -365,10 +370,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
 
   /// O foco de cada campo de DIGITACAO.
   ///
-  /// `starts_at`, `ends_at` e `cover_image.alt_text` ficam de fora: os dois
-  /// primeiros abrem seletor de data e nao recebem teclado, e o texto da capa
-  /// vive dentro de [_BlocoDaCapa] -- para ele a ancora leva ao bloco, que e o
-  /// que poe o campo na tela.
+  /// `starts_at` e `ends_at` ficam de fora: os dois abrem seletor de data e
+  /// nao recebem teclado. (`cover_image.alt_text` saiu da lista em 27/10/2026,
+  /// com o campo de descricao da foto.)
   ///
   /// **`place.state` TAMBEM fica de fora, desde 21/10/2026**: ele deixou de ser
   /// campo de texto e virou `SeletorDeLista`, que nao recebe teclado. Ele
@@ -420,7 +424,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     _bairro.dispose();
     _cidade.dispose();
     _observacoes.dispose();
-    _textoDaCapa.dispose();
     for (final FocusNode foco in _focos.values) {
       foco.dispose();
     }
@@ -542,12 +545,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     if (termina != null && !termina.isAfter(comeca)) {
       return _Impedimento.fimAntesDoComeco;
     }
-    // A CAPA, por ultimo, porque ela e opcional: sem foto escolhida nenhuma
-    // destas duas vale, e o botao fica livre.
+    // A CAPA, por ultimo, porque ela e opcional: sem foto escolhida esta nao
+    // vale, e o botao fica livre. **Era um par ate 27/10/2026** -- a outra
+    // metade era `semTextoDaCapa`, que saiu com o campo de descricao da foto.
     if (_enviandoACapa) return _Impedimento.capaSubindo;
-    if (_uploadDaCapa != null && _textoDaCapa.text.trim().length < 2) {
-      return _Impedimento.semTextoDaCapa;
-    }
     return null;
   }
 
@@ -736,8 +737,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       // `cover_image` e campo de `CommunityNetworkEventInput`, e e esta
       // gravacao que confirma a intencao no servidor, na mesma transacao. Sem
       // isso o objeto subiria e o varredor o recolheria em dez minutos.
+      // **SEM `textoAlternativoDaCapa`**: o campo saiu da tela em 27/10/2026
+      // e `alt_text` deixou de ser `required` no contrato no mesmo dia. A capa
+      // vai pelo `upload_id` sozinho.
       capaUploadId: _uploadDaCapa,
-      textoAlternativoDaCapa: _textoDaCapa.text.trim(),
     );
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
 
@@ -1024,13 +1027,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 ],
                 const SizedBox(height: BichuEspaco.e6),
                 _BlocoDaCapa(
-                  key: _ancoras['cover_image.alt_text'],
                   escolhida: _capaEscolhida,
                   enviando: _enviandoACapa,
                   permissao: _permissaoDaCamera,
-                  textoAlternativo: _textoDaCapa,
-                  erroDoTexto: _errosDeCampo['cover_image.alt_text'],
-                  aoDigitarOTexto: _aoDigitar,
                   aoTirar: enviando ? null : _tirarACapa,
                   aoEscolher: enviando ? null : _escolherACapaDaGaleria,
                   aoAbrirAjustes: _abrirOsAjustes,
@@ -1335,23 +1334,14 @@ class _BlocoDaCapa extends StatelessWidget {
     required this.escolhida,
     required this.enviando,
     required this.permissao,
-    required this.textoAlternativo,
-    required this.erroDoTexto,
-    required this.aoDigitarOTexto,
     required this.aoTirar,
     required this.aoEscolher,
     required this.aoAbrirAjustes,
-    // A ancora que `_levarAoPrimeiroRecusado` usa para rolar ate o texto da
-    // capa, que vive dentro deste bloco.
-    super.key,
   });
 
   final FotoLocal? escolhida;
   final bool enviando;
   final EstadoDaPermissao permissao;
-  final TextEditingController textoAlternativo;
-  final String? erroDoTexto;
-  final ValueChanged<String> aoDigitarOTexto;
   final VoidCallback? aoTirar;
   final VoidCallback? aoEscolher;
   final VoidCallback aoAbrirAjustes;
@@ -1436,31 +1426,9 @@ class _BlocoDaCapa extends StatelessWidget {
           ),
           child: const Text(TelaCriarEncontro.escolherDaGaleria),
         ),
-        // O CAMPO DO `alt_text`, **so quando ha foto**: ele e obrigatorio
-        // quando a capa vai no corpo (`required: [upload_id, alt_text]`) e nao
-        // tem o que descrever quando nao ha capa. Pedi-lo antes seria cobrar
-        // texto sobre uma foto que a pessoa talvez nem escolha.
-        if (local != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e4),
-          BichuField(
-            rotulo: TelaCriarEncontro.rotuloDoTextoDaCapa,
-            controlador: textoAlternativo,
-            aoMudar: aoDigitarOTexto,
-            erro: erroDoTexto,
-            // `maxLength: 150` do contrato, e nao um numero escolhido aqui.
-            limite: 150,
-            exemplo: 'Cachorros correndo na grama do parque',
-            // D59: o servidor recusa telefone, e-mail, link e chave PIX em
-            // `cover_image.alt_text` tambem. Dito antes, e nao descoberto pelo
-            // 400.
-            ajuda: TelaCriarEncontro.ajudaDoTextoDaCapa,
-            capitalizacao: TextCapitalization.sentences,
-            habilitado: !enviando,
-            // Campo intermediario: **avanca**. Ele e o primeiro da tela, e o
-            // proximo e `Nome do evento`.
-            acaoDeTeclado: TextInputAction.next,
-          ),
-        ],
+        // **O CAMPO DO `alt_text` SAIU em 27/10/2026**, por pedido do cliente
+        // de 26/10/2026, e o contrato deixou de o exigir no mesmo dia. Nao o
+        // devolva aqui: `capa_do_evento_test.dart` tem isca sobre isso.
       ],
     );
   }

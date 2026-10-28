@@ -11,6 +11,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/marca_da_pessoa.dart';
+import 'porta_do_perfil_do_autor.dart';
 import '../../widgets/selo_de_validado.dart';
 import '../casca_com_abas.dart';
 
@@ -380,11 +381,27 @@ class _Comentario extends StatelessWidget {
         //
         // O que continua desta tela e o LADO: 32 dp, menor que os 40 do cartao,
         // e a `bodyMedium` da inicial que acompanha o lado.
-        MarcaDaPessoa(
-          urlDoIcone: comentario.autor.urlDoIcone,
-          inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
-          lado: ladoDoIcone,
-          estiloDaInicial: textos.bodyMedium,
+        // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), pela MESMA
+        // `PortaDoPerfilDoAutor` do cartao -- uma superficie com duas regras de
+        // "quando o toque nasce" divergiria na primeira edicao. Sem apelido
+        // ela devolve o circulo cru.
+        PortaDoPerfilDoAutor(
+          autor: comentario.autor,
+          rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
+            comentario.autor.nomeExibido,
+          ),
+          child: MarcaDaPessoa(
+            urlDoIcone: comentario.autor.urlDoIcone,
+            inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
+            lado: ladoDoIcone,
+            estiloDaInicial: textos.bodyMedium,
+            // O dono da foto, para o cache em disco (BICHUS-296). NA UNIAO de
+            // 27/10 ele entra AQUI, dentro do `MarcaDaPessoa` que o #64
+            // embrulhou em `PortaDoPerfilDoAutor`: os dois lados nao se
+            // contradiziam -- um fez da foto uma porta, o outro deu dono a
+            // chave do cache.
+            apelido: comentario.autor.apelido,
+          ),
         ),
         const SizedBox(width: BichuEspaco.e3),
         Expanded(
@@ -401,10 +418,17 @@ class _Comentario extends StatelessWidget {
               // o nome usa `labelLarge`, que e menor que o `titleMedium` do
               // cartao. A medicao esta em
               // `app/test/widgets/selo_de_validado_test.dart`, com os numeros.
-              NomeComSelo(
-                nome: comentario.autor.nomeExibido,
-                comSelo: comentario.autor.canalConfirmado,
-                estilo: textos.labelLarge,
+              //
+              // **O NOME TAMBEM E PORTA**, e **sem `rotulo`**: o texto ja e o
+              // nome acessivel, e trocar a semantica apagaria o selo que o
+              // paragrafo acima acabou de justificar.
+              PortaDoPerfilDoAutor(
+                autor: comentario.autor,
+                child: NomeComSelo(
+                  nome: comentario.autor.nomeExibido,
+                  comSelo: comentario.autor.canalConfirmado,
+                  estilo: textos.labelLarge,
+                ),
               ),
               const SizedBox(height: BichuEspaco.e1),
               // O texto como a pessoa escreveu. Sem recorte e sem tratamento de

@@ -4,6 +4,8 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/api/seguranca_api.dart';
 import 'package:bichu/telas/seguranca/tela_de_bloqueados.dart';
+import 'package:bichu/widgets/ficha_da_pessoa.dart';
+import 'package:bichu/widgets/marca_da_pessoa.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:flutter/material.dart';
@@ -29,9 +31,15 @@ import 'package:http/testing.dart';
 ///   operação que o `MenuDoPerfil` já chamava — e **recarrega**: a pessoa sai
 ///   da lista porque o servidor deixou de mandá-la, e não porque a tela a
 ///   apagou localmente;
-/// - **(c)** a linha pinta o que foi decidido e **nada mais**: nenhuma foto
-///   (emenda 3 do ADR-0010 liberou a foto só entre conexões aceitas, e
-///   bloqueado é o oposto disso) e nenhuma contagem.
+/// - **(c)** a linha pinta o que foi decidido e **nada mais**: nenhuma contagem,
+///   e **nenhuma FOTO** — a emenda 3 do ADR-0010 liberou a foto só entre
+///   conexões aceitas, bloqueado é o oposto disso, e `BlockedPerson` por isso
+///   não tem o campo. **O que ela passou a ter, em 26/10/2026, é o LUGAR da
+///   foto**: o cliente pediu *"na listagem dos usuários bloqueados, você deve
+///   trazer o icone da foto do usuário tambem"*, e o lugar da foto com
+///   `urlDaFoto: null` desenha a **inicial**, que é o recurso que a própria
+///   emenda 3 nomeia. Foto e lugar-da-foto são coisas diferentes, e é a
+///   diferença que deixa atender o pedido sem emendar o contrato.
 const String refDeBruno = 'MNwRiDONS3eWNrR8spLFAQ';
 const String refDeAnonima = 'ZZwRiDONS3eWNrR8spLFAZ';
 
@@ -345,5 +353,77 @@ void main() {
       ], chamadas: chamadas),
     );
     expect(find.text(TelaDeBloqueados.oQueODesbloqueioNaoFaz), findsOneWidget);
+  });
+
+  testWidgets('ISCA: a linha de bloqueado tem o LUGAR DA FOTO, o NOME e o padrao', (
+    tester,
+  ) async {
+    // **A ISCA DA TELA QUE ELE COBROU.** Ela e ancorada em WIDGET e nao na
+    // ausencia de texto: asserção negativa passa no vazio.
+    final chamadas = <String>[];
+    await montar(
+      tester,
+      apiQue(<List<Map<String, dynamic>>>[
+        <Map<String, dynamic>>[
+          linha(publicRef: refDeBruno, handle: 'bruno-vizinho', displayName: 'Bruno Vizinho'),
+        ],
+      ], chamadas: chamadas),
+    );
+    // O padrao esta na tela...
+    expect(find.byType(FichaDaPessoa), findsOneWidget);
+    // ...e com ele o LUGAR da foto.
+    expect(find.byType(MarcaDaPessoa), findsOneWidget);
+    // O nome continua escrito.
+    expect(find.text('Bruno Vizinho'), findsOneWidget);
+    // **E NENHUMA FOTO FOI BAIXADA**: `BlockedPerson` nao tem o campo, e o
+    // circulo e a inicial. Se um dia alguem ligar foto aqui, este caso reprova
+    // e manda ler a emenda antes.
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('B'), findsOneWidget);
+  });
+
+  testWidgets('CONTROLE POSITIVO: quem NAO tem nome nem apelido ainda tem avatar', (
+    tester,
+  ) async {
+    // **A metade que impede o padrao de virar impedimento.** Sem nome, sem
+    // apelido e sem foto, a linha continua tendo circulo — e nao um vao, nem um
+    // erro, nem uma linha que desaparece.
+    final chamadas = <String>[];
+    await montar(
+      tester,
+      apiQue(<List<Map<String, dynamic>>>[
+        <Map<String, dynamic>>[linha(publicRef: refDeAnonima)],
+      ], chamadas: chamadas),
+    );
+    expect(find.byType(FichaDaPessoa), findsOneWidget);
+    expect(find.byType(MarcaDaPessoa), findsOneWidget);
+    expect(find.text('Usuário sem nome'), findsOneWidget);
+    // A inicial de "Usuário sem nome" e `U`, e ela existe: o circulo nao
+    // nasceu vazio.
+    expect(find.text('U'), findsOneWidget);
+  });
+
+  testWidgets('ISCA: numa lista de TRES, cada linha tem a SUA inicial', (tester) async {
+    // O defeito medido: a lista desenhar o mesmo avatar em todas as linhas (o
+    // do primeiro, ou um campo lido fora do laco). Um caso de UMA linha nunca
+    // pegaria isso.
+    final chamadas = <String>[];
+    await montar(
+      tester,
+      apiQue(<List<Map<String, dynamic>>>[
+        <Map<String, dynamic>>[
+          linha(publicRef: refDeBruno, displayName: 'Bruno Vizinho'),
+          linha(publicRef: refDeAnonima, displayName: 'Carla Antunes'),
+          linha(publicRef: 'QQwRiDONS3eWNrR8spLFAQ', displayName: 'Dora Melo'),
+        ],
+      ], chamadas: chamadas),
+    );
+    expect(find.byType(FichaDaPessoa), findsNWidgets(3));
+    final iniciais = tester
+        .widgetList<MarcaDaPessoa>(find.byType(MarcaDaPessoa))
+        .map((MarcaDaPessoa m) => m.inicial)
+        .toList();
+    // TRES iniciais DISTINTAS, cada uma a da sua linha.
+    expect(iniciais, <String>['B', 'C', 'D']);
   });
 }

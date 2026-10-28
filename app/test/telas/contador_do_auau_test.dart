@@ -305,6 +305,12 @@ Future<void> montarBarraComSelo(
               for (final destino in destinos)
                 NavigationDestination(
                   icon: DistintivoDaAba(
+                    // DE VOLTA A `Icon(destino.icone)` em 26/10/2026: o
+                    // cliente reprovou o desenho, os cinco slots voltaram ao
+                    // Material e `desenho` e nulo outra vez -- o `!` daqui
+                    // estourava. O distintivo e medido POR CIMA do glifo, e
+                    // o que importa para esta medida e que o glifo tenha os
+                    // 24 dp de sempre, qualquer que seja a fonte dele.
                     glifo: Icon(destino.icone),
                     naoLidas: naoLidasDe != null
                         ? naoLidasDe(destino)

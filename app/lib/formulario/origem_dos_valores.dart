@@ -104,6 +104,32 @@ class OrigemDosValores {
     return true;
   }
 
+  /// Solta **todos** os campos que ainda carregam o valor que veio do endereço
+  /// guardado, e devolve as chaves que estavam marcadas.
+  ///
+  /// ## Para que isto existe: a TROCA DE PET, em 27/10/2026
+  ///
+  /// Decisão do cliente: *"endereço um por pet"*. No formulário do pedido a
+  /// pessoa escolhe o pet DENTRO da tela, e trocar de pet troca a fonte do
+  /// endereço — o que estava pré-preenchido era do pet de antes.
+  ///
+  /// **Sem isto, a troca de pet produzia um endereço misturado de dois pets**, e
+  /// pelo mesmo mecanismo que [daBusca] documenta: [doGuardado] só preenche
+  /// campo VAZIO, e depois da primeira carga nada está vazio. O endereço do
+  /// segundo pet não entraria em campo nenhum, e o pedido sairia com a rua do
+  /// primeiro — exatamente a classe de defeito que a separação de origem existe
+  /// para evitar, chegando por um caminho novo.
+  ///
+  /// **O que a pessoa DIGITOU não é solto aqui**, e não pode ser: o toque dela
+  /// já tirou o campo deste conjunto ([soltar]), então ele não aparece na
+  /// devolução e quem chama não o limpa. Trocar de pet não apaga o que ela
+  /// escreveu.
+  Set<String> soltarOQueVeioDoGuardado() {
+    final soltas = <String>{..._daConta};
+    _daConta.clear();
+    return soltas;
+  }
+
   /// A MESMA regra de [daBusca], para o valor que não é um
   /// [TextEditingController] — a UF.
   ///

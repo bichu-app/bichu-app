@@ -139,6 +139,34 @@ export interface EntradaPublica {
 }
 
 /**
+ * `PublicDirectoryEntrySummary` do contrato: o cartao de quem NAO tem conta.
+ *
+ * **E `EntradaPublica` menos quatro campos**, e cada ausencia tem razao
+ * propria -- `listPublicDirectoryEntries` as escreve por extenso:
+ *
+ * - `phone_e164` e `site_url`: canal de contato que so sai com conta.
+ *   `portao-contrato-publico.ts` proibe o primeiro por NOME EXATO em operacao
+ *   alcancavel sem conta, e o segundo sai pela razao declarada no proprio
+ *   campo dele ("sai ao lado de `phone_e164` e pela mesma razao"). O portao
+ *   nao nomeia `site_url` hoje, e isso nao e permissao.
+ * - `distance_m`: distancia implica centro, e distancias a partir de centros
+ *   conhecidos trilateram o centro desconhecido. Sem conta nao ha nem ponto de
+ *   onde medir.
+ * - `about`: o cartao nao o desenha, nem aqui nem com conta.
+ *
+ * **O tipo e a trava, e nao a boa intencao de quem escreve a projecao.**
+ * `Omit` em vez de uma interface escrita a mao: com a interface solta, um campo
+ * acrescentado a `EntradaPublica` amanha nao apareceria aqui e ninguem seria
+ * avisado -- enquanto com `Omit` o campo novo CHEGA a esta projecao e o
+ * compilador cobra a decisao sobre ele, que e exatamente o momento em que a
+ * decisao deve ser tomada.
+ */
+export type EntradaPublicaSemConta = Omit<
+  EntradaPublica,
+  'phone_e164' | 'site_url' | 'distance_m' | 'about'
+>;
+
+/**
  * Metros para a grade de 100 m, **sem nunca virar zero para quem esta longe**.
  *
  * `Math.round` levaria 40 m a 0, e "0 m" numa lista e "esta aqui dentro". O
@@ -284,5 +312,46 @@ export function projetarEntrada(
     distance_m: distanciaNaGrade(entrada.distanciaEmMetros),
     // A derivada, nunca o original. `urlDaDerivada` recusa pela FORMA da chave.
     logo_url: urlDaDerivada(entrada.logoPublicKey, urlDeMidia),
+  };
+}
+
+/**
+ * A projecao SEM CONTA, **derivada da de conta e nao paralela a ela**.
+ *
+ * Ela parte de `projetarEntrada` em vez de ler `entrada` de novo, e isso e
+ * deliberado: uma segunda leitura do agregado duplicaria as regras que aquela
+ * funcao aplica -- `atividadePrincipal`, `nivelDerivado`, `evidenciasAprovadas`
+ * e `urlDaDerivada` --, e o modo de falha dessa duplicacao e o pior possivel:
+ * as duas projecoes divergindo em silencio, com a publica ficando para tras e
+ * ninguem percebendo, porque nenhum teste compara as duas campo por campo.
+ *
+ * **A lista e explicita, e nao um `...resto` depois de tirar os quatro.** A
+ * desestruturacao com resto era a forma obvia e e a FRACA: com ela, um campo
+ * novo em `EntradaPublica` cai dentro de `resto` e **vaza para a resposta
+ * publica sozinho**, sem ninguem decidir nada. Nomear os dez campos inverte
+ * isso -- `EntradaPublicaSemConta` ganha o campo novo pelo `Omit`, este objeto
+ * literal fica incompleto e **nao compila**. O compilador passa a cobrar a
+ * decisao sobre o campo novo na hora em que ele nasce, que e quando ela custa
+ * menos.
+ *
+ * (A forma com `...resto` tambem reprovava no `eslint` deste repositorio:
+ * `no-unused-vars` nao aceita os quatro nomes descartados, nem com `_`.)
+ */
+export function projetarEntradaSemConta(
+  entrada: EntradaDoDiretorio,
+  urlDeMidia: (chave: string) => string,
+): EntradaPublicaSemConta {
+  const cheia = projetarEntrada(entrada, urlDeMidia);
+  return {
+    slug: cheia.slug,
+    kind: cheia.kind,
+    kinds: cheia.kinds,
+    entity_kind: cheia.entity_kind,
+    display_name: cheia.display_name,
+    city: cheia.city,
+    state: cheia.state,
+    neighborhood: cheia.neighborhood,
+    verification: cheia.verification,
+    logo_url: cheia.logo_url,
   };
 }

@@ -402,9 +402,12 @@ void main() {
       // evento, acima -- `findsNothing` num `ListView` nao serve.
       await sugerir.escolherNaLista(tester, 'Como entrar em contato', 'Telefone');
       await rolarAte(tester, sugerir.campoDoRotulo('Telefone'));
+      // DIGITOS e nao `+55...`: `MascaraDeTelefone` entrou neste campo em
+      // 26/10/2026 (BICHUS-308) e descarta o `+`. Este caso mede TECLADO,
+      // e o teclado nao mudou.
       await tester.enterText(
         sugerir.campoDoRotulo('Telefone'),
-        '+5521988887777',
+        '21988887777',
       );
       await tester.pumpAndSettle();
       await escolherEstadoNaLista(tester, 'RJ', scrollable: _listaDoPerto);
@@ -631,8 +634,8 @@ void main() {
         localizacao: _negaDestaVez(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);
@@ -691,8 +694,8 @@ void main() {
         localizacao: _negaDestaVez(),
       );
       await irPara(tester, Rotas.registrarAchado);
-      await rolarAte(tester, find.text('Cão'));
-      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Cachorro'));
+      await tocar(tester, find.text('Cachorro'));
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);

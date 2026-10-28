@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -723,6 +723,34 @@ verificar-tokens-gerados-autoteste: ## as iscas do portao dos tokens gerados rep
 
 verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.json (1,26 s)
 	node infra/verificacao/verificar-tokens-gerados.mjs
+
+# ---------------------------------------------------------------------------
+# OS DEZ ICONES DA BARRA (BICHUS-278, 23/10/2026)
+#
+# Gera `app/lib/theme/icones_da_barra.g.dart` a partir de
+# `design/icones-da-barra/*.svg`. Terceiro derivado desta casa, depois dos
+# tokens e da marca.
+#
+# POR QUE ELE NAO TEM UM `verificar-` IRMAO, e a assimetria e deliberada:
+# a pergunta "gerar de novo muda o arquivo?" ja e respondida DENTRO de
+# `flutter test`, por `app/test/telas/icones_da_barra_test.dart`, que le os dez
+# SVG e compara moldura, rotulo e CADA forma -- na ordem -- com o `.g.dart`.
+# Ele e o arranjo de `test/marca/vetor_da_marca_test.dart`, e nao o de
+# `verificar-tokens-gerados.mjs`, porque esta fonte nao tem segundo consumidor:
+# `design/tokens.json` alimenta Dart E CSS do site, e por isso o portao dele
+# mora fora da suite; estes dez alimentam so o app. Um `.mjs` aqui seria um
+# segundo lugar onde a mesma pergunta e feita, e os dois divergiriam.
+#
+# **Este alvo existe para ninguem escrever o `.g.dart` a mao.** O arquivo diz
+# NAO EDITE no cabecalho, e quem precisar mexer num icone mexe no SVG e roda
+# isto.
+# DESLIGADO EM 26/10/2026: o cliente reprovou o desenho ("tava muito feio o
+# icone do cachorro") e a barra voltou aos glifos do Material. Este alvo
+# continua funcionando e o gerado continua commitado e conferido pela suite --
+# o que mudou e `fonteAtivaDaBarra` em app/lib/telas/casca_com_abas.dart, que
+# nao pinta mais os SVG. Religar e trocar aquela chave E os cinco destinos.
+gerar-icones-da-barra: ## regera app/lib/theme/icones_da_barra.g.dart de design/icones-da-barra/*.svg (DESLIGADO na barra desde 26/10)
+	cd app && dart run tool/gen_icones_da_barra.dart
 
 # O SITE (web/, ADR-0028, item 8). Gemeo local do passo de tokens do job `web`:
 # a pergunta e "gerar de novo muda o arquivo?", e a isca (raspberry.700

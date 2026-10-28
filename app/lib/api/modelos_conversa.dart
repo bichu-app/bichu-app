@@ -342,6 +342,7 @@ class Conversa {
     required this.participants,
     required this.messages,
     required this.unread,
+    this.papelDoChamador = PapelNaConversa.tutor,
     this.fotoAlcancaOOutroLado = true,
     this.caseId,
     this.foundReportId,
@@ -469,12 +470,56 @@ class Conversa {
   /// daquele lado.
   final bool fotoAlcancaOOutroLado;
 
+  /// `viewer_role`: **QUAL DOS DOIS LADOS e quem esta usando o app.**
+  ///
+  /// ## O DEFEITO QUE ESTE CAMPO FECHA (medido em 26/10/2026)
+  ///
+  /// O app assumia `tutor` fixo em tres lugares -- o lado da bolha, o nome no
+  /// titulo e o outro lado da linha da lista. **O servidor atende o achador COM
+  /// conta desde sempre**: o recorte da leitura e `tutor_user_id = chamador OR
+  /// finder_user_id = chamador`, e a conversa aparece na lista dos dois lados.
+  /// Para esse achador o resultado era:
+  ///
+  ///   - a bolha do OUTRO lado ia para a DIREITA, que e o lado que a pessoa le
+  ///     como o dela, e a dela ficava a esquerda;
+  ///   - a linha da lista mostrava o PROPRIO nome, sem foto nenhuma -- porque o
+  ///     proprio lado recebe `handle` e `photoIconUrl` nulos **por decisao**
+  ///     (emenda 3 do ADR-0010), e a tela lia esse nulo como se fosse o nulo do
+  ///     outro lado.
+  ///
+  /// ## A DERIVACAO NAO DECIDE, e isso foi MEDIDO
+  ///
+  /// A unica pista que o corpo oferecia era *"o meu lado e o que vem com os
+  /// dois campos nulos"*. Medido em 27/10/2026 sobre `participantesVisiveis`:
+  /// **sem conexao aceita** -- que e o estado NORMAL de uma conversa de achado
+  /// com um estranho -- os DOIS participantes saem com os dois campos nulos, e
+  /// o corpo fica identico para o chamador tutor e para o chamador achador. Por
+  /// isso entrou campo no contrato, e nao heuristica aqui.
+  ///
+  /// ## O PADRAO E `tutor`, e ele e o comportamento de ANTES
+  ///
+  /// `viewer_role` e `required` no contrato, mas uma resposta de servidor
+  /// ANTIGO nao o traz -- o mesmo tratamento de [foundReportId]. Ausente, a
+  /// tela volta a se comportar como se comportava, e o defeito dura mais um
+  /// pouco contra aquele servidor; qualquer outro padrao inverteria a conversa
+  /// do tutor, que e a maioria, por causa de um campo que nao chegou.
+  ///
+  /// **`PapelNaConversa.sistema` nao e valor possivel**: quem chama a rota e
+  /// sempre uma das duas pessoas, e o contrato declara o enum com dois valores
+  /// por isso.
+  ///
+  /// (A prosa destas tres notas evita o nome da marca de proposito: o portao
+  /// `vocabulario_do_produto_test.dart` trava a CONTAGEM dela em `app/lib`, e
+  /// mencoes novas em comentario obrigariam a mexer num numero que toda sessao
+  /// deste repositorio tambem mexe -- colisao de mescla por prosa.)
+  final PapelNaConversa papelDoChamador;
+
   /// O outro lado, para o titulo da conversa e para a marca neutra.
   ///
-  /// Recebe o papel do proprio chamador, que a lista nao sabe: `participants`
-  /// vem sempre com os dois lados e o contrato **nao diz qual deles e o
-  /// chamador** -- nao ha campo para isso, e nao deve haver. Quem sabe e a
-  /// sessao, e e por isso que este metodo recebe o papel em vez de adivinhar.
+  /// Recebe o papel do proprio chamador em vez de adivinhar: `participants` vem
+  /// sempre com os dois lados e **nao marca qual deles e o chamador**. O papel
+  /// agora vem no proprio corpo ([papelDoChamador]) -- antes de 27/10/2026 as
+  /// tres chamadas passavam `PapelNaConversa.tutor` fixo, e era esse o defeito.
   ParticipanteDaConversa? outroLadoVistoPor(PapelNaConversa meuPapel) {
     for (final p in participants) {
       if (p.role != meuPapel && p.role != PapelNaConversa.sistema) return p;
@@ -518,6 +563,16 @@ class Conversa {
       // Ausente, nulo ou de tipo inesperado caem no padrao que nao afirma
       // nada. Ver [Conversa.fotoAlcancaOOutroLado].
       fotoAlcancaOOutroLado: bruto['photo_reaches_other_side'] != false,
+      // `viewer_role`, e **`sistema` nunca**: o contrato declara o enum com
+      // dois valores (`tutor`, `finder`) porque quem chama a rota e sempre uma
+      // das duas pessoas. Um `system` que chegasse cairia no padrao, e nao no
+      // `sistema` -- a tela nao tem lado para ele, e `outroLadoVistoPor`
+      // devolveria o tutor como se fosse o outro lado do sistema.
+      papelDoChamador: switch (PapelNaConversa.porCodigo(bruto['viewer_role'])) {
+        PapelNaConversa.tutor => PapelNaConversa.tutor,
+        PapelNaConversa.achador => PapelNaConversa.achador,
+        _ => PapelNaConversa.tutor,
+      },
       lastMessagePreview: previa is String ? previa : null,
       lastMessageAt: quando is String ? DateTime.tryParse(quando) : null,
       participants: participantes is! List

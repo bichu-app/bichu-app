@@ -259,13 +259,32 @@ dependencies:
   # declarar `qr` direto criaria a segunda fonte da versao do codificador.
   qr_flutter: ^4.1.0
 
+  # SHA-256. **Era `dev_dependencies` ate 27/10/2026**, com a razao escrita:
+  # "entra como dependencia de teste, e nao de producao, porque nada do app
+  # assina nada". Continua verdade que o app nao ASSINA nada -- ele passou a
+  # RESUMIR, que e outra coisa.
+  #
+  # O uso e um so: o nome dos arquivos do cache de imagem em disco (BICHUS-296),
+  # em `lib/api/cache_de_imagens.dart`. A chave de cache de uma foto de pessoa
+  # carrega o apelido dela, e o apelido **nao pode virar nome de pasta em
+  # claro**: a pasta de cache e legivel por quem tem o aparelho na mao, e uma
+  # lista de pastas com os apelidos seria a lista de com quem a pessoa tem
+  # conexao -- o que o ADR-0025 decisao 2 proibe o produto de ter em forma
+  # nenhuma.
+  #
+  # **A alternativa recusada foi escrever o resumo a mao.** Sem este pacote o
+  # caminho seria um hash proprio dentro de um arquivo de privacidade, ou uma
+  # codificacao REVERSIVEL (base64 do apelido), que devolveria o problema
+  # inteiro. Pacote do time do Dart, ja resolvido no `pubspec.lock` desde antes
+  # desta frente, e usado numa funcao de tres linhas.
+  #
+  # O portao do criterio 10 da BICHUS-161 continua usando o mesmo pacote, e
+  # subir de `dev` para producao nao o afeta.
+  crypto: ^3.0.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # So o portao do criterio 10 da BICHUS-161 usa: ele guarda o digest das telas
-  # do assistente de cadastro para reprovar quando alguma mudar. Entra como
-  # dependencia de teste, e nao de producao, porque nada do app assina nada.
-  crypto: ^3.0.6
 
   flutter_lints: ^6.0.0
 

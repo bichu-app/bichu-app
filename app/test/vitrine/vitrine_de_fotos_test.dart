@@ -407,6 +407,108 @@ void main() {
       );
     });
 
+    // O ARRASTO DA FOTO AMPLIADA E LIMITADO AS BORDAS (26/10/2026).
+    //
+    // Duas falas do cliente, e a segunda corrige a leitura da primeira:
+    // *"o usuario consegue arrastar a imagem para varias posicoes, a imagem
+    // deve ficar fixa"* e, depois, *"o arraste limitada as bordas"*. A
+    // primeira entrega desligou o arrasto (`panEnabled: false`) e foi longe
+    // demais -- tirava tambem o passeio DENTRO da foto ampliada. O conserto e
+    // `boundaryMargin: EdgeInsets.zero`, que entrega as duas metades.
+    //
+    // **O CASO VIVE AQUI, E NAO SO NO VISUALIZADOR**, porque o cliente nomeou
+    // ESTA tela. O mecanismo e compartilhado; a conta e desta superficie.
+    //
+    // DESLIGAR PARA VER REPROVAR, em `_ImagemAmpliavelState.build` de
+    // `lib/widgets/visualizador_de_imagem.dart`, e cada um derruba uma metade:
+    //   * `boundaryMargin` de volta para `const EdgeInsets.all(double.infinity)`
+    //     -> reprova a metade 1 (sem ampliar a foto passa a andar);
+    //   * `panEnabled: false` -> reprova a metade 2 (ampliada ela para de
+    //     passear).
+    testWidgets('a foto ampliada da vitrine arrasta DENTRO das bordas, e nao sai delas', (
+      tester,
+    ) async {
+      // A VITRINE NAO FOI RECLAMADA, e entra porque e o MESMO componente.
+      // O cliente nomeou evento e estabelecimento; esta e a terceira
+      // superficie que abre `widgets/visualizador_de_imagem.dart`, e a
+      // propriedade e a mesma. Se um dia ela quiser arraste livre, o conserto
+      // vira parametro -- hoje nao ha razao medida para isso.
+      await montar(tester, vitrineCom(1));
+      await tester.tap(find.byType(InkWell).first);
+      await tester.pumpAndSettle();
+
+      // ANCORA DUPLA: o visualizador abriu, e a foto DELE esta na arvore. O
+      // `Finder` e escopado porque a rota de baixo continua montada, e a
+      // imagem da pagina nao se move -- ela aprovaria o caso no lugar errado.
+      expect(find.byType(VisualizadorDeImagem), findsOneWidget);
+      final foto = find
+          .descendant(
+            of: find.byType(VisualizadorDeImagem),
+            matching: find.byType(Image),
+          )
+          .first;
+      expect(foto, findsOneWidget);
+      Rect pintada() =>
+          Rect.fromPoints(tester.getTopLeft(foto), tester.getBottomRight(foto));
+
+      // --- METADE 1: SEM AMPLIAR a foto nao sai do lugar.
+      final parada = pintada();
+      await tester.drag(find.byType(InteractiveViewer), const Offset(-137, -151));
+      await tester.pumpAndSettle();
+      expect(
+        pintada().left,
+        closeTo(parada.left, 0.5),
+        reason: 'REPROVA: sem ampliacao a foto andou com o arrasto -- saiu de '
+            '$parada e parou em ${pintada()}. E a queixa literal do cliente '
+            'em 26/10/2026. Meio pixel de tolerancia porque o `clamp` do '
+            '`InteractiveViewer` deixa residuo de 2,4e-10 px; o defeito '
+            'deslocava 118,9 px.',
+      );
+
+      // --- METADE 2: AMPLIADA o dedo passeia, e para na borda.
+      await tester.tap(find.byType(InteractiveViewer));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byType(InteractiveViewer));
+      await tester.pumpAndSettle();
+      final ampliada = pintada();
+      expect(
+        ampliada.width,
+        greaterThan(parada.width),
+        reason: 'REPROVA: o toque duplo nao ampliou, e sem ampliacao o resto '
+            'deste caso nao mede o que diz medir.',
+      );
+
+      await tester.drag(find.byType(InteractiveViewer), const Offset(-5000, -5000));
+      await tester.pumpAndSettle();
+      final noLimite = pintada();
+      expect(
+        noLimite.left,
+        lessThan(ampliada.left),
+        reason: 'REPROVA: ampliada, a foto NAO passeia com o dedo. O cliente '
+            'pediu *"o arraste limitada as bordas"*: limitado, e nao '
+            'desligado -- passear dentro da foto e para que serve ampliar.',
+      );
+
+      await tester.drag(find.byType(InteractiveViewer), const Offset(-5000, -5000));
+      await tester.pumpAndSettle();
+      expect(
+        pintada().left,
+        closeTo(noLimite.left, 0.5),
+        reason: 'REPROVA: a foto CONTINUOU andando depois de encostar na '
+            'borda -- estava em $noLimite e foi para ${pintada()}. Com '
+            '`boundaryMargin` infinito nao existe limite e cada arrasto soma.',
+      );
+      // E no limite ela ainda COBRE a janela: borda certa, e nao vazio na tela.
+      expect(
+        noLimite.right >= parada.right - 0.5 &&
+            noLimite.bottom >= parada.bottom - 0.5,
+        isTrue,
+        reason: 'REPROVA: no limite a foto deixou vazio na tela -- $noLimite '
+            'nao cobre $parada. A borda tem dois lados: a imagem nao sai para '
+            'fora E nao deixa buraco.',
+      );
+    });
+
     testWidgets('célula sem foto não oferece toque', (tester) async {
       // `processing` nao tem `open_url`, e a celula desenha o estado em texto.
       await montar(tester, {

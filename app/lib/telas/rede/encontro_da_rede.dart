@@ -59,7 +59,7 @@ import 'pecas_da_rede.dart';
 /// Capa 16:9 com `Voltar` flutuante; cabecalho (titulo, a linha de origem --
 /// `Cadastrado pela equipe do Bichu` ou `Cadastrado pela comunidade`, e
 /// NENHUMA quando o servidor nao disse --, selo de valor); aviso de cancelado; `Quando`; `Local`
-/// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cães`; `O que
+/// (com o mapa); `Sobre o evento`; `Links`; `Fotos`; `Para quais cachorros`; `O que
 /// levar`; `Cuidados no evento`; `Acessibilidade e estrutura`;
 /// `Observações`. **Sem `Quem organiza` e sem `Compartilhar`** (24.17.1 e
 /// 24.15 item 4). Sem check-in, sem galeria da comunidade e sem lista de
@@ -135,6 +135,19 @@ class TelaDoEncontro extends StatefulWidget {
 
   /// O que o toque na capa faz. Vai em `hint`, e nao no nome.
   static const String dicaDeAmpliarACapa = 'Ampliar';
+
+  /// O nome acessivel de UMA miniatura da faixa `Fotos`.
+  ///
+  /// **Diz a POSICAO, e nao so "foto"**: a faixa rola na horizontal e as oito
+  /// miniaturas seriam oito nos com o mesmo nome para quem navega por
+  /// varredura. O `alt_text` do organizador vem antes quando ha um -- ele
+  /// descreve a foto melhor do que um numero --, e o numero entra de reserva.
+  static String nomeDaFoto({required int posicao, required int total}) =>
+      'Foto $posicao de $total';
+
+  /// O que o toque na miniatura faz. **A mesma palavra da capa**, de propósito:
+  /// o gesto e o mesmo e abre a mesma tela.
+  static const String dicaDeAmpliarAFoto = dicaDeAmpliarACapa;
   static const String avisoDeCancelado =
       'A equipe do Bichu cancelou este evento. Ele não vai acontecer.';
   static const String rotuloDoCalendario = 'Adicionar ao calendário';
@@ -638,6 +651,13 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     final textoAlternativoDaCapa =
         conteudo?.urlDaCapa == null ? null : conteudo?.textoAlternativoDaCapa;
 
+    // AS URLS DO VISUALIZADOR, lidas UMA vez e usadas em DOIS lugares: a capa
+    // e a faixa `Fotos`. Duas expressoes separadas divergiriam no dia em que
+    // alguem mexesse numa delas, e a divergencia apareceria como indice errado
+    // -- tocar na terceira miniatura e abrir a segunda foto.
+    final urlsParaAmpliar =
+        conteudo?.urlsParaAmpliar ?? const <String>[];
+
     final capa = Stack(
       children: <Widget>[
         // **A FOTO PRINCIPAL AMPLIA AO TOQUE** (pedido do cliente de
@@ -672,9 +692,26 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
             hint: TelaDoEncontro.dicaDeAmpliarACapa,
             excludeSemantics: true,
             child: InkWell(
-              onTap: () => VisualizadorDeImagem.abrir(
+              // **`abrirVarias` COM A GALERIA INTEIRA, e nao `abrir` com a
+              // capa** (cliente, 26/10/2026: *"as fotos dos eventos, quando
+              // tem mais do que uma nao esta trocando, nao tem a seta que eu
+              // pedi para avancar e retroceder"*).
+              //
+              // **A reclamacao era de ABERTURA, e nao de carrossel.** As setas
+              // e o contador existem no visualizador desde 22/10 e funcionam;
+              // ele os esconde quando recebe UMA imagem, e era UMA que esta
+              // linha entregava -- `abrir` monta `<String>[url]`. Entao um
+              // encontro com oito fotos abria sem seta nenhuma, e o defeito
+              // ficava com cara de carrossel quebrado.
+              //
+              // **`urlsParaAmpliar` e a fonte unica**, a mesma que a faixa
+              // `Fotos` usa: a capa e a posicao 0 dela, e por isso `inicial`
+              // fica no padrao. Lista vazia nao empilha rota (guarda de
+              // `abrirVarias`), e e o que chega de um encontro sem foto -- que
+              // este ramo nem alcanca, porque o `if` acima ja o desviou.
+              onTap: () => VisualizadorDeImagem.abrirVarias(
                 context,
-                url: urlDaCapa,
+                urls: urlsParaAmpliar,
                 textoAlternativo: textoAlternativoDaCapa,
               ),
               child: ImagemDoEncontroOuBanner(
@@ -861,7 +898,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         secao(
           Icons.photo_library_outlined,
           'Fotos',
-          _Fotos(imagens: conteudo.imagens),
+          _Fotos(imagens: conteudo.imagens, urlsParaAmpliar: urlsParaAmpliar),
         );
       }
       if (vivo) {
@@ -1063,10 +1100,39 @@ class _CaixaQuando extends StatelessWidget {
   }
 }
 
+/// A FAIXA `Fotos` DO DETALHE, e **cada miniatura abre o visualizador**.
+///
+/// ## O que mudou em 27/10/2026, e por que e aqui
+///
+/// A faixa existia e desenhava as oito fotos; **nenhuma delas tinha alvo de
+/// toque**. Era `Image.network` solta, sem `InkWell` e sem `Semantics`: tocar
+/// numa foto do evento nao fazia nada. Junto com a capa, que abria o
+/// visualizador com UMA imagem, isso e a reclamacao do cliente de 26/10 por
+/// inteiro -- *"quando tem mais do que uma nao esta trocando, nao tem a seta
+/// que eu pedi para avancar e retroceder"*. **A seta existia; o que nao havia
+/// era como chegar a ela.**
+///
+/// ## O INDICE E O ACORDO, e ele e de uma fonte so
+///
+/// [urlsParaAmpliar] tem **um elemento por item de [imagens], na mesma ordem**
+/// (ver `ConteudoDoEncontro.urlsParaAmpliar`). E o que faz `inicial: i` abrir a
+/// foto que a pessoa tocou, e nao a vizinha. As duas listas chegam da mesma
+/// chamada em `_pagina`, e nao de duas expressoes.
+///
+/// ## Nao e carrossel NESTA faixa, e a diferenca e de produto
+///
+/// A `Loja` desenha um `PageView` com contador na propria pagina
+/// (`produto_da_loja.dart`), porque la a foto E o produto. Aqui a foto e apoio:
+/// a primeira dobra e a capa, a data e o lugar. Um `PageView` no meio da ficha
+/// roubaria o arrasto vertical da pagina numa secao que tem seis vizinhas, e o
+/// cliente pediu as setas **no ampliado** -- que e onde elas estao.
 class _Fotos extends StatelessWidget {
-  const _Fotos({required this.imagens});
+  const _Fotos({required this.imagens, required this.urlsParaAmpliar});
 
   final List<ImagemDoEncontro> imagens;
+
+  /// As derivadas GRANDES, na ordem de [imagens]. Ver a prosa desta classe.
+  final List<String> urlsParaAmpliar;
 
   /// A miniatura: 144 dp de largura (pedido P-M6), 4:3.
   static const double _largura = 144;
@@ -1080,21 +1146,86 @@ class _Fotos extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         itemCount: imagens.length,
         separatorBuilder: (_, _) => const SizedBox(width: BichuEspaco.e3),
-        itemBuilder: (context, i) => ClipRRect(
-          borderRadius: BorderRadius.circular(BichuRaio.md),
-          child: SizedBox(
-            width: _largura,
-            child: Image.network(
-              // A MINIATURA, e nao a capa de 1024 px. Esta galeria desenha
-              // 144 dp em 4:3 (432 px a 3x) e baixava 1024 px -- cinco vezes o
-              // dado que ela pinta, oito vezes numa galeria cheia.
-              imagens[i].urlParaGaleria,
-              fit: BoxFit.cover,
-              semanticLabel: imagens[i].textoAlternativo,
-              errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),
-            ),
-          ),
+        itemBuilder: (context, i) => _Miniatura(
+          imagem: imagens[i],
+          posicao: i + 1,
+          total: imagens.length,
+          largura: _largura,
+          cores: cores,
+          // **A GUARDA MORA AQUI, e nao dentro do `onTap`.** Miniatura sem
+          // lugar no ampliado nao nasce botao: um `InkWell` que nao faz nada
+          // ainda pinta respingo e ainda se anuncia como botao ao leitor de
+          // tela. Mesma forma da capa, que tem o `if (urlDaCapa == null)`.
+          aoTocar: i >= urlsParaAmpliar.length
+              ? null
+              : () => VisualizadorDeImagem.abrirVarias(
+                    context,
+                    urls: urlsParaAmpliar,
+                    inicial: i,
+                    textoAlternativo: imagens[i].textoAlternativo,
+                  ),
         ),
+      ),
+    );
+  }
+}
+
+/// UMA miniatura da faixa `Fotos`.
+///
+/// **UM no semantico, e nao dois.** `Image.network` ja publica
+/// `semanticLabel`; um `Semantics` em volta dela sem `excludeSemantics` faria o
+/// leitor de tela anunciar o nome da foto e depois o botao, como se fossem duas
+/// coisas. A mesma forma da capa e da foto do local em `pagina_do_local.dart`:
+/// o nome e o da foto, a funcao e `button`, e o que o toque FAZ vai em `hint`.
+class _Miniatura extends StatelessWidget {
+  const _Miniatura({
+    required this.imagem,
+    required this.posicao,
+    required this.total,
+    required this.largura,
+    required this.cores,
+    required this.aoTocar,
+  });
+
+  final ImagemDoEncontro imagem;
+  final int posicao;
+  final int total;
+  final double largura;
+  final BichuCores cores;
+
+  /// **Nulo nao e botao.** Ver a guarda em `_Fotos`.
+  final VoidCallback? aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final foto = ClipRRect(
+      borderRadius: BorderRadius.circular(BichuRaio.md),
+      child: SizedBox(
+        width: largura,
+        child: Image.network(
+          // A MINIATURA, e nao a capa de 1024 px. Esta galeria desenha
+          // 144 dp em 4:3 (432 px a 3x) e baixava 1024 px -- cinco vezes o
+          // dado que ela pinta, oito vezes numa galeria cheia. **O ampliado
+          // pede a grande**, e e por isso que ele recebe lista propria.
+          imagem.urlParaGaleria,
+          fit: BoxFit.cover,
+          semanticLabel: imagem.textoAlternativo,
+          errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),
+        ),
+      ),
+    );
+    if (aoTocar == null) return foto;
+    return Semantics(
+      button: true,
+      label: imagem.textoAlternativo.isEmpty
+          ? TelaDoEncontro.nomeDaFoto(posicao: posicao, total: total)
+          : imagem.textoAlternativo,
+      hint: TelaDoEncontro.dicaDeAmpliarAFoto,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: aoTocar,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        child: foto,
       ),
     );
   }
@@ -1141,7 +1272,7 @@ class _Pilula extends StatelessWidget {
   }
 }
 
-/// `Para quais cães`: portes, idade e `Vacinação em dia` (so quando exigida).
+/// `Para quais cachorros`: portes, idade e `Vacinação em dia` (so quando exigida).
 /// **Sem pilula de guia** (UX 28.7.2): a frase inteira esta em `Cuidados`.
 class _ParaQuaisCaes extends StatelessWidget {
   const _ParaQuaisCaes({required this.c});

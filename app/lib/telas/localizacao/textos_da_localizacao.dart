@@ -36,6 +36,29 @@ abstract final class TextosDaLocalizacao {
 
   static const String preferoDigitarOBairro = 'Prefiro digitar o bairro';
 
+  // -- O QUE CADA CAMINHO PREENCHE, dito ANTES do toque --------------------
+  //
+  // **Esta frase nasceu de um relato que NAO era defeito.** O cliente, em
+  // 26/10/2026: *"na pagina achei esse pet, quando eu seleciono a localizacao,
+  // ele ta trazendo apenas a cidade, mas nao o cep, bairro e estado
+  // preenchidos"*. O comportamento esta certo e e o unico que o ADR-0006
+  // autoriza -- a emenda 1 abre **coordenada -> nome de cidade**, e a tabela
+  // dela recusa `coordenada -> bairro` em uma frase (*"bairro e mais fino que o
+  // que a pessoa escolheu entregar"*) e nao fala de UF nenhuma.
+  //
+  // O que faltava era a tela DIZER isso, e no unico instante em que dizer
+  // ajuda: **antes do toque**, quando a pessoa ainda esta formando a
+  // expectativa. Depois do toque ela ja comparou o que esperava com o que veio
+  // e concluiu que faltou algo -- foi o que aconteceu.
+  //
+  // Ela nomeia o CEP porque o CEP esta na tela, logo abaixo, preenchendo
+  // exactamente os dois campos que o ponto nao preenche. Sem essa ponte a
+  // pessoa procura o botao que nao existe em vez do campo que existe.
+
+  static const String oQueCadaCaminhoPreenche =
+      'O botão marca o ponto aproximado e preenche a cidade. Bairro e estado '
+      'vêm do CEP, logo abaixo, ou você escreve.';
+
   // -- DO CRITERIO 4 (F3.5, registrar achado avulso) ------------------------
   //
   // "entao ela diz `Onde voce achou esse pet?` com `Serve para a gente cruzar
@@ -130,7 +153,10 @@ abstract final class TextosDaLocalizacao {
 
   static const String escolherOEstado = 'Escolher na lista';
 
-  static const String estadoEmBrancoFunciona = 'Em branco funciona.';
+  // `estadoEmBrancoFunciona` SAIU EM 26/10/2026, com a ajuda do campo
+  // `Estado` de `captura_de_localizacao.dart` -- cliente, 22/10/2026:
+  // *"Retire o texto so se voce souber, em branco funciona"*. A constante sai
+  // junto com o uso de proposito: constante orfa volta a ser usada.
 
   /// A cidade e o unico campo exigido, e o contrato concorda
   /// (`Area.required: [city]`).

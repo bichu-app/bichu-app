@@ -45,7 +45,9 @@
 // reprova no minuto em que a entrada some.
 
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:bichu/api/cache_de_imagens.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
@@ -67,6 +69,14 @@ import '../telas/ajuda_de_tela.dart';
 /// Ele e citado pelo registro logo abaixo, e um registro que aponte para um
 /// grupo que nao existe reprova. Constante, e nao literal repetido, para que
 /// renomear o grupo nao deixe o registro apontando para o nada.
+/// O grupo da isca do CACHE DE IMAGEM EM DISCO (BICHUS-296).
+///
+/// Mora neste arquivo e nao no da frente porque o que ele mede e o LOGOUT, e e
+/// aqui que existe um app montado com `sair()` alcancavel pelo controlador --
+/// que e o unico caminho que cobre os quatro desfechos.
+const String grupoDaIscaDoCacheDeImagens =
+    'a foto de PESSOA em disco morre no logout';
+
 const String grupoDaIscaDoCache =
     'ISCA — o cache de `Meus pets` nao sobrevive ao logout';
 
@@ -173,6 +183,31 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
   '_contadorDeAvisos': (
     arquivo: 'test/notificacoes/contador_de_avisos_test.dart',
     grupo: grupoDaIscaDoLogout,
+  ),
+  // ACRESCENTADA PELO CACHE DE IMAGEM NO APARELHO (BICHUS-296, cliente
+  // 26/10/2026: *"um cache local no device do usuario para as imagens"*).
+  //
+  // A setima entrada, e a TERCEIRA em disco -- junto com a fila offline e o
+  // registro de fotos pendentes. O que ela apaga e a **foto de perfil das
+  // conexoes** de quem acabou de sair.
+  //
+  // **E a unica entrada desta lista cujo motivo e uma decisao de privacidade
+  // do cliente, e nao so herancas entre contas.** A Emenda 3 do ADR-0010
+  // (19/10/2026) diz que a foto de uma pessoa aparece para outra *"apenas
+  // quando as duas ja aceitaram conexao"*. No servidor isso e uma clausula
+  // `WHERE`; no aparelho, um arquivo gravado continua gravado. Sem esta linha,
+  // a proxima pessoa a entrar neste telefone -- o da recepcao do pet shop, o
+  // do casal, o usado que acabou de ser vendido -- teria no disco o rosto das
+  // conexoes da anterior, e a decisao dele estaria valendo so na tela.
+  //
+  // **A limpeza e `esquecerTodasAsPessoas()` e nao um `limpar()` geral**, e a
+  // assimetria e deliberada: foto de pet perdido e capa de encontro ficam. Elas
+  // nao sao de ninguem, nao vazam de uma conta para a seguinte, e apaga-las
+  // jogaria fora exatamente o que o cliente pediu -- abertura rapida -- sem
+  // fechar risco nenhum. Ha caso medindo as duas direcoes.
+  '_cacheDeImagens': (
+    arquivo: 'test/sessao/limpezas_ao_sair_test.dart',
+    grupo: grupoDaIscaDoCacheDeImagens,
   ),
 };
 
@@ -396,6 +431,127 @@ void main() {
               'recem-criado.',
         );
       }
+    });
+  });
+
+  // ------------------------------------------------------------------------
+  // A ISCA DO CACHE DE IMAGEM EM DISCO (BICHUS-296).
+  //
+  // Medido pelo EFEITO e nao pela presenca da linha: depois de `sair()`, os
+  // bytes da foto de uma conexao nao estao em lugar nenhum do disco.
+  //
+  // DESLIGAR PARA VER REPROVAR: em `lib/app.dart`, tire
+  // `() async => _cacheDeImagens?.esquecerTodasAsPessoas()` da lista
+  // `limpezasAoSair`. Reprova
+  // `depois de `sair()`, a foto da conexao anterior nao esta no disco`.
+  //
+  // **`runAsync` nos trechos que tocam arquivo**: dentro de `testWidgets` o
+  // relogio e falso e `pumpAndSettle` adianta TIMERS, nao I/O de disco. Sem
+  // isso o caso penduraria com `pumpAndSettle timed out`, que nao aponta para
+  // a causa.
+  // ------------------------------------------------------------------------
+  group(grupoDaIscaDoCacheDeImagens, () {
+    /// Uma pasta por caso, apagada no fim. Duas execucoes dividindo diretorio
+    /// de cache se destroem, e uma delas sai verde com o furo aberto.
+    CacheDeImagensNoAparelho cacheEmPastaNova() {
+      final pasta = Directory.systemTemp.createTempSync('bichu-logout-imagens');
+      addTearDown(() {
+        if (pasta.existsSync()) pasta.deleteSync(recursive: true);
+      });
+      return CacheDeImagensNoAparelho(pasta: () async => pasta);
+    }
+
+    final Uint8List bytesDaFoto = Uint8List.fromList(List<int>.filled(64, 9));
+
+    testWidgets(
+        'depois de `sair()`, a foto da conexao anterior nao esta no disco',
+        (tester) async {
+      final cache = cacheEmPastaNova();
+      final daConexao = ChaveDeImagem.dePessoa(
+        'https://m.bichu.app/u/4b2e/thumb.webp',
+        apelido: 'marina',
+      )!;
+
+      await abrirOApp(
+        tester,
+        rede: redeComPetsEComLogout(<Map<String, dynamic>>[petDoContrato()]),
+        deposito: depositoLogado(),
+        cacheDeImagens: cache,
+      );
+
+      await tester.runAsync(() => cache.gravar(daConexao, bytesDaFoto));
+      final antes = await tester.runAsync(() => cache.ler(daConexao));
+      expect(
+        antes,
+        isNotNull,
+        reason: 'A MEDICAO QUE SUSTENTA O RESTO: sem o arquivo em disco agora, '
+            'o `isNull` abaixo mediria a limpeza de um cache que ja estava '
+            'vazio -- passaria sempre, inclusive com o furo aberto.',
+      );
+
+      // Pelo controlador, e nao por um botao: os QUATRO desfechos de `sair()`
+      // passam por aqui, inclusive o que nao tem botao nenhum -- a sessao
+      // derrubada por refresh recusado.
+      final escopo = Escopo.of(tester.element(find.byType(Scaffold).first));
+      await tester.runAsync(() async {
+        await escopo.sessao.sair();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+
+      final depois = await tester.runAsync(() => cache.ler(daConexao));
+      expect(
+        depois,
+        isNull,
+        reason: 'REPROVA: a foto de perfil de uma CONEXAO da pessoa que acabou '
+            'de sair continua gravada no disco deste aparelho. A Emenda 3 do '
+            'ADR-0010 (cliente, 19/10/2026) diz que a foto de uma pessoa '
+            'aparece para outra "SO quando as duas pessoas ja aceitaram '
+            'conexao" -- e quem entrar nesta conta depois nao e conexao de '
+            'ninguem. Diferente das outras entradas desta lista, aqui o dado '
+            'nao morre com o processo: ele sobrevive ao logout, ao app ser '
+            'encerrado pelo sistema e ao aparelho ser desligado.',
+      );
+    });
+
+    testWidgets('o logout NAO apaga a imagem publica, e isso e deliberado',
+        (tester) async {
+      // O CONTRAPESO. Sem este caso, "limpar tudo no logout" passaria no caso
+      // acima e jogaria fora exatamente o que o cliente pediu em 26/10/2026 --
+      // menos trafego e abertura mais rapida --, sem fechar risco nenhum: foto
+      // de pet perdido e capa de encontro sao superficie publica e nao sao de
+      // ninguem.
+      final cache = cacheEmPastaNova();
+      final publica = ChaveDeImagem.publica(
+        'https://m.bichu.app/p/9f3a/card.webp',
+      )!;
+
+      await abrirOApp(
+        tester,
+        rede: redeComPetsEComLogout(<Map<String, dynamic>>[petDoContrato()]),
+        deposito: depositoLogado(),
+        cacheDeImagens: cache,
+      );
+
+      await tester.runAsync(() => cache.gravar(publica, bytesDaFoto));
+      expect(await tester.runAsync(() => cache.ler(publica)), isNotNull);
+
+      final escopo = Escopo.of(tester.element(find.byType(Scaffold).first));
+      await tester.runAsync(() async {
+        await escopo.sessao.sair();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump();
+
+      expect(
+        await tester.runAsync(() => cache.ler(publica)),
+        isNotNull,
+        reason: 'REPROVA: o logout apagou imagem PUBLICA. O cartaz de pet '
+            'perdido existe para ser compartilhado -- a derivada mora em balde '
+            'publico, sem assinatura e com cache de um ano --, nao pertence a '
+            'conta que saiu e nao vaza nada para a proxima. Apaga-la troca o '
+            'ganho que o cliente pediu por nenhuma protecao.',
+      );
     });
   });
 

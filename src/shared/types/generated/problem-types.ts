@@ -9,6 +9,7 @@
 
 export const STATUS_DO_PROBLEMA = {
   'validation-failed':               400,
+  'passkey-attestation-invalid':     400, // a atestacao devolvida pelo aparelho nao foi verificada: assinatura, `clientDataJSON`, origem, `rpIdHash` ou `challenge` nao conferem. Separado de `validation-failed`: ali o corpo esta malformado e a saida e corrigir o formulario; aqui o corpo esta bem formado e a saida e tentar de novo ou seguir sem passkey -- e o passo e DISPENSAVEL, entao a tela nao pode tratar isso como erro de cadastro
   'unauthenticated':                 401, // sem token, token ausente ou assinatura invalida
   'invalid-credentials':             401, // e-mail ou senha nao conferem. Corpo IDENTICO para conta inexistente e senha errada
   'token-expired':                   401, // token de acesso, de renovacao ou de uso unico expirado, ja usado ou revogado
@@ -25,6 +26,8 @@ export const STATUS_DO_PROBLEMA = {
   'broadcast-daily-cap-reached':     409, // teto de 3 comunicados por dia, contado da meia-noite UTC e aplicado no banco na mesma transacao da gravacao. 409 e nao 429: 429 e teto de CHAMADA, aplicado pela borda e que passa em um minuto; este e teto de PRODUTO, e a saida da pessoa e esperar amanha ou nao mandar -- tratar os dois com o mesmo tipo faria o painel oferecer 'tentar de novo' para o unico caso em que tentar de novo nao resolve
   'tag-limit-reached':               409, // teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada
   'contact-channel-unverified':      409,
+  'passkey-already-registered':      409, // este aparelho ja tem credencial nesta conta: o `credential_id` devolvido pela atestacao ja existe. 409 e nao 400 porque nada esta errado no pedido -- a pessoa apertou duas vezes, ou o aparelho ja havia cadastrado -- e a tela diz 'este aparelho ja esta cadastrado' em vez de 'erro'. O banco impoe pelo indice unico de `credential_id`
+  'passkey-limit-reached':           409, // teto de credenciais ATIVAS por conta. Separado de `passkey-already-registered`: um diz 'este aparelho ja esta aqui' e o outro 'esta conta ja tem credenciais demais', e a saida e diferente -- no primeiro nao ha nada a fazer, no segundo e preciso revogar uma. Revogar MARCA revogada e nao apaga (decisao do cliente de 26/10), entao o teto conta `revoked_at IS NULL`
   'pet-photo-missing':               409,
   'transfer-not-for-this-account':   409,
   'transfer-already-in-progress':    409, // BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite
@@ -51,7 +54,7 @@ export const STATUS_DO_PROBLEMA = {
   'postal-code-lookup-unavailable':  503, // BICHUS-9.2: os dois servicos publicos de CEP (ViaCEP e a reserva BrasilAPI) falharam ou nao responderam no prazo. Separado de `not-found`, que e 404, porque a saida da tela e a MESMA -- digitar o endereco a mao -- e a FRASE nao e: `not-found` diz 'este CEP nao existe' e este diz 'nao conseguimos consultar agora, tente de novo'. Nenhum dos dois impede salvar o cadastro
 } as const;
 
-/** União fechada dos 41 tipos declarados no contrato. */
+/** União fechada dos 44 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

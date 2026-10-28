@@ -24,6 +24,7 @@ class AppConfig {
     required this.urlDosTermos,
     required this.urlDaPrivacidade,
     required this.versaoDoApp,
+    required this.commitDoBuild,
   });
 
   /// Raiz da API, **sem** a barra final e **sem** o `/v1`, que a camada de
@@ -88,12 +89,51 @@ class AppConfig {
   /// tocar em mais nada, porque quem le isto e so o portao de versao.
   final String? versaoDoApp;
 
+  /// O COMMIT QUE GEROU ESTE BINARIO, para o app poder DIZER qual build e.
+  ///
+  /// Entra por `--dart-define=BUILD_COMMIT=<sha>`, e a chave e a MESMA que o
+  /// `Dockerfile` e o `Makefile` ja exigem desde a BICHUS-210 para estampar o
+  /// commit nos containers (`/etc/bichu/commit`, lido por `GET /health`).
+  /// **Reusar o nome e deliberado, e nao economia de teclado**: um segundo
+  /// nome para o mesmo fato (`GIT_SHA`, `BUILD_SHA`, `COMMIT_SHA` -- medidos
+  /// em 26/10/2026 como ZERO ocorrencias em `app/lib`) daria dois conceitos de
+  /// "qual build e este" dentro do mesmo produto, e quem estampa o servidor
+  /// com um e o aplicativo com outro nao consegue comparar os dois.
+  ///
+  /// **POR QUE ISTO EXISTE.** Ate 26/10/2026 nada no app dizia qual build
+  /// estava instalado: `APP_VERSION` era `1.0.0` em TODO build, entao dois
+  /// APKs de dias diferentes se apresentavam com o mesmo nome. A consequencia
+  /// nao foi tecnica, foi de conversa: o cliente relatou duas vezes que uma
+  /// coisa pronta "nao chegou" no aparelho dele, e nao havia como saber se o
+  /// APK que ele tinha continha aquele trabalho ou nao. O carimbo nao conserta
+  /// nenhum defeito do produto; ele torna a pergunta respondivel.
+  ///
+  /// **Nulo quando o build nao declarou**, pela mesma razao de [versaoDoApp]:
+  /// nao saber o proprio commit nao e motivo para o app nao subir. O que o
+  /// carimbo faz nesse caso **nao e desaparecer** -- ele diz, na tela, que o
+  /// build nao declarou. Rodape vazio e indistinguivel de rodape que sumiu, e
+  /// foi exatamente essa indistinguibilidade que criou o problema acima.
+  final String? commitDoBuild;
+
+  /// O commit CURTO: o que a tela mostra e o que da para ler em voz alta.
+  ///
+  /// Dez digitos. O `git log --oneline` deste repositorio imprime oito, e dez
+  /// da folga para nao colidir. Valor mais curto que isso volta INTEIRO em vez
+  /// de ser cortado -- cortar um valor de oito para dez nao e possivel, e
+  /// `substring` cego estouraria em vez de mostrar o que tem.
+  String? get commitCurtoDoBuild {
+    final valor = commitDoBuild;
+    if (valor == null) return null;
+    return valor.length <= 10 ? valor : valor.substring(0, 10);
+  }
+
   static const String _chaveApi = 'API_BASE_URL';
   static const String _chaveAmbiente = 'ENVIRONMENT';
   static const String _chaveVersaoDosTermos = 'TERMS_VERSION';
   static const String _chaveUrlDosTermos = 'TERMS_URL';
   static const String _chaveUrlDaPrivacidade = 'PRIVACY_URL';
   static const String _chaveVersaoDoApp = 'APP_VERSION';
+  static const String _chaveCommitDoBuild = 'BUILD_COMMIT';
 
   static const String _apiBaseUrlBruta =
       String.fromEnvironment(_chaveApi, defaultValue: '');
@@ -107,6 +147,8 @@ class AppConfig {
       String.fromEnvironment(_chaveUrlDaPrivacidade, defaultValue: '');
   static const String _versaoDoAppBruta =
       String.fromEnvironment(_chaveVersaoDoApp, defaultValue: '');
+  static const String _commitDoBuildBruto =
+      String.fromEnvironment(_chaveCommitDoBuild, defaultValue: '');
 
   static AppConfig? _instancia;
 
@@ -137,6 +179,7 @@ class AppConfig {
     String? urlDosTermosDeTeste,
     String? urlDaPrivacidadeDeTeste,
     String? versaoDoAppDeTeste,
+    String? commitDoBuildDeTeste,
   }) {
     final bruta = apiBaseUrlDeTeste ?? _apiBaseUrlBruta;
 
@@ -187,6 +230,12 @@ class AppConfig {
       // uma validacao local que recusasse poderia virar tela de erro por um
       // valor que o servidor aceitaria.
       versaoDoApp: _ouNulo(versaoDoAppDeTeste ?? _versaoDoAppBruta),
+      // **Nao e validado aqui**, pela mesma razao de `versaoDoApp` acima: o
+      // formato de commit e cobrado no comando de build (o `Makefile` tem
+      // `FORMA_DE_COMMIT` desde a BICHUS-210) e no portao do APK, que mede o
+      // VALOR dentro do binario. Uma segunda definicao do formato neste
+      // arquivo seria a divergencia que o ADR-0001 existe para nao ter.
+      commitDoBuild: _ouNulo(commitDoBuildDeTeste ?? _commitDoBuildBruto),
     );
     _instancia = config;
     return config;

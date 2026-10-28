@@ -168,9 +168,6 @@ import '../../widgets/arrastar_para_atualizar.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../conexoes/convide_tutores.dart';
-import '../../widgets/item_de_menu.dart';
-import '../../roteamento/rotas.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/marca_da_pessoa.dart';
 
@@ -746,36 +743,32 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
           )
         : const SizedBox.shrink();
 
-    // A PORTA DE `Convide tutores`, NO TOPO DO CORPO DO AuAu (21/10/2026).
+    // `Convide tutores` SAIU DAQUI (26/10/2026), E A DECISAO TEM DUAS DATAS.
     //
-    // **Ela mora aqui porque o cliente decidiu que a secao e o AuAu**, e nao o
-    // Perfil: *"no AuAu como tela empilhada, nao no Perfil"*. O Perfil ja e
-    // pilha de menus, e no mesmo dia ele mandou dividir aquela lista por
-    // topicos em vez de acrescentar a sexta linha nela.
+    // **As duas estao citadas de proposito, porque elas se CONTRADIZEM e a
+    // mais nova e a que vale.** Quem ler so a primeira vai achar que esta
+    // consertando um defeito ao trazer esta porta de volta -- e nao esta.
     //
-    // **SEM CONTA ELA NAO NASCE, e nao fica desabilitada.** Emitir convite e
-    // `bearerAuth` sem alternativa vazia: a rota responderia 401, e uma porta
-    // cujo desfecho e uma recusa e o que o criterio 2 da BICHUS-62 proibe. O
-    // ramo de `_faltaConta` sai antes desta linha, entao a guarda e estrutural
-    // e nao um `if` de visibilidade.
+    // - **21/10/2026**: *"no AuAu como tela empilhada, nao no Perfil"*. Foi
+    //   por isso que a porta nasceu aqui, no topo do corpo do AuAu, e a prosa
+    //   que a justificava morava NESTE lugar.
+    // - **22/10/2026**: *"Mova o convite tutores para a pagina do perfil"*.
+    // - **26/10/2026**, ele de novo, e com a outra metade dita por extenso:
+    //   *"retirar o convite tutores das mensagens, deixar apenas na menu do
+    //   perfil do usuario"*.
     //
-    // **No TOPO e nao no pe**, ao contrario da porta de `Minhas indicacoes` na
-    // aba `Comunidade`: lá o conteudo e uma lista publica longa e a porta e
-    // historico pessoal; aqui a lista e a propria caixa da pessoa, cresce por
-    // rolagem infinita, e uma porta no pe so apareceria para quem rolasse ate o
-    // fim das conversas -- que e o oposto de quem ainda nao tem nenhuma.
-    final porta = Padding(
-      padding: const EdgeInsets.fromLTRB(
-        BichuEspaco.e4,
-        BichuEspaco.e2,
-        BichuEspaco.e4,
-        0,
-      ),
-      child: ItemDeMenu(
-        rotulo: TelaDeConvidarTutores.titulo,
-        aoTocar: () => context.push(Rotas.convidarTutores),
-      ),
-    );
+    // O pedido tem DUAS METADES e as duas foram feitas: a porta SAI daqui e
+    // ENTRA no menu do Perfil (`AbaPerfil`, em `telas/abas.dart`, no grupo
+    // `Comunidade`). **`apenas` e a palavra dele**, e deixar a porta nos dois
+    // lugares seria entregar exatamente o que ele pediu duas vezes para
+    // desfazer -- e foi pedir duas vezes que fez esta linha existir.
+    //
+    // A tela NAO morreu e a rota NAO morreu: `TelaDeConvidarTutores` continua
+    // registrada, e o endereco dela deixou de ser `/mensagens/convide-tutores`
+    // para ser `/perfil/convide-tutores`, porque ela deixou de ser alcancada
+    // por aqui. Quem reprova se esta porta voltar e a isca
+    // `o convite NAO esta no corpo do AuAu` em
+    // `test/telas/convite_tutores_no_perfil_test.dart`.
 
     if (_conversas.isEmpty) {
       // DOIS VAZIOS DIFERENTES, e a frase diz qual dos dois e. Com termo
@@ -789,7 +782,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           barra,
-          porta,
           Padding(
             padding: const EdgeInsets.all(BichuEspaco.e4),
             child: Text(vazio, style: Theme.of(context).textTheme.bodyLarge),
@@ -802,7 +794,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         barra,
-        porta,
         Expanded(
           child: ListView.separated(
             controller: _rolagem,
@@ -885,11 +876,20 @@ class LinhaDaConversa extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    // O outro lado, visto pelo TUTOR. A sessao e quem sabe o papel do
-    // chamador, e o contrato nao manda esse campo (e nao deve: seria mais um
-    // jeito de ligar a conversa a uma conta). O tutor e o papel de quem usa o
-    // app com conta no caminho da plaquinha.
-    final outro = conversa.outroLadoVistoPor(PapelNaConversa.tutor);
+    // O outro lado, visto por QUEM ESTA CHAMANDO -- e o papel vem no corpo
+    // (`Conversation.viewer_role`), nao de uma suposicao desta tela.
+    //
+    // Antes de 27/10/2026 esta linha passava `PapelNaConversa.tutor` fixo, e
+    // era ELA a reclamacao da foto: para o achador COM conta -- que o servidor
+    // atende (`tutor_user_id = chamador OR finder_user_id = chamador`) -- o
+    // "outro lado" era ele mesmo, e o proprio lado recebe `handle` e
+    // `photoIconUrl` nulos **por decisao** (emenda 3 do ADR-0010). A linha
+    // mostrava o proprio nome e a marca neutra, e a foto do tutor -- que tinha
+    // chegado na resposta -- nao era desenhada por ninguem.
+    //
+    // **Nao e identificador**: `viewer_role` diz `tutor` ou `finder` a quem ja
+    // esta autenticado, e nada sobre a outra pessoa (ADR-0010 itens 6 e 7).
+    final outro = conversa.outroLadoVistoPor(conversa.papelDoChamador);
     final quem = outro?.displayName ?? '';
     final marca = outro?.marcaNeutra ?? '';
     // A conversa encerrada e o unico sinal do lado desabilitado que a tela
@@ -1202,6 +1202,16 @@ class MarcaNeutraDoParticipante extends StatelessWidget {
       inicial: inicial,
       lado: tamanho,
       desligada: desligada,
+      // O DONO DA FOTO, para o cache em disco (BICHUS-296).
+      //
+      // **E a MESMA fonte do destino do toque logo abaixo**, e isso nao e
+      // coincidencia: o contrato manda `handle` e `photo_icon_url` pelo MESMO
+      // predicado da Emenda 3 do ADR-0010 -- conexao aceita, nao bloqueada.
+      // Quem nao e conexao recebe os dois nulos, e ai nao ha foto a desenhar
+      // nem a cachear. A foto do ACHADO nao passa por aqui em nenhum caminho:
+      // ela e a URL assinada de 600 s de `FinderConversation`, que este cache
+      // recusa por decisao escrita em `cache_de_imagens.dart`.
+      apelido: quemEle?.handle,
     );
 
     final destino = quemEle == null

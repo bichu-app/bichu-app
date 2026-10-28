@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api/cache_de_imagens.dart';
 import '../theme/bichu_colors.dart';
 import 'imagem_da_rede.dart';
 
@@ -57,6 +58,7 @@ class MarcaDaPessoa extends StatelessWidget {
     this.lado = 40,
     this.desligada = false,
     this.estiloDaInicial,
+    this.apelido,
   });
 
   /// A derivada `thumb` de 176 px da foto da pessoa, ou **nula**.
@@ -99,6 +101,35 @@ class MarcaDaPessoa extends StatelessWidget {
   /// `bodyMedium` no comentario de 32 dp, `titleMedium` nos circulos de 40 —, e
   /// nao a paleta.
   final TextStyle? estiloDaInicial;
+
+  /// **O APELIDO DE QUEM E ESTA FOTO**, e e ele que liga o cache em disco
+  /// (BICHUS-296).
+  ///
+  /// ## Por que ele e obrigatorio para cachear, e nulo nao cacheia
+  ///
+  /// A **Emenda 3 do ADR-0010** (cliente, 19/10/2026) diz que a foto de uma
+  /// pessoa aparece para outra *"apenas quando as duas ja aceitaram conexao"*.
+  /// No servidor isso e uma clausula `WHERE`; **no disco do aparelho, um
+  /// arquivo gravado continua gravado depois de a conexao ser desfeita.** Um
+  /// cache de foto de pessoa sem dono transformaria aquela decisao de
+  /// privacidade numa regra so de interface.
+  ///
+  /// Com apelido, o arquivo cai sob a pasta daquela pessoa, e desfazer conexao
+  /// ou bloquear apaga a pasta -- ver `CacheDeImagensNoAparelho.esquecerPessoa`
+  /// e a chamada em `telas/pessoa/tela_perfil_de_pessoa.dart`. O logout apaga
+  /// as de todas.
+  ///
+  /// **Nulo nao cacheia, e nao e lacuna**: `Conversation.participants[].handle`
+  /// e `PublicationAuthor.handle` sao anulaveis no contrato -- a pessoa pode
+  /// nao ter escolhido apelido --, e ali a foto continua desenhando pela rede,
+  /// que e o comportamento de antes desta frente. Um escopo "sem dono" para
+  /// foto de pessoa e precisamente o furo que a emenda fecha.
+  ///
+  /// **Nao e um identificador interno**: o ADR-0010 item 6 proibe `users.id` e
+  /// `users.public_ref` em superficie de cliente, e o apelido e o unico
+  /// endereco de pessoa que o contrato manda ao aplicativo. Ele nao vira nome
+  /// de arquivo em claro -- ver `ChaveDeImagem.resumoDe`.
+  final String? apelido;
 
   /// A letra que representa um nome: a **primeira**, em maiuscula.
   ///
@@ -149,6 +180,9 @@ class MarcaDaPessoa extends StatelessWidget {
       // O retrato de uma pessoa falhando pede outro desenho que uma fachada
       // falhando.
       simboloDeFalha: Icons.person_outline,
+      // O CACHE EM DISCO, com a identidade da pessoa na chave. Nulo sem
+      // apelido, e ai nao cacheia -- ver [apelido].
+      cache: ChaveDeImagem.dePessoa(url, apelido: apelido),
     );
   }
 }

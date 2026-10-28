@@ -419,10 +419,109 @@ void describe('ISCA -- a lista traz SO os meus, e o de outra pessoa nao entra', 
 });
 
 void describe('a ordem: o que da para cancelar primeiro', () => {
-  void it('nao terminados em ordem crescente, e o passado por ultimo', async () => {
+  /**
+   * A ORDEM MUDOU EM 27/10/2026, e este cenario e a prova de que o defeito era
+   * real.
+   *
+   * O esperado ANTERIOR era
+   * `[MEU_FUTURO, MEU_CANCELADO, MEU_MAIS_LONGE, MEU_PASSADO]`: o cancelado de
+   * 48 h ficava ENTRE dois encontros ativos, o de 24 h e o de 72 h. Essa linha
+   * era a decisao do cliente de 26/10 escrita ao contrario -- *"os eventos
+   * cancelados e que ja passaram devem vir por ultimo na listagem"* --, e ela
+   * passava porque `COALESCE(ends_at, starts_at) > agora` nao olha a
+   * publicacao: o cancelado contava como "ainda nao terminou".
+   *
+   * Agora sao TRES grupos: ativo, cancelado, passado. O cancelado de 48 h desce
+   * para depois do ativo de 72 h, e nao para o fundo -- o rotulo dele ainda e
+   * `cancelled` e nao `ended`, e o caso logo abaixo (`o cancelado segue a regra
+   * da agenda`) e quem mede esse rotulo.
+   *
+   * **Este caso executa contra Postgres**, e e isso que ele acrescenta ao caso
+   * de isca de `cancelado-desce-depois-do-ativo.test.ts`: aquele compila o
+   * `ORDER BY` com `DummyDriver` e le o texto, sem nunca mandar a consulta ao
+   * banco. Um `CASE` que o Postgres recusasse por tipo de parametro passaria
+   * la e reprovaria aqui.
+   */
+  void it('ativo crescente, depois o CANCELADO, e o passado por ultimo', async () => {
     const slugs = (await minha()).itens.map((i) => i.encontro.slug);
-    // 24 h, 48 h e 72 h a frente, e depois o de 72 h atras.
-    assert.deepEqual(slugs, [MEU_FUTURO, MEU_CANCELADO, MEU_MAIS_LONGE, MEU_PASSADO]);
+    // Ativos 24 h e 72 h a frente; o cancelado de 48 h DEPOIS deles; o de 72 h
+    // atras no fim.
+    assert.deepEqual(slugs, [MEU_FUTURO, MEU_MAIS_LONGE, MEU_CANCELADO, MEU_PASSADO]);
+  });
+
+  void it('o recorte `status` roda no BANCO, e casa o rotulo calculado', async () => {
+    // A razao de este caso existir: `situacaoCalculada` e um `CASE` comparado a
+    // um parametro ligado, e e o tipo de expressao que o Postgres recusa com
+    // "could not determine data type of parameter" quando a forma esta errada.
+    // Nenhum caso de `DummyDriver` acusaria isso.
+    const cancelados = await repo.listarMeusEncontros({
+      chamador: eu,
+      status: 'cancelled',
+      agora,
+      page: 1,
+      limit: 20,
+    });
+    assert.deepEqual(cancelados.itens.map((i) => i.encontro.slug), [MEU_CANCELADO]);
+    // `total` segue o recorte, e nao a conta inteira: a contagem e a pagina
+    // partem do mesmo construtor.
+    assert.equal(cancelados.total, 1);
+
+    // CONTRAPESO: sem o recorte, os quatro continuam vindo. Um default que
+    // escondesse o cancelado reprovaria aqui.
+    assert.equal((await minha()).total, 4);
+  });
+
+  /**
+   * A ROTA MEDIDA NA MAO, pelo CORPO da resposta.
+   *
+   * Este projeto valida o corpo da REQUISICAO contra o contrato e **nao valida
+   * o corpo da RESPOSTA**: um desvio de 200 so aparece olhando o JSON. Os casos
+   * acima falam com o repositorio; estes dois passam pela borda inteira, e e o
+   * unico lugar onde se prova que a validacao de parametro ACEITA `status`
+   * (parametro fora do contrato volta 400, e o caso de cima nunca veria isso).
+   */
+  void it('a rota de `Meus eventos` aceita `status` e o CORPO sai recortado', async () => {
+    const r = await chamar('GET', '/network/my-events?status=cancelled', { conta: eu });
+    assert.equal(r.status, 200, r.bruto);
+    const itens = r.corpo['items'] as Record<string, unknown>[];
+    assert.deepEqual(itens.map((i) => i['slug']), [MEU_CANCELADO]);
+    assert.deepEqual(itens.map((i) => i['status']), ['cancelled']);
+    assert.equal(r.corpo['total'], 1);
+
+    // E a ORDEM, no corpo, sem recorte: o cancelado DEPOIS dos dois ativos.
+    const todos = await chamar('GET', '/network/my-events', { conta: eu });
+    assert.equal(todos.status, 200, todos.bruto);
+    assert.deepEqual(
+      (todos.corpo['items'] as Record<string, unknown>[]).map((i) => i['slug']),
+      [MEU_FUTURO, MEU_MAIS_LONGE, MEU_CANCELADO, MEU_PASSADO],
+    );
+  });
+
+  void it('a agenda PUBLICA aceita `status` e o CORPO so traz cancelado', async () => {
+    // Sem conta: `listNetworkEvents` e `security: []`.
+    const r = await chamar('GET', '/network/events?status=cancelled');
+    assert.equal(r.status, 200, r.bruto);
+    const itens = r.corpo['items'] as Record<string, unknown>[];
+    assert.ok(itens.length > 0, `a agenda nao devolveu cancelado nenhum: ${r.bruto}`);
+    // CADA UM dos itens tem de ser cancelado -- um recorte que vaza um ativo e
+    // pior que um recorte vazio, porque parece funcionar.
+    assert.deepEqual([...new Set(itens.map((i) => i['status']))], ['cancelled']);
+    assert.ok(
+      itens.some((i) => i['slug'] === MEU_CANCELADO),
+      `o cancelado conhecido do cenario nao esta na resposta: ${r.bruto}`,
+    );
+
+    // CONTRAPESO: sem `status`, a agenda traz mais que cancelado. Sem este
+    // caso, um recorte grudado em `cancelled` passaria o de cima.
+    const semRecorte = await chamar('GET', '/network/events');
+    assert.equal(semRecorte.status, 200, semRecorte.bruto);
+    const situacoes = new Set(
+      (semRecorte.corpo['items'] as Record<string, unknown>[]).map((i) => i['status']),
+    );
+    assert.ok(
+      situacoes.size > 1 || !situacoes.has('cancelled'),
+      `a agenda sem recorte virou lista de cancelado: ${semRecorte.bruto}`,
+    );
   });
 });
 

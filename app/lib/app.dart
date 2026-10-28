@@ -20,8 +20,10 @@ import 'api/notificacoes_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
+import 'api/cache_de_imagens.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/sonda_de_conexao.dart';
 import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
@@ -53,6 +55,7 @@ import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'telas/atualizacao/portao_de_versao.dart';
 import 'theme/bichu_theme.dart';
+import 'widgets/imagem_em_cache.dart';
 
 /// A raiz do app.
 class BichuApp extends StatefulWidget {
@@ -70,6 +73,7 @@ class BichuApp extends StatefulWidget {
     this.cacheDeMeusPets,
     this.depositoDaCidade,
     this.cofreDoQr,
+    this.cacheDeImagens,
     this.depositoDeOportunidades,
     this.depositoDoAvisoDeCadastro,
     this.agora,
@@ -198,6 +202,16 @@ class BichuApp extends StatefulWidget {
   /// e uma credencial.
   final CofreDaImagemDoQr? cofreDoQr;
 
+  /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296). **Injetavel, e nulo em teste.**
+  ///
+  /// Nulo nao e um esboco: em producao esta raiz constroi um apontado para
+  /// `getApplicationCacheDirectory()`, e em teste de widget **nao se constroi
+  /// nenhum**, porque aquele e um canal de plataforma que trava o
+  /// `pumpAndSettle` para sempre, sem mensagem -- a mesma armadilha de
+  /// `CidadeEscolhida`. Sem cache, `ImagemDaRede` desenha `Image.network` como
+  /// antes desta frente.
+  final CacheDeImagensNoAparelho? cacheDeImagens;
+
   /// Onde o registro das duas oportunidades mora (BICHUS-24).
   ///
   /// Injetavel pelo mesmo motivo do envelope de intencao: o padrao e um
@@ -285,6 +299,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final CacheDeMeusPets _cacheDeMeusPets;
   late final CidadeEscolhida _cidadeEscolhida;
   late final CofreDaImagemDoQr _cofreDoQr;
+  late final CacheDeImagensNoAparelho? _cacheDeImagens;
   late final OportunidadesDeAviso _oportunidades;
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
@@ -319,6 +334,17 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // telefone esta. Ver o cabecalho de `cidade_escolhida.dart`.
     _cidadeEscolhida = CidadeEscolhida(deposito: widget.depositoDaCidade);
     _cofreDoQr = widget.cofreDoQr ?? CofreDaImagemDoQr();
+    // O CACHE DE IMAGEM EM DISCO (BICHUS-296), e **nao ha queda para um padrao
+    // aqui**: com `widget.cacheDeImagens` nulo o aplicativo fica sem cache em
+    // disco, de proposito.
+    //
+    // Construir um `CacheDeImagensNoAparelho` com
+    // `getApplicationCacheDirectory` nesta linha travaria a suite inteira na
+    // secao em que o aplicativo ABRE -- canal de plataforma dentro de
+    // `initState` e exatamente o que `CidadeEscolhida` aprendeu a custo de uma
+    // execucao pendurada. Quem monta producao e `main.dart`, que ja esta fora
+    // de `flutter_test`.
+    _cacheDeImagens = widget.cacheDeImagens;
     _api = ApiClient(
       config: widget.config,
       cliente: widget.clienteHttp,
@@ -585,6 +611,23 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // -- e tocaria nele esperando ver avisos que nao sao dele. Volta a
         // NULO e nao a zero: ver `ContadorDeAvisos.limpar`.
         () async => _contadorDeAvisos.limpar(),
+        // O CACHE DE FOTO DE PESSOA SAI NO LOGOUT (BICHUS-296), e ele e da
+        // CONTA pelo critério das linhas acima -- com um agravante que nenhuma
+        // delas tem: **este vive em DISCO**.
+        //
+        // O cache de pets e o cofre do QR vivem em memoria e morrem com o
+        // processo; a foto de uma conexao gravada em arquivo espera no aparelho
+        // a proxima pessoa que entrar nele, e o aparelho compartilhado e caso
+        // real no publico deste produto. Sem esta linha, quem entrasse em
+        // seguida teria no disco o rosto das conexoes de quem saiu -- e a
+        // **Emenda 3 do ADR-0010** (a foto sai so entre conexoes aceitas)
+        // estaria sendo desobedecida por um arquivo, com a tela toda certa.
+        //
+        // **So a pasta das pessoas, e nunca a publica**: foto de pet perdido e
+        // capa de encontro nao sao de ninguem, nao vazam de uma conta para a
+        // seguinte, e apaga-las jogaria fora exatamente o que o cliente pediu
+        // -- abertura rapida -- sem fechar risco nenhum.
+        () async => _cacheDeImagens?.esquecerTodasAsPessoas(),
       ],
       // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
       // paga o preco da correcao do servidor.
@@ -862,7 +905,9 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       avisoDeCadastro: _avisoDeCadastro,
       contadores: _contadores,
       contadorDeAvisos: _contadorDeAvisos,
-      child: MaterialApp.router(
+      cacheDeImagens: _cacheDeImagens,
+      child: _comCacheDeImagens(
+        MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,
         theme: BichuTheme.claro,
@@ -899,11 +944,35 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
             child: PortaoDeVersao(
               versaoApi: _versao,
               versaoDoApp: widget.config.versaoDoApp,
+              // A SONDA DE CONEXAO (cliente, 26/10/2026). **Ela nao e
+              // opcional em producao**: sem ela o recado de abertura sem
+              // internet so apareceria em build com `APP_VERSION`, e o
+              // mecanismo ficaria desligado em silencio no build de iOS --
+              // que e o defeito de 19/10 que `verificar-apk.sh` existe para
+              // nao deixar voltar. O nulo do parametro serve aos casos de
+              // widget que medem versao e nao conectividade.
+              sonda: SondaDeConexao(_api),
               child: filho ?? const SizedBox.shrink(),
             ),
           );
         },
+        ),
       ),
     );
+  }
+
+  /// Poe o cache de imagem no escopo da arvore, **ou nao poe nada**.
+  ///
+  /// Sem cache devolve [filho] intocado, e a arvore fica sem o
+  /// `CacheDeImagensDoAplicativo` -- que e exatamente o que faz `ImagemDaRede`
+  /// desenhar `Image.network` como antes da BICHUS-296. E o caso de todo teste
+  /// de widget, e e por isso que nenhum deles passou a tocar o disco.
+  ///
+  /// `InheritedWidget` proprio e nao um campo lido do [Escopo]: a razao esta no
+  /// cabecalho de `CacheDeImagensDoAplicativo`.
+  Widget _comCacheDeImagens(Widget filho) {
+    final cache = _cacheDeImagens;
+    if (cache == null) return filho;
+    return CacheDeImagensDoAplicativo(cache: cache, child: filho);
   }
 }

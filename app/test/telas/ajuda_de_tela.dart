@@ -21,11 +21,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bichu/api/cache_de_imagens.dart';
 import 'package:bichu/api/estados_brasileiros.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
+import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:bichu/dispositivo/distintivo_do_aplicativo.dart';
@@ -432,7 +434,7 @@ Map<String, dynamic> referenciaDeTeste() {
   return <String, dynamic>{
     'version': '2026-09-17',
     'species': <Map<String, dynamic>>[
-      <String, dynamic>{'code': 'dog', 'label': 'Cão'},
+      <String, dynamic>{'code': 'dog', 'label': 'Cachorro'},
     ],
     'breeds': <Map<String, dynamic>>[
       // Vira-lata **esta na lista**, e a ajuda do campo promete isso.
@@ -587,6 +589,43 @@ DepositoEmMemoria depositoLogado({
   return deposito;
 }
 
+/// A SONDA DE CONEXAO RESPONDIDA, para TODO caso que monta o app aqui.
+///
+/// **Por que ela nao passa pelo `rede` do caso.** Desde 26/10/2026
+/// `PortaoDeVersao` pergunta `GET /health` na abertura quando a pergunta de
+/// versao nao sai -- e em teste de widget ela nunca sai, porque
+/// `AppConfig.carregar(apiBaseUrlDeTeste: ...)` deixa `APP_VERSION` ausente.
+/// Sem esta intercepcao, os casos cujo `rede` LANCA para qualquer rota (sao
+/// 21 arquivos) passariam a abrir no recado de "sem internet", e o app que
+/// eles querem medir nao estaria na arvore. Eles reprovariam por uma tela que
+/// nao e o assunto deles.
+///
+/// **E ela nao esconde o mecanismo**: quem mede o recado de abertura e
+/// `test/abertura/abertura_sem_internet_test.dart`, que monta `BichuApp`
+/// direto e NAO passa por aqui -- entao a fiacao de producao (`app.dart`
+/// passando a sonda) continua coberta por isca.
+Future<http.Response> Function(http.Request) _comSondaDeConexao(
+  Future<http.Response> Function(http.Request) rede,
+) {
+  return (http.Request requisicao) async {
+    if (requisicao.url.path.endsWith('/health')) {
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'status': 'ok',
+          'version': '0.0.0-teste',
+          'build': <String, String>{
+            'artifact': '0000000000000000',
+            'commit': '0000000',
+          },
+        }),
+        200,
+        headers: const <String, String>{'content-type': 'application/json'},
+      );
+    }
+    return rede(requisicao);
+  };
+}
+
 /// Monta o app com a rede e a camera que o caso pedir.
 Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
@@ -662,6 +701,18 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// e o portao que precisa VER o caminho ser exercido: sem injecao, "o
   /// caminho existe" so poderia ser afirmado lendo o codigo.
   DistintivoDoAplicativo? distintivoDoApp,
+  /// O CACHE DE IMAGEM EM DISCO (BICHUS-296). **Nulo por padrao, de proposito.**
+  ///
+  /// Entra por aqui pelo mesmo motivo do cofre do QR -- o caso do logout
+  /// precisa OLHAR dentro dele depois de a sessao cair -- e o padrao e nulo
+  /// pelo motivo de todos os vizinhos desta lista: o do app resolve a pasta
+  /// por `getApplicationCacheDirectory()`, canal de plataforma que trava o
+  /// `pumpAndSettle` para sempre, sem mensagem.
+  ///
+  /// **Com nulo nenhum caso desta suite toca o disco por causa de imagem**, e
+  /// e isso que mantem o portao do QR (`qr_na_tela_test.dart`, "a imagem nao
+  /// encosta no disco do app") medindo o que ele sempre mediu.
+  CacheDeImagensNoAparelho? cacheDeImagens,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -687,10 +738,11 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
         deposito: deposito ?? DepositoEmMemoria(),
         depositoDeIntencao: envelopeEmUso,
-        clienteHttp: MockClient(rede),
+        clienteHttp: MockClient(_comSondaDeConexao(rede)),
         cacheDeMeusPets: cacheDeMeusPets,
         depositoDaCidade: depositoDaCidade ?? DepositoDaCidadeEmMemoria(),
         cofreDoQr: cofreDoQr,
+        cacheDeImagens: cacheDeImagens,
         depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
         depositoDeFotos: depositoDeFotos ?? DepositoDeFotosEmMemoria(),
         camera: camera ?? const CameraNaoEmbarcada(),
@@ -1124,18 +1176,57 @@ Future<void> irParaAConta(WidgetTester tester) async {
 /// ponto** -- e nao em catorze lugares.
 Future<void> irAoLeitorDeQr(WidgetTester tester) async {
   await irParaAConta(tester);
+  await rolarAtePortaDeEscanear(tester);
 
   final porta = find.text('Escanear uma tag');
   expect(
     porta,
     findsWidgets,
-    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta. Desde '
-        '19/10 ela e a UNICA porta do leitor de QR, e o leitor e o caminho de '
-        'quem acha um cachorro na rua -- o mais critico do produto. Se a '
-        'porta sumiu, ele ficou inalcancavel.',
+    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta, nem '
+        'rolando o menu ate o fim. Desde 19/10 ela e a UNICA porta do leitor '
+        'de QR, e o leitor e o caminho de quem acha um cachorro na rua -- o '
+        'mais critico do produto. Se a porta sumiu, ele ficou inalcancavel.',
   );
   await tester.ensureVisible(porta.first);
   await tester.pumpAndSettle();
   await tester.tap(porta.first);
+  await tester.pumpAndSettle();
+}
+
+/// Rola o menu da tela da conta ate `Escanear uma tag` estar CONSTRUIDA.
+///
+/// **Ela entrou em 26/10/2026, e nao e conveniencia.** O corpo logado da tela
+/// da conta e uma `ListView`, que **so constroi o que cabe na dobra**: numa
+/// bancada de 800 dp de altura, item que fica abaixo dela nao tem `Element` e
+/// `find.text` devolve ZERO -- nao "invisivel", inexistente. No dia em que o
+/// menu ganhou uma linha (`Minhas fotos`, pedido do cliente: *"traga o menu
+/// minhas fotos para o menu principal"*, *"primeiro nivel do perfil"*),
+/// `Escanear uma tag` passou a cair fora da dobra e SEIS casos reprovaram de
+/// uma vez -- todos por geometria da janela, e nenhum por porta perdida.
+///
+/// **O que se mede continua sendo o mesmo**: a porta existe, e tocar nela abre
+/// o leitor. O que mudou e o ALCANCE, e alcancar rolando e o que a pessoa faz
+/// no aparelho. Esta funcao nao engole ausencia: se a porta nao estiver na
+/// lista, a rolagem chega ao fim e o `expect` de quem chamou reprova.
+///
+/// **O ramo DESLOGADO nao tem lista**: ele desenha botoes numa coluna curta, e
+/// nesse caso a porta ja esta construida -- a funcao sai na primeira linha sem
+/// tocar em `Scrollable` nenhum.
+Future<void> rolarAtePortaDeEscanear(WidgetTester tester) async {
+  final porta = find.text('Escanear uma tag');
+  if (porta.evaluate().isNotEmpty) return;
+
+  // **O `Scrollable` da ABA, e nao `.first`.** O
+  // `StatefulShellRoute.indexedStack` mantem as outras abas montadas atras
+  // desta, e `.first` pode ser o rolador de outra aba -- quando e, a rolagem
+  // arrasta a lista errada e estoura `Bad state: No element` apontando para o
+  // lugar errado. E a mesma armadilha que o parametro `scrollable` de
+  // [rolarAte] documenta.
+  final lista = find.descendant(
+    of: find.byType(AbaPerfil),
+    matching: find.byType(Scrollable),
+  );
+  if (lista.evaluate().isEmpty) return;
+  await tester.scrollUntilVisible(porta, 200, scrollable: lista.first);
   await tester.pumpAndSettle();
 }
