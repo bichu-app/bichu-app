@@ -65,13 +65,15 @@
 // Para esse caminho tudo o que este arquivo afirma continua valendo, e o
 // `PreviaDaFoto` do aparelho continua sendo a unica imagem correta na tela.
 //
-// Falta o caso do OUTRO caminho: com `matched_pet` preenchido, a tela tem de
-// desenhar a capa do pet (`ImagemDaRede`, nao `PreviaDaFoto`) e escrever o nome
-// dele. Ele NAO foi escrito nesta entrega porque
-// `lib/telas/achado/tela_achado_registrado.dart` ainda nao le o campo:
-// escrever a assercao antes da tela produziria um caso vermelho no main, e
-// escrever um `findsNothing` no lugar dela produziria um portao cego -- que e o
-// defeito que o bloco seguinte existe para nao repetir.
+// O caso do OUTRO caminho ESTA ESCRITO AGORA, no grupo `o pet ja identificado`
+// no fim deste arquivo: `lib/telas/achado/tela_achado_registrado.dart` passou a
+// ler `matched_pet` em 28/10/2026, e com o campo preenchido a tela desenha a
+// capa do pet (`ImagemDaRede`, nao `PreviaDaFoto`) e escreve o nome dele.
+//
+// A ISCA E NOS DOIS SENTIDOS, e e o entregavel: com pet certo foto e nome
+// APARECEM; no achado avulso eles NAO aparecem, e a tela nao reserva espaco
+// para o cartao que nao nasceu. Ver `DESLIGAR PARA VER REPROVAR` abaixo, itens
+// 5 a 7.
 //
 // A fronteira esta medida do lado do servidor, nos dois sentidos:
 // `src/modules/found/adapters/http/found-report-routes.test.ts` (48 casos) e
@@ -114,6 +116,24 @@
 //  4. Em `textos_do_achado.dart`, troque `achadoEmTexto` por um retorno fixo
 //     `'Achado em 01/01/2026'`.
 //     -> reprova `a data vem de found_at, e nao de um relogio`.
+//  5. Em `lib/telas/achado/tela_achado_registrado.dart`, apague o bloco
+//     `if (achado?.petCorrespondente != null) ...`.
+//     -> reprova `com pet certo, a foto e o nome do pet aparecem`.
+//  6. No mesmo arquivo, troque a condicao daquele bloco por
+//     `if (achado != null)` e o conteudo por um
+//     `_CartaoDoPetCorrespondente(pet: achado!.petCorrespondente ??
+//     const PetCorrespondenteDoAchado(nome: 'Nina', urlDaFoto: 'x'))` --
+//     isto e, faca a tela MOSTRAR SEMPRE.
+//     -> reprova `no achado avulso o pet NAO aparece` e
+//        `o achado avulso nao reserva espaco para o cartao do pet`.
+//        **MEDIDO em 28/10/2026**, e os dois nomes acima sao os que sairam
+//        vermelhos; as iscas de presenca continuaram verdes, que e o ponto --
+//        a reprovacao foi pelo vazamento e nao pela tela quebrada.
+//  7. No mesmo arquivo, apague o `if (url != null)` de
+//     `_CartaoDoPetCorrespondente` e passe `url: url!`.
+//     -> reprova `sem capa pronta o nome sai e nenhum quadro nasce` com
+//        excecao de nulo, que e o motivo de a guarda existir: `ImagemDaRede`
+//        recebe `url` NAO ANULAVEL de proposito e `Image.network('')` lanca.
 
 import 'dart:convert';
 
@@ -123,6 +143,8 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/resultado_do_achado.dart';
 import 'package:bichu/telas/achado/textos_do_achado.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
+import 'package:bichu/widgets/faixa_de_aviso.dart';
+import 'package:bichu/widgets/imagem_da_rede.dart';
 import 'package:bichu/widgets/previa_da_foto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -131,6 +153,13 @@ import 'package:http/http.dart' as http;
 import 'ajuda_de_tela.dart';
 
 const String _idDoAchado = '01a14d3f-d95f-70b1-b31e-16d141678d34';
+
+/// SENTINELA de "a chave `matched_pet` nao esta no corpo".
+///
+/// `null` ja e um valor legitimo do campo (o contrato o declara `nullable`), e
+/// um unico `null` nao distinguiria "veio nulo" de "nao veio" -- que sao as
+/// duas formas que o servidor de fato produz.
+const Object _semCampo = Object();
 
 /// A foto no aparelho. **O caminho nao existe em disco, de proposito.**
 ///
@@ -144,19 +173,32 @@ const FotoLocal _fotoDoAparelho = FotoLocal(
   tamanhoEmBytes: 240 * 1024,
 );
 
+/// O pet JA identificado, com capa pronta.
+///
+/// O nome e a URL sao deliberadamente ESTRANHOS ao resto do arquivo: nenhum
+/// outro texto desta tela escreve "Quindim" nem este caminho, entao um
+/// `findsNothing` sobre eles mede ausencia e nao coincidencia.
+const PetCorrespondenteDoAchado _petCerto = PetCorrespondenteDoAchado(
+  nome: 'Quindim',
+  urlDaFoto: 'https://midia.bichu.app/pets/card/quindim-28-10.jpg',
+);
+
 AchadoRegistrado _achado({
   String? area = 'Vila Gertrudes, São Paulo',
   DateTime? achadoEm,
   String? observacao = 'coleira azul sem placa, mancha branca no peito',
+  PetCorrespondenteDoAchado? pet,
+  OrigemDoAchado origem = OrigemDoAchado.achadoAvulso,
 }) {
   return AchadoRegistrado(
     id: _idDoAchado,
-    origem: OrigemDoAchado.achadoAvulso,
+    origem: origem,
     status: StatusDoAchado.aberto,
     criadoEm: DateTime.utc(2026, 10, 18, 4, 23, 12),
     achadoEm: achadoEm,
     rotuloDaArea: area,
     observacao: observacao,
+    petCorrespondente: pet,
   );
 }
 
@@ -657,4 +699,365 @@ void main() {
       );
     });
   });
+
+  // =========================================================================
+  // O PET JA IDENTIFICADO -- a entrega de 28/10/2026.
+  //
+  // A ISCA E NOS DOIS SENTIDOS, e nenhum dos dois lados vale sozinho:
+  //
+  //  - com pet certo (plaquinha lida, ou link do tutor), a foto e o nome
+  //    APARECEM -- e o cliente repetiu esta queixa varias vezes;
+  //  - no achado avulso cruzado por semelhanca eles NAO aparecem, porque foto
+  //    e nome de um palpite da maquina sao o insumo que falta ao golpe do
+  //    falso achador (risco medido pelo cliente em 20/10/2026).
+  //
+  // So a primeira metade teria sido entregue por uma tela que mostrasse
+  // SEMPRE. Esse foi o desligamento medido (item 6 da tabela acima), e os dois
+  // casos de ausencia deste grupo foram os que sairam vermelhos.
+  //
+  // TODO caso de ausencia aqui ANCORA PRIMEIRO no que tem de existir, pelo
+  // mesmo motivo de `_ancorarNoBlocoDeAviso`: `findsNothing` sobre tela em
+  // branco e o portao cego que este repositorio ja produziu duas vezes.
+  // =========================================================================
+  group('o pet ja identificado', () {
+    testWidgets('com pet certo, a foto e o nome do pet aparecem', (
+      tester,
+    ) async {
+      await _abrir(
+        tester,
+        resultado: ResultadoDoAchado.registrado(
+          achado: _achado(origem: OrigemDoAchado.leituraDeTag, pet: _petCerto),
+          foto: _fotoDoAparelho,
+        ),
+      );
+
+      // O NOME, que e o campo obrigatorio do contrato.
+      expect(
+        find.text(_petCerto.nome),
+        findsOneWidget,
+        reason:
+            'REPROVA: a tela nao escreve o nome do pet. E metade da '
+            'autorizacao do cliente de 28/10/2026, literal -- "pode colocar a '
+            'foto e o nome do pet" --, e `display_name` e OBRIGATORIO em '
+            '`FoundReportMatchedPet`: quando o campo vem, o nome vem com ele.',
+      );
+      expect(
+        find.text(TextosDoAchado.rotuloDeQuemE),
+        findsOneWidget,
+        reason:
+            'REPROVA: o nome do pet aparece sem o rotulo que diz o que ele e. '
+            '`${TextosDoAchado.rotuloDeQuemE}` e o MESMO rotulo do cartao de '
+            '`tela_encontrei_este_pet.dart`, na mesma pasta: um nome solto no '
+            'meio do desfecho nao diz de quem e.',
+      );
+
+      // A FOTO, e ela e `ImagemDaRede` -- a capa que o servidor assinou.
+      final imagem = find.byType(ImagemDaRede);
+      expect(
+        imagem,
+        findsOneWidget,
+        reason:
+            'REPROVA: a tela nao desenha a capa do pet. E a outra metade da '
+            'autorizacao, e e a queixa que o cliente repetiu desde 18/10 -- '
+            '"nao tem foto do pet". A peca e `ImagemDaRede` e nao '
+            '`PreviaDaFoto`: esta foto e uma derivada do SERVIDOR '
+            '(`matched_pet.photo_url`), e nao o arquivo do aparelho. As duas '
+            'coexistem nesta tela de proposito -- sao o mesmo animal pelos '
+            'dois lados da conversa.',
+      );
+
+      // E A IMAGEM CERTA, e nao um quadro qualquer. Sem estas duas assercoes
+      // um `ImagemDaRede` apontando para a logo da marca satisfaria o caso
+      // acima.
+      final widget = tester.widget<ImagemDaRede>(imagem);
+      expect(
+        widget.url,
+        _petCerto.urlDaFoto,
+        reason:
+            'REPROVA: a imagem na arvore nao e a capa que o servidor mandou. '
+            'Ela desenha "${widget.url}". O endereco vem de '
+            '`matched_pet.photo_url` inteiro, montado pelo servidor sobre a '
+            'base de MIDIA -- a tela nao concatena base nenhuma.',
+      );
+      expect(
+        widget.descricao,
+        TextosDoAchado.fotoDoPetDoCaso(_petCerto.nome),
+        reason:
+            'REPROVA: a capa do pet nao tem rotulo de leitor de tela com o '
+            'nome dele. Imagem sem nome e imagem muda (SC 1.1.1), e '
+            '`fotoDoPetDoCaso` e o MESMO rotulo do cartao irmao desta pasta.',
+      );
+
+      // A FOTO DO ACHADOR CONTINUA LA, e as duas nao se atropelam. Sem isto,
+      // uma tela que TROCASSE uma imagem pela outra passaria em tudo acima.
+      expect(
+        find.byType(PreviaDaFoto),
+        findsOneWidget,
+        reason:
+            'REPROVA: a capa do pet entrou no lugar da foto do achador. Sao '
+            'duas imagens de lados opostos da conversa e as duas ficam: a do '
+            'aparelho e o que a pessoa acabou de fotografar, a de rede e a '
+            'capa que o tutor cadastrou.',
+      );
+    });
+
+    testWidgets('no achado avulso o pet NAO aparece', (tester) async {
+      await _abrir(
+        tester,
+        // `_achado()` e `OrigemDoAchado.achadoAvulso` com
+        // `petCorrespondente: null` -- o caminho em que o servidor NAO manda o
+        // campo, por decisao e nao por falta de dado.
+        resultado: ResultadoDoAchado.registrado(
+          achado: _achado(),
+          foto: _fotoDoAparelho,
+        ),
+      );
+
+      // ANCORAS: a tela carregou E desenhou o bloco de informacao. Sem elas os
+      // tres `findsNothing` abaixo ficariam verdes com um `Scaffold` vazio.
+      expect(
+        find.text(TextosDoAchado.tituloDoRegistrado),
+        findsOneWidget,
+        reason: 'REPROVA NA ANCORA: o desfecho registrado nao esta na tela.',
+      );
+      expect(
+        find.text(TextosDoAchado.tituloDoQueGuardamos),
+        findsOneWidget,
+        reason:
+            'REPROVA NA ANCORA: o bloco do registro nao esta na tela. Este '
+            'caso cobra AUSENCIA logo abaixo, e ausencia sobre tela em branco '
+            'e portao cego.',
+      );
+
+      expect(
+        find.byType(ImagemDaRede),
+        findsNothing,
+        reason:
+            'REPROVA: a tela desenhou uma imagem DE REDE num achado avulso. '
+            'O achado avulso chega a um pet por SEMELHANCA, e o cruzamento '
+            'SUGERE -- nao confirma (BICHUS-35, criterio 7). Mostrar a capa de '
+            'uma correspondencia que a maquina palpitou da ao golpista do '
+            'falso achador exatamente o insumo que falta para "achei seu pet" '
+            'soar verdadeiro; o cliente mediu esse golpe em 20/10/2026. O '
+            'servidor nao manda `matched_pet` aqui, e a tela nao desenha nada '
+            'no lugar.',
+      );
+      expect(
+        find.text(_petCerto.nome),
+        findsNothing,
+        reason:
+            'REPROVA: a tela escreveu o nome de um pet num achado avulso. '
+            'Vale a MESMA razao da foto: o nome e metade do insumo do golpe, e '
+            'num avulso ninguem identificou o animal ainda.',
+      );
+      expect(
+        find.text(TextosDoAchado.rotuloDeQuemE),
+        findsNothing,
+        reason:
+            'REPROVA: o cartao do pet nasceu VAZIO no achado avulso. O rotulo '
+            '"${TextosDoAchado.rotuloDeQuemE}" sem pet nenhum ao lado promete '
+            'uma identificacao que nao existe -- e e o desenho que a tela de '
+            '26/10 foi encurtada para nao ter.',
+      );
+    });
+
+    testWidgets('o achado avulso nao reserva espaco para o cartao do pet', (
+      tester,
+    ) async {
+      // ======================================================================
+      // **O ESPACO, MEDIDO EM dp, e nao deduzido do `if`.**
+      //
+      // Os `findsNothing` do caso acima ficam verdes com um cartao vazio sem
+      // texto -- um `SizedBox(height: ...)` fora da condicao, ou um `Container`
+      // de `surfaceAlt` com os filhos condicionais, passariam em todos eles e
+      // deixariam na tela o buraco que o briefing chama de "espaco vazio
+      // esquisito".
+      //
+      // Entao este caso compara a POSICAO do mesmo elemento nas duas arvores:
+      // a faixa de estado da foto, que fica logo abaixo do cartao. Com pet ela
+      // desce; sem pet ela tem de estar no MESMO lugar em que estaria se o
+      // bloco nao existisse -- isto e, estritamente mais acima.
+      // ======================================================================
+      await _abrir(
+        tester,
+        resultado: ResultadoDoAchado.registrado(
+          achado: _achado(),
+          foto: _fotoDoAparelho,
+        ),
+      );
+      final faixa = find.byType(FaixaDeAviso);
+      expect(
+        faixa,
+        findsOneWidget,
+        reason:
+            'REPROVA NA ANCORA: a faixa de estado da foto nao esta na tela, e '
+            'ela e a regua deste caso.',
+      );
+      final semPet = tester.getTopLeft(faixa).dy;
+
+      // A MESMA tela, com o pet. **Mesmo `tester`, mesma altura de view**, que
+      // e o que faz as duas medidas serem comparaveis.
+      await _abrir(
+        tester,
+        resultado: ResultadoDoAchado.registrado(
+          achado: _achado(origem: OrigemDoAchado.leituraDeTag, pet: _petCerto),
+          foto: _fotoDoAparelho,
+        ),
+      );
+      expect(
+        find.text(_petCerto.nome),
+        findsOneWidget,
+        reason:
+            'REPROVA NA ANCORA: a segunda arvore deste caso tinha de ter o '
+            'cartao do pet, e nao tem. Sem ela a comparacao de posicao mede '
+            'duas telas iguais e passa sem significar nada.',
+      );
+      final comPet = tester.getTopLeft(find.byType(FaixaDeAviso)).dy;
+
+      expect(
+        semPet,
+        lessThan(comPet),
+        reason:
+            'REPROVA: o achado avulso RESERVA o espaco do cartao do pet. A '
+            'faixa de estado da foto esta em ${semPet.toStringAsFixed(1)} dp '
+            'sem pet e em ${comPet.toStringAsFixed(1)} dp com pet -- iguais '
+            'significa que ha um bloco de altura fixa (ou um `SizedBox` fora '
+            'da condicao) ocupando a tela onde nao ha pet nenhum a mostrar. '
+            'O cartao nasce DENTRO do `if`, com o respiro dele, ou nao nasce.',
+      );
+    });
+
+    testWidgets('sem capa pronta o nome sai e nenhum quadro nasce', (
+      tester,
+    ) async {
+      // `photo_url` nulo. **E o mesmo nulo para "este pet nao tem foto" e para
+      // "a derivada ainda esta em processamento"**: `FoundReportMatchedPet` nao
+      // tem campo de estado, so a URL anulavel, e o servidor so monta o
+      // endereco de `card_key` com `status = 'ready'`. A tela nao pode, por
+      // isso, escrever "a foto esta em preparo" -- seria verdade em metade dos
+      // casos. Ela escreve o nome, que e o campo obrigatorio, e cala sobre a
+      // foto que nao existe.
+      await _abrir(
+        tester,
+        resultado: ResultadoDoAchado.registrado(
+          achado: _achado(
+            origem: OrigemDoAchado.leituraDeTag,
+            pet: const PetCorrespondenteDoAchado(nome: 'Quindim'),
+          ),
+          foto: _fotoDoAparelho,
+        ),
+      );
+
+      expect(
+        find.text('Quindim'),
+        findsOneWidget,
+        reason:
+            'REPROVA: o pet sem capa pronta perdeu o NOME tambem. O nome e '
+            'obrigatorio no contrato e nao depende de imagem nenhuma: um pet '
+            'identificado sem foto continua identificado.',
+      );
+      expect(
+        find.byType(ImagemDaRede),
+        findsNothing,
+        reason:
+            'REPROVA: a tela montou uma `ImagemDaRede` com `photo_url` nulo. '
+            'Ela recebe `url` NAO ANULAVEL de proposito e `Image.network("")` '
+            'LANCA -- um nulo atravessando ate aqui derruba o desfecho '
+            'inteiro. Sem capa, o cartao encurta.',
+      );
+      // E A TELA NAO INVENTA ESTADO DE FOTO. Ancorada acima, no nome.
+      for (final frase in <String>['em preparo', 'preparando', 'processando']) {
+        expect(
+          find.textContaining(frase, findRichText: true),
+          findsNothing,
+          reason:
+              'REPROVA: a tela diz "$frase" sobre a capa do pet. Ela NAO SABE: '
+              '`FoundReportMatchedPet` tem dois campos (`display_name` e '
+              '`photo_url`) e nenhum estado, e o nulo cobre tanto o pet sem '
+              'foto quanto a derivada em processamento. A faixa informativa de '
+              '`Meus eventos` existe porque LA o modelo carrega `emPreparo`; '
+              'aqui a mesma frase seria mentira em metade das respostas. Se '
+              'esta distincao passar a valer a pena, ela comeca no contrato -- '
+              'e o contrato nao e desta frente.',
+        );
+      }
+    });
+  });
+
+  // =========================================================================
+  // A LEITURA DO CAMPO, antes de a tela ter o que desenhar.
+  //
+  // Os casos de widget acima montam `AchadoRegistrado` A MAO, entao nenhum
+  // deles toca `doJson` -- e um desserializador que ignorasse `matched_pet`
+  // deixaria os quatro verdes e a tela cega em producao. Estes casos medem a
+  // borda da rede, que e onde o campo de fato entra.
+  // =========================================================================
+  group('a leitura de `matched_pet`', () {
+    Map<String, dynamic> corpo(Object? matchedPet) => <String, dynamic>{
+      'id': _idDoAchado,
+      'origin': 'tag_scan',
+      'status': 'open',
+      'created_at': '2026-10-18T04:23:12Z',
+      if (matchedPet != _semCampo) 'matched_pet': matchedPet,
+    };
+
+    test('o campo preenchido vira nome e URL', () {
+      final achado = AchadoRegistrado.doJson(
+        corpo(<String, dynamic>{
+          'display_name': 'Quindim',
+          'photo_url': 'https://midia.bichu.app/pets/card/quindim-28-10.jpg',
+        }),
+      );
+      expect(achado.petCorrespondente?.nome, 'Quindim');
+      expect(
+        achado.petCorrespondente?.urlDaFoto,
+        'https://midia.bichu.app/pets/card/quindim-28-10.jpg',
+      );
+    });
+
+    test('`photo_url` nulo e o pet sem capa, e NAO o pet ausente', () {
+      final achado = AchadoRegistrado.doJson(
+        corpo(<String, dynamic>{'display_name': 'Quindim', 'photo_url': null}),
+      );
+      expect(
+        achado.petCorrespondente,
+        isNotNull,
+        reason:
+            'REPROVA: o pet inteiro sumiu porque a capa nao estava pronta. '
+            'Sao duas ausencias diferentes: sem pet nao ha nome a escrever, '
+            'sem capa o nome continua obrigatorio.',
+      );
+      expect(achado.petCorrespondente?.nome, 'Quindim');
+      expect(achado.petCorrespondente?.urlDaFoto, isNull);
+    });
+
+    test('`photo_url` VAZIA e tratada como ausente', () {
+      // **Defesa de desenho, e nao zelo.** `Image.network("")` lanca, e uma
+      // string vazia atravessando ate a arvore derrubaria o desfecho.
+      final achado = AchadoRegistrado.doJson(
+        corpo(<String, dynamic>{'display_name': 'Quindim', 'photo_url': ''}),
+      );
+      expect(achado.petCorrespondente?.urlDaFoto, isNull);
+    });
+
+    test('o campo nulo, ausente ou sem nome nao vira pet', () {
+      // Os TRES jeitos de nao ter pet, e o terceiro e o que importa: o nome e
+      // `required` no contrato, e um objeto sem ele e resposta que a tela nao
+      // deve desenhar -- nunca um pet com nome vazio no meio do cartao.
+      for (final bruto in <Object?>[
+        null,
+        _semCampo,
+        <String, dynamic>{'photo_url': 'https://midia.bichu.app/x.jpg'},
+        <String, dynamic>{'display_name': ''},
+        'Quindim',
+      ]) {
+        expect(
+          AchadoRegistrado.doJson(corpo(bruto)).petCorrespondente,
+          isNull,
+          reason: 'REPROVA: `matched_pet = $bruto` virou um pet na tela.',
+        );
+      }
+    });
+  });
 }
+
