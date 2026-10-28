@@ -21,6 +21,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:bichu/api/cache_de_imagens.dart';
 import 'package:bichu/api/estados_brasileiros.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
@@ -700,6 +701,18 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// e o portao que precisa VER o caminho ser exercido: sem injecao, "o
   /// caminho existe" so poderia ser afirmado lendo o codigo.
   DistintivoDoAplicativo? distintivoDoApp,
+  /// O CACHE DE IMAGEM EM DISCO (BICHUS-296). **Nulo por padrao, de proposito.**
+  ///
+  /// Entra por aqui pelo mesmo motivo do cofre do QR -- o caso do logout
+  /// precisa OLHAR dentro dele depois de a sessao cair -- e o padrao e nulo
+  /// pelo motivo de todos os vizinhos desta lista: o do app resolve a pasta
+  /// por `getApplicationCacheDirectory()`, canal de plataforma que trava o
+  /// `pumpAndSettle` para sempre, sem mensagem.
+  ///
+  /// **Com nulo nenhum caso desta suite toca o disco por causa de imagem**, e
+  /// e isso que mantem o portao do QR (`qr_na_tela_test.dart`, "a imagem nao
+  /// encosta no disco do app") medindo o que ele sempre mediu.
+  CacheDeImagensNoAparelho? cacheDeImagens,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -729,6 +742,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         cacheDeMeusPets: cacheDeMeusPets,
         depositoDaCidade: depositoDaCidade ?? DepositoDaCidadeEmMemoria(),
         cofreDoQr: cofreDoQr,
+        cacheDeImagens: cacheDeImagens,
         depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
         depositoDeFotos: depositoDeFotos ?? DepositoDeFotosEmMemoria(),
         camera: camera ?? const CameraNaoEmbarcada(),

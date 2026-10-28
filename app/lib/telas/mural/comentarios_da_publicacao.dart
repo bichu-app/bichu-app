@@ -395,6 +395,12 @@ class _Comentario extends StatelessWidget {
             inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
             lado: ladoDoIcone,
             estiloDaInicial: textos.bodyMedium,
+            // O dono da foto, para o cache em disco (BICHUS-296). NA UNIAO de
+            // 27/10 ele entra AQUI, dentro do `MarcaDaPessoa` que o #64
+            // embrulhou em `PortaDoPerfilDoAutor`: os dois lados nao se
+            // contradiziam -- um fez da foto uma porta, o outro deu dono a
+            // chave do cache.
+            apelido: comentario.autor.apelido,
           ),
         ),
         const SizedBox(width: BichuEspaco.e3),

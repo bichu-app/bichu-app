@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../api/cache_de_imagens.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'imagem_em_cache.dart';
 
 /// Uma imagem que vem do servidor, **desenhada com disciplina de memoria**.
 ///
@@ -49,6 +51,7 @@ class ImagemDaRede extends StatelessWidget {
     this.aoTocarNaFalha,
     this.textoDaFalha,
     this.reservaDeFalha,
+    this.cache,
   });
 
   /// A URL da **derivada**. Nao anulavel e nao vazia: ver o item 3 acima.
@@ -114,6 +117,39 @@ class ImagemDaRede extends StatelessWidget {
   /// `Image.network` na tela.
   final Widget? reservaDeFalha;
 
+  /// **A IDENTIDADE ESTAVEL DA IMAGEM, PARA O CACHE EM DISCO** (BICHUS-296).
+  ///
+  /// Nula -- o padrao -- mantem o comportamento de sempre: `Image.network`, com
+  /// cache **so em memoria**, que morre com o processo. **Nenhuma das quinze
+  /// chamadas que ja existiam mudou de comportamento por este parametro
+  /// existir.**
+  ///
+  /// ## Por que e OPT-IN, e nao um gancho global
+  ///
+  /// Porque uma imagem deste aplicativo **nao pode encostar no disco**: a do QR
+  /// da tag, que carrega o codigo da tag dentro dos pixeis (ADR-0004). Ha
+  /// portao medindo isso -- `app/test/telas/qr_na_tela_test.dart` aponta o
+  /// `path_provider` para uma pasta vazia, roda o fluxo e reprova se os bytes
+  /// aparecerem em qualquer arquivo. Um cache ligado por padrao aqui teria
+  /// reprovado aquele portao.
+  ///
+  /// E o mesmo desenho do item 3 do cabecalho desta classe: **a decisao e de
+  /// quem chama**, porque so quem chama sabe o que a imagem e.
+  ///
+  /// ## Como se escolhe entre os dois escopos
+  ///
+  /// - [ChaveDeImagem.publica] para foto de pet, cartaz de perdido, capa de
+  ///   encontro, item do catalogo, logo e faixa do profissional;
+  /// - [ChaveDeImagem.dePessoa] para a `thumb` de 176 da foto de uma pessoa,
+  ///   **com o apelido dela**. E o apelido que faz desfazer conexao e bloquear
+  ///   apagarem o arquivo do disco -- sem ele a Emenda 3 do ADR-0010 valeria so
+  ///   na tela. Ver `MarcaDaPessoa`.
+  ///
+  /// **Chave sem cache no escopo nao faz nada**: se
+  /// `CacheDeImagensDoAplicativo` nao esta na arvore -- o caso de todo teste de
+  /// widget que nao o monta --, esta peca desenha `Image.network` como antes.
+  final ChaveDeImagem? cache;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -143,19 +179,32 @@ class ImagemDaRede extends StatelessWidget {
           borderRadius: BorderRadius.circular(raio),
         );
 
+        // **O numero que decide o custo em memoria.** Em pixeis do aparelho,
+        // pela largura que a tela pinta.
+        final emPixeis = (larguraPintada * fatorDePixel).round();
+
         final conteudo = Container(
           width: larguraPintada,
           height: alturaPintada,
           clipBehavior: Clip.antiAlias,
           decoration: moldura,
-          child: Image.network(
-            url,
+          child: Image(
+            // O PROVEDOR E O UNICO RAMO DESTA PECA, e ele mantem as duas
+            // politicas do cabecalho nos dois caminhos.
+            //
+            // Sem chave de cache ele e `NetworkImage(url)` -- que e
+            // literalmente o que `Image.network` monta por dentro, entao a
+            // pintura de antes nao mudou em nada. Com chave ele e
+            // `ImagemEmCache`, que le o disco antes da rede.
+            //
+            // `ResizeImage` nos DOIS casos, e nao `cacheWidth` so num deles: e
+            // ele que `Image.network(cacheWidth: ...)` usa por dentro, e deixar
+            // o caminho em cache sem ele devolveria o item 1 do cabecalho --
+            // uma faixa de 1280 x 720 custando 3,52 MiB num cartao de 56 dp.
+            image: ResizeImage(_provedor(context), width: emPixeis),
             width: larguraPintada,
             height: alturaPintada,
             fit: BoxFit.cover,
-            // **O numero que decide o custo em memoria.** Em pixeis do
-            // aparelho, pela largura que a tela pinta.
-            cacheWidth: (larguraPintada * fatorDePixel).round(),
             // Uniao das duas frentes: a reserva desenhada pela tela vence, e
             // sem ela vale `_falha`, que sem `aoTocarNaFalha` devolve
             // exatamente o glifo centralizado de antes.
@@ -183,6 +232,33 @@ class ImagemDaRede extends StatelessWidget {
             ? ExcludeSemantics(child: conteudo)
             : conteudo;
       },
+    );
+  }
+
+  /// De onde os bytes vem: o disco antes da rede, ou **so a rede**.
+  ///
+  /// Os dois degraus sao exigidos para o cache entrar, e nenhum deles e
+  /// opcional:
+  ///
+  /// 1. **quem chama passou uma [cache]** -- ver o campo, e por que isto e
+  ///    opt-in;
+  /// 2. **o escopo tem um `CacheDeImagensDoAplicativo`**. Sem ele nao ha pasta
+  ///    nem buscador, e inventar os dois aqui chamaria `path_provider` dentro
+  ///    de `build` -- um canal de plataforma que **trava o `pumpAndSettle`
+  ///    para sempre, sem mensagem**, em teste de widget.
+  ///
+  /// Faltando qualquer um, devolve `NetworkImage(url)`, que e o que
+  /// `Image.network` monta: o comportamento identico ao de antes da BICHUS-296.
+  ImageProvider<Object> _provedor(BuildContext context) {
+    final chave = cache;
+    if (chave == null) return NetworkImage(url);
+    final escopo = CacheDeImagensDoAplicativo.talvezDe(context);
+    if (escopo == null) return NetworkImage(url);
+    return ImagemEmCache(
+      url: url,
+      chave: chave,
+      cache: escopo.cache,
+      buscador: escopo.buscador,
     );
   }
 

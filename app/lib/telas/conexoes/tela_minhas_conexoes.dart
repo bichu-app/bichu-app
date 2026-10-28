@@ -432,6 +432,25 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
+  // ------------------------------------------------------------------------
+  // NA UNIAO DE 27/10: O CACHE DO #72 **NAO CHEGA A ESTA TELA**, e isso esta
+  // RELATADO em vez de consertado de passagem.
+  // ------------------------------------------------------------------------
+  //
+  // O #72 entregou `cache: ChaveDeImagem.dePessoa(url, apelido: pessoa.handle)`
+  // dentro de `_avatar`. Este lado APAGOU `_avatar` de proposito (a quarta
+  // copia do circulo de foto-ou-inicial) e passou a desenhar por
+  // `FichaDaPessoa`. `FichaDaPessoa` NAO tem parametro de dono e NAO repassa
+  // `apelido` para o `MarcaDaPessoa` que ela compoe -- medido --, entao aqui
+  // a foto volta a NAO ser cacheada em disco.
+  //
+  // **Por que nao foi consertado aqui:** acrescentar `apelido` a
+  // `FichaDaPessoa` tocaria os DOIS lugares que a usam, e o outro e
+  // `telas/seguranca/tela_de_bloqueados.dart` -- cachear em disco a foto de
+  // quem a pessoa BLOQUEOU e exatamente a decisao de privacidade que o #72
+  // existe para nao tomar (ele APAGA a foto ao bloquear). Decidir isso e do
+  // produto, nao de quem integra. O resto da entrega do #72 esta intacto:
+  // Mural, comentarios, conversa, perdido e perfil cacheiam.
   // **O AVATAR SAIU DAQUI, e a remocao e o ponto.**
   //
   // `_avatar` e `_circuloDaInicial` eram a QUARTA copia no app do mesmo circulo

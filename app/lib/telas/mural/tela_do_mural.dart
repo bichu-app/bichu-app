@@ -891,6 +891,11 @@ class _FotoDoAutor extends StatelessWidget {
       urlDoIcone: autor.urlDoIcone,
       inicial: MarcaDaPessoa.letraDe(autor.nomeExibido),
       lado: lado,
+      // O DONO DA FOTO, para o cache em disco (BICHUS-296). `apelido` e
+      // anulavel aqui pelo mesmo motivo de o toque nao existir: a pessoa pode
+      // nao ter escolhido apelido, e ai nao se cacheia -- ver
+      // `MarcaDaPessoa.apelido`.
+      apelido: autor.apelido,
     );
   }
 }
