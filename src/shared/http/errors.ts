@@ -764,6 +764,52 @@ export const problemas = {
     }),
 
   /**
+   * 410. O link público leva a um caso que terminou **porque o animal voltou**.
+   *
+   * ===========================================================================
+   * ESTE É O ÚNICO DOS CINCO MOTIVOS DE `lost-case-closed` QUE SE ABRE
+   * ===========================================================================
+   *
+   * Cliente, 28/10/2026 -- terceira vez que ele relatou a mesma página errada:
+   * *"crie uma página padrão, agradecendo a preocupação do usuário e avisando-o
+   * que aquele pet já foi encontrado, que ele não precisa mais se preocupar."*
+   *
+   * `casoPublicoEncerrado` continua respondendo pelos **outros quatro** -- pet
+   * excluído, falecido, arquivado, e token desconhecido --, e também pelo caso
+   * encerrado SEM reencontro (`closed_not_found`, `closed_false_alarm`). Quem
+   * decide qual dos dois sai é `CasoPublico.reencontrado`, que exige o desfecho
+   * `closed_reunited` **e** o pet de pé.
+   *
+   * **Tipo novo em vez de campo novo no corpo de `lost-case-closed`.** Um
+   * `reunited: true` dentro do problema existente faria a ausência do campo
+   * significar "um dos outros quatro", e a leitura de ausência é exatamente o
+   * oráculo que a fusão existe para negar: bastaria pedir dois tokens para
+   * separar o grupo. Com dois tipos, quem recebe `lost-case-closed` não sabe
+   * nada que não soubesse antes.
+   *
+   * ## SEM `next_action`, E A AUSÊNCIA É O PEDIDO DO CLIENTE
+   *
+   * `casoPublicoEncerrado` carrega `register_stray_found_report` porque lá quem
+   * lê pode estar com um animal desconhecido no colo. **Aqui não**: o animal
+   * deste cartaz está em casa, e a pessoa que se mobilizou não tem achado
+   * nenhum para registrar. Empurrá-la para o formulário de achado era
+   * literalmente o defeito relatado -- *"ele não precisa mais se preocupar"* não
+   * termina num formulário.
+   *
+   * ## O QUE O CORPO NÃO DIZ
+   *
+   * Não há data de encerramento, não há quem achou, não há nome do pet e não há
+   * `pet_id`, `case_id` nem `user_id` (ADR-0010, item 6). O único fato novo é
+   * "este caso terminou porque o animal voltou", e ele já é legível sem conta
+   * nenhuma desde 20/10/2026 no selo `found_by_community` da listagem pública
+   * (Emenda 4 do ADR-0010).
+   */
+  casoPublicoReencontrado: (): AppError =>
+    new AppError('lost-case-reunited', 'Este pet já foi encontrado', {
+      detail: 'Obrigado por se preocupar com ele. Ele já está em casa, e você não precisa mais se preocupar.',
+    }),
+
+  /**
    * 410. A janela de reabertura do caso passou (`reopenLostCase`).
    *
    * O contrato declara a resposta e o prazo: *"Encerrar e reversivel por **7

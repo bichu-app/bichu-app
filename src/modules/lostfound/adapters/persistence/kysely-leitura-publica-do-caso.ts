@@ -27,6 +27,17 @@ import type { CasoPublico, LeituraPublicaDoCaso } from '../../ports/leitura-publ
 /** Pet nesses estados não tem mais caso público, mesmo com o caso aberto. */
 const STATUS_DE_PET_SEM_CASO_PUBLICO: readonly string[] = ['deceased', 'archived'];
 
+/**
+ * O desfecho que diz que o animal VOLTOU (`StatusDoCaso`).
+ *
+ * Os outros dois encerramentos -- `closed_not_found` e `closed_false_alarm` --
+ * **não** entram, e a separação é o ponto: `closed_not_found` é o caso que
+ * terminou sem o animal, e dizer a um estranho que ele voltou seria falso.
+ * Mesmo valor que `kysely-listagem-publica-de-perdidos.ts` já usa para o selo
+ * `found_by_community`.
+ */
+const STATUS_DE_CASO_REENCONTRADO = 'closed_reunited';
+
 export function construtorDaLeituraPublicaDoCaso(
   db: DbExecutor,
   shareToken: string,
@@ -78,12 +89,26 @@ export function criarLeituraPublicaDoCaso(db: Db): LeituraPublicaDoCaso {
       const linha = await construtorDaLeituraPublicaDoCaso(db, shareToken, chamador).executeTakeFirst();
       if (linha === undefined) return undefined;
 
+      // **O MESMO predicado de pet de pé serve aos dois campos**, e não dois
+      // parecidos. `aberto` e `reencontrado` respondem a perguntas diferentes
+      // sobre o CASO, mas a mesma sobre o ANIMAL: ele existe e não está
+      // falecido nem arquivado. Escritos separados, o dia em que um estado novo
+      // de pet entrasse em `STATUS_DE_PET_SEM_CASO_PUBLICO` cobriria um e
+      // deixaria o outro -- e o que ficaria de fora é justamente o que fala.
+      const petDePe =
+        linha.pet_excluido !== true &&
+        !STATUS_DE_PET_SEM_CASO_PUBLICO.includes(linha.pet_status);
+
       return {
         shareToken: linha.share_token,
-        aberto:
-          linha.status === 'open' &&
-          linha.pet_excluido !== true &&
-          !STATUS_DE_PET_SEM_CASO_PUBLICO.includes(linha.pet_status),
+        aberto: linha.status === 'open' && petDePe,
+        // **Exige `petDePe`, e essa conjunção é a regra de decência da tela.**
+        // Um pet que voltou para casa e depois morreu guarda
+        // `status = 'closed_reunited'`, porque o desfecho daquele caso não
+        // mudou. Sem este `&&`, quem abrisse o cartaz desse animal leria "ele
+        // já foi encontrado, não se preocupe" -- e os quatro motivos que
+        // continuam fundidos existem exatamente para isso não acontecer.
+        reencontrado: linha.status === STATUS_DE_CASO_REENCONTRADO && petDePe,
         petNome: linha.name,
         especie: linha.species_code,
         porte: linha.size_code,
