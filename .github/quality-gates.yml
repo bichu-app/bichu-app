@@ -150,19 +150,55 @@ dispensas:
   # segredo e vao para o Secret Manager (ADR-0022); a digital que sai dele NAO
   # e segredo e e justamente o que entra neste repositorio.
   #
-  # ENQUANTO ISSO NAO ACONTECER, a lista segue vazia de proposito e o estado e
-  # ruidoso, nao silencioso: `verificar_borda_local.py` acusa a lista vazia a
-  # cada execucao e REPROVA assim que a dispensa `apk-assinado` vencer
-  # (31/10/2026, redatada em 28/09 -- ver o cabecalho desta entrada).
+  # ENQUANTO ISSO NAO ACONTECER, o estado e ruidoso e nao silencioso:
+  # `verificar_borda_local.py` confere a lista a cada execucao e REPROVA assim
+  # que a dispensa `apk-assinado` vencer (30/11/2026, redatada em 28/10 -- ver
+  # o bloco de 28/10 logo abaixo, que corrige este paragrafo: a lista deixou de
+  # estar vazia, e nao foi o insumo certo que a preencheu).
   # Conferido em 22/09 contra `https://tag.bichu.app`: com a dispensa valendo
   # sai `[aviso]` e APROVADO; com `vence_em` recuado para 21/09 sai REPROVADO
   # com codigo de saida 1, nomeando o insumo que falta. Nao ha `TODO` nenhum
   # segurando isso, e e de proposito: a troca da digital no dia da publicacao
   # nao pode depender de alguem lembrar.
+  # ACRESCENTADO EM 28/10/2026. DOIS PONTOS DO QUE ESTA ACIMA FICARAM VELHOS, e
+  # nenhum dos dois tira a necessidade desta dispensa.
+  #
+  # 1. A DECISAO CHEGOU: PLAY APP SIGNING. Verbatim do cliente em 28/10: "play
+  #    app signing, e redata as duas para 30/11". Isso fecha a pergunta que o
+  #    paragrafo CONCLUSAO acima deixou aberta -- nao e mais preciso decidir
+  #    onde vive um keystore de debug COMPARTILHADO, porque a chave que assina
+  #    o app publicado passa a ser do Google. O que a decisao NAO faz, e vale
+  #    escrever porque e o engano comum: ela NAO dispensa keystore. Continua
+  #    sendo nosso o keystore de UPLOAD, que assina o bundle que sobe, e e ele
+  #    que `build.gradle.kts:45` ainda nao tem. E a digital SHA-256 que entra
+  #    em `assetlinks.json` passa a ser a da CHAVE DE ASSINATURA DO APP, que o
+  #    Google guarda e mostra no Play Console (Configuracao > Integridade do
+  #    app). Dai uma ordem que nao da para furar: essa digital NAO EXISTE antes
+  #    de o app existir no console e um bundle subir -- entao `assetlinks.json`
+  #    nao fecha antes disso, por mais que se queira.
+  #
+  # 2. A LISTA NAO ESTA MAIS VAZIA, E NAO FOI O INSUMO CERTO QUE A PREENCHEU.
+  #    Em 28/10 eu pus em `infra/caddy/well-known/assetlinks.json` a digital de
+  #    DEBUG DESTA MAQUINA (`5D:7A:C5:50...`, a terceira do item 2 do
+  #    cabecalho), junto de `delegate_permission/common.get_login_creds`,
+  #    porque sem as duas o passkey nao liga no APK de homologacao. E
+  #    EXATAMENTE O ESTADO QUE O ITEM 2 DO CABECALHO MANDA EVITAR, e a razao
+  #    dele continua inteira: casa com APK compilado nesta maquina e falha em
+  #    toda outra, sem erro em lugar nenhum. Fica, porque e o que faz o passkey
+  #    funcionar no aparelho do cliente HOJE; e fica DECLARADO aqui em vez de
+  #    silencioso, que e para isto que este arquivo existe.
+  #
+  #    O QUE ISSO CUSTA, dito antes de alguem descobrir sozinho: enquanto essa
+  #    digital estiver servida, um APK de pacote `app.bichu` assinado com o
+  #    keystore de debug DESTA maquina tem permissao de tratar os links da
+  #    plaquinha e de ler credencial de login. A digital do Play tem de ENTRAR,
+  #    e a de debug tem de SAIR no dia em que o APK deixar de ser compilado
+  #    aqui -- quem a deixar ficar depois disso esta estendendo essa permissao
+  #    de proposito, e e melhor que esteja escrito.
   - portao: apk-assinado
-    motivo: "MEDIDO em 28/09/2026: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, nao existe keystore de release, e sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json esta VAZIO -- o link da plaquinha abre o navegador, nao o app. A decisao entre keystore proprio e Play App Signing e do cliente, esta pendente e nao tem data (BICHUS-106). CAI QUANDO existir signingConfig de release lendo keystore proprio ou Play App Signing configurado E a impressao digital SHA-256 correspondente entrar em assetlinks.json, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho"
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026: Play App Signing, e nao keystore proprio (BICHUS-106) -- a pergunta que esta dispensa carregou pendente desde 28/09 esta respondida, e a dispensa CONTINUA porque o insumo nao e a decisao, e a chave. MEDIDO em 28/10, nao deduzido: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, entao nao existe assinatura de release de nenhum tipo -- e Play App Signing NAO dispensa keystore, ele troca qual chave e a nossa (segue faltando o keystore de UPLOAD). E a digital SHA-256 que entra em assetlinks.json passa a ser a da chave de assinatura do app que o Google guarda, lida no Play Console em Configuracao > Integridade do app, que nao existe antes de o app existir no console e um bundle subir. MUDOU EM 28/10: sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json NAO esta mais vazio -- entrou a digital de DEBUG desta maquina (5D:7A:C5:50...) para o passkey ligar no APK de homologacao, o que vale so para APK compilado aqui e e o estado que o cabecalho desta entrada manda evitar; fica declarado em vez de silencioso. CAI QUANDO a digital da chave do Play substituir a de debug em assetlinks.json E o release for assinado pelo keystore de upload, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho"
     responsavel: cliente
-    vence_em: 2026-10-31
+    vence_em: 2026-11-30
 
   # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
   # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
@@ -219,12 +255,15 @@ dispensas:
   # `portao` -- travando inclusive entrega alheia que nao tem nada a ver com
   # iOS. Nao existe previsao para a conta Apple, entao nenhuma data descreve o
   # fato; ela so diz de quanto em quanto tempo alguem reabre a pergunta. 31/10
-  # afasta a trava do fim do desenvolvimento (30/09) e mantem a revisao mensal.
-  # Encurtar isso e decisao de quem coordena, nao minha.
+  # afastava a trava do fim do desenvolvimento (30/09) e mantinha a revisao
+  # mensal. REDATADA EM 28/10/2026 PARA 30/11, por decisao do cliente na mesma
+  # frase em que ele reafirmou a pendencia -- a revisao mensal segue sendo a
+  # unica coisa que a data significa. Encurtar isso e decisao de quem
+  # coordena, nao minha.
   - portao: ios
-    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora"
+    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora. REAFIRMADO PELO CLIENTE EM 28/10/2026, verbatim: por enquanto nao consegui criar o id team na ios, vamos deixar isso pendente -- e na mesma data, ao fiar o passkey, apple-app-site-association foi mantido com applinks.details e webcredentials.apps VAZIOS de proposito: servir um Team ID que nao existe deixaria o arquivo com cara de configurado e a falha sem sintoma nenhum, que e o pior dos desfechos descritos acima"
     responsavel: cliente
-    vence_em: 2026-10-31
+    vence_em: 2026-11-30
 
   # A DISPENSA `oasdiff-logout-corpo-obrigatorio` SAIU EM 28/09/2026, E NAO FOI
   # REDATADA. Ela venceria hoje, e o motivo escrito nela CADUCOU pelo unico
