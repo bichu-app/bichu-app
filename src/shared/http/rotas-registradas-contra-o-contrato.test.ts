@@ -70,6 +70,7 @@ import * as mural from '../../modules/publications/adapters/http/publicacao-rout
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import * as enderecoGuardado from '../../modules/tags/adapters/http/endereco-guardado-routes.js';
+import * as enderecoDoPet from '../../modules/tags/adapters/http/endereco-do-pet-routes.js';
 // 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
@@ -173,6 +174,12 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
   enderecoGuardado,
+  // O ENDERECO DE ENTREGA DO PET (cliente, 27/10/2026: *"endereco um por
+  // pet"*), que SUPERA a decisao de 21/10/2026 que criou o modulo de cima. As
+  // duas ficam na lista: o endereco da conta nao foi apagado (decisao dele de
+  // 26/10/2026, *"nao apague nada"*), ele perdeu o papel -- nenhum pedido de
+  // plaquinha le de la.
+  enderecoDoPet,
   moderacaoAdministrativa,
   // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
   // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele

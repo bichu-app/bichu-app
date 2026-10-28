@@ -106,28 +106,47 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// substituir e o que não pode.
   ///
   /// **O mecanismo é um só**, compartilhado com
-  /// `telas/perfil/tela_endereco_de_entrega.dart`: o raciocínio inteiro — as
+  /// `telas/perfil/tela_endereco_de_entrega.dart` (que desde 27/10/2026 edita o
+/// endereço DO PET): o raciocínio inteiro — as
   /// duas decisões do cliente que ele reconcilia, e o que acontece sem ele —
   /// está em [OrigemDosValores], em `formulario/origem_dos_valores.dart`.
   final OrigemDosValores _origem = OrigemDosValores();
 
-  /// Havia endereço guardado na conta quando esta tela abriu?
+  /// Havia endereço guardado **no pet escolhido** quando esta tela o leu?
+  ///
+  /// **DO PET, e não da conta, desde 27/10/2026** — decisão do cliente:
+  /// *"endereço um por pet"*. O registro das duas decisões, com as datas e as
+  /// palavras dele, está em [_carregarOEnderecoDoPet].
   ///
   /// **TRÊS estados, e não dois**, porque a diferença entre dois deles é a que
   /// decide se esta tela pode escrever:
   ///
-  /// - `false` — **a leitura respondeu, e respondeu `null`**: a conta não tem
+  /// - `false` — **a leitura respondeu, e respondeu `null`**: o pet não tem
   ///   endereço guardado. É o ÚNICO estado em que o primeiro pedido guarda;
   /// - `true` — a leitura respondeu com um endereço. O pedido **nunca** escreve,
   ///   nem igual, nem diferente;
-  /// - `null` — **a leitura não respondeu** (500, rede fora, token vencido).
+  /// - `null` — **a leitura não respondeu, ou nem foi feita** (500, rede fora,
+  ///   token vencido, 404 do pet, ou simplesmente nenhum pet escolhido ainda).
   ///   Aqui ninguém sabe se há endereço guardado, e escrever seria apostar: se
   ///   houvesse um, o pedido o SOBRESCREVERIA — exatamente o defeito que a
   ///   decisão do cliente proíbe, e pela porta dos fundos. Na dúvida, não
   ///   escreve.
   ///
-  /// Começa `null` de propósito: até a leitura voltar, o estado é desconhecido.
+  /// Começa `null` de propósito, e **volta a `null` a cada troca de pet**: o que
+  /// se sabia era sobre o pet de antes. Sem esse retorno, trocar para um pet SEM
+  /// endereço carregando um `true` do pet anterior faria o primeiro pedido dele
+  /// não guardar nada; e trocar para um pet COM endereço carregando um `false`
+  /// faria o pedido sobrescrever o endereço dele.
   bool? _haviaEnderecoGuardado;
+
+  /// De qual pet é o que está em [_haviaEnderecoGuardado] e nos campos.
+  ///
+  /// **Sem isto, uma leitura lenta do pet A chegando depois da troca para o pet
+  /// B escreveria o endereço de A no formulário de B** — e o pedido sairia com a
+  /// rua do pet errado, sem nada ter dado erro. A leitura confere este campo
+  /// antes de tocar o formulário; é a mesma guarda de `_cepJaBuscado` para a
+  /// busca de CEP, aplicada à troca de pet.
+  String? _petDoEnderecoLido;
 
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`. Uma so estrutura para a validacao local e para a do
@@ -162,7 +181,77 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (_iniciou) return;
     _iniciou = true;
     _carregarPets();
-    _carregarOEnderecoGuardado();
+    // **So le o endereco se ja ha pet**, e e a decisao de 27/10/2026 que faz
+    // isso ser condicional: o endereco e DO PET, e sem pet escolhido nao ha
+    // endereco a buscar. Quem chega por link direto (`petIdInicial` nulo)
+    // escolhe o pet primeiro, e a leitura acontece no `aoSelecionar`.
+    final inicial = _petEscolhido;
+    if (inicial != null) _carregarOEnderecoDoPet(inicial);
+  }
+
+  /// O pet mudou: o endereco pre-preenchido era de OUTRO pet.
+  ///
+  /// **Decisao do cliente, 27/10/2026: *"endereco um por pet"*.** No modelo da
+  /// conta esta funcao nao existia e nao precisava existir -- o endereco era o
+  /// mesmo para qualquer pet, e trocar de pet nao trocava a fonte.
+  ///
+  /// Tres coisas acontecem aqui, e cada uma conserta um defeito concreto:
+  ///
+  /// 1. **o que veio do pet anterior sai dos campos.** [OrigemDosValores]
+  ///    devolve exatamente as chaves que ainda carregavam valor do guardado, e
+  ///    so essas sao limpas. **O que a pessoa DIGITOU fica**: o toque dela ja
+  ///    tirou o campo daquele conjunto, entao ele nao volta na devolucao e nao e
+  ///    apagado. Trocar de pet nao apaga o que ela escreveu;
+  /// 2. **o estado de escrita volta a desconhecido.** Ver
+  ///    [_haviaEnderecoGuardado]: carregar o `true`/`false` do pet de antes faz
+  ///    o primeiro pedido do pet novo nao guardar, ou sobrescrever;
+  /// 3. **a leitura do pet novo comeca.** Sem ela a troca deixaria o formulario
+  ///    vazio mesmo para pet que TEM endereco, e a conveniencia que a decisao de
+  ///    21/10 comprou -- *"que a pessoa nao redigite nove campos"* -- se perderia
+  ///    justamente em quem tem mais de um animal.
+  ///
+  /// **O CEP buscado tambem e esquecido** (`_cepJaBuscado`): o CEP que entra do
+  /// pet novo conta como ja buscado, e manter o do pet anterior faria a busca
+  /// nao rodar para um CEP que ela nunca viu.
+  void _trocarDePet(String? escolhido) {
+    final soltas = _origem.soltarOQueVeioDoGuardado();
+    setState(() {
+      _petEscolhido = escolhido;
+      _erros.remove(_CamposDoPedido.pet);
+      for (final chave in soltas) {
+        final campo = _campoDe(chave);
+        if (campo != null) {
+          campo.clear();
+        } else if (chave == _CamposDoPedido.uf) {
+          _uf = null;
+        }
+        _erros.remove(chave);
+      }
+      _haviaEnderecoGuardado = null;
+      _petDoEnderecoLido = null;
+      _cepJaBuscado = '';
+      _buscaDoCep = null;
+    });
+    if (escolhido != null) _carregarOEnderecoDoPet(escolhido);
+  }
+
+  /// O controlador daquele campo do endereco, ou nulo quando a chave nao e de um
+  /// campo de texto (`state`, que e seletor, e `pet`).
+  ///
+  /// **Um lugar so**, e nao um `switch` repetido em cada ponto que precisa
+  /// percorrer os campos: duas listas divergem no dia em que um campo entrar.
+  TextEditingController? _campoDe(String chave) {
+    return switch (chave) {
+      _CamposDoPedido.destinatario => _destinatario,
+      _CamposDoPedido.cep => _cep,
+      _CamposDoPedido.logradouro => _logradouro,
+      _CamposDoPedido.numero => _numero,
+      _CamposDoPedido.complemento => _complemento,
+      _CamposDoPedido.bairro => _bairro,
+      _CamposDoPedido.cidade => _cidade,
+      _CamposDoPedido.telefone => _telefone,
+      _ => null,
+    };
   }
 
   @override
@@ -214,11 +303,40 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
   }
 
-  /// Abre o formulário PREENCHIDO com o endereço guardado na conta, se houver.
+  /// Abre o formulário PREENCHIDO com o endereço guardado **naquele pet**, se
+  /// houver.
   ///
-  /// **Decisão do cliente, 21/10/2026:** *"um endereço de entrega salvo na
-  /// conta, reusado em todo pedido e editável num lugar só."* O motivo é que a
-  /// pessoa não redigite nove campos a cada pedido.
+  /// ## AS DUAS DECISÕES DELE, COM AS DATAS E AS PALAVRAS — e a de 21/10 cai
+  ///
+  /// **21/10/2026**, escolhendo entre três opções apresentadas, e esta frase
+  /// estava citada literal nesta função até 27/10:
+  ///
+  ///     "Endereço guardado de verdade -- um endereço de entrega salvo na
+  ///      CONTA, reusado em todo pedido e editável num lugar só."
+  ///
+  /// **27/10/2026**, pedido dele:
+  ///
+  ///     "o endereço de entrega da plaquinha tem que estar dentro do cadastro
+  ///      do pet"
+  ///
+  /// e, com a frase de 21/10 posta na mesa, nomeada e datada:
+  ///
+  ///     "endereço um por pet"
+  ///
+  /// **A de 21/10 CAI e a de 27/10 vale**, e não foi descuido dele: a decisão
+  /// anterior estava em mãos quando a nova foi tomada. Então esta função trocou
+  /// de ALVO — ela lê `getPetDeliveryAddress` e **nunca mais**
+  /// `getMyDeliveryAddress`.
+  ///
+  /// **O que NÃO mudou:** o motivo. Continua sendo *"que a pessoa não redigite
+  /// nove campos"*, e é por isso que a migração `20261027000001` copiou o
+  /// endereço da conta para os pets de cada tutor — sem a cópia, a virada faria
+  /// todo mundo redigitar, perdendo a conveniência de 21/10 como efeito colateral
+  /// de uma mudança de modelo que ninguém pediu para sentir.
+  ///
+  /// **Nada foi apagado** (decisão dele de 26/10/2026, *"não apague nada"*): o
+  /// endereço da conta continua lá, e `MeApi.lerEnderecoGuardado` continua
+  /// existindo. O que ele perdeu foi o papel — **esta tela não o lê mais.**
   ///
   /// Quatro coisas que esta função **não** faz, e cada uma é deliberada:
   ///
@@ -233,14 +351,23 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   ///    depois de ela ter começado a escrever, o campo escrito fica — por isso
   ///    `_preencherSeVazio` e não atribuição direta;
   /// 4. **não escreve nada de volta.** Esta tela nunca chama
-  ///    `salvarEnderecoGuardado`. Editar o endereço aqui muda ESTE pedido e não
+  ///    `salvarEnderecoDoPet` fora do caminho de [_guardarSeNaoHavia]. Editar o
+  ///    endereço aqui muda ESTE pedido e não
   ///    mexe no que está guardado; o lugar de editar o guardado é
-  ///    `TelaEnderecoDeEntrega`, e a decisão dele foi *"ou pergunta, ou não
-  ///    mexe"* — esta frente ficou com **não mexe**.
-  Future<void> _carregarOEnderecoGuardado() async {
+  ///    `TelaEnderecoDeEntrega` — que desde 27/10 é alcançada de dentro do
+  ///    cadastro do pet (`Editar pet` > `Endereço de entrega`), e não mais de
+  ///    `Meus dados` —, e a decisão dele foi *"ou pergunta, ou não mexe"*: esta
+  ///    frente ficou com **não mexe**.
+  ///
+  /// 5. **não escreve no formulário se o pet já mudou.** A leitura é assíncrona
+  ///    e a pessoa pode trocar de pet enquanto ela está no ar: `_petDoEnderecoLido`
+  ///    é conferido contra `_petEscolhido` antes de qualquer `setState`. Sem
+  ///    isso, a resposta lenta do pet A chegaria no formulário do pet B e o
+  ///    pedido sairia com a rua do pet errado — sem nada ter dado erro.
+  Future<void> _carregarOEnderecoDoPet(String petId) async {
     final EnderecoDeEntrega? guardado;
     try {
-      guardado = await Escopo.of(context).me.lerEnderecoGuardado();
+      guardado = await Escopo.of(context).pets.lerEnderecoDoPet(petId);
     } on FalhaDeChamada {
       // Ver a razão 2 acima: silencioso de propósito. O formulário abre vazio.
       //
@@ -249,10 +376,15 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       // guardado, e escrever aqui poderia SOBRESCREVER um que existe.
       return;
     } on Object catch (erro, pilha) {
-      registrarFalhaInesperada(erro, pilha, onde: 'ao ler o endereço guardado para a plaquinha');
+      registrarFalhaInesperada(erro, pilha, onde: 'ao ler o endereço de entrega do pet para a plaquinha');
       return;
     }
     if (!mounted) return;
+    // **O PET JÁ MUDOU: esta resposta é de outro pet.** Ver a razão 5 acima —
+    // escrever aqui poria a rua do pet A no formulário do pet B. Descartar é o
+    // desfecho certo: a troca de pet já disparou a leitura do pet novo.
+    if (_petEscolhido != petId) return;
+    _petDoEnderecoLido = petId;
 
     // A leitura RESPONDEU. Daqui em diante o estado é conhecido, e é ele que
     // autoriza (ou não) a escrita do primeiro pedido.
@@ -361,7 +493,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// ## O QUE FOR GUARDADO AQUI VIRA DADO DE CONTA, e nao digitado
   ///
   /// E isso e automatico, nao precisa de codigo: no pedido seguinte a tela abre,
-  /// [_carregarOEnderecoGuardado] le este endereco e marca os campos em
+  /// [_carregarOEnderecoDoPet] le este endereco e marca os campos em
   /// [OrigemDosValores]. Entao ele CEDE a busca de CEP, como todo dado de
   /// conta -- e nao vence, como venceria se tivesse sido digitado naquela
   /// sessao. A separacao de origem que o cliente confirmou fica intacta.
@@ -369,11 +501,16 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// **Nenhuma caixa, nenhuma pergunta e nenhuma confirmacao no formulario do
   /// pedido**: ele descartou essa saida explicitamente. A tela continua sendo o
   /// unico lugar de EDITAR.
-  Future<void> _guardarSeNaoHavia(EnderecoDeEntrega endereco) async {
+  Future<void> _guardarSeNaoHavia(String petId, EnderecoDeEntrega endereco) async {
     if (_haviaEnderecoGuardado != false) return;
+    // **E SO SE O QUE SE SABE E DESTE PET.** `_haviaEnderecoGuardado == false`
+    // sozinho nao basta depois de 27/10: ele poderia ser o `false` lido para
+    // outro pet, e escrever aqui poria o endereco deste pedido num pet que
+    // ninguem olhou. A conferencia e barata e o defeito seria silencioso.
+    if (_petDoEnderecoLido != petId) return;
     try {
-      await Escopo.of(context).me.salvarEnderecoGuardado(endereco);
-      // A conta passa a TER endereco guardado. Sem esta linha, um segundo toque
+      await Escopo.of(context).pets.salvarEnderecoDoPet(petId, endereco);
+      // O PET passa a TER endereco guardado. Sem esta linha, um segundo toque
       // em `Pedir a plaquinha` na mesma sessao escreveria de novo.
       _haviaEnderecoGuardado = true;
     } on FalhaDeChamada {
@@ -383,7 +520,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       registrarFalhaInesperada(
         erro,
         pilha,
-        onde: 'ao guardar na conta o endereco do primeiro pedido de plaquinha',
+        onde: 'ao guardar no pet o endereco do primeiro pedido de plaquinha',
       );
     }
   }
@@ -545,7 +682,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       if (!mounted) return;
       // **O PRIMEIRO PEDIDO GUARDA SOZINHO**, e só aqui -- depois de o servidor
       // ter aceitado o pedido. Ver `_guardarSeNaoHavia`.
-      await _guardarSeNaoHavia(enderecoDoPedido);
+      await _guardarSeNaoHavia(pet, enderecoDoPedido);
       if (!mounted) return;
       // O desfecho fica NESTA tela, e nao numa tela de sucesso: um `go` para
       // um destino de sucesso alcancavel por link direto afirmaria um desfecho
@@ -774,10 +911,12 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         selecionado: _petEscolhido,
                         erro: _erros[_CamposDoPedido.pet],
                         habilitado: !_enviando,
-                        aoSelecionar: (escolhido) => setState(() {
-                          _petEscolhido = escolhido;
-                          _erros.remove(_CamposDoPedido.pet);
-                        }),
+                        // **NAO e um `setState` direto desde 27/10/2026**
+                        // (cliente: *"endereco um por pet"*): trocar de pet
+                        // troca a FONTE do endereco, e `_trocarDePet` e quem
+                        // tira do formulario o que era do pet anterior, esquece
+                        // o que se sabia sobre ele e le o endereco do novo.
+                        aoSelecionar: _trocarDePet,
                       ),
                       const SizedBox(height: BichuEspaco.e6),
                       Semantics(

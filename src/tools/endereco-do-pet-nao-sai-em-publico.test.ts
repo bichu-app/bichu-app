@@ -341,7 +341,26 @@ void describe('a consulta do endereço do pet carrega o dono e não lê em lista
   });
 
   void it('a porta não tem assinatura que leia pet de terceiro nem vários pets', () => {
-    const porta = readFileSync(CAMINHO_DA_PORTA, 'utf8');
+    // **O TEXTO É LIMPO DE COMENTÁRIO ANTES DE MEDIR, e a primeira versão deste
+    // caso reprovou por não fazer isso.** A porta EXPLICA em prosa por que não
+    // existe uma assinatura `doTutor(chamador): Promise<Endereco[]>` — e o
+    // portão leu a explicação como se fosse o código, exatamente o modo de
+    // falhar que o caso irmão em `endereco-guardado-nao-sai-em-publico.test.ts`
+    // já documenta: um portão que não descarta comentário mede a PROSA e não o
+    // CÓDIGO, e fica vermelho para sempre (ou verde para sempre, se alguém
+    // escrever o código dentro de um comentário).
+    const porta = readFileSync(CAMINHO_DA_PORTA, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//gu, ' ')
+      .replace(/\/\/[^\n]*/gu, ' ');
+
+    // CONTROLE POSITIVO DA LIMPEZA: se ela comesse o código junto, tudo abaixo
+    // passaria por não ter sobrado nada para olhar.
+    assert.ok(
+      porta.includes('EnderecoDoPetRepository'),
+      'a remoção de comentários comeu o código junto: a interface não está mais ' +
+        'no texto medido, e as conferências abaixo olham para o vazio',
+    );
+
     const assinaturas = [...porta.matchAll(/^\s{2}([a-zA-Z]+)\(\s*$|^\s{2}([a-zA-Z]+)\(([^)]*)/gmu)]
       .map((m) => ({ metodo: m[1] ?? m[2] ?? '', parametros: (m[3] ?? '').trim() }))
       .filter((a) => a.metodo !== '');

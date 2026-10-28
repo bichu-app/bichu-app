@@ -210,12 +210,16 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
   ),
   (
     nome: 'endereco de entrega',
-    endereco: '/perfil/endereco-de-entrega',
-    padrao: '/perfil/endereco-de-entrega',
-    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do Perfil, '
-        'e so `Meus dados` a abre, por `ItemDeMenu`. Se `Meus dados` e '
+    endereco: '/pets/3f1d7a9e-0000-7000-8000-000000000001/endereco-de-entrega',
+    padrao: '/pets/:petId/endereco-de-entrega',
+    motivo: 'AMBIGUA, e irma de `minhas fotos`: dois niveis dentro do cadastro '
+        'do pet, e so `Editar pet` a abre, por `ItemDeMenu`. Se `Editar pet` e '
         'interna, ela nao pode ser primeiro plano. E ela e FORMULARIO e nao '
-        'lista -- o que a regra "lista fica" nem alcanca.',
+        'lista -- o que a regra "lista fica" nem alcanca. '
+        'MUDOU DE LUGAR EM 27/10/2026: era `/perfil/endereco-de-entrega` e o '
+        'endereco era da CONTA (cliente, 21/10/2026); ele pediu "o endereco de '
+        'entrega da plaquinha tem que estar dentro do cadastro do pet" e, com '
+        'aquela frase na mesa, decidiu "endereco um por pet".',
   ),
   (
     nome: 'meus achados',

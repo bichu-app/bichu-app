@@ -20,19 +20,55 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/seletor_de_lista.dart';
 
-/// `Perfil` > `Meus dados` > **`Endereço de entrega`**: o lugar — **um só** —
-/// onde o endereço guardado na conta é editado.
+/// **`Pets` > o pet > `Editar pet` > `Endereço de entrega`**: o lugar — **um
+/// só por pet** — onde o endereço de entrega daquele pet é editado.
 ///
-/// ## A decisão, com a data e as palavras dele
+/// ## AS DUAS DECISÕES DELE, COM AS DATAS E AS PALAVRAS — e a de 21/10 cai
 ///
-/// **O cliente decidiu em 21/10/2026**, escolhendo esta opção entre três:
+/// **21/10/2026**, escolhendo esta opção entre três:
 ///
-///     "Endereço guardado de verdade -- um endereço de entrega salvo na conta,
+///     "Endereço guardado de verdade -- um endereço de entrega salvo na CONTA,
 ///      reusado em todo pedido e editável num lugar só."
 ///
-/// O motivo é que a pessoa não redigite nove campos a cada pedido de plaquinha.
-/// **Esta tela é o "lugar só"**, e é o único caminho do app que escreve o
-/// endereço guardado (`putMyDeliveryAddress`).
+/// **27/10/2026**, pedido dele:
+///
+///     "o endereço de entrega da plaquinha tem que estar dentro do cadastro do
+///      pet"
+///
+/// e, com a frase de 21/10 posta na mesa, nomeada e datada:
+///
+///     "endereço um por pet"
+///
+/// **A de 21/10 CAI e a de 27/10 vale**, e não foi descuido dele: a decisão
+/// anterior estava em mãos quando a nova foi tomada.
+///
+/// ## O DESTINO DESTA TELA, decidido e escrito — ela MUDOU DE ALVO
+///
+/// Com um endereço por pet, esta tela perdia a razão de existir como item de
+/// `Meus dados`: um formulário que edita um endereço que **nenhum pedido lê** é
+/// uma tela que mente — a pessoa troca de casa ali, a plaquinha chega na casa
+/// antiga, e nada deu erro. Então as três saídas possíveis eram apagá-la,
+/// deixá-la órfã, ou **mudar o alvo dela**. Esta frente mudou o alvo:
+///
+/// - **o formulário é o mesmo**, caractere por caractere: os nove campos, a
+///   busca de CEP, a separação de [OrigemDosValores], as máscaras e os textos.
+///   Escrever um segundo formulário de endereço dentro do cadastro do pet seria
+///   a segunda redação do mesmo endereço, e as duas divergiriam no primeiro
+///   limite que mudasse;
+/// - **o alvo é o PET**, por [petId]: ela lê `getPetDeliveryAddress` e escreve
+///   `putPetDeliveryAddress`. **Nunca mais `/me/delivery-address`;**
+/// - **o caminho é `/pets/:petId/endereco-de-entrega`**, e o item saiu de
+///   `Meus dados` para dentro do cadastro do pet — que é, literalmente, onde ele
+///   pediu que o endereço estivesse.
+///
+/// **Nada foi apagado** (decisão dele de 26/10/2026, *"não apague nada"*):
+/// `MeApi.lerEnderecoGuardado`/`salvarEnderecoGuardado` e as rotas
+/// `/v1/me/delivery-address` continuam de pé, com o endereço que as pessoas já
+/// guardaram — e foi dele que a migração `20261027000001` copiou para os pets de
+/// cada tutor. O que a conta perdeu foi o **papel**, não os dados.
+///
+/// **Esta tela é o "lugar só" daquele pet**, e é o único caminho do app que
+/// escreve o endereço de um pet.
 ///
 /// ## O formulário do PEDIDO não escreve aqui, e isso é a decisão dele
 ///
@@ -80,10 +116,24 @@ import '../../widgets/seletor_de_lista.dart';
 ///
 /// Não falta implementar: a decisão do cliente de **17/10/2026** é *"você só
 /// deve apagar as informações, caso o usuário remova o pet ou delete a conta"*.
-/// O endereço sai com a conta, pelo `ON DELETE CASCADE`; não há prazo, não há
-/// expiração e não há varredura. Quem quer trocar de casa usa este formulário.
+/// Não há prazo, não há expiração e não há varredura. Quem quer trocar de casa
+/// usa este formulário.
+///
+/// **E desde 27/10/2026 essa frase dele é cumprida inteira**, pela primeira
+/// vez: com o endereço no PET, *"remova o pet"* e *"delete a conta"* são o mesmo
+/// `ON DELETE CASCADE` — `pet_delivery_addresses.pet_id` cascateia de `pets`, e
+/// `pets.owner_user_id` já cascateava de `users`. No modelo da conta, remover um
+/// pet não apagava endereço nenhum.
 class TelaEnderecoDeEntrega extends StatefulWidget {
-  const TelaEnderecoDeEntrega({super.key});
+  const TelaEnderecoDeEntrega({required this.petId, super.key});
+
+  /// O pet de quem é este endereço.
+  ///
+  /// **Obrigatório, e não anulável de propósito.** Um `petId` opcional faria
+  /// esta tela voltar a poder editar o endereço da CONTA quando ele viesse
+  /// nulo — que é exatamente o modelo que a decisão de 27/10/2026 derrubou, e
+  /// ele voltaria pela porta de um parâmetro esquecido, em silêncio.
+  final String petId;
 
   @override
   State<TelaEnderecoDeEntrega> createState() => _TelaEnderecoDeEntregaState();
@@ -169,14 +219,19 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     super.dispose();
   }
 
-  /// Abre com o endereço guardado, se houver.
+  /// Abre com o endereço **deste pet**, se houver.
   ///
-  /// **`null` não é erro e não vira faixa.** É o estado normal de quem nunca
-  /// guardou endereço: a tela abre vazia, que é exatamente o que ela deve
-  /// mostrar nesse caso.
+  /// **`null` não é erro e não vira faixa.** É o estado normal de um pet que
+  /// ainda não tem endereço — e é o estado de TODO pet cadastrado depois da
+  /// migração `20261027000001`: a tela abre vazia, que é exatamente o que ela
+  /// deve mostrar nesse caso.
+  ///
+  /// **404 é outra coisa, e vira faixa**: o pet não é seu, não existe ou foi
+  /// excluído (nunca 403 — ADR-0021). `MensagensDeErro.de` o traduz, e a pessoa
+  /// não fica olhando um formulário vazio que nunca vai poder salvar.
   Future<void> _carregar() async {
     try {
-      final guardado = await Escopo.of(context).me.lerEnderecoGuardado();
+      final guardado = await Escopo.of(context).pets.lerEnderecoDoPet(widget.petId);
       if (!mounted) return;
       setState(() {
         if (guardado != null) _preencherCom(guardado);
@@ -359,7 +414,8 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     });
 
     try {
-      final guardado = await Escopo.of(context).me.salvarEnderecoGuardado(
+      final guardado = await Escopo.of(context).pets.salvarEnderecoDoPet(
+        widget.petId,
         EnderecoDeEntrega(
           destinatario: _destinatario.text.trim(),
           // Sem máscara: o contrato declara oito dígitos.
@@ -704,13 +760,20 @@ abstract final class _CamposDoEndereco {
 abstract final class _TextosDoEndereco {
   static const String titulo = 'Endereço de entrega';
 
-  /// **Diz para que serve, e diz o que NÃO acontece.** A segunda metade é a
-  /// que importa: sem ela, a pessoa não tem como saber que mexer no endereço
-  /// dentro de um pedido não mexe neste — e descobrir isso pela plaquinha que
-  /// chegou no lugar errado é o desfecho que a decisão do cliente evita.
+  /// **Diz para que serve, diz que é DESTE pet, e diz o que NÃO acontece.**
+  ///
+  /// A primeira metade mudou em 27/10/2026, com a decisão dele de *"endereço um
+  /// por pet"*: sem dizer "deste pet", quem tem dois animais não tem como
+  /// saber que salvar aqui não mexe no outro — e descobrir isso pela plaquinha
+  /// que chegou no endereço do outro pet é o desfecho que a frase evita.
+  ///
+  /// A segunda metade continua valendo: mexer no endereço dentro de um pedido
+  /// não mexe neste.
   static const String paraQueServe =
-      'Guardado aqui, ele vem preenchido quando você pedir uma plaquinha. '
-      'Você pode mudar o endereço na hora do pedido sem alterar este.';
+      'É o endereço deste pet. Guardado aqui, ele vem preenchido quando você '
+      'pedir a plaquinha dele — e salvar aqui não mexe no endereço dos seus '
+      'outros pets. Você pode mudar o endereço na hora do pedido sem alterar '
+      'este.';
 
   static const String destinatario = 'Quem recebe';
   static const String cep = 'CEP';

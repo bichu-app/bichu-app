@@ -322,6 +322,96 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     return PedidoDePlaquinha.doJson(json);
   }
 
+  /// `GET /pets/{petId}/delivery-address` (`getPetDeliveryAddress`).
+  ///
+  /// ## As duas decisoes dele, com as datas e as palavras -- e a de 21/10 cai
+  ///
+  /// **21/10/2026**, escolhendo entre tres opcoes apresentadas, e esta frase
+  /// esta citada literal em `tela_solicitar_plaquinha.dart`:
+  ///
+  ///     "Endereco guardado de verdade -- um endereco de entrega salvo na
+  ///      CONTA, reusado em todo pedido e editavel num lugar so."
+  ///
+  /// **27/10/2026**, pedido dele:
+  ///
+  ///     "o endereco de entrega da plaquinha tem que estar dentro do cadastro
+  ///      do pet"
+  ///
+  /// e, com a frase de 21/10 posta na mesa, nomeada e datada:
+  ///
+  ///     "endereco um por pet"
+  ///
+  /// **A de 21/10 CAI e a de 27/10 vale**, e nao foi descuido dele: a decisao
+  /// anterior estava em maos quando a nova foi tomada. `MeApi.lerEnderecoGuardado`
+  /// continua existindo -- a decisao dele de **26/10/2026** e *"nao apague
+  /// nada"*, e foi daquele endereco que a migracao `20261027000001` copiou para
+  /// os pets de cada tutor --, mas **nenhum pedido de plaquinha le de la.**
+  ///
+  /// ## `null` nao e erro, e 404 e outra coisa
+  ///
+  /// Os dois vazios sao diferentes e a tela os desenha diferente:
+  ///
+  /// - **`null`** -- o pet e seu e ainda nao tem endereco. E o estado de TODO
+  ///   pet cadastrado depois da `20261027000001`, e nele o formulario abre
+  ///   vazio, como se endereco guardado nao existisse. Mesma forma de
+  ///   `MeApi.lerEnderecoGuardado` e de `getMyLocation`;
+  /// - **404** -- o pet nao e seu, nao existe ou foi excluido. Lanca
+  ///   `FalhaDeChamada`, e **nunca 403** (ADR-0021): para quem pergunta, o pet
+  ///   de outra pessoa nao existe.
+  ///
+  /// A COSTURA DO CORPO `null` e a mesma de `MeApi.lerEnderecoGuardado`, e a
+  /// razao esta escrita por extenso la: `ApiClient` devolve sempre um mapa, e
+  /// `jsonDecode('null')` chega aqui embrulhado em `{'data': null}`. Ler
+  /// `json['recipient_name']` direto daria cadeia vazia e o formulario abriria
+  /// com nove campos preenchidos de nada -- pior que abrir vazio, porque a
+  /// pessoa teria de limpar antes de digitar.
+  Future<EnderecoDeEntrega?> lerEnderecoDoPet(String petId) async {
+    final json = await _api.get(
+      '/pets/${Uri.encodeComponent(petId)}/delivery-address',
+    );
+    // 204 ou corpo vazio: nao acontece nesta rota, mas o mesmo tratamento do
+    // `null` serve, e um `if` a mais e mais barato que um campo vazio na tela.
+    if (json.isEmpty) return null;
+    // O corpo era `null` cru. Ver a secao acima.
+    if (json.length == 1 && json.containsKey('data') && json['data'] == null) {
+      return null;
+    }
+    return EnderecoDeEntrega.doJson(json);
+  }
+
+  /// `PUT /pets/{petId}/delivery-address` (`putPetDeliveryAddress`).
+  ///
+  /// **O UNICO caminho do app que escreve o endereco de um pet**, e o unico que
+  /// o pedido da plaquinha le. Decisao do cliente de 27/10/2026: *"endereco um
+  /// por pet"* -- ver [lerEnderecoDoPet] para as duas datas e as palavras dele.
+  ///
+  /// **Escrever no pet A nao toca o pet B, e nao toca o endereco da CONTA**
+  /// (`MeApi.salvarEnderecoGuardado`). E o "um por pet" que ele pediu: editar um
+  /// e editar um.
+  ///
+  /// **O endereco inteiro vai junto**, e nao campo a campo: o contrato declara
+  /// `PUT` com `DeliveryAddress` obrigatorio. Trocar de casa troca os nove
+  /// campos de uma vez, e uma escrita parcial deixaria o pet numa mistura de
+  /// duas casas -- rua nova com bairro antigo chega no lugar errado sem nada ter
+  /// dado erro.
+  ///
+  /// Devolve o endereco **como ficou guardado**, ja normalizado pelo servidor
+  /// (CEP sem mascara, UF em maiuscula, bordas sem espaco), e nao o que foi
+  /// enviado: a tela mostra o que esta no banco.
+  Future<EnderecoDeEntrega> salvarEnderecoDoPet(
+    String petId,
+    EnderecoDeEntrega endereco,
+  ) async {
+    final json = await _api.put(
+      '/pets/${Uri.encodeComponent(petId)}/delivery-address',
+      corpo: endereco.paraJson(),
+    );
+    // `doJson` nunca devolve nulo aqui: o `PUT` sempre responde o endereco. O
+    // `!` e sobre o tipo e nao sobre uma suposicao de rede -- corpo que nao
+    // seja objeto ja teria estourado em `_lerResposta`.
+    return EnderecoDeEntrega.doJson(json)!;
+  }
+
   /// `GET /pets/{petId}/tag-requests`: os pedidos da plaquinha deste pet.
   ///
   /// A leitura da PAGINA DE ACOMPANHAMENTO (decisao do cliente, 18/10). E

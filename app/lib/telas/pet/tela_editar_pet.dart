@@ -9,6 +9,7 @@ import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../roteamento/saida_da_mensagem.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -16,6 +17,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
+import '../../widgets/item_de_menu.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -630,6 +632,43 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
               ),
               const SizedBox(height: BichuEspaco.e6),
               CamposDeSinais(key: _sinais, rascunho: _rascunho),
+              const SizedBox(height: BichuEspaco.e6),
+              // ----------------------------------------------------------
+              // O ENDERECO DE ENTREGA DESTE PET (cliente, 27/10/2026)
+              // ----------------------------------------------------------
+              //
+              // Ele pediu: *"o endereco de entrega da plaquinha tem que estar
+              // dentro do cadastro do pet"*. **Esta linha e esse "dentro".**
+              //
+              // E, com a decisao anterior dele posta na mesa -- 21/10/2026, *"um
+              // endereco de entrega salvo na conta, reusado em todo pedido e
+              // editavel num lugar so"* --, ele decidiu *"endereco um por pet"*.
+              // A de 21/10 caiu, e o item que vivia em `Meus dados` veio para
+              // ca. A tela e a MESMA: ela mudou de alvo, nao de formulario.
+              //
+              // **PORTA, e nao bloco de campos nesta rolagem**, e a razao e a
+              // mesma que ja tirou este formulario de `Meus dados`: o `Salvar`
+              // desta tela e um ato unico sobre `PATCH /v1/pets/{petId}`, com UMA
+              // faixa de erro e UMA de confirmacao, e o endereco e outra rota
+              // (`PUT /v1/pets/{petId}/delivery-address`). Um botao que dispara
+              // duas chamadas tem quatro desfechos -- as duas certas, as duas
+              // erradas e as duas misturas --, e esta tela nao tem onde contar os
+              // dois do meio. Nove campos a mais nesta rolagem tambem poriam um
+              // CEP e uma busca de CEP no meio do cadastro do animal, que e
+              // outra coisa.
+              //
+              // **Nao e uma etapa do assistente de cadastro.** Pedir nove campos
+              // de endereco a quem esta cadastrando o animal cobraria endereco
+              // de entrega de quem nunca vai pedir plaquinha. O endereco e
+              // opcional no cadastro e obrigatorio no PEDIDO -- e essa segunda
+              // metade e a decisao dele de 17/10/2026, que esta frente nao
+              // tocou.
+              ItemDeMenu(
+                rotulo: _TextosDoEnderecoDoPet.rotulo,
+                apoio: _TextosDoEnderecoDoPet.apoio,
+                aoTocar: () => GoRouter.of(context)
+                    .push(Rotas.enderecoDeEntregaDoPet(_pet.id)),
+              ),
               if (_faixa != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e6),
                 FaixaDeAviso(
@@ -912,4 +951,24 @@ class _MolduraDaEdicao extends StatelessWidget {
     // pelo `_estado`.
     return null;
   }
+}
+
+/// Os textos da porta do endereco de entrega deste pet.
+///
+/// **Separados numa classe propria, e nao soltos no `build`:** e o padrao desta
+/// casa para texto de interface, e e o que permite um teste de tela cobrar o
+/// rotulo pelo nome em vez de por uma cadeia repetida.
+///
+/// Os equivalentes viviam em `telas/perfil/tela_dados_pessoais.dart` e sairam de
+/// la em 27/10/2026 com o item que rotulavam.
+abstract final class _TextosDoEnderecoDoPet {
+  static const String rotulo = 'Endereco de entrega';
+
+  /// **Diz para que serve, diz que e DESTE pet, e nao promete prazo.**
+  ///
+  /// "Deste pet" e a parte nova, e e a decisao dele de 27/10/2026: quem tem dois
+  /// animais precisa saber, antes de tocar, que o endereco daqui nao e o do
+  /// outro. Prometer entrega ou prazo aqui seria afirmar decisao de produto que
+  /// ninguem tomou.
+  static const String apoio = 'Para onde mandar a plaquinha deste pet';
 }

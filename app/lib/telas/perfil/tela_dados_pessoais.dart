@@ -941,30 +941,37 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             apoio: _TextosDosDados.apoioDaVitrine,
             aoTocar: () => GoRouter.of(context).push(Rotas.minhaVitrine),
           ),
-          // `Endereco de entrega` (cliente, 21/10/2026: *"um endereco de
-          // entrega salvo na conta, reusado em todo pedido e editavel num
-          // lugar so"*). Irmao do item acima e pela mesma razao: e TELA, com
-          // barra e acao fixa, e nao um bloco desta.
+          // ------------------------------------------------------------------
+          // `Endereco de entrega` SAIU DESTA TELA EM 27/10/2026, e nao foi
+          // apagado: ele MUDOU DE LUGAR.
+          // ------------------------------------------------------------------
           //
-          // **AQUI e nao num segundo grupo desta tela**, e nao no `Perfil`: a
-          // lista de itens de `Perfil` e a ordem que o cliente determinou, e
-          // acrescentar linha la e decisao dele. `Meus dados` e a tela dos
-          // dados da PESSOA, e para onde a encomenda dela vai e dado dela.
+          // O item existia aqui desde 21/10/2026, quando o cliente decidiu *"um
+          // endereco de entrega salvo na conta, reusado em todo pedido e
+          // editavel num lugar so"*. Em **27/10/2026** ele pediu *"o endereco de
+          // entrega da plaquinha tem que estar dentro do cadastro do pet"* e,
+          // com aquela frase posta na mesa, nomeada e datada, decidiu
+          // **"endereco um por pet"**. A de 21/10 caiu.
           //
-          // Um BLOCO aqui dentro nao serviria: o `Salvar` desta tela e um ato
-          // unico sobre `PATCH /v1/me`, com UMA faixa de erro e UMA de
-          // confirmacao, e o endereco guardado e outra rota
-          // (`PUT /v1/me/delivery-address`). Um botao que dispara duas
-          // chamadas tem quatro desfechos, e esta tela nao tem onde contar os
-          // dois do meio. Pior: `_cep`, `_bairro`, `_cidade` e `_uf` aqui sao
-          // da REGIAO DE REFERENCIA, e o mapa `_erros` e chaveado por
-          // `postal_code`/`city`/`state` -- as mesmas chaves do endereco de
-          // entrega. Dois CEPs no mesmo mapa de erro se sobrescrevem calado.
-          ItemDeMenu(
-            rotulo: _TextosDosDados.enderecoDeEntrega,
-            apoio: _TextosDosDados.apoioDoEndereco,
-            aoTocar: () => GoRouter.of(context).push(Rotas.enderecoDeEntrega),
-          ),
+          // Entao o item foi para `Editar pet`
+          // (`Rotas.enderecoDeEntregaDoPet`), que e literalmente onde ele pediu
+          // que o endereco estivesse. A tela e a MESMA
+          // (`TelaEnderecoDeEntrega`): ela mudou de alvo, nao de formulario.
+          //
+          // **Por que o item nao ficou aqui tambem.** Um atalho nesta tela para
+          // um endereco que NENHUM pedido le e uma linha que mente: a pessoa
+          // trocaria de casa aqui, a plaquinha chegaria na casa antiga, e nada
+          // teria dado erro. E um atalho que perguntasse "qual pet?" seria um
+          // seletor de pet dentro de `Meus dados`, que e a tela dos dados da
+          // PESSOA -- pet nao e dado da pessoa, e o cadastro dele tem tela
+          // propria.
+          //
+          // **Nada foi apagado** (decisao dele de 26/10/2026, *"nao apague
+          // nada"*): `MeApi.lerEnderecoGuardado`/`salvarEnderecoGuardado` e as
+          // rotas `/v1/me/delivery-address` continuam de pe, com o endereco que
+          // as pessoas ja guardaram -- e foi dele que a migracao
+          // `20261027000001` copiou para os pets de cada tutor. O que a conta
+          // perdeu foi o PAPEL, nao os dados.
         ],
       ),
       ),
@@ -1503,13 +1510,13 @@ abstract final class _TextosDosDados {
   /// O apoio da porta da vitrine. Diz o que ha do outro lado e para QUEM ela
   /// e visivel -- "so voce" e a unica coisa que a pessoa precisa saber antes
   /// de tocar, e e verdade medida: nao existe rota de vitrine de terceiro.
-  static const String enderecoDeEntrega = 'Endereço de entrega';
-
-  /// **Diz para que serve, sem prometer prazo.** "Para a plaquinha" e o unico
-  /// uso que existe hoje; prometer entrega ou prazo aqui seria afirmar decisao
-  /// de produto que ninguem tomou.
-  static const String apoioDoEndereco =
-      'Para onde mandar a plaquinha da coleira';
+  // `enderecoDeEntrega` e `apoioDoEndereco` SAIRAM daqui em 27/10/2026, com o
+  // item que eles rotulavam -- ver o comentario no lugar onde ele estava. Texto
+  // de interface sem tela que o mostre e divida que o proximo nao entende: ele
+  // procura a tela, nao acha, e conclui que falta implementar algo.
+  //
+  // Os rotulos equivalentes do endereco do pet vivem em
+  // `telas/pet/tela_editar_pet.dart`, que e de onde a tela e alcancada agora.
 
   static const String apoioDaVitrine = 'As fotos que só você vê';
 
