@@ -87,6 +87,19 @@ jobs:
     # runner do GitHub, entre 12 e 18 min. O teto de 45 existe para que uma
     # pilha travada morra com nome, e nao com "cancelado".
     timeout-minutes: 45
+    # `id-token: write` E O QUE FAZ O WIF EXISTIR, e sem esta linha o GitHub NAO
+    # emite o token OIDC: `google-github-actions/auth` reprova com "unable to get
+    # ACTIONS_ID_TOKEN_REQUEST_URL", mensagem que fala de variavel de ambiente e
+    # nao de permissao, e que manda procurar no lugar errado.
+    #
+    # Declarar `permissions:` NO JOB SUBSTITUI o bloco do topo deste arquivo, e
+    # nao soma. Por isso `contents: read` esta repetido aqui: sem ele o
+    # `actions/checkout` perde o acesso ao proprio repositorio. O topo deste
+    # arquivo nao concede mais nada, entao nao ha mais nada a repetir -- e a
+    # `ci.yml` repete tambem `pull-requests: read` porque LA o topo concede isso.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -158,6 +171,78 @@ jobs:
       # "Permission denied"; com 0777, `mkdir -p dist/_tests` sai 0.
       - name: os diretorios que o conteiner escreve nascem do lado de fora
         run: install -d -m 0777 dist placar
+
+      # A PILHA DESTA REPETICAO PUXA DO ESPELHO PRIVADO, E ATE 28/10 ELA NAO
+      # AUTENTICAVA.
+      #
+      # `infra/integracao/compose.integracao.yaml` puxa `minio` (linha 158) e
+      # `mc` (linha 207) de `southamerica-east1-docker.pkg.dev/
+      # bichu-app-508914/espelhos-de-terceiros`, que e PRIVADO desde que a MinIO
+      # arquivou o projeto comunitario em 21/10/2026 e os registros publicos
+      # fecharam o pull anonimo.
+      #
+      # Sem credencial o servico `objeto` reprovava no pull -- e o que aparecia
+      # no fim do log NAO dizia isso. Dizia "o banco, o receptor de e-mail ou o
+      # armazenamento de objeto nao ficaram saudaveis" e "a repeticao 1 de 20
+      # nao produziu relatorio TAP", que mandam procurar pilha instavel. A causa
+      # estava 3 linhas acima, medida na execucao 40681061370:
+      #
+      #   objeto Error Get ".../espelhos-de-terceiros/minio/manifests/
+      #   sha256:fef3b9cf...": denied: Unauthenticated request. Unauthenticated
+      #   requests do not have permission
+      #   "artifactregistry.repositories.downloadArtifacts"
+      #
+      # E o acumulado reforcava o engano: "Nenhum caso reprovou em 50
+      # execucao(oes) registrada(s)". Nao havia intermitencia nenhuma para
+      # procurar; a suite nunca chegou a rodar. Este arquivo existe para repetir a
+      # suite, e por 2 execucoes agendadas seguidas ele repetiu o pull negado.
+      #
+      # O desenho abaixo e o MESMO do job `integracao` da `ci.yml`, que esta
+      # verde: o porque de ser federacao e nao chave, o que acontece em PR de
+      # fork, e por que a acao e fixada por SHA estao escritos LA, com as
+      # medicoes, e nao se repetem aqui para que exista um so lugar a corrigir.
+      # Em particular o SHA e COPIADO de la: duas versoes da mesma acao nesta
+      # esteira seriam duas coisas a auditar, e esta e a acao que troca token
+      # OIDC por credencial do GCP.
+      - name: credencial do GCP por federacao, sem chave no repositorio
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: projects/469413493555/locations/global/workloadIdentityPools/github/providers/bichu-app
+          service_account: bichu-cd@bichu-app-508914.iam.gserviceaccount.com
+
+      # O `auth` acima deixa a credencial em disco e aponta
+      # `GOOGLE_APPLICATION_CREDENTIALS` para ela; o `docker` NAO le isso
+      # sozinho. Este passo escreve o `credHelper` do host do registry no
+      # `~/.docker/config.json`, e e ele que faz o `docker compose up` de dentro
+      # de `repetir.mjs` puxar do espelho autenticado. Precisa vir ANTES do
+      # passo `repetir`, que e quem levanta a pilha -- e e por isso que esta
+      # aqui, e nao junto do checkout: o token e usado poucos segundos depois de
+      # obtido, em vez de atravessar o `npm ci` e a restauracao do cache.
+      #
+      # O `command -v` existe porque o ajudante e um BINARIO separado: com
+      # `configure-docker` escrito e o binario fora do PATH, o pull falha com
+      # "error getting credentials", que fala de credencial e nao de arquivo
+      # faltando.
+      - name: o docker sabe pedir credencial ao gcloud
+        run: |
+          command -v docker-credential-gcloud > /dev/null || {
+            echo "::error::docker-credential-gcloud nao esta no PATH. Sem ele \`configure-docker\` escreve um ajudante que nao existe e o pull do espelho falha como se fosse credencial errada"
+            exit 1
+          }
+          gcloud auth configure-docker southamerica-east1-docker.pkg.dev --quiet
+          # CONTROLE POSITIVO, e ele NAO pode ser trocado por `gcloud auth list
+          # --filter=status:ACTIVE`: sob federacao a credencial chega por
+          # `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` e nao entra no armazem do
+          # gcloud, entao aquele comando responde SEM NENHUMA CONTA e COM SAIDA
+          # 0. Sonda que sai 0 sem olhar para nada e pior que sonda nenhuma.
+          #
+          # Pedir o token prova o que interessa: que a troca do token OIDC pela
+          # credencial do GCP produziu algo utilizavel, e prova AGORA, em vez de
+          # 20 repeticoes adiante como erro de `docker pull`. `> /dev/null`
+          # porque o token E a credencial, e log de esteira e lugar publico e
+          # permanente.
+          gcloud auth print-access-token > /dev/null
+          echo "credencial do GCP resolve por federacao (token obtido, nao impresso)"
 
       - name: repetir
         run: |
