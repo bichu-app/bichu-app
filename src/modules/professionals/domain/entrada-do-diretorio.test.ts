@@ -159,7 +159,7 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 });
 
 void describe('a projecao publica da entrada', () => {
-  void it('devolve quatorze campos, e nenhum a mais', () => {
+  void it('devolve quinze campos, e nenhum a mais', () => {
     // TREZE desde 21/10/2026, e cada acrescimo veio de um ramo DIFERENTE. As
     // justificativas ficam todas, porque as listas fechadas sao a mesma lista.
     //
@@ -194,6 +194,19 @@ void describe('a projecao publica da entrada', () => {
     // Esta contagem subiu DUAS vezes em 21/10, por DUAS decisoes diferentes do
     // cliente no mesmo dia (o site e as atividades multiplas). As duas razoes
     // ficam escritas, porque a lista fechada e a mesma lista.
+    //
+    // `rating` e o DECIMO QUINTO (BICHUS-313, 28/10/2026). Ele entra porque o
+    // cliente pediu media e quantidade "na lista e na pagina" (18/10/2026) e
+    // porque `DirectoryEntrySummary` ja o declarava desde entao -- a listagem
+    // simplesmente nao o preenchia, e o campo nao e `required`, entao NADA
+    // reprovava: o servidor omitia, o app lia nulo e todos os portoes passavam.
+    // Este caso e onde a omissao passa a doer.
+    //
+    // **E ele NAO segue a regra de `photo_url`**, e a diferenca e de peso e nao
+    // de categoria: a faixa de 1280 x 720 em vinte cartoes multiplica a
+    // primeira pintura, e `rating` sao sete numeros pequenos -- medidos em 940 B
+    // por pagina de 20 cartoes, 47 B por cartao. O que ficou de fora da lista
+    // continua fora.
     const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }), URL_DE_MIDIA);
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
@@ -206,6 +219,7 @@ void describe('a projecao publica da entrada', () => {
       'logo_url',
       'neighborhood',
       'phone_e164',
+      'rating',
       'site_url',
       'slug',
       'state',
