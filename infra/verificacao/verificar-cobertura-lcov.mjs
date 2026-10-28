@@ -373,6 +373,50 @@ const AUSENCIAS_ACEITAS = new Map([
       'ausencia e esta.',
   ],
 
+  // -- AS QUATRO DA UNIAO DE 27/10 (PRs #64..#76) ---------------------------
+  //
+  // A lista das 37 acima foi calculada contra a `development` de ANTES desta
+  // uniao. As doze branches do dia trazem 15 arquivos novos a `src/`, e destes
+  // 9 sao fonte (6 sao `*.test.ts` ou tipo gerado). MEDIDO com os DOIS lcov de
+  // verdade na mao (`coverage/lcov.info` da unitaria, 4185 casos, e
+  // `coverage/lcov-integracao.info` da integracao, 793 casos): dos 9, CINCO
+  // JA APARECEM no relatorio e por isso NAO entram aqui -- `passkey-routes.ts`,
+  // `passkey-service.ts`, `domain/passkey.ts`, `endereco-do-pet-routes.ts` e
+  // `tools/portao-de-retencao-declarada.ts`. Declarar qualquer um deles faria
+  // a invariante 2 reprovar na hora, por excecao obsoleta.
+  //
+  // **A classificacao e pelo COMPILADO, nao pelo nome do diretorio**, pelo
+  // mesmo metodo do bloco das 37: cada arquivo passou por `ts.transpileModule`
+  // com `removeComments`, e a pergunta foi se sobra UMA instrucao no
+  // JavaScript. DOIS saem vazios e DOIS emitem codigo.
+  //
+  // NENHUM TESTE DE FACHADA FOI ESCRITO PARA ESTES QUATRO. Teste que nao pode
+  // reprovar e pior que ausencia, e os dois `kysely-*` ficam como DIVIDA
+  // NOMEADA, com o endereco dela escrito abaixo.
+  //
+  // -- 2 que so declaram tipo: o compilado sai `export {};` ------------------
+  ['src/modules/identity/ports/passkey-repository.ts', SO_TIPO],
+  ['src/modules/tags/ports/endereco-do-pet.ts', SO_TIPO],
+  // -- 2 que emitem codigo e so o ponto de entrada carrega -------------------
+  //
+  // MEDIDO arquivo por arquivo, e nao deduzido do diretorio: o UNICO importador
+  // de valor dos dois e `src/bin/api.ts` (linhas 74 e 133), que ja esta nesta
+  // mesma lista como `PONTO_DE_ENTRADA`. A suite de integracao exercita este
+  // codigo por HTTP contra o conteiner `api`, e aquele processo nao roda sob
+  // instrumentacao -- a execucao existe e o relatorio dela nao.
+  //
+  // **UMA ARMADILHA CONFERIDA E DESCARTADA:** uma varredura por nome acusa
+  // `src/tools/endereco-do-pet-nao-sai-em-publico.test.ts` de importar
+  // `kysely-endereco-do-pet`. NAO importa: a ocorrencia e um LITERAL DE
+  // CAMINHO que o teste le com `readFileSync` para conferir o texto da fonte.
+  // Ler o arquivo nao o carrega, e por isso ele nao aparece no relatorio.
+  //
+  // A divida dos dois e a mesma dos sete `kysely-*` de 27/10: a suite de
+  // integracao importar o adaptador direto, como `kysely-pet-repository.ts`
+  // fez em 22/09 para sair desta lista.
+  ['src/modules/identity/adapters/persistence/kysely-passkey-repository.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+  ['src/modules/tags/adapters/persistence/kysely-endereco-do-pet.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
+
   // -- ferramenta que nao roda no runtime da aplicacao -----------------------
   ['src/architecture.rules.mjs', FERRAMENTA_FORA_DO_RUNTIME],
   ['src/tools/gerar-tipos-de-problema.mjs', FERRAMENTA_FORA_DO_RUNTIME],
