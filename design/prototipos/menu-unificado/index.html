@@ -597,3 +597,209 @@ body{
       </div>
     </div>
   </div>
+
+  <!-- ==================================================================
+       CASO B: `Conexoes`, ABA 1
+       A tela e EMPILHADA (`BarraDeConta` com `TipoDeSaida.voltar`), entao a
+       barra de topo tem SETA e nao a foto, e NAO ha barra de baixo -- e o que
+       `tela_minhas_conexoes.dart` e `tela_pedidos_de_conexao.dart` fazem hoje,
+       e o protótipo nao muda isso.
+       AS ABAS FICAM FORA DO CORPO, encostadas na barra -- e o arranjo da unica
+       `TabBar` do aplicativo (`rede/secao_da_rede.dart`), copiado pela tela de
+       pedidos em 26/10. Dentro do corpo elas rolariam embora com a lista.
+       ================================================================== -->
+  <div class="caso" id="b-conexoes">
+    <div class="coluna">
+      <p class="rotulo-tela">Conexões — aba 1 de 3 <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">A tela abre <b>aqui</b>, e não em <code>Pendentes</code>: a aba 1 é o que a pessoa vem ver no caso comum, e <code>Pendentes</code> está quase sempre vazia. O número na aba 2 é o que a traz quando há o que decidir.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Conexões</div>
+        </div>
+        <div class="abas" role="tablist">
+          <button role="tab" aria-selected="true" data-aba="b-conexoes">Conexões</button>
+          <button role="tab" aria-selected="false" data-aba="c-pendentes">Pendentes<span class="contador sobre-aba">3</span></button>
+          <button role="tab" aria-selected="false" data-aba="e-bloqueados">Bloqueados</button>
+        </div>
+        <div class="corpo">
+          <p class="rodape-lista" style="margin-top:0;margin-bottom:var(--e3)">12 de 150 conexões</p>
+          <div class="pessoa">
+            <span class="av">A</span>
+            <div class="txt"><div class="nm">Ana Ribeiro <span class="selo-val"><span class="ms">verified</span></span></div><div class="ap">@ana-do-bairro</div></div>
+            <span class="fim"><span class="ms sec">chevron_right</span></span>
+          </div>
+          <div class="pessoa">
+            <span class="av">B</span>
+            <div class="txt"><div class="nm">Bruno Sato</div><div class="ap">@bsato</div></div>
+            <span class="fim"><span class="ms sec">chevron_right</span></span>
+          </div>
+          <div class="pessoa">
+            <span class="av vazia">·</span>
+            <div class="txt"><div class="nm">Usuário sem nome</div><div class="ap">@vizinha-da-14</div></div>
+            <span class="fim"><span class="ms sec">chevron_right</span></span>
+          </div>
+          <div class="pessoa">
+            <span class="av">C</span>
+            <div class="txt"><div class="nm">Carla Menezes <span class="selo-val"><span class="ms">verified</span></span></div><div class="ap">@carlamz</div></div>
+            <span class="fim"><span class="ms sec">chevron_right</span></span>
+          </div>
+          <button class="botao sec" style="margin-top:var(--e2)">Ver mais</button>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Aqui o cartão TEM foto, e nas outras duas abas não — e isso não é descuido do protótipo.</b>
+        <ul>
+          <li>A emenda 3 do <b>ADR-0010</b> libera a foto de perfil <b>entre conexões aceitas</b>, e só. Pedido pendente é exatamente o estado em que ninguém aceitou; <code>BlockedPerson</code> não traz foto no contrato.</li>
+          <li><b>Consequência da unificação, e é nova:</b> hoje as três listas moram em três telas e ninguém as compara. Debaixo de um título só, a aba 1 com foto e as abas 2 e 3 sem leem como <b>inconsistência</b> para quem não sabe do ADR. <b>Não resolvi isso no desenho</b>: resolver seria mexer no ADR-0010, que é decisão e não desenho.</li>
+          <li>Sem busca e sem seletor de ordem, como hoje: a ordem é fixa. <code>Buscar usuários</code> continua sendo a saída do pé desta aba.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO C: `Pendentes`, COM CONTADOR E COM PEDIDO PARA DECIDIR
+       ================================================================== -->
+  <div class="caso" id="c-pendentes">
+    <div class="coluna">
+      <p class="rotulo-tela">Conexões — aba 2, <b>Pendentes</b>, com contador <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">O contador sai de <code>ConnectionSummary.requests_received_count</code>, que <b>já existe no contrato</b>. Ele conta só o que <b>chegou</b> — <code>pending_sent_count</code> fica fora, porque pedido que eu mandei não espera nada de mim e um número que soma os dois mandaria a pessoa decidir algo que não é dela.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Conexões</div>
+        </div>
+        <div class="abas" role="tablist">
+          <button role="tab" aria-selected="false" data-aba="b-conexoes">Conexões</button>
+          <button role="tab" aria-selected="true" data-aba="c-pendentes">Pendentes<span class="contador sobre-aba">3</span></button>
+          <button role="tab" aria-selected="false" data-aba="e-bloqueados">Bloqueados</button>
+        </div>
+        <div class="corpo">
+          <div class="segmento" role="group" aria-label="Qual lado dos pedidos">
+            <button class="seg" aria-pressed="true">Recebidos<span class="contador">3</span></button>
+            <button class="seg" aria-pressed="false">Enviados</button>
+          </div>
+          <div class="pessoa decisao">
+            <div class="alto">
+              <div class="txt"><div class="nm">Ana Ribeiro <span class="selo-val"><span class="ms">verified</span></span></div><div class="ap">@ana-do-bairro</div></div>
+            </div>
+            <div class="acoes">
+              <button class="botao">Aceitar</button>
+              <button class="botao sec">Recusar</button>
+            </div>
+          </div>
+          <div class="pessoa decisao">
+            <div class="alto">
+              <div class="txt"><div class="nm">Bruno Sato</div><div class="ap">@bsato</div></div>
+            </div>
+            <div class="acoes">
+              <button class="botao">Aceitar</button>
+              <button class="botao sec">Recusar</button>
+            </div>
+          </div>
+          <div class="pessoa decisao">
+            <div class="alto">
+              <div class="txt"><div class="nm">Usuário sem nome</div></div>
+            </div>
+            <div class="acoes">
+              <button class="botao">Aceitar</button>
+              <button class="botao sec">Recusar</button>
+            </div>
+          </div>
+          <p class="rodape-lista">Você tem 3 pedidos esperando resposta.</p>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>Três coisas desenhadas aqui, e duas delas são herança que o briefing não citou.</b>
+        <ul>
+          <li><b>O SEGMENTO <code>Recebidos</code>/<code>Enviados</code> É HERANÇA, e é decisão aberta.</b> <code>Pedidos de conexão</code> tem HOJE duas abas internas, por pedido dele de 26/10 (<em>“divida recebidos e enviados por abas, igual na pagina de rede”</em>). Com <code>Pendentes</code> virando aba, as duas não cabem como <code>TabBar</code> — <b>aba dentro de aba é o controle que ninguém sabe qual dos dois está mexendo</b>, e este aplicativo tem <b>uma</b> <code>TabBar</code> só. Viraram chips no <b>topo do corpo</b>, que é onde o padrão de listagem deste projeto manda por controle. <b>Se ele preferir jogar <code>Enviados</code> fora da unificação, isso é escolha dele e não minha.</b></li>
+          <li><b>NÃO HÁ FOTO no cartão de decisão</b> (emenda 3 do ADR-0010), e <b>não há <code>InkWell</code> em volta do cartão</b>: ele tem dois controles destrutivos dentro, e o gesto que erra o botão viraria navegação. Quem é tocável é o <b>nome</b> — e só quando há apelido, porque a rota é por apelido.</li>
+          <li><b>O contador aparece DUAS vezes e é o mesmo número</b>: na aba e no chip <code>Recebidos</code>. Isso é deliberado — quem chega pela notificação cai na aba já aberta e precisa saber que o 3 é dos recebidos, não da aba.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO D: `Pendentes` VAZIA -- O ESTADO COMUM
+       ================================================================== -->
+  <div class="caso" id="d-pendentes-vazia">
+    <div class="coluna">
+      <p class="rotulo-tela">Conexões — aba 2, <b>Pendentes vazia</b> (o estado comum) <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">Com zero pedidos, <b>o contador desaparece da aba inteiro</b>: ele não vira <code>0</code>. Pastilha com zero é um aviso que afirma que não há aviso — ela chama o olho para dizer que não havia nada para ver.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Conexões</div>
+        </div>
+        <div class="abas" role="tablist">
+          <button role="tab" aria-selected="false" data-aba="b-conexoes">Conexões</button>
+          <button role="tab" aria-selected="true" data-aba="d-pendentes-vazia">Pendentes</button>
+          <button role="tab" aria-selected="false" data-aba="e-bloqueados">Bloqueados</button>
+        </div>
+        <div class="corpo">
+          <div class="segmento" role="group" aria-label="Qual lado dos pedidos">
+            <button class="seg" aria-pressed="true">Recebidos</button>
+            <button class="seg" aria-pressed="false">Enviados</button>
+          </div>
+          <div class="vazio">
+            <div class="t">Nenhum pedido esperando você</div>
+          </div>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>O texto é o de hoje, palavra por palavra:</b> <code>TelaDePedidosDeConexao.vazioRecebidos</code> = <em>“Nenhum pedido esperando você”</em>, e em <code>Enviados</code> = <em>“Você não tem pedidos esperando resposta”</em>.
+        <ul>
+          <li><b>UMA LINHA, e sem botão.</b> <code>_UmaLinha</code> em <code>surfaceSunken</code> com borda <code>outline</code> — o mesmo vazio que a listagem de perdidos usa, por pedido dele de 18/10. Não há <em>“Buscar usuários”</em> aqui porque aquela saída é da aba 1, e repeti-la faria duas portas para o mesmo lugar.</li>
+          <li><b>O SEGMENTO FICA.</b> Esconder <code>Recebidos</code>/<code>Enviados</code> quando os recebidos estão vazios faria o controle aparecer e desaparecer sob a mão da pessoa — e ela não teria como descobrir que existem pedidos <b>enviados</b> esperando resposta do outro lado.</li>
+          <li><b>As abas ficam todas as três</b>, e <code>Bloqueados</code> também: aba que some é função que some.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================
+       CASO E: `Bloqueados`, ABA 3 -- a que me preocupa
+       ================================================================== -->
+  <div class="caso" id="e-bloqueados">
+    <div class="coluna">
+      <p class="rotulo-tela">Conexões — aba 3, <b>Bloqueados</b> <span class="w" data-w-eco>· 412 dp</span></p>
+      <p class="nota-tela">A aba desenha <code>tela_de_bloqueados.dart</code> como ela já é: nome, apelido, <code>Desbloquear</code> em cada linha, e a frase que diz o que o desbloqueio <b>não</b> faz.</p>
+      <div class="aparelho">
+        <div class="topo">
+          <div class="ham"><span class="ms g">arrow_back</span></div>
+          <div class="tit">Conexões</div>
+        </div>
+        <div class="abas" role="tablist">
+          <button role="tab" aria-selected="false" data-aba="b-conexoes">Conexões</button>
+          <button role="tab" aria-selected="false" data-aba="c-pendentes">Pendentes<span class="contador sobre-aba">3</span></button>
+          <button role="tab" aria-selected="true" data-aba="e-bloqueados">Bloqueados</button>
+        </div>
+        <div class="corpo">
+          <p class="rodape-lista" style="margin-top:0;margin-bottom:var(--e3)">Desbloquear devolve só a visibilidade. Se vocês eram conexão, a conexão não volta sozinha.</p>
+          <div class="pessoa decisao">
+            <div class="alto">
+              <div class="txt"><div class="nm">Diego Alves</div><div class="ap">@d-alves</div></div>
+              <button class="botao sec pequeno">Desbloquear</button>
+            </div>
+          </div>
+          <div class="pessoa decisao">
+            <div class="alto">
+              <div class="txt"><div class="nm">Usuário sem nome</div></div>
+              <button class="botao sec pequeno">Desbloquear</button>
+            </div>
+          </div>
+          <p class="rodape-lista">Você bloqueou 2 usuários.</p>
+        </div>
+      </div>
+      <div class="legenda">
+        <b>ESTA É A PERDA DE DESCOBERTA QUE EU LEVARIA AO CLIENTE ANTES DE CODAR.</b>
+        <ul>
+          <li><b>O bloqueio é simétrico no servidor:</b> quem bloqueia alguém passa a receber <code>404</code> no perfil dessa pessoa, e o <code>Desbloquear</code> morava dentro do menu daquele perfil — que nunca mais abre. <b>Esta lista é o único lugar de onde o desbloqueio sai no aplicativo inteiro.</b> A prosa do item em <code>abas.dart</code> diz, literal, que ela é <em>“a mais crítica deste menu caso se perdesse”</em>.</li>
+          <li><b>Hoje: 1 toque e a palavra que a pessoa procura.</b> Depois: <b>2 toques</b>, e a palavra <code>bloqueados</code> desaparece do menu — ela fica debaixo de <code>Conexões</code>, que é <b>o oposto</b> do que a pessoa veio desfazer. O argumento que pôs o item em <code>Conta</code> está escrito no código: <em>“ninguém vem aqui ver os bloqueados; vem DESFAZER um bloqueio. Isso é ajuste da própria conta.”</em></li>
+          <li><b>A decisão dele reverte esse argumento</b> (<em>“devemos centralizar tudo em um unico local”</em>), e o protótipo a cumpre. Mas a reversão é dele e <b>está desenhada aqui para ele ver o custo</b>, não escondida.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
