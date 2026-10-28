@@ -394,6 +394,7 @@ x-problem-types:
   # ele e 403, e usa-lo em 401 faz o app tratar "sua senha nao confere" com o
   # mesmo caminho de "este recurso nao e seu".
   - { slug: validation-failed,             status: 400 }
+  - { slug: passkey-attestation-invalid,   status: 400, note: "a atestacao devolvida pelo aparelho nao foi verificada: assinatura, `clientDataJSON`, origem, `rpIdHash` ou `challenge` nao conferem. Separado de `validation-failed`: ali o corpo esta malformado e a saida e corrigir o formulario; aqui o corpo esta bem formado e a saida e tentar de novo ou seguir sem passkey -- e o passo e DISPENSAVEL, entao a tela nao pode tratar isso como erro de cadastro" }
   - { slug: unauthenticated,               status: 401, note: "sem token, token ausente ou assinatura invalida" }
   - { slug: invalid-credentials,           status: 401, note: "e-mail ou senha nao conferem. Corpo IDENTICO para conta inexistente e senha errada" }
   - { slug: token-expired,                 status: 401, note: "token de acesso, de renovacao ou de uso unico expirado, ja usado ou revogado" }
@@ -410,6 +411,8 @@ x-problem-types:
   - { slug: broadcast-daily-cap-reached,   status: 409, note: "teto de 3 comunicados por dia, contado da meia-noite UTC e aplicado no banco na mesma transacao da gravacao. 409 e nao 429: 429 e teto de CHAMADA, aplicado pela borda e que passa em um minuto; este e teto de PRODUTO, e a saida da pessoa e esperar amanha ou nao mandar -- tratar os dois com o mesmo tipo faria o painel oferecer 'tentar de novo' para o unico caso em que tentar de novo nao resolve" }
   - { slug: tag-limit-reached,             status: 409, note: "teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada" }
   - { slug: contact-channel-unverified,    status: 409 }
+  - { slug: passkey-already-registered,    status: 409, note: "este aparelho ja tem credencial nesta conta: o `credential_id` devolvido pela atestacao ja existe. 409 e nao 400 porque nada esta errado no pedido -- a pessoa apertou duas vezes, ou o aparelho ja havia cadastrado -- e a tela diz 'este aparelho ja esta cadastrado' em vez de 'erro'. O banco impoe pelo indice unico de `credential_id`" }
+  - { slug: passkey-limit-reached,         status: 409, note: "teto de credenciais ATIVAS por conta. Separado de `passkey-already-registered`: um diz 'este aparelho ja esta aqui' e o outro 'esta conta ja tem credenciais demais', e a saida e diferente -- no primeiro nao ha nada a fazer, no segundo e preciso revogar uma. Revogar MARCA revogada e nao apaga (decisao do cliente de 26/10), entao o teto conta `revoked_at IS NULL`" }
   - { slug: pet-photo-missing,             status: 409 }
   - { slug: transfer-not-for-this-account, status: 409 }
   - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
@@ -1157,6 +1160,384 @@ paths:
                   scope: { type: string }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/registration/options:
+    post:
+      operationId: beginPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: []
+      summary: Emite o desafio para cadastrar uma credencial digital
+      description: |
+        Primeiro dos dois passos do cadastro de passkey (BICHUS-301). O
+        servidor emite um desafio de uso unico e com prazo, guarda-o, e o app
+        o entrega ao Credential Manager do Android.
+
+        **A passkey SOMA a senha, nunca a substitui.** Passkey e presa ao
+        aparelho: quem troca de celular sem outra porta fica trancado fora da
+        conta. A senha continua valendo e `login`, `refreshSession` e
+        `reauthenticate` continuam existindo sem mudanca.
+
+        **Esta operacao exige sessao.** Ela acontece ao FIM do cadastro, quando
+        o `registerUser` ja devolveu o par de tokens, e e por isso que o
+        `user.id` nao vem no corpo: ele e o `sub` do token. Pedir o
+        identificador no corpo abriria caminho para emitir desafio para conta
+        alheia.
+
+        **O passo e DISPENSAVEL** (decisao do cliente, 26/10). Quem recusa a
+        biometria do aparelho tem de conseguir terminar o cadastro: o app
+        oferece `Agora nao`, nao chama esta operacao, e o cadastro esta
+        completo do mesmo jeito. Nenhuma pendencia de perfil nasce daqui.
+
+        `rp.id` e `bichu.app`, o apex, e **nao pode mudar depois**: trocar o
+        `RP ID` invalida toda credencial ja emitida. O apex serve
+        `/.well-known/assetlinks.json` pelo trecho `(associacao_deep_link)` do
+        `Caddyfile`, com a relacao `delegate_permission/common.get_login_creds`
+        -- sem ela o Android nao entrega credencial, e o `handle_all_urls` do
+        deep link NAO serve para isso.
+
+        `excludeCredentials` traz as credenciais ATIVAS da conta para o
+        aparelho nao cadastrar duas vezes. Isso nao vaza nada: quem chama ja
+        esta autenticado como o dono delas.
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "a dimensao e a conta e nao o IP: emitir desafio e barato, mas desafio guardado e escrita, e o teto existe para a fila de desafios nao virar deposito"
+      responses:
+        '200':
+          description: Desafio emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyRegistrationOptions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            A conta chegou ao teto de credenciais ativas. A saida e revogar uma
+            em `revokePasskey`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                tetoDeCredenciais:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-limit-reached
+                    title: Limite de credenciais atingido
+                    status: 409
+                    detail: Esta conta ja tem 10 credenciais ativas. Revogue uma para cadastrar outra.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/registration:
+    post:
+      operationId: finishPasskeyRegistration
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: [verifies_secret]
+      summary: Conclui o cadastro da credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "o mesmo teto do passo que emite o desafio, e de proposito: um desafio por tentativa, e tentativa sem desafio nao existe. Numero diferente aqui deixaria uma das duas metades do cadastro recusar antes da outra"
+      description: |
+        Segundo passo. O app devolve a atestacao produzida pelo aparelho e o
+        servidor a verifica antes de guardar a chave publica.
+
+        **O que e verificado, e nada disso e opcional:** a assinatura da
+        atestacao; o `challenge` do `clientDataJSON` contra o desafio guardado,
+        que e de **uso unico e com prazo**; o `type` igual a `webauthn.create`;
+        a `origin` contra a origem do app Android (derivada da digital do
+        certificado em `assetlinks.json`, e nao de uma lista escrita a mao); e
+        o `rpIdHash` contra o SHA-256 de `bichu.app`.
+
+        **A verificacao nao e escrita a mao.** Ela usa
+        `@simplewebauthn/server`, e o motivo esta no ADR pretendido: WebAuthn
+        pede parse de CBOR, COSE, cadeia de atestacao e curvas EC -- cada um
+        um lugar onde um erro de implementacao aceita credencial forjada **sem
+        falhar nenhum teste**, porque o caminho felizpassa igual.
+
+        O desafio e **consumido** aqui, de que jeito for: sucesso ou falha, ele
+        nao vale de novo. Desafio que sobrevive a uma falha e desafio que pode
+        ser reusado.
+
+        O `sign_count` devolvido pelo aparelho e guardado como ponto de
+        partida do contador antirrepeticao de `finishPasskeyAuthentication`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasskeyRegistrationRequest' }
+      responses:
+        '201':
+          description: Credencial cadastrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Passkey' }
+        '400':
+          description: |
+            A atestacao nao foi verificada. **Nao e erro de formulario**: o
+            corpo esta bem formado e a saida da tela e tentar de novo ou
+            seguir sem passkey, porque o passo e dispensavel.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                atestacaoInvalida:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-attestation-invalid
+                    title: Nao foi possivel confirmar a credencial
+                    status: 400
+                    detail: A resposta do aparelho nao foi confirmada. Tente de novo ou continue sem credencial digital.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '401':
+          description: |
+            Sem sessao, **ou** o desafio expirou ou ja foi usado. O desafio
+            vencido sai como `token-expired` e nao como
+            `passkey-attestation-invalid`: a saida e pedir outro desafio, nao
+            desistir da credencial.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                desafioVencido:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/token-expired
+                    title: O desafio expirou
+                    status: 401
+                    detail: Comece o cadastro da credencial de novo.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '409':
+          description: |
+            Este aparelho ja tem credencial nesta conta, ou a conta chegou ao
+            teto.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                jaCadastrado:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/passkey-already-registered
+                    title: Este aparelho ja esta cadastrado
+                    status: 409
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/authentication/options:
+    post:
+      operationId: beginPasskeyAuthentication
+      tags: [auth]
+      x-effects: []
+      summary: Emite o desafio para entrar com credencial digital
+      description: |
+        Primeiro dos dois passos da entrada por passkey.
+
+        **Esta operacao NAO recebe e-mail, e isso e desenho e nao esquecimento.**
+        A credencial e *discoverable* (`residentKey: required` no cadastro), e o
+        proprio aparelho sabe qual conta apresentar. Receber o e-mail obrigaria
+        a devolver `allowCredentials` daquela conta, e `allowCredentials` cheia
+        ou vazia responderia **se aquela conta tem passkey** -- um oraculo de
+        enumeracao numa porta sem autenticacao. O contrato ja proibe esse
+        vazamento em `login`, onde o 401 e identico para conta inexistente e
+        senha errada; aqui o vazamento seria pior, porque nem exige tentativa.
+
+        Por isso `allow_credentials` sai **sempre vazia**, para toda chamada,
+        com ou sem conta do outro lado.
+
+        Nao exige sessao, por definicao: e a porta de entrada.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "a dimensao so pode ser a rede: a operacao nao sabe de quem e a tentativa, e e exatamente por nao saber que ela nao vaza nada"
+      responses:
+        '200':
+          description: Desafio emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyAuthenticationOptions' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkey/authentication:
+    post:
+      operationId: finishPasskeyAuthentication
+      tags: [auth]
+      x-effects: [verifies_secret]
+      summary: Entra com credencial digital
+      description: |
+        Segundo passo da entrada. O app devolve a assercao e o servidor abre
+        sessao se ela conferir. A resposta e a **mesma** `SessionResponse` de
+        `login`: para o resto do app, entrar por passkey e entrar.
+
+        **O que e verificado:** a assinatura, contra a chave publica guardada
+        no cadastro; o `challenge`, de uso unico e com prazo; o `type` igual a
+        `webauthn.get`; a `origin`; o `rpIdHash`; o `userHandle`, que precisa
+        apontar para a conta dona da credencial; e o **contador de
+        assinatura**.
+
+        **O contador antirrepeticao.** Cada credencial guarda o `sign_count`
+        da ultima assercao aceita. Assercao com contador **menor ou igual** ao
+        guardado e rejeitada: ou e repeticao de uma assercao capturada, ou e
+        autenticador clonado. Quando isso acontece o servidor **revoga a
+        credencial** e registra o evento -- e responde `invalid-credentials`,
+        sem contar o motivo. Aparelho que sempre devolve zero (parte dos
+        autenticadores de plataforma, legitimamente) e tratado pela excecao
+        prevista na especificacao: contador guardado zero e recebido zero
+        passa, e so passa nesse caso.
+
+        **O 401 e identico** para credencial desconhecida, credencial revogada,
+        assinatura errada e contador repetido. A porta nao diz qual dos quatro
+        foi, pelo mesmo motivo que `login` nao diz se o e-mail existe.
+
+        `stay_signed_in` tem o mesmo efeito que em `login`: ele escolhe a
+        janela de inatividade do refresh, e nada mais.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "nao ha dimensao por conta aqui: o pedido so revela de que conta e DEPOIS de a assinatura conferir, e um teto que precisasse saber a conta antes teria de olhar o `userHandle` sem verificar nada -- que e aceitar como identificacao o campo que o atacante escolhe"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasskeyAuthenticationRequest' }
+      responses:
+        '200':
+          description: Sessao aberta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: |
+            A credencial nao confere. A resposta e **identica** para credencial
+            desconhecida, revogada, assinatura invalida e contador repetido:
+            nao revela nem se a credencial existe, nem se a conta existe.
+
+            Desafio expirado ou ja usado sai como `token-expired`, que e outra
+            saida de tela: pedir outro desafio.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                naoConfere:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: Nao foi possivel entrar com esta credencial
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                desafioVencido:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/token-expired
+                    title: O desafio expirou
+                    status: 401
+                    detail: Tente entrar de novo.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkeys:
+    get:
+      operationId: listPasskeys
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: []
+      summary: Lista as credenciais digitais da conta
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "leitura da propria conta, e e a tela de gerenciar credenciais que a chama"
+      description: |
+        As credenciais **ativas** da conta, mais recente primeiro. Revogadas
+        nao aparecem: elas continuam na base (nada e apagado, decisao do
+        cliente de 26/10) e nao servem a nenhuma tela.
+
+        Nao devolve chave publica nem `credential_id` cru -- nada que sirva
+        para montar uma assercao. O que a tela precisa e o rotulo, quando foi
+        cadastrada e quando foi usada por ultimo, para a pessoa reconhecer o
+        aparelho que vai revogar.
+      responses:
+        '200':
+          description: Lista das credenciais ativas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasskeyList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/passkeys/{passkeyId}:
+    delete:
+      operationId: revokePasskey
+      # DECLARADO, e nao herdado do `security` global: `carregarContrato`
+      # RECUSA operacao sem `security` -- herdar o padrao faria a rota
+      # desaparecer de qualquer conferencia (negar por padrao, e falhar na
+      # subida em vez de na primeira requisicao).
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: [irreversible_write]
+      summary: Revoga uma credencial digital
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "teto FOLGADO de proposito: quem perdeu o aparelho esta com pressa, e o teto nao pode ser o que impede alguem de fechar a porta. Trinta e o triplo do cadastro porque revogar e a saida de emergencia, nao a rotina"
+      description: |
+        **Revogar MARCA revogada, nao apaga** (decisao do cliente de 26/10:
+        "nao apague nada"). A linha fica, com `revoked_at` preenchido, e deixa
+        de contar no teto e de servir para entrar. Isso tambem e o que permite
+        responder honestamente depois a pergunta "esta credencial ja existiu".
+
+        `irreversible_write` porque a credencial nao volta: o padrao WebAuthn
+        nao tem como "desrevogar" -- a chave privada continua no aparelho, mas
+        a confianca nela nao se restaura sem cadastrar de novo.
+
+        **Nao exige reautenticacao.** Pelo contrato, `X-Reauth-Token` protege
+        operacao destrutiva, e revogar passkey parece uma. Nao exige por um
+        motivo concreto: quem perdeu o aparelho precisa revogar a credencial
+        dele, e a senha continua sendo a outra porta -- exigir a senha aqui
+        nao acrescenta defesa (quem esta na sessao ja passou por ela) e
+        acrescenta um passo no momento em que a pessoa mais precisa de pressa.
+        Revogar nunca TRANCA ninguem fora: a senha continua valendo, que e a
+        decisao 1 do BICHUS-301.
+
+        Credencial de outra conta responde **404**, nao 403, como o resto do
+        contrato.
+      parameters:
+        - $ref: '#/components/parameters/PasskeyId'
+      responses:
+        '204':
+          description: "Credencial revogada. Idempotente: revogar a ja revogada tambem sai 204."
+        # O `passkeyId` e `format: uuid`, entao o Ajv pode recusar antes do
+        # handler. Declarar o 400 nao e zelo: a rota JA o devolve, e contrato
+        # que omite resposta que a rota emite e contrato que mente.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/password:
@@ -12444,6 +12825,18 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    PasskeyId:
+      name: passkeyId
+      in: path
+      required: true
+      description: |
+        O `id` DA LINHA devolvido por `listPasskeys`, e nao o `credential_id`.
+        Sao dois identificadores diferentes de proposito: o `credential_id` e
+        escolhido pelo autenticador e aparece em `exclude_credentials`, e usar
+        ele na URL poria um identificador de credencial no caminho, que vai
+        para log de acesso.
+      schema: { type: string, format: uuid }
+
     TagId:
       name: tagId
       in: path
@@ -13911,6 +14304,231 @@ components:
         password: { type: string, maxLength: 256 }
         stay_signed_in:
           $ref: '#/components/schemas/StaySignedIn'
+
+    PasskeyRegistrationOptions:
+      type: object
+      description: |
+        Subconjunto de `PublicKeyCredentialCreationOptions` que o app repassa
+        ao Credential Manager. **Todo campo binario e base64url SEM
+        preenchimento (`=`)**, que e o que o WebAuthn usa e o que o Android
+        espera; base64 comum entra silenciosamente errado no `challenge` e a
+        atestacao reprova depois, longe daqui.
+      required: [challenge, rp, user, pub_key_cred_params, timeout, attestation, authenticator_selection, exclude_credentials]
+      properties:
+        challenge:
+          type: string
+          description: |
+            Desafio de **uso unico** e com **prazo** (`timeout`), base64url.
+            Guardado no servidor e consumido em `finishPasskeyRegistration`,
+            de sucesso ou de falha.
+          example: dGVzdGUtZGUtZGVzYWZpby1uYW8tdXNhci1lbS1wcm9kdWNhbw
+        rp:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              description: |
+                O `RP ID`. **Sempre `bichu.app`**, o apex, e **imutavel**:
+                trocar invalida toda credencial ja emitida.
+              example: bichu.app
+            name: { type: string, example: Bichu }
+        user:
+          type: object
+          required: [id, name, display_name]
+          properties:
+            id:
+              type: string
+              description: |
+                O `userHandle`, base64url. E o UUID interno da conta, o mesmo
+                `sub` do token -- **nunca o e-mail**: o `userHandle` fica
+                guardado no aparelho e e devolvido na entrada sem
+                autenticacao nenhuma, entao por-lo como e-mail deixaria o
+                e-mail legivel para quem tiver o aparelho na mao.
+              example: MDE4ZjdjMWUtN2EyYi03YzNkLTllNGYtMmIxYTBjOWQ4ZTdm
+            name: { type: string, format: email, description: "o e-mail, que e o que o seletor do aparelho mostra" }
+            display_name: { type: string, description: "o nome do tutor" }
+        pub_key_cred_params:
+          type: array
+          description: |
+            Algoritmos aceitos, em ordem de preferencia: `-7` (ES256) e `-257`
+            (RS256). Sao os dois que os autenticadores de plataforma do Android
+            emitem; a lista e fechada aqui e no servidor, e nao herdada do que
+            o aparelho oferecer.
+          items:
+            type: object
+            required: [type, alg]
+            properties:
+              type: { type: string, enum: [public-key] }
+              alg: { type: integer, enum: [-7, -257] }
+        timeout:
+          type: integer
+          description: "prazo do desafio em MILISSEGUNDOS, como o WebAuthn pede. O servidor aplica o mesmo prazo na sua copia guardada -- prazo que vive so no cliente nao e prazo."
+          example: 300000
+        attestation:
+          type: string
+          enum: [none]
+          description: |
+            `none` de proposito. Atestacao direta entregaria o modelo do
+            aparelho e exigiria validar cadeia de certificado de fabricante,
+            e o produto nao tem regra que dependa da marca do autenticador.
+            Pedir atestacao que ninguem examina e coletar dado sem uso.
+        authenticator_selection:
+          type: object
+          required: [authenticator_attachment, resident_key, user_verification]
+          properties:
+            authenticator_attachment:
+              type: string
+              enum: [platform]
+              description: "a credencial fica no proprio aparelho"
+            resident_key:
+              type: string
+              enum: [required]
+              description: |
+                **Obrigatoriamente `required`.** E o que torna a credencial
+                *discoverable* e o que permite a `beginPasskeyAuthentication`
+                nao receber e-mail -- sem isso a entrada precisaria de
+                `allowCredentials`, que seria um oraculo de enumeracao de
+                conta.
+            user_verification:
+              type: string
+              enum: [required]
+              description: "biometria ou bloqueio de tela do aparelho. `required` e nao `preferred`: credencial sem verificacao do usuario nao substitui nada, e aqui ela e a porta inteira."
+        exclude_credentials:
+          type: array
+          description: |
+            As credenciais ATIVAS da conta, para o aparelho nao cadastrar duas
+            vezes. Nao vaza nada: quem chama ja esta autenticado como dono.
+            Vazia quando a conta nao tem nenhuma.
+          items: { $ref: '#/components/schemas/PasskeyDescriptor' }
+
+    PasskeyDescriptor:
+      type: object
+      required: [type, id]
+      properties:
+        type: { type: string, enum: [public-key] }
+        id: { type: string, description: "o `credential_id`, base64url" }
+
+    PasskeyRegistrationRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: object
+          description: |
+            O `PublicKeyCredential` devolvido pelo aparelho, com os campos
+            binarios em base64url.
+          required: [id, raw_id, type, response]
+          properties:
+            id: { type: string, description: "o `credential_id` em base64url" }
+            raw_id: { type: string, description: "o mesmo valor; aceito porque o Credential Manager devolve os dois" }
+            type: { type: string, enum: [public-key] }
+            response:
+              type: object
+              required: [client_data_json, attestation_object]
+              properties:
+                client_data_json:
+                  type: string
+                  description: "base64url. Dele saem `challenge`, `type` e `origin`, e os tres sao conferidos."
+                attestation_object:
+                  type: string
+                  description: "base64url, CBOR. Dele saem `rpIdHash`, as flags, o `sign_count` e a chave publica COSE."
+                transports:
+                  type: array
+                  items: { type: string }
+                  description: "informativo; guardado para a tela, nunca usado como decisao de seguranca"
+        label:
+          type: string
+          maxLength: 60
+          description: |
+            Rotulo do aparelho, escolhido pela pessoa ou sugerido pelo app
+            ("Celular do Leandro"). **Opcional**: sem ele o servidor guarda
+            nulo e a tela mostra a data. Texto livre, e e texto de usuario --
+            a tela escapa, como em qualquer outro campo livre do produto.
+
+    PasskeyAuthenticationOptions:
+      type: object
+      required: [challenge, timeout, rp_id, user_verification, allow_credentials]
+      properties:
+        challenge:
+          type: string
+          description: "desafio de uso unico e com prazo, base64url"
+        timeout: { type: integer, example: 300000, description: "prazo em MILISSEGUNDOS" }
+        rp_id: { type: string, example: bichu.app }
+        user_verification: { type: string, enum: [required] }
+        allow_credentials:
+          type: array
+          maxItems: 0
+          description: |
+            **Sempre vazia, em toda chamada.** Nao e campo a preencher depois:
+            e a forma de a operacao nao responder "esta conta tem passkey?".
+            O aparelho acha a credencial sozinho porque ela e *discoverable*.
+            `maxItems: 0` esta aqui para que preencher isto um dia reprove no
+            portao de contrato em vez de vazar em silencio.
+          items: { $ref: '#/components/schemas/PasskeyDescriptor' }
+
+    PasskeyAuthenticationRequest:
+      type: object
+      required: [credential]
+      properties:
+        credential:
+          type: object
+          required: [id, raw_id, type, response]
+          properties:
+            id: { type: string }
+            raw_id: { type: string }
+            type: { type: string, enum: [public-key] }
+            response:
+              type: object
+              required: [client_data_json, authenticator_data, signature]
+              properties:
+                client_data_json: { type: string, description: "base64url" }
+                authenticator_data: { type: string, description: "base64url. Dele saem o `rpIdHash`, as flags e o `sign_count`." }
+                signature: { type: string, description: "base64url" }
+                user_handle:
+                  type: string
+                  nullable: true
+                  description: |
+                    base64url, o `userHandle` guardado no aparelho. **Nunca e
+                    aceito como identificacao**: ele e conferido contra o dono
+                    da credencial encontrada pelo `credential_id`, e divergencia
+                    recusa. Tratar este campo como identidade seria aceitar
+                    como prova o valor que quem chama escolhe.
+        stay_signed_in:
+          type: boolean
+          default: false
+          description: "o mesmo efeito que em `login`: escolhe a janela de inatividade do refresh, e nada mais"
+
+    Passkey:
+      type: object
+      description: |
+        Uma credencial ATIVA, do ponto de vista da tela. **Nao traz chave
+        publica nem `credential_id`**: nada que sirva para montar assercao
+        sai desta operacao.
+      required: [id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "identificador DA LINHA, e nao o `credential_id`. E o que `revokePasskey` recebe."
+        label:
+          type: string
+          nullable: true
+          description: "o rotulo que a pessoa deu, ou nulo"
+        created_at: { type: string, format: date-time }
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "ultima entrada aceita com esta credencial, ou nulo se nunca foi usada para entrar"
+
+    PasskeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Passkey' }
 
     SessionResponse:
       type: object

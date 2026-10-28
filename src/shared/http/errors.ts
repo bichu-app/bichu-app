@@ -512,6 +512,52 @@ export const problemas = {
    * sessão caiu" e mandaria a pessoa fazer login — que é exatamente o que ela
    * não consegue, porque está tentando recuperar a senha.
    */
+  // --- Credencial digital / passkey (BICHUS-301) ---------------------------
+
+  /**
+   * 400. A atestacao devolvida pelo aparelho nao foi verificada.
+   *
+   * **NAO e `validation-failed`**, e a diferenca e de tela, nao de gosto: ali o
+   * corpo esta malformado e a saida e corrigir o formulario; aqui o corpo esta
+   * bem formado e a saida e tentar de novo ou **seguir sem passkey**. O passo e
+   * dispensavel por decisao do cliente, entao a tela nao pode tratar isto como
+   * erro de cadastro.
+   */
+  atestacaoDePasskeyRecusada: (): AppError =>
+    new AppError('passkey-attestation-invalid', 'Não foi possível confirmar a credencial', {
+      detail:
+        'A resposta do aparelho não foi confirmada. Tente de novo ou continue sem credencial digital.',
+    }),
+
+  /**
+   * 409. Este `credential_id` ja existe.
+   *
+   * 409 e nao 400 porque nada esta errado no pedido: a pessoa apertou duas
+   * vezes, ou o aparelho ja havia cadastrado.
+   */
+  passkeyJaCadastrada: (): AppError =>
+    new AppError('passkey-already-registered', 'Este aparelho já está cadastrado', {
+      detail: 'A credencial digital deste aparelho já existe nesta conta.',
+    }),
+
+  /** 409. Teto de credenciais ATIVAS por conta. A saida e revogar uma. */
+  tetoDePasskeysDaConta: (teto: number): AppError =>
+    new AppError('passkey-limit-reached', 'Limite de credenciais atingido', {
+      detail: `Esta conta já tem ${String(teto)} credenciais ativas. Revogue uma para cadastrar outra.`,
+    }),
+
+  /**
+   * 401. O desafio expirou ou ja foi usado.
+   *
+   * `token-expired` e nao `passkey-attestation-invalid`: a saida e pedir OUTRO
+   * desafio, nao desistir da credencial. O desafio e de uso unico, e e
+   * consumido de sucesso ou de falha.
+   */
+  desafioDePasskeyVencido: (): AppError =>
+    new AppError('token-expired', 'O desafio expirou', {
+      detail: 'Comece de novo.',
+    }),
+
   tokenDeVerificacaoVencido: (): AppError =>
     new AppError('verification-token-expired', 'Este link não vale mais', {
       detail: 'Ele pode ter expirado ou já ter sido usado. Peça um novo.',

@@ -5,6 +5,7 @@
 // so pelo status. Esta e a lista fechada, com o unico status de cada tipo.
 export const TIPOS_DE_PROBLEMA = {
   "validation-failed": 400,
+  "passkey-attestation-invalid": 400,
   "unauthenticated": 401,
   "invalid-credentials": 401,
   "token-expired": 401,
@@ -21,6 +22,8 @@ export const TIPOS_DE_PROBLEMA = {
   "broadcast-daily-cap-reached": 409,
   "tag-limit-reached": 409,
   "contact-channel-unverified": 409,
+  "passkey-already-registered": 409,
+  "passkey-limit-reached": 409,
   "pet-photo-missing": 409,
   "transfer-not-for-this-account": 409,
   "transfer-already-in-progress": 409,

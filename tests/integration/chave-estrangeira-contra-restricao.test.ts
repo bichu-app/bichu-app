@@ -1287,6 +1287,36 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.user_publications',
     aoApagar: 'SET NULL',
   },
+  // -------------------------------------------------------------------------
+  // credencial digital / passkey (BICHUS-301, migracao 20261027000020)
+  // -------------------------------------------------------------------------
+  // As duas sao CASCADE, e a decisao nao e de gosto: a credencial e a conta.
+  // `SET NULL` seria pior aqui do que no resto do banco -- `passkey_credentials`
+  // nao tem `CHECK` que torne `user_id` obrigatoria, entao o nulo ENTRARIA, e o
+  // resultado seria uma chave publica WebAuthn valida sem dono: ninguem para
+  // revogar, e ela continuaria verificando assercao. `NO ACTION` impediria a
+  // exclusao da conta, que e direito da pessoa.
+  //
+  // CASCADE tambem e o que o resto do esquema faz com o que pertence a conta
+  // (42 das 58 referencias a `users (id)`), e `expurgar-contas-excluidas` ja
+  // conta com isso. Revogar passkey MARCA revogada e nunca apaga (decisao do
+  // cliente de 26/10); o que apaga aqui e o EXPURGO da conta, que e outro ato.
+  'public.passkey_credentials.passkey_credentials_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as credenciais digitais da propria pessoa, com a chave publica de cada uma. Sao dela, ' +
+      'e sem a conta nao ha o que autenticar.',
+  },
+  'public.passkey_challenges.passkey_challenges_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os desafios de CADASTRO em aberto da propria pessoa. Os de ENTRADA tem `user_id` nulo ' +
+      'de proposito e nao sao alcancados por esta cascata -- eles vencem em cinco minutos.',
+  },
 };
 
 type VereditoDoPar = 'compativel' | 'contradiz';

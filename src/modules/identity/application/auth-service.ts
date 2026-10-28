@@ -1000,6 +1000,61 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     },
 
     /**
+     * Abre sessão para quem já provou posse de uma **credencial digital**
+     * (passkey). BICHUS-301.
+     *
+     * ## Por que ela existe, e por que não é `entrar`
+     *
+     * `entrar` verifica senha. Aqui a prova já aconteceu, e foi outra: o
+     * `PasskeyService` verificou a assinatura da asserção contra a chave pública
+     * guardada, conferiu desafio, origem, `rpIdHash` e o contador
+     * antirrepetição. Este método **não verifica nada** — ele abre a sessão.
+     *
+     * Isso faz dele uma porta perigosa, e a defesa é de fiação e não de
+     * verificação interna: o `userId` que entra aqui só pode vir de
+     * `PasskeyService.concluirEntrada`, que é o único lugar que o devolve. Ele
+     * não lê corpo de requisição, não aceita e-mail, e não tem como ser
+     * alcançado pelo cliente — nenhuma rota o expõe. Se um dia alguém o chamar
+     * com um identificador vindo do pedido, isto vira autenticação por
+     * afirmação, e é por isso que este parágrafo está aqui.
+     *
+     * A sessão resultante é **indistinguível** da do login: mesmo `abrirSessao`,
+     * mesma `SessionView`, mesmas janelas. Para o resto do app, entrar por
+     * passkey é entrar — e é o que o contrato promete devolvendo a mesma
+     * `SessionResponse`.
+     *
+     * A trilha recebe `auth.login_succeeded` com `method: 'passkey'`, e não um
+     * evento próprio: a pergunta que `login_succeeded` responde é "esta conta
+     * abriu sessão", e ela não muda por causa do meio. O meio vai no metadado,
+     * onde dá para contar os dois sem partir a série histórica.
+     */
+    async entrarComCredencialDigital(
+      userId: UserId,
+      continuarConectado: boolean,
+      contexto: ContextoDaRequisicao,
+    ): Promise<SessionView> {
+      const agora = deps.clock.now();
+      const conta = await deps.repositorio.buscarContaPorId(userId);
+      // A conta sumiu entre a verificação da asserção e esta leitura. O mesmo
+      // 401 de credencial recusada: a credencial é válida e a conta não existe
+      // mais, e dizer qualquer outra coisa contaria a diferença.
+      if (conta === undefined) throw problemas.credencialRecusada();
+
+      const par = await abrirSessao(conta, continuarConectado, contexto, agora);
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.login_succeeded',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { stay_signed_in: continuarConectado, method: 'passkey' },
+      });
+      return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
+    },
+
+    /**
      * A família a que um token de renovação pertence, **sem consumi-lo**.
      *
      * Existe para o teto `token_family` de 10/min da renovação, que é aplicado

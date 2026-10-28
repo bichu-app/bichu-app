@@ -148,8 +148,9 @@ const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);
 const CAMPOS_DISPENSADOS = new Set(['correlation_id']);
 
 /**
- * Operações que **abrem sessão**: cadastro, login, renovação e confirmação de
- * e-mail. Elas declaram `security: []` porque quem chama ainda não tem token,
+ * Operações que **abrem sessão**: cadastro, login, renovação, confirmação de
+ * e-mail e entrada por credencial digital. Elas declaram `security: []` porque
+ * quem chama ainda não tem token,
  * mas o corpo que devolvem é a conta **de quem acabou de provar a credencial na
  * mesma requisição** — não a de um terceiro. Exigir que a resposta de login não
  * traga o próprio e-mail tornaria a operação impossível.
@@ -166,6 +167,10 @@ const OPERACOES_QUE_ABREM_SESSAO: ReadonlyMap<string, string> = new Map([
   ['login', 'devolve a sessão e a conta a quem apresentou a senha'],
   ['refreshSession', 'devolve a sessão a quem apresentou o refresh da própria conta'],
   ['confirmEmailVerification', 'devolve a sessão a quem apresentou o token do próprio e-mail'],
+  [
+    'finishPasskeyAuthentication',
+    'devolve a sessão e a conta a quem apresentou a asserção WebAuthn da própria credencial',
+  ],
 ]);
 
 export interface Achado {
