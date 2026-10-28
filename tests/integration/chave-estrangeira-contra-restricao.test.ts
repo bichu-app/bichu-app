@@ -877,6 +877,24 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'entao nao atravessa pessoas.',
   },
 
+  'public.pet_delivery_addresses.pet_delivery_addresses_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o endereco de entrega guardado DO PET -- a residencia do tutor. Autorizado pelo ' +
+      'cliente em 27/10/2026 ("endereco um por pet"), decisao que SUPERA a de 21/10/2026 ' +
+      '("um endereco de entrega salvo na conta"), cuja chave esta logo acima e nao foi ' +
+      'apagada (decisao dele de 26/10/2026, "nao apague nada"). ' +
+      'ESTA CLAUSULA CUMPRE A FRASE DELE DE 17/10/2026 POR INTEIRO, e e a primeira que o ' +
+      'faz: "voce so deve apagar as informacoes, caso o usuario remova o pet ou delete a ' +
+      'conta". Remover o PET cai aqui; apagar a CONTA cai aqui em cadeia, porque ' +
+      '`pets.owner_user_id` ja cascateia de `users`. No modelo da conta, "remova o pet" ' +
+      'nao apagava endereco nenhum. ' +
+      'Nao ha prazo, nao ha expiracao e nao ha varredura. Uma linha por pet (`pet_id` e a ' +
+      'chave primaria), entao nao atravessa pets nem pessoas.',
+  },
+
   // -------------------------------------------------------------------------
   // a indicacao do diretorio e a fila dela (`20261017000004`, `20261017000016`)
   // -------------------------------------------------------------------------

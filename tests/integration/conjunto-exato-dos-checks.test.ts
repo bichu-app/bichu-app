@@ -1051,6 +1051,29 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'public.user_delivery_addresses.user_delivery_addresses_telefone_formato':
     "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
   // ------------------------------------------------------------------
+  // O ENDERECO DE ENTREGA DO PET (`20261027000001`)
+  // ------------------------------------------------------------------
+  // **Decisao do cliente de 27/10/2026** (*"endereco um por pet"*), que SUPERA
+  // a de 21/10/2026 logo acima -- e a tabela da conta nao foi apagada (decisao
+  // dele de 26/10/2026, *"nao apague nada"*), por isso as duas estao aqui.
+  //
+  // **AS DUAS EXPRESSOES SAO IDENTICAS, CARACTERE POR CARACTERE, AS DE CIMA**, e
+  // isso nao e copia por preguica: e a condicao para o endereco do pet poder
+  // PREENCHER o pedido da plaquinha. Se esta tabela aceitasse um CEP que
+  // `collar_tag_requests` recusa, o endereco do pet nasceria capaz de produzir
+  // um pedido que o banco rejeita, e a pessoa descobriria isso no botao de
+  // pedir. **Divergir aqui e o defeito; ser igual e o requisito.**
+  //
+  // **SO DOIS dos nove `CHECK` desta tabela entram aqui**, pela mesma regra de
+  // `MENCIONA_LITERAL` que a nota de cima explica: os outros sete sao
+  // `char_length(col) BETWEEN a AND b` (e `char_length(state) = 2`), que o
+  // catalogo escreve sem nenhum `'...'::text`, e declara-los faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  'public.pet_delivery_addresses.pet_delivery_addresses_cep_formato':
+    "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
+  'public.pet_delivery_addresses.pet_delivery_addresses_telefone_formato':
+    "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
+  // ------------------------------------------------------------------
   // A INDICACAO DO DIRETORIO (`20261017000004`), O CEP DELA
   // (`20261017000015`) E A FILA (`20261017000016`).
   // ------------------------------------------------------------------
