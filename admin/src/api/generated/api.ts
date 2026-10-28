@@ -8901,6 +8901,43 @@ export interface components {
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
             /**
+             * @description **O PAPEL DE QUEM ESTA CHAMANDO nesta conversa**, e so dele.
+             *
+             *     `participants` traz SEMPRE os dois lados e **nao diz qual deles e o
+             *     chamador**. Sem este campo o cliente tem de adivinhar, e a unica
+             *     adivinhacao disponivel -- "o meu lado e o que vem sem `handle` e sem
+             *     `photo_icon_url`" -- **nao decide**: medido em 27/10/2026 contra
+             *     `participantesVisiveis`, quando nao ha conexao aceita (que e o
+             *     estado NORMAL de uma conversa de achado com um estranho) os dois
+             *     participantes saem com os dois campos nulos, e o corpo fica
+             *     **identico** para o chamador tutor e para o chamador achador.
+             *
+             *     O preco de nao ter o campo era de TELA, e estava medido: o app
+             *     assumia `tutor` fixo. Para o ACHADOR COM CONTA -- que o servidor
+             *     atende desde sempre, porque o recorte da leitura e
+             *     `tutor_user_id = chamador OR finder_user_id = chamador` -- a bolha
+             *     do OUTRO lado ia para a direita, que e o lado que a pessoa le como
+             *     o dela, e a linha da lista mostrava o PROPRIO nome sem foto
+             *     nenhuma: o proprio lado recebe `handle` e `photo_icon_url` nulos
+             *     **por decisao** (emenda 3 do ADR-0010, 19/10/2026), e a tela lia
+             *     esse nulo como se fosse do outro.
+             *
+             *     **Nao e identificador, e nao liga a conversa a uma conta**
+             *     (ADR-0010 itens 6 e 7): ele diz *"voce e este lado aqui"* a quem ja
+             *     esta autenticado, e nao diz nada sobre a outra pessoa. Quem sabe o
+             *     papel e a CONSULTA (`papel_do_chamador`, projetado no `SELECT`), e
+             *     nunca uma comparacao de id na borda -- um `if` de borda poderia
+             *     discordar do `WHERE` que deixou a conversa passar.
+             *
+             *     **`FinderConversation` NAO tem este campo e nao pode precisar
+             *     dele**: aquele schema serve o achador **sem conta**, e o papel
+             *     daquele chamador e `finder` por definicao do proprio token.
+             *
+             *     `system` nao e valor possivel: o Bichu nao chama esta rota.
+             * @enum {string}
+             */
+            viewer_role: "tutor" | "finder";
+            /**
              * @description Os dois lados humanos da conversa, montados campo a campo.
              *
              *     ## EMENDA DE 19/10/2026 (decisao do cliente): a foto entra, e SO

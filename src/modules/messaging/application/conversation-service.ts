@@ -43,6 +43,7 @@ import {
   participantesVisiveis,
   previaDaMensagem,
   type EstadoDaConversa,
+  type Papel,
   type ParticipanteVisivel,
   type SinaisDeEstado,
 } from '../domain/conversa-mediada.js';
@@ -89,6 +90,26 @@ export interface ConversaVisivel {
   readonly caseId: string | null;
   readonly petDisplayName: string;
   readonly status: EstadoDaConversa;
+  /**
+   * O PAPEL DE QUEM CHAMOU nesta conversa (`Conversation.viewer_role`).
+   *
+   * Ja existia no repositorio (`ConversaDoChamador.papelDoChamador`, projetado
+   * pelo `SELECT`) e era usado so para DENTRO -- `senderRole` do envio, o
+   * `by_role` da trilha, o lado do bloqueio. **O que mudou em 27/10/2026 e que
+   * ele SAI.**
+   *
+   * Sai porque o cliente nao tem como deduzi-lo: `participants` traz os dois
+   * lados e nao marca qual e o chamador, e a unica pista -- `handle` e
+   * `photo_icon_url` nulos no proprio lado (emenda 3 do ADR-0010) -- nao
+   * distingue nada quando NAO ha conexao aceita, porque ai os DOIS lados saem
+   * nulos. Medido em 27/10/2026 sobre `participantesVisiveis`: o corpo e
+   * identico para `'tutor'` e para `'finder'`.
+   *
+   * **Nao e identificador.** Diz a quem ja esta autenticado qual dos dois lados
+   * e o dele, e nada sobre a outra pessoa -- nenhum id novo, nenhum jeito novo
+   * de agrupar (ADR-0010 itens 6 e 7).
+   */
+  readonly papelDoChamador: Exclude<Papel, 'system'>;
   readonly participants: readonly ParticipanteVisivel[];
   readonly messages: readonly MensagemGravada[];
   readonly nextCursor: string | null;
@@ -573,6 +594,12 @@ export class ConversationService {
       caseId: conversa.caseId,
       petDisplayName: conversa.petDisplayName,
       status: estadoDaConversa(sinaisDe(conversa)),
+      // O MESMO valor que `participantesVisiveis` recebe abaixo, e de proposito
+      // a MESMA leitura: o papel que decide de quem e cada nulo de `handle` e
+      // de `photo_icon_url` tem de ser o papel que o cliente le em
+      // `viewer_role`, senao a tela desenha o avatar de um lado e a bolha do
+      // outro.
+      papelDoChamador: conversa.papelDoChamador,
       participants: participantesVisiveis({
         nomeDoTutor: conversa.nomeDoTutor,
         nomeDoAchador: conversa.nomeDoAchador,

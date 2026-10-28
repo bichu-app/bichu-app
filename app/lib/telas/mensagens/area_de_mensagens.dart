@@ -876,11 +876,20 @@ class LinhaDaConversa extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    // O outro lado, visto pelo TUTOR. A sessao e quem sabe o papel do
-    // chamador, e o contrato nao manda esse campo (e nao deve: seria mais um
-    // jeito de ligar a conversa a uma conta). O tutor e o papel de quem usa o
-    // app com conta no caminho da plaquinha.
-    final outro = conversa.outroLadoVistoPor(PapelNaConversa.tutor);
+    // O outro lado, visto por QUEM ESTA CHAMANDO -- e o papel vem no corpo
+    // (`Conversation.viewer_role`), nao de uma suposicao desta tela.
+    //
+    // Antes de 27/10/2026 esta linha passava `PapelNaConversa.tutor` fixo, e
+    // era ELA a reclamacao da foto: para o achador COM conta -- que o servidor
+    // atende (`tutor_user_id = chamador OR finder_user_id = chamador`) -- o
+    // "outro lado" era ele mesmo, e o proprio lado recebe `handle` e
+    // `photoIconUrl` nulos **por decisao** (emenda 3 do ADR-0010). A linha
+    // mostrava o proprio nome e a marca neutra, e a foto do tutor -- que tinha
+    // chegado na resposta -- nao era desenhada por ninguem.
+    //
+    // **Nao e identificador**: `viewer_role` diz `tutor` ou `finder` a quem ja
+    // esta autenticado, e nada sobre a outra pessoa (ADR-0010 itens 6 e 7).
+    final outro = conversa.outroLadoVistoPor(conversa.papelDoChamador);
     final quem = outro?.displayName ?? '';
     final marca = outro?.marcaNeutra ?? '';
     // A conversa encerrada e o unico sinal do lado desabilitado que a tela

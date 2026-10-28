@@ -392,6 +392,23 @@ export async function comoResposta(
     case_id: conversa.caseId,
     pet_display_name: conversa.petDisplayName,
     status: conversa.status,
+    // QUAL DOS DOIS LADOS E O CHAMADOR, e **so** isso.
+    //
+    // Sem este campo o cliente adivinha, e a adivinhacao nao decide: medido em
+    // 27/10/2026 sobre `participantesVisiveis`, sem conexao aceita os DOIS
+    // participantes saem com `handle` e `photo_icon_url` nulos, e o corpo fica
+    // identico para o chamador tutor e para o chamador achador. O app assumia
+    // `tutor` fixo por isso, e para o achador COM conta -- que o `WHERE` da
+    // leitura atende -- a bolha do outro lado ia para a direita e a linha da
+    // lista mostrava o proprio nome sem foto.
+    //
+    // **So na vista autenticada**, como `found_report_id` e
+    // `photo_reaches_other_side`. `FinderConversation` nao o ganha: o papel
+    // daquele chamador e `finder` por definicao do token, e nao ha o que dizer.
+    //
+    // Nao e identificador e nao liga a conversa a uma conta (ADR-0010 itens 6
+    // e 7): `'tutor'` ou `'finder'`, e nada sobre a outra pessoa.
+    viewer_role: conversa.papelDoChamador,
     participants: conversa.participants.map((p) => ({
       role: p.role,
       display_name: p.displayName,

@@ -71,6 +71,11 @@ function conversaVisivel(): ConversaVisivel {
     caseId: null,
     petDisplayName: 'Aurora',
     status: 'open',
+    // `Conversation.viewer_role` (27/10/2026). O valor NÃO é indiferente a este
+    // arquivo: `comoResposta` publica o campo, e um fixture sem ele não
+    // compila. O que este arquivo mede continua sendo o aviso e o alcance --
+    // quem mede o papel é `o-papel-do-chamador-sai-na-conversa.test.ts`.
+    papelDoChamador: 'tutor',
     participants: [],
     messages: [],
     nextCursor: null,
