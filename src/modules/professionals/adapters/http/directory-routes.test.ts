@@ -44,6 +44,7 @@ import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { EntradaDoDiretorio } from '../../domain/entrada-do-diretorio.js';
+import { PONTUACAO_VAZIA } from '../../domain/avaliacao-do-local.js';
 import type {
   DirectoryRepository,
   PaginaDoDiretorio,
@@ -72,6 +73,7 @@ const ENTRADA: EntradaDoDiretorio = {
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,
+  pontuacao: PONTUACAO_VAZIA,
 };
 
 interface Cenario {

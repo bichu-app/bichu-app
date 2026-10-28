@@ -26,6 +26,7 @@ import {
   type EntradaDoDiretorio,
   urlDaDerivada,
 } from './entrada-do-diretorio.js';
+import { PONTUACAO_VAZIA } from './avaliacao-do-local.js';
 import {
   evidenciasAprovadas,
   nivelDerivado,
@@ -50,6 +51,7 @@ function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio 
     verificacoes: [],
     distanciaEmMetros: null,
     logoPublicKey: null,
+    pontuacao: PONTUACAO_VAZIA,
     ...ajustes,
   };
 }

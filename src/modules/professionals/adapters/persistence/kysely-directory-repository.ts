@@ -261,7 +261,14 @@ const TEM_ALGUMA_PROVA = sql<boolean>`EXISTS (
      and v.decision = 'approved'
 )`;
 
-function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
+/**
+ * A linha vira entrada. **A pontuacao entra por PARAMETRO e nao pela linha**, e
+ * a separacao e deliberada: a lista a le na MESMA consulta da pagina (lateral
+ * sobre `pontuacao_do_local`), e o detalhe a le na consulta propria que ja
+ * existia. Se ela viesse de `LinhaDaEntrada`, o detalhe precisaria inventar as
+ * sete colunas na sua projecao so para satisfazer o tipo.
+ */
+function comoEntrada(l: LinhaDaEntrada, pontuacao: PontuacaoDoLocal): EntradaDoDiretorio {
   const aprovadas: DecisaoDaVerificacao = 'approved';
   return {
     slug: l.slug,
@@ -284,6 +291,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
     })),
     distanciaEmMetros: l.distancia_em_metros,
     logoPublicKey: l.logo_public_key,
+    pontuacao,
   };
 }
 
@@ -579,6 +587,39 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
   return sql<LinhaDaPontuacao>`SELECT * FROM pontuacao_do_local(${idDoLocal}::uuid)`.execute(db);
 }
 
+/**
+ * A PONTUACAO DE CADA CARTAO DA PAGINA, **na mesma consulta da pagina**.
+ *
+ * ## Por que lateral, e nao vinte leituras
+ *
+ * `pontuacaoDe`, logo acima, le UM local. Chamada por item -- o que uma lista
+ * paginada convida a escrever -- ela levaria a rota de 3 consultas a 23: o N+1
+ * classico, que passa em todo teste porque cada leitura esta certa. Aqui a
+ * funcao entra como item do `FROM`, correlacionada com a linha da pagina, e o
+ * numero de consultas da rota **nao muda**: 3 antes, 3 depois, com 1 ou com 20
+ * cartoes. Isso e medido em `pontuacao-da-listagem-sai-em-uma-consulta.test.ts`,
+ * que conta o SQL compilado -- e nao e uma promessa deste comentario.
+ *
+ * ## Por que a FUNCAO, e nao um `GROUP BY` escrito aqui
+ *
+ * Porque a regra e uma: media arredondada a uma casa, NULA quando nao ha
+ * avaliacao, `status = 'published'` e `conta_habilitada(author_user_id)` (o
+ * ponto unico da migracao `20261017000013`, que trata nulo como habilitado).
+ * `pontuacao_do_local` (migracao `20261017000017`) ja a carrega, e e a MESMA
+ * funcao que a pagina do local e a escrita da avaliacao chamam. Um agregado
+ * reescrito a mao aqui seria a segunda copia do recorte, e o modo de falha
+ * dessa copia esta escrito na propria migracao: "128 avaliacoes" sobre uma lista
+ * que mostra 126.
+ *
+ * `CROSS JOIN` e nao `LEFT JOIN`: a funcao e um agregado sem `GROUP BY`, entao
+ * ela devolve SEMPRE exatamente uma linha -- com `media` nula e `quantidade`
+ * zero para o local que ninguem avaliou. Um `LEFT JOIN` aqui sugeriria um lado
+ * ausente que nao existe, e `CROSS JOIN` nao tem como esconder cartao nenhum.
+ */
+const PONTUACAO_DO_CARTAO = sql<LinhaDaPontuacao>`pontuacao_do_local(professionals.id)`.as(
+  'pontuacao',
+);
+
 export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRepository {
   /**
    * O `ref` publico da avaliacao: 128 bits de CSPRNG em base64url, 22
@@ -615,7 +656,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       const distanciaDisponivel = localizacao !== undefined && recorte.sort === 'distance';
 
       const ponto = pontoDoAparelho(recorte.chamador, recorte.familia, recorte.agora);
-      let pagina = construtorDaListagem(db, recorte).select([
+      let pagina = construtorDaListagem(db, recorte).crossJoinLateral(PONTUACAO_DO_CARTAO).select([
         'slug',
         'kinds',
         'entity_kind',
@@ -632,6 +673,18 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         // proposito: a faixa de 1280 x 720 em vinte cartoes multiplicaria o peso
         // da primeira pintura da lista. A coluna nem chega a esta projecao.
         CHAVE_DA_DERIVADA('logo_image_id').as('logo_public_key'),
+        // AS SETE COLUNAS DA PONTUACAO, do lateral. Os nomes sao os que
+        // `pontuacao_do_local` declara em `RETURNS TABLE`, e sao exatamente os
+        // de `LinhaDaPontuacao` -- entao `comoPontuacao` recebe a linha da
+        // pagina SEM adaptador no meio, e a conversao de `numeric`/`bigint`
+        // (que o driver entrega como texto) continua acontecendo num lugar so.
+        'pontuacao.media',
+        'pontuacao.quantidade',
+        'pontuacao.n1',
+        'pontuacao.n2',
+        'pontuacao.n3',
+        'pontuacao.n4',
+        'pontuacao.n5',
       ]);
 
       // Entrada sem coordenada vai para o fim com `NULLS LAST`, e nao some.
@@ -653,7 +706,15 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         .executeTakeFirstOrThrow();
 
       return {
-        itens: (itens as unknown as LinhaDaEntrada[]).map(comoEntrada),
+        // `comoPontuacao(l)` sobre a MESMA linha: as sete colunas chegaram pelo
+        // lateral, e a pontuacao do cartao e a da pagina do local saem da mesma
+        // funcao do banco e da mesma conversao em TypeScript.
+        //
+        // `(l) => ...` e nao a referencia nua de `comoEntrada`: com a referencia,
+        // o segundo argumento de `map` (o indice) chegaria no lugar da pontuacao.
+        itens: (itens as unknown as (LinhaDaEntrada & LinhaDaPontuacao)[]).map((l) =>
+          comoEntrada(l, comoPontuacao(l)),
+        ),
         total: Number(contagem.total),
         distanciaDisponivel,
       };
@@ -705,6 +766,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       if (linha === undefined) return undefined;
 
       const { rows } = await pontuacaoDe(db, linha.id);
+      const pontuacao = comoPontuacao(rows[0]);
 
       // A MINHA avaliacao e o CANAL VERIFICADO na mesma consulta, e nao em duas:
       // as duas respostas decidem a mesma tela, e a pessoa esta esperando nela.
@@ -726,8 +788,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       `.execute(db);
 
       return {
-        entrada: comoEntrada(linha as unknown as LinhaDaEntrada),
-        pontuacao: comoPontuacao(rows[0]),
+        // A MESMA `pontuacao` nos dois campos, e e UMA leitura: `entrada` a
+        // carrega porque `projetarEntrada` -- o caminho comum da lista e do
+        // detalhe -- e quem projeta `rating`.
+        entrada: comoEntrada(linha as unknown as LinhaDaEntrada, pontuacao),
+        pontuacao,
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: canal.rows[0]?.tem_canal ?? false,
         fotoPublicKey: linha.photo_public_key,
