@@ -1,2 +1,31 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
+
+// O entitlement do Associated Domains (BICHUS-301).
+//
+// AQUI, E NAO NO `project.pbxproj`, e a escolha tem duas razoes.
+//
+// 1. O `project.pbxproj` NAO define `CODE_SIGN_ENTITLEMENTS` em nenhuma das
+//    seis configuracoes (medido: zero ocorrencias). Ajuste de xcconfig vale
+//    quando o pbxproj nao sobrescreve, entao esta linha PEGA -- e e o unico
+//    jeito de ela pegar sem reescrever o pbxproj.
+//
+// 2. O `project.pbxproj` tem alteracao NAO COMITADA na pasta de trabalho do
+//    cliente: um `DEVELOPMENT_TEAM` nos TRES blocos de `buildSettings` do alvo
+//    `Runner` -- exatamente os blocos em que `CODE_SIGN_ENTITLEMENTS` entraria.
+//    Editar ali colidiria com a assinatura dele, que nao se comita. Estes dois
+//    xcconfig ele nao tocou.
+//
+//    O VALOR que esta lah NAO e um Team ID valido: o cliente confirmou em
+//    28/10/2026 que nao conseguiu criar a identidade de equipe no Apple
+//    Developer, e pediu para deixar o iOS pendente. Ele sobrou de uma
+//    tentativa. Nao copie esse valor para lugar nenhum -- em especial nao para
+//    `infra/caddy/well-known/apple-app-site-association`, que fica VAZIO de
+//    proposito: arquivo servido declarando Team ID inexistente parece
+//    configurado e faz o passkey do iOS falhar em silencio. Ver o `LEIA-ME.md`
+//    ao lado daquele arquivo.
+//
+// COBRE AS TRES CONFIGURACOES do alvo `Runner`: Debug le `Debug.xcconfig`, e
+// Release e Profile leem `Release.xcconfig` (medido em
+// `baseConfigurationReference`). Por isso a linha esta nos dois arquivos.
+CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements

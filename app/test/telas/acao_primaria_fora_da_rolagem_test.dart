@@ -89,8 +89,26 @@ void main() {
           versaoDosTermosDeTeste: versao,
         ),
         deposito: DepositoEmMemoria(),
-        clienteHttp: MockClient((requisicao) {
+        clienteHttp: MockClient((requisicao) async {
           chamadas.add(requisicao.url.path);
+          // A PORTA DA PASSKEY RESPONDE 404 AQUI, e nao o `rede` do caso
+          // (BICHUS-301, 28/10/2026).
+          //
+          // Desde que a C.2 passou a tentar a passkey sozinha ao abrir, TODA
+          // montagem desta tela chama esta rota. Os casos deste arquivo medem
+          // GEOMETRIA e stubbam a rede com uma resposta so para tudo -- um
+          // deles devolve `204` com corpo vazio --, e um 200 que nao e
+          // `PasskeyAuthenticationOptions` faz o leitor estourar `TypeError`.
+          // O app trata isso certo: registra e segue com a senha. Mas erro
+          // REGISTRADO reprova teste de widget, e os tres casos passaram a
+          // reprovar por uma rota que eles nao medem.
+          //
+          // 404 e o que uma rota nao stubbada deve responder -- a mesma
+          // convencao dos outros arquivos desta pasta. O caminho de passkey
+          // tem iscas proprias em `passkey_e_dispensavel_test.dart`.
+          if (requisicao.url.path.contains('/auth/passkey/')) {
+            return http.Response('{}', 404);
+          }
           return rede(requisicao);
         }),
       ),

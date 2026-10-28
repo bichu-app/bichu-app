@@ -58,6 +58,9 @@ import 'package:bichu/api/notificacoes_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
+import 'package:bichu/api/passkeys_api.dart';
+import 'package:bichu/dispositivo/credencial_do_aparelho.dart';
+import 'package:bichu/sessao/fiacao_do_passkey.dart';
 import 'package:bichu/api/diretorio_api.dart';
 import 'package:bichu/api/loja_api.dart';
 import 'package:bichu/api/fila_offline.dart';
@@ -142,6 +145,20 @@ Future<_Caixa> _montar(
     Escopo(
       api: api,
       auth: auth,
+      // As tres portas de passkey entraram no escopo em 28/10/2026
+      // (BICHUS-301). Este caso nao exercita passkey nenhuma; elas estao aqui
+      // porque `Escopo` as declara `required`, e isso e deliberado: um padrao
+      // nulo deixaria uma tela de producao subir com a porta desligada e
+      // nenhuma isca acusaria.
+      //
+      // `SemPasskeyNesteBuild` e a porta que recusa -- a de verdade estouraria
+      // `MissingPluginException` dentro de um `Future`, sem apontar a causa.
+      passkeys: PasskeysApi(api),
+      credencialDoAparelho: const SemPasskeyNesteBuild(),
+      passkey: FiacaoDoPasskey(
+        passkeys: PasskeysApi(api),
+        aparelho: const SemPasskeyNesteBuild(),
+      ),
       pets: PetsApi(api),
       casos: CasosApi(api),
       // A porta das conexoes entrou no escopo na uniao de 18/10/2026, junto
