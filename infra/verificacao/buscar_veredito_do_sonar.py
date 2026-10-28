@@ -25,7 +25,9 @@ escrito, estava certo, e nunca executou.
 A correcao separa BUSCAR de JULGAR:
 
   - este arquivo consulta o servico e grava um ENVELOPE com o que aconteceu:
-    obteve ou nao, o codigo HTTP, o erro de transporte, o veredito textual;
+    obteve ou nao, o codigo HTTP, o erro de transporte, o veredito textual e --
+    desde 28/10/2026 -- o erro da tarefa, quando foi o SERVIDOR que falhou
+    (`tipo_do_erro`, `mensagem_do_erro`, `pilha_do_erro`);
   - `verificar_veredito_do_sonar.py` le o envelope e decide, com vocabulario
     fechado: palavra que ele nao reconhece REPROVA, e so o veredito negativo
     de verdade e dispensavel.
@@ -64,6 +66,35 @@ INTERVALO = 5
 # que e um "nao obtive", e nao um "obtive e e negativo".
 TAREFA_TERMINOU = {"SUCCESS", "FAILED", "CANCELED"}
 
+# =========================================================================
+# POR QUE O ENVELOPE PASSOU A CARREGAR O ERRO DA TAREFA
+# =========================================================================
+# Medido em 28/10/2026: a `development` reprovava este job desde `d5c382dc`,
+# passando por `1e0a5c7d`, `29cfa95d` e os commits do dia -- quatro execucoes --
+# e o envelope dizia apenas:
+#
+#   obtido: False / status HTTP: 200
+#   motivo: a analise terminou em `FAILED` no servidor. (...)
+#
+# Era verdade e nao bastava: a resposta de `GET /api/ce/task?id=<id>` traz
+# `errorType` e `errorMessage`, e com `additionalFields=stacktrace` traz tambem
+# `errorStacktrace` -- e nada disso chegava ao log. Buscar a tarefa por fora deu
+# 404, e o controle positivo mostrou que a API nao responde leitura anonima nem
+# para projeto publico conhecido: a mensagem so e alcancavel DE DENTRO da
+# esteira, com o `SONAR_TOKEN`. Ou ela entra neste envelope, ou ela nao aparece
+# em lugar nenhum.
+#
+# AUSENTE E AUSENTE. Campo que o servidor nao mandou NAO entra no envelope. Uma
+# `mensagem_do_erro: ""` parece dado e manda quem le concluir que o servidor nao
+# explicou, quando quem nao explicou fomos nos. O juizo guarda esse par com dois
+# casos, um com mensagem e um sem.
+CAMPOS_DE_ERRO_DA_TAREFA: list[tuple[str, str, int]] = [
+    # (chave da API, chave do envelope, limite em bytes do que vai para o log)
+    ("errorType", "tipo_do_erro", 200),
+    ("errorMessage", "mensagem_do_erro", 2000),
+    ("errorStacktrace", "pilha_do_erro", 4000),
+]
+
 
 def pedir(url: str, token: str) -> tuple[int | None, bytes, str | None]:
     """(codigo HTTP, corpo, erro de transporte).
@@ -93,6 +124,66 @@ def nao_obtive(motivo: str, **extra) -> dict:
     envelope = {"obtido": False, "motivo": motivo}
     envelope.update(extra)
     return envelope
+
+
+def com_pilha(url: str) -> str:
+    """A mesma `ceTaskUrl`, pedindo tambem `errorStacktrace`.
+
+    `ceTaskUrl` ja vem com `?id=<...>` do `report-task.txt`, entao o parametro
+    e ACRESCENTADO a consulta existente em vez de substitui-la. Sem
+    `additionalFields=stacktrace` a API devolve `errorType` e `errorMessage` e
+    omite a pilha.
+    """
+    partes = urllib.parse.urlsplit(url)
+    consulta = urllib.parse.parse_qsl(partes.query, keep_blank_values=True)
+    if not any(c == "additionalFields" for c, _v in consulta):
+        consulta.append(("additionalFields", "stacktrace"))
+    return urllib.parse.urlunsplit(partes._replace(query=urllib.parse.urlencode(consulta)))
+
+
+def recortar(texto: str, limite: int) -> str:
+    """O texto, ou o recorte DIZENDO que recortou e de quanto.
+
+    A pilha de uma tarefa do SonarCloud pode ter dezenas de milhares de bytes, e
+    o envelope inteiro vai para o log do passo e para o resumo do job. Recorte
+    calado seria a mesma familia de defeito que este arquivo existe para impedir:
+    quem le acharia que viu a pilha toda. O limite e declarado em
+    `CAMPOS_DE_ERRO_DA_TAREFA` e a marca aparece no proprio valor, entao ela
+    chega a qualquer lugar onde o campo chegue.
+    """
+    cru = texto.encode("utf-8")
+    if len(cru) <= limite:
+        return texto
+    mantido = cru[:limite].decode("utf-8", "ignore")
+    return (
+        f"{mantido}\n"
+        f"[RECORTADO: o servidor mandou {len(cru)} bytes neste campo e o limite deste "
+        f"relato e {limite}; os primeiros {len(mantido.encode('utf-8'))} bytes estao acima]"
+    )
+
+
+def erro_da_tarefa(tarefa: dict, token: str) -> dict:
+    """Os campos de erro que o servidor mandou, e SO eles.
+
+    O token NAO viaja em URL nem em corpo -- ele vai no cabecalho `Authorization`
+    --, entao a unica forma de ele aparecer aqui seria o servidor devolve-lo
+    dentro de uma mensagem de erro. Improvavel e barato de impedir: se ele
+    aparecer, sai tapado. Nunca imprimimos o token, e nenhum destes campos e
+    montado por nos.
+    """
+    achados: dict = {}
+    segredo = token.strip()
+    for chave, nome, limite in CAMPOS_DE_ERRO_DA_TAREFA:
+        valor = tarefa.get(chave)
+        if valor is None:
+            continue
+        texto = str(valor)
+        if not texto.strip():
+            continue
+        if segredo and len(segredo) >= 8:
+            texto = texto.replace(segredo, "<SONAR_TOKEN TAPADO>")
+        achados[nome] = recortar(texto, limite)
+    return achados
 
 
 def ler_relatorio(caminho: Path) -> dict:
@@ -140,8 +231,9 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
     # 1. A analise na fila do servidor. Enquanto ela nao terminar nao existe
     #    `analysisId`, e sem ele nao ha o que perguntar.
     limite = time.monotonic() + prazo
+    url_com_pilha = com_pilha(url_da_tarefa)
     while True:
-        codigo, corpo, erro = pedir(url_da_tarefa, token)
+        codigo, corpo, erro = pedir(url_com_pilha, token)
         if erro is not None:
             return nao_obtive(
                 f"a consulta a fila de analise falhou no transporte: {erro}", painel=painel
@@ -177,11 +269,15 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
         time.sleep(INTERVALO)
 
     if estado != "SUCCESS":
+        # Os campos de erro entram AQUI, e nao no motivo: o motivo e a frase que
+        # distingue "nao obtive" de "obtive e e negativo", e ela nao muda. O que
+        # o servidor disse e dado dele, nomeado, e quem relata e o juizo.
         return nao_obtive(
             f"a analise terminou em `{estado}` no servidor. Ela NAO produziu veredito: "
             "isto e o SonarCloud nao tendo respondido, e nao o portao tendo reprovado",
             status_http=200,
             painel=painel,
+            **erro_da_tarefa(tarefa, token),
         )
 
     id_da_analise = tarefa.get("analysisId")
@@ -277,22 +373,53 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
 # exatamente os mesmos tres campos. O autoteste ficava verde com a regra que ele
 # existia para testar apagada, porque outro caminho recolhia o caso. Agora cada
 # caso exige o FRAGMENTO do motivo que so o seu caminho escreve.
-CASOS_DA_BUSCA: list[tuple[str, bool, int | None, str | None, str, str]] = [
-    # (modo do servidor, obtido, status_http, veredito, fragmento do motivo, o que o caso isola)
-    ("verde", True, 200, "OK", "", "200 com `OK`: o veredito chega inteiro"),
-    ("vermelho", True, 200, "ERROR", "", "200 com `ERROR`: o veredito NEGATIVO chega como veredito"),
-    ("sem-portao", True, 200, "NONE", "", "200 com `NONE`: a palavra chega crua, quem julga e o juizo"),
-    ("403", False, 403, None, "Um 403 nao e um veredito",
+#
+# A COLUNA DOS CAMPOS DE ERRO, ACRESCENTADA EM 28/10/2026
+# Ela declara, para CADA caso, exatamente quais campos de erro da tarefa o
+# envelope carrega -- e o conjunto e comparado por IGUALDADE, nao por conteudo.
+# Campo a mais reprova tanto quanto campo a menos: "ausente e ausente" so se
+# sustenta se alguem medir a ausencia. Por isso quase todos os casos declaram
+# `{}`: um envelope de 403 que passasse a trazer `mensagem_do_erro` estaria
+# inventando dado, e isso tem de reprovar aqui.
+CASOS_DA_BUSCA: list[tuple[str, bool, int | None, str | None, str, dict[str, str], str]] = [
+    # (modo do servidor, obtido, status_http, veredito, fragmento do motivo,
+    #  campos de erro -> fragmento exigido no valor, o que o caso isola)
+    ("verde", True, 200, "OK", "", {}, "200 com `OK`: o veredito chega inteiro"),
+    ("vermelho", True, 200, "ERROR", "", {},
+     "200 com `ERROR`: o veredito NEGATIVO chega como veredito"),
+    ("sem-portao", True, 200, "NONE", "", {},
+     "200 com `NONE`: a palavra chega crua, quem julga e o juizo"),
+    ("403", False, 403, None, "Um 403 nao e um veredito", {},
      "O DEFEITO DE HOJE: 403 e ausencia de veredito, nunca `OK`"),
-    ("500", False, 500, None, "Um 500 nao e um veredito",
+    ("500", False, 500, None, "Um 500 nao e um veredito", {},
      "500 do servidor: ausencia de veredito"),
-    ("analise-falhou", False, 200, None, "terminou em `FAILED`",
-     "200 com a analise em FAILED: nao ha veredito para buscar"),
-    ("corpo-estranho", False, 200, None, "sem `projectStatus.status`",
+    ("analise-falhou", False, 200, None, "terminou em `FAILED`", {},
+     "CONTROLE POSITIVO: a analise em FAILED e o servidor SEM campos de erro -- nao ha "
+     "veredito para buscar, e o envelope NAO inventa mensagem nenhuma"),
+    ("analise-falhou-com-mensagem", False, 200, None, "terminou em `FAILED`",
+     {"tipo_do_erro": "JAVA_HEAP_SPACE",
+      "mensagem_do_erro": "Java heap space",
+      "pilha_do_erro": "PersistIssuesStep"},
+     "O DEFEITO DE 28/10: a analise em FAILED COM `errorType`/`errorMessage`/"
+     "`errorStacktrace` -- os tres chegam ao envelope. A pilha deste modo so e servida "
+     "quando a consulta pede `additionalFields=stacktrace`, entao este caso tambem mede "
+     "que o pedido a leva"),
+    ("analise-falhou-pilha-enorme", False, 200, None, "terminou em `FAILED`",
+     {"tipo_do_erro": "JAVA_HEAP_SPACE",
+      "mensagem_do_erro": "Java heap space",
+      "pilha_do_erro": "[RECORTADO:"},
+     "a pilha longa e RECORTADA, e o recorte se declara no proprio valor com o tamanho "
+     "que o servidor mandou -- recorte calado faria quem le achar que viu a pilha toda"),
+    ("corpo-estranho", False, 200, None, "sem `projectStatus.status`", {},
      "200 sem `projectStatus.status`: a forma mudou e a leitura cegou"),
-    ("sem-relatorio", False, None, None, "nao existe ou esta vazio",
+    ("sem-relatorio", False, None, None, "nao existe ou esta vazio", {},
      "o scanner nao publicou `report-task.txt`"),
 ]
+
+# A pilha que o modo `analise-falhou-pilha-enorme` serve: maior que o limite de
+# `pilha_do_erro` em `CAMPOS_DE_ERRO_DA_TAREFA`, para que o recorte aconteca.
+_LINHA_DE_PILHA = "\tat org.sonar.ce.task.projectanalysis.step.PersistIssuesStep.execute(PersistIssuesStep.java:112)\n"
+PILHA_ENORME_DA_ISCA = "java.lang.OutOfMemoryError: Java heap space\n" + _LINHA_DE_PILHA * 400
 
 
 def _servidor_de_mentira(modo: str):
@@ -308,13 +435,41 @@ def _servidor_de_mentira(modo: str):
 
         def do_GET(self):  # noqa: N802 (nome exigido pela biblioteca)
             if self.path.startswith("/api/ce/task"):
-                tarefa = (
-                    {"task": {"status": "FAILED"}}
-                    if modo == "analise-falhou"
-                    else {"task": {"status": "SUCCESS", "analysisId": "AX-da-isca"}}
-                )
+                # A API real so devolve `errorStacktrace` quando a consulta pede
+                # `additionalFields=stacktrace`. Este servidor de mentira faz o
+                # mesmo DE PROPOSITO: e assim que a isca mede que o pedido leva o
+                # parametro. Sem isso, apagar o `additionalFields` passaria em
+                # silencio e a pilha voltaria a nunca aparecer.
+                pede_pilha = "additionalFields=stacktrace" in self.path
+                if modo == "analise-falhou":
+                    tarefa = {"task": {"status": "FAILED"}}
+                elif modo.startswith("analise-falhou"):
+                    t = {
+                        "status": "FAILED",
+                        "errorType": "JAVA_HEAP_SPACE",
+                        "errorMessage": "Java heap space",
+                    }
+                    if pede_pilha:
+                        t["errorStacktrace"] = (
+                            PILHA_ENORME_DA_ISCA
+                            if modo == "analise-falhou-pilha-enorme"
+                            else "java.lang.OutOfMemoryError: Java heap space\n"
+                            "\tat org.sonar.ce.task.projectanalysis.step."
+                            "PersistIssuesStep.execute(PersistIssuesStep.java:112)"
+                        )
+                    tarefa = {"task": t}
+                else:
+                    tarefa = {"task": {"status": "SUCCESS", "analysisId": "AX-da-isca"}}
                 return self.responder(200, json.dumps(tarefa).encode())
             if self.path.startswith("/api/qualitygates/project_status"):
+                if modo.startswith("analise-falhou"):
+                    # Inalcancavel enquanto a busca estiver certa: analise que
+                    # falhou nao tem veredito para perguntar. Se alguem chegar
+                    # aqui, o caso cai alto em vez de o servidor estourar calado.
+                    return self.responder(
+                        598,
+                        b'{"isca":"a busca perguntou pelo veredito de uma analise FALHADA"}',
+                    )
                 if modo in ("403", "500"):
                     return self.responder(int(modo), b'{"errors":[{"msg":"da isca"}]}')
                 if modo == "corpo-estranho":
@@ -333,7 +488,7 @@ def _servidor_de_mentira(modo: str):
 def autoteste() -> int:
     falhas = 0
     print(f"autoteste da busca do veredito do SonarCloud ({len(CASOS_DA_BUSCA)} casos)")
-    for modo, obtido, status, veredito, fragmento, descricao in CASOS_DA_BUSCA:
+    for modo, obtido, status, veredito, fragmento, erros, descricao in CASOS_DA_BUSCA:
         servidor = _servidor_de_mentira("verde" if modo == "sem-relatorio" else modo)
         base = f"http://127.0.0.1:{servidor.server_port}"
         pasta = Path(tempfile.mkdtemp(prefix="isca-sonar-"))
@@ -370,6 +525,46 @@ def autoteste() -> int:
             print(f"               esperado conter: {fragmento}")
             print(f"               veio:            {motivo[:140]}")
             continue
+
+        # Os campos de erro, por IGUALDADE de conjunto: campo a mais e dado
+        # inventado, campo a menos e a informacao que resolveria ficando do
+        # outro lado da API.
+        presentes = {
+            nome for _c, nome, _l in CAMPOS_DE_ERRO_DA_TAREFA if nome in envelope
+        }
+        if presentes != set(erros):
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: os campos de erro da tarefa nao batem")
+            print(f"               esperado: {sorted(erros) or '(nenhum)'}")
+            print(f"               veio:     {sorted(presentes) or '(nenhum)'}")
+            continue
+        errado = [
+            (nome, trecho_exigido, str(envelope.get(nome)))
+            for nome, trecho_exigido in erros.items()
+            if trecho_exigido not in str(envelope.get(nome))
+        ]
+        if errado:
+            falhas += 1
+            print(f"  [ FALHOU  ] {descricao}: o campo de erro existe e o VALOR e de outro lugar")
+            for nome, trecho_exigido, veio in errado:
+                print(f"               {nome}: esperado conter {trecho_exigido!r}, "
+                      f"veio {veio[:120]!r}")
+            continue
+        # Nenhum campo de erro pode carregar o token, e a pilha nao pode passar
+        # do limite declarado mais a marca do recorte.
+        vazou = False
+        for _c, nome, lim in CAMPOS_DE_ERRO_DA_TAREFA:
+            valor = str(envelope.get(nome, ""))
+            if "token-da-isca" in valor:
+                vazou = True
+                print(f"  [ FALHOU  ] {descricao}: `{nome}` carrega o token")
+            elif len(valor.encode("utf-8")) > lim + 300:
+                vazou = True
+                print(f"  [ FALHOU  ] {descricao}: `{nome}` tem "
+                      f"{len(valor.encode('utf-8'))} bytes e o limite declarado e {lim}")
+        if vazou:
+            falhas += 1
+            continue
         print(f"  [    ok    ] {descricao}")
 
     if falhas:
@@ -379,8 +574,10 @@ def autoteste() -> int:
         )
         return 1
     naos = sum(1 for c in CASOS_DA_BUSCA if not c[1])
+    com_erro = sum(1 for c in CASOS_DA_BUSCA if c[5])
     print(f"\nautoteste APROVADO: {naos} caso(s) viram `obtido: false` com motivo, e nenhum "
-          "deles vira veredito")
+          f"deles vira veredito; {com_erro} deles carregam os campos de erro da tarefa, e os "
+          "outros NAO inventam campo nenhum")
     return 0
 
 

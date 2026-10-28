@@ -43,7 +43,9 @@ COMO ELE DISTINGUE
 =========================================================================
 Nao pelo codigo de saida do passo anterior, que e o que nao funciona. Pelo
 ENVELOPE que `buscar_veredito_do_sonar.py` grava: um objeto JSON com `obtido`
-(booleano), `status_http`, `motivo` e `veredito`.
+(booleano), `status_http`, `motivo` e `veredito` -- e, quando foi o SERVIDOR que
+falhou, `tipo_do_erro`, `mensagem_do_erro` e `pilha_do_erro`, que este arquivo
+RELATA sem julgar. Ver `ERROS_DO_SERVIDOR`.
 
 O campo `veredito` e julgado contra um VOCABULARIO FECHADO -- `OK`, `ERROR`,
 `WARN`, `NONE`, que e o que a API de `project_status` do SonarQube/SonarCloud
