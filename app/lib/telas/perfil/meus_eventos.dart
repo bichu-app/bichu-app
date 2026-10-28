@@ -58,18 +58,30 @@ import '../rede/pecas_da_rede.dart';
 /// 3. **A palavra da situacao** (`Acontecendo agora`, `Encerrado`,
 ///    `Cancelado`) -- *o que ja aconteceu com ele*. E a mesma peca da agenda, e
 ///    e ela que explica por que o `Cancelar` nao esta ali.
-/// 4. **O estado da capa, com o motivo do servidor quando recusada** -- *a
-///    minha foto entrou?*. Esta tela e o UNICO lugar do produto onde essa
-///    pergunta tem resposta: a capa sobe no mesmo `POST` de criar, o
-///    processador pode recusa-la depois do `201`, `NetworkEventPublic` nao tem
-///    `rejection_reason` e o cartao da agenda e foto + titulo. Outra frente
-///    mediu a ausencia em 19/10 e relatou em vez de inventar campo.
-///    **A pagina de detalhe VOLTOU em 20/10/2026** (ela estava apagada quando
-///    esta linha foi escrita, e o cliente corrigiu: *"eu nao pedi pra voce
-///    remover, eu pedi para remover o clique"*), e isso NAO muda o item: a
-///    pagina publica desenha `NetworkEventPublic`, que continua sem
-///    `rejection_reason`. Esta lista segue sendo o unico lugar que responde
-///    "a minha foto entrou?".
+/// 4. **O estado da capa -- os DOIS estados que tem o que dizer** -- *a minha
+///    foto entrou?*. Esta tela e o UNICO lugar do produto onde essa pergunta
+///    tem resposta: a capa sobe no mesmo `POST` de criar, o processador pode
+///    recusa-la depois do `201`, `NetworkEventPublic` nao tem
+///    `rejection_reason` **nem estado de imagem nenhum**, e o cartao da agenda
+///    e foto + titulo. Outra frente mediu a ausencia em 19/10 e relatou em vez
+///    de inventar campo.
+///
+///    - **`rejected`**: a frase generica mais o motivo do servidor, literal.
+///    - **`processando`**: a foto chegou e a derivada nao saiu. **Foi o estado
+///      que faltava, e a falta era um defeito** -- com `url` nula o cartao
+///      desenha o banner da marca, igual a um encontro sem capa nenhuma, e o
+///      cliente leu isso como falha do envio em 26/10/2026 (*"a foto do evento
+///      foi cadastrada, mas ela tem um delay, entao parece ser um problema, mas
+///      foi resolvido sozinho"*). A capa estava certa; a tela e que estava
+///      calada.
+///
+///    **A pagina de detalhe VOLTOU em 20/10/2026** (ela estava apagada
+///    quando a primeira versao deste item foi escrita, e o cliente
+///    corrigiu: *"eu nao pedi pra voce remover, eu pedi para remover o
+///    clique"*), e isso NAO muda o item: a pagina publica desenha
+///    `NetworkEventPublic`, que continua sem `rejection_reason` e sem
+///    estado de imagem. Esta lista segue sendo o unico lugar que
+///    responde "a minha foto entrou?".
 /// 5. **`Cancelar`** -- a acao que o cliente pediu aqui.
 /// 6. **O TOQUE NO CARTAO, que leva a pagina do encontro** -- pedido dele em
 ///    27/10/2026 (BICHUS-297): *"na pagina de meus eventos, precisamos colocar
@@ -594,6 +606,12 @@ class CartaoDoMeuEncontro extends StatelessWidget {
       ?situacao,
       if (capa != null && capa.recusadaComMotivo)
         '${_FotoRecusada.rotulo} ${capa.motivoDaRecusa!}',
+      // **Tambem no rotulo, e nao so na faixa.** O bloco de texto do cartao sai
+      // com `excludeSemantics: true`, entao quem usa leitor de tela ouve ESTA
+      // string e mais nada: deixar o preparo de fora repetiria para ela o
+      // defeito que a faixa conserta -- um encontro com banner generico e
+      // nenhuma explicacao.
+      if (capa != null && capa.emPreparo) _FotoEmPreparo.rotulo,
     ].join(', ');
   }
 
@@ -727,6 +745,33 @@ class CartaoDoMeuEncontro extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // **A FOTO A CAMINHO, dita em palavra.** Em `processando` a
+                    // `url` e nula e `ImagemDoEncontroOuBanner` acima desenha o
+                    // banner da marca -- o mesmo desenho de um encontro que nunca
+                    // teve capa. Sem esta linha, quem acabou de enviar uma foto le
+                    // o banner como falha do envio (cliente, 26/10/2026), e o envio
+                    // tinha dado certo.
+                    //
+                    // A MESMA peca da recusa, logo abaixo, e nao uma segunda
+                    // invencao: `FaixaDeAviso` em `PesoDaFaixa.informativo` ja e o
+                    // jeito deste cartao falar sobre a capa, e ela e `liveRegion`,
+                    // entao a frase e anunciada quando a lista relida traz o
+                    // estado. Os dois casos sao exclusivos -- `processing` e
+                    // `rejected` nunca coexistem --, entao nao ha risco de duas
+                    // faixas sobre a mesma imagem.
+                    //
+                    // NA UNIAO DE 27/10: este bloco e a entrega do #65 e vive
+                    // DENTRO da estrutura do #64 (o `InkWell` com
+                    // `excludeFromSemantics`). Os dois lados do conflito nao se
+                    // contradiziam: um mudou o TOQUE do cartao, o outro
+                    // ACRESCENTOU uma faixa. Escolher um lado perderia o outro.
+                    if (capa != null && capa.emPreparo) ...<Widget>[
+                      const SizedBox(height: BichuEspaco.e3),
+                      FaixaDeAviso(
+                        peso: PesoDaFaixa.informativo,
+                        texto: _FotoEmPreparo.rotulo,
+                      ),
+                    ],
                     if (capa != null && capa.recusadaComMotivo) ...<Widget>[
                       const SizedBox(height: BichuEspaco.e3),
                       // O MOTIVO DO SERVIDOR, literal, e nunca uma frase própria:
@@ -765,6 +810,25 @@ class CartaoDoMeuEncontro extends StatelessWidget {
 /// a frase genérica aparece **só** acompanhada do motivo.
 abstract final class _FotoRecusada {
   static const String rotulo = 'A foto deste encontro foi recusada.';
+}
+
+/// A frase da capa que ainda esta sendo processada.
+///
+/// **Ela afirma que a foto CHEGOU, e so depois que ela ainda nao aparece** --
+/// nesta ordem, porque a duvida que ela resolve e "meu envio falhou?". Uma
+/// frase que comecasse pela ausencia ("a foto ainda nao esta na agenda")
+/// confirmaria o medo em vez de desfaze-lo.
+///
+/// **Sem prazo em numero.** O processador nao promete segundos e esta tela nao
+/// tem como saber quanto falta; prometer "em 1 minuto" e criar um segundo
+/// defeito quando o minuto passar.
+///
+/// Numa classe propria, como [_FotoRecusada], para a isca poder afirmar que a
+/// frase aparece **so** no estado `processando`.
+abstract final class _FotoEmPreparo {
+  static const String rotulo =
+      'A foto deste encontro chegou e está sendo preparada. '
+      'Ela aparece na agenda em instantes.';
 }
 
 /// `Cancelar o encontro`: contorno, e **não** preenchido em `urgency`.

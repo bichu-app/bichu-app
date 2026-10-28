@@ -791,6 +791,53 @@ void main() {
   //     `_origem.doGuardado(_bairro, resultado.cidade, _chaveBairro);` em
   //     `_preencherACidadeDaLocalizacao` -- derivar area da coordenada.
   //     -> reprova `ISCA -- o bairro NAO e derivado da coordenada`.
+  group('a tela diz de onde cada campo vem, ANTES do toque (26/10/2026)', () {
+    // ## O relato que NAO era defeito
+    //
+    // Cliente, 26/10/2026: *"na pagina achei esse pet, quando eu seleciono a
+    // localizacao, ele ta trazendo apenas a cidade, mas nao o cep, bairro e
+    // estado preenchidos"*.
+    //
+    // **O comportamento esta certo, e o grupo abaixo
+    // (`o bairro NAO e derivado da coordenada`) e quem o prova.** A emenda 1 do
+    // ADR-0006 autoriza UM sentido, `coordenada -> nome de cidade`, e recusa
+    // `coordenada -> bairro` com uma frase. Nada aqui afrouxa aquilo.
+    //
+    // O que faltava era a tela DIZER isso antes de a pessoa formar a
+    // expectativa. Depois do toque ela ja comparou o que esperava com o que
+    // veio -- e foi o que aconteceu.
+    testWidgets('a fase de escolher explica o ponto, a cidade e o CEP',
+        (tester) async {
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await _montar(
+        tester,
+        localizacao: porta,
+        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+      );
+
+      // **SEM TOCAR EM NADA**: e esse o ponto do caso. A explicacao tem de
+      // estar na tela no instante em que a pessoa decide qual caminho tomar.
+      expect(
+        find.text(TextosDaLocalizacao.oQueCadaCaminhoPreenche),
+        findsOneWidget,
+        reason: 'REPROVA: a tela oferece `Usar minha localizacao` sem dizer o '
+            'que o botao preenche. O cliente tocou nele esperando CEP, bairro '
+            'e estado, recebeu o ponto e a cidade -- que e tudo o que o '
+            'ADR-0006 autoriza -- e relatou como defeito em 26/10/2026.',
+      );
+
+      // E ela nomeia o CEP, que e o campo que preenche os dois que o ponto nao
+      // preenche. Sem essa ponte a pessoa procura um botao que nao existe.
+      expect(
+        TextosDaLocalizacao.oQueCadaCaminhoPreenche.contains('CEP'),
+        isTrue,
+        reason: 'REPROVA: a frase nao manda a pessoa a lugar nenhum. Dizer so '
+            '"o bairro nao vem do GPS" deixa a tarefa sem saida; o CEP esta na '
+            'tela e preenche bairro e estado.',
+      );
+    });
+  });
+
   group('o formulario do achado nasce preenchido (22/10/2026)', () {
     testWidgets('a cidade da localizacao autorizada NASCE no campo',
         (tester) async {

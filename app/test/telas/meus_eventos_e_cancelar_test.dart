@@ -49,6 +49,16 @@ const String _motivoDaRecusa = 'A imagem precisa ter pelo menos 600 x 600 pixels
 /// A frase generica que a tela diz ANTES do motivo, e nunca em vez dele.
 const String _rotuloDaRecusa = 'A foto deste encontro foi recusada.';
 
+/// A frase do estado `processing`, e a razao dela estar aqui e um relato.
+///
+/// Cliente, 26/10/2026: *"a foto do evento foi cadastrada, mas ela tem um
+/// delay, entao parece ser um problema, mas foi resolvido sozinho"*. O envio
+/// funcionava; `url` nula fazia o cartao desenhar o banner da marca -- o mesmo
+/// de um encontro sem capa nenhuma --, e quem acabou de enviar uma foto le
+/// aquilo como falha.
+const String _rotuloDoPreparo =
+    'A foto deste encontro chegou e está sendo preparada.';
+
 /// Um encontro meu, na forma de `MyNetworkEvent` -- as sete propriedades.
 ///
 /// As datas sao relativas ao relogio do caso, e nao fixas: um encontro com data
@@ -901,9 +911,39 @@ void main() {
         ),
       );
       await _abrirPelaFotoDaBarra(tester, s);
+      final textos = _textosDaTela(tester);
       expect(
-        _textosDaTela(tester).any((t) => t.contains(_rotuloDaRecusa)),
+        textos.any((t) => t.contains(_rotuloDaRecusa)),
         isFalse,
+      );
+      // **E A TELA DIZ O QUE ESTA ACONTECENDO.** Este caso media so a ausencia
+      // da recusa, e por isso a tela podia ficar completamente calada e passar
+      // -- que era o estado do produto quando o cliente relatou o falso
+      // problema em 26/10/2026.
+      expect(
+        textos.any((t) => t.contains(_rotuloDoPreparo)),
+        isTrue,
+        reason: 'REPROVA: em `processing` a tela nao diz nada. Com `url` nula o '
+            'cartao desenha o banner da marca, que e o MESMO desenho de um '
+            'encontro sem capa -- quem acabou de enviar uma foto conclui que o '
+            'envio falhou. Foi o relato do cliente de 26/10/2026, e o envio '
+            'tinha funcionado.',
+      );
+    });
+
+    testWidgets('a capa PRONTA nao diz que esta sendo preparada', (tester) async {
+      // O outro lado da isca acima: a frase do preparo tem de sair da tela
+      // quando a derivada chega. Uma faixa que ficasse para sempre diria que a
+      // foto nunca entrou, num encontro cuja foto esta ali desenhada.
+      _superficieAlta(tester);
+      final s = _Servidor();
+      await _abrirPelaFotoDaBarra(tester, s);
+
+      expect(
+        _textosDaTela(tester).any((t) => t.contains(_rotuloDoPreparo)),
+        isFalse,
+        reason: 'REPROVA: a capa esta `ready` com URL e a tela ainda diz que a '
+            'foto esta sendo preparada.',
       );
     });
 
@@ -949,6 +989,21 @@ void main() {
       expect(EstadoDaCapa.porCodigo('rejected'), EstadoDaCapa.recusada);
       expect(EstadoDaCapa.porCodigo('quarantined'), isNull);
       expect(CapaDoMeuEncontro.doJson(null), isNull);
+
+      // `emPreparo` so em `processing`, e **nao** no estado desconhecido: uma
+      // versao antiga do app que caia em `emPreparo` para um `quarantined`
+      // futuro prometeria uma foto que nao vem.
+      CapaDoMeuEncontro capaDe(String? estado) => CapaDoMeuEncontro.doJson(
+            <String, dynamic>{
+              'status': estado,
+              'url': null,
+              'rejection_reason': null,
+            },
+          )!;
+      expect(capaDe('processing').emPreparo, isTrue);
+      expect(capaDe('ready').emPreparo, isFalse);
+      expect(capaDe('rejected').emPreparo, isFalse);
+      expect(capaDe('quarantined').emPreparo, isFalse);
     });
   });
 }

@@ -1649,6 +1649,22 @@ class CapaDoMeuEncontro {
       motivoDaRecusa != null &&
       motivoDaRecusa!.trim().isNotEmpty;
 
+  /// Verdadeiro enquanto o processador ainda nao terminou com a capa.
+  ///
+  /// **Existe porque "sem foto" e "foto a caminho" NAO sao o mesmo estado, e a
+  /// tela desenhava os dois iguais.** Em `processando` a `url` e nula, e
+  /// `ImagemDoEncontroOuBanner` cai no banner da marca -- o MESMO desenho de um
+  /// encontro que nunca teve capa. Quem acabou de enviar uma foto le aquele
+  /// banner como falha do envio, e o cliente relatou exactamente isso em
+  /// 26/10/2026: *"a foto do evento foi cadastrada, mas ela tem um delay, entao
+  /// parece ser um problema, mas foi resolvido sozinho"*. O envio funcionava; o
+  /// que faltava era a tela dizer isso.
+  ///
+  /// Irmao de [recusadaComMotivo] de proposito: os dois sao a pergunta "a minha
+  /// foto entrou?" (item 4 do cabecalho de `MeusEventos`), e ela tinha resposta
+  /// so no caso ruim.
+  bool get emPreparo => estado == EstadoDaCapa.processando;
+
   static CapaDoMeuEncontro? doJson(Object? bruto) {
     if (bruto is! Map<String, dynamic>) return null;
     final url = bruto['url'];

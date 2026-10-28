@@ -2482,6 +2482,47 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// sao enfeite: sem elas o zsh aplica o modificador `:a` ao nome da variavel
 /// e devolve lixo COM SAIDA 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem
 /// mesclar `app/lib/telas` de novo recalcula, nunca escolhe um dos lados.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 65
+///
+/// BICHUS-278, 27/10/2026: DUAS CORRECOES DE TELA PEDIDAS PELO CLIENTE, e
+/// nada mais. SUBSTITUI 396c619d14 (`90dfaee7`, a mescla da onda 8 mais os
+/// dois consertos de 23/10), que continua sendo a base deste trabalho -- este
+/// valor e aquele mais TRES blobs, e nenhum arquivo entrou nem saiu. OS TRES
+/// ARQUIVOS, e a conta de `git diff --name-only -- app/lib/telas` tem
+/// exatamente estes tres: `perfil/meus_eventos.dart` (a capa em `processing`
+/// passou a dizer que a foto chegou e esta sendo preparada -- com `url` nula
+/// o cartao desenhava o banner da marca, igual a um encontro sem capa, e o
+/// cliente leu isso como falha do envio em 26/10; o envio funcionava),
+/// `localizacao/captura_de_localizacao.dart` (uma linha de ajuda na fase de
+/// escolher, dizendo que o botao marca o ponto e preenche a cidade e que
+/// bairro e estado vem do CEP, mais o cabecalho que afirmava `o GPS escreve
+/// so _ponto` e ficou errado quando a cidade entrou em 22/10) e
+/// `localizacao/textos_da_localizacao.dart` (a frase nova,
+/// `oQueCadaCaminhoPreenche`). NENHUMA DAS DUAS MEXE EM CONTRATO, e NADA aqui
+/// afrouxa `sem_geocodificacao_test.dart`: o pedido do cliente de 26/10 era
+/// geocodificacao reversa (CEP, bairro e estado a partir da coordenada), que
+/// a emenda 1 do ADR-0006 recusa em uma frase, e o trabalho foi de TEXTO.
+/// MEDIDO pelo procedimento deste proprio portao (`GIT_INDEX_FILE` proprio,
+/// `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse
+/// "${T}:app/lib/telas"`), DEPOIS DA ULTIMA EDICAO em `app/lib/telas` e por
+/// DOIS caminhos independentes que concordaram: o procedimento acima sobre a
+/// arvore de trabalho, e um SEGUNDO indice semeado com `read-tree 90dfaee7`
+/// no qual so os tres arquivos foram postos por `update-index --add`. Os dois
+/// deram b763520734. CONTROLE POSITIVO DO METODO, feito ANTES de trocar esta
+/// linha: `git rev-parse "${SHA}:app/lib/telas"` sobre a base limpa
+/// reproduziu EXATAMENTE a constante que ela travava (396c619d14). Reproduzir
+/// o valor conhecido antes de medir o desconhecido e o que faz esta linha
+/// valer -- sem isso um metodo quebrado devolve um digito qualquer com saida
+/// 0. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito -- arvore que perdeu
+/// arquivo ainda parece valida: `app/lib/telas` tem 89 arquivos na base e 89
+/// aqui, e o `diff` entre `git ls-tree -r --name-only` da base e o `find` do
+/// disco depois das edicoes e VAZIO. Nenhum arquivo entrou, saiu ou foi
+/// renomeado: as duas correcoes mudam CONTEUDO. As CHAVES em
+/// "${T}:app/lib/telas" nao sao enfeite: sem elas o zsh aplica o modificador
+/// `:a` ao nome da variavel e devolve lixo COM SAIDA 0. ESTE VALOR NAO
+/// SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula,
+/// nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
