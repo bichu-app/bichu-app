@@ -1853,6 +1853,7 @@ class RecorteDaRede {
   const RecorteDaRede({
     this.termo,
     this.quando,
+    this.situacao,
     this.entrada,
     this.cidade,
     this.porte,
@@ -1866,6 +1867,19 @@ class RecorteDaRede {
 
   /// Um dos sub-recortes de `Próximos`; nulo e `upcoming`.
   final QuandoDaRede? quando;
+
+  /// A SITUACAO pedida (`status` de `listNetworkEvents`), ou nula para todas.
+  ///
+  /// **Nula e o padrao, e ela mantem o cancelado na lista** -- o estado de
+  /// antes de 27/10/2026. Quem separa o cancelado sem esconde-lo e a ORDEM, no
+  /// servidor; este campo e para quem quer olhar so um grupo.
+  ///
+  /// **A folha de filtros oferece so `Cancelado`**, e nao as quatro: `A vir` e
+  /// `Encerrado` sao o que o grupo `Quando` ja diz com `Próximos` e
+  /// `Encerrados`, e dois controles que dao a mesma lista sao piores que um
+  /// (criterio 2 da BICHUS-62, o mesmo que tirou `Público ou privado`). O
+  /// contrato aceita as quatro porque ele serve outros consumidores.
+  final SituacaoDoEncontro? situacao;
   final TipoDeEntrada? entrada;
   final String? cidade;
   final Porte? porte;
@@ -1910,6 +1924,7 @@ class RecorteDaRede {
       RecorteDaRede(
         termo: semTermo ? null : termo,
         quando: quando,
+        situacao: situacao,
         entrada: entrada,
         cidade: semCidade ? null : (cidade ?? this.cidade),
         porte: porte,
@@ -1926,6 +1941,10 @@ class RecorteDaRede {
         regiao,
         cidade,
         quando?.codigo,
+        // A situacao entra porque ela muda QUAIS encontros estao no recorte, e
+        // a medida guardada e por encontro: sem ela, filtrar por `Cancelado`
+        // reaproveitaria as distancias do recorte anterior.
+        situacao?.codigo,
         entrada?.codigo,
         porte?.valor,
       ].join('|');
@@ -1945,6 +1964,7 @@ class RecorteDaRede {
   /// nunca somar.
   int get quantidadeDeFiltros => <Object?>[
         quando,
+        situacao,
         entrada,
         cidade,
         porte,
@@ -1973,6 +1993,7 @@ class RecorteDaRede {
         'q': ?termoLimpo,
         'city': ?cidade,
         'when': (quando ?? quandoDaAba).codigo,
+        if (situacao != null) 'status': situacao!.codigo,
         if (ordem != null && OrdemDaRede.porCodigo(ordem) != null)
           'sort': ordem!,
         if (entrada != null) 'admission': entrada!.codigo,
@@ -1984,6 +2005,13 @@ class RecorteDaRede {
 
   /// `listNearbyNetworkEvents`. Nao aceita `visibility`: a lista e so de
   /// publicos.
+  ///
+  /// **E NAO ACEITA `status`**: aquela operacao nao declara o parametro no
+  /// contrato (27/10/2026), e manda-lo seria um recorte que o servidor
+  /// descarta em silencio. Quem resolve isso e a TELA, e nao esta linha: com
+  /// uma situacao escolhida ela deixa de usar a rota por distancia e volta
+  /// para a agenda, que honra o recorte. Ver `_carregar` em
+  /// `telas/rede/agenda_da_rede.dart`.
   Map<String, String> queryPorPerto({required OrdemPorPerto ordemPorPerto}) =>
       <String, String>{
         'q': ?termoLimpo,

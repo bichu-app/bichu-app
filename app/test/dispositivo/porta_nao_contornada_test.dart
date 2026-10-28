@@ -2735,6 +2735,45 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// reproduzido de novo nesta sessao antes de medir. ESTE VALOR NAO SOBREVIVE
 /// A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula, nunca
 /// escolhe um dos lados.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 74
+///
+/// BICHUS-299 + BICHUS-300, 27/10/2026: O FILTRO POR SITUACAO NA AGENDA DA
+/// REDE, e nada mais. SUBSTITUI 396c619d14 (BICHUS-278, 23/10/2026), que
+/// continua sendo a base deste trabalho -- este valor e aquele mais UM blob,
+/// e nenhum arquivo entrou nem saiu. O ARQUIVO, e a conta de `git diff
+/// --name-only -- app/lib/telas` tem exatamente este um:
+/// `rede/agenda_da_rede.dart`, que ganhou (a) o grupo de filtro `Situação`
+/// com a UNICA opcao `Cancelado` -- `A vir` e `Encerrado` sao o que o grupo
+/// `Quando` ja diz, e dois controles que dao a mesma lista sao piores que um
+/// (criterio 2 da BICHUS-62) --, (b) a leitura da chave `status` em
+/// `_aplicarAFolha`, (c) o parametro `situacao` em `_recorteCom`, (d) o
+/// importe de `pecas_da_rede.dart`, de onde sai `rotuloDaSituacao` (o MESMO
+/// rotulo do selo do cartao, e nao uma segunda redacao), e (e) a condicao
+/// `recorte.situacao == null` na escolha da operacao:
+/// `listNearbyNetworkEvents` NAO declara `status` no contrato, e sem a
+/// condicao escolher `Cancelado` junto de `Distância` mandaria a chamada para
+/// aquela rota e o recorte DESAPARECERIA em silencio. O resto da decisao mora
+/// FORA desta arvore: `app/lib/api/modelos_rede.dart` ganhou o campo
+/// `situacao` em `RecorteDaRede` e `status` em `queryDaAgenda`, e ele esta em
+/// `app/lib/api/`, que nao mexe neste valor. MEDIDO pelo procedimento deste
+/// proprio portao (`GIT_INDEX_FILE` proprio, `read-tree HEAD`, `add -A --
+/// app/lib/telas`, `write-tree`, `rev-parse "${T}:app/lib/telas"`), DEPOIS DA
+/// ULTIMA EDICAO em `app/lib/telas` e por DOIS caminhos independentes que
+/// concordaram: o procedimento acima sobre a arvore de trabalho, e um SEGUNDO
+/// indice semeado com `read-tree 90dfaee7` no qual SO
+/// `rede/agenda_da_rede.dart` foi posto por `update-index --add`. Os dois
+/// deram a2f375fde4. CONTROLE POSITIVO DO METODO, feito ANTES de editar:
+/// `rev-parse "90dfaee7:app/lib/telas"` sobre a base limpa reproduziu
+/// EXATAMENTE a constante que ela travava (396c619d14). Reproduzir o valor
+/// conhecido antes de medir o desconhecido e o que faz esta linha valer.
+/// PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito -- arvore que perdeu
+/// arquivo ainda parece valida: `app/lib/telas` tem 89 arquivos na base e 89
+/// aqui, e o `diff` entre `git ls-tree -r --name-only 90dfaee7` e o `find` do
+/// disco e VAZIO. As CHAVES em "${T}:app/lib/telas" nao sao enfeite: sem elas
+/// o zsh aplica o modificador `:a` ao nome da variavel e devolve lixo COM
+/// SAIDA 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem mesclar
+/// `app/lib/telas` de novo recalcula, nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

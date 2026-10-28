@@ -19,6 +19,7 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
 import 'encontro_da_rede.dart';
+import 'pecas_da_rede.dart';
 
 /// `Rede`: a agenda dos encontros (design system 24.14 com 24.15 a 24.17,
 /// textos da UX 28.7.4).
@@ -497,7 +498,21 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         (total, pagina) = (p.total, p.pagina);
         efetiva = p.ordemEfetiva.codigo;
       } else {
-        if (logado && _temRegiao && recorte.pedeDistancia) {
+        // **`recorte.situacao == null` E A TERCEIRA CONDICAO, de 27/10/2026.**
+        //
+        // `listNearbyNetworkEvents` **nao declara `status`** no contrato, e
+        // `queryPorPerto` nao o manda. Sem esta condicao, escolher `Cancelado`
+        // junto de `Distância` ou da ordem `Mais perto` mandaria a chamada
+        // para a rota por distancia e o recorte por situacao DESAPARECERIA --
+        // sem erro, sem aviso, com a lista voltando cheia de encontro ativo.
+        //
+        // **Entao a situacao ganha da distancia, e nao o contrario.** As duas
+        // perdas foram comparadas: perder a distancia e VISIVEL (os cartoes
+        // deixam de mostrar a medida e `effective_sort` muda), e perder o
+        // filtro e INVISIVEL -- o cancelado continuaria misturado, que e
+        // exatamente o defeito que esta entrega fecha. Degradacao que a pessoa
+        // ve ganha de degradacao silenciosa.
+        if (logado && _temRegiao && recorte.pedeDistancia && recorte.situacao == null) {
           final p = await rede.listarPorPerto(
             recorte.queryPorPerto(
               ordemPorPerto: recorte.ordem == OrdemPorPerto.distancia.codigo
@@ -880,6 +895,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   RecorteDaRede _recorteCom({
     Object? termo = const _Nada(),
     Object? quando = const _Nada(),
+    Object? situacao = const _Nada(),
     Object? entrada = const _Nada(),
     Object? cidade = const _Nada(),
     Object? porte = const _Nada(),
@@ -891,6 +907,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return RecorteDaRede(
       termo: v<String>(termo, r.termo),
       quando: v<QuandoDaRede>(quando, r.quando),
+      situacao: v<SituacaoDoEncontro>(situacao, r.situacao),
       entrada: v<TipoDeEntrada>(entrada, r.entrada),
       cidade: v<String>(cidade, r.cidade),
       porte: v<Porte>(porte, r.porte),
@@ -968,6 +985,38 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             ),
             for (final q in QuandoDaRede.subRecortes)
               OpcaoDeRecorte(codigo: q.codigo, rotulo: q.rotulo),
+          ],
+        ),
+      );
+      // **O GRUPO `Situação`, de 27/10/2026.** Pedido do cliente em 26/10:
+      // *"nao existe filtro na listagem de eventos por eventos cancelados"*.
+      //
+      // **UMA opcao, e nao as quatro de `NetworkEventStatus`.** `A vir` e
+      // `Encerrado` sao exatamente o que `Quando` ja diz com `Próximos` e
+      // `Encerrados`, e dois grupos que produzem a mesma lista sao piores que
+      // um -- o criterio 2 da BICHUS-62, o mesmo que tirou `Público ou
+      // privado` em 19/10. `Acontecendo agora` nao foi pedido. O contrato
+      // aceita as quatro porque ele serve outros consumidores; a folha oferece
+      // a que o cliente pediu.
+      //
+      // **Sem `codigoPadrao`**, ao contrario de `Quando`: aqui `null` E um
+      // estado que a rota tem -- "nao recorte por situacao" --, e ele e o
+      // padrao. Marcar `Cancelado` e um recorte de verdade, e o distintivo da
+      // barra deve contar.
+      grupos.add(
+        GrupoDeFiltro(
+          chave: 'status',
+          titulo: 'Situação',
+          selecionado: r.situacao?.codigo,
+          opcoes: <OpcaoDeRecorte>[
+            OpcaoDeRecorte(
+              codigo: SituacaoDoEncontro.cancelado.codigo,
+              // O MESMO rotulo do selo do cartao (`rotuloDaSituacao`), e nao
+              // uma segunda redacao: o filtro e o selo falam do mesmo estado, e
+              // foi assim que o rotulo do selo chegou a cinco redacoes antes de
+              // `rotulos-do-encontro-nas-tres-superficies` existir.
+              rotulo: rotuloDaSituacao(SituacaoDoEncontro.cancelado) ?? 'Cancelado',
+            ),
           ],
         ),
       );
@@ -1096,6 +1145,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               ? null
               : QuandoDaRede.porCodigo(c),
         ),
+        situacao: v('status', SituacaoDoEncontro.porCodigo),
         entrada: v('admission', TipoDeEntrada.porCodigo),
         cidade: cidadeDaFolha,
         porte: v('size', Porte.de),

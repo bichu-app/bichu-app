@@ -849,6 +849,29 @@ import '../dispositivo/literais_de_abrir_mapa.dart';
 ///
 /// A armadilha que este numero vigia continua intacta: `Bichu` segue sendo a
 /// marca em todos os 2710 lugares, e nenhum deles e texto de usuario novo.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 74
+///
+///
+/// ## 2706 -> 2708 (BICHUS-299 + BICHUS-300, 27/10/2026)
+///
+/// **Os DOIS a mais nao sao a marca: sao a CHAVE DA ISSUE `BICHUS-62`**, citada
+/// em prosa em dois arquivos, e `BICHUS` contem `bichu` para uma varredura sem
+/// distincao de caixa. Um em `telas/rede/agenda_da_rede.dart` (18 -> 19) e um
+/// em `api/modelos_rede.dart` (2 -> 3), nos comentarios que explicam por que o
+/// grupo de filtro `Situação` oferece so `Cancelado`: `A vir` e `Encerrado`
+/// duplicariam o grupo `Quando`, que e o criterio 2 daquela issue. A base ja
+/// cita a mesma chave nos dois arquivos, entao isto segue a pratica que o
+/// numero 2706 ja media.
+///
+/// MEDIDO arquivo por arquivo contra `90dfaee7` (`git show` do blob da base
+/// contra o disco), e nao pela diferenca do total: um total que fecha por
+/// compensacao e exatamente o que este numero existe para nao aceitar. O
+/// delta e +1 e +1, nos dois arquivos que o `git diff` desta entrega toca em
+/// `app/lib`, e em nenhum outro.
+///
+/// **A ARMADILHA CONTINUA VIGIADA**: nenhum literal de usuario mudou, nenhuma
+/// classe `Bichu*` foi renomeada, e `petu` continua sem aparecer em `app/lib`.
 const int ocorrenciasDeBichu = 2759; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS: RECONTADO sobre a arvore MESCLADA, nao e nenhum dos lados (2752/2746/2745), conferido POR FORMA -- zero formas sairam, zero cairam -- e a prosa de cada entrega esta preservada acima. ANTERIOR: 2742.
 
 /// As tres agulhas, por palavra inteira e sem distincao de caixa.
