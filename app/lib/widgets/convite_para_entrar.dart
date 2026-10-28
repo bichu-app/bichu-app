@@ -91,10 +91,29 @@ import 'botao_primario.dart';
 /// | a LISTA inteira (401 na listagem) | tela cheia, no lugar do corpo |
 /// | um ITEM de uma lista publica | folha curta, no toque do item |
 ///
-/// A aba `Comunidade` e o exemplo do primeiro caso e a aba `Eventos` do
-/// segundo, e as duas estao na MESMA secao: o diretorio responde 401 e desenha
-/// o convite no corpo; a agenda responde 200, mostra os eventos e so o toque
-/// abre a folha.
+/// **A `Comunidade` ERA o exemplo do primeiro caso, e passou para o segundo em
+/// 27/10/2026.** Esta linha dizia, com estas palavras, que "a aba `Comunidade`
+/// e o exemplo do primeiro caso e a aba `Eventos` do segundo", porque o
+/// diretorio respondia 401 na listagem e trocava o corpo pelo convite de tela
+/// cheia.
+///
+/// O que mudou nao foi a regra desta tabela -- foi **onde esta o muro**. O
+/// cliente pediu, em 26/10/2026, que a `Comunidade` listasse para quem esta
+/// deslogado e pedisse conta no toque; a lista ganhou operacao publica
+/// (`listPublicDirectoryEntries`, 200 sem conta) e, com a listagem sem muro, o
+/// muro passou a ser o do ITEM: `getDirectoryEntry` exige conta porque devolve
+/// telefone, distancia, CEP e endereco comercial. Entao a `Comunidade` entrou
+/// na mesma linha da `Rede`, pelo criterio que ja estava escrito aqui.
+///
+/// **Hoje as duas abas da secao `Rede` sao o segundo caso**: as duas listam sem
+/// conta e as duas abrem a folha no toque do item. O primeiro caso continua
+/// vivo e continua sendo a maioria -- `Mural`, `Meus pets`, `Mensagens`,
+/// `Notificacoes`, `Minhas conexoes` e as outras telas que o usam como corpo,
+/// onde o 401 e da lista inteira.
+///
+/// O ramo de tela cheia do diretorio **nao foi apagado** junto: ele atende
+/// quem tem credencial recusada com a aba aberta (token vencido), que continua
+/// recebendo `next_action: sign_in` da listagem com conta.
 class ConviteParaEntrar extends StatelessWidget {
   const ConviteParaEntrar({
     required this.secao,

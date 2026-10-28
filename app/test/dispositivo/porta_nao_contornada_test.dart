@@ -2811,6 +2811,39 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// saiu ou foi renomeado: os quatro arquivos mudam CONTEUDO. ESTE VALOR NAO
 /// SOBREVIVE A PROXIMA UNIAO: quem mesclar `app/lib/telas` de novo recalcula,
 /// nunca escolhe um dos lados.
+///
+/// ## PROSA PRESERVADA DA UNIAO DE 76
+///
+/// BICHUS-278, 27/10/2026: A `Comunidade` LISTA DESLOGADA, e o muro dela
+/// desceu da lista para o item (pedido do cliente de 26/10). SUBSTITUI
+/// 396c619d14 (os dois consertos de 23/10), que continua sendo a base deste
+/// trabalho -- este valor e aquele mais UM blob, e nenhum arquivo entrou nem
+/// saiu. O ARQUIVO, e a conta de `git diff --name-only 90dfaee7 HEAD --
+/// app/lib/telas` tem exatamente ELE: `perto/lista_do_diretorio.dart` -- a
+/// lista passou a escolher entre `listDirectoryEntries` (com conta) e
+/// `listPublicDirectoryEntries` (200 sem conta) em `_pedirPagina`, e o toque
+/// no cartao passou por `_tocarNoCartao`, que deslogado abre
+/// `mostrarConviteParaEntrar(secao: paginaDoLocal, rotaDeVolta: ...)` em vez
+/// de navegar. `widgets/convite_para_entrar.dart` tambem mudou nesta frente
+/// mas NAO entra nesta conta: ele nao esta sob `app/lib/telas`. MEDIDO pelo
+/// procedimento deste proprio portao (`GIT_INDEX_FILE` proprio, `read-tree
+/// HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse
+/// "${T}:app/lib/telas"`), DEPOIS DA ULTIMA EDICAO em `app/lib/telas` -- e
+/// depois de as tres iscas desta frente serem armadas e DESARMADAS, porque
+/// medir com isca armada travaria o hash do codigo sabotado. Os dois caminhos
+/// independentes concordaram: o procedimento acima sobre a arvore de trabalho
+/// e `rev-parse "HEAD:app/lib/telas"` sobre o commit. Os dois deram
+/// 89aa9856e6. CONTROLE POSITIVO DO METODO, feito num worktree LIMPO da base
+/// antes de medir o desconhecido: os mesmos dois caminhos sobre `90dfaee7`
+/// reproduziram EXATAMENTE a constante que ela travava (396c619d14), o que
+/// tambem prova que este portao estava VERDE na `development` e que e esta
+/// frente que o move. PRESENCA DE ARQUIVO CONFERIDA, e nao so o digito --
+/// arvore que perdeu arquivo ainda parece valida: `app/lib/telas` tem 89
+/// arquivos na base e 89 aqui, e o `diff` entre as duas listas de `git ls-
+/// tree -r --name-only` e VAZIO. As CHAVES em "${T}:app/lib/telas" nao sao
+/// enfeite: sem elas o zsh aplica o modificador `:a` ao nome da variavel e
+/// devolve lixo COM SAIDA 0. ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO: quem
+/// mesclar `app/lib/telas` de novo recalcula, nunca escolhe um dos lados.
 const String _arvoreDasTelas = 'ede46d3971b4fdc27f988a51a5715f018ff59e9b'; // 27/10/2026, A UNIAO DAS SEIS ENTREGAS do dia: RECALCULADO sobre a arvore MESCLADA, nao e nenhum dos seis lados do conflito, e a prosa das seis esta preservada logo acima. ANTERIOR: d10e29c50215a93fb3c2abde91452ca4e963925d (a uniao das nove de 26/10 no PR #63). ESTE VALOR NAO SOBREVIVE A PROXIMA UNIAO.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

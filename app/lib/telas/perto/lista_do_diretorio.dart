@@ -9,6 +9,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_diretorio.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
@@ -27,6 +28,24 @@ import 'pagina_do_local.dart';
 ///
 /// A listagem de `GET /v1/directory/entries` (`listDirectoryEntries`), com o
 /// topo de listagem do app ([BarraDeListagem]).
+///
+/// ## DUAS OPERACOES ATENDEM ESTA LISTA, desde 27/10/2026
+///
+/// Com conta, `listDirectoryEntries` -- com telefone e distancia. Sem conta,
+/// `listPublicDirectoryEntries` (`GET /v1/public/directory-entries`), que
+/// responde 200 e **nao** traz `phone_e164` nem `distance_m`: o portao
+/// `portao-contrato-publico.ts` proibe os dois por nome exato em operacao
+/// alcancavel sem conta. Quem escolhe e [_pedirPagina], num lugar so.
+///
+/// Pedido do cliente de 26/10/2026: a `Comunidade` lista para quem esta
+/// deslogado, e pede conta no toque da pagina interna. **Ate 27/10 esta tela
+/// trocava o corpo pelo convite de tela cheia quando a listagem voltava 401**;
+/// esse ramo continua existindo, para credencial recusada, e deixou de ser o
+/// caminho de quem nunca entrou.
+///
+/// O cartao deslogado, por isso, **nao tem botao de ligar e nao tem linha de
+/// distancia -- sem um `if` nesta tela**: os dois campos chegam nulos, e
+/// cartao sem telefone ja nao desenhava o botao.
 ///
 /// ## A tela de detalhe EXISTE desde 18/10/2026
 ///
@@ -300,6 +319,38 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     return base.com(cidade: cidade, limparCidade: cidade == null);
   }
 
+  /// Em que estado de sessao a lista na tela foi carregada.
+  ///
+  /// Entrar ou sair com a aba aberta troca a OPERACAO que atende a lista, e
+  /// nao so o conteudo dela: quem entra passa a ter distancia e telefone. Sem
+  /// este campo a lista deslogada ficaria na tela depois do login, com cartoes
+  /// sem botao de ligar que o servidor agora preencheria. E o mesmo mecanismo
+  /// de `agenda_da_rede.dart`.
+  bool? _logadoDaUltimaCarga;
+
+  /// **A UNICA decisao de qual operacao atende a lista**, e ela e uma so de
+  /// proposito: ha DOIS chamadores (a primeira pagina e o `Carregar mais`), e
+  /// um deles escolhendo diferente faria a pagina 2 vir de outra operacao que
+  /// a 1 -- entrada repetida e entrada faltando no fim da lista, pelo mesmo
+  /// motivo que `_paraAChamada` mora num lugar so.
+  ///
+  /// Deslogado chama `listPublicDirectoryEntries`, que responde 200 sem conta
+  /// (pedido do cliente de 26/10/2026). **Nao e a mesma rota com o muro mais
+  /// baixo**: a resposta dela nao tem `phone_e164` nem `distance_m`, porque
+  /// `portao-contrato-publico.ts` proibe os dois por nome exato em operacao
+  /// alcancavel sem conta. O cartao deslogado, por isso, nasce sem botao de
+  /// ligar e sem linha de distancia **sem um `if` nesta tela**: os dois campos
+  /// chegam nulos, e cartao sem telefone ja nao desenhava o botao.
+  Future<PaginaDoDiretorio> _pedirPagina(
+    Escopo escopo,
+    RecorteDoDiretorio recorte,
+  ) {
+    final chamada = _paraAChamada(recorte);
+    return escopo.sessao.logado
+        ? escopo.diretorio.listar(chamada)
+        : escopo.diretorio.listarPublico(chamada);
+  }
+
   /// O TOQUE em `Usar minha localização`.
   ///
   /// Ele **devolve a palavra a localizacao**: [_folhaDecidiuACidade] desliga,
@@ -355,9 +406,10 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
       _carregandoMais = false;
       _itens.clear();
     });
+    _logadoDaUltimaCarga = escopo.sessao.logado;
 
     try {
-      final pagina = await escopo.diretorio.listar(_paraAChamada(recorte));
+      final pagina = await _pedirPagina(escopo, recorte);
       if (!mounted) return;
       setState(() {
         _pagina = pagina;
@@ -436,7 +488,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     });
 
     try {
-      final pagina = await escopo.diretorio.listar(_paraAChamada(proximo));
+      final pagina = await _pedirPagina(escopo, proximo);
       if (!mounted) return;
       setState(() {
         _recorte = proximo;
@@ -462,8 +514,65 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     }
   }
 
+  /// O TOQUE NO CARTAO, e o destino dele.
+  ///
+  /// Pedido do cliente de 26/10/2026: a `Comunidade` lista para quem esta
+  /// deslogado, e **pede conta no toque da pagina interna**.
+  ///
+  /// **A pagina interna exigir conta e regra do contrato, e nao desenho desta
+  /// tela**: `getDirectoryEntry` declara `bearerAuth` sem alternativa vazia,
+  /// porque ela devolve telefone, distancia, CEP e endereco comercial. Entao o
+  /// muro existe de qualquer forma -- o que esta tela escolhe e **como** ele
+  /// aparece.
+  ///
+  /// **Folha curta no toque, e nao navegar para levar um 401.** Abrir a pagina
+  /// e deixa-la trocar o corpo pelo convite faria a pessoa pagar uma navegacao
+  /// para descobrir que nao podia entrar; e cartao desabilitado anunciaria uma
+  /// recusa antes de ela pedir, sem dizer que basta entrar. A escolha entre
+  /// folha, texto no cartao e convite de tela cheia esta medida em
+  /// `widgets/convite_para_entrar.dart`.
+  ///
+  /// **Isto MOVEU a `Comunidade` de um caso para o outro naquele arquivo.** Ele
+  /// nomeava esta aba como o exemplo do muro na lista inteira (tela cheia) e a
+  /// `Rede` como o do muro no item (folha curta). Com a lista respondendo 200
+  /// sem conta, a `Comunidade` passou a ser o segundo caso -- e o criterio nao
+  /// mudou: o muro e do ITEM porque a LISTA deixou de ter muro.
+  ///
+  /// **A volta e a propria pagina do local.** Depois de entrar, a guarda de
+  /// acao devolve a pessoa a `/rede/locais/<slug>` em vez de a `/pets`,
+  /// como nos encontros da `Rede` -- ver `intencao/leitura_como_intencao.dart`.
+  void _tocarNoCartao(EntradaDoDiretorio entrada, {required bool logado}) {
+    if (!logado) {
+      unawaited(
+        mostrarConviteParaEntrar(
+          context,
+          secao: SecaoComConta.paginaDoLocal,
+          rotaDeVolta: Rotas.localDoPertoDe(entrada.slug),
+        ),
+      );
+      return;
+    }
+    PaginaDoLocal.abrir(context, entrada.slug);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sessao = Escopo.of(context).sessao;
+    // A lista deslogada e a logada vem de OPERACOES diferentes, entao entrar
+    // ou sair com a aba aberta precisa recarregar -- e nao so repintar.
+    return AnimatedBuilder(
+      animation: sessao,
+      builder: (context, _) {
+        if (_logadoDaUltimaCarga != null &&
+            _logadoDaUltimaCarga != sessao.logado) {
+          _agendarCarga();
+        }
+        return _conteudo(logado: sessao.logado);
+      },
+    );
+  }
+
+  Widget _conteudo({required bool logado}) {
     final pagina = _pagina;
 
     return Column(
@@ -538,7 +647,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
             ordenacao: _controleDeOrdenacao(pagina),
             aoAplicar: _aplicarAFolha,
           ),
-        ..._corpo(),
+        ..._corpo(logado: logado),
       ],
     );
   }
@@ -718,7 +827,14 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  List<Widget> _corpo() {
+  /// O corpo da lista.
+  ///
+  /// **[logado] e PARAMETRO e nao `Escopo.of(context).sessao.logado`**, pela
+  /// mesma razao de `agenda_da_rede.dart`: quem monta este corpo e o
+  /// `AnimatedBuilder` de [build], e e o valor que ELE leu que precisa chegar
+  /// ao cartao. Reler a sessao aqui dentro abriria a porta para o corpo e o
+  /// cartao discordarem numa repintura.
+  List<Widget> _corpo({required bool logado}) {
     if (_fase == _Fase.carregando) {
       return const <Widget>[
         _EsqueletoDeEntrada(),
@@ -732,8 +848,20 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     // defensivo e nao decorativo: uma lista que se diz carregada sem pagina
     // seria a tela afirmando ter recebido algo que ela nao tem.
     if (_fase == _Fase.falha || pagina == null) {
-      // SEM CONTA NAO E ERRO, e nao tem `Atualizar`: recarregar sairia
-      // igualmente sem conta e voltaria o mesmo 401.
+      // FALTA DE CONTA NAO E ERRO, e nao tem `Atualizar`: recarregar sairia
+      // com a mesma credencial e voltaria o mesmo 401.
+      //
+      // **Este ramo deixou de ser o caminho do deslogado em 27/10/2026**, e
+      // nao foi apagado de proposito. Deslogado agora chama
+      // `listPublicDirectoryEntries`, que responde 200 sem conta -- entao quem
+      // nunca entrou nao chega mais aqui, e o convite de tela cheia saiu da
+      // lista. O que sobra e o caso de quem TEM credencial e ela foi recusada
+      // (token vencido ou revogado com a aba aberta): ali `next_action:
+      // sign_in` continua sendo a resposta do servidor, e continua certo
+      // dizer "entre" em vez de desenhar uma faixa de erro vermelha.
+      //
+      // Apagar o ramo faria esse caso cair na faixa generica, que e exatamente
+      // o defeito que o cliente relatou do iPhone em 19/10.
       if (_faltaConta) {
         return const <Widget>[
           ConviteParaEntrar(secao: SecaoComConta.diretorio),
@@ -770,7 +898,10 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     return <Widget>[
       for (var i = 0; i < _itens.length; i++) ...<Widget>[
         if (i > 0) const SizedBox(height: BichuEspaco.e3),
-        CartaoDoDiretorio(entrada: _itens[i]),
+        CartaoDoDiretorio(
+          entrada: _itens[i],
+          aoTocar: () => _tocarNoCartao(_itens[i], logado: logado),
+        ),
       ],
       const SizedBox(height: espacoAcimaDoRodape),
       RodapeDaPaginacao(
@@ -809,9 +940,22 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
 /// desabilitado: ganha nenhum botao. O botao de ligar fica FORA do `InkWell`
 /// de proposito: toque nele liga, e nao abre a pagina.
 class CartaoDoDiretorio extends StatelessWidget {
-  const CartaoDoDiretorio({required this.entrada, super.key});
+  const CartaoDoDiretorio({
+    required this.entrada,
+    required this.aoTocar,
+    super.key,
+  });
 
   final EntradaDoDiretorio entrada;
+
+  /// O que o toque no bloco faz, **decidido por quem conhece a sessao**.
+  ///
+  /// Era `PaginaDoLocal.abrir` escrito aqui dentro, e saiu em 27/10/2026: com
+  /// a lista respondendo 200 sem conta, o destino do toque passou a depender
+  /// de haver conta -- pagina do local com conta, folha de convite sem ela. O
+  /// cartao nao le sessao: quem decide e `_tocarNoCartao` na tela, que e onde
+  /// a sessao ja e observada, e o cartao continua sendo so desenho.
+  final VoidCallback aoTocar;
 
   /// O rotulo **VISIVEL**: so `Ligar`, e nunca o nome do local.
   ///
@@ -935,7 +1079,7 @@ class CartaoDoDiretorio extends StatelessWidget {
           // para o botao de ligar nao ficar dentro de uma area tocavel que
           // leva a outro lugar.
           InkWell(
-            onTap: () => PaginaDoLocal.abrir(context, entrada.slug),
+            onTap: aoTocar,
             borderRadius: BorderRadius.circular(BichuRaio.md),
             child: MergeSemantics(
               child: Column(

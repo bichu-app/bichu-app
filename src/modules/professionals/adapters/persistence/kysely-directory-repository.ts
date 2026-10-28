@@ -184,9 +184,25 @@ function pontoDeReferencia(chamador: UserId, familia: FamiliaDeSessao, agora: In
  */
 const SEM_PONTO = sql`null::geography`;
 
-/** O ponto que vale para esta chamada: o do aparelho, ou nenhum. */
-function pontoDoAparelho(chamador: UserId, familia: FamiliaDeSessao | undefined, agora: Instant) {
-  return familia === undefined ? SEM_PONTO : pontoDeReferencia(chamador, familia, agora);
+/**
+ * O ponto que vale para esta chamada: o do aparelho, ou nenhum.
+ *
+ * **Os DOIS precisam existir**, e nao so a familia. Sem conta
+ * (`listPublicDirectoryEntries`) nao ha chamador, e um `chamador` ausente com
+ * familia presente nao nomeia linha nenhuma -- o par e a chave primaria da
+ * tabela. Conferir so `familia` deixaria a consulta montar um `WHERE user_id =
+ * undefined`, que o driver traduz em `null` e devolve zero linha em silencio:
+ * a ausencia de ponto pareceria "nao tem localizacao" em vez de "nao ha quem
+ * chamou".
+ */
+function pontoDoAparelho(
+  chamador: UserId | undefined,
+  familia: FamiliaDeSessao | undefined,
+  agora: Instant,
+) {
+  return chamador === undefined || familia === undefined
+    ? SEM_PONTO
+    : pontoDeReferencia(chamador, familia, agora);
 }
 
 /**
@@ -581,8 +597,12 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       // so por `user_id` diria "tem localizacao" por causa do outro aparelho, e
       // a resposta prometeria uma ordem por distancia que o ponto deste
       // aparelho nao tem como produzir.
+      // `chamador` ao lado de `familia`, e nao a familia sozinha: sem conta
+      // (`listPublicDirectoryEntries`) nao existe nenhum dos dois, e perguntar
+      // por `user_id = undefined` devolveria zero linha em silencio -- a mesma
+      // resposta que "nao tem localizacao", por uma causa diferente.
       const localizacao =
-        recorte.familia === undefined
+        recorte.chamador === undefined || recorte.familia === undefined
           ? undefined
           : await db
               .selectFrom('user_reference_locations')

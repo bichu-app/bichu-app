@@ -46,6 +46,7 @@ import { problemas } from '../../../../shared/http/errors.js';
 import {
   projetarEnderecoComercial,
   projetarEntrada,
+  projetarEntradaSemConta,
   urlDaDerivada,
   type TipoDeProfissional,
 } from '../../domain/entrada-do-diretorio.js';
@@ -107,10 +108,67 @@ export const rotaDoDiretorio = defineRoute({
   ],
 });
 
+/**
+ * `GET /v1/public/directory-entries` -- A MESMA LISTA, SEM CONTA.
+ *
+ * Pedido do cliente de 26/10/2026: a `Comunidade` lista para quem esta
+ * deslogado, e pede conta no toque da pagina interna.
+ *
+ * ## Por que uma rota NOVA, e nao um `security` mais frouxo na de cima
+ *
+ * Nenhum campo, parametro ou teto deste bloco foi escolhido aqui: todos sao o
+ * contrato copiado, e `rotas-registradas-contra-o-contrato.test.ts` compara
+ * entrada por entrada. A razao da operacao nova esta inteira na descricao de
+ * `listPublicDirectoryEntries`, e o resumo e:
+ *
+ * 1. Afrouxar o `security` de `listDirectoryEntries` faz
+ *    `portao-contrato-publico.ts` reprovar `phone_e164` e `distance_m` por
+ *    nome exato -- **medido**: dois achados, nominais.
+ * 2. Tirar os dois campos daquele schema quebra o APK publicado, que le
+ *    aquela resposta.
+ *
+ * Uma operacao tem um schema de resposta so, entao a projecao magra precisa de
+ * operacao propria. **O molde e a `Rede`**, que ja resolve isto com
+ * `listNetworkEvents` (publica, sem distancia) ao lado de
+ * `listNearbyNetworkEvents` (com conta, com distancia).
+ *
+ * ## O teto e por `ip`, e e o de `listPublicLostPets`
+ *
+ * Nao ha conta de onde sair um balde, e teto por conta numa rota sem conta nao
+ * conta nada. `on_exceed: challenge` degenera em `deny_429` com `Retry-After`
+ * quando o pedido nao traz `X-Captcha-Token` (ADR-0020). O terceiro teto, por
+ * `[ip, q]`, existe porque a busca por texto e a metade cara desta rota --
+ * `q` e dimensao generica, entao o registro a resolve sozinho e nao ha
+ * resolvedor a escrever.
+ */
+export const rotaPublicaDoDiretorio = defineRoute({
+  operationId: 'listPublicDirectoryEntries',
+  method: 'get',
+  path: '/public/directory-entries',
+  effects: ['expensive_query'],
+  rateLimit: [
+    { dimension: ['ip'], limit: 120, window: '1h', onExceed: 'challenge' },
+    { dimension: ['ip'], limit: 600, window: '24h', onExceed: 'challenge' },
+    { dimension: ['ip', 'q'], limit: 30, window: '1h', onExceed: 'challenge' },
+  ],
+});
+
 /** Os mesmos defaults que o contrato declara. Copiados de la, nao escolhidos aqui. */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const ORDEM_PADRAO: OrdemDoDiretorio = 'distance';
+
+/**
+ * A ordem da rota publica, **e ela nao e um default**: nao ha `sort` no
+ * contrato dela para a tela escolher.
+ *
+ * `distance` mede a partir da localizacao de referencia de quem chama, que o
+ * servidor guarda por conta e aparelho (SEC-021): sem conta nao existe ponto.
+ * E ordenar por distancia numa rota publica seria o oraculo de posicao que o
+ * cabecalho do portao descreve -- variando o centro e lendo a ORDEM da pagina
+ * da para trilaterar o ponto, sem um numero de coordenada sair no corpo.
+ */
+const ORDEM_SEM_CONTA: OrdemDoDiretorio = 'name';
 
 export interface Autenticador {
   /**
@@ -160,6 +218,16 @@ interface QueryDoDiretorio {
   readonly page?: number;
   readonly limit?: number;
 }
+
+/**
+ * A query da rota publica: a mesma, **menos `sort`**.
+ *
+ * `Omit` e nao uma interface irma: com a interface solta, um filtro novo
+ * acrescentado a lista com conta nao chegaria aqui, e a rota publica passaria
+ * a aceitar menos recorte do que a tela manda sem ninguem ser avisado. Com
+ * `Omit`, o filtro novo chega -- e `filtrosAplicados` ja o devolve.
+ */
+type QueryPublicaDoDiretorio = Omit<QueryDoDiretorio, 'sort'>;
 
 /**
  * MEMOIZADA: o teto por `account` e o manipulador precisam do mesmo dono.
@@ -401,6 +469,67 @@ export function registrarRotasDoDiretorio(
         page,
         limit,
         total: pagina.total,
+        distance_available: pagina.distanciaDisponivel,
+        applied_filters: filtrosAplicados(query),
+      });
+    },
+  );
+
+  // ------------------------------------------------- a MESMA lista, sem conta
+
+  registrarRota(
+    app,
+    rotaPublicaDoDiretorio,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // Os mesmos tres cabecalhos da listagem publica de perdidos, e pela
+      // mesma razao: esta pagina e indexavel por construcao (sem conta, com
+      // `GET`) e nao deve ser indexada nem deixar `Referer` para o host de
+      // midia. Sem conta nao ha nada de pessoal na resposta, mas ha os nomes e
+      // os bairros de negocios reais.
+      void reply.header('X-Robots-Tag', 'noindex, nofollow');
+      void reply.header('Referrer-Policy', 'no-referrer');
+      void reply.header('Cache-Control', 'no-store');
+
+      // **NAO ha `identidadeDoChamador` aqui, e a ausencia e a rota.** Ler o
+      // cabecalho para nao usar nada dele so criaria o 401 de token vencido
+      // numa rota que nao precisa de token -- a mesma razao escrita em
+      // `listPublicLostPets`.
+      const query = (request.query ?? {}) as QueryPublicaDoDiretorio;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO;
+
+      const pagina = await deps.diretorio.listarPublicados({
+        // Sem conta e sem aparelho: nao e "ainda nao sei quem e", e o par
+        // ausente e o que faz a consulta nao medir distancia nenhuma.
+        chamador: undefined,
+        familia: undefined,
+        agora: deps.clock.now(),
+        ...(query.q === undefined ? {} : { q: query.q }),
+        ...(query.city === undefined ? {} : { city: query.city }),
+        ...(query.state === undefined ? {} : { state: query.state }),
+        ...(query.neighborhood === undefined ? {} : { neighborhood: query.neighborhood }),
+        ...(query.kind === undefined ? {} : { kind: query.kind }),
+        ...(query.verification_level === undefined
+          ? {}
+          : { verificationLevel: query.verification_level }),
+        sort: ORDEM_SEM_CONTA,
+        page,
+        limit,
+      });
+
+      return reply.send({
+        items: pagina.itens.map((e) => projetarEntradaSemConta(e, deps.urlDeMidia)),
+        page,
+        limit,
+        total: pagina.total,
+        // **O valor MEDIDO, e nao o literal `false`.** O contrato diz que ele
+        // e sempre falso nesta operacao, e ele e -- mas quem o torna falso e a
+        // consulta (`localizacao !== undefined && sort === 'distance'`), e e
+        // dela que o numero deve sair. Escrever `false` aqui a mao faria a
+        // resposta continuar dizendo "nao ordenei por distancia" mesmo se um
+        // dia a consulta passasse a ordenar, que e a forma de a tela mentir
+        // com o portao verde.
         distance_available: pagina.distanciaDisponivel,
         applied_filters: filtrosAplicados(query),
       });
