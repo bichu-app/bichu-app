@@ -1,10 +1,9 @@
 {
-  "_isca": "ISCA. Reproduz o envelope de uma analise que TERMINOU EM `FAILED` no servidor e cujo `GET /api/ce/task` trouxe os campos de erro. O `errorType`/`errorMessage`/`errorStacktrace` sao INVENTADOS e plausiveis, nao medidos: o que esta isca prova e que a mensagem do servidor CHEGA AO LOG, e nao que esta tenha sido a falha de 28/10/2026. Ela reprova por `nao-obtive`, como antes: isto e relato, nao politica.",
+  "_isca": "ISCA. Reproduz o envelope de uma analise que TERMINOU EM `FAILED` no servidor e cujo `GET /api/ce/task` trouxe os campos de erro. O `errorType` e o `errorMessage` sao INVENTADOS e plausiveis, nao medidos: o que esta isca prova e que a mensagem do servidor CHEGA AO LOG, e nao que esta tenha sido a falha de 28/10/2026. NAO HA PILHA de proposito -- o `errorStacktrace` e do SonarQube Server, e a nuvem recusa `additionalFields=stacktrace` com HTTP 400. Ela reprova por `nao-obtive`, como antes: isto e relato, nao politica.",
   "obtido": false,
   "status_http": 200,
   "motivo": "a analise terminou em `FAILED` no servidor. Ela NAO produziu veredito: isto e o SonarCloud nao tendo respondido, e nao o portao tendo reprovado",
   "tipo_do_erro": "JAVA_HEAP_SPACE",
   "mensagem_do_erro": "Java heap space",
-  "pilha_do_erro": "java.lang.OutOfMemoryError: Java heap space\n\tat org.sonar.ce.task.projectanalysis.step.PersistIssuesStep.execute(PersistIssuesStep.java:112)\n\tat org.sonar.ce.task.step.ComputationStepExecutor.executeStep(ComputationStepExecutor.java:81)",
   "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app&branch=development"
 }

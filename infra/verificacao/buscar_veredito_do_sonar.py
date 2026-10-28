@@ -27,7 +27,7 @@ A correcao separa BUSCAR de JULGAR:
   - este arquivo consulta o servico e grava um ENVELOPE com o que aconteceu:
     obteve ou nao, o codigo HTTP, o erro de transporte, o veredito textual e --
     desde 28/10/2026 -- o erro da tarefa, quando foi o SERVIDOR que falhou
-    (`tipo_do_erro`, `mensagem_do_erro`, `pilha_do_erro`);
+    (`tipo_do_erro` e `mensagem_do_erro` -- a nuvem nao serve pilha);
   - `verificar_veredito_do_sonar.py` le o envelope e decide, com vocabulario
     fechado: palavra que ele nao reconhece REPROVA, e so o veredito negativo
     de verdade e dispensavel.
@@ -77,8 +77,10 @@ TAREFA_TERMINOU = {"SUCCESS", "FAILED", "CANCELED"}
 #   motivo: a analise terminou em `FAILED` no servidor. (...)
 #
 # Era verdade e nao bastava: a resposta de `GET /api/ce/task?id=<id>` traz
-# `errorType` e `errorMessage`, e com `additionalFields=stacktrace` traz tambem
-# `errorStacktrace` -- e nada disso chegava ao log. Buscar a tarefa por fora deu
+# `errorType` e `errorMessage` POR PADRAO, e nenhum dos dois chegava ao log.
+# (A primeira versao deste conserto tambem pedia `additionalFields=stacktrace`,
+# e isso REGREDIU: o SonarCloud recusa esse valor com 400 e a busca passou a
+# falhar antes de ler qualquer coisa. Ver `CAMPOS_DE_ERRO_DA_TAREFA`.) Buscar a tarefa por fora deu
 # 404, e o controle positivo mostrou que a API nao responde leitura anonima nem
 # para projeto publico conhecido: a mensagem so e alcancavel DE DENTRO da
 # esteira, com o `SONAR_TOKEN`. Ou ela entra neste envelope, ou ela nao aparece
@@ -92,7 +94,13 @@ CAMPOS_DE_ERRO_DA_TAREFA: list[tuple[str, str, int]] = [
     # (chave da API, chave do envelope, limite em bytes do que vai para o log)
     ("errorType", "tipo_do_erro", 200),
     ("errorMessage", "mensagem_do_erro", 2000),
-    ("errorStacktrace", "pilha_do_erro", 4000),
+    # `errorStacktrace` NAO ENTRA, e isto foi medido contra o SonarCloud real em
+    # 28/10/2026, nao suposto: ele so e servido pelo SonarQube SERVER, com
+    # `additionalFields=stacktrace`, e a NUVEM RECUSA esse valor com HTTP 400 --
+    # "Value of parameter 'additionalFields' (stacktrace) must be one of:
+    # [scannerContext, warnings]". Pedi-lo nao deixava de trazer a pilha: fazia
+    # a busca inteira falhar antes, e ai perdiamos tambem o `FAILED` e a
+    # mensagem -- pior do que antes do conserto que o introduziu.
 ]
 
 
@@ -124,21 +132,6 @@ def nao_obtive(motivo: str, **extra) -> dict:
     envelope = {"obtido": False, "motivo": motivo}
     envelope.update(extra)
     return envelope
-
-
-def com_pilha(url: str) -> str:
-    """A mesma `ceTaskUrl`, pedindo tambem `errorStacktrace`.
-
-    `ceTaskUrl` ja vem com `?id=<...>` do `report-task.txt`, entao o parametro
-    e ACRESCENTADO a consulta existente em vez de substitui-la. Sem
-    `additionalFields=stacktrace` a API devolve `errorType` e `errorMessage` e
-    omite a pilha.
-    """
-    partes = urllib.parse.urlsplit(url)
-    consulta = urllib.parse.parse_qsl(partes.query, keep_blank_values=True)
-    if not any(c == "additionalFields" for c, _v in consulta):
-        consulta.append(("additionalFields", "stacktrace"))
-    return urllib.parse.urlunsplit(partes._replace(query=urllib.parse.urlencode(consulta)))
 
 
 def recortar(texto: str, limite: int) -> str:
@@ -231,9 +224,9 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
     # 1. A analise na fila do servidor. Enquanto ela nao terminar nao existe
     #    `analysisId`, e sem ele nao ha o que perguntar.
     limite = time.monotonic() + prazo
-    url_com_pilha = com_pilha(url_da_tarefa)
+
     while True:
-        codigo, corpo, erro = pedir(url_com_pilha, token)
+        codigo, corpo, erro = pedir(url_da_tarefa, token)
         if erro is not None:
             return nao_obtive(
                 f"a consulta a fila de analise falhou no transporte: {erro}", painel=painel
@@ -245,7 +238,7 @@ def buscar(relatorio: Path, token: str, prazo: int) -> dict:
                 # repetir a consulta na mao precisa da que levou o
                 # `additionalFields`. Ela nao carrega segredo -- o token vai no
                 # cabecalho.
-                f"a fila de analise respondeu HTTP {codigo} em {url_com_pilha}: {trecho}",
+                f"a fila de analise respondeu HTTP {codigo} em {url_da_tarefa}: {trecho}",
                 status_http=codigo,
                 painel=painel,
             )
@@ -402,28 +395,25 @@ CASOS_DA_BUSCA: list[tuple[str, bool, int | None, str | None, str, dict[str, str
      "veredito para buscar, e o envelope NAO inventa mensagem nenhuma"),
     ("analise-falhou-com-mensagem", False, 200, None, "terminou em `FAILED`",
      {"tipo_do_erro": "JAVA_HEAP_SPACE",
-      "mensagem_do_erro": "Java heap space",
-      "pilha_do_erro": "PersistIssuesStep"},
-     "O DEFEITO DE 28/10: a analise em FAILED COM `errorType`/`errorMessage`/"
-     "`errorStacktrace` -- os tres chegam ao envelope. A pilha deste modo so e servida "
-     "quando a consulta pede `additionalFields=stacktrace`, entao este caso tambem mede "
-     "que o pedido a leva"),
-    ("analise-falhou-pilha-enorme", False, 200, None, "terminou em `FAILED`",
+      "mensagem_do_erro": "Java heap space"},
+     "O DEFEITO DE 28/10: a analise em FAILED COM `errorType` e `errorMessage` -- os dois "
+     "chegam ao envelope, e sao os que a NUVEM serve por padrao"),
+    ("analise-falhou-mensagem-enorme", False, 200, None, "terminou em `FAILED`",
      {"tipo_do_erro": "JAVA_HEAP_SPACE",
-      "mensagem_do_erro": "Java heap space",
-      "pilha_do_erro": "[RECORTADO:"},
-     "a pilha longa e RECORTADA, e o recorte se declara no proprio valor com o tamanho "
-     "que o servidor mandou -- recorte calado faria quem le achar que viu a pilha toda"),
+      "mensagem_do_erro": "[RECORTADO:"},
+     "a mensagem longa e RECORTADA, e o recorte se declara no proprio valor com o tamanho "
+     "que o servidor mandou -- recorte calado faria quem le achar que viu a mensagem toda"),
     ("corpo-estranho", False, 200, None, "sem `projectStatus.status`", {},
      "200 sem `projectStatus.status`: a forma mudou e a leitura cegou"),
     ("sem-relatorio", False, None, None, "nao existe ou esta vazio", {},
      "o scanner nao publicou `report-task.txt`"),
 ]
 
-# A pilha que o modo `analise-falhou-pilha-enorme` serve: maior que o limite de
-# `pilha_do_erro` em `CAMPOS_DE_ERRO_DA_TAREFA`, para que o recorte aconteca.
-_LINHA_DE_PILHA = "\tat org.sonar.ce.task.projectanalysis.step.PersistIssuesStep.execute(PersistIssuesStep.java:112)\n"
-PILHA_ENORME_DA_ISCA = "java.lang.OutOfMemoryError: Java heap space\n" + _LINHA_DE_PILHA * 400
+# A mensagem que o modo `analise-falhou-mensagem-enorme` serve: maior que o
+# limite de `mensagem_do_erro` em `CAMPOS_DE_ERRO_DA_TAREFA`, para que o recorte
+# aconteca. Servidor real manda mensagem longa quando empilha causa sobre causa.
+_CAUSA = "; caused by: org.sonar.ce.task.projectanalysis.step.PersistIssuesStep failed"
+MENSAGEM_ENORME_DA_ISCA = "Java heap space" + _CAUSA * 200
 
 
 def _servidor_de_mentira(modo: str):
@@ -439,28 +429,29 @@ def _servidor_de_mentira(modo: str):
 
         def do_GET(self):  # noqa: N802 (nome exigido pela biblioteca)
             if self.path.startswith("/api/ce/task"):
-                # A API real so devolve `errorStacktrace` quando a consulta pede
-                # `additionalFields=stacktrace`. Este servidor de mentira faz o
-                # mesmo DE PROPOSITO: e assim que a isca mede que o pedido leva o
-                # parametro. Sem isso, apagar o `additionalFields` passaria em
-                # silencio e a pilha voltaria a nunca aparecer.
-                pede_pilha = "additionalFields=stacktrace" in self.path
+                # A BANCADA RECUSA O QUE PRODUCAO RECUSA. Medido contra o
+                # SonarCloud real em 28/10/2026: `additionalFields=stacktrace` da
+                # HTTP 400, "must be one of: [scannerContext, warnings]". A versao
+                # anterior deste servidor de mentira ACEITAVA o parametro e servia
+                # uma pilha -- entao a isca passou verde enquanto a nuvem reprovava,
+                # e o defeito foi mesclado. Agora qualquer isca reprova se alguem
+                # reintroduzir o parametro, em qualquer modo.
+                if "additionalFields=stacktrace" in self.path:
+                    return self.responder(400, json.dumps({"errors": [
+                        {"msg": "Value of parameter 'additionalFields' (stacktrace) "
+                                "must be one of: [scannerContext, warnings]"}]}).encode())
                 if modo == "analise-falhou":
                     tarefa = {"task": {"status": "FAILED"}}
                 elif modo.startswith("analise-falhou"):
                     t = {
                         "status": "FAILED",
                         "errorType": "JAVA_HEAP_SPACE",
-                        "errorMessage": "Java heap space",
+                        "errorMessage": (
+                            MENSAGEM_ENORME_DA_ISCA
+                            if modo == "analise-falhou-mensagem-enorme"
+                            else "Java heap space"
+                        ),
                     }
-                    if pede_pilha:
-                        t["errorStacktrace"] = (
-                            PILHA_ENORME_DA_ISCA
-                            if modo == "analise-falhou-pilha-enorme"
-                            else "java.lang.OutOfMemoryError: Java heap space\n"
-                            "\tat org.sonar.ce.task.projectanalysis.step."
-                            "PersistIssuesStep.execute(PersistIssuesStep.java:112)"
-                        )
                     tarefa = {"task": t}
                 else:
                     tarefa = {"task": {"status": "SUCCESS", "analysisId": "AX-da-isca"}}

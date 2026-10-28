@@ -44,8 +44,8 @@ COMO ELE DISTINGUE
 Nao pelo codigo de saida do passo anterior, que e o que nao funciona. Pelo
 ENVELOPE que `buscar_veredito_do_sonar.py` grava: um objeto JSON com `obtido`
 (booleano), `status_http`, `motivo` e `veredito` -- e, quando foi o SERVIDOR que
-falhou, `tipo_do_erro`, `mensagem_do_erro` e `pilha_do_erro`, que este arquivo
-RELATA sem julgar. Ver `ERROS_DO_SERVIDOR`.
+falhou, `tipo_do_erro` e `mensagem_do_erro`, que este arquivo RELATA sem
+julgar. Ver `ERROS_DO_SERVIDOR`.
 
 O campo `veredito` e julgado contra um VOCABULARIO FECHADO -- `OK`, `ERROR`,
 `WARN`, `NONE`, que e o que a API de `project_status` do SonarQube/SonarCloud
@@ -209,7 +209,12 @@ def ler_dispensa(raiz: Path) -> bool:
 
 # Os campos de erro que `buscar_veredito_do_sonar.py` copia de `GET /api/ce/task`
 # quando a analise termina em `FAILED`/`CANCELED`. A ordem e a de leitura: o tipo
-# classifica, a mensagem explica, a pilha localiza.
+# classifica e a mensagem explica.
+#
+# NAO HA PILHA, e isto foi medido e nao suposto: o `errorStacktrace` e do
+# SonarQube SERVER, e a NUVEM RECUSA `additionalFields=stacktrace` com HTTP 400.
+# A primeira versao deste conserto o pedia, e o efeito foi perder a busca
+# inteira -- ficamos sem o `FAILED` e sem a mensagem, pior do que antes dele.
 #
 # POR QUE ESTAS TRES LINHAS EXISTEM
 # Medido em 28/10/2026: a `development` reprovava este job desde `d5c382dc`, por
@@ -233,7 +238,6 @@ def ler_dispensa(raiz: Path) -> bool:
 ERROS_DO_SERVIDOR: list[tuple[str, str]] = [
     ("tipo_do_erro", "tipo do erro"),
     ("mensagem_do_erro", "mensagem do erro"),
-    ("pilha_do_erro", "pilha do erro"),
 ]
 
 
@@ -363,7 +367,7 @@ CASOS: list[tuple[str, set[str], bool, tuple[str, ...], tuple[str, ...], str]] =
         {"nao-obtive"},
         False,
         ("terminou em `FAILED`", "tipo do erro: JAVA_HEAP_SPACE",
-         "mensagem do erro: Java heap space", "pilha do erro:"),
+         "mensagem do erro: Java heap space"),
         (),
         "O DEFEITO DE 28/10: a analise falhou NO SERVIDOR e ele mandou a mensagem -- reprova "
         "por `nao-obtive` como antes, e agora o log NOMEIA o que o servidor disse",
@@ -373,7 +377,7 @@ CASOS: list[tuple[str, set[str], bool, tuple[str, ...], tuple[str, ...], str]] =
         {"nao-obtive"},
         False,
         ("terminou em `FAILED`",),
-        ("tipo do erro:", "mensagem do erro:", "pilha do erro:"),
+        ("tipo do erro:", "mensagem do erro:"),
         "O CONTROLE POSITIVO: a mesma analise `FAILED` SEM campos de erro -- continua "
         "reprovando por `nao-obtive`, sem inventar mensagem e sem quebrar por campo ausente",
     ),
