@@ -73,6 +73,10 @@ function casoHostil(parcial: Partial<CasoPublico> = {}): CasoPublico {
   const legitimo: CasoPublico = {
     shareToken: TOKEN,
     aberto: true,
+    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
+    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
+    // o adaptador nunca produz.
+    reencontrado: false,
     petNome: `Thor ${TELEFONE_DO_TUTOR}`,
     especie: 'dog',
     porte: 'M',
@@ -258,6 +262,61 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
   });
 
+  /**
+   * O CORPO REAL do agradecimento, medido pela rota e não pela camada de
+   * aplicação.
+   *
+   * Nada neste repositório confere o corpo de uma RESPOSTA -- só o da
+   * requisição é validado contra o contrato --, então um desvio de corpo no 410
+   * novo só apareceria medindo a rota. Este caso é essa medição, e ele roda
+   * sobre `casoHostil`, que planta telefone, e-mail e endereço do tutor nos
+   * campos de texto livre: se a página de agradecimento copiasse qualquer coisa
+   * do caso, o achado sairia aqui.
+   */
+  void it('caso REENCONTRADO: 410 em problem+json, agradecendo e sem next_action', async () => {
+    const bancada = montar(() => casoHostil({ aberto: false, reencontrado: true }));
+    const resposta = await pedir(bancada, URL_DO_CASO);
+
+    assert.equal(resposta.status, 410);
+    assert.match(resposta.tipo ?? '', /^application\/problem\+json/);
+    assert.equal(resposta.corpo['type'], 'https://api.exemplo.invalid/problems/lost-case-reunited');
+    assert.equal(resposta.corpo['status'], 410);
+    assert.equal(
+      resposta.corpo['next_action'],
+      undefined,
+      'REPROVA: o agradecimento saiu com saída. Empurrar quem leu ao formulário ' +
+        'de achado era o defeito que o cliente relatou três vezes.',
+    );
+    assert.deepEqual(
+      achadosDeVazamento(resposta.corpo, { plantados: PLANTADOS }),
+      [],
+      'REPROVA: o corpo do agradecimento carrega dado plantado do tutor.',
+    );
+    assert.equal(
+      JSON.stringify(resposta.corpo).includes('Thor'),
+      false,
+      'REPROVA: o agradecimento nomeia o pet. O único fato autorizado é que o ' +
+        'caso terminou porque o animal voltou.',
+    );
+  });
+
+  void it('o CARTAZ do mesmo caso reencontrado continua no 410 fundido', async () => {
+    // A rota do cartaz declara UM 410 no contrato. Medida na rota porque é
+    // a única maneira: nenhum portão estático compara o corpo emitido com o
+    // declarado.
+    const resposta = await pedir(
+      montar(() => casoHostil({ aberto: false, reencontrado: true })),
+      URL_DO_CARTAZ,
+    );
+    assert.equal(resposta.status, 410);
+    assert.equal(
+      resposta.corpo['type'],
+      `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`,
+      'REPROVA: o cartaz emitiu o tipo novo, que ele não declara.',
+    );
+    assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
+  });
+
   void it('token desconhecido: o MESMO 410, e não 404', async () => {
     const desconhecido = await pedir(montar(() => undefined), URL_DO_CASO);
     const encerrado = await pedir(montar(() => casoHostil({ aberto: false })), URL_DO_CASO);
@@ -402,16 +461,41 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
     }
   });
 
-  void it('o 410 das duas é LostCaseClosed no contrato, e o type emitido é o dele', async () => {
+  /**
+   * O 410 de cada operação aponta para a SUA resposta, e as duas são
+   * diferentes desde 28/10/2026.
+   *
+   * A página passou a declarar `LostCaseClosedOrReunited`, que documenta **dois**
+   * `type` -- o agradecimento do reencontrado e o `lost-case-closed` de sempre
+   * --, e o cartaz continua em `LostCaseClosed`, com um `type` só. O cartaz é
+   * papel: ele não ganhou o tipo novo, e emiti-lo por ali seria responder fora
+   * do contrato sem nenhum portão estático para acusar.
+   *
+   * **O `type` EMITIDO é medido nas duas, e com o token desconhecido**: é o
+   * motivo que não pode vazar em nenhuma das duas superfícies, e ele responde o
+   * corpo fundido de sempre, `next_action` incluído. Que o reencontrado tome o
+   * outro caminho está medido em
+   * `application/leitura-publica-do-caso.test.ts`.
+   */
+  void it('cada operação aponta para a sua resposta, e o token desconhecido fica fundido nas duas', async () => {
     const contrato = carregarContrato('api/openapi.yaml');
-    for (const [operationId, url] of [
-      ['getPublicLostCase', URL_DO_CASO],
-      ['getLostCasePoster', URL_DO_CARTAZ],
+    for (const [operationId, url, refEsperada] of [
+      ['getPublicLostCase', URL_DO_CASO, '#/components/responses/LostCaseClosedOrReunited'],
+      ['getLostCasePoster', URL_DO_CARTAZ, '#/components/responses/LostCaseClosed'],
     ] as const) {
       const respostas = contrato.operacoes.get(operationId)?.raw['responses'] as Record<string, { $ref?: string }>;
-      assert.equal(respostas['410']?.$ref, '#/components/responses/LostCaseClosed');
+      assert.equal(
+        respostas['410']?.$ref,
+        refEsperada,
+        `REPROVA: o 410 de ${operationId} não é ${refEsperada}.`,
+      );
       const resposta = await pedir(montar(() => undefined), url);
-      assert.equal(resposta.corpo['type'], `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`);
+      assert.equal(
+        resposta.corpo['type'],
+        `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`,
+        `REPROVA: ${operationId} respondeu um token DESCONHECIDO com outro ` +
+          '`type`. Distinguir confirma que o token não existe, que é enumeração.',
+      );
       assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
     }
   });

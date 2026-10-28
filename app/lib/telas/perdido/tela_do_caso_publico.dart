@@ -89,17 +89,33 @@ import 'cartao_do_perdido.dart';
 /// ## O 410 E ESTADO, E NAO ERRO
 /// ---------------------------------------------------------------------------
 ///
-/// `lost-case-closed` cobre cinco situacoes com **um corpo so**: caso
-/// encerrado, pet excluido, falecido, arquivado, e token desconhecido. A fusao e
-/// de privacidade e esta tela nao pode desfaze-la -- distinguir contaria a um
+/// O 410 publico cobria **cinco** situacoes com um corpo so: caso encerrado,
+/// pet excluido, falecido, arquivado, e token desconhecido. A fusao e de
+/// privacidade, e esta tela nao pode desfaze-la -- distinguir contaria a um
 /// estranho o que aconteceu com o animal de outra pessoa.
 ///
-/// E por isso **nao ha `Tentar de novo` aqui**: repetir a pergunta nao muda a
-/// resposta, e o botao ensinaria a pessoa a insistir (mesma escolha de
-/// `TelaDoAchado` para o 404). O que ha e a saida que o proprio contrato nomeia
-/// em `next_action`: `register_stray_found_report` -- quem chegou por um cartaz
-/// antigo e esta vendo um animal parecido registra o achado avulso, **sem
-/// token**, e o cruzamento por atributos faz o resto.
+/// **Desde 28/10/2026 um dos cinco tem nome, e so um**: o caso que terminou
+/// porque o animal voltou responde `lost-case-reunited`, e esta tela o recebe
+/// em `_Fase.reencontrado`. Autorizacao do cliente, na terceira vez que ele
+/// relatou o mesmo defeito: *"crie uma pagina padrao, agradecendo a preocupacao
+/// do usuario e avisando-o que aquele pet ja foi encontrado, que ele nao
+/// precisa mais se preocupar."*
+///
+/// **Os outros quatro continuam fundidos em `lost-case-closed`**, e nao por
+/// inercia: dizer "ja foi encontrado" de um pet FALECIDO e mentira cruel; dizer
+/// isso de um TOKEN DESCONHECIDO entrega que o token nao existe, que e
+/// enumeracao; e EXCLUIDO e ARQUIVADO sao assunto privado do tutor. Quem separa
+/// os dois caminhos e `_ehCasoReencontrado`, que compara **so o `type`** -- ler
+/// o status 410 ali entregaria os quatro de bandeja.
+///
+/// E por isso **nao ha `Tentar de novo` em nenhum dos dois**: repetir a
+/// pergunta nao muda a resposta, e o botao ensinaria a pessoa a insistir (mesma
+/// escolha de `TelaDoAchado` para o 404). No ramo fundido o que ha e a saida que
+/// o contrato nomeia em `next_action`: `register_stray_found_report` -- quem
+/// chegou por um cartaz antigo e esta vendo um animal parecido registra o achado
+/// avulso, **sem token**. No ramo do reencontrado **nao ha acao nenhuma**, e a
+/// ausencia e o pedido: o animal esta em casa, quem leu nao tem achado para
+/// registrar, e empurra-la ao formulario de nove campos era o defeito.
 ///
 /// ---------------------------------------------------------------------------
 /// ## NENHUM IDENTIFICADOR INTERNO ENTRA NESTA TELA
@@ -131,13 +147,30 @@ class TelaDoCasoPublico extends StatefulWidget {
 
   /// O que a tela diz quando o link nao leva mais a caso aberto.
   ///
-  /// **Nao diz qual dos cinco motivos foi**, porque o contrato funde os cinco
-  /// num corpo so de proposito. Ver o cabecalho da classe.
+  /// **Nao diz qual dos QUATRO motivos foi** -- pet excluido, falecido,
+  /// arquivado, token desconhecido --, porque o contrato os funde num corpo so
+  /// de proposito. O quinto, o reencontrado, saiu deste grupo em 28/10/2026 e
+  /// tem [petReencontrado]. Ver o cabecalho da classe.
   static const String casoEncerrado =
       'Este link não leva mais a um caso aberto.';
 
   /// A saida do 410, que e a do `next_action` do contrato.
   static const String rotuloDeRegistrarAchado = 'Registrar um achado';
+
+  /// O agradecimento de quem abriu o cartaz de um pet **que ja voltou**.
+  ///
+  /// A frase mora em [MensagensDeErro.petReencontrado] e nao aqui: ela e a
+  /// mesma que o catalogo de erro devolve para `lost-case-reunited`, e duas
+  /// copias da mesma frase divergem. Este apelido existe para a tela ler sem
+  /// repetir o texto.
+  static const String petReencontrado = MensagensDeErro.petReencontrado;
+
+  /// O titulo da barra quando o caso terminou com o animal em casa.
+  ///
+  /// **`Pet encontrado` e nao [titulo]** (`Pet perdido`): deixar "Pet perdido"
+  /// em cima de "ja foi encontrado" poria a barra a contradizer o corpo, e a
+  /// barra e o que fica na aba e no historico de quem compartilhar o link.
+  static const String tituloDoReencontrado = 'Pet encontrado';
 
   /// O titulo da barra. **Nao carrega o nome do pet**: ele chega depois da
   /// leitura, e uma barra que troca de titulo no meio do carregamento e o que
@@ -150,7 +183,24 @@ class TelaDoCasoPublico extends StatefulWidget {
 
 /// Os desfechos de uma abertura. **`encerrado` e um deles**, e nao um erro
 /// generico: ele tem texto proprio e saida propria.
-enum _Fase { carregando, carregado, encerrado, falha }
+enum _Fase {
+  carregando,
+  carregado,
+
+  /// O 410 FUNDIDO: os quatro motivos que continuam sem nome -- pet excluido,
+  /// falecido, arquivado, e token desconhecido -- mais o caso encerrado sem
+  /// reencontro.
+  encerrado,
+
+  /// O 410 do caso que terminou **porque o animal voltou**, e so ele.
+  ///
+  /// Fase propria e nao um ramo de [encerrado]: o corpo e outro, a barra e
+  /// outra, e principalmente **nao ha acao nenhuma** -- e a ausencia da acao e
+  /// o pedido do cliente, nao economia de codigo.
+  reencontrado,
+
+  falha,
+}
 
 class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
   _Fase _fase = _Fase.carregando;
@@ -183,7 +233,9 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
-        if (_ehCasoEncerrado(falha)) {
+        if (_ehCasoReencontrado(falha)) {
+          _fase = _Fase.reencontrado;
+        } else if (_ehCasoEncerrado(falha)) {
           _fase = _Fase.encerrado;
         } else {
           _textoDaFalha = MensagensDeErro.de(falha).texto;
@@ -212,8 +264,36 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
   /// que viesse a passar por aqui.
   bool _ehCasoEncerrado(FalhaDeChamada falha) =>
       falha is FalhaDaApi &&
+      falha.problem.tipo != ProblemTipo.casoReencontrado &&
       (falha.problem.tipo == ProblemTipo.casoEncerrado ||
           falha.problem.status == 410);
+
+  /// **O reencontrado, e ele compara SO o `type`.**
+  ///
+  /// =========================================================================
+  /// A ASSIMETRIA COM [_ehCasoEncerrado] E O CORACAO DESTA TELA
+  /// =========================================================================
+  ///
+  /// [_ehCasoEncerrado] aceita `status == 410` como cinto, para sobreviver ao
+  /// intermediario que reescreva o corpo e deixe o status. **Aqui esse cinto
+  /// seria o defeito**: `lost-case-reunited` e `lost-case-closed` tem o MESMO
+  /// status 410, entao um `|| status == 410` neste metodo faria os quatro
+  /// motivos fundidos -- pet excluido, falecido, arquivado e token
+  /// desconhecido -- chegarem na pagina de agradecimento. Diria "ja foi
+  /// encontrado" de um pet morto, e confirmaria a existencia de um token que
+  /// nunca existiu.
+  ///
+  /// Entao a regra e: **na duvida, a fusao.** Um `type` que este build nao
+  /// reconhece chega como [ProblemTipo.desconhecido], nao casa aqui, e cai em
+  /// [_ehCasoEncerrado] pelo status -- que e a mensagem conservadora. Versao
+  /// antiga do app continua instalada por semanas, e o erro seguro e mostrar
+  /// menos do que o servidor permitiu, nunca mais.
+  ///
+  /// O `!=` em [_ehCasoEncerrado] faz os dois predicados **disjuntos**, para a
+  /// ordem do `if` em `_carregar` deixar de ser o que separa um do outro.
+  bool _ehCasoReencontrado(FalhaDeChamada falha) =>
+      falha is FalhaDaApi &&
+      falha.problem.tipo == ProblemTipo.casoReencontrado;
 
   /// A porta do achado, **com o caso inteiro**.
   ///
@@ -256,7 +336,11 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(TelaDoCasoPublico.titulo),
+        title: Text(
+          _fase == _Fase.reencontrado
+              ? TelaDoCasoPublico.tituloDoReencontrado
+              : TelaDoCasoPublico.titulo,
+        ),
         leading: const SaidaDaTela(tipo: TipoDeSaida.voltar),
       ),
       body: SafeArea(child: _corpo()),
@@ -273,6 +357,25 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
             texto: TelaDoCasoPublico.casoEncerrado,
             rotuloDaAcao: TelaDoCasoPublico.rotuloDeRegistrarAchado,
             aoTocarNaAcao: _registrarAchadoAvulso,
+          ),
+        ),
+      // O AGRADECIMENTO. **Sem `rotuloDaAcao` e sem `aoTocarNaAcao`**, e e a
+      // unica fase de 410 assim: `FaixaDeAviso` so desenha o botao quando os
+      // dois chegam, entao a ausencia deles e o que garante que ninguem seja
+      // empurrado ao formulario de achado -- o defeito que o cliente relatou
+      // tres vezes.
+      //
+      // `PesoDaFaixa.informativo` e nao `erro`: o animal voltou para casa, e
+      // isso e a melhor noticia que esta tela tem para dar. `erro` pintaria a
+      // tinta Brasa e a borda de 2 px num desfecho feliz.
+      //
+      // **Reusa `FaixaDeAviso` em vez de uma terceira tela de estado**: o
+      // corpo e um paragrafo, e um paragrafo nao justifica peca nova.
+      _Fase.reencontrado => Padding(
+          padding: const EdgeInsets.all(BichuEspaco.e4),
+          child: FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            texto: TelaDoCasoPublico.petReencontrado,
           ),
         ),
       // `_textoDaFalha` nunca e nulo nesta fase: quem a liga sempre o preenche

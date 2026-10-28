@@ -136,6 +136,26 @@ abstract final class MensagensDeErro {
   static const String emailJaCadastrado =
       'Este e-mail já tem conta no Bichu.';
 
+  /// O agradecimento de quem abriu o cartaz de um pet **que ja voltou**.
+  ///
+  /// Palavras do cliente, 28/10/2026: *"crie uma pagina padrao, agradecendo a
+  /// preocupacao do usuario e avisando-o que aquele pet ja foi encontrado, que
+  /// ele nao precisa mais se preocupar."* Os tres movimentos que ele pediu
+  /// estao na frase, nesta ordem: agradece, conta o desfecho, e dispensa a
+  /// preocupacao.
+  ///
+  /// **Escrito uma vez so**, aqui e nao na tela, porque `telas/` importa `api/`
+  /// e nunca o contrario -- a frase na tela obrigaria este catalogo a importar
+  /// `telas/`, que e a dependencia ao contrario. [TelaDoCasoPublico] le esta
+  /// constante.
+  ///
+  /// **Nao nomeia o pet, o tutor nem quem achou**, e nem poderia: o corpo do
+  /// 410 nao traz nenhum dos tres. "Este pet" e tudo o que a projecao publica
+  /// permite dizer.
+  static const String petReencontrado =
+      'Obrigado por se preocupar. Este pet já foi encontrado e está em casa, '
+      'e você não precisa mais se preocupar com ele.';
+
   static const String senhaCurta =
       'A senha precisa de pelo menos 10 caracteres.';
 
@@ -443,6 +463,22 @@ abstract final class MensagensDeErro {
       ProblemTipo.casoEncerrado => const MensagemDeErro(
           texto: 'Este link não leva mais a um caso aberto.',
           acao: 'Registrar um achado',
+        ),
+      // O REENCONTRADO, e ele e o unico dos cinco motivos do 410 publico que
+      // se nomeia (cliente, 28/10/2026). Ver [ProblemTipo.casoReencontrado].
+      //
+      // **Sem `acao`, e a ausencia e o pedido do cliente.** A entrada de cima
+      // oferece `Registrar um achado` porque quem a le pode estar com um
+      // animal desconhecido no colo; aqui o animal esta em casa, e empurrar
+      // esta pessoa para o formulario de achado era LITERALMENTE o defeito
+      // relatado -- "ele nao precisa mais se preocupar" nao termina num
+      // formulario de nove campos.
+      //
+      // Como o resto deste catalogo, o texto e do APP e nao do servidor: o
+      // contrato manda decidir por `type` e nunca pelo `title`/`detail`, que
+      // podem ser reescritos sem o app saber.
+      ProblemTipo.casoReencontrado => const MensagemDeErro(
+          texto: petReencontrado,
         ),
       // Os DOIS desfechos de `If-Match` (ADR-0027), e eles existem aqui para
       // NAO cair na faixa generica. Sem estas duas entradas o 412 e o 428

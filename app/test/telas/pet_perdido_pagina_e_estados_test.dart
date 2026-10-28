@@ -39,12 +39,15 @@
 
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/achado/tela_encontrei_este_pet.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/perdido/cartao_do_perdido.dart';
 import 'package:bichu/telas/perdido/tela_do_caso_publico.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/faixa_de_aviso.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -141,10 +144,16 @@ class _Registro {
 /// A rede da LISTAGEM publica mais a pagina de UM caso.
 ///
 /// `_Fase`: o `status` de `getPublicLostCase` e injetado para o grupo do 410.
+///
+/// **O `type` tambem e injetado, e nao derivado do status.** Os dois 410 da
+/// pagina -- `lost-case-closed` e `lost-case-reunited` -- tem o MESMO status,
+/// entao uma bancada que montasse o corpo a partir do status nao conseguiria
+/// distinguir os dois casos que o grupo 8 precisa separar. O `type` e o eixo.
 Future<http.Response> Function(http.Request) _redeDaListagemEDoCaso(
   _Registro registro, {
   Map<String, dynamic>? caso,
   int statusDoCaso = 200,
+  String tipoDoCaso = 'lost-case-closed',
 }) {
   return (req) async {
     registro.pedidos.add(req);
@@ -158,7 +167,7 @@ Future<http.Response> Function(http.Request) _redeDaListagemEDoCaso(
     }
     if (caminho == '/v1/public/lost-cases/$tokenDeMel' && req.method == 'GET') {
       if (statusDoCaso != 200) {
-        return problema('lost-case-closed', statusDoCaso);
+        return problema(tipoDoCaso, statusDoCaso);
       }
       return json200(caso ?? _casoPublicoDoContrato());
     }
@@ -1156,6 +1165,175 @@ void main() {
           reason: 'REPROVA: o 410 virou tela de erro e apagou a pagina do pet. '
               'O pet carregou, e quem o estava lendo continua lendo: a falha e '
               'da acao, e nao da leitura.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // GRUPO 8 — a PAGINA DE AGRADECIMENTO, e os quatro motivos que NAO a recebem
+  //
+  // Pedido do cliente, 28/10/2026, na terceira vez que ele relatou o mesmo
+  // defeito: *"crie uma pagina padrao, agradecendo a preocupacao do usuario e
+  // avisando-o que aquele pet ja foi encontrado, que ele nao precisa mais se
+  // preocupar."*
+  //
+  // PARA VER REPROVANDO, em `tela_do_caso_publico.dart`:
+  //
+  //  1. tire o ramo `_ehCasoReencontrado` de `_carregar` -- o reencontrado cai
+  //     na faixa fundida e o primeiro caso fica vermelho;
+  //  2. troque `_ehCasoReencontrado` por `falha.problem.status == 410` (o
+  //     engano que a tela existe para nao cometer) -- os QUATRO motivos
+  //     fundidos passam a agradecer, e o cruzamento do segundo caso reprova nas
+  //     quatro linhas;
+  //  3. devolva `rotuloDaAcao`/`aoTocarNaAcao` a faixa do reencontrado -- o
+  //     terceiro caso reprova, e ele mede exatamente o defeito relatado.
+  //
+  // **O eixo da bancada e o `type`, e nao o status**: os dois 410 da pagina tem
+  // o mesmo status, e uma rede que variasse so o status nao conseguiria montar
+  // os dois cenarios.
+  // -------------------------------------------------------------------------
+  group('o pet que ja voltou recebe agradecimento, e so ele', () {
+    testWidgets(
+      'ISCA -- `lost-case-reunited` agradece, e NAO empurra formulario',
+      (tester) async {
+        final registro = _Registro();
+        await abrirPets(
+          tester,
+          rede: _redeDaListagemEDoCaso(
+            registro,
+            statusDoCaso: 410,
+            tipoDoCaso: 'lost-case-reunited',
+          ),
+        );
+        await tocar(tester, find.byType(CartaoDoPerdido));
+
+        expect(
+          find.text(TelaDoCasoPublico.petReencontrado),
+          findsOneWidget,
+          reason: 'REPROVA: quem abriu o cartaz de um pet JA ACHADO nao foi '
+              'agradecido. Era o defeito que o cliente relatou tres vezes: a '
+              'pessoa caia na faixa fundida, que nao conta que o animal voltou.',
+        );
+        expect(
+          find.text(TelaDoCasoPublico.casoEncerrado),
+          findsNothing,
+          reason: 'REPROVA: a tela mostrou a mensagem FUNDIDA para o caso que '
+              'tem mensagem propria.',
+        );
+        expect(
+          find.text(TelaDoCasoPublico.rotuloDeRegistrarAchado),
+          findsNothing,
+          reason: 'REPROVA: a pagina de agradecimento oferece `Registrar um '
+              'achado`. O animal esta em casa, quem leu nao tem achado nenhum '
+              'para registrar, e empurra-la a um formulario de nove campos era '
+              'LITERALMENTE o defeito relatado -- "ele nao precisa mais se '
+              'preocupar" nao termina num formulario.',
+        );
+        expect(
+          find.text('Tentar de novo'),
+          findsNothing,
+          reason: 'REPROVA: a tela oferece `Tentar de novo` para uma boa '
+              'noticia que nao muda.',
+        );
+      },
+    );
+
+    // Os quatro motivos chegam ao app como o MESMO `type`, porque e o SERVIDOR
+    // que os funde -- e e exatamente isso que precisa continuar verdade. Qual
+    // estado de dado produz qual `type` esta medido no servidor, em
+    // `so-o-reencontrado-ganha-nome.test.ts`; aqui se mede a tela.
+    //
+    // **Um `testWidgets` por motivo, e nao um laco dentro de um.** `abrirPets`
+    // monta o app e navega pela barra, e a segunda chamada dentro do mesmo caso
+    // nao acha a barra -- a arvore ja esta na pagina do caso. Medido: o laco
+    // unico reprovava com "Found 0 widgets with type NavigationDestination".
+    //
+    // O ultimo eixo (`nao-existe-este-tipo`) e o `type` que este build nao
+    // conhece: ele representa tanto um motivo futuro quanto um corpo reescrito
+    // por intermediario, e tambem nao pode agradecer.
+    const motivosFundidos = <String, String>{
+      'lost-case-closed':
+          'caso encerrado, pet excluido, FALECIDO ou arquivado, ou token desconhecido',
+      'lost-case-reunite': 'slug parecido, e um caractere de diferenca nao e autorizacao',
+      'conversation-closed': 'outro 410 do contrato, de outra superficie',
+      'nao-existe-este-tipo': 'type que este build nao conhece',
+    };
+
+    // CONTROLE POSITIVO da geracao: um mapa que encolhesse deixaria o grupo
+    // verde medindo menos motivos, sem nenhum caso vermelho para avisar.
+    test('o cruzamento dos motivos fundidos tem os quatro eixos', () {
+      expect(motivosFundidos.length, 4);
+    });
+
+    for (final motivo in motivosFundidos.entries) {
+      testWidgets(
+        'ISCA -- `${motivo.key}` NAO agradece',
+        (tester) async {
+          final registro = _Registro();
+          await abrirPets(
+            tester,
+            rede: _redeDaListagemEDoCaso(
+              registro,
+              statusDoCaso: 410,
+              tipoDoCaso: motivo.key,
+            ),
+          );
+          await tocar(tester, find.byType(CartaoDoPerdido));
+
+          expect(
+            find.text(TelaDoCasoPublico.petReencontrado),
+            findsNothing,
+            reason: 'REPROVA: `${motivo.key}` (${motivo.value}) recebeu a '
+                'pagina de agradecimento. A autorizacao do cliente cobre UM '
+                'motivo, o reencontro, e nenhum outro: dizer "ja foi '
+                'encontrado" de um pet FALECIDO e mentira cruel, e dizer isso '
+                'de um TOKEN DESCONHECIDO confirma que o token nao existe, que '
+                'e enumeracao.',
+          );
+          expect(
+            find.text(TelaDoCasoPublico.casoEncerrado),
+            findsOneWidget,
+            reason: 'REPROVA: `${motivo.key}` perdeu a mensagem fundida. Na '
+                'duvida a tela mostra MENOS do que o servidor permitiu, nunca '
+                'mais -- versao antiga do app fica instalada por semanas.',
+          );
+        },
+      );
+    }
+
+    testWidgets(
+      'ISCA -- a faixa do agradecimento nao tem acao NENHUMA',
+      (tester) async {
+        // Medido na ARVORE e nao no texto: `FaixaDeAviso` so desenha o botao
+        // quando `rotuloDaAcao` e `aoTocarNaAcao` chegam os dois, entao a
+        // ausencia de `TextButton` dentro dela e a prova de que ninguem pode
+        // ser empurrado a lugar nenhum -- qualquer que seja o rotulo que um dia
+        // alguem escolha.
+        final registro = _Registro();
+        await abrirPets(
+          tester,
+          rede: _redeDaListagemEDoCaso(
+            registro,
+            statusDoCaso: 410,
+            tipoDoCaso: 'lost-case-reunited',
+          ),
+        );
+        await tocar(tester, find.byType(CartaoDoPerdido));
+
+        final faixa = find.byType(FaixaDeAviso);
+        expect(faixa, findsOneWidget);
+        expect(
+          find.descendant(of: faixa, matching: find.byType(TextButton)),
+          findsNothing,
+          reason: 'REPROVA: a faixa do agradecimento tem botao. O pedido do '
+              'cliente termina em "nao precisa mais se preocupar", e nao numa '
+              'acao -- e um botao aqui e a volta do defeito por outro rotulo.',
+        );
+        expect(
+          find.byType(BotaoPrimario),
+          findsNothing,
+          reason: 'REPROVA: a pagina de agradecimento ganhou acao primaria.',
         );
       },
     );

@@ -131,6 +131,43 @@ enum ProblemTipo {
   /// por que: *"a tela e outra: quem abre o cartaz nao esta numa conversa"*.
   casoEncerrado('lost-case-closed'),
 
+  /// O caso publico terminou **porque o animal voltou**. 410.
+  ///
+  /// =========================================================================
+  /// ESTE E O UNICO DOS CINCO MOTIVOS DE [casoEncerrado] QUE GANHOU NOME
+  /// =========================================================================
+  ///
+  /// Autorizacao do cliente, 28/10/2026, na terceira vez que ele relatou que
+  /// quem abre o cartaz de um pet ja achado caia na pagina errada: *"crie uma
+  /// pagina padrao, agradecendo a preocupacao do usuario e avisando-o que
+  /// aquele pet ja foi encontrado, que ele nao precisa mais se preocupar."*
+  ///
+  /// Os **outros quatro** -- pet excluido, falecido, arquivado e token
+  /// desconhecido -- continuam em [casoEncerrado], indistinguiveis entre si
+  /// **e deste**, e cada um tem razao propria para ficar:
+  ///
+  /// - dizer "ja foi encontrado" de um pet **falecido** e mentira cruel;
+  /// - dizer isso de um **token desconhecido** entrega que o token nao existe,
+  ///   que e enumeracao;
+  /// - **excluido** e **arquivado** sao assunto privado do tutor.
+  ///
+  /// ## POR QUE A TELA NAO PODE DECIDIR ESTE PELO STATUS
+  ///
+  /// Os dois tipos sao **410**, e [casoEncerrado] tem fallback por status
+  /// justamente para sobreviver a um intermediario que reescreva o corpo.
+  /// Entao quem procura o reencontrado compara **so o `type`**, nunca o
+  /// status: um `== 410` aqui faria os quatro motivos fundidos cairem na
+  /// pagina de agradecimento, que e exatamente o engano que a fusao existe
+  /// para impedir. Ver `_ehCasoReencontrado` em
+  /// `telas/perdido/tela_do_caso_publico.dart`.
+  ///
+  /// ## O CORPO NAO TRAZ MAIS NADA
+  ///
+  /// Nem nome do pet, nem data de encerramento, nem quem achou, nem `pet_id`,
+  /// `case_id` ou `user_id` (ADR-0010, item 6). O unico fato e "este caso
+  /// terminou porque o animal voltou".
+  casoReencontrado('lost-case-reunited'),
+
   /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
   limiteDeTentativas('rate-limited'),
 

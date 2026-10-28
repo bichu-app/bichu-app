@@ -27,6 +27,17 @@ import type { CasoPublico, LeituraPublicaDoCaso } from '../../ports/leitura-publ
 /** Pet nesses estados não tem mais caso público, mesmo com o caso aberto. */
 const STATUS_DE_PET_SEM_CASO_PUBLICO: readonly string[] = ['deceased', 'archived'];
 
+/**
+ * O desfecho que diz que o animal VOLTOU (`StatusDoCaso`).
+ *
+ * Os outros dois encerramentos -- `closed_not_found` e `closed_false_alarm` --
+ * **não** entram, e a separação é o ponto: `closed_not_found` é o caso que
+ * terminou sem o animal, e dizer a um estranho que ele voltou seria falso.
+ * Mesmo valor que `kysely-listagem-publica-de-perdidos.ts` já usa para o selo
+ * `found_by_community`.
+ */
+const STATUS_DE_CASO_REENCONTRADO = 'closed_reunited';
+
 export function construtorDaLeituraPublicaDoCaso(
   db: DbExecutor,
   shareToken: string,
@@ -72,34 +83,80 @@ export function construtorDaLeituraPublicaDoCaso(
     .where('lost_cases.share_token', '=', shareToken);
 }
 
+/**
+ * A LINHA da consulta, amarrada ao `select` de
+ * [construtorDaLeituraPublicaDoCaso] em vez de escrita à mão.
+ *
+ * Escrita à mão ela divergiria: coluna removida do `select` continuaria
+ * existindo no tipo, e o mapeamento abaixo seguiria compilando contra um campo
+ * que a consulta não traz mais.
+ */
+export type LinhaDoCasoPublico = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof construtorDaLeituraPublicaDoCaso>['executeTakeFirst']>>
+>;
+
+/**
+ * A LINHA vira [CasoPublico]. **Função pura e exportada, e isso é o ponto.**
+ *
+ * Os cinco motivos do 410 público são cinco ESTADOS DE DADO -- caso encerrado,
+ * pet excluído, pet falecido, pet arquivado, e token desconhecido --, e quatro
+ * deles são combinações de colunas desta linha. Enquanto o mapeamento morava
+ * dentro de `porShareToken`, medir "pet falecido não ganha o agradecimento"
+ * exigia subir Postgres, e por isso ninguém media: a regra de decência mais
+ * importante desta entrega ficava sem prova barata.
+ *
+ * Exportada, cada um dos quatro é uma linha de dado e uma asserção, sem banco.
+ * O quinto -- token desconhecido -- não tem linha nenhuma, e é justamente por
+ * isso que ele não passa por aqui: quem o responde é `porShareToken`,
+ * devolvendo `undefined`.
+ */
+export function casoDaLinha(linha: LinhaDoCasoPublico): CasoPublico {
+  // **O MESMO predicado de pet de pé serve aos dois campos**, e não dois
+  // parecidos. `aberto` e `reencontrado` respondem a perguntas diferentes
+  // sobre o CASO, mas a mesma sobre o ANIMAL: ele existe e não está
+  // falecido nem arquivado. Escritos separados, o dia em que um estado novo
+  // de pet entrasse em `STATUS_DE_PET_SEM_CASO_PUBLICO` cobriria um e
+  // deixaria o outro -- e o que ficaria de fora é justamente o que fala.
+  const petDePe =
+    linha.pet_excluido !== true && !STATUS_DE_PET_SEM_CASO_PUBLICO.includes(linha.pet_status);
+
+  return {
+    shareToken: linha.share_token,
+    aberto: linha.status === 'open' && petDePe,
+    // **Exige `petDePe`, e essa conjunção é a regra de decência da tela.**
+    // Um pet que voltou para casa e depois morreu guarda
+    // `status = 'closed_reunited'`, porque o desfecho daquele caso não
+    // mudou. Sem este `&&`, quem abrisse o cartaz desse animal leria "ele
+    // já foi encontrado, não se preocupe" -- e os quatro motivos que
+    // continuam fundidos existem exatamente para isso não acontecer.
+    reencontrado: linha.status === STATUS_DE_CASO_REENCONTRADO && petDePe,
+    petNome: linha.name,
+    especie: linha.species_code,
+    porte: linha.size_code,
+    // A raça da lista quando há código; o texto do tutor quando não há. Mesma
+    // regra de `kysely-tag-repository.ts` (migração 5).
+    racaRotulo: linha.breed_label ?? linha.breed_free_text,
+    corRotulo: linha.color_label,
+    marcas: linha.distinctive_marks,
+    cuidados: linha.care_notes,
+    descricao: linha.description,
+    vistoPorUltimoEm: linha.last_seen_at,
+    cidade: linha.last_seen_city,
+    bairro: linha.last_seen_neighborhood,
+    chaveDaFoto: linha.card_key,
+    doChamador: linha.do_chamador === true,
+  };
+}
+
 export function criarLeituraPublicaDoCaso(db: Db): LeituraPublicaDoCaso {
   return {
     async porShareToken(shareToken, chamador): Promise<CasoPublico | undefined> {
       const linha = await construtorDaLeituraPublicaDoCaso(db, shareToken, chamador).executeTakeFirst();
+      // O TOKEN DESCONHECIDO, e ele é o único dos cinco motivos que não chega a
+      // [casoDaLinha]: sem linha não há desfecho para consultar, então nenhuma
+      // pergunta sobre reencontro é feita a respeito dele.
       if (linha === undefined) return undefined;
-
-      return {
-        shareToken: linha.share_token,
-        aberto:
-          linha.status === 'open' &&
-          linha.pet_excluido !== true &&
-          !STATUS_DE_PET_SEM_CASO_PUBLICO.includes(linha.pet_status),
-        petNome: linha.name,
-        especie: linha.species_code,
-        porte: linha.size_code,
-        // A raça da lista quando há código; o texto do tutor quando não há. Mesma
-        // regra de `kysely-tag-repository.ts` (migração 5).
-        racaRotulo: linha.breed_label ?? linha.breed_free_text,
-        corRotulo: linha.color_label,
-        marcas: linha.distinctive_marks,
-        cuidados: linha.care_notes,
-        descricao: linha.description,
-        vistoPorUltimoEm: linha.last_seen_at,
-        cidade: linha.last_seen_city,
-        bairro: linha.last_seen_neighborhood,
-        chaveDaFoto: linha.card_key,
-        doChamador: linha.do_chamador === true,
-      };
+      return casoDaLinha(linha);
     },
   };
 }

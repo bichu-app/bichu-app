@@ -33,6 +33,10 @@ function caso(parcial: Partial<CasoPublico> = {}): CasoPublico {
   return {
     shareToken: TOKEN,
     aberto: true,
+    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
+    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
+    // o adaptador nunca produz.
+    reencontrado: false,
     petNome: 'Thor',
     especie: 'dog',
     porte: 'M',
