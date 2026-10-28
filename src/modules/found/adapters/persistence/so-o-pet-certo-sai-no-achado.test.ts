@@ -47,20 +47,42 @@
  *     consulta escrita neste arquivo, que referencia a tabela, casa com a mesma
  *     função de busca. Se a agulha estivesse errada, o controle reprovaria.
  *
- * ## DESLIGAR PARA VER REPROVAR
+ * ## DESLIGAR PARA VER REPROVAR -- medido, com o `fail` de cada um
  *
- * Em `kysely-found-report-repository.ts`:
+ * Linha de base: **13 casos, 13 passam, 0 reprovam** (Node 22.23.2 nesta
+ * máquina, 28/10/2026). Cada linha abaixo foi desligada em
+ * `kysely-found-report-repository.ts`, a suíte rodou, e o arquivo foi
+ * restaurado com `git diff --stat` vazio ao fim.
  *
- *  1. troque o `COALESCE` de `PET_ALVO` por só `found_reports.pet_id`
- *     -> reprova `o link do tutor (share_token) resolve o pet pelo caso`;
- *  2. troque-o por só a subconsulta de `lost_cases`
- *     -> reprova `a plaquinha resolve o pet direto por found_reports.pet_id`;
- *  3. tire `AND f.status = 'ready'` de `PET_CHAVE_DA_FOTO`
- *     -> reprova `a capa sai só quando a derivada esta PRONTA`;
- *  4. acrescente `.leftJoin('match_candidates', ...)` a `construtorDaLeitura`
- *     -> reprova `nenhuma leitura do achado toca match_candidates`;
- *  5. apague as duas linhas `PET_NOME`/`PET_CHAVE_DA_FOTO` de `COLUNAS`
- *     -> reprova a âncora de `o registro ja traz o pet certo`.
+ * | o que foi desligado | `fail` | caso que reprovou |
+ * |---|---|---|
+ * | `PET_ALVO` virando só `found_reports.pet_id` | 2 | a plaquinha / o link do tutor |
+ * | `PET_ALVO` virando só a subconsulta de `lost_cases` | 1 | a plaquinha |
+ * | `AND f.status = 'ready'` fora de `PET_CHAVE_DA_FOTO` | 1 | a capa sai só quando PRONTA |
+ * | `.leftJoin('match_candidates', ...)` em `construtorDaLeitura` | 1 | nenhuma leitura toca `match_candidates` |
+ * | as duas linhas do pet fora de `COLUNAS` | 1 | o registro já traz o pet certo |
+ *
+ * ## DOIS PORTÕES CEGOS FORAM PEGOS AQUI, e não por leitura
+ *
+ * As duas primeiras versões deste arquivo tinham afirmação que passava com o
+ * código quebrado, e **as duas só apareceram rodando o desligamento**:
+ *
+ *  1. "a plaquinha resolve o pet por `found_reports.pet_id`" procurava a agulha
+ *     no SQL das cinco consultas juntas, e passava com o braço da plaquinha
+ *     arrancado -- porque `construtorDoAvisoParaFoto` já tinha um `leftJoin` em
+ *     `found_reports.pet_id`, posto ali pela autorização do tutor, e aquele
+ *     join sozinho satisfazia a busca;
+ *  2. "o registro já traz o pet certo" fazia o mesmo, e passava com as duas
+ *     linhas do pet fora de `COLUNAS` -- porque as outras quatro leituras
+ *     continuavam trazendo `pets` e `card_key`.
+ *
+ * A correção dos dois é a mesma: medir **por consulta**, e escolher a consulta
+ * em que a agulha só pode estar por um motivo. Ver `sqlDe`, `leituraDoRelator`
+ * e `registroDoAchado`.
+ *
+ * Isto fica escrito porque a lição não é sobre estes dois casos: é que agulha
+ * procurada num texto grande encontra o motivo errado, e só o desligamento
+ * conta a verdade.
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
@@ -120,6 +142,77 @@ function tem(agulha: string): boolean {
 function tudo(): string {
   return compiladas.join('\n---\n');
 }
+
+/**
+ * O SQL de UMA chamada, isolado.
+ *
+ * ## Por que por chamada, e não tudo junto -- isto foi MEDIDO
+ *
+ * A primeira versão deste arquivo afirmava "a plaquinha resolve o pet por
+ * `found_reports.pet_id`" procurando a agulha no SQL das cinco consultas
+ * juntas. **Ela passou com o braço da plaquinha arrancado do `COALESCE`**, e o
+ * motivo é um `leftJoin` que já existia: `construtorDoAvisoParaFoto` junta
+ * `pets` em `found_reports.pet_id` para a autorização do tutor (a ampliação da
+ * BICHUS-35), e aquele join sozinho satisfazia a busca.
+ *
+ * Era portão cego -- o defeito recorrente desta casa --, e foi pego rodando o
+ * desligamento em vez de confiando na leitura. A correção é medir no
+ * `buscarDoRelator`, que é a leitura SEM junção nenhuma em `pets`: ali a única
+ * razão para `found_reports.pet_id` aparecer é a resolução do pet.
+ */
+async function sqlDe(chamada: () => Promise<unknown>): Promise<string> {
+  compiladas = [];
+  await chamada();
+  assert.ok(
+    compiladas.length > 0,
+    'REPROVA NO CONTROLE: a chamada não compilou consulta nenhuma, e qualquer ' +
+      'afirmação sobre o texto dela seria vácuo.',
+  );
+  return compiladas.join('\n---\n').toLowerCase();
+}
+
+/** A leitura LIMPA: nenhuma junção em `pets` além da resolução do pet. */
+const leituraDoRelator = (): Promise<unknown> => repositorio.buscarDoRelator(ACHADO, DONO);
+
+/**
+ * O `INSERT ... RETURNING` do registro, medido SOZINHO.
+ *
+ * ## Por que ele tem probe próprio -- também MEDIDO
+ *
+ * O `RETURNING` de `criar` não usa os mesmos construtores das leituras: ele
+ * monta as colunas pelo template `COLUNAS`, que é outra definição. A primeira
+ * versão deste arquivo ancorava "o registro já traz o pet certo" no texto das
+ * CINCO consultas juntas, e **passou com as duas linhas do pet arrancadas de
+ * `COLUNAS`** -- as outras quatro leituras continuavam trazendo `pets` e
+ * `card_key`, e a busca se satisfazia com elas.
+ *
+ * Isso importa mais que as outras quatro: o 201 do registro é a PRIMEIRA
+ * resposta que a tela do achado lê, e é dela que o cliente reclamou. Um portão
+ * que não a cobre deixa passar exatamente o defeito que esta entrega conserta.
+ */
+const registroDoAchado = (): Promise<unknown> =>
+  assert.rejects(() =>
+    repositorio.criar({
+      id: ACHADO,
+      reporterUserId: DONO,
+      especie: 'dog',
+      porte: 'M',
+      sexo: null,
+      racaCodigo: null,
+      racaTextoLivre: null,
+      versaoDosDadosDeReferencia: null,
+      corPrimariaCodigo: null,
+      achadoEm: AGORA,
+      lat: undefined,
+      lon: undefined,
+      cidade: 'São Paulo',
+      bairro: 'Pinheiros',
+      uf: 'SP',
+      observacao: null,
+      caseId: CASO,
+      retencaoAte: AGORA,
+    }),
+  );
 
 beforeEach(() => {
   compiladas = [];
@@ -200,68 +293,134 @@ void describe('CONTROLE POSITIVO: a agulha `match_candidates` casa quando a tabe
 
 void describe('o pet certo SAI, e as duas colunas que o resolvem estão na consulta', () => {
   void it('o registro já traz o pet certo: `pets.name` e a capa', async () => {
-    await compilarAsCincoLeituras();
+    // O `RETURNING` de `criar`, SOZINHO -- ver `registroDoAchado` para o
+    // desligamento que a versão anterior deste caso deixou passar.
+    const sqlDoRegistro = await sqlDe(registroDoAchado);
 
-    // ÂNCORA: sem estas quatro, os casos de ausência abaixo ficariam verdes com
-    // a projeção do pet apagada -- que é o defeito de 28/10, não o conserto.
+    assert.ok(
+      sqlDoRegistro.includes('insert into'),
+      `REPROVA NA ÂNCORA: a consulta medida não é o INSERT. SQL: ${sqlDoRegistro}`,
+    );
     for (const agulha of ['pets', 'name', 'pet_photos', 'card_key']) {
       assert.ok(
-        tem(agulha),
-        `REPROVA NA ÂNCORA: \`${agulha}\` não aparece em nenhuma das cinco ` +
-          'leituras do achado. A foto e o nome do pet são a autorização de ' +
-          '28/10/2026 ("pode colocar a foto e o nome do pet"); sem eles a tela ' +
-          'volta à queixa que o cliente repetiu. ' +
-          `SQL capturado: ${tudo()}`,
+        sqlDoRegistro.includes(agulha),
+        `REPROVA: \`${agulha}\` não aparece no \`RETURNING\` do registro. O 201 do ` +
+          'registro é a PRIMEIRA resposta que a tela do achado lê, e é dela que o ' +
+          'cliente reclamou ("não tem foto do pet"). A autorização de 28/10/2026 ' +
+          'foi "pode colocar a foto e o nome do pet", e sem estas colunas a tela ' +
+          `volta à queixa. SQL: ${sqlDoRegistro}`,
       );
     }
+    assert.match(
+      sqlDoRegistro,
+      /coalesce\(\s*"?found_reports"?\."?pet_id"?/,
+      'REPROVA: o `RETURNING` do registro não resolve o pet pelos dois braços do ' +
+        `\`COALESCE\`. SQL: ${sqlDoRegistro}`,
+    );
   });
 
   void it('a plaquinha resolve o pet direto por `found_reports.pet_id`', async () => {
-    await compilarAsCincoLeituras();
+    const sqlDaLeitura = await sqlDe(leituraDoRelator);
 
+    // ÂNCORA: é a leitura certa, e ela projeta o pet.
     assert.ok(
-      tem('found_reports"."pet_id') || tem('found_reports.pet_id'),
-      'REPROVA: a consulta não resolve o pet por `found_reports.pet_id`. É o ' +
-        'braço da PLAQUINHA do `COALESCE`: `pet_id` é escrito só por ' +
+      sqlDaLeitura.includes('pets') && sqlDaLeitura.includes('card_key'),
+      `REPROVA NA ÂNCORA: a leitura do relator não projeta o pet. SQL: ${sqlDaLeitura}`,
+    );
+
+    // A agulha é o `COALESCE` COM o braço dentro, e não `found_reports.pet_id`
+    // solto: ver `sqlDe` para o desligamento que a versão anterior deixou
+    // passar.
+    assert.match(
+      sqlDaLeitura,
+      /coalesce\(\s*"?found_reports"?\."?pet_id"?/,
+      'REPROVA: a leitura não resolve o pet por `found_reports.pet_id` dentro do ' +
+        '`COALESCE`. É o braço da PLAQUINHA: `pet_id` é escrito só por ' +
         '`registrarAviso` em `kysely-tag-repository.ts`, junto com ' +
-        '`origin: \'tag_scan\'`. Sem ele, o achado vindo de plaquinha lida ' +
-        `perde a foto e o nome -- e é o caminho que o cliente usa. SQL: ${tudo()}`,
+        '`origin: tag_scan`. Sem ele, o achado vindo de plaquinha lida perde a ' +
+        `foto e o nome -- e é o caminho que o cliente mais usa. SQL: ${sqlDaLeitura}`,
     );
   });
 
   void it('o link do tutor (`share_token`) resolve o pet pelo caso', async () => {
-    await compilarAsCincoLeituras();
+    const sqlDaLeitura = await sqlDe(leituraDoRelator);
 
     assert.ok(
-      tem('lost_cases'),
-      'REPROVA: a consulta não alcança `lost_cases`. É o segundo braço do ' +
+      sqlDaLeitura.includes('lost_cases'),
+      'REPROVA: a leitura não alcança `lost_cases`. É o segundo braço do ' +
         '`COALESCE`, e o único caminho do `share_token`: `found_reports.case_id` ' +
         'é escrito só pelo INSERT de `criar`, a partir do token que o tutor ' +
         'publicou (critério 10). Sem ele, quem colou o link do tutor não vê a ' +
-        `foto nem o nome do animal que o próprio link já mostra. SQL: ${tudo()}`,
+        `foto nem o nome do animal que o próprio link já mostra. SQL: ${sqlDaLeitura}`,
     );
-    assert.ok(
-      tem('case_id'),
-      'REPROVA: `lost_cases` aparece mas `case_id` não liga os dois. ' +
-        `SQL: ${tudo()}`,
+    assert.match(
+      sqlDaLeitura,
+      /lc\.id\s*=\s*"?found_reports"?\."?case_id"?/,
+      'REPROVA: `lost_cases` aparece mas não está correlacionada por ' +
+        '`found_reports.case_id`. Sem a correlação ela traria o pet de um caso ' +
+        `qualquer -- o animal de outra pessoa na ficha deste achado. SQL: ${sqlDaLeitura}`,
     );
   });
 
   void it('a capa sai só quando a derivada está PRONTA, e é a primária', async () => {
-    await compilarAsCincoLeituras();
+    const sqlDaLeitura = await sqlDe(leituraDoRelator);
 
     assert.ok(
-      tem("'ready'"),
-      'REPROVA: a capa do pet é lida sem exigir `status = \'ready\'`. Sem o ' +
+      sqlDaLeitura.includes('card_key'),
+      `REPROVA NA ÂNCORA: a leitura não lê a capa do pet. SQL: ${sqlDaLeitura}`,
+    );
+    assert.ok(
+      sqlDaLeitura.includes("'ready'"),
+      "REPROVA: a capa do pet é lida sem exigir `status = 'ready'`. Sem o " +
         'predicado, a resposta monta endereço para uma derivada que o worker ' +
         'ainda não gravou -- e a tela promete uma foto que vai dar 404. É a ' +
         'mesma razão pela qual `kysely-tag-repository.ts` cobra os quatro ' +
-        `predicados. SQL: ${tudo()}`,
+        `predicados. SQL: ${sqlDaLeitura}`,
     );
     assert.ok(
-      tem('is_primary'),
+      sqlDaLeitura.includes('is_primary'),
       'REPROVA: a capa é lida sem `is_primary`. Um pet com três fotos prontas ' +
-        `devolveria a que o Postgres achar primeiro. SQL: ${tudo()}`,
+        `devolveria a que o Postgres achar primeiro. SQL: ${sqlDaLeitura}`,
+    );
+    assert.ok(
+      sqlDaLeitura.includes('deleted_at'),
+      'REPROVA: a capa é lida sem excluir foto apagada. A derivada de uma foto ' +
+        `que o tutor apagou continuaria endereçável. SQL: ${sqlDaLeitura}`,
+    );
+  });
+
+  void it('a resolução é CORRELACIONADA, e não um produto cartesiano', async () => {
+    const sqlDaLeitura = await sqlDe(leituraDoRelator);
+
+    assert.match(
+      sqlDaLeitura,
+      /f\.pet_id\s*=/,
+      'REPROVA: a subconsulta da capa não correlaciona por `f.pet_id`. Sem a ' +
+        'correlação ela devolveria a primeira capa pronta DE QUALQUER PET -- a ' +
+        'foto de um animal na ficha de outro, que é o defeito mais caro que ' +
+        `esta tela pode ter. SQL: ${sqlDaLeitura}`,
+    );
+    assert.match(
+      sqlDaLeitura,
+      /p\.id\s*=/,
+      `REPROVA: a subconsulta do nome não correlaciona por \`p.id\`. SQL: ${sqlDaLeitura}`,
+    );
+  });
+
+  void it('a capa tem `limit 1`, porque duas primárias são representáveis', async () => {
+    const sqlDaLeitura = await sqlDe(leituraDoRelator);
+
+    // `pet_photos` não tem índice único por `(pet_id, is_primary)`: duas capas
+    // marcadas primárias são representáveis no banco, e subconsulta escalar que
+    // devolve duas linhas levanta 21000 em tempo de execução -- um 500 na tela
+    // do achado, e não uma foto errada. `pets.id` é chave primária e não tem
+    // como devolver duas, então o nome não precisa de `LIMIT`.
+    assert.ok(
+      sqlDaLeitura.includes('limit 1'),
+      'REPROVA: a subconsulta da capa perdeu o `LIMIT 1`. Duas fotos marcadas ' +
+        '`is_primary` são representáveis em `pet_photos` (não há índice único ' +
+        'que as proíba), e subconsulta escalar com duas linhas levanta 21000 -- ' +
+        `500 na tela de quem está na rua com um animal no colo. SQL: ${sqlDaLeitura}`,
     );
   });
 });
@@ -326,43 +485,6 @@ void describe('O ACHADO AVULSO: não existe consulta que traga o palpite', () =>
       null,
       'REPROVA: a leitura sem linha devolveu algo. Este caso existe para fixar ' +
         'que a ausência de pet vira ausência, e não objeto pela metade.',
-    );
-  });
-});
-
-void describe('a subconsulta é CORRELACIONADA, e não um produto cartesiano', () => {
-  void it('a capa é filtrada por `f.pet_id`, e o nome por `p.id`', async () => {
-    await compilarAsCincoLeituras();
-
-    const texto = tudo().toLowerCase();
-    assert.ok(
-      texto.includes('f.pet_id ='),
-      'REPROVA: a subconsulta da capa não correlaciona por `f.pet_id`. Sem a ' +
-        'correlação ela devolveria a primeira capa pronta DE QUALQUER PET -- ' +
-        'a foto de um animal na ficha de outro, que é o defeito mais caro que ' +
-        `esta tela pode ter. SQL: ${tudo()}`,
-    );
-    assert.ok(
-      texto.includes('p.id ='),
-      'REPROVA: a subconsulta do nome não correlaciona por `p.id`. ' +
-        `SQL: ${tudo()}`,
-    );
-  });
-
-  void it('a capa tem `limit`, e o nome não precisa dele', async () => {
-    await compilarAsCincoLeituras();
-
-    // `pet_photos` não tem índice único por `(pet_id, is_primary)`: duas capas
-    // marcadas primárias são representáveis no banco, e subconsulta escalar que
-    // devolve duas linhas é erro 21000 em tempo de execução -- um 500 na tela
-    // do achado, e não uma foto errada. O `LIMIT 1` é o que torna isso
-    // impossível. `pets.id` é chave primária e não tem como devolver duas.
-    assert.ok(
-      tudo().toLowerCase().includes('limit 1'),
-      'REPROVA: a subconsulta da capa perdeu o `LIMIT 1`. Duas fotos marcadas ' +
-        '`is_primary` são representáveis em `pet_photos` (não há índice único ' +
-        'que as proíba), e subconsulta escalar com duas linhas levanta 21000 -- ' +
-        `500 na tela de quem está na rua com um animal no colo. SQL: ${tudo()}`,
     );
   });
 });
