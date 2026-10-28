@@ -4485,9 +4485,14 @@ export interface paths {
          *
          *     ## O que o cartao deslogado mostra, e o que ele NAO mostra
          *
-         *     **Nome, atividade, lugar (bairro, cidade e UF), logo e pontuacao.**
-         *     `PublicDirectoryEntrySummary` nao tem `phone_e164`, nao tem `site_url`
-         *     e nao tem `distance_m`.
+         *     **Nome, atividade, lugar (bairro, cidade e UF), logo e selo de
+         *     verificacao.** `PublicDirectoryEntrySummary` nao tem `phone_e164`, nao
+         *     tem `site_url` e nao tem `distance_m`.
+         *
+         *     Tambem nao tem `rating`, e por um motivo diferente dos tres: a
+         *     listagem COM conta nao envia pontuacao nenhuma hoje -- o schema dela a
+         *     declara a frente da implementacao. Ver a nota no proprio
+         *     `PublicDirectoryEntrySummary`.
          *
          *     **A ausencia do telefone e decisao de produto, e nao limitacao
          *     tecnica.** O botao `Ligar` do cartao so existe quando `phone_e164`
@@ -9625,20 +9630,6 @@ export interface components {
              *     foto no detalhe.
              */
             logo_url?: string | null;
-            /**
-             * @description A pontuacao agregada, para o cartao mostrar a media e a quantidade.
-             *
-             *     **OPCIONAL, como no schema com conta**: uma resposta que nao
-             *     conseguiu agregar e melhor sem o campo do que com media zero,
-             *     porque zero se le como "pessimo" e um local sem avaliacao nao e
-             *     pessimo. O cartao sem `rating` nao desenha estrela nenhuma, e nao
-             *     desenha "0,0".
-             *
-             *     O recorte e o MESMO da rota com conta (`status = 'published'` e
-             *     `conta_habilitada(author_user_id)`), para a media do cartao
-             *     deslogado e a do logado nunca discordarem.
-             */
-            rating?: components["schemas"]["DirectoryRating"];
             verification: components["schemas"]["DirectoryVerification"];
         };
         /**

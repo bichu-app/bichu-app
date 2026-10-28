@@ -2509,6 +2509,13 @@ export interface paths {
          *     numa rota publica eles nao podem existir. Afrouxar este `security` para
          *     `[bearerAuth, {}]` faz o portao reprovar os dois, nominalmente.
          *
+         *     **A lista deslogada da aba existe, e e outra operacao**:
+         *     `listPublicDirectoryEntries` (`GET /v1/public/directory-entries`),
+         *     com projecao propria e sem os dois campos. Esta operacao continua
+         *     exigindo conta, e o paragrafo acima continua valendo: o caminho nao
+         *     foi afrouxar este `security`, foi dar ao portao um schema que ele
+         *     aprova.
+         *
          *     **Ordenacao por distancia usa a localizacao de referencia de quem
          *     chama**, que o servidor ja guarda (BICHUS-92). Ela NAO e enviada na
          *     requisicao: coordenada em URL vai para log de acesso, para o historico
@@ -4432,6 +4439,92 @@ export interface paths {
          *     datada desses dois ADRs, a ordem desta rota e temporal.
          */
         get: operations["listPublicLostPets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/directory-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profissionais e estabelecimentos, sem conta
+         * @description A MESMA lista da aba `Comunidade`, **lida sem conta** (pedido do
+         *     cliente, 26/10/2026: a Comunidade deve listar para quem esta deslogado,
+         *     e pedir conta no toque da pagina interna).
+         *
+         *     ## Por que operacao NOVA, e nao `security: [bearerAuth, {}]` na de conta
+         *
+         *     Foram as duas tentativas mais curtas, e as duas estao fechadas:
+         *
+         *     1. **Afrouxar o `security` de `listDirectoryEntries` reprova no
+         *        portao.** `src/tools/portao-contrato-publico.ts` proibe `phone_e164`
+         *        e `distance_m` por NOME EXATO em qualquer operacao alcancavel sem
+         *        conta, e os dois estao em `DirectoryEntrySummary`. A descricao
+         *        daquela operacao ja registra esse beco, e ela continua certa.
+         *     2. **Tirar os dois campos daquele schema quebra o APK publicado**, que
+         *        le aquela resposta. Resposta nao perde campo sem quebrar quem a le.
+         *
+         *     Uma operacao em OpenAPI tem **um** schema de resposta: nao existe forma
+         *     de a mesma operacao devolver a projecao cheia com conta e a magra sem
+         *     conta. Entao a projecao magra precisa de operacao propria, e e esta.
+         *
+         *     **O molde e a `Rede`, e nao foi inventado aqui**: os encontros ja
+         *     resolvem exatamente isto com DUAS operacoes -- `listNetworkEvents`
+         *     (`security: []`, sem distancia) e `listNearbyNetworkEvents` (com conta,
+         *     com distancia). O comentario acima de `/network/my-events` ja escreveu
+         *     a regra por extenso: operacao nova, porque mexer no `security` de uma
+         *     operacao publicada "e quebra de contrato para todo cliente publicado".
+         *
+         *     ## O que o cartao deslogado mostra, e o que ele NAO mostra
+         *
+         *     **Nome, atividade, lugar (bairro, cidade e UF), logo e selo de
+         *     verificacao.** `PublicDirectoryEntrySummary` nao tem `phone_e164`, nao
+         *     tem `site_url` e nao tem `distance_m`.
+         *
+         *     Tambem nao tem `rating`, e por um motivo diferente dos tres: a
+         *     listagem COM conta nao envia pontuacao nenhuma hoje -- o schema dela a
+         *     declara a frente da implementacao. Ver a nota no proprio
+         *     `PublicDirectoryEntrySummary`.
+         *
+         *     **A ausencia do telefone e decisao de produto, e nao limitacao
+         *     tecnica.** O botao `Ligar` do cartao so existe quando `phone_e164`
+         *     existe; publicar o telefone aqui exigiria tornar telefone comercial um
+         *     dado publico e abrir excecao NOMINAL no portao -- mudanca de
+         *     privacidade, que nao se faz para encurtar uma tela. Entao o cartao
+         *     deslogado nasce sem `Ligar`, e **entrar e o que o acrescenta**.
+         *
+         *     `site_url` sai pela razao declarada no proprio campo dele: ele "sai ao
+         *     lado de `phone_e164` e pela mesma razao", e so pode existir porque a
+         *     operacao exige conta. O portao nao o nomeia hoje -- e isso nao e
+         *     permissao. A lista de campos proibidos e o piso da conferencia, nao a
+         *     fronteira da decisao.
+         *
+         *     ## Nao ha `sort`, e a ausencia e a regra
+         *
+         *     A ordenacao e por **nome**, sempre. `sort=distance` mede a partir da
+         *     localizacao de referencia de quem chama, que o servidor guarda por
+         *     CONTA e APARELHO (SEC-021): sem conta nao existe ponto de onde medir.
+         *     E ordenar por distancia numa rota publica seria o oraculo de posicao
+         *     que o cabecalho do portao descreve -- variando o centro e lendo a ORDEM
+         *     da pagina da para trilaterar o ponto, sem um unico numero de coordenada
+         *     sair no corpo.
+         *
+         *     ## O teto e por `ip`, como nas outras rotas publicas
+         *
+         *     Nao ha conta de onde sair um balde, e teto por conta numa rota sem
+         *     conta nao conta nada. E o desenho de `listPublicLostPets`, com os
+         *     numeros dela: diretorio sem teto e a porta da raspagem, e esta e a
+         *     copia publica da lista que a rota com conta ja limita a 120/h.
+         */
+        get: operations["listPublicDirectoryEntries"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9470,6 +9563,100 @@ export interface components {
              * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
              *     foi informado, porque "nada filtrado" e uma informacao e nao uma
              *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O cartao da listagem **sem conta**. E `DirectoryEntrySummary` menos os
+         *     tres campos que so existem com conta: `phone_e164`, `site_url` e
+         *     `distance_m`.
+         *
+         *     **Nao e uma projecao reduzida por timidez**: cada ausencia tem a razao
+         *     escrita em `listPublicDirectoryEntries`. Os dois primeiros sao canal de
+         *     contato que so pode sair com conta -- o ADR-0011 secao 4 publica o
+         *     telefone comercial PARA SER PROCURADO, e e justamente esse campo que
+         *     `portao-contrato-publico.ts` proibe em rota sem conta. O terceiro
+         *     implica centro, e distancia a partir de centros conhecidos trilatera o
+         *     centro desconhecido.
+         *
+         *     **Nao tem `id` e nao tem `about`.** O endereco e o `slug` (ADR-0010
+         *     item 6), como no schema com conta. `about` fica fora porque o cartao
+         *     nao o desenha -- nem aqui nem com conta --, e campo que ninguem le e
+         *     peso de resposta sem leitor.
+         *
+         *     Tambem nao tem quem convidou a entidade nem quem e o titular dela, pela
+         *     mesma razao do schema com conta: as duas colunas ligam a entrada a uma
+         *     conta de pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas
+         *     inclusive como contagem e como existencia.
+         */
+        PublicDirectoryEntrySummary: {
+            slug: components["schemas"]["Slug"];
+            /**
+             * @description **A PRIMEIRA atividade de `kinds`**, e `required` pela mesma razao
+             *     do schema com conta: ele existe para compatibilidade com o APK
+             *     publicado, e quem desenha a entrada nova usa `kinds`.
+             */
+            kind: components["schemas"]["ProfessionalKind"];
+            kinds: components["schemas"]["ProfessionalKinds"];
+            entity_kind: components["schemas"]["EntityKind"];
+            display_name: string;
+            city?: string | null;
+            state?: string | null;
+            /**
+             * @description O bairro, e **ele e a granularidade mais fina que sai sem conta**:
+             *     bairro, cidade e UF, e nunca mais fino (ADR-0010, "o que a rota
+             *     publica jamais exibe", itens 4 e 5).
+             *
+             *     **Nulo e estado possivel e nao erro**, como no schema com conta: o
+             *     cartao de uma entrada sem bairro tem uma linha menos, e nao cai
+             *     para cidade -- dizer `Sao Paulo` onde se pediu bairro faria a
+             *     listagem parecer ter a informacao que nao tem.
+             */
+            neighborhood?: string | null;
+            /**
+             * Format: uri
+             * @description A logo da entidade, **a URL da derivada publica e nunca do
+             *     original**, montada na leitura a partir de `MEDIA_PUBLIC_BASE_URL`
+             *     como no schema com conta (ADR-0007 secao 11.1 proibicao 9).
+             *
+             *     Nula e o estado normal, e o cartao sem ela desenha o glifo do TIPO
+             *     -- nao um retangulo vazio.
+             *
+             *     **A foto em faixa continua fora da lista, aqui tambem**: ela e
+             *     1280 x 720 e pertence a pagina do local, e mandar a faixa em ate 20
+             *     cartoes multiplicaria o peso da primeira pintura. Logo na lista,
+             *     foto no detalhe.
+             */
+            logo_url?: string | null;
+            verification: components["schemas"]["DirectoryVerification"];
+        };
+        /**
+         * @description **A mesma forma de `DirectoryEntryPage`**, e a igualdade e deliberada:
+         *     o aplicativo le as duas respostas com o MESMO modelo
+         *     (`PaginaDoDiretorio.fromJson`), e uma forma diferente exigiria um
+         *     segundo analisador para a mesma tela.
+         */
+        PublicDirectoryEntryPage: {
+            items: components["schemas"]["PublicDirectoryEntrySummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description **Sempre `false` nesta operacao**, e ele sai mesmo assim.
+             *
+             *     Sem conta nao existe localizacao de referencia de onde medir, entao
+             *     a lista saiu por nome -- e e isso que a tela escreve. Omitir o campo
+             *     faria o cliente adivinhar a diferenca entre "nao consegui ordenar"
+             *     e "nao perguntei", que e a mesma classe de mentira barata que o zero
+             *     silencioso.
+             */
+            distance_available: boolean;
+            /**
+             * @description O recorte que de fato valeu, com `scope: all` quando nada foi
+             *     filtrado, como na rota com conta: "nada filtrado" e uma informacao
+             *     e nao uma ausencia.
              */
             applied_filters?: {
                 [key: string]: string;
@@ -20078,6 +20265,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicLostPetPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listPublicDirectoryEntries: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca parcial pelo NOME da entrada, tolerante a acento e a caixa,
+                 *     com o MESMO piso de tres caracteres da rota com conta e pela mesma
+                 *     razao: o indice que a atende e GIN de trigrama, e um padrao com
+                 *     menos de tres caracteres nao produz trigrama nenhum. **A tela nao
+                 *     deve enviar `q` antes do terceiro caractere**, sob pena de levar
+                 *     400 no que a pessoa le como o app quebrado.
+                 */
+                q?: string;
+                city?: string;
+                state?: string;
+                neighborhood?: string;
+                kind?: components["schemas"]["ProfessionalKind"];
+                /**
+                 * @description **Piso**, nao igualdade: pedir `contact_verified` traz
+                 *     `document_verified` junto. O mesmo da rota com conta.
+                 */
+                verification_level?: components["schemas"]["VerificationLevel"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina do diretorio sem conta. `total` alimenta "1 a 20 de 87" e
+             *     `applied_filters` alimenta a linha que explica o recorte, como na
+             *     rota com conta.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicDirectoryEntryPage"];
                 };
             };
             400: components["responses"]["ValidationFailed"];
