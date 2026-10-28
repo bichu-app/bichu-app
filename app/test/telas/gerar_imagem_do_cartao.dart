@@ -284,7 +284,15 @@ class _Estado extends StatelessWidget {
             ),
           ),
           const SizedBox(height: BichuEspaco.e2),
-          CartaoDoDiretorio(entrada: entrada),
+          // `aoTocar` VAZIO, e e o unico valor correto aqui: este arquivo
+          // GERA IMAGEM do cartao e nao mede toque nenhum.
+          //
+          // NA UNIAO DE 27/10: o parametro virou `required` no #76 (com a lista
+          // respondendo 200 sem conta, o destino do toque passou a depender de
+          // haver conta, e quem decide e a tela). Este helper veio do #64, que
+          // nao sabia disso. Nenhuma das duas branches reprova sozinha -- so a
+          // uniao expoe, e o `flutter analyze` a pegou.
+          CartaoDoDiretorio(entrada: entrada, aoTocar: () {}),
         ],
       ),
     );
