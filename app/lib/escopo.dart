@@ -17,9 +17,11 @@ import 'api/fila_offline.dart';
 import 'api/cache_de_imagens.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
+import 'api/passkeys_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/credencial_do_aparelho.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'sessao/localizacao_da_sessao.dart';
 import 'sessao/cidade_escolhida.dart';
@@ -32,6 +34,7 @@ import 'telas/perfil/meus_pets.dart';
 import 'sessao/contadores_de_nao_lido.dart';
 import 'sessao/contador_de_avisos.dart';
 import 'sessao/controlador_de_sessao.dart';
+import 'sessao/fiacao_do_passkey.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
 ///
@@ -43,6 +46,7 @@ class Escopo extends InheritedWidget {
   const Escopo({
     required this.api,
     required this.auth,
+    required this.passkeys,
     required this.pets,
     required this.casos,
     required this.conexoes,
@@ -59,6 +63,8 @@ class Escopo extends InheritedWidget {
     required this.devices,
     required this.camera,
     required this.leitorDeQr,
+    required this.credencialDoAparelho,
+    required this.passkey,
     required this.avisos,
     required this.avisosRecebidos,
     required this.oportunidades,
@@ -80,6 +86,15 @@ class Escopo extends InheritedWidget {
 
   final ApiClient api;
   final AuthApi auth;
+
+  /// As quatro operacoes de passkey do contrato (BICHUS-301).
+  ///
+  /// **Separada de [auth] de proposito.** `AuthApi` e a porta da senha, e a
+  /// passkey SOMA a senha em vez de substitui-la -- juntar as duas num objeto
+  /// so faria parecer que uma troca a outra. Alem disso `AuthApi` nao depende
+  /// de nada do aparelho, e esta depende: quem a usa quase sempre precisa de
+  /// [credencialDoAparelho] no mesmo gesto, e [passkey] e quem junta as duas.
+  final PasskeysApi passkeys;
   final PetsApi pets;
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
@@ -181,6 +196,20 @@ class Escopo extends InheritedWidget {
   /// duas portas consultando `Permission.camera` dariam duas respostas que
   /// precisam ser iguais e um dia nao seriam.
   final LeitorDeQr leitorDeQr;
+
+  /// A folha de credencial do sistema operacional.
+  ///
+  /// Exposta aqui, e nao escondida dentro de [passkey], porque o teste de
+  /// widget precisa troca-la: o pacote `passkeys` fala por canal de
+  /// plataforma, que nao existe em `flutter test`.
+  final CredencialDoAparelho credencialDoAparelho;
+
+  /// A sequencia servidor-aparelho-servidor do passkey.
+  ///
+  /// **Nenhuma tela chama [passkeys] e [credencialDoAparelho] na mao.** O
+  /// desafio e consumido no passo final de sucesso OU de falha, e uma copia da
+  /// sequencia por tela e uma chance por tela de errar isso.
+  final FiacaoDoPasskey passkey;
 
   /// A fronteira com o servico de notificacao. Injetavel pelo mesmo motivo da
   /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
