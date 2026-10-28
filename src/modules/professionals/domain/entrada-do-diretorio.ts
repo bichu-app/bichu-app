@@ -316,31 +316,42 @@ export function projetarEntrada(
 }
 
 /**
- * A projecao SEM CONTA, **derivada da de conta por subtracao**.
+ * A projecao SEM CONTA, **derivada da de conta e nao paralela a ela**.
  *
- * Ela desestrutura o resultado de `projetarEntrada` em vez de montar o objeto
- * de novo, e isso e deliberado: montar um segundo objeto a mao duplicaria dez
- * linhas de mapeamento que teriam de ser mantidas em paralelo, e o modo de
- * falha dessa duplicacao e o pior possivel -- as duas projecoes divergindo em
- * silencio, com a publica ficando para tras e ninguem percebendo, porque
- * nenhum teste compara as duas campo por campo.
+ * Ela parte de `projetarEntrada` em vez de ler `entrada` de novo, e isso e
+ * deliberado: uma segunda leitura do agregado duplicaria as regras que aquela
+ * funcao aplica -- `atividadePrincipal`, `nivelDerivado`, `evidenciasAprovadas`
+ * e `urlDaDerivada` --, e o modo de falha dessa duplicacao e o pior possivel:
+ * as duas projecoes divergindo em silencio, com a publica ficando para tras e
+ * ninguem percebendo, porque nenhum teste compara as duas campo por campo.
  *
- * **Os quatro nomes aparecem UMA vez cada, aqui, e o compilador cobra o
- * resto**: se `EntradaPublica` perder um deles, esta desestruturacao deixa de
- * compilar; se ganhar um campo novo, ele entra em `resto` e chega a resposta
- * publica -- entao o `Omit` de `EntradaPublicaSemConta` e quem reprova, e a
- * decisao sobre o campo novo acontece na hora em que ele nasce.
+ * **A lista e explicita, e nao um `...resto` depois de tirar os quatro.** A
+ * desestruturacao com resto era a forma obvia e e a FRACA: com ela, um campo
+ * novo em `EntradaPublica` cai dentro de `resto` e **vaza para a resposta
+ * publica sozinho**, sem ninguem decidir nada. Nomear os dez campos inverte
+ * isso -- `EntradaPublicaSemConta` ganha o campo novo pelo `Omit`, este objeto
+ * literal fica incompleto e **nao compila**. O compilador passa a cobrar a
+ * decisao sobre o campo novo na hora em que ele nasce, que e quando ela custa
+ * menos.
+ *
+ * (A forma com `...resto` tambem reprovava no `eslint` deste repositorio:
+ * `no-unused-vars` nao aceita os quatro nomes descartados, nem com `_`.)
  */
 export function projetarEntradaSemConta(
   entrada: EntradaDoDiretorio,
   urlDeMidia: (chave: string) => string,
 ): EntradaPublicaSemConta {
-  const {
-    phone_e164: _telefone,
-    site_url: _site,
-    distance_m: _distancia,
-    about: _sobre,
-    ...resto
-  } = projetarEntrada(entrada, urlDeMidia);
-  return resto;
+  const cheia = projetarEntrada(entrada, urlDeMidia);
+  return {
+    slug: cheia.slug,
+    kind: cheia.kind,
+    kinds: cheia.kinds,
+    entity_kind: cheia.entity_kind,
+    display_name: cheia.display_name,
+    city: cheia.city,
+    state: cheia.state,
+    neighborhood: cheia.neighborhood,
+    verification: cheia.verification,
+    logo_url: cheia.logo_url,
+  };
 }

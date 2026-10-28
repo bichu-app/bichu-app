@@ -94,7 +94,10 @@ import { semear } from '../../src/bin/seed.js';
 import { MASSA_DO_DIRETORIO, PUBLICADAS } from '../../src/bin/massa-do-diretorio.js';
 import { criarDirectoryRepository } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
-import { projetarEntrada } from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
+import {
+  projetarEntrada,
+  projetarEntradaSemConta,
+} from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
 import type { DirectoryRepository } from '../../src/modules/professionals/ports/directory-repository.js';
 import { comoFamiliaDeSessao } from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
@@ -1058,5 +1061,129 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       false,
       'nenhum UUID sai do repositorio: nem o da entrada, nem o de conta nenhuma.',
     );
+  });
+
+  // =========================================================================
+  // A LEITURA SEM CONTA (`listPublicDirectoryEntries`, 27/10/2026)
+  //
+  // **Este e o unico lugar em que a consulta sem chamador roda contra o banco.**
+  // A suite unitaria da rota prova o CORPO da resposta com repositorio dublê;
+  // o dublê devolve o que lhe puserem e nao tem como provar que o SQL montado
+  // sem `chamador` e sem `familia` e valido. Um `WHERE user_id = undefined`
+  // chega ao Postgres como `null`, nao levanta erro e devolve zero linha -- e
+  // zero linha aqui se le como "nao ha profissional por aqui", que e o defeito
+  // mais barato de produzir e o mais caro de notar.
+  // =========================================================================
+
+  void it('SEM CONTA: a lista sai por NOME, com distancia nula e sem erro de SQL', async () => {
+    const pagina = await repo.listarPublicados({
+      // Sem conta e sem aparelho. E este par ausente que o caso existe para
+      // levar ate o banco.
+      chamador: undefined,
+      familia: undefined,
+      agora: AGORA,
+      sort: 'name',
+      page: 1,
+      limit: 20,
+    });
+
+    // (1) A CONSULTA RODOU E TROUXE LINHA. A ancora positiva: sem ela o resto
+    // ficaria verde com a consulta devolvendo vazio em silencio, que e
+    // exatamente o modo de falha descrito acima.
+    assert.ok(
+      pagina.total > 0,
+      'REPROVA: a lista sem conta voltou vazia. Ou a consulta montada sem ' +
+        '`chamador` nao casa linha nenhuma, ou a massa nao tem publicada.',
+    );
+    assert.equal(
+      pagina.itens.length > 0,
+      true,
+      'REPROVA: `total` conta mas a pagina nao traz item.',
+    );
+
+    // (2) O MESMO CONJUNTO QUE A LEITURA COM CONTA, medido **no mesmo
+    // instante** e com uma conta recem-criada.
+    //
+    // **Nao e contra `PUBLICADAS.length`, e a primeira versao disto era -- e
+    // reprovou com `41 !== 10`.** Este arquivo CRIA entradas (`criarEntrada`)
+    // ao longo dos casos, em cima das 10 publicadas da massa: comparar com a
+    // constante media a ordem em que os casos rodaram, e nao o que o caso diz
+    // medir. A constante so valeria num banco recem-semeado, e este nao e.
+    //
+    // A comparacao com a leitura COM conta e o invariante de verdade: **a
+    // ausencia de chamador nao pode filtrar entrada nenhuma**. Sem isto, uma
+    // consulta que perdesse linhas por causa da subconsulta da localizacao
+    // passaria -- ela ainda traria "alguma" linha.
+    const titular = await criarConta();
+    const comConta = await repo.listarPublicados(
+      recorte(titular, { sort: 'name' }),
+    );
+    assert.equal(
+      pagina.total,
+      comConta.total,
+      'REPROVA: a lista sem conta e a com conta discordam no tamanho do ' +
+        'recorte. A ausencia de chamador nao pode filtrar entrada nenhuma.',
+    );
+    assert.deepEqual(
+      pagina.itens.map((i) => i.slug),
+      comConta.itens.map((i) => i.slug),
+      'REPROVA: as duas leituras trouxeram entradas DIFERENTES na mesma ' +
+        'pagina. O conjunto e a ordem por nome nao dependem de quem pergunta.',
+    );
+
+    // (3) DISTANCIA NULA EM TODAS, e `distanciaDisponivel` falso. Sem conta nao
+    // ha ponto de onde medir: um numero aqui so poderia ter saido de um centro
+    // que ninguem informou.
+    assert.equal(pagina.distanciaDisponivel, false);
+    for (const item of pagina.itens) {
+      assert.equal(
+        item.distanciaEmMetros,
+        null,
+        `REPROVA: \`${item.slug}\` veio com distancia numa leitura sem conta.`,
+      );
+    }
+
+    // (4) E A ORDEM E ALFABETICA DE VERDADE, lida da resposta e nao suposta
+    // pelo `sort` que foi pedido.
+    const nomes = pagina.itens.map((i) => i.displayName);
+    assert.deepEqual(
+      nomes,
+      [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      'REPROVA: a lista sem conta nao saiu em ordem de nome.',
+    );
+  });
+
+  void it('SEM CONTA: a projecao publica nao carrega telefone, site, distancia nem sobre', async () => {
+    const pagina = await repo.listarPublicados({
+      chamador: undefined,
+      familia: undefined,
+      agora: AGORA,
+      sort: 'name',
+      page: 1,
+      limit: 20,
+    });
+    const entrada = pagina.itens[0];
+    assert.ok(entrada !== undefined);
+
+    const publica = projetarEntradaSemConta(entrada, (chave) => `https://m.test/${chave}`);
+    for (const campo of ['phone_e164', 'site_url', 'distance_m', 'about']) {
+      assert.equal(
+        campo in publica,
+        false,
+        `REPROVA: \`${campo}\` saiu na projecao publica de uma entrada LIDA DO BANCO.`,
+      );
+    }
+
+    // O CONTRAPESO, sobre a MESMA linha do banco: a projecao com conta tem de
+    // trazer os quatro. Sem ele, os `false` acima ficariam verdes com uma
+    // entrada que simplesmente nao tem telefone cadastrado na massa.
+    const cheia = projetarEntrada(entrada, (chave) => `https://m.test/${chave}`);
+    for (const campo of ['phone_e164', 'site_url', 'distance_m', 'about']) {
+      assert.equal(
+        campo in cheia,
+        true,
+        `REPROVA: \`${campo}\` desapareceu da projecao COM conta.`,
+      );
+    }
   });
 });
