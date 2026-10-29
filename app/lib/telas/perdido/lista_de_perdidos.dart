@@ -20,6 +20,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/moldura.dart';
+import '../../widgets/listagem_preservada.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import 'cartao_do_perdido.dart';
 
@@ -516,6 +517,37 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
   _Fase _fase = _Fase.carregando;
 
   List<PerdidoPublico> _itens = const <PerdidoPublico>[];
+
+  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
+  ///
+  /// Teto de [tetoDeItensPreservados]: a foto do cartao e a derivada `thumb`
+  /// com `cacheWidth`, 121 KiB por cartao -- a conta esta em
+  /// `cartao_do_perdido.dart` e em `widgets/listagem_preservada.dart`.
+  final PreservacaoDaListagem _preservacao =
+      PreservacaoDaListagem(teto: tetoDeItensPreservados);
+
+  /// A pergunta que os cartoes na tela respondem.
+  /// **`_recorte` nulo e a tela antes da primeira carga**, e nessa hora nao ha
+  /// pergunta nenhuma a assinar -- `vale` reprova por `itens <= 0` de todo
+  /// modo.
+  String get _assinaturaDaListagem => assinaturaDaListagem(
+        pergunta: _recorte?.query ?? const <String, String>{},
+        referencia: _referenciaDaConta,
+      );
+
+  /// A localizacao de referencia da conta: `Me.reference_area`, que recorta esta
+  /// lista pela cidade. Muda-la torna o que estava preservado a resposta de
+  /// outra pergunta.
+  String? get _referenciaDaConta {
+    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
+    if (regiao == null) return null;
+    return textoDaReferencia(
+      cep: regiao.cep,
+      bairro: regiao.bairro,
+      cidade: regiao.cidade,
+      uf: regiao.uf,
+    );
+  }
   int _total = 0;
   int _pagina = 1;
 
@@ -606,6 +638,14 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     }
     if (_visivel) return;
     _visivel = true;
+    // **BICHUS-316: A VOLTA NAO JOGA FORA O QUE JA FOI CARREGADO.** Ver a prosa
+    // do mesmo trecho em `perto/lista_do_diretorio.dart`.
+    if (_preservacao.vale(
+      itens: _itens.length,
+      assinatura: _assinaturaDaListagem,
+    )) {
+      return;
+    }
     _agendarCarga();
   }
 
@@ -951,6 +991,12 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
       });
     } else {
       geracao = ++_geracao;
+      // **O DESCARTE E O GATILHO.** Busca, filtro, ordenacao e o
+      // arrastar-para-atualizar todos chegam por aqui com `maisUma` falso, e
+      // todos substituem `_itens` abaixo: invalidar deste ponto cobre os quatro
+      // por construcao, e nao por disciplina de cada chamador.
+      _preservacao.descartar();
+      SlotDaRolagem.maybeOf(context)?.aListaFoiDescartada();
       setState(() {
         _fase = _Fase.carregando;
         _agora = DateTime.now();
@@ -973,6 +1019,7 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         _fase = _Fase.lista;
         _carregandoMais = false;
       });
+      _preservacao.marcar(_assinaturaDaListagem);
       // A AREA FOI VISTA -- zera o selo da aba `Pets` (BICHUS-278).
       //
       // **Aqui, e nao no toque na aba:** o momento honesto e quando a lista

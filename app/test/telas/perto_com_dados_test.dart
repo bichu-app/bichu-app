@@ -1623,8 +1623,28 @@ void main() {
       );
     });
 
+    // **ESTE CASO MUDOU DE AFIRMACAO EM 29/10/2026, por pedido do cliente
+    // (BICHUS-316).**
+    //
+    // Ele nasceu cobrando o CONTRARIO: que voltar para a aba recomecasse da
+    // pagina 1. A razao era boa e continua valendo -- `_recorte.pagina` podia
+    // estar em 3 por causa do `Carregar mais`, e pedir a pagina 3 como
+    // PRIMEIRA chamada devolve uma fatia vazia num recorte pequeno, que e o
+    // defeito "a lista ficou vazia sem motivo". O que estava errado era o
+    // CONSERTO: recarregar jogava fora as paginas acumuladas e, com a lista
+    // encurtando, o deslocamento era grampeado no extent menor. Nas palavras
+    // dele: *"a rolagem esta voltando la para cima ... voce consegue fazer
+    // voltar exatamente no mesmo registro que eu tinha visto, como se
+    // mantivesse a paginacao?"*
+    //
+    // **A garantia antiga nao foi apagada, ela mudou de lugar.** Quem descarta
+    // volta para a pagina 1 -- e `rolagem_preservada_test.dart` cobra isso por
+    // gatilho --, e quem NAO descarta nao chama a rota nenhuma, de modo que a
+    // pagina 3 nunca sai como primeira chamada. Este caso passou a medir as
+    // duas metades: nenhuma chamada na volta, e page=1 em qualquer chamada que
+    // saia.
     testWidgets(
-        'voltar para a aba depois de `Carregar mais` recomeca da pagina 1',
+        'voltar para a aba PRESERVA as paginas, e nao pede a pagina 3 como primeira',
         (tester) async {
       final urls = <Uri>[];
       await abrirPerto(
@@ -1635,40 +1655,27 @@ void main() {
       await tocarEmCarregarMais(tester);
       expect(urls.last.queryParameters['page'], '2');
 
-      // Sai da secao e volta. O estado da tela SOBREVIVE (o ramo do
-      // `StatefulShellRoute` fica vivo), e e `TickerMode` que dispara a
-      // recarga -- e por isso que `_recorte` pode voltar aqui com `page` em 2.
+      // Sai da secao e volta. **Volta so pela ABA**: `abrirAComunidade` rola a
+      // lista ate o topo para achar o `Tab`, e isso mediria o ajudante.
       final antesDeSair = urls.length;
       await tester.tap(find.widgetWithText(NavigationDestination, 'Loja'));
       await tester.pumpAndSettle();
-      await abrirAComunidade(tester);
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
       await tester.pumpAndSettle();
 
       final depoisDeVoltar = urls.sublist(antesDeSair);
       expect(
         depoisDeVoltar,
-        isNotEmpty,
-        reason: 'REPROVA: voltar para a aba nao recarregou nada, e o caso '
-            'perdeu o que ele existe para medir.',
+        isEmpty,
+        reason: 'REPROVA: a volta foi a rede. Com as paginas preservadas nao ha '
+            'o que buscar, e cada chamada aqui e uma espera que a pessoa paga '
+            'em rede ruim. Pedidas: '
+            '${depoisDeVoltar.map((u) => u.query).toList()}',
       );
-      // **Todas** as chamadas depois do retorno, e nao so a ultima.
-      //
-      // Enquanto este caso olhava apenas `urls.last` ele ficava VERDE com o
-      // defeito de pe: o retorno pedia a pagina 2 e uma segunda carga, logo
-      // atras, pedia a 1. Medido: `[page=1, page=2, page=2, page=1]`.
-      expect(
-        depoisDeVoltar
-            .map((u) => u.queryParameters['page'])
-            .toSet(),
-        <String>{'1'},
-        reason: 'REPROVA: voltar para a aba pediu a pagina que o `Carregar '
-            'mais` tinha deixado no recorte. Pedidas: '
-            '${depoisDeVoltar.map((u) => u.query).toList()}. Com um recorte '
-            'menor essa pagina volta VAZIA, e a lista fica vazia sem ninguem '
-            'ter mexido em filtro nenhum.',
-      );
-      expect(nomesNaTela(tester), hasLength(20));
+      // **As 25 continuam na tela**, e nao as 20 da pagina 1.
+      expect(nomesNaTela(tester), hasLength(25));
       expect(find.text('Entrada 1'), findsOneWidget);
+      expect(find.text('Entrada 25'), findsOneWidget);
     });
   });
 
