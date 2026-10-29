@@ -380,19 +380,17 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
         // juridica (criterio 6 da BICHUS-185), e apagar a frase junto com o
         // widget tiraria do repositorio a unica copia do que o produto
         // afirmava.
-        // O CONVITE E O CUPOM (cliente, 22/10/2026). Ver
-        // `VitrineDaLoja.conviteDaVitrine` para a redacao dele e para a razao
-        // de isto NAO desfazer a remocao de 17/10.
+        // A BARRA DE LISTAGEM VEM PRIMEIRO (cliente, 28/10/2026), literal:
+        // *"coloque a barra de busca acima do texto"*. "O texto" e o bloco do
+        // convite com o cupom, que desde 22/10 era a primeira coisa do corpo.
         //
-        // **ACIMA DA BARRA DE LISTAGEM, e nao dentro dela.** A barra e busca,
-        // filtro e ordenacao -- controles --, e o padrao em vigor e que eles
-        // ficam no topo do CORPO da tela. Este texto nao e controle: ele e a
-        // primeira coisa que a pagina diz, e e por isso que ele vem antes. Ele
-        // nao depende de `pagina`: a frase vale com a vitrine carregada,
-        // vazia, filtrada ou em falha. Pendurada no `if` da barra, ela sumiria
-        // justamente nos estados em que nao ha produto na tela -- que e quando
-        // sobra espaco para ela.
-        const _ConviteComCupom(),
+        // **ISTO CUMPRE O PADRAO DE LISTAGEM EM VIGOR, e nao o contraria.** O
+        // padrao diz que busca, filtro e ordenacao ficam no topo do CORPO da
+        // tela, nunca na barra de topo -- e eram justamente os 31 dp do
+        // convite que se metiam entre o topo do corpo e os controles (medido:
+        // o rotulo do cupom em `dy = 121` contra o campo de busca em
+        // `dy = 152`). Com a troca, o primeiro controle do corpo e de novo a
+        // busca, e ela continua FORA da barra de topo.
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
@@ -405,6 +403,23 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
             ordenacao: _controleDeOrdenacao(pagina),
             aoAplicar: _aplicarAFolha,
           ),
+        // O CONVITE E O CUPOM (cliente, 22/10/2026). Ver
+        // `VitrineDaLoja.conviteDaVitrine` para a redacao dele e para a razao
+        // de isto NAO desfazer a remocao de 17/10.
+        //
+        // **FORA DO `if (pagina != null)`, e a posicao dele na lista nao muda
+        // isso.** Ele desceu para debaixo da barra por pedido de 28/10, mas
+        // continua NAO dependendo de `pagina`: a frase vale com a vitrine
+        // carregada, vazia, filtrada ou em falha. Pendurado no `if` da barra
+        // ele sumiria justamente nos estados em que nao ha produto na tela --
+        // que e quando sobra espaco para ele. O `Column` desenha nesta ordem,
+        // entao com a barra ausente o convite simplesmente sobe sozinho, sem
+        // deixar vao.
+        //
+        // **O BLOCO INTEIRO DESCE, frase E cupom.** Separar os dois foi
+        // recusado no desenho de 22/10 (ver `_ConviteComCupom`): a frase
+        // promete o desconto e o cupom e como se obtem o desconto.
+        const _ConviteComCupom(),
         ..._corpo(),
       ],
     );
