@@ -643,8 +643,22 @@ export const FORMA_DO_TELEFONE = /^\+[1-9][0-9]{7,14}$/;
  */
 export const TETO_DO_SITE = 'https://'.length + 253;
 
-/** O teto de atividades: o TAMANHO da lista fechada, e nao um numero redondo. */
-export const TETO_DE_ATIVIDADES = 6;
+/**
+ * O teto de atividades: o TAMANHO da lista fechada, e nao um numero redondo.
+ *
+ * **DEZ desde 29/10/2026** (`boarding` e `daycare`). Ele estava em **6** desde
+ * 21/10, e **ficou em 6 quando a lista fechada foi a 8 em 28/10** -- o
+ * `CHECK` do banco e o `maxItems` do contrato subiram e esta constante nao.
+ * Consequencia medida: uma entrada com SETE atividades era recusada aqui com
+ * `400 too_many_kinds`, por um teto que o banco e o contrato ja aceitavam. Nao
+ * havia 500 nem perda de dado -- a regua era mais estreita que a do banco, e e
+ * esse o lado seguro de errar --, mas era recusa sem razao.
+ *
+ * Fica dito porque a licao e a forma: tres lugares declaram o MESMO teto (este,
+ * `professionals_atividades_tamanho` e `ProfessionalKinds.maxItems`), e tres
+ * numeros que concordam por enquanto nao sao um teto.
+ */
+export const TETO_DE_ATIVIDADES = 10;
 
 /**
  * As atividades que o corpo pediu, a partir de `kinds` OU de `kind`.

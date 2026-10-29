@@ -16844,9 +16844,36 @@ components:
         **"Profissional autonomo" foi considerado e NAO entrou**, por correcao
         do proprio cliente na mesma data: *"na verdade, nao inclua profissional
         autonomo como atividade, ja esta no tipo"*. Ele e `EntityKind`, nao
-        atividade. E `sitter` nao e valor novo: ele existe desde
-        `20260921000002`, e o que mudou em 28/10 foi o ROTULO dele na tela
-        ("Pet Sitter", antes "Hospedagem") -- rotulo nao aparece neste contrato.
+        atividade.
+
+        **`boarding` E `daycare` ENTRARAM EM 29/10/2026** (decisao do cliente:
+        *"Nao e um ou outro, sao todos .. hospedagem, pet sitter, sao coisas
+        diferentes"* e *"Acrescentar Creche junto"*), com a migracao
+        `20261029000002`. **E ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE
+        MESES, que vale escrita aqui porque este schema e o lugar onde ela
+        deveria ter sido pega:**
+
+        `sitter` nasceu no primeiro commit da listagem de `Perto` com o rotulo
+        **"Hospedagem"**. O valor dizia *pet sitter* e o rotulo dizia
+        *hospedagem*, e as duas coisas sao diferentes -- hospedagem e o pet
+        FICAR no estabelecimento; pet sitter e alguem que CUIDA, muitas vezes na
+        casa do tutor. **Este contrato nunca descreveu o que cada atividade
+        significa**, so listou o `enum`, e por isso nao havia onde a divergencia
+        reprovar. Em 28/10 o rotulo foi corrigido para "Pet Sitter" -- o que
+        alinhou o rotulo ao valor --, e em 29/10 `boarding` entrou para cobrir o
+        que o rotulo errado vinha representando. `daycare` entrou junto, pelo
+        mesmo pedido.
+
+        **`sitter` NAO foi renomeado**, e a decisao tem o custo escrito:
+        renomear valor de `enum` quebra linha ja gravada e exigiria migracao de
+        DADO, nao so de `CHECK`. O valor fica, e agora e coerente.
+
+        **O ROTULO NAO APARECE NESTE CONTRATO**, e e justamente isso que deixou
+        a divergencia viver: quem define rotulo e o painel
+        (`admin/src/diretorio/dominio.ts`) e o app
+        (`app/lib/api/modelos_diretorio.dart`), e desde 28/10/2026
+        `admin/test/diretorio/rotulos-das-atividades.test.ts` compara os DEZ dos
+        dois lados -- antes ele cobria tres.
 
         **Continua sem valor para ONG, e agora a ausencia e desenho concluido
         e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -16876,17 +16903,21 @@ components:
            um so campo nao os expressava. **Isto continua valendo depois de
            28/10**: a lista cresceu em ATIVIDADE, e nenhum dos dois valores
            novos e tipo de entidade.
-      enum: [vet, groomer, walker, sitter, trainer, clinic, store, hospital]
+      enum: [vet, groomer, walker, sitter, trainer, clinic, store, hospital, boarding, daycare]
 
     ProfessionalKinds:
       type: array
       minItems: 1
-      maxItems: 8
+      maxItems: 10
       uniqueItems: true
       description: |
-        As ATIVIDADES da entrada, de 1 a 8 (decisao do cliente de 21/10/2026:
+        As ATIVIDADES da entrada, de 1 a 10 (decisao do cliente de 21/10/2026:
         uma clinica que tambem faz banho e tosa nao precisa escolher; o teto
-        subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`). Espelha
+        subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`, e de 8 para 10
+        em 29/10/2026 com `boarding` e `daycare`). **O teto E o tamanho da lista
+        fechada**, e nao um numero redondo: deixa-lo abaixo recusaria uma entrada
+        que legitimamente faz todas as atividades, com a recusa vindo do teto e
+        nao do vocabulario. Espelha
         `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
         separador.
 

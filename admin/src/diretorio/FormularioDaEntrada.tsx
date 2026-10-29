@@ -271,11 +271,18 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     e['e-nome'] = 'Informe o nome, de 2 a 120 caracteres.';
   }
   if (!PADRAO_DO_SLUG.test(v.slug)) e['e-slug'] = MENSAGEM_DO_SLUG;
-  // DE 1 A 6 (cliente, 21/10/2026). O teto 6 e o tamanho da lista fechada, e a
-  // tela nem tem como passar dele -- sao seis caixas. A conferencia existe
-  // porque o rascunho retomado (`retomarRascunho`) vem de fora da tela.
+  // DE 1 A DEZ. O teto E o tamanho da lista fechada, e a tela nem tem como
+  // passar dele -- sao dez caixas. A conferencia existe porque o rascunho
+  // retomado (`retomarRascunho`) vem de fora da tela.
+  //
+  // **O numero sai de `ORDEM_DAS_ATIVIDADES` e nao e escrito a mao**, e a troca
+  // e consequencia de um defeito medido: o teto ficou em 6 quando a lista
+  // fechada foi a 8 em 28/10/2026, e ninguem viu porque eram dois numeros
+  // escritos em lugares diferentes.
   if (v.atividades.length === 0) e['e-atividade'] = 'Escolha ao menos uma atividade.';
-  else if (v.atividades.length > 6) e['e-atividade'] = 'Até 6 atividades.';
+  else if (v.atividades.length > ORDEM_DAS_ATIVIDADES.length) {
+    e['e-atividade'] = `Até ${String(ORDEM_DAS_ATIVIDADES.length)} atividades.`;
+  }
   else if (new Set(v.atividades).size !== v.atividades.length) {
     e['e-atividade'] = 'A mesma atividade apareceu duas vezes.';
   }

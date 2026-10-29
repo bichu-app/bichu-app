@@ -54,7 +54,33 @@ enum AtividadeDoDiretorio {
   // `ORDEM_DAS_ATIVIDADES` do painel moveria os seis valores antigos e seria
   // mudanca de tela que ninguem pediu.
   hospital('hospital', 'Hospital'),
-  store('store', 'Loja');
+  store('store', 'Loja'),
+  // `boarding` (Hospedagem) e `daycare` (Creche) -- cliente, 29/10/2026,
+  // migracao `20261029000002`: *"Nao e um ou outro, sao todos .. hospedagem,
+  // pet sitter, sao coisas diferentes"* e *"Acrescentar Creche junto"*.
+  //
+  // **ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE MESES, e ela nasceu neste
+  // arquivo.** `sitter` foi declarado no primeiro commit da listagem de `Perto`
+  // (`109770b4`) com o rotulo **'Hospedagem'**: o valor dizia *pet sitter* e o
+  // rotulo dizia *hospedagem*, e as duas coisas sao diferentes -- hospedagem e
+  // o pet FICAR no estabelecimento, pet sitter e alguem que CUIDA, muitas vezes
+  // na casa do tutor. O `openapi.yaml` nunca descreveu o significado de cada
+  // atividade, so listou o `enum`, entao nao havia onde a divergencia reprovar.
+  //
+  // Em 28/10/2026 o cliente trocou o rotulo para 'Pet Sitter', e isso CORRIGIU
+  // o rotulo em vez de renomear o conceito. Em 29/10 `boarding` entrou para
+  // cobrir o que o rotulo errado vinha representando -- inclusive as 27 linhas
+  // de homologacao gravadas como `sitter` por quem leu "Hospedagem" na tela.
+  //
+  // **`sitter` NAO foi renomeado**: renomear valor de `enum` quebra linha ja
+  // gravada e exigiria migracao de DADO, nao so de `CHECK`.
+  //
+  // Entram no FIM pela mesma razao de `hospital` e `store`: `values` e a ordem
+  // de tela em `telas/perto/lista_do_diretorio.dart` e em
+  // `telas/perto/sugerir_profissional.dart`, e reordenar a lista inteira seria
+  // mudanca de tela que ninguem pediu.
+  boarding('boarding', 'Hospedagem'),
+  daycare('daycare', 'Creche');
 
   const AtividadeDoDiretorio(this.codigo, this.rotulo);
 

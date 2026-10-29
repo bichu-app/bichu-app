@@ -349,7 +349,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // (`FORMA_SIMPLES`), e `kinds <@ ARRAY[...]` nao e essa forma. Ela esta
   // declarada no registro de CHECK com literal, com a definicao inteira fixada.
   //
-  // `professionals_atividades_tamanho` (de 1 a 6) **nao esta em registro
+  // `professionals_atividades_tamanho` (de 1 a 10 desde 29/10/2026) **nao esta em registro
   // nenhum**, e isso e deliberado: e faixa numerica pura, sem literal de texto,
   // entao `MENCIONA_LITERAL` nao casa e declara-lo aqui ou lá viraria entrada
   // fantasma -- o mesmo erro que as cinco da vitrine documentam logo abaixo.
@@ -490,9 +490,27 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   //
   // O FLUXO da fila nao mudou: indicacao continua nascendo pendente e passando
   // por aprovacao. O que mudou e so o vocabulario que ela aceita.
+  //
+  // DEZ VALORES desde 29/10/2026 (`20261029000002`): `boarding` (Hospedagem) e
+  // `daycare` (Creche), por decisao do cliente. Eles existem por causa de uma
+  // divergencia de meses -- `sitter` carregava o rotulo "Hospedagem" desde o
+  // primeiro commit da listagem, e o valor dizia *pet sitter*; o rotulo foi
+  // corrigido em 28/10 e `boarding` entrou para cobrir o que ele representava.
+  // `sitter` NAO foi renomeado: renomear valor de `enum` quebra linha gravada.
   'public.directory_suggestions.directory_suggestions_atividade_conhecida': {
     coluna: 'kind',
-    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic', 'store', 'hospital'],
+    valores: [
+      'vet',
+      'groomer',
+      'walker',
+      'sitter',
+      'trainer',
+      'clinic',
+      'store',
+      'hospital',
+      'boarding',
+      'daycare',
+    ],
   },
   // O tipo do contato e DECLARADO, nunca adivinhado: um palpite aceitaria um
   // telefone no campo de site. Nao ha `email` aqui, e nao e esquecimento --
@@ -1453,8 +1471,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // `store` e `hospital` entraram. `store` NAO e a secao `Loja` do produto --
   // e um estabelecimento que vende aparecendo em `Perto`. ONG continua fora,
   // porque continua nao sendo atividade.
+  // DEZ VALORES desde 29/10/2026 (`20261029000002`): `boarding` e `daycare`.
+  // Ver a nota no conjunto de `directory_suggestions`, acima, que carrega a
+  // historia da divergencia entre o valor `sitter` e o rotulo "Hospedagem".
   'public.professionals.professionals_atividades_conhecidas':
-    "CHECK ((kinds <@ ARRAY['vet'::text, 'groomer'::text, 'walker'::text, 'sitter'::text, 'trainer'::text, 'clinic'::text, 'store'::text, 'hospital'::text]))",
+    "CHECK ((kinds <@ ARRAY['vet'::text, 'groomer'::text, 'walker'::text, 'sitter'::text, 'trainer'::text, 'clinic'::text, 'store'::text, 'hospital'::text, 'boarding'::text, 'daycare'::text]))",
   // O ENDERECO DE RUA da entrada do diretorio (migracao `20261018000001`,
   // decisao 9.2 respondida pelo cliente em 18/10/2026). Os quatro `CHECK` sao
   // `IS NULL OR ...` porque as quatro colunas sao OPCIONAIS: profissional

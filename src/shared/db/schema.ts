@@ -1296,7 +1296,23 @@ export type TipoDeProfissional =
   // um valor so a distincao ficaria no NOME do estabelecimento, onde nenhum
   // filtro alcanca.
   | 'store'
-  | 'hospital';
+  | 'hospital'
+  // `boarding` (Hospedagem) e `daycare` (Creche) -- cliente, 29/10/2026,
+  // migracao `20261029000002`.
+  //
+  // **ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE MESES.** `sitter` nasceu no
+  // primeiro commit da listagem de `Perto` com o rotulo "Hospedagem", e o valor
+  // dizia *pet sitter* enquanto o rotulo dizia *hospedagem* -- coisas
+  // diferentes: hospedagem e o pet FICAR no estabelecimento, pet sitter e
+  // alguem que CUIDA, muitas vezes na casa do tutor. O contrato nunca descreveu
+  // o significado de cada atividade, so listou o `enum`, e por isso nada
+  // reprovava. Em 28/10 o rotulo foi corrigido para "Pet Sitter" e em 29/10
+  // `boarding` entrou para cobrir o que o rotulo errado representava.
+  //
+  // **`sitter` NAO foi renomeado**: renomear valor de `enum` quebra linha ja
+  // gravada e exigiria migracao de DADO. Ele fica, e agora e coerente.
+  | 'boarding'
+  | 'daycare';
 
 /**
  * Sem `'community'`. A emenda 1 do ADR-0011 negou a criacao pela comunidade em
