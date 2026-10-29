@@ -6204,11 +6204,38 @@ export interface paths {
         put?: never;
         /**
          * Cadastra uma entrada do diretorio
-         * @description **A entrada nasce RASCUNHO** (`professionals.status` tem
-         *     `DEFAULT 'draft'`), e so aparece em `Perto` depois de um `PATCH` com
-         *     `status: published`. Nao e zelo: o cadastro de um estabelecimento tem
-         *     campos que o operador costuma buscar em duas sessoes, e publicar na
-         *     criacao faria o diretorio mostrar meia clinica.
+         * @description **A ENTRADA NASCE PUBLICADA desde 29/10/2026**, e isto REVERTEU o
+         *     desenho anterior por decisao do cliente -- verbatim: *"cobrar os dados
+         *     no cadastro"*, sobre o pedido *"quando cadastrar um estabelecimento no
+         *     backoffice, ele ja deve salvar com o padrao publicado e nao como
+         *     rascunho"*.
+         *
+         *     O texto que estava aqui dizia: *"a entrada nasce RASCUNHO ... o cadastro
+         *     de um estabelecimento tem campos que o operador costuma buscar em duas
+         *     sessoes, e publicar na criacao faria o diretorio mostrar meia clinica"*.
+         *     **O risco era real e a resposta e outra**: em vez de nascer rascunho, o
+         *     cadastro COBRA os tres campos da publicacao -- `city`, `state` e
+         *     `phone_e164` --, entao nao ha como publicar meia clinica. Quem precisa
+         *     das duas sessoes manda `status: draft` de proposito.
+         *
+         *     **As duas consequencias, ditas em voz alta porque sao quebra de
+         *     comportamento que nenhuma ferramenta de contrato acusa:**
+         *
+         *     1. corpo SEM `status` agora cria entrada NO AR, e nao rascunho;
+         *     2. corpo sem `city`, `state` ou `phone_e164` e **recusado com `400`**
+         *        nomeando os campos (`AdminDirectoryEntryMissingField`), onde antes
+         *        respondia `201` com `status: draft`.
+         *
+         *     A recusa e do SERVIDOR, pela MESMA funcao (`faltasParaPublicar`) que
+         *     recusa a publicacao por `PATCH` e que preenche `missing_to_publish`:
+         *     duas definicoes de "completo" e o que o ADR-0023 secao 2 proibe, e um
+         *     portao que vivesse so no formulario nao seria portao.
+         *
+         *     **A fila de indicacao vinda do app NAO muda**, e o cliente foi
+         *     explicito: ela e outra porta, nasce pendente e continua passando por
+         *     aprovacao. A entrada que o aceite cria segue a regra daquele caminho
+         *     (`approveAdminDirectorySuggestion`), que publica quando esta completa e
+         *     guarda como rascunho quando nao esta.
          *
          *     **`source` e `import`, e `claim_status` e `unclaimed`.** Nao e atalho:
          *     sao os unicos valores que o `CHECK professionals_aceite_antes_do_perfil`
@@ -10061,9 +10088,36 @@ export interface components {
          *     **"Profissional autonomo" foi considerado e NAO entrou**, por correcao
          *     do proprio cliente na mesma data: *"na verdade, nao inclua profissional
          *     autonomo como atividade, ja esta no tipo"*. Ele e `EntityKind`, nao
-         *     atividade. E `sitter` nao e valor novo: ele existe desde
-         *     `20260921000002`, e o que mudou em 28/10 foi o ROTULO dele na tela
-         *     ("Pet Sitter", antes "Hospedagem") -- rotulo nao aparece neste contrato.
+         *     atividade.
+         *
+         *     **`boarding` E `daycare` ENTRARAM EM 29/10/2026** (decisao do cliente:
+         *     *"Nao e um ou outro, sao todos .. hospedagem, pet sitter, sao coisas
+         *     diferentes"* e *"Acrescentar Creche junto"*), com a migracao
+         *     `20261029000002`. **E ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE
+         *     MESES, que vale escrita aqui porque este schema e o lugar onde ela
+         *     deveria ter sido pega:**
+         *
+         *     `sitter` nasceu no primeiro commit da listagem de `Perto` com o rotulo
+         *     **"Hospedagem"**. O valor dizia *pet sitter* e o rotulo dizia
+         *     *hospedagem*, e as duas coisas sao diferentes -- hospedagem e o pet
+         *     FICAR no estabelecimento; pet sitter e alguem que CUIDA, muitas vezes na
+         *     casa do tutor. **Este contrato nunca descreveu o que cada atividade
+         *     significa**, so listou o `enum`, e por isso nao havia onde a divergencia
+         *     reprovar. Em 28/10 o rotulo foi corrigido para "Pet Sitter" -- o que
+         *     alinhou o rotulo ao valor --, e em 29/10 `boarding` entrou para cobrir o
+         *     que o rotulo errado vinha representando. `daycare` entrou junto, pelo
+         *     mesmo pedido.
+         *
+         *     **`sitter` NAO foi renomeado**, e a decisao tem o custo escrito:
+         *     renomear valor de `enum` quebra linha ja gravada e exigiria migracao de
+         *     DADO, nao so de `CHECK`. O valor fica, e agora e coerente.
+         *
+         *     **O ROTULO NAO APARECE NESTE CONTRATO**, e e justamente isso que deixou
+         *     a divergencia viver: quem define rotulo e o painel
+         *     (`admin/src/diretorio/dominio.ts`) e o app
+         *     (`app/lib/api/modelos_diretorio.dart`), e desde 28/10/2026
+         *     `admin/test/diretorio/rotulos-das-atividades.test.ts` compara os DEZ dos
+         *     dois lados -- antes ele cobria tres.
          *
          *     **Continua sem valor para ONG, e agora a ausencia e desenho concluido
          *     e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -10095,11 +10149,15 @@ export interface components {
          *        novos e tipo de entidade.
          * @enum {string}
          */
-        ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic" | "store" | "hospital";
+        ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic" | "store" | "hospital" | "boarding" | "daycare";
         /**
-         * @description As ATIVIDADES da entrada, de 1 a 8 (decisao do cliente de 21/10/2026:
+         * @description As ATIVIDADES da entrada, de 1 a 10 (decisao do cliente de 21/10/2026:
          *     uma clinica que tambem faz banho e tosa nao precisa escolher; o teto
-         *     subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`). Espelha
+         *     subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`, e de 8 para 10
+         *     em 29/10/2026 com `boarding` e `daycare`). **O teto E o tamanho da lista
+         *     fechada**, e nao um numero redondo: deixa-lo abaixo recusaria uma entrada
+         *     que legitimamente faz todas as atividades, com a recusa vindo do teto e
+         *     nao do vocabulario. Espelha
          *     `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
          *     separador.
          *
@@ -10513,6 +10571,8 @@ export interface components {
              */
             display_name: string;
             kind: components["schemas"]["ProfessionalKind"];
+            /** @default professional */
+            entity_kind: components["schemas"]["EntityKind"];
             city: string;
             state: string;
             neighborhood?: string;
@@ -10616,6 +10676,7 @@ export interface components {
             reference: string;
             display_name: string;
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
             city: string;
             /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
@@ -10898,6 +10959,7 @@ export interface components {
             reference: string;
             display_name: string;
             kind: components["schemas"]["ProfessionalKind"];
+            entity_kind: components["schemas"]["EntityKind"];
             /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
             city: string;
             /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
@@ -11055,6 +11117,43 @@ export interface components {
          */
         DirectoryEntryStatus: "draft" | "published" | "hidden" | "removed";
         /**
+         * @description **COM QUE SITUACAO A ENTRADA NASCE NO PAINEL** (decisao do cliente de
+         *     29/10/2026, verbatim: *"cobrar os dados no cadastro"*, sobre o pedido
+         *     *"quando cadastrar um estabelecimento no backoffice, ele ja deve salvar
+         *     com o padrao publicado e nao como rascunho"*).
+         *
+         *     **AUSENTE VALE `published`, e esta e a mudanca de COMPORTAMENTO que o
+         *     `oasdiff` nao ve.** Ate 28/10/2026 `AdminDirectoryEntryInput` nao tinha
+         *     `status` e o `POST` criava SEMPRE rascunho; a partir de 29/10 o corpo sem
+         *     `status` cria entrada NO AR. Acrescentar propriedade opcional e
+         *     compativel para a ferramenta, e o efeito nao e: um chamador antigo que
+         *     mandava corpo completo e esperava rascunho passa a publicar.
+         *
+         *     **E PUBLICAR COBRA CIDADE, UF E TELEFONE.** O mesmo chamador antigo, se
+         *     mandava corpo INCOMPLETO contando com o rascunho, passa a receber `400`
+         *     nomeando os campos que faltam (`AdminDirectoryEntryMissingField`), em vez
+         *     de um `201` com `status: draft`. **Quem recusa e o SERVIDOR**, pela MESMA
+         *     funcao que recusa a publicacao por `PATCH` e que preenche
+         *     `missing_to_publish` -- nao ha caminho em que o formulario seja a unica
+         *     guarda.
+         *
+         *     **`draft` CONTINUA EXISTINDO como escolha explicita** (o cliente
+         *     confirmou): quem quer guardar trabalho incompleto manda `status: draft`,
+         *     e ai nada e cobrado. O que mudou e o PADRAO, nao a possibilidade.
+         *
+         *     **So estes dois valores, e nao os quatro de `DirectoryEntryStatus`.**
+         *     `hidden` e `removed` sao RETIRADA -- tirar do ar o que esta no ar --, e
+         *     "nasce retirada" nao e estado que signifique algo. Retirar e um `PATCH`
+         *     com `status`, e e ele que carrega o ato explicito.
+         *
+         *     **A fila de indicacao vinda do app NAO muda** (o cliente foi explicito):
+         *     ela e outra porta, nasce pendente e continua passando por aprovacao, e a
+         *     entrada que o aceite cria segue a regra de completude dela.
+         * @default published
+         * @enum {string}
+         */
+        AdminDirectoryEntryCreateStatus: "published" | "draft";
+        /**
          * @description Como a linha nasceu. Espelha `professionals.source`. **Somente
          *     leitura**: nao ha campo para enviar `source`, e o painel grava sempre
          *     `import`, que e o unico valor que o `CHECK
@@ -11185,6 +11284,8 @@ export interface components {
              *     regra de recusa da logo.
              */
             photo_upload_id?: string;
+            images?: components["schemas"]["DirectoryGalleryImagesInput"];
+            status?: components["schemas"]["AdminDirectoryEntryCreateStatus"];
             neighborhood?: string;
             /**
              * @description CEP com oito digitos, **sem mascara e sem hifen** -- mesmo formato
@@ -11239,6 +11340,7 @@ export interface components {
             logo_upload_id?: string | null;
             /** Format: uuid */
             photo_upload_id?: string | null;
+            images?: components["schemas"]["DirectoryGalleryImagesInput"];
             postal_code?: string | null;
             street?: string | null;
             street_number?: string | null;
@@ -11305,6 +11407,8 @@ export interface components {
              *     `status` e `url` da logo.
              */
             photo?: components["schemas"]["AdminCatalogImage"] | null;
+            /** @description Na ordem da pagina do local. `position` 0 e a capa da galeria. Vazia e estado normal. */
+            images: components["schemas"]["AdminCatalogGalleryImage"][];
             status: components["schemas"]["DirectoryEntryStatus"];
             /**
              * @description **Somente leitura**, derivada de `entity_verifications`. Esta aqui
@@ -13593,12 +13697,23 @@ export interface components {
              *     600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
              *     outro e `400 upload_not_usable`.
              *
+             *     **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
+             *     verbatim: *"implemente a tabela de galeria entao"*), com a galeria
+             *     de ate oito fotos da entrada -- o *"padrao igual na pagina de
+             *     eventos"* que ele pediu. **Separado de `directory_photo`, e nao o
+             *     mesmo**, pelo criterio que separou `user_showcase` de `user_photo`:
+             *     aquele e a foto UNICA do lugar, com duas derivadas (`banner` 1280 x
+             *     720 e `card` 1024 x 576), e este sao as da GALERIA, que pedem
+             *     tambem a miniatura de 480 x 360 que a faixa da galeria desenha --
+             *     exatamente as tres derivadas do encontro da `Rede`. Minima 600 x
+             *     600, a mesma de `network_event` e de `directory_photo`.
+             *
              *     **`user_photo` nao esta aqui, de proposito**: a foto da propria
              *     pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
              *     app, e nao pelo painel.
              * @enum {string}
              */
-            purpose: "store_item" | "network_event" | "directory_logo" | "directory_photo";
+            purpose: "store_item" | "network_event" | "directory_logo" | "directory_photo" | "directory_gallery";
             /**
              * @description SVG nunca. HEIC nao, porque a origem e um computador de mesa.
              * @enum {string}
@@ -13608,7 +13723,9 @@ export interface components {
              * @description Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
              *     17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
              *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
-             *     cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+             *     cliente de 01/10; antes, 1600 x 900), 256 x 256 para
+             *     `directory_logo` e 600 x 600 para `directory_photo` e
+             *     `directory_gallery`. Duas conferencias: a
              *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
              *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
              *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
@@ -14186,6 +14303,52 @@ export interface components {
             crop?: components["schemas"]["ImageCrop"];
         };
         /**
+         * @description A GALERIA de fotos da entrada do diretorio (decisao do cliente de
+         *     29/10/2026, verbatim: *"implemente a tabela de galeria entao"*, depois
+         *     do pedido *"no backoffice para cadastrar um parceiro, so esta
+         *     permitindo subir uma foto, deve ser padrao igual na pagina de
+         *     eventos"*).
+         *
+         *     **E a galeria do encontro da `Rede`, campo por campo**, e isso e
+         *     literal: ate 8 imagens, **na ordem em que a pagina do local as mostra**,
+         *     a primeira e a capa da galeria; cada uma e um envio de
+         *     `createAdminCatalogImageIntent` com `purpose: directory_gallery`; a
+         *     lista SUBSTITUI a anterior inteira -- reordenar e mandar a ordem nova,
+         *     escolher a capa e por a imagem em primeiro lugar, remover e omitir, `[]`
+         *     tira todas. `upload_id` repetido e recusado com `400`
+         *     (`code: duplicate_upload`), e envio de outro proposito, vencido ou ja
+         *     usado em OUTRA entrada com `400` (`code: upload_not_usable`), sem dizer
+         *     qual dos casos ocorreu.
+         *
+         *     **ELA NAO SUBSTITUI `logo_upload_id` NEM `photo_upload_id`**, e as duas
+         *     ausencias sao desenho:
+         *
+         *     - a **logo e UMA** porque e a marca, desenhada num quadrado ao lado do
+         *       nome, e a listagem le so ela. "Oito logos" nao e estado que signifique
+         *       algo;
+         *     - a **foto do local continua UMA** -- e esta e a unica divergencia em
+         *       relacao ao encontro, onde a capa E a `position` 0 e nao existe campo
+         *       de capa. `photo_upload_id` fica porque JA existe, no contrato e em
+         *       dado aplicado em homologacao, e tira-lo seria
+         *       `response-property-removed` somado a uma migracao de dado que nenhuma
+         *       decisao pediu.
+         *
+         *     **`alt_text` e OPCIONAL**, como nas duas galerias irmas (`Loja` desde
+         *     17/10/2026, `Rede` desde 21/10, as duas por pedido do cliente: *"pode
+         *     remover a descricao da imagem"*). Quando vem, vale de 2 a 150
+         *     caracteres; quando nao vem, a imagem fica sem texto alternativo e quem
+         *     desenha cai no `display_name` da entrada. **Campo presente e vazio e
+         *     recusado**: o painel OMITE o campo em vez de mandar `""`.
+         *
+         *     **A galeria nao sai em `DirectoryEntrySummary` nem em
+         *     `DirectoryEntryPublic`**, pela mesma razao que `logo` e `photo` nunca
+         *     sairam: expor imagem de estabelecimento em `Perto` depende de decisao do
+         *     cliente (ADR-0010), e a listagem do aplicativo esta MEDIDA como o lugar
+         *     onde ela nao cabe -- vinte faixas 16:9 custariam 65,6 MiB de imagem
+         *     decodificada.
+         */
+        DirectoryGalleryImagesInput: components["schemas"]["CatalogImageInput"][];
+        /**
          * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
          *     mostra**. A primeira e a capa (a imagem do cartao da vitrine). Cada uma
          *     e um envio de `createAdminCatalogImageIntent` com `purpose:
@@ -14298,22 +14461,25 @@ export interface components {
              * Format: uuid
              * @description O identificador que o painel devolve em `images` para manter,
              *     reordenar ou remover esta imagem. **Nulo** quando a conta que
-             *     enviou a imagem foi apagada: a imagem continua no produto ou no
-             *     encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
-             *     NULL`), e o painel so a mantem reenviando a galeria sem ela ou
-             *     com uma imagem nova.
+             *     enviou a imagem foi apagada: a imagem continua no produto, no
+             *     encontro ou na entrada do diretorio
+             *     (`catalog_images.upload_intent_id` e `ON DELETE SET NULL`), e o
+             *     painel so a mantem reenviando a galeria sem ela ou com uma
+             *     imagem nova.
              */
             upload_id: string | null;
             position: number;
             /**
              * @description **Nulo** quando a imagem foi gravada sem texto alternativo, o
              *     que a `Loja` passou a permitir em 17/10/2026
-             *     (`StoreCatalogImagesInput`) e a `Rede` em 21/10/2026
-             *     (`CatalogImagesInput`, decisao do cliente). Nos dois recursos a
-             *     escrita aceita a ausencia, entao a leitura pode trazer nulo em
-             *     qualquer posicao -- **inclusive na capa do encontro**, que e o
-             *     custo que o cliente aceitou por escrito. Quem desenha cai no
-             *     nome do produto ou no titulo do encontro.
+             *     (`StoreCatalogImagesInput`), a `Rede` em 21/10/2026
+             *     (`CatalogImagesInput`, decisao do cliente) e a galeria do
+             *     diretorio desde que nasceu, em 29/10/2026
+             *     (`DirectoryGalleryImagesInput`). Nos TRES recursos a escrita
+             *     aceita a ausencia, entao a leitura pode trazer nulo em qualquer
+             *     posicao -- **inclusive na capa do encontro**, que e o custo que
+             *     o cliente aceitou por escrito. Quem desenha cai no nome do
+             *     produto, no titulo do encontro ou no `display_name` da entrada.
              */
             alt_text: string | null;
         };
