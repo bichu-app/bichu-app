@@ -5,11 +5,16 @@ import 'modelos_passkey.dart';
 
 /// As operacoes de `/v1/auth/passkey` do contrato (BICHUS-301).
 ///
-/// **Quatro das seis operacoes do contrato estao aqui.** `listPasskeys` e
-/// `revokePasskey` ficaram de fora porque o escopo decidido e **cadastro e
-/// entrada**: as duas que faltam servem uma tela de gerenciar aparelhos, que
-/// nao existe. Escrever o cliente delas agora seria codigo sem chamador --
+/// **Cinco das seis operacoes do contrato estao aqui.** `revokePasskey` ficou
+/// de fora porque ela serve uma tela de gerenciar aparelhos, que nao existe --
 /// e codigo sem chamador nao e medido por nada.
+///
+/// `listPasskeys` entrou em 28/10/2026, e **com chamador**:
+/// `FiacaoDoPasskey.reconciliarComAConta` a usa depois de uma entrada por
+/// senha, para descobrir que esta conta tem credencial ativa num aparelho onde
+/// o app ainda nao marcou nada -- o caso da credencial que chegou por
+/// SINCRONIZACAO, por reinstalacao ou por restauracao de backup. Sem ela, o
+/// portao de `tentarEntrar` ficaria fechado para sempre nesses aparelhos.
 ///
 /// **A passkey SOMA a senha, nunca a substitui.** `entrar`, `renovar` e
 /// `reautenticar` continuam existindo em `AuthApi` sem mudanca nenhuma, e e
@@ -94,5 +99,28 @@ class PasskeysApi {
       ),
     );
     return Sessao.doJson(json);
+  }
+
+  /// `GET /auth/passkeys`. **EXIGE SESSAO.**
+  ///
+  /// As credenciais **ativas** da conta do token, mais recente primeiro.
+  /// Revogadas nao aparecem -- elas continuam na base (nada e apagado, decisao
+  /// do cliente de 26/10) e nao servem a nenhuma tela.
+  ///
+  /// **Nao e oraculo de enumeracao**, ao contrario do que `allowCredentials`
+  /// em `comecarEntrada` seria: aqui ha `Bearer`, e a resposta e sobre a conta
+  /// de quem pergunta. A operacao tambem nao devolve chave publica nem
+  /// `credential_id` cru -- nada que sirva para montar uma assercao.
+  ///
+  /// Quem chama e `FiacaoDoPasskey.reconciliarComAConta`, que so olha se a
+  /// lista esta VAZIA ou nao.
+  Future<List<Passkey>> listar() async {
+    final json = await _api.get('/auth/passkeys');
+    final itens = json['items'];
+    if (itens is! List) return const <Passkey>[];
+    return itens
+        .whereType<Map<String, dynamic>>()
+        .map(Passkey.doJson)
+        .toList();
   }
 }
