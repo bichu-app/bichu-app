@@ -1258,6 +1258,21 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
+      // O `ensureVisible` ENTROU EM 28/10/2026, e nao e cerimonia: a folha
+      // ganhou o campo de BAIRRO (BICHUS-315), que nasce ACIMA das pastilhas
+      // -- `CampoDeTextoDoFiltro` vem antes de `GrupoDeFiltro` na folha -- e
+      // empurrou `Passeador` abaixo da dobra da viewport de 600 dp do teste.
+      // Sem ele o `tap` erra o alvo (`would not hit test on the specified
+      // widget`), a pastilha nao e marcada, o `Aplicar` fica desabilitado por
+      // nao haver mudanca, e o caso reprova em `chamadas` -- uma reprova que
+      // NAO fala do defeito que ele mede.
+      //
+      // **A folha ROLA** (`Flexible` + `SingleChildScrollView`, com
+      // `isScrollControlled: true`), entao no aparelho a pastilha continua
+      // alcancavel: o que mudou e que ela deixou de estar visivel de saida
+      // numa tela curta.
+      await tester.ensureVisible(find.text('Passeador'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Passeador'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));

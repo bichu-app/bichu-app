@@ -723,6 +723,69 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     final emUso = _cidadeEmUso;
     if (emUso != null) cidades.add(emUso);
     return ControleDeFiltro(
+      // O BAIRRO, QUE A PESSOA DIGITA (BICHUS-315, 28/10/2026).
+      //
+      // Pedido do cliente: *"No filtro da pagina de comunidade, precisamos
+      // implementar o filtro de bairro, pois em Sao Paulo a cidade e muito
+      // grande."* **A razao dele e o requisito**: `city` sozinha nao recorta
+      // nada numa cidade do tamanho de Sao Paulo.
+      //
+      // ## POR QUE CAMPO E NAO LISTA, e a escolha e medida
+      //
+      // `neighborhood` e **filtro de TEXTO**, e o contrato diz isso com as
+      // proprias palavras: *"`city`, `state` e `neighborhood` sao rotulo de
+      // exibicao e filtro de texto, jamais fonte de coordenada"*. Nao existe
+      // lista canonica de bairros, nao ha operacao que a devolva e nao ha
+      // geocodificacao (ADR-0006): um seletor com todos os bairros de Sao
+      // Paulo nao tem de onde sair.
+      //
+      // A alternativa -- uma lista dos bairros PRESENTES no recorte atual --
+      // foi considerada e descartada, e o motivo ja estava escrito na prosa
+      // do proprio `CampoDeTextoDoFiltro`: *"montar a lista a partir dos
+      // casos que voltaram ofereceria um recorte diferente a cada pagina"*.
+      // **E ela falha PIOR justamente no caso dele**: o teto do contrato e
+      // `limit: 20`, entao numa cidade com 87 entradas a lista ofereceria os
+      // bairros de 20, mudaria a cada `Carregar mais` e esconderia o bairro
+      // que a pessoa procura -- que em Sao Paulo quase nunca esta entre as 20
+      // primeiras. O caso `um bairro que NÃO está em nenhuma entrada
+      // carregada pode ser aplicado` e essa escolha em forma mensuravel: ele
+      // reprova com a lista derivada.
+      //
+      // **O grupo `Cidade` logo abaixo E lista derivada, e nao e
+      // contradicao**: a cidade tem uma fonte que o bairro nao tem -- o
+      // aparelho a resolve (`CaixaDeLocalizacao`, 20/10/2026), e e ela que a
+      // folha injeta marcada. Nenhuma peca deste app resolve o bairro de quem
+      // olha.
+      //
+      // ## NO CORPO, E NAO NA BARRA
+      //
+      // Ele entra na folha de filtros, que sai do controle do CORPO da tela
+      // -- padrao de listagem deste projeto, e o mesmo lugar da busca e da
+      // ordenacao. Nada subiu para a `AppBar`.
+      //
+      // `obrigatorio` NAO e passado (o padrao e `false`), e a diferenca e
+      // inteira: com ele, campo vazio desabilitaria o `Aplicar` e o `Limpar`
+      // da folha nao limparia este campo. Sem ele, apagar o bairro e um
+      // recorte valido -- e e assim que quem digitou um bairro volta a ver a
+      // cidade inteira sem fechar a folha.
+      //
+      // `valor` e **o que o recorte de fato tem**, e nao uma sugestao: campo
+      // que mostra bairro que o servidor nao aplicou e a tela mentindo sobre
+      // o proprio recorte. Por isso sai de `_recorte.bairro`.
+      //
+      // Os dois numeros sao do CONTRATO (`minLength: 2`, `maxLength: 80` em
+      // `neighborhood`) e nao escolhas desta tela.
+      campos: <CampoDeTextoDoFiltro>[
+        CampoDeTextoDoFiltro(
+          chave: 'neighborhood',
+          rotulo: ListaDoDiretorio.rotuloDoBairro,
+          valor: _recorte.bairro,
+          textoDeValidacao: ListaDoDiretorio.validacaoDoBairro,
+          limite: 80,
+          minimoDeCaracteres: 2,
+          exemplo: ListaDoDiretorio.exemploDoBairro,
+        ),
+      ],
       grupos: <GrupoDeFiltro>[
         if (cidades.isNotEmpty)
           GrupoDeFiltro(
@@ -806,6 +869,17 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
       }
     }
 
+    // O BAIRRO DIGITADO (BICHUS-315). **Texto digitado e pastilha escolhida
+    // chegam na MESMA chave de `EscolhaDaFolha.filtros`** -- e assim que o
+    // componente foi desenhado, e por isso o bairro se le igual a `kind`.
+    //
+    // **Vazio LIMPA, e nao e "nao mexi".** Diferente da cidade logo acima,
+    // aqui nao ha valor derivado para distinguir: o bairro nao tem fonte no
+    // aparelho, entao o que a folha devolve e sempre uma decisao da pessoa.
+    // Apagar o campo e um recorte valido -- e a volta para a cidade inteira.
+    final bairro = escolha.filtros['neighborhood']?.trim();
+    final semBairro = bairro == null || bairro.isEmpty;
+
     _trocarRecorte(
       _recorte.com(
         atividade: AtividadeDoDiretorio.porCodigo(atividade),
@@ -814,6 +888,8 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         limparNivel: nivel == null,
         cidade: cidade,
         limparCidade: limparCidade,
+        bairro: semBairro ? null : bairro,
+        limparBairro: semBairro,
         ordem: OrdemDoDiretorio.porCodigo(escolha.ordem),
         pagina: 1,
       ),

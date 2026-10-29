@@ -61,9 +61,7 @@ import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 
-import 'ajuda_de_tela.dart';
 import 'perto_com_dados_test.dart'
     show
         abrirPerto,
@@ -102,14 +100,22 @@ Future<void> abrirAFolha(WidgetTester tester) async {
 
 /// O campo de bairro **de dentro da folha**.
 ///
-/// Recortado pelo `BichuField` do rotulo: a tela tem outro campo de texto (a
-/// busca por nome, que continua montada atras da folha), e um
-/// `find.byType(TextField)` cru pegaria os dois.
+/// Recortado pelo `BichuField` cujo `rotulo` e o do bairro: a tela tem outro
+/// campo de texto -- a busca por nome, que continua montada ATRAS da folha --,
+/// e um `find.byType(TextField)` cru pegaria os dois.
+///
+/// **Casa pela PROPRIEDADE `rotulo`, e nao pelo texto desenhado.** O texto
+/// visivel e `Bairro (opcional)`: `BichuField` acrescenta o sufixo quando
+/// `opcional` e verdadeiro, e o campo do bairro e opcional de proposito
+/// (apagar o bairro e um recorte valido). Um `find.text('Bairro')` nao casa
+/// com `'Bairro (opcional)'` -- custou uma execucao descobrir, e e justamente
+/// o tipo de filtro que **nao casa e devolve zero de tudo**, parecendo que o
+/// campo nao existe. Casar pela propriedade sobrevive ao dia em que o sufixo
+/// mudar de forma.
 Finder campoDoBairro() {
   return find.descendant(
-    of: find.ancestor(
-      of: find.text(ListaDoDiretorio.rotuloDoBairro),
-      matching: find.byType(BichuField),
+    of: find.byWidgetPredicate(
+      (w) => w is BichuField && w.rotulo == ListaDoDiretorio.rotuloDoBairro,
     ),
     matching: find.byType(TextField),
   );
