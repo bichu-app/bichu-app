@@ -536,7 +536,7 @@ void main() {
         FormatoDoRecorte.publicacaoDoMural,
         FormatoDoRecorte.capaDoEncontro,
         FormatoDoRecorte.logoDaIndicacao,
-        FormatoDoRecorte.fotoNaConversa,
+        FormatoDoRecorte.fotoDoAchado,
       ]) {
         expect(formato.circular, isFalse, reason: '$formato');
       }
@@ -566,7 +566,7 @@ void main() {
         FormatoDoRecorte.publicacaoDoMural,
         FormatoDoRecorte.capaDoEncontro,
         FormatoDoRecorte.logoDaIndicacao,
-        FormatoDoRecorte.fotoNaConversa,
+        FormatoDoRecorte.fotoDoAchado,
       ]) {
         expect(formato.aspecto, isNotNull);
         expect(formato.aspecto, greaterThan(0));

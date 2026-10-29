@@ -20,6 +20,7 @@ import '../../widgets/saida_da_tela.dart';
 import '../localizacao/antessala_de_localizacao.dart';
 import '../localizacao/captura_de_localizacao.dart';
 import 'tela_registrar_achado.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import 'textos_do_achado.dart';
 
 /// **Achei ESTE pet** — o destino de `Encontrei este animal` na pagina publica
@@ -146,21 +147,55 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
   }
 
   Future<void> _tirarFoto() async {
-    final foto = await Escopo.of(context).camera.tirarFoto();
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.tirarFoto();
     if (!mounted) return;
-    setState(() {
-      if (foto != null) _rascunho.foto = foto;
-    });
+    // A consulta a camera corre mesmo sem foto: ela existe para a tela saber
+    // se `Tirar foto` ainda leva a algum lugar, e cancelar o seletor nao muda
+    // essa resposta. Era assim antes do recorte e continua sendo.
+    if (foto == null) {
+      await _consultarACamera();
+      return;
+    }
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted) return;
+    if (ajustada != null) setState(() => _rascunho.foto = ajustada);
     await _consultarACamera();
   }
 
   Future<void> _escolherDaGaleria() async {
-    final foto = await Escopo.of(context).camera.escolherDaGaleria();
-    if (!mounted) return;
-    setState(() {
-      if (foto != null) _rascunho.foto = foto;
-    });
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    setState(() => _rascunho.foto = ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o rascunho.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher.
+  ///
+  /// **Esta e a tela de quem NAO TEM CONTA**: a foto sobe por
+  /// `createFinderPhotoUploadIntent`, e o `kind` dela (`finder_photo`) esta
+  /// na MESMA `ESPECIES_DO_ACHADO` do registro com conta -- entao o servidor
+  /// aplica a MESMA `DERIVADA_DA_FOTO_DO_ACHADO` de 1024 x 1126. Medido em
+  /// 29/10/2026 em `src/bin/worker.ts`, cuja varredura de higiene *"liga o
+  /// worker aos DOIS caminhos do achado"*; nao foi presumido da outra tela.
+  ///
+  /// E aqui o corte errado custa o mesmo: a foto e a unica prova de que o
+  /// animal e aquele.
+  Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.fotoDoAchado,
+        titulo: 'Ajuste a foto do animal',
+      );
 
   /// O calendario de `Outra data`, igual ao de F3.5.
   Future<void> _escolherData() async {

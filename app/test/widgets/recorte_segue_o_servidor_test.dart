@@ -147,6 +147,29 @@ DimensaoDaDerivada aVariante(
   return achada.first;
 }
 
+/// Onde o servidor declara os `kind` de envio que a higiene do achado cobre.
+///
+/// **Relativo a `app/`, com o `../`**, pelo mesmo motivo de
+/// [caminhoDasDerivadas].
+const String caminhoDasEspeciesDoAchado =
+    '../src/modules/media/ports/fotos-do-achado.ts';
+
+/// Extrai os `kind` de `ESPECIES_DO_ACHADO`, na ordem em que estao escritos.
+///
+/// Lista vazia quando nao acha a constante -- e quem chama tem de reprovar
+/// nisso ANTES de comparar conteudo, porque `containsAll` de lista vazia
+/// aprova qualquer coisa.
+List<String> especiesDoAchado(String fonte) {
+  final daConstante = RegExp(
+    r'export\s+const\s+ESPECIES_DO_ACHADO\s*=\s*\[([^\]]*)\]',
+  ).firstMatch(fonte);
+  if (daConstante == null) return const <String>[];
+  return RegExp(r"'([a-z_]+)'")
+      .allMatches(daConstante.group(1)!)
+      .map((m) => m.group(1)!)
+      .toList();
+}
+
 void main() {
   late Map<String, List<DimensaoDaDerivada>> lidas;
 
@@ -216,6 +239,18 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
       expect(dimensoesDe(fonte), isEmpty);
     });
 
+    test('a lista de ESPECIES_DO_ACHADO, e o vazio quando ela nao existe', () {
+      expect(
+        especiesDoAchado(
+          "export const ESPECIES_DO_ACHADO = ['a_photo', 'b_photo'] as const;",
+        ),
+        <String>['a_photo', 'b_photo'],
+      );
+      // Cego devolve VAZIO, e nunca uma lista plausivel: e o vazio que faz
+      // quem chama reprovar em vez de aprovar no silencio.
+      expect(especiesDoAchado('nada aqui'), isEmpty);
+    });
+
     test('REPROVA quando o export procurado nao existe', () {
       expect(
         () => aVariante(<String, List<DimensaoDaDerivada>>{}, 'X', 'card'),
@@ -280,10 +315,25 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
         'card',
         FormatoDoRecorte.publicacaoDoMural,
       ),
+      // OS TRES PONTOS QUE COMPARTILHAM A DERIVADA DO ACHADO, e eles sao
+      // casos SEPARADOS de proposito: a reprovacao tem de dizer qual tela
+      // passou a enquadrar errado, e nao "o achado". Que os tres usem a mesma
+      // derivada e fato do SERVIDOR, medido e travado no grupo
+      // `os dois kind do achado` abaixo -- nao e conveniencia deste arquivo.
       'foto na conversa': (
         'DERIVADA_DA_FOTO_DO_ACHADO',
         'card',
-        FormatoDoRecorte.fotoNaConversa,
+        FormatoDoRecorte.fotoDoAchado,
+      ),
+      'registro de achado (quem TEM conta)': (
+        'DERIVADA_DA_FOTO_DO_ACHADO',
+        'card',
+        FormatoDoRecorte.fotoDoAchado,
+      ),
+      'encontrei este pet (quem NAO tem conta)': (
+        'DERIVADA_DA_FOTO_DO_ACHADO',
+        'card',
+        FormatoDoRecorte.fotoDoAchado,
       ),
     };
 
@@ -325,6 +375,58 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
         );
       });
     }
+
+    test(
+        'ISCA — os DOIS kind do achado caem na MESMA derivada, e por isso a '
+        'janela e uma so', () {
+      // **O QUE ESTE CASO IMPEDE.** Tres pontos de upload do app --
+      // o registro de achado, o "encontrei este pet" e a foto na conversa --
+      // usam `FormatoDoRecorte.fotoDoAchado`. Eles sobem por intencoes
+      // DIFERENTES: `createFoundReportPhotoUploadIntent` (quem tem conta) e
+      // `createFinderPhotoUploadIntent` (quem nao tem).
+      //
+      // Partilharem UMA janela so e valido porque o servidor aplica a eles a
+      // MESMA derivada, e isso nao e suposicao: a varredura de higiene de
+      // `src/bin/worker.ts` -- que o proprio comentario de la descreve como o
+      // que *"liga o worker aos DOIS caminhos do achado"* -- seleciona por
+      // `kind in ESPECIES_DO_ACHADO` e manda tudo para
+      // `higienizarFotoDoAchado`, que aplica `DERIVADA_DA_FOTO_DO_ACHADO`.
+      //
+      // ISCA: acrescente um terceiro `kind` a `ESPECIES_DO_ACHADO`, ou
+      // separe `finder_photo` dali para uma derivada propria. Este caso
+      // reprova, e e o aviso de que um daqueles tres pontos passou a precisar
+      // da SUA janela -- sem ele, o app continuaria enquadrando os tres em
+      // 1024 x 1126 e o servidor cortaria um deles em outra forma.
+      final arquivo = File(caminhoDasEspeciesDoAchado);
+      expect(
+        arquivo.existsSync(),
+        isTrue,
+        reason:
+            'REPROVA: $caminhoDasEspeciesDoAchado nao foi encontrado. Sem ele '
+            'a janela unica dos tres pontos do achado deixa de ter prova.',
+      );
+      final kinds = especiesDoAchado(arquivo.readAsStringSync());
+      // A contagem vai junto do veredito: um extrator cego devolveria lista
+      // vazia, e `containsAll` de lista vazia aprova qualquer coisa.
+      expect(
+        kinds,
+        isNotEmpty,
+        reason:
+            'REPROVA: o leitor nao achou `ESPECIES_DO_ACHADO` em '
+            '$caminhoDasEspeciesDoAchado. Ou o nome mudou, ou a formatacao '
+            'mudou e o extrator ficou cego.',
+      );
+      expect(
+        kinds,
+        <String>['found_report_photo', 'finder_photo'],
+        reason:
+            'REPROVA: `ESPECIES_DO_ACHADO` mudou, e ela e o que autoriza os '
+            'TRES pontos do achado a partilharem uma janela so. Releia a '
+            'varredura de higiene de src/bin/worker.ts e decida se cada kind '
+            'ainda cai na mesma derivada; se nao, cada ponto precisa do seu '
+            'proprio FormatoDoRecorte.',
+      );
+    });
 
     test(
         'CONTROLE NEGATIVO — o unico proposito SEM corte e a Loja, e o app nao '

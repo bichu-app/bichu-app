@@ -514,7 +514,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
       context,
       camera: camera,
       foto: escolhida,
-      formato: FormatoDoRecorte.fotoNaConversa,
+      formato: FormatoDoRecorte.fotoDoAchado,
       titulo: 'Ajuste a foto',
     );
     if (!mounted || ajustada == null) return;

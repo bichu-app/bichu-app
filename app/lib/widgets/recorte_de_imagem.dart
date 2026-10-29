@@ -157,16 +157,30 @@ class FormatoDoRecorte {
 
   /// `DERIVADA_DA_FOTO_DO_ACHADO`: 1024 x 1126.
   ///
-  /// **E a forma da foto na CONVERSA**, e essa foi a correcao de rota mais
-  /// util da medicao de 29/10. A previa da foto na conversa tem altura
-  /// VARIAVEL (`PreviaDaFotoDaConversa` mede `min(220, fracao da tela)`),
-  /// entao parecia um destino de forma livre -- e a janela ia ser
-  /// [FormatoDoRecorte.doProprioArquivo]. Mas a foto da conversa sobe por
-  /// `createFoundReportPhotoUploadIntent`, e o servidor a corta em
-  /// 1024 x 1126 (`higienizar-foto-do-achado.ts`). Janela livre ali daria o
-  /// pior dos dois mundos: a pessoa enquadrando uma coisa e o servidor
-  /// entregando outra.
-  static const FormatoDoRecorte fotoNaConversa = FormatoDoRecorte.daDerivada(
+  /// **Serve a TRES pontos de upload**, e isso esta medido no servidor, nao
+  /// suposto: o registro de achado, o "encontrei este pet" e a foto na
+  /// CONVERSA. Os tres sobem por envio cujo `kind` esta em
+  /// `ESPECIES_DO_ACHADO` -- `['found_report_photo', 'finder_photo']`, em
+  /// `src/modules/media/ports/fotos-do-achado.ts` --, e a varredura de higiene
+  /// do `worker.ts` manda os DOIS `kind` para `higienizarFotoDoAchado`, que
+  /// aplica esta mesma derivada. O comentario de la diz, com estas palavras,
+  /// que a varredura *"liga o worker aos DOIS caminhos do achado"*: o de quem
+  /// tem conta (`createFoundReportPhotoUploadIntent`) e o de quem nao tem
+  /// (`PATCH /finder/found-report`).
+  ///
+  /// **A FOTO NA CONVERSA foi a correcao de rota mais util da medicao de
+  /// 29/10.** A previa dela tem altura VARIAVEL
+  /// (`PreviaDaFotoDaConversa` mede `min(220, fracao da tela)`) e nenhum
+  /// aspecto declarado, entao aquele destino PARECIA de forma livre, e a
+  /// janela ia ser [FormatoDoRecorte.doProprioArquivo]. Nao e: o servidor a
+  /// corta aqui. Janela livre ali daria o pior dos dois mundos -- a pessoa
+  /// enquadrando uma coisa e o servidor entregando outra.
+  ///
+  /// **E no achado isso custa mais que em qualquer outro ponto.** A foto e a
+  /// unica prova de que o animal e aquele: um corte que o tutor nao escolheu
+  /// pode tirar da imagem justamente a mancha, a coleira ou a orelha que
+  /// identifica o pet dele.
+  static const FormatoDoRecorte fotoDoAchado = FormatoDoRecorte.daDerivada(
     largura: 1024,
     altura: 1126,
   );
