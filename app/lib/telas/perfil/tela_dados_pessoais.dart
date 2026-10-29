@@ -7,6 +7,7 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
 import '../../api/conexoes_api.dart';
 import '../../api/modelos_conexao.dart';
+import '../../api/modelos_passkey.dart';
 import '../../api/convites_api.dart';
 import '../../formato/apelido.dart';
 import '../../formato/cep.dart';
@@ -29,6 +30,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
@@ -36,6 +38,7 @@ import '../../widgets/qr_do_convite.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/selo_de_validado.dart';
 import '../../widgets/seletor_de_lista.dart';
+import '../../widgets/trilha_de_convites.dart';
 
 /// `Perfil` › `Meus dados`: os dados pessoais do tutor.
 ///
@@ -181,12 +184,18 @@ class TelaDadosPessoais extends StatefulWidget {
   /// DESENHO.md levantou que mover so o QR *"o apaga em silencio"*. O cliente
   /// respondeu a pergunta fechada 3 com (a): o placar fica.
   ///
-  /// **UMA LINHA, e nao a `TrilhaDeConvites` de tres marcos que havia na tela
-  /// morta.** Isso e o que o protovipo desenhou e o que foi aprovado: o placar
-  /// *"nao e o assunto de `Meus dados` e nao merece secao propria"*. A trilha
-  /// de marcos (`O primeiro vizinho`, `Três olhos a mais`,
-  /// `Dez na vizinhança`) **morreu com a tela**, e isso esta reportado -- ela
-  /// era reconhecimento simbolico, nao premio, e nenhuma decisao a nomeou.
+  /// **UMA LINHA, e ela CONTINUA UMA LINHA.** Isso e o que o protovipo
+  /// desenhou e o que foi aprovado: o placar *"nao e o assunto de `Meus dados`
+  /// e nao merece secao propria"*.
+  ///
+  /// **OS MARCOS VOLTARAM EM 29/10/2026, E NAO NO LUGAR DESTA LINHA.** A
+  /// `TrilhaDeConvites` (`O primeiro vizinho`, `Três olhos a mais`,
+  /// `Dez na vizinhança`) morreu com a tela em `c8d80a07` **por omissao** --
+  /// o QR e o placar tinham decisao de viagem, ela nao --, e o cliente pediu
+  /// os marcos de volta: *"Sim, traga os marcos."* Ela foi recuperada do
+  /// historico, nao redesenhada, e entra **depois** desta linha e dentro do
+  /// mesmo bloco recolhido. Ver `widgets/trilha_de_convites.dart` e o
+  /// comentario no `_conteudo` de `_BlocoDoConvite`.
   static String placarDeQuemEntrou(int quantos) => quantos == 1
       ? '1 tutor entrou no Bichu pelo seu convite.'
       : '$quantos tutores entraram no Bichu pelo seu convite.';
@@ -220,14 +229,40 @@ class TelaDadosPessoais extends StatefulWidget {
   // `beginPasskeyRegistration` tira a conta do `sub` do token, e em
   // `Meus dados` a pessoa esta logada por definicao.
   //
-  // **DESATIVAR NAO ENTROU, e a rota EXISTE.** `revokePasskey`
-  // (`DELETE /v1/auth/passkeys/{passkeyId}`) esta no contrato, com teto
-  // folgado, e `PasskeysApi` **nao a expoe** -- a camada tem `listar`, mas nao
-  // `revogar`. Expo-la e desenhar o caminho de volta (qual credencial? a deste
-  // aparelho, que a lista nao identifica, ou todas?) e trabalho que o cliente
-  // nao pediu nesta rodada, e esta reportado como ressalva em vez de
-  // adivinhado. A senha continua sendo a outra porta, e revogar nunca trancou
-  // ninguem fora.
+  // ======================================================================
+  // DESATIVAR ENTROU EM 29/10/2026, e a ressalva anterior estava ERRADA
+  // ======================================================================
+  //
+  // Pedido do cliente: *"Implemente a rota do passkey."*
+  //
+  // A ressalva que estava escrita aqui perguntava *"qual credencial? a deste
+  // aparelho, que a lista nao identifica, ou todas?"*. **MEDIDO no
+  // `api/openapi.yaml`, e o contrato distingue:** `Passkey` devolve `id` (o
+  // identificador DA LINHA, e *"o que `revokePasskey` recebe"*), `label`,
+  // `created_at` e `last_used_at` -- e `listPasskeys` diz para que eles
+  // existem, com estas palavras: *"o que a tela precisa e o rotulo, quando foi
+  // cadastrada e quando foi usada por ultimo, **para a pessoa reconhecer o
+  // aparelho que vai revogar**"*. Entao a secao LISTA e a pessoa ESCOLHE.
+  //
+  // **O QUE O CONTRATO NAO DIZ:** `Passkey` nao traz `credential_id`, de
+  // proposito (*"nada que sirva para montar assercao sai desta operacao"*).
+  // O app, portanto, **nao sabe qual das linhas e a deste aparelho** -- e isso
+  // decide quando a marca local sai. Ver `FiacaoDoPasskey.revogar`: ela sai
+  // quando a conta fica SEM nenhuma credencial ativa, e fica quando sobra
+  // alguma. Nenhum campo foi inventado e o contrato nao foi tocado.
+  //
+  // **UM CAMINHO DE CODIGO.** A tela nao chama `PasskeysApi.revogar` direto --
+  // `escopo.dart` proibe tela que chame `passkeys` na mao --, e e
+  // `FiacaoDoPasskey.revogar` quem sabe que revogar mexe na marca local.
+  //
+  // **FOLHA DESTRUTIVA, porque o contrato declara `irreversible_write`.** Nao
+  // ha campo de senha: `revokePasskey` declara `security: [bearerAuth]`
+  // sozinho, sem `reauth`, com a razao escrita no proprio contrato -- *"quem
+  // perdeu o aparelho precisa revogar a credencial dele, e a senha continua
+  // sendo a outra porta"*. Friction onde o contrato nao pede e o que o 11.9.1
+  // do design system proibe.
+  //
+  // Revogar nunca TRANCA ninguem fora: a senha continua valendo.
 
   /// O nome da secao do login por digital.
   static const String tituloDoPasskey = 'Login por digital';
@@ -267,6 +302,69 @@ class TelaDadosPessoais extends StatefulWidget {
   /// A falha de ATIVAR. Uma frase, e ela nao culpa a pessoa.
   static const String falhaAoAtivarOPasskey =
       'Não conseguimos ativar agora. Tente de novo.';
+
+  // ======================================================================
+  // OS TEXTOS DE DESATIVAR (29/10/2026)
+  // ======================================================================
+
+  /// O cabecalho da lista de aparelhos. **Plural de proposito**: a conta pode
+  /// ter credencial em mais de um aparelho, e o contrato devolve todas.
+  static const String aparelhosComPasskey = 'Aparelhos com login por digital';
+
+  /// A acao em CADA linha. Curta porque ela se repete; quem diz sobre QUAL
+  /// aparelho ela age e [desativarNesteAparelho], o nome acessivel.
+  static const String desativarOPasskey = 'Desativar';
+
+  /// O nome que o LEITOR DE TELA diz no botao da linha.
+  ///
+  /// `Desativar` sozinho, lido fora de contexto numa lista de aparelhos, nao
+  /// diz em qual deles o toque age -- e aqui o toque e `irreversible_write`.
+  static String desativarNesteAparelho(String aparelho) =>
+      'Desativar o login por digital de $aparelho';
+
+  /// A credencial que chegou **sem `label`**, dita pela data.
+  ///
+  /// `label` e nulavel no contrato (*"sem ele o servidor guarda nulo e a tela
+  /// mostra a data"*), e uma linha em branco com um `Desativar` ao lado e a
+  /// pessoa desativando no escuro.
+  static String credencialSemRotulo(String data) => 'Cadastrado em $data';
+
+  /// Quando a credencial foi usada por ultimo, ou que nunca foi.
+  ///
+  /// `last_used_at` nulo e **"nunca entrou com ela"**, e nao ausencia de
+  /// informacao: e o que o contrato diz do campo. Dizer isso ajuda a escolher
+  /// -- credencial que nunca foi usada e a candidata obvia a sair.
+  static String usadaPorUltimo(String? data) =>
+      data == null ? 'Nunca usada para entrar' : 'Última entrada em $data';
+
+  /// O TITULO da folha destrutiva.
+  static const String tituloDaDesativacao = 'Desativar o login por digital?';
+
+  /// O CORPO da folha. Ele diz a consequencia **e a saida**: a senha continua
+  /// valendo, e isso nao e consolo -- e a decisao 1 da BICHUS-301, e sem a
+  /// frase a pessoa pode achar que vai perder o acesso a conta.
+  static const String corpoDaDesativacao =
+      'Você continua entrando com a sua senha, como sempre. Se quiser o login '
+      'por digital de volta, basta ativar de novo.';
+
+  /// O QUE SOME, em marcadores. O 11.9.1 pede a lista concreta.
+  static const List<String> oQueSomeNaDesativacao = <String>[
+    'A entrada sem senha neste aparelho',
+    'A credencial guardada no seu aparelho deixa de valer no Bichu',
+  ];
+
+  /// O rotulo do botao destrutivo da folha. **Diferente de
+  /// [desativarOPasskey]**, que e o da linha: dois controles com o mesmo texto
+  /// na mesma arvore e um toque que ninguem sabe qual dos dois pegou.
+  static const String confirmarADesativacao = 'Desativar o login por digital';
+
+  /// O nome acessivel do botao destrutivo.
+  static const String rotuloAcessivelDeDesativar =
+      'Confirmar e desativar o login por digital';
+
+  /// A falha de DESATIVAR. Uma frase, e ela nao culpa a pessoa.
+  static const String falhaAoDesativar =
+      'Não conseguimos desativar agora. Tente de novo.';
 
   @override
   State<TelaDadosPessoais> createState() => _TelaDadosPessoaisState();
@@ -2139,6 +2237,40 @@ class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
             ),
           ],
         ),
+        // ================================================================
+        // OS MARCOS, DEPOIS DO PLACAR (29/10/2026)
+        // ================================================================
+        //
+        // Decisao do cliente, verbatim: *"Sim, traga os marcos."* A
+        // `TrilhaDeConvites` morreu com a tela `Convide tutores` em
+        // `c8d80a07` **por omissao** -- o QR e o placar tinham decisao de
+        // viagem, ela nao --, e voltou do historico sem redesenho. Ver
+        // `widgets/trilha_de_convites.dart`.
+        //
+        // **`comAFrase: false`, e e a unica diferenca em relacao ao
+        // original.** A frase-cabecalho da trilha diz o mesmo numero que
+        // `placarDeQuemEntrou` acabou de dizer uma linha acima; na tela
+        // dedicada ela era o cabecalho da pagina, aqui seria a segunda
+        // afirmacao empilhada sobre a primeira. **O placar continua UMA
+        // LINHA** -- os marcos somam a ele, nao o substituem: trazer os
+        // marcos nao foi autorizacao para desfazer o desenho aprovado.
+        //
+        // **ZERO NAO DESENHA TRILHA**, e e a regra do quinto caso da tela
+        // morta, trazida junto: zero e a AFIRMACAO do servidor de que
+        // ninguem entrou, e tres marcos todos apagados afirmariam um
+        // progresso que nao comecou. Nulo ja nao chega aqui -- o ramo
+        // inteiro depende de `quantos != null`.
+        //
+        // **ELA NAO DOMINA A PAGINA, e nao por tipografia encolhida.** Este
+        // bloco nasce RECOLHIDO (48 dp, uma linha, o ultimo da pagina
+        // rolante): fechado, a trilha custa ZERO dp e nao empurra nenhum
+        // dado pessoal. Aberto, ela sao tres linhas de 20 dp depois de um QR
+        // de 200 dp que a pessoa abriu de proposito. Nada foi encolhido para
+        // caber porque nao houve nada a encolher.
+        if (quantos > 0) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          TrilhaDeConvites(quantos: quantos, comAFrase: false),
+        ],
       ],
       const SizedBox(height: BichuEspaco.e3),
       Text(
@@ -2216,6 +2348,23 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
   String? _falha;
   bool _pediu = false;
 
+  /// As credenciais ATIVAS da conta, para a pessoa escolher qual revogar
+  /// (29/10/2026).
+  ///
+  /// **Vazia tambem e o estado de "nao deu para ler"**, e nao so o de "nao
+  /// tem": `FiacaoDoPasskey.credenciaisDaConta` devolve vazio em toda falha,
+  /// de proposito. As duas levam ao mesmo lugar na tela -- nenhuma linha de
+  /// aparelho --, e esse e o lado seguro: oferecer `Desativar` sobre uma
+  /// leitura que falhou prometeria agir sobre o que nao se conhece.
+  List<Passkey> _credenciais = const <Passkey>[];
+
+  /// O `id` da credencial cuja revogacao esta em curso, ou nulo.
+  ///
+  /// **Por LINHA e nao um booleano da secao**: com um booleano so, tocar numa
+  /// linha poria a rosca em todas -- e a pessoa nao saberia qual aparelho esta
+  /// saindo.
+  String? _revogando;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -2250,8 +2399,15 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
     final escopo = Escopo.of(context);
     try {
       if (await escopo.passkeyNesteAparelho.haCredencial()) {
+        // A LISTA, para a pessoa escolher qual revogar (29/10/2026). Ela e a
+        // UNICA ida a rede deste ramo: quem tem marca local nao precisa de
+        // reconciliacao nenhuma.
+        final credenciais = await escopo.passkey.credenciaisDaConta();
         if (!mounted) return;
-        setState(() => _estado = _EstadoDoPasskey.ativo);
+        setState(() {
+          _estado = _EstadoDoPasskey.ativo;
+          _credenciais = credenciais;
+        });
         return;
       }
       if (!await escopo.credencialDoAparelho.suportaCredencial()) {
@@ -2266,8 +2422,30 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
       if (!mounted) return;
       final agoraTem = await escopo.passkeyNesteAparelho.haCredencial();
       if (!mounted) return;
-      setState(
-        () => _estado = agoraTem
+      // A LISTA, no ramo em que a conta TEM credencial e este aparelho nao
+      // (29/10/2026). **E a segunda leitura de `/auth/passkeys` nesta
+      // abertura**, e a conta e assumida em vez de escondida: a alternativa
+      // seria a tela refazer na mao o que `reconciliarComAConta` faz -- listar
+      // e marcar --, e `escopo.dart` proibe tela que chame `passkeys` direto,
+      // pelo motivo de sempre (um segundo caminho e um segundo lugar onde a
+      // marca deixa de ser gravada). O teto da operacao e 60/h por conta, e
+      // quem chega neste ramo e quem acabou de trocar de aparelho, nao o caso
+      // dominante. **Quem NAO tem credencial em lugar nenhum nao paga nada**:
+      // a leitura so acontece quando `agoraTem` e verdadeiro.
+      final List<Passkey> credenciais;
+      if (agoraTem) {
+        credenciais = await escopo.passkey.credenciaisDaConta();
+      } else {
+        // **ZERADA, e nao deixada como estava.** Esta releitura acontece
+        // DEPOIS de uma revogacao (ver `_desativar`), e a lista velha ainda
+        // tem a linha que acabou de sair: manter o campo deixaria o aparelho
+        // revogado na tela, com um `Desativar` que responderia 204 por
+        // idempotencia e nao mudaria nada.
+        credenciais = const <Passkey>[];
+      }
+      if (!mounted) return;
+      setState(() {
+        _estado = agoraTem
             // A reconciliacao achou credencial na conta e marcou o aparelho.
             // **A frase do MEIO, e nao `está ativo`**: a credencial existe na
             // conta e a marca acabou de ser posta, mas a chave privada ainda
@@ -2275,8 +2453,9 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
             // acontece na proxima entrada. Dizer `ativo` aqui prometeria um
             // login que a folha do sistema ainda nao sabe fazer.
             ? _EstadoDoPasskey.naContaNaoAqui
-            : _EstadoDoPasskey.inativo,
-      );
+            : _EstadoDoPasskey.inativo;
+        _credenciais = credenciais;
+      });
     } on Object {
       // **SEM FAIXA DE ERRO, e o estado cai no mais conservador.** A secao e
       // ajuste de conta e nao o que a pessoa veio fazer em `Meus dados`; uma
@@ -2314,6 +2493,56 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
         _falha = TelaDadosPessoais.falhaAoAtivarOPasskey;
       }
     });
+  }
+
+  /// DESATIVA uma credencial, atras da folha destrutiva (29/10/2026).
+  ///
+  /// **A folha vem ANTES da rota**, e nao depois: `revokePasskey` e
+  /// `irreversible_write` no contrato (*"a credencial nao volta: o padrao
+  /// WebAuthn nao tem como desrevogar"*). `mostrarFolhaDestrutiva` devolve
+  /// `false` para os tres jeitos de nao destruir -- cancelar, o gesto de
+  /// voltar e arrastar para baixo --, e nenhum deles chega a chamar a rota.
+  ///
+  /// **Quem revoga e `FiacaoDoPasskey`, nao esta tela.** Ela e quem sabe que a
+  /// marca local sai quando a conta fica vazia, e `escopo.dart` proibe tela
+  /// que chame `passkeys` na mao.
+  Future<void> _desativar(Passkey credencial) async {
+    if (_revogando != null) return;
+    final fiacao = Escopo.of(context).passkey;
+    final confirmou = await mostrarFolhaDestrutiva(
+      context,
+      titulo: TelaDadosPessoais.tituloDaDesativacao,
+      corpo: TelaDadosPessoais.corpoDaDesativacao,
+      oQueSome: TelaDadosPessoais.oQueSomeNaDesativacao,
+      rotuloDeConfirmar: TelaDadosPessoais.confirmarADesativacao,
+      rotuloAcessivelDeConfirmar:
+          TelaDadosPessoais.rotuloAcessivelDeDesativar,
+      aoConfirmar: () async {
+        // **A ROSCA E DA LINHA, e ela e posta aqui dentro**: a folha so fecha
+        // depois que isto termina, e sem o `setState` a secao atras dela
+        // ficaria parada enquanto a rota corre.
+        if (!mounted) return;
+        setState(() {
+          _revogando = credencial.id;
+          _falha = null;
+        });
+        final deu = await fiacao.revogar(credencial.id);
+        if (!mounted) return;
+        setState(() {
+          _revogando = null;
+          if (!deu) _falha = TelaDadosPessoais.falhaAoDesativar;
+        });
+      },
+    );
+    if (!confirmou || !mounted) return;
+    // RELE O ESTADO INTEIRO, e nao so tira a linha da lista.
+    //
+    // Revogar muda DUAS coisas que esta secao mostra: a lista de aparelhos e
+    // o proprio estado dos quatro (quem revogou a ultima credencial da conta
+    // volta a `inativo`, e a secao tem de voltar a oferecer `Ativar`). Riscar
+    // a linha na mao deixaria a frase `está ativo neste aparelho` de pe sobre
+    // uma conta sem credencial nenhuma -- a secao mentindo sobre o estado.
+    await _ler();
   }
 
   @override
@@ -2368,28 +2597,49 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
             TelaDadosPessoais.passkeyIndisponivel,
             style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
           ),
-        _EstadoDoPasskey.ativo => Row(
+        _EstadoDoPasskey.ativo => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Icon(
-                Icons.check_circle_outline,
-                size: 20,
-                color: cores.success,
-                // Decorativo: a frase ao lado ja diz o estado, e um glifo com
-                // nome proprio seria anuncio duplo.
-                semanticLabel: '',
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 20,
+                    color: cores.success,
+                    // Decorativo: a frase ao lado ja diz o estado, e um glifo
+                    // com nome proprio seria anuncio duplo.
+                    semanticLabel: '',
+                  ),
+                  const SizedBox(width: BichuEspaco.e2),
+                  Expanded(
+                    child: Text(
+                      TelaDadosPessoais.passkeyAtivado,
+                      style: textos.bodyMedium?.copyWith(
+                        color: cores.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: BichuEspaco.e2),
-              Expanded(
-                child: Text(
-                  TelaDadosPessoais.passkeyAtivado,
-                  style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-                ),
-              ),
+              ..._aparelhos(cores, textos),
             ],
           ),
-        _EstadoDoPasskey.naContaNaoAqui => Text(
-            TelaDadosPessoais.passkeyNaContaNaoNesteAparelho,
-            style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+        _EstadoDoPasskey.naContaNaoAqui => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                TelaDadosPessoais.passkeyNaContaNaoNesteAparelho,
+                style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+              ),
+              // **A LISTA APARECE AQUI TAMBEM, e e o caso que mais importa.**
+              // Quem PERDEU o aparelho cai exatamente neste estado: a
+              // credencial existe na conta e nao esta aqui. Esconder a
+              // revogacao dele seria esconder a saida de emergencia de quem
+              // mais precisa dela -- e o proprio contrato diz, no teto
+              // folgado de 30/h, que *"quem perdeu o aparelho esta com pressa,
+              // e o teto nao pode ser o que impede alguem de fechar a porta"*.
+              ..._aparelhos(cores, textos),
+            ],
           ),
         _EstadoDoPasskey.inativo => BotaoSecundario(
             rotulo: TelaDadosPessoais.ativarOPasskey,
@@ -2398,5 +2648,77 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
           ),
       },
     ];
+  }
+
+  /// A LISTA DE APARELHOS, cada um com a sua revogacao (29/10/2026).
+  ///
+  /// **Vazia nao desenha cabecalho nenhum.** Lista vazia aqui tem duas
+  /// origens -- a conta nao tem credencial, ou a leitura falhou (ver
+  /// [_credenciais]) -- e as duas levam ao mesmo lugar: `Aparelhos com login
+  /// por digital` seguido de nada e um cabecalho afirmando uma secao que nao
+  /// existe.
+  ///
+  /// **O que cada linha mostra vem do contrato, e nada e inventado**:
+  /// `label` quando ele existe, a data de `created_at` quando ele e nulo, e
+  /// `last_used_at` como apoio. `credential_id` nao sai de `listPasskeys` e
+  /// por isso **nenhuma linha diz "este aparelho"** -- o app nao sabe qual
+  /// delas e a daqui, e marcar a errada seria pior que nao marcar nenhuma.
+  List<Widget> _aparelhos(BichuCores cores, TextTheme textos) {
+    if (_credenciais.isEmpty) return const <Widget>[];
+    return <Widget>[
+      const SizedBox(height: BichuEspaco.e4),
+      Text(
+        TelaDadosPessoais.aparelhosComPasskey,
+        style: textos.titleSmall?.copyWith(color: cores.textSecondary),
+      ),
+      for (final credencial in _credenciais) ...<Widget>[
+        const SizedBox(height: BichuEspaco.e3),
+        _linhaDoAparelho(credencial, cores, textos),
+      ],
+    ];
+  }
+
+  Widget _linhaDoAparelho(
+    Passkey credencial,
+    BichuCores cores,
+    TextTheme textos,
+  ) {
+    final nome = credencial.rotulo ??
+        TelaDadosPessoais.credencialSemRotulo(
+          QuandoNaLista.diaEMes(credencial.criadaEm),
+        );
+    final usada = credencial.usadaEm;
+    // **EMPILHADO, e nao nome a esquerda e botao a direita.** O
+    // `outlinedButtonTheme` do design system da `minimumSize` de
+    // `Size(double.infinity, 48)` a todo `BotaoSecundario`: dentro de uma
+    // `Row` ele recebe largura infinita e o layout estoura -- MEDIDO, com
+    // `BoxConstraints forces an infinite width` em dez casos. Encolher o botao
+    // na mao seria contrariar o design system num canto; empilhar respeita a
+    // largura que ele exige.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          nome,
+          style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+        ),
+        const SizedBox(height: BichuEspaco.e1),
+        Text(
+          TelaDadosPessoais.usadaPorUltimo(
+            usada == null ? null : QuandoNaLista.diaEMes(usada),
+          ),
+          style: textos.bodySmall?.copyWith(color: cores.textMuted),
+        ),
+        const SizedBox(height: BichuEspaco.e2),
+        BotaoSecundario(
+          rotulo: TelaDadosPessoais.desativarOPasskey,
+          // `Desativar` sozinho, lido numa lista de aparelhos, nao diz em
+          // qual deles o toque age -- e o toque e `irreversible_write`.
+          nomeAcessivel: TelaDadosPessoais.desativarNesteAparelho(nome),
+          carregando: _revogando == credencial.id,
+          aoTocar: () => unawaited(_desativar(credencial)),
+        ),
+      ],
+    );
   }
 }

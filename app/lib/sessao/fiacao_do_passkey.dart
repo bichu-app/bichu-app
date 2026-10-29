@@ -384,4 +384,92 @@ class FiacaoDoPasskey {
       // encher o canal de observabilidade com ele esconderia o resto.
     }
   }
+
+  // ======================================================================
+  // REVOGAR (29/10/2026)
+  // ======================================================================
+  //
+  // Pedido do cliente: *"Implemente a rota do passkey."*
+  //
+  // ## REVOGAR QUAL CREDENCIAL? O CONTRATO RESPONDE, E FOI MEDIDO
+  //
+  // A ressalva anterior em `tela_dados_pessoais.dart` dizia *"a deste
+  // aparelho, que a lista nao identifica, ou todas?"*. Ela estava errada sobre
+  // o contrato: `Passkey` devolve `id` (a LINHA, e *"o que `revokePasskey`
+  // recebe"*), `label`, `created_at` e `last_used_at`, e `listPasskeys` diz
+  // para que: *"para a pessoa reconhecer o aparelho que vai revogar"*. Entao a
+  // pessoa ESCOLHE, e [credenciaisDaConta] e o que a tela lista.
+  //
+  // ## O QUE O CONTRATO NAO DIZ, E E ISSO QUE DECIDE A MARCA
+  //
+  // `Passkey` **nao traz `credential_id`** -- *"nada que sirva para montar
+  // assercao sai desta operacao"*. Logo o app **nao sabe qual linha e a deste
+  // aparelho**, e [revogar] nao pode inferir. Ver a regra em [revogar].
+
+  /// As credenciais ATIVAS da conta, para a pessoa escolher qual revogar.
+  ///
+  /// **Devolve lista VAZIA em toda falha, e nunca estoura.** Ela e lida por
+  /// uma secao de ajuste dentro de `Meus dados`, pelo mesmo arranjo do resto
+  /// desta classe: a pagina e dos dados pessoais, e uma leitura auxiliar nao
+  /// pode virar faixa de erro nem derrubar a tela. Lista vazia faz a secao
+  /// nao oferecer revogacao nenhuma, que e o lado seguro: oferecer `Desativar`
+  /// sobre uma leitura que falhou prometeria agir sobre o que nao se conhece.
+  Future<List<Passkey>> credenciaisDaConta() async {
+    try {
+      return await _passkeys.listar();
+    } on Object {
+      return const <Passkey>[];
+    }
+  }
+
+  /// Revoga a credencial [passkeyId] e **poe a marca local em dia**.
+  ///
+  /// O [passkeyId] e o `id` da linha, vindo de [credenciaisDaConta]. Devolve
+  /// `true` quando o servidor aceitou.
+  ///
+  /// ## A MARCA LOCAL SAI, E SO QUANDO A CONTA FICA VAZIA
+  ///
+  /// Depois do 204 esta funcao **relista**, e e a lista que decide:
+  ///
+  /// - **conta sem nenhuma credencial ativa** -> `desmarcar()`. Nao ha
+  ///   credencial desta conta em aparelho nenhum, entao o portao de
+  ///   [tentarEntrar] tem de fechar: sem isso a tela de entrar gasta um
+  ///   desafio por abertura, abre a folha do sistema na cara de quem acabou de
+  ///   desligar o recurso, e termina num 401 que o contrato deixa
+  ///   indistinguivel de assinatura errada.
+  /// - **ainda ha credencial ativa** -> a marca **fica**. O contrato nao
+  ///   devolve `credential_id`, entao nao da para saber se a que sobrou e a
+  ///   deste aparelho. Desmarcar aqui fecharia o portao de um aparelho com
+  ///   passkey boa -- quem revoga o TABLET pelo CELULAR perderia a entrada sem
+  ///   toque no celular. `passkey_neste_aparelho.dart` tem a assimetria
+  ///   escrita: marca sobrando custa uma requisicao por sessao, marca
+  ///   faltando custa o recurso inteiro.
+  ///
+  /// **NAO GRAVA RECUSA.** Revogar nao e recusar: quem desativa pode querer
+  /// ativar de novo, e `registrarRecusa` cala a oferta do convite depois do
+  /// login para sempre. Confundir as duas faria a pessoa perder a oferta por
+  /// ter desativado uma vez.
+  ///
+  /// **A RELISTAGEM QUE FALHA NAO DESFAZ A REVOGACAO.** O 204 ja aconteceu, e
+  /// ele e o que a pessoa pediu. Sem saber o que sobrou, a marca fica como
+  /// estava -- o lado seguro, pela mesma assimetria -- e a revogacao continua
+  /// relatada como feita. Dizer que falhou sobre uma escrita que deu certo
+  /// faria a pessoa revogar de novo (o que e idempotente, mas ela nao sabe) ou
+  /// achar que a credencial ainda vale.
+  Future<bool> revogar(String passkeyId) async {
+    try {
+      await _passkeys.revogar(passkeyId);
+    } on Object {
+      // Rede fora, 404 de credencial que nao e desta conta, 429 de teto. A
+      // tela diz que nao deu, e nada local mudou.
+      return false;
+    }
+    try {
+      final restantes = await _passkeys.listar();
+      if (restantes.isEmpty) await _registro.desmarcar();
+    } on Object {
+      // Ver o doc: a marca fica como estava, e a revogacao continua feita.
+    }
+    return true;
+  }
 }
