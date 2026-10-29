@@ -18,7 +18,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/marca_da_pessoa.dart';
 import '../../widgets/selo_de_validado.dart';
-import '../../widgets/tarja_sobre_midia.dart';
+import '../../widgets/veu_do_autor_sobre_midia.dart';
 import 'comentarios_da_publicacao.dart';
 import 'porta_do_perfil_do_autor.dart';
 import '../casca_com_abas.dart';
@@ -788,7 +788,7 @@ class _CartaoDaPublicacao extends StatelessWidget {
             // altura ser reservada antes de os bytes chegarem e a rolagem nao
             // saltar.
             //
-            // **E e ela, nao-posicionada, que da tamanho ao `Stack`**: a tarja
+            // **E e ela, nao-posicionada, que da tamanho ao `Stack`**: o veu
             // esta num `Positioned` e nao conta para a medida. Sem uma filha
             // nao-posicionada o `Stack` colapsaria para o tamanho do pai.
             ImagemDaRede(
@@ -798,12 +798,29 @@ class _CartaoDaPublicacao extends StatelessWidget {
                   : CorpoDoMural.fotoSemDescricao,
               proporcao: 1,
             ),
+            // A BARRA, ENCOSTADA NO TOPO E DE PONTA A PONTA (`left`/`right` em
+            // zero). Recuo nenhum: o cliente pediu que ela nao interfira na
+            // foto, e uma pastilha recuada ocupa a mesma altura E ainda deixa
+            // uma faixa de foto morta acima dela.
             Positioned(
-              top: TarjaSobreMidia.recuo,
-              left: TarjaSobreMidia.recuo,
-              right: TarjaSobreMidia.recuo,
-              child: TarjaSobreMidia(child: _linhaDoAutor(context)),
+              top: 0,
+              left: 0,
+              right: 0,
+              child: VeuDoAutorSobreMidia(
+                child: _linhaDoAutor(context, sobreOVeu: true),
+              ),
             ),
+            // O `⋮` FICA FORA DA BARRA, e e ele que decide a altura dela.
+            //
+            // Dentro da `Row` do veu, o alvo de 48 dp de
+            // [BichuAlvoDeToque.min] esticaria a barra para 48 -- o alvo e
+            // piso de acessibilidade e nao encolhe. Aqui ele e um irmao no
+            // `Stack`: a CAIXA de toque continua com 48 dp e transborda a
+            // barra 8 dp para baixo, invisivel sobre a foto, enquanto o GLIFO
+            // (24 dp, centrado em 24) ocupa de 12 a 36 e fica inteiro dentro
+            // dos 40 dp do veu.
+            if (_temMenu)
+              Positioned(top: 0, right: 0, child: _menu(context)),
           ],
         ),
         Padding(
@@ -845,7 +862,7 @@ class _CartaoDaPublicacao extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _linhaDoAutor(context),
+          _linhaDoAutor(context, sobreOVeu: false),
           const SizedBox(height: BichuEspaco.e2),
           Text(publicacao.texto, style: textos.bodyLarge),
           const SizedBox(height: BichuEspaco.e2),
@@ -855,67 +872,117 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// A LINHA DO AUTOR — foto, nome com selo e `⋮`.
+  /// A LINHA DO AUTOR — foto, nome e, fora do veu, o selo de validado.
   ///
   /// **Uma funcao e nao duas copias**: ela desenha o mesmo nos dois estados, e o
-  /// que muda e so onde ela e pendurada (dentro de [TarjaSobreMidia] sobre a
-  /// foto, ou no topo do corpo quando nao ha foto). Duas copias divergiriam na
-  /// primeira correcao, e as portas do perfil abaixo sao justamente o tipo de
-  /// detalhe que se corrige num lugar e se esquece no outro.
-  Widget _linhaDoAutor(BuildContext context) {
+  /// que muda sai de [sobreOVeu]. Duas copias divergiriam na primeira correcao,
+  /// e as portas do perfil abaixo sao justamente o tipo de detalhe que se
+  /// corrige num lugar e se esquece no outro.
+  ///
+  /// ## O QUE [sobreOVeu] MUDA, E POR QUE CADA COISA
+  ///
+  /// - **a foto cai de 40 para 28 dp** e **o nome de `title` (18 px) para
+  ///   `label` (14 px)**: e aqui que o *"diminua bastante"* do cliente cabe.
+  ///   A `thumb` do icone e de 176 px e continua sobrando (2,1x de cobertura a
+  ///   3x, contra 1,47x nos 40 dp);
+  /// - **a tinta vira clara nos dois temas** ([VeuDoAutorSobreMidia.tinta]),
+  ///   porque atras dela ha uma foto e uma foto nao troca com o tema;
+  /// - **o `⋮` nao entra na linha**: ele e um irmao no `Stack`, pelo alvo de
+  ///   toque. Ver a prosa no `Positioned` que o pendura;
+  /// - **o selo de validado NAO e desenhado**, e isto e uma PERDA conhecida e
+  ///   medida, nao um esquecimento. Ver abaixo.
+  ///
+  /// ## O SELO SOBRE O VEU: O QUE FALTA, COM NUMERO
+  ///
+  /// [SeloDeValidado] pinta o glifo em `cores.success`, sem parametro de cor.
+  /// Sobre o veu preto, com foto BRANCA, isso mede:
+  ///
+  /// - tema claro, `success` `#1F7A46` sobre o composto `#6E6D6C`: **1,03:1**;
+  /// - tema escuro, `success` `#A9CFBB` sobre `#474747`: 5,46:1.
+  ///
+  /// O piso de elemento nao textual e **3,0:1** (SC 1.4.11). O tema claro
+  /// reprova, e **nao ha opacidade de veu que o salve**: quanto mais escuro o
+  /// veu, PIOR fica o verde escuro. Com o veu totalmente opaco o selo ainda nao
+  /// alcanca 3,0.
+  ///
+  /// O conserto e uma cor clara para o selo quando ele pousa no veu — um
+  /// parametro `cor` em `widgets/selo_de_validado.dart`, com o padrao atual
+  /// intacto. **Esse arquivo esta fora do alcance desta frente**, entao o selo
+  /// foi OMITIDO sobre a foto em vez de desenhado ilegivel: o cartao sem foto
+  /// continua com ele, e a decisao de 21/10/2026 do cliente (*"os usuarios
+  /// validados devem ter um simbolo em frente de seu nome nos posts"*) fica
+  /// pendente so na publicacao COM foto, por uma linha de codigo que nao e
+  /// minha de mexer.
+  Widget _linhaDoAutor(BuildContext context, {required bool sobreOVeu}) {
+    final tema = BichuColors.of(context);
     final textos = Theme.of(context).textTheme;
+    final estiloDoNome = sobreOVeu
+        ? textos.labelMedium?.copyWith(color: VeuDoAutorSobreMidia.tinta(tema))
+        : textos.titleMedium;
+
     return Row(
       children: <Widget>[
-              // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), e o toque
-              // mora AQUI e nao dentro de `_FotoDoAutor`: ver a prosa de
-              // `PortaDoPerfilDoAutor`. Sem apelido ela devolve a foto crua.
-              //
-              // **A FOTO LEVA ROTULO e o nome nao**: o circulo nao tem texto
-              // proprio, entao sem rotulo o leitor de tela anunciaria um botao
-              // sem dizer o que ele abre.
-              PortaDoPerfilDoAutor(
-                autor: publicacao.autor,
-                rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
-                  publicacao.autor.nomeExibido,
-                ),
-                child: _FotoDoAutor(autor: publicacao.autor),
-              ),
-              const SizedBox(width: BichuEspaco.e3),
-              // O NOME, COM O SELO DE VALIDADO AO LADO quando a conta tem canal
-              // de contato confirmado — emenda do ADR-0010 de 21/10/2026,
-              // decisao do cliente: *"os usuarios que validados deve ter um
-              // simbolo em frente de seu nome nos posts"*.
-              //
-              // **O selo custa 24 dp de largura** (`SeloDeValidado.custoDeLargura`),
-              // e e o NOME que paga: `NomeComSelo` poe o texto num `Flexible`,
-              // entao ele encolhe com `…` e o selo fica. Um nome com `…` ainda e
-              // legivel; um selo que desaparece e informacao perdida. A medicao
-              // dessa troca a 320, 375 e 430 dp esta em
-              // `app/test/widgets/selo_de_validado_test.dart`.
-              //
-              // **O NOME TAMBEM E PORTA** -- cliente, 22/10/2026: *"Inclua um
-              // link que seja o usuario a pagina do perfil"*. Ele e o alvo
-              // grande e o que a pessoa le; a foto sozinha seria um alvo de 40
-              // dp para o mesmo destino.
-              //
-              // **SEM `rotulo` aqui, de proposito**: trocar a semantica desta
-              // sub-arvore por uma frase apagaria o selo que `NomeComSelo`
-              // anuncia ao lado do nome.
-              //
-              // **A porta fica DENTRO do `Expanded` e nao por fora**: por fora
-              // ela embrulharia tambem o `⋮` de `_menu`, e o menu tem desfecho
-              // proprio -- um toque nele abriria o perfil.
-              Expanded(
-                child: PortaDoPerfilDoAutor(
-                  autor: publicacao.autor,
-                  child: NomeComSelo(
-                    nome: publicacao.autor.nomeExibido,
-                    comSelo: publicacao.autor.canalConfirmado,
-                    estilo: textos.titleMedium,
-                  ),
-                ),
-              ),
-        _menu(context),
+        // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), e o toque mora AQUI e
+        // nao dentro de `_FotoDoAutor`: ver a prosa de `PortaDoPerfilDoAutor`.
+        // Sem apelido ela devolve a foto crua.
+        //
+        // **A FOTO LEVA ROTULO e o nome nao**: o circulo nao tem texto proprio,
+        // entao sem rotulo o leitor de tela anunciaria um botao sem dizer o que
+        // ele abre.
+        PortaDoPerfilDoAutor(
+          autor: publicacao.autor,
+          rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
+            publicacao.autor.nomeExibido,
+          ),
+          child: _FotoDoAutor(
+            autor: publicacao.autor,
+            lado: sobreOVeu ? _FotoDoAutor.ladoNoVeu : _FotoDoAutor.lado40,
+          ),
+        ),
+        SizedBox(width: sobreOVeu ? BichuEspaco.e2 : BichuEspaco.e3),
+        // O NOME, COM O SELO DE VALIDADO AO LADO quando a conta tem canal de
+        // contato confirmado — emenda do ADR-0010 de 21/10/2026, decisao do
+        // cliente: *"os usuarios que validados deve ter um simbolo em frente de
+        // seu nome nos posts"*.
+        //
+        // **O selo custa 24 dp de largura** (`SeloDeValidado.custoDeLargura`), e
+        // e o NOME que paga: `NomeComSelo` poe o texto num `Flexible`, entao ele
+        // encolhe com `…` e o selo fica. Um nome com `…` ainda e legivel; um
+        // selo que desaparece e informacao perdida. A medicao dessa troca a 320,
+        // 375 e 430 dp esta em `app/test/widgets/selo_de_validado_test.dart`.
+        //
+        // **`comSelo: false` SOBRE O VEU**, e o motivo com numero esta no
+        // cabecalho desta funcao: o verde escuro de `success` mede 1,03:1 sobre
+        // o veu com foto branca, contra um piso de 3,0.
+        //
+        // **O NOME TAMBEM E PORTA** -- cliente, 22/10/2026: *"Inclua um link que
+        // seja o usuario a pagina do perfil"*. Ele e o alvo grande e o que a
+        // pessoa le; a foto sozinha seria um alvo de 28 dp para o mesmo destino.
+        //
+        // **SEM `rotulo` aqui, de proposito**: trocar a semantica desta
+        // sub-arvore por uma frase apagaria o selo que `NomeComSelo` anuncia ao
+        // lado do nome.
+        //
+        // **A porta fica DENTRO do `Expanded` e nao por fora**: por fora ela
+        // embrulharia tambem o `⋮` de `_menu`, e o menu tem desfecho proprio --
+        // um toque nele abriria o perfil.
+        Expanded(
+          child: PortaDoPerfilDoAutor(
+            autor: publicacao.autor,
+            child: NomeComSelo(
+              nome: publicacao.autor.nomeExibido,
+              comSelo: !sobreOVeu && publicacao.autor.canalConfirmado,
+              estilo: estiloDoNome,
+            ),
+          ),
+        ),
+        // **O `⋮` so entra na linha QUANDO NAO HA VEU.** Sobre a foto ele e um
+        // irmao no `Stack`, para que o alvo de 48 dp nao estique a barra.
+        if (!sobreOVeu) _menu(context),
+        // O vao que o `⋮` ocupava sobre o veu: sem ele o nome passaria por baixo
+        // do menu que flutua a direita.
+        if (sobreOVeu && _temMenu)
+          const SizedBox(width: BichuAlvoDeToque.min),
       ],
     );
   }
@@ -932,6 +999,15 @@ class _CartaoDaPublicacao extends StatelessWidget {
   /// economia: o caminho para o proprio conteudo e apaga-lo, que e imediato, e o
   /// servidor responde `400 own_content` a quem tentar. Oferecer as duas seria
   /// desenhar um controle cujo unico desfecho e um erro.
+  /// **Se o `⋮` NASCE.** Um so lugar decide, porque agora sao DOIS que
+  /// perguntam: quem pendura o botao sobre a foto e quem reserva o vao dele na
+  /// linha do autor. Dois `if` com a mesma condicao divergem na primeira
+  /// edicao, e o sintoma seria um buraco de 48 dp a direita de um nome, sem
+  /// botao nenhum.
+  bool get _temMenu =>
+      (publicacao.minha && aoApagar != null) ||
+      (!publicacao.minha && aoDenunciar != null);
+
   Widget _menu(BuildContext context) {
     final opcoes = <PopupMenuEntry<String>>[
       if (publicacao.minha && aoApagar != null)
@@ -944,6 +1020,20 @@ class _CartaoDaPublicacao extends StatelessWidget {
     if (opcoes.isEmpty) return const SizedBox.shrink();
 
     return PopupMenuButton<String>(
+      // **48 dp, E ISSO CONSERTA UM DEFEITO QUE JA ESTAVA AQUI.**
+      //
+      // O padrao do `PopupMenuButton` e `EdgeInsets.all(8)` com glifo de 24 --
+      // **40 x 40 dp**, abaixo do piso de [BichuAlvoDeToque.min] (WCAG 2.5.5 e
+      // o paragrafo 6.5). Medido, e nao suposto: o caso
+      // `ISCA (discricao) — o alvo de toque do `⋮` continua com 48 dp`
+      // reprovou com `40.0 x 40.0` antes desta linha existir, no layout velho
+      // e no novo.
+      //
+      // Ele saiu desta frente por tabela: a barra sobre a foto so pode ter 40
+      // dp porque o alvo do menu transborda para fora dela, e medir esse
+      // transbordo exigiu medir o alvo -- que estava errado desde antes.
+      // `12 + 24 + 12 = 48`.
+      padding: const EdgeInsets.all(BichuEspaco.e3),
       // O nome acessivel do alvo. Sem ele o leitor de tela anuncia so "botao".
       tooltip: 'Opções da publicação',
       itemBuilder: (_) => opcoes,
@@ -980,14 +1070,27 @@ class _CartaoDaPublicacao extends StatelessWidget {
 /// o lado de 40 dp e a ausencia de toque, e as duas decisoes sao desta tela e
 /// nao do desenho.
 class _FotoDoAutor extends StatelessWidget {
-  const _FotoDoAutor({required this.autor});
+  const _FotoDoAutor({required this.autor, this.lado = lado40});
 
   final AutorDaPublicacao autor;
+
+  /// O lado pintado. Os dois valores que o cartao usa sao [lado40] e
+  /// [ladoNoVeu], e quem escolhe e `_linhaDoAutor`.
+  final double lado;
 
   /// 40 dp, o tamanho para o qual a `thumb` de 176 foi medida: 120 px reais a
   /// 3x, 1,47x de cobertura. **Nao e numero escolhido aqui** — ele vem da
   /// Emenda 3 e a Emenda 5 o reusa por nome.
-  static const double lado = 40;
+  ///
+  /// E o tamanho da publicacao SEM foto, onde a linha do autor e o cabecalho do
+  /// cartao e nao tem com que competir.
+  static const double lado40 = 40;
+
+  /// 28 dp, SOBRE O VEU — o *"diminua bastante"* do cliente de 29/10/2026.
+  ///
+  /// A `thumb` de 176 px cobre 84 px reais a 3x, **2,1x**: mais folga do que os
+  /// 1,47x para os quais ela foi medida, entao a reducao nao custa nitidez.
+  static const double ladoNoVeu = 28;
 
   @override
   Widget build(BuildContext context) {
