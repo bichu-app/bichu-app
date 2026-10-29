@@ -274,24 +274,36 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   Map<String, String> _errosDeCampo = const <String, String>{};
   String? _chave;
 
-  bool _preencheu = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_preencheu) return;
-    _preencheu = true;
-    // A regiao que o tutor ja cadastrou (BICHUS-92), que e texto e nao
-    // coordenada virada em nome. Quem indica quase sempre indica perto de casa.
-    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
-    if (regiao == null) return;
-    _bairro.text = regiao.bairro ?? '';
-    _cidade.text = regiao.cidade ?? '';
-    // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
-    // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
-    // `siglaDeEstadoValida`.
-    _uf = siglaDeEstadoValida(regiao.uf);
-  }
+  // ===========================================================
+  // BAIRRO, CIDADE E ESTADO ABREM VAZIOS (BICHUS-317)
+  // ===========================================================
+  //
+  // **Nao ha `didChangeDependencies` nesta tela, e a ausencia e o recurso.**
+  // Ate 29/10/2026 ela preenchia os tres campos da regiao de referencia do
+  // tutor (`Me.reference_area`) na primeira montagem. O cliente pediu que
+  // parasse, verbatim: *"na pagina criar evento e indicar profissional, os
+  // campos bairro, cidade e estado estao vindo preenchidos por padrao com
+  // minhas informacoes, deve vir em branco e o usuario digitar"*.
+  //
+  // **O repositorio ja argumentava a favor disso, e e por isso que o pedido
+  // nao e troca de gosto.** `localizacao/captura_de_localizacao.dart` (na
+  // prosa de `_preencherDaRegiaoDeReferencia`) escreve que, ao lado de um dado
+  // medido, *"inventa-la da ficha do tutor seria pior"*. O juizo vale inteiro
+  // aqui, e com mais forca: o endereco desta tela e **de um TERCEIRO** -- uma
+  // clinica que a pessoa esta indicando --, e nao dela. Escrever o bairro do
+  // tutor embaixo do nome de um estabelecimento afirma, com cara de dado
+  // conferido, que o estabelecimento fica onde o tutor mora. Quem indica a
+  // clinica da cidade vizinha mandava a cidade errada sem notar: o campo ja
+  // vinha escrito, e campo escrito nao se le, se aceita.
+  //
+  // **Quem preenche endereco aqui e o CEP**, que a pessoa digita de proposito
+  // e que preenche os tres (`_buscarOCep`). Esse caminho tem origem declarada
+  // e a pessoa sabe o que pediu; a ficha do tutor nao tinha nenhuma das duas.
+  //
+  // **A mudanca vale NOS DOIS formularios de criar da comunidade**, aqui e em
+  // `rede/criar_encontro.dart`. Mexer num so deixaria `Criar evento` e
+  // `Indicar` discordando sobre a mesma pergunta, que e o tipo de incoerencia
+  // que ninguem reporta e todos sentem.
 
   @override
   void dispose() {
@@ -316,9 +328,13 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   /// Tres regras, e as tres sao do pedido do cliente de 17/10/2026:
   ///
   /// 1. **so campo vazio recebe.** O que a pessoa escreveu vence o que a base
-  ///    devolve -- inclusive o bairro, a cidade e a UF que esta tela ja
-  ///    preencheu da regiao de referencia do tutor em [didChangeDependencies].
-  ///    A base erra, e quem esta olhando o endereco e a pessoa;
+  ///    devolve. A base erra, e quem esta olhando o endereco e a pessoa.
+  ///
+  ///    **Desde a BICHUS-317 os tres campos abrem VAZIOS** -- a tela nao os
+  ///    preenche mais da regiao de referencia do tutor --, entao na primeira
+  ///    busca esta regra quase sempre preenche os tres. Ela continua existindo
+  ///    para a SEGUNDA busca e para quem digita o bairro antes do CEP, e
+  ///    continua sendo por CAMPO e nao por formulario;
   /// 2. **nada fica bloqueado depois da busca.** Os tres campos continuam
   ///    editaveis: CEP generico de cidade nao traz bairro;
   /// 3. **nada aqui pode impedir a indicacao.** Nenhum caminho desta funcao
