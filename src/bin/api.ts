@@ -52,6 +52,11 @@ import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http
 // ca: o modulo e o do aviso, e nao o da identidade.
 import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import { registrarRotasDosContadoresDeSecao } from '../modules/sections/adapters/http/section-counter-routes.js';
+// A DUVIDA DE AJUDA (29/10/2026). Mesmo molde dos contadores: o modulo recebe
+// um `autenticar` e nao o servico de identidade.
+import { registrarRotasDeAjuda } from '../modules/support/adapters/http/help-request-routes.js';
+import { criarDuvidaDeAjudaService } from '../modules/support/application/duvida-de-ajuda-service.js';
+import { criarDuvidasDeAjuda } from '../modules/support/adapters/persistence/kysely-duvidas-de-ajuda.js';
 import { criarContadoresDeSecaoService } from '../modules/sections/application/contadores-de-secao-service.js';
 import { criarMarcadoresDeSecao } from '../modules/sections/adapters/persistence/kysely-marcadores-de-secao.js';
 import { criarContagemDePerdidosNovos } from '../modules/lostfound/adapters/persistence/kysely-contagem-de-perdidos-novos.js';
@@ -820,6 +825,20 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // A DUVIDA DE AJUDA (pedido do cliente de 29/10/2026).
+  //
+  // **Nenhum notificador entra aqui**, e a ausencia e a decisao: ele escolheu
+  // "grava no banco e vai para o backoffice", na variante SEM notificacao por
+  // e-mail. O servico recebe a porta da fila e o relogio, e mais nada -- entao
+  // nao ha, dentro dele, nada capaz de avisar alguem nem por engano.
+  const dependenciasDasRotasDeAjuda = {
+    duvidas: criarDuvidaDeAjudaService(criarDuvidasDeAjuda(db, ids), systemClock),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
   // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
   // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
@@ -1472,6 +1491,7 @@ export async function main(): Promise<void> {
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
     registrarRotasDosContadoresDeSecao(escopo, dependenciasDasRotasDosContadores);
+    registrarRotasDeAjuda(escopo, dependenciasDasRotasDeAjuda);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
     // O MURAL (20/10/2026): `GET /timeline`, `GET|POST /me/publications`,

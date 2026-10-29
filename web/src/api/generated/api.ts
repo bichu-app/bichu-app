@@ -1072,6 +1072,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mandar uma duvida para a ajuda
+         * @description **Grava a duvida numa fila e NAO avisa ninguem.** Pedido do cliente de
+         *     29/10/2026 ("no menu do usuario, adicione um botao de ajuda, que abrira
+         *     uma pagina com um formulario de duvida"), com a decisao de destino
+         *     tomada na mesma conversa: **grava no banco e vai para o backoffice**, na
+         *     variante **sem notificacao por e-mail**.
+         *
+         *     A ausencia de aviso e a decisao, e nao um pedaco que faltou: esta
+         *     operacao nao escreve em `notification_items`, nao dispara e-mail e nao
+         *     cria push. Quem le e um humano, abrindo a fila do painel quando abre.
+         *
+         *     ## DOIS CAMPOS, e o autor nao e um deles
+         *
+         *     `subject` e `body`, e so. **Nao ha nome, e-mail, telefone nem
+         *     endereco** no corpo: o botao mora no menu do usuario, entao existe
+         *     sessao, e o autor sai do `Bearer`. Pedir de novo o que a conta ja tem
+         *     seria pedir ao tutor que digitasse um dado que o servidor erra menos.
+         *
+         *     ## O TETO RECUSA, e nunca trunca
+         *
+         *     `maxLength` em `HelpRequestInput` e o que vira **400 com mensagem**.
+         *     Truncar em silencio foi recusado: quem escreve 4142 caracteres e recebe
+         *     4000 gravados acredita ter contado o problema inteiro, e o que fica de
+         *     fora e o fim, onde o tutor costuma dizer o que ja tentou.
+         *
+         *     ## 202 E NAO 201, pelo mesmo motivo da denuncia
+         *
+         *     `reportPublication` responde `202` porque o que foi aceito e um PEDIDO
+         *     DE ATENCAO HUMANA, nao um recurso criado que o chamador va buscar
+         *     depois. Aqui e igual: **nao existe `GET` desta duvida para o tutor**,
+         *     nao ha historico na tela e nao ha endereco para onde apontar um
+         *     `Location`. `201` prometeria um recurso que o cliente desta operacao
+         *     nunca pode ler.
+         *
+         *     **Nenhum prazo e prometido**, como nas denuncias.
+         */
+        post: operations["createMyHelpRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications/read-all": {
         parameters: {
             query?: never;
@@ -15483,6 +15536,28 @@ export interface components {
              */
             city?: string;
         };
+        /**
+         * @description A duvida, em dois campos. **Nenhum dado pessoal aqui**, de proposito: o
+         *     autor sai da sessao, e nome, e-mail e telefone a fila do painel resolve
+         *     por juncao com a conta. Um campo de contato neste corpo seria um dado
+         *     que o tutor digita, o servidor grava e ninguem confere -- e, sendo
+         *     divergente do da conta, o atendimento responderia para o lugar errado.
+         */
+        HelpRequestInput: {
+            /**
+             * @description O assunto, em poucas palavras. 120 e o que cabe numa linha da fila
+             *     do painel sem reticencias no meio de uma palavra. **Estourar e
+             *     `400`, e nunca corte silencioso.**
+             */
+            subject: string;
+            /**
+             * @description A duvida. Texto livre, sem filtro de palavra -- quem le e um humano
+             *     no painel, como no Mural. 4000 e folgado de proposito: quem escreve
+             *     para o suporte conta o que ja tentou, e cortar isso custa uma ida e
+             *     volta de atendimento.
+             */
+            body: string;
+        };
         AdminBroadcastDraft: {
             title: string;
             /**
@@ -18121,6 +18196,25 @@ export interface operations {
                     "application/json": components["schemas"]["SectionCounters"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createMyHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpRequestInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];

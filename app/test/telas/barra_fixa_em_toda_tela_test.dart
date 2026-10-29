@@ -263,6 +263,17 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
     motivo: 'AMBIGUA, mesma conta. E ajuste de conta, e nao destino de '
         'navegacao: ninguem vem "ver os bloqueados", vem desfazer um bloqueio.',
   ),
+  // -- `Perfil` > `Ajuda` (29/10/2026) -----------------------------------
+  (
+    nome: 'o formulario de duvida',
+    endereco: '/perfil/ajuda',
+    padrao: '/perfil/ajuda',
+    motivo: 'Aberta por um `ItemDeMenu` do CORPO da aba `Perfil`, que e '
+        'conteudo e nao casca -- o mesmo criterio de `/perfil/dados` e de '
+        '`/perfil/bloqueados`. E formulario de um passo so: trazer a barra de '
+        'abas de volta por cima dele ofereceria quatro saidas laterais no meio '
+        'de um texto meio escrito, e nenhuma delas o guarda.',
+  ),
   (
     nome: 'os pedidos de conexao',
     endereco: '/conexoes/pedidos',

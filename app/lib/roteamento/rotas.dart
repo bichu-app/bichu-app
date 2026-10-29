@@ -30,6 +30,7 @@ import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
+import '../telas/ajuda/tela_de_duvida.dart';
 import '../telas/conexoes/tela_de_conexoes.dart';
 import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
@@ -558,6 +559,20 @@ abstract final class Rotas {
   /// e das MINHAS decisoes, e o "meu" mora em `Perfil`. Ela EMPURRA e cobre a
   /// casca, com barra de saida e volta.
   static const String pessoasBloqueadas = '/perfil/bloqueados';
+
+  /// `Perfil` > `Ajuda` (29/10/2026, pedido do cliente: *"no menu do usuario,
+  /// adicione um botao de ajuda, que abrira uma pagina com um formulario de
+  /// duvida"*).
+  ///
+  /// `/perfil/ajuda`, irma de `dadosPessoais`, `meusAchados` e
+  /// `pessoasBloqueadas`: quem abre e o CORPO da aba `Perfil`, entao ela
+  /// EMPURRA e cobre a casca, com barra de saida e volta. `GoRoute` cru e nao
+  /// `_comBarraFixa`, pelo mesmo criterio das tres: pagina interna nao traz a
+  /// barra de abas de volta.
+  ///
+  /// **Porta UNICA.** Nao ha entrada por `RegistroDeSubDestinos`: duas portas
+  /// para a mesma tela e o que `gaveta_de_secoes.dart` proibe.
+  static const String ajuda = '/perfil/ajuda';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -1662,6 +1677,13 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.pessoasBloqueadas,
         builder: (context, estado) =>
             _asConexoes(context, aba: AbaDeConexoes.bloqueados),
+      ),
+      // A AJUDA (29/10/2026). A duvida GRAVA numa fila que o backoffice le, e
+      // **nao dispara e-mail nem notificacao** -- decisao do cliente na mesma
+      // conversa do pedido.
+      GoRoute(
+        path: Rotas.ajuda,
+        builder: (context, estado) => const TelaDeDuvida(),
       ),
       // O PERFIL DE OUTRA PESSOA (19/10/2026, fatia G). Irma das de cima: ela
       // EMPURRA e cobre a casca, e voltar devolve a pessoa onde ela estava.

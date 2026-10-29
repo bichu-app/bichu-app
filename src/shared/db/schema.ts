@@ -2848,6 +2848,28 @@ export interface SitePageAvailabilityTable {
   updated_at: AtualizadoEm;
 }
 
+/**
+ * `help_requests` -- a duvida que o tutor manda pelo botao `Ajuda` do menu do
+ * usuario (migracao `20261029000010`, 29/10/2026).
+ *
+ * **Nao ha coluna de estado nem de aviso**, e as duas ausencias sao decisao:
+ * o cliente escolheu "grava no banco e vai para o backoffice, sem notificacao
+ * por e-mail", e a tela do painel -- onde "resolvida" nasceria -- e de outra
+ * frente. Quando ela vier, sera coluna de DATA e mudanca de estado, nunca
+ * `DELETE`.
+ */
+export interface HelpRequestsTable {
+  /** UUIDv7 da aplicacao. Sem `Generated`: a coluna nao tem `DEFAULT`. */
+  id: string;
+  /** FK para `users`, `ON DELETE CASCADE`. Sai da sessao, nunca do corpo. */
+  author_user_id: string;
+  /** 2 a 120 por `CHECK`. O mesmo teto esta em `HelpRequestInput`. */
+  subject: string;
+  /** 2 a 4000 por `CHECK`. Texto livre, sem filtro de palavra. */
+  body: string;
+  created_at: CriadoEm;
+}
+
 export interface Database {
   handles: HandlesTable;
   user_connections: UserConnectionsTable;
@@ -2939,6 +2961,7 @@ export interface Database {
   publication_reports: PublicationReportsTable;
   app_version_policy: AppVersionPolicyTable;
   site_page_availability: SitePageAvailabilityTable;
+  help_requests: HelpRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

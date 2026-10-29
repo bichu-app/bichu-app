@@ -15,6 +15,7 @@ import '../widgets/carimbo_do_build.dart';
 import '../widgets/faixa_de_aviso.dart';
 import '../widgets/item_de_menu.dart';
 import '../widgets/marca.dart';
+import 'ajuda/tela_de_duvida.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
@@ -1170,6 +1171,29 @@ class AbaPerfil extends StatelessWidget {
               aoTocar: () => context.push(Rotas.minhasIndicacoes),
             ),
             const SizedBox(height: BichuEspaco.e6),
+            // A AJUDA (29/10/2026). Cliente, literal: *"no menu do usuario,
+            // adicione um botao de ajuda, que abrira uma pagina com um
+            // formulario de duvida"*.
+            //
+            // **FORA DE GRUPO, e ACIMA de `Sair da conta`.** Fora de grupo
+            // porque pedir ajuda nao e `Conta` (mexer em mim), nao e `Pets na
+            // rua` e nao e `Comunidade` -- e por-la num deles para nao ficar
+            // solta faria o grupo deixar de significar o que ele significa. E
+            // um grupo novo so para ela teria UM item, que este menu nao faz
+            // em lugar nenhum.
+            //
+            // Acima de `Sair da conta` porque o cliente foi literal sobre
+            // aquela linha (*"o sair da conta deve ser sempre a ultima opcao
+            // do menu"*), e `exigirSairPorUltimo` reprova qualquer bloco com
+            // `dy` maior que o dela. As duas vizinhas de pe de pagina sao as
+            // duas coisas que se faz quando se termina: pedir ajuda, ou sair.
+            //
+            // **SEM ICONE**, como as outras doze linhas: `ItemDeMenu` nao tem
+            // parametro de icone, e nao e omissao.
+            ItemDeMenu(
+              rotulo: TelaDeDuvida.titulo,
+              aoTocar: () => context.push(Rotas.ajuda),
+            ),
             // SEMPRE O ULTIMO (pedido do cliente, literal: "o sair da conta
             // deve ser sempre a ultima opcao do menu"), e **fora de grupo**:
             // encerrar a sessao nao e um item de `Conta` entre outros, e por-lo
