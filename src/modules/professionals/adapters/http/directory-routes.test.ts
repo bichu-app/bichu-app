@@ -44,6 +44,7 @@ import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import type { EntradaDoDiretorio } from '../../domain/entrada-do-diretorio.js';
+import { PONTUACAO_VAZIA } from '../../domain/avaliacao-do-local.js';
 import type {
   DirectoryRepository,
   PaginaDoDiretorio,
@@ -72,6 +73,18 @@ const ENTRADA: EntradaDoDiretorio = {
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,
+  pontuacao: PONTUACAO_VAZIA,
+};
+
+/**
+ * A MESMA entrada, mas com avaliacoes publicadas. Existe para o corpo da
+ * resposta poder ser medido nos dois estados -- com e sem avaliacao --, que e o
+ * unico jeito de o caso da media NULA nao ser vacuo.
+ */
+const ENTRADA_AVALIADA: EntradaDoDiretorio = {
+  ...ENTRADA,
+  slug: 'clinica-veterinaria-do-largo',
+  pontuacao: { media: 4.3, quantidade: 128, histograma: { 1: 3, 2: 4, 3: 11, 4: 39, 5: 71 } },
 };
 
 interface Cenario {
@@ -190,6 +203,52 @@ void describe('a resposta do diretorio', () => {
     assert.equal(resposta.corpo['page'], 1);
     assert.equal(resposta.corpo['limit'], 20);
     assert.deepEqual(resposta.corpo['applied_filters'], { scope: 'all' });
+  });
+
+  // -----------------------------------------------------------------------
+  // A PONTUACAO NO CORPO DA RESPOSTA (BICHUS-313)
+  // -----------------------------------------------------------------------
+  //
+  // **Medido no CORPO, e nao na projecao.** Nesta borda so o corpo da
+  // REQUISICAO e conferido contra o contrato; a resposta sai sem ninguem olhar.
+  // Entao um `rating` que a projecao produz e a rota deixa cair pelo caminho --
+  // um `...resto`, uma reescrita apos o espalhamento -- nao tem portao algum na
+  // frente. Estes casos sao esse portao.
+
+  void it('o cartao da lista traz `rating` com media, contagem e histograma', async () => {
+    const resposta = await pedir(servidor({ itens: [ENTRADA_AVALIADA] }));
+    const [entrada] = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.ok(entrada !== undefined);
+    assert.deepEqual(
+      entrada['rating'],
+      { average: 4.3, count: 128, histogram: { '1': 3, '2': 4, '3': 11, '4': 39, '5': 71 } },
+      'REPROVA: `rating` nao saiu no cartao da lista, ou saiu com outra forma. ' +
+        '`DirectoryEntrySummary.rating` nao e `required`: sem este caso, a rota ' +
+        'pode voltar a omitir o campo e nenhum portao acusa -- foi exatamente ' +
+        'assim que a BICHUS-313 passou despercebida.',
+    );
+  });
+
+  void it('cartao SEM avaliacao sai com `average` NULO no corpo, e nunca zero', async () => {
+    // `ENTRADA` carrega `PONTUACAO_VAZIA`, que e o estado da maioria das
+    // entradas de verdade.
+    const resposta = await pedir(servidor());
+    const [entrada] = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.ok(entrada !== undefined);
+    assert.deepEqual(entrada['rating'], {
+      average: null,
+      count: 0,
+      histogram: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+    });
+    // E no JSON CRU: `"average":0` nao pode estar no corpo. Zero numa escala de
+    // 1 a 5 le-se como "pessimo", e um local que ninguem avaliou nao e pessimo
+    // -- o cartao escreve "Ainda sem avaliacoes" e nao desenha estrela nenhuma.
+    assert.equal(
+      resposta.bruto.includes('"average":0'),
+      false,
+      `REPROVA: media ZERO no corpo. JSON: ${resposta.bruto}`,
+    );
+    assert.ok(resposta.bruto.includes('"average":null'), `JSON: ${resposta.bruto}`);
   });
 
   void it('NAO devolve UUID interno em lugar nenhum do corpo', async () => {
@@ -512,6 +571,16 @@ void describe('GET /public/directory-entries: a MESMA lista, sem conta', () => {
     assert.deepEqual(entrada['verification'], {
       level: 'document_verified',
       evidence_kinds: ['crmv'],
+    });
+    // E A PONTUACAO, no cartao DESLOGADO tambem (BICHUS-313). O contrato pedia
+    // as duas projecoes no mesmo commit, com o mesmo recorte, "para a media do
+    // cartao deslogado e a do logado nunca discordarem" -- e aqui as duas vem da
+    // MESMA `EntradaDoDiretorio`, entao discordar exigiria duas projecoes
+    // diferentes do mesmo valor.
+    assert.deepEqual(entrada['rating'], {
+      average: null,
+      count: 0,
+      histogram: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
     });
   });
 
