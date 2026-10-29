@@ -1155,6 +1155,51 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
+/* Recorte e reposicionamento da imagem (BICHUS-314). A moldura E o palco: nao
+   ha area fora dela para arrastar, e isso some com a duvida de onde clicar. */
+.recorte-palco {
+  position: relative;
+  width: 100%;
+  border-radius: var(--bichu-radius-md);
+  overflow: hidden;
+  background: var(--bichu-cor-surface-sunken);
+  touch-action: none;
+  cursor: grab;
+}
+.recorte-palco:active {
+  cursor: grabbing;
+}
+.recorte-palco canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* A grade de tercos e o contorno da moldura. Sem cor a mao: o contorno sai do
+   token de superficie, com a opacidade dando o contraste sobre a foto. */
+.recorte-grade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: var(--bichu-border-medium) solid var(--bichu-cor-surface);
+  border-radius: var(--bichu-radius-md);
+  opacity: 0.85;
+}
+.recorte-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--bichu-space-3);
+}
+.recorte-zoom .input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+.recorte-zoom .ibtn {
+  width: var(--bichu-space-10);
+  height: var(--bichu-space-10);
+  flex: none;
+}
+
 /* Login */
 .login {
   min-height: 100dvh;

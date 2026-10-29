@@ -16,6 +16,7 @@ const TRACOS = {
   ),
   expand: <path d="M6 9l6 6 6-6" />,
   add: <path d="M12 5v14M5 12h14" />,
+  remove: <path d="M5 12h14" />,
   edit: (
     <>
       <path d="M4 20h4L19 9l-4-4L4 16v4z" />
