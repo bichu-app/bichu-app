@@ -54,12 +54,29 @@
 // em que a sigla de UF cabia antes de o campo virar seletor. O caso do rotulo
 // longo passa a acusar transbordo.
 //
-// **OS DEZ ROTULOS AQUI SAO UMA PREVISAO DECLARADA, e nao o enum de hoje.**
-// `AtividadeDoDiretorio` tem OITO valores nesta arvore. Os dez medidos abaixo
+// **OS DEZ ROTULOS AQUI ERAM UMA PREVISAO DECLARADA, E A PREVISAO LANDOU.**
+// O texto original desta nota, escrito quando o enum tinha OITO valores, dizia:
+// *"`AtividadeDoDiretorio` tem OITO valores nesta arvore. Os dez medidos abaixo
 // incluem a mudanca que outra frente esta construindo (`sitter` volta a ser
 // `Hospedagem`, e `Pet Sitter` e `Creche` entram como valores novos) -- foi
 // pedido medir com dez antes de eles existirem. O grupo da parte 1 mede o enum
-// DE VERDADE, entao este arquivo nao afirma que os dez ja existem.
+// DE VERDADE, entao este arquivo nao afirma que os dez ja existem."*
+//
+// **NA UNIAO DE 29/10/2026 (integra/cinco-de-29-10) o enum passou a ter DEZ.**
+// A outra frente era o #103, e ela chegou por um caminho DIFERENTE do previsto:
+// `sitter` NAO foi renomeado (fica `Pet Sitter`, decisao tomada com o custo na
+// mesa na `20261029000002`), e `boarding` ('Hospedagem') e `daycare` ('Creche')
+// entraram como valores NOVOS. O CONJUNTO DE ROTULOS, porem, e exatamente o
+// mesmo que a previsao mediu -- dez rotulos, os mesmos dez textos, so atribuidos
+// a codigos diferentes --, entao a medicao de 320 dp deste arquivo continua
+// valendo sem uma linha de mudanca, e isso foi CONFERIDO e nao suposto.
+//
+// RELEITURA DE 320 dp QUE A PROPRIA ASSERCAO EXIGE: os dois rotulos novos sao
+// 'Hospedagem' (10 caracteres) e 'Creche' (6), e os dois sao MAIS CURTOS que o
+// rotulo de atividade mais longo que ja existia, 'Banho e tosa' (12). Nenhum
+// rotulo novo e mais longo que todos os de hoje, entao o risco que a assercao
+// manda reler nao se materializou. (O `_rotuloMaisLongo` de 31 caracteres que o
+// grupo de 320 dp usa e rotulo de TIPO DE ENTIDADE, nao de atividade.)
 
 import 'package:bichu/api/modelos_diretorio.dart';
 import 'package:bichu/roteamento/rotas.dart';
@@ -206,10 +223,15 @@ void main() {
             '`AtividadeDoDiretorio`.',
       );
       // A CONTAGEM, para a chegada de um valor novo passar por aqui em vez de
-      // passar calada. Dez quando a outra frente landar `Pet Sitter` e
-      // `Creche`; oito hoje.
+      // passar calada. O texto original dizia *"Dez quando a outra frente landar
+      // `Pet Sitter` e `Creche`; oito hoje"* -- e foi exatamente isso que
+      // aconteceu: a uniao de 29/10/2026 juntou ESTA guarda (que o #100 criou
+      // valendo OITO) com o enum do #103 (que subiu para DEZ). Cada lado passava
+      // SOZINHO e os dois nao se tocam no texto -- a guarda vive em
+      // `app/test`, o enum em `app/lib/api` --, entao o git mesclou os dois
+      // limpo e SO a uniao reprovou. E para isso que a contagem existe.
       expect(
-        AtividadeDoDiretorio.values, hasLength(8),
+        AtividadeDoDiretorio.values, hasLength(10),
         reason: 'REPROVA: a lista de atividades mudou de tamanho. Se foi de '
             'proposito, atualize este numero E releia a medicao de 320 dp '
             'deste arquivo -- a folha rola, mas o rotulo novo pode ser mais '
