@@ -26,6 +26,10 @@ import type {
   CorpoDaIntencaoDeFoto,
   FotoDoProprioUsuario,
 } from '../../application/foto-do-proprio-usuario.js';
+import type {
+  CorpoDaIntencaoDoLogotipo,
+  LogotipoDaIndicacao,
+} from '../../application/logotipo-da-indicacao.js';
 import type { FotoDoPet } from '../../ports/media-repository.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -78,6 +82,31 @@ export const rotaDeIntencaoDeFotoDoUsuario = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * O LOGOTIPO DA INDICACAO (cliente, 29/10/2026).
+ *
+ * Mora aqui pelo mesmo motivo da capa do encontro e da foto do usuario: o que
+ * esta rota faz e assinar envio, e quem sabe assinar e este modulo. A escrita
+ * que USA o `upload_id` e `suggestDirectoryEntry`, e e la que a conta do
+ * chamador e conferida de novo, na clausula `WHERE`.
+ *
+ * O mesmo teto de 20/h das outras tres intencoes do app, e o mesmo motivo:
+ * assinar e barato, mas cada assinatura e uma autorizacao de escrita que nao se
+ * desfaz dentro da validade.
+ *
+ * **O `rateLimit` daqui espelha o `x-rate-limit` do contrato entrada por
+ * entrada**, e isso nao e redundancia que o `typecheck` cubra: nenhum portao de
+ * `$ref` compara os dois lados, e um teto so num deles e um teto que nao existe
+ * ou que recusa onde o contrato promete.
+ */
+export const rotaDeIntencaoDoLogotipoDaIndicacao = defineRoute({
+  operationId: 'createDirectorySuggestionLogoUploadIntent',
+  method: 'post',
+  path: '/media/directory-suggestion-logo-intents',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDeConfirmacaoDeFoto = defineRoute({
   operationId: 'confirmPetPhoto',
   method: 'post',
@@ -104,6 +133,8 @@ export interface DependenciasDasRotasDeMidia {
   readonly capasDeEncontro: CapaDeEncontroDaComunidade;
   /** 18/10/2026: a autorizacao de envio da foto do proprio usuario. */
   readonly fotosDoUsuario: FotoDoProprioUsuario;
+  /** 29/10/2026: a autorizacao de envio do logotipo da indicacao. */
+  readonly logotiposDeIndicacao: LogotipoDaIndicacao;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
   /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
@@ -230,6 +261,25 @@ export function registrarRotasDeMidia(
       const { uploadId, autorizacao } = await deps.fotosDoUsuario.autorizar(
         dono,
         request.body as CorpoDaIntencaoDeFoto,
+      );
+      return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeIntencaoDoLogotipoDaIndicacao,
+    {
+      schema: {
+        body: corpoDe(deps.contrato, rotaDeIntencaoDoLogotipoDaIndicacao.operationId),
+      },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.logotiposDeIndicacao.autorizar(
+        dono,
+        request.body as CorpoDaIntencaoDoLogotipo,
       );
       return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
     },

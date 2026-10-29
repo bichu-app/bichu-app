@@ -68,6 +68,28 @@ export type PropositoDaImagem =
   // O autor continua sendo `admin_account_id`: quem sobe e o administrador no
   // painel, como na logo e na foto.
   | 'directory_gallery'
+  // O LOGOTIPO DA INDICACAO (29/10/2026, pedido do cliente: *"nao tem o campo
+  // do logotipo para o usuario subir e indicar o estabelecimento"*). O NONO.
+  //
+  // **SEPARADO de `directory_logo`, e esta separacao e uma FRONTEIRA e nao uma
+  // geometria.** Os outros propositos se separam por derivada: `user_showcase`
+  // de `user_photo` pela grade, `directory_gallery` de `directory_photo` pela
+  // miniatura. Este nao -- ele usa `DERIVADAS_DA_LOGO`, a MESMA constante de
+  // `directory_logo`, porque e o mesmo quadrado ao lado do mesmo nome.
+  //
+  // O que o separa e O AUTOR e O DESTINO. `purpose` e o que amarra o envio ao
+  // destino (T9), e `imagemDoEnvio` em
+  // `professionals/application/diretorio-administrativo.ts` exige
+  // `directory_logo` para aceitar um `upload_id` em
+  // `professionals.logo_image_id` -- e `professionals` E a superficie publica
+  // (`DirectoryEntrySummary`, `DirectoryEntry`). Com UM proposito para os dois,
+  // um envio de usuario caberia naquela conferencia e **a logo de uma indicacao
+  // que ninguem aprovou chegaria ao `Perto`**, que e exatamente o que a fila de
+  // revisao existe para impedir.
+  //
+  // O autor e `user_id`, como `network_event`, `user_photo`, `user_showcase` e
+  // `user_publication` -- e nunca `admin_account_id`.
+  | 'directory_suggestion_logo'
   | 'user_photo'
   // A VITRINE de fotos do usuario (18/10/2026). Proposito SEPARADO de
   // `user_photo`, e nao o mesmo: aquele e a foto UNICA do perfil, este sao as
@@ -83,6 +105,26 @@ export type PropositoDaImagem =
   // foto aberta) e esta tem UMA (`card` 1024), porque nao ha grade no Mural.
   | 'user_publication';
 
+/**
+ * O proposito do LOGOTIPO DA INDICACAO, num ponto so.
+ *
+ * **Mora na PORTA e nao no caso de uso, e isso nao e arrumacao: e a fronteira
+ * de modulo.** `professionals` precisa deste valor -- e a escrita da indicacao
+ * que confere o proposito na clausula `WHERE` --, e a regra
+ * `arquitetura/fronteira-de-modulo` do `eslint` **reprova** import de
+ * `media/application/` por outro modulo. Modulo so conversa com modulo por
+ * porta, e foi o linter que apontou isto: a primeira versao declarava a
+ * constante em `media/application/logotipo-da-indicacao.ts` e dois arquivos de
+ * `professionals` a importavam de la.
+ *
+ * Exportado e usado pelos TRES lados -- quem assina (`LogotipoDaIndicacao`),
+ * quem grava a intencao (`registrarIntencaoDoLogotipoDaIndicacao`) e quem a
+ * confirma (`kysely-directory-suggestion-repository`) --, pela mesma razao que
+ * `PROPOSITO_DA_VITRINE` existe: **dois literais em dois arquivos foi
+ * exatamente o que divergiu em 18/10/2026**, e nenhum teste de unidade viu.
+ */
+export const PROPOSITO_DO_LOGOTIPO_DA_INDICACAO = 'directory_suggestion_logo' as const;
+
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
   store_item: 'products',
@@ -94,6 +136,13 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   // tres sao imagem da mesma entidade. Prefixo separado faria o expurgo e a
   // varredura terem tres listas para varrer.
   directory_gallery: 'directory',
+  // O logotipo da indicacao divide `directory/` com a logo, a foto e a galeria,
+  // e pela mesma razao: as quatro sao imagem de uma entidade do diretorio.
+  // Prefixo separado faria o expurgo e a varredura terem quatro listas para
+  // varrer. **O prefixo nao e a fronteira** -- a fronteira e o `purpose`, e
+  // dividir o prefixo nao abre caminho nenhum: `imagemDoEnvio` confere
+  // proposito, nao prefixo.
+  directory_suggestion_logo: 'directory',
   // Prefixo PROPRIO para foto de pessoa: regime de privacidade diferente.
   user_photo: 'people',
   // A vitrine divide `people/` com a foto unica, e de proposito: as duas sao
@@ -139,6 +188,14 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   // A galeria sai do MESMO computador de mesa que a logo e a foto: a lista de
   // tres tipos, sem HEIC. A constante, e nao a lista escrita de novo.
   directory_gallery: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  // **TRES TIPOS, SEM HEIC, e o custo e de quem usa iPhone.** Este e o unico
+  // proposito de autor `user_id` que NAO usa `TIPOS_ACEITOS`, e a excecao nao e
+  // descuido: a esteira de catalogo nao decodifica HEIC, e e ela que processa
+  // esta imagem. A capa do encontro (`network_event`) paga o mesmo custo pelo
+  // mesmo motivo. Alargar para `TIPOS_ACEITOS` aqui faria a rota assinar uma
+  // politica para um arquivo que o worker vai recusar depois do envio -- pior
+  // que recusar antes, porque os bytes ja subiram.
+  directory_suggestion_logo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   user_photo: TIPOS_ACEITOS,
   // A VITRINE sai do mesmo celular que a foto unica, entao a MESMA lista --
   // `TIPOS_ACEITOS`, com HEIC. Reusar e nao repetir: duas listas dos mesmos
@@ -187,6 +244,14 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   // entao o piso que faz a `banner` se preencher e identico. Numeros diferentes
   // para a mesma geometria e o que ninguem consegue explicar depois.
   directory_gallery: { largura: 600, altura: 600 },
+  // O LOGOTIPO DA INDICACAO usa os MESMOS 256 x 256 de `directory_logo`, e nao
+  // um numero novo: e a mesma imagem (a marca, num quadrado ao lado do nome), a
+  // maior derivada e a mesma (`card` 512) e `sharp` nao amplia. O argumento
+  // inteiro esta escrito em `directory_logo` acima -- logo de clinica de bairro
+  // costuma ser um PNG de 300 px que saiu de um cartao de visita, e exigir 600
+  // reprovaria a logo real da maioria. Numeros diferentes para a mesma
+  // geometria e o que ninguem consegue explicar depois.
+  directory_suggestion_logo: { largura: 256, altura: 256 },
   // 300 x 300 na foto de pessoa, e nao 600. A maior derivada dela e 512, e
   // retrato recortado de uma foto antiga ou de uma captura de tela chega perto
   // disso; recusar a 500 px entregaria "sua foto nao serve" a quem tem a unica
