@@ -97,6 +97,12 @@ export const ORDEM_DOS_TIPOS_DE_ENTIDADE: readonly TipoDeEntidadeDaEntrada[] = [
  */
 export const ATIVIDADES = {
   clinic: 'Clínica',
+  // `hospital` e `store` entraram em 28/10/2026 com a migracao
+  // `20261028000001`. `hospital` e separado de `clinic` porque hospital interna
+  // e tem plantao, e `Loja` aqui e o PETSHOP que aparece em `Perto` -- nao a
+  // secao `Loja` do produto, que e catalogo e vive em `src/loja/`.
+  hospital: 'Hospital',
+  store: 'Loja',
   vet: 'Veterinário',
   groomer: 'Banho e tosa',
   walker: 'Dog Walker',
@@ -112,7 +118,15 @@ export const ATIVIDADES = {
  * e a ordem em que ela foi escrita na migracao, e ela nao e ordem de tela.
  */
 export const ORDEM_DAS_ATIVIDADES: readonly TipoDaEntrada[] = [
+  // Os ESTABELECIMENTOS primeiro (`clinic` na frente, como antes de 28/10, por
+  // ser o que o operador cadastra mais), e as PESSOAS depois, na mesma ordem
+  // relativa de sempre. `hospital` e `store` entraram no primeiro grupo em vez
+  // de no fim da lista porque quem procura um deles esta procurando um lugar, e
+  // nao alguem -- e porque "o valor novo vai no fim" produziria uma lista em
+  // ordem de migracao, que nao e ordem de tela.
   'clinic',
+  'hospital',
+  'store',
   'vet',
   'groomer',
   'walker',

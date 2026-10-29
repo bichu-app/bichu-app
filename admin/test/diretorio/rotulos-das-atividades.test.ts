@@ -77,13 +77,25 @@ describe('os rotulos das atividades (cliente, 28/10/2026)', () => {
     expect(ATIVIDADES.sitter).toBe('Pet Sitter');
   });
 
-  it('os tres valores de fio NAO mudaram, e nenhum valor foi acrescentado aqui', () => {
-    // Renomear rotulo nao mexe em `enum`. Se este caso cair junto com os de
-    // cima, alguem trocou um VALOR pensando que trocava um nome.
+  it('os tres valores de fio NAO mudaram com a renomeacao', () => {
+    // Renomear rotulo nao mexe em `enum`: os tres codigos continuam existindo.
+    // Se este caso cair, alguem trocou um VALOR pensando que trocava um nome.
+    for (const codigo of ['clinic', 'walker', 'sitter'] as const) {
+      expect(Object.keys(ATIVIDADES)).toContain(codigo);
+    }
+  });
+
+  it('as OITO atividades tem rotulo, e o seletor oferece exatamente elas', () => {
+    // `store` e `hospital` entraram em 28/10/2026 (`20261028000001`). O
+    // `satisfies Record<TipoDaEntrada, string>` ja obriga o rotulo no
+    // compilador; este caso guarda a outra metade, que o compilador nao ve: a
+    // ORDEM do seletor nao pode esquecer um valor nem inventar um.
     expect(Object.keys(ATIVIDADES).sort()).toEqual(
-      ['clinic', 'groomer', 'sitter', 'trainer', 'vet', 'walker'].sort(),
+      ['clinic', 'hospital', 'store', 'vet', 'groomer', 'walker', 'sitter', 'trainer'].sort(),
     );
     expect([...ORDEM_DAS_ATIVIDADES].sort()).toEqual(Object.keys(ATIVIDADES).sort());
+    expect(ATIVIDADES.store).toBe('Loja');
+    expect(ATIVIDADES.hospital).toBe('Hospital');
   });
 
   it('o painel e o aplicativo dizem a MESMA coisa para os tres', () => {

@@ -63,11 +63,21 @@ describe('o tipo de entidade e eixo proprio, separado da atividade', () => {
     }
   });
 
-  it('as seis atividades seguem intocadas', () => {
-    // `kind` nao ganhou nem perdeu valor: era isso que o eixo proprio
-    // protegia.
+  it('as atividades crescem sem virar o outro eixo', () => {
+    // ERAM SEIS, E SAO OITO desde 28/10/2026 (`store` e `hospital`,
+    // `20261028000001`). Este caso nao e mais "a lista nao cresce" -- ela
+    // cresceu, por decisao do cliente e com o preco de contrato pago.
+    //
+    // O que ele guarda e a FRONTEIRA, que nao mudou: a lista pode ganhar
+    // ATIVIDADE e nunca TIPO DE ENTIDADE. `organization` e `professional` nao
+    // entram aqui por mais que a lista cresca, e e esse o contrapeso --
+    // "profissional autonomo" chegou a ser pedido como atividade em 28/10 e o
+    // proprio cliente o devolveu ao eixo do tipo.
     expect(Object.keys(ATIVIDADES).sort()).toEqual(
-      ['clinic', 'groomer', 'sitter', 'trainer', 'vet', 'walker'].sort(),
+      ['clinic', 'hospital', 'store', 'vet', 'groomer', 'walker', 'sitter', 'trainer'].sort(),
     );
+    for (const tipoDeEntidade of Object.keys(TIPOS_DE_ENTIDADE)) {
+      expect(Object.keys(ATIVIDADES)).not.toContain(tipoDeEntidade);
+    }
   });
 });

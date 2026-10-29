@@ -35,19 +35,50 @@ import {
 } from './nivel-de-verificacao.js';
 
 /**
- * A lista fechada de `professionals.kind`: a ATIVIDADE, o que se contrata.
- * **Espelhada** em `src/shared/db/schema.ts`.
+ * A lista fechada de `professionals.kinds`: a ATIVIDADE, o que se contrata.
+ * **Espelhada** em `src/shared/db/schema.ts` e conferida pela entrada
+ * `public.professionals.professionals_atividades_conhecidas` de
+ * `tests/integration/conjunto-exato-dos-checks.test.ts`.
  *
  * **Continua sem valor para ONG, e a ausencia agora e desenho concluido.** O
  * texto anterior aqui dizia "decisao pendente do modelo" e nomeava a coluna que
  * faltava; desde `20261018000012` ela existe, e o tipo de entidade e eixo
  * proprio (`TipoDeEntidade`). ONG nao entra nesta lista porque **uma ONG nao e
  * uma atividade**: ela tem atividade (`clinic`, `vet`) E tipo de entidade
- * (`organization`), os dois ao mesmo tempo. Acrescentar valor aqui tambem
- * quebraria o contrato -- `oasdiff`, `response-property-enum-value-added`, 12
- * erros medidos em 18/10.
+ * (`organization`), os dois ao mesmo tempo.
+ *
+ * **ELA CRESCEU EM 28/10/2026, e isso nao afrouxa a frase acima.** O cliente
+ * pediu `store` e `hospital` (migracao `20261028000001`), e os dois sao
+ * ATIVIDADE -- nenhum deles e tipo de entidade. "Profissional autonomo" foi
+ * pedido e depois RETIRADO por ele mesmo, verbatim: *"na verdade, nao inclua
+ * profissional autonomo como atividade, ja esta no tipo"*.
+ *
+ * O preco foi pago de proposito: acrescentar valor a um `enum` que sai em
+ * RESPOSTA quebra o contrato (`oasdiff`,
+ * `response-property-enum-value-added`), e para estes dois valores foram
+ * **26 erros e 16 avisos em 12 operacoes**, medidos em 28/10 contra o
+ * `development` em `6b60db94`, com dispensa datada em
+ * `.github/quality-gates.yml`. **Nao reuse a contagem**: o numero que esta
+ * prosa carregava antes ("12 erros medidos em 18/10") era de um valor
+ * hipotetico num contrato mais pequeno, e quem alargar a lista de novo tem de
+ * medir outra vez.
  */
-export type TipoDeProfissional = 'vet' | 'groomer' | 'walker' | 'sitter' | 'trainer' | 'clinic';
+export type TipoDeProfissional =
+  | 'vet'
+  | 'groomer'
+  | 'walker'
+  | 'sitter'
+  | 'trainer'
+  | 'clinic'
+  // `store` e `hospital` (cliente, 28/10/2026, migracao `20261028000001`).
+  //
+  // `store` NAO e a secao `Loja` do produto (`store_items`): aqui e um
+  // estabelecimento que vende aparecendo em `Perto` -- um petshop. `hospital`
+  // existe separado de `clinic` porque hospital interna e tem plantao, e com
+  // um valor so a distincao ficaria no NOME do estabelecimento, onde nenhum
+  // filtro alcanca.
+  | 'store'
+  | 'hospital';
 
 /**
  * A lista fechada de `professionals.entity_kind`: o QUE a entrada e.
