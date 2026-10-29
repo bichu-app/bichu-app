@@ -175,7 +175,7 @@ class TelaSugerirProfissional extends StatefulWidget {
   static const String rotuloDeConfirmarEmail = 'Confirmar meu e-mail';
 
   static const String recebido =
-      'Indicação recebida. Ela vai para conferência: nada aparece no Perto até '
+      'Indicação recebida. Ela vai para conferência: nada aparece na Rede até '
       'alguém olhar.';
 
   static const String rotuloDoCep = 'CEP';
@@ -191,7 +191,7 @@ class TelaSugerirProfissional extends StatefulWidget {
   /// omissao que a faixa de revisao desta tela existe para nao fazer.
   static const String ajudaDoCep =
       'Preenche bairro, cidade e estado. Você pode mudar depois. Fica salvo '
-      'só para quem confere, e não aparece no Perto.';
+      'só para quem confere, e não aparece na Rede.';
 
   /// Os tres desfechos da busca. **Nenhum e erro de formulario**: nenhum marca
   /// campo, nenhum desabilita o botao e nenhum impede o envio -- o CEP nao e
@@ -847,7 +847,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   // avaliacao da comunidade e outro modelo, e ele nao existe
                   // (ADR-0011 secao 5.4). Dito, para ninguem escrever para o
                   // publico.
-                  ajuda: 'Só quem confere lê. Não aparece no Perto.',
+                  ajuda: 'Só quem confere lê. Não aparece na Rede.',
                   capitalizacao: TextCapitalization.sentences,
                   habilitado: !enviando,
                   // **Sem `acaoDeTeclado`, e e decisao e nao esquecimento.**

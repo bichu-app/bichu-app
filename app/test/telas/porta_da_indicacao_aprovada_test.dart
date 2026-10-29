@@ -4,7 +4,7 @@
 // ate a pagina do profissional recomendado ficou parado em uma pagina preta"*.
 //
 // Este arquivo mede o caminho INTEIRO que a pessoa faz, e nao um pedaco dele:
-// `Minhas indicacoes` -> `Ver no Perto` -> a pagina do local. O defeito nao
+// `Minhas indicacoes` -> `Ver na Rede` -> a pagina do local. O defeito nao
 // aparece em nenhuma das duas telas isoladas, porque ele e de ROTEAMENTO: a
 // pagina do local mora SOB O RAMO da `Rede`
 // (`/rede/locais/:slug`, `StatefulShellBranch`) e `Minhas indicacoes` e irma
@@ -101,7 +101,7 @@ Future<http.Response> Function(http.Request) redeComDetalheQueSumiu() {
 void main() {
   group('do aviso de indicacao aprovada ate a pagina do local', () {
     testWidgets(
-      'ISCA: tocar em `Ver no Perto` abre a pagina do local, e nao uma tela '
+      'ISCA: tocar em `Ver na Rede` abre a pagina do local, e nao uma tela '
       'preta',
       (tester) async {
         await abrirMinhasIndicacoes(
@@ -173,19 +173,38 @@ void main() {
           reason: 'REPROVA: o 404 do detalhe tirou a pagina da arvore. O 404 e '
               'um ESTADO da pagina, nao a ausencia dela.',
         );
+        // O TEXTO POR EXTENSO, e NAO `PaginaDoLocal.tituloDoNaoEncontrado`.
+        // Comparar a tela com a constante que a produz aprova QUALQUER texto,
+        // inclusive vazio: trocar a constante troca os dois lados. E a regra
+        // de `perto_com_dados_test.dart`, e e tambem o que faz este caso
+        // guardar a troca de 28/10/2026 -- com `Perto` no lugar de `Rede` ele
+        // reprova, que e o ponto.
         expect(
-          find.text(PaginaDoLocal.tituloDoNaoEncontrado),
+          find.text('Este local saiu da Rede'),
           findsOneWidget,
-          reason: 'REPROVA: a entrada que saiu do ar nao disse nada. Quem veio '
-              'do aviso de indicacao aprovada tem de ler o motivo, e nao '
-              'encarar uma tela vazia -- que e indistinguivel da tela preta '
-              'para quem esta olhando.',
+          reason: 'REPROVA: a entrada que saiu do ar nao disse nada, ou disse '
+              'com a palavra velha. Quem veio do aviso de indicacao aprovada '
+              'tem de ler o motivo, e nao encarar uma tela vazia -- que e '
+              'indistinguivel da tela preta para quem esta olhando. E a '
+              'palavra e `Rede`: `Perto` nao e secao desde 19/10/2026.',
         );
         expect(
-          find.text(PaginaDoLocal.explicacaoDoNaoEncontrado),
+          find.text(
+            'Ele pode ter sido retirado. Veja quem está atendendo na sua '
+            'região agora.',
+          ),
           findsOneWidget,
           reason: 'REPROVA: o titulo do nao-encontrado apareceu sem a '
               'explicacao. Titulo sozinho nao diz o que fazer agora.',
+        );
+
+        // E A PALAVRA VELHA NAO ESTA NA TELA, em nenhum dos dois textos.
+        expect(
+          find.textContaining('Perto'),
+          findsNothing,
+          reason: 'REPROVA: a pagina do nao-encontrado ainda escreve `Perto`. '
+              'O cliente leu esta tela em 28/10/2026 e disse que ela traz *"o '
+              'conceito antigo ainda de perto e nao de rede"*.',
         );
       },
     );

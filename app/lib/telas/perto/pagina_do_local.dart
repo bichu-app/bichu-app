@@ -113,7 +113,17 @@ class PaginaDoLocal extends StatefulWidget {
   /// Rascunho, oculto, removido e inexistente sao quatro causas e um texto: a
   /// tela nao tem o que fazer com a diferenca, e distinguir contaria a quem
   /// esta de fora que existe uma entrada que ninguem publicou (ADR-0021).
-  static const String tituloDoNaoEncontrado = 'Este local saiu do Perto';
+  /// **O TEXTO MUDOU EM 28/10/2026, e o NOME da constante fica.** Era
+  /// `Este local saiu do Perto`, e `Perto` deixou de ser seção em 19/10/2026 --
+  /// o diretório virou a aba `Comunidade` da `Rede`. O cliente leu o texto
+  /// velho nesta rodada e nomeou a troca: *"está trazendo o conceito antigo
+  /// ainda de perto e não de rede"*.
+  ///
+  /// **`Rede`, a mesma palavra de [rotuloDeVoltarParaPerto]**, que é o botão
+  /// desenhado logo abaixo desta frase: a frase diz de onde o local saiu e o
+  /// botão leva ao mesmo lugar, e duas palavras ali seriam dois nomes para uma
+  /// seção.
+  static const String tituloDoNaoEncontrado = 'Este local saiu da Rede';
 
   static const String explicacaoDoNaoEncontrado =
       'Ele pode ter sido retirado. Veja quem está atendendo na sua região '
