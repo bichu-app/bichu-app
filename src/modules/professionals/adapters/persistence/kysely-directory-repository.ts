@@ -261,7 +261,14 @@ const TEM_ALGUMA_PROVA = sql<boolean>`EXISTS (
      and v.decision = 'approved'
 )`;
 
-function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
+/**
+ * A linha vira entrada. **A pontuacao entra por PARAMETRO e nao pela linha**, e
+ * a separacao e deliberada: a lista a le na MESMA consulta da pagina (lateral
+ * sobre `pontuacao_do_local`), e o detalhe a le na consulta propria que ja
+ * existia. Se ela viesse de `LinhaDaEntrada`, o detalhe precisaria inventar as
+ * sete colunas na sua projecao so para satisfazer o tipo.
+ */
+function comoEntrada(l: LinhaDaEntrada, pontuacao: PontuacaoDoLocal): EntradaDoDiretorio {
   const aprovadas: DecisaoDaVerificacao = 'approved';
   return {
     slug: l.slug,
@@ -284,6 +291,7 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
     })),
     distanciaEmMetros: l.distancia_em_metros,
     logoPublicKey: l.logo_public_key,
+    pontuacao,
   };
 }
 
@@ -579,6 +587,78 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
   return sql<LinhaDaPontuacao>`SELECT * FROM pontuacao_do_local(${idDoLocal}::uuid)`.execute(db);
 }
 
+/**
+ * O nome da coluna interna que o lateral consome, e **so** ele.
+ *
+ * `professionals.id` e UUID interno e o ADR-0010 item 6 o proibe em saida. Ele
+ * entra na subconsulta porque `pontuacao_do_local` recebe um `uuid` -- nao ha
+ * como chamar a funcao sem ele --, e sai da projecao do lado de fora: o `select`
+ * externo nomeia as colunas da entrada uma por uma e esta nao esta entre elas.
+ * O nome anuncia para que serve, para a proxima leitura nao o copiar por
+ * engano para a resposta.
+ */
+const ID_PARA_O_LATERAL = 'id_do_lateral';
+
+/**
+ * A PONTUACAO DE CADA CARTAO, **na mesma consulta da pagina e DEPOIS do
+ * `LIMIT`**.
+ *
+ * ## Por que lateral, e nao vinte leituras
+ *
+ * `pontuacaoDe`, logo acima, le UM local. Chamada por item -- o que uma lista
+ * paginada convida a escrever -- ela levaria a rota de 3 consultas a 23: o N+1
+ * classico, que passa em todo teste porque cada leitura esta certa. Aqui a
+ * funcao entra como item do `FROM`, correlacionada com a linha da pagina, e o
+ * numero de consultas da rota **nao muda**: 3 antes, 3 depois, com 1 ou com 20
+ * cartoes. Isso e medido em `pontuacao-da-listagem-sai-em-uma-consulta.test.ts`,
+ * que conta o SQL compilado -- e nao e uma promessa deste comentario.
+ *
+ * ## POR QUE DEPOIS DO `LIMIT`, E ISSO FOI MEDIDO
+ *
+ * O lateral posto no MESMO nivel do `where` parece equivalente e nao e: o
+ * `LIMIT` acontece depois do `ORDER BY`, e o `ORDER BY` depois da juncao --
+ * entao a agregacao roda para TODA entrada do recorte e vinte e nove em cada
+ * trinta resultados sao jogados fora. Medido em 28/10/2026, com 400 locais
+ * publicados e 4800 avaliacoes (`EXPLAIN (ANALYZE, BUFFERS)`):
+ *
+ * | forma | `Aggregate` | buffers | tempo |
+ * |---|---|---|---|
+ * | pagina de hoje, sem agregado  | --          |     127 |  8,2 ms |
+ * | lateral junto do `where`      | loops=400   |  16 872 | 24,8 ms |
+ * | lateral DEPOIS do `limit`     | loops=20    |     909 |  9,4 ms |
+ *
+ * Nao e N+1 -- e uma consulta nos tres casos --, e e por isso que a contagem de
+ * consultas nao o pegaria: o custo cresce com o TAMANHO DO RECORTE e nao com o
+ * tamanho da pagina, e e nesse eixo que ele piora sem aviso (400 locais hoje,
+ * 10 000 depois). A subconsulta corta o recorte para os 20 cartoes antes de
+ * agregar, e e isso que o contrato quer dizer com "restrito aos no maximo 20
+ * `professional_id` da pagina".
+ *
+ * O `EXPLAIN` tambem mostra que o planejador INCORPORA a funcao (o plano traz
+ * `Aggregate` sobre `Bitmap Heap Scan on professional_reviews`, e nao um
+ * `Function Scan`): o agregado da pagina e literalmente o mesmo agregado da
+ * migracao, e nao uma chamada opaca por linha.
+ *
+ * ## Por que a FUNCAO, e nao um `GROUP BY` escrito aqui
+ *
+ * Porque a regra e uma: media arredondada a uma casa, NULA quando nao ha
+ * avaliacao, `status = 'published'` e `conta_habilitada(author_user_id)` (o
+ * ponto unico da migracao `20261017000013`, que trata nulo como habilitado).
+ * `pontuacao_do_local` (migracao `20261017000017`) ja a carrega, e e a MESMA
+ * funcao que a pagina do local e a escrita da avaliacao chamam. Um agregado
+ * reescrito a mao aqui seria a segunda copia do recorte, e o modo de falha
+ * dessa copia esta escrito na propria migracao: "128 avaliacoes" sobre uma lista
+ * que mostra 126.
+ *
+ * `CROSS JOIN` e nao `LEFT JOIN`: a funcao e um agregado sem `GROUP BY`, entao
+ * ela devolve SEMPRE exatamente uma linha -- com `media` nula e `quantidade`
+ * zero para o local que ninguem avaliou. Um `LEFT JOIN` aqui sugeriria um lado
+ * ausente que nao existe, e `CROSS JOIN` nao tem como esconder cartao nenhum.
+ */
+const PONTUACAO_DO_CARTAO = sql<LinhaDaPontuacao>`pontuacao_do_local(pagina.${sql.raw(
+  ID_PARA_O_LATERAL,
+)})`.as('pontuacao');
+
 export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRepository {
   /**
    * O `ref` publico da avaliacao: 128 bits de CSPRNG em base64url, 22
@@ -615,7 +695,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       const distanciaDisponivel = localizacao !== undefined && recorte.sort === 'distance';
 
       const ponto = pontoDoAparelho(recorte.chamador, recorte.familia, recorte.agora);
+      const distancia = sql<number | null>`ST_Distance(professionals.geo, ${ponto})`;
       let pagina = construtorDaListagem(db, recorte).select([
+        // O ID INTERNO, **so para o lateral do lado de fora chamar a funcao**.
+        // Ele nao atravessa a projecao externa: ver `ID_PARA_O_LATERAL`.
+        sql<string>`professionals.id`.as(ID_PARA_O_LATERAL),
         'slug',
         'kinds',
         'entity_kind',
@@ -627,7 +711,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
         'phone_e164',
         'site_url',
         EVIDENCIAS_APROVADAS.as('evidencias'),
-        sql<number | null>`ST_Distance(professionals.geo, ${ponto})`.as('distancia_em_metros'),
+        distancia.as('distancia_em_metros'),
         // A LOGO, e SO a logo. `photo_image_id` nao e selecionado aqui de
         // proposito: a faixa de 1280 x 720 em vinte cartoes multiplicaria o peso
         // da primeira pintura da lista. A coluna nem chega a esta projecao.
@@ -639,21 +723,77 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       // ninguem consegue preencher: nao ha painel de cadastro, e a ADR-0006
       // proibe derivar o ponto do bairro.
       pagina = distanciaDisponivel
-        ? pagina.orderBy(sql`ST_Distance(professionals.geo, ${ponto}) asc nulls last`)
+        ? pagina.orderBy(sql`${distancia} asc nulls last`)
         : pagina;
 
-      const itens = await pagina
-        .orderBy('display_name')
-        .limit(recorte.limit)
-        .offset((recorte.page - 1) * recorte.limit)
-        .execute();
+      // A PAGINA FECHA AQUI -- `ORDER BY`, `LIMIT` e `OFFSET` --, e so entao a
+      // pontuacao entra. Ver `PONTUACAO_DO_CARTAO`: agregar antes do `LIMIT`
+      // faz a conta rodar para o recorte inteiro, e o preco cresce com o
+      // tamanho do CATALOGO e nao com o da pagina.
+      const comPontuacao = db
+        .selectFrom(
+          pagina
+            .orderBy('display_name')
+            .limit(recorte.limit)
+            .offset((recorte.page - 1) * recorte.limit)
+            .as('pagina'),
+        )
+        .crossJoinLateral(PONTUACAO_DO_CARTAO)
+        .select([
+          'pagina.slug',
+          'pagina.kinds',
+          'pagina.entity_kind',
+          'pagina.display_name',
+          'pagina.about',
+          'pagina.city',
+          'pagina.state',
+          'pagina.neighborhood',
+          'pagina.phone_e164',
+          'pagina.site_url',
+          'pagina.evidencias',
+          'pagina.distancia_em_metros',
+          'pagina.logo_public_key',
+          // AS SETE COLUNAS DA PONTUACAO, do lateral. Os nomes sao os que
+          // `pontuacao_do_local` declara em `RETURNS TABLE`, e sao exatamente os
+          // de `LinhaDaPontuacao` -- entao `comoPontuacao` recebe a linha da
+          // pagina SEM adaptador no meio, e a conversao de `numeric`/`bigint`
+          // (que o driver entrega como texto) continua acontecendo num lugar so.
+          'pontuacao.media',
+          'pontuacao.quantidade',
+          'pontuacao.n1',
+          'pontuacao.n2',
+          'pontuacao.n3',
+          'pontuacao.n4',
+          'pontuacao.n5',
+        ]);
+
+      // **A ORDEM TEM DE SER REAFIRMADA AQUI.** O `ORDER BY` da subconsulta
+      // escolhe QUAIS vinte linhas entram; ele nao obriga o `Nested Loop` do
+      // lado de fora a devolve-las naquela ordem, e nenhuma clausula da
+      // subconsulta atravessa a juncao. Sem estas duas linhas a lista sai na
+      // ordem que o planejador achar conveniente -- hoje a certa, amanha nao --,
+      // e o defeito apareceria como "a ordem por distancia parou de valer", sem
+      // nada no codigo tendo mudado.
+      const ordenada = distanciaDisponivel
+        ? comPontuacao.orderBy(sql`"pagina"."distancia_em_metros" asc nulls last`)
+        : comPontuacao;
+
+      const itens = await ordenada.orderBy('pagina.display_name').execute();
 
       const contagem = await construtorDaListagem(db, recorte)
         .select(sql<string>`count(*)`.as('total'))
         .executeTakeFirstOrThrow();
 
       return {
-        itens: (itens as unknown as LinhaDaEntrada[]).map(comoEntrada),
+        // `comoPontuacao(l)` sobre a MESMA linha: as sete colunas chegaram pelo
+        // lateral, e a pontuacao do cartao e a da pagina do local saem da mesma
+        // funcao do banco e da mesma conversao em TypeScript.
+        //
+        // `(l) => ...` e nao a referencia nua de `comoEntrada`: com a referencia,
+        // o segundo argumento de `map` (o indice) chegaria no lugar da pontuacao.
+        itens: (itens as unknown as (LinhaDaEntrada & LinhaDaPontuacao)[]).map((l) =>
+          comoEntrada(l, comoPontuacao(l)),
+        ),
         total: Number(contagem.total),
         distanciaDisponivel,
       };
@@ -705,6 +845,7 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       if (linha === undefined) return undefined;
 
       const { rows } = await pontuacaoDe(db, linha.id);
+      const pontuacao = comoPontuacao(rows[0]);
 
       // A MINHA avaliacao e o CANAL VERIFICADO na mesma consulta, e nao em duas:
       // as duas respostas decidem a mesma tela, e a pessoa esta esperando nela.
@@ -726,8 +867,11 @@ export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRep
       `.execute(db);
 
       return {
-        entrada: comoEntrada(linha as unknown as LinhaDaEntrada),
-        pontuacao: comoPontuacao(rows[0]),
+        // A MESMA `pontuacao` nos dois campos, e e UMA leitura: `entrada` a
+        // carrega porque `projetarEntrada` -- o caminho comum da lista e do
+        // detalhe -- e quem projeta `rating`.
+        entrada: comoEntrada(linha as unknown as LinhaDaEntrada, pontuacao),
+        pontuacao,
         refDaMinhaAvaliacao: minha?.ref ?? null,
         podeAvaliar: canal.rows[0]?.tem_canal ?? false,
         fotoPublicKey: linha.photo_public_key,

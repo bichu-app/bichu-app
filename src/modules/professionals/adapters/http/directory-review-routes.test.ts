@@ -53,6 +53,7 @@ import type {
   EntradaDoDiretorio,
 } from '../../domain/entrada-do-diretorio.js';
 import {
+  PONTUACAO_VAZIA,
   validarEntradaDaAvaliacao,
   type AvaliacaoDoLocal,
   type EntradaDaAvaliacao,
@@ -94,6 +95,7 @@ const ENTRADA: EntradaDoDiretorio = {
   verificacoes: [{ evidenceKind: 'crmv', decision: 'approved' }],
   distanciaEmMetros: 2740,
   logoPublicKey: null,
+  pontuacao: PONTUACAO_VAZIA,
 };
 
 const SEM_AVALIACAO: PontuacaoDoLocal = {
