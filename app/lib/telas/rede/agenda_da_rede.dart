@@ -16,6 +16,7 @@ import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/cidade_por_localizacao.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/listagem_preservada.dart';
 import '../casca_com_abas.dart';
 import 'cartao_do_encontro.dart';
 import 'encontro_da_rede.dart';
@@ -236,6 +237,49 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   _Fase _fase = _Fase.carregando;
 
   List<_ItemDaAgenda> _itens = const <_ItemDaAgenda>[];
+
+  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
+  ///
+  /// **Teto MENOR que o das outras duas, e a razao e medida.** O cartao de
+  /// encontro desenha capa 16:9 -- 978 x 550 px a 3x, **2,05 MiB por cartao**
+  /// (`pecas_da_rede.dart`) --, e nao miniatura de 121 KiB. Duas paginas custam
+  /// 82 MiB; cinco custariam 205. Ver [tetoDeItensPreservadosComCapa].
+  final PreservacaoDaListagem _preservacao =
+      PreservacaoDaListagem(teto: tetoDeItensPreservadosComCapa);
+
+  /// A pergunta que os cartoes na tela respondem.
+  ///
+  /// **Composta campo a campo, e nao de um `query`**: `RecorteDaRede` nao
+  /// publica um, ao contrario dos recortes de perdidos e do diretorio.
+  /// `_cidadeEmUso` entra porque a cidade derivada do aparelho e aplicada na
+  /// carga e nao gravada no recorte.
+  String get _assinaturaDaListagem => assinaturaDaListagem(
+        pergunta: <String, String>{
+          'termo': _recorte.termo ?? '',
+          'quando': _recorte.quando?.name ?? '',
+          'situacao': _recorte.situacao?.name ?? '',
+          'entrada': _recorte.entrada?.name ?? '',
+          'porte': _recorte.porte?.name ?? '',
+          'distancia': _recorte.distanciaMaxima?.name ?? '',
+          'ordem': _recorte.ordem ?? '',
+          'cidade_em_uso': _cidadeEmUso ?? '',
+        },
+        referencia: _referenciaDaConta,
+      );
+
+  /// A localizacao de referencia da conta -- o gatilho que ninguem lembraria.
+  /// A agenda MEDE DISTANCIA a partir dela (`Me.reference_area`, ADR-0006), e
+  /// mudar a referencia torna as distancias preservadas erradas.
+  String? get _referenciaDaConta {
+    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
+    if (regiao == null) return null;
+    return textoDaReferencia(
+      cep: regiao.cep,
+      bairro: regiao.bairro,
+      cidade: regiao.cidade,
+      uf: regiao.uf,
+    );
+  }
   int _total = 0;
   int _pagina = 1;
   String _ordemEfetiva = OrdemDaRede.proximos.codigo;
@@ -313,6 +357,14 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     if (_visivel) return;
     _visivel = true;
     _criarAResolucaoDaCidade();
+    // **BICHUS-316: A VOLTA NAO JOGA FORA O QUE JA FOI CARREGADO.** Ver a prosa
+    // do mesmo trecho em `perto/lista_do_diretorio.dart`.
+    if (_preservacao.vale(
+      itens: _itens.length,
+      assinatura: _assinaturaDaListagem,
+    )) {
+      return;
+    }
     _agendarCarga();
   }
 
@@ -445,6 +497,11 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       });
     } else {
       geracao = ++_geracao;
+      // **O DESCARTE E O GATILHO**, e cobre por construcao busca, filtro,
+      // ordenacao, o arrastar-para-atualizar e a resolucao da cidade: os cinco
+      // chegam aqui com `maisUma` falso e substituem `_itens`.
+      _preservacao.descartar();
+      SlotDaRolagem.maybeOf(context)?.aListaFoiDescartada();
       setState(() => _fase = _Fase.carregando);
     }
     // **A cidade em uso entra AQUI, no caminho da chamada, e nao no recorte.**
@@ -562,6 +619,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         _fase = _Fase.lista;
         _carregandoMais = false;
       });
+      _preservacao.marcar(_assinaturaDaListagem);
     } on FalhaDeChamada {
       _falhou(geracao, maisUma: maisUma);
     } on FormatException {
