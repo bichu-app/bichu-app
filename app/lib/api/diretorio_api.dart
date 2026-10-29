@@ -91,6 +91,41 @@ class DiretorioApi {
   /// O caminho de `suggestDirectoryEntry`, exposto para a fila offline.
   static const String caminhoDaSugestao = '/directory/suggestions';
 
+  /// `POST /v1/media/directory-suggestion-logo-intents`
+  /// (`createDirectorySuggestionLogoUploadIntent`), com conta.
+  ///
+  /// Pedido do cliente de 29/10/2026: *"nao tem o campo do logotipo para o
+  /// usuario subir e indicar o estabelecimento"*.
+  ///
+  /// **A ASSINATURA E A QUE `EnvioParaConfirmarDepois` EXIGE**, e nao uma
+  /// parecida: `({required String tipoDeConteudo, required int
+  /// tamanhoEmBytes})` devolvendo o JSON cru. Quem monta o `UploadIntent` e
+  /// `AutorizacaoDeEnvio.doJson`, do lado do mecanismo.
+  ///
+  /// **E ESTA ROTA, E NAO A DO PAINEL.** O envio nasce com
+  /// `purpose: directory_suggestion_logo`, que e separado de `directory_logo`:
+  /// a escrita de `professionals` exige o segundo, e `professionals` e a
+  /// superficie publica. **A troca e tentadora e tem precedente medido neste
+  /// produto** -- em 18/10/2026 duas funcoes de assinatura identica foram
+  /// trocadas em `api.ts`, a troca compilou, e a foto da vitrine de todo mundo
+  /// parou de salvar. Aqui o efeito seria pior: a logo de uma indicacao que
+  /// ninguem aprovou entrando numa entrada publicada.
+  ///
+  /// `EnvioParaConfirmarDepois` recebe esta funcao, e nao uma etiqueta de
+  /// proposito, exatamente por isso: a ROTA fica a vista em quem a passa.
+  Future<Map<String, dynamic>> intencaoDeLogotipoDaIndicacao({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      '/media/directory-suggestion-logo-intents',
+      corpo: <String, dynamic>{
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
+  }
+
   /// O corpo de `suggestDirectoryEntry`, montado num lugar so.
   ///
   /// **O minimo que permite checar, e nada alem**: nome, atividade, cidade,
@@ -119,6 +154,7 @@ class DiretorioApi {
     String? bairro,
     String? cep,
     String? recado,
+    String? logoUploadId,
   }) {
     // **O HIFEN MORRE AQUI, e esta linha e a fronteira.**
     //
@@ -168,6 +204,18 @@ class DiretorioApi {
         'value': contato,
       },
       if (recado != null && recado.isNotEmpty) 'note': recado,
+      // O LOGOTIPO, **no fim e so quando ha um**: `logo_upload_id` e opcional no
+      // contrato, e indicacao sem logotipo e o estado normal. Mandar a chave
+      // com `null` seria `400` -- o `format: uuid` nao aceita nulo --, entao o
+      // campo SAI do corpo em vez de ir vazio.
+      //
+      // **`if` e nao `?`, e a diferenca nao e de estilo:** `'k': ?v` manda a
+      // chave quando `v` nao e nulo, e aqui tambem se recusa a string VAZIA --
+      // que e o que um `upload_id` zerado pela falha de envio deixaria. UUID
+      // vazio tomaria `400` em `logo_upload_id` numa indicacao que nao tem
+      // logotipo nenhum.
+      if (logoUploadId != null && logoUploadId.isNotEmpty)
+        'logo_upload_id': logoUploadId,
     };
   }
 

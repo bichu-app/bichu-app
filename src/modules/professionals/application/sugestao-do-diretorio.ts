@@ -147,7 +147,41 @@ export class SugestaoDoDiretorio {
       contatoKind: corpo.public_contact.kind,
       contatoValue: corpo.public_contact.value.trim(),
       note: aparado(corpo.note),
+      // **`?? null` e nao `?? undefined`**, pelo mesmo arranjo de `entityKind`:
+      // quem resolve a ausencia e esta camada, e o adaptador recebe um valor
+      // decidido. Nulo quer dizer "sem logotipo", que e o estado normal -- o
+      // APK publicado nao manda o campo, e quem indica a clinica do bairro
+      // muitas vezes nao tem o arquivo da logo dela.
+      //
+      // **Nao ha conferencia de proposito nem de autoria AQUI**, e a ausencia e
+      // deliberada: as duas sao a clausula `WHERE` da consulta do adaptador.
+      // Um `if` nesta camada precisaria LER o envio primeiro, e ler o envio de
+      // outra pessoa para a memoria deste processo e exatamente o que o
+      // ADR-0021 nao quer -- a mesma razao escrita em `minhasIndicacoes`
+      // abaixo.
+      logoUploadId: corpo.logo_upload_id ?? null,
     });
+
+    // A RECUSA DO ENVIO, traduzida AQUI e nao no adaptador.
+    //
+    // Quatro casos chegam como um: envio de outra conta, de outro proposito,
+    // vencido, ou ja usado em outra indicacao. **A resposta e a mesma para os
+    // quatro, e o silencio e o recurso** -- dizer "esse envio e de outra
+    // pessoa" confirmaria a existencia de um `upload_id` alheio a quem o
+    // adivinhou. E a mesma redacao e o mesmo silencio de
+    // `imagemDoEnvio` na escrita administrativa do diretorio.
+    //
+    // `logo_upload_id` e o campo nomeado porque e o unico que a pessoa pode
+    // corrigir: escolher a imagem de novo refaz a intencao.
+    if (gravada.tipo === 'envio_nao_serve') {
+      throw problemas.validacao([
+        {
+          field: 'logo_upload_id',
+          code: 'upload_not_usable',
+          message: 'Essa imagem não serve para esta indicação. Escolha-a de novo.',
+        },
+      ]);
+    }
 
     // Depois da gravacao: a trilha do app abre transacao propria, e um
     // incidente nela nao e motivo para a pessoa nao conseguir sugerir. O
@@ -161,7 +195,7 @@ export class SugestaoDoDiretorio {
       correlationId: autor.correlationId,
       action: 'directory_suggestion.submitted',
       resourceKind: 'directory_suggestion',
-      resourceId: gravada.ref,
+      resourceId: gravada.sugestao.ref,
       after: {
         kind: corpo.kind,
         city: corpo.city.trim(),
@@ -178,11 +212,18 @@ export class SugestaoDoDiretorio {
         // teto do ADR-0010, e trilha nao tem portao de superficie publica
         // olhando por ela.
         has_postal_code: corpo.postal_code !== undefined,
+        // **A EXISTENCIA do logotipo, nunca o `upload_id` nem o `image_id`**,
+        // pelo mesmo juizo das duas linhas acima: a trilha sobrevive a exclusao
+        // da conta, e o que ela precisa responder e "quem mandou quantas
+        // indicacoes, de que tipo e para onde". Um identificador de imagem na
+        // trilha seria ponteiro para um arquivo que a exclusao da conta deveria
+        // levar embora.
+        has_logo: corpo.logo_upload_id !== undefined,
         review_status: 'pending',
       },
     });
 
-    return projetarRecibo(gravada);
+    return projetarRecibo(gravada.sugestao);
   }
 
   /**

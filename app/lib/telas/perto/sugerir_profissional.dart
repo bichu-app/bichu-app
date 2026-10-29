@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
 import '../../api/busca_de_cep.dart';
+import '../../api/envio_de_foto.dart';
+import '../../dispositivo/camera_e_galeria.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../formato/cep.dart';
 import '../../formato/telefone.dart';
@@ -20,6 +22,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/previa_da_foto.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
 
@@ -214,6 +217,64 @@ class TelaSugerirProfissional extends StatefulWidget {
   /// mil linhas de `build`.
   static const String rotuloDaAtividade = 'O que eles fazem';
 
+  // =========================================================================
+  // O LOGOTIPO (pedido do cliente, 29/10/2026)
+  // =========================================================================
+  //
+  // Verbatim: *"nao tem o campo do logotipo para o usuario subir e indicar o
+  // estabelecimento"*.
+  //
+  // **NAO E UM CAMPO, E UMA OPERACAO DE INTENCAO DE ENVIO.** O backend nunca
+  // recebe os bytes (ADR-0007): `createDirectorySuggestionLogoUploadIntent`
+  // assina a politica, o app sobe direto para o armazenamento, e
+  // `suggestDirectoryEntry` CONFIRMA o `upload_id` na mesma transacao do
+  // `INSERT`. Nao ha segunda chamada de confirmacao, exatamente como na capa do
+  // encontro.
+  //
+  // **O MOLDE E `rede/criar_encontro.dart`**, e o que se reusa e literal:
+  // `EnvioParaConfirmarDepois`, `tiposDeFotoAceitosSemHeic`,
+  // `recusaDeTipoDaFoto`, `PreviaDaFoto` e `CameraEGaleria`. O que NAO se reusa
+  // e a GEOMETRIA: a capa do encontro e uma faixa 16:9 de 180 dp, e o logotipo
+  // e um QUADRADO -- ele e a marca desenhada ao lado do nome, e a derivada dele
+  // e `DERIVADAS_DA_LOGO` (`card` 512 x 512). Desenhar a logo numa faixa
+  // panoramica prometeria um recorte que a derivada nao faz.
+
+  static const String tituloDoLogotipo = 'Logotipo';
+
+  /// **Uma linha de apoio, e o "Opcional" esta nela.** O cliente reprovou texto
+  /// excessivo em tela, e o campo precisa dizer que a ausencia e aceitavel: a
+  /// maioria de quem indica a clinica do bairro nao tem o arquivo da logo dela.
+  static const String ajudaDoLogotipo =
+      'A marca do lugar, se você tiver. Opcional.';
+
+  static const String tirarAFoto = 'Tirar foto';
+
+  static const String escolherDaGaleria = 'Escolher da galeria';
+
+  static const String oLogotipoEscolhido = 'O logotipo que você escolheu';
+
+  static const String logotipoSemSinal =
+      'O logotipo não subiu: sem conexão agora. Escolha a imagem de novo '
+      'quando tiver internet.';
+
+  static const String logotipoRecusado =
+      'O logotipo não foi aceito. Escolha outra imagem.';
+
+  static const String cameraNosAjustes =
+      'A câmera está bloqueada nos ajustes do sistema.';
+
+  static const String abrirAjustes = 'Abrir os ajustes';
+
+  /// O motivo do bloqueio enquanto os bytes do logotipo estao no ar.
+  ///
+  /// **Constante PUBLICA da tela, e nao literal dentro de `_Impedimento`**: o
+  /// `enum` e privado do arquivo, e um teste que precise afirmar esta frase sem
+  /// ela teria de copia-la -- e frase copiada e a que diverge na primeira
+  /// revisao de texto. Mesmo arranjo de `entreParaIndicar` e
+  /// `semEmailConfirmado`, que o `enum` ja le da classe.
+  static const String esperarOLogotipo =
+      'Espere o logotipo terminar de subir.';
+
   static const String rotuloDoCep = 'CEP';
 
   /// O rotulo do campo de estado, que deixou de ser `UF` digitada.
@@ -268,7 +329,14 @@ enum _Impedimento {
   // campo mascarado, `(11` tem tres caracteres e passava por `semContato` --
   // o botao ficava habilitado sobre um numero pela metade, e a recusa chegava
   // como `400` em `public_contact.value`.
-  telefoneIncompleto('Digite DDD e número.');
+  telefoneIncompleto('Digite DDD e número.'),
+  // **O LOGOTIPO ESTA SUBINDO** (29/10/2026). Enviar agora mandaria o
+  // `upload_id` que ainda nao existe -- ou nenhum -- e gravaria a indicacao sem
+  // o logotipo que a pessoa escolheu, **sem dizer nada**. E a mesma guarda que
+  // `capaSubindo` faz em `criar_encontro.dart`, e ela vem POR ULTIMO na ordem:
+  // o logotipo e opcional, entao sem imagem escolhida este impedimento nao
+  // vale e o botao fica livre.
+  logotipoSubindo(TelaSugerirProfissional.esperarOLogotipo);
 
   const _Impedimento(this.texto);
 
@@ -345,6 +413,29 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
   String _cepJaBuscado = '';
 
+  // ===========================================================
+  // O LOGOTIPO (29/10/2026) -- ver as constantes da classe
+  // ===========================================================
+
+  /// A imagem que a pessoa escolheu no aparelho. **A fonte da PREVIA, e ela vem
+  /// do ARQUIVO LOCAL** -- nao se espera a derivada do servidor, que so existe
+  /// depois de o worker rodar, e a indicacao ainda nem foi gravada.
+  FotoLocal? _logotipoEscolhido;
+
+  /// O `upload_id` de um logotipo cujos **bytes ja estao no armazenamento** e
+  /// que ainda nao foi confirmado, ou nulo.
+  ///
+  /// E ele que vai em `logo_upload_id` no `POST`. **Fica nulo quando o envio
+  /// falha**: um identificador de bytes que nao subiram volta
+  /// `400 upload_not_usable` sem dizer por que.
+  String? _uploadDoLogotipo;
+
+  bool _enviandoOLogotipo = false;
+
+  /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
+  /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
+  EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
+
   _Fase _fase = _Fase.preenchendo;
   MensagemDeErro? _erro;
   Map<String, String> _errosDeCampo = const <String, String>{};
@@ -380,6 +471,35 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   // `rede/criar_encontro.dart`. Mexer num so deixaria `Criar evento` e
   // `Indicar` discordando sobre a mesma pergunta, que e o tipo de incoerencia
   // que ninguem reporta e todos sentem.
+  //
+  // ===========================================================
+  // E `didChangeDependencies` VOLTOU EM 29/10/2026 -- PARA A CAMERA, E SO
+  // ===========================================================
+  //
+  // O paragrafo acima dizia "nao ha `didChangeDependencies` nesta tela, e a
+  // ausencia e o recurso". **A ausencia do PREENCHIMENTO continua sendo o
+  // recurso, e ela esta intacta**: nada aqui le `Me.reference_area`, e bairro,
+  // cidade e estado seguem abrindo vazios.
+  //
+  // O metodo existe de novo por um motivo diferente e de outra natureza: o
+  // campo de logotipo precisa saber o estado da camera **antes** de a pessoa
+  // tocar em nada, para nao desenhar `Tirar foto` em aparelho sem camera --
+  // botao que nao leva a nada e pior que a ausencia dele. `Escopo.of(context)`
+  // nao esta disponivel em `initState`, entao nao ha onde mais ler isso.
+  //
+  // E exatamente o arranjo de `rede/criar_encontro.dart`, onde o
+  // `didChangeDependencies` ficou com esta UNICA tarefa depois de a
+  // BICHUS-317 tirar o preenchimento dele.
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // **Uma tarefa so, e ela nao preenche campo nenhum.** Quem acrescentar algo
+    // aqui releia os tres paragrafos acima: foi o preenchimento da regiao de
+    // referencia do tutor neste metodo que mandava a cidade errada embaixo do
+    // nome de um estabelecimento.
+    _lerAPermissaoDaCamera();
+  }
 
   @override
   void dispose() {
@@ -486,6 +606,117 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     return Text(texto, style: textos.bodySmall);
   }
 
+  // -------------------------------------------------------------------------
+  // O LOGOTIPO DA INDICACAO (29/10/2026)
+  // -------------------------------------------------------------------------
+
+  /// O estado da camera, lido **antes** de a pessoa tocar em nada.
+  ///
+  /// E o que permite a tela nao desenhar `Tirar foto` em aparelho sem camera.
+  /// Mesmo arranjo de `criar_encontro`, de `Meus dados`, do cadastro de foto do
+  /// pet e do registro de achado.
+  Future<void> _lerAPermissaoDaCamera() async {
+    final estado = await Escopo.of(context).camera.estadoDaCamera();
+    if (!mounted) return;
+    setState(() => _permissaoDaCamera = estado);
+  }
+
+  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
+  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
+  Future<void> _tirarOLogotipo() async {
+    final camera = Escopo.of(context).camera;
+    var estado = _permissaoDaCamera;
+    if (estado == EstadoDaPermissao.negada) {
+      estado = await camera.pedirCamera();
+      if (!mounted) return;
+      setState(() => _permissaoDaCamera = estado);
+    }
+    if (estado != EstadoDaPermissao.concedida) return;
+    final foto = await camera.tirarFoto();
+    if (!mounted) return;
+    if (foto != null) await _escolheuOLogotipo(foto);
+  }
+
+  Future<void> _escolherOLogotipoDaGaleria() async {
+    final foto = await Escopo.of(context).camera.escolherDaGaleria();
+    if (!mounted) return;
+    if (foto != null) await _escolheuOLogotipo(foto);
+  }
+
+  Future<void> _abrirOsAjustes() =>
+      Escopo.of(context).camera.abrirAjustesDoSistema();
+
+  /// O logotipo escolhido **JA SOBE**, e a previa aparece antes de o servidor
+  /// dizer qualquer coisa.
+  ///
+  /// **Nao ha botao separado de salvar a imagem**, e a ausencia e o desenho:
+  /// os bytes sobem agora e `Enviar indicação` confirma o `upload_id`. Dois
+  /// caminhos de confirmacao para a mesma imagem divergem na primeira edicao.
+  Future<void> _escolheuOLogotipo(FotoLocal foto) async {
+    // A RECUSA POR TIPO, dita ANTES do envio, e com a lista SEM HEIC: o `enum`
+    // de `DirectorySuggestionLogoIntentInput` e `[image/jpeg, image/png,
+    // image/webp]`, mais estreito que o da foto de pet, porque a esteira de
+    // catalogo nao decodifica HEIC. Dizer aqui poupa a pessoa de um `400` que
+    // ela nao tem como interpretar.
+    final recusa =
+        recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
+    if (recusa != null) {
+      setState(() {
+        _logotipoEscolhido = null;
+        _uploadDoLogotipo = null;
+        _erro = MensagemDeErro(texto: recusa);
+      });
+      return;
+    }
+
+    setState(() {
+      _logotipoEscolhido = foto;
+      _uploadDoLogotipo = null;
+      _erro = null;
+      _enviandoOLogotipo = true;
+    });
+
+    // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.
+    final escopo = Escopo.of(context);
+    // `EnvioParaConfirmarDepois` com a FUNCAO DA ROTA, e nao com uma etiqueta
+    // de proposito: `DirectorySuggestionLogoIntentInput` nao tem campo
+    // `purpose`, e e a ROTA que fixa o `directory_suggestion_logo`. Passar a
+    // funcao e o que torna uma troca de rota visivel em quem a passa -- e a
+    // troca aqui seria a mais caro do produto: a rota do PAINEL
+    // (`directory_logo`) grava envio que a escrita de `professionals` ACEITA, e
+    // `professionals` sai em superficie publica.
+    final destino = EnvioParaConfirmarDepois(
+      pedir: DiretorioApi(escopo.api).intencaoDeLogotipoDaIndicacao,
+    );
+    final desfecho = await escopo.envioDeFoto.enviar(
+      foto: foto,
+      destino: destino,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _enviandoOLogotipo = false;
+      switch (desfecho) {
+        case DesfechoDoEnvio.enviada:
+          _uploadDoLogotipo = destino.uploadId;
+        case DesfechoDoEnvio.semSinal:
+          // **A previa SAI quando o envio falha**, e isso nao e perder o
+          // trabalho da pessoa: o `POST` nao teria o que confirmar, e manter a
+          // imagem na tela depois de um envio que nao aconteceu e a tela
+          // prometendo um logotipo que nao existe.
+          _logotipoEscolhido = null;
+          _erro = const MensagemDeErro(
+            texto: TelaSugerirProfissional.logotipoSemSinal,
+          );
+        case DesfechoDoEnvio.recusada:
+          _logotipoEscolhido = null;
+          _erro = const MensagemDeErro(
+            texto: TelaSugerirProfissional.logotipoRecusado,
+          );
+      }
+    });
+  }
+
   _Impedimento? get _impedimento {
     final usuario = Escopo.of(context).sessao.usuario;
     if (usuario == null) {
@@ -509,6 +740,11 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
         telefoneEmE164(_contato.text) == null) {
       return _Impedimento.telefoneIncompleto;
     }
+    // O LOGOTIPO, por ultimo, porque ele e OPCIONAL: sem imagem escolhida este
+    // nao vale e o botao fica livre. O que ele impede e so a janela em que os
+    // bytes estao no ar -- enviar ali gravaria a indicacao sem o logotipo que a
+    // pessoa acabou de escolher, em silencio.
+    if (_enviandoOLogotipo) return _Impedimento.logotipoSubindo;
     return null;
   }
 
@@ -550,6 +786,11 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       bairro: _bairro.text.trim(),
       cep: _cep.text.trim(),
       recado: _recado.text.trim(),
+      // **O LOGOTIPO VAI NO MESMO CORPO.** Nao ha segunda chamada de
+      // confirmacao: `logo_upload_id` e campo de `DirectorySuggestionInput`, e e
+      // esta gravacao que confirma a intencao no servidor, na mesma transacao.
+      // Sem isso o objeto subiria e o varredor o recolheria em dez minutos.
+      logoUploadId: _uploadDoLogotipo,
     );
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
 
@@ -748,6 +989,25 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                     _atividade = AtividadeDoDiretorio.porCodigo(codigo);
                     _erro = null;
                   }),
+                ),
+                const SizedBox(height: BichuEspaco.e6),
+                // O LOGOTIPO, **depois do que o lugar E e do que ele FAZ, e
+                // antes do endereco**: as tres primeiras perguntas sao sobre a
+                // identidade do estabelecimento, e o endereco e outro assunto
+                // (tem titulo de secao proprio logo abaixo). A imagem junto do
+                // nome e tambem a ordem em que a logo aparece depois: um
+                // quadrado ao lado do `display_name`.
+                _BlocoDoLogotipo(
+                  escolhido: _logotipoEscolhido,
+                  enviando: _enviandoOLogotipo,
+                  permissao: _permissaoDaCamera,
+                  // `enviando` aqui e a fase de ENVIO DO FORMULARIO, nao a do
+                  // logotipo: com a indicacao sendo gravada, trocar a imagem
+                  // mandaria um `upload_id` que a requisicao em curso nao vai
+                  // usar.
+                  aoTirar: enviando ? null : _tirarOLogotipo,
+                  aoEscolher: enviando ? null : _escolherOLogotipoDaGaleria,
+                  aoAbrirAjustes: _abrirOsAjustes,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 Semantics(
@@ -1099,6 +1359,175 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
 }
 
 /// O motivo pelo qual o botao esta desabilitado, dito em voz alta.
+/// O bloco do LOGOTIPO (29/10/2026).
+///
+/// **IRMAO de `_BlocoDaCapa` em `rede/criar_encontro.dart`, com UMA diferenca
+/// de desenho: o quadro e QUADRADO.** A capa do encontro e uma faixa 16:9 de
+/// 180 dp porque a derivada dela e `card` 1024 x 576 e a tela a desenha de
+/// borda a borda; a derivada do logotipo e `DERIVADAS_DA_LOGO` -- `card`
+/// 512 x 512 --, e ele e desenhado num quadrado ao lado do nome. Um quadro
+/// panoramico aqui prometeria um recorte que a esteira nao faz, e a logo
+/// apareceria com tarja dos dois lados.
+///
+/// **Classe propria e nao `_BlocoDaCapa` reusado**, e a razao nao e a
+/// geometria: aquele widget e privado de outro arquivo, mora na arvore de outra
+/// tela e carrega os literais de `TelaCriarEncontro`. Reusa-lo exigiria
+/// exporta-lo e parametrizar seis textos -- e e assim que um widget de uma tela
+/// vira o widget de todas e para de poder mudar. O que de fato se reusa esta
+/// uma camada abaixo e e o que importa: `PreviaDaFoto`, `CameraEGaleria`,
+/// `EnvioParaConfirmarDepois` e a esteira de imagem de catalogo.
+class _BlocoDoLogotipo extends StatelessWidget {
+  const _BlocoDoLogotipo({
+    required this.escolhido,
+    required this.enviando,
+    required this.permissao,
+    required this.aoTirar,
+    required this.aoEscolher,
+    required this.aoAbrirAjustes,
+  });
+
+  final FotoLocal? escolhido;
+
+  /// Os bytes do LOGOTIPO estao subindo (nao a indicacao).
+  final bool enviando;
+
+  final EstadoDaPermissao permissao;
+  final VoidCallback? aoTirar;
+  final VoidCallback? aoEscolher;
+  final VoidCallback aoAbrirAjustes;
+
+  /// O lado do quadro, em dp.
+  ///
+  /// **120 e nao 180**, e o numero tem razao medida: a dimensao minima do envio
+  /// e 256 x 256 (`DIMENSAO_MINIMA['directory_suggestion_logo']`), e 120 dp a
+  /// 2x ja pedem 240 px -- abaixo disso o quadro mostraria menos do que a
+  /// imagem mais pequena que a rota aceita. Acima de 120 o bloco empurraria o
+  /// endereco para fora da primeira dobra num aparelho de 640 dp de altura, e o
+  /// logotipo e o campo OPCIONAL deste formulario: ele nao pode ocupar mais
+  /// espaco que a cidade e o contato, que sao obrigatorios.
+  static const double ladoDoQuadro = 120;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final local = escolhido;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Semantics(
+          header: true,
+          child: Text(
+            TelaSugerirProfissional.tituloDoLogotipo,
+            style: textos.titleMedium,
+          ),
+        ),
+        const SizedBox(height: BichuEspaco.e1),
+        Text(
+          TelaSugerirProfissional.ajudaDoLogotipo,
+          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(BichuRaio.lg),
+          child: SizedBox(
+            height: ladoDoQuadro,
+            // **Largura IGUAL a altura, e nao `double.infinity`.** E aqui que
+            // este bloco se separa do da capa: `infinity` faria o quadro ocupar
+            // a linha inteira e a logo sair esticada ou com tarja.
+            width: ladoDoQuadro,
+            child: local != null
+                // `PreviaDaFoto` porque desenhar arquivo do aparelho pede
+                // `dart:io`, e o portao estrutural o proibe dentro de
+                // `lib/telas` -- com razao: foi assim que uma tela imprimiu o
+                // caminho do arquivo em vez da imagem.
+                ? PreviaDaFoto(
+                    foto: local,
+                    descricao: TelaSugerirProfissional.oLogotipoEscolhido,
+                    altura: ladoDoQuadro,
+                  )
+                : _QuadradoSemLogotipo(cores: cores, enviando: enviando),
+          ),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        // A ORIENTACAO DE 5 MB, uma linha, do ponto unico
+        // `orientacaoDeTamanhoDaImagem`: o teto vale na politica assinada e no
+        // contrato (`byte_size.maximum: 5242880`), e um texto proprio aqui seria
+        // o segundo numero que divergiria do primeiro.
+        Text(
+          orientacaoDeTamanhoDaImagem,
+          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        if (permissao == EstadoDaPermissao.negadaPermanentemente) ...<Widget>[
+          FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            texto: TelaSugerirProfissional.cameraNosAjustes,
+            rotuloDaAcao: TelaSugerirProfissional.abrirAjustes,
+            aoTocarNaAcao: aoAbrirAjustes,
+          ),
+          const SizedBox(height: BichuEspaco.e3),
+        ],
+        // **Sem camera o botao SOME.** O oposto do caso acima e deliberado: ali
+        // ha o que liberar e o botao ensina isso; aqui nao ha, e um botao que
+        // nao leva a nada e pior que a ausencia dele. A galeria continua, e ela
+        // nao tem estado de permissao proprio.
+        if (permissao != EstadoDaPermissao.indisponivel) ...<Widget>[
+          BotaoSecundario(
+            rotulo: TelaSugerirProfissional.tirarAFoto,
+            aoTocar: enviando ? null : aoTirar,
+          ),
+          const SizedBox(height: BichuEspaco.e2),
+        ],
+        OutlinedButton(
+          onPressed: enviando ? null : aoEscolher,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+          ),
+          child: const Text(TelaSugerirProfissional.escolherDaGaleria),
+        ),
+      ],
+    );
+  }
+}
+
+/// O lugar do logotipo quando nao ha logotipo.
+///
+/// Fundo afundado, borda de cabelo e o simbolo: o mesmo desenho que a imagem
+/// ocuparia, dizendo que cabe uma imagem ali. **Sem frase**: o cliente mandou
+/// tirar texto de apoio do app, e os dois botoes logo abaixo ja dizem o que
+/// fazer.
+class _QuadradoSemLogotipo extends StatelessWidget {
+  const _QuadradoSemLogotipo({required this.cores, required this.enviando});
+
+  final BichuCores cores;
+
+  /// Os bytes estao subindo. Troca o simbolo por um indicador -- e a diferenca
+  /// entre "cabe uma imagem aqui" e "a sua imagem esta subindo", dita sem uma
+  /// linha de texto nova.
+  final bool enviando;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.lg),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      child: enviando
+          ? const CircularProgressIndicator()
+          : Icon(
+              Icons.image_outlined,
+              color: cores.textSecondary,
+              size: 32,
+            ),
+    );
+  }
+}
+
 class _MotivoDoBloqueio extends StatelessWidget {
   const _MotivoDoBloqueio({required this.texto, required this.cor});
 

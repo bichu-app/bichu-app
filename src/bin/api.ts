@@ -205,8 +205,10 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
+import { LogotipoDaIndicacao } from '../modules/media/application/logotipo-da-indicacao.js';
 import {
   registrarIntencaoDeCapaDaComunidade,
+  registrarIntencaoDoLogotipoDaIndicacao,
   registrarIntencaoDaVitrineDoUsuario,
   registrarIntencaoDeFotoDoUsuario,
   registrarIntencaoDaFotoDaPublicacao,
@@ -926,6 +928,23 @@ export async function main(): Promise<void> {
       registrarIntencao: registrarIntencaoDeFotoDoUsuario,
       db,
       ids,
+    }),
+    // 29/10/2026: o LOGOTIPO DA INDICACAO. O MESMO preparador, com o prefixo
+    // `directory/` e `purpose = directory_suggestion_logo` -- e o proposito e
+    // SEPARADO de `directory_logo` de proposito: `imagemDoEnvio` da escrita de
+    // `professionals` exige `directory_logo`, entao um envio assinado aqui nao
+    // entra em superficie publica. **Ligar `registrarIntencaoDeCapaDaComunidade`
+    // ou qualquer uma das outras quatro aqui NAO COMPILA**: o `purpose` esta
+    // fechado no literal dentro do tipo da dependencia. Era exatamente este
+    // descuido -- duas funcoes de assinatura identica -- que gravou
+    // `network_event` numa foto de vitrine em 18/10/2026.
+    logotiposDeIndicacao: new LogotipoDaIndicacao({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDoLogotipoDaIndicacao,
+      db,
     }),
     midia: new MediaService({
       repositorio: repositorioDeMidia,

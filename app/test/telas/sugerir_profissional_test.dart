@@ -26,6 +26,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/conta/tela_verifique_seu_email.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
@@ -87,12 +88,18 @@ Future<void> abrirPerto(
   /// `o e-mail nao confirmado` mede, e ele nao e fraudado em lugar nenhum:
   /// vai para o deposito e sai em `Me`, como na vida.
   bool emailVerificado = true,
+  /// A camera do aparelho. **O padrao e nulo**, e `abrirOApp` cai em
+  /// `CameraNaoEmbarcada`: nenhum caso antigo deste arquivo ganha camera por
+  /// surpresa, e o campo de logotipo (29/10/2026) aparece sem o botao
+  /// `Tirar foto` para eles -- que e o estado certo de um aparelho sem camera.
+  CameraEGaleria? camera,
 }) async {
   await abrirOApp(
     tester,
     rede: rede,
     deposito:
         logado ? depositoLogado(emailVerificado: emailVerificado) : null,
+    camera: camera,
   );
   // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.** A secao
   // `Perto` deixou de existir, e o diretorio virou a aba `Comunidade` da

@@ -663,6 +663,8 @@ export type PropositoDaImagemDeCatalogo =
   // do lugar, com duas derivadas, e esta e a galeria de ate oito, que precisa
   // tambem da `thumb` de 480 x 360 da faixa -- as TRES derivadas do encontro.
   | 'directory_gallery'
+  /** O logotipo que QUEM INDICOU enviou (`20261029000004`). Autor em `user_id`. */
+  | 'directory_suggestion_logo'
   | 'user_photo'
   // A VITRINE de fotos do usuario -- ver `migrations/20261018000040`. Separado
   // de `user_photo`: aquele e a foto UNICA do perfil, este sao as ate nove da
@@ -1740,6 +1742,26 @@ export interface DirectorySuggestionsTable {
   contact_kind: TipoDeContatoSugerido;
   contact_value: string;
   note: string | null;
+  /**
+   * O logotipo que QUEM INDICOU enviou (`20261029000004`, pedido do cliente de
+   * 29/10/2026: *"nao tem o campo do logotipo para o usuario subir e indicar o
+   * estabelecimento"*).
+   *
+   * `catalog_images.id`, com `purpose = 'directory_suggestion_logo'` -- e **nao**
+   * `directory_logo`. A separacao dos dois propositos e a fronteira da fila:
+   * `imagemDoEnvio` da escrita administrativa exige `directory_logo` para
+   * aceitar um `upload_id` em `professionals.logo_image_id`, e `professionals` e
+   * a superficie publica. Um envio de usuario nao casa aquela conferencia.
+   *
+   * **ANULAVEL e sem `Generated`**: indicacao sem logotipo e o estado normal (o
+   * APK publicado nao manda o campo), e a coluna nao tem `DEFAULT` -- nulo e o
+   * valor certo e nao um padrao a repor.
+   *
+   * **Este UUID nunca sai em resposta** (ADR-0010 item 6), e hoje nenhuma
+   * leitura o projeta: nao ha operacao de leitura desta tabela que devolva
+   * imagem. Esta declarado aqui porque a ESCRITA precisa dele.
+   */
+  logo_image_id: string | null;
   review_status: Generated<RevisaoDaSugestao>;
   created_at: Generated<Date>;
   /** Nulo enquanto pendente, por `CHECK`. */

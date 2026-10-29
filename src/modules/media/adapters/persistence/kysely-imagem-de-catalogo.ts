@@ -217,6 +217,59 @@ export async function registrarIntencaoDaFotoDaPublicacao(
     .execute();
 }
 
+/**
+ * A intencao de envio do LOGOTIPO DA INDICACAO (cliente, 29/10/2026). Autor em
+ * `users`.
+ *
+ * **SEXTA funcao, com `purpose` FECHADO no literal
+ * `'directory_suggestion_logo'`.** A razao da forma esta escrita duas vezes
+ * acima e foi paga uma vez: em 18/10/2026 `api.ts` ligou a vitrine ao
+ * registrador da capa do encontro, as duas assinaturas eram identicas, **a
+ * troca compilou**, nenhum teste de unidade a enxergou, e nenhuma foto de
+ * vitrine podia ser salva.
+ *
+ * **Aqui o risco dessa troca e MAIOR que nas outras cinco, e e por isso que
+ * esta funcao nasce com o literal no tipo em vez de herdar um parametro
+ * aberto.** `directory_suggestion_logo` e `directory_logo` dividem o prefixo
+ * `directory/`, entao uma ligacao errada produziria chave de objeto CERTA e
+ * proposito ERRADO -- o envio de um usuario gravado como envio do painel. Nao
+ * seria um `404` na confirmacao, como no caso da vitrine: seria um `upload_id`
+ * que a escrita de `professionals` ACEITA, e a logo de uma indicacao que
+ * ninguem aprovou entraria numa entrada publicada. A fronteira da fila mora
+ * neste literal.
+ *
+ * Com o literal no tipo, ligar esta funcao no lugar de qualquer uma das outras
+ * cinco (ou qualquer uma delas no lugar desta) **nao compila**.
+ */
+export async function registrarIntencaoDoLogotipoDaIndicacao(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+    readonly purpose: 'directory_suggestion_logo';
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      // Do parametro, e nao um literal escrito aqui: o MESMO valor que o caso
+      // de uso usou para assinar e o que vai para a linha.
+      purpose: nova.purpose,
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
