@@ -814,7 +814,15 @@ os 213, ou **~140 a ~170 GB** no total.
 | 1 | sim | 213h | `builds/lote2-fb3a0fba` |
 | 1 | sim | 141h | `worktrees-app/diag-pr61-onda8-899cf227` |
 | 1 | sim | 7h | `builds/hml-46d0587c` |
-| 1 | **não** | 1h | `builds/menu-unificado-675c516c` ← **frente viva** |
+| 1 | **não** | 1h | `builds/menu-unificado-675c516c` ← **JA REMOVIDO pela propria sessao** (ver nota) |
+
+> **Nota de validade deste levantamento.** Entre a medição e a entrega deste relatório
+> (cerca de 40 minutos), `builds/menu-unificado-675c516c` **foi removido pela própria
+> sessão que o usava** — a pasta não existe mais e os dois ramos
+> (`desenho/menu-unificado-28-10` e `trabalho/menu-unificado-28-10`) continuam no
+> repositório. O registro caiu de 385 para 383 (esse mais o meu). **A foto envelhece em
+> minutos:** reconferir `git worktree list` e `git status --porcelain` de cada candidato
+> imediatamente antes de remover, não confiar nesta tabela.
 
 Os três com `mesclada=não` e árvore suja (`prosa-da-busca`, `icones-da-barra`,
 `menu-unificado-675c516c`) são os que têm mais a perder: trabalho **não comitado** sobre
@@ -828,7 +836,7 @@ não escrever no index de outra sessão.
  0h  worktrees-app/wt-pagina-do-local-28-10                (não mesclada)
  0h  builds/medicao-refactor-28-10                         (este)
  1h  jarvis-ai/workspace/bichu-wt-estrelas-listagem-28-10  (não mesclada)
- 1h  builds/menu-unificado-675c516c                        (não mesclada, SUJA)
+ 1h  builds/menu-unificado-675c516c                        (ja removido pela propria sessao)
  5h  tmp-estrelas-313-28-10                                (não mesclada)
  5h  tmp-menu-unificado-28-10-tmpdir                       (não mesclada)
  5h  jarvis-ai/workspace/bichu-wt-loja-cupom-28-10
