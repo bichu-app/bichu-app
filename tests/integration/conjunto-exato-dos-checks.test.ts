@@ -512,6 +512,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'daycare',
     ],
   },
+  // O TIPO DE ENTIDADE da indicacao (`20261029000003`, pedido do cliente de
+  // 29/10/2026: "esta faltando o campo se e um profissional, ong ou
+  // estabelecimento"). Os MESMOS dois valores, na mesma ordem, de
+  // `professionals_entity_kind_check` e de
+  // `entity_verifications_entity_kind_check`: uma segunda convencao para o
+  // mesmo conceito e a que diverge, e o diretorio passaria a ter `organization`
+  // num lugar e `ong` no outro.
+  'public.directory_suggestions.directory_suggestions_tipo_de_entidade_conhecido': {
+    coluna: 'entity_kind',
+    valores: ['professional', 'organization'],
+  },
   // O tipo do contato e DECLARADO, nunca adivinhado: um palpite aceitaria um
   // telefone no campo de site. Nao ha `email` aqui, e nao e esquecimento --
   // `professionals` nao guarda e-mail de contato publico.

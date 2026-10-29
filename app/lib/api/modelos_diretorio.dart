@@ -1713,6 +1713,7 @@ class MinhaIndicacao {
     required this.referencia,
     required this.nome,
     required this.atividade,
+    required this.tipoDeEntidade,
     required this.cidade,
     required this.uf,
     required this.tipoDeContato,
@@ -1731,6 +1732,18 @@ class MinhaIndicacao {
 
   final String nome;
   final AtividadeDoDiretorio atividade;
+
+  /// O QUE a entidade indicada E -- eixo SEPARADO de [atividade], que e o que
+  /// ela FAZ (contrato, 29/10/2026, pedido do cliente: *"esta faltando o campo
+  /// se e um profissional, ong ou estabelecimento"*).
+  ///
+  /// **Anulavel, pela MESMA razao de `TipoDeEntidade.porCodigo` devolver nulo:**
+  /// o `enum` do contrato e aditivo, e o dia em que ele ganhar um terceiro
+  /// valor esta versao do app precisa continuar lendo a resposta. O campo e
+  /// `required` no contrato -- a coluna e `NOT NULL DEFAULT 'professional'` --,
+  /// entao nulo aqui quer dizer "valor que esta versao nao conhece", e nao
+  /// "ausente".
+  final TipoDeEntidade? tipoDeEntidade;
   final String cidade;
   final String uf;
   final String? bairro;
@@ -1808,6 +1821,7 @@ class MinhaIndicacao {
       referencia: referencia,
       nome: nome,
       atividade: atividade,
+      tipoDeEntidade: TipoDeEntidade.porCodigo(json['entity_kind']),
       cidade: cidade,
       uf: uf,
       bairro: json['neighborhood'] as String?,

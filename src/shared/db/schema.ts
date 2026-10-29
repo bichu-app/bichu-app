@@ -1709,6 +1709,19 @@ export interface DirectorySuggestionsTable {
   ref: string;
   display_name: string;
   kind: TipoDeProfissional;
+  /**
+   * O QUE a entidade indicada E -- eixo SEPARADO de `kind`, que e o que ela
+   * FAZ (`20261029000003`, pedido do cliente: *"esta faltando o campo se e um
+   * profissional, ong ou estabelecimento"*).
+   *
+   * `Generated` porque a coluna tem `DEFAULT 'professional'`: o caminho que nao
+   * manda o valor -- app publicado antes de 29/10/2026 -- continua gravando, e
+   * grava o valor que toda indicacao antiga sempre significou.
+   *
+   * MESMO tipo de `professionals.entity_kind`: uma segunda convencao para o
+   * mesmo conceito e a que diverge.
+   */
+  entity_kind: Generated<TipoDeEntidade>;
   city: string;
   /** A UF. E por esta coluna que o estado da revisao se chama `review_status`. */
   state: string;

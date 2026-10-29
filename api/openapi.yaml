@@ -17365,6 +17365,29 @@ components:
             O nome do estabelecimento ou do profissional, como ele se anuncia.
             Mesmo teto de `professionals.display_name`.
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (pedido do cliente, 29/10/2026): *"esta faltando o
+        # campo se e um profissional, ong ou estabelecimento"*, no formulario de
+        # INDICAR do aplicativo.
+        #
+        # **Eixo SEPARADO de `kind`**, e os dois existem ao mesmo tempo: `kind` e
+        # o que a entidade FAZ e `entity_kind` e o que ela E. Uma ONG que atende
+        # como clinica indica `kind: clinic` e `entity_kind: organization`.
+        #
+        # **OPCIONAL, e ausente vale `professional`** -- o mesmo `DEFAULT` da
+        # coluna `directory_suggestions.entity_kind` (`20261029000003`) e a mesma
+        # decisao de `AdminDirectoryEntryInput.entity_kind`: exigi-lo tornaria
+        # obrigatorio um campo que nao existia, que e quebra de contrato de
+        # REQUISICAO (`request-property-became-required`) e derrubaria o APK ja
+        # publicado no aparelho de quem esta indicando agora.
+        #
+        # Os ROTULOS sao os que o cliente definiu e os que o painel ja mostra:
+        # **"Profissional ou estabelecimento"** e **"ONG"**. Rotulo nao aparece
+        # neste contrato -- e foi exatamente essa ausencia que deixou o rotulo de
+        # `sitter` divergir do valor por meses (ver `ProfessionalKind`).
+        entity_kind:
+          allOf:
+            - $ref: '#/components/schemas/EntityKind'
+          default: professional
         city: { type: string, minLength: 2, maxLength: 80 }
         state: { type: string, pattern: '^[A-Z]{2}$' }
         neighborhood: { type: string, minLength: 2, maxLength: 80 }
@@ -17472,7 +17495,7 @@ components:
         **O estado da revisao e `review_status`, e nao `state`** -- `state`
         aqui e a UF, na mesma projecao, exatamente como na tabela e como em
         `AdminDirectorySuggestion`.
-      required: [reference, display_name, kind, city, state, public_contact, review_status, created_at]
+      required: [reference, display_name, kind, entity_kind, city, state, public_contact, review_status, created_at]
       additionalProperties: false
       properties:
         reference:
@@ -17483,6 +17506,14 @@ components:
           description: O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu.
         display_name: { type: string, minLength: 2, maxLength: 120 }
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (cliente, 29/10/2026). Sai TAMBEM aqui, na projecao
+        # de quem INDICOU, e nao so na do painel: quem indicou declarou o tipo, e
+        # a tela "minhas indicacoes" mostra o que a pessoa escreveu. Esconde-lo
+        # aqui faria a lista dela mostrar menos do que ela mandou.
+        #
+        # `required` e nao anulavel, pela mesma razao do schema do painel: a
+        # coluna e `NOT NULL DEFAULT 'professional'`.
+        entity_kind: { $ref: '#/components/schemas/EntityKind' }
         city:
           type: string
           minLength: 2
@@ -17795,7 +17826,7 @@ components:
         e a UF, na mesma projecao, exatamente como na tabela.
         `DirectorySuggestionReceipt` pode chamar o seu de `state` porque o
         recibo do aplicativo nao devolve a UF.
-      required: [reference, display_name, kind, city, state, public_contact, review_status, created_at]
+      required: [reference, display_name, kind, entity_kind, city, state, public_contact, review_status, created_at]
       additionalProperties: false
       properties:
         reference:
@@ -17806,6 +17837,13 @@ components:
           description: O identificador opaco, 128 bits em base64url. O mesmo que o aplicativo recebeu no recibo.
         display_name: { type: string, minLength: 2, maxLength: 120 }
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (cliente, 29/10/2026). **`required` desde que a
+        # coluna nasceu**, e nao anulavel: `directory_suggestions.entity_kind` e
+        # `NOT NULL DEFAULT 'professional'`, entao toda linha tem valor --
+        # inclusive as gravadas antes de 29/10, que valem `professional` porque
+        # nao havia como dizer outra coisa. Declarar nulavel aqui prometeria um
+        # estado que a coluna nao produz.
+        entity_kind: { $ref: '#/components/schemas/EntityKind' }
         city:
           type: string
           minLength: 2

@@ -320,6 +320,18 @@ export class FilaDeIndicacoes {
       // indica pede uma), e ela entra como lista de um. Alargar a FILA para
       // varias nao foi pedido, e `directory_suggestions.kind` continua singular.
       kinds: [indicacao.kind],
+      // O TIPO DE ENTIDADE VEM DA INDICACAO (cliente, 29/10/2026: *"esta
+      // faltando o campo se e um profissional, ong ou estabelecimento"*).
+      //
+      // **E este o ponto do pedido dele.** Antes de 29/10 a entrada criada pela
+      // aprovacao nascia sempre `professional`, pelo `DEFAULT` da coluna, e
+      // quem indicava uma ONG nao tinha como dizer: o revisor teria de corrigir
+      // o tipo a mao depois, ou -- mais provavel -- nao corrigiria. Agora a
+      // declaracao de quem indicou atravessa a aprovacao.
+      //
+      // Continua sendo o revisor quem APROVA: o que a indicacao traz e o
+      // preenchimento, e nao a decisao.
+      entityKind: indicacao.entityKind,
       displayName: indicacao.displayName,
       // `about` nulo: o recado de quem indicou e para quem revisa, e nao para o
       // diretorio (ADR-0011 secao 5.4). Copia-lo aqui publicaria avaliacao da

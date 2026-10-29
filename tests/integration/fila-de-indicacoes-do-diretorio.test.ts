@@ -133,7 +133,16 @@ async function desabilitar(userId: UserId): Promise<void> {
  * um segundo caminho de escrita, e o caso passaria a medir o caminho do teste
  * em vez do caminho do produto.
  *
- * **DOZE argumentos, e não onze.** Este arquivo nasceu em 18/10 chamando a
+ * **TREZE argumentos desde a `20261029000003`**, que acrescentou
+ * `p_entity_kind` DEPOIS de `p_kind` (cliente, 29/10/2026: *"está faltando o
+ * campo se é um profissional, ong ou estabelecimento"*). Aquela migração
+ * DERRUBOU a de doze e criou a de treze, pelo mesmo motivo escrito abaixo: no
+ * Postgres assinatura diferente é outra função, e as duas de pé deixariam a de
+ * doze gravando indicação sem tipo de entidade para sempre. `ajuste.tipo`
+ * permite exercitá-lo; o padrão é `professional`, que é o `DEFAULT` da coluna e
+ * o caso comum.
+ *
+ * **Eram DOZE argumentos, e não onze.** Este arquivo nasceu em 18/10 chamando a
  * função de ONZE da migração `20261017000004`, e os seis casos daqui morriam
  * todos em `42883 function ... does not exist`. A migração
  * `20261017000015_cep-da-sugestao-do-diretorio.sql` (linha 115) DERRUBOU a de
@@ -153,6 +162,7 @@ async function indicar(
     contato?: ['phone' | 'website' | 'instagram', string];
     recado?: string | null;
     cep?: string | null;
+    tipo?: 'professional' | 'organization';
   } = {},
 ): Promise<string> {
   const ref = randomBytes(16).toString('base64url');
@@ -160,7 +170,9 @@ async function indicar(
   await sql`
     select directory_suggestions_registrar(
       ${ids.uuidv7()}::uuid, ${ref}, ${autorDaIndicacao}::uuid,
-      ${ajuste.nome ?? `Clinica ${sufixo()}`}, 'clinic', 'Sao Paulo', 'SP', 'Bela Vista',
+      ${ajuste.nome ?? `Clinica ${sufixo()}`}, 'clinic',
+      ${ajuste.tipo ?? 'professional'},
+      'Sao Paulo', 'SP', 'Bela Vista',
       ${ajuste.cep ?? null}::text,
       ${kind}, ${valor}, ${ajuste.recado ?? null})
   `.execute(banco.db);
@@ -272,6 +284,10 @@ void describe('a fila de indicações do Perto, contra Postgres', () => {
     assert.equal(aprovada.entry.claim_status, 'unclaimed');
     // O recado de quem indicou NÃO vira texto do diretório.
     assert.equal(aprovada.entry.about, null);
+    // O TIPO DE ENTIDADE sai na fila e na entrada: o padrão é `professional`,
+    // que é o `DEFAULT` da coluna e o que toda indicação sempre significou.
+    assert.equal(aprovada.suggestion.entity_kind, 'professional');
+    assert.equal(aprovada.entry.entity_kind, 'professional');
 
     // A PROVA: a listagem que o aplicativo lê.
     const pagina = await perto.listarPublicados({
@@ -360,6 +376,49 @@ void describe('a fila de indicações do Perto, contra Postgres', () => {
    * — e o painel passaria a não ter caminho nenhum para tirar a indicação
    * repetida da fila.
    */
+  /**
+   * O TIPO DE ENTIDADE ATRAVESSA A APROVAÇÃO (cliente, 29/10/2026).
+   *
+   * Pedido: *"está faltando o campo se é um profissional, ong ou
+   * estabelecimento"* no formulário de indicar. O campo não existia na coluna --
+   * `20261018000012` criou `entity_kind` em `professionals`, não na fila --, e
+   * sem coluna ele seria **aceito e descartado em silêncio**.
+   *
+   * **ESTE CASO EXIGE BANCO, e não é preferência:** a aprovação escreve em DUAS
+   * tabelas na mesma transação, e o valor atravessa
+   * `directory_suggestions.entity_kind` -> `IndicacaoNaFila.entityKind` ->
+   * `NovaEntrada.entityKind` -> `professionals.entity_kind`. Dublê mediria o
+   * dublê; o que pode quebrar aqui é a função SQL de treze argumentos e a
+   * coluna.
+   *
+   * COMO DESLIGAR: tire `entityKind: indicacao.entityKind` de
+   * `fila-de-indicacoes.ts` e a entrada nasce `professional` pelo `DEFAULT` --
+   * a última asserção fica vermelha. Tire `s.entity_kind` de `COLUNAS` em
+   * `kysely-fila-de-indicacoes.ts` e as duas primeiras ficam.
+   */
+  void it('(a4) indicar como ONG cria a entrada com entity_kind organization', async () => {
+    const quem = await novaConta();
+    const ref = await indicar(quem, { nome: 'ONG Patas da Isca', tipo: 'organization' });
+    const slug = `ong-patas-da-isca-${sufixo().slice(0, 6)}`;
+    slugs.push(slug);
+
+    // A fila mostra o tipo ANTES da decisão: é por ele que quem revisa sabe o
+    // que está aprovando.
+    const naFila = await fila.listar({ page: 1, limit: 50 });
+    const minha = naFila.items.find((i) => i.reference === ref);
+    assert.equal(minha?.entity_kind, 'organization', 'a fila do painel mostra o tipo declarado');
+
+    const aprovada = await fila.aprovar(autor, ref, { slug });
+
+    assert.equal(aprovada.suggestion.entity_kind, 'organization');
+    // **A AFIRMAÇÃO QUE O PEDIDO DO CLIENTE É:** a entrada criada guarda o tipo
+    // que quem indicou declarou, e não o `professional` do `DEFAULT`.
+    assert.equal(aprovada.entry.entity_kind, 'organization');
+    // E os dois eixos continuam separados: a ONG que atende como clínica tem
+    // `kind: clinic` E `entity_kind: organization` ao mesmo tempo.
+    assert.equal(aprovada.entry.kind, 'clinic');
+  });
+
   void it('(a3) duplicata: aprovar no slug de uma entrada existente liga as duas e não altera a entrada', async () => {
     const quem = await novaConta();
     const primeira = await indicar(quem, { nome: 'Clinica Isca Repetida' });

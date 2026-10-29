@@ -17,7 +17,12 @@
  * migracao: o nome da coluna fica onde ele ja mora, e aqui chama-se a funcao
  * pelo nome dela.
  *
- * **Doze argumentos desde a `20261017000015`**, que acrescentou `postal_code`
+ * **TREZE argumentos desde a `20261029000003`**, que acrescentou `entity_kind`
+ * (cliente, 29/10/2026: *"esta faltando o campo se e um profissional, ong ou
+ * estabelecimento"*) -- e `p_entity_kind` entra DEPOIS de `p_kind`, porque e o
+ * outro eixo do mesmo par, e nao no fim como "campo novo".
+ *
+ * Eram **doze desde a `20261017000015`**, que acrescentou `postal_code`
  * (cliente, 18/10: "pode armazenar o cep sim!"). Aquela migracao DERRUBOU a
  * funcao de onze e criou a de doze, em vez de usar `CREATE OR REPLACE`: no
  * Postgres assinatura diferente e outra funcao, e as duas de pe deixariam a de
@@ -80,7 +85,7 @@ import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
-import type { TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../../domain/sugestao-do-diretorio.js';
 import type { RevisaoDaIndicacao } from '../../domain/fila-de-indicacoes.js';
 import type {
@@ -108,6 +113,7 @@ interface LinhaDaMinhaIndicacao {
   ref: string;
   display_name: string;
   kind: TipoDeProfissional;
+  entity_kind: TipoDeEntidade;
   city: string;
   state: string;
   neighborhood: string | null;
@@ -125,6 +131,7 @@ function comoMinhaIndicacao(l: LinhaDaMinhaIndicacao): MinhaIndicacao {
     ref: l.ref,
     displayName: l.display_name,
     kind: l.kind,
+    entityKind: l.entity_kind,
     city: l.city,
     state: l.state,
     neighborhood: l.neighborhood,
@@ -152,6 +159,7 @@ export function criarDirectorySuggestionRepository(
           ${sugestao.autor}::uuid,
           ${sugestao.displayName},
           ${sugestao.kind},
+          ${sugestao.entityKind},
           ${sugestao.city},
           ${sugestao.state},
           ${sugestao.neighborhood},
