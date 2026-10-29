@@ -45,7 +45,13 @@ class ItemDeMenu extends StatelessWidget {
     super.key,
     this.apoio,
     this.critico = false,
-  });
+    this.contador,
+    this.rotuloDoContador,
+  }) : assert(
+          contador == null || rotuloDoContador != null,
+          'Numero sem frase nao e anunciavel: quem usa leitor de tela ouviria '
+          'o rotulo e nao ficaria sabendo do numero. Ver `rotuloDoContador`.',
+        );
 
   final String rotulo;
 
@@ -59,14 +65,64 @@ class ItemDeMenu extends StatelessWidget {
   /// quem confirma e a folha que o destino abre.
   final bool critico;
 
+  /// QUANTOS ESPERAM DECISAO NESTE DESTINO, ou nulo quando a linha nao conta
+  /// nada -- que e o estado das outras seis linhas deste menu.
+  ///
+  /// ## Por que o componente aprendeu isto (28/10/2026)
+  ///
+  /// Pedido do cliente, e ele RESPONDE a pergunta fechada 1 do
+  /// `design/prototipos/menu-unificado/DESENHO.md`. O protovipo tinha deixado
+  /// a linha `Conexões` **sem** numero, por fidelidade ao que ele havia
+  /// pedido (*"aba interna de pendentes + notificacao"*), e registrou isso
+  /// como *"a maior fragilidade"* da decisao: do menu, um pedido esperando era
+  /// invisivel, e as duas metades da escolha dele -- a aba e o aviso -- só
+  /// funcionam **depois** que a pessoa abre a caixa de avisos ou a tela. Ele
+  /// escolheu a opcao (a): o numero aparece nos dois lugares.
+  ///
+  /// ## ZERO NAO VIRA PASTILHA
+  ///
+  /// Com `contador` em zero a pastilha **some**, e nao vira um `0`. Pastilha
+  /// com zero e um aviso que afirma que nao ha aviso. Zero e nulo chegam aqui
+  /// por caminhos diferentes -- o servidor dizendo "nenhum" e a linha que nao
+  /// conta nada -- e os dois desenham o mesmo nada, de proposito: nao ha o que
+  /// distinguir na tela entre as duas ausencias.
+  ///
+  /// ## Nenhuma das outras linhas pinta numero, e isso continua verdade
+  ///
+  /// O parametro e opcional. As outras seis linhas do menu do `Perfil` nao o
+  /// passam e continuam identicas entre si -- a mesma conta que a prosa de
+  /// `Minhas indicações` faz sobre o icone que ela nao tem.
+  final int? contador;
+
+  /// O QUE O NUMERO QUER DIZER, para o leitor de tela.
+  ///
+  /// Obrigatorio quando ha [contador] (o `assert` do construtor cobra).
+  /// `ItemDeMenu` e uma parada de foco unica com `excludeSemantics: true`: um
+  /// numero pintado fora do rotulo composto seria **pintado e nao anunciado**,
+  /// e quem usa leitor de tela ouviria `Conexões` sem ficar sabendo que ha
+  /// tres pedidos esperando -- justamente a pessoa para quem o contador do
+  /// menu foi pedido.
+  ///
+  /// **A frase mora em quem chama, e nao aqui.** Este componente nao sabe se o
+  /// numero e de pedido, de aviso ou de recado; uma frase escrita dentro dele
+  /// seria o vocabulario de uma tela so, imposto a todas.
+  final String? rotuloDoContador;
+
   final VoidCallback aoTocar;
 
-  /// O que o leitor de tela ouve: o rotulo, o apoio quando ha, e nada do
-  /// icone -- ele e decorativo e o rotulo ao lado ja diz para onde se vai.
+  /// A pastilha deve ser desenhada? **Zero nao conta** -- ver [contador].
+  bool get temContador => contador != null && contador! > 0;
+
+  /// O que o leitor de tela ouve: o rotulo, o apoio quando ha, o que o numero
+  /// quer dizer quando ha, e nada do icone -- ele e decorativo e o rotulo ao
+  /// lado ja diz para onde se vai.
   String get rotuloAcessivel {
-    final linha = apoio;
-    if (linha == null || linha.isEmpty) return rotulo;
-    return '$rotulo. $linha';
+    final partes = <String>[
+      rotulo,
+      if (apoio != null && apoio!.isNotEmpty) apoio as String,
+      if (temContador) rotuloDoContador as String,
+    ];
+    return partes.join('. ');
   }
 
   @override
@@ -120,6 +176,44 @@ class ItemDeMenu extends StatelessWidget {
                   ],
                 ),
               ),
+              // A PASTILHA DO CONTADOR, entre o texto e o chevron.
+              //
+              // **Aqui e nao ao lado do rotulo**: encostada no texto ela leria
+              // como parte do nome do destino (`Conexões 3`); na cauda, ao
+              // lado do chevron, ela le como estado daquela linha -- que e o
+              // que ela e. E a mesma cauda que o `Row` ja reservava.
+              //
+              // `primary` / `onPrimary`, e o par JA esta medido: ele e
+              // `claro/on-primary-sobre-primary` e
+              // `escuro/on-primary-sobre-primary` em
+              // `design/contrast-pairs.json`, com piso 7,0 e razoes de 7,84 e
+              // 8,59 -- passa nos dois temas. (O DESENHO.md listou este par
+              // como NAO medido na secao 6; ele estava medido desde 21/09, e
+              // o portao de tokens o cobra.)
+              if (temContador) ...<Widget>[
+                const SizedBox(width: BichuEspaco.e2),
+                Container(
+                  // Piso de largura igual a altura: com um digito a pastilha
+                  // e um circulo, e com dois ela cresce para os lados em vez
+                  // de virar um oval apertado.
+                  constraints: const BoxConstraints(minWidth: 24),
+                  height: 24,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BichuEspaco.e2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cores.primary,
+                    borderRadius: BorderRadius.circular(BichuRaio.full),
+                  ),
+                  child: Text(
+                    '$contador',
+                    style: textos.labelMedium?.copyWith(
+                      color: cores.onPrimary,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(width: BichuEspaco.e2),
               Icon(
                 Icons.chevron_right,
