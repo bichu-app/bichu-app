@@ -30,7 +30,31 @@ enum AtividadeDoDiretorio {
   walker('walker', 'Dog Walker'),
   sitter('sitter', 'Pet Sitter'),
   trainer('trainer', 'Adestrador'),
-  clinic('clinic', 'Clínica');
+  clinic('clinic', 'Clínica'),
+  // `hospital` e `store` entraram em 28/10/2026 com a migracao
+  // `20261028000001`. Os DOIS rotulos sao copiados de `ATIVIDADES` em
+  // `admin/src/diretorio/dominio.ts` -- rotulo divergente entre painel e app e
+  // defeito, e `admin/test/diretorio/rotulos-das-atividades.test.ts` cobra a
+  // igualdade de `clinic`, `walker` e `sitter`, mas **nao** a destes dois: o
+  // casamento aqui foi feito a mao, contra o fonte do painel.
+  //
+  // **`store` NAO e a secao `Loja` do produto**, que e catalogo
+  // (`store_items`) e vive em outro fluxo. Aqui e "um estabelecimento que
+  // vende" aparecendo em `Perto` -- um petshop --, e a coincidencia e so de
+  // palavra. `hospital` e separado de `clinic` porque a distincao existe no
+  // mundo: clinica atende hora marcada e fecha, hospital interna e tem
+  // plantao.
+  //
+  // **Os dois entram no FIM, e isso nao e descuido.** `AtividadeDoDiretorio
+  // .values` e a ordem de tela em dois lugares (os chips de filtro de
+  // `telas/perto/lista_do_diretorio.dart` e o seletor de
+  // `telas/perto/sugerir_profissional.dart`), entao a posicao e visivel. Pondo
+  // os dois ao lado de `clinic`, os tres ESTABELECIMENTOS ficam juntos no fim,
+  // que e onde `clinic` ja estava; reordenar a lista inteira para espelhar
+  // `ORDEM_DAS_ATIVIDADES` do painel moveria os seis valores antigos e seria
+  // mudanca de tela que ninguem pediu.
+  hospital('hospital', 'Hospital'),
+  store('store', 'Loja');
 
   const AtividadeDoDiretorio(this.codigo, this.rotulo);
 
