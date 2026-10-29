@@ -136,6 +136,31 @@ export interface CorpoDaSugestaoDoDiretorio {
   readonly postal_code?: string;
   readonly public_contact: ContatoPublicoSugerido;
   readonly note?: string;
+  /**
+   * O `upload_id` do LOGOTIPO (cliente, 29/10/2026: *"nao tem o campo do
+   * logotipo para o usuario subir e indicar o estabelecimento"*).
+   *
+   * **Opcional, e a ausencia e o estado normal.** O APK publicado nao manda o
+   * campo, e quem indica a clinica do bairro muitas vezes nao tem o arquivo da
+   * logo dela. Exigi-lo seria `request-property-became-required`.
+   *
+   * **Nao ha conferencia dele em [errosDaSugestao]**, e a ausencia tem DUAS
+   * razoes e nao uma:
+   *
+   *  1. a FORMA ja e conferida duas vezes antes daqui -- `format: uuid` no
+   *     contrato (o Ajv recusa com `400` antes de o handler rodar) e
+   *     `FORMA_DE_UUID` no adaptador, que devolve "nao serve" em vez de deixar
+   *     o banco estourar;
+   *  2. o que de fato precisa ser conferido -- proposito, autoria, validade e
+   *     se outra indicacao ja usa esta imagem -- **nao e conferivel sem ler o
+   *     banco**, e e a clausula `WHERE` do adaptador que o faz. Uma conferencia
+   *     de dominio aqui so poderia repetir a forma, e seria a terceira redacao
+   *     dela.
+   *
+   * Tambem **nao passa pelo detector de D59**, pelo mesmo motivo de
+   * `postal_code`: um UUID nao carrega contato nem link.
+   */
+  readonly logo_upload_id?: string;
 }
 
 /** O campo do contato, nomeado como o contrato manda nomea-lo no `400`. */

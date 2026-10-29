@@ -61,7 +61,12 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ATIVIDADES, ORDEM_DAS_ATIVIDADES } from '../../src/diretorio/dominio.ts';
+import {
+  ATIVIDADES,
+  ORDEM_DAS_ATIVIDADES,
+  ORDEM_DOS_TIPOS_DE_ENTIDADE,
+  TIPOS_DE_ENTIDADE,
+} from '../../src/diretorio/dominio.ts';
 
 /** O fonte do `enum` Dart que o aplicativo mostra. */
 const DART = readFileSync(
@@ -80,6 +85,24 @@ const DART = readFileSync(
  */
 function rotuloNoDart(codigo: string): string | undefined {
   const achado = new RegExp(`\\b${codigo}\\('${codigo}',\\s*'([^']+)'\\)`).exec(DART);
+  return achado?.[1];
+}
+
+/**
+ * O rotulo que o `enum` Dart da a um valor de fio **quando o nome do membro nao
+ * e o valor**.
+ *
+ * `AtividadeDoDiretorio` declara `clinic('clinic', 'Clínica')` -- membro e valor
+ * sao a mesma palavra, e `rotuloNoDart` acima casa os dois. `TipoDeEntidade`
+ * declara `profissional('professional', 'Profissional ou estabelecimento')`: o
+ * membro esta em portugues e o valor em ingles, entao aquele regex nao casa
+ * nada. Um caso que reusasse `rotuloNoDart` para o tipo de entidade acharia
+ * `undefined` nos dois valores, pularia os dois e **ficaria verde sem comparar
+ * rotulo nenhum** -- que e exatamente o verde falso que o cabecalho deste
+ * arquivo descreve. Por isso o segundo regex casa **so pelo valor de fio**.
+ */
+function rotuloNoDartPorValor(valor: string): string | undefined {
+  const achado = new RegExp(`\\('${valor}',\\s*'([^']+)'\\)`).exec(DART);
   return achado?.[1];
 }
 
@@ -137,6 +160,64 @@ describe('os rotulos das atividades (cliente, 28 e 29/10/2026)', () => {
     expect([...ORDEM_DAS_ATIVIDADES].sort()).toEqual(Object.keys(ATIVIDADES).sort());
     expect(ATIVIDADES.store).toBe('Loja');
     expect(ATIVIDADES.hospital).toBe('Hospital');
+  });
+
+  describe('os TIPOS DE ENTIDADE (cliente, 29/10/2026)', () => {
+    // Pedido do cliente, verbatim: *"esta faltando o campo se e um
+    // profissional, ong ou estabelecimento"*, no formulario de INDICAR do
+    // aplicativo.
+    //
+    // **O painel ja mostrava os dois rotulos; o app nao tinha o campo.** O PR
+    // #103 entregou `entity_kind` no servidor, no contrato, na migracao
+    // `20261029000003` e no modelo Dart, e deixou o seletor da tela de fora --
+    // quem indicava pelo APK publicado gravava `professional` em silencio. A
+    // BICHUS-317b pos o campo na tela, e **com o campo na tela a divergencia de
+    // rotulo passa a ser possivel**: antes dele nao havia dois lados para
+    // divergir.
+    //
+    // Estes casos existem por isso, e pelo precedente medido logo acima:
+    // `sitter` dizia 'Hospedagem' no Dart e outra coisa no painel por MESES,
+    // com os dois lados verdes, porque o `openapi.yaml` lista o `enum` e nunca
+    // descreveu rotulo. Nao existe portao de contrato que pegue rotulo.
+
+    it('os DOIS rotulos sao os que o cliente definiu', () => {
+      expect(TIPOS_DE_ENTIDADE.professional).toBe('Profissional ou estabelecimento');
+      expect(TIPOS_DE_ENTIDADE.organization).toBe('ONG');
+    });
+
+    it('sao exatamente DOIS, e o seletor oferece exatamente eles', () => {
+      // `EntityKind` tem dois valores. Um terceiro aqui quer dizer que alguem
+      // respondeu ao pedido do cliente -- que nomeia TRES coisas -- alargando o
+      // `enum` em vez de usar os dois eixos: estabelecimento e ATIVIDADE
+      // (`store`, `hospital`, `clinic`), nao tipo de entidade.
+      expect(Object.keys(TIPOS_DE_ENTIDADE).sort()).toEqual(
+        ['professional', 'organization'].sort(),
+      );
+      expect([...ORDEM_DOS_TIPOS_DE_ENTIDADE].sort()).toEqual(
+        Object.keys(TIPOS_DE_ENTIDADE).sort(),
+      );
+    });
+
+    it('o painel e o aplicativo dizem a MESMA coisa nos DOIS valores', () => {
+      const comparados: string[] = [];
+      for (const codigo of Object.keys(TIPOS_DE_ENTIDADE) as (keyof typeof TIPOS_DE_ENTIDADE)[]) {
+        const noDart = rotuloNoDartPorValor(codigo);
+        expect(
+          noDart,
+          `${codigo} nao tem rotulo no enum Dart TipoDeEntidade -- ou o regex ` +
+            `deixou de casar, e ai este caso nao esta medindo nada`,
+        ).toBeDefined();
+        expect(noDart, `${codigo} divergente entre painel e app`).toBe(
+          TIPOS_DE_ENTIDADE[codigo],
+        );
+        comparados.push(codigo);
+      }
+      // O CONTROLE POSITIVO: sem esta linha, um regex que deixasse de casar
+      // tornaria o laco vazio e o caso ficaria verde sem comparar nada. Os
+      // `toBeDefined` acima pegam o caso de um valor; este pega o caso de
+      // `Object.keys` vir vazio.
+      expect(comparados.length, `comparados: ${comparados.join(', ')}`).toBe(2);
+    });
   });
 
   it('o painel e o aplicativo dizem a MESMA coisa para TODOS os valores que os dois declaram', () => {

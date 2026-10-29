@@ -3661,6 +3661,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/directory-suggestion-logo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto do logotipo da indicacao
+         * @description Pedido do cliente de 29/10/2026: *"nao tem o campo do logotipo para o
+         *     usuario subir e indicar o estabelecimento"*.
+         *
+         *     O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `directory/` que a logo e a foto do painel ja usam; a derivada e
+         *     criada pelo worker.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createNetworkEventCoverUploadIntent`, e o app reusa o envio
+         *     que ja tem.
+         *
+         *     ## O PROPOSITO DESTA ROTA NAO E O DA LOGO DO PAINEL, E ESSA E A FRONTEIRA
+         *
+         *     O envio e autorizado com `purpose: directory_suggestion_logo`, que e
+         *     **separado** de `directory_logo`. A separacao nao e arrumacao de
+         *     vocabulario: ela e o que garante que **a imagem de uma indicacao que
+         *     ninguem aprovou nao aparece em superficie publica**, que e a razao de a
+         *     fila de revisao existir.
+         *
+         *     - `createDirectoryEntry`/`updateDirectoryEntry` so aceitam
+         *       `logo_upload_id` cujo envio tenha `purpose: directory_logo`, e
+         *       `professionals` **e** a superficie publica (`DirectoryEntrySummary`,
+         *       `DirectoryEntry`). Um `upload_id` desta rota nao casa esse proposito e
+         *       e recusado com `400` (`code: upload_not_usable`);
+         *     - `suggestDirectoryEntry` exige o proposito inverso: envio do painel nao
+         *       entra na fila.
+         *
+         *     Um proposito so para os dois abriria as duas direcoes, e a unica defesa
+         *     seria lembrar de conferir.
+         *
+         *     **O envio e da CONTA**, e nao do painel: `suggestDirectoryEntry` so
+         *     confirma `upload_id` cuja intencao e da propria conta que esta indicando
+         *     (a conferencia esta na clausula `WHERE`), e `upload_id` de outra pessoa,
+         *     de outro proposito, vencido ou ja usado em OUTRA indicacao e recusado
+         *     com `400` (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+         *
+         *     Dimensao minima **256 x 256**, e nao os 600 x 600 da capa do encontro: e
+         *     a mesma minima de `directory_logo`, e o motivo esta escrito lá -- logo de
+         *     clinica de bairro costuma ser um PNG de 300 px que saiu de um cartao de
+         *     visita, e 256 e o piso em que a derivada `card` de 512 ainda fica
+         *     aceitavel sem ampliar (`sharp` nao amplia). `width`/`height` sao
+         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; indicacao sem logotipo e estado
+         *     normal, e o campo e opcional em `DirectorySuggestionInput`.
+         */
+        post: operations["createDirectorySuggestionLogoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/events": {
         parameters: {
             query?: never;
@@ -10622,6 +10690,36 @@ export interface components {
              *     (D59), porque o canal do contato e o campo acima.
              */
             note?: string;
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createDirectorySuggestionLogoUploadIntent`, **da
+             *     propria conta**.
+             *
+             *     **E dessa rota, e nao de `createAdminCatalogImageIntent`**: o envio
+             *     precisa ter `purpose: directory_suggestion_logo`. Envio de outro
+             *     proposito, de outra conta, vencido ou ja usado em OUTRA indicacao e
+             *     recusado com `400` (`code: upload_not_usable`), sem dizer qual dos
+             *     casos ocorreu -- a mesma redacao e o mesmo silencio de
+             *     `AdminDirectoryEntryInput.logo_upload_id`.
+             *
+             *     **A imagem NAO vai para superficie publica, e isso e o ponto.** Ela
+             *     e gravada em `directory_suggestions.logo_image_id`, que nenhuma
+             *     leitura publica toca: `Perto` le `professionals`, e a logo de lá vem
+             *     de um envio do PAINEL (`directory_logo`). A aprovacao **nao copia**
+             *     este valor para a entrada -- carregar imagem de usuario para
+             *     superficie publica e decisao de quem revisa, feita no painel com o
+             *     envio dele. O proposito separado e o que impede o contrario de
+             *     acontecer por descuido, e nao a boa vontade de quem escreve a
+             *     proxima operacao.
+             *
+             *     Passa pela MESMA higiene do resto: a derivada e reescrita do zero
+             *     sem EXIF, XMP nem IPTC, SVG e poliglota sao recusados pelos numeros
+             *     magicos, e `status` so vira `ready` depois de a derivada estar no
+             *     balde. Nao ha segundo caminho de imagem aqui --
+             *     `sanitize_status` (`20261001000006`) e o estado da OUTRA esteira, a
+             *     da foto de pet e de achado, e nada neste campo o toca.
+             */
+            logo_upload_id?: string;
         };
         /**
          * @description O estado da sugestao. Nasce sempre `pending`, e so o painel a move.
@@ -13241,6 +13339,45 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             byte_size: number;
             /** @description Opcional, como o navegador a le. Abaixo de 600 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description O pedido de autorizacao de envio do LOGOTIPO da indicacao (pedido do
+         *     cliente, 29/10/2026).
+         *
+         *     **Sem `purpose`**, pela mesma razao de `NetworkEventCoverIntentInput`:
+         *     esta operacao existe para um proposito so
+         *     (`directory_suggestion_logo`), e deixar o cliente escolhe-lo seria
+         *     deixa-lo pedir uma autorizacao de logo do PAINEL por uma rota do
+         *     aplicativo -- que e exatamente a fronteira que o proposito separado
+         *     existe para fechar.
+         *
+         *     **Esquema PROPRIO e nao reuso de `NetworkEventCoverIntentInput`**, e as
+         *     duas razoes sao de conteudo e nao de organizacao: a prosa daquele
+         *     esquema afirma o proposito `network_event`, que aqui e falso; e a
+         *     dimensao minima e 256 x 256 e nao 600 x 600. A FORMA e a mesma de
+         *     proposito -- quatro campos, mesmos tetos, mesmo `enum` de tres tipos --,
+         *     e o que se reusa de verdade e a esteira: `catalog_images`, as derivadas
+         *     de `DERIVADAS_DA_LOGO` e o `UploadIntent` da resposta.
+         */
+        DirectorySuggestionLogoIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+             *     fora porque a derivada de catalogo e processada pelo mesmo caminho
+             *     do painel, que nao o aceita -- e por isso este enum NAO e o de
+             *     `UploadIntentInput`, que e da foto de pet.
+             *
+             *     **O custo e dito em voz alta:** quem usa iPhone e tem a logo como
+             *     HEIC nao consegue enviar por esta rota. E o mesmo custo que a capa
+             *     do encontro ja paga, e a razao e a mesma -- a esteira de catalogo
+             *     nao decodifica HEIC. Trocar isto quer dizer ensinar o worker, e nao
+             *     alargar este `enum`.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o navegador a le. Abaixo de 256 responde 422 antes de assinar. */
             width?: number;
             height?: number;
         };
@@ -20653,6 +20790,35 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NetworkEventCoverIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createDirectorySuggestionLogoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorySuggestionLogoIntentInput"];
             };
         };
         responses: {

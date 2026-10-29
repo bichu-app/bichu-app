@@ -117,13 +117,41 @@ enum AtividadeDoDiretorio {
 /// tipo" de "sei, e e profissional" para escolher o glifo de reserva. Engolir
 /// o desconhecido como `profissional` apagaria essa diferenca na porta.
 enum TipoDeEntidade {
-  profissional('professional'),
-  organizacao('organization');
+  profissional('professional', 'Profissional ou estabelecimento'),
+  organizacao('organization', 'ONG');
 
-  const TipoDeEntidade(this.codigo);
+  const TipoDeEntidade(this.codigo, this.rotulo);
 
   /// O valor que vai e volta na API.
   final String codigo;
+
+  /// O nome em portugues, que e o que a tela mostra.
+  ///
+  /// **OS DOIS ROTULOS SAO OS DO CLIENTE, E SAO OS DO PAINEL.** Ele os definiu
+  /// em 29/10/2026 ao pedir o campo (*"esta faltando o campo se e um
+  /// profissional, ong ou estabelecimento"*), e `TIPOS_DE_ENTIDADE` em
+  /// `admin/src/diretorio/dominio.ts` ja mostra exatamente estes dois textos na
+  /// fila de indicacao. **Rotulo divergente entre painel e app e defeito**, e
+  /// nao diferenca de superficie: quem revisa a indicacao no painel le "ONG" e
+  /// quem a mandou pelo aplicativo tem de ter lido "ONG" tambem.
+  ///
+  /// **Isto nao e zelo: a classe de defeito ja viveu aqui e ficou meses.**
+  /// `sitter` foi declarado com o rotulo 'Hospedagem' no primeiro commit da
+  /// listagem de `Perto` e o painel dizia outra coisa, **com os dois lados
+  /// verdes** -- o `openapi.yaml` lista o `enum` e nunca descreveu rotulo, entao
+  /// nao havia onde a divergencia reprovar. Quem cobra a igualdade destes dois
+  /// e `admin/test/diretorio/rotulos-das-atividades.test.ts`, que le ESTE
+  /// arquivo do disco: nao ha como um teste de Vitest importar Dart.
+  ///
+  /// **"Profissional ou estabelecimento" carrega as duas palavras de proposito.**
+  /// O cliente nomeou tres coisas no pedido -- profissional, ONG e
+  /// estabelecimento -- e o contrato tem DOIS valores. Alargar `EntityKind` para
+  /// tres seria `response-property-enum-value-added` (12 erros de `oasdiff`
+  /// medidos em 18/10) e, pior, afirmaria que estabelecimento e um terceiro tipo
+  /// de entidade quando ele e uma ATIVIDADE (`store`, `hospital`, `clinic` em
+  /// [AtividadeDoDiretorio]). Os dois eixos ja respondem a pergunta dele: um
+  /// petshop e `kind: store` e `entity_kind: professional`.
+  final String rotulo;
 
   /// O tipo, ou **nulo** para campo ausente, de outro tipo ou de valor que
   /// esta versao do app nao conhece. Ver a prosa da classe.

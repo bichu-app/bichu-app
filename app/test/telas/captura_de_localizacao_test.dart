@@ -265,6 +265,13 @@ Future<_Caixa> _montar(
   return caixa;
 }
 
+/// O proprio [BichuField] cujo rotulo e [rotulo], para ler o que ele DECLARA
+/// (`opcional`), e nao o que ele desenha.
+BichuField _campoDeclarado(WidgetTester tester, String rotulo) =>
+    tester.widget<BichuField>(
+      find.byWidgetPredicate((w) => w is BichuField && w.rotulo == rotulo),
+    );
+
 /// O `TextField` do [BichuField] cujo rotulo e [rotulo].
 ///
 /// Pelo rotulo declarado no widget, e nao por indice nem por
@@ -468,6 +475,46 @@ void main() {
             'acabou de negar a permissao precisa de mais um toque para '
             'comecar a digitar. O defeito e silencioso -- a tela fica certa, '
             'o fluxo funciona, e so quem usa o app no aparelho percebe.',
+      );
+    });
+
+    // **VEIO DE `localizacao_do_botao_test.dart` EM 29/10/2026.**
+    //
+    // Aquele arquivo media isto com o APP montado, dirigindo o botao pela tela
+    // do achado. O achado deixou de oferecer captura (decisao do cliente), e
+    // **nenhuma tela de producao a oferece hoje**: F3.1 nunca adotou esta peca
+    // -- medido, `tela_onde_e_quando.dart` nao cita `CapturaDeLocalizacao`.
+    //
+    // A afirmacao, porem, continua sendo sobre a PECA e continua valendo, e ela
+    // era a unica dos tres casos daquele grupo que nao estava coberta aqui.
+    // Deixa-la morrer junto com a tela perderia a nuance do Android.
+    testWidgets('`negada` (e nao `naoPedida`) ainda abre o dialogo do sistema',
+        (tester) async {
+      final porta = LocalizacaoDeTeste(
+        PermissaoDeLocalizacao.negada,
+        depoisDePedir: PermissaoDeLocalizacao.concedida,
+      );
+      await _montar(tester, localizacao: porta);
+
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+      // A antessala abre para `negada` tambem, e `pedir()` so vem DEPOIS da
+      // confirmacao dela -- por isso o segundo toque.
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).last,
+      );
+
+      expect(
+        porta.vezesQuePediu,
+        greaterThan(0),
+        reason: 'REPROVA: com a permissao `negada` o app nao pediu nada. No '
+            'Android `negada` NAO e definitiva -- ela e "nunca perguntei de '
+            'verdade", e o dialogo do sistema ainda abre. Tratar `negada` '
+            'como `negadaPermanentemente` manda para os ajustes quem so '
+            'precisava ser perguntado outra vez.',
       );
     });
 
@@ -815,6 +862,17 @@ void main() {
   //     `_origem.doGuardado(_bairro, resultado.cidade, _chaveBairro);` em
   //     `_preencherACidadeDaLocalizacao` -- derivar area da coordenada.
   //     -> reprova `ISCA -- o bairro NAO e derivado da coordenada`.
+  // **O PONTO DE USO DESTE GRUPO VIROU `marcarPerdido` EM 29/10/2026**, e a
+  // troca nao e cosmetica: o relato de 26/10 era sobre a tela do achado, e o
+  // achado **deixou de oferecer captura** por decisao do cliente (*"remove os
+  // botoes e deixa os campos de cep, endereco para o usuario preencher"*).
+  //
+  // O que estes casos medem -- a emenda 1 do ADR-0006, `coordenada -> nome de
+  // cidade` e nada mais -- continua inteiro e continua valendo, so que para
+  // F3.1, que e o fluxo que ainda captura. Deixa-los em `registrarAchado`
+  // seria pior que apaga-los: eles passariam a montar uma tela que nao oferece
+  // captura nenhuma e a afirmar, no verde, que a fronteira do ADR-0006 esta
+  // medida -- quando nada estaria sendo exercitado.
   group('a tela diz de onde cada campo vem, ANTES do toque (26/10/2026)', () {
     // ## O relato que NAO era defeito
     //
@@ -836,7 +894,7 @@ void main() {
       await _montar(
         tester,
         localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+        pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
       );
 
       // **SEM TOCAR EM NADA**: e esse o ponto do caso. A explicacao tem de
@@ -869,7 +927,7 @@ void main() {
       await _montar(
         tester,
         localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+        pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
       );
       await tocar(
         tester,
@@ -899,7 +957,7 @@ void main() {
       await _montar(
         tester,
         localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+        pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
       );
       await tocar(
         tester,
@@ -938,7 +996,7 @@ void main() {
       await _montar(
         tester,
         localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+        pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
       );
       await tocar(
         tester,
@@ -982,7 +1040,7 @@ void main() {
         await _montar(
           tester,
           localizacao: porta,
-          pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+          pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
           buscaDeCep: BuscaDeCep(
             cliente: MockClient((req) async {
               // A forma do ViaCEP, que e o servico PRINCIPAL: a reserva nao e
@@ -1060,7 +1118,7 @@ void main() {
       await _montar(
         tester,
         localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+        pontoDeUso: PontoDeUsoDaLocalizacao.marcarPerdido,
       );
       await tocar(
         tester,
@@ -1092,6 +1150,61 @@ void main() {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // VEIO DE `registrar_achado_dois_passos_test.dart` EM 29/10/2026
+  //
+  // A decisao do cliente de 17/10/2026 -- *"(opcional)" so quando ela E
+  // opcional"* -- tem DOIS lados, e o lado `com ponto` era medido pela tela do
+  // achado. O achado deixou de capturar coordenada (decisao de 29/10), entao
+  // aquele caso passou a medir um estado impossivel; o lado `sem ponto`
+  // continua la, porque na tela do achado a cidade e obrigatoria sempre.
+  //
+  // Aqui o par fica inteiro: sem ponto ela e cobrada, com ponto ela nao e.
+  // Sem este caso, travar a cidade como obrigatoria na peca inteira nao
+  // reprovaria nada.
+  // -------------------------------------------------------------------------
+  group('o rotulo "(opcional)" da cidade diz a verdade nos dois estados', () {
+    testWidgets('SEM ponto, a cidade NAO e opcional', (tester) async {
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.naoPedida);
+      await _montar(tester, localizacao: porta);
+
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.preferoDigitarOBairro).first,
+      );
+
+      expect(
+        _campoDeclarado(tester, TextosDaLocalizacao.rotuloCidade).opcional,
+        isFalse,
+        reason: 'REPROVA: a cidade aparece como "(opcional)" sem haver ponto. '
+            'Ela e o unico campo que faz o `onde` existir '
+            '(`Area.required: [city]`), e dizer que ela e dispensavel e o que '
+            'deixa o botao de envio morto com o formulario inteiro cheio.',
+      );
+    });
+
+    testWidgets('COM ponto, a cidade volta a ser opcional', (tester) async {
+      // `concedida` sem `resultado`: a porta decide pelo estado e devolve
+      // ponto, que e o que a implementacao de verdade faz.
+      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.concedida);
+      await _montar(tester, localizacao: porta);
+
+      await tocar(
+        tester,
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        _campoDeclarado(tester, TextosDaLocalizacao.rotuloCidade).opcional,
+        isTrue,
+        reason: 'REPROVA: com a coordenada em maos o `onde` ja existe, e a '
+            'cidade passa a ser mesmo opcional. Cobra-la aqui seria mentir no '
+            'outro sentido.',
+      );
+    });
+  });
+
   group('a antessala diz o que os criterios 3 e 4 mandam', () {
     testWidgets('F3.1 (marcar perdido) usa o texto do criterio 3',
         (tester) async {
@@ -1116,21 +1229,33 @@ void main() {
       );
     });
 
-    testWidgets('F3.5 (registrar achado) usa o texto do criterio 4',
-        (tester) async {
-      final porta = LocalizacaoDeTeste(PermissaoDeLocalizacao.naoPedida);
-      await _montar(
-        tester,
-        localizacao: porta,
-        pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
+    // **PELO ENUM, E NAO PELA TELA, DESDE 29/10/2026.**
+    //
+    // Este caso montava a peca com `registrarAchado` e tocava em `Usar minha
+    // localizacao` para ver a antessala. **Esse caminho nao existe mais**: por
+    // decisao do cliente o achado abre direto nos campos de endereco e nao
+    // oferece captura, entao nao ha botao para tocar e a antessala nunca
+    // aparece por F3.5.
+    //
+    // O criterio 4 continua sendo uma afirmacao sobre o TEXTO -- que titulo e
+    // corpo a antessala usa quando o ponto de uso e o achado --, e e isso que
+    // se mede aqui. Encenar um toque que a pessoa nao pode dar mediria a
+    // montagem do teste, e nao o produto.
+    //
+    // Se o achado voltar a oferecer captura, este caso volta a ser de widget.
+    test('F3.5 (registrar achado) usa o texto do criterio 4', () {
+      expect(
+        PontoDeUsoDaLocalizacao.registrarAchado.titulo,
+        TextosDaLocalizacao.tituloAchado,
+        reason: 'REPROVA: o ponto de uso do achado nao usa o titulo do '
+            'criterio 4.',
       );
-      await tocar(
-        tester,
-        find.text(TextosDaLocalizacao.usarMinhaLocalizacao).first,
+      expect(
+        PontoDeUsoDaLocalizacao.registrarAchado.corpo,
+        TextosDaLocalizacao.corpoAchado,
+        reason: 'REPROVA: o ponto de uso do achado nao usa o corpo do '
+            'criterio 4.',
       );
-
-      expect(find.text(TextosDaLocalizacao.tituloAchado), findsOneWidget);
-      expect(find.text(TextosDaLocalizacao.corpoAchado), findsOneWidget);
     });
 
     testWidgets('a antessala NAO reaparece quando o dialogo ja foi respondido',
