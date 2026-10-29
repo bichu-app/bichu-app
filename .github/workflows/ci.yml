@@ -1866,7 +1866,47 @@ jobs:
     # Se `integracao` reprovar, este job e PULADO, e o job `portao` trata
     # "skipped" como erro ("Portao que nao roda nao aprova"). Nao existe caminho
     # em que a analise desapareca em silencio.
+    #
+    # ESTE PARAGRAFO FICOU PELA METADE EM 28/10/2026, e corrigi-lo e parte do
+    # desligamento. Hoje existe UM caminho em que este job nao roda, e ele e o
+    # oposto de silencio: a dispensa `sonar` de `.github/quality-gates.yml`, que
+    # o `portao` le por nome. Ela cobre a ausencia DESTE job e nada mais -- se
+    # `integracao` reprovar, `integracao` sai `failure` e a regra geral do
+    # agregador reprova por ela, como antes.
     needs: [codigo, integracao]
+
+    # ===================================================================
+    # DESLIGADO EM 28/10/2026 POR DECISAO DO CLIENTE. Verbatim: "nao rodar por
+    # enquanto".
+    #
+    # ISTO NAO E UMA SAIDA PREGUICOSA, E A DIFERENCA E O ARQUIVO AO LADO. O
+    # `if: secrets.SONAR_TOKEN != ''` que o passo "o token existe?" recusa logo
+    # abaixo some sem deixar registro: o job desaparece da lista, o `portao` ve
+    # `skipped`, e a ausencia da analise vira silencio. Aqui a ausencia esta
+    # ESCRITA em `.github/quality-gates.yml`, no portao `sonar`, com motivo,
+    # responsavel e data -- e e aquela entrada, e nada mais, que faz o `portao`
+    # aceitar este job pulado. Apague a entrada e este job pulado volta a
+    # REPROVAR o agregador, sem tocar neste arquivo (secao 5.3: "Para remover a
+    # dispensa: apague a entrada. Nao mexa no workflow").
+    #
+    # POR QUE O JOB NAO FOI APAGADO, nem `sonar-project.properties`: o motivo
+    # da parada nao e nosso e nao e tecnico. A analise de BRANCH da
+    # `development` vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09 com
+    #
+    #     maximum allowed lines limit of 50000 ... LOC count in this
+    #     analysis: 53057
+    #
+    # -- teto de LOC da organizacao no SonarCloud, nao defeito da esteira. O dia
+    # em que o teto subir ou o projeto encolher, este `if:` sai e o job volta
+    # inteiro. Codigo apagado nao volta; `if:` desligado volta em uma linha.
+    #
+    # E POR QUE UM `if:` E NAO UM PASSO QUE SAI 0: passo que fica verde sem
+    # verificar e o que o cabecalho deste arquivo proibe em voz alta -- "Job que
+    # fica verde sem verificar nao e neutro: ele ocupa o lugar de um que
+    # funcionaria". Job PULADO e visivel na lista de checks e e lido pelo
+    # agregador; job verde mentiroso nao e lido por ninguem.
+    # ===================================================================
+    if: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2290,9 +2330,20 @@ jobs:
     needs: [rapidos, codigo, contrato, integracao, isolamento, admin, web, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
-      - name: consolidar
+      # O AGREGADOR PASSOU A LER `.github/quality-gates.yml` EM 28/10/2026, e
+      # por isso precisa da arvore. Antes ele so somava enums e nao precisava de
+      # checkout nenhum. O que mudou esta no passo de baixo.
+      - uses: actions/checkout@v4
+
+      # A REGRA GERAL, INTOCADA, E ELA COBRE ONZE JOBS. `skipped` reprova aqui,
+      # e e isso que impede uma verificacao de desaparecer em silencio. O
+      # DOZE-AVO, `sonar`, saiu desta lista em 28/10/2026 e ganhou um passo
+      # proprio -- um caminho NOMEADO para UMA ausencia, e nao um afrouxamento
+      # desta regra. Quem quiser dispensar outro job tem de escrever outro
+      # caminho nomeado e dizer por que, que e exatamente o custo que deve ter.
+      - name: consolidar os onze
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.admin.result }} ${{ needs.web.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.admin.result }} ${{ needs.web.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in
@@ -2301,4 +2352,64 @@ jobs:
               *) echo "::error::job em '$e'"; exit 1 ;;
             esac
           done
+          echo "os onze jobs de regra geral estao verdes"
+
+      # ===================================================================
+      # O DECIMO SEGUNDO JOB, `sonar`, PELO CAMINHO NOMEADO
+      # ===================================================================
+      # O cliente decidiu em 28/10/2026 nao rodar o SonarCloud por enquanto
+      # (teto de 50.000 linhas na organizacao, 53.057 analisadas -- a mensagem
+      # verbatim do servidor esta em `.github/quality-gates.yml`). O job ficou
+      # com `if: false`, entao ele sai `skipped`.
+      #
+      # DESLIGAR O JOB SEM ESTE PASSO DEIXARIA TODO PR VERMELHO pelo agregador,
+      # que trata `skipped` como erro de proposito. Trocar um vermelho por outro
+      # nao e resolver; e por isso que este passo existe.
+      #
+      # A ACEITACAO NAO E UMA EXCECAO ESCRITA AQUI: ela e um INSUMO, lido do
+      # disco. Este passo aceita `sonar` pulado APENAS quando acha a linha
+      # `- portao: sonar` em `.github/quality-gates.yml` -- e aquela entrada tem
+      # motivo, responsavel e `vence_em`, e `verificar_dispensas.py` (job
+      # `rapidos`, de que este agregador depende) REPROVA no dia em que o prazo
+      # vencer. Quer dizer: a ausencia e declarada, datada, e expira sozinha.
+      # Apagar a entrada devolve o rigor sem tocar neste arquivo.
+      #
+      # O FILTRO TEM DE PROVAR QUE CASOU. O `grep` imprime a linha achada (`-n`)
+      # e o seu proprio codigo de saida e a prova: padrao que nao casa deixa
+      # `dispensa=ausente`, e ausente REPROVA. Uma leitura que nao achou nada
+      # nunca vira aprovacao aqui.
+      #
+      # E ELE NAO DISPENSA VEREDITO. So `skipped` entra pelo ramo da dispensa:
+      # `failure`, `cancelled` ou qualquer palavra que o GitHub inventar amanha
+      # caem no ramo padrao e reprovam, com a entrada escrita. Se o job voltar a
+      # rodar e o portao de qualidade do SonarCloud reprovar, o `portao`
+      # reprova.
+      - name: o decimo segundo job, `sonar`, e a dispensa que o nomeia
+        run: |
+          arquivo=.github/quality-gates.yml
+          if [ ! -f "$arquivo" ]; then
+            echo "::error::$arquivo nao encontrado. Sem ele nao da para saber se a ausencia do job \`sonar\` e declarada ou acidente -- e sem registro ela E acidente"
+            exit 1
+          fi
+          dispensa=ausente
+          if grep -nE '^[[:space:]]*-[[:space:]]*portao:[[:space:]]*sonar[[:space:]]*$' "$arquivo"; then
+            dispensa=presente
+          fi
+          echo "job sonar: ${{ needs.sonar.result }} / dispensa \`sonar\` em $arquivo: $dispensa"
+          case "${{ needs.sonar.result }}" in
+            success)
+              echo "o job \`sonar\` rodou e aprovou"
+              ;;
+            skipped)
+              if [ "$dispensa" != presente ]; then
+                echo "::error::o job \`sonar\` nao rodou e NAO ha dispensa \`sonar\` em $arquivo. Portao que nao roda nao aprova: ou o job volta a rodar, ou a ausencia entra naquele arquivo com motivo, responsavel e vence_em"
+                exit 1
+              fi
+              echo "::warning::o job \`sonar\` NAO RODOU, por dispensa declarada e datada (\`sonar\`) em $arquivo. O VEREDITO DE QUALIDADE DO SONARCLOUD NAO ESTA SENDO CONFERIDO POR NINGUEM enquanto ela valer -- nem cobertura, nem duplicacao, nem as metricas de codigo novo. Isto nao e um job verde: e uma ausencia registrada, com dono e com prazo, e \`verificar-dispensas\` reprova no dia em que o prazo vencer"
+              ;;
+            *)
+              echo "::error::job \`sonar\` em '${{ needs.sonar.result }}'. A dispensa \`sonar\` cobre a AUSENCIA do job e nada mais: resultado que nao e \`success\` nem \`skipped\` reprova com ela escrita"
+              exit 1
+              ;;
+          esac
           echo "portao verde"
