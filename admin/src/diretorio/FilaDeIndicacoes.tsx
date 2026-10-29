@@ -56,7 +56,13 @@ import {
   telefoneEmE164,
 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { ATIVIDADES, MENSAGEM_DO_SLUG, PADRAO_DO_SLUG, slugSugerido } from './dominio.ts';
+import {
+  ATIVIDADES,
+  MENSAGEM_DO_SLUG,
+  PADRAO_DO_SLUG,
+  slugSugerido,
+  TIPOS_DE_ENTIDADE,
+} from './dominio.ts';
 import {
   ABAS,
   CONTATOS,
@@ -241,7 +247,19 @@ export default function FilaDeIndicacoes() {
                           <span className="t-label">{i.display_name}</span>
                           <br />
                           <span className="t-caption c-sec">
-                            {ATIVIDADES[i.kind]} · indicada em {quando(i.created_at)}
+                            {/* OS DOIS EIXOS, e nao so a atividade (cliente,
+                                29/10/2026: *"esta faltando o campo se e um
+                                profissional, ong ou estabelecimento"*).
+
+                                O TIPO aparece porque e ele que a aprovacao
+                                carrega para `professionals.entity_kind`: sem
+                                ele na tela, quem revisa aprovaria uma ONG como
+                                profissional sem nunca ter visto a declaracao de
+                                quem indicou. O ROTULO e o MESMO de
+                                `TIPOS_DE_ENTIDADE` -- o mesmo dado com dois
+                                nomes e defeito, e ja viveu em silencio aqui. */}
+                            {TIPOS_DE_ENTIDADE[i.entity_kind]} · {ATIVIDADES[i.kind]} · indicada em{' '}
+                            {quando(i.created_at)}
                           </span>
                           {i.note && (
                             <>

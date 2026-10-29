@@ -22,11 +22,27 @@
  * `'Clínica ou estabelecimento'` no painel, e os dois lados passavam verdes.
  *
  * A comparacao e por LEITURA DE TEXTO e nao por importacao porque nao ha como
- * um teste de Vitest importar Dart. Ela e frouxa de proposito num ponto: le
- * so os tres valores que este lote renomeou. Um caso que exigisse o conjunto
- * inteiro igual reprovaria no dia em que o contrato ganhasse um valor que o
- * APK publicado ainda nao conhece -- e `AtividadeDoDiretorio.porCodigo`
- * devolver nulo para valor novo e desenho do app, nao falta.
+ * um teste de Vitest importar Dart.
+ *
+ * ## ELA DEIXOU DE SER FROUXA EM 29/10/2026, E A RAZAO E UM DEFEITO MEDIDO
+ *
+ * Ate 28/10 este arquivo comparava **tres** valores (`clinic`, `walker`,
+ * `sitter`) e dizia por que: *"um caso que exigisse o conjunto inteiro igual
+ * reprovaria no dia em que o contrato ganhasse um valor que o APK publicado
+ * ainda nao conhece"*.
+ *
+ * **O argumento confundia duas coisas.** Valor que o app nao conhece nao
+ * aparece no `enum` Dart e e tratado por `AtividadeDoDiretorio.porCodigo`, que
+ * devolve nulo -- isso continua sendo desenho do app. Mas valor que o app
+ * CONHECE e rotula DIFERENTE do painel e defeito, e era exatamente o que a
+ * frouxura deixava passar: `hospital` e `store` entraram em 28/10 nos dois lados
+ * **com o casamento feito a mao**, sem nenhum caso cobrando.
+ *
+ * Agora a comparacao e sobre **os valores que os DOIS lados declaram**: todo
+ * codigo de `ATIVIDADES` que o `enum` Dart tambem declara tem de ter o MESMO
+ * rotulo. Valor que o Dart ainda nao tem e PULADO e CONTADO, e o caso exige que
+ * a contagem comparada seja a esperada -- sem isso, um regex que deixasse de
+ * casar pularia tudo e o arquivo ficaria verde sem comparar nada.
  *
  * ## As iscas, e como cada uma foi provada
  *
@@ -67,7 +83,7 @@ function rotuloNoDart(codigo: string): string | undefined {
   return achado?.[1];
 }
 
-describe('os rotulos das atividades (cliente, 28/10/2026)', () => {
+describe('os rotulos das atividades (cliente, 28 e 29/10/2026)', () => {
   it('`clinic` e so "Clínica": o painel deixou de dizer "ou estabelecimento"', () => {
     expect(ATIVIDADES.clinic).toBe('Clínica');
   });
@@ -75,6 +91,19 @@ describe('os rotulos das atividades (cliente, 28/10/2026)', () => {
   it('`walker` e "Dog Walker" e `sitter` e "Pet Sitter"', () => {
     expect(ATIVIDADES.walker).toBe('Dog Walker');
     expect(ATIVIDADES.sitter).toBe('Pet Sitter');
+  });
+
+  it('`sitter` NAO voltou a ser "Hospedagem": quem diz hospedagem e `boarding`', () => {
+    // O rotulo "Hospedagem" em `sitter` divergia do valor desde o primeiro
+    // commit da listagem de `Perto`, e a troca de 28/10 corrigiu o rotulo. Em
+    // 29/10 o cliente separou os dois servicos de verdade: *"Nao e um ou outro,
+    // sao todos .. hospedagem, pet sitter, sao coisas diferentes"*.
+    //
+    // Este caso existe porque a reversao era tentadora e estava errada: ela
+    // reintroduziria a divergencia de meses.
+    expect(ATIVIDADES.sitter).not.toBe('Hospedagem');
+    expect(ATIVIDADES.boarding).toBe('Hospedagem');
+    expect(ATIVIDADES.daycare).toBe('Creche');
   });
 
   it('os tres valores de fio NAO mudaram com a renomeacao', () => {
@@ -85,26 +114,54 @@ describe('os rotulos das atividades (cliente, 28/10/2026)', () => {
     }
   });
 
-  it('as OITO atividades tem rotulo, e o seletor oferece exatamente elas', () => {
-    // `store` e `hospital` entraram em 28/10/2026 (`20261028000001`). O
-    // `satisfies Record<TipoDaEntrada, string>` ja obriga o rotulo no
-    // compilador; este caso guarda a outra metade, que o compilador nao ve: a
-    // ORDEM do seletor nao pode esquecer um valor nem inventar um.
+  it('as DEZ atividades tem rotulo, e o seletor oferece exatamente elas', () => {
+    // `store` e `hospital` entraram em 28/10/2026 (`20261028000001`), `boarding`
+    // e `daycare` em 29/10 (`20261029000002`). O `satisfies Record<TipoDaEntrada,
+    // string>` ja obriga o rotulo no compilador; este caso guarda a outra
+    // metade, que o compilador nao ve: a ORDEM do seletor nao pode esquecer um
+    // valor nem inventar um.
     expect(Object.keys(ATIVIDADES).sort()).toEqual(
-      ['clinic', 'hospital', 'store', 'vet', 'groomer', 'walker', 'sitter', 'trainer'].sort(),
+      [
+        'clinic',
+        'hospital',
+        'store',
+        'boarding',
+        'daycare',
+        'vet',
+        'groomer',
+        'walker',
+        'sitter',
+        'trainer',
+      ].sort(),
     );
     expect([...ORDEM_DAS_ATIVIDADES].sort()).toEqual(Object.keys(ATIVIDADES).sort());
     expect(ATIVIDADES.store).toBe('Loja');
     expect(ATIVIDADES.hospital).toBe('Hospital');
   });
 
-  it('o painel e o aplicativo dizem a MESMA coisa para os tres', () => {
-    for (const codigo of ['clinic', 'walker', 'sitter'] as const) {
+  it('o painel e o aplicativo dizem a MESMA coisa para TODOS os valores que os dois declaram', () => {
+    // A cobertura passou de TRES para TODOS em 29/10/2026 -- ver o cabecalho.
+    const comparados: string[] = [];
+    const semDart: string[] = [];
+    for (const codigo of Object.keys(ATIVIDADES) as (keyof typeof ATIVIDADES)[]) {
       const noDart = rotuloNoDart(codigo);
-      // O controle positivo: o regex casou. Sem ele, `undefined === undefined`
-      // passaria o caso inteiro sem comparar rotulo nenhum.
-      expect(noDart, `o enum Dart nao declara ${codigo}`).toBeTypeOf('string');
+      if (noDart === undefined) {
+        // Valor que o `enum` Dart ainda nao declara nao e divergencia: e o APK
+        // que nao conhece o valor, e `AtividadeDoDiretorio.porCodigo` devolve
+        // nulo para ele de proposito. Fica CONTADO, e a contagem e cobrada
+        // abaixo.
+        semDart.push(codigo);
+        continue;
+      }
       expect(noDart, `${codigo} divergente entre painel e app`).toBe(ATIVIDADES[codigo]);
+      comparados.push(codigo);
     }
+    // O CONTROLE POSITIVO, e ele e o que impede o verde falso: se o regex
+    // deixasse de casar, todos cairiam em `semDart` e o laco nao compararia
+    // rotulo nenhum. Hoje o Dart declara os dez, entao a contagem e dez e
+    // `semDart` e vazio -- e o dia em que um valor novo entrar so no painel, a
+    // lista o nomeia em vez de ele passar calado.
+    expect(comparados.length, `comparados: ${comparados.join(', ')}`).toBe(10);
+    expect(semDart, `sem rotulo no enum Dart: ${semDart.join(', ')}`).toEqual([]);
   });
 });

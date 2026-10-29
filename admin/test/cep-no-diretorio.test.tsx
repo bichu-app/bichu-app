@@ -55,6 +55,9 @@ function entrada(extra: Partial<Esquemas['AdminDirectoryEntry']> = {}): Esquemas
     // antiga vale.
     entity_kind: 'professional',
     display_name: 'Passeios da Bia',
+    // A GALERIA e obrigatoria na resposta desde 29/10/2026, e `[]` e o estado
+    // normal: a entrada sem foto responde lista vazia, nao campo ausente.
+    images: [],
     status: 'draft',
     verification: { level: 'none', evidence_kinds: [] },
     source: 'import',
@@ -93,6 +96,22 @@ async function preencherObrigatorios() {
   fireEvent.click(screen.getByLabelText('Dog Walker'));
 }
 
+/**
+ * CIDADE, UF E TELEFONE, que o cadastro passou a cobrar em 29/10/2026 (decisao
+ * do cliente: a entrada nasce "No ar" e publicar cobra os tres).
+ *
+ * **Fora de `preencherObrigatorios` de proposito**: as iscas (a) e (b) medem
+ * que o CEP PREENCHE cidade e UF, e preenche-las antes faria a (a) nao medir
+ * nada e a (b) medir a si mesma. Quem chama isto e so quem SALVA.
+ */
+function preencherOsTresDaPublicacao() {
+  fireEvent.change(screen.getByLabelText('Cidade *'), { target: { value: 'São Paulo' } });
+  fireEvent.change(screen.getByLabelText('UF *'), { target: { value: 'SP' } });
+  fireEvent.change(screen.getByLabelText('Telefone comercial *'), {
+    target: { value: '(11) 3061-2200' },
+  });
+}
+
 describe('CEP no formulario de entrada do diretorio', () => {
   it('ISCA (a): o CEP completo preenche rua, bairro, cidade e UF', async () => {
     montar('/perto/novo', {
@@ -105,8 +124,8 @@ describe('CEP no formulario de entrada do diretorio', () => {
       expect(valorDoCampo('Rua')).toBe('Rua Harmonia');
     });
     expect(valorDoCampo('Bairro')).toBe('Sumarezinho');
-    expect(valorDoCampo('Cidade')).toBe('São Paulo');
-    expect(valorDoCampo('UF')).toBe('SP');
+    expect(valorDoCampo('Cidade *')).toBe('São Paulo');
+    expect(valorDoCampo('UF *')).toBe('SP');
   });
 
   it('ISCA: a chamada sai para o NOSSO endpoint, com os oito digitos no caminho', async () => {
@@ -133,7 +152,7 @@ describe('CEP no formulario de entrada do diretorio', () => {
     });
     await preencherObrigatorios();
     // O operador digita cidade e bairro ANTES do CEP, e os dois diferem da base.
-    fireEvent.change(screen.getByLabelText('Cidade'), { target: { value: 'Osasco' } });
+    fireEvent.change(screen.getByLabelText('Cidade *'), { target: { value: 'Osasco' } });
     fireEvent.change(screen.getByLabelText('Bairro'), { target: { value: 'Centro' } });
     fireEvent.change(screen.getByLabelText('CEP'), { target: { value: CEP } });
 
@@ -142,7 +161,7 @@ describe('CEP no formulario de entrada do diretorio', () => {
       expect(valorDoCampo('Rua')).toBe('Rua Harmonia');
     });
     // E o que a pessoa digitou fica EXATAMENTE como ela deixou.
-    expect(valorDoCampo('Cidade')).toBe('Osasco');
+    expect(valorDoCampo('Cidade *')).toBe('Osasco');
     expect(valorDoCampo('Bairro')).toBe('Centro');
   });
 
@@ -153,6 +172,7 @@ describe('CEP no formulario de entrada do diretorio', () => {
     });
     await preencherObrigatorios();
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
+    preencherOsTresDaPublicacao();
     fireEvent.change(screen.getByLabelText('CEP'), { target: { value: CEP } });
     await screen.findByText(/Não encontramos este CEP/);
 
@@ -175,6 +195,7 @@ describe('CEP no formulario de entrada do diretorio', () => {
     });
     await preencherObrigatorios();
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
+    preencherOsTresDaPublicacao();
     fireEvent.change(screen.getByLabelText('CEP'), { target: { value: CEP } });
     await screen.findByText(/Não conseguimos consultar o CEP agora/);
 
@@ -188,6 +209,7 @@ describe('CEP no formulario de entrada do diretorio', () => {
     });
     await preencherObrigatorios();
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
+    preencherOsTresDaPublicacao();
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/perto'));
