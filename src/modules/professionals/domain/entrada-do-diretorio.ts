@@ -22,6 +22,11 @@
  * nao num `if` desta funcao. Projecao que filtra e projecao que um dia esquece.
  */
 import {
+  projetarPontuacao,
+  type PontuacaoDoLocal,
+  type PontuacaoPublica,
+} from './avaliacao-do-local.js';
+import {
   evidenciasAprovadas,
   nivelDerivado,
   type NivelDeVerificacao,
@@ -107,6 +112,27 @@ export interface EntradaDoDiretorio {
    * "processando" numa lista.
    */
   readonly logoPublicKey: string | null;
+  /**
+   * A PONTUACAO AGREGADA do local -- media, contagem e histograma.
+   *
+   * **Ela e CALCULADA na consulta da pagina e nunca materializada**: nao ha
+   * coluna `rating_average` em `professionals` e nao ha gatilho. Media guardada
+   * tem quatro caminhos de invalidacao (criar, editar, apagar, moderar) mais um
+   * quinto que nenhum gatilho em `professional_reviews` enxerga -- o autor
+   * desabilitar a conta muda a media de todo local que ele avaliou sem tocar em
+   * nenhuma avaliacao --, e a media ficaria errada em silencio.
+   *
+   * **E um campo de `EntradaDoDiretorio`, e nao do tipo do DETALHE**, porque o
+   * cliente pediu media e quantidade "na lista e na pagina" (18/10/2026): posta
+   * aqui, ela atravessa `projetarEntrada`, que e o caminho dos dois -- e o
+   * recorte da conta e um so, entao a media do cartao e a da pagina nao tem como
+   * discordar.
+   *
+   * **Nunca `undefined` e nunca "ausente"**: local sem avaliacao tem
+   * `PONTUACAO_VAZIA`, com `media` NULA e `quantidade` zero. Media zero seria a
+   * mentira que esta regra existe para impedir.
+   */
+  readonly pontuacao: PontuacaoDoLocal;
 }
 
 export interface VerificacaoPublica {
@@ -136,6 +162,19 @@ export interface EntradaPublica {
   readonly verification: VerificacaoPublica;
   readonly distance_m: number | null;
   readonly logo_url: string | null;
+  /**
+   * `DirectoryRating`: a media (NULA sem avaliacao), a quantidade e o
+   * histograma.
+   *
+   * **O histograma vem no cartao da lista, e isso foi medido e nao aceito por
+   * costume.** As cinco chaves sao cinco inteiros pequenos, e elas saem da MESMA
+   * varredura que a media e a contagem (`count(*) FILTER` sobre o mesmo indice),
+   * entao nao custam consulta, nem linha, nem acesso a mais. O que custariam e
+   * um agregado proprio da lista -- schema novo, quatro arquivos de tipo
+   * regerados e um modelo diferente no aplicativo --, e esse custo e maior que o
+   * de cinco inteiros por cartao.
+   */
+  readonly rating: PontuacaoPublica;
 }
 
 /**
@@ -312,6 +351,11 @@ export function projetarEntrada(
     distance_m: distanciaNaGrade(entrada.distanciaEmMetros),
     // A derivada, nunca o original. `urlDaDerivada` recusa pela FORMA da chave.
     logo_url: urlDaDerivada(entrada.logoPublicKey, urlDeMidia),
+    // A PONTUACAO sai AQUI, na projecao comum da lista e do detalhe, e nao em
+    // cada rota: duas chamadas a `projetarPontuacao` em dois lugares e como a
+    // media do cartao e a da pagina passam a discordar. O detalhe nao reescreve
+    // `rating` depois do espalhamento por isso.
+    rating: projetarPontuacao(entrada.pontuacao),
   };
 }
 
@@ -353,5 +397,13 @@ export function projetarEntradaSemConta(
     neighborhood: cheia.neighborhood,
     verification: cheia.verification,
     logo_url: cheia.logo_url,
+    // A PONTUACAO SAI TAMBEM SEM CONTA, e o `Omit` e quem cobrou a decisao: ela
+    // nao esta entre os quatro campos removidos, entao este objeto nao compilava
+    // sem ela. E e a resposta certa -- o contrato escreveu que a agregacao entra
+    // "nas DUAS projecoes no mesmo commit", com o MESMO recorte, para a media do
+    // cartao deslogado e a do logado nunca discordarem. Avaliacao de local
+    // publicado nao e dado de pessoa: o que sai e media, contagem e histograma,
+    // sem nenhum autor.
+    rating: cheia.rating,
   };
 }

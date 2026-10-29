@@ -10214,17 +10214,26 @@ export interface components {
              *     nao e pessimo. **O cartao sem `rating` nao desenha estrela
              *     nenhuma**, e nao desenha "0,0".
              *
-             *     **O custo da agregacao e por PAGINA e nao por entrada**, e isso
+             *     **O custo da agregacao e por CONSULTA e nao por entrada**, e isso
              *     importa porque esta operacao ja carrega `x-effects:
-             *     [expensive_query]`: a contagem sai de um unico `GROUP BY` sobre
-             *     `professional_reviews (professional_id, status, created_at DESC)`
-             *     restrito aos no maximo 20 `professional_id` da pagina, e nao de 20
-             *     chamadas a `pontuacao_do_local`. Vinte chamadas a funcao seriam o
-             *     N+1 que uma lista paginada convida a escrever.
+             *     [expensive_query]`: a agregacao sai da MESMA consulta que monta a
+             *     pagina, por `CROSS JOIN LATERAL pontuacao_do_local(professionals.id)`
+             *     sobre o indice `professional_reviews (professional_id, status,
+             *     created_at DESC)`. A rota emite o mesmo numero de consultas com 1 ou
+             *     com 20 cartoes -- e e isso que o `x-effects` promete.
+             *
+             *     **O que esta proibido e a leitura POR ITEM**: vinte `SELECT * FROM
+             *     pontuacao_do_local($1)`, um por cartao, seriam vinte idas ao banco --
+             *     o N+1 que uma lista paginada convida a escrever, e que passa em todo
+             *     teste porque cada leitura esta certa. A contagem de consultas e
+             *     medida em
+             *     `pontuacao-da-listagem-sai-em-uma-consulta.test.ts`.
              *
              *     O recorte e o MESMO da pagina do local e da lista de avaliacoes
-             *     (`status = 'published'` e `conta_habilitada(author_user_id)`), para
-             *     a media do cartao e a da pagina nunca discordarem.
+             *     (`status = 'published'` e `conta_habilitada(author_user_id)`), porque
+             *     e a MESMA funcao do banco nos tres caminhos -- e nao uma terceira
+             *     copia do recorte. E isso que impede a media do cartao e a da pagina
+             *     de discordarem.
              */
             rating?: components["schemas"]["DirectoryRating"];
             /**
@@ -10353,6 +10362,34 @@ export interface components {
              */
             logo_url?: string | null;
             verification: components["schemas"]["DirectoryVerification"];
+            /**
+             * @description A pontuacao agregada, **a MESMA do cartao com conta** (BICHUS-313).
+             *
+             *     Ate 28/10/2026 este campo nao existia aqui, e o comentario que
+             *     ocupava este lugar dizia por que: `DirectoryEntrySummary` o
+             *     declarava sem nenhuma consulta o preencher, e copiar a declaracao
+             *     para um schema novo seria copiar a divida. A agregacao por pagina
+             *     entrou na listagem, e com ela o campo entra **nas duas projecoes no
+             *     mesmo commit**, como aquele comentario pedia.
+             *
+             *     **O recorte e identico ao da listagem com conta e ao da pagina do
+             *     local**: as tres chamam `pontuacao_do_local(uuid)` (migracao
+             *     `20261017000017`), que carrega `status = 'published'` e
+             *     `conta_habilitada(author_user_id)` dentro. A media do cartao
+             *     deslogado e a do logado nao tem como discordar, porque nao ha uma
+             *     segunda conta.
+             *
+             *     **OPCIONAL, pela mesma razao do schema com conta**: o APK publicado
+             *     le esta resposta e nao conhece este campo. E uma resposta que nao
+             *     conseguiu agregar e melhor sem o campo do que com media zero --
+             *     zero se le como "pessimo", e um local sem avaliacao nao e pessimo.
+             *
+             *     **Nao e dado de pessoa.** O que sai e media, contagem e histograma:
+             *     nenhum autor, nenhum `ref` de avaliacao, nenhuma contagem que ligue
+             *     duas pessoas (BICHUS-174). A LISTA de avaliacoes, que tem nome de
+             *     autor, continua exigindo conta.
+             */
+            rating?: components["schemas"]["DirectoryRating"];
         };
         /**
          * @description **A mesma forma de `DirectoryEntryPage`**, e a igualdade e deliberada:
