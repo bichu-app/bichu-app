@@ -1054,6 +1054,7 @@ class DetalheDoLocal {
     required this.verificacao,
     required this.pontuacao,
     required this.podeAvaliar,
+    this.atividades = const <AtividadeDoDiretorio>[],
     this.tipoDeEntidade,
     this.cidade,
     this.estado,
@@ -1072,6 +1073,13 @@ class DetalheDoLocal {
   final AtividadeDoDiretorio? atividade;
   final String nome;
   final VerificacaoDaEntrada verificacao;
+
+  /// **TODAS as atividades da entrada**, na ordem em que o servidor as manda.
+  ///
+  /// NAO ESTA LIGADA AINDA: ver `doJson`. A forma existe para as iscas
+  /// apontarem para algo, e hoje ela carrega so [atividade] -- que e o defeito
+  /// que o cliente relatou em 28/10/2026.
+  final List<AtividadeDoDiretorio> atividades;
 
   /// `entity_kind`: **o QUE a entrada e**, ao lado de [atividade], que e o que
   /// ela faz. Nulo quando o campo nao veio ou trouxe valor desconhecido -- ver
@@ -1185,6 +1193,13 @@ class DetalheDoLocal {
       slug: slug,
       nome: nome,
       atividade: AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
+      // AINDA SO O SINGULAR. `kinds` existe no contrato e nao e lido aqui --
+      // e o defeito que as iscas de `atividades_do_local_test.dart` medem.
+      atividades: <AtividadeDoDiretorio>[
+        if (AtividadeDoDiretorio.porCodigo(json['kind'] as String?)
+            case final AtividadeDoDiretorio uma)
+          uma,
+      ],
       verificacao: VerificacaoDaEntrada.doJson(json['verification']),
       pontuacao: PontuacaoDoLocal.doJson(json['rating']),
       // **Ausente vira FALSO, e nao verdadeiro.** `can_review` nao esta em

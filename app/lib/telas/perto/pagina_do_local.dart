@@ -104,6 +104,10 @@ class PaginaDoLocal extends StatefulWidget {
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String carregandoOLocal = 'Carregando o local';
 
+  /// O titulo do bloco das atividades. **Sem bloco ainda**: ver as iscas de
+  /// `test/telas/atividades_do_local_test.dart`.
+  static const String tituloDasAtividades = 'Atividades';
+
   static const String tituloDasInformacoes = 'Informações';
   static const String tituloDasAvaliacoes = 'Avaliações';
   static const String tituloDaMinha = 'A minha avaliação';
