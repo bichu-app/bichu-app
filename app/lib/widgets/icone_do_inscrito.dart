@@ -16,7 +16,8 @@ import '../theme/bichu_tokens.g.dart';
 /// ## Dois eixos, e o de entidade manda
 ///
 /// O contrato tem DOIS campos de tipo, e nao um: `ProfessionalKind` (o que a
-/// entrada FAZ: `vet`, `groomer`, `walker`, `sitter`, `trainer`, `clinic`) e
+/// entrada FAZ: `vet`, `groomer`, `walker`, `sitter`, `trainer`, `clinic` e,
+/// desde 28/10/2026, `hospital` e `store` -- OITO, e nao seis) e
 /// `EntityKind` (o que ela E: `professional`, `organization`). A prosa de
 /// `EntityKind` no `openapi.yaml` explica por que: uma ONG tem atividade
 /// (`clinic`, `vet`) **e** tipo de entidade (`organization`) ao mesmo tempo.
@@ -41,12 +42,53 @@ import '../theme/bichu_tokens.g.dart';
 /// `Icons.pets_outlined` aparece 4 vezes, `Icons.groups_outlined` 1,
 /// `Icons.storefront_outlined` 2, `Icons.place_outlined` 6.
 ///
+/// **Remedido em 28/10/2026**, para a entrada de `hospital` e `store`:
+/// `pets_outlined` 7, `storefront_outlined` 3, `shopping_bag_outlined` 2 (a
+/// aba `Loja` da barra), `sell_outlined` 1 (a secao `Atividades` da pagina do
+/// local), `place_outlined` 7. E a escolha dos dois glifos novos **nao foi so
+/// lida**: os candidatos foram DESENHADOS a partir do proprio
+/// `MaterialIcons-Regular.otf` desta versao e comparados lado a lado em 20, 28
+/// e 40 dp -- 20 dp e o piso real desta peca (`BichuEspaco.e5`), e e nele que
+/// a colisao aparece ou nao. Foi assim que `store_outlined` caiu: no papel ele
+/// e "a loja", e na tela ele e a mesma vitrine com toldo do `simboloDeFalha`.
+///
 /// - `clinic` -> **`local_hospital_outlined`**, a cruz: o ESTABELECIMENTO que
 ///   trata. Eliminados: `medical_services` (a maleta e o kit de quem atende, e
 ///   fica reservada ao `vet`); `storefront_outlined`, que ja e o
 ///   `simboloDeFalha` da logo neste mesmo cartao -- quem olha nao conseguiria
 ///   separar "sem foto" de "a foto quebrou" -- e que a BICHUS-233 ja recusou
 ///   por ler como loja.
+/// - `hospital` -> **`emergency_outlined`**, a estrela da vida: o que separa
+///   hospital de clinica e o PLANTAO -- "clinica atende hora marcada e fecha,
+///   hospital interna e tem plantao", nas palavras do proprio contrato. A
+///   estrela e o simbolo de pronto-socorro, e e a unica coisa do inventario
+///   que diz plantao sem dizer "cruz" de novo. Eliminados: `local_hospital`,
+///   que E o glifo de `clinic` -- o par mais obvio e justamente o que colide;
+///   `medical_information` e `local_pharmacy`, que sao os dois uma CRUZ dentro
+///   de outra forma e, no tamanho desta peca, leem como a cruz de `clinic`;
+///   `local_hotel`, que e o MESMO desenho de `hotel_outlined` (o `sitter`);
+///   `vaccines` (a agulha), pela mesma razao do `vet`; `monitor_heart`, o
+///   monitor com o traco de ECG -- ele e o mais distinguivel de todos, mas a
+///   20 dp, que e o piso desta peca, vira um borrao, e um monitor le como
+///   APARELHO e nao como lugar.
+/// - `store` -> **`shopping_basket_outlined`**, a cesta: a loja de produtos
+///   para pet que aparece em `Perto` -- o petshop --, e **nao** a secao `Loja`
+///   do produto, que e catalogo. Eliminados, e aqui a eliminacao fez quase
+///   todo o trabalho: `storefront_outlined`, `store_outlined` e
+///   `store_mall_directory_outlined` sao a MESMA vitrine com toldo, e a
+///   primeira delas e o `simboloDeFalha` da logo NESTE MESMO CARTAO -- o par
+///   obvio de `store` e, literalmente, o desenho de "a foto quebrou";
+///   `shopping_bag_outlined` e `local_mall_outlined`, a sacola, que e a ABA
+///   `Loja` da barra de baixo e esta na tela ao mesmo tempo que este cartao --
+///   usa-la aqui fundiria o petshop com o catalogo, que e a confusao que a
+///   prosa de `ProfessionalKind` existe para desfazer; `sell_outlined`, a
+///   etiqueta, que ja e o cabecalho da secao `Atividades` da pagina do local;
+///   `local_convenience_store`, cujo "24" vira sujeira a 20 dp;
+///   `shopping_cart` e `shopping_basket` cheio de carrinho leem como a ACAO
+///   "por no carrinho" -- a cesta, vazia e parada, le como lugar onde se
+///   compra, e a mesma objecao de ACAO ja derrubou `category` na reserva;
+///   `inventory`, `storage` e `widgets`, que leem como estoque, lista e
+///   categorias; `redeem` e `card_giftcard`, o presente.
 /// - `vet` -> **`medical_services_outlined`**, a maleta: a PESSOA que atende, e
 ///   nao o predio. Eliminados: `stethoscope`, que nao existe nesta versao;
 ///   `vaccines` (a agulha), porque seringa numa tela de pet le como dor e nao
@@ -99,6 +141,8 @@ IconData glifoDoInscrito({
   }
   return switch (atividade) {
     AtividadeDoDiretorio.clinic => Icons.local_hospital_outlined,
+    AtividadeDoDiretorio.hospital => Icons.emergency_outlined,
+    AtividadeDoDiretorio.store => Icons.shopping_basket_outlined,
     AtividadeDoDiretorio.vet => Icons.medical_services_outlined,
     AtividadeDoDiretorio.groomer => Icons.shower_outlined,
     AtividadeDoDiretorio.walker => Icons.directions_walk_outlined,

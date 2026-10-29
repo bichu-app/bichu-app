@@ -27,10 +27,34 @@ import 'falhas.dart';
 enum AtividadeDoDiretorio {
   vet('vet', 'Veterinário'),
   groomer('groomer', 'Banho e tosa'),
-  walker('walker', 'Passeador'),
-  sitter('sitter', 'Hospedagem'),
+  walker('walker', 'Dog Walker'),
+  sitter('sitter', 'Pet Sitter'),
   trainer('trainer', 'Adestrador'),
-  clinic('clinic', 'Clínica');
+  clinic('clinic', 'Clínica'),
+  // `hospital` e `store` entraram em 28/10/2026 com a migracao
+  // `20261028000001`. Os DOIS rotulos sao copiados de `ATIVIDADES` em
+  // `admin/src/diretorio/dominio.ts` -- rotulo divergente entre painel e app e
+  // defeito, e `admin/test/diretorio/rotulos-das-atividades.test.ts` cobra a
+  // igualdade de `clinic`, `walker` e `sitter`, mas **nao** a destes dois: o
+  // casamento aqui foi feito a mao, contra o fonte do painel.
+  //
+  // **`store` NAO e a secao `Loja` do produto**, que e catalogo
+  // (`store_items`) e vive em outro fluxo. Aqui e "um estabelecimento que
+  // vende" aparecendo em `Perto` -- um petshop --, e a coincidencia e so de
+  // palavra. `hospital` e separado de `clinic` porque a distincao existe no
+  // mundo: clinica atende hora marcada e fecha, hospital interna e tem
+  // plantao.
+  //
+  // **Os dois entram no FIM, e isso nao e descuido.** `AtividadeDoDiretorio
+  // .values` e a ordem de tela em dois lugares (os chips de filtro de
+  // `telas/perto/lista_do_diretorio.dart` e o seletor de
+  // `telas/perto/sugerir_profissional.dart`), entao a posicao e visivel. Pondo
+  // os dois ao lado de `clinic`, os tres ESTABELECIMENTOS ficam juntos no fim,
+  // que e onde `clinic` ja estava; reordenar a lista inteira para espelhar
+  // `ORDEM_DAS_ATIVIDADES` do painel moveria os seis valores antigos e seria
+  // mudanca de tela que ninguem pediu.
+  hospital('hospital', 'Hospital'),
+  store('store', 'Loja');
 
   const AtividadeDoDiretorio(this.codigo, this.rotulo);
 
@@ -493,6 +517,7 @@ class RecorteDoDiretorio {
     this.atividade,
     this.nivelMinimo,
     this.cidade,
+    this.bairro,
     this.ordem = OrdemDoDiretorio.distancia,
     this.pagina = 1,
     this.limite = 20,
@@ -552,6 +577,53 @@ class RecorteDoDiretorio {
     return limpo;
   }
 
+  /// O BAIRRO do recorte, ou nulo (BICHUS-315, 28/10/2026).
+  ///
+  /// Pedido do cliente: *"No filtro da pagina de comunidade, precisamos
+  /// implementar o filtro de bairro, pois em Sao Paulo a cidade e muito
+  /// grande."* A razao dele e o requisito: `city` sozinha nao recorta nada
+  /// numa cidade do tamanho de Sao Paulo.
+  ///
+  /// **Nenhum contrato mudou por causa disto, e nenhum precisava:**
+  /// `neighborhood` (`minLength: 2`, `maxLength: 80`) ja existia nas DUAS
+  /// operacoes que atendem esta lista -- `listDirectoryEntries` e
+  /// `listPublicDirectoryEntries` --, e o servidor ja normaliza acento nele.
+  /// O que faltava era o app MANDAR, exatamente como faltava para [cidade] em
+  /// 20/10/2026.
+  ///
+  /// **E TEXTO, e nao chave de entidade**, e o contrato diz isso com as
+  /// proprias palavras: *"`city`, `state` e `neighborhood` sao rotulo de
+  /// exibicao e filtro de texto, jamais fonte de coordenada"*. Nao existe
+  /// lista canonica de bairros, nao ha operacao que a devolva e nao ha
+  /// geocodificacao (ADR-0006) -- e e por isso que a tela oferece um campo
+  /// que a pessoa DIGITA (`CampoDeTextoDoFiltro`) e nao um grupo de opcoes.
+  ///
+  /// **A alternativa foi considerada e descartada por medida**: uma lista dos
+  /// bairros vistos nas entradas carregadas ofereceria os bairros de 20
+  /// entradas numa cidade com 87, mudaria de opcoes a cada `Carregar mais` e
+  /// esconderia justamente o bairro que a pessoa procura -- que no caso dele
+  /// quase nunca esta entre as 20 primeiras. O caso `um bairro que NÃO está em
+  /// nenhuma entrada carregada pode ser aplicado`, em
+  /// `filtro_de_bairro_test.dart`, e essa escolha em forma mensuravel.
+  ///
+  /// **O grupo `Cidade` desta mesma tela E lista derivada, e isso nao e
+  /// contradicao**: a cidade tem uma fonte que o bairro nao tem -- o aparelho
+  /// a resolve, e e ela que a folha injeta marcada. Nenhuma peca deste app
+  /// resolve o bairro de quem olha.
+  final String? bairro;
+
+  /// O bairro como ele vai para a rota, ou nulo quando ele nao vai.
+  ///
+  /// **O piso de dois caracteres e do contrato** (`minLength: 2` em
+  /// `neighborhood`): mandar um caractere so voltaria 400, e engolir o 400
+  /// desenharia "nada encontrado" para quem tem um bairro legitimo. Mesma
+  /// regra, e mesma razao, de [termoQueVai] e [cidadeQueVai].
+  String? get bairroQueVai {
+    final limpo = bairro?.trim();
+    if (limpo == null || limpo.length < 2) return null;
+    return limpo;
+  }
+
   final OrdemDoDiretorio ordem;
   final int pagina;
 
@@ -561,26 +633,40 @@ class RecorteDoDiretorio {
   /// Quantos recortes de conteudo estao ativos. **A ordem nao conta**: ela
   /// tem valor sempre, e contar como filtro faria o distintivo nascer aceso
   /// numa tela em que ninguem filtrou nada.
+  /// **O bairro conta pelo `bairroQueVai`, e nao pelo campo.** Um caractere so
+  /// nao vai para a rota: contado, o distintivo prometeria um recorte que o
+  /// servidor nao aplicou -- a mesma mentira, do outro lado, que o piso
+  /// existe para evitar.
   int get quantidadeDeFiltros =>
       (atividade == null ? 0 : 1) +
-      (nivelMinimo == null || nivelMinimo == NivelDeVerificacao.nenhum ? 0 : 1);
+      (nivelMinimo == null || nivelMinimo == NivelDeVerificacao.nenhum
+          ? 0
+          : 1) +
+      (bairroQueVai == null ? 0 : 1);
 
   RecorteDoDiretorio com({
     String? termo,
     AtividadeDoDiretorio? atividade,
     NivelDeVerificacao? nivelMinimo,
     String? cidade,
+    String? bairro,
     OrdemDoDiretorio? ordem,
     int? pagina,
     bool limparAtividade = false,
     bool limparNivel = false,
     bool limparTermo = false,
     bool limparCidade = false,
+    bool limparBairro = false,
   }) {
     return RecorteDoDiretorio(
       termo: limparTermo ? null : (termo ?? this.termo),
       atividade: limparAtividade ? null : (atividade ?? this.atividade),
       nivelMinimo: limparNivel ? null : (nivelMinimo ?? this.nivelMinimo),
+      // `limparBairro` existe pela mesma razao de `limparTermo` e
+      // `limparCidade`: `null` num parametro opcional e indistinguivel de
+      // "nao passei", e apagar o bairro e um recorte VALIDO -- e assim que
+      // quem digitou um bairro volta a ver a cidade inteira.
+      bairro: limparBairro ? null : (bairro ?? this.bairro),
       // `limparCidade` existe pela mesma razao de `limparTermo`: `null` num
       // parametro opcional e indistinguivel de "nao passei", e confundir esses
       // dois foi o que deixou o botao de localizacao dos pets sem efeito.
@@ -599,6 +685,13 @@ class RecorteDoDiretorio {
         // caracteres mora num lugar so. **Nao ha, e nao pode haver, `lat` nem
         // `lon` nesta consulta**: ver [cidade] e o ADR-0006.
         'city': ?cidadeQueVai,
+        // O BAIRRO, pelo `bairroQueVai` -- o piso de dois caracteres mora num
+        // lugar so (BICHUS-315). Depois de `city` e antes de `kind`, na mesma
+        // ordem do contrato. **Ele vale nas duas rotas**: `queryPublica` sai
+        // desta consulta por subtracao, e `listPublicDirectoryEntries` tambem
+        // declara `neighborhood` -- conferido antes de acrescentar a linha,
+        // porque mandar a uma operacao que nao declara o parametro seria 400.
+        'neighborhood': ?bairroQueVai,
         if (atividade != null) 'kind': atividade!.codigo,
         if (nivelMinimo != null && nivelMinimo != NivelDeVerificacao.nenhum)
           'verification_level': nivelMinimo!.codigo,
@@ -1054,6 +1147,7 @@ class DetalheDoLocal {
     required this.verificacao,
     required this.pontuacao,
     required this.podeAvaliar,
+    this.atividades = const <AtividadeDoDiretorio>[],
     this.tipoDeEntidade,
     this.cidade,
     this.estado,
@@ -1072,6 +1166,30 @@ class DetalheDoLocal {
   final AtividadeDoDiretorio? atividade;
   final String nome;
   final VerificacaoDaEntrada verificacao;
+
+  /// **TODAS as atividades da entrada**, na ordem em que o servidor as manda.
+  ///
+  /// `kinds` do contrato (`ProfessionalKinds`): lista de 1 a 6, `uniqueItems`,
+  /// OBRIGATORIA em `DirectoryEntryDetail` desde 21/10/2026 -- *"uma clinica
+  /// que tambem faz banho e tosa nao precisa escolher"*. [atividade] e o
+  /// `kind` singular, que o contrato mantem **so por compatibilidade** (a
+  /// PRIMEIRA desta lista), e quem desenha a entrada nova usa esta.
+  ///
+  /// **A ORDEM E A DO SERVIDOR, e nao a do `enum`.** Ordenar aqui mostraria as
+  /// tags numa ordem que ninguem escolheu -- o painel escolhe uma, e o
+  /// primeiro item e justamente o que sai em `kind`.
+  ///
+  /// **Codigo que este build nao conhece e DESCARTADO, e nao derruba a
+  /// leitura.** `uniqueItems` no contrato nao impede o servidor de ganhar um
+  /// valor novo antes desta versao do app -- e nesta rodada o `enum` esta
+  /// crescendo. Uma `FormatException` aqui tiraria a pagina inteira do ar por
+  /// causa de uma tag; descartar mostra as atividades que o app entende e cala
+  /// sobre a que nao entende.
+  ///
+  /// **Pode vir VAZIA**, em dois casos que a tela trata igual (nao desenha o
+  /// bloco): todas as atividades sao desconhecidas, ou nem `kinds` nem `kind`
+  /// vieram.
+  final List<AtividadeDoDiretorio> atividades;
 
   /// `entity_kind`: **o QUE a entrada e**, ao lado de [atividade], que e o que
   /// ela faz. Nulo quando o campo nao veio ou trouxe valor desconhecido -- ver
@@ -1185,6 +1303,7 @@ class DetalheDoLocal {
       slug: slug,
       nome: nome,
       atividade: AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
+      atividades: _atividadesDoJson(json),
       verificacao: VerificacaoDaEntrada.doJson(json['verification']),
       pontuacao: PontuacaoDoLocal.doJson(json['rating']),
       // **Ausente vira FALSO, e nao verdadeiro.** `can_review` nao esta em
@@ -1212,6 +1331,48 @@ class DetalheDoLocal {
       // de outro tipo viram nulo, e a pagina existe sem a linha de endereco.
       endereco: EnderecoComercialDaEntrada.doJson(json),
     );
+  }
+
+  /// `kinds` do contrato, com o `kind` singular como RESERVA.
+  ///
+  /// Ver [atividades] para o porque de cada decisao. Em resumo, e nesta ordem:
+  ///
+  /// 1. `kinds` quando vem como lista -- os codigos conhecidos, na ordem do
+  ///    servidor, sem repetir;
+  /// 2. o `kind` singular quando `kinds` nao veio (servidor mais velho que o
+  ///    app, massa escrita antes de 21/10/2026);
+  /// 3. lista VAZIA quando nenhum dos dois deu nada conhecido.
+  ///
+  /// **`kinds` presente e com valor conhecido nunca cai no singular**, e e por
+  /// isso que a reserva olha a LISTA e nao o resultado: `kinds: ['frobnicator']`
+  /// de um servidor novo significa *"a atividade desta entrada e uma que voce
+  /// nao conhece"*, e cair no `kind` ali mostraria a atividade de
+  /// compatibilidade como se fosse a lista inteira.
+  ///
+  /// **O `dedup` nao e zelo contra o contrato, e sim contra a juncao com a
+  /// reserva**: `uniqueItems` ja promete que `kinds` nao repete, mas dois
+  /// codigos distintos que este build nao conhece poderiam, no futuro,
+  /// colapsar no mesmo valor de `enum` -- e duas tags iguais na tela sao um
+  /// defeito visivel.
+  static List<AtividadeDoDiretorio> _atividadesDoJson(
+    Map<String, dynamic> json,
+  ) {
+    final bruto = json['kinds'];
+    if (bruto is List) {
+      final lidas = <AtividadeDoDiretorio>[];
+      for (final item in bruto) {
+        final atividade = AtividadeDoDiretorio.porCodigo(
+          item is String ? item : null,
+        );
+        if (atividade != null && !lidas.contains(atividade)) {
+          lidas.add(atividade);
+        }
+      }
+      return List<AtividadeDoDiretorio>.unmodifiable(lidas);
+    }
+    return List<AtividadeDoDiretorio>.unmodifiable(<AtividadeDoDiretorio>[
+      ?AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
+    ]);
   }
 }
 

@@ -28,6 +28,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/telas/perfil/meus_achados.dart';
 import 'package:bichu/api/modelos_rede.dart';
 import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/perfil/meus_eventos.dart';
@@ -307,7 +308,11 @@ void main() {
             matching: find.widgetWithText(ItemDeMenu, rotulo),
           );
 
-      final achados = tester.getTopLeft(naAba('Meus achados')).dy;
+      // O ROTULO VIROU `Achados` EM 28/10/2026, e o caso passou a ler a
+      // CONSTANTE em vez do literal: `MeusAchados.titulo` e a mesma constante
+      // do rotulo do menu e do titulo da barra, e amarrar o caso a ela e o que
+      // faz a proxima troca de nome nao exigir caca a literais.
+      final achados = tester.getTopLeft(naAba(MeusAchados.titulo)).dy;
       final eventos = tester.getTopLeft(naAba(MeusEventos.titulo)).dy;
       final sair = tester.getTopLeft(naAba('Sair da conta')).dy;
 

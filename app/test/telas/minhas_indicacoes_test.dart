@@ -11,7 +11,7 @@
 //
 // AS ISCAS, e cada uma com o contrapeso que reprova se a proteção sair:
 //
-// 1. **A aprovada em RASCUNHO não oferece `Ver no Perto`.** Contrapeso: a
+// 1. **A aprovada em RASCUNHO não oferece `Ver na Rede`.** Contrapeso: a
 //    aprovada publicada oferece. Sem ele, uma tela que nunca desenhasse o botão
 //    passaria no primeiro caso.
 // 2. **A recusada mostra o motivo.** Contrapeso: pendente e aprovada não
@@ -436,14 +436,14 @@ void main() {
       expect(find.text('Em análise'), findsOneWidget);
       // Não há o que fazer com uma pendente, e o contrato não tem retirada:
       // um botão aqui seria toque sem desfecho.
-      expect(find.text('Ver no Perto'), findsNothing);
+      expect(find.text('Ver na Rede'), findsNothing);
       expect(motivosNaTela(), isEmpty);
     });
 
-    testWidgets('aprovada COM entrada publicada leva ao local no Perto',
+    testWidgets('aprovada COM entrada publicada leva ao local na Rede',
         (tester) async {
       // O CONTRAPESO da isca 1: sem este caso, uma tela que nunca desenhasse
-      // `Ver no Perto` passaria no caso do rascunho.
+      // `Ver na Rede` passaria no caso do rascunho.
       await abrirMinhasIndicacoes(
         tester,
         rede: redeDasIndicacoes(
@@ -458,9 +458,9 @@ void main() {
       );
 
       expect(find.text('Aprovada'), findsOneWidget);
-      expect(find.text('Ver no Perto'), findsOneWidget);
+      expect(find.text('Ver na Rede'), findsOneWidget);
       // E não diz que está fora do ar, porque ela está no ar.
-      expect(find.text('Ainda não está no Perto.'), findsNothing);
+      expect(find.text('Ainda não está na Rede.'), findsNothing);
     });
 
     testWidgets(
@@ -492,14 +492,14 @@ void main() {
 
       expect(find.text('Aprovada'), findsOneWidget);
       expect(
-        find.text('Ver no Perto'),
+        find.text('Ver na Rede'),
         findsNothing,
-        reason: 'REPROVA: a tela oferece `Ver no Perto` para uma entrada que '
+        reason: 'REPROVA: a tela oferece `Ver na Rede` para uma entrada que '
             'não está publicada -- o toque levaria a uma página que não está '
             'no `Perto`.',
       );
       // E não cala: a ausência do botão não explica nada por si.
-      expect(find.text('Ainda não está no Perto.'), findsOneWidget);
+      expect(find.text('Ainda não está na Rede.'), findsOneWidget);
     });
 
     testWidgets('ISCA: recusada mostra o motivo escrito pelo administrador',

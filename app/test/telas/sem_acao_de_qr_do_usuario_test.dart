@@ -73,24 +73,20 @@
 // prova que o localizador de botao funciona.
 
 import 'dart:convert';
+
+import 'package:bichu/config/app_config.dart';
 import 'dart:io';
 
-import 'package:bichu/api/api_client.dart';
-import 'package:bichu/api/conexoes_api.dart';
-import 'package:bichu/api/convites_api.dart';
-import 'package:bichu/config/app_config.dart';
-import 'package:bichu/telas/conexoes/convide_tutores.dart';
-import 'package:bichu/theme/bichu_theme.dart';
-import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
 import 'package:bichu/widgets/qr_do_convite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
 import '../dispositivo/diretivas_dart.dart';
+import 'ajuda_de_tela.dart';
 
-const String _urlBase = 'https://api.teste.bichu';
 const String _token = 'KJ8M4QRS7TVW2XYZ';
 
 /// A ULTIMA COISA DO BLOCO DO CONVITE, e o controle positivo de que a regiao
@@ -100,7 +96,28 @@ const String _token = 'KJ8M4QRS7TVW2XYZ';
 /// do bloco esta montado, e um botao reposto ali tambem estaria -- e e so com
 /// isso provado que o `findsNothing` dos casos vale alguma coisa.
 final Finder fimDoBloco = find.textContaining(
-  'O QR aparece aqui enquanto esta tela',
+  // O TEXTO MUDOU DE "tela" PARA "secao" EM 28/10/2026, com a casa: o QR saiu
+  // de `convide_tutores.dart` (que morreu) para uma secao RECOLHIDA de
+  // `Meus dados`. A frase e a mesma afirmacao -- o QR nao sobrevive a sair
+  // daqui, porque nao existe operacao de LEITURA do proprio convite.
+  'O QR aparece aqui enquanto esta seção',
+);
+
+/// O BLOCO DO CONVITE, recortado pelo NOME DA CLASSE.
+///
+/// `_BlocoDoConvite` e privado de `tela_dados_pessoais.dart`, e por isso nao da
+/// para escrever `find.byType`. **O recorte importa mais que a conveniencia**:
+/// o QR mora dentro de `Meus dados` desde 28/10/2026, e varrer os controles da
+/// PAGINA acharia `Salvar`, o seletor de foto e o do endereco -- nenhum deles
+/// tem a ver com esta isca, e os tres levariam a reprovacao para outro motivo.
+///
+/// MEDIDO, e e por isso que nao e `find.ancestor(... Column)`: a `Column` mais
+/// proxima do pe do bloco NAO contem o botao (o conteudo e uma `List<Widget>`
+/// espalhada), e a mais distante e a do formulario inteiro. Com a primeira a
+/// contagem deu ZERO e com a segunda deu mais de um -- as duas reprovando pelo
+/// recorte e nao pela isca.
+final Finder blocoDoConvite = find.byWidgetPredicate(
+  (Widget w) => w.runtimeType.toString() == '_BlocoDoConvite',
 );
 
 /// A FONTE da tela, lida do disco.
@@ -108,8 +125,15 @@ final Finder fimDoBloco = find.textContaining(
 /// O caso (2) mede o ARQUIVO e nao a arvore de widgets: e a unica forma de
 /// provar que o rotulo nao ficou para tras como constante morta, a um
 /// `BotaoSecundario` de distancia de o controle voltar sem texto novo.
+/// **O ARQUIVO MUDOU EM 28/10/2026, E A ASSERCAO NAO.**
+///
+/// Era `lib/telas/conexoes/convide_tutores.dart`. Aquela tela MORREU por
+/// decisao do cliente, e o QR -- com o placar `invited_joined_count` -- foi
+/// para uma secao recolhida de `Meus dados`. A varredura segue o QR: o que
+/// ela cobra e que os dois rotulos de acao sobre o PROPRIO codigo nao voltem
+/// ao arquivo que o hospeda, e isso nao depende de qual arquivo e.
 File get _fonteDaTela =>
-    File('lib/telas/conexoes/convide_tutores.dart');
+    File('lib/telas/perfil/tela_dados_pessoais.dart');
 
 void main() {
   late List<String> chamadas;
@@ -134,7 +158,7 @@ void main() {
 
     chamadas = <String>[];
     AppConfig.limparParaTeste();
-    final cliente = MockClient((http.Request pedido) async {
+    Future<http.Response> resposta(http.Request pedido) async {
       chamadas.add('${pedido.method} ${pedido.url.path}');
       if (pedido.method == 'POST' &&
           pedido.url.path.endsWith('/connection-invites')) {
@@ -169,24 +193,65 @@ void main() {
       // ele falha pela chamada ter saido -- e nao por um 404 que faria a tela
       // acender uma faixa e o motivo da reprovacao virar outro.
       if (pedido.method == 'DELETE') return http.Response('', 204);
+      // `GET /v1/me`: `Meus dados` nao monta o formulario sem ele, e sem o
+      // formulario a secao do convite -- que e o ultimo bloco dele -- nao
+      // existe na arvore. Entrou com a bancada nova de 28/10/2026.
+      if (pedido.url.path.endsWith('/me')) {
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'id': 'u-1',
+            'email': 'marina@exemplo.com.br',
+            'email_verified': true,
+            'display_name': 'Marina',
+            'handle': 'marina',
+            'pending_profile_fields': <String>[],
+            'can_open_lost_case': true,
+          }),
+          200,
+          headers: const <String, String>{
+            'content-type': 'application/json; charset=utf-8',
+          },
+        );
+      }
       return http.Response('{}', 404);
-    });
+    }
 
-    final api = ApiClient(
-      config: AppConfig.carregar(apiBaseUrlDeTeste: _urlBase),
-      cliente: cliente,
-      tokenDeAcesso: () async => 'token-de-teste',
-    );
+    // ===================================================================
+    // A BANCADA ABRE O APP, E NAO UMA TELA SOLTA (28/10/2026)
+    // ===================================================================
+    //
+    // Antes era `MaterialApp(home: TelaDeConvidarTutores(...))`. Aquela tela
+    // MORREU, e o bloco do convite e privado de `tela_dados_pessoais.dart` --
+    // ele vive dentro do formulario de `Meus dados`, que precisa de `MeApi`,
+    // da sessao e do `Escopo` inteiro. Montar o `Escopo` a mao aqui exigiria
+    // dezenas de campos obrigatorios; `abrirOApp` e o ponto unico da casa
+    // para isso, e e o que as outras iscas desta frente usam.
+    //
+    // **O que o arquivo mede nao mudou**: a arvore montada do bloco (provada
+    // por [fimDoBloco]) e o CODIGO do arquivo que o hospeda, lido do disco.
+    await abrirOApp(tester, rede: resposta, deposito: depositoLogado());
+    await irPara(tester, Rotas.dadosPessoais);
+    await tester.pumpAndSettle();
+    // A SECAO E O ULTIMO BLOCO DA PAGINA, e `Meus dados` e um formulario
+    // longo: mesmo com 1600 dp ela nasce abaixo da dobra, e o
+    // `SingleChildScrollView` nao a constroi sem a rolagem. **Sem esta linha
+    // os dois casos reprovavam por nao achar o controle de abrir** -- medido.
+    // `ensureVisible` e nao `scrollUntilVisible`: o corpo de `Meus dados` e um
+    // `SingleChildScrollView`, que constroi TODOS os filhos (nao e preguicoso)
+    // -- o bloco ja esta na arvore, so fora de cena. E `scrollUntilVisible`
+    // exige UM `Scrollable`, e esta arvore tem mais de um (`Bad state: Too
+    // many elements`, medido).
+    final cabecalhoDoConvite = find.text(TelaDadosPessoais.tituloDoConvite);
+    await tester.ensureVisible(cabecalhoDoConvite);
+    await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: BichuTheme.claro,
-        home: TelaDeConvidarTutores(
-          convites: ConvitesApi(api),
-          conexoes: ConexoesApi(api),
-        ),
-      ),
-    );
+    // A SECAO NASCE RECOLHIDA: sem este toque nada do bloco esta na arvore, e
+    // o `findsNothing` dos casos passaria no vazio -- a mesma armadilha que a
+    // nota da tela alta, acima, descreve.
+    await tester.tap(cabecalhoDoConvite);
+    await tester.pumpAndSettle();
+    // E o conteudo aberto tambem entra em cena, pelo mesmo caminho.
+    await tester.ensureVisible(find.text(TelaDadosPessoais.criarOConvite));
     await tester.pumpAndSettle();
   }
 
@@ -197,7 +262,7 @@ void main() {
     // criar. Sem esta linha, o `findsNothing` adiante poderia estar medindo um
     // localizador que nunca acha nada.
     expect(
-      find.byType(BotaoPrimario),
+      find.text(TelaDadosPessoais.criarOConvite),
       findsOneWidget,
       reason:
           'Controle positivo: o estado sem convite tem de oferecer a acao de '
@@ -205,7 +270,7 @@ void main() {
           'arquivo nao provam nada.',
     );
 
-    await tester.tap(find.text('Criar o meu QR de convite'));
+    await tester.tap(find.text(TelaDadosPessoais.criarOConvite));
     await tester.pumpAndSettle();
 
     // CONTROLE POSITIVO DO ESTADO: chegamos ao estado que TINHA as duas acoes.
@@ -231,17 +296,55 @@ void main() {
           'tentativa de provar a isca.',
     );
 
-    // A ASSERCAO. Ancorada no TIPO `BotaoSecundario`: `Trocar` e `Apagar`
-    // eram os dois unicos desta tela, entao qualquer rotulo que reponha uma
-    // delas reprova aqui -- renomear nao escapa.
+    // ==================================================================
+    // A ASSERCAO MUDOU DE ANCORA EM 28/10/2026, E A RAZAO E UMA COLISAO REAL
+    // ==================================================================
+    //
+    // Ela era ancorada no TIPO `BotaoSecundario`, porque `Trocar` e `Apagar`
+    // eram os dois unicos daquela tela -- e a tela inteira era o convite.
+    //
+    // **Na casa nova isso deixou de discriminar.** O QR vive numa gaveta de
+    // apoio dentro de `Meus dados`, e ali `Criar o meu QR de convite` E um
+    // `BotaoSecundario` por escolha de desenho: a acao PRIMARIA daquela
+    // pagina e `Salvar`, que mora na barra fixa, e dois botoes primarios na
+    // mesma tela sao a pilha sem primaria nenhuma que o design system proibe.
+    // Manter a ancora de tipo reprovaria o desenho certo.
+    //
+    // **A ancora passou a ser o CONJUNTO DE CONTROLES do bloco**: ha
+    // exatamente UM, o de criar. Qualquer acao reposta -- com o rotulo velho
+    // ou com outro -- faz esta contagem subir, entao renomear continua nao
+    // escapando. E a varredura de FONTE do caso (2) cobra os dois rotulos
+    // originais pelo nome, no arquivo que agora hospeda o QR.
+    final controlesDoBloco = find.descendant(
+      of: blocoDoConvite,
+      // `byWidgetPredicate` e nao `byType`: **`find.byType` casa o tipo EXATO
+      // e nao subtipo** -- `ButtonStyleButton` e a superclasse de
+      // `FilledButton`, `OutlinedButton` e `TextButton`, e `byType` dela acha
+      // ZERO. Medido nesta rodada, e o caso ficou reprovando pelo localizador
+      // em vez da isca.
+      matching: find.byWidgetPredicate((Widget w) => w is ButtonStyleButton),
+    );
     expect(
-      find.byType(BotaoSecundario),
-      findsNothing,
+      controlesDoBloco,
+      findsOneWidget,
       reason:
-          'REPROVA: a tela voltou a oferecer acao secundaria com o QR na '
-          'tela. `Trocar o meu QR` e `Apagar o meu QR` eram as duas, e o '
+          'REPROVA: o bloco do convite voltou a oferecer mais de uma acao com '
+          'o QR na tela. A unica e `Criar o meu QR de convite`; '
+          '`Trocar o meu QR` e `Apagar o meu QR` eram as outras duas, e o '
           'cliente tirou as duas em 22/10: *"nao deve ter a acao de trocar o '
           'qr-code dele ou de apagar"*.',
+    );
+    expect(
+      tester.widget<ButtonStyleButton>(controlesDoBloco).child,
+      isA<Text>().having(
+        (Text t) => t.data,
+        'rotulo',
+        TelaDadosPessoais.criarOConvite,
+      ),
+      reason:
+          'REPROVA: o unico controle do bloco nao e o de criar. Se ha um '
+          'controle so e ele nao e este, a acao de criar foi SUBSTITUIDA por '
+          'outra -- e a contagem sozinha nao pegaria isso.',
     );
   });
 
@@ -261,15 +364,16 @@ void main() {
     // "sem achar" e o caso verde sobre nada.
     expect(
       codigo,
-      contains('class TelaDeConvidarTutores'),
+      contains('class TelaDadosPessoais'),
       reason:
-          'Controle positivo: nao li o CODIGO da tela do convite. Sem ele, as '
-          'duas buscas abaixo passariam por eu ter lido o arquivo errado -- ou '
-          'por `semComentarios` ter devolvido vazio.',
+          'Controle positivo: nao li o CODIGO da tela que hospeda o QR. Sem '
+          'ele, as '
+          'duas buscas abaixo passariam por eu ter lido o arquivo errado -- '
+          'ou por `semComentarios` ter devolvido vazio.',
     );
     expect(
       codigo,
-      contains("'Criar o meu QR de convite'"),
+      contains('static const String criarOConvite ='),
       reason:
           'Controle positivo: o rotulo de criar tem de estar no codigo. Ele '
           'prova que a busca por rotulo NESTE arquivo acha o que existe.',
@@ -280,7 +384,7 @@ void main() {
       isFalse,
       reason:
           'REPROVA: o rotulo `Trocar o meu QR` voltou ao CODIGO de '
-          '`convide_tutores.dart`. Constante de rotulo sobrando e um '
+          '`tela_dados_pessoais.dart`. Constante de rotulo sobrando e um '
           '`BotaoSecundario` de distancia de a acao voltar, e voltaria sem '
           'nenhum texto novo no arquivo.',
     );
@@ -289,13 +393,13 @@ void main() {
       isFalse,
       reason:
           'REPROVA: o rotulo `Apagar o meu QR` voltou ao CODIGO de '
-          '`convide_tutores.dart`.',
+          '`tela_dados_pessoais.dart`.',
     );
   });
 
   testWidgets('a tela nao alcanca a revogacao do convite', (tester) async {
     await montar(tester);
-    await tester.tap(find.text('Criar o meu QR de convite'));
+    await tester.tap(find.text(TelaDadosPessoais.criarOConvite));
     await tester.pumpAndSettle();
 
     // CONTROLE POSITIVO: a emissao SAIU. Prova que `chamadas` registra de
@@ -321,18 +425,32 @@ void main() {
           'onde `Apagar o meu QR` morava.',
     );
 
-    // TOCA EM TUDO o que a tela oferece neste estado. Com qualquer das duas
+    // TOCA EM TUDO o que o BLOCO oferece neste estado. Com qualquer das duas
     // acoes reposta, um destes toques a aciona.
-    for (final alvo in <Finder>[
-      find.byType(BotaoPrimario),
-      find.byType(BotaoSecundario),
-    ]) {
-      for (var i = 0; i < alvo.evaluate().length; i++) {
-        await tester.ensureVisible(alvo.at(i));
-        await tester.pumpAndSettle();
-        await tester.tap(alvo.at(i));
-        await tester.pumpAndSettle();
-      }
+    //
+    // **Recortado ao bloco desde 28/10/2026**, e nao a tela: o QR mora dentro
+    // de `Meus dados`, e tocar em tudo o que AQUELA pagina oferece acionaria
+    // `Salvar` e o seletor de foto -- controles que nada tem a ver com a isca,
+    // e que levariam a reprovacao para outro motivo.
+    //
+    // `ButtonStyleButton` cobre `FilledButton`, `OutlinedButton` e
+    // `TextButton`, que e o que `BotaoPrimario` e `BotaoSecundario` montam por
+    // dentro: a varredura nao depende de qual dos dois involucros a acao
+    // reposta usaria.
+    final doBloco = find.descendant(
+      of: blocoDoConvite,
+      // `byWidgetPredicate` e nao `byType`: **`find.byType` casa o tipo EXATO
+      // e nao subtipo** -- `ButtonStyleButton` e a superclasse de
+      // `FilledButton`, `OutlinedButton` e `TextButton`, e `byType` dela acha
+      // ZERO. Medido nesta rodada, e o caso ficou reprovando pelo localizador
+      // em vez da isca.
+      matching: find.byWidgetPredicate((Widget w) => w is ButtonStyleButton),
+    );
+    for (var i = 0; i < doBloco.evaluate().length; i++) {
+      await tester.ensureVisible(doBloco.at(i));
+      await tester.pumpAndSettle();
+      await tester.tap(doBloco.at(i));
+      await tester.pumpAndSettle();
     }
 
     expect(

@@ -468,13 +468,22 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   // A INDICACAO DO DIRETORIO (`20261017000004`) E A FILA DELA
   // (`20261017000016`). Tres conjuntos, e os tres nasceram em 17/10.
   // ------------------------------------------------------------------
-  // A MESMA lista de `professionals_kind_check`, e a migracao diz por que:
-  // nao ha valor para ONG aqui pelo mesmo motivo de la -- `professionals` nao
-  // tem `entity_kind`, e acrescentar um decidiria por conta propria que uma
-  // ONG e um tipo de profissional, que e justamente a pergunta aberta.
+  // A MESMA lista de `professionals_atividades_conhecidas`, e nao ha valor
+  // para ONG aqui pelo mesmo motivo de la: ONG e tipo de ENTIDADE
+  // (`professionals.entity_kind`, `20261018000012`) e nao atividade.
+  //
+  // OITO VALORES desde 28/10/2026, e ela cresceu JUNTO com a de
+  // `professionals` por obrigacao e nao por zelo (`20261028000001`): o
+  // contrato tem UM `ProfessionalKind`, usado tambem no `kind` de
+  // `POST /v1/directory/suggestions`. Alargar so `professionals` deixaria o
+  // contrato prometendo `store` numa rota cujo `CHECK` o recusa -- e a recusa
+  // viria do banco, `500`, em vez do `400` de campo invalido.
+  //
+  // O FLUXO da fila nao mudou: indicacao continua nascendo pendente e passando
+  // por aprovacao. O que mudou e so o vocabulario que ela aceita.
   'public.directory_suggestions.directory_suggestions_atividade_conhecida': {
     coluna: 'kind',
-    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
+    valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic', 'store', 'hospital'],
   },
   // O tipo do contato e DECLARADO, nunca adivinhado: um palpite aceitaria um
   // telefone no campo de site. Nao ha `email` aqui, e nao e esquecimento --
@@ -1421,8 +1430,13 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // `<@` e nao `= ANY`: lista vazia satisfaz `<@`, e quem proibe a vazia e
   // `professionals_atividades_tamanho` -- que nao entra em registro nenhum por
   // ser faixa numerica sem literal.
+  //
+  // OITO VALORES desde 28/10/2026 (`20261028000001`, decisao do cliente):
+  // `store` e `hospital` entraram. `store` NAO e a secao `Loja` do produto --
+  // e um estabelecimento que vende aparecendo em `Perto`. ONG continua fora,
+  // porque continua nao sendo atividade.
   'public.professionals.professionals_atividades_conhecidas':
-    "CHECK ((kinds <@ ARRAY['vet'::text, 'groomer'::text, 'walker'::text, 'sitter'::text, 'trainer'::text, 'clinic'::text]))",
+    "CHECK ((kinds <@ ARRAY['vet'::text, 'groomer'::text, 'walker'::text, 'sitter'::text, 'trainer'::text, 'clinic'::text, 'store'::text, 'hospital'::text]))",
   // O ENDERECO DE RUA da entrada do diretorio (migracao `20261018000001`,
   // decisao 9.2 respondida pelo cliente em 18/10/2026). Os quatro `CHECK` sao
   // `IS NULL OR ...` porque as quatro colunas sao OPCIONAIS: profissional

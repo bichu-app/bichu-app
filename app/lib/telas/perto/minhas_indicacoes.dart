@@ -126,7 +126,24 @@ class MinhasIndicacoes extends StatefulWidget {
   static String vazioComFiltro(String rotulo) => 'Nenhuma indicação $rotulo.';
 
   static const String rotuloDeIndicar = 'Indicar quem atende bem';
-  static const String rotuloDeVerNoPerto = 'Ver no Perto';
+  /// **O TEXTO MUDOU EM 28/10/2026 com a seção, e o NOME da constante fica.**
+  ///
+  /// Era `Ver no Perto`. `Perto` deixou de ser seção em 19/10/2026 -- o
+  /// diretório virou a aba `Comunidade` da `Rede` --, e o texto velho
+  /// sobreviveu aqui, no lugar mais visível que existia: o botão que a pessoa
+  /// toca ao sair do aviso de indicação aprovada. O cliente o leu e nomeou a
+  /// troca: *"está trazendo o conceito antigo ainda de perto e não de rede"*.
+  ///
+  /// **`Rede` e não `Comunidade`, e a palavra é dele.** `Comunidade` é a ABA
+  /// onde a entrada aparece; `Rede` é a SEÇÃO, e é o que ele escreveu. Mesma
+  /// escolha de `PaginaDoLocal.rotuloDeVoltarParaPerto`, que já dizia
+  /// `Ver a Rede` desde 19/10 -- duas palavras diferentes para o mesmo destino
+  /// seriam dois nomes para a mesma seção.
+  ///
+  /// O NOME da constante fica, pela razão que
+  /// `PaginaDoLocal.rotuloDeVoltarParaPerto` já registrou: renomeá-la espalha
+  /// a troca por quem a lê, e o que o cliente leu foi o VALOR.
+  static const String rotuloDeVerNoPerto = 'Ver na Rede';
   static const String carregando = 'Carregando as suas indicações';
   static const String falha = 'Não foi possível carregar as suas indicações.';
   static const String falhaDeMais = 'Não foi possível carregar mais indicações.';
@@ -144,7 +161,10 @@ class MinhasIndicacoes extends StatefulWidget {
   ///
   /// **Não promete prazo e não promete link**: quem completa a entrada é o
   /// painel, e esta tela não sabe quando.
-  static const String aprovadaForaDoAr = 'Ainda não está no Perto.';
+  /// **O TEXTO MUDOU EM 28/10/2026**, pela razão de
+  /// [rotuloDeVerNoPerto]: era `Ainda não está no Perto.`, e `Perto` não é
+  /// seção desde 19/10/2026.
+  static const String aprovadaForaDoAr = 'Ainda não está na Rede.';
 
   /// O prefixo do motivo, para o motivo não parecer texto do app.
   static const String prefixoDoMotivo = 'Motivo: ';
@@ -463,14 +483,52 @@ class _CartaoDaIndicacao extends StatelessWidget {
               style: textos.bodySmall,
             ),
           ],
-          // `Ver no Perto` SÓ com `entry_slug`: o servidor só o manda quando a
+          // `Ver na Rede` SÓ com `entry_slug`: o servidor só o manda quando a
           // entrada está publicada, e esta tela não inventa endereço.
+          //
+          // **`go` E NÃO `push`, E A DIFERENÇA É UMA TELA PRETA MEDIDA**
+          // (defeito do cliente, 28/10/2026: *"Ao clicar na notificação para
+          // ir até a página do profissional recomendado ficou parado em uma
+          // página preta"*).
+          //
+          // A página do local é **sub-rota do ramo** da `Rede`
+          // (`locais/:slug` sob `/rede`, dentro do
+          // `StatefulShellRoute.indexedStack`). Esta tela é **irmã da casca**:
+          // `Rotas.minhasIndicacoes` é rota de RAIZ, declarada fora dos ramos,
+          // porque ela é tela de conta e precisa de `Voltar` em vez da barra de
+          // abas -- a conta inteira está em `Rotas.minhasIndicacoes`.
+          //
+          // `push` de uma rota de ramo a partir de uma rota de raiz faz o
+          // `go_router` montar a casca e os ramos DE NOVO, por cima dos que já
+          // estão no `Navigator`, e o framework reprova com chave de página
+          // duplicada:
+          //
+          //     navigator.dart: Failed assertion:
+          //     '!keyReservation.contains(key)': is not true
+          //
+          // A exceção acontece ao CONSTRUIR, então a página do local nunca
+          // entra na árvore e o que fica na tela é o preto do `Navigator` que
+          // não montou -- não é a página falhando, é a página não existindo.
+          //
+          // `go` leva ao mesmo endereço sem empilhar uma segunda casca: ele
+          // troca a localização, o ramo da `Rede` fica com `AbaRede` embaixo e
+          // a página do local em cima, e o `Voltar` da página devolve a aba
+          // `Comunidade`. O custo é conhecido e é o menor dos dois: quem veio
+          // do aviso perde o caminho de volta ATÉ `Minhas indicações` e volta
+          // para a aba -- contra não chegar à página nenhuma.
+          //
+          // **Por que o conserto é aqui e não em `rotas.dart`**: `locais/:slug`
+          // tem outro chamador, o cartão de `lista_do_diretorio.dart`, que vive
+          // DENTRO do ramo e para quem `push` é correto -- é ele que mantém a
+          // busca e o filtro da aba intactos no `Voltar`. Tirar a rota do ramo
+          // consertaria este toque e tiraria a barra de abas da página para
+          // todo mundo, que é redesenho que ninguém pediu.
           if (indicacao.levaAoPerto) ...<Widget>[
             const SizedBox(height: BichuEspaco.e2),
             BotaoSecundario(
               rotulo: MinhasIndicacoes.rotuloDeVerNoPerto,
               aoTocar: () =>
-                  context.push(Rotas.localDoPertoDe(indicacao.entradaSlug!)),
+                  context.go(Rotas.localDoPertoDe(indicacao.entradaSlug!)),
             ),
           ],
           const SizedBox(height: BichuEspaco.e2),

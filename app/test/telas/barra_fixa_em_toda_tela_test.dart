@@ -56,6 +56,7 @@
 
 import 'dart:io';
 
+import 'package:bichu/telas/perfil/meus_achados.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
@@ -174,25 +175,26 @@ const List<TelaEmpilhada> telasInternas = <TelaEmpilhada>[
         'caixa, porque `broadcast` e o unico tipo de aviso sem destino '
         'natural -- os outros levam a uma tela que ja existia.',
   ),
-  // -- `Perfil` > `Convide tutores` (26/10/2026) -------------------------
+  // -- `Perfil` > `Convide tutores`: O REGISTRO SAIU EM 28/10/2026 ------
   //
-  // **O ENDERECO MUDOU, A CLASSIFICACAO NAO.** Era
-  // `/mensagens/convide-tutores` e e `/perfil/convide-tutores` desde 26/10:
-  // o cliente mandou tirar a porta das mensagens e deixar `apenas na menu do
-  // perfil do usuario` (26/10), repetindo o que pediu em 22/10. Ela continua
-  // INTERNA, e agora pela conta das OUTRAS ambiguas e nao por uma propria:
-  // ela passou a ser aberta por um `ItemDeMenu` do CORPO do Perfil, que e
-  // literalmente o criterio das nove.
-  (
-    nome: 'convide tutores',
-    endereco: '/perfil/convide-tutores',
-    padrao: '/perfil/convide-tutores',
-    motivo: 'Aberta por um `ItemDeMenu` do CORPO do Perfil (grupo '
-        '`Comunidade`), e nao pela barra -- a mesma conta das nove ambiguas. '
-        'E ela mostra um QR de 200 dp, que e o conteudo da tela: uma barra '
-        'fixa por cima disputaria espaco com o unico elemento que precisa ser '
-        'fotografado por outro aparelho.',
-  ),
+  // A tela MORREU, por decisao do cliente: o QR foi para dentro de
+  // `Meus dados` (`_BlocoDoConvite`, recolhido no pe da pagina) e o placar
+  // `invited_joined_count` foi com ele. `Rotas.convidarTutores` saiu do
+  // roteador no mesmo commit.
+  //
+  // **O registro TINHA de sair junto, e o portao e quem cobra isso**: o caso
+  // `toda rota empilhada esta CLASSIFICADA` compara esta lista com as rotas
+  // do roteador nos DOIS sentidos, e uma linha classificada sem rota do outro
+  // lado reprova com a frase *"linha orfa e decisao esperando por uma rota
+  // futura que ninguem vai tomar"* -- que e exatamente o que ela seria.
+  //
+  // **O QR NAO PERDEU A CONTA que esta prosa fazia**, e por isso ela nao se
+  // perde aqui: o argumento era que *"uma barra fixa por cima disputaria
+  // espaco com o unico elemento que precisa ser fotografado por outro
+  // aparelho"*. Na casa nova isso deixou de ser uma questao de BARRA -- o QR
+  // vive numa secao RECOLHIDA de `/perfil/dados`, que ja esta classificada
+  // nesta lista, e ele e o ULTIMO bloco da pagina rolante. `Salvar` mora na
+  // barra de acao fixa, que nao rola e nao chega perto do quadrado.
   // -- O exemplo literal dele -------------------------------------------
   (
     nome: 'a conversa',
@@ -1293,19 +1295,45 @@ void main() {
     testWidgets('`Registrar achado avulso` e alcancavel pela FOTO', (
       tester,
     ) async {
-      // DESLIGAMENTO: em `abas.dart`, apague o `ItemDeMenu` de `Registrar
-      // achado avulso`. Este caso reprova, e nenhum outro da suite acusa.
+      // ================================================================
+      // O CAMINHO GANHOU UM TOQUE EM 28/10/2026, E O QUE O CASO PROVA E O
+      // MESMO: A ACAO CONTINUA ALCANCAVEL PELA FOTO.
+      // ================================================================
+      //
+      // Era um `ItemDeMenu` do menu da conta. O cliente decidiu que achados
+      // viram UMA entrada, e `Registrar achado avulso` virou o botao FIXO no
+      // topo do corpo de `Achados` -- `MeusAchados.rotuloDeRegistrar`, com o
+      // artigo (`Registrar um achado avulso`).
+      //
+      // DESLIGAMENTO: em `perfil/meus_achados.dart`, tire o
+      // `SliverPersistentHeader` de `_BarraDeRegistrar`. Este caso reprova, e
+      // `achados_botao_fixo_no_topo_test.dart` tambem -- aquele cobra que o
+      // botao e FIXO, este cobra que ele esta ALCANCAVEL a partir da foto.
+      // Sao as duas metades: existir no lugar certo, e haver caminho humano
+      // ate ele.
       await _abrirAContaPelaFoto(tester);
 
-      final item = find.widgetWithText(ItemDeMenu, 'Registrar achado avulso');
-      await tester.scrollUntilVisible(item, 200);
+      final linhaDeAchados = find.widgetWithText(ItemDeMenu, MeusAchados.titulo);
+      await tester.scrollUntilVisible(linhaDeAchados, 200);
+      expect(
+        linhaDeAchados,
+        findsOneWidget,
+        reason: 'REPROVA: a tela da conta nao oferece a entrada `Achados`, '
+            'que e por onde se chega ao registro de achado avulso desde '
+            '28/10/2026.',
+      );
+      await tester.tap(linhaDeAchados);
+      await tester.pumpAndSettle();
+
+      final item = find.text(MeusAchados.rotuloDeRegistrar);
       expect(
         item,
         findsOneWidget,
-        reason: 'REPROVA: a tela da conta nao oferece `Registrar achado '
-            'avulso`. Ela morava atras do alvo de tres pontos de `Pets`, que '
-            'o cliente mandou remover em 20/10, e **nao tinha nenhuma outra '
-            'porta em `lib/`**.',
+        reason: 'REPROVA: a listagem de achados nao oferece `Registrar um '
+            'achado avulso`. Ela morava atras do alvo de tres pontos de '
+            '`Pets`, que o cliente mandou remover em 20/10, depois no menu da '
+            'conta, e **nunca teve nenhuma outra porta em `lib/`** -- sem '
+            'este botao a tela de registro fica inalcancavel em silencio.',
       );
       await tester.tap(item);
       await tester.pumpAndSettle();
@@ -1321,11 +1349,11 @@ void main() {
         reason: 'REPROVA: tocar no item nao levou a ${Rotas.registrarAchado}.',
       );
       expect(
-        find.text('Registrar achado avulso'),
+        find.text(MeusAchados.rotuloDeRegistrar),
         findsNothing,
-        reason: 'REPROVA: o toque nao saiu do menu -- a tela de destino nao '
-            'abriu e o item continua na tela. Item que pinta o nome e nao '
-            'navega e funcao perdida com um rotulo em cima.',
+        reason: 'REPROVA: o toque nao saiu da listagem -- a tela de destino '
+            'nao abriu e o botao continua na tela. Botao que pinta o nome e '
+            'nao navega e funcao perdida com um rotulo em cima.',
       );
     });
 

@@ -23,6 +23,7 @@ library;
 
 import '../api/falhas.dart';
 import '../api/modelos.dart';
+import '../api/modelos_passkey.dart';
 import '../api/passkeys_api.dart';
 import '../dispositivo/credencial_do_aparelho.dart';
 import '../dispositivo/passkey_neste_aparelho.dart';
@@ -66,6 +67,141 @@ class FiacaoDoPasskey {
   /// sabe responder "existe credencial do Bichu aqui?" -- medido no pacote
   /// `passkeys` 2.23.1 --, entao quem sabe e o registro do proprio app.
   final PasskeyNesteAparelho _registro;
+
+  /// O CONVITE DEVE SER OFERECIDO AGORA? (28/10/2026)
+  ///
+  /// Regra de produto do cliente, verbatim: *"na hora do usuario fazer o login,
+  /// se ele nao tiver o passkey habilitado e nao tiver rejeitado formalmente,
+  /// devemos solicitar ele. Pois pode ser um cenario onde o usuario tenha feito
+  /// o cadastro, desinstalado o app e esta voltando"*.
+  ///
+  /// ## O buraco que isto fecha, e ele foi MEDIDO
+  ///
+  /// So duas telas falavam de passkey -- o convite depois do CADASTRO e a
+  /// tentativa ao abrir a tela de entrar --, e `passkey_credentials` tinha ZERO
+  /// linhas em homologacao. **Quem ja tinha conta nunca conseguia ativar**: a
+  /// unica janela eram os segundos apos criar uma conta nova. Inalcancavel para
+  /// todo usuario existente equivale a nao existir.
+  ///
+  /// ## A ORDEM DAS PERGUNTAS, e ela foi MEDIDA e nao escolhida por elegancia
+  ///
+  /// 1. **ha marca neste aparelho?** Leitura de disco. Quem tem credencial aqui
+  ///    nao precisa de convite: a tela de entrar ja tenta sozinha.
+  /// 2. **recusou formalmente?** Leitura do mesmo arquivo. A recusa cala a
+  ///    pergunta -- ver `PasskeyNesteAparelho.registrarRecusa` para por que ela
+  ///    mora no APARELHO e nao na conta.
+  /// 3. **[reconciliarComAConta]** -- a unica ida a REDE.
+  /// 4. **o aparelho suporta?** Canal de plataforma, sem rede.
+  ///
+  /// **A REDE VEM ANTES DA PERGUNTA DE SUPORTE, e isso contraria "do mais
+  /// barato para o mais caro" DE PROPOSITO.** A reconciliacao nao e parte da
+  /// decisao do convite: ela e um efeito que a entrada por senha ja tinha
+  /// desde o PR #85, e que vale **independentemente** de haver convite --
+  /// aparelho que recebeu a credencial por sincronizacao precisa ficar marcado
+  /// para a tela de entrar tentar a passkey na abertura seguinte. Por a
+  /// pergunta de suporte antes dela faria a reconciliacao **deixar de
+  /// acontecer** em quem o canal de plataforma nao responde, e
+  /// `passkey_e_dispensavel_test.dart` cobra que a entrada por senha consulta
+  /// `listPasskeys` exatamente UMA vez -- com a razao escrita: *"sem isso,
+  /// quem trocou de aparelho tem passkey e um app que nunca a tenta"*.
+  ///
+  /// Quem chama isto do login **nao chama `reconciliarComAConta` tambem**: a
+  /// consulta continua sendo uma so.
+  ///
+  /// ## O PASSO 3 NAO E ZELO, e e o caso que mais erra
+  ///
+  /// Credencial na conta **sem marca local** e o que acontece com sincronizacao
+  /// (Google Password Manager, Chaveiro do iCloud), reinstalacao e restauracao
+  /// de backup. Isso **nao e o mesmo que "nao tem"**: oferecer criar ali faria
+  /// uma segunda credencial redundante, quando o conserto certo e marcar o
+  /// aparelho -- que e o que a reconciliacao faz, e com isso destrava a entrada
+  /// por passkey que a pessoa ja tinha. Depois dela, quem tinha credencial na
+  /// conta cai no caso 1.
+  ///
+  /// ## NAO ESTOURA
+  ///
+  /// Quem chama acabou de entrar com sucesso, ou acabou de abrir `Meus dados`.
+  /// Nenhuma leitura daqui pode virar erro de tela: na duvida, **devolve
+  /// `false`** -- deixar de oferecer custa uma oferta que volta no proximo
+  /// login, e estourar custaria a tela.
+  /// O TETO DE ESPERA DA DECISAO.
+  ///
+  /// **Ela mora no caminho critico de uma entrada que JA DEU CERTO**, e por
+  /// isso nao pode esperar para sempre. Tres leituras dela podem pendurar:
+  ///
+  ///   - o deposito da marca e `DepositoDePasskeyEmArquivo`, e
+  ///     `getApplicationDocumentsDirectory` e **canal de plataforma**;
+  ///   - `suportaCredencial` tambem e canal de plataforma;
+  ///   - `listar()` e rede.
+  ///
+  /// Canal que nao responde nao estoura: ele simplesmente **nao volta**, e um
+  /// `Future` que nao volta nao e pego por `catch` nenhum. **MEDIDO nesta
+  /// rodada**: sem este teto, quatro casos de dois arquivos de login
+  /// (`entrar_executa_a_intencao_test`, `sessao_persistente_por_padrao_test`)
+  /// reprovaram com `pumpAndSettle timed out` -- o `_enviando` do botao
+  /// `Entrar` ficava girando e a pessoa nunca saia da tela.
+  ///
+  /// Em producao o canal responde. O teto existe para o dia em que ele nao
+  /// responder: deixar de oferecer custa uma oferta que volta no proximo
+  /// login, e pendurar custa a entrada.
+  static const Duration tetoDaDecisao = Duration(seconds: 3);
+
+  Future<bool> deveOferecerCadastro() {
+    // `Future.timeout` NAO CANCELA o que esta por baixo -- ele so para de
+    // esperar, e e exatamente isso que se quer: a leitura pendurada segue o
+    // seu destino sem segurar quem acabou de entrar.
+    return _decidirSeOferece().timeout(
+      tetoDaDecisao,
+      onTimeout: () => false,
+    );
+  }
+
+  Future<bool> _decidirSeOferece() async {
+    try {
+      if (await _registro.haCredencial()) return false;
+      if (await _registro.recusouFormalmente()) return false;
+      // A IDA A REDE. **Feita AQUI e nao por [reconciliarComAConta], e o
+      // motivo e um desfecho que aquele metodo nao sabe expressar.**
+      //
+      // Ele devolve `void` e engole toda falha, de proposito -- quem o chama
+      // nao espera por ele. Mas aqui ha TRES desfechos e nao dois, e o
+      // terceiro muda a resposta:
+      //
+      //   - a conta TEM credencial -> marca o aparelho, e nao oferece criar
+      //     outra (sincronizacao, reinstalacao, restauracao de backup);
+      //   - a conta NAO tem -> pode oferecer;
+      //   - **nao deu para saber** (401, 429, rede fora, corpo fora do
+      //     contrato) -> **nao oferece**.
+      //
+      // O terceiro e o que importa, e ele e regra desta casa e nao escolha
+      // minha: `passkey_e_dispensavel_test.dart` cobra, com estas palavras,
+      // que *"a senha conferiu e a pessoa NAO ficou na tela de entrar porque
+      // uma leitura AUXILIAR falhou"*. Uma folha que aparece **porque** a
+      // leitura falhou e exatamente isso -- a falha mudando o que a pessoa ve
+      // depois de uma entrada que deu certo. E ela nem seria uma oferta
+      // honesta: sem saber o que a conta tem, oferecer criar pode fabricar
+      // uma credencial redundante.
+      //
+      // O efeito de MARCAR que o PR #85 entregou continua inteiro, e e o
+      // mesmo que [reconciliarComAConta] faz -- so marca, nunca desmarca.
+      final List<Passkey> naConta;
+      try {
+        naConta = await _passkeys.listar();
+      } on Object {
+        return false;
+      }
+      if (naConta.isNotEmpty) {
+        await _registro.marcar();
+        return false;
+      }
+      // `await` e nao `return` pelado: dentro de um `try`, devolver o
+      // `Future` sem esperar faria a excecao dele escapar do `catch` -- e o
+      // `catch` daqui e o que garante que esta funcao NAO ESTOURA.
+      return await _aparelho.suportaCredencial();
+    } on Object {
+      return false;
+    }
+  }
 
   /// Oferece o cadastro da credencial. **EXIGE SESSAO ABERTA.**
   ///

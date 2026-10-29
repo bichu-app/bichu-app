@@ -16801,6 +16801,26 @@ components:
         por uma atividade de cada vez), e o campo `kind` de compatibilidade das
         respostas.
 
+        **`store` E `hospital` ENTRARAM EM 28/10/2026** (decisao do cliente:
+        *"precisamos adicionar outros tipos de atividade no parceiro"*), com a
+        migracao `20261028000001`. Duas notas que alguem adivinharia errado:
+
+        - **`store` NAO e a secao `Loja` do produto.** A `Loja` e catalogo de
+          PRODUTO (`store_items`), de outro dono e outro fluxo. Aqui `store` e
+          "um estabelecimento que vende" aparecendo em `Perto` -- um petshop. A
+          coincidencia e so de palavra;
+        - **`hospital` alem de `clinic` porque a distincao existe no mundo:**
+          clinica atende hora marcada e fecha, hospital interna e tem plantao.
+          Com um valor so, "atende de madrugada" ficaria no NOME do
+          estabelecimento, isto e, em texto livre onde nenhum filtro alcanca.
+
+        **"Profissional autonomo" foi considerado e NAO entrou**, por correcao
+        do proprio cliente na mesma data: *"na verdade, nao inclua profissional
+        autonomo como atividade, ja esta no tipo"*. Ele e `EntityKind`, nao
+        atividade. E `sitter` nao e valor novo: ele existe desde
+        `20260921000002`, e o que mudou em 28/10 foi o ROTULO dele na tela
+        ("Pet Sitter", antes "Hospedagem") -- rotulo nao aparece neste contrato.
+
         **Continua sem valor para ONG, e agora a ausencia e desenho concluido
         e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
         do modelo" porque `professionals` nao tinha `entity_kind`; desde
@@ -16809,25 +16829,37 @@ components:
         segunda e a que manda:
 
         1. acrescentar valor a um `enum` que sai em RESPOSTA quebra o contrato
-           -- `oasdiff`, regra `response-property-enum-value-added`, **12 erros
-           medidos em 18/10/2026** em `listDirectoryEntries`,
-           `getDirectoryEntry`, `listMyDirectorySuggestions` e nove operacoes
-           de `/admin/directory/*`;
+           -- `oasdiff`, regra `response-property-enum-value-added`. **MEDIDO
+           em 28/10/2026 para a entrada de `store` e `hospital`**, com
+           `tufin/oasdiff:v1.32.1` contra o `development` em `6b60db94`: **26
+           erros e 16 avisos (42 mudancas), em 12 operacoes** --
+           `listDirectoryEntries`, `getDirectoryEntry`,
+           `listPublicDirectoryEntries`, as de `/directory/suggestions` e as de
+           `/admin/directory/*`. A quebra foi aceita com dispensa datada em
+           `.github/quality-gates.yml`. (O numero que estava aqui, "12 erros
+           medidos em 18/10", era de UM valor hipotetico num contrato que desde
+           entao ganhou `GET /public/directory-entries` e o `rating`;
+           **conferir sempre, nunca reusar a contagem antiga**.) Alargar a
+           lista nunca foi de graca, e com `store`/`hospital` o cliente pagou o
+           preco de proposito -- o que **nao** muda a razao 2 abaixo;
         2. uma ONG nao e uma ATIVIDADE. Poe-la aqui afirmaria que organizacao
            e um tipo de profissional, que era exatamente a pergunta aberta.
            Uma ONG tem atividade (`clinic`, `vet`) **e** tipo de entidade
            (`organization`) -- os dois eixos ao mesmo tempo, e e por isso que
-           um so campo nao os expressava.
-      enum: [vet, groomer, walker, sitter, trainer, clinic]
+           um so campo nao os expressava. **Isto continua valendo depois de
+           28/10**: a lista cresceu em ATIVIDADE, e nenhum dos dois valores
+           novos e tipo de entidade.
+      enum: [vet, groomer, walker, sitter, trainer, clinic, store, hospital]
 
     ProfessionalKinds:
       type: array
       minItems: 1
-      maxItems: 6
+      maxItems: 8
       uniqueItems: true
       description: |
-        As ATIVIDADES da entrada, de 1 a 6 (decisao do cliente de 21/10/2026:
-        uma clinica que tambem faz banho e tosa nao precisa escolher). Espelha
+        As ATIVIDADES da entrada, de 1 a 8 (decisao do cliente de 21/10/2026:
+        uma clinica que tambem faz banho e tosa nao precisa escolher; o teto
+        subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`). Espelha
         `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
         separador.
 
@@ -16837,8 +16869,13 @@ components:
         "atividade secundaria" com regra propria, e o filtro por chip trata os
         itens como iguais.
 
-        **TETO 6 = o tamanho da lista fechada.** Teto maior seria ficticio: nao
-        ha setimo valor para um setimo item carregar.
+        **TETO 8 = o tamanho da lista fechada.** Teto maior seria ficticio: nao
+        ha nono valor para um nono item carregar. Ele acompanha a lista por
+        regra e nao por acaso -- deixa-lo em 6 com oito valores disponiveis
+        recusaria uma entrada que legitimamente faz as oito coisas, e a recusa
+        viria do TETO e nao do vocabulario, que e o tipo de erro que manda
+        procurar no lugar errado. `professionals_atividades_tamanho` subiu junto
+        na `20261028000001`.
 
         `uniqueItems` recusa `[vet, vet]` ja no schema; o servidor recusa o
         mesmo com `400` (`code: duplicate_kind`), porque o `CHECK` do banco nao

@@ -440,7 +440,7 @@ void main() {
         );
 
         expect(
-          find.textContaining('nada aparece no Perto até alguém olhar'),
+          find.textContaining('nada aparece na Rede até alguém olhar'),
           findsOneWidget,
           reason: 'REPROVA: o texto de sucesso não diz que nada foi '
               'publicado. Um "pronto, indicado!" faria a pessoa acreditar que '

@@ -8,6 +8,7 @@
 // que o produz** nos casos de microcopy: o esperado esta escrito por extenso,
 // com acento e pontuacao, e trocar a microcopy reprova -- que e o ponto.
 
+import 'package:bichu/telas/perfil/meus_achados.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/cidade_escolhida.dart';
@@ -262,7 +263,7 @@ Future<void> abrirMeusAchados(
   // da dobra. `ListView` so constroi o que cabe: `ensureVisible` sozinho
   // estoura com `Bad state: No element`, porque nao ha elemento nenhum para
   // tornar visivel. Rolar e o que a pessoa faz.
-  final porta = find.text('Meus achados');
+  final porta = find.text(MeusAchados.titulo);
   await tester.scrollUntilVisible(porta, 200);
   await tester.pumpAndSettle();
   await tester.tap(porta);

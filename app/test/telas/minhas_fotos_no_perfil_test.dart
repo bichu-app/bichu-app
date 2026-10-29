@@ -543,7 +543,7 @@ void main() {
     });
 
     testWidgets(
-      'isca (d): ela esta no grupo `Conta`, entre `Meus dados` e os bloqueados',
+      'isca (d): ela esta no grupo `Conta`, DEPOIS de `Meus dados`',
       (tester) async {
         // A POSICAO, medida em `dy` e nao por presenca -- a mesma tecnica de
         // `perfil_ordem_dos_itens_test.dart`, e pelo mesmo motivo: presenca
@@ -562,11 +562,33 @@ void main() {
         await irParaAConta(tester);
 
         final alturas = <String, double>{};
+        // ================================================================
+        // `Usuários bloqueados` SAIU DESTA LISTA EM 28/10/2026
+        // ================================================================
+        //
+        // Ela era a terceira ancora desta medicao, e a assercao de baixo
+        // cobrava que a vitrine ficasse ANTES dela. O cliente tirou o item do
+        // grupo `Conta` e o transformou na aba `Bloqueados` de
+        // `conexoes/tela_de_conexoes.dart` (*"devemos centralizar tudo em um
+        // unico local"*), entao a ancora **nao existe mais neste menu** -- e
+        // `findsOneWidget` sobre ela reprovava por ausencia, nao por ordem.
+        //
+        // **O QUE ESTA ISCA PROTEGE NAO MUDOU**, e e por isso que ela nao foi
+        // apagada: ela cobra que `Minhas fotos` esteja no grupo `Conta` e
+        // DEPOIS de `Meus dados`, que e a decisao do cliente de 26/10/2026 e o
+        // motivo escrito em `abas.dart` (*"ela era filha dele; quem procurava
+        // a vitrine descia por ali"*). O que se perdeu foi so o limite de
+        // BAIXO, porque o item que fechava o grupo saiu.
+        //
+        // A ancora nova e `Pets na rua`, o cabecalho do grupo SEGUINTE: ela
+        // cobra a mesma coisa que `Usuários bloqueados` cobrava -- que a
+        // vitrine nao escorregou para fora do grupo `Conta` --, e cobra melhor,
+        // porque nao depende de qual item fecha o grupo.
         for (final rotulo in <String>[
           'Conta',
           'Meus dados',
           VitrineDeFotosDoUsuario.tituloDaTela,
-          'Usuários bloqueados',
+          'Pets na rua',
         ]) {
           final alvo = find.descendant(
             of: find.byType(AbaPerfil),
@@ -597,13 +619,25 @@ void main() {
               'onde a mao dessa pessoa ja ia.',
         );
         expect(
-          alturas['Usuários bloqueados']!,
+          alturas['Pets na rua']!,
           greaterThan(alturas[VitrineDeFotosDoUsuario.tituloDaTela]!),
           reason: 'REPROVA: `${VitrineDeFotosDoUsuario.tituloDaTela}` nao esta '
-              'ANTES de `Usuários bloqueados`. Aquele item fecha o grupo '
-              '`Conta` com o que eu RECUSEI, e a prosa dele em `abas.dart` diz '
-              'isso por extenso. Se a linha nova foi para baixo dele, ela '
-              'saiu do lugar que a prosa declara.',
+              'ANTES do cabecalho `Pets na rua`, ou seja: ela escorregou para '
+              'FORA do grupo `Conta`. O cliente pediu a vitrine no primeiro '
+              'nivel do perfil e dentro do grupo da propria conta -- as fotos '
+              'que a pessoa mostra de si sao dado dela.',
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AbaPerfil),
+            matching: find.text('Usuários bloqueados'),
+          ),
+          findsNothing,
+          reason: 'REPROVA: `Usuários bloqueados` voltou ao grupo `Conta`. Ela '
+              'saiu em 28/10/2026 e virou a aba `Bloqueados` de '
+              '`conexoes/tela_de_conexoes.dart`, por decisao do cliente; duas '
+              'portas para a mesma lista e o que `gaveta_de_secoes.dart` '
+              'proibe.',
         );
       },
     );

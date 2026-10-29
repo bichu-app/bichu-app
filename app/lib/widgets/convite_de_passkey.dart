@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../escopo.dart';
@@ -47,7 +49,32 @@ import '../theme/bichu_tokens.g.dart';
 /// composicao, o texto e o icone nao foram desenhados. Vale como fiacao
 /// funcional, e o desenho de saida continua devendo.
 class ConviteDePasskey extends StatefulWidget {
-  const ConviteDePasskey({super.key, this.rotuloDoAparelho});
+  const ConviteDePasskey({
+    super.key,
+    this.rotuloDoAparelho,
+    this.permitirRecusaFormal = false,
+  });
+
+  /// A FOLHA OFERECE `Não quero ativar`? (28/10/2026)
+  ///
+  /// **Falso depois do CADASTRO, verdadeiro depois do LOGIN**, e a diferenca
+  /// nao e estetica:
+  ///
+  ///   - no fim do cadastro a folha aparece **uma vez na vida da conta**, e
+  ///     `Agora não` resolve: nao ha o que calar para o futuro;
+  ///   - depois do login ela aparece **em toda entrada** de quem nao tem
+  ///     credencial e nao recusou (regra do cliente de 28/10). Sem uma recusa
+  ///     DEFINITIVA, quem nao quer passkey seria perguntada para sempre -- e
+  ///     a regra dele diz, com estas palavras, *"nao tiver rejeitado
+  ///     formalmente"*, o que pressupoe que exista como rejeitar.
+  ///
+  /// **`Agora não` CONTINUA EXISTINDO quando este e verdadeiro, e nao e o
+  /// mesmo botao.** Os dois desfechos sao diferentes de proposito: `Agora não`
+  /// (e arrastar, e o voltar do sistema) e *"nao agora"* e a oferta volta no
+  /// proximo login; `Não quero ativar` grava a recusa e a oferta nao volta.
+  /// Confundir os dois faria a pessoa perder a funcao por um gesto acidental,
+  /// que e o dano que os dois casos de fronteira da isca cobram.
+  final bool permitirRecusaFormal;
 
   /// O nome sugerido para o aparelho, ou nulo.
   ///
@@ -63,6 +90,21 @@ class ConviteDePasskey extends StatefulWidget {
 
 class _ConviteDePasskeyState extends State<ConviteDePasskey> {
   bool _emAndamento = false;
+
+  /// GRAVA A RECUSA FORMAL e fecha. **So este caminho recusa.**
+  ///
+  /// Nem `Agora não`, nem arrastar a folha, nem o gesto de voltar do sistema
+  /// chegam aqui -- os tres sao *"agora nao"*. Ver
+  /// `PasskeyNesteAparelho.registrarRecusa`.
+  Future<void> _naoQuero() async {
+    // `registrarRecusa` NAO ESTOURA: falha de disco deixa a memoria com o
+    // valor certo, entao esta execucao do app nao pergunta de novo, e a
+    // proxima abertura pergunta -- que custa uma pergunta, nao uma funcao
+    // perdida.
+    await Escopo.of(context).passkeyNesteAparelho.registrarRecusa();
+    if (!mounted) return;
+    Navigator.of(context).pop(DesfechoDoCadastroDePasskey.naoCadastrada);
+  }
 
   Future<void> _ativar() async {
     setState(() => _emAndamento = true);
@@ -149,6 +191,21 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
                     : () => Navigator.of(context)
                         .pop(DesfechoDoCadastroDePasskey.naoCadastrada),
               ),
+              // `Não quero ativar` SO NO CONVITE DO LOGIN (28/10/2026) -- ver
+              // [ConviteDePasskey.permitirRecusaFormal].
+              //
+              // **TERCEIRO na ordem, e com a menor enfase.** Ela e a acao
+              // menos reversivel das tres: `Ativar` e desfeita por revogar, e
+              // `Agora não` e desfeita pelo proximo login; esta cala a oferta
+              // ate a pessoa vir ligar a mao em `Meus dados`. Por ela em cima,
+              // ou com o peso de `Agora não`, poria a saida definitiva no
+              // caminho do gesto apressado.
+              if (widget.permitirRecusaFormal) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e2),
+                _BotaoDeNaoQuero(
+                  aoTocar: _emAndamento ? null : () => unawaited(_naoQuero()),
+                ),
+              ],
             ],
           ),
         ),
@@ -180,6 +237,7 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
 Future<void> mostrarConviteDePasskey(
   BuildContext context, {
   String? rotuloDoAparelho,
+  bool permitirRecusaFormal = false,
 }) async {
   final cores = BichuColors.of(context).cores;
   await showModalBottomSheet<DesfechoDoCadastroDePasskey>(
@@ -190,7 +248,10 @@ Future<void> mostrarConviteDePasskey(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(BichuRaio.xl)),
     ),
-    builder: (contexto) => ConviteDePasskey(rotuloDoAparelho: rotuloDoAparelho),
+    builder: (contexto) => ConviteDePasskey(
+      rotuloDoAparelho: rotuloDoAparelho,
+      permitirRecusaFormal: permitirRecusaFormal,
+    ),
   );
   // O retorno e DESCARTADO de proposito. Ver a documentacao acima.
 }
@@ -300,6 +361,38 @@ class _BotaoDeAgoraNao extends StatelessWidget {
       width: double.infinity,
       height: BichuAlvoDeToque.min,
       child: OutlinedButton(onPressed: aoTocar, child: const Text('Agora não')),
+    );
+  }
+}
+
+/// `Não quero ativar`: a RECUSA FORMAL (28/10/2026).
+///
+/// **`TextButton` e nao `OutlinedButton`**, e a enfase e a mensagem: ela e a
+/// acao menos reversivel da folha, e a forma mais leve e o que a mantem fora do
+/// caminho do gesto apressado. Nao e `critico` nem vermelha -- nao ha nada de
+/// destrutivo em nao querer um recurso, e pintar de alerta sugeriria que ha.
+///
+/// **O alvo continua em [BichuAlvoDeToque.min]**: enfase menor nao e alvo
+/// menor, e o piso do SC 2.5.8 nao depende de quanto a casa quer que a pessoa
+/// toque num botao.
+///
+/// O rotulo diz o que ela recusa (`ativar`) e nao so `Não quero`: sozinho, ele
+/// leria como resposta a pergunta do titulo (*"Entrar sem digitar a senha?"*),
+/// que e o que `Agora não` ja responde.
+class _BotaoDeNaoQuero extends StatelessWidget {
+  const _BotaoDeNaoQuero({required this.aoTocar});
+
+  final VoidCallback? aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: BichuAlvoDeToque.min,
+      child: TextButton(
+        onPressed: aoTocar,
+        child: const Text('Não quero ativar'),
+      ),
     );
   }
 }

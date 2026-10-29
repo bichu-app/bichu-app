@@ -49,6 +49,14 @@ import 'perto_com_dados_test.dart'
 /// que ela evita, esta na prosa de `lib/widgets/icone_do_inscrito.dart`.
 const Map<String, IconData> glifoEsperadoPorAtividade = <String, IconData>{
   'clinic': Icons.local_hospital_outlined,
+  // `hospital` e `store` entraram no contrato em 28/10/2026. A escolha dos
+  // dois, e a lista do que foi ELIMINADO em cada um, esta na prosa de
+  // `lib/widgets/icone_do_inscrito.dart` -- em particular por que o par mais
+  // obvio (`local_hospital` para `hospital`, `storefront`/`store` para
+  // `store`) e justamente o que colide: o primeiro JA e o glifo de `clinic`, e
+  // o segundo e o `simboloDeFalha` da logo no mesmo cartao.
+  'hospital': Icons.emergency_outlined,
+  'store': Icons.shopping_basket_outlined,
   'vet': Icons.medical_services_outlined,
   'groomer': Icons.shower_outlined,
   'walker': Icons.directions_walk_outlined,
@@ -274,7 +282,7 @@ void main() {
 
     test('nenhum par de tipos divide o mesmo glifo', () {
       // Um portao que so olhasse "cada tipo tem glifo" aprovaria uma tabela
-      // em que os sete tipos fossem o mesmo desenho -- o que, na tela, e o
+      // em que todos os tipos fossem o mesmo desenho -- o que, na tela, e o
       // mesmo que nao ter icone por tipo. E a mesma afirmacao 2 do
       // `icone_de_perto_test.dart`, pela mesma razao.
       final todos = <IconData>[
@@ -286,7 +294,8 @@ void main() {
         todos.toSet().length,
         todos.length,
         reason: 'REPROVA: ha glifo repetido entre tipos. Os '
-            '${todos.length} desenhos (seis atividades, ONG e a reserva) '
+            '${todos.length} desenhos (as atividades do contrato, ONG e a '
+            'reserva) '
             'precisam ser distintos entre si, ou o icone deixa de dizer o '
             'tipo.',
       );

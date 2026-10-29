@@ -250,7 +250,7 @@ describe('logo e foto no formulario da entrada', () => {
     });
     fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Passeios da Bia' } });
     // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
-    fireEvent.click(screen.getByLabelText('Passeador'));
+    fireEvent.click(screen.getByLabelText('Dog Walker'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
 
@@ -268,7 +268,7 @@ describe('logo e foto no formulario da entrada', () => {
     });
     fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Passeios da Bia' } });
     // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
-    fireEvent.click(screen.getByLabelText('Passeador'));
+    fireEvent.click(screen.getByLabelText('Dog Walker'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/perto'));
