@@ -193,8 +193,21 @@ Future<http.Response> Function(http.Request) redeDoDiretorio(
 Future<void> abrirPerto(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
+  /// A escala de fonte do sistema. Nulo usa a do ambiente (1,0).
+  ///
+  /// Repassada a [abrirOApp], e **nao aplicada aqui por um `MediaQuery`
+  /// proprio**: o `BichuApp` faz um `clamp` de 1 a 2 no proprio `builder`, e
+  /// um `MediaQuery` cru por cima da arvore montada exercitaria outra coisa
+  /// que nao o app (BICHUS-313, 28/10/2026 -- o risco conhecido da linha da
+  /// nota no cartao e a fonte a 200%).
+  double? escala,
 }) async {
-  await abrirOApp(tester, rede: rede, deposito: depositoLogado());
+  await abrirOApp(
+    tester,
+    rede: rede,
+    deposito: depositoLogado(),
+    escala: escala,
+  );
   // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.**
   //
   // A secao `Perto` deixou de existir por decisao do cliente: o diretorio
@@ -1245,10 +1258,33 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      // `Dog Walker` e nao `Passeador`: o cliente renomeou o rotulo de
-      // `walker` em 28/10/2026, e o chip mostra
-      // `AtividadeDoDiretorio.walker.rotulo`. O VALOR DE FIO (`walker`)
-      // nao mudou -- o que esta escrito aqui e o nome na tela.
+      // UNIAO DE 28/10/2026, e os DOIS lados valem ao mesmo tempo -- escolher
+      // um deles reprovaria o caso:
+      //
+      // Do lado do #94 (rotulos do diretorio), `Dog Walker` e nao `Passeador`:
+      // o cliente renomeou o rotulo de `walker` em 28/10/2026, e o chip mostra
+      // `AtividadeDoDiretorio.walker.rotulo`. O VALOR DE FIO (`walker`) nao
+      // mudou -- o que esta escrito aqui e o nome na tela, e na arvore MESCLADA
+      // `modelos_diretorio.dart` declara `walker('walker', 'Dog Walker')`.
+      //
+      // Do lado do #93 (estrelas + filtro de bairro), o `ensureVisible` ENTROU
+      // em 28/10/2026, e nao e cerimonia: a folha ganhou o campo de BAIRRO
+      // (BICHUS-315), que nasce ACIMA das pastilhas -- `CampoDeTextoDoFiltro`
+      // vem antes de `GrupoDeFiltro` na folha -- e empurrou a pastilha abaixo
+      // da dobra da viewport de 600 dp do teste. Sem ele o `tap` erra o alvo
+      // (`would not hit test on the specified widget`), a pastilha nao e
+      // marcada, o `Aplicar` fica desabilitado por nao haver mudanca, e o caso
+      // reprova em `chamadas` -- uma reprova que NAO fala do defeito que ele
+      // mede.
+      //
+      // **A folha ROLA** (`Flexible` + `SingleChildScrollView`, com
+      // `isScrollControlled: true`), entao no aparelho a pastilha continua
+      // alcancavel: o que mudou e que ela deixou de estar visivel de saida numa
+      // tela curta.
+      //
+      // Portanto: o `ensureVisible` do #93 sobre o rotulo NOVO do #94.
+      await tester.ensureVisible(find.text('Dog Walker'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Dog Walker'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
