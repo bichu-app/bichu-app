@@ -98,11 +98,12 @@ void main() {
 
       await _preencherOPasso1(tester);
       await avancarParaOPasso2(tester);
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
-      await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
+      // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
+      // **`rolarAte` ANTES do `enterText`.** O `ListView` so constroi o que
+      // cabe na tela, e antes de 29/10/2026 quem rolava ate aqui era o toque
+      // no botao que saiu. Sem isto, `enterText` reprova com
+      // `Bad state: No element` -- um motivo que nao e o do caso.
+      await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloCidade));
       await tester.enterText(
         _campo(TextosDaLocalizacao.rotuloCidade),
         'São Paulo',
@@ -153,11 +154,8 @@ void main() {
 
       await _preencherOPasso1(tester);
       await avancarParaOPasso2(tester);
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
-      await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
+      // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
+      await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloBairro));
       await tester.enterText(
         _campo(TextosDaLocalizacao.rotuloBairro),
         'Vila Madalena',
@@ -253,11 +251,8 @@ void main() {
       await irPara(tester, Rotas.registrarAchado);
       await _preencherOPasso1(tester);
       await avancarParaOPasso2(tester);
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
-      await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
+      // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
+      await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloCidade));
 
       expect(
         _bichuField(tester, TextosDaLocalizacao.rotuloCidade).opcional,
@@ -277,26 +272,19 @@ void main() {
       );
     });
 
-    testWidgets('COM ponto, a cidade volta a ser opcional', (tester) async {
-      await abrirOApp(
-        tester,
-        rede: _soAReferencia,
-        deposito: depositoLogado(),
-        localizacao: localizacaoConcedida(),
-      );
-      await irPara(tester, Rotas.registrarAchado);
-      await _preencherOPasso1(tester);
-      await avancarParaOPasso2(tester);
-      await rolarAte(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
-      await tocar(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
-
-      expect(
-        _bichuField(tester, TextosDaLocalizacao.rotuloCidade).opcional,
-        isTrue,
-        reason: 'REPROVA: com a coordenada em maos o `onde` ja existe, e a '
-            'cidade passa a ser mesmo opcional. Cobra-la aqui seria mentir '
-            'no outro sentido.',
-      );
-    });
+    // **O CONTRAPESO `COM ponto` SAIU DAQUI EM 29/10/2026.**
+    //
+    // Ele media o outro lado da decisao de 17/10 -- *"(opcional)" so quando
+    // ela E opcional* --: com coordenada em maos o `onde` ja existe e a cidade
+    // volta a ser mesmo opcional. **Esse estado nao existe mais nesta tela**:
+    // por decisao do cliente o achado nao captura coordenada, entao a cidade e
+    // obrigatoria SEMPRE aqui, e o caso de cima passou a medir o unico estado
+    // possivel.
+    //
+    // A regra nao foi perdida: ela foi para `captura_de_localizacao_test.dart`
+    // (`COM ponto, a cidade volta a ser opcional`), montada no fluxo que
+    // oferece a captura. Sem essa mudanca de lugar, o par de casos ficaria
+    // medindo um lado so -- e alguem poderia travar a cidade como obrigatoria
+    // na peca inteira sem nada reprovar.
   });
 }

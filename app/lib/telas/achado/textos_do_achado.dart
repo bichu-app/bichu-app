@@ -124,28 +124,21 @@ abstract final class TextosDoAchado {
       'coleira azul sem placa, mancha branca no peito, mancava da pata '
       'traseira';
 
-  // -- O que acontece sem rotulo de area ------------------------------------
-
-  /// A frase que a tela mostra quando ha coordenada e **nenhum texto
-  /// digitado** (criterio 6, e a consequencia da BICHUS-23).
-  ///
-  /// Ela nao repreende e nao bloqueia: o achado vale, e o que muda e a forma
-  /// como ele aparece para o tutor. Derivar o bairro da coordenada e o que o
-  /// ADR-0006 proibe, entao a unica saida honesta e perguntar -- e o campo de
-  /// bairro esta logo ali, oferecido junto com o GPS.
-  static const String semRotuloDeArea =
-      'O tutor vai ver a distância, e não o bairro. Escreva o bairro e a '
-      'cidade acima se quiser que ele apareça.';
-
-  /// A frase que a tela mostra quando ha area digitada e **nenhuma
-  /// coordenada** (criterio 6).
-  ///
-  /// O cruzamento **nao deixa de existir**: ele perde o criterio de distancia
-  /// e passa a valer dentro da mesma cidade. Dizer "não vai funcionar" seria
-  /// mentira, e dizer nada deixaria a pessoa achar que a distancia foi medida.
-  static const String semCoordenada =
-      'Sem o ponto no mapa, a busca por um tutor parecido vale na cidade '
-      'inteira, e não no seu quarteirão.';
+  // -- O aviso do lugar SAIU (cliente, 29/10/2026) ---------------------------
+  //
+  // Havia aqui `semRotuloDeArea` e `semCoordenada`, os dois textos da
+  // `FaixaDeAviso` que ficava ao lado da captura. **Os dois deixaram de poder
+  // ser verdade** quando o achado parou de capturar coordenada:
+  //
+  // - `semRotuloDeArea` dizia *"O tutor vai ver a distancia, e nao o bairro"*.
+  //   Sem coordenada nao ha distancia nenhuma: a frase passaria a MENTIR;
+  // - `semCoordenada` dizia que a busca vale na cidade inteira. Virou verdade
+  //   em TODO achado, e faixa que aparece sempre nao distingue nada.
+  //
+  // O que restava de acionavel -- *"escreva o bairro se quiser que ele
+  // apareca"* -- esta no proprio formulario, com o campo de bairro rotulado e
+  // opcional na tela. A ausencia e medida em `registrar_achado_test.dart`,
+  // para a faixa nao voltar sem decisao.
 
   // -- Os dois passos -------------------------------------------------------
 
@@ -359,8 +352,9 @@ abstract final class TextosDoAchado {
   /// Quando o servidor nao mandou rotulo de area.
   ///
   /// **A mesma linha de `Meus achados`.** Ela nao repreende: o achado vale sem
-  /// bairro, e o que muda e como ele chega ao tutor -- o que ja esta dito em
-  /// [semRotuloDeArea], no formulario, onde ainda da para escrever o bairro.
+  /// bairro, e o que muda e como ele chega ao tutor. O formulario nao diz mais
+  /// nada sobre isso -- o aviso do lugar saiu em 29/10/2026, com a captura de
+  /// coordenada --, e quem quiser o rotulo escreve bairro e cidade nos campos.
   static const String regiaoNaoInformada = 'Região não informada';
 
   /// `Achado em dd/mm/aaaa`, com o nulo tratado por quem chama.

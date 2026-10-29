@@ -57,8 +57,28 @@ const Map<String, String> _quemPodeUsarAPorta = <String, String>{
   'dispositivo/localizacao.dart': 'e a propria porta',
   'escopo.dart': 'entrega a porta a arvore de widgets',
   'app.dart': 'escolhe a implementacao, num lugar so',
+  // **O ACHADO DEIXOU DE CAPTURAR EM 29/10/2026**, e o nome fica na lista
+  // porque o arquivo continua falando com a porta -- so nao mais por conta das
+  // duas telas de achado.
+  //
+  // Decisao do cliente, verbatim: *"remove os botoes e deixa os campos de cep,
+  // endereco para o usuario preencher, no mesmo padrao das outras paginas"*.
+  // `CapturaDeLocalizacao` abre direto nos campos de endereco quando o
+  // `pontoDeUso` e `registrarAchado` (ver `_ofereceCaptura`), entao F3.5 e
+  // `TelaEncontreiEstePet` embutem a peca **sem** pedir localizacao nenhuma.
+  //
+  // O caminho do GPS continua no arquivo, vivo e coberto, para `marcarPerdido`
+  // -- F3.1 e o fluxo que precisa de centro para o alerta de 5 km ter raio.
+  //
+  // **E ATENCAO AO QUE A MENSAGEM DE REPROVA ABAIXO AINDA DIZ:** ela afirma
+  // que "os dois embutem `CapturaDeLocalizacao`". Isso ja era impreciso antes
+  // desta mudanca e foi medido em 29/10/2026: os UNICOS arquivos que
+  // constroem a peca sao as duas telas de ACHADO. `telas/perdido/
+  // tela_onde_e_quando.dart` nao a constroi. O criterio 1 continua valendo
+  // como regra de produto -- a porta so e nomeada pelos arquivos desta lista
+  // --, mas quem embute a peca hoje nao sao "os dois pontos de uso".
   'telas/localizacao/captura_de_localizacao.dart':
-      'e a captura que os dois pontos de uso embutem',
+      'fala com a porta; captura so para `marcarPerdido` desde 29/10/2026',
   // Importa pelo TIPO, e nao para falar com o aparelho: `PontoCapturado` e
   // `OrigemDoPonto` sao dados, e o modelo do "onde" precisa nomea-los para
   // montar o corpo da requisicao. Ele nao chama metodo nenhum da porta, e e
