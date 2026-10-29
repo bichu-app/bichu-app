@@ -111,6 +111,7 @@ class DiretorioApi {
   static Map<String, dynamic> corpoDaSugestao({
     required String nome,
     required AtividadeDoDiretorio atividade,
+    required TipoDeEntidade tipoDeEntidade,
     required String cidade,
     required String uf,
     required TipoDeContatoPublico tipoDeContato,
@@ -135,6 +136,26 @@ class DiretorioApi {
     return <String, dynamic>{
       'display_name': nome,
       'kind': atividade.codigo,
+      // **O TIPO DE ENTIDADE VAI SEMPRE, E NAO SO QUANDO E `organization`.**
+      //
+      // `DirectorySuggestionInput.entity_kind` e OPCIONAL e ausente vale
+      // `professional` -- o `DEFAULT` da coluna e o `coalesce` dentro de
+      // `directory_suggestions_registrar`. Omitir o campo quando a escolha e
+      // `professional` gravaria a MESMA linha, e por isso a tentacao: menos um
+      // campo no corpo.
+      //
+      // **E errado, e o motivo e mensuravel.** Omitido, o corpo deixa de
+      // distinguir duas coisas: a pessoa que ESCOLHEU "Profissional ou
+      // estabelecimento" no seletor e o APK publicado que nao tem seletor e nao
+      // escolheu nada. Hoje as duas existem ao mesmo tempo no aparelho de
+      // alguem, e e justamente a segunda que este lote veio consertar. Quem
+      // olhar o corpo da requisicao -- no log, numa medicao de rota, numa
+      // reclamacao -- precisa poder dizer qual dos dois mandou.
+      //
+      // Mandar sempre tambem faz a afirmacao ser DESTA camada e nao do servidor:
+      // o padrao do banco continua existindo para o APK antigo, e nao e o que
+      // decide o valor de quem usa a tela nova.
+      'entity_kind': tipoDeEntidade.codigo,
       'city': cidade,
       'state': uf,
       if (bairro != null && bairro.isNotEmpty) 'neighborhood': bairro,

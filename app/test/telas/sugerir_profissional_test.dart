@@ -497,6 +497,13 @@ void main() {
         const permitidas = <String>{
           'display_name',
           'kind',
+          // `entity_kind` entrou em 29/10/2026 (BICHUS-317b, pedido do
+          // cliente). **Esta isca ACUSOU a chegada dele**, e isso e o controle
+          // positivo de que ela morde: antes de a chave entrar nesta lista, o
+          // caso reprovou com `entity_kind` na diferenca. Quem a acrescentar
+          // aqui sem o campo existir no contrato continua sendo pego pelo
+          // portao de conformidade do app.
+          'entity_kind',
           'city',
           'state',
           'neighborhood',

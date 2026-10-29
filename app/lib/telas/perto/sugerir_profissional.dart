@@ -178,6 +178,42 @@ class TelaSugerirProfissional extends StatefulWidget {
       'Indicação recebida. Ela vai para conferência: nada aparece na Rede até '
       'alguém olhar.';
 
+  /// O rotulo do campo de TIPO DE ENTIDADE (pedido do cliente, 29/10/2026).
+  ///
+  /// Verbatim: *"esta faltando o campo se e um profissional, ong ou
+  /// estabelecimento"*. **O campo nao existia nesta tela**, e a consequencia era
+  /// medida e silenciosa: quem indica pelo APK publicado gravava
+  /// `entity_kind: professional` sem nunca ver a pergunta, porque o `DEFAULT` da
+  /// coluna e o `coalesce` da funcao de registro respondem por quem nao manda o
+  /// campo. Nao havia como indicar uma ONG.
+  ///
+  /// **O rotulo do CAMPO e da voz do app; os rotulos das OPCOES sao do painel.**
+  /// Os dois textos das opcoes vem de [TipoDeEntidade.rotulo] e tem de ser
+  /// identicos aos de `TIPOS_DE_ENTIDADE` em `admin/src/diretorio/dominio.ts`
+  /// (ver a prosa daquele campo e o teste que cobra a igualdade). Este rotulo
+  /// aqui nao: o painel diz `Tipo *` para um operador, e "O que é esse lugar" e
+  /// a pergunta que a mesma lista responde para quem esta indicando a clinica do
+  /// bairro -- a mesma diferenca que ja existe entre `Tipo` e
+  /// [rotuloDaAtividade].
+  static const String rotuloDoTipoDeEntidade = 'O que é esse lugar';
+
+  /// **A ajuda EXISTE porque os dois eixos se confundem**, e e a mesma frase que
+  /// o painel ja diz em `e-tipo-entidade-ajuda`. Sem ela, "O que é esse lugar" e
+  /// "O que eles fazem" parecem a mesma pergunta duas vezes, e quem indica uma
+  /// ONG que atende como clinica fica sem saber onde dizer cada coisa -- a
+  /// resposta e NOS DOIS, e e isso que a linha diz.
+  static const String ajudaDoTipoDeEntidade =
+      'Uma ONG também escolhe abaixo o que ela faz: aqui você diz o que o '
+      'lugar é.';
+
+  /// O rotulo do campo de ATIVIDADE, que era literal na arvore do `build`.
+  ///
+  /// Virou constante em 29/10/2026 por uma razao e nao por arrumacao: o campo de
+  /// tipo de entidade entrou ACIMA dele, e um teste que precisa distinguir os
+  /// dois seletores pelo rotulo nao pode depender de literal solto no meio de
+  /// mil linhas de `build`.
+  static const String rotuloDaAtividade = 'O que eles fazem';
+
   static const String rotuloDoCep = 'CEP';
 
   /// O rotulo do campo de estado, que deixou de ser `UF` digitada.
@@ -259,6 +295,46 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   String? _uf;
 
   AtividadeDoDiretorio? _atividade;
+
+  /// O TIPO DE ENTIDADE escolhido. **Nasce com `profissional`, e nao nulo.**
+  ///
+  /// ## A decisao, e o argumento dos dois lados
+  ///
+  /// O seletor de atividade acima e `AtividadeDoDiretorio?`, nulo ate escolher,
+  /// e `_impedimento` barra o botao enquanto nao ha escolha. Repetir a forma
+  /// aqui seria o caminho de menor atrito de leitura -- e esta errado. Os tres
+  /// motivos, em ordem de peso:
+  ///
+  /// 1. **O painel nasce em `professional`** (`FormularioDaEntrada`,
+  ///    `tipoDeEntidade: 'professional'` no estado inicial) e o contrato tambem
+  ///    (`DirectorySuggestionInput.entity_kind` tem `default: professional`, e a
+  ///    coluna tem o mesmo `DEFAULT`). Exigir escolha aqui faria o aplicativo
+  ///    ser **mais estrito que o painel e que o contrato** na mesma pergunta --
+  ///    que e a classe de divergencia que este campo inteiro veio consertar.
+  /// 2. **Nao existe terceira resposta, e nao existe "nenhuma".** O `enum` tem
+  ///    DOIS valores, e "nem profissional nem ONG" nao e estado que signifique
+  ///    algo. Um impedimento a mais (seria o setimo) travaria o botao de todo
+  ///    mundo esperando a confirmacao de um valor que ja esta certo na enorme
+  ///    maioria -- `ORDEM_DOS_TIPOS_DE_ENTIDADE` no painel escreve exatamente
+  ///    isso: *"`professional` primeiro porque e o padrao do contrato e o caso
+  ///    comum; `organization` e a excecao que o operador escolhe de proposito"*.
+  /// 3. **Padrao VISIVEL nao e gravacao silenciosa.** O contra-argumento legitimo
+  ///    e que padrao grava o que a pessoa nao escolheu. Ele vale para campo
+  ///    escondido; aqui o campo fecha com o texto `Profissional ou
+  ///    estabelecimento` escrito dentro dele, acima da atividade, na primeira
+  ///    dobra. **A gravacao silenciosa e o que acontece HOJE**, sem campo nenhum:
+  ///    o APK publicado manda a indicacao sem `entity_kind` e a linha nasce
+  ///    `professional` sem que a pergunta tenha sido feita. Trocar "escreve o
+  ///    padrao certo com a pergunta na tela" por "trava o botao" nao compra
+  ///    informacao -- compra um toque obrigatorio.
+  ///
+  /// **O que o padrao NAO faz:** ele nao decide nada sobre a fila. A indicacao
+  /// continua nascendo `pending` e passando por um revisor, que ve o tipo escrito
+  /// em `FilaDeIndicacoes` e o corrige se a pessoa errou. O campo existe para a
+  /// pessoa **poder dizer** que e uma ONG, e nao para ser portao de qualidade de
+  /// dado de terceiro.
+  TipoDeEntidade _tipoDeEntidade = TipoDeEntidade.profissional;
+
   TipoDeContatoPublico? _tipoDeContato;
 
   /// O que a ultima busca de CEP devolveu. **Nunca desabilita nada**: serve
@@ -448,6 +524,11 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     final corpo = DiretorioApi.corpoDaSugestao(
       nome: _nome.text.trim(),
       atividade: _atividade!,
+      // **Sem `!` e sem ramo de ausencia**: o campo nasce com `profissional` e
+      // o seletor nunca devolve nulo para ele (ver a prosa de
+      // `_tipoDeEntidade`). E a diferenca em relacao a `_atividade` acima, que
+      // e anulavel e por isso tem `_impedimento.semAtividade` guardando o `!`.
+      tipoDeEntidade: _tipoDeEntidade,
       cidade: _cidade.text.trim(),
       // Sem `trim` e sem `toUpperCase`: o valor vem de `estadosBrasileiros`,
       // que guarda a sigla ja em maiuscula e sem espaco. As duas chamadas
@@ -618,8 +699,43 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   acaoDeTeclado: TextInputAction.next,
                 ),
                 const SizedBox(height: BichuEspaco.e4),
+                // O TIPO DE ENTIDADE, **antes da atividade e de proposito**: "o
+                // que e?" vem antes de "o que faz?", que e a mesma ordem e o
+                // mesmo argumento escritos em `FormularioDaEntrada` no painel.
+                // Uma ONG responde as duas perguntas, e quem le a de cima
+                // primeiro entende por que a de baixo continua sendo pedida.
+                //
+                // **Nao ha `erro:` aqui**, e a ausencia e medida: o campo e
+                // opcional no contrato, nasce preenchido e so pode sair com um
+                // dos dois valores do `enum`, entao nao existe `400` com
+                // `field: entity_kind` para esta tela pintar. Pendurar
+                // `_errosDeCampo['entity_kind']` seria desenhar a moldura de um
+                // erro que nenhum caminho produz.
                 SeletorDeLista(
-                  rotulo: 'O que eles fazem',
+                  rotulo: TelaSugerirProfissional.rotuloDoTipoDeEntidade,
+                  ajuda: TelaSugerirProfissional.ajudaDoTipoDeEntidade,
+                  itens: TipoDeEntidade.values
+                      .map(
+                        (t) => ItemDeLista(codigo: t.codigo, rotulo: t.rotulo),
+                      )
+                      .toList(),
+                  selecionado: _tipoDeEntidade.codigo,
+                  habilitado: !enviando,
+                  aoSelecionar: (codigo) => setState(() {
+                    // **`??` e nao `!`**: `aoSelecionar` declara `String?`, e um
+                    // codigo que o `enum` nao conhece nao pode virar nulo num
+                    // campo que nunca e nulo. Cair no valor que ja estava e a
+                    // unica saida que nao inventa estado -- e, como a lista sai
+                    // de `TipoDeEntidade.values`, este ramo nao tem como
+                    // acontecer pela tela.
+                    _tipoDeEntidade =
+                        TipoDeEntidade.porCodigo(codigo) ?? _tipoDeEntidade;
+                    _erro = null;
+                  }),
+                ),
+                const SizedBox(height: BichuEspaco.e4),
+                SeletorDeLista(
+                  rotulo: TelaSugerirProfissional.rotuloDaAtividade,
                   itens: AtividadeDoDiretorio.values
                       .map(
                         (a) => ItemDeLista(codigo: a.codigo, rotulo: a.rotulo),
