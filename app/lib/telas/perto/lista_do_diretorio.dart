@@ -68,9 +68,14 @@ import 'pagina_do_local.dart';
 ///   pagina de listagem custariam **65,6 MiB** de imagem decodificada (20 x
 ///   3,28 MiB, a 412 dp e 3x) -- 70,4 MiB se alguem esquecer o `cacheWidth`.
 ///   A vitrine da `Loja` chegou a 9,8 MB de primeira pintura por menos que
-///   isso. **`avaliacao` tambem saiu desta lista**:
-///   `DirectoryEntrySummary.rating` entrou no contrato em 18/10 e o cartao
-///   mostra a media e a quantidade.
+///   isso. **`avaliacao` VOLTOU a esta lista em 28/10/2026**:
+///   `DirectoryEntrySummary.rating` entrou no contrato em 18/10, saiu do
+///   cartao em 22/10 com as outras informacoes adicionais, e o cliente a
+///   pediu de volta em 28/10 -- *"vamos incluir umas estrelinhas com a
+///   avaliacao de cada estabelecimento"*. O cartao desenha UMA estrela de
+///   16 dp em carmim, a media com virgula e a contagem, e **nao desenha
+///   estrela nenhuma** quando `count` e zero ou quando `rating` nem veio; a
+///   prosa do `build` de [CartaoDoDiretorio] tem os quatro estados.
 /// - **Nao ha mapa** (decisao de 17/09): o Maps cobra por carregamento e o
 ///   componente criaria precedente contra o ADR-0010.
 ///
@@ -1051,10 +1056,19 @@ class CartaoDoDiretorio extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    // CINCO COISAS, E SO ELAS (cliente, 22/10/2026): *"a listagem dos
-    // profissionais deve ser apenas o logo, nome, segmento, endereco e botao
-    // de ligar, remova as informacoes adicionais, deixe apenas na pagina
-    // interna"*.
+    // SEIS COISAS, E SO ELAS -- CINCO DE 22/10/2026 E A NOTA DE VOLTA EM
+    // 28/10/2026.
+    //
+    // **Duas decisoes do cliente, e a segunda reverte UM item da primeira.**
+    // As duas estao escritas aqui porque o cartao de hoje e o resultado das
+    // duas, e quem ler so a primeira vai achar que a nota voltou por
+    // descuido.
+    //
+    // ## 22/10/2026 -- CINCO COISAS
+    //
+    // *"a listagem dos profissionais deve ser apenas o logo, nome, segmento,
+    // endereco e botao de ligar, remova as informacoes adicionais, deixe
+    // apenas na pagina interna"*.
     //
     // **O que saiu, e onde cada um ja estava na pagina interna** -- conferido
     // ANTES de remover, porque *"deixe apenas na pagina interna"* pressupoe
@@ -1072,6 +1086,32 @@ class CartaoDoDiretorio extends StatelessWidget {
     // `EntradaDoDiretorio`: **o contrato nao mudou, a PINTURA mudou.** Pedir
     // ao servidor que pare de manda-los seria mudar o contrato por causa de um
     // desenho, e a pagina do local usa os mesmos campos.
+    //
+    // ## 28/10/2026 -- UMA DAS QUATRO VOLTA, E SO UMA
+    //
+    // *"a listagem da comunidade, vamos incluir umas estrelinhas com a
+    // avaliacao de cada estabelecimento"*. O cartao passou de cinco para
+    // **SEIS** coisas: logo, nome, segmento, bairro, **nota** e `Ligar`.
+    //
+    // | das quatro que sairam      | em 28/10        |
+    // |----------------------------|-----------------|
+    // | media e contagem           | **VOLTOU**      |
+    // | distancia (`a 1,2 km`)     | continua fora   |
+    // | `about` (a apresentacao)   | continua fora   |
+    // | selo do que foi verificado | continua fora   |
+    //
+    // **As outras tres continuam fora, e isso e decisao dele e nao
+    // descuido**: o pedido de 28/10 nao as menciona, e a decisao de 22/10
+    // continua valendo para elas. Quem quiser devolver qualquer uma precisa
+    // de um pedido do cliente com data, do mesmo jeito que a nota teve o
+    // dela. O caso `voltou UMA das quatro, e só uma` de
+    // `estrelas_na_listagem_test.dart` reprova quem tentar: ele ancora que a
+    // resposta TROUXE os quatro campos e mede que so a nota foi pintada.
+    //
+    // **Decisao do cliente revertendo decisao do cliente e dele.** O que nao
+    // pode e o codigo continuar dizendo uma coisa e desenhar outra -- e era
+    // exatamente nisso que esta prosa ia se transformar no commit que
+    // desenhou a linha, se tivesse sido deixada como estava.
     //
     // O `endereco` dos cinco e **SO O BAIRRO** (cliente, 22/10/2026, quando
     // perguntado o que ele queria por endereco na listagem): *"na listagem
@@ -1101,12 +1141,18 @@ class CartaoDoDiretorio extends StatelessWidget {
     // a listagem parecer ter a informacao que nao tem. **E e a regra desta
     // casa, aplicada sem excecao**: distancia nula nao escreve linha,
     // `rating` ausente nao desenha linha, local sem foto nao tem faixa vazia.
-    // O cartao de uma entrada sem bairro tem quatro itens em vez de cinco, e o
-    // caso `ISCA — o cartao minimo` mede que ele continua de pe.
+    // O cartao de uma entrada sem bairro tem cinco itens em vez de seis, e o
+    // caso `ISCA — o cartao minimo` mede que ele continua de pe. (Eram quatro
+    // em vez de cinco ate 28/10/2026, quando a nota voltou e o cartao passou
+    // a seis.)
     final atividade = entrada.atividade?.rotulo;
     final bairro = linhaDeLugarDe(bairro: entrada.bairro);
     final telefone = entrada.telefoneE164;
     final logo = entrada.logoUrl;
+    // **NULO AQUI E "A RESPOSTA NAO TROUXE A AGREGACAO", e nao "ninguem
+    // avaliou".** Os dois estados existem e sao diferentes; ver a prosa da
+    // linha da nota, mais abaixo.
+    final pontuacao = entrada.pontuacao;
 
     return Container(
       width: double.infinity,
@@ -1198,12 +1244,17 @@ class CartaoDoDiretorio extends StatelessWidget {
                   //            Clinica
                   //            (pin) Pinheiros
                   //
-                  // **Nada entrou e nada saiu**: sao os mesmos cinco itens de
-                  // 22/10 (logo, nome, segmento, bairro, `Ligar`). O que
-                  // mudou e o recuo -- e o recuo e o que transforma tres
-                  // linhas soltas num bloco. Trazer de volta qualquer um dos
-                  // quatro que sairam seria desfazer o pedido anterior dele
-                  // para consertar a aparencia, e o grupo `ITEM 1 — ISCA` de
+                  // **Nada entrou e nada saiu NAQUELE DIA**: o arranjo de
+                  // 26/10 mexeu no recuo e nos mesmos cinco itens de 22/10
+                  // (logo, nome, segmento, bairro, `Ligar`). O que mudou e o
+                  // recuo -- e o recuo e o que transforma tres linhas soltas
+                  // num bloco. **Em 28/10/2026 a nota ENTROU neste mesmo
+                  // bloco**, por pedido do cliente, e e a quarta linha do
+                  // `Expanded`; o recuo de 26/10 e o que a acomodou sem
+                  // redesenho. Trazer de volta qualquer uma das TRES que
+                  // continuam fora (distancia, apresentacao, selo) seria
+                  // desfazer o pedido de 22/10 sem pedido novo, e o grupo
+                  // `ITEM 1 — ISCA` de
                   // `listagem_e_pagina_do_profissional_test.dart` reprova se
                   // alguem tentar.
                   //
@@ -1401,11 +1452,15 @@ class CartaoDoDiretorio extends StatelessWidget {
                               ),
                             ],
                             // O ENDERECO que a listagem tem: **so o bairro**,
-                            // e desde 26/10 **com o pin do mapa**. **A ULTIMA
-                            // linha de texto do cartao** -- a media, a
-                            // distancia, a apresentacao e o selo sairam em
-                            // 22/10/2026, e a cidade e a UF sairam no mesmo
-                            // dia; a prosa de `build` diz onde cada um ficou.
+                            // e desde 26/10 **com o pin do mapa**. Era **a
+                            // ultima linha de texto do cartao** ate
+                            // 28/10/2026 -- hoje a ultima e a NOTA, logo
+                            // abaixo. A distancia, a apresentacao e o selo
+                            // sairam em 22/10/2026 e continuam fora; a media
+                            // saiu com eles e VOLTOU em 28/10; a cidade e a
+                            // UF sairam em 22/10 e continuam na pagina
+                            // interna. A prosa de `build` diz onde cada um
+                            // ficou e em que data.
                             //
                             // **`Icons.place_outlined`, por precedente e nao
                             // por gosto**: e o pin de lugar DESTE app, 6
@@ -1462,6 +1517,175 @@ class CartaoDoDiretorio extends StatelessWidget {
                                     ),
                                   ),
                                 ],
+                              ),
+                            ],
+                            // A NOTA, **A ULTIMA LINHA DE TEXTO DO CARTAO**
+                            // (BICHUS-313, 28/10/2026).
+                            //
+                            // Pedido do cliente: *"a listagem da comunidade,
+                            // vamos incluir umas estrelinhas com a avaliacao
+                            // de cada estabelecimento"*. A ordem do cartao
+                            // passou a ser logo + nome -> segmento -> bairro
+                            // -> **nota** -> `Ligar`.
+                            //
+                            // ## SAO QUATRO ESTADOS, E NAO DOIS
+                            //
+                            // `DirectoryEntrySummary.rating` produz quatro
+                            // desfechos de tela, e **colapsar dois deles faz
+                            // o cartao afirmar coisa falsa**:
+                            //
+                            // | estado                | o cartao escreve      | estrela |
+                            // |-----------------------|-----------------------|---------|
+                            // | `count` > 1           | `4,8 · 128 avaliações`| uma     |
+                            // | `count` == 1          | `5,0 · 1 avaliação`   | uma     |
+                            // | `count` == 0          | `Ainda sem avaliações`| NENHUMA |
+                            // | `rating` AUSENTE      | LINHA NENHUMA         | NENHUMA |
+                            //
+                            // **O `if (pontuacao != null)` separa os dois
+                            // ultimos, e e a linha mais facil de errar deste
+                            // bloco.** Um `entrada.pontuacao ?? zero` teria
+                            // funcionado, passado no `tsc` do Dart e
+                            // desenhado `Ainda sem avaliações` para toda
+                            // resposta que nao trouxe a agregacao -- o APK
+                            // publicado le esta listagem e NAO conhece o
+                            // campo. Ausente e *"esta resposta nao trouxe a
+                            // agregacao"*; zero e *"ninguem avaliou ainda"*.
+                            // Dizer do local que ele nao tem avaliacao por
+                            // causa de um APK velho e afirmar uma coisa que
+                            // nao se sabe. **Medido**: com o colapso
+                            // aplicado de proposito, o caso `ESTADO 4` reprova
+                            // em `not contains 'Ainda sem avaliações'`.
+                            //
+                            // E o estado zero **nunca escreve `0,0`**, pelo
+                            // motivo que o proprio contrato registra: *"zero
+                            // e uma nota possivel de se ler como 'pessimo', e
+                            // um local sem avaliacao nao e pessimo"*. Por
+                            // isso `average` chega NULO com `count` zero, e
+                            // nao ha `?? 0` em lugar nenhum deste caminho.
+                            //
+                            // ## A ESTRELA E CARMIM, E ISSO E MEDIDO
+                            //
+                            // `cores.primary` (`raspberry.700`), **nao** o
+                            // dourado do sistema. Dois motivos, e o primeiro
+                            // e o que manda:
+                            //
+                            // 1. **A pagina do local ja desenha estrela em
+                            //    `cores.primary`** (`_Estrelas` de
+                            //    `pagina_do_local.dart`), sobre a MESMA
+                            //    media. Duas tintas para o mesmo dado seriam
+                            //    duas informacoes.
+                            // 2. Estrela que carrega informacao e objeto
+                            //    grafico e precisa de 3:1 (WCAG 2.1
+                            //    SC 1.4.11). As medidas sobre `surface`:
+                            //    `butter.400` (o dourado, que e
+                            //    `actionFillRawDoNotUseAsText`) da **1,76:1**
+                            //    e `butter.500` da 2,25:1 -- nenhum dos dois
+                            //    chega. `primary` da **7,84:1**. E o proprio
+                            //    nome do token do dourado diz que ele nao
+                            //    pinta nada que precise ser lido.
+                            //
+                            // **UMA estrela, e nao cinco.** As duas variacoes
+                            // foram construidas e medidas no protótipo
+                            // (`design/prototipos/estrelas-na-listagem/`), e
+                            // o cliente escolheu a A em 28/10/2026. A
+                            // diferenca nao era de espaco: as 20 linhas dao
+                            // 5.604 px nas DUAS, e a linha nao quebra a 320,
+                            // 375 nem 412 dp em nenhuma das duas. A diferenca
+                            // e de TINTA -- cinco estrelas repetidas vinte
+                            // vezes viram a textura mais forte da tela e
+                            // competem com o nome do estabelecimento, que e o
+                            // que a pessoa esta procurando. E a estrela VAZIA
+                            // da variacao B e `surface-sunken` sobre
+                            // `surface`: **1,06:1**, praticamente invisivel,
+                            // entao B nao se lia como "4 de 5" e sim como
+                            // "quatro estrelas e um pedaco", sem
+                            // denominador.
+                            //
+                            // ## O RECUO E `Expanded`, PELO MOTIVO DO BAIRRO
+                            //
+                            // A fonte do sistema a 200% era o unico item que
+                            // o `DESENHO.md` deixou por medir -- o protótipo e
+                            // HTML e nao reproduz o `textScaler`. Com
+                            // `Expanded` a linha QUEBRA em vez de estourar, e
+                            // nenhum caractere se perde; sem ele o `Row`
+                            // transbordaria. **Medido** no caso `a fonte do
+                            // sistema a 200%`, que afirma as duas coisas: nao
+                            // ha excecao de estouro E os tres pedacos (a
+                            // estrela, a media e a contagem) continuam na
+                            // tela. Cortar a contagem para caber passaria na
+                            // primeira metade e perderia a informacao que diz
+                            // se `4,8` vale muito ou pouco.
+                            //
+                            // ## O ROTULO, E POR QUE ELE NAO E O TEXTO
+                            //
+                            // `Semantics` + `ExcludeSemantics`, o mesmo par
+                            // do `_Histograma` da pagina do local. A nota
+                            // entra DENTRO do `MergeSemantics` que o cartao
+                            // ja tem, entao quem usa leitor de tela ouve a
+                            // entrada inteira numa parada so -- nome,
+                            // segmento, bairro e nota -- em vez de ganhar uma
+                            // parada nova. O `Ligar` continua FORA, porque e
+                            // controle com destino proprio.
+                            //
+                            // O rotulo diz `Média 4,8 de 5 estrelas, 128
+                            // avaliações` e nao o texto visivel, porque
+                            // `4,8 · 128 avaliações` lido em voz alta nao tem
+                            // denominador em lugar nenhum: o olho ve a
+                            // estrela e sabe que a escala e de 5; quem ouve
+                            // recebe um `4,8` solto.
+                            //
+                            // ## O QUE **NAO** VOLTOU COM ELA
+                            //
+                            // O cliente removeu QUATRO coisas deste cartao em
+                            // 22/10/2026 e o pedido de 28/10 devolve UMA. A
+                            // distancia, a apresentacao (`about`) e o selo do
+                            // que foi verificado **continuam fora**, e o caso
+                            // `voltou UMA das quatro, e só uma` e o que
+                            // impede a nota de abrir a porta para as outras
+                            // tres. A FOTO do lugar tambem continua fora: ela
+                            // e faixa 16:9 e mora so na [PaginaDoLocal], e
+                            // vinte faixas nesta pagina custariam 65,6 MiB de
+                            // imagem decodificada.
+                            if (pontuacao != null) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Semantics(
+                                label: CartaoDoDiretorio.rotuloDaAvaliacao(
+                                  pontuacao,
+                                ),
+                                child: ExcludeSemantics(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      // A ESTRELA SO EXISTE COM NOTA. Ela
+                                      // esta dentro do `if` por obrigacao e
+                                      // nao por economia: uma estrela carmim
+                                      // ao lado de `Ainda sem avaliações`
+                                      // afirmaria uma nota que nao existe --
+                                      // e e a mesma regra do pin orfao do
+                                      // bairro, logo acima.
+                                      if (pontuacao.temAvaliacoes) ...<Widget>[
+                                        Icon(
+                                          Icons.star,
+                                          size: BichuEspaco.e4,
+                                          color: cores.primary,
+                                        ),
+                                        const SizedBox(width: BichuEspaco.e1),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          CartaoDoDiretorio.textoDaAvaliacao(
+                                            pontuacao,
+                                          ),
+                                          style:
+                                              textos.bodyMedium?.copyWith(
+                                            color: cores.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
                           ],

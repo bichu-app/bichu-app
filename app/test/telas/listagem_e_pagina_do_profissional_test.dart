@@ -31,6 +31,17 @@
 // E a presenca na pagina. **Medir so a ausencia aprovaria apagar o dado do
 // produto**, que e o oposto do pedido.
 //
+// **ATUALIZADO EM 28/10/2026 (BICHUS-313): a MEDIA e a CONTAGEM voltaram ao
+// cartao.** O cliente pediu *"a listagem da comunidade, vamos incluir umas
+// estrelinhas com a avaliacao de cada estabelecimento"*, revertendo UM item
+// da decisao de 22/10. A linha da media da tabela acima continua valendo para
+// a PAGINA (ela nunca saiu de la); o que mudou e que a listagem tambem a
+// mostra. **As outras tres continuam fora**, e e isso que este arquivo mede
+// hoje. Os quatro ESTADOS da nota (muitas, uma, zero, campo ausente), a tinta
+// carmim, a medida de 16 dp e a fonte do sistema a 200% moram em
+// `estrelas_na_listagem_test.dart` -- este arquivo so trava que ela esta la e
+// que as tres nao estao.
+//
 // E o CONTROLE POSITIVO mede os cinco que ficam -- logo, nome, segmento,
 // endereco e `Ligar`. Sem ele, um cartao que tivesse deixado de desenhar
 // qualquer coisa passaria em todos os `findsNothing` deste arquivo.
@@ -559,8 +570,8 @@ void main() {
 
   group('ITEM 1 — ISCA: as informações adicionais saíram do cartão', () {
     // DESLIGAR PARA VER REPROVAR: em `lib/telas/perto/lista_do_diretorio.dart`,
-    // devolva ao `build` de `CartaoDoDiretorio` qualquer um dos quatro blocos
-    // que sairam (pontuacao, distancia, `sobre`, selo).
+    // devolva ao `build` de `CartaoDoDiretorio` qualquer um dos TRES blocos
+    // que continuam fora (distancia, `sobre`, selo).
     //
     // **MEDIDO**: com os tres (selo, distancia e `sobre`) de volta, este caso
     // reprova em `not contains '1,2 km'` -- a primeira assercao de conteudo
@@ -572,13 +583,32 @@ void main() {
     // caso `logo, nome, segmento, endereço e `Ligar`` reprovar em
     // `contains 'Pinheiros · São Paulo · SP'`. Sem essa medicao, "a listagem
     // nao mostra X" seria uma afirmacao que um cartao VAZIO satisfaria.
-    testWidgets('nem média, nem distância, nem apresentação, nem selo', (
+    //
+    // =======================================================================
+    // ERAM QUATRO ATE 28/10/2026, E HOJE SAO TRES
+    // =======================================================================
+    // Este grupo media a ausencia dos QUATRO itens que o cliente removeu em
+    // 22/10/2026. Em 28/10/2026 ele pediu UM de volta -- *"a listagem da
+    // comunidade, vamos incluir umas estrelinhas com a avaliacao de cada
+    // estabelecimento"* -- e a media e a contagem voltaram ao cartao
+    // (BICHUS-313).
+    //
+    // **As assercoes da media sairam DESTE grupo e nao do produto**: elas
+    // viraram o seu contrario em `estrelas_na_listagem_test.dart`, que mede os
+    // QUATRO estados da nota e trava que ela e carmim, tem 16 dp e e UMA
+    // estrela. Apagar as duas linhas sem por nada no lugar teria deixado a
+    // nota sem medicao nenhuma no dia em que ela voltou.
+    //
+    // **As outras TRES continuam medidas aqui, e e esse o ponto deste
+    // grupo hoje**: a decisao de 22/10 continua valendo para a distancia, a
+    // apresentacao e o selo, e o pedido de 28/10 nao as menciona.
+    testWidgets('nem distância, nem apresentação, nem selo — e a média SIM', (
       tester,
     ) async {
       await abrirPerto(tester, rede: soAListagem());
 
       // ANCORA: a resposta TROUXE os quatro, e o cartao existe. Sem isto os
-      // quatro `isNot(contains(...))` abaixo passariam sobre o vazio.
+      // tres `isNot(contains(...))` abaixo passariam sobre o vazio.
       expect(find.byType(CartaoDoDiretorio), findsOneWidget);
       final entrada = tester
           .widget<CartaoDoDiretorio>(find.byType(CartaoDoDiretorio))
@@ -590,20 +620,26 @@ void main() {
 
       final texto = textoVisivel(tester);
 
+      // A QUE VOLTOU, medida aqui tambem: sem esta assercao, apagar a linha
+      // da nota por acidente deixaria este grupo verde -- e ele e o grupo que
+      // alguem le para saber o que o cartao mostra.
       expect(
         texto,
-        isNot(contains('4,3')),
-        reason: 'REPROVA: a média continua no cartão.',
+        contains('4,3'),
+        reason: 'REPROVA: a média NÃO está no cartão. Ela voltou em '
+            '28/10/2026 por pedido do cliente, e a medição dos quatro estados '
+            'dela está em `estrelas_na_listagem_test.dart`.',
       );
       expect(
         texto,
-        isNot(contains('128')),
-        reason: 'REPROVA: a contagem de avaliações continua no cartão.',
+        contains('128 avaliações'),
+        reason: 'REPROVA: a contagem de avaliações não está no cartão.',
       );
       expect(
         texto,
         isNot(contains('1,2 km')),
-        reason: 'REPROVA: a distância continua no cartão.',
+        reason: 'REPROVA: a distância continua no cartão. Ela saiu em '
+            '22/10/2026 e o pedido de 28/10 devolveu só a nota.',
       );
       expect(
         texto,
@@ -617,14 +653,17 @@ void main() {
         isNot(contains('Verificado')),
         reason: 'REPROVA: o selo do que foi verificado continua no cartão.',
       );
-      // E nenhuma estrela: a media saiu com o glifo dela.
+      // E UMA estrela, com a media: a variacao de cinco estrelas foi
+      // recusada pelo cliente em 28/10/2026.
       expect(
         find.descendant(
           of: find.byType(CartaoDoDiretorio),
           matching: find.byIcon(Icons.star),
         ),
-        findsNothing,
-        reason: 'REPROVA: a estrela da média ficou no cartão sem a média.',
+        findsOneWidget,
+        reason: 'REPROVA: o cartão não tem UMA estrela ao lado da média. '
+            'Zero estrelas é o cartão de antes de 28/10; cinco é a variação B, '
+            'que o cliente recusou.',
       );
     });
 

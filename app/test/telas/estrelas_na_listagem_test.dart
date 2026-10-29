@@ -68,6 +68,7 @@
 import 'package:bichu/api/modelos_diretorio.dart';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
+import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -149,6 +150,74 @@ String textoDoCartao(WidgetTester tester, {String? nome}) {
     partes.add((e.widget as RichText).text.toPlainText());
   }
   return partes.join('\n');
+}
+
+/// A entrada do MODELO, para os casos que montam o cartao sem rede.
+///
+/// Passa pelo `doJson` de verdade, e nao por um construtor: e o `doJson` que
+/// decide que `rating` ausente vira nulo e que `average` nulo atravessa nulo,
+/// e um construtor direto pularia justamente a regra que estes casos medem.
+EntradaDoDiretorio entradaDoModelo({required int quantidade, double? media}) {
+  return EntradaDoDiretorio.doJson(<String, dynamic>{
+    'slug': 'clinica-santa-barbara',
+    'kind': 'clinic',
+    'display_name': 'Clínica Santa Bárbara',
+    'neighborhood': 'Pinheiros',
+    'city': 'São Paulo',
+    'state': 'SP',
+    'verification': <String, dynamic>{
+      'level': 'document_verified',
+      'evidence_kinds': <String>['cnpj'],
+    },
+    'rating': <String, dynamic>{
+      'count': quantidade,
+      'average': media,
+      'histogram': <String, int>{'5': quantidade},
+    },
+  });
+}
+
+/// Monta **so o cartao**, na largura e na escala de fonte pedidas.
+///
+/// `tester.view.physicalSize` com `devicePixelRatio` 3, que e o precedente de
+/// `titulo_da_conversa_test.dart`: a viewport padrao do teste de widget tem
+/// 800 dp de largura, e um telefone tem 320 a 412. **Medir a quebra a 800 dp
+/// mediria uma largura que nenhum aparelho tem** -- e foi assim que a primeira
+/// versao deste grupo passou sem medir nada.
+///
+/// A escala entra por `builder`, sobre o `MediaQuery` do `MaterialApp`, e
+/// **nunca por um `MediaQueryData` cru**: aquele substitui os dados INTEIROS e
+/// `size` volta a `Size.zero`, defeito que `titulo_da_conversa_test.dart` ja
+/// pagou e documentou.
+Future<void> montarCartao(
+  WidgetTester tester, {
+  required double largura,
+  required double escala,
+  required EntradaDoDiretorio entrada,
+}) async {
+  tester.view.physicalSize = Size(largura * 3, 2400 * 3);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: BichuTheme.claro,
+      builder: (ctx, filho) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(
+          textScaler: TextScaler.linear(escala),
+        ),
+        child: filho!,
+      ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(BichuEspaco.e4),
+            child: CartaoDoDiretorio(entrada: entrada, aoTocar: () {}),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 /// As estrelas **dentro do cartao**.
@@ -551,48 +620,120 @@ void main() {
   // =========================================================================
   // A ESCALA DE FONTE DO SISTEMA A 200%
   // =========================================================================
-  group('a fonte do sistema a 200%', () {
-    // O RISCO CONHECIDO DA VARIACAO A, e o unico item do `DESENHO.md` que
-    // dizia *"mede-se no app, nao aqui"*: o protótipo e HTML e nao reproduz o
-    // `textScaler` do Flutter.
+  group('a fonte do sistema a 200%, nas TRES larguras de telefone', () {
+    // O RISCO CONHECIDO DA VARIACAO A, e o unico item que o `DESENHO.md`
+    // deixou por medir: *"a 200% a linha da avaliacao pode quebrar e empurrar
+    // o cartao; o protótipo e HTML e nao reproduz o `textScaler` do Flutter.
+    // Mede-se no app, nao aqui"*.
     //
-    // **O que este caso afirma**: o cartao nao ESTOURA e os tres pedacos
-    // continuam na tela. Ele NAO afirma que a quebra ficou bonita -- isso se
-    // ve em aparelho, e nao aqui.
-    testWidgets('a linha quebra sem estourar, e nada se perde', (tester) async {
-      await abrirPerto(
+    // ## POR QUE ESTE GRUPO MONTA O CARTAO DIRETO, E NAO PASSA POR `abrirPerto`
+    //
+    // **Medido, e nao preferencia**: a 320 dp -- e a 375 dp com escala 1,5 ou
+    // 2 -- a aba `Comunidade` da `TabBar` sai da largura da viewport, e o
+    // `tap` de `abrirPerto` erra o alvo (`Offset(532.0, 104.0) is outside the
+    // bounds of the root of the render tree, Size(375.0, 2400.0)`). O caso
+    // morreria em `Bad state: No element` na NAVEGACAO, antes de olhar o
+    // cartao, e a reprova nao falaria da nota. Isso e uma limitacao do helper
+    // de sete arquivos e da barra de abas, **nao e defeito desta entrega** e
+    // nao foi consertado aqui.
+    //
+    // Montar `CartaoDoDiretorio` direto mede exatamente o que esta entrega
+    // mudou, na largura que o aparelho tem.
+    //
+    // ## O QUE ESTE GRUPO AFIRMA, E O QUE ELE **NAO** AFIRMA
+    //
+    // **Afirma**: em 320, 375 e 412 dp, a 100%, 150% e 200%, o cartao NAO
+    // estoura, a estrela continua desenhada e nenhum dos dois pedacos de
+    // texto desaparece.
+    //
+    // **NAO afirma em QUANTAS linhas a nota cabe no aparelho.** A fonte do
+    // teste de widget tem metrica QUADRADA -- medido aqui: `i` e `W` dao os
+    // mesmos 14,0 dp em `bodyMedium`, e `4,8 · 128 avaliações` dá 280,0 dp,
+    // 14,0 por caractere. A Inter de verdade escreve essa linha em pouco mais
+    // da metade disso. Entao a quebra que este grupo ve e PESSIMISTA, e
+    // contar linhas aqui descreveria a fonte do teste e nao o produto. Quem
+    // mediu a quebra com largura de texto real foi o protótipo, no navegador:
+    // a linha nao quebra em 320, 375 nem 412 dp.
+    //
+    // O valor deste grupo e justamente ser pessimista: ele prova que **mesmo
+    // com o texto ocupando o dobro da largura real** o cartao cresce em vez
+    // de transbordar.
+    for (final largura in <double>[320, 375, 412]) {
+      for (final escala in <double>[1, 1.5, 2]) {
+        testWidgets(
+          'a ${largura.toInt()} dp e ${(escala * 100).toInt()}%: quebra, '
+          'não estoura',
+          (tester) async {
+            await montarCartao(
+              tester,
+              largura: largura,
+              escala: escala,
+              entrada: entradaDoModelo(quantidade: 128, media: 4.8),
+            );
+
+            // (1) NENHUM ESTOURO. `takeException` devolve o `FlutterError`
+            // que o `RenderFlex` publica ao transbordar, e e assim que "a
+            // linha estourou" se mede -- nao olhando a imagem.
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: 'REPROVA: o cartão estourou a ${largura.toInt()} dp com '
+                  'a fonte a ${(escala * 100).toInt()}%. A linha da avaliação '
+                  'tem de QUEBRAR, não transbordar: é para isso que o `Text` '
+                  'está dentro de um `Expanded`, como o do bairro.',
+            );
+
+            // (2) OS TRES PEDACOS CONTINUAM LA. Um cartao que resolvesse o
+            // estouro cortando a contagem passaria em (1) e estaria errado.
+            final texto = textoDoCartao(tester);
+            expect(
+              texto,
+              contains('4,8'),
+              reason: 'REPROVA: a média sumiu.',
+            );
+            expect(
+              texto,
+              contains('128 avaliações'),
+              reason: 'REPROVA: a contagem sumiu. Cortar a contagem para '
+                  'caber perde a informação que diz se `4,8` vale muito ou '
+                  'pouco.',
+            );
+            expect(
+              estrelasDoCartao(),
+              findsOneWidget,
+              reason: 'REPROVA: a estrela sumiu.',
+            );
+          },
+        );
+      }
+    }
+
+    testWidgets('e o estado ZERO também não estoura a 320 dp e 200%', (
+      tester,
+    ) async {
+      // A frase do estado zero e mais longa que a linha da nota, entao ela e
+      // o pior caso de largura -- e e o estado FREQUENTE.
+      await montarCartao(
         tester,
-        rede: listagemCom(<Map<String, dynamic>>[
-          entradaComNota(quantidade: 128, media: 4.8),
-        ]),
+        largura: 320,
         escala: 2,
+        entrada: entradaDoModelo(quantidade: 0),
       );
 
-      // (1) NENHUM ESTOURO. `takeException` devolve o `FlutterError` que o
-      // `RenderFlex` publica ao transbordar -- e e assim que "a linha
-      // estourou" se mede, e nao olhando a imagem.
       expect(
         tester.takeException(),
         isNull,
-        reason: 'REPROVA: o cartão estourou com a fonte do sistema a 200%. A '
-            'linha da avaliação é a última de texto do cartão e tem de '
-            'QUEBRAR, não transbordar.',
+        reason: 'REPROVA: o cartão do estado zero estourou a 320 dp e 200%.',
       );
-
-      // (2) OS TRES PEDACOS CONTINUAM LA. Um cartao que resolvesse o estouro
-      // cortando a contagem passaria em (1) e estaria errado.
-      final texto = textoDoCartao(tester);
-      expect(texto, contains('4,8'), reason: 'REPROVA: a média sumiu a 200%.');
       expect(
-        texto,
-        contains('128 avaliações'),
-        reason: 'REPROVA: a contagem sumiu a 200%. Cortar a contagem para '
-            'caber perde a informação que diz se `4,8` vale muito ou pouco.',
+        textoDoCartao(tester),
+        contains(PaginaDoLocal.tituloSemAvaliacoes),
       );
       expect(
         estrelasDoCartao(),
-        findsOneWidget,
-        reason: 'REPROVA: a estrela sumiu a 200%.',
+        findsNothing,
+        reason: 'REPROVA: apareceu estrela no estado zero a 200%. A escala de '
+            'fonte não muda QUAIS estados desenham estrela.',
       );
     });
   });
