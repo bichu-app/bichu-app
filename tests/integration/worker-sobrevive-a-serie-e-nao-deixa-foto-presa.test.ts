@@ -65,7 +65,7 @@ import {
   desistirDaFoto,
 } from '../../src/modules/media/application/desistir-da-foto.js';
 import type { JobQueue } from '../../src/shared/ports/job-queue.js';
-import type { PetId, UserId } from '../../src/shared/types/brands.js';
+import type { Instant, PetId, UserId } from '../../src/shared/types/brands.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
@@ -105,6 +105,77 @@ const ORCAMENTO_DE_RSS_EM_MIB = 384;
  * aqui. Ele existe só para que "pendurou" seja uma reprovação e não uma espera.
  */
 const PRAZO_DO_FILHO_EM_MS = 180_000;
+
+/**
+ * O HORIZONTE QUE TIRA O TRABALHO DA FILA ANTES DE ALGUEM O PEGAR.
+ *
+ * ====================================================================
+ * A CORRIDA QUE ISTO FECHA, E ELA REPROVOU A `development`
+ * ====================================================================
+ *
+ * Os casos 2 e 3 reservam o trabalho com um `UPDATE` POR ID -- o mesmo de
+ * `claim`, restrito a uma linha -- e logo depois LEEM a linha esperando
+ * `running`. Entre a reserva e a leitura cabe outro consumidor, e na esteira
+ * ele existe: o job `compose, migracao do zero e pilha de pe` roda a suite
+ * DENTRO da pilha inteira (`docker compose --profile dev up -d --wait`), e ali
+ * o conteiner `worker` esta de pe chamando `fila.claim(1)` a cada 2 s
+ * (`INTERVALO_DA_FILA_EM_MILISSEGUNDOS`).
+ *
+ * O trabalho que `enqueue` cria nasce `pending` com `run_after = now()`, ou
+ * seja, OFERECIDO. O worker o pega, vai buscar o original no armazenamento --
+ * que nunca foi enviado, porque a fixture monta o estado no banco e nada mais
+ * --, leva 404 e ESTOURA. Estourar e o desfecho certo: armazenamento fora do ar
+ * e culpa nossa, e `processar-foto.ts` manda a fila adiar e tentar de novo. So
+ * que `fail` com tentativa restando devolve a linha a **`pending`**, e se esse
+ * `fail` cair entre a nossa reserva e a nossa leitura, a leitura ve `pending`.
+ *
+ * Medido nesta pilha, com o `worker` de pe e 300 amostras do trecho de abertura
+ * do caso 2: 2 em 300 (0,67%) leram `pending`, com `attempts = 2` (uma do
+ * `claim` do worker, uma da nossa reserva) e
+ * `last_error = 'Error: GET 404 no armazenamento'`. Dois trabalhos por execucao
+ * do arquivo dao ~1,3% por execucao -- que e a taxa de uma reprovacao solitaria
+ * na `development` com o mesmo commit passando duas vezes no PR.
+ *
+ * ====================================================================
+ * POR QUE O CONSERTO NAO E ESPERAR, NEM ACEITAR OS DOIS ESTADOS
+ * ====================================================================
+ *
+ * Os dois estados sao LEGITIMOS enquanto o trabalho estiver oferecido: a
+ * assercao nao esta errada, a EXCLUSIVIDADE e que faltava. O sinal de SIGKILL
+ * conferido em `reservarEMorrer` nao alcanca isto -- o filho morreu por SIGKILL
+ * de verdade, e a linha foi sobrescrita DEPOIS.
+ *
+ * `claim` so pega `run_after <= now()`. Nascendo com `run_after` uma hora a
+ * frente, o trabalho e invisivel para qualquer worker de pe, e a UNICA escrita
+ * possivel na linha passa a ser a deste arquivo -- que e o ponto deterministico
+ * que a leitura precisava. `recuperarOrfaos` nao olha `run_after` (ela olha
+ * `status` e `locked_at`), entao as duas varreduras do caso 2 e a do caso 3
+ * continuam medindo exatamente o que mediam.
+ *
+ * E o horizonte NAO esconde a janela seguinte: a primeira varredura devolve a
+ * linha com `run_after = now() + 60 s` (a espera de `fail`, em
+ * `kysely-job-queue.ts`), entao do fim da primeira varredura ao fim do caso ela
+ * tambem fica fora do alcance do `claim`.
+ *
+ * Uma hora, e nao um minuto: o que precisa caber aqui e o caso inteiro numa
+ * maquina carregada, e nesta suite ja se mediu de 4 a 33 minutos sob carga.
+ */
+const HORIZONTE_FORA_DO_ALCANCE_DA_FILA_EM_MS = 60 * 60 * 1000;
+
+/**
+ * Enfileira o processamento da foto FORA do alcance de `claim`.
+ *
+ * O `kind` continua sendo `media.process_upload`, e isso nao e detalhe: e ele
+ * que faz `desistirDaFoto` ter sentido no fim do caso 2. O que muda e so
+ * `run_after`.
+ */
+async function enfileirarForaDoAlcanceDaFila(foto: string): Promise<string> {
+  return fila.enqueue(
+    'media.process_upload',
+    { photo_id: foto },
+    (systemClock.now() + HORIZONTE_FORA_DO_ALCANCE_DA_FILA_EM_MS) as Instant,
+  );
+}
 
 let banco: DbHandle;
 let db: Db;
@@ -480,7 +551,7 @@ void describe('o worker sobrevive à série, e não deixa foto presa', () => {
     '2 — processo MORTO no meio do trabalho, e a foto NÃO fica presa em processing',
     async () => {
       const { foto } = await criarFotoEmProcessamento();
-      const trabalho = await fila.enqueue('media.process_upload', { photo_id: foto });
+      const trabalho = await enfileirarForaDoAlcanceDaFila(foto);
 
       // A reserva acontece e o processo MORRE com ela na mão.
       await reservarEMorrer(trabalho);
@@ -560,7 +631,7 @@ void describe('o worker sobrevive à série, e não deixa foto presa', () => {
     '3 — trabalho reservado AGORA não é roubado de quem o está fazendo',
     async () => {
       const { foto } = await criarFotoEmProcessamento();
-      const trabalho = await fila.enqueue('media.process_upload', { photo_id: foto });
+      const trabalho = await enfileirarForaDoAlcanceDaFila(foto);
       await reservarEMorrer(trabalho);
       assert.equal((await estadoDoTrabalho(trabalho)).status, 'running');
 

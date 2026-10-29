@@ -133,14 +133,23 @@ async function desabilitar(userId: UserId): Promise<void> {
  * um segundo caminho de escrita, e o caso passaria a medir o caminho do teste
  * em vez do caminho do produto.
  *
- * **TREZE argumentos desde a `20261029000003`**, que acrescentou
- * `p_entity_kind` DEPOIS de `p_kind` (cliente, 29/10/2026: *"está faltando o
- * campo se é um profissional, ong ou estabelecimento"*). Aquela migração
- * DERRUBOU a de doze e criou a de treze, pelo mesmo motivo escrito abaixo: no
- * Postgres assinatura diferente é outra função, e as duas de pé deixariam a de
- * doze gravando indicação sem tipo de entidade para sempre. `ajuste.tipo`
- * permite exercitá-lo; o padrão é `professional`, que é o `DEFAULT` da coluna e
- * o caso comum.
+ * **QUATORZE argumentos desde a `20261029000004`**, que acrescentou
+ * `p_logo_image_id` NO FIM (cliente, 29/10/2026: *"não tem o campo do logotipo
+ * para o usuário subir e indicar o estabelecimento"*). Este ajudante passa
+ * `null` nele **sempre**, e isso é desenho: indicação sem logotipo é o estado
+ * comum, e os casos deste arquivo medem a FILA, não a imagem. Quem exercita o
+ * logotipo -- e a recusa de envio de outro propósito, que é a fronteira da fila
+ * -- é `tests/integration/logotipo-da-indicacao.test.ts`, com o caminho do
+ * produto (`criarDirectorySuggestionRepository`) em vez desta função crua.
+ *
+ * **Eram TREZE desde a `20261029000003`**, que acrescentou `p_entity_kind`
+ * DEPOIS de `p_kind` (cliente, 29/10/2026: *"está faltando o campo se é um
+ * profissional, ong ou estabelecimento"*). Aquela migração DERRUBOU a de doze e
+ * criou a de treze, pelo mesmo motivo escrito abaixo: no Postgres assinatura
+ * diferente é outra função, e as duas de pé deixariam a de doze gravando
+ * indicação sem tipo de entidade para sempre. `ajuste.tipo` permite
+ * exercitá-lo; o padrão é `professional`, que é o `DEFAULT` da coluna e o caso
+ * comum.
  *
  * **Eram DOZE argumentos, e não onze.** Este arquivo nasceu em 18/10 chamando a
  * função de ONZE da migração `20261017000004`, e os seis casos daqui morriam
@@ -174,7 +183,8 @@ async function indicar(
       ${ajuste.tipo ?? 'professional'},
       'Sao Paulo', 'SP', 'Bela Vista',
       ${ajuste.cep ?? null}::text,
-      ${kind}, ${valor}, ${ajuste.recado ?? null})
+      ${kind}, ${valor}, ${ajuste.recado ?? null},
+      ${null}::uuid)
   `.execute(banco.db);
   refs.push(ref);
   return ref;

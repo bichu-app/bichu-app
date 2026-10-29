@@ -77,6 +77,22 @@ export interface SugestaoAGravar {
   readonly contatoKind: TipoDeContatoPublico;
   readonly contatoValue: string;
   readonly note: string | null;
+  /**
+   * O `upload_id` do LOGOTIPO que quem indicou enviou, ou nulo (cliente,
+   * 29/10/2026: *"nao tem o campo do logotipo para o usuario subir e indicar o
+   * estabelecimento"*).
+   *
+   * **E `upload_id` e nao `image_id`, e a diferenca e de responsabilidade.** A
+   * imagem de catalogo ainda NAO EXISTE neste momento: quem a cria e a
+   * confirmacao do envio, e ela tem de acontecer na MESMA transacao do
+   * `INSERT` da indicacao (ADR-0027 item 10) -- uma imagem confirmada para uma
+   * indicacao que depois nao foi gravada ficaria `processing` para sempre.
+   * Entao o `id` da imagem nasce dentro do adaptador, e nao chega por aqui.
+   *
+   * **Nunca `undefined`**: quem resolve a ausencia e o caso de uso, como em
+   * `entityKind`. Nulo quer dizer "sem logotipo", que e o estado normal.
+   */
+  readonly logoUploadId: string | null;
 }
 
 /** O que a gravacao devolve, e e tudo que o recibo precisa. */
@@ -85,6 +101,30 @@ export interface SugestaoGravada {
   /** O carimbo que o BANCO pos na linha, e nao o do relogio da aplicacao. */
   readonly createdAt: Date;
 }
+
+/**
+ * O desfecho de `registrar`, e **por que ele deixou de ser so `SugestaoGravada`
+ * em 29/10/2026**.
+ *
+ * Com o logotipo, a gravacao passou a poder RECUSAR: o `upload_id` pode ser de
+ * outra conta, de outro proposito, vencido ou ja usado em outra indicacao. Essa
+ * conferencia mora no adaptador porque ela E a clausula `WHERE` da consulta --
+ * um `if` depois de um `SELECT` sem filtro teria lido o envio de outra pessoa
+ * para a memoria deste processo.
+ *
+ * **Mas a RESPOSTA nao e do adaptador**, e e por isso que o tipo e este e nao um
+ * `throw` lá dentro: o `400`, o `code: upload_not_usable`, a frase que a pessoa
+ * le e o silencio sobre QUAL dos casos ocorreu sao decisao da camada de
+ * aplicacao, onde as outras recusas desta operacao ja moram. Um `problemas.*`
+ * dentro do Kysely poria redacao de erro no adaptador de banco.
+ *
+ * **Um valor so para os quatro casos, e o silencio e deliberado:** dizer "esse
+ * envio e de outra pessoa" confirmaria a existencia de um `upload_id` alheio a
+ * quem o adivinhou.
+ */
+export type RegistroDaSugestao =
+  | { readonly tipo: 'gravada'; readonly sugestao: SugestaoGravada }
+  | { readonly tipo: 'envio_nao_serve' };
 
 /**
  * O recorte da lista de quem indicou: paginacao e o estado da revisao.
@@ -156,7 +196,11 @@ export interface PaginaDasMinhasIndicacoes {
 }
 
 export interface DirectorySuggestionRepository {
-  registrar(sugestao: SugestaoAGravar): Promise<SugestaoGravada>;
+  /**
+   * Grava a indicacao -- e, quando ha logotipo, confirma o envio dele na MESMA
+   * transacao. Ver `RegistroDaSugestao` para por que ela pode recusar.
+   */
+  registrar(sugestao: SugestaoAGravar): Promise<RegistroDaSugestao>;
   /**
    * As indicacoes DA CONTA, da mais recente para a mais antiga.
    *

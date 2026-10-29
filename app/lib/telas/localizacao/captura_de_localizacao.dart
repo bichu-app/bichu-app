@@ -147,7 +147,50 @@ class CapturaDeLocalizacao extends StatefulWidget {
 enum _Fase { escolhendo, capturando, comPonto, digitando }
 
 class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
-  _Fase _fase = _Fase.escolhendo;
+  /// **O achado NAO oferece a captura** (cliente, 29/10/2026: *"remove os
+  /// botoes e deixa os campos de cep, endereco para o usuario preencher, no
+  /// mesmo padrao das outras paginas"*).
+  ///
+  /// A decisao foi tomada com o custo na mesa, medido e relatado: a coordenada
+  /// ia ao servidor (`location` do `StrayFoundReportInput`) e o cruzamento a
+  /// usa em quatro lugares -- o filtro de 20 km, a queda para igualdade de
+  /// cidade, a pontuacao de proximidade (peso 0,15, redistribuido quando falta)
+  /// e o desempate da ordenacao, que poe quem tem coordenada na frente. Ver
+  /// `src/modules/found/domain/cruzamento.ts`. **O achado desta tela passa a
+  /// casar por cidade, nao por quarteirao**, e isso e escolha de produto.
+  ///
+  /// ## O caminho do GPS fica, e o que isso significa HOJE, medido
+  ///
+  /// `marcarPerdido` seleciona o caminho da captura, e **nenhuma tela de
+  /// producao passa esse valor**. Medido em 29/10/2026: os UNICOS arquivos que
+  /// constroem esta peca sao as duas telas de ACHADO, e
+  /// `telas/perdido/tela_onde_e_quando.dart` -- o F3.1 que o criterio 1 da
+  /// BICHUS-23 nomeia como segundo ponto de uso -- **nunca a adotou**: ele nao
+  /// cita `CapturaDeLocalizacao` nem a porta `Localizacao`.
+  ///
+  /// Entao, depois desta decisao, **o caminho do GPS e alcancavel apenas por
+  /// teste**. Isso esta escrito aqui para ninguem concluir que ha um fluxo de
+  /// produto capturando coordenada quando nao ha.
+  ///
+  /// Ele fica, em vez de ser apagado, por uma razao de escopo e nao de gosto:
+  /// apagar levaria com ele a antessala, o enum de ponto de uso e as iscas do
+  /// ADR-0006 (emenda 1, `coordenada -> nome de cidade`) -- decisoes que o
+  /// cliente nao tomou em 29/10 e que F3.1 precisa quando for construido. E
+  /// um lado so da revisao: se o produto confirmar que o achado nunca mais
+  /// captura E que F3.1 nao vai usar esta peca, apagar o caminho e a limpeza
+  /// certa, e e trabalho proprio.
+  bool get _ofereceCaptura =>
+      widget.pontoDeUso != PontoDeUsoDaLocalizacao.registrarAchado;
+
+  late _Fase _fase;
+
+  /// A regiao de referencia ja foi aplicada na montagem.
+  ///
+  /// So para quem abre direto nos campos: `didChangeDependencies` roda de novo
+  /// a cada mudanca de dependencia herdada, e preencher duas vezes passaria por
+  /// cima do que a pessoa corrigiu no meio.
+  bool _regiaoAplicada = false;
+
   PontoCapturado? _ponto;
   MotivoDeNaoTerPonto? _motivo;
 
@@ -218,9 +261,43 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   @override
   void initState() {
     super.initState();
+    // Quem nao oferece a captura abre JA nos campos: sem a fase de escolher,
+    // os dois botoes nao existem em tela nenhuma.
+    _fase = _ofereceCaptura ? _Fase.escolhendo : _Fase.digitando;
     for (final c in <TextEditingController>[_bairro, _cidade]) {
       c.addListener(_publicar);
     }
+  }
+
+  /// A regiao de referencia do tutor, para quem abre direto nos campos.
+  ///
+  /// **Aqui e nao em [initState]**, porque [_preencherDaRegiaoDeReferencia] le
+  /// `Escopo.of(context)` -- busca de `InheritedWidget`, que `initState` nao
+  /// pode fazer. E uma vez so, pelo [_regiaoAplicada].
+  ///
+  /// Quem oferece a captura continua preenchendo ao ENTRAR na fase de digitar,
+  /// dentro de [_irParaODigitado], e por isso este ramo o exclui: aplicar nos
+  /// dois faria o preenchimento acontecer duas vezes naquele fluxo.
+  ///
+  /// **DEPOIS DO QUADRO, e nao dentro dele.** Preencher aqui mesmo reprova com
+  /// `setState() or markNeedsBuild() called during build`, e por dois caminhos
+  /// que levam ao mesmo lugar: [_publicar] chama `widget.aoMudar`, que e um
+  /// `setState` da TELA, e escrever nos controladores dispara o escutador que
+  /// e o proprio [_publicar]. Os dois acontecem enquanto a arvore do passo 2
+  /// ainda esta sendo construida. Medido reprovando em 29/10/2026.
+  ///
+  /// O custo e um quadro: os campos nascem vazios e aparecem preenchidos no
+  /// seguinte. E o mesmo adiamento que [_irParaODigitado] ja faz para o foco.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_ofereceCaptura || _regiaoAplicada) return;
+    _regiaoAplicada = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(_preencherDaRegiaoDeReferencia);
+      _publicar();
+    });
   }
 
   @override
@@ -328,8 +405,8 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// acha um animal acha, na maior parte das vezes, perto de casa, e o campo
   /// abria vazio para quem o app ja sabe onde mora.
   ///
-  /// **Ela roda ao ENTRAR NA FASE DE DIGITAR, e nao na montagem**, e a
-  /// diferenca e de dado e nao de estilo:
+  /// **Para quem OFERECE a captura ela roda ao ENTRAR NA FASE DE DIGITAR, e
+  /// nao na montagem**, e a diferenca e de dado e nao de estilo:
   ///
   /// - na fase `escolhendo` os campos nao estao na tela. Preencher ali faria
   ///   `Onde` passar a existir -- e `Registrar` a destravar -- com uma area
@@ -342,6 +419,13 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// Na fase `digitando` a pergunta e exatamente "onde foi", a resposta esta
   /// na tela, editavel, antes de qualquer envio -- que e a mesma forma das
   /// outras tres telas.
+  ///
+  /// **Quem NAO oferece a captura preenche na montagem** (`didChangeDependencies`),
+  /// e a objecao de cima nao se aplica: sem fase de escolher, os campos estao
+  /// na tela desde o primeiro quadro. O `Onde` que passa a existir leva uma
+  /// area que a pessoa **esta vendo e pode editar** -- que e a condicao que a
+  /// objecao cobrava --, e e assim que as outras tres telas de endereco se
+  /// comportam.
   void _preencherDaRegiaoDeReferencia() {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return;
@@ -648,7 +732,14 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
             ),
             const SizedBox(height: BichuEspaco.e4),
           ],
-          ..._camposDeArea(comFoco: true),
+          // **`comFoco` segue quem OFERECE a captura, e nao a fase.** O
+          // criterio 5 pede o teclado aberto para quem CAI nos campos sem ter
+          // pedido -- depois de uma recusa ou de uma medicao que falhou --, e
+          // esse e o fluxo que oferece. Quem abre direto nos campos nao caiu
+          // em lugar nenhum: no achado esta peca vive na pagina 2 de um
+          // `IndexedStack` com as DUAS paginas montadas, entao um foco pedido
+          // na montagem levantaria o teclado com a pessoa ainda na pagina 1.
+          ..._camposDeArea(comFoco: _ofereceCaptura),
         ];
     }
   }

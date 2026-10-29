@@ -250,8 +250,7 @@ Future<void> _abrirOPasso2Digitado(
   await rolarAte(tester, find.text('Médio'));
   await tocar(tester, find.text('Médio'));
   await avancarParaOPasso2(tester);
-  await rolarAte(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
-  await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
+  // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
 }
 
 void main() {
@@ -569,17 +568,25 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // ISCA 2b -- O CEP NAO ATROPELA O DIGITADO, NEM A COORDENADA
+    // ISCA 2b -- O CEP NAO ATROPELA O QUE A PESSOA DIGITOU
     //
-    // DESLIGAR PARA VER REPROVAR (duas formas):
-    //   - apague `|| campo.text.trim().isNotEmpty` de `_preencherSeVazio`: o
-    //     bairro digitado e atropelado;
-    //   - acrescente `_ponto = null;` dentro do `setState` de `_buscarOCep`:
-    //     a coordenada que a pessoa concedeu desaparece, e a ultima asserção
-    //     reprova.
+    // **A METADE DA COORDENADA SAIU EM 29/10/2026.** Este caso media duas
+    // coisas no achado: que o CEP nao atropela o bairro digitado, e que ele
+    // nao apaga a coordenada do aparelho. A segunda **nao pode mais
+    // acontecer** -- por decisao do cliente o achado nao captura coordenada,
+    // entao nao ha ponto nesta tela para o CEP apagar.
+    //
+    // A regra "o CEP escreve TEXTO e nunca ponto, e os dois nao disputam o
+    // mesmo campo" continua medida onde ela continua podendo falhar: em
+    // `captura_de_localizacao_test.dart`, no fluxo que oferece a captura
+    // (`o CEP nao sobrescreve o que a PESSOA corrigiu num campo
+    // pre-preenchido` e `o bairro digitado JUNTO com o GPS vai nos dois
+    // campos`).
+    //
+    // DESLIGAR PARA VER REPROVAR: apague `|| campo.text.trim().isNotEmpty` de
+    // `_preencherSeVazio` -- o bairro digitado passa a ser atropelado.
     // -----------------------------------------------------------------------
-    testWidgets('2b. nem o digitado nem a localizacao do aparelho sao trocados',
-        (tester) async {
+    testWidgets('2b. o CEP nao troca o que a pessoa digitou', (tester) async {
       final registro = _Registro();
       await abrirOApp(
         tester,
@@ -594,20 +601,17 @@ void main() {
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);
 
-      // A pessoa USOU a localizacao do aparelho: ha coordenada, e nenhum
-      // campo de texto foi preenchido por ela (ADR-0006 proibe derivar
-      // bairro de coordenada, e e por isso que os campos continuam na tela).
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.usarMinhaLocalizacao),
-      );
-      await tocar(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
+      // O formulario abre nos campos, e eles abrem VAZIOS: este tutor nao tem
+      // regiao de referencia cadastrada neste caso, e coordenada nao existe
+      // mais nesta tela para derivar nada. O ADR-0006 continua valendo por
+      // construcao -- nao ha ponto de onde derivar.
+      await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloBairro));
       expect(
         _textoDoCampo(tester, TextosDaLocalizacao.rotuloBairro),
         isEmpty,
-        reason: 'REPROVA: a coordenada virou bairro. Esse e o sentido que o '
-            'ADR-0006 proibe, e nao ha pacote no binario que o faca -- se este '
-            'caso reprovar, alguem o trouxe.',
+        reason: 'REPROVA: o bairro nasceu escrito sem a pessoa ter digitado e '
+            'sem regiao de referencia. Nada nesta tela pode preencher bairro '
+            'sozinho.',
       );
 
       // Ela digitou o bairro que sabe, e so depois o CEP.
@@ -630,27 +634,15 @@ void main() {
         reason: 'REPROVA: o campo vazio deixou de receber porque um vizinho '
             'estava escrito. A regra e por campo.',
       );
-      // A coordenada continua de pe: `Registrar` segue habilitado e o aviso
-      // de precisao do ponto continua na tela.
-      // O pedaco COMUM das duas redacoes do aviso do ponto, e nao
-      // `pontoSemPrecisao`: `localizacaoConcedida()` devolve um ponto COM
-      // margem, e a tela usa `pontoComPrecisao(metros)`
-      // (`textos_da_localizacao.dart`, linhas 65-71). A constante sem margem
-      // so aparece quando a margem e desconhecida -- a isca pedia a redacao
-      // que este duble nunca produz. `Ninguém vê esse ponto` esta nas duas e
-      // **so** e escrito quando existe ponto, que e o que o caso afirma.
-      await rolarAte(
-        tester,
-        find.textContaining('Ninguém vê esse ponto'),
-        passo: -120,
-      );
+      // **E NENHUM AVISO DE PONTO**, que e o outro lado da decisao: a frase
+      // `Ninguém vê esse ponto` so e escrita quando existe coordenada, e nesta
+      // tela nao existe mais nenhuma.
       expect(
         find.textContaining('Ninguém vê esse ponto'),
-        findsWidgets,
-        reason: 'REPROVA: a busca de CEP apagou ou substituiu a coordenada que '
-            'o aparelho mediu. O CEP escreve TEXTO e nunca ponto; os dois nao '
-            'disputam o mesmo campo, e esta asserção e o que garante que '
-            'continuam sem disputar.',
+        findsNothing,
+        reason: 'REPROVA: a tela do achado falou de um ponto. Ela nao captura '
+            'coordenada desde 29/10/2026, entao a unica forma de esta frase '
+            'aparecer e alguem ter devolvido a captura sem a decisao.',
       );
     });
 
