@@ -9,6 +9,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'rascunho_de_pet.dart';
@@ -109,16 +110,34 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
 
     final foto = await camera.tirarFoto();
     if (!mounted || foto == null) return;
-    widget.rascunho.atualizar(() => widget.rascunho.foto = foto);
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    widget.rascunho.atualizar(() => widget.rascunho.foto = ajustada);
     setState(() {});
   }
 
   Future<void> _escolherDaGaleria() async {
     final foto = await Escopo.of(context).camera.escolherDaGaleria();
     if (!mounted || foto == null) return;
-    widget.rascunho.atualizar(() => widget.rascunho.foto = foto);
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    widget.rascunho.atualizar(() => widget.rascunho.foto = ajustada);
     setState(() {});
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e "a tela usa".
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
+        context,
+        camera: Escopo.of(context).camera,
+        foto: foto,
+        formato: FormatoDoRecorte.molduraDoPet,
+        titulo: 'Ajuste a foto do pet',
+      );
 
   void _trocar() {
     widget.rascunho.atualizar(() => widget.rascunho.foto = null);

@@ -14,6 +14,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 
 /// PUBLICAR NO MURAL — **a caixa de texto que o cliente pediu.**
 ///
@@ -258,15 +259,37 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await widget.camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
 
   Future<void> _escolherDaGaleria() async {
     final foto = await widget.camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// `quadrado` porque a publicacao e quadrada, e medido:
+  /// `PublicarNoMural.proporcaoDaPublicacao` vale 1, e e ela que da a altura
+  /// da previa desta tela.
+  Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
+        context,
+        camera: widget.camera,
+        foto: foto,
+        formato: FormatoDoRecorte.quadrado,
+        titulo: 'Ajuste a foto da publicação',
+      );
 
   /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
   /// qualquer coisa. Ver o cabecalho da classe.

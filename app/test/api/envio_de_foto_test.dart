@@ -82,6 +82,15 @@ class _CameraComFoto implements CameraEGaleria {
     }
     return Uint8List.fromList(_bytesDaFoto);
   }
+
+  /// **Estoura de proposito.** Este arquivo mede o ENVIO, e o envio nunca
+  /// recorta: quem recorta e a folha de ajuste, antes de a foto chegar aqui.
+  /// Devolver a foto intacta deixaria passar verde um envio que tivesse
+  /// comecado a recortar por conta propria.
+  @override
+  Future<FotoLocal?> recortarFoto(FotoLocal foto, RecorteDaFoto recorte) async {
+    throw StateError('o envio nao recorta foto; quem recorta e a folha');
+  }
 }
 
 /// O que o caso montou: as pecas de verdade, mais a lista do que saiu na rede.

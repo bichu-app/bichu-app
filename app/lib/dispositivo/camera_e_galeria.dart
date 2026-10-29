@@ -22,7 +22,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+// Recorte e recodificacao em JPEG, em Dart PURO. Ver [CameraDoAparelho.recortarFoto]
+// para o motivo de nao ser um plugin de recorte.
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// Os tres estados de permissao, mais o quarto que nao e permissao.
@@ -63,6 +67,99 @@ class FotoLocal {
   final int tamanhoEmBytes;
 }
 
+/// O retangulo que a pessoa escolheu, **em pixels do arquivo**.
+///
+/// ## Por que a fronteira e um RETANGULO, e nao bytes
+///
+/// A tela nao recorta. Ela desenha a foto, deixa a pessoa arrastar e dar zoom,
+/// e entrega **quatro inteiros**. Quem decodifica, corta e recodifica e a
+/// camada de aparelho, por tres razoes que nao sao de estilo:
+///
+///  - cortar pixels pede `dart:io` (ler o arquivo) e um codificador, e
+///    `porta_nao_contornada_test.dart` proibe as duas coisas em `lib/telas`;
+///  - quatro inteiros tem isca sem aparelho. Uma imagem recortada nao: o
+///    teste de widget nao tem disco de aparelho, e e exatamente a razao pela
+///    qual [CameraEGaleria.bytesDaFoto] mora nesta porta e nao no envio;
+///  - o retangulo e o que se AFIRMA num caso de teste. "A posicao escolhida e
+///    a que sai no envio" e uma frase sobre estes quatro numeros, e sobre
+///    nada mais.
+///
+/// Origem no canto SUPERIOR ESQUERDO do arquivo, como em toda biblioteca de
+/// imagem. Nao ha rotacao: o seletor ja aplica a orientacao do EXIF quando
+/// recodifica (os `maxWidth`/`maxHeight`/`imageQuality` de
+/// [CameraDoAparelho._escolher] forcam isso nas duas plataformas), entao o que
+/// chega aqui ja esta em pe.
+@immutable
+class RecorteDaFoto {
+  const RecorteDaFoto({
+    required this.x,
+    required this.y,
+    required this.largura,
+    required this.altura,
+  });
+
+  /// O recorte que **nao recorta**: o arquivo inteiro, de um lado ao outro.
+  ///
+  /// Existe para quem precisa dizer "nao mexi" com o mesmo tipo de quem
+  /// mexeu, em vez de um nulo que o outro lado tem de interpretar.
+  const RecorteDaFoto.oArquivoInteiro({
+    required int largura,
+    required int altura,
+  }) : this(x: 0, y: 0, largura: largura, altura: altura);
+
+  final int x;
+  final int y;
+  final int largura;
+  final int altura;
+
+  /// Este recorte **grudado** dentro de um arquivo de [larguraDoArquivo] por
+  /// [alturaDoArquivo].
+  ///
+  /// **Grudar aqui, e nao so no arraste, e proposital.** Quem arrasta ja e
+  /// impedido de descolar a imagem da moldura; mas o retangulo tambem nasce de
+  /// arredondamento, de uma troca de orientacao da tela e de um estado
+  /// restaurado -- e nesses caminhos a borda de baixo pode cair um pixel FORA
+  /// do arquivo. Um recorte fora do arquivo nao estoura: ele produz uma faixa
+  /// vazia na foto enviada, que e o tipo de defeito que ninguem liga a causa.
+  RecorteDaFoto grudadoEm(int larguraDoArquivo, int alturaDoArquivo) {
+    final l = largura.clamp(1, larguraDoArquivo);
+    final a = altura.clamp(1, alturaDoArquivo);
+    return RecorteDaFoto(
+      x: x.clamp(0, larguraDoArquivo - l),
+      y: y.clamp(0, alturaDoArquivo - a),
+      largura: l,
+      altura: a,
+    );
+  }
+
+  /// Verdadeiro quando este recorte cobre o arquivo todo -- ou seja, quando
+  /// recortar nao mudaria nada.
+  ///
+  /// E o que permite a [CameraEGaleria.recortarFoto] devolver o MESMO arquivo
+  /// em vez de recodificar a foto para chegar ao mesmo lugar. Recodificar de
+  /// graca custa tempo da pessoa e uma geracao de qualidade de JPEG.
+  bool cobreTudo(int larguraDoArquivo, int alturaDoArquivo) =>
+      x == 0 &&
+      y == 0 &&
+      largura >= larguraDoArquivo &&
+      altura >= alturaDoArquivo;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RecorteDaFoto &&
+      other.x == x &&
+      other.y == y &&
+      other.largura == largura &&
+      other.altura == altura;
+
+  @override
+  int get hashCode => Object.hash(x, y, largura, altura);
+
+  @override
+  String toString() =>
+      'RecorteDaFoto(x: $x, y: $y, largura: $largura, altura: $altura)';
+}
+
 /// O acesso a camera e a galeria do aparelho.
 abstract class CameraEGaleria {
   /// O estado atual, **sem** abrir dialogo.
@@ -93,6 +190,35 @@ abstract class CameraEGaleria {
   /// "arquivo sumiu" de "arquivo de zero byte", e nulo ou vazio juntaria os
   /// dois num silencio so.
   Future<Uint8List> bytesDaFoto(FotoLocal foto);
+
+  /// A foto recortada em [recorte], como um arquivo NOVO no aparelho.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. A origem e de 28/10: *"voce esta cropando no lugar
+  /// errado"* -- e estava. O recorte era automatico e no CENTRO (ou no terco
+  /// superior, pelo `pontoFocal` de `PreviaDaFoto`), decidido por quem
+  /// escreveu a tela e nao por quem tirou a foto.
+  ///
+  /// **O ORIGINAL NAO E PRESERVADO, e nao ha original a preservar.** O que
+  /// chega a este app ja e uma derivada: [CameraDoAparelho._escolher] passa
+  /// `maxWidth`, `maxHeight` e `imageQuality` ao seletor, entao o arquivo que
+  /// [tirarFoto] e [escolherDaGaleria] devolvem ja foi recodificado pelo
+  /// sistema. Guardar a POSICAO no servidor para recortar na leitura (o outro
+  /// desenho possivel) custaria campo novo em sete entradas de intencao de
+  /// envio, uma migracao e o pipeline de derivadas do worker -- para preservar
+  /// um original que esta porta nunca teve.
+  ///
+  /// **Nulo quando o arquivo nao decodifica**, e e o caminho honesto: formato
+  /// sem decodificador nesta versao do sistema e um caso real (HEIC em Android
+  /// antigo). Quem chama devolve a foto ORIGINAL nesse caso, em vez de deixar
+  /// a pessoa presa numa folha que nao desenha nada -- ver
+  /// `ajustarAFoto` em `widgets/recorte_de_imagem.dart`.
+  ///
+  /// **Devolve a MESMA [FotoLocal] quando [recorte] cobre o arquivo todo**:
+  /// recodificar para chegar ao mesmo enquadramento gasta tempo da pessoa e
+  /// uma geracao de qualidade de JPEG por nada.
+  Future<FotoLocal?> recortarFoto(FotoLocal foto, RecorteDaFoto recorte);
 }
 
 /// O aparelho que **nao tem camera** -- e o duble que os testes montam.
@@ -150,6 +276,19 @@ class CameraNaoEmbarcada implements CameraEGaleria {
   Future<Uint8List> bytesDaFoto(FotoLocal foto) async {
     throw StateError(
       'CameraNaoEmbarcada nao produz foto, entao nao ha bytes para ler de '
+      '"${foto.caminho}". Chegar aqui significa que a FotoLocal veio de outra '
+      'porta que nao esta montada.',
+    );
+  }
+
+  /// **Estoura, pela mesma razao de [bytesDaFoto]**: esta implementacao nunca
+  /// devolve [FotoLocal], entao chegar aqui com uma significa fiacao errada, e
+  /// devolver a foto intacta esconderia isso atras de um recorte que nao
+  /// aconteceu.
+  @override
+  Future<FotoLocal?> recortarFoto(FotoLocal foto, RecorteDaFoto recorte) async {
+    throw StateError(
+      'CameraNaoEmbarcada nao produz foto, entao nao ha o que recortar em '
       '"${foto.caminho}". Chegar aqui significa que a FotoLocal veio de outra '
       'porta que nao esta montada.',
     );
@@ -430,6 +569,66 @@ class CameraDoAparelho implements CameraEGaleria {
     return File(foto.caminho).readAsBytes();
   }
 
+  /// ## Por que isto e Dart PURO e nao um plugin de recorte
+  ///
+  /// Medido em 29/10/2026, e a ordem das razoes importa:
+  ///
+  ///  1. `package:image` **ja estava no `pubspec.lock` deste app**, em
+  ///     4.10.1, puxado por `flutter_launcher_icons`. Promove-lo a dependencia
+  ///     direta nao move numero nenhum da resolucao -- conferido rodando
+  ///     `flutter pub get` antes e depois e comparando o `pubspec.lock`.
+  ///  2. Ele e **Dart puro**: nenhum codigo Android, nenhum iOS, nenhum canal
+  ///     de plataforma. Entao a pergunta "ele suporta a faixa de Android que o
+  ///     projeto declara (`min_sdk_android: 21`)?" nao se aplica a ele -- nao
+  ///     ha `minSdk` a cumprir num pacote que nao compila nada nativo. Um
+  ///     plugin de recorte (uCrop, no Android) traria um `minSdk` proprio, uma
+  ///     `Activity` no manifesto e uma tela que **nao e o design system
+  ///     "Serio"** -- a interface seria a do plugin, nao a do Bichu.
+  ///  3. `dart:ui` sozinho resolveria o corte, mas so codifica **PNG**
+  ///     (`ImageByteFormat.png`), e PNG e sem perda: uma foto de 1920 px
+  ///     recortada passa facil dos 5 MiB de [tetoDeBytesDaFoto] e seria
+  ///     recusada pelo servidor. O recorte tem de sair em JPEG, e e
+  ///     `encodeJpg` que o faz.
+  ///
+  /// ## Fora da linha principal, e por que tem de ser
+  ///
+  /// Decodificar, cortar e recodificar um JPEG de 1920 px em Dart puro leva da
+  /// ordem de centenas de milissegundos num aparelho modesto. Na linha
+  /// principal isso trava a animacao da folha fechando, que e exatamente o
+  /// instante em que a pessoa toca `Usar esta foto`. `compute` o manda para
+  /// outro isolado; a fronteira sao bytes e quatro inteiros, que atravessam.
+  @override
+  Future<FotoLocal?> recortarFoto(FotoLocal foto, RecorteDaFoto recorte) async {
+    final bytes = await bytesDaFoto(foto);
+    final recortado = await compute(
+      _recortarEmJpeg,
+      _PedidoDeRecorte(bytes: bytes, recorte: recorte),
+    );
+    // O arquivo nao decodificou, ou o recorte ja cobria tudo. Nos dois casos a
+    // foto que entrou e a resposta certa, e os dois sao distinguiveis por quem
+    // chama so em uma coisa: nenhum arquivo novo foi escrito.
+    if (recortado == null) return null;
+    if (recortado.isEmpty) return foto;
+
+    // No diretorio TEMPORARIO, como o arquivo do proprio seletor: o envio le
+    // os bytes e acaba, e deixar um JPEG recortado no diretorio de documentos
+    // criaria um acumulo que ninguem limpa.
+    final pasta = await getTemporaryDirectory();
+    final destino = File(
+      '${pasta.path}/bichu-recorte-${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
+    await destino.writeAsBytes(recortado, flush: true);
+
+    // Pela MESMA traducao de [fotoLocalDoArquivo], e nao por um `FotoLocal`
+    // montado a mao: o piso e o teto do contrato valem para o arquivo
+    // recortado tanto quanto valiam para o escolhido.
+    return fotoLocalDoArquivo(
+      caminho: destino.path,
+      tamanhoEmBytes: recortado.length,
+      tipoDeConteudo: 'image/jpeg',
+    );
+  }
+
   Future<FotoLocal?> _escolher(ImageSource origem) async {
     if (!_plataformaTemCamera) return null;
     return _semExplodir<FotoLocal?>(
@@ -480,4 +679,48 @@ class CameraDoAparelho implements CameraEGaleria {
       return padrao;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// O recorte, no outro isolado
+// ---------------------------------------------------------------------------
+
+/// O que atravessa para o isolado do recorte.
+@immutable
+class _PedidoDeRecorte {
+  const _PedidoDeRecorte({required this.bytes, required this.recorte});
+
+  final Uint8List bytes;
+  final RecorteDaFoto recorte;
+}
+
+/// Decodifica, corta e recodifica em JPEG. **Funcao de topo**, porque e o que
+/// `compute` consegue mandar para outro isolado.
+///
+/// Tres respostas, e as tres sao diferentes:
+///  - `null` -- **nao decodificou**. Quem chama devolve a foto original e a
+///    pessoa segue sem recorte, em vez de ficar numa folha vazia.
+///  - vazio -- decodificou e o recorte **cobria o arquivo todo**. Nao ha o que
+///    cortar, e recodificar custaria uma geracao de qualidade por nada.
+///  - bytes -- o JPEG recortado.
+Uint8List? _recortarEmJpeg(_PedidoDeRecorte pedido) {
+  final decodificada = img.decodeImage(pedido.bytes);
+  if (decodificada == null) return null;
+
+  final r = pedido.recorte.grudadoEm(decodificada.width, decodificada.height);
+  if (r.cobreTudo(decodificada.width, decodificada.height)) {
+    return Uint8List(0);
+  }
+
+  final cortada = img.copyCrop(
+    decodificada,
+    x: r.x,
+    y: r.y,
+    width: r.largura,
+    height: r.altura,
+  );
+  // A MESMA qualidade da recodificacao do seletor. Dois numeros para a mesma
+  // regra e o jeito conhecido de a foto recortada sair diferente da escolhida
+  // sem ninguem ter decidido isso.
+  return img.encodeJpg(cortada, quality: qualidadeDaFoto);
 }

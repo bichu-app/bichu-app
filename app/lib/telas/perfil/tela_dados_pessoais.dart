@@ -34,6 +34,7 @@ import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/qr_do_convite.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/selo_de_validado.dart';
@@ -472,15 +473,39 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
 
   Future<void> _escolherDaGaleria() async {
-    final foto = await Escopo.of(context).camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// `quadrado` porque o destino e quadrado, e medido: esta tela desenha a
+  /// foto com `ImagemDaRede(largura: lado)`, e `lado` e
+  /// `BichuMoldura.larguraFotoLg` -- 160 por 160.
+  Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.quadrado,
+        titulo: 'Ajuste a sua foto',
+      );
 
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();

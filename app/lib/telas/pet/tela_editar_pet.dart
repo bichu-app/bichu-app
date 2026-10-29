@@ -20,6 +20,7 @@ import '../../widgets/folha_destrutiva.dart';
 import '../../widgets/item_de_menu.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/saida_da_tela.dart';
 import 'campos_do_pet.dart';
 import 'rascunho_de_pet.dart';
@@ -325,8 +326,32 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     // o unico caminho de envio desta tela comeca num arquivo escolhido agora.
     if (!mounted || foto == null) return;
 
-    await _enviar(foto);
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+
+    await _enviar(ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. A origem e de 28/10: *"voce esta cropando no lugar
+  /// errado"* -- e esta tela era um dos lugares, com `_pontoFocal` decidindo
+  /// pela pessoa que a cabeca do animal fica no terco superior.
+  ///
+  /// Nulo e a pessoa cancelando, e cai no mesmo `return` que o cancelamento do
+  /// seletor: **`Salvar` continua nunca reenviando uma foto que ninguem
+  /// trocou**, porque o unico caminho de envio desta tela ainda comeca num
+  /// arquivo escolhido agora.
+  Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.molduraDoPet,
+        titulo: 'Ajuste a foto do pet',
+      );
 
   Future<void> _enviar(FotoLocal foto) async {
     // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.

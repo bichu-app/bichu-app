@@ -106,6 +106,34 @@ dependencies:
   # encerrado pelo sistema -- e memoria nao sobrevive a isso.
   path_provider: ^2.1.5
   image_picker: ^1.2.3
+
+  # RECORTE E RECODIFICACAO EM JPEG, EM DART PURO (cliente, 29/10/2026: *"o
+  # recurso pro usuario fazer o crop e ajustar a posicao da imagem"*).
+  #
+  # A VERSAO NAO FOI ESCOLHIDA A MAO, e esta dependencia NAO MOVE A RESOLUCAO:
+  # `image` ja estava no `pubspec.lock` deste app, em 4.10.1, puxado por
+  # `flutter_launcher_icons` -- que e `dev_dependencies`, e por isso o codigo
+  # de `lib/` nao podia importa-lo. Promove-lo a dependencia direta na MESMA
+  # versao e o que o torna importavel, e foi conferido comparando o
+  # `pubspec.lock` antes e depois: nenhuma outra linha muda.
+  #
+  # POR QUE ELE E NAO UM PLUGIN DE RECORTE (`image_cropper` e os parentes):
+  #
+  #  - ele e DART PURO. Nenhum codigo Android, nenhum iOS, nenhum canal de
+  #    plataforma -- entao a pergunta "ele suporta a faixa de Android que o
+  #    projeto declara (`min_sdk_android: 21`)?" nao se aplica: nao ha
+  #    `minSdk` a cumprir num pacote que nao compila nada nativo. O
+  #    `image_cropper` traria o uCrop, com `minSdk` proprio, uma `Activity`
+  #    no `AndroidManifest.xml` e um `UIViewController` no iOS;
+  #  - a interface do recorte seria A DO PLUGIN, e nao a do design system
+  #    "Serio". A folha deste app usa os tokens de `design/tokens.json`, e um
+  #    recorte com a cara do uCrop no meio do fluxo seria a unica tela do
+  #    produto que nao e o produto;
+  #  - `dart:ui` sozinho resolveria o CORTE, mas so codifica PNG, que e sem
+  #    perda: uma foto de 1920 px recortada passa dos 5 MiB de
+  #    `tetoDeBytesDaFoto` e o servidor a recusaria. Quem produz JPEG e
+  #    `encodeJpg`, daqui.
+  image: ^4.10.1
   permission_handler: ^13.0.2
   mobile_scanner: ^7.4.2
 
