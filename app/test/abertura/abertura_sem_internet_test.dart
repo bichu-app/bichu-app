@@ -134,8 +134,33 @@ void main() {
               'pessoa entra no app e nada carrega, sem uma palavra sobre o '
               'motivo (pedido do cliente, 26/10/2026)',
         );
-        expect(find.text(TextosDaAbertura.tituloSemConexao), findsOneWidget);
-        expect(find.text(TextosDaAbertura.corpoSemConexao), findsOneWidget);
+        // OS TEXTOS POR EXTENSO, E NAO AS CONSTANTES QUE OS PRODUZEM.
+        //
+        // Ate 28/10/2026 estas duas linhas eram
+        // `find.text(TextosDaAbertura.tituloSemConexao)` e
+        // `find.text(TextosDaAbertura.corpoSemConexao)` -- a tela comparada
+        // com a fonte que a pinta. Isso aprova QUALQUER texto, inclusive
+        // vazio: trocar a constante troca os dois lados do `expect` ao mesmo
+        // tempo, e o caso continua verde. E a mesma familia do portao cujo
+        // controle sai da fonte que ele mede.
+        expect(find.text('Não conseguimos abrir o Bichu'), findsOneWidget);
+        expect(
+          find.text('Confira sua conexão com a internet e tente de novo.'),
+          findsOneWidget,
+          reason: 'REPROVA: o corpo do recado nao e a frase pedida. O cliente '
+              'mandou em 28/10/2026: *"Retire a parte do bichu nao conseguiu '
+              'falar com o servidor, e deixe apenas a parte do confira sua '
+              'conexao com a internet e tente novamente"*.',
+        );
+        // E A FRASE RETIRADA NAO VOLTA, por nenhum caminho. Sem esta
+        // assercao, repor a frase passaria -- `findsOneWidget` do corpo novo
+        // continuaria verde num texto que tivesse as DUAS.
+        expect(
+          find.textContaining('não conseguiu falar com o servidor'),
+          findsNothing,
+          reason: 'REPROVA: a frase que o cliente mandou retirar esta de volta '
+              'na tela.',
+        );
         // **E o app NAO esta embaixo**: o recado substitui a arvore, e nao a
         // cobre. Um recado sobreposto deixaria a barra de abas tocavel atras
         // dele.
