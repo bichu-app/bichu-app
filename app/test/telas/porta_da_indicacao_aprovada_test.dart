@@ -18,7 +18,6 @@ import 'dart:convert';
 
 import 'package:bichu/telas/perto/minhas_indicacoes.dart';
 import 'package:bichu/telas/perto/pagina_do_local.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -64,6 +63,36 @@ Future<http.Response> Function(http.Request) redeDaIndicacaoAprovada() {
     }
     if (caminho.startsWith('/v1/directory/entries/') && req.method == 'GET') {
       return json200(detalheComTudo());
+    }
+    return problema('not-found', 404);
+  };
+}
+
+/// A mesma rede, mas o DETALHE responde 404.
+///
+/// O caso real: a indicacao foi aprovada, o servidor mandou `entry_slug`, e
+/// entre o aviso e o toque a entrada saiu do ar (despublicada, removida, ou
+/// publicada e escondida de novo). A pagina tem de dizer isso com PALAVRAS --
+/// `_Fase.naoEncontrado` --, e nunca ficar preta.
+Future<http.Response> Function(http.Request) redeComDetalheQueSumiu() {
+  return (req) async {
+    final caminho = req.url.path;
+    if (caminho == '/v1/directory/suggestions' && req.method == 'GET') {
+      return http.Response(
+        json.encode(
+          paginaDoContrato(<Map<String, dynamic>>[
+            indicacaoDoContrato(
+              reviewStatus: 'approved',
+              decidedAt: '2026-10-28T12:00:00.000Z',
+              entrySlug: slugDaEntrada,
+            ),
+          ]),
+        ),
+        200,
+        headers: const <String, String>{
+          'content-type': 'application/json; charset=utf-8',
+        },
+      );
     }
     return problema('not-found', 404);
   };
@@ -121,6 +150,42 @@ void main() {
           reason: 'REPROVA: a pagina do local abriu sem o nome do local na '
               'arvore. Tela com o widget certo e sem conteudo e a mesma tela '
               'preta por outro caminho.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA: a entrada que saiu do ar cai no NAO ENCONTRADO com frase, e nao '
+      'em preto',
+      (tester) async {
+        await abrirMinhasIndicacoes(
+          tester,
+          rede: redeComDetalheQueSumiu(),
+        );
+        await tester.tap(find.text(MinhasIndicacoes.rotuloDeVerNoPerto));
+        await tester.pumpAndSettle();
+
+        // A PAGINA EXISTE, e e ela que explica. Preto seria a pagina nao
+        // montar; 404 nao e preto, e a diferenca e o que este caso guarda.
+        expect(
+          find.byType(PaginaDoLocal),
+          findsOneWidget,
+          reason: 'REPROVA: o 404 do detalhe tirou a pagina da arvore. O 404 e '
+              'um ESTADO da pagina, nao a ausencia dela.',
+        );
+        expect(
+          find.text(PaginaDoLocal.tituloDoNaoEncontrado),
+          findsOneWidget,
+          reason: 'REPROVA: a entrada que saiu do ar nao disse nada. Quem veio '
+              'do aviso de indicacao aprovada tem de ler o motivo, e nao '
+              'encarar uma tela vazia -- que e indistinguivel da tela preta '
+              'para quem esta olhando.',
+        );
+        expect(
+          find.text(PaginaDoLocal.explicacaoDoNaoEncontrado),
+          findsOneWidget,
+          reason: 'REPROVA: o titulo do nao-encontrado apareceu sem a '
+              'explicacao. Titulo sozinho nao diz o que fazer agora.',
         );
       },
     );

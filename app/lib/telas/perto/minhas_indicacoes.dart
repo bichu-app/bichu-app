@@ -465,12 +465,50 @@ class _CartaoDaIndicacao extends StatelessWidget {
           ],
           // `Ver no Perto` SÓ com `entry_slug`: o servidor só o manda quando a
           // entrada está publicada, e esta tela não inventa endereço.
+          //
+          // **`go` E NÃO `push`, E A DIFERENÇA É UMA TELA PRETA MEDIDA**
+          // (defeito do cliente, 28/10/2026: *"Ao clicar na notificação para
+          // ir até a página do profissional recomendado ficou parado em uma
+          // página preta"*).
+          //
+          // A página do local é **sub-rota do ramo** da `Rede`
+          // (`locais/:slug` sob `/rede`, dentro do
+          // `StatefulShellRoute.indexedStack`). Esta tela é **irmã da casca**:
+          // `Rotas.minhasIndicacoes` é rota de RAIZ, declarada fora dos ramos,
+          // porque ela é tela de conta e precisa de `Voltar` em vez da barra de
+          // abas -- a conta inteira está em `Rotas.minhasIndicacoes`.
+          //
+          // `push` de uma rota de ramo a partir de uma rota de raiz faz o
+          // `go_router` montar a casca e os ramos DE NOVO, por cima dos que já
+          // estão no `Navigator`, e o framework reprova com chave de página
+          // duplicada:
+          //
+          //     navigator.dart: Failed assertion:
+          //     '!keyReservation.contains(key)': is not true
+          //
+          // A exceção acontece ao CONSTRUIR, então a página do local nunca
+          // entra na árvore e o que fica na tela é o preto do `Navigator` que
+          // não montou -- não é a página falhando, é a página não existindo.
+          //
+          // `go` leva ao mesmo endereço sem empilhar uma segunda casca: ele
+          // troca a localização, o ramo da `Rede` fica com `AbaRede` embaixo e
+          // a página do local em cima, e o `Voltar` da página devolve a aba
+          // `Comunidade`. O custo é conhecido e é o menor dos dois: quem veio
+          // do aviso perde o caminho de volta ATÉ `Minhas indicações` e volta
+          // para a aba -- contra não chegar à página nenhuma.
+          //
+          // **Por que o conserto é aqui e não em `rotas.dart`**: `locais/:slug`
+          // tem outro chamador, o cartão de `lista_do_diretorio.dart`, que vive
+          // DENTRO do ramo e para quem `push` é correto -- é ele que mantém a
+          // busca e o filtro da aba intactos no `Voltar`. Tirar a rota do ramo
+          // consertaria este toque e tiraria a barra de abas da página para
+          // todo mundo, que é redesenho que ninguém pediu.
           if (indicacao.levaAoPerto) ...<Widget>[
             const SizedBox(height: BichuEspaco.e2),
             BotaoSecundario(
               rotulo: MinhasIndicacoes.rotuloDeVerNoPerto,
               aoTocar: () =>
-                  context.push(Rotas.localDoPertoDe(indicacao.entradaSlug!)),
+                  context.go(Rotas.localDoPertoDe(indicacao.entradaSlug!)),
             ),
           ],
           const SizedBox(height: BichuEspaco.e2),
