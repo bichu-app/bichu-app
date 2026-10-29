@@ -18112,6 +18112,13 @@ components:
           description: |
             O `upload_id` de um envio com `purpose: directory_photo`. Mesma
             regra de recusa da logo.
+        # A GALERIA (cliente, 29/10/2026): *"implemente a tabela de galeria
+        # entao"*, depois de *"so esta permitindo subir uma foto, deve ser
+        # padrao igual na pagina de eventos"*. OPCIONAL, e omitir equivale a
+        # `[]` -- entrada sem galeria continua sendo cadastrada, publicada e
+        # listada exatamente como antes. Nao entra em
+        # `AdminDirectoryEntryMissingField`: a publicacao nunca cobrou imagem.
+        images: { $ref: '#/components/schemas/DirectoryGalleryImagesInput' }
         # ---------------------------------------------------------------
         # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
         # ---------------------------------------------------------------
@@ -18215,6 +18222,13 @@ components:
         # balde: o que sai e o ponteiro da entrada.
         logo_upload_id: { type: [string, 'null'], format: uuid }
         photo_upload_id: { type: [string, 'null'], format: uuid }
+        # A GALERIA (cliente, 29/10/2026). **`images` SUBSTITUI a galeria
+        # inteira** -- o mesmo idioma de `images` da `Rede` e da `Loja`: a lista
+        # que vem e a lista que fica, reordenar e mandar a ordem nova, e `[]`
+        # tira todas. **Ausente NAO MEXE**, e e por isso que ela nao aceita
+        # `null`: "tirar todas" ja se diz com `[]`, e um segundo jeito de dizer
+        # a mesma coisa seria dois caminhos para o painel errar.
+        images: { $ref: '#/components/schemas/DirectoryGalleryImagesInput' }
         # Os quatro do endereco de rua (decisao 9.2, respondida em 18/10). `null`
         # APAGA e ausente NAO MEXE, como os demais: e a distincao que separa
         # "limpar o CEP" de "editar so o telefone". Nenhum deles e exigido para
@@ -18258,7 +18272,7 @@ components:
         na tabela, o painel nao os escreve, e devolve-los faria uma tela de
         cadastro mostrar documento de terceiro sem nenhuma necessidade.
       required:
-        [slug, kind, kinds, entity_kind, display_name, status, verification, source,
+        [slug, kind, kinds, entity_kind, display_name, images, status, verification, source,
          claim_status, missing_to_publish, created_at, updated_at, version]
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
@@ -18310,6 +18324,20 @@ components:
           description: |
             A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
             `status` e `url` da logo.
+        # A GALERIA (cliente, 29/10/2026). **Sempre presente**, e `[]` e o
+        # estado normal: a entrada que nunca teve foto responde lista vazia, e
+        # nao campo ausente -- a tela abre a galeria com zero itens, que e
+        # diferente de "esta resposta nao fala de galeria".
+        #
+        # O MESMO schema de item que a `Loja` e a `Rede` usam
+        # (`AdminCatalogGalleryImage`): o painel reconhece `upload_id`,
+        # `position`, `alt_text`, `status` e a URL da derivada, e o componente
+        # de galeria e UM para as tres secoes.
+        images:
+          type: array
+          maxItems: 8
+          description: Na ordem da pagina do local. `position` 0 e a capa da galeria. Vazia e estado normal.
+          items: { $ref: '#/components/schemas/AdminCatalogGalleryImage' }
         status: { $ref: '#/components/schemas/DirectoryEntryStatus' }
         verification:
           allOf:
@@ -21095,7 +21123,7 @@ components:
       properties:
         purpose:
           type: string
-          enum: [store_item, network_event, directory_logo, directory_photo]
+          enum: [store_item, network_event, directory_logo, directory_photo, directory_gallery]
           description: |
             Fica gravado no envio. A escrita que confirma o envio exige o mesmo
             proposito, e recusa foto de pet, de achador ou de outro proposito
@@ -21107,6 +21135,17 @@ components:
             512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
             600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
             outro e `400 upload_not_usable`.
+
+            **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
+            verbatim: *"implemente a tabela de galeria entao"*), com a galeria
+            de ate oito fotos da entrada -- o *"padrao igual na pagina de
+            eventos"* que ele pediu. **Separado de `directory_photo`, e nao o
+            mesmo**, pelo criterio que separou `user_showcase` de `user_photo`:
+            aquele e a foto UNICA do lugar, com duas derivadas (`banner` 1280 x
+            720 e `card` 1024 x 576), e este sao as da GALERIA, que pedem
+            tambem a miniatura de 480 x 360 que a faixa da galeria desenha --
+            exatamente as tres derivadas do encontro da `Rede`. Minima 600 x
+            600, a mesma de `network_event` e de `directory_photo`.
 
             **`user_photo` nao esta aqui, de proposito**: a foto da propria
             pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
@@ -21123,7 +21162,9 @@ components:
             Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
             17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
             pixels para `store_item`, 600 x 600 para `network_event` (pedido do
-            cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+            cliente de 01/10; antes, 1600 x 900), 256 x 256 para
+            `directory_logo` e 600 x 600 para `directory_photo` e
+            `directory_gallery`. Duas conferencias: a
             DECLARADA, em `width`/`height` deste pedido, recusada aqui com
             `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
             faz nos bytes e que marca a imagem `rejected` com o motivo, porque
@@ -21862,6 +21903,55 @@ components:
         crop:
           $ref: '#/components/schemas/ImageCrop'
 
+    DirectoryGalleryImagesInput:
+      type: array
+      maxItems: 8
+      description: |
+        A GALERIA de fotos da entrada do diretorio (decisao do cliente de
+        29/10/2026, verbatim: *"implemente a tabela de galeria entao"*, depois
+        do pedido *"no backoffice para cadastrar um parceiro, so esta
+        permitindo subir uma foto, deve ser padrao igual na pagina de
+        eventos"*).
+
+        **E a galeria do encontro da `Rede`, campo por campo**, e isso e
+        literal: ate 8 imagens, **na ordem em que a pagina do local as mostra**,
+        a primeira e a capa da galeria; cada uma e um envio de
+        `createAdminCatalogImageIntent` com `purpose: directory_gallery`; a
+        lista SUBSTITUI a anterior inteira -- reordenar e mandar a ordem nova,
+        escolher a capa e por a imagem em primeiro lugar, remover e omitir, `[]`
+        tira todas. `upload_id` repetido e recusado com `400`
+        (`code: duplicate_upload`), e envio de outro proposito, vencido ou ja
+        usado em OUTRA entrada com `400` (`code: upload_not_usable`), sem dizer
+        qual dos casos ocorreu.
+
+        **ELA NAO SUBSTITUI `logo_upload_id` NEM `photo_upload_id`**, e as duas
+        ausencias sao desenho:
+
+        - a **logo e UMA** porque e a marca, desenhada num quadrado ao lado do
+          nome, e a listagem le so ela. "Oito logos" nao e estado que signifique
+          algo;
+        - a **foto do local continua UMA** -- e esta e a unica divergencia em
+          relacao ao encontro, onde a capa E a `position` 0 e nao existe campo
+          de capa. `photo_upload_id` fica porque JA existe, no contrato e em
+          dado aplicado em homologacao, e tira-lo seria
+          `response-property-removed` somado a uma migracao de dado que nenhuma
+          decisao pediu.
+
+        **`alt_text` e OPCIONAL**, como nas duas galerias irmas (`Loja` desde
+        17/10/2026, `Rede` desde 21/10, as duas por pedido do cliente: *"pode
+        remover a descricao da imagem"*). Quando vem, vale de 2 a 150
+        caracteres; quando nao vem, a imagem fica sem texto alternativo e quem
+        desenha cai no `display_name` da entrada. **Campo presente e vazio e
+        recusado**: o painel OMITE o campo em vez de mandar `""`.
+
+        **A galeria nao sai em `DirectoryEntrySummary` nem em
+        `DirectoryEntryPublic`**, pela mesma razao que `logo` e `photo` nunca
+        sairam: expor imagem de estabelecimento em `Perto` depende de decisao do
+        cliente (ADR-0010), e a listagem do aplicativo esta MEDIDA como o lugar
+        onde ela nao cabe -- vinte faixas 16:9 custariam 65,6 MiB de imagem
+        decodificada.
+      items: { $ref: '#/components/schemas/CatalogImageInput' }
+
     StoreCatalogImagesInput:
       type: array
       maxItems: 8
@@ -22008,22 +22098,25 @@ components:
               description: |
                 O identificador que o painel devolve em `images` para manter,
                 reordenar ou remover esta imagem. **Nulo** quando a conta que
-                enviou a imagem foi apagada: a imagem continua no produto ou no
-                encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
-                NULL`), e o painel so a mantem reenviando a galeria sem ela ou
-                com uma imagem nova.
+                enviou a imagem foi apagada: a imagem continua no produto, no
+                encontro ou na entrada do diretorio
+                (`catalog_images.upload_intent_id` e `ON DELETE SET NULL`), e o
+                painel so a mantem reenviando a galeria sem ela ou com uma
+                imagem nova.
             position: { type: integer, minimum: 0, maximum: 7 }
             alt_text:
               type: [string, 'null']
               description: |
                 **Nulo** quando a imagem foi gravada sem texto alternativo, o
                 que a `Loja` passou a permitir em 17/10/2026
-                (`StoreCatalogImagesInput`) e a `Rede` em 21/10/2026
-                (`CatalogImagesInput`, decisao do cliente). Nos dois recursos a
-                escrita aceita a ausencia, entao a leitura pode trazer nulo em
-                qualquer posicao -- **inclusive na capa do encontro**, que e o
-                custo que o cliente aceitou por escrito. Quem desenha cai no
-                nome do produto ou no titulo do encontro.
+                (`StoreCatalogImagesInput`), a `Rede` em 21/10/2026
+                (`CatalogImagesInput`, decisao do cliente) e a galeria do
+                diretorio desde que nasceu, em 29/10/2026
+                (`DirectoryGalleryImagesInput`). Nos TRES recursos a escrita
+                aceita a ausencia, entao a leitura pode trazer nulo em qualquer
+                posicao -- **inclusive na capa do encontro**, que e o custo que
+                o cliente aceitou por escrito. Quem desenha cai no nome do
+                produto, no titulo do encontro ou no `display_name` da entrada.
 
     AdminStoreTagRef:
       type: object

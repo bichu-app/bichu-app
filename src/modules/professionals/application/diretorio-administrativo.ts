@@ -59,15 +59,18 @@ import {
   projetarEntradaAdministrativa,
   retratoDaEntrada,
   STATUS_INICIAL,
+  TETO_DE_IMAGENS_DA_GALERIA,
   TITULARIDADE_DO_PAINEL,
   type CriacaoDaEntrada,
   type EdicaoDaEntrada,
   type EntradaAdministrativa,
   type EntradaProjetada,
+  type ImagemDeGaleriaDoCorpo,
 } from '../domain/escrita-do-diretorio.js';
 import {
   SlugOcupado,
   type DiretorioAdministrativoRepository,
+  type ImagemDaGaleriaNaPosicao,
   type MudancaDaEntrada,
   type OrdemDoDiretorioAdministrativo,
   type RecorteDeEntradas,
@@ -239,6 +242,55 @@ function errosDaForma(campos: {
   return erros;
 }
 
+/**
+ * A forma da GALERIA (cliente, 29/10/2026).
+ *
+ * **COPIA DELIBERADA de `errosDaGaleria` da `Rede`**, e nao uma abstracao
+ * compartilhada: a diferenca entre as duas e o teto (o mesmo numero, de outra
+ * tabela) e nada mais, e fatorar quinze linhas num modulo comum faria o dominio
+ * do diretorio depender do dominio da `Rede` -- a dependencia que a secao 6
+ * proibe, e a mesma razao pela qual `errosDeTexto` esta repetida nos tres.
+ *
+ * Tres conferencias, e nenhuma delas o schema do contrato faz:
+ *
+ * 1. **O teto** (`too_many_images`). O contrato declara `maxItems: 8`, entao o
+ *    Ajv ja recusa -- esta linha existe para a recusa ter `field: 'images'` e
+ *    uma frase, e para o caso de a lista chegar por outro caminho.
+ * 2. **`upload_id` repetido** (`duplicate_upload`). O schema nao sabe comparar
+ *    itens entre si, e sem isto a mesma imagem ocuparia duas posicoes -- que o
+ *    `UNIQUE` de `professional_images.image_id` recusaria como `500`.
+ * 3. **`alt_text` presente e curto** (tamanho). AUSENTE e estado legitimo e
+ *    nao e conferido; `""` e `"a"` sao `400`.
+ */
+function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined): ProblemFieldError[] {
+  if (imagens === undefined) return [];
+  const erros: ProblemFieldError[] = [];
+  if (imagens.length > TETO_DE_IMAGENS_DA_GALERIA) {
+    erros.push({
+      field: 'images',
+      code: 'too_many_images',
+      message: `Até ${String(TETO_DE_IMAGENS_DA_GALERIA)} imagens.`,
+    });
+  }
+  // `toLowerCase` porque UUID e insensivel a caixa e dois textos diferentes
+  // podem ser o mesmo identificador -- a mesma normalizacao que a `Rede` faz.
+  if (new Set(imagens.map((i) => i.upload_id.toLowerCase())).size !== imagens.length) {
+    erros.push({
+      field: 'images',
+      code: 'duplicate_upload',
+      message: 'A mesma imagem apareceu duas vezes.',
+    });
+  }
+  imagens.forEach((imagem, n) => {
+    // Ausente e estado legitimo (a descricao e opcional nas tres galerias deste
+    // produto); vazio e de uma letra continuam `400`. Sem este desvio
+    // `errosDeTexto` cobraria o campo que o cliente mandou tirar.
+    if (imagem.alt_text === undefined) return;
+    erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
+  });
+  return erros;
+}
+
 /** O texto aparado, ou `null` quando ele apaga o campo. Ausente continua ausente. */
 function aparado(valor: string | null | undefined): string | null | undefined {
   if (valor === undefined) return undefined;
@@ -310,7 +362,10 @@ export class DiretorioAdministrativo {
    * publicar e um `PATCH` com `status`, e e ele que confere a completude.
    */
   async criarEntrada(autor: Autor, corpo: CriacaoDaEntrada): Promise<Escrito<EntradaProjetada>> {
-    const erros = errosDaForma(corpo);
+    // A forma dos campos e a da GALERIA na MESMA lista de erros: a tela precisa
+    // marcar tudo de uma vez, e duas chamadas a `problemas.validacao` faria o
+    // operador descobrir o segundo problema depois de consertar o primeiro.
+    const erros = [...errosDaForma(corpo), ...errosDaGaleria(corpo.images)];
     if (erros.length > 0) throw problemas.validacao(erros);
 
     // AS ATIVIDADES, de `kinds` ou de `kind`. Na CRIACAO a ausencia dos dois e
@@ -368,12 +423,26 @@ export class DiretorioAdministrativo {
       // O `id` interno vai para a trilha e NUNCA para a resposta: a trilha
       // precisa de uma chave que sobreviva a troca de `slug`.
       const id = await tx.idPorSlug(criada.slug);
+      // A GALERIA e escrita DEPOIS do `INSERT`, e nao junto: ela vive em
+      // `professional_images` e precisa do `id` da entrada, que so existe
+      // depois dele. Por isso tambem a releitura abaixo -- `criada` foi lida
+      // antes da galeria existir, e devolve-la faria o `POST` responder
+      // `images: []` tendo gravado oito.
+      //
+      // `id` nulo aqui seria a entrada desaparecendo dentro da propria
+      // transacao que a inseriu. Nao ha galeria a escrever nesse caso, e o
+      // ramo existe para nao mentir um `id` que nao se leu.
+      let completa = criada;
+      if (corpo.images !== undefined && id !== null) {
+        await this.aplicarGaleria(tx, id, corpo.images);
+        completa = await tx.recarregarEntrada(id);
+      }
       await tx.registrarNaTrilha(
         this.evento(autor, 'admin.directory_entry.created', id ?? criada.slug, {
-          after: retratoDaEntrada(criada),
+          after: retratoDaEntrada(completa),
         }),
       );
-      return this.escrito(criada);
+      return this.escrito(completa);
     });
   }
 
@@ -384,7 +453,7 @@ export class DiretorioAdministrativo {
     patch: EdicaoDaEntrada,
   ): Promise<Escrito<EntradaProjetada>> {
     const versao = versaoExigida(ifMatch);
-    const erros = errosDaForma(patch);
+    const erros = [...errosDaForma(patch), ...errosDaGaleria(patch.images)];
     if (erros.length > 0) throw problemas.validacao(erros);
 
     // AS ATIVIDADES na EDICAO. A mesma funcao da criacao, e a diferenca e so
@@ -489,15 +558,29 @@ export class DiretorioAdministrativo {
       );
       if (alterada === null) throw versaoMudou();
 
+      // A GALERIA vem DEPOIS do `UPDATE`, e a ordem nao e negociavel: e o
+      // `UPDATE ... WHERE version = $2` que confere a versao lida e a
+      // incrementa. Substituir a galeria antes dele deixaria a galeria nova
+      // gravada numa transacao que vai morrer em 412 -- e, pior, faria uma
+      // escrita que perdeu a corrida mexer no recurso antes de perde-la.
+      //
+      // `patch.images` substitui a lista inteira, inclusive com `[]`, e e por
+      // isso que o teste e contra `undefined` e nao contra tamanho.
+      let completa = alterada;
+      if (patch.images !== undefined) {
+        await this.aplicarGaleria(tx, id, patch.images, id);
+        completa = await tx.recarregarEntrada(id);
+      }
+
       await tx.registrarNaTrilha(
         this.evento(
           autor,
           'admin.directory_entry.updated',
           id,
-          diferenca(retratoDaEntrada(atual), retratoDaEntrada(alterada)),
+          diferenca(retratoDaEntrada(atual), retratoDaEntrada(completa)),
         ),
       );
-      return this.escrito(alterada);
+      return this.escrito(completa);
     });
   }
 
@@ -526,6 +609,101 @@ export class DiretorioAdministrativo {
    * balde sem passar por uma confirmacao seria apagado dez minutos depois, que
    * e exatamente o que aconteceu com a foto do achado -- duas vezes, medido.
    */
+  /**
+   * Substitui a galeria da entrada pela lista do corpo (cliente, 29/10/2026).
+   *
+   * Confirma cada envio NA ORDEM da lista, e e a ordem que vira `position`: a
+   * posicao 0 e a capa da galeria, e "escolher a capa" no painel e por a imagem
+   * em primeiro lugar. Nenhum campo de capa existe, exatamente como na `Rede`.
+   *
+   * `entradaId` entra DUAS vezes com o mesmo valor na edicao (o dono da galeria
+   * e o dono permitido da imagem) e uma so na criacao, onde ainda nao ha imagem
+   * de outra entrada para reaproveitar. O segundo parametro e o que permite ao
+   * painel mandar o formulario inteiro a cada salvamento sem perder a galeria.
+   */
+  private async aplicarGaleria(
+    tx: TransacaoDoDiretorio,
+    entradaId: string,
+    imagens: readonly ImagemDeGaleriaDoCorpo[],
+    donoPermitido?: string,
+  ): Promise<void> {
+    const galeria: ImagemDaGaleriaNaPosicao[] = [];
+    for (const [position, imagem] of imagens.entries()) {
+      const imageId = await this.imagemDaGaleriaDoEnvio(tx, imagem.upload_id, donoPermitido);
+      // Vazio depois de aparar grava NULO, e nao `''`: `''` morreria no `CHECK`
+      // de tamanho como 500. O contrato ja recusa `""`, e esta linha e a rede
+      // embaixo para quem chegar por outro caminho.
+      const altText = imagem.alt_text?.trim();
+      galeria.push({
+        imageId,
+        position,
+        altText: altText === undefined || altText === '' ? null : altText,
+      });
+    }
+    await tx.substituirImagens(entradaId, galeria);
+  }
+
+  /**
+   * O `catalog_images.id` de um `upload_id` da GALERIA.
+   *
+   * Irma de `imagemDoEnvio` (a logo e a foto) e **nao a mesma funcao**, e a
+   * diferenca nao e cosmetica: aqui o proposito exigido e `directory_gallery`,
+   * o campo do erro e `images` -- e nao `logo_upload_id` --, a pergunta de dono
+   * e a outra tabela (`entradaDaImagemDaGaleria`), e o valor devolvido nunca e
+   * nulo, porque nao existe "imagem de galeria ausente": ausente e a lista nao
+   * ter aquele item.
+   *
+   * A recusa nao diz QUAL dos casos ocorreu -- envio inexistente, de outro
+   * proposito, vencido, ou ja usado em outra entrada saem como o mesmo
+   * `400 upload_not_usable`. Distinguir entregaria a quem adivinha `upload_id`
+   * um oraculo de "este existe mas e de outra entrada" (ADR-0021).
+   */
+  private async imagemDaGaleriaDoEnvio(
+    tx: TransacaoDoDiretorio,
+    uploadId: string,
+    donoPermitido?: string,
+  ): Promise<string> {
+    const recusa = (): never => {
+      throw problemas.validacao([
+        {
+          field: 'images',
+          code: 'upload_not_usable',
+          message: 'Uma das imagens não serve para esta entrada. Envie-a de novo.',
+        },
+      ]);
+    };
+
+    const envio = await tx.envioDeCatalogo(uploadId);
+    if (envio === null || envio.kind !== 'catalog_image' || envio.purpose !== 'directory_gallery') {
+      recusa();
+    }
+    // `envio` ja nao e nulo aqui; o TypeScript nao sabe disso por causa do
+    // `never` dentro de `recusa`. Mesma assercao, e mesmo preco, de
+    // `imagemDoEnvio`.
+    const aberto = envio as NonNullable<typeof envio>;
+    if (aberto.confirmedAt !== null) {
+      // Envio ja confirmado e REAPROVEITADO quando e desta mesma entrada: o
+      // painel manda a galeria inteira a cada salvamento, e recusar aqui faria
+      // a segunda gravacao de um telefone perder todas as fotos.
+      if (aberto.catalogImageId === null) recusa();
+      const dono = await tx.entradaDaImagemDaGaleria(aberto.catalogImageId as string);
+      if (dono !== null && dono !== donoPermitido) recusa();
+      return aberto.catalogImageId as string;
+    }
+    const agora = this.agora();
+    if (aberto.expiresAt.getTime() <= agora) recusa();
+
+    const imagemId = this.deps.ids.uuidv7();
+    await tx.confirmarEnvioDeCatalogo({
+      imagemId,
+      trabalhoId: this.deps.ids.uuidv7(),
+      envioId: aberto.id,
+      purpose: 'directory_gallery',
+      agora,
+    });
+    return imagemId;
+  }
+
   private async imagemDoEnvio(
     tx: TransacaoDoDiretorio,
     campo: 'logo_upload_id' | 'photo_upload_id',

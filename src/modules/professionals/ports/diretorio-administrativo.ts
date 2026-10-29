@@ -44,6 +44,25 @@ export class SlugOcupado extends Error {
   }
 }
 
+/**
+ * UMA imagem da galeria, na posicao que ela ocupa (cliente, 29/10/2026).
+ *
+ * Mesma forma de `ImagemNaPosicao` da `Rede`, e nao importada dela: um modulo
+ * que importe a porta de outro modulo cria a dependencia que a secao 6 proibe.
+ */
+export interface ImagemDaGaleriaNaPosicao {
+  /** `catalog_images.id`, ja confirmado nesta mesma transacao. */
+  readonly imageId: string;
+  readonly position: number;
+  /**
+   * **Anulavel**: nulo quer dizer que o painel nao escreveu descricao; quando
+   * vem, de 2 a 150 caracteres aparados. A coluna aceita nulo desde que nasceu
+   * (`20261029000001`), pela mesma decisao do cliente que afrouxou a `Loja` em
+   * 17/10 e a `Rede` em 21/10.
+   */
+  readonly altText: string | null;
+}
+
 export interface Pagina<T> {
   readonly itens: readonly T[];
   readonly total: number;
@@ -153,6 +172,19 @@ export interface TransacaoDoDiretorio {
   entradaPorSlug(slug: string): Promise<EntradaAdministrativa | null>;
   /** O `id` interno da entrada, para a trilha. Nunca sai em resposta. */
   idPorSlug(slug: string): Promise<string | null>;
+  /**
+   * A entrada pelo `id` interno, SEM trava de linha, para ler o estado final
+   * depois de a galeria ter sido substituida (cliente, 29/10/2026).
+   *
+   * Ela existe porque `inserirEntrada` e `atualizarEntrada` leem a entrada
+   * ANTES de a galeria ser escrita -- a galeria vive em outra tabela e precisa
+   * do `id`, que no `INSERT` so existe depois dele. Sem esta releitura a
+   * resposta do `POST` sairia com `images: []` tendo gravado oito.
+   *
+   * Lanca quando o `id` nao existe: a chamada acontece dentro da transacao que
+   * acabou de escrever a linha, e "sumiu" ali e defeito e nao estado.
+   */
+  recarregarEntrada(id: string): Promise<EntradaAdministrativa>;
   /** Lanca `SlugOcupado`. */
   inserirEntrada(nova: NovaEntrada): Promise<EntradaAdministrativa>;
   /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */
@@ -198,6 +230,25 @@ export interface TransacaoDoDiretorio {
   confirmarEnvioDeCatalogo(entrada: ConfirmacaoDeCatalogo): Promise<void>;
   /** A entrada que ja usa esta imagem, ou `null`. Impede a mesma logo em duas marcas. */
   entradaDaImagem(imagemId: string): Promise<string | null>;
+  /**
+   * SUBSTITUI a galeria inteira da entrada (cliente, 29/10/2026).
+   *
+   * Substitui, e nao acrescenta: a lista que vem e a lista que fica, e vazia
+   * limpa a galeria. E o que faz reordenar ser "mandar a ordem nova" em vez de
+   * uma operacao propria -- e e por isso que a unicidade de posicao no banco e
+   * DIFERIDA, para o apaga-e-insere nao colidir no meio da transacao.
+   */
+  substituirImagens(entradaId: string, imagens: readonly ImagemDaGaleriaNaPosicao[]): Promise<void>;
+  /**
+   * A entrada que ja tem esta imagem NA GALERIA, ou `null`.
+   *
+   * Separada de `entradaDaImagem` porque pergunta de outra tabela
+   * (`professional_images` contra as duas colunas de `professionals`), e porque
+   * a resposta tem outro efeito: ali ela impede a mesma logo em duas marcas,
+   * aqui ela impede que o `UNIQUE` global de `professional_images.image_id` vire
+   * um `500` no lugar do `400 upload_not_usable`.
+   */
+  entradaDaImagemDaGaleria(imagemId: string): Promise<string | null>;
   /** O ULTIMO passo de toda escrita, na MESMA transacao (ADR-0027 item 8). */
   registrarNaTrilha(evento: AuditEvent): Promise<void>;
 }

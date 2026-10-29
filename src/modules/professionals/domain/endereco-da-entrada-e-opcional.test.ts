@@ -48,6 +48,8 @@ const AUTONOMO: EntradaAdministrativa = {
   neighborhood: 'Sumarezinho',
   logo: null,
   photo: null,
+  /** A GALERIA (29/10/2026). Vazia: a publicacao nao cobra imagem nenhuma. */
+  imagens: [],
   postalCode: null,
   street: null,
   streetNumber: null,

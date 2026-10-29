@@ -656,6 +656,13 @@ export type PropositoDaImagemDeCatalogo =
   // esteira, propositos novos -- ver `migrations/20261018000008`.
   | 'directory_logo'
   | 'directory_photo'
+  // A GALERIA da entrada do diretorio (29/10/2026, decisao do cliente:
+  // *"implemente a tabela de galeria entao"*) -- ver
+  // `migrations/20261029000001`. Separado de `directory_photo` pelo MESMO
+  // critério que separou `user_showcase` de `user_photo`: aquele e a foto UNICA
+  // do lugar, com duas derivadas, e esta e a galeria de ate oito, que precisa
+  // tambem da `thumb` de 480 x 360 da faixa -- as TRES derivadas do encontro.
+  | 'directory_gallery'
   | 'user_photo'
   // A VITRINE de fotos do usuario -- ver `migrations/20261018000040`. Separado
   // de `user_photo`: aquele e a foto UNICA do perfil, este sao as ate nove da
@@ -2064,6 +2071,37 @@ export interface NetworkEventSizesTable {
   size: string;
 }
 
+/**
+ * A GALERIA de uma entrada do diretorio de `Perto` (`20261029000001`, decisao
+ * do cliente de 29/10/2026: *"implemente a tabela de galeria entao"*).
+ *
+ * **MESMA forma de `NetworkEventImagesTable`**, e isso e o pedido cumprido ao
+ * pe da letra -- *"deve ser padrao igual na pagina de eventos"*: ate 8,
+ * `position = 0` e a capa, unicidade de ordem diferida no banco.
+ *
+ * Ela **nao substitui** `professionals.logo_image_id` nem
+ * `professionals.photo_image_id`, que continuam singulares e com indice unico
+ * cada um: a logo e UMA porque e a marca (quadrada, ao lado do nome, e e a
+ * unica que a listagem le), e a `photo` singular fica porque JA existe no
+ * contrato e em dado de homologacao.
+ */
+export interface ProfessionalImagesTable {
+  /** `professionals.id`, a identidade interna. Nunca o `slug` (ADR-0024). */
+  professional_id: string;
+  /** `catalog_images.id`, com `purpose = 'directory_gallery'`. UNIQUE global. */
+  image_id: string;
+  /** 0 e a capa da galeria; o `CHECK` do banco vai a 7. */
+  position: number;
+  /**
+   * **Anulavel desde o nascimento da tabela**, e nao afrouxado depois: a `Loja`
+   * perdeu a obrigacao em 17/10/2026 e a `Rede` em 21/10, as duas por pedido do
+   * cliente, e nascer `NOT NULL` aqui criaria em 29/10 a obrigacao que as duas
+   * galerias irmas nao tem -- com UM componente de galeria no painel para as
+   * tres. O `CHECK` de tamanho (2 a 150) vale quando o texto vem.
+   */
+  alt_text: string | null;
+}
+
 /** A galeria do encontro (ADR-0027 A.4.2); `position = 0` e a capa. */
 export interface NetworkEventImagesTable {
   event_id: string;
@@ -2809,6 +2847,7 @@ export interface Database {
   conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
+  professional_images: ProfessionalImagesTable;
   professional_reviews: ProfessionalReviewsTable;
   professional_review_reports: ProfessionalReviewReportsTable;
   entity_verifications: EntityVerificationsTable;

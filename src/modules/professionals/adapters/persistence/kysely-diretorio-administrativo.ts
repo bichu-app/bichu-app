@@ -53,6 +53,7 @@ import type {
 import type {
   EntradaAdministrativa,
   ImagemDaEntrada,
+  ImagemDaGaleriaDaEntrada,
   OrigemDaEntrada,
   StatusDaEntrada,
   TitularidadeDaEntrada,
@@ -137,10 +138,28 @@ interface LinhaDaEntrada {
   photo_status: string | null;
   photo_public_key: string | null;
   photo_rejection_reason: string | null;
+  /**
+   * A GALERIA (29/10/2026), como o `json_agg` da subconsulta a devolve, ja
+   * ordenada por `position`. **Nula quando a entrada nao tem imagem**: um
+   * `json_agg` sobre zero linhas devolve `NULL` e nao `[]`, e e por isso que
+   * `comoEntrada` abre com `?? []` em vez de confiar no tipo.
+   */
+  images: readonly LinhaDaImagemDaGaleria[] | null;
   published_at: Date | null;
   created_at: Date;
   updated_at: Date;
   version: number;
+}
+
+/** Uma linha da galeria como o `json_build_object` da subconsulta a monta. */
+interface LinhaDaImagemDaGaleria {
+  upload_id: string | null;
+  image_id: string;
+  position: number | string;
+  alt_text: string | null;
+  status: string;
+  public_key: string | null;
+  rejection_reason: string | null;
 }
 
 /**
@@ -186,6 +205,19 @@ function comoEntrada(l: LinhaDaEntrada): EntradaAdministrativa {
     siteUrl: l.site_url,
     logo: comoImagem(l.logo_status, l.logo_public_key, l.logo_rejection_reason),
     photo: comoImagem(l.photo_status, l.photo_public_key, l.photo_rejection_reason),
+    // `?? []` porque `json_agg` sobre zero linhas devolve NULL, e nao `[]`.
+    // `Number(position)` porque o `json_build_object` pode devolver o
+    // `smallint` como texto dependendo do driver -- a mesma conversao que
+    // `kysely-rede-administrativa.ts` faz, e pelo mesmo motivo.
+    imagens: (l.images ?? []).map((i) => ({
+      uploadId: i.upload_id,
+      imageId: i.image_id,
+      position: Number(i.position),
+      altText: i.alt_text,
+      status: i.status as ImagemDaGaleriaDaEntrada['status'],
+      publicKey: i.public_key,
+      rejectionReason: i.rejection_reason,
+    })),
     status: l.status,
     source: l.source,
     claimStatus: l.claim_status,
@@ -247,11 +279,42 @@ function imagemDa(coluna: 'logo_image_id' | 'photo_image_id', campo: 'status' | 
 )`;
 }
 
+/**
+ * A GALERIA, por subconsulta (29/10/2026) -- e nao por `JOIN`, pelas DUAS
+ * razoes de `imagemDa` somadas a uma terceira que so vale aqui.
+ *
+ * 1. `entradaPorSlug` usa `FOR UPDATE`, e `FOR UPDATE` com `JOIN` travaria
+ *    tambem as linhas de `catalog_images`. `FOR UPDATE` nao alcanca
+ *    subconsulta.
+ * 2. Um `JOIN` para uma relacao 1:N multiplicaria a linha da entrada por oito,
+ *    e a listagem paginada passaria a contar imagens em vez de entradas.
+ * 3. **A ordem mora aqui.** `ORDER BY i.position` dentro do `json_agg` e o
+ *    UNICO lugar que decide a ordem da galeria: a projecao do dominio nao
+ *    reordena, de proposito, porque duas definicoes de "a ordem" divergem no
+ *    dia em que uma delas mudar.
+ *
+ * `upload_id` sai de `catalog_images.upload_intent_id`, que e `ON DELETE SET
+ * NULL`: nulo quer dizer que a conta que enviou foi apagada e a imagem ficou --
+ * o contrato ja declara `[string, 'null']` em `AdminCatalogGalleryImage`.
+ *
+ * Sem acento grave nesta prosa: ela mora dentro de um template literal de
+ * TypeScript, e o acento grave o encerraria no meio.
+ */
+const GALERIA_DA_ENTRADA = sql<readonly LinhaDaImagemDaGaleria[] | null>`(
+  SELECT json_agg(json_build_object(
+           'upload_id', c.upload_intent_id, 'image_id', c.id, 'position', i.position,
+           'alt_text', i.alt_text, 'status', c.status, 'public_key', c.public_key,
+           'rejection_reason', c.rejection_reason) ORDER BY i.position)
+    FROM professional_images i JOIN catalog_images c ON c.id = i.image_id
+   WHERE i.professional_id = professionals.id
+)`;
+
 function consultaDeEntradas(db: DbExecutor) {
   return db
     .selectFrom('professionals')
     .select([...COLUNAS])
     .select(EVIDENCIAS_APROVADAS.as('evidencias'))
+    .select(GALERIA_DA_ENTRADA.as('images'))
     .select(imagemDa('logo_image_id', 'status').as('logo_status'))
     .select(imagemDa('logo_image_id', 'public_key').as('logo_public_key'))
     .select(imagemDa('logo_image_id', 'rejection_reason').as('logo_rejection_reason'))
@@ -337,6 +400,17 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
         .where('slug', '=', slug)
         .executeTakeFirst();
       return linha?.id ?? null;
+    },
+
+    async recarregarEntrada(id: string) {
+      // Sem `FOR UPDATE`: a transacao que chama esta leitura ja escreveu a
+      // linha e portanto ja a tem travada. Pedir a trava de novo nao
+      // acrescenta garantia e faria a releitura esperar por uma trava que e
+      // dela mesma.
+      const linha = await consultaDeEntradas(trx)
+        .where('professionals.id', '=', id)
+        .executeTakeFirstOrThrow();
+      return comoEntrada(linha);
     },
 
     async inserirEntrada(nova: NovaEntrada) {
@@ -469,6 +543,41 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
         )
         .executeTakeFirst();
       return linha?.id ?? null;
+    },
+
+    async substituirImagens(entradaId: string, imagens) {
+      // Apagar e inserir: a galeria e substituida inteira, e a unicidade de
+      // posicao e DIFERIDA (`professional_images_ordem_unica`), entao a ordem
+      // nova so e conferida no COMMIT. Copiado de `substituirImagens` da
+      // `Rede`, que resolveu o mesmo problema do mesmo jeito.
+      await trx
+        .deleteFrom('professional_images')
+        .where('professional_id', '=', entradaId)
+        .execute();
+      if (imagens.length === 0) return;
+      await trx
+        .insertInto('professional_images')
+        .values(
+          imagens.map((i) => ({
+            professional_id: entradaId,
+            image_id: i.imageId,
+            position: i.position,
+            alt_text: i.altText,
+          })),
+        )
+        .execute();
+    },
+
+    async entradaDaImagemDaGaleria(imagemId: string) {
+      // `professional_images.image_id` e UNIQUE GLOBAL: esta leitura e o que
+      // transforma a recusa num `400` com nome de campo em vez de deixar a
+      // violacao de unicidade chegar na borda como `500`.
+      const linha = await trx
+        .selectFrom('professional_images')
+        .select('professional_id')
+        .where('image_id', '=', imagemId)
+        .executeTakeFirst();
+      return linha?.professional_id ?? null;
     },
 
     registrarNaTrilha: (evento) => deps.trilha.recordIn(trx, evento),

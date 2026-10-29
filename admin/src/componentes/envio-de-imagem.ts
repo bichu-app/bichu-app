@@ -35,13 +35,20 @@ export type Proposito = Esquemas['AdminCatalogImageIntentInput']['purpose'];
  * As minimas do contrato (`AdminCatalogImageIntentInput`): 800 x 800 na Loja,
  * 600 x 600 no encontro (01/10), e desde 18/10/2026 a logo e a foto do
  * diretorio -- 256 x 256 na logo, que e quadrada e pequena, e 600 x 600 na
- * foto da fachada ou do ambiente.
+ * foto da fachada ou do ambiente. A GALERIA do diretorio (29/10/2026) usa os
+ * mesmos 600 x 600 da foto do lugar: as duas sao foto de celular de um lugar, e
+ * a maior derivada das duas e a mesma (`banner` 1280 x 720).
+ *
+ * `Record<Proposito, ...>` vale como TRAVA: proposito novo no contrato reprova
+ * no compilador do painel aqui, em vez de `DIMENSAO_MINIMA[proposito]` virar
+ * `undefined` e `textoDaMinima` imprimir "pelo menos undefined x undefined".
  */
 export const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: number }> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
   directory_logo: { largura: 256, altura: 256 },
   directory_photo: { largura: 600, altura: 600 },
+  directory_gallery: { largura: 600, altura: 600 },
 };
 
 function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {

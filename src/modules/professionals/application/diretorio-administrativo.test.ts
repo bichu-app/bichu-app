@@ -71,6 +71,9 @@ function entradaSemeada(): EntradaAdministrativa {
     neighborhood: 'Vila Mariana',
     logo: null,
     photo: null,
+    // A GALERIA (29/10/2026). VAZIA nesta fixa, que e o estado normal: a
+    // publicacao nao cobra imagem, e a galeria tem casos proprios.
+    imagens: [],
     // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
     // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
     // continuar completa para publicar.
@@ -174,6 +177,24 @@ function repositorioEmMemoria(): Memoria {
       entradaDaImagem: () => {
         throw new Error('entradaDaImagem nao e exercitado por este arquivo');
       },
+      // A GALERIA (29/10/2026) NAO E EXERCITADA NESTE ARQUIVO, e os dois dubles
+      // LANCAM pela mesma razao dos tres acima: um `() => null` faria um caso
+      // que chegasse aqui passar como se tivesse medido a recusa de envio.
+      entradaDaImagemDaGaleria: () => {
+        throw new Error('entradaDaImagemDaGaleria nao e exercitado por este arquivo');
+      },
+      substituirImagens: () => {
+        throw new Error('substituirImagens nao e exercitado por este arquivo');
+      },
+      // `recarregarEntrada` SO e chamada quando o corpo trouxe `images`, e
+      // nenhum caso deste arquivo traz: lancar e o que prova isso. Devolver a
+      // linha guardada faria um caso futuro com galeria passar sem a releitura
+      // ter acontecido.
+      recarregarEntrada: (id: string) => {
+        const linha = linhas.get(id);
+        if (linha === undefined) throw new Error(`recarregarEntrada: ${id} nao existe no dobre`);
+        return Promise.resolve(linha);
+      },
       inserirEntrada(nova: NovaEntrada) {
         if ([...linhas.values()].some((l) => l.slug === nova.slug)) throw new SlugOcupado();
         const criada: EntradaAdministrativa = {
@@ -188,6 +209,7 @@ function repositorioEmMemoria(): Memoria {
           displayName: nova.displayName,
           logo: null,
           photo: null,
+          imagens: [],
           about: nova.about,
           city: nova.city,
           state: nova.state,

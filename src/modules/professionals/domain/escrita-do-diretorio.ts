@@ -153,6 +153,47 @@ export interface ImagemDaEntrada {
   readonly rejectionReason: string | null;
 }
 
+/**
+ * O TETO DA GALERIA: oito imagens.
+ *
+ * Nao e numero redondo escolhido aqui -- e o teto do BANCO, `CHECK (position
+ * BETWEEN 0 AND 7)` somado a `professional_images_ordem_unica`, copiado de
+ * `network_event_images`. A conferencia nesta camada existe para a recusa ter o
+ * nome do campo (`400`, `code: too_many_images`) em vez de virar um `500` de
+ * violacao de `CHECK`.
+ */
+export const TETO_DE_IMAGENS_DA_GALERIA = 8;
+
+/**
+ * UMA IMAGEM DA GALERIA da entrada, como o repositorio a entrega (cliente,
+ * 29/10/2026: *"implemente a tabela de galeria entao"*).
+ *
+ * **COPIA DELIBERADA de `ImagemDoEncontroAdministrativa`** (`Rede`), campo por
+ * campo, porque e exatamente isso que o cliente pediu -- *"padrao igual na
+ * pagina de eventos"*. Separa-la em outra forma seria inventar um segundo
+ * modelo para a mesma coisa.
+ *
+ * Diferente de `ImagemDaEntrada` (a logo e a foto) em tres campos, e os tres
+ * sao o que faz dela uma GALERIA e nao uma imagem solta: `uploadId` (o painel
+ * precisa dele para manter, reordenar e remover), `position` e `altText`.
+ */
+export interface ImagemDaGaleriaDaEntrada {
+  /** O envio de que ela nasceu. Nulo depois que a conta que enviou foi apagada. */
+  readonly uploadId: string | null;
+  /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
+  readonly imageId: string;
+  readonly position: number;
+  /**
+   * **Anulavel desde o nascimento da tabela** (`20261029000001`): nulo quer
+   * dizer que o painel gravou a imagem sem descricao, e e o estado em que as
+   * duas galerias irmas ja estao. O painel LE o nulo como nulo.
+   */
+  readonly altText: string | null;
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly publicKey: string | null;
+  readonly rejectionReason: string | null;
+}
+
 /** A entrada como o repositorio administrativo a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaAdministrativa {
   readonly slug: string;
@@ -191,6 +232,13 @@ export interface EntradaAdministrativa {
    */
   readonly logo: ImagemDaEntrada | null;
   readonly photo: ImagemDaEntrada | null;
+  /**
+   * A GALERIA (cliente, 29/10/2026), em ordem de `position`. **Vazia e o estado
+   * normal**, e `faltasParaPublicar` nao a cobra: a publicacao nunca cobrou
+   * imagem nenhuma, e comecar a cobrar aqui mudaria QUAIS entradas podem ir ao
+   * ar -- decisao de produto que ninguem tomou.
+   */
+  readonly imagens: readonly ImagemDaGaleriaDaEntrada[];
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
   readonly claimStatus: TitularidadeDaEntrada;
@@ -210,6 +258,19 @@ export interface EntradaAdministrativa {
  * tela, em vez de para o momento de publicar -- que e o pior momento possivel
  * para descobrir um conflito.
  */
+/**
+ * UMA imagem da galeria, como o corpo do contrato a declara
+ * (`CatalogImageInput`, o MESMO item que a `Rede` usa).
+ *
+ * `alt_text` AUSENTE e diferente de VAZIO, e a distincao e a das outras duas
+ * galerias: ausente grava nulo; presente e vazio e `400` (`minLength: 2` no
+ * contrato), e o painel OMITE o campo em vez de mandar `""`.
+ */
+export interface ImagemDeGaleriaDoCorpo {
+  readonly upload_id: string;
+  readonly alt_text?: string;
+}
+
 export interface CriacaoDaEntrada {
   readonly slug: string;
   /**
@@ -242,6 +303,11 @@ export interface CriacaoDaEntrada {
   readonly logo_upload_id?: string;
   /** O `upload_id` de um envio `directory_photo`. Opcional. */
   readonly photo_upload_id?: string;
+  /**
+   * A GALERIA, na ordem em que a pagina do local a mostra. Opcional, e omitir
+   * equivale a `[]`: entrada nasce sem galeria, que e o normal.
+   */
+  readonly images?: readonly ImagemDeGaleriaDoCorpo[];
 }
 
 /**
@@ -274,6 +340,16 @@ export interface EdicaoDaEntrada {
   /** `null` TIRA a imagem, ausente nao mexe, `upload_id` novo TROCA. */
   readonly logo_upload_id?: string | null;
   readonly photo_upload_id?: string | null;
+  /**
+   * A GALERIA. **SUBSTITUI a lista inteira** -- o mesmo idioma de `images` da
+   * `Rede` e da `Loja`: a lista que vem e a lista que fica, reordenar e mandar
+   * a ordem nova, e `[]` tira todas.
+   *
+   * **Sem `| null`**, e a ausencia do nulo e desenho: "tirar todas" ja se diz
+   * com `[]`, e um segundo jeito de dizer a mesma coisa seria dois caminhos
+   * para o painel errar. Ausente nao mexe.
+   */
+  readonly images?: readonly ImagemDeGaleriaDoCorpo[];
   readonly status?: StatusDaEntrada;
 }
 
@@ -629,6 +705,28 @@ export interface ImagemProjetada {
   readonly rejection_reason: string | null;
 }
 
+/**
+ * `AdminCatalogGalleryImage` do contrato -- o MESMO schema de item que a `Loja`
+ * e a `Rede` devolvem, e por isso o painel usa UM componente de galeria para as
+ * tres secoes.
+ */
+export interface ImagemDeGaleriaProjetada {
+  readonly upload_id: string | null;
+  readonly position: number;
+  /**
+   * **Anulavel, e o painel precisa do nulo CRU**: se a leitura caisse no
+   * `display_name` da entrada, o formulario reabriria com o campo preenchido e
+   * quem edita nao teria como distinguir "descrevi com o nome" de "nao
+   * descrevi". A reserva e de quem DESENHA, nunca da leitura de edicao -- e e a
+   * mesma decisao de `ImagemProjetada.alt_text` na `Rede`.
+   */
+  readonly alt_text: string | null;
+  readonly source: 'uploaded';
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly url: string | null;
+  readonly rejection_reason: string | null;
+}
+
 function projetarImagem(
   imagem: ImagemDaEntrada | null,
   urlDeMidia: (chave: string) => string,
@@ -665,6 +763,8 @@ export interface EntradaProjetada {
   readonly site_url: string | null;
   readonly logo: ImagemProjetada | null;
   readonly photo: ImagemProjetada | null;
+  /** A GALERIA (29/10/2026). SEMPRE presente; `[]` e o estado normal. */
+  readonly images: readonly ImagemDeGaleriaProjetada[];
   readonly status: StatusDaEntrada;
   readonly verification: VerificacaoProjetada;
   readonly source: OrigemDaEntrada;
@@ -716,6 +816,29 @@ export function projetarEntradaAdministrativa(
     // (ADR-0010), e por enquanto a resposta de `Perto` continua como estava.
     logo: projetarImagem(entrada.logo, urlDeMidia),
     photo: projetarImagem(entrada.photo, urlDeMidia),
+    // A GALERIA sai NESTA projecao, que e a do painel, e **nao** em
+    // `projetarEntrada` (a do aplicativo, em `entrada-do-diretorio.ts`): o que
+    // nao chega lá nao tem como sair em `Perto`. A mesma regra da logo e da
+    // foto, pelo mesmo motivo (ADR-0010) e com uma medida a mais -- vinte
+    // faixas 16:9 na listagem custariam 65,6 MiB de imagem decodificada.
+    //
+    // A ORDEM e a de `position`, e quem a garante e o `ORDER BY` do
+    // repositorio: ordenar de novo aqui seria a segunda definicao de "a ordem
+    // da galeria", e a que nao reclama venceria.
+    images: entrada.imagens.map((imagem) => ({
+      upload_id: imagem.uploadId,
+      position: imagem.position,
+      alt_text: imagem.altText,
+      source: 'uploaded' as const,
+      status: imagem.status,
+      // Mesma regra da logo: sem chave ou fora de `ready`, a URL e NULA e nao
+      // uma URL que daria 404.
+      url:
+        imagem.status === 'ready' && imagem.publicKey !== null
+          ? urlDeMidia(imagem.publicKey)
+          : null,
+      rejection_reason: imagem.status === 'rejected' ? imagem.rejectionReason : null,
+    })),
     status: entrada.status,
     verification: {
       level: nivelDerivado(entrada.verificacoes),
@@ -775,6 +898,17 @@ export function retratoDaEntrada(entrada: EntradaAdministrativa): Record<string,
     // auditar e "alguem pos" / "alguem tirou".
     logo: entrada.logo !== null,
     photo: entrada.photo !== null,
+    // A GALERIA entra na trilha como QUANTIDADE, e nao como lista de `upload_id`
+    // -- a MESMA regra dos dois booleanos acima e pela mesma razao: chave de
+    // objeto numa trilha append-only e um ponteiro permanente para um arquivo
+    // que pode ser trocado ou retirado.
+    //
+    // O que a trilha perde, dito em voz alta: ela registra que a galeria passou
+    // de tres para quatro fotos e NAO mostra que a terceira foi trocada por
+    // outra, nem que a ordem mudou. A `Rede` escolheu diferente (lá o retrato
+    // carrega `upload_id`); aqui a regra do proprio arquivo e esta, e duas
+    // regras no mesmo retrato seria o pior dos dois.
+    images: entrada.imagens.length,
     status: entrada.status,
   };
 }

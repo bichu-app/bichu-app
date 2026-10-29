@@ -6,6 +6,13 @@ import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
 import { CampoDeImagem } from '../componentes/CampoDeImagem.tsx';
 import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
+import {
+  descricaoAceitavel,
+  Galeria,
+  precisaDeDescricao,
+  type ImagemDaGaleria,
+} from '../componentes/Galeria.tsx';
+import { enviarImagem, LIMITE_EM_MB, DIMENSAO_MINIMA } from '../componentes/envio-de-imagem.ts';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { cepDosOitoDigitos, cepEmOitoDigitos } from '../formato/cep.ts';
@@ -93,6 +100,21 @@ export interface Valores {
    */
   logoUploadId: string | null | undefined;
   fotoUploadId: string | null | undefined;
+  /**
+   * A GALERIA (cliente, 29/10/2026: *"implemente a tabela de galeria entao"*).
+   *
+   * **Ao contrario da logo e da foto, ela GUARDA a imagem gravada**, e a
+   * diferenca nao e descuido: a logo e um campo so, e "nao tocou" e
+   * representavel com `undefined`; a galeria e uma LISTA que a pessoa reordena,
+   * e para reordenar a tela tem de conhecer o que esta gravado. E tambem o que
+   * o componente `Galeria` espera -- o mesmo que a `Loja` e a `Rede` fazem.
+   *
+   * Consequencia, dita em voz alta: `sujo` compara `Valores` inteiro, entao a
+   * galeria gravada entra na comparacao. Ela nao faz todo formulario parecer
+   * alterado porque `base` carrega exatamente a mesma lista -- e por isso que
+   * `valoresDa` a monta a partir de `entrada.images` e nao de uma lista vazia.
+   */
+  imagens: ImagemDaGaleria[];
   situacao: StatusDaEntrada;
 }
 
@@ -112,7 +134,8 @@ type Campo =
   | 'e-telefone'
   | 'e-site'
   | 'e-logo'
-  | 'e-foto';
+  | 'e-foto'
+  | 'e-galeria';
 
 const ROTULOS: Record<Campo, string> = {
   'e-nome': 'Nome',
@@ -131,6 +154,7 @@ const ROTULOS: Record<Campo, string> = {
   'e-site': 'Site',
   'e-logo': 'Logo',
   'e-foto': 'Foto do local',
+  'e-galeria': 'Galeria de fotos',
 };
 
 const ORDEM: Campo[] = [
@@ -150,6 +174,7 @@ const ORDEM: Campo[] = [
   'e-site',
   'e-logo',
   'e-foto',
+  'e-galeria',
 ];
 
 const VAZIO: Valores = {
@@ -170,6 +195,7 @@ const VAZIO: Valores = {
   site: '',
   logoUploadId: undefined,
   fotoUploadId: undefined,
+  imagens: [],
   situacao: 'draft',
 };
 
@@ -263,7 +289,104 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     const recusa = mensagemDoSite(v.site);
     if (recusa !== null) e['e-site'] = recusa;
   }
+  // A GALERIA (cliente, 29/10/2026). **A descricao e OPCIONAL**, como nas duas
+  // galerias irmas: o que se recusa aqui e a descricao de UMA letra, que o
+  // contrato rejeita por `minLength: 2`. Vazio quer dizer "nao escrevi" e o
+  // campo e OMITIDO do corpo; `"a"` quer dizer "escrevi errado", e deixar
+  // passar trocaria um erro de campo por um `400` sem endereco na tela.
+  //
+  // O teto de 8 NAO e conferido aqui: a propria `Galeria` desabilita o botao de
+  // adicionar ao chegar em `MAXIMO_DE_IMAGENS`, e o servidor tem a rede embaixo
+  // (`too_many_images`). Conferir na tela algo que a tela nao consegue produzir
+  // seria uma mensagem que ninguem ve.
+  if (v.imagens.some((im) => precisaDeDescricao(im) && !descricaoAceitavel(im.alt, false))) {
+    e['e-galeria'] = 'Escreva pelo menos duas letras na descrição, ou deixe o campo vazio.';
+  }
   return e;
+}
+
+/**
+ * A GALERIA como o corpo do contrato a quer (`DirectoryGalleryImagesInput`).
+ *
+ * Duas regras, e as duas sao de contrato e nao de gosto:
+ *
+ * 1. **So entra a imagem com `upload_id`.** A que falhou, a que ainda esta
+ *    subindo e a que veio de uma conta apagada (`upload_id` nulo na leitura)
+ *    nao tem o que mandar -- e `images` SUBSTITUI a lista inteira, entao mandar
+ *    a galeria sem ela a TIRA da entrada. E o que `semEnvioNaGaleria` avisa.
+ * 2. **Descricao vazia e OMITIDA**, nunca `""`: o contrato recusa `""` por
+ *    `minLength: 2`, e ausente e o jeito de dizer "nao escrevi".
+ */
+function imagensDoCorpo(v: Pick<Valores, 'imagens'>): Esquemas['CatalogImageInput'][] {
+  return v.imagens
+    .filter((im): im is ImagemDaGaleria & { uploadId: string } => typeof im.uploadId === 'string')
+    .map((im) => {
+      const alt = im.alt.trim();
+      return { upload_id: im.uploadId, ...(alt === '' ? {} : { alt_text: alt }) };
+    });
+}
+
+/**
+ * A imagem que a galeria nao consegue reenviar (`upload_id` nulo na leitura).
+ *
+ * A MESMA regra da `Loja` e da `Rede` (UX 30.7 R1): `catalog_images
+ * .upload_intent_id` e `ON DELETE SET NULL`, entao apagar a conta do painel que
+ * enviou deixa a imagem na entrada e tira o identificador com que o painel a
+ * reenviaria.
+ */
+export function semEnvioNaGaleria(im: ImagemDaGaleria): boolean {
+  return (
+    im.uploadId === undefined &&
+    (im.estado === 'ready' || im.estado === 'processing' || im.estado === 'enviada')
+  );
+}
+
+export const MARCA_SEM_ENVIO = 'Sai se a galeria mudar';
+
+/** O alerta abaixo da galeria, com a posicao quando for uma imagem so. */
+export function avisoDeImagensSemEnvio(v: Pick<Valores, 'imagens'>): string | null {
+  const posicoes = v.imagens.flatMap((im, i) => (semEnvioNaGaleria(im) ? [i + 1] : []));
+  if (posicoes.length === 0) return null;
+  if (posicoes.length === 1) {
+    return `A imagem ${String(posicoes[0])} veio de uma conta que não existe mais. Ela fica na entrada enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, a tira da entrada. Para mudar a galeria sem perdê-la, envie o mesmo arquivo de novo.`;
+  }
+  return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam na entrada enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, as tira da entrada. Para mudar a galeria sem perdê-las, envie os mesmos arquivos de novo.`;
+}
+
+/**
+ * A assinatura da galeria, para o `PATCH` so mandar `images` quando ela mudou.
+ *
+ * `[chave, alt]` e nao a lista inteira: `previa` e `progresso` mudam sozinhos
+ * durante o envio, e compara-los faria uma edicao de telefone reenviar a
+ * galeria. A CHAVE carrega a identidade e a ORDEM, que e o que importa.
+ */
+const assinaturaDaGaleria = (v: Pick<Valores, 'imagens'>): string =>
+  JSON.stringify(v.imagens.map((im) => [im.chave, im.alt.trim()]));
+
+/**
+ * O que vai para o rascunho da sessao: **sem arquivo e sem previa local**, que
+ * nao sobrevivem a recarga, e sem a imagem que ainda nao tem `upload_id`.
+ *
+ * Copiado de `paraRascunho` da `Loja`, e pelo mesmo motivo medido: `File` e
+ * `blob:` passam por `JSON.stringify` como `{}` e como uma URL morta, e o
+ * rascunho retomado abriria com uma moldura presa em "Enviando…".
+ */
+export function paraRascunho(v: Valores): Valores {
+  return {
+    ...v,
+    imagens: v.imagens
+      .filter((im) => im.uploadId)
+      .map(
+        (im) =>
+          ({
+            chave: im.chave,
+            uploadId: im.uploadId,
+            alt: im.alt,
+            estado: im.estado === 'enviada' ? 'enviada' : im.estado,
+            previa: im.previa?.startsWith('blob:') ? null : (im.previa ?? null),
+          }) as ImagemDaGaleria,
+      ),
+  };
 }
 
 /**
@@ -318,6 +441,24 @@ function valoresDa(entrada: Entrada): Valores {
     // clique, e nao ha o que editar nele.
     logoUploadId: undefined,
     fotoUploadId: undefined,
+    // A GALERIA e lida, ao contrario da logo e da foto: ver `Valores.imagens`.
+    // Ordenada por `position` aqui tambem, e nao so no servidor -- a tela
+    // reordena a lista local e nao deve depender de o `json_agg` ter mantido a
+    // ordem numa resposta em cache.
+    imagens: [...entrada.images]
+      .sort((a, b) => a.position - b.position)
+      .map((im) => ({
+        // `upload_id` e anulavel no contrato (a intencao de envio pode ter sido
+        // apagada e a imagem fica): a chave cai para a posicao, como na `Loja`
+        // e na `Rede`. Sem `uploadId`, a imagem nao volta no corpo da escrita.
+        chave: im.upload_id ?? `sem-envio-${String(im.position)}`,
+        ...(im.upload_id === null ? {} : { uploadId: im.upload_id }),
+        // `alt_text` e anulavel: na tela o campo vazio e a mesma coisa.
+        alt: im.alt_text ?? '',
+        estado: im.status,
+        motivo: im.rejection_reason ?? null,
+        previa: im.url ?? null,
+      })),
     situacao: entrada.status,
   };
 }
@@ -380,6 +521,13 @@ export function valoresDuplicados(entrada: Entrada): Valores {
     // imagem gravada nenhuma a continuar, porque nao ha entrada ainda.
     logoUploadId: undefined,
     fotoUploadId: undefined,
+    // **A GALERIA TAMBEM NAO VAI**, e pela MESMA razao do contrato que tira a
+    // logo e a foto: a leitura traz `upload_id` de um envio JA USADO nesta
+    // entrada, e `professional_images.image_id` e UNIQUE GLOBAL -- a copia
+    // seria recusada com `400 upload_not_usable`. Quem duplica sobe as fotos de
+    // novo, e o formulario abre com a galeria vazia em vez de prometer o que
+    // nao tem como cumprir.
+    imagens: [],
     situacao: VAZIO.situacao,
   };
 }
@@ -561,7 +709,7 @@ export default function FormularioDaEntrada() {
     valoresRef.current = valores;
   });
   useEffect(
-    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, valoresRef.current)),
+    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, paraRascunho(valoresRef.current))),
     [registrarRascunho, chaveDoRascunho],
   );
 
@@ -688,6 +836,11 @@ export default function FormularioDaEntrada() {
             ...(typeof valores.fotoUploadId === 'string'
               ? { photo_upload_id: valores.fotoUploadId }
               : {}),
+            // A GALERIA (29/10/2026). Vai SEMPRE, inclusive vazia: no cadastro
+            // nao existe "nao tocou no campo" -- o que a tela tem e o que a
+            // entrada vai ter, e `[]` e exatamente o estado da entrada que
+            // nasce sem foto.
+            images: imagensDoCorpo(valores),
           },
         });
         if (data) {
@@ -747,6 +900,14 @@ export default function FormularioDaEntrada() {
         // dos outros campos deste `PATCH`.
         ...(logoNoPatch !== undefined ? { logo_upload_id: logoNoPatch } : {}),
         ...(fotoNoPatch !== undefined ? { photo_upload_id: fotoNoPatch } : {}),
+        // A GALERIA (29/10/2026) **so vai quando mudou em relacao a base**, e
+        // isso nao e economia de bytes: `images` SUBSTITUI a lista inteira, e a
+        // imagem com `upload_id` nulo nao pode ir no corpo -- mandar a galeria
+        // numa edicao de telefone a tiraria da entrada. E o mesmo cuidado que a
+        // `Loja` tem em `corpoDeAlteracao`.
+        ...(assinaturaDaGaleria(valores) === assinaturaDaGaleria(base)
+          ? {}
+          : { images: imagensDoCorpo(valores) }),
         ...(valores.situacao !== entrada.status ? { status: valores.situacao } : {}),
       };
       // Sem mudanca nada vai ao servidor, e a tela diz isso em vez de voltar
@@ -807,6 +968,21 @@ export default function FormularioDaEntrada() {
         } else if (erro.field === 'neighborhood') e['e-bairro'] = 'Entre 2 e 80 caracteres.';
         else if (erro.field === 'postal_code') {
           e['e-cep'] = 'O CEP tem oito dígitos. Por exemplo: 05435-000.';
+        } else if (erro.field === 'images' || erro.field.startsWith('images[')) {
+          // UM campo na tela para os tres `code` que o servidor devolve em
+          // `images`: `upload_not_usable`, `duplicate_upload` e o tamanho de
+          // `images[n].alt_text`. A galeria desenha o erro no topo dela, e nao
+          // na moldura n -- e `images[n]` nao casa com nenhum `id` de campo,
+          // entao `startsWith` e o que impede o erro de cair no silencio do
+          // `else`.
+          e['e-galeria'] =
+            erro.code === 'duplicate_upload'
+              ? 'A mesma imagem aparece duas vezes na galeria. Remova uma delas.'
+              : erro.code === 'too_many_images'
+                ? 'Até 8 imagens na galeria.'
+                : erro.code === 'length'
+                  ? 'Escreva pelo menos duas letras na descrição, ou deixe o campo vazio.'
+                  : 'Uma das imagens da galeria não serve para esta entrada. Envie-a de novo.';
         } else if (erro.field === 'logo_upload_id') {
           e['e-logo'] = 'Não conseguimos usar esta imagem como logo. Envie a imagem de novo.';
         } else if (erro.field === 'photo_upload_id') {
@@ -1201,6 +1377,44 @@ export default function FormularioDaEntrada() {
           erro={erros['e-foto']}
           ajuda="A fachada ou o ambiente, em faixa deitada. É a imagem grande da entrada."
         />
+
+        {/* A GALERIA (cliente, 29/10/2026: *"implemente a tabela de galeria
+            entao"*), que responde ao pedido de 28/10 -- *"so esta permitindo
+            subir uma foto, deve ser padrao igual na pagina de eventos"*.
+
+            E o MESMO componente `Galeria` da `Loja` e da `Rede`, com o
+            proposito `directory_gallery`: um componente para as tres secoes, e
+            nao um terceiro desenho de galeria.
+
+            `principal="Capa"` e nao "Principal": a primeira e a capa da
+            galeria, o mesmo vocabulario da `Rede`. Ela NAO substitui a "Foto do
+            local" acima -- aquela e uma so, e e a imagem grande da entrada. */}
+        <Galeria
+          id="e-galeria"
+          titulo="Galeria de fotos"
+          principal="Capa"
+          proposito="directory_gallery"
+          imagens={valores.imagens}
+          aoMudar={(atualizar) =>
+            mudar({ imagens: atualizar(valores.imagens) })
+          }
+          enviar={(arquivo, aoProgredir) =>
+            enviarImagem(api, arquivo, 'directory_gallery', aoProgredir)
+          }
+          mostrarErrosDeDescricao={tentou}
+          // A descricao e OPCIONAL, como nas duas galerias irmas (`Loja` desde
+          // 17/10/2026 e `Rede` desde 21/10, as duas por pedido do cliente).
+          // O padrao do componente e `true`; desligar aqui e o que mantem as
+          // tres telas com a mesma exigencia.
+          descricaoObrigatoria={false}
+          reservaDaDescricao="o nome da entrada"
+          ajuda={`JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.directory_gallery.largura)} × ${String(DIMENSAO_MINIMA.directory_gallery.altura)} pixels. A primeira é a capa da galeria. Arraste para reordenar, ou use os botões de mover.`}
+          erro={erros['e-galeria']}
+          marca={(im) => (semEnvioNaGaleria(im) ? MARCA_SEM_ENVIO : undefined)}
+        />
+        {avisoDeImagensSemEnvio(valores) && (
+          <Banner tipo="alerta">{avisoDeImagensSemEnvio(valores)}</Banner>
+        )}
 
         {editando && (
           <fieldset className="field" aria-describedby="e-situacao-ajuda">

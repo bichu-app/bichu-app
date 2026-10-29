@@ -58,6 +58,8 @@ const COMPLETA: EntradaAdministrativa = {
   neighborhood: 'Vila Mariana',
   logo: null,
   photo: null,
+  /** A GALERIA (29/10/2026). Vazia: a publicacao nao cobra imagem nenhuma. */
+  imagens: [],
   // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
   // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
   // continuar completa para publicar.

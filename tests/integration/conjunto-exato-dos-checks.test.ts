@@ -280,6 +280,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // teto de bytes e de varredura de vencidos.
       'directory_logo',
       'directory_photo',
+      // O OITAVO, `20261029000001` (29/10/2026): a GALERIA da entrada do
+      // diretorio, pelo pedido do cliente do dia (*"implemente a tabela de
+      // galeria entao"*, depois de *"so esta permitindo subir uma foto, deve
+      // ser padrao igual na pagina de eventos"*). SEPARADO de
+      // `directory_photo` pelo mesmo critério que separou `user_showcase` de
+      // `user_photo`: aquele e a foto UNICA do lugar, com duas derivadas, e
+      // esta e a galeria de ate oito, que precisa tambem da `thumb` de
+      // 480 x 360 da faixa -- as TRES derivadas do encontro.
+      'directory_gallery',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
@@ -615,6 +624,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // teto de bytes e de varredura de vencidos.
       'directory_logo',
       'directory_photo',
+      // O OITAVO, `20261029000001` (29/10/2026): a GALERIA da entrada do
+      // diretorio, pelo pedido do cliente do dia (*"implemente a tabela de
+      // galeria entao"*, depois de *"so esta permitindo subir uma foto, deve
+      // ser padrao igual na pagina de eventos"*). SEPARADO de
+      // `directory_photo` pelo mesmo critério que separou `user_showcase` de
+      // `user_photo`: aquele e a foto UNICA do lugar, com duas derivadas, e
+      // esta e a galeria de ate oito, que precisa tambem da `thumb` de
+      // 480 x 360 da faixa -- as TRES derivadas do encontro.
+      'directory_gallery',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.

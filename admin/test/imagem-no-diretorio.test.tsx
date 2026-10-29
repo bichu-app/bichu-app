@@ -43,6 +43,9 @@ function entrada(extra: Partial<Esquemas['AdminDirectoryEntry']> = {}): Esquemas
     // antiga vale.
     entity_kind: 'professional',
     display_name: 'Passeios da Bia',
+    // A GALERIA e obrigatoria na resposta desde 29/10/2026, e `[]` e o estado
+    // normal: a entrada sem foto responde lista vazia, nao campo ausente.
+    images: [],
     status: 'draft',
     verification: { level: 'none', evidence_kinds: [] },
     source: 'import',
