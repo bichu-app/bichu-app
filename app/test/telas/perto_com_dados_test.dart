@@ -193,8 +193,21 @@ Future<http.Response> Function(http.Request) redeDoDiretorio(
 Future<void> abrirPerto(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
+  /// A escala de fonte do sistema. Nulo usa a do ambiente (1,0).
+  ///
+  /// Repassada a [abrirOApp], e **nao aplicada aqui por um `MediaQuery`
+  /// proprio**: o `BichuApp` faz um `clamp` de 1 a 2 no proprio `builder`, e
+  /// um `MediaQuery` cru por cima da arvore montada exercitaria outra coisa
+  /// que nao o app (BICHUS-313, 28/10/2026 -- o risco conhecido da linha da
+  /// nota no cartao e a fonte a 200%).
+  double? escala,
 }) async {
-  await abrirOApp(tester, rede: rede, deposito: depositoLogado());
+  await abrirOApp(
+    tester,
+    rede: rede,
+    deposito: depositoLogado(),
+    escala: escala,
+  );
   // **O CAMINHO MUDOU EM 19/10/2026: `Rede` -> aba `Comunidade`.**
   //
   // A secao `Perto` deixou de existir por decisao do cliente: o diretorio

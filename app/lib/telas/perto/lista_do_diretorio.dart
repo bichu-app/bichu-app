@@ -978,6 +978,56 @@ class CartaoDoDiretorio extends StatelessWidget {
   /// acerta.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
+  /// A LINHA DA NOTA, como o cartao a escreve (BICHUS-313, 28/10/2026).
+  ///
+  /// `4,8 · 128 avaliações` quando ha nota, e a frase do estado zero quando
+  /// nao ha. **Os dois desfechos moram na MESMA funcao** porque e o `build`
+  /// que escolhe entre desenhar e nao desenhar, e deixar o estado zero para o
+  /// `build` resolver convidaria um `?? '0,0'` no dia em que alguem olhasse so
+  /// a assinatura.
+  ///
+  /// **Ela CHAMA [PontuacaoDoLocal], e nao reimplementa a regra.** A tentacao
+  /// concreta era `'${pontuacao.quantidade} avaliações'` e
+  /// `pontuacao.media!.toStringAsFixed(1)`: as duas linhas funcionariam, e
+  /// produziriam `1 avaliações` para o primeiro avaliador de cada local e um
+  /// PONTO decimal onde a tela escreve virgula. `quantidadeEmTexto` e
+  /// `mediaEmTexto` ja resolviam as duas coisas para a pagina do local, e uma
+  /// segunda definicao divergiria na primeira edicao.
+  ///
+  /// A frase do zero e [PaginaDoLocal.tituloSemAvaliacoes], **a mesma
+  /// constante que a pagina interna usa** -- o mesmo local nao pode dizer
+  /// duas frases diferentes para o mesmo estado em duas telas.
+  static String textoDaAvaliacao(PontuacaoDoLocal pontuacao) {
+    final media = pontuacao.mediaEmTexto;
+    // Media nula com contagem acima de zero seria resposta fora do contrato,
+    // e mesmo ai o cartao cai no estado zero em vez de inventar uma media.
+    if (!pontuacao.temAvaliacoes || media == null) {
+      return PaginaDoLocal.tituloSemAvaliacoes;
+    }
+    return '$media · ${pontuacao.quantidadeEmTexto}';
+  }
+
+  /// O rotulo **ACESSIVEL** da nota: `Média 4,8 de 5 estrelas, 128
+  /// avaliações`.
+  ///
+  /// **O texto visivel nao serve ao leitor de tela, e aqui a diferenca e de
+  /// significado e nao de educacao.** `4,8 · 128 avaliações` lido em voz alta
+  /// nao tem denominador em lugar nenhum: o olho ve a estrela e sabe que a
+  /// escala e de 5, e quem ouve recebe um `4,8` solto. Na pagina do local o
+  /// `de 5` esta escrito ao lado da media em corpo grande; no cartao nao ha
+  /// nem o corpo grande nem o `de 5`, entao o denominador tem de entrar no
+  /// rotulo.
+  ///
+  /// Mesma forma do rotulo de `_Estrelas` da pagina do local
+  /// (`Média 4,8 de 5 estrelas`), com a contagem no fim.
+  static String rotuloDaAvaliacao(PontuacaoDoLocal pontuacao) {
+    final media = pontuacao.mediaEmTexto;
+    if (!pontuacao.temAvaliacoes || media == null) {
+      return PaginaDoLocal.tituloSemAvaliacoes;
+    }
+    return 'Média $media de 5 estrelas, ${pontuacao.quantidadeEmTexto}';
+  }
+
   /// A distancia em texto, ou nulo.
   ///
   /// **NAO e mais desenhada por este cartao** (cliente, 22/10/2026), e continua
