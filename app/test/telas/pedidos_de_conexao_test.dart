@@ -131,7 +131,15 @@ Future<void> _montar(
   await tester.pumpWidget(
     MaterialApp(
       theme: BichuTheme.claro,
-      home: TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+      // **O `Scaffold` E DO TESTE DESDE 28/10/2026, e nao da tela.** Esta tela
+      // virou a aba `Pendentes` de `conexoes/tela_de_conexoes.dart`, e quem
+      // desenha a barra de topo agora e a casca -- dois `Scaffold` empilhados
+      // dariam duas barras, uma por aba. O corpo precisa de um `Material`
+      // ancestral para os botoes dele, e `MaterialApp.home` nao e um. A casca
+      // tem isca propria em `telas/conexoes_tres_abas_test.dart`.
+      home: Scaffold(
+        body: TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -327,7 +335,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: BichuTheme.claro,
-        home: TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+        home: Scaffold(
+          body: TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -603,40 +613,82 @@ void main() {
   // e enviados por abas, igual na pagina de rede."*
   // =========================================================================
 
-  group('ABAS: a forma do controle', () {
-    testWidgets('o controle é uma `TabBar`, e o grupo segmentado SAIU', (
+  group('CHIPS: a forma do controle', () {
+    // ==================================================================
+    // ERA `ABAS: a forma do controle`, E A FORMA MUDOU EM 28/10/2026
+    // ==================================================================
+    //
+    // Este grupo cobrava uma `TabBar` interna, por pedido do cliente de
+    // 26/10/2026 (*"divida recebidos e enviados por abas, igual na pagina de
+    // rede"*). Em 28/10 ele decidiu que CONEXOES VIRA UMA ENTRADA COM TRES
+    // ABAS, e esta tela passou a ser a aba `Pendentes` de
+    // `conexoes/tela_de_conexoes.dart`.
+    //
+    // **As duas caixas nao cabem mais como abas**, e nao e preferencia: aba
+    // dentro de aba e o controle que ninguem sabe qual dos dois esta mexendo,
+    // e este aplicativo tem UMA `TabBar` so. O protovipo aprovado as resolveu
+    // como CHIPS no topo do corpo, que e onde o padrao de listagem deste
+    // projeto manda por controle -- no corpo, nunca na barra. E a terceira
+    // forma deste mesmo controle: `GrupoSegmentado` -> `TabBar` -> chips, no
+    // mesmo lugar da tela.
+    //
+    // **O QUE O GRUPO PROTEGE NAO MUDOU**: duas caixas e so duas, abrindo em
+    // `Recebidos`, com `Enviados` alcancavel. Foi a FORMA que a decisao
+    // trocou, e por isso os casos foram reescritos em vez de apagados.
+    //
+    // **A decisao de 26/10 NAO foi revogada** -- as duas caixas continuam
+    // divididas e visiveis. O que ela ganhou foi um dono diferente na arvore.
+    // Qual e o certo esta registrado como pergunta fechada 2 no
+    // `design/prototipos/menu-unificado/DESENHO.md`, parada no cliente.
+    testWidgets('o controle e CHIP, e nao `TabBar` nem grupo segmentado', (
       tester,
     ) async {
       await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
 
-      expect(find.byType(TabBar), findsOneWidget);
+      expect(
+        find.byType(TabBar),
+        findsNothing,
+        reason:
+            'REPROVA: a caixa voltou a ser escolhida por `TabBar`. Esta tela e '
+            'uma ABA desde 28/10/2026, e uma `TabBar` aqui dentro seria aba '
+            'dentro de aba -- o controle que ninguem sabe qual dos dois esta '
+            'mexendo.',
+      );
       expect(
         find.byType(GrupoSegmentado<CaixaDePedidos>),
         findsNothing,
         reason:
-            'REPROVA: a caixa continua sendo escolhida por grupo segmentado. '
-            'O cliente pediu ABAS em 26/10/2026.',
+            'REPROVA: a caixa voltou ao grupo segmentado, que saiu em '
+            '26/10/2026.',
       );
-      // Os rótulos são de ABA, e não de um controle qualquer que por acaso
+      expect(
+        find.byType(ChoiceChip),
+        findsNWidgets(2),
+        reason:
+            'REPROVA: as duas caixas nao sao dois chips. O protovipo aprovado '
+            'em 28/10 as desenhou como chips no topo do corpo.',
+      );
+      // Os rotulos sao dos CHIPS, e nao de um controle qualquer que por acaso
       // escreve as mesmas duas palavras.
-      expect(find.widgetWithText(Tab, 'Recebidos'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Enviados'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Recebidos'), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Enviados'), findsOneWidget);
     });
 
-    testWidgets('ISCA: são DUAS abas, e NENHUMA terceira', (tester) async {
+    testWidgets('ISCA: sao DUAS caixas, e NENHUMA terceira', (tester) async {
       await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
 
       expect(
-        find.byType(Tab),
+        find.byType(ChoiceChip),
         findsNWidgets(2),
         reason:
-            'REPROVA: a tela ganhou uma terceira aba. A prosa da classe diz '
-            'por que não há: esta tela mostra PEDIDOS, conexão aceita não é '
-            'pedido, e as duas perguntas não cabem no mesmo controle.',
+            'REPROVA: a tela ganhou uma terceira caixa. A prosa da classe diz '
+            'por que nao ha: esta tela mostra PEDIDOS, conexao aceita nao e '
+            'pedido, e as duas perguntas nao cabem no mesmo controle. A '
+            'terceira lista agora e uma ABA IRMA desta, na casca.',
       );
-      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
-      expect(barra.tabs, hasLength(2));
-      // A terceira aba teria o nome da OUTRA tela. Nenhuma palavra dela aqui.
+      // A terceira caixa teria o nome da OUTRA lista. Nenhuma palavra dela
+      // DENTRO do segmento -- `Conexões` existe na tela unificada como rotulo
+      // de ABA, que e outro controle e outro arquivo.
       for (final String proibido in <String>[
         'Conexões',
         'Minhas conexões',
@@ -644,26 +696,36 @@ void main() {
         'Aceitos',
       ]) {
         expect(
-          find.widgetWithText(Tab, proibido),
+          find.widgetWithText(ChoiceChip, proibido),
           findsNothing,
-          reason: 'REPROVA: existe uma aba "$proibido" nesta tela',
+          reason: 'REPROVA: existe um chip de caixa "$proibido" nesta tela',
         );
       }
     });
 
-    testWidgets('a tela abre em `Recebidos`, e o controlador diz o mesmo', (
-      tester,
-    ) async {
+    testWidgets('a tela abre em `Recebidos`, e o chip selecionado diz o mesmo',
+        (tester) async {
       await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
 
-      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
-      expect(barra.controller?.length, 2);
+      final selecionados = tester
+          .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+          .where((ChoiceChip c) => c.selected)
+          .toList(growable: false);
+
       expect(
-        barra.controller?.index,
-        CaixaDePedidos.recebidos.index,
+        selecionados,
+        hasLength(1),
         reason:
-            'REPROVA: a tela não abre na caixa de recebidos. `initialIndex` '
-            'tem de sair de `_caixa`.',
+            'REPROVA: nao ha exatamente um chip selecionado. Dois selecionados '
+            'afirmam duas caixas na frente ao mesmo tempo; nenhum deixa a '
+            'pessoa sem saber qual lista ela esta lendo.',
+      );
+      expect(
+        (selecionados.single.label as Text).data,
+        'Recebidos',
+        reason:
+            'REPROVA: a tela nao abre na caixa de recebidos. O `selected` tem '
+            'de sair de `_caixa`, que nasce em `CaixaDePedidos.recebidos`.',
       );
     });
   });

@@ -437,8 +437,22 @@ void main() {
       // Varredura de FONTE e nao de comportamento, pelo mesmo motivo do caso
       // do `pubspec`: o dado errado chegaria ao quadrado por uma linha nova de
       // quem escrevesse a proxima tela, e o momento de reprovar e o da linha.
+      // ================================================================
+      // O ARQUIVO MUDOU EM 28/10/2026, E A ASSERCAO NAO
+      // ================================================================
+      //
+      // Era `lib/telas/conexoes/convide_tutores.dart`. Aquela tela MORREU por
+      // decisao do cliente, e o QR foi para dentro de `Meus dados`
+      // (`_BlocoDoConvite`), com o placar junto. A varredura segue o QR: ela
+      // cobra O QUE ALIMENTA O QUADRADO, e isso nao depende de em que tela ele
+      // mora.
+      //
+      // **A lista de proibidos foi conferida no arquivo novo**, e nao
+      // herdada: `petId`, `publicRef`, `userId` e `.id}` dao ZERO ocorrencias
+      // em `tela_dados_pessoais.dart`. Se a conta fosse outra, o caso
+      // reprovaria aqui e nao num arquivo que ninguem mais le.
       final tela = File(
-        'lib/telas/conexoes/convide_tutores.dart',
+        'lib/telas/perfil/tela_dados_pessoais.dart',
       ).readAsStringSync();
 
       expect(
@@ -453,7 +467,8 @@ void main() {
         expect(
           tela.contains(proibido),
           isFalse,
-          reason: 'REPROVA: a tela do convite menciona `$proibido`. Nenhum '
+          reason: 'REPROVA: a tela que hospeda o QR menciona `$proibido`. '
+              'Nenhum '
               'identificador interno entra num quadrado que outra pessoa '
               'fotografa (ADR-0010, item 6).',
         );

@@ -163,7 +163,18 @@ Future<void> _montar(
   await tester.pumpWidget(
     MaterialApp(
       theme: BichuTheme.claro,
-      home: TelaDeMinhasConexoes(conexoes: ConexoesApi(api)),
+      // **O `Scaffold` E DO TESTE DESDE 28/10/2026, e nao da tela.**
+      //
+      // Esta tela virou uma ABA de `conexoes/tela_de_conexoes.dart` (decisao
+      // do cliente: *"devemos centralizar tudo em um unico local"*), e quem
+      // desenha a barra de topo agora e a casca -- dois `Scaffold` empilhados
+      // dariam duas barras, uma por aba. O corpo precisa de um `Material`
+      // ancestral para os botoes dele, e `MaterialApp.home` nao e um.
+      //
+      // **O que se mede aqui continua sendo o corpo**, e e por isso que o caso
+      // monta a aba sozinha em vez de abrir a casca: a casca tem isca propria
+      // em `telas/conexoes_tres_abas_test.dart`.
+      home: Scaffold(body: TelaDeMinhasConexoes(conexoes: ConexoesApi(api))),
     ),
   );
   await tester.pumpAndSettle();

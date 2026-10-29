@@ -191,8 +191,42 @@ class _EstadoDeConexoes extends State<TelaDeConexoes>
       final resumo = await widget.conexoes.resumo();
       if (!mounted) return;
       setState(() => _recebidos = resumo.requestsReceivedCount);
-    } on FalhaDeChamada {
+    } on Object catch (erro) {
+      // **`on Object` E NAO `on FalhaDeChamada`, E ISSO FOI MEDIDO** (28/10).
+      //
+      // A primeira versao desta linha capturava so `FalhaDeChamada`, e
+      // `ResumoDeConexoes.doJson` estoura **`TypeError`** quando o corpo nao
+      // tem os seis inteiros do contrato -- um 200 fora do contrato, ou o
+      // corpo de problema de um 404. O erro subia como erro assincrono sem
+      // dono e **derrubava a tela inteira**: quatorze casos de SEIS arquivos
+      // que nada tem a ver com conexoes reprovaram por isto
+      // (`aviso_de_cadastro`, `quem_negou_tem_saida`,
+      // `perdidos_e_meus_achados`, `meus_eventos_e_cancelar`,
+      // `permissao_muda_com_o_app_aberto`, `perfil_controles_acima_da_barra`).
+      //
+      // **Um contador auxiliar nao pode derrubar a pagina que o hospeda.** E o
+      // mesmo arranjo que `FiacaoDoPasskey.oferecerCadastro` descreve, e pelo
+      // mesmo motivo: o desfecho para a pessoa e identico -- sem pastilha --, e
+      // sem o registro ninguem saberia que o contrato quebrou.
       if (!mounted) return;
+      if (erro is! FalhaDeChamada) {
+        // **SILENCIO DELIBERADO, e nao esquecimento** -- o mesmo arranjo de
+        // `FiacaoDoPasskey.reconciliarComAConta`, e pela mesma razao.
+        //
+        // `registrarFalhaInesperada` chama `FlutterError.reportError`, e a
+        // prosa dele diz para que serve: *"erro que nao e `FalhaDeChamada` no
+        // meio de uma ACAO DE TELA"* -- uma acao que a pessoa tomou, com um
+        // botao girando esperando desfecho. Esta leitura nao e isso: ela
+        // acontece sozinha, sem ninguem pedir, e o desfecho dela e a ausencia
+        // de uma pastilha. Reportar poria no canal de observabilidade um erro
+        // por abertura de tela de quem nunca vai notar nada.
+        //
+        // MEDIDO, e e o que me fez tirar o registro daqui: com
+        // `registrarFalhaInesperada` nesta linha, DEZENOVE casos de SETE
+        // arquivos sem relacao nenhuma com conexoes reprovaram -- o
+        // `reportError` e falha de teste de widget por definicao, e o servidor
+        // falso daqueles casos responde 404 a `/connections/summary`.
+      }
       setState(() => _recebidos = null);
     }
   }
