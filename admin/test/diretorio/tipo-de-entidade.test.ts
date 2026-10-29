@@ -73,9 +73,16 @@ describe('o tipo de entidade e eixo proprio, separado da atividade', () => {
     // entram aqui por mais que a lista cresca, e e esse o contrapeso --
     // "profissional autonomo" chegou a ser pedido como atividade em 28/10 e o
     // proprio cliente o devolveu ao eixo do tipo.
-    expect(Object.keys(ATIVIDADES).sort()).toEqual(
-      ['clinic', 'hospital', 'store', 'vet', 'groomer', 'walker', 'sitter', 'trainer'].sort(),
-    );
+    // **A LISTA EXATA SAIU DESTE CASO EM 29/10/2026**, e saiu porque ela estava
+    // em dois lugares: aqui e em `rotulos-das-atividades.test.ts`. Duas listas
+    // da mesma coisa dao duas manutencoes, e a entrada de `boarding` e
+    // `daycare` fez esta reprovar por um motivo que nao e o assunto dela. Quem
+    // guarda o conjunto exato agora e aquele arquivo, que tambem o compara com
+    // o `enum` Dart; aqui fica so a FRONTEIRA.
+    //
+    // O tamanho continua afirmado, porque "a lista pode crescer" nao e o mesmo
+    // que "a lista pode encolher sem ninguem ver".
+    expect(Object.keys(ATIVIDADES).length).toBeGreaterThanOrEqual(10);
     for (const tipoDeEntidade of Object.keys(TIPOS_DE_ENTIDADE)) {
       expect(Object.keys(ATIVIDADES)).not.toContain(tipoDeEntidade);
     }

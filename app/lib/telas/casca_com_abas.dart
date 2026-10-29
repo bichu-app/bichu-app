@@ -11,6 +11,7 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../theme/icones_da_barra.g.dart';
 import '../widgets/barra_de_listagem.dart';
+import '../widgets/listagem_preservada.dart';
 // `../widgets/icone_da_barra.dart` NAO e importado aqui hoje, e a ausencia e
 // parte do desligamento de 26/10/2026: a barra pinta `Icon(...)` do Material
 // enquanto nao houver desenho aprovado, e importe nao usado reprova em
@@ -1620,6 +1621,19 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   /// nenhum.
   final RecargaDaSecao _recargaDaSecao = RecargaDaSecao();
 
+  /// A ASSINATURA DA LISTAGEM, que decide se a rolagem preservada vale
+  /// (BICHUS-316).
+  ///
+  /// **Mora na casca porque a ROLAGEM e da casca**, exatamente como
+  /// [_recargaDaSecao]: o `ListView` das cinco secoes e montado aqui embaixo, e
+  /// o deslocamento a preservar e o DELE. Quem conhece a pergunta -- busca,
+  /// filtro, ordenacao e a localizacao de referencia -- e o corpo da secao, e
+  /// ele a publica por [SlotDaRolagem].
+  ///
+  /// **Nulo nao preserva nada**, e e o estado das abas que nao listam registro:
+  /// `Mural` e `Perfil` nunca publicam, e a rolagem delas segue como era.
+  final RolagemDaListagem _rolagemDaListagem = RolagemDaListagem();
+
   /// O RESPIRO EXTRA NO PE DA LISTA quando ha acao flutuante.
   ///
   /// **Medido, e nao arredondado por gosto.** O `FloatingActionButton` padrao
@@ -1644,6 +1658,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   void dispose() {
     _acaoDaListagem.dispose();
     _recargaDaSecao.dispose();
+    _rolagemDaListagem.dispose();
     super.dispose();
   }
 
@@ -1717,7 +1732,16 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
       // `widgets/arrastar_para_atualizar.dart`.
       child: ArrastarParaAtualizar.doSlot(
         recarga: _recargaDaSecao,
-        child: ListView(
+        // **O CONTROLADOR DE ROLAGEM SAI DAQUI, e era isto que faltava.**
+        //
+        // `cartao_do_perdido.dart` escreveu em 19/10 que nao havia reciclagem
+        // nem preservacao a ganhar "sem a casca entregar o controlador de
+        // rolagem"; BICHUS-316 e o pedido que cobrou isso. Ver
+        // `widgets/listagem_preservada.dart` para a medicao das duas causas.
+        child: PreservaARolagem(
+          rolagem: _rolagemDaListagem,
+          filho: (context, controlador) => ListView(
+        controller: controlador,
         addSemanticIndexes: false,
         // A MARGEM DA PAGINA, mais o respiro do que flutua por cima dela.
         // Ver `_folgaDaAcaoFlutuante`: sem isto o ultimo item da lista nasce
@@ -1747,11 +1771,14 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ...filhos,
         ],
         ),
+        ),
       ),
     );
 
     return SlotDeAtualizacao(
       recarga: _recargaDaSecao,
+      child: SlotDaRolagem(
+      rolagem: _rolagemDaListagem,
       child: SlotDaBarraDeListagem(
       acao: _acaoDaListagem,
       // O CONTADOR E OUVIDO AQUI, e nao dentro do sino, e o motivo e o mesmo
@@ -2048,6 +2075,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             floatingActionButton: widget.acaoDeCriar,
           ),
         ),
+      ),
       ),
       ),
     );

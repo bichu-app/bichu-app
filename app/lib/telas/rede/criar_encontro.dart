@@ -401,18 +401,29 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     super.didChangeDependencies();
     if (_preencheu) return;
     _preencheu = true;
+    // **A permissao da camera e o UNICO trabalho desta funcao desde a
+    // BICHUS-317.**
+    //
+    // Ate 29/10/2026 ela tambem preenchia bairro, cidade e estado da regiao de
+    // referencia do tutor (`Me.reference_area`). O cliente pediu que parasse,
+    // verbatim: *"na pagina criar evento e indicar profissional, os campos
+    // bairro, cidade e estado estao vindo preenchidos por padrao com minhas
+    // informacoes, deve vir em branco e o usuario digitar"*.
+    //
+    // **O repositorio ja dizia o porque**, em
+    // `localizacao/captura_de_localizacao.dart`: ao lado de um lugar que a
+    // pessoa ainda vai escolher, *"inventa-la da ficha do tutor seria pior"*.
+    // Um encontro NAO acontece onde o tutor mora -- ele acontece na praca que
+    // ele escolheu --, e um bairro ja escrito no campo e um bairro que ninguem
+    // le antes de publicar. O encontro nasce EM PUBLICO (ver o alto deste
+    // arquivo): o lugar errado nao vira recusa, vira gente indo ao lugar
+    // errado.
+    //
+    // **Quem preenche endereco aqui e o CEP** (`_buscarOCep`), que a pessoa
+    // digita de proposito. A mudanca vale nos DOIS formularios de criar da
+    // comunidade -- aqui e em `perto/sugerir_profissional.dart` --, para as
+    // duas telas nao discordarem sobre a mesma pergunta.
     _lerAPermissaoDaCamera();
-    // A regiao de referencia que o tutor ja cadastrou (BICHUS-92), que e
-    // texto -- bairro, cidade e UF -- e nunca coordenada virada em nome
-    // (ADR-0006 proibe geocodificacao). Sem ela os campos abrem vazios.
-    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
-    if (regiao == null) return;
-    _bairro.text = regiao.bairro ?? '';
-    _cidade.text = regiao.cidade ?? '';
-    // **So sigla que esta NA LISTA.** `Me.reference_area.state` e
-    // `maxLength: 2` sem `pattern`: `SA` e `XX` cabem nele. Ver
-    // `siglaDeEstadoValida`, que explica por que `length == 2` nao basta.
-    _uf = siglaDeEstadoValida(regiao.uf);
   }
 
   @override
@@ -449,10 +460,13 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// uma quarta redacao dela:
   ///
   /// 1. **so campo vazio recebe.** O que a pessoa escreveu vence o que a base
-  ///    devolve -- inclusive o bairro, a cidade e o estado que esta tela ja
-  ///    preencheu da regiao de referencia do tutor em
-  ///    [didChangeDependencies]. A base erra, e quem esta olhando o lugar e a
-  ///    pessoa;
+  ///    devolve. A base erra, e quem esta olhando o lugar e a pessoa.
+  ///
+  ///    **Desde a BICHUS-317 os tres campos abrem VAZIOS** -- a tela nao os
+  ///    preenche mais da regiao de referencia do tutor --, entao na primeira
+  ///    busca esta regra quase sempre preenche os tres. Ela segue valendo para
+  ///    a segunda busca e para quem digita o bairro antes do CEP, e segue
+  ///    sendo por CAMPO e nao por formulario;
   /// 2. **nada fica bloqueado depois da busca.** Os tres seguem editaveis: CEP
   ///    generico de cidade nao traz bairro;
   /// 3. **nada aqui pode impedir `Criar evento`.** Nenhum caminho desta funcao

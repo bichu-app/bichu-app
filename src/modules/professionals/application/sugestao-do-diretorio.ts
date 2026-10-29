@@ -130,6 +130,11 @@ export class SugestaoDoDiretorio {
       autor: autor.userId,
       displayName: corpo.display_name.trim(),
       kind: corpo.kind,
+      // O PADRAO E RESOLVIDO AQUI, e nao deixado para o `coalesce` da funcao do
+      // banco: o caso de uso e quem decide, e o `coalesce` la e a rede de
+      // baixo. Ausente vale `professional` -- o mesmo `DEFAULT` da coluna --
+      // porque o APK publicado antes de 29/10/2026 nao manda o campo.
+      entityKind: corpo.entity_kind ?? 'professional',
       city: corpo.city.trim(),
       state: corpo.state,
       neighborhood: aparado(corpo.neighborhood),

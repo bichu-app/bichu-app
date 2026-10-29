@@ -52,7 +52,7 @@ import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { errosDeModeracao } from '../../../shared/texto/moderacao.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { ConferenciasDeTexto } from '../ports/conferencias-de-texto.js';
-import type { TipoDeProfissional } from './entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from './entrada-do-diretorio.js';
 // `RevisaoDaIndicacao` e o `CHECK` da tabela, e ele e UM so: reusado em vez de
 // redeclarado. Duas copias da mesma lista fechada e a forma de uma delas ficar
 // atras quando o `CHECK` crescer.
@@ -102,6 +102,21 @@ export interface ContatoPublicoSugerido {
 export interface CorpoDaSugestaoDoDiretorio {
   readonly display_name: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * O QUE a entidade indicada E -- eixo SEPARADO de `kind`, que e o que ela FAZ
+   * (cliente, 29/10/2026: *"esta faltando o campo se e um profissional, ong ou
+   * estabelecimento"*).
+   *
+   * **Opcional, e ausente vale `professional`**: o mesmo `DEFAULT` da coluna
+   * (`20261029000003`), e a mesma decisao de
+   * `AdminDirectoryEntryInput.entity_kind`. Exigi-lo derrubaria o APK ja
+   * publicado no aparelho de quem esta indicando agora.
+   *
+   * **Nao ha conferencia dele em `errosDaSugestao`**, e a ausencia e a mesma de
+   * `postal_code`: a lista fechada esta no `enum` do contrato e no `CHECK` do
+   * banco, e uma terceira redacao aqui seria a que diverge.
+   */
+  readonly entity_kind?: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood?: string;
@@ -267,6 +282,12 @@ export interface MinhaIndicacaoProjetada {
   readonly reference: string;
   readonly display_name: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * O QUE a entidade E. Sai aqui, na projecao de quem INDICOU, porque foi ela
+   * que declarou o tipo -- esconde-lo faria a lista dela mostrar menos do que
+   * ela mandou.
+   */
+  readonly entity_kind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
@@ -305,6 +326,7 @@ export function projetarMinhaIndicacao(i: {
   readonly ref: string;
   readonly displayName: string;
   readonly kind: TipoDeProfissional;
+  readonly entityKind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
@@ -320,6 +342,7 @@ export function projetarMinhaIndicacao(i: {
     reference: i.ref,
     display_name: i.displayName,
     kind: i.kind,
+    entity_kind: i.entityKind,
     city: i.city,
     state: i.state,
     neighborhood: i.neighborhood,

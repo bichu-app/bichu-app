@@ -56,6 +56,18 @@ export type PropositoDaImagem =
   | 'network_event'
   | 'directory_logo'
   | 'directory_photo'
+  // A GALERIA da entrada do diretorio (29/10/2026, decisao do cliente:
+  // *"implemente a tabela de galeria entao"*). O OITAVO, e SEPARADO de
+  // `directory_photo` pelo MESMO criterio que separou `user_showcase` de
+  // `user_photo` na `20261018000040`: aquele e a foto UNICA do lugar, com duas
+  // derivadas (`banner` e `card`), e esta e a galeria de ate oito, que precisa
+  // TAMBEM da miniatura de 480 x 360 que a faixa da galeria desenha. Um
+  // proposito so para os dois obrigaria a derivada a adivinhar qual tela vai
+  // desenhar a imagem.
+  //
+  // O autor continua sendo `admin_account_id`: quem sobe e o administrador no
+  // painel, como na logo e na foto.
+  | 'directory_gallery'
   | 'user_photo'
   // A VITRINE de fotos do usuario (18/10/2026). Proposito SEPARADO de
   // `user_photo`, e nao o mesmo: aquele e a foto UNICA do perfil, este sao as
@@ -78,6 +90,10 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   // UM prefixo para as duas imagens do diretorio: sao da mesma entidade.
   directory_logo: 'directory',
   directory_photo: 'directory',
+  // A galeria divide `directory/` com a logo e a foto, e pela MESMA razao: as
+  // tres sao imagem da mesma entidade. Prefixo separado faria o expurgo e a
+  // varredura terem tres listas para varrer.
+  directory_gallery: 'directory',
   // Prefixo PROPRIO para foto de pessoa: regime de privacidade diferente.
   user_photo: 'people',
   // A vitrine divide `people/` com a foto unica, e de proposito: as duas sao
@@ -120,6 +136,9 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   network_event: TIPOS_DE_IMAGEM_DE_CATALOGO,
   directory_logo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   directory_photo: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  // A galeria sai do MESMO computador de mesa que a logo e a foto: a lista de
+  // tres tipos, sem HEIC. A constante, e nao a lista escrita de novo.
+  directory_gallery: TIPOS_DE_IMAGEM_DE_CATALOGO,
   user_photo: TIPOS_ACEITOS,
   // A VITRINE sai do mesmo celular que a foto unica, entao a MESMA lista --
   // `TIPOS_ACEITOS`, com HEIC. Reusar e nao repetir: duas listas dos mesmos
@@ -162,6 +181,12 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   // A foto do LUGAR usa 600 x 600, o mesmo numero que o cliente aceitou para a
   // capa do encontro em 01/10: as duas sao foto de celular de um lugar.
   directory_photo: { largura: 600, altura: 600 },
+  // A GALERIA usa os MESMOS 600 x 600 da foto do lugar, e nao um numero novo:
+  // as duas sao foto de celular de um lugar, e a maior derivada das duas e a
+  // mesma (`banner` 1280 x 720). `sharp` nao amplia (`withoutEnlargement`),
+  // entao o piso que faz a `banner` se preencher e identico. Numeros diferentes
+  // para a mesma geometria e o que ninguem consegue explicar depois.
+  directory_gallery: { largura: 600, altura: 600 },
   // 300 x 300 na foto de pessoa, e nao 600. A maior derivada dela e 512, e
   // retrato recortado de uma foto antiga ou de uma captura de tela chega perto
   // disso; recusar a 500 px entregaria "sua foto nao serve" a quem tem a unica

@@ -6,6 +6,13 @@ import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
 import { CampoDeImagem } from '../componentes/CampoDeImagem.tsx';
 import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
+import {
+  descricaoAceitavel,
+  Galeria,
+  precisaDeDescricao,
+  type ImagemDaGaleria,
+} from '../componentes/Galeria.tsx';
+import { enviarImagem, LIMITE_EM_MB, DIMENSAO_MINIMA } from '../componentes/envio-de-imagem.ts';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { cepDosOitoDigitos, cepEmOitoDigitos } from '../formato/cep.ts';
@@ -28,6 +35,8 @@ import {
   PADRAO_DA_UF,
   PADRAO_DO_SLUG,
   SITUACOES,
+  SITUACOES_DA_EDICAO,
+  SITUACOES_DO_CADASTRO,
   slugSugerido,
   type Entrada,
   type StatusDaEntrada,
@@ -93,6 +102,21 @@ export interface Valores {
    */
   logoUploadId: string | null | undefined;
   fotoUploadId: string | null | undefined;
+  /**
+   * A GALERIA (cliente, 29/10/2026: *"implemente a tabela de galeria entao"*).
+   *
+   * **Ao contrario da logo e da foto, ela GUARDA a imagem gravada**, e a
+   * diferenca nao e descuido: a logo e um campo so, e "nao tocou" e
+   * representavel com `undefined`; a galeria e uma LISTA que a pessoa reordena,
+   * e para reordenar a tela tem de conhecer o que esta gravado. E tambem o que
+   * o componente `Galeria` espera -- o mesmo que a `Loja` e a `Rede` fazem.
+   *
+   * Consequencia, dita em voz alta: `sujo` compara `Valores` inteiro, entao a
+   * galeria gravada entra na comparacao. Ela nao faz todo formulario parecer
+   * alterado porque `base` carrega exatamente a mesma lista -- e por isso que
+   * `valoresDa` a monta a partir de `entrada.images` e nao de uma lista vazia.
+   */
+  imagens: ImagemDaGaleria[];
   situacao: StatusDaEntrada;
 }
 
@@ -112,7 +136,8 @@ type Campo =
   | 'e-telefone'
   | 'e-site'
   | 'e-logo'
-  | 'e-foto';
+  | 'e-foto'
+  | 'e-galeria';
 
 const ROTULOS: Record<Campo, string> = {
   'e-nome': 'Nome',
@@ -131,6 +156,7 @@ const ROTULOS: Record<Campo, string> = {
   'e-site': 'Site',
   'e-logo': 'Logo',
   'e-foto': 'Foto do local',
+  'e-galeria': 'Galeria de fotos',
 };
 
 const ORDEM: Campo[] = [
@@ -150,9 +176,19 @@ const ORDEM: Campo[] = [
   'e-site',
   'e-logo',
   'e-foto',
+  'e-galeria',
 ];
 
-const VAZIO: Valores = {
+/**
+ * O FORMULARIO DE CADASTRO NOVO, em branco.
+ *
+ * **Exportado desde 29/10/2026**, e nao por conveniencia de teste: a situacao
+ * padrao daqui e uma DECISAO DO CLIENTE (*"ele ja deve salvar com o padrao
+ * publicado e nao como rascunho"*), e uma decisao de produto precisa de um caso
+ * que a leia DESTE objeto. Uma fixa de teste com `situacao: 'published'`
+ * escrita a mao mede a si mesma: trocar o valor aqui a deixaria verde.
+ */
+export const VAZIO: Valores = {
   nome: '',
   slug: '',
   slugEditado: false,
@@ -170,7 +206,13 @@ const VAZIO: Valores = {
   site: '',
   logoUploadId: undefined,
   fotoUploadId: undefined,
-  situacao: 'draft',
+  imagens: [],
+  // **`published` desde 29/10/2026** (cliente: *"cobrar os dados no cadastro"*,
+  // sobre *"ele ja deve salvar com o padrao publicado e nao como rascunho"*).
+  // Era `'draft'`, e a troca aqui e o que faz o PADRAO do formulario de
+  // cadastro ser "no ar" -- o campo Situacao abre marcado em "No ar", e quem
+  // quiser guardar incompleto escolhe "Rascunho" de proposito.
+  situacao: 'published',
 };
 
 /**
@@ -180,10 +222,22 @@ const VAZIO: Valores = {
  * para a recusa chegar sem uma viagem a rede. Por isso cada regua aqui aponta
  * para a sua origem: tamanho de `CHECK`, formato de `slug`, E.164 de telefone.
  *
- * **Cidade, UF e telefone nao sao obrigatorios aqui**, e isso e deliberado: a
- * entrada nasce RASCUNHO, e o rascunho guarda trabalho incompleto. Quem cobra
- * os tres e a publicacao, e `missing_to_publish` diz o que falta antes de
- * alguem tentar.
+ * **CIDADE, UF E TELEFONE SAO OBRIGATORIOS QUANDO A SITUACAO E "No ar"**, e
+ * isso mudou em 29/10/2026 por decisao do cliente -- verbatim: *"cobrar os
+ * dados no cadastro"*, sobre *"quando cadastrar um estabelecimento no
+ * backoffice, ele ja deve salvar com o padrao publicado e nao como rascunho"*.
+ *
+ * O texto aqui dizia o contrario, e dizia por um motivo que deixou de valer:
+ * *"a entrada nasce RASCUNHO, e o rascunho guarda trabalho incompleto"*. Ela
+ * nao nasce mais rascunho. Quem quer guardar incompleto escolhe "Rascunho" no
+ * campo Situacao, e ai os tres voltam a nao ser cobrados -- e a regra aqui le
+ * `v.situacao`, e nao "estou criando ou editando", justamente para ser a MESMA
+ * frase do servidor: *quem publica precisa dos tres*.
+ *
+ * **Esta conferencia NAO substitui a do servidor**, e a diferenca importa
+ * porque o cliente pediu portao e nao aviso: `planejarCriacao` recusa o `POST`
+ * incompleto com `400` nomeando os campos, venha ele deste formulario ou de
+ * qualquer outro chamador. O que esta regua faz e poupar a viagem a rede.
  *
  * **CEP, rua, numero e complemento nao sao obrigatorios NUNCA**, nem no
  * rascunho nem na publicacao, e isso nao e simetria com os de cima -- e
@@ -217,11 +271,18 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     e['e-nome'] = 'Informe o nome, de 2 a 120 caracteres.';
   }
   if (!PADRAO_DO_SLUG.test(v.slug)) e['e-slug'] = MENSAGEM_DO_SLUG;
-  // DE 1 A 6 (cliente, 21/10/2026). O teto 6 e o tamanho da lista fechada, e a
-  // tela nem tem como passar dele -- sao seis caixas. A conferencia existe
-  // porque o rascunho retomado (`retomarRascunho`) vem de fora da tela.
+  // DE 1 A DEZ. O teto E o tamanho da lista fechada, e a tela nem tem como
+  // passar dele -- sao dez caixas. A conferencia existe porque o rascunho
+  // retomado (`retomarRascunho`) vem de fora da tela.
+  //
+  // **O numero sai de `ORDEM_DAS_ATIVIDADES` e nao e escrito a mao**, e a troca
+  // e consequencia de um defeito medido: o teto ficou em 6 quando a lista
+  // fechada foi a 8 em 28/10/2026, e ninguem viu porque eram dois numeros
+  // escritos em lugares diferentes.
   if (v.atividades.length === 0) e['e-atividade'] = 'Escolha ao menos uma atividade.';
-  else if (v.atividades.length > 6) e['e-atividade'] = 'Até 6 atividades.';
+  else if (v.atividades.length > ORDEM_DAS_ATIVIDADES.length) {
+    e['e-atividade'] = `Até ${String(ORDEM_DAS_ATIVIDADES.length)} atividades.`;
+  }
   else if (new Set(v.atividades).size !== v.atividades.length) {
     e['e-atividade'] = 'A mesma atividade apareceu duas vezes.';
   }
@@ -229,12 +290,21 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   if (sobre !== '' && (sobre.length < 2 || sobre.length > 2000)) {
     e['e-sobre'] = 'Entre 2 e 2000 caracteres.';
   }
+  // OS TRES DA PUBLICACAO (cliente, 29/10/2026). A regua le a SITUACAO
+  // escolhida, e nao "criando ou editando": e a mesma frase do servidor.
+  const cobraPublicacao = v.situacao === 'published';
   const cidade = v.cidade.trim();
-  if (cidade !== '' && (cidade.length < 2 || cidade.length > 80)) {
+  if (cobraPublicacao && cidade === '') {
+    e['e-cidade'] = 'Informe a cidade: ela é cobrada para a entrada ficar no ar.';
+  } else if (cidade !== '' && (cidade.length < 2 || cidade.length > 80)) {
     e['e-cidade'] = 'Entre 2 e 80 caracteres.';
   }
   const uf = v.uf.trim();
-  if (uf !== '' && !PADRAO_DA_UF.test(uf)) e['e-uf'] = 'Use a sigla do estado, com duas letras.';
+  if (cobraPublicacao && uf === '') {
+    e['e-uf'] = 'Informe a UF: ela é cobrada para a entrada ficar no ar.';
+  } else if (uf !== '' && !PADRAO_DA_UF.test(uf)) {
+    e['e-uf'] = 'Use a sigla do estado, com duas letras.';
+  }
   const bairro = v.bairro.trim();
   if (bairro !== '' && (bairro.length < 2 || bairro.length > 80)) {
     e['e-bairro'] = 'Entre 2 e 80 caracteres.';
@@ -250,7 +320,10 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   }
   if (v.numero.trim().length > 20) e['e-numero'] = 'Até 20 caracteres.';
   if (v.complemento.trim().length > 80) e['e-complemento'] = 'Até 80 caracteres.';
-  if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
+  if (cobraPublicacao && v.telefone.trim() === '') {
+    e['e-telefone'] =
+      'Informe o telefone comercial: ele é o canal cobrado para a entrada ficar no ar.';
+  } else if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
     e['e-telefone'] = 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
   }
   // O SITE (cliente, 21/10/2026). Vazio nao erra; o que foi digitado passa pelo
@@ -263,7 +336,104 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
     const recusa = mensagemDoSite(v.site);
     if (recusa !== null) e['e-site'] = recusa;
   }
+  // A GALERIA (cliente, 29/10/2026). **A descricao e OPCIONAL**, como nas duas
+  // galerias irmas: o que se recusa aqui e a descricao de UMA letra, que o
+  // contrato rejeita por `minLength: 2`. Vazio quer dizer "nao escrevi" e o
+  // campo e OMITIDO do corpo; `"a"` quer dizer "escrevi errado", e deixar
+  // passar trocaria um erro de campo por um `400` sem endereco na tela.
+  //
+  // O teto de 8 NAO e conferido aqui: a propria `Galeria` desabilita o botao de
+  // adicionar ao chegar em `MAXIMO_DE_IMAGENS`, e o servidor tem a rede embaixo
+  // (`too_many_images`). Conferir na tela algo que a tela nao consegue produzir
+  // seria uma mensagem que ninguem ve.
+  if (v.imagens.some((im) => precisaDeDescricao(im) && !descricaoAceitavel(im.alt, false))) {
+    e['e-galeria'] = 'Escreva pelo menos duas letras na descrição, ou deixe o campo vazio.';
+  }
   return e;
+}
+
+/**
+ * A GALERIA como o corpo do contrato a quer (`DirectoryGalleryImagesInput`).
+ *
+ * Duas regras, e as duas sao de contrato e nao de gosto:
+ *
+ * 1. **So entra a imagem com `upload_id`.** A que falhou, a que ainda esta
+ *    subindo e a que veio de uma conta apagada (`upload_id` nulo na leitura)
+ *    nao tem o que mandar -- e `images` SUBSTITUI a lista inteira, entao mandar
+ *    a galeria sem ela a TIRA da entrada. E o que `semEnvioNaGaleria` avisa.
+ * 2. **Descricao vazia e OMITIDA**, nunca `""`: o contrato recusa `""` por
+ *    `minLength: 2`, e ausente e o jeito de dizer "nao escrevi".
+ */
+function imagensDoCorpo(v: Pick<Valores, 'imagens'>): Esquemas['CatalogImageInput'][] {
+  return v.imagens
+    .filter((im): im is ImagemDaGaleria & { uploadId: string } => typeof im.uploadId === 'string')
+    .map((im) => {
+      const alt = im.alt.trim();
+      return { upload_id: im.uploadId, ...(alt === '' ? {} : { alt_text: alt }) };
+    });
+}
+
+/**
+ * A imagem que a galeria nao consegue reenviar (`upload_id` nulo na leitura).
+ *
+ * A MESMA regra da `Loja` e da `Rede` (UX 30.7 R1): `catalog_images
+ * .upload_intent_id` e `ON DELETE SET NULL`, entao apagar a conta do painel que
+ * enviou deixa a imagem na entrada e tira o identificador com que o painel a
+ * reenviaria.
+ */
+export function semEnvioNaGaleria(im: ImagemDaGaleria): boolean {
+  return (
+    im.uploadId === undefined &&
+    (im.estado === 'ready' || im.estado === 'processing' || im.estado === 'enviada')
+  );
+}
+
+export const MARCA_SEM_ENVIO = 'Sai se a galeria mudar';
+
+/** O alerta abaixo da galeria, com a posicao quando for uma imagem so. */
+export function avisoDeImagensSemEnvio(v: Pick<Valores, 'imagens'>): string | null {
+  const posicoes = v.imagens.flatMap((im, i) => (semEnvioNaGaleria(im) ? [i + 1] : []));
+  if (posicoes.length === 0) return null;
+  if (posicoes.length === 1) {
+    return `A imagem ${String(posicoes[0])} veio de uma conta que não existe mais. Ela fica na entrada enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, a tira da entrada. Para mudar a galeria sem perdê-la, envie o mesmo arquivo de novo.`;
+  }
+  return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam na entrada enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, as tira da entrada. Para mudar a galeria sem perdê-las, envie os mesmos arquivos de novo.`;
+}
+
+/**
+ * A assinatura da galeria, para o `PATCH` so mandar `images` quando ela mudou.
+ *
+ * `[chave, alt]` e nao a lista inteira: `previa` e `progresso` mudam sozinhos
+ * durante o envio, e compara-los faria uma edicao de telefone reenviar a
+ * galeria. A CHAVE carrega a identidade e a ORDEM, que e o que importa.
+ */
+const assinaturaDaGaleria = (v: Pick<Valores, 'imagens'>): string =>
+  JSON.stringify(v.imagens.map((im) => [im.chave, im.alt.trim()]));
+
+/**
+ * O que vai para o rascunho da sessao: **sem arquivo e sem previa local**, que
+ * nao sobrevivem a recarga, e sem a imagem que ainda nao tem `upload_id`.
+ *
+ * Copiado de `paraRascunho` da `Loja`, e pelo mesmo motivo medido: `File` e
+ * `blob:` passam por `JSON.stringify` como `{}` e como uma URL morta, e o
+ * rascunho retomado abriria com uma moldura presa em "Enviando…".
+ */
+export function paraRascunho(v: Valores): Valores {
+  return {
+    ...v,
+    imagens: v.imagens
+      .filter((im) => im.uploadId)
+      .map(
+        (im) =>
+          ({
+            chave: im.chave,
+            uploadId: im.uploadId,
+            alt: im.alt,
+            estado: im.estado === 'enviada' ? 'enviada' : im.estado,
+            previa: im.previa?.startsWith('blob:') ? null : (im.previa ?? null),
+          }) as ImagemDaGaleria,
+      ),
+  };
 }
 
 /**
@@ -318,6 +488,24 @@ function valoresDa(entrada: Entrada): Valores {
     // clique, e nao ha o que editar nele.
     logoUploadId: undefined,
     fotoUploadId: undefined,
+    // A GALERIA e lida, ao contrario da logo e da foto: ver `Valores.imagens`.
+    // Ordenada por `position` aqui tambem, e nao so no servidor -- a tela
+    // reordena a lista local e nao deve depender de o `json_agg` ter mantido a
+    // ordem numa resposta em cache.
+    imagens: [...entrada.images]
+      .sort((a, b) => a.position - b.position)
+      .map((im) => ({
+        // `upload_id` e anulavel no contrato (a intencao de envio pode ter sido
+        // apagada e a imagem fica): a chave cai para a posicao, como na `Loja`
+        // e na `Rede`. Sem `uploadId`, a imagem nao volta no corpo da escrita.
+        chave: im.upload_id ?? `sem-envio-${String(im.position)}`,
+        ...(im.upload_id === null ? {} : { uploadId: im.upload_id }),
+        // `alt_text` e anulavel: na tela o campo vazio e a mesma coisa.
+        alt: im.alt_text ?? '',
+        estado: im.status,
+        motivo: im.rejection_reason ?? null,
+        previa: im.url ?? null,
+      })),
     situacao: entrada.status,
   };
 }
@@ -359,10 +547,15 @@ function valoresDa(entrada: Entrada): Valores {
  *   pudesse mandar para apontar para a imagem do original. Quem duplica sobe a
  *   imagem de novo, e o formulario abre com os campos de imagem vazios em vez
  *   de prometer o que nao tem como cumprir.
- * - **A situacao nasce a de entrada nova, e nao a do original.** Duplicar uma
- *   entrada publicada nao publica a copia: situacao e ESTADO, nao
- *   preenchimento. (O `POST` do contrato nem aceita `status` -- a entrada e
- *   criada em rascunho e a publicacao e um segundo passo.)
+ * - **A situacao nasce a do CADASTRO NOVO, e nao a do original.** Desde
+ *   29/10/2026 o cadastro novo nasce "No ar" (decisao do cliente), entao
+ *   duplicar uma entrada publicada tambem abre a copia como publicada -- e a
+ *   copia carrega cidade, UF e telefone do original, que e exatamente o que a
+ *   publicacao cobra. O que NAO se herda e `hidden` e `removed`: duplicar uma
+ *   entrada retirada nao abre a copia retirada, porque retirada e ESTADO e nao
+ *   preenchimento, e "nasce retirada" nao e um estado que signifique algo.
+ *   Quem quiser revisar antes de o estabelecimento aparecer escolhe "Rascunho"
+ *   no campo Situacao, que o cadastro passou a mostrar.
  *
  * ## E ELA NAO SALVA SOZINHA
  *
@@ -380,6 +573,13 @@ export function valoresDuplicados(entrada: Entrada): Valores {
     // imagem gravada nenhuma a continuar, porque nao ha entrada ainda.
     logoUploadId: undefined,
     fotoUploadId: undefined,
+    // **A GALERIA NAO VAI**, e pela MESMA razao do contrato que tira a
+    // logo e a foto: a leitura traz `upload_id` de um envio JA USADO nesta
+    // entrada, e `professional_images.image_id` e UNIQUE GLOBAL -- a copia
+    // seria recusada com `400 upload_not_usable`. Quem duplica sobe as fotos de
+    // novo, e o formulario abre com a galeria vazia em vez de prometer o que
+    // nao tem como cumprir.
+    imagens: [],
     situacao: VAZIO.situacao,
   };
 }
@@ -561,7 +761,7 @@ export default function FormularioDaEntrada() {
     valoresRef.current = valores;
   });
   useEffect(
-    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, valoresRef.current)),
+    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, paraRascunho(valoresRef.current))),
     [registrarRascunho, chaveDoRascunho],
   );
 
@@ -688,11 +888,28 @@ export default function FormularioDaEntrada() {
             ...(typeof valores.fotoUploadId === 'string'
               ? { photo_upload_id: valores.fotoUploadId }
               : {}),
+            // A GALERIA (29/10/2026). Vai SEMPRE, inclusive vazia: no cadastro
+            // nao existe "nao tocou no campo" -- o que a tela tem e o que a
+            // entrada vai ter, e `[]` e exatamente o estado da entrada que
+            // nasce sem foto.
+            images: imagensDoCorpo(valores),
+            // A SITUACAO (cliente, 29/10/2026). Vai EXPLICITA mesmo quando e o
+            // padrao do contrato: o formulario mostra o campo, a pessoa escolhe,
+            // e mandar o que ela escolheu e mais honesto que confiar no padrao
+            // -- se o padrao do contrato mudar, a tela continua valendo.
+            //
+            // Os DOIS valores que a criacao aceita, e nunca `hidden`/`removed`:
+            // o seletor do cadastro so oferece estes dois (ver `SITUACOES_DO_CADASTRO`).
+            status: valores.situacao === 'draft' ? 'draft' : 'published',
           },
         });
         if (data) {
+          // A frase segue o que o SERVIDOR devolveu, e nao o que a tela pediu:
+          // quem responde se a entrada esta no ar e `data.status`.
           return voltar(
-            'Entrada cadastrada, em rascunho. Para ela aparecer em Perto, publique na edição.',
+            data.status === 'published'
+              ? 'Entrada cadastrada e no ar em Perto.'
+              : 'Entrada cadastrada, em rascunho. Para ela aparecer em Perto, publique na edição.',
           );
         }
         return recusa(error);
@@ -747,6 +964,14 @@ export default function FormularioDaEntrada() {
         // dos outros campos deste `PATCH`.
         ...(logoNoPatch !== undefined ? { logo_upload_id: logoNoPatch } : {}),
         ...(fotoNoPatch !== undefined ? { photo_upload_id: fotoNoPatch } : {}),
+        // A GALERIA (29/10/2026) **so vai quando mudou em relacao a base**, e
+        // isso nao e economia de bytes: `images` SUBSTITUI a lista inteira, e a
+        // imagem com `upload_id` nulo nao pode ir no corpo -- mandar a galeria
+        // numa edicao de telefone a tiraria da entrada. E o mesmo cuidado que a
+        // `Loja` tem em `corpoDeAlteracao`.
+        ...(assinaturaDaGaleria(valores) === assinaturaDaGaleria(base)
+          ? {}
+          : { images: imagensDoCorpo(valores) }),
         ...(valores.situacao !== entrada.status ? { status: valores.situacao } : {}),
       };
       // Sem mudanca nada vai ao servidor, e a tela diz isso em vez de voltar
@@ -807,6 +1032,21 @@ export default function FormularioDaEntrada() {
         } else if (erro.field === 'neighborhood') e['e-bairro'] = 'Entre 2 e 80 caracteres.';
         else if (erro.field === 'postal_code') {
           e['e-cep'] = 'O CEP tem oito dígitos. Por exemplo: 05435-000.';
+        } else if (erro.field === 'images' || erro.field.startsWith('images[')) {
+          // UM campo na tela para os tres `code` que o servidor devolve em
+          // `images`: `upload_not_usable`, `duplicate_upload` e o tamanho de
+          // `images[n].alt_text`. A galeria desenha o erro no topo dela, e nao
+          // na moldura n -- e `images[n]` nao casa com nenhum `id` de campo,
+          // entao `startsWith` e o que impede o erro de cair no silencio do
+          // `else`.
+          e['e-galeria'] =
+            erro.code === 'duplicate_upload'
+              ? 'A mesma imagem aparece duas vezes na galeria. Remova uma delas.'
+              : erro.code === 'too_many_images'
+                ? 'Até 8 imagens na galeria.'
+                : erro.code === 'length'
+                  ? 'Escreva pelo menos duas letras na descrição, ou deixe o campo vazio.'
+                  : 'Uma das imagens da galeria não serve para esta entrada. Envie-a de novo.';
         } else if (erro.field === 'logo_upload_id') {
           e['e-logo'] = 'Não conseguimos usar esta imagem como logo. Envie a imagem de novo.';
         } else if (erro.field === 'photo_upload_id') {
@@ -862,6 +1102,15 @@ export default function FormularioDaEntrada() {
   }
 
   const lista = ORDEM.filter((c) => erros[c]).map((c) => ({ campo: c, rotulo: ROTULOS[c] }));
+  /**
+   * A situacao escolhida publica a entrada? (cliente, 29/10/2026)
+   *
+   * E ela que decide o `*` em Cidade, UF e Telefone, e vem do MESMO lugar que
+   * `validarEntrada` le -- `valores.situacao`. Duas leituras diferentes
+   * deixariam o rotulo prometer uma obrigacao que a validacao nao cobra, ou o
+   * contrario.
+   */
+  const cobraPublicacao = valores.situacao === 'published';
   const sujo =
     JSON.stringify({ ...valores, slugEditado: 0 }) !==
     JSON.stringify({ ...(editando ? base : VAZIO), slugEditado: 0 });
@@ -1050,18 +1299,22 @@ export default function FormularioDaEntrada() {
         <CampoDeTexto
           id="e-cidade"
           dataCy="entrada-cidade"
-          rotulo="Cidade"
+          rotulo={cobraPublicacao ? 'Cidade *' : 'Cidade'}
           valor={valores.cidade}
           aoMudar={(v) => mudar({ cidade: v })}
           maximo={80}
           erro={erros['e-cidade']}
-          ajuda="Precisa estar preenchida para a entrada aparecer em Perto."
+          ajuda={
+            cobraPublicacao
+              ? 'Cobrada para a entrada ficar no ar. Escolha “Rascunho” abaixo se quiser salvar sem ela.'
+              : 'Precisa estar preenchida para a entrada aparecer em Perto.'
+          }
         />
 
         <CampoDeTexto
           id="e-uf"
           dataCy="entrada-uf"
-          rotulo="UF"
+          rotulo={cobraPublicacao ? 'UF *' : 'UF'}
           valor={valores.uf}
           aoMudar={(v) => mudar({ uf: v.toUpperCase().slice(0, 2) })}
           maximo={2}
@@ -1151,7 +1404,7 @@ export default function FormularioDaEntrada() {
         <CampoDeTelefone
           id="e-telefone"
           dataCy="entrada-telefone"
-          rotulo="Telefone comercial"
+          rotulo={cobraPublicacao ? 'Telefone comercial *' : 'Telefone comercial'}
           valor={valores.telefone}
           aoMudar={(v) => mudar({ telefone: v })}
           erro={erros['e-telefone']}
@@ -1202,29 +1455,81 @@ export default function FormularioDaEntrada() {
           ajuda="A fachada ou o ambiente, em faixa deitada. É a imagem grande da entrada."
         />
 
-        {editando && (
-          <fieldset className="field" aria-describedby="e-situacao-ajuda">
-            <legend className="lab">Situação</legend>
-            <div className="checks">
-              {(['published', 'draft', 'hidden', 'removed'] as StatusDaEntrada[]).map((situacao) => (
-                <label className="check" key={situacao}>
-                  <input
-                    type="radio"
-                    name="e-situacao"
-                    data-cy={`entrada-situacao-${situacao}`}
-                    checked={valores.situacao === situacao}
-                    onChange={() => mudar({ situacao })}
-                  />
-                  <span>{SITUACOES[situacao]}</span>
-                </label>
-              ))}
-            </div>
-            <span className="help" id="e-situacao-ajuda">
-              Só “No ar” aparece na seção Perto. Editar outros campos não muda a situação: tirar do ar é
-              uma escolha feita aqui. “Removida” tira a entrada do diretório sem apagar o registro.
-            </span>
-          </fieldset>
+        {/* A GALERIA (cliente, 29/10/2026: *"implemente a tabela de galeria
+            entao"*), que responde ao pedido de 28/10 -- *"so esta permitindo
+            subir uma foto, deve ser padrao igual na pagina de eventos"*.
+
+            E o MESMO componente `Galeria` da `Loja` e da `Rede`, com o
+            proposito `directory_gallery`: um componente para as tres secoes, e
+            nao um terceiro desenho de galeria.
+
+            `principal="Capa"` e nao "Principal": a primeira e a capa da
+            galeria, o mesmo vocabulario da `Rede`. Ela NAO substitui a "Foto do
+            local" acima -- aquela e uma so, e e a imagem grande da entrada. */}
+        <Galeria
+          id="e-galeria"
+          titulo="Galeria de fotos"
+          principal="Capa"
+          proposito="directory_gallery"
+          imagens={valores.imagens}
+          aoMudar={(atualizar) =>
+            mudar({ imagens: atualizar(valores.imagens) })
+          }
+          enviar={(arquivo, aoProgredir) =>
+            enviarImagem(api, arquivo, 'directory_gallery', aoProgredir)
+          }
+          mostrarErrosDeDescricao={tentou}
+          // A descricao e OPCIONAL, como nas duas galerias irmas (`Loja` desde
+          // 17/10/2026 e `Rede` desde 21/10, as duas por pedido do cliente).
+          // O padrao do componente e `true`; desligar aqui e o que mantem as
+          // tres telas com a mesma exigencia.
+          descricaoObrigatoria={false}
+          reservaDaDescricao="o nome da entrada"
+          ajuda={`JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.directory_gallery.largura)} × ${String(DIMENSAO_MINIMA.directory_gallery.altura)} pixels. A primeira é a capa da galeria. Arraste para reordenar, ou use os botões de mover.`}
+          erro={erros['e-galeria']}
+          marca={(im) => (semEnvioNaGaleria(im) ? MARCA_SEM_ENVIO : undefined)}
+        />
+        {avisoDeImagensSemEnvio(valores) && (
+          <Banner tipo="alerta">{avisoDeImagensSemEnvio(valores)}</Banner>
         )}
+
+        {/* O CAMPO SITUACAO PASSA A APARECER NO CADASTRO TAMBEM (cliente,
+            29/10/2026). Antes de 29/10 ele era `editando &&`, e com razao: o
+            `POST` nao aceitava `status` e a entrada nascia sempre rascunho --
+            mostrar o campo seria oferecer uma escolha que nao existia.
+
+            Agora a escolha existe, e e ela que o cliente pediu: o padrao e "No
+            ar" e o rascunho continua disponivel para quem quiser salvar
+            incompleto. Esconder o campo no cadastro deixaria o rascunho sem
+            porta, e era a porta que ele mandou manter.
+
+            **DOIS valores no cadastro e QUATRO na edicao**, e a diferenca nao e
+            cosmetica: `hidden` e `removed` sao RETIRADA -- tirar do ar o que
+            esta no ar --, e o contrato nem os aceita em
+            `AdminDirectoryEntryCreateStatus`. Oferece-los aqui ofereceria um
+            `400`. */}
+        <fieldset className="field" aria-describedby="e-situacao-ajuda">
+          <legend className="lab">Situação</legend>
+          <div className="checks">
+            {(editando ? SITUACOES_DA_EDICAO : SITUACOES_DO_CADASTRO).map((situacao) => (
+              <label className="check" key={situacao}>
+                <input
+                  type="radio"
+                  name="e-situacao"
+                  data-cy={`entrada-situacao-${situacao}`}
+                  checked={valores.situacao === situacao}
+                  onChange={() => mudar({ situacao })}
+                />
+                <span>{SITUACOES[situacao]}</span>
+              </label>
+            ))}
+          </div>
+          <span className="help" id="e-situacao-ajuda">
+            {editando
+              ? 'Só “No ar” aparece na seção Perto. Editar outros campos não muda a situação: tirar do ar é uma escolha feita aqui. “Removida” tira a entrada do diretório sem apagar o registro.'
+              : '“No ar” é o padrão e publica a entrada em Perto na hora — por isso cidade, UF e telefone são cobrados. “Rascunho” guarda o cadastro incompleto, e ele só aparece em Perto depois de você publicar na edição.'}
+          </span>
+        </fieldset>
 
         {/* O nivel de verificacao é SOMENTE LEITURA: ele deriva da verificação
             aprovada mais forte da entidade, e um perfil que declarasse o

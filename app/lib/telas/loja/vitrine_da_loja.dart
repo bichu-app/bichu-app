@@ -1000,14 +1000,44 @@ class _EsqueletoDeItem extends StatelessWidget {
 /// o cliente pediu para enxugar. O texto selecionavel resolve o caso sem
 /// inventar estado.
 ///
-/// **SEM MOLDURA E SEM FUNDO, e a razao foi MEDIDA.** A primeira versao
-/// desenhava um bloco de `surfaceSunken` com 16 dp de recuo em volta e as duas
-/// linhas separadas: ela custava cerca de 145 dp no TOPO de uma lista de
-/// produtos, e empurrou o titulo do primeiro cartao para fora da area visivel
-/// -- `loja_carrossel_nao_sai_test` reprovou tocando num titulo que ja nao
-/// estava alcancavel. Esta versao e texto corrido em `bodySmall` com o cupom na
-/// mesma linha do rotulo: ela diz as duas coisas que o cliente pediu e nao
-/// gasta a dobra da tela, que pertence aos produtos.
+/// **SEM MOLDURA EM VOLTA DO CONJUNTO, e a razao foi MEDIDA.** A primeira
+/// versao desenhava um bloco de `surfaceSunken` com 16 dp de recuo em volta e
+/// as duas linhas separadas: ela custava cerca de 145 dp no TOPO de uma lista
+/// de produtos, e empurrou o titulo do primeiro cartao para fora da area
+/// visivel -- `loja_carrossel_nao_sai_test` reprovou tocando num titulo que ja
+/// nao estava alcancavel. A dobra da Loja pertence aos produtos, e e esse
+/// numero que manda neste bloco.
+///
+/// ## O CUPOM MAIS CHAMATIVO -- VARIACAO A (cliente, 29/10/2026)
+///
+/// Ele pediu *"deixe o cupom de desconto bichu, na pagina da loja, mais
+/// chamativo"*. O desenho saiu em `design/prototipos/cupom-da-loja/`
+/// (prototipo HTML no lugar do Figma, por autorizacao dele de 23/09) com tres
+/// variacoes, e **ele escolheu a A**: o bloco NAO muda de lugar e o conjunto
+/// NAO ganha moldura; muda so o par rotulo+codigo. O rotulo vira `overline`
+/// (12/16, peso 700, caixa alta) e o codigo vira `title` (18/24, peso 600)
+/// dentro de uma pilula de `primaryContainer` com o icone `local_activity`.
+/// **Mais chamativo por tamanho, peso e chao -- nunca por cor sozinha**
+/// (SC 1.4.1).
+///
+/// **A pilula e o UNICO elemento novo, e e ela que torna a A barata.** O chao
+/// e so do codigo, e nao do bloco: o fundo em volta do conjunto e justamente o
+/// desenho de ~145 dp que reprovou em 22/10.
+///
+/// **O QUE A ESCOLHA CUSTA, MEDIDO NO WIDGET MONTADO** (e nao os px de
+/// navegador do prototipo, que precisavam ser remedidos aqui -- ver
+/// `test/telas/loja_cupom_chamativo_test.dart`, que tambem explica por que a
+/// medicao exige a `Inter` real carregada):
+///
+/// | largura | hoje | variacao A |
+/// |---|---|---|
+/// | 412 dp | 72 dp | 88 dp |
+/// | 375 dp | 72 dp | 88 dp |
+/// | 320 dp | 90 dp | 106 dp |
+///
+/// Sao os **+16 dp** que o desenho prometeu, nas tres larguras. A B custava
+/// +28 e a B2 +61 (151 dp a 320 dp, MAIS que os 145 que reprovaram), e foi a
+/// dobra que decidiu -- nao o gosto.
 class _ConviteComCupom extends StatelessWidget {
   const _ConviteComCupom();
 
@@ -1025,27 +1055,90 @@ class _ConviteComCupom extends StatelessWidget {
             VitrineDaLoja.conviteDaVitrine,
             style: textos.bodySmall?.copyWith(color: cores.textSecondary),
           ),
-          const SizedBox(height: BichuEspaco.e1),
+          const SizedBox(height: BichuEspaco.e2),
           // O rotulo e o codigo em DOIS nos na MESMA linha, e nao num
           // `'Cupom: bichu'` montado: quem usa leitor de tela ouve o rotulo e
           // depois o codigo, e o codigo precisa de no proprio para ser
           // selecionado sem arrastar o rotulo junto.
-          Row(
+          //
+          // **`Wrap` E NAO `Row`, E A RAZAO FOI MEDIDA A 200%.** O `Row` com
+          // `Flexible` de antes nao estourava, e era pior do que estourar: a
+          // 320 dp com a fonte do sistema em 200% ele apertava o codigo num
+          // vao de 35 dp e `bichu` saia em QUATRO linhas, uma letra por linha
+          // (medido: a caixa do codigo com 160 dp de altura, e o bloco inteiro
+          // com 356 dp). Um cupom que a pessoa le letra por letra e um cupom
+          // que ela digita errado no site do parceiro.
+          //
+          // Com `Wrap`, quando o par nao cabe na linha a PILULA DESCE INTEIRA
+          // para a linha de baixo e o codigo continua numa linha so. E tambem
+          // o que o prototipo desenhou (`flex-wrap: wrap` nas tres variacoes).
+          Wrap(
+            spacing: BichuEspaco.e2,
+            runSpacing: BichuEspaco.e2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
+              // `labelSmall` E O `overline` DESTA ESCALA (12/16, peso 700,
+              // +8% de espacejamento), e nao um tamanho escolhido a mao.
+              //
+              // **A CAIXA ALTA VEM DO NO, e a constante nao muda.** O Flutter
+              // nao tem `text-transform`, e o `overline` deste sistema e
+              // definido como o estilo de caixa alta do selo de estado. A
+              // constante continua `'Cupom de desconto'`: o rotulo e NOSSO
+              // (ver [VitrineDaLoja.rotuloDoCupom]), ao contrario da frase do
+              // convite, que e dele palavra por palavra e NAO sobe de caixa.
               Text(
-                VitrineDaLoja.rotuloDoCupom,
-                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                VitrineDaLoja.rotuloDoCupom.toUpperCase(),
+                style: textos.labelSmall?.copyWith(color: cores.textSecondary),
               ),
-              const SizedBox(width: BichuEspaco.e1),
-              // `Flexible` e nao `Expanded`: o codigo tem cinco letras e nao
-              // tem por que ocupar o resto da linha, mas a 200% de escala ele
-              // precisa poder encolher em vez de estourar a `Row`.
-              Flexible(
-                child: SelectableText(
-                  VitrineDaLoja.codigoDoCupom,
-                  style: textos.labelLarge?.copyWith(
-                    color: cores.textPrimary,
-                  ),
+              // A PILULA, e ela e o UNICO elemento novo da variacao A.
+              //
+              // O conjunto NAO ganha moldura: a versao de 22/10 que desenhava
+              // moldura e fundo em volta do bloco INTEIRO custava ~145 dp e
+              // reprovou `loja_carrossel_nao_sai_test`. O chao e so do codigo,
+              // e e por isso que ele cabe nos +16 dp.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: BichuEspaco.e3,
+                  vertical: BichuEspaco.e1,
+                ),
+                decoration: BoxDecoration(
+                  color: cores.primaryContainer,
+                  borderRadius: BorderRadius.circular(BichuRaio.full),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    // 18 dp, que e o tamanho do icone no prototipo. Ele diz
+                    // "cupom" pela FORMA: nenhuma variacao distingue so por
+                    // cor (SC 1.4.1), e a A compra o destaque com tamanho,
+                    // peso e chao.
+                    Icon(
+                      Icons.local_activity,
+                      size: 18,
+                      color: cores.onPrimaryContainer,
+                    ),
+                    const SizedBox(width: BichuEspaco.e1),
+                    // **CONTINUA `SelectableText`, e isso e requisito de
+                    // FUNCAO.** O codigo existe para ser digitado no site do
+                    // parceiro, e um cupom que a pessoa nao consegue copiar e
+                    // um cupom que ela erra; o botao de copiar foi recusado em
+                    // 22/10 porque copiar exigiria uma confirmacao visivel
+                    // para nao ser toque sem desfecho. Trocar por `Text` para
+                    // ganhar estilo seria regressao de funcao.
+                    //
+                    // `titleMedium` e o `title` desta escala (18/24, peso
+                    // 600). O `Flexible` fica: ele e a ultima defesa dentro da
+                    // pilula, para o dia em que o codigo deixar de ter cinco
+                    // letras.
+                    Flexible(
+                      child: SelectableText(
+                        VitrineDaLoja.codigoDoCupom,
+                        style: textos.titleMedium?.copyWith(
+                          color: cores.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

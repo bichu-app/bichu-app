@@ -44,7 +44,7 @@ import { sql } from 'kysely';
 
 import type { DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type { Instant } from '../../../../shared/types/brands.js';
-import type { TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../../domain/sugestao-do-diretorio.js';
 import type { IndicacaoNaFila, RevisaoDaIndicacao } from '../../domain/fila-de-indicacoes.js';
 import type {
@@ -72,7 +72,7 @@ const AUTOR_ATIVO = sql<boolean>`indicacao_com_autor_ativo(s.id)`;
 
 /** As colunas que saem, por nome. A autoria nao esta aqui e nao pode estar. */
 const COLUNAS = sql`
-  s.ref, s.display_name, s.kind, s.city, s.state, s.neighborhood,
+  s.ref, s.display_name, s.kind, s.entity_kind, s.city, s.state, s.neighborhood,
   s.contact_kind, s.contact_value, s.note, s.review_status,
   s.created_at, s.decided_at, s.decline_reason,
   (SELECT p.slug FROM professionals p WHERE p.id = s.approved_entry_id) AS entry_slug`;
@@ -81,6 +81,7 @@ interface LinhaDaIndicacao {
   ref: string;
   display_name: string;
   kind: TipoDeProfissional;
+  entity_kind: TipoDeEntidade;
   city: string;
   state: string;
   neighborhood: string | null;
@@ -99,6 +100,7 @@ function comoIndicacao(l: LinhaDaIndicacao): IndicacaoNaFila {
     ref: l.ref,
     displayName: l.display_name,
     kind: l.kind,
+    entityKind: l.entity_kind,
     city: l.city,
     state: l.state,
     neighborhood: l.neighborhood,

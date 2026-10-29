@@ -16,11 +16,16 @@ import '../theme/bichu_tokens.g.dart';
 /// ## Dois eixos, e o de entidade manda
 ///
 /// O contrato tem DOIS campos de tipo, e nao um: `ProfessionalKind` (o que a
-/// entrada FAZ: `vet`, `groomer`, `walker`, `sitter`, `trainer`, `clinic` e,
-/// desde 28/10/2026, `hospital` e `store` -- OITO, e nao seis) e
+/// entrada FAZ: `vet`, `groomer`, `walker`, `sitter`, `trainer`, `clinic`,
+/// `hospital` e `store` desde 28/10/2026, e `boarding` e `daycare` desde
+/// 29/10/2026 -- DEZ, e nao seis) e
 /// `EntityKind` (o que ela E: `professional`, `organization`). A prosa de
 /// `EntityKind` no `openapi.yaml` explica por que: uma ONG tem atividade
 /// (`clinic`, `vet`) **e** tipo de entidade (`organization`) ao mesmo tempo.
+///
+/// Desde 29/10/2026 `ProfessionalKind` tem **DEZ** valores: `boarding`
+/// (Hospedagem) e `daycare` (Creche) entraram, e o glifo do `sitter` mudou
+/// junto -- ver a entrada dele abaixo, que explica o conserto.
 ///
 /// Aqui `organization` VENCE a atividade, e a razao e de informacao e nao de
 /// hierarquia: a atividade ja esta escrita em palavras no cartao e na pagina
@@ -102,10 +107,51 @@ import '../theme/bichu_tokens.g.dart';
 /// - `walker` -> **`directions_walk_outlined`**, a figura andando: o passeio.
 ///   Eliminado: `pets_outlined`, a patinha -- ela e a marca do produto,
 ///   aparece 4 vezes no app e significa "pet", nunca "passeio".
-/// - `sitter` -> **`hotel_outlined`**, a cama: "Hospedagem". Eliminados:
+/// - `sitter` -> **`supervisor_account_outlined`**, duas pessoas com a maior na
+///   frente: alguem que CUIDA. **ELE MUDOU EM 29/10/2026, e a troca e um
+///   conserto.** O glifo era `hotel_outlined`, uma cama, e foi escolhido para
+///   casar com o rotulo **errado** que `sitter` carregava desde o primeiro
+///   commit da listagem ("Hospedagem"). Pet sitter nao e hotel: e uma PESSOA
+///   que cuida, muitas vezes na casa do tutor. A cama passou para `boarding`,
+///   onde ela finalmente diz a coisa certa.
+///
+///   Um glifo de PESSOA e exatamente o que separa os dois na tela: `boarding` e
+///   um LUGAR (a cama) e `sitter` e QUEM vai cuidar. E o mesmo eixo que ja
+///   separa `vet` (a maleta de quem atende) de `clinic` (a cruz do predio).
+///
+///   Eliminados: `escalator_warning_outlined`, cujo DESENHO -- adulto de maos
+///   dadas com alguem menor -- e o mais proximo de "acompanhar", mas cujo NOME
+///   fala de escada rolante, e glifo com nome que contradiz o uso e o que a
+///   proxima pessoa "corrige" errado; `house`, `cottage` e `home_work`, que
+///   leem como ENDERECO ao lado do `place_outlined` da mesma pagina (7
+///   ocorrencias em `lib/`) -- e e a MESMA objecao que ja os derrubou em 18/10;
 ///   `night_shelter`, porque ABRIGO e exatamente o que uma ONG e, e os dois
-///   valores convivem no mesmo conjunto; `house` e `home_work`, que leem como
-///   ENDERECO ao lado do `place_outlined` da mesma pagina.
+///   valores convivem no mesmo conjunto; `diversity_1` e `groups_outlined` (2
+///   ocorrencias), que sao o campo semantico de comunidade da secao `Rede` -- a
+///   BICHUS-233 proibe essa repeticao entre secoes; `child_care_outlined`, uma
+///   cara de bebe, que le como creche HUMANA.
+/// - `boarding` -> **`hotel_outlined`**, a cama: "Hospedagem", o pet FICA no
+///   estabelecimento. **E o glifo que o `sitter` tinha**, e herda-lo nao e
+///   economia: a cama sempre descreveu hospedagem, e o que estava errado era a
+///   atividade a que ela estava presa. A eliminacao de 18/10 continua valendo
+///   aqui: `night_shelter` le como ABRIGO (ONG), `house`/`home_work` leem como
+///   endereco. Nota medida por outra frente em 28/10: `local_hotel` e o MESMO
+///   desenho de `hotel_outlined`, entao nao ha segunda cama a escolher.
+/// - `daycare` -> **`toys_outlined`**, o molinete: "Creche", onde o pet passa o
+///   DIA e volta para casa -- e o que separa creche de hospedagem e justamente
+///   nao dormir ali. O brinquedo e o que esse dia tem de proprio.
+///   Eliminados: `wb_sunny_outlined` e `light_mode_outlined`, o sol, que diriam
+///   "dia" com mais exatidao e leem como TEMPO/clima -- nao ha nada de
+///   meteorologia nesta tela para ancorar a leitura; `child_care_outlined`, a
+///   cara de bebe, que le como creche de crianca num app de pet;
+///   `meeting_room_outlined`, a porta aberta, que le como "sala";
+///   `groups_outlined` e `diversity_1`, do campo da `Rede` (ver `sitter`);
+///   `shopping_basket_outlined`, que E o `store`.
+///
+///   O risco que sobra, dito: a cesta do `store` e o brinquedo podem ler os dois
+///   como "coisa que se compra". Ele e contido porque o nome da atividade e
+///   escrito ao lado do glifo em todas as superficies que usam esta peca
+///   (`AtividadeDoDiretorio.rotulo`), e porque a cesta e a unica com alca.
 /// - `trainer` -> **`school_outlined`**, o capelo: adestrar e ENSINAR.
 ///   Eliminados: `fitness_center` (o haltere le como academia de gente) e
 ///   `sports_score` (a bandeira de chegada le como competicao).
@@ -146,7 +192,9 @@ IconData glifoDoInscrito({
     AtividadeDoDiretorio.vet => Icons.medical_services_outlined,
     AtividadeDoDiretorio.groomer => Icons.shower_outlined,
     AtividadeDoDiretorio.walker => Icons.directions_walk_outlined,
-    AtividadeDoDiretorio.sitter => Icons.hotel_outlined,
+    AtividadeDoDiretorio.sitter => Icons.supervisor_account_outlined,
+    AtividadeDoDiretorio.boarding => Icons.hotel_outlined,
+    AtividadeDoDiretorio.daycare => Icons.toys_outlined,
     AtividadeDoDiretorio.trainer => Icons.school_outlined,
     // Atividade desconhecida ou ausente, com tipo de entidade que nao e
     // `organization`: a reserva.

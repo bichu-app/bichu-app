@@ -29,7 +29,7 @@
  * o mesmo caminho do aplicativo. Quem grava e quem le a propria lista e a
  * mesma pessoa.
  */
-import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../domain/sugestao-do-diretorio.js';
 // `RevisaoDaIndicacao` e o `CHECK` da tabela, e ele e UM so: reusado do dominio
 // da fila em vez de redeclarado aqui. Duas copias da mesma lista fechada e a
@@ -55,6 +55,12 @@ export interface SugestaoAGravar {
   readonly autor: UserId;
   readonly displayName: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * O QUE a entidade indicada E (cliente, 29/10/2026). **Nunca `undefined`
+   * aqui**: quem resolve o padrao e o caso de uso, e nao o adaptador -- o
+   * `coalesce` da funcao do banco e a rede de baixo, nao a decisao.
+   */
+  readonly entityKind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
@@ -113,6 +119,8 @@ export interface MinhaIndicacao {
   readonly ref: string;
   readonly displayName: string;
   readonly kind: TipoDeProfissional;
+  /** O QUE a entidade E. `NOT NULL DEFAULT 'professional'` na coluna. */
+  readonly entityKind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;

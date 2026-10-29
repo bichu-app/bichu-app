@@ -19,6 +19,7 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/icone_do_inscrito.dart';
 import '../../widgets/imagem_da_rede.dart';
+import '../../widgets/listagem_preservada.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
@@ -206,6 +207,43 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
 
   _Fase _fase = _Fase.carregando;
   RecorteDoDiretorio _recorte = const RecorteDoDiretorio();
+
+  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
+  ///
+  /// Teto de [tetoDeItensPreservados] itens: o cartao do diretorio desenha o
+  /// logotipo num quadrado de 56 dp, que e miniatura e nao faixa 16:9 -- a
+  /// conta das duas esta em `widgets/listagem_preservada.dart`.
+  final PreservacaoDaListagem _preservacao =
+      PreservacaoDaListagem(teto: tetoDeItensPreservados);
+
+  /// A pergunta que as entradas na tela respondem.
+  ///
+  /// **`_cidadeEmUso` entra, e `_recorte.query` nao a tem**: a cidade derivada
+  /// do aparelho e aplicada em [_pedirPagina] e nunca gravada no recorte (ver a
+  /// prosa de [_cidadeEmUso]). Sem ela aqui, resolver a cidade com a aba fora
+  /// de cena devolveria a lista da cidade errada.
+  String get _assinaturaDaListagem => assinaturaDaListagem(
+        pergunta: <String, String>{
+          ..._recorte.query,
+          'cidade_em_uso': _cidadeEmUso ?? '',
+        },
+        referencia: _referenciaDaConta,
+      );
+
+  /// A localizacao de referencia da conta -- o gatilho de invalidacao que
+  /// ninguem lembraria. **Esta listagem ordena por distancia a partir dela**
+  /// (ADR-0006: da referencia cadastrada, nunca do GPS), entao mudar a
+  /// referencia torna a ordem preservada errada.
+  String? get _referenciaDaConta {
+    final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
+    if (regiao == null) return null;
+    return textoDaReferencia(
+      cep: regiao.cep,
+      bairro: regiao.bairro,
+      cidade: regiao.cidade,
+      uf: regiao.uf,
+    );
+  }
   PaginaDoDiretorio? _pagina;
   String? _textoDaFalha;
 
@@ -290,6 +328,21 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     if (_visivel) return;
     _visivel = true;
     _criarAResolucaoDaCidade();
+    // **BICHUS-316: A VOLTA NAO JOGA FORA O QUE JA FOI CARREGADO.**
+    //
+    // Era aqui que a paginacao morria: a aba voltava a aparecer e `_carregar`
+    // recomecava da pagina 1, de modo que voltar no item 60 refazia tres
+    // chamadas de rede antes de mostrar qualquer coisa. Agora a recarga so
+    // acontece quando o estado preservado NAO vale -- pergunta diferente,
+    // referencia de distancia diferente, teto estourado ou tempo vencido --, e
+    // cada um desses gatilhos tem caso proprio em
+    // `test/telas/rolagem_preservada_test.dart`.
+    if (_preservacao.vale(
+      itens: _itens.length,
+      assinatura: _assinaturaDaListagem,
+    )) {
+      return;
+    }
     _agendarCarga();
   }
 
@@ -426,6 +479,12 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     final escopo = Escopo.of(context);
     final recorte =
         _recorte.pagina == 1 ? _recorte : _recorte.com(pagina: 1);
+    // **O DESCARTE E O GATILHO, e ele mora aqui de proposito.** Busca, filtro,
+    // ordenacao, arrastar-para-atualizar e a resolucao da cidade TODOS chegam
+    // a esta funcao, e todos limpam `_itens` tres linhas abaixo. Invalidar daqui
+    // cobre os cinco por construcao, em vez de pedir que cada chamador lembre.
+    _preservacao.descartar();
+    SlotDaRolagem.maybeOf(context)?.aListaFoiDescartada();
     setState(() {
       _recorte = recorte;
       _fase = _Fase.carregando;
@@ -448,6 +507,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         _guardarAsCidades(pagina.itens);
         _fase = _Fase.lista;
       });
+      _preservacao.marcar(_assinaturaDaListagem);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -526,6 +586,9 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         _guardarAsCidades(pagina.itens);
         _carregandoMais = false;
       });
+      // **O carimbo anda com a pagina nova**: o teto conta os itens
+      // acumulados, e a validade conta do fetch MAIS RECENTE.
+      _preservacao.marcar(_assinaturaDaListagem);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {

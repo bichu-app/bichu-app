@@ -10979,11 +10979,38 @@ paths:
       x-effects: []
       summary: Cadastra uma entrada do diretorio
       description: |
-        **A entrada nasce RASCUNHO** (`professionals.status` tem
-        `DEFAULT 'draft'`), e so aparece em `Perto` depois de um `PATCH` com
-        `status: published`. Nao e zelo: o cadastro de um estabelecimento tem
-        campos que o operador costuma buscar em duas sessoes, e publicar na
-        criacao faria o diretorio mostrar meia clinica.
+        **A ENTRADA NASCE PUBLICADA desde 29/10/2026**, e isto REVERTEU o
+        desenho anterior por decisao do cliente -- verbatim: *"cobrar os dados
+        no cadastro"*, sobre o pedido *"quando cadastrar um estabelecimento no
+        backoffice, ele ja deve salvar com o padrao publicado e nao como
+        rascunho"*.
+
+        O texto que estava aqui dizia: *"a entrada nasce RASCUNHO ... o cadastro
+        de um estabelecimento tem campos que o operador costuma buscar em duas
+        sessoes, e publicar na criacao faria o diretorio mostrar meia clinica"*.
+        **O risco era real e a resposta e outra**: em vez de nascer rascunho, o
+        cadastro COBRA os tres campos da publicacao -- `city`, `state` e
+        `phone_e164` --, entao nao ha como publicar meia clinica. Quem precisa
+        das duas sessoes manda `status: draft` de proposito.
+
+        **As duas consequencias, ditas em voz alta porque sao quebra de
+        comportamento que nenhuma ferramenta de contrato acusa:**
+
+        1. corpo SEM `status` agora cria entrada NO AR, e nao rascunho;
+        2. corpo sem `city`, `state` ou `phone_e164` e **recusado com `400`**
+           nomeando os campos (`AdminDirectoryEntryMissingField`), onde antes
+           respondia `201` com `status: draft`.
+
+        A recusa e do SERVIDOR, pela MESMA funcao (`faltasParaPublicar`) que
+        recusa a publicacao por `PATCH` e que preenche `missing_to_publish`:
+        duas definicoes de "completo" e o que o ADR-0023 secao 2 proibe, e um
+        portao que vivesse so no formulario nao seria portao.
+
+        **A fila de indicacao vinda do app NAO muda**, e o cliente foi
+        explicito: ela e outra porta, nasce pendente e continua passando por
+        aprovacao. A entrada que o aceite cria segue a regra daquele caminho
+        (`approveAdminDirectorySuggestion`), que publica quando esta completa e
+        guarda como rascunho quando nao esta.
 
         **`source` e `import`, e `claim_status` e `unclaimed`.** Nao e atalho:
         sao os unicos valores que o `CHECK professionals_aceite_antes_do_perfil`
@@ -16817,9 +16844,36 @@ components:
         **"Profissional autonomo" foi considerado e NAO entrou**, por correcao
         do proprio cliente na mesma data: *"na verdade, nao inclua profissional
         autonomo como atividade, ja esta no tipo"*. Ele e `EntityKind`, nao
-        atividade. E `sitter` nao e valor novo: ele existe desde
-        `20260921000002`, e o que mudou em 28/10 foi o ROTULO dele na tela
-        ("Pet Sitter", antes "Hospedagem") -- rotulo nao aparece neste contrato.
+        atividade.
+
+        **`boarding` E `daycare` ENTRARAM EM 29/10/2026** (decisao do cliente:
+        *"Nao e um ou outro, sao todos .. hospedagem, pet sitter, sao coisas
+        diferentes"* e *"Acrescentar Creche junto"*), com a migracao
+        `20261029000002`. **E ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE
+        MESES, que vale escrita aqui porque este schema e o lugar onde ela
+        deveria ter sido pega:**
+
+        `sitter` nasceu no primeiro commit da listagem de `Perto` com o rotulo
+        **"Hospedagem"**. O valor dizia *pet sitter* e o rotulo dizia
+        *hospedagem*, e as duas coisas sao diferentes -- hospedagem e o pet
+        FICAR no estabelecimento; pet sitter e alguem que CUIDA, muitas vezes na
+        casa do tutor. **Este contrato nunca descreveu o que cada atividade
+        significa**, so listou o `enum`, e por isso nao havia onde a divergencia
+        reprovar. Em 28/10 o rotulo foi corrigido para "Pet Sitter" -- o que
+        alinhou o rotulo ao valor --, e em 29/10 `boarding` entrou para cobrir o
+        que o rotulo errado vinha representando. `daycare` entrou junto, pelo
+        mesmo pedido.
+
+        **`sitter` NAO foi renomeado**, e a decisao tem o custo escrito:
+        renomear valor de `enum` quebra linha ja gravada e exigiria migracao de
+        DADO, nao so de `CHECK`. O valor fica, e agora e coerente.
+
+        **O ROTULO NAO APARECE NESTE CONTRATO**, e e justamente isso que deixou
+        a divergencia viver: quem define rotulo e o painel
+        (`admin/src/diretorio/dominio.ts`) e o app
+        (`app/lib/api/modelos_diretorio.dart`), e desde 28/10/2026
+        `admin/test/diretorio/rotulos-das-atividades.test.ts` compara os DEZ dos
+        dois lados -- antes ele cobria tres.
 
         **Continua sem valor para ONG, e agora a ausencia e desenho concluido
         e nao decisao pendente.** O texto anterior aqui dizia "decisao pendente
@@ -16849,17 +16903,21 @@ components:
            um so campo nao os expressava. **Isto continua valendo depois de
            28/10**: a lista cresceu em ATIVIDADE, e nenhum dos dois valores
            novos e tipo de entidade.
-      enum: [vet, groomer, walker, sitter, trainer, clinic, store, hospital]
+      enum: [vet, groomer, walker, sitter, trainer, clinic, store, hospital, boarding, daycare]
 
     ProfessionalKinds:
       type: array
       minItems: 1
-      maxItems: 8
+      maxItems: 10
       uniqueItems: true
       description: |
-        As ATIVIDADES da entrada, de 1 a 8 (decisao do cliente de 21/10/2026:
+        As ATIVIDADES da entrada, de 1 a 10 (decisao do cliente de 21/10/2026:
         uma clinica que tambem faz banho e tosa nao precisa escolher; o teto
-        subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`). Espelha
+        subiu de 6 para 8 em 28/10/2026 com `store` e `hospital`, e de 8 para 10
+        em 29/10/2026 com `boarding` e `daycare`). **O teto E o tamanho da lista
+        fechada**, e nao um numero redondo: deixa-lo abaixo recusaria uma entrada
+        que legitimamente faz todas as atividades, com a recusa vindo do teto e
+        nao do vocabulario. Espelha
         `professionals.kinds`, que e uma coluna de LISTA e nao texto grudado com
         separador.
 
@@ -17307,6 +17365,29 @@ components:
             O nome do estabelecimento ou do profissional, como ele se anuncia.
             Mesmo teto de `professionals.display_name`.
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (pedido do cliente, 29/10/2026): *"esta faltando o
+        # campo se e um profissional, ong ou estabelecimento"*, no formulario de
+        # INDICAR do aplicativo.
+        #
+        # **Eixo SEPARADO de `kind`**, e os dois existem ao mesmo tempo: `kind` e
+        # o que a entidade FAZ e `entity_kind` e o que ela E. Uma ONG que atende
+        # como clinica indica `kind: clinic` e `entity_kind: organization`.
+        #
+        # **OPCIONAL, e ausente vale `professional`** -- o mesmo `DEFAULT` da
+        # coluna `directory_suggestions.entity_kind` (`20261029000003`) e a mesma
+        # decisao de `AdminDirectoryEntryInput.entity_kind`: exigi-lo tornaria
+        # obrigatorio um campo que nao existia, que e quebra de contrato de
+        # REQUISICAO (`request-property-became-required`) e derrubaria o APK ja
+        # publicado no aparelho de quem esta indicando agora.
+        #
+        # Os ROTULOS sao os que o cliente definiu e os que o painel ja mostra:
+        # **"Profissional ou estabelecimento"** e **"ONG"**. Rotulo nao aparece
+        # neste contrato -- e foi exatamente essa ausencia que deixou o rotulo de
+        # `sitter` divergir do valor por meses (ver `ProfessionalKind`).
+        entity_kind:
+          allOf:
+            - $ref: '#/components/schemas/EntityKind'
+          default: professional
         city: { type: string, minLength: 2, maxLength: 80 }
         state: { type: string, pattern: '^[A-Z]{2}$' }
         neighborhood: { type: string, minLength: 2, maxLength: 80 }
@@ -17414,7 +17495,7 @@ components:
         **O estado da revisao e `review_status`, e nao `state`** -- `state`
         aqui e a UF, na mesma projecao, exatamente como na tabela e como em
         `AdminDirectorySuggestion`.
-      required: [reference, display_name, kind, city, state, public_contact, review_status, created_at]
+      required: [reference, display_name, kind, entity_kind, city, state, public_contact, review_status, created_at]
       additionalProperties: false
       properties:
         reference:
@@ -17425,6 +17506,14 @@ components:
           description: O identificador opaco, 128 bits em base64url. O MESMO que o recibo de `suggestDirectoryEntry` devolveu.
         display_name: { type: string, minLength: 2, maxLength: 120 }
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (cliente, 29/10/2026). Sai TAMBEM aqui, na projecao
+        # de quem INDICOU, e nao so na do painel: quem indicou declarou o tipo, e
+        # a tela "minhas indicacoes" mostra o que a pessoa escreveu. Esconde-lo
+        # aqui faria a lista dela mostrar menos do que ela mandou.
+        #
+        # `required` e nao anulavel, pela mesma razao do schema do painel: a
+        # coluna e `NOT NULL DEFAULT 'professional'`.
+        entity_kind: { $ref: '#/components/schemas/EntityKind' }
         city:
           type: string
           minLength: 2
@@ -17737,7 +17826,7 @@ components:
         e a UF, na mesma projecao, exatamente como na tabela.
         `DirectorySuggestionReceipt` pode chamar o seu de `state` porque o
         recibo do aplicativo nao devolve a UF.
-      required: [reference, display_name, kind, city, state, public_contact, review_status, created_at]
+      required: [reference, display_name, kind, entity_kind, city, state, public_contact, review_status, created_at]
       additionalProperties: false
       properties:
         reference:
@@ -17748,6 +17837,13 @@ components:
           description: O identificador opaco, 128 bits em base64url. O mesmo que o aplicativo recebeu no recibo.
         display_name: { type: string, minLength: 2, maxLength: 120 }
         kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        # O TIPO DE ENTIDADE (cliente, 29/10/2026). **`required` desde que a
+        # coluna nasceu**, e nao anulavel: `directory_suggestions.entity_kind` e
+        # `NOT NULL DEFAULT 'professional'`, entao toda linha tem valor --
+        # inclusive as gravadas antes de 29/10, que valem `professional` porque
+        # nao havia como dizer outra coisa. Declarar nulavel aqui prometeria um
+        # estado que a coluna nao produz.
+        entity_kind: { $ref: '#/components/schemas/EntityKind' }
         city:
           type: string
           minLength: 2
@@ -17936,6 +18032,44 @@ components:
         entrada sai do diretorio e continua existindo para a trilha.
       enum: [draft, published, hidden, removed]
 
+    AdminDirectoryEntryCreateStatus:
+      type: string
+      description: |
+        **COM QUE SITUACAO A ENTRADA NASCE NO PAINEL** (decisao do cliente de
+        29/10/2026, verbatim: *"cobrar os dados no cadastro"*, sobre o pedido
+        *"quando cadastrar um estabelecimento no backoffice, ele ja deve salvar
+        com o padrao publicado e nao como rascunho"*).
+
+        **AUSENTE VALE `published`, e esta e a mudanca de COMPORTAMENTO que o
+        `oasdiff` nao ve.** Ate 28/10/2026 `AdminDirectoryEntryInput` nao tinha
+        `status` e o `POST` criava SEMPRE rascunho; a partir de 29/10 o corpo sem
+        `status` cria entrada NO AR. Acrescentar propriedade opcional e
+        compativel para a ferramenta, e o efeito nao e: um chamador antigo que
+        mandava corpo completo e esperava rascunho passa a publicar.
+
+        **E PUBLICAR COBRA CIDADE, UF E TELEFONE.** O mesmo chamador antigo, se
+        mandava corpo INCOMPLETO contando com o rascunho, passa a receber `400`
+        nomeando os campos que faltam (`AdminDirectoryEntryMissingField`), em vez
+        de um `201` com `status: draft`. **Quem recusa e o SERVIDOR**, pela MESMA
+        funcao que recusa a publicacao por `PATCH` e que preenche
+        `missing_to_publish` -- nao ha caminho em que o formulario seja a unica
+        guarda.
+
+        **`draft` CONTINUA EXISTINDO como escolha explicita** (o cliente
+        confirmou): quem quer guardar trabalho incompleto manda `status: draft`,
+        e ai nada e cobrado. O que mudou e o PADRAO, nao a possibilidade.
+
+        **So estes dois valores, e nao os quatro de `DirectoryEntryStatus`.**
+        `hidden` e `removed` sao RETIRADA -- tirar do ar o que esta no ar --, e
+        "nasce retirada" nao e estado que signifique algo. Retirar e um `PATCH`
+        com `status`, e e ele que carrega o ato explicito.
+
+        **A fila de indicacao vinda do app NAO muda** (o cliente foi explicito):
+        ela e outra porta, nasce pendente e continua passando por aprovacao, e a
+        entrada que o aceite cria segue a regra de completude dela.
+      enum: [published, draft]
+      default: published
+
     DirectoryEntryOrigin:
       type: string
       description: |
@@ -18112,6 +18246,18 @@ components:
           description: |
             O `upload_id` de um envio com `purpose: directory_photo`. Mesma
             regra de recusa da logo.
+        # A GALERIA (cliente, 29/10/2026): *"implemente a tabela de galeria
+        # entao"*, depois de *"so esta permitindo subir uma foto, deve ser
+        # padrao igual na pagina de eventos"*. OPCIONAL, e omitir equivale a
+        # `[]` -- entrada sem galeria continua sendo cadastrada, publicada e
+        # listada exatamente como antes. Nao entra em
+        # `AdminDirectoryEntryMissingField`: a publicacao nunca cobrou imagem.
+        images: { $ref: '#/components/schemas/DirectoryGalleryImagesInput' }
+        # A SITUACAO EM QUE A ENTRADA NASCE (cliente, 29/10/2026). Ausente vale
+        # `published`, e publicar COBRA `city`, `state` e `phone_e164` no
+        # proprio `POST`. Ver `AdminDirectoryEntryCreateStatus`, que carrega a
+        # decisao inteira e o custo dela.
+        status: { $ref: '#/components/schemas/AdminDirectoryEntryCreateStatus' }
         # ---------------------------------------------------------------
         # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
         # ---------------------------------------------------------------
@@ -18215,6 +18361,13 @@ components:
         # balde: o que sai e o ponteiro da entrada.
         logo_upload_id: { type: [string, 'null'], format: uuid }
         photo_upload_id: { type: [string, 'null'], format: uuid }
+        # A GALERIA (cliente, 29/10/2026). **`images` SUBSTITUI a galeria
+        # inteira** -- o mesmo idioma de `images` da `Rede` e da `Loja`: a lista
+        # que vem e a lista que fica, reordenar e mandar a ordem nova, e `[]`
+        # tira todas. **Ausente NAO MEXE**, e e por isso que ela nao aceita
+        # `null`: "tirar todas" ja se diz com `[]`, e um segundo jeito de dizer
+        # a mesma coisa seria dois caminhos para o painel errar.
+        images: { $ref: '#/components/schemas/DirectoryGalleryImagesInput' }
         # Os quatro do endereco de rua (decisao 9.2, respondida em 18/10). `null`
         # APAGA e ausente NAO MEXE, como os demais: e a distincao que separa
         # "limpar o CEP" de "editar so o telefone". Nenhum deles e exigido para
@@ -18258,7 +18411,7 @@ components:
         na tabela, o painel nao os escreve, e devolve-los faria uma tela de
         cadastro mostrar documento de terceiro sem nenhuma necessidade.
       required:
-        [slug, kind, kinds, entity_kind, display_name, status, verification, source,
+        [slug, kind, kinds, entity_kind, display_name, images, status, verification, source,
          claim_status, missing_to_publish, created_at, updated_at, version]
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
@@ -18310,6 +18463,20 @@ components:
           description: |
             A foto da fachada ou do ambiente, em faixa 16:9. Mesma regra de
             `status` e `url` da logo.
+        # A GALERIA (cliente, 29/10/2026). **Sempre presente**, e `[]` e o
+        # estado normal: a entrada que nunca teve foto responde lista vazia, e
+        # nao campo ausente -- a tela abre a galeria com zero itens, que e
+        # diferente de "esta resposta nao fala de galeria".
+        #
+        # O MESMO schema de item que a `Loja` e a `Rede` usam
+        # (`AdminCatalogGalleryImage`): o painel reconhece `upload_id`,
+        # `position`, `alt_text`, `status` e a URL da derivada, e o componente
+        # de galeria e UM para as tres secoes.
+        images:
+          type: array
+          maxItems: 8
+          description: Na ordem da pagina do local. `position` 0 e a capa da galeria. Vazia e estado normal.
+          items: { $ref: '#/components/schemas/AdminCatalogGalleryImage' }
         status: { $ref: '#/components/schemas/DirectoryEntryStatus' }
         verification:
           allOf:
@@ -21095,7 +21262,7 @@ components:
       properties:
         purpose:
           type: string
-          enum: [store_item, network_event, directory_logo, directory_photo]
+          enum: [store_item, network_event, directory_logo, directory_photo, directory_gallery]
           description: |
             Fica gravado no envio. A escrita que confirma o envio exige o mesmo
             proposito, e recusa foto de pet, de achador ou de outro proposito
@@ -21107,6 +21274,17 @@ components:
             512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
             600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
             outro e `400 upload_not_usable`.
+
+            **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
+            verbatim: *"implemente a tabela de galeria entao"*), com a galeria
+            de ate oito fotos da entrada -- o *"padrao igual na pagina de
+            eventos"* que ele pediu. **Separado de `directory_photo`, e nao o
+            mesmo**, pelo criterio que separou `user_showcase` de `user_photo`:
+            aquele e a foto UNICA do lugar, com duas derivadas (`banner` 1280 x
+            720 e `card` 1024 x 576), e este sao as da GALERIA, que pedem
+            tambem a miniatura de 480 x 360 que a faixa da galeria desenha --
+            exatamente as tres derivadas do encontro da `Rede`. Minima 600 x
+            600, a mesma de `network_event` e de `directory_photo`.
 
             **`user_photo` nao esta aqui, de proposito**: a foto da propria
             pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
@@ -21123,7 +21301,9 @@ components:
             Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
             17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
             pixels para `store_item`, 600 x 600 para `network_event` (pedido do
-            cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+            cliente de 01/10; antes, 1600 x 900), 256 x 256 para
+            `directory_logo` e 600 x 600 para `directory_photo` e
+            `directory_gallery`. Duas conferencias: a
             DECLARADA, em `width`/`height` deste pedido, recusada aqui com
             `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
             faz nos bytes e que marca a imagem `rejected` com o motivo, porque
@@ -21862,6 +22042,55 @@ components:
         crop:
           $ref: '#/components/schemas/ImageCrop'
 
+    DirectoryGalleryImagesInput:
+      type: array
+      maxItems: 8
+      description: |
+        A GALERIA de fotos da entrada do diretorio (decisao do cliente de
+        29/10/2026, verbatim: *"implemente a tabela de galeria entao"*, depois
+        do pedido *"no backoffice para cadastrar um parceiro, so esta
+        permitindo subir uma foto, deve ser padrao igual na pagina de
+        eventos"*).
+
+        **E a galeria do encontro da `Rede`, campo por campo**, e isso e
+        literal: ate 8 imagens, **na ordem em que a pagina do local as mostra**,
+        a primeira e a capa da galeria; cada uma e um envio de
+        `createAdminCatalogImageIntent` com `purpose: directory_gallery`; a
+        lista SUBSTITUI a anterior inteira -- reordenar e mandar a ordem nova,
+        escolher a capa e por a imagem em primeiro lugar, remover e omitir, `[]`
+        tira todas. `upload_id` repetido e recusado com `400`
+        (`code: duplicate_upload`), e envio de outro proposito, vencido ou ja
+        usado em OUTRA entrada com `400` (`code: upload_not_usable`), sem dizer
+        qual dos casos ocorreu.
+
+        **ELA NAO SUBSTITUI `logo_upload_id` NEM `photo_upload_id`**, e as duas
+        ausencias sao desenho:
+
+        - a **logo e UMA** porque e a marca, desenhada num quadrado ao lado do
+          nome, e a listagem le so ela. "Oito logos" nao e estado que signifique
+          algo;
+        - a **foto do local continua UMA** -- e esta e a unica divergencia em
+          relacao ao encontro, onde a capa E a `position` 0 e nao existe campo
+          de capa. `photo_upload_id` fica porque JA existe, no contrato e em
+          dado aplicado em homologacao, e tira-lo seria
+          `response-property-removed` somado a uma migracao de dado que nenhuma
+          decisao pediu.
+
+        **`alt_text` e OPCIONAL**, como nas duas galerias irmas (`Loja` desde
+        17/10/2026, `Rede` desde 21/10, as duas por pedido do cliente: *"pode
+        remover a descricao da imagem"*). Quando vem, vale de 2 a 150
+        caracteres; quando nao vem, a imagem fica sem texto alternativo e quem
+        desenha cai no `display_name` da entrada. **Campo presente e vazio e
+        recusado**: o painel OMITE o campo em vez de mandar `""`.
+
+        **A galeria nao sai em `DirectoryEntrySummary` nem em
+        `DirectoryEntryPublic`**, pela mesma razao que `logo` e `photo` nunca
+        sairam: expor imagem de estabelecimento em `Perto` depende de decisao do
+        cliente (ADR-0010), e a listagem do aplicativo esta MEDIDA como o lugar
+        onde ela nao cabe -- vinte faixas 16:9 custariam 65,6 MiB de imagem
+        decodificada.
+      items: { $ref: '#/components/schemas/CatalogImageInput' }
+
     StoreCatalogImagesInput:
       type: array
       maxItems: 8
@@ -22008,22 +22237,25 @@ components:
               description: |
                 O identificador que o painel devolve em `images` para manter,
                 reordenar ou remover esta imagem. **Nulo** quando a conta que
-                enviou a imagem foi apagada: a imagem continua no produto ou no
-                encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
-                NULL`), e o painel so a mantem reenviando a galeria sem ela ou
-                com uma imagem nova.
+                enviou a imagem foi apagada: a imagem continua no produto, no
+                encontro ou na entrada do diretorio
+                (`catalog_images.upload_intent_id` e `ON DELETE SET NULL`), e o
+                painel so a mantem reenviando a galeria sem ela ou com uma
+                imagem nova.
             position: { type: integer, minimum: 0, maximum: 7 }
             alt_text:
               type: [string, 'null']
               description: |
                 **Nulo** quando a imagem foi gravada sem texto alternativo, o
                 que a `Loja` passou a permitir em 17/10/2026
-                (`StoreCatalogImagesInput`) e a `Rede` em 21/10/2026
-                (`CatalogImagesInput`, decisao do cliente). Nos dois recursos a
-                escrita aceita a ausencia, entao a leitura pode trazer nulo em
-                qualquer posicao -- **inclusive na capa do encontro**, que e o
-                custo que o cliente aceitou por escrito. Quem desenha cai no
-                nome do produto ou no titulo do encontro.
+                (`StoreCatalogImagesInput`), a `Rede` em 21/10/2026
+                (`CatalogImagesInput`, decisao do cliente) e a galeria do
+                diretorio desde que nasceu, em 29/10/2026
+                (`DirectoryGalleryImagesInput`). Nos TRES recursos a escrita
+                aceita a ausencia, entao a leitura pode trazer nulo em qualquer
+                posicao -- **inclusive na capa do encontro**, que e o custo que
+                o cliente aceitou por escrito. Quem desenha cai no nome do
+                produto, no titulo do encontro ou no `display_name` da entrada.
 
     AdminStoreTagRef:
       type: object

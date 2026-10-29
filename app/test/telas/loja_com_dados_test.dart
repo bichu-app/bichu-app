@@ -875,10 +875,21 @@ void main() {
             'vitrine. A redacao e DELE, palavra por palavra (inclusive '
             '`mantermos`), e esta em `VitrineDaLoja.conviteDaVitrine`.',
       );
+      // **EM CAIXA ALTA desde 29/10/2026, e a CONSTANTE nao mudou.** A
+      // variacao A do desenho do cupom pos o rotulo em `overline`, que neste
+      // sistema e o estilo de caixa alta -- e o Flutter nao tem
+      // `text-transform`, entao quem sobe a caixa e o no. O `expect` compara
+      // com a propria constante subida de caixa, e nao com um literal
+      // reescrito: assim ele continua reprovando se o rotulo sair da tela, e
+      // reprova tambem se alguem trocar a redacao da constante.
+      //
+      // A frase do convite NAO sobe de caixa: ela e redacao DELE, palavra por
+      // palavra. O rotulo e nosso -- ver `VitrineDaLoja.rotuloDoCupom`.
       expect(
-        find.text(VitrineDaLoja.rotuloDoCupom),
+        find.text(VitrineDaLoja.rotuloDoCupom.toUpperCase()),
         findsOneWidget,
-        reason: 'REPROVA: o rotulo do cupom saiu da vitrine.',
+        reason: 'REPROVA: o rotulo do cupom saiu da vitrine (ele e desenhado '
+            'em caixa alta desde a variacao A, 29/10/2026).',
       );
       expect(
         find.text(VitrineDaLoja.codigoDoCupom),
@@ -906,9 +917,15 @@ void main() {
       // Os tres textos que o cliente autorizou. Qualquer outro no da tela que
       // escreva uma das duas palavras e comercio entrando pela porta que a
       // frase dele abriu.
+      // **O rotulo entra EM CAIXA ALTA, e so nela**, porque e assim que a tela
+      // o desenha desde a variacao A (29/10/2026) -- a constante segue em
+      // caixa mista, e o no a sobe. E tem de ser SO a alta: o controle
+      // positivo logo abaixo cobra que a varredura VEJA todos os autorizados,
+      // e a caixa mista nao esta na tela -- por as duas faria aquele controle
+      // reprovar por um no que nao existe.
       final autorizados = <String>{
         VitrineDaLoja.conviteDaVitrine,
-        VitrineDaLoja.rotuloDoCupom,
+        VitrineDaLoja.rotuloDoCupom.toUpperCase(),
         VitrineDaLoja.codigoDoCupom,
       };
 
@@ -1073,7 +1090,7 @@ void main() {
         of: find.byType(BarraDeListagem),
         matching: find.byType(TextField),
       );
-      final rotulo = find.text(VitrineDaLoja.rotuloDoCupom);
+      final rotulo = find.text(VitrineDaLoja.rotuloDoCupom.toUpperCase());
       final codigo = find.text(VitrineDaLoja.codigoDoCupom);
 
       // CONTROLE POSITIVO dos tres nos, antes de medir qualquer `dy`.
