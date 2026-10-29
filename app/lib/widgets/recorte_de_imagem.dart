@@ -58,10 +58,7 @@ import 'moldura.dart';
 /// 16:9 entregaria de volta uma promessa falsa.
 @immutable
 class FormatoDoRecorte {
-  const FormatoDoRecorte({
-    required this.aspecto,
-    required this.circular,
-  });
+  const FormatoDoRecorte({required this.aspecto, required this.circular});
 
   /// A janela segue o aspecto do PROPRIO arquivo.
   ///
@@ -71,9 +68,7 @@ class FormatoDoRecorte {
   /// forma, zoom 1 e a foto inteira e o recorte **nao muda nada**; aproximar
   /// e que recorta. Forcar um quadrado aqui recortaria uma foto que hoje vai
   /// inteira, o que seria uma perda e nao um recurso.
-  const FormatoDoRecorte.doProprioArquivo()
-      : aspecto = null,
-        circular = false;
+  const FormatoDoRecorte.doProprioArquivo() : aspecto = null, circular = false;
 
   /// Largura dividida pela altura, ou nulo para seguir o arquivo.
   final double? aspecto;
@@ -91,24 +86,32 @@ class FormatoDoRecorte {
   /// `Meus dados` (`ImagemDaRede(largura: lado)`), e a celula da vitrine e do
   /// perfil de pessoa (`childAspectRatio: 1`), e a publicacao do Mural
   /// (`PublicarNoMural.proporcaoDaPublicacao`, que vale 1).
-  static const FormatoDoRecorte quadrado =
-      FormatoDoRecorte(aspecto: 1, circular: false);
+  static const FormatoDoRecorte quadrado = FormatoDoRecorte(
+    aspecto: 1,
+    circular: false,
+  );
 
   /// O mesmo quadrado, desenhado como circulo. A foto da propria pessoa.
-  static const FormatoDoRecorte circulo =
-      FormatoDoRecorte(aspecto: 1, circular: true);
+  static const FormatoDoRecorte circulo = FormatoDoRecorte(
+    aspecto: 1,
+    circular: true,
+  );
 
   /// A moldura do pet: `BichuMoldura.proporcao` e altura dividida por largura
   /// (1,1), entao o aspecto da janela e o inverso dela.
-  static const FormatoDoRecorte molduraDoPet =
-      FormatoDoRecorte(aspecto: 1 / BichuMoldura.proporcao, circular: false);
+  static const FormatoDoRecorte molduraDoPet = FormatoDoRecorte(
+    aspecto: 1 / BichuMoldura.proporcao,
+    circular: false,
+  );
 
   /// A capa do encontro. `proporcaoDaCapa` de `telas/rede/pecas_da_rede.dart`
   /// vale 16 / 9, e o valor e repetido aqui em vez de importado porque
   /// `widgets/` nao depende de `telas/` em nenhum outro lugar deste app --
   /// a dependencia corre no outro sentido.
-  static const FormatoDoRecorte capaDoEncontro =
-      FormatoDoRecorte(aspecto: 16 / 9, circular: false);
+  static const FormatoDoRecorte capaDoEncontro = FormatoDoRecorte(
+    aspecto: 16 / 9,
+    circular: false,
+  );
 }
 
 /// O enquadramento, como GEOMETRIA PURA.
@@ -152,9 +155,9 @@ class EnquadramentoDaFoto {
 
   /// A escala que faz a imagem **cobrir** a janela com [zoom] 1.
   double get escalaBase => math.max(
-        janela.width / larguraDoArquivo,
-        janela.height / alturaDoArquivo,
-      );
+    janela.width / larguraDoArquivo,
+    janela.height / alturaDoArquivo,
+  );
 
   /// Pixels do palco por pixel do arquivo.
   double get escala => escalaBase * zoom;
@@ -165,9 +168,9 @@ class EnquadramentoDaFoto {
 
   /// Quanto o deslocamento pode crescer antes de a janela mostrar vazio.
   Offset get deslocamentoMaximo => Offset(
-        math.max(0, (imagemDesenhada.width - janela.width) / 2),
-        math.max(0, (imagemDesenhada.height - janela.height) / 2),
-      );
+    math.max(0, (imagemDesenhada.width - janela.width) / 2),
+    math.max(0, (imagemDesenhada.height - janela.height) / 2),
+  );
 
   /// Este enquadramento com o deslocamento **grudado** nas bordas da imagem.
   ///
@@ -198,14 +201,13 @@ class EnquadramentoDaFoto {
     Size? janela,
     double? zoom,
     Offset? deslocamento,
-  }) =>
-      EnquadramentoDaFoto(
-        larguraDoArquivo: larguraDoArquivo,
-        alturaDoArquivo: alturaDoArquivo,
-        janela: janela ?? this.janela,
-        zoom: zoom ?? this.zoom,
-        deslocamento: deslocamento ?? this.deslocamento,
-      );
+  }) => EnquadramentoDaFoto(
+    larguraDoArquivo: larguraDoArquivo,
+    alturaDoArquivo: alturaDoArquivo,
+    janela: janela ?? this.janela,
+    zoom: zoom ?? this.zoom,
+    deslocamento: deslocamento ?? this.deslocamento,
+  );
 
   /// **O retangulo que vai no envio**, em pixels do arquivo.
   ///
@@ -312,7 +314,7 @@ Future<FotoLocal?> ajustarAFoto(
   required FormatoDoRecorte formato,
   String? titulo,
 }) async {
-  final imagem = await _abrirAImagem(camera, foto);
+  final imagem = await abrirAImagemParaRecortar(camera, foto);
   if (!context.mounted) return foto;
   // Nao decodificou. A foto segue como veio, em vez de a pessoa encarar uma
   // folha que nao desenha nada.
@@ -354,7 +356,7 @@ Future<FotoLocal?> ajustarAFoto(
 /// A imagem pronta para desenhar, mais o tamanho **do arquivo**.
 ///
 /// Os dois nao sao o mesmo numero, e a diferenca importa: a textura e
-/// decodificada reduzida (ver [_abrirAImagem]), e o recorte precisa dos pixels
+/// decodificada reduzida (ver [abrirAImagemParaRecortar]), e o recorte precisa dos pixels
 /// do ARQUIVO -- recortar com o tamanho da textura entregaria um retangulo
 /// pequeno demais para o arquivo, e o resultado sairia enquadrado em outro
 /// lugar.
@@ -379,7 +381,17 @@ class ImagemParaRecortar {
 /// entao 1440 px cobre a aproximacao inteira sem a imagem embacar.
 const int ladoMaiorParaDesenhar = 1440;
 
-Future<ImagemParaRecortar?> _abrirAImagem(
+/// Decodifica o arquivo para desenhar, e devolve junto o tamanho **do
+/// arquivo**.
+///
+/// Publica, e nao privada, porque e o unico jeito de um caso montar
+/// [FolhaDeRecorte] pelo MESMO caminho que a producao usa. Um
+/// [ImagemParaRecortar] montado a mao no teste mediria um caminho que o app
+/// nao tem.
+///
+/// Nulo quando nao decodifica, ou quando o arquivo sumiu do aparelho. Ver
+/// [ajustarAFoto] para o que acontece nesse caso.
+Future<ImagemParaRecortar?> abrirAImagemParaRecortar(
   CameraEGaleria camera,
   FotoLocal foto,
 ) async {
@@ -425,6 +437,9 @@ Future<ImagemParaRecortar?> _abrirAImagem(
   }
 }
 
+/// A chave do palco: a area arrastavel da folha.
+const Key chaveDoPalcoDoRecorte = ValueKey<String>('palco-do-recorte');
+
 /// A folha de recorte: o palco, o zoom e as duas acoes.
 class FolhaDeRecorte extends StatefulWidget {
   const FolhaDeRecorte({
@@ -447,6 +462,15 @@ class FolhaDeRecorte extends StatefulWidget {
 
   /// O passo do teclado, em dp. `Shift` triplica.
   static const double passoDoTeclado = BichuEspaco.e2;
+
+  /// Quanto da altura da tela a janela de recorte pode ocupar.
+  ///
+  /// **36% e nao "o que couber"**: o resto da folha -- titulo, apoio, zoom e as
+  /// duas acoes -- custa altura fixa, e uma janela que coma tudo empurra a
+  /// acao primaria para debaixo da borda. E o mesmo defeito que
+  /// `PreviaDaFotoDaConversa` resolveu com `min(220, fracao da tela)`, pela
+  /// mesma razao.
+  static const double fracaoMaximaDaJanela = 0.36;
 
   @override
   State<FolhaDeRecorte> createState() => _EstadoDaFolhaDeRecorte();
@@ -486,14 +510,15 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     // A troca de janela (rotacao da tela, teclado abrindo) **preserva o zoom e
     // o arraste** e so os gruda de novo. Reiniciar aqui jogaria fora o
     // enquadramento da pessoa por causa de um evento do sistema.
-    _enquadramento = (atual ??
-            EnquadramentoDaFoto(
-              larguraDoArquivo: widget.imagem.larguraDoArquivo,
-              alturaDoArquivo: widget.imagem.alturaDoArquivo,
-              janela: janela,
-            ))
-        .copiaCom(janela: janela)
-        .grudado;
+    _enquadramento =
+        (atual ??
+                EnquadramentoDaFoto(
+                  larguraDoArquivo: widget.imagem.larguraDoArquivo,
+                  alturaDoArquivo: widget.imagem.alturaDoArquivo,
+                  janela: janela,
+                ))
+            .copiaCom(janela: janela)
+            .grudado;
   }
 
   KeyEventResult _teclado(FocusNode _, KeyEvent evento) {
@@ -504,8 +529,7 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     if (atual == null) return KeyEventResult.ignored;
 
     final comShift = HardwareKeyboard.instance.isShiftPressed;
-    final passo =
-        FolhaDeRecorte.passoDoTeclado * (comShift ? 3 : 1);
+    final passo = FolhaDeRecorte.passoDoTeclado * (comShift ? 3 : 1);
     final tecla = evento.logicalKey;
 
     // Arrastar a IMAGEM, e nao a janela: seta para a esquerda move a imagem
@@ -522,15 +546,18 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
       return KeyEventResult.handled;
     }
 
-    final bool aproxima = tecla == LogicalKeyboardKey.add ||
+    final bool aproxima =
+        tecla == LogicalKeyboardKey.add ||
         tecla == LogicalKeyboardKey.equal ||
         tecla == LogicalKeyboardKey.numpadAdd;
-    final bool afasta = tecla == LogicalKeyboardKey.minus ||
+    final bool afasta =
+        tecla == LogicalKeyboardKey.minus ||
         tecla == LogicalKeyboardKey.numpadSubtract;
     if (aproxima || afasta) {
       setState(
-        () => _enquadramento =
-            atual.comZoom(atual.zoom * (aproxima ? 1.2 : 1 / 1.2)),
+        () => _enquadramento = atual.comZoom(
+          atual.zoom * (aproxima ? 1.2 : 1 / 1.2),
+        ),
       );
       return KeyEventResult.handled;
     }
@@ -543,9 +570,10 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     final tipografia = Theme.of(context).textTheme;
     final tela = MediaQuery.sizeOf(context);
 
-    // A janela nunca passa de 44% da altura da tela: sobra o que o zoom, as
-    // duas acoes e o cabecalho precisam, com margem para a area segura.
-    final alturaMaximaDaJanela = math.max(120.0, tela.height * 0.44);
+    final alturaMaximaDaJanela = math.max(
+      120.0,
+      tela.height * FolhaDeRecorte.fracaoMaximaDaJanela,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -554,123 +582,137 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
         BichuEspaco.e4,
         BichuEspaco.e4,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(widget.titulo, style: tipografia.titleMedium),
-          const SizedBox(height: BichuEspaco.e1),
-          Text(
-            TextosDoRecorte.apoio,
-            style: tipografia.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-          const SizedBox(height: BichuEspaco.e3),
-          LayoutBuilder(
-            builder: (contexto, limites) {
-              final larguraDisponivel = limites.maxWidth.isFinite
-                  ? limites.maxWidth - FolhaDeRecorte.folgaDoPalco * 2
-                  : 280.0;
-              final janela = _janelaPara(
-                larguraDisponivel,
-                alturaMaximaDaJanela,
-              );
-              _ajustarAJanela(janela);
-              final enquadramento = _enquadramento!;
+      // **A COLUNA ROLA, e nao e zelo:** `isScrollControlled: true` deixa a
+      // folha CRESCER, mas nao a faz rolar. Medido em 29/10/2026 numa janela
+      // de 800 x 600, que e a do teste de widget e tambem a de um aparelho
+      // baixo com a fonte do sistema aumentada: a coluna estourava por 54 px,
+      // e quem saia da tela era a acao primaria. O teto de
+      // [FolhaDeRecorte.fracaoMaximaDaJanela] cuida do caso comum; esta rolagem cuida do
+      // resto, e os dois juntos sao o que `area_segura_do_aparelho_test`
+      // cobra das outras telas.
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(widget.titulo, style: tipografia.titleMedium),
+            const SizedBox(height: BichuEspaco.e1),
+            Text(
+              TextosDoRecorte.apoio,
+              style: tipografia.bodySmall?.copyWith(color: cores.textSecondary),
+            ),
+            const SizedBox(height: BichuEspaco.e3),
+            LayoutBuilder(
+              builder: (contexto, limites) {
+                final larguraDisponivel = limites.maxWidth.isFinite
+                    ? limites.maxWidth - FolhaDeRecorte.folgaDoPalco * 2
+                    : 280.0;
+                final janela = _janelaPara(
+                  larguraDisponivel,
+                  alturaMaximaDaJanela,
+                );
+                _ajustarAJanela(janela);
+                final enquadramento = _enquadramento!;
 
-              return Semantics(
-                label: TextosDoRecorte.palco,
-                container: true,
-                child: Focus(
-                  autofocus: true,
-                  onKeyEvent: _teclado,
-                  child: GestureDetector(
-                    onScaleStart: (_) =>
-                        _zoomNoInicioDoGesto = enquadramento.zoom,
-                    // `onScaleUpdate` cobre o arraste de UM dedo tambem:
-                    // `focalPointDelta` e o movimento e `scale` fica em 1.
-                    // Dois tratadores (pan e scale) no mesmo detector sao
-                    // proibidos pelo framework, e seriam duas contas para o
-                    // mesmo gesto.
-                    onScaleUpdate: (detalhe) => setState(() {
-                      final comZoom = _enquadramento!.comZoom(
-                        _zoomNoInicioDoGesto * detalhe.scale,
-                      );
-                      _enquadramento =
-                          comZoom.arrastado(detalhe.focalPointDelta);
-                    }),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: janela.height +
-                          FolhaDeRecorte.folgaDoPalco * 2,
-                      child: ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(BichuRaio.lg),
-                        child: CustomPaint(
-                          painter: _PintorDoRecorte(
-                            imagem: widget.imagem.imagem,
-                            enquadramento: enquadramento,
-                            circular: widget.formato.circular,
-                            fundo: cores.surfaceSunken,
-                            veu: cores.scrim,
-                            linha: cores.textOnInverse,
+                return Semantics(
+                  label: TextosDoRecorte.palco,
+                  container: true,
+                  child: Focus(
+                    autofocus: true,
+                    onKeyEvent: _teclado,
+                    child: GestureDetector(
+                      onScaleStart: (_) =>
+                          _zoomNoInicioDoGesto = enquadramento.zoom,
+                      // `onScaleUpdate` cobre o arraste de UM dedo tambem:
+                      // `focalPointDelta` e o movimento e `scale` fica em 1.
+                      // Dois tratadores (pan e scale) no mesmo detector sao
+                      // proibidos pelo framework, e seriam duas contas para o
+                      // mesmo gesto.
+                      onScaleUpdate: (detalhe) => setState(() {
+                        final comZoom = _enquadramento!.comZoom(
+                          _zoomNoInicioDoGesto * detalhe.scale,
+                        );
+                        _enquadramento = comZoom.arrastado(
+                          detalhe.focalPointDelta,
+                        );
+                      }),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: janela.height + FolhaDeRecorte.folgaDoPalco * 2,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(BichuRaio.lg),
+                          child: CustomPaint(
+                            // A chave existe para o CASO poder arrastar ESTE
+                            // `CustomPaint` e nao um dos quatro que o Material
+                            // monta dentro da folha -- medido em 29/10/2026.
+                            key: chaveDoPalcoDoRecorte,
+                            painter: _PintorDoRecorte(
+                              imagem: widget.imagem.imagem,
+                              enquadramento: enquadramento,
+                              circular: widget.formato.circular,
+                              fundo: cores.surfaceSunken,
+                              veu: cores.scrim,
+                              linha: cores.textOnInverse,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
+                );
+              },
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+            Row(
+              children: <Widget>[
+                Text(
+                  TextosDoRecorte.zoom,
+                  style: tipografia.labelMedium?.copyWith(
+                    color: cores.textSecondary,
+                  ),
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-          Row(
-            children: <Widget>[
-              Text(
-                TextosDoRecorte.zoom,
-                style:
-                    tipografia.labelMedium?.copyWith(color: cores.textSecondary),
-              ),
-              Expanded(
-                child: Slider(
-                  value: _enquadramento?.zoom ?? 1,
-                  min: 1,
-                  max: EnquadramentoDaFoto.zoomMaximo,
-                  label: TextosDoRecorte.zoom,
-                  onChanged: _enquadramento == null
-                      ? null
-                      : (valor) => setState(
-                            () => _enquadramento =
-                                _enquadramento!.comZoom(valor),
+                Expanded(
+                  child: Slider(
+                    value: _enquadramento?.zoom ?? 1,
+                    min: 1,
+                    max: EnquadramentoDaFoto.zoomMaximo,
+                    label: TextosDoRecorte.zoom,
+                    onChanged: _enquadramento == null
+                        ? null
+                        : (valor) => setState(
+                            () =>
+                                _enquadramento = _enquadramento!.comZoom(valor),
                           ),
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: _enquadramento == null
-                    ? null
-                    : () => setState(
+                IconButton(
+                  onPressed: _enquadramento == null
+                      ? null
+                      : () => setState(
                           () => _enquadramento = _enquadramento!.reiniciado,
                         ),
-                icon: const Icon(Icons.restart_alt),
-                tooltip: TextosDoRecorte.reiniciar,
-              ),
-            ],
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-          BotaoPrimario(
-            rotulo: TextosDoRecorte.usar,
-            critico: true,
-            aoTocar: _enquadramento == null
-                ? null
-                : () => Navigator.of(context).pop(_enquadramento!.recorte),
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-          BotaoSecundario(
-            rotulo: TextosDoRecorte.cancelar,
-            // `pop()` sem valor devolve nulo, que e o "a pessoa desistiu" que
-            // as telas ja tratam.
-            aoTocar: () => Navigator.of(context).pop(),
-          ),
-        ],
+                  icon: const Icon(Icons.restart_alt),
+                  tooltip: TextosDoRecorte.reiniciar,
+                ),
+              ],
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+            BotaoPrimario(
+              rotulo: TextosDoRecorte.usar,
+              critico: true,
+              aoTocar: _enquadramento == null
+                  ? null
+                  : () => Navigator.of(context).pop(_enquadramento!.recorte),
+            ),
+            const SizedBox(height: BichuEspaco.e2),
+            BotaoSecundario(
+              rotulo: TextosDoRecorte.cancelar,
+              // `pop()` sem valor devolve nulo, que e o "a pessoa desistiu" que
+              // as telas ja tratam.
+              aoTocar: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -719,12 +761,7 @@ class _PintorDoRecorte extends CustomPainter {
     );
     canvas.drawImageRect(
       imagem,
-      Rect.fromLTWH(
-        0,
-        0,
-        imagem.width.toDouble(),
-        imagem.height.toDouble(),
-      ),
+      Rect.fromLTWH(0, 0, imagem.width.toDouble(), imagem.height.toDouble()),
       destino,
       Paint()..filterQuality = FilterQuality.medium,
     );
