@@ -16,6 +16,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/casca_da_pagina_interna.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
@@ -103,6 +104,10 @@ class PaginaDoLocal extends StatefulWidget {
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String carregandoOLocal = 'Carregando o local';
 
+  /// O titulo do bloco das atividades. **Sem bloco ainda**: ver as iscas de
+  /// `test/telas/atividades_do_local_test.dart`.
+  static const String tituloDasAtividades = 'Atividades';
+
   static const String tituloDasInformacoes = 'Informações';
   static const String tituloDasAvaliacoes = 'Avaliações';
   static const String tituloDaMinha = 'A minha avaliação';
@@ -113,7 +118,17 @@ class PaginaDoLocal extends StatefulWidget {
   /// Rascunho, oculto, removido e inexistente sao quatro causas e um texto: a
   /// tela nao tem o que fazer com a diferenca, e distinguir contaria a quem
   /// esta de fora que existe uma entrada que ninguem publicou (ADR-0021).
-  static const String tituloDoNaoEncontrado = 'Este local saiu do Perto';
+  /// **O TEXTO MUDOU EM 28/10/2026, e o NOME da constante fica.** Era
+  /// `Este local saiu do Perto`, e `Perto` deixou de ser seção em 19/10/2026 --
+  /// o diretório virou a aba `Comunidade` da `Rede`. O cliente leu o texto
+  /// velho nesta rodada e nomeou a troca: *"está trazendo o conceito antigo
+  /// ainda de perto e não de rede"*.
+  ///
+  /// **`Rede`, a mesma palavra de [rotuloDeVoltarParaPerto]**, que é o botão
+  /// desenhado logo abaixo desta frase: a frase diz de onde o local saiu e o
+  /// botão leva ao mesmo lugar, e duas palavras ali seriam dois nomes para uma
+  /// seção.
+  static const String tituloDoNaoEncontrado = 'Este local saiu da Rede';
 
   static const String explicacaoDoNaoEncontrado =
       'Ele pode ter sido retirado. Veja quem está atendendo na sua região '
@@ -954,30 +969,58 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   @override
   Widget build(BuildContext context) {
     final detalhe = _detalhe;
-    final titulo = detalhe?.nome;
 
+    // O TITULO SAIU DA BARRA EM 28/10/2026, E A CASCA E A DA FICHA DO EVENTO.
+    //
+    // Pedido do cliente: *"na pagina interna da comunidade, vamos tirar o
+    // titulo e manter o padrao do botao voltar igual da pagina de eventos."*
+    // Esta pagina desenhava um `AppBar` com `Voltar` no `leading` e o nome do
+    // local no titulo; a ficha do evento desenhava capa com `Voltar` flutuante
+    // e a barra que entra na rolagem. Agora as duas desenham a MESMA
+    // `CascaDaPaginaInterna` -- "o mesmo padrao" virou o mesmo codigo, e nao
+    // duas copias que divergem na primeira edicao.
+    //
+    // **O NOME CONTINUA ANUNCIAVEL, e nao por sorte**: quem anuncia a pagina e
+    // o `Semantics` de rota da casca (`namesRoute`, `'Local: <nome>'`), que
+    // esta pagina JA tinha -- com o `AppBar` por cima, o nome era anunciado
+    // DUAS vezes. Tirar o titulo tirou a repeticao, nao a informacao. Ele
+    // tambem volta a ser VISIVEL na barra assim que a capa sai da tela.
+    //
+    // **`temCapa` e a foto, e nao uma constante**: a faixa 16:9 so existe com
+    // `photo_url`, e `photo_url` e nulo em tres casos normais (sem foto, ainda
+    // processando, recusada nos bytes) -- a maioria das entradas. Sem capa a
+    // casca nasce com a barra visivel, porque um botao redondo flutuante
+    // pousaria em cima do nome; ver a prosa dela.
+    if (_fase == _Fase.pronto && detalhe != null) {
+      return CascaDaPaginaInterna(
+        nome: detalhe.nome,
+        prefixoAnunciado: PaginaDoLocal.tituloDaTela,
+        aoVoltar: _voltar,
+        temCapa: detalhe.fotoUrl != null,
+        proporcaoDaCapa: _FaixaDoLocal.proporcao,
+        recuo: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
+        filhos: _corpo(detalhe),
+      );
+    }
+
+    // CARGA, FALHA, SEM CONTA E NAO ENCONTRADO MANTEM A BARRA COM TITULO, e e
+    // o que a ficha do evento faz nas mesmas fases. Sem nome para mostrar, a
+    // barra e o unico lugar onde `Voltar` cabe -- e aqui o titulo nao e
+    // repeticao de nada: e a unica palavra que diz em que pagina a pessoa
+    // esta enquanto ela nao carregou.
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: BichuAlvoDeToque.critico,
         leadingWidth: BichuAlvoDeToque.critico,
-        leading: _BotaoVoltar(aoTocar: _voltar),
-        // **A barra tem `Voltar` e o nome, e nada mais.** O slot de acao fica
-        // vazio de proposito: a ordenacao das avaliacoes e um controle do
-        // conteudo e mora no corpo, no topo da secao a que pertence.
-        title: Text(
-          titulo ?? PaginaDoLocal.tituloDaTela,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        leading: BotaoVoltarNaBarra(aoTocar: _voltar),
+        title: const Text(PaginaDoLocal.tituloDaTela),
       ),
       body: SafeArea(
         child: Semantics(
           scopesRoute: true,
           namesRoute: true,
           explicitChildNodes: true,
-          label: titulo == null
-              ? PaginaDoLocal.tituloDaTela
-              : '${PaginaDoLocal.tituloDaTela}: $titulo',
+          label: PaginaDoLocal.tituloDaTela,
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
             children: _corpo(detalhe),
@@ -1110,6 +1153,34 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
           aoTocar: () => _compartilharOLocal(detalhe),
         ),
       ),
+      // AS ATIVIDADES, EM TAGS (cliente, 28/10/2026): *"no backoffice voce
+      // pode escolher varios segmentos, e no aplicativo so esta aparecendo um.
+      // Adicione um bloco na pagina, trazendo as tags que foram escolhidas."*
+      //
+      // **O dado ja era plural e o app e que nao lia**: `kinds` existe no
+      // contrato desde 21/10/2026 e `DetalheDoLocal` lia so o `kind` singular.
+      // Ver `DetalheDoLocal.atividades`.
+      //
+      // **POR QUE AQUI, logo acima de `Informações`**: a atividade e o que a
+      // pessoa esta procurando quando abre a ficha de um lugar -- ela quer
+      // saber se o lugar FAZ o que ela precisa antes de ler endereco e nota.
+      // O bloco fica depois de `Compartilhar` para nao empurrar aquele botao
+      // para fora da primeira dobra, que e uma decisao de 22/10 com a razao
+      // escrita acima.
+      //
+      // **SEM BLOCO VAZIO**: lista vazia nao desenha nem o titulo nem o
+      // divisor. Ela e vazia em dois casos (todas as atividades desconhecidas,
+      // ou nem `kinds` nem `kind`), e um titulo com nada embaixo e secao que
+      // promete e nao entrega -- o mesmo criterio que mantem a faixa 16:9 fora
+      // da pagina sem foto.
+      if (detalhe.atividades.isNotEmpty) ...<Widget>[
+        const _Divisor(),
+        _Secao(
+          icone: Icons.sell_outlined,
+          titulo: PaginaDoLocal.tituloDasAtividades,
+          child: _Atividades(atividades: detalhe.atividades),
+        ),
+      ],
       const _Divisor(),
       _Secao(
         icone: Icons.notes_outlined,
@@ -1424,10 +1495,10 @@ class _Cabecalho extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
+    // `cores` saiu com a linha da atividade (28/10/2026): ela era a unica
+    // consumidora dele neste `build`.
     final textos = Theme.of(context).textTheme;
 
-    final atividade = detalhe.atividade?.rotulo;
     final lugar = detalhe.linhaDeLugar;
     final endereco = detalhe.endereco.porExtenso;
     final busca = detalhe.endereco.textoParaBuscaNoMapa(
@@ -1490,14 +1561,13 @@ class _Cabecalho extends StatelessWidget {
                   header: true,
                   child: Text(detalhe.nome, style: textos.headlineSmall),
                 ),
-              if (atividade != null) ...<Widget>[
-                const SizedBox(height: BichuEspaco.e2),
-                Text(
-                  atividade,
-                  style:
-                      textos.labelLarge?.copyWith(color: cores.textSecondary),
-                ),
-              ],
+              // A LINHA DA ATIVIDADE SAIU DAQUI EM 28/10/2026, e nao foi
+              // apagada: ela virou o bloco `Atividades`, em tags, no corpo da
+              // pagina. Ela escrevia `detalhe.atividade?.rotulo`, que e o
+              // `kind` SINGULAR -- a versao quebrada da mesma informacao, e
+              // exatamente o que o cliente relatou (*"no aplicativo so esta
+              // aparecendo um"*). Mantê-la ao lado do bloco faria a primeira
+              // atividade aparecer DUAS vezes na mesma dobra.
               // O LUGAR APARECE **UMA** VEZ NA PAGINA, EMBAIXO DO TITULO, E
               // E CLICAVEL (cliente, 22/10/2026).
               //
@@ -2532,6 +2602,41 @@ class _Divisor extends StatelessWidget {
   }
 }
 
+/// O bloco `Atividades`: uma tag por atividade escolhida (cliente, 28/10/2026).
+///
+/// **Reusa [_Selo], que ja era a pilula desta pagina** -- a mesma que carrega
+/// o nivel de verificacao e o selo da minha avaliacao. Um widget novo aqui
+/// seria a segunda definicao do mesmo desenho no mesmo arquivo.
+///
+/// **`Wrap` e nao `Row`**: sao de 1 a 6 atividades e os rotulos tem
+/// comprimentos bem diferentes (`Veterinário`, `Banho e tosa`). Uma `Row`
+/// estouraria a largura com quatro tags e o Flutter pintaria a faixa amarela
+/// de overflow.
+///
+/// **SEM `ExcludeSemantics`, e isso e deliberado**: cada tag e uma palavra que
+/// a pessoa precisa ouvir. Em outros pontos desta pagina o `ExcludeSemantics`
+/// existe para tirar glifo decorativo da arvore; aqui nao ha glifo, ha o
+/// conteudo. Um `Wrap` de tags dentro de `ExcludeSemantics` desenharia as tres
+/// e anunciaria nenhuma.
+class _Atividades extends StatelessWidget {
+  const _Atividades({required this.atividades});
+
+  /// Na ORDEM DO SERVIDOR. Ver `DetalheDoLocal.atividades`: ordenar aqui
+  /// mostraria as tags numa ordem que ninguem escolheu.
+  final List<AtividadeDoDiretorio> atividades;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: BichuEspaco.e2,
+      runSpacing: BichuEspaco.e2,
+      children: <Widget>[
+        for (final atividade in atividades) _Selo(texto: atividade.rotulo),
+      ],
+    );
+  }
+}
+
 /// A caixa neutra que embrulha um bloco de conteudo: mesmo desenho do cartao.
 class _Caixa extends StatelessWidget {
   const _Caixa({required this.child});
@@ -2705,25 +2810,6 @@ class _LinhaComIcone extends StatelessWidget {
           child: Align(alignment: Alignment.centerLeft, child: linha),
         ),
       ),
-    );
-  }
-}
-
-class _BotaoVoltar extends StatelessWidget {
-  const _BotaoVoltar({required this.aoTocar});
-  final VoidCallback aoTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: aoTocar,
-      tooltip: 'Voltar',
-      icon: const Icon(Icons.arrow_back),
-      constraints: const BoxConstraints(
-        minWidth: BichuAlvoDeToque.critico,
-        minHeight: BichuAlvoDeToque.critico,
-      ),
-      color: BichuColors.of(context).cores.textPrimary,
     );
   }
 }
