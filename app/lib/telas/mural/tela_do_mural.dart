@@ -18,6 +18,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/marca_da_pessoa.dart';
 import '../../widgets/selo_de_validado.dart';
+import '../../widgets/tarja_sobre_midia.dart';
 import 'comentarios_da_publicacao.dart';
 import 'porta_do_perfil_do_autor.dart';
 import '../casca_com_abas.dart';
@@ -697,25 +698,174 @@ class _CartaoDaPublicacao extends StatelessWidget {
   final void Function(PublicacaoDaLinha)? aoDenunciar;
   final Future<void> Function()? aoApagar;
 
+  /// A ORDEM DO CARTAO, e ela e DUAS e nao uma.
+  ///
+  /// **O pedido do cliente, de 29/10/2026, verbatim:** *"vamos melhorar a
+  /// interface dos posts no mural e deixar mais parecido com o instagram, onde o
+  /// texto digitado vai pra baixo dos likes e comentarios, o nome do usuario e a
+  /// foto dele, fica sobre a imagem."*
+  ///
+  /// ### Antes (ate 29/10/2026)
+  ///
+  ///     autor (foto + nome + ⋮)  ->  texto  ->  imagem  ->  acoes
+  ///
+  /// ### Depois, COM imagem
+  ///
+  ///     imagem (autor SOBREPOSTO nela)  ->  acoes  ->  legenda
+  ///
+  /// ### Depois, SEM imagem
+  ///
+  ///     autor (foto + nome + ⋮)  ->  texto  ->  acoes
+  ///
+  /// ## POR QUE O CASO SEM IMAGEM NAO SEGUE O PEDIDO, e e decisao a confirmar
+  ///
+  /// **Publicacao so de texto existe, e nao e caso de borda.** Em
+  /// `publicar_no_mural.dart` o texto e OBRIGATORIO (`textoObrigatorio` barra o
+  /// envio sem ele) e a foto e OPCIONAL (`uploadId: _uploadPendente`, que pode
+  /// ser nulo). Entao a metade do pedido que diz *"a foto dele fica sobre a
+  /// imagem"* nao tem onde acontecer: nao ha imagem.
+  ///
+  /// E a outra metade cai com ela. *"O texto vai pra baixo dos likes"* e o
+  /// desenho do Instagram porque lá o texto e **legenda de uma foto** — a foto e
+  /// o conteudo, e a legenda comenta o conteudo. Numa publicacao sem foto o
+  /// texto NAO e legenda: ele e a publicacao inteira. Pô-lo embaixo do coracao
+  /// deixaria o cartao como `Camila / ♥ 💬 / texto`, com o conteudo abaixo dos
+  /// controles que agem sobre ele.
+  ///
+  /// **Esta e a decisao desta frente que mais precisa do aval dele**, e esta
+  /// escrita aqui porque a foto de referencia que ele citou nao chegou na
+  /// mensagem: o protitipo de
+  /// `workspace/artefatos-app/mural-cartao-no-desenho-do-instagram-29-10.html`
+  /// desenha os tres estados e e por ele que a aprovacao passa.
+  ///
+  /// ## O AUTOR SOBRE A IMAGEM VAI NUMA TARJA OPACA, e isso e medicao
+  ///
+  /// Nome claro direto sobre foto arbitraria mede **1,02:1** contra uma foto
+  /// branca, e sobre o `scrim` translucido mede **4,94:1** — passa o piso de 4,5
+  /// raspando e reprova o de 7,0. [TarjaSobreMidia] mede **16,47:1** no tema
+  /// claro e **16,02:1** no escuro, e mede isso contra QUALQUER foto, porque nao
+  /// ha foto atras do texto. A tabela inteira e o motivo estao no cabecalho de
+  /// `widgets/tarja_sobre_midia.dart`.
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
     final imagem = publicacao.imagem;
     final urlDaImagem = imagem?.url;
+    final comImagem = urlDaImagem != null && urlDaImagem.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(BichuEspaco.e4),
+      // **O PADDING SAIU DO CARTAO e foi para o corpo**, e nao e arrumacao: com
+      // ele aqui a foto nascia com 16 dp de margem de cada lado, e autor
+      // sobreposto a uma foto recuada leria como autor sobre um retangulo
+      // qualquer. Agora a midia encosta na borda arredondada (`clipBehavior`) e
+      // quem paga o respiro e o corpo, por dentro.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: cores.surface,
         borderRadius: BorderRadius.circular(BichuRaio.lg),
         border: Border.all(color: cores.outline, width: BichuBorda.hairline),
       ),
+      child: comImagem
+          ? _comImagem(context, urlDaImagem)
+          : _semImagem(context),
+    );
+  }
+
+  /// A ordem NOVA: imagem com o autor sobreposto, acoes, legenda.
+  Widget _comImagem(BuildContext context, String urlDaImagem) {
+    final textos = Theme.of(context).textTheme;
+    final imagem = publicacao.imagem;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Stack(
+          children: <Widget>[
+            // `ImagemDaRede` e nunca `Image.network` cru: ela trata
+            // `cacheWidth` pelo que a tela PINTA e tem `errorBuilder` sempre.
+            // A derivada e a `card` de 1024 x 1024 (1:1), e o cartao a desenha
+            // na largura do corpo — por isso `proporcao: 1`, que e o que faz a
+            // altura ser reservada antes de os bytes chegarem e a rolagem nao
+            // saltar.
+            //
+            // **E e ela, nao-posicionada, que da tamanho ao `Stack`**: a tarja
+            // esta num `Positioned` e nao conta para a medida. Sem uma filha
+            // nao-posicionada o `Stack` colapsaria para o tamanho do pai.
+            ImagemDaRede(
+              url: urlDaImagem,
+              descricao: (imagem?.textoAlternativo?.trim().isNotEmpty ?? false)
+                  ? imagem!.textoAlternativo!.trim()
+                  : CorpoDoMural.fotoSemDescricao,
+              proporcao: 1,
+            ),
+            Positioned(
+              top: TarjaSobreMidia.recuo,
+              left: TarjaSobreMidia.recuo,
+              right: TarjaSobreMidia.recuo,
+              child: TarjaSobreMidia(child: _linhaDoAutor(context)),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            BichuEspaco.e4,
+            BichuEspaco.e2,
+            BichuEspaco.e4,
+            BichuEspaco.e4,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _AcoesDaPublicacao(
+                publicacao: publicacao,
+                interacao: interacao,
+              ),
+              const SizedBox(height: BichuEspaco.e2),
+              // A LEGENDA, como a pessoa escreveu. Sem recorte, sem "ver mais"
+              // e sem nenhum tratamento de conteudo: ela cabe em 280
+              // caracteres, e o cliente mandou deixa-la livre.
+              //
+              // **Sem o nome do autor repetido na frente dela.** O Instagram
+              // prefixa a legenda com o apelido em negrito; aqui o nome ja esta
+              // na tarja, a poucos milimetros, e repetir seria ruido.
+              Text(publicacao.texto, style: textos.bodyLarge),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A publicacao SO DE TEXTO. Ver a prosa de [build] para o porque da ordem
+  /// aqui ser a antiga.
+  Widget _semImagem(BuildContext context) {
+    final textos = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.all(BichuEspaco.e4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            children: <Widget>[
+          _linhaDoAutor(context),
+          const SizedBox(height: BichuEspaco.e2),
+          Text(publicacao.texto, style: textos.bodyLarge),
+          const SizedBox(height: BichuEspaco.e2),
+          _AcoesDaPublicacao(publicacao: publicacao, interacao: interacao),
+        ],
+      ),
+    );
+  }
+
+  /// A LINHA DO AUTOR — foto, nome com selo e `⋮`.
+  ///
+  /// **Uma funcao e nao duas copias**: ela desenha o mesmo nos dois estados, e o
+  /// que muda e so onde ela e pendurada (dentro de [TarjaSobreMidia] sobre a
+  /// foto, ou no topo do corpo quando nao ha foto). Duas copias divergiriam na
+  /// primeira correcao, e as portas do perfil abaixo sao justamente o tipo de
+  /// detalhe que se corrige num lugar e se esquece no outro.
+  Widget _linhaDoAutor(BuildContext context) {
+    final textos = Theme.of(context).textTheme;
+    return Row(
+      children: <Widget>[
               // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), e o toque
               // mora AQUI e nao dentro de `_FotoDoAutor`: ver a prosa de
               // `PortaDoPerfilDoAutor`. Sem apelido ela devolve a foto crua.
@@ -765,37 +915,8 @@ class _CartaoDaPublicacao extends StatelessWidget {
                   ),
                 ),
               ),
-              _menu(context),
-            ],
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-
-          // O TEXTO, como a pessoa escreveu. Sem recorte, sem "ver mais" e sem
-          // nenhum tratamento de conteudo: ele cabe em 280 caracteres, e o
-          // cliente mandou deixa-lo livre.
-          Text(publicacao.texto, style: textos.bodyLarge),
-
-          if (urlDaImagem != null && urlDaImagem.isNotEmpty) ...<Widget>[
-            const SizedBox(height: BichuEspaco.e4),
-            // `ImagemDaRede` e nunca `Image.network` cru: ela trata
-            // `cacheWidth` pelo que a tela PINTA e tem `errorBuilder` sempre.
-            // A derivada e a `card` de 1024 x 1024 (1:1), e o cartao a desenha
-            // na largura do corpo — por isso `proporcao: 1`, que e o que faz a
-            // altura ser reservada antes de os bytes chegarem e a rolagem nao
-            // saltar.
-            ImagemDaRede(
-              url: urlDaImagem,
-              descricao: (imagem?.textoAlternativo?.trim().isNotEmpty ?? false)
-                  ? imagem!.textoAlternativo!.trim()
-                  : CorpoDoMural.fotoSemDescricao,
-              proporcao: 1,
-            ),
-          ],
-
-          const SizedBox(height: BichuEspaco.e2),
-          _AcoesDaPublicacao(publicacao: publicacao, interacao: interacao),
-        ],
-      ),
+        _menu(context),
+      ],
     );
   }
 
