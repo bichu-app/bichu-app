@@ -89,6 +89,7 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/mural_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/telas/mural/tela_do_mural.dart';
+import 'package:bichu/theme/bichu_colors.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/widgets/imagem_da_rede.dart';
@@ -121,6 +122,9 @@ const Color _fotoPreta = Color(0xFF000000);
 /// O piso do SC 1.4.3 para texto comum em tela nao critica.
 const double _pisoDeTexto = 4.5;
 
+/// O piso do SC 1.4.11, para elemento NAO textual -- o glifo do selo.
+const double _pisoNaoTextual = 3.0;
+
 /// A ALTURA ACORDADA DA BARRA, escrita A MAO de proposito.
 ///
 /// Ler `VeuDoAutorSobreMidia.alturaDaBarra` aqui faria os dois lados do
@@ -141,6 +145,10 @@ Map<String, dynamic> _publicacao({bool comFoto = true}) {
       'handle': 'marina-vet',
       'display_name': _nome,
       'photo_icon_url': null,
+      // **VALIDADA, e nao e detalhe do arranjo**: sem isto `NomeComSelo` nao
+      // desenha o selo e os casos que medem o contraste DELE ficariam verdes
+      // por nao haver selo nenhum na arvore.
+      'contact_channel_verified': true,
     },
     'mine': false,
   };
@@ -233,6 +241,26 @@ Color _tintaDoNome(WidgetTester tester) {
     return cor;
   }
   fail('REPROVA: nao achei o texto "$_nome" na arvore.');
+}
+
+/// A cor que de fato foi para o GLIFO do selo de validado.
+///
+/// Pelo `Icon` renderizado, como a cor do nome vem do `RenderParagraph`: nada
+/// aqui repete um hexadecimal do widget.
+Color _corDoSelo(WidgetTester tester) {
+  final selos = tester
+      .widgetList<Icon>(find.byIcon(Icons.verified))
+      .where((i) => i.color != null)
+      .toList();
+  if (selos.isEmpty) {
+    fail(
+      'REPROVA: nao ha selo de validado na arvore. O autor do arranjo tem '
+      '`contact_channel_verified: true`, entao ou o selo deixou de ser '
+      'desenhado sobre a foto -- que e a regressao que esta frente consertou '
+      '-- ou o arranjo parou de pedir um autor validado.',
+    );
+  }
+  return selos.first.color!;
 }
 
 /// A composicao que o aparelho faz: [frente] com o seu alfa sobre [fundo].
@@ -502,6 +530,65 @@ void main() {
   });
 
   // =========================================================================
+  // (3b) O CONTRASTE DO SELO DE VALIDADO SOBRE O VEU
+  // =========================================================================
+  // **Caso separado do nome, e nao um `expect` a mais dentro dele.** O piso e
+  // outro -- 3,0 do SC 1.4.11, por ser elemento NAO TEXTUAL -- e a cor vem de
+  // outro lugar (`cor/success`, nao a tinta do texto). Juntar os dois faria um
+  // caso que reprova sem dizer qual dos dois quebrou.
+  //
+  // O QUE ELE GUARDA, com a historia: ate a primeira volta desta frente o selo
+  // era OMITIDO sobre a foto, porque `SeloDeValidado` pintava em
+  // `cores.success` sem parametro de cor e `#1F7A46` sobre o veu com foto
+  // branca media **1,04:1**. Omitir evitava o ilegivel, mas era regressao: um
+  // autor validado perdia o selo justamente ao publicar com foto. Com o
+  // parametro `cor`, o selo voltou com a tinta clara do nome.
+  group('ISCA (selo) — o selo de validado sobre o veu passa o piso de 3,0',
+      () {
+    for (final escuro in <bool>[false, true]) {
+      final tema = escuro ? 'escuro' : 'claro';
+
+      testWidgets(
+        'ISCA (selo) — o selo de validado sobre o veu passa o piso de 3,0, '
+        'tema $tema',
+        (tester) async {
+          await _montar(tester, escuro: escuro);
+
+          final veu = _corDoVeu(tester);
+          final selo = _corDoSelo(tester);
+          final sobreBranco = _compor(veu, _fotoBranca);
+          final pior = razaoWcag(selo, sobreBranco);
+
+          expect(
+            pior,
+            greaterThanOrEqualTo(_pisoNaoTextual),
+            reason:
+                'REPROVA: o selo de validado sobre o veu mede '
+                '${pior.toStringAsFixed(2)}:1 no tema $tema com a FOTO '
+                'BRANCA, abaixo do piso de $_pisoNaoTextual.\n'
+                '  veu=${_hex(veu)} alfa=${veu.a.toStringAsFixed(3)}\n'
+                '  composto sobre branco=${_hex(sobreBranco)}\n'
+                '  selo=${_hex(selo)}\n'
+                'Se o selo voltou a `cor/success`, nao adianta escurecer o '
+                'veu: quanto mais escuro ele fica, PIOR fica o verde escuro. '
+                'O conserto e a cor do glifo (`SeloDeValidado.cor`).',
+          );
+
+          // E ELE ACOMPANHA O NOME. Dois tons claros diferentes ao lado um do
+          // outro seriam ruido, e e assim que a divergencia comeca.
+          expect(
+            selo,
+            _tintaDoNome(tester),
+            reason:
+                'REPROVA: o selo (${_hex(selo)}) nao esta na mesma tinta do '
+                'nome (${_hex(_tintaDoNome(tester))}).',
+          );
+        },
+      );
+    }
+  });
+
+  // =========================================================================
   // (4) A PUBLICACAO SEM FOTO — o buraco deste tipo de mudanca
   // =========================================================================
   testWidgets(
@@ -528,6 +615,17 @@ void main() {
         findsNothing,
         reason:
             'REPROVA: ha um veu sobre midia num cartao que nao tem midia.',
+      );
+
+      // O SELO CONTINUA `cor/success` AQUI, e e esta assercao que prova que o
+      // parametro novo nao virou repintura geral: fora do veu o fundo e a
+      // `surface` do cartao, e o par de sempre e o certo.
+      expect(
+        _corDoSelo(tester),
+        BichuColors.of(tester.element(find.text(_nome))).cores.success,
+        reason:
+            'REPROVA: o selo do cartao SEM foto deixou de ser `cor/success`. '
+            'A cor clara existe para o veu, e so para ele.',
       );
 
       final oNome = tester.getRect(find.text(_nome));

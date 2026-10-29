@@ -892,27 +892,28 @@ class _CartaoDaPublicacao extends StatelessWidget {
   /// - **o selo de validado NAO e desenhado**, e isto e uma PERDA conhecida e
   ///   medida, nao um esquecimento. Ver abaixo.
   ///
-  /// ## O SELO SOBRE O VEU: O QUE FALTA, COM NUMERO
+  /// ## O SELO SOBRE O VEU, E A COR QUE ELE PRECISOU GANHAR
   ///
-  /// [SeloDeValidado] pinta o glifo em `cores.success`, sem parametro de cor.
-  /// Sobre o veu preto, com foto BRANCA, isso mede:
+  /// [SeloDeValidado] pintava em `cores.success` e nao tinha parametro de cor.
+  /// Sobre o veu preto, com foto BRANCA, isso media:
   ///
-  /// - tema claro, `success` `#1F7A46` sobre o composto `#6E6D6C`: **1,03:1**;
+  /// - tema claro, `success` `#1F7A46` sobre o composto `#6E6D6C`: **1,04:1**;
   /// - tema escuro, `success` `#A9CFBB` sobre `#474747`: 5,46:1.
   ///
-  /// O piso de elemento nao textual e **3,0:1** (SC 1.4.11). O tema claro
-  /// reprova, e **nao ha opacidade de veu que o salve**: quanto mais escuro o
-  /// veu, PIOR fica o verde escuro. Com o veu totalmente opaco o selo ainda nao
-  /// alcanca 3,0.
+  /// O piso de elemento nao textual e **3,0:1** (SC 1.4.11), e **nao ha
+  /// opacidade de veu que salve o tema claro**: quanto mais escuro o veu, pior
+  /// fica o verde escuro.
   ///
-  /// O conserto e uma cor clara para o selo quando ele pousa no veu — um
-  /// parametro `cor` em `widgets/selo_de_validado.dart`, com o padrao atual
-  /// intacto. **Esse arquivo esta fora do alcance desta frente**, entao o selo
-  /// foi OMITIDO sobre a foto em vez de desenhado ilegivel: o cartao sem foto
-  /// continua com ele, e a decisao de 21/10/2026 do cliente (*"os usuarios
-  /// validados devem ter um simbolo em frente de seu nome nos posts"*) fica
-  /// pendente so na publicacao COM foto, por uma linha de codigo que nao e
-  /// minha de mexer.
+  /// **A primeira volta desta frente OMITIU o selo sobre a foto**, porque o
+  /// conserto exigia um arquivo fora do alcance dela. Omitir era melhor que
+  /// entregar 1,04:1, mas era regressao visivel -- um autor validado perdia o
+  /// selo justamente ao publicar com foto, que e quando o cartao tem mais
+  /// visibilidade. Com a autorizacao para mexer em
+  /// `widgets/selo_de_validado.dart`, o selo VOLTOU, com a mesma tinta clara do
+  /// nome: **4,94:1 no tema claro e 8,89:1 no escuro**, contra o piso de 3,0.
+  ///
+  /// **Nenhum token mudou.** O padrao de [SeloDeValidado] continua
+  /// `cores.success`, e as outras quatro superficies nao sentiram nada.
   Widget _linhaDoAutor(BuildContext context, {required bool sobreOVeu}) {
     final tema = BichuColors.of(context);
     final textos = Theme.of(context).textTheme;
@@ -952,7 +953,7 @@ class _CartaoDaPublicacao extends StatelessWidget {
         // 375 e 430 dp esta em `app/test/widgets/selo_de_validado_test.dart`.
         //
         // **`comSelo: false` SOBRE O VEU**, e o motivo com numero esta no
-        // cabecalho desta funcao: o verde escuro de `success` mede 1,03:1 sobre
+        // cabecalho desta funcao: o verde escuro de `success` mede 1,04:1 sobre
         // o veu com foto branca, contra um piso de 3,0.
         //
         // **O NOME TAMBEM E PORTA** -- cliente, 22/10/2026: *"Inclua um link que
@@ -971,8 +972,12 @@ class _CartaoDaPublicacao extends StatelessWidget {
             autor: publicacao.autor,
             child: NomeComSelo(
               nome: publicacao.autor.nomeExibido,
-              comSelo: !sobreOVeu && publicacao.autor.canalConfirmado,
+              comSelo: publicacao.autor.canalConfirmado,
               estilo: estiloDoNome,
+              // **A MESMA TINTA DO NOME**, e pelo mesmo motivo: sobre o veu o
+              // verde de `cor/success` mede 1,04:1 com foto branca, contra um
+              // piso de 3,0. Fora do veu e nulo, e o selo continua `success`.
+              corDoSelo: sobreOVeu ? VeuDoAutorSobreMidia.tinta(tema) : null,
             ),
           ),
         ),
