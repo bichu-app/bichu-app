@@ -123,12 +123,13 @@ Finder _campo(String rotulo) => find.descendant(
 /// Nao monta rascunho por fora: o que se quer medir e que o formulario aceita
 /// o pouco que a pessoa tem, e um rascunho montado em Dart pularia justamente
 /// os campos que a tela poderia estar cobrando.
-Future<void> preencherOMinimo(
-  WidgetTester tester, {
-  /// Verdadeiro escreve a cidade. Falso deixa o lugar so com a coordenada --
-  /// o caminho de quem concede o GPS e nao digita nada.
-  bool digitarACidade = true,
-}) async {
+/// **SEM PARAMETRO DESDE 29/10/2026.** Havia um `digitarACidade: false`, que
+/// tocava em `Usar minha localizacao` e deixava o lugar so com a coordenada.
+/// Esse caminho **nao existe mais nesta tela**: por decisao do cliente
+/// (*"remove os botoes e deixa os campos de cep, endereco para o usuario
+/// preencher"*) o achado nao captura coordenada nenhuma, e os dois unicos
+/// chamadores do `false` eram os casos do aviso do lugar, que sairam com ele.
+Future<void> preencherOMinimo(WidgetTester tester) async {
   // `rolarAte` antes de cada toque: o `ListView` so constroi o que cabe na
   // tela, e F3.5 e um formulario longo de proposito. Um `tap` num widget que
   // ainda nao existe reprova por um motivo que nao e o do caso.
@@ -140,15 +141,12 @@ Future<void> preencherOMinimo(
   // passo 1 e o animal; o `Quando?` e o `Onde?` moram no 2, e sem este toque
   // os casos abaixo procurariam na pagina errada.
   await avancarParaOPasso2(tester);
-  if (digitarACidade) {
-    await rolarAte(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
-    await tocar(tester, find.text(TextosDaLocalizacao.preferoDigitarOBairro));
-    await tester.enterText(_campo(TextosDaLocalizacao.rotuloCidade), 'São Paulo');
-    await tester.pumpAndSettle();
-  } else {
-    await rolarAte(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
-    await tocar(tester, find.text(TextosDaLocalizacao.usarMinhaLocalizacao));
-  }
+  // **Direto no campo, sem botao nenhum antes.** A peca abre nos campos de
+  // endereco, e a cidade e o unico que faz o `Onde` existir
+  // (`Area.required: [city]`).
+  await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloCidade));
+  await tester.enterText(_campo(TextosDaLocalizacao.rotuloCidade), 'São Paulo');
+  await tester.pumpAndSettle();
   // `passo: -120`, para CIMA: `Quando?` e o PRIMEIRO bloco do passo 2
   // (`tela_registrar_achado.dart`, linhas 659-665) e a localizacao vem depois
   // dele, entao a lista ja rolou para baixo quando se chega aqui. Com passo
@@ -398,118 +396,59 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // ISCA 3 — sem rotulo de area, a tela DIZ
+  // ISCA 3 — O AVISO DO LUGAR SAIU (cliente, 29/10/2026)
   //
-  // DESLIGAR PARA VER REPROVAR: em
-  // `lib/telas/achado/tela_registrar_achado.dart`, faca `_avisoDoLugar`
-  // devolver `null` sempre.
-  // Medido em 22/09/2026: **1 caso reprova**.
+  // Havia aqui tres casos medindo uma `FaixaDeAviso` com dois textos
+  // condicionais. Eles sairam porque **os dois textos deixaram de poder ser
+  // verdade** quando a tela parou de capturar coordenada:
   //
-  // **O GATILHO MUDOU EM 22/10/2026, e o aviso nao mudou de sentido.** Por
-  // decisao do cliente, a cidade resolvida da coordenada passa a nascer no
-  // campo -- entao quem concede o GPS normalmente JA tem rotulo de area, e o
-  // aviso nao tem o que dizer. Ele continua existindo para quem concede o GPS
-  // e fica **sem cidade descoberta** (geocoder sem cota, aparelho sem
-  // geocoder, lugar sem nome): ali o achado chega sem rotulo de verdade, e
-  // calar seria deixar a pessoa descobrir depois.
+  // - `semRotuloDeArea` dizia *"O tutor vai ver a distancia, e nao o bairro"*.
+  //   Sem coordenada nao existe distancia nenhuma para o tutor ver: a frase
+  //   passaria a MENTIR, e nao a ficar velha;
+  // - `semCoordenada` dizia que a busca vale na cidade inteira. Virou verdade
+  //   em TODO achado, e faixa que aparece sempre nao distingue nada -- deixa de
+  //   ser aviso e passa a ser decoracao com cara de problema, na tela de quem
+  //   esta com um animal na rua.
   //
-  // **O aviso fala de BAIRRO e o preenchimento automatico traz CIDADE**, e
-  // essa diferenca e deliberada: coordenada -> bairro e o que a emenda 1 do
-  // ADR-0006 nao autoriza (*"a emenda fala de cidade"*). Se o produto quiser o
-  // aviso de volta para quem tem cidade e nao tem bairro, isso e decisao de
-  // produto e nao foi tomada aqui -- esta relatada.
+  // Os dois textos foram apagados de `textos_do_achado.dart` junto com a
+  // faixa, e `_avisoDoLugar` saiu das DUAS telas de achado.
+  //
+  // **O que fica medido no lugar e a AUSENCIA**, para ninguem "consertar" a
+  // faixa de volta sem a decisao: a tela nao pode voltar a falar de distancia
+  // num achado que nao tem coordenada.
+  //
+  // DESLIGAR PARA VER REPROVAR: devolva `_avisoDoLugar` e a `FaixaDeAviso` a
+  // `tela_registrar_achado.dart`.
   // -------------------------------------------------------------------------
-  group('ISCA — quem so da o GPS fica sem bairro, e a tela avisa', () {
-    testWidgets(
-        'sem cidade descoberta, a tela explica o que o tutor vai ver',
+  group('a tela nao fala mais de distancia nem de coordenada', () {
+    testWidgets('nenhuma faixa sobre o lugar aparece no passo 2',
         (tester) async {
       await abrirOApp(
         tester,
         rede: _Rede().call,
         deposito: depositoLogado(),
-        localizacao: localizacaoSemCidade(),
-      );
-      await irPara(tester, Rotas.registrarAchado);
-      await preencherOMinimo(tester, digitarACidade: false);
-
-      // `passo` POSITIVO, para baixo. O aviso do lugar e desenhado DEPOIS do
-      // bloco de localizacao (`tela_registrar_achado.dart`, linhas 693-702),
-      // e nao acima de `Quando?` como esta isca supunha: a ordem do passo 2 e
-      // `Quando?` (linha 659), `Onde?` (linha 686), a captura (linha 693) e o
-      // aviso (linha 700). O ultimo toque de `preencherOMinimo` e em `Agora`,
-      // que fica no topo, entao daqui o aviso esta ABAIXO da dobra.
-      await rolarAte(
-        tester,
-        find.text(TextosDoAchado.semRotuloDeArea),
-      );
-      expect(
-        find.text(TextosDoAchado.semRotuloDeArea),
-        findsOneWidget,
-        reason: 'REPROVA: a pessoa concedeu a localizacao, nao digitou nada, e '
-            'a tela nao disse que o achado dela vai aparecer sem bairro.\n'
-            '`area_label` so se monta com texto digitado -- `rotuloDaArea` le '
-            '`city` e `neighborhood`, e coordenada nao entra ali nem '
-            'arredondada. Derivar o bairro do ponto e o que o ADR-0006 '
-            'proibe. Entao ou a tela pergunta, ou o achado chega sem rotulo e '
-            'ninguem avisou.',
-      );
-      // E o outro estado, para a frase nao virar decoracao permanente.
-      expect(find.text(TextosDoAchado.semCoordenada), findsNothing);
-    });
-
-    testWidgets(
-      'com a CIDADE vinda da localizacao, o aviso do rotulo nao aparece',
-      (tester) async {
-        // **O OUTRO LADO, e ele e o pedido de 22/10/2026.** A pessoa autoriza,
-        // nao digita nada, e o formulario nasce com a cidade -- entao ha rotulo
-        // de area e nao ha o que avisar.
-        //
-        // Sem este caso, o grupo ficaria medindo so o caminho da falha, e
-        // alguem poderia "consertar" o aviso de volta para sempre sem nenhum
-        // caso acusar.
-        await abrirOApp(
-          tester,
-          rede: _Rede().call,
-          deposito: depositoLogado(),
-          localizacao: localizacaoConcedida(),
-        );
-        await irPara(tester, Rotas.registrarAchado);
-        await preencherOMinimo(tester, digitarACidade: false);
-
-        expect(
-          find.text(TextosDoAchado.semRotuloDeArea),
-          findsNothing,
-          reason:
-              'REPROVA: a pessoa autorizou a localizacao, a cidade foi '
-              'descoberta e preenchida no formulario, e a tela continua '
-              'dizendo que o tutor vai ver a distancia e nao o bairro. Com '
-              'cidade ha `area_label` (`rotuloDaArea` le `city` e '
-              '`neighborhood`), e o aviso passou a falar de um problema que '
-              'nao existe mais nesse caminho.',
-        );
-      },
-    );
-
-    testWidgets('com bairro digitado, o aviso do rotulo some', (tester) async {
-      await abrirOApp(
-        tester,
-        rede: _Rede().call,
-        deposito: depositoLogado(),
-        localizacao: localizacaoConcedida(),
       );
       await irPara(tester, Rotas.registrarAchado);
       await preencherOMinimo(tester);
 
-      expect(find.text(TextosDoAchado.semRotuloDeArea), findsNothing);
-      // Para baixo, pelo mesmo motivo do caso de cima: o aviso do lugar vem
-      // DEPOIS da captura de localizacao no passo 2.
-      await rolarAte(tester, find.text(TextosDoAchado.semCoordenada));
+      // As duas frases, pelo texto literal que elas tinham. Elas nao existem
+      // mais como constante; se alguem as reescrever, e por aqui que a volta
+      // aparece.
       expect(
-        find.text(TextosDoAchado.semCoordenada),
-        findsOneWidget,
-        reason: 'REPROVA: a pessoa digitou o bairro e nao deu coordenada, e a '
-            'tela nao disse que a busca passa a valer na cidade inteira. Sem '
-            'isso ela acredita que a distancia foi medida.',
+        find.textContaining('vai ver a distância'),
+        findsNothing,
+        reason: 'REPROVA: a tela voltou a dizer que o tutor vai ver a '
+            'distancia. Esta tela nao captura coordenada desde 29/10/2026, '
+            'entao nao ha distancia para o tutor ver -- a frase e falsa, e '
+            'nao apenas velha.',
+      );
+      expect(
+        find.textContaining('cidade inteira'),
+        findsNothing,
+        reason: 'REPROVA: a faixa de "vale na cidade inteira" voltou. Ela e '
+            'verdadeira em 100% dos achados desta tela, e por isso nao '
+            'informa nada: uma faixa que aparece sempre e decoracao com cara '
+            'de problema.',
       );
     });
   });

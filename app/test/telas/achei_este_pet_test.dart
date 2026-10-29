@@ -372,14 +372,8 @@ void main() {
         // O que SO quem achou sabe, preenchido pela TELA -- como a pessoa
         // faria. Montar o rascunho em Dart pularia justamente os campos que a
         // tela poderia estar cobrando.
-        await rolarAte(
-          tester,
-          find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-        );
-        await tocar(
-          tester,
-          find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-        );
+        // Sem botao antes: a peca abre JA nos campos (cliente, 29/10/2026).
+        await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloCidade));
         await tester.enterText(
           _campo(TextosDaLocalizacao.rotuloCidade),
           'São Paulo',
@@ -474,5 +468,50 @@ void main() {
         );
       },
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // AS DUAS TELAS DE ACHADO MUDAM JUNTAS (cliente, 29/10/2026)
+  //
+  // *"remove os botoes e deixa os campos de cep, endereco para o usuario
+  // preencher, no mesmo padrao das outras paginas"*. O cliente nomeou a tela
+  // de varias etapas (F3.5); esta embute a MESMA peca, com o mesmo ponto de
+  // uso, e por isso muda junto -- deixar uma com botoes e a outra sem seria a
+  // inconsistencia relatada no dia seguinte.
+  //
+  // O caso de F3.5 mora em `achado_sem_captura_de_localizacao_test.dart`, e e
+  // la que o ENVIO com endereco digitado e medido. Aqui mede-se so o que e
+  // proprio desta tela: a peca dela tambem perdeu os botoes.
+  //
+  // PARA VER REPROVANDO: em `captura_de_localizacao.dart`, troque
+  // `_ofereceCaptura` por `true`.
+  // -------------------------------------------------------------------------
+  group('a peca desta tela tambem abre sem os dois botoes', () {
+    testWidgets('nem `Usar minha localizacao` nem `Prefiro digitar o bairro`',
+        (tester) async {
+      final rede = _Rede();
+      await _tocarEmEncontrei(tester, rede);
+
+      expect(
+        find.text(TextosDaLocalizacao.usarMinhaLocalizacao),
+        findsNothing,
+        reason: 'REPROVA: `Usar minha localizacao` continua nesta tela. As '
+            'duas telas de achado mudam juntas, e esta embute a mesma peca '
+            'com o mesmo `pontoDeUso`.',
+      );
+      expect(
+        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
+        findsNothing,
+        reason: 'REPROVA: `Prefiro digitar o bairro` continua nesta tela.',
+      );
+
+      // E o que entra no lugar: os campos, prontos para preencher.
+      await rolarAte(tester, _campo(TextosDaLocalizacao.rotuloCep));
+      expect(
+        _campo(TextosDaLocalizacao.rotuloCep),
+        findsOneWidget,
+        reason: 'REPROVA: o campo de CEP nao esta na tela desta peca.',
+      );
+    });
   });
 }

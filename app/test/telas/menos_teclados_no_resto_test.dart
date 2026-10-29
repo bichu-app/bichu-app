@@ -639,14 +639,10 @@ void main() {
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
-      await tocar(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
+      // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
+      // `rolarAte` antes de LER o campo: o `ListView` so constroi o que cabe,
+      // e quem rolava ate aqui era o toque no botao que saiu.
+      await rolarAte(tester, campoDaLocalizacao(TextosDaLocalizacao.rotuloBairro));
 
       final bairro = tester.widget<TextField>(
         campoDaLocalizacao(TextosDaLocalizacao.rotuloBairro),
@@ -660,10 +656,16 @@ void main() {
             'esta era a que faltava. Nada aqui geocodifica: o texto vem da '
             'ficha que o proprio tutor escreveu (ADR-0006).',
       );
+      // **`focusNode` NULO, e nao `hasFocus` falso.** Desde 29/10/2026 a peca
+      // passa `foco: null` quando nao oferece captura (`comFoco:
+      // _ofereceCaptura`), entao nao existe nó de foco nenhum neste campo --
+      // `bairro.focusNode?.hasFocus` devolve `null`, e um `isFalse` aqui
+      // reprovaria pelo motivo errado. O que o caso afirma e mais forte: nao
+      // ha como o teclado subir, porque nao ha foco a pedir.
       expect(
-        bairro.focusNode?.hasFocus,
-        isFalse,
-        reason: 'REPROVA: o teclado subiu sobre um campo que ja esta '
+        bairro.focusNode,
+        isNull,
+        reason: 'REPROVA: o teclado pode subir sobre um campo que ja esta '
             'preenchido. O criterio 5 escreve a condicao junto da '
             'consequencia -- "o campo fica VAZIO com o teclado aberto" --, e '
             'teclado sobre campo cheio e meia tela coberta sem nada para '
@@ -699,26 +701,37 @@ void main() {
       await rolarAte(tester, find.text('Médio'));
       await tocar(tester, find.text('Médio'));
       await avancarParaOPasso2(tester);
-      await rolarAte(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
-      await tocar(
-        tester,
-        find.text(TextosDaLocalizacao.preferoDigitarOBairro),
-      );
+      // Sem botao: a peca do achado abre JA nos campos (cliente, 29/10/2026).
+      // `rolarAte` antes de LER o campo: o `ListView` so constroi o que cabe,
+      // e quem rolava ate aqui era o toque no botao que saiu.
+      await rolarAte(tester, campoDaLocalizacao(TextosDaLocalizacao.rotuloBairro));
 
       final bairro = tester.widget<TextField>(
         campoDaLocalizacao(TextosDaLocalizacao.rotuloBairro),
       );
       expect(bairro.controller?.text, '');
+      // **O SENTIDO INVERTEU PARA O ACHADO EM 29/10/2026, e e deliberado.**
+      //
+      // O criterio 5 pede "com o teclado aberto" para quem CAI nos campos sem
+      // ter pedido -- depois de negar a permissao ou de a medicao falhar. Com
+      // os botoes fora, ninguem cai em lugar nenhum: o achado ABRE nos campos.
+      //
+      // E aqui pedir o foco seria defeito, nao cortesia: nesta tela a peca
+      // vive na pagina 2 de um `IndexedStack` que mantem as DUAS paginas
+      // montadas, entao um foco pedido na montagem levantaria o teclado com a
+      // pessoa ainda na pagina 1, sobre o formulario do animal.
+      //
+      // O criterio 5 continua medido onde ele continua valendo: em
+      // `captura_de_localizacao_test.dart`, caso `o campo de bairro recebe o
+      // FOCO, que e o teclado aberto`, que exercita o fluxo que OFERECE a
+      // captura.
       expect(
-        bairro.focusNode?.hasFocus,
-        isTrue,
-        reason: 'REPROVA: o campo de bairro apareceu vazio e SEM foco. O '
-            'criterio 5 diz "com o teclado aberto", e sem foco o teclado nao '
-            'sobe: quem acabou de negar a permissao precisa de mais um toque '
-            'para comecar a digitar.',
+        bairro.focusNode,
+        isNull,
+        reason: 'REPROVA: o campo de bairro recebeu um nó de foco na montagem. '
+            'Esta peca mora na pagina 2 de um `IndexedStack` com as duas '
+            'paginas montadas: o teclado subiria com a pessoa ainda na '
+            'pagina 1.',
       );
     });
   });
