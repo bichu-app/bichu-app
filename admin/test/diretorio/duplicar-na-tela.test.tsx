@@ -51,6 +51,10 @@ const FONTE: Esquemas['AdminDirectoryEntry'] = {
   neighborhood: 'Pinheiros',
   phone_e164: '+551130612200',
   status: 'published',
+  // A GALERIA (29/10/2026) e `required` na resposta. Vazia aqui: o que este
+  // arquivo mede e a FIACAO de duplicar, e a regra do que a copia leva tem
+  // arquivo proprio (`duplicar.test.ts`), onde a fonte tem galeria.
+  images: [],
   verification: { level: 'document_verified', evidence_kinds: ['cnpj'] },
   source: 'import',
   claim_status: 'claimed',
@@ -98,7 +102,7 @@ describe('duplicar: da lista até o formulário', () => {
 
     expect(screen.getByLabelText<HTMLInputElement>('Nome *').value).toBe('Clínica São Jorge');
     expect(screen.getByLabelText<HTMLInputElement>('Identificador *').value).toBe('');
-    expect(screen.getByLabelText<HTMLInputElement>('Cidade').value).toBe('São Paulo');
+    expect(screen.getByLabelText<HTMLInputElement>('Cidade *').value).toBe('São Paulo');
     // Os dois eixos vieram: atividade marcada e tipo escolhido.
     expect(screen.getByLabelText<HTMLInputElement>('Clínica').checked).toBe(true);
     expect(screen.getByLabelText<HTMLSelectElement>('Tipo *').value).toBe('organization');
@@ -139,9 +143,19 @@ describe('duplicar: da lista até o formulário', () => {
     expect(corpo.kinds).toEqual(['clinic', 'vet']);
     expect(corpo.entity_kind).toBe('organization');
     expect(corpo.city).toBe('São Paulo');
-    // E nada de identidade nem de historia atravessou para o corpo.
-    for (const proibido of ['version', 'created_at', 'updated_at', 'rating', 'verification', 'status']) {
+    // E nada de IDENTIDADE nem de HISTORIA atravessou para o corpo.
+    //
+    // **`status` SAIU desta lista em 29/10/2026**, e saiu porque deixou de ser
+    // historia: o cadastro passou a escolher a situacao (decisao do cliente, a
+    // entrada nasce "No ar"), e o formulario manda a escolha. O que o caso
+    // guarda e que ela nao e HERDADA da fonte, e isso esta medido logo abaixo e
+    // em `duplicar.test.ts`.
+    for (const proibido of ['version', 'created_at', 'updated_at', 'rating', 'verification']) {
       expect(corpo).not.toHaveProperty(proibido);
     }
+    // A situacao vai no corpo e e a do CADASTRO NOVO. A fonte esta publicada,
+    // entao as duas coincidem aqui; quem separa as duas coisas e o caso da
+    // entrada RETIRADA em `duplicar.test.ts`.
+    expect(corpo.status).toBe('published');
   });
 });

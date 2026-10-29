@@ -739,6 +739,35 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.catalog_images',
     aoApagar: 'NO ACTION',
   },
+  // A GALERIA DO PARCEIRO (`20261029000001`, decisao do cliente de 29/10/2026:
+  // *"implemente a tabela de galeria entao"*). **O MESMO par da galeria do
+  // encontro**, e nao uma escolha nova: a ligacao a partir da ENTRADA e
+  // `CASCADE`, e a imagem de catalogo e `NO ACTION`.
+  //
+  // `CASCADE` na entrada e seguro aqui por uma razao que vale escrita: nenhuma
+  // entrada do diretorio se apaga na pratica -- retirar e `status = 'removed'`,
+  // e a propria porta administrativa nao oferece `apagarEntrada` justamente
+  // porque `entity_verifications` referencia a entidade sem chave estrangeira.
+  // Entao o `CASCADE` existe para o caso em que alguem apague a linha por SQL, e
+  // o que ele leva junto e a ORDEM e o TEXTO, nunca a imagem.
+  //
+  // `NO ACTION` na imagem e o freio que se quer: apagar uma imagem presa numa
+  // galeria reprova com 23503, e quem tira a imagem tira a ligacao primeiro. E
+  // o mesmo veredito de `store_item_images.image_id`,
+  // `network_event_images.image_id` e `user_showcase_images.image_id` -- as
+  // tres galerias que esta copia.
+  'public.professional_images.professional_images_professional_id_fkey': {
+    colunas: ['professional_id'],
+    referencia: 'public.professionals',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a ordem e o texto alternativo das fotos da galeria da entrada apagada. A imagem em catalog_images fica.',
+  },
+  'public.professional_images.professional_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
   // ADR-0027 A.3 (item 20.2): a imagem de catalogo nasce de uma intencao do
   // PAINEL, em tabela propria, e nao de `upload_intents`, que e do app.
   'public.catalog_images.catalog_images_upload_intent_id_fkey': {

@@ -81,6 +81,9 @@ function indicacao(sobre: Partial<MinhaIndicacao> = {}): MinhaIndicacao {
     ref: 'u7YkQwE2tLm9ZpR4sAbC',
     displayName: 'Clínica Veterinária Santa Bárbara',
     kind: 'clinic',
+    // O TIPO DE ENTIDADE (29/10/2026). `professional` na fixa porque e o
+    // `DEFAULT` da coluna e o caso comum; quem mede ONG troca no `sobre`.
+    entityKind: 'professional',
     city: 'São Paulo',
     state: 'SP',
     neighborhood: 'Pinheiros',

@@ -54,7 +54,33 @@ enum AtividadeDoDiretorio {
   // `ORDEM_DAS_ATIVIDADES` do painel moveria os seis valores antigos e seria
   // mudanca de tela que ninguem pediu.
   hospital('hospital', 'Hospital'),
-  store('store', 'Loja');
+  store('store', 'Loja'),
+  // `boarding` (Hospedagem) e `daycare` (Creche) -- cliente, 29/10/2026,
+  // migracao `20261029000002`: *"Nao e um ou outro, sao todos .. hospedagem,
+  // pet sitter, sao coisas diferentes"* e *"Acrescentar Creche junto"*.
+  //
+  // **ELES EXISTEM POR CAUSA DE UMA DIVERGENCIA DE MESES, e ela nasceu neste
+  // arquivo.** `sitter` foi declarado no primeiro commit da listagem de `Perto`
+  // (`109770b4`) com o rotulo **'Hospedagem'**: o valor dizia *pet sitter* e o
+  // rotulo dizia *hospedagem*, e as duas coisas sao diferentes -- hospedagem e
+  // o pet FICAR no estabelecimento, pet sitter e alguem que CUIDA, muitas vezes
+  // na casa do tutor. O `openapi.yaml` nunca descreveu o significado de cada
+  // atividade, so listou o `enum`, entao nao havia onde a divergencia reprovar.
+  //
+  // Em 28/10/2026 o cliente trocou o rotulo para 'Pet Sitter', e isso CORRIGIU
+  // o rotulo em vez de renomear o conceito. Em 29/10 `boarding` entrou para
+  // cobrir o que o rotulo errado vinha representando -- inclusive as 27 linhas
+  // de homologacao gravadas como `sitter` por quem leu "Hospedagem" na tela.
+  //
+  // **`sitter` NAO foi renomeado**: renomear valor de `enum` quebra linha ja
+  // gravada e exigiria migracao de DADO, nao so de `CHECK`.
+  //
+  // Entram no FIM pela mesma razao de `hospital` e `store`: `values` e a ordem
+  // de tela em `telas/perto/lista_do_diretorio.dart` e em
+  // `telas/perto/sugerir_profissional.dart`, e reordenar a lista inteira seria
+  // mudanca de tela que ninguem pediu.
+  boarding('boarding', 'Hospedagem'),
+  daycare('daycare', 'Creche');
 
   const AtividadeDoDiretorio(this.codigo, this.rotulo);
 
@@ -1687,6 +1713,7 @@ class MinhaIndicacao {
     required this.referencia,
     required this.nome,
     required this.atividade,
+    required this.tipoDeEntidade,
     required this.cidade,
     required this.uf,
     required this.tipoDeContato,
@@ -1705,6 +1732,18 @@ class MinhaIndicacao {
 
   final String nome;
   final AtividadeDoDiretorio atividade;
+
+  /// O QUE a entidade indicada E -- eixo SEPARADO de [atividade], que e o que
+  /// ela FAZ (contrato, 29/10/2026, pedido do cliente: *"esta faltando o campo
+  /// se e um profissional, ong ou estabelecimento"*).
+  ///
+  /// **Anulavel, pela MESMA razao de `TipoDeEntidade.porCodigo` devolver nulo:**
+  /// o `enum` do contrato e aditivo, e o dia em que ele ganhar um terceiro
+  /// valor esta versao do app precisa continuar lendo a resposta. O campo e
+  /// `required` no contrato -- a coluna e `NOT NULL DEFAULT 'professional'` --,
+  /// entao nulo aqui quer dizer "valor que esta versao nao conhece", e nao
+  /// "ausente".
+  final TipoDeEntidade? tipoDeEntidade;
   final String cidade;
   final String uf;
   final String? bairro;
@@ -1782,6 +1821,7 @@ class MinhaIndicacao {
       referencia: referencia,
       nome: nome,
       atividade: atividade,
+      tipoDeEntidade: TipoDeEntidade.porCodigo(json['entity_kind']),
       cidade: cidade,
       uf: uf,
       bairro: json['neighborhood'] as String?,

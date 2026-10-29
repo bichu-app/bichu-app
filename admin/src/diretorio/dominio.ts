@@ -106,7 +106,22 @@ export const ATIVIDADES = {
   vet: 'Veterinário',
   groomer: 'Banho e tosa',
   walker: 'Dog Walker',
+  // `sitter` = **Pet Sitter**, e ele NAO voltou a ser "Hospedagem".
+  //
+  // O rotulo dele era "Hospedagem" desde o primeiro commit da listagem de
+  // `Perto`, e divergia do valor: `sitter` diz *pet sitter*, e hospedagem e o
+  // pet FICAR no estabelecimento enquanto pet sitter e alguem que CUIDA, muitas
+  // vezes na casa do tutor. A troca de 28/10/2026 CORRIGIU um rotulo errado de
+  // meses -- a pergunta do cliente fecha o assunto: *"o que sitter tem a ver com
+  // hospedagem?"*. Nada.
+  //
+  // `boarding` entrou em 29/10 para cobrir o que o rotulo errado representava.
   sitter: 'Pet Sitter',
+  // `boarding` e `daycare` (cliente, 29/10/2026, migracao `20261029000002`):
+  // *"Nao e um ou outro, sao todos .. hospedagem, pet sitter, sao coisas
+  // diferentes"* e *"Acrescentar Creche junto"*.
+  boarding: 'Hospedagem',
+  daycare: 'Creche',
   trainer: 'Adestrador',
 } as const satisfies Record<TipoDaEntrada, string>;
 
@@ -127,9 +142,16 @@ export const ORDEM_DAS_ATIVIDADES: readonly TipoDaEntrada[] = [
   'clinic',
   'hospital',
   'store',
+  // `boarding` (Hospedagem) entra no grupo dos ESTABELECIMENTOS, e nao no das
+  // pessoas: hospedagem e um LUGAR onde o pet fica. `daycare` (Creche) tambem.
+  'boarding',
+  'daycare',
   'vet',
   'groomer',
   'walker',
+  // `sitter` (Pet Sitter) fica com as PESSOAS, e e por isso que ele nao esta ao
+  // lado de `boarding`: pet sitter e alguem que vai cuidar, e hospedagem e um
+  // lugar. A separacao na tela e a mesma distincao que o cliente fez em 29/10.
   'sitter',
   'trainer',
 ];
@@ -140,6 +162,34 @@ export const SITUACOES = {
   hidden: 'Retirada',
   removed: 'Removida',
 } as const satisfies Record<StatusDaEntrada, string>;
+
+/**
+ * AS SITUACOES QUE O CADASTRO OFERECE (cliente, 29/10/2026).
+ *
+ * **Duas, e `published` na frente porque e o PADRAO** -- *"ele ja deve salvar
+ * com o padrao publicado e nao como rascunho"*. `draft` fica ao lado porque o
+ * cliente confirmou que o rascunho continua existindo como escolha explicita.
+ *
+ * `hidden` e `removed` **nao entram**, e o contrato concorda
+ * (`AdminDirectoryEntryCreateStatus` so tem dois valores): as duas sao
+ * RETIRADA, e "nasce retirada" nao e estado que signifique algo. Oferece-las no
+ * cadastro ofereceria um `400`.
+ */
+export const SITUACOES_DO_CADASTRO: readonly StatusDaEntrada[] = ['published', 'draft'];
+
+/**
+ * AS SITUACOES QUE A EDICAO OFERECE: as quatro, na ordem de sempre.
+ *
+ * Lista nomeada, e nao literal dentro do JSX, para o cadastro e a edicao
+ * passarem a divergir num lugar so -- e para a divergencia ficar legivel ao
+ * lado da razao dela.
+ */
+export const SITUACOES_DA_EDICAO: readonly StatusDaEntrada[] = [
+  'published',
+  'draft',
+  'hidden',
+  'removed',
+];
 
 /** O selo da lista. `Selo` de `basicos.tsx` tem vocabulario proprio e fechado. */
 export const SELO_DA_SITUACAO = {

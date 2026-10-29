@@ -21,7 +21,7 @@
  * extenso no cabecalho da `20261017000004`.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
-import type { TipoDeProfissional } from './entrada-do-diretorio.js';
+import type { TipoDeEntidade, TipoDeProfissional } from './entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from './sugestao-do-diretorio.js';
 
 /** O `CHECK` `directory_suggestions_revisao_conhecida` (`20261017000004`). */
@@ -41,6 +41,13 @@ export interface IndicacaoNaFila {
   readonly ref: string;
   readonly displayName: string;
   readonly kind: TipoDeProfissional;
+  /**
+   * O QUE a entidade indicada E -- eixo SEPARADO de `kind` (cliente,
+   * 29/10/2026). Toda linha tem valor: a coluna e `NOT NULL DEFAULT
+   * 'professional'`, e a indicacao gravada antes de 29/10 vale como
+   * profissional porque nao havia como dizer outra coisa.
+   */
+  readonly entityKind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
@@ -61,6 +68,8 @@ export interface IndicacaoProjetada {
   readonly reference: string;
   readonly display_name: string;
   readonly kind: TipoDeProfissional;
+  /** O QUE a entidade E. O revisor precisa dele para aprovar com o tipo certo. */
+  readonly entity_kind: TipoDeEntidade;
   readonly city: string;
   readonly state: string;
   readonly neighborhood: string | null;
@@ -87,6 +96,7 @@ export function projetarIndicacao(i: IndicacaoNaFila): IndicacaoProjetada {
     reference: i.ref,
     display_name: i.displayName,
     kind: i.kind,
+    entity_kind: i.entityKind,
     city: i.city,
     state: i.state,
     neighborhood: i.neighborhood,

@@ -60,6 +60,19 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   // 16:9. Ver `derivadas.ts` para a medida de cada tela.
   directory_logo: DERIVADAS_DA_LOGO,
   directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
+  // A GALERIA da entrada do diretorio (29/10/2026, decisao do cliente). Ela
+  // aponta para `DERIVADAS_DO_ENCONTRO` -- a MESMA constante da `Rede`, e nao
+  // uma copia dos tres numeros --, e isso e o pedido do cliente cumprido ao
+  // pe da letra: *"deve ser padrao igual na pagina de eventos"*.
+  //
+  // A geometria casa porque as duas telas sao a mesma tela: uma faixa de
+  // miniaturas 4:3 na pagina (`thumb` 480 x 360), a capa de borda a borda do
+  // detalhe (`banner` 1280 x 720) e o peso de listagem (`card` 1024 x 576). A
+  // foto UNICA do lugar (`DERIVADAS_DA_FOTO_DO_LOCAL`) nao serve a galeria
+  // justamente por nao ter a `thumb`: com a `card` de 1024 a faixa baixaria
+  // cinco vezes o dado que pinta, que e o defeito que
+  // `DERIVADAS_DO_ENCONTRO` ganhou a `thumb` para corrigir.
+  directory_gallery: DERIVADAS_DO_ENCONTRO,
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
   // A VITRINE: `thumb` 320 x 320 para a GRADE (celula de 104 dp, 312 px reais a
   // 3x) e `card` 1024 x 1024 para a foto aberta. Nem a `thumb` de 176 nem a

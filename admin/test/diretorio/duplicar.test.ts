@@ -64,6 +64,26 @@ const FONTE = {
   verification: { level: 'document_verified', evidence_kinds: ['cnpj'] },
   logo: { status: 'ready', url: 'https://cdn.example/logo.webp' },
   photo: { status: 'ready', url: 'https://cdn.example/foto.webp' },
+  // A GALERIA (29/10/2026). A fonte tem DUAS fotos de proposito: duplicar uma
+  // entrada sem galeria nao mediria se a copia a deixa para tras.
+  images: [
+    {
+      upload_id: '0192a3b4-0000-7000-8000-00000000e001',
+      position: 0,
+      alt_text: 'A fachada',
+      source: 'uploaded',
+      status: 'ready',
+      url: 'https://cdn.example/g0.webp',
+    },
+    {
+      upload_id: '0192a3b4-0000-7000-8000-00000000e002',
+      position: 1,
+      alt_text: null,
+      source: 'uploaded',
+      status: 'ready',
+      url: 'https://cdn.example/g1.webp',
+    },
+  ],
   created_at: '2026-01-02T03:04:05Z',
   updated_at: '2026-10-27T10:00:00Z',
   version: 7,
@@ -123,9 +143,26 @@ describe('valoresDuplicados: o que a cópia NÃO leva', () => {
     expect(valoresDuplicados(FONTE).slugEditado).toBe(false);
   });
 
-  it('a situação nasce a de entrada nova: duplicar publicada não publica a cópia', () => {
+  it('a situação nasce a do CADASTRO NOVO, que desde 29/10/2026 é "No ar"', () => {
+    // ESTE CASO MUDOU EM 29/10/2026, e mudou por decisao do cliente -- *"ele ja
+    // deve salvar com o padrao publicado e nao como rascunho"*. Ate 28/10 ele
+    // afirmava `'draft'`, e afirmava com razao: o `POST` nao aceitava `status` e
+    // a entrada nascia sempre rascunho.
+    //
+    // O que o caso continua guardando e o que importava: a copia nao HERDA a
+    // situacao do original, ela nasce com a do cadastro novo. Com a fonte
+    // publicada as duas coincidem; o caso abaixo e que separa as duas coisas.
     expect(FONTE.status).toBe('published');
-    expect(valoresDuplicados(FONTE).situacao).toBe('draft');
+    expect(valoresDuplicados(FONTE).situacao).toBe('published');
+  });
+
+  it('a situação NÃO é herdada: duplicar entrada retirada não abre a cópia retirada', () => {
+    // E este e o contrapeso que o caso acima perdeu quando os dois valores
+    // coincidiram. `hidden` e `removed` sao ESTADO e nao preenchimento, e
+    // "nasce retirada" nao e um estado que signifique algo -- o contrato nem
+    // os aceita na criacao.
+    const retirada = { ...FONTE, status: 'removed' } as unknown as Entrada;
+    expect(valoresDuplicados(retirada).situacao).toBe('published');
   });
 
   it('não leva imagem: o contrato não dá como apontar para a do original', () => {
@@ -135,6 +172,10 @@ describe('valoresDuplicados: o que a cópia NÃO leva', () => {
     // que mandar, entao os campos abrem vazios em vez de prometer a imagem.
     expect(copia.logoUploadId).toBeUndefined();
     expect(copia.fotoUploadId).toBeUndefined();
+    // A GALERIA cai pela MESMA razao, e com uma a mais:
+    // `professional_images.image_id` e UNIQUE GLOBAL, entao reaproveitar o
+    // `upload_id` da fonte seria recusado com `400 upload_not_usable`.
+    expect(copia.imagens).toEqual([]);
   });
 
   it('não leva identidade nem história: nenhum campo do original vaza para a cópia', () => {

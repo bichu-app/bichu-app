@@ -60,7 +60,17 @@ const Map<String, IconData> glifoEsperadoPorAtividade = <String, IconData>{
   'vet': Icons.medical_services_outlined,
   'groomer': Icons.shower_outlined,
   'walker': Icons.directions_walk_outlined,
-  'sitter': Icons.hotel_outlined,
+  // `sitter` TROCOU DE GLIFO em 29/10/2026, e a troca e um conserto: ele era
+  // `hotel_outlined`, a cama, escolhida para casar com o rotulo ERRADO que
+  // `sitter` carregava desde o primeiro commit da listagem ("Hospedagem").
+  // Pet sitter nao e hotel -- e uma PESSOA que cuida, muitas vezes na casa do
+  // tutor --, e a cama passou para `boarding`, onde ela diz a coisa certa.
+  'sitter': Icons.supervisor_account_outlined,
+  // `boarding` e `daycare` entraram no contrato em 29/10/2026. A escolha de
+  // cada um, e o que foi ELIMINADO, esta na prosa de
+  // `lib/widgets/icone_do_inscrito.dart`.
+  'boarding': Icons.hotel_outlined,
+  'daycare': Icons.toys_outlined,
   'trainer': Icons.school_outlined,
 };
 
