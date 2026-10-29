@@ -1273,8 +1273,23 @@ export interface PetTransfersTable {
  * dos outros mapeamentos deste arquivo: nome de coluna e o nome do banco, e a
  * traducao para a forma do dominio mora no adaptador.
  */
-/** Espelha `TipoDeProfissional` de `modules/professionals/domain/perfil-publico.ts`. */
-export type TipoDeProfissional = 'vet' | 'groomer' | 'walker' | 'sitter' | 'trainer' | 'clinic';
+/** Espelha `TipoDeProfissional` de `modules/professionals/domain/entrada-do-diretorio.ts`. */
+export type TipoDeProfissional =
+  | 'vet'
+  | 'groomer'
+  | 'walker'
+  | 'sitter'
+  | 'trainer'
+  | 'clinic'
+  // `store` e `hospital` (cliente, 28/10/2026, migracao `20261028000001`).
+  //
+  // `store` NAO e a secao `Loja` do produto (`store_items`): aqui e um
+  // estabelecimento que vende aparecendo em `Perto` -- um petshop. `hospital`
+  // existe separado de `clinic` porque hospital interna e tem plantao, e com
+  // um valor so a distincao ficaria no NOME do estabelecimento, onde nenhum
+  // filtro alcanca.
+  | 'store'
+  | 'hospital';
 
 /**
  * Sem `'community'`. A emenda 1 do ADR-0011 negou a criacao pela comunidade em

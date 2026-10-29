@@ -27,8 +27,8 @@ import 'falhas.dart';
 enum AtividadeDoDiretorio {
   vet('vet', 'Veterinário'),
   groomer('groomer', 'Banho e tosa'),
-  walker('walker', 'Passeador'),
-  sitter('sitter', 'Hospedagem'),
+  walker('walker', 'Dog Walker'),
+  sitter('sitter', 'Pet Sitter'),
   trainer('trainer', 'Adestrador'),
   clinic('clinic', 'Clínica');
 
