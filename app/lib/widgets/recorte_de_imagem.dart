@@ -38,6 +38,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -469,6 +470,33 @@ const int ladoMaiorParaDesenhar = 1440;
 /// Nulo quando nao decodifica, ou quando o arquivo sumiu do aparelho. Ver
 /// [ajustarAFoto] para o que acontece nesse caso.
 Future<ImagemParaRecortar?> abrirAImagemParaRecortar(FotoLocal foto) async {
+  // **O ARQUIVO SUMIU: a saida e AQUI, antes de qualquer E/S de verdade.**
+  //
+  // Nao e defensividade, e sao duas razoes independentes.
+  //
+  // 1. O caso e REAL e esta documentado na porta: *"o sistema limpa o
+  //    diretorio temporario da camera quando falta espaco, e isso acontece
+  //    entre a escolha e o envio"*. Deixar isso virar excecao faria o caminho
+  //    comum passar pelo `catch`, que e onde a causa se perde.
+  //
+  // 2. **E o que mantem a suite de widget inteira de pe, e isso foi medido.**
+  //    `ImmutableBuffer.fromFilePath` e E/S de verdade, e o relogio do teste
+  //    de widget e FALSO: ele roda microtarefas, mas nao avanca o mundo de
+  //    fora. Com a leitura antes desta guarda, 53 casos deste repositorio
+  //    paravam no meio -- a foto escolhida nunca chegava a tela e nenhum envio
+  //    saia --, porque eles montam `FotoLocal` com caminhos como
+  //    `/tmp/nina.jpg`, que nao existem. Com a guarda, aquele caminho se
+  //    resolve numa microtarefa e eles seguem exatamente como antes.
+  //
+  //    O preco esta na mesa: um caso que QUEIRA a folha precisa de arquivo em
+  //    disco e de `runAsync`. Os dois arquivos de isca deste recurso fazem
+  //    isso, e dizem por que.
+  if (!File(foto.caminho).existsSync()) {
+    debugPrint(
+      'BICHU recorte: "${foto.caminho}" nao esta no aparelho; nada a ajustar.',
+    );
+    return null;
+  }
   try {
     // **DO ARQUIVO, e nao de `CameraEGaleria.bytesDaFoto`**, e a diferenca foi
     // medida em 29/10/2026: ler pela porta soma +1 em `vezesQueLeuOsBytes`, o

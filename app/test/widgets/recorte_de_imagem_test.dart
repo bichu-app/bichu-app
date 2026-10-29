@@ -384,7 +384,7 @@ void main() {
     });
 
     testWidgets(
-        'ISCA — a folha NAO abre quando o arquivo nao decodifica, e a foto vai '
+        'ISCA — o arquivo SUMIU do aparelho: a folha nao abre e a foto vai '
         'como esta', (tester) async {
       // O caminho real: formato sem decodificador nesta versao do sistema
       // (HEIC em Android antigo). Prender a pessoa numa folha vazia seria pior
@@ -444,6 +444,72 @@ void main() {
       // caso de envio deste repositorio -- e o caso que afirma ZERO ("tipo
       // recusado: a tela NAO sobe nada") passa a contar uma leitura que nao e
       // envio nenhum.
+      expect(
+        camera.vezesQueLeuOsBytes,
+        0,
+        reason: 'o ajuste le o ARQUIVO, e nao a porta',
+      );
+    });
+
+    testWidgets(
+        'ISCA — o arquivo EXISTE e nao e imagem: a folha nao abre e a foto vai '
+        'como esta', (tester) async {
+      // O OUTRO caminho, e ele e diferente do de cima: aqui o arquivo esta no
+      // aparelho e o DECODIFICADOR e que nao da conta. E real -- formato sem
+      // decodificador nesta versao do sistema, com HEIC em Android antigo
+      // sendo o caso conhecido, o mesmo que `PreviaDaFoto.naoAbriu` documenta.
+      //
+      // Prender a pessoa numa folha vazia seria pior que deixar a foto ir com
+      // o enquadramento automatico de antes.
+      //
+      // ISCA: em `ajustarAFoto`, troque o `return foto` do ramo
+      // `imagem == null` por `return null`. Compila, nenhuma tela muda -- e
+      // a foto que a pessoa escolheu passa a ser descartada em silencio.
+      final pasta = Directory.systemTemp.createTempSync('bichu-nao-imagem');
+      addTearDown(() {
+        if (pasta.existsSync()) pasta.deleteSync(recursive: true);
+      });
+      final arquivo = File('${pasta.path}/nao-e-imagem.jpg')
+        ..writeAsStringSync('isto nao e um JPEG, e o decodificador vai dizer');
+      final foto = FotoLocal(
+        caminho: arquivo.path,
+        tipoDeConteudo: 'image/jpeg',
+        tamanhoEmBytes: arquivo.lengthSync(),
+      );
+      final camera = CameraDeTeste(
+        EstadoDaPermissao.concedida,
+        foto: foto,
+      );
+
+      late BuildContext contexto;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BichuTheme.claro,
+          home: Scaffold(
+            body: Builder(
+              builder: (c) {
+                contexto = c;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      // `runAsync`: o arquivo EXISTE, entao a leitura acontece de verdade e
+      // nao avanca no relogio falso.
+      final resultado = await tester.runAsync(
+        () => ajustarAFoto(
+          contexto,
+          camera: camera,
+          foto: foto,
+          formato: FormatoDoRecorte.vitrineDoUsuario,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FolhaDeRecorte), findsNothing);
+      expect(resultado, same(foto));
+      expect(camera.vezesQueRecortou, 0);
       expect(
         camera.vezesQueLeuOsBytes,
         0,
