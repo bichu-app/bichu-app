@@ -730,8 +730,13 @@ void main() {
     });
   });
 
-  group('ABAS: acessibilidade', () {
-    testWidgets('cada aba anuncia o rótulo E publica a ação de toque', (
+  group('CHIPS: acessibilidade', () {
+    // Era `ABAS: acessibilidade`. A FORMA do controle mudou em 28/10/2026
+    // (`TabBar` interna -> chips no topo do corpo, porque esta tela virou a
+    // aba `Pendentes` de `conexoes/tela_de_conexoes.dart`), e **o que este
+    // grupo cobra nao mudou**: cada caixa se anuncia, publica acao de toque,
+    // tem alvo acima do piso, e a PERGUNTA do grupo (`Caixa`) continua dita.
+    testWidgets('cada chip anuncia o rótulo E publica a ação de toque', (
       tester,
     ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
@@ -739,18 +744,18 @@ void main() {
 
       for (final String rotulo in <String>['Recebidos', 'Enviados']) {
         final SemanticsNode no = tester.getSemantics(
-          find.widgetWithText(Tab, rotulo),
+          find.widgetWithText(ChoiceChip, rotulo),
         );
         expect(
           no.label,
           contains(rotulo),
-          reason: 'REPROVA: a aba "$rotulo" não se anuncia',
+          reason: 'REPROVA: o chip "$rotulo" não se anuncia',
         );
         expect(
           no.getSemanticsData().hasAction(SemanticsAction.tap),
           isTrue,
           reason:
-              'REPROVA: a aba "$rotulo" se anuncia como controle e não '
+              'REPROVA: o chip "$rotulo" se anuncia como controle e não '
               'publica ação -- é a mesma falha que '
               '`test/a11y/acao_de_controle_test.dart` reprova (WCAG 2.1 '
               'SC 4.1.2).',
@@ -774,57 +779,87 @@ void main() {
       );
     });
 
-    testWidgets('a área TOCÁVEL da aba respeita o piso do produto', (
+    testWidgets('a área TOCÁVEL do chip respeita o piso do produto', (
       tester,
     ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
 
       for (final String rotulo in <String>['Recebidos', 'Enviados']) {
-        // **O ALVO, e não a caixa do `Tab`.** MEDIDO em 26/10/2026: a
-        // `TabBar` envolve cada aba num `Padding(bottom: indicatorWeight)`
-        // por DENTRO do `InkWell`, então o alvo é 2 dp mais alto que o `Tab`
-        // — com o token, `Tab` 48,0 e alvo 50,0; sem ele, `Tab` 46,0 e alvo
-        // 48,0. Medir o `Tab` acusaria "46 dp, abaixo do piso" sobre um alvo
-        // que estava exatamente NO piso, e seria reprovação mentirosa.
+        // **O ALVO, e não a caixa do rótulo.** A conta do `Tab` (26/10) nao
+        // vale mais: o controle e um `ChoiceChip`, e o M3 lhe da 32 dp de
+        // altura por padrao -- ABAIXO do piso de 48. Quem paga o piso aqui e
+        // o `padding` vertical de `e3` que a tela passa, e e por isso que
+        // este caso continua existindo: sem ele, o chip nasceria com 32 dp e
+        // nada acusaria.
         final double tocavel = tester
-            .getSemantics(find.widgetWithText(Tab, rotulo))
+            .getSemantics(find.widgetWithText(ChoiceChip, rotulo))
             .rect
             .height;
         expect(
           tocavel,
           greaterThanOrEqualTo(BichuAlvoDeToque.min),
           reason:
-              'REPROVA: o alvo de toque da aba "$rotulo" tem $tocavel dp de '
+              'REPROVA: o alvo de toque do chip "$rotulo" tem $tocavel dp de '
               'altura, abaixo do piso de ${BichuAlvoDeToque.min} dp '
-              '(design system 6.5, WCAG 2.1 SC 2.5.8).',
+              '(design system 6.5, WCAG 2.1 SC 2.5.8). O `ChoiceChip` do M3 '
+              'nasce com 32 dp: quem paga o piso e o `padding` vertical da '
+              'tela.',
         );
       }
       handle.dispose();
     });
 
-    testWidgets('a aba amarra a altura ao TOKEN, e não ao `kTextTabBarHeight`', (
-      tester,
-    ) async {
-      await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
+    testWidgets(
+      'o chip amarra a folga ao TOKEN, e não ao padrão do `ChoiceChip`',
+      (tester) async {
+        // ================================================================
+        // ERA `a aba amarra a altura ao TOKEN, e não ao kTextTabBarHeight`
+        // ================================================================
+        //
+        // O caso lia `(aba as Tab).height` e cobrava
+        // `BichuAlvoDeToque.min`. Com a troca de forma de 28/10/2026 nao ha
+        // `Tab` nenhum, e o alvo passou a ser pago por outro lugar -- mas **a
+        // propriedade que o caso protege e a mesma**: a altura do controle sai
+        // de `design/tokens.json` e nao de uma constante do SDK que muda numa
+        // atualizacao sem ninguem reparar.
+        //
+        // No `Tab` quem pagava era `height`; no `ChoiceChip` e o `padding`
+        // vertical, porque o M3 nao expoe altura no chip. A conta mudou de
+        // dono, e o caso segue o dono.
+        await _montar(tester, recebidos: const <Map<String, dynamic>>[]);
 
-      final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
-      for (final Widget aba in barra.tabs) {
-        expect(
-          (aba as Tab).height,
-          BichuAlvoDeToque.min,
-          reason:
-              'REPROVA: a altura da aba ficou por conta do SDK. MEDIDO: sem '
-              '`height` o alvo dá 48,0 dp exatos — no piso e com folga ZERO, '
-              'e preso a `kTextTabBarHeight`, que é constante do Flutter e '
-              'muda numa atualização sem ninguém reparar. O padrão da casa '
-              '(`rede/secao_da_rede.dart`) passa o token do produto.',
-        );
-      }
-    });
+        for (final ChoiceChip chip
+            in tester.widgetList<ChoiceChip>(find.byType(ChoiceChip))) {
+          final padding = chip.padding;
+          expect(
+            padding,
+            isA<EdgeInsets>(),
+            reason: 'REPROVA: o chip da caixa nao declara `padding`. Sem ele o '
+                '`ChoiceChip` do M3 fica em 32 dp de altura, abaixo do piso '
+                'de 48, e nada acusa -- e o alvo volta a depender do padrao do '
+                'SDK.',
+          );
+          expect(
+            (padding as EdgeInsets).top,
+            BichuEspaco.e3,
+            reason: 'REPROVA: a folga vertical do chip nao vem do token do '
+                'produto. Ela e o que paga o piso de '
+                '${BichuAlvoDeToque.min} dp sobre os 32 dp do `ChoiceChip`, e '
+                'um numero solto aqui e um alvo que encolhe no dia em que o '
+                'M3 mudar o padrao dele.',
+          );
+          expect((padding).bottom, BichuEspaco.e3);
+        }
+      },
+    );
   });
 
-  group('ABAS: trocar de aba e VOLTAR não recomeça a lista', () {
+  group('CHIPS: trocar de caixa e VOLTAR não recomeça a lista', () {
+    // Era `ABAS: ...`. Ver o grupo `CHIPS: a forma do controle` para a troca
+    // de forma de 28/10/2026; o que estes casos cobram -- a pagina ja vista
+    // nao perguntar de novo, e a caixa sobreviver ao `push` do perfil -- nao
+    // mudou, e continua saindo de `_caixa` e de `_paginas`.
     testWidgets(
       'ISCA: voltar para a aba já vista NÃO pergunta de novo, e NÃO mostra a roda',
       (tester) async {
@@ -850,7 +885,7 @@ void main() {
 
         // IDA: `Enviados` é inédita e TEM de perguntar. Sem este contrapeso o
         // caso ficaria verde com uma tela que nunca carrega nada.
-        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Enviados'));
         await tester.pumpAndSettle();
         expect(
           _chamadasDeLista('sent'),
@@ -861,7 +896,7 @@ void main() {
 
         // VOLTA: `Recebidos` já foi vista. UM pump, de propósito -- a roda,
         // se existisse, apareceria neste quadro e `pumpAndSettle` a esconderia.
-        await tester.tap(find.widgetWithText(Tab, 'Recebidos'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Recebidos'));
         await tester.pump();
 
         expect(
@@ -909,16 +944,16 @@ void main() {
           ],
         );
 
-        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Enviados'));
         await tester.pumpAndSettle();
         expect(_chamadasDeLista('sent'), 1);
 
-        await tester.tap(find.widgetWithText(Tab, 'Recebidos'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Recebidos'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Aceitar'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Enviados'));
         await tester.pumpAndSettle();
         expect(
           _chamadasDeLista('sent'),
@@ -952,7 +987,7 @@ void main() {
           ],
         );
 
-        await tester.tap(find.widgetWithText(Tab, 'Enviados'));
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Enviados'));
         await tester.pumpAndSettle();
         expect(_chamadasDeLista('sent'), 1);
 
@@ -965,15 +1000,24 @@ void main() {
         ).pop();
         await tester.pumpAndSettle();
 
-        final TabBar barra = tester.widget<TabBar>(find.byType(TabBar));
+        // A CAIXA ESCOLHIDA, LIDA NO CHIP SELECIONADO (28/10/2026).
+        //
+        // Era `barra.controller?.index`. O `TabController` saiu com a troca de
+        // forma -- `_caixa` sempre foi quem guardava a escolha, e o
+        // controlador existia para a BARRA e nao para a memoria. O caso
+        // continua cobrando a mesma coisa pelo novo dono do estado.
+        final selecionado = tester
+            .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+            .where((ChoiceChip c) => c.selected)
+            .single;
         expect(
-          barra.controller?.index,
-          CaixaDePedidos.enviados.index,
+          (selecionado.label as Text).data,
+          TelaDePedidosDeConexao.rotuloDaCaixa(CaixaDePedidos.enviados),
           reason:
               'REPROVA: voltar do perfil devolveu a tela em `Recebidos`. É '
               'exatamente o que o comentário do `push` diz que o `go` faria, '
-              'e um `TabController` refeito a cada `build` reintroduz a perda '
-              'pelo outro lado.',
+              'e um estado refeito a cada `build` reintroduz a perda pelo '
+              'outro lado.',
         );
         expect(
           find.text('@carla-da-praca'),
@@ -1082,8 +1126,13 @@ Future<void> _montarComRoteador(
         routes: <RouteBase>[
           GoRoute(
             path: '/pedidos-nesta-bancada',
-            builder: (context, estado) =>
-                TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+            // `Scaffold` da BANCADA desde 28/10/2026: esta tela virou a aba
+            // `Pendentes` de `conexoes/tela_de_conexoes.dart`, e quem desenha
+            // a barra agora e a casca. Sem um `Material` ancestral os botoes
+            // do cartao nem montam.
+            builder: (context, estado) => Scaffold(
+              body: TelaDePedidosDeConexao(conexoes: ConexoesApi(api)),
+            ),
           ),
           _rotaDoPerfilDublada(),
         ],

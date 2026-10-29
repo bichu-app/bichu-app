@@ -2230,7 +2230,23 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
   /// acaso: as duas respondem a mesma pergunta com as mesmas quatro leituras. A
   /// diferenca e o que elas devolvem -- aquela um `bool` para decidir se abre a
   /// folha, esta o estado para a secao escrever na tela.
-  Future<void> _ler() async {
+  Future<void> _ler() => _lerOEstado().timeout(
+        // O MESMO TETO DA DECISAO DO LOGIN, e pela mesma razao: as leituras
+        // daqui passam por CANAL DE PLATAFORMA (o deposito da marca e a
+        // pergunta de suporte), e canal que nao responde nao estoura -- ele
+        // nao volta. Sem o teto, esta secao ficaria com a roda girando para
+        // sempre, que e o estado que mais parece defeito e menos informa.
+        FiacaoDoPasskey.tetoDaDecisao,
+        onTimeout: () {
+          if (!mounted) return;
+          // `indisponivel` e nao `inativo`: oferecer `Ativar` depois de um
+          // canal que nao respondeu seria prometer sobre um aparelho que nao
+          // disse nada.
+          setState(() => _estado = _EstadoDoPasskey.indisponivel);
+        },
+      );
+
+  Future<void> _lerOEstado() async {
     final escopo = Escopo.of(context);
     try {
       if (await escopo.passkeyNesteAparelho.haCredencial()) {

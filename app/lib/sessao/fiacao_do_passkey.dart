@@ -124,7 +124,39 @@ class FiacaoDoPasskey {
   /// Nenhuma leitura daqui pode virar erro de tela: na duvida, **devolve
   /// `false`** -- deixar de oferecer custa uma oferta que volta no proximo
   /// login, e estourar custaria a tela.
-  Future<bool> deveOferecerCadastro() async {
+  /// O TETO DE ESPERA DA DECISAO.
+  ///
+  /// **Ela mora no caminho critico de uma entrada que JA DEU CERTO**, e por
+  /// isso nao pode esperar para sempre. Tres leituras dela podem pendurar:
+  ///
+  ///   - o deposito da marca e `DepositoDePasskeyEmArquivo`, e
+  ///     `getApplicationDocumentsDirectory` e **canal de plataforma**;
+  ///   - `suportaCredencial` tambem e canal de plataforma;
+  ///   - `listar()` e rede.
+  ///
+  /// Canal que nao responde nao estoura: ele simplesmente **nao volta**, e um
+  /// `Future` que nao volta nao e pego por `catch` nenhum. **MEDIDO nesta
+  /// rodada**: sem este teto, quatro casos de dois arquivos de login
+  /// (`entrar_executa_a_intencao_test`, `sessao_persistente_por_padrao_test`)
+  /// reprovaram com `pumpAndSettle timed out` -- o `_enviando` do botao
+  /// `Entrar` ficava girando e a pessoa nunca saia da tela.
+  ///
+  /// Em producao o canal responde. O teto existe para o dia em que ele nao
+  /// responder: deixar de oferecer custa uma oferta que volta no proximo
+  /// login, e pendurar custa a entrada.
+  static const Duration tetoDaDecisao = Duration(seconds: 3);
+
+  Future<bool> deveOferecerCadastro() {
+    // `Future.timeout` NAO CANCELA o que esta por baixo -- ele so para de
+    // esperar, e e exatamente isso que se quer: a leitura pendurada segue o
+    // seu destino sem segurar quem acabou de entrar.
+    return _decidirSeOferece().timeout(
+      tetoDaDecisao,
+      onTimeout: () => false,
+    );
+  }
+
+  Future<bool> _decidirSeOferece() async {
     try {
       if (await _registro.haCredencial()) return false;
       if (await _registro.recusouFormalmente()) return false;

@@ -669,7 +669,14 @@ Future<void> _montarComRoteador(
     routes: <RouteBase>[
       GoRoute(
         path: Rotas.minhasConexoes,
-        builder: (_, _) => TelaDeMinhasConexoes(conexoes: ConexoesApi(api)),
+        // O `Scaffold` e da BANCADA desde 28/10/2026, pelo mesmo motivo do
+        // outro ajudante deste arquivo: a tela virou uma ABA de
+        // `conexoes/tela_de_conexoes.dart` e quem desenha a barra e a casca.
+        // Sem um `Material` ancestral, o `TextButton` de `Buscar usuários`
+        // nem monta -- e e nele que este caso toca.
+        builder: (_, _) => Scaffold(
+          body: TelaDeMinhasConexoes(conexoes: ConexoesApi(api)),
+        ),
       ),
       GoRoute(
         path: Rotas.rede,
