@@ -35,6 +35,8 @@ import {
   PADRAO_DA_UF,
   PADRAO_DO_SLUG,
   SITUACOES,
+  SITUACOES_DA_EDICAO,
+  SITUACOES_DO_CADASTRO,
   slugSugerido,
   type Entrada,
   type StatusDaEntrada,
@@ -177,7 +179,16 @@ const ORDEM: Campo[] = [
   'e-galeria',
 ];
 
-const VAZIO: Valores = {
+/**
+ * O FORMULARIO DE CADASTRO NOVO, em branco.
+ *
+ * **Exportado desde 29/10/2026**, e nao por conveniencia de teste: a situacao
+ * padrao daqui e uma DECISAO DO CLIENTE (*"ele ja deve salvar com o padrao
+ * publicado e nao como rascunho"*), e uma decisao de produto precisa de um caso
+ * que a leia DESTE objeto. Uma fixa de teste com `situacao: 'published'`
+ * escrita a mao mede a si mesma: trocar o valor aqui a deixaria verde.
+ */
+export const VAZIO: Valores = {
   nome: '',
   slug: '',
   slugEditado: false,
@@ -196,7 +207,12 @@ const VAZIO: Valores = {
   logoUploadId: undefined,
   fotoUploadId: undefined,
   imagens: [],
-  situacao: 'draft',
+  // **`published` desde 29/10/2026** (cliente: *"cobrar os dados no cadastro"*,
+  // sobre *"ele ja deve salvar com o padrao publicado e nao como rascunho"*).
+  // Era `'draft'`, e a troca aqui e o que faz o PADRAO do formulario de
+  // cadastro ser "no ar" -- o campo Situacao abre marcado em "No ar", e quem
+  // quiser guardar incompleto escolhe "Rascunho" de proposito.
+  situacao: 'published',
 };
 
 /**
@@ -206,10 +222,22 @@ const VAZIO: Valores = {
  * para a recusa chegar sem uma viagem a rede. Por isso cada regua aqui aponta
  * para a sua origem: tamanho de `CHECK`, formato de `slug`, E.164 de telefone.
  *
- * **Cidade, UF e telefone nao sao obrigatorios aqui**, e isso e deliberado: a
- * entrada nasce RASCUNHO, e o rascunho guarda trabalho incompleto. Quem cobra
- * os tres e a publicacao, e `missing_to_publish` diz o que falta antes de
- * alguem tentar.
+ * **CIDADE, UF E TELEFONE SAO OBRIGATORIOS QUANDO A SITUACAO E "No ar"**, e
+ * isso mudou em 29/10/2026 por decisao do cliente -- verbatim: *"cobrar os
+ * dados no cadastro"*, sobre *"quando cadastrar um estabelecimento no
+ * backoffice, ele ja deve salvar com o padrao publicado e nao como rascunho"*.
+ *
+ * O texto aqui dizia o contrario, e dizia por um motivo que deixou de valer:
+ * *"a entrada nasce RASCUNHO, e o rascunho guarda trabalho incompleto"*. Ela
+ * nao nasce mais rascunho. Quem quer guardar incompleto escolhe "Rascunho" no
+ * campo Situacao, e ai os tres voltam a nao ser cobrados -- e a regra aqui le
+ * `v.situacao`, e nao "estou criando ou editando", justamente para ser a MESMA
+ * frase do servidor: *quem publica precisa dos tres*.
+ *
+ * **Esta conferencia NAO substitui a do servidor**, e a diferenca importa
+ * porque o cliente pediu portao e nao aviso: `planejarCriacao` recusa o `POST`
+ * incompleto com `400` nomeando os campos, venha ele deste formulario ou de
+ * qualquer outro chamador. O que esta regua faz e poupar a viagem a rede.
  *
  * **CEP, rua, numero e complemento nao sao obrigatorios NUNCA**, nem no
  * rascunho nem na publicacao, e isso nao e simetria com os de cima -- e
@@ -255,12 +283,21 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   if (sobre !== '' && (sobre.length < 2 || sobre.length > 2000)) {
     e['e-sobre'] = 'Entre 2 e 2000 caracteres.';
   }
+  // OS TRES DA PUBLICACAO (cliente, 29/10/2026). A regua le a SITUACAO
+  // escolhida, e nao "criando ou editando": e a mesma frase do servidor.
+  const cobraPublicacao = v.situacao === 'published';
   const cidade = v.cidade.trim();
-  if (cidade !== '' && (cidade.length < 2 || cidade.length > 80)) {
+  if (cobraPublicacao && cidade === '') {
+    e['e-cidade'] = 'Informe a cidade: ela é cobrada para a entrada ficar no ar.';
+  } else if (cidade !== '' && (cidade.length < 2 || cidade.length > 80)) {
     e['e-cidade'] = 'Entre 2 e 80 caracteres.';
   }
   const uf = v.uf.trim();
-  if (uf !== '' && !PADRAO_DA_UF.test(uf)) e['e-uf'] = 'Use a sigla do estado, com duas letras.';
+  if (cobraPublicacao && uf === '') {
+    e['e-uf'] = 'Informe a UF: ela é cobrada para a entrada ficar no ar.';
+  } else if (uf !== '' && !PADRAO_DA_UF.test(uf)) {
+    e['e-uf'] = 'Use a sigla do estado, com duas letras.';
+  }
   const bairro = v.bairro.trim();
   if (bairro !== '' && (bairro.length < 2 || bairro.length > 80)) {
     e['e-bairro'] = 'Entre 2 e 80 caracteres.';
@@ -276,7 +313,10 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   }
   if (v.numero.trim().length > 20) e['e-numero'] = 'Até 20 caracteres.';
   if (v.complemento.trim().length > 80) e['e-complemento'] = 'Até 80 caracteres.';
-  if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
+  if (cobraPublicacao && v.telefone.trim() === '') {
+    e['e-telefone'] =
+      'Informe o telefone comercial: ele é o canal cobrado para a entrada ficar no ar.';
+  } else if (v.telefone.trim() !== '' && telefoneEmE164(v.telefone) === null) {
     e['e-telefone'] = 'Informe o telefone com DDD. Por exemplo: (11) 3061-2200.';
   }
   // O SITE (cliente, 21/10/2026). Vazio nao erra; o que foi digitado passa pelo
@@ -500,10 +540,15 @@ function valoresDa(entrada: Entrada): Valores {
  *   pudesse mandar para apontar para a imagem do original. Quem duplica sobe a
  *   imagem de novo, e o formulario abre com os campos de imagem vazios em vez
  *   de prometer o que nao tem como cumprir.
- * - **A situacao nasce a de entrada nova, e nao a do original.** Duplicar uma
- *   entrada publicada nao publica a copia: situacao e ESTADO, nao
- *   preenchimento. (O `POST` do contrato nem aceita `status` -- a entrada e
- *   criada em rascunho e a publicacao e um segundo passo.)
+ * - **A situacao nasce a do CADASTRO NOVO, e nao a do original.** Desde
+ *   29/10/2026 o cadastro novo nasce "No ar" (decisao do cliente), entao
+ *   duplicar uma entrada publicada tambem abre a copia como publicada -- e a
+ *   copia carrega cidade, UF e telefone do original, que e exatamente o que a
+ *   publicacao cobra. O que NAO se herda e `hidden` e `removed`: duplicar uma
+ *   entrada retirada nao abre a copia retirada, porque retirada e ESTADO e nao
+ *   preenchimento, e "nasce retirada" nao e um estado que signifique algo.
+ *   Quem quiser revisar antes de o estabelecimento aparecer escolhe "Rascunho"
+ *   no campo Situacao, que o cadastro passou a mostrar.
  *
  * ## E ELA NAO SALVA SOZINHA
  *
@@ -521,7 +566,7 @@ export function valoresDuplicados(entrada: Entrada): Valores {
     // imagem gravada nenhuma a continuar, porque nao ha entrada ainda.
     logoUploadId: undefined,
     fotoUploadId: undefined,
-    // **A GALERIA TAMBEM NAO VAI**, e pela MESMA razao do contrato que tira a
+    // **A GALERIA NAO VAI**, e pela MESMA razao do contrato que tira a
     // logo e a foto: a leitura traz `upload_id` de um envio JA USADO nesta
     // entrada, e `professional_images.image_id` e UNIQUE GLOBAL -- a copia
     // seria recusada com `400 upload_not_usable`. Quem duplica sobe as fotos de
@@ -841,11 +886,23 @@ export default function FormularioDaEntrada() {
             // entrada vai ter, e `[]` e exatamente o estado da entrada que
             // nasce sem foto.
             images: imagensDoCorpo(valores),
+            // A SITUACAO (cliente, 29/10/2026). Vai EXPLICITA mesmo quando e o
+            // padrao do contrato: o formulario mostra o campo, a pessoa escolhe,
+            // e mandar o que ela escolheu e mais honesto que confiar no padrao
+            // -- se o padrao do contrato mudar, a tela continua valendo.
+            //
+            // Os DOIS valores que a criacao aceita, e nunca `hidden`/`removed`:
+            // o seletor do cadastro so oferece estes dois (ver `SITUACOES_DO_CADASTRO`).
+            status: valores.situacao === 'draft' ? 'draft' : 'published',
           },
         });
         if (data) {
+          // A frase segue o que o SERVIDOR devolveu, e nao o que a tela pediu:
+          // quem responde se a entrada esta no ar e `data.status`.
           return voltar(
-            'Entrada cadastrada, em rascunho. Para ela aparecer em Perto, publique na edição.',
+            data.status === 'published'
+              ? 'Entrada cadastrada e no ar em Perto.'
+              : 'Entrada cadastrada, em rascunho. Para ela aparecer em Perto, publique na edição.',
           );
         }
         return recusa(error);
@@ -1038,6 +1095,15 @@ export default function FormularioDaEntrada() {
   }
 
   const lista = ORDEM.filter((c) => erros[c]).map((c) => ({ campo: c, rotulo: ROTULOS[c] }));
+  /**
+   * A situacao escolhida publica a entrada? (cliente, 29/10/2026)
+   *
+   * E ela que decide o `*` em Cidade, UF e Telefone, e vem do MESMO lugar que
+   * `validarEntrada` le -- `valores.situacao`. Duas leituras diferentes
+   * deixariam o rotulo prometer uma obrigacao que a validacao nao cobra, ou o
+   * contrario.
+   */
+  const cobraPublicacao = valores.situacao === 'published';
   const sujo =
     JSON.stringify({ ...valores, slugEditado: 0 }) !==
     JSON.stringify({ ...(editando ? base : VAZIO), slugEditado: 0 });
@@ -1226,18 +1292,22 @@ export default function FormularioDaEntrada() {
         <CampoDeTexto
           id="e-cidade"
           dataCy="entrada-cidade"
-          rotulo="Cidade"
+          rotulo={cobraPublicacao ? 'Cidade *' : 'Cidade'}
           valor={valores.cidade}
           aoMudar={(v) => mudar({ cidade: v })}
           maximo={80}
           erro={erros['e-cidade']}
-          ajuda="Precisa estar preenchida para a entrada aparecer em Perto."
+          ajuda={
+            cobraPublicacao
+              ? 'Cobrada para a entrada ficar no ar. Escolha “Rascunho” abaixo se quiser salvar sem ela.'
+              : 'Precisa estar preenchida para a entrada aparecer em Perto.'
+          }
         />
 
         <CampoDeTexto
           id="e-uf"
           dataCy="entrada-uf"
-          rotulo="UF"
+          rotulo={cobraPublicacao ? 'UF *' : 'UF'}
           valor={valores.uf}
           aoMudar={(v) => mudar({ uf: v.toUpperCase().slice(0, 2) })}
           maximo={2}
@@ -1327,7 +1397,7 @@ export default function FormularioDaEntrada() {
         <CampoDeTelefone
           id="e-telefone"
           dataCy="entrada-telefone"
-          rotulo="Telefone comercial"
+          rotulo={cobraPublicacao ? 'Telefone comercial *' : 'Telefone comercial'}
           valor={valores.telefone}
           aoMudar={(v) => mudar({ telefone: v })}
           erro={erros['e-telefone']}
@@ -1416,29 +1486,43 @@ export default function FormularioDaEntrada() {
           <Banner tipo="alerta">{avisoDeImagensSemEnvio(valores)}</Banner>
         )}
 
-        {editando && (
-          <fieldset className="field" aria-describedby="e-situacao-ajuda">
-            <legend className="lab">Situação</legend>
-            <div className="checks">
-              {(['published', 'draft', 'hidden', 'removed'] as StatusDaEntrada[]).map((situacao) => (
-                <label className="check" key={situacao}>
-                  <input
-                    type="radio"
-                    name="e-situacao"
-                    data-cy={`entrada-situacao-${situacao}`}
-                    checked={valores.situacao === situacao}
-                    onChange={() => mudar({ situacao })}
-                  />
-                  <span>{SITUACOES[situacao]}</span>
-                </label>
-              ))}
-            </div>
-            <span className="help" id="e-situacao-ajuda">
-              Só “No ar” aparece na seção Perto. Editar outros campos não muda a situação: tirar do ar é
-              uma escolha feita aqui. “Removida” tira a entrada do diretório sem apagar o registro.
-            </span>
-          </fieldset>
-        )}
+        {/* O CAMPO SITUACAO PASSA A APARECER NO CADASTRO TAMBEM (cliente,
+            29/10/2026). Antes de 29/10 ele era `editando &&`, e com razao: o
+            `POST` nao aceitava `status` e a entrada nascia sempre rascunho --
+            mostrar o campo seria oferecer uma escolha que nao existia.
+
+            Agora a escolha existe, e e ela que o cliente pediu: o padrao e "No
+            ar" e o rascunho continua disponivel para quem quiser salvar
+            incompleto. Esconder o campo no cadastro deixaria o rascunho sem
+            porta, e era a porta que ele mandou manter.
+
+            **DOIS valores no cadastro e QUATRO na edicao**, e a diferenca nao e
+            cosmetica: `hidden` e `removed` sao RETIRADA -- tirar do ar o que
+            esta no ar --, e o contrato nem os aceita em
+            `AdminDirectoryEntryCreateStatus`. Oferece-los aqui ofereceria um
+            `400`. */}
+        <fieldset className="field" aria-describedby="e-situacao-ajuda">
+          <legend className="lab">Situação</legend>
+          <div className="checks">
+            {(editando ? SITUACOES_DA_EDICAO : SITUACOES_DO_CADASTRO).map((situacao) => (
+              <label className="check" key={situacao}>
+                <input
+                  type="radio"
+                  name="e-situacao"
+                  data-cy={`entrada-situacao-${situacao}`}
+                  checked={valores.situacao === situacao}
+                  onChange={() => mudar({ situacao })}
+                />
+                <span>{SITUACOES[situacao]}</span>
+              </label>
+            ))}
+          </div>
+          <span className="help" id="e-situacao-ajuda">
+            {editando
+              ? 'Só “No ar” aparece na seção Perto. Editar outros campos não muda a situação: tirar do ar é uma escolha feita aqui. “Removida” tira a entrada do diretório sem apagar o registro.'
+              : '“No ar” é o padrão e publica a entrada em Perto na hora — por isso cidade, UF e telefone são cobrados. “Rascunho” guarda o cadastro incompleto, e ele só aparece em Perto depois de você publicar na edição.'}
+          </span>
+        </fieldset>
 
         {/* O nivel de verificacao é SOMENTE LEITURA: ele deriva da verificação
             aprovada mais forte da entidade, e um perfil que declarasse o

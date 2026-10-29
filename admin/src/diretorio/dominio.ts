@@ -141,6 +141,34 @@ export const SITUACOES = {
   removed: 'Removida',
 } as const satisfies Record<StatusDaEntrada, string>;
 
+/**
+ * AS SITUACOES QUE O CADASTRO OFERECE (cliente, 29/10/2026).
+ *
+ * **Duas, e `published` na frente porque e o PADRAO** -- *"ele ja deve salvar
+ * com o padrao publicado e nao como rascunho"*. `draft` fica ao lado porque o
+ * cliente confirmou que o rascunho continua existindo como escolha explicita.
+ *
+ * `hidden` e `removed` **nao entram**, e o contrato concorda
+ * (`AdminDirectoryEntryCreateStatus` so tem dois valores): as duas sao
+ * RETIRADA, e "nasce retirada" nao e estado que signifique algo. Oferece-las no
+ * cadastro ofereceria um `400`.
+ */
+export const SITUACOES_DO_CADASTRO: readonly StatusDaEntrada[] = ['published', 'draft'];
+
+/**
+ * AS SITUACOES QUE A EDICAO OFERECE: as quatro, na ordem de sempre.
+ *
+ * Lista nomeada, e nao literal dentro do JSX, para o cadastro e a edicao
+ * passarem a divergir num lugar so -- e para a divergencia ficar legivel ao
+ * lado da razao dela.
+ */
+export const SITUACOES_DA_EDICAO: readonly StatusDaEntrada[] = [
+  'published',
+  'draft',
+  'hidden',
+  'removed',
+];
+
 /** O selo da lista. `Selo` de `basicos.tsx` tem vocabulario proprio e fechado. */
 export const SELO_DA_SITUACAO = {
   draft: 'rascunho',

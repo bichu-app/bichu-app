@@ -121,6 +121,18 @@ export interface NovaEntrada {
   readonly logoImageId: string | null;
   readonly photoImageId: string | null;
   readonly status: StatusDaEntrada;
+  /**
+   * `true` quando a entrada JA NASCE no ar (cliente, 29/10/2026), e e ele que
+   * grava `published_at` no proprio `INSERT`.
+   *
+   * **Opcional, e ausente vale `false`**: o aceite da indicacao
+   * (`fila-de-indicacoes.ts`) monta uma `NovaEntrada` e nao tem opiniao sobre
+   * este marco. Exigir o campo obrigaria aquele caminho a decidir algo que ele
+   * nao coleta -- a mesma razao de `entityKind` ser opcional aqui.
+   *
+   * Ate 28/10/2026 nenhuma criacao gravava o marco, porque nenhuma publicava.
+   */
+  readonly gravaMarcoDePublicacao?: boolean | undefined;
   readonly source: OrigemDaEntrada;
   readonly claimStatus: TitularidadeDaEntrada;
   readonly agora: Instant;

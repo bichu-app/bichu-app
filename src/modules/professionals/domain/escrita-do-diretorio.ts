@@ -102,8 +102,32 @@ export type TitularidadeDaEntrada = 'unclaimed' | 'claim_pending' | 'claimed' | 
 export const ORIGEM_DO_PAINEL: OrigemDaEntrada = 'import';
 export const TITULARIDADE_DO_PAINEL: TitularidadeDaEntrada = 'unclaimed';
 
-/** O estado em que a entrada nasce. `professionals.status` tem `DEFAULT 'draft'`. */
+/**
+ * O estado da entrada INCOMPLETA. `professionals.status` tem `DEFAULT 'draft'`.
+ *
+ * **Deixou de ser "o estado em que a entrada nasce" em 29/10/2026.** Quem nasce
+ * pelo painel nasce `published` (ver `STATUS_PADRAO_DO_CADASTRO`); esta
+ * constante continua sendo o estado de quem nao esta completo, e e ela que o
+ * ACEITE DA INDICACAO usa quando a indicacao aprovada nao tem os tres campos
+ * (`fila-de-indicacoes.ts`). O cliente foi explicito: a fila de indicacao nao
+ * muda.
+ */
 export const STATUS_INICIAL: StatusDaEntrada = 'draft';
+
+/**
+ * COM QUE SITUACAO O CADASTRO DO PAINEL NASCE (cliente, 29/10/2026).
+ *
+ * Verbatim: *"cobrar os dados no cadastro"*, sobre *"quando cadastrar um
+ * estabelecimento no backoffice, ele ja deve salvar com o padrao publicado e
+ * nao como rascunho"*.
+ *
+ * **Constante separada de `STATUS_INICIAL`, e nao o mesmo valor trocado**, e a
+ * separacao e o ponto: os dois caminhos de criacao passaram a querer coisas
+ * diferentes. Trocar o valor de `STATUS_INICIAL` publicaria tambem a entrada do
+ * ACEITE DA INDICACAO -- inclusive a incompleta --, que e exatamente o fluxo que
+ * o cliente mandou nao mexer.
+ */
+export const STATUS_PADRAO_DO_CADASTRO: StatusDaEntrada = 'published';
 
 export const MINIMO_DO_NOME = 2;
 export const MAXIMO_DO_NOME = 120;
@@ -308,6 +332,17 @@ export interface CriacaoDaEntrada {
    * equivale a `[]`: entrada nasce sem galeria, que e o normal.
    */
   readonly images?: readonly ImagemDeGaleriaDoCorpo[];
+  /**
+   * A situacao em que a entrada nasce (cliente, 29/10/2026). **Ausente vale
+   * `published`** (`STATUS_PADRAO_DO_CADASTRO`), e publicar cobra `city`,
+   * `state` e `phone_e164`.
+   *
+   * So os DOIS valores: `hidden` e `removed` sao RETIRADA, e "nasce retirada"
+   * nao e estado que signifique algo. O contrato ja fecha a lista
+   * (`AdminDirectoryEntryCreateStatus`); o tipo aqui a repete porque o dominio
+   * nao acredita no schema -- e porque a funcao abaixo decide sobre estes dois.
+   */
+  readonly status?: 'published' | 'draft';
 }
 
 /**
@@ -431,6 +466,58 @@ export function faltasParaPublicar(
   if (valorResultante(edicao.state, atual.state) === null) faltas.push('state');
   if (valorResultante(edicao.phone_e164, atual.phoneE164) === null) faltas.push('phone_e164');
   return ORDEM_DA_FALTA.filter((falta) => faltas.includes(falta));
+}
+
+export interface PlanoDaCriacao {
+  /** O estado em que a entrada vai nascer. */
+  readonly status: StatusDaEntrada;
+  /**
+   * Verdadeiro quando a entrada nasce no ar. E ele que grava `published_at`:
+   * ate 28/10/2026 nenhuma criacao o gravava, porque nenhuma publicava.
+   */
+  readonly gravaMarcoDePublicacao: boolean;
+}
+
+export type ResultadoDaCriacao =
+  | { readonly ok: true; readonly plano: PlanoDaCriacao }
+  | { readonly ok: false; readonly erros: readonly ProblemFieldError[] };
+
+/**
+ * DECIDE A CRIACAO (cliente, 29/10/2026: *"cobrar os dados no cadastro"*).
+ *
+ * Ela existe pelo mesmo motivo que `planejarEdicao`: a pergunta "esta entrada
+ * pode nascer assim?" precisa ter resposta que se testa sem Fastify, sem
+ * Postgres e sem Docker.
+ *
+ * **Ausente vale `published`**, e publicar cobra os tres campos --
+ * `faltasParaPublicar`, a MESMA funcao da edicao e da projecao. Tres copias de
+ * "completo" e o que o ADR-0023 secao 2 proibe, e e por isso que esta funcao
+ * nao tem regua propria: ela delega.
+ *
+ * **O ARGUMENTO E O CORPO, e nao uma entrada gravada**, porque na criacao nao
+ * existe entrada gravada. `faltasParaPublicar` recebe os valores do corpo no
+ * lugar dos valores atuais, com `null` para o que nao veio -- que e exatamente
+ * o que o `INSERT` vai gravar.
+ *
+ * **`draft` NAO cobra nada**, e e esse o ponto de o rascunho continuar
+ * existindo: o cliente confirmou que quem quiser salvar incompleto pode.
+ */
+export function planejarCriacao(corpo: CriacaoDaEntrada): ResultadoDaCriacao {
+  const status: StatusDaEntrada = corpo.status ?? STATUS_PADRAO_DO_CADASTRO;
+  if (status !== 'published') {
+    return { ok: true, plano: { status, gravaMarcoDePublicacao: false } };
+  }
+  // Os valores do CORPO no lugar dos valores atuais. `?? null` e nao `?? ''`:
+  // `faltasParaPublicar` testa contra `null`, e `''` passaria pela regua para
+  // morrer no `CHECK` do banco como 500.
+  const faltas = faltasParaPublicar({
+    slug: corpo.slug,
+    city: corpo.city?.trim() ?? null,
+    state: corpo.state?.trim() ?? null,
+    phoneE164: corpo.phone_e164?.trim() ?? null,
+  });
+  if (faltas.length > 0) return { ok: false, erros: errosDaFalta(faltas) };
+  return { ok: true, plano: { status, gravaMarcoDePublicacao: true } };
 }
 
 export interface PlanoDaEdicao {

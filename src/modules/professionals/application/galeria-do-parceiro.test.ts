@@ -70,6 +70,17 @@ const AUTOR: Autor = {
 
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
+/**
+ * Cidade, UF e telefone, que a CRIACAO passou a cobrar em 29/10/2026 (a entrada
+ * nasce `published`). Os casos deste arquivo medem a GALERIA; sem os tres eles
+ * reprovariam pela regra do outro item.
+ */
+const COMPLETA_PARA_PUBLICAR = {
+  city: 'São Paulo',
+  state: 'SP',
+  phone_e164: '+551130612200',
+} as const;
+
 /** Um envio aberto, do proposito certo, que ainda nao venceu. */
 function envioAberto(id: string, purpose: PropositoDaImagem = 'directory_gallery'): EnvioDeCatalogo {
   return {
@@ -210,6 +221,7 @@ function repositorioEmMemoria(): Memoria {
           state: nova.state,
           phoneE164: nova.phoneE164,
           status: nova.status,
+          publishedAt: nova.gravaMarcoDePublicacao === true ? comoData(nova.agora) : null,
           imagens: [],
           version: 1,
         };
@@ -298,9 +310,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
       slug: 'pet-feliz',
       kinds: ['store'],
       display_name: 'Pet Feliz',
-      city: 'São Paulo',
-      state: 'SP',
-      phone_e164: '+551130612200',
+      ...COMPLETA_PARA_PUBLICAR,
       images: [
         { upload_id: 'e-1', alt_text: 'A fachada' },
         { upload_id: 'e-2' },
@@ -338,6 +348,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
       slug: 'pet-feliz',
       kinds: ['store'],
       display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     assert.equal(memoria.confirmacoes.length, 0);
     assert.ok(!memoria.ordem.includes('substituir'));
@@ -354,6 +365,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
         slug: 'pet-feliz',
         kinds: ['store'],
         display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
         images: [{ upload_id: 'e-1' }],
       })
       .then(
@@ -376,6 +388,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
           slug: 'pet-feliz',
           kinds: ['store'],
           display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
           images: [{ upload_id: uploadId }],
         })
         .then(
@@ -424,6 +437,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
         slug: 'pet-feliz',
         kinds: ['store'],
         display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
         images: [{ upload_id: 'e-1' }, { upload_id: 'E-1' }],
       })
       .then(
@@ -442,6 +456,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
         slug: 'pet-feliz',
         kinds: ['store'],
         display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
         images,
       })
       .then(
@@ -458,6 +473,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
         slug: 'pet-feliz',
         kinds: ['store'],
         display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
         images: [{ upload_id: 'e-1', alt_text: 'a' }],
       })
       .then(
@@ -473,6 +489,7 @@ void describe('a galeria do parceiro, na escrita administrativa', () => {
       slug: 'pet-feliz',
       kinds: ['store'],
       display_name: 'Pet Feliz',
+      ...COMPLETA_PARA_PUBLICAR,
       images: [{ upload_id: 'e-1' }],
     });
     assert.equal(memoria.gravou, true);

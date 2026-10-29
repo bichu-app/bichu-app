@@ -10979,11 +10979,38 @@ paths:
       x-effects: []
       summary: Cadastra uma entrada do diretorio
       description: |
-        **A entrada nasce RASCUNHO** (`professionals.status` tem
-        `DEFAULT 'draft'`), e so aparece em `Perto` depois de um `PATCH` com
-        `status: published`. Nao e zelo: o cadastro de um estabelecimento tem
-        campos que o operador costuma buscar em duas sessoes, e publicar na
-        criacao faria o diretorio mostrar meia clinica.
+        **A ENTRADA NASCE PUBLICADA desde 29/10/2026**, e isto REVERTEU o
+        desenho anterior por decisao do cliente -- verbatim: *"cobrar os dados
+        no cadastro"*, sobre o pedido *"quando cadastrar um estabelecimento no
+        backoffice, ele ja deve salvar com o padrao publicado e nao como
+        rascunho"*.
+
+        O texto que estava aqui dizia: *"a entrada nasce RASCUNHO ... o cadastro
+        de um estabelecimento tem campos que o operador costuma buscar em duas
+        sessoes, e publicar na criacao faria o diretorio mostrar meia clinica"*.
+        **O risco era real e a resposta e outra**: em vez de nascer rascunho, o
+        cadastro COBRA os tres campos da publicacao -- `city`, `state` e
+        `phone_e164` --, entao nao ha como publicar meia clinica. Quem precisa
+        das duas sessoes manda `status: draft` de proposito.
+
+        **As duas consequencias, ditas em voz alta porque sao quebra de
+        comportamento que nenhuma ferramenta de contrato acusa:**
+
+        1. corpo SEM `status` agora cria entrada NO AR, e nao rascunho;
+        2. corpo sem `city`, `state` ou `phone_e164` e **recusado com `400`**
+           nomeando os campos (`AdminDirectoryEntryMissingField`), onde antes
+           respondia `201` com `status: draft`.
+
+        A recusa e do SERVIDOR, pela MESMA funcao (`faltasParaPublicar`) que
+        recusa a publicacao por `PATCH` e que preenche `missing_to_publish`:
+        duas definicoes de "completo" e o que o ADR-0023 secao 2 proibe, e um
+        portao que vivesse so no formulario nao seria portao.
+
+        **A fila de indicacao vinda do app NAO muda**, e o cliente foi
+        explicito: ela e outra porta, nasce pendente e continua passando por
+        aprovacao. A entrada que o aceite cria segue a regra daquele caminho
+        (`approveAdminDirectorySuggestion`), que publica quando esta completa e
+        guarda como rascunho quando nao esta.
 
         **`source` e `import`, e `claim_status` e `unclaimed`.** Nao e atalho:
         sao os unicos valores que o `CHECK professionals_aceite_antes_do_perfil`
@@ -17936,6 +17963,44 @@ components:
         entrada sai do diretorio e continua existindo para a trilha.
       enum: [draft, published, hidden, removed]
 
+    AdminDirectoryEntryCreateStatus:
+      type: string
+      description: |
+        **COM QUE SITUACAO A ENTRADA NASCE NO PAINEL** (decisao do cliente de
+        29/10/2026, verbatim: *"cobrar os dados no cadastro"*, sobre o pedido
+        *"quando cadastrar um estabelecimento no backoffice, ele ja deve salvar
+        com o padrao publicado e nao como rascunho"*).
+
+        **AUSENTE VALE `published`, e esta e a mudanca de COMPORTAMENTO que o
+        `oasdiff` nao ve.** Ate 28/10/2026 `AdminDirectoryEntryInput` nao tinha
+        `status` e o `POST` criava SEMPRE rascunho; a partir de 29/10 o corpo sem
+        `status` cria entrada NO AR. Acrescentar propriedade opcional e
+        compativel para a ferramenta, e o efeito nao e: um chamador antigo que
+        mandava corpo completo e esperava rascunho passa a publicar.
+
+        **E PUBLICAR COBRA CIDADE, UF E TELEFONE.** O mesmo chamador antigo, se
+        mandava corpo INCOMPLETO contando com o rascunho, passa a receber `400`
+        nomeando os campos que faltam (`AdminDirectoryEntryMissingField`), em vez
+        de um `201` com `status: draft`. **Quem recusa e o SERVIDOR**, pela MESMA
+        funcao que recusa a publicacao por `PATCH` e que preenche
+        `missing_to_publish` -- nao ha caminho em que o formulario seja a unica
+        guarda.
+
+        **`draft` CONTINUA EXISTINDO como escolha explicita** (o cliente
+        confirmou): quem quer guardar trabalho incompleto manda `status: draft`,
+        e ai nada e cobrado. O que mudou e o PADRAO, nao a possibilidade.
+
+        **So estes dois valores, e nao os quatro de `DirectoryEntryStatus`.**
+        `hidden` e `removed` sao RETIRADA -- tirar do ar o que esta no ar --, e
+        "nasce retirada" nao e estado que signifique algo. Retirar e um `PATCH`
+        com `status`, e e ele que carrega o ato explicito.
+
+        **A fila de indicacao vinda do app NAO muda** (o cliente foi explicito):
+        ela e outra porta, nasce pendente e continua passando por aprovacao, e a
+        entrada que o aceite cria segue a regra de completude dela.
+      enum: [published, draft]
+      default: published
+
     DirectoryEntryOrigin:
       type: string
       description: |
@@ -18119,6 +18184,11 @@ components:
         # listada exatamente como antes. Nao entra em
         # `AdminDirectoryEntryMissingField`: a publicacao nunca cobrou imagem.
         images: { $ref: '#/components/schemas/DirectoryGalleryImagesInput' }
+        # A SITUACAO EM QUE A ENTRADA NASCE (cliente, 29/10/2026). Ausente vale
+        # `published`, e publicar COBRA `city`, `state` e `phone_e164` no
+        # proprio `POST`. Ver `AdminDirectoryEntryCreateStatus`, que carrega a
+        # decisao inteira e o custo dela.
+        status: { $ref: '#/components/schemas/AdminDirectoryEntryCreateStatus' }
         # ---------------------------------------------------------------
         # O ENDERECO DE RUA, e por que ele existe aqui a partir de 18/10/2026
         # ---------------------------------------------------------------

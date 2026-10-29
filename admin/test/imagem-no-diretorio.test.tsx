@@ -84,6 +84,20 @@ function escolher(rotulo: string, f: File) {
   fireEvent.change(screen.getByLabelText(rotulo), { target: { files: [f] } });
 }
 
+/**
+ * CIDADE, UF E TELEFONE, que o cadastro passou a cobrar em 29/10/2026 (decisao
+ * do cliente: a entrada nasce "No ar" e publicar cobra os tres). Os casos deste
+ * arquivo medem a LOGO e a FOTO; sem os tres eles reprovariam pela regra do
+ * outro item, antes de chegarem ao assunto.
+ */
+function preencherOsTresDaPublicacao() {
+  fireEvent.change(screen.getByLabelText('Cidade *'), { target: { value: 'São Paulo' } });
+  fireEvent.change(screen.getByLabelText('UF *'), { target: { value: 'SP' } });
+  fireEvent.change(screen.getByLabelText('Telefone comercial *'), {
+    target: { value: '(11) 3061-2200' },
+  });
+}
+
 describe('tamanho e dimensao dos dois campos novos', () => {
   it('a minima da logo e 256 x 256, e a da foto do local 600 x 600', () => {
     expect(DIMENSAO_MINIMA.directory_logo).toEqual({ largura: 256, altura: 256 });
@@ -255,6 +269,11 @@ describe('logo e foto no formulario da entrada', () => {
     // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
     fireEvent.click(screen.getByLabelText('Dog Walker'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
+    // OS TRES DA PUBLICACAO (29/10/2026): o cadastro nasce "No ar" e cobra
+    // cidade, UF e telefone. Sem eles a regua local recusa antes da rede, e
+    // este caso -- que mede o erro de campo do SERVIDOR -- nao chegaria a
+    // mandar nada.
+    preencherOsTresDaPublicacao();
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
 
     expect(
@@ -273,6 +292,7 @@ describe('logo e foto no formulario da entrada', () => {
     // A atividade virou CAIXA em 21/10/2026 (atividades multiplas).
     fireEvent.click(screen.getByLabelText('Dog Walker'));
     fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'passeios-da-bia' } });
+    preencherOsTresDaPublicacao();
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar entrada' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/perto'));
 

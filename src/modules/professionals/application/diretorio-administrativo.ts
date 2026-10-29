@@ -55,10 +55,10 @@ import {
   MINIMO_DO_NUMERO,
   MINIMO_DO_SOBRE,
   ORIGEM_DO_PAINEL,
+  planejarCriacao,
   planejarEdicao,
   projetarEntradaAdministrativa,
   retratoDaEntrada,
-  STATUS_INICIAL,
   TETO_DE_IMAGENS_DA_GALERIA,
   TITULARIDADE_DO_PAINEL,
   type CriacaoDaEntrada,
@@ -358,8 +358,16 @@ export class DiretorioAdministrativo {
   }
 
   /**
-   * Cadastra. **A entrada nasce rascunho**, e nao ha parametro que mude isso:
-   * publicar e um `PATCH` com `status`, e e ele que confere a completude.
+   * Cadastra. **A entrada nasce PUBLICADA desde 29/10/2026** (decisao do
+   * cliente: *"cobrar os dados no cadastro"*), e cobra `city`, `state` e
+   * `phone_e164` no proprio `POST`.
+   *
+   * A regua e `planejarCriacao`, que delega a `faltasParaPublicar` -- a MESMA
+   * funcao da edicao e da projecao. **A recusa e daqui, e nao do formulario**:
+   * um chamador que mande o corpo direto, sem passar pelo painel, recebe o
+   * mesmo `400` com os campos nomeados.
+   *
+   * `status: draft` continua sendo escolha explicita e nao cobra nada.
    */
   async criarEntrada(autor: Autor, corpo: CriacaoDaEntrada): Promise<Escrito<EntradaProjetada>> {
     // A forma dos campos e a da GALERIA na MESMA lista de erros: a tela precisa
@@ -382,6 +390,13 @@ export class DiretorioAdministrativo {
     // Amarrado num `const` porque o estreitamento acima nao sobrevive a entrada
     // no fecho de `emTransacao`.
     const kinds = atividades.ok;
+
+    // A SITUACAO EM QUE A ENTRADA NASCE, e a completude que ela exige (cliente,
+    // 29/10/2026). Depois da forma e das atividades, e ANTES da transacao: nao
+    // ha por que abrir transacao para uma criacao que a regra ja recusou.
+    const planejada = planejarCriacao(corpo);
+    if (!planejada.ok) throw problemas.validacao([...planejada.erros]);
+    const plano = planejada.plano;
 
     return this.deps.repositorio.emTransacao(async (tx) => {
       // A logo e a foto sao confirmadas ANTES do `INSERT`, na mesma transacao:
@@ -414,7 +429,12 @@ export class DiretorioAdministrativo {
           siteUrl: aparado(corpo.site_url) ?? null,
           logoImageId,
           photoImageId,
-          status: STATUS_INICIAL,
+          status: plano.status,
+          // `published_at` so quando a entrada JA NASCE no ar. Ate 28/10/2026
+          // nenhuma criacao o gravava porque nenhuma publicava, e a coluna
+          // responde "desde quando esta no ar" -- deixa-la nula numa entrada
+          // publicada faria o painel ler a entrada como rascunho.
+          gravaMarcoDePublicacao: plano.gravaMarcoDePublicacao,
           source: ORIGEM_DO_PAINEL,
           claimStatus: TITULARIDADE_DO_PAINEL,
           agora: this.agora(),

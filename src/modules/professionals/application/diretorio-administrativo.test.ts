@@ -224,7 +224,11 @@ function repositorioEmMemoria(): Memoria {
           source: nova.source,
           claimStatus: nova.claimStatus,
           verificacoes: [],
-          publishedAt: null,
+          // O MARCO so quando a entrada NASCE no ar (cliente, 29/10/2026). O
+          // dobre o honra em vez de fixar `null`: `null` fixo faria o caso do
+          // padrao publicado passar sem a coluna ter sido escrita, que e
+          // exatamente o defeito que o adaptador de verdade podia ter.
+          publishedAt: nova.gravaMarcoDePublicacao === true ? comoData(nova.agora) : null,
           createdAt: comoData(nova.agora),
           updatedAt: comoData(nova.agora),
           version: 1,
@@ -297,18 +301,145 @@ async function tipoDoErro(trabalho: () => Promise<unknown>): Promise<string> {
   }
 }
 
+/**
+ * O CORPO MINIMO DE UMA CRIACAO QUE PUBLICA (cliente, 29/10/2026).
+ *
+ * Desde 29/10 a entrada nasce `published` e publicar COBRA cidade, UF e
+ * telefone. Os casos abaixo que medem OUTRA coisa -- a UF em maiuscula, o `id`
+ * fora da resposta, a trilha, o 409 do slug -- partem daqui para nao reprovarem
+ * pela regra que nao e o assunto deles.
+ *
+ * **Eles nao passaram a mandar `status: draft`**, e a escolha e deliberada: com
+ * `draft` eles mediriam o caminho que o painel deixou de usar por padrao.
+ */
+const COMPLETA_PARA_PUBLICAR = {
+  city: 'São Paulo',
+  state: 'SP',
+  phone_e164: '+551130612200',
+} as const;
+
 void describe('criar', () => {
-  void it('a entrada nasce rascunho, por importacao e sem titular', async () => {
+  void it('a entrada nasce PUBLICADA, por importacao e sem titular (cliente, 29/10/2026)', async () => {
+    // *"cobrar os dados no cadastro"*, sobre *"ele ja deve salvar com o padrao
+    // publicado e nao como rascunho"*. SEM `status` no corpo: e o PADRAO que
+    // mudou, e e o padrao que este caso mede.
     const criada = await diretorio.criarEntrada(AUTOR, {
       slug: 'passeios-da-bia',
       kind: 'walker',
       display_name: 'Passeios da Bia',
+      ...COMPLETA_PARA_PUBLICAR,
     });
-    assert.equal(criada.recurso.status, 'draft');
+    assert.equal(criada.recurso.status, 'published');
     assert.equal(criada.recurso.source, 'import');
     assert.equal(criada.recurso.claim_status, 'unclaimed');
-    assert.equal(criada.recurso.published_at, null);
+    // O MARCO: entrada que nasce no ar tem `published_at`. Nulo aqui faria o
+    // painel ler uma entrada publicada como rascunho.
+    assert.notEqual(criada.recurso.published_at, null);
+    assert.equal(criada.recurso.missing_to_publish.length, 0);
     assert.equal(criada.etag, '"1"');
+  });
+
+  void it('sem cidade, UF e telefone o SERVIDOR recusa, nomeando os tres', async () => {
+    // A recusa e daqui e nao do formulario: um chamador que mande o corpo
+    // direto recebe o mesmo `400` com os campos nomeados. Portao no servidor.
+    const erro = await diretorio
+      .criarEntrada(AUTOR, {
+        slug: 'passeios-da-bia',
+        kind: 'walker',
+        display_name: 'Passeios da Bia',
+      })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    assert.ok(erro instanceof AppError);
+    assert.equal(erro.problemType, 'validation-failed');
+    assert.deepEqual(
+      erro.errors?.map((e) => e.field),
+      ['city', 'state', 'phone_e164'],
+    );
+    // E nada foi gravado: a regra recusa ANTES da transacao.
+    assert.equal(memoria.gravou, false);
+  });
+
+  void it('faltando UM dos tres, so ele e nomeado', async () => {
+    const erro = await diretorio
+      .criarEntrada(AUTOR, {
+        slug: 'passeios-da-bia',
+        kind: 'walker',
+        display_name: 'Passeios da Bia',
+        city: 'São Paulo',
+        state: 'SP',
+      })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    assert.ok(erro instanceof AppError);
+    assert.deepEqual(
+      erro.errors?.map((e) => e.field),
+      ['phone_e164'],
+    );
+  });
+
+  void it('`status: draft` CONTINUA existindo, e nao cobra nada', async () => {
+    // O cliente confirmou: o rascunho fica como escolha explicita, para quem
+    // quiser salvar incompleto.
+    const criada = await diretorio.criarEntrada(AUTOR, {
+      slug: 'passeios-da-bia',
+      kind: 'walker',
+      display_name: 'Passeios da Bia',
+      status: 'draft',
+    });
+    assert.equal(criada.recurso.status, 'draft');
+    assert.equal(criada.recurso.published_at, null);
+    // E a tela continua sabendo o que falta, pela MESMA lista.
+    assert.deepEqual(
+      [...criada.recurso.missing_to_publish],
+      ['city', 'state', 'phone_e164'],
+    );
+  });
+
+  void it('`status: published` explicito e a mesma coisa que o padrao', async () => {
+    const criada = await diretorio.criarEntrada(AUTOR, {
+      slug: 'passeios-da-bia',
+      kind: 'walker',
+      display_name: 'Passeios da Bia',
+      status: 'published',
+      ...COMPLETA_PARA_PUBLICAR,
+    });
+    assert.equal(criada.recurso.status, 'published');
+  });
+
+  void it('telefone presente mas SO COM ESPACO nao publica -- e a recusa vem da FORMA', async () => {
+    // **MEDIDO, e o resultado corrige o que eu ia escrever aqui:** retirar o
+    // `.trim()` de `planejarCriacao` NAO reprova nenhum caso deste arquivo. A
+    // recusa de `'   '` vem antes, de `errosDaForma` -> `errosDoTelefone`, que
+    // nao casa a expressao de E.164. O mesmo vale para `city` (`errosDeTexto`
+    // mede o texto APARADO) e para `state` (`errosDaUf`).
+    //
+    // Entao o `.trim()` la e defensivo e nao e a guarda: ele existe para um
+    // chamador que alcance `planejarCriacao` sem passar por `errosDaForma`, e
+    // nenhum caminho de hoje faz isso. Dito aqui porque a alternativa era um
+    // comentario afirmando uma prova que a sabotagem desmentiu.
+    //
+    // O que ESTE caso guarda e o desfecho, que importa de qualquer jeito:
+    // telefone so com espaco nao produz entrada publicada.
+    const erro = await diretorio
+      .criarEntrada(AUTOR, {
+        slug: 'passeios-da-bia',
+        kind: 'walker',
+        display_name: 'Passeios da Bia',
+        city: 'São Paulo',
+        state: 'SP',
+        phone_e164: '   ',
+      })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    assert.ok(erro instanceof AppError);
+    assert.equal(erro.problemType, 'validation-failed');
   });
 
   void it('grava a UF em MAIUSCULA, qualquer que seja a digitacao', async () => {
@@ -318,6 +449,7 @@ void describe('criar', () => {
       display_name: 'Tosa da Ana',
       state: ' sp ',
       city: ' Santo André ',
+      phone_e164: '+551130612200',
     });
     assert.equal(criada.recurso.state, 'SP');
     assert.equal(criada.recurso.city, 'Santo André');
@@ -328,6 +460,7 @@ void describe('criar', () => {
       slug: 'adestra-junto',
       kind: 'trainer',
       display_name: 'Adestra Junto',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     assert.equal('id' in (criada.recurso as unknown as Record<string, unknown>), false);
   });
@@ -337,6 +470,7 @@ void describe('criar', () => {
       slug: 'sos-silvestres',
       kind: 'vet',
       display_name: 'SOS Silvestres',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     assert.equal(memoria.trilha.length, 1);
     assert.equal(memoria.trilha[0]?.action, 'admin.directory_entry.created');
@@ -348,7 +482,12 @@ void describe('criar', () => {
     memoria.trilhaFalha = true;
     const antes = memoria.linhas.size;
     await assert.rejects(() =>
-      diretorio.criarEntrada(AUTOR, { slug: 'nao-fica', kind: 'vet', display_name: 'Não fica' }),
+      diretorio.criarEntrada(AUTOR, {
+        slug: 'nao-fica',
+        kind: 'vet',
+        display_name: 'Não fica',
+        ...COMPLETA_PARA_PUBLICAR,
+      }),
     );
     assert.equal(memoria.linhas.size, antes);
     assert.equal(memoria.trilha.length, 0);
@@ -361,6 +500,7 @@ void describe('criar', () => {
           slug: 'clinica-sao-jorge',
           kind: 'clinic',
           display_name: 'Outra clínica',
+          ...COMPLETA_PARA_PUBLICAR,
         }),
       ),
       'slug-taken',
@@ -486,6 +626,10 @@ void describe('listar', () => {
       slug: 'clinica-em-cadastro',
       kind: 'clinic',
       display_name: 'Clínica Em Cadastro',
+      // `draft` EXPLICITO desde 29/10/2026: o padrao do cadastro passou a ser
+      // `published`, e sem esta linha a listagem traria duas publicadas e o
+      // caso mediria outra coisa.
+      status: 'draft',
     });
     const pagina = await diretorio.listarEntradas({ sort: 'name', page: 1, limit: 50 });
     assert.equal(pagina.total, 2);
@@ -515,6 +659,7 @@ void describe('o tipo de entidade na escrita administrativa', () => {
       kind: 'clinic',
       entity_kind: 'organization',
       display_name: 'ONG Patas Livres',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     assert.equal(criada.recurso.entity_kind, 'organization');
     assert.equal(criada.recurso.kind, 'clinic');
@@ -527,6 +672,7 @@ void describe('o tipo de entidade na escrita administrativa', () => {
       slug: 'clinica-sem-o-campo',
       kind: 'vet',
       display_name: 'Clínica sem o campo',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     assert.equal(criada.recurso.entity_kind, 'professional');
   });
@@ -536,6 +682,7 @@ void describe('o tipo de entidade na escrita administrativa', () => {
       slug: 'virou-ong',
       kind: 'clinic',
       display_name: 'Virou ONG',
+      ...COMPLETA_PARA_PUBLICAR,
     });
     // A entrada nasce em `version: 1`, entao o `ETag` do primeiro `PATCH` e
     // `"1"` -- a escrita administrativa exige o condicional (ADR-0030).

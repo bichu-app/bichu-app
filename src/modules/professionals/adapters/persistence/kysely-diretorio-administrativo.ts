@@ -443,10 +443,17 @@ function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrati
             status: nova.status,
             source: nova.source,
             claim_status: nova.claimStatus,
-            // `published_at` nulo porque a entrada nasce rascunho, e
+            // `published_at` **so quando a entrada JA NASCE no ar** (cliente,
+            // 29/10/2026). Ate 28/10 ele era sempre nulo aqui, porque nenhuma
+            // criacao publicava; agora o padrao do painel e `published`, e uma
+            // entrada publicada sem este marco apareceria no painel como
+            // rascunho -- o mesmo defeito que a `20260928000003` consertou na
+            // `Loja` com `UPDATE store_items SET published_at = now()`.
+            //
             // `claimed_at`/`claimed_by_user_id` ficam de fora: o `CHECK`
             // `professionals_titularidade_tem_marco` exige que os dois sejam
             // nulos quando `claim_status = 'unclaimed'`.
+            ...(nova.gravaMarcoDePublicacao === true ? { published_at: agora } : {}),
             created_at: agora,
             updated_at: agora,
             version: 1,
