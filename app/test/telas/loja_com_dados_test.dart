@@ -966,6 +966,147 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  // A BUSCA ACIMA DO TEXTO (cliente, 28/10/2026)
+  // -------------------------------------------------------------------------
+  // Literal: *"coloque a barra de busca acima do texto"*. "O texto" e o bloco
+  // do convite com o cupom (`_ConviteComCupom`), que era a primeira coisa da
+  // tela desde 22/10 -- e nao a frase de nenhum cartao.
+  //
+  // **ISTO CUMPRE O PADRAO DE LISTAGEM EM VIGOR**, e nao o contraria: busca,
+  // filtro e ordenacao ficam no TOPO DO CORPO da tela (nunca na barra de
+  // topo). Antes deste pedido o convite se metia entre o topo do corpo e os
+  // controles; agora os controles sao de novo a primeira coisa do corpo, e o
+  // convite vem logo abaixo deles.
+  //
+  // **A medicao e de POSICAO, e nao de ordem de filho no `Column`.** Ordem de
+  // filho aprovaria um `Column` reordenado que o `Stack` de alguem pintasse
+  // ao contrario; `dy` da arvore montada e o que a pessoa ve.
+  group('a busca vem ACIMA do texto do convite', () {
+    // DESLIGAR PARA VER REPROVAR: em `lib/telas/loja/vitrine_da_loja.dart`,
+    // no `build`, volte a por `const _ConviteComCupom(),` ANTES do
+    // `if (pagina != null) BarraDeListagem(...)`. Os dois `expect` de ordem
+    // reprovam nomeando os dois `dy`, e os controles positivos continuam
+    // passando -- que e o que separa "a ordem voltou" de "a tela nao abriu".
+    testWidgets('a barra de listagem e o campo de busca ficam acima da frase',
+        (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
+        ),
+      );
+
+      // CONTROLE POSITIVO, e ele vem PRIMEIRO: sem os tres nos na tela os
+      // `getTopLeft` de baixo lancam, e um caso que lanca nao mede ordem --
+      // ele mede que a tela nao abriu.
+      final barra = find.byType(BarraDeListagem);
+      final campo = find.descendant(
+        of: barra,
+        matching: find.byType(TextField),
+      );
+      final frase = find.text(VitrineDaLoja.conviteDaVitrine);
+
+      expect(
+        barra,
+        findsOneWidget,
+        reason: 'REPROVA: a vitrine nao esta montada (nao ha barra de '
+            'listagem). Sem ela nao ha o que comparar, e os `expect` de '
+            'ordem abaixo nao provariam nada.',
+      );
+      expect(
+        campo,
+        findsOneWidget,
+        reason: 'REPROVA: nao ha campo de busca DENTRO da barra de listagem. '
+            'O pedido do cliente e sobre a barra de BUSCA, e medir a barra '
+            'de listagem sem o campo dentro dela mediria outra coisa.',
+      );
+      expect(
+        frase,
+        findsOneWidget,
+        reason: 'REPROVA: a frase do convite (22/10/2026) saiu da vitrine. '
+            'Ela e "o texto" do pedido de 28/10, e sem ela este caso nao '
+            'tem referencia -- o pedido era mover a busca para cima DELA, '
+            'nao apagar nenhuma das duas.',
+      );
+
+      final yDaBarra = tester.getTopLeft(barra).dy;
+      final yDoCampo = tester.getTopLeft(campo).dy;
+      final yDaFrase = tester.getTopLeft(frase).dy;
+
+      expect(
+        yDaBarra,
+        lessThan(yDaFrase),
+        reason: 'REPROVA: a barra de listagem NAO esta acima do texto do '
+            'convite.\n'
+            '  barra de listagem: dy = $yDaBarra\n'
+            '  frase do convite:  dy = $yDaFrase\n'
+            'O cliente pediu em 28/10/2026: "coloque a barra de busca acima '
+            'do texto". Busca, filtro e ordenacao sao os controles do topo '
+            'do CORPO da tela, e o convite vem depois deles.',
+      );
+      expect(
+        yDoCampo,
+        lessThan(yDaFrase),
+        reason: 'REPROVA: o campo de busca NAO esta acima do texto do '
+            'convite.\n'
+            '  campo de busca:   dy = $yDoCampo\n'
+            '  frase do convite: dy = $yDaFrase\n'
+            'A barra pode estar acima e o campo nao: a barra tem contagem, '
+            'lupa e gatilho de folha, e e o CAMPO que o cliente nomeou.',
+      );
+    });
+
+    // O cupom anda junto com a frase: ele e o mesmo bloco, e separar os dois
+    // foi explicitamente recusado no desenho de 22/10. Um caso proprio para
+    // o cupom porque o rotulo e o codigo sao os nos que o cliente nomeou, e
+    // uma frase que subisse sozinha deixaria o cupom orfao acima da busca.
+    testWidgets('o cupom tambem fica abaixo da busca, junto da frase',
+        (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[itemDoContrato()]),
+        ),
+      );
+
+      final campo = find.descendant(
+        of: find.byType(BarraDeListagem),
+        matching: find.byType(TextField),
+      );
+      final rotulo = find.text(VitrineDaLoja.rotuloDoCupom);
+      final codigo = find.text(VitrineDaLoja.codigoDoCupom);
+
+      // CONTROLE POSITIVO dos tres nos, antes de medir qualquer `dy`.
+      expect(campo, findsOneWidget, reason: 'REPROVA: nao ha campo de busca.');
+      expect(
+        rotulo,
+        findsOneWidget,
+        reason: 'REPROVA: o rotulo do cupom saiu da vitrine.',
+      );
+      expect(
+        codigo,
+        findsOneWidget,
+        reason: 'REPROVA: o codigo `${VitrineDaLoja.codigoDoCupom}` saiu da '
+            'vitrine.',
+      );
+
+      final yDoCampo = tester.getTopLeft(campo).dy;
+      expect(
+        tester.getTopLeft(rotulo).dy,
+        greaterThan(yDoCampo),
+        reason: 'REPROVA: o rotulo do cupom ficou ACIMA do campo de busca. O '
+            'bloco do convite e um so -- frase e cupom --, e ele inteiro vem '
+            'depois dos controles.',
+      );
+      expect(
+        tester.getTopLeft(codigo).dy,
+        greaterThan(yDoCampo),
+        reason: 'REPROVA: o codigo do cupom ficou ACIMA do campo de busca.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // ISCA — o 21o item e alcancavel, e trocar o recorte volta para a pagina 1
   // -------------------------------------------------------------------------
   group('ISCA — a paginacao avanca de verdade', () {

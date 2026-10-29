@@ -59,6 +59,7 @@ import {
   type EntradaDoDiretorio,
   projetarEntrada,
 } from '../../domain/entrada-do-diretorio.js';
+import { PONTUACAO_VAZIA } from '../../domain/avaliacao-do-local.js';
 
 const semBanco = new Kysely<Database>({
   dialect: {
@@ -123,6 +124,7 @@ const ENTRADA_DO_JARDIM_AMERICA: EntradaDoDiretorio = {
   verificacoes: [],
   distanciaEmMetros: null,
   logoPublicKey: null,
+  pontuacao: PONTUACAO_VAZIA,
 };
 
 void describe('ISCA: o bairro compara por texto normalizado, nunca por `lower()`', () => {

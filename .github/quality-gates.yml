@@ -38,6 +38,92 @@ dispensas:
   # `make fechar-integracao` local e o unico portao que existe. O registro fica em
   # `docs/07-devops.md` secao 5.3.
 
+  # ===================================================================
+  # A DISPENSA `sonar` ENTROU EM 28/10/2026, E ELA E NOVA -- NAO E A VOLTA DA
+  # `sonarcloud-veredito`.
+  #
+  # Leia o bloco acima antes deste. A `sonarcloud-veredito` saiu em 28/09/2026
+  # porque a razao ESCRITA NELA deixou de valer: ela dispensava um VEREDITO
+  # negativo causado pela ausencia de linha de base de codigo novo, e o cliente
+  # definiu essa linha de base no painel do projeto. Aquele fato acabou, e
+  # ressuscitar a entrada seria afirmar de novo um motivo que nao existe mais --
+  # o defeito que este arquivo inteiro existe para impedir.
+  #
+  # ESTA ENTRADA DISPENSA OUTRA COISA, POR OUTRA RAZAO, E A RAZAO FOI MEDIDA
+  # HOJE. A `sonarcloud-veredito` dispensava um veredito RUIM; esta dispensa
+  # cobre a AUSENCIA DO JOB -- o `sonar` nao executa, entao nao existe veredito
+  # nenhum, bom ou ruim.
+  #
+  # O QUE O SERVIDOR DIZ, verbatim, e e a mensagem que so apareceu depois de a
+  # instrumentacao dos PRs 88 e 89 ser consertada:
+  #
+  #     This analysis will make your organization 'bichu-app' reach the maximum
+  #     allowed lines limit of 50000. Current LOC usage is: 0.
+  #     LOC count in this analysis: 53057. Language distribution: js=148,ts=52909
+  #
+  # TETO DE 50.000 LINHAS NA ORGANIZACAO DO SONARCLOUD, E O PROJETO TEM 53.057.
+  # A analise de PR passava porque conta so o diff; a analise de BRANCH conta o
+  # projeto inteiro e bate no teto. E por isso que o painel da `development`
+  # esta parado em 29/09 -- foi quando o projeto cruzou as 50 mil. A analise de
+  # branch falhava NO SERVIDOR desde entao, sem produzir veredito, e ninguem
+  # tinha a mensagem na mao para dizer por que.
+  #
+  # TAMBEM MEDIDO, e e o que fecha a porta do outro lado: `src` sem testes e sem
+  # gerados tem 99.118 linhas nao vazias, e o Sonar desconta comentarios e chega
+  # as 52.909 da mensagem. Caber embaixo do teto exigiria tirar cerca de 3.100
+  # linhas de PRODUCAO da analise -- nao de teste, nao de gerado -- e a base
+  # cresce todo dia. O cliente recusou esse corte e recusou contratar plano por
+  # ora. Verbatim dele em 28/10: "nao rodar por enquanto".
+  #
+  # O QUE FICA SEM PORTAO, DITO EM VOZ ALTA: enquanto esta dispensa valer, o
+  # veredito de qualidade do SonarCloud nao e conferido por ninguem, em lugar
+  # nenhum. Nao e so o `new_*` do codigo novo: e tambem cobertura, duplicacao,
+  # cheiro e vulnerabilidade, dos quais nao existe segunda medicao neste
+  # repositorio. As iscas de `verificar-cobertura-lcov.mjs` continuam de pe e
+  # conferem a FORMA do relatorio, nunca o veredito -- e com o job desligado
+  # elas tambem nao rodam na esteira.
+  #
+  # O CAMINHO QUE O AGREGADOR USA E ESTA ENTRADA, POR NOME. O job `portao` trata
+  # `skipped` como erro de proposito ("Portao que nao roda nao aprova"), e
+  # desligar o `sonar` sem mais nada deixaria TODO PR vermelho pelo agregador --
+  # trocar um vermelho por outro. Entao o agregador passou a ter um passo
+  # separado so para o `sonar`, que LE este arquivo e aceita a ausencia APENAS
+  # quando acha a linha `- portao: sonar` aqui. A regra geral dos outros onze
+  # jobs nao foi tocada: `skipped` neles continua reprovando. Apagar esta
+  # entrada nao exige mexer no workflow -- ela e o unico insumo do caminho
+  # nomeado, e sem ela o `sonar` pulado volta a REPROVAR o `portao`. Secao 5.3:
+  # "Para remover a dispensa: apague a entrada. Nao mexa no workflow."
+  #
+  # A CONDICAO DE SAIDA E UM FATO, e sao dois fatos alternativos, nenhum deles
+  # uma data: ou o TETO da organizacao sobe (plano contratado), ou o LOC
+  # ANALISADO cai abaixo de 50.000. No dia em que um dos dois acontecer, a
+  # analise de branch volta a produzir veredito, o job volta a rodar e esta
+  # entrada sai por ter virado redundante -- que e o unico jeito honesto de uma
+  # dispensa cair. Os dois insumos sao do cliente (dinheiro ou autorizacao de
+  # corte), e por isso `responsavel: cliente`.
+  #
+  # A DATA E A UNICA PARTE ARBITRARIA, E EU A DECLARO ASSIM: ela nao sai de
+  # medicao nenhuma. 30/11/2026 e escolha, e o argumento dela e um so -- e a
+  # mesma data de `apk-assinado` e de `ios`, as outras duas entradas vivas,
+  # todas dependendo de insumo do cliente sem previsao. Uma revisao, tres
+  # perguntas, no mesmo dia, em vez de tres datas para divergirem. Sao 33 dias
+  # contados de hoje. Quando o prazo vencer, `verificar-dispensas` reprova
+  # nomeando `sonar`, o job `rapidos` cai, o `portao` cai com ele, e alguem
+  # reabre a pergunta -- esse e o mecanismo funcionando, e e o que impede "por
+  # enquanto" de virar "para sempre".
+  #
+  # O QUE ESTA ENTRADA NAO FAZ, e vale dizer porque o nome e curto: ela nao
+  # dispensa veredito negativo. Se o job voltar a rodar e o portao de qualidade
+  # do SonarCloud REPROVAR, o `portao` reprova com esta entrada escrita -- o
+  # passo nomeado so aceita `skipped`, e qualquer outro resultado cai no ramo
+  # padrao. `verificar_veredito_do_sonar.py` tambem nao a enxerga: ele procura
+  # exclusivamente `sonarcloud-veredito`, que nao esta aqui e nao volta.
+  # ===================================================================
+  - portao: sonar
+    motivo: "DECIDIDO PELO CLIENTE EM 28/10/2026, verbatim: nao rodar por enquanto -- o job `sonar` sai da esteira por ora, e esta entrada e o que torna a ausencia DECLARADA em vez de silenciosa. ELA NAO E A VOLTA DA `sonarcloud-veredito`, que saiu em 28/09/2026: aquela dispensava um VEREDITO negativo pela falta de linha de base de codigo novo, fato que deixou de existir quando o cliente definiu a linha de base no painel. A razao desta e outra e nova, MEDIDA EM 28/10 e nao deduzida: o job nao executa porque a analise de BRANCH da development vem sendo RECUSADA PELO SERVIDOR desde cerca de 29/09, sem produzir veredito, com a mensagem verbatim -- This analysis will make your organization 'bichu-app' reach the maximum allowed lines limit of 50000. Current LOC usage is: 0. LOC count in this analysis: 53057. Language distribution: js=148,ts=52909 -- isto e, TETO DE 50.000 LINHAS NA ORGANIZACAO e 53.057 analisadas. Analise de PR passava porque conta so o diff; analise de branch conta o projeto inteiro, e e por isso que o painel da development esta parado em 29/09, quando o projeto cruzou as 50 mil. Caber embaixo do teto exigiria tirar cerca de 3.100 linhas de PRODUCAO da analise, e a base cresce: o cliente recusou o corte e recusou contratar plano por ora. O QUE FICA SEM PORTAO, dito em voz alta: o veredito de qualidade do SonarCloud NAO E CONFERIDO POR NINGUEM, em lugar nenhum, enquanto esta dispensa valer -- nem cobertura, nem duplicacao, nem as metricas new_ do codigo novo. CAI QUANDO o teto da organizacao for levantado (plano contratado) OU o LOC analisado ficar abaixo de 50.000, momento em que a analise de branch volta a produzir veredito, o job volta a rodar e esta entrada sai por redundancia. ELA E O CAMINHO NOMEADO DO AGREGADOR: o passo `o decimo segundo job` do `portao` le este arquivo e aceita `sonar` pulado SO porque acha esta linha -- sem ela, `sonar` pulado reprova o `portao`, e a regra geral dos outros onze jobs nao foi afrouxada. Ela NAO dispensa veredito negativo: resultado que nao seja success nem skipped reprova com ela escrita. A data e escolha declarada e nao medicao: 30/11/2026 e a mesma de apk-assinado e de ios, para a revisao das tres acontecer de uma vez, e sao 33 dias contados de hoje"
+    responsavel: cliente
+    vence_em: 2026-11-30
+
   # `apk-assinado` FOI REDATADA EM 28/09/2026, E O MOTIVO FOI REESCRITO INTEIRO.
   #
   # O texto de 22/09 dizia "o app nao vai para loja por ora" e punha como

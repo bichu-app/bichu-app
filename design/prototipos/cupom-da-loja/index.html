@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cupom da Loja — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block" rel="stylesheet">
+<style>
+/* =====================================================================
+   TOKENS DO APP ("Sério"), de design/tokens.json e app/lib/theme/
+   bichu_tokens.g.dart. NAO e a linguagem expressiva do SITE: aqui nao ha
+   ilustracao, blob, manuscrito nem patinha -- isto e o app.
+   Os dois temas estao escritos, porque `primaryContainer` muda de
+   #F9ECF0 para #54031D e um cupom que so foi visto no claro nao foi visto.
+   ===================================================================== */
+:root{
+  --primary:#9E0B3A; --primary-pressed:#880730; --on-primary:#FAFAF8;
+  --primary-container:#F9ECF0; --on-primary-container:#880730;
+  --surface:#FAFAF8; --surface-alt:#F6F6F4; --surface-sunken:#F4F3F1;
+  --text-primary:#1C1B19; --text-secondary:#4B4944; --text-muted:#67655D;
+  --outline:#DFDED8; --outline-control:#827F73;
+  --success:#1F7A46; --success-container:#DDEFE6;
+  --community-fill:#A9CFBB; --action-fill:#E7B93E;
+  /* espaco e raio */
+  --e1:4px; --e2:8px; --e3:12px; --e4:16px; --e5:20px; --e6:24px; --e8:32px;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-full:999px;
+  --alvo-min:48px; --alvo-critico:64px;
+  --fundo-palco:#2A2824;
+}
+html[data-tema="escuro"]{
+  --primary:#E79DB4; --primary-pressed:#ECBBCB; --on-primary:#17150F;
+  --primary-container:#54031D; --on-primary-container:#ECBBCB;
+  --surface:#17150F; --surface-alt:#201D15; --surface-sunken:#2B271C;
+  --text-primary:#F3F0E7; --text-secondary:#BEB9AB; --text-muted:#BEB9AB;
+  --outline:#38342A; --outline-control:#6E6857;
+  --success:#A9CFBB; --success-container:#0E3A21;
+  --fundo-palco:#0B0A07;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--fundo-palco); color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------- painel de controle ---------------- */
+.painel{
+  position:sticky; top:0; z-index:50;
+  background:#1C1B19; color:#FAFAF8;
+  padding:10px var(--e5) 8px;
+  border-bottom:1px solid #3A3833;
+  max-height:52vh; overflow-y:auto;
+}
+.painel h1{font-size:15px;margin:0 0 1px;font-weight:700;letter-spacing:.01em}
+.painel .sub{font-size:11.5px;color:#B5B2A8;margin:0 0 8px}
+.linha{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.linha .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8E8B82;margin-right:var(--e1)}
+.chip{
+  font:inherit;font-size:12px;font-weight:600;
+  background:#312F2A;color:#E8E6DE;border:1px solid #46433C;
+  border-radius:var(--r-full);padding:6px 12px;cursor:pointer;
+}
+.chip:hover{background:#3C3933}
+.chip[aria-pressed="true"]{background:#FAFAF8;color:#1C1B19;border-color:#FAFAF8}
+.aviso{
+  font-size:11.5px;line-height:1.5;color:#C9C6BC;background:#262420;
+  border-left:3px solid var(--action-fill);padding:8px 10px;border-radius:0 6px 6px 0;
+  margin-top:var(--e2);
+}
+.aviso.reco{border-left-color:#A9CFBB}
+.painel code{background:#312F2A;padding:1px 5px;border-radius:4px;font-size:11px}
+
+/* ---------------- palco ---------------- */
+.palco{display:flex;flex-wrap:wrap;gap:var(--e8);padding:var(--e8) var(--e5) 96px;justify-content:center;align-items:flex-start}
+.caso{display:none}
+.caso.ativo{display:block}
+.caso.lado-a-lado{display:none}
+.caso.lado-a-lado.ativo{display:flex;gap:var(--e8);flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.rotulo-tela{
+  color:#E8E6DE;font-size:13px;font-weight:600;margin:0 0 6px;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+}
+.rotulo-tela .w{color:#8E8B82;font-weight:400;font-size:11px}
+.rotulo-tela .custo{
+  color:#1C1B19;background:var(--action-fill);font-weight:700;font-size:10.5px;
+  border-radius:var(--r-full);padding:2px 8px;letter-spacing:.02em;
+}
+.nota-tela{color:#A8A59B;font-size:11.5px;line-height:1.55;max-width:420px;margin:0 0 var(--e3)}
+.coluna{display:flex;flex-direction:column}
+
+/* ---------------- aparelho ---------------- */
+.aparelho{
+  width:var(--tela,375px);
+  height:720px;
+  background:var(--surface);
+  border-radius:var(--r-xl);
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
+  position:relative;
+}
+.topo{
+  height:var(--alvo-critico);min-height:var(--alvo-critico);
+  background:var(--surface);
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--outline);
+}
+.topo .ham{width:64px;height:64px;display:grid;place-items:center;flex:0 0 64px}
+.topo .tit{
+  flex:1 1 auto;min-width:0;
+  font-size:22px;font-weight:600;line-height:28px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.topo .acao{width:48px;height:48px;display:grid;place-items:center;flex:0 0 48px}
+.topo .foto{
+  width:40px;height:40px;border-radius:var(--r-full);
+  background:var(--community-fill);color:#1C1B19;
+  display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.corpo{flex:1 1 auto;overflow-y:auto;padding:var(--e4);position:relative}
+.ms{font-family:'Material Symbols Outlined';font-weight:400;font-style:normal;
+  font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;
+  display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;
+  font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;
+  color:var(--text-primary);
+  /* sem rede aparece o NOME do glifo, que e exatamente o nome proposto --
+     falha que informa em vez de enganar */
+  max-width:28px;overflow:hidden;
+}
+.ms.p{font-size:20px;max-width:24px}
+.ms.pp{font-size:18px;max-width:20px}
+.baixo{
+  height:80px;min-height:80px;display:flex;
+  background:var(--surface);border-top:1px solid var(--outline);
+}
+.baixo a{
+  flex:1 1 0;min-width:0;text-decoration:none;color:var(--text-muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:0 2px;
+}
+.baixo a .lab{font-size:12px;line-height:16px;font-weight:500;width:100%;text-align:center;
+  white-space:nowrap;overflow:hidden}
+.baixo a[aria-current="page"]{color:var(--primary)}
+.baixo a[aria-current="page"] .ms{color:var(--primary)}
+.baixo a[aria-current="page"] .lab{font-weight:600}
+.baixo .pilula{width:56px;height:28px;border-radius:var(--r-full);display:grid;place-items:center}
+.baixo a[aria-current="page"] .pilula{background:var(--primary-container)}
+
+/* ---------------- a barra de listagem (JA ACIMA DO TEXTO) ----------------
+   A parte (1) do pedido de 28/10 ja esta no codigo: busca, filtro e
+   ordenacao sao o topo do CORPO da tela. O prototipo desenha a tela COM a
+   nova ordem, porque e nela que o cupom vai morar. */
+.listagem{margin-bottom:var(--e4)}
+.listagem .linha1{display:flex;gap:var(--e2);align-items:center}
+.busca{
+  flex:1 1 auto;min-width:0;height:48px;
+  border:1px solid var(--outline-control);border-radius:var(--r-md);
+  background:var(--surface);display:flex;align-items:center;
+  padding:0 var(--e2) 0 var(--e3);gap:var(--e2);
+}
+.busca input{flex:1 1 auto;min-width:0;border:0;outline:0;background:none;
+  font:inherit;font-size:16px;color:var(--text-primary)}
+.busca input::placeholder{color:var(--text-muted)}
+.busca .lupa{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;
+  border-radius:var(--r-sm);border:0;background:none;cursor:pointer}
+.gatilho{
+  width:48px;height:48px;flex:0 0 48px;border-radius:var(--r-md);
+  border:1px solid var(--outline-control);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;
+}
+.resumo{font-size:13px;line-height:18px;color:var(--text-secondary);margin:var(--e3) 0 0}
+
+/* =====================================================================
+   O CONVITE E O CUPOM -- as tres versoes
+   A frase e do cliente (22/10/2026), palavra por palavra, e nenhuma
+   variacao a reescreve. O codigo e `bichu`, em minuscula, porque cupom e
+   codigo e codigo nao se "arruma".
+   ===================================================================== */
+
+/* ------- HOJE (referencia): texto corrido, cupom na mesma linha ------- */
+.convite-hoje{margin:0 0 var(--e3)}
+.convite-hoje .frase{font-size:13px;line-height:18px;color:var(--text-secondary);margin:0}
+.convite-hoje .cup{display:flex;align-items:center;gap:var(--e1);margin-top:var(--e1)}
+.convite-hoje .cup .rot{font-size:13px;line-height:18px;color:var(--text-secondary)}
+.convite-hoje .cup .cod{font-size:16px;line-height:20px;font-weight:600;letter-spacing:.01em;color:var(--text-primary)}
+
+/* ------- VARIACAO A: no lugar onde ja esta, com contraste e tamanho -------
+   NAO move o bloco e NAO desenha moldura em volta do conjunto. O que muda
+   e so o par rotulo+codigo: o rotulo vira `overline` (12/16, 700, +8% de
+   espacejamento) e o codigo vira `title` (18/24, 600) dentro de uma pilula
+   de `primaryContainer`. A pilula e o UNICO elemento novo.
+   CUSTO DE ALTURA, MEDIDO no navegador e nao estimado: +16 dp a 375 e
+   a 412 dp, e +16 dp tambem a 320 dp. */
+.convite-a{margin:0 0 var(--e3)}
+.convite-a .frase{font-size:13px;line-height:18px;color:var(--text-secondary);margin:0}
+.convite-a .cup{display:flex;align-items:center;gap:var(--e2);margin-top:var(--e2);flex-wrap:wrap}
+.convite-a .cup .rot{
+  font-size:12px;line-height:16px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-secondary);
+}
+.convite-a .pilula-cup{
+  display:inline-flex;align-items:center;gap:var(--e1);
+  background:var(--primary-container);border-radius:var(--r-full);
+  padding:var(--e1) var(--e3);min-height:32px;
+}
+.convite-a .pilula-cup .ms{color:var(--on-primary-container)}
+.convite-a .pilula-cup .cod{
+  font-size:18px;line-height:24px;font-weight:600;letter-spacing:.01em;
+  color:var(--text-primary);
+  /* SELECIONAVEL: o codigo existe para ser digitado no site do parceiro, e
+     cupom que nao se copia e cupom que se erra. No produto e
+     `SelectableText`, que a versao de hoje ja usa. */
+  user-select:all;
+}
+
+/* ------- VARIACAO B: bloco com borda tracejada, estilo cupom, UMA linha ---
+   A frase fica FORA do bloco: ela tem duas linhas a 375 dp, e dentro do
+   bloco ela o transformaria num paragrafo com moldura -- que foi o desenho
+   medido e recusado em 22/10 (145 dp, empurrou o titulo do primeiro cartao
+   para fora da area visivel).
+   CUSTO DE ALTURA, MEDIDO: +28 dp sobre hoje, nas tres larguras. */
+.convite-b{margin:0 0 var(--e3)}
+.convite-b .frase{font-size:13px;line-height:18px;color:var(--text-secondary);margin:0 0 var(--e2)}
+.cupom-bloco{
+  display:flex;align-items:center;gap:var(--e2);
+  background:var(--primary-container);
+  /* A BORDA TRACEJADA E O SINAL DE "CUPOM", e ela NAO e so cor: a forma
+     muda, e isso e o que WCAG 2.1 SC 1.4.1 cobra. 1,5 px porque 1 px
+     tracejado desaparece em tela de 3x. */
+  border:1.5px dashed var(--primary);
+  border-radius:var(--r-md);
+  padding:var(--e2) var(--e3);
+  min-height:44px;
+}
+.cupom-bloco .ms{color:var(--on-primary-container);flex:0 0 auto}
+.cupom-bloco .rot{
+  font-size:12px;line-height:16px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-secondary);flex:0 0 auto;
+}
+.cupom-bloco .cod{
+  font-size:18px;line-height:24px;font-weight:600;letter-spacing:.01em;
+  color:var(--text-primary);user-select:all;
+  flex:1 1 auto;min-width:0;
+}
+
+/* ------- VARIACAO B2: o mesmo bloco, codigo em LINHA PROPRIA -------
+   A versao mais chamativa das tres, e a mais cara: o codigo sobe para
+   `titleLg` (22/28) e ganha a linha inteira.
+   CUSTO DE ALTURA, MEDIDO: +61 dp sobre hoje. A 320 dp o bloco inteiro
+   chega a 151 dp -- MAIS que os 145 dp que reprovaram em 22/10. */
+.convite-b2{margin:0 0 var(--e3)}
+.convite-b2 .frase{font-size:13px;line-height:18px;color:var(--text-secondary);margin:0 0 var(--e2)}
+.cupom-bloco2{
+  background:var(--primary-container);
+  border:1.5px dashed var(--primary);
+  border-radius:var(--r-md);
+  padding:var(--e3);
+}
+.cupom-bloco2 .cab{display:flex;align-items:center;gap:var(--e2);margin-bottom:var(--e1)}
+.cupom-bloco2 .cab .ms{color:var(--on-primary-container)}
+.cupom-bloco2 .cab .rot{
+  font-size:12px;line-height:16px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-secondary);
+}
+.cupom-bloco2 .cod{
+  font-size:22px;line-height:28px;font-weight:600;letter-spacing:.01em;
+  color:var(--text-primary);user-select:all;display:block;
+}
+
+/* ---------------- o cartao do produto (a vitrine) ---------------- */
+.produto{
+  border:1px solid var(--outline);border-radius:var(--r-lg);
+  background:var(--surface);overflow:hidden;margin-bottom:var(--e4);
+  text-align:left;font:inherit;cursor:pointer;padding:0;width:100%;display:block;
+}
+.produto .capa{
+  height:160px;background:var(--surface-sunken);display:grid;place-items:center;
+}
+.produto .capa .ms{color:var(--text-muted);font-size:32px;max-width:36px}
+.produto .txt{padding:var(--e4);display:block}
+.produto .tit{
+  font-size:18px;line-height:24px;font-weight:600;color:var(--text-primary);
+  display:block;
+}
+.produto .res{font-size:13px;line-height:18px;color:var(--text-secondary);display:block;margin-top:var(--e1)}
+.produto .preco{font-size:16px;line-height:20px;font-weight:600;color:var(--text-primary);display:block;margin-top:var(--e2)}
+.produto .fora{
+  font-size:13px;line-height:18px;color:var(--text-secondary);display:flex;
+  align-items:center;gap:var(--e1);margin-top:var(--e2);
+}
+.produto .fora .ms{color:var(--text-secondary)}
+
+/* ---------------- a linha da dobra ----------------
+   A DOBRA E O QUE DECIDE ESTE DESENHO, e nao o gosto: em 22/10 um bloco de
+   cupom de 145 dp empurrou o titulo do primeiro cartao para fora da area
+   visivel e `loja_carrossel_nao_sai_test` reprovou tocando num titulo que
+   nao estava alcancavel. A linha marca onde a tela de 720 px termina. */
+.dobra{
+  position:absolute;left:0;right:0;
+  border-top:2px dashed var(--action-fill);
+  pointer-events:none;z-index:9;
+}
+.dobra::after{
+  content:attr(data-rot);
+  position:absolute;right:6px;top:-18px;
+  background:var(--action-fill);color:#1C1B19;
+  font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;
+}
+.aparelho:not(.com-dobra) .dobra{display:none}
+</style>
+</head>
+<body>
+
+<div class="painel">
+  <h1>Cupom da Loja — protótipo de desenho</h1>
+  <p class="sub">Bichu · 28/10/2026 · substitui o Figma por autorização do cliente de 23/09 (a conta não tem cota) · pedido dele: <em>“deixe o cupom de desconto bichu, na pagina da loja, mais chamativo”</em></p>
+
+  <div class="linha">
+    <span class="rot">Largura</span>
+    <button class="chip" data-w="320" aria-pressed="false">320 dp</button>
+    <button class="chip" data-w="375" aria-pressed="true">375 dp</button>
+    <button class="chip" data-w="412" aria-pressed="false">412 dp</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Tema</span>
+    <button class="chip" data-tema="claro" aria-pressed="true">claro</button>
+    <button class="chip" data-tema="escuro" aria-pressed="false">escuro</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Telas</span>
+    <button class="chip" data-t="z-hoje" aria-pressed="true">hoje (referência)</button>
+    <button class="chip" data-t="a-no-lugar" aria-pressed="false">A — no lugar, com contraste e tamanho</button>
+    <button class="chip" data-t="b-tracejado" aria-pressed="false">B — bloco tracejado, uma linha</button>
+    <button class="chip" data-t="b2-tracejado-alto" aria-pressed="false">B2 — bloco tracejado, código em linha própria</button>
+    <button class="chip" data-t="x-lado-a-lado" aria-pressed="false">as quatro lado a lado</button>
+  </div>
+
+  <div class="linha">
+    <span class="rot">Dobra</span>
+    <button class="chip" data-dobra="1" aria-pressed="true">marcar onde a tela acaba</button>
+  </div>
+
+  <p class="aviso reco"><strong>Recomendo a A.</strong> Ela ganha contraste e tamanho por <strong>+16 dp</strong>, enquanto a B custa +28 dp e a B2 +61 dp — <strong>medidos no navegador, não estimados</strong>. É a dobra, e não o gosto, que decide: em 22/10 um bloco de cupom de 145 dp empurrou o título do primeiro produto para fora da área visível e <code>loja_carrossel_nao_sai_test</code> reprovou tocando num título que não estava alcançável. <strong>A B2 chega a 151 dp a 320 dp de largura</strong> — mais que aqueles 145. <strong>A escolha é sua</strong>: se o cupom vale mais que o primeiro produto, a B existe e está desenhada, e ela custa menos da metade do que custou o desenho que reprovou.</p>
+  <p class="aviso"><strong>O que NENHUMA das três muda:</strong> a frase é sua, palavra por palavra (inclusive <code>mantermos</code>); o código é <code>bichu</code> em minúscula, porque cupom é código e código não se “arruma”; o código continua <strong>selecionável</strong> e <strong>sem botão de copiar</strong>; e não entra preço riscado, “de/por” nem “menor preço” — nada disso foi pedido e o critério 19 os proíbe.</p>
+  <p class="aviso"><strong>Contraste medido</strong> (WCAG 2.1, pisos 4,5:1 texto pequeno e 3:1 não-texto), nos <strong>dois</strong> temas: código <code>textPrimary</code> sobre <code>primaryContainer</code> = <strong>14,98:1</strong> claro e <strong>13,09:1</strong> escuro; rótulo <code>textSecondary</code> sobre <code>primaryContainer</code> = 7,83:1 e 7,61:1; borda tracejada <code>primary</code> sobre <code>primaryContainer</code> = 7,13:1 e 7,02:1. <strong>Nenhuma variação distingue só por cor</strong> (SC 1.4.1): a A muda tamanho e peso, a B e a B2 mudam a forma da borda.</p>
+  <p class="aviso"><strong>A barra de busca já está acima do texto</strong> nas quatro telas: isso é o outro pedido do mesmo dia, e ele é código, já medido e já no PR. O protótipo desenha a tela com a ordem nova porque é nela que o cupom vai morar.</p>
+</div>
+
+<div class="palco">
+
+  <!-- ================= HOJE ================= -->
+  <div class="caso ativo" id="z-hoje">
+    <p class="rotulo-tela">Loja — hoje, para comparar <span class="w" data-w-eco>· 375 dp</span><span class="custo">72 dp · 90 a 320</span></p>
+    <p class="nota-tela">O cupom é texto corrido em <code>bodySmall</code> (13/18) com o código em <code>labelLarge</code> (16/20) na mesma linha do rótulo. É a versão enxuta que substituiu, em 22/10, um bloco com moldura de 145 dp. <strong>Medido:</strong> 72 dp a 375 e a 412 dp, e 90 dp a 320 dp, onde a frase passa a ocupar três linhas.</p>
+    <div class="aparelho com-dobra">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Loja</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+        <div class="listagem">
+          <div class="linha1">
+            <div class="busca">
+              <input type="text" placeholder="Buscar produto" aria-label="Buscar produto">
+              <button class="lupa" aria-label="Buscar, nada digitado"><span class="ms">search</span></button>
+            </div>
+            <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+          </div>
+          <p class="resumo">24 produtos</p>
+        </div>
+        <div class="convite-hoje">
+          <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+          <div class="cup">
+            <span class="rot">Cupom de desconto</span>
+            <span class="cod">bichu</span>
+          </div>
+        </div>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Bola Pop</span>
+            <span class="res">Bola de borracha atóxica que flutua.</span>
+            <span class="preco">R$ 49,90</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre cobasi.com.br</span>
+          </span>
+        </button>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Caminha Nuvem</span>
+            <span class="res">Caminha lavável para cães de até 15 kg.</span>
+            <span class="preco">Preço não confirmado, veja no site do parceiro</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre petz.com.br</span>
+          </span>
+        </button>
+      </div>
+      <div class="baixo">
+        <a href="#"><span class="pilula"><span class="ms">dashboard</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+      </div>
+      <div class="dobra" data-rot="dobra" style="top:640px"></div>
+    </div>
+  </div>
+
+  <!-- ================= VARIACAO A ================= -->
+  <div class="caso" id="a-no-lugar">
+    <p class="rotulo-tela">A — no lugar onde já está, com contraste e tamanho <span class="w" data-w-eco>· 375 dp</span><span class="custo">88 dp · +16</span></p>
+    <p class="nota-tela">O bloco não muda de lugar e não ganha moldura em volta do conjunto. Muda só o par: o rótulo vira <code>overline</code> (12/16, peso 700, caixa alta) e o código vira <code>title</code> (18/24) dentro de uma pilula de <code>primaryContainer</code>, com o ícone de cupom. Mais chamativo por <strong>tamanho, peso e chão</strong>, e não por cor sozinha. <strong>Medido: +16 dp</strong> nas três larguras.</p>
+    <div class="aparelho com-dobra">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Loja</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+        <div class="listagem">
+          <div class="linha1">
+            <div class="busca">
+              <input type="text" placeholder="Buscar produto" aria-label="Buscar produto">
+              <button class="lupa" aria-label="Buscar, nada digitado"><span class="ms">search</span></button>
+            </div>
+            <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+          </div>
+          <p class="resumo">24 produtos</p>
+        </div>
+        <div class="convite-a">
+          <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+          <div class="cup">
+            <span class="rot">Cupom de desconto</span>
+            <span class="pilula-cup">
+              <span class="ms pp">local_activity</span>
+              <span class="cod">bichu</span>
+            </span>
+          </div>
+        </div>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Bola Pop</span>
+            <span class="res">Bola de borracha atóxica que flutua.</span>
+            <span class="preco">R$ 49,90</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre cobasi.com.br</span>
+          </span>
+        </button>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Caminha Nuvem</span>
+            <span class="res">Caminha lavável para cães de até 15 kg.</span>
+            <span class="preco">Preço não confirmado, veja no site do parceiro</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre petz.com.br</span>
+          </span>
+        </button>
+      </div>
+      <div class="baixo">
+        <a href="#"><span class="pilula"><span class="ms">dashboard</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+      </div>
+      <div class="dobra" data-rot="dobra" style="top:640px"></div>
+    </div>
+  </div>
+
+  <!-- ================= VARIACAO B ================= -->
+  <div class="caso" id="b-tracejado">
+    <p class="rotulo-tela">B — bloco destacado com borda tracejada, uma linha <span class="w" data-w-eco>· 375 dp</span><span class="custo">100 dp · +28</span></p>
+    <p class="nota-tela">O cupom sai do texto corrido e ganha um bloco próprio: chão de <code>primaryContainer</code> e borda <strong>tracejada</strong> de 1,5 dp em <code>primary</code> — a forma de bilhete, que é o que diz “cupom” sem precisar da palavra. A frase fica <strong>fora</strong> do bloco: dentro, ela o transformaria no parágrafo com moldura de 145 dp que foi medido e recusado em 22/10. <strong>Medido: +28 dp</strong> nas três larguras.</p>
+    <div class="aparelho com-dobra">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Loja</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+        <div class="listagem">
+          <div class="linha1">
+            <div class="busca">
+              <input type="text" placeholder="Buscar produto" aria-label="Buscar produto">
+              <button class="lupa" aria-label="Buscar, nada digitado"><span class="ms">search</span></button>
+            </div>
+            <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+          </div>
+          <p class="resumo">24 produtos</p>
+        </div>
+        <div class="convite-b">
+          <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+          <div class="cupom-bloco">
+            <span class="ms pp">local_activity</span>
+            <span class="rot">Cupom</span>
+            <span class="cod">bichu</span>
+          </div>
+        </div>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Bola Pop</span>
+            <span class="res">Bola de borracha atóxica que flutua.</span>
+            <span class="preco">R$ 49,90</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre cobasi.com.br</span>
+          </span>
+        </button>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Caminha Nuvem</span>
+            <span class="res">Caminha lavável para cães de até 15 kg.</span>
+            <span class="preco">Preço não confirmado, veja no site do parceiro</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre petz.com.br</span>
+          </span>
+        </button>
+      </div>
+      <div class="baixo">
+        <a href="#"><span class="pilula"><span class="ms">dashboard</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+      </div>
+      <div class="dobra" data-rot="dobra" style="top:640px"></div>
+    </div>
+  </div>
+
+  <!-- ================= VARIACAO B2 ================= -->
+  <div class="caso" id="b2-tracejado-alto">
+    <p class="rotulo-tela">B2 — bloco tracejado, código em linha própria <span class="w" data-w-eco>· 375 dp</span><span class="custo">133 dp · +61 · 151 a 320</span></p>
+    <p class="nota-tela">A mais chamativa das três, e a mais cara. O código sobe para <code>titleLg</code> (22/28) e ganha a linha inteira; o rótulo vira cabeçalho do bloco. <strong>Medido: 133 dp</strong> a 375 dp e <strong>151 dp a 320 dp</strong> — ou seja, a 320 dp ela passa dos 145 dp do desenho que reprovou em 22/10. Está desenhada aqui para a comparação ser vista, e não imaginada.</p>
+    <div class="aparelho com-dobra">
+      <div class="topo">
+        <div class="ham"><span class="foto">L</span></div>
+        <div class="tit">Loja</div>
+        <div class="acao"><span class="ms">notifications</span></div>
+      </div>
+      <div class="corpo">
+        <div class="listagem">
+          <div class="linha1">
+            <div class="busca">
+              <input type="text" placeholder="Buscar produto" aria-label="Buscar produto">
+              <button class="lupa" aria-label="Buscar, nada digitado"><span class="ms">search</span></button>
+            </div>
+            <button class="gatilho" aria-label="Filtrar e ordenar"><span class="ms">tune</span></button>
+          </div>
+          <p class="resumo">24 produtos</p>
+        </div>
+        <div class="convite-b2">
+          <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+          <div class="cupom-bloco2">
+            <div class="cab">
+              <span class="ms pp">local_activity</span>
+              <span class="rot">Cupom de desconto</span>
+            </div>
+            <span class="cod">bichu</span>
+          </div>
+        </div>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Bola Pop</span>
+            <span class="res">Bola de borracha atóxica que flutua.</span>
+            <span class="preco">R$ 49,90</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre cobasi.com.br</span>
+          </span>
+        </button>
+        <button class="produto">
+          <span class="capa"><span class="ms">photo_camera</span></span>
+          <span class="txt">
+            <span class="tit">Caminha Nuvem</span>
+            <span class="res">Caminha lavável para cães de até 15 kg.</span>
+            <span class="preco">Preço não confirmado, veja no site do parceiro</span>
+            <span class="fora"><span class="ms p">open_in_new</span>Abre petz.com.br</span>
+          </span>
+        </button>
+      </div>
+      <div class="baixo">
+        <a href="#"><span class="pilula"><span class="ms">dashboard</span></span><span class="lab">Mural</span></a>
+        <a href="#"><span class="pilula"><span class="ms">pets</span></span><span class="lab">Pets</span></a>
+        <a href="#"><span class="pilula"><span class="ms">groups</span></span><span class="lab">Comunidade</span></a>
+        <a href="#" aria-current="page"><span class="pilula"><span class="ms">storefront</span></span><span class="lab">Loja</span></a>
+        <a href="#"><span class="pilula"><span class="ms">chat</span></span><span class="lab">AuAu</span></a>
+      </div>
+      <div class="dobra" data-rot="dobra" style="top:640px"></div>
+    </div>
+  </div>
+
+  <!-- ================= LADO A LADO ================= -->
+  <div class="caso lado-a-lado" id="x-lado-a-lado">
+    <div class="coluna">
+      <p class="rotulo-tela">hoje<span class="custo">72 dp</span></p>
+      <div class="aparelho" style="height:330px">
+        <div class="corpo">
+          <div class="convite-hoje">
+            <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+            <div class="cup"><span class="rot">Cupom de desconto</span><span class="cod">bichu</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="coluna">
+      <p class="rotulo-tela">A<span class="custo">+16 dp</span></p>
+      <div class="aparelho" style="height:330px">
+        <div class="corpo">
+          <div class="convite-a">
+            <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+            <div class="cup">
+              <span class="rot">Cupom de desconto</span>
+              <span class="pilula-cup"><span class="ms pp">local_activity</span><span class="cod">bichu</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="coluna">
+      <p class="rotulo-tela">B<span class="custo">+28 dp</span></p>
+      <div class="aparelho" style="height:330px">
+        <div class="corpo">
+          <div class="convite-b">
+            <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+            <div class="cupom-bloco">
+              <span class="ms pp">local_activity</span>
+              <span class="rot">Cupom</span>
+              <span class="cod">bichu</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="coluna">
+      <p class="rotulo-tela">B2<span class="custo">+61 dp</span></p>
+      <div class="aparelho" style="height:330px">
+        <div class="corpo">
+          <div class="convite-b2">
+            <p class="frase">Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.</p>
+            <div class="cupom-bloco2">
+              <div class="cab"><span class="ms pp">local_activity</span><span class="rot">Cupom de desconto</span></div>
+              <span class="cod">bichu</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  function mostrar(id){
+    document.querySelectorAll('.caso').forEach(function(c){
+      c.classList.toggle('ativo', c.id === id);
+    });
+    document.querySelectorAll('.chip[data-t]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.t === id));
+    });
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(function(b){
+    b.addEventListener('click', function(){ mostrar(b.dataset.t); });
+  });
+
+  function largura(w){
+    document.querySelectorAll('.caso:not(.lado-a-lado) .aparelho').forEach(function(a){
+      a.style.setProperty('--tela', w+'px');
+    });
+    document.querySelectorAll('[data-w-eco]').forEach(function(s){ s.textContent = '· '+w+' dp'; });
+    document.querySelectorAll('.chip[data-w]').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.w === w));
+    });
+  }
+  document.querySelectorAll('.chip[data-w]').forEach(function(b){
+    b.addEventListener('click', function(){ largura(b.dataset.w); });
+  });
+  largura('375');
+
+  /* O TEMA ESCURO NAO E ENFEITE: `primaryContainer` vai de #F9ECF0 para
+     #54031D, e um cupom visto so no claro nao foi visto. */
+  document.querySelectorAll('.chip[data-tema]').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.documentElement.setAttribute('data-tema', b.dataset.tema);
+      document.querySelectorAll('.chip[data-tema]').forEach(function(x){
+        x.setAttribute('aria-pressed', String(x.dataset.tema === b.dataset.tema));
+      });
+    });
+  });
+
+  /* A dobra: liga e desliga a linha que marca onde a tela acaba. */
+  var dobraLigada = true;
+  document.querySelectorAll('.chip[data-dobra]').forEach(function(b){
+    b.addEventListener('click', function(){
+      dobraLigada = !dobraLigada;
+      b.setAttribute('aria-pressed', String(dobraLigada));
+      document.querySelectorAll('.caso:not(.lado-a-lado) .aparelho').forEach(function(a){
+        a.classList.toggle('com-dobra', dobraLigada);
+      });
+    });
+  });
+
+  /* Um toque no cartao do produto SAIRIA do app, para o site do parceiro.
+     Aqui ele so pisca: prometer destino que o prototipo nao tem e o toque
+     sem desfecho que o criterio 2 da BICHUS-62 proibe. */
+  document.querySelectorAll('.produto').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.style.outline = '3px solid var(--primary)';
+      setTimeout(function(){ b.style.outline = ''; }, 420);
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -89,6 +89,20 @@ export const PONTUACAO_VAZIA: PontuacaoDoLocal = {
 };
 
 /**
+ * `DirectoryRating` do contrato, **como TIPO**.
+ *
+ * Ele existe nomeado -- e nao anonimo no retorno de `projetarPontuacao` --
+ * porque `EntradaPublica.rating` precisa declarar a MESMA forma: um tipo
+ * anonimo repetido nos dois lugares divergiria no dia em que o contrato
+ * ganhasse um campo, e o lado que ficasse para tras compilaria calado.
+ */
+export interface PontuacaoPublica {
+  readonly average: number | null;
+  readonly count: number;
+  readonly histogram: Readonly<Record<string, number>>;
+}
+
+/**
  * `DirectoryRating` do contrato.
  *
  * **`average` nulo e nao zero quando nao ha avaliacao**, e esta e a unica linha
@@ -101,11 +115,7 @@ export const PONTUACAO_VAZIA: PontuacaoDoLocal = {
  * uma nota que ninguem deu precisa existir vazia, senao o grafico muda de forma
  * e deixa de ser comparavel entre locais.
  */
-export function projetarPontuacao(p: PontuacaoDoLocal): {
-  average: number | null;
-  count: number;
-  histogram: Record<string, number>;
-} {
+export function projetarPontuacao(p: PontuacaoDoLocal): PontuacaoPublica {
   return {
     average: p.quantidade === 0 ? null : p.media,
     count: p.quantidade,
