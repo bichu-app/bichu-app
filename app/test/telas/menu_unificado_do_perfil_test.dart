@@ -25,7 +25,6 @@
 // difícil de notar -- o cliente nao as citou, e por isso ninguem iria olhar.
 library;
 
-import 'package:bichu/api/pets_api.dart';
 import 'package:bichu/telas/abas.dart';
 import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
 import 'package:bichu/telas/perfil/meus_achados.dart';
