@@ -1527,6 +1527,7 @@ class TelaDeAba extends StatefulWidget {
     this.tituloEmMarca = false,
     this.raizDeSecao = false,
     this.acaoDeCriar,
+    this.cabecalhoFixo,
   });
 
   /// O **nome curto** da secao, igual ao rotulo da aba (UX 25.7.2 e 27.4.2).
@@ -1587,6 +1588,49 @@ class TelaDeAba extends StatefulWidget {
   /// recebe [_folgaDaAcaoFlutuante] de respiro extra no pe quando esta acao
   /// existe. Ver a conta ali.
   final Widget? acaoDeCriar;
+
+  /// O TOPO QUE NAO ROLA: desenhado acima do rolavel, dentro do CORPO.
+  ///
+  /// Pedido do cliente, 29/10/2026, sobre a secao `Rede`: *"na pagina de rede
+  /// vamos manter as abas eventos, comunidade, usuarios e o campo de busca fixo
+  /// na pagina e deixar apenas o conteudo com a rolagem"*.
+  ///
+  /// **`null` e o estado das outras QUATRO secoes, e nulo nao muda nada.** Com
+  /// ele o corpo e exatamente a arvore de antes -- o mesmo `SafeArea`, o mesmo
+  /// `ArrastarParaAtualizar`, o mesmo `PreservaARolagem` e o mesmo `ListView`,
+  /// sem widget nenhum a mais no caminho. Isso nao e promessa: a condicao esta
+  /// em [_EstadoDaTelaDeAba._comCabecalho], e o ramo nulo devolve o rolavel SEM
+  /// embrulho. `Mural`, `Pets`, `Loja` e `Perfil` tem outra frente mexendo
+  /// nelas, e a troca nao podia aparecer como defeito delas.
+  ///
+  /// ## POR QUE FORA DO ROLAVEL, E NAO UM `SliverPersistentHeader`
+  ///
+  /// `perfil/meus_achados.dart` fixou o `Registrar um achado avulso` com
+  /// `CustomScrollView` + `SliverPersistentHeader(pinned: true)`, e esse era o
+  /// desenho previsto para ca. **Ele foi MEDIDO e nao serve para ESTE topo**, e
+  /// a razao e a altura: `SliverPersistentHeaderDelegate` exige `minExtent` e
+  /// `maxExtent` como numeros, calculados sem `BuildContext` -- e e por isso
+  /// que `_BarraDeRegistrar` escreve `BichuAlvoDeToque.min + BichuEspaco.e3 * 2`
+  /// na mao. Ali da certo porque o conteudo e UM `BotaoPrimario` de altura
+  /// travada.
+  ///
+  /// Aqui nao. O topo da `Rede` carrega `LinhaDeBuscaDaListagem`, e a propria
+  /// linha diz que *"o gatilho e o campo tem alturas proprias (48 dp e a do
+  /// `BichuField`)"*: a altura do campo e INTRINSECA e cresce com a escala de
+  /// texto. Numero fixo no `maxExtent` estoura a 200%, que e a mesma parede que
+  /// ja derrubou o `Tab(icon:, text:)` empilhado desta secao -- cinco casos de
+  /// `RenderFlex overflowed` em quatro arquivos. **O que nao cabe nao e o
+  /// numero, e a altura fixa.**
+  ///
+  /// Fora do rolavel o topo se mede sozinho, em qualquer escala, e o rolavel
+  /// recebe o que sobra. O custo e que o conteudo nao passa POR BAIXO do topo,
+  /// e ele nao foi pedido: o cliente pediu que as abas e a busca parem, e nao
+  /// que a lista corra atras delas.
+  ///
+  /// **O arrastar-para-atualizar continua no rolavel**, e e onde ele tem de
+  /// estar: o gesto comeca no conteudo, que e o que a pessoa puxa. Arrastar
+  /// sobre as abas nao recarrega -- e nem deveria, porque ali nao ha lista.
+  final Widget? cabecalhoFixo;
 
   @override
   State<TelaDeAba> createState() => _EstadoDaTelaDeAba();
@@ -1653,6 +1697,32 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
   /// e a acao flutuante continuaria pousada sobre o ultimo item sempre que a
   /// lista fosse mais longa que a tela.
   static const double _folgaDaAcaoFlutuante = BichuEspaco.e12 + BichuEspaco.e2;
+
+  /// Poe o topo fixo acima do rolavel -- **ou devolve o rolavel intacto**.
+  ///
+  /// **O RAMO NULO E O CONTRATO COM AS OUTRAS QUATRO SECOES.** `Mural`,
+  /// `Pets`, `Loja` e `Perfil` nao passam `cabecalhoFixo`, e para elas esta
+  /// funcao e a identidade: nao ha `Column`, nao ha `Expanded`, nao ha
+  /// `SizedBox` -- a arvore e a mesma de antes desta edicao, widget por widget.
+  /// Isso e estrutural e nao disciplina: nao existe caminho em que o ramo nulo
+  /// embrulhe alguma coisa.
+  ///
+  /// **`Expanded` e nao `Flexible`**: o rolavel tem de receber TODA a altura
+  /// que sobra. Com `Flexible` ele pediria a altura do proprio conteudo, e um
+  /// `ListView` dentro de uma `Column` sem altura travada e um `RenderFlex`
+  /// com restricao infinita -- o erro que aparece como lista invisivel.
+  ///
+  /// **`stretch` na transversal** porque o topo da `Rede` e uma `TabBar` mais
+  /// uma linha de busca, e as duas ocupam a largura toda. Sem ele a `Column`
+  /// as encolheria ao proprio conteudo e a busca nasceria centrada.
+  Widget _comCabecalho(Widget rolavel) {
+    final cabecalho = widget.cabecalhoFixo;
+    if (cabecalho == null) return rolavel;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[cabecalho, Expanded(child: rolavel)],
+    );
+  }
 
   @override
   void dispose() {
@@ -1730,7 +1800,13 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
       // inteira a cada publicacao, e com ela uma carga de rede nova: 22 casos
       // da suite reprovaram assim. A medicao esta no construtor, em
       // `widgets/arrastar_para_atualizar.dart`.
-      child: ArrastarParaAtualizar.doSlot(
+      // **O TOPO FIXO ENTRA AQUI, ENTRE A AREA SEGURA E O ROLAVEL.**
+      //
+      // Com `cabecalhoFixo` nulo -- as outras QUATRO secoes -- `_comCabecalho`
+      // devolve o PROPRIO rolavel, sem widget nenhum a mais. Ver a prosa de
+      // `TelaDeAba.cabecalhoFixo`.
+      child: _comCabecalho(
+        ArrastarParaAtualizar.doSlot(
         recarga: _recargaDaSecao,
         // **O CONTROLADOR DE ROLAGEM SAI DAQUI, e era isto que faltava.**
         //
@@ -1770,6 +1846,7 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
           ],
           ...filhos,
         ],
+        ),
         ),
         ),
       ),

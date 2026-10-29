@@ -1280,7 +1280,23 @@ void main() {
       });
       await abrirRede(tester, rede: rede, logado: false);
 
-      expect(find.byType(TextField), findsNothing);
+      // **ESTA LINHA VIROU O CONTRARIO EM 29/10/2026, E A INVERSAO E DO
+      // CLIENTE.** Ela media `findsNothing`: sem evento nenhum nao havia
+      // barra de listagem, e sem barra nao havia campo -- *"buscar o nada e
+      // um controle sem desfecho"*.
+      //
+      // Com o topo PARADO (*"o campo de busca fixo na pagina"*) essa regra
+      // produz um defeito pior do que o que ela evitava: o campo nasceria
+      // quando o primeiro evento chegasse e empurraria a lista para baixo no
+      // meio da leitura. O campo passou a montar SEMPRE, e quem decidiu foi
+      // ele. Ver `BuscaNoTopoFixo`.
+      expect(
+        find.byType(TextField),
+        findsOneWidget,
+        reason: 'REPROVA: o campo de busca sumiu com a lista vazia. Desde '
+            '29/10/2026 ele monta SEMPRE -- e o topo fixo que o cliente '
+            'pediu, e topo fixo que muda de altura nao e fixo.',
+      );
       expect(find.widgetWithText(Tab, 'Eventos'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Comunidade'), findsOneWidget);
     });

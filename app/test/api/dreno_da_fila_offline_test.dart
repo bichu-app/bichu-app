@@ -201,7 +201,38 @@ void main() {
       // O sinal voltou, e a pessoa tirou o telefone do bolso.
       semSinal = false;
       saiu.clear();
+      // **OS DOIS ESTADOS DO MEIO NAO SAO ENFEITE, e eles entraram em
+      // 29/10/2026.**
+      //
+      // Este caso ia de `paused` DIRETO para `resumed`, e nenhum aparelho faz
+      // isso: a volta ao primeiro plano passa sempre por `inactive`. O
+      // proprio Flutter afirma contra a transicao
+      // (`app_lifecycle_listener.dart`, linha 225: *"Invalid state transition
+      // from AppLifecycleState.paused to AppLifecycleState.resumed"*).
+      //
+      // **Ele passava por acidente, e o acidente acabou.** A afirmacao so
+      // dispara com um `AppLifecycleListener` montado, e quem monta um e o
+      // `EditableText` de qualquer campo de texto na tela. A tela do arranque
+      // e a `Rede`, e ate 29/10 ela abria SEM campo de busca quando nao havia
+      // evento nenhum -- que e exatamente a massa deste caso. Com o topo fixo
+      // o campo passou a montar sempre (ver `BuscaNoTopoFixo`), e a transicao
+      // invalida que este caso sempre fez virou visivel.
+      //
+      // **A VOLTA SAO TRES PASSOS, e o Flutter cobra os TRES**: de `paused`
+      // so se sai para `hidden`, de `hidden` para `inactive` e so de
+      // `inactive` para `resumed`. Pular qualquer um reprova pela mesma
+      // afirmacao, agora na linha 233 em vez da 225.
+      //
+      // **O que o caso mede nao mudou**: quem reage e
+      // `didChangeAppLifecycleState` em `resumed`, e os dois estados do meio
+      // sao o caminho que o aparelho percorre.
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.inactive,
+      );
       await tester.pump();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();

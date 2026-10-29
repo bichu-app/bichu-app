@@ -642,7 +642,12 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
         // `filtro` e `ordenacao` vão NULOS, e é essa a linha que decide que o
         // gatilho de recorte não nasce. Ver a tabela no cabeçalho desta classe
         // antes de preencher um dos dois.
-        LinhaDeBuscaDaListagem(
+        // **PUBLICADA NO TOPO FIXO DA SECAO desde 29/10/2026**, em vez de
+        // desenhada aqui. `BuscaNoTopoFixo` desenha a MESMA
+        // `LinhaDeBuscaDaListagem` quando nao ha topo fixo acima -- e esse
+        // ramo nao e teorico: `busca_de_pessoas_test.dart` monta esta aba
+        // sozinha, fora de `SecaoDaRede`, e ela continua tendo campo.
+        BuscaNoTopoFixo(
           total: _pagina?.total ?? 0,
           busca: _controleDaBusca(),
         ),
