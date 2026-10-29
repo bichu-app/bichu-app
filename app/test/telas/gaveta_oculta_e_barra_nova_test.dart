@@ -30,11 +30,11 @@
 // ocultar o menu **não perdeu função**.
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/perfil/meus_achados.dart';
+import 'package:bichu/telas/conexoes/tela_de_conexoes.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
-import 'package:bichu/telas/conexoes/convide_tutores.dart';
 import 'package:bichu/telas/conexoes/tela_minhas_conexoes.dart';
-import 'package:bichu/telas/conexoes/tela_pedidos_de_conexao.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/perfil/meus_eventos.dart';
 import 'package:bichu/telas/perfil/tela_dados_pessoais.dart';
@@ -1133,11 +1133,16 @@ void main() {
       // `` `Convide tutores` é alcançável pela FOTO da barra de topo `` prova
       // que a porta nova abre a tela, e as iscas de
       // `convite_tutores_no_perfil_test.dart` provam que a velha não voltou.
+      // NOVE -> OITO em 28/10/2026, e **esta e a primeira QUEDA desta lista**:
+      // `Convide tutores` desceu de volta para `planejada` (com o rotulo da
+      // UX, `Convidar vizinhos`) porque a TELA dela MORREU por decisao do
+      // cliente -- o QR foi para dentro de `Meus dados` e o placar foi com
+      // ele. A funcao nao se perdeu; o que ela perdeu foi o atalho de gaveta.
       expect(
         vivos,
-        hasLength(9),
+        hasLength(8),
         reason: 'REPROVA: o registro tem ${vivos.length} item(ns) vivo(s) e '
-            'não 9: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
+            'não 8: $vivos. Cada um precisa de uma casa nomeada neste grupo. '
             'Item novo sem caso aqui é função que pode desaparecer no próximo '
             'diff grande, porque a gaveta já não a mostra.',
       );
@@ -1155,11 +1160,15 @@ void main() {
       // menu e não um segundo nome para um que já existia. A rota dele
       // (`/perfil/convide-tutores`) não era apontada por nenhum item vivo --
       // ela era empurrada pelo corpo do AuAu, que não é item de gaveta.
+      // OITO -> SETE no mesmo movimento, e os DOIS numeros cairam juntos:
+      // e isso que prova que o que saiu foi um DESTINO inteiro
+      // (`/perfil/convide-tutores`, que morreu com a tela) e nao um segundo
+      // nome para um destino que continua existindo.
       expect(
         vivos.toSet(),
-        hasLength(8),
-        reason: 'REPROVA: os nove itens vivos apontam para '
-            '${vivos.toSet().length} destinos distintos, e são 8 -- '
+        hasLength(7),
+        reason: 'REPROVA: os oito itens vivos apontam para '
+            '${vivos.toSet().length} destinos distintos, e são 7 -- '
             '`Escanear uma tag` tem duas linhas de propósito, e é a ÚNICA '
             'duplicata legítima.',
       );
@@ -1301,14 +1310,31 @@ void main() {
       await tester.tap(find.byType(AvatarDaConta));
       await tester.pumpAndSettle();
 
-      final item = find.widgetWithText(ItemDeMenu, 'Registrar achado avulso');
-      await tester.scrollUntilVisible(item, 200);
+      // O CAMINHO GANHOU UM TOQUE EM 28/10/2026, E A CASA E A TERCEIRA EM
+      // OITO DIAS: folha do alvo secundario de `Pets` -> item deste menu ->
+      // botao FIXO no topo do corpo de `Achados`. **O que o caso prova e o
+      // mesmo**: existe caminho humano, a partir da FOTO, ate a tela de
+      // registro -- e ela nunca teve nenhuma outra porta em `lib/`.
+      final entrada = find.widgetWithText(ItemDeMenu, MeusAchados.titulo);
+      await tester.scrollUntilVisible(entrada, 200);
+      expect(
+        entrada,
+        findsOneWidget,
+        reason: 'REPROVA: a tela da conta nao oferece a entrada '
+            '`${MeusAchados.titulo}`, que e por onde se chega ao registro de '
+            'achado avulso desde 28/10/2026.',
+      );
+      await tester.tap(entrada);
+      await tester.pumpAndSettle();
+
+      final item = find.text(MeusAchados.rotuloDeRegistrar);
       expect(
         item,
         findsOneWidget,
-        reason: 'REPROVA: a tela da conta não oferece `Registrar achado '
-            'avulso`. Ela perdeu a folha do alvo secundário em 20/10 e **não '
-            'tinha nenhuma outra porta em `lib/`**.',
+        reason: 'REPROVA: a listagem de achados não oferece `Registrar um '
+            'achado avulso`. Ela perdeu a folha do alvo secundário em 20/10, '
+            'perdeu a linha de menu em 28/10, e **não tinha nenhuma outra '
+            'porta em `lib/`**.',
       );
       await tester.tap(item);
       await tester.pumpAndSettle();
@@ -1470,17 +1496,32 @@ void main() {
     // ninguém, nem ao dono. O item nasce com caso de alcance **no mesmo
     // commit**, que é exatamente o que as três linhas acima tiveram de
     // aprender na união do lote.
+    // ==================================================================
+    // `Pedidos de conexão` E `Usuários bloqueados` SAIRAM DESTA LISTA EM
+    // 28/10/2026 -- E A PROTECAO DELES NAO SAIU: VIROU UM CASO PROPRIO.
+    // ==================================================================
+    //
+    // Os dois deixaram de ser LINHA DE MENU e viraram ABA de
+    // `conexoes/tela_de_conexoes.dart`, por decisao do cliente
+    // (*"devemos centralizar tudo em um unico local"*). Esta lista mede
+    // "ha item de menu com este rotulo que abre esta tela", e isso deixou de
+    // ser verdade para os dois -- mas **o que este grupo vigia continua
+    // valendo, e para `Usuários bloqueados` vale MAIS do que antes**: os dois
+    // tinham a gaveta como UNICA porta ate 19/10, e a lista de bloqueados e o
+    // unico lugar de onde o desbloqueio sai no aplicativo inteiro, porque o
+    // bloqueio e simetrico no servidor.
+    //
+    // Entao eles ganharam o caso
+    // `` as DUAS listas que viraram ABA continuam alcancaveis pela FOTO ``,
+    // logo abaixo, que percorre o caminho novo inteiro -- FOTO, `Conexões`, e
+    // as tres abas -- e cobra o `Desbloquear` dentro da terceira. Tirar os
+    // dois daqui sem aquele caso seria exatamente o silencio que este grupo
+    // existe para impedir.
     for (final (rotulo, tela) in <(String, Type)>[
       ('Meus dados', TelaDadosPessoais),
-      ('Pedidos de conexão', TelaDePedidosDeConexao),
-      // `Conexões` entrou pela frente da lista das próprias conexões
-      // (22/10/2026). O rótulo de bloqueados fica como a
-      // `development` o tem -- `Usuários bloqueados` --, que é o que
-      // `TelaDeBloqueados.titulo` e `abas.dart` realmente desenham; a
-      // outra ponta ainda dizia `Pessoas bloqueadas`, prosa anterior
-      // ao renome. Os DOIS lados ficam: o item novo e o rótulo certo.
-      (TelaDeMinhasConexoes.titulo, TelaDeMinhasConexoes),
-      ('Usuários bloqueados', TelaDeBloqueados),
+      // `Conexões` e a ENTRADA UNICA desde 28/10/2026: ela abre a casca das
+      // tres abas, e nao mais so a lista das proprias conexoes.
+      (TelaDeMinhasConexoes.titulo, TelaDeConexoes),
       (MeusEventos.titulo, MeusEventos),
     ]) {
       testWidgets(
@@ -1548,62 +1589,129 @@ void main() {
       );
     }
 
-    testWidgets('`Convide tutores` é alcançável pela FOTO da barra de topo',
-        (tester) async {
-      tester.view.physicalSize = const Size(1170, 7800);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.reset);
+    // ==================================================================
+    // A PROTECAO DOS DOIS QUE VIRARAM ABA (28/10/2026)
+    // ==================================================================
+    //
+    // `Pedidos de conexão` e `Usuários bloqueados` sairam da lista acima
+    // porque deixaram de ser linha de menu. **Este caso e o que impede a
+    // saida de ser uma perda de cobertura**, e ele percorre o caminho novo
+    // INTEIRO em vez de montar a rota direto -- o que estava em risco nunca
+    // foi a existencia da tela, foi a PORTA.
+    //
+    // **O desbloqueio e o motivo de este caso existir.** O bloqueio e
+    // simetrico no servidor: quem bloqueia alguem passa a receber `404` no
+    // perfil dessa pessoa, e o `Desbloquear` morava dentro do menu daquele
+    // perfil -- que nunca mais abre. A aba 3 e o unico lugar de onde o
+    // desbloqueio sai no aplicativo inteiro, e a decisao do cliente tirou a
+    // PALAVRA `bloqueados` do menu. Se o caminho ate ela se perder,
+    // **bloquear volta a ser irreversivel pelo aplicativo** -- e e por isso
+    // que o caso nao para em "a aba existe": ele toca no `Desbloquear`.
+    //
+    // DESLIGAMENTO: em `abas.dart`, apague a linha `Conexões`
+    // (`_LinhaDeConexoes`). Este caso reprova, e nomeia o que se perdeu.
+    testWidgets(
+      'as DUAS listas que viraram ABA continuam alcancaveis pela FOTO',
+      (tester) async {
+        tester.view.physicalSize = const Size(1125, 3000);
+        tester.view.devicePixelRatio = 3;
+        addTearDown(tester.view.reset);
 
-      // A CASA NOMEADA DO ITEM QUE ENTROU EM 26/10/2026, que e o que o caso de
-      // contagem deste grupo cobra de todo item vivo.
-      //
-      // **A porta dele MUDOU DE SECAO, e nao nasceu.** Ate 26/10 a tela era
-      // aberta por um `ItemDeMenu` no topo do corpo do AuAu; o cliente mandou
-      // tira-la de la e deixar *"apenas na menu do perfil do usuario"*. Entao
-      // aqui a conta e a mesma dos outros oito -- o caminho humano existe --,
-      // e a metade que falta (a porta velha NAO voltou) e medida em
-      // `convite_tutores_no_perfil_test.dart`, isca (a) e isca (b).
-      //
-      // O DESTINO E MEDIDO PELO TIPO DA TELA, e nao pelo rotulo: um caso que
-      // so achasse o texto ficaria verde com o item na tela e sem destino.
-      await abrirOApp(
-        tester,
-        rede: redeDasCincoListagens,
-        deposito: depositoLogado(),
-      );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(AvatarDaConta));
-      await tester.pumpAndSettle();
+        await abrirOApp(
+          tester,
+          rede: redeDasCincoListagens,
+          deposito: depositoLogado(),
+        );
+        await tester.tap(find.widgetWithText(NavigationDestination, 'Pets'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(AvatarDaConta));
+        await tester.pumpAndSettle();
 
-      final item = find.widgetWithText(
-        ItemDeMenu,
-        TelaDeConvidarTutores.titulo,
-      );
-      await tester.scrollUntilVisible(item, 200);
-      expect(
-        item,
-        findsOneWidget,
-        reason: 'REPROVA: `${TelaDeConvidarTutores.titulo}` nao esta no menu '
-            'da conta. Ele saiu do corpo do AuAu em 26/10/2026 por pedido do '
-            'cliente, e sair de LA sem chegar AQUI deixa a tela sem porta '
-            'humana nenhuma -- do mesmo jeito que `Pedidos de conexao` ficou '
-            'de 18/10 a 19/10, que e o buraco que este grupo existe para '
-            'vigiar.',
-      );
+        final porta = find.text(TelaDeMinhasConexoes.titulo);
+        await tester.scrollUntilVisible(porta, 200);
+        await tester.tap(porta);
+        await tester.pumpAndSettle();
 
-      await tester.ensureVisible(item);
-      await tester.pumpAndSettle();
-      await tester.tap(item);
-      await tester.pumpAndSettle();
-      expect(
-        find.byType(TelaDeConvidarTutores),
-        findsOneWidget,
-        reason: 'REPROVA: o toque no item nao abriu `TelaDeConvidarTutores`. '
-            'O item existir e o destino abrir sao duas afirmacoes, e so a '
-            'segunda prova que a porta nova nao e um beco.',
-      );
-    });
+        // AS TRES ABAS, e nao so a que abriu: o que a decisao fundiu foi
+        // tres listas num titulo, e duas delas sao as que saíram do menu.
+        for (final aba in AbaDeConexoes.values) {
+          expect(
+            find.descendant(
+              of: find.byType(TabBar),
+              matching: find.text(aba.rotulo),
+            ),
+            findsOneWidget,
+            reason: 'REPROVA: a aba `${aba.rotulo}` nao existe na entrada '
+                'unica de conexoes. `Pedidos de conexão` e '
+                '`Usuários bloqueados` perderam a linha de menu em '
+                '28/10/2026 e esta casca e a casa das duas -- sem a aba, a '
+                'lista fica inalcancavel em silencio, que e exatamente o que '
+                'este grupo existe para impedir.',
+          );
+        }
+
+        // A ABA 3, E O CONTROLE DENTRO DELA.
+        await tester.tap(
+          find.descendant(
+            of: find.byType(TabBar),
+            matching: find.text(AbaDeConexoes.bloqueados.rotulo),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // **A TELA, E NAO O BOTAO -- e a razao foi MEDIDA e nao suposta.**
+        //
+        // `redeDasCincoListagens` nao previ `/v1/me/blocks` e responde 404,
+        // entao a aba 3 abre no estado de FALHA: nao ha cartao com
+        // `Desbloquear` e o vazio **nao e anunciado** (de proposito -- "voce
+        // nao bloqueou ninguem" e "nao consegui perguntar" sao afirmacoes
+        // diferentes, e a primeira seria mentira em cima da segunda).
+        //
+        // Isso nao enfraquece o caso, porque o que ele mede e o CAMINHO: a
+        // FOTO leva a `Conexões`, e a aba 3 monta a lista de bloqueados. Uma
+        // assercao sobre o conteudo dela aqui mediria a bancada e nao a porta.
+        //
+        // O BOTAO em si, o `DELETE` que ele dispara e a frase do estado vazio
+        // sao medidos em `telas/conexoes_tres_abas_test.dart`, que tem um
+        // bloqueado na rede. A divisao e deliberada: aquele arquivo mede o
+        // CONTROLE, este mede que se CHEGA nele.
+        expect(
+          find.byType(TelaDeBloqueados),
+          findsOneWidget,
+          reason: 'REPROVA: a aba `Bloqueados` nao monta a lista de '
+              'bloqueados. Ela e o UNICO lugar de onde o desbloqueio sai no '
+              'aplicativo inteiro, porque o bloqueio e simetrico no servidor '
+              'e o `Desbloquear` do perfil da pessoa bloqueada nunca mais '
+              'abre. Sem este caminho, bloquear volta a ser irreversivel pelo '
+              'aplicativo.',
+        );
+
+      },
+    );
+
+    // ==================================================================
+    // `Convide tutores` SAIU DESTE GRUPO EM 28/10/2026, COM A TELA
+    // ==================================================================
+    //
+    // O caso media que a tela era alcancavel pela FOTO da barra de topo, pelo
+    // `ItemDeMenu` do menu da conta. **A TELA MORREU**, por decisao do
+    // cliente: o QR foi para dentro de `Meus dados` (`_BlocoDoConvite`,
+    // recolhido no pe da pagina) e o placar `invited_joined_count` foi com
+    // ele.
+    //
+    // **O BURACO QUE ESTE GRUPO VIGIA NAO FICOU DESCOBERTO, e e por isso que
+    // a remocao nao e uma perda de cobertura.** O grupo existe para pegar
+    // tela entregue SEM PORTA HUMANA -- o que `Pedidos de conexao` viveu de
+    // 18/10 a 19/10. Aqui nao ha mais tela para ficar sem porta: a rota, o
+    // item do menu e o atalho da gaveta sairam no MESMO commit que apagou o
+    // arquivo. O risco virou o inverso -- porta sem tela --, e quem o pega e
+    // `barra_fixa_em_toda_tela_test.dart`, que compara a lista de rotas
+    // classificadas com as do roteador nos DOIS sentidos.
+    //
+    // O QR continua alcancavel pela FOTO: `Meus dados` esta neste mesmo
+    // grupo, e a secao do convite e o ultimo bloco da pagina dele. O que ela
+    // mostra tem isca propria em
+    // `telas/qr_do_convite_em_meus_dados_test.dart`.
 
     testWidgets('`Sair da conta` é alcançável pela FOTO da barra de topo',
         (tester) async {

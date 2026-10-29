@@ -65,7 +65,23 @@ const List<String> arquivosDaHistoria = <String>[
   // um 12 solto entram sem ninguem notar.
   'lib/telas/rede/busca_de_pessoas.dart',
   'lib/telas/rede/cartao_de_pessoa_encontrada.dart',
-  'lib/telas/conexoes/convide_tutores.dart',
+  // **`conexoes/convide_tutores.dart` SAIU DESTA LISTA EM 28/10/2026**, e nao
+  // porque a peca deixou de merecer vigilancia: a TELA morreu por decisao do
+  // cliente e o QR e o placar foram para dentro de `Meus dados`. O arquivo que
+  // os hospeda, `lib/telas/perfil/tela_dados_pessoais.dart`, **ja esta nesta
+  // lista** (duas entradas acima, desde 18/10) -- entao a peca continua
+  // coberta, no arquivo novo, sem linha nova aqui.
+  //
+  // A entrada velha nao podia ficar: este portao REPROVA quando um arquivo da
+  // lista nao existe, de proposito (*"um portao que nao acha o que verificar
+  // reprova com o motivo, nunca aprova por ausencia"*) -- e foi exatamente
+  // assim que ele acusou esta frente.
+  //
+  // A NOVA tela unificada das conexoes (`conexoes/tela_de_conexoes.dart`)
+  // ENTRA, e por merito proprio: ela monta pastilha de contador com
+  // `cores.primary`/`cores.onPrimary`, raio `full` e alturas em numero, que e
+  // o tipo de peca em que um hex ou um 12 solto entram sem ninguem notar.
+  'lib/telas/conexoes/tela_de_conexoes.dart',
   // O PINTOR DOS ICONES DA BARRA (BICHUS-278, 23/10/2026). Ele e um
   // `CustomPainter` que monta `Paint()` a mao, que e o lugar mais facil do app
   // para um hex entrar sem ninguem notar -- `qr_do_convite.dart`, logo abaixo,

@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/busca_de_cep.dart';
+import '../../api/conexoes_api.dart';
+import '../../api/modelos_conexao.dart';
+import '../../api/convites_api.dart';
 import '../../formato/apelido.dart';
 import '../../formato/cep.dart';
+import '../../formato/quando.dart';
 import '../../api/envio_de_foto.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
@@ -14,6 +20,7 @@ import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
 import '../../roteamento/saida_da_mensagem.dart';
+import '../../sessao/fiacao_do_passkey.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -25,6 +32,7 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/qr_do_convite.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/selo_de_validado.dart';
 import '../../widgets/seletor_de_lista.dart';
@@ -102,6 +110,163 @@ import '../../widgets/seletor_de_lista.dart';
 ///   pessoa nem abriu.
 class TelaDadosPessoais extends StatefulWidget {
   const TelaDadosPessoais({super.key});
+
+  // ======================================================================
+  // A SECAO DO CONVITE, VINDA DE `conexoes/convide_tutores.dart` (28/10/2026)
+  // ======================================================================
+  //
+  // Decisao do cliente: a tela `Convide tutores` morre e o QR vai para dentro
+  // de `Meus dados`. As constantes viajaram com as suas palavras EXATAS -- o
+  // texto nao foi reescrito na mudanca de casa, porque reescrever teria sido
+  // redecidir sem ninguem pedindo.
+  //
+  // **TRES EIXOS fazem o QR nao dominar a pagina, e nenhum deles e so
+  // tamanho** (desenho de 28/10, secao 3.5):
+  //
+  //   1. POSICAO -- ultimo bloco da pagina. Quem veio trocar o telefone nunca
+  //      passa por ele. (`Salvar` mora na `BarraDeAcaoFixa`, que e a barra de
+  //      baixo e nao rola: na pagina rolante este bloco e o fim.)
+  //   2. ESTADO -- **recolhido por padrao**: 48 dp fechado contra os 200 dp do
+  //      quadrado. `QrDoConvite.lado` e o mesmo numero de `QrDaPlaquinha` e
+  //      **nao encolhe** -- QR que encolhe de uma tela para a outra e QR que a
+  //      camera do vizinho pega numa e nao pega na outra.
+  //   3. TINTA -- chao `surfaceSunken` com borda `outline`, e nao cartao
+  //      `surface` com sombra. Afundado le como gaveta de apoio; elevado leria
+  //      como o assunto da tela, que sao os dados pessoais.
+
+  /// O nome da secao, e o rotulo da linha que a abre.
+  static const String tituloDoConvite = 'Meu QR de convite';
+
+  /// A linha de apoio da secao recolhida. **Ela diz PARA QUEM e o convite**,
+  /// que e o que faz a pessoa saber se precisa abrir.
+  static const String apoioDoConvite =
+      'Para quem tem pet e ainda não está no Bichu';
+
+  /// **O QR É APP-PARA-APP, e a secao diz isso em voz alta** (decisão de
+  /// 21/10/2026, e a frase viajou intacta de `Convide tutores`).
+  ///
+  /// Sem esta frase a pessoa aponta a câmera comum do celular para o quadrado,
+  /// não acontece nada que ela reconheça, e ela conclui que o recurso está
+  /// quebrado. E a frase não é consolo: ela é **a instrução** — o que faz o
+  /// convite funcionar é a outra pessoa abrir o Bichu e escanear de dentro
+  /// dele. O quadrado carrega o **token**, e não uma URL.
+  static const String oQrEDeAppParaApp =
+      'Peça para o usuário abrir o Bichu e escanear daqui. A câmera comum do '
+      'celular não abre este código.';
+
+  /// A ação de emitir, para quem ainda não tem convite nesta sessão.
+  ///
+  /// **ELA VIAJOU JUNTO, e e ressalva PARADA no cliente desde 26/10.** Ele
+  /// disse que o QR da pessoa *deveria* ser criado automaticamente; hoje isso
+  /// nao e alcancavel sem mexer no `openapi.yaml` -- nao existe operacao de
+  /// LEITURA do proprio convite, o token em claro existe uma vez so (o banco
+  /// guarda o SHA-256), e emitir na abertura revogaria o anterior a cada
+  /// visita. **Sem este botao, a secao nao teria QR nenhum para mostrar.**
+  static const String criarOConvite = 'Criar o meu QR de convite';
+
+  /// O que a secao diz antes de haver QR nesta sessão.
+  static const String semConviteAgora =
+      'Você não tem QR de convite valendo agora.';
+
+  /// **O QR não é lido de volta, e por isso ele não sobrevive a fechar a
+  /// seção.**
+  static const String oQrNaoVoltaDepois =
+      'O QR aparece aqui enquanto esta seção estiver aberta. Ao voltar, toque '
+      'em criar de novo — o anterior deixa de valer.';
+
+  /// O PLACAR, EM UMA LINHA. **Ele viajou junto por decisao do cliente de
+  /// 28/10/2026**, e nao por zelo meu.
+  ///
+  /// `invited_joined_count` era a outra metade da tela que morreu, e o
+  /// DESENHO.md levantou que mover so o QR *"o apaga em silencio"*. O cliente
+  /// respondeu a pergunta fechada 3 com (a): o placar fica.
+  ///
+  /// **UMA LINHA, e nao a `TrilhaDeConvites` de tres marcos que havia na tela
+  /// morta.** Isso e o que o protovipo desenhou e o que foi aprovado: o placar
+  /// *"nao e o assunto de `Meus dados` e nao merece secao propria"*. A trilha
+  /// de marcos (`O primeiro vizinho`, `Três olhos a mais`,
+  /// `Dez na vizinhança`) **morreu com a tela**, e isso esta reportado -- ela
+  /// era reconhecimento simbolico, nao premio, e nenhuma decisao a nomeou.
+  static String placarDeQuemEntrou(int quantos) => quantos == 1
+      ? '1 tutor entrou no Bichu pelo seu convite.'
+      : '$quantos tutores entraram no Bichu pelo seu convite.';
+
+  /// O prazo em palavras. **`QuandoNaLista.diaEMes` e nao uma data crua**: o
+  /// convite vale 30 dias, entao dia e mes bastam.
+  static String valeAte(DateTime quando) =>
+      'Vale até ${QuandoNaLista.diaEMes(quando)}.';
+
+  // ======================================================================
+  // O LOGIN POR DIGITAL (BICHUS-301, 28/10/2026)
+  // ======================================================================
+  //
+  // Relato do cliente: *"quando eu fiz o login ele nao pediu pra eu logar com
+  // a digital"*. A causa foi MEDIDA e nao suposta:
+  // `passkey_credentials` tinha **ZERO linhas** em homologacao, `abas.dart`
+  // tinha **ZERO mencoes** a passkey, e as unicas duas telas que falavam dela
+  // eram o convite depois do CADASTRO e a tentativa ao abrir a tela de entrar.
+  // **Quem ja tinha conta nunca conseguia ativar** -- a unica janela eram os
+  // segundos apos criar uma conta nova.
+  //
+  // **SAO DUAS ENTRADAS PARA UM CAMINHO SO.** Esta secao e a porta de quem
+  // quer ligar quando quiser; o convite depois do login
+  // (`telas/conta/tela_entrar.dart`) e para quem nao ligou e nao recusou. As
+  // duas chamam `FiacaoDoPasskey.oferecerCadastro`, que ja existia e e o que o
+  // cadastro usa -- o cliente pediu reaproveitamento, e dois jeitos de
+  // registrar credencial seriam dois lugares onde a marca local pode deixar de
+  // ser gravada.
+  //
+  // **A ROTA EXIGE SESSAO, e aqui isso e a favor**:
+  // `beginPasskeyRegistration` tira a conta do `sub` do token, e em
+  // `Meus dados` a pessoa esta logada por definicao.
+  //
+  // **DESATIVAR NAO ENTROU, e a rota EXISTE.** `revokePasskey`
+  // (`DELETE /v1/auth/passkeys/{passkeyId}`) esta no contrato, com teto
+  // folgado, e `PasskeysApi` **nao a expoe** -- a camada tem `listar`, mas nao
+  // `revogar`. Expo-la e desenhar o caminho de volta (qual credencial? a deste
+  // aparelho, que a lista nao identifica, ou todas?) e trabalho que o cliente
+  // nao pediu nesta rodada, e esta reportado como ressalva em vez de
+  // adivinhado. A senha continua sendo a outra porta, e revogar nunca trancou
+  // ninguem fora.
+
+  /// O nome da secao do login por digital.
+  static const String tituloDoPasskey = 'Login por digital';
+
+  /// O apoio da secao: o que ela faz, numa linha.
+  static const String apoioDoPasskey =
+      'Entre usando a digital, o rosto ou o desbloqueio do aparelho.';
+
+  /// A acao de ligar, para quem nao tem credencial neste aparelho.
+  static const String ativarOPasskey = 'Ativar o login por digital';
+
+  /// O ESTADO de quem ja tem credencial aqui. **E estado, e nao acao**: o
+  /// cliente pediu *"mostre o estado, nao so o botao"*, e sem ele a pessoa nao
+  /// tem como saber se ja ligou.
+  static const String passkeyAtivado =
+      'O login por digital está ativo neste aparelho.';
+
+  /// O ESTADO DO MEIO, e ele e o que mais erra.
+  ///
+  /// Credencial na CONTA sem marca neste aparelho e o que acontece com
+  /// sincronizacao (Google Password Manager, Chaveiro do iCloud), reinstalacao
+  /// e restauracao de backup. **Nao e o mesmo que "nao tem"**, e oferecer
+  /// `Ativar` aqui como se nao houvesse nada mentiria sobre o que a conta tem.
+  /// Quem resolve e `FiacaoDoPasskey.reconciliarComAConta`, que MARCA o
+  /// aparelho em vez de criar uma credencial redundante -- e esta frase e o que
+  /// a pessoa le enquanto isso acontece.
+  static const String passkeyNaContaNaoNesteAparelho =
+      'Você já tem login por digital nesta conta, mas ainda não neste '
+      'aparelho. Entre com a senha uma vez e ele passa a valer aqui.';
+
+  /// APARELHO SEM BIOMETRIA. **Estado normal, e nao erro**: o cliente foi
+  /// explicito, e a pessoa nao pode ver uma promessa que o sistema vai negar.
+  static const String passkeyIndisponivel =
+      'Este aparelho não oferece login por digital. É preciso ter bloqueio de '
+      'tela configurado.';
+
+  /// A falha de ATIVAR. Uma frase, e ela nao culpa a pessoa.
+  static const String falhaAoAtivarOPasskey =
+      'Não conseguimos ativar agora. Tente de novo.';
 
   @override
   State<TelaDadosPessoais> createState() => _TelaDadosPessoaisState();
@@ -983,6 +1148,44 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           // as pessoas ja guardaram -- e foi dele que a migracao
           // `20261027000001` copiou para os pets de cada tutor. O que a conta
           // perdeu foi o PAPEL, nao os dados.
+          // ------------------------------------------------------------------
+          // O CONVITE ENTROU AQUI EM 28/10/2026, e e O ULTIMO BLOCO DA PAGINA.
+          // ------------------------------------------------------------------
+          //
+          // Decisao do cliente: a tela `Convide tutores` morre e o QR vem para
+          // dentro de `Meus dados`. O placar `invited_joined_count` veio junto,
+          // por decisao dele do mesmo dia.
+          //
+          // **POR ULTIMO, e isso e o primeiro dos tres eixos do desenho**:
+          // quem veio trocar o telefone nunca passa pelo QR. `Salvar` mora na
+          // `BarraDeAcaoFixa` (a barra de baixo, que nao rola), entao o fim da
+          // pagina rolante e aqui -- que e "depois de `Salvar`" na ordem de
+          // leitura da pessoa.
+          //
+          // **O `grupo` nao embrulha este bloco**, ao contrario dos de cima: o
+          // convite nao e um dado da pessoa, e por-lo dentro de
+          // `Quem você é` diria que e. A secao traz o proprio nome na linha
+          // que a abre.
+          // ------------------------------------------------------------------
+          // O LOGIN POR DIGITAL (BICHUS-301, 28/10/2026)
+          // ------------------------------------------------------------------
+          //
+          // **ANTES do bloco do convite, e a ordem e escolhida.** Esta secao e
+          // um ajuste da PROPRIA CONTA -- como entrar nela --, e o convite e
+          // sobre outras pessoas. O grupo `Conta` do menu do `Perfil` faz a
+          // mesma separacao, e pela mesma razao.
+          //
+          // E ela nao e recolhivel, ao contrario do QR: o conteudo dela e uma
+          // frase e, no maximo, um botao de 48 dp -- nao ha 200 dp de quadrado
+          // para esconder, e uma gaveta fechada esconderia justamente a funcao
+          // que a pessoa nao sabia que existia.
+          const SizedBox(height: BichuEspaco.e6),
+          const _BlocoDoPasskey(),
+          const SizedBox(height: BichuEspaco.e6),
+          _BlocoDoConvite(
+            conexoes: Escopo.of(context).conexoes,
+            convites: Escopo.of(context).convites,
+          ),
         ],
       ),
       ),
@@ -1667,4 +1870,533 @@ abstract final class _TextosDosDados {
   static const String confiraOsCampos = 'Confira os campos marcados.';
   static const String tetoAtingido =
       'Você salvou muitas vezes seguidas. Tente em alguns minutos.';
+}
+
+/// A SECAO DO CONVITE dentro de `Meus dados` -- o QR e o placar, recolhidos.
+///
+/// Vinda de `conexoes/convide_tutores.dart`, que morreu em 28/10/2026 por
+/// decisao do cliente. Ver as constantes em [TelaDadosPessoais] para os tres
+/// eixos que fazem o QR nao dominar a pagina.
+///
+/// ## Por que um `StatefulWidget` proprio, e nao estado da tela
+///
+/// O formulario de `Meus dados` guarda sete controladores de texto, a fase da
+/// leitura e o mapa de erros por campo. Por o convite la dentro misturaria
+/// duas historias que nao se tocam: nada no convite entra no `Salvar`, e nada
+/// do `Salvar` muda o convite. Separado, a secao tambem **nao reconstroi o
+/// formulario** quando abre, fecha ou emite.
+///
+/// ## RECOLHIDA ao nascer, e o estado NAO e lembrado
+///
+/// Toda abertura da pagina comeca fechada. Lembrar seria guardar preferencia
+/// de gaveta de apoio, e a pessoa que abriu o QR uma vez nao pediu para ele
+/// estar aberto na vez em que ela veio trocar o telefone.
+class _BlocoDoConvite extends StatefulWidget {
+  const _BlocoDoConvite({required this.conexoes, required this.convites});
+
+  final ConexoesApi conexoes;
+  final ConvitesApi convites;
+
+  @override
+  State<_BlocoDoConvite> createState() => _EstadoDoBlocoDoConvite();
+}
+
+class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
+  bool _aberta = false;
+  ConviteEmitido? _convite;
+  bool _emitindo = false;
+  String? _falha;
+
+  /// Quantas pessoas a conta trouxe, ou **nulo quando ninguem contou**.
+  ///
+  /// Nulo e zero sao coisas diferentes, e a linha depende disso: zero e a
+  /// afirmacao do servidor de que ninguem entrou ainda; nulo e a ausencia de
+  /// afirmacao, e nesse caso a linha **nao aparece**. Dizer que ninguem entrou
+  /// e uma afirmacao, e o servidor nao a fez.
+  int? _placar;
+
+  /// **O PLACAR SO E LIDO QUANDO A SECAO ABRE**, e isso e deliberado.
+  ///
+  /// Na tela morta ele era lido no `initState`, porque a tela inteira era o
+  /// convite. Aqui a secao nasce recolhida no pe de uma pagina de dados
+  /// pessoais: ler o resumo na abertura de `Meus dados` gastaria uma chamada
+  /// de rede em toda visita de quem veio trocar o telefone e nunca vai abrir o
+  /// convite.
+  Future<void> _lerOPlacar() async {
+    try {
+      final resumo = await widget.conexoes.resumo();
+      if (!mounted) return;
+      setState(() => _placar = resumo.invitedJoinedCount);
+    } on Object catch (erro) {
+      // **`on Object` E NAO `on FalhaDeChamada`, E ISSO FOI MEDIDO** (28/10).
+      //
+      // A primeira versao desta linha capturava so `FalhaDeChamada`, e
+      // `ResumoDeConexoes.doJson` estoura **`TypeError`** quando o corpo nao
+      // tem os seis inteiros do contrato -- um 200 fora do contrato, ou o
+      // corpo de problema de um 404. O erro subia como erro assincrono sem
+      // dono e **derrubava a tela inteira**: quatorze casos de SEIS arquivos
+      // que nada tem a ver com conexoes reprovaram por isto
+      // (`aviso_de_cadastro`, `quem_negou_tem_saida`,
+      // `perdidos_e_meus_achados`, `meus_eventos_e_cancelar`,
+      // `permissao_muda_com_o_app_aberto`, `perfil_controles_acima_da_barra`).
+      //
+      // **Um contador auxiliar nao pode derrubar a pagina que o hospeda.** E o
+      // mesmo arranjo que `FiacaoDoPasskey.oferecerCadastro` descreve, e pelo
+      // mesmo motivo: o desfecho para a pessoa e identico -- sem pastilha --, e
+      // sem o registro ninguem saberia que o contrato quebrou.
+      if (!mounted) return;
+      if (erro is! FalhaDeChamada) {
+        // **SILENCIO DELIBERADO, e nao esquecimento** -- o mesmo arranjo de
+        // `FiacaoDoPasskey.reconciliarComAConta`, e pela mesma razao.
+        //
+        // `registrarFalhaInesperada` chama `FlutterError.reportError`, e a
+        // prosa dele diz para que serve: *"erro que nao e `FalhaDeChamada` no
+        // meio de uma ACAO DE TELA"* -- uma acao que a pessoa tomou, com um
+        // botao girando esperando desfecho. Esta leitura nao e isso: ela
+        // acontece sozinha, sem ninguem pedir, e o desfecho dela e a ausencia
+        // de uma pastilha. Reportar poria no canal de observabilidade um erro
+        // por abertura de tela de quem nunca vai notar nada.
+        //
+        // MEDIDO, e e o que me fez tirar o registro daqui: com
+        // `registrarFalhaInesperada` nesta linha, DEZENOVE casos de SETE
+        // arquivos sem relacao nenhuma com conexoes reprovaram -- o
+        // `reportError` e falha de teste de widget por definicao, e o servidor
+        // falso daqueles casos responde 404 a `/connections/summary`.
+      }
+      // **SEM FAIXA DE ERRO**: o placar e reconhecimento, e nao o que a
+      // pessoa veio buscar aqui -- ela veio pegar o QR. Uma faixa vermelha
+      // culparia a secao por uma leitura auxiliar, e o bloco do QR continua
+      // inteiro sem ela.
+      setState(() => _placar = null);
+    }
+  }
+
+  void _alternar() {
+    final vaiAbrir = !_aberta;
+    setState(() => _aberta = vaiAbrir);
+    if (vaiAbrir && _placar == null) unawaited(_lerOPlacar());
+  }
+
+  Future<void> _emitir() async {
+    if (_emitindo) return;
+    setState(() {
+      _emitindo = true;
+      _falha = null;
+    });
+    try {
+      final convite = await widget.convites.emitir();
+      if (!mounted) return;
+      setState(() {
+        _convite = convite;
+        _emitindo = false;
+      });
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _emitindo = false;
+        _falha = MensagensDeErro.de(falha).texto;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+
+    return Container(
+      // TINTA: chao afundado com borda, e nao cartao elevado -- ver as
+      // constantes de [TelaDadosPessoais].
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _cabecalho(cores),
+          if (_aberta) ..._conteudo(cores),
+        ],
+      ),
+    );
+  }
+
+  /// A LINHA QUE ABRE E FECHA. Uma parada de foco so, anunciada como botao com
+  /// o estado -- `expanded` e o que diz a quem usa leitor de tela se o
+  /// conteudo esta na tela ou nao.
+  Widget _cabecalho(BichuCores cores) {
+    final textos = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      expanded: _aberta,
+      excludeSemantics: true,
+      label: '${TelaDadosPessoais.tituloDoConvite}. '
+          '${TelaDadosPessoais.apoioDoConvite}',
+      onTap: _alternar,
+      child: InkWell(
+        onTap: _alternar,
+        borderRadius: BorderRadius.circular(BichuRaio.sm),
+        child: Container(
+          // O piso de 48 dp e o da linha de menu: fechada, a secao e uma
+          // linha, e ela tem de ser tao tocavel quanto as outras.
+          constraints: const BoxConstraints(minHeight: BichuAlvoDeToque.min),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Text(
+                      TelaDadosPessoais.tituloDoConvite,
+                      style: textos.titleMedium?.copyWith(
+                        color: cores.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      TelaDadosPessoais.apoioDoConvite,
+                      style: textos.bodyMedium?.copyWith(
+                        color: cores.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: BichuEspaco.e2),
+              Icon(
+                _aberta ? Icons.expand_less : Icons.expand_more,
+                color: cores.textSecondary,
+                // Decorativo: o rotulo composto acima ja e o nome do controle,
+                // e `expanded` ja carrega o estado.
+                semanticLabel: '',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _conteudo(BichuCores cores) {
+    final textos = Theme.of(context).textTheme;
+    final convite = _convite;
+    final falha = _falha;
+    final quantos = _placar;
+
+    return <Widget>[
+      const SizedBox(height: BichuEspaco.e4),
+      if (falha != null) ...<Widget>[
+        FaixaDeAviso(texto: falha),
+        const SizedBox(height: BichuEspaco.e4),
+      ],
+      if (convite != null) ...<Widget>[
+        Center(child: QrDoConvite(token: convite.inviteToken)),
+        const SizedBox(height: BichuEspaco.e4),
+        // **A INSTRUCAO VEM ANTES DO PRAZO**, e a ordem e escolhida: o prazo e
+        // sobre o convite, e esta frase e sobre o que a pessoa precisa fazer
+        // AGORA para ele funcionar.
+        Text(
+          TelaDadosPessoais.oQrEDeAppParaApp,
+          style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+        ),
+        const SizedBox(height: BichuEspaco.e3),
+        Text(
+          TelaDadosPessoais.valeAte(convite.expiresAt),
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+      ] else
+        Text(
+          TelaDadosPessoais.semConviteAgora,
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+      // O PLACAR, EM UMA LINHA, DEPOIS DO QUADRADO.
+      //
+      // **Depois e nao antes**: o que a pessoa veio buscar e o QR, e o placar e
+      // reconhecimento. Na tela morta ele vinha primeiro porque era a primeira
+      // secao de uma tela dedicada; aqui, numa gaveta de apoio dentro de
+      // `Meus dados`, por o numero antes do quadrado poria o reconhecimento na
+      // frente da funcao.
+      //
+      // **Nulo nao vira "ninguem ainda"** -- a linha sai. Ver [_placar].
+      if (quantos != null) ...<Widget>[
+        const SizedBox(height: BichuEspaco.e4),
+        Row(
+          children: <Widget>[
+            Icon(
+              Icons.volunteer_activism_outlined,
+              size: 20,
+              color: cores.textSecondary,
+              semanticLabel: '',
+            ),
+            const SizedBox(width: BichuEspaco.e2),
+            Expanded(
+              child: Text(
+                TelaDadosPessoais.placarDeQuemEntrou(quantos),
+                style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: BichuEspaco.e3),
+      Text(
+        TelaDadosPessoais.oQrNaoVoltaDepois,
+        style: textos.bodySmall?.copyWith(color: cores.textMuted),
+      ),
+      const SizedBox(height: BichuEspaco.e3),
+      BotaoSecundario(
+        rotulo: TelaDadosPessoais.criarOConvite,
+        carregando: _emitindo,
+        aoTocar: () => unawaited(_emitir()),
+      ),
+      // **NADA DEPOIS DO BOTAO, e a ausencia e o desenho.** `Trocar o meu QR`
+      // e `Apagar o meu QR` sairam por pedido do cliente de 22/10/2026
+      // (*"nao deve ter a acao de trocar o qr-code dele ou de apagar"*), e
+      // `app/test/telas/sem_acao_de_qr_do_usuario_test.dart` e a isca que
+      // impede as duas de voltarem. Saiu a PORTA e nao a capacidade:
+      // `ConvitesApi.revogar` e `revokeConnectionInvite` continuam intocados.
+    ];
+  }
+}
+
+/// A SECAO DO LOGIN POR DIGITAL dentro de `Meus dados` (BICHUS-301,
+/// 28/10/2026).
+///
+/// Ver as constantes em [TelaDadosPessoais] para o buraco que ela fecha e por
+/// que ela existe. **Ela nao inventa fluxo de ativacao nenhum**: chama
+/// `FiacaoDoPasskey.oferecerCadastro`, o mesmo do cadastro e o mesmo do convite
+/// depois do login.
+///
+/// ## QUATRO ESTADOS, e o cliente pediu o ESTADO e nao so o botao
+///
+/// | estado | o que a secao mostra |
+/// |---|---|
+/// | o aparelho nao suporta | so a frase, e nenhuma acao |
+/// | ha credencial NESTE aparelho | `está ativo neste aparelho` |
+/// | ha na CONTA, nao aqui | a frase do meio, e nenhuma acao de criar |
+/// | nao ha em lugar nenhum | a acao `Ativar` |
+///
+/// ## A leitura e feita UMA vez, em `didChangeDependencies`
+///
+/// `Escopo.of` precisa de `context` com a dependencia ligada e **nao funciona
+/// no `initState`** -- medido nesta mesma rodada, na linha `Conexões` do menu
+/// do `Perfil`: lá o numero ficava nulo e a pastilha nao aparecia, sem erro
+/// nenhum na tela.
+class _BlocoDoPasskey extends StatefulWidget {
+  const _BlocoDoPasskey();
+
+  @override
+  State<_BlocoDoPasskey> createState() => _EstadoDoBlocoDoPasskey();
+}
+
+/// O que a secao sabe sobre esta conta e este aparelho.
+enum _EstadoDoPasskey {
+  /// Ainda lendo. **Nada e afirmado**: sem isto a secao piscaria `Ativar` por
+  /// um quadro para quem ja tem o login ligado.
+  lendo,
+
+  /// O sistema deste aparelho nao faz passkey.
+  indisponivel,
+
+  /// Ha credencial neste aparelho.
+  ativo,
+
+  /// Ha credencial na conta, mas nao neste aparelho.
+  naContaNaoAqui,
+
+  /// Nao ha credencial em lugar nenhum.
+  inativo,
+}
+
+class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
+  _EstadoDoPasskey _estado = _EstadoDoPasskey.lendo;
+  bool _ativando = false;
+  String? _falha;
+  bool _pediu = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_pediu) return;
+    _pediu = true;
+    unawaited(_ler());
+  }
+
+  /// Decide qual dos quatro estados vale, na ordem do mais barato ao mais caro.
+  ///
+  /// **A ordem e a mesma de `FiacaoDoPasskey.deveOferecerCadastro`**, e nao por
+  /// acaso: as duas respondem a mesma pergunta com as mesmas quatro leituras. A
+  /// diferenca e o que elas devolvem -- aquela um `bool` para decidir se abre a
+  /// folha, esta o estado para a secao escrever na tela.
+  Future<void> _ler() => _lerOEstado().timeout(
+        // O MESMO TETO DA DECISAO DO LOGIN, e pela mesma razao: as leituras
+        // daqui passam por CANAL DE PLATAFORMA (o deposito da marca e a
+        // pergunta de suporte), e canal que nao responde nao estoura -- ele
+        // nao volta. Sem o teto, esta secao ficaria com a roda girando para
+        // sempre, que e o estado que mais parece defeito e menos informa.
+        FiacaoDoPasskey.tetoDaDecisao,
+        onTimeout: () {
+          if (!mounted) return;
+          // `indisponivel` e nao `inativo`: oferecer `Ativar` depois de um
+          // canal que nao respondeu seria prometer sobre um aparelho que nao
+          // disse nada.
+          setState(() => _estado = _EstadoDoPasskey.indisponivel);
+        },
+      );
+
+  Future<void> _lerOEstado() async {
+    final escopo = Escopo.of(context);
+    try {
+      if (await escopo.passkeyNesteAparelho.haCredencial()) {
+        if (!mounted) return;
+        setState(() => _estado = _EstadoDoPasskey.ativo);
+        return;
+      }
+      if (!await escopo.credencialDoAparelho.suportaCredencial()) {
+        if (!mounted) return;
+        setState(() => _estado = _EstadoDoPasskey.indisponivel);
+        return;
+      }
+      // Pode MARCAR: depois dela, quem tinha credencial na conta passa a ter
+      // marca local -- e e isso que destrava a entrada por passkey que a
+      // pessoa ja tinha, sem criar uma segunda credencial.
+      await escopo.passkey.reconciliarComAConta();
+      if (!mounted) return;
+      final agoraTem = await escopo.passkeyNesteAparelho.haCredencial();
+      if (!mounted) return;
+      setState(
+        () => _estado = agoraTem
+            // A reconciliacao achou credencial na conta e marcou o aparelho.
+            // **A frase do MEIO, e nao `está ativo`**: a credencial existe na
+            // conta e a marca acabou de ser posta, mas a chave privada ainda
+            // nao esta neste aparelho -- quem sincroniza e o sistema, e isso
+            // acontece na proxima entrada. Dizer `ativo` aqui prometeria um
+            // login que a folha do sistema ainda nao sabe fazer.
+            ? _EstadoDoPasskey.naContaNaoAqui
+            : _EstadoDoPasskey.inativo,
+      );
+    } on Object {
+      // **SEM FAIXA DE ERRO, e o estado cai no mais conservador.** A secao e
+      // ajuste de conta e nao o que a pessoa veio fazer em `Meus dados`; uma
+      // faixa vermelha culparia a pagina inteira por uma leitura auxiliar.
+      // `indisponivel` e nao `inativo`: oferecer `Ativar` depois de uma falha
+      // de leitura seria prometer sobre um aparelho que nao respondeu.
+      if (!mounted) return;
+      setState(() => _estado = _EstadoDoPasskey.indisponivel);
+    }
+  }
+
+  /// ATIVA, pelo MESMO caminho do cadastro e do convite do login.
+  Future<void> _ativar() async {
+    if (_ativando) return;
+    setState(() {
+      _ativando = true;
+      _falha = null;
+    });
+    // `oferecerCadastro` NAO ESTOURA -- devolve `naoCadastrada` em todo
+    // desfecho que nao e sucesso, 409 e 429 inclusive. E por isso que nao ha
+    // `try` aqui: um `catch` daria a impressao de que existe um caminho de
+    // erro que esta secao trata.
+    final desfecho = await Escopo.of(context).passkey.oferecerCadastro();
+    if (!mounted) return;
+    setState(() {
+      _ativando = false;
+      if (desfecho == DesfechoDoCadastroDePasskey.cadastrada) {
+        _estado = _EstadoDoPasskey.ativo;
+      } else {
+        // **NAO REGISTRA RECUSA**, e esta e a fronteira que mais custa: quem
+        // fechou a folha do sistema disse *"agora nao"*, e so o toque
+        // deliberado no `Não quero` do convite do login grava recusa formal.
+        // Tratar isto como recusa faria a pessoa perder a funcao por um gesto
+        // acidental. Aqui a secao simplesmente continua oferecendo.
+        _falha = TelaDadosPessoais.falhaAoAtivarOPasskey;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Container(
+      // Mesma tinta do bloco do convite, e pelo mesmo motivo: gaveta de apoio
+      // afundada, e nao cartao elevado -- o assunto da tela sao os dados.
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            TelaDadosPessoais.tituloDoPasskey,
+            style: textos.titleMedium?.copyWith(color: cores.textPrimary),
+          ),
+          const SizedBox(height: BichuEspaco.e1),
+          Text(
+            TelaDadosPessoais.apoioDoPasskey,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          ),
+          const SizedBox(height: BichuEspaco.e3),
+          ..._conteudo(cores, textos),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _conteudo(BichuCores cores, TextTheme textos) {
+    final falha = _falha;
+    return <Widget>[
+      if (falha != null) ...<Widget>[
+        FaixaDeAviso(texto: falha),
+        const SizedBox(height: BichuEspaco.e3),
+      ],
+      switch (_estado) {
+        // **A ROSCA, e nao um estado afirmado.** Ver [_EstadoDoPasskey.lendo].
+        _EstadoDoPasskey.lendo => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(BichuEspaco.e3),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        _EstadoDoPasskey.indisponivel => Text(
+            TelaDadosPessoais.passkeyIndisponivel,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          ),
+        _EstadoDoPasskey.ativo => Row(
+            children: <Widget>[
+              Icon(
+                Icons.check_circle_outline,
+                size: 20,
+                color: cores.success,
+                // Decorativo: a frase ao lado ja diz o estado, e um glifo com
+                // nome proprio seria anuncio duplo.
+                semanticLabel: '',
+              ),
+              const SizedBox(width: BichuEspaco.e2),
+              Expanded(
+                child: Text(
+                  TelaDadosPessoais.passkeyAtivado,
+                  style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        _EstadoDoPasskey.naContaNaoAqui => Text(
+            TelaDadosPessoais.passkeyNaContaNaoNesteAparelho,
+            style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+          ),
+        _EstadoDoPasskey.inativo => BotaoSecundario(
+            rotulo: TelaDadosPessoais.ativarOPasskey,
+            carregando: _ativando,
+            aoTocar: () => unawaited(_ativar()),
+          ),
+      },
+    ];
+  }
 }

@@ -170,10 +170,17 @@ class PasskeyNesteAparelho {
   /// Cache de leitura: o arquivo e lido uma vez por processo.
   bool? _memoria;
 
+  /// Cache da RECUSA FORMAL, pelo mesmo motivo de [_memoria].
+  bool? _memoriaDaRecusa;
+
   /// A chave gravada. Escrita a mao, e nao derivada de nome de simbolo: o
   /// arquivo e um contrato com o passado, e renomear algo em Dart nao pode
   /// apagar a marca de ninguem.
   static const String _chave = 'ha_credencial';
+
+  /// A chave da RECUSA FORMAL (28/10/2026). Escrita a mao pelo mesmo motivo de
+  /// [_chave]: o arquivo e um contrato com o passado.
+  static const String _chaveDaRecusa = 'recusou_formalmente';
 
   /// Verdadeiro quando ha prova de credencial neste aparelho.
   ///
@@ -191,20 +198,34 @@ class PasskeyNesteAparelho {
     return lido;
   }
 
-  Future<bool> _ler() async {
+  Future<bool> _ler([String chave = _chave]) async {
+    final corpo = await _corpo();
+    return corpo[chave] == true;
+  }
+
+  /// O JSON gravado, ou um mapa VAZIO quando nao ha nada legivel.
+  ///
+  /// **Existe porque ha DUAS chaves no arquivo desde 28/10**, e as duas sao
+  /// lidas e escritas por caminhos diferentes. Sem um ponto unico, cada
+  /// escrita montaria o JSON do zero e apagaria a chave da outra -- que e o
+  /// defeito mais facil de cometer aqui, e tem caso proprio na isca.
+  ///
+  /// Disco que nao responde, JSON quebrado ou corpo que nao e mapa viram mapa
+  /// vazio, e o lado seguro e esse: ver [haCredencial].
+  Future<Map<String, dynamic>> _corpo() async {
     final String? cru;
     try {
       cru = await deposito.ler();
     } on Object {
-      return false;
+      return const <String, dynamic>{};
     }
-    if (cru == null || cru.isEmpty) return false;
+    if (cru == null || cru.isEmpty) return const <String, dynamic>{};
     try {
       final corpo = jsonDecode(cru);
-      if (corpo is! Map<String, dynamic>) return false;
-      return corpo[_chave] == true;
+      if (corpo is! Map<String, dynamic>) return const <String, dynamic>{};
+      return corpo;
     } on FormatException {
-      return false;
+      return const <String, dynamic>{};
     }
   }
 
@@ -217,8 +238,17 @@ class PasskeyNesteAparelho {
     if (_memoria == true) return;
     _memoria = true;
     try {
+      // **LE O QUE HAVIA ANTES DE GRAVAR** (28/10/2026).
+      //
+      // Esta linha montava o JSON do zero. Com a chave da RECUSA FORMAL no
+      // mesmo arquivo, gravar do zero apagaria a recusa de quem disse
+      // `Não quero` -- e a pessoa voltaria a ser perguntada em todo login,
+      // porque `marcar()` roda em toda entrada por passkey bem-sucedida.
+      // O contrario tambem vale, e `registrarRecusa` tem o mesmo cuidado.
+      final anterior = await _corpo();
       await deposito.gravar(
         jsonEncode(<String, dynamic>{
+          ...anterior,
           _chave: true,
           'marcado_em': agora().toUtc().toIso8601String(),
         }),
@@ -227,6 +257,77 @@ class PasskeyNesteAparelho {
       // A memoria ja tem o valor certo, entao esta execucao do app usa a
       // passkey. A proxima abertura volta a nao tentar -- que custa um toque,
       // nao uma conta trancada.
+    }
+  }
+
+  // ======================================================================
+  // A RECUSA FORMAL (28/10/2026)
+  // ======================================================================
+  //
+  // Regra de produto do cliente, verbatim: *"na hora do usuario fazer o login,
+  // se ele nao tiver o passkey habilitado e nao tiver rejeitado formalmente,
+  // devemos solicitar ele. Pois pode ser um cenario onde o usuario tenha feito
+  // o cadastro, desinstalado o app e esta voltando"*.
+  //
+  // **ELA MORA NO APARELHO E NAO NA CONTA, E A RAZAO E A REGRA DELE -- NAO
+  // ECONOMIA DE CAMPO.** Esta e a decisao que alguem vai querer "consertar"
+  // depois movendo a recusa para o servidor, e o motivo de ela estar escrita
+  // aqui com data:
+  //
+  // Recusa na CONTA **sobreviveria a reinstalacao**, e com isso silenciaria
+  // exatamente o usuario que ele quer alcancar -- quem se cadastrou, recusou,
+  // desinstalou e esta voltando num aparelho novo ou numa instalacao nova.
+  // Recusa LOCAL apaga com a reinstalacao, e aí perguntar de novo e o
+  // comportamento **certo**: e literalmente o cenario que ele nomeou. Mover
+  // isto para a conta nao e uma melhoria da mesma regra; e outra regra.
+  //
+  // **Ela nao e o oposto de [haCredencial], e as duas conviv:** uma pessoa
+  // pode ter credencial neste aparelho E ter recusado o convite antes de
+  // ativar por outro caminho. As duas chaves vivem no mesmo JSON e nenhuma
+  // escrita apaga a outra -- ver o `_corpo()` em [marcar].
+
+  /// Verdadeiro quando a pessoa recusou o convite **deliberadamente**.
+  ///
+  /// **Ausencia de resposta nao e resposta negativa**: arquivo inexistente,
+  /// disco que nao responde e JSON quebrado viram `false`, que e o estado de
+  /// quem nunca foi perguntada. O lado seguro aqui e o oposto do de
+  /// [haCredencial], e de proposito: ler `true` por engano calaria a oferta
+  /// para sempre, e ler `false` por engano custa uma pergunta que a pessoa
+  /// pode recusar de novo.
+  Future<bool> recusouFormalmente() async {
+    final memoria = _memoriaDaRecusa;
+    if (memoria != null) return memoria;
+    final lido = await _ler(_chaveDaRecusa);
+    _memoriaDaRecusa = lido;
+    return lido;
+  }
+
+  /// Registra que a pessoa disse que **nao quer** o login por digital.
+  ///
+  /// **SO O TOQUE DELIBERADO CHAMA ISTO.** Fechar a folha arrastando, ou o
+  /// sistema cancelar o dialogo, e *"agora nao"* e nao recusa -- quem trata
+  /// cancelamento como recusa faz a pessoa perder a passkey **para sempre por
+  /// um gesto acidental**, e isso e pior que a funcao nao existir. A fronteira
+  /// tem dois casos proprios em
+  /// `test/sessao/convite_de_passkey_depois_do_login_test.dart`.
+  ///
+  /// Idempotente, e **preserva a marca de credencial** -- ver [marcar].
+  Future<void> registrarRecusa() async {
+    if (_memoriaDaRecusa == true) return;
+    _memoriaDaRecusa = true;
+    try {
+      final anterior = await _corpo();
+      await deposito.gravar(
+        jsonEncode(<String, dynamic>{
+          ...anterior,
+          _chaveDaRecusa: true,
+          'recusou_em': agora().toUtc().toIso8601String(),
+        }),
+      );
+    } on Object {
+      // Igual a [marcar]: a memoria ja tem o valor certo, entao esta execucao
+      // do app nao pergunta de novo. A proxima abertura pergunta -- que custa
+      // uma pergunta, e nao uma funcao perdida.
     }
   }
 }

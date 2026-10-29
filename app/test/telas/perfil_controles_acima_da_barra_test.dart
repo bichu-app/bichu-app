@@ -200,7 +200,20 @@ Future<void> _ateOFim(WidgetTester tester) async {
   final estado = tester.state<ScrollableState>(find.byType(Scrollable).first);
   for (var i = 0; i < 60; i++) {
     final antes = estado.position.pixels;
-    await tester.drag(find.byType(ListView).first, const Offset(0, -400));
+    // **ARRASTA PELO `Scrollable`, E NAO PELA `ListView`** (28/10/2026).
+    //
+    // Era `find.byType(ListView).first`, e isso estourou `Bad state: No
+    // element` no dia em que `Meus achados` virou `CustomScrollView` -- a
+    // tela ganhou um `SliverPersistentHeader(pinned: true)` com o botao de
+    // registrar achado avulso, que e a unica forma em que a lista passa por
+    // DEBAIXO do controle.
+    //
+    // O ajudante nao tem por que saber qual sliver a tela usa: ele mede
+    // ROLAGEM, e `Scrollable` e o tipo que as duas formas tem em comum. E e
+    // o MESMO `first` de onde `estado` sai, duas linhas acima -- antes eram
+    // dois seletores diferentes para o mesmo objeto, e um deles podia deixar
+    // de casar sem o outro acusar.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
     await tester.pumpAndSettle();
     if (estado.position.pixels <= antes + 0.01) break;
   }
@@ -285,15 +298,33 @@ void _exigirControleDentroDaAreaVisivel(
 
 /// O controle tocavel mais baixo DENTRO do `ListView` da tela.
 ///
-/// Dentro do `ListView`, e nao `find.byType(InkWell).last`: a barra de topo e
+/// Dentro do corpo rolante, e nao `find.byType(InkWell).last`: a barra de topo e
 /// a de abas trazem `InkWell` proprios, e a ordem da arvore nao e a ordem
 /// visual -- a primeira escrita deste arquivo mediu o `InkWell` da barra, que
 /// fica em 0..64 dp e passa sempre.
 Finder _controleMaisBaixoDaLista(WidgetTester tester) {
   Element? pior;
   var maisBaixo = double.negativeInfinity;
+  // **DENTRO DO `Scrollable`, E NAO DO `ListView`** (28/10/2026).
+  //
+  // A razao de recortar pelo corpo rolante nao mudou uma letra -- a barra de
+  // topo e a de abas trazem `InkWell` proprios, e medir o da barra passa
+  // sempre. O que mudou e que `Meus achados` virou `CustomScrollView`, com o
+  // botao fixo de registrar achado avulso num
+  // `SliverPersistentHeader(pinned: true)`, e `find.byType(ListView)` passou a
+  // achar ZERO -- o controle positivo logo abaixo acusou isso, que e
+  // exatamente o trabalho dele.
+  //
+  // `Scrollable` e o tipo que as duas formas tem em comum, e e tambem o que
+  // `_ateOFim` e `_exigirQueChegouAoFim` ja usavam: os tres ajudantes deste
+  // arquivo passam a falar do MESMO objeto.
+  //
+  // **O cabecalho FIXO nao envenena a medicao**, e isso importa: ele e
+  // descendente do `Scrollable`, entao o seu `InkWell` entra na varredura --
+  // mas ele vive no TOPO do corpo (0..72 dp), e esta funcao procura o
+  // `bottom` MAIOR. Um controle fixo no topo nunca e o mais baixo.
   final dentro = find.descendant(
-    of: find.byType(ListView),
+    of: find.byType(Scrollable),
     matching: find.byType(InkWell),
   );
   for (final e in dentro.evaluate()) {
@@ -310,9 +341,9 @@ Finder _controleMaisBaixoDaLista(WidgetTester tester) {
     isNotNull,
     reason:
         'REPROVA O PROPRIO CONTROLE: nenhum controle tocavel dentro do '
-        '`ListView`. Com a arvore vazia a geometria nao mede nada -- e arvore '
-        'vazia e o estado normal de um `ListView` cujo trecho medido nao foi '
-        'construido.',
+        'corpo rolante. Com a arvore vazia a geometria nao mede nada -- e '
+        'arvore vazia e o estado normal de uma lista preguicosa cujo trecho '
+        'medido nao foi construido.',
   );
   return find.byElementPredicate((x) => x == alvo);
 }

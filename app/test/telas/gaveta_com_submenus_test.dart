@@ -40,6 +40,7 @@
 import 'dart:io';
 
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/perfil/meus_achados.dart';
 import 'package:bichu/telas/achado/tela_registrar_achado.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/gaveta_de_secoes.dart';
@@ -434,10 +435,22 @@ void main() {
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
       await irParaASecao(tester, 'Pets');
 
+      // **O VEICULO MUDOU DE CASA A TERCEIRA VEZ, EM 28/10/2026.** Era um item
+      // do menu da conta; o cliente decidiu que achados viram UMA entrada, e
+      // `Registrar achado avulso` virou o botao FIXO no topo do corpo de
+      // `Achados` (`MeusAchados.rotuloDeRegistrar`, com o artigo: `Registrar
+      // um achado avulso`). O caminho ganhou um toque -- a FOTO, a linha
+      // `Achados`, e o botao --, e **o que o caso prova nao mudou uma letra**.
       await tester.tap(find.byType(AvatarDaConta));
       await tester.pumpAndSettle();
-      final item = find.text('Registrar achado avulso');
-      await tester.scrollUntilVisible(item, 200);
+      final linhaDeAchados = find.text(MeusAchados.titulo);
+      await tester.scrollUntilVisible(linhaDeAchados, 200);
+      await tester.tap(linhaDeAchados);
+      await tester.pumpAndSettle();
+      // O botao e FIXO no topo do corpo: ele nao precisa de rolagem, e e
+      // exatamente essa a propriedade que `achados_botao_fixo_no_topo_test`
+      // cobra.
+      final item = find.text(MeusAchados.rotuloDeRegistrar);
       await tester.tap(item);
       await tester.pumpAndSettle();
       expect(
@@ -458,6 +471,34 @@ void main() {
         find.byType(TelaRegistrarAchado),
         findsNothing,
         reason: 'REPROVA: o voltar do sistema nao saiu da tela empilhada.',
+      );
+      // O PRIMEIRO POP CAI EM `Achados`, QUE TAMBEM E EMPILHADA (28/10/2026).
+      //
+      // O caminho ganhou um nivel quando `Registrar achado avulso` virou o
+      // botao fixo DENTRO de `Achados`: antes era conta -> registro, agora e
+      // conta -> `Achados` -> registro. Um pop so devolve a listagem, que e
+      // pagina interna e **nao veste a barra de baixo** -- e e por isso que a
+      // afirmacao da barra, que vem depois, precisa do SEGUNDO pop.
+      //
+      // Esta linha nao e arrumacao: ela cobra que o primeiro pop para em
+      // `Achados` em vez de pular para a conta. Pop que atravessa dois niveis
+      // de uma vez levaria a pessoa de volta ao menu, perdendo a listagem que
+      // ela estava olhando.
+      expect(
+        find.text(MeusAchados.titulo),
+        findsWidgets,
+        reason: 'REPROVA: o primeiro voltar nao parou na listagem de '
+            '`Achados`. Ela e o nivel de onde o registro foi aberto, e voltar '
+            'tem de devolver a pessoa onde ela estava.',
+      );
+
+      final voltouDeNovo = await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        voltouDeNovo,
+        isTrue,
+        reason: 'REPROVA: o segundo voltar do sistema nao foi tratado pelo '
+            'app -- a listagem de `Achados` nao tem de onde sair.',
       );
       // **DESDE 20/10 A BARRA JA ESTAVA LA ANTES DO POP**, e por isso esta
       // linha deixou de provar que o pop devolveu a casca -- ela prova que o
@@ -675,10 +716,22 @@ void main() {
       //
       // A tela tem de usar a mesma `TelaDeAba` das raizes, e
       // `TelaRegistrarAchado` continua sendo exatamente isso.
+      // **O VEICULO MUDOU DE CASA A TERCEIRA VEZ, EM 28/10/2026.** Era um item
+      // do menu da conta; o cliente decidiu que achados viram UMA entrada, e
+      // `Registrar achado avulso` virou o botao FIXO no topo do corpo de
+      // `Achados` (`MeusAchados.rotuloDeRegistrar`, com o artigo: `Registrar
+      // um achado avulso`). O caminho ganhou um toque -- a FOTO, a linha
+      // `Achados`, e o botao --, e **o que o caso prova nao mudou uma letra**.
       await tester.tap(find.byType(AvatarDaConta));
       await tester.pumpAndSettle();
-      final porta = find.text('Registrar achado avulso');
-      await tester.scrollUntilVisible(porta, 200);
+      final linhaDeAchados = find.text(MeusAchados.titulo);
+      await tester.scrollUntilVisible(linhaDeAchados, 200);
+      await tester.tap(linhaDeAchados);
+      await tester.pumpAndSettle();
+      // O botao e FIXO no topo do corpo: ele nao precisa de rolagem, e e
+      // exatamente essa a propriedade que `achados_botao_fixo_no_topo_test`
+      // cobra.
+      final porta = find.text(MeusAchados.rotuloDeRegistrar);
       await tester.tap(porta);
       await tester.pumpAndSettle();
 
@@ -1195,11 +1248,23 @@ void main() {
       // 9 no mesmo movimento. A tela e a rota ja existiam desde 21/10; o que
       // mudou em 26/10 foi POR ONDE se chega nela, por pedido do cliente
       // repetido duas vezes (22/10 e 26/10).
+      // NOVE -> OITO em 28/10/2026, e **esta e a primeira QUEDA desta lista**:
+      // `Convide tutores` desceu de volta para `planejada`, com o rotulo da UX
+      // (`Convidar vizinhos`), porque a TELA dela morreu por decisao do
+      // cliente -- o QR e o placar foram para dentro de `Meus dados`.
+      //
+      // A mensagem abaixo diz que *"descer significa que um atalho da gaveta
+      // morreu"*, e e exatamente isso que aconteceu -- a diferenca e que foi
+      // DELIBERADO e a funcao nao se perdeu: ela tem porta nova, so nao na
+      // gaveta (que esta oculta desde 19/10 de qualquer jeito). `todos`
+      // continua 54 e `destinos` continua 18, porque a linha nao foi apagada:
+      // o inventario de 27.5 registra o que a UX NOMEIA, e ela continua
+      // nomeando esta porta como reserva.
       expect(
         vivos.length,
-        9,
+        8,
         reason:
-            'REPROVA: os atalhos VIVOS sairam de 9 e foram para '
+            'REPROVA: os atalhos VIVOS sairam de 8 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
@@ -1219,13 +1284,19 @@ void main() {
       // desapareceu da tela.
       expect(
         porConstruir.length,
-        9,
+        10,
         reason:
-            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 10 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
       );
+      // NOVE -> DEZ em 28/10/2026, no mesmo movimento que tirou `vivos` de 9
+      // para 8: `Convidar vizinhos` voltou a ser reserva porque a tela do
+      // convite morreu. A regra que a mensagem acima enuncia e a que vale aqui
+      // ao contrario -- `porConstruir` SUBIU e `vivos` caiu pelo mesmo um, e a
+      // soma das duas continua sendo `destinos`, que o caso logo abaixo cobra.
+      // Nenhum nome desapareceu do inventario.
 
       expect(
         vivos.length + porConstruir.length,
