@@ -162,15 +162,37 @@ void main() {
       _superficieAlta(tester);
       await _abrirOPerfil(tester);
 
-      // `Sair da conta` e um `_ItemDeSair` e nao um `ItemDeMenu`, entao ele
-      // nao entra nesta contagem -- do mesmo jeito que nao entrava nas onze.
+      // CORRECAO MEDIDA DA PRIMEIRA VERSAO DESTA ISCA: eu havia escrito que
+      // `Sair da conta` *"e um `_ItemDeSair` e nao um `ItemDeMenu`"*. **E
+      // falso** -- `_ItemDeSair.build` devolve um `ItemDeMenu`, com
+      // `critico: true`. A contagem crua da oito, e nao sete.
+      //
+      // Entao a conta e feita pelo que a decisao realmente diz: **sete linhas
+      // de menu, e `Sair da conta` fora da conta**. `critico` e exatamente o
+      // que separa as duas coisas na arvore, e e por isso que ele serve de
+      // recorte aqui em vez de um numero ajustado para oito -- oito passaria
+      // a valer tambem se uma linha nova entrasse e o `Sair` saisse.
+      final linhas = tester
+          .widgetList<ItemDeMenu>(_naAba(find.byType(ItemDeMenu)))
+          .toList(growable: false);
+      final deMenu = linhas.where((ItemDeMenu i) => !i.critico);
+      final deSaida = linhas.where((ItemDeMenu i) => i.critico);
+
       expect(
-        _naAba(find.byType(ItemDeMenu)),
-        findsNWidgets(7),
-        reason: 'REPROVA: o menu nao tem sete linhas. O cliente decidiu '
-            '11 -> 7 em 28/10/2026 (`Sair da conta` fora da conta nos dois '
-            'lados). Se este numero mudou por uma linha NOVA, ela nao foi '
-            'pedida; se mudou por uma que sumiu, alguma frente varreu demais.',
+        deMenu.length,
+        7,
+        reason: 'REPROVA: o menu nao tem sete linhas, e tem '
+            '${deMenu.length}: ${deMenu.map((i) => i.rotulo).join(', ')}. '
+            'O cliente decidiu 11 -> 7 em 28/10/2026 (`Sair da conta` fora da '
+            'conta nos dois lados). Se este numero mudou por uma linha NOVA, '
+            'ela nao foi pedida; se mudou por uma que sumiu, alguma frente '
+            'varreu demais.',
+      );
+      expect(
+        deSaida.length,
+        1,
+        reason: 'REPROVA: a cauda critica nao e uma linha so. `Sair da conta` '
+            'e a unica linha `critico` deste menu.',
       );
       expect(
         _naAba(find.text('Sair da conta')),

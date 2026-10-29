@@ -30,10 +30,7 @@ import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../api/vitrine_api.dart';
 import '../escopo.dart';
-import '../telas/conexoes/convide_tutores.dart';
-import '../telas/conexoes/tela_minhas_conexoes.dart';
-import '../telas/conexoes/tela_pedidos_de_conexao.dart';
-import '../telas/seguranca/tela_de_bloqueados.dart';
+import '../telas/conexoes/tela_de_conexoes.dart';
 import '../api/pessoas_api.dart';
 import '../api/seguranca_api.dart';
 import '../telas/pessoa/tela_perfil_de_pessoa.dart';
@@ -1017,6 +1014,28 @@ void ligarPortaDoDestinoDoAviso() {
   };
 }
 
+/// A TELA UNICA DAS CONEXOES, montada pelas TRES rotas que apontam para ela.
+///
+/// Um ajudante e nao tres construcoes iguais: as duas portas (`ConexoesApi` e
+/// `SegurancaApi`) tem de ser as MESMAS nas tres entradas, e tres chamadas
+/// copiadas sao tres lugares onde uma delas pode divergir sem ninguem reparar.
+///
+/// `SegurancaApi` e construida AQUI a partir do `ApiClient` do `Escopo`, como
+/// era na rota de bloqueados e como fazem a vitrine e o perfil de pessoa:
+/// acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de teste que
+/// o constroi. `ConexoesApi` ja e campo do `Escopo` e vem de la.
+Widget _asConexoes(
+  BuildContext context, {
+  AbaDeConexoes aba = AbaDeConexoes.conexoes,
+}) {
+  final escopo = Escopo.of(context);
+  return TelaDeConexoes(
+    conexoes: escopo.conexoes,
+    seguranca: SegurancaApi(escopo.api),
+    abaInicial: aba,
+  );
+}
+
 GoRouter criarRoteador(ControladorDeSessao sessao) {
   // A COSTURA DO TOQUE NA FOTO, uma vez, antes de qualquer rota existir. Ela
   // nao depende da sessao nem do roteador -- e so um destino --, e por isso nao
@@ -1523,46 +1542,32 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         path: Rotas.meusPets,
         builder: (context, estado) => const TelaDeTodosOsPets(),
       ),
-      // -- AS QUATRO ROTAS DA UNIAO DE 18/10/2026 ---------------------------
+      // ==================================================================
+      // `Rotas.convidarTutores` MORREU EM 28/10/2026, COM A TELA
+      // ==================================================================
       //
-      // As quatro telas chegaram prontas, de frentes diferentes, e nenhuma
-      // estava registrada: cada ramo construiu a tela e deixou a fiacao para
-      // quem unisse, porque `rotas.dart` e arquivo de todos e colidiria em
-      // todos. Elas EMPURRAM (cobrem a casca) em vez de virar ramo, como
-      // `Meus dados` e `Meus achados` acima -- a barra de baixo continua
-      // existindo atras e voltar devolve a pessoa onde ela estava.
+      // Decisao do cliente: a tela `Convide tutores` morre e o QR vai para
+      // dentro de `Meus dados` (`telas/perfil/tela_dados_pessoais.dart`,
+      // `_BlocoDoConvite`), com o placar `invited_joined_count` junto.
       //
-      // `Perfil` > `Convide tutores`. **Era `AuAu` > ... ate 26/10/2026**, e a
-      // troca e pedido do cliente repetido duas vezes (22/10 e 26/10); a
-      // decisao de 21/10 que a punha no AuAu esta citada ao lado das outras
-      // duas em `Rotas.convidarTutores`, em `telas/abas.dart` e em
-      // `telas/mensagens/area_de_mensagens.dart`.
+      // **A ROTA SAIU, e nao ficou apontando para lugar nenhum.** A tela era o
+      // unico destino dela, e uma rota viva para uma tela apagada e um
+      // endereco que derruba o app quando alguem o abre. As duas portas
+      // humanas que existiam -- o item do menu do `Perfil` e a linha reservada
+      // da gaveta -- sairam no mesmo commit, que e o que impede o estado de
+      // *"tela sem porta nenhuma"* que `Pedidos de conexão` viveu entre 18/10
+      // e 19/10 sem ninguem ver. Aqui e o inverso: porta sem tela.
       //
-      // **A ORDEM DE REGISTRO DEIXOU DE IMPORTAR PARA ESTA ROTA, e esta linha
-      // existia por causa dela.** Enquanto o endereco era
-      // `/mensagens/convide-tutores`, ele TINHA de vir antes de
-      // `/mensagens/:conversaId`: o `go_router` casa na ordem de registro, e
-      // fora de ordem a tela da conversa abriria pedindo a conversa
-      // `'convide-tutores'`, que nao existe. Sob `/perfil` nao ha nada que a
-      // possa capturar -- **nao existe rota `/perfil/:algo`** no produto, e as
-      // oito rotas sob `/perfil` tem todas segmento literal.
+      // **NADA DO SERVIDOR FOI APAGADO** (decisao dele de 26/10, *"nao apague
+      // nada"*): `ConvitesApi.emitir`/`revogar` e as tres operacoes de convite
+      // do `openapi.yaml` continuam intocadas, e `emitir` e exatamente o que o
+      // bloco novo dentro de `Meus dados` chama.
       //
-      // Ela continua declarada AQUI, antes da area de mensagens, e isso agora e
-      // so arrumacao: as quatro rotas desta uniao ficam juntas. Mover nao
-      // quebra, e deixar junto e mais facil de ler.
-      //
-      // **Irma da casca e nao sub-rota do ramo**: ela cobre a barra de baixo e
-      // voltar devolve a pessoa a tela da conta, que e de onde o item do menu
-      // a abre. E `ConvitesApi` vem do `Escopo`, como as outras camadas de API
-      // -- a mesma instancia que o leitor de QR usa para resolver um convite
-      // lido.
-      GoRoute(
-        path: Rotas.convidarTutores,
-        builder: (context, estado) => TelaDeConvidarTutores(
-          convites: Escopo.of(context).convites,
-          conexoes: Escopo.of(context).conexoes,
-        ),
-      ),
+      // A decisao de 21/10 (*"no AuAu como tela empilhada"*), as duas de
+      // 22/10 e 26/10 que a mudaram para o `Perfil`, e esta de 28/10 que a
+      // mata, estao citadas tambem em `telas/mensagens/area_de_mensagens.dart`
+      // -- sem as datas ao lado uma da outra alguem reverte isto achando que
+      // esta consertando um defeito.
       // A AREA DE MENSAGENS: o destino do slot `AuAu`.
       _comBarraFixa(
         path: RotasDeMensagens.area,
@@ -1646,27 +1651,44 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           );
         },
       ),
+      // ==================================================================
+      // AS TRES ROTAS DE CONEXAO APONTAM PARA A MESMA TELA (28/10/2026)
+      // ==================================================================
+      //
+      // Decisao do cliente: *"devemos centralizar tudo em um unico local"*.
+      // `Conexões`, `Pendentes` e `Bloqueados` sao tres ABAS de
+      // `conexoes/tela_de_conexoes.dart`, e o menu do `Perfil` tem UMA
+      // entrada.
+      //
+      // **AS TRES ROTAS CONTINUAM DE PE, e isso nao e duplicacao de porta.**
+      // O que `gaveta_de_secoes.dart` proibe e dois NOMES para o mesmo lugar
+      // no mesmo menu; aqui ha um endereco por ABA, e cada um pousa na aba que
+      // promete. Apaga-las custaria caro e nao compraria nada:
+      //
+      //   - `Rotas.pedidosDeConexao` e para onde o toque na notificacao
+      //     `connection_requested` cai (`DestinoDoAviso.pedidosDeConexao`,
+      //     logo acima neste arquivo). Sem `abaInicial`, quem chega pelo aviso
+      //     pousaria na aba `Conexões` e teria de procurar o pedido;
+      //   - `Rotas.pessoasBloqueadas` e **a porta direta do desbloqueio**, e
+      //     ela e o risco medido desta frente. O bloqueio e simetrico no
+      //     servidor e a aba 3 e o unico lugar de onde o desbloqueio sai no
+      //     aplicativo inteiro; a decisao ja tira a PALAVRA `bloqueados` do
+      //     menu, e fazer a rota pousar na aba 1 cobraria um toque A MAIS que
+      //     hoje. Com `abaInicial`, continua custando um toque;
+      //   - `Rotas.minhasConexoes` e a entrada do menu, e o padrao da tela.
+      GoRoute(
+        path: Rotas.minhasConexoes,
+        builder: (context, estado) => _asConexoes(context),
+      ),
       GoRoute(
         path: Rotas.pedidosDeConexao,
         builder: (context, estado) =>
-            TelaDePedidosDeConexao(conexoes: Escopo.of(context).conexoes),
+            _asConexoes(context, aba: AbaDeConexoes.pendentes),
       ),
-      // AS PROPRIAS CONEXOES (22/10/2026). Rota IRMA da de pedidos, e nao
-      // filha: as duas respondem perguntas diferentes, e o cabecalho de
-      // `TelaDeMinhasConexoes` tem as tres razoes.
-      GoRoute(
-        path: Rotas.minhasConexoes,
-        builder: (context, estado) =>
-            TelaDeMinhasConexoes(conexoes: Escopo.of(context).conexoes),
-      ),
-      // PESSOAS BLOQUEADAS (19/10/2026). A porta e construida AQUI a partir do
-      // `ApiClient` do `Escopo`, como a da vitrine e as do perfil de pessoa:
-      // acrescentar campo obrigatorio ao `Escopo` quebraria toda tela de teste
-      // que o constroi.
       GoRoute(
         path: Rotas.pessoasBloqueadas,
         builder: (context, estado) =>
-            TelaDeBloqueados(seguranca: SegurancaApi(Escopo.of(context).api)),
+            _asConexoes(context, aba: AbaDeConexoes.bloqueados),
       ),
       // O PERFIL DE OUTRA PESSOA (19/10/2026, fatia G). Irma das de cima: ela
       // EMPURRA e cobre a casca, e voltar devolve a pessoa onde ela estava.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +7,7 @@ import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../api/falhas.dart';
 import '../api/mural_api.dart';
 import '../widgets/acao_de_criar_flutuante.dart';
 import '../widgets/botao_primario.dart';
@@ -15,8 +18,8 @@ import '../widgets/marca.dart';
 import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
-import 'conexoes/convide_tutores.dart';
 import 'conexoes/tela_minhas_conexoes.dart';
+import 'conexoes/tela_pedidos_de_conexao.dart';
 import 'mural/tela_do_mural.dart';
 import 'perdido/lista_de_perdidos.dart';
 import 'perfil/meus_achados.dart';
@@ -949,25 +952,41 @@ class AbaPerfil extends StatelessWidget {
               rotulo: VitrineDeFotosDoUsuario.tituloDaTela,
               aoTocar: () => context.push(Rotas.minhaVitrine),
             ),
-            // `Pessoas bloqueadas` -- e ela tinha a GAVETA COMO UNICA PORTA
-            // ate 19/10 (medido: `Rotas.pessoasBloqueadas` aparecia so em
-            // `gaveta_de_secoes.dart`, em `rotas.dart` e dentro da propria
-            // tela).
+            // ================================================================
+            // `Usuários bloqueados` SAIU DESTE GRUPO EM 28/10/2026
+            // ================================================================
             //
-            // **E ela e a mais critica deste menu caso se perdesse.** O
-            // bloqueio e simetrico no servidor: quem bloqueia alguem passa a
-            // receber `404` no perfil dessa pessoa, e o `Desbloquear` morava
-            // dentro do menu daquele perfil -- que nunca mais abre. Esta lista
-            // E o unico lugar de onde o desbloqueio sai. Sem porta para ela,
-            // **bloquear voltaria a ser irreversivel pelo aplicativo**.
+            // Decisao do cliente, literal: *"devemos centralizar tudo em um
+            // unico local"*. Ela virou a **terceira aba** de
+            // `conexoes/tela_de_conexoes.dart`, ao lado de `Conexões` e
+            // `Pendentes`.
             //
-            // **POR QUE EM `Conta` E NAO EM `Comunidade`:** ninguem vem aqui
-            // "ver os bloqueados"; vem DESFAZER um bloqueio. Isso e ajuste da
-            // propria conta, do mesmo tipo de `Meus dados`.
-            ItemDeMenu(
-              rotulo: 'Usuários bloqueados',
-              aoTocar: () => context.push(Rotas.pessoasBloqueadas),
-            ),
+            // **ESTA ERA A LINHA MAIS CRITICA DESTE MENU, e a prosa que vivia
+            // aqui dizia isso por extenso.** O bloqueio e simetrico no
+            // servidor: quem bloqueia alguem passa a receber `404` no perfil
+            // dessa pessoa, e o `Desbloquear` morava dentro do menu daquele
+            // perfil -- que nunca mais abre. A lista E o unico lugar de onde o
+            // desbloqueio sai no aplicativo inteiro.
+            //
+            // **O CUSTO ESTA MEDIDO E NAO ESCONDIDO.** Hoje era 1 toque, com a
+            // palavra que a pessoa procura escrita no menu; agora sao 2
+            // toques, e a palavra `bloqueados` **nao existe em mais lugar
+            // nenhum deste menu** -- ela fica debaixo de `Conexões`, que e o
+            // OPOSTO do que a pessoa veio desfazer. O argumento que pos o item
+            // aqui era *"ninguem vem aqui ver os bloqueados; vem DESFAZER um
+            // bloqueio -- isso e ajuste da propria conta"*, e a decisao do
+            // cliente reverte esse argumento. A reversao e dele, esta desenhada
+            // no protovipo com o custo a vista, e foi aprovada.
+            //
+            // **O QUE SEGURA O CAMINHO, e e por isso que isto nao e uma perda
+            // solta:** `Rotas.pessoasBloqueadas` continua de pe e abre a tela
+            // **JA na aba 3** (`abaInicial`, ver `rotas.dart`). O endereco que
+            // a gaveta usa, e qualquer link que ja circule, pousa no destino em
+            // UM toque -- igual a hoje. O que se perde e achar a funcao
+            // **lendo este menu**, e so isso.
+            //
+            // **O GRUPO `Conta` NAO FICOU COM UM ITEM SO**, e isso foi
+            // conferido: sobram `Meus dados` e `Minhas fotos`, que sao dois.
             const SizedBox(height: BichuEspaco.e6),
             // -----------------------------------------------------------------
             // GRUPO `Bichos na rua`: o bicho que NAO e meu
@@ -996,48 +1015,37 @@ class AbaPerfil extends StatelessWidget {
               aoTocar: () => context.push(Rotas.escanear),
             ),
             // ================================================================
-            // `Registrar achado avulso`: A ACAO QUE PERDEU A CASA EM 20/10
+            // `Registrar achado avulso` SAIU DESTE MENU EM 28/10/2026
             // ================================================================
             //
-            // Ela morava atras do alvo secundario da acao flutuante de `Pets`,
-            // e o cliente mandou o alvo sair no mesmo dia em que pediu os
-            // topicos: *"na pagina pet, remova o icone dos ..., so deixe o de
-            // escanear a tag"*.
+            // Decisao do cliente: achados viram **uma entrada**, e a acao de
+            // registrar um achado avulso e um botao **fixo no topo do corpo**
+            // da listagem (`perfil/meus_achados.dart`,
+            // `MeusAchados.rotuloDeRegistrar`) -- nunca na barra, que e o que o
+            // padrao de listagem deste projeto manda.
             //
-            // **MEDIDO ANTES DE MOVER: ela nao tinha NENHUMA outra porta.**
-            // `Rotas.registrarAchado` aparecia em `lib/` so em tres lugares --
-            // a folha do alvo secundario em `abas.dart`, a declaracao em
-            // `rotas.dart` e a propria tela. Tirar o alvo sem esta linha
-            // deixaria uma tela construida inalcancavel **em silencio**: a rota
-            // existe, a tela monta, e o que desapareceria e o unico caminho
-            // humano ate ela. Foi o mesmo achado de `Pedidos de conexao` e
-            // `Pessoas bloqueadas` em 19/10.
+            // **TERCEIRA CASA DO ROTULO EM OITO DIAS**, e a conta importa: a
+            // folha do alvo secundario da acao flutuante de `Pets` (ate 20/10)
+            // -> item deste menu (20/10 a 28/10) -> botao daquela tela. A
+            // palavra **avulso** ficou, pelo motivo que a prosa daqui
+            // registrou: *"quem usava a acao acha pelo texto"*. O que mudou foi
+            // o artigo -- `Registrar um achado avulso` --, e isso esta
+            // reportado como a perda que ela e.
             //
-            // **O ROTULO E O MESMO que a folha pintava**, e e de proposito:
-            // quem usava a folha acha a acao pelo texto, e nao descobre que ela
-            // mudou de lugar lendo um nome novo.
+            // **A PORTA NAO SE PERDEU**, e isso foi o que a medicao de 20/10
+            // tinha achado da pior maneira: `Rotas.registrarAchado` nao tinha
+            // NENHUMA outra porta, e tirar esta linha sem por o botao deixaria
+            // uma tela construida inalcancavel **em silencio**. O botao da nova
+            // tela e a porta, e ele esta visivel tambem no estado de lista
+            // VAZIA -- que e justamente quando registrar o primeiro achado e a
+            // unica coisa a fazer ali.
             //
-            // **E ELA NAO EXIGE CONTA**, como nao exigia na folha: o dono da
-            // acao e o ACHADOR, e quem acha um animal na rua pode nao ter
-            // conta. A tela de destino pede o que precisar, com a saida que
-            // resolve -- tela que recusa dizendo e melhor que porta que nao
-            // aparece. **Este menu so existe logado**, e a porta sem conta
-            // continua sendo a de `Pets`... que saiu com o alvo secundario.
-            //
-            // **ESTA E A PERDA REAL DO ITEM 3, E O CLIENTE JA RESPONDEU SOBRE
-            // ELA -- NAO REABRA.** Eu a medi e a levei a ele como pergunta
-            // fechada; resposta literal, de 20/10/2026: *"O fluxo ja existe
-            // dentro do botao escanear, digitar codigo manualmente e sinalizar
-            // o pet perdido ou no perfil do usuario, podemos deixar como
-            // esta"*. Ou seja: quem acha um bicho na rua SEM conta entra pelo
-            // leitor de plaquinha -- que e a acao flutuante de `Pets`, nao
-            // exige conta, e aceita codigo digitado a mao --, e dali sinaliza.
-            // A perda e conhecida e aceita; devolver uma porta sem conta aqui
-            // seria desfazer uma decisao dele.
-            ItemDeMenu(
-              rotulo: 'Registrar achado avulso',
-              aoTocar: () => context.push(Rotas.registrarAchado),
-            ),
+            // **A PORTA SEM CONTA CONTINUA SENDO A DE `Pets`, e o cliente ja
+            // respondeu sobre isso -- NAO REABRA.** Resposta literal, de
+            // 20/10/2026: *"O fluxo ja existe dentro do botao escanear,
+            // digitar codigo manualmente e sinalizar o pet perdido ou no
+            // perfil do usuario, podemos deixar como esta"*. Este menu so
+            // existe logado, e a perda e conhecida e aceita.
             // `Meus achados`: a lista dos avisos de achado desta conta.
             //
             // **Aqui e nao na aba `Pets`**, e a razao esta por extenso no
@@ -1060,61 +1068,53 @@ class AbaPerfil extends StatelessWidget {
             // encontros em que entrei. Nomear o grupo `Rede` faria o menu
             // parecer um atalho para a secao, e ele nao e.
             const TituloDeGrupoDeMenu('Comunidade'),
-            // `Pedidos de conexao` -- o outro dos dois que tinham a gaveta
-            // como UNICA porta em `lib/` ate 19/10, pela mesma medicao.
-            ItemDeMenu(
-              rotulo: 'Pedidos de conexão',
-              aoTocar: () => context.push(Rotas.pedidosDeConexao),
-            ),
-            // `Conexoes` (22/10/2026), por decisao do cliente: *"o usuario pode
-            // abrir a lista de usuarios que e sua conexao"*.
+            // ================================================================
+            // `Pedidos de conexão` E `Convide tutores` SAIRAM, E `Conexões`
+            // VIROU A ENTRADA UNICA (28/10/2026)
+            // ================================================================
             //
-            // **Logo DEPOIS dos pedidos, e a ordem e deliberada**: o pedido e o
-            // que espera decisao e a conexao e o que ja decidiu, entao a ordem
-            // do menu segue a do tempo. E as DUAS linhas existem porque sao
-            // DOIS destinos -- `gaveta_de_secoes.dart` proibe dois nomes para o
-            // mesmo lugar, e aqui ha um nome por lugar.
-            ItemDeMenu(
-              rotulo: TelaDeMinhasConexoes.titulo,
-              aoTocar: () => context.push(Rotas.minhasConexoes),
-            ),
-            // **`Convide tutores` ENTROU AQUI (26/10/2026), e e a METADE QUE A
-            // PESSOA VE.** Ele pediu duas vezes: 22/10/2026, *"Mova o convite
-            // tutores para a pagina do perfil"*; e 26/10/2026, *"retirar o
-            // convite tutores das mensagens, deixar apenas na menu do perfil
-            // do usuario"*. Isto emenda a decisao dele de 21/10/2026
-            // (*"no AuAu como tela empilhada, nao no Perfil"*), que e a que
-            // ainda esta escrita em `mensagens/area_de_mensagens.dart` -- as
-            // tres datas estao citadas nos dois arquivos de proposito, porque
-            // sem as duas novas ao lado da velha alguem reverte isto achando
-            // que esta consertando um defeito.
+            // Decisao do cliente, literal: *"devemos centralizar tudo em um
+            // unico local"*. Tres linhas deste grupo viraram UMA:
             //
-            // **E ESTE MENU, e nao a gaveta, que cumpre o pedido.** A linha
-            // reservada `Convidar vizinhos` de `gaveta_de_secoes.dart` subiu
-            // no mesmo commit, mas a gaveta esta OCULTA desde 19/10: se a
-            // porta tivesse ido so para la, `retirar das mensagens` teria
-            // deixado a tela SEM PORTA NENHUMA -- que e exatamente como
-            // `Pedidos de conexao` passou de 18/10 a 19/10 sem o cliente ver
-            // nada. A porta de verdade e esta, alcancada pela FOTO da barra de
-            // topo.
+            //   - `Pedidos de conexão` virou a aba `Pendentes`, COM CONTADOR;
+            //   - `Usuários bloqueados` (que morava em `Conta`) virou a aba
+            //     `Bloqueados`;
+            //   - `Conexões` -- esta linha -- e a aba 1 e a porta das tres.
             //
-            // **NO GRUPO `Comunidade`, e DEPOIS de `Conexoes`.** O grupo e o
-            // que e MEU dentro da `Rede`, e as tres linhas de gente ficam
-            // juntas na ordem do tempo: quem ESPERA decisao (`Pedidos`), quem
-            // JA e conexao (`Conexoes`), e quem ainda NAO esta no produto
-            // (este). `Meus eventos` continua a ultima do grupo porque ela e a
-            // unica que fala de encontro e nao de gente -- *"a minha gente e
-            // os encontros"*, nesta ordem, e o que o cabecalho do grupo diz.
+            // **O ROTULO NAO FOI INVENTADO.** `TelaDeMinhasConexoes.titulo` ja
+            // era `'Conexões'` desde 22/10/2026, e e tambem o titulo da barra
+            // da tela unificada: quem procura a funcao pelo nome do menu ve o
+            // mesmo nome na tela que abriu.
             //
-            // **Nenhuma linha existente mudou de lugar.** O cliente mandou
-            // dividir este menu por topicos em 21/10 e ele JA esta dividido
-            // (`Conta`, `Pets na rua`, `Comunidade`); reordenar o que ja esta
-            // decidido nao foi pedido, e `perfil_ordem_dos_itens_test.dart`
-            // guarda a ordem que ele determinou.
-            ItemDeMenu(
-              rotulo: TelaDeConvidarTutores.titulo,
-              aoTocar: () => context.push(Rotas.convidarTutores),
-            ),
+            // **`Convide tutores` MORREU, e nao mudou de lugar.** O QR foi para
+            // dentro de `Meus dados` (`perfil/tela_dados_pessoais.dart`,
+            // `_BlocoDoConvite`), e o placar `invited_joined_count` foi com
+            // ele por decisao do cliente do mesmo dia -- mover so o QR o
+            // apagaria em silencio. A tela, a rota e o atalho da gaveta sairam
+            // no mesmo commit, que e o que impede o estado de *"tela sem porta
+            // nenhuma"*; aqui o risco era o inverso -- porta sem tela.
+            //
+            // **`Meus eventos` e `Minhas indicações` FICAM EXATAMENTE ONDE
+            // ESTAO.** O cliente nao as citou em 28/10, e varrer o grupo
+            // levando as duas junto seria a falha mais facil de cometer aqui e
+            // a mais dificil de notar. Tres das cinco linhas deste grupo
+            // morrem; estas duas nao sao duas delas.
+            //
+            // **NENHUMA LINHA MUDOU DE ORDEM.** A ordem deste menu e decisao do
+            // cliente de 18/10 e 21/10, `perfil_ordem_dos_itens_test.dart` a
+            // guarda, e tres pares dela sao contrato de portao. As linhas
+            // SAEM; nada se move.
+            //
+            // **O CONTADOR, e por que esta linha tem estado proprio.** Em
+            // 28/10 o cliente pediu o numero de pendentes **tambem aqui**, e
+            // nao so na aba -- ele respondeu (a) na pergunta fechada 1 do
+            // DESENHO.md. Sem isso, quem nao abre `Conexões` depende so da
+            // notificacao, e foi por isso que ele pediu. `AbaPerfil` e
+            // `StatelessWidget` e continua sendo: quem le o resumo e
+            // `_LinhaDeConexoes`, logo abaixo neste arquivo -- um pedaco de
+            // estado do tamanho de uma linha, e nao a pagina inteira virando
+            // `StatefulWidget` por causa de um numero.
+            const _LinhaDeConexoes(),
             // `Meus eventos`: os encontros que esta conta criou (19/10/2026).
             //
             // **ESTA LINHA E O UNICO CAMINHO DO APP ATE `Cancelar`.** Nada na
@@ -1329,6 +1329,97 @@ class _AvisoPorPertoDesligado extends StatelessWidget {
 /// mudou foi a forma do gatilho -- de botao de contorno de largura total para
 /// linha de menu --, pelo pedido do cliente de 18/10/2026. `critico` poe a
 /// tinta da marca no rotulo: e a unica linha deste menu que encerra algo.
+/// A LINHA `Conexões` DO MENU, COM O CONTADOR DE PEDIDOS PENDENTES.
+///
+/// Pedido do cliente de 28/10/2026, e **e a resposta (a) a pergunta fechada 1**
+/// do `design/prototipos/menu-unificado/DESENHO.md`. O protovipo tinha deixado
+/// esta linha sem numero, por fidelidade ao pedido anterior dele (*"aba interna
+/// de pendentes + notificacao"*), e registrou isso como *"a maior
+/// fragilidade"* da decisao: as duas metades daquela escolha só avisam
+/// **depois** que a pessoa abre a caixa de avisos ou a tela. Do menu, um pedido
+/// esperando era invisivel.
+///
+/// ## Por que um widget proprio, e nao estado de `AbaPerfil`
+///
+/// `AbaPerfil` e `StatelessWidget` e continua sendo. O numero custa uma leitura
+/// de rede, e por-la na pagina faria a pagina inteira reconstruir quando a
+/// resposta chegasse -- com os cartoes de `Meus pets` e o resto do menu dentro.
+/// Aqui o `setState` alcanca uma linha.
+///
+/// ## O numero e `requests_received_count`, e ele JA EXISTE no contrato
+///
+/// Mudanca de LUGAR do numero, e nao campo novo. **So o recebido conta**:
+/// `pending_sent_count` fica fora, porque pedido que eu mandei nao espera nada
+/// de mim, e um numero que soma os dois manda a pessoa decidir algo que nao e
+/// dela. A frase que o leitor de tela ouve e
+/// `TelaDePedidosDeConexao.quantosEsperam`, que e a mesma que a pastilha da aba
+/// usa -- um texto so para o mesmo numero nos dois lugares.
+///
+/// ## A FALHA NAO DESENHA NADA, e isso e deliberado
+///
+/// Sem resposta do servidor a linha e exatamente a de antes: rotulo e chevron.
+/// O contador e aviso, nao e o que a pessoa veio fazer nesta pagina, e uma
+/// faixa de erro no menu do perfil por causa de um numero auxiliar culparia a
+/// pagina inteira por ele. **Zero tambem nao pinta** -- ver
+/// `ItemDeMenu.contador`.
+class _LinhaDeConexoes extends StatefulWidget {
+  const _LinhaDeConexoes();
+
+  @override
+  State<_LinhaDeConexoes> createState() => _EstadoDaLinhaDeConexoes();
+}
+
+class _EstadoDaLinhaDeConexoes extends State<_LinhaDeConexoes> {
+  int? _recebidos;
+
+  /// **A LEITURA SAI DE `didChangeDependencies` E NAO DE `initState`, e isso
+  /// foi MEDIDO e nao copiado.**
+  ///
+  /// `Escopo.of` e uma busca de `InheritedWidget` e precisa de `context` com a
+  /// dependencia ja ligada; chamada no `initState` ela nao acha o escopo, o
+  /// numero fica nulo e a pastilha simplesmente nao aparece -- **sem erro
+  /// nenhum na tela**. Foi o que aconteceu na primeira versao desta linha, e o
+  /// caso `com pedido esperando, a linha Conexões pinta o numero` foi quem
+  /// acusou. A mesma nota existe em `perfil/tela_dados_pessoais.dart`.
+  ///
+  /// `_pediu` guarda que a pergunta ja foi feita: `didChangeDependencies` roda
+  /// mais de uma vez, e sem ele cada reconstrucao do escopo custaria uma
+  /// chamada de rede.
+  bool _pediu = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_pediu) return;
+    _pediu = true;
+    unawaited(_ler());
+  }
+
+  Future<void> _ler() async {
+    try {
+      final resumo = await Escopo.of(context).conexoes.resumo();
+      if (!mounted) return;
+      setState(() => _recebidos = resumo.requestsReceivedCount);
+    } on FalhaDeChamada {
+      if (!mounted) return;
+      setState(() => _recebidos = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final quantos = _recebidos;
+    return ItemDeMenu(
+      rotulo: TelaDeMinhasConexoes.titulo,
+      contador: quantos,
+      rotuloDoContador: quantos == null
+          ? null
+          : TelaDePedidosDeConexao.quantosEsperam(quantos),
+      aoTocar: () => context.push(Rotas.minhasConexoes),
+    );
+  }
+}
+
 class _ItemDeSair extends StatelessWidget {
   const _ItemDeSair({required this.sessao});
 

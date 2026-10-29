@@ -297,20 +297,13 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     // SEM CONTA o corpo inteiro vira o convite, e nao a lista com faixa de
     // erro: nao ha o que atualizar, e `ArrastarParaAtualizar` repetiria o 401.
     if (_faltaConta) {
-      return Scaffold(
-        appBar: AppBar(title: const Text(TelaDeMinhasConexoes.titulo)),
-        body: const SafeArea(
-          child: Padding(
-            padding: EdgeInsets.all(BichuEspaco.e4),
-            child: ConviteParaEntrar(secao: SecaoComConta.minhasConexoes),
-          ),
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(BichuEspaco.e4),
+        child: ConviteParaEntrar(secao: SecaoComConta.minhasConexoes),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text(TelaDeMinhasConexoes.titulo)),
-      body: ArrastarParaAtualizar(
+    return ArrastarParaAtualizar(
         aoAtualizar: _carregar,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
@@ -353,7 +346,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
               ],
             ],
           ],
-        ),
       ),
     );
   }

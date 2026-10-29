@@ -10,6 +10,7 @@ import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/arrastar_para_atualizar.dart';
+import '../../widgets/botao_primario.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -76,7 +77,36 @@ import '../../widgets/saida_da_tela.dart';
 class MeusAchados extends StatefulWidget {
   const MeusAchados({super.key});
 
-  static const String titulo = 'Meus achados';
+  /// O NOME DA TELA, E O ROTULO DO MENU. **Uma constante para os dois**, e e
+  /// por isso que ela mudou em 28/10/2026.
+  ///
+  /// Era `'Meus achados'`. O cliente decidiu que achados viram **uma entrada**
+  /// chamada `Achados`, e com o menu dizendo `Achados` e a barra dizendo
+  /// `Meus achados` quem procura a funcao pelo nome do menu nao a reconheceria
+  /// na tela que abriu. Trocar as duas pontas e trocar esta linha.
+  ///
+  /// **O "meu" nao se perdeu do produto**, so do rotulo: `listMyFoundReports`
+  /// exige conta e tem a autorizacao no `WHERE` do servidor, e esta tela
+  /// continua morando em `Perfil` por isso -- a prosa do cabecalho tem a conta
+  /// inteira. O que a barra diz e o que o menu diz.
+  static const String titulo = 'Achados';
+
+  /// O ROTULO DO BOTAO FIXO NO TOPO DO CORPO (28/10/2026).
+  ///
+  /// `Registrar achado avulso` era um item do menu do `Perfil` e virou este
+  /// botao, por decisao do cliente. **TERCEIRA CASA DO ROTULO EM OITO DIAS**:
+  /// folha do alvo secundario de `Pets` -> item de menu -> este botao.
+  ///
+  /// **A palavra `avulso` FICOU de proposito.** A prosa de `abas.dart`
+  /// registrou, quando a acao virou item de menu, que o rotulo foi mantido
+  /// igual ao da folha *"porque quem usava a acao acha pelo texto"* -- e a
+  /// mesma razao vale aqui. O que mudou foi o artigo (`um`), e isso esta
+  /// reportado como a perda que e.
+  ///
+  /// **O MESMO ROTULO NO VAZIO E NA LISTA CHEIA.** Ele nao cresce, nao muda de
+  /// tinta e nao vira *"Registrar o seu primeiro achado"*: botao que muda entre
+  /// o vazio e a lista e um botao que a pessoa aprende duas vezes.
+  static const String rotuloDeRegistrar = 'Registrar um achado avulso';
 
   /// Uma linha, e só uma, em cada estado em que a lista não tem o que mostrar.
   static const String vazio = 'Você ainda não registrou nenhum achado.';
@@ -264,10 +294,57 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
           // `Tentar de novo` da faixa.
           builder: (context, _) => ArrastarParaAtualizar(
             aoAtualizar: _carregar,
-            child: ListView(
-              padding: const EdgeInsets.all(BichuEspaco.e4),
-              addSemanticIndexes: false,
-              children: _corpo(),
+            // ============================================================
+            // O CORPO VIROU `CustomScrollView` EM 28/10/2026, E O MOTIVO E O
+            // BOTAO FIXO.
+            // ============================================================
+            //
+            // Era uma `ListView`. O cliente pediu `Registrar um achado avulso`
+            // **fixo no topo do corpo, com a lista passando por baixo**, e
+            // `position: sticky` em Flutter e um `SliverPersistentHeader`
+            // com `pinned: true` -- a unica forma em que o conteudo rola por
+            // DEBAIXO do controle em vez de parar antes dele.
+            //
+            // **Por que FIXO e nao so a primeira linha da lista**: com 20
+            // itens e `Carregar mais`, um botao que rola embora obriga a
+            // voltar ao inicio para registrar o proximo achado -- e quem
+            // registra um achado costuma estar **na rua, com um animal na
+            // mao**. Um botao que fosse o primeiro filho da `ListView`
+            // passaria em quase todos os casos da isca e reprovaria no que
+            // rola a lista, que e o que importa.
+            //
+            // **NA BARRA, NUNCA.** O padrao de listagem deste projeto manda
+            // por controle no topo do CORPO da tela, e o cliente pediu
+            // exatamente isso.
+            //
+            // `addSemanticIndexes: false` sobreviveu a troca, no
+            // `SliverChildListDelegate`: com os indices, o corpo inteiro vira
+            // um no anunciado como botao.
+            child: CustomScrollView(
+              slivers: <Widget>[
+                // **A LINHA SO APARECE COM CONTA.** No estado `semConta` o
+                // corpo inteiro e o convite para entrar, e um botao de acao
+                // grudado no topo dele seria um controle acima de uma tela que
+                // existe para dizer que nao ha sessao. A ACAO EM SI nao exige
+                // conta -- e nao exigia na folha de `Pets` --, mas esta tela so
+                // e alcancada logada.
+                if (_fase != _Fase.semConta)
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _BarraDeRegistrar(
+                      aoTocar: () => context.push(Rotas.registrarAchado),
+                    ),
+                  ),
+                SliverPadding(
+                  padding: const EdgeInsets.all(BichuEspaco.e4),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate(
+                      _corpo(),
+                      addSemanticIndexes: false,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -464,4 +541,80 @@ class _UmaLinha extends StatelessWidget {
       child: Text(texto, style: Theme.of(context).textTheme.titleMedium),
     );
   }
+}
+
+/// O CHAO FIXO COM `Registrar um achado avulso`, no topo do corpo.
+///
+/// Decisao do cliente de 28/10/2026, desenhada em
+/// `design/prototipos/menu-unificado/`.
+///
+/// ## Por que um `SliverPersistentHeaderDelegate`, e nao uma `Column`
+///
+/// Com uma `Column` o botao ficaria **acima** do corpo rolante e a lista
+/// comecaria embaixo dele: nada passaria por baixo, e a viewport encolheria. O
+/// cliente pediu o botao fixo **com a lista passando por baixo**, que e o que
+/// `pinned: true` faz -- o conteudo rola por DEBAIXO do cabecalho.
+///
+/// ## O CHAO E OPACO, E ISSO NAO E ENFEITE
+///
+/// Sem `color` o cabecalho seria transparente e o texto do primeiro cartao
+/// apareceria ATRAS do botao enquanto a lista rolasse -- duas camadas de texto
+/// no mesmo lugar, que e pior que nao ter botao fixo. O chao e `surface` (o
+/// mesmo da tela) com um `outline` de cabelo na base, que e o que separa o
+/// controle da lista sem o fazer parecer um cartao.
+///
+/// ## A ALTURA
+///
+/// Fixa, e amarrada ao token: o alvo de toque de 48 dp mais a folga de `e3` de
+/// cada lado. [maxExtent] e [minExtent] sao iguais de proposito -- um
+/// cabecalho que encolhe na rolagem e um alvo de toque que muda de tamanho
+/// debaixo da mao da pessoa.
+///
+/// **A fonte do sistema a 200% nao cabe nesta altura, e isso esta reportado.**
+/// `BotaoPrimario` quebraria o rotulo em duas linhas dentro de um chao de
+/// altura fixa. Um `SliverPersistentHeader` exige extensao conhecida, e medir o
+/// texto aqui seria reimplementar o layout do botao; a saida certa e o chao
+/// crescer com a escala, e ela nao foi feita nesta frente.
+class _BarraDeRegistrar extends SliverPersistentHeaderDelegate {
+  const _BarraDeRegistrar({required this.aoTocar});
+
+  final VoidCallback aoTocar;
+
+  /// `e3` em cima e embaixo do alvo de 48 dp.
+  static const double _altura = BichuAlvoDeToque.min + BichuEspaco.e3 * 2;
+
+  @override
+  double get maxExtent => _altura;
+
+  @override
+  double get minExtent => _altura;
+
+  @override
+  Widget build(BuildContext context, double deslocamento, bool sobrepondo) {
+    final cores = BichuColors.of(context).cores;
+    return Container(
+      // OPACO -- ver a prosa da classe.
+      decoration: BoxDecoration(
+        color: cores.surface,
+        border: Border(
+          bottom: BorderSide(color: cores.outline, width: BichuBorda.hairline),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: BichuEspaco.e4,
+        vertical: BichuEspaco.e3,
+      ),
+      child: BotaoPrimario(
+        rotulo: MeusAchados.rotuloDeRegistrar,
+        icone: Icons.add,
+        aoTocar: aoTocar,
+      ),
+    );
+  }
+
+  /// **Reconstroi quando a acao muda, e so.** O rotulo e constante e a altura e
+  /// fixa; comparar por identidade de `aoTocar` e o que evita um `rebuild` a
+  /// cada quadro de rolagem.
+  @override
+  bool shouldRebuild(_BarraDeRegistrar velho) => velho.aoTocar != aoTocar;
 }

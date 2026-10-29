@@ -162,8 +162,20 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
     final textos = Theme.of(context).textTheme;
     final itens = _pagina?.items ?? const <PessoaBloqueada>[];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text(TelaDeBloqueados.titulo)),
+    // **ESTA TELA PERDEU O `Scaffold` EM 28/10/2026, e nao perdeu a barra.**
+    //
+    // Ela virou a aba 3 de `conexoes/tela_de_conexoes.dart`, por decisao do
+    // cliente (*"devemos centralizar tudo em um unico local"*), e quem desenha
+    // a barra de topo agora e a casca -- com o titulo `Conexões` e a barra de
+    // abas. Dois `Scaffold` empilhados dariam duas barras de topo, uma por
+    // aba.
+    //
+    // `TelaDeBloqueados.titulo` **continua existindo e nao e mais a barra
+    // desta tela**: ele e o vocabulario do produto para esta lista, citado em
+    // `gaveta_de_secoes.dart` e nos portoes. O rotulo da ABA e
+    // `AbaDeConexoes.bloqueados.rotulo`, que e `Bloqueados` -- tres rotulos
+    // lado a lado numa tela de 320 dp nao cabem com `Usuários bloqueados`.
+    return
       // ACHADO DA MESCLA DE 19/10/2026: era `RefreshIndicator` cru.
       //
       // A frente `estado-deslogado-nas-secoes` trouxe o ponto unico do gesto
@@ -173,7 +185,7 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
       // nao se cruzam em nenhuma linha -- o git mesclou sem conflito e o
       // portao reprovou sobre a UNIAO. A conversao e a mesma que
       // `tela_pedidos_de_conexao.dart` recebeu em 18/10.
-      body: ArrastarParaAtualizar(
+      ArrastarParaAtualizar(
         aoAtualizar: _carregar,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
@@ -225,7 +237,6 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
             ],
           ],
         ),
-      ),
     );
   }
 

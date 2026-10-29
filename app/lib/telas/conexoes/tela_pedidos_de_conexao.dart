@@ -107,7 +107,24 @@ import '../../widgets/selo_de_validado.dart';
 /// exibição; com os dois nulos a tela escreve [semNome], que é texto de tela e
 /// não de servidor. O `ref` que viaja nos botões é **da aresta**, não da pessoa.
 class TelaDePedidosDeConexao extends StatefulWidget {
-  const TelaDePedidosDeConexao({required this.conexoes, super.key});
+  const TelaDePedidosDeConexao({
+    required this.conexoes,
+    super.key,
+    this.aoMudarOsPedidos,
+  });
+
+  /// AVISA A CASCA DE QUE A CONTAGEM MUDOU NO SERVIDOR.
+  ///
+  /// Aceitar ou recusar tira o pedido da caixa `Recebidos` **no servidor**, e
+  /// a pastilha da aba `Pendentes` mora na casca
+  /// (`conexoes/tela_de_conexoes.dart`), que leu o resumo antes de esta aba
+  /// existir. Sem este aviso a pastilha ficaria no numero velho, afirmando
+  /// pedidos que a propria pessoa acabou de resolver -- e o numero no menu do
+  /// `Perfil` idem, na proxima vez que a pagina fosse montada.
+  ///
+  /// **Opcional de proposito**: a aba tambem e montada sozinha em teste, e um
+  /// parametro obrigatorio faria cada caso inventar uma funcao vazia.
+  final VoidCallback? aoMudarOsPedidos;
 
   /// Entregue por quem monta a tela.
   ///
@@ -117,6 +134,22 @@ class TelaDePedidosDeConexao extends StatefulWidget {
   final ConexoesApi conexoes;
 
   static const String titulo = 'Pedidos de conexão';
+
+  /// O QUE A PASTILHA DO CONTADOR QUER DIZER, em palavras.
+  ///
+  /// Mora aqui, e nao na casca nem em `ItemDeMenu`, porque e o vocabulario
+  /// DESTA caixa: a casca pinta o numero e o componente de menu pinta o
+  /// numero, mas nenhum dos dois sabe de que ele e. Os dois leem esta frase.
+  ///
+  /// **So o recebido.** `pending_sent_count` nao entra: pedido que eu mandei
+  /// nao espera nada de mim.
+  static String quantosEsperam(int quantos) => quantos == 1
+      ? '1 pedido esperando você'
+      : '$quantos pedidos esperando você';
+
+  /// Os rotulos das duas caixas, como CHIPS no topo do corpo.
+  static String rotuloDaCaixa(CaixaDePedidos caixa) =>
+      caixa == CaixaDePedidos.recebidos ? 'Recebidos' : 'Enviados';
   static const String semNome = 'Usuário sem nome';
   static const String vazioRecebidos = 'Nenhum pedido esperando você';
   static const String vazioEnviados = 'Você não tem pedidos esperando resposta';
@@ -136,27 +169,34 @@ class TelaDePedidosDeConexao extends StatefulWidget {
   State<TelaDePedidosDeConexao> createState() => _EstadoDosPedidos();
 }
 
-class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
-    with SingleTickerProviderStateMixin {
+class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
+  /// A caixa que esta na frente. **Ela mora no estado**, e e isso que faz a
+  /// escolha sobreviver a reconstrucao -- inclusive a que acontece quando o
+  /// perfil de quem pediu e EMPILHADO por cima desta aba e depois sai.
   CaixaDePedidos _caixa = CaixaDePedidos.recebidos;
 
-  /// O controlador das DUAS abas, criado UMA vez e com `initialIndex`.
-  ///
-  /// **Ele mora no estado e não no `build`**, e é isso que faz a aba escolhida
-  /// sobreviver a reconstrução — inclusive à reconstrução que acontece quando
-  /// o perfil de quem pediu é EMPILHADO por cima desta tela e depois sai. Ver
-  /// o comentário do `push` em [_nomeDeQuemPediu]: ele já dizia que voltar do
-  /// perfil tem de devolver a caixa que a pessoa estava olhando, e com um
-  /// controlador refeito a cada `build` a aba voltaria a `Recebidos`.
-  ///
-  /// `length` vem de `CaixaDePedidos.values` e não de um `2` escrito à mão:
-  /// uma caixa nova no contrato quebraria o controlador em silêncio, com a
-  /// aba existindo no `enum` e não na barra.
-  late final TabController _abas = TabController(
-    length: CaixaDePedidos.values.length,
-    initialIndex: _caixa.index,
-    vsync: this,
-  );
+  // ====================================================================
+  // O `TabController` DAS DUAS CAIXAS SAIU EM 28/10/2026.
+  // ====================================================================
+  //
+  // Esta tela virou a aba `Pendentes` de `conexoes/tela_de_conexoes.dart`, por
+  // decisao do cliente (*"devemos centralizar tudo em um unico local"*). As
+  // duas caixas eram uma `TabBar` interna, por pedido dele de 26/10 (*"divida
+  // recebidos e enviados por abas, igual na pagina de rede"*), e dentro de uma
+  // aba isso viraria **aba dentro de aba** -- o controle que ninguem sabe qual
+  // dos dois esta mexendo. Este aplicativo tem UMA `TabBar` so.
+  //
+  // Elas viraram CHIPS no topo do corpo, que e onde o padrao de listagem deste
+  // projeto manda por controle: no corpo, nunca na barra. A escolha continua
+  // sobrevivendo a reconstrucao por `_caixa`, que sempre foi quem a guardava;
+  // o controlador existia para a barra, e nao para a memoria.
+  //
+  // **O SEGMENTO FICA mesmo com `Recebidos` vazio.** Esconde-lo faria o
+  // controle aparecer e sumir sob a mao da pessoa, e ela nao teria como
+  // descobrir que ha pedidos ENVIADOS esperando resposta do outro lado.
+  //
+  // **Qual e o certo e decisao do cliente**, e esta registrado como pergunta
+  // fechada 2 no `design/prototipos/menu-unificado/DESENHO.md`.
 
   /// A PÁGINA JÁ CARREGADA DE CADA CAIXA, e a razão de ela ser um MAPA.
   ///
@@ -192,12 +232,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
   void initState() {
     super.initState();
     unawaited(_carregar());
-  }
-
-  @override
-  void dispose() {
-    _abas.dispose();
-    super.dispose();
   }
 
   Future<void> _carregar() async {
@@ -274,6 +308,11 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
       // desenhar uma lista que o servidor já não tem. `_carregar()` logo
       // abaixo refaz a da frente; a outra refaz quando for aberta.
       _paginas.clear();
+      // A CASCA E AVISADA ANTES da recarga, e nao depois: a pastilha da aba
+      // `Pendentes` le o resumo por conta propria, e fazer os dois em paralelo
+      // e o que mantem o numero e a lista chegando juntos. Ver
+      // `TelaDePedidosDeConexao.aoMudarOsPedidos`.
+      widget.aoMudarOsPedidos?.call();
       await _carregar();
     } on FalhaDeChamada {
       if (!mounted) return;
@@ -313,107 +352,74 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
     // deslogado. Nao ha `RefreshIndicator` tambem -- arrastar para atualizar
     // repetiria o 401.
     if (_faltaConta) {
-      return Scaffold(
-        appBar: AppBar(title: const Text(TelaDePedidosDeConexao.titulo)),
-        body: const SafeArea(
-          child: Padding(
-            padding: EdgeInsets.all(BichuEspaco.e4),
-            child: ConviteParaEntrar(secao: SecaoComConta.pedidosDeConexao),
-          ),
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(BichuEspaco.e4),
+        child: ConviteParaEntrar(secao: SecaoComConta.pedidosDeConexao),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text(TelaDePedidosDeConexao.titulo)),
+    // **SEM `Scaffold` DESDE 28/10/2026**: quem desenha a barra de topo e a
+    // casca `conexoes/tela_de_conexoes.dart`, com o titulo `Conexões` e a
+    // barra de abas. Dois `Scaffold` empilhados dariam duas barras.
+    return
       // **ERA UM `RefreshIndicator` CRU, e passou a ser o componente.** Esta
       // era a UNICA tela do app com o gesto, escrita antes de ele existir em
       // lugar nenhum; o cliente mandou o gesto para o app inteiro em
       // 18/10/2026, e manter o cru aqui deixaria uma tela com rotulo de leitor
       // de tela diferente das outras dez.
-      body: ArrastarParaAtualizar(
+      ArrastarParaAtualizar(
         aoAtualizar: _carregar,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
-            // O CONTROLE NO TOPO DO CORPO, e não na barra: é o padrão de
-            // listagem desta casa, e a aba herda exatamente o lugar do
-            // segmento que ela substituiu. **DUAS abas, porque não há uma
-            // terceira caixa** -- ver a prosa da classe.
+            // OS CHIPS NO TOPO DO CORPO, e nao na barra: e o padrao de
+            // listagem desta casa, e eles herdam exatamente o lugar da
+            // `TabBar` interna que substituiram em 28/10/2026 -- que por sua
+            // vez havia herdado o lugar de um `GrupoSegmentado`. Tres formas,
+            // o mesmo lugar.
             //
-            // **ELAS FICAM DENTRO DA `ListView`, e isso é escolha e não
+            // **POR QUE CHIP E NAO ABA, agora**: esta tela virou a aba
+            // `Pendentes` de `conexoes/tela_de_conexoes.dart`, e duas abas
+            // dentro de uma aba sao o controle que ninguem sabe qual dos dois
+            // esta mexendo. Este aplicativo tem UMA `TabBar` so
+            // (`rede/secao_da_rede.dart`, e a casca das conexoes agora).
+            //
+            // **ELES FICAM DENTRO DA `ListView`, e isso e escolha e nao
             // descuido.** Em `secao_da_rede.dart` as abas ficam FORA do corpo
-            // rolante, e o motivo medido está escrito lá: a barra de listagem
+            // rolante, e o motivo medido esta escrito la: a barra de listagem
             // daquela tela desaparece em alguns estados e levaria as abas
-            // junto. **Aqui não há barra de listagem**, e o lugar do controle
-            // é o topo do corpo pelo padrão desta casa; tirá-lo da `ListView`
-            // reestruturaria a tela e passaria por cima do gesto de arrastar
-            // para atualizar, que é o pai desta lista.
+            // junto. **Aqui nao ha barra de listagem**, e tira-los da
+            // `ListView` passaria por cima do gesto de arrastar para
+            // atualizar, que e o pai desta lista.
+            //
+            // **O SEGMENTO FICA mesmo com `Recebidos` vazio** -- ver a prosa
+            // do estado.
             Semantics(
               container: true,
-              // `Caixa` era o `rotulo` do `GrupoSegmentado`, e ele continua
-              // aqui pelo motivo que está escrito lá: sem o nome do grupo,
-              // quem usa leitor de tela ouve `Recebidos` e não tem como saber
-              // qual era a pergunta. A `TabBar` do M3 já anuncia `aba 1 de 2`
-              // e o estado de selecionada -- o que ela NÃO tem é a pergunta.
+              // `Caixa` era o `rotulo` do `GrupoSegmentado` e continua aqui
+              // pelo motivo que estava escrito la: sem o nome do grupo, quem
+              // usa leitor de tela ouve `Recebidos` e nao tem como saber qual
+              // era a pergunta. O `ChoiceChip` do M3 anuncia o estado de
+              // selecionado -- o que ele NAO tem e a pergunta.
               label: 'Caixa',
-              child: TabBar(
-                controller: _abas,
-                // AS DUAS VÊM DE `secao_da_rede.dart`, e a conta foi
-                // REFEITA para ESTES dois rótulos em vez de herdada
-                // (320 dp de tela, 200% de escala de fonte):
-                //
-                // | barra | largura dada | precisa de | linhas |
-                // |---|---|---|---|
-                // | NÃO rolável (`fill`) | 112,0 dp | 252,9 / 224,8 | **2** |
-                // | `isScrollable` | 252,9 / 224,8 dp | idem | 1 |
-                //
-                // **ISTO CORRIGE O QUE EU HAVIA ESCRITO AQUI.** Eu disse que
-                // o rótulo "corta" numa barra não rolável, copiando a palavra
-                // da prosa da `Rede`. MEDIDO: **não corta** --
-                // `didExceedMaxLines` é falso e nenhuma exceção sobe. O que
-                // acontece é que ele QUEBRA EM DUAS LINHAS, com 112 dp onde
-                // pede 252,9, e o texto passa de 40,0 para 48,0 dp de altura.
-                // Logo: rolar não evita uma quebra de layout, evita que o
-                // rótulo vire duas linhas. É escolha de qualidade e não
-                // conserto de defeito, e dizer o contrário seria inventar
-                // gravidade para justificar a decisão.
-                //
-                // `tabAlignment: TabAlignment.start` porque com
-                // `isScrollable` o padrão do M3 é `startOffset`, que abre um
-                // vão de 52 dp antes da primeira aba -- somado à margem de
-                // 16 dp deste corpo, `Recebidos` nasceria a 68 dp da borda,
-                // desalinhada de tudo o que está abaixo dela.
-                //
-                // O CUSTO É DE LARGURA, e está medido e não escondido: a 200%
-                // a segunda aba termina em 541,7 dp, fora de uma tela de 320
-                // -- e é por isso mesmo que esta barra rola.
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                onTap: (int i) => _trocarCaixa(CaixaDePedidos.values[i]),
-                tabs: const <Widget>[
-                  // `height` EXPLÍCITO, amarrado ao token, e a conta está
-                  // MEDIDA (26/10/2026, neste Flutter 3.47.4):
-                  //
-                  // | `height` | caixa do `Tab` | ALVO DE TOQUE |
-                  // |---|---|---|
-                  // | ausente | 46,0 dp | **48,0 dp** |
-                  // | `BichuAlvoDeToque.min` | 48,0 dp | **50,0 dp** |
-                  //
-                  // **O alvo nunca esteve abaixo do piso**, e dizer que isto
-                  // conserta um alvo pequeno seria falso: a `TabBar` envolve
-                  // cada aba num `Padding(bottom: indicatorWeight)` por
-                  // DENTRO do `InkWell`, então o alvo é 2 dp mais alto que a
-                  // caixa do `Tab`. Sem `height` ele dá 48,0 — no piso, com
-                  // folga ZERO.
-                  //
-                  // O que o token compra é a folga e o VÍNCULO: a altura
-                  // passa a vir de `design/tokens.json` e não de
-                  // `kTextTabBarHeight`, que é constante do SDK e pode mudar
-                  // numa atualização sem ninguém reparar. É também o que o
-                  // padrão da casa faz em `rede/secao_da_rede.dart`.
-                  Tab(height: BichuAlvoDeToque.min, child: Text('Recebidos')),
-                  Tab(height: BichuAlvoDeToque.min, child: Text('Enviados')),
+              child: Wrap(
+                spacing: BichuEspaco.e2,
+                children: <Widget>[
+                  for (final caixa in CaixaDePedidos.values)
+                    ChoiceChip(
+                      selected: _caixa == caixa,
+                      onSelected: (_) => _trocarCaixa(caixa),
+                      // O ALVO DE TOQUE amarrado ao token, como os `Tab` que
+                      // sairam: sem isto o `ChoiceChip` do M3 fica em 32 dp de
+                      // altura, abaixo do piso de 48 dp do SC 2.5.8.
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: BichuEspaco.e3,
+                        vertical: BichuEspaco.e3,
+                      ),
+                      label: Text(
+                        TelaDePedidosDeConexao.rotuloDaCaixa(caixa),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -447,7 +453,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao>
               ...itens.map((Conexao pedido) => _cartao(cores, textos, pedido)),
           ],
         ),
-      ),
     );
   }
 

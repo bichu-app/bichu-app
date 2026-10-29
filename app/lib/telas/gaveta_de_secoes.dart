@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
-import 'conexoes/convide_tutores.dart';
 import 'conexoes/tela_minhas_conexoes.dart';
 import 'conexoes/tela_pedidos_de_conexao.dart';
 import 'seguranca/tela_de_bloqueados.dart';
@@ -572,7 +571,7 @@ abstract final class RegistroDeSubDestinos {
       // NORMAL desta casa -- subir o estado do sub-destino que a UX 27.5 ja
       // nomeia, em vez de acrescentar linha. A 27.5.5 reservou
       // `Convidar vizinhos` e a deixou `planejada`; o cabecalho de
-      // `TelaDeConvidarTutores` diz, por escrito, que esta era a linha dela:
+      // a prosa daquela tela dizia, por escrito, que esta era a linha dela:
       // *"A UX 27.5.5 tinha a linha `Convidar vizinhos` reservada e
       // `planejada`"*. O rotulo que entrou e o que o CLIENTE escreveu em
       // 21/10/2026, e `tutores` e mais exato -- o que o produto quer e quem
@@ -631,12 +630,44 @@ abstract final class RegistroDeSubDestinos {
       //
       // `Icons.share*` nao aparece em nenhum outro lugar de `app/lib` (medido),
       // entao o glifo nao chega com sentido emprestado de outra tela.
+      // ==================================================================
+      // ELA DESCEU DE VOLTA PARA `planejada` EM 28/10/2026, E ISSO E A
+      // CONSEQUENCIA DE UMA DECISAO E NAO UM ATALHO QUE MORREU SOZINHO.
+      // ==================================================================
+      //
+      // A tela `Convide tutores` MORREU, por decisao do cliente de 28/10/2026:
+      // o QR foi para dentro de `Meus dados`
+      // (`telas/perfil/tela_dados_pessoais.dart`, `_BlocoDoConvite`), com o
+      // placar `invited_joined_count` junto. `Rotas.convidarTutores` saiu de
+      // `rotas.dart` com ela -- rota viva para tela apagada e endereco que
+      // derruba o app.
+      //
+      // **A LINHA NAO FOI APAGADA, e isso e o procedimento desta casa, nao
+      // zelo.** Ela e a reserva da UX 27.5.5 (`Convidar vizinhos`,
+      // `planejada`) que havia subido em 26/10; com a tela morta, ela volta
+      // exatamente ao estado de onde veio. Apagar a linha mudaria o
+      // inventario de 54 para 53 e os destinos de 18 para 17, e o inventario
+      // de 27.5 e o registro do que a UX NOMEIA -- e ela continua nomeando
+      // esta porta. `todos` continua 54, `destinos` continua 18, e a linha
+      // atravessa de `vivos` (9 -> 8) para `porConstruir` (9 -> 10).
+      //
+      // **O ROTULO VOLTOU A SER O DA UX**, e nao o do cliente: `Convide
+      // tutores` era o nome da TELA, que nao existe mais, e
+      // `TelaDeConvidarTutores.titulo` foi apagado com ela. `Convidar
+      // vizinhos` e o que a 27.5.5 reservou, e e o nome de uma porta por
+      // construir -- que e o que esta linha e de novo.
+      //
+      // **SEM `rota` E SEM `icone`**, que e o que `planejada` exige: o
+      // `assert` do construtor cobra glifo so de quem `viraItem`, e
+      // `Rotas.convidarTutores` nao existe mais para ser citada aqui.
+      //
+      // A FUNCAO NAO SE PERDEU: o QR tem porta nova, dentro de `Meus dados`,
+      // e e por isso que esta descida nao deixa ninguem sem caminho. O que
+      // esta linha registra e que a GAVETA voltou a nao ter atalho para ele.
       SubDestino(
-        rotulo: TelaDeConvidarTutores.titulo,
+        rotulo: 'Convidar vizinhos',
         forma: FormaDoSubDestino.destino,
-        estado: EstadoDoSubDestino.existe,
-        rota: Rotas.convidarTutores,
-        icone: Icons.share_outlined,
+        estado: EstadoDoSubDestino.planejada,
       ),
       // **LINHA NOVA (19/10/2026), e nao mudanca de estado -- a diferenca esta
       // dita aqui de proposito.** O procedimento desta casa e subir o estado do
