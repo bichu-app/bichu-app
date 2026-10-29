@@ -337,52 +337,25 @@ abstract final class Rotas {
   /// as duas dizem a mesma coisa.
   static const String mensagens = '/mensagens';
 
-  /// `Convide tutores` — a tela de trazer tutores para o Bichu.
-  ///
-  /// **SOB `/perfil` DESDE 26/10/2026, e era `/mensagens/convide-tutores`.** A
-  /// tela saiu do corpo do AuAu e passou a ser alcancada pelo menu do Perfil,
-  /// por pedido do cliente feito DUAS VEZES -- 22/10/2026, *"Mova o convite
-  /// tutores para a pagina do perfil"*, e 26/10/2026, *"retirar o convite
-  /// tutores das mensagens, deixar apenas na menu do perfil do usuario"*. Isso
-  /// emenda a decisao dele de 21/10/2026 (*"no AuAu como tela empilhada, nao no
-  /// Perfil"*), que foi o que pos este endereco sob `/mensagens`.
-  ///
-  /// **O ENDERECO FOI RENOMEADO PORQUE RENOMEAR AQUI NAO CUSTA NADA, e isso
-  /// foi MEDIDO e nao suposto.** Nada aponta para esta rota de fora do app:
-  ///
-  ///  1. o app **nao abre por link** -- so `MAIN`/`LAUNCHER`, nenhum
-  ///     `intent-filter` de `VIEW` e `assetlinks.json` vazio, como o cabecalho
-  ///     de `widgets/qr_do_convite.dart` ja registrava;
-  ///  2. o QR do convite carrega o **token cru** (43 simbolos ao portador), e
-  ///     nao uma URL -- renomear rota nao invalida convite nenhum ja emitido;
-  ///  3. `convide-tutores` nao aparece em `app/android/` nem em `app/ios/`
-  ///     (medido), entao nenhum manifesto reclama;
-  ///  4. nao ha migracao: endereco de tela nao e dado guardado.
-  ///
-  /// O custo inteiro foram tres arquivos -- esta constante, o `GoRoute` abaixo
-  /// e a entrada de `telasInternas` do portao de barra fixa.
-  ///
-  /// **E RENOMEAR APAGOU UMA ARMADILHA em vez de criar uma.** Enquanto o
-  /// endereco era `/mensagens/convide-tutores`, ele SO funcionava por estar
-  /// registrado antes de `/mensagens/:conversaId` -- fora de ordem, o
-  /// `go_router` abriria a conversa `'convide-tutores'`, que nao existe. Sob
-  /// `/perfil` essa dependencia de ordem deixa de existir: **nao ha nenhuma
-  /// rota `/perfil/:algo`** no produto (medido -- as oito rotas sob `/perfil`
-  /// tem todas segmento literal), entao nada pode captura-la.
-  ///
-  /// `slotDaRota` nao entra nesta conta, e vale dizer por que: esta tela esta
-  /// em `telasInternas` do portao de barra fixa, ou seja ela **nao mostra barra
-  /// de baixo nenhuma**. Nao ha slot para acender, e o primeiro segmento do
-  /// endereco nao muda nada do que a pessoa ve.
-  ///
-  /// **Nao e `/rede/indicacoes/...`, e a distancia e deliberada**: "indicacao"
-  /// neste produto e indicar PROFISSIONAL ao diretorio, e aquelas duas rotas sao
-  /// dela. Duas funcoes diferentes vizinhas no endereco sao duas funcoes
-  /// diferentes vizinhas na gaveta.
-  ///
-  /// EMPILHADA, e interna: ela e aberta por um `ItemDeMenu` do corpo do Perfil,
-  /// e nao pela barra. Classificada em `telasInternas` do portao de barra fixa.
-  static const String convidarTutores = '/perfil/convide-tutores';
+  // ====================================================================
+  // `convidarTutores` MORREU EM 28/10/2026, COM A TELA E COM A ROTA
+  // ====================================================================
+  //
+  // Decisao do cliente: a tela `Convide tutores` morre e o QR vai para dentro
+  // de `Meus dados` (`telas/perfil/tela_dados_pessoais.dart`,
+  // `_BlocoDoConvite`), com o placar `invited_joined_count` junto.
+  //
+  // **A CONSTANTE SAIU JUNTO, e nao ficou "por seguranca".** Endereco
+  // declarado sem rota do outro lado e exatamente a linha orfa que o portao de
+  // barra fixa chama de *"decisao esperando por uma rota futura que ninguem
+  // vai tomar"* -- e pior: ela compila, entao um `push` dela levaria a pessoa a
+  // um endereco que o roteador nao conhece, sem erro em tempo de compilacao.
+  // Com a constante fora, qualquer tentativa de repor a porta nem compila.
+  //
+  // `app/test/telas/convite_tutores_no_perfil_test.dart` varre o ENDERECO em
+  // texto nos quatro arquivos que esta historia tocou, porque a `String` crua
+  // continuaria compilando.
+
 
   /// A CAIXA DE NOTIFICACOES (18/10/2026): o conteudo do sino.
   ///
