@@ -5,9 +5,12 @@ import 'modelos_passkey.dart';
 
 /// As operacoes de `/v1/auth/passkey` do contrato (BICHUS-301).
 ///
-/// **Cinco das seis operacoes do contrato estao aqui.** `revokePasskey` ficou
-/// de fora porque ela serve uma tela de gerenciar aparelhos, que nao existe --
-/// e codigo sem chamador nao e medido por nada.
+/// **As SEIS operacoes do contrato estao aqui.** `revokePasskey` era a que
+/// faltava: ela ficou de fora porque serviria uma tela de gerenciar aparelhos
+/// que nao existia, e codigo sem chamador nao e medido por nada. **Entrou em
+/// 29/10/2026, por pedido do cliente e com chamador** --
+/// `FiacaoDoPasskey.revogar`, atras da secao `Login por digital` de
+/// `Meus dados`.
 ///
 /// `listPasskeys` entrou em 28/10/2026, e **com chamador**:
 /// `FiacaoDoPasskey.reconciliarComAConta` a usa depois de uma entrada por
@@ -122,5 +125,36 @@ class PasskeysApi {
         .whereType<Map<String, dynamic>>()
         .map(Passkey.doJson)
         .toList();
+  }
+
+  /// `DELETE /auth/passkeys/{passkeyId}`. **EXIGE SESSAO.**
+  ///
+  /// Entrou em 29/10/2026 por pedido do cliente -- *"Implemente a rota do
+  /// passkey"* --, e **com chamador**: `FiacaoDoPasskey.revogar`. Era a sexta
+  /// e ultima operacao de passkey do contrato que faltava nesta camada.
+  ///
+  /// **O [passkeyId] e o `id` DA LINHA, e nao o `credential_id`.** O contrato
+  /// e explicito no campo: *"identificador DA LINHA, e nao o `credential_id`.
+  /// E o que `revokePasskey` recebe"*. Ele sai de [listar], que e a unica
+  /// operacao que o devolve -- `Passkey` **nao traz `credential_id`**, de
+  /// proposito: nada que sirva para montar uma assercao sai de lá.
+  ///
+  /// **REVOGAR MARCA REVOGADA, NAO APAGA** (decisao do cliente de 26/10): a
+  /// linha fica com `revoked_at` preenchido, deixa de contar no teto e deixa
+  /// de servir para entrar.
+  ///
+  /// **NAO leva `X-Reauth-Token`, e isso e leitura do contrato e nao
+  /// economia.** A operacao declara `security: [bearerAuth]` sozinho, com a
+  /// razao escrita: *"quem perdeu o aparelho precisa revogar a credencial
+  /// dele, e a senha continua sendo a outra porta"*. Mandar reautenticacao
+  /// aqui poria um passo no momento em que a pessoa mais precisa de pressa.
+  ///
+  /// **IDEMPOTENTE pelo contrato**: revogar a ja revogada tambem sai 204.
+  /// Credencial de outra conta responde **404 e nao 403**.
+  ///
+  /// `Idempotency-Key` fica de fora, como no resto desta classe: a operacao ja
+  /// e idempotente por desenho, e o caminho e o proprio identificador.
+  Future<void> revogar(String passkeyId) async {
+    await _api.delete('/auth/passkeys/${Uri.encodeComponent(passkeyId)}');
   }
 }

@@ -49,7 +49,7 @@
 ///    SINCRONIZACAO (Google Password Manager, Chaveiro do iCloud),
 ///    reinstalacao ou restauracao de backup.
 ///
-/// ## O REGISTRO SO MARCA, E NUNCA DESMARCA. E deliberado.
+/// ## O REGISTRO SO MARCA POR CONTA PROPRIA, E NUNCA DESMARCA SOZINHO.
 ///
 /// Os dois erros possiveis nao custam a mesma coisa:
 ///
@@ -59,9 +59,35 @@
 /// - **marca faltando** (ha credencial aqui): a pessoa perde a entrada sem
 ///   toque, que e o valor inteiro do recurso.
 ///
-/// Como o segundo e muito pior, o registro nunca volta atras. Quem revogou a
-/// ultima credencial em OUTRO aparelho continua gastando um desafio por sessao
-/// do app aqui -- e esse e o preco escolhido, nao um descuido.
+/// Como o segundo e muito pior, **nenhuma leitura automatica volta atras**.
+/// Quem revogou a ultima credencial em OUTRO aparelho continua gastando um
+/// desafio por sessao do app aqui -- e esse e o preco escolhido, nao um
+/// descuido: `reconciliarComAConta` le a conta sozinha, sem ninguem pedir, e
+/// conta vazia ali nao prova aparelho vazio (este aparelho pode ter a
+/// credencial de OUTRA conta).
+///
+/// ## A UNICA EXCECAO: [desmarcar], e ela e PEDIDA e nao inferida (29/10/2026)
+///
+/// `FiacaoDoPasskey.revogar` a chama quando a pessoa **acabou de revogar**, em
+/// `Meus dados`, e a conta ficou **sem nenhuma credencial ativa**. A diferenca
+/// em relacao a leitura automatica e inteira:
+///
+/// - **ha um ato deliberado**: a pessoa tocou `Desativar` e confirmou numa
+///   folha destrutiva. Nao e inferencia sobre um silencio;
+/// - **a conta ficou VAZIA**, e isso e verificado relistando depois do 204.
+///   Com credencial restante a marca **fica** -- o contrato nao devolve
+///   `credential_id` (*"nada que sirva para montar assercao"*), entao o app
+///   nao sabe qual linha e a daqui, e fechar o portao poderia cegar um
+///   aparelho com passkey boa. Essa e exatamente a assimetria acima.
+///
+/// Sem esta excecao, quem desativa fica com o portao de `tentarEntrar` aberto
+/// para uma credencial que nao existe mais: desafio gasto em toda abertura,
+/// folha do sistema na cara de quem acabou de desligar o recurso, e um 401 que
+/// o contrato deixa indistinguivel de assinatura errada.
+///
+/// **Desmarcar NAO e recusar.** Ver [registrarRecusa]: quem revoga pode querer
+/// ativar de novo, e a recusa cala a oferta do login. As duas chaves vivem no
+/// mesmo JSON e [desmarcar] preserva a outra.
 ///
 /// ## ONDE ELE MORA, E POR QUE NAO MORRE NO LOGOUT
 ///
@@ -257,6 +283,46 @@ class PasskeyNesteAparelho {
       // A memoria ja tem o valor certo, entao esta execucao do app usa a
       // passkey. A proxima abertura volta a nao tentar -- que custa um toque,
       // nao uma conta trancada.
+    }
+  }
+
+  /// Apaga a marca de credencial neste aparelho. **SO QUEM PEDE CHAMA ISTO.**
+  ///
+  /// Ver o cabecalho da biblioteca: o registro nao desmarca sozinho, e esta e
+  /// a unica excecao -- a revogacao DELIBERADA que deixou a conta **sem
+  /// nenhuma credencial ativa**. Quem decide essa condicao e
+  /// `FiacaoDoPasskey.revogar`, que e quem ve a lista depois do 204; este
+  /// metodo so obedece.
+  ///
+  /// **PRESERVA A RECUSA FORMAL**, pelo mesmo cuidado de [marcar] e de
+  /// [registrarRecusa]: as duas chaves moram no mesmo JSON, e montar o corpo
+  /// do zero apagaria a outra. Revogar nao e recusar.
+  ///
+  /// Idempotente, e **nao grava quando a marca ja esta ausente**: `desmarcar`
+  /// numa instalacao sem marca nenhuma escreveria um arquivo para dizer que
+  /// nada mudou.
+  ///
+  /// **A MEMORIA E ATUALIZADA ANTES DO DISCO**, como em [marcar]: disco que
+  /// nao responde deixa esta execucao do app com o valor certo, e o lado
+  /// seguro aqui e esse -- `haCredencial` cacheia por processo, e sem mexer na
+  /// memoria a tela de entrar desta sessao seguiria tentando a credencial que
+  /// a pessoa acabou de revogar.
+  Future<void> desmarcar() async {
+    if (_memoria == false) return;
+    _memoria = false;
+    try {
+      final anterior = await _corpo();
+      if (anterior[_chave] != true) return;
+      final novo = <String, dynamic>{...anterior}
+        ..remove(_chave)
+        ..remove('marcado_em')
+        ..['desmarcado_em'] = agora().toUtc().toIso8601String();
+      await deposito.gravar(jsonEncode(novo));
+    } on Object {
+      // Igual a [marcar]: a memoria ja tem o valor certo, entao esta execucao
+      // do app nao tenta mais a passkey. A proxima abertura volta a tentar --
+      // que custa um desafio e um 401, e nao uma conta trancada, porque a
+      // senha continua sendo a outra porta.
     }
   }
 
