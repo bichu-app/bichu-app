@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import type { Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
@@ -35,7 +35,7 @@ import {
   type TipoDeEntidadeDaEntrada,
 } from './dominio.ts';
 
-interface Valores {
+export interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
@@ -323,6 +323,68 @@ function valoresDa(entrada: Entrada): Valores {
 }
 
 /**
+ * A ENTRADA DUPLICADA (cliente, 28/10/2026): *"Implemente um recurso de
+ * duplicar estabelecimento no backoffice"*.
+ *
+ * ## O QUE A COPIA LEVA: os dados de PREENCHIMENTO, e so eles
+ *
+ * Nome, atividades, tipo de entidade, sobre, cidade, UF, bairro, CEP,
+ * logradouro, numero, complemento, telefone e site. E o trabalho de digitacao,
+ * que e exatamente o que duplicar existe para poupar: a segunda unidade da
+ * mesma rede repete quase tudo disso.
+ *
+ * ## O QUE ELA NAO LEVA, e o motivo de cada um
+ *
+ * - **`slug` (vazio, e `slugEditado: false`).** E a CHAVE PUBLICA, unica global
+ *   sobre nao-nulo desde a `20260922000021`. Copia-lo daria `409 slug-taken` na
+ *   hora de salvar, e **sugeri-lo a partir do nome copiado daria o slug do
+ *   ORIGINAL** -- um formulario com cara de pronto que falha no envio. Vazio, a
+ *   validacao do proprio formulario cobra o identificador, e quem duplica
+ *   ESCOLHE o endereco publico novo de proposito. Retomar a digitacao do nome
+ *   volta a sugerir, porque `slugEditado` fica `false`.
+ * - **Nenhum carimbo de data, `version`, `claim_status`, `origin`,
+ *   `missing_to_publish` nem `rating`.** Sao historia da entrada original --
+ *   avaliacao de quem foi atendido por ELA, titularidade reivindicada sobre
+ *   ELA. Herdar avaliacao seria publicar reputacao que ninguem deu a entrada
+ *   nova, e e o mais caro dos erros possiveis aqui.
+ * - **Nenhum nivel de verificacao.** Ele e derivado da verificacao aprovada da
+ *   entidade, e a entidade nova nao tem nenhuma. O formulario nunca o editou.
+ * - **Nao ha `id` para deixar de fora:** o painel endereca por `slug` e
+ *   `AdminDirectoryEntry` nao tem `id` (ADR-0010 item 6).
+ * - **A LOGO E A FOTO NAO VAO, e isso e o contrato e nao preferencia.** A
+ *   leitura da entrada traz `logo`/`photo` como URL ja processada, **sem
+ *   `upload_id` e sem `id` de imagem**, e a escrita so aceita `upload_id` de um
+ *   envio desta sessao que **ainda nao foi usado em outra entrada** (`400
+ *   upload_not_usable`). Nao existe, no contrato de hoje, nada que a copia
+ *   pudesse mandar para apontar para a imagem do original. Quem duplica sobe a
+ *   imagem de novo, e o formulario abre com os campos de imagem vazios em vez
+ *   de prometer o que nao tem como cumprir.
+ * - **A situacao nasce a de entrada nova, e nao a do original.** Duplicar uma
+ *   entrada publicada nao publica a copia: situacao e ESTADO, nao
+ *   preenchimento. (O `POST` do contrato nem aceita `status` -- a entrada e
+ *   criada em rascunho e a publicacao e um segundo passo.)
+ *
+ * ## E ELA NAO SALVA SOZINHA
+ *
+ * Esta funcao devolve VALORES DE FORMULARIO, e nao uma escrita. O destino e a
+ * tela de cadastro aberta para revisao: duplicar sem revisar criaria duas
+ * entradas identicas no diretorio publico, que e pior do que nao duplicar.
+ */
+export function valoresDuplicados(entrada: Entrada): Valores {
+  return {
+    ...valoresDa(entrada),
+    slug: '',
+    slugEditado: false,
+    // Explicitos, e nao herdados de `valoresDa`: aqui eles nao significam "a
+    // pessoa nao tocou no campo, a imagem gravada continua valendo" -- nao ha
+    // imagem gravada nenhuma a continuar, porque nao ha entrada ainda.
+    logoUploadId: undefined,
+    fotoUploadId: undefined,
+    situacao: VAZIO.situacao,
+  };
+}
+
+/**
  * Cadastro e edicao de uma entrada do diretorio de `Perto`.
  *
  * ## O QUE ESTE FORMULARIO NAO PEDE, E CADA AUSENCIA TEM MOTIVO
@@ -392,11 +454,37 @@ export default function FormularioDaEntrada() {
   const { api, registrarRascunho } = useSessao();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [parametros] = useSearchParams();
+  /**
+   * DUPLICANDO: o `slug` da entrada FONTE, que vem de `?duplicarDe=`.
+   *
+   * Em consulta, e nao em `state` de navegacao, por dois motivos: a URL
+   * sobrevive a recarga da aba (quem recarrega continua duplicando o mesmo
+   * estabelecimento em vez de cair num formulario vazio sem explicacao), e ela
+   * e comparavel, o que da uma CHAVE DE RASCUNHO propria logo abaixo.
+   *
+   * So vale no cadastro. Na edicao o parametro e ignorado: `perto/:entrySlug`
+   * ja tem uma entrada, e duplicar para cima dela nao e operacao que exista.
+   */
+  const duplicarDe = editando ? undefined : (parametros.get('duplicarDe') ?? undefined);
+  /**
+   * A chave do rascunho guardado, que **nao e so o `pathname`**.
+   *
+   * `/perto/novo` e `/perto/novo?duplicarDe=x` tem o MESMO `pathname`, e com a
+   * chave antiga um rascunho de "nova entrada" abandonado voltaria por cima da
+   * copia -- a pessoa pediu para duplicar e receberia outro formulario, sem
+   * aviso. Cada duplicacao tem a sua, e a de cadastro limpo continua sendo o
+   * `pathname` puro, que e a chave que ja estava em uso.
+   */
+  const chaveDoRascunho = duplicarDe ? `${pathname}?duplicarDe=${duplicarDe}` : pathname;
   const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>();
   const [entrada, setEntrada] = useState<Entrada>();
   const [etag, setEtag] = useState<string>();
   const [valores, setValores] = useState<Valores>(() =>
-    editando ? VAZIO : (retomarRascunho<Valores>(pathname) ?? VAZIO),
+    // Duplicando tambem nasce `VAZIO`: a copia so existe depois de a fonte ser
+    // lida, e a tela fica em `Carregando…` ate la em vez de mostrar um
+    // formulario em branco que vai ser trocado debaixo de quem comecou a digitar.
+    editando || duplicarDe ? VAZIO : (retomarRascunho<Valores>(chaveDoRascunho) ?? VAZIO),
   );
   const [base, setBase] = useState<Valores>(VAZIO);
   const [errosDoServidor, setErrosDoServidor] = useState<Partial<Record<Campo, string>>>({});
@@ -412,16 +500,28 @@ export default function FormularioDaEntrada() {
   const resumo = useRef<HTMLDivElement>(null);
   const liberado = useRef(false);
 
-  const chaveDaCarga = `${entrySlug ?? 'novo'}#${versao}`;
-  const fase = !editando ? 'pronto' : carga?.chave === chaveDaCarga ? carga.fase : 'carregando';
+  /**
+   * O `slug` que esta carga vai LER, que nao e sempre o que ela vai EDITAR.
+   *
+   * Editando, e a propria entrada. Duplicando, e a FONTE da copia -- lida pela
+   * mesma rota e pelo mesmo tratamento de 404, e o que muda e so o que se faz
+   * com a resposta.
+   */
+  const slugParaCarregar = entrySlug ?? duplicarDe;
+  const chaveDaCarga = `${entrySlug ?? (duplicarDe ? `dup:${duplicarDe}` : 'novo')}#${versao}`;
+  const fase = !slugParaCarregar
+    ? 'pronto'
+    : carga?.chave === chaveDaCarga
+      ? carga.fase
+      : 'carregando';
 
   useEffect(() => {
-    if (!entrySlug) return;
+    if (!slugParaCarregar) return;
     const controle = new AbortController();
     const chave = chaveDaCarga;
     api
       .GET('/admin/directory/entries/{entrySlug}', {
-        params: { path: { entrySlug } },
+        params: { path: { entrySlug: slugParaCarregar } },
         signal: controle.signal,
       })
       .then(({ data, response }) => {
@@ -430,27 +530,39 @@ export default function FormularioDaEntrada() {
           setCarga({ chave, fase: response.status === 404 ? 'nao-encontrado' : 'erro' });
           return;
         }
-        setEntrada(data);
-        // Do `version`, e nao do ETag do cabecalho: a borda o sufixa
-        // ("3-zstd") e o If-Match daria 412 em toda escrita.
-        setEtag(versaoComoEtag(data.version));
-        setBase(valoresDa(data));
-        setValores(retomarRascunho<Valores>(pathname) ?? valoresDa(data));
+        if (editando) {
+          setEntrada(data);
+          // Do `version`, e nao do ETag do cabecalho: a borda o sufixa
+          // ("3-zstd") e o If-Match daria 412 em toda escrita.
+          setEtag(versaoComoEtag(data.version));
+          setBase(valoresDa(data));
+          setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDa(data));
+        } else {
+          // DUPLICANDO. `entrada` e `etag` ficam VAZIOS de proposito: eles sao
+          // o que faz `salvar` escolher o `PATCH`, e a copia e um `POST`.
+          // Deixar a fonte em `entrada` aqui transformaria "duplicar" em
+          // "editar o original", que e justamente o acidente a evitar.
+          //
+          // `base` tambem fica `VAZIO`, e por isso o formulario abre SUJO: ha
+          // trabalho nao salvo na tela (a copia inteira), e sair dela sem
+          // salvar deve avisar.
+          setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDuplicados(data));
+        }
         setCarga({ chave, fase: 'pronto' });
       })
       .catch(() => {
         if (!controle.signal.aborted) setCarga({ chave, fase: 'erro' });
       });
     return () => controle.abort();
-  }, [api, entrySlug, pathname, chaveDaCarga]);
+  }, [api, slugParaCarregar, editando, chaveDoRascunho, chaveDaCarga]);
 
   const valoresRef = useRef(valores);
   useLayoutEffect(() => {
     valoresRef.current = valores;
   });
   useEffect(
-    () => registrarRascunho(() => guardarRascunho(pathname, valoresRef.current)),
-    [registrarRascunho, pathname],
+    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, valoresRef.current)),
+    [registrarRascunho, chaveDoRascunho],
   );
 
   const erros = tentou ? { ...errosDoServidor, ...validarEntrada(valores) } : errosDoServidor;
@@ -734,9 +846,16 @@ export default function FormularioDaEntrada() {
       <div className="form">
         {voltarLink}
         <Banner tipo="erro">
+          {/* Duplicando, o que faltou foi a FONTE da copia, e nao "esta
+              entrada" -- a copia nem existe ainda. Dizer a frase da edicao
+              aqui mandaria procurar o que nao e o problema. */}
           {fase === 'nao-encontrado'
-            ? 'Esta entrada não existe mais.'
-            : 'Não conseguimos carregar a entrada.'}
+            ? duplicarDe
+              ? 'A entrada que você quer duplicar não existe mais.'
+              : 'Esta entrada não existe mais.'
+            : duplicarDe
+              ? 'Não conseguimos carregar a entrada que você quer duplicar.'
+              : 'Não conseguimos carregar a entrada.'}
         </Banner>
       </div>
     );
@@ -759,7 +878,20 @@ export default function FormularioDaEntrada() {
         }}
       >
         {voltarLink}
-        <h1 className="t-headline">{entrada ? entrada.display_name : 'Nova entrada'}</h1>
+        <h1 className="t-headline">
+          {entrada ? entrada.display_name : duplicarDe ? 'Cópia de entrada' : 'Nova entrada'}
+        </h1>
+        {/* DUPLICANDO: a tela diz de ONDE a copia veio e o que ela NAO trouxe.
+            Sem isto, um formulario cheio sob o titulo de cadastro parece uma
+            entrada que ja existe -- e o identificador vazio pareceria defeito
+            em vez de escolha. */}
+        {duplicarDe && (
+          <Banner tipo="info">
+            Copiado de <strong>{duplicarDe}</strong>. O identificador ficou em branco porque ele é o
+            endereço público e não pode repetir. Avaliações, verificação e as imagens não vêm na
+            cópia — confira os dados e cadastre.
+          </Banner>
+        )}
         {lista.length > 0 && (
           <ResumoDeErros
             referencia={resumo}

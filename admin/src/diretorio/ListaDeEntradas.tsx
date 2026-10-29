@@ -1,9 +1,10 @@
 import { useCallback } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
 import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
+import { MenuDeAcoes } from '../componentes/MenuDeAcoes.tsx';
 import { useAvisoDaNavegacao, useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { telefoneDoE164 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
@@ -71,6 +72,7 @@ function lugarDa(entrada: Entrada): string {
  */
 export default function ListaDeEntradas() {
   const { api } = useSessao();
+  const navigate = useNavigate();
   const [p, mudar] = useParametrosDaLista(PADROES);
   const [aviso, fecharAviso] = useAvisoDaNavegacao();
   // O servidor exige 3 caracteres em `q` (o piso do indice trigrama: um padrao
@@ -268,14 +270,41 @@ export default function ListaDeEntradas() {
                         <Selo tipo={SELO_DA_SITUACAO[entrada.status]} />
                       </td>
                       <td className="w-acts">
-                        <Link
-                          className="ibtn"
-                          to={`/perto/${entrada.slug}`}
-                          aria-label={`Editar ${entrada.display_name}`}
-                          title="Editar"
-                        >
-                          <Icone nome="edit" />
-                        </Link>
+                        {/* O editar direto mais o menu, como na `Loja` e na
+                            `Rede`: a acao de todo dia fica a um clique e as
+                            demais entram no menu, em vez de a coluna crescer
+                            um icone por recurso novo. */}
+                        <div className="acts">
+                          <Link
+                            className="ibtn"
+                            to={`/perto/${entrada.slug}`}
+                            aria-label={`Editar ${entrada.display_name}`}
+                            title="Editar"
+                          >
+                            <Icone nome="edit" />
+                          </Link>
+                          <MenuDeAcoes
+                            rotuloDoBotao={`Mais ações para ${entrada.display_name}`}
+                            titulo="Mais ações"
+                            itens={[
+                              {
+                                // DUPLICAR (cliente, 28/10/2026). Ele NAVEGA e
+                                // nao escreve: leva ao cadastro com os dados de
+                                // preenchimento copiados, para revisar e
+                                // cadastrar. Duplicar com um clique criaria duas
+                                // entradas identicas no diretorio publico, que e
+                                // pior que nenhuma.
+                                rotulo: 'Duplicar',
+                                icone: 'add',
+                                dataCy: 'entrada-duplicar',
+                                aoEscolher: () =>
+                                  void navigate(
+                                    `/perto/novo?duplicarDe=${encodeURIComponent(entrada.slug)}`,
+                                  ),
+                              },
+                            ]}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
