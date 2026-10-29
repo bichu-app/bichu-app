@@ -259,13 +259,15 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
   /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
   ///
-  /// `quadrado` porque a celula e quadrada, e medido: a grade desta tela usa
-  /// `childAspectRatio: 1`.
+  /// A forma vem de `DERIVADAS_DA_VITRINE_DO_USUARIO` (1024 x 1024) em
+  /// `src/modules/media/domain/derivadas.ts` -- o corte que o SERVIDOR faz.
+  /// A grade desta tela usa `childAspectRatio: 1` e concorda, mas quem manda
+  /// na janela e quem corta.
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: widget.camera,
         foto: foto,
-        formato: FormatoDoRecorte.quadrado,
+        formato: FormatoDoRecorte.vitrineDoUsuario,
         titulo: 'Ajuste a foto da vitrine',
       );
 

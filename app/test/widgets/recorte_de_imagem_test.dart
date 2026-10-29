@@ -38,6 +38,8 @@
 // nominalmente naquele ponto de upload -- medido em 29/10/2026, revertendo as
 // sete telas para `origin/development` e deixando a peca de pe.
 
+import 'dart:io';
+
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/theme/bichu_theme.dart';
@@ -291,13 +293,17 @@ void main() {
       // `pop(_enquadramento!.recorteDoCentro)`. Compila, a folha desenha
       // igual, o arraste continua funcionando na tela -- e este caso reprova
       // pelo nome, porque o que atravessa o `pop` voltou a ser o centro.
-      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.quadrado);
+      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.vitrineDoUsuario);
       expect(find.byType(FolhaDeRecorte), findsOneWidget);
 
       // Arrasta a IMAGEM para cima, dentro do palco.
       await tester.drag(oPalco, const Offset(0, -40));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(
+        find.widgetWithText(BotaoPrimario, 'Usar esta imagem'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(BotaoPrimario, 'Usar esta imagem'));
       await tester.pumpAndSettle();
 
@@ -315,7 +321,7 @@ void main() {
 
     testWidgets('`Cancelar` devolve NULO, o mesmo nulo de nao escolher foto',
         (tester) async {
-      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.quadrado);
+      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.vitrineDoUsuario);
       await tester.tap(find.widgetWithText(BotaoSecundario, 'Cancelar'));
       await tester.pumpAndSettle();
       expect(folha.fechou, isTrue, reason: 'a folha tem de ter fechado');
@@ -332,11 +338,15 @@ void main() {
       // ISCA: em `_EstadoDaFolhaDeRecorte._teclado`, devolva
       // `KeyEventResult.ignored` antes do `switch` das setas. A folha
       // continua inteira ao toque e este caso reprova pelo nome.
-      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.quadrado);
+      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.vitrineDoUsuario);
       for (var i = 0; i < 8; i++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
         await tester.pump();
       }
+      await tester.ensureVisible(
+        find.widgetWithText(BotaoPrimario, 'Usar esta imagem'),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(BotaoPrimario, 'Usar esta imagem'));
       await tester.pumpAndSettle();
 
@@ -349,7 +359,7 @@ void main() {
 
     testWidgets('o ZOOM encolhe o recorte pelo controle, e nao so pela pinca',
         (tester) async {
-      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.quadrado);
+      final folha = await abrirAFolha(tester, formato: FormatoDoRecorte.vitrineDoUsuario);
       final semZoom = EnquadramentoDaFoto(
         larguraDoArquivo: 1200,
         alturaDoArquivo: 1600,
@@ -358,6 +368,10 @@ void main() {
 
       final controle = tester.widget<Slider>(find.byType(Slider));
       controle.onChanged!(2);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.widgetWithText(BotaoPrimario, 'Usar esta imagem'),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(BotaoPrimario, 'Usar esta imagem'));
       await tester.pumpAndSettle();
@@ -388,28 +402,33 @@ void main() {
         EstadoDaPermissao.concedida,
         foto: fotoEscolhidaDeTeste,
       );
-      FotoLocal? resultado;
+      // O contexto vem da ARVORE, e `ajustarAFoto` e chamada direto dentro de
+      // `runAsync`: `ImmutableBuffer.fromFilePath` e E/S de VERDADE e nao
+      // avanca no relogio falso do teste. Passar pelo `onPressed` de um botao
+      // deixava a continuacao pendente quando o `expect` rodava, e o caso
+      // media um nulo que era do RELOGIO e nao do codigo.
+      late BuildContext contexto;
       await tester.pumpWidget(
         MaterialApp(
           theme: BichuTheme.claro,
           home: Scaffold(
             body: Builder(
-              builder: (contexto) => TextButton(
-                onPressed: () async {
-                  resultado = await ajustarAFoto(
-                    contexto,
-                    camera: camera,
-                    foto: fotoEscolhidaDeTeste,
-                    formato: FormatoDoRecorte.quadrado,
-                  );
-                },
-                child: const Text('abrir'),
-              ),
+              builder: (c) {
+                contexto = c;
+                return const SizedBox.shrink();
+              },
             ),
           ),
         ),
       );
-      await tester.tap(find.text('abrir'));
+      final resultado = await tester.runAsync(
+        () => ajustarAFoto(
+          contexto,
+          camera: camera,
+          foto: fotoEscolhidaDeTeste,
+          formato: FormatoDoRecorte.vitrineDoUsuario,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(FolhaDeRecorte), findsNothing);
@@ -419,22 +438,73 @@ void main() {
         0,
         reason: 'sem folha nao ha recorte a pedir',
       );
+      // ISCA DO CONTADOR, e ela protege OITO casos de OUTROS arquivos: o
+      // ajuste nao pode passar por `CameraEGaleria.bytesDaFoto`. Se passar,
+      // `vezesQueLeuOsBytes` deixa de significar "os bytes subiram" em todo
+      // caso de envio deste repositorio -- e o caso que afirma ZERO ("tipo
+      // recusado: a tela NAO sobe nada") passa a contar uma leitura que nao e
+      // envio nenhum.
+      expect(
+        camera.vezesQueLeuOsBytes,
+        0,
+        reason: 'o ajuste le o ARQUIVO, e nao a porta',
+      );
     });
   });
 
   // =========================================================================
-  group('FormatoDoRecorte: cada forma e a do destino, e nao um palpite', () {
-    test('os aspectos medidos', () {
-      expect(FormatoDoRecorte.quadrado.aspecto, 1);
-      expect(FormatoDoRecorte.circulo.aspecto, 1);
-      expect(FormatoDoRecorte.circulo.circular, isTrue);
-      // `proporcaoDaCapa` de `telas/rede/pecas_da_rede.dart`.
-      expect(FormatoDoRecorte.capaDoEncontro.aspecto, 16 / 9);
-      // `BichuMoldura.proporcao` e ALTURA por largura (1,1), entao o aspecto
-      // da janela e o inverso -- a janela do pet e mais alta que larga.
-      expect(FormatoDoRecorte.molduraDoPet.aspecto, closeTo(1 / 1.1, 1e-9));
-      expect(FormatoDoRecorte.molduraDoPet.aspecto! < 1, isTrue);
-      // A forma que segue o arquivo nao declara aspecto nenhum.
+  group('FormatoDoRecorte: nenhuma forma e circular hoje, e isso e medido', () {
+    test('o circulo existe na peca e NENHUM destino o usa', () {
+      // `circular` muda so o DESENHO da janela, nunca o retangulo. Nenhum
+      // ponto de upload do app o liga hoje: a foto da propria pessoa, que
+      // seria a candidata, e desenhada com `ImagemDaRede(raio: BichuRaio.lg)`
+      // -- quadrado de cantos arredondados, e nao circulo.
+      //
+      // O campo fica porque o desenho da janela e o unico lugar onde essa
+      // informacao cabe, e porque uma peca que nao soubesse desenhar circulo
+      // obrigaria a proxima tela circular a inventar a segunda folha.
+      for (final formato in <FormatoDoRecorte>[
+        FormatoDoRecorte.fotoDePet,
+        FormatoDoRecorte.fotoDeUsuario,
+        FormatoDoRecorte.vitrineDoUsuario,
+        FormatoDoRecorte.publicacaoDoMural,
+        FormatoDoRecorte.capaDoEncontro,
+        FormatoDoRecorte.logoDaIndicacao,
+        FormatoDoRecorte.fotoNaConversa,
+      ]) {
+        expect(formato.circular, isFalse, reason: '$formato');
+      }
+      // E a peca sabe desenhar um, se um destino pedir.
+      expect(
+        const FormatoDoRecorte.daDerivada(
+          largura: 1,
+          altura: 1,
+          circular: true,
+        ).circular,
+        isTrue,
+      );
+    });
+
+    test('a proporcao e CONFERIDA contra o servidor em outro arquivo', () {
+      // Os numeros nao sao afirmados aqui de proposito: repeti-los seria a
+      // terceira copia da mesma regra. Quem os cobra e
+      // `recorte_segue_o_servidor_test.dart`, que LE
+      // `src/modules/media/domain/derivadas.ts` do disco.
+      //
+      // O que este caso cobra e so o que aquele nao ve: que toda constante
+      // declare proporcao, menos a que existe para nao declarar.
+      for (final formato in <FormatoDoRecorte>[
+        FormatoDoRecorte.fotoDePet,
+        FormatoDoRecorte.fotoDeUsuario,
+        FormatoDoRecorte.vitrineDoUsuario,
+        FormatoDoRecorte.publicacaoDoMural,
+        FormatoDoRecorte.capaDoEncontro,
+        FormatoDoRecorte.logoDaIndicacao,
+        FormatoDoRecorte.fotoNaConversa,
+      ]) {
+        expect(formato.aspecto, isNotNull);
+        expect(formato.aspecto, greaterThan(0));
+      }
       expect(const FormatoDoRecorte.doProprioArquivo().aspecto, isNull);
     });
   });
@@ -444,10 +514,7 @@ void main() {
 ///
 /// Arrastar nele e o que a pessoa faz. Arrastar na folha inteira pegaria o
 /// `Slider` ou um botao.
-final Finder oPalco = find.descendant(
-  of: find.byType(FolhaDeRecorte),
-  matching: find.byType(CustomPaint),
-);
+final Finder oPalco = find.byKey(chaveDoPalcoDoRecorte);
 
 /// O recorte do CENTRO para uma janela com a forma de [recorte].
 ///
@@ -466,6 +533,31 @@ class ResultadoDaFolha {
   bool fechou = false;
 }
 
+/// Um arquivo PNG de verdade, em disco, apagado no fim do caso.
+///
+/// **Tem de ser arquivo e nao bytes**: desde 29/10/2026
+/// [abrirAImagemParaRecortar] le o CAMINHO com `ImmutableBuffer.fromFilePath`
+/// e nao passa por `CameraEGaleria.bytesDaFoto` -- justamente para nao somar
+/// no contador `vezesQueLeuOsBytes`, que oito iscas deste repositorio usam
+/// para afirmar que os bytes subiram, ou que nada subiu.
+///
+/// `Directory.systemTemp` respeita o `TMPDIR` da execucao, que esta esteira
+/// exige duravel e proprio de cada rodada.
+FotoLocal arquivoDeTeste(WidgetTester tester) {
+  final pasta = Directory.systemTemp.createTempSync('bichu-recorte');
+  addTearDown(() {
+    if (pasta.existsSync()) pasta.deleteSync(recursive: true);
+  });
+  final bytes = pngDeTeste();
+  final arquivo = File('${pasta.path}/retrato.png')
+    ..writeAsBytesSync(bytes);
+  return FotoLocal(
+    caminho: arquivo.path,
+    tipoDeConteudo: 'image/png',
+    tamanhoEmBytes: bytes.length,
+  );
+}
+
 /// Abre [FolhaDeRecorte] numa arvore minima, pelo MESMO caminho da producao.
 ///
 /// A imagem e decodificada em [WidgetTester.runAsync] porque
@@ -475,16 +567,14 @@ Future<ResultadoDaFolha> abrirAFolha(
   WidgetTester tester, {
   required FormatoDoRecorte formato,
 }) async {
-  final camera = CameraDeTeste(
-    EstadoDaPermissao.concedida,
-    foto: fotoEscolhidaDeTeste,
-    bytes: pngDeTeste(),
-  );
+  final foto = arquivoDeTeste(tester);
   final imagem = await tester.runAsync(
-    () => abrirAImagemParaRecortar(camera, fotoEscolhidaDeTeste),
+    () => abrirAImagemParaRecortar(foto),
   );
   // Nulo aqui seria o caso medindo a si mesmo: `pngDeTeste` E uma imagem.
   expect(imagem, isNotNull, reason: 'pngDeTeste tem de decodificar');
+  expect(imagem!.larguraDoArquivo, 1200);
+  expect(imagem.alturaDoArquivo, 1600);
 
   final resultado = ResultadoDaFolha();
   await tester.pumpWidget(
@@ -497,8 +587,13 @@ Future<ResultadoDaFolha> abrirAFolha(
               resultado.devolvido = await showModalBottomSheet<RecorteDaFoto>(
                 context: contexto,
                 isScrollControlled: true,
+                // O MESMO de `ajustarAFoto`. Sem isto a arvore do teste nao e
+                // a folha de producao, e o defeito que `enableDrag: false`
+                // conserta (arrastar fechava a folha) deixa de ter isca.
+                enableDrag: false,
+                showDragHandle: false,
                 builder: (_) => FolhaDeRecorte(
-                  imagem: imagem!,
+                  imagem: imagem,
                   formato: formato,
                   titulo: 'Ajuste',
                 ),

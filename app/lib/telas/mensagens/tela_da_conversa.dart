@@ -495,14 +495,18 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     // upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
     // posicao da imagem"*.
     //
-    // **`doProprioArquivo` E NAO `quadrado`**, e a diferenca e medida: a
-    // previa da foto na conversa (`PreviaDaFotoDaConversa`) tem altura
-    // VARIAVEL -- `min(220, fracao da altura da tela)` -- e nenhum aspecto
-    // declarado, entao a foto vai inteira hoje. Com a janela no aspecto do
-    // proprio arquivo, zoom 1 continua sendo a foto inteira e o recorte nao
-    // muda nada; quem aproxima e que recorta. Um quadrado aqui passaria a
-    // recortar uma foto que hoje chega completa, o que seria PERDA e nao
-    // recurso.
+    // **A FORMA AQUI FOI UMA CORRECAO DE ROTA, e ela fica escrita.** A previa
+    // da foto na conversa (`PreviaDaFotoDaConversa`) tem altura VARIAVEL --
+    // `min(220, fracao da altura da tela)` -- e nenhum aspecto declarado,
+    // entao este destino PARECIA de forma livre, e a janela ia ser
+    // `FormatoDoRecorte.doProprioArquivo`.
+    //
+    // Nao e. A foto da conversa sobe por
+    // `createFoundReportPhotoUploadIntent`, e o servidor corta aquela imagem
+    // em 1024 x 1126 (`DERIVADA_DA_FOTO_DO_ACHADO`, aplicada por
+    // `higienizar-foto-do-achado.ts`). Janela livre aqui daria o pior dos dois
+    // mundos: a pessoa enquadrando uma coisa e o servidor entregando outra --
+    // o defeito de 28/10 de volta por um caminho novo. Medido em 29/10/2026.
     //
     // O ajuste vem ANTES das recusas de propósito: e o arquivo ajustado que
     // sobe, e e o tamanho DELE que o teto do contrato tem de medir.
@@ -510,7 +514,7 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
       context,
       camera: camera,
       foto: escolhida,
-      formato: const FormatoDoRecorte.doProprioArquivo(),
+      formato: FormatoDoRecorte.fotoNaConversa,
       titulo: 'Ajuste a foto',
     );
     if (!mounted || ajustada == null) return;

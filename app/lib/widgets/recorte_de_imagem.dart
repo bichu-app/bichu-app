@@ -48,26 +48,53 @@ import '../dispositivo/camera_e_galeria.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import 'botao_primario.dart';
-import 'moldura.dart';
 
 /// A forma da janela de recorte, por destino.
 ///
-/// **Cada valor aqui foi MEDIDO no lugar onde a foto aparece**, e nao
-/// escolhido: a janela do recorte so pode prometer "o que esta dentro e o que
-/// sai" se ela tiver a forma do destino. Uma janela quadrada para uma capa
-/// 16:9 entregaria de volta uma promessa falsa.
+/// ## NENHUM numero aqui foi escolhido, e isso tem portao
+///
+/// Todo aspecto desta classe e a razao `largura / altura` da derivada
+/// `card` que o SERVIDOR produz, em `src/modules/media/domain/derivadas.ts`.
+/// A razao nao e preferencia de desenho: naquele arquivo, **`altura` presente
+/// significa `fit: 'cover'`** -- o servidor CORTA a imagem naquela proporcao,
+/// com as palavras do cliente citadas la (*"vamos cropar a imagem na
+/// proporcao"*).
+///
+/// Entao uma janela com outra proporcao seria o defeito de 28/10 de volta por
+/// um caminho novo: a pessoa enquadraria o rosto num quadrado, o servidor
+/// cortaria aquele quadrado em 1024 x 1126, e **o enquadramento dela seria
+/// recortado outra vez** -- agora por um numero que ela nao viu. Medido em
+/// 29/10/2026.
+///
+/// `recorte_segue_o_servidor_test.dart` LE `derivadas.ts` do disco e compara
+/// com cada constante daqui. Nao e comentario: um numero que mudar la reprova
+/// aqui.
 @immutable
 class FormatoDoRecorte {
   const FormatoDoRecorte({required this.aspecto, required this.circular});
 
-  /// A janela segue o aspecto do PROPRIO arquivo.
+  /// O aspecto a partir das dimensoes da derivada do servidor.
   ///
-  /// Para o destino que desenha a foto inteira, sem forma fixa -- a foto na
-  /// conversa, cuja previa tem altura variavel (`PreviaDaFotoDaConversa`
-  /// mede `min(220, fracao da tela)`) e nenhum aspecto declarado. Com esta
-  /// forma, zoom 1 e a foto inteira e o recorte **nao muda nada**; aproximar
-  /// e que recorta. Forcar um quadrado aqui recortaria uma foto que hoje vai
-  /// inteira, o que seria uma perda e nao um recurso.
+  /// Os dois numeros entram como eles estao em `derivadas.ts`, e nao a razao
+  /// ja calculada: `1024 / 1126` e conferivel contra o arquivo com os olhos,
+  /// e `0.9094` nao e.
+  const FormatoDoRecorte.daDerivada({
+    required int largura,
+    required int altura,
+    bool circular = false,
+  }) : this(aspecto: largura / altura, circular: circular);
+
+  /// A janela segue o aspecto do PROPRIO arquivo -- nada e cortado em zoom 1.
+  ///
+  /// **Nenhum ponto de upload do app usa esta forma hoje, e isso esta
+  /// medido:** em `derivadas.ts`, todo proposito que o app envia tem `altura`
+  /// presente, ou seja `fit: 'cover'`. O unico que nao tem e
+  /// `DERIVADAS_DO_PRODUTO` (a Loja, `fit: 'inside'`), e o app nao sobe
+  /// produto -- quem o faz e o painel.
+  ///
+  /// Ela fica porque e a resposta certa para um destino que o servidor NAO
+  /// corta, e porque sem ela a escolha de cada ponto pareceria a unica
+  /// possivel em vez de uma decisao medida.
   const FormatoDoRecorte.doProprioArquivo() : aspecto = null, circular = false;
 
   /// Largura dividida pela altura, ou nulo para seguir o arquivo.
@@ -75,42 +102,72 @@ class FormatoDoRecorte {
 
   /// A janela e desenhada como circulo.
   ///
-  /// Nao muda o recorte, que continua sendo o quadrado que circunscreve o
-  /// circulo: o retrato e exibido dentro de uma forma arredondada e o
-  /// retangulo e o que o contrato recebe. O circulo esta aqui porque enquadrar
-  /// um rosto num quadrado e ve-lo cortado num circulo e o mesmo defeito que
-  /// esta peca conserta, numa escala menor.
+  /// Nao muda o recorte, que continua sendo o retangulo que circunscreve o
+  /// circulo: o retrato e exibido arredondado e o retangulo e o que o servidor
+  /// recebe. O circulo esta aqui porque enquadrar um rosto num quadrado e
+  /// ve-lo cortado num circulo e o mesmo defeito, numa escala menor.
   final bool circular;
 
-  /// `foto/lg` do design system: a foto da propria pessoa, 160 x 160 em
-  /// `Meus dados` (`ImagemDaRede(largura: lado)`), e a celula da vitrine e do
-  /// perfil de pessoa (`childAspectRatio: 1`), e a publicacao do Mural
-  /// (`PublicarNoMural.proporcaoDaPublicacao`, que vale 1).
-  static const FormatoDoRecorte quadrado = FormatoDoRecorte(
-    aspecto: 1,
-    circular: false,
+  /// `DERIVADAS_DA_FOTO_DE_PET`: 1024 x 1126.
+  ///
+  /// Nao e 1:1. **E tambem nao e `BichuMoldura.proporcao` (1,1)**, que e o
+  /// token da forma com que a foto do pet e EXIBIDA: 1126 / 1024 da 1,0996, e
+  /// a diferenca e invisivel na tela mas e a do servidor que corta. Quem manda
+  /// na janela e quem corta, nao quem desenha.
+  static const FormatoDoRecorte fotoDePet = FormatoDoRecorte.daDerivada(
+    largura: 1024,
+    altura: 1126,
   );
 
-  /// O mesmo quadrado, desenhado como circulo. A foto da propria pessoa.
-  static const FormatoDoRecorte circulo = FormatoDoRecorte(
-    aspecto: 1,
-    circular: true,
+  /// `DERIVADAS_DA_FOTO_DE_USUARIO`: 512 x 512.
+  static const FormatoDoRecorte fotoDeUsuario = FormatoDoRecorte.daDerivada(
+    largura: 512,
+    altura: 512,
   );
 
-  /// A moldura do pet: `BichuMoldura.proporcao` e altura dividida por largura
-  /// (1,1), entao o aspecto da janela e o inverso dela.
-  static const FormatoDoRecorte molduraDoPet = FormatoDoRecorte(
-    aspecto: 1 / BichuMoldura.proporcao,
-    circular: false,
+  /// `DERIVADAS_DA_VITRINE_DO_USUARIO`: 1024 x 1024.
+  static const FormatoDoRecorte vitrineDoUsuario = FormatoDoRecorte.daDerivada(
+    largura: 1024,
+    altura: 1024,
   );
 
-  /// A capa do encontro. `proporcaoDaCapa` de `telas/rede/pecas_da_rede.dart`
-  /// vale 16 / 9, e o valor e repetido aqui em vez de importado porque
-  /// `widgets/` nao depende de `telas/` em nenhum outro lugar deste app --
-  /// a dependencia corre no outro sentido.
-  static const FormatoDoRecorte capaDoEncontro = FormatoDoRecorte(
-    aspecto: 16 / 9,
-    circular: false,
+  /// `DERIVADAS_DA_PUBLICACAO`: 1024 x 1024.
+  static const FormatoDoRecorte publicacaoDoMural = FormatoDoRecorte.daDerivada(
+    largura: 1024,
+    altura: 1024,
+  );
+
+  /// `DERIVADAS_DO_ENCONTRO`, variante `banner`: 1280 x 720.
+  ///
+  /// **E onde este recurso mais paga:** a capa e 16:9 e a foto sai de um
+  /// celular, em retrato. O corte automatico no centro de um retrato 3:4 para
+  /// uma faixa 16:9 joga fora as duas pontas e fica com a barriga da foto --
+  /// que e literalmente *"cropando no lugar errado"*, o relato de 28/10.
+  static const FormatoDoRecorte capaDoEncontro = FormatoDoRecorte.daDerivada(
+    largura: 1280,
+    altura: 720,
+  );
+
+  /// `DERIVADAS_DA_LOGO`: 512 x 512.
+  static const FormatoDoRecorte logoDaIndicacao = FormatoDoRecorte.daDerivada(
+    largura: 512,
+    altura: 512,
+  );
+
+  /// `DERIVADA_DA_FOTO_DO_ACHADO`: 1024 x 1126.
+  ///
+  /// **E a forma da foto na CONVERSA**, e essa foi a correcao de rota mais
+  /// util da medicao de 29/10. A previa da foto na conversa tem altura
+  /// VARIAVEL (`PreviaDaFotoDaConversa` mede `min(220, fracao da tela)`),
+  /// entao parecia um destino de forma livre -- e a janela ia ser
+  /// [FormatoDoRecorte.doProprioArquivo]. Mas a foto da conversa sobe por
+  /// `createFoundReportPhotoUploadIntent`, e o servidor a corta em
+  /// 1024 x 1126 (`higienizar-foto-do-achado.ts`). Janela livre ali daria o
+  /// pior dos dois mundos: a pessoa enquadrando uma coisa e o servidor
+  /// entregando outra.
+  static const FormatoDoRecorte fotoNaConversa = FormatoDoRecorte.daDerivada(
+    largura: 1024,
+    altura: 1126,
   );
 }
 
@@ -314,7 +371,7 @@ Future<FotoLocal?> ajustarAFoto(
   required FormatoDoRecorte formato,
   String? titulo,
 }) async {
-  final imagem = await abrirAImagemParaRecortar(camera, foto);
+  final imagem = await abrirAImagemParaRecortar(foto);
   if (!context.mounted) return foto;
   // Nao decodificou. A foto segue como veio, em vez de a pessoa encarar uma
   // folha que nao desenha nada.
@@ -327,7 +384,21 @@ Future<FotoLocal?> ajustarAFoto(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    showDragHandle: true,
+    // **`enableDrag: false`, E ISSO E UM DEFEITO MEDIDO E NAO PRECAUCAO.**
+    //
+    // Com o padrao (`true`), arrastar a foto PARA CIMA dentro do palco
+    // fechava a folha devolvendo nulo: o reconhecedor de arraste da propria
+    // folha ganhava o gesto vertical na arena, e a pessoa perdia a foto que
+    // acabou de escolher ao tentar reposiciona-la. Pego em 29/10/2026 pela
+    // isca `Usar esta imagem devolve o retangulo ARRASTADO`, que recebeu nulo.
+    //
+    // Nesta folha o arraste vertical E a funcao principal, entao ele nao pode
+    // ser dividido com o fechamento. Quem fecha e `Cancelar`, que esta na
+    // tela, e o botao de voltar do sistema -- os dois devolvem o mesmo nulo.
+    enableDrag: false,
+    // Sem alca, pela mesma razao: ela anuncia um arraste que fecha, e aqui
+    // arrastar nao fecha.
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(BichuRaio.xl)),
     ),
@@ -338,11 +409,17 @@ Future<FotoLocal?> ajustarAFoto(
     ),
   );
 
-  // A imagem de exibicao nao serve a mais ninguem depois da folha. Sem isto
-  // cada escolha de foto deixa uma textura viva ate o coletor passar, e o
-  // aparelho modesto que `PreviaDaFoto` cita no cabecalho e justamente o que
-  // sente.
-  imagem.imagem.dispose();
+  // **QUEM LIBERA A TEXTURA E A PROPRIA FOLHA, no `dispose` dela.**
+  //
+  // Ela era liberada AQUI, e era um defeito: `showModalBottomSheet` devolve o
+  // valor quando o `pop` acontece, e a folha continua PINTANDO durante a
+  // animacao de saida. Liberar a imagem nesse instante fazia
+  // `Canvas.drawImageRect` estourar a asserção de imagem descartada -- tela
+  // vermelha a cada ajuste de foto confirmado. Pego em 29/10/2026 pela isca
+  // de F1.4.
+  //
+  // `State.dispose` roda quando a rota ja saiu da arvore, que e o unico
+  // momento em que ninguem mais pinta aquela textura.
 
   if (escolhido == null) return null;
   // Recortar cobre o arquivo todo: nada a fazer, e a propria porta devolve a
@@ -391,13 +468,25 @@ const int ladoMaiorParaDesenhar = 1440;
 ///
 /// Nulo quando nao decodifica, ou quando o arquivo sumiu do aparelho. Ver
 /// [ajustarAFoto] para o que acontece nesse caso.
-Future<ImagemParaRecortar?> abrirAImagemParaRecortar(
-  CameraEGaleria camera,
-  FotoLocal foto,
-) async {
+Future<ImagemParaRecortar?> abrirAImagemParaRecortar(FotoLocal foto) async {
   try {
-    final bytes = await camera.bytesDaFoto(foto);
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    // **DO ARQUIVO, e nao de `CameraEGaleria.bytesDaFoto`**, e a diferenca foi
+    // medida em 29/10/2026: ler pela porta soma +1 em `vezesQueLeuOsBytes`, o
+    // contador que OITO casos deste repositorio usam para afirmar "os bytes
+    // subiram" e "nada subiu". Passar o desenho por aquele contador trocaria o
+    // significado dele em oito iscas de uma vez -- e o pior: o caso que afirma
+    // `vezesQueLeuOsBytes == 0` ("tipo recusado: a tela NAO sobe nada")
+    // passaria a contar uma leitura que nao e envio nenhum.
+    //
+    // Desenhar arquivo local de dentro de `lib/widgets` e o padrao desta
+    // pasta e nao uma excecao: `previa_da_foto.dart` existe exatamente por
+    // isso, e usa `Image.file`. O portao de diretivas
+    // (`porta_nao_contornada_test.dart`) cobra `lib/telas`, e e ali que a
+    // regra vale -- tela que abre arquivo e tela que fala com o aparelho por
+    // fora da porta.
+    //
+    // `ImmutableBuffer.fromFilePath` e de `dart:ui`: nem `dart:io` nem plugin.
+    final buffer = await ui.ImmutableBuffer.fromFilePath(foto.caminho);
     // O DESCRITOR primeiro, e nao o codec: ele da o tamanho do ARQUIVO sem
     // decodificar nada. E o unico caminho que entrega os dois numeros de que
     // esta peca precisa -- o do arquivo, para o recorte, e o reduzido, para a
@@ -429,8 +518,9 @@ Future<ImagemParaRecortar?> abrirAImagemParaRecortar(
     );
   } on Object catch (erro) {
     // Vale para as duas falhas, e elas sao diferentes: o arquivo sumiu do
-    // aparelho (`bytesDaFoto` estoura de proposito, e esta documentado na
-    // porta) e o formato nao tem decodificador. Nenhuma das duas derruba a
+    // aparelho (o sistema limpa o diretorio temporario da camera quando falta
+    // espaco, e isso acontece entre a escolha e o envio) e o formato nao tem
+    // decodificador nesta versao do sistema. Nenhuma das duas derruba a
     // escolha da foto; as duas caem no caminho de "vai como esta".
     debugPrint('BICHU recorte: nao abriu "${foto.caminho}". $erro');
     return null;
@@ -438,6 +528,9 @@ Future<ImagemParaRecortar?> abrirAImagemParaRecortar(
 }
 
 /// A chave do palco: a area arrastavel da folha.
+///
+/// Existe para o CASO poder arrastar este `CustomPaint` e nao um dos quatro
+/// que o Material monta dentro da folha -- medido em 29/10/2026.
 const Key chaveDoPalcoDoRecorte = ValueKey<String>('palco-do-recorte');
 
 /// A folha de recorte: o palco, o zoom e as duas acoes.
@@ -478,6 +571,19 @@ class FolhaDeRecorte extends StatefulWidget {
 
 class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
   EnquadramentoDaFoto? _enquadramento;
+
+  /// **A folha e a dona da textura de exibicao.** Ver a nota em
+  /// [ajustarAFoto]: liberar a imagem quando o `pop` devolve o valor estoura
+  /// na animacao de saida, que ainda pinta.
+  ///
+  /// Sem liberar nada, cada escolha de foto deixaria uma textura viva ate o
+  /// coletor passar -- e o aparelho modesto que o cabecalho de `PreviaDaFoto`
+  /// cita e justamente o que sente.
+  @override
+  void dispose() {
+    widget.imagem.imagem.dispose();
+    super.dispose();
+  }
 
   /// O zoom no inicio do gesto de pinca. `ScaleUpdateDetails.scale` e relativo
   /// ao comeco do gesto, e nao ao quadro anterior.
@@ -591,30 +697,42 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
       // resto, e os dois juntos sao o que `area_segura_do_aparelho_test`
       // cobra das outras telas.
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Text(widget.titulo, style: tipografia.titleMedium),
-            const SizedBox(height: BichuEspaco.e1),
-            Text(
-              TextosDoRecorte.apoio,
-              style: tipografia.bodySmall?.copyWith(color: cores.textSecondary),
-            ),
-            const SizedBox(height: BichuEspaco.e3),
-            LayoutBuilder(
-              builder: (contexto, limites) {
-                final larguraDisponivel = limites.maxWidth.isFinite
-                    ? limites.maxWidth - FolhaDeRecorte.folgaDoPalco * 2
-                    : 280.0;
-                final janela = _janelaPara(
-                  larguraDisponivel,
-                  alturaMaximaDaJanela,
-                );
-                _ajustarAJanela(janela);
-                final enquadramento = _enquadramento!;
+        // **O `LayoutBuilder` ENVOLVE A COLUNA INTEIRA, e nao so o palco.**
+        //
+        // Ele envolvia so o palco, e era um defeito: o builder de um
+        // `LayoutBuilder` roda no LAYOUT, depois do resto desta arvore ser
+        // construida. Como e ele que calcula a janela -- e portanto
+        // `_enquadramento` --, na PRIMEIRA moldura o zoom, o reiniciar e
+        // `Usar esta imagem` nasciam DESABILITADOS, e so acordavam no primeiro
+        // `setState` (um arraste, uma tecla). Quem nao arrastasse encontrava a
+        // acao principal morta.
+        //
+        // Pego em 29/10/2026 pela isca do zoom, que achou `Slider.onChanged`
+        // nulo. Com a coluna dentro do builder, a janela existe antes de
+        // qualquer filho ser construido.
+        child: LayoutBuilder(
+          builder: (contexto, limites) {
+            final larguraDisponivel = limites.maxWidth.isFinite
+                ? limites.maxWidth - FolhaDeRecorte.folgaDoPalco * 2
+                : 280.0;
+            final janela = _janelaPara(larguraDisponivel, alturaMaximaDaJanela);
+            _ajustarAJanela(janela);
+            final enquadramento = _enquadramento!;
 
-                return Semantics(
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(widget.titulo, style: tipografia.titleMedium),
+                const SizedBox(height: BichuEspaco.e1),
+                Text(
+                  TextosDoRecorte.apoio,
+                  style: tipografia.bodySmall?.copyWith(
+                    color: cores.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: BichuEspaco.e3),
+                Semantics(
                   label: TextosDoRecorte.palco,
                   container: true,
                   child: Focus(
@@ -651,67 +769,74 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
                               enquadramento: enquadramento,
                               circular: widget.formato.circular,
                               fundo: cores.surfaceSunken,
+                              // `scrim` e o token de preto com transparencia
+                              // do projeto -- a mesma linguagem que o cliente
+                              // determinou para a barra do autor no Mural em
+                              // 29/10/2026. Aqui ele e mais forte de
+                              // proposito: um veu discreto nao diria onde
+                              // termina o recorte, que e a unica informacao
+                              // desta tela.
                               veu: cores.scrim,
                               linha: cores.textOnInverse,
+                              contorno: cores.surfaceInverse,
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            Row(
-              children: <Widget>[
-                Text(
-                  TextosDoRecorte.zoom,
-                  style: tipografia.labelMedium?.copyWith(
-                    color: cores.textSecondary,
-                  ),
                 ),
-                Expanded(
-                  child: Slider(
-                    value: _enquadramento?.zoom ?? 1,
-                    min: 1,
-                    max: EnquadramentoDaFoto.zoomMaximo,
-                    label: TextosDoRecorte.zoom,
-                    onChanged: _enquadramento == null
-                        ? null
-                        : (valor) => setState(
-                            () =>
-                                _enquadramento = _enquadramento!.comZoom(valor),
-                          ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: _enquadramento == null
-                      ? null
-                      : () => setState(
-                          () => _enquadramento = _enquadramento!.reiniciado,
+                const SizedBox(height: BichuEspaco.e2),
+                Row(
+                  children: <Widget>[
+                    Text(
+                      TextosDoRecorte.zoom,
+                      style: tipografia.labelMedium?.copyWith(
+                        color: cores.textSecondary,
+                      ),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: enquadramento.zoom,
+                        min: 1,
+                        max: EnquadramentoDaFoto.zoomMaximo,
+                        label: TextosDoRecorte.zoom,
+                        // SEM guarda de nulo: a janela e calculada pelo
+                        // `LayoutBuilder` que envolve esta coluna, entao
+                        // `_enquadramento` existe antes deste filho nascer. A
+                        // guarda que havia aqui era o que deixava o controle
+                        // morto na primeira moldura.
+                        onChanged: (valor) => setState(
+                          () => _enquadramento = enquadramento.comZoom(valor),
                         ),
-                  icon: const Icon(Icons.restart_alt),
-                  tooltip: TextosDoRecorte.reiniciar,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => setState(
+                        () => _enquadramento = enquadramento.reiniciado,
+                      ),
+                      icon: const Icon(Icons.restart_alt),
+                      tooltip: TextosDoRecorte.reiniciar,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: BichuEspaco.e2),
+                BotaoPrimario(
+                  rotulo: TextosDoRecorte.usar,
+                  critico: true,
+                  aoTocar: () =>
+                      Navigator.of(context).pop(enquadramento.recorte),
+                ),
+                const SizedBox(height: BichuEspaco.e2),
+                BotaoSecundario(
+                  rotulo: TextosDoRecorte.cancelar,
+                  // `pop()` sem valor devolve nulo, que e o "a pessoa desistiu" que
+                  // as telas ja tratam.
+                  aoTocar: () => Navigator.of(context).pop(),
                 ),
               ],
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            BotaoPrimario(
-              rotulo: TextosDoRecorte.usar,
-              critico: true,
-              aoTocar: _enquadramento == null
-                  ? null
-                  : () => Navigator.of(context).pop(_enquadramento!.recorte),
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            BotaoSecundario(
-              rotulo: TextosDoRecorte.cancelar,
-              // `pop()` sem valor devolve nulo, que e o "a pessoa desistiu" que
-              // as telas ja tratam.
-              aoTocar: () => Navigator.of(context).pop(),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -733,6 +858,7 @@ class _PintorDoRecorte extends CustomPainter {
     required this.fundo,
     required this.veu,
     required this.linha,
+    required this.contorno,
   });
 
   final ui.Image imagem;
@@ -741,6 +867,9 @@ class _PintorDoRecorte extends CustomPainter {
   final Color fundo;
   final Color veu;
   final Color linha;
+
+  /// O tom ESCURO da moldura, por baixo do claro. Ver o fim de [paint].
+  final Color contorno;
 
   @override
   void paint(Canvas canvas, Size tamanho) {
@@ -805,6 +934,23 @@ class _PintorDoRecorte extends CustomPainter {
     }
     canvas.restore();
 
+    // A MOLDURA EM DOIS TONS, e isto NAO e enfeite.
+    //
+    // A linha era so clara (`textOnInverse`), e sobre uma foto CLARA ela
+    // desaparece -- a pessoa perde a unica informacao da tela, que e onde
+    // termina o recorte. Dois tracos resolvem em qualquer foto: um escuro mais
+    // GROSSO por baixo e o claro por cima, entao a borda sempre tem um lado
+    // contrastando com a imagem.
+    //
+    // Pelo mesmo motivo os dois tons saem de TOKEN e nao de hexadecimal: eles
+    // invertem entre o tema claro e o escuro junto com o resto.
+    canvas.drawPath(
+      formaDaJanela,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = BichuBorda.medium + BichuBorda.medium
+        ..color = contorno,
+    );
     canvas.drawPath(
       formaDaJanela,
       Paint()
@@ -823,5 +969,6 @@ class _PintorDoRecorte extends CustomPainter {
       antigo.circular != circular ||
       antigo.fundo != fundo ||
       antigo.veu != veu ||
-      antigo.linha != linha;
+      antigo.linha != linha ||
+      antigo.contorno != contorno;
 }

@@ -349,7 +349,7 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
         context,
         camera: camera,
         foto: foto,
-        formato: FormatoDoRecorte.molduraDoPet,
+        formato: FormatoDoRecorte.fotoDePet,
         titulo: 'Ajuste a foto do pet',
       );
 

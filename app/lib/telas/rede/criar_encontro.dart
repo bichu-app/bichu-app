@@ -616,8 +616,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
   /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
   ///
-  /// **`capaDoEncontro` e onde este recurso mais paga**: a capa e 16:9
-  /// (`proporcaoDaCapa`, em `pecas_da_rede.dart`) e a foto sai de um celular,
+  /// **`capaDoEncontro` e onde este recurso mais paga**: a capa e 16:9 --
+  /// `DERIVADAS_DO_ENCONTRO`, variante `banner`, 1280 x 720, em
+  /// `src/modules/media/domain/derivadas.ts` -- e a foto sai de um celular,
   /// em retrato. O recorte automatico no centro de um retrato 3:4 para uma
   /// faixa 16:9 joga fora as duas pontas e fica com a barriga da foto -- que e
   /// literalmente *"cropando no lugar errado"*, o relato de 28/10.

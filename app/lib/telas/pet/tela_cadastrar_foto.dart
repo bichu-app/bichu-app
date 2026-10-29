@@ -135,7 +135,7 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
         context,
         camera: Escopo.of(context).camera,
         foto: foto,
-        formato: FormatoDoRecorte.molduraDoPet,
+        formato: FormatoDoRecorte.fotoDePet,
         titulo: 'Ajuste a foto do pet',
       );
 

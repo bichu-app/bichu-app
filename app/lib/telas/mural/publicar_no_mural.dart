@@ -280,14 +280,15 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
   /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
   /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
   ///
-  /// `quadrado` porque a publicacao e quadrada, e medido:
-  /// `PublicarNoMural.proporcaoDaPublicacao` vale 1, e e ela que da a altura
-  /// da previa desta tela.
+  /// A forma vem de `DERIVADAS_DA_PUBLICACAO` (1024 x 1024) em
+  /// `src/modules/media/domain/derivadas.ts` -- o corte que o SERVIDOR faz.
+  /// `PublicarNoMural.proporcaoDaPublicacao` vale 1 e concorda, mas quem
+  /// manda na janela e quem corta.
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: widget.camera,
         foto: foto,
-        formato: FormatoDoRecorte.quadrado,
+        formato: FormatoDoRecorte.publicacaoDoMural,
         titulo: 'Ajuste a foto da publicação',
       );
 

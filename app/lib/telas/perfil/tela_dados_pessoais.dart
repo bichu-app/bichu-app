@@ -495,15 +495,17 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
   /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
   ///
-  /// `quadrado` porque o destino e quadrado, e medido: esta tela desenha a
-  /// foto com `ImagemDaRede(largura: lado)`, e `lado` e
-  /// `BichuMoldura.larguraFotoLg` -- 160 por 160.
+  /// A forma vem de `DERIVADAS_DA_FOTO_DE_USUARIO` (512 x 512) em
+  /// `src/modules/media/domain/derivadas.ts`, e **nao** do quadro de 160 dp
+  /// que esta tela desenha: quem manda na janela e quem CORTA, que e o
+  /// servidor. Os dois concordam aqui, e o portao
+  /// `recorte_segue_o_servidor_test.dart` e quem garante que continuem.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
         camera: camera,
         foto: foto,
-        formato: FormatoDoRecorte.quadrado,
+        formato: FormatoDoRecorte.fotoDeUsuario,
         titulo: 'Ajuste a sua foto',
       );
 
