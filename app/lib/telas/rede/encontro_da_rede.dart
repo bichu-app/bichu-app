@@ -12,6 +12,7 @@ import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/casca_da_pagina_interna.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/marca.dart';
 import '../../widgets/visualizador_de_imagem.dart';
@@ -295,22 +296,12 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
   /// sem conta, no cancelado e no encontro que nao tem endereco escrito.
   String? _endereco;
 
-  final ScrollController _rolagem = ScrollController();
-  bool _barraVisivel = false;
-
   bool _cargaAgendada = false;
 
   @override
   void initState() {
     super.initState();
-    _rolagem.addListener(_aoRolar);
     _agendarCarga();
-  }
-
-  @override
-  void dispose() {
-    _rolagem.dispose();
-    super.dispose();
   }
 
   void _agendarCarga() {
@@ -320,15 +311,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       _cargaAgendada = false;
       if (mounted) _carregar();
     });
-  }
-
-  /// A barra de topo normal volta quando a capa sai da tela (24.17.1, item
-  /// 7): a partir da altura da capa menos 48 dp.
-  void _aoRolar() {
-    final largura = MediaQuery.sizeOf(context).width;
-    final limite = largura / proporcaoDaCapa - BichuAlvoDeToque.min;
-    final visivel = _rolagem.hasClients && _rolagem.offset > limite;
-    if (visivel != _barraVisivel) setState(() => _barraVisivel = visivel);
   }
 
   bool get _logado => Escopo.of(context).sessao.logado;
@@ -509,7 +491,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         appBar: AppBar(
           toolbarHeight: BichuAlvoDeToque.critico,
           leadingWidth: BichuAlvoDeToque.critico,
-          leading: _BotaoVoltar(aoTocar: _voltar),
+          leading: BotaoVoltarNaBarra(aoTocar: _voltar),
           title: const Text(TelaDoEncontro.tituloDaTela),
         ),
         body: SafeArea(
@@ -530,74 +512,27 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       );
     }
 
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Scaffold(
-      body: SafeArea(
-        child: Semantics(
-          // A rota anuncia `Evento: {título}`: nao ha titulo visivel na
-          // barra do topo enquanto a capa esta na tela (UX 28.7.2).
-          scopesRoute: true,
-          namesRoute: true,
-          explicitChildNodes: true,
-          label: '${TelaDoEncontro.tituloDaTela}: ${encontro.titulo}',
-          child: Stack(
-            children: <Widget>[
-              ListView(
-                controller: _rolagem,
-                padding: const EdgeInsets.only(bottom: BichuEspaco.e8),
-                children: _pagina(encontro),
-              ),
-              if (_barraVisivel)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  child: Material(
-                    color: cores.surface,
-                    elevation: 0,
-                    child: Container(
-                      height: BichuAlvoDeToque.critico,
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: cores.outline,
-                            width: BichuBorda.hairline,
-                          ),
-                        ),
-                        boxShadow: Theme.of(context).brightness ==
-                                Brightness.dark
-                            ? null
-                            : BichuSombra.sm,
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          _BotaoVoltar(aoTocar: _voltar),
-                          Expanded(
-                            child: Text(
-                              encontro.titulo,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: textos.titleMedium,
-                            ),
-                          ),
-                          const SizedBox(width: BichuEspaco.e4),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Positioned(
-                  left: BichuEspaco.e2,
-                  top: BichuEspaco.e2,
-                  child: _BotaoVoltarSobreMidia(aoTocar: _voltar),
-                ),
-            ],
-          ),
-        ),
-      ),
+    // A CASCA SAIU DESTE ARQUIVO EM 28/10/2026, e e a MESMA da ficha do local.
+    //
+    // Era este `build` que desenhava a capa com `Voltar` flutuante, a barra que
+    // entra na rolagem e o `Semantics` de rota -- e a ficha do local desenhava
+    // um `AppBar` com o nome no titulo. O cliente mandou as duas terem o mesmo
+    // padrao (*"manter o padrao do botao voltar igual da pagina de eventos"*),
+    // e copiar isto para la faria DUAS copias da mesma regra. Entao a casca
+    // virou `widgets/casca_da_pagina_interna.dart` e as duas a consomem.
+    //
+    // **Nada mudou no que esta tela desenha**: a capa, o limiar da barra (a
+    // altura da capa menos 48 dp) e o anuncio `Evento: {título}` sao os mesmos,
+    // agora num lugar so. `temCapa` e verdadeiro porque `_pagina` sempre abre
+    // com a capa 16:9 -- quando o evento nao tem banner, `pecas_da_rede`
+    // desenha a reserva na mesma proporcao.
+    return CascaDaPaginaInterna(
+      nome: encontro.titulo,
+      prefixoAnunciado: TelaDoEncontro.tituloDaTela,
+      aoVoltar: _voltar,
+      proporcaoDaCapa: proporcaoDaCapa,
+      recuo: const EdgeInsets.only(bottom: BichuEspaco.e8),
+      filhos: _pagina(encontro),
     );
   }
 
@@ -1426,59 +1361,6 @@ class _ListaComVisto extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// A volta com a barra de topo normal.
-class _BotaoVoltar extends StatelessWidget {
-  const _BotaoVoltar({required this.aoTocar});
-  final VoidCallback aoTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: aoTocar,
-      tooltip: 'Voltar',
-      icon: const Icon(Icons.arrow_back),
-      constraints: const BoxConstraints(
-        minWidth: BichuAlvoDeToque.critico,
-        minHeight: BichuAlvoDeToque.critico,
-      ),
-      color: BichuColors.of(context).cores.textPrimary,
-    );
-  }
-}
-
-/// `Botão sobre mídia`: 48 dp, fundo `surface`, sombra propria, para o
-/// contraste nao depender da foto (24.12.1 e 24.12.6).
-class _BotaoVoltarSobreMidia extends StatelessWidget {
-  const _BotaoVoltarSobreMidia({required this.aoTocar});
-  final VoidCallback aoTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final escuro = Theme.of(context).brightness == Brightness.dark;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cores.surface,
-        shape: BoxShape.circle,
-        boxShadow: escuro ? null : BichuSombra.md,
-        border: escuro
-            ? Border.all(color: cores.outline, width: BichuBorda.hairline)
-            : null,
-      ),
-      child: IconButton(
-        onPressed: aoTocar,
-        tooltip: 'Voltar',
-        icon: const Icon(Icons.arrow_back),
-        constraints: const BoxConstraints(
-          minWidth: BichuAlvoDeToque.min,
-          minHeight: BichuAlvoDeToque.min,
-        ),
-        color: cores.textPrimary,
-      ),
     );
   }
 }

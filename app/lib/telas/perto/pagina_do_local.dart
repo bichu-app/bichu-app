@@ -16,6 +16,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
+import '../../widgets/casca_da_pagina_interna.dart';
 import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
@@ -964,30 +965,58 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   @override
   Widget build(BuildContext context) {
     final detalhe = _detalhe;
-    final titulo = detalhe?.nome;
 
+    // O TITULO SAIU DA BARRA EM 28/10/2026, E A CASCA E A DA FICHA DO EVENTO.
+    //
+    // Pedido do cliente: *"na pagina interna da comunidade, vamos tirar o
+    // titulo e manter o padrao do botao voltar igual da pagina de eventos."*
+    // Esta pagina desenhava um `AppBar` com `Voltar` no `leading` e o nome do
+    // local no titulo; a ficha do evento desenhava capa com `Voltar` flutuante
+    // e a barra que entra na rolagem. Agora as duas desenham a MESMA
+    // `CascaDaPaginaInterna` -- "o mesmo padrao" virou o mesmo codigo, e nao
+    // duas copias que divergem na primeira edicao.
+    //
+    // **O NOME CONTINUA ANUNCIAVEL, e nao por sorte**: quem anuncia a pagina e
+    // o `Semantics` de rota da casca (`namesRoute`, `'Local: <nome>'`), que
+    // esta pagina JA tinha -- com o `AppBar` por cima, o nome era anunciado
+    // DUAS vezes. Tirar o titulo tirou a repeticao, nao a informacao. Ele
+    // tambem volta a ser VISIVEL na barra assim que a capa sai da tela.
+    //
+    // **`temCapa` e a foto, e nao uma constante**: a faixa 16:9 so existe com
+    // `photo_url`, e `photo_url` e nulo em tres casos normais (sem foto, ainda
+    // processando, recusada nos bytes) -- a maioria das entradas. Sem capa a
+    // casca nasce com a barra visivel, porque um botao redondo flutuante
+    // pousaria em cima do nome; ver a prosa dela.
+    if (_fase == _Fase.pronto && detalhe != null) {
+      return CascaDaPaginaInterna(
+        nome: detalhe.nome,
+        prefixoAnunciado: PaginaDoLocal.tituloDaTela,
+        aoVoltar: _voltar,
+        temCapa: detalhe.fotoUrl != null,
+        proporcaoDaCapa: _FaixaDoLocal.proporcao,
+        recuo: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
+        filhos: _corpo(detalhe),
+      );
+    }
+
+    // CARGA, FALHA, SEM CONTA E NAO ENCONTRADO MANTEM A BARRA COM TITULO, e e
+    // o que a ficha do evento faz nas mesmas fases. Sem nome para mostrar, a
+    // barra e o unico lugar onde `Voltar` cabe -- e aqui o titulo nao e
+    // repeticao de nada: e a unica palavra que diz em que pagina a pessoa
+    // esta enquanto ela nao carregou.
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: BichuAlvoDeToque.critico,
         leadingWidth: BichuAlvoDeToque.critico,
-        leading: _BotaoVoltar(aoTocar: _voltar),
-        // **A barra tem `Voltar` e o nome, e nada mais.** O slot de acao fica
-        // vazio de proposito: a ordenacao das avaliacoes e um controle do
-        // conteudo e mora no corpo, no topo da secao a que pertence.
-        title: Text(
-          titulo ?? PaginaDoLocal.tituloDaTela,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        leading: BotaoVoltarNaBarra(aoTocar: _voltar),
+        title: const Text(PaginaDoLocal.tituloDaTela),
       ),
       body: SafeArea(
         child: Semantics(
           scopesRoute: true,
           namesRoute: true,
           explicitChildNodes: true,
-          label: titulo == null
-              ? PaginaDoLocal.tituloDaTela
-              : '${PaginaDoLocal.tituloDaTela}: $titulo',
+          label: PaginaDoLocal.tituloDaTela,
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e4),
             children: _corpo(detalhe),
@@ -2715,25 +2744,6 @@ class _LinhaComIcone extends StatelessWidget {
           child: Align(alignment: Alignment.centerLeft, child: linha),
         ),
       ),
-    );
-  }
-}
-
-class _BotaoVoltar extends StatelessWidget {
-  const _BotaoVoltar({required this.aoTocar});
-  final VoidCallback aoTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: aoTocar,
-      tooltip: 'Voltar',
-      icon: const Icon(Icons.arrow_back),
-      constraints: const BoxConstraints(
-        minWidth: BichuAlvoDeToque.critico,
-        minHeight: BichuAlvoDeToque.critico,
-      ),
-      color: BichuColors.of(context).cores.textPrimary,
     );
   }
 }
