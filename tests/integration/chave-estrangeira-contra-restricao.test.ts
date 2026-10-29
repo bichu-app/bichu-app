@@ -946,6 +946,25 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.professionals',
     aoApagar: 'NO ACTION',
   },
+  // O LOGOTIPO DA INDICACAO (`20261029000004`, 29/10/2026). `NO ACTION`, e e o
+  // PADRAO do Postgres e nao uma escolha escrita: a migracao nao declara `ON
+  // DELETE` nenhum. **E diferente de `professionals.logo_image_id`, que e `SET
+  // NULL`**, e a diferenca e de significado: lá a entrada continua existindo sem
+  // logo (retirar a imagem de uma entrada publicada e operacao normal do
+  // painel); aqui apagar a imagem com a indicacao de pe seria apagar o que a
+  // pessoa mandou enquanto alguem ainda vai revisar, e recusar e o desfecho
+  // certo. A indicacao nao se apaga na pratica -- ela e decidida, e o estado
+  // fica.
+  //
+  // O NOME da restricao e o automatico do Postgres: a migracao nomeia
+  // explicitamente so o `UNIQUE` (`directory_suggestions_logotipo_unico`), e a
+  // chave estrangeira herda `<tabela>_<coluna>_fkey`. Este teste le
+  // `pg_constraint`, e nao o texto da migracao.
+  'public.directory_suggestions.directory_suggestions_logo_image_id_fkey': {
+    colunas: ['logo_image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
 
   // -------------------------------------------------------------------------
   // a avaliacao do local e a denuncia dela (`20261017000017`)

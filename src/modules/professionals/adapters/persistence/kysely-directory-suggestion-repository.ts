@@ -83,7 +83,7 @@
 import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbTransaction } from '../../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
 import type { TipoDeEntidade, TipoDeProfissional } from '../../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../../domain/sugestao-do-diretorio.js';
@@ -93,9 +93,17 @@ import type {
   MinhaIndicacao,
   PaginaDasMinhasIndicacoes,
   RecorteDasMinhasIndicacoes,
+  RegistroDaSugestao,
   SugestaoAGravar,
-  SugestaoGravada,
 } from '../../ports/directory-suggestion-repository.js';
+// **Os DOIS da PORTA, e nao do caso de uso**: `arquitetura/fronteira-de-modulo`
+// reprova import de `media/application/` por outro modulo, e com razao -- modulo
+// so conversa com modulo por porta. Foi o linter que apontou, e o conserto foi
+// mover a constante para a porta, e nao afrouxar a regra.
+import {
+  PROPOSITO_DO_LOGOTIPO_DA_INDICACAO,
+  TRABALHO_DE_IMAGEM_DE_CATALOGO,
+} from '../../../media/ports/imagem-de-catalogo.js';
 
 /** O que o `RETURNING` da funcao devolve. */
 interface LinhaDoRegistro {
@@ -145,41 +153,191 @@ function comoMinhaIndicacao(l: LinhaDaMinhaIndicacao): MinhaIndicacao {
   };
 }
 
+/**
+ * A forma de UUID, para o `upload_id` que nao e UUID devolver "nao serve" em vez
+ * de estourar como erro de banco.
+ *
+ * O contrato ja o valida como `format: uuid` e o Ajv recusa antes do handler --
+ * esta e a SEGUNDA rede, e a mesma que `envioDeCatalogo` em
+ * `media/adapters/persistence/kysely-imagem-de-catalogo.ts` tem pelo mesmo
+ * motivo.
+ */
+const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function criarDirectorySuggestionRepository(
   db: Db,
   ids: IdGenerator,
 ): DirectorySuggestionRepository {
   return {
-    async registrar(sugestao: SugestaoAGravar): Promise<SugestaoGravada> {
+    /**
+     * Grava a indicacao -- e, quando ha logotipo, confirma o envio dele NA MESMA
+     * TRANSACAO (ADR-0027 item 10).
+     *
+     * ## POR QUE HA TRANSACAO AQUI DESDE 29/10/2026
+     *
+     * Ate o logotipo isto era uma instrucao so e nao precisava de transacao.
+     * Agora sao tres escritas que nao podem se separar: a imagem de catalogo, o
+     * envio marcado como confirmado, o trabalho enfileirado -- e o `INSERT` da
+     * indicacao. **Imagem confirmada para uma indicacao que depois nao foi
+     * gravada ficaria `processing` para sempre**, e o varredor de vencidos nao a
+     * recolhe (ele recolhe INTENCAO nao confirmada, e esta estaria confirmada).
+     * Na direcao inversa, indicacao gravada apontando para imagem que nao
+     * nasceu seria chave estrangeira violada.
+     *
+     * **Sem logotipo nao ha transacao**, e isso nao e otimizacao de enfeite: uma
+     * transacao por indicacao sem logotipo gastaria uma conexao do pool por duas
+     * instrucoes que nao precisam de atomicidade -- e indicacao sem logotipo e o
+     * caso comum, inclusive todo o APK publicado.
+     *
+     * ## A CONFERENCIA E A CLAUSULA `WHERE`, E NAO UM `if`
+     *
+     * Quatro coisas tornam um `upload_id` inutilizavel, e as quatro sao
+     * resolvidas na consulta:
+     *
+     *  - **nao e da conta que esta indicando** (`u.user_id`);
+     *  - **nao e do proposito desta rota** (`u.purpose`) -- e e esta linha que
+     *    impede o envio do PAINEL (`directory_logo`) de entrar na fila, do mesmo
+     *    jeito que `imagemDoEnvio` da escrita administrativa impede o caminho
+     *    inverso. **As duas juntas sao a fronteira da fila de revisao**: a
+     *    imagem de uma indicacao que ninguem aprovou nao tem caminho ate
+     *    `professionals`, que e a superficie publica;
+     *  - **venceu** (`expires_at`);
+     *  - **ja pertence a OUTRA indicacao** (a subconsulta de
+     *    `directory_suggestions`).
+     *
+     * **Um `if` depois de um `SELECT` sem filtro teria lido o envio de outra
+     * pessoa para a memoria deste processo**, que e o que o ADR-0021 nao quer --
+     * a mesma razao escrita em `capaDoEnvio` do encontro da comunidade, e a
+     * mesma razao pela qual `listarDoAutor` abaixo nao filtra nada nesta camada.
+     *
+     * `FOR UPDATE OF u` trava a linha do envio: duas escritas com o mesmo
+     * `upload_id` nao podem as duas acha-lo aberto e criar duas imagens.
+     *
+     * ## O ENVIO JA CONFIRMADO NAO SERVE DE NOVO, E ESSA E A DIFERENCA DA CAPA
+     *
+     * Em `capaDoEnvio` o envio ja confirmado serve DE NOVO para o MESMO
+     * encontro, porque encontro se edita. **Indicacao nao se edita** -- nao
+     * existe operacao de atualizacao de `directory_suggestions` no contrato --,
+     * entao `confirmed_at` preenchido nao tem segundo uso legitimo aqui: ele e
+     * uma indicacao que ja foi gravada. Devolver "nao serve" e o certo, e a
+     * `directory_suggestions_logotipo_unico` e a rede de baixo.
+     */
+    async registrar(sugestao: SugestaoAGravar): Promise<RegistroDaSugestao> {
       const ref = randomBytes(16).toString('base64url');
-      const linha = await sql<LinhaDoRegistro>`
-        SELECT directory_suggestions_registrar(
-          ${ids.uuidv7()}::uuid,
-          ${ref},
-          ${sugestao.autor}::uuid,
-          ${sugestao.displayName},
-          ${sugestao.kind},
-          ${sugestao.entityKind},
-          ${sugestao.city},
-          ${sugestao.state},
-          ${sugestao.neighborhood},
-          ${sugestao.postalCode},
-          ${sugestao.contatoKind},
-          ${sugestao.contatoValue},
-          ${sugestao.note}
-        ) AS created_at
-      `.execute(db);
+      const logoUploadId = sugestao.logoUploadId;
 
-      const gravada = linha.rows[0];
-      if (gravada === undefined) {
-        // A funcao sempre devolve uma linha; chegar aqui e defeito de esquema, e
-        // nao caso de borda. Lancar com o motivo e melhor que devolver um
-        // recibo com `created_at` inventado.
-        throw new Error(
-          'directory_suggestions_registrar nao devolveu linha: as migracoes 20261017000004 e 20261017000015 nao estao aplicadas neste banco, ou a funcao mudou de forma.',
-        );
-      }
-      return { ref, createdAt: gravada.created_at };
+      /** O `INSERT` da indicacao, pela funcao. Igual com e sem logotipo. */
+      const gravar = async (
+        executor: Db | DbTransaction,
+        logoImageId: string | null,
+      ): Promise<RegistroDaSugestao> => {
+        const linha = await sql<LinhaDoRegistro>`
+          SELECT directory_suggestions_registrar(
+            ${ids.uuidv7()}::uuid,
+            ${ref},
+            ${sugestao.autor}::uuid,
+            ${sugestao.displayName},
+            ${sugestao.kind},
+            ${sugestao.entityKind},
+            ${sugestao.city},
+            ${sugestao.state},
+            ${sugestao.neighborhood},
+            ${sugestao.postalCode},
+            ${sugestao.contatoKind},
+            ${sugestao.contatoValue},
+            ${sugestao.note},
+            ${logoImageId}::uuid
+          ) AS created_at
+        `.execute(executor);
+
+        const gravada = linha.rows[0];
+        if (gravada === undefined) {
+          // A funcao sempre devolve uma linha; chegar aqui e defeito de esquema,
+          // e nao caso de borda. Lancar com o motivo e melhor que devolver um
+          // recibo com `created_at` inventado.
+          throw new Error(
+            'directory_suggestions_registrar nao devolveu linha: as migracoes 20261017000004, 20261017000015, 20261029000003 e 20261029000004 nao estao aplicadas neste banco, ou a funcao mudou de forma.',
+          );
+        }
+        return { tipo: 'gravada', sugestao: { ref, createdAt: gravada.created_at } };
+      };
+
+      // O CAMINHO COMUM, e o do APK publicado: sem logotipo, uma instrucao so.
+      if (logoUploadId === null) return gravar(db, null);
+
+      // Segunda rede da forma: `format: uuid` no contrato e a primeira.
+      if (!FORMA_DE_UUID.test(logoUploadId)) return { tipo: 'envio_nao_serve' };
+
+      return db.transaction().execute(async (trx) => {
+        const r = await sql<{
+          id: string;
+          expires_at: Date;
+          confirmed_at: Date | null;
+        }>`
+          SELECT u.id, u.expires_at, u.confirmed_at
+            FROM catalog_upload_intents u
+           WHERE u.id = ${logoUploadId}::uuid
+             AND u.user_id = ${sugestao.autor}::uuid
+             AND u.purpose = ${PROPOSITO_DO_LOGOTIPO_DA_INDICACAO}
+           FOR UPDATE OF u
+        `.execute(trx);
+
+        const envio = r.rows[0];
+        // Nao existe, nao e desta conta, ou nao e deste proposito. **Os tres
+        // chegam aqui como o MESMO desfecho**, e o silencio e o recurso.
+        if (envio === undefined) return { tipo: 'envio_nao_serve' };
+        // JA CONFIRMADO: nao serve de novo. Ver o cabecalho.
+        //
+        // **E esta linha, e nao uma subconsulta, que cobre "ja usado em OUTRA
+        // indicacao".** A primeira versao deste metodo tinha um `SELECT` em
+        // `directory_suggestions` para perguntar isso, e um portao a reprovou
+        // com razao -- este adaptador nao le aquela tabela direto, e a isca de
+        // `minhas-indicacoes-routes.test.ts` guarda esse caminho.
+        //
+        // **A subconsulta era redundante, e nao foi so removida por causa do
+        // portao:** `confirmed_at` e gravado na MESMA transacao que anexa a
+        // imagem a uma indicacao, e indicacao nao se edita (nao existe operacao
+        // de atualizacao de `directory_suggestions` no contrato). Entao envio
+        // confirmado JA pertence a alguma indicacao, sempre -- perguntar a qual
+        // delas nao muda a resposta. A `directory_suggestions_logotipo_unico` e
+        // a rede de baixo, para o que esta linha nao alcance.
+        if (envio.confirmed_at !== null) return { tipo: 'envio_nao_serve' };
+        if (envio.expires_at.getTime() <= Date.now()) return { tipo: 'envio_nao_serve' };
+
+        const imagemId = ids.uuidv7();
+        await trx
+          .updateTable('catalog_upload_intents')
+          .set({ confirmed_at: new Date() })
+          .where('id', '=', envio.id)
+          // `confirmed_at is null` de novo, e nao por desconfianca do `FOR
+          // UPDATE`: e a mesma guarda que `capaDoEnvio` tem, e ela e o que faz
+          // a condicao de corrida ser impossivel em vez de improvavel.
+          .where('confirmed_at', 'is', null)
+          .execute();
+        await trx
+          .insertInto('catalog_images')
+          .values({
+            id: imagemId,
+            upload_intent_id: envio.id,
+            purpose: PROPOSITO_DO_LOGOTIPO_DA_INDICACAO,
+            public_key: null,
+            rejection_reason: null,
+          })
+          .execute();
+        // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
+        // imagem falharia em laco. Os dois na mesma transacao -- e, aqui,
+        // tambem na mesma do `INSERT` da indicacao.
+        await trx
+          .insertInto('jobs')
+          .values({
+            id: ids.uuidv7(),
+            kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+            payload: JSON.stringify({ catalog_image_id: imagemId }),
+          })
+          .execute();
+
+        return gravar(trx, imagemId);
+      });
     },
 
     async listarDoAutor(

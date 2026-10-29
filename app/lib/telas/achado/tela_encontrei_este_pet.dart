@@ -199,16 +199,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
     );
   }
 
-  /// A frase sobre o lugar, ou nada. Mesma regra de F3.5: tres estados, e
-  /// nenhum deles bloqueia o envio.
-  String? get _avisoDoLugar {
-    final onde = _rascunho.onde;
-    if (onde == null) return null;
-    if (!_rascunho.temRotuloDeArea) return TextosDoAchado.semRotuloDeArea;
-    if (!_rascunho.temCoordenada) return TextosDoAchado.semCoordenada;
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -288,6 +278,13 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
             // ponto de uso: `registrarAchado`. Um valor novo no enum seria um
             // ponteiro sem texto proprio, e o portao `enum-sem-valores-lidos`
             // reprova enum cujo valor ninguem le.
+            //
+            // **Sem os dois botoes, e pelo ponto de uso** (cliente,
+            // 29/10/2026). As duas telas de achado mudam JUNTAS: sao o mesmo
+            // fluxo e tinham a mesma promessa, e deixar uma com botoes e a
+            // outra sem seria a inconsistencia que o produto relataria no dia
+            // seguinte. Ver `_ofereceCaptura` na peca e o cabecalho de
+            // `tela_registrar_achado.dart` para o custo medido da decisao.
             CapturaDeLocalizacao(
               pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
               aoMudar: (onde) {
@@ -295,13 +292,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
                 setState(() {});
               },
             ),
-            if (_avisoDoLugar != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e4),
-              FaixaDeAviso(
-                peso: PesoDaFaixa.informativo,
-                texto: _avisoDoLugar!,
-              ),
-            ],
             const SizedBox(height: BichuEspaco.e6),
             BichuField(
               rotulo: TextosDoAchado.rotuloDoRecado,

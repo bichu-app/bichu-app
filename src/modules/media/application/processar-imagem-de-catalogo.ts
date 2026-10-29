@@ -73,6 +73,13 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   // cinco vezes o dado que pinta, que e o defeito que
   // `DERIVADAS_DO_ENCONTRO` ganhou a `thumb` para corrigir.
   directory_gallery: DERIVADAS_DO_ENCONTRO,
+  // O LOGOTIPO DA INDICACAO aponta para `DERIVADAS_DA_LOGO` -- a MESMA
+  // constante de `directory_logo`, e nao uma copia dos numeros. Aqui o
+  // proposito separado NAO traz geometria separada, e a igualdade e o ponto: a
+  // imagem e a mesma coisa (a marca da entidade, num quadrado), e o que separa
+  // os dois propositos e o AUTOR e o DESTINO, nao o tamanho. Ver a prosa de
+  // `directory_suggestion_logo` em `ports/imagem-de-catalogo.ts`.
+  directory_suggestion_logo: DERIVADAS_DA_LOGO,
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
   // A VITRINE: `thumb` 320 x 320 para a GRADE (celula de 104 dp, 312 px reais a
   // 3x) e `card` 1024 x 1024 para a foto aberta. Nem a `thumb` de 176 nem a

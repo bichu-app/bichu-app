@@ -289,6 +289,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // esta e a galeria de ate oito, que precisa tambem da `thumb` de
       // 480 x 360 da faixa -- as TRES derivadas do encontro.
       'directory_gallery',
+      // O NONO, `20261029000004` (29/10/2026): o LOGOTIPO que QUEM INDICOU
+      // enviou (pedido do cliente: *"nao tem o campo do logotipo para o
+      // usuario subir e indicar o estabelecimento"*).
+      //
+      // **SEPARADO de `directory_logo`, e nao o mesmo valor com outro nome.**
+      // Os outros propositos se separam por GEOMETRIA; este se separa por AUTOR
+      // e DESTINO, e usa a MESMA `DERIVADAS_DA_LOGO`. `imagemDoEnvio` da escrita
+      // administrativa exige `directory_logo` para aceitar um `upload_id` em
+      // `professionals.logo_image_id`, e `professionals` e a superficie publica:
+      // com UM proposito para os dois, a logo de uma indicacao que ninguem
+      // aprovou chegaria ao `Perto`. **Juntar os dois valores aqui nao e
+      // simplificacao: e abrir a fronteira da fila de revisao.**
+      'directory_suggestion_logo',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
@@ -662,6 +675,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // esta e a galeria de ate oito, que precisa tambem da `thumb` de
       // 480 x 360 da faixa -- as TRES derivadas do encontro.
       'directory_gallery',
+      // O NONO, `20261029000004` (29/10/2026): o LOGOTIPO que QUEM INDICOU
+      // enviou (pedido do cliente: *"nao tem o campo do logotipo para o
+      // usuario subir e indicar o estabelecimento"*).
+      //
+      // **SEPARADO de `directory_logo`, e nao o mesmo valor com outro nome.**
+      // Os outros propositos se separam por GEOMETRIA; este se separa por AUTOR
+      // e DESTINO, e usa a MESMA `DERIVADAS_DA_LOGO`. `imagemDoEnvio` da escrita
+      // administrativa exige `directory_logo` para aceitar um `upload_id` em
+      // `professionals.logo_image_id`, e `professionals` e a superficie publica:
+      // com UM proposito para os dois, a logo de uma indicacao que ninguem
+      // aprovou chegaria ao `Perto`. **Juntar os dois valores aqui nao e
+      // simplificacao: e abrir a fronteira da fila de revisao.**
+      'directory_suggestion_logo',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.

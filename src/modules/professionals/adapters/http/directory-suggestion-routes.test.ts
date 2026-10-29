@@ -90,7 +90,16 @@ function repositorio(): DirectorySuggestionRepository {
   return {
     registrar: (sugestao) => {
       gravadas.push(sugestao);
-      return Promise.resolve({ ref: REF, createdAt: CRIADO_EM });
+      // **`tipo: 'gravada'` desde 29/10/2026.** `registrar` passou a poder
+      // RECUSAR, porque com o logotipo ela confirma o envio na mesma transacao
+      // -- e um `upload_id` de outra conta, de outro proposito, vencido ou ja
+      // usado devolve `envio_nao_serve`. Este dobre sempre GRAVA: o caminho de
+      // recusa e medido contra a pilha de verdade, onde existe envio para
+      // conferir.
+      return Promise.resolve({
+        tipo: 'gravada' as const,
+        sugestao: { ref: REF, createdAt: CRIADO_EM },
+      });
     },
     // Este arquivo nao mede a LEITURA: o dobre recusa em voz alta em vez de
     // devolver pagina vazia, que passaria por resultado legitimo. Quem mede

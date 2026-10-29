@@ -38,20 +38,40 @@ import 'textos_do_achado.dart';
 /// ## A captura de localizacao e EMBUTIDA, e nao reescrita
 ///
 /// [CapturaDeLocalizacao] e a peca da BICHUS-23, escrita exatamente para ser
-/// embutida por esta tela e por F3.1. Ela ja trata os cinco motivos de nao
-/// haver ponto, a antessala, o prazo de 12 s e a precisao arredondada para
-/// cima -- e ja oferece o campo de bairro **junto** com o GPS, que e o caminho
-/// conservador da pergunta que foi para a pauta de refinamento. Esta tela
-/// consome o `Onde?` que ela publica e nao sabe nada sobre permissao.
+/// embutida por esta tela e por F3.1. Esta tela consome o `Onde?` que ela
+/// publica e nao sabe nada sobre permissao.
 ///
-/// ## O que esta tela faz quando nao ha rotulo de area
+/// ## Esta tela NAO oferece a captura de localizacao (29/10/2026)
 ///
-/// Ela **diz**. Quem concede o GPS e nao digita nada aparece para o tutor com
-/// a distancia e sem o bairro, porque `area_label` so se monta com texto
-/// digitado (`rotuloDaArea` le `city` e `neighborhood`, e coordenada nao entra
-/// ali nem arredondada). Derivar o bairro da coordenada e o que o ADR-0006
-/// proibe. Entao a tela escreve [TextosDoAchado.semRotuloDeArea] ao lado da
-/// captura, com o campo de bairro a um toque -- e **nao bloqueia nada**.
+/// Decisao do cliente, verbatim: *"remove os botoes e deixa os campos de cep,
+/// endereco para o usuario preencher, no mesmo padrao das outras paginas"*. A
+/// peca abre direto nos campos -- CEP, bairro, cidade e estado --, e os dois
+/// botoes (`Usar minha localizacao` e `Prefiro digitar o bairro`) nao aparecem.
+/// Quem escolhe isso e o `pontoDeUso`; ver `_ofereceCaptura` na peca.
+///
+/// **O achado desta tela nao tem coordenada, nunca.** Isso foi decidido com o
+/// custo medido na mesa: `location` ia ao servidor e o cruzamento usa a
+/// coordenada em quatro lugares (`src/modules/found/domain/cruzamento.ts`), de
+/// modo que o achado passa a casar **por cidade e nao por quarteirao**, e fica
+/// atras de quem tem ponto no desempate da ordenacao.
+///
+/// ## Por que nao ha mais aviso sobre o lugar
+///
+/// Havia uma `FaixaDeAviso` aqui com dois textos condicionais, e **os dois
+/// deixaram de poder ser verdade**:
+///
+/// - `semRotuloDeArea` dizia *"O tutor vai ver a distancia, e nao o bairro"*.
+///   Sem coordenada nao ha distancia nenhuma para o tutor ver, entao a frase
+///   passaria a **mentir** -- e nao a ficar velha;
+/// - `semCoordenada` dizia que a busca vale na cidade inteira. Virou verdade em
+///   **todo** achado, e uma faixa que aparece sempre nao distingue nada: deixa
+///   de ser aviso e passa a ser decoracao com cara de problema, na tela de quem
+///   esta com um animal na rua. E o mesmo argumento que a propria peca ja
+///   escreve para nao usar `FaixaDeAviso` onde nao ha o que avisar.
+///
+/// O que restava de acionavel -- *"escreva o bairro se quiser que ele
+/// apareca"* -- esta no formulario, que mostra o campo de bairro rotulado e
+/// opcional a um toque de distancia.
 ///
 /// ## O que esta tela NAO faz
 ///
@@ -267,20 +287,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     ];
   }
 
-  /// A frase sobre o lugar, ou nada.
-  ///
-  /// **Tres estados e nao dois**: com ponto e sem texto, com texto e sem
-  /// ponto, e com os dois (que nao precisa de aviso nenhum). Sem lugar
-  /// nenhum, quem fala e o impedimento do botao, e repetir a informacao aqui
-  /// seria dizer duas vezes.
-  String? get _avisoDoLugar {
-    final onde = _rascunho.onde;
-    if (onde == null) return null;
-    if (!_rascunho.temRotuloDeArea) return TextosDoAchado.semRotuloDeArea;
-    if (!_rascunho.temCoordenada) return TextosDoAchado.semCoordenada;
-    return null;
-  }
-
   /// Em qual dos dois passos a pessoa esta (0 ou 1).
   ///
   /// **O passo e a UNICA coisa que a divisao acrescentou ao estado.** Tudo o
@@ -334,7 +340,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
             _Passo2(
               rascunho: _rascunho,
               observacao: _observacao,
-              avisoDoLugar: _avisoDoLugar,
               erro: _erro,
               aoMudar: () => setState(() {}),
               aoEscolherData: _escolherData,
@@ -587,7 +592,6 @@ class _Passo2 extends StatelessWidget {
   const _Passo2({
     required this.rascunho,
     required this.observacao,
-    required this.avisoDoLugar,
     required this.erro,
     required this.aoMudar,
     required this.aoEscolherData,
@@ -595,7 +599,6 @@ class _Passo2 extends StatelessWidget {
 
   final RascunhoDoAchado rascunho;
   final TextEditingController observacao;
-  final String? avisoDoLugar;
   final MensagemDeErro? erro;
   final VoidCallback aoMudar;
   final VoidCallback aoEscolherData;
@@ -653,10 +656,6 @@ class _Passo2 extends StatelessWidget {
             aoMudar();
           },
         ),
-        if (avisoDoLugar != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e4),
-          FaixaDeAviso(peso: PesoDaFaixa.informativo, texto: avisoDoLugar!),
-        ],
         const SizedBox(height: BichuEspaco.e6),
         BichuField(
           rotulo: TextosDoAchado.rotuloDaObservacao,

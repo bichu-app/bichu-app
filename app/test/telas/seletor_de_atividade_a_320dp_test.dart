@@ -77,6 +77,37 @@
 // rotulo novo e mais longo que todos os de hoje, entao o risco que a assercao
 // manda reler nao se materializou. (O `_rotuloMaisLongo` de 31 caracteres que o
 // grupo de 320 dp usa e rotulo de TIPO DE ENTIDADE, nao de atividade.)
+//
+// --- PROSA DO OUTRO LADO DA UNIAO DE 29/10/2026 (noite), VERBATIM ---
+// Os dois lados escreveram sobre o MESMO assunto nesta nota e nenhum
+// esta errado: a base 5bd0163c (uniao dos cinco, PR #104) e o PR #106 (seletor de tipo e logotipo). A uniao fica com as duas,
+// sem reembrulhar, porque apagar uma apagaria o registro de quem a
+// escreveu. A ASSERCAO abaixo e a mesma nos dois lados.
+//
+// **OS DEZ ROTULOS DEIXARAM DE SER PREVISAO EM 29/10/2026.**
+//
+// Quando este arquivo nasceu, `AtividadeDoDiretorio` tinha OITO valores e os dez
+// medidos abaixo eram uma previsao declarada da mudanca que outra frente estava
+// construindo. Essa frente landou (PR #103, migracao `20261029000002`), e esta
+// arvore tem os DEZ: `boarding` ('Hospedagem') e `daycare` ('Creche') entraram
+// como valores NOVOS e `sitter` ficou com 'Pet Sitter'.
+//
+// **A previsao acertou os dez TEXTOS e errou de quem era um deles**, e o registro
+// fica porque a diferenca e o assunto do PR #103: 'Hospedagem' nao voltou para
+// `sitter` -- ela e de `boarding`, um valor que nao existia. A lista abaixo
+// continua valendo caractere a caractere; a contagem do grupo da parte 1 subiu
+// de 8 para 10 e e ela, e nao esta prosa, que mede o enum de verdade.
+//
+// =========================================================================
+// PARTE 3: O SELETOR DE TIPO DE ENTIDADE EXISTE AGORA, E ELE E MEDIDO EM OUTRO
+// =========================================================================
+//
+// A medicao de largura abaixo usa `Profissional ou estabelecimento` num
+// `SeletorDeLista` MONTADO AQUI, porque em 29/10 o campo ainda nao existia na
+// tela. Ele existe desde a BICHUS-317b, e quem mede o campo REAL -- na arvore
+// da tela, com os rotulos que o `enum` declara -- e
+// `test/telas/tipo_de_entidade_na_indicacao_test.dart`. Os dois ficam: este mede
+// o COMPONENTE com o rotulo longo, aquele mede a TELA.
 
 import 'package:bichu/api/modelos_diretorio.dart';
 import 'package:bichu/roteamento/rotas.dart';
@@ -230,12 +261,37 @@ void main() {
       // SOZINHO e os dois nao se tocam no texto -- a guarda vive em
       // `app/test`, o enum em `app/lib/api` --, entao o git mesclou os dois
       // limpo e SO a uniao reprovou. E para isso que a contagem existe.
+      //
+      // --- PROSA DO OUTRO LADO DA UNIAO DE 29/10/2026 (noite), VERBATIM ---
+      // Os dois lados escreveram sobre o MESMO assunto nesta nota e nenhum
+      // esta errado: a base 5bd0163c (uniao dos cinco, PR #104) e o PR #106 (seletor de tipo e logotipo). A uniao fica com as duas,
+      // sem reembrulhar, porque apagar uma apagaria o registro de quem a
+      // escreveu. A ASSERCAO abaixo e a mesma nos dois lados.
+      //
+      // passar calada. Dez quando a outra frente landar `Pet Sitter` e
+      // `Creche`; oito hoje.
+      // A CONTAGEM subiu de 8 para 10 em 29/10/2026, com `boarding` e `daycare`
+      // do PR #103 (`20261029000002`). O numero continua travado aqui pelo
+      // motivo de sempre: valor novo passa por este caso em vez de passar
+      // calado.
       expect(
         AtividadeDoDiretorio.values, hasLength(10),
         reason: 'REPROVA: a lista de atividades mudou de tamanho. Se foi de '
             'proposito, atualize este numero E releia a medicao de 320 dp '
             'deste arquivo -- a folha rola, mas o rotulo novo pode ser mais '
             'longo que todos os de hoje.',
+      );
+      // Os DOIS valores do PR #103, com os rotulos que o cliente definiu. Sem
+      // estas duas linhas, a contagem de dez poderia fechar com qualquer par de
+      // valores.
+      expect(rotulos['boarding'], 'Hospedagem');
+      expect(rotulos['daycare'], 'Creche');
+      expect(
+        rotulos['sitter'],
+        'Pet Sitter',
+        reason: 'REPROVA: `sitter` voltou a dizer "Hospedagem". Quem diz '
+            'Hospedagem e `boarding`, e a divergencia entre valor e rotulo de '
+            '`sitter` durou meses (ver o PR #103).',
       );
     });
   });
