@@ -493,6 +493,7 @@ class RecorteDoDiretorio {
     this.atividade,
     this.nivelMinimo,
     this.cidade,
+    this.bairro,
     this.ordem = OrdemDoDiretorio.distancia,
     this.pagina = 1,
     this.limite = 20,
@@ -552,6 +553,53 @@ class RecorteDoDiretorio {
     return limpo;
   }
 
+  /// O BAIRRO do recorte, ou nulo (BICHUS-315, 28/10/2026).
+  ///
+  /// Pedido do cliente: *"No filtro da pagina de comunidade, precisamos
+  /// implementar o filtro de bairro, pois em Sao Paulo a cidade e muito
+  /// grande."* A razao dele e o requisito: `city` sozinha nao recorta nada
+  /// numa cidade do tamanho de Sao Paulo.
+  ///
+  /// **Nenhum contrato mudou por causa disto, e nenhum precisava:**
+  /// `neighborhood` (`minLength: 2`, `maxLength: 80`) ja existia nas DUAS
+  /// operacoes que atendem esta lista -- `listDirectoryEntries` e
+  /// `listPublicDirectoryEntries` --, e o servidor ja normaliza acento nele.
+  /// O que faltava era o app MANDAR, exatamente como faltava para [cidade] em
+  /// 20/10/2026.
+  ///
+  /// **E TEXTO, e nao chave de entidade**, e o contrato diz isso com as
+  /// proprias palavras: *"`city`, `state` e `neighborhood` sao rotulo de
+  /// exibicao e filtro de texto, jamais fonte de coordenada"*. Nao existe
+  /// lista canonica de bairros, nao ha operacao que a devolva e nao ha
+  /// geocodificacao (ADR-0006) -- e e por isso que a tela oferece um campo
+  /// que a pessoa DIGITA (`CampoDeTextoDoFiltro`) e nao um grupo de opcoes.
+  ///
+  /// **A alternativa foi considerada e descartada por medida**: uma lista dos
+  /// bairros vistos nas entradas carregadas ofereceria os bairros de 20
+  /// entradas numa cidade com 87, mudaria de opcoes a cada `Carregar mais` e
+  /// esconderia justamente o bairro que a pessoa procura -- que no caso dele
+  /// quase nunca esta entre as 20 primeiras. O caso `um bairro que NÃO está em
+  /// nenhuma entrada carregada pode ser aplicado`, em
+  /// `filtro_de_bairro_test.dart`, e essa escolha em forma mensuravel.
+  ///
+  /// **O grupo `Cidade` desta mesma tela E lista derivada, e isso nao e
+  /// contradicao**: a cidade tem uma fonte que o bairro nao tem -- o aparelho
+  /// a resolve, e e ela que a folha injeta marcada. Nenhuma peca deste app
+  /// resolve o bairro de quem olha.
+  final String? bairro;
+
+  /// O bairro como ele vai para a rota, ou nulo quando ele nao vai.
+  ///
+  /// **O piso de dois caracteres e do contrato** (`minLength: 2` em
+  /// `neighborhood`): mandar um caractere so voltaria 400, e engolir o 400
+  /// desenharia "nada encontrado" para quem tem um bairro legitimo. Mesma
+  /// regra, e mesma razao, de [termoQueVai] e [cidadeQueVai].
+  String? get bairroQueVai {
+    final limpo = bairro?.trim();
+    if (limpo == null || limpo.length < 2) return null;
+    return limpo;
+  }
+
   final OrdemDoDiretorio ordem;
   final int pagina;
 
@@ -561,26 +609,40 @@ class RecorteDoDiretorio {
   /// Quantos recortes de conteudo estao ativos. **A ordem nao conta**: ela
   /// tem valor sempre, e contar como filtro faria o distintivo nascer aceso
   /// numa tela em que ninguem filtrou nada.
+  /// **O bairro conta pelo `bairroQueVai`, e nao pelo campo.** Um caractere so
+  /// nao vai para a rota: contado, o distintivo prometeria um recorte que o
+  /// servidor nao aplicou -- a mesma mentira, do outro lado, que o piso
+  /// existe para evitar.
   int get quantidadeDeFiltros =>
       (atividade == null ? 0 : 1) +
-      (nivelMinimo == null || nivelMinimo == NivelDeVerificacao.nenhum ? 0 : 1);
+      (nivelMinimo == null || nivelMinimo == NivelDeVerificacao.nenhum
+          ? 0
+          : 1) +
+      (bairroQueVai == null ? 0 : 1);
 
   RecorteDoDiretorio com({
     String? termo,
     AtividadeDoDiretorio? atividade,
     NivelDeVerificacao? nivelMinimo,
     String? cidade,
+    String? bairro,
     OrdemDoDiretorio? ordem,
     int? pagina,
     bool limparAtividade = false,
     bool limparNivel = false,
     bool limparTermo = false,
     bool limparCidade = false,
+    bool limparBairro = false,
   }) {
     return RecorteDoDiretorio(
       termo: limparTermo ? null : (termo ?? this.termo),
       atividade: limparAtividade ? null : (atividade ?? this.atividade),
       nivelMinimo: limparNivel ? null : (nivelMinimo ?? this.nivelMinimo),
+      // `limparBairro` existe pela mesma razao de `limparTermo` e
+      // `limparCidade`: `null` num parametro opcional e indistinguivel de
+      // "nao passei", e apagar o bairro e um recorte VALIDO -- e assim que
+      // quem digitou um bairro volta a ver a cidade inteira.
+      bairro: limparBairro ? null : (bairro ?? this.bairro),
       // `limparCidade` existe pela mesma razao de `limparTermo`: `null` num
       // parametro opcional e indistinguivel de "nao passei", e confundir esses
       // dois foi o que deixou o botao de localizacao dos pets sem efeito.
@@ -599,6 +661,13 @@ class RecorteDoDiretorio {
         // caracteres mora num lugar so. **Nao ha, e nao pode haver, `lat` nem
         // `lon` nesta consulta**: ver [cidade] e o ADR-0006.
         'city': ?cidadeQueVai,
+        // O BAIRRO, pelo `bairroQueVai` -- o piso de dois caracteres mora num
+        // lugar so (BICHUS-315). Depois de `city` e antes de `kind`, na mesma
+        // ordem do contrato. **Ele vale nas duas rotas**: `queryPublica` sai
+        // desta consulta por subtracao, e `listPublicDirectoryEntries` tambem
+        // declara `neighborhood` -- conferido antes de acrescentar a linha,
+        // porque mandar a uma operacao que nao declara o parametro seria 400.
+        'neighborhood': ?bairroQueVai,
         if (atividade != null) 'kind': atividade!.codigo,
         if (nivelMinimo != null && nivelMinimo != NivelDeVerificacao.nenhum)
           'verification_level': nivelMinimo!.codigo,

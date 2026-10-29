@@ -124,6 +124,30 @@ class ListaDoDiretorio extends StatefulWidget {
   static const String explicacaoSemCidade =
       'Mostrando profissionais de todas as cidades.';
 
+  /// O rotulo do campo de BAIRRO da folha de filtros (BICHUS-315,
+  /// 28/10/2026).
+  ///
+  /// Pedido do cliente: *"No filtro da pagina de comunidade, precisamos
+  /// implementar o filtro de bairro, pois em Sao Paulo a cidade e muito
+  /// grande."*
+  ///
+  /// E o rotulo VISIVEL e o nome ACESSIVEL ao mesmo tempo: `BichuField` o
+  /// publica com `rotuloVisivel`, e campo com dica e sem rotulo e campo mudo.
+  static const String rotuloDoBairro = 'Bairro';
+
+  /// A unica linha que o campo mostra alem do rotulo, e so quando o valor nao
+  /// serve. **Nao e texto de apoio**: o cliente mandou remover os de apoio em
+  /// 18/10/2026, e mensagem de validacao nao e um deles.
+  ///
+  /// O numero e do contrato (`minLength: 2` em `neighborhood`) e nao uma
+  /// escolha desta tela.
+  static const String validacaoDoBairro =
+      'Escreva ao menos duas letras do bairro.';
+
+  /// A dica DENTRO do campo. Um bairro de Sao Paulo, porque e a cidade do
+  /// pedido.
+  static const String exemploDoBairro = 'Pinheiros';
+
   /// O titulo do vazio sem nenhum filtro: a secao ainda nao tem entrada na
   /// regiao de quem esta olhando.
   static const String tituloDoVazio = 'Ainda não há profissionais por aqui';
