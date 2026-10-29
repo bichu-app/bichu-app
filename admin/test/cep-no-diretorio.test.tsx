@@ -90,7 +90,7 @@ async function preencherObrigatorios() {
   // A ATIVIDADE VIROU CAIXA em 21/10/2026 (atividades multiplas, decisao do
   // cliente): era um `<select>` com rotulo "Atividade *" e passou a ser um grupo
   // de caixas dentro de um `fieldset` "Atividades *". Marcar e um clique.
-  fireEvent.click(screen.getByLabelText('Passeador'));
+  fireEvent.click(screen.getByLabelText('Dog Walker'));
 }
 
 describe('CEP no formulario de entrada do diretorio', () => {

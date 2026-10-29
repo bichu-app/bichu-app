@@ -61,13 +61,46 @@ export const ORDEM_DOS_TIPOS_DE_ENTIDADE: readonly TipoDeEntidadeDaEntrada[] = [
   'organization',
 ];
 
-/** O rotulo de cada atividade, no singular e como o operador fala. */
+/**
+ * O rotulo de cada atividade, no singular e como o operador fala.
+ *
+ * ## OS DOIS EIXOS FICAM SEPARADOS, E ISSO E DECISAO DO CLIENTE DE 28/10/2026
+ *
+ * Nesta data ele considerou pôr "Profissional autônomo" aqui e **se corrigiu**,
+ * verbatim: *"na verdade, nao inclua profissional autonomo como atividade, ja
+ * esta no tipo"*. Entao a fronteira vale escrita, porque ela nao e obvia para
+ * quem chega depois:
+ *
+ * - **atividade (este mapa) e O QUE A ENTRADA FAZ** -- o que se contrata dela;
+ * - **`TIPOS_DE_ENTIDADE` e O QUE ELA E** -- `professional` ou `organization`.
+ *
+ * Os dois eixos existem AO MESMO TEMPO e nenhum substitui o outro: uma ONG que
+ * atende como clinica tem atividade `clinic` **e** tipo `organization`. Quem
+ * sentir falta de "profissional autônomo", "estabelecimento" ou "ONG" nesta
+ * lista esta olhando para o eixo errado -- os tres sao resposta de
+ * `TIPOS_DE_ENTIDADE`, que na mesma data ganhou os rotulos
+ * *"Profissional ou estabelecimento"* e *"ONG"*.
+ *
+ * ## OS ROTULOS DE 28/10/2026, e o que neles NAO e valor de fio
+ *
+ * Verbatim: *"alterar para clinica ao inves de clinica e estabelecimento,
+ * alterar passeador para Dog Walker"*, e `sitter` virou *"Pet Sitter"*.
+ *
+ * **Os tres sao renomeacao de ROTULO, e nenhum tocou o contrato.** `sitter` ja
+ * existia -- "Pet Sitter" e o nome dele na tela, nao um valor novo --, e
+ * `clinic` deixou de dizer "ou estabelecimento" porque estabelecimento passou a
+ * ser dito no eixo do tipo. `walker` e `sitter` sao renomeados **nos dois
+ * lados** (aqui e em `app/lib/api/modelos_diretorio.dart`): rotulo divergente
+ * entre painel e app e defeito, e `test/diretorio/rotulos-das-atividades.test.ts`
+ * passou a reprovar a divergencia -- que existia em silencio, com `clinic`
+ * valendo `'Clínica'` no Dart e `'Clínica ou estabelecimento'` aqui.
+ */
 export const ATIVIDADES = {
-  clinic: 'Clínica ou estabelecimento',
+  clinic: 'Clínica',
   vet: 'Veterinário',
   groomer: 'Banho e tosa',
-  walker: 'Passeador',
-  sitter: 'Hospedagem',
+  walker: 'Dog Walker',
+  sitter: 'Pet Sitter',
   trainer: 'Adestrador',
 } as const satisfies Record<TipoDaEntrada, string>;
 

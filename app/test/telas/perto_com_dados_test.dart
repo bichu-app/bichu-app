@@ -1245,7 +1245,11 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Passeador'));
+      // `Dog Walker` e nao `Passeador`: o cliente renomeou o rotulo de
+      // `walker` em 28/10/2026, e o chip mostra
+      // `AtividadeDoDiretorio.walker.rotulo`. O VALOR DE FIO (`walker`)
+      // nao mudou -- o que esta escrito aqui e o nome na tela.
+      await tester.tap(find.text('Dog Walker'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Aplicar'));
       await tester.pumpAndSettle();
