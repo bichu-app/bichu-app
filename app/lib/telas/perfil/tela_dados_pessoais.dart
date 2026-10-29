@@ -36,6 +36,7 @@ import '../../widgets/qr_do_convite.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/selo_de_validado.dart';
 import '../../widgets/seletor_de_lista.dart';
+import '../../widgets/trilha_de_convites.dart';
 
 /// `Perfil` › `Meus dados`: os dados pessoais do tutor.
 ///
@@ -181,12 +182,18 @@ class TelaDadosPessoais extends StatefulWidget {
   /// DESENHO.md levantou que mover so o QR *"o apaga em silencio"*. O cliente
   /// respondeu a pergunta fechada 3 com (a): o placar fica.
   ///
-  /// **UMA LINHA, e nao a `TrilhaDeConvites` de tres marcos que havia na tela
-  /// morta.** Isso e o que o protovipo desenhou e o que foi aprovado: o placar
-  /// *"nao e o assunto de `Meus dados` e nao merece secao propria"*. A trilha
-  /// de marcos (`O primeiro vizinho`, `Três olhos a mais`,
-  /// `Dez na vizinhança`) **morreu com a tela**, e isso esta reportado -- ela
-  /// era reconhecimento simbolico, nao premio, e nenhuma decisao a nomeou.
+  /// **UMA LINHA, e ela CONTINUA UMA LINHA.** Isso e o que o protovipo
+  /// desenhou e o que foi aprovado: o placar *"nao e o assunto de `Meus dados`
+  /// e nao merece secao propria"*.
+  ///
+  /// **OS MARCOS VOLTARAM EM 29/10/2026, E NAO NO LUGAR DESTA LINHA.** A
+  /// `TrilhaDeConvites` (`O primeiro vizinho`, `Três olhos a mais`,
+  /// `Dez na vizinhança`) morreu com a tela em `c8d80a07` **por omissao** --
+  /// o QR e o placar tinham decisao de viagem, ela nao --, e o cliente pediu
+  /// os marcos de volta: *"Sim, traga os marcos."* Ela foi recuperada do
+  /// historico, nao redesenhada, e entra **depois** desta linha e dentro do
+  /// mesmo bloco recolhido. Ver `widgets/trilha_de_convites.dart` e o
+  /// comentario no `_conteudo` de `_BlocoDoConvite`.
   static String placarDeQuemEntrou(int quantos) => quantos == 1
       ? '1 tutor entrou no Bichu pelo seu convite.'
       : '$quantos tutores entraram no Bichu pelo seu convite.';
@@ -2139,6 +2146,40 @@ class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
             ),
           ],
         ),
+        // ================================================================
+        // OS MARCOS, DEPOIS DO PLACAR (29/10/2026)
+        // ================================================================
+        //
+        // Decisao do cliente, verbatim: *"Sim, traga os marcos."* A
+        // `TrilhaDeConvites` morreu com a tela `Convide tutores` em
+        // `c8d80a07` **por omissao** -- o QR e o placar tinham decisao de
+        // viagem, ela nao --, e voltou do historico sem redesenho. Ver
+        // `widgets/trilha_de_convites.dart`.
+        //
+        // **`comAFrase: false`, e e a unica diferenca em relacao ao
+        // original.** A frase-cabecalho da trilha diz o mesmo numero que
+        // `placarDeQuemEntrou` acabou de dizer uma linha acima; na tela
+        // dedicada ela era o cabecalho da pagina, aqui seria a segunda
+        // afirmacao empilhada sobre a primeira. **O placar continua UMA
+        // LINHA** -- os marcos somam a ele, nao o substituem: trazer os
+        // marcos nao foi autorizacao para desfazer o desenho aprovado.
+        //
+        // **ZERO NAO DESENHA TRILHA**, e e a regra do quinto caso da tela
+        // morta, trazida junto: zero e a AFIRMACAO do servidor de que
+        // ninguem entrou, e tres marcos todos apagados afirmariam um
+        // progresso que nao comecou. Nulo ja nao chega aqui -- o ramo
+        // inteiro depende de `quantos != null`.
+        //
+        // **ELA NAO DOMINA A PAGINA, e nao por tipografia encolhida.** Este
+        // bloco nasce RECOLHIDO (48 dp, uma linha, o ultimo da pagina
+        // rolante): fechado, a trilha custa ZERO dp e nao empurra nenhum
+        // dado pessoal. Aberto, ela sao tres linhas de 20 dp depois de um QR
+        // de 200 dp que a pessoa abriu de proposito. Nada foi encolhido para
+        // caber porque nao houve nada a encolher.
+        if (quantos > 0) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          TrilhaDeConvites(quantos: quantos, comAFrase: false),
+        ],
       ],
       const SizedBox(height: BichuEspaco.e3),
       Text(
