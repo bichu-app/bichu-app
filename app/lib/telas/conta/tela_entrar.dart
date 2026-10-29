@@ -10,6 +10,7 @@ import '../../formato/email.dart';
 import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/convite_de_passkey.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
@@ -252,7 +253,66 @@ class _TelaEntrarState extends State<TelaEntrar> {
       // `unawaited` e nao chamada pelada: `unawaited_futures` reprova a
       // segunda, e um `Future` esquecido sem marca nenhuma e o jeito de
       // ninguem notar que ele existe.
-      unawaited(escopo.passkey.reconciliarComAConta());
+      //
+      // ==================================================================
+      // ELA PASSOU A SER ESPERADA EM 28/10/2026, DENTRO DE
+      // `deveOferecerCadastro`, E O MOTIVO E UMA REGRA DE PRODUTO NOVA.
+      // ==================================================================
+      //
+      // Cliente, verbatim: *"na hora do usuario fazer o login, se ele nao
+      // tiver o passkey habilitado e nao tiver rejeitado formalmente, devemos
+      // solicitar ele. Pois pode ser um cenario onde o usuario tenha feito o
+      // cadastro, desinstalado o app e esta voltando"*.
+      //
+      // **A CONSULTA CONTINUA SENDO UMA SO.** `deveOferecerCadastro` chama
+      // `reconciliarComAConta` por dentro -- e por isso a chamada solta saiu
+      // daqui em vez de ficar ao lado dela. Duas chamadas gastariam dois
+      // `listPasskeys` por login, e `passkey_e_dispensavel_test.dart` cobra
+      // que seja exatamente um, com a razao escrita.
+      //
+      // **O EFEITO DE MARCAR O APARELHO NAO SE PERDEU**, e ele e o que o PR
+      // #85 entregou: quem recebeu a credencial por sincronizacao, por
+      // reinstalacao ou por restauracao de backup continua ficando marcado,
+      // porque a reconciliacao acontece ANTES da pergunta de suporte dentro
+      // daquele metodo -- ver a prosa dela.
+      //
+      // **O QUE SE PAGA E LATENCIA, e so para quem precisa da oferta.** Quem
+      // ja tem marca local sai na primeira linha de `deveOferecerCadastro`,
+      // sem rede nenhuma -- e e a maioria de quem entra por senha depois da
+      // primeira vez. Quem nao tem espera UM `GET` antes de a tela navegar, e
+      // essa pessoa e exatamente a que o cliente quer alcancar.
+      //
+      // **O CONVITE NAO BLOQUEIA A NAVEGACAO**, que foi a ressalva dele: a
+      // folha e dispensavel pelos tres gestos (`Agora não`, arrastar para
+      // baixo, voltar do sistema), `mostrarConviteDePasskey` devolve `void` e
+      // o destino do login e calculado DEPOIS dela, intacto. Quem quer usar o
+      // app fecha a folha e segue.
+      if (await escopo.passkey.deveOferecerCadastro()) {
+        if (!mounted) return;
+        // ================================================================
+        // O GIRO DO BOTAO SAI ANTES DA FOLHA, E ISSO NAO E ESTETICA.
+        // ================================================================
+        //
+        // **MEDIDO, e e a MESMA armadilha que `tela_criar_conta.dart` ja
+        // documenta**: sem esta linha, `_enviando` continua `true` enquanto a
+        // folha esta aberta (o `finally` so roda depois), o
+        // `CircularProgressIndicator` do botao `Entrar` fica girando ATRAS
+        // dela, e `pumpAndSettle` **nunca assenta** -- animacao infinita na
+        // arvore. Reproduzido nesta rodada em TRES casos de
+        // `passkey_e_dispensavel_test.dart` antes desta linha existir.
+        //
+        // E para a pessoa tambem esta certo: a entrada JA deu certo neste
+        // ponto, e um botao girando atras do convite diria que ainda nao.
+        setState(() => _enviando = false);
+        // `permitirRecusaFormal: true` **so aqui**, e nao no convite do fim do
+        // cadastro: aquele aparece uma vez na vida da conta, e este aparece em
+        // toda entrada de quem nao tem credencial. Sem uma recusa definitiva,
+        // quem nao quer passkey seria perguntada para sempre -- e a regra do
+        // cliente pressupoe que exista como rejeitar (*"nao tiver rejeitado
+        // formalmente"*).
+        await mostrarConviteDePasskey(context, permitirRecusaFormal: true);
+        if (!mounted) return;
+      }
       // O destino depois do login e a intencao pendente (UX 8.3), e nao a
       // home. **A acao guardada e executada aqui**, antes de qualquer
       // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a

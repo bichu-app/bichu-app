@@ -99,6 +99,25 @@ enum MotivoDaIndisponibilidade {
 
 /// A porta. Uma implementacao real e uma de teste.
 abstract class CredencialDoAparelho {
+  /// O SISTEMA DESTE APARELHO SABE FAZER PASSKEY? (28/10/2026)
+  ///
+  /// Existe porque o convite passou a ser OFERECIDO -- depois do login e dentro
+  /// de `Meus dados` --, e nao mais so aceito no fim do cadastro. **Nao se
+  /// oferece o que o sistema vai recusar**: aparelho sem bloqueio de tela, ou
+  /// com versao de sistema velha, e estado NORMAL e nao erro, e a pessoa nao
+  /// pode ver uma promessa que a folha do sistema vai negar.
+  ///
+  /// Antes disto a indisponibilidade so aparecia DEPOIS do toque, como
+  /// [CredencialIndisponivel] com [MotivoDaIndisponibilidade.aparelhoNaoSuporta]
+  /// -- bom o bastante para quem acabou de criar a conta e ja estava com a mao
+  /// no botao, e ruim para uma secao de ajustes que anuncia a funcao.
+  ///
+  /// **Falso quando nao der para saber.** A pergunta e barata e o custo de
+  /// errar e assimetrico: um `false` a mais esconde uma funcao de quem talvez
+  /// a tivesse, e um `true` a mais promete o que o sistema nega -- e a segunda
+  /// e a que o cliente mandou evitar.
+  Future<bool> suportaCredencial();
+
   /// Pede ao sistema para CRIAR uma credencial e devolve o que ele atestou.
   ///
   /// Estoura [SemCredencialNoAparelho] quando a pessoa fecha a folha, e
@@ -125,6 +144,36 @@ class CredencialDoAparelhoReal implements CredencialDoAparelho {
       : _autenticador = autenticador ?? PasskeyAuthenticator();
 
   final PasskeyAuthenticator _autenticador;
+
+  @override
+  Future<bool> suportaCredencial() async {
+    try {
+      // `canAuthenticate` e a propria pergunta do pacote `passkeys` 2.23.1, e
+      // nao uma heuristica nossa sobre versao de sistema.
+      //
+      // **A SUPRESSAO DA DEPRECIACAO E DELIBERADA, e a troca nao e de uma
+      // linha.** O substituto que o pacote indica (`PasskeyAvailability`, em
+      // `availability.dart`) **nao e agnostico de plataforma**: ele expoe
+      // `android()`, `iOS()`, `web()` e `windows()` separados, cada um com
+      // tipo de retorno proprio, e usa-lo exigiria trazer deteccao de
+      // plataforma para esta porta e tratar quatro formas diferentes de
+      // resposta -- para responder a MESMA pergunta booleana. O metodo
+      // depreciado continua existindo e funcionando no 2.23.1, que e a versao
+      // travada no `pubspec`.
+      //
+      // Quando o pacote subir de versao e remove-lo, o conserto e aqui, num
+      // lugar so: a porta devolve `Future<bool>` e nenhuma tela sabe como ela
+      // chegou nesse booleano.
+      // ignore: deprecated_member_use
+      return await _autenticador.canAuthenticate();
+    } on Object {
+      // Canal de plataforma que nao responde vira `false`: ver o doc da porta.
+      // **Nao registra**, e isso e deliberado -- esta pergunta acontece em
+      // toda abertura de `Meus dados` e depois de todo login por senha, e um
+      // canal indisponivel e o estado normal de um build sem o plugin.
+      return false;
+    }
+  }
 
   @override
   Future<CredencialCadastrada> cadastrar(
@@ -290,6 +339,9 @@ class CredencialDoAparelhoReal implements CredencialDoAparelho {
 @visibleForTesting
 class SemPasskeyNesteBuild implements CredencialDoAparelho {
   const SemPasskeyNesteBuild();
+
+  @override
+  Future<bool> suportaCredencial() async => false;
 
   @override
   Future<CredencialCadastrada> cadastrar(OpcoesDeCadastroDePasskey opcoes) =>

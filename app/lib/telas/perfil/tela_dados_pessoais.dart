@@ -20,6 +20,7 @@ import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
 import '../../roteamento/saida_da_mensagem.dart';
+import '../../sessao/fiacao_do_passkey.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -194,6 +195,78 @@ class TelaDadosPessoais extends StatefulWidget {
   /// convite vale 30 dias, entao dia e mes bastam.
   static String valeAte(DateTime quando) =>
       'Vale até ${QuandoNaLista.diaEMes(quando)}.';
+
+  // ======================================================================
+  // O LOGIN POR DIGITAL (BICHUS-301, 28/10/2026)
+  // ======================================================================
+  //
+  // Relato do cliente: *"quando eu fiz o login ele nao pediu pra eu logar com
+  // a digital"*. A causa foi MEDIDA e nao suposta:
+  // `passkey_credentials` tinha **ZERO linhas** em homologacao, `abas.dart`
+  // tinha **ZERO mencoes** a passkey, e as unicas duas telas que falavam dela
+  // eram o convite depois do CADASTRO e a tentativa ao abrir a tela de entrar.
+  // **Quem ja tinha conta nunca conseguia ativar** -- a unica janela eram os
+  // segundos apos criar uma conta nova.
+  //
+  // **SAO DUAS ENTRADAS PARA UM CAMINHO SO.** Esta secao e a porta de quem
+  // quer ligar quando quiser; o convite depois do login
+  // (`telas/conta/tela_entrar.dart`) e para quem nao ligou e nao recusou. As
+  // duas chamam `FiacaoDoPasskey.oferecerCadastro`, que ja existia e e o que o
+  // cadastro usa -- o cliente pediu reaproveitamento, e dois jeitos de
+  // registrar credencial seriam dois lugares onde a marca local pode deixar de
+  // ser gravada.
+  //
+  // **A ROTA EXIGE SESSAO, e aqui isso e a favor**:
+  // `beginPasskeyRegistration` tira a conta do `sub` do token, e em
+  // `Meus dados` a pessoa esta logada por definicao.
+  //
+  // **DESATIVAR NAO ENTROU, e a rota EXISTE.** `revokePasskey`
+  // (`DELETE /v1/auth/passkeys/{passkeyId}`) esta no contrato, com teto
+  // folgado, e `PasskeysApi` **nao a expoe** -- a camada tem `listar`, mas nao
+  // `revogar`. Expo-la e desenhar o caminho de volta (qual credencial? a deste
+  // aparelho, que a lista nao identifica, ou todas?) e trabalho que o cliente
+  // nao pediu nesta rodada, e esta reportado como ressalva em vez de
+  // adivinhado. A senha continua sendo a outra porta, e revogar nunca trancou
+  // ninguem fora.
+
+  /// O nome da secao do login por digital.
+  static const String tituloDoPasskey = 'Login por digital';
+
+  /// O apoio da secao: o que ela faz, numa linha.
+  static const String apoioDoPasskey =
+      'Entre usando a digital, o rosto ou o desbloqueio do aparelho.';
+
+  /// A acao de ligar, para quem nao tem credencial neste aparelho.
+  static const String ativarOPasskey = 'Ativar o login por digital';
+
+  /// O ESTADO de quem ja tem credencial aqui. **E estado, e nao acao**: o
+  /// cliente pediu *"mostre o estado, nao so o botao"*, e sem ele a pessoa nao
+  /// tem como saber se ja ligou.
+  static const String passkeyAtivado =
+      'O login por digital está ativo neste aparelho.';
+
+  /// O ESTADO DO MEIO, e ele e o que mais erra.
+  ///
+  /// Credencial na CONTA sem marca neste aparelho e o que acontece com
+  /// sincronizacao (Google Password Manager, Chaveiro do iCloud), reinstalacao
+  /// e restauracao de backup. **Nao e o mesmo que "nao tem"**, e oferecer
+  /// `Ativar` aqui como se nao houvesse nada mentiria sobre o que a conta tem.
+  /// Quem resolve e `FiacaoDoPasskey.reconciliarComAConta`, que MARCA o
+  /// aparelho em vez de criar uma credencial redundante -- e esta frase e o que
+  /// a pessoa le enquanto isso acontece.
+  static const String passkeyNaContaNaoNesteAparelho =
+      'Você já tem login por digital nesta conta, mas ainda não neste '
+      'aparelho. Entre com a senha uma vez e ele passa a valer aqui.';
+
+  /// APARELHO SEM BIOMETRIA. **Estado normal, e nao erro**: o cliente foi
+  /// explicito, e a pessoa nao pode ver uma promessa que o sistema vai negar.
+  static const String passkeyIndisponivel =
+      'Este aparelho não oferece login por digital. É preciso ter bloqueio de '
+      'tela configurado.';
+
+  /// A falha de ATIVAR. Uma frase, e ela nao culpa a pessoa.
+  static const String falhaAoAtivarOPasskey =
+      'Não conseguimos ativar agora. Tente de novo.';
 
   @override
   State<TelaDadosPessoais> createState() => _TelaDadosPessoaisState();
@@ -1093,6 +1166,21 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
           // convite nao e um dado da pessoa, e por-lo dentro de
           // `Quem você é` diria que e. A secao traz o proprio nome na linha
           // que a abre.
+          // ------------------------------------------------------------------
+          // O LOGIN POR DIGITAL (BICHUS-301, 28/10/2026)
+          // ------------------------------------------------------------------
+          //
+          // **ANTES do bloco do convite, e a ordem e escolhida.** Esta secao e
+          // um ajuste da PROPRIA CONTA -- como entrar nela --, e o convite e
+          // sobre outras pessoas. O grupo `Conta` do menu do `Perfil` faz a
+          // mesma separacao, e pela mesma razao.
+          //
+          // E ela nao e recolhivel, ao contrario do QR: o conteudo dela e uma
+          // frase e, no maximo, um botao de 48 dp -- nao ha 200 dp de quadrado
+          // para esconder, e uma gaveta fechada esconderia justamente a funcao
+          // que a pessoa nao sabia que existia.
+          const SizedBox(height: BichuEspaco.e6),
+          const _BlocoDoPasskey(),
           const SizedBox(height: BichuEspaco.e6),
           _BlocoDoConvite(
             conexoes: Escopo.of(context).conexoes,
@@ -2069,6 +2157,230 @@ class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
       // `app/test/telas/sem_acao_de_qr_do_usuario_test.dart` e a isca que
       // impede as duas de voltarem. Saiu a PORTA e nao a capacidade:
       // `ConvitesApi.revogar` e `revokeConnectionInvite` continuam intocados.
+    ];
+  }
+}
+
+/// A SECAO DO LOGIN POR DIGITAL dentro de `Meus dados` (BICHUS-301,
+/// 28/10/2026).
+///
+/// Ver as constantes em [TelaDadosPessoais] para o buraco que ela fecha e por
+/// que ela existe. **Ela nao inventa fluxo de ativacao nenhum**: chama
+/// `FiacaoDoPasskey.oferecerCadastro`, o mesmo do cadastro e o mesmo do convite
+/// depois do login.
+///
+/// ## QUATRO ESTADOS, e o cliente pediu o ESTADO e nao so o botao
+///
+/// | estado | o que a secao mostra |
+/// |---|---|
+/// | o aparelho nao suporta | so a frase, e nenhuma acao |
+/// | ha credencial NESTE aparelho | `está ativo neste aparelho` |
+/// | ha na CONTA, nao aqui | a frase do meio, e nenhuma acao de criar |
+/// | nao ha em lugar nenhum | a acao `Ativar` |
+///
+/// ## A leitura e feita UMA vez, em `didChangeDependencies`
+///
+/// `Escopo.of` precisa de `context` com a dependencia ligada e **nao funciona
+/// no `initState`** -- medido nesta mesma rodada, na linha `Conexões` do menu
+/// do `Perfil`: lá o numero ficava nulo e a pastilha nao aparecia, sem erro
+/// nenhum na tela.
+class _BlocoDoPasskey extends StatefulWidget {
+  const _BlocoDoPasskey();
+
+  @override
+  State<_BlocoDoPasskey> createState() => _EstadoDoBlocoDoPasskey();
+}
+
+/// O que a secao sabe sobre esta conta e este aparelho.
+enum _EstadoDoPasskey {
+  /// Ainda lendo. **Nada e afirmado**: sem isto a secao piscaria `Ativar` por
+  /// um quadro para quem ja tem o login ligado.
+  lendo,
+
+  /// O sistema deste aparelho nao faz passkey.
+  indisponivel,
+
+  /// Ha credencial neste aparelho.
+  ativo,
+
+  /// Ha credencial na conta, mas nao neste aparelho.
+  naContaNaoAqui,
+
+  /// Nao ha credencial em lugar nenhum.
+  inativo,
+}
+
+class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
+  _EstadoDoPasskey _estado = _EstadoDoPasskey.lendo;
+  bool _ativando = false;
+  String? _falha;
+  bool _pediu = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_pediu) return;
+    _pediu = true;
+    unawaited(_ler());
+  }
+
+  /// Decide qual dos quatro estados vale, na ordem do mais barato ao mais caro.
+  ///
+  /// **A ordem e a mesma de `FiacaoDoPasskey.deveOferecerCadastro`**, e nao por
+  /// acaso: as duas respondem a mesma pergunta com as mesmas quatro leituras. A
+  /// diferenca e o que elas devolvem -- aquela um `bool` para decidir se abre a
+  /// folha, esta o estado para a secao escrever na tela.
+  Future<void> _ler() async {
+    final escopo = Escopo.of(context);
+    try {
+      if (await escopo.passkeyNesteAparelho.haCredencial()) {
+        if (!mounted) return;
+        setState(() => _estado = _EstadoDoPasskey.ativo);
+        return;
+      }
+      if (!await escopo.credencialDoAparelho.suportaCredencial()) {
+        if (!mounted) return;
+        setState(() => _estado = _EstadoDoPasskey.indisponivel);
+        return;
+      }
+      // Pode MARCAR: depois dela, quem tinha credencial na conta passa a ter
+      // marca local -- e e isso que destrava a entrada por passkey que a
+      // pessoa ja tinha, sem criar uma segunda credencial.
+      await escopo.passkey.reconciliarComAConta();
+      if (!mounted) return;
+      final agoraTem = await escopo.passkeyNesteAparelho.haCredencial();
+      if (!mounted) return;
+      setState(
+        () => _estado = agoraTem
+            // A reconciliacao achou credencial na conta e marcou o aparelho.
+            // **A frase do MEIO, e nao `está ativo`**: a credencial existe na
+            // conta e a marca acabou de ser posta, mas a chave privada ainda
+            // nao esta neste aparelho -- quem sincroniza e o sistema, e isso
+            // acontece na proxima entrada. Dizer `ativo` aqui prometeria um
+            // login que a folha do sistema ainda nao sabe fazer.
+            ? _EstadoDoPasskey.naContaNaoAqui
+            : _EstadoDoPasskey.inativo,
+      );
+    } on Object {
+      // **SEM FAIXA DE ERRO, e o estado cai no mais conservador.** A secao e
+      // ajuste de conta e nao o que a pessoa veio fazer em `Meus dados`; uma
+      // faixa vermelha culparia a pagina inteira por uma leitura auxiliar.
+      // `indisponivel` e nao `inativo`: oferecer `Ativar` depois de uma falha
+      // de leitura seria prometer sobre um aparelho que nao respondeu.
+      if (!mounted) return;
+      setState(() => _estado = _EstadoDoPasskey.indisponivel);
+    }
+  }
+
+  /// ATIVA, pelo MESMO caminho do cadastro e do convite do login.
+  Future<void> _ativar() async {
+    if (_ativando) return;
+    setState(() {
+      _ativando = true;
+      _falha = null;
+    });
+    // `oferecerCadastro` NAO ESTOURA -- devolve `naoCadastrada` em todo
+    // desfecho que nao e sucesso, 409 e 429 inclusive. E por isso que nao ha
+    // `try` aqui: um `catch` daria a impressao de que existe um caminho de
+    // erro que esta secao trata.
+    final desfecho = await Escopo.of(context).passkey.oferecerCadastro();
+    if (!mounted) return;
+    setState(() {
+      _ativando = false;
+      if (desfecho == DesfechoDoCadastroDePasskey.cadastrada) {
+        _estado = _EstadoDoPasskey.ativo;
+      } else {
+        // **NAO REGISTRA RECUSA**, e esta e a fronteira que mais custa: quem
+        // fechou a folha do sistema disse *"agora nao"*, e so o toque
+        // deliberado no `Não quero` do convite do login grava recusa formal.
+        // Tratar isto como recusa faria a pessoa perder a funcao por um gesto
+        // acidental. Aqui a secao simplesmente continua oferecendo.
+        _falha = TelaDadosPessoais.falhaAoAtivarOPasskey;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Container(
+      // Mesma tinta do bloco do convite, e pelo mesmo motivo: gaveta de apoio
+      // afundada, e nao cartao elevado -- o assunto da tela sao os dados.
+      decoration: BoxDecoration(
+        color: cores.surfaceSunken,
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+      ),
+      padding: const EdgeInsets.all(BichuEspaco.e4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            TelaDadosPessoais.tituloDoPasskey,
+            style: textos.titleMedium?.copyWith(color: cores.textPrimary),
+          ),
+          const SizedBox(height: BichuEspaco.e1),
+          Text(
+            TelaDadosPessoais.apoioDoPasskey,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          ),
+          const SizedBox(height: BichuEspaco.e3),
+          ..._conteudo(cores, textos),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _conteudo(BichuCores cores, TextTheme textos) {
+    final falha = _falha;
+    return <Widget>[
+      if (falha != null) ...<Widget>[
+        FaixaDeAviso(texto: falha),
+        const SizedBox(height: BichuEspaco.e3),
+      ],
+      switch (_estado) {
+        // **A ROSCA, e nao um estado afirmado.** Ver [_EstadoDoPasskey.lendo].
+        _EstadoDoPasskey.lendo => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(BichuEspaco.e3),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        _EstadoDoPasskey.indisponivel => Text(
+            TelaDadosPessoais.passkeyIndisponivel,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          ),
+        _EstadoDoPasskey.ativo => Row(
+            children: <Widget>[
+              Icon(
+                Icons.check_circle_outline,
+                size: 20,
+                color: cores.success,
+                // Decorativo: a frase ao lado ja diz o estado, e um glifo com
+                // nome proprio seria anuncio duplo.
+                semanticLabel: '',
+              ),
+              const SizedBox(width: BichuEspaco.e2),
+              Expanded(
+                child: Text(
+                  TelaDadosPessoais.passkeyAtivado,
+                  style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        _EstadoDoPasskey.naContaNaoAqui => Text(
+            TelaDadosPessoais.passkeyNaContaNaoNesteAparelho,
+            style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+          ),
+        _EstadoDoPasskey.inativo => BotaoSecundario(
+            rotulo: TelaDadosPessoais.ativarOPasskey,
+            carregando: _ativando,
+            aoTocar: () => unawaited(_ativar()),
+          ),
+      },
     ];
   }
 }

@@ -603,10 +603,42 @@ void main() {
             'tentativa de passkey deixou o botao inerte -- provavelmente '
             'mexendo em `_enviando`.',
       );
+
+      // ================================================================
+      // O CONVITE APARECE AQUI DESDE 28/10/2026, E A NAVEGACAO VEM DEPOIS
+      // ================================================================
+      //
+      // Regra de produto do cliente, verbatim: *"na hora do usuario fazer o
+      // login, se ele nao tiver o passkey habilitado e nao tiver rejeitado
+      // formalmente, devemos solicitar ele"*. Esta pessoa e exatamente o alvo
+      // dela -- aparelho sem marca, conta sem credencial, nenhuma recusa --,
+      // entao a folha abre.
+      //
+      // **O caso nao foi afrouxado**: o que ele protege e que a SENHA entra e
+      // a pessoa sai da tela de entrar, e as duas coisas continuam cobradas
+      // logo abaixo. O que mudou e que ha um passo DISPENSAVEL no meio, e o
+      // caso o dispensa pelo caminho que qualquer pessoa usaria.
+      //
+      // `Agora não` e nao `Não quero ativar`: o primeiro e *"agora nao"* e a
+      // oferta volta no proximo login; o segundo gravaria recusa formal, que
+      // e outra afirmacao e tem casos proprios em
+      // `test/sessao/convite_de_passkey_depois_do_login_test.dart`.
+      expect(
+        find.text('Agora não'),
+        findsOneWidget,
+        reason: 'REPROVA: o convite de passkey NAO apareceu depois do login '
+            'de quem nao tem credencial e nunca recusou. E o cenario que o '
+            'cliente nomeou -- cadastrou, desinstalou o app e esta voltando.',
+      );
+      await tester.tap(find.text('Agora não'));
+      await tester.pumpAndSettle();
+
       expect(
         find.widgetWithText(AppBar, 'Entrar'),
         findsNothing,
-        reason: 'REPROVA: a senha conferiu e a pessoa ficou na tela de entrar.',
+        reason: 'REPROVA: a senha conferiu e a pessoa ficou na tela de entrar. '
+            'O convite e DISPENSAVEL e nao pode bloquear a navegacao: quem '
+            'fecha a folha segue para o app.',
       );
     });
 
@@ -795,6 +827,23 @@ class _CredencialDeTeste implements CredencialDoAparelho {
 
   final CredencialCadastrada Function() aoCadastrar;
   final CredencialAssinada Function() aoAssinar;
+
+  /// SUPORTA, por padrao (28/10/2026).
+  ///
+  /// `suportaCredencial` entrou na porta `CredencialDoAparelho` quando o
+  /// convite passou a ser OFERECIDO -- depois do login e em `Meus dados` -- e
+  /// nao mais so aceito no fim do cadastro: nao se oferece o que o sistema vai
+  /// recusar.
+  ///
+  /// **`true` e o padrao certo PARA ESTE ARQUIVO**, e nao uma escolha neutra:
+  /// todo caso daqui mede o caminho de quem TEM passkey disponivel -- a folha
+  /// que abre, a credencial que e cadastrada, a assinatura que entra. Um duble
+  /// que dissesse "nao suporto" tiraria o convite do caminho e os casos
+  /// mediriam a ausencia dele.
+  bool suporta = true;
+
+  @override
+  Future<bool> suportaCredencial() async => suporta;
 
   @override
   Future<CredencialCadastrada> cadastrar(OpcoesDeCadastroDePasskey opcoes) async {

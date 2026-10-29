@@ -48,6 +48,7 @@ import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/credencial_do_aparelho.dart';
 import 'package:bichu/dispositivo/passkey_neste_aparelho.dart';
 import 'package:bichu/sessao/fiacao_do_passkey.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -390,7 +391,36 @@ void main() {
           registro: registro,
         );
 
-        await fiacao.oferecerCadastro();
+        // **O RELATO DE FALHA E O COMPORTAMENTO CERTO, e por isso ele e
+        // CAPTURADO em vez de evitado.**
+        //
+        // `oferecerCadastro` chama `registrarFalhaInesperada` no ramo de
+        // `CredencialIndisponivel`, e a prosa dela diz por que: `dominioNaoAssociado`
+        // chega por ali e e erro de fiacao NOSSO -- *"o unico sinal de que o
+        // passkey esta quebrado para todo mundo em vez de recusado por uma
+        // pessoa"*. Para a pessoa o desfecho e o mesmo (segue sem passkey).
+        //
+        // `FlutterError.reportError` e reprovacao de teste por definicao,
+        // entao o caso troca o coletor, guarda o que chegou e **afirma que
+        // chegou** -- silenciar sem conferir esconderia o dia em que o relato
+        // parasse de sair.
+        final anterior = FlutterError.onError;
+        final relatados = <FlutterErrorDetails>[];
+        FlutterError.onError = relatados.add;
+        try {
+          await fiacao.oferecerCadastro();
+        } finally {
+          FlutterError.onError = anterior;
+        }
+
+        expect(
+          relatados.map((FlutterErrorDetails d) => d.exception),
+          contains(isA<CredencialIndisponivel>()),
+          reason: 'REPROVA: a indisponibilidade do aparelho nao foi relatada. '
+              '`dominioNaoAssociado` chega por este ramo e e defeito de '
+              'fiacao nosso -- sem o relato, o passkey quebrado para TODO '
+              'MUNDO fica indistinguivel de uma recusa individual.',
+        );
 
         expect(
           await registro.recusouFormalmente(),
