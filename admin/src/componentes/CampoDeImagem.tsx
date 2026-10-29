@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import { ErroDoCampo } from './basicos.tsx';
+import { DialogoDeRecorte } from './DialogoDeRecorte.tsx';
 import {
   conferirArquivo,
   conferirDimensao,
@@ -13,6 +14,7 @@ import {
   type Proposito,
 } from './envio-de-imagem.ts';
 import { Icone } from './Icone.tsx';
+import { devolverImagem, lerImagem, podeRecortar, recortar, type ImagemParaRecorte, type Janela } from './recorte-de-imagem.ts';
 
 /**
  * UMA imagem, e nao uma galeria. A `Galeria` e `multiple` e ordenada por
@@ -23,6 +25,10 @@ import { Icone } from './Icone.tsx';
  * O envio e o MESMO de todo o painel (`enviarImagem`, ADR-0007): politica,
  * bytes direto no armazenamento e `upload_id` confirmado depois pela escrita do
  * registro. Nao ha segundo caminho de envio no backoffice.
+ *
+ * Desde 29/10/2026 (BICHUS-314) a escolha passa pelo ENQUADRAMENTO: o arquivo
+ * escolhido abre `DialogoDeRecorte`, e o que sobe sao os bytes do recorte. Onde
+ * o navegador nao souber recortar, o envio segue exatamente como antes.
  */
 export type PropositoDeImagemUnica = Extract<Proposito, 'directory_logo' | 'directory_photo'>;
 
@@ -79,6 +85,13 @@ export function CampoDeImagem({
   const [recusa, setRecusa] = useState<string>();
   const [previa, setPrevia] = useState<string | null>(null);
   const [anuncio, setAnuncio] = useState('');
+  /**
+   * O arquivo ORIGINAL escolhido nesta sessao, e nunca o recortado: reenquadrar
+   * sobre o recorte anterior impediria afastar o zoom de novo e empilharia
+   * perda de qualidade a cada ajuste.
+   */
+  const [original, setOriginal] = useState<File>();
+  const [emRecorte, setEmRecorte] = useState<ImagemParaRecorte>();
   const seletor = useRef<HTMLInputElement>(null);
 
   /** Troca a previa local e devolve o `blob:` anterior ao navegador. */
@@ -96,11 +109,9 @@ export function CampoDeImagem({
     });
   }
 
-  async function escolher(arquivo: File) {
-    // A conferencia local vem ANTES de qualquer chamada: tipo e tamanho o
-    // navegador sabe sozinho, e pedir politica para um arquivo de 8 MB so para
-    // ouvir `422` gasta uma viagem e some com o motivo.
-    const naoServe = conferirArquivo(arquivo) ?? (await conferirDimensao(arquivo, proposito));
+  /** A dimensao e o envio. Recebe o RECORTE quando houve um, e o arquivo cru quando nao. */
+  async function enviarEscolhido(arquivo: File) {
+    const naoServe = await conferirDimensao(arquivo, proposito);
     if (naoServe) {
       setRecusa(naoServe);
       setAnuncio(naoServe);
@@ -123,10 +134,64 @@ export function CampoDeImagem({
     }
   }
 
+  async function escolher(arquivo: File) {
+    // A conferencia local vem ANTES de qualquer chamada: tipo e tamanho o
+    // navegador sabe sozinho, e pedir politica para um arquivo de 8 MB so para
+    // ouvir `422` gasta uma viagem e some com o motivo.
+    const naoServe = conferirArquivo(arquivo);
+    if (naoServe) {
+      setRecusa(naoServe);
+      setAnuncio(naoServe);
+      return;
+    }
+    setOriginal(arquivo);
+    const imagem = await lerImagem(arquivo);
+    if (imagem) {
+      // A dimensao minima e conferida DENTRO do dialogo, contra o recorte: um
+      // arquivo grande pode virar um recorte pequeno demais, e um pequeno
+      // ainda serve se a pessoa nao aproximar.
+      setRecusa(undefined);
+      setEmRecorte(imagem);
+      return;
+    }
+    await enviarEscolhido(arquivo);
+  }
+
+  async function reenquadrar() {
+    if (!original) return;
+    const imagem = await lerImagem(original);
+    if (imagem) setEmRecorte(imagem);
+  }
+
+  async function confirmarRecorte(janela: Janela) {
+    const imagem = emRecorte;
+    const arquivo = original;
+    if (!imagem || !arquivo) return;
+    setEmRecorte(undefined);
+    // Sem bytes utilizaveis o envio segue com o arquivo cru: e melhor subir a
+    // imagem inteira do que nao subir nada.
+    const recortado = (await recortar(imagem, janela)) ?? arquivo;
+    devolverImagem(imagem);
+    await enviarEscolhido(recortado);
+  }
+
+  function fecharRecorte() {
+    devolverImagem(emRecorte);
+    setEmRecorte(undefined);
+    // Sem o enquadramento nao ha envio, e o seletor volta a aceitar o MESMO
+    // arquivo: sem limpar, escolher de novo nao dispara `change`.
+    if (!uploadIdEnviado() && seletor.current) seletor.current.value = '';
+  }
+
+  function uploadIdEnviado() {
+    return typeof uploadId === 'string';
+  }
+
   function remover() {
     trocarPrevia(null);
     setEnvio(undefined);
     setRecusa(undefined);
+    setOriginal(undefined);
     if (seletor.current) seletor.current.value = '';
     aoMudar(null);
     setAnuncio('Imagem removida.');
@@ -207,6 +272,23 @@ export function CampoDeImagem({
               if (arquivo) void escolher(arquivo);
             }}
           />
+          {/* Reenquadrar so existe para a imagem escolhida NESTA sessao: da
+              gravada o painel tem a derivada publica, e nao o original -- cortar
+              de novo em cima dela perderia qualidade e poderia cair abaixo da
+              minima. Para reenquadrar uma gravada, escolha o arquivo outra vez. */}
+          {original && podeRecortar() && !envio && (
+            <button
+              type="button"
+              className="btn ghost sm"
+              data-reenquadrar
+              data-cy={`${dataCy ?? id}-reenquadrar`}
+              aria-label={`Reenquadrar ${rotulo}`}
+              onClick={() => void reenquadrar()}
+            >
+              <Icone nome="edit" tamanho="s20" />
+              Reenquadrar
+            </button>
+          )}
           {temImagem && (
             <button
               type="button"
@@ -234,6 +316,15 @@ export function CampoDeImagem({
       <span className="sr" aria-live="polite">
         {anuncio}
       </span>
+      {emRecorte && (
+        <DialogoDeRecorte
+          imagem={emRecorte}
+          proposito={proposito}
+          rotulo={rotulo.toLowerCase()}
+          aoConfirmar={(janela) => void confirmarRecorte(janela)}
+          aoFechar={fecharRecorte}
+        />
+      )}
     </div>
   );
 }
