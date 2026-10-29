@@ -1153,6 +1153,34 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
           aoTocar: () => _compartilharOLocal(detalhe),
         ),
       ),
+      // AS ATIVIDADES, EM TAGS (cliente, 28/10/2026): *"no backoffice voce
+      // pode escolher varios segmentos, e no aplicativo so esta aparecendo um.
+      // Adicione um bloco na pagina, trazendo as tags que foram escolhidas."*
+      //
+      // **O dado ja era plural e o app e que nao lia**: `kinds` existe no
+      // contrato desde 21/10/2026 e `DetalheDoLocal` lia so o `kind` singular.
+      // Ver `DetalheDoLocal.atividades`.
+      //
+      // **POR QUE AQUI, logo acima de `Informações`**: a atividade e o que a
+      // pessoa esta procurando quando abre a ficha de um lugar -- ela quer
+      // saber se o lugar FAZ o que ela precisa antes de ler endereco e nota.
+      // O bloco fica depois de `Compartilhar` para nao empurrar aquele botao
+      // para fora da primeira dobra, que e uma decisao de 22/10 com a razao
+      // escrita acima.
+      //
+      // **SEM BLOCO VAZIO**: lista vazia nao desenha nem o titulo nem o
+      // divisor. Ela e vazia em dois casos (todas as atividades desconhecidas,
+      // ou nem `kinds` nem `kind`), e um titulo com nada embaixo e secao que
+      // promete e nao entrega -- o mesmo criterio que mantem a faixa 16:9 fora
+      // da pagina sem foto.
+      if (detalhe.atividades.isNotEmpty) ...<Widget>[
+        const _Divisor(),
+        _Secao(
+          icone: Icons.sell_outlined,
+          titulo: PaginaDoLocal.tituloDasAtividades,
+          child: _Atividades(atividades: detalhe.atividades),
+        ),
+      ],
       const _Divisor(),
       _Secao(
         icone: Icons.notes_outlined,
@@ -1467,10 +1495,10 @@ class _Cabecalho extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
+    // `cores` saiu com a linha da atividade (28/10/2026): ela era a unica
+    // consumidora dele neste `build`.
     final textos = Theme.of(context).textTheme;
 
-    final atividade = detalhe.atividade?.rotulo;
     final lugar = detalhe.linhaDeLugar;
     final endereco = detalhe.endereco.porExtenso;
     final busca = detalhe.endereco.textoParaBuscaNoMapa(
@@ -1533,14 +1561,13 @@ class _Cabecalho extends StatelessWidget {
                   header: true,
                   child: Text(detalhe.nome, style: textos.headlineSmall),
                 ),
-              if (atividade != null) ...<Widget>[
-                const SizedBox(height: BichuEspaco.e2),
-                Text(
-                  atividade,
-                  style:
-                      textos.labelLarge?.copyWith(color: cores.textSecondary),
-                ),
-              ],
+              // A LINHA DA ATIVIDADE SAIU DAQUI EM 28/10/2026, e nao foi
+              // apagada: ela virou o bloco `Atividades`, em tags, no corpo da
+              // pagina. Ela escrevia `detalhe.atividade?.rotulo`, que e o
+              // `kind` SINGULAR -- a versao quebrada da mesma informacao, e
+              // exatamente o que o cliente relatou (*"no aplicativo so esta
+              // aparecendo um"*). Mantê-la ao lado do bloco faria a primeira
+              // atividade aparecer DUAS vezes na mesma dobra.
               // O LUGAR APARECE **UMA** VEZ NA PAGINA, EMBAIXO DO TITULO, E
               // E CLICAVEL (cliente, 22/10/2026).
               //
@@ -2571,6 +2598,41 @@ class _Divisor extends StatelessWidget {
         indent: BichuEspaco.e4,
         endIndent: BichuEspaco.e4,
       ),
+    );
+  }
+}
+
+/// O bloco `Atividades`: uma tag por atividade escolhida (cliente, 28/10/2026).
+///
+/// **Reusa [_Selo], que ja era a pilula desta pagina** -- a mesma que carrega
+/// o nivel de verificacao e o selo da minha avaliacao. Um widget novo aqui
+/// seria a segunda definicao do mesmo desenho no mesmo arquivo.
+///
+/// **`Wrap` e nao `Row`**: sao de 1 a 6 atividades e os rotulos tem
+/// comprimentos bem diferentes (`Veterinário`, `Banho e tosa`). Uma `Row`
+/// estouraria a largura com quatro tags e o Flutter pintaria a faixa amarela
+/// de overflow.
+///
+/// **SEM `ExcludeSemantics`, e isso e deliberado**: cada tag e uma palavra que
+/// a pessoa precisa ouvir. Em outros pontos desta pagina o `ExcludeSemantics`
+/// existe para tirar glifo decorativo da arvore; aqui nao ha glifo, ha o
+/// conteudo. Um `Wrap` de tags dentro de `ExcludeSemantics` desenharia as tres
+/// e anunciaria nenhuma.
+class _Atividades extends StatelessWidget {
+  const _Atividades({required this.atividades});
+
+  /// Na ORDEM DO SERVIDOR. Ver `DetalheDoLocal.atividades`: ordenar aqui
+  /// mostraria as tags numa ordem que ninguem escolheu.
+  final List<AtividadeDoDiretorio> atividades;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: BichuEspaco.e2,
+      runSpacing: BichuEspaco.e2,
+      children: <Widget>[
+        for (final atividade in atividades) _Selo(texto: atividade.rotulo),
+      ],
     );
   }
 }

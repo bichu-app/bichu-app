@@ -1076,9 +1076,26 @@ class DetalheDoLocal {
 
   /// **TODAS as atividades da entrada**, na ordem em que o servidor as manda.
   ///
-  /// NAO ESTA LIGADA AINDA: ver `doJson`. A forma existe para as iscas
-  /// apontarem para algo, e hoje ela carrega so [atividade] -- que e o defeito
-  /// que o cliente relatou em 28/10/2026.
+  /// `kinds` do contrato (`ProfessionalKinds`): lista de 1 a 6, `uniqueItems`,
+  /// OBRIGATORIA em `DirectoryEntryDetail` desde 21/10/2026 -- *"uma clinica
+  /// que tambem faz banho e tosa nao precisa escolher"*. [atividade] e o
+  /// `kind` singular, que o contrato mantem **so por compatibilidade** (a
+  /// PRIMEIRA desta lista), e quem desenha a entrada nova usa esta.
+  ///
+  /// **A ORDEM E A DO SERVIDOR, e nao a do `enum`.** Ordenar aqui mostraria as
+  /// tags numa ordem que ninguem escolheu -- o painel escolhe uma, e o
+  /// primeiro item e justamente o que sai em `kind`.
+  ///
+  /// **Codigo que este build nao conhece e DESCARTADO, e nao derruba a
+  /// leitura.** `uniqueItems` no contrato nao impede o servidor de ganhar um
+  /// valor novo antes desta versao do app -- e nesta rodada o `enum` esta
+  /// crescendo. Uma `FormatException` aqui tiraria a pagina inteira do ar por
+  /// causa de uma tag; descartar mostra as atividades que o app entende e cala
+  /// sobre a que nao entende.
+  ///
+  /// **Pode vir VAZIA**, em dois casos que a tela trata igual (nao desenha o
+  /// bloco): todas as atividades sao desconhecidas, ou nem `kinds` nem `kind`
+  /// vieram.
   final List<AtividadeDoDiretorio> atividades;
 
   /// `entity_kind`: **o QUE a entrada e**, ao lado de [atividade], que e o que
@@ -1193,13 +1210,7 @@ class DetalheDoLocal {
       slug: slug,
       nome: nome,
       atividade: AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
-      // AINDA SO O SINGULAR. `kinds` existe no contrato e nao e lido aqui --
-      // e o defeito que as iscas de `atividades_do_local_test.dart` medem.
-      atividades: <AtividadeDoDiretorio>[
-        if (AtividadeDoDiretorio.porCodigo(json['kind'] as String?)
-            case final AtividadeDoDiretorio uma)
-          uma,
-      ],
+      atividades: _atividadesDoJson(json),
       verificacao: VerificacaoDaEntrada.doJson(json['verification']),
       pontuacao: PontuacaoDoLocal.doJson(json['rating']),
       // **Ausente vira FALSO, e nao verdadeiro.** `can_review` nao esta em
@@ -1227,6 +1238,48 @@ class DetalheDoLocal {
       // de outro tipo viram nulo, e a pagina existe sem a linha de endereco.
       endereco: EnderecoComercialDaEntrada.doJson(json),
     );
+  }
+
+  /// `kinds` do contrato, com o `kind` singular como RESERVA.
+  ///
+  /// Ver [atividades] para o porque de cada decisao. Em resumo, e nesta ordem:
+  ///
+  /// 1. `kinds` quando vem como lista -- os codigos conhecidos, na ordem do
+  ///    servidor, sem repetir;
+  /// 2. o `kind` singular quando `kinds` nao veio (servidor mais velho que o
+  ///    app, massa escrita antes de 21/10/2026);
+  /// 3. lista VAZIA quando nenhum dos dois deu nada conhecido.
+  ///
+  /// **`kinds` presente e com valor conhecido nunca cai no singular**, e e por
+  /// isso que a reserva olha a LISTA e nao o resultado: `kinds: ['frobnicator']`
+  /// de um servidor novo significa *"a atividade desta entrada e uma que voce
+  /// nao conhece"*, e cair no `kind` ali mostraria a atividade de
+  /// compatibilidade como se fosse a lista inteira.
+  ///
+  /// **O `dedup` nao e zelo contra o contrato, e sim contra a juncao com a
+  /// reserva**: `uniqueItems` ja promete que `kinds` nao repete, mas dois
+  /// codigos distintos que este build nao conhece poderiam, no futuro,
+  /// colapsar no mesmo valor de `enum` -- e duas tags iguais na tela sao um
+  /// defeito visivel.
+  static List<AtividadeDoDiretorio> _atividadesDoJson(
+    Map<String, dynamic> json,
+  ) {
+    final bruto = json['kinds'];
+    if (bruto is List) {
+      final lidas = <AtividadeDoDiretorio>[];
+      for (final item in bruto) {
+        final atividade = AtividadeDoDiretorio.porCodigo(
+          item is String ? item : null,
+        );
+        if (atividade != null && !lidas.contains(atividade)) {
+          lidas.add(atividade);
+        }
+      }
+      return List<AtividadeDoDiretorio>.unmodifiable(lidas);
+    }
+    return List<AtividadeDoDiretorio>.unmodifiable(<AtividadeDoDiretorio>[
+      ?AtividadeDoDiretorio.porCodigo(json['kind'] as String?),
+    ]);
   }
 }
 
