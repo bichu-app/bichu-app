@@ -39,6 +39,26 @@ function ehViolacaoDeUnicidade(erro: unknown): boolean {
   );
 }
 
+/**
+ * A conta deixou de existir DEPOIS de a transacao ja ter gravado.
+ *
+ * No Kysely, `return` de dentro de `db.transaction().execute()` **COMITA**: a
+ * transacao so e desfeita quando o corpo **lanca**. Devolver `undefined` de
+ * dentro do bloco, para dizer "conta nao encontrada", confirmaria tudo o que
+ * foi gravado antes -- apelido reservado, imagem de catalogo, trabalho na fila
+ * -- sem nada apontando para aquilo. Esta sentinela e lancada DENTRO e
+ * convertida de volta para `undefined` FORA, de modo que o contrato da porta
+ * (`Promise<Conta | undefined>`) fica igual e a recusa desfaz as escritas.
+ *
+ * BICHUS-321.
+ */
+class ContaSumiuNaTransacao extends Error {
+  constructor() {
+    super('a conta sumiu no meio da transacao; nada deve ficar gravado');
+    this.name = 'ContaSumiuNaTransacao';
+  }
+}
+
 type LinhaDeConta = Pick<
   Selectable<UsersTable>,
   | 'id'
@@ -273,74 +293,83 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
       }
 
-      return await db.transaction().execute(async (trx) => {
-        const atual = await trx
-          .selectFrom('users')
-          .select(['handle'])
-          .where('id', '=', id)
-          .where('deleted_at', 'is', null)
-          .executeTakeFirst();
-        if (atual === undefined) return undefined;
-
-        const anterior = atual.handle;
-
-        const ehTroca = anterior !== null && anterior.toLowerCase() !== apelidoNovo;
-
-        if (ehTroca) {
-          const vivo = await trx
-            .selectFrom('handles')
-            .select(['claimed_at'])
-            .where('user_id', '=', id)
-            .where('kind', '=', 'pessoa')
+      try {
+        return await db.transaction().execute(async (trx) => {
+          const atual = await trx
+            .selectFrom('users')
+            .select(['handle'])
+            .where('id', '=', id)
+            .where('deleted_at', 'is', null)
             .executeTakeFirst();
+          if (atual === undefined) return undefined;
 
-          if (vivo !== undefined) {
-            const desde = new Date(vivo.claimed_at).getTime();
-            const dias = (Number(agora) - desde) / 86_400_000;
-            if (dias < DIAS_ENTRE_TROCAS_DE_APELIDO) {
-              const faltam = Math.ceil(DIAS_ENTRE_TROCAS_DE_APELIDO - dias);
-              throw problemas.validacao([
-                {
-                  field: 'handle',
-                  code: 'too_soon',
-                  message: `Você poderá trocar de apelido em ${String(faltam)} dias.`,
-                },
-              ]);
+          const anterior = atual.handle;
+
+          const ehTroca = anterior !== null && anterior.toLowerCase() !== apelidoNovo;
+
+          if (ehTroca) {
+            const vivo = await trx
+              .selectFrom('handles')
+              .select(['claimed_at'])
+              .where('user_id', '=', id)
+              .where('kind', '=', 'pessoa')
+              .executeTakeFirst();
+
+            if (vivo !== undefined) {
+              const desde = new Date(vivo.claimed_at).getTime();
+              const dias = (Number(agora) - desde) / 86_400_000;
+              if (dias < DIAS_ENTRE_TROCAS_DE_APELIDO) {
+                const faltam = Math.ceil(DIAS_ENTRE_TROCAS_DE_APELIDO - dias);
+                throw problemas.validacao([
+                  {
+                    field: 'handle',
+                    code: 'too_soon',
+                    message: `Você poderá trocar de apelido em ${String(faltam)} dias.`,
+                  },
+                ]);
+              }
             }
+
+            await trx
+              .updateTable('handles')
+              .set({ kind: 'reservado' })
+              .where('user_id', '=', id)
+              .where('kind', '=', 'pessoa')
+              .execute();
           }
 
-          await trx
-            .updateTable('handles')
-            .set({ kind: 'reservado' })
-            .where('user_id', '=', id)
-            .where('kind', '=', 'pessoa')
-            .execute();
-        }
+          if (anterior === null || ehTroca) {
+            await trx
+              .insertInto('handles')
+              .values({
+                handle: apelidoNovo,
+                handle_esqueleto: apelidoNovo,
+                kind: 'pessoa',
+                user_id: id,
+                claimed_at: new Date(Number(agora)),
+              })
+              .execute();
+            mudancas['handle'] = apelidoNovo;
+          }
 
-        if (anterior === null || ehTroca) {
-          await trx
-            .insertInto('handles')
-            .values({
-              handle: apelidoNovo,
-              handle_esqueleto: apelidoNovo,
-              kind: 'pessoa',
-              user_id: id,
-              claimed_at: new Date(Number(agora)),
-            })
-            .execute();
-          mudancas['handle'] = apelidoNovo;
-        }
+          const linha = await trx
+            .updateTable('users')
+            .set(mudancas)
+            .where('id', '=', id)
+            .where('deleted_at', 'is', null)
+            .returning(COLUNAS_DA_CONTA)
+            .executeTakeFirst();
 
-        const linha = await trx
-          .updateTable('users')
-          .set(mudancas)
-          .where('id', '=', id)
-          .where('deleted_at', 'is', null)
-          .returning(COLUNAS_DA_CONTA)
-          .executeTakeFirst();
-
-        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
-      });
+          // `return undefined` aqui COMITARIA o apelido anterior rebaixado a
+          // `reservado` e a linha nova em `handles`, para uma conta que nao
+          // existe mais. Lancar desfaz; o `catch` devolve o mesmo `undefined`.
+          if (linha === undefined) throw new ContaSumiuNaTransacao();
+          return paraConta(linha as LinhaSelecionada);
+        });
+      } catch (erro) {
+        if (erro instanceof ContaSumiuNaTransacao) return undefined;
+        throw erro;
+      }
     },
 
     /** A foto do perfil desta conta (cliente, 18/10/2026). */
@@ -362,74 +391,87 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
 
     /** Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`. */
     async trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined> {
-      return db.transaction().execute(async (trx) => {
-        let imagemId: string | null = null;
+      try {
+        return await db.transaction().execute(async (trx) => {
+          let imagemId: string | null = null;
 
-        if (uploadId !== null) {
-          const r = await sql<{
-            id: string;
-            expires_at: Date;
-            confirmed_at: Date | null;
-            catalog_image_id: string | null;
-            dono_da_imagem: string | null;
-          }>`
-            SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id,
-                   (SELECT d.id FROM users d WHERE d.photo_image_id = c.id) AS dono_da_imagem
-              FROM catalog_upload_intents u
-              LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
-             WHERE u.id = ${uploadId}::uuid
-               AND u.user_id = ${id}::uuid
-               AND u.purpose = 'user_photo'
-             FOR UPDATE OF u
-          `.execute(trx);
-          const envio = r.rows[0];
-          if (envio === undefined) throw new EnvioDeFotoNaoServe();
+          if (uploadId !== null) {
+            const r = await sql<{
+              id: string;
+              expires_at: Date;
+              confirmed_at: Date | null;
+              catalog_image_id: string | null;
+              dono_da_imagem: string | null;
+            }>`
+              SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id,
+                     (SELECT d.id FROM users d WHERE d.photo_image_id = c.id) AS dono_da_imagem
+                FROM catalog_upload_intents u
+                LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
+               WHERE u.id = ${uploadId}::uuid
+                 AND u.user_id = ${id}::uuid
+                 AND u.purpose = 'user_photo'
+               FOR UPDATE OF u
+            `.execute(trx);
+            const envio = r.rows[0];
+            if (envio === undefined) throw new EnvioDeFotoNaoServe();
 
-          if (envio.confirmed_at !== null) {
-            if (envio.catalog_image_id === null) throw new EnvioDeFotoNaoServe();
-            if (envio.dono_da_imagem !== null && envio.dono_da_imagem !== id) {
-              throw new EnvioDeFotoNaoServe();
+            if (envio.confirmed_at !== null) {
+              if (envio.catalog_image_id === null) throw new EnvioDeFotoNaoServe();
+              if (envio.dono_da_imagem !== null && envio.dono_da_imagem !== id) {
+                throw new EnvioDeFotoNaoServe();
+              }
+              imagemId = envio.catalog_image_id;
+            } else {
+              if (envio.expires_at.getTime() <= Number(agora)) throw new EnvioDeFotoNaoServe();
+              imagemId = ids.uuidv7();
+              await trx
+                .updateTable('catalog_upload_intents')
+                .set({ confirmed_at: new Date(Number(agora)) })
+                .where('id', '=', envio.id)
+                .where('confirmed_at', 'is', null)
+                .execute();
+              await trx
+                .insertInto('catalog_images')
+                .values({
+                  id: imagemId,
+                  upload_intent_id: envio.id,
+                  purpose: 'user_photo',
+                  public_key: null,
+                  rejection_reason: null,
+                })
+                .execute();
+              await trx
+                .insertInto('jobs')
+                .values({
+                  id: ids.uuidv7(),
+                  kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+                  payload: JSON.stringify({ catalog_image_id: imagemId }),
+                })
+                .execute();
             }
-            imagemId = envio.catalog_image_id;
-          } else {
-            if (envio.expires_at.getTime() <= Number(agora)) throw new EnvioDeFotoNaoServe();
-            imagemId = ids.uuidv7();
-            await trx
-              .updateTable('catalog_upload_intents')
-              .set({ confirmed_at: new Date(Number(agora)) })
-              .where('id', '=', envio.id)
-              .where('confirmed_at', 'is', null)
-              .execute();
-            await trx
-              .insertInto('catalog_images')
-              .values({
-                id: imagemId,
-                upload_intent_id: envio.id,
-                purpose: 'user_photo',
-                public_key: null,
-                rejection_reason: null,
-              })
-              .execute();
-            await trx
-              .insertInto('jobs')
-              .values({
-                id: ids.uuidv7(),
-                kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
-                payload: JSON.stringify({ catalog_image_id: imagemId }),
-              })
-              .execute();
           }
-        }
 
-        const linha = await trx
-          .updateTable('users')
-          .set({ photo_image_id: imagemId, updated_at: new Date(Number(agora)) })
-          .where('id', '=', id)
-          .where('deleted_at', 'is', null)
-          .returning(COLUNAS_DA_CONTA)
-          .executeTakeFirst();
-        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
-      });
+          const linha = await trx
+            .updateTable('users')
+            .set({ photo_image_id: imagemId, updated_at: new Date(Number(agora)) })
+            .where('id', '=', id)
+            .where('deleted_at', 'is', null)
+            .returning(COLUNAS_DA_CONTA)
+            .executeTakeFirst();
+
+          // Este e o defeito da BICHUS-321 na sua forma original: acima ja
+          // foram gravados o `confirmed_at` do envio, a linha em
+          // `catalog_images` e o trabalho em `jobs`. `return undefined`
+          // COMITARIA os tres com `photo_image_id` nunca apontando para a
+          // imagem -- envio confirmado, imagem orfa e trabalho enfileirado para
+          // ninguem. Lancar desfaz; o `catch` devolve o mesmo `undefined`.
+          if (linha === undefined) throw new ContaSumiuNaTransacao();
+          return paraConta(linha as LinhaSelecionada);
+        });
+      } catch (erro) {
+        if (erro instanceof ContaSumiuNaTransacao) return undefined;
+        throw erro;
+      }
     },
 
     async buscarContaPorEmail(email: string): Promise<Conta | undefined> {
