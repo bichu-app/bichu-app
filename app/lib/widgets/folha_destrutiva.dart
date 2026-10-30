@@ -4,6 +4,7 @@ import '../api/falhas.dart';
 import '../api/mensagens_de_erro.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'alca_de_arraste.dart';
 import 'faixa_de_aviso.dart';
 
 /// A folha inferior destrutiva do paragrafo 11.9.1 do design system.
@@ -100,7 +101,7 @@ class _FolhaDestrutivaState extends State<FolhaDestrutiva> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const _AlcaDeArraste(),
+              const AlcaDeArraste(),
               ExcludeSemantics(
                 child: Icon(
                   Icons.warning_amber_rounded,
@@ -189,29 +190,6 @@ Future<bool> mostrarFolhaDestrutiva(
     ),
   );
   return confirmou ?? false;
-}
-
-/// A alca de 36 x 4, centralizada, com 12 de margem acima e abaixo.
-class _AlcaDeArraste extends StatelessWidget {
-  const _AlcaDeArraste();
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    return ExcludeSemantics(
-      child: Center(
-        child: Container(
-          width: 36,
-          height: 4,
-          margin: const EdgeInsets.symmetric(vertical: BichuEspaco.e3),
-          decoration: BoxDecoration(
-            color: cores.outline,
-            borderRadius: BorderRadius.circular(BichuRaio.full),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Um item da lista do que some.

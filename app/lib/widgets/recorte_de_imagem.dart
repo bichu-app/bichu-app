@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import '../dispositivo/camera_e_galeria.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'alca_de_arraste.dart';
 import 'botao_primario.dart';
 
 /// A forma da janela de recorte, por destino.
@@ -197,6 +198,9 @@ abstract final class TextosDoRecorte {
       'O que ficar dentro da moldura é o que vai ser enviado.';
   static const String usar = 'Usar esta imagem';
   static const String cancelar = 'Cancelar';
+
+  /// O rotulo do `X` do canto.
+  static const String fechar = 'Fechar';
   static const String reiniciar = 'Voltar ao enquadramento inicial';
   static const String zoom = 'Zoom';
   static const String palco =
@@ -328,6 +332,9 @@ class FolhaDeRecorte extends StatefulWidget {
   /// Quanto da altura da tela a janela de recorte pode ocupar.
   static const double fracaoMaximaDaJanela = 0.36;
 
+  /// Quanto da altura da tela a FOLHA ocupa.
+  static const double fracaoDaFolha = 0.95;
+
   @override
   State<FolhaDeRecorte> createState() => _EstadoDaFolhaDeRecorte();
 }
@@ -423,19 +430,17 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     final tipografia = Theme.of(context).textTheme;
     final tela = MediaQuery.sizeOf(context);
 
+    final recorteDeBaixo = MediaQuery.viewPaddingOf(context).bottom;
+
     final alturaMaximaDaJanela = math.max(
       120.0,
       tela.height * FolhaDeRecorte.fracaoMaximaDaJanela,
     );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        BichuEspaco.e4,
-        0,
-        BichuEspaco.e4,
-        BichuEspaco.e4,
-      ),
-      child: SingleChildScrollView(
+    return SizedBox(
+      height: tela.height * FolhaDeRecorte.fracaoDaFolha,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: BichuEspaco.e4),
         child: LayoutBuilder(
           builder: (contexto, limites) {
             final larguraDisponivel = limites.maxWidth.isFinite
@@ -446,50 +451,75 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
             final enquadramento = _enquadramento!;
 
             return Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text(widget.titulo, style: tipografia.titleMedium),
-                const SizedBox(height: BichuEspaco.e1),
-                Text(
-                  TextosDoRecorte.apoio,
-                  style: tipografia.bodySmall?.copyWith(
-                    color: cores.textSecondary,
-                  ),
+                const AlcaDeArraste(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const SizedBox(height: BichuEspaco.e1),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              widget.titulo,
+                              style: tipografia.titleMedium,
+                            ),
+                          ),
+                          const SizedBox(height: BichuEspaco.e1),
+                          Text(
+                            TextosDoRecorte.apoio,
+                            style: tipografia.bodySmall?.copyWith(
+                              color: cores.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: BichuEspaco.e2),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                      tooltip: TextosDoRecorte.fechar,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: BichuEspaco.e3),
-                Semantics(
-                  label: TextosDoRecorte.palco,
-                  container: true,
-                  child: Focus(
-                    autofocus: true,
-                    onKeyEvent: _teclado,
-                    child: GestureDetector(
-                      onScaleStart: (_) =>
-                          _zoomNoInicioDoGesto = enquadramento.zoom,
-                      onScaleUpdate: (detalhe) => setState(() {
-                        final comZoom = _enquadramento!.comZoom(
-                          _zoomNoInicioDoGesto * detalhe.scale,
-                        );
-                        _enquadramento = comZoom.arrastado(
-                          detalhe.focalPointDelta,
-                        );
-                      }),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: janela.height + FolhaDeRecorte.folgaDoPalco * 2,
+                const SizedBox(height: BichuEspaco.e2),
+                Expanded(
+                  child: Semantics(
+                    label: TextosDoRecorte.palco,
+                    container: true,
+                    child: Focus(
+                      autofocus: true,
+                      onKeyEvent: _teclado,
+                      child: GestureDetector(
+                        onScaleStart: (_) =>
+                            _zoomNoInicioDoGesto = enquadramento.zoom,
+                        onScaleUpdate: (detalhe) => setState(() {
+                          final comZoom = _enquadramento!.comZoom(
+                            _zoomNoInicioDoGesto * detalhe.scale,
+                          );
+                          _enquadramento = comZoom.arrastado(
+                            detalhe.focalPointDelta,
+                          );
+                        }),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(BichuRaio.lg),
-                          child: CustomPaint(
-                            key: chaveDoPalcoDoRecorte,
-                            painter: _PintorDoRecorte(
-                              imagem: widget.imagem.imagem,
-                              enquadramento: enquadramento,
-                              circular: widget.formato.circular,
-                              fundo: cores.surfaceSunken,
-                              veu: cores.scrim,
-                              linha: cores.textOnInverse,
-                              contorno: cores.surfaceInverse,
+                          child: SizedBox.expand(
+                            child: CustomPaint(
+                              key: chaveDoPalcoDoRecorte,
+                              painter: _PintorDoRecorte(
+                                imagem: widget.imagem.imagem,
+                                enquadramento: enquadramento,
+                                circular: widget.formato.circular,
+                                fundo: cores.surfaceSunken,
+                                veu: cores.scrim,
+                                linha: cores.textOnInverse,
+                                contorno: cores.surfaceInverse,
+                              ),
                             ),
                           ),
                         ),
@@ -538,6 +568,7 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
                   rotulo: TextosDoRecorte.cancelar,
                   aoTocar: () => Navigator.of(context).pop(),
                 ),
+                SizedBox(height: BichuEspaco.e4 + recorteDeBaixo),
               ],
             );
           },
@@ -546,6 +577,7 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     );
   }
 }
+
 
 /// Pinta a imagem, o veu do que fica FORA da janela, as guias de tercos e a
 /// linha da janela.
