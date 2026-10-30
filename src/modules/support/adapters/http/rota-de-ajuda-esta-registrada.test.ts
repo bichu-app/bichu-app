@@ -32,10 +32,22 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
-import { zerarInventario } from '../../../../shared/http/registrar-rota.js';
+import {
+  CABECALHO_DA_SUPERFICIE,
+  COOKIE_DA_SESSAO_ADMINISTRATIVA,
+  escoparRotasAdministrativas,
+  VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
+  type PortaDaSessaoAdministrativa,
+  type SessaoAdministrativaConferida,
+} from '../../../../shared/http/superficie-administrativa.js';
+import { escoparRotas, zerarInventario } from '../../../../shared/http/registrar-rota.js';
 import { criarServidor } from '../../../../shared/http/server.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
+import {
+  registrarRotasDaFilaDeAjuda,
+  type DependenciasDasRotasDaFilaDeAjuda,
+} from './admin-help-request-routes.js';
 import {
   registrarRotasDeAjuda,
   type DependenciasDasRotasDeAjuda,
@@ -265,6 +277,169 @@ void describe('ISCA: a rota da duvida de ajuda responde', () => {
         'REPROVA: a rota aceitou sem credencial. O botao mora no menu do usuario, entao ' +
           'ha sessao -- e duvida sem autor nao e respondivel, que e o contrario do que ' +
           'a fila existe para ser.',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+void describe('ISCA: a fila administrativa das duvidas responde', () => {
+  /**
+   * O DEFEITO QUE ESTE BLOCO EXISTE PARA IMPEDIR e o do passkey: servidor,
+   * contrato e entitlement no lugar, **nenhuma porta de interface**, banco com
+   * zero credenciais e nenhum portao acusando. A escrita sem a leitura e
+   * exatamente a mesma forma de nada.
+   *
+   * Comente `registrarRota` em `admin-help-request-routes.ts`: reprova
+   * `ISCA: GET /admin/help-requests nao e 404`.
+   */
+  const PAGINA = {
+    itens: [
+      {
+        ref: 'AAAAAAAAAAAAAAAAAAAAAA',
+        assunto: 'Nao salva o segundo pet',
+        texto: 'A tela volta para o comeco.',
+        criadaEm: Date.parse('2026-10-29T23:14:54.000Z') as unknown as never,
+      },
+    ],
+    total: 7,
+  };
+
+  function dependenciasDaFila(registro: { pedido?: { pagina: number; limite: number } }) {
+    return {
+      fila: {
+        listar: (pagina: number, limite: number) => {
+          registro.pedido = { pagina, limite };
+          return Promise.resolve(PAGINA);
+        },
+      },
+    } as unknown as DependenciasDasRotasDaFilaDeAjuda;
+  }
+
+  const ORIGEM = 'https://painel.exemplo.test';
+
+  /**
+   * A sessao administrativa de mentira, com o papel que a rota exige.
+   *
+   * **A rota e montada pelo INVOLUCRO de verdade**, e nao solta no servidor:
+   * `registrarRota` RECUSA registrar rota `/admin/` fora de
+   * `escoparRotasAdministrativas` -- *"ela seria servida sem a guarda do
+   * prefixo (ADR-0027 item 7)"*. Descobri isso por este caso reprovando, e a
+   * recusa e o desenho funcionando: a fronteira administrativa nao e
+   * contornavel nem por engano, nem num teste.
+   */
+  const SESSAO = {
+    sessionId: 'sessao-de-teste',
+    adminAccountId: 'conta-admin-de-teste',
+    displayName: 'Operadora de Teste',
+    papeis: ['admin'],
+    csrfTokenHash: Buffer.alloc(32),
+    etiqueta: 'aaaaaaaa',
+    instanteDaSenha: new Date(0),
+  } as unknown as SessaoAdministrativaConferida;
+
+  const sessoes = {
+    conferir: () => Promise.resolve(SESSAO),
+    registrarRecusa: () => Promise.resolve(),
+  } as unknown as PortaDaSessaoAdministrativa;
+
+  function servidorDaFila(deps: DependenciasDasRotasDaFilaDeAjuda) {
+    const app = criarServidor({
+      problemBaseUrl: BASE_DE_PROBLEMA,
+      isProduction: false,
+      teto: tetoDeTeste(criarContadorEmMemoria(() => Date.now())),
+      bodyLimitBytes: 1_048_576,
+    });
+    void escoparRotas(app, '', (v1) => {
+      escoparRotasAdministrativas(v1, { origem: ORIGEM, sessoes }, (adm) => {
+        registrarRotasDaFilaDeAjuda(adm, deps);
+      });
+    });
+    return app;
+  }
+
+  /** Os cabecalhos que o painel de verdade manda: a superficie e o cookie. */
+  const DO_PAINEL = {
+    [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
+    cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,
+    origin: ORIGEM,
+  };
+
+  void it('ISCA: GET /admin/help-requests nao e 404 -- ela esta registrada', async () => {
+    zerarInventario();
+    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const app = servidorDaFila(dependenciasDaFila(registro));
+    try {
+      const resposta = await app.inject({
+        method: 'GET',
+        url: '/admin/help-requests',
+        headers: DO_PAINEL,
+      });
+      assert.notEqual(
+        resposta.statusCode,
+        404,
+        'REPROVA: a fila respondeu 404. A duvida seria gravada e NENHUM humano a ' +
+          'alcancaria -- que e como o passkey foi entregue: servidor, contrato e ' +
+          'entitlement no lugar, nenhuma porta de interface, e o banco em zero.',
+      );
+      assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
+
+      // O CORPO, campo a campo. **Nenhum portao deste repositorio confere corpo
+      // de resposta**: so o corpo da REQUISICAO e validado.
+      const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
+      assert.deepEqual(Object.keys(corpo).sort(), ['items', 'limit', 'page', 'total']);
+      assert.equal(corpo['total'], 7, 'REPROVA: `total` nao e o da fila inteira.');
+      assert.deepEqual(
+        Object.keys((corpo['items'] as Record<string, unknown>[])[0] ?? {}).sort(),
+        ['body', 'created_at', 'ref', 'subject'],
+        'REPROVA: a linha carrega campo alem dos quatro. NADA do autor pode sair: o ' +
+          'contrato afirma em TRES lugares que a fila de pedidos de encontro e "a unica ' +
+          'leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor aqui ' +
+          'criaria a segunda e tornaria aquela frase falsa.',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: `page` e `limit` chegam ao servico -- a fila pagina de verdade', async () => {
+    zerarInventario();
+    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const app = servidorDaFila(dependenciasDaFila(registro));
+    try {
+      const resposta = await app.inject({
+        method: 'GET',
+        url: '/admin/help-requests?page=3&limit=10',
+        headers: DO_PAINEL,
+      });
+      assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
+      assert.deepEqual(
+        registro.pedido,
+        { pagina: 3, limite: 10 },
+        'REPROVA: a rota ignorou `page`/`limit`. Uma fila que devolve sempre a primeira ' +
+          'pagina tem fundo falso: o revisor rola, nao chega ao fim, e as duvidas mais ' +
+          'velhas nunca sao lidas por ninguem.',
+      );
+      const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
+      assert.equal(corpo['page'], 3, 'REPROVA: a resposta nao devolve a pagina pedida.');
+      assert.equal(corpo['limit'], 10);
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: sem `page` nem `limit` a fila usa os padroes do contrato', async () => {
+    zerarInventario();
+    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const app = servidorDaFila(dependenciasDaFila(registro));
+    try {
+      await app.inject({ method: 'GET', url: '/admin/help-requests', headers: DO_PAINEL });
+      assert.deepEqual(
+        registro.pedido,
+        { pagina: 1, limite: 50 },
+        'REPROVA: os padroes nao sao os do contrato (`AdminPage` default 1, 50 por ' +
+          'pagina como as outras duas filas do painel).',
       );
     } finally {
       await app.close();

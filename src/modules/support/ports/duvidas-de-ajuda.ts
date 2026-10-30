@@ -38,17 +38,41 @@ export interface DuvidaParaRegistrar {
 /**
  * Uma linha da fila, **como o painel a le**.
  *
- * O `id` sai daqui porque o consumidor e o painel e nao o aplicativo -- a rota
- * do app responde `202` e nao devolve identificador nenhum. Nenhum campo de
- * contato aparece: nome e e-mail do autor sao do cadastro, e o painel os resolve
- * por juncao com `users` quando tiver tela.
+ * ## NADA DO AUTOR SAI AQUI, e a ausencia e a regra da casa
+ *
+ * `api/openapi.yaml` afirma em TRES lugares que a fila de pedidos de encontro
+ * e *"a unica leitura de pessoa do backoffice v1"*, coberta pelo RA-01 com as
+ * decisoes D53 a D57 do cliente (23/09). A fila de plaquinhas repete a
+ * afirmacao e se abstem de ler perfil, projetando so o nome de quem recebe a
+ * encomenda -- que e destinatario de entrega e nao leitura de conta.
+ *
+ * Entao esta interface **nao tem `autor`**. Projetar nome, e-mail ou um
+ * identificador estavel do tutor criaria a SEGUNDA leitura de pessoa do
+ * backoffice e tornaria aquela frase falsa nos tres lugares -- e isso e
+ * decisao do cliente, do tamanho da D53, nao de quem escreve a porta.
+ *
+ * `ref` e por DUVIDA e nao por pessoa: duas duvidas do mesmo tutor tem refs
+ * sem relacao entre si, entao o painel nao monta "todas as duvidas da Maria",
+ * que e exatamente o que a D53 proibe.
  */
 export interface DuvidaNaFila {
-  readonly id: string;
-  readonly autor: UserId;
+  /** O endereco OPACO da duvida, 22 simbolos. **Nunca o `id`.** */
+  readonly ref: string;
   readonly assunto: string;
   readonly texto: string;
   readonly criadaEm: Instant;
+}
+
+/** Uma pagina da fila, no formato que o painel ja usa nas outras duas. */
+export interface PaginaDaFila {
+  readonly itens: readonly DuvidaNaFila[];
+  /**
+   * O total de duvidas, para o painel desenhar quantas paginas ha.
+   *
+   * Conta LINHAS e nao pessoas, e nao ha recorte por autor que o torne um
+   * numero sobre alguem.
+   */
+  readonly total: number;
 }
 
 export interface DuvidasDeAjuda {
@@ -60,8 +84,10 @@ export interface DuvidasDeAjuda {
   registrar(duvida: DuvidaParaRegistrar, agora: Instant): Promise<void>;
 
   /**
-   * A fila, da mais nova para a mais velha -- a consulta que o painel vai usar,
-   * e a mesma que o indice `help_requests_da_fila` serve.
+   * A fila, da mais nova para a mais velha -- a consulta que o painel usa, e a
+   * mesma que o indice `help_requests_da_fila` serve.
+   *
+   * `pagina` comeca em 1, como em toda pagina do painel.
    */
-  listarAFila(limite: number): Promise<readonly DuvidaNaFila[]>;
+  listarAFila(pagina: number, limite: number): Promise<PaginaDaFila>;
 }

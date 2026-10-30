@@ -7,6 +7,7 @@ import { rotasDaRede } from './rede/rotas.tsx';
 import { rotasDoDiretorio } from './diretorio/rotas.tsx';
 import { rotasDasPlaquinhas } from './plaquinhas/rotas.tsx';
 import { rotasDaModeracao } from './moderacao/rotas.tsx';
+import { rotasDaAjuda } from './ajuda/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
 import NaoEncontrada from './rotas/NaoEncontrada.tsx';
 import { ProvedorDeSessao, type PropsDoProvedor } from './sessao/ProvedorDeSessao.tsx';
@@ -45,6 +46,10 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         // 18/10/2026: a fila de moderacao. `conversation_reports` gravava
         // denuncia desde 28/09 e nenhuma tela a lia.
         ...rotasDaModeracao,
+        // 29/10/2026: a fila das DUVIDAS do botao `Ajuda` do aplicativo. Ela
+        // entra junto com a escrita e nao depois: `help_requests` gravaria
+        // duvida sem nenhuma tela a ler, que foi como o passkey nasceu.
+        ...rotasDaAjuda,
         { path: 'comunicados', children: [{ index: true, lazy: async () => ({ Component: (await import('./comunicados/ListaDeComunicados.tsx')).default }) }, { path: 'novo', lazy: async () => ({ Component: (await import('./comunicados/FormularioDeComunicado.tsx')).default }) }] },
         { path: '*', element: <NaoEncontrada /> },
       ],

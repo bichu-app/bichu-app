@@ -57,6 +57,8 @@ import { registrarRotasDosContadoresDeSecao } from '../modules/sections/adapters
 import { registrarRotasDeAjuda } from '../modules/support/adapters/http/help-request-routes.js';
 import { criarDuvidaDeAjudaService } from '../modules/support/application/duvida-de-ajuda-service.js';
 import { criarDuvidasDeAjuda } from '../modules/support/adapters/persistence/kysely-duvidas-de-ajuda.js';
+import { registrarRotasDaFilaDeAjuda } from '../modules/support/adapters/http/admin-help-request-routes.js';
+import { criarFilaDeAjudaService } from '../modules/support/application/fila-de-ajuda-service.js';
 import { criarContadoresDeSecaoService } from '../modules/sections/application/contadores-de-secao-service.js';
 import { criarMarcadoresDeSecao } from '../modules/sections/adapters/persistence/kysely-marcadores-de-secao.js';
 import { criarContagemDePerdidosNovos } from '../modules/lostfound/adapters/persistence/kysely-contagem-de-perdidos-novos.js';
@@ -831,8 +833,13 @@ export async function main(): Promise<void> {
   // "grava no banco e vai para o backoffice", na variante SEM notificacao por
   // e-mail. O servico recebe a porta da fila e o relogio, e mais nada -- entao
   // nao ha, dentro dele, nada capaz de avisar alguem nem por engano.
+  // A MESMA porta para as duas pontas: o app escreve, o painel le. Uma
+  // instancia so, entao nao ha como a leitura do painel olhar uma tabela e a
+  // escrita do app outra.
+  const duvidasDeAjuda = criarDuvidasDeAjuda(db, ids);
+  const dependenciasDasRotasDaFilaDeAjuda = { fila: criarFilaDeAjudaService(duvidasDeAjuda) };
   const dependenciasDasRotasDeAjuda = {
-    duvidas: criarDuvidaDeAjudaService(criarDuvidasDeAjuda(db, ids), systemClock),
+    duvidas: criarDuvidaDeAjudaService(duvidasDeAjuda, systemClock),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
     },
@@ -1617,6 +1624,8 @@ export async function main(): Promise<void> {
           // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`. Fica ao
           // lado da escrita do diretorio de proposito: aprovar uma indicacao
           // GRAVA uma entrada, pela mesma transacao e pela mesma funcao.
+          // A FILA DAS DUVIDAS (29/10/2026): a porta de saida do botao `Ajuda`.
+          registrarRotasDaFilaDeAjuda(administrativo, dependenciasDasRotasDaFilaDeAjuda);
           registrarRotasDaFilaDeIndicacoes(administrativo, {
             fila: filaDeIndicacoes,
             contrato,

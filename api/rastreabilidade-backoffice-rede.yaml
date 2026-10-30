@@ -966,6 +966,30 @@ telas:
           - resp:recipients_total
           - problem:broadcast-daily-cap-reached
 
+  # 29/10/2026. A FILA DAS DUVIDAS do botao `Ajuda` do app. Entrou junto com a
+  # escrita (`createMyHelpRequest`), e nao depois: a duvida gravada que nenhum
+  # humano alcanca e funcionalidade que nao existe -- foi o que aconteceu com o
+  # passkey, que teve servidor, contrato e entitlement no lugar e nenhuma porta
+  # de interface, com zero credenciais no banco e nenhum portao acusando.
+  - tela: "Ajuda - fila de duvidas"
+    prototipo: nenhum
+    estados: [fila, carregando, vazio, erro, duvida_aberta]
+    operacoes:
+      - operationId: listAdminHelpRequests
+        situacao: contrato
+        usa:
+          - query:page
+          - query:limit
+          - resp:items
+          - resp:page
+          - resp:limit
+          - resp:total
+          - resp:items[].ref
+          - resp:items[].subject
+          - resp:items[].body
+          - resp:items[].created_at
+    nota: "NADA do autor aparece nesta tela, e a ausencia e a regra e nao recorte de quem a desenhou: o contrato afirma em TRES lugares que `listAdminNetworkJoinRequests` e a unica leitura de pessoa do backoffice v1 (D53 a D57). Consequencia escrita: o administrador LE a duvida e nao tem por onde responder -- o caminho de resposta e decisao aberta do cliente."
+
 correspondencias:
   # ====================================================================
   # `StoreCategory` SAIU DAQUI EM 17/10/2026, E A SAIDA E A DECISAO

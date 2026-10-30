@@ -1107,6 +1107,14 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
   // O identificador opaco do pedido da plaquinha, base64url. Mesma forma do
   // `ref` do pedido de encontro, porque e a mesma necessidade.
+  // A DUVIDA DE AJUDA (20261029000010, 29/10/2026). 22 e exato, e nao a faixa
+  // 20-32 das duas filas acima: `ref` aqui e SEMPRE 128 bits de CSPRNG em
+  // base64url, que dao exatamente 22 simbolos. A faixa das outras existe
+  // porque elas aceitam ref de origens com tamanhos diferentes; esta nao tem
+  // segunda origem, e uma faixa frouxa aceitaria um ref curto que ninguem
+  // gerou.
+  'public.help_requests.help_requests_ref_forma':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{22}$'::text))",
   'public.collar_tag_requests.collar_tag_requests_ref_formato':
     "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
   // Decidido tem instante, nos dois sentidos.

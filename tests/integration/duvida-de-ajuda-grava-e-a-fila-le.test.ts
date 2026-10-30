@@ -45,15 +45,25 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 
+import { registrarRotasDaFilaDeAjuda } from '../../src/modules/support/adapters/http/admin-help-request-routes.js';
 import { registrarRotasDeAjuda } from '../../src/modules/support/adapters/http/help-request-routes.js';
 import { criarDuvidasDeAjuda } from '../../src/modules/support/adapters/persistence/kysely-duvidas-de-ajuda.js';
 import { criarDuvidaDeAjudaService } from '../../src/modules/support/application/duvida-de-ajuda-service.js';
+import { criarFilaDeAjudaService } from '../../src/modules/support/application/fila-de-ajuda-service.js';
 import type { DuvidasDeAjuda } from '../../src/modules/support/ports/duvidas-de-ajuda.js';
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { carregarContrato } from '../../src/shared/http/contract.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
 import { criarServidor } from '../../src/shared/http/server.js';
+import {
+  CABECALHO_DA_SUPERFICIE,
+  COOKIE_DA_SESSAO_ADMINISTRATIVA,
+  escoparRotasAdministrativas,
+  VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
+  type PortaDaSessaoAdministrativa,
+  type SessaoAdministrativaConferida,
+} from '../../src/shared/http/superficie-administrativa.js';
 import { tetoDeTeste } from '../../src/shared/http/teto-de-teste.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { systemClock } from '../../src/shared/time/clock.js';
@@ -61,6 +71,30 @@ import type { UserId } from '../../src/shared/types/brands.js';
 
 const PREFIXO_DA_API = '/v1';
 const CAMINHO = '/me/help-requests';
+const ORIGEM_DO_PAINEL = 'https://painel.exemplo.test';
+
+/** A sessao do painel, de mentira: o caminho do dado e o que esta sob prova. */
+const sessoesDeTeste = {
+  conferir: () =>
+    Promise.resolve({
+      sessionId: 'sessao-de-teste',
+      adminAccountId: 'conta-admin-de-teste',
+      displayName: 'Operadora de Teste',
+      papeis: ['admin'],
+      csrfTokenHash: Buffer.alloc(32),
+      etiqueta: 'aaaaaaaa',
+      instanteDaSenha: new Date(0),
+    } as unknown as SessaoAdministrativaConferida),
+  registrarRecusa: () => Promise.resolve(),
+} as unknown as PortaDaSessaoAdministrativa;
+
+/** Os cabecalhos que o painel de verdade manda. */
+const DO_PAINEL: Record<string, string> = {
+  accept: 'application/json',
+  [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
+  cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,
+  origin: ORIGEM_DO_PAINEL,
+};
 
 let banco: { db: Db; close: () => Promise<void> };
 let app: RegistradorDeRotas;
@@ -127,6 +161,20 @@ before(async () => {
         autenticador: { autenticar: () => Promise.resolve({ userId: autor }) },
         contrato,
       });
+      // A FILA ADMINISTRATIVA, no MESMO escopo e sobre a MESMA porta.
+      //
+      // **Pelo involucro de verdade, e nao solta**: `registrarRota` RECUSA
+      // registrar rota `/admin/` fora de `escoparRotasAdministrativas` --
+      // "ela seria servida sem a guarda do prefixo (ADR-0027 item 7)". Eu
+      // tentei o atalho e a recusa me pegou, que e o desenho funcionando: a
+      // fronteira administrativa nao e contornavel nem num teste.
+      //
+      // A SESSAO e o unico duble: o que este arquivo mede e o CAMINHO DO DADO
+      // -- o que o app grava, o painel le --, e quem confere credencial de
+      // painel tem portao proprio.
+      escoparRotasAdministrativas(escopo, { origem: ORIGEM_DO_PAINEL, sessoes: sessoesDeTeste }, (adm) => {
+        registrarRotasDaFilaDeAjuda(adm, { fila: criarFilaDeAjudaService(fila) });
+      });
       pronto();
     },
     { prefix: PREFIXO_DA_API },
@@ -149,7 +197,63 @@ after(async () => {
   }
 });
 
+async function lerAFila(busca = ''): Promise<{ status: number; corpo: unknown }> {
+  const resposta = await fetch(`${base}${PREFIXO_DA_API}/admin/help-requests${busca}`, {
+    headers: DO_PAINEL,
+  });
+  const texto = await resposta.text();
+  return { status: resposta.status, corpo: texto === '' ? undefined : JSON.parse(texto) };
+}
+
 void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le', () => {
+  void it('O CAMINHO INTEIRO: o app grava pela rota, e o PAINEL le pela rota dele', async () => {
+    // E o caso que esta funcionalidade existe para ter. A duvida gravada que
+    // nenhum humano alcanca e funcionalidade que nao existe -- foi assim que o
+    // passkey foi entregue, com servidor, contrato e entitlement no lugar,
+    // nenhuma porta de interface e zero credenciais no banco.
+    const marca = randomUUID().slice(0, 8);
+    const escrita = await chamar({
+      subject: `Caminho inteiro ${marca}`,
+      body: 'Escrita pelo app, lida pelo painel.',
+    });
+    assert.equal(escrita.status, 202, `REPROVA: a escrita falhou. Corpo: ${JSON.stringify(escrita.corpo)}`);
+
+    const leitura = await lerAFila('?page=1&limit=50');
+    assert.equal(
+      leitura.status,
+      200,
+      `REPROVA: a fila do painel respondeu ${String(leitura.status)}. 404 = a rota ` +
+        `administrativa nao esta registrada. Corpo: ${JSON.stringify(leitura.corpo)}`,
+    );
+
+    const corpo = leitura.corpo as { items: Record<string, unknown>[]; total: number };
+    const minha = corpo.items.find((i) => i['subject'] === `Caminho inteiro ${marca}`);
+    assert.ok(
+      minha !== undefined,
+      'REPROVA: o app gravou 202 e a rota do painel NAO devolve a duvida. As duas ' +
+        'pontas estao olhando coisas diferentes, e o tutor espera uma resposta que ' +
+        'ninguem vai ler.',
+    );
+    assert.equal(minha['body'], 'Escrita pelo app, lida pelo painel.');
+    assert.match(
+      String(minha['ref']),
+      /^[A-Za-z0-9_-]{22}$/,
+      'REPROVA: `ref` nao tem a forma de 22 simbolos base64url.',
+    );
+    assert.deepEqual(
+      Object.keys(minha).sort(),
+      ['body', 'created_at', 'ref', 'subject'],
+      'REPROVA: a resposta da fila carrega campo alem dos quatro. NADA do autor pode ' +
+        'sair: o contrato afirma em TRES lugares que a fila de pedidos de encontro e ' +
+        '"a unica leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor ' +
+        'aqui criaria a segunda e tornaria aquela frase falsa nos tres lugares.',
+    );
+    assert.ok(
+      corpo.total >= 1,
+      'REPROVA: `total` nao conta a fila. O painel desenharia uma pagina so.',
+    );
+  });
+
   void it('a duvida mandada pela rota chega em help_requests', async () => {
     const resposta = await chamar({
       subject: 'Nao salva o segundo pet',
@@ -167,15 +271,28 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
     // so o corpo da REQUISICAO e validado contra o contrato.
     assert.deepEqual(resposta.corpo, { status: 'accepted' });
 
-    const linhas = await fila.listarAFila(10);
-    const minha = linhas.find((l) => l.assunto === 'Nao salva o segundo pet');
+    const pagina = await fila.listarAFila(1, 10);
+    const minha = pagina.itens.find((l) => l.assunto === 'Nao salva o segundo pet');
     assert.ok(
       minha !== undefined,
       'REPROVA: a rota respondeu 202 e a consulta do painel NAO acha a linha. E o ' +
         'desfecho pior de todos: o tutor ve o recado de recebido, espera resposta, e ' +
         'a fila esta vazia -- indistinguivel de um dia em que ninguem perguntou nada.',
     );
-    assert.equal(minha.autor, autor, 'REPROVA: o autor gravado nao e o da sessao.');
+    assert.match(
+      minha.ref,
+      /^[A-Za-z0-9_-]{22}$/,
+      'REPROVA: o `ref` da duvida nao tem a forma de 22 simbolos base64url. E ele que ' +
+        'sai para o painel; o `id` e UUIDv7 e nunca sai (SEC-001/SEC-002).',
+    );
+    assert.equal(
+      Object.keys(minha).sort().join(','),
+      'assunto,criadaEm,ref,texto',
+      'REPROVA: a linha da fila carrega campo alem dos quatro. NADA do autor pode sair: ' +
+        'o contrato afirma em TRES lugares que a fila de pedidos de encontro e "a unica ' +
+        'leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor aqui criaria ' +
+        'a segunda e tornaria aquela frase falsa.',
+    );
     assert.equal(
       minha.texto,
       'Toda vez que eu aperto salvar, a tela volta para o comeco.',
@@ -188,8 +305,8 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
     await chamar({ subject: `Primeira ${marca}`, body: 'Mandada antes.' });
     await chamar({ subject: `Segunda ${marca}`, body: 'Mandada depois.' });
 
-    const linhas = await fila.listarAFila(50);
-    const minhas = linhas.filter((l) => l.assunto.endsWith(marca));
+    const pagina = await fila.listarAFila(1, 50);
+    const minhas = pagina.itens.filter((l) => l.assunto.endsWith(marca));
     assert.equal(
       minhas.length,
       2,
@@ -203,6 +320,41 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
         '`created_at desc`, que e a que o indice `help_requests_da_fila` serve -- ' +
         'trocar a ordem aqui deixa o indice sem leitor e poe o que chegou hoje no ' +
         'fim de uma lista que ninguem rola ate o fim.',
+    );
+  });
+
+  void it('a fila PAGINA, e o `total` conta a fila inteira e nao a pagina', async () => {
+    const marca = randomUUID().slice(0, 8);
+    for (let i = 1; i <= 3; i++) {
+      await chamar({ subject: `Pagina ${i} ${marca}`, body: `Texto ${i}.` });
+    }
+
+    const primeira = await fila.listarAFila(1, 2);
+    assert.equal(primeira.itens.length, 2, 'REPROVA: `limit` nao recortou a pagina.');
+
+    const segunda = await fila.listarAFila(2, 2);
+    assert.ok(
+      segunda.itens.length >= 1,
+      'REPROVA: a pagina 2 veio vazia. Sem `offset`, o painel desenharia a mesma ' +
+        'pagina para sempre e a fila teria fundo falso.',
+    );
+    assert.equal(
+      primeira.itens.filter((l) => segunda.itens.some((o) => o.ref === l.ref)).length,
+      0,
+      'REPROVA: as paginas 1 e 2 repetem linha. `offset` errado faz o revisor ler duas ' +
+        'vezes a mesma duvida e nunca chegar ao fim da fila.',
+    );
+
+    assert.ok(
+      primeira.total >= 3,
+      `REPROVA: \`total\` veio ${String(primeira.total)} com pelo menos 3 duvidas gravadas.`,
+    );
+    assert.notEqual(
+      primeira.total,
+      primeira.itens.length,
+      'REPROVA: `total` e igual ao tamanho da pagina. Contar `linhas.length` em vez de ' +
+        'perguntar ao banco faz o painel desenhar UMA pagina e esconder o resto da fila ' +
+        '-- o defeito que uma fila nao pode ter.',
     );
   });
 
@@ -229,9 +381,9 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
         'do banco virou a primeira linha de defesa -- e ai o desfecho seria 500.',
     );
 
-    const linhas = await fila.listarAFila(50);
+    const pagina = await fila.listarAFila(1, 50);
     assert.equal(
-      linhas.filter((l) => l.assunto === `X${marca}`).length,
+      pagina.itens.filter((l) => l.assunto === `X${marca}`).length,
       0,
       'REPROVA: o 400 veio e a linha foi gravada mesmo assim, provavelmente truncada. ' +
         'Truncar em silencio foi recusado de proposito: o fim do texto e onde o tutor ' +

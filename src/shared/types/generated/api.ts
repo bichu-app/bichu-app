@@ -7181,6 +7181,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila das duvidas mandadas pelo botao `Ajuda` do app
+         * @description A porta de saida de `POST /v1/me/help-requests`. Sem ela a duvida e
+         *     gravada e **nenhum humano a alcanca** -- e funcionalidade que ninguem
+         *     alcanca equivale a funcionalidade que nao existe.
+         *
+         *     Da mais nova para a mais velha, em paginas. E a mesma ordem que o
+         *     indice `help_requests_da_fila` serve.
+         *
+         *     ## NADA DO AUTOR SAI AQUI, e a ausencia e a regra e nao um recorte meu
+         *
+         *     Este contrato afirma em TRES lugares que `listAdminNetworkJoinRequests`
+         *     e **"a unica leitura de pessoa do backoffice v1"**, coberta pelo RA-01
+         *     com as decisoes D53 a D57 do cliente (23/09, ADR-0027 item 17). A fila
+         *     de plaquinhas repete a afirmacao e se abstem de ler perfil -- o nome
+         *     que ela projeta e o de quem RECEBE a encomenda, destinatario de
+         *     entrega e nao leitura de conta.
+         *
+         *     Entao daqui sai a DUVIDA e nada do tutor: sem nome, sem e-mail, sem
+         *     telefone, sem UUID, sem identificador estavel e sem historico.
+         *     Projetar qualquer um deles criaria a SEGUNDA leitura de pessoa do
+         *     backoffice e tornaria aquela frase falsa nos tres lugares -- e isso e
+         *     decisao do cliente, do tamanho da D53, nao de quem escreve a rota.
+         *
+         *     **Consequencia que precisa estar escrita:** com esta operacao o
+         *     administrador LE a duvida e **nao tem por onde responder**. O caminho
+         *     de resposta -- seja o e-mail do tutor no painel (uma segunda leitura de
+         *     pessoa) ou uma resposta dentro do app (uma funcionalidade) -- e decisao
+         *     aberta do cliente, e esta nomeada no PR em vez de resolvida aqui.
+         *
+         *     ## SEM `x-audit`, e a ausencia tambem e por regra
+         *
+         *     `listAdminNetworkJoinRequests` e, pelo proprio texto dela, **a unica
+         *     operacao `GET` administrativa com `x-audit`, e a excecao e
+         *     deliberada** -- ela existe porque aquela operacao le PESSOA (D55).
+         *     Esta nao le, entao nao ha leitura de pessoa para registrar, e o par
+         *     `x-audit` + `counts: rows_returned` nao se aplica: o teto conta
+         *     REQUISICOES, como nas outras filas do painel.
+         */
+        get: operations["listAdminHelpRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/broadcasts": {
         parameters: {
             query?: never;
@@ -15289,6 +15344,45 @@ export interface components {
             items: components["schemas"]["AdminCollarTagRequest"][];
             page: number;
             limit: number;
+            total: number;
+        };
+        /**
+         * @description Uma duvida na fila. **Nada do autor sai aqui** -- sem nome, e-mail,
+         *     telefone, UUID, identificador estavel nem historico. A unica leitura de
+         *     pessoa do backoffice v1 segue sendo `listAdminNetworkJoinRequests`
+         *     (D53 a D57); ver a descricao da operacao.
+         */
+        AdminHelpRequest: {
+            /**
+             * @description Identificador opaco da DUVIDA, 128 bits aleatorios em base64url.
+             *     Nao e o UUID, pela mesma razao de `AdminJoinRequest.ref`: `id` e
+             *     UUIDv7, ordenavel no tempo, e dois deles entregam a taxa de criacao
+             *     de registros (SEC-001/SEC-002).
+             *
+             *     E por duvida e **nao por pessoa**: duas duvidas do mesmo tutor tem
+             *     `ref` sem relacao entre si, entao o painel nao monta "todas as
+             *     duvidas da Maria" -- que e o que a D53 proibe.
+             */
+            ref: string;
+            subject: string;
+            /**
+             * @description O texto inteiro, e nao um resumo. A fila existe para ser LIDA, e um
+             *     recorte obrigaria uma segunda viagem por duvida so para ver o que
+             *     ja cabia na primeira.
+             */
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AdminHelpRequestPage: {
+            items: components["schemas"]["AdminHelpRequest"][];
+            page: number;
+            limit: number;
+            /**
+             * @description O total da fila inteira, e nao da pagina. Conta LINHAS e nao
+             *     pessoas, e nao ha recorte por autor que o torne um numero sobre
+             *     alguem.
+             */
             total: number;
         };
         StoreTagPage: {
@@ -24359,6 +24453,33 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
             422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminHelpRequests: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila, da mais nova para a mais velha. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHelpRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
             429: components["responses"]["TooManyRequests"];
         };
     };

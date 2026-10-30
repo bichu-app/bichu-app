@@ -2861,7 +2861,15 @@ export interface SitePageAvailabilityTable {
 export interface HelpRequestsTable {
   /** UUIDv7 da aplicacao. Sem `Generated`: a coluna nao tem `DEFAULT`. */
   id: string;
-  /** FK para `users`, `ON DELETE CASCADE`. Sai da sessao, nunca do corpo. */
+  /**
+   * O endereco OPACO da duvida, 22 simbolos base64url. E ele que sai para o
+   * painel; o `id` nunca sai (UUIDv7 e ordenavel, SEC-001/SEC-002).
+   */
+  ref: string;
+  /**
+   * FK para `users`, `ON DELETE CASCADE`. Sai da sessao, nunca do corpo, e
+   * **nunca e projetada**: nenhuma leitura devolve dado do autor.
+   */
   author_user_id: string;
   /** 2 a 120 por `CHECK`. O mesmo teto esta em `HelpRequestInput`. */
   subject: string;

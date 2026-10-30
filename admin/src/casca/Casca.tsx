@@ -55,6 +55,18 @@ const ITENS: ItemDaNavegacao[] = [
   // **COM aviso de contagem**: `AdminModerationItemPage` tem `pending_total`,
   // que passa pelo mesmo filtro de conta desabilitada dos outros dois lugares.
   { para: '/moderacao', rotulo: 'Moderação', icone: 'error', ativo: (c) => c === '/moderacao' || c.startsWith('/moderacao/') },
+  // 29/10/2026. A FILA DE DUVIDAS do botao `Ajuda` do aplicativo. Secao
+  // propria e nao sub-item: ela nao e assunto de Loja, Rede, Perto nem
+  // Moderacao -- o que chega aqui e pergunta de tutor sobre o produto, e nao
+  // conteudo a julgar.
+  //
+  // **SEM aviso de contagem.** `AdminHelpRequestPage` nao tem `pending_total`,
+  // e nao tem de proposito: o numerinho responde "quanto trabalho esta
+  // esperando", e so faz sentido com uma nocao de ATENDIDO. Esta fila nao tem
+  // estado -- o cliente nao decidiu o que encerra uma duvida --, entao o
+  // numero seria o total de todas as duvidas que ja existiram, crescendo para
+  // sempre e sem nunca pedir nada de ninguem.
+  { para: '/ajuda', rotulo: 'Ajuda', icone: 'info', ativo: (c) => c === '/ajuda' || c.startsWith('/ajuda/') },
   { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
 
