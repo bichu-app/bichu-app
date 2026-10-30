@@ -32,15 +32,21 @@
 // sistema**. As duas sao geometria do render, e nenhuma delas sobrevive a uma
 // tela montada num retangulo limpo de 800 x 600.
 
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/telas/avisos/antessala_de_aviso.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/pet/textos_do_cadastro.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
+import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/botao_primario.dart';
+import 'package:bichu/widgets/recorte_de_imagem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 
 import 'ajuda_de_tela.dart';
 
@@ -213,4 +219,158 @@ void main() {
       );
     });
   }
+
+  // --------------------------------------------------------------------
+  // ACHADO 6 — `Cancelar` da FOLHA DE RECORTE embaixo da barra do Android.
+  //
+  // O cliente fotografou isto em 29/10/2026, em `Criar um encontro`: *"a tela
+  // esta cortando, o botão cancelar fica atras do menu"*. E a TERCEIRA folha a
+  // cair no mesmo buraco -- a antessala (achado 3) foi a primeira --, e cai
+  // pelo mesmo motivo escrito lá: `showModalBottomSheet(useSafeArea: true)`
+  // monta `SafeArea(bottom: false)` e devolve a base ao conteudo. A folha de
+  // recorte reservava `BichuEspaco.e4` (16 dp) e a barra de tres botoes do
+  // Android tem 48.
+  //
+  // ISCA: troque o `SizedBox(height: BichuEspaco.e4 + recorteDeBaixo)` do fim
+  // da coluna de `FolhaDeRecorte` por `SizedBox(height: BichuEspaco.e4)` e os
+  // OITO casos (quatro formatos x dois aparelhos) reprovam pelo nome, com os
+  // dois numeros na mensagem. No `Aparelho.semRecorte` eles passariam de
+  // qualquer forma, e e por isso que ele NAO esta na lista: este defeito **e**
+  // de area segura, ao contrario do achado 5.
+  //
+  // OS QUATRO FORMATOS, e nao so a capa: a folha e UMA peca servindo os dez
+  // pontos de upload do app, e e `FormatoDoRecorte` que muda entre eles. Medir
+  // os quatro e o que torna o caso uma afirmacao sobre os dez pontos em vez de
+  // sobre a tela em que o cliente reparou.
+  for (final a in <Aparelho>[Aparelho.iphone, Aparelho.android]) {
+    for (final formato in <({String nome, FormatoDoRecorte qual})>[
+      (nome: 'capa do encontro 16:9', qual: FormatoDoRecorte.capaDoEncontro),
+      (nome: 'foto de usuario 1:1', qual: FormatoDoRecorte.fotoDeUsuario),
+      (nome: 'foto do achado 1024x1126', qual: FormatoDoRecorte.fotoDoAchado),
+      (nome: 'logo da indicacao 1:1', qual: FormatoDoRecorte.logoDaIndicacao),
+    ]) {
+      testWidgets(
+          'as acoes da folha de recorte ficam acima do recorte do sistema '
+          '(${formato.nome}, ${a.nome})', (tester) async {
+        aparelho(tester, a);
+        await _abrirAFolhaDeRecorte(tester, formato.qual);
+
+        final tela =
+            tester.view.physicalSize.height / tester.view.devicePixelRatio;
+        final inicioDoRecorte = tela - a.base;
+
+        for (final alvo in <({String rotulo, Finder onde})>[
+          (
+            rotulo: TextosDoRecorte.cancelar,
+            onde: find.widgetWithText(
+              BotaoSecundario,
+              TextosDoRecorte.cancelar,
+            ),
+          ),
+          (
+            rotulo: TextosDoRecorte.usar,
+            onde: find.widgetWithText(BotaoPrimario, TextosDoRecorte.usar),
+          ),
+        ]) {
+          expect(
+            alvo.onde,
+            findsOneWidget,
+            reason:
+                'a folha de recorte tem de mostrar `${alvo.rotulo}`; sem ele '
+                'a medida abaixo seria vacua',
+          );
+          final botao = tester.getRect(alvo.onde);
+          expect(
+            botao.bottom,
+            lessThanOrEqualTo(inicioDoRecorte),
+            reason:
+                'REPROVA: `${alvo.rotulo}` da folha de recorte '
+                '(${formato.nome}) termina em ${botao.bottom} dp e o recorte '
+                'inferior de ${a.nome} comeca em $inicioDoRecorte dp. Os '
+                'ultimos '
+                '${(botao.bottom - inicioDoRecorte).toStringAsFixed(1)} dp do '
+                'botao ficam embaixo da barra do sistema, que **come o toque** '
+                'antes de ele chegar no app -- e `tester.tap` NAO acusa isso, '
+                'porque entrega o toque direto ao `RenderObject`. O alvo '
+                'continua com ${BichuAlvoDeToque.critico} dp e passa em '
+                'qualquer verificacao de tamanho: o que falta e distancia ate '
+                'a borda. `useSafeArea: true` nao resolve -- o Flutter monta '
+                '`SafeArea(bottom: false)` e a base e do conteudo.',
+          );
+        }
+      });
+    }
+  }
+}
+
+/// Um PNG de verdade em disco, porque [abrirAImagemParaRecortar] **recusa
+/// caminho que nao existe** -- e a recusa e deliberada, nao defensividade: ela
+/// e o que mantem 53 casos de widget deste repositorio de pe.
+///
+/// `Directory.systemTemp` respeita o `TMPDIR` da execucao, que esta esteira
+/// exige duravel e proprio de cada rodada.
+FotoLocal _arquivoDeTeste() {
+  final pasta = Directory.systemTemp.createTempSync('bichu-area-segura');
+  addTearDown(() {
+    if (pasta.existsSync()) pasta.deleteSync(recursive: true);
+  });
+  final imagem = img.Image(width: 1200, height: 1600);
+  for (var y = 0; y < 1600; y++) {
+    for (var x = 0; x < 1200; x++) {
+      imagem.setPixelRgb(x, y, y < 800 ? 240 : 20, y < 800 ? 240 : 20, 20);
+    }
+  }
+  final bytes = Uint8List.fromList(img.encodePng(imagem));
+  final arquivo = File('${pasta.path}/retrato.png')..writeAsBytesSync(bytes);
+  return FotoLocal(
+    caminho: arquivo.path,
+    tipoDeConteudo: 'image/png',
+    tamanhoEmBytes: bytes.length,
+  );
+}
+
+/// Abre a folha pelos MESMOS parametros de `ajustarAFoto`.
+///
+/// **`useSafeArea: true` entra aqui de proposito**, e e o coracao do caso: sem
+/// ele a medida provaria apenas que uma folha sem protecao nenhuma nao protege.
+/// Com ele, o caso afirma a coisa que surpreende -- que o parametro cujo nome
+/// promete area segura **nao** cobre a base.
+///
+/// A imagem e decodificada em [WidgetTester.runAsync] porque
+/// [abrirAImagemParaRecortar] faz trabalho assincrono de verdade: o
+/// decodificador do motor nao roda no relogio falso do teste.
+Future<void> _abrirAFolhaDeRecorte(
+  WidgetTester tester,
+  FormatoDoRecorte formato,
+) async {
+  final foto = _arquivoDeTeste();
+  final imagem = await tester.runAsync(() => abrirAImagemParaRecortar(foto));
+  expect(imagem, isNotNull, reason: 'o PNG do caso tem de decodificar');
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: BichuTheme.claro,
+      home: Scaffold(
+        body: Builder(
+          builder: (contexto) => TextButton(
+            onPressed: () => showModalBottomSheet<RecorteDaFoto>(
+              context: contexto,
+              isScrollControlled: true,
+              useSafeArea: true,
+              enableDrag: false,
+              showDragHandle: false,
+              builder: (_) => FolhaDeRecorte(
+                imagem: imagem!,
+                formato: formato,
+                titulo: 'Ajuste a capa do encontro',
+              ),
+            ),
+            child: const Text('abrir'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('abrir'));
+  await tester.pumpAndSettle();
 }
