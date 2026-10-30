@@ -1,26 +1,4 @@
-/**
- * Leitura do vocabulario dos dois niveis, com cache em processo.
- *
- * ## O cache e copiado de `reference-data`, e pela mesma razao
- *
- * A lista muda por MIGRACAO, nunca em tempo de execucao, e a resposta sai com
- * `Cache-Control: public, max-age=86400`. Consultar tres tabelas a cada chamada
- * de uma resposta que nao muda por 24 h seria trabalho que so existe para ser
- * jogado fora -- e esta e a rota que o filtro da aba `Loja` e o formulario do
- * painel abrem primeiro.
- *
- * O cache e invalidado por REINICIO, que e exatamente quando a migracao que
- * mudou a lista entra. Nao existe caminho de escrita que ele possa perder: nem
- * o painel nem o app escrevem em `store_categories` (o backoffice da Loja
- * escreve item, parceiro e tag, nunca o vocabulario de categoria).
- *
- * ## Tres consultas, e nao uma com juncao
- *
- * Uma juncao das tres tabelas traria o rotulo da categoria repetido em cada
- * subcategoria e cada especie, e o agrupamento seria feito aqui de qualquer
- * forma. Tres leituras de tabela pequena, uma vez por processo, custam menos
- * que o produto cartesiano -- e o `ORDER BY` de cada uma fica legivel.
- */
+/** Leitura do vocabulario dos dois niveis, com cache em processo. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { EspecieDoItem } from '../../domain/item-da-vitrine.js';
 import type {
@@ -82,9 +60,6 @@ export function criarTaxonomiaDaVitrineRepository(db: Db): TaxonomiaDaVitrineRep
         categories: categorias.map((categoria) => ({
           code: categoria.code,
           label: categoria.label,
-          // Categoria sem arvore de segundo nivel levantada sai com a lista
-          // VAZIA, e nao fora da resposta: ela continua sendo uma categoria
-          // escolhivel, so nao oferece subcategoria.
           subcategories: porCategoria.get(categoria.code) ?? [],
         })),
       };

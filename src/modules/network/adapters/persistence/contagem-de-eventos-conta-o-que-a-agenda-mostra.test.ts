@@ -1,14 +1,4 @@
-/**
- * ISCA — a contagem de encontros novos conta O QUE A AGENDA MOSTRA.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Em `kysely-contagem-de-eventos-novos.ts`: apague o `if (recorte.desde !==
- * undefined)` -> reprova `ISCA: ver a sub-aba Eventos zera`. Troque
- * `when: 'upcoming'` por `'all'` -> reprova `ISCA: a contagem usa o MESMO
- * recorte de tempo da agenda`. Troque `published_at` por `created_at` ->
- * reprova `ISCA: o sinal e a PUBLICACAO`.
- */
+/** ISCA — a contagem de encontros novos conta O QUE A AGENDA MOSTRA. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

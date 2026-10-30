@@ -1,91 +1,15 @@
-/**
- * A projecao de um item da vitrine: o que a secao `Loja` mostra.
- *
- * ## O que NAO sai daqui, e por que cada ausencia e decisao
- *
- * - **Nenhum UUID, e nao por filtragem: nao ha um.** `store_items` e
- *   `store_partners` tem `slug` como chave primaria. O ADR-0010 item 6 proibe
- *   UUID interno em saida publica, e a `20260922000008` mostrou o custo de
- *   descobrir isso depois: `professionals` precisou ganhar `slug` por migracao
- *   porque tinha um `id` que nunca poderia ser projetado. Aqui a coluna nao
- *   existe, entao o engano nao tem como acontecer.
- * - **`active`.** So item ativo chega ate aqui. O filtro vive na clausula
- *   `WHERE` (ADR-0021), e nao num `if` desta funcao: projecao que filtra e
- *   projecao que um dia esquece.
- * - **Carrinho, pedido, pagamento, estoque.** Nao ha campo, porque nao ha
- *   coluna, porque nao ha o conceito (criterio 5 da BICHUS-185).
- * - **Preco riscado, "de/por", desconto, "menor preco".** Criterio 19. Nao ha
- *   campo para nenhum dos quatro, e o ultimo caso de `item-da-vitrine.test.ts`
- *   reprova se algum nascer. **Nao ha portao de esquema para isto**, e o
- *   criterio 19 pede um: esta registrado como o que ficou de fora.
- *
- * ## O preco vence, e quem o omite e ESTE arquivo
- *
- * Criterio 16 da BICHUS-185, e e o que costuma ser esquecido: passada a janela
- * desde `price_checked_at`, **o servidor nao envia o valor**. Nao e a tela que
- * esconde.
- *
- * A diferenca e a razao inteira da regra existir aqui. Se o vencimento morasse
- * no aplicativo, um aparelho com build antigo mostraria preco vencido para
- * sempre, e nao haveria como parar isso sem passar pela loja de aplicativos --
- * que leva dias e depende de aprovacao de terceiro. Com a regra no servidor, o
- * valor **nao chega** ao aparelho, e todo build, novo ou velho, para de mostrar
- * no mesmo dia.
- *
- * Vencido, o item **continua na vitrine**: some o valor, e a tela passa a dizer
- * que o preco nao esta confirmado. Nunca o valor acompanhado de aviso de que
- * esta velho -- "R$ 89,90 (desatualizado)" e o pior dos dois mundos, porque a
- * pessoa le o numero e ignora o adjetivo.
- */
-
 import { comoData } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
-/**
- * O CODIGO da categoria do produto, primeiro dos dois niveis.
- *
- * ## Era uma uniao de seis literais, e deixou de ser em 17/10/2026
- *
- * O cliente decidiu "dois niveis, com subcategorias como a petlove": 14
- * categorias e 83 subcategorias. A lista continua FECHADA, e o que mudou e
- * quem a fecha -- deixou de ser o `CHECK` da `20260922000023` espelhado aqui e
- * no `enum` do contrato, e passou a ser a CHAVE ESTRANGEIRA de
- * `store_items.category` contra `store_categories (code)` (migracao
- * `20261017000003`).
- *
- * Tres razoes, e nenhuma e volume:
- *
- * 1. **A subcategoria pertence a uma categoria.** Uma uniao de literais sabe
- *    dizer que `bifinhos` e valido; nao sabe dizer que ele e de `treats` e nao
- *    de `food`. A chave estrangeira COMPOSTA sabe.
- * 2. **A arvore varia por especie** (gato tem arranhador e areia), e uma uniao
- *    de literais nao tem onde guardar isso.
- * 3. **Cada ajuste seria mudanca de contrato das quatro aplicacoes** mais um
- *    APK novo, para acrescentar uma linha de vocabulario.
- *
- * Mesma forma de `breed_code`, que tambem e `string` no contrato e tem a lista
- * em `ref_breeds`. Quem recusa codigo desconhecido na ESCRITA e
- * `errosDaClassificacao`, com `unknown_category`; na LEITURA, categoria
- * desconhecida devolve lista vazia, como `tag` ja fazia.
- */
+/** O CODIGO da categoria do produto, primeiro dos dois niveis. */
 export type CategoriaDaVitrine = string;
 
-/** O CODIGO da subcategoria. Unico dentro da categoria, nao globalmente. */
+/** O CODIGO da subcategoria. */
 export type SubcategoriaDaVitrine = string;
 
 /**
- * As SEIS categorias que existiam antes de 17/10/2026, e que **continuam
- * validas com os mesmos codigos**.
- *
- * **Nao e mais a lista fechada** -- ela mora em `store_categories`. Esta
- * constante existe por dois motivos concretos:
- *
- * - a massa fixa de QA (`massa-da-vitrine.ts`) so usa estas seis, e
- *   `massa-da-vitrine.test.ts` confere isso sem subir banco;
- * - o APK publicado filtra e le por estes seis codigos, e e por isso que
- *   nenhum deles foi trocado nem renomeado. O que mudou neles foi o ROTULO,
- *   que agora e dado: `food` passou a se chamar "Racoes" porque existe
- *   `treats` ("Petiscos e ossos") ao lado.
+ * As SEIS categorias que existiam antes de 17/10/2026, e que **continuam validas
+ * com os mesmos codigos**.
  */
 export const CATEGORIAS_DA_VITRINE: readonly CategoriaDaVitrine[] = [
   'food',
@@ -96,30 +20,21 @@ export const CATEGORIAS_DA_VITRINE: readonly CategoriaDaVitrine[] = [
   'bed',
 ];
 
-/**
- * Quantos dias um preco de referencia vale.
- *
- * **30, e o numero e emprestado e nao escolhido.** E o mesmo prazo que o
- * produto ja usa para a validade da localizacao de referencia (ADR-0006). Um
- * numero diferente aqui seria mais um numero para alguem decorar, e o PM
- * recomendou justamente 30 na Emenda 1 da BICHUS-185.
- *
- * **O valor final e do cliente**, e a pergunta esta na pauta de refinamento.
- * Enquanto ela nao volta, este e o default declarado, e nao um palpite
- * escondido numa comparacao.
- */
+/** Quantos dias um preco de referencia vale. */
 export const DIAS_DE_VALIDADE_DO_PRECO = 30;
 
 /**
- * As especies que `store_item_species.species` admite, as de `ref_species` e as
- * do cadastro de pet (ADR-0027 item 16). A ordem e a de `ref_species.sort_order`,
- * e e a ordem em que a resposta as lista.
+ * As especies que `store_item_species.species` admite, as de `ref_species` e as do
+ * cadastro de pet (ADR-0027 item 16).
  */
 export type EspecieDoItem = 'dog' | 'cat' | 'other';
 
 export const ESPECIES_DO_ITEM: readonly EspecieDoItem[] = ['dog', 'cat', 'other'];
 
-/** Ordena pela ordem do cadastro, para a resposta nao variar com a ordem de gravacao. */
+/**
+ * Ordena pela ordem do cadastro, para a resposta nao variar com a ordem de
+ * gravacao.
+ */
 export function ordenarEspecies(especies: readonly string[]): EspecieDoItem[] {
   return ESPECIES_DO_ITEM.filter((e) => especies.includes(e));
 }
@@ -130,21 +45,7 @@ export interface TagDaVitrine {
   readonly label: string;
 }
 
-/**
- * O endereco absoluto de um caminho no site do parceiro.
- *
- * O banco guarda o CAMINHO do item e o HOST do parceiro em colunas separadas
- * (migracao `20260922000009`; a secao 3.6 de `docs/07-devops.md` e normativa
- * no porque), e e aqui que os dois viram a URL unica que a resposta publica
- * devolve. Nao ha esquema guardado em lugar nenhum: ele e sempre `https`,
- * porque link de saida em claro numa vitrine nossa e uma recomendacao nossa
- * de digitar dado em canal aberto.
- *
- * Compor aqui torna ESTRUTURAL o que antes era conferido: o destino de um item
- * nao tem como apontar para fora do host do parceiro que ele declara, porque o
- * host nao vem do item. E trocar o dominio de um parceiro volta a ser o UPDATE
- * de uma coluna que a chave estrangeira da migracao promete.
- */
+/** O endereco absoluto de um caminho no site do parceiro. */
 export function enderecoNoParceiro(host: string, caminho: string): string {
   return `https://${host}${caminho}`;
 }
@@ -152,13 +53,6 @@ export function enderecoNoParceiro(host: string, caminho: string): string {
 /**
  * O host a usar na composicao: o do item quando ele mora num SUBDOMINIO do
  * parceiro, e o do parceiro no caso comum.
- *
- * `store_items.target_host` e nulo quando o host e o do proprio parceiro
- * (migracao `20261017000001`), e e esse nulo que faz trocar o dominio de um
- * parceiro continuar sendo o `UPDATE` de uma coluna so. Esta funcao e o unico
- * lugar que resolve o nulo, para a leitura publica e a do painel nao
- * resolverem diferente -- que e exatamente como `www.` apareceria numa tela e
- * nao na outra.
  */
 export function hostDoDestinoDoItem(
   hostDoParceiro: string,
@@ -167,46 +61,31 @@ export function hostDoDestinoDoItem(
   return hostDoItem ?? hostDoParceiro;
 }
 
-/** O item como o repositorio o entrega. Sem `active`, sem UUID -- nao ha um. */
+/** O item como o repositorio o entrega. */
 export interface ItemDaVitrine {
   readonly slug: string;
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
   /**
-   * O rotulo da categoria, lido de `store_categories.label` na MESMA consulta
-   * que trouxe o item.
-   *
-   * Vem do banco e nao de um mapa em codigo porque o vocabulario e dado:
-   * renomear "Alimentacao" para "Racoes" foi um `UPDATE`, e um mapa aqui faria
-   * a mesma renomeacao exigir deploy -- e, no aplicativo, um APK.
+   * O rotulo da categoria, lido de `store_categories.label` na MESMA consulta que
+   * trouxe o item.
    */
   readonly categoryLabel: string;
   /** O segundo nivel. Nulo e estado normal: a subcategoria e opcional. */
   readonly subcategory: SubcategoriaDaVitrine | null;
-  /** O rotulo da subcategoria. Nulo junto com `subcategory`. */
+  /** O rotulo da subcategoria. */
   readonly subcategoryLabel: string | null;
   /**
    * A imagem principal, ja como URL publica: a primeira imagem PRONTA do item
-   * (`store_item_images`, menor `position`), ou a URL externa da massa. Imagem
-   * em processamento ou recusada nunca chega aqui (ADR-0027 item 10).
+   * (`store_item_images`, menor `position`), ou a URL externa da massa.
    */
   readonly imageUrl: string | null;
-  /** O texto alternativo da principal. A imagem externa da massa leva o titulo do item. */
+  /** O texto alternativo da principal. */
   readonly imageAltText: string | null;
   /**
-   * TODAS as imagens prontas do item, na ordem de `position` — e não só a
-   * primeira (17/10/2026).
-   *
-   * **Isto não custa consulta nova.** `complementos()` já buscava a lista
-   * inteira de cada item da página, numa consulta por página, e `comoItem`
-   * usava só o elemento 0; os outros sete eram lidos do banco, trazidos pela
-   * rede e descartados no mapeamento. O carrossel da vitrine não cria N+1
-   * nenhum: ele passa a projetar o que já estava na memória.
-   *
-   * Vazia é estado normal: item da massa com imagem externa não tem linha em
-   * `store_item_images`, e `projetarItem` compõe a galeria de um elemento a
-   * partir de [imageUrl] — a mesma regra que o detalhe já aplicava.
+   * TODAS as imagens prontas do item, na ordem de `position` — e não só a primeira
+   * (17/10/2026).
    */
   readonly imagens: readonly ImagemDaVitrine[];
   readonly species: readonly EspecieDoItem[];
@@ -219,7 +98,10 @@ export interface ItemDaVitrine {
   /** Centavos, inteiro. Nulo quando o item nao tem preco, que e estado normal. */
   readonly priceAmount: number | null;
   readonly priceCurrency: string | null;
-  /** `AAAA-MM-DD`. Nunca nulo quando ha `priceAmount` -- o banco exige os tres juntos. */
+  /**
+   * `AAAA-MM-DD`. Nunca nulo quando ha `priceAmount` -- o banco exige os tres
+   * juntos.
+   */
   readonly priceCheckedAt: string | null;
 }
 
@@ -235,81 +117,37 @@ export interface ItemProjetado {
   readonly image_url: string | null;
   readonly image_alt_text: string | null;
   /**
-   * `StoreItemSummary.images`, ADITIVO (17/10/2026): a vitrine desenha
-   * carrossel quando há mais de uma.
-   *
-   * **`image_url` continua saindo, intocado.** O APK instalado lê aquele campo
-   * e mais nada; renomeá-lo ou removê-lo quebraria o app que está no bolso das
-   * pessoas — já aconteceu neste produto com a unidade de preço. A primeira
-   * imagem desta lista é a mesma de `image_url`, de propósito: cliente velho e
-   * cliente novo desenham a mesma capa.
-   *
-   * O teto do contrato é 8, o MESMO de `StoreItemDetail.images`. A igualdade é
-   * obrigatória e não estética: o detalhe é `allOf` do resumo, e `allOf` é
-   * interseção — um teto menor aqui encolheria a galeria do detalhe calado.
+   * `StoreItemSummary.images`, ADITIVO (17/10/2026): a vitrine desenha carrossel
+   * quando há mais de uma.
    */
   readonly images: readonly ImagemProjetada[];
   readonly target_url: string;
   readonly partner: { readonly slug: string; readonly name: string; readonly host: string };
   readonly species: readonly EspecieDoItem[];
   readonly tags: readonly TagDaVitrine[];
-  /**
-   * Centavos. **Ausente quando vencido**, e ausente quando nunca houve preco.
-   * Os dois casos sao distinguidos por `price_status`, e nao pela tela
-   * adivinhar a partir do nulo.
-   */
+  /** Centavos. **Ausente quando vencido**, e ausente quando nunca houve preco. */
   readonly price_amount: number | null;
   readonly price_currency: string | null;
   readonly price_checked_at: string | null;
   readonly price_status: EstadoDoPreco;
 }
 
-/**
- * Os tres estados de preco, e eles sao tres e nao dois.
- *
- * `sem_preco` e `vencido` produzem a mesma ausencia de numero e **pedem textos
- * diferentes na tela**: um item que nunca teve preco simplesmente nao mostra a
- * linha (criterio A.2.4: ausencia de preco e estado normal, nao lacuna), e um
- * item com preco vencido diz que o preco nao esta confirmado e aponta o
- * parceiro (criterio 17). Um booleano aqui faria a tela escolher uma das duas
- * frases para os dois casos.
- */
+/** Os tres estados de preco, e eles sao tres e nao dois. */
 export type EstadoDoPreco = 'vigente' | 'vencido' | 'sem_preco';
 
-/**
- * Quantos dias inteiros separam `desde` de `ate`, pelo calendario UTC.
- *
- * Conta em dias de calendario e nao em milissegundos divididos por 86 400 000:
- * `price_checked_at` e uma DATA, sem hora, e comparar uma data com um instante
- * faz o resultado depender da hora em que a consulta rodou. Um item semeado com
- * data de exatamente 30 dias atras vencia de manha e nao vencia de tarde.
- */
+/** Quantos dias inteiros separam `desde` de `ate`, pelo calendario UTC. */
 export function diasDeCalendario(desde: string, ate: Instant): number {
   const [ano, mes, dia] = desde.split('-').map(Number);
   if (ano === undefined || mes === undefined || dia === undefined) {
     throw new TypeError(`price_checked_at fora do formato AAAA-MM-DD: "${desde}"`);
   }
   const inicio = Date.UTC(ano, mes - 1, dia);
-  // `comoData` e o unico caminho declarado de `Instant` para `Date` neste
-  // repositorio. Construir a data aqui seria a supressao de lint que o
-  // cabecalho de `shared/time/clock.ts` existe para evitar.
   const instante = comoData(ate);
   const fim = Date.UTC(instante.getUTCFullYear(), instante.getUTCMonth(), instante.getUTCDate());
   return Math.floor((fim - inicio) / 86_400_000);
 }
 
-/**
- * O estado do preco de um item, agora.
- *
- * Recebe so os dois campos que decidem, porque a projecao do painel
- * (`projetarItemAdministrativo`) usa esta MESMA funcao: "vencido" precisa querer
- * dizer a mesma coisa no app e no painel.
- *
- * **A fronteira e `> DIAS_DE_VALIDADE_DO_PRECO`, e nao `>=`.** Trinta dias de
- * validade significa que o trigesimo dia ainda vale; recusar no trigesimo faria
- * a validade ser de vinte e nove, e a divergencia entre o numero escrito e o
- * numero aplicado e a classe de defeito que ninguem procura.
- */
+/** O estado do preco de um item, agora. */
 export function estadoDoPreco(
   item: Pick<ItemDaVitrine, 'priceAmount' | 'priceCheckedAt'>,
   agora: Instant,
@@ -320,14 +158,7 @@ export function estadoDoPreco(
     : 'vigente';
 }
 
-/**
- * Projeta o item para a resposta publica, **omitindo o valor quando vencido**.
- *
- * `price_checked_at` tambem sai quando vencido, e isso e deliberado: manter a
- * data sem o valor entregaria ao aplicativo tudo de que ele precisa para
- * reconstruir "o preco era de tal dia", e o que nao chega nao pode ser
- * remontado por build nenhum.
- */
+/** Projeta o item para a resposta publica, **omitindo o valor quando vencido**. */
 export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado {
   const estado = estadoDoPreco(item, agora);
   const vigente = estado === 'vigente';
@@ -356,15 +187,7 @@ export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado
 /** Uma imagem do detalhe publico: so pronta, ja como URL. */
 export interface ImagemDaVitrine {
   readonly url: string;
-  /**
-   * **Nulo é estado normal, e o tipo diz isso desde 17/10/2026.**
-   *
-   * `store_item_images.alt_text` perdeu o `NOT NULL` na migração
-   * `20261017000002` e `StoreItemImage.alt_text` é `[string, 'null']` no
-   * contrato; este campo era declarado `string` e mentia — o nulo do banco
-   * atravessava por baixo de um tipo que prometia texto. Quem desenha cai no
-   * título do produto (`ImagemDoProduto.nomeDaImagem`, no app).
-   */
+  /** **Nulo é estado normal, e o tipo diz isso desde 17/10/2026.** */
   readonly altText: string | null;
 }
 
@@ -378,19 +201,7 @@ export interface DetalheProjetado extends ItemProjetado {
   readonly images: readonly ImagemProjetada[];
 }
 
-/**
- * A galeria publica de um item, por UMA regra só.
- *
- * Ela existe porque o resumo e o detalhe passaram a projetar a mesma lista
- * (17/10/2026), e duas cópias desta composição divergiriam no primeiro dia em
- * que alguém mexesse numa delas: a tela do produto mostraria a imagem externa
- * da massa e a vitrine mostraria uma galeria vazia, ou o contrário.
- *
- * **Item da massa com URL externa e sem imagem enviada traz a externa como a
- * única imagem**, com o título do item de texto alternativo. Sem isto o
- * carrossel nasceria vazio em toda a massa de QA, que não tem linha nenhuma em
- * `store_item_images` (`src/bin/massa-da-vitrine.ts` grava só `image_path`).
- */
+/** A galeria publica de um item, por UMA regra só. */
 export function galeriaDoItem(
   item: ItemDaVitrine,
   imagens: readonly ImagemDaVitrine[],
@@ -403,21 +214,13 @@ export function galeriaDoItem(
 }
 
 /**
- * O detalhe publico (`getStoreItem`): o mesmo item da lista, mais todas as
- * imagens PRONTAS em ordem. Com a regra de vencimento da lista, porque e a
- * mesma funcao que projeta os dois.
- *
- * Item da massa com URL externa e sem imagem enviada traz a externa como a
- * unica imagem, com o titulo do item de texto alternativo (`StoreItemImage`).
+ * O detalhe publico (`getStoreItem`): o mesmo item da lista, mais todas as imagens
+ * PRONTAS em ordem.
  */
 export function projetarDetalhe(
   item: ItemDaVitrine,
   imagens: readonly ImagemDaVitrine[],
   agora: Instant,
 ): DetalheProjetado {
-  // **As imagens vêm do parâmetro, e não de `item.imagens`.** O detalhe lê a
-  // galeria por um caminho próprio no repositório (`detalhe()`), e trocar isto
-  // por `item.imagens` mudaria a fonte de uma tela que já funciona. A regra de
-  // composição é a mesma dos dois lados, e é por isso que ela mora numa função.
   return { ...projetarItem(item, agora), images: galeriaDoItem(item, imagens) };
 }

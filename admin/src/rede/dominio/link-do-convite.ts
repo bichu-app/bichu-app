@@ -1,25 +1,11 @@
-/**
- * Os dois links do encontro (ADR-0027 item 22), com a MESMA regra do servidor
- * (`errosDoLinkDeIngresso` e `handleDoInstagram` em
- * `src/modules/network/domain/escrita-do-encontro.ts`). O painel confere
- * antes para dizer o motivo no campo; quem decide e o servidor, e as recusas
- * dele caem nos mesmos textos (por `code`).
- *
- * Mora SOZINHO, sem nenhum especificador de modulo, de proposito -- mesma razao
- * que `./texto.ts`: a prova de que estas regras concordam com o servidor, caso a
- * caso, e cobrada pela suite da RAIZ, em
- * `src/modules/network/domain/paridade-com-o-backoffice.test.ts`, que compila em
- * `nodenext`. Um `import './x.ts'` aqui reprovaria la com TS5097
- * (`allowImportingTsExtensions`), e um que chegasse a `src/config.ts` traria
- * `import.meta.env`, que e do Vite. Saiu de `./links.ts` em 23/10/2026, que
- * continua reexportando tudo para quem importava de la.
- */
-
 const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan|home|home\.arpa|corp|test|invalid|example)$/;
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const CONTROLE_BIDIRECIONAL = /[\u202A-\u202E\u2066-\u2069]/;
 
-/** O servidor conta `texto.length` (unidades UTF-16) neste campo, e o `maxLength` nativo conta igual. */
+/**
+ * O servidor conta `texto.length` (unidades UTF-16) neste campo, e o `maxLength`
+ * nativo conta igual.
+ */
 export const LIMITE_DO_LINK_DO_CONVITE = 500;
 
 export type CodigoDoLink =
@@ -31,7 +17,10 @@ export type CodigoDoLink =
   | 'ticket_url_ip_literal'
   | 'ticket_url_local_host';
 
-/** O primeiro motivo de recusa do link, como o servidor; `null` quando o link passa. */
+/**
+ * O primeiro motivo de recusa do link, como o servidor; `null` quando o link
+ * passa.
+ */
 export function recusaDoLinkDoConvite(valor: string): CodigoDoLink | null {
   if (CONTROLE_BIDIRECIONAL.test(valor)) return 'bidi_control';
   const texto = valor.trim();
@@ -45,8 +34,6 @@ export function recusaDoLinkDoConvite(valor: string): CodigoDoLink | null {
   }
   if (url.protocol !== 'https:' || !texto.startsWith('https://')) return 'ticket_url_not_https';
   if (url.username !== '' || url.password !== '' || /^https:\/\/[^/?#]*@/.test(texto)) return 'ticket_url_has_credentials';
-  // O ponto final do host ("localhost.", "x.local.") e o mesmo host: sai antes
-  // de todas as regras, como no servidor (QA r5).
   const host = url.hostname.toLowerCase().replace(/\.+$/, '');
   if (host === '') return 'ticket_url_invalid';
   if (host.startsWith('[') || IPV4.test(host) || /^\d+$/.test(host) || /^0x/i.test(host)) return 'ticket_url_ip_literal';
@@ -54,15 +41,7 @@ export function recusaDoLinkDoConvite(valor: string): CodigoDoLink | null {
   return null;
 }
 
-/**
- * O handle a partir do valor do campo. Usada para a PREVIA ("Aparece no app
- * como @x") e para ler o que ja esta gravado quando o formulario reabre.
- *
- * Continua aceitando o apelido cru de proposito: a coluna guarda handle, e o
- * formulario o reabre por aqui. Quem recusa o apelido na ENTRADA e
- * [recusaDoInstagram] -- endurecer a extracao junto quebraria a leitura do
- * dado existente para resolver um problema que e da entrada.
- */
+/** O handle a partir do valor do campo. */
 export function handleDoInstagram(valor: string): string | null {
   let texto = valor.trim();
   const daUrl = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i.exec(texto);
@@ -71,12 +50,10 @@ export function handleDoInstagram(valor: string): string | null {
   return /^[A-Za-z0-9._]{1,30}$/.test(texto) ? texto.toLowerCase() : null;
 }
 
-/** O texto de cada recusa, no campo. Vale para a conferencia do painel e para o `400` do servidor. */
+/** O texto de cada recusa, no campo. */
 export const MENSAGEM_DO_LINK: Record<CodigoDoLink, string> = {
   bidi_control: 'O link tem caracteres invisíveis. Apague e digite de novo.',
   length: `Use até ${String(LIMITE_DO_LINK_DO_CONVITE)} caracteres no link.`,
-  // UX 30.10 R3 trazia um exemplo de link completo; host literal em src/
-  // reprova o portao de portabilidade, entao o exemplo vira a descricao.
   ticket_url_invalid: 'Confira o link: ele não pode ter espaço e precisa estar completo, com https:// e o endereço do site.',
   ticket_url_not_https: 'O link precisa começar com https://.',
   ticket_url_has_credentials: 'Tire o usuário e a senha do link.',

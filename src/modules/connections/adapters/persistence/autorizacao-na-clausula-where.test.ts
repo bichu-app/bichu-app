@@ -1,24 +1,4 @@
-/**
- * **A autorização está na cláusula `WHERE`, e isto se prova lendo o SQL.**
- *
- * Teste de comportamento não serve aqui. Um `UPDATE` por `ref` sozinho aceitaria
- * a conexão de outra pessoa, e a autorização passaria a depender de quem chama
- * ter lido a aresta antes — **o caminho novo que esquecesse a leitura abriria o
- * furo sem que nenhum teste de comportamento acusasse**. É a mesma razão pela
- * qual `bloqueio-do-chamador-na-clausula-where.test.ts` existe.
- *
- * As iscas deste arquivo:
- *
- * - **(e)** `conta_habilitada` nos **dois** lados de **toda** leitura e de toda
- *   escrita, com isca que reprova uma consulta que a esqueça;
- * - **(c)** os quatro tetos no `WHERE` do `INSERT`, com os números ligados como
- *   parâmetro — o nível que vale sob concorrência;
- * - **(f)** nenhuma coluna de conta é **projetada**: `requester_user_id` e
- *   `addressee_user_id` aparecem só em predicado, e `id` não aparece em lugar
- *   nenhum da saída;
- * - **(d)** nada nesta camada distingue "não é seu" de "não existe": é o mesmo
- *   `WHERE`, logo o mesmo zero linhas, logo o mesmo 404.
- */
+/** **A autorização está na cláusula `WHERE`, e isto se prova lendo o SQL.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -101,11 +81,6 @@ const TODAS = {
       limite: 20,
       agora: AGORA,
     }),
-  // **AS DUAS DE 22/10/2026.** Elas entram neste mapa e nao ao lado dele: e
-  // estar AQUI que as poe debaixo de todas as varreduras deste arquivo --
-  // `conta_habilitada` nos dois lados, nenhuma coluna de conta projetada, a
-  // lista fechada de apelidos de saida e o molde explicito de tempo. Um
-  // construtor novo fora do mapa fica fora dos quatro de uma vez, em silencio.
   listaDasProprias: () => construtorDasConexoes(semBanco, CHAMADOR, { pagina: 1, limite: 20 }),
   arestasPorApelido: () =>
     construtorDasArestasPorApelido(semBanco, CHAMADOR, ['bia-vet', 'carla-ong'], AGORA),
@@ -167,12 +142,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
     'parConectado',
     'pedidosRecebidos',
     'pedidosEnviados',
-    // AS DUAS DE 22/10/2026. A lista das PROPRIAS conexoes e a leitura de
-    // estado por apelido reusam `juncaoDaAresta`, e e por isso que passam --
-    // mas elas precisam estar NOMEADAS aqui: medido em 22/10/2026, sem estes
-    // dois nomes uma versao da lista que trocasse a juncao por um `FROM` cru,
-    // perdendo `conta_habilitada` E o recorte por quem chama, passava nas 55
-    // conferencias deste arquivo em silencio.
     'listaDasProprias',
     'arestasPorApelido',
   ] as const;
@@ -192,20 +161,8 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
   }
 
   /**
-   * **O RECORTE POR QUEM CHAMA, nas duas leituras de LISTA** — e este caso
-   * nasceu de uma isca que não caiu.
-   *
-   * Em 22/10/2026, com a lista das próprias conexões recém-escrita, a mutação
-   * que trocava `juncaoDaAresta` por um `FROM user_connections` cru passava nas
-   * 55 conferências deste arquivo. Ela perdia **duas** coisas de uma vez: o
-   * `conta_habilitada` dos dois lados (que o caso de cima agora cobra, com os
-   * dois nomes novos na lista) e o **predicado das duas pontas contra quem
-   * chama** — que nenhum caso cobrava em lote, porque até então toda leitura de
-   * lista era de pedidos e o caso do `ref` cobria as outras uma por uma.
-   *
-   * Sem o predicado das duas pontas, `GET /connections` devolveria a tabela
-   * inteira para qualquer conta. É o vazamento exato que a emenda do cliente de
-   * 22/10/2026 **não** autorizou: ele abriu a lista do dono, não a de todos.
+   * **O RECORTE POR QUEM CHAMA, nas duas leituras de LISTA** — e este caso nasceu de
+   * uma isca que não caiu.
    */
   for (const nome of ['listaDasProprias', 'arestasPorApelido', 'pedidosRecebidos', 'pedidosEnviados'] as const) {
     void it(`\`${nome}\` cobra as DUAS pontas contra quem chama, no WHERE`, () => {
@@ -222,8 +179,8 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
 
   /**
    * **ISCA do caso de cima.** Sem ela, aquele `assert.match` passaria por as
-   * consultas de hoje terem a forma certa — e não por a expressão saber
-   * reconhecer a forma errada.
+   * consultas de hoje terem a forma certa — e não por a expressão saber reconhecer a
+   * forma errada.
    */
   void it('ISCA: a conferencia do recorte REPROVA um `FROM` sem as duas pontas', () => {
     const semRecorte = semBanco
@@ -240,19 +197,8 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
   });
 
   /**
-   * **`conta_habilitada` NA ARESTA, e não em qualquer subconsulta** — e este
-   * caso nasceu de uma isca que caiu pela metade.
-   *
-   * Medido em 22/10/2026: a mutação que trocava `juncaoDaAresta` por um `FROM`
-   * cru na lista das próprias conexões **continuava passando** no caso genérico
-   * de `conta_habilitada`, porque a subconsulta que conta as conexões da OUTRA
-   * pessoa (`connections_count`) chama a função duas vezes sobre `uc` — o
-   * alias dela. A expressão genérica não distingue a aresta que está sendo
-   * lida da aresta que está sendo contada.
-   *
-   * Então este caso cobra o alias: `c`, que é a aresta de [juncaoDaAresta]. É a
-   * diferença entre *"a função aparece no SQL"* e *"a linha que sai passou por
-   * ela"*.
+   * **`conta_habilitada` NA ARESTA, e não em qualquer subconsulta** — e este caso
+   * nasceu de uma isca que caiu pela metade.
    */
   for (const nome of ['listaDasProprias', 'arestasPorApelido'] as const) {
     void it(`\`${nome}\` chama \`conta_habilitada\` sobre a ARESTA LIDA (alias \`c\`)`, () => {
@@ -269,8 +215,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
   }
 
   void it('a contagem de conexões também filtra, senão o número não bate com a lista', () => {
-    // Contagem que não bate com a leitura é pior que as duas, e é exatamente o
-    // que acontece se só a leitura filtrar.
     assert.match(TODAS.contagens().sql, /conta_habilitada\([^)]*requester_user_id\)/i);
     assert.match(TODAS.contagens().sql, /conta_habilitada\([^)]*addressee_user_id\)/i);
   });
@@ -282,8 +226,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
   });
 
   void it('ISCA: a conferência REPROVA uma consulta que esqueça um dos lados', () => {
-    // Sem esta isca, as conferências acima passariam por haver DUAS chamadas
-    // quaisquer, inclusive duas ao mesmo lado.
     const soUmLado = semBanco
       .selectFrom('user_connections')
       .select('ref')
@@ -298,9 +240,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
   });
 
   void it('`desfazerPorBloqueio` NÃO filtra por conta habilitada, e é de propósito', () => {
-    // Bloqueio é limpeza, e limpeza que respeitasse a desabilitação deixaria a
-    // aresta viva esperando a conta voltar — exatamente o canal aberto por
-    // descuido que o desenho recusa.
     const { sql } = TODAS.desfazerPorBloqueio();
     assert.doesNotMatch(sql, /conta_habilitada/i);
     assert.match(sql, /delete from user_connections/i);
@@ -362,12 +301,6 @@ void describe('ISCA (c): os tetos no WHERE do INSERT — o nível que vale na co
 
 void describe('todo instante entra no SQL com molde explícito', () => {
   void it('nenhum parâmetro de tempo fica sem `::timestamptz`', () => {
-    // REGRESSÃO MEDIDA EM 18/10/2026, num Postgres de verdade: sem o molde, o
-    // banco resolve `$n - interval '24 hours'` como `interval - interval` e a
-    // comparação reprova com "operator does not exist: timestamp with time zone
-    // > interval". Nenhum teste de SQL compilado acusa isso — por isso a
-    // conferência é da forma do texto, e o exercício contra o banco está no
-    // relatório da entrega.
     for (const [nome, construtor] of Object.entries(TODAS)) {
       const { sql } = construtor();
       for (const achado of sql.matchAll(/(\$\d+)\s*(?:-|\+)\s*interval/gi)) {
@@ -392,11 +325,6 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     'addressee_user_id',
     'pair_low',
     'pair_high',
-    // As DUAS colunas de verificacao da conta, pela emenda do ADR-0010 de
-    // 21/10/2026: o selo sai como booleano `canal_verificado`, e a DATA de
-    // confirmacao nunca sai. Elas entram nesta lista e nao na de apelidos
-    // permitidos, e e essa a diferenca entre "derivei um booleano" e "projetei
-    // a data".
     'email_verified_at',
     'phone_verified_at',
   ];
@@ -404,9 +332,6 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
   for (const [nome, construtor] of Object.entries(TODAS)) {
     void it(`\`${nome}\` não seleciona coluna de conta na lista de saída`, () => {
       const { sql } = construtor();
-      // A lista de saída é o que vem depois do último `SELECT` de topo (ou do
-      // `RETURNING`). Conferimos que nenhuma coluna de conta aparece com apelido
-      // de saída (`AS <nome>`), que é a única forma de ela virar campo de corpo.
       for (const coluna of PROIBIDAS_NA_SAIDA) {
         assert.doesNotMatch(
           sql,
@@ -417,12 +342,7 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     });
   }
 
-  /**
-   * A lista FECHADA de apelidos de saída desta camada. `id` está nela por um
-   * motivo só, e ele é conferido no caso seguinte: é o apelido da tabela
-   * derivada que carrega **a conta de quem chama** (`SELECT $1::uuid AS id`), e
-   * ela nunca é projetada — só comparada.
-   */
+  /** A lista FECHADA de apelidos de saída desta camada. */
   const APELIDOS_PERMITIDOS = new Set([
     'ref',
     'state',
@@ -432,35 +352,14 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     'rest_until',
     'display_name',
     'handle',
-    // O SELO DE VALIDADO (emenda do ADR-0010, 21/10/2026). **O apelido de saida
-    // e o BOOLEANO `canal_verificado`, e nunca `email_verified_at` nem
-    // `phone_verified_at`**: as duas colunas de data ficam DENTRO da expressao,
-    // porque "o e-mail dela foi confirmado em marco" nao e assunto de terceiro.
-    // Esta lista e fechada, e as duas datas nao estao nela -- e o caso abaixo e
-    // onde isso se cobra.
     'canal_verificado',
     'total',
     'feito',
     'conexoes',
     'pendentes',
     'do_dia',
-    // O contador de convidados (21/10/2026). **Numero, e nao coluna de conta**:
-    // ele e um `count(*)`, do mesmo tipo de `conexoes` e `pendentes`, e passa
-    // por esta lista pelo mesmo motivo que eles -- campo novo em resposta e
-    // decisao de privacidade, e a decisao esta no `$description` de
-    // `invited_joined_count` no contrato: contagem nao diz QUEM.
     'convidados',
     'conectados',
-    // OS TRES DA LISTA DAS PROPRIAS CONEXOES (22/10/2026), e os tres sao os
-    // MESMOS campos que `PersonSearchResult` ja entrega na busca -- nome,
-    // apelido e as duas contagens, mais a foto. **Campo novo em resposta e
-    // decisao de privacidade**, e a decisao e a do cliente: *"o usuario pode
-    // abrir a lista de usuarios que e sua conexao"*.
-    //
-    // As duas contagens sao `count(*)`, do mesmo tipo de `conexoes` e
-    // `pendentes`: contagem nao diz QUEM. E `photo_key` e CHAVE de objeto e
-    // nunca URL -- a borda monta o endereco com a base de midia do ambiente
-    // (§11.1 proibicao 9).
     'pets_count',
     'connections_count',
     'photo_key',
@@ -513,9 +412,6 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
   });
 
   void it('o apelido é lido pela costura que tolera a coluna ausente', () => {
-    // `to_jsonb(outro) ->> 'handle'` devolve NULL hoje (a coluna vive em
-    // `feat/idade-minima-cadastro`, fora de `origin/development`) e passa a
-    // devolver o apelido quando a migração descer, sem uma linha mudar.
     for (const nome of ['arestaPorRef', 'arestaDoPar', 'pedido', 'aceite', 'pedidosRecebidos'] as const) {
       assert.match(
         TODAS[nome]().sql,
@@ -582,21 +478,10 @@ void describe('a caixa de pedidos não devolve conexão aceita', () => {
 });
 
 void describe('ISCA: o contador de convidados tem os DOIS sinais no WHERE', () => {
-  // A regra é decisão do cliente de 21/10/2026: conta quem entrou pelo convite
-  // DESTA conta **e** tem pet com foto `ready`. Ela mora no banco, e numa fonte
-  // só -- se morasse no aplicativo, dois clientes contariam diferente e o número
-  // que a pessoa vê dependeria de qual deles ela abriu.
-  //
-  // PARA DESLIGAR E VER REPROVAR: em `construtorDaContagemDeConvidados`, tire o
-  // `EXISTS` de `pet_photos`. O segundo caso reprova, e é ele que trava o freio
-  // anti-abuso.
   const sql = TODAS.contagemDeConvidados().sql.toLowerCase();
 
   void it('conta aceita, com ESTA conta no destino e origem de convite', () => {
     assert.match(sql, /c\.state = 'accepted'/);
-    // O DESTINO e não qualquer lado: quem usa um convite é quem PEDE, e o único
-    // convite que leva ao perfil desta conta é o dela. Contar os dois lados
-    // somaria quem ELA convidou com quem a convidou.
     assert.match(sql, /c\.addressee_user_id = \$\d+::uuid/);
     assert.match(sql, /c\.origin = 'invite_link'/);
     assert.doesNotMatch(
@@ -618,8 +503,6 @@ void describe('ISCA: o contador de convidados tem os DOIS sinais no WHERE', () =
       /f\.deleted_at is null/,
       'REPROVA: foto apagada conta. O freio anti-abuso precisa do sinal VIVO.',
     );
-    // `EXISTS` e não junção direta: uma junção multiplicaria a aresta por foto
-    // pronta, e quem tem três fotos contaria três vezes.
     assert.doesNotMatch(
       sql,
       /from user_connections c\s+join pet_photos/,

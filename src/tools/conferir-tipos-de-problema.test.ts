@@ -1,16 +1,4 @@
-/**
- * Testes do portão de tipos de problema.
- *
- * Quase todos os casos aqui são negativos, e é de propósito: um portão só
- * promete uma coisa, que é **reprovar o que deve reprovar**. Prova negativa que
- * vive numa frase evapora — ninguém consegue reexecutá-la, e ela não acusa no
- * dia em que a regra deixa de funcionar. Por isso as iscas moram no
- * repositório e rodam a cada execução.
- *
- * O último caso é o oposto: ele confere o `api/openapi.yaml` de verdade contra
- * a tabela que o código usa. É esse que reprova quando o contrato ganha um tipo
- * e ninguém roda `npm run generate:types`.
- */
+/** Testes do portão de tipos de problema. */
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -88,8 +76,7 @@ void describe('o que o portão precisa reprovar', () => {
 
   /**
    * Esta é a isca que reproduz o defeito que deu origem ao portão: `forbidden`
-   * saindo com 401. Se ela um dia passar, o portão parou de vigiar exatamente o
-   * caso para o qual foi escrito.
+   * saindo com 401.
    */
   void it('acusa `forbidden` com 401', () => {
     const achados = conferir(contrato, { forbidden: 401, unauthenticated: 401 });

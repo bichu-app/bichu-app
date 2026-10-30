@@ -1,14 +1,4 @@
-/**
- * Testes do portão de contrato (BICHUS-55).
- *
- * O critério 2 da história é o motivo deste arquivo existir: **um portão que não
- * consegue verificar precisa reprovar.** Por isso os casos abaixo são quase
- * todos negativos — eles provam que o portão REPROVA o que deve reprovar, que é
- * a única coisa que um portão promete.
- *
- * O portão também carrega uma isca interna que roda a cada execução. Este
- * arquivo é a segunda camada: ele varia a isca, coisa que a interna não faz.
- */
+/** Testes do portão de contrato (BICHUS-55). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { parse as parseYaml } from 'yaml';
@@ -89,8 +79,6 @@ void describe('quem o portão percorre', () => {
   });
 
   void it('percorre a rota de autenticação opcional, porque ela responde sem token também', () => {
-    // `bearerAuth` mais `{}` é autenticação opcional: existe um caminho sem
-    // conta, e é justamente esse que precisa ser olhado.
     const opcional = operacaoDe('opcional', 'responses: {}', [{ bearerAuth: [] }, {}]);
     assert.equal(ehOperacaoSemConta(opcional.operacao), true);
   });
@@ -109,8 +97,6 @@ void describe('o que o portão precisa reprovar', () => {
     const achados = inspecionarCamposPublicos(spec, [operacao]);
 
     assert.deepEqual(camposAchados(achados), ['case_id', 'id']);
-    // `share_token` termina em `_token` e não é UUID: o endereço público É o
-    // token, e reprová-lo tornaria o desenho do contrato impossível.
     assert.equal(
       achados.some((achado) => achado.campo === 'share_token'),
       false,
@@ -141,9 +127,6 @@ responses:
   });
 
   void it('não acusa campo parecido com o proibido', () => {
-    // `recipient_email_masked` é mascarado de propósito e existe no contrato.
-    // Portão que acusa o remédio perde a confiança de quem o lê, e o próximo
-    // achado verdadeiro é lido como ruído.
     const parecido = `
 responses:
   '200':
@@ -163,11 +146,6 @@ responses:
 
 void describe('ausência de alvo não é aprovação, e continua não sendo', () => {
   void it('sem página HTML, a conferência devolve zero páginas conferidas e nenhum achado', () => {
-    // Desde o ADR-0017 o contrato não tem resposta `text/html`, e reprovar por
-    // isso seria o portão cobrar uma coisa que foi removida por decisão. O que
-    // NÃO pode acontecer é a ausência virar aprovação: quem lê o resultado
-    // precisa conseguir separar os dois casos, e por isso a contagem sai junto
-    // com os achados em vez de um `Achado[]` que some com a informação.
     const resultado = inspecionarCabecalhos([]);
     assert.deepEqual(resultado.achados, []);
     assert.equal(resultado.paginasConferidas, 0);
@@ -200,24 +178,6 @@ responses:
   });
 });
 
-// ---------------------------------------------------------------------------
-// O LADO DO PEDIDO.
-//
-// O portão nasceu olhando só a resposta declarada. Medido em 19/10/2026, na
-// `feat/pets-por-distancia`: acrescentar `distance_m` ao schema
-// `PublicLostPet` reprovava com dois achados, e acrescentar `lat`, `lon` e
-// `radius_m` como PARÂMETROS de `listPublicLostPets` APROVAVA, exit 0.
-//
-// Aceitar um centro escolhido por quem chama transforma a rota pública num
-// oráculo de posição: variando o centro e lendo a ORDEM da página dá para
-// trilaterar o ponto de cada caso sem um único número de coordenada aparecer
-// na resposta. ADR-0006 e ADR-0010 itens 4 e 5.
-//
-// A isca interna do portão já cobra esta família a cada execução, e a isca de
-// `infra/verificacao/iscas/` a cobra na esteira. Este arquivo é a camada que
-// VARIA a isca, que é o que as duas não fazem.
-// ---------------------------------------------------------------------------
-
 function operacaoComParametros(
   operationId: string,
   nomes: readonly (readonly [string, string])[],
@@ -246,14 +206,10 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
       ]),
     ]);
     assert.deepEqual(camposAchados(resultado.achados), ['X-Latitude', 'lat', 'lon']);
-    // Cabeçalho é pedido também: um oráculo não fica menos oráculo por trocar
-    // de lugar dentro do pedido.
     assert.ok(resultado.achados.some((a) => a.onde === 'parâmetro (header)'));
   });
 
   void it('reprova o nome COMPOSTO, que é o que nome exato não alcança', () => {
-    // Esta é a razão de o casamento ser por segmento. Na resposta, nome exato
-    // basta; no pedido não, e `max_km` do contrato de verdade é a prova.
     const resultado = inspecionarParametrosPublicos([
       operacaoComParametros('iscaComposta', [
         ['center_lat', 'query'],
@@ -273,11 +229,6 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
   });
 
   void it('reprova `max_km`, que a lista da RESPOSTA não tem', () => {
-    // O caso que decidiu a lista ser própria e não a `CAMPOS_PROIBIDOS`.
-    // `max_km` é o nome que esta casa já usa para raio
-    // (`listNearbyNetworkEvents`), e ele não está na lista da resposta — com
-    // razão, porque nunca aparece numa resposta. Se alguém trocar a lista
-    // própria do pedido pela da resposta, este caso reprova.
     const resultado = inspecionarParametrosPublicos([
       operacaoComParametros('iscaRaio', [
         ['max_km', 'query'],
@@ -295,9 +246,6 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
   });
 
   void it('NÃO acusa os filtros que o ADR-0006 manda a listagem usar', () => {
-    // Portão que reprova tudo não distingue nada e é retirado na primeira
-    // sexta-feira. Estes são os nomes medidos nas 37 operações sem conta do
-    // contrato de hoje, e nenhum pode produzir achado.
     const resultado = inspecionarParametrosPublicos([
       operacaoComParametros('iscaPermitida', [
         ['page', 'query'],
@@ -340,8 +288,6 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
   });
 
   void it('não acusa palavra inglesa que nomeia outra coisa com naturalidade', () => {
-    // `long`, `around`, `within` e `bounds` ficaram FORA da lista de propósito.
-    // Se alguém os acrescentar, este caso reprova e obriga a medir o custo.
     const resultado = inspecionarParametrosPublicos([
       operacaoComParametros('iscaPalavraComum', [
         ['long_name', 'query'],
@@ -354,9 +300,6 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
   });
 
   void it('operação COM conta pode declarar coordenada: ela não chega aqui', () => {
-    // `previewLostCaseReach` e `listNearbyNetworkEvents` declaram `lat`, `lon`
-    // e `max_km` hoje, e são produto. Quem filtra é `ehOperacaoSemConta`, e o
-    // caso existe para fixar que o filtro é ele e não esta varredura.
     const comConta = operacaoComParametros(
       'getPerto',
       [
@@ -371,8 +314,6 @@ void describe('o pedido: coordenada, distância e raio em parâmetro de rota sem
   });
 
   void it('ausência de alvo é REPROVAÇÃO, e não aprovação por omissão', () => {
-    // A regra do arquivo. Se nenhuma operação sem conta declarar parâmetro, a
-    // varredura não percorreu nada, e um verde dela não diz nada.
     const resultado = inspecionarParametrosPublicos([
       operacaoComParametros('semParametroNenhum', []),
     ]);

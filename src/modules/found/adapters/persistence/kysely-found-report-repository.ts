@@ -1,36 +1,4 @@
-/**
- * Persistência do achado avulso, em PostGIS.
- *
- * ## A autorização está na cláusula `WHERE`, e em lugar nenhum além dela
- *
- * ADR-0021. Toda consulta daqui que toca o achado de alguém traz
- * `reporter_user_id = :dono`, e nenhuma delas lê a linha para depois comparar o
- * dono num `if`. A diferença entre as duas formas aparece no dia em que alguém
- * esquece o `if`: a consulta sem `WHERE` devolve o relato de outra pessoa — e um
- * achado carrega onde um animal foi visto, com data e hora.
- *
- * `construtorD*` existe para que essa afirmação seja **verificável** em vez de
- * combinada. `autorizacao-na-clausula-where.test.ts` compila o SQL destas
- * funções, lê a posição `$n` que o predicado do dono ocupa, confere o valor
- * ligado **àquela posição** e carrega a isca que precisa reprovar.
- *
- * ## O ponto entra e sai por SQL, e a coluna nunca é selecionada crua
- *
- * `ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography` grava. **A ordem é
- * (lon, lat)** — `ST_MakePoint` recebe X antes de Y, e trocar os dois é o erro
- * clássico do PostGIS: ele não falha, ele grava o Brasil no meio da Somália.
- *
- * Nenhuma leitura deste arquivo seleciona `found_point`. O que sai é
- * `tem_ponto`, um booleano calculado no banco, e — só dentro do cruzamento —
- * `ST_Distance`, que é um número de metros e não uma posição. A coordenada não
- * tem por que atravessar a aplicação, e o jeito mais barato de garantir que ela
- * não vaze é ela não estar disponível.
- *
- * **Nada aqui transforma coordenada em endereço nem o contrário** (ADR-0006).
- * O que este arquivo devolve de lugar é `found_city` e `found_neighborhood`, o
- * texto que a pessoa digitou; quem os junta em "Bairro, Cidade" é `rotuloDaArea`,
- * de `lostfound`, na borda.
- */
+/** Persistência do achado avulso, em PostGIS. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
@@ -82,43 +50,11 @@ function comoAchado(l: LinhaDoAchado): AchadoGravado {
     temFoto: l.tem_foto,
     observacao: l.notes,
     criadoEm: l.created_at,
-    // Nome ausente é a ausência de PET, e não a de nome: `pets.name` é `NOT
-    // NULL` no banco, então um nulo aqui só sai da subconsulta não ter achado
-    // linha — isto é, o achado é avulso e não tem pet certo. A chave da foto,
-    // sozinha, não sustenta um `matched_pet`: sem nome não há o que exibir.
     petCorrespondente:
       l.pet_nome === null ? null : { nome: l.pet_nome, chaveDaFoto: l.pet_chave_da_foto },
   };
 }
 
-// ===========================================================================
-// O PET JÁ IDENTIFICADO — emenda 7 do ADR-0010 (28/10/2026)
-// ===========================================================================
-//
-// `COALESCE` de duas colunas, e cada uma tem dono MEDIDO neste repositório:
-//
-//  - `found_reports.pet_id` é escrito **só** por `registrarAviso` em
-//    `kysely-tag-repository.ts`, junto com `origin: 'tag_scan'`;
-//  - `found_reports.case_id` é escrito **só** pelo `INSERT` de `criar`, a
-//    partir do `share_token` (critério 10).
-//
-// Os dois únicos `UPDATE` deste arquivo (`construtorDoEnriquecimento` e o do
-// achador sem conta) não tocam nenhuma das duas, e nada mais no código escreve
-// nelas. Então "tem pet certo" e "veio de plaquinha ou de link do tutor" são a
-// MESMA condição, e ela é a da emenda.
-//
-// **`match_candidates` não aparece aqui, e a ausência é o desenho.** O vínculo
-// do achado avulso cruzado por semelhança mora lá, com
-// `link_origin = 'attribute_match'` e `status = 'suggested'` — e a consulta que
-// traria foto e nome de um palpite da máquina **não existe nesta porta**. É a
-// mesma forma de argumento das emendas 3 e 5: não é um `if` que alguém apaga
-// num refatoramento, é uma consulta que ninguém escreveu.
-//
-// SUBCONSULTA e não `JOIN`: `construtorDoAvisoParaFoto` já tem um `leftJoin`
-// em `pets` com outra finalidade (a autorização do tutor), e um segundo join
-// pela mesma tabela com outro predicado ficaria à mercê de qual dos dois o
-// leitor acha que manda. Escalar e correlacionada, cada uma devolve uma coluna
-// ou nulo.
 const PET_ALVO = sql`COALESCE(
   found_reports.pet_id,
   (SELECT lc.pet_id FROM lost_cases lc WHERE lc.id = found_reports.case_id)
@@ -129,13 +65,10 @@ const PET_NOME = sql<string | null>`(
 )`;
 
 /**
- * A capa pronta do pet. Mesmos quatro predicados de `kysely-tag-repository.ts`
- * — `is_primary`, `status = 'ready'`, não apagada —, porque as duas superfícies
- * endereçam o mesmo objeto e divergir aqui faria a plaquinha e o achado
- * mostrarem fotos diferentes do mesmo animal.
- *
- * `status = 'ready'` é o que impede endereço montado para derivada que o worker
- * ainda não gravou.
+ * A capa pronta do pet. Mesmos quatro predicados de `kysely-tag-repository.ts` —
+ * `is_primary`, `status = 'ready'`, não apagada —, porque as duas superfícies
+ * endereçam o mesmo objeto e divergir aqui faria a plaquinha e o achado mostrarem
+ * fotos diferentes do mesmo animal.
  */
 const PET_CHAVE_DA_FOTO = sql<string | null>`(
   SELECT f.card_key FROM pet_photos f
@@ -144,13 +77,7 @@ const PET_CHAVE_DA_FOTO = sql<string | null>`(
    LIMIT 1
 )`;
 
-/**
- * As colunas da leitura do relator.
- *
- * `found_point` **não está aqui**, e a ausência é a regra: o que sai é
- * `tem_ponto` quando alguém precisa dele, e nesta lista nem isso — o contrato de
- * `FoundReport` não declara nenhum campo que dependa de ter coordenada.
- */
+/** As colunas da leitura do relator. */
 const COLUNAS = sql<LinhaDoAchado>`
   id, origin, status, species, size,
   found_city, found_neighborhood, found_at,
@@ -160,14 +87,7 @@ const COLUNAS = sql<LinhaDoAchado>`
   ${PET_CHAVE_DA_FOTO} AS pet_chave_da_foto
 `;
 
-/**
- * A leitura de UM achado do relator, como consulta ainda não executada.
- *
- * O predicado do dono e o do identificador vão juntos, e é por isso que o achado
- * de outra conta responde 404 em vez de 403: a consulta que o encontraria não
- * existe. O ADR-0021 não diz "não devolva a linha do outro"; ele diz onde a
- * decisão mora.
- */
+/** A leitura de UM achado do relator, como consulta ainda não executada. */
 export function construtorDaLeitura(db: DbExecutor, achado: FoundReportId, dono: UserId) {
   return db
     .selectFrom('found_reports')
@@ -190,18 +110,7 @@ export function construtorDaLeitura(db: DbExecutor, achado: FoundReportId, dono:
     .where('reporter_user_id', '=', dono);
 }
 
-/**
- * A lista do relator, paginada por cursor.
- *
- * O cursor é o `created_at` do último item, em milissegundos — e não um `OFFSET`.
- * `OFFSET` relê e descarta tudo que veio antes, e desloca a página inteira
- * quando uma linha nova entra no topo entre duas chamadas, que é exatamente o
- * que acontece numa lista ordenada por criação decrescente.
- *
- * O teto de linhas é do chamador e é imposto pelo serviço (`limiteDaPagina`): um
- * `limit` que chegasse do cliente sem teto é coleção sem paginação com mais
- * passos.
- */
+/** A lista do relator, paginada por cursor. */
 export function construtorDaLista(
   db: DbExecutor,
   dono: UserId,
@@ -228,26 +137,12 @@ export function construtorDaLista(
     .where('reporter_user_id', '=', dono)
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
-    // Uma linha a mais do que o pedido: é o que diz se existe próxima página sem
-    // uma segunda consulta de contagem. A linha extra não sai na resposta.
     .limit(limite + 1);
   if (cursor !== null) consulta = consulta.where('created_at', '<', cursor);
   return consulta;
 }
 
-/**
- * O enriquecimento, como consulta ainda não executada.
- *
- * Três predicados no `WHERE`, e os três são regra e não zelo:
- *
- * - `id` e `reporter_user_id` são a autorização por propriedade que o contrato
- *   descreve ("autorizada por propriedade, não por posse de token");
- * - `status <> 'closed'` está aqui e **não** num `if` antes: encerrar e
- *   enriquecer podem chegar ao mesmo tempo, e conferir antes de escrever deixa a
- *   janela entre as duas operações aberta. O contrato declara 410 para o caso já
- *   encerrado, e quem descobre que foi isso que aconteceu é o serviço, olhando o
- *   status **depois** de a escrita não ter pegado.
- */
+/** O enriquecimento, como consulta ainda não executada. */
 export function construtorDoEnriquecimento(
   db: DbExecutor,
   achado: FoundReportId,
@@ -265,9 +160,6 @@ export function construtorDoEnriquecimento(
             found_point: sql`ST_SetSRID(ST_MakePoint(${mudanca.lon}, ${mudanca.lat}), 4326)::geography`,
           }
         : {}),
-      // Toca a retenção para frente: quem complementa o aviso está dizendo que
-      // ele ainda vale. Sem isto, um achado enriquecido no 29º dia sumiria no
-      // 30º com a informação nova dentro.
       retention_until: comoData((Number(agora) + JANELA_MAXIMA_EM_DIAS * 86_400_000) as Instant),
     } as never)
     .where('id', '=', achado)
@@ -275,34 +167,7 @@ export function construtorDoEnriquecimento(
     .where('status', '<>', 'closed');
 }
 
-/**
- * A contagem de intenções de foto de UM aviso do relator. Teto vitalício (SEC-009).
- *
- * ## Por que ela tem um `JOIN` e uma correlação, e não dois predicados soltos
- *
- * A forma óbvia seria `WHERE found_report_id = :achado AND user_id = :dono`, e
- * ela responde a pergunta errada de um jeito que passa despercebido: `user_id`
- * em `upload_intents` é **quem pediu a intenção**, não quem é dono do aviso.
- *
- * **Desde a BICHUS-35 eles NÃO coincidem mais**, e é por isso que a observação
- * deixou de ser teórica: o tutor do pet também pede intenção de foto (a conversa
- * mediada é simétrica), e o achador sem conta pede com `user_id` NULO. Contar
- * por `upload_intents.user_id` daria a cada pessoa o seu próprio teto de três,
- * e o SEC-009 diz **três por AVISO**. A contagem aqui é do aviso inteiro, as
- * duas espécies juntas, e é isso que faz o teto ser compartilhado.
- *
- * O predicado do chamador é o mesmo `OR` de [construtorDoAvisoParaFoto] — o
- * relator ou o tutor do pet —, e ele continua no `WHERE`: uma contagem
- * autorizada por outra chamada ter acontecido é a autorização num `if`, com
- * mais passos.
- *
- * Com o `JOIN` e o `whereRef`, a pergunta vira a certa e vira sozinha: *"quantas
- * intenções existem PARA ESTE AVISO, sendo este aviso DESTA CONTA"*. Sem a
- * correlação `upload_intents.found_report_id = found_reports.id`, o mesmo SQL
- * com o mesmo dono ligado passaria a perguntar *"esta conta tem algum aviso?"* —
- * e a contagem responderia sobre o conjunto errado sem nenhum predicado faltando
- * no texto.
- */
+/** A contagem de intenções de foto de UM aviso do relator. */
 export function construtorDaContagemDeFotos(db: DbExecutor, achado: FoundReportId, dono: UserId) {
   return db
     .selectFrom('upload_intents')
@@ -320,34 +185,7 @@ export function construtorDaContagemDeFotos(db: DbExecutor, achado: FoundReportI
     );
 }
 
-/**
- * O AVISO, para quem pode ANEXAR FOTO A ELE: o relator **ou** o tutor do pet.
- *
- * ## Por que existe uma segunda leitura, e nao um parametro em [construtorDaLeitura]
- *
- * `construtorDaLeitura` autoriza `GET`, `PATCH` e `statusDoRelator`, e nas
- * tres a regra e e continua sendo **so o relator**: o aviso e a declaracao de
- * quem achou o animal, e o tutor nao edita o que outra pessoa declarou. Trocar
- * aquela consulta por esta ampliaria tres autorizacoes para resolver uma, e as
- * outras duas nao foram decididas por ninguem.
- *
- * ## A juncao responde "quem e o tutor" DENTRO deste modulo
- *
- * `found_reports.pet_id` -> `pets.owner_user_id`. Nao ha travessia de
- * fronteira: nenhuma linha daqui importa de `messaging`, e a conversa nem
- * aparece nesta consulta. E deliberado -- fazer a autorizacao da foto depender
- * de `messaging` acoplaria o modulo que GUARDA o aviso ao modulo que o
- * CONVERSA, e a pergunta "de quem e este pet" nunca foi de `messaging`.
- *
- * `leftJoin` e nao `innerJoin`: o aviso de animal SEM plaquinha tem
- * `pet_id` nulo (achado avulso, `20260922000010`). Com `innerJoin` o
- * relator desses avisos perderia a autorizacao que ele JA TEM hoje -- a
- * ampliacao viraria uma restricao, em silencio, justamente no caminho que mais
- * usa foto.
- *
- * O `OR` esta no `WHERE` e nao num `if` depois (ADR-0021): a consulta que
- * alcancaria o aviso de um terceiro nao existe neste arquivo.
- */
+/** O AVISO, para quem pode ANEXAR FOTO A ELE: o relator **ou** o tutor do pet. */
 export function construtorDoAvisoParaFoto(
   db: DbExecutor,
   achado: FoundReportId,
@@ -380,15 +218,6 @@ export function construtorDoAvisoParaFoto(
     );
 }
 
-// ===========================================================================
-// O achador sem conta (BICHUS-41)
-// ===========================================================================
-//
-// O "dono" aqui é o resumo do token, e ele entra no `WHERE` de toda consulta,
-// pelo mesmo motivo que `reporter_user_id` entra nas de cima: a consulta que
-// alcançaria o aviso de outra pessoa não existe neste arquivo. `origin =
-// 'tag_scan'` vai junto porque só o aviso da plaquinha tem token.
-
 interface LinhaDoAvisoDoAchador {
   id: string;
   status: 'open' | 'matched' | 'closed';
@@ -400,7 +229,7 @@ interface LinhaDoAvisoDoAchador {
   finder_token_hash: Buffer | null;
 }
 
-/** A leitura do aviso pelo token. Exportado para a bancada que lê o SQL. */
+/** A leitura do aviso pelo token. */
 export function construtorDoAvisoDoAchador(db: DbExecutor, resumo: Uint8Array) {
   return db
     .selectFrom('found_reports')
@@ -410,7 +239,6 @@ export function construtorDoAvisoDoAchador(db: DbExecutor, resumo: Uint8Array) {
       'found_reports.status',
       'found_reports.found_at',
       sql<boolean>`(found_reports.photo_upload_id IS NOT NULL)`.as('tem_foto'),
-      // O booleano, e nunca o ponto: a coordenada não atravessa a aplicação.
       sql<boolean>`(found_reports.found_point IS NOT NULL)`.as('tem_ponto'),
       'found_reports.notes',
       'pets.name as pet_name',
@@ -420,13 +248,7 @@ export function construtorDoAvisoDoAchador(db: DbExecutor, resumo: Uint8Array) {
     .where('found_reports.origin', '=', 'tag_scan');
 }
 
-/**
- * O "Contar mais" do achador. `status <> 'closed'` no `WHERE`: aviso encerrado
- * não recebe detalhe, e a escrita que não pegou é o sinal que o serviço lê.
- *
- * `found_point` por SQL, na ordem (lon, lat) de `ST_MakePoint`, como no resto
- * do arquivo.
- */
+/** O "Contar mais" do achador. */
 export function construtorDoEnriquecimentoDoAchador(
   db: DbExecutor,
   resumo: Uint8Array,
@@ -491,44 +313,18 @@ function comoAvisoDoAchador(linha: LinhaDoAvisoDoAchador): AvisoDoAchador | unde
 export function criarFoundReportRepository(db: Db): FoundReportRepository {
   return {
     async casoAbertoPorShareToken(token: string): Promise<CaseId | null> {
-      // `status = 'open'` no `WHERE`: um token de caso encerrado não vincula
-      // nada, e o achado da pessoa continua valendo como achado avulso. O caso
-      // de tutor com conta desabilitada cai no mesmo lugar, e o `null` é o
-      // melhor desenho possível aqui: o achado de quem quis ajudar continua
-      // gravado e visível para ele, só não aponta para um caso que não existe
-      // mais para ninguém de fora. Nenhum erro, nenhuma pista.
-      //
-      // Esta consulta NÃO leva dono, e a ausência é o desenho: o `share_token` é
-      // a única chave do caso em superfície pública, e quem chega por ele é o
-      // vizinho que recebeu o push — uma pessoa qualquer, de propósito. O que
-      // ela devolve é um identificador de caso e nada mais: nenhum dado do pet,
-      // nenhum dado do tutor, nenhuma indicação de que o token existe (o serviço
-      // trata `null` como "sem vínculo", não como erro).
       const linha = await db
         .selectFrom('lost_cases')
         .innerJoin('pets', 'pets.id', 'lost_cases.pet_id')
         .select('lost_cases.id as id')
         .where('lost_cases.share_token', '=', token)
         .where('lost_cases.status', '=', 'open')
-        // A JUNCAO EXISTE PARA ESTE PREDICADO, e so para ele.
-        //
-        // `lost_cases` nao tem `deleted_at`, e o caso herda o estado do dono por
-        // `pets`: o gatilho `users_desabilitada_marca_pets` (migracao
-        // `20261017000013`) marca os pets da conta desabilitada, e a leitura
-        // publica do caso ja le `pets.deleted_at` e responde 410. Sem esta
-        // clausula, o MESMO `share_token` que a pagina publica recusa continuaria
-        // vinculando achados novos ao caso -- a funcionalidade sobreviveria a
-        // pagina, que e exatamente o que o cliente mandou fechar.
         .where('pets.deleted_at', 'is', null)
         .executeTakeFirst();
       return linha === undefined ? null : (linha.id as CaseId);
     },
 
     async criar(novo: NovoAchado): Promise<AchadoGravado> {
-      // SQL cru e não o construtor tipado: `geography` não é um tipo que o
-      // modelo do Kysely represente, e a coluna é declarada em `schema.ts` como
-      // não selecionável e não inserível de propósito — o único caminho para ela
-      // é este, onde `ST_MakePoint` está à vista de quem revisa.
       const ponto =
         novo.lat === undefined || novo.lon === undefined
           ? sql`NULL`
@@ -677,8 +473,6 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
         .insertInto('upload_intents')
         .values({
           id: nova.id,
-          // Sem conta, sem dono: o CHECK `upload_intents_dono_salvo_achador_sem_conta`
-          // só admite isto em `finder_photo`.
           user_id: null,
           pet_id: null,
           found_report_id: nova.foundReportId,
@@ -694,15 +488,6 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
     },
 
     async paresParaCruzar(achado: FoundReportId): Promise<readonly Par[]> {
-      // O filtro grosseiro roda NO BANCO, porque é lá que estão o índice GiST e
-      // `ST_Distance`. Trazer todos os casos abertos para pontuar em memória
-      // seria a varredura que o índice existe para evitar, no caminho mais caro
-      // do produto.
-      //
-      // Os filtros de espécie, de janela de tempo e de distância são repetidos
-      // no domínio (`excluir`), e a repetição é deliberada: aqui eles são
-      // desempenho, lá eles são a regra. O dia em que os dois divergirem, quem
-      // decide é o domínio — ele só recebe menos linhas para decidir sobre.
       const linhas = await sql<{
         case_id: string;
         caso_species: Especie;
@@ -807,11 +592,6 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
     async sugerirCorrespondencias(sugestoes): Promise<number> {
       if (sugestoes.length === 0) return 0;
 
-      // **`status` NÃO é parâmetro.** Ele é o literal `'suggested'`, escrito
-      // aqui, e `decided_by_user_id`/`decided_at` ficam de fora do INSERT —
-      // nenhuma chamada a esta função consegue gravar uma correspondência
-      // confirmada. O banco cobra o mesmo por CHECK; são duas camadas, e a
-      // segunda existe porque a primeira some num refatoramento.
       let gravadas = 0;
       for (const s of sugestoes) {
         const r = await sql`
@@ -844,12 +624,7 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
   };
 }
 
-/**
- * O cursor, que é o instante do último item em base64url.
- *
- * Opaco de propósito: um cursor legível vira contrato acidental, e o cliente que
- * o construir à mão trava a paginação no formato de hoje.
- */
+/** O cursor, que é o instante do último item em base64url. */
 function codificarCursor(criadoEm: Date): string {
   return Buffer.from(String(criadoEm.getTime()), 'utf8').toString('base64url');
 }
@@ -858,9 +633,6 @@ function decodificarCursor(cursor: string | null): Date | null {
   if (cursor === null || cursor === '') return null;
   const texto = Buffer.from(cursor, 'base64url').toString('utf8');
   const ms = Number(texto);
-  // Cursor ilegível vira "primeira página", e não erro. Ele é opaco: o cliente
-  // não tem como saber que o adulterou, e devolver 400 aqui transformaria um
-  // valor guardado de uma versão anterior do app numa tela quebrada.
   if (!Number.isSafeInteger(ms) || ms <= 0) return null;
   return new Date(ms);
 }

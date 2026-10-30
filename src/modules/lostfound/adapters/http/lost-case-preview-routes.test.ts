@@ -1,37 +1,4 @@
-/**
- * `GET /pets/:petId/lost-case-preview` sobre um Fastify de verdade (BICHUS-202).
- *
- * A rota estava **declarada no contrato, no tipo gerado e no inventário do
- * Cypress, e não existia em `src/`**. Este arquivo é a metade que faltava do par
- * declaração/implementação, e ele sobe o servidor em vez de chamar o handler
- * porque três das quatro coisas que a rota promete só existem com o Fastify no
- * caminho: o 429 do teto (que é um gancho `onRequest`, não um `if` do handler),
- * o `application/problem+json` do 404 e a serialização real da resposta — que é
- * onde um UUID vazaria.
- *
- * ## As iscas deste arquivo
- *
- * Nenhuma afirmação aqui vale por confiança: cada mecanismo foi **desligado no
- * código de produção, rodado e visto reprovar** em 22/09/2026, e depois
- * restaurado com o SHA-256 conferido contra a cópia anterior
- * (`lost-case-routes.ts` = `bdf52c37…5ebbd`, `lost-case-service.ts` =
- * `b3104966…b729c`). O que cada desligamento derrubou:
- *
- * | o que foi desligado | reprovaram |
- * |---|---|
- * | a conferência de `existeEhDoTutor` (autorização some) | 4 casos |
- * | `naoEncontrado()` virando `semPermissao()` (403 no lugar de 404) | 4 casos |
- * | `pet_id` acrescentado ao montador da resposta | 3 casos |
- * | `rateLimit` removido da declaração da rota | **não compila** |
- * | dimensão `pet` declarada sem resolvedor | **não compila** |
- * | `app.get` direto, fora de `registrarRota` | o portão de registro reprova, nomeando arquivo e linha |
- * | `deny_429` virando `log_and_alert` (teto declarado que não recusa) | 3 casos |
- *
- * As duas últimas linhas da tabela são a razão de a terceira isca ser
- * **automática**, marcada com `ISCA` no nome: o mesmo caminho com
- * `criarContadorDesligado()` precisa deixar a 31ª passar, e é isso que prova
- * que o caso acima mede limite, e não a capacidade de contar até 31.
- */
+/** `GET /pets/:petId/lost-case-preview` sobre um Fastify de verdade (BICHUS-202). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -71,12 +38,9 @@ function comoToken(userId: UserId): string {
 }
 
 interface Cenario {
-  /**
-   * O interruptor de `site_page_availability`. **Ausente = desligado**, que e o
-   * estado de producao: `/p/{shareToken}` da 404 (medido em 20/10/2026).
-   */
+  /** O interruptor de `site_page_availability`. */
   readonly paginasPublicadas?: boolean;
-  /** O que `AlcanceDoAlerta` responde. `null` = não foi possível contar. */
+  /** O que `AlcanceDoAlerta` responde. */
   readonly contagem?: number | null;
   readonly temFotoPronta?: boolean;
   readonly temCanalVerificado?: boolean;
@@ -84,23 +48,16 @@ interface Cenario {
   readonly areaDeReferencia?: { city?: string; neighborhood?: string };
   readonly contador?: RateLimitStore;
   /**
-   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar
-   * o dono — é o equivalente exato de tirar `owner_user_id = :dono` da cláusula
+   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar o
+   * dono — é o equivalente exato de tirar `owner_user_id = :dono` da cláusula
    * `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
    */
   readonly autorizacaoDesligada?: boolean;
-  /** O caso que `buscarDoTutor` devolve ao DONO. Sem ele, a leitura é 404. */
+  /** O caso que `buscarDoTutor` devolve ao DONO. */
   readonly casoDoDono?: CasoGravado;
 }
 
-/**
- * O repositório, com a autorização **dentro da consulta**.
- *
- * `existeEhDoTutor` é falso para qualquer chamador que não seja o dono, e essa
- * é a única coisa que o serviço recebe: ele não tem como saber se o pet existe e
- * é de outra pessoa, ou se não existe. Os dois casos chegam idênticos, que é o
- * que faz o 404 ser estrutural em vez de lembrado.
- */
+/** O repositório, com a autorização **dentro da consulta**. */
 function repositorio(cenario: Cenario): LostCaseRepository {
   const naoUsado = (): never => {
     throw new Error('A prévia não escreve nem lê caso: este método não devia ser chamado.');
@@ -136,14 +93,7 @@ function repositorio(cenario: Cenario): LostCaseRepository {
   };
 }
 
-/**
- * `n` destinatários, com um aparelho cada.
- *
- * Os identificadores não importam para esta rota — ela só conta — e é
- * exatamente por isso que eles existem: se a prévia algum dia começar a olhar
- * para dentro da lista, é aqui que o teste vai precisar mudar, e a mudança vai
- * aparecer na revisão.
- */
+/** `n` destinatários, com um aparelho cada. */
 function destinatariosDeTeste(n: number): { usuario: UserId; aparelhos: string[] }[] {
   return Array.from({ length: n }, (_, i) => ({
     usuario: `018f3a2b-0000-7000-8000-${String(i).padStart(12, '0')}` as UserId,
@@ -151,7 +101,7 @@ function destinatariosDeTeste(n: number): { usuario: UserId; aparelhos: string[]
   }));
 }
 
-/** O registro de disparos, em memória. A prévia não escreve nada nele. */
+/** O registro de disparos, em memória. */
 function disparosDeTeste(): RegistroDeDisparos {
   return {
     abrir: (entrada) =>
@@ -177,9 +127,6 @@ function filaDeTeste(): JobQueue {
   return {
     enqueue: () => Promise.resolve('018f3a2b-0000-7000-8000-00000000f11a'),
     claim: () => Promise.resolve([]),
-    // Este teste nao exercita a fila; a varredura de orfaos entra na porta
-    // porque o tipo a exige, e devolver lista vazia e o que um dublê honesto
-    // faz -- inventar orfao aqui seria o dublê contando uma historia propria.
     recuperarOrfaos: () => Promise.resolve([]),
     complete: () => Promise.resolve(),
     fail: () => Promise.resolve(),
@@ -194,10 +141,6 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     bodyLimitBytes: 1_048_576,
   });
 
-  // `contagem` vira uma LISTA de destinatários, e não um número: a porta não
-  // tem mais como devolver "quantos" sem devolver "quem", e o dublê precisa
-  // obedecer à mesma regra que a implementação real — senão ele testa uma porta
-  // que não existe.
   const alcance: AlcanceDoAlerta = {
     alcancaveis: () =>
       Promise.resolve(
@@ -224,9 +167,6 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       alcance,
       disparos: disparosDeTeste(),
       fila: filaDeTeste(),
-      // BICHUS-66. Esta bancada nao abre caso -- ela le a previa --, entao o
-      // dublê nunca e chamado. Ele existe porque a porta e obrigatoria por
-      // tipo, que e o que faz a fiacao de `api.ts` nao poder esquecer dela.
       transferencias: { cancelarPorCasoAberto: () => Promise.resolve() },
       conversaDaCorrespondencia: { aoConfirmarCorrespondencia: () => Promise.resolve() },
     }),
@@ -238,15 +178,9 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
-    // O contrato DE VERDADE: é ele que decide o schema do corpo das outras rotas
-    // deste registrador, e uma cópia aqui deixaria de acusar mudança na spec.
     contrato: carregarContrato('api/openapi.yaml'),
     clock,
     baseDaWeb: BASE_DA_WEB,
-    // O interruptor das paginas publicas. **DESLIGADO por padrao**, que e o
-    // estado de producao em 20/10/2026 (`/p/` e `/cartaz/` dao 404, medido).
-    // O caso que cobra a FORMA dos links liga-o explicitamente -- ver
-    // `getLostCase: os links do caso apontam para as paginas do site`.
     paginas: {
       estaPublicada: () => Promise.resolve(cenario.paginasPublicadas === true),
     },
@@ -277,7 +211,7 @@ async function pedir(
   };
 }
 
-/** O slug de `type` do Problem Details. É por ele que o cliente decide. */
+/** O slug de `type` do Problem Details. */
 function tipoDe(corpo: Record<string, unknown>): string | undefined {
   const { type } = corpo;
   return typeof type === 'string' ? type.slice(type.lastIndexOf('/') + 1) : undefined;
@@ -306,8 +240,6 @@ void describe('a rota existe e responde o que o contrato declara', () => {
     await app.close();
 
     assert.equal(corpo['reach_status'], 'no_location');
-    // A asserção que importa: `0` aqui diria "não há ninguém por perto" quando a
-    // verdade é "não há raio". São decisões opostas para quem está em pânico.
     assert.equal(corpo['reachable_tutors'], null);
     assert.notEqual(corpo['reachable_tutors'], 0);
   });
@@ -344,7 +276,6 @@ void describe('a rota existe e responde o que o contrato declara', () => {
       'pet_photo_missing',
       'pet_already_lost',
     ]);
-    // Critério 14 da BICHUS-20: `no_location` NÃO entra em `blockers`.
     assert.equal(corpo['reach_status'], 'no_location');
   });
 
@@ -359,8 +290,6 @@ void describe('a rota existe e responde o que o contrato declara', () => {
 
   void it('coordenada fora do Brasil é recusada antes da consulta cara', async () => {
     const app = servidor({ contagem: 7 });
-    // Latitude e longitude trocadas de ordem: o erro mais comum de quem monta a
-    // consulta à mão, e ele cai fora do retângulo declarado no contrato.
     const { status } = await pedir(app, { consulta: '?lat=-46.68&lon=-23.56' });
     await app.close();
 
@@ -383,10 +312,6 @@ void describe('ISCA 1 — autorização na cláusula WHERE, 404 e nunca 403 (ADR
     const { status, corpo } = await pedir(app, { como: OUTRO_TUTOR });
     await app.close();
 
-    // Escrito como duas negações separadas de propósito. O corpo da BICHUS-21,
-    // critério 12, diz 403; a ADR-0021 diz 404 e é ela que vale. Se alguém
-    // "corrigir" o código pela issue, este caso nomeia a divergência em vez de
-    // deixar a mudança passar como ajuste de status.
     assert.notEqual(status, 403);
     assert.notEqual(tipoDe(corpo), 'forbidden');
   });
@@ -399,16 +324,7 @@ void describe('ISCA 1 — autorização na cláusula WHERE, 404 e nunca 403 (ADR
     assert.notEqual(status, 200);
   });
 
-  /**
-   * A prova de que os três casos acima medem alguma coisa.
-   *
-   * Com `autorizacaoDesligada` o dobre do repositório responde sobre o pet sem
-   * olhar o dono — o mesmo efeito de tirar `owner_user_id = :dono` do `WHERE` e
-   * conferir depois. Os três casos acima passam a receber **200**, e reprovam.
-   *
-   * Conferido em 22/09/2026 rodando com a isca ligada de verdade no código de
-   * produção: três casos reprovaram de uma vez.
-   */
+  /** A prova de que os três casos acima medem alguma coisa. */
   void it('ISCA: com a autorização fora da consulta, o pet alheio responde 200', async () => {
     const app = servidor({ autorizacaoDesligada: true });
     const { status } = await pedir(app, { como: OUTRO_TUTOR });
@@ -424,14 +340,7 @@ void describe('ISCA 1 — autorização na cláusula WHERE, 404 e nunca 403 (ADR
 });
 
 void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7)', () => {
-  /**
-   * Busca por FORMA e não por nome de campo.
-   *
-   * Um teste que procurasse `pet_id` continuaria verde no dia em que alguém
-   * acrescentasse `case_id`, `owner_id` ou `photo_id`. O que esta expressão
-   * procura é qualquer coisa com a cara de um UUID, em qualquer campo — inclusive
-   * num campo que ainda não existe.
-   */
+  /** Busca por FORMA e não por nome de campo. */
   const FORMATO_DE_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
   void it('o corpo do 200 não contém nada com forma de UUID', async () => {
@@ -447,15 +356,9 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
   });
 
   /**
-   * O corpo do 404 carrega DOIS valores com forma de UUID por desenho do
-   * servidor, e nenhum deles é identificador interno: `correlation_id`, que é
-   * gerado por requisição, e `instance`, que é o caminho que o próprio chamador
-   * pediu. Procurar forma de UUID ali acusaria os dois e não acusaria vazamento
-   * nenhum.
-   *
-   * O que o 404 precisa provar é outra coisa, e é a mais forte: ele é
-   * **indistinguível** entre "o pet é de outra pessoa" e "o pet não existe". Um
-   * corpo que diferisse nos dois casos seria o 403 de volta, escrito em prosa.
+   * O corpo do 404 carrega DOIS valores com forma de UUID por desenho do servidor, e
+   * nenhum deles é identificador interno: `correlation_id`, que é gerado por
+   * requisição, e `instance`, que é o caminho que o próprio chamador pediu.
    */
   void it('o 404 do pet alheio é idêntico ao 404 do pet inexistente', async () => {
     const app = servidor();
@@ -477,8 +380,6 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
       semRastroDaRequisicao(alheio.corpo),
       semRastroDaRequisicao(JSON.parse(inexistente.body) as Record<string, unknown>),
     );
-    // E o que sobra, fora a correlação e o caminho que o chamador mandou, não
-    // tem nada com forma de UUID.
     assert.equal(FORMATO_DE_UUID.test(JSON.stringify(semRastroDaRequisicao(alheio.corpo))), false);
   });
 
@@ -487,10 +388,6 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
     const { corpo } = await pedir(app);
     await app.close();
 
-    // O item 7 do ADR-0010 proíbe agrupar os pets de um tutor. O serviço tem
-    // `casosAbertosDaConta` na mão e não o devolve: propriedade a MAIS não quebra
-    // cliente nenhum, então nenhum portão de contrato a acusa, e é exatamente por
-    // ali que a implementação se afasta do documento.
     assert.deepEqual(Object.keys(corpo).sort(), [
       'area_label',
       'blockers',
@@ -521,8 +418,6 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
   }
 
   void it('a rota declara os dois tetos do contrato, com os números dele', () => {
-    // Os números vivem no contrato; este caso é o que impede alguém de afrouxar
-    // o teto no código sem tocar na especificação que o portão da esteira lê.
     assert.deepEqual(rotaDePreviaDoCaso.rateLimit, [
       { dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' },
       { dimension: ['pet'], limit: 10, window: '1h', onExceed: 'serve_cache' },
@@ -548,13 +443,7 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
     assert.equal(tipoDe(JSON.parse(ultima.body) as Record<string, unknown>), 'rate-limited');
   });
 
-  /**
-   * A prova de que o caso acima mede limite, e não a capacidade de contar até 31.
-   *
-   * `criarContadorDesligado` é a única forma legítima de desligar o teto neste
-   * repositório, e ela está escrita na linha, onde a revisão vê. Com ela, a 31ª
-   * passa — e o caso acima reprovaria.
-   */
+  /** A prova de que o caso acima mede limite, e não a capacidade de contar até 31. */
   void it('ISCA: com o contador desligado a 31ª passa, e o caso acima reprova', async () => {
     const status = await statusAteEstourar(criarContadorDesligado());
 
@@ -570,11 +459,7 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
 /**
  * Os links que a resposta do caso entrega ao tutor apontam para as páginas do
  * site, nos caminhos do ADR-0017: `/p/{shareToken}` é a página do caso, e
- * `/c/{finderToken}` é a CONVERSA de quem avisou sem conta. Até esta branch o
- * `share_url` saía em `/c/`, e o link que o tutor compartilhava no WhatsApp
- * levaria o site a chamar `getFinderConversation` com um token de outra
- * natureza. O montador agora é um só, `linksDoCaso`, o mesmo das rotas
- * públicas, e este caso cobra o resultado na resposta de `getLostCase`.
+ * `/c/{finderToken}` é a CONVERSA de quem avisou sem conta.
  */
 void describe('getLostCase: os links do caso apontam para as páginas do site', () => {
   void it('share_url é /p/{shareToken} e poster_url é /cartaz/{shareToken}', async () => {
@@ -597,10 +482,6 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
     };
     const resposta = await servidor({
       casoDoDono: caso,
-      // **LIGADO de proposito.** Este caso cobra a FORMA dos links; com o
-      // interruptor no padrao (desligado) os dois campos nao sairiam e as duas
-      // asercoes abaixo comparariam `undefined` com `undefined` -- passando sem
-      // medir nada, que e a vacuidade que este repositorio paga caro.
       paginasPublicadas: true,
     }).inject({
       method: 'GET',
@@ -613,20 +494,7 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
     assert.equal(corpo['poster_url'], `${BASE_DA_WEB}/cartaz/${caso.shareToken}`);
   });
 
-  /**
-   * O OUTRO LADO DO MESMO INTERRUPTOR, e ele e o que protege o produto hoje.
-   *
-   * MEDIDO em 20/10/2026, de fora, nos dois ambientes: `GET /p/<token>` responde
-   * **404** em `hml.bichu.app` e em `bichu.app`, e `web/src/pages/` nao tem a
-   * pasta. O cartao de pre-visualizacao que o 404 serve diz
-   * `og:title: Pagina nao encontrada · Bichu`.
-   *
-   * Entao, enquanto a linha de `site_page_availability` disser `false`, os dois
-   * enderecos **nao saem**. A asercao e sobre a CHAVE e nao sobre o valor
-   * (`in`), porque `corpo['share_url'] === undefined` passaria tambem se o campo
-   * saisse com valor nulo -- e nulo e um endereco que o aplicativo poderia
-   * tentar abrir.
-   */
+  /** O OUTRO LADO DO MESMO INTERRUPTOR, e ele e o que protege o produto hoje. */
   void it('com a pagina NAO publicada, share_url e poster_url nao saem', async () => {
     const caso: CasoGravado = {
       id: '018f3a2b-0000-7000-8000-0000000000ef' as CaseId,
@@ -660,8 +528,6 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
         'pagina do pet nao existe.',
     );
     assert.equal('poster_url' in corpo, false, 'O cartaz tambem da 404 hoje.');
-    // O CONTROLE: o caso saiu de verdade. Sem esta linha as duas asercoes acima
-    // passariam com a rota respondendo um corpo vazio, ou 200 sem caso nenhum.
     assert.equal(corpo['share_token'], undefined, 'LostCase nunca carregou share_token.');
     assert.equal(corpo['id'], caso.id, 'O caso TEM de estar na resposta.');
     assert.equal(corpo['area_label'], 'Pinheiros, São Paulo');

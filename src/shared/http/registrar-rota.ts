@@ -1,51 +1,4 @@
-/**
- * Registro de rota. **É aqui que o teto de chamada passa a existir.**
- *
- * ## O que este arquivo troca
- *
- * Antes: `app.post(rota.path, handler)`. O objeto de `defineRoute` chegava
- * inteiro à borda e só a sua propriedade `path` era consumida. O `rateLimit`
- * ficava declarado, obrigatório por tipo, e **nunca lido** — a declaração e a
- * aplicação eram dois atos ligados por uma string.
- *
- * Agora: `registrarRota(app, rota, opcoes, handler)`. Quem registra passa a
- * rota inteira, e é o registro que instala os ganchos que aplicam os tetos
- * declarados nela. Não existe passo a lembrar, porque não existe passo.
- *
- * ## As três coisas que deixam de ser exprimíveis
- *
- * 1. **Registrar sem aplicar.** O portão `varrer-registro-direto` reprova
- *    qualquer `app.get/post/put/patch/delete(` fora deste arquivo, e ele tem
- *    isca própria — uma varredura que não acusa o caso plantado reprova a si
- *    mesma.
- * 2. **Registrar sem contador.** O contador chega pelo decorador
- *    `tetoDeChamada`, que `criarServidor` instala e cujo tipo é obrigatório nas
- *    opções do servidor. Um `FastifyInstance` sem ele derruba o registro na
- *    subida, nomeando o que falta — não em produção, na primeira requisição.
- * 3. **Declarar uma dimensão e não resolvê-la.** `ip`, `ip_24` e `origin` saem
- *    da requisição crua e o registro resolve sozinho. As demais (`account`,
- *    `email`, `code`, `pet`, `token_family`, `finder_identity`) o autor da rota
- *    precisa fornecer, e a falta é **erro de compilação**: o tipo
- *    `ResolvedoresExigidos` extrai as dimensões da própria tupla declarada em
- *    `defineRoute`.
- *
- * ## Ordem dos ganchos, que é onde está a parte que importa
- *
- * ```
- * onRequest      teto das dimensões de requisição crua  <- 429 sai daqui
- * onRequest      os ganchos da própria rota (ex.: conferência de assinatura)
- * preValidation  teto das dimensões que precisam do corpo ou da credencial
- * handler
- * onError        marca a tentativa como inválida, pelo `type` do problema
- * onResponse     conta a inválida (`applies_to: invalid_attempts`)
- * ```
- *
- * O teto genérico vem **antes** do gancho da rota, e não é detalhe de estilo: a
- * conferência de assinatura do webhook é deliberadamente cara (tempo constante),
- * e o critério 3 da BICHUS-178 exige que a chamada recusada por teto não chegue
- * a ser conferida. Se este arquivo inverter as duas linhas, o teto continua
- * respondendo 429 e deixa de proteger do que ele existe para proteger.
- */
+/** Registro de rota. **É aqui que o teto de chamada passa a existir.** */
 import type {
   FastifyInstance,
   FastifyPluginCallback,
@@ -85,21 +38,11 @@ import type { RateLimitEntry, ReauthScope, RouteDefinition } from './route-defin
 
 /**
  * O cabeçalho da segunda credencial, como o contrato o declara no esquema de
- * segurança `reauth`. Em minúsculas porque é assim que o Fastify normaliza.
+ * segurança `reauth`.
  */
 export const CABECALHO_DE_REAUTENTICACAO = 'x-reauth-token';
 
-/**
- * Quem sabe se a janela de reautenticação vale, e a consome.
- *
- * Assinatura e não objeto: o que o registro precisa é de uma função, e o módulo
- * `identity` é quem a fornece. `shared/http` continua sem conhecer o serviço de
- * identidade — a dependência anda na direção certa, como a do contador de teto.
- *
- * Recusa **lançando** `AppError('reauthentication-required')`. Devolver um
- * booleano deixaria o chamador esquecer de olhar, que é a forma do defeito que
- * este arquivo inteiro existe para eliminar.
- */
+/** Quem sabe se a janela de reautenticação vale, e a consome. */
 export type VerificadorDeReautenticacao = (
   request: FastifyRequest,
   escopo: ReauthScope,
@@ -107,41 +50,26 @@ export type VerificadorDeReautenticacao = (
 
 declare module 'fastify' {
   interface FastifyInstance {
-    /** Instalado por `criarServidor`. Ver `OpcoesDoServidor.teto`. */
+    /** Instalado por `criarServidor`. */
     tetoDeChamada?: DependenciasDoTeto;
     /**
-     * Instalado por `criarServidor` quando `OpcoesDoServidor.reautenticacao`
-     * vem preenchido. Rota que declara `reauthScope` num servidor sem ele
-     * **não sobe**, e o motivo sai escrito.
+     * Instalado por `criarServidor` quando `OpcoesDoServidor.reautenticacao` vem
+     * preenchido.
      */
     reautenticacao?: VerificadorDeReautenticacao;
   }
   interface FastifyRequest {
-    /**
-     * Marcada em `onError` quando o problema é recusa de credencial. Lida em
-     * `onResponse`, que é o único gancho que roda sempre.
-     */
+    /** Marcada em `onError` quando o problema é recusa de credencial. */
     tentativaInvalida?: true;
-    /** O consumo da janela de reautenticacao desta requisicao, para devolver em 412/428. */
+    /**
+     * O consumo da janela de reautenticacao desta requisicao, para devolver em
+     * 412/428.
+     */
     reautenticacaoConsumida?: ReautenticacaoConsumida | undefined;
   }
 }
 
-/**
- * Os tipos de problema que significam **credencial recusada**, e só eles.
- *
- * `applies_to: invalid_attempts` conta a tentativa que se revelou inválida. A
- * tentação é contar todo 4xx, e ela está errada de um jeito caro: o webhook do
- * Postmark faz 600 chamadas legítimas por hora, e um punhado delas com um
- * `RecordType` que ainda não classificamos responde **400**. Contar esses 400
- * gastaria o teto de 20 inválidas com tráfego legítimo e passaria a recusar o
- * provedor — o oposto do que o teto existe para fazer.
- *
- * Então a decisão é pelo `type` do problema, que é vocabulário fechado do
- * contrato, e não pelo status. `tag-revoked` fica **fora** de propósito: quem
- * escaneia uma plaquinha revogada acertou um código real, e isso é resolução
- * bem-sucedida de uma tag morta, não tentativa inválida.
- */
+/** Os tipos de problema que significam **credencial recusada**, e só eles. */
 export const TIPOS_DE_TENTATIVA_INVALIDA: ReadonlySet<ProblemType> = new Set<ProblemType>([
   'unauthenticated',
   'invalid-credentials',
@@ -169,32 +97,20 @@ type DimensoesExigidas<T extends RouteDefinition> = Exclude<
 >;
 
 /**
- * Obrigatório quando a rota declara alguma dimensão específica; ausente quando
- * não declara nenhuma. `[X] extends [never]` (e não `X extends never`) porque a
- * forma simples distribui sobre a união e responde a pergunta errada.
+ * Obrigatório quando a rota declara alguma dimensão específica; ausente quando não
+ * declara nenhuma.
  */
 type ResolvedoresExigidos<T extends RouteDefinition> = [DimensoesExigidas<T>] extends [never]
   ? { readonly resolvedores?: undefined }
   : { readonly resolvedores: Readonly<Record<DimensoesExigidas<T>, ResolvedorDeDimensao>> };
 
 export type OpcoesDeRegistro<T extends RouteDefinition> = ResolvedoresExigidos<T> & {
-  /** Schema do Fastify, como antes. O corpo continua saindo do contrato. */
+  /** Schema do Fastify, como antes. */
   readonly schema?: RouteShorthandOptions['schema'];
   readonly config?: RouteShorthandOptions['config'];
-  /** Ganchos da própria rota. Rodam DEPOIS do teto das dimensões genéricas. */
+  /** Ganchos da própria rota. */
   readonly onRequest?: readonly onRequestAsyncHookHandler[];
-  /**
-   * Ganchos de `preValidation` da própria rota. Rodam DEPOIS do teto das
-   * dimensões que dependem do corpo ou da credencial, pela mesma razão que
-   * `onRequest`: o critério 3 da BICHUS-178 exige que a chamada recusada por
-   * teto não chegue a executar trabalho da rota.
-   *
-   * Existe porque duas operações do contrato declaram `requestBody` com
-   * `required: false` e precisam de `corpoAusenteEhCorpoVazio` aqui
-   * (`fix/logout-sem-revogacao`, `c62ac0e`). Sem este campo, `app.route`
-   * receberia só `[tetoDoCorpo]` e o gancho da rota sumiria em silêncio — a
-   * chamada legítima sem corpo voltaria a levar 400 `body must be object`.
-   */
+  /** Ganchos de `preValidation` da própria rota. */
   readonly preValidation?: readonly preValidationHookHandler[];
 };
 
@@ -202,10 +118,7 @@ export type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<
 
 /**
  * O que a subida precisa dizer em voz alta: as entradas declaradas que este
- * mecanismo **não** aplica. Acumula por processo, e `api.ts` imprime a lista.
- *
- * Lista de exceção que ninguém vê é lista que cresce, e é a própria forma do
- * defeito que esta história conserta: uma proteção que se acredita existir.
+ * mecanismo **não** aplica.
  */
 const naoAplicadas: EntradaNaoAplicavel[] = [];
 
@@ -218,14 +131,7 @@ export function zerarInventario(): void {
   naoAplicadas.length = 0;
 }
 
-/**
- * O método declarado, no vocabulário do framework.
- *
- * Tabela e não `toUpperCase()`: a tabela é exaustiva por tipo, então acrescentar
- * um método a `RouteBase` sem acrescentá-lo aqui não compila. Com a conversão de
- * texto, o método novo chegaria ao framework como uma cadeia qualquer e falharia
- * na subida, que é tarde demais para algo que o compilador sabia.
- */
+/** O método declarado, no vocabulário do framework. */
 const METODOS = {
   get: 'GET',
   post: 'POST',
@@ -235,43 +141,20 @@ const METODOS = {
 } as const satisfies Record<RouteDefinition['method'], string>;
 
 /**
- * Os membros do servidor que **registram rota**, e que ninguém fora deste
- * arquivo pode alcançar.
- *
- * `Extract<keyof FastifyInstance, ...>` e não uma união solta: um nome que o
- * framework não tenha some do `Omit` abaixo em silêncio, e o `RegistradorDeRotas`
- * voltaria a expor o método. A lista é conferida contra a do framework.
+ * Os membros do servidor que **registram rota**, e que ninguém fora deste arquivo
+ * pode alcançar.
  */
 type MetodoDeRegistro = Extract<
   keyof FastifyInstance,
   'get' | 'head' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'all' | 'route'
 >;
 
-/**
- * O servidor **sem a porta dos fundos**. É o tipo que todo módulo de rota
- * recebe, e o que `escoparRotas` entrega.
- *
- * Por que isto existe, e por que não bastava o portão de código-fonte: o portão
- * acusa depois, na suíte, e acusa porque alguém lembrou de mantê-lo afiado. O
- * tipo acusa no editor, na hora, e **não tem furo de nome de variável** — um
- * parâmetro chamado `escopo`, `app` ou `xpto` simplesmente não tem `.post` para
- * chamar. Foi por um nome de variável que a versão anterior do portão deixou
- * passar o registro clandestino de `api.ts`.
- *
- * Tudo que não registra rota continua aqui: `register`, `addHook`, `listen`,
- * `close`, `decorate`, `log`, `inject`. Quem precisa do servidor inteiro é
- * `registrarRota`, e ele mora neste arquivo.
- */
+/** O servidor **sem a porta dos fundos**. */
 export type RegistradorDeRotas = Omit<FastifyInstance, MetodoDeRegistro>;
 
 /**
- * Abre um escopo prefixado e entrega ao chamador um servidor **sem** os métodos
- * de registro.
- *
- * `app.register((escopo, ...) => ...)` do framework tipa `escopo` como o
- * servidor inteiro, e era exatamente ali — dentro do escopo `/v1`, onde as seis
- * famílias de rotas entram — que `escopo.post(...)` compilava sem que nada
- * acusasse. Passando por aqui, o mesmo `escopo.post(...)` deixa de compilar.
+ * Abre um escopo prefixado e entrega ao chamador um servidor **sem** os métodos de
+ * registro.
  */
 export async function escoparRotas(
   app: RegistradorDeRotas,
@@ -279,9 +162,6 @@ export async function escoparRotas(
   montar: (registrador: RegistradorDeRotas) => void,
 ): Promise<void> {
   const plugin: FastifyPluginCallback = (escopo, _opcoes, pronto) => {
-    // O erro de registro (a fronteira administrativa, o verificador que falta)
-    // vai para `pronto`: lancado aqui dentro, ele nao chegaria a `ready()` e o
-    // carregador esperaria o `pronto` que nunca vem, ate estourar o tempo.
     try {
       montar(escopo);
     } catch (erro) {
@@ -306,23 +186,7 @@ function tetoDe(app: RegistradorDeRotas): DependenciasDoTeto {
   return teto;
 }
 
-/**
- * O portão da segunda credencial, e **ele nasce da declaração da rota**.
- *
- * `rota.reauthScope` é o mesmo `x-reauth-scope` do contrato, e
- * `rotas-registradas-contra-o-contrato.test.ts` cobra a equivalência nos dois
- * sentidos: operação com `reauth: []` cuja rota não declara o escopo reprova, e
- * rota que declara um escopo que o contrato não exige também.
- *
- * Isso é o que torna "esqueci de exigir a senha" inexprimível. Não existe passo
- * a lembrar no manipulador: quem escreve a rota declara a finalidade, e o
- * registro instala a conferência. `Desativar a tag` não pode entrar sem ela.
- *
- * Servidor sem o decorador derruba o registro **na subida**, e não na primeira
- * requisição destrutiva. Uma rota destrutiva que subisse sem verificador seria
- * uma rota destrutiva sem senha, e o silêncio é exatamente o desfecho que este
- * arquivo recusa.
- */
+/** O portão da segunda credencial, e **ele nasce da declaração da rota**. */
 function portaoDeReautenticacao(
   app: RegistradorDeRotas,
   rota: RouteDefinition,
@@ -346,19 +210,8 @@ function portaoDeReautenticacao(
 }
 
 /**
- * A rota administrativa so sobe dentro do escopo da guarda, e o escopo so
- * aceita rota administrativa (ADR-0027 item 7). Sao as quatro formas de uma
- * rota escapar da guarda, e cada uma derruba a subida com o motivo:
- *
- * 1. rota com `/admin/` no caminho, ou com declaracao administrativa, fora do
- *    escopo: ela seria servida sem guarda nenhuma;
- * 2. rota do escopo sem `/admin/` no caminho: o contrato nao a conhece ali;
- * 3. rota do escopo sem `adminRoles` nem `adminPublic`: a guarda nao teria
- *    papel contra o que conferir, e conferir contra lista vazia recusa tudo ou,
- *    escrito do jeito errado, aprova tudo;
- * 4. escrita do escopo sem `audit`, ou leitura com `audit`: GET nao muda estado
- *    (ADR-0027 item 3), e escrita administrativa sem trilha e o estado que D49
- *    proibe.
+ * A rota administrativa so sobe dentro do escopo da guarda, e o escopo so aceita
+ * rota administrativa (ADR-0027 item 7).
  */
 function exigirFronteiraAdministrativa(
   rota: RouteDefinition,
@@ -384,21 +237,11 @@ function exigirFronteiraAdministrativa(
   if ((rota.adminRoles === undefined) === (rota.adminPublic !== true)) {
     falha('rota do escopo administrativo precisa declarar adminRoles OU adminPublic, e so um dos dois');
   }
-  // `adminPublic` e a guarda sem sessao. Ela vale por lista fechada, e nao por
-  // quem lembrou de declarar: uma terceira rota sem sessao e decisao de
-  // arquitetura, nao de registro.
   if (rota.adminPublic === true && !OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.includes(rota.operationId)) {
     falha(
       `adminPublic fora da lista fechada de operacoes sem sessao (${OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.join(', ')})`,
     );
   }
-  // GET administrativo nao muda estado e nao declara audit, com UMA excecao: a
-  // LEITURA DE DADO PESSOAL AUDITADA (D55), que exige verbo de leitura na acao
-  // E teto por linhas devolvidas (D56). Rota sem sessao nunca e essa excecao:
-  // leitura de pessoa sem conta identificada nao tem a quem atribuir a trilha.
-  // E a mesma regra que o portao do contrato administrativo impoe no contrato
-  // (regra 5), aqui no codigo; o inverso (teto por linhas sem trilha) tambem
-  // nao sobe.
   const contaLinhas = (rota.rateLimit ?? []).some((t) => t.counts === 'rows_returned');
   if (rota.method === 'get' && rota.audit !== undefined) {
     const verbo = rota.audit.action.split('.').pop() ?? '';
@@ -424,11 +267,6 @@ function portaoDeReautenticacaoAdministrativa(
   const escopo = rota.adminReauthScope;
   if (escopo === undefined || superficie === undefined) return undefined;
   return async (request) => {
-    // QA bug 4 (28/09): a precondicao que da para conferir SEM o recurso vem
-    // ANTES de gastar a janela. Toda operacao com `x-admin-reauth-scope` e
-    // escrita versionada com `If-Match` obrigatorio (conferido contra o
-    // contrato em `superficie-administrativa.test.ts`); sem ele, e o 428 que a
-    // rota daria, e a janela fica intacta para a pessoa tentar de novo.
     const versao = request.headers['if-match'];
     if (versao === undefined || versao === '') {
       throw new AppError('precondition-required', 'Falta a versão que você leu');
@@ -446,16 +284,14 @@ function portaoDeReautenticacaoAdministrativa(
 
 /**
  * Respostas que provam que a escrita NAO aconteceu: a versao do `If-Match` nao
- * confere (412) ou faltou (428). Nelas a janela gasta volta. Qualquer outra
- * resposta, sucesso inclusive, mantem o consumo: devolver depois de uma
- * gravacao que deu certo seria a reautenticacao servindo duas vezes.
+ * confere (412) ou faltou (428).
  */
 const DEVOLVEM_A_JANELA: ReadonlySet<number> = new Set([412, 428]);
 
 /**
- * Devolve a janela ANTES de a resposta sair (`onSend`, e nao `onResponse`):
- * quem recebe o 412 recarrega e tenta de novo na hora, e a janela precisa ja
- * estar de volta quando o segundo pedido chegar.
+ * Devolve a janela ANTES de a resposta sair (`onSend`, e nao `onResponse`): quem
+ * recebe o 412 recarrega e tenta de novo na hora, e a janela precisa ja estar de
+ * volta quando o segundo pedido chegar.
  */
 function devolucaoDaReautenticacaoAdministrativa(
   rota: RouteDefinition,
@@ -469,21 +305,13 @@ function devolucaoDaReautenticacaoAdministrativa(
     try {
       await consumo.devolver();
     } catch (erro) {
-      // A resposta continua a mesma: a pessoa reautentica de novo, que e o
-      // comportamento de antes. Mas nao some.
       request.log.error({ err: erro, operationId: rota.operationId }, 'a janela de reautenticacao nao foi devolvida');
     }
     return carga;
   };
 }
 
-/**
- * Registra a rota e liga os tetos dela.
- *
- * `rota.method` finalmente é consumido: era o único campo do objeto, junto com
- * `path`, que a borda lia — e ainda assim o método era repetido à mão em
- * `app.post(...)`. Agora a declaração é a única fonte dos dois.
- */
+/** Registra a rota e liga os tetos dela. */
 export function registrarRota<const T extends RouteDefinition>(
   app: RegistradorDeRotas,
   rota: T,
@@ -494,8 +322,6 @@ export function registrarRota<const T extends RouteDefinition>(
   const superficie = app.superficieAdministrativa;
   exigirFronteiraAdministrativa(rota, superficie);
   if (superficie !== undefined) anotarMetodoDaSuperficie(superficie, rota);
-  // A marca da rota de 405 e so de `fecharMetodosDaSuperficie`: numa rota
-  // comum ela a tiraria da conferencia de subida contra o contrato.
   if (opcoes.config !== undefined && 'metodoNaoPermitido' in opcoes.config) {
     throw new Error(
       `Rota ${rota.operationId}: \`config.metodoNaoPermitido\` e reservada a rota de 405 do painel, ` +
@@ -505,9 +331,6 @@ export function registrarRota<const T extends RouteDefinition>(
   const portaoDeReauth = portaoDeReautenticacao(app, rota);
   const portaoDeReauthAdministrativa = portaoDeReautenticacaoAdministrativa(rota, superficie);
   const devolucaoDaReauth = devolucaoDaReautenticacaoAdministrativa(rota, superficie);
-  // O corpo administrativo e FECHADO de verdade: o Ajv do Fastify apaga o campo
-  // desconhecido em silencio (`removeAdditional`), e numa escrita do painel isso
-  // e responder 200 a um campo que nao foi gravado. O guarda roda antes do Ajv.
   const corpoDaRota = opcoes.schema?.body;
   const corpoFechado =
     superficie !== undefined && typeof corpoDaRota === 'object' && corpoDaRota !== null
@@ -530,20 +353,11 @@ export function registrarRota<const T extends RouteDefinition>(
     if (erro !== undefined) throw erro;
   };
 
-  // A ÚNICA reabertura do tipo largo em todo o `src/`, e ela está no arquivo
-  // que o portão autoriza. `RegistradorDeRotas` é o mesmo objeto com os métodos
-  // de registro escondidos; aqui eles voltam, porque é aqui que se registra.
   (app as FastifyInstance).route({
     method: METODOS[rota.method],
     url: rota.path,
     ...(opcoes.schema === undefined ? {} : { schema: opcoes.schema }),
-    // A declaracao inteira vai para `config`: e dali que a guarda do escopo
-    // administrativo le o papel minimo da operacao.
     config: { ...(opcoes.config ?? {}), rotaDeclarada: rota },
-    // A ordem é a do cabeçalho deste arquivo, com o portão da segunda
-    // credencial entre o teto e os ganchos da rota: a chamada recusada por teto
-    // não chega a custar a leitura do banco que a conferência da janela faz, e
-    // nenhum gancho da rota roda antes de a senha ter sido conferida.
     onRequest: [
       tetoDeEntrada,
       ...(portaoDeReauth === undefined ? [] : [portaoDeReauth]),
@@ -558,16 +372,11 @@ export function registrarRota<const T extends RouteDefinition>(
       }
       pronto();
     },
-    // Depois da resposta ter saído: contar não pode atrasar quem já foi
-    // recusado, e a contagem que atrasa a resposta vira o próprio custo que o
-    // teto existe para evitar.
     onResponse: async (request) => {
       if (request.tentativaInvalida !== true) return;
       try {
         await contarTentativaInvalida(rota, request, resolvedores, deps);
       } catch (erro) {
-        // Falha ao contar não derruba nada (a resposta já saiu), mas também não
-        // some: um contador que para de contar é o teto voltando a não existir.
         deps.log(
           { operation_id: rota.operationId, err: String(erro) },
           'nao foi possivel contar a tentativa invalida',
@@ -594,17 +403,6 @@ const METODOS_QUE_O_PAINEL_PODE_RECEBER = ['GET', 'POST', 'PUT', 'PATCH', 'DELET
 /**
  * `405 method-not-allowed`, com `Allow`, para todo metodo que um caminho da
  * superficie administrativa NAO declara (ADR-0027 item 20.5).
- *
- * Sem isto o `GET` do "nao fui eu" responderia 404, que e a resposta de "esta
- * rota nao existe": o painel, a borda e quem investiga um log leriam a coisa
- * errada, e a regra "so por POST" ficaria implicita. Chamado por
- * `escoparRotasAdministrativas` depois de todas as rotas do escopo, porque so
- * entao se sabe o que cada caminho declara.
- *
- * A rota de 405 nao tem `rotaDeclarada`, entao a guarda do escopo faz so as
- * duas primeiras conferencias: sem `X-Internal-Surface` continua 404 (D33), e
- * com `Authorization` continua 401 (D36). A superficie nao se revela a quem nao
- * veio pela borda administrativa.
  */
 export function fecharMetodosDaSuperficie(
   app: RegistradorDeRotas,
@@ -617,8 +415,6 @@ export function fecharMetodosDaSuperficie(
     (app as FastifyInstance).route({
       method: faltando,
       url: caminho,
-      // A marca que `vigiarParametrosDasRotas` le para nao cobrar operacao do
-      // contrato de uma rota que so existe para recusar o metodo.
       config: { metodoNaoPermitido: true },
       handler: async (_request, reply) => {
         void reply.header('Allow', permitidos);

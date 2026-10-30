@@ -1,13 +1,4 @@
-/**
- * Testes do adaptador do gerenciador de segredos (ADR-0022).
- *
- * Sem rede: `fetch` entra por parâmetro. O que está sob teste não é o protocolo
- * do provedor — é a **tradução da falha dele para a mensagem que o operador
- * consegue usar**. O caso do `403` é o motivo de o arquivo existir: ele chega
- * tanto para "a conta não tem acesso" quanto para "o segredo não existe", e um
- * `permission denied` cru no log de subida manda quem lê mexer em IAM quando o
- * defeito era um segredo que ninguém criou.
- */
+/** Testes do adaptador do gerenciador de segredos (ADR-0022). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -15,10 +6,8 @@ import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
 import { criarSecretProviderGerenciado, type Buscar } from './gcp-secret-manager.js';
 
 /**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia
- * 404 na VM e passava aqui, porque o duble respondia a qualquer URL com
- * `metadata`). Literal, e nao importado: trocar a constante do adaptador
- * reprova este arquivo.
+ * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
+ * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
  */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
@@ -31,9 +20,7 @@ const TOKEN = JSON.stringify({ access_token: 'token-descartavel', expires_in: 36
 
 /**
  * `fetch` falso: responde o token no endereço de metadados e delega o resto ao
- * caso. As chamadas ficam registradas para que o teste confira o ENDEREÇO —
- * é ali que se prova que o nome da variável vira o identificador do segredo
- * sem tradução nenhuma.
+ * caso.
  */
 function buscarFalso(
   responder: (url: string) => Response,
@@ -43,7 +30,6 @@ function buscarFalso(
     const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
     chamadas.push(url);
     if (url === METADADOS_EXATO) return Promise.resolve(new Response(TOKEN, { status: 200 }));
-    // Qualquer outra forma do endereco de metadados: 404, como na VM.
     if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
     return Promise.resolve(responder(url));
   };
@@ -143,7 +129,6 @@ void describe('o valor não vaza e não é adulterado', () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
       if (url === METADADOS_EXATO) return Promise.resolve(new Response('', { status: 404 }));
-      // Qualquer outra forma do endereco de metadados: 404, como na VM.
       if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(respostaComValor('v'));
     };

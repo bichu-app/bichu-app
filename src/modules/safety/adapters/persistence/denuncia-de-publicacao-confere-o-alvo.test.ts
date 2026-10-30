@@ -1,32 +1,6 @@
 /**
- * ISCA (e): **a denúncia de publicação usa a que JÁ EXISTE, e desde 20/10/2026
- * ela confere o alvo.**
- *
- * ## O buraco que estes casos fecham, e ele estava declarado
- *
- * `publication_reports` nasceu em 18/10/2026 **sem hospedeiro**: a tabela de
- * publicações não existia, a escrita gravava a denúncia com o endereço recebido
- * e não conferia nada. O custo estava dito em voz alta no próprio código —
- * *"hoje esta rota aceita um endereço de publicação que não existe, e grava a
- * denúncia dele"* — e a chave estrangeira que faltava estava escrita e comentada
- * no fim da migração `20261018000032`.
- *
- * **Nada disso foi substituído.** A operação `reportPublication` é a mesma, a
- * etiqueta `safety` continua com SEIS operações, a tabela é a mesma, a lista de
- * cinco motivos é a mesma e a função
- * `publicacao_ocultada_para_quem_denunciou` é a mesma. O que entrou foi a
- * conferência de alvo e a chave estrangeira.
- *
- * ## Por que o recorte da denúncia é o MESMO da leitura
- *
- * Sem o predicado de conexão aceita, qualquer conta poderia perguntar *"este
- * endereço existe?"* pelo desfecho da denúncia: `202` quando existe, `404`
- * quando não. É um oráculo, e o ADR-0021 recusa justamente isso.
- *
- * E ser **o mesmo** não é simetria decorativa: mais frouxo faria a denúncia ser
- * a leitura que a linha do tempo recusa; mais apertado deixaria publicação
- * visível e não denunciável — e o ponto de acesso da denúncia é o próprio
- * cartão, que só aparece na linha do tempo.
+ * ISCA (e): **a denúncia de publicação usa a que JÁ EXISTE, e desde 20/10/2026 ela
+ * confere o alvo.**
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -107,18 +81,6 @@ void describe('ISCA (e): a denuncia de publicacao confere o alvo, com o recorte 
   });
 
   void it('ISCA (e) -- a perna do PROPRIO AUTOR existe, e e ela que torna `eu_mesmo` alcancavel', () => {
-    // **Sem esta perna o desfecho `eu_mesmo` e CODIGO MORTO**, e a rota responde
-    // `404` a quem denuncia o proprio texto -- ninguem tem aresta de conexao
-    // consigo, entao a propria publicacao caia no mesmo `ausente` de
-    // inexistente.
-    //
-    // E `404` ali e o desenho errado: `CAMPO_E_CODIGO.publication` existe em
-    // `safety-routes.ts` desde 18/10 com a mensagem *"Esta publicacao e sua.
-    // Para tira-la do ar, apague-a."* -- o produto JA decidiu que este caso e
-    // `400 own_publication`, com a saida que o resolve.
-    //
-    // **Medido a mao contra Postgres**: antes da perna, `404`; com ela, `400`
-    // com `code: own_publication`.
     assert.match(
       alvo().sql,
       /p\.author_user_id = \$\d+::uuid\s*\n?\s*or exists/i,
@@ -152,9 +114,6 @@ void describe('ISCA (e): a denuncia de publicacao confere o alvo, com o recorte 
   });
 
   void it('CONTRAPESO -- o alvo SELECIONA id, autor e o corpo que a denuncia congela', () => {
-    // Sem ele, as iscas de omissao passariam num mundo em que a consulta nao
-    // devolve nada -- e sem `corpo` a denuncia perde o texto CONGELADO, que e o
-    // que o administrador julga.
     const { sql } = alvo();
     assert.match(sql, /"?p"?\."?id"? as "?id"?/);
     assert.match(sql, /"?p"?\."?author_user_id"? as "?autor"?/);
@@ -190,8 +149,6 @@ void describe('ISCA (e): a denuncia que existia NAO foi substituida por outra', 
   });
 
   void it('ISCA (e) -- a etiqueta `safety` continua com SEIS operacoes', () => {
-    // O Mural tem etiqueta propria (`publications`). Uma operacao do Mural que
-    // tivesse caido em `safety` apareceria aqui.
     let seis = 0;
     for (const item of Object.values(spec.paths)) {
       for (const metodo of METODOS) {
@@ -202,10 +159,6 @@ void describe('ISCA (e): a denuncia que existia NAO foi substituida por outra', 
   });
 
   void it('ISCA (e) -- `ModerationOrigin` continua com as CINCO origens, `publication` entre elas', () => {
-    // A perna `publication` da visao `fila_de_moderacao` e o valor do enum JA
-    // existiam em `development` (migracao `20261018000032`, secao 7): esta
-    // fatia nao os criou, e este caso reprova quem os remover achando que eram
-    // desta frente.
     assert.deepEqual(
       [...(spec.components.schemas.ModerationOrigin?.enum ?? [])],
       ['review', 'conversation', 'profile', 'photo', 'publication'],

@@ -1,10 +1,4 @@
-/**
- * A regra dos dois campos de raça.
- *
- * O caso central é negativo e é o motivo de o arquivo existir: **texto livre
- * com raça da lista precisa ser recusado**. Um teste que só confirmasse "aceita
- * outro_dog com texto" passaria com a regra invertida instalada.
- */
+/** A regra dos dois campos de raça. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { conferirRaca, ehCodigoOutro, rotuloDaRaca } from './breed.js';
@@ -23,8 +17,6 @@ void describe('conferência da raça', () => {
   });
 
   void it('RECUSA texto livre junto de raça da lista', () => {
-    // "Shih Tzu" no código e "poodle" no texto são duas respostas para uma
-    // pergunta, e ninguém consegue resolver a divergência depois.
     assert.equal(
       conferirRaca({ breedCode: 'shih_tzu', breedFreeText: 'poodle' }),
       'texto_livre_com_codigo_da_lista',
@@ -61,8 +53,6 @@ void describe('rótulo da raça', () => {
   });
 
   void it('outro_* usa o texto da pessoa, e não o rótulo genérico da lista', () => {
-    // Se devolvesse o rótulo da lista aqui, toda ficha de raça fora da lista
-    // diria "Outra", que é a informação que o campo existe para evitar.
     assert.equal(rotuloDaRaca({ breedCode: 'outro_dog', breedFreeText: 'Akita' }, 'Outra'), 'Akita');
   });
 

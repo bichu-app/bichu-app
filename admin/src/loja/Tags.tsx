@@ -21,12 +21,7 @@ const CHIPS = [
   { valor: 'inativas', rotulo: 'Inativas' },
 ];
 
-/**
- * 6 · Tags (secao 25.5.4): o vocabulario curado da Loja. Nao ha exclusao;
- * desativar tira a tag do app e mantem o vinculo com os produtos, e reativar o
- * devolve (contrato, `updateAdminStoreTag`). A ordem e alfabetica, a unica do
- * contrato para esta lista.
- */
+/** 6 · Tags (secao 25.5.4): o vocabulario curado da Loja. */
 export default function Tags() {
   const { api } = useSessao();
   const [p, mudar] = useParametrosDaLista(PADROES);
@@ -57,7 +52,6 @@ export default function Tags() {
   );
   const { estado, carregarMais, recarregar, substituir } = useListaPaginada<Tag>(chave, buscar);
 
-  // "{n} de 40 tags ativas · {m} inativas": dois totais, pedidos com limit=1.
   useEffect(() => {
     const controle = new AbortController();
     void Promise.all([

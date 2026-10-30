@@ -1,33 +1,4 @@
-/**
- * ISCA — a rota da duvida de ajuda esta REGISTRADA, e nao so declarada.
- *
- * ## O defeito que este arquivo existe para impedir que volte
- *
- * `POST /v1/me/conversations-seen` respondeu **404** em homologacao em
- * 20/10/2026 por faltar **uma** chamada de `registrarRota`. Tudo o mais
- * existia: a operacao no contrato, o `defineRoute` exportado, o servico, o
- * repositorio e o app chamando. Nenhum portao pegou, porque
- * `rotas-registradas-contra-o-contrato.test.ts` compara os `defineRoute`
- * EXPORTADOS com a spec e **nunca pergunta se `registrarRota` foi chamada**.
- *
- * Aqui a conta de repetir aquele defeito seria alta de um jeito proprio: o
- * tutor escreve a duvida, toca em `Enviar`, ve o recado de recebido, e **nada
- * foi gravado**. Ele fica esperando uma resposta que nunca vem, e ninguem do
- * lado de ca descobre, porque a fila vazia e indistinguivel de "ninguem
- * perguntou nada hoje".
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Comente o bloco `registrarRota(app, rotaDeDuvidaDeAjuda, ...)` em
- * `help-request-routes.ts`: reprova
- * `ISCA: POST /me/help-requests nao e 404`. Religue e volta.
- *
- * ## POR QUE A FUNCAO DE PRODUCAO, e nao `registrarRota` direto
- *
- * Registrar a rota aqui provaria que o MECANISMO funciona, que e o que ja se
- * sabe. O que quebra e a FIACAO. Entao os casos chamam `registrarRotasDeAjuda`
- * -- a mesma funcao que `src/bin/api.ts` chama.
- */
+/** ISCA — a rota da duvida de ajuda esta REGISTRADA, e nao so declarada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -73,10 +44,6 @@ function dependenciasDeTeste(registro: OQueChegou): DependenciasDasRotasDeAjuda 
         return Promise.resolve();
       },
     },
-    // O esquema do corpo e pedido no momento do REGISTRO e nao no do pedido.
-    // `additionalProperties: false` AQUI TAMBEM nao e detalhe do duble:
-    // `recusarCampoDesconhecido` **derruba a subida** quando montado sobre
-    // corpo aberto, e um duble sem esta linha faria o registro estourar.
     contrato: {
       requestBodySchema: () => ({
         type: 'object',
@@ -123,8 +90,6 @@ void describe('ISCA: a rota da duvida de ajuda responde', () => {
           'sido gravado -- e fila vazia e indistinguivel de dia sem pergunta.',
       );
       assert.equal(resposta.statusCode, 202, `Corpo: ${resposta.body}`);
-      // O CORPO, campo a campo. **Nenhum portao deste repositorio confere corpo
-      // de resposta**: so o corpo da REQUISICAO e validado.
       assert.deepEqual(
         JSON.parse(resposta.body),
         { status: 'accepted' },
@@ -290,13 +255,9 @@ void describe('ISCA: a rota da duvida de ajuda responde', () => {
 
 void describe('ISCA: a fila administrativa das duvidas responde', () => {
   /**
-   * O DEFEITO QUE ESTE BLOCO EXISTE PARA IMPEDIR e o do passkey: servidor,
-   * contrato e entitlement no lugar, **nenhuma porta de interface**, banco com
-   * zero credenciais e nenhum portao acusando. A escrita sem a leitura e
-   * exatamente a mesma forma de nada.
-   *
-   * Comente `registrarRota` em `admin-help-request-routes.ts`: reprova
-   * `ISCA: GET /admin/help-requests nao e 404`.
+   * O DEFEITO QUE ESTE BLOCO EXISTE PARA IMPEDIR e o do passkey: servidor, contrato
+   * e entitlement no lugar, **nenhuma porta de interface**, banco com zero
+   * credenciais e nenhum portao acusando.
    */
   const PAGINA = {
     itens: [
@@ -308,9 +269,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
       },
     ],
     total: 7,
-    // DIFERENTE de `total`, de proposito: com os dois iguais, uma rota que
-    // trocasse um pelo outro passaria. `abertas` ignora o filtro e e o
-    // numerinho do menu.
     abertas: 3,
   };
 
@@ -330,16 +288,7 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
   const ORIGEM = 'https://painel.exemplo.test';
 
-  /**
-   * A sessao administrativa de mentira, com o papel que a rota exige.
-   *
-   * **A rota e montada pelo INVOLUCRO de verdade**, e nao solta no servidor:
-   * `registrarRota` RECUSA registrar rota `/admin/` fora de
-   * `escoparRotasAdministrativas` -- *"ela seria servida sem a guarda do
-   * prefixo (ADR-0027 item 7)"*. Descobri isso por este caso reprovando, e a
-   * recusa e o desenho funcionando: a fronteira administrativa nao e
-   * contornavel nem por engano, nem num teste.
-   */
+  /** A sessao administrativa de mentira, com o papel que a rota exige. */
   const SESSAO = {
     sessionId: 'sessao-de-teste',
     adminAccountId: 'conta-admin-de-teste',
@@ -396,8 +345,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
       );
       assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
 
-      // O CORPO, campo a campo. **Nenhum portao deste repositorio confere corpo
-      // de resposta**: so o corpo da REQUISICAO e validado.
       const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
       assert.deepEqual(Object.keys(corpo).sort(), [
       'items',
@@ -414,14 +361,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
           'do menu e IGNORA o filtro: com o filtro aplicado nos dois, o menu anunciaria ' +
           '"0 pendentes" toda vez que alguem abrisse a aba dos atendidos.',
       );
-      // O CONJUNTO EXATO, e nao "contem": e a lista fechada que impede o autor
-      // de entrar. `attended_at` e `attended_by` falam da OPERADORA que
-      // marcou -- conta do painel --, e `status` e derivado do instante.
-      //
-      // NADA DO TUTOR pode sair: o contrato afirma em TRES lugares que a fila
-      // de pedidos de encontro e "a unica leitura de pessoa do backoffice v1"
-      // (D53 a D57), e projeta-lo aqui criaria a segunda e tornaria aquela
-      // frase falsa nos tres lugares.
       assert.deepEqual(
         Object.keys((corpo['items'] as Record<string, unknown>[])[0] ?? {}).sort(),
         ['attended_at', 'attended_by', 'body', 'created_at', 'ref', 'status', 'subject'],
@@ -478,14 +417,7 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
 void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () => {
   const ORIGEM_DA_ESCRITA = 'https://painel.exemplo.test';
-  /**
-   * O token anti-CSRF, e o HASH dele na sessao.
-   *
-   * Sem isto a guarda responde **403**, e foi o que ela fez quando eu montei a
-   * bancada com um hash de zeros: o par cookie + `X-CSRF-Token` e exigido em
-   * todo metodo nao seguro, e a rota de marcar e POST. A recusa e o desenho
-   * funcionando -- so que, aqui, ela escondia o que o caso queria medir.
-   */
+  /** O token anti-CSRF, e o HASH dele na sessao. */
   const TOKEN_ANTI_CSRF = 'token-anti-csrf-de-teste';
   const ATENDIDA: DuvidaNaFila = {
     ref: 'AAAAAAAAAAAAAAAAAAAAAA',
@@ -565,8 +497,6 @@ void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () =>
       );
       assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
 
-      // O CORPO, campo a campo. Nenhum portao deste repositorio confere corpo
-      // de resposta: so o da REQUISICAO e validado.
       assert.deepEqual(JSON.parse(resposta.body), {
         ref: 'AAAAAAAAAAAAAAAAAAAAAA',
         subject: 'Nao salva o segundo pet',
@@ -630,9 +560,6 @@ void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () =>
   });
 
   void it('ISCA: a rota declara TRILHA, e o verbo e de escrita', () => {
-    // A regra 2 do portao de contrato administrativo cobra isto no contrato; o
-    // `defineRoute` e o espelho dela no codigo, e `rotas-registradas-contra-o-contrato`
-    // compara os dois. Este caso e a terceira linha: ele le a declaracao.
     assert.deepEqual(rotaDeAtenderDuvida.audit, {
       action: 'admin.help_request.attended',
       resourceKind: 'help_request',

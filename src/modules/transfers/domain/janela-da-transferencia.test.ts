@@ -1,10 +1,4 @@
-/**
- * A janela de 24 h, medida.
- *
- * Os casos de limite existem porque e neles que a regra se perde: um `>` no
- * lugar de um `>=` consuma um minuto cedo e ninguem percebe ate a primeira
- * plaquinha morrer antes da hora.
- */
+/** A janela de 24 h, medida. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -81,9 +75,6 @@ void describe('podeCancelar', () => {
   });
 
   void it('linha aceita com a janela ja vencida nao aceita cancelamento tardio', () => {
-    // Worker parado, banco restaurado: o estado diz `accepted` e o mundo ja
-    // passou do ponto. Responder 200 aqui prometeria um desfazer que o proximo
-    // ciclo do worker desmentiria.
     assert.equal(podeCancelar(aceita, em(30 * 3_600_000)), false);
   });
 });

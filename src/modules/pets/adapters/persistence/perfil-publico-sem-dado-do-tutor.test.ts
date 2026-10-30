@@ -1,10 +1,6 @@
 /**
  * A consulta do perfil público não lê dado do tutor nem id interno, e filtra no
  * `WHERE`, e o SQL compilado prova as duas coisas.
- *
- * O teste HTTP (`adapters/http/perfil-publico.test.ts`) usa dublê no lugar da
- * porta e não enxerga esta camada. Mesmo instrumento de
- * `autorizacao-na-clausula-where.test.ts`: compilador do Postgres, sem banco.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

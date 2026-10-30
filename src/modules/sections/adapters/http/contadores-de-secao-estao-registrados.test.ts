@@ -1,39 +1,4 @@
-/**
- * ISCA — as DUAS rotas dos contadores estao REGISTRADAS, e nao so declaradas.
- *
- * ## O defeito que este arquivo existe para impedir que volte
- *
- * `POST /v1/me/conversations-seen` respondeu **404** em homologacao em
- * 20/10/2026 (`fb3a0fba`) porque faltava **uma** chamada de `registrarRota`.
- * Tudo o mais existia: a operacao no contrato, o `defineRoute` exportado, o
- * servico, o repositorio e o app chamando. O efeito foi inteiro -- o contador
- * de mensagens nao zerava por nenhum caminho -- e foi CALADO, porque o cliente
- * Dart engole a falha dessa chamada de proposito.
- *
- * **Nenhum portao pegou**, e o motivo e estrutural:
- * `rotas-registradas-contra-o-contrato.test.ts` compara os `defineRoute`
- * EXPORTADOS com a spec, e nunca pergunta se `registrarRota` foi chamada; e a
- * operacao nao estava em `OPERACOES_AINDA_SEM_ROTA`, a lista onde uma ausencia
- * DELIBERADA tem de estar escrita com motivo. Ela estava no vao entre as duas.
- *
- * Estas duas rotas sao do MESMO TIPO -- um par "conta" + "vi" que o app chama e
- * cuja falha ele tambem engole --, entao elas precisam da mesma isca.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Comente o bloco `registrarRota(app, rotaDeContadoresDeSecao, ...)` em
- * `section-counter-routes.ts`: reprova
- * `ISCA: GET /me/section-counters nao e 404`. Comente o bloco de
- * `rotaDeSecaoVista`: reprova
- * `ISCA: POST /me/sections-seen nao e 404`. Religue e os dois voltam.
- *
- * ## POR QUE A FUNCAO DE PRODUCAO, e nao `registrarRota` direto
- *
- * Registrar a rota aqui provaria que o MECANISMO de registro funciona, que e o
- * que ja se sabe. O que estava quebrado era a FIACAO. Entao estes casos chamam
- * `registrarRotasDosContadoresDeSecao` -- a mesma funcao que `src/bin/api.ts`
- * chama -- e mandam a requisicao no servidor que saiu dela.
- */
+/** ISCA — as DUAS rotas dos contadores estao REGISTRADAS, e nao so declaradas. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -52,13 +17,7 @@ import type { SecaoComContador } from '../../ports/marcadores-de-secao.js';
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 
-/**
- * Numeros DIFERENTES entre si e diferentes de zero, de proposito.
- *
- * Com os tres iguais, um `comoResposta` que trocasse dois campos de lugar
- * passaria. Com zero, um handler que devolvesse `{}` passaria pela leitura de
- * campo ausente como `undefined`.
- */
+/** Numeros DIFERENTES entre si e diferentes de zero, de proposito. */
 const CONTAGEM: ContadoresDeSecao = {
   perdidosNovos: 3,
   eventosNovos: 7,
@@ -83,17 +42,9 @@ function dependenciasDeTeste(registro: OQueChegou): DependenciasDasRotasDosConta
         return Promise.resolve(CONTAGEM);
       },
     },
-    // A rota de escrita pede o esquema de corpo do contrato no momento do
-    // REGISTRO, e nao no do pedido: sem este duble,
-    // `registrarRotasDosContadoresDeSecao` estoura antes de chegar na rota.
     contrato: {
       requestBodySchema: () => ({
         type: 'object',
-        // `additionalProperties: false` AQUI TAMBEM, e nao e detalhe do duble:
-        // `recusarCampoDesconhecido` **derruba a subida** quando montado sobre
-        // schema de corpo aberto (verificacao que nao consegue verificar
-        // reprova). Um duble sem esta linha faria o registro das rotas estourar
-        // -- que e o portao do guarda funcionando.
         additionalProperties: false,
         required: ['section'],
         properties: {
@@ -136,9 +87,6 @@ void describe('ISCA: as duas rotas dos contadores das abas respondem', () => {
           'contador de MENSAGENS sem zerar em 20/10/2026, e calado.',
       );
       assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
-      // O CORPO, campo a campo. **Nenhum portao deste repositorio confere corpo
-      // de resposta**, e foi assim que `open_case_id` fixo em nulo passou por
-      // tudo. Tres numeros distintos: campo trocado de lugar reprova.
       assert.deepEqual(JSON.parse(resposta.body), {
         lost_pets_new: 3,
         network_events_new: 7,

@@ -1,29 +1,4 @@
-/**
- * A conferencia pura da sugestao do diretorio.
- *
- * ## O que este arquivo NAO consegue exercitar, dito antes de alguem acreditar
- * no verde
- *
- * O detector de D59 de verdade (`temContatoOuPagamento`, por
- * `errosDeTextoDeUsuario`) mora em `modules/network/domain`, e
- * `arquitetura/fronteira-de-modulo` reprova importa-lo de dentro de
- * `src/modules/professionals/` -- **inclusive de um `.test.ts`**, porque aquela
- * regra nao tem isencao para teste. Medido:
- *
- *     error  Import de 'professionals' para 'network/domain'.
- *            Módulo só conversa com módulo por porta.
- *
- * Entao o que estes casos provam e o que ESTE modulo faz: que
- * `display_name` e `note` sao levados ao detector com o campo e os tetos
- * certos, e que uma recusa dele chega inteira ao `400`. **Que o detector
- * reconhece "chama no 11 98765-4321" e caso da suite da `Rede`**, e nao se
- * repete aqui -- repeti-lo com um dobro feito a mao provaria o dobro.
- *
- * O contato publico e diferente, e por isso ele e testado de verdade: o
- * telefone usa a regua do banco que esta neste arquivo, e o site usa o
- * `errosDoEnderecoCompleto` de `shared/url`, que e importavel e e o de
- * producao.
- */
+/** A conferencia pura da sugestao do diretorio. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -46,15 +21,7 @@ interface ChamadaDoDetector {
   readonly maximo: number;
 }
 
-/**
- * O dobro das conferencias injetadas.
- *
- * `recusar` faz o detector acusar o que ele acusaria em producao, com o MESMO
- * `code` que `errosDeTextoDeUsuario` usa. A gramatica do handle do Instagram e
- * a documentada em `handleDoInstagram` (1 a 30 de letra, digito, ponto e
- * sublinhado): aqui ela existe para que os casos do `@` exercitem o DESPACHO
- * deste modulo, que e a parte que este arquivo responde por.
- */
+/** O dobro das conferencias injetadas. */
 function conferenciasDobradas(opcoes: {
   readonly recusar?: readonly string[];
   readonly chamadas?: ChamadaDoDetector[];
@@ -241,8 +208,6 @@ void describe('o recibo e recibo, e nao o recurso sugerido', () => {
   void it('traz `reference`, `state: pending` e `created_at`, e MAIS NADA', () => {
     const recibo = projetarRecibo({
       ref: 'u7YkQwE2tLm9ZpR4sA',
-      // `comoData` e nao `new Date`: a camada pura nao le o relogio, e a regra
-      // de lint vale tambem no teste.
       createdAt: comoData(Date.UTC(2026, 9, 17, 12, 0, 0) as Instant),
     });
     assert.deepEqual(Object.keys(recibo).sort(), ['created_at', 'reference', 'state']);

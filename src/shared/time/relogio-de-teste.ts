@@ -1,14 +1,4 @@
-/**
- * Relógio parado, para teste.
- *
- * Existe porque a regra de lint proíbe `Date.now()` e `new Date()` em
- * `domain/**` e `application/**` — inclusive nos testes dessas camadas, e isso
- * é proposital: teste que lê o relógio da máquina é teste que falha às 23h59 do
- * último dia do mês, numa execução que ninguém consegue reproduzir. O projeto já
- * gastou uma investigação inteira atrás de uma falha intermitente.
- *
- * A saída daqui é sempre a mesma em toda execução, em qualquer fuso.
- */
+/** Relógio parado, para teste. */
 import type { Clock } from './clock.js';
 import type { Instant } from '../types/brands.js';
 

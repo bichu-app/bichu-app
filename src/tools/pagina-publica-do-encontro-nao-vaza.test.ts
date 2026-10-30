@@ -1,27 +1,6 @@
 /**
  * AS ISCAS DE VAZAMENTO DA PAGINA PUBLICA DO ENCONTRO (emenda 4 do ADR-0017,
  * decisao do cliente de 21/10/2026).
- *
- * `/encontro/{slug}` e lida por **qualquer pessoa da internet, sem conta**, e
- * ela se alimenta de `getNetworkEvent` -- operacao de autenticacao OPCIONAL,
- * que o portao de contrato publico trata como publica. Entao tudo que entrar em
- * `NetworkEventPublic` daqui para frente sai para estranhos, e este arquivo
- * existe para que isso nao aconteca por descuido.
- *
- * ## POR QUE ESTES CASOS MEXEM NO CONTRATO DE VERDADE
- *
- * `portao-contrato-publico.test.ts` prova o portao com operacoes sinteticas, o
- * que esta certo la: ele testa o PORTAO. Aqui o alvo e outro -- a pergunta nao
- * e "o portao sabe reprovar?", e sim **"o portao reprova O MEU CAMPO, no
- * contrato que esta no disco?"**. Por isso cada isca abaixo carrega
- * `api/openapi.yaml`, injeta o vazamento em `NetworkEventPublic` e exige a
- * reprovacao nominal.
- *
- * A diferenca importa porque o buraco que estes casos fecharam era exatamente
- * de nome: `CAMPOS_PROIBIDOS` compara por nome EXATO, tinha `street` e
- * `address`, e **nao tinha `street_address`** -- que e como a coluna do encontro
- * se chama. Antes de 21/10/2026 o portao aprovava um `street_address` em
- * `NetworkEventPublic`, e nenhuma isca sintetica teria mostrado isso.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -63,13 +42,7 @@ function operacoesSemConta() {
   return { contrato, semConta };
 }
 
-/**
- * Roda o portao sobre um contrato em que `NetworkEventPublic` ganhou `campos`.
- *
- * A injecao e no OBJETO ja carregado, e nao num arquivo temporario, para que a
- * isca nao dependa de escrever no disco -- e para que ela sempre parta do
- * contrato de verdade, inclusive das mudancas que chegarem depois desta.
- */
+/** Roda o portao sobre um contrato em que `NetworkEventPublic` ganhou `campos`. */
 function achadosComCamposInjetados(campos: Record<string, unknown>): string[] {
   const s = spec();
   const publico = esquema(s, 'NetworkEventPublic');
@@ -81,9 +54,6 @@ function achadosComCamposInjetados(campos: Record<string, unknown>): string[] {
 }
 
 void describe('a pagina publica do encontro nao vaza', () => {
-  // -------------------------------------------------------------------------
-  // CONTROLE POSITIVO -- sem ele nenhuma isca abaixo vale nada
-  // -------------------------------------------------------------------------
 
   void it('CONTROLE POSITIVO -- `getNetworkEvent` E uma operacao sem conta, e o portao a percorre', () => {
     const { semConta } = operacoesSemConta();
@@ -111,10 +81,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
     );
   });
 
-  // -------------------------------------------------------------------------
-  // ISCA (a) -- O LOGRADOURO
-  // -------------------------------------------------------------------------
-
   void it('ISCA DE VAZAMENTO -- `street_address` no detalhe publico REPROVA, pelo nome', () => {
     const achados = achadosComCamposInjetados({
       street_address: { type: 'string', nullable: true },
@@ -131,8 +97,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
   });
 
   void it('ISCA DE VAZAMENTO -- o logradouro por outros nomes tambem REPROVA', () => {
-    // Nome exato e a regra do portao, entao a lista de nomes e que carrega o
-    // peso. Estes tres sao as formas que um schema novo plausivelmente usaria.
     for (const nome of ['street', 'address', 'address_line']) {
       const achados = achadosComCamposInjetados({ [nome]: { type: 'string' } });
       assert.ok(
@@ -143,7 +107,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
   });
 
   void it('o contrato de HOJE nao tem logradouro em `NetworkEventPublic`', () => {
-    // A afirmacao direta, sem portao no meio: o que esta no disco agora.
     const propriedades = Object.keys(esquema(spec(), 'NetworkEventPublic').properties ?? {});
     for (const proibido of [
       'street_address',
@@ -164,10 +127,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
       );
     }
   });
-
-  // -------------------------------------------------------------------------
-  // ISCA (b) -- IDENTIFICADOR INTERNO
-  // -------------------------------------------------------------------------
 
   void it('ISCA DE VAZAMENTO -- UUID interno na rota publica REPROVA (SEC-001, ADR-0010 item 6)', () => {
     for (const nome of ['id', 'event_id', 'created_by_id']) {
@@ -194,15 +153,9 @@ void describe('a pagina publica do encontro nao vaza', () => {
     );
   });
 
-  // -------------------------------------------------------------------------
-  // ISCA (c) -- O PRIVADO NAO GANHA PAGINA
-  // -------------------------------------------------------------------------
-
   void it('ISCA DE VAZAMENTO -- o teaser do privado continua com CINCO propriedades e sem `share_url`', () => {
     const teaser = esquema(spec(), 'NetworkEventPrivateTeaser');
     const propriedades = Object.keys(teaser.properties ?? {}).sort();
-    // Lista permitida e nao proibida: e o unico jeito de a chegada de um campo
-    // novo reprovar sem ninguem ter previsto o nome dele.
     assert.deepEqual(
       propriedades,
       ['local_date', 'slug', 'status', 'title', 'visibility'],
@@ -217,10 +170,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
       'REPROVA: o teaser deixou de ser lista fechada.',
     );
   });
-
-  // -------------------------------------------------------------------------
-  // O INTERRUPTOR -- a ausencia do campo e o que o apaga
-  // -------------------------------------------------------------------------
 
   void it('`share_url` existe em `NetworkEventPublic` e NAO esta em `required`', () => {
     const publico = esquema(spec(), 'NetworkEventPublic');
@@ -240,9 +189,6 @@ void describe('a pagina publica do encontro nao vaza', () => {
   });
 
   void it('`share_url` nao e campo privado para o portao', () => {
-    // Prova que o campo que ESTA ME INTERESSANDO passa: uma isca que reprova
-    // tudo nao distingue nada. Ele e um endereco de pagina publica, montado com
-    // `WEB_BASE_URL` e o `slug`, e nao carrega nada de ninguem.
     const { semConta } = operacoesSemConta();
     const achados = inspecionarCamposPublicos(spec(), semConta).filter(
       (a) => a.campo === 'share_url',

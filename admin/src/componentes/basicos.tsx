@@ -7,10 +7,7 @@ type TipoDeBanner = 'erro' | 'alerta' | 'info' | 'ok';
 
 const ICONE_DO_BANNER: Record<TipoDeBanner, NomeDoIcone> = { erro: 'error', alerta: 'warning', info: 'info', ok: 'check' };
 
-/**
- * Banner (secao 11.6). Erro e `role="alert"`; o resto e `status`. `aoFechar`
- * poe o botao Fechar (sucesso persistente, secao 25.5).
- */
+/** Banner (secao 11.6). Erro e `role="alert"`; o resto e `status`. */
 export function Banner({
   tipo,
   titulo,
@@ -81,7 +78,10 @@ export function Selo({ tipo }: { tipo: TipoDeSelo }) {
   );
 }
 
-/** Estado vazio (secao 11.10): a lista nao tem nenhum registro, sem busca nem filtro. */
+/**
+ * Estado vazio (secao 11.10): a lista nao tem nenhum registro, sem busca nem
+ * filtro.
+ */
 export function EstadoVazio({ titulo, corpo, acao, destino }: { titulo: string; corpo: string; acao: string; destino: string }) {
   return (
     <div className="vazio">
@@ -228,53 +228,40 @@ export function CampoDeTexto({
   dataCy?: string;
   contador?: boolean;
   maximo?: number;
-  /** `tel` entrou em 17/10/2026 com o primeiro campo de telefone do painel (diretorio de `Perto`). */
+  /**
+   * `tel` entrou em 17/10/2026 com o primeiro campo de telefone do painel (diretorio
+   * de `Perto`).
+   */
   tipo?: 'text' | 'email' | 'url' | 'date' | 'number' | 'tel';
-  /** `tel` oferece o teclado de discagem no celular, com o `+` que o numero de fora do Brasil precisa. */
+  /**
+   * `tel` oferece o teclado de discagem no celular, com o `+` que o numero de fora
+   * do Brasil precisa.
+   */
   modoDeEntrada?: 'decimal' | 'numeric' | 'url' | 'text' | 'email' | 'tel';
   autoComplete?: string;
   somenteLeitura?: boolean;
   autoFoco?: boolean;
   /** So do campo de uma linha: nenhuma area de texto da tela precisa de `ref`. */
   referencia?: React.Ref<HTMLInputElement>;
-  /**
-   * Conferencia **ao sair do campo**. O momento em que um e-mail pode ser
-   * conferido sem interromper quem ainda digita: a cada tecla, `leandro@g`
-   * seria erro durante toda a digitacao.
-   */
+  /** Conferencia **ao sair do campo**. */
   aoSair?: () => void;
-  /**
-   * Desliga correcao automatica, maiuscula automatica e corretor ortografico.
-   * Para endereco, identificador e codigo: as tres transformam o que a pessoa
-   * escreveu, e no celular a maiuscula automatica e a causa numero um de
-   * `Leandro@...` num campo de e-mail.
-   */
+  /** Desliga correcao automatica, maiuscula automatica e corretor ortografico. */
   semCorrecao?: boolean;
   /**
-   * Uma linha viva abaixo do campo com a forma final do que foi digitado
-   * ("Fica R$ 1.234,56."). Mesmo recurso que `CampoDoInstagram` ja usa para
-   * `@handle`, e e o que mostra o `R$` sem bota-lo dentro do valor.
+   * Uma linha viva abaixo do campo com a forma final do que foi digitado ("Fica R$
+   * 1.234,56.").
    */
   comoFica?: string;
   /**
-   * Com `linhas`, o campo e uma AREA DE TEXTO dessa altura inicial, e nao um
-   * campo de uma linha: a pessoa escreve em paragrafos e a quebra de linha vai
-   * no valor (pedido do cliente de 17/10/2026, sobre a "Descricao" do
-   * produto).
-   *
-   * `tipo` e `modoDeEntrada` nao se aplicam a area de texto, e por isso nao
-   * sao passados adiante: `type` num `<textarea>` nao existe.
+   * Com `linhas`, o campo e uma AREA DE TEXTO dessa altura inicial, e nao um campo
+   * de uma linha: a pessoa escreve em paragrafos e a quebra de linha vai no valor
+   * (pedido do cliente de 17/10/2026, sobre a "Descricao" do produto).
    */
   linhas?: number;
 }) {
   const idDaAjuda = `${id}-ajuda`;
   const idDoContador = `${id}-contador`;
   const idDoComoFica = `${id}-como-fica`;
-  // A previa VAZIA fica no DOM (e regiao `aria-live`, e sumir dela mata o
-  // anuncio), mas sai do `aria-describedby`: o no vazio nao descreve nada e
-  // ainda emenda um espaco no fim da descricao acessivel do campo. `''` e
-  // estado normal e esperado -- e o que `CampoDeValorEmReais`,
-  // `CampoDeCep` e `CampoDeTelefone` passam enquanto o valor nao da previa.
   const descritores = [erro || ajuda ? idDaAjuda : undefined, comoFica ? idDoComoFica : undefined, contador ? idDoContador : undefined]
     .filter(Boolean)
     .join(' ');
@@ -304,9 +291,6 @@ export function CampoDeTexto({
           {...comuns}
         />
       ) : (
-        // `rows` e a altura INICIAL; a rolagem e do proprio `textarea` quando o
-        // texto passa dela. Sem altura fixa em CSS: travar a altura e o defeito
-        // que o pedido do cliente justamente descreve.
         <textarea rows={linhas} {...comuns} />
       )}
       {erro ? (
@@ -346,8 +330,8 @@ export function ErroDoCampo({ id, children }: { id: string; children: ReactNode 
 }
 
 /**
- * Resumo de erros no topo do formulario (3.13): um link por campo, e o foco
- * vai para o resumo quando ele aparece.
+ * Resumo de erros no topo do formulario (3.13): um link por campo, e o foco vai
+ * para o resumo quando ele aparece.
  */
 export function ResumoDeErros({
   titulo,

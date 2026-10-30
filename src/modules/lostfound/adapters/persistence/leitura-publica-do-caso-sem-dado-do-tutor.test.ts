@@ -1,14 +1,6 @@
 /**
  * A consulta da leitura pública do caso não lê dado do tutor, e o SQL compilado
  * prova isso.
- *
- * O teste HTTP (`adapters/http/leitura-publica-do-caso.test.ts`) prova que a
- * resposta não carrega o que não deve. Ele não enxerga esta camada: com dublê no
- * lugar da porta, uma consulta que passasse a juntar `users` e selecionar
- * `email` continuaria verde lá, e o dado estaria a um `...linha` de sair. Aqui se
- * lê a lista de colunas do SQL que o adaptador de fato compila, com o compilador
- * do Postgres e sem banco (mesmo instrumento de
- * `pets/adapters/persistence/autorizacao-na-clausula-where.test.ts`).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -43,11 +35,7 @@ function listaDeSaida(sql: string): string {
   return achado[1] ?? '';
 }
 
-/**
- * Colunas que não podem ser SAÍDA desta consulta. `owner_user_id` fica de fora
- * desta lista porque ele aparece, legitimamente, dentro da comparação que vira
- * `do_chamador`; o caso próprio abaixo cobra que ele só apareça assim.
- */
+/** Colunas que não podem ser SAÍDA desta consulta. */
 const SAIDAS_PROIBIDAS: readonly RegExp[] = [
   /"lost_cases"\."id"/,
   /"pets"\."id"/,

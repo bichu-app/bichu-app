@@ -1,42 +1,4 @@
-/**
- * O caso de uso da vitrine passa ao registro o MESMO proposito que assinou.
- *
- * ## O DEFEITO, MEDIDO E NAO SUPOSTO
- *
- * Relato do cliente em 18/10/2026, contra homologacao: *"no perfil do usuario,
- * para subir a foto esta dando erro"*. Medido contra a pilha efemera de
- * integracao, no commit `f8c74714` -- o MESMO que
- * `https://hml.bichu.app/v1/health` reportava -- `POST
- * /v1/me/showcase/photo-intents` devolvia `201` e `PUT /v1/me/showcase`
- * devolvia `404` para a MESMA `upload_id`. Na tabela, a chave era de pessoa
- * (`people/original/...`, o prefixo de `user_showcase`) e a coluna `purpose`
- * dizia `network_event`.
- *
- * Eram DOIS lugares decidindo o proposito: este caso de uso, para assinar, e a
- * funcao de persistencia, com um literal proprio -- e `api.ts` tinha ligado a
- * funcao do ENCONTRO aqui. Agora ha UM valor (`PROPOSITO_DA_VITRINE`), e ele
- * vai para os dois lados.
- *
- * ## O QUE ESTE ARQUIVO MEDE, E POR QUE AQUI
- *
- * So o que e do caso de uso: que o proposito ENTREGUE ao registro e o mesmo que
- * foi ao preparador. O dublê do registro e o ponto de observacao -- com a
- * funcao de verdade, este arquivo importaria `media/adapters`, e a fronteira de
- * modulo (com razao) recusa.
- *
- * Os outros dois pedacos da mesma regra:
- *
- * - `src/modules/media/adapters/persistence/intencao-da-vitrine-grava-o-proposito.test.ts`
- *   -- que a funcao escreve na coluna o proposito que recebeu;
- * - `src/tools/vitrine-ligada-ao-registrador-certo.test.ts` -- a FIACAO de
- *   `api.ts`, que e onde o defeito morava.
- *
- * ## ISCA CONFERIDA
- *
- * Em 18/10/2026, trocando `purpose: PROPOSITO_DA_VITRINE` por
- * `purpose: 'network_event' as typeof PROPOSITO_DA_VITRINE` em
- * `autorizarEnvio`, os dois casos abaixo reprovam pelo nome.
- */
+/** O caso de uso da vitrine passa ao registro o MESMO proposito que assinou. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -68,8 +30,6 @@ async function autorizar(): Promise<Medicao> {
       assinados.push(proposito);
       return Promise.resolve({
         uploadId: UPLOAD,
-        // `comoObjectKey` e a UNICA porta da marca (BICHUS-134): `as ObjectKey`
-        // aqui prometeria ao compilador uma conferencia que ninguem fez.
         chave: chaveDeTeste(proposito),
         contentType,
         maxBytes: 5_242_880,
@@ -96,7 +56,6 @@ async function autorizar(): Promise<Medicao> {
       registrados.push(nova.purpose);
       return Promise.resolve();
     },
-    // Nenhum caso deste arquivo toca banco: o dublê acima não o usa.
     db: undefined as never,
     clock: relogioParado(INSTANTE_FIXO),
   });
@@ -133,9 +92,6 @@ void describe('a vitrine entrega ao registro o proposito que assinou (defeito de
   void it('ISCA: o proposito REGISTRADO é o mesmo que ASSINOU a política', async () => {
     const { assinados, registrados } = await autorizar();
 
-    // Esta é a conferência que o defeito teria reprovado: a chave assinada saiu
-    // `people/...` (propósito da vitrine) e a linha foi ao banco com
-    // `network_event`. Dois lugares decidindo, uma divergência.
     assert.deepEqual(
       registrados,
       assinados,

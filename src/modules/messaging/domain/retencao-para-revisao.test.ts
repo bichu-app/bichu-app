@@ -1,11 +1,4 @@
-/**
- * Os dois gatilhos de `hold_for_review` (critérios 10, 11 e 17).
- *
- * O critério 17 existe porque contar a coisa errada aqui **inverte** a
- * contramedida, e os dois casos que ele nomeia estão abaixo palavra por
- * palavra: trinta mensagens num caso só não disparam, uma mensagem em três
- * casos diferentes dispara.
- */
+/** Os dois gatilhos de `hold_for_review` (critérios 10, 11 e 17). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -60,9 +53,6 @@ void describe('critério 17 — o que se conta são CASOS, não mensagens', () =
   });
 
   void it('quem não tem conta não tem série a contar', () => {
-    // O token do achador tem escopo de UMA conversa. Contar casos distintos
-    // deste lado é contar sempre `1`, e um `0` interpretado como `undefined`
-    // faria o gatilho nunca valer para quem tem conta.
     assert.equal(
       retencaoDestaMensagem({ mensagensDoParticipante: 5, casosDistintosDaConta: undefined }),
       null,
@@ -84,9 +74,6 @@ void describe('quando os dois valem, o motivo mais grave é o que a moderação 
 
 void describe('ISCA — os números vêm do contrato e não podem derivar em silêncio', () => {
   void it('são 200 mensagens e 3 casos, como `api/openapi.yaml` declara', () => {
-    // O contrato é a fonte dos dois números. Mudá-los aqui sem mudá-los lá faz
-    // o mesmo `200` significar duas coisas no mesmo sistema, e o lugar onde a
-    // divergência aparece é a fila de moderação vazia.
     assert.equal(TETO_DE_MENSAGENS_EM_24H, 200);
     assert.equal(TETO_DE_CASOS_DISTINTOS_EM_24H, 3);
   });

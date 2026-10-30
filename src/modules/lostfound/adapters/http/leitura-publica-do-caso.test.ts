@@ -1,28 +1,4 @@
-/**
- * `GET /v1/public/lost-cases/{shareToken}` e `.../poster`, pela borda HTTP.
- *
- * ## O teste de não-vazamento, que é o motivo deste arquivo
- *
- * Regra inviolável do produto: **resposta pública nunca expõe telefone,
- * endereço, e-mail nem id interno do tutor** (ADR-0021, SEC-001, SEC-002). Para
- * que "não expõe" seja verificável, o dublê da porta aqui é HOSTIL: além do
- * `CasoPublico` legítimo, ele devolve o e-mail, o telefone, o endereço e os UUIDs
- * do tutor, do pet e do caso como propriedades a mais, e planta os mesmos dados
- * dentro do texto livre (descrição, cuidados, marcas, nome). É o cenário de
- * alguém um dia acrescentar `...linha` à projeção, ou juntar `users` na consulta
- * "porque já está na mão".
- *
- * A resposta então passa pelo detector `shared/http/vazamento-publico.ts`, que
- * reprova por quatro caminhos: propriedade que o contrato não declara (lida de
- * `api/openapi.yaml` em tempo de execução, não copiada aqui), nome proibido em
- * qualquer profundidade, valor plantado em qualquer campo, e qualquer UUID. As
- * iscas do detector estão no teste dele; aqui se prova a ROTA.
- *
- * O que este arquivo NÃO cobre: a consulta SQL. Com dublê no lugar da porta,
- * uma consulta que juntasse `users` passaria aqui. Quem cobre é
- * `adapters/persistence/leitura-publica-do-caso-sem-dado-do-tutor.test.ts`, que
- * lê o SQL compilado.
- */
+/** `GET /v1/public/lost-cases/{shareToken}` e `.../poster`, pela borda HTTP. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -65,17 +41,12 @@ const PLANTADOS: readonly ValorPlantado[] = [
 
 /**
  * O caso legítimo, com os dados sensíveis plantados no texto livre, e as
- * propriedades a mais que uma porta descuidada carregaria. O `as` é o ponto: a
- * interface não admite esses campos, e o dublê os força para provar que a
- * projeção é lista branca e não cópia.
+ * propriedades a mais que uma porta descuidada carregaria.
  */
 function casoHostil(parcial: Partial<CasoPublico> = {}): CasoPublico {
   const legitimo: CasoPublico = {
     shareToken: TOKEN,
     aberto: true,
-    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
-    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
-    // o adaptador nunca produz.
     reencontrado: false,
     petNome: `Thor ${TELEFONE_DO_TUTOR}`,
     especie: 'dog',
@@ -127,8 +98,6 @@ function montar(resposta: (chamador: UserId | undefined) => CasoPublico | undefi
     isProduction: false,
     teto: tetoDeTeste(),
   });
-  // O mesmo par de `src/bin/api.ts`: sem ele a bancada não exercita o 400 de
-  // parâmetro, que é um dos status que o contrato declara.
   const conferirParametros = vigiarParametrosDasRotas(app, contrato, '/v1');
   void app.register(
     (escopo, _opcoes, pronto) => {
@@ -262,17 +231,7 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
   });
 
-  /**
-   * O CORPO REAL do agradecimento, medido pela rota e não pela camada de
-   * aplicação.
-   *
-   * Nada neste repositório confere o corpo de uma RESPOSTA -- só o da
-   * requisição é validado contra o contrato --, então um desvio de corpo no 410
-   * novo só apareceria medindo a rota. Este caso é essa medição, e ele roda
-   * sobre `casoHostil`, que planta telefone, e-mail e endereço do tutor nos
-   * campos de texto livre: se a página de agradecimento copiasse qualquer coisa
-   * do caso, o achado sairia aqui.
-   */
+  /** O CORPO REAL do agradecimento, medido pela rota e não pela camada de aplicação. */
   void it('caso REENCONTRADO: 410 em problem+json, agradecendo e sem next_action', async () => {
     const bancada = montar(() => casoHostil({ aberto: false, reencontrado: true }));
     const resposta = await pedir(bancada, URL_DO_CASO);
@@ -301,9 +260,6 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
   });
 
   void it('o CARTAZ do mesmo caso reencontrado continua no 410 fundido', async () => {
-    // A rota do cartaz declara UM 410 no contrato. Medida na rota porque é
-    // a única maneira: nenhum portão estático compara o corpo emitido com o
-    // declarado.
     const resposta = await pedir(
       montar(() => casoHostil({ aberto: false, reencontrado: true })),
       URL_DO_CARTAZ,
@@ -321,8 +277,6 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     const desconhecido = await pedir(montar(() => undefined), URL_DO_CASO);
     const encerrado = await pedir(montar(() => casoHostil({ aberto: false })), URL_DO_CASO);
     assert.equal(desconhecido.status, 410);
-    // `correlation_id` identifica a requisição e muda a cada chamada; o resto
-    // do corpo precisa ser idêntico.
     const semCorrelacao = (corpo: Record<string, unknown>): Record<string, unknown> =>
       Object.fromEntries(Object.entries(corpo).filter(([chave]) => chave !== 'correlation_id'));
     assert.deepEqual(semCorrelacao(desconhecido.corpo), semCorrelacao(encerrado.corpo));
@@ -346,8 +300,6 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
     assert.equal(resposta.status, 200);
     assert.equal(resposta.corpo['pet_display_name'], 'Thor');
     assert.equal(resposta.corpo['short_url'], `https://web.exemplo.invalid/p/${TOKEN}`);
-    // ADR-0010: nenhuma recompensa, em nenhuma forma. O campo saiu do contrato
-    // em 23/09 e não pode voltar pela porta dos fundos.
     assert.equal('reward_note' in resposta.corpo, false);
   });
 
@@ -358,9 +310,6 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
   });
 
   void it('o cartaz nem lê o token: um token inválido continua respondendo 200, e não 401', async () => {
-    // `security: []` desde 23/09, e o contrato não declara 401 aqui. Se a rota
-    // passar a autenticar, este caso reprova antes de a resposta sair com um
-    // status que a especificação não promete.
     const resposta = await pedir(montar(() => casoHostil()), URL_DO_CARTAZ, 'token-vencido');
     assert.equal(resposta.status, 200);
   });
@@ -378,10 +327,7 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
 
 /**
  * O `type` que o contrato promete no 410 das duas operações, lido do exemplo de
- * `components/responses/LostCaseClosed`. É daqui, e não de uma string escrita
- * neste arquivo, que o esperado vem: foi uma string escrita à mão
- * (`conversation-closed`) que deixou o código e o contrato divergirem sem que
- * nenhum teste acusasse.
+ * `components/responses/LostCaseClosed`.
  */
 function slugDoCasoEncerrado(): string {
   const spec = carregarContrato('api/openapi.yaml').spec as {
@@ -402,8 +348,7 @@ function declara(contrato: Contrato, operationId: string, status: number): boole
 
 /**
  * Todo status que as duas rotas emitem está declarado, e o 410 aponta para
- * `LostCaseClosed`. O caminho é o da bancada inteira (validação de parâmetro e
- * teto de chamada ligados), e não uma lista de status copiada do contrato.
+ * `LostCaseClosed`.
  */
 void describe('os status que as rotas do caso emitem são os que o contrato declara', () => {
   const TOKEN_CURTO = 'curto';
@@ -425,12 +370,6 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
 
     assert.deepEqual([...emitidos].sort(), [200, 400, 401, 410]);
 
-    // Acima do teto de 120/h. O contrato declara 429 porque `challenge` sem
-    // `X-Captcha-Token` degenera em `deny_429` (ADR-0020), mas
-    // `aplicacao-de-teto.ts` hoje só recusa em `deny_429` e deixa `challenge`
-    // passar. O que se cobra aqui é que a 121ª saia com status DECLARADO, seja
-    // qual for dos dois; a divergência entre a política e a borda está no
-    // relatório da entrega, fora deste PR.
     const bancada = montar(() => casoHostil());
     let ultima = 0;
     for (let i = 0; i < 121; i += 1) ultima = (await pedir(bancada, URL_DO_CASO)).status;
@@ -447,8 +386,6 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
     emitidos.add((await pedir(montar(() => casoHostil()), `/v1/public/lost-cases/${TOKEN_CURTO}/poster`)).status);
     emitidos.add((await pedir(montar(() => undefined), URL_DO_CARTAZ)).status);
 
-    // `serve_cache` não recusa: acima do teto de 60/h continua 200, e por isso
-    // o contrato não declara 429 aqui.
     const bancada = montar(() => casoHostil());
     let ultima = 0;
     for (let i = 0; i < 61; i += 1) ultima = (await pedir(bancada, URL_DO_CARTAZ)).status;
@@ -462,20 +399,8 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
   });
 
   /**
-   * O 410 de cada operação aponta para a SUA resposta, e as duas são
-   * diferentes desde 28/10/2026.
-   *
-   * A página passou a declarar `LostCaseClosedOrReunited`, que documenta **dois**
-   * `type` -- o agradecimento do reencontrado e o `lost-case-closed` de sempre
-   * --, e o cartaz continua em `LostCaseClosed`, com um `type` só. O cartaz é
-   * papel: ele não ganhou o tipo novo, e emiti-lo por ali seria responder fora
-   * do contrato sem nenhum portão estático para acusar.
-   *
-   * **O `type` EMITIDO é medido nas duas, e com o token desconhecido**: é o
-   * motivo que não pode vazar em nenhuma das duas superfícies, e ele responde o
-   * corpo fundido de sempre, `next_action` incluído. Que o reencontrado tome o
-   * outro caminho está medido em
-   * `application/leitura-publica-do-caso.test.ts`.
+   * O 410 de cada operação aponta para a SUA resposta, e as duas são diferentes
+   * desde 28/10/2026.
    */
   void it('cada operação aponta para a sua resposta, e o token desconhecido fica fundido nas duas', async () => {
     const contrato = carregarContrato('api/openapi.yaml');

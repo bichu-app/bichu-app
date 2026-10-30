@@ -1,42 +1,4 @@
-/**
- * O teto da rota de envio, exercido pelo servidor de verdade.
- *
- * ## Por que este arquivo existe separado
- *
- * A conversa é um caminho de abuso óbvio: é por ela que o falso achador aborda
- * o tutor, e é nela que o produto promete um teto. Um teto **declarado** e não
- * aplicado foi exatamente o defeito da BICHUS-178, e ele ficou de pé por
- * semanas com o portão de contrato verde — porque o portão lia a especificação
- * e nunca abria `src/`.
- *
- * Então aqui a rota REAL é registrada num servidor REAL, com os NÚMEROS dela, e
- * as requisições são mandadas até estourar. Um teste que declarasse o seu
- * próprio teto de 3/min provaria que o mecanismo conta, e não que o teto do
- * produto vale.
- *
- * ## As duas iscas
- *
- * 1. **Com o contador desligado, o mesmo caso precisa REPROVAR.** Sem ela, um
- *    teste de limite que passa com o limitador desligado não testa limite
- *    nenhum.
- * 2. **As entradas que a borda NÃO aplica precisam aparecer no inventário.** As
- *    duas de `hold_for_review` são trabalho de domínio, e o perigo aqui não é
- *    elas não serem aplicadas: é elas sumirem em silêncio, que é a proteção que
- *    se acredita existir.
- *
- * ## O resolvedor é o DE PRODUÇÃO, e isso custou uma medição para virar regra
- *
- * A primeira versão deste arquivo declarava o resolvedor do balde inline, aqui
- * dentro. Ele era equivalente ao de produção, e por isso mesmo não provava
- * nada sobre ele: trocando `${conversa}:${conta}` por `${conta}` em
- * `conversation-routes.ts`, a suíte inteira ficava VERDE — 0 casos reprovados,
- * com as duas pessoas da conversa dividindo o mesmo balde e o falso achador
- * podendo calar o tutor gastando as 30 mensagens dele.
- *
- * É a mesma armadilha do dublê que recusa, uma camada acima: o teste prova o
- * mecanismo e deixa a fiação sem dono. Agora ele importa `resolvedoresDoEnvio`
- * e registra a rota com ele.
- */
+/** O teto da rota de envio, exercido pelo servidor de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -66,7 +28,7 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc';
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 const OUTRA_CONVERSA = '018f3a2b-0000-7000-8000-0000000000dd';
 
-/** O número que o contrato declara. Repetido aqui de propósito: ver o cabeçalho. */
+/** O número que o contrato declara. */
 const TETO_POR_HORA = 30;
 
 function servidor(contador: RateLimitStore) {
@@ -76,9 +38,6 @@ function servidor(contador: RateLimitStore) {
     teto: tetoDeTeste(contador),
     bodyLimitBytes: 1_048_576,
   });
-  // A rota real, com os resolvedores REAIS: `resolvedoresDoEnvio` é a mesma
-  // função que `registrarRotasDeConversas` usa. Ver o cabeçalho deste arquivo
-  // para o que um dublê equivalente aqui deixava passar.
   registrarRota(
     app,
     rotaDeEnvioDeMensagem,
@@ -88,14 +47,7 @@ function servidor(contador: RateLimitStore) {
   return app;
 }
 
-/**
- * As dependências que os resolvedores de produção exigem.
- *
- * Só o autenticador é exercido: os dois resolvedores precisam do chamador e de
- * mais nada. `conversas` e `contrato` não são tocados por eles, e um objeto
- * vazio com a marca de tipo é mais honesto do que montar um serviço inteiro que
- * este arquivo não usa.
- */
+/** As dependências que os resolvedores de produção exigem. */
 function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
   return {
     autenticador: { autenticar: () => Promise.resolve({ userId: CONTA as UserId }) },
@@ -103,12 +55,6 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
     contrato: undefined as unknown as DependenciasDasRotasDeConversa['contrato'],
     idempotencia: undefined as unknown as DependenciasDasRotasDeConversa['idempotencia'],
     clock: undefined as unknown as DependenciasDasRotasDeConversa['clock'],
-    // Entrou com a emenda 3 do ADR-0010 (19/10/2026). Os resolvedores de teto
-    // nao a tocam -- eles precisam do chamador e de mais nada --, e por isso
-    // ela segue a mesma forma dos vizinhos deste objeto.
-    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
-    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
-    // deixaria a isca da invariante verde com a chave do original gravada.
     assinarFoto: (chave: string) =>
       Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: undefined as unknown as DependenciasDasRotasDeConversa['baseDeMidia'],
@@ -119,8 +65,6 @@ async function enviar(app: ReturnType<typeof servidor>, conversa: string) {
   return app.inject({
     method: 'POST',
     url: `/conversations/${conversa}/messages`,
-    // O resolvedor de produção exige credencial: sem ela ele devolve
-    // `undefined`, a entrada é pulada e o teto não conta ninguém.
     headers: { authorization: 'Bearer token-de-teste' },
     payload: { body: 'oi' },
   });
@@ -157,9 +101,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
   });
 
   void it('o balde é POR CONVERSA: estourar numa não cala a pessoa na outra', async () => {
-    // Quem está combinando a devolução de dois animais ao mesmo tempo seria
-    // recusado por estar usando o produto. É por isso que a dimensão é o par
-    // (conversa, participante), e não `account`.
     zerarInventario();
     const app = servidor(criarContadorEmMemoria(() => Date.now()));
     try {
@@ -171,20 +112,7 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
     }
   });
 
-  /**
-   * O relógio parado em 00:00 UTC, que é quando o defeito aparecia.
-   *
-   * A rota declara DUAS entradas na mesma dimensão: 30/1h (`deny_429`) e
-   * 200/24h (`hold_for_review`). Enquanto a janela não entrava na `bucketKey`,
-   * as duas montavam a mesma chave, e o contador só as separava pelo início da
-   * janela — que coincide **toda madrugada entre 00:00 e 01:00 UTC**, 21h no
-   * Brasil. Nessa hora cada requisição somava dois, e o teto de 30 recusava na
-   * 16ª.
-   *
-   * Este caso congela esse instante. Sem ele o defeito só reprovava a suíte de
-   * quem rodasse dentro daquela hora, que é como ele chegou até aqui: some antes
-   * de alguém conseguir olhar, e volta no dia seguinte.
-   */
+  /** O relógio parado em 00:00 UTC, que é quando o defeito aparecia. */
   void it('duas entradas na mesma dimensão não se somam, nem às 00:00 UTC', async () => {
     zerarInventario();
     const MEIA_NOITE_UTC = Date.parse('2026-09-23T00:00:00.000Z');
@@ -205,25 +133,9 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
     }
   });
 
-  /**
-   * O mesmo, no MEIO da hora da colisão, e com a premissa medida.
-   *
-   * O caso logo acima prende o relógio em 00:00:00.000 exato, que é a fronteira.
-   * Este prende às 00:30 — dentro da hora, longe de qualquer borda — para que um
-   * erro de arredondamento na fronteira não seja a única coisa que os dois
-   * exercem. O primeiro caso deste arquivo, que usa `Date.now()`, só via o
-   * defeito se a suíte por acaso rodasse naquela hora: foi por isso que ele
-   * reprovou duas vezes num dia e catorze vezes não no outro, e por isso a
-   * hipótese foi para carga da máquina.
-   *
-   * A asserção de premissa é o que falta ao caso acima: `inicioDaJanela` é
-   * `floor(t/janela)*janela` sobre a época, e se os inícios de `1h` e `24h`
-   * deixarem de coincidir no instante escolhido, os dois casos param de exercer
-   * o que existem para exercer e ninguém fica sabendo.
-   */
+  /** O mesmo, no MEIO da hora da colisão, e com a premissa medida. */
   void it('00:30 UTC — a hora em que as duas entradas somavam no mesmo balde', async () => {
     zerarInventario();
-    // Primeira hora do dia UTC: `inicioDaJanela(t, 1h) === inicioDaJanela(t, 24h)`.
     const dentroDaColisao = Date.parse('2026-09-29T00:30:00Z');
     assert.equal(
       inicioDaJanela(dentroDaColisao, janelaEmSegundos('1h')).getTime(),
@@ -245,7 +157,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
   });
 
   void it('ISCA — com o contador DESLIGADO, a 31ª passa, e este arquivo reprova', async () => {
-    // Sem esta isca, os dois casos acima passariam num sistema sem teto nenhum.
     zerarInventario();
     const app = servidor(criarContadorDesligado());
     try {
@@ -264,10 +175,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
 
 void describe('o que a borda NÃO aplica precisa estar dito em voz alta', () => {
   void it('a entrada de `distinct_cases` entra no inventário, com o motivo', async () => {
-    // Ela não é aplicada porque a porta `RateLimitStore` conta requisições, e
-    // esta conta CASOS. Quem a torna verdade é o serviço, em `avaliarRetencao`.
-    // O que não pode é ela sumir: proteção que se acredita existir é pior que
-    // proteção ausente, porque ninguém procura o que acredita já ter.
     zerarInventario();
     const app = servidor(criarContadorEmMemoria(() => Date.now()));
     try {
@@ -283,8 +190,6 @@ void describe('o que a borda NÃO aplica precisa estar dito em voz alta', () => 
   });
 
   void it('a rota declara as TRÊS entradas que o contrato declara', () => {
-    // Apagar uma entrada daqui não quebra nada visível: o teto simplesmente
-    // deixa de existir, que é o defeito que a BICHUS-178 consertou uma vez.
     assert.deepEqual(
       rotaDeEnvioDeMensagem.rateLimit.map((e) => [e.dimension.join('+'), e.limit, e.onExceed]),
       [

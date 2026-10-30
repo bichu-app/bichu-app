@@ -1,10 +1,4 @@
-/**
- * O que o módulo `identity` exige da persistência.
- *
- * A porta é declarada por quem a **exige**, nunca por quem a implementa (§6 e
- * §11.3 de docs/03-arquitetura.md). Por isso as assinaturas falam da linguagem
- * do domínio — conta, credencial, família de sessão — e não de tabela.
- */
+/** O que o módulo `identity` exige da persistência. */
 import type { Instant, TokenHash, UserId } from '../../../shared/types/brands.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 import type { MotivoDaRecusa } from '../domain/reautenticacao.js';
@@ -14,19 +8,7 @@ export interface Conta {
   readonly email: string;
   readonly emailVerifiedAt: Date | null;
   readonly displayName: string | null;
-  /**
-   * O apelido (`@`), ou `null` quando a conta não escolheu nenhum.
-   *
-   * **`Conta` carrega o apelido e NÃO carrega a data de nascimento**, e a
-   * assimetria é a decisão: o apelido *"não tem relação com informações
-   * pessoais"* (cliente, 18/10/2026) e o dono precisa dele de volta para poder
-   * trocá-lo na tela de edição; a data de nascimento existe para ter sido
-   * conferida no cadastro e não volta para ninguém.
-   *
-   * Sai só em `GET /v1/me` e no que responde sobre a própria conta. Nenhuma
-   * resposta sem conta o declara -- a dependência está registrada no plano
-   * 4-C: o apelido não aparece para outra pessoa antes da fatia E.
-   */
+  /** O apelido (`@`), ou `null` quando a conta não escolheu nenhum. */
   readonly handle: string | null;
   readonly phoneE164: string | null;
   readonly phoneVerifiedAt: Date | null;
@@ -41,19 +23,7 @@ export interface Conta {
   readonly createdAt: Date;
 }
 
-/**
- * A FOTO DO PROPRIO USUARIO, como o dono a ve (cliente, 18/10/2026).
- *
- * **Lida por uma consulta propria e nao por coluna de `Conta`**, e a razao e de
- * risco e nao de estilo: `Conta` e montada em oito caminhos (cadastro, login,
- * verificacao de e-mail, troca de senha, ...), todos por `COLUNAS_DA_CONTA` e
- * `paraConta`. Pendurar ali uma subconsulta a `catalog_images` faria toda
- * escrita de identidade passar a ler a tabela de imagem para nada. A foto
- * interessa a UMA resposta -- `Me` --, e e ela que a pede.
- *
- * **Sem `id` e sem `uploadId`** (ADR-0010 item 6): o que sai e a chave da
- * derivada, e a URL e montada na leitura.
- */
+/** A FOTO DO PROPRIO USUARIO, como o dono a ve (cliente, 18/10/2026). */
 export interface FotoDoPerfil {
   readonly status: 'processing' | 'ready' | 'rejected';
   readonly publicKey: string | null;
@@ -63,10 +33,6 @@ export interface FotoDoPerfil {
 /**
  * O envio que nao serve para esta conta: inexistente, de outra pessoa, de outro
  * proposito, vencido, ou de uma imagem que ja e de outra conta.
- *
- * **Os cinco casos sao UM erro so**, traduzido pelo caso de uso para `400
- * upload_not_usable`. Distinguir entregaria a quem adivinha `upload_id` um
- * oraculo de "este existe mas e de outra pessoa" (ADR-0021).
  */
 export class EnvioDeFotoNaoServe extends Error {
   constructor() {
@@ -80,13 +46,6 @@ export interface CamposDoPerfil {
   /**
    * O apelido (`@`), na edição do perfil (cliente, 18/10/2026: *"vai estar no
    * cadastro do usuário e na pagina de edição do perfil"*).
-   *
-   * **`string | undefined`, e nunca `null`** — ao contrário dos outros campos
-   * desta interface, em que `null` significa "apagar". Não há como abandonar um
-   * apelido: soltá-lo de volta ao pool é o furo do plano 4-C.7, porque quem o
-   * pegasse herdaria o que a vizinhança associava a quem o tinha. Trocar é
-   * permitido; abandonar não é, e a ausência do `null` é essa regra escrita no
-   * tipo.
    */
   readonly handle?: string | undefined;
   readonly phoneE164?: string | null | undefined;
@@ -100,17 +59,14 @@ export type PropositoDoToken =
   | 'email_verify'
   | 'password_reset'
   | 'email_change'
-  /**
-   * O "Nao fui eu" do aviso de reuso (BICHUS-215). Unico proposito que nao
-   * leva a pessoa a digitar nada: o link derruba as sessoes e acaba.
-   */
+  /** O "Nao fui eu" do aviso de reuso (BICHUS-215). */
   | 'session_disavow';
 
 export interface NovoTokenDeVerificacao {
   readonly id: string;
   readonly userId: UserId;
   readonly proposito: PropositoDoToken;
-  /** SHA-256 de 256 bits de CSPRNG. O valor em claro não é guardado. */
+  /** SHA-256 de 256 bits de CSPRNG. */
   readonly tokenHash: TokenHash;
   readonly enviadoPara: string;
   readonly expiraEm: Instant;
@@ -132,34 +88,13 @@ export interface CredencialLocal {
 export interface NovaConta {
   readonly email: string;
   /**
-   * A data de nascimento em `YYYY-MM-DD`, **já conferida** contra a idade
-   * mínima de 16 anos (`shared/idade/idade-minima.ts`).
-   *
-   * `string` e não `string | undefined`: o cadastro não cria mais conta sem
-   * ela, e deixar o tipo aceitar a ausência aqui seria deixar um caminho de
-   * volta para o estado que a decisão de 18/10/2026 fechou. A **coluna** é
-   * anulável, por causa das contas que já existiam — e isso é outra coisa,
-   * escrita no cabeçalho da `20261018000021`.
-   *
-   * Ela entra só na escrita. Não há método de leitura que a devolva, e
-   * `Conta` não a carrega: a data existe para ser conferida no cadastro, não
-   * para ser exibida.
+   * A data de nascimento em `YYYY-MM-DD`, **já conferida** contra a idade mínima de
+   * 16 anos (`shared/idade/idade-minima.ts`).
    */
   readonly birthDate: string;
   /**
-   * O apelido (`@`) **normalizado e conferido**, ou `undefined` quando a
-   * pessoa não escolheu nenhum.
-   *
-   * `undefined` e não `null`: no cadastro não existe "apagar o apelido", só
-   * "não escolhi" — e são a mesma coisa só aqui, onde a conta está nascendo.
-   *
-   * **Opcional de propósito** (plano 4-C.8): a coluna é anulável, a tela cai
-   * para o nome de exibição com apelido nulo, e **nenhum fluxo obriga a
-   * escolher**. Exigi-lo no cadastro seria uma segunda quebra de contrato e
-   * transformaria "achar um apelido livre" em pré-requisito para ter conta.
-   *
-   * **A disponibilidade NÃO é conferida antes.** Quem decide é o índice único
-   * de `handles`, nesta escrita, e a violação vira `code: 'taken'`.
+   * O apelido (`@`) **normalizado e conferido**, ou `undefined` quando a pessoa não
+   * escolheu nenhum.
    */
   readonly handle: string | undefined;
   readonly displayName: string | undefined;
@@ -175,28 +110,14 @@ export type MotivoDeRevogacao =
   | 'logout_all'
   | 'password_changed'
   | 'account_deleted'
-  /**
-   * A resposta HUMANA a deteccao de reuso, e o quinto gatilho do SEC-006.
-   * Distinto de `reuse_detected`, que e automatico e vale para UMA familia, e
-   * de `logout_all`, que e o titular arrumando a casa: aqui alguem esta
-   * declarando que a conta esta com outra pessoa.
-   */
+  /** A resposta HUMANA a deteccao de reuso, e o quinto gatilho do SEC-006. */
   | 'not_me';
 
 export interface RefreshArmazenado {
   readonly id: string;
   readonly userId: UserId;
   readonly familyId: string;
-  /**
-   * Quando esta linha nasceu. É o que `renovar()` compara com
-   * `users.sessions_invalid_before` (SEC-006): refresh anterior à barreira é
-   * recusado, e sem este campo a comparação não tem com o que ser feita.
-   *
-   * Vem do relógio da aplicação, e não do `DEFAULT now()` do banco: o outro
-   * lado da comparação também é gravado pela aplicação, e misturar os dois
-   * relógios faria a barreira valer alguns milissegundos a mais ou a menos sem
-   * que ninguém percebesse.
-   */
+  /** Quando esta linha nasceu. */
   readonly issuedAt: Instant;
   readonly expiresAt: Instant;
   readonly absoluteExpiresAt: Instant;
@@ -210,11 +131,7 @@ export interface NovoRefresh {
   readonly userId: UserId;
   readonly familyId: string;
   readonly tokenHash: TokenHash;
-  /**
-   * O instante de nascimento, pelo relógio da aplicação. Obrigatório de
-   * propósito: a coluna tem `DEFAULT now()`, e deixar o banco preenchê-la
-   * colocaria os dois lados da barreira do SEC-006 em relógios diferentes.
-   */
+  /** O instante de nascimento, pelo relógio da aplicação. */
   readonly issuedAt: Instant;
   readonly expiresAt: Instant;
   readonly absoluteExpiresAt: Instant;
@@ -229,45 +146,16 @@ export interface ConsequenciasDaExclusao {
 }
 
 export interface IdentityRepository {
-  /**
-   * Cria conta, vínculo `provider = 'local'` e credencial numa transação só.
-   * Devolve `undefined` quando o e-mail já tem conta viva — e devolver em vez de
-   * lançar é de propósito: quem chama precisa decidir o que a resposta revela.
-   */
+  /** Cria conta, vínculo `provider = 'local'` e credencial numa transação só. */
   criarContaLocal(nova: NovaConta): Promise<Conta | undefined>;
 
   buscarContaPorId(id: UserId): Promise<Conta | undefined>;
 
-  /**
-   * Atualiza o perfil e devolve a conta já atualizada.
-   *
-   * **Não aceita `email`** (SEC-003), e a ausência é a regra: trocar o e-mail é
-   * operação própria e assíncrona. Aceitar aqui faria a resposta revelar se um
-   * endereço já tem conta — o erro de unicidade viraria um oráculo de
-   * existência, consultável por qualquer pessoa logada.
-   *
-   * `undefined` em um campo significa "não mexer"; `null` significa "apagar".
-   * São coisas diferentes e o `PATCH` precisa das duas.
-   */
+  /** Atualiza o perfil e devolve a conta já atualizada. */
   atualizarPerfil(id: UserId, campos: CamposDoPerfil, agora: Instant): Promise<Conta | undefined>;
   /** A foto do perfil desta conta, ou `null` quando nao ha. */
   fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null>;
-  /**
-   * Troca ou TIRA a foto do perfil, numa transacao so.
-   *
-   * `uploadId` nulo TIRA a foto: o ponteiro da conta sai e **nenhum objeto do
-   * balde e apagado**. Apagamento de arquivo e ato explicito sobre o dado, e a
-   * decisao do cliente de 17/10 (ver `varrer-envios-vencidos.ts`) e que prazo e
-   * efeito colateral nao apagam foto.
-   *
-   * **A confirmacao do envio acontece DENTRO desta transacao.** E ela que grava
-   * `catalog_upload_intents.confirmed_at` e tira a linha da varredura de
-   * vencidos; sem ela a foto que a pessoa acabou de enviar seria apagada do
-   * balde dez minutos depois, que e exatamente o defeito que a foto do achado
-   * sofreu duas vezes.
-   *
-   * Lanca `EnvioDeFotoNaoServe`. `undefined` quando a conta nao existe mais.
-   */
+  /** Troca ou TIRA a foto do perfil, numa transacao so. */
   trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined>;
   buscarContaPorEmail(email: string): Promise<Conta | undefined>;
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined>;
@@ -279,28 +167,15 @@ export interface IdentityRepository {
   gravarRefresh(novo: NovoRefresh): Promise<void>;
   buscarRefreshPorHash(hash: TokenHash): Promise<RefreshArmazenado | undefined>;
 
-  /**
-   * Consome o token apresentado e grava o sucessor **na mesma transação**.
-   * Devolve `false` quando o token já havia sido consumido ou revogado — ler e
-   * depois atualizar em dois passos permitiria a dois pedidos simultâneos
-   * rotacionarem o mesmo token.
-   */
+  /** Consome o token apresentado e grava o sucessor **na mesma transação**. */
   rotacionar(tokenAtualId: string, sucessor: NovoRefresh, agora: Instant): Promise<boolean>;
 
-  /** Revoga a família inteira. Usada no logout e na detecção de reuso. */
+  /** Revoga a família inteira. */
   revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number>;
 
   /**
-   * Revoga **todas** as famílias de refresh ainda vivas da conta, e devolve
-   * quantas linhas caíram.
-   *
-   * É a outra metade de `invalidarSessoes`, e não um atalho dela. A barreira
-   * derruba o token de **acesso** em menos de um segundo; ela não toca em
-   * `refresh_tokens`. Sem esta chamada, um refresh copiado antes do gatilho
-   * continua sendo uma linha viva no banco até vencer por inatividade — e o
-   * único motivo de ele não renovar é a barreira que `renovar()` passou a ler
-   * (BICHUS-77). Rede de proteção não substitui a revogação: quem depende só
-   * dela fica a uma refatoração de distância de voltar ao defeito.
+   * Revoga **todas** as famílias de refresh ainda vivas da conta, e devolve quantas
+   * linhas caíram.
    */
   revogarTodasAsFamilias(
     userId: UserId,
@@ -308,199 +183,61 @@ export interface IdentityRepository {
     agora: Instant,
   ): Promise<number>;
 
-  /**
-   * SEC-006: empurra `sessions_invalid_before` para `barreira`.
-   *
-   * `barreira` e `agora` são parâmetros SEPARADOS de propósito. A barreira sai
-   * de `instanteDeRevogacao` e pode estar até um segundo à frente do relógio,
-   * para alcançar o token que a emissão datou à frente numa revogação anterior
-   * do mesmo segundo; `agora` é o relógio da requisição e é o que vai para
-   * `updated_at`. Um parâmetro só convidaria a gravar o relógio e deixar o
-   * defeito de volta.
-   *
-   * A gravação é **monotônica**: a coluna nunca anda para trás, porque duas
-   * revogações simultâneas leem a mesma barreira anterior e a que escrever por
-   * último não pode desfazer a que escreveu antes.
-   */
+  /** SEC-006: empurra `sessions_invalid_before` para `barreira`. */
   invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void>;
-
-  // --- Tokens de verificação e de redefinição -----------------------------
 
   /** Grava o HASH. O valor em claro nunca chega a esta porta. */
   criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void>;
 
-  /**
-   * Consome o token em **UMA instrução**, e devolve a quem ele pertencia.
-   *
-   * `UPDATE ... SET consumed_at = now() WHERE token_hash = $1 AND consumed_at
-   * IS NULL AND expires_at > now() RETURNING user_id`.
-   *
-   * Conferir e depois atualizar em dois passos permite corrida: duas aberturas
-   * simultâneas do mesmo link — que é o caso REAL, porque cliente de e-mail
-   * pré-carrega o link e a pessoa clica em seguida — passariam as duas pela
-   * conferência antes de qualquer uma marcar. Numa redefinição de senha, isso é
-   * duas trocas de senha a partir de um token de uso único.
-   *
-   * `undefined` cobre inexistente, expirado e já consumido. São a mesma
-   * resposta (410) de propósito: distinguir contaria a um estranho se aquele
-   * token existiu.
-   */
+  /** Consome o token em **UMA instrução**, e devolve a quem ele pertencia. */
   consumirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
   ): Promise<TokenConsumido | undefined>;
 
-  /**
-   * Só confere, sem consumir. Serve à página que o time web renderiza antes do
-   * formulário, e à recusa de senha fraca **sem gastar o token** (critério 12).
-   */
+  /** Só confere, sem consumir. */
   conferirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
   ): Promise<TokenConsumido | undefined>;
 
-  /**
-   * Invalida todos os tokens pendentes de uma conta.
-   *
-   * Chamada em toda troca de senha, por qualquer caminho (critério 9 de
-   * BICHUS-77): um link de redefinição emitido antes da troca continuaria
-   * valendo depois dela, e é exatamente por ele que quem tomou a conta volta.
-   */
+  /** Invalida todos os tokens pendentes de uma conta. */
   invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number>;
 
   marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void>;
-
-  // --- Janela de reautenticacao (BICHUS-48) -------------------------------
 
   /** Grava o HASH. O valor em claro so existe na resposta de `POST /auth/reauth`. */
   criarJanelaDeReautenticacao(nova: NovaJanelaDeReautenticacao): Promise<void>;
 
   /**
-   * Consome a janela em **UMA instrução**, com as cinco amarras na cláusula
-   * `WHERE` (ADR-0021: a autorização vai na cláusula, nunca num `if` depois de
-   * ler a linha).
-   *
-   * `UPDATE reauth_tokens SET consumed_at = $agora WHERE token_hash = $1 AND
-   * user_id = $2 AND scope = $3 AND access_jti = $4 AND consumed_at IS NULL AND
-   * expires_at > $agora AND issued_at >= $barreira RETURNING id`.
-   *
-   * Conferir e depois consumir em dois passos permite corrida, e aqui a corrida
-   * é o ataque: duas chamadas simultâneas de `DELETE /me` com a mesma janela
-   * passariam as duas pela conferência antes de qualquer uma marcar, e o uso
-   * único deixaria de ser único.
-   *
-   * O `motivo` da recusa sai de uma leitura SEPARADA, e só no caminho de recusa:
-   * ele existe para a trilha, nunca para o corpo da resposta — as seis recusas
-   * viram o mesmo 401 na borda.
+   * Consome a janela em **UMA instrução**, com as cinco amarras na cláusula `WHERE`
+   * (ADR-0021: a autorização vai na cláusula, nunca num `if` depois de ler a linha).
    */
   consumirJanelaDeReautenticacao(
     consumo: ConsumoDeJanela,
   ): Promise<ResultadoDoConsumoDaJanela>;
-  /**
-   * A EXCLUSÃO LÓGICA, e o que ela leva junto na mesma transação.
-   *
-   * O contrato de `deleteMyAccount` diz o que esta operação é: *"Exclusão
-   * lógica imediata, expurgo definitivo em 30 dias"*. Ela não apaga linha
-   * nenhuma — e, desde 17/10, **nada apaga**: o expurgo de 30 dias foi
-   * desligado por decisão do cliente e a conta fica DESABILITADA. Aqui a conta
-   * passa a `deletion_requested`, ganha `deleted_at`, e com isso sai do índice
-   * `users_email_unico_ativo`: o endereço fica livre para uma conta nova no
-   * mesmo instante, que é o que faz a exclusão valer para quem a pediu.
-   *
-   * **As tags caem junto, e é por isso que isto é uma transação e não três
-   * chamadas.** O ADR-0010 diz *"casos encerrados e tags revogadas na hora"*, e
-   * a tag é a única coisa deste produto que continua funcionando sozinha depois
-   * que a pessoa some: ela está numa coleira, na rua, e resolve para a página
-   * do achador sem ninguém autenticar. Trinta dias de QR vivo apontando para o
-   * pet de uma conta excluída é o buraco que a exclusão existe para fechar.
-   * Revogação é estado completo (`pet_tags_revogacao_e_completa`) e apaga o
-   * texto cifrado do código (`pet_tags_revogada_nao_guarda_o_codigo`).
-   *
-   * Idempotente: chamada sobre uma conta já marcada, devolve `undefined`.
-   */
+  /** A EXCLUSÃO LÓGICA, e o que ela leva junto na mesma transação. */
   registrarPedidoDeExclusao(
     userId: UserId,
     agora: Instant,
   ): Promise<ConsequenciasDaExclusao | undefined>;
 
-  /**
-   * As contas cujo prazo de expurgo venceu, para a varredura do worker.
-   *
-   * `limite` existe para a varredura ser um passo e não um evento: uma rodada
-   * que tentasse apagar dez mil contas numa transação só seguraria o banco e,
-   * ao falhar numa, desfaria as nove mil e novecentas que já tinham dado certo.
-   */
+  /** As contas cujo prazo de expurgo venceu, para a varredura do worker. */
   contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]>;
 
-  // `expurgarConta` SAIU DAQUI em 17/10, e a ausência é a mudança.
-  //
-  // Ela era o único `DELETE FROM users` deste produto, e o ponto em que as
-  // cascatas de dezoito tabelas disparavam. O cliente decidiu, por escrito,
-  // que *"não delete os dados do usuário, apenas desabilite na plataforma"*, e
-  // com isso não há mais nenhum caminho de código que apague uma conta: a
-  // exclusão é só lógica, e o que faz a pessoa desaparecer é cláusula de
-  // consulta.
-  //
-  // O método foi REMOVIDO em vez de deixado sem chamador de propósito. Um
-  // `DELETE FROM users` existindo na porta é um convite a ser religado por quem
-  // ler o nome e supor a intenção antiga, e o isca
-  // `tests/integration/expurgo-nao-apaga-nada.test.ts` reprova se ele voltar.
-  //
-  // O apagamento efetivo sob pedido formal do titular (LGPD art. 18, VI) passa
-  // a ser procedimento administrativo, e **não existe hoje**. A emenda de ADR
-  // que registra isso saiu junto desta branch.
-
-  // --- Troca de e-mail ----------------------------------------------------
-
-  /**
-   * Guarda o endereço que a pessoa QUER, sem tocar no que a conta USA.
-   *
-   * Os dois endereços coexistem de propósito, e é essa coexistência que faz a
-   * troca valer só depois da confirmação: `users.email` continua sendo o
-   * endereço que entra, que recupera senha e que recebe aviso, e
-   * `pending_email` é só uma intenção declarada. Enquanto a confirmação não
-   * chega, quem tomou a sessão não ganhou canal nenhum.
-   *
-   * `pending_email` **não** tem índice único, e a ausência é decisão: duas
-   * contas podem querer o mesmo endereço ao mesmo tempo, e quem o leva é quem
-   * confirmar primeiro. Reservar o endereço no pedido deixaria qualquer pessoa
-   * logada bloquear o cadastro alheio escrevendo o endereço de outro.
-   */
+  /** Guarda o endereço que a pessoa QUER, sem tocar no que a conta USA. */
   registrarPedidoDeTrocaDeEmail(userId: UserId, novoEmail: string, agora: Instant): Promise<void>;
 
-  /**
-   * Efetiva a troca, e devolve `undefined` se o endereço deixou de estar livre.
-   *
-   * A conferência de unicidade é o índice `users_email_unico_ativo`, e não um
-   * `SELECT` antes do `UPDATE`: entre ler e escrever cabe o cadastro de outra
-   * pessoa, e o caso REAL é justamente esse, porque o link fica 24 horas
-   * parado numa caixa de entrada. Quem chama traduz `undefined` em 410 — o
-   * mesmo 410 do token vencido, porque distinguir os dois contaria a quem tem
-   * o link que aquele endereço passou a ter dono.
-   *
-   * Na mesma instrução o e-mail passa a valer como verificado e
-   * `email_deliverable` volta a `true`: a pessoa acabou de PROVAR que alcança
-   * o endereço, e uma devolução registrada contra o endereço ANTIGO não pode
-   * seguir marcando a conta como inalcançável depois disso.
-   */
+  /** Efetiva a troca, e devolve `undefined` se o endereço deixou de estar livre. */
   concluirTrocaDeEmail(
     userId: UserId,
     novoEmail: string,
     agora: Instant,
   ): Promise<Conta | undefined>;
 
-  /**
-   * Apaga a intenção de troca, sem tocar no e-mail que a conta usa.
-   *
-   * É a outra metade do critério 9: trocar a senha por qualquer caminho
-   * invalida os pedidos de troca de e-mail pendentes. `invalidarTokensPendentes`
-   * mata o TOKEN, e isso já impede a troca de se concluir — mas `pending_email`
-   * sobreviveria, e a tela continuaria mostrando uma troca pendente que nenhum
-   * link consegue mais concluir. Aviso que não corresponde a nada é o que ensina
-   * a pessoa a ignorar aviso.
-   */
+  /** Apaga a intenção de troca, sem tocar no e-mail que a conta usa. */
   cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void>;
 }
 

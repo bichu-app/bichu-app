@@ -1,7 +1,6 @@
 /**
- * O desafio do login administrativo (D41): reCAPTCHA Enterprise, pontuacao,
- * acao `admin_login` (a mesma que o servidor confere). Carregado so no
- * documento `/entrar/`.
+ * O desafio do login administrativo (D41): reCAPTCHA Enterprise, pontuacao, acao
+ * `admin_login` (a mesma que o servidor confere).
  */
 import { configuracao } from '../config.ts';
 
@@ -25,8 +24,7 @@ export class CaptchaIndisponivel extends Error {}
 /**
  * Sem chave de site no desenvolvimento local, o painel manda um token que o
  * servidor sempre recusa: o servidor nao tem modo que aprove sem avaliar, e o
- * caminho `403 captcha-rejected` continua exercitado de ponta a ponta. No build
- * de producao, chave ausente e verificacao que nao carregou (1.9).
+ * caminho `403 captcha-rejected` continua exercitado de ponta a ponta.
  */
 export const TOKEN_DE_DESENVOLVIMENTO = 'desenvolvimento-sem-chave-de-captcha';
 

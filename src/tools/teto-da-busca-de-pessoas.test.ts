@@ -1,36 +1,6 @@
 /**
- * A ISCA DO **TETO DE CONSULTAS DA BUSCA DE PESSOAS**: ele existe, é por conta,
- * e **reprova quando desligado**.
- *
- * O cliente pediu, em 20/10/2026: *"teto de consultas por conta, para impedir
- * varredura do catálogo"*, e *"siga o padrão de teto que já existe no projeto;
- * não invente mecanismo novo"*. Este arquivo mede as duas metades.
- *
- * ## O que é "desligado", e por que a isca mede DOIS desligamentos
- *
- * Um teto desta casa pode deixar de valer de duas formas, e as duas são
- * silenciosas:
- *
- * 1. **a declaração sai do contrato** — e aí `registrar-rota.ts` não tem o que
- *    aplicar. A rota continua funcionando, e nada acusa;
- * 2. **a declaração fica e a dimensão vira a errada** — o caso mais traiçoeiro:
- *    um teto na dimensão `[q]` sozinha somaria **todas as contas no mesmo
- *    balde** (porque `q` resolve para uma marca constante), e um teto na
- *    dimensão `[ip]` pegaria vizinho inocente no CGNAT. Nos dois casos existe um
- *    número escrito no contrato e ele não limita o que deveria.
- *
- * ## Por que lê o CONTRATO e não o objeto da rota
- *
- * Porque a aplicação do teto é feita pelo **registro da rota** a partir da
- * declaração, e porque o ADR-0016 emenda 1 registra o defeito original com
- * precisão: *"o defeito não é que alguém esqueceu de chamar `hit()`: é que era
- * possível esquecer."* O que precisa existir é a **declaração**; `defineRoute`
- * garante que o objeto a tenha quando há efeito, e
- * `rotas-registradas-contra-o-contrato.test.ts` garante que os dois concordem.
- *
- * Mora em `src/tools/` porque lê `api/openapi.yaml` do disco, e o `eslint` deste
- * repositório recusa `node:fs` em `domain/` — com razão. Os vizinhos deste
- * diretório fazem o mesmo.
+ * A ISCA DO **TETO DE CONSULTAS DA BUSCA DE PESSOAS**: ele existe, é por conta, e
+ * **reprova quando desligado**.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -134,13 +104,12 @@ void describe('o teto de consultas da busca de pessoas', () => {
   });
 
   /**
-   * **A isca da isca.** Sem ela, os casos acima passariam por o contrato estar
-   * certo hoje — e não por a conferência saber reconhecer um teto desligado.
+   * **A isca da isca.** Sem ela, os casos acima passariam por o contrato estar certo
+   * hoje — e não por a conferência saber reconhecer um teto desligado.
    */
   void it('ISCA: a conferencia REPROVA um teto removido e um teto sem `account`', () => {
     const originais = tetosDe('searchPeople');
 
-    // (a) desligado por remocao
     const semTeto: readonly EntradaDeTeto[] = [];
     assert.equal(
       semTeto.length,
@@ -148,7 +117,6 @@ void describe('o teto de consultas da busca de pessoas', () => {
       'a isca passou: a conferencia de presenca nao reconheceria a remocao',
     );
 
-    // (b) desligado por dimensao errada -- o caso tracoeiro
     const comDimensaoErrada = originais.map((t) =>
       (t.dimension ?? []).includes('q') ? { ...t, dimension: ['q'] } : t,
     );

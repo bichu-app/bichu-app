@@ -1,52 +1,4 @@
-/**
- * ISCA — `markMyConversationsSeen` está REGISTRADA, e não só declarada.
- *
- * ## O defeito que este arquivo existe para impedir que volte
- *
- * Medido em 20/10/2026 contra `https://hml.bichu.app` em `fb3a0fba`:
- *
- * ```
- * POST /v1/me/conversations-seen  ->  404
- * {"type":"https://hml.bichu.app/problems/not-found","title":"Não encontramos isso",
- *  "status":404,"instance":"/v1/me/conversations-seen"}
- * ```
- *
- * E tudo o que a operação precisa existia: ela está em `api/openapi.yaml` com
- * `x-effects: []` e teto de 240/h por conta, `rotaDeListaVista` está declarada
- * e EXPORTADA neste módulo, `ConversationService.marcarListaVista` existe, o
- * repositório grava em `conversation_list_views`, e o aplicativo Flutter CHAMA
- * a rota a cada abertura da área de mensagens. Faltava **uma** chamada de
- * `registrarRota`.
- *
- * O efeito não era cosmético: **o contador de mensagens não zerava por nenhum
- * caminho.** Pior, ele falhava calado — o cliente Dart engole a falha desta
- * chamada de propósito (está escrito em `ConversasApi.marcarListaVista`,
- * porque um erro em cima da lista que acabou de carregar seria um erro sobre
- * uma operação que ninguém pediu). Então o 404 não aparecia em tela nenhuma, e
- * o número ficava aceso para quem acabou de ler.
- *
- * ## POR QUE NENHUM PORTÃO PEGOU — e é o motivo de este arquivo não ser
- * ## redundante com `rotas-registradas-contra-o-contrato.test.ts`
- *
- * Aquele portão compara os `defineRoute` **exportados** com as operações do
- * contrato. A rota exportada já bastava para ele ficar verde: ele nunca
- * pergunta se `registrarRota` foi chamada. E `markMyConversationsSeen` também
- * não estava em `OPERACOES_AINDA_SEM_ROTA`, que é a lista onde uma ausência
- * DELIBERADA tem de estar escrita com motivo. A operação estava no vão entre
- * as duas listas: nem registrada, nem declarada ausente.
- *
- * É a vacuidade conhecida deste repositório numa forma nova — o portão lê a
- * ESPECIFICAÇÃO e a DECLARAÇÃO, e nunca a fiação. Então este caso faz o que o
- * outro não faz: chama `registrarRotasDeConversas` — a função de produção, a
- * mesma que `src/bin/api.ts` chama — e manda a requisição no servidor que
- * saiu dela.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Comente o bloco `registrarRota(app, rotaDeListaVista, ...)` em
- * `conversation-routes.ts`. Os dois casos passam a reprovar por nome, com o
- * 404 na mensagem. Religue e eles voltam.
- */
+/** ISCA — `markMyConversationsSeen` está REGISTRADA, e não só declarada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -66,8 +18,8 @@ const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 /**
  * Quem o serviço recebeu. É `undefined` até a rota chamar, e é por isso que o
  * segundo caso consegue distinguir "respondeu 204" de "respondeu 204 e fez a
- * coisa": um handler que devolvesse 204 sem chamar o serviço passaria no
- * primeiro caso e reprovaria no segundo.
+ * coisa": um handler que devolvesse 204 sem chamar o serviço passaria no primeiro
+ * caso e reprovaria no segundo.
  */
 let chamadorQueChegou: string | undefined;
 
@@ -81,17 +33,11 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
         return Promise.resolve();
       },
     } as unknown as DependenciasDasRotasDeConversa['conversas'],
-    // As outras rotas do módulo pedem o esquema de corpo do contrato no
-    // momento do REGISTRO, não no do pedido: sem este dublê,
-    // `registrarRotasDeConversas` estoura antes de chegar na rota medida.
     contrato: {
       requestBodySchema: () => ({ type: 'object' }),
     } as unknown as DependenciasDasRotasDeConversa['contrato'],
     idempotencia: undefined as unknown as DependenciasDasRotasDeConversa['idempotencia'],
     clock: { now: () => new Date('2026-10-20T12:00:00.000Z') } as unknown as DependenciasDasRotasDeConversa['clock'],
-    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
-    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
-    // deixaria a isca da invariante verde com a chave do original gravada.
     assinarFoto: (chave: string) =>
       Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: 'https://img.bichu.test' as AbsoluteUrl,
@@ -105,10 +51,6 @@ function servidor(deps: DependenciasDasRotasDeConversa) {
     teto: tetoDeTeste(criarContadorEmMemoria(() => Date.now())),
     bodyLimitBytes: 1_048_576,
   });
-  // A FUNÇÃO DE PRODUÇÃO, e não `registrarRota` direto: registrar a rota aqui
-  // provaria que o mecanismo de registro funciona, que é o que já se sabe. O
-  // que estava quebrado era a FIAÇÃO -- esta função não chamava aquela --, e
-  // só chamando esta função o caso enxerga isso.
   registrarRotasDeConversas(app, deps);
   return app;
 }

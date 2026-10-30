@@ -1,12 +1,4 @@
-/**
- * A guarda de reentrada, medida sem servidor, sem banco e sem rede.
- *
- * O defeito que ela fecha é do `setInterval` da fila em `worker.ts`: ele não
- * espera promessa, então uma passada que leva mais que o intervalo tem a
- * seguinte começando em cima dela. Cada passada reserva o próprio trabalho, e
- * três decodificações simultâneas do pior caso aceito matam o processo nos
- * 448 MiB do `compose.yaml` — inclusive com o cache do libvips desligado.
- */
+/** A guarda de reentrada, medida sem servidor, sem banco e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -34,7 +26,6 @@ void describe('passada sem reentrada', () => {
     assert.equal(execucoes, 1, 'a primeira chamada tem de entrar');
     assert.equal(passada.correndo, true);
 
-    // Esta é a chamada que o `setInterval` fazia em cima da anterior.
     await passada();
     assert.equal(execucoes, 1, 'a segunda chamada não pode entrar no corpo');
     assert.equal(passada.puladas, 1);
@@ -88,8 +79,6 @@ void describe('passada sem reentrada', () => {
     await assert.rejects(passada(), /armazenamento fora do ar/);
     assert.equal(passada.correndo, false, 'a trava tem de ter sido liberada');
 
-    // Sem o `finally`, esta segunda chamada seria pulada e a fila pararia em
-    // silêncio: o processo continuaria de pé respondendo a tudo menos a fila.
     await assert.rejects(passada(), /armazenamento fora do ar/);
     assert.equal(execucoes, 2);
     assert.equal(passada.puladas, 0);

@@ -1,20 +1,4 @@
-/**
- * A projecao da entrada e a derivacao do selo, sem banco e sem servidor.
- *
- * ## As iscas deste arquivo, e como cada uma foi provada
- *
- * Cada linha foi desligada no codigo de producao, a mudanca foi conferida no
- * disco (`git diff --stat` nao vazio), a suite rodou e reprovou, e o arquivo foi
- * restaurado. 22/09/2026, Node 22 (`/opt/homebrew/opt/node@22`).
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `nivelDerivado` deixando de filtrar por `decision === 'approved'` | 3 |
- * | `phone_callback` entrando em `EVIDENCIAS_DE_DOCUMENTO` | 2 |
- * | `distanciaNaGrade` com `Math.round` puro, sem o piso de uma celula | 1 |
- * | `distanciaNaGrade` devolvendo `0` no lugar de `null` | 1 |
- * | `projetarEntrada` acrescentando `id` a saida | 1 |
- */
+/** A projecao da entrada e a derivacao do selo, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -33,7 +17,7 @@ import {
   type VerificacaoDaEntidade,
 } from './nivel-de-verificacao.js';
 
-/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+/** A montagem de URL de midia, pela porta. */
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio {
@@ -160,53 +144,6 @@ void describe('a distancia sai na grade de 100 m, e nunca mente', () => {
 
 void describe('a projecao publica da entrada', () => {
   void it('devolve quinze campos, e nenhum a mais', () => {
-    // TREZE desde 21/10/2026, e cada acrescimo veio de um ramo DIFERENTE. As
-    // justificativas ficam todas, porque as listas fechadas sao a mesma lista.
-    //
-    // Eram DEZ ate 18/10/2026. `logo_url` entrou com a liberacao das imagens do
-    // profissional no aplicativo. **`photo_url` NAO esta aqui, e e o ponto desta
-    // lista fechada**: a faixa de 1280 x 720 pertence a pagina do local, e esta
-    // projecao e a que a LISTAGEM usa. Quem a acrescentar aqui reprova.
-    //
-    // `entity_kind` e o decimo primeiro, do eixo proprio do tipo de entidade
-    // (`20261018000012`) -- esta lista e o que impede a entrada de ONG de
-    // trazer carona: se a projecao passar a devolver quem convidou, quem e o
-    // titular, a coordenada ou o `id`, este caso cai antes de qualquer portao.
-    //
-    // `site_url` e o DECIMO TERCEIRO (`20261020000014`, decisao do cliente de
-    // 21/10/2026), e ele esta aqui -- e nao so no detalhe -- por ser um CANAL DE
-    // CONTATO, ao lado de `phone_e164` e pela mesma razao: a entidade o publicou
-    // de proposito para ser procurada (ADR-0011 secao 4). Nao e dado pessoal que
-    // escapou, e e por isso que nao segue a regra de `photo_url`.
-    //
-    // (Doze seria o numero se `site_url` ficasse so no detalhe; a contagem
-    // mudou com a decisao, e nao por acomodacao a um teste que reprovou.)
-    //
-    // `kinds` e o DECIMO QUARTO (`20261020000015`, decisao do cliente de
-    // 21/10/2026: atividades multiplas). **`kind` CONTINUA aqui ao lado dele, e
-    // os dois juntos nao sao duplicacao de dado -- sao duas idades de cliente:**
-    // `kind` e `kinds[0]` e existe porque o APK publicado le `kind` como string,
-    // e trocar o tipo dele seria `response-property-type-changed`, quebra para
-    // quem ja tem o aplicativo instalado. Quem desenha a tela nova le `kinds`.
-    // No dia em que nenhum APK em campo ler `kind`, ele sai -- e este caso e
-    // onde isso vai ser notado.
-    //
-    // Esta contagem subiu DUAS vezes em 21/10, por DUAS decisoes diferentes do
-    // cliente no mesmo dia (o site e as atividades multiplas). As duas razoes
-    // ficam escritas, porque a lista fechada e a mesma lista.
-    //
-    // `rating` e o DECIMO QUINTO (BICHUS-313, 28/10/2026). Ele entra porque o
-    // cliente pediu media e quantidade "na lista e na pagina" (18/10/2026) e
-    // porque `DirectoryEntrySummary` ja o declarava desde entao -- a listagem
-    // simplesmente nao o preenchia, e o campo nao e `required`, entao NADA
-    // reprovava: o servidor omitia, o app lia nulo e todos os portoes passavam.
-    // Este caso e onde a omissao passa a doer.
-    //
-    // **E ele NAO segue a regra de `photo_url`**, e a diferenca e de peso e nao
-    // de categoria: a faixa de 1280 x 720 em vinte cartoes multiplica a
-    // primeira pintura, e `rating` sao sete numeros pequenos -- medidos em 940 B
-    // por pagina de 20 cartoes, 47 B por cartao. O que ficou de fora da lista
-    // continua fora.
     const projetada = projetarEntrada(entrada({ verificacoes: [aprovada('crmv')] }), URL_DE_MIDIA);
     assert.deepEqual(Object.keys(projetada).sort(), [
       'about',
@@ -227,19 +164,7 @@ void describe('a projecao publica da entrada', () => {
     ]);
   });
 
-  // -----------------------------------------------------------------------
-  // AS DUAS ISCAS DA LIBERACAO DAS IMAGENS NO APLICATIVO (18/10/2026)
-  // -----------------------------------------------------------------------
-
   void it('ISCA: o ORIGINAL nao vaza para a resposta de leitura, em nenhuma categoria', () => {
-    // A chave do original tem a forma `{categoria}/original/{128 bits}` e mora
-    // no balde PRIVADO. Se ela chegasse a esta projecao, o aplicativo receberia
-    // ou um 403 na tela ou -- no dia em que alguem afrouxasse a politica do
-    // balde -- a foto COM EXIF, com a coordenada de onde ela foi tirada.
-    //
-    // `urlDaDerivada` recusa pela FORMA, e nao por confianca em quem chama: o
-    // tipo `string | null` nao distingue chave de original de chave de derivada,
-    // e a consulta e uma linha de SQL de distancia de um `JOIN` errado.
     for (const original of [
       'directory/original/KioqKioqKioqKioqKioqKg',
       'people/original/KioqKioqKioqKioqKioqKg',
@@ -256,9 +181,6 @@ void describe('a projecao publica da entrada', () => {
       );
     }
 
-    // CONTRAPESO: a chave de DERIVADA produz a URL. Sem ele, as recusas acima
-    // passariam para uma projecao que nunca devolve imagem nenhuma -- e um
-    // recurso que nao mostra logo tambem "nao vaza o original".
     assert.equal(
       projetarEntrada(
         entrada({ logoPublicKey: 'directory/card/KioqKioqKioqKioqKioqKg.jpeg' }),
@@ -269,19 +191,12 @@ void describe('a projecao publica da entrada', () => {
   });
 
   void it('ISCA: entrada SEM logo nao quebra a listagem -- o cartao sai sem imagem', () => {
-    // O modo de falhar que esta isca existe para impedir e o pior de todos nesta
-    // tela: uma entrada sem logo derrubando a PAGINA inteira, e a pessoa que
-    // procura um veterinario perto vendo lista vazia por causa de um campo
-    // opcional. Nulo tem de atravessar a projecao sem erro.
     const semLogo = projetarEntrada(entrada({ logoPublicKey: null }), URL_DE_MIDIA);
     assert.equal(semLogo.logo_url, null);
-    // O resto do cartao continua inteiro: nome, atividade e endereco publico.
     assert.equal(semLogo.display_name, entrada().displayName);
     assert.ok(semLogo.slug.length > 0);
     assert.equal(semLogo.verification.level, 'none');
 
-    // E uma pagina MISTA -- algumas com logo, outras sem -- projeta inteira, na
-    // ordem, sem buraco: e assim que a listagem real chega.
     const pagina = [
       entrada({ logoPublicKey: 'directory/card/AAAAAAAAAAAAAAAAAAAAAA.jpeg' }),
       entrada({ logoPublicKey: null }),
@@ -295,10 +210,6 @@ void describe('a projecao publica da entrada', () => {
   });
 
   void it('a entrada de ONG nao traz nem um campo a mais que a comum', () => {
-    // ISCA (b) do lote: a ONG passa pela MESMA projecao, e por isso nao ha
-    // caminho em que ela exponha algo que a entrada comum nao exponha. O que
-    // muda entre as duas e o VALOR de `entity_kind`, nunca o conjunto de
-    // chaves.
     const ong = projetarEntrada(entrada({ entityKind: 'organization' }), URL_DE_MIDIA);
     const comum = projetarEntrada(entrada({ entityKind: 'professional' }), URL_DE_MIDIA);
     assert.deepEqual(Object.keys(ong).sort(), Object.keys(comum).sort());
@@ -308,11 +219,6 @@ void describe('a projecao publica da entrada', () => {
 
   void it('NAO devolve identificador interno: o endereco e o slug (ADR-0010)', () => {
     const bruto = JSON.stringify(projetarEntrada(entrada(), URL_DE_MIDIA));
-    // Os nomes das colunas de vinculo NAO sao escritos aqui de proposito: o
-    // portao de saida procura o literal em todo `src/`, e escreve-lo num teste
-    // reprovaria o build. O que este caso afirma e mais forte que o nome: a
-    // projecao nao carrega identificador nenhum, entao nao ha como um deles
-    // entrar sem que a primeira asserção acuse.
     assert.equal(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(bruto),
       false,
@@ -345,10 +251,6 @@ void describe('a projecao publica da entrada', () => {
   });
 
   void it('cidade, UF e bairro saem como texto, e nao viram rotulo unico', () => {
-    // A listagem de perdidos junta em "Bairro, Cidade" porque a tela dela e
-    // outra. Aqui os tres saem separados de proposito: a folha de filtros do
-    // diretorio precisa compara-los, e um rotulo unico obrigaria a tela a
-    // desmonta-lo de volta.
     const projetada = projetarEntrada(entrada(), URL_DE_MIDIA);
     assert.equal(projetada.city, 'São Paulo');
     assert.equal(projetada.state, 'SP');
@@ -362,22 +264,9 @@ void describe('a projecao publica da entrada', () => {
   });
 });
 
-/**
- * O TIPO DE ENTIDADE, eixo proprio (`20261018000012`).
- *
- * Iscas desligadas no codigo de producao em 18/10/2026, conferidas no disco,
- * suite rodada, arquivo restaurado:
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `projetarEntrada` deixando de copiar `entityKind` para `entity_kind` | 3 |
- * | `entity_kind` saindo como `kind` (os dois eixos confundidos) | 2 |
- */
+/** O TIPO DE ENTIDADE, eixo proprio (`20261018000012`). */
 void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
   void it('a ONG projeta organization, e a atividade dela continua sendo a atividade', () => {
-    // E este o par que o eixo proprio existe para permitir: uma ONG que atende
-    // como clinica e `organization` + `clinic`, e nao um terceiro valor de
-    // `kind` que teria obrigado o APK instalado a entender valor novo.
     const projetada = projetarEntrada(entrada({ entityKind: 'organization', kinds: ['clinic'] }), URL_DE_MIDIA);
     assert.equal(projetada.entity_kind, 'organization');
     assert.equal(projetada.kind, 'clinic');
@@ -389,11 +278,6 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
   });
 
   void it('os dois eixos saem SEMPRE os dois, e nenhum substitui o outro', () => {
-    // Contrapeso da isca acima: se a projecao passasse a derivar um do outro --
-    // por exemplo devolvendo `kind: 'organization'` --, o contrato quebraria
-    // exatamente pela regra que o eixo proprio evitou
-    // (`response-property-enum-value-added`), e o APK receberia em `kind` um
-    // valor que ele nao conhece.
     const projetada = projetarEntrada(entrada({ entityKind: 'organization', kinds: ['vet'] }), URL_DE_MIDIA);
     assert.equal(projetada.kind, 'vet');
     assert.notEqual(projetada.kind, 'organization');
@@ -404,21 +288,9 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
 /**
  * O ENDERECO COMERCIAL (cliente, 21/10/2026): *"o endereco completo do
  * profissional"*, para a pessoa tocar e abrir o aplicativo de mapas.
- *
- * Iscas desligadas no codigo de producao em 21/10/2026, conferidas no disco,
- * suite rodada, arquivo restaurado:
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `projetarEnderecoComercial` devolvendo os quatro nulos | 2 |
- * | os quatro campos acrescentados a `projetarEntrada` (a projecao da LISTA) | 1 |
  */
 void describe('o endereco comercial da entrada', () => {
   void it('os quatro campos atravessam como GRAVADOS, sem compor e sem normalizar', () => {
-    // O servidor nao monta uma linha unica: o que ele gravou foi o que o
-    // operador conferiu na tela do painel. Compor aqui seria inventar um
-    // formato que ninguem decidiu, num lugar onde o painel nao poderia
-    // corrigi-lo.
     const projetado = projetarEnderecoComercial({
       postalCode: '05422030',
       street: 'Rua Teodoro Sampaio',
@@ -446,10 +318,6 @@ void describe('o endereco comercial da entrada', () => {
   });
 
   void it('ISCA DE FRONTEIRA: a projecao da LISTA nao carrega nenhum dos quatro', () => {
-    // `projetarEntrada` e o caminho da listagem E do detalhe. O endereco segue
-    // o caminho da FOTO EM FAIXA -- campo proprio de `LocalDoDiretorio` --, e e
-    // por isso que ele nao tem como escorregar para o cartao de `Perto` no dia
-    // em que alguem acrescentar um campo a projecao comum.
     const chaves = Object.keys(projetarEntrada(entrada(), URL_DE_MIDIA));
     for (const campo of ['postal_code', 'street', 'street_number', 'complement']) {
       assert.ok(

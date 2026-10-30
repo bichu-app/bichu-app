@@ -1,18 +1,4 @@
-/**
- * As cinco amarras da janela de reautenticação, sem banco e sem servidor.
- *
- * O que este arquivo pega e o de integração não pega: a **regra**, isolada de
- * quem a aplica. O caso de integração mede o desfecho (401 ou 204), e um 401
- * pelo motivo errado é indistinguível de um 401 pelo motivo certo do lado de
- * fora — que é exatamente a propriedade que a resposta uniforme tem de ter.
- * Aqui dentro o motivo é observável, e é aqui que ele pode ser fixado.
- *
- * O que ele **não** pega, e precisa ser dito em voz alta: a cláusula `WHERE`
- * que de fato consome. Esta função é a especificação; quem impõe é
- * `construtorDoConsumoDaJanela`, e é `reautenticacao-na-clausula-where.test.ts`
- * que cobra os dois lados. Uma regra correta aqui e um `WHERE` incompleto lá
- * seria uma janela aberta com um teste verde em cima.
- */
+/** As cinco amarras da janela de reautenticação, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -69,11 +55,7 @@ void describe('a janela boa vale', () => {
 });
 
 void describe('cada amarra recusa sozinha, e nomeia o motivo', () => {
-  /**
-   * Cada linha muda **uma** coisa em relação ao caso que vale. É isso que
-   * distingue "esta amarra funciona" de "alguma amarra funciona": um caso que
-   * mudasse duas continuaria vermelho com uma delas removida.
-   */
+  /** Cada linha muda **uma** coisa em relação ao caso que vale. */
   const casos: readonly {
     nome: string;
     janela?: Partial<JanelaDeReautenticacao>;
@@ -138,11 +120,6 @@ void describe('os limites de cada comparação, que é onde o defeito mora', () 
   });
 
   void it('a janela emitida EXATAMENTE na barreira continua valendo', () => {
-    // A barreira alcança o que foi emitido ANTES dela, e a comparação é `<`.
-    // Com `<=`, reautenticar e derrubar as sessões no mesmo instante seria
-    // impossível: `logout-all` empurra a barreira, e a janela que o autorizou
-    // ficaria retroativamente inválida. Uma pessoa apertaria o botão e veria
-    // "confirme sua senha" por ter confirmado a senha.
     const veredicto = conferirJanela(
       { ...janelaBoa, emitidaEm: AGORA },
       { ...apresentacaoBoa, barreiraDaConta: AGORA },

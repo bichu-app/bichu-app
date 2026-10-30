@@ -1,20 +1,6 @@
 /**
  * O padrao de endereco do painel: **a pessoa digita o endereco completo, com
  * `https://`**.
- *
- * Decisao do cliente, 17/10/2026: "todo campo de site/url, o usuario deve
- * preencher completo o endereco completo, inclusive com o https".
- *
- * Espelha `src/shared/url/endereco-completo.ts` no servidor, que e quem
- * decide. O painel confere antes so para dizer o motivo DENTRO do campo, sem
- * ida e volta -- e as recusas do servidor caem nos mesmos textos, escolhidos
- * pelo `code`.
- *
- * **Mora fora de `rede/` e de `loja/` de proposito.** O site do parceiro e a
- * URL do Instagram sao o mesmo problema, em duas secoes diferentes do painel;
- * a primeira versao disto nasceu em `rede/dominio/links.ts` e obrigava a Loja a
- * importar de dentro da Rede, que e a dependencia errada e a que vira
- * duplicacao na proxima vez.
  */
 import { configuracao } from '../config.ts';
 import { handleDoInstagram } from '../rede/dominio/links.ts';
@@ -23,11 +9,7 @@ const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const CONTROLE_BIDIRECIONAL = /[\u202A-\u202E\u2066-\u2069]/;
 
-/**
- * A frase do endereco com espaco. Uma so para os dois campos: o motivo e o
- * mesmo, e o servidor tambem a escreve uma vez (`'O endereço não pode ter
- * espaço.'`, em `errosDoEnderecoCompleto`).
- */
+/** A frase do endereco com espaco. */
 const SEM_ESPACO = 'Confira o endereço: ele não pode ter espaço.';
 
 /** Espaco (de qualquer largura) ou caractere de controle no texto. */
@@ -35,18 +17,10 @@ function temEspacoOuControle(texto: string): boolean {
   return [...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 }
 
-/**
- * O exemplo que as mensagens mostram.
- *
- * Montado da configuracao (`VITE_URL_DO_PERFIL_DO_INSTAGRAM`, em
- * `config/hosts-externos.ts`) e nao escrito aqui: host de terceiro literal em
- * `src/` reprova o portao de portabilidade. O precedente e a mensagem do link
- * do convite, que PERDEU o exemplo por nao ter onde por o host -- aqui ele
- * tem, e o exemplo fica.
- */
+/** O exemplo que as mensagens mostram. */
 export const EXEMPLO_DO_INSTAGRAM = `${configuracao.urlDoPerfilDoInstagram.replace(/\/+$/, '')}/bichu.app`;
 
-/** A base do perfil mais os 30 do handle, com folga. O mesmo teto do contrato. */
+/** A base do perfil mais os 30 do handle, com folga. */
 export const LIMITE_DA_URL_DO_INSTAGRAM = 120;
 
 export type CodigoDoInstagram =
@@ -60,12 +34,8 @@ export type CodigoDoInstagram =
   | 'instagram_url_not_instagram';
 
 /**
- * O primeiro motivo de recusa da URL do Instagram, como o servidor; `null`
- * quando passa.
- *
- * **Desde 17/10/2026 o apelido cru e RECUSADO.** Padrao do cliente: todo campo
- * de site recebe o endereco completo, com `https://`. `@bichu.app` cai em
- * `instagram_url_not_https`, e a mensagem mostra a forma certa.
+ * O primeiro motivo de recusa da URL do Instagram, como o servidor; `null` quando
+ * passa.
  */
 export function recusaDoInstagram(valor: string): CodigoDoInstagram | null {
   if (CONTROLE_BIDIRECIONAL.test(valor)) return 'bidi_control';
@@ -76,7 +46,6 @@ export function recusaDoInstagram(valor: string): CodigoDoInstagram | null {
   try {
     url = new URL(texto);
   } catch {
-    // Onde `@bichu.app` e `bichu.app` caem: sem esquema o `URL` nem parseia.
     return 'instagram_url_not_https';
   }
   if (url.protocol !== 'https:' || !texto.startsWith('https://')) return 'instagram_url_not_https';
@@ -94,7 +63,7 @@ export function recusaDoInstagram(valor: string): CodigoDoInstagram | null {
   return null;
 }
 
-/** `https://` + 253 do dominio. O mesmo do contrato. */
+/** `https://` + 253 do dominio. */
 export const LIMITE_DO_SITE = 261;
 
 export type CodigoDoSite =
@@ -107,12 +76,8 @@ export type CodigoDoSite =
   | 'site_url_local_host';
 
 /**
- * O primeiro motivo de recusa do site do parceiro, como o servidor; `null`
- * quando passa.
- *
- * Mesma regra de [recusaDoLinkDoConvite], com outro teto e outro prefixo de
- * `code`. Os prefixos diferentes existem para a tela poder escolher a frase
- * certa quando dois campos de endereco recusam na mesma pagina.
+ * O primeiro motivo de recusa do site do parceiro, como o servidor; `null` quando
+ * passa.
  */
 export function recusaDoSite(valor: string): CodigoDoSite | null {
   if (CONTROLE_BIDIRECIONAL.test(valor)) return 'bidi_control';
@@ -144,14 +109,7 @@ export function hostDoSite(valor: string): string | null {
   return new URL(valor.trim()).hostname.toLowerCase().replace(/\.+$/, '');
 }
 
-
-/**
- * O texto de cada recusa do Instagram. Uma linha por motivo, e o motivo REAL.
- *
- * A frase de `not_https` traz o exemplo porque e a recusa que ENSINA o padrao
- * novo: quem digitava `@bichu.app` ate ontem precisa ver a forma certa, e nao
- * so ouvir que a antiga nao serve mais.
- */
+/** O texto de cada recusa do Instagram. */
 export const MENSAGEM_DO_INSTAGRAM: Record<CodigoDoInstagram, string> = {
   bidi_control: 'O endereço tem caracteres invisíveis. Apague e digite de novo.',
   instagram_url_length: `Use até ${String(LIMITE_DA_URL_DO_INSTAGRAM)} caracteres.`,
@@ -163,25 +121,7 @@ export const MENSAGEM_DO_INSTAGRAM: Record<CodigoDoInstagram, string> = {
   instagram_url_invalid: `Falta o perfil no fim do endereço. Por exemplo: ${EXEMPLO_DO_INSTAGRAM}`,
 };
 
-/**
- * A frase da recusa LOCAL do Instagram, ou `null` quando o endereco passa.
- *
- * **O `code` sozinho nao distingue o motivo**, e o servidor nao finge que
- * distingue: `errosDoInstagram` (em `src/modules/network/domain/
- * escrita-do-encontro.ts`) escolhe a frase NO PONTO da recusa, porque dois
- * motivos diferentes dividem o mesmo `code`:
- *
- * - `instagram_url_not_https`: sem esquema nenhum (`@bichu.app`) **ou** com
- *   `http://`. Quem escreveu `http://` ja escreveu um esquema, so nao o
- *   certo, e mandar "cole o endereco completo" responderia outra pergunta.
- * - `instagram_url_invalid`: espaco no meio **ou** endereco sem o perfil no
- *   fim. "Falta o perfil" para um texto com espaco e simplesmente falso.
- *
- * Foi essa confusao de uma frase so para recusas diferentes que custou o
- * tempo do cliente em 17/10. [MENSAGEM_DO_INSTAGRAM] continua existindo e
- * continua sendo o mapa das recusas que chegam DO SERVIDOR, onde a tela so
- * tem o `code`.
- */
+/** A frase da recusa LOCAL do Instagram, ou `null` quando o endereco passa. */
 export function mensagemDoInstagram(valor: string): string | null {
   const code = recusaDoInstagram(valor);
   if (code === null) return null;
@@ -199,8 +139,6 @@ export function mensagemDoInstagram(valor: string): string | null {
 export const MENSAGEM_DO_SITE: Record<CodigoDoSite, string> = {
   bidi_control: 'O endereço tem caracteres invisíveis. Apague e digite de novo.',
   site_url_length: `Use até ${String(LIMITE_DO_SITE)} caracteres.`,
-  // Sem exemplo com host: o site do parceiro nao tem um host de terceiro
-  // que caiba em configuracao, e o precedente do link do convite e descrever.
   site_url_not_https: 'Escreva o endereço completo do site, começando com https://.',
   site_url_has_credentials: 'Tire o usuário e a senha do endereço.',
   site_url_ip_literal: 'Use o endereço do site, e não um número de IP.',
@@ -208,27 +146,7 @@ export const MENSAGEM_DO_SITE: Record<CodigoDoSite, string> = {
   site_url_invalid: SEM_ESPACO,
 };
 
-/**
- * A frase da recusa LOCAL do site do parceiro, ou `null` quando o endereco
- * passa.
- *
- * Mesmo motivo de [mensagemDoInstagram], no outro campo: **o `code` sozinho
- * nao distingue o motivo**, e o servidor nao finge que distingue.
- * `errosDoEnderecoCompleto` (em `src/shared/url/endereco-completo.ts`) escolhe
- * a frase NO PONTO da recusa, porque dois motivos dividem o mesmo `code`:
- *
- * - `site_url_not_https`: sem esquema nenhum (`casadobicholapa.com.br`)
- *   **ou** com `http://`. Quem escreveu `http://` ja escreveu um esquema, so
- *   nao o certo, e mandar "escreva o endereco completo" responderia outra
- *   pergunta.
- * - `site_url_invalid`: espaco no meio **ou** endereco sem host nenhum
- *   (`https://.`, que o `URL` aceita e cujo host some ao tirar o ponto
- *   final). "Nao pode ter espaco" para um texto SEM espaco e simplesmente
- *   falso, e o servidor ja responde o incompleto nesse caso.
- *
- * [MENSAGEM_DO_SITE] continua existindo e continua sendo o mapa das recusas
- * que chegam DO SERVIDOR, onde a tela so tem o `code`.
- */
+/** A frase da recusa LOCAL do site do parceiro, ou `null` quando o endereco passa. */
 export function mensagemDoSite(valor: string): string | null {
   const code = recusaDoSite(valor);
   if (code === null) return null;
@@ -236,9 +154,6 @@ export function mensagemDoSite(valor: string): string | null {
   if (code === 'site_url_not_https' && texto.toLowerCase().startsWith('http://')) {
     return 'Troque http:// por https://.';
   }
-  // O mapa guarda a frase do espaco, que e o caso comum; o host vazio e o
-  // outro motivo do mesmo `code` e pede a frase do endereco incompleto -- a
-  // mesma que `errosDoEnderecoCompleto` devolve para `host === ''`.
   if (code === 'site_url_invalid' && !temEspacoOuControle(texto)) {
     return MENSAGEM_DO_SITE.site_url_not_https;
   }

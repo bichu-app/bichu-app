@@ -2,14 +2,6 @@
  * O aviso a todos os administradores (D52, D60), por e-mail, a cada encontro
  * criado, movido, cancelado, com condicao de acesso trocada ou com observacoes
  * mudadas.
- *
- * Quem recebe: toda conta ATIVA com papel `admin`, lida no instante do envio.
- * Um envio por conta, e a falha de um nao impede os outros: o aviso existe
- * para que alguem perceba uma conta tomada, e basta que ele chegue a uma
- * pessoa. A falha de cada envio sai no log, sem o endereco.
- *
- * Sai DEPOIS do `COMMIT` (quem chama garante): um e-mail sobre uma escrita
- * desfeita seria um aviso falso.
  */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { Mailer } from '../../../identity/ports/mailer.js';
@@ -24,8 +16,6 @@ export interface DependenciasDoAviso {
 export function criarAvisoAosAdministradores(deps: DependenciasDoAviso): AvisoAosAdministradores {
   return {
     async avisar({ assunto, linhas }) {
-      // Os administradores sao as contas ATIVAS de `admin_accounts` (ADR-0027
-      // item 20): conta do app nunca recebe aviso do painel.
       const contas = await deps.db
         .selectFrom('admin_accounts')
         .select(['email'])

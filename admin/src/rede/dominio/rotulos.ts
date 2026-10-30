@@ -1,10 +1,4 @@
-/**
- * Rotulos de tela para os valores de lista fechada do contrato. A chave de
- * cada mapa e o valor do contrato; o tipo `Record<Enum, string>` faz o
- * compilador reprovar quando o contrato ganha ou perde um valor.
- *
- * Textos: docs/06-design-system.md 25.5.2 e docs/05-ux-research.md 29.10.
- */
+/** Rotulos de tela para os valores de lista fechada do contrato. */
 import type {
   Estrutura,
   EstadoDoPedido,
@@ -51,9 +45,8 @@ export const ESTRUTURAS: Record<Estrutura, string> = {
 };
 
 /**
- * A que o preco se refere, na frase que o painel e a previa escrevem (decisao
- * do cliente de 01/10). `per_dog` e legado: o servidor ainda o devolve nos
- * encontros antigos, e ele aparece como "por pet".
+ * A que o preco se refere, na frase que o painel e a previa escrevem (decisao do
+ * cliente de 01/10).
  */
 export const UNIDADES: Record<UnidadeDoValor, string> = {
   per_pet: 'por pet',
@@ -63,10 +56,16 @@ export const UNIDADES: Record<UnidadeDoValor, string> = {
   per_dog: 'por pet',
 };
 
-/** O que o painel oferece. `per_dog` nao entra: so aparece, como "por pet", em encontro antigo. */
+/**
+ * O que o painel oferece. `per_dog` nao entra: so aparece, como "por pet", em
+ * encontro antigo.
+ */
 export const UNIDADES_OFERECIDAS = ['per_pet', 'per_person', 'per_pair', 'per_two_people'] as const satisfies readonly UnidadeDoValor[];
 
-/** `per_dog` e `per_pet` sao a mesma coisa para quem le: compara pelo que a pessoa ve. */
+/**
+ * `per_dog` e `per_pet` sao a mesma coisa para quem le: compara pelo que a pessoa
+ * ve.
+ */
 export function unidadeComoAparece(u: UnidadeDoValor): Exclude<UnidadeDoValor, 'per_dog'> {
   return u === 'per_dog' ? 'per_pet' : u;
 }
@@ -88,7 +87,7 @@ export const VAZIO_DE_PEDIDOS: Record<EstadoDoPedido, string> = {
   declined: 'Nenhum pedido recusado.',
 };
 
-/** As 27 siglas, na ordem do prototipo. `place.state` e `^[A-Z]{2}$`. */
+/** As 27 siglas, na ordem do prototipo. */
 export const UFS = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
   'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',

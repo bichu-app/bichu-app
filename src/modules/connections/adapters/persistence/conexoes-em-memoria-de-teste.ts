@@ -1,20 +1,4 @@
-/**
- * O repositório de conexão **em memória**, para teste de comportamento.
- *
- * Existe pela mesma razão de `rede-em-memoria-de-teste.ts`: a suíte unitária não
- * tem banco, e as perguntas de comportamento — *o aceite é obrigatório?*, *a
- * conta desabilitada sai?*, *o bloqueio apaga o pendente das duas direções?* —
- * não se respondem lendo SQL compilado.
- *
- * **Ele não substitui o teste de SQL, e os dois medem coisas diferentes.** Aqui
- * se mede a regra; em `autorizacao-na-clausula-where.test.ts` se mede que a
- * regra está no `WHERE` e não num `if`. Uma implementação em memória que
- * acertasse a regra por `if` passaria aqui e reprovaria lá, que é exatamente o
- * arranjo que se quer.
- *
- * Reproduz de propósito, e só, o que o SQL faz: `conta_habilitada` nos dois
- * lados, uma linha por par canônico, e os tetos contados em linha.
- */
+/** O repositório de conexão **em memória**, para teste de comportamento. */
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import {
   arestaMorta,
@@ -46,16 +30,7 @@ interface LinhaEmMemoria {
   pedinte: UserId;
   destinatario: UserId;
   estado: EstadoGuardado;
-  /**
-   * De onde o pedido NASCEU, como a coluna `origin` guarda.
-   *
-   * **Ele não estava aqui até 20/10/2026**, e a ausência era um buraco de
-   * medição e não uma simplificação: o repositório de verdade escreve `origin`
-   * em toda linha — a coluna é `NOT NULL` com `CHECK` de lista fechada — e este
-   * dublê descartava o valor em silêncio. Nenhum teste podia afirmar a
-   * procedência de uma aresta, que é justamente aquilo em que os dois caminhos
-   * novos (convite e apelido) se distinguem.
-   */
+  /** De onde o pedido NASCEU, como a coluna `origin` guarda. */
   origem: OrigemDoPedido;
   pedidoEm: number;
   expiraEm: number;
@@ -71,38 +46,16 @@ export interface PessoaDeTeste {
   /**
    * Reproduz o `EXISTS` de `pets` com `pet_photos.status = 'ready'` — o segundo
    * sinal do contador de convidados (21/10/2026).
-   *
-   * **Opcional, e o padrão é `false`**, e isso não é conveniência: o padrão
-   * reproduz a conta recém-criada, que é justamente quem o freio anti-abuso
-   * precisa NÃO contar. Um padrão `true` faria o caso do abuso passar sem
-   * ninguém escrevê-lo.
    */
   readonly petComFotoPronta?: boolean;
   /**
-   * O SELO DE VALIDADO. `true` reproduz
-   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
-   *
-   * **Opcional, e o padrão é `false`**: conta que o teste nunca mencionou não é
-   * conta validada, e um padrão `true` faria toda esta suíte nascer com selo —
-   * a isca de "sem canal confirmado o selo não aparece" ficaria verde sem medir.
+   * O SELO DE VALIDADO. `true` reproduz `email_verified_at IS NOT NULL OR
+   * phone_verified_at IS NOT NULL`.
    */
   readonly canalVerificado?: boolean;
-  /**
-   * Quantos pets não apagados, para a lista das próprias conexões (22/10/2026).
-   *
-   * **Opcional, e o padrão é `0`**: conta que o teste nunca mencionou não tem
-   * pet, e um padrão diferente de zero faria a isca da contagem ficar verde sem
-   * ninguém escrever o número.
-   */
+  /** Quantos pets não apagados, para a lista das próprias conexões (22/10/2026). */
   readonly pets?: number;
-  /**
-   * A chave da derivada `thumb` da foto, ou `null`. Reproduz o predicado
-   * `status = 'ready' AND thumb_key IS NOT NULL` da consulta de verdade.
-   *
-   * **Opcional, e o padrão é `null`**: na dúvida não há foto, pela mesma razão
-   * do selo — um padrão com chave faria a isca de "sem foto pronta sai nulo"
-   * ficar verde sem medir nada.
-   */
+  /** A chave da derivada `thumb` da foto, ou `null`. */
   readonly chaveDaFoto?: string | null;
 }
 
@@ -144,10 +97,6 @@ export function conexoesEmMemoria(
       outraPessoa: {
         apelido: pessoa?.apelido ?? null,
         nomeDeExibicao: pessoa?.nomeDeExibicao ?? null,
-        // **`false` quando a conta nao esta no dublê**, e nao `true`: na duvida o
-        // selo NAO nasce. Um padrao `true` faria todo caso desta suite nascer
-        // validado e a isca de "sem canal confirmado o selo nao aparece" ficaria
-        // verde sem medir nada.
         canalVerificado: pessoa?.canalVerificado ?? false,
       },
     };
@@ -174,9 +123,9 @@ export function conexoesEmMemoria(
     contarConexoes: (pessoa: UserId) => Promise.resolve(contarConexoesDe(pessoa)),
 
     /**
-     * Os DOIS sinais do contador de convidados, no mesmo recorte da consulta
-     * de verdade: aresta aceita com esta conta no DESTINO e origem de convite,
-     * **e** quem pediu com pet de foto pronta.
+     * Os DOIS sinais do contador de convidados, no mesmo recorte da consulta de
+     * verdade: aresta aceita com esta conta no DESTINO e origem de convite, **e** quem
+     * pediu com pet de foto pronta.
      */
     contarConvidadosQueEntraram: (pessoa: UserId) =>
       Promise.resolve(
@@ -297,27 +246,13 @@ export function conexoesEmMemoria(
       });
     },
 
-    /**
-     * **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026).
-     *
-     * Reproduz de propósito, e só, o que a consulta faz: `accepted`,
-     * `conta_habilitada` nos **dois** lados (via [viva]), **sem apelido fica
-     * fora** (a consulta de verdade filtra `handle IS NOT NULL`, porque cada
-     * linha é uma porta para o perfil), e a ordem por nome e depois por apelido.
-     *
-     * **Não há argumento de pessoa**, como na porta: quem quisesse a lista de
-     * outra conta teria de acrescentar parâmetro, e o lugar onde isso se vê é a
-     * porta.
-     */
+    /** **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026). */
     conexoes: (quemChama: UserId, recorte: RecorteDeConexoes): Promise<PaginaDeConexoes> => {
       const todas = linhas
         .filter((l) => l.estado === 'accepted' && viva(l))
         .filter((l) => l.pedinte === quemChama || l.destinatario === quemChama)
         .map((l) => estado.get(l.pedinte === quemChama ? l.destinatario : l.pedinte))
         .filter((pessoa): pessoa is PessoaDeTeste => pessoa !== undefined)
-        // **Sem apelido nao entra**: a consulta de verdade cobra
-        // `handle IS NOT NULL`, porque a linha e uma porta para o perfil e o
-        // perfil e enderecado pelo apelido.
         .filter((pessoa) => pessoa.apelido !== null)
         .sort(
           (a, b) =>
@@ -337,13 +272,7 @@ export function conexoesEmMemoria(
       });
     },
 
-    /**
-     * As arestas entre quem chama e uma lista de apelidos (22/10/2026).
-     *
-     * Reproduz o recorte da consulta: `conta_habilitada` nos dois lados (via
-     * [viva]) e `accepted` **ou** pendente ainda na validade. **A projeção do
-     * estado não é daqui** — quem projeta é `estadoNoApp`, no leitor.
-     */
+    /** As arestas entre quem chama e uma lista de apelidos (22/10/2026). */
     arestasPorApelido: (
       quemChama: UserId,
       apelidos: readonly string[],
@@ -385,9 +314,6 @@ export function conexoesEmMemoria(
     repositorio,
     linhas,
     semear(parcial) {
-      // Quem a bancada semeia e habilitado por padrao: `conta_habilitada` so
-      // responde falso para conta DESABILITADA, e uma conta que o teste nunca
-      // mencionou nao e uma conta desabilitada.
       for (const lado of [parcial.pedinte, parcial.destinatario]) {
         if (!estado.has(lado)) {
           estado.set(lado, {
@@ -395,9 +321,6 @@ export function conexoesEmMemoria(
             apelido: null,
             nomeDeExibicao: null,
             habilitada: true,
-            // Ver `PessoaDeTeste.canalVerificado`: quem a bancada semeia sem
-            // dizer nada NAO e validado. O padrao oposto ao de `habilitada`, e
-            // de proposito: desabilitar e um ato, validar tambem.
             canalVerificado: false,
           });
         }
@@ -408,8 +331,6 @@ export function conexoesEmMemoria(
       linhas.push({
         ref,
         estado: 'pending',
-        // O padrão é `invite_link`, que é o caminho que de fato existe em
-        // produção desde 20/10/2026. Quem semeia pode sobrescrever.
         origem: 'invite_link',
         pedidoEm: agora - DIA,
         expiraEm: agora + 29 * DIA,

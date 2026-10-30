@@ -1,47 +1,13 @@
-/**
- * Portao do contrato administrativo (ADR-0027 item 7, regras 1 a 3; D37).
- *
- * Le `api/openapi.yaml` e confere as operacoes sob `/admin/`:
- *
- * 1. toda operacao sob `/admin/`, exceto as da lista fechada de operacoes sem
- *    sessao (`openAdminSession` e `disavowAdminSessionAlert`, ADR-0027 item
- *    20.5), declara `security` com `adminSession` e declara `x-admin-roles`
- *    nao vazio, so com valores de `AdminRole`; as da lista nao declaram nenhum
- *    dos dois;
- * 2. toda operacao sob `/admin/` de metodo nao seguro declara `x-audit` com
- *    `action` e `resource_kind`, e `adminCsrf` (as da lista fechada sao as
- *    unicas sem `adminCsrf`: nao tem sessao da qual tirar o token);
- * 3. nenhuma operacao fora de `/admin/` declara `adminSession`, `adminCsrf`,
- *    `adminReauth`, `x-admin-roles` ou `x-audit`;
- * 4. `adminReauth` no `security` e `x-admin-reauth-scope` andam juntos, e o
- *    escopo e um valor de `AdminReauthScope`;
- * 5. `GET` administrativo so declara `x-audit` quando e LEITURA DE DADO PESSOAL
- *    AUDITADA (D55): o verbo da acao e de leitura (`.listed`, `.read`), a
- *    operacao declara o teto por linhas devolvidas (`x-rate-limit` com
- *    `counts: rows_returned`, D56) e NAO e da lista fechada sem sessao (leitura
- *    de pessoa sem conta identificada nao tem a quem atribuir a trilha). Fora
- *    disso, GET com `x-audit` continua reprovado (GET nao muda estado, item 3),
- *    e um verbo de escrita num GET reprova sempre;
- * 6. o inverso: `GET` administrativo com teto por `rows_returned` e leitura de
- *    pessoa, e sem `x-audit` ele sairia sem trilha (D55);
- * 7. nenhuma operacao sob `/admin/` recebe `password` no corpo, exceto o login
- *    e a reautenticacao, que CONFEREM senha: nenhuma operacao do contrato
- *    define ou redefine senha de conta do painel (D61, item 20.4);
- * 8. `password-reset-required` nao aparece em operacao administrativa nem no
- *    catalogo de problemas: senha certa e vazada responde o mesmo 401 da senha
- *    errada (D43, decisao de 28/09). O 403 proprio confirmava a quem testa
- *    listas de vazamento que o e-mail e de administrador e a senha confere.
- *
- * **Nao achar alvo reprova**: com zero operacoes sob `/admin/` o portao nao
- * verificou nada, e diz isso. As iscas que ele precisa reprovar estao no teste
- * ao lado, uma por regra.
- */
+/** Portao do contrato administrativo (ADR-0027 item 7, regras 1 a 3; D37). */
 import { parse as parseYaml } from 'yaml';
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 const SEGUROS: ReadonlySet<string> = new Set(['get']);
 const PREFIXO = '/admin/';
-/** A lista fechada de `superficie-administrativa.ts`, repetida aqui e nao importada: o portao le o contrato por conta propria. */
+/**
+ * A lista fechada de `superficie-administrativa.ts`, repetida aqui e nao
+ * importada: o portao le o contrato por conta propria.
+ */
 const SEM_SESSAO: ReadonlySet<string> = new Set(['openAdminSession', 'disavowAdminSessionAlert']);
 /** As que conferem senha. Definir senha nenhuma operacao define (D61). */
 const RECEBEM_SENHA: ReadonlySet<string> = new Set(['openAdminSession', 'reauthenticateAdmin']);
@@ -153,8 +119,6 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
         violacoes.push(`${id}: operacao sem sessao da lista fechada; nao declara security nem x-admin-roles`);
       }
       if (!semSessao && esquemas.size === 0) {
-        // Ja acusado acima como "sem adminSession"; o texto daqui diz o que o
-        // conserto NAO e: acrescentar a operacao a lista e decisao de arquitetura.
         violacoes.push(`${id}: operacao sob /admin/ sem sessao fora da lista fechada (${[...SEM_SESSAO].join(', ')})`);
       }
 

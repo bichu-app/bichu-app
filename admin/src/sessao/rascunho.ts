@@ -1,10 +1,6 @@
 /**
  * O formulario aberto quando a sessao cai (UX 29.2): guardado no navegador e
  * devolvido quando a pessoa volta a mesma rota depois de entrar.
- *
- * Fica em `sessionStorage`, que e da aba e morre com ela. Guarda **so os campos
- * do formulario**: nada de sessao, token anti-CSRF ou senha (a senha do dialogo
- * de reautenticacao nunca entra aqui). `test/iscas.test.ts` confere isso.
  */
 const PREFIXO = 'bichu-adm-rascunho:';
 

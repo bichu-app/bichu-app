@@ -1,46 +1,4 @@
-/**
- * A FILA DE INDICACOES do `Perto`, no painel: o menu que faltava.
- *
- * ## A queixa que esta tela responde, literal
- *
- * "No backoffice nao tem um menu para aprovar os profissionais que as pessoas
- * estao indicando." A indicacao pelo aplicativo grava em `directory_suggestions`
- * com estado pendente desde 17/10, sem tocar `professionals`, e nenhuma das duas
- * frentes paralelas fez o lado que LE essa fila.
- *
- * ## APROVAR CRIA A ENTRADA, e por isso a aprovacao pede o endereco
- *
- * Aprovado quer dizer que a entidade aparece no `Perto`. A aprovacao manda um
- * `slug` -- o endereco publico da entrada --, sugerido a partir do nome
- * indicado pela MESMA funcao que o formulario de cadastro usa (`slugSugerido`),
- * e editavel.
- *
- * **A duplicata se resolve pelo endereco.** Se ja existir entrada naquele
- * `slug`, o servidor nao cria nada, nao altera nada na entrada existente, e liga
- * a indicacao aquela entrada -- a resposta volta com `entry_created: false`, e o
- * aviso diz isso com outras palavras ("ligada a entrada que ja estava no Perto",
- * e nao "entrada criada"). O operador que reconhece o lugar procura o nome em
- * `Perto`, copia o endereco e aprova com ele.
- *
- * ## RECUSAR PEDE MOTIVO, e nao apaga
- *
- * O motivo e para o PROXIMO revisor -- a mesma entidade vai ser indicada outra
- * vez --, nao e publicado e nao chega a quem indicou. A indicacao recusada
- * continua na aba Recusadas, com o motivo a vista.
- *
- * ## O que esta tela NAO mostra, e a ausencia e a regra
- *
- * **Nada de quem indicou.** Nem nome, nem conta, nem quantas indicacoes a mesma
- * pessoa mandou: a coluna da autoria nunca sai do servidor, e a resposta nao a
- * carrega. Esta fila nao e leitura de pessoa -- e por isso ela nao tem o teto
- * por linhas nem a trilha por chamada que a fila da Rede tem (D53 a D57).
- *
- * ## O numero do menu vem do servidor
- *
- * `pending_total` e a contagem do aviso, e ela ignora o filtro de proposito: o
- * item da navegacao responde "quanto trabalho esta esperando". Somar na tela
- * contaria o que a lista nao mostra.
- */
+/** A FILA DE INDICACOES do `Perto`, no painel: o menu que faltava. */
 import { useCallback, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -92,7 +50,7 @@ const SELO_DA_ABA = {
   declined: 'retirado',
 } as const satisfies Record<EstadoDaIndicacao, 'rascunho' | 'publicado' | 'retirado'>;
 
-/** O instante, curto, no fuso de quem le. Mesma gramatica das outras listas do painel. */
+/** O instante, curto, no fuso de quem le. */
 function quando(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
@@ -117,8 +75,6 @@ export default function FilaDeIndicacoes() {
         signal: sinal,
       });
       if (!data) return undefined;
-      // A contagem do aviso vem na mesma resposta: a tela nao faz uma segunda
-      // chamada so para o numero, e nao soma nada por conta propria.
       setPendentes(data.pending_total);
       return { itens: data.items, total: data.total };
     },
@@ -176,11 +132,8 @@ export default function FilaDeIndicacoes() {
           Não conseguimos carregar a fila de indicações.
         </Banner>
       )}
-      {/* Filtro NO TOPO DO CORPO DA TELA, e nunca na barra do app: e o padrao de
-          listagem do projeto. `chips` e a mesma marcacao e o mesmo CSS global
-          que a lista de entradas usa por `BarraDeListagem` -- aqui sem a barra,
-          porque esta fila nao tem busca por nome no contrato e um campo de
-          busca que nao busca e pior que nenhum. */}
+      {
+}
       <div className="chips">
         <div className="chips-grupo" role="radiogroup" aria-label="Filtrar por situação">
           {ABAS.map((k) => (
@@ -247,17 +200,9 @@ export default function FilaDeIndicacoes() {
                           <span className="t-label">{i.display_name}</span>
                           <br />
                           <span className="t-caption c-sec">
-                            {/* OS DOIS EIXOS, e nao so a atividade (cliente,
-                                29/10/2026: *"esta faltando o campo se e um
-                                profissional, ong ou estabelecimento"*).
+                            {
 
-                                O TIPO aparece porque e ele que a aprovacao
-                                carrega para `professionals.entity_kind`: sem
-                                ele na tela, quem revisa aprovaria uma ONG como
-                                profissional sem nunca ter visto a declaracao de
-                                quem indicou. O ROTULO e o MESMO de
-                                `TIPOS_DE_ENTIDADE` -- o mesmo dado com dois
-                                nomes e defeito, e ja viveu em silencio aqui. */}
+}
                             {TIPOS_DE_ENTIDADE[i.entity_kind]} · {ATIVIDADES[i.kind]} · indicada em{' '}
                             {quando(i.created_at)}
                           </span>
@@ -403,10 +348,6 @@ function mensagemDoErro(status: number, erro: unknown): string {
 /**
  * A aprovacao: o endereco publico da entrada e, quando o contato indicado nao e
  * telefone, o telefone comercial.
- *
- * O endereco vem sugerido do nome pela MESMA funcao do formulario de cadastro
- * (`slugSugerido`): duas regras de sugestao divergiriam, e o operador veria um
- * endereco diferente dependendo de por onde entrou.
  */
 function DialogoDeAprovacao({
   indicacao: i,
@@ -438,9 +379,6 @@ function DialogoDeAprovacao({
       return;
     }
     setErroDoSlug(undefined);
-    // O telefone e OPCIONAL: sem ele a entrada nasce rascunho, e o aviso diz
-    // isso. Mas telefone MAL ESCRITO nao vira 400 do servidor -- a tela recusa
-    // com a mesma mensagem do formulario de cadastro.
     const e164 = telefone.trim() === '' ? null : telefoneEmE164(telefone);
     if (telefone.trim() !== '' && e164 === null) {
       setErroDoTelefone(ERRO_AO_SAIR_DO_TELEFONE);
@@ -547,16 +485,7 @@ function DialogoDeAprovacao({
   );
 }
 
-/**
- * A recusa, com motivo obrigatorio.
- *
- * **Nao reusa `DialogoComMotivo` da Rede**, e a escolha e deliberada: aquele
- * componente mora em `src/rede/componentes/`, importa `rede.module.css` e
- * `rede/dominio/formulario.ts`, e puxa-lo para o diretorio criaria dependencia
- * de uma secao do painel na outra -- o primeiro passo para um componente
- * compartilhado que ninguem decidiu criar. Quando um terceiro lugar pedir a
- * mesma caixa, ela sobe para `src/componentes/`; duas nao e um padrao.
- */
+/** A recusa, com motivo obrigatorio. */
 function DialogoDeRecusa({
   indicacao: i,
   aoRecusar,

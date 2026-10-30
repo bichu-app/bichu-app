@@ -1,20 +1,4 @@
-/**
- * Testes do adaptador de push (ADR-0008).
- *
- * Sem rede e sem aparelho: `fetch` entra por parâmetro. Não há envio de
- * verdade aqui de propósito — push real exige aparelho físico e está em
- * BICHUS-136. O que está sob teste é o que dá para provar sem aparelho, e é
- * justamente o que quebra calado no dia da homologação:
- *
- * 1. **A porteira do payload roda antes do fio.** Uma mensagem com dado
- *    pessoal não pode sair nem consumir credencial para ser recusada.
- * 2. **A tradução da falha do transporte para a decisão de quem chamou.**
- *    `SENDER_ID_MISMATCH` é o caso que justifica o arquivo: lido cru, ele manda
- *    apagar o aparelho e mandar a pessoa reinstalar, e o defeito volta parecendo
- *    intermitente porque a causa era o projeto errado.
- * 3. **`retentavel`**, que é o que a fila lê. Repetir para sempre uma falha que
- *    não passa é como uma fila morre sem ninguém notar.
- */
+/** Testes do adaptador de push (ADR-0008). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -23,10 +7,8 @@ import { PushNaoEnviadoError, type MensagemDePush } from '../../ports/push-sende
 import { criarPushSenderFcm, type Buscar } from './fcm-http-v1.js';
 
 /**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia
- * 404 na VM e passava aqui, porque o duble respondia a qualquer URL com
- * `metadata`). Literal, e nao importado: trocar a constante do adaptador
- * reprova este arquivo.
+ * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
+ * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
  */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
@@ -50,10 +32,8 @@ function mensagem(ajuste: Partial<MensagemDePush> = {}): MensagemDePush {
 }
 
 /**
- * `fetch` falso: responde a credencial no endereço de metadados e delega o
- * resto ao caso. As chamadas ficam registradas com corpo, para que o teste
- * confira **o que foi para o fio** — que é o único lugar onde se prova que
- * nada sensível saiu.
+ * `fetch` falso: responde a credencial no endereço de metadados e delega o resto
+ * ao caso.
  */
 function buscarFalso(responder: (url: string) => Response): {
   buscar: Buscar;
@@ -64,7 +44,6 @@ function buscarFalso(responder: (url: string) => Response): {
     const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
     chamadas.push({ url, corpo: typeof init?.body === 'string' ? init.body : undefined });
     if (url === METADADOS_EXATO) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
-    // Qualquer outra forma do endereco de metadados: 404, como na VM.
     if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
     return Promise.resolve(responder(url));
   };
@@ -102,8 +81,6 @@ void describe('a porteira do payload roda ANTES de qualquer coisa', () => {
         ),
       (erro: unknown) => erro instanceof VazamentoNoPushError,
     );
-    // NADA foi chamado: nem o metadados, nem o transporte. Se esta linha cair,
-    // um payload com dado pessoal já saiu da máquina antes de alguém reclamar.
     assert.deepEqual(chamadas, []);
   });
 
@@ -150,8 +127,6 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
     }).message.android;
     assert.equal(android['ttl'], '21600s');
     assert.equal(android['collapse_key'], 'tagEscaneada:k7QpZr3XmBvNs2Td');
-    // Nome do enum em maiúsculas: a forma canônica do JSON de protobuf. A
-    // minúscula é tolerada hoje, e depender de tolerância não é contrato.
     assert.equal(android['priority'], 'HIGH');
   });
 
@@ -161,8 +136,6 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
     const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     const message = (JSON.parse(envio?.corpo ?? '{}') as { message: Record<string, unknown> })
       .message;
-    // Um bloco vazio não adiantaria, e um bloco preenchido esconderia a
-    // pendência atrás de configuração que não funciona.
     assert.equal(message['apns'], undefined);
   });
 
@@ -198,8 +171,6 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
         erro instanceof PushNaoEnviadoError &&
         erro.motivo === 'projeto-divergente' &&
         erro.retentavel === false &&
-        // As DUAS leituras precisam estar na mensagem: sem a segunda, quem lê
-        // apaga o aparelho e o defeito volta parecendo intermitente.
         erro.message.includes('OUTRO projeto') &&
         erro.message.includes('google-services.json'),
     );
@@ -257,8 +228,6 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
   });
 
   void it('usa o `status` genérico do Google quando o transporte não manda `details`', async () => {
-    // Nem toda recusa traz o `errorCode` do FCM. Sem esta leitura, a recusa
-    // cairia no mapeamento por status HTTP e perderia o nome da causa.
     const { buscar } = buscarFalso(
       () => new Response(JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT' } }), { status: 400 }),
     );
@@ -270,9 +239,6 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
   });
 
   void it('corpo de erro que não é JSON não derruba a tradução', async () => {
-    // Uma borda no caminho pode devolver HTML numa falha. Se o `json()`
-    // estourasse aqui, a causa real (o status) se perderia atrás de um
-    // `SyntaxError` que não diz nada a quem lê o log.
     const { buscar } = buscarFalso(() => new Response('<html>502</html>', { status: 502 }));
     await assert.rejects(
       () => criarPushSenderFcm(CONFIG, buscar).enviar(mensagem()),
@@ -284,8 +250,6 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
   });
 
   void it('status desconhecido NÃO vira retentável por otimismo', async () => {
-    // Repetir para sempre uma falha que ninguém sabe ler é como uma fila morre
-    // sem ninguém notar.
     const { buscar } = buscarFalso(() => recusa(418));
     await assert.rejects(
       () => criarPushSenderFcm(CONFIG, buscar).enviar(mensagem()),
@@ -300,7 +264,6 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
       if (url === METADADOS_EXATO) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
-      // Qualquer outra forma do endereco de metadados: 404, como na VM.
       if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.reject(new Error('getaddrinfo ENOTFOUND'));
     };
@@ -317,7 +280,6 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
       if (url === METADADOS_EXATO) return Promise.resolve(new Response('', { status: 404 }));
-      // Qualquer outra forma do endereco de metadados: 404, como na VM.
       if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(aceito());
     };
@@ -337,7 +299,6 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
       if (url === METADADOS_EXATO) {
         return Promise.resolve(new Response(JSON.stringify({ expires_in: 3600 }), { status: 200 }));
       }
-      // Qualquer outra forma do endereco de metadados: 404, como na VM.
       if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(aceito());
     };
@@ -351,8 +312,6 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
   });
 
   void it('o token da instância é reaproveitado: não há uma ida ao metadados por push', async () => {
-    // Um alerta de vizinhança sai para dezenas de aparelhos. Uma ida ao
-    // metadados por aparelho transformaria o envio em cascata de chamadas.
     const { buscar, chamadas } = buscarFalso(() => aceito());
     const remetente = criarPushSenderFcm(CONFIG, buscar);
     await remetente.enviar(mensagem());

@@ -1,18 +1,4 @@
-/**
- * Persistência do módulo `identity`.
- *
- * Aqui mora a tradução entre a linguagem do domínio e as tabelas. Dois pontos em
- * que a implementação decide correção, e não desempenho:
- *
- * - **criação de conta** grava `users`, `user_identities` e `local_credentials`
- *   na mesma transação. Conta sem credencial é um estado que ninguém consegue
- *   corrigir pela interface;
- * - **rotação de refresh** consome o token apresentado com um `UPDATE`
- *   condicional e grava o sucessor na mesma transação. Ler e depois atualizar em
- *   dois passos permitiria a dois pedidos simultâneos rotacionarem o mesmo
- *   token, que é exatamente o cenário que a detecção de reuso existe para
- *   distinguir de um roubo.
- */
+/** Persistência do módulo `identity`. */
 import { sql, type Insertable } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Selectable } from 'kysely';
@@ -40,15 +26,8 @@ import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-c
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 
-/**
- * Uma troca de apelido a cada 60 dias (plano 4-C.7, `9d99ac0f`).
- *
- * O prazo não é cerimônia: ele é o que torna o apelido um identificador em que
- * a vizinhança pode confiar. Sem ele, trocar de `@` todo dia é de graça, e
- * reconhecer alguém pelo apelido deixa de valer.
- */
+/** Uma troca de apelido a cada 60 dias (plano 4-C.7, `9d99ac0f`). */
 const DIAS_ENTRE_TROCAS_DE_APELIDO = 60;
-
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -60,13 +39,6 @@ function ehViolacaoDeUnicidade(erro: unknown): boolean {
   );
 }
 
-// `Selectable<UsersTable>` e nao `UsersTable`: as colunas que a aplicacao pode
-// OMITIR no `INSERT` sao declaradas como `ColumnType<...>` no esquema, e
-// `Pick` sobre o tipo cru trazia o `ColumnType` inteiro para ca em vez do tipo
-// LIDO. `handle` foi a primeira a expor isso -- ela e `ColumnType` porque o
-// `INSERT` de `users` acontece ANTES da linha de `handles` (a FK e circular:
-// `users.handle` aponta para `handles.handle` e `handles.user_id` aponta para
-// `users.id`), entao ela entra por um `UPDATE` depois.
 type LinhaDeConta = Pick<
   Selectable<UsersTable>,
   | 'id'
@@ -126,54 +98,12 @@ function paraConta(linha: LinhaSelecionada): Conta {
     pendingEmail: linha.pending_email,
     emailDeliverable: linha.email_deliverable,
     status: linha.status,
-    // A conversão para `Instant` acontece na borda da persistência: o domínio
-    // fala em milissegundos e nunca constrói data.
     sessionsInvalidBefore: linha.sessions_invalid_before.getTime() as Instant,
     createdAt: linha.created_at,
   };
 }
 
-/**
- * ## Os construtores da escrita em massa, e por que eles saíram de dentro da fábrica
- *
- * As duas instruções abaixo são `UPDATE` **sem `id` no `WHERE`**: o que decide
- * quantas linhas elas atingem é a coluna de escopo, e só ela. Removida a
- * `user_id`, as duas continuam sintaticamente válidas, continuam devolvendo um
- * número, e passam a valer para a base inteira — um "sair de todos os
- * aparelhos" derrubaria a sessão de todo mundo, e uma troca de senha queimaria
- * o link de verificação de todo mundo.
- *
- * Isso não é observável pelo lado de fora. Quem chama recebe o efeito que
- * pediu; quem paga são contas que nenhuma requisição mencionou. Nem o dublê em
- * memória acusa: ele apaga do `Map` da conta pedida de qualquer jeito, e a
- * cardinalidade do `UPDATE` não existe dentro dele.
- *
- * `construtorD*` existe para que o escopo seja **verificável**:
- * `escopo-de-escrita-em-massa.test.ts` compila estas funções sem executá-las e
- * confere a cláusula `WHERE` inteira, e
- * `tests/integration/escopo-da-revogacao-em-massa.test.ts` conta as linhas
- * atingidas em Postgres de verdade, com duas contas na tabela.
- *
- * Eles recebem `DbExecutor` e não `Db` para que o mesmo predicado valha se um
- * dia a chamada vier de dentro de uma transação.
- */
-
-/**
- * **SEC-006, revogação em massa das famílias de refresh de UMA conta.**
- *
- * Uma instrução. Varrer família por família exigiria primeiro listá-las, e
- * entre a lista e o `UPDATE` uma renovação em curso abriria uma linha nova que
- * a varredura já não alcançaria — a sessão que o gatilho existe para derrubar
- * sobreviveria à própria revogação.
- *
- * `user_id = $n` é o escopo, e ele é o único limite de alcance desta
- * instrução: a ADR-0002 (emenda 1) separa "sair" de "sair de todos os
- * aparelhos" em dois mecanismos, e **os dois param na pessoa**. Nenhum dos
- * cinco gatilhos do SEC-006 é da plataforma para a base.
- *
- * `revoked_at IS NULL` mantém a idempotência: chamada duas vezes, a segunda
- * devolve 0 e não reescreve o motivo nem a hora da primeira.
- */
+/** **SEC-006, revogação em massa das famílias de refresh de UMA conta.** */
 export function construtorDaRevogacaoEmMassa(
   db: DbExecutor,
   userId: UserId,
@@ -188,30 +118,7 @@ export function construtorDaRevogacaoEmMassa(
     .returning('id');
 }
 
-/**
- * **BICHUS-48: as cinco amarras da janela de reautenticação, todas no `WHERE`.**
- *
- * Uma instrução, e ela CONSOME ao mesmo tempo em que confere. Ler a linha,
- * decidir na aplicação e marcar depois é a forma que o ADR-0021 existe para
- * eliminar, e aqui ela também perderia o uso único: duas chamadas simultâneas
- * de `DELETE /me` com a mesma janela passariam as duas pela conferência antes
- * de qualquer uma marcar.
- *
- * Cada predicado responde por uma amarra, e nenhum é redundante:
- *
- * | predicado | o que ele impede |
- * |---|---|
- * | `token_hash = $n` | endereça a linha, e só ela (256 bits de CSPRNG) |
- * | `user_id = $n` | janela de OUTRA conta apresentada nesta sessão |
- * | `scope = $n` | janela aberta para revogar a tag usada para excluir a conta |
- * | `access_jti = $n` | janela copiada para outro aparelho |
- * | `consumed_at IS NULL` | segunda apresentação do mesmo valor |
- * | `expires_at > $agora` | janela vencida |
- * | `issued_at >= $barreira` | janela anterior a uma troca de senha ou a um logout-all (SEC-006) |
- *
- * `reautenticacao-na-clausula-where.test.ts` compila esta função sem executá-la
- * e cobra os sete, com isca que precisa reprovar quando qualquer um sai.
- */
+/** **BICHUS-48: as cinco amarras da janela de reautenticação, todas no `WHERE`.** */
 export function construtorDoConsumoDaJanela(db: DbExecutor, consumo: ConsumoDeJanela) {
   return db
     .updateTable('reauth_tokens')
@@ -226,14 +133,7 @@ export function construtorDoConsumoDaJanela(db: DbExecutor, consumo: ConsumoDeJa
     .returning('id');
 }
 
-/**
- * A leitura que NOMEIA a recusa, e só ela.
- *
- * Endereça pelo hash e por nada mais, de propósito: é assim que ela consegue
- * dizer "esta janela existe e é de outra conta" em vez de "não achei nada". O
- * resultado vai para a trilha e **nunca para o corpo da resposta** — quem
- * apresentou uma janela recusada recebe o mesmo 401 nos seis casos.
- */
+/** A leitura que NOMEIA a recusa, e só ela. */
 export function construtorDaLeituraDaJanela(db: DbExecutor, tokenHash: TokenHash) {
   return db
     .selectFrom('reauth_tokens')
@@ -241,18 +141,7 @@ export function construtorDaLeituraDaJanela(db: DbExecutor, tokenHash: TokenHash
     .where('token_hash', '=', tokenHash);
 }
 
-/**
- * **Critério 9 da BICHUS-77: nenhum link pendente sobrevive à troca de senha.**
- *
- * Mesma forma e mesmo risco da revogação de famílias: `user_id = $n` é o que
- * separa "queimo os links desta conta" de "queimo os links de todo mundo", e a
- * segunda leitura deixaria toda verificação de e-mail e toda redefinição em
- * curso na plataforma morrer sem que ninguém conseguisse dizer por quê.
- *
- * `consumed_at IS NULL` não é filtro de correção e sim de idempotência e de
- * verdade da contagem: sem ele a chamada reescreveria a hora de consumo de
- * tokens já gastos e devolveria um número que não é o de links queimados.
- */
+/** **Critério 9 da BICHUS-77: nenhum link pendente sobrevive à troca de senha.** */
 export function construtorDaInvalidacaoDeTokensPendentes(
   db: DbExecutor,
   userId: UserId,
@@ -275,37 +164,11 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const valores: Insertable<UsersTable> = {
         id: userId,
         email: nova.email,
-        // O ENDEREÇO PÚBLICO DA PESSOA nasce com a conta (fatia E, migração
-        // `20261018000031`): 128 bits de CSPRNG em base64url, 22 símbolos, no
-        // mesmo molde de `professional_reviews.ref` e de `upload_ref`.
-        //
-        // Nasce AQUI e não na primeira vez que alguém precisa dele, por duas
-        // razões. A coluna é `NOT NULL`, então um caminho de criação que não o
-        // escrevesse não compilaria — que é exatamente o freio que se quer. E
-        // preenchê-lo tarde obrigaria a leitura de um perfil a ESCREVER na
-        // linha de outra pessoa, o que é contenção e é um `UPDATE` num caminho
-        // que ninguém espera que escreva.
-        //
-        // **Sorteado, e nunca derivado do e-mail nem do nome**: um endereço que
-        // carregasse o dono permitiria cruzar as pegadas de uma pessoa entre
-        // superfícies (BICHUS-174).
         public_ref: Buffer.from(ids.random128()).toString('base64url'),
         display_name: nova.displayName ?? null,
-        // A data de nascimento entra na ESCRITA e em lugar nenhum mais: ela não
-        // está em `COLUNAS_DA_CONTA` (o `returning` abaixo), e por isso não
-        // volta nem para quem acabou de se cadastrar. Com idade mínima de 16 o
-        // titular pode ser adolescente, e a data existe para ter sido
-        // conferida, não para ser exibida — ver o cabeçalho da
-        // `20261018000021`.
         birth_date: nova.birthDate,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
-        // A conta nasce com a barreira do SEC-006 no segundo da criação: assim
-        // nenhum token anterior a ela pode existir, nem por relógio adiantado.
-        // TRUNCADA AO SEGUNDO de propósito — ver `barreiraDeContaNova`: com a
-        // precisão de milissegundo, o token que o próprio cadastro devolve
-        // nascia revogado, e `POST /v1/auth/register` entregava uma sessão que
-        // não abria nenhuma tela.
         sessions_invalid_before: new Date(barreiraDeContaNova(nova.agora)),
         created_at: agora,
         updated_at: agora,
@@ -319,22 +182,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .returning(COLUNAS_DA_CONTA)
             .executeTakeFirstOrThrow();
 
-          // O APELIDO REIVINDICA O ESPAÇO DE NOMES NA MESMA TRANSAÇÃO.
-          //
-          // `handles` primeiro e `users.handle` depois, e a ordem não é gosto:
-          // `users.handle` tem FK para `handles.handle`, então a ordem inversa
-          // reprovaria por chave estrangeira.
-          //
-          // **É AQUI QUE A DISPONIBILIDADE É DECIDIDA** (plano 4-C.5). Não há
-          // consulta antes, e não pode haver: a janela entre conferir e gravar
-          // é onde a corrida mora. Duas contas pedindo `@maria` ao mesmo tempo
-          // chegam as duas até este `INSERT`; uma viola `handles_pkey` ou
-          // `handles_esqueleto_unico`, e `recusaDeApelidoTomado` traduz.
-          //
-          // `handle_esqueleto` é calculado pelo BANCO, pelo gatilho
-          // `handles_esqueleto_derivado`, e não aqui: o esqueleto é derivado,
-          // sempre, e quem o mandasse errado de propósito contornaria o índice
-          // que separa os parecidos. O valor abaixo é descartado pelo gatilho.
           if (nova.handle !== undefined) {
             await trx
               .insertInto('handles')
@@ -360,9 +207,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
               id: identityId,
               user_id: userId,
               provider: 'local',
-              // `provider_subject` do provedor local é o próprio UUID interno.
-              // Usar o e-mail aqui reintroduziria pelo lado do vínculo a chave
-              // que o ADR-0002 existe para proibir.
               provider_subject: userId,
               email_at_provider: nova.email,
               linked_at: agora,
@@ -383,8 +227,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           return paraConta(conta as LinhaSelecionada);
         });
       } catch (erro) {
-        // E-mail já cadastrado é resposta, não incidente. Quem chama decide o
-        // que a resposta revela.
         if (ehViolacaoDeUnicidade(erro)) return undefined;
         throw erro;
       }
@@ -401,9 +243,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
     },
 
     async atualizarPerfil(id: UserId, campos, agora): Promise<Conta | undefined> {
-      // Só entra no `SET` o que veio no corpo. `undefined` é "não mexer" e
-      // `null` é "apagar": montar o objeto com todos os campos transformaria um
-      // `PATCH` de um campo numa limpeza silenciosa dos outros cinco.
       const mudancas: Record<string, unknown> = { updated_at: new Date(Number(agora)) };
       const mapa = {
         displayName: 'display_name',
@@ -419,13 +258,8 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         if (valor !== undefined) mudancas[coluna] = valor;
       }
 
-      // Trocar o telefone invalida a verificação anterior: o número novo não
-      // herda a confiança do antigo, e `can_open_lost_case` precisa cair junto.
       if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
 
-      // O APELIDO NÃO ENTRA NO `mapa` ACIMA, e a ausência dele ali é
-      // deliberada: ele não é um `SET` a mais, é duas linhas de `handles` mais
-      // a coluna, e tudo isso na mesma transação da conta.
       const apelidoNovo = campos.handle;
       if (apelidoNovo === undefined) {
         const linha = await db
@@ -450,17 +284,9 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
 
         const anterior = atual.handle;
 
-        // SALVAR O MESMO APELIDO NÃO É TROCA, e tratá-lo como troca gastaria a
-        // única troca de 60 dias de quem só mexeu no telefone com o campo de
-        // apelido preenchido na tela. `citext` compara sem caixa no banco; aqui
-        // a comparação é do valor já normalizado dos dois lados.
         const ehTroca = anterior !== null && anterior.toLowerCase() !== apelidoNovo;
 
         if (ehTroca) {
-          // UMA TROCA A CADA 60 DIAS (plano 4-C.7). Lido de `claimed_at` da
-          // linha viva, que é o carimbo de quando o apelido atual passou a
-          // valer -- e não de `users.updated_at`, que qualquer edição de
-          // telefone move.
           const vivo = await trx
             .selectFrom('handles')
             .select(['claimed_at'])
@@ -483,19 +309,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             }
           }
 
-          // O ANTERIOR FICA RESERVADO, E NÃO VOLTA AO POOL (plano 4-C.7).
-          //
-          // Este é o passo que não pode faltar: soltar `@maria` na hora deixa
-          // um estranho pegá-lo e **herdar tudo que a vizinhança associava a
-          // quem o tinha**, que é imitação servida pelo produto. A linha deixa
-          // de ser `pessoa` e passa a `reservado`, com o `user_id`
-          // **preservado** -- é o `user_id` que diz para quem ela está
-          // guardada nos 180 dias.
-          //
-          // O índice `handles_uma_pessoa_um_apelido` é parcial em
-          // `kind = 'pessoa'`, e é por isso que esta linha precisa mudar de
-          // `kind` ANTES do `INSERT` do apelido novo: com as duas como
-          // `pessoa`, o índice reprovaria.
           await trx
             .updateTable('handles')
             .set({ kind: 'reservado' })
@@ -509,27 +322,9 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .insertInto('handles')
             .values({
               handle: apelidoNovo,
-              // Descartado pelo gatilho `handles_esqueleto_derivado`, que o
-              // recalcula. Ver `criarContaLocal`.
               handle_esqueleto: apelidoNovo,
               kind: 'pessoa',
               user_id: id,
-              // `new Date`, E NAO `agora`. `agora` e `Instant` -- milissegundos
-              // desde a epoca, um NUMERO --, e `timestamptz` nao o le: o
-              // Postgres recusa com `22008 date/time field value out of range:
-              // "1792376135079"` e a rota devolve 500. Medido em 18/10/2026,
-              // `PATCH /v1/me` com `handle`, que e o campo do apelido na pagina
-              // de edicao do perfil: TODO salvamento que escolhesse ou trocasse
-              // apelido morria aqui.
-              //
-              // O tipo nao pegou porque `HandlesTable.claimed_at` aceitava
-              // `number` na escrita. Aceitava para nada: ninguem grava epoch
-              // aqui de proposito, e o unico efeito era deixar este erro
-              // compilar. O tipo passou a aceitar so `Date` (shared/db/schema.ts).
-              //
-              // `criarContaLocal` ja fazia certo (`const agora = new
-              // Date(nova.agora)`), e a divergencia entre os dois caminhos da
-              // MESMA coluna e o que fez o defeito aparecer so na edicao.
               claimed_at: new Date(Number(agora)),
             })
             .execute();
@@ -548,15 +343,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       });
     },
 
-    /**
-     * A foto do perfil desta conta (cliente, 18/10/2026).
-     *
-     * Uma consulta propria, e nao uma subconsulta em `COLUNAS_DA_CONTA`: so a
-     * resposta `Me` quer a foto, e pendurar a leitura de `catalog_images` em
-     * `paraConta` faria todo login e todo cadastro consultarem a tabela de
-     * imagem sem precisar. O custo e uma busca por chave primaria, pelo
-     * ponteiro que a propria linha da conta carrega.
-     */
+    /** A foto do perfil desta conta (cliente, 18/10/2026). */
     async fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null> {
       const linha = await db
         .selectFrom('users')
@@ -573,19 +360,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       };
     },
 
-    /**
-     * Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`.
-     *
-     * **A conta na clausula `WHERE` (`u.user_id`) e o que impede confirmar o
-     * envio de outra pessoa**, e e a mesma forma de `capaDoEnvio`
-     * (`kysely-network-repository.ts`): um `if` depois do `SELECT` responderia
-     * sobre envio alheio. `admin_account_id` nao casa aqui nunca -- envio do
-     * painel nao vira foto de pessoa (T9).
-     *
-     * `purpose = 'user_photo'` tambem esta no `WHERE`: a capa de um encontro e
-     * a logo de um profissional, enviadas pela mesma esteira, nao viram foto de
-     * perfil.
-     */
+    /** Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`. */
     async trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined> {
       return db.transaction().execute(async (trx) => {
         let imagemId: string | null = null;
@@ -611,9 +386,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           if (envio === undefined) throw new EnvioDeFotoNaoServe();
 
           if (envio.confirmed_at !== null) {
-            // Ja confirmado: serve de novo SO para esta mesma conta. Reenviar o
-            // mesmo `upload_id` num segundo `PATCH` nao pode criar imagem nova,
-            // e o app manda o formulario inteiro ao salvar.
             if (envio.catalog_image_id === null) throw new EnvioDeFotoNaoServe();
             if (envio.dono_da_imagem !== null && envio.dono_da_imagem !== id) {
               throw new EnvioDeFotoNaoServe();
@@ -622,10 +394,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           } else {
             if (envio.expires_at.getTime() <= Number(agora)) throw new EnvioDeFotoNaoServe();
             imagemId = ids.uuidv7();
-            // ESTE `UPDATE` E O QUE PROTEGE A FOTO DA VARREDURA DE VENCIDOS:
-            // com `confirmed_at` preenchido, a linha sai de
-            // `listarIntencoesVencidas` e o objeto no balde deixa de ser
-            // candidato a limpeza.
             await trx
               .updateTable('catalog_upload_intents')
               .set({ confirmed_at: new Date(Number(agora)) })
@@ -642,8 +410,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
                 rejection_reason: null,
               })
               .execute();
-            // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
-            // imagem falharia em laco. Os dois na mesma transacao.
             await trx
               .insertInto('jobs')
               .values({
@@ -725,9 +491,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           user_id: novo.userId,
           family_id: novo.familyId,
           token_hash: novo.tokenHash,
-          // Explícito, e não pelo `DEFAULT now()` da coluna: é este valor que
-          // `renovar()` compara com `sessions_invalid_before`, que também é
-          // gravado pelo relógio da aplicação.
           issued_at: new Date(novo.issuedAt),
           expires_at: new Date(novo.expiresAt),
           absolute_expires_at: new Date(novo.absoluteExpiresAt),
@@ -799,9 +562,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           })
           .execute();
 
-        // O `WHERE` carrega a condição de consumo. Se outro pedido já consumiu
-        // este token, nenhuma linha volta e a transação inteira é desfeita,
-        // inclusive o sucessor recém-inserido.
         const consumido = await trx
           .updateTable('refresh_tokens')
           .set({
@@ -851,11 +611,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
     },
 
     async invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
-      // `GREATEST` e não atribuição direta: a barreira é calculada a partir do
-      // valor lido antes, e duas revogações simultâneas leem o mesmo valor. Sem
-      // o piso, a que terminasse por último podia gravar um instante MENOR que a
-      // outra já tinha gravado e devolver a janela que as duas existem para
-      // fechar. A coluna só anda para a frente.
       await db
         .updateTable('users')
         .set({
@@ -882,9 +637,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
     },
 
     async consumirTokenDeVerificacao(hash, proposito, agora): Promise<TokenConsumido | undefined> {
-      // UMA instrução. As três condições no `WHERE` e a marcação no `SET` são
-      // avaliadas sob a mesma trava de linha: duas aberturas simultâneas do
-      // mesmo link disputam a linha, e só uma sai com `RETURNING`.
       const linha = await db
         .updateTable('verification_tokens')
         .set({ consumed_at: new Date(agora) })
@@ -944,9 +696,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const linha = await construtorDoConsumoDaJanela(db, consumo).executeTakeFirst();
       if (linha !== undefined) return { consumida: true };
 
-      // Só no caminho de recusa, e só para a trilha. A leitura endereça pelo
-      // hash, que é o que permite distinguir "não existe" de "existe e não
-      // serve" — distinção que fica AQUI DENTRO.
       const bruta = await construtorDaLeituraDaJanela(db, consumo.tokenHash).executeTakeFirst();
       if (bruta === undefined) return { consumida: false, motivo: 'inexistente' };
 
@@ -966,9 +715,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         barreiraDaConta: consumo.barreiraDaConta,
         agora: consumo.agora,
       });
-      // `vale: true` aqui significa que o `UPDATE` e a regra do domínio
-      // discordaram, e isso é defeito nosso, não recusa da pessoa. Ele vira
-      // `inexistente` na trilha em vez de um sucesso que a instrução não deu.
       return veredicto.vale
         ? { consumida: false, motivo: 'inexistente' }
         : { consumida: false, motivo: veredicto.motivo };
@@ -979,8 +725,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .updateTable('users')
         .set({
           email_verified_at: new Date(agora),
-          // Verificar o e-mail prova que ele entrega. Uma devolução antiga não
-          // pode continuar marcando a conta como inalcançável depois disso.
           email_deliverable: true,
           updated_at: new Date(agora),
         })
@@ -988,17 +732,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .execute();
     },
 
-    /**
-     * Exclusão lógica e revogação das tags, numa transação só.
-     *
-     * O `where` da marcação exige `deleted_at is null`: é ele, e não um `if`
-     * antes, que torna a operação idempotente sob concorrência. Duas chamadas
-     * simultâneas leriam as duas a mesma conta ativa; só uma atualiza linha.
-     *
-     * A revogação das tags roda por subconsulta em `pets` do próprio dono. A
-     * autorização vai na cláusula e não num `if` de papel (ADR-0021): não há
-     * caminho, nem por engano de parâmetro, que revogue a tag de outra pessoa.
-     */
+    /** Exclusão lógica e revogação das tags, numa transação só. */
     async registrarPedidoDeExclusao(
       userId: UserId,
       agora: Instant,
@@ -1023,14 +757,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           .set({
             status: 'revoked',
             revoked_at: new Date(agora),
-            // `owner_request` e não um motivo novo: do ponto de vista da tag,
-            // foi o tutor que pediu. Um `account_deleted` aqui seria um sexto
-            // valor numa lista fechada para dizer o que a trilha da conta já
-            // diz, e a `revocation_reason` é lida por quem investiga a TAG.
             revocation_reason: 'owner_request',
-            // ADR-0004: a revogação apaga o texto cifrado guardado para
-            // reimpressão. `pet_tags_revogada_nao_guarda_o_codigo` recusa a
-            // versão pela metade, então esquecer esta linha não passa.
             code_ciphertext: null,
           })
           .where('status', '=', 'active')
@@ -1060,11 +787,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.map((linha) => linha.id as UserId);
     },
 
-    // `expurgarConta` saiu daqui em 17/10 junto da porta. Era o unico
-    // `deleteFrom('users')` de `src/`, e a decisao do cliente -- "nao delete os
-    // dados do usuario, apenas desabilite na plataforma" -- o tornou proibido em
-    // vez de adiado.
-
     async registrarPedidoDeTrocaDeEmail(
       userId: UserId,
       novoEmail: string,
@@ -1083,21 +805,12 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       novoEmail: string,
       agora: Instant,
     ): Promise<Conta | undefined> {
-      // `pending_email` entra no WHERE, e não só no SET. Ele é o que amarra o
-      // token ao ÚLTIMO pedido: quem pediu A, pediu B em seguida e então abriu
-      // o link de A não pode levar a conta para A. O token de A já teria sido
-      // invalidado no pedido de B, mas depender só disso deixaria a regra numa
-      // instrução distante desta, e esta é a que escreve.
       try {
         const linha = await db
           .updateTable('users')
           .set({
             email: novoEmail,
             pending_email: null,
-            // Abrir o link é a prova de alcance que a verificação pede. Exigir
-            // um segundo e-mail de verificação depois desta confirmação seria
-            // pedir duas vezes a mesma prova, e devolveria à conta o estado de
-            // e-mail não verificado que a troca existe para tirar dela.
             email_verified_at: new Date(agora),
             email_deliverable: true,
             updated_at: new Date(agora),
@@ -1110,9 +823,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
 
         return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
       } catch (erro) {
-        // O endereço ganhou dono entre o envio do link e a abertura dele. É
-        // resposta, não incidente: quem chama devolve o mesmo 410 do token
-        // vencido.
         if (ehViolacaoDeUnicidade(erro)) return undefined;
         throw erro;
       }
@@ -1129,7 +839,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
   };
 }
 
-/** Sinal interno de corrida perdida na rotação. Nunca sai deste arquivo. */
+/** Sinal interno de corrida perdida na rotação. */
 class RotacaoPerdida extends Error {
   constructor() {
     super('refresh já consumido por outro pedido');

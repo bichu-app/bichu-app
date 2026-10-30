@@ -1,29 +1,4 @@
-/**
- * A prova de que a chave que SAI do banco passa pela porta.
- *
- * Este arquivo existe porque ele não existia. O `comoObjectKey` foi escrito
- * (BICHUS-134), as seis afirmações `as ObjectKey` do adaptador foram trocadas
- * por ele — e nada provava a troca: o QA desfez as seis, repôs o `import type`,
- * e a suíte continuou 433/433. O adaptador tinha **0% de cobertura** e sequer
- * aparecia no relatório, porque nenhum teste o carregava. A porta única era
- * documentação falsa sobre documentação falsa.
- *
- * O que morde aqui é uma linha HOSTIL vinda do `SELECT`. Com a porta, a leitura
- * recusa e o log aponta a linha torta; com `as`, a mesma linha atravessa
- * calada até o `pathname` da URL do objeto, que RESOLVE `..` e lê de fora do
- * bucket.
- *
- * ## Por que dá para fazer isso sem Postgres
- *
- * O Kysely separa o *dialeto* (compilar SQL, abrir conexão) do construtor de
- * consulta. Trocando só o motor por um que devolve linhas combinadas, o
- * adaptador roda INTEIRO e de verdade: as mesmas cláusulas `WHERE`, o mesmo
- * `.select()`, o mesmo mapeamento de linha para `FotoDoPet`. O que o dublê não
- * cobre é o que só o banco responde — se a coluna existe, se o índice é usado,
- * se a transação de quatro escritas é atômica. Isso é de `tests/integration/`,
- * e continua lá. O que ESTE teste cobre é o que acontece com a linha depois que
- * ela chega, e para isso o banco é dispensável.
- */
+/** A prova de que a chave que SAI do banco passa pela porta. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -42,13 +17,7 @@ import type { Database } from '../../../../shared/db/schema.js';
 import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 import { criarMediaRepository } from './kysely-media-repository.js';
 
-/**
- * Um `Db` que compila a consulta de verdade e devolve as linhas combinadas.
- *
- * Cada chamada consome o próximo lote da fila. Pedir mais consultas do que o
- * teste preparou é ERRO e não lote vazio: lote vazio faria um adaptador que
- * consultasse a tabela errada passar em silêncio.
- */
+/** Um `Db` que compila a consulta de verdade e devolve as linhas combinadas. */
 function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   const fila = [...lotes];
 
@@ -98,9 +67,7 @@ const CARD_BOA = 'card/KioqKioqKioqKioqKioqKg.webp';
 
 /**
  * A linha que uma importação, uma migração ou uma correção manual em produção
- * consegue gravar — nenhuma delas passa pelo domínio. `card/../../etc/senha`
- * vira `/etc/senha` no `pathname`, fora do prefixo da variante e fora do
- * bucket.
+ * consegue gravar — nenhuma delas passa pelo domínio.
  */
 const CHAVE_TORTA = 'card/../../etc/senha';
 
@@ -120,13 +87,7 @@ function linhaDeFoto(sobrescrever: Partial<Record<string, unknown>> = {}): Recor
 const RECUSA = /Chave de objeto recusada/;
 
 void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
-  /**
-   * Os três da mesma linha, um a um.
-   *
-   * Separados de propósito: as três colunas são três afirmações distintas no
-   * adaptador, e um caso só que cobrisse as três passaria com duas delas
-   * desfeitas.
-   */
+  /** Os três da mesma linha, um a um. */
   for (const coluna of ['original_key', 'thumb_key', 'card_key'] as const) {
     void it(`RECUSA a leitura quando \`${coluna}\` atravessa o caminho`, async () => {
       const repo = criarMediaRepository(
@@ -155,8 +116,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void it('RECUSA a foto que o WORKER vai processar com `original_key` torta', async () => {
-    // O caminho do worker é o que menos tem olhos em cima: não há requisição de
-    // usuário do outro lado, e a chave vai direto para o armazenamento.
     const repo = criarMediaRepository(
       bancoQueDevolve([{ id: 'f-1', pet_id: PET, status: 'processing', original_key: CHAVE_TORTA }]),
     );
@@ -164,8 +123,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void it('RECUSA a intenção vencida com `object_key` torta', async () => {
-    // Esta chave vai para um DELETE no armazenamento. Uma torta apagaria um
-    // objeto fora do prefixo da intenção.
     const repo = criarMediaRepository(
       bancoQueDevolve([{ id: 'i-1', object_key: CHAVE_TORTA }]),
     );
@@ -173,8 +130,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void it('diz QUAL chave recusou, para a linha ruim aparecer no log', async () => {
-    // Quem for diagnosticar precisa achar a linha torta no banco, e o id da
-    // foto não está na mensagem do domínio: a chave está.
     const repo = criarMediaRepository(
       bancoQueDevolve([linhaDeFoto({ card_key: CHAVE_TORTA })]),
     );
@@ -182,9 +137,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void it('o contrapeso: a linha boa continua sendo lida, com as três chaves', async () => {
-    // Sem este caso, uma conferência que recusasse tudo passaria em todos os
-    // anteriores e apagaria do aplicativo a foto de todo pet — que é como a
-    // tutora reconhece o animal dela num achado.
     const repo = criarMediaRepository(bancoQueDevolve([linhaDeFoto()]));
     const fotos = await repo.listarDoPet(PET, DONO);
 
@@ -199,9 +151,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void it('o contrapeso: derivada ainda não processada é `null`, e não recusa', async () => {
-    // `thumb_key` e `card_key` são nulos até o worker rodar. Uma conferência
-    // que tratasse `null` como chave inválida deixaria toda foto recém-enviada
-    // ilegível entre a confirmação e o processamento.
     const repo = criarMediaRepository(
       bancoQueDevolve([linhaDeFoto({ thumb_key: null, card_key: null })]),
     );
@@ -212,24 +161,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
   });
 
   void describe('O EXPURGO DE CONTA ALCANÇA A VERSÃO LIMPA (art. 18, VI)', () => {
-    // ======================================================================
-    // Isca: se o expurgo voltar a ignorar `sanitized_key`, estes casos reprovam.
-    // ======================================================================
-    //
-    // Com a decisão do cliente de 17/10/2026 — *"pode apagar o original e
-    // guardar só o arquivo 2"* — a higiene APAGA o original da foto do achado
-    // assim que a versão sem metadado está gravada. Então `sanitized_key`
-    // passa a ser a **única** cópia que existe daquela foto.
-    //
-    // `chavesDaConta` lia só `object_key`. Antes isso era um furo; com a
-    // decisão é O furo: quem exerce o direito de apagamento teria apagado a
-    // cópia que a higiene já apagou sozinha, e deixado no balde justamente a
-    // que sobrou — com `privacy.account_purged` afirmando que os arquivos
-    // saíram. O número é o que alguém audita, e ele mentiria.
-    //
-    // `chavesDaConta` faz TRÊS consultas, nesta ordem: `upload_intents`,
-    // `pet_photos` (com junção) e `conversation_messages`. Os lotes abaixo
-    // seguem essa ordem.
     const LIMPA = 'found-reports/r-1/sanitized/limpa';
     const ORIGINAL_DO_ACHADO = 'found-reports/r-1/original/orig';
 
@@ -248,11 +179,7 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
         chaves.includes(LIMPA),
         'o expurgo IGNOROU a versão limpa, que é a única cópia que existe da foto',
       );
-      // O original continua na lista: a conta pode ter fotos cuja higiene ainda
-      // não rodou, e nesse caso é ele que está no balde.
       assert.ok(chaves.includes(ORIGINAL_DO_ACHADO));
-      // As DUAS, e sem repetição: `chavesDaConta` junta por `(classe, chave)`
-      // porque o número vai para `privacy.account_purged`.
       assert.deepEqual(chaves, [ORIGINAL_DO_ACHADO, LIMPA]);
     });
 
@@ -268,11 +195,6 @@ void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
     });
 
     void it('o contrapeso: `sanitized_key` nula não vira chave', async () => {
-      // Nula enquanto a higiene não terminou, nula em `recusada`/`ausente` (o
-      // CHECK `upload_intents_higiene_coerente` exige), e nula na foto de pet,
-      // que não passa por este caminho. Sem o `continue`, `comoObjectKey(null)`
-      // derrubaria o expurgo inteiro da conta — e o expurgo que lança não
-      // apaga nada.
       const repo = criarMediaRepository(
         bancoQueDevolve([{ object_key: ORIGINAL_DO_ACHADO, sanitized_key: null }], [], []),
       );

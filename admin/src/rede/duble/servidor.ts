@@ -1,14 +1,7 @@
 /**
- * Duble das rotas `/v1/admin/network/*` e
- * `/v1/admin/media/catalog-image-intents`, escrito contra os tipos gerados do
- * contrato enquanto o servidor de verdade nao existe
- * (`feat/backoffice-rede-admin`). Ele e deliberadamente exigente onde o
- * contrato e: `If-Match` obrigatorio (428) e conferido (412), sem
- * reautenticacao desde 07/10 (ADR-0027 item 23), recusa de
- * observacao com contato (400 `contact_or_payment_detected`) e as transicoes
- * da fila (aprovado nao volta a recusado).
- *
- * Tudo o que chega fica em `registro`, para os testes (e as iscas) lerem.
+ * Duble das rotas `/v1/admin/network/*` e `/v1/admin/media/catalog-image-intents`,
+ * escrito contra os tipos gerados do contrato enquanto o servidor de verdade nao
+ * existe (`feat/backoffice-rede-admin`).
  */
 import { handleDoInstagram, recusaDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
 import { achadosNasObservacoes } from '../dominio/observacoes.ts';
@@ -29,7 +22,6 @@ import type { components } from '../../api/generated/api.ts';
 type AdminSession = components['schemas']['AdminSession'];
 import { encontrosDeExemplo, pedidosDeExemplo } from './massa.ts';
 
-
 export interface Requisicao {
   metodo: string;
   caminho: string;
@@ -45,13 +37,15 @@ export interface OpcoesDoDuble {
   atrasoMs?: number;
   /** Faz a proxima leitura da lista falhar com 500. */
   falharLista?: boolean;
-  /** Forca uma recusa 400 de campo na proxima criacao ou edicao (para exercitar o caminho do servidor). */
+  /**
+   * Forca uma recusa 400 de campo na proxima criacao ou edicao (para exercitar o
+   * caminho do servidor).
+   */
   recusaDeCampo?: { field: string; code: string };
-  /** Teto de linhas devolvidas da fila por hora (D56). O servidor usa 300. */
+  /** Teto de linhas devolvidas da fila por hora (D56). */
   tetoDeLinhasDaFila?: number;
 }
 
-// Sem host: o duble nao e nenhum ambiente, e o cliente decide pelo slug depois da ultima `/`.
 const PROBLEMA = 'urn:bichu:problems/';
 
 function json(status: number, corpo: unknown, extra: Record<string, string> = {}): Response {
@@ -67,12 +61,7 @@ function problema(status: number, slug: string, title: string, errors?: Problema
 
 /** A versao como o If-Match deve chegar. */
 const versao = (e: Encontro) => `"${String(e.version)}"`;
-/**
- * O ETag como a borda de hml o entrega: comprimido e sufixado (`"3-zstd"`).
- * O duble o emite assim e confere o If-Match contra a versao PURA, para que um
- * painel que volte a devolver o cabecalho no If-Match reprove (412), como
- * reprovava em hml antes de 07/10.
- */
+/** O ETag como a borda de hml o entrega: comprimido e sufixado (`"3-zstd"`). */
 const etag = (e: Encontro) => `"${String(e.version)}-zstd"`;
 
 function aleatorio(n: number): string {
@@ -109,7 +98,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   }
   recalcularPendentes();
 
-
   /** Como o servidor: faltar `If-Match` responde 428. */
   function exigirIfMatch(req: Requisicao): Response | null {
     return req.cabecalhos['if-match'] ? null : problema(428, 'precondition-required', 'Falta a versao');
@@ -136,7 +124,10 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     return null;
   }
 
-  /** Um recorte da regra do servidor (errosDoEndereco): link, e-mail ou telefone com DDD recusam; rua e CEP, nao. */
+  /**
+   * Um recorte da regra do servidor (errosDoEndereco): link, e-mail ou telefone com
+   * DDD recusam; rua e CEP, nao.
+   */
   function recusaDeEndereco(endereco: unknown): Response | null {
     if (typeof endereco === 'string' && /https?:\/\/|www\.|@|\(?\d{2}\)?\s?9?\d{4}-?\d{4}/.test(endereco)) {
       return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'street_address', code: 'contact_or_payment_detected' }]);
@@ -144,7 +135,10 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     return null;
   }
 
-  /** Como o servidor: link e Instagram com a mesma regra do painel, mais a recusa forcada da opcao. */
+  /**
+   * Como o servidor: link e Instagram com a mesma regra do painel, mais a recusa
+   * forcada da opcao.
+   */
   function recusaDeLinks(corpo: { ticket_url?: string | null; instagram_url?: string | null }): Response | null {
     const forcada = recusaForcada;
     if (forcada && forcada.field in corpo) {
@@ -170,10 +164,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       rejection_reason: null,
       upload_id: img.upload_id,
       position,
-      // O corpo OMITE `alt_text` quando a descricao esta vazia (opcional desde
-      // 21/10/2026); a LEITURA o devolve como `null`, nunca `undefined`. O
-      // duble precisa fazer a mesma traducao que o servidor faz, senao a tela
-      // reabriria com `undefined` onde o servidor manda `null`.
       alt_text: img.alt_text ?? null,
     }));
   }
@@ -196,7 +186,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     if (area === 'auth' && (recurso === 'logout' || recurso === 'logout-all') && req.metodo === 'POST') {
       return new Response(null, { status: 204 });
     }
-
 
     if (area === 'media' && recurso === 'catalog-image-intents' && req.metodo === 'POST') {
       uploads += 1;
@@ -270,9 +259,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
           street_address: corpo.street_address ?? null,
           ticket_url: corpo.ticket_url ?? null,
           instagram_handle: corpo.instagram_url ? handleDoInstagram(corpo.instagram_url) : null,
-          // O duble nao MONTA URL (host literal em `src/` reprova o portao de
-          // portabilidade): ele devolve a que chegou. Basta para o formulario
-          // reabrir com endereco completo, que e o caminho que importa aqui.
           instagram_url: corpo.instagram_url ?? null,
           pending_request_count: 0,
           publication_status: 'published',
@@ -422,7 +408,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   const fetchDoDuble = async (entrada: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const endereco = entrada instanceof Request ? entrada.url : entrada.toString();
     if (new URL(endereco, globalThis.location.href).pathname.startsWith('/duble-upload/')) {
-      // O envio direto ao armazenamento: o corpo e o arquivo, e nao interessa ao duble.
       registro.push({ metodo: init?.method ?? 'GET', caminho: new URL(endereco).pathname, consulta: new URLSearchParams(), cabecalhos: {}, corpo: undefined });
       return new Response(null, { status: 200 });
     }

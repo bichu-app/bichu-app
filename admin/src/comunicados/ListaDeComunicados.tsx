@@ -9,28 +9,10 @@ import estilos from './comunicados.module.css';
 import { plural, POR_PAGINA, quandoFoi, type Comunicado } from './dominio.ts';
 import { CAMINHO_DO_NOVO } from './rotas.tsx';
 
-/**
- * A chave da lista paginada, constante de MODULO. `useListaPaginada` a exige
- * estavel: uma chave nova a cada render recomecaria a lista da pagina 1
- * sozinha, que e a mesma armadilha que o `padroes` de `useParametrosDaLista`
- * tem na listagem da Loja e do diretorio.
- */
+/** A chave da lista paginada, constante de MODULO. */
 const CHAVE = 'comunicados';
 
-/**
- * O REGISTRO PERMANENTE dos comunicados disparados.
- *
- * **Nao ha editar nem apagar, em lugar nenhum desta tela.** Comunicado e
- * irreversivel: ele ja esta na caixa de quem recebeu, e apagar a linha daqui
- * apagaria a prova de que foi mandado, sem desmandar nada. A lista responde
- * "o que foi mandado, por quem, e para quantas caixas" -- e so.
- *
- * **Sem busca, filtro nem ordenacao no topo do corpo.** O padrao de listagem do
- * projeto os pede em toda pagina com registros, mas `listAdminBroadcasts` tem
- * `page` e `limit` e mais nada: um recorte feito aqui filtraria a pagina
- * carregada e nao o registro, e diria "1 comunicado" sobre um registro de
- * quarenta. Quando o contrato ganhar `q` ou `sort`, a barra entra.
- */
+/** O REGISTRO PERMANENTE dos comunicados disparados. */
 export default function ListaDeComunicados() {
   const { api } = useSessao();
   const [aviso, fecharAviso] = useAvisoDaNavegacao();
@@ -52,11 +34,8 @@ export default function ListaDeComunicados() {
       <div>
         <h1 className="t-headline">Comunicados</h1>
         <p className="t-body-sm c-sec">
-          {/*
-           * Sem o NUMERO do teto aqui: ele vem do servidor (`daily_cap`), e a
-           * lista nao le a janela de disparo. Repetir "3" nesta frase seria a
-           * segunda copia do numero, e a copia e que diverge.
-           */}
+          {
+}
           A mensagem que vai para a caixa de notificações de todo mundo. Há um teto de comunicados por dia, e um comunicado
           disparado não pode ser desfeito, editado nem apagado.
         </p>
@@ -147,12 +126,12 @@ export default function ListaDeComunicados() {
                     <td>
                       <span className="t-label">{c.title}</span>
                       <br />
-                      {/* Texto puro, cortado numa linha. Sem marcacao nenhuma:
-                          o que o operador escreveu aparece como caractere. */}
+                      {
+}
                       <span className={`t-caption c-sec ${estilos.trecho ?? ''}`}>{c.body}</span>
                     </td>
-                    {/* O NOME DE EXIBICAO de quem disparou, como o contrato
-                        manda: nao e o e-mail e nao e o identificador. */}
+                    {
+}
                     <td className={`${estilos.colQuem ?? ''} t-body-sm`}>{c.dispatched_by}</td>
                     <td className={`${estilos.colCaixas ?? ''} t-body-sm`}>
                       {c.recipients_total.toLocaleString('pt-BR')}

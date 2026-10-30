@@ -1,74 +1,4 @@
-/**
- * As rotas da conexão entre pessoas (fatia F).
- *
- * ## SEIS operações desde 22/10/2026, e a sexta é a lista do próprio dono
- *
- * | | |
- * |---|---|
- * | `POST /connections` | pedir, **por convite ou por apelido** |
- * | `GET /connections` | **as PRÓPRIAS conexões aceitas** (22/10/2026) |
- * | `GET /connections/requests` | as duas caixas de pedidos |
- * | `GET /connections/summary` | os **números** da própria conta |
- * | `POST /connections/{ref}/acceptance` | aceitar |
- * | `DELETE /connections/{ref}` | recusar, cancelar ou desfazer |
- *
- * **`GET /connections` EXISTE DESDE 22/10/2026**, e este cabeçalho afirmava o
- * contrário: ele dizia *"Não existe `GET /connections`. A lista de conexões não
- * aparece a ninguém, nem a quem é conectado"*. **O cliente emendou a própria
- * decisão de 18/10/2026**, literal:
- *
- * > *"o usuário pode abrir a lista de usuários que é sua conexão"*
- *
- * **A emenda é exata, e a metade não emendada continua valendo inteira:**
- *
- * | | antes | agora |
- * |---|---|---|
- * | a própria lista, para o próprio dono | nunca | **PODE** |
- * | a lista de **TERCEIRO** | nunca | **continua NUNCA** |
- *
- * Não há rota de lista endereçada a uma pessoa neste arquivo, e não pode haver:
- * `listMyConnections` não tem parâmetro de caminho, e quem chama vem do
- * `bearerAuth`. `conexao-nao-expoe-lista-nem-identificador.test.ts` foi
- * **ajustado pelo nome** — ele abriu `listMyConnections` e passou a cobrar três
- * coisas novas: nenhuma operação de conexão endereçada por pessoa,
- * `ConnectedPersonPage` com uma porta só, e o recorte da lista igual ao da
- * busca. O número exato de operações continua cobrado, agora em seis.
- *
- * **As operações do convite continuam na etiqueta `connection-invites`**, e a
- * busca de pessoas em `people`: o número desta etiqueta é um mecanismo, e a
- * forma de respeitá-lo nunca foi afrouxá-lo.
- *
- * **O nome do portão estava errado neste cabeçalho até 20/10/2026**: ele citava
- * um `sem-lista-de-conexoes.test.ts` que **nunca existiu** em nenhuma ref deste
- * repositório (conferido em 20/10/2026 contra `70f4aa34`). O portão existe e
- * funciona, com outro nome; a citação errada é pior que nenhuma, porque mandava
- * quem fosse conferir procurar um arquivo ausente e concluir que não havia
- * portão. A emenda 2 do ADR-0010 repete o nome errado, e ela precisa da mesma
- * correção — está no relatório da entrega.
- *
- * **Não existe "seguir"**, e isso não mudou: timeline de quem se segue é a lista
- * de presença com hora, e o ADR-0025 já a recusou (`20261018000030`:
- * *"Encerrado, não se reabre"*).
- *
- * **A busca de pessoas PASSOU A EXISTIR** em 20/10/2026, por decisão do cliente,
- * e ela **não** está aqui: é `GET /v1/people`, da etiqueta `people`. Este
- * arquivo recebe um apelido já escolhido — ele não lista e não casa texto.
- *
- * ## Todas exigem conta, e o 401 vem antes de qualquer consulta
- *
- * `bearerAuth` **sem alternativa vazia** nas seis. A coluna "sem conta" da
- * tabela 4-B é vazia inteira, e isso é arquitetura e não escolha de tela: não
- * existe rota de conexão alcançável sem conta, em estado nenhum — e a lista das
- * próprias conexões é o caso mais óbvio disso, porque sem conta não existe "as
- * próprias".
- *
- * ## O que este arquivo NÃO decide
- *
- * Quem pode ver o quê é decidido na cláusula `WHERE` do repositório (ADR-0021), e
- * não aqui: não há um `if` nesta borda que escolha entre 404 e 403, e não há um
- * caminho em que 403 seja produzido. `ref` de aresta alheia, conta desabilitada
- * e par bloqueado são o mesmo 404 que `ref` inexistente.
- */
+/** As rotas da conexão entre pessoas (fatia F). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -100,17 +30,7 @@ export const rotaDasCaixasDePedidos = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * **A lista das PRÓPRIAS conexões** (cliente, 22/10/2026).
- *
- * O teto é o das duas leituras irmãs — 600/h por conta —, e é o mesmo por uma
- * razão e não por simetria: as três são leitura da própria conta, numa tela que
- * a pessoa reabre. **Não há dimensão `q`** porque não há busca aqui: a lista não
- * recebe termo, e sem termo não há varredura a limitar.
- *
- * **Efeitos vazios**: é leitura. E **não há parâmetro de caminho**, que é o que
- * torna a lista de terceiro inexprimível nesta rota.
- */
+/** **A lista das PRÓPRIAS conexões** (cliente, 22/10/2026). */
 export const rotaDasPropriasConexoes = defineRoute({
   operationId: 'listMyConnections',
   method: 'get',
@@ -136,10 +56,9 @@ export const rotaDoAceiteDeConexao = defineRoute({
 });
 
 /**
- * **`irreversible_write`**, e as três semânticas que ela serve justificam a
- * marca: desfazer não volta (desbloquear também não devolve a conexão) e a
- * recusa guarda o descanso de 90 dias. Com efeito não vazio, `defineRoute`
- * torna a ausência de `rateLimit` erro de compilação (ADR-0016).
+ * **`irreversible_write`**, e as três semânticas que ela serve justificam a marca:
+ * desfazer não volta (desbloquear também não devolve a conexão) e a recusa guarda
+ * o descanso de 90 dias.
  */
 export const rotaDoEncerramentoDeConexao = defineRoute({
   operationId: 'endConnection',
@@ -165,9 +84,8 @@ export interface DependenciasDasRotasDeConexao {
   readonly contrato: Contrato;
   /**
    * A raiz pública da mídia, de onde a URL da foto é montada — **entrou em
-   * 22/10/2026 com `listMyConnections`**, que é a primeira resposta de conexão
-   * a carregar foto. A mesma dependência, com o mesmo nome, de
-   * `DependenciasDasRotasDeBusca`.
+   * 22/10/2026 com `listMyConnections`**, que é a primeira resposta de conexão a
+   * carregar foto.
    */
   readonly baseDeMidia: AbsoluteUrl;
 }
@@ -182,7 +100,7 @@ interface QueryDasCaixas {
   readonly limit?: number;
 }
 
-/** A paginação da lista das próprias conexões. **Sem direção e sem pessoa.** */
+/** A paginação da lista das próprias conexões. */
 interface PaginacaoSimples {
   readonly page?: number;
   readonly limit?: number;
@@ -191,16 +109,6 @@ interface PaginacaoSimples {
 /**
  * Uma conexão como `ConnectedPerson` a declara: **os CINCO campos de
  * `PersonSearchResult`** (cliente, 22/10/2026).
- *
- * **Ser conexão aceita não abre campo aqui**, e a igualdade com o recorte da
- * busca é medida no contrato pelo portão. Sem `public_ref` (esta lista não
- * hospeda denunciar nem bloquear), sem `connection_ref` (desfazer mora no
- * perfil), sem `connection_state` (seria a constante `connected` em toda linha)
- * e sem UUID (ADR-0010 item 6).
- *
- * **Exportada para a isca**, como `comoRespostaDaPessoa` da busca: nenhum portão
- * deste repositório confere o CORPO da resposta, então a única forma de medir o
- * conjunto de chaves em suíte é chamar a projeção.
  */
 export function comoRespostaDaConexao(
   pessoa: PessoaConectada,
@@ -211,20 +119,10 @@ export function comoRespostaDaConexao(
     display_name: pessoa.nomeDeExibicao,
     pets_count: pessoa.petsCount,
     connections_count: pessoa.connectionsCount,
-    // A URL e montada na BORDA, com o dominio de midia do ambiente -- o banco
-    // guarda chave de objeto e nunca endereco. A chave vem SEMPRE, com nulo
-    // quando nao ha foto pronta: chave que aparece e desaparece faria o cliente
-    // distinguir ausencia de nulo sem que a diferenca significasse algo.
     photo_icon_url:
       pessoa.photoKey === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${pessoa.photoKey}`,
   };
 }
-
-// `corpoDe` NAO mora mais aqui: ele veio de `shared/http/contract.js` na
-// refatoracao de 21/10 que juntou 29 copias numa fonte so. A copia local que
-// esta frente trazia era identica em assinatura, logica e mensagem -- conferido
-// linha a linha antes de sair --, e manter as duas e justamente o defeito que a
-// fonte unica existe para fechar.
 
 function tokenDoCabecalho(request: FastifyRequest): string {
   const cabecalho = request.headers.authorization;
@@ -258,27 +156,8 @@ export function registrarRotasDeConexao(
   };
 
   /**
-   * Pedir. **O corpo carrega UMA das duas credenciais**, e o guarda de corpo
-   * fechado continua não sendo opcional.
-   *
-   * O Fastify monta o Ajv com `removeAdditional: true`, então
-   * `additionalProperties: false` no contrato **apaga** o campo desconhecido em
-   * silêncio em vez de recusar. O guarda recusa o campo desconhecido com nome, e
-   * desde 20/10/2026 ele serve a um propósito diferente do de antes: antes ele
-   * mantinha *"não existe caminho por apelido"* legível de fora; agora ele
-   * mantém legível que existem **exatamente dois** caminhos e não um terceiro.
-   *
-   * **`oneOf` no contrato, e a escolha aqui é pelo campo presente.** Corpo com
-   * os dois, ou com nenhum, é recusado pelo esquema antes de chegar ao
-   * manipulador — então este `if` não tem um `else` de erro: ele não pode ser
-   * alcançado com os dois ausentes.
-   *
-   * **Nenhum dos dois caminhos diz, na resposta, qual deles foi usado.** A
-   * resposta é `Connection`, igual nos dois, e `origin` **não** sai nela: ele é
-   * coluna de trilha e de procedência, não de resposta. Um corpo que dissesse
-   * `origin: people_search` contaria a quem recebeu o pedido que a outra pessoa
-   * o achou numa busca — e isso é informação sobre como alguém chegou até ela,
-   * que ninguém pediu para dar.
+   * Pedir. **O corpo carrega UMA das duas credenciais**, e o guarda de corpo fechado
+   * continua não sendo opcional.
    */
   const corpoDoPedido = corpoDe(deps.contrato, rotaDoPedidoDeConexao.operationId);
   registrarRota(
@@ -297,11 +176,7 @@ export function registrarRotasDeConexao(
       const quem = await contexto(request, deps);
       const conexao =
         corpo.invite_token === undefined
-          ? // O `oneOf` do contrato garante que, sem `invite_token`, `handle`
-            // existe -- entao nao ha terceiro ramo a escrever aqui. O `?? ''`
-            // nao e um valor de reserva com significado: ele existe porque o
-            // tipo e opcional, e um apelido vazio nao casa nenhuma linha no
-            // `WHERE` -- o mesmo 404 de inexistente.
+          ?
             await deps.conexoes.pedirPorApelido(quem, corpo.handle ?? '')
           : await deps.conexoes.pedir(quem, corpo.invite_token);
       return reply.status(201).header('Cache-Control', SEM_CACHE).send(conexao);
@@ -330,20 +205,7 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /**
-   * **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026).
-   *
-   * **Nenhum parâmetro de caminho e nenhum filtro de pessoa**: só `page` e
-   * `limit`. Quem chama vem do `bearerAuth`, e é ele que entra na cláusula
-   * `WHERE` do repositório — não há nesta borda um valor de pessoa que alguém
-   * pudesse mandar, e é isso que mantém a lista de terceiro inexprimível.
-   *
-   * **A URL da foto é montada AQUI**, com a base de mídia do ambiente: o banco
-   * guarda chave de objeto e nunca endereço (§11.1 proibição 9). A mesma divisão
-   * da busca de pessoas, e a projeção é exportada pela mesma razão que a dela —
-   * nenhum portão deste repositório confere o CORPO da resposta, então a única
-   * forma de medir o conjunto de chaves em suíte é chamar a projeção.
-   */
+  /** **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026). */
   registrarRota(
     app,
     rotaDasPropriasConexoes,
@@ -362,7 +224,7 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** Só números, e só da própria conta. É o que a tela mostra ao lado da lista. */
+  /** Só números, e só da própria conta. */
   registrarRota(
     app,
     rotaDoResumoDeConexoes,
@@ -385,13 +247,7 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /**
-   * Recusar, cancelar ou desfazer. **204 sem corpo nas três.**
-   *
-   * A resposta vazia é o mecanismo, não economia: um corpo que dissesse
-   * "recusado" seria o *"ela recusou você"* que o desenho recusa. Qual das três
-   * aconteceu vai para a trilha.
-   */
+  /** Recusar, cancelar ou desfazer. */
   registrarRota(
     app,
     rotaDoEncerramentoDeConexao,

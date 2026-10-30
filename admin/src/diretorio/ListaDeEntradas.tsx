@@ -21,12 +21,8 @@ import {
 const POR_PAGINA = 50;
 
 /**
- * Busca, filtro e ordenacao **no topo do corpo da tela**, e nunca na barra do
- * app: e o padrao de listagem do projeto, e e o mesmo da `Loja` e da `Rede`.
- *
- * `padroes` e constante de modulo porque `useParametrosDaLista` o exige estavel:
- * um objeto novo a cada render recriaria o `useCallback` do filtro e a lista
- * recomecaria da pagina 1 sozinha.
+ * Busca, filtro e ordenacao **no topo do corpo da tela**, e nunca na barra do app:
+ * e o padrao de listagem do projeto, e e o mesmo da `Loja` e da `Rede`.
  */
 const PADROES = { q: '', atividade: 'todas', situacao: 'todas', ordem: 'name' };
 
@@ -52,32 +48,18 @@ function plural(n: number) {
   return n === 1 ? 'entrada' : 'entradas';
 }
 
-/** Cidade e UF numa celula. Uma entrada em rascunho pode nao ter nenhuma das duas. */
+/** Cidade e UF numa celula. */
 function lugarDa(entrada: Entrada): string {
   const partes = [entrada.city, entrada.state].filter((p): p is string => typeof p === 'string' && p !== '');
   return partes.length === 0 ? '—' : partes.join(' · ');
 }
 
-/**
- * O diretorio de `Perto` no painel: a lista que faltava.
- *
- * **Ela mostra rascunho, retirada e removida junto com a publicada**, e e essa a
- * diferenca da listagem do aplicativo. Quem administra precisa achar o que
- * ainda nao esta no ar -- uma lista que so mostrasse publicados esconderia
- * exatamente o trabalho em andamento.
- *
- * **Nao ha ordem por distancia.** Distancia depende da localizacao de
- * referencia de quem chama, e o painel e operado de uma mesa que nao tem relacao
- * nenhuma com onde a entrada atende.
- */
+/** O diretorio de `Perto` no painel: a lista que faltava. */
 export default function ListaDeEntradas() {
   const { api } = useSessao();
   const navigate = useNavigate();
   const [p, mudar] = useParametrosDaLista(PADROES);
   const [aviso, fecharAviso] = useAvisoDaNavegacao();
-  // O servidor exige 3 caracteres em `q` (o piso do indice trigrama: um padrao
-  // menor nao produz trigrama nenhum e a busca vira varredura da tabela). Abaixo
-  // disso a tela nao manda o parametro, em vez de mandar e levar 400.
   const q = p.q.trim().length >= 3 ? p.q.trim() : '';
   const chave = JSON.stringify([q, p.atividade, p.situacao, p.ordem]);
 
@@ -182,10 +164,6 @@ export default function ListaDeEntradas() {
         seletores={[
           {
             id: 'filtro-atividade',
-            // UMA atividade por vez, e e de proposito: o filtro do contrato
-            // (`?kind=`) e singular, e a entrada com varias aparece em CADA um
-            // dos filtros dela -- uma vez em cada, porque o servidor testa
-            // pertinencia em vez de desdobrar a linha.
             rotuloAcessivel: 'Filtrar por atividade',
             valor: p.atividade,
             opcoes: ATIVIDADE_TODAS,
@@ -253,27 +231,21 @@ export default function ListaDeEntradas() {
                           {entrada.display_name}
                         </Link>
                         <br />
-                        {/* TODAS as atividades, e nao so a primeira (cliente,
-                            21/10/2026). `entrada.kind` continua no contrato,
-                            mas e `kinds[0]` e existe para o APK em campo --
-                            usa-lo aqui faria o painel esconder que a entrada
-                            tem outras, e e justamente isso que o operador
-                            precisa ver antes de editar. */}
+                        {
+}
                         <span className="t-caption c-sec">
                           {entrada.kinds.map((k) => ATIVIDADES[k]).join(' · ')}
                         </span>
                       </td>
                       <td className="w-preco t-body-sm">{lugarDa(entrada)}</td>
-                      {/* O E.164 gravado, de volta na gramatica de quem le. */}
+                      {}
                       <td className="w-upd t-body-sm">{telefoneDoE164(entrada.phone_e164) || '—'}</td>
                       <td className="w-status">
                         <Selo tipo={SELO_DA_SITUACAO[entrada.status]} />
                       </td>
                       <td className="w-acts">
-                        {/* O editar direto mais o menu, como na `Loja` e na
-                            `Rede`: a acao de todo dia fica a um clique e as
-                            demais entram no menu, em vez de a coluna crescer
-                            um icone por recurso novo. */}
+                        {
+}
                         <div className="acts">
                           <Link
                             className="ibtn"
@@ -288,12 +260,6 @@ export default function ListaDeEntradas() {
                             titulo="Mais ações"
                             itens={[
                               {
-                                // DUPLICAR (cliente, 28/10/2026). Ele NAVEGA e
-                                // nao escreve: leva ao cadastro com os dados de
-                                // preenchimento copiados, para revisar e
-                                // cadastrar. Duplicar com um clique criaria duas
-                                // entradas identicas no diretorio publico, que e
-                                // pior que nenhuma.
                                 rotulo: 'Duplicar',
                                 icone: 'add',
                                 dataCy: 'entrada-duplicar',

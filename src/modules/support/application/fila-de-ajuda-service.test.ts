@@ -1,19 +1,4 @@
-/**
- * O teto da pagina da fila, e por que ele existe DUAS vezes.
- *
- * O contrato ja recusa `limit=101` antes do handler (`AdminLimit`,
- * `maximum: 100`). Este servico repete a conta, e a repeticao e deliberada:
- * **o esquema do contrato so protege o caminho que passa por ele**. Um teste,
- * uma bancada, um caso de uso futuro que chame `listar` direto pediria a
- * tabela inteira numa consulta so, e a fila do painel viraria uma varredura.
- *
- * | mexa em `fila-de-ajuda-service.ts` | reprova |
- * |---|---|
- * | tirar o `Math.min` | `recorta o limite acima do teto` |
- * | tirar o `Math.max(1, ...)` da pagina | `pagina abaixo de 1 vira 1` |
- * | tirar o `Math.max(1, ...)` do limite | `limite zero vira 1` |
- * | tirar o `Math.trunc` | `numero quebrado e truncado` |
- */
+/** O teto da pagina da fila, e por que ele existe DUAS vezes. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

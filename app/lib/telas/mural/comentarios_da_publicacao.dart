@@ -17,44 +17,6 @@ import '../casca_com_abas.dart';
 
 /// OS COMENTARIOS de uma publicacao — decisao do cliente de 19/10/2026,
 /// *"curtir e comentar"* na primeira versao.
-///
-/// ## Quem ve os comentarios e quem ve a publicacao
-///
-/// O recorte e o MESMO, na clausula `WHERE` do servidor (ADR-0021). Publicacao
-/// que quem chama nao ve responde `404` — **e nao lista vazia**, que afirmaria
-/// que a publicacao existe e nao tem comentario. Esta tela nao tem um `if` que
-/// esconda comentario nenhum: ela desenha o que `GET .../comments` devolveu.
-///
-/// ## A ordem e o INVERSO da linha do tempo
-///
-/// Mais ANTIGO primeiro, porque comentario se le na ordem em que a conversa
-/// aconteceu. A ordem e do servidor, e esta tela nao reordena.
-///
-/// ## O TEXTO E LIVRE, e esta tela nao julga nenhuma palavra
-///
-/// Decisao do cliente de 18/10: *"deixe o texto livre na timeline"* e *"quem
-/// modera vai ser o administrador, deve ir para a pagina de backoffice"*. Nao ha
-/// lista de palavra e nao ha aviso de tom.
-///
-/// ## O QUE FALTA, E ESTA DITO AQUI PORQUE E AQUI QUE O DANO MORA
-///
-/// **A DENUNCIA DE COMENTARIO NAO EXISTE, E FICAR SEM ELA FOI DECISAO DO
-/// CLIENTE EM 20/10/2026.** Medido: os cinco motivos de
-/// `PublicationReportInput` servem a um comentario sem mudanca nenhuma — o que
-/// falta nao e motivo, e ALVO (`comment_reports`, a sexta perna da fila do
-/// painel, o valor `comment` em `ModerationOrigin` e uma operacao em `safety`,
-/// que iria de seis para sete). O custo foi levado a ele e ele escolheu deixar
-/// para depois: **nao e esquecimento**, e a data esta aqui para quem ler depois
-/// saber que alguem olhou e decidiu.
-///
-/// Por isso **nao ha `Denunciar` no `⋮` de um comentario alheio**: um controle
-/// que abrisse uma folha de motivos e terminasse num `404` seria pior do que a
-/// ausencia. O que existe hoje e BLOQUEAR o autor, que some com os comentarios
-/// dele — `bloqueio_entre` esta no `WHERE` da leitura —, e isso se faz no perfil
-/// dele, nao aqui.
-///
-/// **E risco conhecido e declarado**, nao surpresa: o administrador ainda nao
-/// alcanca comentario.
 class ComentariosDaPublicacao extends StatefulWidget {
   const ComentariosDaPublicacao({
     required this.ref,
@@ -63,21 +25,12 @@ class ComentariosDaPublicacao extends StatefulWidget {
     super.key,
   });
 
-  /// O endereco opaco da publicacao, 22 simbolos. **Nunca o `id`.**
+  /// O endereco opaco da publicacao, 22 simbolos.
   final String ref;
 
   final InteracaoDoMural interacao;
 
   /// Se quem chama e o DONO da publicacao.
-  ///
-  /// **Vem do `mine` da linha do tempo, que vem do SERVIDOR** -- nao de uma
-  /// comparacao de apelido nesta camada. E ele que decide se o `Apagar` nasce
-  /// num comentario de TERCEIRO (decisao do cliente de 20/10/2026): o dono
-  /// limpa a propria casa.
-  ///
-  /// **A trava de verdade e do servidor**, nao desta linha: os dois caminhos de
-  /// autorizacao estao na clausula `WHERE` do `UPDATE` (ADR-0021), e um
-  /// `Apagar` desenhado por engano levaria `404`. Isto decide quem VE a porta.
   final bool minhaPublicacao;
 
   /// O teto do contrato, COPIADO de la — o MESMO da publicacao, que e o de
@@ -164,8 +117,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        // **O comentario novo vai no FIM**, e nao no comeco: a ordem e
-        // crescente, e e onde o servidor o devolveria na proxima leitura.
         _itens = <ComentarioDaPublicacao>[...?_itens, criado.comentario];
         _total = criado.total;
       });
@@ -174,8 +125,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
       anunciar(context, ComentariosDaPublicacao.enviado);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      // **O TEXTO FICA no campo**: tentar de novo e so a escrita, e limpar aqui
-      // faria a pessoa reescrever por uma falha que nao foi dela.
       final mensagem = MensagensDeErro.de(falha);
       setState(() {
         _enviando = false;
@@ -219,13 +168,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
 
     return Scaffold(
       appBar: AppBar(title: const Text(ComentariosDaPublicacao.titulo)),
-      // **O TOTAL VOLTA PARA O CARTAO, e e por isso que `canPop` e `false`.**
-      //
-      // Sem isto o numero no Mural ficaria o velho ate a proxima recarga da
-      // linha do tempo -- a pessoa comentaria, voltaria, e veria o contador
-      // antigo. `canPop: false` intercepta o gesto de voltar e o botao da barra,
-      // e o `pop` daqui leva o total; sem ele o Flutter fecharia a tela com
-      // `null` e `_AcoesDaPublicacao` nao teria o que atualizar.
       body: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
@@ -253,17 +195,12 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
                               titulo: ComentariosDaPublicacao.tituloVazio,
                               explicacao:
                                   ComentariosDaPublicacao.explicacaoVazio,
-                              // SEM ACAO: o campo de escrever esta logo abaixo,
-                              // sempre visivel. Uma acao aqui seria a mesma
-                              // porta em dois lugares.
                               acao: null,
                             )
                           else
                             for (final comentario in itens) ...<Widget>[
                               _Comentario(
                                 comentario: comentario,
-                                // O `Apagar` nasce em DOIS casos: o comentario
-                                // e meu, OU a publicacao e minha.
                                 podeApagar: comentario.meu ||
                                     widget.minhaPublicacao,
                                 aoApagar: () => _apagar(comentario),
@@ -273,8 +210,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
                         ],
                       ),
               ),
-              // O CAMPO, fixo no pe: comentar e a acao desta tela, e ela nao
-              // deve exigir rolagem ate o fim de uma lista longa.
               Container(
                 padding: const EdgeInsets.all(BichuEspaco.e4),
                 decoration: BoxDecoration(
@@ -296,8 +231,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
                       habilitado: !_enviando,
                       linhas: 2,
                       capitalizacao: TextCapitalization.sentences,
-                      // **SEM `limite`**: `maxLength` TRUNCA no teclado, e
-                      // truncar em silencio apaga o que a pessoa escreveu.
                     ),
                     const SizedBox(height: BichuEspaco.e1),
                     Align(
@@ -331,21 +264,6 @@ class _ComentariosDaPublicacaoState extends State<ComentariosDaPublicacao> {
 }
 
 /// Um comentario na lista.
-///
-/// ## O `⋮` nasce em DOIS casos, e so com `Apagar`
-///
-/// 1. o comentario e **meu** -- tirar do ar o que eu escrevi;
-/// 2. a **publicacao** e minha -- decisao do cliente de 20/10/2026: o dono
-///    limpa a propria casa.
-///
-/// **O segundo nao e moderacao**: nao passa por fila, nao tem administrador e
-/// nao tem revisao. E a mesma natureza de bloquear alguem, que o produto trata
-/// como ferramenta pessoal.
-///
-/// **Nao ha `Denunciar`**: a denuncia de comentario nao existe no contrato, e
-/// ficar sem ela foi decisao do cliente no mesmo dia. Um controle que abrisse
-/// uma folha de motivos para terminar num `404` seria pior do que a ausencia —
-/// ver o cabecalho de [ComentariosDaPublicacao].
 class _Comentario extends StatelessWidget {
   const _Comentario({
     required this.comentario,
@@ -362,8 +280,7 @@ class _Comentario extends StatelessWidget {
   final VoidCallback aoApagar;
 
   /// 32 dp, menor que os 40 do cartao: o comentario e uma linha dentro de uma
-  /// lista, e nao o cabecalho de um cartao. A derivada continua a `thumb` 176,
-  /// e `cacheWidth` acompanha a largura PINTADA.
+  /// lista, e nao o cabecalho de um cartao.
   static const double ladoDoIcone = 32;
 
   @override
@@ -373,18 +290,6 @@ class _Comentario extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **A TERCEIRA SUPERICIE DO CIRCULO DE PESSOA, e e ela que motivou a
-        // extracao (21/10/2026).** O cabecalho de `_FotoDoAutor`, no Mural, dizia
-        // *"No dia em que aparecer a terceira superficie, este widget e o irmao
-        // dele viram um so, em `lib/widgets/`"*. Era aqui: este circulo era a
-        // terceira copia das mesmas linhas, escrita inline.
-        //
-        // O que continua desta tela e o LADO: 32 dp, menor que os 40 do cartao,
-        // e a `bodyMedium` da inicial que acompanha o lado.
-        // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), pela MESMA
-        // `PortaDoPerfilDoAutor` do cartao -- uma superficie com duas regras de
-        // "quando o toque nasce" divergiria na primeira edicao. Sem apelido
-        // ela devolve o circulo cru.
         PortaDoPerfilDoAutor(
           autor: comentario.autor,
           rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
@@ -395,11 +300,6 @@ class _Comentario extends StatelessWidget {
             inicial: MarcaDaPessoa.letraDe(comentario.autor.nomeExibido),
             lado: ladoDoIcone,
             estiloDaInicial: textos.bodyMedium,
-            // O dono da foto, para o cache em disco (BICHUS-296). NA UNIAO de
-            // 27/10 ele entra AQUI, dentro do `MarcaDaPessoa` que o #64
-            // embrulhou em `PortaDoPerfilDoAutor`: os dois lados nao se
-            // contradiziam -- um fez da foto uma porta, o outro deu dono a
-            // chave do cache.
             apelido: comentario.autor.apelido,
           ),
         ),
@@ -408,20 +308,6 @@ class _Comentario extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // O NOME, COM O SELO DE VALIDADO AO LADO — emenda do ADR-0010 de
-              // 21/10/2026, decisao do cliente: *"os usuarios que validados deve
-              // ter um simbolo em frente de seu nome nos posts, comentarios"*.
-              //
-              // **AQUI O SELO CABE EM TODAS AS LARGURAS MEDIDAS**, e e o unico
-              // dos quatro lugares em que isso e verdade: a linha do comentario
-              // nao divide largura com um `⋮` fixo nem com um titulo de barra, e
-              // o nome usa `labelLarge`, que e menor que o `titleMedium` do
-              // cartao. A medicao esta em
-              // `app/test/widgets/selo_de_validado_test.dart`, com os numeros.
-              //
-              // **O NOME TAMBEM E PORTA**, e **sem `rotulo`**: o texto ja e o
-              // nome acessivel, e trocar a semantica apagaria o selo que o
-              // paragrafo acima acabou de justificar.
               PortaDoPerfilDoAutor(
                 autor: comentario.autor,
                 child: NomeComSelo(
@@ -431,9 +317,6 @@ class _Comentario extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: BichuEspaco.e1),
-              // O texto como a pessoa escreveu. Sem recorte e sem tratamento de
-              // conteudo: ele cabe em 280 caracteres e o cliente mandou
-              // deixa-lo livre.
               Text(comentario.texto, style: textos.bodyLarge),
             ],
           ),

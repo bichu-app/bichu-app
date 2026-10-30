@@ -1,11 +1,4 @@
-/**
- * A cifra do código da tag.
- *
- * O caso que justifica o modo autenticado é o de adulteração, e ele é o único
- * que uma implementação em CBC passaria "funcionando": decifrar bytes trocados
- * devolveria alguma coisa, e essa alguma coisa acabaria impressa numa plaquinha.
- * Aqui ela precisa **falhar**.
- */
+/** A cifra do código da tag. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarSecretCipher } from './aes-gcm-secret-cipher.js';
@@ -26,8 +19,6 @@ void describe('cifra do código da tag', () => {
   });
 
   void it('cifrar duas vezes o mesmo código dá resultados diferentes', async () => {
-    // IV novo a cada cifragem. Igual significaria IV fixo, e IV repetido em GCM
-    // não vaza só o padrão: vaza a chave de autenticação.
     const cifra = criarSecretCipher(CHAVE);
     const a = Buffer.from(await cifra.encrypt(CODIGO));
     const b = Buffer.from(await cifra.encrypt(CODIGO));

@@ -1,12 +1,6 @@
 /**
- * O repositorio da escrita administrativa da `Rede` em memoria, para os testes
- * do caso de uso e das rotas. Nunca e ligado em `api.ts`.
- *
- * Imita o que o caso de uso usa do banco: a versao lida no `WHERE` (devolve
- * `false` quando mudou), o `ROLLBACK` (o rascunho da transacao so vira estado
- * se o trabalho inteiro terminar, trilha incluida), a unicidade do `slug`, a
- * trilha como livro-razao da contagem de linhas (D56) e a fila de trabalhos.
- * A prova contra Postgres e `tests/integration/escrita-administrativa-da-rede.test.ts`.
+ * O repositorio da escrita administrativa da `Rede` em memoria, para os testes do
+ * caso de uso e das rotas.
  */
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
 import type { EnvioDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
@@ -156,7 +150,6 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
             endsAt: novo.endsAt,
             timeZone: novo.timeZone,
             visibilidade: novo.visibilidade,
-            // O painel cria so `admin`; `community` nasce pela porta publica.
             origem: 'admin',
             entrada: novo.entrada,
             portes: [],

@@ -1,13 +1,4 @@
-/**
- * Os prazos da sessao vistos do navegador (D38, UX 29.2), sem chamada extra.
- *
- * O servidor devolve `idle_expires_at` e `absolute_expires_at` em
- * `getAdminSession`. A duracao da inatividade sai da diferenca entre o prazo e
- * o instante da resposta; depois, cada resposta da API renova a estimativa. O
- * servidor so grava o uso uma vez por minuto (ADR-0027 item 2), entao a
- * estimativa desconta esse minuto: avisar cedo e seguro, avisar tarde perde o
- * formulario de alguem.
- */
+/** Os prazos da sessao vistos do navegador (D38, UX 29.2), sem chamada extra. */
 export const AVISO_DE_INATIVIDADE_MS = 2 * 60_000;
 export const AVISO_DO_TETO_MS = 10 * 60_000;
 export const FOLGA_DA_RENOVACAO_MS = 60_000;
@@ -34,7 +25,10 @@ export function prazosDaResposta(
   };
 }
 
-/** Uma resposta da API chegou agora: a inatividade renova, descontada a folga, sem passar do teto. */
+/**
+ * Uma resposta da API chegou agora: a inatividade renova, descontada a folga, sem
+ * passar do teto.
+ */
 export function renovarPorUso(prazos: Prazos, agora: number): Prazos {
   const estimado = agora - FOLGA_DA_RENOVACAO_MS + prazos.duracaoDaInatividadeMs;
   return { ...prazos, fimPorInatividade: Math.min(Math.max(estimado, prazos.fimPorInatividade), prazos.teto) };

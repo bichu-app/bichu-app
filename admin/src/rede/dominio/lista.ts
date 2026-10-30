@@ -1,7 +1,7 @@
 /**
- * Lista de encontros: o filtro de escolha unica da tela traduzido nos
- * parametros de `listAdminNetworkEvents`, o selo de cada linha e os textos de
- * contagem e de sem resultado (UX 29.4 e 29.5).
+ * Lista de encontros: o filtro de escolha unica da tela traduzido nos parametros
+ * de `listAdminNetworkEvents`, o selo de cada linha e os textos de contagem e de
+ * sem resultado (UX 29.4 e 29.5).
  */
 import { dataEHora, hora } from './horario.ts';
 import type { Encontro, FiltrosDaLista, OrdemDaLista } from './tipos.ts';
@@ -27,7 +27,6 @@ export function ehOrdem(v: string | null): v is OrdemDaLista {
 export function consultaDaLista(filtro: Filtro, q: string, ordem: OrdemDaLista, page: number, limit: number): FiltrosDaLista {
   const base: FiltrosDaLista = { sort: ordem, page, limit };
   const busca = q.trim();
-  // `q` tem minLength 2 no contrato: uma letra so nao vai ao servidor.
   if (busca.length >= 2) base.q = busca.slice(0, 80);
   switch (filtro) {
     case 'agendados':
@@ -89,10 +88,9 @@ export function acoesDoEncontro(e: Pick<Encontro, 'publication_status' | 'timing
 }
 
 /**
- * Ate quando o encontro cancelado continua no app (decisao do cliente de 23/09
- * e contrato): ate o fim previsto; sem fim declarado, ate 23:59:59 do dia do
- * inicio, no fuso do encontro. O dialogo e o sucesso dizem o prazo certo de cada
- * caso, em vez de "ate o horario previsto de fim" para quem nao tem fim.
+ * Ate quando o encontro cancelado continua no app (decisao do cliente de 23/09 e
+ * contrato): ate o fim previsto; sem fim declarado, ate 23:59:59 do dia do inicio,
+ * no fuso do encontro.
  */
 export function textosDoCancelamento(e: Pick<Encontro, 'starts_at' | 'ends_at' | 'time_zone'>): { corpo: string; sucesso: string } {
   const fuso = e.time_zone;

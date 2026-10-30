@@ -1,52 +1,6 @@
 /**
  * Os DOIS tetos de tentativa inválida de `GET /v1/tags/:code`, medidos pela
  * posição da recusa.
- *
- * ## Por que dois casos, e não um
- *
- * `resolveTagCode` declara duas entradas `applies_to: invalid_attempts`, e elas
- * não são redundantes — uma é a saída da outra:
- *
- * - `['finder_identity']`, 5 por 10 min. O balde é
- *   `hmacDeIdentidadeDoAchador(request.ip, user-agent, chave)`. Quem adivinha
- *   código tem cinco palpites por identidade.
- * - `['ip']`, 20 por hora. O balde é só o endereço.
- *
- * A segunda existe porque o `User-Agent` entra na primeira, e ele é do
- * atacante. Trocar o cabeçalho a cada cinco palpites dá balde novo e escapa
- * inteiro da entrada por identidade. A entrada por IP é o que fecha essa saída,
- * e **é exatamente isso que o segundo caso deste arquivo faz**: ele varia o
- * `User-Agent` de propósito, porque a evasão é o cenário que a entrada existe
- * para cobrir. Um caso que fixasse o cabeçalho pararia na sexta tentativa e
- * nunca chegaria perto do teto por IP.
- *
- * ## Por que a POSIÇÃO, e não "alguma resposta foi 429"
- *
- * A rota declara SEIS entradas de teto. Medir presença de 429 não distingue
- * qual delas recusou, e as duas de invalidas respondem o mesmo código. A
- * posição distingue, e distingue nos dois sentidos:
- *
- * - No caso da identidade, a recusa na 6ª não pode ser a entrada por IP: ela
- *   permite 20, e na 6ª só há 5 contadas.
- * - No caso do IP, as 20 primeiras saírem 404 já **prova** que a entrada por
- *   identidade não estava contando — se estivesse, a 6ª teria sido 429.
- *
- * As outras quatro entradas não podem recusar aqui: `serve_cache` e
- * `notify_owner` não são recusa, `['ip']` 300/h e `['ip_24']` 2000/h estão
- * ordens de magnitude acima de 21, e o código varia a cada tentativa, então o
- * balde `['ip','code']` de 30/h recebe uma contagem por chave.
- *
- * ## O relógio é CONGELADO, e isso não é conveniência
- *
- * As janelas deste produto são fixas e alinhadas ao epoch
- * (`inicioDaJanela`: `floor(agora / janela) * janela`), e não deslizantes. Com
- * `Date.now()` um caso de 21 requisições pode atravessar a virada da janela, o
- * balde zerar no meio e a recusa não acontecer onde o caso a espera — verde ou
- * vermelho decidido pelo minuto em que a suíte rodou. Congelar remove essa
- * classe inteira, e tem um segundo efeito que o caso aproveita: o `Retry-After`
- * passa a ser exato, e os dois tetos têm janelas diferentes (300 s contra
- * 3300 s neste instante). Esse número é a terceira prova de QUAL entrada
- * recusou, e ela é independente da posição.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -72,38 +26,18 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const ENDERECO = '198.51.100.7';
 
 /**
- * Os números que `api/openapi.yaml` declara em `resolveTagCode`, repetidos aqui
- * de propósito.
- *
- * Ler o esperado de `rotaDeResolucaoDaTag.rateLimit` seria comparar a
- * declaração consigo mesma: trocar 5 por 50 na rota passaria, porque o caso
- * passaria a cobrar 50. A distância entre os dois lugares é o que transforma
- * "o número mudou" em suíte vermelha, e o último caso deste arquivo é o que
- * cruza os dois.
+ * Os números que `api/openapi.yaml` declara em `resolveTagCode`, repetidos aqui de
+ * propósito.
  */
 const TETO_POR_IDENTIDADE = 5;
 const TETO_POR_ENDERECO = 20;
 
-/**
- * Instante fixo: 22/09/2026 12:05:00 UTC.
- *
- * Escolhido por caber com folga DENTRO das duas janelas alinhadas, o que torna
- * o `Retry-After` determinístico:
- * - janela de 10 min → começa 12:00:00, vence 12:10:00 → faltam 300 s
- * - janela de 1 h    → começa 12:00:00, vence 13:00:00 → faltam 3300 s
- */
+/** Instante fixo: 22/09/2026 12:05:00 UTC. */
 const AGORA = Date.UTC(2026, 8, 22, 12, 5, 0);
 const FALTAM_NA_JANELA_DE_10_MIN = 300;
 const FALTAM_NA_JANELA_DE_1_HORA = 3300;
 
-/**
- * Códigos bem formados que não existem.
- *
- * Precisam passar por `normalizarCodigoDaTag` — um código malformado é recusado
- * antes, com `tag-code-malformed`, e o balde `['ip','code']` seria pulado por
- * falta de valor. Bem formado e inexistente é o palpite do enumerador: é o que
- * custa uma consulta ao índice cego antes de virar 404.
- */
+/** Códigos bem formados que não existem. */
 function codigoInexistente(semente: number): string {
   const bytes = new Uint8Array(10);
   bytes[0] = semente & 0xff;
@@ -112,13 +46,7 @@ function codigoInexistente(semente: number): string {
   return gerarCodigoDaTag(bytes);
 }
 
-/**
- * As dependências que os resolvedores de produção exigem.
- *
- * `resolvedoresDaTag` toca `ipHmacKey` e mais nada; `chamadorOpcional` toca o
- * autenticador. O resto é objeto vazio com a marca de tipo, que é mais honesto
- * do que montar um serviço inteiro que este arquivo não exerce.
- */
+/** As dependências que os resolvedores de produção exigem. */
 function dependenciasDeTeste(): DependenciasDasRotasDeTag {
   return {
     tags: {
@@ -140,16 +68,10 @@ function servidor(contador: RateLimitStore) {
     isProduction: false,
     teto: tetoDeTeste(contador),
   });
-  // A rota REAL, com os resolvedores REAIS. Declarar um resolvedor equivalente
-  // aqui dentro deixaria a fiação de `tag-routes.ts` sem dono: trocar o balde
-  // de `finder_identity` por `ip` lá não reprovaria nada aqui.
   registrarRota(
     app,
     rotaDeResolucaoDaTag,
     { resolvedores: resolvedoresDaTag(dependenciasDeTeste()) },
-    // O manipulador real recusa pelo serviço; aqui o serviço já rejeita com
-    // `tag-code-not-found`, que é um dos tipos que `registrarRota` conta como
-    // tentativa inválida (`TIPOS_DE_TENTATIVA_INVALIDA`).
     async (request, reply) => {
       const deps = dependenciasDeTeste();
       const { code } = request.params as { code: string };
@@ -198,9 +120,8 @@ async function adivinhar(
 }
 
 /**
- * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`,
- * depois de a resposta sair. Em paralelo, a tentativa N+1 poderia alcançar o
- * `peek` antes de a N ter sido contada, e a posição medida seria outra.
+ * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`, depois
+ * de a resposta sair.
  */
 async function adivinharEmSerie(
   app: ReturnType<typeof servidor>,
@@ -274,9 +195,6 @@ void describe('GET /tags/:code — o teto por endereço, que é a saída da evas
     zerarInventario();
     const app = servidor(criarContadorEmMemoria(() => AGORA));
     try {
-      // Um cabeçalho novo por tentativa: é o que o atacante faz, e é a razão de
-      // a entrada por IP existir. `hmacDeIdentidadeDoAchador` leva o
-      // `User-Agent`, então cada valor novo é um balde novo de `finder_identity`.
       const respostas = await adivinharEmSerie(
         app,
         TETO_POR_ENDERECO + 1,
@@ -334,15 +252,6 @@ void describe('GET /tags/:code — o teto por endereço, que é a saída da evas
 
 void describe('GET /tags/:code — a rota declara os dois tetos que o contrato declara', () => {
   void it('as duas entradas de invalidas estão lá, com dimensão, número, janela e recusa', () => {
-    // O OUTRO LADO DA PINÇA, independente dos casos acima de propósito. Eles
-    // provam que o mecanismo recusa onde deve; este prova que os números não
-    // mudaram. Se o esperado saísse da própria rota, trocar 5 por 50 passaria
-    // nos dois, porque os dois passariam a cobrar 50.
-    // O tipo de `rateLimit` aqui é a tupla literal que `defineRoute` preserva, e
-    // nela `appliesTo` só existe nos membros que a declaram. Ler pelo tipo largo
-    // do contrato (`RateLimitEntry`) é o que permite perguntar "quantas entradas
-    // de invalidas existem?" — inclusive a resposta ZERO e a resposta UM, que
-    // são os dois casos que este bloco precisa reprovar.
     const declaradas: readonly RateLimitEntry[] = rotaDeResolucaoDaTag.rateLimit ?? [];
     const invalidas = declaradas.filter((entrada) => entrada.appliesTo === 'invalid_attempts');
 
@@ -381,9 +290,6 @@ void describe('GET /tags/:code — a rota declara os dois tetos que o contrato d
 
 void describe('GET /tags/:code — as iscas dos dois casos', () => {
   void it('ISCA — com o contador DESLIGADO, a 21ª passa, e este arquivo reprova', async () => {
-    // Sem esta isca, os dois casos de posição passariam num sistema sem teto
-    // nenhum: um 404 na 21ª é indistinguível de "o teto não existe" se ninguém
-    // afirmar que o contador desligado produz exatamente isso.
     zerarInventario();
     const app = servidor(criarContadorDesligado());
     try {

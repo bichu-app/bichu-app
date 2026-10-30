@@ -1,6 +1,6 @@
 /**
- * A consulta de faixa, com a rede substituida: o que se prova aqui e o que sai
- * da maquina (so o prefixo de 5) e o que a resposta vira.
+ * A consulta de faixa, com a rede substituida: o que se prova aqui e o que sai da
+ * maquina (so o prefixo de 5) e o que a resposta vira.
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

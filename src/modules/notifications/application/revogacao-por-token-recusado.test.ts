@@ -1,44 +1,4 @@
-/**
- * O critério 4: o FCM recusou o token, o aparelho sai, e os outros continuam.
- *
- * ## Por que este caminho tem teste e não tem rota
- *
- * Quem chama `revogarPorTokenRecusado` é o caminho de **envio**, e ele ainda
- * não existe: é a BICHUS-18. Escrever a revogação agora, com teste próprio e
- * sob a revisão de segurança desta história, é preferível à alternativa —
- * a BICHUS-18 inventar a higiene de token junto com o disparo, no meio do
- * caminho mais crítico do produto.
- *
- * Isso é, reconhecidamente, um mecanismo sem chamador, que é a família de
- * defeito que este repositório já registrou três vezes (`invalidarTodasAsSessoes`,
- * a rota do webhook de entrega, o remetente de push). A diferença está dita em
- * voz alta em vez de descoberta depois: o chamador tem nome, tem número de
- * história e é a próxima da fila do PM (`92 → 20 → 24 → 91 → 18 → 46`).
- *
- * ## O desfecho vem da porta, e não de uma exceção
- *
- * `ResultadoDoEnvio` já declara `'aparelho-sumiu'` como **resposta**, com o
- * argumento escrito em `ports/push-sender.ts`: se `UNREGISTERED` virasse
- * exceção, ele cairia na mesma vala das falhas de rede e a fila o repetiria
- * para sempre contra um aparelho que não existe mais. Esta função é o outro
- * lado daquela decisão.
- *
- * ## As iscas, e como foram provadas
- *
- * Desligadas em `registro-de-aparelhos-service.ts`, rodadas e vistas reprovar
- * em 22/09/2026, e depois restauradas:
- *
- * | o que foi desligado | reprovaram |
- * |---|---|
- * | `revogarPorTokenRecusado` deixando de chamar o repositório | 5 casos |
- * | `registrarRevogacao` deixando de gravar na trilha | 1 caso aqui, e 3 no arquivo de rotas |
- *
- * O mesmo par contra Postgres de verdade está em
- * `tests/integration/aparelho-e-token-de-push.test.ts`, e lá a revogação
- * transformada em `no-op` reprovou 3 casos — enquanto **a suíte unitária
- * inteira continuou verde**, porque o dublê em memória apaga do `Map` de
- * qualquer jeito. É a medida exata do que só o banco prova.
- */
+/** O critério 4: o FCM recusou o token, o aparelho sai, e os outros continuam. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -70,12 +30,7 @@ function aparelho(id: string, token: TokenDeAparelho): Aparelho {
   };
 }
 
-/**
- * Registro em memória com **dois aparelhos da mesma conta**.
- *
- * Dois e não um: com um só, "não derrubou os outros aparelhos do mesmo
- * usuário" não tem como ser medido, e o caso passaria por vacuidade.
- */
+/** Registro em memória com **dois aparelhos da mesma conta**. */
 function montar(): {
   servico: RegistroDeAparelhosService;
   linhas: Map<string, Aparelho>;
@@ -201,9 +156,6 @@ void describe('token recusado pelo FCM: o aparelho sai agora (critério 4)', () 
   });
 
   void it('duas recusas do mesmo token: a segunda não erra e não grava duas vezes', async () => {
-    // O envio é concorrente por aparelho. Duas mensagens contra o mesmo token
-    // morto voltam com `UNREGISTERED` quase juntas, e a segunda não pode virar
-    // 500 nem uma segunda linha de trilha dizendo que revogou de novo.
     const { servico, eventos } = montar();
     assert.equal(await servico.revogarPorTokenRecusado(TOKEN_MORTO), true);
     assert.equal(await servico.revogarPorTokenRecusado(TOKEN_MORTO), false);
@@ -217,8 +169,6 @@ void describe('token recusado pelo FCM: o aparelho sai agora (critério 4)', () 
     const evento = eventos.find((e) => e.action === 'device.revoked');
     assert.ok(evento !== undefined, 'a revogação não foi para a trilha, que é a única memória dela');
     assert.equal(evento.metadata?.['reason'], 'token_rejected');
-    // Não há pessoa: quem decidiu foi o transporte. `actorUserId` é proibido
-    // fora de `user` pela porta da trilha.
     assert.equal(evento.actorKind, 'system');
     assert.equal(evento.actorUserId, undefined);
     assert.equal(evento.metadata?.['owner_user_id'], TUTORA);

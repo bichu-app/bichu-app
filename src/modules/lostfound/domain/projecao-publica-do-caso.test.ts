@@ -1,14 +1,4 @@
-/**
- * A projeção pública do caso e o cartaz (BICHUS-76), sem servidor e sem banco.
- *
- * O que se prova aqui é regra, não fiação: que links saem nos caminhos do site
- * (ADR-0017, quadro das oito rotas), que texto livre passa pela redação do
- * canal mediado na saída, e que o caso sem área em texto continua tendo um
- * `area_label`, que o contrato declara obrigatório.
- *
- * O teste de não-vazamento de ponta a ponta, contra a resposta HTTP, mora em
- * `adapters/http/leitura-publica-do-caso.test.ts`.
- */
+/** A projeção pública do caso e o cartaz (BICHUS-76), sem servidor e sem banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -33,9 +23,6 @@ function caso(parcial: Partial<CasoPublico> = {}): CasoPublico {
   return {
     shareToken: TOKEN,
     aberto: true,
-    // O caso de pe e ABERTO e nao reencontrado: os dois sao exclusivos no
-    // mundo real, e o dublê que dissesse `true` nos dois mediria um estado que
-    // o adaptador nunca produz.
     reencontrado: false,
     petNome: 'Thor',
     especie: 'dog',
@@ -56,9 +43,6 @@ function caso(parcial: Partial<CasoPublico> = {}): CasoPublico {
 
 void describe('links do caso', () => {
   void it('o link compartilhável é a página do caso, /p/, e não a conversa /c/', () => {
-    // `/c/{finderToken}` é a conversa de quem avisou sem ter conta (ADR-0017).
-    // Um share_token ali faria o site chamar `getFinderConversation` com o
-    // token errado, e todo link compartilhado no WhatsApp abriria um erro.
     const links = linksDoCaso(BASES.baseDaWeb, TOKEN);
     assert.equal(links.shareUrl, `https://web.exemplo.invalid/p/${TOKEN}`);
     assert.equal(links.posterUrl, `https://web.exemplo.invalid/cartaz/${TOKEN}`);
@@ -83,16 +67,6 @@ void describe('projeção pública do caso (PublicLostCase)', () => {
       care_notes: 'É medroso. Não corra atrás.',
       can_report_sighting: true,
       poster_url: `https://web.exemplo.invalid/cartaz/${TOKEN}`,
-      // `found_by_community` CHEGA PELO `allOf`: `PublicLostCase` e
-      // `allOf: [PublicLostPet, ...]`, e o campo entrou em `PublicLostPet` em
-      // 20/10/2026 com o selo de reencontro da listagem (Emenda 4 do ADR-0010).
-      //
-      // **`false` e o valor MEDIDO**, e nao um padrao conveniente: a leitura
-      // por token so resolve caso ABERTO -- caso encerrado responde `410` com
-      // `lost-case-closed` --, entao nenhuma resposta desta projecao pode
-      // trazer um reencontro. O `deepEqual` e o que garante que ele saia: um
-      // campo declarado no contrato e nao emitido faria o documento prometer a
-      // quatro clientes uma propriedade que nunca chega.
       found_by_community: false,
     });
   });
@@ -106,9 +80,6 @@ void describe('projeção pública do caso (PublicLostCase)', () => {
   });
 
   void it('caso aberto só com coordenada sai com area_label nulo, e não com um rótulo inventado', () => {
-    // O contrato tornou o campo anulável em 23/09: rótulo fixo dentro de um
-    // campo de dado é indistinguível de um bairro com esse nome. O texto da
-    // tela é do cliente.
     assert.equal(projecaoPublicaDoCaso(caso({ cidade: null, bairro: null }), BASES).area_label, null);
     assert.equal(cartazDoCaso(caso({ cidade: null, bairro: null }), BASES).area_label, null);
   });
@@ -150,7 +121,6 @@ void describe('cartaz do caso (LostCasePoster)', () => {
     assert.equal('share_token' in corpo, false);
     assert.equal('description' in corpo, false);
     assert.equal('care_notes' in corpo, false);
-    // ADR-0010: nenhuma recompensa, em nenhuma forma.
     assert.equal('reward_note' in corpo, false);
   });
 

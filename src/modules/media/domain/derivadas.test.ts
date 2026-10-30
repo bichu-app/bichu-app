@@ -1,14 +1,6 @@
 /**
  * O PONTO ÚNICO de configuração do tratamento de imagem, e o que estes casos
  * protegem não é o valor de hoje — é o fato de haver **um** valor.
- *
- * Teto de envio, formato de saída, faixa de bytes, escada e geometria por uso
- * estavam espalhados por cinco arquivos, com três números diferentes para o
- * mesmo teto. O que estes casos impedem é a volta disso: eles amarram cada
- * decisão ao lugar que a declara e às listas que a gravação confere.
- *
- * **Escritos e não executados** nesta entrega: o cliente pediu para não rodar
- * suíte unitária nem de integração.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -42,18 +34,11 @@ void describe('o formato de saída: JPEG com extensão .jpeg (cliente, 17/10/202
   });
 
   void it('o tipo e a extensão são ACEITOS pelas listas que a gravação confere', () => {
-    // Esta é a asserção que importa para quem trocar o formato: as duas listas
-    // de `chave-de-objeto.ts` RECUSAM o que estiver fora delas, por igualdade,
-    // e recusam na hora de montar a chave — depois de a foto já estar
-    // processada. Um formato novo configurado aqui e esquecido lá produziria
-    // uma exceção no worker, não um aviso.
     assert.ok(ehTipoDeDerivada(FORMATO_DAS_DERIVADAS.contentType));
     assert.ok(ehExtensaoDeDerivada(FORMATO_DAS_DERIVADAS.extensao));
   });
 
   void it('JPEG achata o alfa, porque o formato não guarda canal alfa', () => {
-    // Sem achatar, um PNG de fundo transparente sai com o fundo preto — e o
-    // que o libvips faz com o alfa descartado não é promessa de versão.
     assert.equal(FORMATO_DAS_DERIVADAS.achataAlfa, FORMATO_DAS_DERIVADAS.nome === 'jpeg');
   });
 });
@@ -65,7 +50,6 @@ void describe('o teto do envio: 5 MB, um número só', () => {
 
   void it('a orientação de tela diz o mesmo número, em uma linha', () => {
     assert.match(ORIENTACAO_DE_TAMANHO_DA_IMAGEM, /5 MB/);
-    // Uma linha: o cliente reprovou texto excessivo em tela.
     assert.ok(!ORIENTACAO_DE_TAMANHO_DA_IMAGEM.includes('\n'));
     assert.ok(
       ORIENTACAO_DE_TAMANHO_DA_IMAGEM.length <= 60,
@@ -91,10 +75,6 @@ void describe('as duas escadas de qualidade', () => {
     ['enxuta', ESCADA_ENXUTA],
   ] as const) {
     void it(`${nome}: é DECRESCENTE, porque o adaptador para no primeiro que cabe`, () => {
-      // A ordem é a regra inteira: percorrida de cima para baixo, o primeiro
-      // degrau que cabe é a MELHOR qualidade que respeita o teto. Invertida, o
-      // mesmo laço entregaria a pior qualidade que cabe, e nenhum teste de
-      // bytes veria diferença.
       for (let i = 1; i < escada.length; i += 1) {
         assert.ok(
           (escada[i] ?? 0) < (escada[i - 1] ?? 0),
@@ -149,10 +129,7 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     const thumb = DERIVADAS_DA_FOTO_DE_PET.find((d) => d.variante === 'thumb');
     const card = DERIVADAS_DA_FOTO_DE_PET.find((d) => d.variante === 'card');
     assert.ok(thumb !== undefined && card !== undefined);
-    // 56 dp x 3 = 168 px. A miniatura precisa COBRIR isso, não empatar.
     assert.ok(thumb.largura >= 56 * 3, `thumb de ${String(thumb.largura)} px não cobre 3x`);
-    // 1024 é número do contrato (`LostCasePoster.photo_url`), com a conta de
-    // 150 dpi em meia folha A4 feita lá. Reduzir estraga o cartaz impresso.
     assert.equal(card.largura, 1024);
   });
 
@@ -171,7 +148,6 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     const thumb = DERIVADAS_DO_ENCONTRO.find((d) => d.variante === 'thumb');
     assert.ok(thumb !== undefined, 'sem `thumb` a galeria volta a baixar 1024 px para 432');
     assert.ok(thumb.largura >= 144 * 3);
-    // 4:3, que é `proporcaoDaFoto` da galeria.
     assert.ok(Math.abs((thumb.altura ?? 0) / thumb.largura - 3 / 4) < 0.02);
   });
 
@@ -181,7 +157,6 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     assert.ok(banner !== undefined && card !== undefined);
     assert.ok(banner.largura >= 430 * 3 - 10, `banner de ${String(banner.largura)} px`);
     assert.ok(card.largura >= 328 * 3, `card de ${String(card.largura)} px`);
-    // 16:9 nas duas, que é `proporcaoDaCapa`.
     for (const d of [banner, card]) {
       assert.ok(Math.abs((d.altura ?? 0) / d.largura - 9 / 16) < 0.02);
     }
@@ -194,9 +169,6 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
   });
 
   void it('encontro: só o `banner` é `grande` — a listagem desenha muitos cartões', () => {
-    // O peso de uma TELA é a soma das derivadas que ela desenha. Pôr o cartão
-    // da agenda na faixa de 300 a 500 KB faria uma listagem de dez cartões
-    // pesar megabytes, que é exatamente a preocupação do cliente.
     assert.deepEqual(
       DERIVADAS_DO_ENCONTRO.filter((d) => d.porte === 'grande').map((d) => d.variante),
       ['banner'],
@@ -212,7 +184,6 @@ void describe('as derivadas batem com o LAYOUT medido', () => {
     const card = DERIVADAS_DA_FOTO_DE_PET.find((d) => d.variante === 'card');
     assert.equal(DERIVADA_DA_FOTO_DO_ACHADO.largura, card?.largura);
     assert.equal(DERIVADA_DA_FOTO_DO_ACHADO.altura, card?.altura);
-    // `grande`: é a foto que o tutor olha para reconhecer o animal dele.
     assert.equal(DERIVADA_DA_FOTO_DO_ACHADO.porte, 'grande');
   });
 });
@@ -223,9 +194,6 @@ void describe('a dimensão mínima da foto de pet', () => {
   });
 
   void it('é MENOR que a derivada `card`: acima dela a recusa viraria regra', () => {
-    // O mínimo existe para que o cartaz impresso não saia como mancha, e não
-    // para exigir foto profissional. Um mínimo igual ou acima de 1024 recusaria
-    // a foto de celular em modo retrato recortada.
     const card = DERIVADAS_DA_FOTO_DE_PET.find((d) => d.variante === 'card');
     assert.ok(DIMENSAO_MINIMA_DA_FOTO_DE_PET.largura < (card?.largura ?? 0));
   });

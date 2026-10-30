@@ -1,76 +1,4 @@
-/**
- * Os sete critérios do ADR-0006 estão na consulta, e o SQL compilado prova.
- *
- * ## Por que conferir o SQL, e não só o comportamento
- *
- * O teste de comportamento existe, roda contra PostGIS de verdade e está em
- * `tests/integration/alcance-e-disparo.test.ts`. Ele é necessário e não é
- * suficiente, pelo mesmo motivo dos arquivos irmãos da BICHUS-91 e da
- * BICHUS-92: ele passa igual se a consulta trouxer a linha e um `if` na
- * aplicação a descartar depois. As duas implementações são indistinguíveis do
- * lado de fora **até** o dia em que alguém mexe no `if` — e aí não existe teste
- * que acuse, porque o `if` era o teste.
- *
- * **A isca daqui tem que provar que a CONSULTA filtra, não que um dublê
- * recusou.** É por isso que este arquivo compila o construtor de verdade, com o
- * mesmo compilador de dialeto que a aplicação usa, em vez de comparar contra um
- * SQL escrito à mão: uma cópia no teste continuaria certa depois de alguém
- * apagar um critério do arquivo real.
- *
- * ## O que esta conferência pega, e o que ela não pega
- *
- * Ela pega a **ausência** de um predicado e a troca de operador. Ela não pega
- * semântica: uma consulta que trocasse `granted` por `denied` nas quatro cópias
- * do predicado ao mesmo tempo passaria por aqui, e quem pega isso é
- * `aparelho.test.ts`, que mede o valor. Dizer o alcance em voz alta é o que
- * impede esta conferência de virar conforto.
- *
- * ## O quarto lugar do mesmo predicado
- *
- * Os critérios 1 e 4 do ADR-0006 estão escritos quatro vezes: no domínio
- * (`podeReceberPush`), no repositório de aparelhos (`construtorDosAlcancaveis`),
- * no predicado parcial do índice `user_devices_alcancaveis`, e agora no `EXISTS`
- * desta consulta. A BICHUS-91 já cobrava as três primeiras; o caso final deste
- * arquivo acrescenta a quarta, porque uma consulta cujo `EXISTS` divergisse do
- * índice pararia de usá-lo e viraria varredura no pior instante do produto, sem
- * ninguém perceber.
- *
- * ## As iscas, e como foram provadas
- *
- * Desligadas em `kysely-alcance-por-postgis.ts`, rodadas e vistas reprovar em
- * 22/09/2026, e depois restauradas. Antes de cada rodada o arquivo foi
- * comparado consigo mesmo por conteúdo, porque uma substituição que não casa
- * deixa o arquivo idêntico e a isca passa por não ter mudado nada:
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | `url.expires_at > ...` removido (validade de 30 dias) | 1 caso |
- * | `ST_DWithin` trocado por `ST_Distance(...) <= raio` | 1 caso |
- * | `url.user_id <> ...` removido (o próprio tutor) | 1 caso |
- * | o `EXISTS` de `user_devices` removido | 1 caso |
- * | o `count(*)` de `alert_recipients` removido (fadiga) | 4 casos |
- * | `u.deleted_at IS NULL` removido (BICHUS-88) | 1 caso |
- * | `LIMIT` removido (teto de 500) | 1 caso |
- * | `ORDER BY ST_Distance` removido | 1 caso |
- * | um `count(*)` a mais projetado na consulta | 1 caso |
- *
- * A base é 16 casos verdes. A contagem da fadiga derruba quatro porque o
- * `count(*)` dela também é o que sustenta o caso do "não existe COUNT de
- * destinatários" e o do teto por usuário — o mesmo predicado é cobrado de
- * quatro ângulos, e apagá-lo derruba os quatro.
- *
- * **A primeira rodada destas iscas relatou "arquivo idêntico" nas nove**, e era
- * falso: a conferência usava `git diff`, e estes arquivos são novos e não
- * rastreados, então o `git diff` não tinha o que mostrar. Trocada por
- * comparação de conteúdo, cada substituição mostrou a diferença em bytes e cada
- * isca reprovou. Fica registrado porque o modo de falhar — a verificação que
- * não consegue verificar e mesmo assim responde "tudo certo" — é o defeito que
- * a isca existe para não ter.
- *
- * A integração pega o que este arquivo não vê — que o predicado **funciona**
- * contra PostGIS — e este pega o que a integração não vê: que ele está na
- * consulta em vez de num `if`.
- */
+/** Os sete critérios do ADR-0006 estão na consulta, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -96,13 +24,7 @@ import { construtorDoAlcance } from './kysely-alcance-por-postgis.js';
 const TUTOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/**
- * Kysely sem banco: ele compila a consulta e não a executa.
- *
- * É o caminho REAL — o mesmo construtor e o mesmo compilador de dialeto que a
- * aplicação usa. Um SQL escrito à mão aqui seria o atalho que parece
- * equivalente e esconde exatamente o que se foi conferir.
- */
+/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -128,10 +50,6 @@ function normalizado(): string {
 
 void describe('os sete critérios do ADR-0006 estão na consulta de alcance', () => {
   void it('1. a localização conhecida é a própria tabela de origem', () => {
-    // O critério não é um `WHERE`: ele é o `FROM`. Quem não tem linha em
-    // `user_reference_locations` não é candidato, e é isso que faz "quem negou
-    // a permissão e não tocou no mapa" sair da base de alerta sem nenhum
-    // predicado a mais.
     assert.match(
       normalizado(),
       /from user_reference_locations url/i,
@@ -152,10 +70,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('2. a validade compara uma COLUNA, e não um intervalo recalculado', () => {
-    // `expires_at` é coluna por decisão da BICHUS-92: com a data gravada, mudar
-    // a janela não reescreve o passado. Uma consulta que calculasse
-    // `captured_at > agora - 30 dias` daria outra resposta para as linhas
-    // antigas no dia em que alguém mexesse na janela.
     assert.doesNotMatch(
       normalizado(),
       /captured_at/i,
@@ -174,10 +88,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('3. o raio NÃO é uma comparação de ST_Distance, que ignoraria o índice', () => {
-    // Os dois dariam o mesmo conjunto. `ST_Distance(...) <= raio` não usa o
-    // índice GiST, e transforma a consulta do segundo seguinte ao "meu pet
-    // sumiu" numa varredura da tabela inteira de tutores. É a diferença que
-    // nenhum teste de comportamento consegue ver.
     assert.doesNotMatch(
       normalizado(),
       /st_distance\([^)]*\)\s*(<=|<)/i,
@@ -222,10 +132,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('6. o teto de fadiga vale POR USUÁRIO, e a correlação prova', () => {
-    // Critério 10 da BICHUS-18, textual: "o teto de fadiga é por usuário, não
-    // por caso". A subconsulta correlaciona por `ar.user_id = url.user_id` e
-    // não por caso; sem essa correlação ela contaria os alertas do mundo
-    // inteiro e zeraria a base de alerta no quarto disparo do dia.
     assert.match(
       normalizado(),
       /alert_recipients ar where ar\.user_id = url\.user_id/i,
@@ -236,17 +142,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('BICHUS-88: a conta logicamente excluída não entra no alcance', () => {
-    // A BICHUS-88 foi consertada na raiz em 22/09: o gatilho da migração
-    // `20260922000006` apaga a linha de `user_reference_locations` no instante
-    // da exclusão lógica, então ela não chega mais a casar com `ST_DWithin`.
-    //
-    // ESTE CASO PASSOU A SER O ÚNICO QUE SEGURA A JUNÇÃO, e é por isso que ele
-    // ganhou importância em vez de perder. Com o gatilho no lugar, remover
-    // `u.deleted_at IS NULL` da consulta não reprova caso nenhum da suíte de
-    // integração — medido, 252 de 252 verdes sem a cláusula. A segunda camada
-    // deixou de ter consequência observável, e uma proteção sem consequência
-    // observável some na primeira refatoração que a achar redundante. O que
-    // resta para segurá-la é a leitura do texto do SQL, que é o que está aqui.
     const sql = normalizado();
     assert.match(
       sql,
@@ -296,12 +191,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   void it('9. a ordem é por distância crescente, porque o corte é por ela', () => {
     assert.match(
       normalizado(),
-      // SEC-021: `MIN(...)` em volta desde 23/09, e ele é parte do critério e
-      // não ruído de sintaxe. Agrupada por pessoa, uma conta tem tantas
-      // distâncias quantos aparelhos, e a que ordena precisa ser a do aparelho
-      // MAIS PRÓXIMO — qualquer outra poria quem tem um aparelho ao lado do
-      // caso atrás de quem tem um a quatro quilômetros. Trocar `min` por `max`
-      // reprova aqui.
       /order by min\(st_distance\(\s*url\.reference_point,.*?\)\) asc/i,
       'a ordenação por distância sumiu, ou deixou de ser pela MENOR das distâncias ' +
         'da pessoa. Com o teto de 500 e sem ordem, quem fica de fora passa a ser ' +
@@ -311,14 +200,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('SEC-021: a consulta agrupa por pessoa, e por isso não a devolve duas vezes', () => {
-    // ISCA: tire `GROUP BY url.user_id` de `construtorDoAlcance` e este caso
-    // reprova. Desde 23/09 a localização é DO APARELHO, então uma pessoa com
-    // tablet em casa e celular no trabalho tem DUAS linhas em
-    // `user_reference_locations`. Sem o agrupamento, as duas dentro do raio
-    // devolvem a mesma pessoa duas vezes, e nada a jusante é conjunto: o alerta
-    // sai em duplicata, gasta dois dos três lugares do teto de fadiga de 24 h e
-    // ocupa dois dos 500 lugares do teto de destinatários, tirando outro tutor
-    // do alerta.
     assert.match(
       normalizado(),
       /group by url\.user_id/i,
@@ -329,10 +210,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('a distância ordena e NÃO sai: nenhuma coluna de distância é projetada', () => {
-    // ADR-0010: `distance_m` é proibido em superfície pública, e guardá-la sem
-    // ninguém precisar dela acumula o dano sem o benefício. Três casos abertos
-    // perto da mesma pessoa e a distância de cada um a põem num círculo de
-    // poucos metros.
     const projecao = normalizado().split(/ from user_reference_locations/i)[0] ?? '';
     assert.doesNotMatch(
       projecao,
@@ -354,10 +231,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('não existe COUNT de destinatários: a contagem é o tamanho da lista', () => {
-    // O critério 9 da BICHUS-20 no lugar onde ele pode ser quebrado. Um
-    // `COUNT(*)` de tutores ao lado seria a segunda definição de "quantos", e
-    // ela divergiria da lista no dia em que alguém acrescentasse um critério a
-    // uma e esquecesse a outra — com a tela prometendo 12 e o envio entregando 9.
     const sql = normalizado();
     const contagens = sql.match(/count\(\*\)/gi) ?? [];
     assert.equal(
@@ -370,21 +243,7 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 });
 
-/**
- * O valor LIGADO em cada `$n`, e não só a existência do predicado.
- *
- * Esta seção existe por um tropeço real de outro par hoje: uma isca que cobrava
- * o predicado esperado ficou VERDE com a cláusula removida, porque a
- * autorização era por outra coluna; e outra passou com a correlação entre
- * tabelas ausente, o que trocou "este pet é desta conta?" por "esta conta tem
- * algum pet?".
- *
- * A lição aplicada aqui: **conferir a cláusula que existe, não a que se espera
- * encontrar, e cobrar a correlação junto do predicado.** E não basta perguntar
- * "o valor está na lista de parâmetros": com oito valores ligados, essa
- * pergunta é quase sempre sim por acidente. O que estes casos fazem é ler o
- * `$n` de DENTRO da cláusula e conferir o que está naquela posição.
- */
+/** O valor LIGADO em cada `$n`, e não só a existência do predicado. */
 function parametroDa(regex: RegExp): unknown {
   const { sql, parameters } = construtorDoAlcance({
     centro: { lat: -23.56, lon: -46.68 },
@@ -406,9 +265,6 @@ function parametroDa(regex: RegExp): unknown {
 
 void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () => {
   void it('a desigualdade do tutor liga o tutor, e não outro dos oito valores', () => {
-    // O caso que o tropeço de hoje pede. `url.user_id <> $6` com o `$6` apontando
-    // para o raio compilaria, rodaria, e tiraria do alcance uma conta cujo UUID
-    // ninguém consegue prever — com a tutora recebendo o alerta do próprio pet.
     assert.equal(
       parametroDa(/url\.user_id <> \$(\d+)/i),
       TUTOR,
@@ -426,8 +282,6 @@ void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () 
   });
 
   void it('a validade compara o AGORA, e não o início da janela de fadiga', () => {
-    // Os dois são instantes e os dois compilam. Ligado ao início da janela, o
-    // filtro de validade passaria a aceitar localizações vencidas há até 24 h.
     assert.deepEqual(
       parametroDa(/url\.expires_at > \$(\d+)/i),
       comoData(AGORA),
@@ -436,8 +290,6 @@ void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () 
   });
 
   void it('a janela de fadiga compara 24 h atrás, e não o agora', () => {
-    // Ligado ao agora, o `count(*)` daria sempre zero e o teto de fadiga nunca
-    // barraria ninguém — passando por todos os casos de predicado acima.
     assert.deepEqual(
       parametroDa(/ar\.notified_at > \$(\d+)/i),
       comoData((Number(AGORA) - JANELA_DE_24H_EM_MS) as Instant),
@@ -465,10 +317,6 @@ void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () 
   });
 
   void it('a correlação do EXISTS é com url.user_id, e não uma tabela solta', () => {
-    // O segundo tropeço de hoje, traduzido para esta consulta. Sem
-    // `d.user_id = url.user_id`, o `EXISTS` pergunta "existe ALGUM aparelho
-    // alcançável no sistema?" — verdadeiro o tempo todo — e o critério 4 deixa
-    // de filtrar qualquer coisa sem que nenhum predicado tenha sumido.
     assert.match(
       normalizado(),
       /from user_devices d where d\.user_id = url\.user_id/i,
@@ -495,7 +343,7 @@ void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () 
 });
 
 void describe('o predicado do aparelho diz a mesma coisa nos quatro lugares', () => {
-  /** A migração do aparelho, lida do disco. Ver `readdirSync` abaixo. */
+  /** A migração do aparelho, lida do disco. */
   function migracaoDoAparelho(): string {
     const dir = 'migrations';
     const nome = readdirSync(dir).find((f) => f.includes('aparelho-e-token-de-push'));
@@ -509,9 +357,6 @@ void describe('o predicado do aparelho diz a mesma coisa nos quatro lugares', ()
   }
 
   void it('o EXISTS da consulta e o predicado parcial do índice coincidem', () => {
-    // Se o índice divergir, o Postgres para de usá-lo e a consulta do pânico
-    // vira varredura sem ninguém perceber. É a divergência mais cara e a mais
-    // silenciosa das quatro.
     assert.match(
       migracaoDoAparelho(),
       /CREATE INDEX user_devices_alcancaveis[^;]*WHERE\s+push_permission\s*=\s*'granted'\s+AND\s+push_token\s+IS\s+NOT\s+NULL/i,

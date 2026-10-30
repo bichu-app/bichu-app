@@ -1,22 +1,4 @@
-/**
- * O `If-Match` das escritas versionadas, lido NUM PONTO SO (Loja e Rede).
- *
- * O `ETag` que o servidor emite e a versao entre aspas: `"3"`. Entre o
- * servidor e o painel mora a borda, e o `encode zstd gzip` do Caddy
- * ACRESCENTA o sufixo da codificacao ao `ETag` da resposta comprimida:
- * `"3-gzip"`, `"3-zstd"`, `"3-br"`. O painel devolve o que recebeu, e a
- * escrita caia em 412 sem ninguem ter alterado nada (provado em hml, log de
- * 05/10: `POST .../relocation` -> `precondition-failed`). O `W/` cobre a
- * borda que enfraquece o validador em vez de sufixa-lo.
- *
- * O que se tira e SO o que a borda poe: um `W/` na frente e um sufixo de
- * codificacao conhecido no fim. A versao de dentro continua conferida por
- * inteiro contra o banco: versao velha com sufixo continua 412.
- *
- * `ausente` vira 428; qualquer forma que nao seja uma versao (`*`, lixo,
- * sufixo desconhecido) vira 412: o contrato pede a versao que a pessoa leu, e
- * `*` e justamente "nao li nada".
- */
+/** O `If-Match` das escritas versionadas, lido NUM PONTO SO (Loja e Rede). */
 export type VersaoLida =
   | { readonly tipo: 'ausente' }
   | { readonly tipo: 'numero'; readonly versao: number }
@@ -39,13 +21,7 @@ export function lerIfMatch(cabecalho: string | string[] | undefined): VersaoLida
 
 const MARCAS_DA_BORDA = new RegExp(`^(?:W/)?"(.*?)(?:-(?:${SUFIXOS_DE_CODIFICACAO.join('|')}))?"$`);
 
-/**
- * O `If-None-Match` de uma leitura condicional casa com o `ETag` atual? A
- * comparacao e FRACA (RFC 9110 13.1.2), e por isso ignora o `W/` e o sufixo de
- * codificacao que a borda acrescenta: sem isso, o `"2026-09-17.2-gzip"` que o
- * cliente recebeu pela borda nunca casa com `"2026-09-17.2"` e a leitura
- * responde 200 inteira em vez de 304. Lista separada por virgula e `*` valem.
- */
+/** O `If-None-Match` de uma leitura condicional casa com o `ETag` atual? */
 export function casaIfNoneMatch(cabecalho: string | string[] | undefined, etagAtual: string): boolean {
   if (cabecalho === undefined) return false;
   const valor = Array.isArray(cabecalho) ? cabecalho.join(',') : cabecalho;

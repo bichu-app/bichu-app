@@ -1,26 +1,6 @@
 /**
  * `GET /v1/pets/{petId}/tags/{tagId}/qr.png` e o `qr_png_url` da emissão, pela
  * borda inteira.
- *
- * ## O que esta rota fecha
- *
- * O critério 2 da BICHUS-63 exige que a emissão devolva `code`, `url` **e**
- * `qr_png_url`. Até aqui ela devolvia os dois primeiros, e a ausência do
- * terceiro era deliberada e honesta: `getPetTagQrImage` estava declarada no
- * contrato e não existia em `src/`. O cliente viu os dois lados dessa lacuna no
- * primeiro teste em aparelho (BICHUS-225 e BICHUS-226) — código em texto sem
- * QR, e o botão da tag desabilitado.
- *
- * ## Por que os casos são escritos assim
- *
- * O que se prova aqui é o **efeito**: a resposta é um PNG de verdade, ele
- * decodifica, e o endereço prometido na emissão é o endereço que responde. Um
- * caso que conferisse "`qr_png_url` está presente" ficaria verde apontando para
- * uma rota que responde 404 — que é exatamente a promessa quebrada que o
- * comentário anterior de `tag-routes.ts` existia para não fazer.
- *
- * O último caso é o que amarra os dois: ele **segue** a URL devolvida pela
- * emissão, com o servidor de verdade, em vez de montar o caminho à mão.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -75,20 +55,13 @@ interface Bancada {
   readonly app: RegistradorDeRotas;
   /** Quais argumentos chegaram à consulta vinculada, em ordem. */
   readonly buscas: { petId: PetId; tagId: TagId; dono: UserId }[];
-  /** A conferência de subida. Chamar depois de as rotas existirem. */
+  /** A conferência de subida. */
   readonly conferirParametros: () => void;
 }
 
 function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
   const buscas: { petId: PetId; tagId: TagId; dono: UserId }[] = [];
-  /**
-   * O cifrado que a EMISSÃO gravou.
-   *
-   * Sem isto a bancada devolveria um cifrado fixo, e o caso que compara `url`
-   * com o conteúdo do QR compararia dois códigos diferentes — ele reprovaria
-   * dizendo a verdade sobre a bancada e mentindo sobre o código. O repositório
-   * de verdade devolve o que foi gravado, e aqui também.
-   */
+  /** O cifrado que a EMISSÃO gravou. */
   let cifradoGravado: Uint8Array | undefined;
 
   const repositorio: TagRepository = {
@@ -150,14 +123,7 @@ function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
     ids,
     clock,
     trilha,
-    // BICHUS-43. Nenhum cenário deste arquivo passa por `avisar`, então a
-    // abertura de conversa não é exercida aqui. O dublê existe porque a porta
-    // é obrigatória por tipo — e ela é obrigatória de propósito: opcional, a
-    // conversa deixaria de nascer no dia em que alguém esquecesse a linha em
-    // `bin/api.ts`, e o defeito só apareceria com um animal perdido na rua.
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
-    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
-    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
     fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     baseDaTag: BASE_DA_TAG,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
@@ -196,10 +162,6 @@ function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
     baseDaApi: BASE_DA_API,
   };
 
-  // O mesmo par de `src/bin/api.ts`: o gancho `onRoute` instala `schema.params`
-  // a partir do contrato, e sem ele esta bancada não exercitaria a validação de
-  // parâmetro que a rota de verdade recebe. Uma bancada que registra a rota sem
-  // a fiação da borda mede outra coisa e diz que mediu esta.
   const conferirParametros = vigiarParametrosDasRotas(app, deps.contrato, '/v1');
 
   void app.register(
@@ -239,9 +201,6 @@ void describe('getPetTagQrImage: a imagem para mandar imprimir', () => {
     assert.equal(resposta.statusCode, 200);
     assert.equal(resposta.headers['content-type'], 'image/png');
 
-    // O que sai da rota é entregue a um decodificador independente. Conferir só
-    // o `content-type` e o tamanho do corpo aprovaria uma imagem ilegível, que
-    // é o defeito que só aparece depois de impresso.
     const lido = await decodificar(resposta.rawPayload);
     assert.equal(lido, `${BASE_DA_TAG}/t/${CODIGO_CANONICO}`);
   });
@@ -304,9 +263,6 @@ void describe('getPetTagQrImage: a imagem para mandar imprimir', () => {
       headers: { authorization: `Bearer ${TOKEN_DE_ACESSO}` },
     });
 
-    // O 400 vem do `schema.params` que o contrato instala por `onRoute`, e é
-    // por isso que esta operação precisou declarar `400` em `api/openapi.yaml`:
-    // sem a declaração a aplicação nem sobe.
     assert.equal(resposta.statusCode, 400);
     assert.deepEqual(bancada.buscas, []);
   });
@@ -315,12 +271,6 @@ void describe('getPetTagQrImage: a imagem para mandar imprimir', () => {
     const bancada = montar(ativa());
     await bancada.app.ready();
 
-    // `vigiarParametrosDasRotas` DERRUBA a subida quando uma operação cujos
-    // parâmetros podem recusar não declara 400 — e `petId`/`tagId` declaram
-    // `format: uuid`, então esta pode recusar. Apagar o
-    // `400: { $ref: ... ValidationFailed }` de `getPetTagQrImage` em
-    // `api/openapi.yaml` reprova aqui, na máquina de quem apagou, em vez de
-    // virar um contêiner que não sobe num log que alguém precisa ir ler.
     assert.doesNotThrow(() => {
       bancada.conferirParametros();
     });
@@ -335,8 +285,6 @@ void describe('getPetTagQrImage: a imagem para mandar imprimir', () => {
       headers: { authorization: `Bearer ${TOKEN_DE_ACESSO}` },
     });
 
-    // O código viaja DENTRO da imagem. Ela acaba num aplicativo de mensagem na
-    // hora de mandar imprimir, e não pode ficar num cache intermediário.
     assert.equal(resposta.headers['cache-control'], 'no-store');
     assert.equal(resposta.headers['x-robots-tag'], 'noindex, nofollow');
     assert.equal(resposta.headers['referrer-policy'], 'no-referrer');
@@ -395,8 +343,6 @@ void describe('critério 2: a emissão devolve code, url e qr_png_url', () => {
       headers: { authorization: `Bearer ${TOKEN_DE_ACESSO}` },
     });
 
-    // O texto legível e o QR ficam lado a lado na mesma plaquinha prensada.
-    // Apontar para lugares diferentes é um defeito sem conserto por atualização.
     assert.equal(await decodificar(imagem.rawPayload), corpo['url']);
   });
 
@@ -404,9 +350,6 @@ void describe('critério 2: a emissão devolve code, url e qr_png_url', () => {
     const bancada = montar(ativa());
     const corpo = await emitir(bancada);
 
-    // Segue a URL devolvida, em vez de montar o caminho à mão. É o que impede
-    // esta suíte de aprovar um campo presente apontando para 404 — a promessa
-    // quebrada que o cliente descobriria na hora de imprimir.
     const prometida = String(corpo['qr_png_url']);
     assert.equal(prometida.startsWith(`${BASE_DA_API}/v1/`), true, prometida);
 
@@ -424,10 +367,6 @@ void describe('critério 2: a emissão devolve code, url e qr_png_url', () => {
     const bancada = montar(ativa());
     const corpo = await emitir(bancada);
 
-    // Os dois são coisas diferentes, e a distinção é o ADR-0010 item 6:
-    // `qr_png_url` é uma rota autenticada desta API, numa resposta para o dono;
-    // o QR é o que vai impresso na coleira, alcançável por qualquer pessoa na
-    // rua. O primeiro pode levar identificador interno; o segundo não.
     const formaDeUuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     assert.equal(formaDeUuid.test(String(corpo['qr_png_url'])), true);
 

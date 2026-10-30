@@ -9,10 +9,9 @@ import estilos from '../rede.module.css';
 export type ResultadoDaAcao = { ok: true } | { ok: false; mensagem: string };
 
 /**
- * Confirmacao com motivo: o contrato exige `reason` em
- * `relocateAdminNetworkEvent` e `changeAdminNetworkEventAccess` e `note` em
- * `cancelAdminNetworkEvent`, e o motivo vai no e-mail aos administradores.
- * Sem senha desde 07/10 (decisao do cliente, ADR-0027 item 23).
+ * Confirmacao com motivo: o contrato exige `reason` em `relocateAdminNetworkEvent`
+ * e `changeAdminNetworkEventAccess` e `note` em `cancelAdminNetworkEvent`, e o
+ * motivo vai no e-mail aos administradores.
  */
 export function DialogoComMotivo({
   titulo,

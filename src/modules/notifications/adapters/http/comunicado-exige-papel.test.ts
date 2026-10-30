@@ -1,37 +1,4 @@
-/**
- * A TRAVA DO COMUNICADO, conferida na DECLARACAO da rota.
- *
- * ===========================================================================
- * POR QUE A ISCA E SOBRE A DECLARACAO, E NAO SOBRE UMA REQUISICAO
- * ===========================================================================
- *
- * Quem aplica papel, cookie de sessao, `Origin` e `X-CSRF-Token` e
- * `escoparRotasAdministrativas`, uma vez, para todas as rotas do prefixo -- e
- * isso ja tem isca propria em `superficie-administrativa.test.ts`. O que PODE
- * faltar nesta frente, e o que esta suite cobra, e a rota **declarar** o que a
- * guarda deve exigir dela: uma operacao administrativa que esquecesse
- * `adminRoles` ou `audit` subiria e a guarda nao teria o que aplicar.
- *
- * `rotas-registradas-contra-o-contrato.test.ts` compara estas mesmas
- * declaracoes com o `x-audit` e o `x-admin-roles` do contrato, nos dois
- * sentidos. Este arquivo e o desligamento do lado de ca: ele afirma, por rota e
- * por nome, o que nao pode faltar.
- *
- * ===========================================================================
- * E A SENHA, QUE NAO ESTA AQUI DE PROPOSITO
- * ===========================================================================
- *
- * Nenhuma destas rotas declara reautenticacao, e o caso 4 AFIRMA essa ausencia
- * em vez de deixa-la implicita. A emenda do item 23 do ADR-0027 (07/10/2026)
- * tirou a senha de TODA escrita do painel, "com o risco de sessao sequestrada
- * aceito", e deixou "a rota de reautenticacao obsoleta, sem remover". O esquema
- * `adminReauth` existe no contrato e ZERO operacoes o declaram.
- *
- * O caso 4 existe para que acrescentar `adminReauthScope` ao comunicado REPROVE
- * a suite: seria uma escrita do painel pedindo senha contra ADR em vigor, e
- * quem o fizesse acharia que estava endurecendo a trava. Se a decisao mudar, o
- * caso cai junto -- e ai o teste e o lugar onde a mudanca fica registrada.
- */
+/** A TRAVA DO COMUNICADO, conferida na DECLARACAO da rota. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -42,15 +9,7 @@ import {
   rotaDaJanelaDeDisparo,
 } from './admin-comunicado-routes.js';
 
-/**
- * A forma LARGA da declaracao de rota.
- *
- * `defineRoute` devolve um tipo literal estreito, e nele um campo opcional
- * AUSENTE nao existe -- `rota.adminReauthScope` nem compila. Isso e bom para
- * quem escreve a rota e inutil para quem quer afirmar uma AUSENCIA, que e
- * metade desta suite. A forma larga declara os campos como opcionais, e e
- * contra ela que os casos 3, 4 e 5 medem.
- */
+/** A forma LARGA da declaracao de rota. */
 interface RotaConferivel {
   readonly operationId: string;
   readonly method: string;
@@ -141,10 +100,6 @@ void describe('a trava do comunicado', () => {
   });
 
   void it('4b. a janela de disparo e GET, e por isso nao precisa de trilha', () => {
-    // E o par do caso 3: a regra 2 do portao exige `x-audit` de TODA operacao
-    // sob /admin/ de metodo NAO seguro. A janela so pode ficar sem trilha
-    // porque e `get` -- se alguem a transformar em `post` de novo, este caso
-    // explica por que o portao vai reprovar antes de a suite chegar la.
     assert.equal(
       JANELA.method,
       'get',

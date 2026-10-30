@@ -1,13 +1,4 @@
-/**
- * As três recusas de `corpoAusenteEhCorpoVazio`, contra o contrato de verdade.
- *
- * A terceira é a que importa. Um gancho que repõe `{}` numa rota de corpo
- * **obrigatório** apaga a exigência sem deixar rastro: o `required` do schema
- * deixaria de acusar, e `logout` voltaria a aceitar a requisição vazia que a
- * correção da BICHUS-81 existe para recusar. O mecanismo que protege o `logout`
- * morreria por um gancho colado na rota errada, e nenhum teste de `logout`
- * acusaria — ele passaria a testar uma rota que não existe mais como era.
- */
+/** As três recusas de `corpoAusenteEhCorpoVazio`, contra o contrato de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

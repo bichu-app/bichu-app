@@ -1,28 +1,4 @@
-/**
- * O serviço do caso de perdido. O que se prova aqui é o **efeito**, não a chamada.
- *
- * O foco é o encerramento (`BICHUS-82`), que até aqui nunca tinha sido exercido
- * de ponta a ponta. Quem está do outro lado dessas asserções é a tutora cujo pet
- * voltou: ela toca em "Voltou" com o app na fila offline, o toque sai duas
- * vezes, e o segundo encerramento não pode reescrever o desfecho do primeiro —
- * porque é esse desfecho que diz se o produto funciona.
- *
- * Quatro coisas que estes testes tratam como regra, e não como detalhe:
- *
- * - **Caso alheio e caso inexistente são a MESMA resposta**, e a asserção cobra
- *   404 e cobra explicitamente que não seja 403. Aqui um 403 confirmaria a um
- *   estranho que aquele pet está perdido.
- * - **O vínculo com o dono viaja em todo argumento.** Os testes leem o que o
- *   serviço entregou ao repositório: um `encerrar` que esquecesse de passar o
- *   dono passaria numa asserção de resultado e reprova nesta.
- * - **A corrida do índice `lost_cases_um_aberto_por_pet` é reproduzida**, e não
- *   descrita: o repositório de memória tem o índice, e a conferência devolve o
- *   estado velho — que é exatamente a janela por onde a rajada da fila offline
- *   passa quando o sinal volta.
- * - **Nada que saia do serviço carrega coordenada, telefone ou endereço.** A
- *   busca é por forma no objeto serializado, e não por nome de campo: um campo
- *   novo acrescentado depois cai na asserção sem ninguém atualizar o teste.
- */
+/** O serviço do caso de perdido. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -72,32 +48,13 @@ interface EstadoDoRepositorio {
   abertura?: Partial<EstadoDoPetParaAbertura>;
   /** Um caso já gravado, com o dono dele. */
   caso?: { readonly dono: UserId; readonly gravado: CasoGravado };
-  /**
-   * Pets que o índice único `lost_cases_um_aberto_por_pet` já cobre.
-   *
-   * Existe separado de `abertura.petJaTemCasoAberto` de propósito: a corrida que
-   * este módulo sofre é justamente a conferência dizer "pode" e o índice dizer
-   * "não", e sem dois lugares para o estado essa corrida não é representável.
-   */
+  /** Pets que o índice único `lost_cases_um_aberto_por_pet` já cobre. */
   petsComCasoAbertoNoIndice?: PetId[];
   /** A area de referencia em texto do tutor, que so sai no caminho sem centro. */
   areaDeReferencia?: { city?: string; neighborhood?: string };
-  /**
-   * O que a porta `AlcanceDoAlerta` responde.
-   *
-   * `null` e o padrao de proposito: e o que a implementacao ligada em `api.ts`
-   * devolve hoje, porque as tabelas de localizacao e de push nao existem. Um
-   * padrao numerico aqui faria os testes exercitarem um mundo que nao existe.
-   */
+  /** O que a porta `AlcanceDoAlerta` responde. */
   contagemDeAlcance?: number | null;
-  /**
-   * Um candidato de `match_candidates`, com o dono do CASO dele.
-   *
-   * O dono mora aqui e não no candidato porque `match_candidates` **não tem
-   * coluna de dono**: quem decide é o tutor do caso, e o duplo aqui precisa ter
-   * a mesma forma para que a asserção "um terceiro não decide" signifique a
-   * mesma coisa que no banco.
-   */
+  /** Um candidato de `match_candidates`, com o dono do CASO dele. */
   candidato?: {
     readonly dono: UserId;
     readonly casoAberto?: boolean;
@@ -105,13 +62,8 @@ interface EstadoDoRepositorio {
     readonly decididoPor?: UserId;
   };
   /**
-   * Quando o último alerta deste caso **saiu**, para o critério 7 do ADR-0006
-   * (um disparo por caso a cada 24 h).
-   *
-   * `undefined` é "nunca saiu", e é o padrão: um caso recém-aberto tem um
-   * disparo `queued` e nenhum `dispatched_at`. O estado existe separado dos
-   * disparos abertos de propósito — é essa a distinção que a porta faz, e um
-   * disparo que ficou enfileirado e nunca saiu não gastou o direito de ninguém.
+   * Quando o último alerta deste caso **saiu**, para o critério 7 do ADR-0006 (um
+   * disparo por caso a cada 24 h).
    */
   ultimoEnvio?: Instant;
 }
@@ -133,7 +85,7 @@ interface Registro {
   readonly transferenciasCanceladas: PetId[];
   /** O que o serviço pediu ao repositório ao decidir, dono incluído. */
   readonly decidiu: { caso: CaseId; candidato: string; dono: UserId; decisao: string }[];
-  /** As conversas que a decisão mandou abrir. Vazio prova que NÃO abriu. */
+  /** As conversas que a decisão mandou abrir. */
   readonly conversasAbertas: Parameters<
     AberturaDeConversaPorCorrespondencia['aoConfirmarCorrespondencia']
   >[0][];
@@ -184,9 +136,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     transferenciasCanceladas: [],
   };
   const indice = new Set<PetId>(estado.petsComCasoAbertoNoIndice ?? []);
-  // Cópia mutável: encerrar de verdade muda o estado, e é essa mudança que faz
-  // o segundo encerramento da fila offline encontrar um caso que não está mais
-  // aberto — em vez de o teste fingir isso com um contador.
   let guardado = estado.caso;
 
   const repositorio: LostCaseRepository = {
@@ -220,8 +169,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
 
     abrir: (novo) => {
       registro.abriu.push(novo);
-      // O índice único parcial, reproduzido: quem chega com o pet já coberto sai
-      // com zero linhas, que é o `null` do contrato da porta.
       if (indice.has(novo.petId)) return Promise.resolve(null);
       indice.add(novo.petId);
       const gravado: CasoGravado = {
@@ -241,9 +188,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
 
     buscarDoTutor: (caso, dono) => {
       registro.buscou.push({ caso, dono });
-      // O `WHERE` do repositório de verdade resolve os dois predicados no banco.
-      // Aqui o vínculo é reproduzido: quem não é o dono recebe exatamente o
-      // mesmo nada de quem pediu um caso que nunca existiu.
       if (guardado === undefined || guardado.gravado.id !== caso) return Promise.resolve(null);
       return Promise.resolve(guardado.dono === dono ? guardado.gravado : null);
     },
@@ -253,9 +197,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
         return Promise.resolve(null);
       }
-      // `status = 'open'` mora no `WHERE` do UPDATE, e não num `if` antes dele.
-      // As três recusas — não existe, não é seu, já estava encerrado — saem como
-      // o mesmo `null`.
       if (guardado.dono !== entrada.dono || guardado.gravado.status !== 'open') {
         return Promise.resolve(null);
       }
@@ -266,10 +207,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
         closureOutcome: entrada.desfecho,
         closureChannel: entrada.canal ?? null,
         closureNote: entrada.nota ?? null,
-        // 7 DIAS, o mesmo numero que o SQL grava e o mesmo que o contrato
-        // promete ("Encerrar e reversivel por 7 dias"). Sem esta linha o dado
-        // de bancada nasceria sem prazo e NADA reabriria -- a isca da janela
-        // ficaria verde por vazio, medindo o dublê e nao o servico.
         reopenDeadline: comoData((Number(entrada.agora) + 7 * 24 * 3600 * 1000) as Instant),
       };
       indice.delete(guardado.gravado.petId);
@@ -278,21 +215,8 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     },
 
     /**
-     * A reabertura, com os MESMOS quatro predicados que o `WHERE` do `UPDATE`
-     * carrega — e não um `if` a mais nem um a menos.
-     *
-     * Dublê DERIVADO do SQL de `kysely-lost-case-repository.ts`, e é isso que
-     * torna os casos de cima mediveis: se este dublê recusasse por um critério
-     * que o SQL não tem (ou aceitasse por um que ele tem), os casos mediriam o
-     * dublê. Os quatro, na ordem do `WHERE`:
-     *
-     * 1. `id` — caso que não é este sai como `null`;
-     * 2. `owner_user_id = :dono` — a autorização, e é ela que faz 404 e não 403;
-     * 3. `status <> 'open'` — caso aberto não reabre (o serviço traduz para 200);
-     * 4. `reopen_deadline > :agora` — a janela, lida da COLUNA. Prazo nulo não
-     *    satisfaz a comparação, igual ao SQL;
-     * 5. `NOT EXISTS (outro caso aberto do mesmo pet)` — o índice único parcial
-     *    como predicado, que é o que `indice` representa nesta bancada.
+     * A reabertura, com os MESMOS quatro predicados que o `WHERE` do `UPDATE` carrega
+     * — e não um `if` a mais nem um a menos.
      */
     reabrir: (entrada) => {
       registro.reabriu.push({ ...entrada });
@@ -320,13 +244,7 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(reaberto);
     },
 
-    /**
-     * A decisão, com o mesmo `WHERE` que o SQL carrega.
-     *
-     * As quatro recusas saem como o MESMO `null`, e é isso que faz 404 e não
-     * 403: não existe caminho em que a linha de outro tutor chegue à camada de
-     * cima para ser descartada por um `if`.
-     */
+    /** A decisão, com o mesmo `WHERE` que o SQL carrega. */
     decidirCandidato: (entrada) => {
       registro.decidiu.push({
         caso: entrada.caso,
@@ -346,8 +264,8 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     },
 
     /**
-     * `PATCH` com o mesmo `WHERE` do `UPDATE` de verdade: `id`, `dono` e
-     * `status = 'open'`. As três recusas saem como o MESMO `null`.
+     * `PATCH` com o mesmo `WHERE` do `UPDATE` de verdade: `id`, `dono` e `status =
+     * 'open'`.
      */
     atualizarOndeEQuando: (entrada) => {
       if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
@@ -372,8 +290,8 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     },
 
     /**
-     * A listagem com o dono na junção, como o SQL a carrega: candidato de caso
-     * de outro tutor não chega a esta camada para ser descartado por um `if`.
+     * A listagem com o dono na junção, como o SQL a carrega: candidato de caso de
+     * outro tutor não chega a esta camada para ser descartado por um `if`.
      */
     candidatosDoCaso: (caso, dono) => {
       const c = estado.candidato;
@@ -419,9 +337,6 @@ function servico(estado: EstadoDoRepositorio = {}): {
     random80: () => new Uint8Array(10).fill(0x2b),
   };
 
-  // O dublê devolve **a lista**, porque a porta só sabe devolver lista. Um
-  // dublê que ainda devolvesse um número testaria uma porta que não existe, e
-  // é assim que uma suíte inteira fica verde contra uma implementação trocada.
   const alcance: AlcanceDoAlerta = {
     alcancaveis: ({ centro, raioEmMetros, excluir }) => {
       registro.contou.push({ centro, raio: raioEmMetros, excluiu: excluir });
@@ -465,17 +380,11 @@ function servico(estado: EstadoDoRepositorio = {}): {
       return Promise.resolve('018f3a2b-0000-7000-8000-00000000f11a');
     },
     claim: () => Promise.resolve([]),
-    // Este teste nao exercita a fila; a varredura de orfaos entra na porta
-    // porque o tipo a exige, e devolver lista vazia e o que um dublê honesto
-    // faz -- inventar orfao aqui seria o dublê contando uma historia propria.
     recuperarOrfaos: () => Promise.resolve([]),
     complete: () => Promise.resolve(),
     fail: () => Promise.resolve(),
   };
 
-  // BICHUS-66. Nao e dublê mudo: ele REGISTRA, para que o caso de "abrir caso
-  // cancela a transferencia" possa afirmar que a chamada aconteceu em vez de
-  // apenas compilar.
   const transferencias = {
     cancelarPorCasoAberto: (pet: PetId) => {
       registro.transferenciasCanceladas.push(pet);
@@ -504,7 +413,6 @@ function servico(estado: EstadoDoRepositorio = {}): {
     eventos,
   };
 }
-
 
 /** O candidato como o repositório o devolve depois de decidido. */
 function candidatoGravado(status: DecisaoDoCandidato): CandidatoDecidido {
@@ -555,7 +463,10 @@ async function capturar(executar: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a operação não recusou, e deveria ter recusado');
 }
 
-/** Usada nas asserções de vazamento: o formato de um UUID, de um telefone e de um CEP. */
+/**
+ * Usada nas asserções de vazamento: o formato de um UUID, de um telefone e de um
+ * CEP.
+ */
 const COORDENADA = /-?\d{1,3}\.\d{3,}/;
 const TELEFONE = /(\+55|\(?\d{2}\)?[\s-]?)?9?\d{4}[\s-]?\d{4}/;
 
@@ -578,9 +489,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
 
     assert.equal(erro.problemType, 'not-found');
     assert.equal(erro.status, 404);
-    // A segunda asserção é o ADR-0021 escrito como cobrança: um 403 diria ao
-    // curioso que aquele caso existe, e neste módulo isso é contar que aquele
-    // pet está perdido a quem não deveria saber.
     assert.notEqual(erro.status, 403);
   });
 
@@ -594,9 +502,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       return casos.encerrar(CASO, 'not_found', undefined, undefined, chamador(OUTRO_TUTOR));
     });
 
-    // Textos iguais, tipo igual, status igual. Qualquer diferença aqui é um
-    // oráculo de existência: dá para varrer IDs e separar o que existe do que
-    // não existe pela resposta.
     assert.equal(alheio.problemType, inexistente.problemType);
     assert.equal(alheio.status, inexistente.status);
     assert.equal(alheio.title, inexistente.title);
@@ -611,9 +516,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
 
     assert.equal(primeiro.closureOutcome, 'reunited');
     assert.equal(segundo.problemType, 'not-found');
-    // O que a métrica mede é o evento, e um caso que encerrou uma vez tem UM
-    // evento. Se o segundo toque gravasse, "reencontrado" viraria "não
-    // encontrado" na única conta que diz se o produto funciona.
     const encerramentos = eventos.filter((e) => e.action === 'lost_case.closed');
     assert.equal(encerramentos.length, 1);
     assert.equal(encerramentos[0]?.metadata?.['outcome'], 'reunited');
@@ -624,8 +526,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
 
     await capturar(() => casos.encerrar(CASO, 'reunited', 'tag_scan', undefined, chamador(OUTRO_TUTOR)));
 
-    // Trilha com evento de encerramento que não encerrou nada faz o investigador
-    // de amanhã acreditar num desfecho que nunca existiu.
     assert.equal(eventos.length, 0);
   });
 
@@ -634,9 +534,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
 
     await casos.encerrar(CASO, 'not_found', undefined, undefined, chamador(DONO));
 
-    // O ADR-0021 pede a autorização no `WHERE`. A prova de que ela não virou um
-    // `if` depois da leitura é dupla: o dono está na entrada do `encerrar`, e
-    // nenhuma busca solta aconteceu antes dele.
     assert.equal(registro.encerrou[0]?.dono, DONO);
     assert.equal(registro.buscou.length, 0);
   });
@@ -645,11 +542,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
     for (const desfecho of ['not_found', 'false_alarm'] as const) {
       const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
-      // O app manda o canal que estava na tela anterior; o serviço é quem
-      // descarta. Canal preenchido num caso que não foi reencontro sujaria a
-      // conta de "um reencontro em cada três" com atribuição inventada — e no
-      // `false_alarm` (BICHUS-44 critério 3) ele tem de ser nulo, porque não
-      // houve reencontro nenhum.
       const { caso: encerrado } = await casos.encerrar(CASO, desfecho, 'tag_scan', undefined, chamador(DONO));
 
       assert.equal(registro.encerrou[0]?.canal, undefined);
@@ -677,9 +569,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       chamador(DONO),
     );
 
-    // A nota é campo livre, e campo livre recebe telefone e endereço de gente
-    // que não consentiu com nada. A trilha é imutável por papel de banco: o que
-    // entrar ali não sai mais.
     const serializada = JSON.stringify(eventos[0]?.metadata ?? {});
     assert.doesNotMatch(serializada, /vizinha|98888/i);
     assert.doesNotMatch(serializada, TELEFONE);
@@ -696,17 +585,8 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       chamador(DONO),
     );
 
-    // O ALERTA TAMBÉM PASSA PELA VARREDURA, e é a parte nova: ele nasceu nesta
-    // história e é o objeto mais provável de carregar geografia por engano —
-    // uma `distance_m` do destinatário mais próximo pareceria informação útil e
-    // seria uma trilateração pronta (ADR-0010).
     assert.doesNotMatch(JSON.stringify(alerta ?? {}), COORDENADA);
 
-    // A busca é por forma, e não por nome de campo: um `lat` renomeado para
-    // `ponto` continuaria sendo o vazamento. Ficam de fora da varredura os
-    // campos que o contrato manda existir nesta resposta do DONO — os dois
-    // UUIDs, o rótulo de área (bairro e cidade, o máximo de precisão que o
-    // ADR-0010 admite) e as datas — porque os dígitos deles disparariam sozinhos.
     const semOQueOContratoExige = {
       ...encerrado,
       id: null,
@@ -715,12 +595,6 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       lastSeenAt: null,
       openedAt: null,
       closedAt: null,
-      // `reopenDeadline` entra nesta lista pelo MESMO motivo das outras datas,
-      // e ele foi MEDIDO: o campo nasceu com a reabertura
-      // (`LostCase.reopen_deadline`, que o contrato declara), e a varredura
-      // reprovou nele -- os milissegundos de `2027-01-22T08:00:00.000Z` casam
-      // com `COORDENADA` (`00` + `.` + `000`). Era falso positivo da forma, e
-      // não vazamento: a data não tem geografia nenhuma.
       reopenDeadline: null,
     };
     assert.doesNotMatch(JSON.stringify(semOQueOContratoExige), COORDENADA);
@@ -760,9 +634,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
   });
 
   void it('perder a corrida do índice `lost_cases_um_aberto_por_pet` vira `pet-already-lost`', async () => {
-    // A conferência diz que pode e o índice diz que não: é a rajada da fila
-    // offline quando o sinal volta, com duas requisições do mesmo tutor passando
-    // pela leitura antes de qualquer uma gravar.
     const { casos, eventos, registro } = servico({
       abertura: { petJaTemCasoAberto: false },
       petsComCasoAbertoNoIndice: [PET],
@@ -773,7 +644,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
     assert.equal(erro.problemType, 'pet-already-lost');
     assert.equal(erro.status, 409);
     assert.equal(registro.abriu.length, 1, 'a gravação precisa ter sido TENTADA: é o índice que recusa');
-    // Sem caso gravado não há alerta, e a trilha não pode dizer que houve.
     assert.equal(eventos.length, 0);
   });
 
@@ -793,8 +663,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
 
     const erro = await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(DONO)));
 
-    // Mandar a pessoa verificar o e-mail para ela descobrir depois que o teto
-    // barrou é uma ida à caixa de entrada à toa, no pior momento da vida dela.
     assert.equal(erro.problemType, 'open-case-limit-reached');
   });
 
@@ -803,9 +671,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
 
     const erro = await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(DONO)));
 
-    // Verificar o e-mail é o que mais gente resolve na hora; a foto exige sair
-    // da tela e voltar. Pedir a difícil primeiro faz desistir quem resolveria a
-    // fácil.
     assert.equal(erro.problemType, 'contact-channel-unverified');
   });
 
@@ -818,13 +683,8 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
       chamador(DONO),
     );
 
-    // Critério 5 do BICHUS-21: falta de coordenada reduz o alcance, não a
-    // existência. Bloquear aqui excluiria justamente quem negou a permissão de
-    // localização — muita gente, e sobretudo quem instalou o app na pressa.
     assert.equal(caso.hasLocation, false);
     assert.equal(caso.status, 'open');
-    // Critério 14 da BICHUS-18: sem centro não há raio, e isso é registrado
-    // como `no_location` — não como falha de envio.
     assert.equal(alerta?.estado, 'no_location');
   });
 
@@ -841,8 +701,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
   void it('compartilhar na lista pública é o padrão, e quem disse não é respeitado', async () => {
     const { casos, registro } = servico();
     await casos.abrir(PET, entradaPadrao(), chamador(DONO));
-    // Critério 10: quem abre um caso está pedindo alcance, e perguntar isso a
-    // quem está em pânico é uma decisão a mais no pior momento.
     assert.equal(registro.abriu[0]?.shareToPublicList, true);
 
     const outro = servico();
@@ -855,9 +713,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
 
     await casos.abrir(PET, entradaPadrao({ lat: -23.561414, lon: -46.681872 }), chamador(DONO));
 
-    // docs/04-seguranca.md 9: a trilha não guarda coordenada bruta. O que
-    // importa para investigar depois é se houve alerta, e `has_location`
-    // responde isso sem gravar onde a pessoa mora.
     const serializada = JSON.stringify(eventos[0]?.metadata ?? {});
     assert.doesNotMatch(serializada, COORDENADA);
     assert.equal(eventos[0]?.metadata?.['has_location'], true);
@@ -868,9 +723,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
 
     await casos.abrir(PET, entradaPadrao(), chamador(DONO));
 
-    // ADR-0010 item 6: nenhum UUID de banco em superfície pública. O `share_url`
-    // e o cartaz são montados com este token, então um `shareToken` que fosse o
-    // id do caso publicaria a chave interna em cada cartaz de poste.
     const novo = registro.abriu[0];
     assert.ok(novo !== undefined);
     assert.notEqual(novo.shareToken, novo.id);
@@ -878,30 +730,7 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
   });
 });
 
-/**
- * A prévia do alcance (BICHUS-202).
- *
- * O que se prova aqui é o que a rota não consegue provar sozinha: **o vínculo
- * com o dono viaja no argumento**. Um serviço que buscasse o estado sem passar o
- * chamador e conferisse o dono depois passaria em toda asserção de status desta
- * suíte e reprovaria neste bloco — que é a única forma de acusar a diferença
- * entre autorização na consulta e autorização num `if`.
- */
-/**
- * BICHUS-66. Abrir um caso de perdido DERRUBA a transferencia viva daquele pet.
- *
- * Este bloco e a isca dessa ligacao, e ela existe porque a primeira medicao
- * mostrou que ela faltava: com `cancelarPorCasoAberto` trocado por um `no-op`,
- * os 1389 casos unitarios continuaram VERDES. O caso da transferencia chamava o
- * servico dela diretamente e nao passava por aqui, entao a unica coisa que
- * segurava a ligacao era o tipo -- e tipo prova que a fiacao existe, nao que
- * ela e usada.
- *
- * A assimetria que decide o desenho: consumar com caso aberto revogaria todas
- * as tags do pet (ADR-0004, irreversivel) no minuto em que a plaquinha da
- * coleira e a unica coisa ligando o animal ao tutor. Cancelar custa refazer o
- * convite depois do reencontro.
- */
+/** A prévia do alcance (BICHUS-202). */
 void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () => {
   void it('o caso aberto avisa o modulo de transferencia, com o pet certo', async () => {
     const { casos, registro } = servico();
@@ -916,9 +745,6 @@ void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () 
   });
 
   void it('o aviso sai DEPOIS de o caso existir, e nao antes', async () => {
-    // A ordem importa: cancelar antes e ver a abertura falhar por corrida no
-    // indice unico deixaria o tutor sem caso E sem transferencia, que e o pior
-    // dos tres desfechos.
     const { casos, registro } = servico();
     await casos.abrir(PET, entradaPadrao(), chamador(DONO));
 
@@ -927,9 +753,6 @@ void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () 
   });
 
   void it('abertura RECUSADA nao avisa ninguem', async () => {
-    // Pet de outro tutor: nao houve caso, entao nao ha transferencia a derrubar.
-    // Avisar aqui deixaria qualquer conta cancelar a transferencia de qualquer
-    // pet, usando a abertura recusada como gatilho.
     const { casos, registro } = servico({ abertura: { existeEhDoTutor: false } });
     await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(OUTRO_TUTOR)));
 
@@ -954,9 +777,6 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
       (erro: unknown) => {
         assert.ok(erro instanceof AppError);
         assert.equal(erro.status, 404);
-        // A BICHUS-21, critério 12, diz 403. A ADR-0021 diz 404 e é ela que
-        // vale: aqui um 403 confirmaria que aquele pet existe e está perdido a
-        // quem não é dono dele.
         assert.notEqual(erro.status, 403);
         assert.equal(erro.problemType, 'not-found');
         return true;
@@ -983,10 +803,6 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
 
-    // Critério 5 do ADR-0006: o tutor do caso nunca entra na própria lista de
-    // notificados. O número da tela é o mesmo que o disparo vai usar, então um
-    // tutor contado aqui seria um destinatário a mais na métrica e a menos na
-    // realidade.
     assert.deepEqual(registro.contou, [
       { centro: { lat: -23.56, lon: -46.68 }, raio: 5000, excluiu: DONO },
     ]);
@@ -1010,10 +826,6 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     const previa = await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
 
-    // Rotular o ponto onde o pet sumiu com o bairro de casa do tutor seria uma
-    // mentira de aparência plausível, e a tela a exibiria com a confiança de um
-    // dado do servidor: "Vamos avisar 46 tutores num raio de 5 km da Vila
-    // Madalena" quando o pet sumiu em outra cidade.
     assert.equal(previa.rotuloDaArea, null);
   });
 
@@ -1032,8 +844,6 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     const previa = await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
 
-    // Busca por FORMA, e não por nome de campo: um campo novo acrescentado
-    // depois cai nesta asserção sem ninguém atualizar o teste.
     const serializada = JSON.stringify(previa);
     assert.doesNotMatch(serializada, COORDENADA);
     assert.doesNotMatch(
@@ -1047,9 +857,6 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
     const previa = await casos.previa(PET, undefined, chamador(DONO));
 
-    // Ele não está entre os três `blockers` do contrato, e devolvê-lo "porque já
-    // está na mão" agruparia os pets do tutor numa resposta que o documento não
-    // declara — propriedade a MAIS, que nenhum portão de contrato acusa.
     assert.deepEqual(previa.bloqueios, []);
     assert.deepEqual(Object.keys(previa).sort(), [
       'bloqueios',
@@ -1063,27 +870,18 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
 
 void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro instante', () => {
   void it('com coordenada o alerta nasce `queued` e o trabalho é ENFILEIRADO', async () => {
-    // A API enfileira e o worker envia (ADR-0001). `queued` é um estado
-    // próprio e não um sinônimo de `unavailable` — critério 11 da BICHUS-20,
-    // que pede os dois como estados distintos.
     const { casos, registro } = servico();
 
     const { caso, alerta } = await casos.abrir(PET, entradaPadrao(), chamador(DONO));
 
     assert.equal(alerta?.estado, 'queued');
     assert.equal(alerta?.destinatarios, null, 'um disparo que não rodou não tem número');
-    // O identificador enfileirado é o do caso que ACABOU de ser gravado. Um
-    // trabalho enfileirado com outro identificador some na fila sem erro
-    // nenhum, e o alerta simplesmente nunca sai.
     assert.deepEqual(registro.enfileirados, [
       { kind: 'alert.dispatch', payload: { caseId: caso.id } },
     ]);
   });
 
   void it('SEM coordenada nada é enfileirado: não é falha de envio, e não retenta', async () => {
-    // Critério 14 da BICHUS-18, textual. Enfileirar para depois descobrir que
-    // não há centro produziria uma tentativa fracassada onde não havia o que
-    // tentar, e a tela leria isso como "o alerta falhou".
     const { casos, registro } = servico();
 
     const { alerta } = await casos.abrir(
@@ -1097,9 +895,6 @@ void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro in
   });
 
   void it('o payload da fila leva o identificador, e nunca conteúdo montado', async () => {
-    // A regra do payload da fila (§11.5). O nome do pet e o bairro são lidos
-    // pelo worker no instante do envio; enfileirados aqui, eles congelariam o
-    // que a tutora corrigir nos próximos cinco minutos.
     const { casos, registro } = servico();
 
     await casos.abrir(PET, entradaPadrao(), chamador(DONO));
@@ -1108,29 +903,12 @@ void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro in
   });
 
   void it('os quatro estados de `AlertDispatch` são distintos entre si', () => {
-    // Critério 12 da BICHUS-20: `no_location` é um quarto estado, distinto de
-    // `computed` com zero, de `unavailable` e de `queued`. A tela tem texto
-    // diferente para cada um, e trocar um pelo outro é mentir para quem está
-    // em pânico.
     const estados = new Set(['computed', 'unavailable', 'queued', 'no_location']);
     assert.equal(estados.size, 4);
   });
 });
 
-/**
- * A decisão humana sobre o candidato (BICHUS-86, critérios 4, 5 e 12).
- *
- * O que se prova aqui é **o efeito da decisão sobre a conversa**, que é a parte
- * que nenhum banco pega: se `aoConfirmarCorrespondencia` sai do `if`, o Postgres
- * continua feliz e o tutor passa a receber o canal aberto de alguém que ele
- * acabou de dizer que não achou o pet dele.
- *
- * A autorização também está aqui, e é deliberadamente redundante com
- * `autorizacao-do-decisor-na-clausula-where.test.ts` e com a integração: aquele
- * lê o SQL, a integração o executa, e este cobra que a camada de cima **não
- * invente um segundo caminho** — um `if` que devolvesse a linha do terceiro
- * antes de o repositório recusar passaria nos outros dois.
- */
+/** A decisão humana sobre o candidato (BICHUS-86, critérios 4, 5 e 12). */
 void describe('a decisão do candidato', () => {
   const contextoDoDono = chamador(DONO);
 
@@ -1197,8 +975,6 @@ void describe('a decisão do candidato', () => {
         'afirmar sozinha (ADR-0021)',
     );
     assert.deepEqual(registro.conversasAbertas, []);
-    // O dono viajou no argumento: um `decidirCandidato` que esquecesse de
-    // passá-lo passaria numa asserção de resultado e reprova nesta.
     assert.equal(registro.decidiu[0]?.dono, OUTRO_TUTOR);
   });
 
@@ -1214,8 +990,6 @@ void describe('a decisão do candidato', () => {
   });
 
   void it('REJEITADO NÃO VOLTA: confirmar depois de rejeitar é recusado', async () => {
-    // Seção 4.10 de `docs/03-arquitetura.md` e critério 12 da BICHUS-86, com a
-    // mesma frase nos dois: "rejeitado não volta".
     const { casos, registro } = servico(comCandidato({ status: 'rejected', decididoPor: DONO }));
 
     const erro = await capturar(() =>
@@ -1231,9 +1005,6 @@ void describe('a decisão do candidato', () => {
   });
 
   void it('o reenvio da MESMA decisão devolve o mesmo candidato, e não 404', async () => {
-    // Critério 7: sem conexão, a confirmação entra numa fila — e fila reenvia.
-    // Um 404 aqui diria "não encontramos isso" logo depois de a ação ter dado
-    // certo, que é a tela quebrada que a fila offline produz.
     const { casos, registro } = servico(comCandidato());
 
     const primeira = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
@@ -1271,8 +1042,6 @@ void describe('a decisão do candidato', () => {
   });
 
   void it('as DUAS decisões entram na trilha, com quem decidiu e o que decidiu', async () => {
-    // Rejeição é irreversível: ela precisa de autor e instante em lugar
-    // auditável, que é a mesma razão de `match_candidates_decisao_tem_autor`.
     for (const decisao of ['confirmed', 'rejected'] as const) {
       const { casos, eventos } = servico(comCandidato());
       await casos.decidirCandidato(CASO, CANDIDATO, decisao, contextoDoDono);
@@ -1286,32 +1055,19 @@ void describe('a decisão do candidato', () => {
   });
 
   void it('a resposta da decisão não carrega o dono do achado nem o id do caso do pet', async () => {
-    // O que sai é `MatchCandidate`. `pet_id` e o identificador de quem
-    // registrou o achado não estão no schema, e o portão de contrato só procura
-    // o que SUMIU — propriedade a mais passa por ele.
     const { casos } = servico(comCandidato());
     const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
 
-    // A camada de aplicação ainda os carrega, de propósito: é com eles que ela
-    // abre a conversa. Quem os deixa de fora é `comoRespostaDoCandidato`, e o
-    // que se cobra aqui é que eles CHEGUEM, para que a borda tenha o que omitir.
     assert.equal(decidido.petId, PET);
     assert.equal(decidido.relatorUserId, RELATOR);
   });
 });
-
-// ===========================================================================
-// O laço central: ver os candidatos, corrigir o caso, reenviar o alerta
-// ===========================================================================
 
 /** O contexto do dono, o mesmo molde das suítes de cima. */
 const contextoDoTutor = chamador(DONO);
 
 void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () => {
   void it('o dono lê as correspondências do caso dele, inclusive as ainda sugeridas', async () => {
-    // Este é o buraco que a operação fecha: a esteira já gravava, e a rota de
-    // DECIDIR já estava no ar. Sem esta leitura, o tutor podia dizer "é o meu
-    // pet" sobre algo que ele não tinha como ver.
     const { casos } = servico({
       caso: { dono: DONO, gravado: casoAberto() },
       candidato: { dono: DONO, status: 'suggested' },
@@ -1325,9 +1081,6 @@ void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () 
   });
 
   void it('caso de OUTRO tutor responde 404, e não uma lista vazia', async () => {
-    // Lista vazia com 200 numa URL que carrega o `caseId` de outra pessoa
-    // afirma, para quem souber ler, que aquele caso existe. O ADR-0021 fecha
-    // exatamente este oráculo, e por isso a leitura vinculada vem ANTES.
     const { casos } = servico({
       caso: { dono: DONO, gravado: casoAberto() },
       candidato: { dono: DONO, status: 'suggested' },
@@ -1357,9 +1110,6 @@ void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () 
   });
 
   void it('lista vazia do PRÓPRIO caso é 200 com `items: []`, e não erro', async () => {
-    // É o estado mais frequente do produto: a maior parte dos casos não tem
-    // correspondência nenhuma no primeiro dia. Tratá-lo como erro faria a tela
-    // dizer "não foi possível" onde a verdade é "ainda não apareceu ninguém".
     const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 20, depoisDe: undefined });
@@ -1386,7 +1136,6 @@ void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () 
       candidato: { dono: DONO, status: 'suggested' },
     });
 
-    // `limit: 1` com um item é página cheia: pode haver continuação.
     const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 1, depoisDe: undefined });
 
     assert.notEqual(pagina.nextCursor, null);
@@ -1396,9 +1145,6 @@ void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () 
   });
 
   void it('a leitura NÃO conta nada e NÃO enfileira nada: `x-effects` é vazio de verdade', async () => {
-    // O cruzamento é um job na fila. Se esta operação começasse a calcular, ela
-    // viraria `expensive_query` e ganharia teto — mas então a mudança é de
-    // desenho, e este caso é o que obriga o marcador a acompanhar.
     const { casos, registro } = servico({
       caso: { dono: DONO, gravado: casoAberto() },
       candidato: { dono: DONO, status: 'suggested' },
@@ -1428,9 +1174,6 @@ void describe('updateLostCase: o tutor corrige onde e quando', () => {
   });
 
   void it('corrigir de PONTO para SÓ ÁREA apaga o ponto: `has_location` vira falso', async () => {
-    // Quem troca o ponto no mapa por "só o bairro" está dizendo que o ponto
-    // estava errado. Um `COALESCE` o manteria gravado, e o alerta seguiria
-    // centrado onde o pet não estava — com a tela dizendo o contrário.
     const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     const { caso } = await casos.atualizar(
@@ -1443,9 +1186,6 @@ void describe('updateLostCase: o tutor corrige onde e quando', () => {
   });
 
   void it('NÃO dispara alerta: o reenvio é outra operação, com teto próprio', async () => {
-    // Fundir as duas faria cada correção de digitação na data acordar os
-    // vizinhos outra vez — e a correção de digitação é o uso mais comum desta
-    // rota. O contrato declara `x-effects: []`, e este caso é o que o sustenta.
     const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     await casos.atualizar(CASO, entradaPadrao(), contextoDoTutor);
@@ -1466,8 +1206,6 @@ void describe('updateLostCase: o tutor corrige onde e quando', () => {
   });
 
   void it('caso ENCERRADO não se corrige: 404, o mesmo `null` do encerramento', async () => {
-    // Mexer no "visto pela última vez" de um caso encerrado alteraria o dado
-    // que a métrica de reencontro já contabilizou.
     const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
     await casos.encerrar(CASO, 'reunited', 'tag_scan', undefined, contextoDoTutor);
 
@@ -1488,7 +1226,6 @@ void describe('updateLostCase: o tutor corrige onde e quando', () => {
     const evento = eventos.find((e) => e.action === 'lost_case.updated');
     assert.ok(evento !== undefined, 'a correção precisa aparecer na trilha');
     assert.equal(evento.actorUserId, DONO);
-    // A trilha não guarda coordenada bruta (docs/04-seguranca.md 9).
     assert.doesNotMatch(JSON.stringify(evento.metadata), COORDENADA);
     assert.equal((evento.metadata as { has_location?: boolean }).has_location, true);
   });
@@ -1496,8 +1233,6 @@ void describe('updateLostCase: o tutor corrige onde e quando', () => {
 
 void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia', () => {
   void it('o reenvio grava o disparo e ENFILEIRA, pela mesma máquina da abertura', async () => {
-    // Uma segunda máquina aqui teria duas respostas para "quem recebe o alerta
-    // deste caso", e a do reenvio seria a que ninguém revisita.
     const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     const disparo = await casos.reenviarAlerta(CASO, contextoDoTutor);
@@ -1508,9 +1243,6 @@ void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia
   });
 
   void it('caso SEM coordenada nasce `no_location` e NÃO é enfileirado', async () => {
-    // Critério 14 da BICHUS-18: isso não é falha de envio e não gera
-    // retentativa. Enfileirar para depois descobrir que não há centro produziria
-    // uma tentativa fracassada onde não havia o que tentar.
     const { casos, registro } = servico({
       caso: { dono: DONO, gravado: { ...casoAberto(), hasLocation: false } },
     });
@@ -1522,8 +1254,6 @@ void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia
   });
 
   void it('o segundo reenvio dentro de 24 h recebe 429 com prazo, e não um alerta', async () => {
-    // O teto é do CASO (critério 7 do ADR-0006), e a verdade sobre "já avisou
-    // hoje" está em `dispatched_at` — não em `requested_at`.
     const umaHoraAtras = (Number(AGORA) - 60 * 60 * 1000) as Instant;
     const { casos, registro } = servico({
       caso: { dono: DONO, gravado: casoAberto() },
@@ -1534,8 +1264,6 @@ void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia
 
     assert.equal(erro.problemType, 'rate-limited');
     assert.equal(erro.status, 429);
-    // O prazo é o que FALTA, e não um número fixo: o app agenda o reenvio por
-    // ele, e um valor inventado agendaria algo que já nasce recusado.
     assert.ok(
       (erro.retryAfterSeconds ?? 0) > 22 * 3600 && (erro.retryAfterSeconds ?? 0) <= 23 * 3600,
       `esperava ~23 h de prazo e veio ${String(erro.retryAfterSeconds)}`,
@@ -1544,9 +1272,6 @@ void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia
   });
 
   void it('um disparo que ficou ENFILEIRADO e nunca saiu não gasta o direito de ninguém', async () => {
-    // `ultimoEnvio` ausente com um disparo aberto: é o caso de um `queued` de
-    // ontem que nunca virou push. Se a leitura fosse do último disparo qualquer,
-    // ele bloquearia o alerta de hoje sem nunca ter avisado uma só pessoa.
     const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     await casos.reenviarAlerta(CASO, contextoDoTutor);
@@ -1589,9 +1314,6 @@ void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia
   });
 
   void it('a trilha do reenvio tem autor humano, e é SEPARADA do disparo do worker', async () => {
-    // `lost_case.alert_dispatched` é do worker e diz que o alerta SAIU.
-    // Juntá-las tornaria impossível responder quantas vezes um tutor pediu e
-    // quantas de fato saíram.
     const { casos, eventos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
     await casos.reenviarAlerta(CASO, contextoDoTutor);

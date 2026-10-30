@@ -1,59 +1,4 @@
-/**
- * `handles.claimed_at` recebe `Date`, e **nunca o `Instant` cru**.
- *
- * ## O DEFEITO, MEDIDO E NAO SUPOSTO
- *
- * Relato do cliente em 18/10/2026, contra homologacao: *"ao salvar o perfil
- * tambem [da erro]"*. Medido contra a pilha efemera de integracao, no commit
- * `f8c74714` -- o MESMO que `https://hml.bichu.app/v1/health` reportava:
- *
- *     PATCH /v1/me  {"handle":"medicao-134549"}
- *     500 {"type":".../problems/internal","title":"Nao foi possivel concluir agora"}
- *
- * E no log da API, a causa:
- *
- *     DatabaseError 22008: date/time field value out of range: "1792376135079"
- *       at Object.atualizarPerfil (kysely-identity-repository.js)
- *       hint: Perhaps you need a different "datestyle" setting.
- *
- * `1792376135079` e o `Instant` -- milissegundos desde a epoca. O `INSERT INTO
- * handles` passava `claimed_at: agora`, e `agora` e um `Instant`, que e um
- * `number`. `timestamptz` nao le numero. **Toda escolha e toda troca de apelido
- * pela pagina de edicao do perfil devolvia 500**, e o apelido e justamente o
- * campo que o cliente pediu nessa pagina no mesmo dia.
- *
- * ## POR QUE O COMPILADOR NAO PEGOU, E POR QUE AGORA PEGA
- *
- * `HandlesTable.claimed_at` era
- * `ColumnType<Date, number | Date | string | undefined, ...>`: a escrita
- * aceitava `number`. Aceitava para nada -- ninguem grava epoch nesta coluna de
- * proposito --, e o unico efeito era deixar este erro compilar. O tipo passou a
- * aceitar so `Date`.
- *
- * `criarContaLocal` ja fazia certo, com `const agora = new Date(nova.agora)`, e
- * essa divergencia entre dois caminhos da MESMA coluna e por que o defeito
- * aparecia so na edicao e nao no cadastro.
- *
- * ## POR QUE O CASO LE O PARAMETRO LIGADO, E NAO O COMPORTAMENTO
- *
- * Porque o comportamento quebrado so aparece com Postgres de verdade, e a suite
- * de integracao deste repositorio **nao compila hoje** (o `tsc` do servico
- * `testes` estoura o `mem_limit: 1g` com `JavaScript heap out of memory`, em
- * `origin/development`, antes de qualquer caso rodar). Entao a conferencia cai
- * onde ela e observavel sem banco: no valor que o driver receberia.
- *
- * `instanceof Date` e o predicado certo e `typeof !== 'number'` nao e: uma
- * string ISO tambem passaria pelo segundo e tambem nao e o que a coluna espera
- * depois do estreitamento do tipo.
- *
- * ## ISCA CONFERIDA
- *
- * Trocando `claimed_at: new Date(Number(agora))` de volta por
- * `claimed_at: agora` em `atualizarPerfil`, os dois casos abaixo reprovam pelo
- * nome. Conferido em 18/10/2026. (Com o tipo estreitado a reversao tambem para
- * o `tsc`, e e isso que se quer: o caso existe para o dia em que alguem alargar
- * o tipo de novo.)
- */
+/** `handles.claimed_at` recebe `Date`, e **nunca o `Instant` cru**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -81,16 +26,7 @@ interface ConsultaCapturada {
   readonly parameters: readonly unknown[];
 }
 
-/**
- * Kysely com o compilador REAL do Postgres e um driver que captura.
- *
- * `DummyDriver` nao serve aqui: ele devolve `rows: []`, e `atualizarPerfil`
- * desiste no primeiro `SELECT` (conta nao encontrada) sem chegar ao `INSERT`
- * que esta sendo medido -- o caso passaria sem ter exercitado nada.
- *
- * O `responder` devolve linha para os `SELECT` e vazio para o resto, que e o
- * minimo para o caminho "conta existe, ainda nao tem apelido" rodar inteiro.
- */
+/** Kysely com o compilador REAL do Postgres e um driver que captura. */
 function bancoQueCaptura(linhaDaConta: Record<string, unknown>): {
   db: Db;
   consultas: ConsultaCapturada[];
@@ -130,7 +66,7 @@ function bancoQueCaptura(linhaDaConta: Record<string, unknown>): {
   return { db, consultas };
 }
 
-/** A linha que os `SELECT` deste caminho devolvem. `handle: null` = sem apelido. */
+/** A linha que os `SELECT` deste caminho devolvem. */
 const LINHA_DA_CONTA: Record<string, unknown> = {
   id: DONO,
   email: 'marina@exemplo.com.br',

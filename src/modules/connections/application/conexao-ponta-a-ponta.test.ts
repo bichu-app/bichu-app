@@ -1,24 +1,6 @@
 /**
  * O comportamento da conexão, ponta a ponta no caso de uso, com as quatro iscas
  * que não se respondem lendo SQL:
- *
- * - **(a)** o pedido exige **aceite**: antes dele, o predicado de conectado é
- *   falso; depois, verdadeiro;
- * - **(c)** o teto de 150 recusa o 151º, com contrapeso no 150º — aqui pelo
- *   caminho inteiro, e não só pela função pura;
- * - **(d)** par bloqueado responde **404**, e nunca 403;
- * - **(e)** a conexão de conta desabilitada **some** da leitura e da contagem, e
- *   **a linha não é apagada** — reabilitar devolve a conexão intacta.
- *
- * Mais o **contrato com a fatia E**: `desfazerPorBloqueio` apaga o pendente das
- * duas direções e desfaz a conexão, em silêncio e de forma idempotente.
- *
- * **E a prova que vem primeiro, com o escopo que ela passou a ter em
- * 20/10/2026:** sem uma credencial que resolva, nenhuma aresta nasce — e o 404 é
- * o mesmo para token inexistente, token que não resolve e alvo bloqueado. Até
- * essa data a afirmação era mais forte (*"nenhuma conta alcança nenhuma
- * outra"*), porque não existia emissor de convite; o cliente pediu o link, o QR
- * e a busca, e `nenhumConviteExiste` saiu da fiação e deste arquivo.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -43,20 +25,8 @@ import type {
 import { ConexaoEntrePessoas, type ContextoDoChamador } from './conexao-entre-pessoas.js';
 
 /**
- * **Um resolvedor que não resolve nada**, e ele é um dublê de teste — não a
- * fiação de produção.
- *
- * Até 20/10/2026 este arquivo usava `nenhumConviteExiste`, que era a fiação de
- * produção e a afirmação executável de que nenhuma conta alcançava nenhuma
- * outra. **Ela saiu**: o cliente pediu o link, o QR e a busca, e a produção
- * agora liga `criarResolvedorDeConvite` e `criarResolvedorDeApelido`, que leem o
- * banco.
- *
- * O dublê fica porque o que ele mede **continua valendo**: um token que não
- * resolve responde 404, e esse é o caminho de um token inexistente, vencido ou
- * revogado. O que mudou é o escopo da afirmação — ela já não é "nenhuma conta
- * alcança nenhuma outra", e sim "sem uma credencial que resolva, não nasce
- * aresta".
+ * **Um resolvedor que não resolve nada**, e ele é um dublê de teste — não a fiação
+ * de produção.
  */
 const nadaResolve: ResolvedorDeConvite = { resolver: () => Promise.resolve(undefined) };
 
@@ -97,9 +67,6 @@ function montar(opcoes: {
   /**
    * Quem tem pet com foto `ready` -- o segundo sinal do contador de convidados
    * (21/10/2026).
-   *
-   * Lista e nao booleano porque o sinal e de UMA conta, e o caso que importa e
-   * justamente o assimetrico: quem entrou pelo convite tem pet, ou nao tem.
    */
   comPetComFotoPronta?: readonly UserId[];
 } = {}): Montagem {
@@ -184,18 +151,7 @@ async function erroDe(acao: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a ação não falhou, e era o que o teste media');
 }
 
-/**
- * **O ESCOPO DESTE BLOCO MUDOU EM 20/10/2026.**
- *
- * Ele se chamava *"NENHUMA conta arbitrária alcança outra: a fiação de
- * produção"*, e media `nenhumConviteExiste`. Aquela afirmação **deixou de ser o
- * desenho**: o cliente pediu a busca, o QR e o link, e agora duas credenciais
- * alcançam uma conta.
- *
- * O que estes casos medem continua valendo, e é mais estreito e mais exato:
- * **sem uma credencial que resolva, não nasce aresta** — e o 404 é o mesmo
- * qualquer que seja o motivo pelo qual ela não resolveu.
- */
+/** **O ESCOPO DESTE BLOCO MUDOU EM 20/10/2026.** */
 void describe('sem credencial que resolva, não nasce aresta — e o 404 é um só', () => {
   void it('token que não resolve responde 404, qualquer que seja o token', async () => {
     const { servico, bancada } = montar();
@@ -224,13 +180,7 @@ void describe('sem credencial que resolva, não nasce aresta — e o 404 é um s
     assert.equal(a.problemType, 'not-found');
   });
 
-  /**
-   * **O caminho por apelido cria aresta, e grava `people_search`.**
-   *
-   * Sem este caso, todos os de cima passariam num mundo em que
-   * `pedirPorApelido` sempre falhasse — e eles não distinguiriam "recusa
-   * correta" de "operação quebrada".
-   */
+  /** **O caminho por apelido cria aresta, e grava `people_search`.** */
   void it('apelido que resolve CRIA a aresta, com `origin: people_search`', async () => {
     const { servico, bancada, trilha } = montar({ apelidoPara: ANA });
     const conexao = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
@@ -491,9 +441,6 @@ void describe('recusar, cancelar e desfazer — e o silêncio da recusa', () => 
     assert.equal(bancada.linhas.length, 1, 'a recusa não apaga a linha: apagá-la lavaria a recusa');
     assert.equal(bancada.linhas[0]?.estado, 'declined');
 
-    // E AQUI ESTÁ O SILÊNCIO, medido: pedir de novo devolve `pending_sent`, que
-    // é byte por byte o que um pedido não respondido devolveria. Quem pediu não
-    // tem como saber que foi recusado, e nenhuma linha nova nasce.
     const denovo = await servico.pedir(contexto(BIA), 'convite');
     assert.equal(denovo.state, 'pending_sent');
     assert.equal(denovo.ref, pedido.ref);
@@ -574,13 +521,6 @@ void describe('o pedido é idempotente, e a aresta morta é reaproveitada', () =
 });
 
 void describe('ISCA: o contador de convidados conta quem ACEITOU e tem pet com foto', () => {
-  // A regra e decisao do cliente de 21/10/2026, e ela sao DOIS sinais. Este
-  // grupo os mede um a um, e cada caso tem contrapeso: sem contrapeso, um
-  // contador que devolvesse zero sempre passaria em metade deles.
-  //
-  // **O numero mora no SERVIDOR, numa fonte so.** Se a regra morasse no
-  // aplicativo, dois clientes contariam diferente e o numero que a pessoa ve
-  // dependeria de qual deles ela abriu.
 
   void it('pedido pendente NAO conta: falta o aceite', async () => {
     const { servico } = montar({ convitePara: ANA, comPetComFotoPronta: [BIA] });
@@ -608,12 +548,6 @@ void describe('ISCA: o contador de convidados conta quem ACEITOU e tem pet com f
   });
 
   void it('aceito e SEM pet com foto pronta NAO conta: e o freio anti-abuso', async () => {
-    // PARA DESLIGAR E VER REPROVAR: no dublê, tire o
-    // `petComFotoPronta === true` de `contarConvidadosQueEntraram`.
-    //
-    // Uma conta criada a toa para inflar o contador de alguem nao tem pet com
-    // foto aprovada. E o mesmo sinal que a vitrine ja usa, o que evita uma
-    // segunda definicao de "conta de verdade".
     const { servico } = montar({ convitePara: ANA });
     const pedido = await servico.pedir(contexto(BIA), 'convite');
     await servico.aceitar(contexto(ANA), pedido.ref);
@@ -633,8 +567,6 @@ void describe('ISCA: o contador de convidados conta quem ACEITOU e tem pet com f
   });
 
   void it('quem CONVIDOU nao aparece no contador de quem foi convidado', async () => {
-    // A assimetria e o ponto: `connected_count` sobe nos dois lados, e este
-    // nao. Contar os dois lados somaria quem a conta trouxe com quem a trouxe.
     const { servico } = montar({ convitePara: ANA, comPetComFotoPronta: [BIA] });
     const pedido = await servico.pedir(contexto(BIA), 'convite');
     await servico.aceitar(contexto(ANA), pedido.ref);
@@ -654,9 +586,6 @@ void describe('ISCA: o contador de convidados conta quem ACEITOU e tem pet com f
   });
 
   void it('quem entrou pela BUSCA nao conta: a origem e outra', async () => {
-    // O caminho do apelido grava `origin = 'people_search'`. Quem se achou na
-    // busca nao foi trazido por ninguem, e contar isso faria o numero crescer
-    // sem a pessoa ter convidado nada.
     const { servico } = montar({ apelidoPara: ANA, comPetComFotoPronta: [BIA] });
     const pedido = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
     await servico.aceitar(contexto(ANA), pedido.ref);

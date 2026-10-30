@@ -38,11 +38,6 @@ import 'sessao/controlador_de_sessao.dart';
 import 'sessao/fiacao_do_passkey.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
-///
-/// Sem pacote de injecao: o esqueleto tem tres dependencias, e um
-/// `InheritedWidget` resolve isso sem trazer um framework de estado que
-/// ninguem precisou escolher ainda. Quando o app crescer, isto e um ponto de
-/// troca e nao uma reescrita.
 class Escopo extends InheritedWidget {
   const Escopo({
     required this.api,
@@ -90,12 +85,6 @@ class Escopo extends InheritedWidget {
   final AuthApi auth;
 
   /// As quatro operacoes de passkey do contrato (BICHUS-301).
-  ///
-  /// **Separada de [auth] de proposito.** `AuthApi` e a porta da senha, e a
-  /// passkey SOMA a senha em vez de substitui-la -- juntar as duas num objeto
-  /// so faria parecer que uma troca a outra. Alem disso `AuthApi` nao depende
-  /// de nada do aparelho, e esta depende: quem a usa quase sempre precisa de
-  /// [credencialDoAparelho] no mesmo gesto, e [passkey] e quem junta as duas.
   final PasskeysApi passkeys;
   final PetsApi pets;
 
@@ -103,40 +92,19 @@ class Escopo extends InheritedWidget {
   final CasosApi casos;
 
   /// A porta das CONEXOES entre pessoas (18/10/2026).
-  ///
-  /// Ela entrou aqui na uniao das quatorze: `TelaDePedidosDeConexao` pedia a
-  /// porta por parametro de construtor porque, quando foi escrita, este
-  /// arquivo estava sendo mexido por outra sessao e ligar aqui colidiria. Com
-  /// os ramos unidos, ela mora onde as outras moram -- uma porta por rota, e
-  /// nao uma por tela.
   final ConexoesApi conexoes;
 
   /// As rotas `tags: [connection-invites]` do contrato: emitir, revogar e
   /// resolver o convite do proprio perfil.
-  ///
-  /// Fica no escopo pela mesma razao das outras camadas de API, e por uma a
-  /// mais que e desta porta: **quem a consome sao DUAS telas distantes** -- a
-  /// de convidar, que emite, e o LEITOR DE QR, que resolve. Construir uma
-  /// instancia dentro de cada uma seria duas portas para a mesma rota, e o
-  /// teste de widget perderia o ponto de injecao.
   final ConvitesApi convites;
 
   /// As rotas `tags: [me]` do contrato: os dados pessoais do tutor.
-  ///
-  /// Fica no escopo, como as outras camadas de API, e nao e construida dentro
-  /// da tela: um `MeApi` por tela seria uma segunda porta para a mesma rota, e
-  /// o teste de widget perderia o ponto de injecao que todas as outras telas
-  /// usam.
   final MeApi me;
 
   /// O diretorio de `Perto` (`tags: [directory]` do contrato).
   final DiretorioApi diretorio;
 
   /// A vitrine de `Loja` (`tags: [store]` do contrato).
-  ///
-  /// **A unica rota do escopo que nao exige conta.** A vitrine e navegavel
-  /// deslogado (criterio 24 da BICHUS-185), e nada na resposta dela e privado
-  /// de ninguem: tudo ja esta publicado no site do parceiro.
   final LojaApi loja;
 
   /// As rotas de achado avulso (`tags: [found]` do contrato), ligadas pela
@@ -144,234 +112,79 @@ class Escopo extends InheritedWidget {
   final AchadosApi achados;
 
   /// **O unico caminho de bytes do app** (22/09/2026).
-  ///
-  /// Fica no escopo, e nao dentro da tela, pelo mesmo motivo do [cofreDoQr] e
-  /// com uma razao a mais: ele carrega um cliente HTTP proprio, que existe
-  /// para os bytes sairem **sem o token da sessao** para o host que o servidor
-  /// nomeou. Um envio construido dentro de cada tela seria um cliente por
-  /// tela, e a proxima pessoa passaria o cliente da API "para reaproveitar".
-  ///
-  /// Um so no app inteiro, e tres consumidores: a foto do pet (F1.6), a foto
-  /// do achado avulso e a foto do PROPRIO usuario em `Meus dados` (cliente,
-  /// 18/10/2026).
   final EnvioDeFoto envioDeFoto;
 
-  /// A busca de endereco por CEP, para poupar digitacao no pedido da
-  /// plaquinha. **Nao e geocodificacao**: devolve texto, nunca coordenada
-  /// (ver `api/busca_de_cep.dart`). Servico de terceiro fora do ar nao
-  /// impede nenhum pedido.
+  /// A busca de endereco por CEP, para poupar digitacao no pedido da plaquinha.
   final BuscaDeCep buscaDeCep;
 
   /// O envio da foto **mais o registro do que ficou pendente** (BICHUS-87,
   /// criterios 6 e 7).
-  ///
-  /// Fica no escopo, e nao na tela, com a mesma razao da fila offline e uma a
-  /// mais: o registro vive em DISCO, e duas instancias sobre o mesmo arquivo
-  /// guardariam listas diferentes em memoria e uma sobrescreveria a outra. A
-  /// limpeza dele esta em `limpezasAoSair`, no `app.dart`.
   final RetomadaDeFotos retomadaDeFotos;
 
   /// A fila de acoes sem conexao (BICHUS-31), **ligada pela BICHUS-21**.
-  ///
-  /// Ela vive no escopo e nao dentro da tela de F3.2 pela mesma razao do
-  /// [cofreDoQr], e com a mesma consequencia: a limpeza dela esta registrada
-  /// em `limpezasAoSair` no `app.dart`, e uma fila criada dentro da tela seria
-  /// outro objeto -- o `sair()` limparia uma fila vazia enquanto o nome do
-  /// pet, o endereco de referencia e o telefone da tutora anterior
-  /// continuariam no arquivo do aparelho.
-  ///
-  /// Duas filas sobre o mesmo arquivo tambem perderiam uma da outra: cada
-  /// instancia guarda a lista em memoria depois da primeira leitura, e a
-  /// segunda sobrescreveria o que a primeira enfileirou.
   final FilaOffline fila;
 
   final TagsApi tags;
   final DevicesApi devices;
 
-  /// A fronteira com o aparelho. Injetavel para que o teste de widget
-  /// exercite os tres estados de permissao sem aparelho.
+  /// A fronteira com o aparelho.
   final CameraEGaleria camera;
 
-  /// A leitura de QR ao vivo (BICHUS-54). Injetavel pelo mesmo motivo da
-  /// [camera], com uma diferenca que vale dizer: ela nao pergunta permissao.
-  /// Quem pergunta e a [camera], porque e a MESMA permissao de sistema, e
-  /// duas portas consultando `Permission.camera` dariam duas respostas que
-  /// precisam ser iguais e um dia nao seriam.
+  /// A leitura de QR ao vivo (BICHUS-54).
   final LeitorDeQr leitorDeQr;
 
   /// A folha de credencial do sistema operacional.
-  ///
-  /// Exposta aqui, e nao escondida dentro de [passkey], porque o teste de
-  /// widget precisa troca-la: o pacote `passkeys` fala por canal de
-  /// plataforma, que nao existe em `flutter test`.
   final CredencialDoAparelho credencialDoAparelho;
 
   /// O sinal LOCAL de que ha credencial digital neste aparelho (28/10/2026).
-  ///
-  /// **E o que impede a tela de entrar de gastar `beginPasskeyAuthentication`
-  /// em quem nao tem passkey** -- que e quase todo mundo. Exposto aqui, e nao
-  /// escondido dentro de [passkey], porque o teste de widget precisa dos dois
-  /// estados: com marca e sem marca sao caminhos diferentes, e um deles nao faz
-  /// requisicao nenhuma.
   final PasskeyNesteAparelho passkeyNesteAparelho;
 
   /// A sequencia servidor-aparelho-servidor do passkey.
-  ///
-  /// **Nenhuma tela chama [passkeys] e [credencialDoAparelho] na mao.** O
-  /// desafio e consumido no passo final de sucesso OU de falha, e uma copia da
-  /// sequencia por tela e uma chance por tela de errar isso.
   final FiacaoDoPasskey passkey;
 
-  /// A fronteira com o servico de notificacao. Injetavel pelo mesmo motivo da
-  /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
-  /// exercitar e a reacao da tela aos quatro estados.
+  /// A fronteira com o servico de notificacao.
   final Avisos avisos;
 
   /// O ouvinte dos avisos que CHEGAM (os tres estados do push).
-  ///
-  /// Fica no escopo, e nao na tela, pela mesma razao da fila offline: e UM
-  /// objeto no app inteiro. Um ouvinte por tela registraria N assinaturas na
-  /// mesma stream e a pessoa veria o mesmo aviso N vezes; e, pior, o estado
-  /// `fechado` (`getInitialMessage`) entrega a mensagem UMA vez -- a segunda
-  /// instancia a perderia.
   final OuvinteDeAvisos avisosRecebidos;
 
   /// Quais das DUAS oportunidades de UX 10.1 ja foram gastas neste aparelho
   /// (BICHUS-24).
-  ///
-  /// Fica no escopo, e nao dentro da tela, porque as duas oportunidades moram
-  /// em telas diferentes -- F1.6 e F3.2 -- e precisam contar a MESMA coisa.
-  /// Duas instancias sobre o mesmo arquivo perderiam uma da outra, e o limite
-  /// de duas viraria dois limites de uma.
   final OportunidadesDeAviso oportunidades;
 
   /// Quem reconcilia a permissao de aviso quando ela muda com o app aberto.
-  ///
-  /// Fica no escopo porque quem precisa dela e o Perfil, para saber se mostra
-  /// `Ligar nos ajustes`, e o fluxo da antessala, para lhe contar o que
-  /// descobriu. Ver [VigiaDeAviso].
   final VigiaDeAviso vigiaDeAviso;
-  /// A fronteira com a localizacao do aparelho (BICHUS-23). Injetavel pelo
-  /// mesmo motivo das outras duas, com um agravante: dos cinco motivos de nao
-  /// haver ponto, **quatro** so acontecem em aparelho (permissao recusada,
-  /// recusada em definitivo, servico desligado, GPS que nao fixa). Sem a porta
-  /// nao haveria como exercitar nenhum deles, e o criterio 5 -- "o fluxo
-  /// inteiro funciona" -- ficaria sustentado por uma frase.
+  /// A fronteira com a localizacao do aparelho (BICHUS-23).
   final Localizacao localizacao;
 
   /// O QUE O APARELHO JA DISSE, compartilhado por TODAS as secoes.
-  ///
-  /// Decisao do cliente, 22/10/2026: *"quando o usuario autorizar a
-  /// localizacao, em qualquer uma das paginas, voce deve utilizar ela para
-  /// todas as secoes"*. Antes disto cada secao construia a sua propria
-  /// descoberta e guardava o resultado em si mesma -- medido: duas resolucoes
-  /// para andar `Rede` -> `Pets`, e a caixa do app voltando a aparecer na
-  /// segunda quando a tentativa dela falhava.
-  ///
-  /// Fica no escopo pelo motivo que a propria peca tem: e UMA por app, e e
-  /// isso que a faz valer para todas. Ver
-  /// `sessao/localizacao_da_sessao.dart`.
   final LocalizacaoDaSessao localizacaoDaSessao;
 
   final ControladorDeSessao sessao;
 
   /// A guarda de acao (UX 8.3): o envelope de intencao pendente e a execucao
-  /// dele depois do login. Fica no escopo porque quem precisa dela e a tela de
-  /// entrar, que nao pode monta-la: o envelope e um so no app inteiro, e duas
-  /// instancias sobre o mesmo arquivo perderiam uma da outra.
+  /// dele depois do login.
   final GuardaDeAcao guarda;
 
   /// O cache de leitura de `Perfil` › `Meus pets` (criterio 7 da BICHUS-62).
-  ///
-  /// Fica no escopo, e nao dentro da tela, porque ele precisa sobreviver a
-  /// tela ser descartada -- que e o caso comum: trocar de aba e voltar. Em
-  /// memoria e por dono; ver [CacheDeMeusPets].
   final CacheDeMeusPets cacheDeMeusPets;
 
   /// A ultima cidade escolhida na listagem publica de perdidos, **neste
   /// aparelho**.
-  ///
-  /// Fica no escopo, e nao dentro da tela, pelo mesmo motivo do
-  /// [cacheDeMeusPets] e por um a mais que e de TESTE: o deposito em arquivo
-  /// chama `getApplicationDocumentsDirectory()`, um canal de plataforma que
-  /// **trava o `pumpAndSettle` para sempre, sem mensagem**, em teste de widget.
-  /// E a mesma armadilha que `DepositoDeIntencaoEmArquivo` tem, e a saida e a
-  /// mesma: o objeto entra pela raiz, e o teste injeta um que responde.
-  ///
-  /// Uma tela que o construisse por conta travaria a suite inteira na secao em
-  /// que o aplicativo ABRE, e o sintoma -- `pumpAndSettle timed out` -- nao
-  /// aponta para a causa. Custou uma execucao travada para descobrir.
   final CidadeEscolhida cidadeEscolhida;
 
   /// Onde a imagem do QR da tag fica depois de baixada (BICHUS-229).
-  ///
-  /// Fica no escopo pelo mesmo motivo do [cacheDeMeusPets], com um agravante:
-  /// a limpeza dele precisa estar registrada em `limpezasAoSair`, e quem monta
-  /// essa lista e o `app.dart`. Um cofre criado dentro da tela seria outro
-  /// objeto, e o `sair()` limparia um cofre vazio enquanto o QR do tutor
-  /// anterior continuaria no cache global de imagem.
   final CofreDaImagemDoQr cofreDoQr;
 
   /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296), ou **nulo**.
-  ///
-  /// **Opcional e no fim da lista de proposito.** O cabecalho da rota do perfil
-  /// de pessoa, em `roteamento/rotas.dart`, deixou a condicao escrita: campo
-  /// NOVO e obrigatorio aqui "quebraria toda tela de teste que o constroi". Com
-  /// nulo nao ha nada a esquecer, e nenhum dos arquivos de teste que existiam
-  /// mudou.
-  ///
-  /// Quem DESENHA imagem nao o le por aqui -- le o
-  /// `CacheDeImagensDoAplicativo`, que e um `InheritedWidget` proprio em
-  /// `widgets/imagem_em_cache.dart`, pelo motivo escrito la: `ImagemDaRede` e
-  /// montada isoladamente por varias telas em teste, e exigir a raiz do
-  /// aplicativo para pintar uma foto seria o avesso.
-  ///
-  /// **Ele esta aqui por causa de uma coisa so: APAGAR.** Desfazer conexao e
-  /// bloquear precisam de `esquecerPessoa`, e quem os hospeda e a tela do
-  /// perfil de pessoa, que recebe suas portas pela rota -- e a rota le o
-  /// `Escopo`. A limpeza do logout nao passa por aqui: ela esta em
-  /// `limpezasAoSair`, no `app.dart`.
   final CacheDeImagensNoAparelho? cacheDeImagens;
 
   /// O registro de dispensas do aviso persistente de cadastro (BICHUS-75).
-  ///
-  /// Fica no escopo porque o aviso aparece em TRES lugares -- a faixa de
-  /// `Inicio`, o item do topo de `Perfil` e a linha do cartao de cada pet -- e
-  /// os tres precisam contar a MESMA dispensa. Duas instancias sobre o mesmo
-  /// arquivo perderiam uma da outra, e "dispensei uma vez" viraria "dispensei
-  /// em cada tela, separadamente": a faixa de `Inicio` encolheria e a de
-  /// `Perfil` continuaria cheia.
-  ///
-  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`, pelo motivo escrito
-  /// em [AvisoDeCadastro]: o que ele guarda e da CONTA.
   final AvisoDeCadastro avisoDeCadastro;
 
   /// O CONTADOR DE NAO LIDO que a barra de baixo pinta (20/10/2026).
-  ///
-  /// Fica no escopo, e nao dentro da casca, por tres razoes que sao a mesma:
-  /// o numero e da CONTA e nao da tela; quem o atualiza na abertura e na
-  /// retomada e o `app.dart`, que e outro lugar; e quem o derruba e a area de
-  /// mensagens, que e um ramo diferente da aba que o pinta. Duas instancias
-  /// perderiam uma da outra, e a aba continuaria acesa depois de a pessoa ler.
-  ///
-  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`: o que ele guarda e
-  /// da conta, e nao do aparelho.
   final ContadoresDeNaoLido contadores;
   /// O NUMERO DO SINO da barra de topo (19/10/2026).
-  ///
-  /// Fica no escopo, e nao dentro do sino, e o motivo e o arranjo da casca: os
-  /// ramos visitados ficam MONTADOS (`IndexedStack`), entao um sino que
-  /// buscasse por conta propria dispararia uma chamada por secao visitada --
-  /// cinco pedidos para desenhar um numero, com cinco respostas chegando fora
-  /// de ordem para o mesmo circulo.
-  ///
-  /// Um objeto so e tambem o que deixa a CAIXA de avisos derrubar o numero ao
-  /// abrir: com uma contagem por sino, ela nao teria a quem falar.
-  ///
-  /// A limpeza dele esta em `limpezasAoSair` e a busca em `aoEntrar`, as duas
-  /// no `app.dart`, pelo motivo de [avisoDeCadastro]: o que ele guarda e da
-  /// CONTA. A politica de atualizacao inteira esta escrita em
-  /// [ContadorDeAvisos].
   final ContadorDeAvisos contadorDeAvisos;
 
   static Escopo of(BuildContext context) {

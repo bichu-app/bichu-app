@@ -1,28 +1,4 @@
-/**
- * Rotas do cadastro do pet.
- *
- * O `operationId` de cada rota é o mesmo do contrato, e `effects`/`rateLimit`
- * **espelham** `api/openapi.yaml` — rota com efeito e sem teto não compila
- * (`shared/http/route-definition.ts`).
- *
- * Dois pontos desta fiação que não são detalhe:
- *
- * - **O corpo é validado pelo schema da própria especificação.** OpenAPI 3.1 é
- *   JSON Schema, e o Fastify valida com JSON Schema: escrever validação à mão
- *   em paralelo criaria a segunda definição, que diverge na primeira mudança.
- * - **`createPet` passa por `executarComIdempotencia`.** O contrato declara
- *   `Idempotency-Key` na operação, e o portão de subida derruba a aplicação se
- *   a rota registrada divergir do contrato — nos dois sentidos. Foi ele que
- *   pegou esta rota na primeira subida: eu a registrei sem a máquina, e o
- *   serviço se recusou a subir em vez de aceitar cadastro duplicado da fila
- *   offline de um cliente sem rede. O defeito que ele evita é caro e silencioso:
- *   o reenvio criaria um SEGUNDO pet, com outro id, e o tutor veria o animal
- *   duplicado sem entender por quê.
- * - **A resposta é montada campo a campo, e não por espalhamento do objeto do
- *   domínio.** `PetGravado` carrega `careNotesRedactions` e, amanhã, o que mais
- *   o domínio precisar; um `...pet` publicaria cada campo novo por omissão. A
- *   lista explícita faz a decisão de expor ser sempre uma decisão.
- */
+/** Rotas do cadastro do pet. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -74,9 +50,6 @@ export const rotaDeExclusaoDoPet = defineRoute({
   operationId: 'deletePet',
   method: 'delete',
   path: '/pets/:petId',
-  // Some da conta, das listas e do perfil público, e não há desfazer pela
-  // interface. O registro continua existindo para a trilha (exclusão lógica),
-  // e é por isso que o efeito declarado é `irreversible_write` e não `deletes`.
   effects: ['irreversible_write'],
   rateLimit: [{ dimension: ['account'], limit: 10, window: '24h', onExceed: 'deny_429' }],
 });
@@ -137,18 +110,7 @@ function comoEntrada(corpo: CorpoDoPet): EntradaDoPet {
   };
 }
 
-/**
- * A visão do dono, campo a campo.
- *
- * `open_case_id` sai nulo porque `lostfound` não existe nesta entrega. Ausência
- * é o valor verdadeiro; um identificador de caso inventado seria uma promessa
- * que o cliente descobre quebrada na tela.
- *
- * `photos` traz o ESTADO de cada foto, e não só as prontas. É o que sustenta o
- * cartão do pet dizendo "enviando" em vez de mostrar um espaço vazio que o
- * tutor não sabe se é erro dele: uma foto `processing` existe, aparece na lista
- * e tem as duas URLs nulas.
- */
+/** A visão do dono, campo a campo. */
 function comoRespostaDoPet(
   pet: PetGravado,
   fotos: readonly FotoResumida[],
@@ -190,9 +152,8 @@ function comoRespostaDoPet(
 }
 
 /**
- * MEMOIZADA por requisição: o teto por `account` precisa do dono antes do
- * handler, e o handler precisa do mesmo dono. Sem a memória, toda rota de pet
- * passaria a verificar o token e a ler `users` duas vezes.
+ * MEMOIZADA por requisição: o teto por `account` precisa do dono antes do handler,
+ * e o handler precisa do mesmo dono.
  */
 function donoAutenticado(
   request: FastifyRequest,
@@ -238,9 +199,6 @@ export function registrarRotasDePets(
   registrarRota(app, rotaDeListagemDePets, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const pets = await deps.pets.listar(chamador);
-    // UMA consulta para as fotos de todos os pets: a lista do tutor é a tela
-    // inicial do app, e uma leitura por pet aqui seria N+1 no caminho mais
-    // percorrido do produto.
     const fotos = await deps.fotos.porPets(pets.map((p) => p.id));
     return reply.status(200).send({
       items: pets.map((p) => comoRespostaDoPet(p, fotos.get(p.id) ?? [])),
@@ -253,9 +211,6 @@ export function registrarRotasDePets(
     {
       schema: { body: corpoDe(deps.contrato, rotaDeCadastroDePet.operationId) },
       resolvedores: { account: (request) => contaDoTeto(request, deps) },
-      // A marca que o portão de subida confere contra o contrato. Ela não faz a
-      // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
-      // ela faz a divergência entre os dois ser impossível de passar batida.
       config: { idempotencia: true },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -267,21 +222,14 @@ export function registrarRotasDePets(
         {
           exigencia: exigenciaDeIdempotencia(deps.contrato, rotaDeCadastroDePet.operationId),
           chaveDoCabecalho: request.headers['idempotency-key'],
-          // Sempre há conta aqui: `donoAutenticado` já recusou quem não tem. A
-          // chave é escopada pelo tutor, então a chave de um não devolve nunca
-          // o pet de outro.
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeCadastroDePet.method.toUpperCase()} ${rotaDeCadastroDePet.path}`,
-          // `/pets` nao tem parametro de caminho, e `{}` aqui e o fato, nao
-          // omissao: `corpoCanonicoDoPedido` so exige valor para o que o molde
-          // da rota declara.
           parametrosDeCaminho: {},
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },
         async () => ({
           status: 201,
-          // Pet recém-criado não tem foto, e `[]` aqui é o fato, não um atalho.
           body: comoRespostaDoPet(await deps.pets.criar(comoEntrada(corpo), chamador), []),
         }),
       );
@@ -308,10 +256,6 @@ export function registrarRotasDePets(
       const chamador = await donoAutenticado(request, deps);
       const petId = petIdDoCaminho(request);
 
-      // `PATCH` sobre o cadastro inteiro: o corpo parcial é fundido com o que
-      // já está gravado, e a fusão acontece DEPOIS da leitura autorizada — ler
-      // primeiro é o que garante que editar pet alheio responda 404 sem nunca
-      // ter chegado perto de uma escrita.
       const atual = await deps.pets.buscar(petId, chamador);
       const parcial = request.body as Partial<CorpoDoPet>;
       const fundido = comoEntrada({ ...comoCorpo(atual), ...parcial });

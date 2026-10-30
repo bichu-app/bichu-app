@@ -1,33 +1,6 @@
 /**
  * As ISCAS do perfil de outra pessoa, medidas no CASO DE USO e na PROJEÇÃO do
  * corpo — **as duas**, e não uma.
- *
- * ## Por que o corpo é medido aqui
- *
- * **Nenhum portão deste repositório confere o CORPO da resposta**: o Fastify
- * valida o corpo da REQUISIÇÃO contra o contrato, e a saída não passa por
- * validação nenhuma. Então um campo a mais no corpo não é pego por portão de
- * contrato, por `tsc` nem por lint — só por um caso que leia o objeto que a
- * borda envia. É `comoResposta` que este arquivo chama, e é por isso que ela é
- * exportada.
- *
- ## O que é dublado, e o que NÃO é
- *
- * `LeitorDeConexao` é dublado **pela porta**, e não por `conexoesEmMemoria`: a
- * fronteira da arquitetura corta em `connections/ports/`, e montar a bancada da
- * fatia F aqui seria `people` importando `connections/adapters/` — que o
- * `eslint` desta casa reprova, com razão. **O que aquela bancada provaria mora
- * onde ela pode morar**: `connections/application/leitor-de-conexao.test.ts`
- * mede, com `estadoNoApp` de verdade, que pendente expirado e recusa em
- * descanso devolvem `undefined`. Aqui se mede o RECORTE do perfil a partir do
- * estado, que é o que esta fatia decide.
- *
- * `PerfilDePessoaRepository` é dublado **generoso de propósito**: ele devolve
- * fotos para QUALQUER chamada de `vitrineDeConexao`, ignorando o par. É isso
- * que faz a isca (a) ter o que medir — se o dublê recusasse por conta própria,
- * o caso passaria mesmo com o recorte do caso de uso desligado, que é a
- * definição de portão cego. O predicado de verdade mora no `WHERE`, e quem o
- * mede é `autorizacao-na-clausula-where.test.ts`, ao lado.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -49,10 +22,7 @@ const MARINA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 const BASE_DE_MIDIA = 'https://midia.exemplo/derivadas' as AbsoluteUrl;
 
-/**
- * O nome do pet e a chave da foto dele existem SÓ aqui, como literais de
- * controle. Se algum dos dois aparecer na resposta, a isca (c) acusa pelo texto.
- */
+/** O nome do pet e a chave da foto dele existem SÓ aqui, como literais de controle. */
 const NOME_DO_PET = 'Bidu-o-terceiro';
 
 const MARINA_VISIVEL: PessoaVisivel = {
@@ -65,14 +35,8 @@ const MARINA_VISIVEL: PessoaVisivel = {
 };
 
 /**
- * `comoObjectKey` e nao `as ObjectKey`: a marca sai da PORTA de `media`, e o
- * `as` seria a documentacao falsa que a regra `marca-so-pela-porta` recusa.
- *
- * **As chaves tem a forma REAL da derivada publica** (`people/{thumb|card}/…`),
- * e nao um texto inventado: `comoObjectKey` RECUSA forma que este sistema nao
- * escreve, e a primeira versao deste arquivo morreu na importacao com
- * "Chave de objeto recusada" por usar `people/thumb/um.jpg`. Dublê com forma
- * invalida nao prova nada sobre a URL que a borda monta.
+ * `comoObjectKey` e nao `as ObjectKey`: a marca sai da PORTA de `media`, e o `as`
+ * seria a documentacao falsa que a regra `marca-so-pela-porta` recusa.
  */
 const TRES_FOTOS: readonly FotoDoPerfilDeOutraPessoa[] = [
   {
@@ -94,7 +58,7 @@ const TRES_FOTOS: readonly FotoDoPerfilDeOutraPessoa[] = [
 
 interface Bancada {
   readonly servico: PerfilDePessoa;
-  /** Quantas vezes o caso de uso PEDIU a vitrine. Zero é o que a isca (a) cobra. */
+  /** Quantas vezes o caso de uso PEDIU a vitrine. */
   readonly pedidosDeVitrine: { total: number };
   /** Quantas vezes o caso de uso perguntou a aresta. */
   readonly perguntasDeAresta: { total: number };
@@ -103,8 +67,8 @@ interface Bancada {
 /**
  * `null` e nao `undefined` para "pessoa invisivel", e a escolha nao e estilo:
  * passar `undefined` a um parametro com valor padrao USA O PADRAO, e a primeira
- * versao deste arquivo fez exatamente isso -- a isca (d) media uma bancada em
- * que a pessoa estava visivel e passava vacuamente. `null` nao e substituido.
+ * versao deste arquivo fez exatamente isso -- a isca (d) media uma bancada em que
+ * a pessoa estava visivel e passava vacuamente.
  */
 function bancada(
   pessoa: PessoaVisivel | null = MARINA_VISIVEL,
@@ -114,9 +78,6 @@ function bancada(
   const pedidosDeVitrine = { total: 0 };
   const perguntasDeAresta = { total: 0 };
 
-  // A porta DUBLADA. O que ela devolve e o que a implementacao real devolveria;
-  // que ela devolve isso para cada estado e medido em
-  // `connections/application/leitor-de-conexao.test.ts`.
   const conexoes: LeitorDeConexao = {
     arestaVivaEntre: () => {
       perguntasDeAresta.total += 1;
@@ -124,11 +85,6 @@ function bancada(
     },
     contarConexoes: () => Promise.resolve(conexoesDaPessoa),
     estaConectado: () => Promise.resolve(aresta?.estado === 'connected'),
-    // **O perfil NAO pergunta estado em lote**, e o dublê o declara levantando:
-    // a porta ganhou `estadosPorApelido` em 22/10/2026 para a BUSCA. Responder
-    // em silencio aqui deixaria passar um perfil que o chamasse -- e o contador
-    // `perguntasDeAresta` deste arquivo, que mede UMA pergunta por tela,
-    // continuaria em um.
     estadosPorApelido: () => {
       throw new Error('o perfil de UMA pessoa nao pergunta estado em lote');
     },
@@ -137,7 +93,6 @@ function bancada(
   const perfis: PerfilDePessoaRepository = {
     perfilPorApelido: (apelido: string) =>
       Promise.resolve(pessoa !== null && apelido === pessoa.handle ? pessoa : undefined),
-    // **GENEROSO DE PROPÓSITO**: devolve foto para qualquer par. Ver o cabeçalho.
     vitrineDeConexao: () => {
       pedidosDeVitrine.total += 1;
       return Promise.resolve(TRES_FOTOS);
@@ -148,10 +103,6 @@ function bancada(
     servico: new PerfilDePessoa({
       perfis,
       conexoes,
-      // Este arquivo mede `porApelido`, que nao toca o convite. O dublê que
-      // nao resolve nada e o certo aqui: um que resolvesse faria estes casos
-      // dependerem de um caminho que eles nao exercitam. `porConvite` tem iscas
-      // proprias em `convite-resolve-no-mesmo-perfil.test.ts`.
       convites: { resolver: () => Promise.resolve(undefined) },
       clock: { now: () => AGORA },
     }),
@@ -179,9 +130,6 @@ async function erroDe(acao: () => Promise<unknown>): Promise<unknown> {
 }
 
 void describe('o perfil de outra pessoa (fatia G)', () => {
-  // ------------------------------------------------------------------
-  // ISCA (a): A VITRINE NÃO SAI PARA QUEM NÃO É CONEXÃO
-  // ------------------------------------------------------------------
 
   void it('ISCA (a) -- nao-conexao NAO recebe foto da vitrine', async () => {
     const b = bancada();
@@ -192,9 +140,7 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
       !Object.hasOwn(corpo, 'showcase'),
       '`showcase` saiu no corpo de quem nao e conexao: a decisao do cliente de 19/10/2026 nega as fotos publicadas a essa pessoa',
     );
-    // A chave é OMITIDA e não `[]`: lista vazia afirmaria "ela não tem foto".
     assert.doesNotMatch(await textoDoCorpo(b), /grid_url|open_url|people\/thumb/);
-    // E a consulta não aconteceu: o recorte é do caso de uso, antes do banco.
     assert.equal(b.pedidosDeVitrine.total, 0, 'a vitrine foi CONSULTADA para quem nao e conexao');
   });
 
@@ -217,11 +163,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('ISCA (a) -- aresta que nao se projeta cai para `none` e a vitrine continua fora', async () => {
-    // `undefined` da porta funde "nunca houve nada", "pendente expirado" e
-    // "recusa em descanso" -- e QUE ela funda os tres e medido em
-    // `connections/application/leitor-de-conexao.test.ts`, onde `estadoNoApp` e
-    // exercitado de verdade. Aqui se mede o que o perfil faz com o `undefined`:
-    // `none`, `connection_ref` nulo e nenhuma consulta de vitrine.
     const b = bancada(MARINA_VISIVEL, undefined);
     const corpo = await corpoDe(b);
 
@@ -232,9 +173,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('CONTRAPESO (a) -- a vitrine SAI para conexao ACEITA, com as duas derivadas', async () => {
-    // Sem este caso, todos os de cima passariam num mundo em que a vitrine nunca
-    // sai para ninguem -- que e a forma mais facil de um teste de omissao ficar
-    // verde sem ter medido nada.
     const b = bancada(MARINA_VISIVEL, { estado: 'connected', ref: 'ref-da-aresta-0001' });
     const corpo = await corpoDe(b);
 
@@ -257,10 +195,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
       );
     }
   });
-
-  // ------------------------------------------------------------------
-  // ISCA (b): NADA DE TIMELINE OU PUBLICAÇÃO
-  // ------------------------------------------------------------------
 
   void it('ISCA (b) -- nao-conexao NAO recebe timeline nem publicacao', async () => {
     const corpo = await corpoDe(bancada());
@@ -293,17 +227,11 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('CONTRAPESO (b) -- o corpo NAO esta vazio: as tres coisas que o cliente liberou estao la', async () => {
-    // Sem este caso, a isca (b) passaria num corpo `{}` -- o rotulo de semantica
-    // VAZIO que ja enganou este repositorio, na forma de `isNot(contains())`.
     const corpo = await corpoDe(bancada());
     assert.equal(corpo['display_name'], 'Marina');
     assert.equal(corpo['pets_count'], 3);
     assert.equal(corpo['connections_count'], 0);
   });
-
-  // ------------------------------------------------------------------
-  // ISCA (c): PET É CONTAGEM, E SÓ CONTAGEM
-  // ------------------------------------------------------------------
 
   void it('ISCA (c) -- nao-conexao recebe a CONTAGEM de pets, e nunca nome nem miniatura', async () => {
     const b = bancada();
@@ -321,7 +249,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
         `\`${proibido}\` e agrupamento NAVEGAVEL de pets, e e isso que o item 7 proibe`,
       );
     }
-    // `pets_count` é a ÚNICA chave que fala de pet, e o nome dela diz contagem.
     const quFalamDePet = Object.keys(corpo).filter((chave) => chave.includes('pet'));
     assert.deepEqual(quFalamDePet, ['pets_count']);
   });
@@ -337,16 +264,11 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('ISCA (c) -- o corpo inteiro tem a lista FECHADA de chaves do contrato', async () => {
-    // Ancora no CONJUNTO e nao em "nao contem X": lista de proibidos falha
-    // exatamente no item que ninguem previu, e falha para verde.
     assert.deepEqual((await corpoDe(bancada())).constructor, Object);
     assert.deepEqual(Object.keys(await corpoDe(bancada())).sort(), [
       'connection_ref',
       'connection_state',
       'connections_count',
-      // O SELO DE VALIDADO, pela emenda do ADR-0010 de 21/10/2026. **Fora do
-      // bloco condicional da vitrine**: ele sai nos QUATRO estados de conexao,
-      // e por isso aparece nesta lista -- que e a do estado `none`.
       'contact_channel_verified',
       'display_name',
       'handle',
@@ -356,11 +278,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('EMENDA 21/10 -- o SELO DE VALIDADO sai nos QUATRO estados de conexao', async () => {
-    // **O selo nao e condicionado ao aceite, e a vitrine e** -- a diferenca tem
-    // razao: a vitrine e conteudo que a pessoa publicou para quem ela aceitou, e
-    // o selo e atributo da conta que vale igual para quem chega pelo apelido.
-    // Condiciona-lo faria a mesma conta aparecer validada numa tela e nao na
-    // outra, que e a divergencia que a regua unica existe para impedir.
     for (const aresta of [
       undefined,
       { estado: 'pending_sent' as const, ref: 'ref-da-aresta-0001' },
@@ -377,13 +294,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('EMENDA 21/10 -- conta SEM canal confirmado sai com o selo `false`, e nao ausente', async () => {
-    // **`false` e nao chave ausente**: `contact_channel_verified` e OBRIGATORIO
-    // no contrato, e `undefined` no aplicativo nao e "nao validado" -- e "nao
-    // sei", que e o estado que esta pergunta nao tem.
-    //
-    // E `false` NAO desenha um selo apagado na tela: um selo cinza ao lado do
-    // nome diria "esta conta foi reprovada", e o que `false` significa e que
-    // ninguem conferiu nada.
     const corpo = await corpoDe(bancada({ ...MARINA_VISIVEL, canalVerificado: false }));
     assert.ok(Object.hasOwn(corpo, 'contact_channel_verified'));
     assert.equal(corpo['contact_channel_verified'], false);
@@ -441,14 +351,7 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
     assert.match(String((await corpoDe(bancada()))['public_ref']), /^[A-Za-z0-9_-]{22}$/);
   });
 
-  // ------------------------------------------------------------------
-  // ISCA (d): 404, NUNCA 403
-  // ------------------------------------------------------------------
-
   void it('ISCA (d) -- perfil inexistente e perfil invisivel respondem 404 e nunca 403', async () => {
-    // O repositório funde os seis motivos em `undefined` (é o `WHERE`, medido em
-    // `autorizacao-na-clausula-where.test.ts`). O que ESTE caso prova é que o
-    // caso de uso não tem um segundo ramo que escolha outro código.
     const invisivel = bancada(null);
 
     const erro = await erroDe(() => invisivel.servico.porApelido(QUEM_OLHA, 'nao-existe-aqui'));
@@ -456,9 +359,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
     assert.equal(erro.status, 404);
     assert.notEqual(erro.status, 403, '403 contaria que existe algo ali e que alguem decidiu barrar');
 
-    // E o apelido CERTO, numa bancada em que a pessoa não é visível, dá o mesmo
-    // 404: é a prova de que a borda não distingue "não existe" de "não é para
-    // você".
     const outro = await erroDe(() => invisivel.servico.porApelido(QUEM_OLHA, 'marina-vet'));
     assert.ok(outro instanceof AppError);
     assert.equal(outro.status, 404);
@@ -470,8 +370,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('ISCA (d) -- `porApelido` nao consulta NADA depois do 404', async () => {
-    // Trabalho a mais depois da recusa é tempo de resposta que varia conforme o
-    // motivo, e o ADR-0021 proíbe vazar existência por tempo também.
     const invisivel = bancada(null);
     await erroDe(() => invisivel.servico.porApelido(QUEM_OLHA, 'marina-vet'));
     assert.equal(invisivel.pedidosDeVitrine.total, 0);
@@ -479,15 +377,9 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('CONTRAPESO (d) -- a MESMA bancada responde 200 quando a pessoa e visivel', async () => {
-    // Sem ele, a isca (d) passaria num mundo em que `porApelido` sempre levanta
-    // 404 -- e um 404 incondicional não é autorização, é a tela quebrada.
     const corpo = await corpoDe(bancada());
     assert.equal(corpo['handle'], 'marina-vet');
   });
-
-  // ------------------------------------------------------------------
-  // O ESTADO, E O `ref` DA ARESTA
-  // ------------------------------------------------------------------
 
   void it('o `ref` que sai e da ARESTA, e vem nulo quando nao ha aresta viva', async () => {
     const semAresta = await corpoDe(bancada());
@@ -503,11 +395,6 @@ void describe('o perfil de outra pessoa (fatia G)', () => {
   });
 
   void it('a aresta e perguntada UMA vez, e junto da contagem', async () => {
-    // Uma pergunta por leitura, e as duas em paralelo: o resumo nao atrasa a
-    // aresta e a aresta nao atrasa o resumo. (Conta desabilitada do outro lado
-    // tira o estado, e isso e medido onde o predicado mora:
-    // `connections/application/leitor-de-conexao.test.ts` e o `WHERE` da
-    // persistencia da fatia F.)
     const b = bancada(MARINA_VISIVEL, { estado: 'connected', ref: 'ref-da-aresta-0001' });
     await corpoDe(b);
     assert.equal(b.perguntasDeAresta.total, 1);

@@ -1,24 +1,6 @@
 /**
  * As rotas da escrita administrativa da `Rede` e da fila de pedidos, montadas
  * DENTRO da guarda do prefixo `/v1/admin`, sem banco (BICHUS-273 e BICHUS-292).
- *
- * A sessao e um duble da porta de identidade (o desenho de
- * `admin-store-routes.test.ts`); o caso de uso e o de verdade, sobre o
- * repositorio em memoria, que desfaz a transacao inteira quando a trilha falha.
- *
- * As iscas do briefing que moram aqui, cada uma com o caso que PRECISA
- * reprovar:
- *
- * - tutor recusado sem escrita (403, nada gravado, nenhuma linha de trilha);
- * - trilha que falha desfaz a escrita (o encontro nao existe depois);
- * - cancelar e remover sem reautenticacao recusados (401), e mover e mudar
- *   acesso tambem;
- * - aprovado -> recusado recusado (400 `request_not_pending`);
- * - leitura da fila sem registro na trilha reprova: a leitura grava a linha, e
- *   com a trilha fora do ar a fila NAO sai.
- *
- * A mesma matriz contra Postgres esta em
- * `tests/integration/escrita-administrativa-da-rede.test.ts`.
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
@@ -356,9 +338,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('ISCA do QA (bug 1): o filtro visibility de listAdminNetworkEvents NAO tem default no contrato', () => {
-    // O default de `NetworkEventVisibility` (public) e o de quem CRIA. Num
-    // parametro de filtro ele vira "so publicos" em todo cliente gerado do
-    // contrato, e o encontro privado some da lista do painel.
     const texto = readFileSync(resolve(process.cwd(), 'api/openapi.yaml'), 'utf8');
     const spec = parseYaml(texto) as {
       paths: Record<string, Record<string, { operationId?: string; parameters?: unknown[] }>>;
@@ -551,13 +530,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.equal(tirado.corpo['street_address'], null);
   });
 
-  // `instagram_url` na ENTRADA, e nao `instagram_handle`: a troca e de
-  // `2ffb605` (padrao do cliente de 17/10/2026, "todo campo de site/url, o
-  // usuario deve preencher completo o endereco completo, inclusive com o
-  // https"). O corpo deste caso ficou no desenho velho porque aquele commit
-  // registra "TESTES ESCRITOS E NAO RODADOS" e so tocou nos testes de dominio.
-  // A LEITURA nao mudou: `instagram_handle` e `instagram_url` continuam saindo
-  // os dois, a segunda montada de `INSTAGRAM_PROFILE_BASE_URL`.
   void it('links (01/10, 17/10): criar com link e a URL completa do perfil; o painel le o handle puro e a URL montada', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', {
       corpo: { ...PRACA, ticket_url: 'https://ingressos.exemplo.br/evento/1', instagram_url: 'https://www.instagram.com/Encontro.Dos_Caes/' },
@@ -571,13 +543,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
       [{ ticket_url: 'javascript:alert(1)' }, null],
       [{ ticket_url: 'http://ingressos.exemplo.br/evento/1' }, null],
       [{ ticket_url: 'https://203.0.113.10/ingresso' }, 'ticket_url_ip_literal'],
-      // Apelido cru RECUSADO (a mudanca de desenho de 17/10). O codigo aqui e
-      // `pattern`, e nao `instagram_url_not_https`: na borda, o `pattern` de
-      // `NetworkEventInstagramUrlInput` recusa antes de o corpo chegar ao
-      // dominio, e ele e estritamente mais apertado que a conferencia de
-      // dominio -- nada que `errosDoInstagram` recuse passa por ele. A FRASE
-      // que ensina a forma certa e medida onde ela nasce,
-      // em `escrita-do-encontro.test.ts`.
       [{ instagram_url: '@bichu-app' }, 'pattern'],
       [{ notes: 'Ingressos em https://ingressos.exemplo.br/evento/1' }, 'contact_or_payment_detected'],
     ] as const) {

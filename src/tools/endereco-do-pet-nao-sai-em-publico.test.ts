@@ -1,52 +1,6 @@
 /**
- * O ENDERECO DE ENTREGA DO PET NAO SAI EM SUPERFICIE PUBLICA, NAO APARECE EM
- * LISTA E NAO E LIDO POR OUTRA CONTA — medido no CONTRATO e na CONSULTA.
- *
- * ## A decisao que este arquivo protege
- *
- * O cliente pediu em **27/10/2026**: *"o endereco de entrega da plaquinha tem
- * que estar dentro do cadastro do pet"* e, com a decisao anterior dele posta na
- * mesa, *"endereco um por pet"*. Ela **supera** a de **21/10/2026** (*"um
- * endereco de entrega salvo na conta, reusado em todo pedido e editavel num
- * lugar so"*), que criou `user_delivery_addresses`.
- *
- * O que ele autorizou foi o endereco MUDAR DE DONO, e nao uma superficie nova
- * de dado pessoal. **Isto continua sendo a RESIDENCIA do usuario**, a mais
- * estreita das tres posturas de endereco deste produto — o irmao deste arquivo,
- * `endereco-guardado-nao-sai-em-publico.test.ts`, lista as tres.
- *
- * ## O QUE ESTE ARQUIVO MEDE, e o que o irmao dele ja media
- *
- * A varredura das operacoes alcancaveis **sem conta** contra os nove campos de
- * `DeliveryAddress` ja existe no irmao, e ela cobre o contrato INTEIRO — as
- * operacoes novas desta frente incluidas, porque ela parte das operacoes
- * publicas e nao de uma lista de rotas conhecidas. Repeti-la aqui seria uma
- * segunda redacao da mesma medida.
- *
- * O que ela **nao** cobre, e e por isso que este arquivo existe:
- *
- * 1. **`Pet` e `PetInput` nao carregam campo de endereco.** As duas sao
- *    projetadas com conta, entao a varredura publica nunca as visita — mas
- *    `Pet` sai em `listMyPets`, que e LISTA. O endereco dentro de `Pet` faria a
- *    residencia do tutor sair na abertura do aplicativo, multiplicada pelo
- *    numero de pets dele. O cabecalho da `20261020000016` fixou a regra
- *    inversa: *"quem quer o endereco faz JOIN, e quem nao faz nao o tem em
- *    maos"*;
- * 2. **as duas rotas novas exigem `bearerAuth` sem alternativa vazia**;
- * 3. **todo acesso a `pet_delivery_addresses` carrega o DONO DO PET e
- *    `deleted_at IS NULL` na mesma sentenca**;
- * 4. **as duas listas de colunas do repositorio nomeiam as mesmas nove.**
- *    `sql<LinhaDoEndereco>` e asserção e nao conferencia: acrescentar coluna a
- *    uma lista e esquecer a outra deixa o `tsc` verde e chega `undefined` em
- *    tempo de execucao.
- *
- * ## O CONTROLE POSITIVO E OBRIGATORIO em cada caso
- *
- * Uma varredura que nao acha nada e uma varredura cega saem com a mesma cor —
- * e e a regra do ADR-0027 item 12.12. Entao cada caso abaixo prova primeiro que
- * **enxerga** o campo onde ele esta, antes de afirmar que ele nao esta onde nao
- * deveria. Sem isso, renomear `DeliveryAddress` deixaria este arquivo verde e
- * cego para sempre.
+ * O ENDERECO DE ENTREGA DO PET NAO SAI EM SUPERFICIE PUBLICA, NAO APARECE EM LISTA
+ * E NAO E LIDO POR OUTRA CONTA — medido no CONTRATO e na CONSULTA.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -58,18 +12,10 @@ const CAMINHO_DO_REPOSITORIO =
   'src/modules/tags/adapters/persistence/kysely-endereco-do-pet.ts';
 const CAMINHO_DA_PORTA = 'src/modules/tags/ports/endereco-do-pet.ts';
 
-/** A tabela do endereco do pet. Uma constante porque os casos a procuram. */
+/** A tabela do endereco do pet. */
 const TABELA = 'pet_delivery_addresses';
 
-/**
- * Os NOVE campos do endereco, pelos nomes que o contrato usa. Lista FECHADA, e
- * a MESMA do irmao deste arquivo — de proposito: e o mesmo `DeliveryAddress`, e
- * uma segunda lista com outros nomes seria a segunda fonte para divergir.
- *
- * O caso `a lista dos nove campos e a de `DeliveryAddress`` compara esta lista
- * com as propriedades do schema e reprova quando elas divergem. Sem ele, um
- * decimo campo nasceria **fora** da varredura e vazaria sem nada ficar vermelho.
- */
+/** Os NOVE campos do endereco, pelos nomes que o contrato usa. */
 const CAMPOS_DO_ENDERECO = [
   'city',
   'complement',
@@ -135,9 +81,6 @@ function propriedadesDe(nome: string): readonly string[] {
 
 void describe('o endereço de entrega do pet não sai em público nem em lista', () => {
   void it('a lista dos nove campos é a de `DeliveryAddress`', () => {
-    // CONTROLE POSITIVO DE TUDO O QUE VEM ABAIXO. Se `DeliveryAddress` ganhar
-    // um décimo campo, ou for renomeado, este caso reprova — e sem ele os casos
-    // seguintes passariam medindo uma lista que não descreve mais o endereço.
     assert.deepEqual(
       propriedadesDe('DeliveryAddress'),
       [...CAMPOS_DO_ENDERECO],
@@ -149,9 +92,6 @@ void describe('o endereço de entrega do pet não sai em público nem em lista',
   void it('`Pet` e `PetInput` não carregam campo de endereço — `Pet` sai em lista', () => {
     for (const schema of ['Pet', 'PetInput']) {
       const propriedades = propriedadesDe(schema);
-      // CONTROLE POSITIVO: o caminhador enxerga ESTE schema. Sem isto, um
-      // `allOf` que ele não soubesse resolver devolveria lista vazia e o caso
-      // aprovaria qualquer coisa.
       assert.ok(
         propriedades.includes('name') && propriedades.includes('species'),
         `o caminhador não enxerga as propriedades de \`${schema}\`: não achou ` +
@@ -173,8 +113,6 @@ void describe('o endereço de entrega do pet não sai em público nem em lista',
 
   void it('as duas operações novas exigem `bearerAuth` sem alternativa vazia', () => {
     const achadas = operacoes();
-    // CONTROLE POSITIVO: as duas existem. Renomear uma operação não pode
-    // transformar este caso em aprovação por ausência.
     for (const operationId of OPERACOES_NOVAS) {
       const operacao = achadas.get(operationId);
       assert.ok(
@@ -200,11 +138,6 @@ void describe('o endereço de entrega do pet não sai em público nem em lista',
   });
 
   void it('`getPetDeliveryAddress` responde o alias ANULÁVEL, e declara 404', () => {
-    // Os dois vazios são diferentes e a tela os desenha diferente: `null` fala
-    // do ENDEREÇO (pet sem endereço, 200) e 404 fala do PET (não é seu, não
-    // existe, excluído — nunca 403, ADR-0021). Um `DeliveryAddress` não-anulável
-    // aqui faria o cliente gerado quebrar em TODO pet cadastrado depois da
-    // `20261027000001`.
     const bruto = readFileSync(CAMINHO_DA_SPEC, 'utf8');
     assert.match(
       bruto,
@@ -224,12 +157,7 @@ void describe('o endereço de entrega do pet não sai em público nem em lista',
 void describe('a consulta do endereço do pet carrega o dono e não lê em lista', () => {
   const repositorio = readFileSync(CAMINHO_DO_REPOSITORIO, 'utf8');
 
-  /**
-   * UMA FATIA POR SENTENÇA que vai ao banco. O corte é `.execute(deps.db)`, e
-   * o caso abaixo CONTA as fatias: corte no lugar errado produz fatia vazia, e
-   * portão que varre fatia vazia aprova tudo. Em 21/10/2026 um portão deste
-   * projeto cortou uma consulta no lugar errado e ficou cego para o resto.
-   */
+  /** UMA FATIA POR SENTENÇA que vai ao banco. */
   const fatias = repositorio.split('.execute(deps.db)').slice(0, -1);
 
   void it('o corte da consulta é onde eu digo que é, e nenhuma fatia é cega', () => {
@@ -271,16 +199,10 @@ void describe('a consulta do endereço do pet carrega o dono e não lê em lista
   });
 
   void it('nenhum acesso lê a tabela inteira nem pagina', () => {
-    // O texto é limpo de comentários antes de medir: este arquivo EXPLICA em
-    // prosa por que não há `SELECT *`, e um portão que mede a prosa em vez do
-    // código fica vermelho para sempre — ou verde para sempre, se alguém
-    // escrever o código dentro de um comentário.
     const semComentarios = repositorio
       .replace(/\/\*[\s\S]*?\*\//gu, ' ')
       .replace(/\/\/[^\n]*/gu, ' ');
 
-    // CONTROLE POSITIVO DA LIMPEZA: se ela comesse o código junto, tudo abaixo
-    // passaria por não ter sobrado nada para olhar.
     assert.ok(
       semComentarios.includes(`INSERT INTO ${TABELA}`),
       'a remoção de comentários comeu o código junto: o `INSERT INTO ' +
@@ -306,10 +228,6 @@ void describe('a consulta do endereço do pet carrega o dono e não lê em lista
   });
 
   void it('as duas listas de colunas nomeiam as mesmas nove', () => {
-    // `sql<LinhaDoEndereco>` é asserção e NÃO conferência. Acrescentar coluna a
-    // uma das listas e esquecer a outra deixa o `tsc` verde e faz o campo
-    // chegar `undefined` em tempo de execução — foi exatamente esse o defeito
-    // que a mescla de 18/10 produziu em `kysely-pedido-de-plaquinha.ts`.
     const colunasDe = (nome: string): readonly string[] => {
       const bloco = new RegExp(`const ${nome} = sql\`([^\`]*)\``, 'u').exec(repositorio);
       assert.ok(bloco !== null, `a lista \`${nome}\` não existe mais no repositório`);
@@ -321,8 +239,6 @@ void describe('a consulta do endereço do pet carrega o dono e não lê em lista
     };
     const comApelido = colunasDe('COLUNAS_DO_ENDERECO');
     const semApelido = colunasDe('COLUNAS_DO_ENDERECO_GRAVADO');
-    // CONTROLE POSITIVO: as duas têm nove nomes. Uma expressão regular que não
-    // casasse devolveria lista vazia, e `deepEqual([], [])` aprovaria.
     assert.equal(comApelido.length, 9, `\`COLUNAS_DO_ENDERECO\` tem ${comApelido.length} colunas`);
     assert.deepEqual(
       comApelido,
@@ -341,20 +257,10 @@ void describe('a consulta do endereço do pet carrega o dono e não lê em lista
   });
 
   void it('a porta não tem assinatura que leia pet de terceiro nem vários pets', () => {
-    // **O TEXTO É LIMPO DE COMENTÁRIO ANTES DE MEDIR, e a primeira versão deste
-    // caso reprovou por não fazer isso.** A porta EXPLICA em prosa por que não
-    // existe uma assinatura `doTutor(chamador): Promise<Endereco[]>` — e o
-    // portão leu a explicação como se fosse o código, exatamente o modo de
-    // falhar que o caso irmão em `endereco-guardado-nao-sai-em-publico.test.ts`
-    // já documenta: um portão que não descarta comentário mede a PROSA e não o
-    // CÓDIGO, e fica vermelho para sempre (ou verde para sempre, se alguém
-    // escrever o código dentro de um comentário).
     const porta = readFileSync(CAMINHO_DA_PORTA, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//gu, ' ')
       .replace(/\/\/[^\n]*/gu, ' ');
 
-    // CONTROLE POSITIVO DA LIMPEZA: se ela comesse o código junto, tudo abaixo
-    // passaria por não ter sobrado nada para olhar.
     assert.ok(
       porta.includes('EnderecoDoPetRepository'),
       'a remoção de comentários comeu o código junto: a interface não está mais ' +

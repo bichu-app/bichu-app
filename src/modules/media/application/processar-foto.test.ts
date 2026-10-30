@@ -1,14 +1,4 @@
-/**
- * O processamento da foto de pet, nas quatro decisões que entraram nesta
- * entrega.
- *
- * O que já era coberto em outro lugar não se repete aqui: a remoção de metadado
- * tem as três fixtures de `sharp-image-processor.test.ts` (GPS em EXIF, GPS em
- * XMP, IPTC), e as formas de chave têm `chave-de-objeto.test.ts`.
- *
- * **Escritos e não executados** nesta entrega: o cliente pediu para não rodar
- * suíte unitária nem de integração.
- */
+/** O processamento da foto de pet, nas quatro decisões que entraram nesta entrega. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -128,8 +118,6 @@ function montar(cenario: Cenario): {
 
 void describe('as derivadas vêm do PONTO ÚNICO, e não de números daqui', () => {
   void it('pede exatamente as derivadas que `DERIVADAS_DA_FOTO_DE_PET` declara', () => {
-    // Esta é a asserção que mantém a decisão num lugar só: acrescentar uma
-    // derivada ao ponto único passa a gerá-la, sem editar este caso de uso.
     const { deps, pedidos } = montar({});
     return processarFoto(deps, { photo_id: FOTO }).then(() => {
       assert.deepEqual(
@@ -151,8 +139,6 @@ void describe('as derivadas vêm do PONTO ÚNICO, e não de números daqui', () 
   });
 
   void it('sobe as duas ANTES de marcar `ready`', async () => {
-    // Na ordem inversa existiria uma janela em que a rota pública serviria o
-    // endereço de um objeto que ainda não está no balde.
     const { deps, eventos } = montar({});
     await processarFoto(deps, { photo_id: FOTO });
     const pronta = eventos.findIndex((e) => e.startsWith('pronta:'));
@@ -171,8 +157,6 @@ void describe('as derivadas vêm do PONTO ÚNICO, e não de números daqui', () 
   });
 
   void it('relata bytes e degrau de qualidade de cada derivada', async () => {
-    // É este número que responde "o teto do cliente está sendo respeitado?"
-    // sem ninguém abrir o balde para medir.
     const { deps } = montar({});
     const r = await processarFoto(deps, { photo_id: FOTO });
     assert.equal(r.tipo, 'pronta');
@@ -220,8 +204,6 @@ void describe('a dimensão mínima, que não existia', () => {
   });
 
   void it('a foto grande demais continua recebendo o motivo DELA', async () => {
-    // A ordem importa: o teto de megapixels é conferido na inspeção, antes da
-    // dimensão mínima, e uma foto de 56 MP não pode sair como "pequena demais".
     const { deps } = montar({ inspecao: 'imagem_grande_demais' });
     const r = await processarFoto(deps, { photo_id: FOTO });
     if (r.tipo !== 'recusada') return assert.fail('esperava recusa');
@@ -248,8 +230,6 @@ void describe('o motivo chega gravado, em texto para a tela', () => {
   }
 
   void it('o decodificador que desiste é recusa FINAL, e não exceção', async () => {
-    // É o caso do HEIC nesta instalação. Como exceção, a fila tentaria cinco
-    // vezes a mesma foto que nunca vai abrir.
     const { deps } = montar({ derivada: 'formato_nao_decodificavel' });
     const r = await processarFoto(deps, { photo_id: FOTO });
     assert.equal(r.tipo, 'recusada');

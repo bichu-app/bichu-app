@@ -1,9 +1,6 @@
 /**
  * `admin_sessions`, `admin_reauth_tokens` e `admin_session_alerts` em Postgres
  * (ADR-0027, apendice A.1 e item 20).
- *
- * As escritas usam a transacao recebida, e nunca abrem a propria: e a
- * transacao da escrita auditada, e o evento da trilha vai nela.
  */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { AdminAccountId, Instant } from '../../../../shared/types/brands.js';
@@ -12,14 +9,12 @@ import type {
   SessaoComConta,
 } from '../../ports/sessao-administrativa-repository.js';
 
-/** O teto de `user_agent` na migracao. Cortado aqui para o `CHECK` nunca derrubar um login. */
+/** O teto de `user_agent` na migracao. */
 const TAMANHO_MAXIMO_DO_USER_AGENT = 512;
 
 export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativaRepository {
   return {
     async contaParaAGuarda(tokenHash) {
-      // Uma consulta so, com a conta junto: a guarda le papel, estado e
-      // barreira NESTA requisicao (D37), e a sessao sem a conta nao decide nada.
       const linha = await db
         .selectFrom('admin_sessions as s')
         .innerJoin('admin_accounts as c', 'c.id', 's.admin_account_id')
@@ -72,8 +67,6 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
     },
 
     async renovarUso(id, agora, idleExpiresAt) {
-      // `revoked_at IS NULL` na clausula: a renovacao nunca ressuscita uma
-      // sessao revogada entre a leitura da guarda e esta escrita.
       await db
         .updateTable('admin_sessions')
         .set({ last_seen_at: new Date(agora), idle_expires_at: new Date(idleExpiresAt) })
@@ -136,9 +129,6 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
     },
 
     async consumirJanela(consumo) {
-      // Todas as amarras na MESMA clausula do UPDATE que consome (ADR-0021):
-      // ler e depois decidir deixaria duas requisicoes simultaneas gastarem a
-      // mesma janela.
       const linha = await db
         .updateTable('admin_reauth_tokens')
         .set({ consumed_at: new Date(consumo.agora) })

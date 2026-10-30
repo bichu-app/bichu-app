@@ -1,31 +1,4 @@
-/**
- * Le uma senha do terminal, sem eco, para um `Buffer` que quem chama zera.
- *
- * ## Por que nao `readline`
- *
- * `readline` devolve `string`, e string em JavaScript e imutavel: ela vive ate
- * o coletor passar, e ninguem consegue apaga-la. Aqui os bytes vao para um
- * `Buffer` alocado uma vez, os pedacos que o terminal entrega sao zerados assim
- * que copiados, e o que sai e um `Buffer` do tamanho exato que quem chama zera
- * com `fill(0)` quando termina. Nao e garantia absoluta (o hash precisa da
- * senha como string, ver `comando-conta-admin.ts`), e reduz a senha em memoria ao
- * minimo que a derivacao exige.
- *
- * ## Por que o modo cru
- *
- * Sem ele o terminal ecoa o que se digita antes de o processo ver o byte. Em
- * modo cru o eco e desligado pelo proprio terminal, e o processo trata Enter,
- * apagar e Ctrl-C sozinho. Nada e escrito de volta, nem asterisco: o tamanho
- * da senha tambem e informacao.
- *
- * ## Sem terminal, recusa
- *
- * Com `stdin` redirecionado (`echo senha | node ...`) a senha teria vindo de
- * arquivo ou de outro processo, que sao exatamente os canais que a regra
- * proibe. `exigirTerminal` recusa antes de qualquer pergunta.
- */
-
-/** A parte do `process.stdin` que este leitor usa. Existe para o teste. */
+/** A parte do `process.stdin` que este leitor usa. */
 export interface EntradaDeTerminal {
   readonly isTTY?: boolean | undefined;
   setRawMode?: ((modo: boolean) => unknown) | undefined;
@@ -78,11 +51,7 @@ export interface SenhaLida {
   readonly excedeu: boolean;
 }
 
-/**
- * Le ate Enter. Ctrl-C, e Ctrl-D com a linha vazia, interrompem. Apagar recua
- * um caractere inteiro de UTF-8, e nao um byte, para nao deixar meio caractere
- * no buffer. Sequencia de escape (setas) e descartada ate a letra final.
- */
+/** Le ate Enter. Ctrl-C, e Ctrl-D com a linha vazia, interrompem. */
 export function lerSenhaSemEco(
   entrada: EntradaDeTerminal,
   saida: SaidaDeTerminal,
@@ -118,7 +87,6 @@ export function lerSenhaSemEco(
       try {
         for (const byte of pedaco) {
           if (emEscape) {
-            // `ESC [ ... <letra>`: termina na primeira letra depois do colchete.
             if ((byte >= 0x40 && byte <= 0x7e && byte !== 0x5b)) emEscape = false;
             continue;
           }
@@ -131,7 +99,6 @@ export function lerSenhaSemEco(
             return;
           }
           if (byte === DEL || byte === BACKSPACE) {
-            // Recua sobre os bytes de continuacao (10xxxxxx) ate o inicio do caractere.
             while (tamanho > 0 && ((area[tamanho - 1] ?? 0) & 0xc0) === 0x80) {
               tamanho -= 1;
               area[tamanho] = 0;
@@ -155,14 +122,10 @@ export function lerSenhaSemEco(
           tamanho += 1;
         }
       } finally {
-        // O pedaco que o terminal entregou tambem carrega a senha.
         pedaco.fill(0);
       }
     };
 
-    // O modo cru liga ANTES do rotulo. Na ordem inversa, o que chega entre o
-    // rotulo e o modo cru (colar, digitar adiantado) passa pelo eco do
-    // terminal: medido num pty em 23/09, a segunda senha apareceu na saida.
     setRawMode.call(entrada, true);
     saida.write(rotulo);
     entrada.on('data', aoReceber);
@@ -174,10 +137,8 @@ export function lerSenhaSemEco(
 export const BYTES_MAXIMOS_DA_LINHA = 512;
 
 /**
- * Le uma linha COM eco, no modo normal do terminal (que ja entrega a linha
- * inteira depois do Enter). Serve ao que nao e segredo: o nome de quem roda e
- * a confirmacao. Tambem exige terminal, porque a confirmacao respondida por
- * `yes |` nao confirma nada.
+ * Le uma linha COM eco, no modo normal do terminal (que ja entrega a linha inteira
+ * depois do Enter).
  */
 export function lerLinhaComEco(
   entrada: EntradaDeTerminal,

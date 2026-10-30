@@ -1,33 +1,4 @@
-/**
- * A porta da escrita administrativa da `Loja` (ADR-0027 item 14).
- *
- * ## Toda escrita acontece dentro de `emTransacao`, e a trilha e o ULTIMO passo
- *
- * D49: a trilha grava na mesma transacao da mudanca, e a falha dela desfaz a
- * escrita. Por isso a trilha nao e uma dependencia separada do servico: ela e
- * um metodo da propria transacao (`registrarNaTrilha`), e nao ha como gravar
- * item fora de uma transacao que tambem tenha como gravar trilha.
- *
- * **Ultimo, e nao por estilo.** A gravacao da trilha assume o papel
- * `bichu_audit_writer` com `SET LOCAL ROLE`, e esse papel nao escreve em
- * `store_*`. Um `UPDATE` de item depois dela falharia por permissao. O servico
- * chama `registrarNaTrilha` depois da ultima escrita, e o adaptador documenta a
- * mesma coisa.
- *
- * ## A versao lida mora na clausula `WHERE`
- *
- * `atualizarParceiro` e `atualizarItem` recebem a versao que a pessoa leu e
- * devolvem `null` quando ela nao e mais a atual. Ler, comparar e depois gravar
- * deixaria dois administradores passarem pela comparacao ao mesmo tempo; com a
- * versao no `WHERE`, o banco serializa e o segundo encontra zero linhas
- * (ADR-0021 aplicado a concorrencia).
- *
- * ## O que esta porta NAO faz
- *
- * Nao le `users`, `user_roles`, `pets` nem conversa (D51). O "criado por conta
- * admin" do item 10 do ADR-0027 e garantido pelo unico caminho que cria
- * `kind = 'catalog_image'`, que passa pela guarda administrativa.
- */
+/** A porta da escrita administrativa da `Loja` (ADR-0027 item 14). */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type {
   ConfirmacaoDeCatalogo,
@@ -78,11 +49,7 @@ export interface RecorteDeItens {
   readonly tagSlug?: string | undefined;
   readonly priceStatus?: EstadoDoPreco | undefined;
   readonly sort: OrdemDoPainel;
-  /**
-   * `AAAA-MM-DD`: o corte do vencimento. Vem do relogio da aplicacao, e nao de
-   * `CURRENT_DATE`, para o filtro `vencido` concordar com o `price_status` que a
-   * mesma resposta calcula.
-   */
+  /** `AAAA-MM-DD`: o corte do vencimento. */
   readonly hoje: string;
   readonly page: number;
   readonly limit: number;
@@ -111,13 +78,16 @@ export interface MudancaDeTag {
 /** Uma posicao da galeria, como a escrita a grava. */
 export interface ImagemNaPosicao {
   readonly imageId: string;
-  /** O indice na lista que o painel mandou. `0` e a capa. */
+  /** O indice na lista que o painel mandou. */
   readonly position: number;
   /** `null` quando o painel nao escreveu descricao (opcional desde 17/10/2026). */
   readonly altText: string | null;
 }
 
-/** A tag referenciada por um item, pelo `slug`, resolvida para a identidade interna. */
+/**
+ * A tag referenciada por um item, pelo `slug`, resolvida para a identidade
+ * interna.
+ */
 export interface TagResolvida {
   readonly id: string;
   readonly slug: string;
@@ -154,40 +124,21 @@ export interface Preco {
 }
 
 /**
- * O item como nasce. **Nasce rascunho**, e desde 17/10/2026 o rascunho aceita
- * as quatro coisas que a publicacao exige em branco: `null` aqui e "a pessoa
- * ainda nao sabe", nao erro.
+ * O item como nasce. **Nasce rascunho**, e desde 17/10/2026 o rascunho aceita as
+ * quatro coisas que a publicacao exige em branco: `null` aqui e "a pessoa ainda
+ * nao sabe", nao erro.
  */
 export interface NovoItem {
   readonly id: string;
   readonly slug: string;
   readonly partnerId: string | null;
-  /**
-   * O host do parceiro, para o adaptador decidir se `target_host` fica nulo.
-   *
-   * Vem junto do `partnerId` e nao e relido do banco pelo adaptador: quem
-   * validou o destino (`errosDoDestino`) ja leu o parceiro, e uma segunda
-   * leitura abriria a janela em que o host muda entre a validacao e a gravacao
-   * -- o item gravaria `target_host` nulo contra um dominio que nao e mais o
-   * que foi conferido.
-   *
-   * `null` e o rascunho SEM parceiro (`20261017000002`): sem host nao ha
-   * endereco a compor, e `target_host` fica nulo junto.
-   */
+  /** O host do parceiro, para o adaptador decidir se `target_host` fica nulo. */
   readonly partnerHost: string | null;
   /** O minimo do rascunho. */
   readonly title: string;
   readonly summary: string | null;
   readonly category: CategoriaDaVitrine | null;
-  /**
-   * O segundo nivel. `null` grava item sem segundo nivel, que e estado valido.
-   *
-   * **Com `category` nula ele tem de ser nulo tambem**: a chave estrangeira
-   * composta e `MATCH SIMPLE` e nao cobraria o par, e quem recusa a
-   * subcategoria solta e o `CHECK
-   * store_items_subcategoria_exige_categoria`. A aplicacao recusa antes, com
-   * `subcategory_without_category`.
-   */
+  /** O segundo nivel. `null` grava item sem segundo nivel, que e estado valido. */
   readonly subcategory: SubcategoriaDaVitrine | null;
   readonly targetUrl: string | null;
   readonly preco: Preco | null;
@@ -195,36 +146,20 @@ export interface NovoItem {
   readonly agora: Instant;
 }
 
-/**
- * Ausente nao mexe; `null` LIMPA, no mesmo idioma que `preco` ja usava. Limpar
- * so cabe em rascunho: a publicacao recusa o conjunto incompleto, e o
- * `CHECK store_items_publicado_esta_completo` recusa o resto.
- */
+/** Ausente nao mexe; `null` LIMPA, no mesmo idioma que `preco` ja usava. */
 export interface MudancaDeItem {
   readonly slug?: string;
   readonly partnerId?: string | null;
   readonly title?: string;
   readonly summary?: string | null;
   readonly category?: CategoriaDaVitrine | null;
-  /**
-   * O segundo nivel. `null` tira a subcategoria; ausente nao mexe.
-   *
-   * **`undefined` e `null` sao coisas diferentes aqui**, e e por isso que o
-   * campo nao e so `SubcategoriaDaVitrine | null`: ausente preserva o que esta
-   * gravado, e `null` apaga. Colapsar os dois faria editar o titulo de um
-   * produto apagar a classificacao de segundo nivel dele.
-   */
+  /** O segundo nivel. `null` tira a subcategoria; ausente nao mexe. */
   readonly subcategory?: SubcategoriaDaVitrine | null;
   /**
-   * O destino novo. **Os dois campos andam juntos de proposito**: o adaptador
-   * grava `target_path` e `target_host` a partir dos dois, e um sem o outro
-   * gravaria o caminho novo sob o dominio antigo -- o link levaria a pessoa
-   * para o caminho certo no site errado. Dois campos opcionais soltos deixavam
-   * essa combinacao ser escrita sem erro de compilacao; um campo so nao deixa.
-   *
-   * `targetUrl: null` LIMPA o destino (so cabe em rascunho), e
-   * `partnerHost: null` e o item sem parceiro: os dois nulos gravam as duas
-   * colunas nulas, que e a verdade do rascunho.
+   * O destino novo. **Os dois campos andam juntos de proposito**: o adaptador grava
+   * `target_path` e `target_host` a partir dos dois, e um sem o outro gravaria o
+   * caminho novo sob o dominio antigo -- o link levaria a pessoa para o caminho
+   * certo no site errado.
    */
   readonly destino?: { readonly targetUrl: string | null; readonly partnerHost: string | null };
   /** `null` tira o preco. Ausente nao mexe. */
@@ -240,7 +175,7 @@ export interface TransacaoDoCatalogo {
   parceiroPorSlug(slug: string): Promise<ParceiroAdministrativo | null>;
   /** Lanca `SlugOcupado`. */
   inserirParceiro(novo: NovoParceiro): Promise<ParceiroAdministrativo>;
-  /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */
+  /** `null` quando `versaoLida` nao e mais a atual. */
   atualizarParceiro(
     id: string,
     versaoLida: number,
@@ -249,25 +184,14 @@ export interface TransacaoDoCatalogo {
   ): Promise<ParceiroAdministrativo | null>;
 
   itemPorSlug(slug: string): Promise<ItemAdministrativo | null>;
-  /**
-   * O que o vocabulario diz sobre um par `(categoria, subcategoria)`.
-   *
-   * Existe dentro da TRANSACAO, e nao numa porta de leitura separada com
-   * cache, de proposito: a resposta e usada para decidir uma GRAVACAO que a
-   * chave estrangeira do banco vai conferir de novo no mesmo instante. Uma
-   * leitura cacheada poderia aprovar uma subcategoria que outra migracao
-   * desativou, e a recusa voltaria como erro de integridade em vez de erro de
-   * campo.
-   *
-   * `subcategoria` nula pergunta so pela categoria.
-   */
+  /** O que o vocabulario diz sobre um par `(categoria, subcategoria)`. */
   conferirClassificacao(
     categoria: CategoriaDaVitrine,
     subcategoria: SubcategoriaDaVitrine | null,
   ): Promise<ClassificacaoDoVocabulario>;
   /** Lanca `SlugOcupado`. */
   inserirItem(novo: NovoItem): Promise<ItemAdministrativo>;
-  /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */
+  /** `null` quando `versaoLida` nao e mais a atual. */
   atualizarItem(
     id: string,
     versaoLida: number,
@@ -281,18 +205,15 @@ export interface TransacaoDoCatalogo {
   recarregarItem(id: string): Promise<ItemAdministrativo>;
   /** Substitui o conjunto inteiro de especies do item. */
   substituirEspecies(itemId: string, especies: readonly EspecieDoItem[]): Promise<void>;
-  /** As tags do vocabulario com estes `slug`s, ativas ou nao. As que nao existem ficam de fora. */
+  /** As tags do vocabulario com estes `slug`s, ativas ou nao. */
   tagsPorSlugs(slugs: readonly string[]): Promise<readonly TagResolvida[]>;
   /** Substitui o conjunto inteiro de tags do item. */
   substituirTags(itemId: string, tagIds: readonly string[]): Promise<void>;
-  /**
-   * Substitui a galeria inteira do item (`[]` tira todas). A unicidade de
-   * posicao e diferida, entao a nova ordem so e conferida no COMMIT.
-   */
+  /** Substitui a galeria inteira do item (`[]` tira todas). */
   substituirImagens(itemId: string, imagens: readonly ImagemNaPosicao[]): Promise<void>;
   /** O envio de imagem, com trava de linha. */
   envioDeCatalogo(uploadId: string): Promise<EnvioDeCatalogo | null>;
-  /** A que item uma imagem ja confirmada esta ligada. `null` se a nenhum. */
+  /** A que item uma imagem ja confirmada esta ligada. */
   itemDaImagem(imageId: string): Promise<string | null>;
   /** Imagem em `processing`, envio confirmado e trabalho enfileirado, juntos. */
   confirmarEnvioDeCatalogo(entrada: ConfirmacaoDeCatalogo): Promise<void>;
@@ -306,7 +227,7 @@ export interface TransacaoDoCatalogo {
   contarTagsAtivasComTrava(): Promise<number>;
   /** Lanca `SlugOcupado`. */
   inserirTag(nova: NovaTag): Promise<TagAdministrativa>;
-  /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */
+  /** `null` quando `versaoLida` nao e mais a atual. */
   atualizarTag(
     id: string,
     versaoLida: number,
@@ -314,7 +235,7 @@ export interface TransacaoDoCatalogo {
     agora: Instant,
   ): Promise<TagAdministrativa | null>;
 
-  /** O ULTIMO passo de toda escrita. Ver o cabecalho. */
+  /** O ULTIMO passo de toda escrita. */
   registrarNaTrilha(evento: AuditEvent): Promise<void>;
 }
 

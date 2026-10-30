@@ -1,29 +1,6 @@
 /**
- * As quatro rotas da conversa do achador sem conta, sobre um Fastify de
- * verdade, com o serviço de verdade e o contrato de verdade (BICHUS-41).
- *
- * ## A regra inviolável, e como este arquivo a cobra
- *
- * "Quem acha nunca vê telefone, endereço, e-mail nem id interno do tutor, e o
- * contato é sempre mediado." O repositório daqui é um dublê que **entrega
- * demais de propósito**: cada conversa e cada mensagem que ele devolve vêm com
- * e-mail, telefone, endereço e ids do tutor pendurados, como faria um adaptador
- * que selecionasse colunas a mais. Se o serviço ou a rota passarem a espalhar o
- * objeto em vez de montar a resposta campo a campo, o dado aparece no corpo e
- * os casos de "não vaza" reprovam. A mesma checagem procura QUALQUER UUID no
- * corpo, e não só os que o dublê conhece.
- *
- * ## O token nunca desce em claro
- *
- * O dublê registra todo argumento que recebe, e um caso confere que o token
- * apresentado não aparece em nenhum deles: o que chega à persistência é o
- * resumo.
- *
- * ## A segunda chave
- *
- * Um cenário faz o "banco" devolver a conversa para QUALQUER resumo (o banco
- * que compara errado). A rota precisa responder 403 mesmo assim, porque o
- * serviço compara o resumo gravado com o apresentado em tempo constante.
+ * As quatro rotas da conversa do achador sem conta, sobre um Fastify de verdade,
+ * com o serviço de verdade e o contrato de verdade (BICHUS-41).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -104,8 +81,8 @@ interface Bancada {
 }
 
 /**
- * A mensagem como um adaptador desatento a devolveria: com o id, a conta de
- * quem mandou e a chave do objeto. Nada disso pode chegar ao achador.
+ * A mensagem como um adaptador desatento a devolveria: com o id, a conta de quem
+ * mandou e a chave do objeto.
  */
 function mensagemComExtras(parcial: Partial<MensagemGravada>): MensagemGravada {
   return {
@@ -142,7 +119,6 @@ function bancada(cenario: Cenario = {}): Bancada {
     tokenExpiraEm:
       cenario.tokenVencidoPeloAviso === true ? new Date(AGORA - DIA) : new Date(AGORA + 29 * DIA),
     caso: cenario.caso ?? null,
-    // O que um adaptador que selecionasse colunas a mais traria junto.
     ...{
       tutorUserId: DO_TUTOR.userId,
       emailDoTutor: DO_TUTOR.email,
@@ -167,10 +143,6 @@ function bancada(cenario: Cenario = {}): Bancada {
   ];
 
   const repositorio: ConversationRepository = {
-    // BICHUS-278. Estas tres sao do lado COM CONTA, e as rotas do achador nao
-    // as chamam: o achador sem conta nao tem lista nem sino. Reprovam alto em
-    // vez de devolver zero -- um `0` calado aqui esconderia uma rota do achador
-    // que passasse a mexer na leitura do tutor, que seria defeito grave.
     contarParaOSino: () => {
       throw new Error('as rotas do achador nao contam o sino de ninguem');
     },
@@ -227,7 +199,6 @@ function bancada(cenario: Cenario = {}): Bancada {
       retencoes.push(motivo);
       return Promise.resolve();
     },
-    // O lado com conta não é exercido por estas rotas.
     abrirPorAviso: () => Promise.reject(new Error('fora desta bancada')),
     porAviso: () => Promise.reject(new Error('fora desta bancada')),
     listarDoChamador: () => Promise.reject(new Error('fora desta bancada')),
@@ -255,11 +226,6 @@ function bancada(cenario: Cenario = {}): Bancada {
   registrarRotasDoAchador(app, {
     conversas: new ConversaDoAchadorService({
       repositorio,
-      // BICHUS-35. A foto nao e exercida por esta bancada: ela mede as quatro
-      // rotas e a forma do corpo. Quem mede a foto do lado sem conta e
-      // `application/conversa-do-achador.test.ts`. O duble REJEITA em vez de
-      // devolver nulo -- um nulo faria um caso que passasse a anexar foto ficar
-      // verde medindo o caminho sem foto.
       fotos: {
         porUploadId: () => Promise.reject(new Error('fora desta bancada')),
         pelaReferenciaDoAchador: () => Promise.reject(new Error('fora desta bancada')),
@@ -273,16 +239,12 @@ function bancada(cenario: Cenario = {}): Bancada {
         },
       },
     }),
-    // O contrato DE VERDADE: é dele que sai o schema do corpo.
     contrato: carregarContrato('api/openapi.yaml'),
     idempotencia: {
       reservar: () => Promise.resolve(undefined),
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
-    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
-    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
-    // deixaria a isca da invariante verde com a chave do original gravada.
     assinarFoto: (chave: string) =>
       Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     clock,
@@ -360,13 +322,9 @@ function propriedadesDoContrato(nome: string): Set<string> {
 }
 
 /**
- * **A checagem de não-vazamento.** Reprova quando o corpo carrega qualquer dado
- * de contato do tutor, o sobrenome, qualquer UUID (conhecido ou não), ou uma
- * chave de identificador.
- *
- * `correlation_id` sai do corpo de problema antes da busca por UUID: é o
- * identificador da requisição (v4, aleatório), não um registro do banco, e o
- * contrato o declara em `Problem`.
+ * **A checagem de não-vazamento.** Reprova quando o corpo carrega qualquer dado de
+ * contato do tutor, o sobrenome, qualquer UUID (conhecido ou não), ou uma chave de
+ * identificador.
  */
 function exigirQueNaoVaza(resposta: Resposta, onde: string): void {
   const bruto = resposta.bruto;
@@ -471,8 +429,6 @@ void describe('o token, pelo que o CONTRATO declara (status e `type` lidos de ap
   void it('as quatro operações declaram FinderLinkInvalid e FinderAccessEnded nos status do contrato', () => {
     for (const operacao of OPERACOES) {
       assert.equal(respostaDeclarada(operacao.operationId, invalido.status), 'FinderLinkInvalid');
-      // `postFinderMessage` escreve o 410 na própria operação, porque ele cobre
-      // também a conversa bloqueada; as outras três apontam para a resposta.
       const doVencido = respostaDeclarada(operacao.operationId, vencido.status);
       if (operacao.operationId !== 'postFinderMessage') assert.equal(doVencido, 'FinderAccessEnded');
     }
@@ -483,8 +439,6 @@ void describe('o token, pelo que o CONTRATO declara (status e `type` lidos de ap
       { rotulo: 'ausente', token: null },
       { rotulo: 'malformado', token: 'curto' },
       { rotulo: 'desconhecido', token: OUTRO_TOKEN },
-      // O banco que compara errado devolve a conversa para o token de outra
-      // pessoa. A segunda chave, em tempo constante, é quem recusa.
       { rotulo: 'que não confere', token: OUTRO_TOKEN, cenario: { bancoSemFiltro: true } },
     ];
     const corpos = new Set<string>();
@@ -508,17 +462,12 @@ void describe('o token, pelo que o CONTRATO declara (status e `type` lidos de ap
   });
 
   void it('token vencido: FinderAccessEnded nas quatro, com corpo FIXO, sem o desfecho do caso', async () => {
-    // O link é um bearer e pode ter sido repassado. Um texto que diz "voltou
-    // para casa" num desfecho e outra coisa nos demais conta, por exclusão, o
-    // que aconteceu com o animal de outra pessoa.
     const desfechos = ['reunited', 'not_found', 'false_alarm'] as const;
     const corpos = new Set<string>();
     for (const operacao of OPERACOES) {
       for (const desfecho of desfechos) {
         const { app, gravadas, bloqueios, denuncias } = bancada({
           tokenVencidoPeloAviso: true,
-          // O desfecho pendurado como um adaptador desatento o traria: a porta
-          // não o declara, e a resposta não pode depender dele.
           caso: { aberto: false, encerradoEm: new Date(AGORA - 40 * DIA), ...{ desfecho } },
         });
         const resposta = await pedir(app, operacao.pedido);
@@ -608,24 +557,10 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
       assert.equal(gravadas.length, 0);
       corpos.push(`${String(resposta.corpo['title'])}|${String(resposta.corpo['detail'])}`);
     }
-    // Distinguir contaria a quem escreve que o tutor o bloqueou.
     assert.equal(corpos[0], corpos[1]);
   });
 
-  /**
-   * ISCA DO ENVIO TRAVADO, lado SEM CONTA (17/10).
-   *
-   * **Este é o lado que implementa o "não receber".** Quem desabilita a conta é
-   * o tutor; quem continuaria escrevendo é o achador, por token, sem login. Uma
-   * trava só no lado autenticado deixaria o buraco exatamente no caminho que não
-   * pede credencial -- e esse caminho é alcançável por qualquer um que tenha o
-   * link do e-mail.
-   *
-   * Isca a rodar (não rodada nesta branch): tirar `participanteDesabilitado` de
-   * `estadoDe` em `conversa-do-achador.ts` deve reprovar este caso, e os dois
-   * casos de `conversation-service.test.ts` continuariam verdes -- é por isso
-   * que ele existe aqui, e não por simetria.
-   */
+  /** ISCA DO ENVIO TRAVADO, lado SEM CONTA (17/10). */
   void it('ISCA: tutor desabilitado trava o envio do ACHADOR por token, 410', async () => {
     const { app, gravadas } = bancada({ tutorDesabilitado: true });
     const resposta = await pedir(app, {
@@ -634,9 +569,6 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
       corpo: { body: 'Oi' },
     });
     await app.close();
-    // 410 e não 403: a conversa EXISTE para quem apresenta o token, e o que
-    // mudou é o estado dela. E não 404: o ADR-0021 manda 404 para o que não deve
-    // existir, e esta conversa deve existir em modo leitura.
     assert.equal(resposta.status, 410);
     assert.equal(tipoDe(resposta.corpo), 'conversation-closed');
     assert.equal(
@@ -647,9 +579,6 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
   });
 
   void it('ISCA: o nome do tutor desabilitado NÃO sai na resposta do achador', async () => {
-    // Esta rota é `finderToken`, sem `bearerAuth`, e projeta o nome do tutor.
-    // Medido no inventário como a superfície por onde o nome de uma conta
-    // desabilitada chegaria a quem não tem conta nenhuma.
     const { app } = bancada({ tutorDesabilitado: true });
     const resposta = await pedir(app, { metodo: 'GET', url: '/finder/conversation' });
     await app.close();
@@ -662,8 +591,6 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
   });
 
   void it('INVARIANTE 1: a 201ª mensagem em 24 h é GRAVADA, e a conversa é retida em silêncio', async () => {
-    // `hold_for_review` não é recusa: nada que o achador manda ao tutor é
-    // descartado por limite. Recusar avisaria o golpista de que foi marcado.
     const { app, gravadas, retencoes } = bancada({ mensagensDoAchadorEm24h: 201 });
     const resposta = await pedir(app, {
       metodo: 'POST',
@@ -718,9 +645,6 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
       await pedir(app, { metodo: 'POST', url: '/finder/conversation/messages', corpo: { body: 'x' } });
     }
     await app.close();
-    // Mesmo contador, outro token: o balde é outro. O token é desconhecido
-    // desta bancada, então a resposta é a recusa de credencial do handler, e
-    // não um 429.
     const { app: outra } = bancada({ contador });
     const resposta = await pedir(outra, {
       metodo: 'POST',

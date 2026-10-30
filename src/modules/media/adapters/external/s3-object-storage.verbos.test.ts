@@ -1,15 +1,4 @@
-/**
- * Os verbos do armazenamento: `getSignedReadUrl`, `head`, `get`, `put`, `delete`.
- *
- * Eles não aparecem no caminho do usuário — quem os usa é o worker — e por isso
- * são exatamente o tipo de código que passa meses sem ninguém olhar. Um erro na
- * assinatura aqui não quebra nenhuma tela: quebra o processamento de foto, de
- * madrugada, num log que ninguém lê.
- *
- * O `fetch` é substituído por um dublê que **guarda o pedido**, porque o que se
- * verifica não é a resposta (ela é inventada aqui): é o que o adaptador
- * **enviou** — método, caminho, e os cabeçalhos assinados.
- */
+/** Os verbos do armazenamento: `getSignedReadUrl`, `head`, `get`, `put`, `delete`. */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';
@@ -73,9 +62,6 @@ void describe('getSignedReadUrl', () => {
   });
 
   void it('validade diferente produz assinatura diferente', async () => {
-    // Prova que a assinatura cobre os parâmetros, e não é um valor constante:
-    // sem isso, mudar a validade passaria despercebido e o armazenamento
-    // recusaria em produção por um motivo que ninguém liga à mudança.
     const a = new URL(await armazenamento.getSignedReadUrl('privado', CHAVE, 60));
     const b = new URL(await armazenamento.getSignedReadUrl('privado', CHAVE, 600));
     assert.notEqual(a.searchParams.get('X-Amz-Signature'), b.searchParams.get('X-Amz-Signature'));
@@ -103,8 +89,6 @@ void describe('head', () => {
   });
 
   void it('outro status vira erro: 503 não é "não existe"', async () => {
-    // Confundir os dois faria a confirmação recusar uma foto que chegou, só
-    // porque o armazenamento piscou.
     dublarFetch({ status: 503 });
     await assert.rejects(() => armazenamento.head('privado', CHAVE), /HEAD 503/);
   });
@@ -129,8 +113,6 @@ void describe('get e put — só o worker', () => {
 
     assert.equal(capturado?.metodo, 'PUT');
     assert.equal(capturado?.cabecalhos['content-type'], 'image/webp');
-    // O hash do conteúdo entra na assinatura: corpo trocado no caminho é
-    // recusado pelo armazenamento, e não aceito em silêncio.
     assert.match(capturado?.cabecalhos['x-amz-content-sha256'] ?? '', /^[0-9a-f]{64}$/);
   });
 
@@ -151,9 +133,6 @@ void describe('delete', () => {
   });
 
   void it('404 é SUCESSO: o estado desejado é "não existe"', async () => {
-    // A varredura de envios vencidos depende disto — o caso mais comum lá é
-    // justamente o objeto nunca ter chegado. Tratar ausência como erro
-    // deixaria a linha presa na fila para sempre.
     dublarFetch({ status: 404 });
     await assert.doesNotReject(() => armazenamento.delete('privado', CHAVE));
   });

@@ -4,13 +4,8 @@ import { useBlocker } from 'react-router';
 import { saidaDoPainel } from '../sessao/sessao.ts';
 import { Dialogo } from './Dialogo.tsx';
 
-/**
- * 3.15: formulario sujo pede confirmacao antes de sair (secao 25.5). Cobre a
- * navegacao do painel (link, voltar) e o fechamento da aba.
- */
+/** 3.15: formulario sujo pede confirmacao antes de sair (secao 25.5). */
 export function SairSemSalvar({ sujo, liberado }: { sujo: boolean; liberado: RefObject<boolean> }) {
-  // `liberado` e ref: quem acabou de salvar navega no mesmo tique, antes de o
-  // estado `sujo` chegar a este componente.
   const bloqueio = useBlocker(
     ({ currentLocation, nextLocation }) => sujo && !liberado.current && currentLocation.pathname !== nextLocation.pathname,
   );

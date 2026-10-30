@@ -1,24 +1,4 @@
-/**
- * Portão: o enum de erro do back-end não pode divergir de `x-problem-types`.
- *
- * A geração (`src/tools/gerar-tipos-de-problema.mjs`) resolve o caso em que
- * alguém roda o gerador. Ela **não** resolve o caso que custa caro: o contrato
- * muda e ninguém gera. Aí o arquivo versionado continua compilando, continua
- * parecendo certo, e responde com o status de ontem.
- *
- * Por isso este arquivo lê o contrato **de novo**, por conta própria, e compara
- * com a tabela que o código de fato usa. A releitura independente é a razão de
- * ele existir: um portão que reaproveitasse o leitor do gerador concordaria com
- * o gerador mesmo quando os dois estivessem errados.
- *
- * Três coisas que ele reprova, e a terceira é a que costuma faltar:
- *
- * 1. tipo no contrato que não está no código, e vice-versa;
- * 2. tipo cujo status difere entre os dois;
- * 3. **contrato sem `x-problem-types`**. Verificação que não consegue verificar
- *    precisa reprovar, nunca aprovar: uma lista ausente lida como "nenhuma
- *    divergência" seria confiança falsa, que é pior que nenhuma verificação.
- */
+/** Portão: o enum de erro do back-end não pode divergir de `x-problem-types`. */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import { STATUS_DO_PROBLEMA } from '../shared/types/generated/problem-types.js';
@@ -36,13 +16,7 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/**
- * Extrai `x-problem-types` da especificação já carregada.
- *
- * Lança quando a lista não existe, está vazia ou traz entrada malformada. Lançar
- * e não devolver lista vazia é deliberado: lista vazia comparada com um código
- * vazio daria "nenhuma divergência" para um contrato quebrado.
- */
+/** Extrai `x-problem-types` da especificação já carregada. */
 export function tabelaDoContrato(spec: unknown, origem: string): TabelaDeStatus {
   if (!ehObjeto(spec)) {
     throw new Error(`${origem} não é um documento YAML de mapa, então não há contrato para conferir.`);

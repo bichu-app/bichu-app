@@ -1,28 +1,6 @@
 /**
- * Os casos de uso da escrita administrativa da `Rede` (BICHUS-273 e
- * BICHUS-292; ADR-0027 itens 8, 12, 13 e 17).
- *
- * ## Regras que atravessam o arquivo
- *
- * - **Toda escrita grava a trilha, na mesma transacao, como ultimo passo**
- *   (D49). A falha dela desfaz a escrita.
- * - **A versao que a pessoa leu decide** (`If-Match`): ausente, 428 antes de
- *   qualquer leitura; diferente, 412, e nada e gravado.
- * - **Papel e reautenticacao nao sao daqui.** A guarda do prefixo decidiu o
- *   papel antes de o recurso ser lido, e a janela de reautenticacao de mover,
- *   mudar acesso, cancelar e remover e consumida pelo registro da rota antes
- *   de qualquer gancho dela (ADR-0027 item 7, D40).
- * - **O aviso aos administradores sai depois do `COMMIT`** (D52, D60), e a
- *   falha dele nao desfaz a escrita.
- * - **A coordenada nunca vai para a trilha**: ali vai `point_changed`.
- *
- * ## A fila de pedidos
- *
- * E a unica leitura de pessoa do backoffice (RA-01, D53 a D57). Toda leitura
- * grava `admin.network_join_request.listed` com os filtros e a quantidade,
- * nunca os nomes (D55), e o teto de 300 linhas por hora por conta e lido da
- * propria trilha, na mesma transacao (D56). Aprovar gera o push ao tutor, so
- * com o titulo, enfileirado na transacao da decisao; recusar nao avisa ninguem.
+ * Os casos de uso da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292;
+ * ADR-0027 itens 8, 12, 13 e 17).
  */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
@@ -80,26 +58,18 @@ import {
   type TransacaoDaRede,
 } from '../ports/rede-administrativa.js';
 
-/**
- * A descricao do encontro (`summary`, "Descricao" no painel). Era 180, o mesmo
- * numero de `store_items.summary`; passou a 200 a pedido do cliente (01/10). O
- * `CHECK` do banco foi alargado na `20261001000001`; a Loja continua em 180.
- */
+/** A descricao do encontro (`summary`, "Descricao" no painel). */
 export const TETO_DA_DESCRICAO = 200;
 
-/** Quem escreve, para a trilha. Nunca o e-mail. */
+/** Quem escreve, para a trilha. */
 export interface Autor {
-  /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
+  /** `admin_accounts.id` (ADR-0027 item 20). */
   readonly adminAccountId: AdminAccountId;
   /** Os 8 primeiros bytes, em hex, do hash da sessao (ADR-0027 item 8). */
   readonly sessao: string;
   readonly ip?: string | undefined;
   readonly correlationId?: string | undefined;
 }
-
-// ---------------------------------------------------------------------------
-// Corpos, como o contrato os declara
-// ---------------------------------------------------------------------------
 
 export interface LugarDoCorpo {
   readonly place_name: string;
@@ -113,12 +83,7 @@ export interface ImagemDoCorpo {
   readonly upload_id: string;
   /**
    * **OPCIONAL desde 21/10/2026** (decisao do cliente, dita duas vezes: "pode
-   * remover a descricao da imagem"). `alt_text` saiu do `required` de
-   * `CatalogImageInput`, que a `Rede` e a UNICA a usar.
-   *
-   * AUSENTE e diferente de VAZIO, e a distincao e a mesma da `Loja`
-   * (`catalogo-administrativo.ts`): ausente grava nulo; presente e vazio e
-   * `400` (`minLength: 2`), e o painel OMITE o campo em vez de mandar `""`.
+   * remover a descricao da imagem").
    */
   readonly alt_text?: string;
 }
@@ -143,7 +108,7 @@ export interface CorpoDeEncontro {
   readonly notes?: string;
   readonly street_address?: string;
   readonly ticket_url?: string;
-  /** A URL COMPLETA do perfil (padrao de 17/10). A coluna continua guardando o handle. */
+  /** A URL COMPLETA do perfil (padrao de 17/10). */
   readonly instagram_url?: string;
 }
 
@@ -169,7 +134,7 @@ export interface CorpoDeMudancaDeLugar {
   /**
    * O endereco por extenso. Muda SO por aqui, e nao pelo PATCH: mudar onde o
    * encontro acontece e T11, e esta rota exige reautenticacao, motivo e aviso a
-   * todos os administradores. `null` tira o endereco.
+   * todos os administradores.
    */
   readonly street_address?: string | null;
   readonly starts_at?: string;
@@ -206,15 +171,11 @@ export interface DependenciasDaRedeAdministrativa {
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly urlDeMidia: (chave: string) => string;
-  /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. Sem ela, `instagram_url` sai nula. */
+  /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. */
   readonly baseDoPerfilDoInstagram?: string | null;
   /** Log estruturado de ocorrencia: aviso que nao saiu, teto da fila estourado. */
   readonly registrarOcorrencia: (dados: Record<string, unknown>, mensagem: string) => void;
 }
-
-// ---------------------------------------------------------------------------
-// Erros
-// ---------------------------------------------------------------------------
 
 function slugOcupado(): AppError {
   return new AppError('slug-taken', 'Este endereço já está em uso');
@@ -246,10 +207,6 @@ async function comSlugLivre<T>(escrever: () => Promise<T>): Promise<T> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Conferencias de corpo
-// ---------------------------------------------------------------------------
-
 function errosDoLugar(lugar: LugarDoCorpo, prefixo = 'place'): ProblemFieldError[] {
   return [
     ...errosDeTexto(`${prefixo}.place_name`, lugar.place_name, 2, 80),
@@ -278,8 +235,6 @@ function errosDaGaleria(imagens: readonly ImagemDoCorpo[] | undefined): ProblemF
     erros.push({ field: 'images', code: 'duplicate_upload', message: 'A mesma imagem apareceu duas vezes.' });
   }
   imagens.forEach((imagem, n) => {
-    // Ausente e estado legitimo desde 21/10/2026; vazio continua `400`. Sem
-    // este desvio `errosDeTexto` cobraria o campo que o cliente mandou tirar.
     if (imagem.alt_text === undefined) return;
     erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
   });
@@ -301,18 +256,12 @@ function comoData(texto: string, campo: string): Date {
   return comoDataDoRelogio(instante as Instant);
 }
 
-// ---------------------------------------------------------------------------
-// Avisos (D52, D60)
-// ---------------------------------------------------------------------------
-
 function descreverLugar(lugar: Lugar): string {
   return `${lugar.placeName}, ${lugar.neighborhood}, ${lugar.city}/${lugar.state}`;
 }
 
 function descreverEntrada(e: EncontroAdministrativo['entrada']): string {
   if (e.tipo === 'free') return 'gratuito';
-  // `per_dog` e legado (aposentadoria registrada no ADR-0027 item 22): o
-  // painel o mostra como "por pet" e nao o oferece mais.
   const unidade: Record<UnidadeDoValor, string> = {
     per_dog: 'por pet',
     per_pet: 'por pet',
@@ -322,10 +271,6 @@ function descreverEntrada(e: EncontroAdministrativo['entrada']): string {
   };
   return `R$ ${(e.centavos / 100).toFixed(2).replace('.', ',')} ${unidade[e.unidade]}`;
 }
-
-// ---------------------------------------------------------------------------
-// Casos de uso
-// ---------------------------------------------------------------------------
 
 export class RedeAdministrativa {
   constructor(private readonly deps: DependenciasDaRedeAdministrativa) {}
@@ -371,8 +316,6 @@ export class RedeAdministrativa {
     }
   }
 
-  // ------------------------------------------------------------- leituras
-
   async listarEncontros(recorte: {
     q?: string | undefined;
     publicacao?: PublicacaoAdministrativa | undefined;
@@ -400,12 +343,9 @@ export class RedeAdministrativa {
     return this.escrito(encontro);
   }
 
-  // --------------------------------------------------------------- criar
-
   /**
-   * Criar e publicar (12.9): nasce `published`, `origin = admin`, e avisa todos
-   * os administradores (D52). O privado ganha `slug` aleatorio, e mandar um e
-   * recusado (12.10).
+   * Criar e publicar (12.9): nasce `published`, `origin = admin`, e avisa todos os
+   * administradores (D52).
    */
   async criarEncontro(autor: Autor, corpo: CorpoDeEncontro): Promise<Escrito<EncontroAdministrativoProjetado>> {
     const agora = this.agora();
@@ -441,9 +381,6 @@ export class RedeAdministrativa {
       const inserir = (slug: string) =>
         tx.inserirEncontro({
           id,
-          // A autoria do painel, carimbada na mesma transacao pela funcao da
-          // migracao `20261001000004`. Era o furo: a coluna existia desde
-          // 28/09 e nenhuma escrita a preenchia.
           autorDoPainel: autor.adminAccountId,
           slug,
           title: corpo.title.trim(),
@@ -518,13 +455,9 @@ export class RedeAdministrativa {
     throw slugOcupado();
   }
 
-
-  // --------------------------------------------------------------- editar
-
   /**
-   * Sem data, horario, fuso, lugar, visibilidade nem condicao de acesso (o
-   * corpo nem os tem). Mudar as observacoes avisa todos os administradores com
-   * o antes e o depois (D60), sem reautenticacao.
+   * Sem data, horario, fuso, lugar, visibilidade nem condicao de acesso (o corpo nem
+   * os tem).
    */
   async alterarEncontro(
     autor: Autor,
@@ -571,8 +504,6 @@ export class RedeAdministrativa {
           ? {}
           : { instagram: patch.instagram_url === null ? null : handleDoInstagram(patch.instagram_url) }),
       };
-      // O UPDATE vem primeiro, mesmo quando so as listas mudam: e ele que
-      // confere a versao lida e a incrementa.
       const ok = await comSlugLivre(() => tx.atualizarEncontro(atual.id, versao, mudanca, agora));
       if (!ok) throw versaoMudou();
       if (patch.accepted_sizes !== undefined) await tx.substituirPortes(atual.id, patch.accepted_sizes);
@@ -592,10 +523,6 @@ export class RedeAdministrativa {
       return { antes: atual, depois: completo };
     });
 
-    // Link e @ sao o que leva quem le o app para fora dele: mudar um dos dois
-    // avisa todos os administradores com o antes e o depois, como as
-    // observacoes (D60). Uma sessao tomada que troca o link de ingresso por um
-    // golpe nao passa calada.
     if (antes.linkDeIngresso !== depois.linkDeIngresso || antes.instagram !== depois.instagram) {
       await this.avisarAdministradores(autor, `Links alterados: ${depois.title}`, [
         'O link de ingresso ou o Instagram de um evento da Rede foi alterado.',
@@ -618,8 +545,6 @@ export class RedeAdministrativa {
     }
     return this.escrito(depois);
   }
-
-  // --------------------------------------------------------------- mover
 
   /** T11: o encontro que reuniria caes onde e quando um invasor quiser. */
   async moverEncontro(
@@ -700,12 +625,10 @@ export class RedeAdministrativa {
     return this.escrito(depois);
   }
 
-  // ------------------------------------------------------- condicao de acesso
-
   /**
-   * Publico que vira privado ganha `slug` novo, gerado, e o antigo passa a 404
-   * sem redirecionamento; privado que vira publico mantem o `slug` e deixa os
-   * pedidos como estao.
+   * Publico que vira privado ganha `slug` novo, gerado, e o antigo passa a 404 sem
+   * redirecionamento; privado que vira publico mantem o `slug` e deixa os pedidos
+   * como estao.
    */
   async mudarAcesso(
     autor: Autor,
@@ -769,9 +692,7 @@ export class RedeAdministrativa {
     return this.escrito(resultado.depois);
   }
 
-  // ------------------------------------------------------------ cancelar
-
-  /** So a partir de `published`, sem volta. O cancelado segue visivel ate o fim previsto. */
+  /** So a partir de `published`, sem volta. */
   async cancelarEncontro(
     autor: Autor,
     slug: string,
@@ -815,8 +736,6 @@ export class RedeAdministrativa {
     return this.escrito(cancelado);
   }
 
-  // -------------------------------------------------------------- remover
-
   /** Terminal. Ja removido responde 204 sem nova linha de trilha. */
   async removerEncontro(autor: Autor, slug: string, ifMatch: string | string[] | undefined): Promise<void> {
     const versao = versaoExigida(ifMatch);
@@ -835,8 +754,6 @@ export class RedeAdministrativa {
     });
   }
 
-  // -------------------------------------------------------------- galeria
-
   private async aplicarGaleria(
     tx: TransacaoDaRede,
     eventoId: string,
@@ -851,12 +768,7 @@ export class RedeAdministrativa {
     await tx.substituirImagens(eventoId, galeria);
   }
 
-  /**
-   * A confirmacao do envio e a propria escrita do encontro (ADR-0027 item 10).
-   * So aceita `kind = catalog_image` com `purpose = network_event`: foto de pet,
-   * imagem de produto, envio vencido ou imagem de OUTRO encontro sao recusados
-   * com a mesma resposta (T9).
-   */
+  /** A confirmacao do envio e a propria escrita do encontro (ADR-0027 item 10). */
   private async imagemDoEnvio(tx: TransacaoDaRede, eventoId: string, uploadId: string, agora: Instant): Promise<string> {
     const recusaDaImagem = (): AppError =>
       recusa('images', 'upload_not_usable', 'Uma das imagens não serve para este encontro. Envie-a de novo.');
@@ -874,13 +786,9 @@ export class RedeAdministrativa {
     return imagemId;
   }
 
-  // ---------------------------------------------------------------- fila
-
   /**
-   * A fila (D53 a D57). A leitura grava na trilha a quantidade e os filtros,
-   * nunca os nomes; se a trilha falhar, a resposta nao sai. O teto de 300
-   * linhas por hora por conta e somado da propria trilha: o que se mede e
-   * quanto dado de pessoa saiu, e a pagina e cortada no que falta para o teto.
+   * A fila (D53 a D57). A leitura grava na trilha a quantidade e os filtros, nunca
+   * os nomes; se a trilha falhar, a resposta nao sai.
    */
   async listarFila(
     autor: Autor,
@@ -925,7 +833,7 @@ export class RedeAdministrativa {
     });
   }
 
-  /** Aprovar vem de pendente ou recusado; aprovado nao volta. Gera o push, so com o titulo. */
+  /** Aprovar vem de pendente ou recusado; aprovado nao volta. */
   async aprovarPedido(autor: Autor, ref: string): Promise<PedidoProjetado> {
     return this.decidir(autor, ref, 'approved');
   }
@@ -952,7 +860,6 @@ export class RedeAdministrativa {
       if (decisao === 'approved') {
         await tx.enfileirarAvisoDeAprovacao({ trabalhoId: this.deps.ids.uuidv7(), pedidoId: atual.id });
       }
-      // Pelo `id` interno e pelo `ref`, nunca pelo nome de quem pediu (12.11).
       await tx.registrarNaTrilha(
         this.evento(
           autor,

@@ -1,68 +1,4 @@
-/**
- * A avaliação do local: a faixa da nota, a recusa de escrita e o que NÃO sai.
- *
- * ## Por que este arquivo existe
- *
- * `avaliacao-do-local.ts` é o domínio de uma funcionalidade que o cliente pediu
- * em 18/10/2026 e que fala de **negócio real com nome e endereço**. Ele não
- * tinha caso de unidade nenhum: as quatro funções exportadas
- * (`validarEntradaDaAvaliacao`, `validarDenuncia`, `projetarPontuacao`,
- * `projetarAvaliacao`) eram exercitadas só de raspão, pelo fio, em
- * `adapters/http/directory-review-routes.test.ts` — que mede a rota, não a
- * regra, e por isso não chega nas bordas da faixa nem na forma da projeção.
- *
- * Duas propriedades aqui são das que custam caro quando falham:
- *
- * 1. **a recusa de escrita** — nota fora de 1–5, texto acima do limite e HTML
- *    são recusados com o CAMPO nomeado. O próprio módulo diz por que recusa o
- *    HTML na entrada em vez de escapar na saída: "escapar na saída depende de
- *    **toda** tela futura lembrar de escapar — quatro aplicações leem este
- *    contrato";
- * 2. **o que NÃO sai** — `projetarAvaliacao` devolve `ref`, nunca o `id`. O
- *    cabeçalho do módulo lista o `id` como "UUID interno, proibido em saída
- *    pelo ADR-0010". Um campo a mais numa resposta não quebra cliente nenhum e
- *    nenhum comparador de contrato o acusa, então é aqui que ele tem de ser
- *    acusado.
- *
- * ## O QUE DESLIGAR PARA VER CADA CASO REPROVAR
- *
- * Em `avaliacao-do-local.ts`:
- *
- * - **a faixa da nota:** apague o ramo `else if (notaCrua < NOTA_MINIMA ||
- *   notaCrua > NOTA_MAXIMA)`. Reprova `nota fora da faixa é recusada e
- *   NOMEADA`;
- * - **a exigência de inteiro:** tire o `!Number.isInteger(notaCrua)`. Reprova
- *   `nota quebrada não é nota`;
- * - **as bordas:** troque `NOTA_MINIMA` por 2 ou `NOTA_MAXIMA` por 4. Reprova
- *   `1 e 5 são notas válidas`, que é o caso que impede o conserto preguiçoso de
- *   estreitar a faixa — o projeto já teve um teste que afirmava "para em 16
- *   símbolos: o 17º não entra", e era o defeito;
- * - **o aparo antes de medir:** tire o `.trim()`. Reprovam
- *   `texto só de espaço é "sem texto"` e `o texto é gravado aparado`;
- * - **vazio virar `null`:** faça `aparado === ''` empurrar um erro. Reprova
- *   `texto só de espaço é "sem texto"`;
- * - **o limite do texto:** troque `>` por `>=`. Reprova
- *   `o texto no limite passa, e um caractere além reprova`;
- * - **a recusa de HTML:** apague o ramo `/[<>]/`. Reprova
- *   `sinal de maior ou menor é recusado, nos dois campos`;
- * - **a lista fechada de motivos:** tire o `MOTIVOS_DA_DENUNCIA.includes(...)`.
- *   Reprova `motivo fora da lista é recusado`;
- * - **a média vazia:** troque `p.quantidade === 0 ? null : p.media` por
- *   `p.media`. Reprova `local sem avaliação tem média NULA, e não zero`;
- * - **o histograma completo:** devolva só as notas com contagem. Reprova
- *   `as cinco barras vêm sempre`;
- * - **o `ref` em vez do `id`:** acrescente `id: a.id` ao objeto que
- *   `projetarAvaliacao` devolve. Reprova
- *   `a avaliação projetada NÃO carrega UUID interno`.
- *
- * ## O QUE ESTE ARQUIVO NÃO COBRE, DITO EM VOZ ALTA
- *
- * **"Uma avaliação por pessoa" não está aqui, e não pode estar.** A unicidade é
- * um índice de `professional_reviews` no banco, e afirmá-la com dublê seria
- * afirmar o dublê. Ela pertence à suíte de integração, que nesta rodada não
- * rodou (o build da pilha efêmera travou no Docker). Fica registrado como vão
- * de cobertura em vez de virar um caso verde que não mede nada.
- */
+/** A avaliação do local: a faixa da nota, a recusa de escrita e o que NÃO sai. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -169,7 +105,6 @@ void describe('o texto da avaliação: opcional, aparado e sem HTML', () => {
   });
 
   void it('mil e quinhentos espaços não são um texto de 1500 caracteres', () => {
-    // Aparado ANTES de medir: recusar isto por tamanho explicaria a coisa errada.
     const r = validarEntradaDaAvaliacao({ rating: 3, body: ' '.repeat(TAMANHO_MAXIMO_DO_TEXTO + 50) });
     assert.deepEqual(r.erros, []);
     assert.equal(r.entrada?.texto, null);
@@ -195,7 +130,6 @@ void describe('o texto da avaliação: opcional, aparado e sem HTML', () => {
   });
 
   void it('nota e texto errados ao mesmo tempo nomeiam OS DOIS campos', () => {
-    // Um 400 que para no primeiro erro faz a pessoa corrigir um campo por vez.
     assert.deepEqual(campos(validarEntradaDaAvaliacao({ rating: 9, body: 42 }).erros).sort(), [
       'body:invalid',
       'rating:out_of_range',
@@ -290,8 +224,6 @@ void describe('o que a avaliação projetada NÃO carrega', () => {
       false,
       'REPROVA: o `id` da avaliação saiu. É UUID interno, proibido em saída pelo ADR-0010.',
     );
-    // A varredura é sobre o corpo inteiro e não sobre uma lista de campos:
-    // campo novo que vaze UUID amanhã reprova sem ninguém lembrar do nome dele.
     assert.doesNotMatch(projetada, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu);
   });
 

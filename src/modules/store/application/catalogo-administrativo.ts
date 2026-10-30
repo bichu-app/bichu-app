@@ -1,24 +1,6 @@
 /**
- * Os casos de uso da escrita administrativa da `Loja` (BICHUS-266 e
- * BICHUS-267; ADR-0027 itens 8, 10 e 14).
- *
- * ## Tres regras atravessam o arquivo
- *
- * - **Toda escrita grava a trilha, na mesma transacao, como ultimo passo**
- *   (D49). Nao existe metodo aqui que mude estado sem `registrarNaTrilha`, e a
- *   falha dela desfaz a escrita porque as duas estao dentro de `emTransacao`.
- * - **A versao que a pessoa leu decide** (`If-Match`). Ausente: 428, antes de
- *   qualquer leitura. Diferente: 412, e nada foi gravado.
- * - **Papel nao e daqui.** A guarda do prefixo decidiu antes de o recurso ser
- *   lido (ADR-0027 item 7). O que chega aqui ja e um administrador, e o `Autor`
- *   existe para a trilha, nao para autorizar.
- *
- * ## O que a trilha grava
- *
- * `resource_id` e o `id` INTERNO, nunca o `slug` (ADR-0027 item 8): o `slug`
- * muda, e a trilha precisa achar o mesmo objeto depois da troca. `before` e
- * `after` levam so os campos que mudaram; catalogo nao e dado pessoal, entao o
- * valor vai inteiro.
+ * Os casos de uso da escrita administrativa da `Loja` (BICHUS-266 e BICHUS-267;
+ * ADR-0027 itens 8, 10 e 14).
  */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
@@ -82,9 +64,9 @@ import {
   type TransacaoDoCatalogo,
 } from '../ports/catalogo-administrativo.js';
 
-/** Quem escreve, para a trilha. Nunca o e-mail (BICHUS-56 criterio 3). */
+/** Quem escreve, para a trilha. */
 export interface Autor {
-  /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
+  /** `admin_accounts.id` (ADR-0027 item 20). */
   readonly adminAccountId: AdminAccountId;
   /** Os 8 primeiros bytes, em hex, do hash da sessao (ADR-0027 item 8). */
   readonly sessao: string;
@@ -102,12 +84,8 @@ export interface CorpoDeParceiro {
   readonly slug: string;
   readonly name: string;
   /**
-   * O endereco COMPLETO do site do parceiro, com `https://` (padrao do cliente
-   * de 17/10/2026). O host, que e o que a coluna guarda, sai dele.
-   *
-   * Substituiu `host`, que recebia o nome pelado (`cobasi.com.br`) e tinha no
-   * painel a ajuda "So o endereco, sem https:// e sem barra" -- o oposto
-   * exato do padrao novo.
+   * O endereco COMPLETO do site do parceiro, com `https://` (padrao do cliente de
+   * 17/10/2026).
    */
   readonly site_url: string;
   readonly sort_order?: number;
@@ -122,12 +100,7 @@ export interface PatchDeParceiro {
   readonly active?: boolean;
 }
 
-/**
- * O corpo de `createAdminStoreItem`. **So `title` e obrigatorio** desde
- * 17/10/2026: o item nasce rascunho, e rascunho existe para guardar trabalho
- * incompleto enquanto a pessoa busca o que falta (pedido do cliente). O que
- * falta e cobrado na PUBLICACAO, campo por campo (`faltaParaPublicar`).
- */
+/** O corpo de `createAdminStoreItem`. */
 export interface CorpoDeItem {
   /** Opcional: sem ele, o servidor deriva do titulo (`slugDoItem`). */
   readonly slug?: string;
@@ -147,12 +120,7 @@ export interface CorpoDeItem {
 
 /**
  * `StoreCatalogImageInput`: um envio e, **se a pessoa escreveu**, o texto
- * alternativo dele. O texto virou opcional na `Loja` em 17/10/2026; a `Rede`
- * continua com `CatalogImageInput`, onde ele e obrigatorio.
- *
- * Ausente e "nao escreveu". **Vazio nao chega aqui**: o contrato recusa
- * `alt_text: ""` (`minLength: 2`), e o painel omite o campo em vez de mandar
- * texto vazio.
+ * alternativo dele.
  */
 export interface ImagemDoCorpo {
   readonly upload_id: string;
@@ -189,7 +157,7 @@ export interface CorpoDeIntencao {
   readonly purpose: PropositoDaImagem;
   readonly content_type: string;
   readonly byte_size: number;
-  /** Declaradas pelo navegador, opcionais. Abaixo da minima recusa com 422. */
+  /** Declaradas pelo navegador, opcionais. */
   readonly width?: number;
   readonly height?: number;
 }
@@ -216,7 +184,7 @@ export interface DependenciasDoCatalogo {
   readonly envios: PreparadorDeEnvioDeCatalogo;
   readonly ids: IdGenerator;
   readonly clock: Clock;
-  /** A URL publica da derivada, montada na leitura. O banco guarda so a chave. */
+  /** A URL publica da derivada, montada na leitura. */
   readonly urlDeMidia: (chave: string) => string;
 }
 
@@ -234,11 +202,7 @@ function faltaVersao(): AppError {
   return new AppError('precondition-required', 'Falta a versão que você leu');
 }
 
-/**
- * 428 antes de qualquer leitura, e 412 para o que nao e uma versao. A leitura
- * do recurso vem depois: escrita sem `If-Match` nao chega a perguntar se o
- * recurso existe.
- */
+/** 428 antes de qualquer leitura, e 412 para o que nao e uma versao. */
 function versaoExigida(ifMatch: string | string[] | undefined): number {
   const lida = lerIfMatch(ifMatch);
   if (lida.tipo === 'ausente') throw faltaVersao();
@@ -269,11 +233,7 @@ function retratoDoParceiro(p: ParceiroAdministrativo): Record<string, unknown> {
   return { slug: p.slug, name: p.name, host: p.host, active: p.active, sort_order: p.sortOrder };
 }
 
-/**
- * Os campos do item como a trilha os grava. A galeria vai como a lista que o
- * painel mandou (`upload_id` e texto alternativo, na ordem): e isso que
- * responde "que imagens estavam aqui antes" numa investigacao.
- */
+/** Os campos do item como a trilha os grava. */
 function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
   return {
     slug: i.slug,
@@ -300,9 +260,9 @@ function retratoDaTag(t: TagAdministrativa): Record<string, unknown> {
 }
 
 /**
- * Destino sem parceiro. O banco guarda so o CAMINHO e compoe o endereco com o
- * host do parceiro: sem parceiro nao ha contra o que conferir o link, nem como
- * le-lo de volta depois.
+ * Destino sem parceiro. O banco guarda so o CAMINHO e compoe o endereco com o host
+ * do parceiro: sem parceiro nao ha contra o que conferir o link, nem como le-lo de
+ * volta depois.
  */
 function destinoSemParceiro(): ProblemFieldError {
   return {
@@ -320,8 +280,7 @@ function tagDesconhecida(): AppError {
 
 /**
  * O que o corpo diz de especie, tags e imagens, conferido antes de abrir a
- * transacao. O que depende do banco (tag existe, envio serve) e conferido la
- * dentro, por `aplicarEspecieTagsEImagens`.
+ * transacao.
  */
 function errosDaGaleriaEDaEspecie(corpo: {
   readonly species?: readonly string[] | undefined;
@@ -356,10 +315,6 @@ function errosDaGaleriaEDaEspecie(corpo: {
     if (new Set(corpo.images.map((i) => i.upload_id.toLowerCase())).size !== corpo.images.length) {
       erros.push({ field: 'images', code: 'duplicate_upload', message: 'A mesma imagem apareceu duas vezes.' });
     }
-    // So o que VEIO: o texto alternativo e opcional na `Loja` desde 17/10/2026,
-    // e ausente nao e texto curto. O contrato ja recusa `""` por `minLength`,
-    // entao o que chega aqui com o campo presente e texto de verdade -- e e
-    // sobre ele, aparado, que o tamanho e medido (como no banco).
     corpo.images.forEach((imagem, n) => {
       if (imagem.alt_text === undefined) return;
       erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
@@ -423,10 +378,6 @@ export class CatalogoAdministrativo {
   private escritoDoParceiro(p: ParceiroAdministrativo): Escrito<ParceiroProjetado> {
     return { recurso: projetarParceiro(p), etag: comoEtag(p.version) };
   }
-
-  // -------------------------------------------------------------------------
-  // Parceiros (BICHUS-266)
-  // -------------------------------------------------------------------------
 
   async listarParceiros(recorte: {
     q?: string | undefined;
@@ -493,11 +444,6 @@ export class CatalogoAdministrativo {
       const atual = await tx.parceiroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
 
-      // Trocar o host nao deixa item orfao: o item guarda so o caminho, e o
-      // endereco e composto na leitura com o host do parceiro (migracao
-      // `20260922000023`). Os itens vao junto, e e para isso que o host mora
-      // numa coluna so.
-
       const mudanca: MudancaDeParceiro = {
         ...(patch.slug === undefined ? {} : { slug: patch.slug }),
         ...(patch.name === undefined ? {} : { name: patch.name.trim() }),
@@ -522,10 +468,6 @@ export class CatalogoAdministrativo {
       return this.escritoDoParceiro(alterado);
     });
   }
-
-  // -------------------------------------------------------------------------
-  // Itens (BICHUS-267)
-  // -------------------------------------------------------------------------
 
   async listarItens(recorte: {
     q?: string | undefined;
@@ -555,15 +497,11 @@ export class CatalogoAdministrativo {
   }
 
   /**
-   * O item nasce em RASCUNHO (`active = false`, `published_at` nulo) e nao
-   * aparece no app ate `publicarItem` (ADR-0027 item 14).
+   * O item nasce em RASCUNHO (`active = false`, `published_at` nulo) e nao aparece
+   * no app ate `publicarItem` (ADR-0027 item 14).
    */
   async criarItem(autor: Autor, corpo: CorpoDeItem): Promise<Escrito<ItemAdministrativoProjetado>> {
     const agora = this.agora();
-    // A PRIMEIRA REGUA. So o que VEIO e conferido: o rascunho guarda trabalho
-    // incompleto, e o que falta e cobrado em `publicarItem`. O que continua
-    // valendo e a forma do que a pessoa JA escreveu -- descricao de um
-    // caractere e erro de digitacao, nao rascunho.
     const erros = [
       ...errosDeTexto('title', corpo.title, 2, 120),
       ...(corpo.summary === undefined ? [] : errosDeTexto('summary', corpo.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
@@ -573,8 +511,6 @@ export class CatalogoAdministrativo {
     if (erros.length > 0) throw problemas.validacao(erros);
 
     return this.deps.repositorio.emTransacao(async (tx) => {
-      // Sem parceiro nao ha host, e sem host o destino nao tem contra o que ser
-      // conferido: as duas coisas andam juntas, no rascunho e na publicacao.
       let parceiro: ParceiroAdministrativo | null = null;
       if (corpo.partner_slug !== undefined) {
         parceiro = await tx.parceiroPorSlug(corpo.partner_slug);
@@ -590,17 +526,6 @@ export class CatalogoAdministrativo {
         if (destino.length > 0) throw problemas.validacao(destino);
       }
 
-      // A classificacao e conferida DENTRO da transacao, e nao no bloco de
-      // erros do corpo acima: ela depende do vocabulario gravado, e desde que
-      // a categoria deixou de ser `enum` do contrato (17/10) nao ha mais quem
-      // a recuse antes daqui a nao ser a chave estrangeira do banco -- que
-      // responderia erro de integridade onde o painel espera erro de campo.
-      //
-      // **Sem categoria nao ha vocabulario a consultar** (o rascunho da
-      // `20261017000002` pode nascer sem ela), e e por isso que a consulta e
-      // condicional: o que sobra para conferir e a coerencia dos dois niveis,
-      // e quem responde isso e `errosDaClassificacao` com
-      // `SEM_CATEGORIA_PARA_CONFERIR`.
       const categoria = corpo.category ?? null;
       const subcategoria = corpo.subcategory ?? null;
       const classificacao = errosDaClassificacao(
@@ -644,7 +569,10 @@ export class CatalogoAdministrativo {
     });
   }
 
-  /** Editar nao publica nem retira: o estado so muda por `publicarItem` e `retirarItem`. */
+  /**
+   * Editar nao publica nem retira: o estado so muda por `publicarItem` e
+   * `retirarItem`.
+   */
   async alterarItem(
     autor: Autor,
     slug: string,
@@ -655,7 +583,6 @@ export class CatalogoAdministrativo {
     const agora = this.agora();
     const erros = [
       ...(patch.title === undefined ? [] : errosDeTexto('title', patch.title, 2, 120)),
-      // `null` LIMPA (rascunho), e limpar nao tem tamanho a conferir.
       ...(patch.summary === undefined || patch.summary === null
         ? []
         : errosDeTexto('summary', patch.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
@@ -668,9 +595,6 @@ export class CatalogoAdministrativo {
       const atual = await tx.itemPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
 
-      // `undefined` nao mexe, `null` limpa, texto troca. As tres respostas
-      // precisam ser distinguiveis, e por isso `partnerId` nao e um
-      // `string | undefined`.
       let partnerId: string | null | undefined;
       let hostDoParceiro = atual.partner?.host ?? null;
       if (patch.partner_slug === null) {
@@ -687,20 +611,6 @@ export class CatalogoAdministrativo {
         hostDoParceiro = parceiro.host;
       }
 
-      // A classificacao e reconferida quando muda a CATEGORIA ou a
-      // SUBCATEGORIA -- e nao so quando a subcategoria vem no corpo.
-      //
-      // **Trocar a categoria sem mandar a subcategoria e o caso que decide
-      // esta condicao.** A subcategoria gravada pertence a categoria antiga;
-      // deixa-la para tras gravaria um par que a chave estrangeira composta
-      // recusa, e a pessoa receberia erro de banco no lugar de "essa
-      // subcategoria e de outra categoria".
-      //
-      // **`patch.category === null` LIMPA**, e por isso a escolha e por
-      // `undefined` e nao por `??`: com `??`, limpar a categoria cairia na
-      // categoria ATUAL e a conferencia passaria sobre um valor que o
-      // `UPDATE` nao vai gravar -- a subcategoria antiga ficaria solta, que e
-      // exatamente o buraco que a mescla dos dois lotes de 17/10 abriu.
       if (patch.category !== undefined || patch.subcategory !== undefined) {
         const categoria = patch.category === undefined ? atual.category : patch.category;
         const subcategoria =
@@ -715,14 +625,6 @@ export class CatalogoAdministrativo {
         if (erros.length > 0) throw problemas.validacao(erros);
       }
 
-      // O destino e reconferido quando muda ELE ou o parceiro: trocar o
-      // parceiro de um item sem trocar o link deixaria o link apontando para o
-      // site de outro parceiro.
-      //
-      // Tirar o parceiro TIRA o destino junto, e nao e cortesia: o banco guarda
-      // so o caminho e compoe o endereco com o host do parceiro, entao caminho
-      // sem parceiro e um destino que ninguem consegue ler de volta. A tela
-      // mostra os dois campos vazios, que e a verdade do rascunho.
       const alvoDoDestino = patch.target_url === undefined ? atual.targetUrl : patch.target_url;
       if (hostDoParceiro === null) {
         if (patch.target_url !== undefined && patch.target_url !== null) {
@@ -742,14 +644,6 @@ export class CatalogoAdministrativo {
         ...(patch.summary === undefined ? {} : { summary: patch.summary === null ? null : patch.summary.trim() }),
         ...(patch.category === undefined ? {} : { category: patch.category }),
         ...(patch.subcategory === undefined ? {} : { subcategory: patch.subcategory }),
-        // O destino volta ao adaptador quando muda ELE **ou o parceiro**, e os
-        // dois casos mandam `partnerHost` junto: e com ele que o adaptador
-        // decide se `target_host` fica nulo. Trocar o parceiro sem remandar o
-        // destino deixaria `target_host` apontando para o dominio do parceiro
-        // anterior, e o link sairia no site de quem nao vende mais o item.
-        //
-        // Tirar o parceiro LIMPA o destino junto (`destinoLimpoComOParceiro`):
-        // caminho sem host e endereco que ninguem compoe de volta.
         ...(patch.target_url === undefined && partnerId === undefined
           ? {}
           : {
@@ -768,9 +662,6 @@ export class CatalogoAdministrativo {
         ...(patch.sort_order === undefined ? {} : { sortOrder: patch.sort_order }),
       };
 
-      // O UPDATE vem primeiro, mesmo quando so a galeria muda: e ele que
-      // confere a versao lida e a incrementa, e sem ele duas edicoes da galeria
-      // com o mesmo If-Match passariam as duas.
       const alterado = await comSlugLivre(() => tx.atualizarItem(atual.id, versao, mudanca, agora));
       if (alterado === null) throw versaoMudou();
       await this.aplicarEspecieTagsEImagens(
@@ -795,11 +686,7 @@ export class CatalogoAdministrativo {
     });
   }
 
-  /**
-   * Rascunho ou retirado passa a publicado. **Idempotente**: item ja publicado
-   * responde 200 sem nova linha de trilha e sem mudar a versao, como o contrato
-   * declara. `published_at` grava a primeira publicacao e nao e reescrito.
-   */
+  /** Rascunho ou retirado passa a publicado. */
   async publicarItem(
     autor: Autor,
     slug: string,
@@ -812,16 +699,6 @@ export class CatalogoAdministrativo {
       const antes = estadoDePublicacao(atual);
       if (antes === 'published') return this.escritoDoItem(atual);
 
-      // **A SEGUNDA REGUA, E E AQUI QUE ELA MORA.** O rascunho exige so o
-      // titulo; a publicacao exige o conjunto, e responde `400` dizendo O QUE
-      // FALTA, um erro por campo, com o mesmo `field` que a tela usa. A conta e
-      // a MESMA de `missing_to_publish` na leitura: uma funcao so, para a tela
-      // nunca prometer uma publicacao que o servidor recusa.
-      //
-      // `species` sempre esteve aqui (A.2.1: o item da massa nasceu sem especie
-      // e nao volta ao app sem uma). O que mudou em 17/10/2026 e que as outras
-      // quatro passaram a acompanha-la, porque deixaram de ser cobradas na
-      // criacao.
       const faltas = faltaParaPublicar(atual);
       if (faltas.length > 0) throw problemas.validacao(errosDaFalta(faltas));
 
@@ -847,18 +724,7 @@ export class CatalogoAdministrativo {
     });
   }
 
-  /**
-   * O "excluir publicado" da `Loja` (D40). Nada e apagado: o item passa a
-   * `retired` e volta com `publicarItem`.
-   *
-   * A reautenticacao (`store_item_retirement`) NAO e conferida aqui: ela e da
-   * declaracao da rota, e o registro a instala antes de qualquer gancho da
-   * rota, como faz com `reauthScope` do app. O caso de uso so e alcancado com a
-   * janela ja consumida.
-   *
-   * Rascunho responde 400 `not_published` (contrato). Ja retirado responde 200
-   * sem nova linha de trilha, pela mesma regra de idempotencia da publicacao.
-   */
+  /** O "excluir publicado" da `Loja` (D40). */
   async retirarItem(
     autor: Autor,
     slug: string,
@@ -896,7 +762,7 @@ export class CatalogoAdministrativo {
   /**
    * Especie, tags e galeria, cada uma so quando o corpo a traz, e cada uma
    * SUBSTITUINDO a anterior inteira (o contrato: "a lista substitui a anterior
-   * inteira"). Uma escrita, uma transacao, uma linha de trilha.
+   * inteira").
    */
   private async aplicarEspecieTagsEImagens(
     tx: TransacaoDoCatalogo,
@@ -914,10 +780,6 @@ export class CatalogoAdministrativo {
     if (corpo.tag_slugs !== undefined) {
       const achadas = await tx.tagsPorSlugs(corpo.tag_slugs);
       if (achadas.length !== corpo.tag_slugs.length) throw tagDesconhecida();
-      // O teto de 5 conta ativas E desativadas (a lista inteira ja foi contada
-      // antes da transacao). O que se recusa aqui e LIGAR DE NOVO uma
-      // desativada; manter a que ja estava ligada preserva o vinculo (ADR-0027
-      // item 16, emenda de 23/09).
       if (achadas.some((t) => !t.active && !tagsJaLigadas.includes(t.slug))) {
         throw problemas.validacao([
           {
@@ -935,9 +797,6 @@ export class CatalogoAdministrativo {
 
     if (corpo.images !== undefined) {
       const galeria: ImagemNaPosicao[] = [];
-      // `position` E O INDICE DA LISTA, e e so isso: a ordem que o painel
-      // mandou e a ordem que o banco grava, e a capa e a posicao 0. Nao ha
-      // sinalizador de capa em lugar nenhum (`20260928000003`).
       for (const [position, imagem] of corpo.images.entries()) {
         const imageId = await this.imagemDoEnvio(tx, itemId, imagem.upload_id, agora);
         galeria.push({ imageId, position, altText: imagem.alt_text?.trim() ?? null });
@@ -948,11 +807,7 @@ export class CatalogoAdministrativo {
 
   /**
    * O `slug` derivado do titulo, com sufixo curto se ja existir (contrato:
-   * `AdminStoreItemInput.slug`). A procura e feita dentro da transacao, e a
-   * corrida que sobra (dois itens com o mesmo titulo ao mesmo tempo) e pega
-   * pelo indice unico, que devolve `SlugOcupado`: ai a proxima tentativa leva
-   * sufixo. Cinco tentativas com 20 bits de sufixo cada; se todas colidirem, o
-   * 409 do contrato sai, e nao um 500.
+   * `AdminStoreItemInput.slug`).
    */
   private async inserirComSlugDerivado(
     tx: TransacaoDoCatalogo,
@@ -974,18 +829,7 @@ export class CatalogoAdministrativo {
     throw slugOcupado();
   }
 
-  /**
-   * A confirmacao do envio e a propria escrita do item (ADR-0027 item 10).
-   *
-   * **So aceita** envio de `kind = 'catalog_image'` com `purpose = 'store_item'`.
-   * Foto de pet, de achador, capa de encontro, envio vencido, ou imagem que ja
-   * e de OUTRO item: todos recusados com `400` (T9), e com a MESMA resposta,
-   * para nao contar a quem testa ids qual deles aconteceu.
-   *
-   * Envio aberto vira `catalog_images` em `processing`, com o trabalho
-   * enfileirado na mesma transacao. Envio ja confirmado e ligado a ESTE item e
-   * reaproveitado: o painel manda a galeria inteira a cada salvamento.
-   */
+  /** A confirmacao do envio e a propria escrita do item (ADR-0027 item 10). */
   private async imagemDoEnvio(
     tx: TransacaoDoCatalogo,
     itemId: string,
@@ -1022,10 +866,6 @@ export class CatalogoAdministrativo {
     return imagemId;
   }
 
-  // -------------------------------------------------------------------------
-  // Vocabulario de tags (BICHUS-267, ADR-0027 item 16)
-  // -------------------------------------------------------------------------
-
   async listarTags(recorte: {
     q?: string | undefined;
     active?: boolean | undefined;
@@ -1041,11 +881,7 @@ export class CatalogoAdministrativo {
     };
   }
 
-  /**
-   * A tag nasce uma vez, aqui, com rotulo conferido. Teto de 40 ativas: acima,
-   * `400 tag_vocabulary_full`. A contagem e feita sob trava da transacao, entao
-   * duas criacoes simultaneas nao passam as duas pela 40a vaga.
-   */
+  /** A tag nasce uma vez, aqui, com rotulo conferido. */
   async criarTag(autor: Autor, corpo: CorpoDeTag): Promise<Escrito<TagProjetada>> {
     const conferido = conferirRotulo('label', corpo.label);
     if (conferido.erros.length > 0) throw problemas.validacao(conferido.erros);
@@ -1067,7 +903,7 @@ export class CatalogoAdministrativo {
     });
   }
 
-  /** Renomear troca o `slug` junto. Nao ha exclusao: desativar tira do app e mantem a ligacao. */
+  /** Renomear troca o `slug` junto. */
   async alterarTag(
     autor: Autor,
     slug: string,
@@ -1103,19 +939,7 @@ export class CatalogoAdministrativo {
     });
   }
 
-  // -------------------------------------------------------------------------
-  // Imagem de catalogo (BICHUS-267; ADR-0007 e ADR-0027 item 10)
-  // -------------------------------------------------------------------------
-
-  /**
-   * A politica assinada de envio direto. O backend nunca recebe os bytes.
-   *
-   * A assinatura e pedida ANTES da transacao, e nao dentro dela: e chamada de
-   * rede a um servico externo, e segurar uma conexao do banco esperando por ela
-   * e o que esgota o pool num pico. Se a transacao falhar depois, a politica
-   * assinada existe e nenhuma linha aponta para ela: o objeto que chegar a ser
-   * enviado nao e alcancado por nada, e a politica morre em dez minutos.
-   */
+  /** A politica assinada de envio direto. */
   async autorizarEnvioDeCatalogo(autor: Autor, corpo: CorpoDeIntencao): Promise<IntencaoAutorizada> {
     recusarDimensaoDeclaradaPequena(corpo.purpose, corpo.width, corpo.height);
     const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size, corpo.purpose);

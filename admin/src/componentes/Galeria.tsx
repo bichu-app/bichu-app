@@ -13,14 +13,7 @@ import {
 import { Icone } from './Icone.tsx';
 import { devolverImagem, lerImagem, podeRecortar, recortar, type ImagemParaRecorte, type Janela } from './recorte-de-imagem.ts';
 
-/**
- * Uma imagem da galeria, do ponto de vista da tela.
- *
- * - `enviando` / `erro`: so existem no navegador, antes da escrita do item.
- * - `enviada`: os bytes chegaram; falta a escrita do item confirmar o envio.
- * - `processing` / `ready` / `rejected`: o estado que o servidor devolve
- *   (`AdminCatalogGalleryImage.status`) depois da escrita.
- */
+/** Uma imagem da galeria, do ponto de vista da tela. */
 export interface ImagemDaGaleria {
   chave: string;
   uploadId?: string;
@@ -29,15 +22,14 @@ export interface ImagemDaGaleria {
   progresso?: number;
   erro?: string;
   motivo?: string | null;
-  /** A derivada publica quando pronta, ou a previa local (`blob:`) do arquivo escolhido. */
+  /**
+   * A derivada publica quando pronta, ou a previa local (`blob:`) do arquivo
+   * escolhido.
+   */
   previa?: string | null;
   /** O arquivo que esta subindo, ja RECORTADO quando a pessoa enquadrou. */
   arquivo?: File;
-  /**
-   * O arquivo CRU que a pessoa escolheu, guardado so para reenquadrar
-   * (BICHUS-314). Reenquadrar sobre o recorte anterior impediria afastar o
-   * zoom e empilharia perda de qualidade a cada ajuste.
-   */
+  /** O arquivo CRU que a pessoa escolheu, guardado so para reenquadrar (BICHUS-314). */
   original?: File;
 }
 
@@ -48,13 +40,8 @@ export function novaChave(): string {
 }
 
 /**
- * A imagem ACEITA descricao (secao 25.5.1): a que falhou, a recusada e a que
- * ainda esta subindo nao mostram o campo.
- *
- * Aceitar nao e o mesmo que EXIGIR. Quem exige e `descricaoObrigatoria` da
- * galeria. A `Loja` a desligou em 17/10/2026 e a `Rede` em 21/10/2026, as duas
- * a pedido do cliente -- hoje NENHUM dos dois formularios a liga, e o padrao
- * `true` sobrevive so para quem vier depois.
+ * A imagem ACEITA descricao (secao 25.5.1): a que falhou, a recusada e a que ainda
+ * esta subindo nao mostram o campo.
  */
 export function precisaDeDescricao(imagem: ImagemDaGaleria): boolean {
   return imagem.estado !== 'erro' && imagem.estado !== 'rejected' && imagem.estado !== 'enviando';
@@ -65,13 +52,7 @@ export function descricaoValida(alt: string): boolean {
   return t.length >= 2 && t.length <= 150;
 }
 
-/**
- * A descricao em branco e aceitavel? So onde ela e opcional -- e, mesmo ali,
- * **uma letra nao e**: o contrato recusa `alt_text` de um caractere
- * (`minLength: 2`), e deixar passar na tela trocaria um erro de campo por um
- * `400` sem endereco. Vazio quer dizer "nao escrevi" e o campo e OMITIDO no
- * corpo; `"a"` quer dizer "escrevi errado".
- */
+/** A descricao em branco e aceitavel? */
 export function descricaoAceitavel(alt: string, obrigatoria: boolean): boolean {
   if (alt.trim() === '') return !obrigatoria;
   return descricaoValida(alt);
@@ -88,36 +69,21 @@ export interface PropsDaGaleria {
   titulo?: string;
   principal?: string;
   ajuda?: string;
-  /**
-   * A descricao de cada imagem e obrigatoria? Padrao `true`.
-   *
-   * **Os dois formularios que usam esta galeria passam `false`**: a `Loja`
-   * desde 17/10/2026 e a `Rede` desde 21/10/2026, as duas por pedido do
-   * cliente. O administrador salva a imagem sem escrever nada, e quem desenha
-   * cai no nome do produto ou no titulo do encontro.
-   *
-   * O padrao segue `true` de proposito: a galeria nao sabe em que recurso esta,
-   * e a forma segura de um campo de acessibilidade e exigir e deixar que a tela
-   * dispense por escrito.
-   */
+  /** A descricao de cada imagem e obrigatoria? */
   descricaoObrigatoria?: boolean;
-  /**
-   * O que o app LE quando a descricao nao vem. Entra na frase de ajuda, e so
-   * importa quando `descricaoObrigatoria` e `false`.
-   *
-   * Existe porque a reserva e do RECURSO e nao da galeria: na `Loja` e o nome
-   * do produto, na `Rede` e o titulo do encontro. Antes de 21/10/2026 a frase
-   * dizia "o nome do produto" para os dois, e so a `Loja` a via.
-   */
+  /** O que o app LE quando a descricao nao vem. */
   reservaDaDescricao?: string;
-  /** Marca curta numa imagem (ex.: a foto sem envio da Rede, UX 30.7), tambem lida no nome acessivel do item. */
+  /**
+   * Marca curta numa imagem (ex.: a foto sem envio da Rede, UX 30.7), tambem lida no
+   * nome acessivel do item.
+   */
   marca?: (imagem: ImagemDaGaleria) => string | undefined;
 }
 
 /**
  * Galeria de ate 8 imagens (secao 25.5.1, UX 29.10): a primeira e a principal;
- * mover, usar como principal e remover por botao, com a posicao no nome
- * acessivel; arrastar para reordenar e atalho, nao requisito (SC 2.5.7).
+ * mover, usar como principal e remover por botao, com a posicao no nome acessivel;
+ * arrastar para reordenar e atalho, nao requisito (SC 2.5.7).
  */
 export function Galeria({
   id,
@@ -129,8 +95,6 @@ export function Galeria({
   erro,
   titulo = 'Imagens do produto',
   principal = 'Principal',
-  // O teto e a minima vem de `envio-de-imagem.ts`: a ajuda nao repete numero
-  // que o contrato pode mudar.
   ajuda = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.store_item.largura)} × ${String(DIMENSAO_MINIMA.store_item.altura)} pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.`,
   descricaoObrigatoria = true,
   reservaDaDescricao = 'o nome do produto',
@@ -138,8 +102,8 @@ export function Galeria({
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
   /**
-   * O enquadramento aberto. `chave` nao nula e um item que JA subiu e esta
-   * sendo reenquadrado; `indice` nao nulo e a troca de uma imagem recusada.
+   * O enquadramento aberto. `chave` nao nula e um item que JA subiu e esta sendo
+   * reenquadrado; `indice` nao nulo e a troca de uma imagem recusada.
    */
   const [recorte, setRecorte] = useState<{
     imagem: ImagemParaRecorte;
@@ -164,10 +128,6 @@ export function Galeria({
   }
 
   async function subir(chave: string, arquivo: File, original?: File) {
-    // Sem `original` explicito, o CRU e o proprio arquivo -- e e assim que a
-    // imagem do LOTE (que sobe sem passar pelo enquadramento) fica
-    // reenquadravel depois. Onde o navegador nao sabe recortar nao ha cru
-    // nenhum, e o botao nem aparece.
     const cru = original ?? (podeRecortar() ? arquivo : undefined);
     const recusa = conferirArquivo(arquivo) ?? (await conferirDimensao(arquivo, proposito));
     if (recusa) {
@@ -220,12 +180,8 @@ export function Galeria({
   }
 
   /**
-   * UM arquivo abre o enquadramento (BICHUS-314); VARIOS sobem como sempre e
-   * cada um ganha o botao "Reenquadrar" no proprio item.
-   *
-   * A diferenca nao e capricho: oito dialogos em fila para um envio em lote
-   * seria pior do que o recorte automatico que o cliente reclamou. Quem escolhe
-   * oito de uma vez quer os oito dentro, e ajusta o que precisar depois.
+   * UM arquivo abre o enquadramento (BICHUS-314); VARIOS sobem como sempre e cada um
+   * ganha o botao "Reenquadrar" no proprio item.
    */
   async function enquadrarOuSubir(arquivo: File, indice: number | null) {
     if (!conferirArquivo(arquivo)) {
@@ -235,8 +191,6 @@ export function Galeria({
         return;
       }
     }
-    // Arquivo recusado pelo tipo ou pelo tamanho, ou navegador que nao sabe
-    // recortar: o caminho de sempre, que mostra a recusa dentro do item.
     if (indice === null) acrescentar([arquivo]);
     else substituir(indice, arquivo);
   }
@@ -267,7 +221,6 @@ export function Galeria({
     if (!im.original) return;
     const imagem = await lerImagem(im.original);
     if (!imagem) {
-      // Falhar calado deixaria o botao sem efeito e sem explicacao.
       setAnuncio('Não foi possível abrir o enquadramento desta imagem.');
       return;
     }
@@ -278,8 +231,6 @@ export function Galeria({
     const pedido = recorte;
     if (!pedido) return;
     setRecorte(undefined);
-    // Sem bytes utilizaveis sobe o arquivo cru: melhor a imagem inteira do que
-    // nenhuma.
     const recortado = (await recortar(pedido.imagem, janela)) ?? pedido.original;
     devolverImagem(pedido.imagem);
     if (pedido.chave !== null) {
@@ -508,10 +459,8 @@ export function Galeria({
                         <Icone nome="check" tamanho="s20" />
                       </button>
                     )}
-                    {/* Reenquadrar so existe para o que foi escolhido NESTA
-                        sessao: da imagem ja gravada o painel tem a derivada
-                        publica e nao o original, e recortar em cima dela
-                        perderia qualidade. */}
+                    {
+}
                     {im.original && podeMover && (
                       <button
                         type="button"

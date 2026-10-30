@@ -1,22 +1,4 @@
-/**
- * Processo de trabalho.
- *
- * Mesma imagem de `api.ts`, outro comando. Hoje ele carrega **dois** trabalhos:
- *
- * - o expurgo dos 24 meses de retenção da trilha de auditoria, por temporizador;
- * - o **consumo da fila** (`jobs`), que processa foto de pet e **dispara o
- *   alerta de 5 km** (`alert.dispatch`, BICHUS-18) e **avisa o tutor de que
- *   alguém escaneou a plaquinha do pet dele** (`tag.scan_notify`). Lembrete
- *   entra com a história que o cria.
- *
- * Os dois são coisas diferentes e é por isso que não compartilham laço: o
- * expurgo roda a cada seis horas e não tem fila; o processamento reserva
- * trabalho com `FOR UPDATE SKIP LOCKED` e precisa de uma passada curta.
- *
- * O agendamento vive aqui e não no banco: `pg_cron` não é oferecido de forma
- * uniforme pelos gerenciados, e uma extensão que só existe em um provedor é
- * amarração disfarçada de conveniência (docs/07-devops.md 3.4).
- */
+/** Processo de trabalho. */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { resolverSegredos } from '../shared/config/segredos.js';
@@ -96,158 +78,28 @@ import type { CaseId } from '../shared/types/brands.js';
 
 const INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
-/**
- * De quanto em quanto tempo os envios vencidos são varridos.
- *
- * Quinze minutos. A autorização vale 5, então isso dá no máximo 20 minutos entre
- * o vencimento e a limpeza — folgado de sobra para lixo que ninguém vê, e raro o
- * bastante para não competir com o processamento de foto, que é o trabalho que
- * alguém está esperando.
- */
+/** De quanto em quanto tempo os envios vencidos são varridos. */
 const INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS = 15 * 60 * 1000;
 
-/**
- * Quanto o worker espera entre duas passadas na fila.
- *
- * Dois segundos, e não duzentos milissegundos: a foto do pet não é interativa —
- * o cadastro já avançou sem ela (é o ponto inteiro de BICHUS-87) e ninguém está
- * olhando um botão girar. Sondar rápido só gastaria conexão de banco para
- * encontrar a fila vazia.
- */
+/** Quanto o worker espera entre duas passadas na fila. */
 const INTERVALO_DA_FILA_EM_MILISSEGUNDOS = 2000;
 
-/**
- * De quanto em quanto tempo as localizações de referência vencidas são
- * apagadas.
- *
- * Seis horas, o mesmo da trilha, e a folga é intencional. **Este temporizador
- * não é o que faz a conta sair da base de alerta** — isso o `WHERE
- * expires_at > agora` de toda leitura já fez, no milissegundo do vencimento
- * (critério 7 da BICHUS-92). O que ele faz é retenção: dado vencido não fica
- * guardado esperando alguém precisar dele (ADR-0010). Errar por seis horas na
- * hora de apagar não muda quem recebe alerta nenhum; errar no sentido contrário
- * — depender desta varredura para a elegibilidade — faria a janela de 30 dias
- * virar "30 dias mais o atraso do worker", e ninguém acusaria.
- */
+/** De quanto em quanto tempo as localizações de referência vencidas são apagadas. */
 const INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
-/**
- * Quantos trabalhos por passada.
- *
- * UM. Processamento de imagem é o trabalho mais pesado em memória que existe
- * neste sistema, e o worker roda com limite de memória e reinício automático
- * (SEC-007). Pegar um lote de dez significaria dez decodificações concorrendo
- * pelo mesmo teto, e o estouro derrubaria as dez — inclusive as nove que
- * estavam saudáveis.
- */
+/** Quantos trabalhos por passada. */
 const TRABALHOS_POR_PASSADA = 1;
 
-/**
- * Quantas fotos de achado a varredura enfileira por passada.
- *
- * Enfileirar é um `INSERT` por linha, e não decodifica imagem nenhuma: o número
- * é de volume de fila, não de memória. 20 a cada 15 minutos dá 80 por hora, que
- * é bem mais que o teto de chamada daquelas rotas (3 fotos por aviso, para
- * sempre) consegue produzir — e com teto, para que um reinício longo não
- * enfileire a tabela inteira numa passada.
- */
+/** Quantas fotos de achado a varredura enfileira por passada. */
 const FOTOS_DE_ACHADO_POR_VARREDURA = 20;
 
-/**
- * QUANTO TEMPO DE `running` SEM SINAL DE VIDA É ÓRFÃO: cinco minutos.
- *
- * O número não é redondo por gosto. Ele sai de três medições e de um limite que
- * já existe neste sistema.
- *
- * **O teto do trabalho legítimo, medido.** O pior caso que `inspecionar` aceita
- * é 50 megapixels exatos (o teto é `> 50`, não `>=`) em JPEG progressivo, e ele
- * cabe nos 10 MiB de `UploadIntentInput.byte_size`: 2,1 MiB. No container com
- * `mem_limit: 448m`, a inspeção mais as duas derivadas levaram, por foto:
- *
- *   sem limite de CPU ......... 0,68 s a 2,4 s
- *   `--cpus 1` ................ 0,83 s a 0,92 s
- *   `--cpus 0,5` .............. 1,6 s a 2,2 s
- *   `--cpus 2`, primeira foto . 4,2 s (a mais lenta de todas as medições)
- *
- * Quatro segundos e dois décimos é o pior tempo de imagem medido. Somando as
- * três chamadas de armazenamento que o trabalho faz (um `get` do original e dois
- * `put` de derivada) e a concorrência que ainda cabe no processo, o teto
- * legítimo fica na casa dos quinze segundos.
- *
- * **Por que não algo próximo disso.** Porque `s3-object-storage.ts` não impõe
- * prazo nenhum nas chamadas de rede, e o `fetch` do Node também não: uma conexão
- * pendurada deixa o trabalho legítimo esperando por um tempo que nada neste
- * repositório limita. Derivar o prazo de órfão de um tempo medido de CPU seria
- * derivá-lo da parte do trabalho que tem fim, ignorando a que não tem.
- *
- * **Por que não menos de um minuto.** `proximaTentativaEmMs(1)` é 60 s: é o que
- * um trabalho que falhou por exceção espera antes da próxima tentativa. Um prazo
- * de órfão menor que isso faria a recuperação do caminho ANORMAL ser mais ágil
- * que a retentativa do caminho normal, e a fila passaria a favorecer o trabalho
- * cujo processo morreu.
- *
- * **Por que exatamente 300 s.** É a validade da autorização de envio
- * (`VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS`, em `media-service.ts`): o intervalo que
- * este sistema já escolheu como o limite externo de uma etapa do ciclo de vida de
- * uma foto. Usar o mesmo número mantém uma decisão só onde havia uma, e dá 20
- * vezes de folga sobre o teto legítimo medido — folga suficiente para a chamada
- * de rede sem prazo esticar bastante antes de um trabalho vivo ser tomado de
- * quem o está fazendo.
- *
- * **O preço, dito com clareza.** A foto de quem caiu no azar fica até cinco
- * minutos e meio em `processing` antes de alguém tentar de novo. Isso é aceitável
- * aqui e em pouco lugar mais: a foto do pet não é interativa, o cadastro já
- * avançou sem ela (é o ponto inteiro da BICHUS-87) e ninguém está olhando um
- * botão girar.
- */
+/** QUANTO TEMPO DE `running` SEM SINAL DE VIDA É ÓRFÃO: cinco minutos. */
 const PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS = 5 * 60 * 1000;
 
-/**
- * QUANTAS ORFANDADES ANTES DE DESISTIR: duas.
- *
- * A pergunta por trás do número é como se distingue "falhou pela foto" de
- * "falhou por azar", e a resposta não está na contagem: está em **qual coluna
- * conta**.
- *
- * Trabalho que lança exceção passa por `fail`, que grava `last_error` e conta em
- * `attempts`. Armazenamento fora do ar, banco indisponível, rede: tudo isso
- * acusa o AMBIENTE, e cinco tentativas com espera crescente é a resposta certa
- * porque o ambiente volta.
- *
- * Trabalho recuperado de `running` por trava vencida não passou por `fail`
- * nenhum: ele **matou o processo**. Essa é a assinatura da carga, não do
- * ambiente, e é exatamente por isso que ela merece coluna própria
- * (`orphan_recoveries`) e teto próprio. O que mata o processo decodificando uma
- * imagem mata de novo na retentativa, com a mesma imagem.
- *
- * **Por que não uma.** Porque a primeira morte é ambígua de verdade, e por
- * motivos que não têm nada a ver com a foto: implantação mandando SIGKILL, o
- * matador de memória do cgroup escolhendo este processo por causa de um trabalho
- * VIZINHO, a máquina reiniciando. Desistir na primeira jogaria fora uma foto boa
- * a cada implantação que pegasse o worker ocupado.
- *
- * **Por que não cinco, que é o padrão de `max_attempts`.** Porque cada morte
- * leva consigo todo trabalho que estava em voo no mesmo processo, e não só o
- * culpado. Repetir cinco vezes é pagar quatro quedas por uma informação que a
- * segunda já deu.
- *
- * **Por que duas separa.** Porque a segunda reserva acontece pelo menos um
- * minuto depois da primeira (a recuperação devolve com a espera de `fail`, não
- * com `run_after = now()`), e a janela de uma implantação já passou. Morrer duas
- * vezes segurando a MESMA carga, em reservas separadas por minutos, não é
- * coincidência: é a carga.
- */
+/** QUANTAS ORFANDADES ANTES DE DESISTIR: duas. */
 const TETO_DE_ORFANDADE = 2;
 
-/**
- * De quanto em quanto tempo os órfãos são varridos: um minuto.
- *
- * Menor que o prazo de órfandade de propósito. Varrer a cada quinze minutos,
- * como as outras varreduras, faria a latência de detecção ser o prazo mais o
- * intervalo — vinte minutos para descobrir algo que se decidiu chamar de órfão em
- * cinco. A varredura é uma consulta sobre um índice parcial de linhas em voo, que
- * são poucas por construção; um minuto não pesa.
- */
+/** De quanto em quanto tempo os órfãos são varridos: um minuto. */
 const INTERVALO_DA_VARREDURA_DE_ORFAOS_EM_MILISSEGUNDOS = 60 * 1000;
 
 /** Teto de linhas por varredura: uma passada não pode virar transação longa. */
@@ -255,55 +107,17 @@ const ORFAOS_POR_VARREDURA = 20;
 
 export async function main(): Promise<void> {
   assertSafeBoot();
-  // Os segredos vêm ANTES de `loadAppConfig()` porque é ela que os lê. Em
-  // `dev` isto é o `env_file` de sempre; em `prod`/`preprod` vem do gerenciador
-  // (ADR-0022), e nos dois casos o valor chega em `process.env` com o MESMO
-  // nome — é o que mantém os `requireEnv('NOME')` literais visíveis para a
-  // guarda da esteira e as validações de forma valendo sem uma linha nova.
-  //
-  // Ligar aqui não é detalhe: sem esta chamada a porta inteira seria código
-  // morto, que foi exatamente o defeito que o QA achou em
-  // `invalidarTodasAsSessoes` — mecanismo escrito, testado, e sem chamador.
   await resolverSegredos(criarSecretProvider(optionalEnv('ENVIRONMENT') ?? 'dev'));
 
   const config = loadAppConfig();
   const banco = createDb(config.databaseUrl);
 
-  // Declarado ANTES de qualquer trabalho. Entre o fim do primeiro expurgo e o
-  // agendamento do próximo não pode existir um instante em que o laço de
-  // eventos esteja vazio: é nesse instante que o processo sai com 0.
   const vida = manterProcessoVivo();
 
-  // Uma instância só, pelo mesmo motivo de `api.ts`: o gerador de UUIDv7 usa o
-  // relógio para o prefixo ordenável, e dois geradores são dois relógios.
   const ids = criarIdGenerator(() => systemClock.now());
   const fila = criarJobQueue(banco.db, ids);
 
-  // O remetente de push é montado AQUI, e não em `api.ts`, porque é aqui que o
-  // envio acontece: a API **enfileira** (`push.send`, `alert.dispatch`) e o
-  // worker envia. A métrica do ADR de arquitetura diz isso com todas as letras
-  // — "da abertura ao último push ENFILEIRADO, ≤ 60 s" —, o ADR-0008 e
-  // docs/07-devops.md 4.1 descrevem o log do alerta como saída DO WORKER, e o
-  // cabeçalho deste arquivo já prevê que "alerta, lembrete e e-mail entram com
-  // as histórias que os criam". Um remetente montado na API seria um segundo
-  // caminho de envio que ninguém escolheu.
-  //
-  // Montar aqui não é detalhe: sem esta linha, a porta, os dois adaptadores e a
-  // porteira do payload seriam código morto — a mesma família de
-  // `invalidarTodasAsSessoes` e da rota do webhook de entrega, que este
-  // repositório já registrou duas vezes hoje.
-  //
-  // O que AINDA não existe, e é honesto dizer onde para: o tratador de
-  // `push.send` na fila. Ele depende da tabela `user_devices`
-  // (docs/03-arquitetura.md), que não tem migração, e de quem decide QUEM
-  // recebe — o raio de 5 km e o teto de fadiga, que são de outra camada e de
-  // outra história. Quando ele chegar, ele recebe este `push` e mais nada muda.
   const push = criarPushSender(config.push);
-  // O transporte no log de subida, antes de qualquer trabalho: "por onde este
-  // processo manda push?" é a primeira pergunta de todo incidente de
-  // notificação, e é para ela que a porta declara `transporte`. Responder isso
-  // olhando para `ENVIRONMENT` é deduzir em vez de ler — e com `log` a resposta
-  // certa é "por lugar nenhum", que ninguém adivinha.
   console.info(JSON.stringify({ evento: 'push.transporte', transporte: push.transporte }));
 
   const dependenciasDaFoto = {
@@ -314,8 +128,6 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
-  // ADR-0027 item 10 (BICHUS-267). A imagem de catalogo do painel, pelo mesmo
-  // armazenamento e o mesmo processador da foto do pet.
   const dependenciasDaImagemDeCatalogo = {
     imagens: criarImagensDeCatalogoDoWorker(banco.db),
     armazenamento: dependenciasDaFoto.armazenamento,
@@ -324,13 +136,8 @@ export async function main(): Promise<void> {
   };
 
   /**
-   * A HIGIENE DA FOTO DO ACHADO, pelo MESMO processador e o MESMO armazenamento
-   * da foto de pet.
-   *
-   * Não há segundo worker de imagem neste sistema, e não pode haver: dois
-   * caminhos de processamento divergem, e o que diverge primeiro é sempre o que
-   * ninguém está olhando. O que entra aqui é o repositório — a foto do achado
-   * mora em `upload_intents`, e não em `pet_photos`.
+   * A HIGIENE DA FOTO DO ACHADO, pelo MESMO processador e o MESMO armazenamento da
+   * foto de pet.
    */
   const dependenciasDaHigieneDoAchado = {
     fotos: criarFotosDoAchadoDoWorker(banco.db),
@@ -340,16 +147,6 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
-  // BICHUS-18. O DISPARO DO ALERTA DE 5 KM, montado aqui e em lugar nenhum
-  // mais. É esta fiação que liga as três funções que a BICHUS-91 deixou com o
-  // chamador nomeado e ausente: `enderecoDeEnvio` e `revogarPorTokenRecusado`
-  // entram por `criarEntregaDoAlertaPorPush`, e o remetente de push acima
-  // deixa de ser decoração.
-  //
-  // A trilha é a do serviço de aparelhos e não uma nova: a revogação por token
-  // recusado grava `device.revoked` com o motivo, e como a linha do aparelho é
-  // apagada, essa é a única memória de por que aquele aparelho parou de
-  // receber.
   const aparelhos = new RegistroDeAparelhosService({
     repositorio: criarRegistroDeAparelhos(banco.db, ids),
     clock: systemClock,
@@ -359,9 +156,6 @@ export async function main(): Promise<void> {
       clock: systemClock,
       ipHmacKey: config.ipHmacKey,
       onFailure: (erro, evento) => {
-        // A trilha não derruba o alerta: um incidente no esquema de auditoria
-        // não é motivo para 500 vizinhos ficarem sem o aviso. Ruidosa, porém —
-        // falha silenciosa aqui apagaria a única memória da revogação.
         console.error(
           JSON.stringify({
             evento: 'audit.write_failed',
@@ -382,18 +176,9 @@ export async function main(): Promise<void> {
       revogarPorTokenRecusado: (token) => aparelhos.revogarPorTokenRecusado(token),
     }),
     clock: systemClock,
-    // A mesma montagem de `api.ts`: o banco guarda a chave, e a URL pública é
-    // montada na leitura. Uma URL gravada carrega o domínio do dia em que foi
-    // escrita, e é assim que `localhost` vaza para produção.
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   });
 
-  // BICHUS-66. QUEM FECHA A JANELA DE 24 H.
-  //
-  // O aceite agenda `case.transfer_consummate` para daqui 24 h; este servico e
-  // quem executa. Ele mora no WORKER e nao na API de proposito: consumar troca o
-  // dono do pet e revoga todas as tags (ADR-0004), e isso nao pode depender de
-  // alguem abrir uma tela na hora certa.
   const transferencias = new PetTransferService({
     repositorio: criarTransferRepository(banco.db),
     ids,
@@ -412,27 +197,11 @@ export async function main(): Promise<void> {
     mailer: criarMailer(config.mail),
     contas: criarEmailVerificadoDoChamador(banco.db),
     pets: criarNomeDoPet(banco.db),
-    // A consumacao nao enfileira nada. A fila entra na porta porque o tipo a
-    // exige (o mesmo servico serve a API, que agenda), e nao porque este lado a
-    // use -- e por isso ela e a mesma instancia, e nao uma segunda.
     fila,
     baseDaWeb: config.webBaseUrl,
   });
 
-  /**
-   * A VARREDURA DE ÓRFÃOS, e ela é o que dá saída a `running`.
-   *
-   * Dois desfechos, e os dois precisam de log: devolvido à fila (alguém vai
-   * tentar de novo, nada a fazer) e desistido (final, e alguém prometeu algo a
-   * uma pessoa). No segundo caso, um trabalho de foto deixa uma foto presa em
-   * `processing`, e é aqui que ela sai — em `rejected`, com motivo.
-   *
-   * Trabalho de outro tipo que desiste por orfandade sai só no log, e isso é
-   * honesto em vez de completo: `alert.dispatch` e `case.transfer_consummate`
-   * têm rede de segurança própria (a varredura de transferências reenfileira;
-   * o alerta é reavaliado por caso), e inventar desfecho para eles aqui seria
-   * um segundo caminho de consumação que ninguém escolheu.
-   */
+  /** A VARREDURA DE ÓRFÃOS, e ela é o que dá saída a `running`. */
   const rodarVarreduraDeOrfaos = async (): Promise<void> => {
     const recuperados = await fila.recuperarOrfaos({
       prazoEmMs: PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS,
@@ -477,8 +246,6 @@ export async function main(): Promise<void> {
     }
   };
 
-  // BICHUS-292. O push de pedido aprovado para encontro privado da Rede, so
-  // com o titulo. A API enfileira na transacao da decisao; aqui ele sai.
   const avisoDeAprovacao = {
     pedidos: criarLeituraDoPedidoAprovado(banco.db),
     entrega: criarAvisoDeAprovacaoPorPush({
@@ -488,14 +255,6 @@ export async function main(): Promise<void> {
     }),
   };
 
-  // O AVISO AO TUTOR DE QUE ALGUEM ESCANEOU A PLAQUINHA, e ele e o buraco
-  // central do produto que estava aberto: a API gravava o aviso do achador e
-  // **nao enfileirava entrega nenhuma**.
-  //
-  // Mesma composicao do aviso de aprovacao da `Rede`, de proposito: a MESMA
-  // fila, o MESMO `PushSender`, a MESMA revogacao por token recusado. O
-  // `mailer` e o `contas` sao as MESMAS instancias que a transferencia usa
-  // acima — duas seriam duas conexoes e dois transportes para o mesmo dado.
   const avisoAoTutor = {
     avisos: criarLeituraDoAvisoAoTutor(banco.db),
     entrega: criarAvisoAoTutorPorPush({
@@ -512,10 +271,6 @@ export async function main(): Promise<void> {
     for (const trabalho of trabalhos) {
       try {
         if (trabalho.kind === 'alert.dispatch') {
-          // BICHUS-18. O desfecho vem como VALOR e não como exceção, e por isso
-          // todos eles completam o trabalho: "o caso não existe mais" e "este
-          // caso já avisou hoje" não são falhas, e reenfileirá-los gastaria a
-          // fila contra algo que nunca vai mudar de resposta.
           const { caseId } = trabalho.payload as { caseId: string };
           const desfecho = await disparoDoAlerta.disparar(caseId as CaseId);
           await fila.complete(trabalho.id);
@@ -524,10 +279,6 @@ export async function main(): Promise<void> {
         }
 
         if (trabalho.kind === 'case.transfer_consummate') {
-          // Mesmo padrao do alerta: o desfecho vem como VALOR e nao como
-          // excecao. "Ja cancelada" e "caso de perdido aberto" sao desfechos
-          // NORMAIS desta operacao -- reenfileira-los gastaria a fila contra
-          // algo que nunca vai mudar de resposta.
           const { transferId } = trabalho.payload as { transferId: string };
           const desfecho = await transferencias.consumar(transferId as TransferId);
           await fila.complete(trabalho.id);
@@ -550,10 +301,6 @@ export async function main(): Promise<void> {
         }
 
         if (trabalho.kind === TRABALHO_DE_AVISO_AO_TUTOR) {
-          // Mesmo padrao dos de cima: o desfecho vem como VALOR. "O aviso nao
-          // existe mais" e "o pet foi excluido" nao sao falhas, e
-          // reenfileira-los gastaria a fila contra algo que nunca muda de
-          // resposta. Falha de transporte sim estoura, e ai a fila adia.
           const { found_report_id: avisoId } = trabalho.payload as { found_report_id: string };
           const desfecho = await avisarTutorDoAchado(avisoAoTutor, avisoId, config.webBaseUrl);
           await fila.complete(trabalho.id);
@@ -584,49 +331,6 @@ export async function main(): Promise<void> {
         }
 
         if (trabalho.kind === 'match.recompute') {
-          // O CRUZAMENTO DE PARES NAO EXISTE AINDA, E ESTE RAMO E ISSO POR
-          // ESCRITO. Ele conclui o trabalho e **nao cruza nada**.
-          //
-          // ## O que estava acontecendo, medido
-          //
-          // `found-report-service.ts:139` enfileira `match.recompute` a cada
-          // achado registrado SEM caso vinculado. A cadeia de despacho daqui
-          // nao tinha ramo para o tipo, e ele caia no pega-tudo logo abaixo,
-          // que chama `fila.fail`. E `fail` nao e uma falha por achado: ele
-          // devolve a linha a `pending` com espera e so declara `failed` quando
-          // `attempts >= max_attempts` (`kysely-job-queue.ts`), que e **5** por
-          // omissao. Entao cada achado registrado custava cinco reservas de
-          // worker e terminava em `failed` garantido -- em producao, sem parar.
-          //
-          // ## Por que CONCLUIR, e nao deixar de enfileirar
-          //
-          // A outra saida era tirar o `enqueue` do servico. Ela perde duas
-          // coisas medidas:
-          //
-          // 1. **Ha portao exigindo o enfileiramento.**
-          //    `found-report-routes.test.ts:610` afirma
-          //    `enfileirados[0]?.kind === 'match.recompute'`. Parar de
-          //    enfileirar obrigaria a apagar esse portao, isto e, a remover uma
-          //    exigencia medida do produto para consertar o sintoma dela.
-          // 2. **O motor de dominio JA EXISTE.**
-          //    `FoundReportService.cruzarAchado` (`found-report-service.ts:146`)
-          //    le `paresParaCruzar`, aplica `cruzar` e grava sugestoes -- e o
-          //    cabecalho dela diz que o consumidor e "dez linhas de reserva e
-          //    confirmacao". O que falta e ligar, e ligar e decisao de produto
-          //    (o cruzamento sugere correspondencia a tutor de pet perdido),
-          //    nao conserto de hemorragia de fila. O gancho fica aqui, pronto,
-          //    no lugar exato.
-          //
-          // ## O que este ramo NAO pode fazer, e nao faz
-          //
-          // **Nao pode ser silencioso.** Um `complete` mudo e a forma de a fila
-          // ficar limpa mentindo: ninguem descobre que N achados nunca foram
-          // cruzados. Entao ele registra, com nivel de AVISO, e o evento e
-          // contavel -- e esse numero e a evidencia com que se pede o motor.
-          //
-          // No dia em que o cruzamento for ligado, este bloco vira
-          // `await servicoDeAchados.cruzarAchado(achado)` e o log passa a dizer
-          // quantas sugestoes sairam. Nada mais muda.
           const { foundReportId: achado } = trabalho.payload as { foundReportId: string };
           await fila.complete(trabalho.id);
           console.warn(
@@ -643,9 +347,6 @@ export async function main(): Promise<void> {
         }
 
         if (trabalho.kind !== 'media.process_upload') {
-          // Trabalho de um tipo que este worker ainda não sabe fazer. Falhar
-          // com o motivo é melhor que ignorar em silêncio: ignorado, ele fica
-          // `running` para sempre e ninguém descobre que a fila tem entulho.
           await fila.fail(trabalho.id, `tipo sem tratador neste worker: ${trabalho.kind}`);
           continue;
         }
@@ -656,36 +357,17 @@ export async function main(): Promise<void> {
           JSON.stringify({
             evento: `media.${resultado.tipo}`,
             foto: resultado.fotoId,
-            // O peso e o degrau de qualidade de cada derivada. É este número que
-            // responde "o teto de 500 KB do cliente está sendo respeitado?" sem
-            // ninguém precisar abrir o balde para medir.
             ...(resultado.tipo === 'pronta' ? { derivadas: resultado.derivadas } : {}),
           }),
         );
       } catch (erro: unknown) {
-        // Falha de VERDADE (armazenamento fora do ar, banco indisponível): a
-        // fila adia e tenta de novo. Recusa de arquivo não passa por aqui —
-        // ela vira `rejected` dentro de `processarFoto`, e é final.
         await fila.fail(trabalho.id, String(erro));
         console.error(JSON.stringify({ evento: 'media.process_failed', trabalho: trabalho.id, erro: String(erro) }));
       }
     }
   };
 
-  /**
-   * BICHUS-66. A REDE DE SEGURANCA DA JANELA, e ela nao e redundancia inutil.
-   *
-   * O trabalho agendado pode nao ter rodado: processo caido por mais de um dia,
-   * banco restaurado de um backup anterior ao agendamento, fila purgada. Sem
-   * esta varredura, uma transferencia aceita ficaria `accepted` para sempre --
-   * com a tela do tutor dizendo que a janela corre e NADA acontecendo quando ela
-   * fecha, que e a pior forma de errar aqui: a promessa continua na tela e o
-   * sistema parou de honra-la.
-   *
-   * Reenfileirar em vez de consumar na varredura mantem UM caminho de
-   * consumacao. Dois caminhos divergem, e o que diverge primeiro e sempre o que
-   * ninguem esta olhando.
-   */
+  /** BICHUS-66. A REDE DE SEGURANCA DA JANELA, e ela nao e redundancia inutil. */
   const rodarVarreduraDeTransferencias = async (): Promise<void> => {
     const agora = systemClock.now();
     const { aExpirar, aConsumar } = await transferenciasVencidas(banco.db, agora, 50);
@@ -702,24 +384,8 @@ export async function main(): Promise<void> {
   };
 
   /**
-   * A VARREDURA DA HIGIENE, e é ela que liga o worker aos DOIS caminhos do
-   * achado sem rota nova nenhuma.
-   *
-   * Por que uma varredura e não um `enqueue` na confirmação, que é o desenho da
-   * foto de pet: **a foto do achado não tem confirmação**. No caminho de quem
-   * tem conta, `createFoundReportPhotoUploadIntent` assina a autorização e
-   * nenhuma operação do contrato confirma o envio; no caminho de quem não tem
-   * conta, a confirmação é a referência opaca em `PATCH /finder/found-report`,
-   * que é outro módulo e outra transação. Uma varredura cobre os dois, cobre o
-   * que JÁ ESTÁ no balde com EXIF, e não depende de um cliente que ainda não
-   * existe — "nenhum dos dois tem cliente hoje" é exatamente o motivo de a
-   * limpeza precisar valer para o envio que aparecer amanhã.
-   *
-   * Ela ENFILEIRA e não processa: um caminho de processamento só. O teto por
-   * passada é [FOTOS_DE_ACHADO_POR_VARREDURA] e não o `TRABALHOS_POR_PASSADA`
-   * da fila — enfileirar é um `INSERT` e não decodifica nada, então o número
-   * aqui é de volume de fila, e quem protege a memória continua sendo o laço da
-   * fila, que tira UM trabalho por passada.
+   * A VARREDURA DA HIGIENE, e é ela que liga o worker aos DOIS caminhos do achado
+   * sem rota nova nenhuma.
    */
   const rodarVarreduraDeHigiene = async (): Promise<void> => {
     const pendentes = await dependenciasDaHigieneDoAchado.fotos.pendentes(
@@ -731,9 +397,6 @@ export async function main(): Promise<void> {
       });
     }
     if (pendentes.length === 0) return;
-    // A fila inteira no log, e não só esta passada: o número que interessa é
-    // "quantas fotos de achado ainda estão com EXIF no balde", e ele não cabe
-    // numa contagem limitada a 10.
     console.info(
       JSON.stringify({
         evento: 'achado.higiene_enfileirada',
@@ -749,8 +412,6 @@ export async function main(): Promise<void> {
       armazenamento: dependenciasDaFoto.armazenamento,
       clock: systemClock,
     });
-    // Silêncio quando não há nada: uma linha de log a cada 15 minutos dizendo
-    // "zero" afoga o log em que alguém vai procurar um problema de verdade.
     if (r.examinadas > 0) {
       console.info(JSON.stringify({ evento: 'media.purge_expired', ...r }));
     }
@@ -760,22 +421,15 @@ export async function main(): Promise<void> {
 
   const rodarExpurgoDeLocalizacao = async (): Promise<void> => {
     const apagadas = await localizacoes.expurgarVencidas(systemClock.now());
-    // Silêncio quando não há nada, pelo mesmo motivo da varredura de envios.
     if (apagadas > 0) {
       console.info(JSON.stringify({ evento: 'privacy.reference_location_purged', apagadas }));
     }
   };
 
-
   /**
-   * O expurgo de conta excluída, e ele mora aqui e não na API pelo mesmo motivo
-   * do expurgo da trilha: `DELETE /v1/me` responde 202 porque o efeito completo
-   * tem prazo de 30 dias, e o que tem prazo é do worker.
-   *
-   * A trilha é montada aqui, e não é a mesma dos aparelhos por acaso: ela grava
-   * `privacy.account_purged`, que é a **única** memória de que aquela conta
-   * existiu depois que a linha some. `audit.events` não referencia `users` de
-   * propósito, e é isso que faz o registro sobreviver ao que ele registra.
+   * O expurgo de conta excluída, e ele mora aqui e não na API pelo mesmo motivo do
+   * expurgo da trilha: `DELETE /v1/me` responde 202 porque o efeito completo tem
+   * prazo de 30 dias, e o que tem prazo é do worker.
    */
   const contas = criarIdentityRepository(banco.db, ids);
   const trilhaDoExpurgo = criarTrilhaDeAuditoria({
@@ -790,15 +444,6 @@ export async function main(): Promise<void> {
     },
   });
 
-  // SEC-020: QUEM APAGA OS ARQUIVOS, e ele é injetado no expurgo em vez de
-  // importado por ele. `identity` não conhece `media` (ADR-0008), e o que
-  // atravessa é uma função de uma linha declarada do lado de identidade.
-  //
-  // As dependências são as MESMAS de `dependenciasDaFoto`, acima: o repositório
-  // de mídia e o armazenamento que o worker já constrói para processar foto.
-  // Uma segunda instância de `ObjectStorage` aqui seria uma segunda leitura da
-  // configuração de balde, e a divergência só apareceria no dia em que uma
-  // apontasse para o lugar errado.
   const apagarObjetosDaConta = criarApagadorDeObjetosDaConta({
     repositorio: dependenciasDaFoto.repositorio,
     armazenamento: dependenciasDaFoto.armazenamento,
@@ -811,9 +456,6 @@ export async function main(): Promise<void> {
       clock: systemClock,
       apagarObjetosDaConta,
     });
-    // Silêncio quando não há nada, pelo mesmo motivo das outras varreduras. A
-    // exceção é a falha: ela fala SEMPRE, mesmo com zero expurgadas, porque uma
-    // conta que não some no prazo é descumprimento de política e não ruído.
     if (r.examinadas > 0 || r.falhas > 0) {
       console.info(JSON.stringify({ evento: 'privacy.account_purge', ...r }));
     }
@@ -830,8 +472,6 @@ export async function main(): Promise<void> {
     );
   };
 
-  // BICHUS-292 (D54). Pedido de encontro que acabou ha mais de 30 dias sai do
-  // banco. A trilha guarda a decisao pelo `ref`, sem o nome de quem pediu.
   const rodarExpurgoDePedidos = async (): Promise<void> => {
     const removidos = await expurgarPedidosVencidos(banco.db, comoData(systemClock.now()), DIAS_DE_RETENCAO_DO_PEDIDO);
     if (removidos > 0) console.info(JSON.stringify({ evento: 'network.join_request_purge', removidos }));
@@ -902,20 +542,7 @@ export async function main(): Promise<void> {
   }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
   temporizadorDeTransferencias.unref();
 
-  /**
-   * A PASSADA DA FILA NÃO CORRE SOBRE SI MESMA, e sem esta linha ela corria.
-   *
-   * `setInterval` não espera promessa. Com o intervalo em 2 s e uma foto grande
-   * levando mais que isso, a passada seguinte começava em cima da anterior e
-   * reservava OUTRO trabalho — então `TRABALHOS_POR_PASSADA = 1` deixava de
-   * significar "uma decodificação por vez neste processo". Medido: três
-   * decodificações simultâneas do pior caso aceito matam o processo nos 448 MiB
-   * do `compose.yaml`, e matam **mesmo com o cache do libvips desligado**. As
-   * três morrem, inclusive as duas saudáveis.
-   *
-   * É também por isso que `WORKER_IMAGE_CONCURRENCY: "1"` no `compose.yaml` não
-   * protegia nada: nenhuma linha deste repositório lê essa variável.
-   */
+  /** A PASSADA DA FILA NÃO CORRE SOBRE SI MESMA, e sem esta linha ela corria. */
   const passadaDaFila = criarPassadaSemReentrada(rodarFila);
 
   const temporizadorDaFila = setInterval(() => {
@@ -926,10 +553,6 @@ export async function main(): Promise<void> {
   }, INTERVALO_DA_FILA_EM_MILISSEGUNDOS);
   temporizadorDaFila.unref();
 
-  // A varredura de órfãos também não se sobrepõe: ela escreve nas mesmas linhas
-  // que está lendo, e duas passadas concorrentes no mesmo processo contariam a
-  // mesma orfandade duas vezes. Entre processos isso é o `SKIP LOCKED`; dentro
-  // de um, é esta guarda.
   const passadaDeOrfaos = criarPassadaSemReentrada(rodarVarreduraDeOrfaos);
 
   const temporizadorDeOrfaos = setInterval(() => {
@@ -942,20 +565,12 @@ export async function main(): Promise<void> {
 
   const temporizador = setInterval(() => {
     if (vida.estaEncerrando) return;
-    // Falha no expurgo não derruba o worker, e também não some: sai no log e a
-    // próxima janela tenta de novo.
     rodarExpurgo().catch((erro: unknown) => {
       console.error(JSON.stringify({ evento: 'audit.purge_failed', erro: String(erro) }));
     });
   }, INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS);
-  // Sem referência: quem responde pelo tempo de vida do processo é `vida`, um
-  // lugar só. Temporizador de trabalho segurando o processo por efeito colateral
-  // é como o defeito anterior se escondeu.
   temporizador.unref();
 
-  // Processo de vida longa. A plataforma orientada a requisição congela o
-  // processo fora do ciclo de uma requisição, e é por isso que o worker é um
-  // processo separado e não uma thread de fundo da API.
   await vida.encerrado;
 
   clearInterval(temporizador);

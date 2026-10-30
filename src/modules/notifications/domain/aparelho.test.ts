@@ -1,29 +1,4 @@
-/**
- * O predicado de elegibilidade, e a distinção que ele NÃO pode perder.
- *
- * Duas coisas são medidas aqui, e as duas custam caro quando erram:
- *
- * 1. **Permissão concedida sem token não é alcançável.** A leitura preguiçosa
- *    é "granted quer dizer que recebe", e ela infla `reachable_tutors` com
- *    aparelhos para os quais não existe endereço de entrega. A janela é real:
- *    no iOS o SDK só entrega o token depois do registro no APNs.
- * 2. **`not_asked` é distinto de `denied`** (critério 2). Nenhum dos dois é
- *    alcançável, o que torna tentador colapsá-los num booleano — e o que se
- *    perde é a diferença entre "disse não" e "ainda não perguntamos", que é a
- *    diferença entre parar de insistir e a BICHUS-24 ter uma segunda
- *    oportunidade.
- *
- * ## Iscas, e como foram provadas
- *
- * Desligadas em `aparelho.ts`, rodadas e vistas reprovar em 22/09/2026, e
- * depois restauradas:
- *
- * | o que foi desligado | reprovaram |
- * |---|---|
- * | `podeReceberPush` deixando de exigir `pushToken !== null` | 3 casos |
- * | `podeReceberPush` aceitando qualquer permissão | 5 casos |
- * | `contaEAlcancavelPorPush` usando `every` em vez de `some` | 2 casos |
- */
+/** O predicado de elegibilidade, e a distinção que ele NÃO pode perder. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -81,9 +56,6 @@ void describe('podeReceberPush: os critérios 1 e 4 do ADR-0006, e só eles', ()
   }
 
   void it('exatamente UMA das seis combinações é alcançável', () => {
-    // Guarda contra as duas formas de errar por atacado: um predicado que
-    // aprova tudo e um que reprova tudo passariam em metade dos casos acima
-    // sem que a metade que falha aponte a causa.
     const alcancaveis = TABELA.filter((caso) =>
       podeReceberPush(aparelho(caso.permissao, caso.token)),
     );
@@ -94,9 +66,6 @@ void describe('podeReceberPush: os critérios 1 e 4 do ADR-0006, e só eles', ()
 
 void describe('not_asked é um estado distinto de denied (critério 2)', () => {
   void it('os dois recusam push, e os dois continuam REGISTRADOS', () => {
-    // O ADR-0008 é explícito: quem negou continua registrado, e é esse registro
-    // que permite contar quantos tutores são de fato alcançáveis. Um aparelho
-    // negado que não existisse no banco faria a métrica parecer melhor do que é.
     const negado = aparelho('denied', TOKEN);
     const naoPerguntado = aparelho('not_asked', TOKEN);
     assert.equal(podeReceberPush(negado), false);

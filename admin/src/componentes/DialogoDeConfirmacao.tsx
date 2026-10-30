@@ -5,12 +5,7 @@ import { Dialogo } from './Dialogo.tsx';
 
 export type ResultadoDaAcaoConfirmada = { ok: true } | { ok: false; mensagem: string };
 
-/**
- * `BO/Dialogo de confirmacao`, variante Destrutivo (secao 25.4). Desde 07/10
- * nenhuma escrita do painel pede senha (decisao do cliente, ADR-0027 item 23):
- * a acao destrutiva continua confirmada aqui, com a consequencia escrita, e sem
- * campo de senha. O foco inicial vai para Cancelar, que e o lado seguro.
- */
+/** `BO/Dialogo de confirmacao`, variante Destrutivo (secao 25.4). */
 export function DialogoDeConfirmacao({
   titulo,
   corpo,

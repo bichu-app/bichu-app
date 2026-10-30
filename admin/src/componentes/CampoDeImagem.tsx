@@ -16,20 +16,7 @@ import {
 import { Icone } from './Icone.tsx';
 import { devolverImagem, lerImagem, podeRecortar, recortar, type ImagemParaRecorte, type Janela } from './recorte-de-imagem.ts';
 
-/**
- * UMA imagem, e nao uma galeria. A `Galeria` e `multiple` e ordenada por
- * posicao -- "a primeira e a principal" --, e nada disso existe numa logo: ela
- * e uma so, nao tem ordem e nao tem descricao por item. Reusar a galeria aqui
- * obrigaria a tela a esconder metade dos controles dela.
- *
- * O envio e o MESMO de todo o painel (`enviarImagem`, ADR-0007): politica,
- * bytes direto no armazenamento e `upload_id` confirmado depois pela escrita do
- * registro. Nao ha segundo caminho de envio no backoffice.
- *
- * Desde 29/10/2026 (BICHUS-314) a escolha passa pelo ENQUADRAMENTO: o arquivo
- * escolhido abre `DialogoDeRecorte`, e o que sobe sao os bytes do recorte. Onde
- * o navegador nao souber recortar, o envio segue exatamente como antes.
- */
+/** UMA imagem, e nao uma galeria. */
 export type PropositoDeImagemUnica = Extract<Proposito, 'directory_logo' | 'directory_photo'>;
 
 export interface PropsDoCampoDeImagem {
@@ -37,16 +24,9 @@ export interface PropsDoCampoDeImagem {
   rotulo: string;
   proposito: PropositoDeImagemUnica;
   api: ClienteDaApi;
-  /**
-   * O que a PESSOA fez neste formulario:
-   *
-   * - `string`: ela escolheu uma imagem nesta sessao, os bytes subiram e este e
-   *   o `upload_id` que a escrita confirma;
-   * - `null`: ela REMOVEU a imagem gravada (o `PATCH` manda `null`);
-   * - `undefined`: ela nao tocou no campo, e o que vale e `salva`.
-   */
+  /** O que a PESSOA fez neste formulario: */
   uploadId: string | null | undefined;
-  /** A imagem GRAVADA, como o servidor a devolve. Ignorada quando `uploadId` foi tocado. */
+  /** A imagem GRAVADA, como o servidor a devolve. */
   salva?: Esquemas['AdminCatalogImage'] | null | undefined;
   aoMudar: (uploadId: string | null) => void;
   ajuda?: string | undefined;
@@ -57,9 +37,7 @@ export interface PropsDoCampoDeImagem {
 
 /**
  * A previa local (`blob:`) do arquivo escolhido, ou `null` onde o ambiente nao
- * sabe criar uma. Ela e CONFORTO -- ver o que se escolheu antes de salvar --, e
- * nao pode derrubar o envio: sem previa o campo mostra o lugar da imagem e os
- * bytes sobem igual.
+ * sabe criar uma.
  */
 function previaLocal(arquivo: File): string | null {
   try {
@@ -87,8 +65,8 @@ export function CampoDeImagem({
   const [anuncio, setAnuncio] = useState('');
   /**
    * O arquivo ORIGINAL escolhido nesta sessao, e nunca o recortado: reenquadrar
-   * sobre o recorte anterior impediria afastar o zoom de novo e empilharia
-   * perda de qualidade a cada ajuste.
+   * sobre o recorte anterior impediria afastar o zoom de novo e empilharia perda de
+   * qualidade a cada ajuste.
    */
   const [original, setOriginal] = useState<File>();
   const [emRecorte, setEmRecorte] = useState<ImagemParaRecorte>();
@@ -101,15 +79,17 @@ export function CampoDeImagem({
         try {
           URL.revokeObjectURL(anterior);
         } catch {
-          // Nada a fazer: o endereco ja nao vale, e falhar ao devolve-lo nao
-          // pode parar a tela.
+          // Nada a fazer: o endereco ja nao vale, e falhar ao devolve-lo nao pode parar a tela.
         }
       }
       return nova;
     });
   }
 
-  /** A dimensao e o envio. Recebe o RECORTE quando houve um, e o arquivo cru quando nao. */
+  /**
+   * A dimensao e o envio. Recebe o RECORTE quando houve um, e o arquivo cru quando
+   * nao.
+   */
   async function enviarEscolhido(arquivo: File) {
     const naoServe = await conferirDimensao(arquivo, proposito);
     if (naoServe) {
@@ -135,9 +115,6 @@ export function CampoDeImagem({
   }
 
   async function escolher(arquivo: File) {
-    // A conferencia local vem ANTES de qualquer chamada: tipo e tamanho o
-    // navegador sabe sozinho, e pedir politica para um arquivo de 8 MB so para
-    // ouvir `422` gasta uma viagem e some com o motivo.
     const naoServe = conferirArquivo(arquivo);
     if (naoServe) {
       setRecusa(naoServe);
@@ -147,9 +124,6 @@ export function CampoDeImagem({
     setOriginal(arquivo);
     const imagem = await lerImagem(arquivo);
     if (imagem) {
-      // A dimensao minima e conferida DENTRO do dialogo, contra o recorte: um
-      // arquivo grande pode virar um recorte pequeno demais, e um pequeno
-      // ainda serve se a pessoa nao aproximar.
       setRecusa(undefined);
       setEmRecorte(imagem);
       return;
@@ -168,8 +142,6 @@ export function CampoDeImagem({
     const arquivo = original;
     if (!imagem || !arquivo) return;
     setEmRecorte(undefined);
-    // Sem bytes utilizaveis o envio segue com o arquivo cru: e melhor subir a
-    // imagem inteira do que nao subir nada.
     const recortado = (await recortar(imagem, janela)) ?? arquivo;
     devolverImagem(imagem);
     await enviarEscolhido(recortado);
@@ -178,8 +150,6 @@ export function CampoDeImagem({
   function fecharRecorte() {
     devolverImagem(emRecorte);
     setEmRecorte(undefined);
-    // Sem o enquadramento nao ha envio, e o seletor volta a aceitar o MESMO
-    // arquivo: sem limpar, escolher de novo nao dispara `change`.
     if (!uploadIdEnviado() && seletor.current) seletor.current.value = '';
   }
 
@@ -197,8 +167,6 @@ export function CampoDeImagem({
     setAnuncio('Imagem removida.');
   }
 
-  // Quem manda e o que a pessoa fez; a gravada so aparece enquanto o campo
-  // esta intocado.
   const enviada = typeof uploadId === 'string';
   const gravada = uploadId === undefined ? (salva ?? undefined) : undefined;
   const endereco = enviada ? previa : gravada?.status === 'ready' ? (gravada.url ?? null) : null;
@@ -212,9 +180,8 @@ export function CampoDeImagem({
   const idDoErro = `${id}-erro`;
   const minima = DIMENSAO_MINIMA[proposito];
   /**
-   * A orientacao fica SEMPRE em tela, e nao so quando algo da errado (pedido
-   * do cliente de 18/10/2026). Quem descobre o limite pela recusa ja perdeu o
-   * tempo de escolher o arquivo errado.
+   * A orientacao fica SEMPRE em tela, e nao so quando algo da errado (pedido do
+   * cliente de 18/10/2026).
    */
   const orientacao = `${ORIENTACAO_DE_TAMANHO} JPG, PNG ou WebP, com pelo menos ${String(minima.largura)} × ${String(minima.altura)} pixels.`;
 
@@ -272,10 +239,8 @@ export function CampoDeImagem({
               if (arquivo) void escolher(arquivo);
             }}
           />
-          {/* Reenquadrar so existe para a imagem escolhida NESTA sessao: da
-              gravada o painel tem a derivada publica, e nao o original -- cortar
-              de novo em cima dela perderia qualidade e poderia cair abaixo da
-              minima. Para reenquadrar uma gravada, escolha o arquivo outra vez. */}
+          {
+}
           {original && podeRecortar() && !envio && (
             <button
               type="button"

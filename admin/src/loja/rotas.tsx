@@ -1,8 +1,8 @@
 import type { RouteObject } from 'react-router';
 
 /**
- * As rotas da Loja. Cada tela carrega o proprio modulo sob demanda (`lazy`):
- * tela nao visitada nao e baixada.
+ * As rotas da Loja. Cada tela carrega o proprio modulo sob demanda (`lazy`): tela
+ * nao visitada nao e baixada.
  */
 export const rotasDaLoja: RouteObject[] = [
   { path: 'loja', lazy: async () => ({ Component: (await import('./ListaDeProdutos.tsx')).default }) },

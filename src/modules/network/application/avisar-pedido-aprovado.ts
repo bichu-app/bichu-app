@@ -1,10 +1,4 @@
-/**
- * O trabalho `network.join_request_approved`, no worker.
- *
- * O desfecho vem como VALOR: pedido que sumiu (expurgo, conta apagada) ou que
- * nao esta mais aprovado nao e falha, e reenfileira-lo gastaria a fila contra
- * algo que nunca muda de resposta.
- */
+/** O trabalho `network.join_request_approved`, no worker. */
 import type {
   EntregaDoAvisoDeAprovacao,
   LeituraDoPedidoAprovado,

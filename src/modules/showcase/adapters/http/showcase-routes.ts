@@ -1,33 +1,4 @@
-/**
- * As rotas da VITRINE DE FOTOS DO USUÁRIO. São três, e **todas são do dono**.
- *
- * ## Por que não há rota de vitrine de OUTRA pessoa, e a ausência é a defesa
- *
- * Não existe `GET /users/{id}/showcase`, e não é omissão a ser preenchida
- * depois. A vitrine sai em `GET /me/showcase` e em NENHUMA outra resposta:
- *
- * - o **ADR-0025 item 2** proíbe avatar de pessoa na superfície da `Rede`, por
- *   nome;
- * - o contrato afirma em **dois lugares** que `Conversation.participants` nunca
- *   traz foto de perfil.
- *
- * Mostrar a vitrine a terceiro contraria decisão registrada, e seria decisão do
- * cliente — não desta frente. Por isso a rota que a mostraria não existe, em
- * vez de existir com um `if`: um `if` alguém esquece de repetir, uma rota
- * ausente ninguém chama por engano.
- *
- * ## `PUT` e não `POST`, e uma escrita só
- *
- * O corpo manda a vitrine inteira, na ordem. É o desenho das duas galerias da
- * casa, e ele resolve acrescentar, reordenar, **trocar a capa** (posição 0) e
- * remover com uma operação — quatro rotas seriam quatro lugares para o teto de
- * nove divergir. `photos: []` tira todas.
- *
- * `200` e não `202`: a vitrine responde o estado que passou a valer. As fotos
- * novas vêm com `status: processing` e `grid_url: null`, porque antes de o
- * worker reescrever a derivada elas carregam o EXIF do celular — o contrato diz
- * isso no status em vez de deixar o app descobrir pela ausência da URL.
- */
+/** As rotas da VITRINE DE FOTOS DO USUÁRIO. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -51,9 +22,8 @@ export const rotaDaMinhaVitrine = defineRoute({
 });
 
 /**
- * Assinar é barato, mas cada assinatura é uma autorização de escrita que **não
- * se desfaz dentro da validade**. Mesmo teto de 20/h da foto de pet e da capa
- * do encontro, pelo mesmo motivo.
+ * Assinar é barato, mas cada assinatura é uma autorização de escrita que **não se
+ * desfaz dentro da validade**.
  */
 export const rotaDeIntencaoDaVitrine = defineRoute({
   operationId: 'createShowcasePhotoUploadIntent',
@@ -110,21 +80,7 @@ async function contaDoTeto(
   }
 }
 
-/**
- * Uma foto da vitrine como o contrato a declara.
- *
- * **`grid_url` é a derivada de 320 px e `open_url` é a de 1024 px**, e as duas
- * saem nomeadas pelo USO e não pela variante do armazenamento: a grade pede a
- * primeira e nunca a segunda, e **o original nunca sai** — ele não tem derivada
- * pública e o leitor de mídia só abre chave com forma de derivada.
- *
- * A URL é montada AQUI, na leitura, a partir do domínio de mídia. O banco
- * guarda só a chave (§11.1 proibição 9): gravar URL absoluta amarraria cada
- * linha ao provedor do dia em que ela foi escrita.
- *
- * `catalog_images.id` **não aparece**: é identidade interna. O identificador
- * que sai é o `upload_id`, como nas duas galerias da casa.
- */
+/** Uma foto da vitrine como o contrato a declara. */
 function comoRespostaDaFoto(foto: FotoDaVitrine, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   const url = (chave: string | null): string | null =>
     chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
@@ -146,18 +102,14 @@ function comoRespostaDaVitrine(
 ): Record<string, unknown> {
   return {
     photos: fotos.map((foto) => comoRespostaDaFoto(foto, baseDeMidia)),
-    // O teto, na resposta, para a tela não guardar uma segunda cópia do
-    // número. Vem do PONTO ÚNICO (`derivadas.ts`), e não de um literal aqui.
     max_photos: TETO_DE_FOTOS_DA_VITRINE,
   };
 }
 
 /**
- * `...DaVitrineDeFotos`, e nao `...DaVitrine`: **a palavra "vitrine" ja tem
- * dono neste repositorio.** `registrarRotasDaVitrine` e a da LOJA (o catalogo
- * de produto), e `DependenciasDasRotasDaVitrine` tambem. Duas coisas com o
- * mesmo nome no mesmo bootstrap e colisao de compilacao -- e, pior, e a leitura
- * errada na cabeca de quem passar por aqui depois.
+ * `...DaVitrineDeFotos`, e nao `...DaVitrine`: **a palavra "vitrine" ja tem dono
+ * neste repositorio.** `registrarRotasDaVitrine` e a da LOJA (o catalogo de
+ * produto), e `DependenciasDasRotasDaVitrine` tambem.
  */
 export function registrarRotasDaVitrineDeFotos(
   app: RegistradorDeRotas,
@@ -166,9 +118,6 @@ export function registrarRotasDaVitrineDeFotos(
   registrarRota(
     app,
     rotaDaMinhaVitrine,
-    // Sem `resolvedores`: a leitura nao declara teto, e `registrarRota` recusa
-    // resolvedor para rota sem `rateLimit` -- o que e certo, porque um
-    // resolvedor sem balde seria trabalho feito e descartado a cada leitura.
     {},
     async (request: FastifyRequest, reply: FastifyReply) => {
       const dono = await donoAutenticado(request, deps);
@@ -194,8 +143,6 @@ export function registrarRotasDaVitrineDeFotos(
         upload_id: uploadId,
         method: autorizacao.metodo,
         url: autorizacao.url,
-        // Um dos dois, nunca os dois: `POST` leva campos de formulário, `PUT`
-        // leva cabeçalhos assinados. O cliente LÊ `method` em vez de presumir.
         ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
         ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
         expires_at: autorizacao.expiraEm.toISOString(),

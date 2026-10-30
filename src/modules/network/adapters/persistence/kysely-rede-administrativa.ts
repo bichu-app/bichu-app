@@ -1,27 +1,4 @@
-/**
- * A escrita administrativa da `Rede` em Postgres (BICHUS-273 e BICHUS-292).
- *
- * ## O ponto
- *
- * `network_events.geo` e `ColumnType<never, never, never>` no esquema tipado,
- * de proposito: o unico caminho ate ela e SQL onde `ST_MakePoint`, `ST_Y` e
- * `ST_X` ficam a vista. Aqui o ponto e lido so para o painel (que o marcou) e
- * nunca vai para a trilha.
- *
- * ## O autor
- *
- * A coluna de autoria do encontro leva a marca "nunca sai do servidor" e o
- * portao `portao-colunas-que-nao-saem` recusa o nome dela em `src/`. Ela NAO e
- * escrita aqui: quem criou esta em `audit.events`, gravado na mesma transacao
- * (`admin.network_event.created`, com `actor_admin_id` e a sessao). A coluna de
- * quem decidiu o pedido (`decided_by_admin_id`, conta do painel) nao tem a
- * marca, e e escrita por SQL cru.
- *
- * ## A trilha
- *
- * `registrarNaTrilha` delega a `TrilhaTransacional.recordIn(trx, evento)`: o
- * evento entra na transacao da escrita, e a falha dele a desfaz (D49).
- */
+/** A escrita administrativa da `Rede` em Postgres (BICHUS-273 e BICHUS-292). */
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type {
@@ -109,10 +86,7 @@ interface LinhaDaImagem {
   rejection_reason: string | null;
 }
 
-/**
- * As colunas do encontro, nomeadas uma a uma. Nao ha `selectAll()`: ele traria
- * a coluna de autoria para dentro do processo.
- */
+/** As colunas do encontro, nomeadas uma a uma. */
 const COLUNAS = sql`
   e.id, e.slug, e.title, e.summary, e.place_name, e.neighborhood, e.city, e.state,
   ST_Y(e.geo::geometry) AS lat, ST_X(e.geo::geometry) AS lon,
@@ -284,23 +258,6 @@ function comoPedido(l: LinhaDoPedido): PedidoNaFila {
 /**
  * O pedido pelo `ref` ou pelo `id`, de encontro privado em qualquer estado do
  * painel: o removido tambem e lido, para a decisao responder 409 e nao 404.
- *
- * `conta_habilitada(j.user_id)` (migracao `20261017000013`): decisao do cliente
- * de 17/10 -- conta desabilitada "nao e mais encontrada em nenhuma pagina ou
- * funcionalidade", e `solicitante.displayName` sai nesta projecao. O predicado
- * esta NO `WHERE` e nao num `if` depois da leitura (ADR-0021): pedido de conta
- * desabilitada nao existe para esta rota, e a decisao responde 404 -- nunca
- * 403, que confirmaria que ele existe.
- *
- * A LINHA NAO E APAGADA. Ela fica em `network_event_join_requests`, inteira, e
- * volta a aparecer no dia em que a conta for reabilitada. O que muda e a
- * alcancabilidade, nao o dado -- a mesma troca que o cliente pediu para as
- * paginas.
- *
- * CONSEQUENCIA A RELATAR: pedido pendente de conta desabilitada fica pendente
- * para sempre, porque sai da fila sem ser decidido. Nao ha hoje nenhuma rotina
- * que encerre pedido orfao, e inventar uma aqui seria decidir sozinho o que
- * acontece com quem volta.
  */
 async function lerPedido(db: DbExecutor, onde: ReturnType<typeof sql<SqlBool>>, travar: boolean): Promise<PedidoNaFila | null> {
   const r = await sql<LinhaDoPedido>`
@@ -368,7 +325,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ticket_url: novo.linkDeIngresso,
             instagram_handle: novo.instagram,
             origin: 'admin',
-            // Criar e publicar (12.9): nao ha rascunho.
             publication_status: 'published',
             published_at: agora,
             cancelled_at: null,
@@ -379,12 +335,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
           })
           .execute(),
       );
-      // A AUTORIA DO PAINEL, que ficou tres semanas sem nunca ser gravada: o
-      // nome da coluna e reprovado em `src/` pelo portao de colunas que nao
-      // saem, entao o carimbo passa pela funcao da migracao `20261001000004`,
-      // na mesma transacao do `INSERT`. A trilha continua gravando o ator; esta
-      // linha faz a coluna e o `CHECK` da `20260928000005` deixarem de guardar
-      // um valor que ninguem escrevia.
       await sql`SELECT network_events_gravar_autoria(${novo.id}::uuid, NULL, ${novo.autorDoPainel}::uuid)`.execute(trx);
       if (novo.lugar.ponto !== null) await gravarPonto(trx, novo.id, novo.lugar.ponto);
     },
@@ -468,8 +418,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
     },
 
     async substituirImagens(eventoId, imagens) {
-      // Apagar e inserir: a galeria e substituida inteira, e a unicidade de
-      // posicao e diferida, entao a ordem nova so e conferida no COMMIT.
       await trx.deleteFrom('network_event_images').where('event_id', '=', eventoId).execute();
       if (imagens.length === 0) return;
       await trx
@@ -497,9 +445,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
     pedidoPorRef: (ref) => lerPedido(trx, sql<SqlBool>`j.ref = ${ref}`, true),
 
     async decidirPedido(id, decisao, decisor, agora) {
-      // `decided_by_admin_id` fica fora do tipo da tabela (nenhuma leitura o
-      // projeta), e por isso o UPDATE e SQL cru. E conta do painel
-      // (`admin_accounts`), nunca de `users` (ADR-0027 item 20.2).
       await sql`
         UPDATE network_event_join_requests
            SET status = ${decisao}, decided_at = ${new Date(agora)}::timestamptz,
@@ -537,7 +482,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
 
     async listarFila(recorte: RecorteDaFila): Promise<Pagina<PedidoNaFila>> {
       const decisao = recorte.decisao ?? 'pending';
-      // Sem filtro, a fila de PENDENTES: desistido nao aparece e nao se decide.
       const filtro = sql<SqlBool>`j.status = ${decisao}
         ${decisao === 'pending' ? sql`AND j.withdrawn_at IS NULL` : sql``}
         ${recorte.eventoSlug === undefined ? sql`` : sql`AND e.slug = ${recorte.eventoSlug}`}`;
@@ -577,8 +521,6 @@ export function criarRedeAdministrativaRepository(
           sql<SqlBool>`(e.title ILIKE ${padrao} OR e.summary ILIKE ${padrao} OR e.place_name ILIKE ${padrao})`,
         );
       }
-      // Removido some da lista e so volta pelo filtro fechado (contrato de
-      // listAdminNetworkEvents).
       condicoes.push(
         recorte.publicacao === undefined
           ? sql<SqlBool>`e.publication_status IN ('published', 'cancelled')`
@@ -614,8 +556,7 @@ export function criarRedeAdministrativaRepository(
  * D54. Pedido de encontro que acabou (fim, ou inicio sem fim), foi cancelado ou
  * removido ha mais de 30 dias sai do banco, em qualquer decisao: aprovado e
  * recusado pela regra, e o pendente que ninguem decidiu porque, para o tutor, ele
- * ja e `expired`. A trilha guarda a decisao pelo `ref` e pelo administrador, sem
- * o nome de quem pediu.
+ * ja e `expired`.
  */
 export async function expurgarPedidosVencidos(db: DbExecutor, agora: Date, dias: number): Promise<number> {
   const r = await sql`

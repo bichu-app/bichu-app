@@ -1,16 +1,4 @@
-/**
- * O portão de vigência, e **a isca que prova que ele sabe reprovar**.
- *
- * Critério 10 da BICHUS-178, palavra por palavra: *"o portão rodado contra uma
- * aplicação com o limitador desligado precisa reprovar"*. Sem este segundo caso
- * no repositório, o portão vale pela confiança de quem o escreveu no dia em que
- * o escreveu — e é justamente assim que o portão anterior passou meses verde
- * sobre um mecanismo inexistente.
- *
- * `criarContadorDesligado` não é um dublê montado aqui: é a implementação real
- * da porta que a aplicação usa com `RATE_LIMIT_DRIVER=disabled`. A isca exercita
- * o caminho que a subida agora recusa fora de `dev`.
- */
+/** O portão de vigência, e **a isca que prova que ele sabe reprovar**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -35,9 +23,6 @@ void describe('portão de vigência do teto de chamada', () => {
       'o portão aprovou com o limitador DESLIGADO. Um portão que passa sem teto não ' +
         'prova teto nenhum, e é exatamente o estado que a BICHUS-178 existe para fechar.',
     );
-    // Reprova pelo motivo certo, e não por qualquer motivo: sem isto, uma falha
-    // acidental (contrato ilegível, rota ausente) faria a isca "passar" sem ter
-    // exercido nada.
     assert.match(veredicto.motivo, /deveria sair 429/);
     assert.equal(veredicto.status[TETO_DE_INVALIDAS_DO_WEBHOOK], 401);
   });

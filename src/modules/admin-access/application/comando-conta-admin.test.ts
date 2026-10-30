@@ -1,10 +1,4 @@
-/**
- * O comando `conta-admin` com portas de teste: sem banco, sem terminal e sem
- * rede. Toda saida (terminal, avisos, escritas) e conferida contra a
- * sentinela, que e a senha digitada: ela nunca pode aparecer em lugar nenhum.
- *
- * As senhas daqui sao valores de teste, nunca de conta real.
- */
+/** O comando `conta-admin` com portas de teste: sem banco, sem terminal e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

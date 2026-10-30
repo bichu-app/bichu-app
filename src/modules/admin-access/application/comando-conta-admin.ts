@@ -1,18 +1,6 @@
 /**
- * O comando `conta-admin` (ADR-0027 item 20.3), sem banco, sem terminal e sem
- * rede proprios: tudo chega por porta, e o teste troca todas.
- *
- * ## A senha e do cliente
- *
- * Nos subcomandos que definem senha (`criar`, `redefinir-senha`, `reativar`), a
- * senha e pedida duas vezes pelo terminal, sem eco, e chega aqui como `Buffer`.
- * Ela so vira string para o que exige string (politica, base de vazadas,
- * conferencia com o app e derivacao), e os dois buffers sao zerados no
- * `finally`, com ou sem sucesso. Nenhum agente gera, grava ou le essa senha:
- * quem digita e o cliente (regra 1 do item 20.3).
- *
- * Nenhuma mensagem, evento de trilha, aviso ou erro deste arquivo recebe a
- * senha. O teste confere isso com uma sentinela.
+ * O comando `conta-admin` (ADR-0027 item 20.3), sem banco, sem terminal e sem rede
+ * proprios: tudo chega por porta, e o teste troca todas.
  */
 import { timingSafeEqual } from 'node:crypto';
 
@@ -35,21 +23,19 @@ export interface SenhaDigitada {
   readonly excedeu: boolean;
 }
 
-/** O terminal, visto daqui. `mostrar` vai para a saida de erro. */
+/** O terminal, visto daqui. */
 export interface Interacao {
   mostrar(texto: string): void;
   perguntar(rotulo: string): Promise<string>;
   perguntarSenha(rotulo: string): Promise<SenhaDigitada>;
 }
 
-/**
- * D63: a senha do painel nao pode ser a mesma da conta do app com o mesmo
- * e-mail. E a UNICA leitura do mundo do app no caminho do painel, e ela mora
- * no ponto de composicao (`src/bin/conta-admin.ts`), pela porta publica de
- * `identity`, e nao neste modulo.
- */
+/** D63: a senha do painel nao pode ser a mesma da conta do app com o mesmo e-mail. */
 export interface ConferenciaComContaDoApp {
-  /** `true` quando existe conta do app com esse e-mail e a senha confere com a credencial local dela. */
+  /**
+   * `true` quando existe conta do app com esse e-mail e a senha confere com a
+   * credencial local dela.
+   */
   mesmaSenhaDaContaDoApp(email: string, senha: string): Promise<boolean>;
 }
 
@@ -89,10 +75,7 @@ function mesmaSenha(primeira: Buffer, segunda: Buffer): boolean {
   return primeira.length === segunda.length && timingSafeEqual(primeira, segunda);
 }
 
-/**
- * Pede a senha duas vezes e devolve o PHC, ou o codigo de recusa. Os buffers
- * sao zerados aqui, em qualquer saida.
- */
+/** Pede a senha duas vezes e devolve o PHC, ou o codigo de recusa. */
 async function senhaDefinida(
   email: string,
   deps: DependenciasDoComandoContaAdmin,
@@ -128,9 +111,6 @@ async function senhaDefinida(
       return { recusa: SAIDA.SENHA_RECUSADA };
     }
     if (vazada === 'desconhecido') {
-      // Definir senha e o unico momento em que da para dizer nao sem trancar
-      // ninguem do lado de fora. Aprovar por falta de verificacao seria o
-      // portao verde que nao verificou nada (item 20.3, regra 2).
       interacao.mostrar(
         'recusado: nao consegui consultar a base de senhas vazadas (D43), e sem ela a senha nao e ' +
           'aceita. Nada foi gravado. Confira a saida de rede do servidor e rode de novo.',
@@ -155,9 +135,7 @@ async function senhaDefinida(
 
 /**
  * Regra 5 do item 20.3: um e-mail para CADA administrador ativo, e no `criar`
- * tambem para o dono do endereco novo. Falha do envio nao desfaz a escrita; o
- * comando diz no terminal quem nao recebeu. E o que faz uma conta criada por
- * quem tomou a maquina aparecer na caixa de alguem.
+ * tambem para o dono do endereco novo.
  */
 async function avisar(
   deps: DependenciasDoComandoContaAdmin,

@@ -1,21 +1,13 @@
-/**
- * Sessao do backoffice no navegador (ADR-0027 itens 2 e 3).
- *
- * - A credencial e o cookie `__Host-bichu_adm`, `HttpOnly`: este codigo nunca a
- *   ve, e nao tem como guarda-la em lugar nenhum.
- * - O token anti-CSRF vem no corpo de `openAdminSession`, `getAdminSession` e
- *   `reauthenticateAdmin`, e fica **so em memoria**, nesta variavel de modulo.
- *   Nunca em `localStorage`, `sessionStorage` nem cookie: `test/iscas.test.ts`
- *   reprova se ele aparecer em qualquer armazenamento do navegador.
- * - Todo metodo que nao e `GET`/`HEAD` leva `X-CSRF-Token`. A mesma origem manda
- *   o cookie sozinho (`credentials: 'same-origin'`, explicito aqui).
- */
+/** Sessao do backoffice no navegador (ADR-0027 itens 2 e 3). */
 export interface EstrategiaDeSessao {
   /** Ajusta a requisicao antes do envio. */
   prepararRequisicao(requisicao: Request): Request | Promise<Request>;
   /** Chamado quando a API responde 401. */
   aoPerderAutorizacao?(resposta: Response): void;
-  /** Chamado a cada resposta que nao e 401: a sessao foi usada, a inatividade renovou. */
+  /**
+   * Chamado a cada resposta que nao e 401: a sessao foi usada, a inatividade
+   * renovou.
+   */
   aoUsar?(): void;
 }
 
@@ -29,7 +21,10 @@ export interface GuardaDoTokenAntiCsrf {
   trocar(token: string | undefined): void;
 }
 
-/** O token em memoria. Uma instancia por pagina; F5 o perde, e `getAdminSession` o devolve. */
+/**
+ * O token em memoria. Uma instancia por pagina; F5 o perde, e `getAdminSession` o
+ * devolve.
+ */
 export function criarGuardaEmMemoria(): GuardaDoTokenAntiCsrf {
   let token: string | undefined;
   return {
@@ -67,8 +62,7 @@ export const semSessao: EstrategiaDeSessao = {
 };
 
 /**
- * Levantada quando o painel sai para `/entrar` por conta propria (sessao
- * caiu, Sair). O aviso de formulario sujo nao pergunta nada nessa hora: o
- * formulario ja foi guardado como rascunho.
+ * Levantada quando o painel sai para `/entrar` por conta propria (sessao caiu,
+ * Sair).
  */
 export const saidaDoPainel = { liberada: false };

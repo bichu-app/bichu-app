@@ -1,52 +1,18 @@
 /// O formato unico de erro da API: `application/problem+json`, RFC 9457.
-///
-/// A regra que governa este arquivo inteiro: **o cliente decide por `type`, e
-/// nunca pelo texto de `title` ou `detail`** (api/openapi.yaml, secao "Erros").
-/// O texto vem do servidor e pode ser reescrito a qualquer momento; o
-/// comportamento de tela nao pode mudar junto.
 library;
 
 /// Catalogo: os slugs de `#/x-problem-types` que a tela trata por NOME.
-///
-/// O contrato lista 28 e este enum nomeia os que levam a uma saida propria;
-/// o resto cai em `desconhecido` e no texto generico de erro, que e o desenho
-/// certo e nao uma lacuna. Por isso o portao de conformidade exige aqui so a
-/// metade que pega o defeito desta classe: todo slug nomeado aqui tem de
-/// existir no contrato. Slug renomeado na spec reprova pelo nome.
-///
-/// Os `type` que o contrato nomeia hoje.
-///
-/// O `type` e uma URI estavel sob `https://<dominio>/problems/`. O app compara
-/// pelo **ultimo segmento do caminho** e nao pela URI inteira, porque o
-/// dominio e variavel de servidor no contrato (`api.{dominio}`) e muda entre
-/// local, homologacao e producao. Comparar a URI inteira faria o app tratar o
-/// mesmo erro de tres jeitos conforme o ambiente.
 enum ProblemTipo {
   validacaoFalhou('validation-failed'),
   emailJaCadastrado('email-already-registered'),
 
-  // Os QUATRO 401 do contrato (api/openapi.yaml, `x-problem-types`). Eles sao
-  // quatro tipos e nao um porque significam coisas diferentes e a tela reage
-  // diferente a cada um. Decidir pelo status 401 acerta hoje por sorte, porque
-  // so `invalid-credentials` chega a C.2, e erra calado no dia em que outro
-  // chegar: a tela diria a pessoa que a senha esta errada e ela trocaria uma
-  // senha que estava certa (UX 8.2.2).
-  //
-  // `forbidden` NAO entra nesta lista de 401: ele e 403, e usa-lo aqui faria o
-  // app tratar "sua senha nao confere" pelo mesmo caminho de "este recurso nao
-  // e seu".
-
-  /// Sem token, token ausente ou assinatura invalida. 401.
+  /// Sem token, token ausente ou assinatura invalida.
   naoAutenticado('unauthenticated'),
 
-  /// E-mail ou senha nao conferem. 401. So aparece em C.2.
-  ///
-  /// O corpo e **identico** para conta inexistente e senha errada, por decisao
-  /// de seguranca: distinguir os dois transformaria a tela de entrar num
-  /// verificador de quem tem conta.
+  /// E-mail ou senha nao conferem.
   credencialInvalida('invalid-credentials'),
 
-  /// Token expirado, ja usado ou revogado. 401.
+  /// Token expirado, ja usado ou revogado.
   tokenExpirado('token-expired'),
 
   reautenticacaoNecessaria('reauthentication-required'),
@@ -54,148 +20,43 @@ enum ProblemTipo {
   petSemFoto('pet-photo-missing'),
   tagRevogada('tag-revoked'),
 
-  /// Teto de pets por conta atingido. 409. So aparece em F1.3/F1.5, ao
-  /// cadastrar.
-  ///
-  /// O numero **vem da resposta**, nunca escrito na frase -- e pela mesma
-  /// razao do `Retry-After`: um teto escrito no binario continua sendo dito
-  /// por versao antiga do app depois de o servidor ter mudado o valor.
+  /// Teto de pets por conta atingido.
   limiteDePetsAtingido('pet-limit-reached'),
 
-  /// Teto de 3 encontros ATIVOS da comunidade por conta. 409. So aparece ao
-  /// criar encontro na `Rede`.
-  ///
-  /// **Tipo proprio, e nao [limiteDePetsAtingido] nem o 429 de chamada.** O
-  /// contrato declara os tres separados (`#/x-problem-types`), e a diferenca e
-  /// de tela: o 429 pede para esperar, este pede para ENCERRAR ou cancelar um
-  /// encontro -- esperar nao resolve, porque o balde que esta cheio e o de
-  /// encontros em aberto e nao o de chamadas.
-  ///
-  /// O numero **nao e escrito na frase**: ele sai de `limit` na resposta, pela
-  /// mesma razao de [limiteDePetsAtingido] -- uma versao antiga do app fica
-  /// instalada por semanas depois de o servidor mudar o valor.
+  /// Teto de 3 encontros ATIVOS da comunidade por conta.
   limiteDeEncontrosDaComunidade('community-event-limit-reached'),
 
   /// O texto **nao normaliza para um codigo**: tamanho diferente de 16 depois
   /// da normalizacao, caractere fora do alfabeto, ou **simbolo de verificacao
-  /// que nao bate**. 400.
-  ///
-  /// O terceiro caso e o que chegou com a Emenda 1 do ADR-0004, e e o que tira
-  /// o erro de digitacao do 404: um caractere trocado e uma transposicao caem
-  /// aqui, antes de o servidor tocar o banco.
-  ///
-  /// **Diferente de [codigoDeTagNaoEncontrado]**, e a diferenca e util para
-  /// quem esta na rua: um diz "confira o que voce digitou", o outro diz "nao
-  /// encontramos este codigo".
+  /// que nao bate**.
   codigoDeTagMalformado('tag-code-malformed'),
 
-  /// Normalizou para um codigo bem formado que nao existe. 404.
+  /// Normalizou para um codigo bem formado que nao existe.
   codigoDeTagNaoEncontrado('tag-code-not-found'),
 
-  /// Recurso que sumiu ou nunca foi da pessoa. 404.
-  ///
-  /// O contrato usa 404 para os dois casos de proposito, para nao confirmar
-  /// que o recurso de outro tutor existe, e a tela nao pode desfazer isso.
+  /// Recurso que sumiu ou nunca foi da pessoa.
   naoEncontrado('not-found'),
 
-  /// A conversa mediada nao aceita mais mensagem. 410.
-  ///
-  /// **O corpo e FIXO, e os dois motivos chegam como este mesmo tipo**: a
-  /// conversa foi encerrada (ou o caso foi), OU a conta do outro lado foi
-  /// desabilitada. O contrato declara a fusao por extenso em
-  /// `#/x-problem-types`, e ela e de seguranca: distinguir contaria a uma
-  /// pessoa o que aconteceu com a conta de outra.
-  ///
-  /// Por isso a tela trata os dois com a MESMA saida -- modo leitura, sem
-  /// caixa de texto. Ela nao tem como escrever "a conta foi desabilitada", e
-  /// nao deve: o unico sinal desse caso e a despersonalizacao que o servidor
-  /// ja faz em `participants` (`Tutor` / `Quem achou`).
+  /// A conversa mediada nao aceita mais mensagem.
   conversaEncerrada('conversation-closed'),
 
-  /// O link publico de um caso nao leva mais a caso aberto. 410.
-  ///
-  /// **O corpo cobre CINCO situacoes com a mesma resposta** (`x-problem-types`,
-  /// slug `lost-case-closed`): caso encerrado, pet excluido, pet falecido, pet
-  /// arquivado e token desconhecido. A fusao e de privacidade, e a tela nao
-  /// pode desfaze-la -- distinguir contaria a um estranho o que aconteceu com o
-  /// animal de outra pessoa, ou se aquele token um dia existiu.
-  ///
-  /// **Nao e 404, e a diferenca e de produto**: link impresso num cartaz nao
-  /// pode terminar numa pagina sem saida (mesma razao da tag revogada,
-  /// ADR-0004). O contrato declara a saida em `next_action`:
-  /// `register_stray_found_report` -- quem chegou por um cartaz antigo e esta
-  /// vendo um animal parecido registra o achado avulso, e o cruzamento por
-  /// atributos faz o resto.
-  ///
-  /// **Separado de [conversaEncerrada]** de proposito, e a nota do contrato diz
-  /// por que: *"a tela e outra: quem abre o cartaz nao esta numa conversa"*.
+  /// O link publico de um caso nao leva mais a caso aberto.
   casoEncerrado('lost-case-closed'),
 
-  /// O caso publico terminou **porque o animal voltou**. 410.
-  ///
-  /// =========================================================================
-  /// ESTE E O UNICO DOS CINCO MOTIVOS DE [casoEncerrado] QUE GANHOU NOME
-  /// =========================================================================
-  ///
-  /// Autorizacao do cliente, 28/10/2026, na terceira vez que ele relatou que
-  /// quem abre o cartaz de um pet ja achado caia na pagina errada: *"crie uma
-  /// pagina padrao, agradecendo a preocupacao do usuario e avisando-o que
-  /// aquele pet ja foi encontrado, que ele nao precisa mais se preocupar."*
-  ///
-  /// Os **outros quatro** -- pet excluido, falecido, arquivado e token
-  /// desconhecido -- continuam em [casoEncerrado], indistinguiveis entre si
-  /// **e deste**, e cada um tem razao propria para ficar:
-  ///
-  /// - dizer "ja foi encontrado" de um pet **falecido** e mentira cruel;
-  /// - dizer isso de um **token desconhecido** entrega que o token nao existe,
-  ///   que e enumeracao;
-  /// - **excluido** e **arquivado** sao assunto privado do tutor.
-  ///
-  /// ## POR QUE A TELA NAO PODE DECIDIR ESTE PELO STATUS
-  ///
-  /// Os dois tipos sao **410**, e [casoEncerrado] tem fallback por status
-  /// justamente para sobreviver a um intermediario que reescreva o corpo.
-  /// Entao quem procura o reencontrado compara **so o `type`**, nunca o
-  /// status: um `== 410` aqui faria os quatro motivos fundidos cairem na
-  /// pagina de agradecimento, que e exatamente o engano que a fusao existe
-  /// para impedir. Ver `_ehCasoReencontrado` em
-  /// `telas/perdido/tela_do_caso_publico.dart`.
-  ///
-  /// ## O CORPO NAO TRAZ MAIS NADA
-  ///
-  /// Nem nome do pet, nem data de encerramento, nem quem achou, nem `pet_id`,
-  /// `case_id` ou `user_id` (ADR-0010, item 6). O unico fato e "este caso
-  /// terminou porque o animal voltou".
+  /// O caso publico terminou **porque o animal voltou**.
   casoReencontrado('lost-case-reunited'),
 
-  /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
+  /// Estouro de limite com `deny_429`.
   limiteDeTentativas('rate-limited'),
 
-  // Os DOIS de `If-Match` (ADR-0027). Eles sao dois tipos e nao um porque a
-  // tela reage diferente: um e falha do APP, o outro e colisao entre PESSOAS.
-
   /// O `ETag` apresentado nao e a versao atual: alguem salvou depois de voce
-  /// ter lido. 412.
-  ///
-  /// **Tipo proprio, e nao a faixa generica de erro.** Sem ele o 412 cai em
-  /// [desconhecido] e a tela diz "algo deu errado", que e a frase que esconde
-  /// justamente o que a pessoa precisa saber -- o encontro mudou enquanto ela
-  /// olhava, e recarregar resolve. Medido em 19/10/2026: o enum tinha os dois
-  /// faltando e `deUri` devolvia [desconhecido] para ambos.
+  /// ter lido.
   precondicaoFalhou('precondition-failed'),
 
-  /// Escrita sobre recurso existente sem `If-Match`. Nada foi gravado. 428.
-  ///
-  /// **Nao e erro para a pessoa ler**: e defeito de quem chamou, porque o app
-  /// deixou de mandar a versao que leu. A tela recarrega e tenta de novo em
-  /// vez de culpar quem tocou no botao.
+  /// Escrita sobre recurso existente sem `If-Match`.
   precondicaoNecessaria('precondition-required'),
 
   /// Chegou um `type` que este build nao conhece.
-  ///
-  /// Nao e caso de erro: versao antiga do app continua instalada por semanas e
-  /// vai receber `type` novo. A tela cai no texto generico da situacao, que e
-  /// sempre melhor que uma tela em branco.
   desconhecido('');
 
   const ProblemTipo(this.slug);
@@ -215,25 +76,13 @@ enum ProblemTipo {
 }
 
 /// `#/components/schemas/Problem/properties/next_action` do contrato.
-///
-/// O caminho alternativo que o servidor oferece quando existe um.
-///
-/// A tela monta a acao a partir deste campo, **em vez de deduzir pelo status**:
-/// dois 409 diferentes pedem saidas diferentes, e o status nao sabe qual.
 enum ProximaAcao {
   registrarAchadoAvulso('register_stray_found_report'),
   verificarEmail('verify_email'),
   enviarFotoDoPet('upload_pet_photo'),
   entrar('sign_in'),
 
-  /// O servidor pede que a pessoa tente de novo mais tarde. E o caminho que
-  /// acompanha `rate-limited` e a familia 5xx.
-  ///
-  /// Achado pelo portao de conformidade em 23/09/2026: o contrato declara
-  /// CINCO valores em `next_action` e este enum tinha quatro. `de()` devolvia
-  /// `null` para `retry_later`, e o campo chegava a tela como "nenhuma saida
-  /// oferecida" -- indistinguivel de uma resposta que de fato nao oferece
-  /// nenhuma. O servidor dizia o que fazer e o app descartava, em silencio.
+  /// O servidor pede que a pessoa tente de novo mais tarde.
   tentarMaisTarde('retry_later');
 
   const ProximaAcao(this.valor);
@@ -296,8 +145,7 @@ class Problem {
   /// Texto do servidor. Mesma regra de [titulo].
   final String? detalhe;
 
-  /// O mesmo identificador propagado no log e no trace do backend. E o que
-  /// permite achar a requisicao quando alguem relata um problema.
+  /// O mesmo identificador propagado no log e no trace do backend.
   final String? correlationId;
 
   final ProximaAcao? proximaAcao;
@@ -307,15 +155,8 @@ class Problem {
   /// Vem do cabecalho `Retry-After` do 429, em segundos.
   final Duration? tenteDepoisDe;
 
-  /// O corpo cru, para os **membros de extensao** da RFC 9457: propriedades
-  /// que o `Problem` carrega e o esquema do contrato nao declara.
-  ///
-  /// Existe por um caso concreto e nao por generalidade: a microcopy de
-  /// `pet-limit-reached` manda dizer o teto **lido da resposta**, e o esquema
-  /// `Problem` de `api/openapi.yaml` nao tem campo para ele. Enquanto o
-  /// contrato nao declarar um, [inteiro] devolve nulo e a tela cai no texto
-  /// que nao promete numero -- em vez de escrever "20" no binario, que e
-  /// exatamente o que a regra do `{limite}` proibe.
+  /// O corpo cru, para os **membros de extensao** da RFC 9457: propriedades que
+  /// o `Problem` carrega e o esquema do contrato nao declara.
   final Map<String, dynamic> extensoes;
 
   /// Um membro de extensao numerico, quando o servidor mandou um.
@@ -350,9 +191,6 @@ class Problem {
   }
 
   /// Um `Problem` sintetico, para quando a resposta nao veio no formato.
-  ///
-  /// Um backend que devolve HTML de proxy num 502 nao para o app: a tela cai
-  /// no texto de servidor fora, que e o certo para aquele momento.
   factory Problem.semCorpo(int status, {Duration? tenteDepoisDe}) {
     return Problem(
       tipo: ProblemTipo.desconhecido,

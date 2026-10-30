@@ -1,10 +1,6 @@
 /**
- * A entrega do aviso de pedido aprovado (Rede, ADR-0027 item 17) a cada
- * aparelho da conta, pelo mesmo remetente e a mesma porteira do alerta.
- *
- * O token e resolvido no instante do envio, e o aparelho que o transporte diz
- * que sumiu e revogado na hora, pelo servico (que grava a trilha), como no
- * alerta de vizinhanca.
+ * A entrega do aviso de pedido aprovado (Rede, ADR-0027 item 17) a cada aparelho
+ * da conta, pelo mesmo remetente e a mesma porteira do alerta.
  */
 import { montarAvisoDePedidoAprovado, VazamentoNoPushError } from '../../domain/conteudo-do-push.js';
 import { PushNaoEnviadoError, type PushSender, type TokenDeAparelho } from '../../ports/push-sender.js';

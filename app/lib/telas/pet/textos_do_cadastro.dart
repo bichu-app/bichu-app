@@ -1,17 +1,9 @@
 /// A microcopy das telas de cadastro de pet.
-///
-/// **Copiada de `docs/05-ux-research.md`, nao reescrita.** Microcopy e
-/// especificacao: cada constante daqui aponta a secao de onde saiu, para que
-/// uma divergencia apareca como divergencia e nao como esquecimento.
-///
-/// As constantes marcadas com `DEDUZIDO` sao a excecao, e elas estao
-/// separadas no fim do arquivo de proposito.
 library;
 
 import '../../dispositivo/camera_e_galeria.dart';
 
 abstract final class TextosDoCadastro {
-  // -- F1.3, identificacao --------------------------------------------------
 
   /// Figma `89:48`. O inventario do UX nao escreve titulo para F1.3.
   static const String tituloIdentificacao = 'Quem é o seu pet?';
@@ -43,10 +35,6 @@ abstract final class TextosDoCadastro {
   static const String racaLivreLonga = 'Cabe até 40 caracteres.';
 
   /// UX F1.3, `validation-failed` com raca da lista **e** texto livre.
-  ///
-  /// A mensagem nomeia a raca escolhida em vez de dizer "a raça selecionada":
-  /// quem chegou aqui provavelmente escolheu errado e nao percebeu, e ver o
-  /// nome e o que faz perceber.
   static String racaLivreComRacaDaLista(String raca) {
     return 'Você escolheu $raca na lista. Para escrever a raça com suas '
         'palavras, troque a lista para Outra.';
@@ -62,14 +50,9 @@ abstract final class TextosDoCadastro {
   static const String continuarSemARaca = 'Continuar sem a raça';
 
   /// A saída do critério 6 de BICHUS-90: sem a lista, a pessoa digita.
-  ///
-  /// O texto diz "digitar" e não "escolher" de propósito — a lista não está
-  /// disponível, e oferecer "escolher" seria prometer o que não há.
   static const String digitarARaca = 'Digitar a raça';
 
   static const String continuar = 'Continuar';
-
-  // -- F1.4, foto -----------------------------------------------------------
 
   /// Figma `91:37`.
   static String tituloDaFoto(String nome) {
@@ -78,11 +61,6 @@ abstract final class TextosDoCadastro {
   }
 
   /// A orientacao de tamanho, numa linha (cliente, 17/10/2026).
-  ///
-  /// Vem de `orientacaoDeTamanhoDaImagem` e nao e escrita aqui: o numero e o
-  /// mesmo teto que o contrato declara e que o balde impoe na politica
-  /// assinada, e uma copia literal nesta classe seria o quarto lugar a
-  /// divergir.
   static const String orientacaoDaFoto = orientacaoDeTamanhoDaImagem;
 
   /// Figma `91:41`.
@@ -104,8 +82,6 @@ abstract final class TextosDoCadastro {
       'O Bichu não tem permissão para usar a câmera.';
 
   static const String abrirOsAjustes = 'Abrir os ajustes';
-
-  // -- F1.5, sinais ---------------------------------------------------------
 
   /// Figma `91:54`.
   static String tituloDosSinais(String nome) {
@@ -139,8 +115,8 @@ abstract final class TextosDoCadastro {
   }
 
   /// A prevencao de erro que vale mais que qualquer mensagem depois: o motivo
-  /// numero um para escrever um telefone ali e achar que precisa de um jeito
-  /// de ser contatada.
+  /// numero um para escrever um telefone ali e achar que precisa de um jeito de
+  /// ser contatada.
   static String cuidadosSemTelefone(String nome) {
     final pet = nome.trim().isEmpty ? 'seu pet' : nome.trim();
     return 'Não precisa colocar seu telefone: se alguém encontrar $pet, o '
@@ -150,8 +126,7 @@ abstract final class TextosDoCadastro {
   static const String exemploDosCuidados =
       'Toma remédio de uso contínuo. É medrosa, não corra atrás.';
 
-  /// Limite de `care_notes` no contrato. **Desenho, e nao economia de banco:**
-  /// quem le esta de pe, com uma mao, com o animal se mexendo.
+  /// Limite de `care_notes` no contrato.
   static const int limiteDosCuidados = 280;
 
   /// UX F1.5, o RG Animal, escrito em 2026-09-17.
@@ -163,8 +138,6 @@ abstract final class TextosDoCadastro {
       'e não altera nada lá.';
 
   static const String cadastrar = 'Cadastrar';
-
-  // -- F1.6, pet cadastrado -------------------------------------------------
 
   /// UX F1.6, item 1. O Figma diz "A Nina está cadastrada"; o UX reescreveu a
   /// tela inteira em 2026-09-17 e o proprio Figma marca que o texto dele nao
@@ -181,11 +154,8 @@ abstract final class TextosDoCadastro {
 
   static const String copiarOCodigo = 'Copiar o código';
 
-  /// UX F1.6, item 6: **a linha que esta tela e obrigada a dizer e que
-  /// nenhuma outra diz.**
-  ///
-  /// Ela e informativa: fica abaixo do codigo, **sem** icone de alerta e
-  /// **sem** cor de erro. Nada deu errado.
+  /// UX F1.6, item 6: **a linha que esta tela e obrigada a dizer e que nenhuma
+  /// outra diz.**
   static String soAquiPorExtenso(String sufixo) {
     final quatro = sufixo.isEmpty ? '' : ' (…$sufixo)';
     return 'Este é o único lugar onde o código aparece inteiro. Depois desta '
@@ -194,44 +164,27 @@ abstract final class TextosDoCadastro {
         'tag, no próximo passo.';
   }
 
-  // -- F1.6, a imagem do QR (BICHUS-229) -----------------------------------
-  //
-  // TRES TEXTOS PARA TRES ESTADOS, e eles nao se substituem.
-  //
-  // Ate aqui o erro de imagem colapsava para `SizedBox.shrink()`: a tela ficava
-  // identica nos dois casos, e quem estava olhando nao tinha como distinguir
-  // "esta tag nao tem imagem" de "eu nao consegui buscar a imagem". O primeiro
-  // e um fato sobre a tag e nao tem o que fazer; o segundo e um fato sobre esta
-  // tentativa e tem: tentar de novo.
-
-  /// Enquanto a imagem esta sendo buscada. E o rotulo que o leitor de tela
-  /// anuncia, e nao um texto desenhado: o indicador ja ocupa o lugar.
+  /// Enquanto a imagem esta sendo buscada.
   static const String qrCarregando = 'Preparando a imagem do QR';
 
-  /// A emissao nao trouxe endereco de imagem. **Nada falhou**, e o texto nao
-  /// pode soar como falha: e uma tag sem arquivo de imagem, e o codigo por
-  /// extenso resolve a plaquinha do mesmo jeito.
+  /// A emissao nao trouxe endereco de imagem.
   static const String qrSemImagem =
       'Esta tag não veio com imagem do QR. O código abaixo é o que vale, e '
       'pode ser gravado na plaquinha do mesmo jeito.';
 
-  /// A busca da imagem falhou. Diz o que falhou, diz o que continua valendo, e
-  /// oferece o unico movimento que resolve.
+  /// A busca da imagem falhou.
   static const String qrNaoCarregou =
       'Não consegui carregar a imagem do QR. O código abaixo continua valendo, '
       'e dá para tentar de novo.';
 
-  /// UX F1.6, acessibilidade: confirmacao anunciada em regiao viva. Copiar sem
-  /// retorno audivel e copiar sem saber se copiou.
+  /// UX F1.6, acessibilidade: confirmacao anunciada em regiao viva.
   static const String codigoCopiado = 'Código copiado';
 
   static const String fazerATag = 'Fazer a tag da coleira';
 
   static const String depois = 'Depois';
 
-  /// UX F1.6, erro: a tag nao foi emitida. O cadastro **nao** e revertido, e o
-  /// texto diz isso na primeira frase, antes de qualquer outra coisa, porque o
-  /// medo imediato e ter perdido o cadastro.
+  /// UX F1.6, erro: a tag nao foi emitida.
   static String tagNaoSaiu(String nome) {
     final pet = nome.trim().isEmpty ? 'Seu pet' : nome.trim();
     return '$pet está cadastrado. O código da coleira ainda não ficou pronto.';
@@ -244,27 +197,13 @@ abstract final class TextosDoCadastro {
         'quando o sinal voltar, e a gente te avisa.';
   }
 
-  /// UX F1.6, a foto ainda subindo. Sem botao: nao ha nada para a pessoa fazer.
-  ///
-  /// **Ate 22/09/2026 esta frase era falsa.** Nenhum caminho do app enviava
-  /// bytes, entao a tela anunciava o efeito de uma chamada que ninguem fazia.
-  /// Ela so pode aparecer enquanto o envio esta de fato em curso.
+  /// UX F1.6, a foto ainda subindo.
   static String fotoAindaSubindo(String nome) {
     final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
     return 'A foto $pet ainda está sendo enviada. Isso não atrasa o código.';
   }
 
   /// UX F1.6, o envio da foto parou por falta de sinal.
-  ///
-  /// **Com botao, ao contrario do estado acima**, e a diferenca e a mesma do
-  /// QR que nao carregou: aqui existe um movimento que resolve, e esconde-lo
-  /// seria tirar da pessoa a unica coisa que ela pode fazer.
-  ///
-  /// **A promessa de que ela sobe depois so pode existir porque ela e
-  /// verdade.** O criterio 6 da BICHUS-87 manda o arquivo permanecer no disco
-  /// do aparelho, e o registro de fotos pendentes e o que cumpre isso: sem
-  /// ele esta frase seria a tela de sucesso para o que nao aconteceu que o
-  /// criterio 2 da BICHUS-31 proibe.
   static String fotoNaoSubiuSemSinal(String nome) {
     final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
     return 'A foto $pet não subiu: faltou sinal. Ela está salva aqui e sobe '
@@ -272,11 +211,6 @@ abstract final class TextosDoCadastro {
   }
 
   /// UX F1.6, o envio da foto foi recusado.
-  ///
-  /// **Sem botao**, e por isso e outro texto: tentar de novo devolve a mesma
-  /// recusa. Tipo fora da lista, arquivo acima do teto, autorizacao vencida e
-  /// arquivo que sumiu do aparelho terminam todos aqui, e o caminho que
-  /// resolve e escolher outra foto -- que e `Editar`, e nao esta tela.
   static String fotoNaoSubiuRecusada(String nome) {
     final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
     return 'Não consegui enviar a foto $pet. O cadastro está salvo, e dá para '
@@ -284,15 +218,9 @@ abstract final class TextosDoCadastro {
   }
 
   /// O rotulo do unico movimento que resolve a falta de sinal.
-  ///
-  /// `Tentar agora`, e nao `Enviar de novo`: o texto ao lado ja diz que ela
-  /// sobe sozinha depois, e o que o botao acrescenta e o **agora**.
   static const String tentarEnviarAgora = 'Tentar agora';
 
   /// UX F1.5, o aviso da redacao de `care_notes`, que aparece **aqui**.
-  ///
-  /// O sujeito e "tiramos", e nao "você escreveu algo proibido": quem agiu
-  /// fomos nos, e dizer isso tira a culpa da frase.
   static String redacaoDeCuidados(List<String> retirados, String nome) {
     final pet = nome.trim().isEmpty ? 'seu pet' : nome.trim();
     final lista = retirados.length == 1
@@ -307,21 +235,7 @@ abstract final class TextosDoCadastro {
 
   static const String entendi = 'Entendi';
 
-  // -- DEDUZIDO -------------------------------------------------------------
-  //
-  // O que segue **nao esta escrito em docs/05-ux-research.md**. Cada frase
-  // aplica o padrao de formulario da secao 13 ("o requisito e dito antes do
-  // erro") ao rotulo que a tela ja tem, na mesma forma das mensagens de C.2
-  // que ja existem no codigo ("Digite seu e-mail.").
-  //
-  // Elas estao aqui, juntas e marcadas, em vez de espalhadas pelas telas, para
-  // que a revisao de UX as encontre num lugar so e as substitua ou aprove. O
-  // precedente e C.2: a tela rodou com texto deduzido do contrato, a deducao
-  // foi declarada, e o UX escreveu a especificacao depois sem canonizar o que
-  // a frente mobile tinha adivinhado.
-
-  /// DEDUZIDO. Nome vazio em F1.3. UX nao escreveu a mensagem de campo
-  /// obrigatorio desta tela.
+  /// DEDUZIDO. Nome vazio em F1.3.
   static const String digiteONome = 'Digite o nome do seu pet.';
 
   /// DEDUZIDO. Especie nao escolhida em F1.3.
@@ -331,43 +245,15 @@ abstract final class TextosDoCadastro {
   static const String escolhaOPorte = 'Escolha o porte.';
 
   /// DEDUZIDO. O rotulo do campo que a acao `Digitar o código` abre em F2.1.
-  ///
-  /// Nao e frase nova: e **o mesmo texto do controle que abre o campo**,
-  /// escrito em F2.1 e desenhado no Figma. Escolhido assim justamente para nao
-  /// coinhar um rotulo ("Código da tag", "Código da plaquinha") que ninguem
-  /// revisou.
   static const String digitarOCodigo = 'Digitar o código';
 
   /// O rotulo da acao de avancar sem foto em F1.4 (BICHUS-157).
-  ///
-  /// **`Pular`, e nao `Depois`.** [depois] ja existe e e usado em F1.6 para
-  /// adiar **a tag da coleira**; reusar a palavra faria dois adiamentos
-  /// diferentes se chamarem igual a um passo de distancia no mesmo fluxo.
-  ///
-  /// A escolha do rotulo e da forma (botao ou texto) e decisao de UX e
-  /// **continua aberta** na BICHUS-157 -- a issue nao fixa nenhum dos dois.
-  /// `Pular` e o unico dos dois nomes escritos na issue que nao colide, e a
-  /// forma e botao porque o criterio 5 exige alvo de toque e a exigencia de
-  /// acessibilidade proibe que a acao seja so um link de texto pequeno.
   static const String seguirSemFoto = 'Pular';
 
   /// O nome acessivel da mesma acao.
-  ///
-  /// Contem o rotulo visivel (WCAG 2.1 SC 2.5.3, *Label in Name*) e diz o que
-  /// a acao faz, que `Pular` sozinho nao diz: quem ouve "Pular, botão" no meio
-  /// de um assistente de tres passos nao sabe se pula o passo ou o cadastro.
   static const String seguirSemFotoAnunciado = 'Pular a foto';
 
   /// DEDUZIDO. BICHUS-158: o quarto estado, `indisponivel`, em F1.4.
-  ///
-  /// Duas coisas que este texto **nao** pode fazer, e as duas estao escritas
-  /// no comentario do proprio `EstadoDaPermissao.indisponivel`: culpar a
-  /// pessoa, e mandar aos ajustes do sistema. Nao ha permissao a conceder, e
-  /// mandar procurar uma faria a pessoa percorrer os ajustes atras do que nao
-  /// existe.
-  ///
-  /// A ultima frase existe para nao deixar a tela so com a ma noticia: a acao
-  /// que sobra e a da BICHUS-157, e ela esta ali do lado.
   static const String cameraNaoEmbarcada =
       'Tirar foto e escolher da galeria ainda não estão disponíveis neste '
       'aplicativo. Não há nada a ajustar no seu aparelho. Você pode seguir '

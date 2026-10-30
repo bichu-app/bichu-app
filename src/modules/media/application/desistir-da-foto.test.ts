@@ -1,10 +1,4 @@
-/**
- * A saída de `processing`, medida sem banco: é regra de domínio, não de SQL.
- *
- * O que estes casos protegem é a diferença entre duas coisas que parecem a
- * mesma: a foto que ficou presa porque o processo morreu (tem de sair, em
- * `rejected`, com motivo) e a foto que já tinha desfecho (não pode ser tocada).
- */
+/** A saída de `processing`, medida sem banco: é regra de domínio, não de SQL. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -35,10 +29,6 @@ function repositorioDublado(
       });
     },
     marcarRecusada(id: string, motivo: string) {
-      // O dublê repete a guarda do adaptador de verdade
-      // (`kysely-media-repository.ts`: `.where('status', '=', 'processing')`).
-      // Sem ela aqui, o teste aprovaria uma chamada que o banco recusaria, e o
-      // dublê estaria mais permissivo que a produção — que é como dublê mente.
       if (foto?.status === 'processing') recusas.push({ foto: id, motivo });
       return Promise.resolve();
     },
@@ -57,8 +47,6 @@ void describe('desistência da foto por trabalho órfão', () => {
     assert.equal(mudou, true);
     assert.equal(recusas.length, 1);
     assert.equal(recusas[0]?.motivo, TEXTO_DO_PROCESSAMENTO_INTERROMPIDO);
-    // O texto é a única coisa que distingue esta recusa das três do envio, e ele
-    // não pode mandar a pessoa trocar de foto: o defeito foi nosso.
     assert.doesNotMatch(TEXTO_DO_PROCESSAMENTO_INTERROMPIDO, /escolha outra|tire uma nova/i);
     assert.match(TEXTO_DO_PROCESSAMENTO_INTERROMPIDO, /nosso/i);
   });

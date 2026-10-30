@@ -1,21 +1,4 @@
-/**
- * A regra da escrita do diretorio, sem banco, sem servidor e sem Docker.
- *
- * ## As iscas deste arquivo
- *
- * - **editar nao despublica**: sem `status` no corpo, uma entrada publicada
- *   continua publicada;
- * - **a edicao nao pode quebrar a publicacao**: apagar `city` de uma entrada no
- *   ar e recusado, nomeando o campo, e nao aceito e despublicado em silencio;
- * - **despublicar e explicito**, e nao exige completude: tirar do ar uma entrada
- *   incompleta passa;
- * - **`null` apaga e ausente nao mexe**, e a distincao sobrevive a decisao;
- * - **o marco de publicacao e so da transicao**: editar entrada ja publicada
- *   nao o regrava;
- * - **a projecao nao carrega `id`, coordenada, documento nem vinculo**;
- * - **`missing_to_publish` e a MESMA lista que recusa a publicacao**: duas
- *   definicoes de "completo" e o defeito que o ADR-0023 secao 2 proibe.
- */
+/** A regra da escrita do diretorio, sem banco, sem servidor e sem Docker. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -40,9 +23,6 @@ import {
 
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
-// `comoData` e nao `new Date(...)`: dominio nao constroi tempo real, e a regra
-// de arquitetura reprova a construcao direta tambem no teste. As tres marcas
-// vem de constantes, que e o que um teste de regra precisa.
 const NASCEU_EM = Date.UTC(2026, 8, 30, 12, 0, 0) as Instant;
 const NO_AR_DESDE = Date.UTC(2026, 9, 1, 12, 0, 0) as Instant;
 const MEXERAM_EM = Date.UTC(2026, 9, 2, 12, 0, 0) as Instant;
@@ -60,9 +40,6 @@ const COMPLETA: EntradaAdministrativa = {
   photo: null,
   /** A GALERIA (29/10/2026). Vazia: a publicacao nao cobra imagem nenhuma. */
   imagens: [],
-  // O endereco de rua existe na entrada desde 18/10/2026 e e OPCIONAL: esta
-  // fixa o deixa nulo de proposito, porque uma entrada sem endereco tem de
-  // continuar completa para publicar.
   postalCode: null,
   street: null,
   streetNumber: null,
@@ -95,8 +72,6 @@ const RASCUNHO_INCOMPLETO: EntradaAdministrativa = {
 
 void describe('como a entrada do painel nasce', () => {
   void it('nasce rascunho, sem titular e por importacao', () => {
-    // Os tres valores andam juntos: sao os unicos que o CHECK
-    // `professionals_aceite_antes_do_perfil` admite sem titular.
     assert.equal(STATUS_INICIAL, 'draft');
     assert.equal(ORIGEM_DO_PAINEL, 'import');
     assert.equal(TITULARIDADE_DO_PAINEL, 'unclaimed');
@@ -113,7 +88,6 @@ void describe('o que falta para publicar', () => {
   });
 
   void it('acusa a falta de endereco publico', () => {
-    // A coluna aceita nulo, e a massa de qa pode ter linha sem endereco.
     const semSlug = { ...COMPLETA, slug: null as unknown as string };
     assert.deepEqual(faltasParaPublicar(semSlug), ['slug']);
   });
@@ -191,8 +165,6 @@ void describe('planejarEdicao', () => {
   });
 
   void it('despublicar e explicito e NAO exige completude', () => {
-    // Tirar do ar uma entrada que perdeu dado nao pode ser bloqueado: seria
-    // obrigar o operador a completar a entrada para poder retira-la.
     const r = planejarEdicao({ ...COMPLETA, city: null }, { status: 'hidden' });
     assert.ok(r.ok);
     assert.equal(r.plano.statusResultante, 'hidden');
@@ -219,7 +191,6 @@ void describe('forma dos campos', () => {
 
   void it('o telefone e E.164, com a MESMA forma do CHECK do banco', () => {
     assert.deepEqual(errosDoTelefone('phone_e164', '+551130612200'), []);
-    // Sem `+`, com zero depois do `+`, ou curto demais: recusados.
     assert.deepEqual(errosDoTelefone('phone_e164', '1130612200').map((e) => e.code), ['phone_invalid']);
     assert.deepEqual(errosDoTelefone('phone_e164', '+0511306122').map((e) => e.code), ['phone_invalid']);
     assert.deepEqual(errosDoTelefone('phone_e164', '+5511').map((e) => e.code), ['phone_invalid']);
@@ -261,8 +232,6 @@ void describe('projecao', () => {
 
 void describe('retrato da trilha', () => {
   void it('nao carrega marca de tempo nem versao', () => {
-    // As duas mudam em TODA escrita, e deixa-las aqui faria a diferenca
-    // antes/depois acusar mudanca em toda linha da trilha.
     const retrato = retratoDaEntrada(COMPLETA);
     assert.equal('updated_at' in retrato, false);
     assert.equal('version' in retrato, false);

@@ -1,30 +1,4 @@
-/**
- * ISCA (c): A GRADE DA VITRINE USA A DERIVADA DE 320 px, E NUNCA OUTRA.
- *
- * ## O achado que estes casos existem para não deixar voltar
- *
- * A foto única da pessoa já tinha duas derivadas, e **nenhuma serve à grade**:
- *
- * - a célula da grade tem 104 dp, que a 3x são **312 px reais**;
- * - a `thumb` de `DERIVADAS_DA_FOTO_DE_USUARIO` tem 176 px, e seria **ampliada
- *   1,8×** — ampliar não acrescenta informação nenhuma, só borra;
- * - a `card` de 512 px é **1,6× mais dado do que a célula pinta**, e a grade
- *   desenha até NOVE de uma vez, então o desperdício é multiplicado por nove.
- *
- * Reusar uma das duas é a decisão "econômica" que alguém toma olhando a lista
- * de derivadas existentes sem fazer a conta da tela. Estes casos fazem a conta.
- *
- * ## O que cada caso REPROVA
- *
- * - trocar a `thumb` da vitrine por 176 (reusar a da foto única) reprova;
- * - tirar a `thumb` e deixar a grade cair na `card` reprova;
- * - apontar a grade para o ORIGINAL reprova — e o original não tem derivada
- *   pública nenhuma, então essa seria a pior das três.
- *
- * E o CONTRAPESO: a `card` de 1024 continua existindo e continua `grande`. Sem
- * ele, "a grade não usa a card" passaria também para uma lista que não tem
- * `card` — e `processar-imagem-de-catalogo.ts` falha ruidosamente sem ela.
- */
+/** ISCA (c): A GRADE DA VITRINE USA A DERIVADA DE 320 px, E NUNCA OUTRA. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -38,7 +12,7 @@ import {
 /** A célula da grade, medida na tela, e a densidade do pior caso comum. */
 const CELULA_EM_DP = 104;
 const DENSIDADE = 3;
-const PIXEIS_REAIS_DA_CELULA = CELULA_EM_DP * DENSIDADE; // 312
+const PIXEIS_REAIS_DA_CELULA = CELULA_EM_DP * DENSIDADE;
 
 const daGrade = DERIVADAS_DA_VITRINE_DO_USUARIO.find((d) => d.variante === 'thumb');
 const aberta = DERIVADAS_DA_VITRINE_DO_USUARIO.find((d) => d.variante === 'card');
@@ -99,7 +73,6 @@ void describe('a derivada da grade da vitrine', () => {
   });
 
   void it('A GRADE É MAIS LEVE QUE A ABERTA -- a conta que justifica as duas', () => {
-    // Área em pixels, que é o que manda no peso de um JPEG de mesma textura.
     const areaDaGrade = (daGrade?.largura ?? 0) * (daGrade?.altura ?? 0);
     const areaDaAberta = (aberta?.largura ?? 0) * (aberta?.altura ?? 0);
     assert.ok(

@@ -10,47 +10,18 @@ import '../intencao/guarda_de_acao.dart';
 import 'deposito_de_sessao.dart';
 
 /// O que aconteceu com a **metade de servidor** do logout.
-///
-/// Este enum existe por um motivo so, e ele e o defeito que a `BICHUS-81`
-/// existe para matar: *sem rede* e *o servidor recusou a minha requisicao* nao
-/// sao a mesma coisa, e por meses foram, porque `sair()` tinha um unico
-/// `catch (FalhaDeChamada)` que engolia as duas em silencio.
-///
-/// O estrago do empate: quando o contrato passou a exigir `refresh_token` no
-/// corpo, o app -- que nao mandava corpo nenhum -- passou a receber **400** em
-/// todo logout. O `catch` largo engolia, a tela dizia que a pessoa saiu, e a
-/// familia de refresh continuava viva no banco. Sucesso indistinguivel do
-/// nada, que e a forma de falha que este projeto ja pagou varias vezes.
-///
-/// O apagamento local nao depende deste valor: ele acontece nos quatro casos,
-/// sempre (criterio 13.1). O que este valor governa e **o que fica registrado**
-/// e o que quem chamou pode dizer a pessoa.
 enum RevogacaoNoServidor {
   /// O servidor confirmou. A familia de refresh daquele aparelho morreu no
   /// banco, que e onde ela e conferida.
   confirmada,
 
-  /// Nao havia o que revogar: o app nao tinha sessao guardada. Nao e falha, e
-  /// nao vira ruido.
+  /// Nao havia o que revogar: o app nao tinha sessao guardada.
   semSessaoParaRevogar,
 
-  /// A requisicao nao chegou, ou a resposta nao voltou. **Nao e defeito
-  /// nosso**, e e operacao normal deste produto: metro, elevador, aviao.
-  ///
-  /// A consequencia esta declarada no ADR-0002, emenda 1, secao 6: a familia
-  /// fica viva no banco ate vencer por inatividade. Ela nao e retentada porque
-  /// retentar exigiria **guardar o refresh no aparelho** ate a revogacao
-  /// passar, e isso inverte a prioridade -- manteria a credencial no aparelho
-  /// justamente enquanto ele esta sem rede. A saida decidida e registrar, nao
-  /// reter.
+  /// A requisicao nao chegou, ou a resposta nao voltou.
   naoConfirmadaSemRede,
 
-  /// O servidor respondeu, e **recusou**. Isto e defeito nosso: o par
-  /// app/contrato esta desencontrado, ou o app mandou o que nao devia.
-  ///
-  /// Nunca e silencioso. Um 400 aqui significa que nenhum aparelho no mundo
-  /// esta conseguindo revogar a propria sessao, e um defeito desse tamanho nao
-  /// pode depender de alguem desconfiar da tela.
+  /// O servidor respondeu, e **recusou**.
   recusadaPeloServidor,
 }
 
@@ -80,47 +51,12 @@ class AvisoDeSaida {
 typedef ObservadorDeSaida = void Function(AvisoDeSaida aviso);
 
 /// Algo guardado neste aparelho que **nao pode** sobreviver ao logout.
-///
-/// Existe para que o criterio 11 da `BICHUS-81` -- "o cache e apagado no
-/// logout" -- seja cumprido **em** `sair()`, e nao no `onPressed` de cada tela
-/// que por acaso lembrar. Limpeza que mora no botao so acontece pelo caminho do
-/// botao: a sessao que cai por refresh recusado, o envelope que expira, o
-/// logout disparado de outra tela, todos passariam ao largo. E trocar de conta
-/// no mesmo aparelho nao pode expor os pets da conta anterior.
 typedef LimpezaAoSair = Future<void> Function();
 
 /// Algo que precisa acontecer **depois de todo login bem-sucedido**.
-///
-/// Existe por um motivo so, e ele e o SEC-019. Desde 23/09 o servidor apaga o
-/// cadastro de push de TODOS os aparelhos da conta em qualquer revogacao em
-/// massa -- sair de todos, troca de senha, redefinicao, "nao fui eu", exclusao
-/// de conta -- inclusive o aparelho de quem pediu. Ele nao consegue poupar um:
-/// nao ha vinculo entre a linha de `user_devices` e a familia de refresh, e um
-/// parametro de "nao apague este" seria preenchido por quem esta com o telefone
-/// roubado.
-///
-/// Quem repoe o registro e o app, e tem de ser **em [abrir]**, nao no
-/// `onPressed` da tela de entrar. Sao quatro caminhos de login hoje (entrar,
-/// criar conta, e os dois de volta pela guarda de intencao) e nenhuma garantia
-/// de que o quinto lembre. E a mesma licao de [LimpezaAoSair], do outro lado da
-/// sessao: limpeza que mora no botao so acontece pelo caminho do botao.
-///
-/// **A falha de uma nao derruba o login.** Entrar na conta nao pode depender de
-/// um registro de push, e quem esta sem rede no momento do login precisa entrar
-/// assim mesmo.
 typedef AoEntrar = Future<void> Function();
 
 /// O registro padrao, usado quando ninguem injeta outro.
-///
-/// A escolha do canal e por severidade, e nao por gosto:
-///
-/// - **Recusa do servidor** vai por [FlutterError.reportError], que e o canal
-///   que a observabilidade do projeto escuta (Sentry, ADR-0008). Defeito de
-///   contrato precisa chegar a quem opera, nao ao console de quem por acaso
-///   estava com o depurador aberto.
-/// - **Falta de rede** vai por [debugPrint]. Ela e esperada, tem consequencia
-///   declarada, e transformar sinal ruim em alerta de erro treina todo mundo a
-///   ignorar o alerta.
 void registrarSaidaNoCanalPadrao(AvisoDeSaida aviso) {
   switch (aviso.revogacao) {
     case RevogacaoNoServidor.confirmada:
@@ -145,20 +81,11 @@ void registrarSaidaNoCanalPadrao(AvisoDeSaida aviso) {
 }
 
 /// O TETO DA LEITURA DO CHAVEIRO NO ARRANQUE.
-///
-/// A leitura e local -- Keychain no iOS, Keystore no Android -- e nao sai para
-/// a rede, entao o valor legitimo e de milissegundos. O teto nao esta aqui
-/// para acomodar lentidao: esta para que o chaveiro que **nao responde** tenha
-/// desfecho, porque [EstadoDaSessao.carregando] sem saida e a tela de abertura
-/// sem saida.
-///
-/// Dois segundos e folgado para uma leitura local e curto o bastante para nao
-/// parecer app travado.
 const Duration tetoDaLeituraDaSessao = Duration(seconds: 2);
 
 /// Em que ponto do arranque e da autenticacao o app esta.
 enum EstadoDaSessao {
-  /// O app ainda esta lendo o chaveiro. E o estado da splash, e ele e curto.
+  /// O app ainda esta lendo o chaveiro.
   carregando,
 
   /// Sem conta. **Nao e um muro**: o app inteiro e navegavel assim, e so as
@@ -169,47 +96,17 @@ enum EstadoDaSessao {
   logado,
 }
 
-/// POR QUE nao ha conta agora. **Deslogado nao e um estado so.**
-///
-/// Medido em 19/10/2026, e e o defeito que esta distincao existe para matar:
-/// `_renovar` recusado com 401 fazia `_mudar(EstadoDaSessao.deslogado, null)`,
-/// exatamente como `iniciar()` faz quando o chaveiro esta VAZIO. Depois disso
-/// nada no app conseguia separar *"esta pessoa nunca entrou"* de *"esta pessoa
-/// estava dentro e acabou de ser posta para fora"* -- e a diferenca nao e de
-/// tom, e de SAIDA: para a primeira, `Criar conta` e o caminho; para a
-/// segunda, oferecer `Criar conta` manda alguem que JA TEM conta criar uma
-/// segunda, perdendo os pets, as conversas e os achados da primeira.
-///
-/// O servidor diz qual dos dois e, e diz por `type`: `unauthenticated` quando
-/// nenhum token foi apresentado, `token-expired` quando o refresh foi recusado
-/// (medido na homologacao em 19/10, os dois com `next_action: sign_in`). Mas
-/// **a tela nunca ve o `token-expired`**: ele chega em `POST /auth/refresh`,
-/// dentro de [ControladorDeSessao._renovar], e a chamada da tela que vem
-/// depois sai sem `Authorization` e volta `unauthenticated`. Por isso a
-/// lembranca mora AQUI, e nao na tela.
+/// POR QUE nao ha conta agora.
 enum MotivoSemConta {
   /// Nao havia sessao guardada, ou a pessoa saiu da conta por decisao dela.
-  ///
-  /// Sair por vontade propria cai aqui, e nao em [sessaoCaiu], de proposito:
-  /// quem acabou de tocar em `Sair da conta` nao teve sessao nenhuma expirando
-  /// debaixo dela, e dizer que expirou seria a tela mentindo sobre o que a
-  /// propria pessoa fez.
   nuncaEntrou,
 
   /// A pessoa estava logada e a renovacao foi recusada.
-  ///
-  /// O access token vale 900 s e o refresh 30 dias (medido: `expires_in: 900`,
-  /// `refresh_expires_in: 2592000`). Chegar aqui significa que o refresh
-  /// venceu, foi revogado ou foi reapresentado -- nos tres casos havia conta.
   sessaoCaiu,
 }
 
 /// A sessao do app: le o chaveiro no arranque, renova quando expira e avisa
 /// quem depende disso.
-///
-/// Renovacao e rotacao: o refresh token vale uma vez so, e o novo precisa ser
-/// gravado antes de qualquer outra chamada. Apresentar um token ja consumido
-/// revoga a familia inteira, que e como o roubo de token e detectado.
 class ControladorDeSessao extends ChangeNotifier {
   ControladorDeSessao({
     required AuthApi auth,
@@ -234,14 +131,13 @@ class ControladorDeSessao extends ChangeNotifier {
   final AuthApi _auth;
   final DepositoDeSessao _deposito;
 
-  /// A guarda da intencao pendente (UX 8.3). Opcional porque nem todo teste de
-  /// sessao tem uma; em producao ela existe sempre.
+  /// A guarda da intencao pendente (UX 8.3).
   final GuardaDeAcao? _guardaDeAcao;
 
-  /// Tudo o mais que o app guardou localmente desta conta. Ver [LimpezaAoSair].
+  /// Tudo o mais que o app guardou localmente desta conta.
   final List<LimpezaAoSair> _limpezasAoSair;
 
-  /// O que refaz o registro do aparelho depois do login. Ver [AoEntrar].
+  /// O que refaz o registro do aparelho depois do login.
   final List<AoEntrar> _aoEntrar;
 
   final ObservadorDeSaida _observadorDeSaida;
@@ -256,29 +152,11 @@ class ControladorDeSessao extends ChangeNotifier {
   Usuario? get usuario => _sessao?.usuario;
   bool get logado => _estado == EstadoDaSessao.logado;
 
-  /// Por que nao ha conta agora. Ver [MotivoSemConta].
-  ///
-  /// Logado, o valor e o da ULTIMA ausencia e nao tem leitor: quem o consome
-  /// so e desenhado quando [logado] e falso.
+  /// Por que nao ha conta agora.
   MotivoSemConta get motivoSemConta => _motivoSemConta;
 
-  /// Le o que estiver guardado. Chamado uma vez, no arranque.
-  ///
-  /// Falha de rede aqui **nao** desloga ninguem: sem sinal, o app abre com a
-  /// sessao que ja tinha e a renovacao acontece quando o sinal voltar. Deslogar
-  /// alguem por falta de rede e a pior falha possivel neste produto.
+  /// Le o que estiver guardado.
   Future<void> iniciar() async {
-    // **ESTE METODO E O UNICO QUE TIRA A PESSOA DA `TelaDeAbertura`.** O
-    // `redirect` do roteador segura quem esta em `EstadoDaSessao.carregando`,
-    // e `carregando` e o valor com que `_estado` nasce: enquanto `_mudar` nao
-    // acontecer, a tela de abertura nao tem saida. Entao **toda** saida deste
-    // metodo precisa passar por `_mudar`, inclusive as de falha.
-    //
-    // O teto cobre o deposito que nao RESPONDE, e o `catch` cobre o que
-    // LANCA. Os dois existem porque `try/catch` nao pega travamento: um
-    // `Future` que nunca completa tambem nunca lanca, e sem o `.timeout` ele
-    // deixaria a pessoa numa tela parada para sempre -- que e o mesmo defeito
-    // que o teto do push conserta no `main.dart`, uma camada acima.
     final Sessao? guardada;
     try {
       guardada = await _deposito.ler().timeout(tetoDaLeituraDaSessao);
@@ -301,29 +179,14 @@ class ControladorDeSessao extends ChangeNotifier {
   }
 
   /// Guarda a sessao recem-aberta, avisa as telas e refaz o que o login repoe.
-  ///
-  /// A ORDEM E O PONTO: [_aoEntrar] roda **depois** de `_mudar`, nunca antes.
-  /// O registro do aparelho e uma chamada `bearerAuth`, e ela pergunta o token
-  /// ao controlador -- com a sessao ainda nao publicada, ela sairia sem
-  /// `Authorization` e o servidor responderia 401 ao registro que o SEC-019
-  /// existe para garantir. O sintoma seria invisivel: nenhuma tela muda, nenhum
-  /// erro aparece, e a pessoa fica fora da base de alerta.
   Future<void> abrir(Sessao sessao) async {
     await _deposito.gravar(sessao);
-    // O motivo volta ao piso no login, e nao na proxima saida: sem isto, quem
-    // tomou um refresh recusado, entrou de novo e mais tarde saiu por vontade
-    // propria continuaria lendo "sua sessao expirou" na tela seguinte.
     _motivoSemConta = MotivoSemConta.nuncaEntrou;
     _mudar(EstadoDaSessao.logado, sessao);
     await _reporOQueOLoginRepoe();
   }
 
-  /// O que precisa acontecer de novo a cada login. Ver [AoEntrar].
-  ///
-  /// Cada uma e isolada pelo mesmo motivo das limpezas de saida: uma que falhe
-  /// nao pode impedir as outras, e nenhuma pode derrubar o login. Entrar na
-  /// conta sem rede continua funcionando; o que nao acontece e o registro, e a
-  /// retomada seguinte com permissao diferente tenta de novo.
+  /// O que precisa acontecer de novo a cada login.
   Future<void> _reporOQueOLoginRepoe() async {
     for (final passo in _aoEntrar) {
       try {
@@ -335,47 +198,6 @@ class ControladorDeSessao extends ChangeNotifier {
   }
 
   /// Sai da conta **neste aparelho**.
-  ///
-  /// Sao duas metades com garantias diferentes, e confundi-las e o defeito:
-  ///
-  /// 1. **No servidor**, a familia de refresh apresentada e revogada. E por
-  ///    isso que o `refresh_token` vai no corpo: sem ele o servidor nao sabe
-  ///    qual familia matar, e um refresh ja copiado continua renovando por ate
-  ///    180 dias mesmo depois de o telefone esquece-lo.
-  /// 2. **No aparelho**, tudo desta conta e apagado. Isso e **incondicional**
-  ///    (criterio 13.1): acontece com a revogacao confirmada, com o servidor
-  ///    fora, sem sinal e com o servidor recusando. Limpeza que depende da
-  ///    resposta deixa o dado no aparelho exatamente no caso em que ninguem
-  ///    esta olhando -- por isso ela mora num `finally` e nao no caminho feliz.
-  ///
-  /// A ordem e servidor-e-depois-aparelho, e ela nao e arbitraria: a operacao
-  /// exige `bearerAuth`, entao apagar o token antes mandaria a requisicao sem
-  /// `Authorization` e o servidor recusaria com 401 o logout que ele deveria
-  /// atender. O preco e que a limpeza espera o limite de tempo do cliente HTTP
-  /// quando nao ha rede; o `finally` garante que ela nao espera mais que isso.
-  ///
-  /// **Sem rede a pessoa sai assim mesmo.** Prender alguem numa conta porque o
-  /// servidor nao respondeu e pior que a familia orfa que sobra no banco: ela e
-  /// inalcancavel para quem saiu, porque o unico exemplar do token foi apagado,
-  /// e vence sozinha por inatividade. Quem precisa de mais que isso -- aparelho
-  /// roubado, token ja exfiltrado -- usa `Sair de todos os aparelhos`
-  /// (`BICHUS-125`), que empurra `sessions_invalid_before` e fecha em menos de
-  /// um segundo. Este caminho **nao** toca essa coluna: ela e por pessoa, e
-  /// empurra-la aqui derrubaria o tablet e o celular de quem ficou em casa.
-  ///
-  /// Repoe o usuario da sessao com o que o servidor acabou de devolver.
-  ///
-  /// Quem chama e `Perfil` › `Meus dados`, depois de `PATCH /me`. **Nao abre
-  /// sessao e nao fecha nenhuma**: os tokens continuam os mesmos objetos, e por
-  /// isso nao ha `_aoEntrar`, nao ha limpeza e nao ha troca de estado -- um
-  /// `abrir()` aqui refaria o registro do aparelho a cada nome corrigido.
-  ///
-  /// Grava no deposito porque o usuario mora dentro da sessao guardada: sem
-  /// isto, fechar e reabrir o app traria de volta o nome antigo.
-  ///
-  /// Sem sessao aberta nao faz nada. Nao e caso teorico: a sessao pode cair
-  /// entre o PATCH e a volta dele (401 em `_renovar`), e criar sessao a partir
-  /// de uma resposta de perfil seria ressuscitar uma conta que acabou de sair.
   Future<void> atualizarUsuario(Usuario usuario) async {
     final atual = _sessao;
     if (atual == null) return;
@@ -387,10 +209,7 @@ class ControladorDeSessao extends ChangeNotifier {
   /// A revogacao perdida **nao e retentada**, e isso e decisao e nao omissao
   /// (ADR-0002, emenda 1, secao 6): retentar exigiria guardar o refresh no
   /// aparelho ate a revogacao passar, o que manteria a credencial no disco
-  /// justamente enquanto ele esta sem rede. Registra-se em vez de reter.
-  ///
-  /// Devolve o que aconteceu com a metade de servidor, para que quem chamou
-  /// possa dizer a verdade na tela em vez de supor que deu certo.
+  /// justamente enquanto ele esta sem rede.
   Future<RevogacaoNoServidor> sair() async {
     final refresh = _sessao?.refreshToken;
     try {
@@ -402,18 +221,12 @@ class ControladorDeSessao extends ChangeNotifier {
 
   Future<RevogacaoNoServidor> _revogarNoServidor(String? refreshToken) async {
     if (refreshToken == null) {
-      // Nao ha sessao guardada: nao ha familia para revogar. Sair mesmo assim
-      // e legitimo -- e o caminho de quem reabre o app num estado sujo -- e
-      // nao vira ruido no registro.
       return RevogacaoNoServidor.semSessaoParaRevogar;
     }
     try {
       await _auth.sair(refreshToken);
       return RevogacaoNoServidor.confirmada;
     } on FalhaDaApi catch (falha) {
-      // O SERVIDOR RESPONDEU E RECUSOU. Este ramo existe separado do de baixo
-      // porque junta-los foi o defeito: com um `catch (FalhaDeChamada)` unico,
-      // um 400 em 100% dos logouts do mundo era indistinguivel de sinal ruim.
       return _registrar(
         RevogacaoNoServidor.recusadaPeloServidor,
         'O servidor recusou o logout com ${falha.problem.status} '
@@ -435,11 +248,6 @@ class ControladorDeSessao extends ChangeNotifier {
         causa: falha,
       );
     } on FalhaDeTempo catch (falha) {
-      // Separada de [FalhaDeConexao] na camada de API porque ali a acao **pode**
-      // ter acontecido. Aqui as duas caem no mesmo veredito de proposito: a
-      // consequencia e identica (nao da para confirmar, e nao se retenta) e a
-      // repeticao do logout e idempotente no servidor, entao nada muda com a
-      // distincao. O que nao pode e cair junto com a recusa, que e defeito.
       return _registrar(
         RevogacaoNoServidor.naoConfirmadaSemRede,
         'Logout sem resposta dentro do prazo (${falha.limite.inSeconds}s): a '
@@ -468,19 +276,8 @@ class ControladorDeSessao extends ChangeNotifier {
   }
 
   /// O apagamento local, que acontece nos quatro desfechos.
-  ///
-  /// O token da sessao sai **primeiro**: e o item mais sensivel, e se alguma
-  /// limpeza de cache estourar no meio ele ja saiu. Cada limpeza registrada e
-  /// isolada pelo mesmo motivo -- uma que falhe nao pode impedir as outras de
-  /// rodar, senao o cache da conta anterior sobrevive por causa de um erro em
-  /// outro cache.
   Future<void> _apagarTudoDestaConta() async {
     await _deposito.apagar();
-    // A intencao pendente morre junto (regra 7 de UX 8.3). Ela e o rascunho de
-    // quem estava na conta que acabou de sair; deixa-la no disco faria a
-    // proxima pessoa a entrar neste aparelho -- o filho, o outro tutor da casa,
-    // quem comprou o celular usado -- publicar um caso que nao e dela assim
-    // que o login terminasse.
     await _guardaDeAcao?.descartar();
     for (final limpeza in _limpezasAoSair) {
       try {
@@ -489,18 +286,11 @@ class ControladorDeSessao extends ChangeNotifier {
         debugPrint('Bichu/sessao: uma limpeza de logout falhou ($erro).');
       }
     }
-    // SAIR NAO E EXPIRAR. Este caminho e o do botao `Sair da conta` (e o da
-    // exclusao de conta, que passa por ele): a pessoa decidiu, e a tela de
-    // deslogado dela e a de quem chega, com `Entrar` e `Criar conta`.
     _motivoSemConta = MotivoSemConta.nuncaEntrou;
     _mudar(EstadoDaSessao.deslogado, null);
   }
 
   /// Devolve um access token utilizavel, renovando quando preciso.
-  ///
-  /// E esta a funcao que a camada de API recebe como `tokenDeAcesso`. Chamadas
-  /// concorrentes compartilham a mesma renovacao: duas renovacoes em paralelo
-  /// com o mesmo refresh token derrubam a familia inteira.
   Future<String?> tokenValido() {
     final atual = _sessao;
     if (atual == null) return Future<String?>.value();
@@ -517,11 +307,6 @@ class ControladorDeSessao extends ChangeNotifier {
       return nova.accessToken;
     } on FalhaDaApi catch (falha) {
       if (falha.problem.status == 401) {
-        // Token invalido, expirado ou reutilizado. A sessao acabou de verdade.
-        //
-        // **E E AQUI, e em nenhum outro lugar, que se sabe que havia conta.**
-        // A chamada da tela que vier depois disto sai sem `Authorization` e
-        // volta `unauthenticated`, indistinguivel de quem nunca entrou.
         await _deposito.apagar();
         _motivoSemConta = MotivoSemConta.sessaoCaiu;
         _mudar(EstadoDaSessao.deslogado, null);
@@ -529,7 +314,6 @@ class ControladorDeSessao extends ChangeNotifier {
       }
       return _sessao?.accessToken;
     } on FalhaDeChamada {
-      // Sem rede. Mantem a sessao: ela volta a valer quando o sinal voltar.
       return _sessao?.accessToken;
     }
   }

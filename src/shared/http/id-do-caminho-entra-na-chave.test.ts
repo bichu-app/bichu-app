@@ -1,39 +1,6 @@
 /**
- * O id do caminho entra na chave de idempotência — em TODA rota, inclusive na
- * que ainda não existe.
- *
- * ## O defeito, e por que ele é uma classe e não três bugs
- *
- * `endpoint` é o MOLDE da rota (`POST /pets/:petId/lost-cases`), não a URL.
- * Duas requisições para recursos diferentes da mesma rota têm o mesmo
- * `endpoint`. A chave de idempotência é escopada por `donoOuToken + endpoint +
- * resumo do corpo`, então, quando o id do recurso está no CAMINHO e não no
- * corpo, os três componentes ficam idênticos: a mesma conta, com a mesma chave,
- * em dois recursos diferentes, recebe a resposta gravada do PRIMEIRO como
- * resposta do segundo. E o segundo efeito nunca acontece.
- *
- * Foi encontrado em `postConversationMessage`, consertado ali, e continuava
- * vivo em `openLostCase`, em `createFoundReportFromTag` e em
- * `cancelTransferByToken`.
- *
- * ## Por que esta isca não é uma isca por rota
- *
- * Porque uma isca por rota deixa a QUARTA rota nascer furada. Três asserções
- * específicas provam três rotas e calam sobre a próxima que alguém escrever com
- * id no caminho — que é exatamente como esta classe sobreviveu ao conserto da
- * primeira.
- *
- * O que se prova aqui é o MECANISMO, com duas provas que nenhuma rota real
- * fornece:
- *
- * 1. **O caso plantado.** Uma rota que não existe no produto
- *    (`POST /plantada/:recursoId/coisas`) é submetida ao mecanismo com o id de
- *    fora. O mecanismo precisa recusar. É esta prova que cobre a rota que
- *    ninguém escreveu ainda: ela não depende de nenhum nome do produto.
- * 2. **A varredura vinda do contrato.** A lista das operações idempotentes sai
- *    de `api/openapi.yaml` em tempo de execução, e não de uma lista escrita
- *    aqui. Operação idempotente nova sem veredito nesta tabela REPROVA — a
- *    tabela não pode ficar para trás em silêncio.
+ * O id do caminho entra na chave de idempotência — em TODA rota, inclusive na que
+ * ainda não existe.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -107,10 +74,6 @@ function pedidoDe(sobrescrita: Partial<PedidoIdempotente>): PedidoIdempotente {
   };
 }
 
-// ---------------------------------------------------------------------------
-// 1. O CASO PLANTADO: a rota que ainda não existe
-// ---------------------------------------------------------------------------
-
 void describe('o caso plantado: uma rota com id no caminho que esquece o id', () => {
   void it('é RECUSADA pelo mecanismo, e o efeito não roda', async () => {
     const armazem = idempotenciaEmMemoria();
@@ -120,9 +83,6 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
       return Promise.resolve({ status: 201, body: { id: efeitos } });
     };
 
-    // `parametrosDeCaminho: {}` numa rota cujo molde declara `:recursoId`. É a
-    // forma que a quarta rota teria se alguém a escrevesse copiando `createPet`,
-    // que não tem parâmetro nenhum.
     await assert.rejects(
       () => executarComIdempotencia(armazem, pedidoDe({}), executar),
       /id no caminho fora da chave/,
@@ -133,10 +93,6 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
 
   void it('é recusada TAMBÉM quando o cliente não manda chave nenhuma', async () => {
     const armazem = idempotenciaEmMemoria();
-    // A requisição sem `Idempotency-Key` nunca toca o corpo canônico. Se a
-    // conferência da fiação viesse depois dela, a rota pareceria sã até o
-    // primeiro cliente offline — que é quem manda chave, e só aparece em
-    // produção.
     await assert.rejects(
       () =>
         executarComIdempotencia(armazem, pedidoDe({ chaveDoCabecalho: undefined }), () =>
@@ -161,9 +117,6 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
     );
     assert.deepEqual(primeira, { status: 201, body: { recurso: 1 } });
 
-    // Mesma conta, mesma chave, mesmo corpo, OUTRO recurso. Sem o conserto isto
-    // devolvia `{ recurso: 1 }` com status 201, e o segundo recurso ficava sem
-    // efeito nenhum.
     await assert.rejects(
       () =>
         executarComIdempotencia(
@@ -189,15 +142,11 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
     const primeira = await executarComIdempotencia(armazem, pedido, executar);
     const segunda = await executarComIdempotencia(armazem, pedido, executar);
 
-    // O conserto não pode quebrar o que a idempotência existe para fazer: o
-    // reenvio da fila offline do MESMO pedido devolve a resposta original.
     assert.deepEqual(segunda, primeira);
     assert.equal(efeitos, 1);
   });
 
   void it('rota SEM parâmetro de caminho produz o corpo canônico de sempre', () => {
-    // Acrescentar envelope onde não há defeito invalidaria chave em voo de
-    // `createPet` e de `createStrayFoundReport` sem fechar nada.
     const corpo = { name: 'Bichu', species_code: 'dog' };
     assert.equal(
       corpoCanonicoDoPedido(
@@ -236,27 +185,12 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
   });
 });
 
-// ---------------------------------------------------------------------------
-// 2. A VARREDURA: toda rota idempotente do produto, com veredito
-// ---------------------------------------------------------------------------
-
-/**
- * O veredito de cada operação idempotente do contrato.
- *
- * `rota` para a que tem handler registrado; `semHandler` para a que o contrato
- * declara e o código ainda não implementa. A lista é conferida contra
- * `api/openapi.yaml` no caso `nenhuma operação idempotente fica sem veredito`:
- * operação nova sem linha aqui reprova.
- */
+/** O veredito de cada operação idempotente do contrato. */
 type Veredito =
   | { readonly operationId: string; readonly path: string }
   | { readonly operationId: string; readonly semHandler: string };
 
-/**
- * As rotas entram pelo OBJETO, e o `operationId` sai dele. Escrever o
- * `operationId` à mão aqui já produziu uma linha errada — `defineRoute` é a
- * fonte, e uma cópia do nome diverge dela sem nada acusar.
- */
+/** As rotas entram pelo OBJETO, e o `operationId` sai dele. */
 const VEREDITOS: readonly Veredito[] = [
   rotaDeCadastroDePet,
   rotaDeRegistroDeAchado,
@@ -264,9 +198,6 @@ const VEREDITOS: readonly Veredito[] = [
   rotaDeEnvioDeMensagem,
   rotaDeAvisoPelaTag,
   rotaDeCancelamentoPorToken,
-  // O outro lado da conversa mediada, da BICHUS-41: o contrato declara
-  // `Idempotency-Key` e não há handler. Quando ele existir, troque esta linha
-  // pela rota — e o caso abaixo passa a exigir o id do caminho dela também.
   { operationId: 'postFinderMessage', semHandler: 'BICHUS-41, sem handler registrado' },
 ];
 
@@ -310,14 +241,11 @@ void describe('varredura: toda rota idempotente do produto', () => {
         return;
       }
 
-      // Esquecer o id REPROVA.
       assert.throws(
         () => corpoCanonicoDoPedido(pedidoDe({ endpoint, parametrosDeCaminho: {} })),
         /id no caminho fora da chave/,
       );
 
-      // E dois recursos diferentes produzem resumos diferentes, um id por vez —
-      // com dois parâmetros, trocar só um já precisa separar os pedidos.
       const base = Object.fromEntries(nomes.map((n) => [n, `${n}-1`]));
       const canonicoBase = corpoCanonicoDoPedido(
         pedidoDe({ endpoint, parametrosDeCaminho: base }),

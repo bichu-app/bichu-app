@@ -1,15 +1,4 @@
-/**
- * JWT RS256, assinado e verificado com `node:crypto`.
- *
- * RS256 e nunca HS256 (ADR-0002): chave simétrica não se substitui por um
- * emissor externo, e quem valida também poderia emitir. É o que fecharia a porta
- * do Keycloak.
- *
- * A verificação lê a chave da **memória do processo** e nunca busca o próprio
- * JWKS por HTTP: somos o emissor no MVP, e um serviço que valida chamando o
- * próprio endpoint cria dependência circular e um vetor de negação de serviço
- * trivial (docs/04-seguranca.md 7.6, requisito 5).
- */
+/** JWT RS256, assinado e verificado com `node:crypto`. */
 import { constants, createSign, createVerify, type KeyObject } from 'node:crypto';
 import type { SigningKey, TokenConfig } from '../../../../shared/config/app-config.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
@@ -79,14 +68,6 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
       const cabecalho = base64url(
         JSON.stringify({ alg: ALGORITMO, typ: 'JWT', kid: config.activeKey.kid }),
       );
-      // `sub` é o UUID interno. É este detalhe que compra a liberdade: quando o
-      // Keycloak entrar, os usuários são criados nele com o `id` forçado igual
-      // ao nosso, e o `sub` continua sendo o mesmo valor de sempre.
-      // `sid` e a familia de refresh que emitiu este token (ADR-0002, emenda
-      // 1). Ele entra no corpo agora e a barreira nao o le nesta rodada: o
-      // ganho e que, no dia em que a revogacao por sessao for necessaria, os
-      // tokens em campo ja a carregam. Campo novo em token publicado e mudanca
-      // de contrato com versao antiga em aparelho por meses.
       const corpo = base64url(
         JSON.stringify({ iss: config.issuer, sub, aud: config.audience, iat, exp, jti, sid }),
       );
@@ -110,9 +91,6 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
         return { ok: false, motivo: 'malformado' };
       }
 
-      // Lista de algoritmos permitidos igual a exatamente ["RS256"], conferida
-      // ANTES de qualquer outra coisa. `alg: none` e HS256 assinado com a chave
-      // pública morrem aqui.
       if (cabecalho['alg'] !== ALGORITMO) {
         return { ok: false, motivo: 'algoritmo_nao_permitido' };
       }
@@ -120,7 +98,6 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
       const kid = cabecalho['kid'];
       if (typeof kid !== 'string') return { ok: false, motivo: 'kid_desconhecido' };
       const chave = porKid.get(kid);
-      // Falha fechado. Nunca "tentar todas as chaves do JWKS".
       if (chave === undefined) return { ok: false, motivo: 'kid_desconhecido' };
 
       if (!conferirAssinatura(`${cabecalhoBruto}.${corpoBruto}`, assinatura, chave.publicKey)) {
@@ -139,8 +116,6 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
         return { ok: false, motivo: 'malformado' };
       }
 
-      // Lista de emissores confiáveis, não um emissor fixo. Uma lista com um
-      // item hoje é uma linha de configuração amanhã (ADR-0002).
       if (!config.trustedIssuers.includes(iss)) {
         return { ok: false, motivo: 'emissor_nao_confiavel' };
       }
@@ -151,10 +126,6 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
       if (exp + tolerancia <= agoraEmSegundos) return { ok: false, motivo: 'expirado' };
       if (iat - tolerancia > agoraEmSegundos) return { ok: false, motivo: 'emitido_no_futuro' };
 
-      // `sid` NAO entra na conferencia de forma acima, e a ausencia dele nao
-      // recusa o token. Todo token emitido a partir desta mudanca o carrega; os
-      // que ja circulam, nao. Exigi-lo aqui deslogaria a base inteira na
-      // subida — o estrago exato que declarar o campo cedo existe para evitar.
       const claims: ClaimsDoAcesso = {
         sub: sub as UserId,
         iss,

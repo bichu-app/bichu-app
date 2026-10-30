@@ -1,42 +1,4 @@
-/**
- * As três rotas de `/v1/me/location`.
- *
- * O contrato já as declarava antes desta história; o que faltava era a coluna e
- * a fiação. `effects`, `rateLimit` e `operationId` **espelham**
- * `api/openapi.yaml`, e nada no contrato mudou — o `oasdiff` não tem o que
- * comparar aqui, e essa é a forma certa de entregar quando a especificação já é
- * a fonte.
- *
- * Quatro decisões que não são detalhe de fiação:
- *
- * - **O corpo é validado pelo schema da própria especificação** (`corpoDe`).
- *   `UserLocationInput` já limita a caixa do Brasil (`lat` de -34 a 6, `lon` de
- *   -74 a -32) e fecha `source` em dois valores. Escrever a mesma validação à
- *   mão criaria a segunda definição, que diverge na primeira mudança. A caixa
- *   não é higiene teórica: sem ela, um `lat` de 51 grava Londres e entra na
- *   consulta de raio de um caso aberto em Recife.
- * - **A resposta é montada campo a campo**, nunca por espalhamento do objeto do
- *   domínio. `LocalizacaoDeReferencia` carrega hoje seis campos e amanhã o que
- *   o domínio precisar; um `...localizacao` publicaria cada campo novo por
- *   omissão, e é exatamente assim que uma coordenada mais precisa vazaria sem
- *   ninguém ter decidido nada.
- * - **`GET` devolve `null` e não 404** quando não há localização válida. O
- *   contrato declara `UserLocation` como `nullable`, e os dois casos que caem
- *   nesse `null` — nunca informou, e informou e venceu — são estados normais da
- *   conta, não recurso ausente. A tela distingue os dois pelo texto que os
- *   critérios 7 e 8 já escrevem.
- * - **Nenhuma rota aqui é pública.** As três exigem `bearerAuth`, e o dono do
- *   token é o único `user_id` que chega ao `WHERE`. É o que sustenta o critério
- *   11 ("nenhuma coordenada de nenhum usuário é devolvida a outro usuário"):
- *   não há caminho de código que receba um id de terceiro.
- *
- * **SEC-021, e ela muda o significado das três sem mudar o contrato:** a
- * localização passou a ser do APARELHO. O `GET` devolve o que ESTE aparelho
- * informou, o `PUT` grava para ESTE aparelho, e o `DELETE` tira do raio ESTE
- * aparelho. O aparelho é a família de refresh que o `sid` do token carrega; o
- * corpo e as respostas continuam exatamente como `UserLocation` os declara, e
- * por isso o `oasdiff` continua sem nada a comparar.
- */
+/** As três rotas de `/v1/me/location`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -77,13 +39,9 @@ export const rotaDeApagarLocalizacao = defineRoute({
 
 export interface AutenticadorDaLocalizacao {
   /**
-   * `sid` é opcional aqui porque é opcional no token: o ADR-0002, emenda 1,
-   * seção 2, acrescentou o campo a tokens que já circulavam sem ele, e o
-   * verificador aceita os dois — "aceita o token SEM `sid`: é o que já está no
-   * aparelho das pessoas".
-   *
-   * **Para estas três rotas, um token sem `sid` é recusado**, e o porquê está
-   * em `chamadorAutenticado`.
+   * `sid` é opcional aqui porque é opcional no token: o ADR-0002, emenda 1, seção 2,
+   * acrescentou o campo a tokens que já circulavam sem ele, e o verificador aceita
+   * os dois — "aceita o token SEM `sid`: é o que já está no aparelho das pessoas".
    */
   autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
 }
@@ -100,13 +58,7 @@ interface CorpoDaLocalizacao {
   source: 'device_gps' | 'map_pin';
 }
 
-/**
- * A resposta, campo a campo, exatamente como `UserLocation` a declara.
- *
- * `lat` e `lon` aqui são os **quantizados**, porque é o que o domínio devolve e
- * é o que o banco guarda. Não existe caminho neste arquivo que alcance a
- * coordenada bruta: ela morre no corpo da requisição.
- */
+/** A resposta, campo a campo, exatamente como `UserLocation` a declara. */
 function comoResposta(localizacao: LocalizacaoDeReferencia): Record<string, unknown> {
   return {
     lat: localizacao.lat,
@@ -120,8 +72,7 @@ function comoResposta(localizacao: LocalizacaoDeReferencia): Record<string, unkn
 
 /**
  * MEMOIZADA por requisição, pelo mesmo motivo das rotas de pet: o teto por
- * `account` precisa do dono antes do handler, e o handler precisa do mesmo
- * dono. Sem a memória, cada `PUT` verificaria RS256 e leria `users` duas vezes.
+ * `account` precisa do dono antes do handler, e o handler precisa do mesmo dono.
  */
 function chamadorAutenticado(
   request: FastifyRequest,
@@ -135,20 +86,6 @@ function chamadorAutenticado(
     const token = cabecalho.slice('Bearer '.length).trim();
     if (token === '') throw problemas.naoAutenticado();
     const { userId, sid } = await deps.autenticador.autenticar(token);
-    // SEC-021: SEM `sid` NÃO HÁ APARELHO, E SEM APARELHO NÃO HÁ LOCALIZAÇÃO.
-    //
-    // A localização passou a ser do aparelho (decisão do cliente, 23/09/2026), e
-    // o aparelho é a família de refresh que o `sid` carrega. Um token emitido
-    // antes da emenda 1 não o carrega, e não há de onde deduzi-lo: `users.id`
-    // responde quem é a pessoa e nada diz sobre qual aparelho.
-    //
-    // As três saídas foram consideradas. Gravar sem família cria uma linha que
-    // nenhum logout alcança — coordenada imortal. Inventar uma família dá o
-    // mesmo resultado, com pior aparência. Recusar devolve a pessoa ao caminho
-    // que já existe: o refresh renova, o token novo nasce com `sid`, e a
-    // requisição seguinte passa. Por isso é `session-expired` e não
-    // `unauthenticated`: é exatamente o que ela significa, e é a resposta a que
-    // o app já reage renovando (BICHUS-81).
     if (typeof sid !== 'string' || sid === '') throw problemas.sessaoExpirada();
     return {
       userId,
@@ -186,7 +123,6 @@ export function registrarRotasDeLocalizacao(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
       const localizacao = await deps.localizacao.atual(chamador);
-      // `null` e não 404: ver o cabeçalho do arquivo.
       return reply.status(200).send(localizacao === null ? null : comoResposta(localizacao));
     },
   );

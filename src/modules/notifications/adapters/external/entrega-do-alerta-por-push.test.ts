@@ -1,47 +1,4 @@
-/**
- * O envio do alerta a um vizinho: o token é resolvido AGORA, e o morto é revogado.
- *
- * Este arquivo cobra as duas garantias que a BICHUS-91 escreveu e deixou sem
- * chamador, e que a BICHUS-18 passou a exercer:
- *
- * 1. **`enderecoDeEnvio` no instante do envio.** O aviso que atravessa a porta
- *    carrega `aparelhoId`, e não `pushToken` — então não existe forma de mandar
- *    para um token carregado junto da lista, porque o token não está na lista.
- *    O caso que prova isso é o que **remove o aparelho entre a montagem da
- *    lista e o envio** e exige que nada saia.
- * 2. **`revogarPorTokenRecusado` quando o transporte diz que o aparelho sumiu.**
- *    A higiene do ADR-0008 acontece no instante da recusa, e não numa varredura
- *    que alguém precisa lembrar de rodar.
- *
- * ## Por que os erros são resultado e não exceção
- *
- * Um aparelho que falha não pode derrubar o alerta dos outros 499. Os quatro
- * desfechos de `ResultadoDaEntrega` são valores, e os dois casos de erro deste
- * arquivo exigem que `avisar` **retorne** em vez de estourar.
- *
- * ## As iscas, e como foram provadas
- *
- * Desligadas em `entrega-do-alerta-por-push.ts`, rodadas e vistas reprovar em
- * 22/09/2026, e depois restauradas. A conferência de que o arquivo mudou foi
- * por CONTEÚDO, e não por `git diff`: o arquivo é novo e não rastreado.
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | `enderecoDeEnvio` deixando de ser chamado (token fixo) | 4 casos |
- * | `revogarPorTokenRecusado` virando `no-op` | 1 caso |
- * | `PushNaoEnviadoError` voltando a propagar | 1 caso |
- *
- * A base é 11 casos verdes. A primeira linha derruba quatro, e entre eles está
- * o que importa: **o aparelho removido entre a lista e o envio volta a receber
- * push.** É o defeito inteiro que a resolução no instante do envio existe para
- * impedir.
- *
- * O que esta suíte **não** prova: que a revogação apaga a linha do banco. O
- * dublê apaga do `Map` de qualquer jeito, e foi exatamente esse o ponto cego
- * que a BICHUS-91 mediu — com `revogarDoDono` virado `no-op`, a suíte unitária
- * inteira ficou verde e só a integração reprovou. Quem prova o apagamento é
- * `tests/integration/aparelho-e-token-de-push.test.ts`.
- */
+/** O envio do alerta a um vizinho: o token é resolvido AGORA, e o morto é revogado. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -120,10 +77,6 @@ void describe('o token é resolvido no instante do envio', () => {
   });
 
   void it('o aparelho removido ENTRE a lista e o envio não recebe nada', async () => {
-    // O caso que a decisão inteira existe para cobrir. Uma implementação que
-    // carregasse o token junto da lista de destinatários mandaria para este
-    // aparelho, e nenhuma forma de marcar a linha conserta isso — só reler no
-    // momento de usar.
     const { entrega, enviadas, enderecosPedidos } = montar({
       enderecos: new Map([[APARELHO, null]]),
     });
@@ -135,9 +88,6 @@ void describe('o token é resolvido no instante do envio', () => {
   });
 
   void it('dois envios ao mesmo aparelho releem o endereço duas vezes', async () => {
-    // Sem isto, um disparo que percorre 500 pessoas poderia resolver uma vez e
-    // reusar — que é a mesma coisa que carregar o token junto da lista, só que
-    // escondida atrás de um cache.
     const { entrega, enderecosPedidos } = montar();
 
     await entrega.avisar(aviso());
@@ -157,9 +107,6 @@ void describe('o token que o transporte recusa é revogado na hora', () => {
   });
 
   void it('o envio ACEITO não revoga nada', async () => {
-    // A guarda do outro lado: uma revogação disparada por engano em todo envio
-    // esvaziaria o parque de aparelhos no primeiro alerta grande, e o sintoma
-    // apareceria como "o push parou de funcionar" semanas depois.
     const { entrega, revogados } = montar({ desfecho: 'aceito' });
 
     await entrega.avisar(aviso());
@@ -182,16 +129,12 @@ void describe('uma falha num aparelho não derruba o alerta dos outros', () => {
       erroDoEnvio: new PushNaoEnviadoError('quota_exceeded', true, 'cota do projeto'),
     });
 
-    // Se isto estourasse, o laço do disparo pararia no primeiro aparelho com
-    // problema e os outros 499 vizinhos ficariam sem o aviso.
     assert.equal(await entrega.avisar(aviso()), 'falhou');
   });
 });
 
 void describe('o conteúdo do push respeita o teto de precisão geográfica', () => {
   void it('o bairro entra no corpo, e nenhuma coordenada sai', async () => {
-    // Critério 3 da BICHUS-18. A porteira de `conteudo-do-push.ts` confere de
-    // novo antes de serializar; esta é a primeira das duas guardas.
     const { entrega, enviadas } = montar();
 
     await entrega.avisar(aviso({ bairro: 'Vila Madalena' }));
@@ -211,8 +154,6 @@ void describe('o conteúdo do push respeita o teto de precisão geográfica', ()
   });
 
   void it('espécie desconhecida cai em "pet", e não no código cru', async () => {
-    // "Um other sumiu perto de você" seria vocabulário de banco na tela de
-    // bloqueio de alguém.
     const { entrega, enviadas } = montar();
 
     await entrega.avisar(aviso({ especieCodigo: 'other' }));
@@ -222,8 +163,6 @@ void describe('o conteúdo do push respeita o teto de precisão geográfica', ()
   });
 
   void it('o que sai nos dados é o token público, e nunca um UUID de banco', async () => {
-    // ADR-0010, item 6. O `case_id` e o `user_id` não atravessam esta porta, e
-    // o `share_token` é a substituição que o item nomeia.
     const { entrega, enviadas } = montar();
 
     await entrega.avisar(aviso({ tokenPublico: 'c-abc123xyz' }));

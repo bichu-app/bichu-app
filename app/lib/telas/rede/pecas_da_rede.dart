@@ -4,41 +4,6 @@ import '../../api/modelos_rede.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
-/// As pecas do cartao da agenda, e as duas proporcoes que a `Loja` divide com
-/// ela.
-///
-/// ## O que saiu em 19/10/2026, e por que
-///
-/// A pagina do encontro saiu do app (*"sem informações adicionais ou pagina
-/// de detalhes do evento"*) e o cartao virou foto e titulo. Com as duas
-/// coisas, estas pecas deixaram de ter quem as desenhasse e sairam: o bloco
-/// de dia (`SÁB` / `27` / `SET`), o distintivo de situacao (`Acontecendo
-/// agora`, `Encerrado`, `Cancelado`), `rotuloDaSituacao` e os selos
-/// (`SeloDoEncontro`, `seloDeValor`, `seloPrivado`).
-///
-/// ## E o que VOLTOU na uniao do lote, no mesmo dia
-///
-/// [rotuloDaSituacao] e [DistintivoDeSituacao] estao de volta, verbatim.
-/// Eles sairam por **falta de chamador** -- esta e a frase acima, e ela nao
-/// era proibicao --, e `feat/meus-eventos-e-cancelar` trouxe um chamador
-/// noutra tela: `perfil/meus_eventos.dart`, a lista de quem CRIOU o
-/// encontro, onde saber que ele esta `Encerrado` ou `Acontecendo agora` e
-/// funcao e nao enfeite. O cartao da AGENDA nao mudou: ele continua foto e
-/// titulo, mais a palavra `Cancelado` que ele mesmo desenha.
-///
-/// O que **nao** voltou e o parametro `cancelado` de
-/// [ImagemDoEncontroOuBanner], que pintava a capa em cinza: aquele saiu por
-/// ser sinal exclusivamente por cor (SC 1.4.1), e decisao de acessibilidade
-/// nao se desfaz por conveniencia de mescla.
-///
-/// Ficaram as tres que ainda tem chamador: [proporcaoDaCapa] e
-/// [BannerDaMarca], que [ImagemDoEncontroOuBanner] usa, e [proporcaoDaFoto],
-/// que e de `loja/produto_da_loja.dart` -- e e por ela que este arquivo
-/// continua sendo importado de fora da `Rede`.
-///
-/// Nenhuma cor escrita a mao: tudo sai de `BichuCores.claro` (o banner,
-/// abaixo, explica por que o claro fixo).
-
 /// A proporcao 16:9 da capa e do cartao (pedido de token P-M5, 24.12.7).
 const double proporcaoDaCapa = 16 / 9;
 
@@ -46,18 +11,6 @@ const double proporcaoDaCapa = 16 / 9;
 const double proporcaoDaFoto = 4 / 3;
 
 /// O banner da marca, no lugar da capa que nao existe ou que nao pode sair.
-///
-/// Ceu, sol, chao e tres arvores do pilar "encontros" (design system 24.12.2).
-/// Decorativo: fora da arvore de acessibilidade.
-///
-/// **Por que `BichuCores.claro` e nao o tema.** A especificacao pede as rampas
-/// primitivas (`butter`, `sage`, `raspberry`) porque o banner faz o papel de
-/// uma FOTO, e foto nao troca com o tema (24.12.6). O gerador de tokens do app
-/// nao publica primitivas; os papeis do tema claro que coincidem com elas
-/// sao `communityFill` (`sage-300`), `successContainer` (`sage-100`),
-/// `primary` (`raspberry-700`) e `actionFill` (`butter-400`, o vizinho do
-/// `butter-300` pedido). O ceu (`butter-100`) sai do `actionFill` a 25% sobre
-/// `surface`. Pedido de token registrado na entrega: publicar as primitivas.
 class BannerDaMarca extends StatelessWidget {
   const BannerDaMarca({super.key});
 
@@ -128,39 +81,6 @@ class _PintorDoBanner extends CustomPainter {
 
 /// A imagem 16:9 do cartao: a capa da derivada `cover_image_url`, ou o banner
 /// da marca quando nao ha capa (ou quando ela nao carrega).
-///
-/// ## `cacheWidth` pela largura PINTADA, e por que ele entrou agora
-///
-/// Ate 19/10/2026 esta peca era um `Image.network` sem `cacheWidth` -- a
-/// excecao do app, porque a politica de `widgets/imagem_da_rede.dart` nunca
-/// chegou aqui. O custo em memoria de um `ui.Image` e `largura x altura x 4`
-/// bytes da imagem DECODIFICADA, e nao os bytes do JPEG: sem `cacheWidth`, a
-/// derivada de 1024 x 576 custa **2.359.296 bytes por cartao**, e uma pagina
-/// de 20 cartoes custa 47.185.920 -- a agenda monta os 20 de uma vez, numa
-/// `Column` e nao numa lista preguicosa, entao sao os 20 ao mesmo tempo.
-///
-/// Com `cacheWidth` pela largura pintada o decodificador nunca passa do que a
-/// tela usa. A derivada CONTINUA sendo `cover_image_url` (1024 x 576): o
-/// cartao pinta 326 dp de largura, que da 978 px a 3x -- `cover_banner_url`
-/// (1280 x 720) desperdicaria 30% em cada um dos 20 cartoes para ganhar
-/// nitidez que ninguem ve, e a derivada de 480 da galeria borraria.
-///
-/// **A imagem fica fora da arvore de acessibilidade quando [textoAlternativo]
-/// e nulo**, e e assim que o CARTAO a usa: ele mostra foto e titulo, e o
-/// titulo esta logo abaixo, em texto -- um rotulo aqui faria o leitor de tela
-/// dizer o encontro duas vezes.
-///
-/// **[textoAlternativo] voltou em 20/10/2026, com a pagina do encontro.** Ele
-/// saiu junto com a pagina em 19/10 e por falta de chamador, e nao por
-/// decisao: a capa da PAGINA tem o `alt_text` que o organizador escreveu para
-/// a imagem de posicao 0 (`images[0].alt_text`), e ela e a unica imagem
-/// grande do app cujo texto alternativo vem do contrato. Sem ele, a capa da
-/// pagina ficaria muda para quem usa leitor de tela.
-///
-/// **O `cancelado` NAO voltou**, e a ausencia e a mesma do cartao: ele pintava
-/// a capa em escala de cinza, e sinal exclusivamente por cor reprova em
-/// SC 1.4.1. Quem diz que o evento foi cancelado e a palavra -- no cartao, e o
-/// aviso em texto na pagina.
 class ImagemDoEncontroOuBanner extends StatelessWidget {
   const ImagemDoEncontroOuBanner({
     required this.url,
@@ -170,8 +90,7 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
 
   final String? url;
 
-  /// O `alt_text` da capa, quando ha um. Nulo tira a imagem da arvore de
-  /// acessibilidade.
+  /// O `alt_text` da capa, quando ha um.
   final String? textoAlternativo;
 
   @override
@@ -183,17 +102,12 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
         child: BannerDaMarca(),
       );
     }
-    // Fora do `LayoutBuilder`: o fator de pixel e do aparelho, nao do espaco
-    // disponivel. Mesma razao de `widgets/imagem_da_rede.dart`.
     final fatorDePixel = MediaQuery.devicePixelRatioOf(context);
     return AspectRatio(
       aspectRatio: proporcaoDaCapa,
       child: LayoutBuilder(
         builder: (context, limites) {
           final largura = limites.maxWidth;
-          // `maxWidth` infinito nao da numero para pedir ao decodificador, e
-          // desenhar sem `cacheWidth` seria exatamente o que estas linhas
-          // existem para impedir: entra o banner, que nao baixa nada.
           if (!largura.isFinite || largura <= 0) {
             return const BannerDaMarca();
           }
@@ -203,12 +117,8 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
               width: double.infinity,
               height: double.infinity,
               semanticLabel: textoAlternativo,
-              // **O numero que decide o custo em memoria.** Em pixeis do
-              // aparelho, pela largura que o cartao PINTA.
               cacheWidth: (largura * fatorDePixel).round(),
               excludeFromSemantics: textoAlternativo == null,
-              // Foto que nao carrega vira o banner, e nao um retangulo cinza:
-              // o retangulo promete algo que nao vem (24.12.2).
               errorBuilder: (_, _, _) => const BannerDaMarca(),
           );
           return textoAlternativo == null
@@ -221,8 +131,6 @@ class ImagemDoEncontroOuBanner extends StatelessWidget {
 }
 
 /// O rotulo da situacao que a data nao diz, ou nulo.
-///
-/// `upcoming` nao ganha rotulo: a data ja diz. Os outros tres ganham.
 String? rotuloDaSituacao(SituacaoDoEncontro? situacao) {
   return switch (situacao) {
     SituacaoDoEncontro.acontecendo => 'Acontecendo agora',
@@ -234,10 +142,6 @@ String? rotuloDaSituacao(SituacaoDoEncontro? situacao) {
 }
 
 /// O distintivo de situacao: `Acontecendo agora`, `Encerrado`, `Cancelado`.
-///
-/// `Cancelado` e o unico invertido (`surfaceInverse` com `textOnInverse`): o
-/// par de maior contraste do sistema, sem cor de erro nem de urgencia
-/// (24.11). A diferenca nao depende de cor: a palavra esta la (SC 1.4.1).
 class DistintivoDeSituacao extends StatelessWidget {
   const DistintivoDeSituacao({
     required this.situacao,
@@ -278,23 +182,6 @@ class DistintivoDeSituacao extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// AS TRES PECAS QUE VOLTARAM COM A PAGINA DO ENCONTRO (20/10/2026)
-//
-// [BlocoDoDia], [SeloDoEncontro] e [seloDeValor] sairam em 19/10 por FALTA DE
-// CHAMADOR, junto com a pagina que as desenhava -- e o cliente corrigiu o
-// pedido em 20/10, literal: *"eu nao pedi pra voce remover, eu pedi para
-// remover o clique para o usuario nnao conseguir acessar a pagina de detalhes
-// e pedi pra voce resumir a listagem com foto, titulo do evento"*. A pagina
-// voltou, e elas voltam **verbatim**: a redacao, as medidas e os papeis de cor
-// sao os do commit anterior a remocao (`be057793^`), e nao uma reescrita.
-//
-// **`seloPrivado` NAO voltou**, e esta e a unica das quatro que fica fora. O
-// evento privado saiu por decisao separada e explicita dele -- *"vamos deixar
-// apenas os eventos abertos por enquanto, no futuro analisamos a necessidade"*
-// --, e um selo `Privado` sem evento privado seria peca sem chamador de novo.
-// ---------------------------------------------------------------------------
-
 /// O bloco de dia: `SÁB` / `27` / `SET`.
 class BlocoDoDia extends StatelessWidget {
   const BlocoDoDia({required this.dia, super.key, this.comFundo = true});
@@ -329,8 +216,6 @@ class BlocoDoDia extends StatelessWidget {
       ],
     );
 
-    // A data por extenso esta sempre ao lado, em texto: o bloco e ornamento
-    // de leitura rapida e sai da arvore para nao ser lido duas vezes.
     return ExcludeSemantics(
       child: !comFundo
           ? conteudo
@@ -353,11 +238,7 @@ class BlocoDoDia extends StatelessWidget {
   }
 }
 
-/// Um selo neutro com icone e palavra: `Gratuito`, `R$ 15 por cão`,
-/// `Privado`.
-///
-/// Neutro de proposito: a palavra e a informacao, e nenhuma cor diz nada
-/// (24.13.1). **Nao ha selo `Público`** (UX 28.7.2): o normal nao tem selo.
+/// Um selo neutro com icone e palavra: `Gratuito`, `R$ 15 por cão`, `Privado`.
 class SeloDoEncontro extends StatelessWidget {
   const SeloDoEncontro({required this.icone, required this.texto, super.key});
 

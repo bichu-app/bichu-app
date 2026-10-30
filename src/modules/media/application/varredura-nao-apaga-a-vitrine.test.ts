@@ -1,33 +1,4 @@
-/**
- * ISCA (d): A VARREDURA DE VENCIDOS NÃO APAGA A FOTO DA VITRINE.
- *
- * ## O defeito que estes casos existem para não deixar voltar
- *
- * Esta varredura apaga intenção de envio **não confirmada e vencida**, e apaga o
- * objeto do balde junto. A foto do ACHADO foi apagada por ela — medido com
- * hora: subida 01:18:44, apagada 01:29:10; subida 01:33:35, apagada 01:44:10.
- * Dez minutos, e **sempre**. A causa não era o filtro: era a foto do achado não
- * ter operação de confirmação, de propósito, e portanto `confirmed_at` nunca
- * deixar de ser nulo nela.
- *
- * Então a pergunta certa sobre um propósito NOVO não é "a varredura o filtra?",
- * e sim **"existe algum instante em que a foto existe e a intenção dela ainda
- * não está confirmada?"**. Para a vitrine a resposta é não, porque a confirmação
- * é gravada na MESMA transação que cria a linha de `user_showcase_images` — e
- * isso é medido em
- * `showcase/adapters/persistence/confirmacao-na-mesma-transacao.test.ts`, que
- * confere que as duas escritas chegam no mesmo executor.
- *
- * Aqui se mede a consequência: a vitrine viva nunca aparece nesta lista, e o
- * envio ABANDONADO aparece e tem de ser recolhido.
- *
- * ## Os contrapesos, e por que sem eles o primeiro caso não vale nada
- *
- * "A vitrine não é apagada" passaria para uma varredura que não limpa nada — e
- * tirar o lixo invisível do balde é a única razão de ela existir. O segundo caso
- * prova que ela limpa; o terceiro prova que a guarda da foto do achado continua
- * de pé, e reprova se alguém a remover ao acrescentar um propósito.
- */
+/** ISCA (d): A VARREDURA DE VENCIDOS NÃO APAGA A FOTO DA VITRINE. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { varrerEnviosVencidos } from './varrer-envios-vencidos.js';
@@ -66,9 +37,6 @@ function varreduraCom(vencidas: readonly IntencaoVencida[]): {
 
 void describe('a varredura de vencidos e a vitrine de fotos', () => {
   void it('ISCA -- a foto da vitrine que EXISTE nunca chega à varredura', async () => {
-    // A consulta filtra `confirmed_at IS NULL`, e a confirmação da vitrine é
-    // gravada na mesma transação que cria a linha da foto. Não há instante em
-    // que uma foto existente apareça aqui: a lista vem VAZIA.
     const { rodar, apagados } = varreduraCom([]);
     const { removidas } = await rodar();
     assert.equal(removidas, 0);
@@ -76,9 +44,6 @@ void describe('a varredura de vencidos e a vitrine de fotos', () => {
   });
 
   void it('CONTRAPESO -- intenção de vitrine NÃO confirmada e vencida É apagada', async () => {
-    // Envio abandonado NÃO é foto: nenhuma linha de `user_showcase_images`
-    // aponta para ele, ele não aparece em tela nenhuma, e é exatamente o lixo
-    // invisível que esta varredura existe para tirar.
     const { rodar, apagados } = varreduraCom([
       { id: ENVIO, objectKey: CHAVE_DA_VITRINE, kind: 'catalog_image' },
     ]);

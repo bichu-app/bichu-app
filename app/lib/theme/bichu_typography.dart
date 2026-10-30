@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import 'bichu_tokens.g.dart';
 
 /// A escala tipografica do Bichu, montada a partir de `design/tokens.json`.
-///
-/// Duas familias e nao mais (secao 8.1): `PlusJakartaSans` em `display*` e
-/// `headline*`, `Inter` em todo o resto. Ambas embarcadas em
-/// `assets/fonts/`, nao baixadas em tempo de execucao.
 abstract final class BichuTipografia {
   /// Converte uma entrada da escala num `TextStyle`.
   static TextStyle estilo(BichuTipo tipo, Color cor) {
@@ -21,20 +17,16 @@ abstract final class BichuTipografia {
   }
 
   /// O corpo de 18/28 das telas criticas (achador, pagina do QR, cartaz).
-  ///
-  /// Ele **nao** ocupa um slot do `TextTheme`: o `bodyLarge` do Material e o
-  /// corpo padrao do app, de 16. A tela critica pede este estilo por nome, de
-  /// proposito, porque 18 nao e o corpo de toda tela.
   static TextStyle corpoDeTelaCritica(Color cor) =>
       estilo(BichuEscalaDeTipo.bodyLg, cor);
 
-  /// O `overline` em caixa alta do selo de estado. Uma a tres palavras.
+  /// O `overline` em caixa alta do selo de estado.
   static TextStyle overline(Color cor) =>
       estilo(BichuEscalaDeTipo.overline, cor);
 
   /// Algarismos tabulares. Obrigatorio em data, hora, contagem, distancia e
-  /// qualquer codigo (secao 8.3): sem isso o codigo da tag dança na tela a
-  /// cada digito.
+  /// qualquer codigo (secao 8.3): sem isso o codigo da tag dança na tela a cada
+  /// digito.
   static TextStyle tabular(TextStyle base) {
     return base.copyWith(
       fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
@@ -42,9 +34,6 @@ abstract final class BichuTipografia {
   }
 
   /// O `TextTheme` do Material 3 com os nossos tamanhos (secao 15.3).
-  ///
-  /// Onde divergimos do M3, divergimos para cima: o M3 foi calibrado para uso
-  /// em ambiente normal, e a tela critica deste produto nao e ambiente normal.
   static TextTheme textTheme(Color corDoTexto) {
     TextStyle e(BichuTipo tipo) => estilo(tipo, corDoTexto);
     return TextTheme(

@@ -1,24 +1,4 @@
-/**
- * Carregamento de `api/openapi.yaml` em tempo de execução.
- *
- * Uma fonte só: schemas de OpenAPI 3.1 **são** JSON Schema 2020-12, e o Fastify
- * valida com JSON Schema. Escrever validação à mão em paralelo à especificação
- * cria duas definições que divergem, e o dia em que divergirem ninguém vai saber
- * qual vale (ADR-0001).
- *
- * O que este arquivo faz, e por quê:
- *
- * 1. **Indexa as operações por `operationId`.** É a chave de rastreio entre a
- *    especificação e a rota, e é o que permite a `defineRoute` e ao portão de
- *    contrato falarem do mesmo objeto.
- * 2. **Resolve `$ref` e remove o que é vocabulário de OpenAPI e não de JSON
- *    Schema** (`example`, `nullable`, `discriminator`). `nullable: true` vira
- *    união com `null`, que é a forma de 3.1 — deixá-lo passar faria o validador
- *    ignorar a nulidade em silêncio.
- * 3. **Reprova operação sem `security` declarado.** Herança do `security` global
- *    esconde exatamente a rota que precisava ser olhada
- *    (docs/04-seguranca.md 9).
- */
+/** Carregamento de `api/openapi.yaml` em tempo de execução. */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
@@ -31,45 +11,25 @@ export interface OperacaoDoContrato {
   readonly method: MetodoHttp;
   /** Caminho como está na especificação, com `{param}`. */
   readonly path: string;
-  /** `security` declarado na operação. `[]` significa pública. */
+  /** `security` declarado na operação. */
   readonly security: readonly Record<string, unknown>[];
-  /** Nomes dos esquemas exigidos, achatados. `[]` quando a operação é pública. */
+  /** Nomes dos esquemas exigidos, achatados. */
   readonly securitySchemes: readonly string[];
   readonly effects: readonly string[];
   readonly hasRateLimit: boolean;
   readonly raw: Record<string, unknown>;
   /**
-   * Os parâmetros da operação, com os do **item de caminho** já juntos e todo
-   * `$ref` de parâmetro resolvido.
-   *
-   * A junção acontece aqui porque ela é fácil de esquecer e cara quando
-   * esquecida: neste contrato a maior parte dos parâmetros de caminho está
-   * declarada no nível do item de caminho, e não dentro da operação. Quem
-   * lesse só `raw['parameters']` concluiria que `getPet` não tem parâmetro
-   * nenhum — e validaria nada com toda a aparência de estar validando.
+   * Os parâmetros da operação, com os do **item de caminho** já juntos e todo `$ref`
+   * de parâmetro resolvido.
    */
   readonly parameters: readonly Record<string, unknown>[];
 }
 
-/**
- * O que o Fastify precisa para validar parâmetro de caminho e de query string.
- *
- * `undefined` em `params` ou `querystring` significa "a operação não declara
- * nenhum parâmetro desse lugar", e não "não há o que validar": a distinção é o
- * que permite ao portão de subida saber se ele conferiu alguma coisa.
- */
+/** O que o Fastify precisa para validar parâmetro de caminho e de query string. */
 export interface EsquemasDeParametros {
   readonly params: Record<string, unknown> | undefined;
   readonly querystring: Record<string, unknown> | undefined;
-  /**
-   * Tipo de problema a devolver quando **aquele** parâmetro reprova, por nome.
-   *
-   * Sai de `x-problem-type` no próprio parâmetro. Existe porque o contrato já
-   * declara, para alguns parâmetros, um 400 com significado próprio — o código
-   * da tag responde `tag-code-malformed`, e não `validation-failed`. Sem isto,
-   * ligar a validação de borda trocaria o `type` que o app lê para decidir a
-   * tela, e o teto de tentativas inválidas deixaria de contar a tentativa.
-   */
+  /** Tipo de problema a devolver quando **aquele** parâmetro reprova, por nome. */
   readonly tiposDeProblema: ReadonlyMap<string, string>;
 }
 
@@ -83,40 +43,7 @@ export interface Contrato {
   parameterSchemas(operationId: string): EsquemasDeParametros;
 }
 
-/**
- * Schema de corpo tirado da própria especificação. **Uma fonte só.**
- *
- * Schemas de OpenAPI 3.1 são JSON Schema, e o Fastify valida com JSON Schema.
- * Validação escrita à mão em paralelo à spec é a segunda definição que diverge.
- *
- * ## Por que esta função mora AQUI, e não em cada arquivo de rotas
- *
- * Medido em 21/10/2026, sobre `f60ba3fc`: esta função estava declarada
- * **29 vezes**, uma em cada arquivo de rotas, e as 29 cópias tinham **três
- * redações** da mesma mensagem:
- *
- * - 19 cópias com a frase longa e a continuação em acento grave;
- * - 9 cópias com a MESMA frase e a continuação em aspa simples (igual em
- *   execução, diferente no arquivo — a divergência que o `eslint` não vê);
- * - 1 cópia em `admin-session-routes.ts` com **outra frase**, sem acentos e
- *   sem a parte que diz o que fazer ("Corrija a especificação, não o código").
- *
- * As três concordavam no que FAZEM e discordavam no que DIZEM, que é como esta
- * classe de defeito sempre começa. A trigésima cópia seria a quarta redação.
- *
- * A mensagem é de quem MANTÉM, e não de quem usa o app: ela só existe quando o
- * contrato não declara corpo para uma operação cuja rota espera um, e nesse
- * caso o registro da rota falha na subida. Nenhuma resposta de rota a carrega.
- *
- * Estourar no REGISTRO -- na subida, e não no pedido -- é o que impede a rota
- * de nascer aceitando qualquer coisa. Esta frase vinha do comentário de
- * `pedido-de-plaquinha-routes.ts`, e ela documenta a invariante: por isso ela
- * desceu para cá em vez de ser apagada com a cópia.
- *
- * `tag-routes.ts` já trazia a dívida escrita, quando eram CINCO: *"extrair para
- * `shared/http/` vale a pena e toca quatro módulos de uma vez, o que não cabe
- * nesta correção"*. Não couberam, e as cinco viraram 29.
- */
+/** Schema de corpo tirado da própria especificação. */
 export function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
   const schema = contrato.requestBodySchema(operationId);
   if (schema === undefined) {
@@ -159,16 +86,6 @@ const CHAVES_DESCARTADAS = new Set([
 /**
  * Palavras-chave cujo VALOR e um mapa de nomes escolhidos por quem escreveu o
  * contrato, e nao mais um schema com palavras-chave de OpenAPI.
- *
- * Esta distincao nao e detalhe: sem ela, `CHAVES_DESCARTADAS` e o corte de
- * `x-` se aplicavam dentro de `properties`, onde a chave e o NOME DO CAMPO. Um
- * corpo com um campo chamado `example`, `deprecated`, `readOnly` ou qualquer um
- * comecando com `x-` perdia esse campo de `properties` e o mantinha em
- * `required`; com `additionalProperties: false` a rota passava a recusar
- * **toda** requisicao, para sempre, sem que nada no contrato parecesse errado.
- *
- * Nenhum campo do contrato de hoje tem esses nomes -- o defeito era latente, e
- * e exatamente por isso que ele merecia teste antes de alguem bater nele.
  */
 const MAPAS_DE_NOMES = new Set([
   'properties',
@@ -190,8 +107,6 @@ function paraJsonSchema(
   }
   if (!ehObjeto(valor)) return valor;
 
-  // Antes de qualquer outra coisa: num mapa de nomes nenhuma chave e palavra
-  // de OpenAPI. Nem `$ref`, que aqui seria um campo chamado `$ref`.
   if (mapaDeNomes) {
     const porNome: Record<string, unknown> = {};
     for (const [nome, item] of Object.entries(valor)) {
@@ -203,9 +118,6 @@ function paraJsonSchema(
   const ref = valor['$ref'];
   if (typeof ref === 'string') {
     if (refsNoCaminho.has(ref)) {
-      // Recursão no contrato viraria expansão infinita aqui. Nenhum schema do
-      // Bichu é recursivo hoje; se um vier a ser, a falha precisa ser ruidosa e
-      // não uma pilha estourada sem explicação.
       throw new Error(`Schema recursivo no contrato, sem tratamento: ${ref}`);
     }
     const alvo = resolverRef(spec, ref);
@@ -220,9 +132,6 @@ function paraJsonSchema(
     saida[chave] = paraJsonSchema(item, spec, refsNoCaminho, MAPAS_DE_NOMES.has(chave));
   }
 
-  // `nullable: true` é forma de OpenAPI 3.0 e aparece neste contrato. Em 3.1 o
-  // equivalente é o tipo em união com `null`; sem a conversão o validador
-  // recusaria `null` em campo que a especificação declara anulável.
   if (valor['nullable'] === true) {
     const tipo = saida['type'];
     if (typeof tipo === 'string') saida['type'] = [tipo, 'null'];
@@ -236,42 +145,6 @@ function paraJsonSchema(
 /**
  * A chave que isenta uma palavra-chave do esquema de **borda**, declarada no
  * parâmetro e não dentro do `schema` dele.
- *
- * ## O defeito que ela existe para consertar
- *
- * `searchPeople` declara `minLength: 3` em `q` e a descrição do contrato diz,
- * por escrito, que aquele piso **não é recusado com 400 quando menor** — a
- * resposta é lista vazia, porque a tela chama a busca a cada tecla e `ma` no
- * meio de alguém escrevendo `maria` é o produto discutindo com quem digita.
- * Durante um dia aquilo foi só prosa: `vigiarParametrosDasRotas` instalava o
- * `minLength` no validador e a rota respondia `400 validation-failed`, medido
- * em homologação em 21/10/2026 pelo corpo da resposta.
- *
- * ## Por que a isenção, e não apagar o `minLength` do contrato
- *
- * Porque o número **documenta** um limite real: o índice é GIN trigrama e um
- * padrão com menos de três caracteres não produz trigrama nenhum. Apagá-lo
- * tiraria do contrato a única razão escrita pela qual o piso é `3` e não um
- * gosto, e quem lesse a especificação amanhã não teria como saber. A isenção
- * mantém a declaração e diz o que ela é: documentação do piso, cobrado uma
- * camada adiante.
- *
- * ## Por que ela é ruidosa quando não casa nada
- *
- * Uma isenção escrita errada — `minlength`, ou uma palavra que saiu do `schema`
- * e deixou a linha para trás — seria um **no-op silencioso**: a borda voltaria a
- * recusar e o contrato continuaria prometendo que não. É a mesma classe de
- * defeito que esta função conserta, uma volta depois. Por isso palavra isenta
- * que o `schema` não declara **levanta**, e levanta no carregamento do
- * contrato, que é na subida.
- *
- * ## O que ela NÃO faz
- *
- * Não toca em corpo de requisição (`requestBodySchema`) nem em schema de
- * resposta: a prosa que ela serve é sobre parâmetro, e o 400 de corpo é outra
- * decisão, de outro arquivo. E não isenta a operação inteira — é por parâmetro
- * e por palavra, porque foi exatamente isso que se decidiu: em `q`, `maxLength`
- * continua recusando.
  */
 const ISENCAO_DE_BORDA = 'x-nao-recusado-na-borda';
 
@@ -325,9 +198,6 @@ export function carregarContrato(caminho: string): Contrato {
 
   let spec: unknown;
   try {
-    // `uniqueKeys` fica no padrão, que é recusar chave repetida. Tolerar aqui
-    // faria o último valor vencer em silêncio, e a especificação passaria a
-    // dizer uma coisa para quem lê e outra para quem carrega.
     spec = parseYaml(texto);
   } catch (erro) {
     throw new Error(
@@ -368,8 +238,6 @@ export function carregarContrato(caminho: string): Contrato {
 
   for (const [caminhoDaRota, item] of Object.entries(paths)) {
     if (!ehObjeto(item)) continue;
-    // Parâmetros do ITEM DE CAMINHO. É onde a maior parte dos parâmetros de
-    // caminho deste contrato mora, e ignorá-los seria validar quase nada.
     const parametrosDoCaminho = parametrosDe(item['parameters']);
     for (const metodo of METODOS) {
       const operacao = item[metodo];
@@ -384,17 +252,6 @@ export function carregarContrato(caminho: string): Contrato {
         semSecurity.push(operationId);
         continue;
       }
-      // `security` DECLARADO mas malformado é tão perigoso quanto ausente, e
-      // mais traiçoeiro: `security: [bearerAuth]` — sem os dois-pontos e as
-      // chaves — é o erro mais natural do arquivo, porque `tags` e `x-effects`
-      // logo ao lado são listas de texto. `Array.isArray` passa, o filtro
-      // esvazia, e o resultado é `security: []`, que este módulo documenta como
-      // **pública**. Uma rota escrita para exigir conta vira pública em
-      // silêncio, e o portão que existe para pegar isso é o mesmo que foi
-      // enganado.
-      //
-      // Por isso: lista não vazia que não tem NENHUM mapa não carrega. A lista
-      // vazia continua valendo, porque ela é a forma correta de dizer "pública".
       const entradas = security.filter(ehObjeto);
       if (security.length > 0 && entradas.length === 0) {
         securityMalformado.push(operationId);
@@ -425,8 +282,6 @@ export function carregarContrato(caminho: string): Contrato {
     );
   }
   if (semSecurity.length > 0) {
-    // Negar por padrão, e falhar na subida em vez de na primeira requisição:
-    // especificação sem `security` não carrega.
     throw new Error(
       'Operações sem `security` declarado, o que faz a rota herdar o padrão ' +
         `global e desaparecer de qualquer conferência: ${semSecurity.join(', ')}`,
@@ -472,10 +327,6 @@ export function carregarContrato(caminho: string): Contrato {
         const lugar = parametro['in'];
         const nome = parametro['name'];
         if (typeof nome !== 'string') continue;
-        // `header` e `cookie` ficam de fora de propósito. `Idempotency-Key` é
-        // cabeçalho e tem máquina própria (`idempotency.ts`), que faz muito mais
-        // do que conferir formato; duplicar a conferência aqui criaria a segunda
-        // definição, que é o defeito que este módulo inteiro existe para evitar.
         if (lugar !== 'path' && lugar !== 'query') continue;
         if (parametro['schema'] === undefined) continue;
 
@@ -483,11 +334,7 @@ export function carregarContrato(caminho: string): Contrato {
         if (!ehObjeto(convertido)) continue;
 
         const grupo = porLugar.get(lugar) ?? { propriedades: {}, exigidos: [] };
-        // A isenção de borda entra AQUI e em nenhum outro lugar: é o esquema que
-        // o Fastify instala, e é dele — e só dele — que a palavra isenta sai.
         grupo.propriedades[nome] = semAsPalavrasIsentas(parametro, convertido, operationId);
-        // Parâmetro de caminho é sempre obrigatório por definição da própria
-        // especificação; o de query só quando o contrato disser.
         if (lugar === 'path' || parametro['required'] === true) grupo.exigidos.push(nome);
         porLugar.set(lugar, grupo);
 
@@ -502,12 +349,6 @@ export function carregarContrato(caminho: string): Contrato {
           type: 'object',
           properties: grupo.propriedades,
           ...(grupo.exigidos.length > 0 ? { required: grupo.exigidos } : {}),
-          // `additionalProperties` fica ABERTO, e isso é decisão, não descuido.
-          // Em `params` o Fastify só entrega o que a própria rota declarou no
-          // caminho, então fechar não acrescenta nada. Em `querystring`, fechar
-          // recusaria `?utm_source=...` e qualquer parâmetro que um cliente
-          // publicado já mande — uma recusa nova sobre uma requisição que hoje
-          // funciona, sem nenhum ganho de segurança.
         };
       };
 

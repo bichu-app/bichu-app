@@ -1,19 +1,6 @@
 /**
- * `GET /v1/public/pets/{slug}` (`getPublicPetBySlug`, BICHUS-45): o perfil
- * público do pet, que o site consome em `/@{slug}` (ADR-0028).
- *
- * - **404 para os quatro casos, com o mesmo corpo:** slug inexistente, perfil
- *   desligado (o contrato manda), pet excluído e pet falecido ou arquivado. Quem
- *   decide é o `WHERE` do adaptador; aqui só se traduz ausência em 404.
- * - **O 301 de slug trocado não existe nesta entrega.** O contrato o declara, e
- *   não há onde o slug anterior esteja guardado: `pets.slug` é uma coluna só, e
- *   `updatePetPublicProfile`, a única operação que trocaria o slug, também não
- *   está implementada. Sem histórico, a rota não tem de onde tirar o `Location`.
- *   A divergência está registrada na entrega.
- * - **O teto é o do contrato**, `ip` 60/1h com `challenge`, e a dimensão `ip`
- *   o registro resolve sozinho.
- * - **Sem autenticação.** O contrato declara `security: []`, e o perfil é o
- *   mesmo para qualquer pessoa.
+ * `GET /v1/public/pets/{slug}` (`getPublicPetBySlug`, BICHUS-45): o perfil público
+ * do pet, que o site consome em `/@{slug}` (ADR-0028).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -33,7 +20,7 @@ export const rotaDoPerfilPublico = defineRoute({
 
 export interface DependenciasDoPerfilPublico {
   readonly perfis: LeituraDoPerfilPublico;
-  /** Onde as derivadas públicas da foto moram. O banco guarda só a chave. */
+  /** Onde as derivadas públicas da foto moram. */
   readonly baseDeMidia: AbsoluteUrl;
 }
 

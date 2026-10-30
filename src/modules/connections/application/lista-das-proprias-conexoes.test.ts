@@ -1,31 +1,6 @@
 /**
  * **A LISTA DAS PRÓPRIAS CONEXÕES** — e as iscas que provam que ela é só a
  * própria.
- *
- * ## A decisão, e o que ela emendou
- *
- * Cliente, **22/10/2026**, literal:
- *
- * > *"o usuário pode abrir a lista de usuários que é sua conexão"*
- *
- * Isto **emenda uma decisão dele mesmo, de 18/10/2026**, que dizia *"nunca,
- * inclusive ao dono"* e que estava escrita em quatro lugares vivos do
- * repositório. A emenda é exata, e este arquivo mede as duas metades:
- *
- * | | antes | agora | onde se mede |
- * |---|---|---|---|
- * | a própria lista, para o próprio dono | nunca | **PODE** | este arquivo |
- * | a lista de **TERCEIRO** | nunca | **continua NUNCA** | este arquivo + `conexao-nao-expoe-lista-nem-identificador.test.ts` |
- *
- * ## Por que estes casos moram aqui, e o que eles NÃO medem
- *
- * A regra é desta fatia, e a bancada é `conexoesEmMemoria` — a mesma que a
- * fatia F usa —, então o recorte é exercitado de verdade em vez de dublado.
- *
- * **Eles não medem que o recorte está na cláusula `WHERE`**, e isso é de
- * propósito: quem mede aquilo é `autorizacao-na-clausula-where.test.ts`, lendo
- * o SQL compilado. Uma implementação em memória que acertasse a regra por `if`
- * passaria aqui e reprovaria lá, que é exatamente o arranjo que se quer.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -59,8 +34,6 @@ const PESSOAS: readonly PessoaDeTeste[] = [
   },
   { id: CARLA, apelido: 'carla-ong', nomeDeExibicao: 'Carla', habilitada: true, pets: 0 },
   { id: DORA, apelido: 'dora-passeio', nomeDeExibicao: 'Dora', habilitada: true, pets: 3 },
-  // **Conexão SEM apelido.** `users.handle` é anulável, e as contas de teste de
-  // 18/10/2026 continuam sem apelido.
   { id: ELO, apelido: null, nomeDeExibicao: 'Elo', habilitada: true, pets: 9 },
 ];
 
@@ -78,9 +51,6 @@ function bancada(): { banca: BancadaDeConexoes; servico: ConexaoEntrePessoas } {
     apelidos: { resolver: () => Promise.resolve(undefined) },
     bloqueios: { existeBloqueioEntre: () => Promise.resolve(false) },
     trilha: TRILHA,
-    // **Os geradores levantam**: esta bancada e de LEITURA, e nenhum caso dela
-    // cria aresta -- `banca.semear` escreve direto na bancada. Um gerador que
-    // devolvesse valor em silencio deixaria passar um caminho de escrita.
     ids: {
       uuidv7: () => {
         throw new Error('a lista NAO escreve');
@@ -117,30 +87,25 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
     banca.semear({ pedinte: CARLA, destinatario: ANA, estado: 'accepted' });
 
-    // Os DOIS lados da aresta entram: a conexão é simétrica, e contar só um
-    // lado faria a lista discordar de `connected_count`.
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet', 'carla-ong']);
   });
 
   /**
-   * **PENDENTE NÃO ENTRA**, e esta é a linha que separa as duas listas: a caixa
-   * de pedidos é o que espera decisão, e esta é o que já decidiu. Sem este caso,
-   * a lista responderia *"quem são minhas conexões"* com gente que ainda não
-   * aceitou — que é a forma mais fácil de o produto mentir sobre uma relação.
+   * **PENDENTE NÃO ENTRA**, e esta é a linha que separa as duas listas: a caixa de
+   * pedidos é o que espera decisão, e esta é o que já decidiu.
    */
   void it('pendente NAO entra, nem o que eu mandei nem o que eu recebi', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
-    banca.semear({ pedinte: ANA, destinatario: CARLA }); // pendente enviado
-    banca.semear({ pedinte: DORA, destinatario: ANA }); // pendente recebido
+    banca.semear({ pedinte: ANA, destinatario: CARLA });
+    banca.semear({ pedinte: DORA, destinatario: ANA });
 
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet']);
   });
 
   /**
    * **RECUSADO NÃO ENTRA**, e a recusa continua silenciosa: ela não aparece aqui
-   * como ausência explicável, porque um pendente não respondido também não
-   * aparece. As duas são a mesma ausência.
+   * como ausência explicável, porque um pendente não respondido também não aparece.
    */
   void it('recusado NAO entra, e e indistinguivel de nunca ter havido nada', async () => {
     const { banca, servico } = bancada();
@@ -148,17 +113,9 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...(await apelidosDe(servico, ANA))], []);
   });
 
-  /**
-   * **ISCA DE VAZAMENTO ENTRE CONTAS, e é o caso mais importante do arquivo.**
-   *
-   * Duas contas com conexões **disjuntas**: nada de uma pode aparecer na lista
-   * da outra. Sem este caso, uma consulta que esquecesse quem chama devolveria a
-   * tabela inteira para os dois e **todos os casos acima continuariam verdes** —
-   * eles afirmam que o que está lá deve estar, não que o que não está não pode.
-   */
+  /** **ISCA DE VAZAMENTO ENTRE CONTAS, e é o caso mais importante do arquivo.** */
   void it('ISCA DE VAZAMENTO: a conta A nao ve NADA da lista da conta B', async () => {
     const { banca, servico } = bancada();
-    // ANA -- BIA, e CARLA -- DORA. Dois pares sem nenhuma ponta em comum.
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
     banca.semear({ pedinte: CARLA, destinatario: DORA, estado: 'accepted' });
 
@@ -168,23 +125,19 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...deAna], ['bia-vet'], 'ANA ve a conexao DELA');
     assert.deepEqual([...deCarla], ['dora-passeio'], 'CARLA ve a conexao DELA');
 
-    // E o que importa: NENHUMA ponta do par alheio atravessa.
     for (const alheio of ['carla-ong', 'dora-passeio']) {
       assert.ok(!deAna.includes(alheio), `\`${alheio}\` vazou para a lista de ANA`);
     }
     for (const alheio of ['ana-tutora', 'bia-vet']) {
       assert.ok(!deCarla.includes(alheio), `\`${alheio}\` vazou para a lista de CARLA`);
     }
-    // A propria conta nunca aparece na propria lista: o `CHECK`
-    // `user_connections_nao_e_consigo` torna a aresta consigo impossivel.
     assert.ok(!deAna.includes('ana-tutora'));
   });
 
   /**
    * **ISCA DA ISCA DE VAZAMENTO.** Sem ela, o caso de cima passaria por os dois
    * pares serem disjuntos **na bancada**, e não por a consulta recortar por quem
-   * chama. A mutação é uma leitura que ignora o chamador — exatamente o defeito
-   * que se teme —, e ela tem de produzir um resultado DIFERENTE.
+   * chama.
    */
   void it('ISCA: uma leitura que ignorasse quem chama devolveria as QUATRO pontas', async () => {
     const { banca, servico } = bancada();
@@ -192,7 +145,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     banca.semear({ pedinte: CARLA, destinatario: DORA, estado: 'accepted' });
 
     const comRecorte = await apelidosDe(servico, ANA);
-    // A leitura SEM recorte, montada aqui a partir das mesmas linhas da bancada.
     const semRecorte = banca.linhas.length * 2;
     assert.equal(semRecorte, 4, 'a bancada tem duas arestas, quatro pontas');
     assert.notEqual(
@@ -206,8 +158,8 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
 
   /**
    * **CONTA DESABILITADA SAI DA LISTA, e a linha não é apagada** — decisão do
-   * cliente de 17/10: conta desabilitada *"não é mais encontrada em nenhuma
-   * página ou funcionalidade"*. Reabilitar devolve a conexão intacta.
+   * cliente de 17/10: conta desabilitada *"não é mais encontrada em nenhuma página
+   * ou funcionalidade"*.
    */
   void it('conta desabilitada de qualquer lado sai da lista, e reabilitar a devolve', async () => {
     const { banca, servico } = bancada();
@@ -220,11 +172,9 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
   });
 
   /**
-   * **SEM APELIDO NÃO ENTRA**, e a consequência vale dita: esta lista pode ter
-   * menos linhas que `connected_count`, e a diferença são exactamente as
-   * conexões sem apelido. Cada linha é uma porta para o perfil, o perfil é
-   * endereçado pelo apelido, e uma linha sem apelido seria uma porta que não
-   * abre.
+   * **SEM APELIDO NÃO ENTRA**, e a consequência vale dita: esta lista pode ter menos
+   * linhas que `connected_count`, e a diferença são exactamente as conexões sem
+   * apelido.
    */
   void it('conexao SEM apelido nao entra: a linha seria uma porta que nao abre', async () => {
     const { banca, servico } = bancada();
@@ -236,13 +186,7 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(pagina.total, 1, 'o total conta o MESMO conjunto que a pagina devolve');
   });
 
-  /**
-   * **O RECORTE DE CADA PESSOA É O DA BUSCA: cinco campos, e nada mais.**
-   *
-   * A isca é por **conjunto exato de chaves** e não por "não contém X": uma
-   * asserção que só negasse `connection_ref` passaria no dia em que alguém
-   * acrescentasse `city`, `public_ref` ou `showcase`.
-   */
+  /** **O RECORTE DE CADA PESSOA É O DA BUSCA: cinco campos, e nada mais.** */
   void it('ISCA: cada pessoa da lista tem EXATAMENTE os cinco campos da busca', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -257,12 +201,7 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     ]);
   });
 
-  /**
-   * **NENHUM IDENTIFICADOR INTERNO sai** (ADR-0010 item 6). A varredura é sobre
-   * o JSON inteiro da página e procura os valores das contas, não os nomes dos
-   * campos: um campo chamado `pessoa` que carregasse o UUID passaria por uma
-   * conferência de nomes.
-   */
+  /** **NENHUM IDENTIFICADOR INTERNO sai** (ADR-0010 item 6). */
   void it('ISCA: nenhum UUID de conta aparece no JSON da pagina', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -273,16 +212,14 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     for (const conta of [ANA, BIA, CARLA, DORA, ELO]) {
       assert.ok(!json.includes(conta), `o UUID de uma conta vazou na pagina: ${conta}`);
     }
-    // E nenhum `ref` de aresta: desfazer mora no perfil, nao na lista.
     for (const linha of banca.linhas) {
       assert.ok(!json.includes(linha.ref), `o \`ref\` da aresta vazou: desfazer mora no perfil`);
     }
   });
 
   /**
-   * **ISCA DA ISCA do UUID.** Sem ela, o caso de cima passaria por a bancada não
-   * ter UUID em lugar nenhum da forma — e não por a varredura saber reconhecer
-   * um.
+   * **ISCA DA ISCA do UUID.** Sem ela, o caso de cima passaria por a bancada não ter
+   * UUID em lugar nenhum da forma — e não por a varredura saber reconhecer um.
    */
   void it('ISCA: a varredura de UUID REPROVA uma conta acrescentada a forma', async () => {
     const { banca, servico } = bancada();
@@ -311,8 +248,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(typeof bia?.petsCount, 'number');
     assert.equal(bia?.petsCount, 2);
     assert.equal(bia?.photoKey, 'u/ab/cdef/thumb.jpg');
-    // **A chave vem SEMPRE, com nulo quando nao ha foto pronta**: chave que
-    // aparece e desaparece faria o cliente distinguir ausencia de nulo.
     assert.equal(carla?.photoKey, null);
     assert.ok(Object.prototype.hasOwnProperty.call(carla ?? {}, 'photoKey'));
   });
@@ -334,9 +269,7 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
 
   /**
    * **A LISTA E `connected_count` CONTAM O MESMO**, e têm de contar: os dois
-   * recortam `accepted` com conta habilitada nos dois lados. Números diferentes
-   * na mesma tela seriam dois predicados divergindo — e a tela diz *"Você tem N
-   * de 150 conexões"* ao lado da lista.
+   * recortam `accepted` com conta habilitada nos dois lados.
    */
   void it('o total da lista e `connected_count` nao divergem (descontado o sem apelido)', async () => {
     const { banca, servico } = bancada();
@@ -348,14 +281,7 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(pagina.total, resumo.connected_count);
   });
 
-  /**
-   * **A LISTA NÃO É ENDEREÇÁVEL A UMA PESSOA, e isso é de tipo e não de regra.**
-   *
-   * `conexoes` recebe **quem chama, a página e o limite** — e mais nada. Não há
-   * um argumento de pessoa para alguém passar, então a lista de terceiro não é
-   * *proibida*: ela é **inexprimível**. Quem a quisesse teria de acrescentar
-   * parâmetro na porta e no caso de uso, que é o lugar onde alguém vê.
-   */
+  /** **A LISTA NÃO É ENDEREÇÁVEL A UMA PESSOA, e isso é de tipo e não de regra.** */
   void it('ISCA: o metodo nao tem por onde receber OUTRA pessoa', () => {
     const { servico } = bancada();
     assert.equal(

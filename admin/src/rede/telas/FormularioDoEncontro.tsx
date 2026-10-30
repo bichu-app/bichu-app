@@ -1,13 +1,4 @@
-/**
- * 4 · Rede: formulario (25.3 quadros 4.9 a 4.13, 25.5.2, UX 29.5 e 29.10).
- *
- * Criar e publicar e uma operacao so (12.9). Na edicao, o que mudou decide o
- * caminho (`planoDeEdicao`): titulo, descricao, fotos, o que levar,
- * observacoes e detalhes vao direto; data, horario e lugar, e visibilidade
- * e custo, abrem o dialogo com motivo, porque o contrato os separa em
- * operacoes que exigem `reason` e avisam todos os administradores. Nenhuma
- * pede senha desde 07/10 (ADR-0027 item 23).
- */
+/** 4 · Rede: formulario (25.3 quadros 4.9 a 4.13, 25.5.2, UX 29.5 e 29.10). */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
@@ -58,8 +49,6 @@ import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
 import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
 
-// O teto vem de `LIMITE_EM_MB`: escrever "5 MB" a mao aqui faria a ajuda
-// mentir no dia em que o contrato mudasse o teto.
 const AJUDA_DAS_FOTOS = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.network_event.largura)} × ${String(DIMENSAO_MINIMA.network_event.altura)} pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.`;
 
 /** O id do elemento que recebe o foco pelo resumo de erros. */
@@ -98,12 +87,6 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   notes: 'observacoes',
   street_address: 'endereco',
   ticket_url: 'linkDoConvite',
-  // `instagram_url`, e nao `instagram_handle`: o campo de ENTRADA virou a URL
-  // completa em 17/10/2026, e e esse o nome que o servidor poe no erro de
-  // campo (`errosDoInstagram('instagram_url', ...)` em
-  // `src/modules/network/application/rede-administrativa.ts`). Com a chave
-  // velha a recusa do Instagram caia fora do `map` e nunca chegava ao campo:
-  // a pessoa via o resumo do erro sem saber qual campo corrigir.
   instagram_url: 'instagram',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
@@ -117,16 +100,13 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
   return falha.erros.flatMap((e) => {
     const campo = CAMPO_DO_SERVIDOR[e.field];
     if (!campo) return [];
-    // A recusa de contato no endereco tem texto proprio: o das observacoes fala de "observacoes".
     const mensagem =
       campo === 'endereco' && e.code === 'contact_or_payment_detected'
         ? 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.'
         : campo === 'linkDoConvite'
           ? (MENSAGEM_DO_LINK[e.code as CodigoDoLink] ?? MENSAGEM_DO_LINK.ticket_url_invalid)
           : campo === 'instagram'
-            ? // Pelo `code`, como o link do convite: o servidor distingue
-              // "nao e https", "nao e do instagram.com" e "falta o perfil", e
-              // a tela nao pode juntar os tres numa frase so.
+            ?
               (MENSAGEM_DO_INSTAGRAM[e.code as CodigoDoInstagram] ?? MENSAGEM_DO_INSTAGRAM.instagram_url_invalid)
             : texto;
     return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
@@ -161,7 +141,6 @@ export default function FormularioDoEncontro() {
   const [nadaMudou, setNadaMudou] = useState(false);
   const [dialogo, setDialogo] = useState<DialogoPendente>();
   const [versao, setVersao] = useState(0);
-  // A carga vale para uma chave (encontro e versao): chave nova e 'carregando' sem setState no efeito.
   const chaveDaCarga = `${eventSlug ?? ''}:${versao}`;
   const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>(() => ({ chave: editando ? '' : chaveDaCarga, fase: 'pronto' }));
   const fase = carga.chave === chaveDaCarga ? carga.fase : 'carregando';
@@ -198,7 +177,6 @@ export default function FormularioDoEncontro() {
     };
   }, [rede, eventSlug, pathname, versao]);
 
-  // UX 29.2: se a sessao cair, o formulario fica guardado para depois do login.
   const fRef = useRef(f);
   useEffect(() => {
     fRef.current = f;
@@ -258,13 +236,10 @@ export default function FormularioDoEncontro() {
     if (!encontro || !etag) return;
     const plano = planoDeEdicao(encontro, travarLugarEAcesso ? { ...f, ...lugarEAcessoDe(base) } : f);
     if (!plano.patch && !plano.mudanca && !plano.acesso) {
-      // Nada a enviar: dizer "Alteracoes salvas" aqui era o defeito (a pessoa via
-      // sucesso e o servidor nao recebia nada).
       setNadaMudou(true);
       return;
     }
     if (plano.mudanca || plano.acesso) {
-      // Lugar, data e acesso pedem motivo (vai no e-mail aos administradores), e nao senha (07/10).
       setDialogo({ plano });
       return;
     }
@@ -275,7 +250,10 @@ export default function FormularioDoEncontro() {
     else tratarFalha(r.falha, 'salvar as alterações');
   }
 
-  /** Patch primeiro; depois mudanca e acesso, cada um com a versao da resposta anterior. */
+  /**
+   * Patch primeiro; depois mudanca e acesso, cada um com a versao da resposta
+   * anterior.
+   */
   async function executarComMotivo(plano: PlanoDeEdicao, motivo: string): Promise<ResultadoDaAcao> {
     if (!encontro || !etag) return { ok: false, mensagem: 'Recarregue a página e tente de novo.' };
     let slug = encontro.slug;
@@ -298,9 +276,6 @@ export default function FormularioDoEncontro() {
       if (!r.ok) {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
         if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
-        // Recusa de campo (endereco com contato, por exemplo): o mesmo tratamento do
-        // salvar direto. O campo fica marcado atras do dialogo, e o dialogo diz o
-        // texto do campo, e nao o generico (que e o das observacoes).
         const noCampo = errosDoServidor(r.falha);
         if (noCampo.length) {
           setTentou(true);
@@ -404,10 +379,6 @@ export default function FormularioDoEncontro() {
         aoMudar={(atualizar) => setF((atual) => ({ ...atual, fotos: atualizar(atual.fotos) }))}
         enviar={(arquivo, aoProgredir) => enviarImagem(cliente, arquivo, 'network_event', aoProgredir)}
         mostrarErrosDeDescricao={tentou}
-        // A descricao da imagem e OPCIONAL desde 21/10/2026 (decisao do
-        // cliente, dita duas vezes: "pode remover a descricao da imagem"). O
-        // padrao da galeria e `true`; a `Loja` desligou em 17/10 e a `Rede`
-        // agora. Quem salva sem descricao faz o app cair no titulo do evento.
         descricaoObrigatoria={false}
         reservaDaDescricao="o título do evento"
         erro={erroDe('fotos')}
@@ -475,10 +446,8 @@ export default function FormularioDoEncontro() {
           {f.pago && (
             <div className={estilos.blocoInterno}>
               <div className="row2">
-                {/* O valor guardado continua sendo texto; `centavosDoTexto` e
-                    quem o transforma em `admission.price.amount`, em centavos
-                    inteiros. O teto de 12 e `1.000.000,00`, o maximo do
-                    contrato ja mascarado. */}
+                {
+}
                 <CampoDeValorEmReais
                   id="enc-valor"
                   rotulo="Valor em reais *"
@@ -492,7 +461,6 @@ export default function FormularioDoEncontro() {
                   <select
                     id="enc-unidade"
                     className={estilos.selecao}
-                    // `per_dog` de encontro antigo aparece como "por pet" e so muda se a pessoa mexer.
                     value={unidadeComoAparece(f.unidade)}
                     onChange={(e) => mudar('unidade', e.target.value as EstadoDoFormulario['unidade'])}
                   >
@@ -601,7 +569,10 @@ export default function FormularioDoEncontro() {
   );
 }
 
-/** Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os toca. */
+/**
+ * Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os
+ * toca.
+ */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
   const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
   return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };
@@ -641,9 +612,8 @@ function CampoDeDataEHora({ id, rotulo, valor, aoMudar, erro }: { id: string; ro
 }
 
 /**
- * Descricao do encontro (`summary`, ate 200): area de varias linhas que cresce
- * com o texto, com contador. `field-sizing: content` onde o navegador sabe; nos
- * outros, a altura acompanha o `scrollHeight` a cada mudanca.
+ * Descricao do encontro (`summary`, ate 200): area de varias linhas que cresce com
+ * o texto, com contador.
  */
 function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-resumo';
@@ -662,8 +632,6 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         id={id}
         rows={3}
         className={`input ${estilos.areaQueCresce ?? ''}`}
-        // Sem `maxLength` nativo: ele conta unidades UTF-16 e pararia em 100
-        // emojis. O corte e o contador seguem o servidor (code points).
         value={valor}
         onChange={(e) => aoMudar(cortarEmCodePoints(e.target.value, LIMITE_DO_RESUMO))}
         aria-invalid={erro ? true : undefined}
@@ -686,11 +654,7 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
   );
 }
 
-/**
- * Endereco por extenso (`place.street_address`), opcional. Sem `maxLength`
- * nativo, que conta UTF-16: o corte e o contador sao em code points, como o
- * servidor conta (`errosDoEndereco`, 5 a 200).
- */
+/** Endereco por extenso (`place.street_address`), opcional. */
 function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-endereco';
   return (
@@ -722,7 +686,7 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
   );
 }
 
-/** `instagram_url`: a URL COMPLETA do perfil (padrao de 17/10). Mostra o @ que vai ser guardado. */
+/** `instagram_url`: a URL COMPLETA do perfil (padrao de 17/10). */
 function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-instagram';
   const handle = valor.trim() ? handleDoInstagram(valor) : null;

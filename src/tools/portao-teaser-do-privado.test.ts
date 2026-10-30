@@ -1,7 +1,6 @@
 /**
- * P19, a metade do contrato: o portao contra o `api/openapi.yaml` de verdade, e
- * as iscas que ele precisa reprovar, cada uma pelo motivo dela. Roda na suite
- * unitaria, entao reprova no job `codigo` sem precisar de fiacao nova.
+ * P19, a metade do contrato: o portao contra o `api/openapi.yaml` de verdade, e as
+ * iscas que ele precisa reprovar, cada uma pelo motivo dela.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

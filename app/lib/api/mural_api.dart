@@ -1,30 +1,6 @@
 import 'api_client.dart';
 
 /// O MURAL — a publicacao do usuario e a linha do tempo.
-///
-/// Arquivo proprio, e nao metodos dentro de `me_api.dart`, pelo mesmo motivo de
-/// `vitrine_api.dart`: o Mural tem cinco operacoes e modelos proprios, e
-/// `me_api.dart` e a porta dos DADOS da conta (nome, telefone, endereco de
-/// referencia). Misturar os dois faria o envio de uma foto alcancar `atualizar`
-/// — que e exatamente o que `IntencaoDeFotoDoUsuario` existe para impedir.
-///
-/// ## NENHUMA rota de publicacao de OUTRA pessoa, e a ausencia e deliberada
-///
-/// Nao existe `GET /publications/{ref}` no contrato, e nao existe
-/// `/people/{apelido}/publications`. A UNICA leitura que mostra publicacao de
-/// outra pessoa e `GET /timeline`, e ela devolve **so** quem e conexao aceita de
-/// quem chama — o recorte mora na clausula `WHERE` da consulta do servidor
-/// (ADR-0021), e nao num campo que esta camada pudesse interpretar.
-///
-/// Por isso nao ha metodo aqui que receba um apelido: **nao ha o que chamar.**
-///
-/// ## A escrita e UMA, e ela confirma a foto
-///
-/// `POST /me/publications` manda o texto e, opcionalmente, o `upload_id`. **E
-/// nessa escrita que a intencao de envio e confirmada no servidor, na mesma
-/// transacao** — nao ha operacao de confirmacao separada. Sem isso a varredura
-/// de vencidos apagaria a foto dez minutos depois, que foi o que aconteceu com a
-/// foto do achado.
 class MuralApi
     implements
         IntencaoDeFotoDaPublicacao,
@@ -69,13 +45,6 @@ class MuralApi
         '/me/publications',
         corpo: <String, dynamic>{
           'body': texto,
-          // `?` e nao `if`: e o marcador null-aware que o lint deste
-          // repositorio pede, e o mesmo que `auth_api.dart` e `achados_api.dart`
-          // ja usam.
-          //
-          // **O vazio e filtrado na TELA**, e nao aqui: e ela que sabe que
-          // `alt_text` so vale com foto -- mandar o par invalido seria produzir
-          // um `400` que ela sabia evitar.
           'upload_id': ?uploadId,
           'alt_text': ?textoAlternativo,
         },
@@ -104,9 +73,7 @@ class MuralApi
     );
   }
 
-  /// Os comentarios, **mais ANTIGO primeiro**. `404` quando a publicacao nao e
-  /// visivel, e nao lista vazia: lista vazia afirmaria que ela existe e nao tem
-  /// comentario.
+  /// Os comentarios, **mais ANTIGO primeiro**.
   @override
   Future<PaginaDeComentarios> comentarios(String ref, {String? cursor}) async {
     return PaginaDeComentarios.doJson(
@@ -152,27 +119,13 @@ class MuralApi
   }
 }
 
-/// O que a TELA DO MURAL precisa para desenhar. Interface ESTREITA, pelo mesmo
-/// motivo de `LeituraDaVitrine`: a tela que so desenha nao deve alcancar
-/// [MuralApi.apagar] nem [MuralApi.publicar] — um toque errado apagaria uma
-/// publicacao.
-///
-/// Ela tambem e o que permite medir a tela sem rede: a bancada de teste
-/// implementa estes metodos e nada mais, em vez de construir um `ApiClient` que
-/// aponta para algum lugar. Teste de widget que alcanca a rede e teste que
-/// pisca.
+/// O que a TELA DO MURAL precisa para desenhar.
 abstract class LeituraDoMural {
   Future<PaginaDaLinhaDoTempo> linhaDoTempo({String? cursor});
   Future<PaginaDasMinhasPublicacoes> minhasPublicacoes({String? cursor});
 }
 
-/// O que o mecanismo de envio precisa desta API. Interface ESTREITA, e nao a
-/// classe: um envio que alcancasse [MuralApi.apagar] poderia apagar uma
-/// publicacao ao gravar uma foto.
-/// O que o CARTAO e a folha de comentarios precisam. Interface ESTREITA, pelo
-/// mesmo motivo das outras: o cartao que curte nao deve alcancar
-/// [MuralApi.apagar] -- um toque errado apagaria a publicacao em vez de
-/// descurtir.
+/// O que o mecanismo de envio precisa desta API.
 abstract class InteracaoDoMural {
   Future<ReacaoDaPublicacao> curtir(String ref);
   Future<ReacaoDaPublicacao> descurtir(String ref);
@@ -189,13 +142,6 @@ abstract class IntencaoDeFotoDaPublicacao {
 }
 
 /// O que a tela de PUBLICAR precisa.
-///
-/// **Ela ESTENDE [IntencaoDeFotoDaPublicacao] em vez de redeclarar o metodo**: a
-/// assinatura da intencao e a que `EnvioParaConfirmarDepois` recebe como FUNCAO,
-/// e duas declaracoes dela seriam duas assinaturas identicas — que e exatamente
-/// a forma do defeito consertado em 19/10, a vitrine chamando o registrador de
-/// capa de encontro e gravando `network_event` numa foto de pessoa. A troca
-/// COMPILAVA.
 abstract class EscritaDoMural implements IntencaoDeFotoDaPublicacao {
   Future<MinhaPublicacao> publicar({
     required String texto,
@@ -207,27 +153,6 @@ abstract class EscritaDoMural implements IntencaoDeFotoDaPublicacao {
 }
 
 /// `#/components/schemas/MyPublicationImage/properties/status` do contrato.
-///
-/// O estado de processamento da imagem de uma publicacao:
-/// `processing` -> `ready` | `rejected`, e **nunca volta**.
-///
-/// **O PONTEIRO NAO E DECORACAO, e a falta dele foi um defeito meu medido.**
-/// `verificar-conformidade-do-app` exige que todo enum de `app/lib/api/` ou
-/// aponte para a lista fechada que ele espelha, ou diga `/// Local:` com o
-/// motivo -- *"sem isso o portao nao sabe se deveria conferi-lo, e o silencio
-/// vira aprovacao"*. Este nasceu sem ponteiro e levou o portao de **1
-/// divergencia pre-existente para 2**; o agente da mescla do lote 3 consertou,
-/// e esta forma e a que a sessao irma escolheu, para as duas nao colidirem.
-///
-/// Com o ponteiro, o portao RESOLVE a ancora contra a spec e confere os tres
-/// valores -- isto e, ele passa a medir, em vez de so aprovar.
-/// **ENUM COM O VALOR DE FIO, e nao um `switch` ao lado.** O portao resolve a
-/// ancora e le os tres valores DAQUI; com o `switch` separado ele acusava
-/// `enum-sem-valores-lidos` -- *"comparar conjunto vazio com o contrato aprova
-/// qualquer coisa"*. E a forma de `PendenciaDeCadastro`, em `modelos.dart`.
-///
-/// O ganho nao e so de portao: o valor de fio passa a ter **um dono**. Antes ele
-/// vivia no `switch`, e o enum nao sabia o proprio nome no contrato.
 enum EstadoDaFotoDaPublicacao {
   processando('processing'),
   pronta('ready'),
@@ -237,12 +162,6 @@ enum EstadoDaFotoDaPublicacao {
 
   /// O valor que o contrato declara em `MyPublicationImage.status`, e a UNICA
   /// copia dele: `_estadoDe` le desta lista.
-  ///
-  /// **Chama-se `codigo` e nao `valor`, decidido na mescla do terceiro lote**:
-  /// e o nome que a sessao irma usou em `EstadoDaFoto` de `vitrine_api.dart`
-  /// -- os dois enums irmaos ficam com a MESMA forma, que e o que a prosa
-  /// acima promete --, e evita `e.valor == valor` comparando campo com
-  /// parametro de mesmo nome logo abaixo.
   final String codigo;
 }
 
@@ -250,20 +169,10 @@ EstadoDaFotoDaPublicacao _estadoDe(Object? valor) {
   for (final e in EstadoDaFotoDaPublicacao.values) {
     if (e.codigo == valor) return e;
   }
-  // Qualquer outra coisa, inclusive um estado novo que o servidor passe a
-  // mandar, cai em `processando`. E o estado em que a tela nao promete imagem
-  // nenhuma, e portanto o unico seguro para o desconhecido.
   return EstadoDaFotoDaPublicacao.processando;
 }
 
-/// A imagem de uma publicacao na LINHA DO TEMPO. **Sem estado**: imagem que nao
-/// esta `ready` nao chega aqui, porque o predicado esta no `WHERE` do servidor.
-///
-/// **`image`/`url` e nao `photo`/`open_url`**, e os dois nomes vem do contrato,
-/// que diz por que: `photo` e o nome da foto de PESSOA nesta casa (um portao
-/// conta os campos `photo:`) e `open_url` e o de uma derivada da VITRINE (outro
-/// portao os varre por nome de campo). A imagem de uma publicacao nao e nenhuma
-/// das duas.
+/// A imagem de uma publicacao na LINHA DO TEMPO.
 class ImagemDaPublicacao {
   const ImagemDaPublicacao({required this.url, required this.textoAlternativo});
 
@@ -274,17 +183,14 @@ class ImagemDaPublicacao {
     );
   }
 
-  /// A derivada de **1024 x 1024 px**, a UNICA desta imagem. Nula so se o
-  /// servidor mandar o campo vazio — a tela decide o que fazer com o nulo.
+  /// A derivada de **1024 x 1024 px**, a UNICA desta imagem.
   final String? url;
 
-  /// O rotulo do leitor de tela. Nulo quando quem publicou nao o escreveu — e
-  /// ai a tela anuncia um rotulo generico, e **nao** esconde a imagem.
+  /// O rotulo do leitor de tela.
   final String? textoAlternativo;
 }
 
-/// A imagem de uma publicacao do DONO. **Com estado**, porque motivo de recusa e
-/// assunto entre o dono e quem modera.
+/// A imagem de uma publicacao do DONO.
 class ImagemDaMinhaPublicacao {
   const ImagemDaMinhaPublicacao({
     required this.uploadId,
@@ -314,15 +220,7 @@ class ImagemDaMinhaPublicacao {
   final String? textoAlternativo;
 }
 
-/// Quem publicou, na linha do tempo. **Quatro campos, e nada mais.**
-///
-/// **A FOTO ENTROU EM 20/10/2026** pela Emenda 5 do ADR-0010 — decisao do
-/// cliente, *"tras a foto, algo bem parecido com o instagram"*. Ela nasceu
-/// ausente de proposito: a Emenda 3 limitava a foto de pessoa a
-/// `Conversation.participants[]` *"e em mais nenhuma resposta deste contrato"*,
-/// a frente parou e perguntou, e a emenda NOMEOU esta superficie.
-///
-/// A derivada e a `thumb` de 176, a MESMA da Emenda 3 — nunca a `card` de 512.
+/// Quem publicou, na linha do tempo.
 class AutorDaPublicacao {
   const AutorDaPublicacao({
     required this.apelido,
@@ -336,47 +234,20 @@ class AutorDaPublicacao {
       apelido: json['handle'] as String?,
       nomeExibido: json['display_name'] as String? ?? '',
       urlDoIcone: json['photo_icon_url'] as String?,
-      // **Padrao `false`: na duvida o selo NAO nasce.** O mesmo padrao de
-      // `mine`, e pelo mesmo tipo de razao -- la um `true` errado ofereceria
-      // apagar o que nao e seu, aqui um `true` errado afirmaria uma confirmacao
-      // que ninguem fez. O campo e obrigatorio no contrato; este padrao e o que
-      // o app faz se um dia ele faltar.
       canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
     );
   }
 
-  /// O apelido, e e ele o endereco do perfil. **Nulo** quando a pessoa nao tem
-  /// apelido: ai o toque no autor **nao nasce**, em vez de nascer e nao levar a
-  /// lugar nenhum (criterio 2 da BICHUS-62).
+  /// O apelido, e e ele o endereco do perfil.
   final String? apelido;
 
   final String nomeExibido;
 
-  /// A `thumb` de 176 da foto do autor. **Nula em tres estados**, e nenhum e
-  /// erro: a pessoa nao tem foto, a foto nao esta `ready` (em `processing` ela
-  /// carrega o EXIF do celular), ou a conta esta desabilitada. A tela nao os
-  /// distingue — com nula ela desenha a inicial do nome.
+  /// A `thumb` de 176 da foto do autor.
   final String? urlDoIcone;
 
   /// **O SELO DE VALIDADO** — `contact_channel_verified`, emenda do ADR-0010 de
   /// 21/10/2026, decisao do cliente.
-  ///
-  /// O que ele prova e **um canal de contato confirmado**:
-  /// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
-  /// servidor, que e a MESMA regua dos quatro 409
-  /// `contact-channel-unverified`. **Na pratica e e-mail**, porque nada no
-  /// servidor grava a confirmacao de telefone — e e por isso que o rotulo que a
-  /// tela desenha diz "e-mail confirmado".
-  ///
-  /// **O nome deste campo e o que ele prova, e nao o que ele parece.** Chama-se
-  /// `canalConfirmado` e nao `verificado` de proposito: documento nao e
-  /// conferido por ninguem, e um nome que dissesse "verificado" seria a primeira
-  /// peca de uma cadeia que termina num rotulo mentindo para quem usa leitor de
-  /// tela.
-  ///
-  /// **`false` nao desenha nada**, e nao desenha um selo apagado: selo cinza ao
-  /// lado do nome diria "esta conta foi reprovada", e `false` significa que
-  /// ninguem conferiu nada.
   final bool canalConfirmado;
 }
 
@@ -396,14 +267,6 @@ class ReacaoDaPublicacao {
 }
 
 /// Um comentario.
-///
-/// **O autor usa o MESMO [AutorDaPublicacao]** da publicacao, e o reuso vem do
-/// contrato: e a mesma pessoa, com os mesmos quatro campos e a mesma derivada de
-/// foto (Emenda 5 do ADR-0010).
-///
-/// **E o reuso e o que faz o selo de validado chegar aos dois de uma vez**:
-/// `PublicationAuthor` e UM schema, entao o campo que a emenda de 21/10/2026
-/// abriu vale na publicacao e no comentario sem um segundo modelo.
 class ComentarioDaPublicacao {
   const ComentarioDaPublicacao({
     required this.ref,
@@ -421,8 +284,6 @@ class ComentarioDaPublicacao {
       autor: AutorDaPublicacao.doJson(
         (json['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
       ),
-      // Padrao `false`: na duvida o `Apagar` NAO nasce. Oferecer apagar o
-      // comentario de outra pessoa levaria a um 404, e a tela teria mentido.
       meu: json['mine'] as bool? ?? false,
     );
   }
@@ -432,7 +293,7 @@ class ComentarioDaPublicacao {
   final DateTime? criadoEm;
   final AutorDaPublicacao autor;
 
-  /// `true` quando quem chama escreveu o comentario. **Vem do SERVIDOR.**
+  /// `true` quando quem chama escreveu o comentario.
   final bool meu;
 }
 
@@ -459,7 +320,6 @@ class PaginaDeComentarios {
   final String? proximoCursor;
 
   /// O total da PUBLICACAO, e nao `itens.length`, que e o tamanho desta pagina.
-  /// A tela mostra o total no cartao e a pagina na folha.
   final int total;
 }
 
@@ -506,9 +366,6 @@ class PublicacaoDaLinha {
       autor: AutorDaPublicacao.doJson(
         (json['author'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
       ),
-      // Padrao `false`: na duvida o cartao oferece `Denunciar` e nao `Apagar`.
-      // O caminho errado aqui seria oferecer apagar a publicacao de outra
-      // pessoa, e o servidor responderia 404 — mas a tela teria mentido.
       minha: json['mine'] as bool? ?? false,
       curtidas: (json['like_count'] as num?)?.toInt() ?? 0,
       comentarios: (json['comment_count'] as num?)?.toInt() ?? 0,
@@ -522,18 +379,13 @@ class PublicacaoDaLinha {
   final ImagemDaPublicacao? imagem;
   final AutorDaPublicacao autor;
 
-  /// `true` quando quem chama e o autor. **Vem do SERVIDOR**, e nao de uma
-  /// comparacao de apelido nesta camada: a tela nao tem o apelido de quem chama
-  /// em toda rolagem, e comparar aqui seria a autorizacao migrando para o
-  /// cliente.
+  /// `true` quando quem chama e o autor.
   final bool minha;
 
-  /// Quantas pessoas curtiram. **Lida das linhas no servidor**, e nao de coluna
-  /// denormalizada. A tela mostra o numero e **nunca quem**: nao existe lista de
-  /// quem curtiu (item 7 da Emenda 5 do ADR-0010).
+  /// Quantas pessoas curtiram.
   final int curtidas;
 
-  /// Quantos comentarios VIVOS. Comentario apagado nao conta.
+  /// Quantos comentarios VIVOS.
   final int comentarios;
 
   /// Se quem chama curtiu. Vem do servidor: a tela nao teria como saber, e

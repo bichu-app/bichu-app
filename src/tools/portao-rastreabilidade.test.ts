@@ -1,11 +1,4 @@
-/**
- * Testes do portão da matriz de rastreabilidade (ADR-0027 item 18).
- *
- * Três camadas: a matriz de verdade contra o contrato de verdade, que precisa
- * aprovar; a isca permanente, que precisa reprovar pelos quatro motivos; e
- * variações pequenas, cada uma com um defeito só, para provar que cada regra
- * enxerga sozinha e não só em conjunto.
- */
+/** Testes do portão da matriz de rastreabilidade (ADR-0027 item 18). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';

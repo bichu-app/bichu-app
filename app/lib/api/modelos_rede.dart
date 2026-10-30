@@ -1,32 +1,4 @@
 /// Os modelos da secao `Rede`, campo por campo do contrato.
-///
-/// **Regra do cliente (23/09/2026): o app usa exatamente os nomes do
-/// `api/openapi.yaml`.** Cada classe e cada enum daqui abre o doc com o
-/// ponteiro JSON do schema que espelha, e o portao
-/// `infra/verificacao/verificar-conformidade-do-app.mjs` confere os dois
-/// lados: campo que o app le e o contrato nao tem, campo opcional lido como
-/// obrigatorio, valor de enum que falta ou sobra. Por isso toda leitura de
-/// resposta aqui e `json['campo']` dentro da propria classe: leitura por outro
-/// nome de variavel escaparia do portao.
-///
-/// ## O que o app NAO le, e por que
-///
-/// - **Nao ha pessoa em lugar nenhum** (ADR-0025, ADR-0010 item 7). O pedido
-///   de participacao e da conta e o app so ve o estado do PROPRIO pedido.
-/// - **Nao ha `declined`.** O contrato nao manda recusa ao app (ADR-0027
-///   12.11): o recusado chega como `requested`. Nao existe estado, rotulo nem
-///   ramo de tela para recusa, e a isca de `test/rede/` reprova se aparecer.
-/// - **O teaser do privado tem cinco campos e so cinco.** O app nao tenta ler
-///   lugar, capa nem horario de um privado que nao foi aprovado: o servidor
-///   nao manda (P19), e ler seria convite para alguem desenhar.
-/// - **A coordenada so existe em [LocalizacaoDoEncontro]**, que vem de
-///   `getNetworkEventLocation`, com conta. [LugarDoEncontro] sao quatro
-///   rotulos.
-///
-/// ## A situacao vem PRONTA do servidor
-///
-/// [SituacaoDoEncontro] e lida de `status` e nunca calculada aqui: um relogio
-/// errado no aparelho chamaria de proximo um encontro que ja passou.
 library;
 
 import 'dart:collection';
@@ -35,14 +7,7 @@ import '../formato/dinheiro.dart';
 
 import 'modelos_pet.dart';
 
-// ---------------------------------------------------------------------------
-// LISTAS FECHADAS
-// ---------------------------------------------------------------------------
-
 /// `#/components/schemas/NetworkEventStatus` do contrato.
-///
-/// [porCodigo] devolve nulo para codigo desconhecido: nao ha valor seguro para
-/// onde cair, e a tela nao afirma nada sobre um estado que nao entende.
 enum SituacaoDoEncontro {
   aVir('upcoming'),
   acontecendo('happening'),
@@ -62,17 +27,6 @@ enum SituacaoDoEncontro {
 }
 
 /// `#/components/schemas/NetworkEventOrigin` do contrato.
-///
-/// Quem CADASTROU o encontro: a equipe do Bichu ou uma conta do app.
-///
-/// **Nao e o autor, e nao ha como ele ser.** `created_by_user_id` nunca sai
-/// do servidor (ADR-0025 secao 3, ADR-0027 apendice A.4), e este campo nao o
-/// contorna: sao dois valores fixos, e nenhum deles identifica pessoa.
-///
-/// [porCodigo] devolve **nulo** para codigo desconhecido, como
-/// [SituacaoDoEncontro], e a tela trata o nulo como "nao sei": ela deixa de
-/// afirmar a origem em vez de chutar uma. Encontro gravado antes de o campo
-/// existir chega sem ele, e e exatamente esse o caso.
 enum OrigemDoEncontro {
   equipe('admin'),
   comunidade('community');
@@ -91,9 +45,6 @@ enum OrigemDoEncontro {
 }
 
 /// `#/components/schemas/NetworkEventWhen` do contrato, sem `all`.
-///
-/// `all` nao e usado por aba nenhuma: a agenda nunca mistura passado e futuro
-/// (`Próximos` manda `upcoming` ou um sub-recorte, `Encerrados` manda `past`).
 enum QuandoDaRede {
   aVir('upcoming', 'Próximos'),
   passados('past', 'Encerrados'),
@@ -140,11 +91,6 @@ enum OrdemDaRede {
 }
 
 /// `#/components/schemas/NetworkEventNearbySort` do contrato.
-///
-/// Outra lista, de outra operacao (`listNearbyNetworkEvents`). `proximos` tem
-/// o mesmo codigo e o mesmo rotulo de [OrdemDaRede.proximos] de proposito: e
-/// a mesma ordem, e a linha de resumo nao pode dizer coisas diferentes para
-/// ela conforme a operacao.
 enum OrdemPorPerto {
   distancia('distancia', 'Mais perto'),
   proximos('proximos', 'Data mais próxima');
@@ -181,8 +127,6 @@ enum VisibilidadeDoEncontro {
 }
 
 /// `#/components/schemas/NetworkEventAdmission/properties/kind` do contrato.
-///
-/// E tambem o vocabulario do filtro `admission` (`free`, `paid`).
 enum TipoDeEntrada {
   gratuito('free', 'Gratuito'),
   pago('paid', 'Pago');
@@ -201,15 +145,6 @@ enum TipoDeEntrada {
 }
 
 /// `#/components/schemas/EventPriceUnit` do contrato.
-///
-/// **A correspondencia nao e um para um** (01/10): `per_dog` e `per_pet` sao a
-/// mesma coisa para quem le, e os dois aparecem como `por pet`. `per_dog` e
-/// legado -- o servidor ainda o devolve nos encontros antigos e o painel nao o
-/// oferece mais, por isso ele continua aqui. Aposentadoria no ADR-0027 item 22.
-///
-/// Os rotulos sao, palavra por palavra, os do painel
-/// (`admin/src/rede/dominio/rotulos.ts`, `UNIDADES`): o valor que a pessoa ve
-/// no backoffice e o que ela ve no aparelho, e nao ha duas verdades.
 enum UnidadeDoPreco {
   porPet('per_pet', 'por pet'),
   porPessoa('per_person', 'por humano'),
@@ -274,9 +209,6 @@ enum EstruturaDoLocal {
 }
 
 /// `#/components/schemas/NetworkEventBringItem` do contrato.
-///
-/// O icone de cada item e parte da lista fechada (design system 24.13.3) e
-/// mora na tela; o rotulo e o da matriz de rastreabilidade.
 enum ItemParaLevar {
   agua('water', 'Água'),
   poteDeAgua('water_bowl', 'Pote de água'),
@@ -301,12 +233,6 @@ enum ItemParaLevar {
 }
 
 /// `#/components/schemas/JoinRequestAppState` do contrato.
-///
-/// **E o vocabulario do app, e a recusa nao faz parte dele** (ADR-0027
-/// 12.11): o servidor manda `requested` para pedido pendente e para pedido
-/// recusado, e esta lista nao tem para onde levar uma recusa. Valor que o app
-/// nao conhece cai em nulo, e a tela trata nulo como `Pedido enviado` sem
-/// acao -- nunca como recusa.
 enum EstadoDoPedido {
   enviado('requested', 'Pedido enviado'),
   aprovado('approved', 'Pedido aprovado'),
@@ -318,19 +244,7 @@ enum EstadoDoPedido {
   final String codigo;
 
   /// O rotulo na tela, ou nulo quando a especificacao nao desenha nenhum.
-  ///
-  /// `expired` nao tem rotulo (design system 24.17.5): o encontro que passa
-  /// sai de `Meus pedidos` e vai para `Encerrados`. `withdrawn` tambem nao
-  /// (24.17.6): ele nao aparece na lista, e o "Pedido cancelado" da matriz de
-  /// rastreabilidade nao entra na tela. Divergencia da matriz registrada na
-  /// entrega.
   final String? rotulo;
-
-  // **`doFiltro` SAIU** (19/10/2026). Era a lista de dois valores (`enviado`,
-  // `aprovado`) que o grupo `Situação do pedido` oferecia, e o grupo saiu com
-  // a aba `Meus pedidos`. O `enum` FICA inteiro: ele e o vocabulario de
-  // `NetworkEventJoinRequestState` no contrato, e o portao de conformidade do
-  // app o confere valor por valor contra a lista fechada.
 
   static EstadoDoPedido? porCodigo(Object? codigo) {
     for (final e in EstadoDoPedido.values) {
@@ -340,12 +254,8 @@ enum EstadoDoPedido {
   }
 }
 
-/// `#/paths/~1network~1events~1nearby/get/parameters/6/schema` do contrato:
-/// o `max_km` de `listNearbyNetworkEvents`.
-///
-/// O ponteiro e por posicao, e isso e deliberado: se o parametro mudar de
-/// lugar, o portao de conformidade reprova nomeando o ponteiro, em vez de o
-/// app mandar um valor que ninguem confere.
+/// `#/paths/~1network~1events~1nearby/get/parameters/6/schema` do contrato: o
+/// `max_km` de `listNearbyNetworkEvents`.
 enum DistanciaMaxima {
   ate2km('2', 'Até 2 km'),
   ate5km('5', 'Até 5 km'),
@@ -364,18 +274,7 @@ enum DistanciaMaxima {
   }
 }
 
-// ---------------------------------------------------------------------------
-// O FUSO DO EVENTO
-// ---------------------------------------------------------------------------
-
 /// O deslocamento de fuso com que a hora do encontro e desenhada.
-///
-/// `starts_at` e um instante absoluto e `time_zone` e o nome IANA da zona. A
-/// hora do cartaz da praca **nao esta no instante**: `toLocal()` responderia
-/// sobre o fuso do APARELHO. O Dart nao embarca a base IANA, entao a
-/// resolucao e em tres degraus: a tabela das zonas do Brasil (que nao
-/// observam horario de verao desde o Decreto 9.772/2019), o deslocamento
-/// escrito no proprio `starts_at`, e UTC dito por extenso.
 class FusoDoEvento {
   const FusoDoEvento({
     required this.nomeIana,
@@ -388,11 +287,8 @@ class FusoDoEvento {
   final Duration deslocamento;
   final bool conhecido;
 
-  /// A linha que a caixa `Quando` mostra: `Horário de Brasília`,
-  /// `Horário de Manaus`, `Horário UTC−03:00` ou `Horário UTC`.
-  ///
-  /// As zonas de −3 horas dizem `Horário de Brasília`, que e o nome oficial
-  /// do fuso e o texto aprovado (UX 28.7.2); as outras dizem a cidade da zona.
+  /// A linha que a caixa `Quando` mostra: `Horário de Brasília`, `Horário de
+  /// Manaus`, `Horário UTC−03:00` ou `Horário UTC`.
   final String rotulo;
 
   static const Map<String, (int, String)> _zonasDoBrasil =
@@ -516,11 +412,6 @@ abstract final class CalendarioPtBr {
   ];
 
   /// `Sábado, 27 de setembro`, com o ano quando ele nao e o [anoCorrente].
-  ///
-  /// O ano entra quando difere: em `Encerrados`, `27 de setembro` sozinho nao
-  /// distingue o encontro deste ano do de tres anos atras. Comparar o ano com
-  /// o relogio do aparelho e so escolha de formato; a situacao do encontro
-  /// continua vindo do servidor.
   static String dataLonga(DateTime parede, {required int anoCorrente}) {
     final dia = diasDaSemana[parede.weekday - 1];
     final base =
@@ -547,9 +438,6 @@ abstract final class CalendarioPtBr {
 }
 
 /// Quando o encontro acontece, ja no fuso do EVENTO.
-///
-/// O instante fica em UTC; a hora de parede sai de `instante + deslocamento`,
-/// lida nos campos UTC do resultado. Nao ha `toLocal()` neste arquivo.
 class HorarioDoEncontro {
   const HorarioDoEncontro({
     required this.inicio,
@@ -600,14 +488,11 @@ class HorarioDoEncontro {
 }
 
 /// A data de um encontro como a TELA precisa dela: dia, mes e dia da semana.
-///
-/// Serve aos dois lados: ao publico, que tem instante e fuso, e ao teaser do
-/// privado, que tem so `local_date` (AAAA-MM-DD) e nenhuma hora.
 class DiaDoEncontro {
   const DiaDoEncontro(this.parede);
 
   /// Uma data marcada UTC cujos campos de ano, mes e dia ja sao os do fuso do
-  /// evento. So os campos de data sao lidos.
+  /// evento.
   final DateTime parede;
 
   String dataLonga({required int anoCorrente}) =>
@@ -617,8 +502,8 @@ class DiaDoEncontro {
   String get mesAbreviado => CalendarioPtBr.mesesAbreviados[parede.month - 1];
   int get numero => parede.day;
 
-  /// `local_date` do teaser. Data sem hora: e lida como meio-dia UTC para o
-  /// dia da semana nunca escorregar pela borda da meia-noite.
+  /// `local_date` do teaser. Data sem hora: e lida como meio-dia UTC para o dia
+  /// da semana nunca escorregar pela borda da meia-noite.
   static DiaDoEncontro? daDataLocal(String? iso) {
     if (iso == null) return null;
     final casou = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso);
@@ -634,13 +519,7 @@ class DiaDoEncontro {
   }
 }
 
-// ---------------------------------------------------------------------------
-// OS OBJETOS DO CONTRATO
-// ---------------------------------------------------------------------------
-
 /// `#/components/schemas/NetworkEventPlace` do contrato.
-///
-/// Quatro rotulos e nenhuma coordenada.
 class LugarDoEncontro {
   const LugarDoEncontro({
     required this.nomeDoLugar,
@@ -690,24 +569,14 @@ class LugarDoEncontro {
 }
 
 /// `#/components/schemas/NetworkEventPrice` do contrato.
-///
-/// Informativo: o Bichu nao cobra. O selo e `R$ 15 por pet`, montado de
-/// numero e unidade, sempre no mesmo formato (UX 28.7.2).
 class PrecoDoEncontro {
   const PrecoDoEncontro({required this.centavos, required this.unidade});
 
   final int centavos;
   final UnidadeDoPreco? unidade;
 
-  /// `R$ 15 por pet`, `R$ 12,50 por humano`. **Sem unidade conhecida, so o
-  /// valor**: inventar a unidade seria afirmar o que o servidor nao disse, e e
-  /// o que mantem o app de pe quando o contrato ganha uma unidade nova sem ele
-  /// (isca `tolera unidade de preco que este build nao conhece`).
+  /// `R$ 15 por pet`, `R$ 12,50 por humano`.
   String get rotulo {
-    // A conta de centavos para texto e de `formato/dinheiro.dart`, o unico
-    // lugar do app que a faz. `centavosRedondos: false` e o que mantem
-    // `R\$ 15 por pet` em vez de `R\$ 15,00 por pet`, que era o
-    // comportamento deste getter antes de a conta sair daqui.
     final valor = reaisEmTexto(centavos, centavosRedondos: false);
     final u = unidade;
     return u == null ? valor : '$valor ${u.rotulo}';
@@ -718,8 +587,6 @@ class PrecoDoEncontro {
     final json = bruto;
     final centavos = json['amount'];
     if (centavos is! int) return null;
-    // `currency` e sempre `BRL` no contrato; lido so para o portao conferir
-    // que o campo existe com esse nome.
     final moeda = json['currency'];
     if (moeda != null && moeda != 'BRL') return null;
     return PrecoDoEncontro(
@@ -771,19 +638,11 @@ class ImagemDoEncontro {
   final String url;
 
   /// `thumb_url`: a derivada de 480 x 360 (4:3), **da galeria do detalhe**.
-  ///
-  /// Anulavel porque a imagem gravada antes desta derivada existir nao a tem.
-  /// Quem a usa cai em [url], que e o comportamento de antes.
   final String? urlDaMiniatura;
 
   final String textoAlternativo;
 
   /// O que a GALERIA pede: a miniatura, com a capa como reserva.
-  ///
-  /// A galeria desenha 144 dp em 4:3, que a 3x sao 432 px, e pedia a derivada
-  /// de 1024 px -- **cinco vezes o dado que ela pinta**, oito vezes numa
-  /// galeria cheia. O peso de uma tela e a soma das derivadas que ela desenha,
-  /// e nao o teto de cada arquivo.
   String get urlParaGaleria => urlDaMiniatura ?? url;
 
   static List<ImagemDoEncontro> daLista(Object? bruto) {
@@ -810,10 +669,6 @@ class ImagemDoEncontro {
 }
 
 /// O que o encontro publico e o conteudo do privado aprovado tem em comum.
-///
-/// `NetworkEventPublic` e `NetworkEventPrivateDetails` sao a mesma forma no
-/// contrato, com e sem `visibility`; a tela desenha as duas com o mesmo
-/// codigo, e por isso elas dividem esta classe.
 abstract class ConteudoDoEncontro {
   const ConteudoDoEncontro();
 
@@ -826,14 +681,6 @@ abstract class ConteudoDoEncontro {
   String? get urlDaCapa;
 
   /// `cover_banner_url`: a derivada de 1280 x 720 da capa, **do detalhe**.
-  ///
-  /// A capa do detalhe e de borda a borda (360 a 430 dp, ou 1080 a 1290 px a
-  /// 3x) e borrava de leve com a derivada de 1024. Uma derivada separada e nao
-  /// uma [urlDaCapa] maior: o cartao da agenda usa a mesma imagem, e subir
-  /// aquela derivada engordaria **cada** cartao da listagem para ganhar
-  /// nitidez numa tela que desenha uma so.
-  ///
-  /// Anulavel; quem a usa cai em [urlDaCapa], que e o comportamento de antes.
   String? get urlDoBannerDaCapa;
 
   List<ImagemDoEncontro> get imagens;
@@ -847,35 +694,18 @@ abstract class ConteudoDoEncontro {
   String? get observacoes;
 
   /// Quem cadastrou o encontro, ou **nulo** quando o servidor nao disse.
-  ///
-  /// Nulo e estado previsto e nao erro: o campo entrou em 20/10/2026 e e
-  /// opcional no contrato. Quem o le decide o que fazer com a ausencia -- a
-  /// ficha deixa de afirmar a origem, em vez de afirmar a errada.
   OrigemDoEncontro? get origem;
 
-  /// `ticket_url`: onde se compra o convite. Publico (ADR-0027 item 22). Nulo
-  /// quando nao ha, e a tela entao nao desenha a moldura.
+  /// `ticket_url`: onde se compra o convite.
   Uri? get urlDoConvite;
 
   /// `instagram_url`, montada pelo servidor com a base da configuracao e o
-  /// handle. Nula sem handle **ou sem base configurada no ambiente**
-  /// (`INSTAGRAM_PROFILE_BASE_URL`): nos dois casos a tela nao desenha nada.
+  /// handle.
   Uri? get urlDoInstagram;
 
   /// `share_url`: o endereco da **pagina publica do encontro** no site, para o
   /// compartilhamento levar um link que abre para quem **ainda nao tem o app**
   /// (decisao do cliente de 21/10/2026, emenda 4 do ADR-0017).
-  ///
-  /// **Nulo e o estado normal, e o nulo e o INTERRUPTOR.** O servidor omite o
-  /// campo enquanto `site_page_availability` disser que a pagina nao esta
-  /// publicada (migracao `20261020000017`), e tambem no encontro cancelado e no
-  /// encerrado. Por isso a pagina acende **sem APK novo**: nada aqui precisa
-  /// mudar no dia em que ela subir.
-  ///
-  /// **O aplicativo NUNCA monta este endereco.** Nao ha `'/encontro/' + slug`
-  /// em lugar nenhum do app, de proposito: um literal montado aqui viraria link
-  /// morto no dia em que o site mudasse de forma, e o binario instalado nao se
-  /// corrige. Quem decide o endereco e quem serve a pagina.
   Uri? get linkDaPagina;
 
   DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
@@ -884,28 +714,8 @@ abstract class ConteudoDoEncontro {
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
 
-  /// AS URLS QUE O VISUALIZADOR AMPLIA, na ordem da galeria e **numa fonte so**.
-  ///
-  /// O cliente, 26/10/2026: *"as fotos dos eventos, quando tem mais do que uma
-  /// nao esta trocando, nao tem a seta que eu pedi para avancar e retroceder"*.
-  /// **O que faltava nao era o carrossel nem o dado** -- `NetworkEventImages`
-  /// traz ate OITO desde sempre, o servidor as agrega por encontro
-  /// (`kysely-network-repository.ts`, as chaves `k`/`t`/`b`/`a`) e [imagens] ja
-  /// as lia. Faltava o app ABRIR o visualizador com a lista: a capa chamava
-  /// `VisualizadorDeImagem.abrir` (UMA), e a faixa de miniaturas nao tinha alvo
-  /// de toque nenhum. Com uma so o visualizador esconde seta e contador de
-  /// proposito, entao a capa nunca mostrava seta -- nem quando havia oito
-  /// fotos.
-  ///
-  /// **A derivada e a GRANDE, e nao a da faixa.** [ImagemDoEncontro.urlParaGaleria]
-  /// serve a miniatura de 144 dp; ampliada ela seria 480 px esticados numa tela
-  /// que amplia ate 4x. Aqui vai `url` (1024 x 576), e na posicao 0 vai
-  /// [urlDoBannerDaCapa] (1280 x 720) quando ela existe: e a derivada mais nitida
-  /// da mesma imagem, e e a que a capa de borda a borda ja desenha.
-  ///
-  /// **Lista e nao conjunto, e a ORDEM e o indice**: quem toca na miniatura `i`
-  /// abre o visualizador em `inicial: i`, e isso so fecha porque esta lista tem
-  /// exatamente um elemento por item de [imagens], na mesma ordem.
+  /// AS URLS QUE O VISUALIZADOR AMPLIA, na ordem da galeria e **numa fonte
+  /// so**.
   List<String> get urlsParaAmpliar => <String>[
         for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
           if (i == 0) urlDoBannerDaCapa ?? imagem.url else imagem.url,
@@ -913,10 +723,6 @@ abstract class ConteudoDoEncontro {
 }
 
 /// Os campos de conteudo, lidos do mesmo jeito nas duas formas.
-///
-/// Funcao e nao classe: o portao de conformidade confere as leituras
-/// `json[...]` no corpo da classe ancorada, e por isso cada classe abaixo le
-/// os proprios campos. Esta funcao so converte o que ja foi lido.
 Set<Porte> _portes(Object? bruto) {
   if (bruto is! List) return <Porte>{...Porte.values};
   final lidos = <Porte>{
@@ -936,10 +742,6 @@ List<EstruturaDoLocal> _estrutura(Object? bruto) {
 }
 
 /// Um link publico do encontro (`ticket_url`, `instagram_url`).
-///
-/// Nulo e estado normal: o encontro pode nao ter link. Devolve nulo tambem
-/// para o que nao da URL absoluta, em vez de levar a pessoa a um link quebrado
-/// -- o servidor ja recusa na escrita, e aqui a tela so nao desenha.
 Uri? _link(Object? bruto) {
   if (bruto is! String || bruto.trim().isEmpty) return null;
   final u = Uri.tryParse(bruto.trim());
@@ -955,11 +757,9 @@ List<ItemParaLevar> _levar(Object? bruto) {
   ];
 }
 
-/// Um encontro da agenda ou do detalhe: `NetworkEventSummary` e
-/// `NetworkEvent` sao `oneOf` do publico e do teaser do privado,
-/// discriminados por `visibility`.
-///
-/// `#/components/schemas/NetworkEvent` do contrato.
+/// Um encontro da agenda ou do detalhe: `NetworkEventSummary` e `NetworkEvent`
+/// sao `oneOf` do publico e do teaser do privado, discriminados por
+/// `visibility`.
 sealed class EncontroDaRede {
   const EncontroDaRede();
 
@@ -1058,10 +858,7 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
 
-  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`. Repetido aqui porque estas
-  /// classes **implementam** o contrato em vez de estende-lo, e por isso cada
-  /// membro concreto dele precisa de corpo nas duas -- a mesma razao de
-  /// [textoAlternativoDaCapa] e de `dia` logo acima.
+  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`.
   @override
   List<String> get urlsParaAmpliar => <String>[
         for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
@@ -1109,26 +906,15 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
-      // Ausente no encontro gravado antes de 20/10/2026, e `porCodigo`
-      // devolve nulo tambem para valor desconhecido: a tela nao afirma origem
-      // que nao entende.
       origem: OrigemDoEncontro.porCodigo(json['origin']),
       urlDoConvite: _link(json['ticket_url']),
       urlDoInstagram: _link(json['instagram_url']),
-      // AUSENTE enquanto a pagina do encontro nao estiver publicada, e ausente
-      // tambem no cancelado e no encerrado: e o servidor que decide, e o
-      // aplicativo so le. `_link` devolve nulo para ausente e para o que nao e
-      // URI, que e o mesmo tratamento de `ticket_url`.
       linkDaPagina: _link(json['share_url']),
     );
   }
 }
 
 /// `#/components/schemas/NetworkEventPrivateTeaser` do contrato.
-///
-/// **Cinco campos, e so cinco.** Nao ha lugar, capa, horario nem resumo, e a
-/// tela nao tem de onde tira-los: e o servidor que nao manda (ADR-0027
-/// 12.10, portao P19).
 class TeaserDoPrivado extends EncontroDaRede {
   const TeaserDoPrivado({
     required this.slug,
@@ -1170,9 +956,6 @@ class TeaserDoPrivado extends EncontroDaRede {
 }
 
 /// `#/components/schemas/NetworkEventPrivateDetails` do contrato.
-///
-/// O conteudo do privado, que so chega a conta aprovada. Mesma forma do
-/// publico, sem `visibility`.
 class DetalhesDoPrivado implements ConteudoDoEncontro {
   const DetalhesDoPrivado({
     required this.slug,
@@ -1235,14 +1018,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   /// **Sempre nulo, e cravado em vez de lido.** Encontro privado **nao tem
   /// pagina publica** (ADR-0027 12.10): quem nao foi aprovado ve so o teaser, e
   /// publicar uma pagina aberta de um encontro privado entregaria a estranhos o
-  /// lugar e a hora que o produto esconde deles. Ler o campo do corpo aqui
-  /// faria a tela depender de o servidor nunca mandar o campo; cravar `null`
-  /// faz o vazamento impossivel neste caminho, mesmo que um dia ele venha.
-  ///
-  /// (O nome do campo nao aparece como leitura nesta classe de proposito: o
-  /// portao de conformidade do app anda pelo corpo da classe procurando
-  /// leituras, e ele conta uma mencao em comentario como leitura -- com razao,
-  /// porque e assim que ele pega a leitura que alguem comentou e esqueceu.)
+  /// lugar e a hora que o produto esconde deles.
   @override
   Uri? get linkDaPagina => null;
   @override
@@ -1260,10 +1036,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   String? get textoAlternativoDaCapa =>
       imagens.isEmpty ? null : imagens.first.textoAlternativo;
 
-  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`. Repetido aqui porque estas
-  /// classes **implementam** o contrato em vez de estende-lo, e por isso cada
-  /// membro concreto dele precisa de corpo nas duas -- a mesma razao de
-  /// [textoAlternativoDaCapa] e de `dia` logo acima.
+  /// Ver `ConteudoDoEncontro.urlsParaAmpliar`.
   @override
   List<String> get urlsParaAmpliar => <String>[
         for (final (int i, ImagemDoEncontro imagem) in imagens.indexed)
@@ -1311,9 +1084,6 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
-      // Ausente no encontro gravado antes de 20/10/2026, e `porCodigo`
-      // devolve nulo tambem para valor desconhecido: a tela nao afirma origem
-      // que nao entende.
       origem: OrigemDoEncontro.porCodigo(json['origin']),
       urlDoConvite: _link(json['ticket_url']),
       urlDoInstagram: _link(json['instagram_url']),
@@ -1328,7 +1098,7 @@ class EncontroPorPerto {
 
   final EncontroPublico encontro;
 
-  /// Metros, arredondados a 100 pelo servidor. Nula sem ponto ou sem regiao.
+  /// Metros, arredondados a 100 pelo servidor.
   final int? distanciaEmMetros;
 
   static EncontroPorPerto doJson(Map<String, dynamic> json) {
@@ -1342,10 +1112,6 @@ class EncontroPorPerto {
 }
 
 /// A distancia como a tela a escreve: `A cerca de {n} km da sua região`.
-///
-/// `n = max(1, arredondar(km))` (UX 28.1): a medida parte da regiao cadastrada
-/// e nao da pessoa (design system 24.16), e uma casa decimal prometeria uma
-/// precisao que o dado nao tem.
 abstract final class DistanciaDaRegiao {
   static int quilometros(int metros) {
     final km = (metros / 1000).round();
@@ -1380,20 +1146,12 @@ class PontoDoEncontro {
 }
 
 /// `#/components/schemas/NetworkEventLocation` do contrato.
-///
-/// **So existe com conta** (`getNetworkEventLocation`). `point` nulo e o
-/// encontro sem ponto marcado, que e estado normal.
 class LocalizacaoDoEncontro {
   const LocalizacaoDoEncontro({required this.ponto, required this.endereco});
 
   final PontoDoEncontro? ponto;
 
   /// `street_address`: o endereco por extenso, como o painel o escreveu.
-  ///
-  /// **So sai aqui, e so com conta** (emenda de 01/10 do ADR-0027): nem a
-  /// agenda nem o detalhe publico o carregam. Nulo quando nao ha, que e estado
-  /// normal -- o app abre este TEXTO no aplicativo de mapas do aparelho e nao
-  /// geocodifica nada (ADR-0006).
   final String? endereco;
 
   static LocalizacaoDoEncontro doJson(Map<String, dynamic> json) {
@@ -1411,8 +1169,7 @@ class LocalizacaoDoEncontro {
 class PedidoDeParticipacao {
   const PedidoDeParticipacao({required this.estado, required this.pedidoEm});
 
-  /// Nulo para um estado que este build nao conhece. A tela trata como
-  /// `Pedido enviado`, sem acao: nunca como recusa.
+  /// Nulo para um estado que este build nao conhece.
   final EstadoDoPedido? estado;
 
   final DateTime? pedidoEm;
@@ -1438,8 +1195,6 @@ class MeuPedido {
     if (evento is! Map<String, dynamic>) {
       throw const FormatException('pedido sem `event`');
     }
-    // `requested_at` existe no contrato e a lista nao o mostra: a pilula diz
-    // o estado, e a data que importa e a do encontro.
     return MeuPedido(
       encontro: TeaserDoPrivado.doJson(evento),
       estado: EstadoDoPedido.porCodigo(json['state']),
@@ -1477,14 +1232,12 @@ class PaginaDaRede {
   final int limite;
   final int total;
 
-  /// A ordem em que a lista DE FATO saiu. O default de `sort` depende de
-  /// `when`, entao sem este campo a tela nao sabe qual ordem valeu.
+  /// A ordem em que a lista DE FATO saiu.
   final OrdemDaRede ordemEfetiva;
   final QuandoDaRede? quandoEfetivo;
   final Map<String, String> filtrosAplicados;
 
-  /// As cidades dos encontros PUBLICOS desta pagina. O teaser do privado nao
-  /// tem cidade, e nao entra.
+  /// As cidades dos encontros PUBLICOS desta pagina.
   Set<String> get cidades {
     final achadas = SplayTreeSet<String>();
     for (final item in itens) {
@@ -1507,18 +1260,6 @@ class PaginaDaRede {
     return PaginaDaRede(
       itens: <EncontroDaRede>[
         for (final bruto in itens)
-          // **SO EVENTO ABERTO** (cliente, 19/10/2026: *"vamos deixar apenas
-          // os eventos abertos por enquanto, no futuro analisamos a
-          // necessidade de ter eventos privados tambem"*).
-          //
-          // Duas metades, e esta e a segunda: a primeira e
-          // `queryDaAgenda`, que pede `visibility=public`. Esta nao depende
-          // do servidor obedecer -- um privado que chegasse apesar do
-          // parametro e DESCARTADO aqui, e nao desenhado.
-          //
-          // Descartar, e nao lancar: um privado na resposta nao pode
-          // derrubar a agenda inteira na faixa de falha. Mesmo tratamento e
-          // mesma razao de `PaginaPorPerto.doJson`, logo abaixo.
           if (bruto is Map<String, dynamic> && bruto['visibility'] == 'public')
             EncontroDaRede.doJson(bruto),
       ],
@@ -1576,8 +1317,6 @@ class PaginaPorPerto {
     return PaginaPorPerto(
       itens: <EncontroPorPerto>[
         for (final bruto in itens)
-          // O contrato diz que privado nao entra nesta lista. Se entrar, ele
-          // e descartado aqui, e nao desenhado com distancia (ADR-0027 12.14).
           if (bruto is Map<String, dynamic> && bruto['visibility'] == 'public')
             EncontroPorPerto.doJson(bruto),
       ],
@@ -1611,8 +1350,6 @@ class PaginaDeMeusPedidos {
     if (itens is! List) {
       throw const FormatException('resposta de meus pedidos sem `items`');
     }
-    // `effective_sort` so tem um valor (`proximos`) nesta operacao; ele e
-    // conferido para uma resposta fora do contrato cair no estado de falha.
     if (json['effective_sort'] != 'proximos') {
       throw const FormatException(
         'resposta de meus pedidos sem `effective_sort` reconhecivel',
@@ -1632,14 +1369,6 @@ class PaginaDeMeusPedidos {
 }
 
 /// `#/components/schemas/MyNetworkEventCoverStatus`: o estado da capa do dono.
-///
-/// **Ela nao existe na projecao publica, e e por isso que esta classe existe.**
-/// A capa sobe no mesmo `POST` de criar o encontro, e o processador pode
-/// RECUSA-LA depois do `201`. `NetworkEventPublic` nao tem `rejection_reason`,
-/// a pagina de detalhe do encontro foi apagada por decisao do cliente e o
-/// cartao da agenda e foto + titulo -- medido por outra frente em 19/10/2026,
-/// que relatou a ausencia em vez de inventar campo. `Meus eventos` e o lugar
-/// onde a recusa chega a quem enviou a imagem.
 enum EstadoDaCapa {
   processando('processing'),
   pronta('ready'),
@@ -1650,9 +1379,7 @@ enum EstadoDaCapa {
   final String codigo;
 
   /// Nulo para codigo desconhecido: nao ha estado seguro para onde cair, e a
-  /// tela nao afirma nada sobre uma situacao que ela nao entende. Versao antiga
-  /// do app continua no bolso de alguem quando o servidor ganhar um estado
-  /// novo, e um `switch` que nao o conhece nao pode derrubar a tela.
+  /// tela nao afirma nada sobre uma situacao que ela nao entende.
   static EstadoDaCapa? porCodigo(Object? codigo) {
     for (final e in EstadoDaCapa.values) {
       if (e.codigo == codigo) return e;
@@ -1661,7 +1388,8 @@ enum EstadoDaCapa {
   }
 }
 
-/// `#/components/schemas/MyNetworkEventCover`: a capa e o que aconteceu com ela.
+/// `#/components/schemas/MyNetworkEventCover`: a capa e o que aconteceu com
+/// ela.
 class CapaDoMeuEncontro {
   const CapaDoMeuEncontro({
     required this.estado,
@@ -1672,44 +1400,19 @@ class CapaDoMeuEncontro {
   /// Nulo quando o servidor manda um estado que esta versao do app nao conhece.
   final EstadoDaCapa? estado;
 
-  /// A derivada de 1024 x 576, a MESMA que a agenda serve. Nula fora de
-  /// `pronta`.
+  /// A derivada de 1024 x 576, a MESMA que a agenda serve.
   final String? url;
 
   /// O motivo da recusa, **em texto pronto do servidor**, quando recusada.
-  ///
-  /// A tela mostra ESTE texto e nunca uma frase propria: o servidor e quem sabe
-  /// se o problema foi o formato, a dimensao minima ou um arquivo truncado, e
-  /// uma frase generica deixa a pessoa sem saber o que consertar. Exemplos
-  /// medidos: *"A imagem precisa ter pelo menos 600 x 600 pixels."* e
-  /// *"Nao conseguimos ler essa imagem. Ela pode ter chegado incompleta."*
   final String? motivoDaRecusa;
 
   /// Verdadeiro so quando ha estado `recusada` **e** motivo para mostrar.
-  ///
-  /// As duas condicoes juntas de proposito: o contrato promete motivo em toda
-  /// recusa (o banco o cobra em `catalog_images_recusada_tem_motivo`), e se um
-  /// dia ele vier nulo a tela fica calada em vez de desenhar faixa vazia ou
-  /// inventar texto.
   bool get recusadaComMotivo =>
       estado == EstadoDaCapa.recusada &&
       motivoDaRecusa != null &&
       motivoDaRecusa!.trim().isNotEmpty;
 
   /// Verdadeiro enquanto o processador ainda nao terminou com a capa.
-  ///
-  /// **Existe porque "sem foto" e "foto a caminho" NAO sao o mesmo estado, e a
-  /// tela desenhava os dois iguais.** Em `processando` a `url` e nula, e
-  /// `ImagemDoEncontroOuBanner` cai no banner da marca -- o MESMO desenho de um
-  /// encontro que nunca teve capa. Quem acabou de enviar uma foto le aquele
-  /// banner como falha do envio, e o cliente relatou exactamente isso em
-  /// 26/10/2026: *"a foto do evento foi cadastrada, mas ela tem um delay, entao
-  /// parece ser um problema, mas foi resolvido sozinho"*. O envio funcionava; o
-  /// que faltava era a tela dizer isso.
-  ///
-  /// Irmao de [recusadaComMotivo] de proposito: os dois sao a pergunta "a minha
-  /// foto entrou?" (item 4 do cabecalho de `MeusEventos`), e ela tinha resposta
-  /// so no caso ruim.
   bool get emPreparo => estado == EstadoDaCapa.processando;
 
   static CapaDoMeuEncontro? doJson(Object? bruto) {
@@ -1726,11 +1429,6 @@ class CapaDoMeuEncontro {
 }
 
 /// `#/components/schemas/MyNetworkEvent`: um encontro na lista do DONO.
-///
-/// **Sete propriedades, e nenhuma outra** -- ver a justificativa de cada uma no
-/// esquema do contrato. Nao e um [EncontroPublico] menor: ela responde "qual
-/// dos meus encontros e este, da para cancelar, e a minha foto entrou?", e nao
-/// "como e este encontro?".
 class MeuEncontro {
   const MeuEncontro({
     required this.slug,
@@ -1741,7 +1439,7 @@ class MeuEncontro {
   });
 
   /// O endereco da ACAO: e o que vai em `cancelNetworkEvent` e em
-  /// `getMyNetworkEvent`. Nao e UUID interno (ADR-0010).
+  /// `getMyNetworkEvent`.
   final String slug;
 
   final String titulo;
@@ -1758,12 +1456,6 @@ class MeuEncontro {
   DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
 
   /// Se a tela oferece `Cancelar`.
-  ///
-  /// **A regra e a do servidor, copiada dela**: so encontro `published` que
-  /// ainda nao terminou se cancela (`event_not_published` e `event_ended` sao
-  /// os dois 400 que a operacao declara). Desenhar o botao fora disso seria
-  /// oferecer uma acao que o servidor recusa **depois** de a pessoa confirmar,
-  /// que e a pior ordem possivel para uma folha destrutiva.
   bool get podeCancelar =>
       situacao == SituacaoDoEncontro.aVir ||
       situacao == SituacaoDoEncontro.acontecendo;
@@ -1794,10 +1486,6 @@ class MeuEncontro {
 }
 
 /// `#/components/schemas/MyNetworkEventPage`.
-///
-/// **Sem `applied_filters` e sem `effective_sort`**: a operacao nao aceita
-/// recorte nenhum e a ordem e fixa no servidor, entao nao ha o que a resposta
-/// informasse de volta que nao fosse constante.
 class PaginaDeMeusEncontros {
   const PaginaDeMeusEncontros({
     required this.itens,
@@ -1829,26 +1517,16 @@ class PaginaDeMeusEncontros {
 }
 
 /// Um encontro meu **com a versao dele**, como `getMyNetworkEvent` a devolve.
-///
-/// A versao e o `ETag` da resposta, e nao um campo do corpo: ela nao e dado do
-/// encontro, e o lugar dela no HTTP e o cabecalho. [etag] vai **como veio**,
-/// sem aparar o `W/` nem o sufixo que a borda acrescenta (`"1-zstd"`): quem o
-/// le de volta e o servidor, que tolera as duas formas.
 class MeuEncontroComVersao {
   const MeuEncontroComVersao({required this.encontro, required this.etag});
 
   final MeuEncontro encontro;
 
-  /// Nulo quando a resposta nao trouxe o cabecalho. **Sem ele nao da para
-  /// cancelar**, e a tela diz isso em vez de mandar `If-Match` vazio e colher
-  /// um 428 que parece defeito do servidor.
+  /// Nulo quando a resposta nao trouxe o cabecalho.
   final String? etag;
 }
 
 /// O recorte pedido a agenda: o que cada aba manda.
-///
-/// Nulo quer dizer **"nao mandei o parametro"**. A ordem nula e o caso que
-/// faz `effective_sort` existir: o default de `sort` depende de `when`.
 class RecorteDaRede {
   const RecorteDaRede({
     this.termo,
@@ -1869,52 +1547,19 @@ class RecorteDaRede {
   final QuandoDaRede? quando;
 
   /// A SITUACAO pedida (`status` de `listNetworkEvents`), ou nula para todas.
-  ///
-  /// **Nula e o padrao, e ela mantem o cancelado na lista** -- o estado de
-  /// antes de 27/10/2026. Quem separa o cancelado sem esconde-lo e a ORDEM, no
-  /// servidor; este campo e para quem quer olhar so um grupo.
-  ///
-  /// **A folha de filtros oferece so `Cancelado`**, e nao as quatro: `A vir` e
-  /// `Encerrado` sao o que o grupo `Quando` ja diz com `Próximos` e
-  /// `Encerrados`, e dois controles que dao a mesma lista sao piores que um
-  /// (criterio 2 da BICHUS-62, o mesmo que tirou `Público ou privado`). O
-  /// contrato aceita as quatro porque ele serve outros consumidores.
   final SituacaoDoEncontro? situacao;
   final TipoDeEntrada? entrada;
   final String? cidade;
   final Porte? porte;
   final DistanciaMaxima? distanciaMaxima;
 
-  /// `proximos`, `recentes` ou `distancia`. O terceiro so vale em
-  /// `listNearbyNetworkEvents`.
+  /// `proximos`, `recentes` ou `distancia`.
   final String? ordem;
   final int pagina;
   final int limite;
 
   /// A mesma consulta em outra pagina, sem o termo de busca, ou com outra
   /// cidade.
-  ///
-  /// `semTermo` serve as distancias: elas dependem de quais encontros
-  /// publicos existem no recorte, e nao do que a pessoa digitou, entao nao
-  /// ha motivo para pergunta-las de novo a cada tecla.
-  ///
-  /// ## `cidade` e `semCidade`: a cidade DERIVADA entra aqui, e nao no recorte
-  ///
-  /// A cidade que o aparelho resolve (20/10/2026, *"utilizar a mesma
-  /// inteligencia do pets"*) **nao e gravada em [RecorteDaRede.cidade]**, e a
-  /// distincao tem duas consequencias medidas:
-  ///
-  /// 1. [quantidadeDeFiltros] nao a conta, e o distintivo da barra nao nasce
-  ///    com `1` numa agenda que ninguem recortou -- o mesmo defeito que
-  ///    `GrupoDeFiltro.codigoPadrao` fechou para `Próximos`;
-  /// 2. limpar a cidade na folha continua significando "limpar": se a derivada
-  ///    morasse no recorte, ela voltaria no proximo `copiar` e desfaria a acao
-  ///    de quem acabou de apagar o filtro.
-  ///
-  /// A tela compoe as duas (`cidade em uso`) e passa o resultado AQUI, no
-  /// caminho da chamada. **Nulo nao limpa** -- `null` e indistinguivel de "nao
-  /// passei" num parametro opcional, e foi por confundir esses dois que o botao
-  /// de localizacao dos pets ficou sem efeito. Para limpar, `semCidade: true`.
   RecorteDaRede copiar({
     int? pagina,
     bool semTermo = false,
@@ -1934,16 +1579,12 @@ class RecorteDaRede {
         limite: limite,
       );
 
-  /// O que decide as distancias guardadas: QUAIS encontros publicos entram
-  /// e DE ONDE se mede. A [regiao] e a regiao de referencia de quem chama;
-  /// quando ela muda, a assinatura muda e as medidas antigas sao apagadas.
+  /// O que decide as distancias guardadas: QUAIS encontros publicos entram e DE
+  /// ONDE se mede.
   String assinaturaDasDistancias({required String regiao}) => <Object?>[
         regiao,
         cidade,
         quando?.codigo,
-        // A situacao entra porque ela muda QUAIS encontros estao no recorte, e
-        // a medida guardada e por encontro: sem ela, filtrar por `Cancelado`
-        // reaproveitaria as distancias do recorte anterior.
         situacao?.codigo,
         entrada?.codigo,
         porte?.valor,
@@ -1954,14 +1595,7 @@ class RecorteDaRede {
     return t == null || t.isEmpty ? null : t;
   }
 
-  /// Quantos GRUPOS de filtro estao ativos. A busca nao conta.
-  ///
-  /// **`visibilidade` e `estadoDoPedido` sairam desta conta e desta classe**
-  /// em 19/10/2026, com os dois grupos de filtro que os alimentavam
-  /// (`Público ou privado` e `Situação do pedido`). O numero importa: ele e o
-  /// que diz "Nenhum evento com esses filtros" em vez de "A Rede ainda nao
-  /// tem eventos", e um campo sempre nulo na lista inflaria o `length` sem
-  /// nunca somar.
+  /// Quantos GRUPOS de filtro estao ativos.
   int get quantidadeDeFiltros => <Object?>[
         quando,
         situacao,
@@ -1978,16 +1612,6 @@ class RecorteDaRede {
       ordem == OrdemPorPerto.distancia.codigo || distanciaMaxima != null;
 
   /// `listNetworkEvents`, com o `when` da aba.
-  ///
-  /// **`visibility` e FIXO em `public`, e nao mais um filtro.** Decisao do
-  /// cliente de 19/10/2026: *"vamos deixar apenas os eventos abertos por
-  /// enquanto, no futuro analisamos a necessidade de ter eventos privados
-  /// tambem"*. Era `if (visibilidade != null) 'visibility': ...`, alimentado
-  /// pelo grupo `Público ou privado` da folha de filtros, que saiu.
-  ///
-  /// Fixo AQUI e nao na tela: a agenda tem duas abas e tres caminhos de
-  /// carga, e um deles esqueceria. E o par desta linha e o descarte em
-  /// `PaginaDaRede.doJson` -- pedir nao e garantir.
   Map<String, String> queryDaAgenda({required QuandoDaRede quandoDaAba}) =>
       <String, String>{
         'q': ?termoLimpo,
@@ -2003,15 +1627,7 @@ class RecorteDaRede {
         'limit': '$limite',
       };
 
-  /// `listNearbyNetworkEvents`. Nao aceita `visibility`: a lista e so de
-  /// publicos.
-  ///
-  /// **E NAO ACEITA `status`**: aquela operacao nao declara o parametro no
-  /// contrato (27/10/2026), e manda-lo seria um recorte que o servidor
-  /// descarta em silencio. Quem resolve isso e a TELA, e nao esta linha: com
-  /// uma situacao escolhida ela deixa de usar a rota por distancia e volta
-  /// para a agenda, que honra o recorte. Ver `_carregar` em
-  /// `telas/rede/agenda_da_rede.dart`.
+  /// `listNearbyNetworkEvents`.
   Map<String, String> queryPorPerto({required OrdemPorPerto ordemPorPerto}) =>
       <String, String>{
         'q': ?termoLimpo,
@@ -2025,8 +1641,4 @@ class RecorteDaRede {
         'limit': '$limite',
       };
 
-  // **`queryDePedidos` SAIU** (19/10/2026). Montava a consulta de
-  // `listMyNetworkEventJoinRequests` (`q`, `state`, `sort`), e a aba `Meus
-  // pedidos` era quem a usava. A operacao continua no contrato, aposentada
-  // com registro em `api/rastreabilidade-backoffice-rede.yaml`.
 }

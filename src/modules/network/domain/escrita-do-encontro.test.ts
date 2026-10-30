@@ -1,11 +1,4 @@
-/**
- * As regras da escrita administrativa da `Rede`, sem banco e sem servidor.
- *
- * Cada regra tem o caso que precisa reprovar: o detector de D59 com cada forma
- * de contato e de pagamento, a transicao aprovado -> recusado, o `slug` do
- * privado que nao pode carregar o que o administrador digitou, e a projecao da
- * fila que nao pode levar mais que os tres campos de D53.
- */
+/** As regras da escrita administrativa da `Rede`, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -232,7 +225,6 @@ void describe('miudezas', () => {
     assert.deepEqual(lerIfMatch(undefined), { tipo: 'ausente' });
     assert.deepEqual(lerIfMatch('"3"'), { tipo: 'numero', versao: 3 });
     assert.deepEqual(lerIfMatch('*'), { tipo: 'invalida' });
-    // A borda enfraquece ou sufixa o ETag (07/10): continua sendo a versao 3.
     assert.deepEqual(lerIfMatch('W/"3"'), { tipo: 'numero', versao: 3 });
   });
 
@@ -302,8 +294,6 @@ void describe('o endereco do encontro (01/10): D59 nao recusa endereco legitimo'
 });
 
 void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so nestes dois campos', () => {
-  // O esquema em constante: a URL do perfil e ENTRADA do analisador, e nao
-  // host de que o codigo dependa (o portao de portabilidade varre `src/`).
   const HTTPS = 'https:' + '//';
   const HTTP = 'http:' + '//';
   const link = (texto: string): string[] => errosDoLinkDeIngresso('ticket_url', texto).map((e) => e.code);
@@ -348,21 +338,9 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     assert.deepEqual(link(`${HTTPS}intranet./`), ['ticket_url_local_host']);
     assert.deepEqual(link(`${HTTPS}127.0.0.1./`), ['ticket_url_ip_literal']);
     assert.deepEqual(link(`${HTTPS}203.0.113.10./`), ['ticket_url_ip_literal']);
-    // Coerente: o mesmo host publico, com ou sem ponto final, tem o mesmo destino.
     assert.deepEqual(link(`${HTTPS}exemplo.com.br./ingresso`), []);
     assert.deepEqual(link(`${HTTPS}exemplo.com.br/ingresso`), []);
   });
-
-  // ---------------------------------------------------------------------
-  // 17/10/2026: o campo passou a exigir a URL COMPLETA do perfil
-  // ---------------------------------------------------------------------
-  //
-  // Padrao do cliente, por extenso: "todo campo de site/url, o usuario deve
-  // preencher completo o endereco completo, inclusive com o https".
-  //
-  // O que mudou e so a ENTRADA. `handleDoInstagram` continua lendo o apelido
-  // cru, porque ela tambem le o que esta GRAVADO -- a coluna guarda handle, e
-  // o painel a usa para reabrir o formulario.
 
   void it('a extracao continua lendo o que esta gravado, inclusive apelido cru', () => {
     for (const [entrada, esperado] of [
@@ -377,9 +355,6 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     ] as const) {
       assert.equal(handleDoInstagram(entrada), esperado, entrada);
     }
-    // A base vem da configuracao (`INSTAGRAM_PROFILE_BASE_URL`); aqui, um host
-    // de teste. **Ela continua em uso**: a URL publica segue sendo montada a
-    // partir do handle guardado, e a variavel nao virou configuracao morta.
     assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test'), 'https://perfil.exemplo.test/bichu.app/');
     assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test/'), 'https://perfil.exemplo.test/bichu.app/');
     assert.equal(urlDoInstagram(null, 'https://perfil.exemplo.test'), null);
@@ -397,18 +372,10 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     }
   });
 
-  // ISCA -- em `errosDoInstagram`, volte a chamar so `handleDoInstagram` e a
-  // devolver `instagram_handle_invalid`. Os quatro apelidos abaixo voltam a
-  // ser aceitos e o caso reprova.
   void it('ISCA: apelido cru e recusado, e a frase mostra a forma certa', () => {
     for (const apelido of ['@bichu.app', 'bichu.app', 'instagram.com/bichu.app', 'www.instagram.com/bichu_app/']) {
       const erros = errosDoInstagram('instagram_url', apelido);
       assert.deepEqual(erros.map((e) => e.code), ['instagram_url_not_https'], apelido);
-      // A frase ENSINA o que falta, em vez de so recusar: ela diz "endereco
-      // completo, comecando com https://". **O EXEMPLO com o host fica no
-      // PAINEL**, montado de `VITE_URL_DO_PERFIL_DO_INSTAGRAM` -- host de
-      // terceiro literal em `src/` reprova o portao de portabilidade, e e o
-      // mesmo motivo pelo qual a mensagem do link do convite nao tem exemplo.
       assert.ok((erros[0]?.message ?? '').includes('https://'), apelido);
     }
   });
@@ -420,8 +387,6 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     assert.deepEqual(codigo(`${HTTP}instagram.com/bichu.app`), ['instagram_url_not_https']);
     assert.ok(frase(`${HTTP}instagram.com/bichu.app`).includes('http://'));
 
-    // Esquema que nao e web, dominio de outro site, credencial, IP e host
-    // local: tudo o que ja era recusado continua recusado.
     assert.deepEqual(codigo('javascript:alert(1)'), ['instagram_url_not_https']);
     assert.deepEqual(codigo(`${HTTPS}www.facebook.com/bichu`), ['instagram_url_not_instagram']);
     assert.deepEqual(codigo(`${HTTPS}u:s@instagram.com/bichu`), ['instagram_url_has_credentials']);
@@ -430,8 +395,6 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     assert.deepEqual(codigo(`${HTTPS}instagram.com/${'a'.repeat(31)}`), ['instagram_url_invalid']);
     assert.deepEqual(codigo(''), ['instagram_url_length']);
 
-    // E nenhuma recusa que nao seja de esquema fala de `https://`: foi essa
-    // confusao que custou o tempo do cliente em 17/10.
     for (const ruim of [`${HTTPS}www.facebook.com/bichu`, `${HTTPS}u:s@instagram.com/bichu`, `${HTTPS}203.0.113.5/bichu`]) {
       assert.ok(!frase(ruim).includes('https://'), ruim);
     }

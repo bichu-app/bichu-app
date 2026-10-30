@@ -1,13 +1,6 @@
 /**
  * **ISCA (a): o pedido exige ACEITE.** Sem aceite, o predicado que todo dado de
- * conectado atravessa é falso; depois do aceite é verdadeiro. E a recusa é
- * silenciosa, medida pela única forma que vale: **quem pediu não consegue
- * distinguir** a recusa de um pedido não respondido.
- *
- * **ISCA (f) em parte**: a projeção não tem como carregar identificador interno,
- * porque a forma projetada não tem campo para ele — e o teste varre o JSON por
- * forma de UUID em vez de conferir nome de campo, para que um campo NOVO que
- * carregasse UUID também reprove.
+ * conectado atravessa é falso; depois do aceite é verdadeiro.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -47,9 +40,6 @@ function aresta(
         : opcoes.descansoAte === null
           ? null
           : (opcoes.descansoAte as Instant),
-    // `canalVerificado: false` por padrao nesta bancada, e a escolha e a mesma
-    // do dublê em memoria: conta que o caso nunca mencionou NAO e conta
-    // validada. Os casos do selo passam `true` por cima.
     outraPessoa: {
       apelido: 'maria-silva',
       nomeDeExibicao: 'Maria',
@@ -166,10 +156,6 @@ void describe('o apelido é a chave de leitura, e nada quebra com ele nulo', () 
     assert.deepEqual(projetada?.person, {
       handle: null,
       display_name: null,
-      // **O selo sai `false` e nao ausente**, mesmo com os dois nomes nulos:
-      // `contact_channel_verified` e OBRIGATORIO no contrato, e chave ausente
-      // faria o app ler `undefined` e desenhar o selo de um lado e nao do
-      // outro conforme a conta tivesse nome.
       contact_channel_verified: false,
     });
   });
@@ -193,8 +179,6 @@ void describe('ISCA (f): nenhum identificador interno na projeção', () => {
   });
 
   void it('ISCA: a varredura REPROVA um corpo que carregue UUID num campo novo', () => {
-    // Sem esta isca, a conferência de cima passaria por não haver UUID nenhum em
-    // parte alguma — e não por ela saber reconhecer um.
     const comVazamento = {
       ...projetarConexao(aresta('accepted', true), AGORA, ISO),
       person_id: '018f3a2b-0000-7000-8000-0000000000aa',
@@ -208,9 +192,6 @@ void describe('ISCA (f): nenhum identificador interno na projeção', () => {
   });
 
   void it('a forma projetada tem exatamente quatro chaves, e nenhuma é de pessoa', () => {
-    // "Nenhuma de pessoa" continua literal depois da emenda de 21/10/2026: o
-    // que entrou em `person` e um BOOLEANO sobre a conta, e nao uma coluna que
-    // identifique ou localize alguem.
     const projetada = projetarConexao(aresta('accepted', true), AGORA, ISO);
     assert.deepEqual(Object.keys(projetada ?? {}).sort(), [
       'person',
@@ -218,10 +199,6 @@ void describe('ISCA (f): nenhum identificador interno na projeção', () => {
       'requested_at',
       'state',
     ]);
-    // TRES chaves em `person` desde a emenda do ADR-0010 de 21/10/2026, e a
-    // lista e FECHADA: `contact_channel_verified` entrou por decisao do
-    // cliente, e nada mais entra por analogia. **Nem a data de confirmacao, nem
-    // qual dos dois canais** -- so o booleano.
     assert.deepEqual(Object.keys(projetada?.person ?? {}).sort(), [
       'contact_channel_verified',
       'display_name',

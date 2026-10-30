@@ -1,54 +1,4 @@
-/**
- * As DUAS LISTAS DE EXCECAO nao divergiram do banco.
- *
- * ===========================================================================
- * POR QUE ESTA ISCA EXISTE
- * ===========================================================================
- *
- * Quem APLICA o agrupamento e a regra do contador e o Postgres: as funcoes
- * `notificacao_nunca_agrupa(text)` e `notificacao_persiste_no_contador(text)`
- * da migracao `20261018000020`. O dominio carrega as MESMAS duas listas, e a
- * duplicacao e deliberada -- o dominio precisa delas para o app saber desenhar,
- * e para esta isca poder existir.
- *
- * Duas listas da mesma coisa divergem. Foi assim que `forbidden` saiu com 401
- * em dois caminhos neste repositorio, e e por isso que `ProblemType` passou a
- * ser gerado do contrato. Aqui nao ha gerador: a migracao e SQL, e TypeScript
- * nao a le em tempo de compilacao. Entao a conferencia e esta -- o teste LE a
- * migracao e compara.
- *
- * O que cada caso pega:
- *
- * 1. um tipo acrescentado a uma lista do dominio e nao a funcao SQL (ou o
- *    contrario) -- o agrupamento da tela discordaria do agrupamento do banco;
- * 2. `TIPOS_DE_AVISO` divergir do `CHECK` de `notification_items.item_kind` --
- *    um tipo que o dominio conhece e o banco recusa estoura na insercao do
- *    gatilho, e um que o banco aceita e o dominio nao conhece chega a borda
- *    como valor fora do `enum` do contrato;
- * 3. o TETO DE COMUNICADOS do dominio divergir do aplicado na funcao -- a
- *    previa diria "resta 1" sobre um teto que o banco ja fechou.
- *
- * ===========================================================================
- * POR QUE ESTE ARQUIVO MORA EM `adapters/persistence/` E NAO EM `domain/`
- * ===========================================================================
- *
- * Ele LE a migracao do disco, e `domain/` e `application/` nao conhecem
- * framework, banco, HTTP nem nuvem -- `src/architecture.rules.mjs` reprova
- * `node:fs` nas duas camadas, e com razao. A conferencia e justamente entre uma
- * constante do dominio e uma definicao de PERSISTENCIA, entao o lugar dela e do
- * lado da persistencia.
- *
- * ===========================================================================
- * POR QUE A LEITURA E POR EXPRESSAO REGULAR, E O QUE ISSO NAO PROVA
- * ===========================================================================
- *
- * O teste nao executa SQL: ele le o TEXTO da migracao. Isso prova que as listas
- * escritas coincidem, e **nao** prova que a funcao faz o que o nome dela diz --
- * isso foi medido em `BEGIN`/`ROLLBACK` contra um Postgres 16 com todas as
- * migracoes aplicadas. Uma reescrita da funcao que mantivesse a lista e mudasse
- * o corpo passaria por aqui, e e por isso que a medicao no banco nao e
- * dispensavel.
- */
+/** As DUAS LISTAS DE EXCECAO nao divergiram do banco. */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -70,13 +20,7 @@ function migracao(): string {
   return readFileSync(CAMINHO_DA_MIGRACAO, 'utf8');
 }
 
-/**
- * Os valores de `IN (...)` do corpo de uma funcao `notificacao_*`.
- *
- * Ancora no `CREATE FUNCTION` do nome pedido e para no `$$` de fechamento: sem
- * a ancora, a varredura acharia o `IN (...)` do `CHECK` da tabela e as duas
- * conferencias mediriam a mesma coisa.
- */
+/** Os valores de `IN (...)` do corpo de uma funcao `notificacao_*`. */
 function valoresDaFuncao(sql: string, nome: string): string[] {
   const inicio = sql.indexOf(`CREATE FUNCTION ${nome}(`);
   assert.notEqual(
@@ -94,24 +38,6 @@ function valoresDaFuncao(sql: string, nome: string): string[] {
 /**
  * Os valores do `CHECK` de `notification_items.item_kind`, **da migracao mais
  * recente que o define**.
- *
- * Ler so a `20261018000020` deixaria esta isca cega para o caminho mais
- * provavel de divergencia: um tipo NOVO entra por `DROP CONSTRAINT` /
- * `ADD CONSTRAINT` numa migracao posterior (foi assim que `connection_requested`
- * entrou, pela `20261020000018`), e a lista da migracao original nao muda.
- * A isca passaria comparando o dominio novo com o `CHECK` velho e reprovando --
- * ou, pior, aprovando um dominio que esqueceu o tipo.
- *
- * A SUBIDA, e nao a descida: a descida tambem escreve
- * `ADD CONSTRAINT notification_items_tipo_conhecido`, com a lista ANTIGA. Por
- * isso o corte em `-- Down Migration` acontece antes da varredura.
- *
- * E a ancora e o `CHECK` e nao o NOME da restricao, porque o nome aparece em
- * tres formas que nao carregam lista -- `DROP CONSTRAINT`, `ADD CONSTRAINT` na
- * linha anterior ao `CHECK`, e `COMMENT ON CONSTRAINT`. Ancorar no nome
- * encontrava o comentario, nao achava valor nenhum ali e caia para a migracao
- * antiga **em silencio**: medido, e e exatamente a cegueira que esta isca
- * existe para nao ter.
  */
 function tiposDoCheck(): string[] {
   const dir = resolve(process.cwd(), 'migrations');
@@ -167,9 +93,6 @@ void describe('as excecoes da caixa nao divergiram do banco', () => {
   });
 
   void it('1c. as duas listas sao SEPARADAS, mesmo coincidindo hoje', () => {
-    // Nao assertamos que sao diferentes: hoje sao iguais. O que este caso
-    // registra e que elas sao DUAS, com duas razoes, para quem mudar uma saber
-    // que nao mudou a outra.
     assert.deepEqual(
       [...TIPOS_QUE_NUNCA_AGRUPAM].sort(),
       [...TIPOS_QUE_PERSISTEM_NO_CONTADOR].sort(),

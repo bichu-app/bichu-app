@@ -1,15 +1,4 @@
-/**
- * Os campos do painel que tem forma propria: valor em reais e e-mail.
- *
- * **Um componente por tipo, reusado em todo lugar.** A alternativa -- repetir
- * `modoDeEntrada`, mascara, prefixo e conferencia em cada tela -- e exatamente
- * como este projeto ganhou tres numeros para o mesmo teto de imagem e dois
- * rotulos para a mesma unidade de preco. Aqui existe um lugar.
- *
- * Eles sao finos de proposito: desenham por cima de `CampoDeTexto`
- * (`basicos.tsx`), que continua sendo quem faz rotulo, ajuda, erro,
- * `aria-describedby` e contador.
- */
+/** Os campos do painel que tem forma propria: valor em reais e e-mail. */
 import type { Ref } from 'react';
 
 import { CampoDeTexto } from './basicos.tsx';
@@ -31,28 +20,7 @@ import {
   telefoneEmE164,
 } from '../formato/telefone.ts';
 
-/**
- * Campo de valor monetario em reais.
- *
- * ## O que ele NAO faz, e e o ponto todo
- *
- * **Ele nao muda o que vai para a API.** O valor que ele guarda continua sendo
- * a string do formulario, e quem a transforma em `amount` continua sendo
- * `precoEmCentavos` (Loja) e `centavosDoTexto` (Rede), que devolvem **centavos
- * inteiros**. A mascara mexe no que a pessoa ve: ela normaliza para a
- * gramatica brasileira (`1.234,56`) que os dois leitores ja aceitam, e por
- * isso nenhum valor que entrava antes deixa de entrar.
- *
- * Preco errado em produto e o pior tipo de defeito, porque parece certo. Um
- * campo que "ajuda" convertendo para centavos aqui dentro seria a forma mais
- * curta de corromper preco em silencio.
- *
- * ## O `R$`
- *
- * Fica no rotulo e na linha viva abaixo do campo ("Fica R$ 1.234,56."), e
- * **nunca dentro do valor**: `centavosDoTexto` recusa `R$ 15` de proposito, e
- * um `R$` no valor deixaria o campo do encontro invalido a cada tecla.
- */
+/** Campo de valor monetario em reais. */
 export function CampoDeValorEmReais({
   id,
   rotulo,
@@ -80,13 +48,8 @@ export function CampoDeValorEmReais({
       rotulo={rotulo}
       valor={valor}
       aoMudar={(v) => aoMudar(mascaraDeReais(v))}
-      // Teclado numerico com virgula no celular e no tablet; `decimal`, e nao
-      // `numeric`, porque `numeric` nao oferece o separador decimal.
       modoDeEntrada="decimal"
-      // Zero transformacao de texto num campo de numero.
       semCorrecao
-      // A virgula sozinha no fim e estado de quem esta digitando, e nao
-      // entra na previa: "Fica R$ 12,." nao e uma frase.
       comoFica={valor.trim() === '' ? '' : `Fica R$ ${valor.replace(/,$/, '')}.`}
       {...(erro !== undefined ? { erro } : {})}
       {...(ajuda !== undefined ? { ajuda } : {})}
@@ -98,18 +61,8 @@ export function CampoDeValorEmReais({
 }
 
 /**
- * Campo de e-mail: teclado de e-mail, nenhuma transformacao de texto e
- * conferencia ao sair do campo.
- *
- * **Nao tem mascara**, e isso e decisao: a parte local do RFC 5321 aceita
- * ponto, `+`, `_` e `-`, entao qualquer mascara ou recusa endereco valido ou
- * nao recusa nada. O que [formato/email.ts] documenta e o que vale.
- *
- * O erro de forma e **local** e vive em [erroDeForma]: ele aparece ao sair do
- * campo e sai sozinho quando o endereco volta a ser plausivel. O erro de
- * credencial ou de servidor vem em [erro] e **ganha a frente**, porque ele
- * sabe mais: "Confira o e-mail" por cima de "E-mail ou senha incorretos"
- * esconderia a unica informacao nova da tela.
+ * Campo de e-mail: teclado de e-mail, nenhuma transformacao de texto e conferencia
+ * ao sair do campo.
  */
 export function CampoDeEmail({
   id,
@@ -145,18 +98,12 @@ export function CampoDeEmail({
       rotulo={rotulo}
       valor={valor}
       aoMudar={(v) => {
-        // O erro de forma sai assim que o endereco fica plausivel de novo, sem
-        // esperar outro blur: erro que sobrevive a correcao e o defeito que a
-        // secao 13 de UX proibe. Ele nao NASCE enquanto se digita, so morre.
         if (erroDeForma && !erraAoSairDoCampo(v)) aoMudarErroDeForma(false);
         aoMudar(v);
       }}
       aoSair={() => aoMudarErroDeForma(erraAoSairDoCampo(valor))}
       tipo="email"
       modoDeEntrada="email"
-      // Sem correcao automatica, sem maiuscula automatica e sem corretor: no
-      // celular a maiuscula automatica e a causa numero um de `Leandro@...`
-      // num campo de e-mail.
       semCorrecao
       {...(mostrado !== undefined ? { erro: mostrado } : {})}
       {...(ajuda !== undefined ? { ajuda } : {})}
@@ -168,33 +115,7 @@ export function CampoDeEmail({
   );
 }
 
-/**
- * Campo de CEP brasileiro: mascara ao digitar, oito digitos no envio.
- *
- * ## O que ele NAO faz, e e o mesmo ponto dos outros tres
- *
- * **Ele nao muda o que vai para a API.** O valor que ele guarda continua sendo
- * a string do formulario, e quem a transforma em `postal_code` continua sendo
- * [cepEmOitoDigitos], que devolve `null` quando o que foi digitado nao e um
- * CEP. A mascara mexe no que a pessoa ve.
- *
- * **Ele tambem nao busca endereco.** Quem decide QUANDO buscar e o formulario,
- * por [aoCompletar]: o campo so avisa que chegou a oito digitos. A busca mora
- * no formulario porque e ele que sabe quais campos estao vazios -- e preencher
- * so campo vazio e a regra que impede a busca de apagar o que o operador
- * digitou.
- *
- * ## `aoCompletar` dispara no oitavo digito, e nao ao sair do campo
- *
- * Ao sair seria mais barato em chamadas e pior de usar: quem digita o CEP e
- * segue para o numero veria os campos se preencherem DEPOIS de ja ter passado
- * por eles. No oitavo digito o endereco aparece enquanto a pessoa ainda olha
- * para o CEP, que e quando ela consegue conferir se e o certo.
- *
- * O erro de forma e **local** e vive em [erroDeForma]: aparece ao sair do campo
- * e sai sozinho quando o CEP volta a ser plausivel. O erro do servidor vem em
- * [erro] e ganha a frente, porque ele sabe mais.
- */
+/** Campo de CEP brasileiro: mascara ao digitar, oito digitos no envio. */
 export function CampoDeCep({
   id,
   rotulo,
@@ -226,22 +147,15 @@ export function CampoDeCep({
       rotulo={rotulo}
       valor={valor}
       aoMudar={(v) => {
-        // O erro de forma sai assim que o CEP fica plausivel de novo, sem
-        // esperar outro blur: erro que sobrevive a correcao e o defeito que a
-        // secao 13 de UX proibe. Ele nao NASCE enquanto se digita, so morre.
         if (erroDeForma && !erraAoSairDoCep(v)) aoMudarErroDeForma(false);
         const mascarado = mascaraDeCep(v);
         aoMudar(mascarado);
         const oitoDigitos = cepEmOitoDigitos(mascarado);
-        // Só quando MUDOU para completo: sem esta comparação, apagar e
-        // redigitar o último dígito dispararia a busca duas vezes.
         if (oitoDigitos !== null && oitoDigitos !== cepEmOitoDigitos(valor)) {
           aoCompletar?.(oitoDigitos);
         }
       }}
       aoSair={() => aoMudarErroDeForma(erraAoSairDoCep(valor))}
-      // `numeric` e nao `tel`: o CEP nao tem `+` nem `*`, e o teclado numerico
-      // puro e o que erra menos.
       modoDeEntrada="numeric"
       semCorrecao
       maximo={LIMITE_DO_CEP}
@@ -253,28 +167,7 @@ export function CampoDeCep({
   );
 }
 
-/**
- * Campo de telefone brasileiro: mascara ao digitar, E.164 no envio.
- *
- * ## O que ele NAO faz, e e o mesmo ponto do campo de valor
- *
- * **Ele nao muda o que vai para a API.** O valor que ele guarda continua sendo
- * a string do formulario, e quem a transforma em `phone_e164` continua sendo
- * [telefoneEmE164], que devolve `null` quando o que foi digitado nao e um
- * telefone. A mascara mexe no que a pessoa ve.
- *
- * ## A linha viva mostra o E.164, de proposito
- *
- * "Fica +5511306122 00." parece detalhe tecnico, e e justamente por isso que
- * ela esta la: o telefone do diretorio **aparece no aplicativo**, e quem
- * cadastra precisa ver o numero exato que vai ser discado antes de salvar. Um
- * campo que escondesse a forma final faria o erro de DDD aparecer para o
- * usuario, e nao para o operador.
- *
- * O erro de forma e **local** e vive em [erroDeForma]: aparece ao sair do campo
- * e sai sozinho quando o numero volta a ser plausivel. O erro do servidor vem
- * em [erro] e ganha a frente, porque ele sabe mais.
- */
+/** Campo de telefone brasileiro: mascara ao digitar, E.164 no envio. */
 export function CampoDeTelefone({
   id,
   rotulo,
@@ -304,16 +197,11 @@ export function CampoDeTelefone({
       rotulo={rotulo}
       valor={valor}
       aoMudar={(v) => {
-        // O erro de forma sai assim que o numero fica plausivel de novo, sem
-        // esperar outro blur: erro que sobrevive a correcao e o defeito que a
-        // secao 13 de UX proibe. Ele nao NASCE enquanto se digita, so morre.
         if (erroDeForma && !erraAoSairDoTelefone(v)) aoMudarErroDeForma(false);
         aoMudar(mascaraDeTelefone(v));
       }}
       aoSair={() => aoMudarErroDeForma(erraAoSairDoTelefone(valor))}
       tipo="tel"
-      // `tel` e nao `numeric`: no celular ele oferece o teclado de discagem,
-      // com o `+` que o numero de fora do Brasil precisa.
       modoDeEntrada="tel"
       semCorrecao
       maximo={LIMITE_DO_TELEFONE}

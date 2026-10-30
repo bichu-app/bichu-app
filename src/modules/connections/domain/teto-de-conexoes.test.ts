@@ -1,10 +1,4 @@
-/**
- * **ISCA (c): o teto de 150 recusa o 151º, e o CONTRAPESO é o 150º passar.**
- *
- * As duas metades juntas, porque um teto só testado pelo lado que recusa pode
- * estar recusando tudo — e um teto só testado pelo lado que passa pode não
- * existir. Os outros dois tetos (20 pendentes, 10 por dia) ganham o mesmo par.
- */
+/** **ISCA (c): o teto de 150 recusa o 151º, e o CONTRAPESO é o 150º passar.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -51,9 +45,6 @@ void describe('o teto de 150 conexões', () => {
   });
 
   void it('o teto do PRÓPRIO lado é anunciado primeiro quando os dois estão cheios', () => {
-    // "Você já tem 150 conexões" é acionável; "a outra pessoa está cheia" não é.
-    // E anunciar o teto do outro primeiro contaria sobre a outra conta algo que
-    // não precisava ser contado.
     assert.equal(
       recusaDoPedido(contagens({ conexoes: 150 }), { conexoes: 150 }),
       'connection_limit_reached',

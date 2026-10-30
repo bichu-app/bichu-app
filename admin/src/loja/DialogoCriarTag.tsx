@@ -9,16 +9,25 @@ import { MAXIMO_DE_TAGS_ATIVAS, PADRAO_DO_ROTULO_DE_TAG, PADRAO_INVISIVEL } from
 
 type Tag = Esquemas['AdminStoreTag'];
 
-/** O texto do alfabeto, num ponto so: a ajuda do campo e a mensagem de recusa dizem a mesma coisa. */
+/**
+ * O texto do alfabeto, num ponto so: a ajuda do campo e a mensagem de recusa dizem
+ * a mesma coisa.
+ */
 export const ALFABETO_DA_TAG = 'letras, números, espaço e os sinais & - ’ +';
 const RECUSA_DO_ALFABETO = `Use só ${ALFABETO_DA_TAG}.`;
 const RECUSA_DO_TAMANHO = 'Use de 2 a 24 caracteres.';
 /** Nao chamar de "caractere especial": `&` e apostrofo agora passam, invisivel nao. */
 const RECUSA_DO_INVISIVEL = 'Este nome tem caractere invisível. Apague o campo e digite o nome de novo.';
-/** O `slug` derivado precisa de três caracteres; `N&D` dá `n-d` e cabe, `N` e `Pé` não. */
+/**
+ * O `slug` derivado precisa de três caracteres; `N&D` dá `n-d` e cabe, `N` e `Pé`
+ * não.
+ */
 const RECUSA_DO_ENDERECO = 'Este nome não forma um endereço válido. Use pelo menos três letras, números ou hífens.';
 
-/** Mensagens da tag (secao 25.5.1, ATENCAO): o servidor decide, a tela so traduz o codigo. */
+/**
+ * Mensagens da tag (secao 25.5.1, ATENCAO): o servidor decide, a tela so traduz o
+ * codigo.
+ */
 export function mensagemDeErroDaTag(tipo: string | undefined, codigos: string[]): string {
   if (tipo === 'slug-taken') return 'Já existe uma tag com esse nome.';
   if (codigos.includes('tag_vocabulary_full')) return `Já há ${MAXIMO_DE_TAGS_ATIVAS} tags ativas, o limite.`;
@@ -37,10 +46,7 @@ export function conferirRotulo(rotulo: string): string | undefined {
   return undefined;
 }
 
-/**
- * "Criar tag" (`createAdminStoreTag`). Tag e vocabulario curado: nasce aqui, e
- * o produto so a referencia pelo `slug` (ADR-0027 item 17).
- */
+/** "Criar tag" (`createAdminStoreTag`). */
 export function DialogoCriarTag({ aoFechar, aoCriar }: { aoFechar: () => void; aoCriar: (tag: Tag) => void }) {
   const { api } = useSessao();
   const [rotulo, setRotulo] = useState('');

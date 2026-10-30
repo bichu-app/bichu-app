@@ -1,76 +1,6 @@
 /**
  * A transferencia de pet: as quatro camadas do contrato, e a decisao que nem a
  * BICHUS-66 nem a BICHUS-21 tinham previsto.
- *
- * ## O desenho, em uma frase
- *
- * Transferir e a operacao mais destrutiva do produto porque consumar revoga
- * **todas** as tags do pet (ADR-0004): a plaquinha que esta na coleira deixa de
- * resolver, para sempre, e nao ha como reativa-la. Tudo aqui e escrito contra
- * esse fato.
- *
- * As quatro camadas sao do contrato e nao deste arquivo:
- *
- *   1. reautenticacao com senha (`X-Reauth-Token`) -- **nao e implementada
- *      aqui**; ver o bloco "O QUE ESTE ARQUIVO NAO FAZ", abaixo;
- *   2. vinculo com o destinatario: so a conta cujo e-mail **verificado** e o
- *      destinatario consegue aceitar;
- *   3. token de 256 bits, guardado como SHA-256, entregue so por e-mail;
- *   4. janela de 24 h: aceitar NAO consuma.
- *
- * ## A pergunta que a issue nao respondeu: e se o pet for marcado como perdido
- * no meio da janela?
- *
- * O contrato ja decidiu metade dela: `startPetTransfer` responde 409 para pet
- * com caso aberto. Ou seja, **caso aberto e transferencia sao mutuamente
- * exclusivos**, e o contrato escolheu o caso quando os dois disputam o inicio.
- *
- * A outra metade -- o caso chegando DEPOIS, com a janela ja correndo -- nao
- * estava escrita, e a escolha aqui e a conservadora pela assimetria do custo:
- *
- *   consumar com caso aberto  revoga a plaquinha no minuto em que um estranho
- *                             pode estar com o animal no colo lendo o QR. E
- *                             irreversivel, e o achador chega a um beco sem
- *                             saida no unico momento em que o produto existe
- *                             para funcionar.
- *   cancelar a transferencia  custa ao tutor refazer o convite depois. Dois
- *                             toques, e so depois de o pet voltar.
- *
- * Entao **abrir um caso de perdido cancela a transferencia viva daquele pet**,
- * com `lost_case_opened`, e os dois lados sao avisados. Nada e revogado.
- *
- * E ha DUAS barreiras, nao uma, e a duplicacao e deliberada:
- *
- *   - `cancelarPorCasoAberto`, chamada quando o caso abre, para que a tela diga
- *     a verdade na hora em vez de o prazo continuar correndo em silencio;
- *   - a reconferencia dentro de `consumar`, na mesma transacao, que e a que
- *     **garante**. O caso pode abrir na corrida entre a checagem e a escrita, e
- *     numa operacao irreversivel a barreira que vale e a que o banco segura.
- *
- * Nao inventei um estado `paused`: `cancelled` ja esta no enum do contrato, e um
- * estado a mais seria contrato inventado. A pergunta fechada sobre retomar
- * automaticamente ao encerrar o caso esta na pauta de refinamento.
- *
- * ## O QUE ESTE ARQUIVO NAO FAZ, e por que
- *
- * **Nao verifica `X-Reauth-Token`.** Transferir e uma das acoes sensiveis --
- * `api/openapi.yaml` ja declara `x-reauth-scope: pet_transfer` e
- * `security: [bearerAuth, reauth]` na operacao, e `pet_transfer` ja esta no
- * enum de `POST /v1/auth/reauth`. O mecanismo que emite e valida aquele token e
- * de outra historia, em construcao agora; escrever aqui uma segunda verificacao
- * produziria duas definicoes da mesma regra, e a que diverge primeiro e sempre a
- * que ninguem esta olhando. A rota **declara** o escopo
- * (`reauthScope: 'pet_transfer'`), que e a marca que o portao confere contra o
- * contrato; a aplicacao dele entra com o mecanismo.
- *
- * **Nao enfileira o convite.** O e-mail sai sincronamente, pela mesma razao que
- * `ports/mailer.ts` escreve por extenso: o payload de `jobs` e GRAVADO, e o que
- * precisa chegar ao e-mail e o token **em claro**. Enfileirar o deixaria numa
- * linha de banco que sobrevive ao envio.
- *
- * **Nao monta link guardado.** `baseDaWeb` e lida no instante do envio. Link
- * gravado carrega o dominio do dia em que foi escrito, e e a forma mais provavel
- * de `localhost` vazar para producao.
  */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken } from '../../../shared/crypto/digest.js';
@@ -100,21 +30,13 @@ export interface ContextoDoChamador {
   readonly ip: string | undefined;
 }
 
-/**
- * O canal de contato **verificado** do chamador, para a camada 2.
- *
- * E uma porta e nao uma consulta direta a `users` porque a pergunta que importa
- * nao e "qual e o e-mail desta conta" e sim "qual e o e-mail que esta conta
- * PROVOU ser dela". Um `users.email` lido cru aceitaria um endereco por
- * verificar, e a camada inteira cairia: bastaria cadastrar uma conta com o
- * endereco do destinatario para aceitar a transferencia dele.
- */
+/** O canal de contato **verificado** do chamador, para a camada 2. */
 export interface EmailVerificadoDoChamador {
   /** `undefined` quando a conta nao tem e-mail verificado. */
   emailVerificadoDe(conta: UserId): Promise<string | undefined>;
 }
 
-/** Como o pet se chama, para o texto dos e-mails. Nunca guardado na linha. */
+/** Como o pet se chama, para o texto dos e-mails. */
 export interface NomeDoPet {
   nomeDe(pet: PetId): Promise<string | undefined>;
 }
@@ -127,21 +49,12 @@ export interface DependenciasDeTransferencia {
   readonly mailer: Mailer;
   readonly contas: EmailVerificadoDoChamador;
   readonly pets: NomeDoPet;
-  /** So para AGENDAR a consumacao. Nenhum token entra no payload. */
+  /** So para AGENDAR a consumacao. */
   readonly fila: JobQueue;
   readonly baseDaWeb: string;
 }
 
-/**
- * Normaliza o endereco **antes** de qualquer conferencia ou comparacao.
- *
- * A ordem nao e detalhe: `ports/mailer.ts` documenta os 82 pontos de codigo que
- * passam numa conferencia e viram caractere proibido depois de normalizados.
- * Aqui a normalizacao e a mesma do cadastro (`trim` + `toLowerCase`), e ela roda
- * primeiro -- inclusive porque a comparacao da camada 2 e entre dois enderecos
- * que precisam ter passado pelo mesmo tratamento, senao `Marina@…` deixa de ser
- * a mesma pessoa que `marina@…`.
- */
+/** Normaliza o endereco **antes** de qualquer conferencia ou comparacao. */
 function normalizarEmail(valor: string): string {
   return valor.trim().toLowerCase();
 }
@@ -157,10 +70,6 @@ export class PetTransferService {
   ): Promise<TransferenciaGravada> {
     const destinatario = normalizarEmail(emailDoDestinatario);
 
-    // Transferir para si mesmo nao e erro de digitacao inofensivo: consumado,
-    // ele revogaria todas as tags do pet e devolveria o animal para o mesmo
-    // dono sem plaquinha nenhuma. E o unico caminho em que a operacao destroi
-    // sem transferir coisa alguma.
     const meu = await this.deps.contas.emailVerificadoDe(chamador.userId);
     if (meu !== undefined && normalizarEmail(meu) === destinatario) {
       throw problemas.validacao([
@@ -194,10 +103,6 @@ export class PetTransferService {
     const nome = (await this.deps.pets.nomeDe(pet)) ?? 'seu pet';
     const base = this.deps.baseDaWeb.replace(/\/$/, '');
 
-    // A RESPOSTA E A MESMA EXISTA OU NAO A CONTA. O contrato e explicito, e o
-    // motivo e que a diferenca transformaria esta rota em oraculo de cadastro:
-    // qualquer tutor descobriria, um endereco por vez, quem tem conta no Bichu.
-    // Por isso o convite explica como criar conta em vez de o servidor decidir.
     await this.deps.mailer.enviar({
       para: destinatario,
       assunto: `Voce foi convidado a ser o tutor de ${nome} no Bichu`,
@@ -219,23 +124,18 @@ export class PetTransferService {
       resourceId: resultado.transferencia.id,
       correlationId: chamador.correlationId,
       actorIp: chamador.ip,
-      // O endereco entra MASCARADO. A trilha sobrevive a exclusao da conta, e
-      // gravar o endereco em claro deixaria ali um dado pessoal de alguem que
-      // pode nem ter conta.
       metadata: { pet_id: pet, recipient_email_masked: mascararEmail(destinatario) },
     });
 
     return resultado.transferencia;
   }
 
-  /** O cancelamento de dentro do app. Vinculado ao tutor pela porta. */
+  /** O cancelamento de dentro do app. */
   async cancelarPeloTutor(
     transferencia: TransferId,
     chamador: ContextoDoChamador,
   ): Promise<TransferenciaGravada> {
     const atual = await this.deps.repositorio.buscarDoTutor(transferencia, chamador.userId);
-    // `undefined` cobre "nao existe" e "nao e sua", e as duas viram 404
-    // (ADR-0021). Um 403 confirmaria a existencia de uma transferencia alheia.
     if (atual === undefined) throw problemas.naoEncontrado();
 
     const agora = this.deps.clock.now();
@@ -245,14 +145,8 @@ export class PetTransferService {
       transferencia,
       motivo: 'current_owner',
       quando: agora,
-      // O token de cancelamento continua valendo? Nao: a transferencia acabou.
-      // Deixa-lo vivo manteria um link no e-mail apontando para uma linha morta,
-      // e a rota publica responderia 410 -- o mesmo destino, por um caminho mais
-      // longo. Consumir aqui e dizer a verdade uma vez so.
       consumirTokenDeCancelamento: true,
     });
-    // Perdeu a corrida entre a leitura e a escrita: o estado mudou. A condicao
-    // esta no `WHERE` do adaptador, e e ela que garante.
     if (cancelada === undefined) throw problemas.transferenciaJaConsumada();
 
     await this.avisarCancelamento(cancelada, 'current_owner');
@@ -271,21 +165,13 @@ export class PetTransferService {
   }
 
   /**
-   * Camada 2 em uma funcao: o token abre a porta, o e-mail verificado decide de
-   * quem ela e.
-   *
-   * **403 e nao 410 quando o token e valido e a conta e outra**, e o contrato e
-   * explicito sobre isso: o token nao esta errado, quem apresenta e que nao e o
-   * destinatario. Responder 410 mandaria a pessoa certa, logada na conta errada,
-   * pedir um convite novo que nao resolveria nada.
+   * Camada 2 em uma funcao: o token abre a porta, o e-mail verificado decide de quem
+   * ela e.
    */
   async aceitar(tokenBruto: string, chamador: ContextoDoChamador): Promise<TransferenciaGravada> {
     const convite = await this.deps.repositorio.buscarPorTokenDeConvite(hashDeToken(tokenBruto));
     const agora = this.deps.clock.now();
 
-    // Inexistente, ja usado e vencido sao a MESMA resposta. Distinguir contaria
-    // a um estranho se aquele token existiu -- o mesmo raciocinio de
-    // `verification-token-expired`.
     if (convite === undefined) throw problemas.tokenDeVerificacaoVencido();
     if (convite.status !== 'pending_acceptance') throw problemas.tokenDeVerificacaoVencido();
     if (agora >= (convite.inviteExpiresAt.getTime() as Instant)) {
@@ -293,10 +179,6 @@ export class PetTransferService {
     }
 
     const meu = await this.deps.contas.emailVerificadoDe(chamador.userId);
-    // Conta sem e-mail verificado nao aceita, e a resposta e a mesma de conta
-    // com outro e-mail: 403. A camada 2 inteira depende de "verificado", e
-    // tratar "ainda nao verifiquei" como caso proprio daria a quem tem o token
-    // uma pista sobre o cadastro do destinatario.
     if (meu === undefined || normalizarEmail(meu) !== convite.recipientEmail) {
       throw problemas.transferenciaNaoEDestaConta();
     }
@@ -313,20 +195,12 @@ export class PetTransferService {
     });
     if (resultado.tipo === 'estado_mudou') throw problemas.tokenDeVerificacaoVencido();
 
-    // O TRABALHO AGENDADO E O QUE FECHA A JANELA. Payload so com identificador
-    // (regra normativa da fila): nenhum token, nenhum e-mail, nenhum nome.
     await this.deps.fila.enqueue('case.transfer_consummate', { transferId: convite.id }, efetivaEm);
 
     const nome = (await this.deps.pets.nomeDe(convite.petId)) ?? 'o pet';
     const base = this.deps.baseDaWeb.replace(/\/$/, '');
-    // `comoIso` e nao `new Date(...)`: o caminho declarado da conversao de
-    // instante, que a regra de lint de `application/` exige (shared/time/clock.ts).
     const quando = comoIso(efetivaEm);
 
-    // O E-MAIL DO TUTOR ATUAL E A ROTA PUBLICA INTEIRA. Ele pode estar em outro
-    // aparelho, deslogado, com o app desinstalado -- e este e o momento em que
-    // NAO se pede que ele entre na conta, porque um obstaculo aqui e um pet
-    // transferido por engano.
     const tutor = await this.deps.contas.emailVerificadoDe(convite.fromUserId);
     if (tutor !== undefined) {
       await this.deps.mailer.enviar({
@@ -356,14 +230,11 @@ export class PetTransferService {
     return resultado.transferencia;
   }
 
-  /** A leitura publica da tela de cancelamento. Sem conta, e com o minimo. */
+  /** A leitura publica da tela de cancelamento. */
   async verPorTokenDeCancelamento(tokenBruto: string): Promise<TransferenciaPorTokenDeCancelamento> {
     const achada = await this.deps.repositorio.buscarPorTokenDeCancelamento(
       hashDeToken(tokenBruto),
     );
-    // Consumada, cancelada e token que nao vale mais respondem IGUAL. Dizer qual
-    // deles ocorreu entregaria a quem tem um token velho o estado atual de uma
-    // transferencia alheia (descricao do 410 no contrato).
     if (achada === undefined) throw problemas.tokenDeVerificacaoVencido();
     if (!podeCancelar(comoEstado(achada), this.deps.clock.now())) {
       throw problemas.tokenDeVerificacaoVencido();
@@ -371,7 +242,7 @@ export class PetTransferService {
     return achada;
   }
 
-  /** O cancelamento pelo link do e-mail. Uso unico, consumido aqui. */
+  /** O cancelamento pelo link do e-mail. */
   async cancelarPorToken(tokenBruto: string): Promise<void> {
     const achada = await this.deps.repositorio.buscarPorTokenDeCancelamento(
       hashDeToken(tokenBruto),
@@ -385,16 +256,10 @@ export class PetTransferService {
       quando: agora,
       consumirTokenDeCancelamento: true,
     });
-    // A CONDICAO ESTA NO `WHERE`, e nao numa leitura anterior. E isso que faz o
-    // token parar de funcionar depois de consumada mesmo que duas requisicoes
-    // cheguem no mesmo milissegundo.
     if (cancelada === undefined) throw problemas.tokenDeVerificacaoVencido();
 
     await this.avisarCancelamento(cancelada, 'cancel_token');
     await this.deps.trilha.record({
-      // ATOR ANONIMO, e de proposito: quem cancelou apresentou um token que
-      // chegou por e-mail, e pode nao estar logado. Afirmar a conta do tutor
-      // aqui seria a trilha inventando um ator que ela nao viu.
       actorKind: 'anonymous',
       action: 'pet_transfer.cancelled',
       resourceKind: 'pet_transfer',
@@ -403,13 +268,7 @@ export class PetTransferService {
     });
   }
 
-  /**
-   * O pet foi marcado como perdido. A transferencia viva dele cai.
-   *
-   * Silenciosa quando nao ha transferencia -- que e o caminho de quase todo
-   * caso de perdido. Ela nao pode lancar: falhar aqui derrubaria a abertura do
-   * caso, e abrir o caso e a coisa urgente.
-   */
+  /** O pet foi marcado como perdido. */
   async cancelarPorCasoAberto(pet: PetId): Promise<void> {
     const cancelada = await this.deps.repositorio.cancelarVivaDoPet({
       pet,
@@ -428,13 +287,7 @@ export class PetTransferService {
     });
   }
 
-  /**
-   * A consumacao, chamada pelo worker quando o trabalho agendado vence.
-   *
-   * Reconfere tudo dentro da transacao do adaptador. Devolve o que aconteceu em
-   * vez de lancar: "ja cancelada" e resultado normal, e um trabalho que falha
-   * por um desfecho normal e um trabalho que volta a tentar para sempre.
-   */
+  /** A consumacao, chamada pelo worker quando o trabalho agendado vence. */
   async consumar(transferencia: TransferId): Promise<ResultadoDaTentativaDeConsumar> {
     const agora = this.deps.clock.now();
     const resultado = await this.deps.repositorio.consumar(transferencia, agora);
@@ -444,9 +297,6 @@ export class PetTransferService {
       return { tipo: 'reagendar', para: resultado.effectiveAt.getTime() as Instant };
     }
 
-    // A SEGUNDA BARREIRA DO CASO ABERTO, e a que garante: ela roda na mesma
-    // transacao que trocaria o dono. Cancelar em vez de adiar mantem a promessa
-    // que a tela do tutor ja fez quando o caso abriu.
     if (resultado.tipo === 'caso_aberto' || resultado.tipo === 'destinatario_sumiu') {
       const motivo: MotivoDoCancelamento =
         resultado.tipo === 'caso_aberto' ? 'lost_case_opened' : 'recipient_gone';
@@ -506,8 +356,8 @@ export class PetTransferService {
   }
 
   /**
-   * O aviso dos dois lados. Nunca lanca: um transporte fora do ar nao pode
-   * desfazer um cancelamento que ja esta gravado.
+   * O aviso dos dois lados. Nunca lanca: um transporte fora do ar nao pode desfazer
+   * um cancelamento que ja esta gravado.
    */
   private async avisarCancelamento(
     transferencia: TransferenciaGravada,
@@ -537,10 +387,6 @@ export class PetTransferService {
           corpo: explicacao,
         });
       } catch {
-        // Engolido de proposito, e so aqui: o aviso e consequencia do
-        // cancelamento, e nao condicao dele. Lancar faria uma falha de SMTP
-        // devolver 500 para um tutor cujo cancelamento ja esta gravado, e ele
-        // tentaria de novo achando que nao funcionou.
         continue;
       }
     }
@@ -559,9 +405,6 @@ function comoEstado(t: {
 }): { status: TransferenciaGravada['status']; inviteExpiresAt: Instant; effectiveAt: Instant | null } {
   return {
     status: t.status,
-    // `podeCancelar` nao olha o vencimento do convite -- desistir e a direcao
-    // segura e vale durante toda a janela. O campo entra zerado de proposito, e
-    // nao lido do banco a toa.
     inviteExpiresAt: 0 as Instant,
     effectiveAt: t.effectiveAt === null ? null : (t.effectiveAt.getTime() as Instant),
   };

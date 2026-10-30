@@ -1,25 +1,3 @@
-/**
- * O achado avulso: o que ele precisa ter, e o que sai dele.
- *
- * Sem banco, sem rede, sem relógio de parede — o instante chega como parâmetro.
- *
- * ## O que este arquivo NÃO faz, e por quê
- *
- * **Não transforma coordenada em endereço nem endereço em coordenada** (ADR-0006).
- * As duas representações de lugar chegam separadas e ficam separadas: o ponto vai
- * para `found_point` e serve à consulta de distância; o texto vai para
- * `found_city`/`found_neighborhood` e serve ao rótulo. Nenhuma das duas é
- * derivada da outra, aqui nem em lugar nenhum.
- *
- * **Não monta o rótulo de área por conta própria.** Ele sai de `rotuloDaArea`,
- * a MESMA função que o caso de perdido usa — ela nasceu em
- * `lostfound/domain/abertura-do-caso.ts` e passou a morar em
- * `shared/lugar/rotulo-de-area.ts` quando o segundo módulo precisou dela
- * (BICHUS-35). Uma segunda definição aqui divergiria da primeira na primeira vez
- * que uma das duas mudasse, e as duas aparecem lado a lado na mesma tela de
- * "possíveis correspondências".
- */
-
 import { rotuloDaArea as rotuloDeAreaCompartilhado } from '../../../shared/lugar/rotulo-de-area.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type { Especie, Porte, Sexo } from './cruzamento.js';
@@ -70,23 +48,12 @@ export function temCoordenada(onde: OndeFoiAchado): boolean {
   return typeof onde.lat === 'number' && typeof onde.lon === 'number';
 }
 
-/**
- * Tem o mínimo para registrar: coordenada **ou** cidade.
- *
- * É o `anyOf: [location, area]` do `StrayFoundReportInput` e o critério 6 da
- * história — "a localização negada, e o achado é registrado do mesmo jeito".
- */
+/** Tem o mínimo para registrar: coordenada **ou** cidade. */
 export function temOndeSuficiente(onde: OndeFoiAchado): boolean {
   return temCoordenada(onde) || (onde.city !== undefined && onde.city.trim() !== '');
 }
 
-/**
- * Tudo que recusa o registro, numa lista só.
- *
- * Lista e não primeiro erro: a tela do achado tem sete campos, e devolver um por
- * requisição faria quem está na rua com um animal no colo descobrir os problemas
- * um a um, com uma ida ao servidor entre cada um.
- */
+/** Tudo que recusa o registro, numa lista só. */
 export function recusasDoRegistro(achado: AchadoAvulso, agora: Instant): readonly ProblemaDeCampo[] {
   const recusas: ProblemaDeCampo[] = [];
 
@@ -121,9 +88,6 @@ export function recusasDoRegistro(achado: AchadoAvulso, agora: Instant): readonl
     });
   }
 
-  // "Achei amanhã" é erro de digitação ou de fuso. Gravado assim, ele fura o
-  // filtro 2 do cruzamento (achado antes do desaparecimento) na direção errada e
-  // ordena a lista do tutor por uma data que não aconteceu.
   if (Number(achado.achadoEm) > Number(agora) + FOLGA_DE_RELOGIO_EM_MILISSEGUNDOS) {
     recusas.push({
       field: 'found_at',
@@ -132,8 +96,6 @@ export function recusasDoRegistro(achado: AchadoAvulso, agora: Instant): readonl
     });
   }
 
-  // Raça em texto livre sem código é o campo que descreve sem ter o que
-  // descrever. Mesma regra de `PetInput`, e o banco também a impõe.
   if (
     achado.racaTextoLivre !== undefined &&
     achado.racaTextoLivre.trim() !== '' &&
@@ -149,27 +111,12 @@ export function recusasDoRegistro(achado: AchadoAvulso, agora: Instant): readonl
   return recusas;
 }
 
-/**
- * Quando esta linha para de existir, se ela não virar correspondência.
- *
- * A partir da CRIAÇÃO e não do achado: uma pessoa que registra hoje um animal
- * que viu há três semanas não deve ter o relato apagado em nove dias.
- */
+/** Quando esta linha para de existir, se ela não virar correspondência. */
 export function retencaoAPartirDe(criadoEm: Instant): Instant {
   return (Number(criadoEm) + RETENCAO_EM_DIAS * MILISSEGUNDOS_POR_DIA) as Instant;
 }
 
-/**
- * O rótulo de área que sai na resposta. Um invólucro tipado sobre a definição
- * compartilhada, e não uma cópia: mudar o formato mexe no caso de perdido
- * também, e é bom que isso apareça num lugar só.
- *
- * O parâmetro é `OndeFoiAchado`, com `lat` e `lon` dentro, **de propósito**: é o
- * que deixa o teste passar um achado com coordenada e exigir que o rótulo saia
- * sem ela. Um parâmetro que não aceitasse coordenada tornaria essa afirmação
- * inexprimível, e a proibição do ADR-0006 voltaria a ser uma ausência que
- * ninguém consegue reprovar.
- */
+/** O rótulo de área que sai na resposta. */
 export function rotuloDaArea(onde: OndeFoiAchado): string | null {
   return rotuloDeAreaCompartilhado(onde);
 }
@@ -177,27 +124,6 @@ export function rotuloDaArea(onde: OndeFoiAchado): string | null {
 /**
  * O que sai numa resposta de achado — e a lista é fechada aqui, campo a campo,
  * pelo que o `FoundReport` do contrato declara.
- *
- * Três ausências que não são esquecimento:
- *
- * - **coordenada**, em nenhuma forma. Nem para quem registrou: a pessoa já sabe
- *   onde ela estava, e o campo só existiria para vazar depois — por um log de
- *   depuração, por uma captura de tela, por uma rota pública nova que
- *   reaproveitasse este montador. É o mesmo argumento de `comoRespostaDoCaso`.
- * - **`reporter_user_id`, `case_id` e `pet_id`**. O ADR-0010 item 7 proíbe
- *   agrupar; devolver o caso a que um achado se ligou contaria ao autor do achado
- *   qual pet de qual tutor está sendo procurado, antes de qualquer confirmação
- *   humana.
- *
- *   **A emenda 7 do ADR-0010 (28/10/2026) não mexeu nesta linha.** Ela abriu a
- *   FOTO e o NOME do pet — `petCorrespondente` abaixo —, e os três
- *   identificadores continuam fora, pelo mesmo motivo de sempre: nome e foto
- *   dizem *qual animal é este*, e um UUID diz *onde ele mora no banco*. O que
- *   a emenda derrubou foi a leitura larga de que item 7 proibiria qualquer
- *   atributo do pet; ele proíbe **agrupar**, e um achado tem um pet só.
- * - **contagem de achados da conta.** O repositório a tem na mão ao paginar, e
- *   devolvê-la "porque já está ali" seria a propriedade a mais que o portão de
- *   contrato, que só procura o que sumiu, não veria.
  */
 export interface AchadoGravado {
   readonly id: string;
@@ -212,65 +138,22 @@ export interface AchadoGravado {
   readonly observacao: string | null;
   readonly criadoEm: Date;
   /**
-   * O pet que este achado JÁ identificou — e `null` quando o único vínculo
-   * possível seria um **palpite** do cruzamento.
-   *
-   * ## De onde ele vem, e por que são só dois caminhos
-   *
-   * A consulta resolve o pet por
-   * `COALESCE(found_reports.pet_id, lost_cases.pet_id via found_reports.case_id)`,
-   * e as duas colunas têm dono medido:
-   *
-   * - `pet_id` é escrito **só** por `registrarAviso` em
-   *   `kysely-tag-repository.ts`, junto com `origin: 'tag_scan'` — a plaquinha
-   *   foi lida, e quem registrou chegou pela página daquele animal;
-   * - `case_id` é escrito **só** pelo `INSERT` de `criar`, a partir do
-   *   `share_token` (critério 10) — a pessoa colou o link que o tutor
-   *   publicou, e aquele link já mostra foto e nome.
-   *
-   * Nos dois, quem lê **já sabe qual animal é**: foto e nome não contam nada
-   * novo. É por isso que a emenda 7 os libera aqui e não em geral.
-   *
-   * ## O achado avulso fica nulo POR CONSTRUÇÃO, e não por um `if`
-   *
-   * No achado avulso cruzado por semelhança o vínculo não mora em
-   * `found_reports`: ele mora em `match_candidates`, com
-   * `link_origin = 'attribute_match'` e `status = 'suggested'`. **Nenhuma
-   * consulta desta porta toca `match_candidates`** — a consulta que traria a
-   * foto e o nome de uma correspondência palpitada não existe.
-   *
-   * O risco que isso fecha é nominal e foi medido pelo cliente em 20/10/2026:
-   * no golpe do falso achador um estranho diz "achei seu pet" para extorquir o
-   * tutor. Foto e nome de um palpite da máquina seriam exatamente o insumo que
-   * falta para a frase soar verdadeira — e o cruzamento **sugere**, não
-   * confirma (BICHUS-35, critério 7).
+   * O pet que este achado JÁ identificou — e `null` quando o único vínculo possível
+   * seria um **palpite** do cruzamento.
    */
   readonly petCorrespondente: PetCorrespondente | null;
 }
 
 /**
- * O pet já identificado de um achado: o que a tela desenha, e nada que a
- * enderece no banco.
- *
- * `chaveDaFoto` é `pet_photos.card_key` com `status = 'ready'` — a derivada
- * pública, nunca o original do bucket privado. Nula quando não há capa pronta,
- * e aí a tela lê "este pet não tem foto", nunca "a rota não sabe responder".
+ * O pet já identificado de um achado: o que a tela desenha, e nada que a enderece
+ * no banco.
  */
 export interface PetCorrespondente {
   readonly nome: string;
   readonly chaveDaFoto: string | null;
 }
 
-/**
- * `FoundReport.matched_pet`, campo a campo como o contrato o declara — ou
- * `null`.
- *
- * Função e não objeto montado na borda, pelo mesmo motivo de `rotuloDaArea`: a
- * mesma projeção serve o registro, o detalhe, a lista e o enriquecimento, e
- * quatro cópias divergiriam na primeira vez que uma delas mudasse. O endereço é
- * montado só a partir de chave presente, então endereço para objeto que ninguém
- * gravou continua não existindo.
- */
+/** `FoundReport.matched_pet`, campo a campo como o contrato o declara — ou `null`. */
 export function matchedPetDaResposta(
   pet: PetCorrespondente | null,
   baseDeMidia: string,

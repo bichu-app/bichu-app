@@ -1,9 +1,6 @@
 /**
- * A guarda do prefixo `/v1/admin`, sem banco (BICHUS-259, ADR-0027 itens 2, 3
- * e 7). A sessao e um dublê da porta que o modulo de identidade entrega; o que
- * este arquivo prova e a ORDEM e a COBERTURA da guarda e da fronteira de
- * registro. A mesma matriz, contra Postgres e contra as rotas reais, esta em
- * `tests/integration/sessao-administrativa-pelo-http.test.ts` (P16).
+ * A guarda do prefixo `/v1/admin`, sem banco (BICHUS-259, ADR-0027 itens 2, 3 e
+ * 7).
  */
 import assert from 'node:assert/strict';
 import { AppError } from './errors.js';
@@ -32,8 +29,6 @@ import { tetoDeTeste } from './teto-de-teste.js';
 const ORIGEM = 'https://painel.exemplo.test';
 const BASE = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-// `adminPublic` so vale para as operacoes da lista fechada; a bancada usa o
-// nome do login de verdade num caminho de teste.
 const rotaDeEntrar = defineRoute({
   operationId: 'openAdminSession',
   method: 'post',
@@ -148,8 +143,6 @@ function bancada(rotasExtras: (adm: RegistradorDeRotas) => void = () => {}): Ban
       registrarRota(adm, rotaDeEscrita, { schema: { body: CORPO_FECHADO } }, async (_r, reply) =>
         reply.status(200).send({ gravado: true }),
       );
-      // `x-teste-resposta` escolhe o desfecho da escrita: 412 (versao nao
-      // confere), 500 (falha qualquer) ou, sem ele, 200.
       registrarRota(adm, rotaSensivel, {}, async (r, reply) => {
         const desfecho = r.headers['x-teste-resposta'];
         if (desfecho === '412') throw new AppError('precondition-failed', 'Alguém alterou isto antes de você');
@@ -332,20 +325,15 @@ void describe('guarda do prefixo /v1/admin', () => {
     const recusada = bancada();
     assert.equal((await pedir(recusada.app, { 'x-teste-resposta': '412' })).statusCode, 412);
     assert.deepEqual(recusada.janelas, { consumidas: 1, devolvidas: 1 }, 'o 412 nao devolveu a janela');
-    // ISCA: a gravacao que deu certo nao devolve (seria a janela servindo duas vezes)...
     const gravada = bancada();
     assert.equal((await pedir(gravada.app, {})).statusCode, 200);
     assert.deepEqual(gravada.janelas, { consumidas: 1, devolvidas: 0 });
-    // ...nem a falha que pode ter vindo depois de gravar.
     const quebrada = bancada();
     assert.equal((await pedir(quebrada.app, { 'x-teste-resposta': '500' })).statusCode, 500);
     assert.deepEqual(quebrada.janelas, { consumidas: 1, devolvidas: 0 });
   });
 
   void it('QA bug 4 / 07/10: nenhuma operacao do contrato pede reautenticacao, e a que voltar exige If-Match', () => {
-    // A guarda responde 428 sem gastar a janela quando falta o If-Match, e so
-    // pode fazer isso porque TODA operacao com reautenticacao e escrita
-    // versionada. Operacao nova com escopo e sem If-Match reprova aqui.
     const texto = readFileSync(resolve(process.cwd(), 'api/openapi.yaml'), 'utf8');
     const spec = parseYaml(texto) as {
       paths: Record<string, Record<string, Record<string, unknown>>>;
@@ -366,8 +354,6 @@ void describe('guarda do prefixo /v1/admin', () => {
         }
       }
     }
-    // Desde 07/10/2026 (ADR-0027 item 23) nenhuma escrita do painel pede
-    // reautenticacao. Se uma voltar, ela continua obrigada a ter If-Match.
     assert.equal(conferidas, 0, 'uma operacao voltou a pedir reautenticacao sem nova decisao do cliente');
     assert.deepEqual(sem, []);
   });
@@ -443,8 +429,6 @@ void describe('fronteira de registro do prefixo administrativo', () => {
   });
 
   const noEscopo = (rota: RouteDefinition) => (app: RegistradorDeRotas) => {
-    // O erro chega por `ready()`, em `subir`; aqui ele so e consumido para nao
-    // virar rejeicao solta.
     escoparRotas(app, '/v1', (v1) => {
       escoparRotasAdministrativas(v1, { origem: ORIGEM, sessoes: {} as PortaDaSessaoAdministrativa }, (adm) =>
         registrarRota(adm, rota, {} as never, nada as never),

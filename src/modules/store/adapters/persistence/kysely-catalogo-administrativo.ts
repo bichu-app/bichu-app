@@ -1,26 +1,4 @@
-/**
- * Persistencia da escrita administrativa da `Loja` (BICHUS-266 e BICHUS-267).
- *
- * ## A versao lida mora na clausula `WHERE`
- *
- * `UPDATE ... SET version = version + 1 WHERE id = $1 AND version = $2
- * RETURNING id`. Zero linhas quer dizer que outra pessoa salvou depois da
- * leitura, e o caso de uso responde 412 sem ter gravado nada. Ler, comparar e
- * gravar em tres passos deixaria dois administradores passarem juntos pela
- * comparacao.
- *
- * ## A trilha e da porta de `audit`, e nao daqui
- *
- * `registrarNaTrilha` delega a `TrilhaTransacional.recordIn(trx, evento)`, a
- * forma transacional da trilha que o ADR-0027 item 8 pede: o evento e gravado NA transacao da
- * escrita, e a falha dele desfaz a escrita. Este adaptador nao conhece o papel
- * `bichu_audit_writer` nem o esquema `audit`.
- *
- * ## O que este arquivo nao le
- *
- * `users`, `user_roles`, `pets`, conversas e casos (D51). A intencao de envio
- * de imagem e gravada pela porta de `media`.
- */
+/** Persistencia da escrita administrativa da `Loja` (BICHUS-266 e BICHUS-267). */
 import { sql } from 'kysely';
 import type { Db, DbTransaction, DbExecutor } from '../../../../shared/db/pool.js';
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
@@ -60,14 +38,7 @@ import { comoDataSimples, escaparCuringas } from './kysely-store-repository.js';
 
 export interface DependenciasDoCatalogoAdministrativo {
   readonly db: Db;
-  /**
-   * A forma transacional da trilha (`criarTrilhaTransacional`). Nao e
-   * `EscritaAuditada` porque duas operacoes daqui terminam SEM evento: publicar
-   * item ja publicado e retirar item ja retirado respondem 200 sem nova linha
-   * de trilha, como o contrato declara, e `EscritaAuditada` nao admite
-   * trabalho sem evento. Toda escrita que muda estado grava o evento pelo
-   * mesmo `recordIn`, na mesma transacao, e por ultimo.
-   */
+  /** A forma transacional da trilha (`criarTrilhaTransacional`). */
   readonly trilha: TrilhaTransacional;
   readonly imagens: RegistroDeImagemDeCatalogo;
 }
@@ -78,11 +49,7 @@ const INDICE_DO_PARCEIRO = 'store_partners_slug_unico';
 const INDICE_DO_ITEM = 'store_items_slug_unico';
 const INDICE_DA_TAG = 'store_tags_slug_unico';
 
-/**
- * A chave da trava de transacao do teto de 40 tags ativas. Um numero fixo, e
- * nao `hashtext`: a trava e deste arquivo, e um numero escrito e o que se acha
- * procurando.
- */
+/** A chave da trava de transacao do teto de 40 tags ativas. */
 const TRAVA_DO_VOCABULARIO = 2_700_016;
 
 function comSlugTraduzido<T>(recurso: 'store_partner' | 'store_item' | 'store_tag', indice: string) {
@@ -96,10 +63,6 @@ function comSlugTraduzido<T>(recurso: 'store_partner' | 'store_item' | 'store_ta
     }
   };
 }
-
-// ---------------------------------------------------------------------------
-// Leitura
-// ---------------------------------------------------------------------------
 
 interface LinhaDoParceiro {
   id: string;
@@ -142,9 +105,6 @@ function consultaDeParceiros(db: DbExecutor) {
       'p.created_at as created_at',
       'p.updated_at as updated_at',
       'p.version as version',
-      // Subconsulta correlacionada e nao `GROUP BY`: a pagina tem no maximo cem
-      // linhas, e o `COUNT` por parceiro usa o indice de `partner_id` que a
-      // chave estrangeira pede. Uma consulta por pagina, sem N+1.
       (eb) =>
         eb
           .selectFrom('store_items as i')
@@ -157,10 +117,6 @@ function consultaDeParceiros(db: DbExecutor) {
 interface LinhaDoItem {
   id: string;
   slug: string;
-  // Nulos juntos, e so no rascunho: a juncao com `store_partners` e EXTERNA
-  // desde a `20261017000002`, porque `i.partner_id` passou a ser anulavel e uma
-  // juncao interna FARIA O RASCUNHO SEM PARCEIRO DESAPARECER DO PAINEL -- a
-  // pessoa salvaria o rascunho e nao o acharia mais na lista.
   partner_slug: string | null;
   partner_name: string | null;
   partner_host: string | null;
@@ -193,8 +149,8 @@ interface ComplementosDoItem {
 
 /**
  * Especie, tags e galeria dos itens, em TRES consultas para qualquer numero de
- * itens: a listagem do painel tem ate cem linhas, e uma consulta por linha
- * seria o N+1 que o padrao de qualidade proibe.
+ * itens: a listagem do painel tem ate cem linhas, e uma consulta por linha seria o
+ * N+1 que o padrao de qualidade proibe.
  */
 async function complementosDosItens(db: DbExecutor, ids: readonly string[]): Promise<ComplementosDoItem> {
   if (ids.length === 0) return { especies: new Map(), tags: new Map(), imagens: new Map() };
@@ -249,9 +205,6 @@ async function complementosDosItens(db: DbExecutor, ids: readonly string[]): Pro
 }
 
 function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo {
-  // Os quatro andam com o parceiro: sem host nao ha como compor endereco
-  // nenhum, nem do destino nem da imagem da massa. Uma funcao so para os dois
-  // porque a regra e a mesma, e nao coincidencia.
   const host = l.partner_host;
   const endereco = (caminho: string | null): string | null =>
     host === null || caminho === null ? null : enderecoNoParceiro(host, caminho);
@@ -270,12 +223,7 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
     category: l.category,
     categoryLabel: l.category_label,
     subcategory: l.subcategory,
-    // Mesma regra da leitura publica: sem subcategoria nao ha rotulo, e rotulo
-    // de linha inativa nao e inventado aqui.
     subcategoryLabel: l.subcategory === null ? null : l.subcategory_label,
-    // A MESMA resolucao da leitura publica: o painel precisa mostrar o link
-    // com `www.` quando foi `www.` que a pessoa cadastrou. Rascunho sem
-    // parceiro ou sem caminho nao tem endereco a compor.
     targetUrl:
       host === null || l.target_path === null
         ? null
@@ -296,19 +244,7 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
 function consultaDeItens(db: DbExecutor) {
   return db
     .selectFrom('store_items as i')
-    // EXTERNA, e nao interna: ver a nota em `LinhaDoItem`. O rascunho sem
-    // parceiro tem de aparecer na lista do painel.
     .leftJoin('store_partners as p', 'p.id', 'i.partner_id')
-    // EXTERNA para os DOIS niveis.
-    //
-    // A juncao da categoria nasceu INTERNA nesta branch, e estava certa
-    // enquanto `store_items.category` era `NOT NULL`: a chave estrangeira
-    // garantia a linha de `store_categories`. A `20261017000002` tornou a
-    // coluna anulavel para o rascunho incompleto caber, e com ela nula uma
-    // juncao interna ESCONDERIA o rascunho da lista do painel -- o mesmo
-    // defeito que fez a juncao do parceiro virar externa, no mesmo dia.
-    //
-    // A da subcategoria ja era externa, porque a coluna sempre foi opcional.
     .leftJoin('store_categories as c', 'c.code', 'i.category')
     .leftJoin('store_subcategories as sc', (juncao) =>
       juncao
@@ -412,12 +348,8 @@ async function tagPorId(db: DbExecutor, id: string): Promise<TagAdministrativa> 
 }
 
 /**
- * O construtor da listagem de itens do painel, exportado para ser compilado e
- * lido por teste sem banco.
- *
- * `price_status` e filtrado pela MESMA fronteira de `estadoDoPreco`: vencido e
- * `price_checked_at` com MAIS de 30 dias, entao o corte e
- * `price_checked_at < hoje - 30`. O dia 30 ainda vale.
+ * O construtor da listagem de itens do painel, exportado para ser compilado e lido
+ * por teste sem banco.
  */
 export function construtorDaListagemDoPainel(db: DbExecutor, recorte: RecorteDeItens) {
   let consulta = consultaDeItens(db);
@@ -478,16 +410,8 @@ export function construtorDaListagemDoPainel(db: DbExecutor, recorte: RecorteDeI
   return consulta;
 }
 
-// ---------------------------------------------------------------------------
-// Escrita
-// ---------------------------------------------------------------------------
-
 function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativo): TransacaoDoCatalogo {
   return {
-    // Dentro da escrita, o parceiro e lido com `FOR UPDATE`. Sem a trava, criar
-    // um item e trocar o host do mesmo parceiro podiam correr juntos: a troca
-    // conferia os destinos antes de o item novo existir, e o item nascia
-    // apontando para o host antigo. Com ela, uma das duas espera a outra.
     async parceiroPorSlug(slug) {
       const linha = await consultaDeParceiros(trx)
         .where('p.slug', '=', slug)
@@ -552,15 +476,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
           .where('active', '=', true)
           .executeTakeFirst()) !== undefined;
 
-      // Sem subcategoria a conferir, nenhuma segunda consulta: perguntar por
-      // `null` traria a lista inteira para ser descartada.
       if (subcategoria === null) {
         return { categoriaAtiva, subcategoriaNaCategoria: false, subcategoriaEmAlgumaCategoria: false };
       }
 
-      // Uma consulta pelo CODIGO, sem a categoria no filtro, e depois a
-      // comparacao aqui: e o que permite distinguir "e de outra categoria" de
-      // "nao existe", e sao duas mensagens diferentes na tela do painel.
       const encontradas = await trx
         .selectFrom('store_subcategories')
         .select('category_code')
@@ -590,8 +509,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             subcategory: novo.subcategory,
             image_path: null,
             target_path: novo.targetUrl === null ? null : caminhoDoDestino(novo.targetUrl),
-            // Nulo quando o host e o do proprio parceiro, que e o caso comum,
-            // e nulo tambem no rascunho sem destino ou sem parceiro.
             target_host:
               novo.targetUrl === null || novo.partnerHost === null
                 ? null
@@ -599,7 +516,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             price_amount: novo.preco?.amount ?? null,
             price_currency: novo.preco?.currency ?? null,
             price_checked_at: novo.preco === null ? null : sql<Date>`${novo.preco.checkedAt}::date`,
-            // RASCUNHO. O padrao `true` da coluna e da massa (ADR-0027 item 14).
             active: false,
             published_at: null,
             sort_order: novo.sortOrder,
@@ -625,13 +541,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             ...(mudanca.title === undefined ? {} : { title: mudanca.title }),
             ...(mudanca.summary === undefined ? {} : { summary: mudanca.summary }),
             ...(mudanca.category === undefined ? {} : { category: mudanca.category }),
-            // `undefined` preserva, `null` apaga. O `in` e a unica forma de
-            // distinguir os dois numa propriedade opcional que admite nulo:
-            // `=== undefined` trataria `null` como "nao mexe".
             ...('subcategory' in mudanca ? { subcategory: mudanca.subcategory ?? null } : {}),
-            // Os dois andam JUNTOS: gravar o caminho novo com o host antigo
-            // levaria a pessoa para o caminho novo no dominio errado. `null`
-            // nos dois e o destino LIMPO do rascunho.
             ...(mudanca.destino === undefined
               ? {}
               : {
@@ -655,8 +565,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
                   }),
             ...(mudanca.sortOrder === undefined ? {} : { sort_order: mudanca.sortOrder }),
             ...(mudanca.active === undefined ? {} : { active: mudanca.active }),
-            // `coalesce` e a segunda rede do "nunca reescrito": mesmo que o caso
-            // de uso mande a data de novo, a primeira publicacao fica.
             ...(mudanca.publishedAt === undefined
               ? {}
               : { published_at: sql<Date>`coalesce(published_at, ${new Date(mudanca.publishedAt)})` }),
@@ -701,9 +609,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
     },
 
     async substituirImagens(itemId, imagens) {
-      // Apagar e inserir, e nao atualizar posicao por posicao: a galeria e
-      // substituida inteira pelo contrato, e a unicidade de posicao e diferida,
-      // entao a ordem nova so e conferida no COMMIT.
       await trx.deleteFrom('store_item_images').where('item_id', '=', itemId).execute();
       if (imagens.length === 0) return;
       await trx
@@ -836,7 +741,6 @@ export function criarCatalogoAdministrativoRepository(
         .select((eb) => eb.fn.countAll<string>().as('total'))
         .executeTakeFirst();
 
-      // O desempate por `slug` em toda ordem: sem ele a paginacao repete e pula.
       const ordenada =
         recorte.sort === 'nome'
           ? base.orderBy('i.title', 'asc').orderBy('i.slug', 'asc')

@@ -1,9 +1,4 @@
 /// O que a pessoa preencheu em F3.1, entre a tela e o envio de F3.2.
-///
-/// **Ele atravessa telas, e por isso ele nao e estado de widget.** F3.1 colhe,
-/// F3.2 envia, e o envelope de intencao (UX 8.3) o grava em disco quando a
-/// sessao cai no meio -- tres donos para o mesmo conteudo. Um `State` seria
-/// perdido na primeira das tres passagens.
 library;
 
 import '../api/modelos_caso.dart';
@@ -12,15 +7,8 @@ import 'quando_foi_visto.dart';
 
 /// O motivo pelo qual `Continuar` esta desabilitado, ou nulo quando ele nao
 /// esta.
-///
-/// **Ele e um tipo, e nao um booleano com um texto ao lado**, porque o criterio
-/// 5 exige o motivo VISIVEL junto do botao: botao desabilitado sem motivo dito
-/// e desenho preguicoso (F3.1). Enquanto o motivo for um `String?` solto,
-/// alguem desabilita o botao sem preenche-lo e ninguem ve.
 enum ImpedimentoDeContinuar {
-  /// Criterio 5, palavra por palavra de F3.1. **Bairro, cidade e UF bastam**:
-  /// o contrato exige `last_seen_at` mais `last_seen_location` OU
-  /// `last_seen_area`, e a area sozinha abre o caso.
+  /// Criterio 5, palavra por palavra de F3.1.
   semBairro('Precisamos do bairro para avisar quem está por perto.'),
 
   /// Nenhuma das quatro opcoes de `Quando?` foi tocada.
@@ -69,10 +57,7 @@ class RascunhoDoCaso {
   String uf;
   String descricao;
 
-  /// Criterio 10: **o padrao e verdadeiro**. Quem abre um caso esta pedindo
-  /// alcance, e perguntar isso a quem esta em panico e uma decisao a mais no
-  /// pior momento. A tela mostra o estado e deixa desligar; ela nao pergunta
-  /// antes.
+  /// Criterio 10: **o padrao e verdadeiro**.
   bool compartilharNaListaPublica;
 
   /// O teto de `LostCaseInput.description` no contrato.
@@ -91,10 +76,6 @@ class RascunhoDoCaso {
       );
 
   /// O que impede `Continuar`, na ordem em que a tela resolve.
-  ///
-  /// A **localizacao vem primeiro** porque e o impedimento que o criterio 5
-  /// nomeia e o unico que manda o foco para um campo. Os de data vem depois
-  /// porque sao um toque de distancia.
   ImpedimentoDeContinuar? impedimentoEm(DateTime agora) {
     if (area == null) return ImpedimentoDeContinuar.semBairro;
     if (quando == null) return ImpedimentoDeContinuar.semQuando;
@@ -109,9 +90,6 @@ class RascunhoDoCaso {
   bool podeContinuarEm(DateTime agora) => impedimentoEm(agora) == null;
 
   /// Os campos do rascunho como o envelope de intencao os guarda.
-  ///
-  /// So texto, numero e booleano: `RascunhoDaIntencao` recusa o resto, e a
-  /// recusa e o que impede alguem de enfiar os bytes de uma foto aqui.
   Map<String, Object?> campos() => <String, Object?>{
         'quando': quando?.name,
         'data_escolhida': dataEscolhida?.toIso8601String(),
@@ -123,11 +101,6 @@ class RascunhoDoCaso {
       };
 
   /// Reconstroi o rascunho a partir dos campos do envelope.
-  ///
-  /// [pet] entra por fora porque ele **nao** vai no envelope: o pet e do
-  /// servidor, e guardar uma copia dele em disco seria dado de conta esperando
-  /// a proxima pessoa que entrar naquele aparelho. O envelope guarda o `alvo`,
-  /// que e o id, e quem executa busca o resto.
   static RascunhoDoCaso dosCampos(Pet pet, Map<String, Object?> campos) {
     final bruto = campos['data_escolhida'] as String?;
     return RascunhoDoCaso(

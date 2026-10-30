@@ -1,24 +1,6 @@
 /**
  * ISCA — a contagem de perdidos novos conta O QUE A ABA `Pets` MOSTRA, e o
  * marcador ZERA.
- *
- * ## O que este arquivo cobra, e por que nenhum portao cobra
- *
- * Um contador tem duas formas de mentir, e as duas passam por qualquer suite
- * que so olhe se a chamada devolveu numero:
- *
- * 1. **contar um recorte diferente do que a aba abre** -- a pessoa ve `3`, toca
- *    na aba, nao acha nada, e o numero zera;
- * 2. **nao aplicar o marcador** -- o numero fica aceso para sempre, e contador
- *    que nao zera e pior que contador nenhum.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Em `kysely-contagem-de-perdidos-novos.ts`: apague o `if (recorte.desde !==
- * undefined)` -> reprova `ISCA: ver a aba Pets zera`. Troque o
- * `construtorDaListagemPublicaDePerdidos` por um `selectFrom('lost_cases')`
- * proprio -> reprova `ISCA: os predicados de PUBLICACAO vem do construtor da
- * listagem`.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -34,8 +16,6 @@ const VISTO_EM = 1_792_400_000_000 as Instant;
 async function contar(
   recorte: { desde?: Instant; cidade?: string },
 ): Promise<{ total: number; sql: string }> {
-  // A conexao DEVOLVE LINHA com um total diferente de zero: com zero, uma
-  // contagem que nao somasse nada passaria igual.
   const { db, compilado } = bancoDeMentira<Database>(() => [{ total: '7' }]);
   const total = await criarContagemDePerdidosNovos(db).contar({ agora: AGORA, ...recorte });
   assert.equal(compilado.length, 1, 'a contagem tem de ser UMA consulta');

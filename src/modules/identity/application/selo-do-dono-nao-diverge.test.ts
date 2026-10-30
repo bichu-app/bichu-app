@@ -1,41 +1,4 @@
-/**
- * **O SELO QUE O DONO VÊ DE SI É O MESMO QUE OS OUTROS VEEM DELE.**
- *
- * Decisão do cliente, 21/10/2026, literal: *"Unificar agora, nas duas — a mesma
- * régua (e-mail OU telefone) nos dois lugares, antes de telefone existir."*
- *
- * ## O DEFEITO QUE ESTE ARQUIVO PRENDE
- *
- * `Me.email_verified` era o selo do DONO, e é só e-mail.
- * `contact_channel_verified` é o selo que os OUTROS veem, e é e-mail **OU**
- * telefone. As duas respostas coincidem em toda conta que existe hoje, porque
- * nada em `src/` grava `phone_verified_at` — **e é por isso que a divergência
- * era invisível**. No dia em que telefone confirmar, a mesma conta apareceria
- * validada para os outros e não para si, e ninguém ia lembrar que a causa era
- * essa.
- *
- * Então o caso que define esta tarefa **finge o futuro**: ele monta a conta de
- * telefone confirmado com e-mail nulo, que hoje não acontece, e exige que o
- * dono veja o selo. Um teste só com as contas de hoje passaria com as duas
- * réguas de volta.
- *
- * ## AS DUAS PROJEÇÕES DO DONO SÃO DUAS, E ELAS TAMBÉM PODEM DIVERGIR
- *
- * `Me` tem **dois** montadores no servidor, e isso não é redundância
- * acidental: `projetarMeuPerfil` responde `getMe`/`updateMe` (e carrega a
- * foto), e `projetarConta` responde `SessionResponse.user` — as cinco rotas de
- * sessão. Um campo novo em um e não no outro faz o selo aparecer depois do
- * login e desaparecer ao abrir `Meus dados`. Os casos deste arquivo cobram os
- * dois com a mesma tabela.
- *
- * ## O QUE ESTE ARQUIVO NÃO MEDE
- *
- * A igualdade com o lado de TERCEIRO, que é derivado no **SQL**. Aqui só existe
- * TypeScript. Quem mede os dois lados com um Postgres de verdade é
- * `tests/integration/regua-do-selo-nao-diverge.test.ts`; o que prende a
- * expressão de SQL à mesma tabela de verdade é
- * `src/shared/db/canal-de-contato-confirmado.test.ts`.
- */
+/** **O SELO QUE O DONO VÊ DE SI É O MESMO QUE OS OUTROS VEEM DELE.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -86,12 +49,8 @@ const PROJECOES: ReadonlyArray<{
 ];
 
 /**
- * A MESMA tabela de `canal-de-contato-confirmado.test.ts`, e a terceira linha é
- * a razão de ser desta tarefa.
- *
- * `selo` é o que `contact_channel_verified` tem de responder; `email` é o que
- * `email_verified` tem de responder. **As duas colunas diferem numa linha só**,
- * e é essa linha que separa as duas réguas.
+ * A MESMA tabela de `canal-de-contato-confirmado.test.ts`, e a terceira linha é a
+ * razão de ser desta tarefa.
  */
 const TABELA: ReadonlyArray<{
   readonly nome: string;
@@ -150,12 +109,6 @@ void describe('o selo do dono não diverge do selo que os outros veem', () => {
     'ISCA — A RÉGUA QUE DIVERGIA: telefone confirmado, e-mail nulo, e o dono ' +
       'vê o selo nas DUAS projeções',
     () => {
-      // **ESTE É O CASO QUE REPROVA SE AS DUAS RÉGUAS DIVERGIREM.**
-      //
-      // ISCA: voltar `contact_channel_verified` a
-      // `conta.emailVerifiedAt !== null` (a régua antiga do selo do dono) em
-      // `resposta-do-perfil.ts` ou em `session-view.ts` compila, passa em toda
-      // conta que existe hoje, e reprova AQUI.
       const comTelefone = conta({ emailVerifiedAt: null, phoneVerifiedAt: comoData(EM) });
       for (const projecao of PROJECOES) {
         const projetada = projecao.montar(comTelefone);
@@ -171,14 +124,6 @@ void describe('o selo do dono não diverge do selo que os outros veem', () => {
   );
 
   void it('`email_verified` NÃO foi redefinido: ele continua falando do e-mail', () => {
-    // A metade que impede "unificar" de virar licença para o campo mentir.
-    // Campo de contrato com nome que fala de e-mail tem de responder sobre
-    // e-mail — a tela usa este booleano na linha "E-mail confirmado / E-mail
-    // ainda não confirmado" ao lado do endereço, e a pendência
-    // `email_verification` sai dele.
-    //
-    // ISCA: apontar `email_verified` para a régua unificada passaria em todos
-    // os casos acima e reprovaria aqui.
     for (const projecao of PROJECOES) {
       for (const linha of TABELA) {
         const projetada = projecao.montar(
@@ -195,8 +140,6 @@ void describe('o selo do dono não diverge do selo que os outros veem', () => {
         );
       }
     }
-    // E as duas colunas DIFEREM em alguma linha, senão o caso acima mediria a
-    // mesma régua duas vezes e passaria com os dois campos unificados.
     assert.ok(
       TABELA.some((l) => l.selo !== l.email),
       'a tabela não tem nenhuma linha em que o selo e o e-mail discordam: ela ' +
@@ -205,8 +148,6 @@ void describe('o selo do dono não diverge do selo que os outros veem', () => {
   });
 
   void it('as DUAS projeções respondem o mesmo sobre a mesma conta', () => {
-    // Um campo novo em um montador e não no outro faz o selo aparecer depois do
-    // login e desaparecer ao abrir `Meus dados`.
     for (const linha of TABELA) {
       const c = conta({
         emailVerifiedAt: linha.emailVerifiedAt,

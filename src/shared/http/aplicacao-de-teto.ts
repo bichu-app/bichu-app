@@ -1,43 +1,4 @@
-/**
- * Aplicação do teto de chamada declarado em `x-rate-limit`.
- *
- * ## O defeito que este arquivo fecha
- *
- * Até 21/09/2026 **nenhuma rota aplicava teto**. A porta `RateLimitStore`
- * existia, as três implementações existiam, `defineRoute` obrigava toda rota
- * com efeito a DECLARAR `rateLimit` sob pena de erro de compilação, e o
- * contrato declarava os tetos em 80 operações. E `hit()` não era chamado em
- * lugar nenhum fora de teste.
- *
- * **Por que o mecanismo que obriga a declarar nunca chegou ao que aplica** — e
- * esta é a resposta que impede o defeito de voltar: `defineRoute` é uma
- * restrição de TIPO sobre um objeto, e o tipo garante que a propriedade
- * `rateLimit` exista. Ele não tem como garantir que alguém a LEIA. O registro
- * era `app.post(rota.path, handler)`, que consome `rota.path` e mais nada: a
- * declaração e a aplicação eram dois atos separados, ligados só por uma string.
- * O teto ficava declarado no objeto e o objeto passava inteiro pela borda sem
- * ninguém abrir. Nenhum portão pegava, porque o portão da esteira lê
- * `api/openapi.yaml` e nunca abre `src/`.
- *
- * A correção, do ADR-0016 emenda 1: *"o defeito não é que alguém esqueceu de
- * chamar `hit()`: é que era possível esquecer."* Por isso a aplicação não é uma
- * chamada que o autor da rota faz — é o próprio registro da rota
- * (`registrar-rota.ts`), e uma rota registrada sem os seus tetos deixa de ser
- * exprimível.
- *
- * ## O que este arquivo aplica, e o que ele RECUSA aplicar em silêncio
- *
- * `counts: 'requests'` (o padrão) é contagem de requisições, e é o que a porta
- * `hit()` sabe fazer. `counts: 'distinct_identities'` e `'distinct_emails'`
- * contam VALORES DISTINTOS, que é outro algoritmo e outra estrutura; `when:`
- * condiciona o teto ao estado do pet, que é juízo de domínio. Nenhum dos dois é
- * exprimível pela porta de hoje.
- *
- * Aplicar os que dá e calar sobre os que não dá seria repetir exatamente o
- * defeito que este arquivo conserta, uma camada abaixo. Então:
- * `inventariarNaoAplicaveis` devolve cada entrada não aplicada, com o motivo, e
- * a subida IMPRIME a lista. O que não vale, vale dito.
- */
+/** Aplicação do teto de chamada declarado em `x-rate-limit`. */
 import { createHmac } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
@@ -46,17 +7,7 @@ import { ehJanelaVitalicia, janelaEmSegundos } from './rate-limit.js';
 import { problemas, type AppError } from './errors.js';
 import { hmacDeEnderecoIp } from '../crypto/digest.js';
 
-/**
- * As dimensões declaradas no contrato. Doze, e não as seis que a BICHUS-178
- * lista: `ip_24`, `origin`, `pet` e `found_report` também são declaradas hoje,
- * `conversation_participant` entrou com a BICHUS-43 e `q` entrou com a busca
- * do diretório.
- *
- * A lista cresce quando uma rota que declara a dimensão passa a existir, e não
- * quando o contrato passa a declará-la: uma dimensão aqui sem rota que a use
- * seria um nome que nada resolve, e `registrar-rota.ts` deixaria de acusar a
- * falta do resolvedor em tempo de compilação para justamente essa.
- */
+/** As dimensões declaradas no contrato. */
 export const DIMENSOES_CONHECIDAS = [
   'ip',
   'ip_24',
@@ -67,127 +18,46 @@ export const DIMENSOES_CONHECIDAS = [
   /**
    * O CASO, que é a dimensão do reenvio do alerta (`resendLostCaseAlert`, um por
    * caso a cada 24 h).
-   *
-   * Não é `account`, e a diferença é de produto: quem tem dois animais perdidos
-   * ao mesmo tempo precisa poder reenviar o aviso dos dois. Um teto por conta lhe
-   * daria um reenvio por dia no total, e o segundo animal ficaria sem o segundo
-   * aviso — exatamente o dia em que o produto existe para funcionar.
-   *
-   * UUID interno em claro no balde, pela mesma exceção declarada para `account`
-   * e `pet` neste arquivo: `rate_limit_counters.bucket_key` não sai em resposta
-   * nenhuma, e o resumo tornaria impossível responder qual caso bateu no teto
-   * numa investigação.
    */
   'case',
   'email',
   'token_family',
   'finder_identity',
   /**
-   * BICHUS-43. O par (conversa, participante), que é a dimensão em que o teto
-   * de 30 mensagens por hora conta. Não é `account`: duas conversas da mesma
-   * pessoa são dois baldes, senão quem está combinando a devolução de dois
-   * animais ao mesmo tempo seria recusado por estar usando o produto.
+   * BICHUS-43. O par (conversa, participante), que é a dimensão em que o teto de 30
+   * mensagens por hora conta.
    */
   'conversation_participant',
-  // BICHUS-35. O teto de três fotos por aviso do achador (SEC-009) é por AVISO e
-  // não por conta: a mesma pessoa pode registrar vários achados, e um teto por
-  // conta faria o segundo animal da noite ficar sem foto nenhuma.
   'found_report',
   /**
-   * **Presença de busca por texto, e NÃO o termo digitado.** Esta é a única
-   * dimensão da lista cujo valor não identifica ninguém, e a diferença decide
-   * se o teto serve para alguma coisa.
-   *
-   * O resolvedor devolve uma marca constante quando a requisição traz `q`, e
-   * `undefined` quando não traz. As duas metades importam:
-   *
-   * - **`undefined` quando não há `q`** faz `resolverValores` pular a entrada
-   *   inteira, e é isso que dá à busca um teto próprio sem penalizar quem só
-   *   abre a aba e rola a lista. É o mecanismo que já existe, e não um `if`
-   *   novo em algum manipulador.
-   * - **Marca constante quando há `q`** faz o balde ser por CONTA, contando
-   *   toda busca. O reflexo seria pôr o termo no balde, e ele está errado de um
-   *   jeito que passa em revisão: com o termo, cada termo novo abre um balde
-   *   novo com um uso. Quem enumera o diretório varia o termo a cada chamada
-   *   **por definição** — é essa a forma do ataque — e portanto nunca
-   *   encostaria no teto. O único uso que um teto por termo limitaria é
-   *   repetir a mesma busca, que é o que mais parece com gente.
-   *
-   * Por conta e não por IP pelo mesmo motivo do teto de 120 desta rota: ela
-   * exige conta, então `account` existe e é exato, e o CGNAT das operadoras
-   * brasileiras faria um teto por IP pegar vizinho inocente e errar quem raspa.
+   * **Presença de busca por texto, e NÃO o termo digitado.** Esta é a única dimensão
+   * da lista cujo valor não identifica ninguém, e a diferença decide se o teto serve
+   * para alguma coisa.
    */
   'q',
-  /**
-   * BICHUS-41. O token do achador sem conta, que é a única identidade dele. O
-   * balde recebe o HMAC do token e nunca o token: `bucket_key` é lida por quem
-   * opera o banco, e o token em claro ali abriria a conversa de alguém.
-   */
+  /** BICHUS-41. O token do achador sem conta, que é a única identidade dele. */
   'finder_token',
-  /**
-   * BICHUS-41. O alvo da denúncia, que é o par (conversa, papel denunciado). Só
-   * aparece em entrada `distinct_identities`, que esta porta não aplica e o
-   * inventário da subida lista; o resolvedor existe para a declaração ter dono.
-   */
+  /** BICHUS-41. O alvo da denúncia, que é o par (conversa, papel denunciado). */
   'report_target',
 ] as const;
 
-/**
- * O valor que a dimensão `q` põe no balde quando há busca.
- *
- * Constante, e exportada para que o teste afirme a consequência que importa:
- * **trocar o termo não troca o balde**. Um teste que montasse a sua própria
- * marca estaria medindo outra chave que a de produção.
- */
+/** O valor que a dimensão `q` põe no balde quando há busca. */
 export const MARCA_DE_BUSCA = 'busca';
 
 export type Dimensao = (typeof DIMENSOES_CONHECIDAS)[number];
 
-/**
- * Dimensões que saem da requisição crua, sem conhecer domínio nem credencial.
- * Estas o registro resolve sozinho; as demais o autor da rota precisa fornecer,
- * e a falta é erro de compilação (ver `registrar-rota.ts`).
- *
- * `q` está aqui e as outras três são de rede, o que parece fora de lugar até se
- * ler o critério, que não é "é de rede" e sim "sai da requisição crua". `q` sai
- * da query string, que o framework já parseou quando o primeiro gancho roda, e
- * não conhece domínio nem credencial nenhuma. Deixá-la fora obrigaria **cada**
- * rota com busca a escrever o próprio resolvedor, e duas rotas escreveriam duas
- * respostas diferentes para a pergunta "o que `q` conta" — que é exatamente a
- * decisão que precisa existir num lugar só.
- */
+/** Dimensões que saem da requisição crua, sem conhecer domínio nem credencial. */
 export const DIMENSOES_GENERICAS = ['ip', 'ip_24', 'origin', 'q'] as const;
 
 export type DimensaoEspecifica = Exclude<Dimensao, (typeof DIMENSOES_GENERICAS)[number]>;
 
-/**
- * Resolve o valor de uma dimensão a partir da requisição.
- *
- * Devolver `undefined` significa "esta requisição não tem esta dimensão" — por
- * exemplo, `email` numa requisição sem corpo. Nesse caso a entrada é PULADA, e
- * isso é correto: contar todo mundo num balde `email=undefined` juntaria
- * pessoas que não têm relação nenhuma.
- */
+/** Resolve o valor de uma dimensão a partir da requisição. */
 export type ResolvedorDeDimensao = (
   request: FastifyRequest,
   sigilo: Sigilo,
 ) => string | undefined | Promise<string | undefined>;
 
-/**
- * O que um resolvedor usa para não gravar identificador pessoal em claro.
- *
- * A chave do balde vai para `rate_limit_counters.bucket_key`, no Postgres. Ela
- * é lida por quem opera o banco, viaja em despejo de diagnóstico e **sobrevive
- * à exclusão da conta**. `email`, `code` e `finder_identity` em claro ali
- * desfazem a promessa de privacidade num lugar onde ninguém vai procurá-la —
- * o mesmo argumento que o SEC-010 faz para o IP, e que vale igual para os
- * demais identificadores.
- *
- * `account` e `pet` são exceção declarada: são UUID interno, que já é o que a
- * tabela de trilha guarda, e trocá-los por um resumo tornaria impossível
- * responder "qual conta bateu no teto" numa investigação. O ADR-0010 proíbe
- * UUID interno em **saída pública**, e `bucket_key` não sai em resposta nenhuma.
- */
+/** O que um resolvedor usa para não gravar identificador pessoal em claro. */
 export interface Sigilo {
   /** HMAC com a chave de pseudonimização de borda, em base64url. */
   hmac(valor: string): string;
@@ -197,21 +67,9 @@ export type Resolvedores = Partial<Record<Dimensao, ResolvedorDeDimensao>>;
 
 export interface DependenciasDoTeto {
   readonly contador: RateLimitStore;
-  /**
-   * SEC-010: o endereço nunca vira chave de balde em claro. O balde viaja para
-   * o Postgres em `rate_limit_counters.bucket_key`, é lido por quem opera o
-   * banco e sobrevive à exclusão da conta — o IP em claro ali desfaz a promessa
-   * num lugar onde ninguém vai procurá-la.
-   */
+  /** SEC-010: o endereço nunca vira chave de balde em claro. */
   readonly hmacDeIp: (ip: string | undefined) => Buffer | null;
-  /**
-   * HMAC de um identificador qualquer, com a MESMA chave (`IP_HMAC_KEY`).
-   *
-   * A chave é de pseudonimização de borda e não é específica de IP: um segundo
-   * segredo com o mesmo propósito seria mais uma variável obrigatória para
-   * alguém esquecer, e o modo de falha do esquecimento aqui é gravar o valor em
-   * claro — que é justamente o que se quer impedir.
-   */
+  /** HMAC de um identificador qualquer, com a MESMA chave (`IP_HMAC_KEY`). */
   readonly hmacDeValor: (valor: string) => string;
   readonly log: (evento: Record<string, unknown>, mensagem: string) => void;
 }
@@ -219,11 +77,6 @@ export interface DependenciasDoTeto {
 /**
  * Monta as dependências do teto a partir do contador e da chave de
  * pseudonimização.
- *
- * Existe para que `api.ts` e todo cenário de teste montem o MESMO objeto. Um
- * teste que montasse o seu próprio `hmacDeValor` estaria exercitando outra chave
- * de balde que a produção, e o teste passaria sobre um mecanismo que não é o que
- * roda.
  */
 export function dependenciasDoTeto(entrada: {
   readonly contador: RateLimitStore;
@@ -239,7 +92,7 @@ export function dependenciasDoTeto(entrada: {
   };
 }
 
-/** `counts` que a porta sabe contar. Os demais são inventariados, não aplicados. */
+/** `counts` que a porta sabe contar. */
 function ehContagemDeRequisicoes(entrada: RateLimitEntry): boolean {
   return entrada.counts === undefined || entrada.counts === 'requests';
 }
@@ -250,12 +103,7 @@ export interface EntradaNaoAplicavel {
   readonly motivo: string;
 }
 
-/**
- * O que NÃO é aplicado, e por quê. A subida imprime isto.
- *
- * Lista de exceção que ninguém vê é lista que cresce — e, pior, é exatamente a
- * forma do defeito original: uma proteção que se acredita existir.
- */
+/** O que NÃO é aplicado, e por quê. */
 export function inventariarNaoAplicaveis(
   rota: RouteDefinition,
 ): readonly EntradaNaoAplicavel[] {
@@ -290,28 +138,7 @@ export function entradasAplicaveis(rota: RouteDefinition): readonly RateLimitEnt
   );
 }
 
-/**
- * Quando cada entrada pode ser aplicada.
- *
- * O Fastify não parseia o corpo antes de `onRequest`, então uma entrada por
- * `email` (que sai do corpo) simplesmente não tem o que ler ali. E uma entrada
- * por `ip` precisa ser aplicada em `onRequest`, antes de tudo: é isso que faz o
- * 21º pedido inválido ao webhook ser recusado **sem que a assinatura seja
- * conferida**, porque a conferência dele também mora em `onRequest`.
- *
- * Por isso duas fases, decididas pela própria dimensão e não por escolha de
- * quem escreve a rota:
- *
- * - `entrada` — todas as dimensões saem da requisição crua (`ip`, `ip_24`,
- *   `origin`, `q`). Roda em `onRequest`, antes de parsear qualquer byte. A
- *   query string já está parseada nesse ponto: quem a parseia é o roteamento,
- *   antes do primeiro gancho;
- * - `corpo` — alguma dimensão precisa do corpo ou da credencial (`account`,
- *   `email`, `token_family`, `code`, `pet`, `finder_identity`,
- *   `conversation_participant`). Roda em
- *   `preValidation`, que é depois do parse e **antes** da validação de schema:
- *   corpo malformado também consome o teto, e não vira um caminho de graça.
- */
+/** Quando cada entrada pode ser aplicada. */
 export type FaseDoTeto = 'entrada' | 'corpo';
 
 const GENERICAS: ReadonlySet<string> = new Set<string>(DIMENSOES_GENERICAS);
@@ -329,15 +156,7 @@ function primeiroValor(bruto: unknown): string | undefined {
   return undefined;
 }
 
-/**
- * Resolvedores das dimensões genéricas.
- *
- * `ip_24` é a faixa /24, e ela existe porque **teto por IP puro é armadilha no
- * Brasil**: o CGNAT das operadoras agrupa muita gente atrás de poucos
- * endereços. A faixa é derivada do endereço já reduzido e depois passa pelo
- * mesmo HMAC — uma faixa em claro é tão identificadora quanto o endereço para
- * quem tem a tabela de alocação.
- */
+/** Resolvedores das dimensões genéricas. */
 export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
   const hmac = (valor: string | undefined): string | undefined => {
     const digerido = deps.hmacDeIp(valor);
@@ -354,14 +173,10 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
     },
     origin: (request) => primeiroValor(request.headers['origin']),
     /**
-     * **A marca constante, nunca o termo.** O raciocínio inteiro está na
-     * declaração de `q` em `DIMENSOES_CONHECIDAS`; aqui fica a consequência
-     * que se lê no código: `MARCA_DE_BUSCA` não depende de `busca`, então a
-     * chave do balde é a mesma para todo termo, e variar o termo não zera
-     * contagem nenhuma.
-     *
-     * `undefined` quando não há busca: aí `resolverValores` pula a entrada
-     * inteira e a chamada sem `q` só responde ao teto geral da rota.
+     * **A marca constante, nunca o termo.** O raciocínio inteiro está na declaração de
+     * `q` em `DIMENSOES_CONHECIDAS`; aqui fica a consequência que se lê no código:
+     * `MARCA_DE_BUSCA` não depende de `busca`, então a chave do balde é a mesma para
+     * todo termo, e variar o termo não zera contagem nenhuma.
      */
     q: (request) => {
       const busca = (request.query as { q?: unknown } | undefined)?.q;
@@ -370,48 +185,7 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
   };
 }
 
-/**
- * A chave do balde. Ela precisa identificar a POLÍTICA, e não só a dimensão.
- *
- * ## O defeito que esta função teve, e o que ele custava
- *
- * Até aqui a chave era `operationId:dimensão[:appliesTo]|valores`. Faltava tudo
- * o que distingue duas entradas declaradas na MESMA dimensão — e o contrato
- * declara cinco operações assim. Duas entradas montavam a mesma chave, o
- * contador somava as duas no mesmo balde, e **cada requisição era contada duas
- * vezes**. O teto recusava na metade do número que a política escreveu.
- *
- * `postConversationMessage` declara 30/`1h` (`deny_429`) e 200/`24h` na
- * dimensão `conversation_participant`. O contador ainda separava os baldes pelo
- * início da janela, então o sintoma só aparecia quando os dois inícios
- * coincidem — e `inicioDaJanela` é `floor(t/janela)*janela` sobre a época, então
- * os inícios de `1h` e de `24h` coincidem **toda madrugada entre 00:00 e 01:00
- * UTC**, que é 21h no Brasil, horário de pico da conversa. Nessa hora o teto de
- * 30 recusava na **16ª** mensagem, com 429. Fora dela, nada.
- *
- * O sintoma é o pior formato possível: some antes de alguém conseguir olhar, e
- * volta todo dia. A suíte deste repositório o mostrou como caso intermitente —
- * reprovou duas vezes no dia 22/09 e nenhuma em catorze tentativas no dia 28/09,
- * o que levou a hipótese para carga da máquina. Não era carga: era a hora.
- *
- * ## Por que a janela no nome não bastava
- *
- * `openLostCase` declara 5/`24h` e 20/`24h` na dimensão `account`: **mesma
- * janela**. Para essas duas a janela no nome não separa nada, e a contagem em
- * dobro não tem hora — vale o dia inteiro, todo dia. Por isso a chave carrega
- * também `limit` e `onExceed`: é o conjunto que identifica a entrada, e duas
- * entradas aplicáveis distintas passam a ser dois baldes por construção, sem
- * depender de as janelas serem diferentes.
- *
- * `createStrayFoundReport` (10/`24h` `deny_429` + 30/`30d`) tinha a terceira
- * forma: os inícios de `24h` e `30d` coincidem um dia a cada trinta, e nesse dia
- * inteiro o teto de 10 recusava na 6ª.
- *
- * ## O custo
- *
- * Trocar a chave **zera os contadores uma vez**, no deploy. É o custo certo: o
- * contador antigo estava somando entradas que não deviam se somar.
- */
+/** A chave do balde. Ela precisa identificar a POLÍTICA, e não só a dimensão. */
 export function montarChave(
   operationId: string,
   entrada: RateLimitEntry,
@@ -419,39 +193,12 @@ export function montarChave(
 ): string {
   const sufixo = entrada.appliesTo === undefined ? '' : `:${entrada.appliesTo}`;
   const janela = entrada.window.trim();
-  // As DUAS contribuicoes, e elas se compoem. `dono` e a do balde compartilhado
-  // (D52); `politica` e a da contagem em dobro, documentada no bloco acima.
-  //
-  // O balde compartilhado entra NO LUGAR da operacao, e so ele (D52): todas as
-  // operacoes que declaram o mesmo balde somam no mesmo contador. Com `bucket:`
-  // como prefixo proprio, nenhum `operationId` consegue colidir com um balde.
-  //
-  // A politica DENTRO de um balde compartilhado nao o reparte hoje, e isto foi
-  // medido e nao deduzido: `admin_write` e `admin_publication` nascem de uma
-  // constante reusada por operacao (`BALDE_DE_ESCRITA` e `BALDE_DE_PUBLICACAO`,
-  // em `network/adapters/http/admin-network-routes.ts` e em
-  // `store/adapters/http/admin-store-routes.ts`), com `limit`, `window` e
-  // `onExceed` IGUAIS nos dois modulos -- 120/`10m` e 30/`1h`, ambos
-  // `deny_429`. Um balde cujas operacoes declarassem politicas diferentes
-  // passaria a contar em baldes separados; o lugar de resolver isso e a
-  // declaracao, que e onde a divergencia seria o defeito.
   const dono = entrada.bucket === undefined ? operationId : `bucket:${entrada.bucket}`;
   const politica = `${janela}:${String(entrada.limit)}:${entrada.onExceed}`;
   return `${dono}:${entrada.dimension.join('+')}@${politica}${sufixo}|${valores.join('|')}`;
 }
 
-/**
- * `on_exceed` decide o que acontece ao estourar, e só `deny_429` recusa.
- *
- * Os demais são observação ou trabalho de domínio (`serve_cache`,
- * `notify_owner`, `group_notification`, ...) e NÃO viram 429: transformar
- * `log_and_alert` em recusa mudaria a política declarada no contrato, que é a
- * fonte do número e do comportamento.
- *
- * `challenge` também não recusa aqui. Não há quem responda ao desafio hoje, e
- * a rota que não pode recebê-lo já declara `noChallenge`. Tratá-lo como 429
- * seria endurecer o cadastro e o login além do que o contrato promete.
- */
+/** `on_exceed` decide o que acontece ao estourar, e só `deny_429` recusa. */
 function recusa(entrada: RateLimitEntry): boolean {
   return entrada.onExceed === 'deny_429';
 }
@@ -465,25 +212,13 @@ export interface ResultadoDaAplicacao {
  * O 429 sai pelo construtor canônico de `errors.ts`, e não por um `AppError`
  * montado aqui: título, `detail` e `type` do 429 já são contrato, e uma segunda
  * redação deles divergiria da primeira sem nada acusar.
- *
- * **Qual dos dois construtores depende da janela, não do número.** Janela
- * `lifetime` não reabre, e `decisao.retryAfterSeconds` ali é o teto de formato
- * de 24 h de `rate-limit.ts` — obedecê-lo no texto faria a resposta prometer
- * uma reabertura que não acontece.
  */
 function erroDeTeto(entrada: RateLimitEntry, segundos: number | undefined): AppError {
   if (ehJanelaVitalicia(entrada.window)) return problemas.limiteSemReabertura();
   return problemas.limiteDeChamadas(segundos ?? 1);
 }
 
-/**
- * Aplica as entradas que contam TODA requisição.
- *
- * Roda antes do handler. Entrada com `appliesTo: 'invalid_attempts'` não é
- * contada aqui — ela é só CONSULTADA, porque incrementá-la na entrada contaria
- * a tentativa válida junto e o critério 8 da BICHUS-178 existe para impedir
- * isso.
- */
+/** Aplica as entradas que contam TODA requisição. */
 export async function aplicarNaEntrada(
   rota: RouteDefinition,
   request: FastifyRequest,
@@ -499,9 +234,6 @@ export async function aplicarNaEntrada(
     const janela = janelaEmSegundos(entrada.window);
 
     if (entrada.appliesTo === 'invalid_attempts') {
-      // CONSULTA, não incremento. É isto que faz o 21º pedido inválido receber
-      // 429 **sem que a assinatura seja conferida**: quando o balde já está no
-      // teto, a recusa acontece antes de qualquer trabalho caro.
       const decisao = await deps.contador.peek(chave, entrada.limit, janela);
       if (!decisao.allowed) {
         deps.log(
@@ -525,12 +257,7 @@ export async function aplicarNaEntrada(
   return {};
 }
 
-/**
- * Conta a tentativa que se revelou INVÁLIDA, depois do fato.
- *
- * Chamada pelo registro quando o handler (ou um hook) recusa a requisição. A
- * tentativa válida nunca chega aqui, e é isso que o critério 8 cobra.
- */
+/** Conta a tentativa que se revelou INVÁLIDA, depois do fato. */
 export async function contarTentativaInvalida(
   rota: RouteDefinition,
   request: FastifyRequest,
@@ -549,12 +276,7 @@ export async function contarTentativaInvalida(
   }
 }
 
-/**
- * Resolve todos os valores da dimensão composta.
- *
- * Basta um componente ausente para a entrada inteira ser pulada: um par
- * `['ip', 'code']` com `code` indefinido não é "o teto de IP", é outro teto.
- */
+/** Resolve todos os valores da dimensão composta. */
 async function resolverValores(
   entrada: RateLimitEntry,
   request: FastifyRequest,

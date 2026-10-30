@@ -1,48 +1,4 @@
-/**
- * Persistencia da secao `Rede`.
- *
- * ## A visibilidade mora na clausula `WHERE`, em toda leitura
- *
- * `publication_status IN ('published', 'cancelled')`, o mesmo predicado dos
- * indices parciais da migracao, escrito uma vez em `VISIVEL`. `pending_review`
- * e `removed` ficam na tabela e fora de toda leitura.
- *
- * ## O encontro privado (ADR-0027 12.10 a 12.12)
- *
- * - **A autorizacao do conteudo oculto e um `EXISTS` na clausula `WHERE`**:
- *   `buscarDetalhesPrivados` e o ponto do privado so devolvem linha quando a
- *   propria conta tem pedido `approved`. Sem isso, nao ha linha, e a borda
- *   responde o mesmo 404 de "nao existe".
- * - **Recorte por valor oculto exclui o privado.** `city`, `admission` e
- *   `size` so casam encontro publico, e `q` casa o privado so pelo titulo:
- *   aparecer num recorte que so casa pelo bairro entregaria o bairro (P19,
- *   item 4). As condicoes estao em `recorteOculto`, uma funcao so, para que
- *   filtro novo sobre campo oculto passe por ela.
- * - **A agenda por distancia nao tem privado nenhum.** A posicao dele numa
- *   lista por distancia ja e localizacao.
- *
- * ## O pedido para participar
- *
- * A decisao guardada (`pending`, `approved`, `declined`) sai daqui; o estado
- * que o app ve e derivado no dominio. **Pedido desistido nunca e lido**: o
- * pendente desistido e apagado (D54) e o recusado desistido fica so para nao
- * lavar a recusa; se ele fosse lido, a desistencia separaria o recusado do
- * pendente.
- *
- * ## O `id` nunca e selecionado para leitura
- *
- * O que sai e o `slug`. As listas do encontro (portes, estrutura, o que levar)
- * vem por subconsulta escalar com `array(...)`, e nao por `join`: uma consulta
- * por pagina, sem N+1.
- *
- * ## Imagens
- *
- * A galeria (`network_event_images`, migracao `20260928000004`) vem na mesma
- * consulta, por subconsulta escalar em JSON, so com imagem PRONTA
- * (`catalog_images.status = 'ready'`): a derivada nunca e servida antes
- * (ADR-0027 item 10). O banco guarda a chave; a URL e composta aqui, e a capa
- * (`cover_image_url`) e a de posicao 0, no dominio.
- */
+/** Persistencia da secao `Rede`. */
 import { randomBytes } from 'node:crypto';
 import { sql, type Expression, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
@@ -81,7 +37,7 @@ import type {
 import type { FamiliaDeSessao } from '../../../identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant } from '../../../../shared/types/brands.js';
 
-/** Os estados de publicacao que as leituras enxergam. Uma lista so. */
+/** Os estados de publicacao que as leituras enxergam. */
 export const VISIVEL: readonly PublicacaoVisivel[] = ['published', 'cancelled'];
 
 /** A ordem das listas fechadas, a mesma dos `enum` do contrato. */
@@ -135,20 +91,13 @@ interface LinhaDoEncontro {
   amenities: string[];
   bring_items: string[];
   /**
-   * `k` = `public_key` (1024), `t` = `thumb_key` (480), `b` = `banner_key`
-   * (1280), `a` = `alt_text`. Nomes de UMA letra porque este JSON e agregado
-   * por linha de encontro numa listagem: o nome da chave viaja uma vez por
-   * imagem por encontro, e `thumb_url` repetido oito vezes por cartao e peso
-   * de rede pago pelo tutor para transportar nome de campo.
+   * `k` = `public_key` (1024), `t` = `thumb_key` (480), `b` = `banner_key` (1280),
+   * `a` = `alt_text`.
    */
   images: { k: string; t: string | null; b: string | null; a: string | null }[] | null;
 }
 
-/**
- * As colunas do encontro, nomeadas uma a uma, mais as tres listas. Nao ha
- * `selectAll()`: ele traria `id`, `geo` e a coluna de autoria para dentro do
- * processo.
- */
+/** As colunas do encontro, nomeadas uma a uma, mais as tres listas. */
 function colunasDoEncontro() {
   return [
     'e.slug as slug',
@@ -163,9 +112,6 @@ function colunasDoEncontro() {
     'e.time_zone as time_zone',
     'e.publication_status as publication_status',
     'e.visibility as visibility',
-    // A ORIGEM, e **nao a autoria**: `admin` ou `community`, dois valores
-    // fixos. `created_by_user_id` continua fora desta lista, que e o que o
-    // comentario acima quer dizer com "a coluna de autoria".
     'e.origin as origin',
     'e.admission_kind as admission_kind',
     'e.admission_amount as admission_amount',
@@ -178,7 +124,6 @@ function colunasDoEncontro() {
     'e.street_address as street_address',
     'e.ticket_url as ticket_url',
     'e.instagram_handle as instagram_handle',
-    // A data local no fuso do PROPRIO encontro, pelo catalogo do banco.
     sql<string>`to_char(e.starts_at AT TIME ZONE e.time_zone, 'YYYY-MM-DD')`.as('local_date'),
     sql<string[]>`array(
       SELECT s.size FROM network_event_sizes s JOIN ref_sizes r ON r.code = s.size
@@ -200,18 +145,7 @@ function colunasDoEncontro() {
   ] as const;
 }
 
-/**
- * A capa **com o estado dela**, para a lista do DONO (19/10/2026).
- *
- * `colunasDoEncontro` carrega so imagem `ready` com chave publica, porque e isso
- * que a agenda pode mostrar. A consequencia medida: a capa recusada nao
- * aparecia em superficie nenhuma e quem a enviou nunca descobria. Esta coluna
- * existe para a leitura do dono, e **so para ela**.
- *
- * `ORDER BY i.position LIMIT 1`: a capa e a imagem de posicao 0, a mesma
- * definicao da agenda. Nulo quando o encontro nao tem imagem nenhuma -- e isso
- * e diferente de `processing`.
- */
+/** A capa **com o estado dela**, para a lista do DONO (19/10/2026). */
 function capaDoDono() {
   return sql<{ s: 'processing' | 'ready' | 'rejected'; k: string | null; r: string | null } | null>`(
     SELECT json_build_object('s', c.status, 'k', c.public_key, 'r', c.rejection_reason)
@@ -234,17 +168,12 @@ function comoCapaDoDono(
   if (capa === null || capa === undefined) return null;
   return {
     estado: capa.s,
-    // A url sai **so** em `ready` com chave: montar o endereco de um objeto que
-    // o worker ainda nao gravou e uma promessa que a tela descobre quebrada.
     url: capa.s === 'ready' && capa.k !== null ? urlDeMidia(capa.k) : null,
     motivoDaRecusa: capa.s === 'rejected' ? capa.r : null,
   };
 }
 
-/**
- * Escapa os curingas do `LIKE` para que o termo seja procurado como texto. A
- * barra invertida vem primeiro.
- */
+/** Escapa os curingas do `LIKE` para que o termo seja procurado como texto. */
 export function escaparCuringas(termo: string): string {
   return termo.replace(/\\/g, '\\\\').replace(/[%_]/g, (c) => `\\${c}`);
 }
@@ -258,43 +187,7 @@ function aprovado(chamador: string): Expression<SqlBool> {
 
 type Consulta = ReturnType<typeof consultaBase>;
 
-/**
- * O PONTO UNICO DA REDE, e desde 17/10 ele carrega o autor.
- *
- * Toda leitura de encontro deste arquivo passa por aqui -- a agenda publica, o
- * `nearby`, a leitura por slug, o local, os detalhes privados, o pedido de
- * participacao e "meus pedidos". Foi por isso que o filtro do autor desabilitado
- * entrou NESTA funcao e nao em cada uma das sete: o cliente pediu "filtro as
- * paginas para que esse usuario nao seja mais encontrado em nenhuma pagina ou
- * funcionalidade", e sete clausulas repetidas e a forma que perde a oitava.
- *
- * ## `encontro_com_autor_ativo` e nao um `innerJoin('users')`
- *
- * A coluna de autoria de `network_events` esta marcada "NUNCA sai do servidor"
- * na `20260928000001`, e `src/tools/portao-colunas-que-nao-saem.ts` reprova
- * qualquer arquivo de `src/` que CITE o nome dela -- inclusive dentro de um
- * `WHERE`, e inclusive dentro de um COMENTARIO, porque ele compara texto puro.
- * (Medido: a primeira versao deste proprio comentario reprovou o portao, por
- * escrever o nome por extenso aqui.) A funcao de banco (migracao
- * `20261017000013`) devolve `boolean` e nao a autoria, entao o predicado existe
- * sem que o nome da coluna apareca aqui. Mesmo arranjo de
- * `network_events_do_autor`, da `20261001000005`.
- *
- * ## O que isto FAZ, medido, e o que e consequencia a relatar
- *
- * O encontro sai da agenda em TODOS os recortes de tempo, `when=all` incluido:
- * o predicado e da consulta base e nao da janela, entao encontro PASSADO de
- * autor desabilitado tambem sai. Foi a escolha deliberada -- "sair de todas as
- * superficies" -- e nao ha hoje nenhuma superficie que mostre so o passado.
- *
- * CONSEQUENCIA QUE NAO E OBVIA: `listarMeusPedidos` e `lerPedido` tambem passam
- * por aqui. Quem tinha pedido de participacao PENDENTE num encontro cujo autor
- * desabilitou a conta deixa de ver o pedido -- a linha de
- * `network_event_join_requests` continua no banco, intacta e nao apagada, mas a
- * lista vem vazia, SEM EXPLICACAO. Isso esta no relatorio como decisao de
- * produto em aberto: dizer a essa pessoa o que aconteceu exige um texto que o
- * cliente precisa escolher, e inventa-lo aqui seria pior do que relatar.
- */
+/** O PONTO UNICO DA REDE, e desde 17/10 ele carrega o autor. */
 function consultaBase(db: DbExecutor) {
   return db
     .selectFrom('network_events as e')
@@ -305,48 +198,16 @@ function consultaBase(db: DbExecutor) {
 /** 23:59:59 do dia local do encontro, no fuso dele, como instante. */
 const FIM_DO_DIA_DO_CANCELADO = sql`(((e.starts_at AT TIME ZONE e.time_zone)::date + time '23:59:59') AT TIME ZONE e.time_zone)`;
 
-/**
- * Ate quando o cancelado AINDA SE CHAMA cancelado, em SQL.
- *
- * E `fimDoCancelado` do dominio, campo a campo: o fim previsto, ou, sem
- * `ends_at`, 23:59:59 do dia do encontro no fuso dele. O `COALESCE` e o que
- * torna esta expressao util fora de `recorteNoTempo` -- la os dois casos
- * estavam partidos em dois ramos do `OR`, porque a janela de tempo ja separava
- * quem tem `ends_at` de quem nao tem. Aqui o rotulo e UM valor por linha.
- */
+/** Ate quando o cancelado AINDA SE CHAMA cancelado, em SQL. */
 const FIM_DO_CANCELADO = sql`COALESCE(e.ends_at, ${FIM_DO_DIA_DO_CANCELADO})`;
 
-/**
- * O encontro esta ROTULADO `cancelled` agora -- e nao "foi cancelado um dia".
- *
- * A diferenca e a razao de esta funcao existir: `publication_status` e a coluna
- * crua e ela nunca volta atras, entao um cancelado de tres semanas atras
- * continua `cancelled` NA COLUNA. O rotulo que o app le e `statusDoEncontro`,
- * e para ele esse encontro e `ended`. Recortar ou ordenar pela coluna faria o
- * servidor discordar do campo `status` que ele mesmo acabou de projetar.
- */
+/** O encontro esta ROTULADO `cancelled` agora -- e nao "foi cancelado um dia". */
 function rotuladoCancelado(agora: Date) {
   return sql<SqlBool>`(e.publication_status = 'cancelled'
     AND ${agora}::timestamptz <= ${FIM_DO_CANCELADO})`;
 }
 
-/**
- * A SITUACAO CALCULADA, em SQL: a traducao fiel de `statusDoEncontro`.
- *
- * **Os ramos estao na mesma ordem da funcao do dominio, e a ordem importa**:
- * `cancelled` prevalece sobre o estado temporal ate o fim previsto, e so depois
- * dele a regra do encerrado volta a valer. Trocar os dois primeiros `WHEN`
- * faria o cancelado de hoje sair `happening`.
- *
- * Os tres ultimos ramos sao `statusTemporal`: antes de comecar e `upcoming`;
- * sem `ends_at` nao existe `happening` (ADR-0025 secao 6); com `ends_at`, ate
- * ele e `happening`.
- *
- * **Por que o calculo vive no banco e nao num `filter` da aplicacao**: a
- * contagem (`total`) e a pagina tem de concordar, e recortar em memoria
- * depois do `LIMIT` daria uma pagina menor que o limite com `total` cheio --
- * o defeito que a paginacao nao perdoa.
- */
+/** A SITUACAO CALCULADA, em SQL: a traducao fiel de `statusDoEncontro`. */
 function situacaoCalculada(agora: Date) {
   return sql<string>`(CASE
     WHEN ${rotuladoCancelado(agora)} THEN 'cancelled'
@@ -357,14 +218,7 @@ function situacaoCalculada(agora: Date) {
   END)`;
 }
 
-/**
- * A chave de ordem que DESCE o cancelado para depois do ativo.
- *
- * Decisao do cliente de 26/10/2026: *"os eventos cancelados e que ja passaram
- * devem vir por ultimo na listagem"*. `0` para todo o resto e `1` para o
- * cancelado, entao ela entra ANTES da data e nao no lugar dela -- dentro de
- * cada um dos dois grupos a ordem continua sendo a data.
- */
+/** A chave de ordem que DESCE o cancelado para depois do ativo. */
 function chaveDoCancelado(agora: Date) {
   return sql`(CASE WHEN ${rotuladoCancelado(agora)} THEN 1 ELSE 0 END)`;
 }
@@ -377,9 +231,9 @@ function sabadoDoFimDeSemana(agora: Date) {
 }
 
 /**
- * O recorte no tempo. Os tres originais sao o complemento exato do rotulo
- * temporal do dominio; os tres novos (ADR-0027 12.14) sao calculados no fuso de
- * cada encontro, pelo banco.
+ * O recorte no tempo. Os tres originais sao o complemento exato do rotulo temporal
+ * do dominio; os tres novos (ADR-0027 12.14) sao calculados no fuso de cada
+ * encontro, pelo banco.
  */
 function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora: Date): Consulta {
   switch (when) {
@@ -388,8 +242,6 @@ function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora
         eb.or([
           eb.and([eb('e.ends_at', 'is', null), eb('e.starts_at', '>', agora)]),
           eb.and([eb('e.ends_at', 'is not', null), eb('e.ends_at', '>=', agora)]),
-          // O cancelado sem fim segue visivel COMO cancelado ate 23:59:59 do
-          // dia dele, no fuso dele (`fimDoCancelado`, decisao de 28/09).
           sql<SqlBool>`(e.publication_status = 'cancelled' AND e.ends_at IS NULL
             AND ${agora}::timestamptz <= ${FIM_DO_DIA_DO_CANCELADO})`,
         ]),
@@ -412,8 +264,6 @@ function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora
                      = (${agora}::timestamptz AT TIME ZONE e.time_zone)::date`,
       );
     case 'weekend':
-      // O sabado corrente (ou o proximo) no fuso do encontro; no domingo, o
-      // sabado de ontem, para o domingo ainda ser "este fim de semana".
       return consulta.where(
         sql<SqlBool>`(e.starts_at AT TIME ZONE e.time_zone)::date
           BETWEEN ${sabadoDoFimDeSemana(agora)} AND ${sabadoDoFimDeSemana(agora)} + 1`,
@@ -427,10 +277,7 @@ function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora
   }
 }
 
-/**
- * Os recortes que tocam campo oculto do privado, TODOS aqui (P19 item 4).
- * `q` casa o privado so pelo titulo; `city`, `admission` e `size` o excluem.
- */
+/** Os recortes que tocam campo oculto do privado, TODOS aqui (P19 item 4). */
 function recorteOculto(consulta: Consulta, recorte: Omit<RecorteDaAgenda, 'sort' | 'when' | 'agora' | 'page' | 'limit'>): Consulta {
   let c = consulta;
   const termo = recorte.q?.trim();
@@ -456,8 +303,8 @@ function recorteOculto(consulta: Consulta, recorte: Omit<RecorteDaAgenda, 'sort'
 }
 
 /**
- * O construtor da agenda, separado para poder ser compilado e lido por um
- * teste sem subir banco.
+ * O construtor da agenda, separado para poder ser compilado e lido por um teste
+ * sem subir banco.
  */
 export function construtorDaAgenda(db: DbExecutor, recorte: RecorteDaAgenda) {
   const agora = comoData(recorte.agora);
@@ -465,11 +312,6 @@ export function construtorDaAgenda(db: DbExecutor, recorte: RecorteDaAgenda) {
   if (recorte.visibility !== undefined) {
     consulta = consulta.where('e.visibility', '=', recorte.visibility);
   }
-  // O recorte por SITUACAO, e ele nao mora em `recorteOculto`: a situacao do
-  // privado nao e campo oculto. O teaser do privado ja entrega `state`
-  // (`NetworkEventPrivateTeaser`, ADR-0027 12.10), entao casar por ela nao
-  // conta nada que a resposta nao conte -- ao contrario de `city`,
-  // `admission` e `size`, que estao la justamente por entregarem.
   if (recorte.status !== undefined) {
     consulta = consulta.where(sql<SqlBool>`${situacaoCalculada(agora)} = ${recorte.status}`);
   }
@@ -477,17 +319,11 @@ export function construtorDaAgenda(db: DbExecutor, recorte: RecorteDaAgenda) {
 }
 
 /**
- * A agenda **com a ordem**, separada para o mesmo motivo de
- * `construtorDaAgenda`: um teste a compila e le o `ORDER BY` sem subir banco.
- *
- * `recentes` NAO separa o cancelado, e a ausencia e deliberada: ela e a ordem
- * do passado (`when=past`), e no passado o rotulo do cancelado ja virou
- * `ended` para todo mundo pelo fim previsto. Uma chave que nunca muda de valor
- * seria custo de ordenacao sem desfecho.
+ * A agenda **com a ordem**, separada para o mesmo motivo de `construtorDaAgenda`:
+ * um teste a compila e le o `ORDER BY` sem subir banco.
  */
 export function agendaOrdenada(db: DbExecutor, recorte: RecorteDaAgenda) {
   const base = construtorDaAgenda(db, recorte);
-  // Desempate por `slug`, que e unico: sem ele a paginacao repete e pula.
   if (recorte.sort === 'recentes') {
     return base.orderBy('e.starts_at', 'desc').orderBy('e.slug', 'desc');
   }
@@ -497,25 +333,7 @@ export function agendaOrdenada(db: DbExecutor, recorte: RecorteDaAgenda) {
     .orderBy('e.slug', 'asc');
 }
 
-/**
- * `listMyNetworkEvents`: os encontros desta conta (19/10/2026).
- *
- * ## A AUTORIA ESTA NA CLAUSULA `WHERE`, por semi-juncao
- *
- * `network_events_da_conta` (migracao `20261019000010`) devolve o CONJUNTO de
- * `id` do autor, lido pelo indice, e a consulta o usa com `IN`. Nao e um
- * predicado booleano por linha de proposito: assim a leitura por autor
- * acontece uma vez, e nao uma por encontro visivel da tabela inteira. Funcao
- * e nao `WHERE` escrito aqui porque o nome da coluna de autoria e reprovado
- * neste arquivo (ver o cabecalho de `consultaBase`).
- *
- * ## O recorte por `status`, acrescentado em 27/10/2026
- *
- * O MESMO calculo da agenda (`situacaoCalculada`), e nao um segundo: a lista do
- * dono projeta o campo `status` pela mesma funcao de dominio, entao um recorte
- * que discordasse dele devolveria encontro cujo rotulo contradiz o filtro que o
- * trouxe.
- */
+/** `listMyNetworkEvents`: os encontros desta conta (19/10/2026). */
 export function construtorDosMeusEncontros(db: DbExecutor, recorte: RecorteDosMeusEncontros) {
   const consulta = consultaBase(db).where(
     sql<SqlBool>`e.id IN (SELECT id FROM network_events_da_conta(${recorte.chamador}::uuid))`,
@@ -526,49 +344,11 @@ export function construtorDosMeusEncontros(db: DbExecutor, recorte: RecorteDosMe
   );
 }
 
-/**
- * A ordem de `Meus eventos`, e desde 27/10/2026 ela tem TRES GRUPOS.
- *
- * ## O que mudou, e qual defeito fechou
- *
- * Eram dois grupos -- "ainda nao terminou" e "passou" --, e o cancelado caia no
- * primeiro, porque `COALESCE(ends_at, starts_at) > agora` nao olha a
- * publicacao. Consequencia MEDIDA: um encontro **cancelado** para amanha
- * ordenava ANTES de um encontro **ativo** para depois de amanha. A unica
- * decisao que esta lista oferece e cancelar, e ela aparecia no alto justamente
- * para quem nao tem mais nada a decidir. Decisao do cliente de 26/10/2026.
- *
- * Os tres grupos, nesta ordem:
- *
- * 1. **ativo que ainda nao terminou**, do mais proximo para o mais distante: e
- *    o que corre risco de acontecer errado, e e sobre ele que a pessoa decide;
- * 2. **cancelado que ainda se chama cancelado** (`rotuladoCancelado`), do mais
- *    proximo para o mais distante;
- * 3. **o que passou**, do mais recente para o mais antigo: historico se le de
- *    tras para frente.
- *
- * ## Por que o cancelado e o grupo 2 e nao o fundo da lista
- *
- * Porque o rotulo dele ainda e `cancelled` e nao `ended`. Quando ele passa do
- * fim previsto o rotulo vira `ended` pela regra do encerrado, e ele cai no
- * grupo 3 **sozinho**, sem nenhuma chave aqui tratando disso. Jogar o
- * `cancelled` de hoje para debaixo do historico de ano passado esconderia a
- * informacao que a propria pessoa acabou de gerar.
- *
- * ## Por que quatro chaves, e nao uma
- *
- * `starts_at ASC` poria o encontro de ano passado no topo; `DESC` poria o mais
- * distante no futuro antes do de amanha. A chave 2 e nula no grupo 3 (e o
- * `ASC` do Postgres poe nulo no fim), e a chave 3 so tem efeito la, porque nos
- * grupos 1 e 2 a chave 2 ja ordenou tudo.
- */
+/** A ordem de `Meus eventos`, e desde 27/10/2026 ela tem TRES GRUPOS. */
 export function meusEncontrosOrdenados(db: DbExecutor, recorte: RecorteDosMeusEncontros) {
   const agora = comoData(recorte.agora);
   const cancelado = rotuladoCancelado(agora);
   const naoTerminou = sql<SqlBool>`COALESCE(e.ends_at, e.starts_at) > ${agora}::timestamptz`;
-  // A ORDEM DOS `WHEN` IMPORTA: o cancelado e testado primeiro justamente
-  // porque ele tambem satisfaz `naoTerminou`. Invertidos, ele volta para o
-  // grupo 1 e o defeito reabre inteiro.
   const grupo = sql`(CASE WHEN ${cancelado} THEN 1
                           WHEN ${naoTerminou} THEN 0
                           ELSE 2 END)`;
@@ -576,8 +356,6 @@ export function meusEncontrosOrdenados(db: DbExecutor, recorte: RecorteDosMeusEn
     .orderBy(grupo, 'asc')
     .orderBy(sql`(CASE WHEN ${cancelado} OR ${naoTerminou} THEN e.starts_at END)`, 'asc')
     .orderBy('e.starts_at', 'desc')
-    // O desempate estavel: sem ele, dois encontros no mesmo instante trocam de
-    // lugar entre paginas e um deles nunca aparece.
     .orderBy('e.slug', 'asc');
 }
 
@@ -593,24 +371,7 @@ export function construtorDoLocal(db: DbExecutor, slug: string, chamador: string
     ]);
 }
 
-/**
- * A regiao de referencia VALIDA **deste aparelho** de quem chama, como em
- * `Perto`.
- *
- * `session_family_id` no `WHERE` nao e zelo: desde a
- * `20260928000008_localizacao-de-referencia-por-aparelho` a chave primaria da
- * tabela e o par `(user_id, session_family_id)`, uma linha POR APARELHO. Sem a
- * familia esta subconsulta escalar devolve duas linhas para quem entrou na
- * conta em dois aparelhos, e o Postgres levanta `more than one row returned by
- * a subquery used as an expression` -- 500 na rota inteira, porque a contagem e
- * a pagina usam a mesma expressao. Com o par, o resultado e no maximo uma linha
- * por construcao, e nao por um `LIMIT 1` que escolheria um dos dois lugares sem
- * ninguem ter decidido qual.
- *
- * E tambem a regra da SEC-021, a mesma que `construtorDaLeitura` de `identity`
- * aplica: um aparelho nao le o lugar que outro informou, e por isso nao mede
- * distancia a partir dele.
- */
+/** A regiao de referencia VALIDA **deste aparelho** de quem chama, como em `Perto`. */
 function regiaoDaConta(chamador: string, familia: FamiliaDeSessao, agora: Date) {
   return sql`(SELECT u.reference_point FROM user_reference_locations u
                WHERE u.user_id = ${chamador}::uuid
@@ -618,14 +379,7 @@ function regiaoDaConta(chamador: string, familia: FamiliaDeSessao, agora: Date) 
                  AND u.expires_at > ${agora}::timestamptz)`;
 }
 
-/**
- * A regiao que vale para esta chamada: a do aparelho, ou nenhuma.
- *
- * `null::geography` para o token sem `sid`: `ST_Distance` e `ST_DWithin`
- * devolvem nulo e falso contra nulo, que e o mesmo comportamento de quem nunca
- * informou onde estava. A conversao explicita existe porque `null` cru deixaria
- * as duas funcoes ambiguas para o Postgres.
- */
+/** A regiao que vale para esta chamada: a do aparelho, ou nenhuma. */
 function regiaoDoAparelho(chamador: string, familia: FamiliaDeSessao | undefined, agora: Date) {
   return familia === undefined
     ? sql`null::geography`
@@ -641,9 +395,9 @@ export class KyselyNetworkRepository implements NetworkRepository {
   constructor(
     private readonly db: Db,
     private readonly ids: { uuidv7(): string },
-    /** A URL publica da derivada. O banco guarda so a chave. */
+    /** A URL publica da derivada. */
     private readonly urlDeMidia: (chave: string) => string,
-    /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. Sem ela, `instagram_url` sai nula. */
+    /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. */
     private readonly baseDoInstagram: string | null = null,
   ) {}
 
@@ -654,10 +408,6 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .executeTakeFirst();
     const total = Number(contagem?.total ?? 0);
 
-    // A ORDEM vem de `agendaOrdenada`, e nao e escrita aqui: e a mesma
-    // funcao que o caso de isca compila e le. Duas escritas da mesma ordem
-    // divergem na primeira correcao, e a que o teste nao le e a que fica
-    // errada.
     const linhas = (await agendaOrdenada(this.db, recorte)
       .select(colunasDoEncontro())
       .limit(recorte.limit)
@@ -669,10 +419,6 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
   async listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia> {
     const agora = comoData(recorte.agora);
-    // A presenca pergunta pelo MESMO par que a subconsulta mede. Perguntar so
-    // por `user_id` diria "tem regiao" por causa do outro aparelho, e a
-    // resposta prometeria uma ordem por distancia que este aparelho nao tem
-    // como produzir.
     const regiao =
       recorte.familia === undefined
         ? undefined
@@ -685,8 +431,6 @@ export class KyselyNetworkRepository implements NetworkRepository {
             .executeTakeFirst();
     const temRegiao = regiao !== undefined;
 
-    // O privado NUNCA entra, aprovado ou nao: a posicao dele numa lista por
-    // distancia ja e localizacao.
     let base = construtorDaAgenda(this.db, { ...recorte, sort: 'proximos' }).where(
       'e.visibility',
       '=',
@@ -771,13 +515,8 @@ export class KyselyNetworkRepository implements NetworkRepository {
         ])
         .executeTakeFirst();
       if (alvo === undefined) return { tipo: 'nao_encontrado' } as const;
-      // O mesmo 400 para o pendente e para o recusado: a checagem vem antes de
-      // olhar o pedido.
       if (alvo.encerrado) return { tipo: 'encerrado' } as const;
 
-      // Idempotente, e a recusa nao se lava: sobre linha existente o unico
-      // efeito e limpar a desistencia (que so existe no recusado). A decisao
-      // nao muda.
       await sql`
         INSERT INTO network_event_join_requests (id, ref, event_id, user_id)
         VALUES (${this.ids.uuidv7()}::uuid, ${randomBytes(16).toString('base64url')},
@@ -825,11 +564,8 @@ export class KyselyNetworkRepository implements NetworkRepository {
       if (pedido.status === 'approved' || pedido.encerrado) return { tipo: 'final' } as const;
 
       if (pedido.status === 'pending') {
-        // D54: nada a guardar, entao a linha sai na hora.
         await sql`DELETE FROM network_event_join_requests WHERE id = ${pedido.id}::uuid`.execute(trx);
       } else {
-        // Recusado: a linha fica, marcada, para que pedir de novo nao nasca
-        // pendente e lave a recusa.
         await sql`UPDATE network_event_join_requests SET withdrawn_at = ${quando}::timestamptz
                    WHERE id = ${pedido.id}::uuid`.execute(trx);
       }
@@ -851,8 +587,6 @@ export class KyselyNetworkRepository implements NetworkRepository {
     if (termo !== undefined && termo !== '') {
       base = base.where(sql<SqlBool>`e.title ILIKE ${`%${escaparCuringas(termo)}%`}`);
     }
-    // O filtro por estado segue a MESMA derivacao do dominio: `pending` e
-    // `declined` juntos, sempre. `withdrawn` nao tem linha legivel.
     switch (recorte.estado) {
       case 'approved':
         base = base.where('j.status', '=', 'approved');
@@ -885,13 +619,9 @@ export class KyselyNetworkRepository implements NetworkRepository {
   }
 
   /**
-   * `listMyNetworkEvents`. O recorte mora em `construtorDosMeusEncontros` e a
-   * ordem em `meusEncontrosOrdenados`, as duas no nivel do modulo: e de la que
-   * o caso de isca as compila e le, sem subir banco.
-   *
-   * **A contagem usa o construtor SEM a ordem**, de proposito: `ORDER BY` num
-   * `count` e trabalho que o Postgres faz e ninguem le. Os dois partem do mesmo
-   * construtor, entao `total` e a pagina concordam sobre o recorte.
+   * `listMyNetworkEvents`. O recorte mora em `construtorDosMeusEncontros` e a ordem
+   * em `meusEncontrosOrdenados`, as duas no nivel do modulo: e de la que o caso de
+   * isca as compila e le, sem subir banco.
    */
   async listarMeusEncontros(recorte: RecorteDosMeusEncontros): Promise<PaginaDosMeusEncontros> {
     const contagem = await construtorDosMeusEncontros(this.db, recorte)
@@ -912,19 +642,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
     };
   }
 
-  /**
-   * `getMyNetworkEvent`: o encontro desta conta COM A VERSAO.
-   *
-   * **A unica leitura da Rede que carrega `version`**, e e ela que alimenta o
-   * `ETag`. A regra de autoria e a MESMA da escrita, pela MESMA funcao de banco
-   * (`network_events_do_autor`, migracao `20261001000005`): nao existe uma
-   * segunda definicao de "este encontro e meu" em lugar nenhum. Zero linhas para
-   * inexistente, de outra conta, do painel e removido -- o mesmo 404.
-   *
-   * `consultaBase` continua no caminho, e com ela o predicado de visibilidade e
-   * o do autor com conta ativa: a projecao do dono sai do MESMO ponto unico que
-   * a agenda, e um campo novo na leitura da Rede chega aqui sozinho.
-   */
+  /** `getMyNetworkEvent`: o encontro desta conta COM A VERSAO. */
   async buscarMeuEncontro(slug: string, chamador: string): Promise<MeuEncontro | undefined> {
     const linha = (await consultaBase(this.db)
       .where(
@@ -942,25 +660,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
     };
   }
 
-  // ------------------------------------------------------------- a escrita
-
-  /**
-   * O estado da conta para criar encontro, numa consulta so.
-   *
-   * **A regua do canal verificado vem da FONTE UNICA**
-   * (`canalDeContatoConfirmadoNoSql`, em
-   * `shared/db/canal-de-contato-confirmado.ts`), e nao mais copiada de
-   * `estadoParaAbertura`: e-mail OU telefone verificado, e
-   * preenchido-e-nao-verificado nao conta. Na pratica isso e e-mail, porque
-   * nada em `src/` grava `phone_verified_at` -- a coluna existe e so e
-   * zerada.
-   *
-   * A contagem do teto esta na mesma consulta e nao num `SELECT` depois: as
-   * duas respostas decidem a mesma requisicao, e a pessoa esta esperando na
-   * tela. Ela passa pela funcao da migracao 20261001000005 pelo mesmo motivo do
-   * carimbo da autoria: precisa da coluna de autor na clausula WHERE, e o nome
-   * dela nao pode aparecer em src/.
-   */
+  /** O estado da conta para criar encontro, numa consulta so. */
   async estadoParaCriarEncontro(chamador: string, agora: Instant): Promise<EstadoDaContaParaCriar> {
     const quando = comoData(agora);
     const linha = await sql<{ tem_canal: boolean; ativos: number }>`
@@ -984,21 +684,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
   }
 }
 
-/**
- * A transacao das escritas da comunidade.
- *
- * Tres coisas aqui nao sao detalhe:
- *
- * 1. **`origin = 'community'` e `publication_status = 'published'` sao
- *    literais**, e nao parametro: nem a origem nem o estado inicial sao escolha
- *    de quem chama. O encontro da comunidade publica direto (ADR-0025 emenda 3).
- * 2. **A autoria e carimbada pela funcao da migracao `20261001000004`**, na
- *    mesma transacao do `INSERT`, e nao por uma coluna no `values`: o nome das
- *    duas colunas de autoria e reprovado em `src/` pelo portao de saida.
- * 3. **Toda leitura de escrita passa por `network_events_do_autor`**, que leva a
- *    origem e a conta na clausula `WHERE`. Nao ha um `if` de autoria em lugar
- *    nenhum deste arquivo.
- */
+/** A transacao das escritas da comunidade. */
 function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): TransacaoDaComunidade {
   return {
     async encontroDoAutor(slug, chamador) {
@@ -1051,9 +737,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
     },
 
     async alterarEncontro(id, versaoLida, m, agora) {
-      // A VERSAO ESTA NA CLAUSULA `WHERE` do `UPDATE`, e nao num `SELECT`
-      // antes: duas edicoes simultaneas da mesma pessoa em dois aparelhos
-      // passariam as duas por um `SELECT`.
       const r = await trx
         .updateTable('network_events')
         .set({
@@ -1084,8 +767,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
     },
 
     async cancelarEncontro(id, versaoLida, nota, agora) {
-      // Cancelar NAO APAGA: o encontro continua visivel no app como cancelado
-      // ate o fim previsto, pela mesma regra do cancelamento do painel.
       const r = await trx
         .updateTable('network_events')
         .set({
@@ -1132,14 +813,9 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
     },
 
     /**
-     * Confirma o envio da capa, na MESMA transacao da escrita do encontro
-     * (ADR-0027 item 10): uma imagem confirmada para um encontro que depois nao
-     * foi gravado ficaria `processing` para sempre.
-     *
-     * **A conta do chamador esta na clausula `WHERE`** (`u.user_id`), e e isso
-     * que impede confirmar o envio de outra pessoa: um `if` depois do `SELECT`
-     * responderia sobre envio alheio. `admin_account_id` nao casa aqui nunca --
-     * envio do painel nao vira capa de encontro da comunidade (T9).
+     * Confirma o envio da capa, na MESMA transacao da escrita do encontro (ADR-0027
+     * item 10): uma imagem confirmada para um encontro que depois nao foi gravado
+     * ficaria `processing` para sempre.
      */
     async capaDoEnvio(entrada) {
       const r = await sql<{
@@ -1161,8 +837,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
       const envio = r.rows[0];
       if (envio === undefined) return undefined;
       if (envio.confirmed_at !== null) {
-        // Ja confirmado: serve de novo SO para o mesmo encontro (reenviar o
-        // mesmo `upload_id` numa segunda edicao nao pode criar imagem nova).
         if (envio.catalog_image_id === null) return undefined;
         if (envio.evento_da_imagem !== null && envio.evento_da_imagem !== entrada.eventoId) return undefined;
         return envio.catalog_image_id;
@@ -1185,8 +859,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
           rejection_reason: null,
         })
         .execute();
-      // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
-      // imagem falharia em laco. Os dois na mesma transacao.
       await trx
         .insertInto('jobs')
         .values({
@@ -1199,8 +871,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
     },
 
     async definirCapa(eventoId, capa) {
-      // A galeria do encontro da comunidade tem no maximo UMA imagem, a capa
-      // (`position = 0`): o painel tem oito, e a tela do app tem uma.
       await trx.deleteFrom('network_event_images').where('event_id', '=', eventoId).execute();
       if (capa !== null) {
         await trx
@@ -1283,9 +953,6 @@ function comoEncontro(
     instagramUrl: urlDoInstagram(linha.instagram_handle, baseDoInstagram),
     imagens: (linha.images ?? []).map((i) => ({
       url: urlDeMidia(i.k),
-      // Nulas na imagem gravada antes das derivadas existirem. `urlDeMidia`
-      // sobre `null` montaria o endereco de um objeto que ninguem gravou, que e
-      // uma promessa que o cliente descobre quebrada ao desenhar a tela.
       urlDaMiniatura: i.t === null ? null : urlDeMidia(i.t),
       urlDoBanner: i.b === null ? null : urlDeMidia(i.b),
       textoAlternativo: i.a,
@@ -1303,27 +970,8 @@ export function criarNetworkRepository(
 }
 
 /**
- * O `slug` do encontro da comunidade: o derivado do titulo, depois o derivado
- * com sufixo curto, e dez tentativas no total.
- *
- * **O laco existe porque a comunidade nao manda `slug`** e dois encontros com
- * titulos parecidos sao normais ("Encontro no Ibirapuera"). O `slug` e cortado
- * em 30 caracteres, entao dois titulos que so divergem DEPOIS do 30o caractere
- * colidem tambem -- foi assim que o defeito apareceu em homologacao.
- *
- * **O conflito nao sobe mais como erro, e esse e o ponto.** Cada tentativa e um
- * `INSERT ... ON CONFLICT (slug) DO NOTHING RETURNING slug`: `slug` ocupado
- * devolve zero linhas, e o laco segue para o proximo candidato. Antes o laco
- * capturava o `23505` do indice unico, o que nunca funcionou: a violacao aborta
- * a transacao inteira, e a tentativa seguinte morria com `25P02` (`current
- * transaction is aborted`), que subia como 500. **O desempate era inalcancavel
- * -- ele nunca conseguia gravar** (medido em `hml.bichu.app` em 19/10/2026,
- * commit `458cd005`).
- *
- * O alvo do `ON CONFLICT` e explicito: so a colisao de `slug` e silenciada, e
- * conflito em qualquer outra restricao continua subindo. E o desempate segue
- * sem `SELECT` antes -- um `SELECT` deixaria duas criacoes simultaneas passarem
- * juntas, e quem decide e o indice unico.
+ * O `slug` do encontro da comunidade: o derivado do titulo, depois o derivado com
+ * sufixo curto, e dez tentativas no total.
  */
 async function inserirComSlugLivre(
   trx: DbTransaction,
@@ -1337,9 +985,6 @@ async function inserirComSlugLivre(
   for (const slug of candidatos) {
     if (await inserirLinhaDoEncontro(trx, novo, slug, quando)) return slug;
   }
-  // Dez tentativas falhadas nao e colisao: e titulo que nao da `slug` nenhum
-  // (so pontuacao) ou sorte impossivel. As duas sobem como 409, que e o que o
-  // contrato declara para `slug` ocupado.
   throw new SlugDoEncontroOcupado();
 }
 
@@ -1361,15 +1006,11 @@ async function inserirLinhaDoEncontro(
       neighborhood: novo.lugar.neighborhood,
       city: novo.lugar.city,
       state: novo.lugar.state,
-      // Sem ponto e sem endereco: ADR-0006, e nao ha geocodificacao nenhuma
-      // neste caminho.
       geo_source: null,
       street_address: null,
       starts_at: novo.startsAt,
       ends_at: novo.endsAt,
       time_zone: novo.timeZone,
-      // Todo encontro da comunidade e publico e gratuito (ver o contrato de
-      // `createNetworkEvent`).
       visibility: 'public',
       admission_kind: 'free',
       admission_amount: null,
@@ -1382,9 +1023,6 @@ async function inserirLinhaDoEncontro(
       ticket_url: null,
       instagram_handle: null,
       origin: 'community',
-      // Publica direto (decisao do cliente de 17/10/2026): nao ha revisao, e
-      // `published_at` existe porque o `CHECK network_events_visivel_foi_publicado`
-      // exige instante em todo encontro visivel.
       publication_status: 'published',
       published_at: quando,
       cancelled_at: null,
@@ -1393,9 +1031,6 @@ async function inserirLinhaDoEncontro(
       updated_at: quando,
       version: 1,
     })
-    // O alvo e o indice `network_events_slug_unico`, nomeado pela coluna: so
-    // a colisao de `slug` vira "zero linhas". Conflito em qualquer outra
-    // restricao (a chave primaria, por exemplo) continua levantando.
     .onConflict((oc) => oc.column('slug').doNothing())
     .returning('slug')
     .executeTakeFirst();

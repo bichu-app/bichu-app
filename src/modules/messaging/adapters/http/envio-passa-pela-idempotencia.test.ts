@@ -1,38 +1,4 @@
-/**
- * O envio de mensagem passa pela idempotência DE VERDADE.
- *
- * ## O defeito que este arquivo existe para impedir de voltar
- *
- * `POST /conversations/{conversationId}/messages` declarava
- * `Idempotency-Key` no contrato e não passava pelo mecanismo. A API recusava
- * subir por causa disso (`vigiarIdempotenciaDasRotas`), e o portão está certo:
- * o contrato prometia que reenviar não duplica, e reenviar duplicava.
- *
- * ## Por que uma isca própria, se o portão de subida já acusa
- *
- * Porque os dois medem coisas diferentes, e só um deles mede o efeito.
- *
- * O portão de subida lê a MARCA `config: { idempotencia: true }` e compara com
- * o contrato. Ele reprova a rota sem marca — e aprova a rota marcada cujo
- * handler não chama `executarComIdempotencia`. Marca e comportamento são duas
- * declarações da mesma coisa, e as duas divergem no dia em que alguém mexe no
- * handler sem mexer na marca. Aqui o que se mede é o EFEITO: o mesmo envio,
- * com a mesma chave, duas vezes, e o serviço chamado UMA vez.
- *
- * Medido, e é por isso que este arquivo tem esta forma: tirar só a chamada a
- * `executarComIdempotencia` do handler, deixando a marca de pé, mantém a API
- * subindo e o portão verde. O caso `o segundo envio com a mesma chave não
- * chama o serviço de novo` é o único que reprova.
- *
- * ## O dobre de idempotência não é "sempre undefined"
- *
- * O dobre das outras bancadas devolve `undefined` em `reservar`, que é o
- * suficiente quando o que se testa é outra coisa. Aqui ele seria a armadilha
- * exata que este repositório já pagou duas vezes: com `reservar` sempre
- * devolvendo `undefined`, o efeito roda nas duas chamadas e o teste passa com a
- * idempotência DESLIGADA. Este dobre guarda e devolve, como a tabela guarda e
- * devolve, e recusa a chave reaproveitada para outro pedido.
- */
+/** O envio de mensagem passa pela idempotência DE VERDADE. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -98,12 +64,7 @@ function idempotenciaEmMemoria(): Idempotencia {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /**
-   * Quantas vezes o SERVIÇO foi chamado. É este número que a isca observa.
-   *
-   * Propriedade de função e não método: ela é desestruturada de `bancada()`,
-   * e método desestruturado perde o `this` (`@typescript-eslint/unbound-method`).
-   */
+  /** Quantas vezes o SERVIÇO foi chamado. */
   readonly envios: () => number;
 }
 
@@ -134,17 +95,9 @@ function bancada(): Bancada {
   registrarRotasDeConversas(app, {
     conversas,
     autenticador: { autenticar: (token: string) => Promise.resolve({ userId: token as UserId }) },
-    // O contrato DE VERDADE: é ele que diz se a operação declara
-    // `Idempotency-Key`, e uma cópia aqui deixaria de acusar mudança na spec.
     contrato: carregarContrato('api/openapi.yaml'),
     idempotencia: idempotenciaEmMemoria(),
     clock,
-    // Emenda 3 do ADR-0010 (19/10/2026). Este arquivo mede a idempotencia do
-    // ENVIO, que nao projeta participante nenhum, e por isso a base e um valor
-    // de teste reconhecivel em vez do dominio real.
-    // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
-    // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
-    // deixaria a isca da invariante verde com a chave do original gravada.
     assinarFoto: (chave: string) =>
       Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
     baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],
@@ -178,8 +131,6 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
 
     assert.equal(primeira.statusCode, 201);
     assert.equal(segunda.statusCode, 201);
-    // A MESMA resposta, e não uma segunda mensagem parecida: o tutor e quem
-    // achou o animal veriam duas linhas iguais na conversa.
     assert.deepEqual(JSON.parse(segunda.body), JSON.parse(primeira.body));
     assert.equal(
       envios(),
@@ -206,8 +157,6 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
     await app.close();
 
     assert.equal(primeira.statusCode, 201);
-    // 400 e não 201: devolver o corpo gravado aqui entregaria a mensagem de uma
-    // conversa dentro de outra, que é pior do que recusar.
     assert.equal(segunda.statusCode, 400);
     assert.equal(envios(), 1);
   });
@@ -230,8 +179,6 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
       bodyLimitBytes: 1_048_576,
     });
     const contrato = carregarContrato('api/openapi.yaml');
-    // Registrado ANTES das rotas, como `api.ts` faz: o gancho `onRoute` só vê o
-    // que for registrado depois dele.
     const conferir = vigiarIdempotenciaDasRotas(app, contrato, '/v1');
     const clock: Clock = { now: () => AGORA as ReturnType<Clock['now']> };
 
@@ -241,9 +188,6 @@ void describe('o envio de mensagem honra a Idempotency-Key que o contrato declar
       contrato,
       idempotencia: idempotenciaEmMemoria(),
       clock,
-      // BICHUS-35. O assinador da foto da mensagem. A URL carrega a CHAVE, para
-      // que um caso possa afirmar QUAL chave foi assinada: um duble de URL fixa
-      // deixaria a isca da invariante verde com a chave do original gravada.
       assinarFoto: (chave: string) =>
         Promise.resolve(`https://privado.invalid/${chave}` as AbsoluteUrl),
       baseDeMidia: 'https://midia.test' as DependenciasDasRotasDeConversa['baseDeMidia'],

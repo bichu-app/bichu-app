@@ -1,42 +1,6 @@
 /**
- * "Sair de todos os aparelhos" — o gatilho que a BICHUS-125 existe para
- * construir, provado pelo EFEITO e não pela chamada.
- *
- * ## Por que este arquivo não usa a bancada de `auth-service.test.ts`
- *
- * Aquela bancada tem dublês que respondem valor fixo: `buscarRefreshPorHash`
- * devolve sempre a mesma linha, `revogarFamilia` só anota. Ela serve ao que ela
- * prova — que uma porta foi tocada. Aqui isso não basta, e o motivo está escrito
- * na história: `invalidarTodasAsSessoes()` sobreviveu meses **sem nenhum
- * chamador**, e nenhuma suíte reclamou. Um caso que afirmasse
- * "`revogarTodasAsFamilias` foi chamada" ficaria verde com a função morta, que é
- * literalmente o estado de ontem.
- *
- * Então o repositório daqui é um banco de mentira que **se comporta como o
- * banco**: guarda linhas de `refresh_tokens` com `revoked_at` e `rotated_to_id`,
- * guarda `sessions_invalid_before` na conta, e responde às consultas do jeito
- * que o Postgres responderia. O que se afirma é o que a pessoa observa: **o
- * outro aparelho para de conseguir renovar.**
- *
- * ## O caso que decide o trabalho
- *
- * Dois aparelhos com sessão viva. Um pede para sair de todos. O refresh do
- * outro tem que parar de funcionar — sem ninguém ter tocado naquele aparelho.
- *
- * Ele reprova de duas formas diferentes, e as duas importam:
- *
- * - arranque `revogarTodasAsFamilias` de `derrubarTodasAsSessoes` e o refresh do
- *   aparelho B continua renovando. **É este o defeito de hoje**: a barreira de
- *   `sessions_invalid_before` não toca em `refresh_tokens`, e nesta base
- *   `renovar()` ainda nem lê a barreira (isso chega com BICHUS-77);
- * - arranque `invalidarSessoes` e o token de ACESSO do aparelho B sobrevive até
- *   o `exp`, o que o caso `a barreira também é empurrada` pega.
- *
- * ## O contrapeso, que separa portão de bloqueio geral
- *
- * Um refresh emitido **depois** do "sair de todos" continua valendo. Sem ele, a
- * implementação mais simples que passa no caso acima seria "recusar sempre", e
- * ninguém mais entraria na conta.
+ * "Sair de todos os aparelhos" — o gatilho que a BICHUS-125 existe para construir,
+ * provado pelo EFEITO e não pela chamada.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -79,7 +43,7 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/** Relógio que anda quando o caso mandar. O produto nunca lê o da máquina. */
+/** Relógio que anda quando o caso mandar. */
 function relogioQueAnda(inicio: Instant = INSTANTE_FIXO): Clock & {
   avancar: (ms: number) => void;
 } {
@@ -102,13 +66,7 @@ function geradorSequencial(): IdGenerator {
   };
 }
 
-/**
- * Um `refresh_tokens` de mentira que se comporta como a tabela.
- *
- * Os campos são os do esquema, e as consultas replicam as cláusulas: a
- * revogação em massa é `WHERE user_id = $1 AND revoked_at IS NULL`, e não um
- * `forEach` sobre tudo — a diferença é a idempotência, que um caso abaixo cobra.
- */
+/** Um `refresh_tokens` de mentira que se comporta como a tabela. */
 interface Linha {
   id: string;
   userId: UserId;
@@ -125,21 +83,12 @@ interface Linha {
   revokedReason: MotivoDeRevogacao | null;
 }
 
-/**
- * A recusa deste arquivo, pelo nome da porta. Mesma mensagem que cada stub
- * carregava antes de o dublê compartilhado assumir as portas não exercitadas.
- */
+/** A recusa deste arquivo, pelo nome da porta. */
 function naoUsado(nome: string): never {
   throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
 }
 
 class BancoDeMentira extends RepositorioQueRecusaTudo {
-  // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-  // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-  // avatar da barra do app caia na inicial do nome em todas as paginas.
-  // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-  // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-  // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
   override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
     return Promise.resolve(null);
   }
@@ -160,8 +109,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
       email: EMAIL,
       emailVerifiedAt: dataFixa(0),
       displayName: 'Tutora',
-      // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
-      // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
       handle: null,
       phoneE164: null,
       phoneVerifiedAt: null,
@@ -223,9 +170,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
 
   override rotacionar(atualId: string, sucessor: NovoRefresh, agora: Instant): Promise<boolean> {
     const atual = this.linhas.find((x) => x.id === atualId);
-    // A mesma guarda do `UPDATE ... WHERE rotated_to_id IS NULL AND revoked_at
-    // IS NULL` do repositório de verdade. Sem ela este dublê rotacionaria uma
-    // linha revogada, e o caso central passaria por acidente.
     if (atual === undefined || atual.rotatedToId !== null || atual.revokedAt !== null) {
       return Promise.resolve(false);
     }
@@ -293,15 +237,7 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   }
 }
 
-/**
- * O cadastro de aparelhos como uma TABELA de mentira, e não um espião.
- *
- * O SEC-019 é um defeito de endereço, não de chamada, e o parecer da segurança
- * diz por extenso por quê: *"um caso que só verifique que `removerPushDaConta`
- * foi chamada fica verde com o `DELETE` errado embaixo"*. Então o que este
- * objeto guarda são LINHAS, e o que os casos afirmam é que a linha do aparelho
- * roubado **não existe mais** depois da operação.
- */
+/** O cadastro de aparelhos como uma TABELA de mentira, e não um espião. */
 class CadastroDeAparelhosDeMentira {
   private readonly linhas = new Map<string, { dono: UserId; pushToken: string }>();
 
@@ -326,7 +262,7 @@ class CadastroDeAparelhosDeMentira {
   }
 }
 
-/** O texto da reprovação diz o RISCO, e não o número. Ver o §19 da segurança. */
+/** O texto da reprovação diz o RISCO, e não o número. */
 const AINDA_RECEBE =
   'o aparelho continuaria recebendo alerta de pet perdido. A sessão caiu e a linha de ' +
   '`user_devices` ficou, com `push_token` e `push_permission = granted` intactos: quem ' +
@@ -343,8 +279,8 @@ interface Bancada {
 }
 
 /**
- * `pushQuebrado` existe para UM caso: o que prova que a falha do passo 3
- * propaga em vez de virar sucesso silencioso. Ver o caso, lá embaixo.
+ * `pushQuebrado` existe para UM caso: o que prova que a falha do passo 3 propaga
+ * em vez de virar sucesso silencioso.
  */
 async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada> {
   const relogio = relogioQueAnda();
@@ -354,9 +290,8 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
   const mensagens: Mensagem[] = [];
 
   /**
-   * O assinador guarda o `iat` que emitiu e o devolve na verificação, com o
-   * mesmo `Math.floor` do emissor real. Sem essa volta, emissão e barreira
-   * seriam dois dublês independentes e a comparação não provaria nada.
+   * O assinador guarda o `iat` que emitiu e o devolve na verificação, com o mesmo
+   * `Math.floor` do emissor real.
    */
   const claimsPorToken = new Map<string, ClaimsDoAcesso>();
   const assinador: TokenSigner = {
@@ -384,8 +319,6 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
 
   const servico = criarAuthService({
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
-    // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
-    // resposta honesta de "não havia localização gravada".
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio: banco,
     assinador,
@@ -421,12 +354,7 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
   return { servico, banco, aparelhos, relogio, eventos, mensagens };
 }
 
-/**
- * Dois aparelhos no cadastro de push: o que foi levado e o que ficou.
- *
- * Dois, e não um, pelo mesmo motivo do refresh: com um só, "todos os aparelhos
- * saíram" não tem como ser medido e o caso passa por vacuidade.
- */
+/** Dois aparelhos no cadastro de push: o que foi levado e o que ficou. */
 const APARELHO_ROUBADO = 'aparelho-roubado';
 const APARELHO_DE_CASA = 'aparelho-de-casa';
 
@@ -435,7 +363,7 @@ function comDoisAparelhosNoPush(b: Bancada): void {
   b.aparelhos.registrar(APARELHO_DE_CASA, TUTORA, 'fcm-do-tablet-de-casa');
 }
 
-/** Entra de verdade, pelo caminho da senha. Dois destes são dois aparelhos. */
+/** Entra de verdade, pelo caminho da senha. */
 async function entrarNoAparelho(b: Bancada): Promise<{ acesso: string; refresh: string }> {
   const sessao = await b.servico.entrar(
     { email: EMAIL, password: SENHA, staySignedIn: false },
@@ -464,24 +392,18 @@ void describe('sair de todos os aparelhos (BICHUS-125, gatilho 1)', () => {
     b.relogio.avancar(1000);
     const aparelhoB = await entrarNoAparelho(b);
 
-    // Duas famílias distintas, e as duas vivas. Sem isto o caso mediria o
-    // logout de um aparelho só e passaria com a implementação errada.
     assert.equal(b.banco.vivas.length, 2, 'os dois aparelhos precisam ter sessão viva');
     const familias = new Set(b.banco.vivas.map((l) => l.familyId));
     assert.equal(familias.size, 2, 'cada aparelho abre a própria família');
 
-    // O aparelho B renova ANTES, para que a recusa de depois não possa ser
-    // atribuída a um refresh que nunca funcionou.
     b.relogio.avancar(1000);
     await b.servico.renovar(aparelhoB.refresh, CONTEXTO);
     const refreshVivoDoB = b.banco.vivas.find((l) => l.userId === TUTORA && l.revokedAt === null);
     assert.ok(refreshVivoDoB !== undefined);
 
-    // O aparelho A pede para sair de todos.
     b.relogio.avancar(1000);
     await b.servico.sairDeTodosOsAparelhos(await autenticado(b, aparelhoA.acesso), CONTEXTO);
 
-    // E o B, que ninguém tocou, não renova mais.
     b.relogio.avancar(1000);
     const refreshAtualDoB = b.banco.linhas.find(
       (l) => l.id === refreshVivoDoB.id,
@@ -505,9 +427,6 @@ void describe('sair de todos os aparelhos (BICHUS-125, gatilho 1)', () => {
 
     b.relogio.avancar(1000);
     const erro = await recusa(() => b.servico.renovar(aparelhoB.refresh, CONTEXTO));
-    // Indistinguível de um refresh inválido qualquer: o mesmo `type` que um
-    // token vencido produz. Qualquer outro valor aqui viraria oráculo — diria
-    // a quem apresenta um refresh que AQUELA conta pediu para sair de todos.
     assert.equal(erro.problemType, 'token-expired');
   });
 
@@ -517,7 +436,6 @@ void describe('sair de todos os aparelhos (BICHUS-125, gatilho 1)', () => {
     b.relogio.avancar(1000);
     const aparelhoB = await entrarNoAparelho(b);
 
-    // Funcionava antes.
     await autenticado(b, aparelhoB.acesso);
 
     b.relogio.avancar(1000);
@@ -534,8 +452,6 @@ void describe('sair de todos os aparelhos (BICHUS-125, gatilho 1)', () => {
     b.relogio.avancar(1000);
     await b.servico.sairDeTodosOsAparelhos(await autenticado(b, aparelhoA.acesso), CONTEXTO);
 
-    // A pessoa entra de novo. Se "sair de todos" fosse um bloqueio geral em vez
-    // de um gatilho pontual, isto aqui falharia — e ninguém mais entraria.
     b.relogio.avancar(2000);
     const novaSessao = await entrarNoAparelho(b);
     b.relogio.avancar(1000);
@@ -556,9 +472,6 @@ void describe('sair de todos os aparelhos (BICHUS-125, gatilho 1)', () => {
     const evento = b.eventos.find((e) => e.action === 'auth.sessions_revoked');
     assert.ok(evento !== undefined, 'o gatilho não entrou na auditoria');
     assert.equal(evento.resourceId, TUTORA);
-    // `devices_removed` entra no MESMO evento e não num evento próprio
-    // (SEC-019): o gesto é um, e duas famílias de evento para o mesmo ato
-    // fariam a trilha contar o mesmo fato duas vezes.
     assert.deepEqual(evento.metadata, {
       reason: 'logout_all',
       revoked_families: 2,
@@ -669,7 +582,6 @@ void describe('troca de senha (BICHUS-125, gatilho 2)', () => {
     b.relogio.avancar(1000);
     const eu = await autenticado(b, aparelhoA.acesso);
 
-    // Senha atual errada E senha nova fraca. O erro tem de ser o da credencial.
     const erro = await recusa(() => b.servico.trocarSenha(eu, 'errada', '123', CONTEXTO));
     assert.equal(
       erro.problemType,
@@ -693,11 +605,6 @@ void describe('troca de senha (BICHUS-125, gatilho 2)', () => {
 
 void describe('redefinição de senha (BICHUS-125): a barreira era metade do trabalho', () => {
   void it('a revogação em massa passa a ser a MESMA dos outros gatilhos', async () => {
-    // A redefinição vive noutra bancada (ela consome token de verificação), e o
-    // que este caso guarda é o acoplamento que importa: os três gatilhos chamam
-    // `derrubarTodasAsSessoes`, que faz as duas metades. Se alguém separar de
-    // novo, `revogarTodasAsFamilias` deixa de existir na porta e isto não
-    // compila — a barreira de tipo é a prova, e ela roda no `tsc`.
     const b = await montar();
     const aparelhoA = await entrarNoAparelho(b);
     b.relogio.avancar(1000);
@@ -711,25 +618,7 @@ void describe('redefinição de senha (BICHUS-125): a barreira era metade do tra
   });
 });
 
-/**
- * O SEC-019: os caminhos de revogação em massa apagam o cadastro de push.
- *
- * ## O que decide cada caso
- *
- * A LINHA, lida depois da operação. Não "`removerPushDaConta` foi chamada":
- * essa afirmação fica verde com o `DELETE` errado embaixo, e é o que o §19 do
- * documento de segurança proíbe por extenso.
- *
- * ## As iscas, rodadas e vistas reprovar em 23/09/2026
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | a chamada `deps.removerPushDaConta(userId)` comentada em `derrubarTodasAsSessoes` | 4 casos |
- * | `removerTodosDaConta` delegando a `revogarDoDono(dono, dono)` (o `DELETE` errado) | 4 casos |
- *
- * A segunda isca é a que justifica ler a linha em vez de contar a chamada: com
- * ela, um caso que afirmasse "a função foi chamada" continuaria verde.
- */
+/** O SEC-019: os caminhos de revogação em massa apagam o cadastro de push. */
 void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', () => {
   void it('"sair de todos os aparelhos" tira o aparelho ROUBADO do cadastro de push', async () => {
     const b = await montar();
@@ -743,11 +632,6 @@ void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', (
   });
 
   void it('o aparelho de QUEM PEDIU cai junto, e isso é a decisão e não um efeito colateral', async () => {
-    // §19: sem vínculo entre a linha e a família de refresh, o servidor não tem
-    // como saber qual linha é o telefone que está pedindo. Um parâmetro de "não
-    // apague este" seria preenchido por quem está com o aparelho roubado, então
-    // a escolha é derrubar todos. O requisito que paga esse preço é do app:
-    // re-registrar depois de todo login (`vigia_de_aviso.dart`).
     const b = await montar();
     comDoisAparelhosNoPush(b);
     const aparelhoA = await entrarNoAparelho(b);
@@ -791,9 +675,6 @@ void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', (
   });
 
   void it('a trilha conta os aparelhos que saíram, junto das famílias', async () => {
-    // Sem `devices_removed`, o evento diz que a sessão caiu e não diz se o
-    // endereço de entrega caiu junto — que é a pergunta que o SEC-019 fez e que
-    // a trilha de ontem não respondia em lugar nenhum.
     const b = await montar();
     comDoisAparelhosNoPush(b);
     const aparelhoA = await entrarNoAparelho(b);
@@ -809,9 +690,6 @@ void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', (
   });
 
   void it('conta SEM aparelho registrado não vira falha: zero é sucesso', async () => {
-    // Contrapeso. Sem ele, a implementação mais simples que passa nos casos
-    // acima poderia exigir ao menos uma linha, e o primeiro "sair de todos" de
-    // quem nunca concedeu notificação viraria 500.
     const b = await montar();
     const aparelhoA = await entrarNoAparelho(b);
     b.relogio.avancar(1000);
@@ -825,10 +703,6 @@ void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', (
   });
 
   void it('a falha ao remover o push PROPAGA: não há sucesso com push vivo', async () => {
-    // O §19 é explícito: o que não pode acontecer é o passo 3 falhar dentro de
-    // um `catch` mudo e a resposta continuar sendo sucesso. Sem este caso, a
-    // "correção" mais simples que passa em todos os de cima é envolver a
-    // chamada num `try` vazio, e o defeito volta silencioso.
     const b = await montar({ pushQuebrado: true });
     comDoisAparelhosNoPush(b);
     const aparelhoA = await entrarNoAparelho(b);

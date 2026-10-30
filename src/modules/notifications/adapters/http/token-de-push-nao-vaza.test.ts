@@ -1,61 +1,4 @@
-/**
- * O token de push não atravessa a borda de saída, em resposta nenhuma.
- *
- * ## Por que este arquivo existe
- *
- * `push_token` é **credencial de entrega**: quem o tem, junto da credencial do
- * projeto FCM, manda notificação para aquele aparelho — e notificação aparece
- * na tela bloqueada, ao lado de quem estiver junto da pessoa. Ele entra no
- * sistema pelo corpo de `POST /v1/me/devices` e não pode sair por lugar nenhum,
- * nem para o próprio dono: o dono já o tem, e devolvê-lo só acrescenta cópias
- * em log de proxy, em histórico de ferramenta e na tela de quem depura.
- *
- * ## Por que a coluna não leva a marca `NUNCA sai do servidor`
- *
- * A marca de `src/tools/portao-colunas-que-nao-saem.ts` parece feita para este
- * caso, e não serve — pelo mesmo motivo estrutural que fez a BICHUS-92 não
- * marcar `reference_point`, com um detalhe a mais:
- *
- * - aquele portão percorre o contrato INTEIRO, e o percurso de `components` não
- *   distingue requisição de resposta. `DeviceRegistration.push_token` é campo
- *   de **entrada**, e precisa ser: é por ele que o token chega. Marcar a coluna
- *   reprovaria o portão por um campo que está certo;
- * - o mesmo portão reprova o nome em QUALQUER arquivo de `src/`, e o adaptador
- *   de persistência precisa escrever `push_token` para gravar a coluna. Marcar
- *   obrigaria o adaptador a entrar na lista de dispensa, que é o furo que o
- *   portão existe para impedir.
- *
- * Em lugar da marca, esta conferência — que é mais estreita e, por ser mais
- * estreita, é a que de fato responde a pergunta: **o nome aparece em alguma
- * RESPOSTA?**
- *
- * Três coisas fazem este arquivo valer mais que uma revisão atenta:
- *
- * 1. **O nome da coluna é LIDO DA MIGRAÇÃO**, não escrito aqui. Quem renomear
- *    a coluna amanhã continua coberto, e quem a apagar derruba este arquivo com
- *    o motivo na mensagem: não achar alvo é reprovação.
- * 2. **A varredura é a DO PORTÃO** (`inspecionarContrato`), aplicada às
- *    respostas resolvidas por `responseSchema` — e não uma segunda
- *    implementação da mesma ideia, que divergiria em silêncio.
- * 3. **A isca roda em toda execução.** Hoje o contrato tem zero ocorrência do
- *    nome em resposta, e "não achei nada" tem exatamente a mesma cor de
- *    "conferi e está limpo".
- *
- * ## As iscas, e como foram provadas
- *
- * Desligadas, rodadas e vistas reprovar em 22/09/2026, e depois restauradas:
- *
- * | o que foi desligado | reprovaram |
- * |---|---|
- * | `push_token` acrescentado a `Device` em `api/openapi.yaml` | 1 caso aqui, e 1 no arquivo de rotas |
- * | `comoResposta` trocado por `{ ...aparelho, ... }` | 2 casos aqui, e 5 no arquivo de rotas |
- * | `bearerAuth` retirado de `listDevices` no contrato | 1 caso |
- * | a coluna `push_token` renomeada na migração | 2 casos, por não ter o que conferir |
- *
- * A segunda linha é a que mais importa: o espalhamento do objeto do domínio é a
- * forma mais curta e mais provável de o token sair, e ela reprova nos dois
- * lugares — aqui pelo código-fonte, lá pelo corpo da resposta serializada.
- */
+/** O token de push não atravessa a borda de saída, em resposta nenhuma. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -75,12 +18,7 @@ const CAMINHO_DA_ROTA = 'src/modules/notifications/adapters/http/device-routes.t
 /** `push_token text` na migração, com ou sem espaço, em qualquer arquivo. */
 const COLUNA_DE_TOKEN = /^\s*(push_token)\s+text\b/gim;
 
-/**
- * O nome da coluna do token, lido do disco.
- *
- * Não achar é falha, e não silêncio: uma varredura sem alvo termina verde e
- * ninguém desconfia. É o defeito que este repositório mais persegue.
- */
+/** O nome da coluna do token, lido do disco. */
 function colunasDeToken(): readonly string[] {
   const diretorio = 'migrations';
   const achadas: string[] = [];
@@ -95,19 +33,7 @@ function colunasDeToken(): readonly string[] {
   return achadas;
 }
 
-/**
- * As respostas do contrato, embrulhadas na forma que `inspecionarContrato` lê.
- *
- * Por que embrulhar em vez de passar a especificação inteira: aquela função
- * percorre `components` por atacado, e é lá que mora `DeviceRegistration` — o
- * schema de ENTRADA, onde `push_token` está certo. Passando a spec crua, o
- * resultado seria um achado verdadeiro sobre um campo que não é violação, e
- * uma conferência que acusa o que está certo é uma conferência que alguém
- * desliga.
- *
- * `responseSchema` devolve o schema **já resolvido** (sem `$ref`), então o
- * percurso do portão o atravessa inteiro sem precisar de `components`.
- */
+/** As respostas do contrato, embrulhadas na forma que `inspecionarContrato` lê. */
 function respostasComoSpec(contrato: Contrato): Record<string, unknown> {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const operacao of contrato.operacoes.values()) {
@@ -137,9 +63,6 @@ void describe('o alvo existe, e a ausência dele é reprovação', () => {
   });
 
   void it('a varredura das respostas enxerga alguma coisa, e não um objeto vazio', () => {
-    // Se `respostasComoSpec` devolvesse `{ paths: {} }` — por um `responseSchema`
-    // que mudou de forma, por exemplo — todos os casos abaixo ficariam verdes
-    // sem nunca ter olhado para uma resposta.
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const montada = respostasComoSpec(contrato) as { paths: Record<string, unknown> };
     assert.ok(
@@ -147,8 +70,6 @@ void describe('o alvo existe, e a ausência dele é reprovação', () => {
       `a montagem das respostas achou ${String(Object.keys(montada.paths).length)} operações. ` +
         'Filtro que não filtra termina verde e ninguém desconfia.',
     );
-    // E ela precisa achar a coluna quando ela ESTÁ lá: o contrato de isca
-    // abaixo prova a varredura, este caso prova a montagem.
     const achados = inspecionarContrato(montada, new Set(['push_permission']));
     assert.ok(
       achados.length > 0,
@@ -160,14 +81,6 @@ void describe('o alvo existe, e a ausência dele é reprovação', () => {
 
 void describe('a coluna NÃO carrega a marca do portão de saída, e isso é verificado', () => {
   void it('`push_token` não aparece na lista de colunas marcadas', () => {
-    // A armadilha é literal e ela já aconteceu nesta história: o portão lê
-    // `/nunca sai do servidor/i` contra o TEXTO do `COMMENT ON COLUMN`, então
-    // um comentário que EXPLICA por que a coluna não leva a marca acaba
-    // carregando a marca. O portão reprovou com nove achados, todos corretos,
-    // por uma frase explicativa.
-    //
-    // Este caso trava a redação: quem reescrever o comentário e reintroduzir a
-    // frase descobre aqui, em segundos, e não no passo do portão da esteira.
     const migracoes = readdirSync('migrations')
       .filter((nome) => nome.endsWith('.sql'))
       .map((nome) => ({ caminho: nome, conteudo: readFileSync(join('migrations', nome), 'utf8') }));
@@ -232,10 +145,6 @@ paths:
   });
 
   void it('`DeviceRegistration` continua declarando o token na ENTRADA', () => {
-    // O oposto da isca acima, e ele importa: um portão que reprovasse o campo
-    // de entrada seria desligado na primeira semana, e com ele iria a
-    // conferência de saída. A entrada é o único caminho pelo qual o token
-    // chega, e ela precisa existir.
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const corpo = contrato.requestBodySchema('registerDevice');
     assert.ok(corpo !== undefined, '`registerDevice` perdeu o corpo de requisição');
@@ -250,10 +159,6 @@ paths:
 
 void describe('a rota monta a resposta campo a campo, e não por espalhamento', () => {
   void it('`device-routes.ts` não espalha o objeto do domínio numa resposta', () => {
-    // `Aparelho` carrega `pushToken` porque `podeReceberPush` precisa dele. Um
-    // `...aparelho` publicaria a credencial na primeira vez que alguém achasse
-    // o espalhamento mais curto — e o contrato não acusaria, porque propriedade
-    // A MAIS na resposta não quebra nenhum cliente.
     const fonte = readFileSync(CAMINHO_DA_ROTA, 'utf8');
     const semComentarios = fonte.replace(/\/\*[^]*?\*\/|\/\/.*$/gm, '');
     assert.doesNotMatch(

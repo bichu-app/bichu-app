@@ -1,26 +1,4 @@
-/**
- * Rotas do achado avulso (BICHUS-35).
- *
- * Quatro pontos desta fiação que não são detalhe:
- *
- * - **`createStrayFoundReport` exige conta.** O contrato declara `bearerAuth`
- *   ("exige conta, regra fechada no briefing"), e a história põe isso em *Fora
- *   desta história*: "registro de achado por quem não tem conta, que a regra de
- *   acesso exige". Quem acha um pet COM plaquinha continua avisando sem conta,
- *   pela rota do QR — são portas diferentes de propósito.
- * - **A conversão de data acontece AQUI**, na borda. A camada de aplicação não
- *   constrói `Date`, e uma data malformada precisa virar `validation-failed` com
- *   o nome do campo antes de chegar ao serviço.
- * - **A resposta não tem coordenada.** Nem para quem registrou: a pessoa já sabe
- *   onde estava, e o campo só existiria para vazar depois. O que sai é
- *   `area_label`, por `rotuloDaArea`.
- * - **A resposta não tem `case_id`.** O achado pode ter se ligado a um caso pelo
- *   `share_token`, e devolver qual contaria a quem registrou qual pet de qual
- *   tutor está sendo procurado — antes de qualquer confirmação humana, e para
- *   quem, no pior caso, é o falso achador. O ADR-0010 item 7 proíbe o
- *   agrupamento; o portão de contrato, que só procura o que sumiu, não veria a
- *   propriedade a mais.
- */
+/** Rotas do achado avulso (BICHUS-35). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -42,19 +20,7 @@ import {
 import type { Especie, Porte, Sexo } from '../../domain/cruzamento.js';
 import type { AbsoluteUrl, FoundReportId, Instant, UserId } from '../../../../shared/types/brands.js';
 
-/**
- * Os dois tetos são os do contrato, copiados dele e não escolhidos aqui.
- *
- * `hold_for_review` **não recusa** (`aplicacao-de-teto.ts`): só `deny_429`
- * recusa. Ele conta e alerta, e está aqui porque o contrato o declara.
- *
- * Por que `account` é a dimensão, e não `ip`: a rota é autenticada, então
- * `account` existe e é exata. Teto por `ip` seria armadilha no Brasil, onde o
- * CGNAT das operadoras põe muita gente atrás de poucos endereços — ele pegaria
- * vizinhos inocentes e erraria o abusador. E o que se protege aqui é caro de
- * verdade: cada achado enfileira um cruzamento geoespacial contra todos os casos
- * abertos, e é `expensive_query` no contrato por isso.
- */
+/** Os dois tetos são os do contrato, copiados dele e não escolhidos aqui. */
 export const rotaDeRegistroDeAchado = defineRoute({
   operationId: 'createStrayFoundReport',
   method: 'post',
@@ -88,20 +54,7 @@ export const rotaDeEnriquecimento = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A intenção de envio da foto do achador.
- *
- * O teto é por **aviso** e não por conta, e a janela é `lifetime`: é o SEC-009
- * ("3 fotos e 2 MB por foto no aviso do achador") copiado do contrato. Um teto
- * por conta faria o segundo animal da noite ficar sem foto nenhuma; um teto por
- * hora deixaria o quarto upload passar na hora seguinte, e "três fotos" viraria
- * "três fotos por hora, para sempre".
- *
- * O teto da borda é um freio grosso — ele conta requisição, inclusive a que vai
- * responder 415. A garantia de verdade é a contagem de `upload_intents` do
- * serviço, e as duas são independentes de propósito (ADR-0001): basta um job ou
- * uma rota interna nova para a borda ser contornada.
- */
+/** A intenção de envio da foto do achador. */
 export const rotaDeIntencaoDeFotoDoAchado = defineRoute({
   operationId: 'createFoundReportPhotoUploadIntent',
   method: 'post',
@@ -122,14 +75,7 @@ export interface DependenciasDasRotasDeAchado {
   readonly idempotencia: Idempotencia;
   readonly contrato: Contrato;
   readonly clock: Clock;
-  /**
-   * De onde sai `matched_pet.photo_url` (emenda 7 do ADR-0010).
-   *
-   * É a MESMA base do perfil público do pet e da resolução da plaquinha
-   * (`config.mediaPublicBaseUrl`), e isso é requisito e não arrumação: as três
-   * superfícies endereçam o mesmo objeto, e uma base própria aqui faria a tela
-   * do achado pedir uma derivada que não existe naquele host.
-   */
+  /** De onde sai `matched_pet.photo_url` (emenda 7 do ADR-0010). */
   readonly baseDeMidia: AbsoluteUrl;
 }
 
@@ -161,17 +107,7 @@ async function contaDoTeto(
   }
 }
 
-/**
- * `found_report` para o teto da foto.
- *
- * Sai do corpo, e por isso a entrada é aplicada em `preValidation` e não em
- * `onRequest` — `faseDa` decide isso sozinho, pela dimensão.
- *
- * Devolver `undefined` faz a entrada ser **pulada**, e aqui isso é o certo: sem
- * identificador de aviso não existe balde, e contar todas as requisições sem
- * `found_report_id` num balde só juntaria pessoas que não têm relação nenhuma.
- * O corpo malformado é recusado pela validação de schema logo adiante.
- */
+/** `found_report` para o teto da foto. */
 function achadoDoTeto(request: FastifyRequest): string | undefined {
   const corpo = request.body as { found_report_id?: unknown } | undefined;
   const id = corpo?.found_report_id;
@@ -184,13 +120,7 @@ function achadoDoCaminho(request: FastifyRequest): FoundReportId {
   return foundReportId as FoundReportId;
 }
 
-/**
- * A data de "quando eu achei", vinda como ISO.
- *
- * Recusa o que não é data; o futuro é recusado no domínio, junto com as outras
- * regras de registro, para que a tela receba a lista inteira de problemas de uma
- * vez em vez de descobri-los um por requisição.
- */
+/** A data de "quando eu achei", vinda como ISO. */
 function instanteDeAchado(bruto: unknown): Instant {
   const ms = typeof bruto === 'string' ? Date.parse(bruto) : Number.NaN;
   if (Number.isNaN(ms)) {
@@ -199,48 +129,7 @@ function instanteDeAchado(bruto: unknown): Instant {
   return ms as Instant;
 }
 
-/**
- * `FoundReport`, campo a campo como o contrato o declara. **Treze campos e
- * nenhum a mais** — doze até 28/10/2026, quando `matched_pet` entrou.
- *
- * `photo_url` sai **nulo enquanto não houver conversa mediada**, e isso é o
- * critério 9 e não uma pendência escondida: a foto do achador "é vista pelo
- * tutor dentro da conversa mediada, e só". Quem chama estas rotas é o achador, e
- * assinar uma URL de leitura para ele aqui criaria a superfície que o critério
- * fecha. Montar o endereço de um objeto que ninguém pode abrir seria uma promessa
- * que o cliente descobre quebrada na hora de desenhar a tela — é a mesma decisão
- * de `thumb_url`/`card_url` em `media-routes.ts`.
- *
- * `conversation_id` sai nulo pelo mesmo motivo: não há conversa nesta entrega, e
- * inventar um identificador seria pior que a ausência.
- *
- * ## `matched_pet`: A FOTO E O NOME DO PET, QUE AGORA VÊM
- *
- * **Autorização do cliente, 28/10/2026, literal: *"pode colocar a foto e o nome
- * do pet."*** Ela responde a uma queixa que ele repetiu — o achado registrado
- * aparecia sem foto nem nome — e está registrada na emenda 7 do ADR-0010, no
- * nome dele.
- *
- * **Não é o mesmo campo que `photo_url` acima, e a diferença não é detalhe:**
- * `photo_url` é a foto que o ACHADOR tirou do animal na rua, e continua nula
- * fora da conversa mediada; `matched_pet.photo_url` é a capa que o TUTOR
- * cadastrou. São os dois lados da mesma conversa, e confundi-los faria a tela
- * mostrar a foto errada para a pessoa errada.
- *
- * **Sai nos dois caminhos em que quem lê já sabe qual animal é, e só neles.** O
- * recorte não está num `if` desta função: ele está na consulta
- * (`kysely-found-report-repository.ts`), que resolve o pet por
- * `COALESCE(pet_id, lost_cases.pet_id via case_id)` — `pet_id` só é escrito com
- * `origin: 'tag_scan'`, `case_id` só a partir do `share_token`. No achado avulso
- * cruzado por semelhança o vínculo mora em `match_candidates`, que **nenhuma
- * consulta desta porta toca**: o nulo chega aqui porque a consulta que traria
- * foto e nome de um palpite da máquina não existe.
- *
- * O risco está por extenso na emenda e no contrato. Em resumo: o cliente mediu o
- * golpe do falso achador em 20/10/2026, e foto e nome de uma correspondência
- * **sugerida** seriam o insumo que falta ao golpista para "achei seu pet" soar
- * verdadeiro.
- */
+/** `FoundReport`, campo a campo como o contrato o declara. */
 function comoResposta(achado: AchadoGravado, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   return {
     id: achado.id,
@@ -291,11 +180,6 @@ export function registrarRotasDeAchado(
         photo_upload_id?: string;
       };
 
-      // `Idempotency-Key` está declarado no contrato, e o portão de subida
-      // derruba a aplicação se a rota divergir. O defeito que a máquina evita é
-      // o do critério 5: o rascunho local é reenviado quando a conexão volta, e
-      // sem ela cada reenvio seria um achado novo — a mesma tutora receberia a
-      // mesma sugestão três vezes, e o produto pareceria estar chutando.
       const resposta = await executarComIdempotencia(
         deps.idempotencia,
         {
@@ -303,7 +187,6 @@ export function registrarRotasDeAchado(
           chaveDoCabecalho: request.headers['idempotency-key'],
           donoOuToken: relator,
           endpoint: `${rotaDeRegistroDeAchado.method.toUpperCase()} ${rotaDeRegistroDeAchado.path}`,
-          // `/found-reports` nao tem parametro de caminho.
           parametrosDeCaminho: {},
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
@@ -343,25 +226,6 @@ export function registrarRotasDeAchado(
                 },
                 ...(corpo.notes === undefined ? {} : { observacao: corpo.notes }),
                 ...(corpo.share_token === undefined ? {} : { shareToken: corpo.share_token }),
-                // `photo_upload_id` é lido do corpo e **não é usado**, e isso é
-                // uma tensão do contrato, não um esquecimento.
-                //
-                // Para existir um `upload_id` de foto de achado é preciso
-                // chamar `createFoundReportPhotoUploadIntent`, que exige
-                // `found_report_id` no corpo — ou seja, exige que o achado já
-                // exista. Não há como obter um valor válido para este campo
-                // ANTES da chamada que o recebe, e o único outro emissor de
-                // intenção (`createPetPhotoUploadIntent`) exige um `pet_id`,
-                // que o achado avulso não tem.
-                //
-                // O desenho da história é o mesmo: o critério 4 manda registrar
-                // o achado SEM a foto quando o upload falha, com o envio
-                // seguindo em segundo plano. A foto vem depois, sempre.
-                //
-                // Não recuso o campo porque o contrato o declara e recusá-lo
-                // quebraria um cliente que o lê. Não o uso porque não existe
-                // valor que eu possa honrar. Está na pauta de refinamento como
-                // pergunta fechada, junto do 415.
               },
               relator,
             ),
@@ -443,8 +307,6 @@ export function registrarRotasDeAchado(
         upload_id: uploadId,
         method: autorizacao.metodo,
         url: autorizacao.url,
-        // Um dos dois, nunca os dois: `POST` leva campos de formulário, `PUT`
-        // leva cabeçalhos assinados. O cliente LÊ `method` em vez de presumir.
         ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
         ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
         expires_at: autorizacao.expiraEm.toISOString(),

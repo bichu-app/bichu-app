@@ -1,27 +1,4 @@
-/**
- * Persistência da mídia.
- *
- * Duas coisas aqui não são detalhe de implementação:
- *
- * **A autorização mora na cláusula `WHERE`**, como nas tags e no cadastro. Toda
- * leitura de foto passa por `pets.owner_user_id = :dono`, e a consulta que
- * devolveria a foto de outro tutor não existe neste arquivo.
- *
- * **A confirmação é uma transação de quatro escritas**, e as quatro precisam
- * acontecer juntas: marcar a intenção como confirmada, criar a foto, tirar a
- * principal anterior e enfileirar o trabalho. Qualquer subconjunto é um estado
- * quebrado que ninguém consegue diagnosticar depois — foto sem trabalho fica
- * `processing` para sempre; trabalho sem foto falha em laço procurando uma linha
- * que não existe; duas principais violam o índice e derrubam a próxima escrita.
- *
- * **Toda chave que sai daqui passa por `comoObjectKey`.** Ela vinha marcada por
- * `as ObjectKey`, que não confere nada: promete ao compilador que alguém já
- * validou. Quem escreve hoje é só o domínio — mas essa garantia não está em
- * contrato nenhum, e importação, migração ou correção manual em produção
- * escrevem nesta tabela sem passar por ele. A chave daqui vai para o `pathname`
- * da URL do objeto, e o parser de URL resolve `..`: uma linha com
- * `card/../../x` lê de fora do bucket (BICHUS-134).
- */
+/** Persistência da mídia. */
 import { sql } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
@@ -41,15 +18,7 @@ import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js'
 import { comoObjectKey } from '../../domain/chave-de-objeto.js';
 import { ESPECIES_DO_ACHADO } from '../../ports/fotos-do-achado.js';
 
-/**
- * O nome do trabalho na fila, **tirado da porta** e não inventado aqui.
- *
- * `JobKind` é uma união fechada em `shared/ports/job-queue.ts`, e eu tinha
- * escrito `media.process_pet_photo` neste arquivo — um valor que a união não
- * conhece. O worker casa por este nome: um adaptador que enfileira um `kind`
- * fora da união produz trabalho que ninguém nunca pega, e a foto ficaria
- * `processing` para sempre sem nenhum erro em lugar nenhum.
- */
+/** O nome do trabalho na fila, **tirado da porta** e não inventado aqui. */
 export const TRABALHO_DE_PROCESSAR_FOTO: JobKind = 'media.process_upload';
 
 interface LinhaDaFoto {
@@ -87,26 +56,6 @@ const COLUNAS_DA_FOTO = [
   'pet_photos.created_at',
 ] as const;
 
-/**
- * ## Os construtores, e por que a autorização passou a sair por eles
- *
- * ADR-0021: a autorização mora na cláusula `WHERE`. A afirmação **não é
- * observável pela resposta da rota** — uma consulta que traz a foto do outro e
- * a descarta num `if` responde igual, até o dia em que alguém mexe no `if`, e
- * aí não existe teste que acuse, porque o `if` era o teste.
- *
- * Cada uma das cinco cláusulas de dono deste arquivo foi removida, uma por vez,
- * e os 967 casos unitários continuaram verdes nas cinco. O comportamento estava
- * correto; o que faltava era a verificação.
- *
- * `autorizacao-na-clausula-where.test.ts` compila o SQL destas funções sem
- * executá-las e lê o **valor ligado à posição `$n` do predicado**, e não a
- * presença do nome da coluna no texto. A distinção decide o resultado aqui: as
- * consultas de foto ligam `pet`, `foto` e `dono` na mesma chamada, e
- * `parameters.includes(dono)` aprovaria um `owner_user_id = :petId` com o dono
- * ainda na lista por causa de outro predicado.
- */
-
 /** O pet é deste tutor? É o portão de `registrarIntencao` e de `confirmarEnvio`. */
 export function construtorDaConferenciaDoPet(db: DbExecutor, pet: PetId, dono: UserId) {
   return db
@@ -117,14 +66,7 @@ export function construtorDaConferenciaDoPet(db: DbExecutor, pet: PetId, dono: U
     .where('deleted_at', 'is', null);
 }
 
-/**
- * A intenção de envio ainda aberta.
- *
- * Aqui o dono é `upload_intents.user_id`, e **não** `owner_user_id`: a tabela
- * guarda quem pediu o envio, não o dono do pet. Uma isca que só procurasse
- * `owner_user_id` ficaria verde com esta cláusula removida — é por isso que o
- * arquivo de teste carrega dois predicados, e não um.
- */
+/** A intenção de envio ainda aberta. */
 export function construtorDaIntencaoAberta(
   db: DbExecutor,
   id: string,
@@ -135,9 +77,6 @@ export function construtorDaIntencaoAberta(
     .selectFrom('upload_intents')
     .selectAll()
     .where('id', '=', id)
-    // As três condições valem juntas: dono errado, vencida e já confirmada
-    // saem todas como `null`, e é o serviço que as transforma na MESMA
-    // resposta — distinguir contaria a um estranho qual delas aconteceu.
     .where('user_id', '=', dono)
     .where('expires_at', '>', new Date(Number(agora)))
     .where('confirmed_at', 'is', null);
@@ -173,14 +112,7 @@ export function construtorDaBuscaDeFoto(
     .where('pet_photos.deleted_at', 'is', null);
 }
 
-/**
- * A exclusão lógica da foto.
- *
- * O dono entra por `exists` correlacionado, e a correlação
- * (`pets.id = pet_photos.pet_id`) é tão essencial quanto o `owner_user_id`: sem
- * ela o `exists` seria verdadeiro para quem tivesse QUALQUER pet, e apagaria a
- * foto de qualquer um. A isca cobra as duas coisas.
- */
+/** A exclusão lógica da foto. */
 export function construtorDaExclusaoDeFoto(
   db: DbExecutor,
   pet: PetId,
@@ -259,8 +191,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
           .execute();
 
         if (entrada.definirComoPrincipal) {
-          // Precisa vir ANTES da inserção: o índice único parcial não aceita
-          // duas principais nem por um instante dentro da transação.
           await trx
             .updateTable('pet_photos')
             .set({ is_primary: false })
@@ -361,10 +291,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
           processed_at: new Date(Number(entrada.agora)),
         })
         .where('id', '=', entrada.fotoId)
-        // Só sai de `processing`. Uma foto já `ready` ou `rejected` não volta:
-        // o trabalho pode ser reentregue pela fila depois de um reinício, e
-        // reprocessar geraria derivadas novas com chaves novas, deixando as
-        // antigas órfãs no bucket público e ainda servindo.
         .where('status', '=', 'processing')
         .execute();
     },
@@ -379,22 +305,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]> {
-      // As DUAS tabelas de intencao: a do app (`upload_intents`) e a do painel
-      // (`catalog_upload_intents`, ADR-0027 A.3). Uma consulta so, com UNION
-      // ALL: a ordem por vencimento e o limite valem para as duas juntas.
-      //
-      // O COMENTARIO QUE ESTAVA AQUI AFIRMAVA QUE "nao ha risco de apagar o
-      // original de uma foto viva", E ESTAVA ERRADO. Ele valia para os dois
-      // casos que alguem tinha na cabeca -- foto de pet e imagem de catalogo,
-      // que TEM operacao de confirmacao e portanto saem desta lista no momento
-      // em que viram foto. A foto do achado e o terceiro caso: ela NAO TEM
-      // confirmacao no contrato, de proposito, e por isso `confirmed_at` nunca
-      // deixa de ser nulo nela. Julgada pelo mesmo critterio, ela vencia e era
-      // apagada ~10 min depois de subir, SEMPRE.
-      //
-      // Entao o filtro e por ESPECIE e nao por confirmacao: `confirmed_at` nao
-      // e o ciclo de vida da foto do achado. O ciclo dela e `sanitize_status`
-      // (migracao `20261001000006`), e quem o move e a varredura de higiene.
       const vencimento = new Date(Number(agora));
       const linhas = await db
         .selectFrom('upload_intents')
@@ -402,11 +312,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
           'id',
           'object_key',
           'expires_at',
-          // `kind` passa por `sql<EspecieVencida>` para que os DOIS bracos do
-          // UNION tenham o mesmo tipo: a coluna e `TipoDeEnvio` (tres valores) e
-          // o braco do catalogo acrescenta `'catalog_image'`. Sem alargar aqui,
-          // o Kysely recusa o `unionAll` -- e com razao, porque a forma das duas
-          // consultas tem de ser a mesma.
           sql<EspecieVencida>`kind`.as('kind'),
         ])
         .where('confirmed_at', 'is', null)
@@ -421,10 +326,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
               'id',
               'object_key',
               'expires_at',
-              // `catalog_upload_intents` nao tem coluna `kind`: a tabela guarda
-              // uma coisa so. A especie entra como literal para que os dois
-              // bracos do UNION tenham a mesma forma e o caso de uso possa
-              // decidir pela especie sem saber de que tabela a linha veio.
               sql<EspecieVencida>`'catalog_image'`.as('kind'),
             ])
             .where('confirmed_at', 'is', null)
@@ -440,44 +341,8 @@ export function criarMediaRepository(db: Db): MediaRepository {
       }));
     },
 
-    /**
-     * Todas as chaves de objeto da conta, nos dois baldes (SEC-020).
-     *
-     * Quatro consultas e não um `UNION`: as tabelas chegam ao dono por caminhos
-     * diferentes -- `upload_intents` tem `user_id`, `pet_photos` chega por
-     * `pets.owner_user_id`, e `conversation_messages` por `sender_user_id` --,
-     * e um `UNION` com três junções diferentes esconderia justamente qual delas
-     * está errada no dia em que uma estiver.
-     *
-     * **A foto EXCLUÍDA LOGICAMENTE entra**, e é deliberado: `pet_photos` tem
-     * `deleted_at` e `media-service.ts` promete por comentário que "os objetos
-     * saem do armazenamento pelo expurgo". Filtrar por `deleted_at IS NULL`
-     * aqui deixaria no balde exatamente as fotos que a pessoa já tinha mandado
-     * apagar uma vez.
-     *
-     * A derivada nula é pulada: foto ainda em `processing`, ou recusada, não
-     * tem `thumb` nem `card`.
-     */
+    /** Todas as chaves de objeto da conta, nos dois baldes (SEC-020). */
     async chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]> {
-      // SEM REPETICAO, e a razao e a CONTAGEM, nao o custo do `delete`.
-      //
-      // As consultas abaixo chegam ao mesmo objeto por caminhos diferentes, e
-      // isso nao e excecao: e o estado NORMAL de uma foto pronta. A intencao de
-      // envio confirmada continua em `upload_intents` com `object_key` = o
-      // original, e `pet_photos.original_key` e o MESMO objeto. Sem juntar, uma
-      // foto pronta devolve quatro entradas para tres arquivos.
-      //
-      // O `delete` da porta trata 404 como sucesso, entao repetir nao quebrava
-      // nada -- o que quebrava era o numero. `objects_deleted` vai para
-      // `privacy.account_purged`, e quem audita o art. 18, VI le aquele numero
-      // como "arquivos que sairam". Inflado, ele afirma mais do que aconteceu,
-      // que e o mesmo defeito de leitura que o SEC-020 existe para corrigir --
-      // so trocado de sinal. MEDIDO: o caso "a trilha conta os objetos que
-      // sairam, junto das linhas" de `tests/integration/expurgo-de-conta-conclui.test.ts`
-      // recebia 4 e esperava 3.
-      //
-      // A chave da juncao e o PAR (classe, chave): o mesmo nome em balde
-      // privado e em balde publico sao dois arquivos, e os dois tem de sair.
       const vistos = new Set<string>();
       const todos: ObjetoDaConta[] = [];
       const objetos = {
@@ -489,22 +354,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
         },
       };
 
-      // AS DUAS CHAVES, e `sanitized_key` nao e detalhe: com a decisao do
-      // cliente de 17/10/2026 ("pode apagar o original e guardar so o arquivo
-      // 2"), a higiene APAGA o original da foto do achado assim que a versao
-      // sem metadado esta gravada. Logo `sanitized_key` passa a ser a UNICA
-      // copia que existe daquela foto.
-      //
-      // Ler so `object_key` era um furo antes e seria o furo PRINCIPAL agora:
-      // quem exerce o direito de apagamento (art. 18, VI) teria apagado a
-      // copia que a higiene ja apagou sozinha, e deixado no balde justamente a
-      // que sobrou -- com `privacy.account_purged` afirmando que os arquivos
-      // sairam.
-      //
-      // `sanitized_key` e nula enquanto a higiene nao terminou, e tambem em
-      // `'recusada'`/`'ausente'` (CHECK `upload_intents_higiene_coerente`), e
-      // nula na foto de pet, que nao passa por este caminho. O `continue`
-      // abaixo cobre os quatro casos sem perguntar qual deles e.
       const intencoes = await db
         .selectFrom('upload_intents')
         .select(['object_key', 'sanitized_key'])
@@ -512,9 +361,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .execute();
       for (const linha of intencoes) {
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.object_key) });
-        // Mesmo balde do original, e de proposito: a chave da limpa e
-        // `found-reports/{dono}/sanitized/...`, o mesmo prefixo, no balde
-        // PRIVADO (criterio 9 da BICHUS-35).
         if (linha.sanitized_key === null) continue;
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.sanitized_key) });
       }
@@ -526,10 +372,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .where('pets.owner_user_id', '=', dono)
         .execute();
       for (const linha of fotos) {
-        // O ORIGINAL É PRIVADO E AS DUAS DERIVADAS SÃO PÚBLICAS. São três
-        // objetos por foto, e a contagem importa: uma tutora com dois pets e
-        // três fotos cada deixa 18 objetos para trás, seis deles em balde
-        // público servido com `max-age` de um ano.
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.original_key) });
         if (linha.thumb_key !== null) {
           objetos.push({ classe: 'publico', chave: comoObjectKey(linha.thumb_key) });
@@ -539,10 +381,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
         }
       }
 
-      // A foto de achador (BICHUS-35): UM objeto, só original, sem derivada, e
-      // no balde privado. Ela chega ao dono por `sender_user_id`, que é nulo
-      // quando quem escreveu não tinha conta -- e nesse caso não há titular
-      // cuja exclusão estejamos cumprindo.
       const mensagens = await db
         .selectFrom('conversation_messages')
         .select('photo_object_key')
@@ -558,16 +396,11 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async descartarIntencao(id: string): Promise<void> {
-      // O `id` e UUIDv7 e nao se repete entre as duas tabelas; apagar nas duas
-      // pelo mesmo `id`, e so a nao confirmada, e o que dispensa a porta de
-      // saber de qual tabela a intencao veio.
       await db.deleteFrom('upload_intents').where('id', '=', id).where('confirmed_at', 'is', null).execute();
       await db.deleteFrom('catalog_upload_intents').where('id', '=', id).where('confirmed_at', 'is', null).execute();
     },
 
     async excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean> {
-      // O subconsulta do dono está aqui, e não num `if` antes, pelo mesmo motivo
-      // de sempre: o arranjo que apagaria a foto de outro tutor não existe.
       const resultado = await construtorDaExclusaoDeFoto(
         db,
         pet,

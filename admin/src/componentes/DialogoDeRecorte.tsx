@@ -18,33 +18,22 @@ import {
   type Janela,
 } from './recorte-de-imagem.ts';
 
-/**
- * A largura em pixeis do desenho do palco. Constante de proposito: ela nao
- * participa de conta nenhuma do recorte -- a regiao sai em FRACOES e so vira
- * pixel contra a imagem original --, e depender de `clientWidth` faria o
- * desenho depender do layout, que em teste e zero.
- */
+/** A largura em pixeis do desenho do palco. */
 const LARGURA_DO_PALCO = 560;
 
 export interface PropsDoDialogoDeRecorte {
   imagem: ImagemParaRecorte;
   proposito: Proposito;
-  /** O nome do que se esta enquadrando, para o titulo e os rotulos ("Logo", "Imagem 2 de 5"). */
+  /**
+   * O nome do que se esta enquadrando, para o titulo e os rotulos ("Logo", "Imagem 2
+   * de 5").
+   */
   rotulo: string;
   aoConfirmar: (janela: Janela) => void;
   aoFechar: () => void;
 }
 
-/**
- * RECORTAR E REPOSICIONAR (BICHUS-314, cliente 28 e 29/10/2026).
- *
- * A moldura e o palco inteiro: nao existe "area fora da moldura" arrastavel, e
- * isso some com a duvida de onde clicar. A imagem anda por baixo dela.
- *
- * **Arrastar e atalho, nao requisito** (SC 2.5.7, a mesma regra que a `Galeria`
- * ja segue para reordenar): as setas movem o enquadramento e o campo de zoom e
- * um `range`, entao a tarefa inteira se faz pelo teclado.
- */
+/** RECORTAR E REPOSICIONAR (BICHUS-314, cliente 28 e 29/10/2026). */
 export function DialogoDeRecorte({ imagem, proposito, rotulo, aoConfirmar, aoFechar }: PropsDoDialogoDeRecorte) {
   const [enquadramento, setEnquadramento] = useState<Enquadramento>(ENQUADRAMENTO_INICIAL);
   const palco = useRef<HTMLDivElement>(null);

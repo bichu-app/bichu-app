@@ -1,28 +1,6 @@
 /**
- * **O bloqueio do lado COM CONTA carrega o chamador no `WHERE`**, e o papel sai
- * do SQL — não de quem chama.
- *
- * ## A assimetria que a escrita nova fecha
- *
- * `bloquearPeloAchador` estava no ar e o lado autenticado não tinha nada: um
- * tutor sendo extorquido no canal mediado não tinha saída. A coluna
- * (`blocked_at`, `blocked_by_role`) já existia e o envio já recusa conversa
- * bloqueada — faltava só esta escrita.
- *
- * ## As duas coisas que este arquivo prova, e por que lendo o SQL
- *
- * 1. **O chamador está no `WHERE` da própria escrita.** Um `UPDATE` por `id`
- *    sozinho bloquearia a conversa de outra pessoa, e a autorização passaria a
- *    depender de quem chama ter lido a conversa antes — o caminho novo que
- *    esquecesse a leitura abriria o furo sem que nenhum teste de comportamento
- *    acusasse.
- * 2. **`blocked_by_role` é DERIVADO**, por um `CASE` sobre `tutor_user_id`, e não
- *    recebido por argumento. Este é o campo que diz à outra pessoa quem fechou a
- *    porta: trocado, ele acusaria a vítima. Um argumento vindo da borda faria a
- *    escrita acreditar em quem chama.
- *
- * A isca do fim prova que a conferência do papel reprova de verdade quando o
- * papel vem ligado como parâmetro em vez de derivado.
+ * **O bloqueio do lado COM CONTA carrega o chamador no `WHERE`**, e o papel sai do
+ * SQL — não de quem chama.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -56,7 +34,7 @@ function bloqueio(chamador: UserId = CHAMADOR) {
   return construtorDoBloqueioDoChamador(semBanco, CONVERSA, chamador, AGORA).compile();
 }
 
-/** O `CASE` que deriva o papel. Sem ele, o papel viria de fora. */
+/** O `CASE` que deriva o papel. */
 const PAPEL_DERIVADO =
   /case when "tutor_user_id" = \$\d+ then 'tutor' else 'finder' end/i;
 
@@ -84,9 +62,6 @@ void describe('o bloqueio pelo chamador com conta', () => {
   });
 
   void it('`blocked_at IS NULL` preserva o PRIMEIRO bloqueio', () => {
-    // Repetir não reescreve quem bloqueou nem quando. É isto que torna a
-    // operação idempotente sem um `SELECT` antes do `UPDATE` — e o contrato
-    // declara `accept_and_deduplicate`, não recusa.
     assert.match(bloqueio().sql, /"blocked_at" is null/);
   });
 
@@ -108,8 +83,6 @@ void describe('o bloqueio pelo chamador com conta', () => {
   });
 
   void it('ISCA: a conferência do papel REPROVA quando ele vem como parâmetro', () => {
-    // A mesma escrita, com o papel ligado em vez de derivado. Se a conferência
-    // acima aprovar isto, ela não está medindo a derivação.
     const comPapelDeFora = semBanco
       .updateTable('conversations')
       .set({ blocked_at: new Date(Number(AGORA)), blocked_by_role: 'tutor' })

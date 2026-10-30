@@ -13,18 +13,16 @@ export interface SeletorDaBarra {
   valor: string;
   opcoes: OpcaoDeSelecao[];
   aoMudar: (valor: string) => void;
-  /** O seletor de ordenacao mostra "Ordenar:" visivel; os filtros, so o rotulo acessivel. */
+  /**
+   * O seletor de ordenacao mostra "Ordenar:" visivel; os filtros, so o rotulo
+   * acessivel.
+   */
   prefixoVisivel?: string;
 }
 
 /**
  * A Barra de listagem (`BO/Barra de listagem`, padrao de listagem do projeto):
  * busca, filtros e ordenacao no topo do corpo, nunca na barra do app.
- *
- * A busca guarda o que se digita em estado local e so escreve para fora depois
- * de uma pausa. O valor externo (a URL) muda de forma assincrona; controlar o
- * campo por ele perderia caractere. Quando a URL muda por fora (voltar, link
- * colado), o efeito reconcilia o campo.
  */
 export function BarraDeListagem({
   rotuloDaBusca,
@@ -52,7 +50,6 @@ export function BarraDeListagem({
   extra?: ReactNode;
 }) {
   const [texto, setTexto] = useState(busca);
-  // O ultimo valor que este campo mandou para fora, e o ultimo valor externo visto.
   const [enviado, setEnviado] = useState(busca);
   const [externoVisto, setExternoVisto] = useState(busca);
   const aoBuscarRef = useRef(aoBuscar);
@@ -60,8 +57,6 @@ export function BarraDeListagem({
     aoBuscarRef.current = aoBuscar;
   });
 
-  // Reconcilia quando a busca muda por fora (voltar, link colado) e nao foi este
-  // campo que mandou. Ajuste durante a renderizacao, sem efeito.
   if (busca !== externoVisto) {
     setExternoVisto(busca);
     if (busca !== enviado) {

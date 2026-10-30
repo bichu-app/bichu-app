@@ -16,29 +16,6 @@ import '../../widgets/saida_da_tela.dart';
 import 'tela_onde_e_quando.dart';
 
 /// A ponte entre o envelope de intenção e F3.1 (UX 8.3, regra 4).
-///
-/// ## Por que ela existe em vez de F3.1 receber o envelope direto
-///
-/// O envelope guarda o **id** do pet e não o pet. Essa decisão está em
-/// `RascunhoDoCaso.dosCampos` e o motivo é privacidade: uma cópia do animal em
-/// disco seria dado de conta esperando a próxima pessoa que entrar naquele
-/// aparelho. A consequência é que reconstruir F3.1 custa uma leitura, e F3.1
-/// **não pode fazer leitura nenhuma** — o critério 6 manda que ela funcione
-/// inteira sem conexão, e um estado de carregamento dentro dela criaria a
-/// espera que o critério recusa.
-///
-/// A leitura fica aqui, num passo que só existe neste caminho: a abertura do
-/// caso falhou depois do login, e a pessoa está voltando para o formulário.
-/// Esse caminho já é de rede, porque a falha veio dela.
-///
-/// ## Os dois desfechos que não são F3.1
-///
-/// - **A lista não carrega.** Sem o pet não há como desenhar F3.1, e desenhar
-///   um formulário que não sabe de qual animal fala seria pior que dizer o que
-///   houve. A tela mostra a falha e oferece tentar de novo.
-/// - **O pet não está mais na conta.** Envelope de até 24 horas atrás pode
-///   apontar para um animal que saiu da lista. A tela diz isso em vez de abrir
-///   um formulário para um caso que não pode existir.
 class TelaDeRetomadaDoCaso extends StatefulWidget {
   const TelaDeRetomadaDoCaso({required this.retomada, super.key});
 
@@ -105,9 +82,6 @@ class _TelaDeRetomadaDoCasoState extends State<TelaDeRetomadaDoCaso> {
   Widget build(BuildContext context) {
     final pet = _pet;
     if (_fase == _Fase.achou && pet != null) {
-      // F3.1 **preenchida**, com o erro dito. Reabrir calada deixaria a falha
-      // invisível: a pessoa tocaria em `Continuar` de novo sem saber o que
-      // houve da primeira vez.
       return TelaOndeEQuando(
         rascunho: RascunhoDoCaso.dosCampos(pet, widget.retomada.campos),
         erroInicial: widget.retomada.erro?.texto,
@@ -126,8 +100,6 @@ class _TelaDeRetomadaDoCasoState extends State<TelaDeRetomadaDoCaso> {
         child: Padding(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           child: switch (_fase) {
-            // Carregamento **com texto**, e nunca um esqueleto mudo: quem usa
-            // leitor de tela precisa ouvir que algo está acontecendo.
             _Fase.carregando || _Fase.achou => Semantics(
                 liveRegion: true,
                 child: Row(

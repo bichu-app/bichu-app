@@ -1,11 +1,6 @@
 /**
- * O que se prova aqui é a **ausência** de identificador interno na chave
- * pública, e não o formato dela.
- *
- * O caso central é negativo porque o erro que ele pega é silencioso: uma chave
- * pública com `pets/{petId}/` funcionaria perfeitamente, passaria em qualquer
- * teste de "a foto aparece", e entregaria o `pet_id` a quem clicasse com o botão
- * direito na imagem de um cartaz.
+ * O que se prova aqui é a **ausência** de identificador interno na chave pública,
+ * e não o formato dela.
  */
 import assert from 'node:assert/strict';
 import { TETO_DE_BYTES_DO_ENVIO } from './derivadas.js';
@@ -27,8 +22,6 @@ const FOTO = '01a0b480-0000-7000-8000-000000000001';
 void describe('chave da derivada pública', () => {
   void it('NÃO carrega pet_id, foto_id nem user_id', () => {
     const chave = chaveDaDerivada('card', new Uint8Array(16).fill(7), 'webp');
-    // A CATEGORIA e publica de proposito (ADR-0007 Emenda 1): `pets/card/...`.
-    // O que nao pode vazar e o DONO: nenhum identificador depois dela.
     for (const interno of [PET, FOTO, `pets/${PET}`]) {
       assert.ok(!chave.includes(interno), `a chave pública vazou "${interno}": ${chave}`);
     }
@@ -42,12 +35,6 @@ void describe('chave da derivada pública', () => {
   });
 
   void it('sobrevive a URL sem escape: base64url não tem +, / nem =', () => {
-    // A chave viaja em cartaz impresso e em mensagem. Um `+` virando espaço no
-    // meio do caminho quebraria a foto de um jeito que ninguém reproduz.
-    //
-    // A conferência olha só a PARTE SORTEADA: a barra que separa o prefixo é a
-    // estrutura da chave, e é para estar ali. (Primeira versão deste teste
-    // reprovava por causa dela, e o defeito era do teste.)
     const chave = chaveDaDerivada('thumb', new Uint8Array(16).fill(251), 'webp');
     const sorteada = chave.slice(chave.lastIndexOf('/') + 1);
     assert.ok(!/[+=]/.test(sorteada), sorteada);
@@ -55,11 +42,6 @@ void describe('chave da derivada pública', () => {
   });
 
   void it('RECUSA aleatório curto — é ela que não tem assinatura protegendo', () => {
-    // A ironia do BICHUS-134: a exigência existia só no original, que já está
-    // atrás de URL assinada, e faltava justamente aqui. A chave da derivada é
-    // pública e servida sem assinatura; não ser adivinhável é a proteção
-    // inteira. Com 1 byte, a foto do pet fica a 256 tentativas de quem souber o
-    // formato — e a foto é como a tutora reconhece o animal dela num achado.
     for (const curto of [0, 1, 8, 15]) {
       assert.throws(
         () => chaveDaDerivada('card', new Uint8Array(curto), 'webp'),
@@ -70,12 +52,9 @@ void describe('chave da derivada pública', () => {
   });
 
   void it('16 bytes continuam gerando chave — recusar tudo não é defesa', () => {
-    // O contrapeso. Sem ele, uma implementação que recusasse todo aleatório
-    // passaria no caso acima e pararia o processamento de toda foto.
     for (const variante of ['card', 'thumb'] as const) {
       const chave = chaveDaDerivada(variante, new Uint8Array(16).fill(5), 'webp');
       assert.ok(chave.startsWith(`pets/${variante}/`), chave);
-      // 16 bytes em base64url são 22 caracteres: a mesma conta do original.
       assert.equal(chave.slice(`pets/${variante}/`.length, chave.indexOf(".")).length, 22);
     }
   });
@@ -89,14 +68,10 @@ void describe('chave do original', () => {
   });
 
   void it('RECUSA aleatório curto, em vez de gerar chave fraca em silêncio', () => {
-    // Uma chave com menos entropia que o critério 21 exige passaria em todo
-    // teste de "a foto sobe" e só apareceria para quem a explorasse.
     assert.throws(() => chaveDoOriginal(PET, new Uint8Array(8)), /128 bits/);
   });
 
   void it('NÃO deriva do identificador da intenção, que é enumerável', () => {
-    // UUIDv7 tem carimbo de tempo no prefixo: quem conhece o petId e a janela
-    // de tempo enumera as chaves. Foi o erro da primeira versão deste arquivo.
     const chave = chaveDoOriginal(PET, new Uint8Array(16).fill(3));
     assert.ok(!chave.includes(FOTO), chave);
   });
@@ -110,33 +85,18 @@ void describe('tipos aceitos', () => {
   });
 
   void it('RECUSA SVG, que é o vetor de XSS servido como imagem', () => {
-    // SVG é um documento com script. Servido do domínio de mídia ele não alcança
-    // a sessão, mas continua sendo página executável hospedada por nós.
     assert.ok(!ehTipoAceito('image/svg+xml'));
     assert.ok(!ehTipoAceito('text/html'));
     assert.ok(!ehTipoAceito('image/gif'));
   });
 
   void it('o teto é o do contrato: 5 MiB, o MESMO em todos os caminhos', () => {
-    // Eram três números para a mesma regra: 10 MiB aqui, 2 MiB na foto do
-    // achado e 5 MiB no catálogo, com o contrato emprestando os 10 MiB para a
-    // operação do achado por composição. O cliente unificou em 5 MB em
-    // 17/10/2026, para usuário e administrador.
     assert.equal(TETO_DE_BYTES, 5_242_880);
-    // E ele é o MESMO objeto que o ponto único declara, não uma cópia com o
-    // mesmo valor: é a cópia com o mesmo valor que diverge na próxima mudança.
     assert.equal(TETO_DE_BYTES, TETO_DE_BYTES_DO_ENVIO);
   });
 });
 
-/**
- * A extensão da derivada, que é o campo que VIRA CAMINHO (BICHUS-133).
- *
- * O que se prova aqui não é a mensagem do erro: é que **nenhuma chave sai do
- * prefixo da variante**. A afirmação é sobre a chave e não sobre a exceção de
- * propósito — uma implementação que saneasse a extensão em silêncio também não
- * lançaria, e gravaria a foto num caminho que ninguém escreveu.
- */
+/** A extensão da derivada, que é o campo que VIRA CAMINHO (BICHUS-133). */
 const ALEATORIO = new Uint8Array(16).fill(42);
 
 /** A chave, ou `null` quando a geração recusou. */
@@ -150,26 +110,19 @@ function chaveOuNada(variante: 'thumb' | 'card', extensao: string): string | nul
 
 /**
  * O primeiro segmento DEPOIS de resolver `..`, que é onde o objeto grava de
- * verdade. Comparar o texto cru diria "começa com `card/`" para uma chave que
- * o armazenamento resolve para `publico/`.
+ * verdade.
  */
 function prefixoEfetivo(chave: string): string {
-  // Categoria e variante (ADR-0007 Emenda 1): `pets/card`.
   return posix.normalize(chave).split('/').slice(0, 2).join('/');
 }
 
 const EXTENSOES_HOSTIS = [
-  // A do relato: escapa do prefixo da variante e do bucket privado para o
-  // público, com a assinatura V4 calculada depois — gravação válida no lugar
-  // errado, que o armazenamento não tem como recusar.
   'webp/../../../publico/card/x.webp',
   '../thumb/x.webp',
   'webp/x.webp',
   'webp/..',
   '.webp',
   '',
-  // Caixa alta: a lista é por IGUALDADE, e `WEBP` não é `webp`. Extensão que
-  // ninguém gera hoje não passa por ser parecida com uma que gera.
   'WEBP',
 ];
 
@@ -193,8 +146,6 @@ void describe('extensão da derivada', () => {
   });
 
   void it('a extensão legítima continua passando — recusar tudo não é defesa', () => {
-    // O contrapeso. Sem ele, uma implementação que recusasse toda extensão
-    // passaria nos casos acima e quebraria o processamento inteiro em silêncio.
     for (const boa of ['webp', 'jpg', 'jpeg']) {
       const chave = chaveDaDerivada('card', ALEATORIO, boa);
       assert.equal(prefixoEfetivo(chave), 'pets/card', chave);
@@ -206,37 +157,21 @@ void describe('extensão da derivada', () => {
 
 void describe('tipo da derivada — o que pode ser GRAVADO', () => {
   void it('aceita os dois que o worker produz', () => {
-    // Contrapeso do lado da gravação: o caminho feliz precisa continuar existindo.
     assert.ok(ehTipoDeDerivada('image/webp'));
     assert.ok(ehTipoDeDerivada('image/jpeg'));
   });
 
   void it('RECUSA por igualdade, e o prefixo `image/` não é critério', () => {
-    // `starts-with: image/` aceitaria `image/svg+xml`, que é documento com
-    // script servido pelo domínio de mídia — o mesmo erro que o critério 22
-    // proíbe na entrada.
     for (const ruim of ['image/svg+xml', 'text/html', 'image/', 'image/webp; charset=utf-8', 'IMAGE/WEBP']) {
       assert.ok(!ehTipoDeDerivada(ruim), ruim);
     }
   });
 
   void it('RECUSA image/heic, que entra mas nunca sai', () => {
-    // Aceito no ENVIO e impossível como derivada: o worker reescreve tudo em
-    // WebP. Gravar HEIC seria a lista da entrada vazando para a saída.
     assert.ok(ehTipoAceito('image/heic'));
     assert.ok(!ehTipoDeDerivada('image/heic'));
   });
 });
-
-/**
- * `comoObjectKey`, que é a única porta para a marca (BICHUS-134).
- *
- * O que se prova aqui não é a mensagem do erro: é que **nenhuma chave aceita
- * resolve para fora do lugar onde foi escrita**. A afirmação é sobre o caminho
- * efetivo e não sobre a exceção de propósito — uma implementação que
- * normalizasse `..` em silêncio também não lançaria, e leria a foto de um lugar
- * onde ninguém a gravou.
- */
 
 /** A marca, ou `null` quando a conferência recusou. */
 function chaveOuNulo(valor: string): string | null {
@@ -251,29 +186,18 @@ const ORIGINAL_BOA = `pets/${PET}/original/KioqKioqKioqKioqKioqKg`;
 const DERIVADA_BOA = 'card/KioqKioqKioqKioqKioqKg.webp';
 
 const CHAVES_HOSTIS = [
-  // A travessia: o `pathname` da URL RESOLVE `..`, então esta chave lê de fora
-  // do bucket, e não de `card/`. Conferido com o parser de URL do Node.
   'card/../../etc/senha',
   '../thumb/x.webp',
   'card/./x.webp',
   `pets/${PET}/original/..`,
-  // Barra no começo, no fim e dobrada: segmento vazio é caminho que não é o que
-  // está escrito.
   '/card/x.webp',
   'card/x.webp/',
   'card//x.webp',
-  // Codificação percentual: `%2e%2e` é `..` depois que alguém decodifica. As
-  // duas formas importam — a que a forma da chave já barra por ter segmento a
-  // mais, e a que passaria por ela se o conjunto de caracteres não existisse.
   'card/%2e%2e/x.webp',
   'card/x%2e%2e.webp',
-  // Espaço e acento viram `%XX` no `pathname`: a chave pedida deixa de ser a
-  // chave gravada, e a política assinada compara por IGUALDADE.
   'card/x y.webp',
   'card/café.webp',
-  // Barra invertida, que o parser de URL trata como separador de caminho.
   'card\\..\\x.webp',
-  // Fora das duas formas que este sistema escreve.
   'publico/x.webp',
   'card/x.webp/extra',
   `pets/${PET}/x.webp`,
@@ -296,8 +220,6 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
   });
 
   void it('a travessia sai mesmo do bucket quando a URL é montada', () => {
-    // O porquê do caso acima, em vez da afirmação abstrata: é isto que uma
-    // linha corrompida no banco faria com a URL do objeto.
     const url = new URL('https://midia.invalid/bucket/');
     url.pathname = '/bucket/card/../../etc/senha';
     assert.equal(url.pathname, '/etc/senha');
@@ -305,70 +227,37 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
   });
 
   void it('RECUSA com a chave no texto, para a linha ruim aparecer no log', () => {
-    // Quem for diagnosticar precisa saber QUAL linha do banco está torta.
     assert.throws(() => comoObjectKey('card/../../etc/senha'), /Chave de objeto recusada/);
     assert.throws(() => comoObjectKey('card/../../etc/senha'), /etc\/senha/);
   });
 
   void it('as duas formas que já estão gravadas continuam passando', () => {
-    // O contrapeso, e ele não é cerimônia: uma conferência que recusasse tudo
-    // passaria em todos os casos acima e apagaria do aplicativo a foto de todo
-    // pet — que é como a tutora reconhece o animal dela num achado.
     for (const boa of [ORIGINAL_BOA, DERIVADA_BOA, 'thumb/KioqKioqKioqKioqKioqKg.jpg']) {
       assert.equal(comoObjectKey(boa), boa);
     }
   });
 
   void it('não prende a leitura às regras de ESCRITA de hoje', () => {
-    // Linha antiga não pode quebrar porque a regra de escrita mudou depois: a
-    // chave é contrato (ADR-0007), e um cartaz colado num poste continua
-    // apontando para a chave de ontem.
-    //
-    // `pets/{petId}/original/{uuid}` é a forma que a PRIMEIRA versão deste
-    // arquivo gerava, antes de trocar para 128 bits sorteados.
     assert.equal(comoObjectKey(`pets/${PET}/original/${FOTO}`), `pets/${PET}/original/${FOTO}`);
-    // Extensão fora de `EXTENSOES_DE_DERIVADA`: recusada na escrita desde o
-    // BICHUS-133, e ainda assim legível se estiver gravada.
     assert.equal(comoObjectKey('card/abc.png'), 'card/abc.png');
   });
 
   void it('é a porta por onde a própria geração passa', () => {
-    // Se a geração continuasse usando `as`, a marca teria duas portas e a
-    // conferência valeria só para metade das chaves.
-    //
-    // A primeira versão deste caso comparava `chaveDaDerivada(...)` com
-    // `comoObjectKey(String(chaveDaDerivada(...)))` — e `comoObjectKey` é
-    // IDENTIDADE na entrada válida, então a afirmação era `X === X` e passava
-    // com a geração marcando por `as`. O QA mostrou com isca (BICHUS-134).
-    //
-    // O que morde é o contrário: pedir uma chave que a PORTA recusa, e exigir
-    // que a geração recuse junto. Se ela não passar pela porta, a chave sai.
 
-    // O original: `petId` chega como `string` e é interpolado no caminho.
     assert.throws(() => chaveDoOriginal('../outro', ALEATORIO), /Chave de objeto recusada/);
-    // Um `/` dentro do `petId` monta um segmento a mais: `pets/a/b/original/x`
-    // não é a forma que este sistema escreve, e sai do prefixo do pet.
     assert.throws(() => chaveDoOriginal('a/b', ALEATORIO), /Chave de objeto recusada/);
 
-    // A derivada: `variante` é união de dois literais **no compilador**, e o
-    // compilador não roda em produção. JavaScript chamando daqui, um valor
-    // desserializado ou um `as` em outro arquivo passam o que quiserem — e é
-    // exatamente essa a tese do BICHUS-134 sobre `as`. Só a porta barra.
     const varianteTorta = 'card/../..' as unknown as 'card';
     assert.throws(
       () => chaveDaDerivada(varianteTorta, ALEATORIO, 'webp'),
       /Chave de objeto recusada/,
     );
 
-    // Contrapeso: as duas continuam gerando com entrada boa. Sem ele, uma
-    // geração que lançasse sempre passaria nas três afirmações acima.
     assert.ok(String(chaveDaDerivada('card', ALEATORIO, 'webp')).startsWith('pets/card/'));
     assert.ok(String(chaveDoOriginal(PET, ALEATORIO)).startsWith(`pets/${PET}/original/`));
   });
 
   void it('o TETO de 1024 é o do armazenamento, e ele recusa', () => {
-    // Chave acima do teto não é chave: é linha corrompida chegando do banco.
-    // A isca I21 do QA passou verde porque nada exercitava este limite.
     const noTeto = `card/${'a'.repeat(1024 - 'card/'.length - '.webp'.length)}.webp`;
     assert.equal(noTeto.length, 1024);
     assert.equal(comoObjectKey(noTeto), noTeto);
@@ -377,15 +266,11 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
     assert.equal(umAcima.length, 1025);
     assert.throws(() => comoObjectKey(umAcima), /recusada \(tamanho\)/);
 
-    // O outro extremo do mesmo `if`: vazio também não é chave.
     assert.throws(() => comoObjectKey(''), /recusada \(tamanho\)/);
   });
 });
 
-
-/**
- * As formas de chave que entraram nesta entrega, e o que cada uma protege.
- */
+/** As formas de chave que entraram nesta entrega, e o que cada uma protege. */
 void describe('a variante `banner` e a derivada higienizada do achado', () => {
   const ALEATORIO = new Uint8Array(16).fill(7);
 
@@ -396,7 +281,6 @@ void describe('a variante `banner` e a derivada higienizada do achado', () => {
   });
 
   void it('a variante fora da lista não monta chave nenhuma', () => {
-    // A variante é um SEGMENTO DO CAMINHO: valor livre ali é travessia.
     assert.throws(() =>
       // @ts-expect-error — é exatamente isto que a união fechada impede, e o
       // teste existe para o dia em que alguém trocar o tipo por `string`.
@@ -405,8 +289,6 @@ void describe('a variante `banner` e a derivada higienizada do achado', () => {
   });
 
   void it('a higienizada do achado fica no MESMO prefixo do original', () => {
-    // O prefixo compartilhado é o que faz política de bucket, ciclo de vida e
-    // o expurgo dos 30 dias (ADR-0010) alcançarem as duas juntas.
     const chave = chaveDaFotoHigienizada('1111-2222', ALEATORIO, 'jpeg');
     assert.ok(chave.startsWith('found-reports/1111-2222/sanitized/'));
   });

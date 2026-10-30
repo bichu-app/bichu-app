@@ -1,44 +1,4 @@
-/**
- * Massa fixa de qa.
- *
- * O QUE ESTE ARQUIVO FAZ: confere que da para semear, recusa dizendo o que
- * falta, e grava a massa do diretorio de `Perto`.
- *
- * ## As tres travas, e por que nenhuma delas e zelo
- *
- * 1. **Ambiente.** Semear e destrutivo por natureza: a massa fixa so e fixa se
- *    sobrescreve o que estava la. A recusa vem ANTES de abrir conexao, porque
- *    conectar em producao para so entao decidir nao escrever e confiar na ordem
- *    das linhas. `conferirAmbiente` esta separada e exportada por um motivo:
- *    trava sem teste e trava por confianca, e esta estava a 0% de cobertura --
- *    `seed.test.ts` agora a exerce nos dois sentidos.
- * 2. **Esquema.** Semear antes de migrar produz erro de relacao inexistente no
- *    meio das insercoes, com parte da massa gravada.
- * 3. **Determinismo.** `make seed` recria "a massa fixa de qa, deterministica".
- *    Nenhum `Math.random()`, nenhum `now()`: todo identificador e todo instante
- *    vem de `massa-do-diretorio.ts`, literais. Massa que muda faz o mesmo teste
- *    passar hoje e falhar amanha, e a investigacao comeca pelo teste, que esta
- *    certo.
- *
- * ## O que ela semeia, e o que continua sem massa
- *
- * Semeia o **diretorio**: contas titulares, entradas de `professionals` e as
- * verificacoes de `entity_verifications` que sustentam o selo de cada uma. Foi
- * o que o cliente pediu para ver na tela.
- *
- * NAO semeia conta de tutor, pet nem caso de perdido. Quais sao essas e decisao
- * de QA com produto, e massa inventada aqui vira a massa oficial por inercia --
- * no dia em que o teste de aceite precisar de um pet perdido ha 8 dias, ninguem
- * vai saber se o que existe foi pensado ou foi o que sobrou.
- *
- * ## `verification_level` e escrito aqui, e e derivado
- *
- * A coluna e cache de uma regra que mora no dominio (`nivelDerivado`). A massa a
- * preenche CHAMANDO a regra sobre as verificacoes que ela mesma grava, e nunca
- * escolhendo o valor a mao: uma massa que declara o proprio nivel semearia
- * exatamente a incoerencia que a leitura existe para nao ter. A rota, de todo
- * modo, nao le esta coluna -- ela deriva de novo, da fonte.
- */
+/** Massa fixa de qa. */
 import { sql } from 'kysely';
 import { optionalEnv, requireEnv } from '../shared/config/env.js';
 import { createDb } from '../shared/db/pool.js';
@@ -70,10 +30,7 @@ import {
 /** Sai 2, e nao 1: separa "recusei" de "quebrei" para quem le em esteira. */
 const SAIDA_MASSA_NAO_DEFINIDA = 2;
 
-/**
- * Tabelas que a massa precisa encontrar. Semear antes de migrar produz erro de
- * relacao inexistente no meio das insercoes, com parte da massa gravada.
- */
+/** Tabelas que a massa precisa encontrar. */
 const TABELAS_EXIGIDAS = [
   'users',
   'user_identities',
@@ -86,26 +43,12 @@ const TABELAS_EXIGIDAS = [
   'network_events',
 ] as const;
 
-/**
- * Os ambientes em que semear e PERDA DE DADO, e nao recriacao de massa.
- *
- * Lista de PROIBIDOS e o arranjo errado aqui, e por isso a funcao abaixo nao
- * usa uma: um ambiente novo que ninguem lembrou de listar cairia no caso
- * padrao, que seria semear. A pergunta certa e a inversa -- **e `dev` ou
- * `test`?** --, e qualquer outra coisa recusa.
- */
+/** Os ambientes em que semear e PERDA DE DADO, e nao recriacao de massa. */
 export const AMBIENTES_QUE_ACEITAM_MASSA: ReadonlySet<string> = new Set(['dev', 'test', 'ci']);
 
 export class AmbienteRecusado extends Error {}
 
-/**
- * A trava de ambiente, separada para poder ser exercida sem banco.
- *
- * Duas condicoes independentes, e as duas precisam existir: `NODE_ENV` e o que
- * o Node conhece e o que uma imagem de producao carrega por padrao; `ENVIRONMENT`
- * e o que este projeto usa para distinguir `preprod` de `prod`. Uma so deixaria
- * passar o caso em que a outra esta certa.
- */
+/** A trava de ambiente, separada para poder ser exercida sem banco. */
 export function conferirAmbiente(env: {
   NODE_ENV?: string | undefined;
   ENVIRONMENT?: string | undefined;
@@ -142,14 +85,7 @@ async function conferirEsquema(db: Db): Promise<void> {
   }
 }
 
-/**
- * Apaga a massa ANTERIOR, e so ela.
- *
- * Pelos identificadores que este arquivo conhece, e nao por `truncate`: a massa
- * fixa convive com o que quem desenvolve criou a mao, e varrer a tabela inteira
- * apagaria o trabalho de alguem sem avisar. Determinismo nao exige terra
- * arrasada; exige que o resultado seja o mesmo.
- */
+/** Apaga a massa ANTERIOR, e so ela. */
 async function limparMassaAnterior(db: Db): Promise<void> {
   const entradas = MASSA_DO_DIRETORIO.map((uma) => uma.id);
   const titulares = MASSA_DO_DIRETORIO.map((uma) => uma.titularId);
@@ -157,33 +93,17 @@ async function limparMassaAnterior(db: Db): Promise<void> {
   await sql`delete from professionals where id = any(${sql.val(entradas)}::uuid[])`.execute(db);
   await sql`delete from users where id = any(${sql.val(titulares)}::uuid[])`.execute(db);
 
-  // A vitrine. Os itens saem antes dos parceiros por causa da chave
-  // estrangeira, e a versao por ultimo porque nada depende dela.
   const itens = MASSA_DA_VITRINE.map((um) => um.slug);
   const parceiros = PARCEIROS_DA_VITRINE.map((um) => um.slug);
   await sql`delete from store_items where slug = any(${sql.val(itens)}::text[])`.execute(db);
   await sql`delete from store_partners where slug = any(${sql.val(parceiros)}::text[])`.execute(db);
   await sql`delete from store_catalog_versions where version = ${VERSAO_DA_VITRINE}`.execute(db);
 
-  // A `Rede`. So os encontros da massa, pelo `slug`, que e o identificador que
-  // ESTE arquivo conhece: o `id` e gerado a cada semeadura. Nunca `truncate` --
-  // a massa fixa convive com o que quem desenvolve criou a mao.
   const encontros = MASSA_DA_REDE.map((um) => um.slug);
   await sql`delete from network_events where slug = any(${sql.val(encontros)}::text[])`.execute(db);
 }
 
-/**
- * A data de consulta de um preco, a partir do deslocamento em dias.
- *
- * Calculada e nao literal, e o cabecalho de `massa-da-vitrine.ts` diz por que:
- * com datas literais a massa inteira vence sozinha em trinta dias e a vitrine
- * de QA passa a mostrar "preco nao confirmado" nos dez itens. O que precisa
- * ser preservado e a RELACAO -- um vencido, um no limite, os outros vigentes.
- *
- * Em UTC, porque `price_checked_at` e data pura: montar a partir do fuso local
- * faria a data virar o dia anterior em fuso negativo, aproximando o vencimento
- * em silencio.
- */
+/** A data de consulta de um preco, a partir do deslocamento em dias. */
 export function dataDaConsulta(diasAtras: number, hoje: Date): string {
   const base = Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate());
   const alvo = new Date(base - diasAtras * 86_400_000);
@@ -193,19 +113,13 @@ export function dataDaConsulta(diasAtras: number, hoje: Date): string {
   return `${ano}-${mes}-${dia}`;
 }
 
-/** Grava a vitrine da `Loja`. Idempotente pelo `limparMassaAnterior`. */
+/** Grava a vitrine da `Loja`. */
 export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
   await sql`
     insert into store_catalog_versions (version, is_current)
     values (${VERSAO_DA_VITRINE}, true)
   `.execute(db);
 
-  // A identidade interna e gerada AQUI, e de proposito nao esta na massa
-  // (ADR-0024). A massa descreve o catalogo -- o que a tela mostra --, e o `id`
-  // nao e catalogo: ele nunca sai em resposta. Gerar na hora tambem prova a
-  // decisao pelo caminho mais curto: se alguma consulta, algum teste ou algum
-  // campo de contrato dependesse do valor do `id`, esta semeadura quebraria a
-  // cada execucao. Ela nao quebra.
   const ids = criarIdGenerator(() => Date.now());
   const idDoParceiro = new Map<string, string>();
 
@@ -220,26 +134,15 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
   }
 
   for (const item of MASSA_DA_VITRINE) {
-    // Os tres campos de preco andam juntos: o CHECK
-    // `store_items_preco_anda_completo` recusa qualquer combinacao parcial, e
-    // e ele que garante que "preco sem data" nao exista nem por engano.
     const data = item.precoConsultadoHaDias === null
       ? null
       : dataDaConsulta(item.precoConsultadoHaDias, hoje);
     const partnerId = idDoParceiro.get(item.partnerSlug);
     if (partnerId === undefined) {
-      // Massa que aponta para parceiro inexistente precisa PARAR a semeadura,
-      // e nao seguir sem o item: um `continue` aqui produziria uma vitrine
-      // menor do que a massa declara, e o teste que conta itens acusaria o
-      // sintoma sem nomear a causa.
       throw new Error(
         `o item '${item.slug}' aponta para o parceiro '${item.partnerSlug}', que nao esta em PARCEIROS_DA_VITRINE`,
       );
     }
-    // `published_at` em TODO item da massa, inclusive no inativo (ADR-0027
-    // A.2): a massa descreve itens que estiveram na vitrine, e o inativo e o
-    // retirado, nao o rascunho. `store_items_publicado_tem_data` recusaria o
-    // ativo sem data, e o inativo sem data viraria `draft` no painel.
     await sql`
       insert into store_items (
         id, slug, partner_id, title, summary, category, image_path, target_path,
@@ -254,33 +157,8 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
   }
 }
 
-/**
- * Grava os encontros da `Rede`. Idempotente pelo `limparMassaAnterior`.
- *
- * ## O INSTANTE E MONTADO PELO POSTGRES, e nao aqui
- *
- * `massa-da-rede.ts` produz o TEXTO da hora de parede e o nome IANA da zona em
- * que esse texto deve ser lido; quem resolve o deslocamento e o
- * `::timestamp AT TIME ZONE` abaixo. Somar `-03:00` a mao seria reimplementar
- * horario de verao.
- *
- * ## O ponto entra por SQL, e a ORDEM E (lon, lat)
- *
- * `ST_MakePoint(x, y)` e `(longitude, latitude)`, ao contrario de como as
- * pessoas escrevem. A massa guarda `{ lat, lon }` com nome, e a troca acontece
- * so aqui, a vista. `geo_source` anda junto por `CHECK`.
- *
- * ## Publicacao
- *
- * `origin = 'admin'` e `published_at` preenchido em todo encontro publicado
- * (ADR-0027 12.8). O retirado tambem foi publicado antes de sair, entao ele
- * tambem tem `published_at`.
- */
+/** Grava os encontros da `Rede`. */
 export async function semearRede(db: Db, hoje: Date): Promise<void> {
-  // A identidade interna e gerada AQUI, e de proposito nao esta na massa
-  // (ADR-0024): o `id` nao e catalogo, ele nunca sai em resposta. Gerar na hora
-  // prova a decisao pelo caminho mais curto: se alguma consulta dependesse do
-  // valor do `id`, esta semeadura quebraria a cada execucao.
   const ids = criarIdGenerator(() => Date.now());
 
   for (const encontro of MASSA_DA_REDE) {
@@ -326,14 +204,7 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
   }
 }
 
-/**
- * O ponto entra por SQL, e a ORDEM E (lon, lat).
- *
- * `ST_MakePoint` recebe X antes de Y, e trocar os dois e o erro classico do
- * PostGIS: ele nao falha, ele grava o Brasil no meio da Somalia. A massa guarda
- * o par ja nessa ordem, e o teste de integracao mede a distancia de volta -- que
- * e a unica forma de a troca aparecer.
- */
+/** O ponto entra por SQL, e a ORDEM E (lon, lat). */
 function pontoDaEntrada(entrada: EntradaSemeada) {
   if (entrada.ponto === null) return sql`null`;
   const [lon, lat] = entrada.ponto;
@@ -343,8 +214,8 @@ function pontoDaEntrada(entrada: EntradaSemeada) {
 /**
  * Grava a massa. **Exportada** para que a suite de integracao a rode contra o
  * Postgres efemero: uma massa que ninguem executa e uma massa que se descobre
- * quebrada no dia da demonstracao, contra um CHECK que o teste unitario nao
- * tem como conhecer.
+ * quebrada no dia da demonstracao, contra um CHECK que o teste unitario nao tem
+ * como conhecer.
  */
 export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
   await limparMassaAnterior(db);
@@ -361,11 +232,6 @@ export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
               ${MOMENTO_DA_MASSA}::timestamptz)
     `.execute(db);
 
-    // `claim_status = 'claimed'` com `claimed_at` preenchido: o CHECK
-    // `professionals_titularidade_tem_marco` exige o marco, e o
-    // `professionals_aceite_antes_do_perfil` exige que `self` e `invited` nunca
-    // estejam sem titular. A massa e de perfis ACEITOS, que e a regra da emenda
-    // 1 -- nenhum perfil nasce sem o aceite de quem ele descreve.
     await sql`
       insert into professionals (
         id, kinds, display_name, about, city, state, neighborhood, geo,
@@ -408,7 +274,7 @@ export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
   }
 }
 
-/** O nivel sai da REGRA, sobre as verificacoes da propria entrada. Ver o cabecalho. */
+/** O nivel sai da REGRA, sobre as verificacoes da propria entrada. */
 export function nivelDaEntrada(entrada: EntradaSemeada): string {
   return nivelDerivado(
     entrada.verificacoes.map((uma) => ({

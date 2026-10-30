@@ -1,48 +1,4 @@
-/**
- * O serviço do registro de aparelho: registrar, listar e revogar.
- *
- * Fino, como o da localização, e pela mesma razão: a regra vive em dois lugares
- * melhores — o predicado de elegibilidade no domínio, a autorização na cláusula
- * `WHERE` do repositório. O que sobra aqui é o que só existe quando os dois se
- * juntam.
- *
- * ## Quem revoga, quando, e por qual caminho
- *
- * Revogação é metade do título da história, e ela tem **quatro** disparadores.
- * Três passam por este arquivo; o quarto é do banco e não precisa de código:
- *
- * | quem dispara | por onde | motivo na trilha |
- * |---|---|---|
- * | o tutor, pelo Perfil (critério 5) | `DELETE /v1/me/devices/{deviceId}` | `user_removed` |
- * | o app, ao sair da conta (critério 3) | a mesma rota, antes do `logout` | `user_removed` |
- * | o FCM, ao recusar o token (critério 4) | `revogarPorTokenRecusado` | `token_rejected` |
- * | outra conta registrando o mesmo token | `registrar`, no mesmo comando | `reclaimed_by_other_account` |
- *
- * O quarto é o que faz o critério 3 valer **mesmo quando o app não conseguiu
- * chamar a rota**, e esse caso não é raro: a ADR-0002 §5 registra por escrito
- * que o apagamento local no logout é incondicional e a revogação no servidor
- * "pode não acontecer" (sair sem rede). Sem ele, o token ficaria preso à conta
- * anterior e o aviso do pet dela chegaria em quem está com o aparelho agora.
- *
- * A quinta porta é `ON DELETE CASCADE`: a exclusão de conta leva os aparelhos
- * junto, sem ninguém lembrar de nada.
- *
- * ## O que o envio em curso enxerga
- *
- * Nada aqui avisa um disparo em andamento, e isso é deliberado. Quem manda
- * resolve o token pelo `enderecoDeEnvio` no instante do envio, e a revogação
- * aparece como `null` na chamada seguinte. Avisar seria construir um segundo
- * canal de invalidação para uma garantia que a releitura já dá.
- *
- * ## A trilha é a única memória da revogação
- *
- * A linha é apagada (o argumento inteiro está no cabeçalho da migração), então
- * `device.revoked` com o `reason` no metadado é o que resta. Ela não carrega o
- * token: a porta da auditoria proíbe "token de qualquer espécie" e a trilha
- * sobrevive à exclusão da conta de propósito — gravar o token nela desfaria o
- * direito de apagamento por uma porta lateral, do mesmo jeito que gravar a
- * coordenada desfaria.
- */
+/** O serviço do registro de aparelho: registrar, listar e revogar. */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
@@ -65,13 +21,7 @@ export interface DependenciasDoRegistroDeAparelhos {
 export class RegistroDeAparelhosService {
   constructor(private readonly deps: DependenciasDoRegistroDeAparelhos) {}
 
-  /**
-   * Registra ou atualiza o aparelho do chamador.
-   *
-   * A permissão é gravada como veio, inclusive `denied`: o ADR-0008 manda
-   * registrar quem negou justamente para a métrica de alcance ser honesta e
-   * para a pessoa cair no caminho do e-mail em vez de sumir da base.
-   */
+  /** Registra ou atualiza o aparelho do chamador. */
   async registrar(
     chamador: ChamadorDoAparelho,
     entrada: RegistroDeAparelho,
@@ -84,9 +34,6 @@ export class RegistroDeAparelhosService {
     );
 
     if (reivindicadoDe !== null) {
-      // O ator é quem registrou, e o alvo é a conta que perdeu o aparelho. Sem
-      // esta linha, "por que a conta anterior parou de receber?" não tem
-      // resposta em lugar nenhum: a linha dela foi apagada no mesmo comando.
       await this.registrarRevogacao(
         { ...aparelho, dono: reivindicadoDe },
         'reclaimed_by_other_account',
@@ -104,9 +51,6 @@ export class RegistroDeAparelhosService {
       metadata: {
         platform: aparelho.plataforma,
         push_permission: aparelho.permissao,
-        // Se o aparelho conta ou não para `reachable_tutors`, dito no momento
-        // em que ele foi registrado. É a leitura que o relatório de homologação
-        // precisa e que não se reconstrói depois, porque a linha muda.
         has_push_token: aparelho.pushToken !== null,
       },
     });
@@ -118,14 +62,7 @@ export class RegistroDeAparelhosService {
     return this.deps.repositorio.listarDoDono(chamador.userId);
   }
 
-  /**
-   * Remove um aparelho do chamador.
-   *
-   * `false` significa 404 para quem chamou, e ele cobre os dois casos de
-   * propósito: não existe, e existe e é de outra conta. A ADR-0021 diz que a
-   * segunda não pode ser distinguível da primeira, e aqui ela não é — o dono
-   * entra no `WHERE` e a linha alheia nunca chega a ser lida.
-   */
+  /** Remove um aparelho do chamador. */
   async remover(chamador: ChamadorDoAparelho, aparelhoId: string): Promise<boolean> {
     const revogado = await this.deps.repositorio.revogarDoDono(chamador.userId, aparelhoId);
     if (revogado === null) return false;
@@ -137,37 +74,12 @@ export class RegistroDeAparelhosService {
     return true;
   }
 
-  /**
-   * Todos os aparelhos da conta saem, porque a identidade revogou tudo
-   * (SEC-019). Devolve quantos saíram.
-   *
-   * **Não grava `device.revoked` por aparelho, e a ausência é deliberada.** Os
-   * outros quatro disparadores revogam UM endereço e a pergunta que a trilha
-   * responde é "por que este aparelho parou de receber". Aqui a pergunta é
-   * outra, e ela já tem dono: `auth.sessions_revoked` é o evento do gesto, e é
-   * nele que a contagem entra como `devices_removed`. Uma segunda família de
-   * eventos para o mesmo ato faria a trilha contar o mesmo fato duas vezes, com
-   * dois atores diferentes, e a leitura de "o que aconteceu nesta conta" passa
-   * a depender de qual dos dois quem consulta encontrou primeiro.
-   *
-   * O motivo `session_revoked` não existe em {@link MotivoDaRevogacao} por essa
-   * mesma razão: ele não seria lido por ninguém.
-   */
+  /** Todos os aparelhos da conta saem, porque a identidade revogou tudo (SEC-019). */
   removerTodosDaConta(dono: UserId): Promise<number> {
     return this.deps.repositorio.revogarTodosDoDono(dono);
   }
 
-  /**
-   * O FCM recusou este token: o aparelho sai agora (critério 4).
-   *
-   * **Quem chama é o caminho de envio**, e ele ainda não existe — é a
-   * BICHUS-18. Esta função é a metade do critério 4 que é de servidor, e ela
-   * está escrita agora porque a alternativa seria a BICHUS-18 inventar a
-   * revogação junto com o disparo, sem revisão de segurança própria.
-   *
-   * `actorKind: 'system'` porque não há pessoa: quem decidiu foi o transporte.
-   * Nenhum `actorUserId` — a porta da trilha proíbe o campo fora de `user`.
-   */
+  /** O FCM recusou este token: o aparelho sai agora (critério 4). */
   async revogarPorTokenRecusado(token: TokenDeAparelho, correlationId?: string): Promise<boolean> {
     const revogado = await this.deps.repositorio.revogarPorToken(token);
     if (revogado === null) return false;
@@ -178,15 +90,12 @@ export class RegistroDeAparelhosService {
     return true;
   }
 
-  /**
-   * Dois dos sete critérios do ADR-0006, sobre candidatos que alguém já
-   * filtrou. **Não é a contagem do alcance** — ver a porta.
-   */
+  /** Dois dos sete critérios do ADR-0006, sobre candidatos que alguém já filtrou. */
   contasAlcancaveisPorPush(candidatos: readonly UserId[]): Promise<ReadonlySet<UserId>> {
     return this.deps.repositorio.contasAlcancaveisPorPush(candidatos);
   }
 
-  /** O token, relido no instante do envio. `null` = não mande. Ver a porta. */
+  /** O token, relido no instante do envio. */
   enderecoDeEnvio(aparelhoId: string): Promise<TokenDeAparelho | null> {
     return this.deps.repositorio.enderecoDeEnvio(aparelhoId);
   }
@@ -198,14 +107,7 @@ export class RegistroDeAparelhosService {
     return { correlationId: chamador.correlationId, actorIp: chamador.ip };
   }
 
-  /**
-   * A gravação da revogação, num lugar só.
-   *
-   * Quatro chamadores e quatro motivos; o formato do evento é um. Repetir o
-   * objeto em cada um é como dois deles passam a gravar campos diferentes sem
-   * que ninguém note — e o que se lê depois é uma trilha que responde a
-   * pergunta em três casos e não no quarto.
-   */
+  /** A gravação da revogação, num lugar só. */
   private registrarRevogacao(
     aparelho: Aparelho,
     motivo: MotivoDaRevogacao,
@@ -221,9 +123,6 @@ export class RegistroDeAparelhosService {
       metadata: {
         reason: motivo,
         platform: aparelho.plataforma,
-        // Quem perdeu o aparelho. Precisa estar aqui porque em
-        // `reclaimed_by_other_account` o ator **não** é o dono, e sem este
-        // campo o evento não diria de quem foi o aparelho revogado.
         owner_user_id: aparelho.dono,
       },
     });

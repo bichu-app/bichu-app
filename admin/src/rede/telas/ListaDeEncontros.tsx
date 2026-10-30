@@ -1,8 +1,4 @@
-/**
- * 4 · Rede: lista (25.3 quadros 4.1 a 4.8, 25.5.2, UX 29.5 e 29.10). Busca,
- * filtro e ordenacao no topo do corpo, na URL; contagem, "Carregar mais",
- * menu da linha com Editar, Ver pedidos, Cancelar evento e Remover.
- */
+/** 4 · Rede: lista (25.3 quadros 4.1 a 4.8, 25.5.2, UX 29.5 e 29.10). */
 import { useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 

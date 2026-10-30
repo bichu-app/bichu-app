@@ -5,57 +5,6 @@ import '../theme/bichu_tokens.g.dart';
 import '../validacao/politica_de_senha.dart';
 
 /// A lista de requisitos da senha, atualizada **enquanto a pessoa digita**.
-///
-/// Substitui o texto de ajuda estatico que ficava sob o campo de senha ("Pelo
-/// menos 10 caracteres. Uma frase curta funciona melhor que uma senha
-/// complicada."). Pedido do cliente em 22/09/2026: _"colocar aquelas validacoes
-/// do campo dinamico conforme o usuario for preenchendo e ir respeitando a
-/// politica de senha."_
-///
-/// O texto estatico dizia **um** dos quatro requisitos e so virava erro depois
-/// do toque no botao. A lista diz os quatro e responde a cada tecla.
-///
-/// ## Tres decisoes que o codigo nao entrega sozinho
-///
-/// **Escuta os controladores, e nao um `setState` da tela.** A regra
-/// `similar_to_identity` depende do e-mail e do nome, entao a lista precisa
-/// reagir a **tres** campos. Amarrar isso a `onChanged` de cada um deixaria a
-/// lista parada no dia em que alguem acrescentasse um `onChanged` proprio a um
-/// deles e esquecesse de encadear. Aqui o `Listenable.merge` nao tem como ser
-/// esquecido.
-///
-/// **Um no de semantica para a lista inteira, com regiao viva.** Oito nos
-/// (icone e texto de cada linha) fariam o leitor de tela recitar fragmentos
-/// soltos. O rotulo composto diz quantos requisitos estao atendidos, quais, e o
-/// que falta, numa frase.
-///
-/// E ele **so muda quando um requisito vira**, nunca a cada tecla: o rotulo e
-/// montado a partir dos estados, e nao do que foi digitado. Regiao viva que
-/// muda de texto a cada caractere interrompe a fala do TalkBack sem parar,
-/// que e o jeito conhecido de tornar um campo de senha inutilizavel para quem
-/// nao enxerga.
-///
-/// **Cor nao e o unico indicador** (WCAG 2.1 SC 1.4.1): cada estado tem icone
-/// proprio, e verde e vermelho saem de token (`cores.success`, `cores.error`).
-///
-/// ## O aviso do vazamento saiu (18/10/2026)
-///
-/// A lista terminava com *"O servidor também recusa senha que já apareceu em
-/// vazamento conhecido. Isso não dá para conferir aqui: se acontecer, avisamos
-/// depois de enviar."*, e o cliente mandou remover a frase.
-///
-/// **Ela saiu das DUAS aparicoes**, o `Text` do pe da lista e o
-/// [_rotulo] composto. Nao e descuido com acessibilidade, e o contrario: este
-/// widget roda com `excludeSemantics: true`, entao [_rotulo] e a UNICA leitura
-/// da lista -- manter a frase ali faria o leitor de tela anunciar um texto que
-/// nao existe mais em tela nenhuma, e a paridade entre o que se ve e o que se
-/// ouve e justamente o que o rotulo composto existe para garantir.
-///
-/// **O que a lista deixou de prometer, a recusa continua explicando.** Com o
-/// aviso fora, "quatro de quatro" em verde nao e mais ressalvado aqui; quem
-/// enviar uma senha vazada le `senhaRecusadaPeloServidor` no campo, que diz o
-/// que houve e o que fazer, e e por isso que a remocao nao abriu beco. A
-/// ligacao esta em `telas/conta/tela_criar_conta.dart` e tem isca que a cobra.
 class RequisitosDaSenha extends StatelessWidget {
   const RequisitosDaSenha({
     required this.senha,
@@ -134,9 +83,7 @@ class RequisitosDaSenha extends StatelessWidget {
     }
   }
 
-  /// A cor do estado, **sempre de token**. Literal hexadecimal aqui reprova o
-  /// portao de tokens, e com razao: verde e vermelho de estado sao decisao do
-  /// sistema de design, e ja tem par de contraste medido.
+  /// A cor do estado, **sempre de token**.
   static Color _cor(EstadoDaRegra estado, BichuCores cores) {
     switch (estado) {
       case EstadoDaRegra.aguardando:

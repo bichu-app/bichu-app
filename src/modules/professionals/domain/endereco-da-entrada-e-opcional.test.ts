@@ -1,23 +1,6 @@
 /**
  * ISCA DA REGRA QUE O CLIENTE *NAO* MUDOU -- **escrita e NAO rodada** nesta
  * entrega (sem suite unitaria, por regra dele de 18/10/2026).
- *
- * O cliente autorizou o painel a PREENCHER endereco. Ele nao pediu, em momento
- * nenhum, que endereco passasse a ser EXIGIDO -- e exigir seria um defeito de
- * produto com nome e sobrenome: um profissional autonomo (adestrador,
- * passeador, veterinario que atende em casa) tem como "endereco comercial" a
- * casa dele. Campo obrigatorio o tornaria incadastravel, ou o obrigaria a
- * entregar o endereco residencial para poder aparecer no diretorio.
- *
- * Esta isca e o que impede isso de virar opcional "por enquanto".
- *
- * ## Prova por desligamento
- *
- * | isca | o que desligar para ela reprovar |
- * |---|---|
- * | nao entra em `missing_to_publish` | acrescentar `'postal_code'` a `ORDEM_DA_FALTA` e a `FaltaParaPublicar` |
- * | publica sem endereco nenhum | idem |
- * | endereco nao vai para a trilha | acrescentar os quatro campos a `retratoDaEntrada` |
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -36,7 +19,10 @@ const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}
 
 const NASCEU_EM = Date.UTC(2026, 9, 18, 12, 0, 0) as Instant;
 
-/** Um autonomo publicavel: tem nome, endereco publico, cidade, UF e telefone, e **nenhuma rua**. */
+/**
+ * Um autonomo publicavel: tem nome, endereco publico, cidade, UF e telefone, e
+ * **nenhuma rua**.
+ */
 const AUTONOMO: EntradaAdministrativa = {
   slug: 'passeios-da-bia',
   kinds: ['walker'],
@@ -60,8 +46,6 @@ const AUTONOMO: EntradaAdministrativa = {
   source: 'import',
   claimStatus: 'unclaimed',
   verificacoes: [],
-  // `comoData` e nao `new Date(...)`: dominio nao constroi tempo real, e a
-  // regra de arquitetura reprova a construcao direta tambem no teste.
   publishedAt: comoData(NASCEU_EM),
   createdAt: comoData(NASCEU_EM),
   updatedAt: comoData(NASCEU_EM),
@@ -109,10 +93,6 @@ void describe('o endereco de rua da entrada do diretorio', () => {
   });
 
   void it('ISCA: o endereco NAO vai para a trilha de auditoria', () => {
-    // O precedente e do endereco de entrega da plaquinha: "nunca na trilha de
-    // auditoria". A trilha e append-only, e o "endereco comercial" de um
-    // autonomo e a casa dele -- um historico de enderecos residenciais que
-    // nenhuma correcao de cadastro alcanca.
     const retrato = retratoDaEntrada({
       ...AUTONOMO,
       postalCode: '05435000',

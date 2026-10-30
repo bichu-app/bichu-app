@@ -1,22 +1,4 @@
 /// Os campos do pet, num lugar so.
-///
-/// **Duas formas diferentes de editar os mesmos campos e defeito, nao
-/// escolha.** O assistente de cadastro (F1.3 e F1.5) e a tela de edicao
-/// mexem nos MESMOS atributos do mesmo animal; enquanto os campos moravam
-/// dentro do `State` de cada tela, a segunda tela so podia nascer como copia,
-/// e copia diverge na primeira manutencao -- o rotulo muda de um lado, a
-/// validacao do outro, e quem cadastrou e quem editou passam a ver telas
-/// diferentes do mesmo formulario.
-///
-/// Quem hospeda continua dono do `Scaffold`, da `BarraDeConta`, do
-/// `IndicadorDePasso`, da `BarraDeAcaoFixa`, do botao e da navegacao ou da
-/// chamada de API. **So os campos moram aqui.**
-///
-/// A validacao sai por [CamposDeIdentificacaoState.validar] e
-/// [CamposDeSinaisState.validar], alcancados por `GlobalKey`: a tela
-/// hospedeira chama antes de salvar e so segue com `true`. E o unico jeito de
-/// a regra de campo obrigatorio continuar morando junto do campo -- se ela
-/// subisse para a tela, voltariamos a ter duas copias dela.
 library;
 
 import 'package:flutter/material.dart';
@@ -35,66 +17,22 @@ import 'rascunho_de_pet.dart';
 import 'textos_do_cadastro.dart';
 
 /// A leitura de `reference-data`, num lugar so.
-///
-/// Ela estava DUPLICADA nas duas telas, com corpos diferentes: uma marcava
-/// `_listaFalhou` e a outra zerava a referencia. O que as duas de fato
-/// compartilham e so isto -- pedir a lista e engolir [FalhaDeChamada] --, e o
-/// que cada uma faz com a falha continua sendo decisao dela, porque as saidas
-/// sao mesmo diferentes: em F1.3 a raca perdida ganha faixa e botoes de saida,
-/// e em F1.5 a cor perdida simplesmente desabilita o seletor.
-///
-/// Devolve `null` quando a chamada falhou.
 Future<DadosDeReferencia?> _buscarReferencia(BuildContext context) async {
   try {
     return await Escopo.of(context).pets.dadosDeReferencia();
   } on FalhaDeChamada {
     return null;
   } on Object catch (erro, pilha) {
-    // Falha que nao e de chamada tambem e lista que nao chegou, e quem chama
-    // ja sabe tratar nulo. Antes ela escapava daqui e deixava
-    // `_carregandoReferencia` ligado para sempre nas duas telas que usam este
-    // ajudante (F1.3 e F1.5).
     registrarFalhaInesperada(erro, pilha, onde: 'ao buscar a lista de referencia');
     return null;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Identificacao: nome, especie, raca, raca livre, porte, sexo
-// ---------------------------------------------------------------------------
-
 /// Os campos de identificacao do pet (F1.3, Figma `89:45`).
-///
-/// **Raca sao dois campos, e a tela e o que torna o erro impossivel.**
-/// `breed_code` vem da lista fechada e e a unica coisa que o cruzamento de
-/// perdido e achado le; `breed_free_text` e a raca como a pessoa escreveu,
-/// guardada e exibida, **nunca cruzada**. O contrato recusa os dois juntos com
-/// `validation-failed`, e a restricao que impede isso nao e validacao: e o
-/// campo de texto **so existir** quando a opcao `Outra` esta escolhida
-/// (Norman). Deixar o campo visivel o tempo todo e convidar ao erro e depois
-/// explica-lo.
-///
-/// **A lista que nao carrega nao trava o cadastro.** Raca e opcional no
-/// contrato (`PetInput` exige `name`, `species` e `size`), e perder o pet por
-/// causa de um campo que ninguem precisa preencher e o pior desfecho possivel.
-///
-/// **Sem a lista, a pessoa pode DIGITAR a raca** (criterio 6 de BICHUS-90), e
-/// isso nao contradiz o paragrafo acima: o que nao pode acontecer e o texto
-/// livre virar o codigo de cruzamento. Aqui ele nao vira -- digitar escolhe
-/// `outro_<especie>`, que e um codigo LIMPO da lista fechada, significando
-/// "nao esta na lista", e o texto vai para `breed_free_text`, que descreve e
-/// nunca cruza. E exatamente o arranjo que o criterio 3 da mesma historia
-/// descreve: "o texto e aceito e guardado, E o cruzamento continua funcionando
-/// pelos atributos que vieram da lista".
-///
-/// A primeira versao desta tela nao oferecia esse caminho e o cadastro seguia
-/// sem raca nenhuma. Funcionava, e perdia a informacao: `outro_dog` + "Akita"
-/// aparece na ficha, no cartaz e no perfil publico; nada nao aparece.
 class CamposDeIdentificacao extends StatefulWidget {
   const CamposDeIdentificacao({required this.rascunho, super.key});
 
-  /// O rascunho e de quem hospeda: quem o cria e quem o descarta. Estes campos
-  /// so o leem, o escutam e o atualizam.
+  /// O rascunho e de quem hospeda: quem o cria e quem o descarta.
   final RascunhoDePet rascunho;
 
   @override
@@ -129,43 +67,15 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   String? _erroDaRacaLivre;
 
   /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
-  ///
-  /// `Escopo` e um `InheritedWidget`, e ler um inherited widget dentro de
-  /// `initState` e erro de framework: naquele momento a dependencia ainda nao
-  /// pode ser registrada, e o widget nao seria reconstruido se ela mudasse. O
-  /// sinalizador impede que o arranque rode de novo a cada mudanca de tema, de
-  /// tamanho de fonte ou de rotacao, que e o outro lado dessa troca.
   bool _iniciou = false;
 
   @override
   void initState() {
     super.initState();
-    // **Os campos escutam o rascunho.** `RascunhoDePet` e um `ChangeNotifier` e
-    // `atualizar` chama `notifyListeners()`; sem ninguem escutando, a
-    // notificacao nao chegava a lugar nenhum e o campo que so chamava
-    // `atualizar` gravava o valor **sem redesenhar**. Era o defeito de
-    // BICHUS-156: tocar num sexo nao mostrava nada, e a selecao aparecia no
-    // toque seguinte, num outro campo -- daí o relato de que o sexo estava
-    // "vinculado ao porte".
-    //
-    // Escutar aqui e o que faz `atualizar` valer por si. A correcao por campo
-    // (um `setState` ao lado de cada `atualizar`) ja foi tentada neste
-    // repositorio, com o aviso escrito ao lado em
-    // `tela_cadastrar_sinais.dart`, e o aviso **nao viajou ate o campo
-    // seguinte**: sao 7 chamadas de `atualizar` so neste bloco, cada uma
-    // dependendo de alguem lembrar. Campo novo agora redesenha sozinho.
-    //
-    // O `setState` que sobrou nos outros campos **nao e redundante**: ele
-    // carrega estado LOCAL do formulario (as mensagens de erro,
-    // `_seguiuSemRaca`), que o rascunho nao conhece e nao notifica.
     _rascunho.addListener(_oRascunhoMudou);
   }
 
   /// O rascunho mudou por qualquer caminho: redesenha.
-  ///
-  /// `mounted` porque `atualizar` pode ser chamado por quem tambem segura o
-  /// rascunho (ele atravessa os tres passos do assistente) depois de este
-  /// bloco sair da arvore.
   void _oRascunhoMudou() {
     if (!mounted) return;
     setState(() {});
@@ -181,8 +91,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
 
   @override
   void dispose() {
-    // Solta a escuta e **nao** descarta o rascunho: o dono e quem o criou, e a
-    // tela seguinte do assistente ainda o usa.
     _rascunho.removeListener(_oRascunhoMudou);
     _nome.dispose();
     _racaLivre.dispose();
@@ -210,9 +118,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
       _carregandoReferencia = false;
     });
     _rascunho.atualizar(() {
-      // A versao que o **cliente tinha em maos**. Sem ela o servidor grava a
-      // corrente no momento da escrita, que responde "qual e a lista de
-      // hoje" e nao "de qual lista este pet foi escolhido".
       _rascunho.refDataVersion = dados.versao;
     });
   }
@@ -245,9 +150,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   void _escolherEspecie(Especie escolha) {
     _rascunho.atualizar(() {
       _rascunho.especie = escolha;
-      // A lista de racas e por especie, e o codigo de saida tambem. Trocar a
-      // especie sem soltar a raca deixaria `breed_code` apontando para uma
-      // lista que nao e mais a desta tela.
       _rascunho.breedCode = null;
       _rascunho.breedFreeText = '';
     });
@@ -259,12 +161,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   }
 
   /// A saída do critério 6: sem a lista, a pessoa digita a raça.
-  ///
-  /// Reusa `_escolherRaca` com o código `outro_<espécie>` em vez de abrir um
-  /// caminho paralelo. Isso importa mais do que parece: `_escolherRaca` já
-  /// anuncia o aparecimento do campo para o leitor de tela e já cuida de não
-  /// roubar o foco. Um caminho novo precisaria repetir as duas coisas, e a
-  /// repetição é onde a acessibilidade se perde primeiro.
   void _digitarARaca() {
     final especie = _rascunho.especie;
     if (especie == null) return;
@@ -279,10 +175,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
 
     final agoraEOutra = _rascunho.escolheuOutraRaca;
     if (agoraEOutra && !eraOutra) {
-      // **O aparecimento e anunciado e o foco NAO pula para o campo.** Mudar o
-      // foco sozinho depois de uma escolha e deslize garantido em leitor de
-      // tela; o campo fica imediatamente depois do seletor na ordem de foco e
-      // e alcancado pelo avanco normal (UX F1.3, acessibilidade).
       anunciar(
         context,
         '${TextosDoCadastro.rotuloDaRacaLivre} (opcional)',
@@ -316,11 +208,7 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   }
 
   /// Confere os campos, pinta os erros e **grava o que foi digitado** no
-  /// rascunho. Devolve `false` quando a tela hospedeira nao deve seguir.
-  ///
-  /// A navegacao (ou a chamada de API) NAO esta aqui de proposito: quem
-  /// hospeda decide para onde vai depois do `true`. O que nao pode variar de
-  /// tela para tela e a regra, e a regra mora junto do campo.
+  /// rascunho.
   bool validar() {
     setState(() {
       _erroDoNome = null;
@@ -336,10 +224,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
       return false;
     }
 
-    // A tela **nao corrige** a combinacao proibida por conta propria: ela a
-    // torna impossivel. Se por algum caminho o texto livre existir com uma
-    // raca da lista, o erro e do campo livre e nao do seletor, e a mensagem
-    // nomeia a raca escolhida.
     if (livre.isNotEmpty && !_rascunho.escolheuOutraRaca) {
       final raca = _rotuloDaRacaEscolhida;
       setState(() {
@@ -407,9 +291,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
             child: Wrap(
               spacing: BichuEspaco.e4,
               children: <Widget>[
-                // Primeiro a saida que PRESERVA a informacao. "Continuar
-                // sem a raca" continua existindo e vem depois, porque
-                // perder o campo e a segunda melhor opcao, nao a primeira.
                 if (_rascunho.especie != null)
                   TextButton(
                     onPressed: _digitarARaca,
@@ -430,9 +311,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
           itens: _itensDeRaca,
           selecionado: rascunho.breedCode,
           aoSelecionar: _escolherRaca,
-          // Desabilitado enquanto nao ha especie escolhida (a lista e por
-          // especie), enquanto a lista carrega, e quando ela falhou. Em
-          // nenhum desses casos ele vira campo de texto livre.
           habilitado: rascunho.especie != null &&
               !_carregandoReferencia &&
               !_listaFalhou,
@@ -467,12 +345,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
             _rascunho.atualizar(() => _rascunho.porte = escolha);
             setState(() => _erroDoPorte = null);
           },
-          // Tres botoes, e nao os quatro valores de `PetSize`. O desenho de
-          // F1.3 tem tres, e o paragrafo 11.17 do design system limita o
-          // grupo segmentado a tres segmentos de uma palavra: com quatro, o
-          // rotulo mais longo quebra em duas linhas a 200% de escala de
-          // fonte. `GG` existe no contrato e e lido na ficha; ele so nao e
-          // oferecido aqui.
           opcoes: const <OpcaoSegmentada<Porte>>[
             OpcaoSegmentada<Porte>(
               valor: Porte.pequeno,
@@ -498,26 +370,7 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sinais: cor principal, segunda cor, sinais particulares, cuidados
-// ---------------------------------------------------------------------------
-
 /// Os campos de sinais do pet (F1.5, Figma `91:51`).
-///
-/// **A cor e lista fechada de duas posicoes desde 2026-09-17.** O contrato tem
-/// `primary_color_code` e `secondary_color_code`, dois codigos da mesma lista
-/// de `reference-data`, e **nao tem campo de cor em texto livre**. Sao duas
-/// cores no maximo, e nao a multipla escolha do paragrafo 11.18 do design
-/// system, que e anterior a essa mudanca. O que a pessoa quiser dizer alem
-/// disso cabe em Sinais particulares, que continua sendo texto livre -- e a
-/// ajuda dos dois campos **aponta para la**, porque a lista de duas posicoes
-/// frustra exatamente quem tem o pet mais facil de reconhecer.
-///
-/// **`care_notes` e o unico campo do cadastro que vai direto para uma pagina
-/// publica sem interruptor de visibilidade.** Nao ha como marca-lo como
-/// privado depois. Por isso o aviso na hora de escrever nao e acabamento: e a
-/// unica protecao que a pessoa tem, e ele precisa ser lido **antes** de ela
-/// digitar.
 class CamposDeSinais extends StatefulWidget {
   const CamposDeSinais({required this.rascunho, super.key});
 
@@ -540,12 +393,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
   DadosDeReferencia? _referencia;
 
   /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
-  ///
-  /// `Escopo` e um `InheritedWidget`, e ler um inherited widget dentro de
-  /// `initState` e erro de framework: naquele momento a dependencia ainda nao
-  /// pode ser registrada, e o widget nao seria reconstruido se ela mudasse. O
-  /// sinalizador impede que o arranque rode de novo a cada mudanca de tema, de
-  /// tamanho de fonte ou de rotacao, que e o outro lado dessa troca.
   bool _iniciou = false;
 
   @override
@@ -566,9 +413,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
   Future<void> _carregarReferencia() async {
     final dados = await _buscarReferencia(context);
     if (!mounted) return;
-    // Mesma saida de F1.3: cor e opcional no contrato, e cadastrar sem ela e
-    // escolher depois em `Editar` e melhor que travar o cadastro. O que nao
-    // acontece e o campo virar texto livre como plano B.
     setState(() => _referencia = dados);
   }
 
@@ -581,13 +425,7 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
     ];
   }
 
-  /// Grava o que foi digitado no rascunho. Devolve `false` quando a tela
-  /// hospedeira nao deve seguir.
-  ///
-  /// Aqui nao ha campo obrigatorio nem combinacao proibida -- os dois campos
-  /// sao texto livre opcional --, entao ela sempre devolve `true`. O metodo
-  /// existe mesmo assim porque **os controladores moram aqui**: sem ele a tela
-  /// hospedeira teria que alcancar o texto por fora, que e como a copia volta.
+  /// Grava o que foi digitado no rascunho.
   bool validar() {
     final rascunho = widget.rascunho;
     rascunho.atualizar(() {
@@ -613,11 +451,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
           itens: _cores,
           habilitado: listaCarregou,
           selecionado: rascunho.corPrincipalCodigo,
-          // `setState` junto do `atualizar`: o rascunho notifica quem o
-          // escuta, e este bloco **nao** o escuta -- ele le o valor direto.
-          // Sem o `setState`, a escolha ia para o rascunho e a caixa
-          // continuava dizendo "Escolher na lista", que e o defeito que
-          // parece "o toque nao funcionou".
           aoSelecionar: (codigo) => setState(
             () => rascunho.corPrincipalCodigo = codigo,
           ),
@@ -625,9 +458,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
         const SizedBox(height: BichuEspaco.e4),
         SeletorDeLista(
           rotulo: TextosDoCadastro.rotuloDaSegundaCor,
-          // "(opcional)" em texto no rotulo, e nao por asterisco:
-          // asterisco falha para leitor de tela e para quem nao conhece a
-          // convencao (UX secao 13).
           estadoInicial: TextosDoCadastro.escolherNaLista,
           itens: _cores,
           habilitado: listaCarregou,
@@ -646,30 +476,12 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
         ),
         const SizedBox(height: BichuEspaco.e6),
         _BlocoDeCuidados(nome: nome, controlador: _cuidados),
-        // NAO ESTAO AQUI, e a ausencia e decisao: `castrado`, `chip`,
-        // `RG Animal (opcional)` e `regiao de referencia`. Os quatro estao
-        // na especificacao de F1.5 e os dois primeiros textos do RG Animal
-        // ate foram escritos pelo UX em 2026-09-17 -- mas o quadro `91:51`
-        // do Figma desenha **so** Sinais particulares e Cuidados. A regra
-        // desta rodada e que tela sem desenho nao entra em
-        // desenvolvimento, e campo sem desenho segue a mesma regra: eu
-        // inventaria a ordem, o agrupamento e o peso visual de quatro
-        // controles numa tela que ja tem um bloco de ajuda de quatro
-        // paragrafos. Os textos estao guardados em `TextosDoCadastro`
-        // (`rotuloDoRgAnimal`, `ajudaDoRgAnimal`) para o dia em que o
-        // desenho chegar.
       ],
     );
   }
 }
 
 /// O bloco de `care_notes`, com o aviso lido **antes** da digitacao.
-///
-/// A ordem nao e estetica. A ultima linha ("nao precisa colocar seu telefone")
-/// e prevencao de erro (Nielsen 5), e ela vale mais que qualquer mensagem
-/// depois: o motivo numero um para alguem escrever um telefone ali e achar que
-/// precisa de um jeito de ser contatada. Dizer que isso ja esta resolvido
-/// remove a vontade antes de ela virar um dado exposto.
 class _BlocoDeCuidados extends StatelessWidget {
   const _BlocoDeCuidados({required this.nome, required this.controlador});
 

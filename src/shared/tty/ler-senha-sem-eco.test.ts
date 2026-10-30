@@ -1,9 +1,6 @@
 /**
- * O leitor de senha do terminal, contra um terminal de mentira: o que importa
- * aqui e o que ele faz com os bytes, e isso nao precisa de pty.
- *
- * A prova com terminal de verdade (pty, eco desligado, sentinela ausente da
- * saida capturada) esta registrada na entrega da BICHUS-260.
+ * O leitor de senha do terminal, contra um terminal de mentira: o que importa aqui
+ * e o que ele faz com os bytes, e isso nao precisa de pty.
  */
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -69,9 +66,6 @@ void describe('lerSenhaSemEco', () => {
   });
 
   void it('isca: o modo cru liga ANTES do rotulo, senao o que se digita logo depois dele ecoa', async () => {
-    // Medido num pty de verdade em 23/09: com o rotulo escrito antes do modo
-    // cru, a resposta que chegou junto com o rotulo (colar, digitar adiantado)
-    // passou pelo eco do terminal, e a segunda senha apareceu na saida.
     const entrada = new TerminalFalso();
     const ordem: string[] = [];
     entrada.setRawMode = (modo: boolean): void => {

@@ -1,28 +1,4 @@
-/**
- * As três rotas de `/me/devices` sobre um Fastify de verdade.
- *
- * O servidor sobe em vez de o handler ser chamado direto porque três coisas que
- * as rotas prometem só existem com o framework no caminho: o 429 do teto (que é
- * gancho `onRequest`, não `if` de handler), a validação do corpo a partir do
- * schema do contrato, e a **serialização real da resposta** — que é onde o
- * token de push vazaria.
- *
- * ## As iscas deste arquivo, e como foram provadas
- *
- * Cada mecanismo foi desligado no código de produção, rodado e visto reprovar
- * em 22/09/2026, e depois restaurado:
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | `comoResposta` trocado por `{ ...aparelho, ... }` | 5 casos |
- * | `push_token` acrescentado a `Device` no contrato | 1 caso |
- * | `remover()` devolvendo `true` quando o repositório não achou (404 virando 204) | 2 casos |
- * | a trilha deixando de gravar a revogação | 3 casos |
- * | o `400` de `deleteDevice` removido do contrato | 1 caso (a isca da subida) |
- * | `rateLimit` removido da declaração da rota | **não compila** |
- * | dimensão `account` declarada sem resolvedor | **não compila** (TS2345) |
- * | `app.post` direto, fora de `registrarRota` | o portão de registro reprova |
- */
+/** As três rotas de `/me/devices` sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -53,15 +29,9 @@ const CAMINHO = '/me/devices';
 const TOKEN = 'fcm-token-do-aparelho-da-tutora' as TokenDeAparelho;
 
 /**
- * Registro em memória que **guarda por dono** e reproduz as três invariantes
- * que o banco impõe: um token uma conta, uma linha sem token por plataforma, e
- * a autorização no endereçamento.
- *
- * Reproduzir as invariantes é deliberado: um dublê frouxo aqui faria os casos
- * de reivindicação e de 404 passarem por acidente, medindo o dublê em vez do
- * código. O que ele **não** reproduz — a corrida do `ON CONFLICT` e o índice
- * parcial de fato existir — é justamente o que está em
- * `tests/integration/aparelho-e-token-de-push.test.ts`.
+ * Registro em memória que **guarda por dono** e reproduz as três invariantes que o
+ * banco impõe: um token uma conta, uma linha sem token por plataforma, e a
+ * autorização no endereçamento.
  */
 function registro(): RegistroDeAparelhos & { readonly linhas: Map<string, Aparelho> } {
   const linhas = new Map<string, Aparelho>();
@@ -106,8 +76,6 @@ function registro(): RegistroDeAparelhos & { readonly linhas: Map<string, Aparel
       Promise.resolve([...linhas.values()].filter((aparelho) => aparelho.dono === dono)),
     revogarDoDono: (dono, aparelhoId) => {
       const linha = linhas.get(aparelhoId);
-      // O dono no "WHERE" do dublê: sem esta conjunção, o caso do 404 passaria
-      // por acidente e o critério da ADR-0021 ficaria sem medida.
       if (linha === undefined || linha.dono !== dono) return Promise.resolve(null);
       linhas.delete(aparelhoId);
       return Promise.resolve(linha);
@@ -167,12 +135,9 @@ function montar(cenario: Cenario = {}): {
 
   registrarRotasDeAparelho(app, {
     aparelhos: new RegistroDeAparelhosService({ repositorio: repo, clock, trilha }),
-    // O token É o id da conta neste dublê: cada caso diz de quem é a sessão.
     autenticador: {
       autenticar: (token: string) => Promise.resolve({ userId: token as UserId }),
     },
-    // O contrato DE VERDADE: é ele que decide o schema do corpo, e uma cópia
-    // aqui deixaria de acusar mudança na especificação.
     contrato: carregarContrato('api/openapi.yaml'),
   });
 
@@ -232,9 +197,6 @@ void describe('POST /me/devices registra o aparelho', () => {
   });
 
   void it('o token de push NÃO está na resposta, nem sob outro nome', async () => {
-    // O corpo bruto e não as chaves: um `push_token` aninhado, ou renomeado
-    // para `token`, passaria por uma conferência que só olhasse o primeiro
-    // nível de chaves. O que não pode aparecer é o VALOR.
     const { app } = montar();
     const { bruto } = await pedir(app, { metodo: 'POST', corpo: REGISTRO_CONCEDIDO });
     await app.close();
@@ -351,9 +313,6 @@ void describe('POST /me/devices registra o aparelho', () => {
 
 void describe('o token que muda de conta é reivindicado (critério 3, sem depender do app)', () => {
   void it('a conta anterior perde o aparelho, e a trilha diz por quê', async () => {
-    // O caso real: a ADR-0002 §5 registra que o logout sem rede apaga no
-    // aparelho e NÃO revoga no servidor. Se o token ficasse preso à conta
-    // antiga, o aviso do pet dela chegaria em quem está com o aparelho agora.
     const { app, repo, eventos } = montar();
     await pedir(app, { metodo: 'POST', como: DONO, corpo: REGISTRO_CONCEDIDO });
     await pedir(app, { metodo: 'POST', como: OUTRO, corpo: REGISTRO_CONCEDIDO });
@@ -384,9 +343,6 @@ void describe('o token que muda de conta é reivindicado (critério 3, sem depen
   });
 
   void it('o MESMO dono registrando o mesmo token não é revogação de nada', async () => {
-    // É o caminho comum: o app registra a cada abertura. Um `device.revoked` a
-    // cada abertura encheria a trilha de ruído e faria o evento perder o
-    // significado que ele tem.
     const { app, eventos } = montar();
     await pedir(app, { metodo: 'POST', corpo: REGISTRO_CONCEDIDO });
     await pedir(app, { metodo: 'POST', corpo: REGISTRO_CONCEDIDO });
@@ -512,8 +468,6 @@ void describe('DELETE /me/devices/{deviceId} revoga, e responde 404 nunca 403', 
   });
 
   void it('identificador que nunca existiu: o MESMO 404', async () => {
-    // A indistinguibilidade é o ponto. Se os dois casos respondessem diferente,
-    // a rota viraria oráculo de existência de aparelho de terceiro.
     const { app } = montar();
     const { status, corpo } = await pedir(app, {
       metodo: 'DELETE',
@@ -569,8 +523,6 @@ void describe('o teto declarado é o teto aplicado', () => {
   });
 
   void it('ISCA: com o contador desligado, a 61ª passa', async () => {
-    // Sem este caso, o anterior mediria a capacidade de contar até 61 em vez do
-    // limite: um servidor que respondesse 429 sempre passaria nele.
     const { app } = montar({ contador: criarContadorDesligado() });
     for (let i = 0; i < 60; i += 1) {
       await pedir(app, { metodo: 'POST', corpo: REGISTRO_CONCEDIDO });
@@ -581,19 +533,7 @@ void describe('o teto declarado é o teto aplicado', () => {
   });
 });
 
-/**
- * A SUBIDA, exercitada pelo caminho real.
- *
- * `vigiarParametrosDasRotas` instala `schema.params` a partir do contrato e
- * devolve uma conferência que **derruba o boot** em quatro casos. O terceiro é
- * o que mais aparece em rota nova: operação com parâmetro que pode recusar e
- * que não declara 400. Uma bancada que registra a rota sem esta fiação mede
- * outra coisa e diz que mediu esta.
- *
- * Foi por aqui que a BICHUS-63 descobriu o assunto, e é por aqui que a rota do
- * aparelho ia descobrir: `deviceId` é `format: uuid`, então `deleteDevice`
- * precisava ganhar `400` no contrato — e ganhou, nesta história.
- */
+/** A SUBIDA, exercitada pelo caminho real. */
 function montarComBorda(contrato: Contrato): {
   app: RegistradorDeRotas;
   conferirParametros: () => void;
@@ -608,8 +548,6 @@ function montarComBorda(contrato: Contrato): {
   const trilha: AuditLog = { record: () => Promise.resolve() };
   const clock: Clock = { now: () => AGORA };
 
-  // O mesmo par de `src/bin/api.ts`: o gancho `onRoute` só enxerga o que for
-  // registrado depois dele, e a conferência só faz sentido no fim.
   const conferirParametros = vigiarParametrosDasRotas(app, contrato, '/v1');
 
   void app.register(
@@ -629,14 +567,7 @@ function montarComBorda(contrato: Contrato): {
   return { app, conferirParametros };
 }
 
-/**
- * O contrato real, com o `400` de `deleteDevice` arrancado.
- *
- * Um objeto novo e não uma cópia do arquivo em disco: o que a conferência lê é
- * `operacao.raw['responses']`, e é exatamente isso que precisa mudar. Mexer no
- * YAML de verdade para provar a isca deixaria o repositório num estado que a
- * própria suíte reprova.
- */
+/** O contrato real, com o `400` de `deleteDevice` arrancado. */
 function semOQuatrocentosDoDelete(): Contrato {
   const real = carregarContrato('api/openapi.yaml');
   const operacoes = new Map(real.operacoes);
@@ -659,9 +590,6 @@ void describe('a rota sobe pelo caminho real, com a validação de parâmetro do
   });
 
   void it('`deviceId` malformado responde 400, e não 500 vindo do Postgres', async () => {
-    // Sem `schema.params`, o texto torto atravessaria a borda e o domínio e
-    // chegaria ao banco, que responde `invalid input syntax for type uuid` —
-    // ou seja, 500, um erro NOSSO para uma requisição do cliente.
     const { app } = montarComBorda(carregarContrato('api/openapi.yaml'));
     await app.ready();
     const resposta = await app.inject({
@@ -679,9 +607,6 @@ void describe('a rota sobe pelo caminho real, com a validação de parâmetro do
   });
 
   void it('ISCA: sem o `400` declarado, a MESMA conferência derruba a subida', async () => {
-    // É isto que a história acrescentou ao contrato. Sem a isca, o caso acima
-    // mediria só que a aplicação sobe — e continuaria verde no dia em que o
-    // `400` fosse removido junto com a conferência que o exige.
     const { app, conferirParametros } = montarComBorda(semOQuatrocentosDoDelete());
     await app.ready();
     assert.throws(

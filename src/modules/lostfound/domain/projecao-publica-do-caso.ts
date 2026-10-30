@@ -1,27 +1,4 @@
-/**
- * A projeção pública do caso (`PublicLostCase`) e o cartaz (`LostCasePoster`).
- *
- * As duas saem de `CasoPublico`, que já nasce sem id interno e sem dado do
- * tutor (ver a porta). O que esta camada acrescenta são três regras:
- *
- * 1. **Texto livre passa pela redação do canal mediado NA SAÍDA.** O contrato
- *    diz que `description` "passa pela mesma redação de contato das mensagens".
- *    A redação deveria acontecer antes de gravar
- *    (`shared/redaction/redigir.ts`), e para `care_notes` acontece; para
- *    `lost_cases.description` e `pets.distinctive_marks`, hoje, não acontece.
- *    Enquanto a gravação não redigir, a superfície pública redige, e redige
- *    tudo que é texto do tutor, inclusive nome e raça digitada: um telefone
- *    cabe em 40 caracteres, e a regra "resposta pública nunca expõe telefone"
- *    não tem exceção por campo (ADR-0021, "resposta pública não tem ramo
- *    privilegiado").
- * 2. **Os links são as páginas do site** (ADR-0017, quadro das oito rotas):
- *    `/p/{shareToken}` é a página do caso e `/cartaz/{shareToken}` o cartaz.
- * 3. **`area_label` é nulo quando o caso só tem coordenada** (BICHUS-21
- *    critério 5). A coordenada não vira rótulo (não há geocodificação no MVP)
- *    e nunca sai. O texto que a tela mostra nesse caso é do cliente: um rótulo
- *    fixo dentro de um campo de dado seria indistinguível de um bairro com esse
- *    nome (contrato, `PublicLostPet.area_label`).
- */
+/** A projeção pública do caso (`PublicLostCase`) e o cartaz (`LostCasePoster`). */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import { rotuloDaArea } from './abertura-do-caso.js';
 import type { components } from '../../../shared/types/generated/api.js';
@@ -36,7 +13,7 @@ type PublicLostPet = components['schemas']['PublicLostPet'];
 export interface BasesPublicas {
   /** Onde o site mora: de onde saem o link do caso e o do cartaz. */
   readonly baseDaWeb: AbsoluteUrl;
-  /** Onde as derivadas públicas da foto moram. O banco guarda só a chave. */
+  /** Onde as derivadas públicas da foto moram. */
   readonly baseDeMidia: AbsoluteUrl;
 }
 
@@ -57,7 +34,7 @@ export function linksDoCaso(baseDaWeb: AbsoluteUrl, shareToken: string): LinksDo
   };
 }
 
-/** Texto do tutor, redigido. `null` continua `null`: ausência não é texto vazio. */
+/** Texto do tutor, redigido. */
 function redigido(texto: string | null): string | null {
   if (texto === null) return null;
   return redigirCanalMediado(texto).texto;
@@ -79,14 +56,7 @@ function rotuloPublicoDaArea(caso: CasoPublico): string | null {
   });
 }
 
-/**
- * `PublicLostCase`, campo a campo como o contrato declara, e nenhum a mais.
- *
- * `can_report_sighting` é falso só para o tutor. O contrato diz "verdadeiro
- * para qualquer outra conta" e não fala de quem não tem conta; aqui o anônimo
- * também recebe verdadeiro, porque o botão existe para quem viu o animal, e a
- * conta é pedida no toque, não na leitura.
- */
+/** `PublicLostCase`, campo a campo como o contrato declara, e nenhum a mais. */
 export function projecaoPublicaDoCaso(caso: CasoPublico, bases: BasesPublicas): PublicLostCase {
   const links = linksDoCaso(bases.baseDaWeb, caso.shareToken);
   return {
@@ -104,31 +74,11 @@ export function projecaoPublicaDoCaso(caso: CasoPublico, bases: BasesPublicas): 
     care_notes: redigido(caso.cuidados),
     can_report_sighting: !caso.doChamador,
     poster_url: links.posterUrl,
-    // `found_by_community` CHEGA AQUI PELO `allOf` do contrato, e não por
-    // escolha desta projeção: `PublicLostCase` é `allOf: [PublicLostPet, …]`, e
-    // o campo novo entrou em `PublicLostPet`. É a mesma costura que o cabeçalho
-    // de `listPublicLostPets` já registra para `distance_m`.
-    //
-    // **Falso é o valor medido, e não um padrão conveniente**: a leitura por
-    // token só resolve caso ABERTO — caso encerrado responde `410` com
-    // `lost-case-closed` —, então nenhuma resposta desta projeção pode trazer um
-    // reencontro. Declarar o campo e não emiti-lo faria o documento prometer a
-    // quatro clientes uma propriedade que nunca chega.
     found_by_community: false,
   };
 }
 
-/**
- * `LostCasePoster`, campo a campo como o contrato declara.
- *
- * - Não há campo de recompensa. O ADR-0010 proíbe recompensa em qualquer forma,
- *   e `reward_note` saiu do contrato em 23/09/2026.
- * - `short_url` é o endereço da página do caso. Não há encurtador no produto, e
- *   o `/p/{shareToken}` é o endereço mais curto que leva ao canal mediado.
- * - `photo_url` é a derivada `card`, a única que a superfície pública mostra
- *   (migração de `pet_photos`). O contrato fixa essa derivada, de 1024 px, para
- *   o cartaz desde 23/09/2026.
- */
+/** `LostCasePoster`, campo a campo como o contrato declara. */
 export function cartazDoCaso(caso: CasoPublico, bases: BasesPublicas): LostCasePoster {
   return {
     pet_display_name: nomeRedigido(caso.petNome),
@@ -145,27 +95,8 @@ export function cartazDoCaso(caso: CasoPublico, bases: BasesPublicas): LostCaseP
 }
 
 /**
- * `PublicLostPet`, campo a campo como o contrato declara — a projeção da
- * LISTAGEM pública.
- *
- * Ela vive aqui, ao lado de `projecaoPublicaDoCaso`, de propósito: as duas
- * aplicam a **mesma** regra de redação na saída (item 1 do cabeçalho deste
- * arquivo) e a **mesma** regra de `area_label` nulo (item 3). Uma projeção
- * irmã em outro arquivo seria a segunda definição das duas regras, e a segunda
- * definição é a que diverge.
- *
- * O que ela tem a menos que `projecaoPublicaDoCaso`, e por quê:
- *
- * - **Não há `description`, `care_notes` nem `distinctive_marks`.** Quem tem o
- *   link está olhando UM caso; a listagem desenha vinte, e texto livre de vinte
- *   tutores numa página é vinte vezes mais superfície de vazamento pelo mesmo
- *   benefício nenhum. Quem quiser os sinais abre o caso.
- * - **Não há `can_report_sighting` nem `poster_url`.** Os dois são ações da
- *   página do caso, e a listagem não desenha ação nenhuma por cartão além de
- *   abri-lo.
- *
- * `share_url` **fica**, e é o mesmo endereço de `/p/{shareToken}`: é o que o
- * cartão abre, e é o único identificador que a listagem carrega.
+ * `PublicLostPet`, campo a campo como o contrato declara — a projeção da LISTAGEM
+ * pública.
  */
 export function projecaoPublicaDoPerdido(
   perdido: PerdidoPublico,
@@ -188,9 +119,6 @@ export function projecaoPublicaDoPerdido(
         ? null
         : `${semBarraNoFim(bases.baseDeMidia)}/${perdido.chaveDaFoto}`,
     share_url: linksDoCaso(bases.baseDaWeb, perdido.shareToken).shareUrl,
-    // O SELO de reencontro pela comunidade (decisão do cliente, 20/10/2026).
-    // Vem da consulta, e não de uma dedução aqui: quem o decide é o ramo
-    // `reencontrado` do adaptador, onde a existência da conversa é predicado.
     found_by_community: perdido.encontradoPelaComunidade,
   };
 }

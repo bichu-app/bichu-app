@@ -1,21 +1,4 @@
-/**
- * Senha local: PBKDF2-HMAC-SHA512, parâmetros gravados junto do hash.
- *
- * **Bcrypt está proibido neste projeto** (ADR-0003), por mais que seja o padrão
- * das bibliotecas de Node. O motivo não é criptográfico e sim de saída: o
- * Keycloak importa `pbkdf2-sha512` nativamente pela Admin API, e não entende
- * bcrypt sem provider de terceiro. Trocar o algoritmo aqui transformaria a
- * migração futura numa redefinição de senha em massa.
- *
- * Argon2id é superior no papel e é o padrão do Keycloak desde a versão 25, mas a
- * importação exige acertar memória, paralelismo, versão e tipo além das
- * iterações, e é aí que migração quebra. Entre o melhor no papel e o que
- * atravessa a fronteira sem cerimônia, a decisão foi o segundo.
- *
- * Os parâmetros vão **junto de cada hash**, em formato PHC, e nunca em
- * configuração global: é o que permite subir o custo sem reset em massa, e é o
- * que faz o rehash transparente do login ser possível.
- */
+/** Senha local: PBKDF2-HMAC-SHA512, parâmetros gravados junto do hash. */
 import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
@@ -47,8 +30,6 @@ export function codificarPhc(parametros: ParametrosDeHash): string {
 
 export function decodificarPhc(phc: string): ParametrosDeHash | undefined {
   const partes = phc.split('$');
-  // A string começa com `$`, então a primeira parte é vazia: cinco campos ao
-  // todo. Qualquer outra contagem é um formato que não emitimos.
   if (partes.length !== 5 || partes[0] !== '' || partes[1] !== ALGORITMO_PHC) return undefined;
 
   const iteracoesCasadas = /^i=(\d{1,9})$/.exec(partes[2] ?? '');
@@ -69,10 +50,7 @@ export async function gerarHashDeSenha(senha: string): Promise<string> {
   return codificarPhc({ iteracoes: ITERACOES_VIGENTES, sal, derivado });
 }
 
-/**
- * Verificação em tempo constante. `===` sobre o hash vaza o tamanho do prefixo
- * comum pelo tempo de resposta (docs/04-seguranca.md 7.7).
- */
+/** Verificação em tempo constante. */
 export async function verificarSenha(senha: string, phc: string): Promise<boolean> {
   const parametros = decodificarPhc(phc);
   if (parametros === undefined) return false;
@@ -87,12 +65,7 @@ export async function verificarSenha(senha: string, phc: string): Promise<boolea
   return timingSafeEqual(derivado, parametros.derivado);
 }
 
-/**
- * Guardar os parâmetros junto do hash só vale alguma coisa se alguém os usar.
- * No login bem-sucedido, hash abaixo da política vigente é regravado dentro da
- * mesma transação; sem isso o formato PHC é documentação
- * (docs/04-seguranca.md 7.7, BICHUS-17 critério 6).
- */
+/** Guardar os parâmetros junto do hash só vale alguma coisa se alguém os usar. */
 export function precisaDeRehash(phc: string): boolean {
   const parametros = decodificarPhc(phc);
   if (parametros === undefined) return true;
@@ -103,17 +76,7 @@ export function precisaDeRehash(phc: string): boolean {
   );
 }
 
-/**
- * Hash de descarte, usado quando o e-mail não existe.
- *
- * A derivação precisa acontecer **mesmo sem usuário**, com os mesmos
- * parâmetros. Sem isso, a diferença entre "não achei o usuário" e "derivei
- * 210.000 iterações" é um oráculo de enumeração de centenas de milissegundos,
- * que anula a resposta 401 idêntica que o contrato tomou o cuidado de
- * especificar (docs/04-seguranca.md 7.1).
- *
- * É gerado uma vez por processo e nunca corresponde a senha nenhuma.
- */
+/** Hash de descarte, usado quando o e-mail não existe. */
 let phcDeDescarte: string | undefined;
 
 export async function consumirTempoDeVerificacao(senha: string): Promise<void> {

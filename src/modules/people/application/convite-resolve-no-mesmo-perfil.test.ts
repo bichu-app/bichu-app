@@ -1,36 +1,6 @@
 /**
  * As ISCAS da **resolução do convite**: ela devolve o **perfil**, e convite
  * inválido, vencido ou revogado **não distingue qual dos três**.
- *
- * > *"ao clicar vai para a página do perfil do usuário com o botão de
- * > adicionar"*
- *
- * ## As duas afirmações, e por que a segunda é de segurança
- *
- * 1. **convite válido devolve o perfil** — e não um recorte parecido. É o
- *    contrapeso: sem ele, a isca da indistinguibilidade passaria num mundo em
- *    que resolver convite nunca funciona, que é o defeito que se disfarça de
- *    segurança;
- * 2. **inválido, vencido e revogado são a MESMA resposta** — porque *"este token
- *    já existiu"* é justamente a informação que diz a alguém que vale a pena
- *    continuar tentando. E porque distinguir "o convite morreu" de "a pessoa não
- *    está disponível para você" diria a quem foi bloqueado que o link que ele
- *    guardou um dia foi válido — o aviso de bloqueio que o desenho não dá.
- *
- * ## Por que a comparação é da RESPOSTA INTEIRA
- *
- * Os três caminhos **sempre** foram 404; comparar só o código de estado não
- * mediria nada. Um 404 com `detail` diferente continua sendo um oráculo, só mais
- * discreto.
- *
- * ## Onde a fusão dos três mora de verdade
- *
- * Na cláusula `WHERE` de `construtorDoConvitePorToken`: `revoked_at IS NULL` e
- * `expires_at > agora` são predicados da **mesma** consulta que casa o
- * `token_hash`, então não existe o estado intermediário "achei o convite, agora
- * decido" em que um `else` nasceria. Este arquivo prova que a camada de
- * aplicação não reintroduz a diferença que o SQL evitou; o SQL é medido em
- * `../../connections/adapters/persistence/convite-e-apelido-na-clausula-where.test.ts`.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -57,26 +27,10 @@ const ANA_VISIVEL: PessoaVisivel = {
   publicRef: 'refAnaBairro0000000001',
   displayName: 'Ana',
   petsCount: 2,
-  // CODIGO DE FIO DA ONDA 4: `canalVerificado` nasceu OBRIGATORIO em
-  // `PessoaVisivel` na frente do selo, e esta bancada veio da frente do
-  // convite -- intersecao de linhas vazia, mescla limpa, `tsc` reprovando.
-  //
-  // `false` e nao `true`, pela regra que a propria frente do selo escreveu
-  // para as bancadas dela: conta que o caso nunca mencionou nao e conta
-  // validada, e um padrao `true` faria as iscas de "sem canal confirmado o
-  // selo nao aparece" ficarem verdes sem medir. Este caso nao fala de selo.
   canalVerificado: false,
 };
 
-/**
- * Monta o serviço.
- *
- * `conviteResolve` nulo cobre **os três** casos negativos de uma vez, e é essa
- * a forma do tipo que este arquivo defende: `ResolvedorDeConvite` devolve
- * `undefined` para inexistente, vencido e revogado, então os três cenários
- * **não são distinguíveis nem no dublê**. Se um dia fosse possível montar um
- * dublê que os distinguisse, a porta já teria deixado de fundir.
- */
+/** Monta o serviço. */
 function montar(opcoes: { conviteResolve: boolean; pessoaExiste?: boolean }) {
   const perfis: PerfilDePessoaRepository = {
     perfilPorApelido: (apelido: string) =>
@@ -89,10 +43,6 @@ function montar(opcoes: { conviteResolve: boolean; pessoaExiste?: boolean }) {
     estaConectado: () => Promise.resolve(false),
     contarConexoes: () => Promise.resolve(7),
     arestaVivaEntre: (): Promise<ArestaVivaDoPar | undefined> => Promise.resolve(undefined),
-    // **O perfil NAO usa `estadosPorApelido`**, e o dublê o declara levantando:
-    // a porta ganhou o metodo em 22/10/2026 para a BUSCA, e um dublê que o
-    // respondesse em silencio deixaria passar um perfil que começasse a
-    // perguntar estado em lote -- vinte idas ao banco por tela de uma pessoa.
     estadosPorApelido: () => {
       throw new Error('o perfil de UMA pessoa nao pergunta estado em lote');
     },
@@ -130,8 +80,8 @@ function respostaInteira(erro: AppError): Record<string, unknown> {
 
 void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', () => {
   /**
-   * **O CONTRAPESO.** Sem ele, as iscas de indistinguibilidade abaixo passariam
-   * num mundo em que resolver convite nunca funciona.
+   * **O CONTRAPESO.** Sem ele, as iscas de indistinguibilidade abaixo passariam num
+   * mundo em que resolver convite nunca funciona.
    */
   void it('CONTRAPESO: convite valido devolve o perfil de quem emitiu', async () => {
     const servico = montar({ conviteResolve: true });
@@ -143,9 +93,9 @@ void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', (
   });
 
   /**
-   * **A tela de destino tem de saber o que o botão diz.** `connection_state` é o
-   * que decide entre "adicionar", "pedido enviado" e "conectado" — e ele vem de
-   * graça porque esta operação **reusa** `porApelido` em vez de projetar de novo.
+   * **A tela de destino tem de saber o que o botão diz.** `connection_state` é o que
+   * decide entre "adicionar", "pedido enviado" e "conectado" — e ele vem de graça
+   * porque esta operação **reusa** `porApelido` em vez de projetar de novo.
    */
   void it('o perfil resolvido carrega `connection_state`, que e o que o botao le', async () => {
     const servico = montar({ conviteResolve: true });
@@ -186,9 +136,6 @@ void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', (
 void describe('ISCA: convite invalido, VENCIDO e REVOGADO nao se distinguem', () => {
   void it('ISCA: os tres dao a MESMA resposta, campo por campo', async () => {
     const servico = montar({ conviteResolve: false });
-    // Os tres cenarios chegam aqui como o MESMO `undefined` da porta -- que e
-    // precisamente a afirmacao: nao ha como o duble distingui-los, porque nao ha
-    // como a porta distingui-los.
     const respostas = await Promise.all(
       ['token-que-nunca-existiu', 'token-vencido', 'token-revogado'].map(async (token) =>
         respostaInteira(await erroDe(() => servico.porConvite(QUEM_OLHA, token))),
@@ -215,9 +162,7 @@ void describe('ISCA: convite invalido, VENCIDO e REVOGADO nao se distinguem', ()
 
   /**
    * **A fusão vai além do convite**: o 404 do convite que não resolve e o 404 da
-   * pessoa que não existe para quem olha são o mesmo. Sem isto, quem tem um link
-   * velho descobriria, pela diferença, que a pessoa ainda existe — ou que ela o
-   * bloqueou.
+   * pessoa que não existe para quem olha são o mesmo.
    */
   void it('ISCA: convite que nao resolve e PESSOA invisivel dao a MESMA resposta', async () => {
     const conviteMorto = montar({ conviteResolve: false });

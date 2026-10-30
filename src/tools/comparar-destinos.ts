@@ -1,43 +1,6 @@
 /**
- * Comparador de destinos: o que PODE divergir está numa lista fechada, e só
- * isso pode ter divergido.
- *
- * Por que este arquivo existe
- * ---------------------------
- * O critério 12 de BICHUS-13 pede portabilidade **provada por execução** nos
- * dois destinos. A prova que existia era: o mesmo fonte foi construído duas
- * vezes e as duas pilhas subiram. O QA reprovou, com razão, por três motivos —
- * e dois deles moram aqui:
- *
- *  - **"mesmo artefato" não era verificado em lugar nenhum.** A esteira já
- *    compara `docker inspect` de `api` e `worker` e reprova se diferirem; entre
- *    DESTINOS essa asserção não existia. Aqui ela existe, e ela compara o que a
- *    aplicação responde sobre si mesma (`build.artifact` de `/v1/health`), que é
- *    calculado do disco de dentro do container e não declarado por ninguém.
- *  - **As composições divergem e a divergência não estava declarada.** `mail`
- *    tem `profiles: [dev, qa]` e não sobe no destino hospedado: um dos quatro
- *    serviços do critério 1 simplesmente não existe lá. Isso não é defeito, é
- *    uma decisão — e o que faltava era ela estar escrita num lugar que reprova
- *    quando alguém acrescenta a segunda sem dizer.
- *
- * A forma
- * -------
- * Divergência permitida é ENUMERADA, com motivo, e impressa a cada execução.
- * Lista de exceção que ninguém vê é lista que cresce. Tudo que não está nela e
- * divergiu reprova, nomeando o campo e os dois valores.
- *
- * **Quando não consegue verificar, reprova.** Destino fora do ar, JSON
- * ilegível, campo ausente — reprovação com o motivo, nunca "está tudo bem".
- *
- * O autoteste roda ANTES da rede: as iscas abaixo PRECISAM ser reprovadas, e
- * uma delas precisa passar. Se o comparador deixar de enxergar, ele falha
- * dizendo isso e nem chega a consultar os destinos. Verificação que nunca
- * reprovou não é verificação.
- *
- * Uso:
- *   node dist/tools/comparar-destinos.js <rotulo>=<url> <rotulo>=<url> [...]
- *   node dist/tools/comparar-destinos.js      (so a topologia, dizendo que so isso rodou)
- * Saída: 0 aprovado, 1 reprovado.
+ * Comparador de destinos: o que PODE divergir está numa lista fechada, e só isso
+ * pode ter divergido.
  */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
@@ -47,51 +10,17 @@ export const VERSAO_DO_COMPARADOR = '1.0.0';
 const TEMPO_LIMITE_MS = 15_000;
 const CAMINHO_DA_SONDA = '/v1/health';
 
-// ---------------------------------------------------------------------------
-// A LISTA FECHADA
-// ---------------------------------------------------------------------------
-
 export interface DivergenciaPermitida {
   /** Caminho do campo na resposta da sonda, com pontos. */
   readonly campo: string;
   readonly motivo: string;
 }
 
-/**
- * O que pode divergir entre destinos na resposta de `/v1/health`.
- *
- * Entrar nesta lista é uma decisão, e ela é impressa a cada execução para que
- * seja uma decisão que alguém vê. Sair dela é o objetivo.
- */
+/** O que pode divergir entre destinos na resposta de `/v1/health`. */
 export const DIVERGENCIAS_PERMITIDAS: readonly DivergenciaPermitida[] = [
-  // A lista está VAZIA, e isso é o objetivo dela, não um esquecimento.
-  //
-  // `build.commit` morou aqui até a BICHUS-210, com o motivo escrito: o commit
-  // era declarado por variável de runtime e não viajava dentro da imagem, então
-  // um destino podia declarar e o outro não sem que nenhum dos dois estivesse
-  // mentindo. Aquela entrada terminava dizendo que sairia "no dia em que o
-  // argumento de build entrar". O argumento entrou: o `Dockerfile` tem
-  // `ARG BUILD_COMMIT`, grava o valor nos três alvos finais e reprova o build
-  // sem ele.
-  //
-  // Com o commit viajando na imagem, dois destinos que rodam o mesmo artefato
-  // precisam reportar o mesmo commit. Divergir deixou de ser uma diferença
-  // legítima de declaração e passou a ser uma das duas coisas que a BICHUS-210
-  // existe para pegar: imagem construída sem o argumento certo, ou valor fixado
-  // em algum lugar. Manter a entrada aqui faria este comparador aprovar
-  // exatamente isso.
-  //
-  // Entrada nova aqui é decisão, e precisa de motivo escrito — o teste cobra.
 ];
 
-/**
- * Serviços do `compose.yaml` que, por decisão, NÃO sobem no destino hospedado.
- *
- * A chave é o nome do serviço; o valor é por que ele fica de fora. Todo serviço
- * que carrega `profiles:` precisa estar aqui, e toda entrada daqui precisa
- * existir no compose COM `profiles:` — as duas direções reprovam, porque uma
- * lista que só cresce e uma lista que envelhece falham do mesmo jeito: calada.
- */
+/** Serviços do `compose.yaml` que, por decisão, NÃO sobem no destino hospedado. */
 export const SERVICOS_AUSENTES_NO_HOSPEDADO: ReadonlyMap<string, string> = new Map([
   [
     'mail',
@@ -128,10 +57,6 @@ export const SERVICOS_AUSENTES_NO_HOSPEDADO: ReadonlyMap<string, string> = new M
   ],
 ]);
 
-// ---------------------------------------------------------------------------
-// Comparação, pura e testável
-// ---------------------------------------------------------------------------
-
 export interface RespostaDeDestino {
   readonly rotulo: string;
   readonly corpo: unknown;
@@ -145,9 +70,6 @@ function achatar(valor: unknown, prefixo = ''): Map<string, string> {
         plano.set(caminho, folha);
       }
     }
-    // Objeto vazio é uma folha: sem isto, `checks: {}` num destino e
-    // `checks: {database: 'ok'}` no outro não produziriam campo nenhum para
-    // comparar, e a ausência das sondas passaria calada.
     if (plano.size === 0) plano.set(prefixo, '{}');
     return plano;
   }
@@ -155,13 +77,7 @@ function achatar(valor: unknown, prefixo = ''): Map<string, string> {
   return plano;
 }
 
-/**
- * Campos que a comparação exige que EXISTAM nos dois lados.
- *
- * Sem esta lista, um destino que parasse de responder `build` sumiria da
- * comparação junto com o campo: nada para comparar vira nada para reprovar, que
- * é o jeito mais silencioso de um portão parar de valer.
- */
+/** Campos que a comparação exige que EXISTAM nos dois lados. */
 const CAMPOS_OBRIGATORIOS = ['status', 'version', 'build.artifact', 'build.commit'];
 
 export interface ResultadoDaComparacao {
@@ -235,10 +151,6 @@ export function compararRespostas(
   };
 }
 
-// ---------------------------------------------------------------------------
-// A topologia: quem não sobe no destino hospedado
-// ---------------------------------------------------------------------------
-
 export function conferirTopologia(
   textoDoCompose: string,
   declarados: ReadonlyMap<string, string> = SERVICOS_AUSENTES_NO_HOSPEDADO,
@@ -294,16 +206,9 @@ export function conferirTopologia(
   return falhas;
 }
 
-// ---------------------------------------------------------------------------
-// Autoteste: as iscas rodam antes da rede
-// ---------------------------------------------------------------------------
-
 const SONDA_BASE = {
   status: 'ok',
   version: '0.1.0',
-  // `commit: null` era o valor daqui até a BICHUS-210, e ele era o estado real
-  // dos dois ambientes. Uma base com `null` fazia as duas sondas concordarem em
-  // não saber de onde vieram, que é a concordância mais barata que existe.
   build: { artifact: '0123456789abcdef', commit: '262cf1f8a1b2c3d4e5f60718293a4b5c6d7e8f90' },
   checks: { database: 'ok' },
 };
@@ -319,7 +224,7 @@ function comCampo(caminho: string, valor: unknown): Record<string, unknown> {
   return copia;
 }
 
-/** Cada isca diz o que ela precisa produzir. Resultado diferente é cegueira. */
+/** Cada isca diz o que ela precisa produzir. */
 export function autoteste(): string[] {
   const falhas: string[] = [];
   const par = (outro: unknown): RespostaDeDestino[] => [
@@ -340,9 +245,6 @@ export function autoteste(): string[] {
     }
   }
 
-  // O commit deixou de ser divergência permitida na BICHUS-210, e essa saída da
-  // lista precisa de isca própria: ela é a que pega imagem construída sem o
-  // argumento certo, ou valor fixado em algum lugar.
   const commitDiferente = compararRespostas(
     par(comCampo('build.commit', 'b528bc8fedcba9876543210fedcba9876543210f')),
   );
@@ -360,13 +262,6 @@ export function autoteste(): string[] {
     );
   }
 
-  // Controle positivo: sem ele o autoteste ficaria verde com um comparador que
-  // reprova tudo, que não compara nada — só reclama.
-  //
-  // A lista fechada real está VAZIA hoje (ver DIVERGENCIAS_PERMITIDAS), e é por
-  // isso que este controle passa uma lista PRÓPRIA: sem ela o mecanismo de
-  // exceção deixaria de ser exercitado, e pararia de funcionar sem ninguém
-  // perceber — no dia em que a primeira entrada nova chegasse.
   const comExcecaoDeTeste = compararRespostas(par(comCampo('version', '0.2.0')), [
     { campo: 'version', motivo: 'exceção só deste autoteste, nunca da lista real' },
   ]);
@@ -380,7 +275,6 @@ export function autoteste(): string[] {
     falhas.push('duas sondas idênticas reprovaram: o comparador reprova qualquer coisa');
   }
 
-  // Topologia: as duas direções.
   const semDeclaracao = conferirTopologia(
     'services:\n  api: {}\n  mail:\n    profiles: [dev]\n  outro:\n    profiles: [dev]\n',
     new Map([['mail', 'motivo']]),
@@ -405,10 +299,6 @@ export function autoteste(): string[] {
 
   return falhas;
 }
-
-// ---------------------------------------------------------------------------
-// Execução
-// ---------------------------------------------------------------------------
 
 async function buscarSonda(rotulo: string, base: string): Promise<RespostaDeDestino> {
   const url = `${base.replace(/\/$/, '')}${CAMINHO_DA_SONDA}`;
@@ -458,12 +348,6 @@ export async function main(argv: readonly string[]): Promise<number> {
   console.log(`  [${topologia.length === 0 ? 'ok' : 'REPROVA'}] topologia declarada`);
   falhas.push(...topologia);
 
-  // SEM destino nenhum: só a topologia foi conferida, e isso é dito em voz
-  // alta. É o modo que a esteira de PR usa, porque num PR o destino hospedado
-  // ainda não foi implantado e comparar com ele reprovaria por motivo errado.
-  // A comparação de verdade roda no fluxo agendado `dois-destinos.yml`.
-  //
-  // UM destino só reprova: um destino concorda consigo mesmo.
   if (destinos.length === 0) {
     console.log(
       '\n  [aviso] nenhum destino informado: a COMPARACAO ENTRE DESTINOS NAO RODOU, ' +

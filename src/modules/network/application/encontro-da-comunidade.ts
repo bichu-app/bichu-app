@@ -1,44 +1,6 @@
 /**
- * As tres escritas do encontro da comunidade (ADR-0025 emenda 3): criar, editar
- * o proprio e cancelar o proprio.
- *
- * ## O que a decisao do cliente de 17/10/2026 poe neste arquivo
- *
- * Nao ha fila de revisao: o encontro nasce `published` e aparece na agenda
- * publica na hora. E **quem criou administra aquele encontro** -- edita e
- * cancela o proprio, e nada mais.
- *
- * ## A ordem das recusas da criacao nao e arbitraria
- *
- * 1. **O teto da conta primeiro.** E o unico que a pessoa nao resolve mexendo
- *    neste formulario: mandar alguem confirmar o e-mail para depois descobrir
- *    que ela ja tem tres encontros marcados e uma ida a caixa de entrada a toa.
- *    E a mesma ordem de `LostCaseService.abrir`, pela mesma razao.
- * 2. **O canal verificado depois**, que e a regua de quem pode criar.
- * 3. **A conferencia do corpo por ultimo**, com todos os erros de campo de uma
- *    vez: a tela marca os campos juntos em vez de um por rodada.
- *
- * ## Quem decide "este encontro e desta pessoa": um lugar so
- *
- * `tx.encontroDoAutor`, com `origin = 'community'` e a conta na clausula
- * `WHERE`. A edicao e o cancelamento chamam a MESMA leitura, e nenhum dos dois
- * tem `if` de autoria: inexistente, de outra conta e do painel devolvem
- * `undefined` e viram o mesmo 404 (ADR-0021).
- *
- * ## Nada aqui decide visibilidade, preco nem estado de publicacao
- *
- * O encontro da comunidade e sempre publico, gratuito e `published`. Isso nao e
- * parametro: esta no contrato, no repositorio e no `CHECK` do banco, e um campo
- * aqui para escolher seria tres lugares para divergir.
- *
- * ## A trilha
- *
- * `network_event.submitted`, `network_event.updated` e
- * `network_event.cancelled`, por `AuditLog.record`, que abre a propria
- * transacao e nao derruba a requisicao quando falha -- o caminho do app, e nao
- * o do backoffice (D49 e para a escrita administrativa). **A autoria em coluna
- * NAO depende disso**: ela e carimbada dentro da transacao do `INSERT`, pela
- * funcao da migracao `20261001000004`.
+ * As tres escritas do encontro da comunidade (ADR-0025 emenda 3): criar, editar o
+ * proprio e cancelar o proprio.
  */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
@@ -137,7 +99,7 @@ function errosDosPortes(portes: readonly string[] | undefined): ProblemFieldErro
   return [];
 }
 
-/** Os tres rotulos do lugar. `place_name` passa pela conferencia de endereco. */
+/** Os tres rotulos do lugar. */
 function errosDoLugar(lugar: LugarDaComunidade): ProblemFieldError[] {
   return [
     ...errosDoNomeDoLugar('place.place_name', lugar.place_name),
@@ -148,11 +110,6 @@ function errosDoLugar(lugar: LugarDaComunidade): ProblemFieldError[] {
 
 function errosDaCapa(capa: CapaDoCorpo | null | undefined): ProblemFieldError[] {
   if (capa === undefined || capa === null) return [];
-  // **`alt_text` AUSENTE e valido desde 27/10/2026**, e so por isso ha um
-  // retorno vazio aqui: o contrato tirou o campo do `required` a pedido do
-  // cliente (26/10/2026). Presente e vazio NAO passa -- cai no minimo de 2 de
-  // `errosDeTextoDeUsuario`, como no catalogo --, e presente continua medido
-  // contra contato e pagamento (D59).
   if (capa.alt_text === undefined) return [];
   return errosDeTextoDeUsuario('cover_image.alt_text', capa.alt_text, 2, TETO_DO_TEXTO_ALTERNATIVO);
 }
@@ -163,15 +120,12 @@ function lugarGravado(lugar: LugarDaComunidade) {
     neighborhood: lugar.neighborhood.trim(),
     city: lugar.city.trim(),
     state: lugar.state,
-    // Sem ponto: ADR-0006, e nao ha geocodificacao neste caminho.
     ponto: null,
   };
 }
 
 export class EncontroDaComunidade {
   constructor(private readonly deps: DependenciasDoEncontroDaComunidade) {}
-
-  // ---------------------------------------------------------------- criar
 
   async criar(autor: AutorDoEncontro, corpo: CorpoDoEncontroDaComunidade): Promise<EncontroEscrito> {
     const agora = this.deps.clock.now();
@@ -240,8 +194,6 @@ export class EncontroDaComunidade {
     return this.lerDepoisDeEscrever(slug, 1);
   }
 
-  // --------------------------------------------------------------- editar
-
   async editar(
     autor: AutorDoEncontro,
     slug: string,
@@ -271,9 +223,6 @@ export class EncontroDaComunidade {
           : errosDasObservacoes('notes', patch.notes)),
         ...errosDaCapa(patch.cover_image),
       ];
-      // O horario e conferido inteiro, com o que ESTA gravado no lugar do que
-      // o corpo nao traz: mandar so `ends_at` nao pode virar um fim antes de um
-      // inicio que ninguem reenviou.
       if (startsAt !== undefined || endsAt !== undefined || timeZone !== undefined) {
         erros.push(
           ...errosDoHorario(
@@ -316,16 +265,11 @@ export class EncontroDaComunidade {
 
     await this.registrar(autor, 'network_event.updated', versaoNova.id, {
       slug,
-      // Os NOMES dos campos que mudaram, e nao o conteudo inteiro: a trilha
-      // responde "o que foi alterado e quando", e texto livre de pessoa nela
-      // sobrevive a exclusao da conta.
       fields: Object.keys(patch).sort(),
       version: versaoNova.versao,
     });
     return this.lerDepoisDeEscrever(slug, versaoNova.versao);
   }
-
-  // ------------------------------------------------------------- cancelar
 
   async cancelar(
     autor: AutorDoEncontro,
@@ -356,16 +300,7 @@ export class EncontroDaComunidade {
     return this.lerDepoisDeEscrever(slug, cancelado.versao);
   }
 
-  // ---------------------------------------------------------------- apoio
-
-  /**
-   * O encontro da propria conta, ou 404.
-   *
-   * **Encerrado nao se edita nem se cancela** (`event_ended`): editar o passado
-   * reescreve o que aconteceu, e o encerrado nao volta a aparecer na agenda.
-   * O que **ja comecou** e nao terminou continua alcancavel, porque e ali que o
-   * aviso de ultima hora importa.
-   */
+  /** O encontro da propria conta, ou 404. */
   private async meuEncontro(
     tx: TransacaoDaComunidade,
     slug: string,
@@ -373,7 +308,6 @@ export class EncontroDaComunidade {
     agora: Instant,
   ): Promise<EncontroDoAutor> {
     const atual = await tx.encontroDoAutor(slug, autor.userId);
-    // Inexistente, de outra pessoa, do painel e removido: um 404 so.
     if (atual === undefined) throw problemas.naoEncontrado();
     if ((atual.endsAt ?? atual.startsAt) <= agora) {
       throw recusa('eventSlug', 'event_ended', 'O encontro já terminou.');
@@ -381,7 +315,7 @@ export class EncontroDaComunidade {
     return atual;
   }
 
-  /** Confirma o envio da capa e a poe na posicao 0. Envio que nao serve: 400. */
+  /** Confirma o envio da capa e a poe na posicao 0. */
   private async aplicarCapa(
     tx: TransacaoDaComunidade,
     eventoId: string,
@@ -396,8 +330,6 @@ export class EncontroDaComunidade {
       eventoId,
       agora,
     });
-    // Inexistente, de outra conta, de outro proposito, vencido ou de outro
-    // encontro: a mesma recusa, sem dizer qual (T9).
     if (imagemId === undefined) {
       throw recusa('cover_image', 'upload_not_usable', 'Essa imagem não serve para este encontro. Envie-a de novo.');
     }
@@ -405,17 +337,15 @@ export class EncontroDaComunidade {
   }
 
   /**
-   * A resposta sai de uma LEITURA PUBLICA depois do `COMMIT`, e nao de um
-   * montador proprio: o que o app recebe aqui e byte a byte o que
-   * `getNetworkEvent` devolve, e um campo novo na leitura publica nao precisa
-   * ser lembrado em dois lugares.
+   * A resposta sai de uma LEITURA PUBLICA depois do `COMMIT`, e nao de um montador
+   * proprio: o que o app recebe aqui e byte a byte o que `getNetworkEvent` devolve,
+   * e um campo novo na leitura publica nao precisa ser lembrado em dois lugares.
    */
   private async lerDepoisDeEscrever(slug: string, versao: number): Promise<EncontroEscrito> {
     const agora = this.deps.clock.now();
     const encontro = await this.deps.rede.buscarEncontro(slug);
     if (encontro === undefined) throw problemas.naoEncontrado();
     return {
-      // A consulta devolve o encontro da comunidade, que e sempre publico.
       recurso: projetarEncontro(encontro, agora) as EncontroPublicoProjetado,
       etag: comoEtag(versao),
     };
@@ -427,9 +357,6 @@ export class EncontroDaComunidade {
     eventoId: string,
     depois: Record<string, unknown>,
   ): Promise<void> {
-    // Depois do `COMMIT`: a trilha do app abre transacao propria, e um
-    // incidente nela nao e motivo para a pessoa nao conseguir publicar. O
-    // `resourceId` e o `id` interno, que nunca sai em resposta.
     await this.deps.trilha.record({
       actorKind: 'user',
       actorUserId: autor.userId,

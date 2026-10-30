@@ -1,37 +1,6 @@
 /**
  * ISCA (d): A VARREDURA DE VENCIDOS NÃO APAGA A FOTO DA VITRINE — e a prova é a
  * confirmação estar na MESMA TRANSAÇÃO da escrita.
- *
- * ## O defeito que estes casos existem para não deixar voltar
- *
- * `varrer-envios-vencidos.ts` apaga intenção de envio **não confirmada e
- * vencida**, e apaga o objeto do balde junto. A foto do ACHADO foi apagada por
- * ela — medido com hora: subida 01:18:44, apagada 01:29:10; subida 01:33:35,
- * apagada 01:44:10. Dez minutos, e **sempre**. A causa não era o filtro: era a
- * foto do achado não ter operação de confirmação, de propósito, e portanto
- * `confirmed_at` nunca deixar de ser nulo nela.
- *
- * Então a pergunta certa sobre um propósito NOVO não é "a varredura o filtra?",
- * e sim **"existe algum instante em que a foto existe e a intenção dela ainda
- * não está confirmada?"**. Se existir, a varredura entra por ali.
- *
- * Para a vitrine a resposta é não, e é isso que estes casos medem: o `UPDATE
- * ... SET confirmed_at` e o `INSERT INTO user_showcase_images` chegam no **MESMO
- * executor** — a mesma transação. Não há janela: ou os dois valem, ou nenhum.
- *
- * A outra metade desta isca -- o que a varredura faz e o que ela NAO faz, com
- * os contrapesos -- mora em
- * `media/application/varredura-nao-apaga-a-vitrine.test.ts`, junto do caso de
- * uso que ela mede: a fronteira da arquitetura nao deixa `showcase` importar
- * `media/application`, e ela esta certa.
- *
- * ## Por que o teste olha o EXECUTOR, e não o resultado
- *
- * Confirmar numa transação à parte produz exatamente o mesmo resultado final, e
- * passaria em qualquer teste de resultado. O que muda é só a existência da
- * janela entre as duas — e janela não aparece em asserção de resultado. Foi um
- * comentário afirmando não haver risco que deixou o defeito nascer; aqui o que
- * afirma é a medição.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -51,13 +20,7 @@ interface Operacao {
   readonly valores?: Record<string, unknown>;
 }
 
-/**
- * Um executor de banco de MENTIRA, encadeável como o Kysely, que só registra.
- *
- * Ele não executa SQL nenhum: o que este teste mede é **qual executor recebeu
- * cada escrita**, e para isso o SQL é irrelevante. A `SELECT` do envio devolve
- * uma intenção aberta, que é o caminho em que a confirmação acontece.
- */
+/** Um executor de banco de MENTIRA, encadeável como o Kysely, que só registra. */
 function executorQueRegistra(registro: Operacao[]): DbExecutor {
   const executor: Record<string, unknown> = {};
   const encadear = (acao: string, tabela: string) => {
@@ -76,8 +39,6 @@ function executorQueRegistra(registro: Operacao[]): DbExecutor {
     };
     elo['executeTakeFirst'] = () => {
       registro.push({ acao, tabela, executor });
-      // A intenção ABERTA do dono: não confirmada e dentro do prazo. É o
-      // caminho em que `confirmed_at` passa a ser gravado.
       return Promise.resolve({
         id: ENVIO,
         purpose: 'user_showcase',

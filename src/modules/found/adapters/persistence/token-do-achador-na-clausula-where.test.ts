@@ -1,7 +1,6 @@
 /**
  * O aviso do achador sem conta é alcançado pelo RESUMO do token, no `WHERE`
- * (BICHUS-41). Mesmo instrumento de `autorizacao-na-clausula-where.test.ts`:
- * SQL compilado com `DummyDriver`, valor conferido na posição do predicado.
+ * (BICHUS-41).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -47,7 +46,6 @@ void describe('o resumo do token no WHERE das consultas do aviso', () => {
     const compilado = construtorDoAvisoDoAchador(semBanco, RESUMO).compile();
     exigirResumo(compilado);
     assert.match(compilado.sql, /"origin" = \$\d+/);
-    // O ponto não atravessa a aplicação: só o booleano calculado no banco.
     assert.doesNotMatch(compilado.sql, /select[^;]*"found_point"[,\s]/i);
     assert.match(compilado.sql, /found_point IS NOT NULL/);
   });

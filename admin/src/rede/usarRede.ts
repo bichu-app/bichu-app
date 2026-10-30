@@ -13,9 +13,7 @@ export function useRede() {
 
 /**
  * O `If-Match` de um recurso: sempre montado do `version` dele, e nunca do
- * cabecalho `ETag`. A borda comprime e sufixa o ETag (`"1-zstd"`, `"1-gzip"`),
- * e devolver esse valor no If-Match dava 412 em toda escrita (o "nao salva" de
- * hml, 07/10).
+ * cabecalho `ETag`.
  */
 export function etagDe(e: { version: number }): string {
   return `"${String(e.version)}"`;

@@ -1,22 +1,4 @@
-/**
- * As operações do caso de perdido.
- *
- * Quem está do outro lado: uma tutora em pânico, com o celular em 11%, que não
- * abre o app há quatro meses. Tudo neste arquivo é escrito contra esse retrato.
- *
- * Quatro regras atravessam o módulo:
- *
- * 1. **A abertura é conferida e ainda assim pode perder a corrida.** As duas
- *    coisas: a conferência dá a mensagem certa, e o índice único do banco dá a
- *    garantia. Só a conferência deixaria a janela entre ler e gravar, que é
- *    exatamente por onde a fila offline passa em rajada quando o sinal volta.
- * 2. **Coordenada não é obrigatória.** Área sozinha abre o caso; o que muda é o
- *    alcance, não a existência.
- * 3. **Caso de outro tutor responde 404**, nunca 403 — um 403 confirmaria que
- *    aquele pet está perdido a quem não deveria saber.
- * 4. **A resposta nunca traz coordenada.** Nem no corpo do dono: ele já sabe
- *    onde o pet dele sumiu, e o campo só existiria para vazar depois.
- */
+/** As operações do caso de perdido. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -64,22 +46,7 @@ import type {
   UserId,
 } from '../../../shared/types/brands.js';
 
-/**
- * Quem abre a conversa mediada quando o tutor **confirma** uma correspondência.
- *
- * Porta de um método só, declarada por quem a exige, e com a mesma forma da
- * `AberturaDeConversaPorAviso` do módulo de tags — de propósito: o outro lado é
- * `ConversationService.abrirPorAviso`, que é indiferente à origem do achado, e
- * duas formas diferentes para a mesma abertura seriam duas verdades sobre a
- * primeira mensagem do sistema.
- *
- * A assimetria com o caminho da plaquinha está na seção 20.5 do backlog e é
- * deliberada: **o aviso do QR abre a conversa ao ser registrado; o achado avulso
- * abre no portão da decisão humana.** Quem escaneia a plaquinha está com o
- * animal identificado na mão; quem registra um achado avulso ainda é um palpite
- * do cruzamento, e abrir o canal antes da confirmação entregaria o tutor ao
- * falso achador — que é exatamente o que o critério 20 da BICHUS-86 proíbe.
- */
+/** Quem abre a conversa mediada quando o tutor **confirma** uma correspondência. */
 export interface AberturaDeConversaPorCorrespondencia {
   aoConfirmarCorrespondencia(aviso: {
     readonly foundReportId: FoundReportId;
@@ -93,20 +60,7 @@ export interface AberturaDeConversaPorCorrespondencia {
   }): Promise<void>;
 }
 
-/**
- * BICHUS-66. O que a abertura de caso precisa dizer ao modulo de transferencia.
- *
- * Uma porta de UM metodo, e nao o servico inteiro: o que `lostfound` sabe e que
- * "este pet foi dado como perdido"; o que se faz com uma transferencia em curso
- * e decisao do outro modulo. Injetar `PetTransferService` aqui acoplaria os dois
- * pela implementacao e faria os testes de caso precisarem de um servico de
- * transferencia inteiro para abrir um caso.
- *
- * **Ela nao lanca, e a implementacao tem de honrar isso**: abrir o caso e a
- * coisa urgente, e uma falha ao cancelar um convite nao pode derrubar o alerta
- * de um animal na rua. A barreira que GARANTE nao e esta -- e a reconferencia
- * dentro da transacao que consumaria a transferencia.
- */
+/** BICHUS-66. O que a abertura de caso precisa dizer ao modulo de transferencia. */
 export interface AvisoDeCasoAberto {
   cancelarPorCasoAberto(pet: PetId): Promise<void>;
 }
@@ -121,34 +75,24 @@ export interface DependenciasDeCasos {
   /**
    * A fila. **A API enfileira e o worker envia** (ADR-0001, e a métrica de
    * arquitetura fala em "da abertura ao último push ENFILEIRADO, ≤ 60 s").
-   *
-   * Mandar 500 push dentro do `POST` que abre o caso faria a tutora em pânico
-   * esperar o transporte responder 500 vezes antes de ver a tela do caso — no
-   * exato minuto em que ela precisa do cartaz e do link.
    */
   readonly fila: JobQueue;
   /**
-   * BICHUS-66. Avisado quando um caso abre, para que a transferencia viva
-   * daquele pet caia em vez de consumar no meio da emergencia.
+   * BICHUS-66. Avisado quando um caso abre, para que a transferencia viva daquele
+   * pet caia em vez de consumar no meio da emergencia.
    */
   readonly transferencias: AvisoDeCasoAberto;
   /** BICHUS-86 critério 4. Confirmar abre a conversa; rejeitar não a abre. */
   readonly conversaDaCorrespondencia: AberturaDeConversaPorCorrespondencia;
 }
 
-/**
- * O caso e o estado do alerta dele, juntos.
- *
- * Juntos porque a resposta do contrato traz `alert` em toda leitura de caso
- * (`LostCase.alert` é obrigatório), e porque montar aquele objeto a partir de
- * `hasLocation` — que foi o que esta camada fez enquanto não havia tabela de
- * disparo — deixou de ser verdade no instante em que o worker passou a gravar
- * o número real. Uma tela que continuasse dizendo `queued` depois de o alerta
- * ter saído para 87 pessoas seria falsa de um jeito que nada acusaria.
- */
+/** O caso e o estado do alerta dele, juntos. */
 export interface CasoComAlerta {
   readonly caso: CasoGravado;
-  /** `null` só enquanto a linha do disparo não existir (casos abertos antes desta história). */
+  /**
+   * `null` só enquanto a linha do disparo não existir (casos abertos antes desta
+   * história).
+   */
   readonly alerta: DisparoGravado | null;
 }
 
@@ -163,10 +107,10 @@ export interface PreviaDoCaso {
 
 export interface EntradaDoCaso {
   /**
-   * Já em milissegundos. A conversão de ISO para instante acontece na BORDA,
-   * e não aqui: a camada de aplicação não constrói `Date` (regra do relógio
-   * injetável), e uma data malformada precisa virar `validation-failed` com o
-   * nome do campo antes de chegar a esta função.
+   * Já em milissegundos. A conversão de ISO para instante acontece na BORDA, e não
+   * aqui: a camada de aplicação não constrói `Date` (regra do relógio injetável), e
+   * uma data malformada precisa virar `validation-failed` com o nome do campo antes
+   * de chegar a esta função.
    */
   readonly lastSeenAt: Instant;
   readonly lat?: number | undefined;
@@ -178,14 +122,7 @@ export interface EntradaDoCaso {
   readonly shareToPublicList?: boolean | undefined;
 }
 
-/**
- * A página de candidatos como ela sai do serviço.
- *
- * `nextCursor` é `null` quando a página veio curta: página cheia **pode** ter
- * continuação, página curta é o fim da lista. É a mesma regra das outras duas
- * coleções do produto, e ela erra para o lado seguro — um cursor a mais custa
- * uma requisição que volta vazia; um cursor de menos esconde candidatos.
- */
+/** A página de candidatos como ela sai do serviço. */
 export interface PaginaDeCandidatosDoCaso {
   readonly items: readonly CandidatoDoCaso[];
   readonly nextCursor: string | null;
@@ -218,12 +155,8 @@ export class LostCaseService {
     chamador: ContextoDoChamador,
   ): Promise<CasoComAlerta> {
     const estado = await this.deps.repositorio.estadoParaAbertura(pet, chamador.userId);
-    // Pet inexistente e pet de outro tutor são a mesma resposta.
     if (!estado.existeEhDoTutor) throw problemas.naoEncontrado();
 
-    // O teto da conta vem ANTES dos bloqueios do pet: ele é o único que não se
-    // resolve mexendo neste pet, e mandar a pessoa verificar o e-mail para
-    // depois descobrir que o teto barrou é uma ida à caixa de entrada à toa.
     if (atingiuTetoDaConta(estado)) throw problemas.tetoDeCasosAbertos();
 
     const bloqueios = bloqueiosParaAbrirCaso(estado);
@@ -237,8 +170,6 @@ export class LostCaseService {
       state: entrada.state,
     };
     if (!temOndeSuficiente(onde)) {
-      // Sem ponto e sem cidade o caso não apareceria no alerta NEM na lista
-      // pública: um caso invisível, que a pessoa acha que abriu.
       throw problemas.validacao([
         {
           field: 'last_seen_area',
@@ -259,30 +190,12 @@ export class LostCaseService {
       neighborhood: entrada.neighborhood,
       state: entrada.state,
       description: entrada.description,
-      // Critério 10: o padrão é VERDADEIRO. Quem abre um caso está pedindo
-      // alcance, e perguntar isso a quem está em pânico é uma decisão a mais no
-      // pior momento.
       shareToPublicList: entrada.shareToPublicList ?? true,
       shareToken: this.deps.ids.opaqueToken(),
     });
 
-    // `null` é a corrida perdida para o índice único: outra requisição abriu o
-    // caso entre a conferência e a gravação. A resposta é a verdade.
     if (caso === null) throw problemas.petJaEstaPerdido();
 
-    // BICHUS-66. O PET ACABOU DE SER DADO COMO PERDIDO, E ISSO DERRUBA UMA
-    // TRANSFERENCIA EM CURSO.
-    //
-    // A assimetria decide: consumar com caso aberto revogaria TODAS as tags do
-    // pet (ADR-0004, irreversivel) no minuto em que um estranho pode estar com o
-    // animal no colo lendo o QR da coleira -- e ele chegaria a um beco sem
-    // saida. Cancelar a transferencia custa ao tutor refazer o convite depois do
-    // reencontro. O contrato ja tinha escolhido esse lado na direcao inversa:
-    // `startPetTransfer` responde 409 para pet com caso aberto.
-    //
-    // Fica DEPOIS da abertura de proposito. Cancelar antes e ver a abertura
-    // falhar por corrida no indice unico deixaria o tutor sem caso E sem
-    // transferencia, que e o pior dos tres desfechos.
     await this.deps.transferencias.cancelarPorCasoAberto(pet);
 
     await this.deps.trilha.record({
@@ -293,29 +206,13 @@ export class LostCaseService {
       action: 'lost_case.opened',
       resourceKind: 'lost_case',
       resourceId: caso.id,
-      // SEM coordenada no metadado. A trilha não guarda coordenada bruta
-      // (docs/04-seguranca.md 9), e `has_location` responde o que importa
-      // para investigar depois: houve alerta ou não.
       metadata: { has_location: caso.hasLocation, shared: caso.shareToPublicList },
     });
 
     return { caso, alerta: await this.pedirOAlerta(caso) };
   }
 
-  /**
-   * Registra o disparo e o enfileira — ou registra por que ele não vai existir.
-   *
-   * **O caso já está gravado quando esta função roda, e é isso que a torna
-   * segura.** O critério 6 da BICHUS-20 é explícito: *"o caso é criado mesmo
-   * assim; o caso nunca se perde por falha de push"*. Se a fila estiver fora do
-   * ar, o que se perde é o alerta, e o tutor continua com o caso, o cartaz, o
-   * link e a tag.
-   *
-   * Sem coordenada, o disparo nasce `no_location` e **não é enfileirado**:
-   * critério 14 da BICHUS-18, que é explícito em dizer que isso não é falha de
-   * envio e não gera retentativa. Enfileirar para depois descobrir que não há
-   * centro produziria uma tentativa fracassada onde não havia o que tentar.
-   */
+  /** Registra o disparo e o enfileira — ou registra por que ele não vai existir. */
   private async pedirOAlerta(caso: CasoGravado): Promise<DisparoGravado> {
     const disparo = await this.deps.disparos.abrir({
       id: this.deps.ids.uuidv7(),
@@ -326,41 +223,13 @@ export class LostCaseService {
     });
 
     if (disparo.estado === 'queued') {
-      // Só o identificador do caso. A regra do payload da fila (§11.5) é
-      // "carrega identificador, nunca conteúdo renderizado": o nome do pet e o
-      // bairro são lidos pelo worker no instante do envio, e enfileirados aqui
-      // eles congelariam o que a tutora corrigir nos próximos cinco minutos.
       await this.deps.fila.enqueue('alert.dispatch', { caseId: caso.id });
     }
 
     return disparo;
   }
 
-  /**
-   * A prévia do alcance, ANTES de abrir o caso (F3.2).
-   *
-   * Três coisas que decidem o desenho desta função, na ordem em que importam:
-   *
-   * 1. **Pet que não é do chamador responde 404**, e a decisão vem da ADR-0021 —
-   *    não do corpo da BICHUS-21, cujo critério 12 diz 403. A divergência é
-   *    conhecida e está resolvida a favor da ADR: aqui um 403 confirmaria a
-   *    existência de um pet alheio, e a rota viraria oráculo de enumeração de
-   *    UUID para qualquer pessoa com cadastro. A conferência é a leitura do
-   *    `existeEhDoTutor` que já veio VINCULADO da consulta, e não um `if` sobre
-   *    um pet que a consulta tenha devolvido sem vínculo.
-   * 2. **Bloqueio não é erro.** A abertura lança `problemaDoBloqueio`; a prévia
-   *    devolve os três em lista, e responde 200. É o que faz a folha de bloqueio
-   *    ter o texto certo sem uma segunda chamada, e é literalmente o que o
-   *    contrato declara em `blockers`.
-   * 3. **Nada aqui inventa número.** `alcanceDe` só produz `computed` quando a
-   *    porta devolveu um inteiro; `null` vira `unavailable` e ausência de centro
-   *    vira `no_location`.
-   *
-   * O teto de casos abertos por conta NÃO é consultado aqui, e a ausência é
-   * deliberada: ele não está entre os três `blockers` do contrato, e acrescentá-lo
-   * faria a resposta entregar mais do que o documento declara — que é o defeito
-   * que nenhum portão de contrato pega.
-   */
+  /** A prévia do alcance, ANTES de abrir o caso (F3.2). */
   async previa(
     pet: PetId,
     centro: CentroDoAlcance | undefined,
@@ -369,11 +238,6 @@ export class LostCaseService {
     const estado = await this.deps.repositorio.estadoParaPrevia(pet, chamador.userId);
     if (!estado.existeEhDoTutor) throw problemas.naoEncontrado();
 
-    // `contagemDe` sobre o MESMO objeto que o disparo vai percorrer. Não há
-    // `COUNT(*)` nesta rota, e a ausência é o critério 9 da BICHUS-20: o número
-    // da tela é o número real de destinatários. Uma contagem própria aqui
-    // divergiria da lista no dia em que alguém acrescentasse um critério a uma
-    // e esquecesse a outra, e nenhum teste acusaria.
     const contagem = centro === undefined ? null : contagemDe(await this.calcular(centro, chamador));
 
     const alcance = alcanceDe(centro, contagem);
@@ -382,10 +246,6 @@ export class LostCaseService {
       estadoDoAlcance: alcance.estado,
       tutoresAlcancaveis: alcance.tutoresAlcancaveis,
       raioEmMetros: RAIO_DO_ALERTA_EM_METROS,
-      // Com centro o rótulo é `null`: não há geocodificação no MVP (ADR-0006),
-      // então nomear o ponto onde o pet sumiu com o bairro de casa do tutor
-      // seria uma mentira de aparência plausível — e a tela a exibiria com a
-      // confiança de um dado do servidor.
       rotuloDaArea: centro === undefined ? rotuloDaArea(estado.areaDeReferenciaDoTutor) : null,
       bloqueios: bloqueiosParaAbrirCaso(estado),
     };
@@ -394,36 +254,10 @@ export class LostCaseService {
   async buscar(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoComAlerta> {
     const achado = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
     if (achado === null) throw problemas.naoEncontrado();
-    // A leitura do alerta vem DEPOIS da conferência do dono, e não junto: ela
-    // é por `case_id` e não carrega o dono no `WHERE`, então fazê-la antes
-    // devolveria o estado do alerta de um caso alheio a quem pediu por
-    // identificador. O 404 do ADR-0021 acontece primeiro.
     return { caso: achado, alerta: await this.deps.disparos.ultimoDoCaso(achado.id) };
   }
 
-  /**
-   * `GET /v1/lost-cases/{caseId}/candidates`.
-   *
-   * **O buraco que esta operação fecha**: a esteira já calculava e gravava as
-   * correspondências, e a rota de *decidir* já estava no ar — o tutor podia
-   * dizer "é o meu pet" sobre algo que ele não tinha como ver. A lista é a tela
-   * que torna a decisão humana possível, e sem ela a decisão era humana só no
-   * nome.
-   *
-   * **Duas consultas, e a ordem entre elas é a regra.** A primeira é
-   * `buscarDoTutor`, com o dono no `WHERE`, e ela é o que transforma caso alheio
-   * em 404 (ADR-0021): sem ela, caso de outro tutor responderia `items: []`,
-   * indistinguível de "ainda não há correspondência" — e `200` numa URL com o
-   * `caseId` de outra pessoa afirma, para quem souber ler, que aquele caso
-   * existe. A segunda carrega o dono **de novo**, na junção, e a repetição é
-   * deliberada: a autorização não pode depender de alguém ter lembrado de fazer
-   * a primeira leitura.
-   *
-   * **Nada é cruzado aqui.** `x-effects: []` é verdade: o cruzamento é um job na
-   * fila (seção 4.10 de `docs/03-arquitetura.md`), e esta operação lê linhas já
-   * gravadas. Se algum dia ela passar a calcular, vira `expensive_query` e ganha
-   * teto — mas então a mudança é de desenho, e o marcador acompanha.
-   */
+  /** `GET /v1/lost-cases/{caseId}/candidates`. */
   async candidatos(
     caso: CaseId,
     chamador: ContextoDoChamador,
@@ -436,18 +270,7 @@ export class LostCaseService {
     return { items, nextCursor: proximoDosCandidatos(items, pagina.limit) };
   }
 
-  /**
-   * `PATCH /v1/lost-cases/{caseId}` — o tutor corrige onde e quando.
-   *
-   * **Não dispara alerta**, e a ausência é o contrato: a operação declara
-   * `x-effects: []`. Quem quer avisar a vizinhança de novo usa
-   * `POST /lost-cases/{caseId}/alerts`, que tem o teto de um por dia. Fundir as
-   * duas faria cada correção de digitação na data acordar os vizinhos outra vez
-   * — e a correção de digitação é o uso mais comum desta rota.
-   *
-   * `null` do repositório cobre três coisas e todas viram 404: o caso não
-   * existe, não é do chamador, ou não está aberto.
-   */
+  /** `PATCH /v1/lost-cases/{caseId}` — o tutor corrige onde e quando. */
   async atualizar(
     caso: CaseId,
     entrada: EntradaDoCaso,
@@ -475,35 +298,13 @@ export class LostCaseService {
       action: 'lost_case.updated',
       resourceKind: 'lost_case',
       resourceId: atualizado.id,
-      // SEM coordenada no metadado, como na abertura: a trilha não guarda
-      // coordenada bruta (docs/04-seguranca.md 9). `has_location` responde o que
-      // importa numa investigação — passou a haver raio, ou deixou de haver.
       metadata: { has_location: atualizado.hasLocation },
     });
 
     return { caso: atualizado, alerta: await this.deps.disparos.ultimoDoCaso(atualizado.id) };
   }
 
-  /**
-   * `POST /v1/lost-cases/{caseId}/alerts` — reenvia o alerta à vizinhança.
-   *
-   * **A máquina de disparo é a MESMA da abertura**, e isso é o ponto: o reenvio
-   * chama `pedirOAlerta`, que grava a linha de `alert_dispatches` e enfileira
-   * `alert.dispatch`. Uma segunda máquina aqui teria duas respostas para "quem
-   * recebe o alerta deste caso", e a do reenvio seria a que ninguém revisita.
-   *
-   * **O teto de um por dia é conferido DUAS vezes, de propósito.** A borda conta
-   * requisições na dimensão `case` (`x-rate-limit` do contrato); esta camada
-   * pergunta ao banco quando o último alerta **saiu**, por
-   * `ultimoEnvioDoCaso` + `podeDispararDeNovo` — que é o critério 7 do ADR-0006,
-   * o mesmo predicado que o worker já respeita. As duas não são redundantes:
-   * o contador da borda é por processo e por janela de contagem, e um disparo
-   * que ficou enfileirado sem nunca sair não gastou o direito de ninguém. A
-   * verdade sobre "este caso já avisou hoje" está em `dispatched_at`.
-   *
-   * Caso inexistente, alheio ou **encerrado** respondem 404 — caso encerrado não
-   * alerta ninguém: o animal voltou, ou a busca acabou.
-   */
+  /** `POST /v1/lost-cases/{caseId}/alerts` — reenvia o alerta à vizinhança. */
   async reenviarAlerta(caso: CaseId, chamador: ContextoDoChamador): Promise<DisparoGravado> {
     const doTutor = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
     if (doTutor === null || doTutor.status !== 'open') throw problemas.naoEncontrado();
@@ -511,10 +312,6 @@ export class LostCaseService {
     const agora = this.deps.clock.now();
     const ultimoEnvio = await this.deps.disparos.ultimoEnvioDoCaso(caso);
     if (!podeDispararDeNovo(ultimoEnvio, agora)) {
-      // O prazo que falta, em segundos, e não um número fixo: o 429 carrega
-      // `Retry-After`, e um valor inventado faria o app agendar um reenvio que
-      // já nasce recusado. `ultimoEnvio` não é nulo aqui — `podeDispararDeNovo`
-      // devolve `true` para nulo —, e o `?? 0` existe só para o compilador.
       const faltam = JANELA_DE_24H_EM_MS - (Number(agora) - Number(ultimoEnvio ?? 0));
       throw problemas.limiteDeChamadas(Math.max(1, Math.ceil(faltam / 1000)));
     }
@@ -544,16 +341,11 @@ export class LostCaseService {
       caso,
       dono: chamador.userId,
       desfecho,
-      // O canal só faz sentido com reencontro: é ele que torna a métrica
-      // atribuível. Preenchê-lo nos outros desfechos sujaria a conta.
       canal: desfecho === 'reunited' ? canal : undefined,
       nota,
       agora: this.deps.clock.now(),
     });
 
-    // `null` cobre não existe, não é seu, e já estava encerrado. O terceiro é o
-    // que a fila offline produz, e o segundo encerramento sobrescreveria o
-    // desfecho do primeiro.
     if (encerrado === null) throw problemas.naoEncontrado();
 
     await this.deps.trilha.record({
@@ -570,55 +362,8 @@ export class LostCaseService {
     return { caso: encerrado, alerta: await this.deps.disparos.ultimoDoCaso(encerrado.id) };
   }
 
-  /**
-   * `POST /v1/lost-cases/{caseId}/reopen` — o DESFAZER do encerramento.
-   *
-   * A operação estava no contrato desde o começo e **não tinha rota**: era uma
-   * linha de `OPERACOES_AINDA_SEM_ROTA`, e o documento já prometia a quatro
-   * clientes que *"encerrar e reversivel por 7 dias"*. Quem tocasse em
-   * `Encontrei meu pet` por engano — um toque, sem confirmação, numa tela que
-   * se abre em pânico — não tinha desfazer nenhum.
-   *
-   * ## Os quatro desfechos, e por que são quatro e não dois
-   *
-   * A escrita é UMA, com os quatro predicados no `WHERE` (ver `reabrir` no
-   * adaptador). Zero linhas cobre quatro situações, e empilhá-las num 404 só
-   * seria a tela dizendo "não encontramos esse caso" a quem está olhando para
-   * ele. A releitura que as separa **só acontece quando a escrita não pegou**:
-   * o caminho de sucesso continua sendo uma consulta.
-   *
-   * | Releitura | Resposta | Por quê |
-   * |---|---|---|
-   * | `null` | **404** | ADR-0021. Caso inexistente e caso alheio são a mesma resposta, e aqui um 403 confirmaria que aquele pet esteve perdido |
-   * | `status === 'open'` | **200** | O reenvio da fila offline. Mesma decisão escrita em `decidirCandidato`: a segunda chamada chega depois de a primeira ter dado certo, e 404 diria "não deu" sobre o que deu |
-   * | encerrado, prazo vencido ou ausente | **410** | O que o contrato declara: *"Passou dos 7 dias"* |
-   * | encerrado, prazo em aberto | **409** | Sobrou um predicado: o pet já tem OUTRO caso aberto (`pet-already-lost`) |
-   *
-   * **O 409 é o único que o contrato não declara**, e ele não é hipotético:
-   * encerrar, marcar como perdido de novo e tentar reabrir o primeiro são dois
-   * toques. Sem ele a violação do índice único parcial chegaria à borda como
-   * 500 — um defeito do servidor no lugar de uma recusa explicada.
-   *
-   * ## A trilha, e por que ela não é opcional aqui
-   *
-   * Reabrir DESFAZ um desfecho que a métrica de reencontro já contabilizou.
-   * `lost_case.reopened` é a única ação que responde "este `reunited` foi
-   * desfeito, por quem e quando", e o metadado carrega o desfecho desfeito e o
-   * prazo que valia — lidos do caso ANTES da escrita, porque depois dela as
-   * três colunas estão em `NULL`. Diagnóstico deste projeto mora em
-   * `audit.events`: o `node-pg-migrate` descarta `RAISE NOTICE` e `WARNING`, e
-   * nada que saia por ali chega a ninguém.
-   *
-   * **Não dispara alerta**, e a ausência é deliberada: o contrato declara
-   * `x-effects: [notifies]` nesta operação, mas o reenvio do aviso à vizinhança
-   * é `POST /alerts`, com teto de um por dia e máquina própria. Reabrir por
-   * engano acordaria os vizinhos de novo sem ninguém ter pedido, e o caminho de
-   * pedir já existe e é explícito.
-   */
+  /** `POST /v1/lost-cases/{caseId}/reopen` — o DESFAZER do encerramento. */
   async reabrir(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoComAlerta> {
-    // O caso ANTES da escrita: as três colunas do encerramento vão para `NULL`
-    // nela, e o metadado da trilha precisa do desfecho que foi desfeito. A
-    // leitura carrega `owner_user_id` no `WHERE` como todo o resto do módulo.
     const antes = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
 
     const reaberto = await this.deps.repositorio.reabrir({
@@ -628,10 +373,6 @@ export class LostCaseService {
     });
 
     if (reaberto === null) {
-      // A releitura separa as quatro situações. `depois` e não `antes`: entre
-      // as duas chamadas o estado pode ter mudado — é o mesmo caso que a fila
-      // offline produz —, e diagnosticar sobre a leitura velha diria 410 sobre
-      // um caso que outra requisição acabou de reabrir.
       const depois = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
       if (depois === null) throw problemas.naoEncontrado();
       if (depois.status === 'open') {
@@ -641,8 +382,6 @@ export class LostCaseService {
       if (prazo === null || Number(prazo) <= Number(this.deps.clock.now())) {
         throw problemas.janelaDeReaberturaVencida();
       }
-      // Sobrou o quarto predicado. O pet já tem outro caso aberto, e a saída da
-      // pessoa é aquele caso — não é "tente de novo".
       throw problemas.petJaEstaPerdido();
     }
 
@@ -654,9 +393,6 @@ export class LostCaseService {
       action: 'lost_case.reopened',
       resourceKind: 'lost_case',
       resourceId: reaberto.id,
-      // SEM coordenada, como no resto do módulo (docs/04-seguranca.md 9). O que
-      // uma investigação precisa é o desfecho que deixou de valer e o prazo que
-      // autorizava desfazê-lo.
       metadata: {
         undone_outcome: antes?.closureOutcome ?? null,
         reopen_deadline: antes?.reopenDeadline?.toISOString() ?? null,
@@ -666,34 +402,7 @@ export class LostCaseService {
     return { caso: reaberto, alerta: await this.deps.disparos.ultimoDoCaso(reaberto.id) };
   }
 
-  /**
-   * `POST /v1/lost-cases/{caseId}/candidates/{candidateId}/decision`.
-   *
-   * O fecho da BICHUS-86: o cruzamento sugere, e é aqui que uma pessoa afirma.
-   *
-   * **Três coisas acontecem, e a ordem entre elas é a regra.**
-   *
-   * 1. A escrita da decisão carrega a autorização na própria cláusula `WHERE`
-   *    (`lost_cases.owner_user_id = :dono`). Nada é lido antes para comparar
-   *    depois, então não existe o caminho em que a linha de outro tutor chega a
-   *    esta camada.
-   * 2. **Só `confirmed` abre a conversa.** `rejected` não abre nada, não avisa
-   *    ninguém e não é reversível — a seção 4.10 de `docs/03-arquitetura.md` e o
-   *    critério 12 da BICHUS-86 dizem a mesma frase, *"rejeitado não volta"*, e
-   *    quem a cumpre é o predicado `status = 'suggested'` da escrita mais o
-   *    filtro `m.status = 'rejected'` do cruzamento, que a partir desta
-   *    operação passa a ter o que eliminar.
-   * 3. A trilha registra as duas decisões, e não só a confirmação. Uma rejeição
-   *    é irreversível: ela precisa ter autor e instante em lugar auditável, que
-   *    é a mesma razão de `match_candidates_decisao_tem_autor` existir.
-   *
-   * **O reenvio da fila offline devolve 200, e não 404.** O critério 7 põe a
-   * confirmação numa fila quando falta conexão, e fila reenvia: a segunda
-   * chamada não encontra mais o candidato em `suggested`, e sem a leitura de
-   * `candidatoDecididoDoTutor` ela responderia "não encontramos isso" logo
-   * depois de a ação ter dado certo. Mudar de ideia é outra coisa, e continua
-   * recusada: só o reenvio da **mesma** decisão passa.
-   */
+  /** `POST /v1/lost-cases/{caseId}/candidates/{candidateId}/decision`. */
   async decidirCandidato(
     caso: CaseId,
     candidato: string,
@@ -715,9 +424,6 @@ export class LostCaseService {
       actorUserId: chamador.userId,
       actorIp: chamador.ip,
       correlationId: chamador.correlationId,
-      // A ação é UMA, e a decisão é metadado. Duas ações diriam a mesma coisa
-      // com dois vocabulários, e a consulta "o que aconteceu com este
-      // candidato" passaria a depender de lembrar dos dois nomes.
       action: 'match.candidate_decided',
       resourceKind: 'match_candidate',
       resourceId: decidido.id,
@@ -728,17 +434,11 @@ export class LostCaseService {
       },
     });
 
-    // **A ÚNICA porta entre a decisão e a conversa.** Fora do `if`, rejeitar
-    // abriria o canal com quem o tutor acabou de dizer que não é quem achou o
-    // pet dele.
     if (decisao === 'confirmed') {
       await this.deps.conversaDaCorrespondencia.aoConfirmarCorrespondencia({
         foundReportId: decidido.foundReportId,
-        // O pet vem do CASO que casou, porque o achado avulso não tem `pet_id`.
         petId: decidido.petId,
         nomeDoPet: decidido.nomeDoPet,
-        // Para um achado não existe escaneamento: o instante da primeira
-        // mensagem do sistema é quando o animal foi visto.
         escaneadoEm: decidido.achado.achadoEm.getTime() as Instant,
         rotuloDaArea: rotuloDaArea({
           city: decidido.achado.cidade ?? undefined,
@@ -746,8 +446,6 @@ export class LostCaseService {
         }),
         recado: decidido.achado.observacao,
         achadorComConta: decidido.relatorUserId,
-        // Achado avulso não agrupa: o agrupamento é do achador anônimo que
-        // escaneia duas plaquinhas, e este caminho exige conta.
         avisoAnteriorId: null,
       });
     }
@@ -755,13 +453,7 @@ export class LostCaseService {
     return decidido;
   }
 
-  /**
-   * O reenvio da mesma decisão, e só dele.
-   *
-   * Decisão diferente da que está gravada cai no mesmo 404 de tudo o mais: a
-   * decisão pendente que a requisição pede não existe mais. Não há caminho de
-   * "mudar de ideia" nesta operação, e a ausência é a regra, não um vazio.
-   */
+  /** O reenvio da mesma decisão, e só dele. */
   private async reenvioDaFila(
     caso: CaseId,
     candidato: string,
@@ -777,16 +469,7 @@ export class LostCaseService {
     return jaDecidido;
   }
 
-  /**
-   * O alcance da prévia, com a falha traduzida em `null`.
-   *
-   * O `catch` é aqui porque é esta camada que conhece a diferença entre "o
-   * banco não respondeu" e "não há ninguém por perto", e porque a consulta
-   * deliberadamente não engole exceção (ver o cabeçalho dela). `null` vira
-   * `unavailable`, que é a regra do ADR-0006 em uma frase: *"falha de cálculo
-   * não vira zero"*. Um `0` aqui faria desistir quem tinha cem vizinhos ao
-   * redor.
-   */
+  /** O alcance da prévia, com a falha traduzida em `null`. */
   private async calcular(
     centro: CentroDoAlcance,
     chamador: ContextoDoChamador,
@@ -799,11 +482,6 @@ export class LostCaseService {
         agora: this.deps.clock.now(),
       });
     } catch (erro: unknown) {
-      // O erro não some: ele sai no log com a correlação da requisição, e a
-      // tela diz que não conseguiu calcular. Engolir sem registrar
-      // transformaria um defeito de esquema num `unavailable` que ninguém
-      // procura — a verificação que não consegue verificar e mesmo assim não
-      // reprova.
       console.error(
         JSON.stringify({
           evento: 'lost_case.reach_failed',
@@ -816,14 +494,7 @@ export class LostCaseService {
   }
 }
 
-/**
- * O cursor da próxima página de candidatos, ou `null`.
- *
- * Página curta é o fim da lista. A posição sai do **último item entregue**, e
- * não de um contador de deslocamento: candidato decidido não sai da tabela, mas
- * um `score` recalculado por uma versão nova da estratégia muda a ordem — e um
- * `OFFSET` guardado no cliente passaria a apontar para outro lugar da lista.
- */
+/** O cursor da próxima página de candidatos, ou `null`. */
 function proximoDosCandidatos(
   items: readonly CandidatoDoCaso[],
   limite: number,

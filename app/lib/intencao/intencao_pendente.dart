@@ -1,32 +1,7 @@
 /// O envelope de intenção pendente (UX 8.3, BICHU-30).
-///
-/// A pessoa toca em `Marcar como perdido` com o pet já escolhido, a foto já
-/// tirada e o texto já digitado. Sobe a folha que pede conta. Ela cria a conta,
-/// verifica o e-mail noutro app, e o sistema encerra o Bichu enquanto isso —
-/// que é o comportamento normal de um aparelho com pouca memória, e é
-/// exatamente o aparelho de quem mais precisa deste produto.
-///
-/// **O que este arquivo garante é que aquilo não se perde.** O envelope é o
-/// que a pessoa ia fazer, gravado em disco, com o rascunho inteiro, esperando o
-/// login acontecer. Quem executa é a `GuardaDeAcao`; aqui mora só o formato —
-/// e o formato é onde estão as duas armadilhas:
-///
-/// 1. **Foto é caminho de arquivo, nunca conteúdo.** Um envelope com os bytes
-///    da foto dentro é um JSON de alguns megabytes sendo serializado no
-///    momento de menos memória disponível do app. Ele estoura no aparelho
-///    antigo, que é justamente o aparelho em que o envelope precisa existir. O
-///    arquivo já está no disco: o que atravessa é o caminho dele.
-/// 2. **A localização carrega o carimbo de tempo.** Coordenada sem hora é
-///    coordenada de ontem passando por coordenada de agora, e o caso de pet
-///    perdido é gravado no lugar errado — que é pior que não ter lugar
-///    nenhum, porque a busca acontece em volta dele.
 library;
 
 /// As ações que o produto guarda (UX 8.3).
-///
-/// Enum fechado, e não `String` livre: um envelope com ação que este build não
-/// conhece precisa ser recusado na leitura, e não descoberto na hora de
-/// executar — quando a pessoa já entrou e está esperando o resultado.
 enum AcaoDeIntencao {
   marcarPerdido('marcar_perdido'),
   registrarAchado('registrar_achado'),
@@ -36,25 +11,15 @@ enum AcaoDeIntencao {
   gerarTag('gerar_tag'),
 
   /// Pedir para participar de um encontro privado da `Rede` (design system
-  /// 24.17.1, item 5). O `alvo` e o `slug` do encontro.
+  /// 24.17.1, item 5).
   pedirParaParticipar('pedir_para_participar'),
 
-  /// **VER** um conteúdo que exige conta (20/10/2026). O `alvo` é a ROTA.
-  ///
-  /// É a única entrada deste enum que não escreve nada: ver
-  /// `intencao/leitura_como_intencao.dart`, que explica por que uma leitura
-  /// entra num mecanismo feito para ações e o que ela deliberadamente não faz
-  /// (não chama o servidor e não guarda rascunho).
-  ///
-  /// Ela entrou porque o convite de deslogado das páginas de conteúdo mandava
-  /// a pessoa para `/pets` depois do login — medido —, e não para a página que
-  /// ela tinha pedido.
+  /// **VER** um conteúdo que exige conta (20/10/2026).
   verConteudo('ver_conteudo');
 
   const AcaoDeIntencao(this.valor);
 
-  /// Como a ação é gravada no disco. Fixo: o envelope gravado por uma versão
-  /// do app é lido por outra, depois da atualização.
+  /// Como a ação é gravada no disco.
   final String valor;
 
   static AcaoDeIntencao? porValor(String valor) {
@@ -66,9 +31,6 @@ enum AcaoDeIntencao {
 }
 
 /// Uma foto do rascunho: **o caminho do arquivo**, e nada do conteúdo dele.
-///
-/// Os três campos são os mesmos de `FotoLocal`, que é o que a câmera devolve.
-/// Não há campo de bytes e não vai haver: ver a regra 5 da seção 8.3.
 class FotoDaIntencao {
   const FotoDaIntencao({
     required this.caminho,
@@ -76,8 +38,7 @@ class FotoDaIntencao {
     required this.tamanhoEmBytes,
   });
 
-  /// O caminho do arquivo no disco do aparelho. O arquivo é de quem o criou
-  /// (a câmera, a galeria) e continua lá depois de o app ser encerrado.
+  /// O caminho do arquivo no disco do aparelho.
   final String caminho;
 
   final String tipoDeConteudo;
@@ -109,9 +70,7 @@ class LocalizacaoDaIntencao {
   final DateTime capturadaEm;
 
   /// Acima disto, a tela de resultado pergunta se o lugar ainda vale (regra 6
-  /// de 8.3). Meia hora é o tempo em que alguém andando com o animal no colo
-  /// já saiu do quarteirão: gravar a coordenada velha calada põe o caso no
-  /// lugar errado e manda a busca para lá.
+  /// de 8.3).
   static const Duration validade = Duration(minutes: 30);
 
   bool desatualizadaEm(DateTime agora) =>
@@ -132,10 +91,6 @@ class LocalizacaoDaIntencao {
 }
 
 /// Onde a pessoa estava na tela: a rolagem e o passo do assistente.
-///
-/// Parece detalhe e não é: voltar para o topo de um formulário de sete campos
-/// depois do login faz a pessoa procurar de novo onde tinha parado, e é o tipo
-/// de coisa que ninguém reporta como defeito — só abandona.
 class PosicaoNaTela {
   const PosicaoNaTela({this.rolagem = 0, this.passo = 0});
 
@@ -154,10 +109,6 @@ class PosicaoNaTela {
 /// Tudo o que a pessoa já tinha digitado, escolhido, fotografado e localizado.
 class RascunhoDaIntencao {
   /// Valida os campos na **captura**, e não na gravação.
-  ///
-  /// Se a checagem ficasse na hora de gravar, o defeito apareceria no aparelho
-  /// de quem estivesse com a memória no limite, em produção, e não na tela que
-  /// montou o rascunho errado. Aqui ele aparece para quem escreveu a tela.
   RascunhoDaIntencao({
     Map<String, Object?> campos = const <String, Object?>{},
     this.fotos = const <FotoDaIntencao>[],
@@ -239,23 +190,16 @@ class IntencaoPendente {
 
   final AcaoDeIntencao acao;
 
-  /// Id do pet, do caso ou da conversa. Nulo quando o alvo **ainda não
-  /// existe** — é o caso do achado avulso e do cadastro, em que a ação é
-  /// justamente criar o alvo.
+  /// Id do pet, do caso ou da conversa.
   final String? alvo;
 
-  /// O ID de tela da pesquisa de UX, ex.: `F1.5`. É para onde a pessoa volta
-  /// quando a execução falha (regra 4 de 8.3).
+  /// O ID de tela da pesquisa de UX, ex.: `F1.5`.
   final String telaDeRetorno;
 
   final RascunhoDaIntencao rascunho;
   final DateTime criadaEm;
 
   /// Vinte e quatro horas (regra 2 de 8.3).
-  ///
-  /// Rascunho de ontem executado sozinho hoje é pior que rascunho nenhum: a
-  /// pessoa entra na conta para ver uma notificação e o app publica um caso
-  /// de pet perdido que ela já resolveu ontem à noite.
   static const Duration validade = Duration(hours: 24);
 
   bool expiradaEm(DateTime agora) =>
@@ -270,11 +214,6 @@ class IntencaoPendente {
       };
 
   /// Lê um envelope gravado.
-  ///
-  /// Lança `FormatException` para o que este build não sabe executar — ação
-  /// desconhecida, campo faltando, data ilegível. Quem chama trata isso como
-  /// "não há intenção", e não como erro de tela: um envelope gravado por outra
-  /// versão do app não pode impedir a pessoa de entrar na conta dela.
   static IntencaoPendente deJson(Map<String, dynamic> json) {
     final bruta = json['acao'];
     if (bruta is! String) {

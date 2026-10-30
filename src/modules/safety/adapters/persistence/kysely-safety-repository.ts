@@ -1,49 +1,4 @@
-/**
- * Bloqueio e denúncia, no banco. **A AUTORIZAÇÃO É A PRÓPRIA CLÁUSULA `WHERE`.**
- *
- * ADR-0021, e aqui ele vale duas vezes:
- *
- * 1. **toda escrita carrega quem chama no `WHERE`** — não existe caminho por
- *    aqui para bloquear em nome de outra pessoa nem para desfazer o bloqueio
- *    dela;
- * 2. **o alvo é resolvido por uma consulta que já exclui o que quem chama não
- *    pode ver** — conta desabilitada, conta inexistente e **conta que bloqueou
- *    quem chama** caem no MESMO `undefined`, que a borda traduz no MESMO `404`.
- *
- * O segundo ponto é o que faz o bloqueio ser silencioso de verdade. Um `403`,
- * ou um `404` com corpo diferente, seria um oráculo: *"ela te bloqueou"*. E
- * descobrir que foi bloqueado é o que gera retaliação.
- *
- * ## `bloqueio_entre(uuid, uuid)` é o PONTO ÚNICO do predicado
- *
- * A pergunta "há bloqueio entre estes dois?" vai aparecer em toda leitura que
- * mostre uma pessoa a outra — perfil, conexão, timeline, vitrine. Ela mora na
- * função SQL da migração `20261018000031`, e não em `N` expressões de Kysely:
- * `N` cópias do predicado são `N` lugares onde uma correção pode faltar, e foi
- * exatamente assim que a fila da `Rede` filtrou em um lugar só.
- *
- * **A função é SIMÉTRICA**, e a simetria é a segunda metade do desenho: quem
- * bloqueou não vê o bloqueado, **e o bloqueado não vê quem bloqueou**.
- *
- * ## `conta_habilitada(uuid)` entra em TODA resolução de alvo
- *
- * Decisão do cliente de 17/10: conta desabilitada *"não é mais encontrada em
- * nenhuma página ou funcionalidade"*. Bloquear ou denunciar uma conta
- * desabilitada é apontar para quem já não está lá, e a resposta é `404`.
- *
- * ## A ocultação imediata NÃO está neste arquivo
- *
- * Ela é filtro de LEITURA, e as leituras que ela filtra são de outras fatias
- * (perfil, timeline, vitrine). O mecanismo está pronto e é das funções
- * `perfil_ocultado_para_quem_denunciou`, `foto_ocultada_para_quem_denunciou` e
- * `publicacao_ocultada_para_quem_denunciou` (`20261018000032`): cada leitura
- * nova acrescenta `AND NOT <função>(<ref>, <leitor>)` ao `WHERE`.
- *
- * **A da PUBLICAÇÃO está ligada desde 20/10/2026**, em
- * `publications/adapters/persistence/kysely-publicacoes.ts`: a linha do tempo
- * carrega `NOT publicacao_ocultada_para_quem_denunciou(p.public_ref, <leitor>)`
- * no `WHERE`. As do perfil e da foto continuam onde estavam.
- */
+/** Bloqueio e denúncia, no banco. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
@@ -57,20 +12,7 @@ import type {
   SafetyRepository,
 } from '../../ports/safety-repository.js';
 
-/**
- * Resolve o endereço público numa conta **visível para quem chama**.
- *
- * Os três `WHERE` na mesma consulta, e nenhum deles é dispensável:
- *
- * - `public_ref` — o endereço, que é o que a borda recebeu;
- * - `conta_habilitada(users.id)` — conta desabilitada não é encontrada;
- * - `NOT bloqueio_entre(users.id, chamador)` — **se o alvo já bloqueou quem
- *   chama, ele não existe para quem chama**.
- *
- * Devolve `undefined` nos três casos, de propósito: um valor por caso viraria
- * um `404` por caso, e a diferença entre eles é a informação que não queremos
- * dar.
- */
+/** Resolve o endereço público numa conta **visível para quem chama**. */
 async function contaVisivelPara(
   db: Kysely<Database>,
   ref: RefPublicoDaPessoa,
@@ -94,47 +36,7 @@ interface LinhaDeBloqueio {
   readonly created_at: Date;
 }
 
-/**
- * **A LISTA DE QUEM EU BLOQUEEI, e a igualdade é a autorização.**
- *
- * `blocker_user_id = chamador` no `WHERE` (ADR-0021), e é **essa igualdade** que
- * faz a leitura ser assimétrica sobre um predicado simétrico:
- *
- * - **`bloqueio_entre` NÃO é chamada aqui, e a ausência é o desenho inteiro.**
- *   Aquela função é simétrica de propósito, e usá-la nesta consulta devolveria
- *   as duas metades do par — quem eu bloqueei **e quem me bloqueou**. A segunda
- *   metade é o oráculo *"ela te bloqueou"*, que é exatamente o que o resto desta
- *   fatia gasta linhas para não dizer;
- * - **`conta_habilitada(u.id)`** tira a linha de conta desabilitada, pela
- *   decisão do cliente de 17/10 (*"não é mais encontrada em nenhuma página ou
- *   funcionalidade"*). Aqui ela não deixa nada preso: conta desabilitada não
- *   aparece em superfície nenhuma, então o bloqueio dela não tem efeito a
- *   desfazer — e a linha **volta** com a conta, porque ela nunca foi apagada;
- * - **`conta_habilitada(chamador)`**, como em toda leitura desta casa;
- * - **`perfil_ocultado_para_quem_denunciou` NÃO entra**, e é a única divergência
- *   deliberada em relação a `construtorDoPerfilPorApelido`. Aquela função existe
- *   para quem denunciou parar de ver as superfícies **do alvo**; esta lista não
- *   é superfície do alvo, é o registro dos atos de quem chama, e a linha só
- *   existe porque quem chama a criou. Esconder o próprio ato de quem o praticou
- *   devolveria o beco sem saída que esta leitura existe para fechar.
- *
- * **O `LEFT JOIN` em `handles` é `LEFT` de propósito:** o bloqueio é endereçado
- * por `public_ref` e não pelo apelido, então é possível ter bloqueado alguém sem
- * apelido. Um `INNER JOIN` omitiria a linha dessa pessoa — e ela ficaria
- * bloqueada para sempre, que é o defeito que esta operação conserta.
- *
- * `kind = 'pessoa'` no mesmo `ON`: o apelido antigo de uma troca vira
- * `reservado` **com `user_id` preservado**, e sem este filtro a pessoa
- * apareceria duas vezes, uma delas com o apelido que ela já não usa.
- *
- * **Nenhuma migração foi necessária**: a ordem do `WHERE` é a do índice
- * `user_blocks_um_por_par (blocker_user_id, blocked_user_id)`, que a
- * `20261018000031` já criou.
- *
- * **Exportado** como os `construtorDe...` da casa: a suíte unitária não tem
- * banco, e ler o SQL compilado é o único jeito de provar que a igualdade está no
- * `WHERE` em vez de num `if` que um caminho novo esquece.
- */
+/** **A LISTA DE QUEM EU BLOQUEEI, e a igualdade é a autorização.** */
 export function construtorDeQuemEuBloqueei(
   db: Kysely<Database>,
   chamador: string,
@@ -156,9 +58,6 @@ export function construtorDeQuemEuBloqueei(
     .where('b.blocker_user_id', '=', chamador)
     .where(sql<boolean>`conta_habilitada(u.id)`)
     .where(sql<boolean>`conta_habilitada(${chamador}::uuid)`)
-    // Mais recentes primeiro. O desempate por `public_ref` não é enfeite: sem
-    // ele, dois bloqueios do mesmo instante podem trocar de lugar entre duas
-    // páginas e uma pessoa some da lista sem nunca ter sido mostrada.
     .orderBy('b.created_at', 'desc')
     .orderBy('u.public_ref', 'asc')
     .limit(limit)
@@ -166,12 +65,7 @@ export function construtorDeQuemEuBloqueei(
     .compile();
 }
 
-/**
- * A CONTAGEM, com a MESMA cláusula `WHERE` da página.
- *
- * Duas cláusulas diferentes dariam um `total` que não corresponde às linhas —
- * e a tela mostraria "3 pessoas" sobre uma lista de duas.
- */
+/** A CONTAGEM, com a MESMA cláusula `WHERE` da página. */
 export function construtorDaContagemDeQuemEuBloqueei(
   db: Kysely<Database>,
   chamador: string,
@@ -187,31 +81,8 @@ export function construtorDaContagemDeQuemEuBloqueei(
 }
 
 /**
- * A PUBLICAÇÃO denunciada, resolvida pelo endereço público, **com o MESMO
- * recorte da linha do tempo**.
- *
- * ## Por que o recorte, e por que ele é o mesmo
- *
- * Sem o predicado de conexão aceita, qualquer conta poderia perguntar *"este
- * endereço de 22 símbolos existe?"* pelo desfecho da denúncia — `202` quando
- * existe, `404` quando não. Isso é um oráculo de existência, e o endereço de uma
- * publicação que quem chama não pode ver não deve nem confirmar existência
- * (ADR-0021).
- *
- * Ser **o mesmo** recorte da leitura não é zelo: se este fosse mais frouxo, a
- * denúncia seria a leitura que a linha do tempo recusa; se fosse mais apertado,
- * haveria publicação visível e não denunciável, e o ponto de acesso da denúncia
- * é o próprio cartão.
- *
- * **Construtor exportado** pela mesma razão dos dois vizinhos: a prova de que o
- * predicado está no `WHERE` se faz compilando e lendo o SQL, e não chamando o
- * repositório com um banco. Medido em
- * `denuncia-de-publicacao-confere-o-alvo.test.ts`.
- *
- * `body` sai porque a denúncia **congela o texto denunciado**: sem a cópia,
- * editar depois faria o administrador julgar um texto que ninguém denunciou.
- * `author_user_id` sai porque a fila mostra de quem é a publicação — e ele
- * **não** vai para resposta nenhuma.
+ * A PUBLICAÇÃO denunciada, resolvida pelo endereço público, **com o MESMO recorte
+ * da linha do tempo**.
  */
 export function construtorDoAlvoDaPublicacao(
   db: Kysely<Database>,
@@ -223,23 +94,6 @@ export function construtorDoAlvoDaPublicacao(
     .select(['p.id as id', 'p.author_user_id as autor', 'p.body as corpo'])
     .where('p.public_ref', '=', refDaPublicacao)
     .where('p.deleted_at', 'is', null)
-    // **O MESMO recorte da linha do tempo, com as DUAS pernas.**
-    //
-    // A perna do proprio autor (`p.author_user_id = chamador`) nao e descuido e
-    // nao afrouxa nada: ela e o que torna o desfecho `eu_mesmo` ALCANCAVEL.
-    // Sem ela, a propria publicacao caia no mesmo `ausente` de inexistente --
-    // ninguem tem aresta de conexao consigo -- e a rota respondia `404` a quem
-    // tentasse denunciar o proprio texto.
-    //
-    // E `404` ali seria o desenho errado: `CAMPO_E_CODIGO.publication` existe
-    // em `safety-routes.ts` desde 18/10 com a mensagem *"Esta publicacao e
-    // sua. Para tira-la do ar, apague-a."* -- isto e, o produto JA decidiu que
-    // este caso e `400 own_publication`, com a saida que o resolve, e nao um
-    // `404` que esconde a publicacao de quem a escreveu. E o mesmo que
-    // `denunciarFoto` e `denunciarPerfil` fazem.
-    //
-    // **MEDIDO A MAO**: antes desta perna, `POST /v1/publications/{propria}/reports`
-    // respondia `404`; com ela, `400` com `code: own_publication`.
     .where(
       sql<boolean>`(
         p.author_user_id = ${chamador}::uuid
@@ -277,18 +131,10 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
     },
 
     async bloquear(chamador, alvo, agora): Promise<DesfechoDaEscrita> {
-      // O alvo é resolvido com `bloqueio_entre` no `WHERE`, o que significa que
-      // quem JÁ bloqueou quem chama devolve `ausente`. Isso é certo: bloquear
-      // de volta quem te bloqueou não tem efeito nenhum (a função é simétrica,
-      // o canal já está fechado nos dois sentidos) e a resposta não pode
-      // revelar que o bloqueio existe.
       const idDoAlvo = await contaVisivelPara(db, alvo, chamador);
       if (idDoAlvo === undefined) return 'ausente';
       if (idDoAlvo === chamador) return 'eu_mesmo';
 
-      // IDEMPOTENTE. `DO NOTHING` e não `409`: erro aqui contaria a quem chama
-      // um estado que ele mesmo escolheu, e obrigaria a tela a ter um segundo
-      // caminho para nada.
       await sql`
         INSERT INTO user_blocks (id, blocker_user_id, blocked_user_id, created_at)
         VALUES (${ids.uuidv7()}::uuid, ${chamador}::uuid, ${idDoAlvo}::uuid, ${comoData(agora)}::timestamptz)
@@ -299,14 +145,6 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
     },
 
     async desbloquear(chamador, alvo): Promise<DesfechoDaEscrita> {
-      // `contaVisivelPara` NÃO serve aqui, e a diferença é a razão de esta
-      // consulta existir à parte: quem desbloqueia está, por definição, num par
-      // em que `bloqueio_entre` é VERDADEIRO — o predicado do bloqueio
-      // esconderia justamente a pessoa que se quer desbloquear.
-      //
-      // `conta_habilitada` também sai: desbloquear alguém que desabilitou a
-      // conta é limpar a própria lista, e recusar deixaria a linha presa para
-      // sempre.
       const linha = await db
         .selectFrom('users')
         .select('id')
@@ -314,38 +152,22 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
         .executeTakeFirst();
       if (linha === undefined) return 'ausente';
 
-      // QUEM CHAMA ESTÁ NO `WHERE` DA PRÓPRIA ESCRITA. Um `DELETE` por alvo
-      // sozinho desfaria o bloqueio de outra pessoa.
       await db
         .deleteFrom('user_blocks')
         .where('blocker_user_id', '=', chamador)
         .where('blocked_user_id', '=', linha.id)
         .execute();
 
-      // IDEMPOTENTE: não havia bloqueio é o mesmo `204` de havia.
       return 'feito';
     },
 
     async denunciarPerfil(chamador, alvo, denuncia, agora): Promise<DesfechoDaEscrita> {
-      // O alvo é resolvido ANTES, e com os mesmos três `WHERE`: denunciar quem
-      // já bloqueou quem chama devolve o mesmo `404` de pessoa inexistente.
       const idDoAlvo = await contaVisivelPara(db, alvo, chamador);
       if (idDoAlvo === undefined) return 'ausente';
-      // O próprio perfil não se denuncia: não há a quem pedir moderação de si
-      // mesmo, e o caminho de mudar o próprio perfil é outro e é imediato.
       if (idDoAlvo === chamador) return 'eu_mesmo';
 
       const quando = comoData(agora);
 
-      // DENUNCIAR DE NOVO SOMA e não duplica, e não é erro: erro ensinaria a
-      // quem denuncia que ele já denunciou, o que não é informação dele.
-      //
-      // `ON CONFLICT (...) WHERE resolved_at IS NULL` casa com o índice
-      // PARCIAL: resolvida, a denúncia LIBERA o par, e a próxima cria linha
-      // nova — um abuso novo depois da decisão é um item de fila novo.
-      //
-      // `reason` e `detail` são atualizados: a segunda denúncia costuma ser a
-      // mais informada. `created_at` não muda, porque a fila lê por chegada.
       await sql`
         INSERT INTO profile_reports
           (id, subject_user_id, subject_ref, reporter_user_id, reason, detail,
@@ -365,13 +187,6 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
     },
 
     async denunciarFoto(chamador, chaveDaFoto, denuncia, agora): Promise<DesfechoDaEscrita> {
-      // A FOTO é resolvida pela chave da derivada pública, e a consulta leva o
-      // dono para duas coisas: recusar a denúncia da própria foto e guardar de
-      // quem é a foto, que é o que a fila mostra.
-      //
-      // `catalog_images.status = 'ready'` no `WHERE`: imagem que não está no ar
-      // não tem alvo, e responder outra coisa que `404` revelaria que aquela
-      // chave existiu.
       const alvo = await db
         .selectFrom('catalog_images')
         .leftJoin('users', 'users.photo_image_id', 'catalog_images.id')
@@ -381,12 +196,7 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
         .executeTakeFirst();
 
       if (alvo === undefined) return 'ausente';
-      // A própria foto não se denuncia: o caminho é removê-la, que é imediato.
       if (alvo.dono !== null && alvo.dono === chamador) return 'eu_mesmo';
-      // DONO QUE BLOQUEOU QUEM CHAMA: a foto não existe para quem chama, e a
-      // resposta é o mesmo `404` de chave inexistente. O predicado vem da
-      // função — que é o ponto único dele — e não de uma segunda expressão
-      // escrita aqui.
       if (alvo.dono !== null) {
         const { rows } = await sql<{ bloqueado: boolean }>`
           SELECT bloqueio_entre(${alvo.dono}::uuid, ${chamador}::uuid) AS bloqueado
@@ -415,47 +225,12 @@ export function criarSafetyRepository(db: Kysely<Database>, ids: IdGenerator): S
     },
 
     async denunciarPublicacao(chamador, refDaPublicacao, denuncia, agora): Promise<DesfechoDaEscrita> {
-      // **O ALVO PASSOU A SER CONFERIDO EM 20/10/2026.**
-      //
-      // Até aqui esta escrita não conferia nada, e a ausência estava declarada
-      // em voz alta: `user_publications` não existia nesta base, conferir contra
-      // tabela inexistente não compila, e o custo estava dito por extenso --
-      // *"hoje esta rota aceita um endereço de publicação que não existe, e
-      // grava a denúncia dele"*. A tabela existe (`20261020000002`), e a
-      // conferência que faltava é esta consulta.
-      //
-      // **O RECORTE É O MESMO DA LINHA DO TEMPO, e isso não é zelo: é o que
-      // impede a denúncia de ser um oráculo.** Sem o predicado de conexão
-      // aceita, qualquer conta poderia perguntar "este endereço de 22 símbolos
-      // existe?" pelo desfecho da denúncia -- e o endereço de uma publicação
-      // que quem chama não pode ver não deve nem confirmar existência
-      // (ADR-0021).
-      //
-      // Os quatro predicados, e cada um tem a mesma razão que tem na linha do
-      // tempo: `deleted_at IS NULL` (publicação apagada não tem alvo), conexão
-      // aceita nos dois sentidos com `conta_habilitada` das duas pontas,
-      // `NOT bloqueio_entre`, e a própria publicação de quem chama **fora** --
-      // esta última pelo motivo da foto e do perfil: o caminho para o próprio
-      // conteúdo é apagá-lo, que é imediato, e denunciar a si mesmo não tem
-      // desfecho.
-      //
-      // `author_user_id` sai da consulta porque a fila mostra de quem é a
-      // publicação, e `body` porque a denúncia **congela o texto denunciado**:
-      // sem a cópia, editar depois faria o administrador julgar um texto que
-      // ninguém denunciou. (Hoje a publicação não tem operação de edição; a
-      // cópia existe para que isso continue verdade quando ela tiver.)
       const { rows } = await db.executeQuery(
         construtorDoAlvoDaPublicacao(db, refDaPublicacao, chamador),
       );
       const alvo = rows[0];
 
       if (alvo === undefined) return 'ausente';
-      // A PRÓPRIA publicação não se denuncia, e este desfecho é ALCANÇÁVEL: a
-      // consulta acima tem a perna do próprio autor justamente para que ele
-      // chegue aqui. O caminho para o próprio conteúdo é apagá-lo
-      // (`deleteMyPublication`), que é imediato, e a borda responde `400` com
-      // `code: own_publication` e essa saída escrita na mensagem -- em vez de um
-      // `404` que esconderia de alguém a publicação que ela mesma escreveu.
       if (alvo.autor === chamador) return 'eu_mesmo';
 
       const quando = comoData(agora);

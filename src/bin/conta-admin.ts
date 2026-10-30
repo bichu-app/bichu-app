@@ -1,40 +1,4 @@
-/**
- * Contas do painel administrativo (ADR-0027 item 20.3; D43, D51, D61, D63).
- * Substitui o `conceder-papel`: o painel tem cadastro proprio
- * (`admin_accounts`), e nao papel em `user_roles`.
- *
- *   docker compose run --rm -it api node dist/bin/conta-admin.js criar --email <e-mail> --nome <nome>
- *   docker compose run --rm -it api node dist/bin/conta-admin.js redefinir-senha --email <e-mail>
- *   docker compose run --rm -it api node dist/bin/conta-admin.js desativar --email <e-mail>
- *   docker compose run --rm -it api node dist/bin/conta-admin.js reativar --email <e-mail>
- *   docker compose run --rm -it api node dist/bin/conta-admin.js encerrar-sessoes --email <e-mail>
- *   docker compose run --rm -it api node dist/bin/conta-admin.js listar
- *
- * O roteiro de uso esta em `infra/roteiro-provisionamento.md`, "Conta
- * administrativa". **A senha e digitada pelo cliente no terminal**: nenhum
- * roteiro de agente roda `criar`, `redefinir-senha` ou `reativar`.
- *
- * ## A ordem das recusas
- *
- * 1. argumentos (senha por argumento, subcomando desconhecido): sem terminal,
- *    sem segredo, sem banco;
- * 2. terminal: sem ele, recusa antes de perguntar qualquer coisa;
- * 3. so entao segredos, configuracao e conexao.
- *
- * ## D63 mora aqui, e nao em `admin-access`
- *
- * A conferencia "a senha nova e a mesma da conta do app com o mesmo e-mail?" e
- * a unica leitura do mundo do app no caminho do painel. Ela e composta neste
- * arquivo, pelas portas de `identity` (o repositorio da credencial local e a
- * verificacao de senha), para que o modulo `admin-access` continue sem citar
- * nenhuma tabela do app (P21).
- *
- * ## O que sai no erro inesperado
- *
- * Nome, codigo e mensagem do erro, e nunca o objeto inteiro. O `detail` de uma
- * violacao de restricao do Postgres traz a linha que falhou ("Failing row
- * contains ..."), e a linha de `admin_accounts` carrega o hash.
- */
+/** Contas do painel administrativo (ADR-0027 item 20.3; D43, D51, D61, D63). */
 import { resolverSegredos } from '../shared/config/segredos.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { optionalEnv } from '../shared/config/env.js';
@@ -86,8 +50,7 @@ function interacaoDoTerminal(entrada: EntradaDeTerminal): Interacao {
 
 /**
  * D63, composto aqui: a credencial local da conta do app com o mesmo e-mail,
- * conferida com a mesma funcao do login. Sem conta do app, ou conta so com
- * provedor externo, nao ha o que conferir.
+ * conferida com a mesma funcao do login.
  */
 export function conferenciaComContaDoApp(
   db: Db,
@@ -103,7 +66,7 @@ export function conferenciaComContaDoApp(
   };
 }
 
-/** Nome, codigo e mensagem. Nunca `detail`, `where`, parametros nem pilha. */
+/** Nome, codigo e mensagem. */
 export function descreverErro(erro: unknown): string {
   if (!(erro instanceof Error)) return 'erro inesperado sem descricao';
   const codigo = (erro as { code?: unknown }).code;
@@ -171,7 +134,6 @@ if (optionalEnv('BICHU_SUPRESS_AUTOSTART') === undefined) {
         process.exitCode = SAIDA.ERRO_INTERNO;
       })
       .finally(() => {
-        // `stdin` retomado pelo leitor seguraria o processo aberto.
         process.stdin.pause();
       });
   }

@@ -5,21 +5,6 @@ import 'bichu_tokens.g.dart';
 import 'bichu_typography.dart';
 
 /// O tema do Bichu sobre o Material 3.
-///
-/// Decisao do cliente: os componentes usam o M3 como base, pelo suporte nativo
-/// do Flutter (docs/06-design-system.md secao 15). A semente e a Framboesa
-/// `#9E0B3A`, mas **o esquema nao e gerado por HCT**: cada papel foi fixado por
-/// medicao de contraste, porque o gerador do M3 produz pares que passam em AA
-/// e falham no piso de 7:1 que este produto adota nas superficies criticas.
-///
-/// A trava principal esta em duas linhas deste arquivo, e vale reler antes de
-/// mexer: **`ColorScheme.primary` e a tinta carmim `#9E0B3A`, nao a
-/// manteiga `#E7B93E`.** Se a manteiga fosse `primary`, todo `TextButton`,
-/// todo `OutlinedButton` e todo icone acentuado do M3 nasceriam a 1.73:1, por
-/// padrao, sem ninguem escrever uma linha errada. Com a tinta ali, o padrao
-/// passa a ser o seguro e o preenchimento so aparece onde alguem o colocou de
-/// proposito, pelos temas explicitos de `filledButtonTheme` e
-/// `floatingActionButtonTheme`.
 abstract final class BichuTheme {
   static ThemeData get claro => _tema(BichuColors.claro, Brightness.light);
 
@@ -42,14 +27,8 @@ abstract final class BichuTheme {
       fontFamily: 'Inter',
       splashFactory: InkSparkle.splashFactory,
 
-      // O M3 usa sobreposicao tonal para elevacao. Nos nao: a sobreposicao
-      // gera diferencas de 1.1:1 a 1.3:1 entre camadas, invisiveis em tela
-      // barata e sob sol. Separacao por `outline` de 1px e por superficie,
-      // que e deterministica (divergencia 1 da secao 15.6).
       applyElevationOverlayColor: false,
 
-      // Alvo de toque: 48dp no app, 64dp nas acoes criticas. Vem do tema, nao
-      // de padding caso a caso.
       materialTapTargetSize: MaterialTapTargetSize.padded,
       visualDensity: VisualDensity.standard,
 
@@ -63,7 +42,6 @@ abstract final class BichuTheme {
         titleTextStyle: textos.headlineSmall,
       ),
 
-      // O preenchimento de acao chega a tela por aqui, e so por aqui.
       filledButtonTheme: FilledButtonThemeData(
         style: bichu.filledButtonStyle,
       ),
@@ -79,9 +57,6 @@ abstract final class BichuTheme {
         ),
       ),
 
-      // Botao secundario: contorno de 2px. O `FilledTonalButton` do M3 fica
-      // com 1.3:1 de contraste de container sobre superficie clara, e o
-      // usuario nao identifica onde e o alvo sob sol (divergencia 7).
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStateProperty.resolveWith((estados) {
@@ -132,10 +107,6 @@ abstract final class BichuTheme {
         ),
       ),
 
-      // Rotulo fixo acima do campo, nunca flutuante: o rotulo flutuante reduz
-      // a altura util e some quando o campo esta preenchido, que e justamente
-      // quando a pessoa revisa (divergencia 8). Quem monta o par rotulo+campo
-      // e o `BichuField`.
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: c.surface,
@@ -172,8 +143,6 @@ abstract final class BichuTheme {
         space: BichuEspaco.e0,
       ),
 
-      // Quatro destinos, rotulo sempre visivel, e visivel tambem deslogado:
-      // deslogado e um estado de navegacao, nao um muro (UX 5.2).
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: c.surface,
         surfaceTintColor: Colors.transparent,
@@ -220,8 +189,6 @@ abstract final class BichuTheme {
         circularTrackColor: c.surfaceSunken,
       ),
 
-      // Botao com cápsula compete com a geometria da moldura, que e a forma
-      // assinante do sistema (divergencia 2). Raio 12 em tudo que e acao.
       chipTheme: ChipThemeData(
         backgroundColor: c.surfaceSunken,
         labelStyle: textos.labelMedium?.copyWith(color: c.textPrimary),
@@ -252,15 +219,11 @@ abstract final class BichuTheme {
     return ColorScheme(
       brightness: brilho,
 
-      // A tinta, nunca o preenchimento. Ver o comentario da classe.
       primary: c.primary,
       onPrimary: c.onPrimary,
       primaryContainer: c.primaryContainer,
       onPrimaryContainer: c.onPrimaryContainer,
 
-      // Nao ha papel `secondary` nem `tertiary` no sistema do Bichu. Apontar
-      // os dois para a tinta e deliberado: assim nenhum widget do M3 pinta
-      // uma cor que ninguem mediu.
       secondary: c.primary,
       onSecondary: c.onPrimary,
       secondaryContainer: c.primaryContainer,
@@ -286,11 +249,6 @@ abstract final class BichuTheme {
       surfaceContainerHighest: c.surfaceSunken,
       onSurfaceVariant: c.textSecondary,
 
-      // A armadilha de nomenclatura da secao 15.2: o que o M3 chama de
-      // `outline` e a borda de controle, e o que ele chama de `outlineVariant`
-      // e o divisor decorativo. A nossa nomenclatura e a inversa, entao a
-      // traducao acontece aqui, uma vez, com o nome do erro escrito ao lado:
-      // trocar estas duas linhas passa em revisao e reprova em acessibilidade.
       outline: c.outlineControl,
       outlineVariant: c.outline,
 
@@ -300,7 +258,6 @@ abstract final class BichuTheme {
       onInverseSurface: c.textOnInverse,
       inversePrimary: c.primaryContainer,
 
-      // Sem sobreposicao tonal (divergencia 1).
       surfaceTint: Colors.transparent,
     );
   }

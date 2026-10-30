@@ -1,11 +1,4 @@
-/**
- * Os dois casos de uso do pedido da plaquinha: o do tutor e o do painel.
- *
- * **Nenhum dos dois emite codigo.** Emitir e `issuePetTag`, e o codigo e
- * irreversivel (ADR-0004): um painel que emitisse criaria plaquinha sem o
- * tutor pedir, e um pedido que emitisse transformaria "quero a plaquinha" em
- * um codigo a mais no pet.
- */
+/** Os dois casos de uso do pedido da plaquinha: o do tutor e o do painel. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -36,16 +29,7 @@ function refDoPedido(ids: IdGenerator): string {
   return Buffer.from(ids.random128()).toString('base64url');
 }
 
-/**
- * O pedido do tutor.
- *
- * Idempotente **sem chave de idempotencia**, e quem garante isso e o banco:
- * `collar_tag_requests_um_pendente_por_pet` e um indice parcial unico, entao
- * ha no maximo um pedido `pending` por pet e pedir de novo devolve o que ja
- * existe. Uma chave de idempotencia aqui seria um segundo mecanismo para a
- * mesma propriedade, e o do banco e o que vale mesmo quando o cliente perde a
- * resposta.
- */
+/** O pedido do tutor. */
 export class PedidoDePlaquinhaService {
   constructor(
     private readonly deps: {
@@ -55,11 +39,8 @@ export class PedidoDePlaquinhaService {
   ) {}
 
   /**
-   * **404 e nao 403 para pet de outra pessoa**, e a decisao nao e desta
-   * camada: ela esta na clausula `WHERE` do repositorio, que nao encontra
-   * linha nenhuma. Aqui so se traduz "nao encontrei" para a resposta, e por
-   * isso nao ha ramo que compare dono com chamador -- um ramo assim poderia
-   * ser escrito ao contrario.
+   * **404 e nao 403 para pet de outra pessoa**, e a decisao nao e desta camada: ela
+   * esta na clausula `WHERE` do repositorio, que nao encontra linha nenhuma.
    */
   async pedir(
     petId: PetId,
@@ -79,17 +60,7 @@ export class PedidoDePlaquinhaService {
     return pedido;
   }
 
-  /**
-   * Os pedidos de um pet do chamador, para a pagina de acompanhamento.
-   *
-   * **404 e nao 403 para pet de outra pessoa**, e pelo mesmo motivo de
-   * [pedir]: a decisao esta na clausula `WHERE` do repositorio, e aqui so se
-   * traduz "nao encontrei" para a resposta.
-   *
-   * **Lista vazia NAO e 404.** Pet que e seu e ainda nao tem pedido responde
-   * `200` com zero itens: e um estado legitimo, e confundi-lo com "nao existe"
-   * faria a pagina do pet recem-cadastrado mentir sobre o proprio pet.
-   */
+  /** Os pedidos de um pet do chamador, para a pagina de acompanhamento. */
   async listarDoPet(petId: PetId, solicitante: UserId): Promise<readonly PedidoDoTutor[]> {
     const pedidos = await this.deps.repositorio.listarDoPet(petId, solicitante);
     if (pedidos === undefined) throw problemas.naoEncontrado();
@@ -97,7 +68,7 @@ export class PedidoDePlaquinhaService {
   }
 }
 
-/** A fila do painel: listar e decidir. A TELA e da sessao Backoffice. */
+/** A fila do painel: listar e decidir. */
 export class FilaDePlaquinhasAdministrativa {
   constructor(
     private readonly deps: {
@@ -111,15 +82,7 @@ export class FilaDePlaquinhasAdministrativa {
     return this.deps.repositorio.listarFila(recorte);
   }
 
-  /**
-   * UM pedido, para a tela de entrega.
-   *
-   * **404 e nao 403**, e a decisao nao e desta camada: o `WHERE` do repositorio
-   * carrega `conta_habilitada(requested_by)` e nao encontra linha nenhuma
-   * quando a conta esta desabilitada. Aqui so se traduz "nao encontrei" para a
-   * resposta -- e por isso nao ha ramo que compare nada, porque um ramo assim
-   * poderia ser escrito ao contrario.
-   */
+  /** UM pedido, para a tela de entrega. */
   async ler(ref: string): Promise<PedidoNaFilaDePlaquinhas> {
     const pedido = await this.deps.repositorio.pedidoParaLeitura(ref);
     if (pedido === undefined) throw problemas.naoEncontrado();
@@ -129,20 +92,6 @@ export class FilaDePlaquinhasAdministrativa {
   /**
    * A ATUALIZACAO DA ENTREGA: o passo e o codigo de rastreio, numa escrita so --
    * como o cliente pediu em 18/10, numa frase so.
-   *
-   * A ordem das recusas e deliberada, e vai da mais geral para a mais
-   * especifica: o pedido existe, o pedido foi atendido, a transicao e
-   * permitida, o rastreio e aceitavel. Trocar essa ordem faria um pedido
-   * pendente com rastreio vazio responder sobre o rastreio, e o que quem
-   * clicou precisa ouvir primeiro e que falta atender.
-   *
-   * A escrita e o evento da trilha na MESMA transacao (D49): falha da trilha
-   * desfaz a atualizacao.
-   *
-   * **`before`/`after` carregam `delivery_state` e `tracking_code`, e NENHUM
-   * campo do endereco** -- nem em `metadata`. O rastreio entra de proposito: e
-   * numero de encomenda e nao dado pessoal, e e o campo cuja troca alguem vai
-   * querer auditar depois.
    */
   async atualizarEntrega(
     declaracao: DeclaracaoDeTrilha,
@@ -158,9 +107,6 @@ export class FilaDePlaquinhasAdministrativa {
       const atual = await this.deps.repositorio.pedidoPorRef(trx, ref);
       if (atual === undefined) throw problemas.naoEncontrado();
 
-      // Mesma regra do `CHECK` `entrega_exige_atendimento`, traduzida para uma
-      // resposta que diz qual e o proximo passo em vez de estourar uma violacao
-      // de restricao do Postgres como 500.
       if (!entregaPodeAndar(atual.status)) {
         throw problemas.validacao([
           {
@@ -233,14 +179,8 @@ export class FilaDePlaquinhasAdministrativa {
   }
 
   /**
-   * A escrita e o evento da trilha na MESMA transacao, pela unidade de
-   * trabalho de `EscritaAuditada`: falha da trilha desfaz a decisao (D49).
-   *
-   * **Pelo `id` interno e pelo `ref`, nunca por quem pediu e NUNCA pelo
-   * endereco.** A trilha registra que houve decisao e qual foi; o endereco de
-   * entrega e dado pessoal e nao e copiado para `audit.events` -- nem em
-   * `before`, nem em `after`, nem em `metadata`. `before`/`after` carregam so
-   * o `status`, que e o que mudou.
+   * A escrita e o evento da trilha na MESMA transacao, pela unidade de trabalho de
+   * `EscritaAuditada`: falha da trilha desfaz a decisao (D49).
    */
   private async decidir(
     declaracao: DeclaracaoDeTrilha,
@@ -248,8 +188,6 @@ export class FilaDePlaquinhasAdministrativa {
     ref: string,
     decisao: 'fulfilled' | 'declined',
   ): Promise<PedidoNaFilaDePlaquinhas> {
-    // `comoData` sobre a porta `Clock`, e nunca `new Date()`: o instante da
-    // decisao e o mesmo que o teste controla.
     const agora = comoData(this.deps.clock.now());
     return this.deps.escrita.executar(async (trx) => {
       const atual = await this.deps.repositorio.pedidoPorRef(trx, ref);

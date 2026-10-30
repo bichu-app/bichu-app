@@ -1,17 +1,4 @@
-/**
- * Iscas da redação de canal mediado.
- *
- * O que se prova aqui **não** é "a função tem uma expressão regular de
- * telefone". É que as três evasões nomeadas nos critérios 13 a 16 de
- * `BICHUS-43` não passam, e que o campo continua servindo para o que ele
- * existe.
- *
- * Os dois lados importam na mesma medida, e o segundo é o mais fácil de
- * esquecer: uma redação que engole "toma 2 comprimidos às 8h" cumpre a
- * promessa de privacidade destruindo a informação pela qual `care_notes` foi
- * desenhado — o que quem acabou de achar o animal precisa saber nos próximos
- * cinco minutos. Por isso metade dos casos abaixo é negativa.
- */
+/** Iscas da redação de canal mediado. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { redigirCanalMediado } from './redigir.js';
@@ -34,8 +21,6 @@ void describe('redação de canal mediado — o que precisa sair', () => {
   });
 
   void it('ISCA 1 — largura zero entre os dígitos', () => {
-    // Os dígitos estão na ordem certa e nenhuma regex de dígito consecutivo
-    // casa. Na tela, indistinguível do telefone acima.
     const entrada = 'me liga 1​1​9​8​7​6​5​4​3​2​1';
     assert.deepEqual(tipos(entrada), ['phone']);
     assert.ok(!/\d/.test(texto(entrada)), 'o número sobreviveu à redação');
@@ -59,11 +44,6 @@ void describe('redação de canal mediado — o que precisa sair', () => {
   });
 
   void it('link externo, com e sem protocolo', () => {
-    // O host aqui é neutro de propósito. O portão de portabilidade reprova
-    // literal de host conhecido em `src/`, e ele está certo em ser cego: uma
-    // expressão regular não distingue "host que o código chama" de "texto que o
-    // redator analisa". Afrouxar o portão para acomodar uma fixture sairia mais
-    // caro que trocar a fixture.
     assert.deepEqual(tipos('meu perfil https://perfil-de-teste.link/fulano'), ['external_link']);
     assert.deepEqual(tipos('olha em www.meusite.com.br'), ['external_link']);
     assert.deepEqual(tipos('perfil: instagram.com/fulano'), ['external_link']);
@@ -80,8 +60,6 @@ void describe('redação de canal mediado — o que precisa sair', () => {
   });
 
   void it('ponto de encontro COM número é endereço', () => {
-    // BICHUS-43. A palavra sozinha não basta (ver a isca negativa abaixo), mas
-    // com número ela é endereço como qualquer outro.
     assert.deepEqual(tipos('estou na Praca da Se, 100'), ['address']);
     assert.deepEqual(tipos('moro na Quadra 104'), ['address']);
   });
@@ -113,10 +91,6 @@ void describe('redação de canal mediado — o que NÃO pode sair', () => {
   });
 
   void it('ISCA NEGATIVA — o ponto de encontro público sobrevive (BICHUS-43)', () => {
-    // A mensagem de sistema do canal mediado PEDE que as duas pessoas combinem
-    // um ponto público e movimentado. Redigir a resposta a esse pedido cumpria
-    // a promessa de privacidade impedindo a devolução do animal, que é o único
-    // desfecho pelo qual o produto existe.
     for (const entrada of [
       'consigo te encontrar amanha de manha na praca central',
       'te espero no largo da matriz as 10h',
@@ -129,7 +103,6 @@ void describe('redação de canal mediado — o que NÃO pode sair', () => {
   });
 
   void it('palavra que contém número por extenso não é telefone', () => {
-    // "um" e "seis" isolados são linguagem, não dígito ditado.
     assert.deepEqual(redigirCanalMediado('e um cao docil').retirados, []);
   });
 });
@@ -143,9 +116,6 @@ void describe('redação de canal mediado — propriedades', () => {
   });
 
   void it('a dica NUNCA carrega o que foi retirado', () => {
-    // Devolver o trecho na dica entregaria pela porta do lado o dado que a
-    // função existe para reter — e a dica vai para a tela, para o log e para a
-    // trilha de auditoria.
     const r = redigirCanalMediado('liga 11987654321 ou joao@exemplo.com');
     for (const t of r.retirados) {
       assert.ok(!/\d/.test(t.hint), `dica com dígito: ${t.hint}`);

@@ -1,43 +1,4 @@
-/**
- * A isca do TETO do contrato, que é a outra metade de `tempo-da-redacao.test.ts`.
- *
- * As duas guardam coisas diferentes, e a divisão é o ponto:
- *
- * - a isca de tempo guarda **a expressão regular**: ela reprova se alguém
- *   reintroduzir retrocesso quadrático em `redigir.ts` ou em
- *   `conteudo-do-push.ts`;
- * - esta aqui guarda **o teto**: ela reprova se alguém afrouxar o `maxLength`
- *   dos três campos que alimentam `redigirCanalMediado`.
- *
- * Por que a segunda continua existindo depois de a primeira existir. O conserto
- * tornou a redação linear, então o teto deixou de ser a única defesa contra a
- * parada do laço de eventos. Ele não deixou de ser defesa: a isca de tempo mede
- * 200 KB fixos, e quem remover o `maxLength` passa a alimentar a função com o
- * que couber no `bodyLimit` de 1 MB (`src/shared/http/server.ts`), que é cinco
- * vezes mais. Linear em 1 MB é aceitável; qualquer regressão futura em 1 MB não
- * é, e esta isca acusa o afrouxamento no dia em que ele acontece, com o motivo
- * escrito, em vez de no dia em que ele se combina com outra coisa.
- *
- * **Os três campos e onde eles entram na função**, conferido e não suposto:
- *   `POST /conversations/{conversationId}/messages` `body` -> conversation-service.ts:206
- *   `POST /finder/conversation/messages`            `body` -> primeira-mensagem.ts:114
- *   `PetInput.care_notes`                                  -> pet-service.ts:140
- *
- * O `/v1` que aparece nos caminhos da API mora em `servers[].url`, e não nas
- * chaves de `paths`. A primeira versão desta isca procurou `/v1/...` e não achou
- * nada -- e reprovou dizendo que o teto tinha sumido, que é o comportamento
- * correto de uma verificação que não consegue verificar. O caminho está certo
- * agora; o caso que acusou o engano fica registrado aqui porque ele é a prova
- * de que esta isca não aprova por ausência de dado.
- *
- * `/finder/conversation/messages` está no contrato e ainda não tem rota
- * implementada. O teto dele vale assim mesmo: ele é o número que quem for
- * implementar vai declarar no `schema` do Fastify.
- *
- * O que esta isca NÃO faz: ela não impede que o teto mude. Ela impede que ele
- * mude em silêncio. Quem precisar de um campo maior sobe o número aqui junto,
- * e o commit passa a dizer que a decisão foi tomada.
- */
+/** A isca do TETO do contrato, que é a outra metade de `tempo-da-redacao.test.ts`. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -112,8 +73,6 @@ void describe('SEC-025 — o teto do contrato nos três campos que a redação r
   const spec: unknown = parseYaml(bruto);
 
   void it('encontra `api/openapi.yaml`, ou reprova dizendo que não encontrou', () => {
-    // Verificação que não consegue verificar reprova, nunca aprova: sem o
-    // contrato na mão, todos os casos abaixo passariam por ausência de dado.
     assert.ok(
       typeof spec === 'object' && spec !== null,
       `SEC-025: não consegui ler ${CAMINHO_DA_SPEC} como YAML. Sem o contrato esta isca não ` +

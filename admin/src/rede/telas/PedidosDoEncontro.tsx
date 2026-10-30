@@ -1,15 +1,4 @@
-/**
- * 4 · Rede: pedidos para participar (25.5.2, UX 29.10, BO-10 e BO-11).
- *
- * So existe em encontro privado. Abas Pendentes, Aprovados e Recusados, com a
- * contagem de cada uma. **Aprovar nao tem volta** (o tutor ja viu o local); a
- * recusa pode ser desfeita aprovando depois, e nao avisa a pessoa.
- *
- * A leitura da fila e a unica leitura de pessoa do painel (D53 a D57): cada
- * chamada vai para a trilha e o teto conta LINHAS devolvidas (300 por hora).
- * Por isso a aba aberta pede a pagina (ate 50) e as outras duas pedem so a
- * contagem, com `limit=1`: tres abas custam no maximo 52 linhas, e nao 150.
- */
+/** 4 · Rede: pedidos para participar (25.5.2, UX 29.10, BO-10 e BO-11). */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
@@ -72,7 +61,6 @@ export default function PedidosDoEncontro() {
 
   const privado = typeof encontro === 'object' && encontro.visibility === 'private';
   const chaveDaFila = `${aba}:${versao}`;
-  // Cancelado, removido ou encerrado nao recebe decisao (409 event-not-open): a tela ja nao oferece.
   const fechado =
     fechadoPeloServidor || (typeof encontro === 'object' && (encontro.publication_status !== 'published' || encontro.timing === 'ended'));
   const fila: Fila = filaGuardada.chave === chaveDaFila ? filaGuardada : { fase: 'carregando' };
@@ -100,7 +88,6 @@ export default function PedidosDoEncontro() {
     if (!privado) return;
     let ativo = true;
     void rede.pedidos(eventSlug, aba, 1).then((r) => ativo && aplicar(r, 1));
-    // So a contagem das outras abas: `limit=1` devolve no maximo uma linha.
     for (const outra of ABAS.filter((x) => x !== aba)) {
       void rede.contarPedidos(eventSlug, outra).then((r) => {
         if (ativo && r.ok) setContagens((c) => ({ ...c, [outra]: r.dados.total }));
@@ -123,7 +110,6 @@ export default function PedidosDoEncontro() {
       else n.set('aba', nova);
       return n;
     });
-    // As tres abas estao sempre na arvore: o foco vai direto, sem esperar a troca da URL.
     if (focar) abasRef.current?.querySelector<HTMLButtonElement>(`[data-aba="${nova}"]`)?.focus();
   }
 
@@ -137,8 +123,9 @@ export default function PedidosDoEncontro() {
   }
 
   /**
-   * Depois da decisao, a fila e as contagens mudam aqui mesmo, sem nova leitura: cada
-   * leitura da fila vai para a trilha e conta no teto de 300 linhas por hora (D56).
+   * Depois da decisao, a fila e as contagens mudam aqui mesmo, sem nova leitura:
+   * cada leitura da fila vai para a trilha e conta no teto de 300 linhas por hora
+   * (D56).
    */
   function aplicarDecisao(antes: EstadoDoPedido, depois: Pedido) {
     setContagens((c) => ({
@@ -162,16 +149,13 @@ export default function PedidosDoEncontro() {
     setDecidindo(undefined);
     const nome = nomeDe(p);
     if (!r.ok && r.falha.tipo === 'encontro-fechado') {
-      // O encontro fechou (409 event-not-open): nenhuma decisao vai valer; o aviso fixo da fila diz isso.
       setAviso(undefined);
       setFechadoPeloServidor(true);
-      // Reler o encontro da o estado certo para a frase (UX 30.7 R2).
       void rede.obter(eventSlug).then((e) => e.ok && setEncontro(e.dados));
       return;
     }
     if (!r.ok) {
       setAviso({ tipo: 'erro', texto: mensagemDaFalha(r.falha, decisao === 'aprovar' ? 'aprovar o pedido' : 'recusar o pedido') });
-      // Pedido ja decidido por outra pessoa: a fila em tela esta velha, e so entao se rele.
       if (r.falha.tipo === 'validacao') setVersao((v) => v + 1);
       return;
     }
@@ -182,7 +166,6 @@ export default function PedidosDoEncontro() {
         : { tipo: 'ok', texto: `Pedido de ${nome} recusado. A pessoa não é avisada.`, desfazer: r.dados },
     );
   }
-
 
   if (encontro === undefined) {
     return (

@@ -1,12 +1,4 @@
-/**
- * A mensagem de abertura (critério 2), e o que ela **não** deixa passar.
- *
- * O caso que mais importa aqui é o do recado: `found_reports.notes` guarda o
- * que o achador digitou, sem redação nenhuma, porque a coluna nasceu antes
- * desta história. Quando aquele texto atravessa para o tutor, ele vira mensagem
- * do canal mediado — e o primeiro recado é o mais provável de todos a conter um
- * telefone, porque quem o escreve está com o animal na mão e quer resolver.
- */
+/** A mensagem de abertura (critério 2), e o que ela **não** deixa passar. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,8 +28,6 @@ void describe('o texto do critério 2', () => {
   });
 
   void it('no dia seguinte deixa de dizer "hoje" e diz a data', () => {
-    // Um aviso lido no dia seguinte dizendo "hoje" manda o tutor procurar o
-    // animal na hora errada. Parece detalhe de texto e custa uma tarde.
     const { texto } = primeiraMensagemDoSistema({ ...BASE, agora: DIA_SEGUINTE });
     assert.equal(texto, 'Alguém escaneou a tag da Aurora em 22/09 às 15:30.');
   });
@@ -79,9 +69,6 @@ void describe('o recado do achador atravessa REDIGIDO', () => {
   });
 
   void it('ISCA NEGATIVA — recado sem dado de contato sobrevive inteiro', () => {
-    // Metade da prova é esta. Uma redação que engole "ele está mancando da pata
-    // de trás" cumpre a promessa de privacidade destruindo a informação pela
-    // qual a mensagem existe.
     const recado = 'ele está mancando da pata de trás e bebeu água às 14h';
     const { texto, retirados } = primeiraMensagemDoSistema({ ...BASE, recado });
     assert.deepEqual(retirados, []);

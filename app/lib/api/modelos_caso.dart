@@ -1,35 +1,7 @@
 /// Os modelos do caso de perdido (`LostCase`, `LostCaseReachPreview`).
-///
-/// Recorte de `components/schemas` de `api/openapi.yaml`. O contrato e entrada,
-/// nao sugestao: campo que nao esta la nao aparece aqui.
-///
-/// **A coordenada nao esta neste arquivo, e a ausencia e a regra e nao um
-/// esquecimento.** O servidor nao devolve `last_seen_location` em resposta
-/// nenhuma, nem para o dono (`lost-case-routes.ts`, `comoRespostaDoCaso`): ele
-/// ja sabe onde o pet dele sumiu, e o campo so existiria para vazar depois. Um
-/// modelo que declarasse o campo convidaria a primeira tela com pressa a
-/// preenche-lo.
 library;
 
 /// `#/components/schemas/AlertDispatch/properties/reach_status` do contrato.
-///
-/// `LostCaseReachPreview.reach_status` e `AlertDispatch.reach_status`.
-///
-/// **As quatro respostas nao se confundem, e e nisto que esta o produto.** O
-/// erro que este enum existe para impedir e escrever `0` onde a verdade e
-/// "nao sei":
-///
-/// | valor | o que quer dizer |
-/// |---|---|
-/// | `computed` | contamos, e o numero e este -- **inclusive zero** |
-/// | `unavailable` | havia centro e o calculo nao respondeu |
-/// | `noLocation` | nao ha centro: **nao havera alerta** |
-/// | `queued` | o disparo ficou para depois (so em `AlertDispatch`) |
-///
-/// `desconhecido` nao esta no contrato: e o que este build faz com um valor
-/// que ele nao conhece. Versao antiga do app fica instalada por semanas depois
-/// de o servidor ganhar um estado novo, e um `switch` cego derrubaria a tela
-/// inteira do caso aberto -- justamente a tela de quem esta em panico.
 enum EstadoDoAlcance {
   calculado('computed'),
   indisponivel('unavailable'),
@@ -49,12 +21,8 @@ enum EstadoDoAlcance {
   }
 }
 
-/// `#/components/schemas/LostCaseReachPreview/properties/blockers/items` do contrato.
-///
-/// `LostCaseReachPreview.blockers`: o que impede abrir o caso.
-///
-/// **Falta de coordenada nao esta aqui**, e o contrato diz isso por escrito:
-/// ela reduz o alcance, nao a existencia do caso.
+/// `#/components/schemas/LostCaseReachPreview/properties/blockers/items` do
+/// contrato.
 enum BloqueioDoCaso {
   canalDeContatoNaoVerificado('contact_channel_unverified'),
   petSemFoto('pet_photo_missing'),
@@ -74,14 +42,6 @@ enum BloqueioDoCaso {
 }
 
 /// `Area`: onde o pet foi visto, **em texto**.
-///
-/// Bairro e cidade sao o nivel maximo de precisao que sai em superficie
-/// publica (ADR-0010), entao esta representacao nao perde nada na exibicao.
-/// Ela perde no alerta, que precisa de um centro para ter raio.
-///
-/// [cidade] e o unico campo obrigatorio do contrato, e o motivo esta no teste
-/// de dominio do servidor: "ha Centro em toda cidade do pais". Bairro sem
-/// cidade nao localiza nada.
 class AreaDoAvistamento {
   const AreaDoAvistamento({
     required this.cidade,
@@ -93,9 +53,7 @@ class AreaDoAvistamento {
   final String? bairro;
   final String? uf;
 
-  /// Ha o minimo para abrir o caso? A mesma pergunta que `temOndeSuficiente`
-  /// responde no servidor, feita aqui **antes** de gastar uma viagem de rede
-  /// de quem esta com 11% de bateria.
+  /// Ha o minimo para abrir o caso?
   bool get suficiente => cidade.trim().isNotEmpty;
 
   Map<String, dynamic> paraJson() => <String, dynamic>{
@@ -117,7 +75,8 @@ class AreaDoAvistamento {
   }
 }
 
-/// `LostCaseReachPreview`: quantos tutores o alerta alcanca, **antes** de abrir.
+/// `LostCaseReachPreview`: quantos tutores o alerta alcanca, **antes** de
+/// abrir.
 class PreviaDoAlcance {
   const PreviaDoAlcance({
     required this.estado,
@@ -130,10 +89,6 @@ class PreviaDoAlcance {
   final EstadoDoAlcance estado;
 
   /// Nulo quando [estado] nao e [EstadoDoAlcance.calculado].
-  ///
-  /// **A tela nao pode trocar este nulo por zero.** Sao respostas opostas: com
-  /// zero a pessoa aprende que compartilhar alcanca mais gente hoje que o
-  /// alerta; com "nao sei" ela nao aprende nada e nao desiste do alerta.
   final int? tutoresAlcancaveis;
 
   final int raioEmMetros;
@@ -172,8 +127,7 @@ class DisparoDoAlerta {
 
   final EstadoDoAlcance estado;
 
-  /// Nulo sempre que [estado] nao e [EstadoDoAlcance.calculado]. Mesmo cuidado
-  /// de [PreviaDoAlcance.tutoresAlcancaveis].
+  /// Nulo sempre que [estado] nao e [EstadoDoAlcance.calculado].
   final int? destinatarios;
 
   final int raioEmMetros;
@@ -189,30 +143,15 @@ class DisparoDoAlerta {
 }
 
 /// `#/components/schemas/LostCaseClosure/properties/outcome` do contrato.
-///
-/// **Nao ha valor `desconhecido` aqui, ao contrario de `StatusDoPet`.** A
-/// diferenca e a direcao: aquele enum LE o que o servidor manda, e precisa
-/// sobreviver a um valor que este build nao conhece; este ESCREVE no corpo de
-/// um pedido, e um valor que o contrato nao declara seria 400. Enum de entrada e
-/// enum de saida nao se parecem.
 enum DesfechoDoCaso {
   /// O animal voltou. **E o unico que conta no numerador da metrica de
   /// reencontro**, que o contrato chama de instrumento de medicao do produto.
   reencontrado('reunited'),
 
-  /// A procura terminou sem o animal. Conta no denominador.
+  /// A procura terminou sem o animal.
   naoEncontrado('not_found'),
 
   /// O caso foi aberto por engano, e o animal nunca esteve perdido.
-  ///
-  /// **Sai do numerador E do denominador** da metrica, e e por isso que ele
-  /// existe: sem ele o tutor responde "voltou" e um caso que nunca foi perdido
-  /// entra na conta de reencontro.
-  ///
-  /// O contrato o oferece **somente** quando o caso tem menos de 6 horas e
-  /// nenhum aviso ou candidato. Nenhuma tela deste app tem esses tres numeros
-  /// em maos hoje -- eles sairiam de `GET /lost-cases/{caseId}` --, e por isso
-  /// nenhuma o envia.
   abertoPorEngano('false_alarm');
 
   const DesfechoDoCaso(this.valor);
@@ -221,10 +160,6 @@ enum DesfechoDoCaso {
 }
 
 /// `#/components/schemas/LostCaseClosure/properties/reunion_channel`.
-///
-/// **So faz sentido com [DesfechoDoCaso.reencontrado]**, e e o que torna a
-/// metrica de reencontro atribuivel a um canal. Nenhuma tela deste app o manda
-/// hoje: ver a prosa de `CasosApi.encerrarCaso`.
 enum CanalDoReencontro {
   pelaTag('tag_scan'),
   peloAlerta('bichu_alert'),
@@ -264,8 +199,7 @@ class CasoDePerdido {
 
   /// `has_location`. **Falso quando o caso nasceu so com area**, e e ele que
   /// manda na tela: com ele falso F3.3 nao mostra a secao de alerta vazia,
-  /// mostra a explicacao no lugar dela. Secao vazia num caso aberto parece
-  /// defeito, e faz a pessoa tocar de novo (criterio 9).
+  /// mostra a explicacao no lugar dela.
   final bool temLocalizacao;
 
   final DisparoDoAlerta alerta;
@@ -273,27 +207,9 @@ class CasoDePerdido {
   final String? urlDoCartaz;
 
   /// `reopen_deadline`: ate quando este encerramento da para desfazer.
-  ///
-  /// **Nulo e o estado normal de um caso ABERTO**, e nulo tambem e o que chega
-  /// de um servidor que nao manda o campo. A tela trata os dois igual -- sem
-  /// prazo, sem oferta de reabrir -- e isso e deliberado: `?? ` com um valor
-  /// de verdade aqui seria a terceira repeticao do defeito que esta casa ja
-  /// pagou, em que o servidor devolvia `owner_notified: true`, a tela afirmava
-  /// isso em texto fixo E o desserializador tinha `?? true`. Tres lugares
-  /// mentindo juntos, e nenhum deles media nada.
-  ///
-  /// **O app NAO recalcula a janela.** Os 7 dias sao numero de produto: o
-  /// contrato os escreve em `closeLostCase` ("Encerrar e reversivel por 7
-  /// dias"), o servidor os grava em `reopen_deadline`, e refazer a conta sobre
-  /// `closed_at` aqui poria uma segunda fonte no bolso de quem nao atualiza o
-  /// aplicativo. Quem decide se da para reabrir e esta data.
   final DateTime? prazoDeReabertura;
 
   /// Se a janela de reabertura esta aberta **neste instante**.
-  ///
-  /// `agora` entra como argumento, e nao sai de `DateTime.now()` aqui dentro:
-  /// a tela precisa poder medir isto com um relogio de bancada, e um relogio
-  /// escondido num getter e um teste que so passa no dia certo.
   bool janelaDeReaberturaAberta(DateTime agora) {
     final prazo = prazoDeReabertura;
     return prazo != null && prazo.isAfter(agora);
@@ -302,8 +218,6 @@ class CasoDePerdido {
   factory CasoDePerdido.doJson(Map<String, dynamic> json) {
     final vistoEm = json['last_seen_at'] as String?;
     return CasoDePerdido(
-      // Sem `??`, de proposito: caso sem identidade nao e caso degradado, e
-      // uma tela de resultado apontando para nada e pior que um estouro aqui.
       id: json['id'] as String,
       petId: json['pet_id'] as String? ?? '',
       status: json['status'] as String? ?? 'open',
@@ -319,8 +233,6 @@ class CasoDePerdido {
       ),
       urlDeCompartilhar: json['share_url'] as String?,
       urlDoCartaz: json['poster_url'] as String?,
-      // SEM `??` de valor: campo ausente e prazo ausente, e prazo ausente nao
-      // oferece reabrir. Ver a prosa de [prazoDeReabertura].
       prazoDeReabertura: DateTime.tryParse(
         json['reopen_deadline'] as String? ?? '',
       ),
@@ -330,17 +242,6 @@ class CasoDePerdido {
 
 /// `MatchCandidate`: uma possivel correspondencia entre o caso do tutor e um
 /// aviso de achado.
-///
-/// ## O `score` NAO esta aqui, e a ausencia e a regra
-///
-/// O contrato o declara obrigatorio em `MatchCandidate`, e o criterio 2 da
-/// BICHUS-86 proibe exibi-lo: *"o numero ordena a lista e nao vai para a tela,
-/// porque numero inventa precisao que o sistema nao tem"*. O servidor **ja
-/// ordena** por ele, e a lista chega na ordem certa — entao o app nao precisa
-/// do campo para nada, e um campo que existe no modelo acaba numa tela.
-///
-/// Quem pagina usa [proximoCursor] da pagina, que carrega a posicao opaca. O
-/// app nao recalcula ordem nenhuma.
 class CandidatoDeCorrespondencia {
   const CandidatoDeCorrespondencia({
     required this.id,
@@ -357,15 +258,13 @@ class CandidatoDeCorrespondencia {
   /// `MatchCandidate.id`. E o que a rota de decidir pede no caminho.
   final String id;
 
-  /// `suggested`, `confirmed` ou `rejected`. Texto e nao enum fechado: valor
-  /// novo no contrato nao pode derrubar a lista do tutor em panico.
+  /// `suggested`, `confirmed` ou `rejected`.
   final String status;
 
   /// `found_report.found_at`: quando o animal foi visto por quem avisou.
   final DateTime avisoEm;
 
-  /// Bairro e cidade, em texto. **Nunca coordenada**: nao ha geocodificacao
-  /// (ADR-0006), e o servidor nao devolve ponto nenhum nesta resposta.
+  /// Bairro e cidade, em texto.
   final String? rotuloDaArea;
 
   final String? especie;
@@ -375,7 +274,7 @@ class CandidatoDeCorrespondencia {
   /// Nulo quando o caso ou o achado nao tem coordenada.
   final int? distanciaEmMetros;
 
-  /// O que bateu, e nao quanto cada coisa pesou. O peso e a metade do `score`.
+  /// O que bateu, e nao quanto cada coisa pesou.
   final List<String> atributosQuePontuaram;
 
   bool get aguardandoDecisao => status == 'suggested';
@@ -384,8 +283,6 @@ class CandidatoDeCorrespondencia {
     final aviso = json['found_report'] as Map<String, dynamic>? ??
         const <String, dynamic>{};
     return CandidatoDeCorrespondencia(
-      // Sem `??`: candidato sem identidade nao da para decidir, e uma linha que
-      // aponta para nada e pior que um estouro aqui.
       id: json['id'] as String,
       status: json['status'] as String? ?? 'suggested',
       avisoEm:
@@ -405,17 +302,12 @@ class CandidatoDeCorrespondencia {
 }
 
 /// `CandidatePage`.
-///
-/// **Lista vazia e um estado legitimo e frequente**, e nao erro: a maior parte
-/// dos casos nao tem correspondencia nenhuma no primeiro dia. A tela diz isso
-/// em uma linha, e nao com cara de falha.
 class PaginaDeCandidatos {
   const PaginaDeCandidatos({required this.itens, this.proximoCursor});
 
   final List<CandidatoDeCorrespondencia> itens;
 
-  /// Valor **opaco**: o app o devolve como veio e nao o interpreta. Nulo quando
-  /// nao ha proxima pagina.
+  /// Valor **opaco**: o app o devolve como veio e nao o interpreta.
   final String? proximoCursor;
 
   factory PaginaDeCandidatos.doJson(Map<String, dynamic> json) {

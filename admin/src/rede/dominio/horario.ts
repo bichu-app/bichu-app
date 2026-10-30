@@ -1,11 +1,3 @@
-/**
- * Conversao entre o campo `datetime-local` (hora de parede, sem fuso) e o
- * instante do contrato (`date-time` em UTC), sempre pelo fuso do encontro
- * (`time_zone`, padrao `America/Sao_Paulo`, que a tela chama de "Horario de
- * Brasilia"). O deslocamento vem do `Intl`, nunca de um -03:00 fixo: se o
- * horario de verao voltar, o calculo continua certo.
- */
-
 export const FUSO_PADRAO = 'America/Sao_Paulo';
 
 interface Partes {

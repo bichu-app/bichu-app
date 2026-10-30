@@ -1,37 +1,4 @@
-/**
- * ISCA (e): ACIMA DE 5 MB É RECUSADO NO SERVIDOR, ANTES DE ASSINAR.
- *
- * Mede o PREPARADOR DE VERDADE, com o propósito `user_showcase`. Mora em
- * `media/application/` e não no módulo da vitrine porque é aqui que a recusa
- * vive, e a fronteira da arquitetura não deixa `showcase` importar
- * `media/application` — ela está certa: o que a vitrine enxerga é a porta.
- *
- * ## Por que "antes de assinar" é a parte que importa
- *
- * O backend **nunca recebe os bytes** (ADR-0007): o app envia direto ao
- * armazenamento. Uma conferência de tamanho feita *depois* não recusa nada —
- * reclama de um objeto já gravado e já pago. O teto tem de estar na **política
- * assinada**, e o `byte_size` declarado tem de ser recusado **antes** de a
- * assinatura existir, porque uma política assinada vale dez minutos e **não se
- * desfaz**.
- *
- * É por isso que estes casos medem **se alguma assinatura foi pedida**, e não só
- * o código de erro: recusar com 400 *depois* de assinar produz a mesma resposta
- * ao cliente e deixa a autorização de escrita de pé no armazenamento.
- *
- * ## O dublê é o ARMAZENAMENTO, e só ele
- *
- * Uma versão anterior destes casos dublava o PREPARADOR, e por isso
- * `byte_size` acima do teto **passava**: o dublê não tinha como recusar, porque
- * a recusa está aqui. O teste media a si mesmo. Agora o que é de mentira é a
- * chamada de rede; as conferências de tipo, tamanho e propósito são as de
- * produção.
- *
- * O número vem de `TETO_DE_BYTES_DO_ENVIO`, o PONTO ÚNICO. Ele já existiu em
- * três lugares com três números (10 MiB na foto de pet, 2 MiB na do achado,
- * 5 MiB no catálogo), e um teste que repetisse o literal continuaria verde no
- * dia em que um deles divergisse.
- */
+/** ISCA (e): ACIMA DE 5 MB É RECUSADO NO SERVIDOR, ANTES DE ASSINAR. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarPreparadorDeEnvioDeCatalogo } from './preparar-envio-de-catalogo.js';

@@ -1,32 +1,7 @@
 /**
  * `/v1/admin/store/...` e `/v1/admin/media/catalog-image-intents`: a escrita
- * administrativa da `Loja` (BICHUS-266 e BICHUS-267; ADR-0027 itens 7, 8, 10,
- * 11 e 14).
- *
- * ## O que NAO esta aqui, porque ja aconteceu antes
- *
- * Estas rotas so sobem dentro de `escoparRotasAdministrativas`, e a guarda do
- * escopo roda antes de qualquer gancho delas: `X-Internal-Surface` (404),
- * recusa de `Authorization` (401), sessao em cookie (401), `Origin` e
- * `X-CSRF-Token` em metodo nao seguro (403) e o papel de `adminRoles` (403).
- * `registrarRota` fecha o corpo antes do Ajv (campo desconhecido: 400).
- * Retirar o item nao pede mais reautenticacao desde 07/10/2026 (decisao do
- * cliente, ADR-0027 item 23).
- * **Nenhuma verificacao de papel mora aqui nem no caso de uso** (item 7).
- *
- * ## A declaracao e a do contrato
- *
- * Papel, trilha, escopo de reautenticacao e teto sao copiados do contrato, e
- * `rotas-registradas-contra-o-contrato` e `admin-store-routes.test.ts` os
- * comparam. O balde compartilhado (`admin_write`, `admin_publication`) sai da
- * `note` do contrato, que e o unico lugar onde ele esta escrito (D52).
- *
- * ## Nenhum UUID interno na resposta
- *
- * As projecoes do dominio nao carregam `id`. A unica excecao e `upload_id` da
- * intencao de envio, que o contrato declara (`UploadIntent`, ADR-0007): e o
- * identificador que o painel devolve na escrita que confirma, e nao aponta para
- * nada que exista antes dela.
+ * administrativa da `Loja` (BICHUS-266 e BICHUS-267; ADR-0027 itens 7, 8, 10, 11 e
+ * 14).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -53,7 +28,10 @@ import type {
 } from '../../application/catalogo-administrativo.js';
 import type { OrdemDoPainel } from '../../ports/catalogo-administrativo.js';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas administrativas. */
+/**
+ * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
+ * administrativas.
+ */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -62,7 +40,10 @@ const BALDE_DE_ESCRITA = {
   onExceed: 'deny_429',
 } as const satisfies RateLimitEntry;
 
-/** D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de evento. */
+/**
+ * D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de
+ * evento.
+ */
 const BALDE_DE_PUBLICACAO = {
   bucket: 'admin_publication',
   dimension: ['account'],
@@ -185,8 +166,7 @@ export const rotaDePublicarItem = defineRoute({
 
 /**
  * Retirar item publicado exige `X-Admin-Reauth-Token` do escopo
- * `store_item_retirement` (D40). A exigencia nasce desta declaracao: o registro
- * instala o portao antes de qualquer gancho da rota, e a janela e consumida ali.
+ * `store_item_retirement` (D40).
  */
 export const rotaDeRetirarItem = defineRoute({
   operationId: 'retireAdminStoreItem',
@@ -199,9 +179,8 @@ export const rotaDeRetirarItem = defineRoute({
 });
 
 /**
- * `irreversible_write` e o efeito que o contrato declara: a politica assinada
- * vale dez minutos e nao se revoga. Teto proprio (60 por hora), fora dos baldes
- * compartilhados, como o contrato o escreve.
+ * `irreversible_write` e o efeito que o contrato declara: a politica assinada vale
+ * dez minutos e nao se revoga.
  */
 export const rotaDeIntencaoDeImagemDeCatalogo = defineRoute({
   operationId: 'createAdminCatalogImageIntent',
@@ -223,15 +202,9 @@ const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 50;
 const ORDEM_PADRAO: OrdemDoPainel = 'curadoria';
 
-/**
- * A conta do teto sai da sessao que a guarda pendurou. `preValidation` roda
- * depois do `onRequest` da guarda, entao ela ja existe; se nao existir, a
- * entrada e pulada, e a guarda ja respondeu antes disso.
- */
+/** A conta do teto sai da sessao que a guarda pendurou. */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
-  // `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem
-  // chave (ADR-0027 item 20.2).
   return conta === undefined ? undefined : `admin:${conta}`;
 };
 
@@ -285,8 +258,6 @@ export function registrarRotasDaLojaAdministrativa(
   const { catalogo, contrato } = deps;
   const resolvedores = { account: contaDoTeto };
 
-  // --------------------------------------------------------------- parceiros
-
   registrarRota(app, rotaDeListarParceiros, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDeParceiros;
     const termo = query.q?.trim();
@@ -330,8 +301,6 @@ export function registrarRotasDaLojaAdministrativa(
     },
   );
 
-  // -------------------------------------------------------------------- tags
-
   registrarRota(app, rotaDeListarTags, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDeParceiros;
     const termo = query.q?.trim();
@@ -369,8 +338,6 @@ export function registrarRotasDaLojaAdministrativa(
       return reply.header('ETag', alterada.etag).send(alterada.recurso);
     },
   );
-
-  // ------------------------------------------------------------------- itens
 
   registrarRota(app, rotaDeListarItens, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDeItens;
@@ -438,8 +405,6 @@ export function registrarRotasDaLojaAdministrativa(
     );
     return reply.header('ETag', retirado.etag).send(retirado.recurso);
   });
-
-  // ----------------------------------------------------- imagem de catalogo
 
   registrarRota(
     app,

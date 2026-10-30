@@ -1,54 +1,6 @@
 /**
  * Portão da retenção declarada (ADR-0010, emenda 6 de 26/10/2026 — decisão do
  * cliente: *"não apague nada, mantenha e corrija a política"*).
- *
- * Ele responde duas perguntas diferentes, e elas têm forças diferentes. A
- * distinção está escrita aqui porque um portão que não diz o que NÃO mede é
- * lido como prova do que não provou.
- *
- * ## Pergunta 1 — a política publicada voltou a dizer prazo vago?
- *
- * **Isca provada.** O arquivo `web/src/conteudo/juridico/privacidade.md` é o
- * texto que vai ao ar em bichu.app. Em 26/10 ele tinha **dez** células de
- * "por quanto tempo" dizendo *"Ainda não definido"*, mais quatro frases de
- * prosa com a mesma lacuna. A emenda 6 as substituiu por redação que amarra a
- * guarda à finalidade. Esta parte do portão reprova se qualquer uma delas
- * voltar, e {@link autoTeste} prova que ela reprova — com célula vaga
- * sintética e com célula boa sintética, nas duas direções.
- *
- * ## Pergunta 2 — apareceu expurgo por prazo em `src/` sem decisão escrita?
- *
- * **GUARDA, e não isca provada contra a intenção.** Ela mede uma coisa bem
- * definida e NÃO mede outra, e a fronteira é esta:
- *
- * - **Mede:** um `DELETE` sobre tabela do produto cujo predicado compara uma
- *   coluna de tempo com um instante, feito em `src/` fora de teste, sobre uma
- *   tabela que não está em {@link EXPURGOS_DECLARADOS}. Reprova pelo nome da
- *   tabela.
- * - **Mede:** que cada entrada de {@link EXPURGOS_DECLARADOS} aponte para uma
- *   decisão escrita que **resolve** — o arquivo existe e contém o trecho
- *   citado. Decisão que some, ou que é reescrita, derruba o portão.
- * - **Mede:** que cada entrada declarada continue tendo expurgo no código. Uma
- *   lista que sobrevive ao código que ela descreve para de medir em silêncio, e
- *   esta é também a prova de que a varredura ainda está achando algo.
- * - **NÃO mede** se a decisão citada é de verdade uma decisão do cliente.
- *   Quem acrescentar uma entrada e escrever um arquivo de decisão para ela
- *   passa. O que o portão faz nesse caso é obrigar o ato a ser **deliberado e
- *   escrito** em vez de silencioso — e é só isso que ele faz.
- * - **NÃO mede** expurgo que não passe por `DELETE` em `src/`: `pg_cron`,
- *   política de ciclo de vida de balde, rotina em migração, `TRUNCATE`, ou
- *   apagamento feito à mão no banco. Em 26/10 nenhum desses existia
- *   (`grep -rniE "pg_cron|cron" migrations/ infra/` não achou agendador de
- *   banco), e o portão não alcançaria se existisse.
- * - **NÃO mede** nome de tabela montado por concatenação, pela mesma razão que
- *   `portao-cadastros-separados.ts` registra.
- *
- * ## Verificação que não consegue verificar REPROVA
- *
- * Política ilegível, zero células de prazo encontradas, zero arquivos varridos
- * em `src/`: todos terminam em reprovação com o motivo. Nenhum deles aprova por
- * falta do que conferir — "o filtro não casou" e "está limpo" não podem ter a
- * mesma cor.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -59,14 +11,7 @@ export const POLITICA = 'web/src/conteudo/juridico/privacidade.md';
 /** O cabeçalho que marca a coluna de prazo de guarda nas tabelas da política. */
 const COLUNA_DE_PRAZO = 'por quanto tempo';
 
-/**
- * A redação vaga, por extenso. São as formas que a política de fato usava antes
- * da emenda 6, mais as vizinhas óbvias — "a definir", "TBD", "indefinido".
- *
- * Comparação **sem acento e sem caixa**: `naoAcentuado` normaliza as duas
- * pontas, porque "Ainda Não Definido" e "ainda nao definido" são a mesma
- * lacuna, e um portão que só pega uma delas não pega nenhuma.
- */
+/** A redação vaga, por extenso. */
 export const REDACOES_VAGAS: readonly string[] = [
   'ainda nao definido',
   'ainda nao esta definido',
@@ -101,14 +46,7 @@ export interface CelulaDePrazo {
   readonly forma: 'tabela' | 'prosa';
 }
 
-/**
- * As células de prazo de guarda da política.
- *
- * Duas formas, porque a política usa as duas: a **coluna** "por quanto tempo"
- * das tabelas de cada seção 4.x, e a **prosa** `Por quanto tempo: …` das seções
- * que não têm tabela (4.13 e 4.16). Ler só as tabelas deixaria passar as duas
- * frases de prosa que diziam "ainda não definido" em 26/10.
- */
+/** As células de prazo de guarda da política. */
 export function celulasDePrazo(conteudo: string): CelulaDePrazo[] {
   const linhas = conteudo.split('\n');
   const celulas: CelulaDePrazo[] = [];
@@ -119,17 +57,12 @@ export function celulasDePrazo(conteudo: string): CelulaDePrazo[] {
     const bruta = linha.trim();
 
     if (!bruta.startsWith('|')) {
-      // Fora de tabela a coluna deixa de valer: duas tabelas seguidas podem ter
-      // a coluna de prazo em posições diferentes, e herdar o índice da anterior
-      // leria a célula errada com cara de certa.
       colunaAtual = undefined;
       const prosa = /^por quanto tempo\s*:\s*(.+)$/i.exec(bruta);
       if (prosa?.[1] !== undefined) {
         celulas.push({ linha: i + 1, texto: prosa[1], forma: 'prosa' });
         continue;
       }
-      // `Base legal: …. Por quanto tempo: ….` numa frase só (é assim que 4.13 e
-      // 4.16 escrevem).
       const embutida = /por quanto tempo\s*:\s*([^|]+)$/i.exec(bruta);
       if (embutida?.[1] !== undefined) {
         celulas.push({ linha: i + 1, texto: embutida[1], forma: 'prosa' });
@@ -143,7 +76,6 @@ export function celulasDePrazo(conteudo: string): CelulaDePrazo[] {
       colunaAtual = cabecalho;
       continue;
     }
-    // A linha de separador (`|---|---|`) não é dado.
     if (colunas.every((c) => /^[\s:-]*$/.test(c))) continue;
     if (colunaAtual === undefined) continue;
     const celula = colunas[colunaAtual];
@@ -161,12 +93,7 @@ export interface CelulaVaga {
   readonly redacao: string;
 }
 
-/**
- * As células vagas, e a contagem de quantas foram conferidas.
- *
- * `conferidas` sai junto do veredito de propósito: verde com zero células
- * conferidas é o arquivo que mudou de forma, não a política que ficou boa.
- */
+/** As células vagas, e a contagem de quantas foram conferidas. */
 export function conferirPolitica(conteudo: string): {
   readonly vagas: readonly CelulaVaga[];
   readonly conferidas: number;
@@ -183,10 +110,6 @@ export function conferirPolitica(conteudo: string): {
   return { vagas, conferidas: celulas.length };
 }
 
-// ---------------------------------------------------------------------------
-// Pergunta 2: expurgo por prazo em `src/`
-// ---------------------------------------------------------------------------
-
 export interface ExpurgoDeclarado {
   /** A tabela varrida. */
   readonly tabela: string;
@@ -201,11 +124,6 @@ export interface ExpurgoDeclarado {
 /**
  * Os três expurgos por prazo que existiam em `src/` em 26/10, cada um com a
  * decisão que o sustenta.
- *
- * `trecho` é conferido palavra por palavra no arquivo citado. Não é enfeite: é
- * o que faz "decisão escrita" ser medida em vez de afirmada. Apagar a linha da
- * tabela do ADR-0010, ou reescrevê-la, derruba o portão — e isso é o
- * comportamento desejado, porque o expurgo passaria a rodar sem registro.
  */
 export const EXPURGOS_DECLARADOS: readonly ExpurgoDeclarado[] = [
   {
@@ -233,11 +151,8 @@ export const EXPURGOS_DECLARADOS: readonly ExpurgoDeclarado[] = [
 
 /** O que torna um `DELETE` um expurgo **por prazo**, e não uma edição. */
 const PADROES_DE_PRAZO: readonly RegExp[] = [
-  // Kysely: `.where('expires_at', '<=', x)` / `.where('occurred_at', '<', x)`
   /'(?:\w*(?:_at|_until))'\s*,\s*'<=?'/,
-  // SQL cru: `where occurred_at < $1`, `AND ends_at <= now()`
   /\b\w*(?:_at|_until)\b\s*<=?\s*[^=<]/,
-  // SQL cru: `- make_interval(days => n)` / `now() - interval '90 days'`
   /\bmake_interval\s*\(/,
   /\binterval\s*'/,
 ];
@@ -247,17 +162,7 @@ export interface ExpurgoAchado {
   readonly tabela: string;
 }
 
-/**
- * Os expurgos por prazo de um arquivo.
- *
- * A janela vai do `DELETE` até o `;` que fecha o comando, no máximo 1500
- * caracteres. É ela, e não a linha, que carrega o predicado: tanto a cadeia do
- * Kysely quanto o literal de modelo do SQL cru ocupam várias linhas.
- *
- * **Comentário não conta.** O texto é limpo antes, porque este arquivo e os
- * três módulos de expurgo explicam em prosa o que apagam, e um portão que lesse
- * comentário acusaria a própria documentação da decisão.
- */
+/** Os expurgos por prazo de um arquivo. */
 export function expurgosPorPrazoEm(caminho: string, conteudo: string): ExpurgoAchado[] {
   const texto = semComentarios(conteudo);
   const achados: ExpurgoAchado[] = [];
@@ -303,15 +208,7 @@ export interface Arquivo {
   readonly conteudo: string;
 }
 
-/**
- * `src/` sem teste, sem semente e sem este diretório.
- *
- * - **teste** apaga de propósito para montar cenário;
- * - **`src/bin/seed.ts`** é a massa de desenvolvimento, e ela apaga o que
- *   plantou;
- * - **`src/tools/`** é onde os portões moram, e este arquivo cita expurgo em
- *   literal de isca.
- */
+/** `src/` sem teste, sem semente e sem este diretório. */
 export function arquivosDoProduto(raiz: string): Arquivo[] {
   const saida: Arquivo[] = [];
   const andar = (diretorio: string): void => {
@@ -381,10 +278,6 @@ export function conferirExpurgos(
   };
 }
 
-// ---------------------------------------------------------------------------
-// As iscas, e elas rodam sempre
-// ---------------------------------------------------------------------------
-
 const POLITICA_VAGA = [
   '| O que | Para quê | Base legal | Por quanto tempo |',
   '|---|---|---|---|',
@@ -410,14 +303,7 @@ const SRC_COM_EDICAO = [
   '  .execute();',
 ].join('\n');
 
-/**
- * As iscas, e o que cada uma precisa provar. Devolve a lista de falhas: vazia é
- * aprovado.
- *
- * A quinta é a que dá dente à pergunta 2: uma entrada declarada cujo arquivo de
- * decisão não existe **reprova**. Sem ela, a lista de permissões seria uma lista
- * de nomes e nada mais.
- */
+/** As iscas, e o que cada uma precisa provar. */
 export function autoTeste(): string[] {
   const falhas: string[] = [];
 

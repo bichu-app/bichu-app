@@ -1,43 +1,22 @@
-/**
- * O que o cadastro precisa saber sobre foto, e **nada além**.
- *
- * A porta é declarada aqui, do lado de quem consome, e não importada de
- * `media/ports/`. São três linhas de interface contra um acoplamento: o cadastro
- * não precisa conhecer intenção de envio, chave de objeto, bucket nem
- * armazenamento — ele precisa responder "esta ficha tem foto, e em que estado".
- *
- * Quem satisfaz esta porta é o repositório de mídia, e a ligação entre os dois
- * acontece em `bin/api.ts`, que é o único lugar do sistema que conhece os dois
- * lados. O dia em que a foto vier de outro serviço, muda a linha da fiação.
- *
- * A leitura é **em lote, por lista de pets**, e isso não é otimização
- * prematura: `listMyPets` devolve a lista inteira do tutor, e uma consulta por
- * pet transformaria a tela inicial em N+1 no caminho mais percorrido do app.
- */
+/** O que o cadastro precisa saber sobre foto, e **nada além**. */
 import type { PetId } from '../../../shared/types/brands.js';
 
 export type StatusDaFoto = 'processing' | 'ready' | 'rejected';
 
-/** A foto como a ficha do pet a mostra. Sem chave, sem bucket, sem intenção. */
+/** A foto como a ficha do pet a mostra. */
 export interface FotoResumida {
   readonly id: string;
   readonly status: StatusDaFoto;
-  /**
-   * O motivo da recusa, em texto. Nulo fora de `rejected`.
-   *
-   * Entra nesta porta porque a ficha do pet é onde a pessoa VÊ a foto recusada:
-   * dizer "recusada" sem dizer por quê deixa a tela sem a única informação que
-   * permite consertar o problema.
-   */
+  /** O motivo da recusa, em texto. */
   readonly rejectionReason: string | null;
   readonly isPrimary: boolean;
-  /** Nulas enquanto o worker não gerou as derivadas. Ausência é o valor honesto. */
+  /** Nulas enquanto o worker não gerou as derivadas. */
   readonly thumbUrl: string | null;
   readonly cardUrl: string | null;
   readonly createdAt: Date;
 }
 
 export interface FotosDoPet {
-  /** Mapa de `petId` para as fotos dele. Pet sem foto simplesmente não aparece. */
+  /** Mapa de `petId` para as fotos dele. */
   porPets(pets: readonly PetId[]): Promise<ReadonlyMap<string, readonly FotoResumida[]>>;
 }

@@ -1,20 +1,10 @@
 /// Os modelos que a camada de acesso devolve.
-///
-/// Sao recortes do `components/schemas` de `api/openapi.yaml`, com os campos
-/// que as telas desta entrega usam. O contrato e entrada, nao sugestao: campo
-/// que nao esta la nao aparece aqui.
 library;
 
-// **So `urlDeImagem`, e nao o modulo.** A funcao e a definicao UNICA de
-// "URL de imagem que veio do contrato, ou nulo" neste app: campo ausente,
-// nulo, de outro tipo e string vazia caem todos no mesmo nulo, e
-// `Image.network('')` lanca. `me_api.dart` a importa do mesmo jeito.
 import 'modelos_diretorio.dart' show urlDeImagem;
 
-/// `#/components/schemas/Me/properties/pending_profile_fields/items` do contrato.
-///
-/// O que o contrato chama de `pending_profile_fields`: o que alimenta o aviso
-/// persistente de cadastro incompleto.
+/// `#/components/schemas/Me/properties/pending_profile_fields/items` do
+/// contrato.
 enum PendenciaDeCadastro {
   verificacaoDeEmail('email_verification'),
   telefone('phone'),
@@ -34,17 +24,6 @@ enum PendenciaDeCadastro {
 }
 
 /// `Me.reference_area`: onde o tutor mora, **em texto**.
-///
-/// Os quatro campos sao anulaveis no contrato, inclusive quando o objeto
-/// existe. Ela e a fonte honesta do bairro ja preenchido em F3.1 (criterio 2
-/// da BICHUS-21): **coordenada nao vira nome de bairro**, porque nao ha
-/// geocodificacao no MVP (ADR-0006), e o que a pessoa cadastrou e a unica
-/// regiao que o produto sabe escrever.
-///
-/// **Nao ha coordenada aqui, e nao ha de haver.** O servidor guarda o ponto de
-/// referencia numa coluna geografica propria (BICHUS-92) que nao sai em
-/// resposta nenhuma, e ha portao de contrato que reprova quando
-/// `reference_point` aparece em qualquer corpo.
 class RegiaoDeReferencia {
   const RegiaoDeReferencia({this.bairro, this.cidade, this.uf, this.cep});
 
@@ -53,8 +32,7 @@ class RegiaoDeReferencia {
   final String? uf;
   final String? cep;
 
-  /// Verdadeiro quando ha algo a preencher. Um objeto com os campos nulos
-  /// existe no contrato e nao serve para preencher nada.
+  /// Verdadeiro quando ha algo a preencher.
   bool get temAlgo =>
       (bairro != null && bairro!.isNotEmpty) ||
       (cidade != null && cidade!.isNotEmpty);
@@ -91,87 +69,28 @@ class Usuario {
   final String email;
 
   /// `email_verified`: **o e-mail desta conta foi confirmado**, e so isso.
-  ///
-  /// **NAO e o selo de validado** -- isso e [canalConfirmado]. Quem le este
-  /// campo e a linha "E-mail confirmado / E-mail nao confirmado" ao lado do
-  /// endereco, na tela de dados pessoais, que fala do e-mail.
   final bool emailVerificado;
 
   /// `contact_channel_verified`: **O SELO DE VALIDADO**, pela mesma regua que
   /// os OUTROS veem desta conta.
-  ///
-  /// `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
-  /// servidor, derivado numa fonte unica
-  /// (`shared/db/canal-de-contato-confirmado.ts`) e com o MESMO nome de campo
-  /// que `PublicationAuthor`, `PersonProfile` e `ConnectionPerson`.
-  ///
-  /// **Entrou em 21/10/2026 por decisao do cliente**: *"Unificar agora, nas
-  /// duas -- a mesma regua (e-mail OU telefone) nos dois lugares, antes de
-  /// telefone existir."* Antes disto o selo do dono era [emailVerificado], que
-  /// e so e-mail, e o selo que os outros veem era e-mail OU telefone. As duas
-  /// coincidiam porque nada no servidor grava `phone_verified_at` -- no dia em
-  /// que telefone confirmar, a mesma conta apareceria validada para os outros e
-  /// nao para si.
-  ///
-  /// **O padrao de ausencia e `false`**, como em todo booleano deste arquivo: o
-  /// APK publicado nao conhece o campo, e um selo que aparecesse por omissao
-  /// seria o pior dos dois erros.
   final bool canalConfirmado;
 
   /// Endereco novo aguardando confirmacao, quando ha troca em curso.
   final String? emailPendente;
 
-  /// Falso apos devolucao definitiva do provedor. Sem isto, o tutor de e-mail
-  /// invalido nunca descobre que ninguem consegue avisa-lo.
+  /// Falso apos devolucao definitiva do provedor.
   final bool emailEntregavel;
 
   final String? nome;
   final List<PendenciaDeCadastro> pendencias;
 
-  /// Falso quando nenhum canal de contato esta verificado. E o que bloqueia
-  /// marcar um pet como perdido.
+  /// Falso quando nenhum canal de contato esta verificado.
   final bool podeAbrirCaso;
 
-  /// A regiao cadastrada pelo tutor, quando ha uma. E o que preenche o bairro
-  /// em F3.1 sem geocodificar nada (criterio 2 da BICHUS-21).
+  /// A regiao cadastrada pelo tutor, quando ha uma.
   final RegiaoDeReferencia? regiaoDeReferencia;
 
   /// `Me.photo.url`: a foto que a PROPRIA pessoa cadastrou, ou nulo.
-  ///
-  /// ## Por que ela passou a ser lida AQUI, e nao so em `Meus dados`
-  ///
-  /// `DadosPessoais` (em `me_api.dart`) ja lia este campo, e so a tela de
-  /// `Meus dados` o desenhava. Mas `SessionResponse.user` aponta para o MESMO
-  /// schema `Me` -- entao a foto **sempre viajou** em `registerUser`, `login`,
-  /// `refreshSession` e `confirmEmailVerification`, e este modelo a descartava.
-  /// O avatar da barra de topo e desenhado em toda tela de secao, por quem le
-  /// a SESSAO e nao `GET /me`: sem este campo, ele nao tinha de onde tirar a
-  /// foto e mostrava o circulo com a inicial para quem tem foto cadastrada --
-  /// que e o defeito que o cliente mediu em 20/10/2026.
-  ///
-  /// **Nao e campo novo de contrato.** Ele esta declarado em `Me.photo` desde
-  /// 18/10, e o que faltava era o app lê-lo.
-  ///
-  /// ## E a derivada `card` (512 x 512), porque e a UNICA que o contrato da
-  ///
-  /// `MyPhoto` tem tres propriedades -- `status`, `url` e `rejection_reason` --
-  /// e `url` e descrita por extenso como *"a derivada `card` (512 x 512,
-  /// JPEG)"*. **Nao existe `thumb_url` em `MyPhoto`**: a `thumb` de 176 px
-  /// aparece no contrato so em `Conversation.participants[].photo_icon_url`, a
-  /// foto de OUTRA pessoa entre conexoes aceitas. Montar a URL da `thumb` aqui
-  /// a partir da `card` seria o cliente derivando chave de armazenamento, e
-  /// isso nao esta prometido em lugar nenhum.
-  ///
-  /// Quem pinta paga `cacheWidth` pela largura PINTADA (`ImagemDaRede`), entao
-  /// o custo em MEMORIA e o do circulo de 32 dp e nao o dos 512 px.
-  ///
-  /// ## Nulo e o estado normal, em quatro casos
-  ///
-  /// Conta sem foto, `processing` (o worker nao terminou), `rejected` (recusada
-  /// nos bytes) e campo ausente -- o APK publicado le esta resposta e nao
-  /// conhece `photo`. **Os quatro desenham a marca neutra**, e a barra de topo
-  /// nao distingue entre eles: `status` e `rejection_reason` sao assunto de
-  /// `Meus dados`, que e a tela que tem o que consertar.
   final String? fotoUrl;
 
   bool get cadastroIncompleto => pendencias.isNotEmpty;
@@ -195,11 +114,6 @@ class Usuario {
       regiaoDeReferencia: RegiaoDeReferencia.doJson(
         json['reference_area'] as Map<String, dynamic>?,
       ),
-      // `photo` e `oneOf: [MyPhoto, null]`, e um `as Map?` cru sobre outro
-      // tipo estoura em tempo de execucao -- aqui isso derrubaria o LOGIN, que
-      // e por onde este corpo passa. O recorte por `is` trata ausente, nulo e
-      // tipo errado do mesmo jeito: sem foto. `urlDeImagem` trata o resto
-      // (vazio, nao-string).
       fotoUrl: urlDeImagem(
         json['photo'] is Map<String, dynamic>
             ? (json['photo'] as Map<String, dynamic>)['url']
@@ -222,21 +136,11 @@ class Sessao {
   final String refreshToken;
 
   /// Instante absoluto em que o access token deixa de valer.
-  ///
-  /// O contrato manda `expires_in` em segundos; guardar o instante e nao a
-  /// duracao e o que faz a sessao continuar correta depois de o app ficar
-  /// horas suspenso em segundo plano.
   final DateTime expiraEm;
 
   final Usuario usuario;
 
   /// A MESMA sessao com outro usuario dentro.
-  ///
-  /// Existe para `PATCH /me`: o corpo da resposta e um `Me` completo e novo, e
-  /// os tokens nao mudam. Sem isto, salvar os dados pessoais atualizaria a tela
-  /// do formulario e deixaria o `Perfil` atras dela dizendo que falta o
-  /// telefone que acabou de ser preenchido. **Nao recria token nenhum**: um
-  /// `Sessao.doJson` sobre a resposta de `/me` nao teria tokens para ler.
   Sessao comUsuario(Usuario novo) => Sessao(
         accessToken: accessToken,
         refreshToken: refreshToken,
@@ -246,8 +150,7 @@ class Sessao {
 
   bool get expirado => DateTime.now().isAfter(expiraEm);
 
-  /// Verdadeiro quando falta pouco para expirar. Renovar antes evita que a
-  /// sessao caia no meio de uma acao.
+  /// Verdadeiro quando falta pouco para expirar.
   bool get quaseExpirado =>
       DateTime.now().isAfter(expiraEm.subtract(const Duration(minutes: 1)));
 

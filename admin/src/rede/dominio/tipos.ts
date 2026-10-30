@@ -1,7 +1,4 @@
-/**
- * Apelidos dos tipos do contrato usados pela Rede. Nada aqui e escrito a mao:
- * tudo sai de `src/api/generated/api.ts`, gerado de `api/openapi.yaml`.
- */
+/** Apelidos dos tipos do contrato usados pela Rede. */
 import type { components, operations } from '../../api/generated/api.ts';
 
 type S = components['schemas'];

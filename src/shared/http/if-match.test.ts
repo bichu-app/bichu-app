@@ -1,11 +1,6 @@
 /**
  * O `If-Match` que volta da borda (hml, 05/10): o `encode` do Caddy sufixa o
  * `ETag` com a codificacao, e o painel devolve o valor sufixado.
- *
- * Iscas: o sufixo de codificacao e o `W/` sao tirados e a versao de dentro
- * continua inteira; sufixo DESCONHECIDO, sufixo sem versao e versao fora da
- * forma continuam invalidos (412). Que a versao velha com sufixo ainda da 412
- * e da integracao, contra o banco.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

@@ -1,50 +1,4 @@
-/**
- * A massa fixa do diretorio de `Perto`: doze entradas, dez publicadas.
- *
- * ## Por que ela mora num arquivo proprio, e nao dentro de `seed.ts`
- *
- * `seed.ts` e o MECANISMO -- as tres travas (ambiente, esquema, determinismo) e
- * a gravacao. Isto e o CONTEUDO. Separar permite que o conteudo seja lido por
- * um teste sem subir banco: as regras que a massa precisa respeitar (nenhum
- * slug repetido, nenhuma entrada publicada sem lugar, variedade de niveis) sao
- * afirmaveis sobre este arquivo, e `massa-do-diretorio.test.ts` as afirma.
- *
- * ## O que ela e, e o que ela nao e
- *
- * Ela existe para o cliente **julgar o visual** da secao. Por isso a variedade
- * importa mais que o volume, e cada entrada abaixo cobre um caso de desenho que
- * uma lista homogenea esconderia:
- *
- * - um nome longo que quebra em duas linhas, e um nome curtissimo ao lado;
- * - uma entrada **sem telefone** -- a tela precisa saber desenhar o cartao sem
- *   botao de ligar;
- * - uma entrada **sem apresentacao**, e uma com apresentacao longa;
- * - uma entrada **sem coordenada**, que e o caso real de hoje: ninguem escreve
- *   `geo` porque nao ha painel. Ela aparece por ultimo, com distancia nula;
- * - os tres niveis de verificacao, `none` inclusive, porque `none` e estado
- *   legitimo e publicavel (passeador e tosa nao tem conselho);
- * - as seis atividades que `professionals.kinds` admite, uma por entrada;
- * - um `draft` e um `hidden`, que **nunca** podem aparecer. Eles nao sao enfeite:
- *   sao o que da o que medir a isca do filtro.
- *
- * ## O que ela NAO promete, porque o banco nao tem onde guardar
- *
- * Horario de funcionamento, rua e numero, foto ou logotipo, site, e-mail, redes
- * sociais, lista de servicos, faixa de preco e avaliacoes. Nenhum desses tem
- * coluna em `professionals`, e inventar o campo na massa faria a tela ser
- * desenhada em cima de dado que a rota nunca vai devolver. O que existe e o que
- * esta abaixo.
- *
- * ## Determinismo
- *
- * `make seed` recria "a massa fixa de qa, deterministica". Todo identificador e
- * literal, todo instante e literal. Nada de `Math.random()` nem de `now()`: uma
- * massa que muda faz o mesmo teste passar hoje e falhar amanha, e a investigacao
- * comeca pelo teste, que esta certo.
- *
- * Os UUIDs sao v7 com o mesmo carimbo de tempo e sufixo sequencial -- validos
- * pela forma e reconheciveis de olho quando aparecem num log.
- */
+/** A massa fixa do diretorio de `Perto`: doze entradas, dez publicadas. */
 import type { TipoDeProfissional } from '../modules/professionals/domain/entrada-do-diretorio.js';
 import type { TipoDeEvidencia } from '../modules/professionals/domain/nivel-de-verificacao.js';
 
@@ -63,25 +17,8 @@ export interface EntradaSemeada {
   readonly titularId: string;
   readonly titularEmail: string;
   /**
-   * O ENDERECO PUBLICO do titular (`users.public_ref`), LITERAL como todo o
-   * resto desta massa.
-   *
-   * `users.public_ref` e `NOT NULL` e SEM valor padrao desde a `20261018000031`
-   * (ADR-0024): quem cria a conta preenche. A massa de QA e um caminho de
-   * criacao de conta como qualquer outro, e ela NAO preenchia -- `make seed`
-   * reprovava com 23502 em `public_ref`. Medido em 19/10/2026 pela suite de
-   * integracao, no caso "a MASSA DE QA grava e a secao aparece ocupada".
-   *
-   * LITERAL e nao sorteado porque a massa e deterministica por contrato:
-   * semear duas vezes tem de deixar o MESMO estado, e o caso "semear duas
-   * vezes deixa o mesmo estado" mede isso. Em producao o valor e sorteado por
-   * linha, em `kysely-identity-repository.ts`.
-   *
-   * 22 simbolos de base64url (`^[A-Za-z0-9_-]{22}$`), e NUNCA derivado do
-   * nome, do e-mail nem do telefone do titular (BICHUS-174): endereco que
-   * carregasse o dono permitiria cruzar as pegadas de uma pessoa entre
-   * superficies. O sufixo repete so o par do `titularId` para a massa continuar
-   * legivel a quem depura, e `titularId` e UUID interno, nao e dado da pessoa.
+   * O ENDERECO PUBLICO do titular (`users.public_ref`), LITERAL como todo o resto
+   * desta massa.
    */
   readonly titularPublicRef: string;
   readonly slug: string;
@@ -91,7 +28,7 @@ export interface EntradaSemeada {
   readonly city: string | null;
   readonly state: string | null;
   readonly neighborhood: string | null;
-  /** `[lon, lat]`, na ORDEM DE `ST_MakePoint`. Nulo quando nao ha ponto. */
+  /** `[lon, lat]`, na ORDEM DE `ST_MakePoint`. */
   readonly ponto: readonly [number, number] | null;
   readonly phoneE164: string | null;
   readonly crmvNumber: string | null;
@@ -115,7 +52,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     titularPublicRef: 'QAmassaDiretorio0000a1',
     slug: 'clinica-santa-barbara',
     kind: 'clinic',
-    // NOME LONGO DE PROPOSITO: 61 caracteres, quebra em duas linhas no cartao.
     displayName: 'Clínica Veterinária Santa Bárbara 24 Horas — Pinheiros',
     about:
       'Pronto atendimento 24 horas, internação, exames de imagem e laboratório ' +
@@ -149,7 +85,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     titularPublicRef: 'QAmassaDiretorio0000a2',
     slug: 'vet-lu',
     kind: 'vet',
-    // NOME CURTISSIMO, ao lado do longo: seis caracteres.
     displayName: 'Vet Lu',
     about: 'Atendimento domiciliar para gatos.',
     city: 'São Paulo',
@@ -182,7 +117,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     state: 'SP',
     neighborhood: 'Pinheiros',
     ponto: [-46.7012, -23.5669],
-    // SEM TELEFONE: a tela precisa saber desenhar o cartao sem botao de ligar.
     phoneE164: null,
     crmvNumber: null,
     crmvUf: null,
@@ -204,7 +138,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     slug: 'passeios-do-rodrigo',
     kind: 'walker',
     displayName: 'Passeios do Rodrigo',
-    // SEM APRESENTACAO: o cartao precisa fechar sem o paragrafo.
     about: null,
     city: 'São Paulo',
     state: 'SP',
@@ -214,8 +147,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     crmvNumber: null,
     crmvUf: null,
     cnpj: null,
-    // NAO VERIFICADO, e publicado assim mesmo: passeador nao tem conselho e
-    // `none` e estado legitimo. E o cartao sem selo, que a tela precisa ter.
     status: 'published',
     verificacoes: [],
   },
@@ -269,8 +200,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
         evidenceKind: 'phone_callback',
         aprovada: true,
       },
-      // PENDENTE: nao conta, e e por isso que ela esta aqui. O nivel desta
-      // entrada precisa sair `contact_verified` e nao `document_verified`.
       {
         id: '0199c3a0-0000-7000-8000-0000000000e7',
         evidenceKind: 'document',
@@ -289,8 +218,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     about: 'Consultas, vacinas e cirurgias eletivas. Estacionamento próprio.',
     city: 'São Paulo',
     state: 'SP',
-    // BAIRRO DISTANTE dos demais: uns 11 km da Paulista, para a ordenacao por
-    // distancia ter o que ordenar em vez de empatar tudo no mesmo quarteirao.
     neighborhood: 'Tatuapé',
     ponto: [-46.5766, -23.5404],
     phoneE164: '+551129415500',
@@ -315,7 +242,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     kind: 'groomer',
     displayName: 'Tosa da Ana',
     about: 'Tosa na tesoura, atendimento com hora marcada, um pet por vez.',
-    // OUTRA CIDADE: para o filtro por cidade ter o que deixar de fora.
     city: 'Santo André',
     state: 'SP',
     neighborhood: 'Vila Assunção',
@@ -339,9 +265,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     city: 'São Paulo',
     state: 'SP',
     neighborhood: 'Lapa',
-    // SEM COORDENADA, e este e o caso REAL de hoje: ninguem escreve `geo`
-    // porque nao existe painel de cadastro. Ela precisa aparecer na lista, por
-    // ultimo, com distancia nula -- e nao sumir.
     ponto: null,
     phoneE164: '+551136778899',
     crmvNumber: '55130',
@@ -382,9 +305,6 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
       },
     ],
   },
-  // ---------------------------------------------------------------------
-  // As duas que NUNCA podem aparecer. Elas sao o que da o que medir a isca.
-  // ---------------------------------------------------------------------
   {
     id: '0199c3a0-0000-7000-8000-0000000000db',
     titularId: '0199c3a0-0000-7000-8000-0000000000ab',
@@ -427,5 +347,5 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
   },
 ];
 
-/** As publicadas, que sao as que a secao `Perto` mostra. Dez. */
+/** As publicadas, que sao as que a secao `Perto` mostra. */
 export const PUBLICADAS = MASSA_DO_DIRETORIO.filter((uma) => uma.status === 'published');

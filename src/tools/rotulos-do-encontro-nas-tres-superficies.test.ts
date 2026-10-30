@@ -1,44 +1,6 @@
 /**
- * Os rotulos de lista fechada do encontro dizem a MESMA coisa nas TRES
- * superficies -- e este arquivo e o unico lugar que confere isso.
- *
- * ## O QUE FOI MEDIDO, EM 21/10/2026, SOBRE `f60ba3fc`
- *
- * Tres mapas de rotulo (`NetworkEventDogAge`, `NetworkEventAmenity`,
- * `NetworkEventBringItem`) existem **tres vezes**, uma por superficie, com
- * **19 frases que o usuario le**:
- *
- * | superficie | arquivo                             | forma          |
- * | ---------- | ----------------------------------- | -------------- |
- * | app        | `app/lib/api/modelos_rede.dart`     | `enum` com rotulo |
- * | painel     | `admin/src/rede/dominio/rotulos.ts` | `Record<Enum, string>` |
- * | site       | `web/src/conteudo/encontro.ts`      | `ROTULOS`      |
- *
- * As 19 **concordavam** no dia da medicao. O problema nao e que elas divirjam
- * hoje: e que **nada reprovava se divergissem**. O comentario do site chega a
- * se declarar copia fiel -- *"com as palavras EXATAS do aplicativo"* -- sem
- * nenhuma conferencia que sustente a afirmacao. Foi assim que a frase de abrir
- * o app de mapas chegou a tres redacoes, **duas delas se declarando copia fiel
- * de uma quarta**, e foi assim que o rotulo do selo chegou a cinco.
- *
- * ## POR QUE UMA GUARDA, E NAO UMA FONTE UNICA
- *
- * As tres superficies sao tres builds: Dart, o pacote do painel e o do site.
- * Nao ha modulo que as tres importem, e **inventar um** -- um pacote de texto
- * publicado, ou geracao de codigo a partir do contrato -- e desenho novo, com
- * decisao de quem toca o produto, e nao refatoracao. Enquanto ele nao existir,
- * o que impede a quarta redacao e esta conferencia.
- *
- * **Portanto: a contagem de copias NAO caiu de 3 para 1 aqui.** Continuam tres.
- * O que mudou e que a divergencia passou a reprovar pelo nome do caso.
- *
- * ## ONDE ESTE ARQUIVO MORA, E POR QUE
- *
- * Em `src/tools/`, ao lado dos outros portoes que leem arquivo de fonte do
- * disco: o `eslint` deste repositorio recusa `node:fs` em `domain/` e
- * `application/`, e a `npm test` ja roda `src/**\/*.test.ts` -- entao esta
- * conferencia entra na esteira sem tocar no `Makefile` nem no `ci.yml`.
- * **Nenhum portao existente de `src/tools/` foi alterado.**
+ * Os rotulos de lista fechada do encontro dizem a MESMA coisa nas TRES superficies
+ * -- e este arquivo e o unico lugar que confere isso.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -50,14 +12,7 @@ const SITE = 'web/src/conteudo/encontro.ts';
 
 type Mapa = Readonly<Record<string, string>>;
 
-/**
- * Recorta o bloco de um seletor, e EXPLODE em vez de devolver vazio.
- *
- * Seletor que deixa de casar e o jeito classico de um portao destes ficar
- * verde sem medir: ele devolveria `{}` nas tres superficies e a comparacao
- * aprovaria por nao ter nada para comparar. Aqui ele estoura, e o controle
- * positivo abaixo ainda confere o TAMANHO de cada mapa.
- */
+/** Recorta o bloco de um seletor, e EXPLODE em vez de devolver vazio. */
 function recortar(texto: string, padrao: RegExp, onde: string): string {
   const casado = padrao.exec(texto);
   if (casado === null || casado[1] === undefined) {
@@ -123,9 +78,6 @@ const GRUPOS = [
 
 void describe('os rótulos do encontro dizem a mesma coisa no app, no painel e no site', () => {
   void it('a leitura achou os 19 rótulos nas três superfícies, e não mapas vazios', () => {
-    // CONTROLE POSITIVO. Sem ele, um seletor que deixa de casar devolve `{}`
-    // nas três, e a comparação abaixo aprova por não ter nada para comparar --
-    // que é como portão deste repositório já ficou verde sem medir.
     for (const g of GRUPOS) {
       assert.equal(Object.keys(g.app).length, g.quantos, `${g.nome}: app`);
       assert.equal(Object.keys(g.painel).length, g.quantos, `${g.nome}: painel`);

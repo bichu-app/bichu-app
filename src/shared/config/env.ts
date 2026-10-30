@@ -1,16 +1,3 @@
-/**
- * Leitura de ambiente, com falha ruidosa.
- *
- * Regra da §11.2: **nenhuma variável obrigatória tem valor padrão embutido que
- * aponte para um provedor.** A ausência derruba a aplicação na subida, com o
- * nome da variável na mensagem — falha ruidosa é melhor do que um padrão
- * silencioso que funciona na máquina de quem escreveu e não em mais lugar
- * nenhum.
- *
- * As duas travas do fim do arquivo não são zelo: mecanismo de teste que
- * sobrevive em produção é porta dos fundos.
- */
-
 export function requireEnv(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
@@ -35,7 +22,10 @@ export function boolEnv(name: string, fallback = false): boolean {
 /** O nome e o unico valor que ligam o desafio de desenvolvimento do painel. */
 export const VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO = 'CAPTCHA_DESENVOLVIMENTO_LOCAL';
 
-/** Host que so resolve na propria maquina: `localhost`, loopback, `*.localhost` e `*.test`. */
+/**
+ * Host que so resolve na propria maquina: `localhost`, loopback, `*.localhost` e
+ * `*.test`.
+ */
 export function ehHostLocal(url: string): boolean {
   let host: string;
   try {
@@ -54,13 +44,8 @@ export function ehHostLocal(url: string): boolean {
 
 /**
  * QA, 28/09: o desafio de desenvolvimento do login do painel (ver
- * `admin-access/adapters/external/captcha-de-desenvolvimento-local.ts`) so
- * existe na pilha local. Devolve o motivo da recusa, ou `undefined`.
- *
- * A variavel PRESENTE ja e o gatilho, com qualquer valor: uma
- * `CAPTCHA_DESENVOLVIMENTO_LOCAL` num ambiente hospedado e engano de
- * configuracao mesmo quando o valor nao ligaria o modo, e quem le o log de um
- * boot que morreu precisa ver isso antes de alguem "consertar" o valor.
+ * `admin-access/adapters/external/captcha-de-desenvolvimento-local.ts`) so existe
+ * na pilha local.
  */
 export function recusaDoCaptchaDeDesenvolvimento(ambiente: NodeJS.ProcessEnv): string | undefined {
   const valor = ambiente[VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO];
@@ -86,10 +71,6 @@ export function recusaDoCaptchaDeDesenvolvimento(ambiente: NodeJS.ProcessEnv): s
  * qualquer porta.
  */
 export function assertSafeBoot(): void {
-  // ANTES do desvio de produção abaixo, e de propósito: esta trava vale em todo
-  // ambiente que não seja `dev`, e não só em produção. Homologação subindo sem
-  // teto é a mesma classe de silêncio que fez a BICHUS-178 existir — a diferença
-  // é que ali ninguém percebe, porque ninguém está martelando homologação.
   const ambiente = optionalEnv('ENVIRONMENT') ?? 'dev';
   if (optionalEnv('RATE_LIMIT_DRIVER') === 'disabled' && ambiente !== 'dev') {
     throw new Error(

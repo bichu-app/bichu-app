@@ -1,16 +1,4 @@
-/**
- * ISCA — O TRABALHO `tag.scan_notify`: os dois canais, e o que cada um diz.
- *
- * O que se prova aqui e **efeito**, e nao chamada: o que saiu no push, o que
- * saiu no e-mail, e o que acontece quando um dos dois nao pode sair.
- *
- * A rede de seguranca por e-mail e o ponto principal deste arquivo. UX 10.1 e
- * ADR-0008 a obrigam porque **um canal que depende de permissao do sistema nao
- * pode ser o unico**, e o caso medido e cru: em hml o envio de push responde
- * 403 (a conta de servico da VM nao tem o papel de envio) e o tutor nao
- * receberia absolutamente nada. O e-mail sai mesmo quando o push foi aceito,
- * por decisao escrita no cabecalho do servico.
- */
+/** ISCA — O TRABALHO `tag.scan_notify`: os dois canais, e o que cada um diz. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -138,9 +126,6 @@ void describe('ISCA — o trabalho que avisa o tutor', () => {
   });
 
   void it('o aviso entregue e o LIDO, e nao um montado aqui', async () => {
-    // A isca contra o engano mais provavel desta ligacao: um `donoUserId`
-    // tirado do payload do trabalho em vez da consulta. A consulta e o que leva
-    // a autorizacao no `WHERE` (ADR-0021); o payload e so o id do aviso.
     const lido: AvisoAoTutorParaEntrega = {
       donoUserId: TUTOR,
       nomeDoPet: 'Nina',
@@ -198,8 +183,6 @@ void describe('ISCA — o texto do e-mail de rede de seguranca', () => {
         ['coordenada', /-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/u],
         ['telefone', /\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/u],
         ['UUID', /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu],
-        // `/c/{finderToken}` e CREDENCIAL DO ACHADOR. Mandar o link da conversa
-        // para a caixa do tutor entregaria a ele a chave de outra pessoa.
         ['link da conversa do achador', /\/c\//u],
       ] as const) {
         assert.equal(

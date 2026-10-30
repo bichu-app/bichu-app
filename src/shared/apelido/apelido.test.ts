@@ -1,27 +1,4 @@
-/**
- * A regra do **apelido (`@`)**, exercitada nas bordas.
- *
- * Decisão do cliente de 18/10/2026: *"o apelido esta livre, vai estar no
- * cadastro do usuário e na pagina de edição do perfil"*. O desenho vem fechado
- * do plano `9d99ac0f` (seção 4-C) e não é reaberto aqui.
- *
- * ## O QUE ESTE ARQUIVO NÃO MEDE, E ONDE ISSO É MEDIDO
- *
- * **Disponibilidade.** Não há função de disponibilidade para testar: ela é
- * decidida pelo índice único de `handles`, na escrita (plano 4-C.5). O caso que
- * prova a recusa por duplicidade **chamando o banco** é a validação em
- * `BEGIN/ROLLBACK` descrita no relatório desta tarefa, mais
- * `recusaDeApelidoTomado` abaixo, que traduz a violação.
- *
- * ## A PARIDADE COM O BANCO É MEDIDA AQUI
- *
- * `esqueletoDoApelido` precisa dar exatamente o mesmo que
- * `handle_esqueleto(text)` da migração `20261018000021`. Se as duas
- * divergirem, o índice do banco e a recusa da aplicação passam a discordar
- * sobre o que é parecido, e o furo aparece como "o servidor aceitou e o banco
- * recusou". Os casos de `esqueleto` abaixo foram rodados contra o Postgres e
- * carregam a saída que ele deu.
- */
+/** A regra do **apelido (`@`)**, exercitada nas bordas. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -56,19 +33,7 @@ function codigoDaRecusa(executar: () => unknown): string {
 }
 
 void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', () => {
-  /**
-   * AS DUAS BORDAS DA FAIXA, que é onde o erro mora.
-   *
-   * 4 recusa e 5 passa; 20 passa e 21 recusa. Uma borda só não prova nada: a
-   * regra `< 5` e a regra `<= 5` concordam em todo o resto e discordam
-   * exatamente aqui.
-   *
-   * **Os mesmos quatro casos foram rodados contra o `CHECK` de
-   * `handles.handle` em `BEGIN/ROLLBACK`**, e deram o mesmo resultado. É essa
-   * coincidência que o relatório desta tarefa chama de "a mesma faixa nos três
-   * lugares" -- a divergência que esta casa já pagou foi o recado do achado,
-   * que aceitava 1000 no contrato e 500 na coluna.
-   */
+  /** AS DUAS BORDAS DA FAIXA, que é onde o erro mora. */
   void it('a borda de BAIXO: 4 caracteres recusa, 5 passa', () => {
     assert.equal(codigoDaRecusa(() => verificarApelido('abcd')), 'too_short');
     assert.equal(verificarApelido('abcde'), 'abcde');
@@ -84,14 +49,7 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
     assert.equal(codigoDaRecusa(() => verificarApelido(vinteEUm)), 'too_long');
   });
 
-  /**
-   * O teto de 20 é do NORMALIZADO, e o plano afirma que ele é idêntico ao
-   * digitado. **Isto confere a afirmação** em vez de confiar nela: o conjunto é
-   * ASCII restrito, então `toLowerCase` é um para um e o comprimento não muda.
-   *
-   * O caso que isto mataria é `maxLength` contado no digitado e `CHECK` contado
-   * no normalizado -- e é o tipo de divergência que só aparece em produção.
-   */
+  /** O teto de 20 é do NORMALIZADO, e o plano afirma que ele é idêntico ao digitado. */
   void it('normalizado e digitado têm o MESMO comprimento, sempre', () => {
     for (const bruto of ['MARIA-SILVA', 'Maria-Silva', 'abcdefghij0123456789', 'MaRiA-01']) {
       assert.equal(
@@ -104,12 +62,8 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
   });
 
   void it('a forma recusa maiúscula crua, acento, ponto, sublinhado e hífen na ponta', () => {
-    // Maiúscula é NORMALIZADA e não recusada: `@Leandro` é `@leandro`.
     assert.equal(verificarApelido('MARIA-SILVA'), 'maria-silva');
 
-    // Ponto e sublinhado foram recusados DE PROPÓSITO: com os três
-    // separadores, `@maria.silva`, `@maria_silva` e `@maria-silva`
-    // conviveriam.
     for (const ruim of ['maria.silva', 'maria_silva', 'mariá-silva', '-maria', 'maria-']) {
       assert.equal(
         codigoDaRecusa(() => verificarApelido(ruim)),
@@ -139,17 +93,7 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
 });
 
 void describe('o esqueleto: parecidos não coexistem', () => {
-  /**
-   * O INVARIANTE DO PLANO, e o que ele custou.
-   *
-   * O plano escreve o mapa como `0→o`, `1→l`, `5→s`, `3→e`, e **esse mapa
-   * sozinho não produz esta colisão**: com ele, `mar1a` vira `marla` e `maria`
-   * fica `maria`. `i→l` foi acrescentado para o invariante escrito valer, e a
-   * divergência está declarada no módulo e na migração.
-   *
-   * As três saídas abaixo foram rodadas contra `handle_esqueleto` no Postgres:
-   * as três deram `marlasllva`.
-   */
+  /** O INVARIANTE DO PLANO, e o que ele custou. */
   void it('@maria-silva, @mariasilva e @mar1a-silva são o MESMO apelido', () => {
     const esperado = 'marlasllva';
     assert.equal(esqueletoDoApelido('maria-silva'), esperado);
@@ -164,9 +108,9 @@ void describe('o esqueleto: parecidos não coexistem', () => {
   });
 
   /**
-   * PARIDADE COM O BANCO. As saídas da direita vieram de
-   * `SELECT handle_esqueleto(...)` rodado contra o Postgres 16 em
-   * `BEGIN/ROLLBACK`, e não de ler a função daqui.
+   * PARIDADE COM O BANCO. As saídas da direita vieram de `SELECT
+   * handle_esqueleto(...)` rodado contra o Postgres 16 em `BEGIN/ROLLBACK`, e não de
+   * ler a função daqui.
    */
   void it('bate caractere a caractere com handle_esqueleto do Postgres', () => {
     const medidoNoBanco: ReadonlyArray<readonly [string, string]> = [
@@ -188,15 +132,7 @@ void describe('o esqueleto: parecidos não coexistem', () => {
 });
 
 void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o esqueleto', () => {
-  /**
-   * A ISCA QUE O PLANO PEDE, e ela precisa das DUAS regras ao mesmo tempo.
-   *
-   * `@B1CHU-suporte` escapa de tudo que não seja "contém, sobre o esqueleto":
-   * não é igual a `bichu`, não começa com `bichu`, e com o `1` no lugar do `i`
-   * não contém `bichu` como texto. O que o pega é
-   * `esqueleto("b1chu-suporte") = "blchusuporte"` conter
-   * `esqueleto("bichu") = "blchu"`.
-   */
+  /** A ISCA QUE O PLANO PEDE, e ela precisa das DUAS regras ao mesmo tempo. */
   void it('@B1CHU-suporte é recusado', () => {
     assert.equal(codigoDaRecusa(() => verificarApelido('B1CHU-suporte')), 'reserved');
   });
@@ -218,8 +154,8 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
   });
 
   /**
-   * CONTRAPESO. Sem ele, `apelidoEhReservado` passando a devolver `true` para
-   * tudo deixaria todos os casos acima verdes.
+   * CONTRAPESO. Sem ele, `apelidoEhReservado` passando a devolver `true` para tudo
+   * deixaria todos os casos acima verdes.
    */
   void it('apelido comum NÃO é reservado', () => {
     for (const bom of ['maria-silva', 'leandro-p', 'bidu-2026', 'joana-vet']) {
@@ -230,8 +166,7 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
 
   /**
    * A lista daqui e a carregada em `handles` pela migração precisam continuar
-   * iguais. A migração carregou 51 linhas `kind = 'reservado'`, contadas no
-   * Postgres em `BEGIN/ROLLBACK`.
+   * iguais.
    */
   void it('a lista tem 52 palavras e 51 esqueletos, e a migração carrega 51 linhas', () => {
     assert.equal(
@@ -242,16 +177,6 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
         'de `taken`). As duas metades são necessárias',
     );
 
-    // 52 PALAVRAS, 51 LINHAS NO BANCO, E ISSO NÃO É DEFEITO.
-    //
-    // `noreply` e `no-reply` têm o MESMO esqueleto — o esqueleto tira o hífen —
-    // então o `INSERT` da migração grava uma e o `ON CONFLICT DO NOTHING`
-    // descarta a outra. **As duas continuam recusadas**, porque o índice de
-    // esqueleto recusa a segunda forma de qualquer jeito.
-    //
-    // Este caso existe para a contagem de 51 no banco não parecer uma palavra
-    // perdida na carga. Medido: 51 linhas `kind = 'reservado'` em
-    // `BEGIN/ROLLBACK` contra o Postgres.
     const esqueletos = new Set(RESERVADAS.map((p) => esqueletoDoApelido(p)));
     assert.equal(
       esqueletos.size,
@@ -264,11 +189,8 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
       esqueletoDoApelido('no-reply'),
       'o par que explica a diferença entre 52 e 51 deixou de colidir',
     );
-    // E as duas formas continuam recusadas, que é o que importa de verdade.
     assert.ok(apelidoEhReservado('noreply'));
     assert.ok(apelidoEhReservado('no-reply'));
-    // Nenhuma reservada pode ser impossível pela própria forma: reservar o que
-    // o piso de 5 já proíbe é regra morta.
     for (const palavra of RESERVADAS) {
       assert.ok(
         FORMA_DO_APELIDO.test(palavra),
@@ -280,13 +202,7 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
 });
 
 void describe('a disponibilidade é do banco, e a tradução é daqui', () => {
-  /**
-   * ISCA: a violação de unicidade vira `code: 'taken'`.
-   *
-   * **É aqui que a disponibilidade é decidida** -- e não numa consulta anterior,
-   * que é a rota que o plano 4-C.5 matou. As duas escritas concorrentes chegam
-   * ao banco, uma viola o índice, e esta tradução é o que a tela trata.
-   */
+  /** ISCA: a violação de unicidade vira `code: 'taken'`. */
   void it('o 23505 de handles vira recusa de campo com `taken`', () => {
     const doPostgres = {
       code: '23505',
@@ -338,10 +254,9 @@ void describe('a disponibilidade é do banco, e a tradução é daqui', () => {
 
 void describe('as três sugestões, que substituem o parágrafo de apoio', () => {
   /**
-   * Elas existem porque **não há rota de disponibilidade**: sem conferência a
-   * cada tecla, a pessoa só descobre no envio, e a mitigação que não custa nada
-   * é oferecer saídas. É isso que resolve o nome curto legítimo -- Ana, Léo,
-   * Zé -- por exemplo e não por explicação.
+   * Elas existem porque **não há rota de disponibilidade**: sem conferência a cada
+   * tecla, a pessoa só descobre no envio, e a mitigação que não custa nada é
+   * oferecer saídas.
    */
   void it('são três, e todas passam na própria forma', () => {
     for (const curto of ['ana', 'leo', 'ze', 'maria-silva']) {
@@ -373,8 +288,8 @@ void describe('as três sugestões, que substituem o parágrafo de apoio', () =>
   });
 
   /**
-   * O teto é respeitado pelas sugestões: sugerir 21 caracteres seria oferecer
-   * o que a própria recusa acabou de negar.
+   * O teto é respeitado pelas sugestões: sugerir 21 caracteres seria oferecer o que
+   * a própria recusa acabou de negar.
    */
   void it('nenhuma sugestão passa do teto', () => {
     const longo = 'abcdefghij0123456789';

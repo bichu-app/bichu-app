@@ -1,42 +1,4 @@
-/**
- * `/v1/admin/tag-requests`: a fila dos pedidos da plaquinha da coleira.
- *
- * ## O LADO DO BACKEND ESTA AQUI; A TELA DO PAINEL NAO
- *
- * A sessao Backoffice e dona do painel. Estas tres operacoes sao exatamente o
- * que ela precisa chamar, e nada neste arquivo desenha nada.
- *
- * ## O que NAO esta aqui, porque a guarda do escopo ja fez
- *
- * Estas rotas so sobem dentro de `escoparRotasAdministrativas`, e a guarda roda
- * antes de qualquer gancho delas: `X-Internal-Surface` (404), recusa de
- * `Authorization` (401), sessao em cookie (401), `Origin` e `X-CSRF-Token` em
- * metodo nao seguro (403) e o papel de `adminRoles` (403). **Nenhuma
- * verificacao de papel mora aqui nem no caso de uso** (ADR-0027 item 7).
- *
- * ## O ENDERECO SAI AQUI, e so aqui
- *
- * Desde a decisao do cliente de 17/10, a fila devolve o endereco de entrega:
- * e o que o administrador le para enviar a plaquinha. E o unico dado pessoal
- * destas respostas, e por isso:
- *
- * - **so nesta superficie**. Nenhuma resposta sem conta o projeta, e o app nao
- *   o recebe de volta (`CollarTagRequest` nao tem endereco);
- * - **nunca na trilha**. `x-audit` das duas escritas registra `status` e
- *   `ref`, e o caso de uso nao copia campo nenhum de endereco para
- *   `audit.events`;
- * - **nunca geocodificado** (ADR-0006). O que sai e o que o tutor digitou.
- *
- * **Nenhum PERFIL do solicitante sai destas respostas**: nem e-mail, nem
- * telefone, nem UUID, nem identificador estavel. O nome que aparece e
- * `delivery_address.recipient_name`, quem recebe a encomenda, e nao uma
- * leitura de conta -- a unica leitura de conta do backoffice v1 segue sendo a
- * fila de pedidos de encontro (D53 a D57), e e por isso que o `GET` daqui
- * continua sem `x-audit` e sem teto por `rows_returned` (D55/D56).
- *
- * A fila tambem **nao traz o codigo da plaquinha**, que e credencial ao
- * portador (ADR-0004).
- */
+/** `/v1/admin/tag-requests`: a fila dos pedidos da plaquinha da coleira. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
@@ -70,8 +32,6 @@ export const rotaDeListarPedidosDePlaquinha = defineRoute({
   path: '/admin/tag-requests',
   effects: [],
   adminRoles: ADMIN,
-  // Contagem de REQUISICOES, aplicada pela borda. Nao e `rows_returned`: o
-  // teto por linhas e da leitura de pessoa, e esta fila nao le pessoa.
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
@@ -95,14 +55,7 @@ export const rotaDeRecusarPedidoDePlaquinha = defineRoute({
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
-/**
- * A leitura de UM pedido, para a tela de entrega.
- *
- * Sem `x-audit` e sem teto por `rows_returned`, como a listagem irma e pelo
- * mesmo motivo: esta superficie nao le PESSOA -- o nome que sai e o de quem
- * recebe a encomenda, dentro do endereco. A unica leitura de conta do
- * backoffice v1 segue sendo a fila de pedidos de encontro (D53 a D57).
- */
+/** A leitura de UM pedido, para a tela de entrega. */
 export const rotaDeLerPedidoDePlaquinha = defineRoute({
   operationId: 'getAdminCollarTagRequest',
   method: 'get',
@@ -112,13 +65,7 @@ export const rotaDeLerPedidoDePlaquinha = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A ATUALIZACAO DA ENTREGA: passo e codigo de rastreio numa escrita so.
- *
- * `POST` em sub-recurso de acao, e nao `PATCH`: as outras duas escritas desta
- * fila sao `/fulfillment` e `/decline`, e esta e a terceira irma delas. Um
- * `PATCH` aqui faria o painel falar dois dialetos com a mesma fila.
- */
+/** A ATUALIZACAO DA ENTREGA: passo e codigo de rastreio numa escrita so. */
 export const rotaDeAtualizarEntregaDaPlaquinha = defineRoute({
   operationId: 'updateAdminCollarTagRequestDelivery',
   method: 'post',
@@ -134,14 +81,9 @@ export const rotaDeAtualizarEntregaDaPlaquinha = defineRoute({
 
 export interface DependenciasDaFilaDePlaquinhas {
   readonly fila: FilaDePlaquinhasAdministrativa;
-  /**
-   * De onde sai o schema do corpo da atualizacao de entrega. Validacao escrita
-   * a mao em paralelo a spec e a segunda definicao, e e ela que diverge.
-   */
+  /** De onde sai o schema do corpo da atualizacao de entrega. */
   readonly contrato: Contrato;
 }
-
-/** O schema do corpo, tirado do proprio contrato pelo `operationId`. */
 
 const PAGINA_INICIAL = 1;
 /** 50, e nao 100: o mesmo tamanho da outra fila do painel. */
@@ -149,8 +91,6 @@ const TAMANHO_PADRAO = 50;
 
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
-  // `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem
-  // chave (ADR-0027 item 20.2).
   return conta === undefined ? undefined : `admin:${conta}`;
 };
 
@@ -170,39 +110,22 @@ interface QueryDaFila {
 interface CorpoDaEntrega {
   readonly delivery_state: PassoAlcancavelDoPedido;
   /**
-   * Ausente, texto ou `null`, e os tres sao pedidos diferentes -- manter, definir
-   * e apagar. `undefined` e ausente e NAO e o mesmo que `null`, e e por isso que
-   * este campo nao ganha valor padrao em lugar nenhum do caminho.
+   * Ausente, texto ou `null`, e os tres sao pedidos diferentes -- manter, definir e
+   * apagar.
    */
   readonly tracking_code?: string | null;
 }
 
-/**
- * `AdminCollarTagRequest` como o contrato o declara.
- *
- * `id` NAO entra: ele e o UUID interno, serve a trilha e nada mais. O que o
- * painel usa no caminho e `ref`.
- */
+/** `AdminCollarTagRequest` como o contrato o declara. */
 function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<string, unknown> {
   return {
     ref: pedido.ref,
     pet: { display_name: pedido.petNome, species: pedido.petEspecie },
-    // `DeliveryAddress` como o contrato o declara, pela MESMA traducao que a
-    // rota do tutor e a do endereco guardado usam
-    // (`endereco-de-entrega-no-contrato.ts`). Eram nove linhas copiadas aqui;
-    // com o endereco guardado da conta (cliente, 21/10/2026) elas seriam a
-    // terceira copia, e nove campos copiados a mao em tres lugares divergem
-    // pelo campo que alguem esquece num dos lados. `complement` continua
-    // saindo explicitamente nulo e nao omitido, e a razao esta na funcao.
     delivery_address: comoDeliveryAddress(pedido.endereco),
     notes: pedido.observacao,
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),
     decided_at: pedido.decididoEm === null ? null : pedido.decididoEm.toISOString(),
-    // A ENTREGA. `delivery_state` nunca e nulo (a coluna e `NOT NULL`); os dois
-    // carimbos saem explicitamente nulos, e nao omitidos, pela mesma razao de
-    // `complement`: omitir faria o painel distinguir "nao aconteceu" de "campo
-    // que sumiu".
     delivery_state: pedido.passoDaEntrega,
     tracking_code: pedido.codigoDeRastreio,
     shipped_at: pedido.despachadoEm === null ? null : pedido.despachadoEm.toISOString(),
@@ -272,9 +195,6 @@ export function registrarRotasDaFilaDePlaquinhas(
         atorAdministrativoDe(request),
         parametro(request, 'requestRef'),
         corpo.delivery_state,
-        // `tracking_code` e repassado COMO VEIO -- ausente, texto ou `null`. Um
-        // `?? null` aqui transformaria "manter" em "apagar", e marcar a chegada
-        // limparia o rastreio que ja estava la.
         corpo.tracking_code,
       );
       return reply.send(comoAdminCollarTagRequest(atualizado));
