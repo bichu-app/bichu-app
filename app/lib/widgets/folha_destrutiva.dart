@@ -4,6 +4,7 @@ import '../api/falhas.dart';
 import '../api/mensagens_de_erro.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'alca_de_arraste.dart';
 import 'faixa_de_aviso.dart';
 
 /// A folha inferior destrutiva do paragrafo 11.9.1 do design system.
@@ -168,7 +169,7 @@ class _FolhaDestrutivaState extends State<FolhaDestrutiva> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const _AlcaDeArraste(),
+              const AlcaDeArraste(),
               // Icone `warning` de 32 dp em `error`, acima do titulo e alinhado
               // a esquerda com ele. Decorativo para o leitor de tela: o titulo
               // logo abaixo ja diz o que o icone ilustra, e anuncia-lo seria uma
@@ -276,33 +277,6 @@ Future<bool> mostrarFolhaDestrutiva(
   );
   // Nulo e o gesto de voltar e o arrasto para baixo. Os dois sao cancelar.
   return confirmou ?? false;
-}
-
-/// A alca de 36 x 4, centralizada, com 12 de margem acima e abaixo.
-///
-/// **Decorativa**: fechar sempre tem tambem um botao, e o 11.9 diz que a alca
-/// nao e o caminho. Fora da arvore de semantica para nao virar uma parada de
-/// leitor de tela sem funcao.
-class _AlcaDeArraste extends StatelessWidget {
-  const _AlcaDeArraste();
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    return ExcludeSemantics(
-      child: Center(
-        child: Container(
-          width: 36,
-          height: 4,
-          margin: const EdgeInsets.symmetric(vertical: BichuEspaco.e3),
-          decoration: BoxDecoration(
-            color: cores.outline,
-            borderRadius: BorderRadius.circular(BichuRaio.full),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Um item da lista do que some.

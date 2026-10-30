@@ -48,6 +48,7 @@ import 'package:flutter/services.dart';
 import '../dispositivo/camera_e_galeria.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import 'alca_de_arraste.dart';
 import 'botao_primario.dart';
 
 /// A forma da janela de recorte, por destino.
@@ -338,6 +339,13 @@ abstract final class TextosDoRecorte {
       'O que ficar dentro da moldura é o que vai ser enviado.';
   static const String usar = 'Usar esta imagem';
   static const String cancelar = 'Cancelar';
+
+  /// O rotulo do `X` do canto. **Nao e "Cancelar" repetido:** o `X` e o
+  /// `Cancelar` fazem a mesma coisa (`pop()` sem valor), e dois rotulos iguais
+  /// na mesma folha fariam o leitor de tela anunciar a mesma acao duas vezes
+  /// sem dizer que sao a mesma. "Fechar" e o verbo da folha; "Cancelar", o da
+  /// acao.
+  static const String fechar = 'Fechar';
   static const String reiniciar = 'Voltar ao enquadramento inicial';
   static const String zoom = 'Zoom';
   static const String palco =
@@ -411,8 +419,15 @@ Future<FotoLocal?> ajustarAFoto(
     // ser dividido com o fechamento. Quem fecha e `Cancelar`, que esta na
     // tela, e o botao de voltar do sistema -- os dois devolvem o mesmo nulo.
     enableDrag: false,
-    // Sem alca, pela mesma razao: ela anuncia um arraste que fecha, e aqui
-    // arrastar nao fecha.
+    // **`showDragHandle: false` CONTINUA, e a alca agora existe de outro
+    // jeito.** A alca do Material e um alvo de arraste que FECHA, e aqui
+    // arrastar recorta -- ligar este parametro devolveria o defeito que
+    // `enableDrag: false` acabou de tirar.
+    //
+    // O cliente pediu a alca em 29/10/2026 (*"coloque aquela barra em cima"*),
+    // e o que ele pediu e a LINGUAGEM dela, nao o gesto. Quem a desenha e
+    // [AlcaDeArraste], dentro de [FolhaDeRecorte]: a mesma peca das outras
+    // folhas, decorativa e fora da arvore de semantica.
     showDragHandle: false,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(BichuRaio.xl)),
@@ -607,6 +622,17 @@ class FolhaDeRecorte extends StatefulWidget {
   /// mesma razao.
   static const double fracaoMaximaDaJanela = 0.36;
 
+  /// Quanto da altura da tela a FOLHA ocupa.
+  ///
+  /// **95% e nao 100%**: a faixa de 5% que sobra mostra o veu da rota por cima
+  /// do que ficou atras, e e ela que diz que isto e uma folha sobre a tela
+  /// anterior e nao uma tela nova. Uma folha de 100% mente sobre para onde o
+  /// `X` volta.
+  ///
+  /// Cliente, 29/10/2026, sobre `Criar um encontro`: *"Vamos fazer com que
+  /// essa pagina se torne praticamente full screen"*. O "praticamente" e dele.
+  static const double fracaoDaFolha = 0.95;
+
   @override
   State<FolhaDeRecorte> createState() => _EstadoDaFolhaDeRecorte();
 }
@@ -718,27 +744,37 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     final tipografia = Theme.of(context).textTheme;
     final tela = MediaQuery.sizeOf(context);
 
+    // **O RECORTE DO SISTEMA, LIDO DA VIEW.**
+    //
+    // `viewPadding` e nao `padding`: o segundo zera quando o teclado esta
+    // aberto, e esta folha nao tem campo de texto -- a barra de navegacao
+    // continua la de qualquer forma. Ver `area_segura_do_aparelho_test`, que
+    // documenta por que `showModalBottomSheet(useSafeArea: true)` NAO cobre
+    // isto: o Flutter monta `SafeArea(bottom: false)` e devolve a base ao
+    // conteudo de proposito, porque so o conteudo sabe se ele rola.
+    //
+    // Era `BichuEspaco.e4` fixo, e o cliente fotografou o resultado em
+    // 29/10/2026: *"o botão cancelar fica atras do menu"*. Num Android com
+    // barra de tres botoes sao 48 dp, e `Cancelar` nascia inteiro debaixo
+    // dela.
+    final recorteDeBaixo = MediaQuery.viewPaddingOf(context).bottom;
+
     final alturaMaximaDaJanela = math.max(
       120.0,
       tela.height * FolhaDeRecorte.fracaoMaximaDaJanela,
     );
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        BichuEspaco.e4,
-        0,
-        BichuEspaco.e4,
-        BichuEspaco.e4,
-      ),
-      // **A COLUNA ROLA, e nao e zelo:** `isScrollControlled: true` deixa a
-      // folha CRESCER, mas nao a faz rolar. Medido em 29/10/2026 numa janela
-      // de 800 x 600, que e a do teste de widget e tambem a de um aparelho
-      // baixo com a fonte do sistema aumentada: a coluna estourava por 54 px,
-      // e quem saia da tela era a acao primaria. O teto de
-      // [FolhaDeRecorte.fracaoMaximaDaJanela] cuida do caso comum; esta rolagem cuida do
-      // resto, e os dois juntos sao o que `area_segura_do_aparelho_test`
-      // cobra das outras telas.
-      child: SingleChildScrollView(
+    return SizedBox(
+      // **PRATICAMENTE TELA CHEIA**, por pedido do cliente de 29/10/2026:
+      // *"Vamos fazer com que essa pagina se torne praticamente full
+      // screen"*. A altura e fixa e nao mais ditada pelo conteudo, e quem
+      // ganha o espaco novo e o PALCO -- ver o [Expanded] abaixo. Numa capa
+      // 16:9 a janela e limitada pela LARGURA, entao crescer a folha nao
+      // cresce a janela: cresce o quanto da foto aparece em volta dela, que e
+      // justamente o que a folga do palco existe para mostrar.
+      height: tela.height * FolhaDeRecorte.fracaoDaFolha,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: BichuEspaco.e4),
         // **O `LayoutBuilder` ENVOLVE A COLUNA INTEIRA, e nao so o palco.**
         //
         // Ele envolvia so o palco, e era um defeito: o builder de um
@@ -762,65 +798,115 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
             final enquadramento = _enquadramento!;
 
             return Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text(widget.titulo, style: tipografia.titleMedium),
-                const SizedBox(height: BichuEspaco.e1),
-                Text(
-                  TextosDoRecorte.apoio,
-                  style: tipografia.bodySmall?.copyWith(
-                    color: cores.textSecondary,
-                  ),
+                // A ALCA: a peca que as OUTRAS folhas ja usam, promovida de
+                // `folha_destrutiva.dart` em 29/10/2026. Cliente: *"coloque
+                // aquela barra em cima, parecido nas outras paginas quando o
+                // conteudo pode ser minimzado"*. Decorativa -- quem fecha e o
+                // `X` -- e por isso `enableDrag: false` continua valendo: o
+                // arraste vertical aqui RECORTA.
+                const AlcaDeArraste(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          // A MARGEM DO TITULO. Cliente: *"dê uma margem do
+                          // titulo 'ajuste a capa' porque ficou estranho,
+                          // desalinhado"*. O `Padding` da folha tinha topo
+                          // `0`, entao o titulo encostava na borda de cima; a
+                          // alca ja da respiro, e este `e1` acaba de alinhar
+                          // a primeira linha com o centro do `X` ao lado.
+                          const SizedBox(height: BichuEspaco.e1),
+                          Semantics(
+                            header: true,
+                            child: Text(
+                              widget.titulo,
+                              style: tipografia.titleMedium,
+                            ),
+                          ),
+                          const SizedBox(height: BichuEspaco.e1),
+                          Text(
+                            TextosDoRecorte.apoio,
+                            style: tipografia.bodySmall?.copyWith(
+                              color: cores.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: BichuEspaco.e2),
+                    // O `X`, pedido pelo cliente. `pop()` SEM valor, igual ao
+                    // `Cancelar`: os dois devolvem o mesmo nulo que as dez
+                    // telas ja tratam como "a pessoa desistiu".
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                      tooltip: TextosDoRecorte.fechar,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: BichuEspaco.e3),
-                Semantics(
-                  label: TextosDoRecorte.palco,
-                  container: true,
-                  child: Focus(
-                    autofocus: true,
-                    onKeyEvent: _teclado,
-                    child: GestureDetector(
-                      onScaleStart: (_) =>
-                          _zoomNoInicioDoGesto = enquadramento.zoom,
-                      // `onScaleUpdate` cobre o arraste de UM dedo tambem:
-                      // `focalPointDelta` e o movimento e `scale` fica em 1.
-                      // Dois tratadores (pan e scale) no mesmo detector sao
-                      // proibidos pelo framework, e seriam duas contas para o
-                      // mesmo gesto.
-                      onScaleUpdate: (detalhe) => setState(() {
-                        final comZoom = _enquadramento!.comZoom(
-                          _zoomNoInicioDoGesto * detalhe.scale,
-                        );
-                        _enquadramento = comZoom.arrastado(
-                          detalhe.focalPointDelta,
-                        );
-                      }),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: janela.height + FolhaDeRecorte.folgaDoPalco * 2,
+                const SizedBox(height: BichuEspaco.e2),
+                // **O PALCO ABSORVE O QUE SOBRA**, e e ele que torna a folha
+                // "praticamente full screen" util em vez de so alta: o pintor
+                // centra a janela no canvas (ver `_PintorDoRecorte.paint`),
+                // entao palco maior = mais foto visivel em volta do recorte.
+                //
+                // `Expanded` e nao `SingleChildScrollView`: com altura fixa na
+                // folha, a coluna nao tem mais como estourar por conteudo --
+                // quem cede espaco e o palco, e ele cede ate zero sem
+                // transbordar. A rolagem que existia aqui protegia a folha
+                // DIMENSIONADA PELO CONTEUDO, que deixou de existir.
+                Expanded(
+                  child: Semantics(
+                    label: TextosDoRecorte.palco,
+                    container: true,
+                    child: Focus(
+                      autofocus: true,
+                      onKeyEvent: _teclado,
+                      child: GestureDetector(
+                        onScaleStart: (_) =>
+                            _zoomNoInicioDoGesto = enquadramento.zoom,
+                        // `onScaleUpdate` cobre o arraste de UM dedo tambem:
+                        // `focalPointDelta` e o movimento e `scale` fica em 1.
+                        // Dois tratadores (pan e scale) no mesmo detector sao
+                        // proibidos pelo framework, e seriam duas contas para o
+                        // mesmo gesto.
+                        onScaleUpdate: (detalhe) => setState(() {
+                          final comZoom = _enquadramento!.comZoom(
+                            _zoomNoInicioDoGesto * detalhe.scale,
+                          );
+                          _enquadramento = comZoom.arrastado(
+                            detalhe.focalPointDelta,
+                          );
+                        }),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(BichuRaio.lg),
-                          child: CustomPaint(
-                            // A chave existe para o CASO poder arrastar ESTE
-                            // `CustomPaint` e nao um dos quatro que o Material
-                            // monta dentro da folha -- medido em 29/10/2026.
-                            key: chaveDoPalcoDoRecorte,
-                            painter: _PintorDoRecorte(
-                              imagem: widget.imagem.imagem,
-                              enquadramento: enquadramento,
-                              circular: widget.formato.circular,
-                              fundo: cores.surfaceSunken,
-                              // `scrim` e o token de preto com transparencia
-                              // do projeto -- a mesma linguagem que o cliente
-                              // determinou para a barra do autor no Mural em
-                              // 29/10/2026. Aqui ele e mais forte de
-                              // proposito: um veu discreto nao diria onde
-                              // termina o recorte, que e a unica informacao
-                              // desta tela.
-                              veu: cores.scrim,
-                              linha: cores.textOnInverse,
-                              contorno: cores.surfaceInverse,
+                          child: SizedBox.expand(
+                            child: CustomPaint(
+                              // A chave existe para o CASO poder arrastar ESTE
+                              // `CustomPaint` e nao um dos quatro que o Material
+                              // monta dentro da folha -- medido em 29/10/2026.
+                              key: chaveDoPalcoDoRecorte,
+                              painter: _PintorDoRecorte(
+                                imagem: widget.imagem.imagem,
+                                enquadramento: enquadramento,
+                                circular: widget.formato.circular,
+                                fundo: cores.surfaceSunken,
+                                // `scrim` e o token de preto com transparencia
+                                // do projeto -- a mesma linguagem que o cliente
+                                // determinou para a barra do autor no Mural em
+                                // 29/10/2026. Aqui ele e mais forte de
+                                // proposito: um veu discreto nao diria onde
+                                // termina o recorte, que e a unica informacao
+                                // desta tela.
+                                veu: cores.scrim,
+                                linha: cores.textOnInverse,
+                                contorno: cores.surfaceInverse,
+                              ),
                             ),
                           ),
                         ),
@@ -876,6 +962,10 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
                   // as telas ja tratam.
                   aoTocar: () => Navigator.of(context).pop(),
                 ),
+                // A BASE: a folga do projeto MAIS o recorte do sistema. Sem a
+                // segunda parcela, `Cancelar` fica atras da barra de navegacao
+                // do Android -- o defeito que o cliente fotografou.
+                SizedBox(height: BichuEspaco.e4 + recorteDeBaixo),
               ],
             );
           },
@@ -884,6 +974,7 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     );
   }
 }
+
 
 /// Pinta a imagem, o veu do que fica FORA da janela, as guias de tercos e a
 /// linha da janela.
