@@ -1,12 +1,18 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
-import { Banner, CampoDeTexto, ResumoDeErros } from '../componentes/basicos.tsx';
+import { Banner, CampoDeTexto } from '../componentes/basicos.tsx';
+import {
+  BannerDaFalha,
+  ResumoDosCampos,
+  useRascunhoDoFormulario,
+  useResumoDeErros,
+  VoltarPara,
+} from '../componentes/casca-de-formulario.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
-import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
+import { retomarRascunho } from '../sessao/rascunho.ts';
 import estilos from './comunicados.module.css';
 import {
   alcanceEmPalavras,
@@ -35,7 +41,7 @@ type Resultado = { ok: true } | { ok: false; mensagem: string };
 
 /** A tela de disparo do comunicado. */
 export default function FormularioDeComunicado() {
-  const { api, registrarRascunho } = useSessao();
+  const { api } = useSessao();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [valores, setValores] = useState<ValoresDoComunicado>(() => retomarRascunho<ValoresDoComunicado>(pathname) ?? VAZIO);
@@ -45,16 +51,12 @@ export default function FormularioDeComunicado() {
   const [carregandoPrevia, setCarregandoPrevia] = useState(false);
   const [falha, setFalha] = useState<string>();
   const [confirmando, setConfirmando] = useState(false);
-  const resumo = useRef<HTMLDivElement>(null);
+  const { referencia: resumo, focar } = useResumoDeErros();
   const liberado = useRef(false);
   const idDaTrava = useId();
   const idDaPrevia = useId();
 
-  const valoresRef = useRef(valores);
-  useLayoutEffect(() => {
-    valoresRef.current = valores;
-  });
-  useEffect(() => registrarRascunho(() => guardarRascunho(pathname, valoresRef.current)), [registrarRascunho, pathname]);
+  useRascunhoDoFormulario(pathname, valores);
 
   const erros = tentou ? { ...errosDoServidor, ...validarComunicado(valores) } : errosDoServidor;
   const trava = travaDoDisparo(valores, guardada);
@@ -68,7 +70,7 @@ export default function FormularioDeComunicado() {
 
   function mostrar(doServidor: Partial<Record<CampoDoComunicado, string>>) {
     setErrosDoServidor(doServidor);
-    requestAnimationFrame(() => resumo.current?.focus());
+    focar();
   }
 
   async function verPrevia() {
@@ -128,23 +130,14 @@ export default function FormularioDeComunicado() {
           void verPrevia();
         }}
       >
-        <Link className="btn ghost voltar" to={CAMINHO_DA_LISTA}>
-          <Icone nome="back" tamanho="s20" />
-          Voltar para Comunicados
-        </Link>
+        <VoltarPara para={CAMINHO_DA_LISTA}>Voltar para Comunicados</VoltarPara>
         <h1 className="t-headline">Novo comunicado</h1>
         <p className="t-body c-sec">
           Vai para a caixa de notificações de todo mundo. Veja a prévia antes de disparar: depois de disparado, o comunicado
           não pode ser desfeito, editado nem apagado.
         </p>
-        {lista.length > 0 && (
-          <ResumoDeErros
-            referencia={resumo}
-            titulo={`Corrija ${lista.length} ${lista.length === 1 ? 'campo' : 'campos'} para ver a prévia:`}
-            erros={lista}
-          />
-        )}
-        {falha && <Banner tipo="erro">{falha}</Banner>}
+        <ResumoDosCampos referencia={resumo} erros={lista} acao="ver a prévia" />
+        <BannerDaFalha falha={falha === undefined ? undefined : { texto: falha }} />
         <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
         <CampoDeTexto
           id="c-titulo"

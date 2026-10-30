@@ -1,13 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import type { Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
-import { Banner, CampoDeTexto, ResumoDeErros } from '../componentes/basicos.tsx';
-import { Icone } from '../componentes/Icone.tsx';
+import { CampoDeTexto } from '../componentes/basicos.tsx';
+import {
+  BannerDaFalha,
+  carregarPorChave,
+  CargaQueFalhou,
+  ResumoDosCampos,
+  RodapeDoFormulario,
+  useCargaDoFormulario,
+  useRascunhoDoFormulario,
+  useResumoDeErros,
+  VoltarPara,
+  type FalhaDoFormulario,
+} from '../componentes/casca-de-formulario.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
+import { retomarRascunho } from '../sessao/rascunho.ts';
 import {
   hostDoSite,
   LIMITE_DO_SITE,
@@ -55,10 +66,10 @@ function valoresDo(p: Parceiro): Valores {
 export default function FormularioDeParceiro() {
   const { partnerSlug } = useParams();
   const editando = partnerSlug !== undefined;
-  const { api, registrarRascunho } = useSessao();
+  const { api } = useSessao();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>();
+  const { chave: chaveDaCarga, fase, definir: setCarga, recarregar } = useCargaDoFormulario(partnerSlug);
   const [parceiro, setParceiro] = useState<Parceiro>();
   const [etag, setEtag] = useState<string>();
   const [valores, setValores] = useState<Valores>(() => (editando ? VAZIO : (retomarRascunho<Valores>(pathname) ?? VAZIO)));
@@ -66,43 +77,28 @@ export default function FormularioDeParceiro() {
   const [errosDoServidor, setErrosDoServidor] = useState<Partial<Record<Campo, string>>>({});
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean; informativo?: boolean }>();
-  const [versao, setVersao] = useState(0);
-  const resumo = useRef<HTMLDivElement>(null);
+  const [falha, setFalha] = useState<FalhaDoFormulario>();
+  const { referencia: resumo, focar } = useResumoDeErros();
   const liberado = useRef(false);
-
-  const chaveDaCarga = `${partnerSlug ?? 'novo'}#${versao}`;
-  const fase = !editando ? 'pronto' : carga?.chave === chaveDaCarga ? carga.fase : 'carregando';
 
   useEffect(() => {
     if (!partnerSlug) return;
-    const controle = new AbortController();
-    const chave = chaveDaCarga;
-    api
-      .GET('/admin/store/partners/{partnerSlug}', { params: { path: { partnerSlug } }, signal: controle.signal })
-      .then(({ data, response }) => {
-        if (controle.signal.aborted) return;
-        if (!data) {
-          setCarga({ chave, fase: response.status === 404 ? 'nao-encontrado' : 'erro' });
-          return;
-        }
-        setParceiro(data);
-        setEtag(versaoComoEtag(data.version));
-        setBase(valoresDo(data));
-        setValores(retomarRascunho<Valores>(pathname) ?? valoresDo(data));
-        setCarga({ chave, fase: 'pronto' });
-      })
-      .catch(() => {
-        if (!controle.signal.aborted) setCarga({ chave, fase: 'erro' });
+    return carregarPorChave(chaveDaCarga, setCarga, async (sinal) => {
+      const { data, response } = await api.GET('/admin/store/partners/{partnerSlug}', {
+        params: { path: { partnerSlug } },
+        signal: sinal,
       });
-    return () => controle.abort();
-  }, [api, partnerSlug, pathname, chaveDaCarga]);
+      if (sinal.aborted) return undefined;
+      if (!data) return response.status === 404 ? 'nao-encontrado' : 'erro';
+      setParceiro(data);
+      setEtag(versaoComoEtag(data.version));
+      setBase(valoresDo(data));
+      setValores(retomarRascunho<Valores>(pathname) ?? valoresDo(data));
+      return 'pronto';
+    });
+  }, [api, partnerSlug, pathname, chaveDaCarga, setCarga]);
 
-  const valoresRef = useRef(valores);
-  useLayoutEffect(() => {
-    valoresRef.current = valores;
-  });
-  useEffect(() => registrarRascunho(() => guardarRascunho(pathname, valoresRef.current)), [registrarRascunho, pathname]);
+  useRascunhoDoFormulario(pathname, valores);
 
   const erros = tentou ? { ...errosDoServidor, ...validarParceiro(valores) } : errosDoServidor;
 
@@ -117,7 +113,7 @@ export default function FormularioDeParceiro() {
 
   function mostrar(doServidor: Partial<Record<Campo, string>>) {
     setErrosDoServidor(doServidor);
-    requestAnimationFrame(() => resumo.current?.focus());
+    focar();
   }
 
   function voltar(aviso?: string) {
@@ -182,20 +178,14 @@ export default function FormularioDeParceiro() {
     setFalha({ texto: 'Não conseguimos salvar o parceiro. Confira os campos e tente de novo.' });
   }
 
-  const voltarLink = (
-    <Link className="btn ghost voltar" to="/loja/parceiros">
-      <Icone nome="back" tamanho="s20" />
-      Voltar para Parceiros
-    </Link>
-  );
+  const voltarLink = <VoltarPara para="/loja/parceiros">Voltar para Parceiros</VoltarPara>;
 
   if (fase === 'carregando') return <p role="status">Carregando…</p>;
   if (fase !== 'pronto') {
     return (
-      <div className="form">
-        {voltarLink}
-        <Banner tipo="erro">{fase === 'nao-encontrado' ? 'Este parceiro não existe mais.' : 'Não conseguimos carregar o parceiro.'}</Banner>
-      </div>
+      <CargaQueFalhou voltar={voltarLink}>
+        {fase === 'nao-encontrado' ? 'Este parceiro não existe mais.' : 'Não conseguimos carregar o parceiro.'}
+      </CargaQueFalhou>
     );
   }
 
@@ -214,23 +204,8 @@ export default function FormularioDeParceiro() {
       >
         {voltarLink}
         <h1 className="t-headline">{parceiro ? parceiro.name : 'Novo parceiro'}</h1>
-        {lista.length > 0 && (
-          <ResumoDeErros referencia={resumo} titulo={`Corrija ${lista.length} ${lista.length === 1 ? 'campo' : 'campos'} para salvar:`} erros={lista} />
-        )}
-        {falha && (
-          <Banner
-            tipo={falha.informativo ? 'info' : 'erro'}
-            acao={
-              falha.recarregar ? (
-                <button type="button" className="btn ghost sm" onClick={() => setVersao((n) => n + 1)}>
-                  Recarregar
-                </button>
-              ) : undefined
-            }
-          >
-            {falha.texto}
-          </Banner>
-        )}
+        <ResumoDosCampos referencia={resumo} erros={lista} acao="salvar" />
+        <BannerDaFalha falha={falha} aoRecarregar={recarregar} />
         <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
         <CampoDeTexto
           id="p-nome"
@@ -295,15 +270,12 @@ export default function FormularioDeParceiro() {
             </span>
           </fieldset>
         )}
-        <div className="rodape-form">
-          <Link className="btn sec" to="/loja/parceiros">
-            Cancelar
-          </Link>
-          <button type="submit" className="btn pri" data-cy="parceiro-salvar" aria-busy={salvando || undefined} disabled={salvando}>
-            {salvando && <span className="spin" aria-hidden="true" />}
-            {editando ? 'Salvar alterações' : 'Cadastrar parceiro'}
-          </button>
-        </div>
+        <RodapeDoFormulario
+          cancelarPara="/loja/parceiros"
+          rotulo={editando ? 'Salvar alterações' : 'Cadastrar parceiro'}
+          salvando={salvando}
+          dataCy="parceiro-salvar"
+        />
       </form>
       <SairSemSalvar sujo={sujo && !salvando} liberado={liberado} />
     </>
