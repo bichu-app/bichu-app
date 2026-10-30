@@ -288,6 +288,9 @@ class DiagnosticoDoEnvio {
     required this.motivo,
     this.status,
     this.codigo,
+    this.corpo,
+    this.camposDoFormulario,
+    this.tipoDaParteDoArquivo,
   });
 
   final DesfechoDoEnvio desfecho;
@@ -299,6 +302,40 @@ class DiagnosticoDoEnvio {
   /// O `type` do problema, quando quem recusou foi a nossa API.
   final String? codigo;
 
+  /// **O CORPO de quem recusou, recortado.** O que o `drain` jogava fora.
+  ///
+  /// Um 403 do armazenamento não diz nada no status: as causas são política
+  /// expirada, assinatura errada, credencial sem permissão no bucket e
+  /// condição da política violada — quatro defeitos em lugares diferentes, e o
+  /// número é o mesmo nos quatro. O corpo é onde elas se separam: o XML do
+  /// Google traz `<Code>` e `<Message>`, e numa política de POST ele **nomeia a
+  /// condição**, do tipo `Policy condition failed: ["eq", "$Content-Type",
+  /// "image/jpeg"]`.
+  ///
+  /// Em 30/10/2026 o envio ficou parado em 403 por horas com o corpo sendo
+  /// descartado em [EnvioDeFoto] por `resposta.stream.drain<void>()`. O status
+  /// sozinho mandou o diagnóstico para a assinatura, que estava certa.
+  final String? corpo;
+
+  /// Os nomes dos campos do formulário **na ordem em que foram para o fio**.
+  ///
+  /// Metade de um 403 de política de POST é esta lista: o armazenamento recusa
+  /// QUALQUER campo que a política não declare, e exige `file` por último. Sem
+  /// a lista, a pergunta "o app manda campo a mais?" só se responde com
+  /// captura de pacote, que não existe no aparelho do cliente.
+  ///
+  /// Só os NOMES, nunca os valores: `policy` e `x-goog-signature` são
+  /// assinados e não têm o que esconder, mas valor de campo no registro é
+  /// hábito que um dia carrega o que não devia.
+  final List<String>? camposDoFormulario;
+
+  /// O `content-type` da PARTE DO ARQUIVO do multipart.
+  ///
+  /// Separado do campo `Content-Type` do formulário de propósito: eles são
+  /// dois valores distintos no mesmo envio, e um 403 que diverge de condição
+  /// `["eq", "$Content-Type", ...]` não diz qual dos dois errou.
+  final String? tipoDaParteDoArquivo;
+
   /// Uma linha só, para o registro do aparelho.
   ///
   /// É o que permite ler o caminho sem depurador acoplado: `adb logcat` ou o
@@ -309,6 +346,11 @@ class DiagnosticoDoEnvio {
       'motivo=${motivo.name}',
       if (status != null) 'status=$status',
       if (codigo != null) 'codigo=$codigo',
+      if (camposDoFormulario != null)
+        'campos=${camposDoFormulario!.join(',')}',
+      if (tipoDaParteDoArquivo != null)
+        'tipoDaParte=$tipoDaParteDoArquivo',
+      if (corpo != null) 'corpo=${corpo!}',
     ];
     return partes.join(' ');
   }
@@ -370,12 +412,18 @@ class EnvioDeFoto {
     MotivoDoDesfecho motivo, {
     int? status,
     String? codigo,
+    String? corpo,
+    List<String>? camposDoFormulario,
+    String? tipoDaParteDoArquivo,
   }) {
     final diagnostico = DiagnosticoDoEnvio(
       desfecho: desfecho,
       motivo: motivo,
       status: status,
       codigo: codigo,
+      corpo: corpo,
+      camposDoFormulario: camposDoFormulario,
+      tipoDaParteDoArquivo: tipoDaParteDoArquivo,
     );
     _ultimoDiagnostico = diagnostico;
     if (motivo != MotivoDoDesfecho.entregue) debugPrint(diagnostico.linha);
@@ -486,6 +534,11 @@ class EnvioDeFoto {
     aoProgredir?.call(0, bytes.length);
 
     final http.BaseRequest requisicao;
+    // **O QUE FOI PARA O FIO, anotado antes de ir.** Depois de `send` a
+    // requisicao esta finalizada e a lista nao se recupera -- e ela e metade
+    // do diagnostico de um 403 de politica de POST.
+    List<String>? camposNoFio;
+    String? tipoDaParte;
     if (autorizacao.metodo == 'PUT') {
       requisicao = _CorpoMedido(
         'PUT',
@@ -494,16 +547,24 @@ class EnvioDeFoto {
         bytes.length,
       )..headers.addAll(autorizacao.cabecalhos);
     } else {
-      requisicao = http.MultipartRequest('POST', autorizacao.url)
+      final arquivo = http.MultipartFile(
+        'file',
+        _emPedacos(bytes, aoProgredir),
+        bytes.length,
+        filename: 'foto',
+      );
+      final multipart = http.MultipartRequest('POST', autorizacao.url)
         ..fields.addAll(autorizacao.campos)
-        ..files.add(
-          http.MultipartFile(
-            'file',
-            _emPedacos(bytes, aoProgredir),
-            bytes.length,
-            filename: 'foto',
-          ),
-        );
+        ..files.add(arquivo);
+      // `file` entra na lista porque a ordem e o que o armazenamento cobra: a
+      // parte do arquivo tem de ser a ULTIMA, e `package:http` escreve os
+      // campos antes dos arquivos. A lista prova isso sem captura de pacote.
+      camposNoFio = <String>[
+        ...multipart.fields.keys,
+        ...multipart.files.map((a) => a.field),
+      ];
+      tipoDaParte = '${arquivo.contentType}';
+      requisicao = multipart;
     }
 
     late final http.StreamedResponse resposta;
@@ -526,10 +587,19 @@ class EnvioDeFoto {
       );
     }
 
-    await resposta.stream.drain<void>();
-
     final status = resposta.statusCode;
-    if (status >= 200 && status < 300) return DesfechoDoEnvio.enviada;
+    if (status >= 200 && status < 300) {
+      // No caminho feliz o corpo e vazio (204) ou irrelevante, e drenar e o
+      // que libera o socket.
+      await resposta.stream.drain<void>();
+      return DesfechoDoEnvio.enviada;
+    }
+
+    // **O CORPO DE QUEM RECUSOU, e nao o `drain` que o jogava fora.** O status
+    // sozinho tem quatro causas (ver [DiagnosticoDoEnvio.corpo]); o corpo
+    // nomeia a condicao. Em 30/10/2026 isso custou horas de cliente parado.
+    final corpo = await _recortarOCorpo(resposta);
+
     // **O STATUS DO ARMAZENAMENTO, anotado.** Era aqui que a informação
     // morria: a tela recebia `recusada` e nada dizia se o 403 foi de política,
     // o 400 de campo fora das condições, ou se quem recusou foi a nossa API
@@ -538,7 +608,32 @@ class EnvioDeFoto {
       DesfechoDoEnvio.recusada,
       MotivoDoDesfecho.armazenamentoRecusou,
       status: status,
+      corpo: corpo,
+      camposDoFormulario: camposNoFio,
+      tipoDaParteDoArquivo: tipoDaParte,
     );
+  }
+
+  /// Os primeiros [_caracteresDoCorpoRecusado] caracteres do corpo, numa linha.
+  ///
+  /// **Nunca estoura.** Um corpo que nao decodifica, uma conexao que cai no
+  /// meio da leitura ou um corpo gigante nao podem transformar uma recusa
+  /// diagnosticavel em `armazenamentoSemRede` -- seria trocar a informacao que
+  /// esta funcao existe para trazer por uma causa errada. Sem corpo, devolve
+  /// nulo e o diagnostico fica como era antes dela.
+  static Future<String?> _recortarOCorpo(http.StreamedResponse resposta) async {
+    try {
+      final bruto = await resposta.stream.bytesToString();
+      // Uma linha: o XML do Google vem indentado, e quebra de linha no meio do
+      // registro do aparelho e no meio da faixa da tela nao se le.
+      final numaLinha = bruto.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (numaLinha.isEmpty) return null;
+      return numaLinha.length <= _caracteresDoCorpoRecusado
+          ? numaLinha
+          : numaLinha.substring(0, _caracteresDoCorpoRecusado);
+    } on Object {
+      return null;
+    }
   }
 
   void fechar() => _cliente.close();
@@ -549,6 +644,13 @@ typedef ProgressoDeEnvio = void Function(int enviados, int total);
 
 /// Quanto o gerador entrega por vez.
 const int _pedacoDoEnvio = 64 * 1024;
+
+/// Quanto do corpo de quem recusou cabe no diagnóstico.
+///
+/// O `<Code>` e o `<Message>` do XML do Google, mais a condição nomeada,
+/// chegam bem antes disto; o teto existe para um corpo de HTML de proxy não
+/// virar o registro inteiro do aparelho.
+const int _caracteresDoCorpoRecusado = 300;
 
 /// Os bytes do arquivo, em pedacos, **contando o que o socket ja aceitou**.
 Stream<List<int>> _emPedacos(Uint8List bytes, ProgressoDeEnvio? aoProgredir) {
