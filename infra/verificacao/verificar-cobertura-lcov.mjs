@@ -426,7 +426,7 @@ const AUSENCIAS_ACEITAS = new Map([
   // CAMINHO que o teste le com `readFileSync` para conferir o texto da fonte.
   // Ler o arquivo nao o carrega, e por isso ele nao aparece no relatorio.
   //
-  // A divida dos dois e a mesma dos sete `kysely-*` de 27/10: a suite de
+  // A divida dos dois e a mesma dos seis `kysely-*` de 27/10: a suite de
   // integracao importar o adaptador direto, como `kysely-pet-repository.ts`
   // fez em 22/09 para sair desta lista.
   ['src/modules/identity/adapters/persistence/kysely-passkey-repository.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
