@@ -670,6 +670,28 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // **A BUSCA DESTA ABA, PUBLICADA NO TOPO FIXO DA SECAO**
+        // (cliente, 29/10/2026). Ela ocupa zero aqui: quem a desenha e
+        // `SecaoDaRede._topoFixo`, fora da area de rolagem.
+        //
+        // **MONTADA SEMPRE, e nao so com pagina.** A `BarraDeListagem` logo
+        // abaixo so nasce com `pagina != null`, e enquanto o diretorio
+        // carregava nao havia campo nenhum. Num topo que nao rola isso vira
+        // defeito visivel: o campo apareceria quando o dado chegasse e
+        // empurraria a lista. `total` vai zero ate a pagina chegar, e com
+        // zero `acaoDeRecorte` nao desenha gatilho -- o campo, que e o que da
+        // a altura da linha, esta la desde o primeiro quadro.
+        //
+        // **A `CaixaDeLocalizacao` NAO SOBE JUNTO**: ele pediu as abas e o
+        // campo de busca, e nada alem disso. Ela fica abaixo, no conteudo que
+        // rola.
+        BuscaNoTopoFixo(
+          total: pagina?.total ?? 0,
+          busca: _controleDeBusca(),
+          filtro: _controleDeFiltro(),
+          ordenacao: pagina == null ? null : _controleDeOrdenacao(pagina),
+          aoAplicar: _aplicarAFolha,
+        ),
         // **A PORTA DE INDICAR SUBIU PARA A BARRA DE TOPO** em 18/10/2026, e
         // nao esta mais aqui. Pedido literal do cliente: "os itens de criacao,
         // como evento e indicacao, ate o escanear poderia ser icones na barra
@@ -734,6 +756,12 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
+            // **`buscaAcima` ENTROU EM 29/10/2026**: o campo e o gatilho
+            // passaram a ser desenhados pelo TOPO FIXO da secao (ver
+            // `BuscaNoTopoFixo`, no primeiro filho desta coluna), e sem isto
+            // a barra os desenharia de novo aqui -- duas buscas na mesma
+            // tela. O que sobra para ela e o RESUMO, que rola com a lista.
+            buscaAcima: true,
             busca: _controleDeBusca(),
             filtro: _controleDeFiltro(),
             ordenacao: _controleDeOrdenacao(pagina),

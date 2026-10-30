@@ -123,9 +123,18 @@ enum AbaDeConexoes {
 
   const AbaDeConexoes(this.rotulo);
 
-  /// O que a aba diz. **`Bloqueados` e nao `Usuários bloqueados`**: a barra de
-  /// abas tem tres rotulos lado a lado numa tela de 320 dp, e a palavra que a
-  /// pessoa procura e `bloqueados`.
+  /// O que a aba diz. **`Bloqueados` e nao `Usuários bloqueados`**: a palavra
+  /// que a pessoa procura e `bloqueados`, e a barra tem tres rotulos para
+  /// acomodar.
+  ///
+  /// A versao anterior desta prosa justificava a palavra curta dizendo que os
+  /// tres rotulos ficavam *"lado a lado numa tela de 320 dp"*. **Isso estava
+  /// errado, e foi medido em 29/10/2026:** nao ficavam -- `Bloqueados`
+  /// quebrava em duas linhas em qualquer tela abaixo de 405,1 dp. A conclusao
+  /// (palavra curta) continua certa; a premissa (cabia) nao era. Quem resolve
+  /// o caber agora e o `isScrollable: true` da `TabBar`, com a conta no
+  /// `build` de [_EstadoDeConexoes] -- e por isso encurtar MAIS nao e o
+  /// caminho se um rotulo novo apertar: a barra rola.
   final String rotulo;
 }
 
@@ -246,6 +255,50 @@ class _EstadoDeConexoes extends State<TelaDeConexoes>
         // so, continuam no corpo.
         bottom: TabBar(
           controller: _abas,
+          // **A BARRA ROLA, e isto e conserto de 29/10/2026 com a conta na
+          // mesa.** Pedido do cliente, literal: *"na pagina de conexoes, os
+          // textos pendentes e bloqueados esta quebrando a linha"*.
+          //
+          // Nao rolavel, cada aba recebia um terco exato da largura menos os
+          // 32 dp de `kTabLabelPadding`. Medido com a `Inter` de verdade
+          // (`test/telas/conexoes_rotulo_nao_quebra_test.dart` carrega a
+          // fonte, porque a do `flutter_test` tem glifos quadrados e infla
+          // `Bloqueados` de 103,03 para 180,00 dp):
+          //
+          //   `Conexões`                86,85 dp
+          //   `Pendentes` + a pastilha 120,73 dp
+          //   `Bloqueados`             103,03 dp
+          //
+          // Com um terco de tela cada, davam DOIS defeitos de uma causa so:
+          // `Bloqueados` quebrava em duas linhas abaixo de 405,1 dp (todo
+          // telefone) e `Conexões` abaixo de 356,6 dp; e `Pendentes` NAO
+          // quebrava -- transbordava, porque `Row` da largura infinita ao
+          // filho no eixo principal, e a pastilha saia pela direita
+          // (`RenderFlex overflowed by 46 pixels` a 320 dp, e so limpava
+          // acima de 458,2 dp).
+          //
+          // **Encurtar a palavra nao e saida**: `Bloqueados` e a palavra que a
+          // pessoa procura -- e o que a prosa de [AbaDeConexoes.rotulo]
+          // explica. Rolar e o arranjo que esta casa JA decidiu e JA mediu
+          // para este mesmo defeito, em `rede/secao_da_rede.dart`, e com a
+          // mesma frase: *"`isScrollable: true` e o que resolve sem
+          // abreviar"*. Cada aba passa a receber a largura do proprio texto.
+          //
+          // **O custo, medido e nao escondido:** o conteudo natural da barra
+          // mede 406,61 dp (16 + 86,85 + 32 + 120,73 + 32 + 103,03 + 16),
+          // entao abaixo disso ela rola e a aba 3 aparece cortada -- a 320 dp
+          // sobram **32,41 dos 103,03 dp** dela. Isso NAO esconde o
+          // desbloqueio: `Rotas.pessoasBloqueadas` pousa JA nela
+          // ([abaInicial]), o `TabBarView` anda por arrasto, e aba cortada e
+          // justamente o aviso de que ha mais barra -- que a palavra quebrada
+          // em duas linhas nao dava.
+          isScrollable: true,
+          // **`tabAlignment: TabAlignment.start`**: com `isScrollable` o
+          // padrao do M3 e `startOffset`, que abre um vao de 52 dp antes da
+          // primeira aba. `Conexões` nasceria a 68 dp da borda, desalinhada do
+          // TITULO da propria barra, que comeca a 16 dp. Mesma escolha, e pelo
+          // mesmo motivo, de `rede/secao_da_rede.dart`.
+          tabAlignment: TabAlignment.start,
           tabs: <Widget>[
             for (final aba in AbaDeConexoes.values)
               Tab(

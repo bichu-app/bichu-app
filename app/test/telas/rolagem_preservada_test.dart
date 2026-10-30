@@ -22,9 +22,16 @@
 // 3. **O rolavel sem `controller`.** Ha mais de um `Scrollable` na arvore, e o
 //    que importa e o que a casca controla.
 // 4. **`abrirAComunidade` na volta.** O ajudante ROLA a lista ate o topo para
-//    achar o `Tab` (a `TabBar` mora dentro do corpo rolavel). Ele acusa 16,0 de
-//    deslocamento e a culpa parece ser do app. Para medir a troca de aba, volte
-//    **so pela aba**, sem reabrir a sub-aba -- a selecao dela sobrevive.
+//    achar o `Tab`. Ele acusa 16,0 de deslocamento e a culpa parece ser do app.
+//    Para medir a troca de aba, volte **so pela aba**, sem reabrir a sub-aba --
+//    a selecao dela sobrevive.
+//
+//    **A CAUSA DESTE ENGANO MORREU EM 29/10/2026, e o conselho continua.** A
+//    `TabBar` da `Rede` nao mora mais dentro do corpo rolavel: ela foi para o
+//    `cabecalhoFixo` da casca, por pedido do cliente (*"as abas ... e o campo
+//    de busca fixo na pagina"*), entao achar o `Tab` nao rola mais nada. O
+//    ajudante continua chamando `ensureVisible` por outras razoes, e medir a
+//    troca de aba sem reabrir a sub-aba segue sendo o caminho curto.
 //
 // Nenhum desses enganos reprova: todos passam, com o numero errado.
 

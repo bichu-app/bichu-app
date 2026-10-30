@@ -152,11 +152,23 @@ Future<void> tocarEDeixarODiscoResponder(
 ) async {
   await tester.ensureVisible(alvo);
   await tester.pumpAndSettle();
-  await tester.tap(alvo);
-  await tester.pump();
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 50)),
-  );
+  // **O TOQUE VAI DENTRO DE `runAsync`, e nao antes dele.** Mudou em
+  // 29/10/2026, com o recorte de imagem.
+  //
+  // O arranjo anterior (tocar fora, dar tempo real depois) funcionava enquanto
+  // a unica E/S depois do toque era `File.length()`. O ajuste de imagem
+  // acrescentou `ImmutableBuffer.fromFilePath` e `ImageDescriptor.encoded`:
+  // uma cadeia que NASCE na zona do relogio falso enfileira as continuacoes
+  // naquele relogio, e o `runAsync` posterior nao as roda -- a tela ficava
+  // esperando para sempre e o caso reprovava como se a foto nao tivesse
+  // chegado ao rascunho.
+  //
+  // Com o toque dentro, a cadeia inteira corre no mundo de fora, e o
+  // `pumpAndSettle` seguinte constroi o que chegou.
+  await tester.runAsync(() async {
+    await tester.tap(alvo);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+  });
   await tester.pumpAndSettle();
 }
 

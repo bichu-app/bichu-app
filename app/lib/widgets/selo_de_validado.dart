@@ -80,7 +80,40 @@ import '../theme/bichu_tokens.g.dart';
 /// fundo verde desaparece. Aqui o selo pousa ao lado do NOME, sobre a superficie
 /// do cartao, e um anel seria enfeite.
 class SeloDeValidado extends StatelessWidget {
-  const SeloDeValidado({super.key});
+  const SeloDeValidado({super.key, this.cor});
+
+  /// A COR DO GLIFO. Nula e `cor/success`, que e o padrao e continua sendo o
+  /// selo em toda superficie de `surface`.
+  ///
+  /// **Existe por uma medicao, e nao por flexibilidade.** Em 29/10/2026 o
+  /// cliente pediu o autor SOBRE a foto no cartao do Mural, numa barra preta
+  /// translucida. O selo foi junto, e la ele nao pousa mais em `surface`:
+  /// pousa no veu composto com uma foto arbitraria. Medido, com a conta do SC
+  /// 1.4.11 (piso **3,0:1** para elemento nao textual), no pior caso -- o veu
+  /// sobre uma foto BRANCA:
+  ///
+  /// | tema   | glifo                | fundo composto | razao      |
+  /// |--------|----------------------|----------------|------------|
+  /// | claro  | `success` `#1F7A46`  | `#6E6D6C`      | **1,04:1** |
+  /// | escuro | `success` `#A9CFBB`  | `#474747`      | 5,46:1     |
+  ///
+  /// **E nenhuma opacidade de veu salva o tema claro**: quanto mais escuro o
+  /// veu, PIOR fica o verde escuro. Com o veu totalmente opaco ele ainda nao
+  /// alcanca 3,0. O unico conserto e a cor do glifo, e e este parametro.
+  ///
+  /// ## O QUE ELE NAO E
+  ///
+  /// **Nao e licenca para repintar o selo.** O padrao continua `cores.success`
+  /// e todo chamador que nao passa nada continua com ele -- quatro superficies
+  /// e a tela do dono. O unico chamador que passa cor e o cartao do Mural COM
+  /// foto, e o valor que ele passa e o mesmo token de tinta clara que o nome
+  /// ao lado ja usa, para os dois nao divergirem.
+  ///
+  /// **E nao e token novo.** `design/tokens.json` nao ganhou nada, e por isso
+  /// o portao de marca em pixel e o verificador de contraste do tema continuam
+  /// medindo exatamente o que mediam: a cor que muda e de CHAMADA, nao de
+  /// paleta.
+  final Color? cor;
 
   /// O nome acessivel. **"Contato confirmado", e nunca mais do que isso.**
   ///
@@ -133,7 +166,7 @@ class SeloDeValidado extends StatelessWidget {
           // Symbols, e o que quem usa leitor de tela ouve e [rotulo].
           Icons.verified,
           size: lado,
-          color: cores.success,
+          color: cor ?? cores.success,
         ),
       ),
     );
@@ -174,6 +207,7 @@ class NomeComSelo extends StatelessWidget {
     required this.comSelo,
     super.key,
     this.estilo,
+    this.corDoSelo,
     this.alinhamento = MainAxisAlignment.start,
   });
 
@@ -188,6 +222,13 @@ class NomeComSelo extends StatelessWidget {
   final bool comSelo;
 
   final TextStyle? estilo;
+
+  /// A cor do selo, quando ela nao pode ser a padrao.
+  ///
+  /// Nula e `cor/success`. Ver [SeloDeValidado.cor] para a medicao que criou
+  /// este caminho: sobre o veu preto do cartao do Mural o verde escuro mede
+  /// 1,04:1 com foto branca, contra um piso de 3,0.
+  final Color? corDoSelo;
 
   final MainAxisAlignment alinhamento;
 
@@ -210,7 +251,12 @@ class NomeComSelo extends StatelessWidget {
         ),
         if (comSelo) ...<Widget>[
           const SizedBox(width: SeloDeValidado.vao),
-          const SeloDeValidado(),
+          // **A COR DO SELO SEGUE A DO NOME, e nao e coincidencia.** Quem
+          // desenha o nome claro sobre o veu do Mural precisa do selo claro ao
+          // lado; deixar os dois escolherem sozinhos e o caminho de um nome
+          // claro com um selo verde escuro invisivel colado nele. Nulo mantem
+          // `cor/success`, que e o padrao das outras quatro superficies.
+          SeloDeValidado(cor: corDoSelo),
         ],
       ],
     );

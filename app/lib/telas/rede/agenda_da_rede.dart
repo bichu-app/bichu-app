@@ -781,19 +781,17 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         final filtro = _controleDeFiltro();
         final ordenacao = _controleDeOrdenacao();
         final reforco = widget.reforcoDaSecao;
-        // O campo de busca aparece **exatamente** quando a barra apareceria:
-        // a decisao e uma so, e ela mora no componente. Sem isto a `Rede`
-        // sem encontro nenhum desenharia um campo de busca sobre o nada,
-        // que e o caso que a secao "Lista vazia" da `BarraDeListagem`
-        // resolve nao desenhando.
-        final comControles = _fase != _Fase.carregando &&
-            BarraDeListagem.desenha(
-              total: _total,
-              busca: busca,
-              filtro: filtro,
-              ordenacao: ordenacao,
-              aoAplicar: _aplicarAFolha,
-            );
+        // **`comControles` SAIU EM 29/10/2026.**
+        //
+        // Ele dizia *"o campo de busca aparece exatamente quando a barra
+        // apareceria"*, e a razao escrita era boa: campo de busca sobre o
+        // nada e controle sem desfecho. **O cliente decidiu o contrario para
+        // esta secao**, e a decisao e dele: com o topo PARADO, um campo que
+        // vai e vem conforme o dado chega e o topo mudando de altura no meio
+        // da leitura -- que e pior do que um campo sobre uma lista vazia.
+        //
+        // Quem decide desenhar a contagem e a faixa da ordem continua sendo a
+        // propria `BarraDeListagem`, logo abaixo, e ela nao mudou de regra.
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -811,16 +809,29 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
             // pela barra; agora a linha e uma so e sobe inteira, acima do
             // reforco e das abas, e a barra deixa de desenhar o gatilho por
             // causa de `buscaAcima`.
-            if (comControles) ...<Widget>[
-              LinhaDeBuscaDaListagem(
-                total: _total,
-                busca: busca,
-                filtro: filtro,
-                ordenacao: ordenacao,
-                aoAplicar: _aplicarAFolha,
-              ),
-              const SizedBox(height: BichuEspaco.e4),
-            ],
+            // **A LINHA SUBIU PARA O TOPO FIXO DA SECAO EM 29/10/2026.**
+            //
+            // Era `LinhaDeBuscaDaListagem` desenhada aqui, e **so com
+            // `comControles`**. As duas coisas mudaram, e as duas por pedido
+            // do cliente (*"o campo de busca fixo na pagina"*):
+            //
+            //   - quem desenha agora e `SecaoDaRede._topoFixo`, fora da area
+            //     de rolagem. Esta peca so PUBLICA o controle e ocupa zero;
+            //   - ela monta SEMPRE. `comControles` era falso enquanto a
+            //     agenda carregava, e num topo que nao rola isso faria o
+            //     campo nascer depois do dado e empurrar a lista para baixo
+            //     no meio da leitura.
+            //
+            // `comControles` continua decidindo o RESUMO (a contagem e a
+            // faixa da ordem), que fica no conteudo e rola -- ele descreve o
+            // resultado, e nao e controle.
+            BuscaNoTopoFixo(
+              total: _total,
+              busca: busca,
+              filtro: filtro,
+              ordenacao: ordenacao,
+              aoAplicar: _aplicarAFolha,
+            ),
             // **Vazio nao desenha** (18/10/2026): a `Rede` manda
             // `reforcoDaPagina: ''` desde que o cliente removeu as cinco
             // frases de apoio, e sem o `isNotEmpty` a secao abriria com um

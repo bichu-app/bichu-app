@@ -23,6 +23,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
 
@@ -633,15 +634,47 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) await _escolheuOLogotipo(foto);
+    if (!mounted || foto == null) return;
+    final ajustado = await _ajustarOLogotipo(camera, foto);
+    if (!mounted || ajustado == null) return;
+    await _escolheuOLogotipo(ajustado);
   }
 
   Future<void> _escolherOLogotipoDaGaleria() async {
-    final foto = await Escopo.of(context).camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) await _escolheuOLogotipo(foto);
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustado = await _ajustarOLogotipo(camera, foto);
+    if (!mounted || ajustado == null) return;
+    await _escolheuOLogotipo(ajustado);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// A forma vem de `DERIVADAS_DA_LOGO` (512 x 512) em
+  /// `src/modules/media/domain/derivadas.ts` -- o corte que o SERVIDOR faz.
+  /// O quadro desta tela (`ladoDoQuadro`, 120, com `width` IGUAL a `height`
+  /// de proposito) concorda, mas quem manda na janela e quem corta.
+  ///
+  /// E era justamente este o recorte automatico errado para uma LOGO: uma
+  /// marca retangular centrada num quadrado perde as duas pontas, e a logo e
+  /// a parte da indicacao que identifica o negocio.
+  Future<FotoLocal?> _ajustarOLogotipo(
+    CameraEGaleria camera,
+    FotoLocal foto,
+  ) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.logoDaIndicacao,
+        titulo: 'Ajuste o logotipo',
+      );
 
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();

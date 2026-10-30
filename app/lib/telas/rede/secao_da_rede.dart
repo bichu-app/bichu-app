@@ -8,8 +8,10 @@ import '../../api/pessoas_api.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../sessao/controlador_de_sessao.dart';
+import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/acao_de_criar_flutuante.dart';
+import '../../widgets/barra_de_listagem.dart';
 import '../abas.dart';
 import '../casca_com_abas.dart';
 import '../perto/lista_do_diretorio.dart';
@@ -242,9 +244,19 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     _trocarAba(pedida);
   }
 
+  /// A BUSCA QUE O CORPO DA ABA PUBLICA NO TOPO FIXO.
+  ///
+  /// Quem publica e `BuscaNoTopoFixo`, dentro de cada uma das tres abas; quem
+  /// desenha e `LinhaDeBuscaFixaDaSecao`, dentro de [_topoFixo]. **Mora aqui, e
+  /// nao na casca**, porque o topo fixo e desta secao: `Mural`, `Pets`, `Loja`
+  /// e `Perfil` nao tem topo fixo e nao teriam o que publicar.
+  final ValueNotifier<BuscaFixaDaSecao?> _buscaDoTopo =
+      ValueNotifier<BuscaFixaDaSecao?>(null);
+
   @override
   void dispose() {
     _abas.dispose();
+    _buscaDoTopo.dispose();
     super.dispose();
   }
 
@@ -293,12 +305,17 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     // `AnimatedBuilder` porque a visibilidade da porta de criar depende da
     // SESSAO: sem ele, quem entra ou confirma o e-mail com a `Rede` aberta
     // continuaria sem a acao flutuante ate trocar de aba.
-    return AnimatedBuilder(
+    return SlotDaBuscaFixa(
+      busca: _buscaDoTopo,
+      child: AnimatedBuilder(
       animation: sessao,
       builder: (context, _) => TelaDeAba(
         raizDeSecao: true,
         titulo: destino.rotulo,
         acaoDeCriar: _acaoDeCriar(context, sessao),
+        // **O TOPO QUE NAO ROLA** (cliente, 29/10/2026): as tres abas e a
+        // linha de busca. Ver [_topoFixo].
+        cabecalhoFixo: _topoFixo(),
         // **O reforco desce para o corpo, e nao sai da tela.** `TelaDeAba` o
         // desenha como PRIMEIRA linha, acima dos filhos, e o cliente pediu em
         // 17/10 que o campo de busca fique acima dele e das abas -- e o campo
@@ -306,68 +323,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
         // ordem. Hoje ele e vazio nas cinco secoes de qualquer jeito.
         reforco: null,
         filhos: <Widget>[
-          // **AS ABAS FICAM ACIMA DO CORPO E FORA DA BARRA DE LISTAGEM**, e
-          // isso e herdado da agenda por um motivo medido: a barra de listagem
-          // nao e desenhada em alguns estados (carregando, vazio sem recorte,
-          // falha), e abas dentro dela sumiriam junto -- quem filtrasse ate o
-          // vazio em `Comunidade` ficaria sem como voltar para `Eventos`.
-          TabBar(
-            controller: _abas,
-            // Ver a conta inteira na prosa de [SecaoDaRede]: `Comunidade`
-            // corta por 77,24 dp a 200% numa barra NAO rolavel de dois itens,
-            // e rolar e o que a mantem inteira sem abreviar o nome que o
-            // cliente escolheu.
-            isScrollable: true,
-            // **`tabAlignment: TabAlignment.start`**: com `isScrollable` o
-            // padrao do M3 e `startOffset`, que abre um vao de 52 dp antes da
-            // primeira aba -- e a tela ja tem a margem de 16 dp do corpo. Com
-            // os dois, `Eventos` nasceria a 68 dp da borda, desalinhada de
-            // tudo o que esta abaixo dela.
-            tabAlignment: TabAlignment.start,
-            onTap: (i) => _trocarAba(AbaDaSecaoRede.values[i]),
-            // **O GLIFO FICA AO LADO DO ROTULO, e a horizontal e o que
-            // mantem a ALTURA desta barra.** O cliente pediu o icone em
-            // 22/10/2026.
-            //
-            // **A vertical foi tentada primeiro e MEDIDA a reprovar.** Com
-            // `Tab(icon:, text:)` o M3 empilha e pede 72 dp de altura; a 200%
-            // de escala de fonte a linha do rotulo cresce e a pilha estoura a
-            // propria aba -- `RenderFlex overflowed by 2.0 pixels on the
-            // bottom`, em CINCO casos de 200% de quatro arquivos
-            // (`casca_de_cinco_secoes`, `gaveta_com_submenus`,
-            // `barra_fixa_em_toda_tela`, `widget_test`). Qualquer altura fixa
-            // tem a mesma falha mais adiante na escala: o que nao cabe nao e
-            // o numero, e a altura fixa.
-            //
-            // **Deitado, a aba cresce para o LADO -- e e a dimensao que esta
-            // barra tem de sobra**, porque ela e `isScrollable`. A altura
-            // continua sendo `BichuAlvoDeToque.min`, que e o que os casos de
-            // 200% ja mediam e continuam medindo.
-            //
-            // **O CUSTO E DE LARGURA, e ele esta medido e nao escondido**: ver
-            // o caso `o glifo das abas nao empurra `Usuários` para fora da
-            // tela` em `test/rede/glifos_das_abas_da_rede_test.dart`, que mede
-            // onde a terceira aba comeca a 320 dp antes e depois do glifo.
-            tabs: <Widget>[
-              for (final a in AbaDaSecaoRede.values)
-                Tab(
-                  height: BichuAlvoDeToque.min,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      // 20 dp e nao 24: o glifo aqui acompanha uma linha de
-                      // texto e nao e alvo proprio, e cada dp dele e dp que
-                      // empurra a terceira aba para fora de uma tela de
-                      // 320 dp. O alvo de toque continua sendo a aba inteira.
-                      Icon(a.glifo, size: 20),
-                      const SizedBox(width: BichuEspaco.e1),
-                      Text(a.rotulo),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: BichuEspaco.e4),
           // **UMA ABA MONTADA POR VEZ, e nao um `TabBarView`.** As duas
           // listas publicam no mesmo `SlotDaBarraDeListagem` da casca e
           // desenham o proprio gatilho de filtro; com as duas montadas, as
@@ -376,6 +331,129 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
           // faziam, pelo mesmo motivo.
           ..._corpoDaAba(sessao.logado),
         ],
+      ),
+      ),
+    );
+  }
+
+  /// AS TRES ABAS DA SECAO.
+  ///
+  /// **ELAS SAIRAM DE `filhos` E FORAM PARA O TOPO FIXO EM 29/10/2026**, por
+  /// pedido do cliente. Ate aqui eram o primeiro filho do `ListView` da casca
+  /// e rolavam com a lista: numa lista longa elas saiam da tela, e quem
+  /// chegasse ao fim de `Comunidade` nao tinha como voltar para `Eventos` sem
+  /// rolar tudo de volta.
+  ///
+  /// **A RAZAO DE ELAS FICAREM FORA DA `BarraDeListagem` NAO MUDOU, e ficou
+  /// mais forte:** a barra nao e desenhada em alguns estados (carregando,
+  /// vazio sem recorte, falha), e abas dentro dela sumiriam junto. No topo
+  /// fixo elas nao dependem de estado nenhum do corpo.
+  Widget _abasDaSecao() {
+    return TabBar(
+        controller: _abas,
+        // Ver a conta inteira na prosa de [SecaoDaRede]: `Comunidade`
+        // corta por 77,24 dp a 200% numa barra NAO rolavel de dois itens,
+        // e rolar e o que a mantem inteira sem abreviar o nome que o
+        // cliente escolheu.
+        isScrollable: true,
+        // **`tabAlignment: TabAlignment.start`**: com `isScrollable` o
+        // padrao do M3 e `startOffset`, que abre um vao de 52 dp antes da
+        // primeira aba -- e a tela ja tem a margem de 16 dp do corpo. Com
+        // os dois, `Eventos` nasceria a 68 dp da borda, desalinhada de
+        // tudo o que esta abaixo dela.
+        tabAlignment: TabAlignment.start,
+        onTap: (i) => _trocarAba(AbaDaSecaoRede.values[i]),
+        // **O GLIFO FICA AO LADO DO ROTULO, e a horizontal e o que
+        // mantem a ALTURA desta barra.** O cliente pediu o icone em
+        // 22/10/2026.
+        //
+        // **A vertical foi tentada primeiro e MEDIDA a reprovar.** Com
+        // `Tab(icon:, text:)` o M3 empilha e pede 72 dp de altura; a 200%
+        // de escala de fonte a linha do rotulo cresce e a pilha estoura a
+        // propria aba -- `RenderFlex overflowed by 2.0 pixels on the
+        // bottom`, em CINCO casos de 200% de quatro arquivos
+        // (`casca_de_cinco_secoes`, `gaveta_com_submenus`,
+        // `barra_fixa_em_toda_tela`, `widget_test`). Qualquer altura fixa
+        // tem a mesma falha mais adiante na escala: o que nao cabe nao e
+        // o numero, e a altura fixa.
+        //
+        // **Deitado, a aba cresce para o LADO -- e e a dimensao que esta
+        // barra tem de sobra**, porque ela e `isScrollable`. A altura
+        // continua sendo `BichuAlvoDeToque.min`, que e o que os casos de
+        // 200% ja mediam e continuam medindo.
+        //
+        // **O CUSTO E DE LARGURA, e ele esta medido e nao escondido**: ver
+        // o caso `o glifo das abas nao empurra `Usuários` para fora da
+        // tela` em `test/rede/glifos_das_abas_da_rede_test.dart`, que mede
+        // onde a terceira aba comeca a 320 dp antes e depois do glifo.
+        tabs: <Widget>[
+          for (final a in AbaDaSecaoRede.values)
+            Tab(
+              height: BichuAlvoDeToque.min,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // 20 dp e nao 24: o glifo aqui acompanha uma linha de
+                  // texto e nao e alvo proprio, e cada dp dele e dp que
+                  // empurra a terceira aba para fora de uma tela de
+                  // 320 dp. O alvo de toque continua sendo a aba inteira.
+                  Icon(a.glifo, size: 20),
+                  const SizedBox(width: BichuEspaco.e1),
+                  Text(a.rotulo),
+                ],
+              ),
+            ),
+        ],
+    );
+  }
+
+  /// O TOPO QUE NAO ROLA: as tres abas e a linha de busca.
+  ///
+  /// Pedido do cliente, 29/10/2026, literal: *"na pagina de rede vamos manter
+  /// as abas eventos, comunidade, usuarios e o campo de busca fixo na pagina e
+  /// deixar apenas o conteudo com a rolagem"*.
+  ///
+  /// **NO CORPO, E NUNCA NA `AppBar`.** O padrao de listagem do projeto manda
+  /// busca, filtro e ordenacao no topo do CORPO da tela; "fixo" aqui quer dizer
+  /// fora da area de rolagem, e nao promovido a barra do aplicativo. O
+  /// `GatilhoDeRecorteNoCorpo` que viaja junto com a linha continua sendo o
+  /// alvo de 48 dp do corpo, e nao o de 64 da barra.
+  ///
+  /// **SO A BUSCA SOBE, e a `CaixaDeLocalizacao` FICA NO CONTEUDO.** Ele pediu
+  /// as abas e o campo de busca, e nada alem disso. A caixa e, alem de nao
+  /// pedida, a peca que mais varia de altura das tres -- ela desaparece quando
+  /// ha cidade em uso --, e um topo fixo que encolhe no meio da leitura e o
+  /// defeito que este trabalho existe para tirar.
+  ///
+  /// **A LINHA DE BUSCA E A DA ABA DA FRENTE**, publicada por `BuscaNoTopoFixo`
+  /// de dentro do corpo dela. As tres abas publicam no mesmo slot e so uma
+  /// esta montada por vez, entao nao ha disputa -- a mesma razao pela qual
+  /// [_corpoDaAba] monta uma aba por vez e nao um `TabBarView`.
+  Widget _topoFixo() {
+    final cores = BichuColors.of(context).cores;
+    return DecoratedBox(
+      // **O FIO EMBAIXO E O QUE EXPLICA O CORTE.** Sem ele o primeiro cartao
+      // da lista entra por baixo do topo e aparece cortado ao meio, sem nada
+      // na tela dizendo por que. Mesmo desenho que `perfil/meus_achados.dart`
+      // usou em 28/10 para o botao fixo dele, e pelo mesmo motivo.
+      decoration: BoxDecoration(
+        color: cores.surface,
+        border: Border(
+          bottom: BorderSide(color: cores.outline, width: BichuBorda.hairline),
+        ),
+      ),
+      child: Padding(
+        // A MARGEM LATERAL DE 16 e a mesma do `ListView` da casca: o topo
+        // deixou de ser filho dele e teria perdido o alinhamento com a lista.
+        padding: const EdgeInsets.all(BichuEspaco.e4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _abasDaSecao(),
+            const SizedBox(height: BichuEspaco.e4),
+            LinhaDeBuscaFixaDaSecao(busca: _buscaDoTopo),
+          ],
+        ),
       ),
     );
   }

@@ -15,6 +15,7 @@ import '../../widgets/convite_para_entrar.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/imagem_da_rede.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/visualizador_de_imagem.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
@@ -237,15 +238,38 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await widget.camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
 
   Future<void> _escolherDaGaleria() async {
     final foto = await widget.camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) await _escolheu(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheu(ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// A forma vem de `DERIVADAS_DA_VITRINE_DO_USUARIO` (1024 x 1024) em
+  /// `src/modules/media/domain/derivadas.ts` -- o corte que o SERVIDOR faz.
+  /// A grade desta tela usa `childAspectRatio: 1` e concorda, mas quem manda
+  /// na janela e quem corta.
+  Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
+        context,
+        camera: widget.camera,
+        foto: foto,
+        formato: FormatoDoRecorte.vitrineDoUsuario,
+        titulo: 'Ajuste a foto da vitrine',
+      );
 
   Future<void> _abrirOsAjustes() => widget.camera.abrirAjustesDoSistema();
 

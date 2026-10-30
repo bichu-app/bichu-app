@@ -1255,6 +1255,209 @@ class LinhaDeBuscaDaListagem extends StatelessWidget {
   }
 }
 
+/// O QUE UMA SECAO COM TOPO FIXO POE NA LINHA DE BUSCA DELE.
+///
+/// Pedido do cliente, 29/10/2026: *"na pagina de rede vamos manter as abas
+/// eventos, comunidade, usuarios e o campo de busca fixo na pagina e deixar
+/// apenas o conteudo com a rolagem"*.
+///
+/// **Isto NAO sobe a busca para a `AppBar`.** O padrao de listagem do projeto
+/// -- busca, filtro e ordenacao no topo do CORPO da tela, nunca na barra do
+/// aplicativo -- continua inteiro: o que muda e que o topo do corpo deixou de
+/// rolar. `GatilhoDeRecorteNoCorpo` continua sendo o do corpo, com os 48 dp
+/// que ele sempre teve.
+@immutable
+class BuscaFixaDaSecao {
+  const BuscaFixaDaSecao({
+    required this.total,
+    required this.busca,
+    this.filtro,
+    this.ordenacao,
+    this.aoAplicar,
+  });
+
+  final int total;
+  final ControleDeBusca busca;
+  final ControleDeFiltro? filtro;
+  final ControleDeOrdenacao? ordenacao;
+  final void Function(EscolhaDaFolha escolha)? aoAplicar;
+}
+
+/// O CANAL entre o corpo da aba (que tem o estado da busca) e o TOPO FIXO da
+/// secao (que a desenha).
+///
+/// Mesmo arranjo de [SlotDaBarraDeListagem], e pela mesma razao: quem monta o
+/// topo fixo e a secao, e quem conhece a busca e o corpo da aba, que e filho
+/// dela. Parametro obrigaria a secao a guardar o estado de busca das TRES
+/// abas, com tres semanticas diferentes -- a espera de 400 ms de `Usuarios`, o
+/// piso de trigrama de `Comunidade`, o `minLength: 2` de `Eventos`.
+///
+/// **NAO HA LACO, e isto foi conferido e nao suposto.** Quem publica e
+/// [BuscaNoTopoFixo], dentro do corpo; quem le e [LinhaDeBuscaFixaDaSecao],
+/// dentro do `cabecalhoFixo`. Os dois sao subarvores IRMAS: reconstruir o
+/// leitor nao reconstroi `SecaoDaRede`, nem `TelaDeAba`, nem o corpo -- entao
+/// a publicacao nao volta. E por isso que aqui nao ha a comparacao por valor
+/// que [AcaoDeListagem] precisou: la o publicador era descendente de quem
+/// reconstruia.
+class SlotDaBuscaFixa extends InheritedWidget {
+  const SlotDaBuscaFixa({
+    required this.busca,
+    required super.child,
+    super.key,
+  });
+
+  final ValueNotifier<BuscaFixaDaSecao?> busca;
+
+  static SlotDaBuscaFixa? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<SlotDaBuscaFixa>();
+
+  void publicar(BuscaFixaDaSecao nova) => busca.value = nova;
+
+  /// Apaga **so se o que estiver la for o meu**.
+  ///
+  /// A troca de aba desmonta o corpo antigo e monta o novo no MESMO quadro, e
+  /// as duas retrochamadas de fim de quadro correm na ordem da fila. Sem a
+  /// guarda de identidade, uma limpeza atrasada apagaria a busca da aba NOVA e
+  /// o topo ficaria sem campo ate o proximo `build` do corpo.
+  void limparSeFor(BuscaFixaDaSecao? minha) {
+    if (minha == null || !identical(busca.value, minha)) return;
+    busca.value = null;
+  }
+
+  @override
+  bool updateShouldNotify(SlotDaBuscaFixa antigo) => antigo.busca != busca;
+}
+
+/// PUBLICA a linha de busca no topo fixo da secao, e nao desenha nada no lugar.
+///
+/// **Sem topo fixo acima, ela desenha a linha ali mesmo.** Esse ramo nao e
+/// cortesia: `test/telas/busca_de_pessoas_test.dart` monta `BuscaDePessoas`
+/// direto, fora de `SecaoDaRede`, e a aba tem de continuar tendo campo de
+/// busca quando alguem a monta sozinha. A linha desenhada e a MESMA
+/// ([LinhaDeBuscaDaListagem]) nos dois ramos -- duas linhas divergiriam na
+/// primeira edicao.
+///
+/// **MONTA SEMPRE, inclusive carregando** (decisao de 29/10/2026). Era
+/// condicional nas duas listagens: `Eventos` so desenhava com
+/// `BarraDeListagem.desenha` e `Comunidade` so com pagina carregada. Com o
+/// topo parado essa condicao vira defeito visivel -- o topo nasceria sem campo,
+/// ganharia o campo quando o dado chegasse e empurraria a lista para baixo no
+/// meio da leitura. O que carrega e o CONTEUDO, abaixo; o topo nao pisca.
+class BuscaNoTopoFixo extends StatefulWidget {
+  const BuscaNoTopoFixo({
+    required this.total,
+    required this.busca,
+    super.key,
+    this.filtro,
+    this.ordenacao,
+    this.aoAplicar,
+  });
+
+  final int total;
+  final ControleDeBusca busca;
+  final ControleDeFiltro? filtro;
+  final ControleDeOrdenacao? ordenacao;
+  final void Function(EscolhaDaFolha escolha)? aoAplicar;
+
+  @override
+  State<BuscaNoTopoFixo> createState() => _EstadoDaBuscaNoTopoFixo();
+}
+
+class _EstadoDaBuscaNoTopoFixo extends State<BuscaNoTopoFixo> {
+  SlotDaBuscaFixa? _slot;
+
+  /// O ultimo valor que ESTE estado publicou, ou nulo.
+  BuscaFixaDaSecao? _publicada;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final novo = SlotDaBuscaFixa.maybeOf(context);
+    if (identical(novo, _slot)) return;
+    _slot?.limparSeFor(_publicada);
+    _slot = novo;
+    _publicada = null;
+  }
+
+  @override
+  void dispose() {
+    // **Depois do quadro, e nao aqui dentro**: `dispose` corre com a arvore
+    // TRAVADA, e mexer num notificador que um irmao escuta marca esse irmao
+    // sujo durante a desmontagem. Mesma medicao que
+    // `_EstadoDaBarraDeListagem.dispose` ja carregava.
+    final slot = _slot;
+    final publicada = _publicada;
+    if (slot != null && publicada != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          slot.limparSeFor(publicada);
+        } on FlutterError {
+          // A secao inteira foi embora junto: nao ha topo a limpar.
+        }
+      });
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget;
+    final slot = _slot;
+    if (slot == null) {
+      return LinhaDeBuscaDaListagem(
+        total: b.total,
+        busca: b.busca,
+        filtro: b.filtro,
+        ordenacao: b.ordenacao,
+        aoAplicar: b.aoAplicar,
+      );
+    }
+
+    final nova = BuscaFixaDaSecao(
+      total: b.total,
+      busca: b.busca,
+      filtro: b.filtro,
+      ordenacao: b.ordenacao,
+      aoAplicar: b.aoAplicar,
+    );
+    // **Publicado depois do quadro**, e nao durante: o leitor e um IRMAO que ja
+    // foi construido neste quadro (o topo vem antes do rolavel na `Column` da
+    // casca), e marca-lo sujo agora e o erro que o Flutter afirma contra.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _publicada = nova;
+      slot.publicar(nova);
+    });
+    return const SizedBox.shrink();
+  }
+}
+
+/// DESENHA o que o corpo da aba publicou no topo fixo.
+///
+/// Mora no `cabecalhoFixo` da secao. Nulo desenha nada -- e o unico quadro em
+/// que isso acontece e o primeiro da secao, antes de o corpo ter publicado.
+class LinhaDeBuscaFixaDaSecao extends StatelessWidget {
+  const LinhaDeBuscaFixaDaSecao({required this.busca, super.key});
+
+  final ValueNotifier<BuscaFixaDaSecao?> busca;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<BuscaFixaDaSecao?>(
+      valueListenable: busca,
+      builder: (context, fixa, _) => fixa == null
+          ? const SizedBox.shrink()
+          : LinhaDeBuscaDaListagem(
+              total: fixa.total,
+              busca: fixa.busca,
+              filtro: fixa.filtro,
+              ordenacao: fixa.ordenacao,
+              aoAplicar: fixa.aoAplicar,
+            ),
+    );
+  }
+}
+
 /// O que o gatilho de recorte desenha agora, ou nulo quando nao ha folha.
 ///
 /// **Uma verdade so**: [BarraDeListagem] e [LinhaDeBuscaDaListagem] chamam
