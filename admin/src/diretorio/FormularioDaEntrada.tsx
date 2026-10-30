@@ -1,10 +1,22 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import type { Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
-import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
+import { Banner, CampoDeTexto, ErroDoCampo } from '../componentes/basicos.tsx';
 import { CampoDeImagem } from '../componentes/CampoDeImagem.tsx';
+import {
+  BannerDaFalha,
+  carregarPorChave,
+  CargaQueFalhou,
+  ResumoDosCampos,
+  RodapeDoFormulario,
+  useCargaDoFormulario,
+  useRascunhoDoFormulario,
+  useResumoDeErros,
+  VoltarPara,
+  type FalhaDoFormulario,
+} from '../componentes/casca-de-formulario.tsx';
 import { CampoDeCep, CampoDeTelefone } from '../componentes/campos.tsx';
 import {
   descricaoAceitavel,
@@ -24,7 +36,7 @@ import {
 } from '../endereco/enderecos.ts';
 import { telefoneDoE164, telefoneEmE164 } from '../formato/telefone.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
+import { retomarRascunho } from '../sessao/rascunho.ts';
 import {
   ATIVIDADES,
   frasePendente,
@@ -353,7 +365,7 @@ export function valoresDuplicados(entrada: Entrada): Valores {
 export default function FormularioDaEntrada() {
   const { entrySlug } = useParams();
   const editando = entrySlug !== undefined;
-  const { api, registrarRascunho } = useSessao();
+  const { api } = useSessao();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [parametros] = useSearchParams();
@@ -361,7 +373,14 @@ export default function FormularioDaEntrada() {
   const duplicarDe = editando ? undefined : (parametros.get('duplicarDe') ?? undefined);
   /** A chave do rascunho guardado, que **nao e so o `pathname`**. */
   const chaveDoRascunho = duplicarDe ? `${pathname}?duplicarDe=${duplicarDe}` : pathname;
-  const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>();
+  /** O `slug` que esta carga vai LER, que nao e sempre o que ela vai EDITAR. */
+  const slugParaCarregar = entrySlug ?? duplicarDe;
+  const {
+    chave: chaveDaCarga,
+    fase,
+    definir: setCarga,
+    recarregar,
+  } = useCargaDoFormulario(entrySlug ?? (duplicarDe ? `dup:${duplicarDe}` : undefined));
   const [entrada, setEntrada] = useState<Entrada>();
   const [etag, setEtag] = useState<string>();
   const [valores, setValores] = useState<Valores>(() =>
@@ -376,59 +395,32 @@ export default function FormularioDaEntrada() {
   >('ocioso');
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean; informativo?: boolean }>();
-  const [versao, setVersao] = useState(0);
-  const resumo = useRef<HTMLDivElement>(null);
+  const [falha, setFalha] = useState<FalhaDoFormulario>();
+  const { referencia: resumo, focar } = useResumoDeErros();
   const liberado = useRef(false);
-
-  /** O `slug` que esta carga vai LER, que nao e sempre o que ela vai EDITAR. */
-  const slugParaCarregar = entrySlug ?? duplicarDe;
-  const chaveDaCarga = `${entrySlug ?? (duplicarDe ? `dup:${duplicarDe}` : 'novo')}#${versao}`;
-  const fase = !slugParaCarregar
-    ? 'pronto'
-    : carga?.chave === chaveDaCarga
-      ? carga.fase
-      : 'carregando';
 
   useEffect(() => {
     if (!slugParaCarregar) return;
-    const controle = new AbortController();
-    const chave = chaveDaCarga;
-    api
-      .GET('/admin/directory/entries/{entrySlug}', {
+    return carregarPorChave(chaveDaCarga, setCarga, async (sinal) => {
+      const { data, response } = await api.GET('/admin/directory/entries/{entrySlug}', {
         params: { path: { entrySlug: slugParaCarregar } },
-        signal: controle.signal,
-      })
-      .then(({ data, response }) => {
-        if (controle.signal.aborted) return;
-        if (!data) {
-          setCarga({ chave, fase: response.status === 404 ? 'nao-encontrado' : 'erro' });
-          return;
-        }
-        if (editando) {
-          setEntrada(data);
-          setEtag(versaoComoEtag(data.version));
-          setBase(valoresDa(data));
-          setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDa(data));
-        } else {
-          setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDuplicados(data));
-        }
-        setCarga({ chave, fase: 'pronto' });
-      })
-      .catch(() => {
-        if (!controle.signal.aborted) setCarga({ chave, fase: 'erro' });
+        signal: sinal,
       });
-    return () => controle.abort();
-  }, [api, slugParaCarregar, editando, chaveDoRascunho, chaveDaCarga]);
+      if (sinal.aborted) return undefined;
+      if (!data) return response.status === 404 ? 'nao-encontrado' : 'erro';
+      if (editando) {
+        setEntrada(data);
+        setEtag(versaoComoEtag(data.version));
+        setBase(valoresDa(data));
+        setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDa(data));
+      } else {
+        setValores(retomarRascunho<Valores>(chaveDoRascunho) ?? valoresDuplicados(data));
+      }
+      return 'pronto';
+    });
+  }, [api, slugParaCarregar, editando, chaveDoRascunho, chaveDaCarga, setCarga]);
 
-  const valoresRef = useRef(valores);
-  useLayoutEffect(() => {
-    valoresRef.current = valores;
-  });
-  useEffect(
-    () => registrarRascunho(() => guardarRascunho(chaveDoRascunho, paraRascunho(valoresRef.current))),
-    [registrarRascunho, chaveDoRascunho],
-  );
+  useRascunhoDoFormulario(chaveDoRascunho, valores, paraRascunho);
 
   const erros = tentou ? { ...errosDoServidor, ...validarEntrada(valores) } : errosDoServidor;
 
@@ -467,7 +459,7 @@ export default function FormularioDaEntrada() {
 
   function mostrar(doServidor: Partial<Record<Campo, string>>) {
     setErrosDoServidor(doServidor);
-    requestAnimationFrame(() => resumo.current?.focus());
+    focar();
   }
 
   function voltar(aviso?: string) {
@@ -651,30 +643,20 @@ export default function FormularioDaEntrada() {
     setFalha({ texto: 'Não conseguimos salvar a entrada. Confira os campos e tente de novo.' });
   }
 
-  const voltarLink = (
-    <Link className="btn ghost voltar" to="/perto">
-      <Icone nome="back" tamanho="s20" />
-      Voltar para Perto
-    </Link>
-  );
+  const voltarLink = <VoltarPara para="/perto">Voltar para Perto</VoltarPara>;
 
   if (fase === 'carregando') return <p role="status">Carregando…</p>;
   if (fase !== 'pronto') {
     return (
-      <div className="form">
-        {voltarLink}
-        <Banner tipo="erro">
-          {
-}
-          {fase === 'nao-encontrado'
-            ? duplicarDe
-              ? 'A entrada que você quer duplicar não existe mais.'
-              : 'Esta entrada não existe mais.'
-            : duplicarDe
-              ? 'Não conseguimos carregar a entrada que você quer duplicar.'
-              : 'Não conseguimos carregar a entrada.'}
-        </Banner>
-      </div>
+      <CargaQueFalhou voltar={voltarLink}>
+        {fase === 'nao-encontrado'
+          ? duplicarDe
+            ? 'A entrada que você quer duplicar não existe mais.'
+            : 'Esta entrada não existe mais.'
+          : duplicarDe
+            ? 'Não conseguimos carregar a entrada que você quer duplicar.'
+            : 'Não conseguimos carregar a entrada.'}
+      </CargaQueFalhou>
     );
   }
 
@@ -709,27 +691,8 @@ export default function FormularioDaEntrada() {
             cópia — confira os dados e cadastre.
           </Banner>
         )}
-        {lista.length > 0 && (
-          <ResumoDeErros
-            referencia={resumo}
-            titulo={`Corrija ${lista.length} ${lista.length === 1 ? 'campo' : 'campos'} para salvar:`}
-            erros={lista}
-          />
-        )}
-        {falha && (
-          <Banner
-            tipo={falha.informativo ? 'info' : 'erro'}
-            acao={
-              falha.recarregar ? (
-                <button type="button" className="btn ghost sm" onClick={() => setVersao((n) => n + 1)}>
-                  Recarregar
-                </button>
-              ) : undefined
-            }
-          >
-            {falha.texto}
-          </Banner>
-        )}
+        <ResumoDosCampos referencia={resumo} erros={lista} acao="salvar" />
+        <BannerDaFalha falha={falha} aoRecarregar={recarregar} />
         {
 }
         {pendente && entrada?.status !== 'published' && <Banner tipo="info">{pendente}</Banner>}
@@ -1059,21 +1022,12 @@ export default function FormularioDaEntrada() {
           </p>
         )}
 
-        <div className="rodape-form">
-          <Link className="btn sec" to="/perto">
-            Cancelar
-          </Link>
-          <button
-            type="submit"
-            className="btn pri"
-            data-cy="entrada-salvar"
-            aria-busy={salvando || undefined}
-            disabled={salvando}
-          >
-            {salvando && <span className="spin" aria-hidden="true" />}
-            {editando ? 'Salvar alterações' : 'Cadastrar entrada'}
-          </button>
-        </div>
+        <RodapeDoFormulario
+          cancelarPara="/perto"
+          rotulo={editando ? 'Salvar alterações' : 'Cadastrar entrada'}
+          salvando={salvando}
+          dataCy="entrada-salvar"
+        />
       </form>
       <SairSemSalvar sujo={sujo && !salvando} liberado={liberado} />
     </>

@@ -2,14 +2,21 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
-import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../../componentes/basicos.tsx';
+import { Banner, CampoDeTexto, ErroDoCampo } from '../../componentes/basicos.tsx';
 import { CampoDeValorEmReais } from '../../componentes/campos.tsx';
+import {
+  BannerDaFalha,
+  ResumoDosCampos,
+  useCargaDoFormulario,
+  useRascunhoDoFormulario,
+  useResumoDeErros,
+  VoltarPara,
+} from '../../componentes/casca-de-formulario.tsx';
 import { DIMENSAO_MINIMA, enviarImagem, LIMITE_EM_MB } from '../../componentes/envio-de-imagem.ts';
 import { Galeria } from '../../componentes/Galeria.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
 import { SairSemSalvar } from '../../componentes/SairSemSalvar.tsx';
-import { guardarRascunho, retomarRascunho } from '../../sessao/rascunho.ts';
-import { useSessao } from '../../sessao/ProvedorDeSessao.tsx';
+import { retomarRascunho } from '../../sessao/rascunho.ts';
 import { mensagemDaFalha } from '../api/mensagens.ts';
 import { precisaReler, type Falha } from '../api/redeApi.ts';
 import { DialogoComMotivo, type ResultadoDaAcao } from '../componentes/DialogoComMotivo.tsx';
@@ -126,7 +133,6 @@ export default function FormularioDoEncontro() {
   const editando = eventSlug !== undefined;
   const modo = editando ? 'editar' : 'novo';
   const { rede, cliente } = useRede();
-  const sessao = useSessao();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -140,11 +146,8 @@ export default function FormularioDoEncontro() {
   const [falha, setFalha] = useState<string>();
   const [nadaMudou, setNadaMudou] = useState(false);
   const [dialogo, setDialogo] = useState<DialogoPendente>();
-  const [versao, setVersao] = useState(0);
-  const chaveDaCarga = `${eventSlug ?? ''}:${versao}`;
-  const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>(() => ({ chave: editando ? '' : chaveDaCarga, fase: 'pronto' }));
-  const fase = carga.chave === chaveDaCarga ? carga.fase : 'carregando';
-  const resumo = useRef<HTMLDivElement>(null);
+  const { chave: chaveDaCarga, fase, definir: setCarga, recarregar } = useCargaDoFormulario(eventSlug);
+  const { referencia: resumo, focar: mostrarErros } = useResumoDeErros();
   const liberado = useRef(false);
 
   const mudar = useCallback(<K extends keyof EstadoDoFormulario>(campo: K, valor: EstadoDoFormulario[K]) => {
@@ -156,7 +159,7 @@ export default function FormularioDoEncontro() {
   useEffect(() => {
     if (!eventSlug) return;
     let ativo = true;
-    const chave = `${eventSlug}:${versao}`;
+    const chave = chaveDaCarga;
     void rede.obter(eventSlug).then((r) => {
       if (!ativo) return;
       if (!r.ok) {
@@ -175,16 +178,12 @@ export default function FormularioDoEncontro() {
     return () => {
       ativo = false;
     };
-  }, [rede, eventSlug, pathname, versao]);
+  }, [rede, eventSlug, pathname, chaveDaCarga, setCarga]);
 
-  const fRef = useRef(f);
-  useEffect(() => {
-    fRef.current = f;
-  });
-  useEffect(
-    () => sessao.registrarRascunho(() => guardarRascunho(pathname, { ...fRef.current, fotos: fRef.current.fotos.filter((x) => x.uploadId) })),
-    [sessao, pathname],
-  );
+  useRascunhoDoFormulario(pathname, f, (atual) => ({
+    ...atual,
+    fotos: atual.fotos.filter((x) => x.uploadId),
+  }));
 
   const errosLocais = useMemo(() => (tentou ? validar(f, modo) : []), [tentou, f, modo]);
   const erros = [...errosLocais, ...doServidor.filter((s) => !errosLocais.some((l) => l.campo === s.campo))];
@@ -201,10 +200,6 @@ export default function FormularioDoEncontro() {
     void navigate('/rede', { state: { aviso } });
   }
 
-  function mostrarErros() {
-    requestAnimationFrame(() => resumo.current?.focus());
-  }
-
   function tratarFalha(r: Falha, acao: string) {
     const noCampo = errosDoServidor(r);
     if (noCampo.length) {
@@ -212,7 +207,7 @@ export default function FormularioDoEncontro() {
       mostrarErros();
       return;
     }
-    if (precisaReler(r)) setVersao((n) => n + 1);
+    if (precisaReler(r)) recarregar();
     setFalha(mensagemDaFalha(r, acao));
   }
 
@@ -275,7 +270,7 @@ export default function FormularioDoEncontro() {
       const r = await passo();
       if (!r.ok) {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
-        if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
+        if (i > 0 || precisaReler(r.falha)) recarregar();
         const noCampo = errosDoServidor(r.falha);
         if (noCampo.length) {
           setTentou(true);
@@ -306,7 +301,7 @@ export default function FormularioDoEncontro() {
           tipo="erro"
           acao={
             fase === 'erro' ? (
-              <button type="button" className="btn ghost sm" onClick={() => setVersao((n) => n + 1)}>
+              <button type="button" className="btn ghost sm" onClick={recarregar}>
                 Atualizar
               </button>
             ) : undefined
@@ -356,13 +351,13 @@ export default function FormularioDoEncontro() {
           Este evento foi cancelado. Você ainda pode corrigir título, descrição, fotos e detalhes; data, local e acesso não mudam mais.
         </Banner>
       )}
-      {falha && <Banner tipo="erro">{falha}</Banner>}
+      <BannerDaFalha falha={falha === undefined ? undefined : { texto: falha }} />
       {nadaMudou && !falha && <Banner tipo="info">Nada mudou. Altere algum campo antes de salvar.</Banner>}
       {nErros > 0 && (
-        <ResumoDeErros
+        <ResumoDosCampos
           referencia={resumo}
-          titulo={`Corrija ${nErros} ${nErros === 1 ? 'campo' : 'campos'} para ${editando ? 'salvar' : 'publicar'}:`}
           erros={erros.map((e) => ({ campo: idDoCampo(e.campo), rotulo: e.rotulo }))}
+          acao={editando ? 'salvar' : 'publicar'}
         />
       )}
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
@@ -580,10 +575,9 @@ function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
 
 function VoltarParaARede() {
   return (
-    <Link className={`btn ghost voltar ${estilos.voltar ?? ''}`} to="/rede">
-      <Icone nome="back" tamanho="s20" />
+    <VoltarPara para="/rede" className={estilos.voltar ?? ''}>
       Voltar para a Rede
-    </Link>
+    </VoltarPara>
   );
 }
 

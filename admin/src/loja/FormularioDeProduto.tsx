@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
-import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
+import { Banner, CampoDeTexto, ErroDoCampo } from '../componentes/basicos.tsx';
 import { CampoDeValorEmReais } from '../componentes/campos.tsx';
+import {
+  BannerDaFalha,
+  carregarPorChave,
+  CargaQueFalhou,
+  ResumoDosCampos,
+  useCargaDoFormulario,
+  useRascunhoDoFormulario,
+  useResumoDeErros,
+  VoltarPara,
+  type FalhaDoFormulario,
+} from '../componentes/casca-de-formulario.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../componentes/DialogoDeConfirmacao.tsx';
 import { enviarImagem } from '../componentes/envio-de-imagem.ts';
@@ -12,7 +23,7 @@ import { Galeria, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
+import { retomarRascunho } from '../sessao/rascunho.ts';
 import { DialogoCriarTag } from './DialogoCriarTag.tsx';
 import { DialogoRenovarPreco } from './DialogoRenovarPreco.tsx';
 import {
@@ -112,12 +123,17 @@ function comparavel(v: ValoresDoProduto): string {
 export default function FormularioDeProduto() {
   const { itemSlug } = useParams();
   const editando = itemSlug !== undefined;
-  const { api, registrarRascunho } = useSessao();
+  const { api } = useSessao();
   const navigate = useNavigate();
   const location = useLocation();
   const rotaDoRascunho = location.pathname;
 
-  const [carga, setCarga] = useState<{ chave: string; fase: 'pronto' | 'erro' | 'nao-encontrado' }>();
+  const {
+    chave: chaveDaCarga,
+    fase,
+    definir: setCarga,
+    recarregar,
+  } = useCargaDoFormulario(itemSlug, { carregaSempre: true });
   const [item, setItem] = useState<Item>();
   const [etag, setEtag] = useState<string>();
   const [parceiros, setParceiros] = useState<Parceiro[]>([]);
@@ -129,18 +145,14 @@ export default function FormularioDeProduto() {
   const [tagsRecusadas, setTagsRecusadas] = useState<string[]>([]);
   const [tentouSalvar, setTentouSalvar] = useState<Acao>();
   const [salvando, setSalvando] = useState<Acao>();
-  const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean }>();
+  const [falha, setFalha] = useState<FalhaDoFormulario>();
   const [criarTag, setCriarTag] = useState(false);
   const [retirar, setRetirar] = useState(false);
   const [confirmarRetirada, setConfirmarRetirada] = useState(false);
   const [renovar, setRenovar] = useState(false);
-  const [versao, setVersao] = useState(0);
-  const resumo = useRef<HTMLDivElement>(null);
+  const { referencia: resumo, focar: focarResumo } = useResumoDeErros();
   const liberado = useRef(false);
   const falhaDaNavegacao = (location.state as { falha?: string } | null)?.falha;
-
-  const chaveDaCarga = `${itemSlug ?? 'novo'}#${versao}`;
-  const fase = carga?.chave === chaveDaCarga ? carga.fase : 'carregando';
 
   const mudar = useCallback(<K extends keyof ValoresDoProduto>(campo: K, valor: ValoresDoProduto[K]) => {
     setValores((v) => ({ ...v, [campo]: valor }));
@@ -149,25 +161,18 @@ export default function FormularioDeProduto() {
   }, []);
 
   useEffect(() => {
-    const controle = new AbortController();
-    const sinal = controle.signal;
-    const chave = chaveDaCarga;
-    async function carregar() {
+    return carregarPorChave(chaveDaCarga, setCarga, async (sinal) => {
       const [respostaDoItem, respostaDosParceiros, respostaDasTags, respostaDaTaxonomia] = await Promise.all([
         itemSlug ? api.GET('/admin/store/items/{itemSlug}', { params: { path: { itemSlug } }, signal: sinal }) : Promise.resolve(undefined),
         carregarParceirosAtivos(api, sinal),
         api.GET('/admin/store/tags', { params: { query: { active: true, limit: 100 } }, signal: sinal }),
         api.GET('/store/taxonomy', { signal: sinal }),
       ]);
-      if (sinal.aborted) return;
+      if (sinal.aborted) return undefined;
       if (respostaDoItem && !respostaDoItem.data) {
-        setCarga({ chave, fase: respostaDoItem.response.status === 404 ? 'nao-encontrado' : 'erro' });
-        return;
+        return respostaDoItem.response.status === 404 ? 'nao-encontrado' : 'erro';
       }
-      if (!respostaDosParceiros || !respostaDasTags.data || !respostaDaTaxonomia.data) {
-        setCarga({ chave, fase: 'erro' });
-        return;
-      }
+      if (!respostaDosParceiros || !respostaDasTags.data || !respostaDaTaxonomia.data) return 'erro';
       setParceiros(respostaDosParceiros);
       setTags(respostaDasTags.data.items);
       setTaxonomia(respostaDaTaxonomia.data);
@@ -182,29 +187,15 @@ export default function FormularioDeProduto() {
       setValores(rascunho?.valores ?? doServidor);
       setErrosDoServidorNaTela({});
       setTentouSalvar(undefined);
-      setCarga({ chave, fase: 'pronto' });
-    }
-    carregar().catch(() => {
-      if (!sinal.aborted) setCarga({ chave, fase: 'erro' });
+      return 'pronto';
     });
-    return () => controle.abort();
-  }, [api, itemSlug, rotaDoRascunho, chaveDaCarga]);
+  }, [api, itemSlug, rotaDoRascunho, chaveDaCarga, setCarga]);
 
-  const valoresRef = useRef(valores);
-  const etagRef = useRef(etag);
-  useLayoutEffect(() => {
-    valoresRef.current = valores;
-    etagRef.current = etag;
-  });
-  useEffect(
-    () =>
-      registrarRascunho(() =>
-        guardarRascunho(rotaDoRascunho, {
-          valores: paraRascunho(valoresRef.current),
-          ...(etagRef.current ? { etag: etagRef.current } : {}),
-        } satisfies RascunhoDoProduto),
-      ),
-    [registrarRascunho, rotaDoRascunho],
+  useRascunhoDoFormulario(
+    rotaDoRascunho,
+    { valores, etag },
+    ({ valores: v, etag: e }) =>
+      ({ valores: paraRascunho(v), ...(e ? { etag: e } : {}) }) satisfies RascunhoDoProduto,
   );
 
   const temConferencia = valores.imagens.some((im) => im.estado === 'processing');
@@ -254,10 +245,6 @@ export default function FormularioDeProduto() {
 
   const faltas = publicado ? [] : faltaParaPublicar(valores);
   const avisoDaFalta = fase === 'pronto' ? fraseDaFalta(faltas) : null;
-
-  function focarResumo() {
-    requestAnimationFrame(() => resumo.current?.focus());
-  }
 
   function sair(aviso: string) {
     liberado.current = true;
@@ -323,7 +310,7 @@ export default function FormularioDeProduto() {
     const texto = 'O produto foi salvo, mas não conseguimos publicar. Tente publicar de novo.';
     if (editando) {
       setFalha({ texto });
-      setVersao((n) => n + 1);
+      recarregar();
       return;
     }
     liberado.current = true;
@@ -365,29 +352,16 @@ export default function FormularioDeProduto() {
   if (fase === 'carregando') return <p role="status">Carregando…</p>;
   if (fase === 'nao-encontrado' || fase === 'erro') {
     return (
-      <div className="form">
-        <Link className="btn ghost voltar" to="/loja">
-          <Icone nome="back" tamanho="s20" />
-          Voltar para a Loja
-        </Link>
-        <Banner
-          tipo="erro"
-          acao={
-            fase === 'erro' ? (
-              <button type="button" className="btn ghost sm" onClick={() => setVersao((n) => n + 1)}>
-                Atualizar
-              </button>
-            ) : undefined
-          }
-        >
-          {fase === 'nao-encontrado' ? 'Este produto não existe mais.' : 'Não conseguimos carregar o produto.'}
-        </Banner>
-      </div>
+      <CargaQueFalhou
+        voltar={<VoltarPara para="/loja">Voltar para a Loja</VoltarPara>}
+        aoAtualizar={fase === 'erro' ? recarregar : undefined}
+      >
+        {fase === 'nao-encontrado' ? 'Este produto não existe mais.' : 'Não conseguimos carregar o produto.'}
+      </CargaQueFalhou>
     );
   }
 
   const listaDeErros = ORDEM_DOS_CAMPOS.filter((c) => erros[c]).map((c) => ({ campo: c, rotulo: ROTULO_DO_CAMPO[c] }));
-  const n = listaDeErros.length;
   const erro = (c: CampoDoProduto) => erros[c];
   const tagsAtivas = new Set(tags.map((t) => t.slug));
   const tagsDoItemInativas = (item?.tags ?? []).filter((t) => !t.active && !tagsAtivas.has(t.slug));
@@ -410,32 +384,17 @@ export default function FormularioDeProduto() {
         void salvar(publicado ? 'salvar' : 'publicar');
       }}
     >
-      <Link className="btn ghost voltar" to="/loja">
-        <Icone nome="back" tamanho="s20" />
-        Voltar para a Loja
-      </Link>
+      <VoltarPara para="/loja">Voltar para a Loja</VoltarPara>
       <h1 className="t-headline">{item ? item.title : 'Novo produto'}</h1>
-      {n > 0 && (
-        <ResumoDeErros
-          referencia={resumo}
-          titulo={`Corrija ${n} ${n === 1 ? 'campo' : 'campos'} para ${tentouSalvar === 'publicar' ? 'publicar' : 'salvar'}:`}
-          erros={listaDeErros}
-        />
-      )}
-      {(falha || falhaDaNavegacao) && (
-        <Banner
-          tipo="erro"
-          acao={
-            falha?.recarregar ? (
-              <button type="button" className="btn ghost sm" onClick={() => setVersao((v) => v + 1)}>
-                Recarregar
-              </button>
-            ) : undefined
-          }
-        >
-          {falha?.texto ?? falhaDaNavegacao}
-        </Banner>
-      )}
+      <ResumoDosCampos
+        referencia={resumo}
+        erros={listaDeErros}
+        acao={tentouSalvar === 'publicar' ? 'publicar' : 'salvar'}
+      />
+      <BannerDaFalha
+        falha={falha ?? (falhaDaNavegacao === undefined ? undefined : { texto: falhaDaNavegacao })}
+        aoRecarregar={recarregar}
+      />
       <p className="t-body-sm c-sec">
         {publicado
           ? 'Campos com * são obrigatórios.'
