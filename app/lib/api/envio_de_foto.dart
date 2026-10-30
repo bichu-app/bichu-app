@@ -3,12 +3,15 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+// `foundation` traz `debugPrint`, `@immutable` E reexporta `Uint8List` --
+// `dart:typed_data` aqui seria import redundante, e o analisador reprova.
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../dispositivo/camera_e_galeria.dart';
 import 'falhas.dart';
+import 'problem.dart';
 
 /// `#/components/schemas/UploadIntent` do contrato.
 class AutorizacaoDeEnvio {
@@ -222,6 +225,98 @@ enum DesfechoDoEnvio {
   recusada,
 }
 
+/// POR QUE o envio não terminou — o que [DesfechoDoEnvio] não distingue.
+///
+/// ## O defeito que este enum existe para não repetir
+///
+/// Em 30/10/2026 o envio de foto ficou bloqueado em homologação e **três
+/// rodadas de diagnóstico foram gastas na hipótese errada**. A razão foi esta
+/// tela: [DesfechoDoEnvio.recusada] cobria QUATRO causas diferentes — arquivo
+/// ilegível, arquivo vazio, **a nossa própria rota de intenção recusando**, e
+/// o armazenamento recusando. A frase na tela dizia "a foto não foi aceita", o
+/// que aponta para o armazenamento, e o diagnóstico foi para a assinatura V4.
+///
+/// A assinatura estava certa. O custo de não distinguir: uma chave HMAC
+/// rotacionada sem motivo, e a chave antiga quase desativada — o que teria
+/// derrubado a exibição de fotos inteira, porque o leitor de mídia ainda a
+/// usava.
+///
+/// **A frase para a pessoa pode continuar simples.** O que não pode continuar
+/// é o CAMINHO ser indistinguível para quem depura: a recusa da nossa API e a
+/// do armazenamento são defeitos em lugares opostos do sistema.
+enum MotivoDoDesfecho {
+  /// Os bytes chegaram e o envio terminou.
+  entregue,
+
+  /// `bytesDaFoto` estourou: o arquivo não abre ou sumiu do aparelho. O
+  /// sistema limpa o diretório temporário da câmera quando falta espaço, e o
+  /// recorte escreve justamente ali.
+  arquivoIlegivel,
+
+  /// O arquivo abriu com zero byte — seletor interrompido no meio da cópia.
+  arquivoVazio,
+
+  /// **A NOSSA rota de intenção recusou**, e o status e o código estão em
+  /// [DiagnosticoDoEnvio.status] e [DiagnosticoDoEnvio.codigo]. 415 é tipo
+  /// fora da lista; 422, dimensão declarada pequena; 429, teto de chamadas.
+  /// Nada disto é problema do armazenamento.
+  intencaoRecusadaPelaApi,
+
+  /// A intenção não saiu: sem conexão ou prazo esgotado.
+  intencaoSemRede,
+
+  /// **O ARMAZENAMENTO recusou**, com o status em
+  /// [DiagnosticoDoEnvio.status]. 403 é política ou assinatura; 400 costuma
+  /// ser campo do formulário fora das condições.
+  armazenamentoRecusou,
+
+  /// O envio dos bytes não completou: sem conexão, prazo, ou falha de cliente.
+  armazenamentoSemRede,
+
+  /// A confirmação falhou depois de os bytes subirem.
+  confirmacaoRecusada,
+
+  /// A confirmação não saiu por rede.
+  confirmacaoSemRede,
+}
+
+/// O desfecho COM a causa, para o registro do aparelho e para os casos.
+@immutable
+class DiagnosticoDoEnvio {
+  const DiagnosticoDoEnvio({
+    required this.desfecho,
+    required this.motivo,
+    this.status,
+    this.codigo,
+  });
+
+  final DesfechoDoEnvio desfecho;
+  final MotivoDoDesfecho motivo;
+
+  /// O status HTTP de QUEM recusou, quando houve resposta.
+  final int? status;
+
+  /// O `type` do problema, quando quem recusou foi a nossa API.
+  final String? codigo;
+
+  /// Uma linha só, para o registro do aparelho.
+  ///
+  /// É o que permite ler o caminho sem depurador acoplado: `adb logcat` ou o
+  /// console do Xcode mostram qual das causas foi, e o status de quem recusou.
+  String get linha {
+    final partes = <String>[
+      'BICHU envio: ${desfecho.name}',
+      'motivo=${motivo.name}',
+      if (status != null) 'status=$status',
+      if (codigo != null) 'codigo=$codigo',
+    ];
+    return partes.join(' ');
+  }
+
+  @override
+  String toString() => linha;
+}
+
 /// O mecanismo. Tres passos, tres consumidores, uma copia.
 class EnvioDeFoto {
   EnvioDeFoto({
@@ -244,6 +339,49 @@ class EnvioDeFoto {
   /// por rede de celular, e 20 s derrubaria envio que ia dar certo.
   final Duration tempoLimite;
 
+  /// O identificador do problema para o registro.
+  ///
+  /// `ProblemTipo` e um enum FECHADO: um `type` que este build nao conhece vira
+  /// `desconhecido`, cujo slug e vazio. E o caso de `unsupported-media-type`
+  /// (415), que e exatamente o que as rotas de catalogo devolvem para tipo
+  /// fora da lista -- o motivo mais provavel de uma recusa nossa. Cair na URI
+  /// crua mantem a informacao no log em vez de anotar string vazia.
+  static String? _identificadorDoProblema(Problem problema) {
+    final slug = problema.tipo.slug;
+    return slug.isNotEmpty ? slug : (problema.tipoUri.isEmpty ? null : problema.tipoUri);
+  }
+
+  /// O desfecho da ÚLTIMA chamada de [enviar], com a causa.
+  ///
+  /// Existe porque [DesfechoDoEnvio] tem três valores e o caminho tem nove —
+  /// ver [MotivoDoDesfecho] para o que custou não distinguir. As telas
+  /// continuam decidindo a frase pelo desfecho; quem depura lê aqui.
+  DiagnosticoDoEnvio? get ultimoDiagnostico => _ultimoDiagnostico;
+  DiagnosticoDoEnvio? _ultimoDiagnostico;
+
+  /// Anota a causa, escreve UMA linha no registro do aparelho, e devolve o
+  /// desfecho que a tela consome.
+  ///
+  /// O registro não é enfeite: sem ele, a única informação que sai de um
+  /// aparelho de verdade é a frase da tela, e foi exatamente isso que mandou
+  /// três rodadas de diagnóstico para o lugar errado.
+  DesfechoDoEnvio _anotar(
+    DesfechoDoEnvio desfecho,
+    MotivoDoDesfecho motivo, {
+    int? status,
+    String? codigo,
+  }) {
+    final diagnostico = DiagnosticoDoEnvio(
+      desfecho: desfecho,
+      motivo: motivo,
+      status: status,
+      codigo: codigo,
+    );
+    _ultimoDiagnostico = diagnostico;
+    if (motivo != MotivoDoDesfecho.entregue) debugPrint(diagnostico.linha);
+    return desfecho;
+  }
+
   /// [aoProgredir] recebe **bytes do arquivo entregues ao socket**, e o total,
   /// a cada 64 KiB.
   Future<DesfechoDoEnvio> enviar({
@@ -251,13 +389,19 @@ class EnvioDeFoto {
     required DestinoDaFoto destino,
     ProgressoDeEnvio? aoProgredir,
   }) async {
+    _ultimoDiagnostico = null;
     final Uint8List bytes;
     try {
       bytes = await camera.bytesDaFoto(foto);
     } on Object {
-      return DesfechoDoEnvio.recusada;
+      return _anotar(
+        DesfechoDoEnvio.recusada,
+        MotivoDoDesfecho.arquivoIlegivel,
+      );
     }
-    if (bytes.isEmpty) return DesfechoDoEnvio.recusada;
+    if (bytes.isEmpty) {
+      return _anotar(DesfechoDoEnvio.recusada, MotivoDoDesfecho.arquivoVazio);
+    }
 
     final AutorizacaoDeEnvio autorizacao;
     try {
@@ -266,11 +410,34 @@ class EnvioDeFoto {
         tamanhoEmBytes: bytes.length,
       );
     } on FalhaDeConexao {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.intencaoSemRede,
+      );
     } on FalhaDeTempo {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.intencaoSemRede,
+      );
+    } on FalhaDaApi catch (falha) {
+      // **O ramo que faltava.** A nossa rota recusando (415, 422, 429) caía no
+      // `on Object` abaixo e virava a MESMA recusa do armazenamento. O status e
+      // o tipo do problema saem daqui para o registro do aparelho.
+      return _anotar(
+        DesfechoDoEnvio.recusada,
+        MotivoDoDesfecho.intencaoRecusadaPelaApi,
+        status: falha.problem.status,
+        codigo: _identificadorDoProblema(falha.problem),
+      );
     } on Object {
-      return DesfechoDoEnvio.recusada;
+      // Sobra o que não é rede nem recusa da API: corpo que não decodifica,
+      // `url`/`upload_id` ausentes. Fica em `intencaoRecusadaPelaApi` SEM
+      // status, e a ausência de status é o que o separa de uma recusa de
+      // verdade no registro.
+      return _anotar(
+        DesfechoDoEnvio.recusada,
+        MotivoDoDesfecho.intencaoRecusadaPelaApi,
+      );
     }
 
     final subiu = await _subirOsBytes(
@@ -284,14 +451,30 @@ class EnvioDeFoto {
     try {
       await destino.confirmar(autorizacao.uploadId);
     } on FalhaDeConexao {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.confirmacaoSemRede,
+      );
     } on FalhaDeTempo {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.confirmacaoSemRede,
+      );
+    } on FalhaDaApi catch (falha) {
+      return _anotar(
+        DesfechoDoEnvio.recusada,
+        MotivoDoDesfecho.confirmacaoRecusada,
+        status: falha.problem.status,
+        codigo: _identificadorDoProblema(falha.problem),
+      );
     } on Object {
-      return DesfechoDoEnvio.recusada;
+      return _anotar(
+        DesfechoDoEnvio.recusada,
+        MotivoDoDesfecho.confirmacaoRecusada,
+      );
     }
 
-    return DesfechoDoEnvio.enviada;
+    return _anotar(DesfechoDoEnvio.enviada, MotivoDoDesfecho.entregue);
   }
 
   Future<DesfechoDoEnvio> _subirOsBytes(
@@ -327,18 +510,35 @@ class EnvioDeFoto {
     try {
       resposta = await _cliente.send(requisicao).timeout(tempoLimite);
     } on TimeoutException {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.armazenamentoSemRede,
+      );
     } on http.ClientException {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.armazenamentoSemRede,
+      );
     } on Object {
-      return DesfechoDoEnvio.semSinal;
+      return _anotar(
+        DesfechoDoEnvio.semSinal,
+        MotivoDoDesfecho.armazenamentoSemRede,
+      );
     }
 
     await resposta.stream.drain<void>();
 
     final status = resposta.statusCode;
     if (status >= 200 && status < 300) return DesfechoDoEnvio.enviada;
-    return DesfechoDoEnvio.recusada;
+    // **O STATUS DO ARMAZENAMENTO, anotado.** Era aqui que a informação
+    // morria: a tela recebia `recusada` e nada dizia se o 403 foi de política,
+    // o 400 de campo fora das condições, ou se quem recusou foi a nossa API
+    // um passo antes.
+    return _anotar(
+      DesfechoDoEnvio.recusada,
+      MotivoDoDesfecho.armazenamentoRecusou,
+      status: status,
+    );
   }
 
   void fechar() => _cliente.close();

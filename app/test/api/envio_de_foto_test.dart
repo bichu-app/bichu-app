@@ -52,9 +52,13 @@ const FotoLocal _foto = FotoLocal(
 
 /// A camera reduzida ao que o envio usa: entregar os bytes do arquivo.
 class _CameraComFoto implements CameraEGaleria {
-  _CameraComFoto({this.arquivoSumiu = false});
+  _CameraComFoto({this.arquivoSumiu = false, this.arquivoVazio = false});
 
   final bool arquivoSumiu;
+
+  /// O arquivo ABRE e tem zero byte -- seletor interrompido no meio da copia.
+  /// Causa diferente de [arquivoSumiu], e e por isso que o motivo e outro.
+  final bool arquivoVazio;
   int vezesQueLeuOsBytes = 0;
 
   @override
@@ -80,6 +84,7 @@ class _CameraComFoto implements CameraEGaleria {
     if (arquivoSumiu) {
       throw const FileSystemException('o arquivo sumiu do aparelho');
     }
+    if (arquivoVazio) return Uint8List(0);
     return Uint8List.fromList(_bytesDaFoto);
   }
 
@@ -539,7 +544,382 @@ void main() {
       expect(bancada.aoArmazenamento, isEmpty);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // O CORPO REAL DA HOMOLOGACAO, LITERAL
+  // ---------------------------------------------------------------------------
+  //
+  // **Este grupo existe porque tres rodadas de diagnostico foram gastas numa
+  // hipotese que nenhum teste podia confirmar nem negar.** Em 30/10/2026 o
+  // envio de foto estava bloqueado em homologacao, a intencao saia 201, nenhum
+  // byte chegava ao armazenamento, e a suspeita caiu na assinatura V4 do
+  // dialeto `goog`. A assinatura estava CERTA -- medida contra o GCS de
+  // verdade, 204 em todos os caminhos --, e o que faltava era um caso que
+  // perguntasse a outra metade: **o app consegue LER o que o servidor emite?**
+  //
+  // O corpo abaixo nao foi escrito a mao. Ele foi emitido pelo adaptador
+  // COMPILADO que a hml roda, em 30/10/2026 13:42:04Z, com o mapeamento de
+  // `comoAutorizacao` da propria imagem implantada, e colado aqui LITERAL.
+  // Um corpo montado a mao mediria o que quem escreve o teste imagina que o
+  // servidor manda -- que e exatamente o ponto cego que custou as tres
+  // rodadas.
+  //
+  // A chave, a credencial e a assinatura sao de homologacao e ja venceram
+  // (`expires_at` de dez minutos, em 30/10). Nao ha segredo aqui: a politica
+  // assinada e publica por desenho -- ela viaja no formulario, pelo aparelho
+  // de quem envia.
+  group('o corpo REAL da homologacao e consumido pelo app', () {
+    test('`doJson` le o 201 da hml sem estourar, e nada se perde no caminho',
+        () async {
+      final json = jsonDecode(_corpoRealDaHml) as Map<String, dynamic>;
+
+      // A pergunta (A) das tres rodadas: o corpo decodifica? Se `doJson`
+      // estourar aqui, o defeito e NOSSO e e de contrato -- o servidor emite
+      // 201 com algo que o app nao le, e a tela mostra "a foto nao foi
+      // aceita" apontando para o armazenamento.
+      final autorizacao = AutorizacaoDeEnvio.doJson(json);
+
+      expect(autorizacao.metodo, 'POST');
+      expect(autorizacao.url.host, 'storage.googleapis.com');
+      expect(autorizacao.uploadId, isNotEmpty);
+      expect(autorizacao.maxBytes, 5242880);
+
+      // Os SETE campos assinados, por nome. O GCS recusa o envio inteiro se
+      // faltar um deles, e recusa tambem se chegar um campo que a politica nao
+      // declara -- a simetria e o contrato.
+      expect(
+        autorizacao.campos.keys.toSet(),
+        <String>{
+          'key',
+          'Content-Type',
+          'x-goog-algorithm',
+          'x-goog-credential',
+          'x-goog-date',
+          'policy',
+          'x-goog-signature',
+        },
+        reason: 'REPROVA: o app perdeu ou inventou campo do formulario '
+            'assinado. Qualquer diferenca aqui e 403 SignatureDoesNotMatch no '
+            'armazenamento, e a tela mostra uma recusa que nao distingue '
+            'isso de arquivo ilegivel.',
+      );
+
+      // O dialeto. `x-amz-*` aqui significa que a hml voltou a assinar no
+      // dialeto da API S3 contra o armazenamento gerenciado, que e 403 no
+      // primeiro envio.
+      expect(autorizacao.campos['x-goog-algorithm'], 'GOOG4-HMAC-SHA256');
+      expect(
+        autorizacao.campos['x-goog-credential'],
+        contains('/storage/goog4_request'),
+      );
+    });
+
+    test('o multipart leva os sete campos assinados, e o `file` por ULTIMO',
+        () async {
+      final json = jsonDecode(_corpoRealDaHml) as Map<String, dynamic>;
+      final bancada = _montar(
+        rede: (requisicao) async {
+          if (requisicao.url.host == 'storage.googleapis.com') {
+            return http.Response('', 204);
+          }
+          return _json(json);
+        },
+      );
+
+      final destino = EnvioParaConfirmarDepois(
+        pedir: ({
+          required String tipoDeConteudo,
+          required int tamanhoEmBytes,
+        }) async =>
+            json,
+      );
+
+      expect(
+        await bancada.envio.enviar(foto: _foto, destino: destino),
+        DesfechoDoEnvio.enviada,
+      );
+      // Filtrado pelo host REAL do corpo da hml, e nao por `aoArmazenamento`:
+      // aquele atalho casa com o armazenamento ficticio dos outros casos.
+      final aoGcs = bancada.pedidos
+          .where((p) => p.url.host == 'storage.googleapis.com')
+          .toList();
+      expect(aoGcs.length, 1);
+
+      final corpo = utf8.decode(aoGcs.single.bodyBytes, allowMalformed: true);
+
+      for (final campo in (json['fields'] as Map<String, dynamic>).keys) {
+        expect(
+          corpo,
+          contains('name="$campo"'),
+          reason: 'REPROVA: o campo assinado `$campo` nao saiu no multipart. '
+              'A politica declara todos os campos do formulario, e o '
+              'armazenamento recusa o envio inteiro quando falta um.',
+        );
+      }
+
+      // **`file` por ULTIMO, e isso e normativo.** A politica de POST ignora
+      // o que vier depois do arquivo, entao um campo assinado emitido apos
+      // ele simplesmente nao chega -- e o sintoma e o mesmo 403.
+      expect(
+        corpo.indexOf('name="file"'),
+        greaterThan(corpo.indexOf('name="x-goog-signature"')),
+        reason: 'REPROVA: o arquivo saiu antes de algum campo assinado.',
+      );
+
+      expect(
+        destino.uploadId,
+        json['upload_id'],
+        reason: 'REPROVA: o `upload_id` nao foi guardado, e o `Salvar` do '
+            'formulario nao tem o que confirmar.',
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // O CAMINHO TEM DE SER DISTINGUIVEL
+  // ---------------------------------------------------------------------------
+  //
+  // **A isca do defeito que custou tres rodadas.** `DesfechoDoEnvio.recusada`
+  // cobria quatro causas, e a tela dizia "a foto nao foi aceita" para todas --
+  // inclusive quando quem recusou foi a NOSSA rota de intencao. O diagnostico
+  // foi para a assinatura V4 do armazenamento, que estava certa, e o custo foi
+  // uma chave HMAC rotacionada sem motivo e a antiga quase desativada.
+  //
+  // Os casos abaixo cobram que cada causa tenha motivo PROPRIO. O desfecho
+  // continua sendo tres valores, porque a frase da pessoa nao precisa de mais;
+  // o que nao pode voltar a ser indistinguivel e o caminho.
+  group('cada causa tem motivo proprio, e o registro diz qual', () {
+    test('arquivo que nao abre e arquivo VAZIO sao motivos diferentes',
+        () async {
+      final sumiu = _montar(
+        rede: (_) async => _json(_autorizacaoPost()),
+        camera: _CameraComFoto(arquivoSumiu: true),
+      );
+      expect(
+        await sumiu.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: sumiu.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.recusada,
+      );
+      expect(
+        sumiu.envio.ultimoDiagnostico!.motivo,
+        MotivoDoDesfecho.arquivoIlegivel,
+      );
+
+      final vazio = _montar(
+        rede: (_) async => _json(_autorizacaoPost()),
+        camera: _CameraComFoto(arquivoVazio: true),
+      );
+      expect(
+        await vazio.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: vazio.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.recusada,
+      );
+      expect(
+        vazio.envio.ultimoDiagnostico!.motivo,
+        MotivoDoDesfecho.arquivoVazio,
+        reason: 'REPROVA: arquivo vazio virou a mesma causa de arquivo '
+            'ilegivel. Sao defeitos diferentes: um e o seletor interrompido '
+            'no meio da copia, o outro e o arquivo que sumiu do aparelho.',
+      );
+    });
+
+    test('a NOSSA rota recusando leva status e codigo, e nao se confunde com '
+        'o armazenamento', () async {
+      final bancada = _montar(
+        rede: (requisicao) async {
+          if (requisicao.url.path.endsWith('/media/pet-photo-intents')) {
+            return http.Response(
+              jsonEncode(<String, dynamic>{
+                'type': 'https://bichu.app/problems/unsupported-media-type',
+                'title': 'Tipo de midia nao aceito',
+                'status': 415,
+              }),
+              415,
+              headers: <String, String>{
+                'content-type': 'application/problem+json',
+              },
+            );
+          }
+          return http.Response('', 204);
+        },
+      );
+
+      expect(
+        await bancada.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: bancada.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.recusada,
+      );
+
+      final diagnostico = bancada.envio.ultimoDiagnostico!;
+      expect(
+        diagnostico.motivo,
+        MotivoDoDesfecho.intencaoRecusadaPelaApi,
+        reason: 'REPROVA: a recusa da NOSSA rota de intencao virou a mesma '
+            'causa da recusa do armazenamento. Este e exatamente o defeito '
+            'que mandou tres rodadas de diagnostico para a assinatura V4.',
+      );
+      expect(diagnostico.status, 415);
+      // A URI CRUA, e nao o slug: `unsupported-media-type` nao esta no enum
+      // fechado `ProblemTipo` deste build, entao o slug sairia vazio -- e um
+      // 415 e justamente o que as rotas de catalogo devolvem para tipo fora da
+      // lista. Ver `_identificadorDoProblema`.
+      expect(
+        diagnostico.codigo,
+        'https://bichu.app/problems/unsupported-media-type',
+      );
+      expect(
+        bancada.aoArmazenamento,
+        isEmpty,
+        reason: 'REPROVA: o app mandou bytes depois de a intencao ser '
+            'recusada.',
+      );
+      // E a linha que sai no registro do aparelho nomeia o lado certo.
+      expect(diagnostico.linha, contains('intencaoRecusadaPelaApi'));
+      expect(diagnostico.linha, contains('status=415'));
+    });
+
+    test('o ARMAZENAMENTO recusando leva o status dele, e motivo proprio',
+        () async {
+      final bancada = _montar(
+        rede: (requisicao) async {
+          if (requisicao.url.toString().startsWith(_armazenamento)) {
+            return http.Response(
+              '<Error><Code>SignatureDoesNotMatch</Code></Error>',
+              403,
+            );
+          }
+          return _json(_autorizacaoPost());
+        },
+      );
+
+      expect(
+        await bancada.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: bancada.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.recusada,
+      );
+
+      final diagnostico = bancada.envio.ultimoDiagnostico!;
+      expect(diagnostico.motivo, MotivoDoDesfecho.armazenamentoRecusou);
+      expect(
+        diagnostico.status,
+        403,
+        reason: 'REPROVA: o status do armazenamento nao foi anotado. Sem ele, '
+            'um 403 de assinatura e um 400 de campo fora da politica sao a '
+            'mesma coisa para quem depura.',
+      );
+      expect(diagnostico.linha, contains('status=403'));
+    });
+
+    test('as duas recusas tem o MESMO desfecho e motivos DIFERENTES', () async {
+      // O caso que amarra os dois anteriores: se alguem voltar a juntar as
+      // causas, este reprova mesmo que os outros passem.
+      final daApi = _montar(
+        rede: (requisicao) async =>
+            requisicao.url.path.endsWith('/media/pet-photo-intents')
+                ? http.Response(
+                    jsonEncode(<String, dynamic>{
+                      'type': 'https://bichu.app/problems/validation-failed',
+                      'status': 422,
+                    }),
+                    422,
+                    headers: <String, String>{
+                      'content-type': 'application/problem+json',
+                    },
+                  )
+                : http.Response('', 204),
+      );
+      await daApi.envio.enviar(
+        foto: _foto,
+        destino: FotoDePet(api: daApi.pets, petId: 'pet-1'),
+      );
+
+      final doArmazenamento = _montar(
+        rede: (requisicao) async =>
+            requisicao.url.toString().startsWith(_armazenamento)
+                ? http.Response('', 403)
+                : _json(_autorizacaoPost()),
+      );
+      await doArmazenamento.envio.enviar(
+        foto: _foto,
+        destino: FotoDePet(api: doArmazenamento.pets, petId: 'pet-1'),
+      );
+
+      expect(
+        daApi.envio.ultimoDiagnostico!.desfecho,
+        doArmazenamento.envio.ultimoDiagnostico!.desfecho,
+        reason: 'a frase da pessoa pode continuar a mesma',
+      );
+      expect(
+        daApi.envio.ultimoDiagnostico!.motivo,
+        isNot(doArmazenamento.envio.ultimoDiagnostico!.motivo),
+        reason: 'REPROVA: as duas recusas voltaram a ser indistinguiveis. '
+            'Uma e defeito NOSSO de rota, a outra e do armazenamento -- '
+            'lugares opostos do sistema, e foi essa confusao que custou tres '
+            'rodadas e uma rotacao de chave desnecessaria.',
+      );
+    });
+
+    test('sem sinal no envio dos bytes tem motivo de REDE, nao de recusa',
+        () async {
+      final bancada = _montar(
+        rede: (requisicao) async {
+          if (requisicao.url.toString().startsWith(_armazenamento)) {
+            throw http.ClientException('a rede caiu no meio');
+          }
+          return _json(_autorizacaoPost());
+        },
+      );
+
+      expect(
+        await bancada.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: bancada.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.semSinal,
+      );
+      expect(
+        bancada.envio.ultimoDiagnostico!.motivo,
+        MotivoDoDesfecho.armazenamentoSemRede,
+      );
+      expect(bancada.envio.ultimoDiagnostico!.status, isNull);
+    });
+
+    test('o envio que DA CERTO anota `entregue`', () async {
+      final bancada = _montar(
+        rede: (requisicao) async =>
+            requisicao.url.toString().startsWith(_armazenamento)
+                ? http.Response('', 204)
+                : _json(_autorizacaoPost()),
+      );
+      expect(
+        await bancada.envio.enviar(
+          foto: _foto,
+          destino: FotoDePet(api: bancada.pets, petId: 'pet-1'),
+        ),
+        DesfechoDoEnvio.enviada,
+      );
+      expect(
+        bancada.envio.ultimoDiagnostico!.motivo,
+        MotivoDoDesfecho.entregue,
+      );
+    });
+  });
 }
+
+/// O 201 que `POST /v1/media/directory-suggestion-logo-intents` devolveu na
+/// homologacao em 30/10/2026 13:42:04Z, emitido pelo adaptador compilado da
+/// imagem implantada. LITERAL, nao montado a mao. Ver o cabecalho do grupo
+/// `o corpo REAL da homologacao e consumido pelo app`.
+const String _corpoRealDaHml =
+    r'{"upload_id":"3f84505a-b373-43f4-93a7-96d463e76700","method":"POST","url":"https://storage.googleapis.com/bichu-hml-media-private","fields":{"key":"directory/original/5LhGmB97jsZ6gjNx2NruPQ","Content-Type":"image/jpeg","x-goog-algorithm":"GOOG4-HMAC-SHA256","x-goog-credential":"GOOG1EXTOC5R3ASOTDR5IJKLENQ7HXEPO44AGS5OS2JACB2QOF5VP3XQD7SMC/20261030/southamerica-east1/storage/goog4_request","x-goog-date":"20261030T134204Z","policy":"eyJleHBpcmF0aW9uIjoiMjAyNi0xMC0zMFQxMzo1MjowNC4yNTlaIiwiY29uZGl0aW9ucyI6W3siYnVja2V0IjoiYmljaHUtaG1sLW1lZGlhLXByaXZhdGUifSx7ImtleSI6ImRpcmVjdG9yeS9vcmlnaW5hbC81TGhHbUI5N2pzWjZnak54Mk5ydVBRIn0seyJDb250ZW50LVR5cGUiOiJpbWFnZS9qcGVnIn0sWyJjb250ZW50LWxlbmd0aC1yYW5nZSIsMSw1MjQyODgwXSx7IngtZ29vZy1hbGdvcml0aG0iOiJHT09HNC1ITUFDLVNIQTI1NiJ9LHsieC1nb29nLWNyZWRlbnRpYWwiOiJHT09HMUVYVE9DNVIzQVNPVERSNUlKS0xFTlE3SFhFUE80NEFHUzVPUzJKQUNCMlFPRjVWUDNYUUQ3U01DLzIwMjYxMDMwL3NvdXRoYW1lcmljYS1lYXN0MS9zdG9yYWdlL2dvb2c0X3JlcXVlc3QifSx7IngtZ29vZy1kYXRlIjoiMjAyNjEwMzBUMTM0MjA0WiJ9XX0=","x-goog-signature":"61aa46e31fdafcf95e58a31a593c2741cca9ff4679873ccd5ca5266108a192af"},"expires_at":"2026-10-30T13:52:04.259Z","max_bytes":5242880}';
 
 /// `agulha` aparece inteira, em sequencia, dentro de `palheiro`?
 bool _contem(List<int> palheiro, List<int> agulha) {
