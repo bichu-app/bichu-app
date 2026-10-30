@@ -3782,6 +3782,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/directory-suggestion-photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto de uma FOTO DO ESTABELECIMENTO na indicacao
+         * @description Pedido do cliente de 30/10/2026: *"na pagina de indicacao de
+         *     profissional/estabelecimento, so tem o campo para subir a foto do
+         *     logotipo da empresa, mas nao as fotos do estabelecimento que fica no
+         *     topo da pagina"*; e, de 29/10/2026, *"nas indicacoes de estabelecimento
+         *     e eventos so esta sendo possivel enviar uma imagem no app, devemos
+         *     deixar enviar ate 4 imagens"*.
+         *
+         *     **Uma chamada por foto, e a tela chama ate QUATRO vezes.** Cada foto e
+         *     um envio proprio, como no painel: nao existe autorizacao "de quatro
+         *     imagens", porque cada assinatura e uma autorizacao de escrita
+         *     independente e o varredor recolhe as que ninguem confirmar.
+         *
+         *     O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `directory/`; a derivada e criada pelo worker.
+         *
+         *     ## ESTA ROTA NAO E A DO LOGOTIPO, E A DIFERENCA NAO E ARRUMACAO
+         *
+         *     O logotipo e a **marca**: um quadrado ao lado do nome, 512 x 512, minima
+         *     de 256. A foto do estabelecimento e a **faixa do topo da ficha**:
+         *     1280 x 720, minima de 600 x 600. Sao duas geometrias e duas minimas, e
+         *     por isso sao duas rotas -- exatamente como `directory_logo` e
+         *     `directory_photo` sao dois propositos no painel desde 18/10/2026.
+         *
+         *     **O logotipo NAO conta entre as quatro.** Quem indica a clinica do
+         *     bairro pode mandar a logo dela e quatro fotos do lugar; obrigar a logo a
+         *     ocupar uma das quatro faria quem tem logo poder mandar so tres fotos, o
+         *     que nao e o que o cliente pediu -- ele nomeou as duas ausencias em duas
+         *     mensagens separadas, como duas coisas.
+         *
+         *     ## O PROPOSITO DESTA ROTA NAO E O DA FOTO DO PAINEL, E ESSA E A FRONTEIRA
+         *
+         *     O envio e autorizado com `purpose: directory_suggestion_photo`, que e
+         *     **separado** de `directory_photo` pela MESMA razao, escrita por extenso,
+         *     que separou `directory_suggestion_logo` de `directory_logo` na
+         *     `20261029000004`: a imagem de uma indicacao que ninguem aprovou **nao
+         *     aparece em superficie publica**, e e isso que a fila de revisao existe
+         *     para decidir.
+         *
+         *     - `createAdminDirectoryEntry`/`updateAdminDirectoryEntry` so aceitam
+         *       `photo_upload_id` cujo envio tenha `purpose: directory_photo`, e
+         *       `professionals` **e** a superficie publica (`DirectoryEntrySummary`,
+         *       `DirectoryEntryDetail`). Um `upload_id` desta rota nao casa esse
+         *       proposito e e recusado com `400` (`code: upload_not_usable`);
+         *     - `suggestDirectoryEntry` exige o proposito inverso: envio do painel nao
+         *       entra na fila.
+         *
+         *     Um proposito so para os dois abriria as duas direcoes, e a unica defesa
+         *     seria lembrar de conferir.
+         *
+         *     **O envio e da CONTA.** `suggestDirectoryEntry` so confirma `upload_id`
+         *     cuja intencao e da propria conta que esta indicando (a conferencia esta
+         *     na clausula `WHERE`), e `upload_id` de outra pessoa, de outro proposito,
+         *     vencido ou ja usado em OUTRA indicacao e recusado com `400`
+         *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+         *
+         *     Dimensao minima **600 x 600**, a mesma de `directory_photo` e da capa do
+         *     encontro: a derivada `banner` e 1280 x 720 e `sharp` nao amplia.
+         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
+         *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
+         *     worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; indicacao sem foto do
+         *     estabelecimento e estado normal, e o campo e opcional em
+         *     `DirectorySuggestionInput`.
+         */
+        post: operations["createDirectorySuggestionPhotoUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/events": {
         parameters: {
             query?: never;
@@ -10878,6 +10963,61 @@ export interface components {
              *     da foto de pet e de achado, e nada neste campo o toca.
              */
             logo_upload_id?: string;
+            /**
+             * @description Ate **quatro** fotos do estabelecimento, **na ordem em que a pessoa
+             *     as colocou**, cada uma pelo `upload_id` de
+             *     `createDirectorySuggestionPhotoUploadIntent` **da propria conta**.
+             *     A **primeira e a capa**, como em `network_event_images` e em
+             *     `professional_images`: nao existe campo de capa separado, porque
+             *     duas formas de dizer qual e a capa e o defeito, e nao o recurso.
+             *
+             *     **QUATRO, e nao oito como as duas galerias do painel.** O numero e o
+             *     que o cliente pediu, e o teto menor tem motivo proprio: quem revisa
+             *     precisa decidir, nao navegar, e quatro faixas 16:9 ja sao o que a
+             *     tela do aparelho decodifica de uma vez. O painel segue com oito
+             *     (`DirectoryGalleryImagesInput`), e a assimetria e deliberada --
+             *     alinhar os dois numeros exigiria um pedido, e nao houve.
+             *
+             *     **OPCIONAL, e a ausencia e o estado normal** -- o APK publicado no
+             *     aparelho nao tem o campo, e exigi-lo seria
+             *     `request-property-became-required`. Presente, tem de ter pelo menos
+             *     um item: `[]` e recusado com `400`, porque "mandei a lista vazia" e
+             *     "nao mandei a lista" sao a mesma intencao dita de duas formas, e
+             *     aceitar as duas e o que faz a proxima leitura ter de tratar os dois
+             *     casos para sempre. `uniqueItems`: o mesmo `upload_id` duas vezes e
+             *     recusado com `400` (`code: duplicate_upload`), como em
+             *     `CatalogImagesInput`.
+             *
+             *     **Nao ha `alt_text` e nao ha `crop`**, e as duas ausencias sao
+             *     decisao e nao esquecimento:
+             *
+             *     - `alt_text` saiu do aplicativo inteiro por pedido do cliente de
+             *       26/10/2026 (*"remova todos os campos de descricao de foto do
+             *       aplicativo, nao iremos implementar solucoes para quem usa leitor
+             *       de tela por enquanto"*), e o custo esta dito em
+             *       `CommunityNetworkEventCoverInput`;
+             *     - `crop` nao existe aqui porque **o aplicativo recorta nos bytes,
+             *       antes de enviar** (`recorte_de_imagem.dart`,
+             *       `FormatoDoRecorte.fotoDaIndicacao`), e nao manda regiao para o
+             *       servidor cortar. `crop` e do PAINEL, onde a imagem sobe inteira e
+             *       o recorte e do servidor. O mesmo vale para `logo_upload_id`, que
+             *       tambem nao o tem.
+             *
+             *     **Nenhuma destas imagens vai para superficie publica, e isso e o
+             *     ponto** -- a mesma fronteira do logotipo, com o mesmo mecanismo: o
+             *     proposito `directory_suggestion_photo` nao casa com o
+             *     `photo_upload_id` de `AdminDirectoryEntryInput`, entao nao existe
+             *     caminho, nem por descuido nem por `upload_id` adivinhado, que leve a
+             *     foto de uma indicacao pendente ao `Perto`. **A aprovacao nao as
+             *     copia** para a entrada: carregar imagem de usuario para superficie
+             *     publica e decisao de quem revisa, feita no painel com o envio dele
+             *     (`directory_photo`).
+             *
+             *     Quem **le** estas fotos e a fila do painel, e so ela:
+             *     `AdminDirectorySuggestion.photo_urls` devolve a URL da derivada --
+             *     nunca o identificador (ADR-0010 item 6).
+             */
+            photo_upload_ids?: string[];
         };
         /**
          * @description O estado da sugestao. Nasce sempre `pending`, e so o painel a move.
@@ -11249,6 +11389,67 @@ export interface components {
              *     fila para a entrada.
              */
             entry_slug?: string | null;
+            /**
+             * Format: uri
+             * @description O LOGOTIPO que quem indicou enviou, na derivada `thumb`
+             *     (176 x 176) -- a mesma de `DERIVADAS_DA_LOGO` que o painel ja desenha
+             *     num quadrado ao lado do nome.
+             *
+             *     **Nulo e o estado normal, em tres casos que a fila trata igual:** a
+             *     indicacao nao tem logotipo (o comum -- quem indica a clinica do
+             *     bairro raramente tem o arquivo da logo dela); o logotipo foi enviado
+             *     e o worker ainda nao terminou; os bytes foram recusados. A mesma
+             *     nulidade de tres casos de `DirectoryEntrySummary.logo_url`, e a linha
+             *     da fila nao deixa de existir em nenhum deles.
+             *
+             *     **`thumb` e nao `card`**, porque esta e uma LISTA: a lista paginada
+             *     da fila desenha o quadrado pequeno, e e o mesmo juizo que mantem a
+             *     faixa de 1280 x 720 fora de `DirectoryEntrySummary` ("logo na lista,
+             *     foto no detalhe") -- naquele caso medido, imagem demais em lista
+             *     chegou a 9,8 MB na primeira pintura.
+             */
+            logo_url?: string | null;
+            /**
+             * @description As FOTOS DO ESTABELECIMENTO que quem indicou enviou, **na ordem em
+             *     que ele as colocou** -- a primeira e a capa --, cada uma na derivada
+             *     `card` (1024 x 576) de `DERIVADAS_DA_FOTO_DO_LOCAL`.
+             *
+             *     **Lista vazia, e nunca nula**, ao contrario de `logo_url`: "nenhuma
+             *     foto" e uma lista de zero itens, e uma lista que as vezes e nula
+             *     obriga quem le a tratar dois casos para dizer a mesma coisa.
+             *     `required`, por isso mesmo.
+             *
+             *     **So entram as que estao `ready`.** A foto cujo worker nao terminou
+             *     e a recusada nos bytes **nao aparecem na lista**, e e por isso que
+             *     `photos_total` existe ao lado: sem ele o painel nao distingue "nao
+             *     enviou nenhuma" de "enviou quatro e nenhuma ficou pronta ainda", que
+             *     sao decisoes de revisao diferentes. Esta e a mesma pergunta que
+             *     `logo_status` responde para as entradas do diretorio; aqui ela e
+             *     respondida por uma contagem porque sao ate quatro imagens e um
+             *     `status` por indicacao nao diria de qual.
+             *
+             *     **`card` e nao `banner`:** 1024 x 576 e o tamanho em que quem revisa
+             *     decide se aquilo e de fato o estabelecimento, e a `banner` de
+             *     1280 x 720 existe para a ficha publica, que estas imagens nunca
+             *     alcancam. O **custo, dito:** uma pagina de fila com 20 linhas pode
+             *     trazer ate 80 URLs de `card`, e **quem decide o que pintar e o
+             *     painel** -- a forma recomendada e o quadrado da linha mostrar a
+             *     primeira e as quatro aparecerem ao abrir a indicacao. Esta projecao
+             *     e uma so, e nao uma de lista e outra de detalhe, porque
+             *     `AdminDirectorySuggestion` serve a listagem, a leitura e
+             *     `AdminDirectorySuggestionApproved.suggestion`: um segundo esquema
+             *     que repetisse os treze campos e exatamente a uniao duplicada que
+             *     este repositorio ja viu passar por `tsc`, pelo lint e por milhares
+             *     de casos enquanto divergia em silencio.
+             */
+            photo_urls: string[];
+            /**
+             * @description Quantas fotos do estabelecimento a indicacao TEM, prontas ou nao.
+             *     Maior que `photo_urls.length` quer dizer que alguma ainda esta
+             *     processando ou foi recusada nos bytes -- e e esse o caso em que o
+             *     painel diz "ainda processando" em vez de "sem fotos".
+             */
+            photos_total: number;
         };
         AdminDirectorySuggestionPage: {
             items: components["schemas"]["AdminDirectorySuggestion"][];
@@ -13422,6 +13623,57 @@ export interface components {
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"];
             cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
+            /**
+             * @description Ate **quatro** imagens do encontro, **na ordem em que o autor as
+             *     colocou**, cada uma pelo `upload_id` de
+             *     `createNetworkEventCoverUploadIntent` **da propria conta**. A
+             *     **primeira e a capa**.
+             *
+             *     **A rota de autorizacao e a QUE JA EXISTE, e nao uma nova.** O
+             *     proposito e `network_event` nas quatro, a dimensao minima e 600 x
+             *     600 nas quatro e a derivada e `DERIVADAS_DO_ENCONTRO` nas quatro:
+             *     nao ha nada que distinga a segunda imagem da primeira no envio, e
+             *     criar uma segunda rota so para dizer "esta nao e a capa" seria
+             *     inventar uma fronteira que nao existe. **Quem e a capa e a POSICAO
+             *     na lista, e nao o proposito do envio** -- a mesma leitura de
+             *     `AdminNetworkEventInput.images`, onde a capa e a `position` 0 e nao
+             *     existe campo de capa.
+             *
+             *     Isto e diferente da indicacao, onde a foto do estabelecimento
+             *     GANHOU rota propria: lá as duas imagens tem geometrias e minimas
+             *     diferentes (logo 512 quadrada com minima 256; faixa 1280 x 720 com
+             *     minima 600), e aqui as quatro sao a mesma faixa.
+             *
+             *     ## `cover_image` e `image_upload_ids` SE EXCLUEM
+             *
+             *     Mandar os dois e recusado com `400`
+             *     (`code: cover_and_images_both_sent`). **Duas formas de dizer qual e
+             *     a capa, no mesmo corpo, e o defeito** -- e nao uma conveniencia:
+             *     qualquer regra de precedencia que eu escrevesse aqui ("a lista
+             *     ganha", "a capa ganha") viraria comportamento que ninguem pediu e
+             *     que a tela nao mostra. O aplicativo publicado manda `cover_image`; o
+             *     aplicativo novo manda `image_upload_ids`, **inclusive quando e uma
+             *     imagem so**. Nenhum dos dois manda os dois.
+             *
+             *     **QUATRO, e nao oito como o painel** (`CatalogImagesInput`): o
+             *     numero e o que o cliente pediu. O teto do banco e oito
+             *     (`network_event_images.position` tem `CHECK (position BETWEEN 0 AND
+             *     7)`, da `20260928000004`), entao **nao ha migracao nesta mudanca** --
+             *     o aplicativo passa a ocupar quatro das oito posicoes que a tabela ja
+             *     tinha, e o painel segue podendo usar as oito.
+             *
+             *     Presente, tem de ter pelo menos um item: `[]` e recusado com `400`
+             *     pela mesma razao escrita em `DirectorySuggestionInput.
+             *     photo_upload_ids`. `uniqueItems`: `upload_id` repetido e `400`
+             *     (`code: duplicate_upload`), como em `CatalogImagesInput`.
+             *
+             *     **Nao ha `alt_text` e nao ha `crop`**, pelas duas razoes de
+             *     `DirectorySuggestionInput.photo_upload_ids`: o cliente mandou tirar
+             *     a descricao de foto do aplicativo em 26/10/2026, e o recorte 16:9
+             *     acontece nos bytes, no aparelho
+             *     (`FormatoDoRecorte.capaDoEncontro`), antes do envio.
+             */
+            image_upload_ids?: string[];
         };
         /**
          * @description A foto do proprio usuario, como o DONO a ve (cliente, 18/10/2026).
@@ -13536,6 +13788,51 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             byte_size: number;
             /** @description Opcional, como o navegador a le. Abaixo de 256 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description O pedido de autorizacao de envio de **uma** FOTO DO ESTABELECIMENTO na
+         *     indicacao (pedido do cliente, 29 e 30/10/2026). A tela pede ate quatro,
+         *     uma por chamada.
+         *
+         *     **Sem `purpose`**, pela mesma razao de `DirectorySuggestionLogoIntentInput`:
+         *     esta operacao existe para um proposito so
+         *     (`directory_suggestion_photo`), e deixar o cliente escolhe-lo seria
+         *     deixa-lo pedir uma autorizacao de foto do PAINEL por uma rota do
+         *     aplicativo -- que e exatamente a fronteira que o proposito separado
+         *     existe para fechar.
+         *
+         *     **Esquema PROPRIO e nao reuso de `DirectorySuggestionLogoIntentInput`**,
+         *     e a razao e de conteudo: a prosa daquele esquema afirma o proposito
+         *     `directory_suggestion_logo`, que aqui e falso, e a dimensao minima lá e
+         *     256 x 256 e aqui e **600 x 600**. A FORMA e a mesma de proposito --
+         *     quatro campos, mesmos tetos, mesmo `enum` de tres tipos --, e o que se
+         *     reusa de verdade e a esteira: `catalog_images`, as derivadas de
+         *     `DERIVADAS_DA_FOTO_DO_LOCAL` e o `UploadIntent` da resposta.
+         *
+         *     **A derivada e a MESMA constante da foto do local do painel**
+         *     (`DERIVADAS_DA_FOTO_DO_LOCAL`: `banner` 1280 x 720 e `card`
+         *     1024 x 576), e nao uma copia dos numeros -- a geometria e a mesma porque
+         *     e a mesma faixa do topo da ficha. O que **nao** se compartilha e o
+         *     proposito, que e o que amarra o envio ao destino (T9).
+         */
+        DirectorySuggestionPhotoIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo `image/`.
+             *
+             *     **HEIC fica de fora, e o custo e dito em voz alta:** quem usa iPhone
+             *     e tem a foto como HEIC nao consegue envia-la por esta rota. E o
+             *     mesmo custo que a capa do encontro e o logotipo da indicacao ja
+             *     pagam, e a razao e a mesma -- a esteira de catalogo nao decodifica
+             *     HEIC. Trocar isto quer dizer ensinar o worker, e nao alargar este
+             *     `enum`. (O aplicativo pede JPEG a camera e a galeria neste ponto,
+             *     entao o caso que sobra e o arquivo HEIC escolhido a mao.)
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o cliente a le. Abaixo de 600 responde 422 antes de assinar. */
             width?: number;
             height?: number;
         };
@@ -21106,6 +21403,35 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DirectorySuggestionLogoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createDirectorySuggestionPhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorySuggestionPhotoIntentInput"];
             };
         };
         responses: {
