@@ -156,6 +156,40 @@ class CameraDeTeste implements CameraEGaleria {
     }
     return Uint8List.fromList(bytes ?? bytesDeFotoDeTeste);
   }
+
+  /// O recorte que a tela pediu, ou nulo se nenhuma tela pediu nenhum.
+  ///
+  /// **E este campo que sustenta a isca do recorte** (cliente, 29/10/2026):
+  /// afirmar que a posicao escolhida e a que sai no envio e afirmar que estes
+  /// quatro inteiros chegaram aqui. Medir a imagem resultante exigiria disco
+  /// de aparelho, que o teste de widget nao tem -- e e a mesma razao pela qual
+  /// `bytesDaFoto` mora na porta.
+  RecorteDaFoto? recorteQuePediram;
+
+  /// Quantas vezes o app pediu um recorte. Zero prova que nenhuma tela
+  /// recortou nada por conta propria.
+  int vezesQueRecortou = 0;
+
+  /// A foto que [recortarFoto] devolve. Nulo devolve a que entrou com o
+  /// caminho marcado, para o caso poder distinguir a recortada da escolhida.
+  FotoLocal? fotoRecortada;
+
+  /// O recorte falhou -- o formato nao tem decodificador neste sistema.
+  /// [recortarFoto] devolve nulo, e quem chama tem de seguir com a original.
+  bool naoConsegueRecortar = false;
+
+  @override
+  Future<FotoLocal?> recortarFoto(FotoLocal foto, RecorteDaFoto recorte) async {
+    vezesQueRecortou += 1;
+    recorteQuePediram = recorte;
+    if (naoConsegueRecortar) return null;
+    return fotoRecortada ??
+        FotoLocal(
+          caminho: '${foto.caminho}.recortada.jpg',
+          tipoDeConteudo: 'image/jpeg',
+          tamanhoEmBytes: foto.tamanhoEmBytes,
+        );
+  }
 }
 
 /// Um conteudo de foto curto e **reconhecivel dentro do corpo que saiu**.

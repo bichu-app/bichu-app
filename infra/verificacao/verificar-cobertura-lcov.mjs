@@ -136,10 +136,10 @@ const FERRAMENTA_FORA_DO_RUNTIME =
   'roda fora do runtime da aplicacao (regra de ESLint / gerador de tipos), em processo que nenhuma ' +
   'suite instrumenta. Entra em `sonar.sources` por estar sob `src/`; nao e codigo que chega ao usuario.';
 /*
- * O motivo das onze de 27/10, e ele e DIFERENTE do de 22/09.
+ * O motivo das dez de 27/10, e ele e DIFERENTE do de 22/09.
  *
  * Nao e "nenhuma suite chega a este modulo" por descuido de quem escreveu o
- * teste. MEDIDO, arquivo a arquivo: cada um destes onze so e importado EM
+ * teste. MEDIDO, arquivo a arquivo: cada um destes dez so e importado EM
  * TEMPO DE EXECUCAO por `src/bin/api.ts` ou `src/bin/worker.ts` -- e os dois
  * pontos de entrada JA estao nesta lista, como `PONTO_DE_ENTRADA`, porque
  * medi-los exige subir o processo SOB instrumentacao. Os modulos de rota que
@@ -159,10 +159,19 @@ const FERRAMENTA_FORA_DO_RUNTIME =
  *     `seguranca-da-comunidade`) sao logica sobre portas e cabem em teste
  *     unitario com porta falsa, sem banco: divida BARATA, e e por onde
  *     comecar;
- *   - os sete `kysely-*` precisam de banco de pe, e o caminho deles e a suite
+ *   - os seis `kysely-*` precisam de banco de pe, e o caminho deles e a suite
  *     de integracao importar o adaptador direto, como
  *     `kysely-pet-repository.ts` e `kysely-lost-case-repository.ts` fizeram
  *     para sair desta lista em 22/09.
+ *
+ * ERAM ONZE, e `kysely-directory-suggestion-repository.ts` SAIU em 29/10 --
+ * pelo caminho que esta escrito acima, e nao por afrouxamento: a suite de
+ * INTEGRACAO passou a importar o adaptador DIRETO
+ * (`tests/integration/logotipo-da-indicacao.test.ts`, que mede a clausula
+ * `WHERE` do proposito da indicacao), e `coverage/lcov-integracao.info` tem o
+ * `SF:` dele. Quem apagou a entrada nao escolheu apagar: a invariante 2 a
+ * acusou de obsoleta e REPROVOU com o nome dela, exatamente como a ultima
+ * frase deste bloco promete.
  *
  * Instrumentar `api`/`worker` e recolher o relatorio na parada e entrega
  * propria, e nao efeito colateral desta. No dia em que um teste tocar o
@@ -351,7 +360,7 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/store/ports/taxonomia-da-vitrine.ts', SO_TIPO],
   ['src/modules/tags/ports/endereco-guardado.ts', SO_TIPO],
   ['src/modules/tags/ports/pedido-de-plaquinha.ts', SO_TIPO],
-  // -- 11 que emitem codigo e so o ponto de entrada carrega -----------------
+  // -- 10 que emitem codigo e so o ponto de entrada carrega -----------------
   // Ver o bloco de `SO_O_PONTO_DE_ENTRADA_CARREGA`, acima, para a medicao e
   // para os dois enderecos da divida.
   ['src/modules/app-release/adapters/persistence/kysely-politica-de-versao.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
@@ -361,7 +370,6 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/media/application/foto-do-proprio-usuario.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
   ['src/modules/notifications/adapters/persistence/kysely-comunicados.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
   ['src/modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
-  ['src/modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
   ['src/modules/safety/application/seguranca-da-comunidade.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
   ['src/modules/sections/adapters/persistence/kysely-marcadores-de-secao.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
   ['src/modules/tags/adapters/persistence/kysely-leitura-do-aviso-ao-tutor.ts', SO_O_PONTO_DE_ENTRADA_CARREGA],
