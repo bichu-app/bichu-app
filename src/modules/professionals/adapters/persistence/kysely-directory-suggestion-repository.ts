@@ -16,6 +16,7 @@ import type {
   SugestaoAGravar,
 } from '../../ports/directory-suggestion-repository.js';
 import {
+  PROPOSITO_DA_FOTO_DA_INDICACAO,
   PROPOSITO_DO_LOGOTIPO_DA_INDICACAO,
   TRABALHO_DE_IMAGEM_DE_CATALOGO,
 } from '../../../media/ports/imagem-de-catalogo.js';
@@ -68,6 +69,32 @@ function comoMinhaIndicacao(l: LinhaDaMinhaIndicacao): MinhaIndicacao {
  */
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * A recusa de envio, como EXCECAO -- e isto nao e estilo, e um defeito medido.
+ *
+ * **`return` de dentro de `db.transaction().execute(...)` COMITA.** O Kysely so
+ * desfaz quando o corpo LANCA. Enquanto a recusa era um `return`, a indicacao com
+ * quatro fotos cuja QUARTA nao servia comitava as TRES primeiras: tres imagens
+ * `processing` para sempre, tres envios confirmados e tres trabalhos
+ * enfileirados, sem indicacao nenhuma apontando para eles -- e o desfecho que
+ * `tests/integration/fotos-da-indicacao.test.ts` ("UMA das quatro que nao serve
+ * desfaz as OUTRAS TRES") pegou com 3 !== 0.
+ *
+ * Com UMA imagem so (o logotipo, ate 29/10/2026) o defeito nao tinha efeito
+ * visivel: a recusa acontecia ANTES de qualquer escrita, entao a transacao
+ * comitada estava vazia. Foi a segunda imagem que o tornou observavel.
+ *
+ * Ela nao atravessa a fronteira do repositorio: `registrar` a converte em
+ * `RegistroDaSugestao` FORA da transacao, e quem chama continua vendo so o tipo
+ * da porta.
+ */
+class EnvioNaoServe extends Error {
+  constructor(readonly campo: 'logo_upload_id' | 'photo_upload_ids') {
+    super(`envio nao serve: ${campo}`);
+    this.name = 'EnvioNaoServe';
+  }
+}
+
 export function criarDirectorySuggestionRepository(
   db: Db,
   ids: IdGenerator,
@@ -80,6 +107,13 @@ export function criarDirectorySuggestionRepository(
     async registrar(sugestao: SugestaoAGravar): Promise<RegistroDaSugestao> {
       const ref = randomBytes(16).toString('base64url');
       const logoUploadId = sugestao.logoUploadId;
+      const fotos = sugestao.photoUploadIds;
+      /**
+       * O `id` da indicacao, sorteado AQUI e nao dentro de `gravar`: as linhas de
+       * `directory_suggestion_images` precisam dele para a chave estrangeira, e
+       * um segundo `ids.uuidv7()` daria um `id` diferente do que a funcao gravou.
+       */
+      const idDaIndicacao = ids.uuidv7();
 
       /** O `INSERT` da indicacao, pela funcao. */
       const gravar = async (
@@ -88,7 +122,7 @@ export function criarDirectorySuggestionRepository(
       ): Promise<RegistroDaSugestao> => {
         const linha = await sql<LinhaDoRegistro>`
           SELECT directory_suggestions_registrar(
-            ${ids.uuidv7()}::uuid,
+            ${idDaIndicacao}::uuid,
             ${ref},
             ${sugestao.autor}::uuid,
             ${sugestao.displayName},
@@ -114,11 +148,28 @@ export function criarDirectorySuggestionRepository(
         return { tipo: 'gravada', sugestao: { ref, createdAt: gravada.created_at } };
       };
 
-      if (logoUploadId === null) return gravar(db, null);
-
-      if (!FORMA_DE_UUID.test(logoUploadId)) return { tipo: 'envio_nao_serve' };
-
-      return db.transaction().execute(async (trx) => {
+      /**
+       * Confirma UM envio e devolve o `catalog_images.id` que nasceu dele, ou
+       * `undefined` quando o envio NAO SERVE -- e os cinco casos sao o mesmo
+       * caso de proposito (inexistente, **de outra conta**, de outro proposito,
+       * vencido, **ja usado**), porque dizer qual deles ocorreu diria a quem
+       * adivinhou um `upload_id` se ele existe.
+       *
+       * **A conta esta na clausula `WHERE`, e nao num `if` depois da leitura:**
+       * um envio de outra pessoa nao e lido, entao nao ha o que comparar errado.
+       *
+       * `FOR UPDATE OF u` trava a linha do envio: duas indicacoes concorrentes
+       * com o mesmo `upload_id` serializam aqui, e a segunda ve
+       * `confirmed_at` preenchido.
+       */
+      const confirmar = async (
+        trx: DbTransaction,
+        uploadId: string,
+        proposito:
+          | typeof PROPOSITO_DO_LOGOTIPO_DA_INDICACAO
+          | typeof PROPOSITO_DA_FOTO_DA_INDICACAO,
+      ): Promise<string | undefined> => {
+        if (!FORMA_DE_UUID.test(uploadId)) return undefined;
         const r = await sql<{
           id: string;
           expires_at: Date;
@@ -126,16 +177,25 @@ export function criarDirectorySuggestionRepository(
         }>`
           SELECT u.id, u.expires_at, u.confirmed_at
             FROM catalog_upload_intents u
-           WHERE u.id = ${logoUploadId}::uuid
+           WHERE u.id = ${uploadId}::uuid
              AND u.user_id = ${sugestao.autor}::uuid
-             AND u.purpose = ${PROPOSITO_DO_LOGOTIPO_DA_INDICACAO}
+             AND u.purpose = ${proposito}
            FOR UPDATE OF u
         `.execute(trx);
 
         const envio = r.rows[0];
-        if (envio === undefined) return { tipo: 'envio_nao_serve' };
-        if (envio.confirmed_at !== null) return { tipo: 'envio_nao_serve' };
-        if (envio.expires_at.getTime() <= Date.now()) return { tipo: 'envio_nao_serve' };
+        if (envio === undefined) return undefined;
+        /**
+         * **E AQUI QUE "JA USADO EM OUTRA INDICACAO" E RECUSADO**, e nao numa
+         * segunda consulta: usar um envio EXIGE confirma-lo, e a confirmacao e
+         * esta -- nao existe caminho que vincule a imagem a uma indicacao sem
+         * passar por aqui, porque o vinculo e gravado na MESMA transacao. Embaixo
+         * disso ainda ha o `UNIQUE` global de `directory_suggestion_images.
+         * image_id` e o `directory_suggestions_logotipo_unico`: se algum dia
+         * houver um segundo caminho, o banco recusa em vez de duplicar.
+         */
+        if (envio.confirmed_at !== null) return undefined;
+        if (envio.expires_at.getTime() <= Date.now()) return undefined;
 
         const imagemId = ids.uuidv7();
         await trx
@@ -149,7 +209,7 @@ export function criarDirectorySuggestionRepository(
           .values({
             id: imagemId,
             upload_intent_id: envio.id,
-            purpose: PROPOSITO_DO_LOGOTIPO_DA_INDICACAO,
+            purpose: proposito,
             public_key: null,
             rejection_reason: null,
           })
@@ -162,9 +222,56 @@ export function criarDirectorySuggestionRepository(
             payload: JSON.stringify({ catalog_image_id: imagemId }),
           })
           .execute();
+        return imagemId;
+      };
 
-        return gravar(trx, imagemId);
-      });
+      /** Sem logotipo E sem foto: uma instrucao, e transacao nenhuma. */
+      if (logoUploadId === null && fotos.length === 0) return gravar(db, null);
+
+      try {
+        return await db.transaction().execute(async (trx) => {
+        const logoImageId =
+          logoUploadId === null ? null : (await confirmar(trx, logoUploadId, PROPOSITO_DO_LOGOTIPO_DA_INDICACAO) ?? null);
+        if (logoUploadId !== null && logoImageId === null) {
+          throw new EnvioNaoServe('logo_upload_id');
+        }
+
+        /**
+         * As fotos NA ORDEM DO ARRAY, e o indice e a `position`: a `0` e a capa.
+         * O laco e sequencial de proposito -- cada volta trava a linha do envio,
+         * e `Promise.all` aqui abriria a porta a impasse entre duas indicacoes
+         * que mandassem os mesmos envios em ordens diferentes.
+         */
+        const linhas: { suggestion_id: string; image_id: string; position: number }[] = [];
+        for (const [position, uploadId] of fotos.entries()) {
+          const imagemId = await confirmar(trx, uploadId, PROPOSITO_DA_FOTO_DA_INDICACAO);
+          if (imagemId === undefined) {
+            throw new EnvioNaoServe('photo_upload_ids');
+          }
+          linhas.push({ suggestion_id: idDaIndicacao, image_id: imagemId, position });
+        }
+
+        const gravada = await gravar(trx, logoImageId);
+
+        /**
+         * As fotos entram DEPOIS da funcao, com SQL comum e na MESMA transacao:
+         * elas moram em OUTRA tabela, que nao tem coluna proibida nenhuma, e por
+         * isso `directory_suggestions_registrar` nao ganhou um decimo quinto
+         * argumento (esta escrito no cabecalho da `20261030000002`, e e
+         * deliberado).
+         */
+        if (linhas.length > 0) {
+          await trx.insertInto('directory_suggestion_images').values(linhas).execute();
+        }
+        return gravada;
+        });
+      } catch (erro) {
+        // A sentinela volta a ser o tipo da porta DEPOIS do `ROLLBACK`. Qualquer
+        // outro erro -- 23514 do `CHECK` de posicao, 23505 do `UNIQUE` de
+        // `image_id`, queda de conexao -- sobe, porque nao e recusa de envio.
+        if (erro instanceof EnvioNaoServe) return { tipo: 'envio_nao_serve', campo: erro.campo };
+        throw erro;
+      }
     },
 
     async listarDoAutor(

@@ -114,6 +114,27 @@ function errosDaCapa(capa: CapaDoCorpo | null | undefined): ProblemFieldError[] 
   return errosDeTextoDeUsuario('cover_image.alt_text', capa.alt_text, 2, TETO_DO_TEXTO_ALTERNATIVO);
 }
 
+/**
+ * **`cover_image` e `image_upload_ids` SE EXCLUEM**, e os dois juntos sao `400`
+ * (`code: cover_and_images_both_sent`).
+ *
+ * Nao e zelo: sao duas formas de dizer qual e a capa no MESMO corpo, e qualquer
+ * regra de precedencia ("a lista ganha", "a capa ganha") seria comportamento que
+ * ninguem pediu e que a tela nao mostra. O aplicativo publicado manda
+ * `cover_image`; o novo manda `image_upload_ids`, **inclusive quando e uma imagem
+ * so**. Nenhum dos dois manda os dois.
+ */
+function errosDaCapaComAsImagens(corpo: CorpoDoEncontroDaComunidade): ProblemFieldError[] {
+  if (corpo.cover_image === undefined || corpo.image_upload_ids === undefined) return [];
+  return [
+    {
+      field: 'image_upload_ids',
+      code: 'cover_and_images_both_sent',
+      message: 'Mande a capa OU a lista de imagens, e não as duas.',
+    },
+  ];
+}
+
 function lugarGravado(lugar: LugarDaComunidade) {
   return {
     placeName: lugar.place_name.trim(),
@@ -146,6 +167,7 @@ export class EncontroDaComunidade {
       ...errosDosPortes(corpo.accepted_sizes),
       ...(corpo.notes === undefined ? [] : errosDasObservacoes('notes', corpo.notes)),
       ...errosDaCapa(corpo.cover_image),
+      ...errosDaCapaComAsImagens(corpo),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -176,7 +198,7 @@ export class EncontroDaComunidade {
               },
         agora,
       });
-      await this.aplicarCapa(tx, id, autor, corpo.cover_image ?? undefined, agora);
+      await this.aplicarImagens(tx, id, autor, corpo, agora);
       return gravado;
     });
 
@@ -190,6 +212,8 @@ export class EncontroDaComunidade {
       publication_status: 'published',
       origin: 'community',
       has_cover: corpo.cover_image !== undefined,
+      /** QUANTAS imagens vieram pela lista nova, e nao quais. */
+      image_count: (corpo.image_upload_ids ?? []).length,
     });
     return this.lerDepoisDeEscrever(slug, 1);
   }
@@ -258,7 +282,7 @@ export class EncontroDaComunidade {
       if (patch.accepted_sizes !== undefined) await tx.substituirPortes(atual.id, patch.accepted_sizes);
       if (patch.amenities !== undefined) await tx.substituirEstrutura(atual.id, patch.amenities);
       if (patch.bring_items !== undefined) await tx.substituirParaLevar(atual.id, patch.bring_items);
-      if (patch.cover_image === null) await tx.definirCapa(atual.id, null);
+      if (patch.cover_image === null) await tx.definirImagens(atual.id, []);
       else await this.aplicarCapa(tx, atual.id, autor, patch.cover_image, agora);
       return { versao: nova, id: atual.id };
     });
@@ -315,7 +339,45 @@ export class EncontroDaComunidade {
     return atual;
   }
 
-  /** Confirma o envio da capa e a poe na posicao 0. */
+  /**
+   * As imagens da CRIACAO: `cover_image` (uma) ou `image_upload_ids` (ate quatro),
+   * nunca os dois -- `errosDaCapaComAsImagens` ja recusou o corpo que manda ambos.
+   */
+  private async aplicarImagens(
+    tx: TransacaoDaComunidade,
+    eventoId: string,
+    autor: AutorDoEncontro,
+    corpo: CorpoDoEncontroDaComunidade,
+    agora: Instant,
+  ): Promise<void> {
+    if (corpo.image_upload_ids === undefined) {
+      await this.aplicarCapa(tx, eventoId, autor, corpo.cover_image, agora);
+      return;
+    }
+    /**
+     * NA ORDEM DO ARRAY, e sequencial de proposito: cada volta trava a linha do
+     * envio com `FOR UPDATE`, e `Promise.all` abriria a porta a impasse entre dois
+     * encontros que mandassem os mesmos envios em ordens diferentes.
+     *
+     * **Sem `alt_text`**: a lista nova nao o tem, porque o cliente mandou remover
+     * a descricao de foto do aplicativo em 26/10/2026.
+     */
+    const imagens: { imagemId: string; altText: string | null }[] = [];
+    for (const uploadId of corpo.image_upload_ids) {
+      const imagemId = await tx.capaDoEnvio({ uploadId, chamador: autor.userId, eventoId, agora });
+      if (imagemId === undefined) {
+        throw recusa(
+          'image_upload_ids',
+          'upload_not_usable',
+          'Uma das imagens não serve para este encontro. Envie-a de novo.',
+        );
+      }
+      imagens.push({ imagemId, altText: null });
+    }
+    await tx.definirImagens(eventoId, imagens);
+  }
+
+  /** Confirma o envio da capa e a poe na posicao 0, sozinha. */
   private async aplicarCapa(
     tx: TransacaoDaComunidade,
     eventoId: string,
@@ -333,7 +395,7 @@ export class EncontroDaComunidade {
     if (imagemId === undefined) {
       throw recusa('cover_image', 'upload_not_usable', 'Essa imagem não serve para este encontro. Envie-a de novo.');
     }
-    await tx.definirCapa(eventoId, { imagemId, altText: capa.alt_text?.trim() ?? null });
+    await tx.definirImagens(eventoId, [{ imagemId, altText: capa.alt_text?.trim() ?? null }]);
   }
 
   /**

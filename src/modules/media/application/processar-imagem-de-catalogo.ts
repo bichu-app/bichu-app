@@ -35,6 +35,7 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
   directory_gallery: DERIVADAS_DO_ENCONTRO,
   directory_suggestion_logo: DERIVADAS_DA_LOGO,
+  directory_suggestion_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
   user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
   user_publication: DERIVADAS_DA_PUBLICACAO,

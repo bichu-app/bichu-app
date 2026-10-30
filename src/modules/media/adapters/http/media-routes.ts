@@ -18,6 +18,10 @@ import type {
   CorpoDaIntencaoDoLogotipo,
   LogotipoDaIndicacao,
 } from '../../application/logotipo-da-indicacao.js';
+import type {
+  CorpoDaIntencaoDaFoto,
+  FotoDaIndicacao,
+} from '../../application/foto-da-indicacao.js';
 import type { FotoDoPet } from '../../ports/media-repository.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -56,6 +60,23 @@ export const rotaDeIntencaoDoLogotipoDaIndicacao = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A FOTO DO ESTABELECIMENTO na indicacao (cliente, 30/10/2026).
+ *
+ * **O teto e o MESMO de `rotaDeIntencaoDoLogotipoDaIndicacao` (20/1h por
+ * conta), e ele NAO foi multiplicado por quatro so porque a tela agora manda
+ * ate quatro fotos** -- o espelho do `x-rate-limit` do contrato, com a razao
+ * escrita la: multiplicar o teto por causa do numero de campos da tela seria
+ * deixar o formulario definir o orcamento do armazenamento.
+ */
+export const rotaDeIntencaoDaFotoDaIndicacao = defineRoute({
+  operationId: 'createDirectorySuggestionPhotoUploadIntent',
+  method: 'post',
+  path: '/media/directory-suggestion-photo-intents',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDeConfirmacaoDeFoto = defineRoute({
   operationId: 'confirmPetPhoto',
   method: 'post',
@@ -84,6 +105,8 @@ export interface DependenciasDasRotasDeMidia {
   readonly fotosDoUsuario: FotoDoProprioUsuario;
   /** 29/10/2026: a autorizacao de envio do logotipo da indicacao. */
   readonly logotiposDeIndicacao: LogotipoDaIndicacao;
+  /** 30/10/2026: a autorizacao de envio de UMA foto do estabelecimento indicado. */
+  readonly fotosDeIndicacao: FotoDaIndicacao;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
   /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
@@ -215,6 +238,25 @@ export function registrarRotasDeMidia(
       const { uploadId, autorizacao } = await deps.logotiposDeIndicacao.autorizar(
         dono,
         request.body as CorpoDaIntencaoDoLogotipo,
+      );
+      return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeIntencaoDaFotoDaIndicacao,
+    {
+      schema: {
+        body: corpoDe(deps.contrato, rotaDeIntencaoDaFotoDaIndicacao.operationId),
+      },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.fotosDeIndicacao.autorizar(
+        dono,
+        request.body as CorpoDaIntencaoDaFoto,
       );
       return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
     },

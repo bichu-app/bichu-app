@@ -965,6 +965,41 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.catalog_images',
     aoApagar: 'NO ACTION',
   },
+  // AS FOTOS DO ESTABELECIMENTO NA INDICACAO (`20261030000002`, 30/10/2026:
+  // *"so tem o campo para subir a foto do logotipo da empresa, mas nao as fotos
+  // do estabelecimento que fica no topo da pagina"*). **DUAS chaves, e o par e o
+  // MESMO das tres galerias irmas** (`network_event_images`,
+  // `professional_images`, `store_item_images`): a ligacao a partir do PAI e
+  // `CASCADE`, e a imagem de catalogo e `NO ACTION`.
+  //
+  // `CASCADE` no `suggestion_id` DIVERGE de `directory_suggestions.
+  // logo_image_id` (que e `NO ACTION`) de proposito, e a migracao escreve a
+  // razao: aquela e uma coluna NA indicacao, e esta e uma tabela FILHA -- a linha
+  // nao tem vida propria sem a indicacao, e `NO ACTION` aqui tornaria qualquer
+  // remocao de indicacao um erro de chave estrangeira em vez de uma decisao.
+  //
+  // **A cascata NAO atravessa pessoas**, e e por isso que nenhuma das duas esta
+  // em `CASCATAS_QUE_ATRAVESSAM_PESSOAS`: a indicacao e as fotos dela sao da
+  // MESMA pessoa (quem indicou), e apagar a conta dela leva as duas por
+  // `directory_suggestions.suggested_by_user_id`. Nao ha terceiro no caminho.
+  'public.directory_suggestion_images.directory_suggestion_images_suggestion_id_fkey': {
+    colunas: ['suggestion_id'],
+    referencia: 'public.directory_suggestions',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a ORDEM das fotos do estabelecimento da indicacao apagada, e so ela. De quem indicou -- ' +
+      'a mesma pessoa de quem e a indicacao. A imagem em `catalog_images` e a derivada no ' +
+      'balde FICAM: o que sai e o vinculo.',
+  },
+  // `NO ACTION` (o PADRAO do Postgres: a migracao nao declara `ON DELETE` nesta),
+  // e e o freio que se quer -- apagar uma imagem presa numa indicacao reprova com
+  // 23503, e quem tira a imagem tira o vinculo primeiro. O MESMO veredito de
+  // `professional_images.image_id` e de `network_event_images.image_id`.
+  'public.directory_suggestion_images.directory_suggestion_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
 
   // -------------------------------------------------------------------------
   // a avaliacao do local e a denuncia dela (`20261017000017`)

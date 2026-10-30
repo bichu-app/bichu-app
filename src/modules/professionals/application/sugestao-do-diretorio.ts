@@ -73,12 +73,13 @@ export class SugestaoDoDiretorio {
       contatoValue: corpo.public_contact.value.trim(),
       note: aparado(corpo.note),
       logoUploadId: corpo.logo_upload_id ?? null,
+      photoUploadIds: corpo.photo_upload_ids ?? [],
     });
 
     if (gravada.tipo === 'envio_nao_serve') {
       throw problemas.validacao([
         {
-          field: 'logo_upload_id',
+          field: gravada.campo,
           code: 'upload_not_usable',
           message: 'Essa imagem não serve para esta indicação. Escolha-a de novo.',
         },
@@ -101,6 +102,11 @@ export class SugestaoDoDiretorio {
         has_note: corpo.note !== undefined,
         has_postal_code: corpo.postal_code !== undefined,
         has_logo: corpo.logo_upload_id !== undefined,
+        /**
+         * QUANTAS fotos do estabelecimento vieram, e nao quais: a trilha nao
+         * guarda `upload_id`, pelo mesmo motivo que `has_logo` e booleano.
+         */
+        photo_count: (corpo.photo_upload_ids ?? []).length,
         review_status: 'pending',
       },
     });

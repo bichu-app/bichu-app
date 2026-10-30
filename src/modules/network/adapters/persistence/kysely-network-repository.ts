@@ -870,14 +870,30 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
       return imagemId;
     },
 
-    async definirCapa(eventoId, capa) {
+    /**
+     * Apaga e reescreve as imagens do encontro, **na ordem do array**: o indice e
+     * a `position`, e a `0` e a capa. UMA instrucao de `INSERT` para as quatro, e
+     * nao uma por imagem.
+     *
+     * O `DELETE` antes continua sendo o desenho (e o mesmo de
+     * `substituirImagens` da entrada do diretorio): a lista e a verdade inteira, e
+     * nao um delta. `network_event_images_ordem_unica` e DIFERIDA, entao a
+     * reescrita passa pelos estados intermediarios sem colidir.
+     */
+    async definirImagens(eventoId, imagens) {
       await trx.deleteFrom('network_event_images').where('event_id', '=', eventoId).execute();
-      if (capa !== null) {
-        await trx
-          .insertInto('network_event_images')
-          .values({ event_id: eventoId, image_id: capa.imagemId, position: 0, alt_text: capa.altText })
-          .execute();
-      }
+      if (imagens.length === 0) return;
+      await trx
+        .insertInto('network_event_images')
+        .values(
+          imagens.map((imagem, position) => ({
+            event_id: eventoId,
+            image_id: imagem.imagemId,
+            position,
+            alt_text: imagem.altText,
+          })),
+        )
+        .execute();
     },
   };
 }

@@ -183,9 +183,11 @@ import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistenc
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
 import { LogotipoDaIndicacao } from '../modules/media/application/logotipo-da-indicacao.js';
+import { FotoDaIndicacao } from '../modules/media/application/foto-da-indicacao.js';
 import {
   registrarIntencaoDeCapaDaComunidade,
   registrarIntencaoDoLogotipoDaIndicacao,
+  registrarIntencaoDaFotoDaIndicacao,
   registrarIntencaoDaVitrineDoUsuario,
   registrarIntencaoDeFotoDoUsuario,
   registrarIntencaoDaFotoDaPublicacao,
@@ -626,6 +628,14 @@ export async function main(): Promise<void> {
         ids,
       }),
       registrarIntencao: registrarIntencaoDoLogotipoDaIndicacao,
+      db,
+    }),
+    fotosDeIndicacao: new FotoDaIndicacao({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDaFotoDaIndicacao,
       db,
     }),
     midia: new MediaService({

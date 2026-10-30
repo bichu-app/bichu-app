@@ -476,7 +476,12 @@ void main() {
           'amenities',
           'bring_items',
           'notes',
-          'cover_image',
+          // **`image_upload_ids`, e nao `cover_image`** (contrato de
+          // 30/10/2026): o aplicativo novo manda a lista de ate quatro, e
+          // nunca o campo da capa unica. `cover_image` continua no esquema
+          // para o APK que esta no aparelho, e os dois no mesmo corpo sao
+          // `400 cover_and_images_both_sent`.
+          'image_upload_ids',
         };
         expect(
           corpo.keys.toSet().difference(permitidas),

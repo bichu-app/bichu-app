@@ -502,6 +502,8 @@ export type PropositoDaImagemDeCatalogo =
   | 'directory_gallery'
   /** O logotipo que QUEM INDICOU enviou (`20261029000004`). */
   | 'directory_suggestion_logo'
+  /** As fotos do ESTABELECIMENTO que quem indicou enviou (`20261030000002`). */
+  | 'directory_suggestion_photo'
   | 'user_photo'
   | 'user_showcase'
   | 'user_publication';
@@ -1424,6 +1426,28 @@ export interface ProfessionalImagesTable {
   alt_text: string | null;
 }
 
+/**
+ * As FOTOS DO ESTABELECIMENTO que quem indicou enviou (`20261030000002`,
+ * pedido do cliente de 29 e 30/10/2026: *"devemos deixar enviar ate 4
+ * imagens"* e *"so tem o campo para subir a foto do logotipo da empresa, mas
+ * nao as fotos do estabelecimento que fica no topo da pagina"*).
+ *
+ * **Nao substitui `directory_suggestions.logo_image_id`:** a logo e UMA porque
+ * e a marca, e **nao conta entre as quatro**; estas sao a faixa 16:9 do topo.
+ *
+ * **SEM `alt_text`**, e e a primeira galeria do projeto a nascer assim: o
+ * cliente mandou remover a descricao de foto do APLICATIVO em 26/10/2026, e
+ * estas imagens so entram pelo aplicativo -- nao ha painel que as escreva.
+ */
+export interface DirectorySuggestionImagesTable {
+  /** `directory_suggestions.id`. `ON DELETE CASCADE`: a linha nao tem vida propria. */
+  suggestion_id: string;
+  /** `catalog_images.id`, com `purpose = 'directory_suggestion_photo'`. */
+  image_id: string;
+  /** 0 e a CAPA; o `CHECK` do banco vai a 3 -- quatro imagens, e nao oito. */
+  position: number;
+}
+
 /** A galeria do encontro (ADR-0027 A.4.2); `position = 0` e a capa. */
 export interface NetworkEventImagesTable {
   event_id: string;
@@ -1843,6 +1867,7 @@ export interface Database {
   professional_review_reports: ProfessionalReviewReportsTable;
   entity_verifications: EntityVerificationsTable;
   directory_suggestions: DirectorySuggestionsTable;
+  directory_suggestion_images: DirectorySuggestionImagesTable;
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_categories: StoreCategoriesTable;

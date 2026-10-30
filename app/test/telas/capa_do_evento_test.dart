@@ -419,8 +419,8 @@ void main() {
   testWidgets(
       '(b) ISCA — `Criar evento` CONFIRMA a capa, no MESMO `POST`',
       (tester) async {
-    // ISCA: em `_marcar` (mesmo arquivo), trocar `capaUploadId: _uploadDaCapa`
-    // por `capaUploadId: null`. Compila, o `POST` continua saindo, o evento
+    // ISCA: em `_marcar` (mesmo arquivo), trocar
+    // `imagens: _imagens.map(...)` por `imagens: null`. Compila, o `POST` continua saindo, o evento
     // continua nascendo -- e a capa nunca entra nele: a intencao vence em
     // 600 s e o varredor a recolhe. Nenhuma verificacao de texto enxerga isso;
     // so a leitura do CORPO do `POST`.
@@ -453,7 +453,7 @@ void main() {
     // de 26/10/2026 (*"essa porra de campo e obrigatorio na criacao do evento,
     // tire essa merda"*).
     //
-    // ISCA: devolver o `BichuField` de `Descrição da foto` ao `_BlocoDaCapa`.
+    // ISCA: devolver o `BichuField` de `Descrição da foto` a `FaixaDeImagens`.
     // Este `expect` reprova, e e o unico lugar que o pega com FOTO na tela --
     // que e o unico estado em que o campo aparecia.
     expect(
@@ -478,19 +478,38 @@ void main() {
       reason: 'REPROVA: o `Criar evento` nao mandou exatamente um '
           '`POST /v1/network/events`.',
     );
-    final capa = corpos.single['cover_image'];
+    // **`image_upload_ids`, E NAO `cover_image`** (contrato de 30/10/2026).
+    // O aplicativo novo manda a LISTA, inclusive com uma imagem so; quem e a
+    // capa e a POSICAO, e nao um campo.
+    final imagens = corpos.single['image_upload_ids'];
     expect(
-      capa,
-      isA<Map<String, dynamic>>(),
-      reason: 'REPROVA: o corpo da criacao saiu SEM `cover_image`, com uma '
-          'capa enviada e confirmada na tela. Era este o estado de antes desta '
-          'entrega, e o `upload_id` seria recolhido pelo varredor em 600 s.',
+      imagens,
+      isA<List<dynamic>>(),
+      reason: 'REPROVA: o corpo da criacao saiu SEM `image_upload_ids`, com '
+          'uma imagem enviada e confirmada na tela. Era este o estado de antes '
+          'desta entrega, e o `upload_id` seria recolhido pelo varredor em '
+          '600 s.',
     );
     expect(
-      (capa as Map<String, dynamic>)['upload_id'],
-      uploadDaCapa,
+      imagens,
+      <String>[uploadDaCapa],
       reason: 'REPROVA: o corpo nao levou o `upload_id` que a intencao '
-          'devolveu.',
+          'devolveu, na posicao 0 (a capa).',
+    );
+    // **E NUNCA OS DOIS CAMPOS.** Mandar `cover_image` junto de
+    // `image_upload_ids` e `400` (`code: cover_and_images_both_sent`): duas
+    // formas de dizer qual e a capa, no mesmo corpo, e o defeito. ISCA:
+    // devolver o ramo `if (capaUploadId != null) 'cover_image': {...}` a
+    // `corpoDeCriacao` ao lado do novo -- compila, parece compatibilidade, e
+    // todo evento com imagem passa a tomar 400.
+    expect(
+      corpos.single.containsKey('cover_image'),
+      isFalse,
+      reason: 'REPROVA: o corpo levou `cover_image` JUNTO de '
+          '`image_upload_ids`. Os dois sao mutuamente exclusivos no contrato e '
+          'a resposta e `400 cover_and_images_both_sent`. `cover_image` '
+          'continua no contrato porque o APK publicado o manda -- este '
+          'aplicativo nao e aquele.',
     );
     // **O VEREDITO INVERTEU EM 27/10/2026, e aqui esta o que ele media.**
     //
@@ -506,13 +525,20 @@ void main() {
     // mandar string vazia, sao as duas formas de "consertar" isto que
     // gravariam no banco uma descricao que ninguem escreveu. Vazio, por sinal,
     // continua `400`: `minLength: 2` ficou no esquema.
+    //
+    // **E EM 30/10/2026 O CAMPO DEIXOU DE TER ONDE CABER.**
+    // `image_upload_ids` e uma lista de `uuid` pelados: nao existe objeto por
+    // imagem, entao nao existe `alt_text` nem `crop` para inventar. O que este
+    // `expect` guarda e que a lista e de TEXTOS, e nao de objetos -- um
+    // `[{upload_id: ..., alt_text: ...}]` tomaria `400` por `items.type`.
     expect(
-      capa.containsKey('alt_text'),
-      isFalse,
-      reason: 'REPROVA: o corpo levou `alt_text` sem a tela ter campo para a '
-          'pessoa escrever um. Ou alguem devolveu o campo, ou alguem derivou '
-          'o texto do titulo -- e o contrato diz que o titulo do evento e '
-          'outra coisa.',
+      (imagens as List<dynamic>).every((e) => e is String),
+      isTrue,
+      reason: 'REPROVA: `image_upload_ids` nao e uma lista de textos. O '
+          'contrato declara `items: {type: string, format: uuid}`: um objeto '
+          'por imagem -- com `alt_text` ou `crop` dentro -- e `400`, e seria '
+          'alguem devolvendo um campo que o cliente mandou remover em '
+          '26/10/2026.',
     );
 
     // **UM caminho de confirmacao, e so um.** Nenhum `PATCH` e nenhuma
@@ -539,8 +565,9 @@ void main() {
     // sai com `cover_image_url: null`).
     //
     // ISCA: em `corpoDeCriacao` (`app/lib/api/rede_api.dart`), trocar o
-    // `if (capaUploadId != null && ...)` por um `cover_image` sempre presente.
-    // Compila, e todo evento sem foto passa a levar 400.
+    // `if (imagens != null && imagens.isNotEmpty)` por um `image_upload_ids`
+    // sempre presente. Compila, e todo evento sem foto passa a levar 400 por
+    // `minItems: 1`.
     final capturado = CapturadoDaCapa();
     await abrirOFormulario(
       tester,
@@ -556,12 +583,22 @@ void main() {
     final corpos = capturado.criacoes();
     expect(corpos, hasLength(1));
     expect(
+      corpos.single.containsKey('image_upload_ids'),
+      isFalse,
+      reason: 'REPROVA: o corpo levou `image_upload_ids` sem imagem escolhida. '
+          'O esquema e `minItems: 1`, entao `[]` e `400` -- e `format: uuid` '
+          'nao aceita nulo. "Mandei a lista vazia" e "nao mandei a lista" sao '
+          'a MESMA intencao dita de duas formas, e o contrato recusa as duas '
+          'de proposito.',
+    );
+    // E `cover_image` tambem nao, por um motivo DIFERENTE: este aplicativo
+    // deixou de mandar aquele campo em qualquer estado.
+    expect(
       corpos.single.containsKey('cover_image'),
       isFalse,
-      reason: 'REPROVA: o corpo levou `cover_image` sem capa escolhida. O '
-          'esquema e `additionalProperties: false` e os dois campos internos '
-          'sao obrigatorios: um `cover_image` vazio e 400 em todo evento sem '
-          'foto.',
+      reason: 'REPROVA: o corpo levou `cover_image`. O aplicativo novo nao '
+          'manda esse campo em estado nenhum -- ele existe no contrato para o '
+          'APK que esta no aparelho agora.',
     );
     expect(
       capturado.doCaminho('/media/network-event-cover-intents'),
@@ -776,9 +813,10 @@ void main() {
   testWidgets(
       '(e2) ISCA — o envio que nao sai TIRA a previa, e o botao de criar nao '
       'promete a capa', (tester) async {
-    // ISCA: em `_escolheuACapa`, no ramo `DesfechoDoEnvio.recusada`, manter
-    // `_capaEscolhida` em vez de anula-la. Compila, a previa fica bonita na
-    // tela -- e o `POST` sai sem `cover_image`, porque `_uploadDaCapa` e nulo.
+    // ISCA: em `_escolheuACapa`, no ramo `DesfechoDoEnvio.recusada`, acrescentar
+    // a imagem a `_imagens` em vez de so anotar o erro. Compila, a previa fica
+    // bonita na tela -- e o `POST` sai com um `upload_id` de bytes que nao
+    // subiram, que e `400 upload_not_usable`.
     // A pessoa publica o evento vendo a foto na tela e o evento nasce sem ela.
     final camera = CameraDeTeste(
       EstadoDaPermissao.concedida,
@@ -840,11 +878,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      capturado.criacoes().single.containsKey('cover_image'),
+      capturado.criacoes().single.containsKey('image_upload_ids'),
       isFalse,
-      reason: 'REPROVA: o corpo levou `cover_image` de um envio que foi '
+      reason: 'REPROVA: o corpo levou `image_upload_ids` de um envio que foi '
           'recusado. O `upload_id` de bytes que nao subiram volta '
           '`400 upload_not_usable` sem dizer por que.',
+    );
+    expect(
+      capturado.criacoes().single.containsKey('cover_image'),
+      isFalse,
+      reason: 'REPROVA: o corpo levou `cover_image`, que este aplicativo nao '
+          'manda em estado nenhum.',
     );
   });
 
@@ -855,7 +899,7 @@ void main() {
     // ISCA: apagar o `if (_enviandoACapa) return _Impedimento.capaSubindo;` do
     // getter `_impedimento`. Compila, e abre a corrida que nenhum texto
     // enxerga: a pessoa toca em `Criar evento` enquanto os bytes sobem,
-    // `_uploadDaCapa` ainda e nulo, e o evento nasce SEM a capa que ela
+    // `_imagens` ainda esta vazia, e o evento nasce SEM a capa que ela
     // escolheu -- sem uma palavra sobre isso.
     final pendurado = Completer<http.Response>();
     final camera = CameraDeTeste(

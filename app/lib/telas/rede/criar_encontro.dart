@@ -20,7 +20,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
-import '../../widgets/previa_da_foto.dart';
+import '../../widgets/faixa_de_imagens.dart';
 import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -51,18 +51,24 @@ class TelaCriarEncontro extends StatefulWidget {
 
   static const String entreParaMarcar = 'Entre para criar um evento.';
 
-  /// O titulo da secao da capa.
-  static const String tituloDaCapa = 'Foto do evento';
+  /// O titulo da secao das imagens.
+  ///
+  /// **Plural, e o rotulo mudou com o campo** (pedido do cliente, 29/10/2026:
+  /// *"nas indicacoes de estabelecimento e eventos so esta sendo possivel
+  /// enviar uma imagem no app, devemos deixar enviar ate 4 imagens"*). Deixar
+  /// `Foto do evento` no singular com quatro quadros na tela seria o rotulo
+  /// desmentindo o campo.
+  static const String tituloDaCapa = 'Fotos do evento';
 
-  /// A unica linha de apoio da secao.
+  /// A unica linha de apoio da secao. **A ordem ("a primeira e a capa") e dita
+  /// pela propria faixa**, com as imagens na tela -- dizer aqui tambem seria a
+  /// segunda redacao da mesma regra.
   static const String ajudaDaCapa =
-      'A foto que aparece no cartão do evento. Opcional.';
+      'Até 4 fotos. A primeira aparece no cartão do evento. Opcional.';
 
   static const String tirarAFoto = 'Tirar foto';
 
   static const String escolherDaGaleria = 'Escolher da galeria';
-
-  static const String aCapaEscolhida = 'A foto que você escolheu';
 
   static const String capaProntaParaSalvar =
       'Foto enviada. Toque em criar evento para publicar com ela.';
@@ -155,14 +161,25 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   DateTime? _comeca;
   DateTime? _termina;
 
-  /// A capa que a pessoa escolheu no aparelho.
-  FotoLocal? _capaEscolhida;
-
-  /// O `upload_id` de uma capa cujos **bytes ja estao no armazenamento** e que
-  /// ainda **nao foi confirmada**, ou nulo quando nao ha nenhuma.
-  String? _uploadDaCapa;
+  /// As imagens que já subiram, **na ordem em que a pessoa as pôs**.
+  ///
+  /// **A primeira é a capa, e não há campo de capa separado** -- é a mesma
+  /// leitura de `AdminNetworkEventInput.images`, onde a capa é a `position` 0.
+  /// Duas formas de dizer qual é a capa, no mesmo corpo, é o defeito: o
+  /// contrato recusa `cover_image` junto de `image_upload_ids` com `400`
+  /// (`code: cover_and_images_both_sent`).
+  ///
+  /// **Só entra aqui o que já tem `upload_id`.** Uma lista de "escolhidas" e
+  /// outra de "enviadas" divergiriam na primeira falha de rede.
+  final List<_ImagemDoEncontro> _imagens = <_ImagemDoEncontro>[];
 
   bool _enviandoACapa = false;
+
+  /// A imagem cujos bytes estão **subindo agora**, para a prévia provisória.
+  ///
+  /// "Apresentar como vai ficar" foi palavra do cliente, e a derivada do
+  /// servidor não existe nesse instante.
+  FotoLocal? _imagemSubindo;
 
   /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
   /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
@@ -371,25 +388,32 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
 
-  /// A capa escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
-  /// qualquer coisa.
+  /// A imagem escolhida **JA SOBE**, e so entra na faixa quando os bytes
+  /// chegaram ao armazenamento.
+  ///
+  /// **A ROTA DE INTENCAO E A QUE JA EXISTE, e nao uma nova**
+  /// (`createNetworkEventCoverUploadIntent`, proposito `network_event`): as
+  /// quatro imagens tem a mesma geometria, a mesma minima e a mesma derivada, e
+  /// nada no envio distingue a segunda da primeira. Quem e a capa e a POSICAO
+  /// na lista, e nao o proposito do envio -- uma segunda rota so para dizer
+  /// "esta nao e a capa" inventaria uma fronteira que nao existe.
   Future<void> _escolheuACapa(FotoLocal foto) async {
     final recusa =
         recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
     if (recusa != null) {
-      setState(() {
-        _capaEscolhida = null;
-        _uploadDaCapa = null;
-        _erro = MensagemDeErro(texto: recusa);
-      });
+      setState(() => _erro = MensagemDeErro(texto: recusa));
       return;
     }
+    // **O teto e conferido AQUI tambem, e nao so no botao desabilitado.** Um
+    // toque que escapasse pela janela entre o envio e o `setState` pediria uma
+    // quinta assinatura, e cada assinatura e uma autorizacao de escrita que
+    // nao se desfaz.
+    if (_imagens.length >= FaixaDeImagens.maximoDoContrato) return;
 
     setState(() {
-      _capaEscolhida = foto;
-      _uploadDaCapa = null;
       _erro = null;
       _enviandoACapa = true;
+      _imagemSubindo = foto;
     });
 
     final escopo = Escopo.of(context);
@@ -404,21 +428,53 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
 
     setState(() {
       _enviandoACapa = false;
+      // **A previa provisoria SAI em todos os desfechos.** No caminho que deu
+      // certo ela e substituida pela linha definitiva; nos dois que falharam
+      // ela tem de desaparecer, senao o `Criar evento` promete uma capa que o
+      // corpo nao vai confirmar.
+      _imagemSubindo = null;
       switch (desfecho) {
         case DesfechoDoEnvio.enviada:
-          _uploadDaCapa = destino.uploadId;
+          final id = destino.uploadId;
+          // `uploadId` nulo com desfecho `enviada` nao acontece pelo contrato
+          // de `EnvioParaConfirmarDepois`; a guarda existe para que, se
+          // acontecesse, a faixa NAO ganhasse uma previa sem identificador.
+          if (id != null && id.isNotEmpty) {
+            _imagens.add(_ImagemDoEncontro(foto: foto, uploadId: id));
+          } else {
+            _erro = const MensagemDeErro(
+              texto: TelaCriarEncontro.capaRecusada,
+            );
+          }
         case DesfechoDoEnvio.semSinal:
-          _capaEscolhida = null;
           _erro = const MensagemDeErro(
             texto: TelaCriarEncontro.capaSemSinal,
           );
         case DesfechoDoEnvio.recusada:
-          _capaEscolhida = null;
           _erro = const MensagemDeErro(
             texto: TelaCriarEncontro.capaRecusada,
           );
       }
     });
+  }
+
+  /// Troca a ordem de duas imagens. **A primeira e a capa**, entao mover para o
+  /// topo e o jeito de escolher a capa.
+  void _moverAImagem(int de, int para) {
+    if (de < 0 || de >= _imagens.length) return;
+    if (para < 0 || para >= _imagens.length) return;
+    setState(() {
+      final movida = _imagens.removeAt(de);
+      _imagens.insert(para, movida);
+    });
+  }
+
+  /// Tira a imagem da faixa. **Nao cancela o envio**: nao ha rota de
+  /// cancelamento de intencao no contrato, e o varredor recolhe o objeto em dez
+  /// minutos.
+  void _removerAImagem(int indice) {
+    if (indice < 0 || indice >= _imagens.length) return;
+    setState(() => _imagens.removeAt(indice));
   }
 
   /// Dia e hora, nessa ordem, numa escolha so.
@@ -472,7 +528,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       comecaEm: _comeca!,
       terminaEm: _termina,
       observacoes: _observacoes.text.trim(),
-      capaUploadId: _uploadDaCapa,
+      imagens: _imagens.map((i) => i.uploadId).toList(growable: false),
     );
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
 
@@ -649,13 +705,25 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                   ),
                 ],
                 const SizedBox(height: BichuEspaco.e6),
-                _BlocoDaCapa(
-                  escolhida: _capaEscolhida,
+                FaixaDeImagens(
+                  imagens:
+                      _imagens.map((i) => i.foto).toList(growable: false),
+                  subindo: _imagemSubindo,
                   enviando: _enviandoACapa,
                   permissao: _permissaoDaCamera,
+                  textos: const TextosDaFaixaDeImagens(
+                    titulo: TelaCriarEncontro.tituloDaCapa,
+                    ajuda: TelaCriarEncontro.ajudaDaCapa,
+                    tirarAFoto: TelaCriarEncontro.tirarAFoto,
+                    escolherDaGaleria: TelaCriarEncontro.escolherDaGaleria,
+                    cameraNosAjustes: TelaCriarEncontro.cameraNosAjustes,
+                    abrirAjustes: TelaCriarEncontro.abrirAjustes,
+                  ),
                   aoTirar: enviando ? null : _tirarACapa,
                   aoEscolher: enviando ? null : _escolherACapaDaGaleria,
                   aoAbrirAjustes: _abrirOsAjustes,
+                  aoMover: _moverAImagem,
+                  aoRemover: _removerAImagem,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 BichuField(
@@ -844,125 +912,21 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   }
 }
 
-/// A CAPA DO EVENTO: o quadro, os dois botoes e o texto alternativo.
-class _BlocoDaCapa extends StatelessWidget {
-  const _BlocoDaCapa({
-    required this.escolhida,
-    required this.enviando,
-    required this.permissao,
-    required this.aoTirar,
-    required this.aoEscolher,
-    required this.aoAbrirAjustes,
-  });
+/// Uma IMAGEM DO ENCONTRO que **ja esta no armazenamento**.
+///
+/// A previa e o `upload_id` andam juntos de proposito: uma lista de previas e
+/// outra de identificadores divergiriam na primeira remocao, e a tela mostraria
+/// uma imagem cujo identificador foi para outra posicao do corpo -- o que, aqui,
+/// quer dizer outra CAPA.
+@immutable
+class _ImagemDoEncontro {
+  const _ImagemDoEncontro({required this.foto, required this.uploadId});
 
-  final FotoLocal? escolhida;
-  final bool enviando;
-  final EstadoDaPermissao permissao;
-  final VoidCallback? aoTirar;
-  final VoidCallback? aoEscolher;
-  final VoidCallback aoAbrirAjustes;
+  /// O arquivo no aparelho, para a miniatura.
+  final FotoLocal foto;
 
-  /// A altura do quadro. 180 dp dao 16:9 numa tela de 360 dp com as margens de
-  /// 16 dp dos dois lados -- 328 / 16 * 9 = 184,5, e 180 cabe sem estourar em
-  /// tela mais estreita.
-  static const double alturaDoQuadro = 180;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final local = escolhida;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Semantics(
-          header: true,
-          child: Text(TelaCriarEncontro.tituloDaCapa, style: textos.titleMedium),
-        ),
-        const SizedBox(height: BichuEspaco.e1),
-        Text(
-          TelaCriarEncontro.ajudaDaCapa,
-          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-        ),
-        const SizedBox(height: BichuEspaco.e3),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(BichuRaio.lg),
-          child: SizedBox(
-            height: alturaDoQuadro,
-            width: double.infinity,
-            child: local != null
-                ? PreviaDaFoto(
-                    foto: local,
-                    descricao: TelaCriarEncontro.aCapaEscolhida,
-                    altura: alturaDoQuadro,
-                  )
-                : _QuadradoSemCapa(cores: cores, enviando: enviando),
-          ),
-        ),
-        const SizedBox(height: BichuEspaco.e3),
-        Text(
-          orientacaoDeTamanhoDaImagem,
-          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-        ),
-        const SizedBox(height: BichuEspaco.e3),
-        if (permissao == EstadoDaPermissao.negadaPermanentemente) ...<Widget>[
-          FaixaDeAviso(
-            peso: PesoDaFaixa.informativo,
-            texto: TelaCriarEncontro.cameraNosAjustes,
-            rotuloDaAcao: TelaCriarEncontro.abrirAjustes,
-            aoTocarNaAcao: aoAbrirAjustes,
-          ),
-          const SizedBox(height: BichuEspaco.e3),
-        ],
-        if (permissao != EstadoDaPermissao.indisponivel) ...<Widget>[
-          BotaoSecundario(
-            rotulo: TelaCriarEncontro.tirarAFoto,
-            aoTocar: enviando ? null : aoTirar,
-          ),
-          const SizedBox(height: BichuEspaco.e2),
-        ],
-        OutlinedButton(
-          onPressed: enviando ? null : aoEscolher,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
-          ),
-          child: const Text(TelaCriarEncontro.escolherDaGaleria),
-        ),
-      ],
-    );
-  }
-}
-
-/// O lugar da capa quando nao ha capa.
-class _QuadradoSemCapa extends StatelessWidget {
-  const _QuadradoSemCapa({required this.cores, required this.enviando});
-
-  final BichuCores cores;
-
-  /// Os bytes estao subindo. Troca o simbolo por um indicador -- e a diferenca
-  /// entre "cabe uma foto aqui" e "a sua foto esta subindo", dita sem uma linha
-  /// de texto nova.
-  final bool enviando;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: cores.surfaceSunken,
-        borderRadius: BorderRadius.circular(BichuRaio.lg),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
-      child: enviando
-          ? const CircularProgressIndicator()
-          : Icon(
-              Icons.photo_camera_outlined,
-              color: cores.textSecondary,
-              size: 32,
-            ),
-    );
-  }
+  /// O que `createNetworkEvent` vai confirmar em `image_upload_ids`.
+  final String uploadId;
 }
 
 /// Uma data e hora escolhida, ou o convite para escolher.

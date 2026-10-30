@@ -183,6 +183,42 @@ export async function registrarIntencaoDoLogotipoDaIndicacao(
     .execute();
 }
 
+/**
+ * A intencao de envio de UMA FOTO DO ESTABELECIMENTO na indicacao (cliente,
+ * 30/10/2026).
+ *
+ * **Funcao propria e nao reuso da do logotipo**, pela razao de sempre neste
+ * arquivo: o `purpose` esta FECHADO no tipo. E isso que impede o produto de
+ * pedir uma autorizacao de foto do PAINEL por uma rota do aplicativo -- a
+ * fronteira que o proposito separado existe para fechar.
+ */
+export async function registrarIntencaoDaFotoDaIndicacao(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+    readonly purpose: 'directory_suggestion_photo';
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      purpose: nova.purpose,
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

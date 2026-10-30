@@ -17,12 +17,16 @@ export type PropositoDaImagem =
   | 'directory_photo'
   | 'directory_gallery'
   | 'directory_suggestion_logo'
+  | 'directory_suggestion_photo'
   | 'user_photo'
   | 'user_showcase'
   | 'user_publication';
 
 /** O proposito do LOGOTIPO DA INDICACAO, num ponto so. */
 export const PROPOSITO_DO_LOGOTIPO_DA_INDICACAO = 'directory_suggestion_logo' as const;
+
+/** O proposito da FOTO DO ESTABELECIMENTO da indicacao, num ponto so. */
+export const PROPOSITO_DA_FOTO_DA_INDICACAO = 'directory_suggestion_photo' as const;
 
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
@@ -32,6 +36,7 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   directory_photo: 'directory',
   directory_gallery: 'directory',
   directory_suggestion_logo: 'directory',
+  directory_suggestion_photo: 'directory',
   user_photo: 'people',
   user_showcase: 'people',
   user_publication: 'people',
@@ -51,6 +56,7 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   directory_photo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   directory_gallery: TIPOS_DE_IMAGEM_DE_CATALOGO,
   directory_suggestion_logo: TIPOS_DE_IMAGEM_DE_CATALOGO,
+  directory_suggestion_photo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   user_photo: TIPOS_ACEITOS,
   user_showcase: TIPOS_ACEITOS,
   user_publication: TIPOS_ACEITOS,
@@ -67,6 +73,9 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   directory_photo: { largura: 600, altura: 600 },
   directory_gallery: { largura: 600, altura: 600 },
   directory_suggestion_logo: { largura: 256, altura: 256 },
+  // 600 x 600 e nao os 256 do logotipo: a derivada `banner` e 1280 x 720 e
+  // `sharp` nao amplia. A MESMA minima de `directory_photo`, que e a mesma faixa.
+  directory_suggestion_photo: { largura: 600, altura: 600 },
   user_photo: { largura: 300, altura: 300 },
   user_showcase: { largura: 600, altura: 600 },
   user_publication: { largura: 600, altura: 600 },
