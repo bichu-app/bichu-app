@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
-import '../../api/busca_de_cep.dart';
 import '../../api/conexoes_api.dart';
 import '../../api/modelos_conexao.dart';
 import '../../api/modelos_passkey.dart';
@@ -20,6 +19,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../roteamento/saida_da_mensagem.dart';
 import '../../sessao/fiacao_do_passkey.dart';
 import '../../formato/telefone.dart';
@@ -167,11 +167,37 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   final TextEditingController _nome = TextEditingController();
   final TextEditingController _apelido = TextEditingController();
   final TextEditingController _telefone = TextEditingController();
-  final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
 
   String? _uf;
+
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele.**
+  ///
+  /// Antes de 30/10/2026 esta tela tinha a sua propria copia do bloco, e a
+  /// copia **nao conferia a sigla do estado**: ela aceitava qualquer par de
+  /// letras que a base de CEP devolvesse. O bloco chama
+  /// `siglaDeEstadoValida`, e agora esta tela tambem.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      bairro: _bairro,
+      chaveDoBairro: _CamposDosDados.bairro,
+      cidade: _cidade,
+      chaveDaCidade: _CamposDosDados.cidade,
+      chaveDoEstado: _CamposDosDados.uf,
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+      aoPreencher: _erros.remove,
+    ),
+  );
+
+  /// Os tres desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: _TextosDosDados.buscaIndisponivel,
+  );
 
   /// O que o servidor devolveu na ultima leitura.
   DadosPessoais? _lido;
@@ -185,10 +211,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`.
   final Map<String, String> _erros = <String, String>{};
-
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
-  String _cepJaBuscado = '';
 
   /// A foto que a pessoa escolheu no aparelho.
   FotoLocal? _fotoEscolhida;
@@ -322,12 +344,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       _nome,
       _apelido,
       _telefone,
-      _cep,
       _bairro,
       _cidade,
     ]) {
       c.dispose();
     }
+    _cepBloco.dispose();
     super.dispose();
   }
 
@@ -345,11 +367,11 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
         _nome.text = dados.usuario.nome ?? '';
         _apelido.text = dados.apelido ?? '';
         _telefone.text = telefoneDoE164(dados.telefone);
-        _cep.text = mascaraDeCep(dados.cep ?? '');
+        _cepBloco.cep.text = mascaraDeCep(dados.cep ?? '');
         _bairro.text = dados.bairro ?? '';
         _cidade.text = dados.cidade ?? '';
         _uf = (dados.uf != null && dados.uf!.length == 2) ? dados.uf : null;
-        _cepJaBuscado = _soDigitos(_cep.text);
+        _cepBloco.naoBuscarDeNovo(dados.cep ?? '');
         _fase = _Fase.formulario;
       });
     } on FalhaDeChamada catch (falha) {
@@ -369,46 +391,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   }
 
   static String _soDigitos(String bruto) => bruto.replaceAll(RegExp(r'\D'), '');
-
-  /// A busca de CEP, com as mesmas tres regras do pedido da plaquinha: so
-  /// preenche campo vazio, nada fica bloqueado, e **nada aqui impede o
-  /// salvar**.
-  Future<void> _buscarOCep() async {
-    final cep = _soDigitos(_cep.text);
-    if (cep.length != 8 || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-      _preencherSeVazio(_bairro, endereco.bairro, _CamposDosDados.bairro);
-      _preencherSeVazio(_cidade, endereco.cidade, _CamposDosDados.cidade);
-      if (_uf == null && endereco.uf.length == 2) {
-        _uf = endereco.uf;
-        _erros.remove(_CamposDosDados.uf);
-      }
-    });
-  }
-
-  void _preencherSeVazio(
-    TextEditingController campo,
-    String valor,
-    String chave,
-  ) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
-    _erros.remove(chave);
-  }
 
   /// Confere campo por campo e devolve os erros TODOS de uma vez.
   Map<String, String> _conferir() {
@@ -443,7 +425,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       erros[_CamposDosDados.telefone] = _TextosDosDados.telefoneIncompleto;
     }
 
-    final cepDigitado = _soDigitos(_cep.text);
+    final cepDigitado = _soDigitos(_cepBloco.cep.text);
     if (cepDigitado.isEmpty) {
       if (lido?.cep != null && lido!.cep!.isNotEmpty) {
         erros[_CamposDosDados.cep] = _TextosDosDados.cepNaoSeApaga;
@@ -493,7 +475,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     final novoTelefone = telefoneDigitado.isEmpty
         ? null
         : telefoneEmE164(telefoneDigitado);
-    final cepDigitado = _soDigitos(_cep.text);
+    final cepDigitado = _soDigitos(_cepBloco.cep.text);
 
     final nome = _seMudou(_nome.text.trim(), lido.usuario.nome);
     final apelido = _seMudou(
@@ -552,7 +534,7 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
       setState(() {
         _lido = dados;
         _confirmacao = _TextosDosDados.salvo;
-        _cepJaBuscado = _soDigitos(dados.cep ?? '');
+        _cepBloco.naoBuscarDeNovo(dados.cep ?? '');
         if (fotoParaGravar != null) {
           _fotoEscolhida = null;
           _uploadDaFoto = null;
@@ -718,16 +700,19 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
             autofill: const <String>[AutofillHints.postalCode],
             acaoDeTeclado: TextInputAction.next,
             rotulo: _TextosDosDados.cep,
-            controlador: _cep,
+            controlador: _cepBloco.cep,
             limite: limiteDoCep,
             tipoDeTeclado: TextInputType.number,
-            formatadores: const <TextInputFormatter>[
-              MascaraDeCep(),
-            ],
-            aoMudarTambem: (_) => _buscarOCep(),
+            formatadores: formatadoresDeCep,
+            aoMudarTambem: (_) =>
+                _cepBloco.buscar(Escopo.of(context).buscaDeCep),
           ),
-          if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
-            _linhaDaBusca(textos),
+          if (_cepBloco.temDesfecho) ...<Widget>[
+            LinhaDaBuscaDeCep(
+              bloco: _cepBloco,
+              textos: _textosDaBusca,
+              estilo: textos.bodySmall,
+            ),
             const SizedBox(height: BichuEspaco.e4),
           ],
           _campo(
@@ -842,20 +827,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     );
   }
 
-  /// A linha que conta o que a busca de CEP fez, e **so isso**: ela nao marca
-  /// campo, nao desabilita nada e nao impede o salvar.
-  Widget _linhaDaBusca(TextTheme textos) {
-    if (_buscandoOCep) {
-      return Text(_TextosDosDados.buscandoOCep, style: textos.bodySmall);
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado => _TextosDosDados.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel => _TextosDosDados.buscaIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto, style: textos.bodySmall);
-  }
 }
 
 /// A foto da propria pessoa: o retrato, o selo em cima dele, e as acoes.
@@ -1215,9 +1186,8 @@ abstract final class _TextosDosDados {
   static const String cepNaoSeApaga =
       'O CEP não pode ser apagado por aqui. Para tirá-lo, escreva para '
       'oi@bichu.app.';
-  static const String cepNaoEncontrado =
-      'CEP não encontrado. Preencha abaixo.';
-  static const String buscandoOCep = 'Buscando o endereço…';
+  /// O terceiro desfecho da busca de CEP; os outros dois vivem em
+  /// `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaIndisponivel =
       'Não conseguimos buscar o CEP agora. Preencha abaixo.';
 

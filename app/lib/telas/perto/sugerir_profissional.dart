@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
-import '../../api/busca_de_cep.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../api/envio_de_foto.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../api/estados_brasileiros.dart';
@@ -153,11 +153,8 @@ class TelaSugerirProfissional extends StatefulWidget {
       'só para quem confere, e não aparece na Rede.';
 
   /// Os tres desfechos da busca.
-  static const String buscandoOCep = 'Buscando o endereço…';
-
-  static const String cepNaoEncontrado =
-      'CEP não encontrado. Preencha abaixo.';
-
+  /// O terceiro desfecho da busca de CEP; os outros dois sao iguais nas seis
+  /// telas e vivem em `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaIndisponivel =
       'Não deu para buscar o CEP agora. Preencha abaixo.';
 
@@ -189,7 +186,6 @@ enum _Impedimento {
 
 class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   final TextEditingController _nome = TextEditingController();
-  final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final TextEditingController _contato = TextEditingController();
@@ -205,12 +201,28 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
 
   TipoDeContatoPublico? _tipoDeContato;
 
-  /// O que a ultima busca de CEP devolveu.
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele**, e o que
+  /// se digita nele VIAJA no corpo como `postal_code`.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      bairro: _bairro,
+      chaveDoBairro: 'neighborhood',
+      cidade: _cidade,
+      chaveDaCidade: 'city',
+      chaveDoEstado: 'state',
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+      aoPreencher: _esquecerOErroDoCampo,
+    ),
+  );
 
-  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
-  String _cepJaBuscado = '';
+  /// Os tres desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: TelaSugerirProfissional.buscaIndisponivel,
+  );
 
   /// A imagem que a pessoa escolheu no aparelho.
   FotoLocal? _logotipoEscolhido;
@@ -257,7 +269,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   @override
   void dispose() {
     _nome.dispose();
-    _cep.dispose();
+    _cepBloco.dispose();
     _bairro.dispose();
     _cidade.dispose();
     _contato.dispose();
@@ -270,65 +282,9 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
         _errosDeCampo = const <String, String>{};
       });
 
-  static final RegExp _soDigitos = RegExp(r'[^0-9]');
-
-  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
-  Future<void> _buscarOCep() async {
-    final cep = _cep.text.replaceAll(_soDigitos, '');
-    if (cep.length != 8 || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-      _preencherSeVazio(_bairro, endereco.bairro, 'neighborhood');
-      _preencherSeVazio(_cidade, endereco.cidade, 'city');
-      final uf = siglaDeEstadoValida(endereco.uf);
-      if (_uf == null && uf != null) {
-        _uf = uf;
-        _errosDeCampo = <String, String>{..._errosDeCampo}..remove('state');
-      }
-    });
-  }
-
-  /// Campo vazio recebe; campo escrito fica.
-  void _preencherSeVazio(
-    TextEditingController campo,
-    String valor,
-    String chave,
-  ) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
+  /// O erro daquele campo sai, porque a busca de CEP acabou de preenche-lo.
+  void _esquecerOErroDoCampo(String chave) {
     _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
-  }
-
-  /// A linha que conta o que a busca fez.
-  Widget _linhaDaBusca(TextTheme textos) {
-    if (_buscandoOCep) {
-      return Text(
-        TelaSugerirProfissional.buscandoOCep,
-        style: textos.bodySmall,
-      );
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado =>
-        TelaSugerirProfissional.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel =>
-        TelaSugerirProfissional.buscaIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto, style: textos.bodySmall);
   }
 
   /// O estado da camera, lido **antes** de a pessoa tocar em nada.
@@ -611,7 +567,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
           ? telefoneEmE164(_contato.text)!
           : _contato.text.trim(),
       bairro: _bairro.text.trim(),
-      cep: _cep.text.trim(),
+      cep: _cepBloco.cep.text.trim(),
       recado: _recado.text.trim(),
       logoUploadId: _uploadDoLogotipo,
       fotosDoEstabelecimento:
@@ -833,25 +789,27 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                 const SizedBox(height: BichuEspaco.e3),
                 BichuField(
                   rotulo: TelaSugerirProfissional.rotuloDoCep,
-                  controlador: _cep,
+                  controlador: _cepBloco.cep,
                   opcional: true,
                   limite: limiteDoCep,
                   tipoDeTeclado: TextInputType.number,
                   ajuda: TelaSugerirProfissional.ajudaDoCep,
-                  formatadores: const <TextInputFormatter>[
-                    MascaraDeCep(),
-                  ],
+                  formatadores: formatadoresDeCep,
                   correcaoAutomatica: false,
                   habilitado: !enviando,
                   acaoDeTeclado: TextInputAction.next,
                   aoMudar: (valor) {
                     _aoDigitar(valor);
-                    _buscarOCep();
+                    _cepBloco.buscar(Escopo.of(context).buscaDeCep);
                   },
                 ),
-                if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+                if (_cepBloco.temDesfecho) ...<Widget>[
                   const SizedBox(height: BichuEspaco.e2),
-                  _linhaDaBusca(textos),
+                  LinhaDaBuscaDeCep(
+                    bloco: _cepBloco,
+                    textos: _textosDaBusca,
+                    estilo: textos.bodySmall,
+                  ),
                 ],
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(

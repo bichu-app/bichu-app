@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../api/busca_de_cep.dart';
 import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
@@ -10,6 +9,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../formulario/origem_dos_valores.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
@@ -37,7 +37,6 @@ class TelaSolicitarPlaquinha extends StatefulWidget {
 
 class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   final TextEditingController _destinatario = TextEditingController();
-  final TextEditingController _cep = TextEditingController();
   final TextEditingController _logradouro = TextEditingController();
   final TextEditingController _numero = TextEditingController();
   final TextEditingController _complemento = TextEditingController();
@@ -46,13 +45,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   final TextEditingController _telefone = TextEditingController();
   final TextEditingController _observacao = TextEditingController();
 
-  /// O que a ultima busca de CEP devolveu.
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
-
-  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
-  String _cepJaBuscado = '';
-
   List<Pet>? _pets;
   String? _petEscolhido;
   String? _uf;
@@ -60,6 +52,36 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
   /// substituir e o que não pode.
   final OrigemDosValores _origem = OrigemDosValores();
+
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele.**
+  ///
+  /// Antes de 30/10/2026 esta tela tinha a propria copia do bloco, e a copia
+  /// **nao conferia a sigla do estado**: ela aceitava qualquer par de letras
+  /// que a base de CEP devolvesse. O bloco chama `siglaDeEstadoValida`, e
+  /// agora esta tela tambem.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    origem: _origem,
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      logradouro: _logradouro,
+      chaveDoLogradouro: _CamposDoPedido.logradouro,
+      bairro: _bairro,
+      chaveDoBairro: _CamposDoPedido.bairro,
+      cidade: _cidade,
+      chaveDaCidade: _CamposDoPedido.cidade,
+      chaveDoEstado: _CamposDoPedido.uf,
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+      aoPreencher: _erros.remove,
+    ),
+  );
+
+  /// Os tres desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: _TextosDaPlaquinha.buscaIndisponivel,
+  );
 
   /// Havia endereço guardado **no pet escolhido** quando esta tela o leu?
   bool? _haviaEnderecoGuardado;
@@ -117,8 +139,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       }
       _haviaEnderecoGuardado = null;
       _petDoEnderecoLido = null;
-      _cepJaBuscado = '';
-      _buscaDoCep = null;
+      _cepBloco.esquecerABusca();
     });
     if (escolhido != null) _carregarOEnderecoDoPet(escolhido);
   }
@@ -128,7 +149,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   TextEditingController? _campoDe(String chave) {
     return switch (chave) {
       _CamposDoPedido.destinatario => _destinatario,
-      _CamposDoPedido.cep => _cep,
+      _CamposDoPedido.cep => _cepBloco.cep,
       _CamposDoPedido.logradouro => _logradouro,
       _CamposDoPedido.numero => _numero,
       _CamposDoPedido.complemento => _complemento,
@@ -143,7 +164,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   void dispose() {
     for (final c in <TextEditingController>[
       _destinatario,
-      _cep,
       _logradouro,
       _numero,
       _complemento,
@@ -154,6 +174,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     ]) {
       c.dispose();
     }
+    _cepBloco.dispose();
     super.dispose();
   }
 
@@ -205,7 +226,11 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     _haviaEnderecoGuardado = true;
 
     setState(() {
-      _preencherDoGuardado(_cep, mascaraDeCep(guardado!.cep), _CamposDoPedido.cep);
+      _preencherDoGuardado(
+        _cepBloco.cep,
+        mascaraDeCep(guardado!.cep),
+        _CamposDoPedido.cep,
+      );
       _preencherDoGuardado(
         _destinatario,
         guardado.destinatario,
@@ -230,7 +255,9 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
         _origem.anotarDaConta(_CamposDoPedido.uf, temValor: true);
         _erros.remove(_CamposDoPedido.uf);
       }
-      if (_cepJaBuscado.isEmpty) _cepJaBuscado = guardado.cep;
+      if (_cepBloco.nenhumaBuscaAinda) {
+        _cepBloco.naoBuscarDeNovo(guardado.cep);
+      }
     });
   }
 
@@ -257,44 +284,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (_origem.doGuardado(campo, valor, chave)) _erros.remove(chave);
   }
 
-  /// Busca o endereco do CEP e preenche o que estiver VAZIO.
-  Future<void> _buscarOCep() async {
-    final cep = _soDigitos(_cep.text);
-    if (cep.length != 8 || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-
-      _preencherSeVazio(_logradouro, endereco.logradouro, _CamposDoPedido.logradouro);
-      _preencherSeVazio(_bairro, endereco.bairro, _CamposDoPedido.bairro);
-      _preencherSeVazio(_cidade, endereco.cidade, _CamposDoPedido.cidade);
-      if (_origem.podeVirDaBusca(_CamposDoPedido.uf, vazio: _uf == null) &&
-          endereco.uf.length == 2) {
-        _uf = endereco.uf;
-        _origem.soltar(_CamposDoPedido.uf);
-        _erros.remove(_CamposDoPedido.uf);
-      }
-    });
-  }
-
-  /// Preenche o campo quando ele está vazio **ou quando ainda carrega o valor
-  /// que veio do endereço guardado**, sem a pessoa ter tocado nele.
-  void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
-    if (_origem.daBusca(campo, valor, chave)) _erros.remove(chave);
-  }
-
   /// Valida **campo por campo**, e devolve os erros todos de uma vez.
   Map<String, String> _conferir() {
     final erros = <String, String>{};
@@ -304,7 +293,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (_destinatario.text.trim().length < 2) {
       erros[_CamposDoPedido.destinatario] = _TextosDaPlaquinha.digiteODestinatario;
     }
-    if (_soDigitos(_cep.text).length != 8) {
+    if (_soDigitos(_cepBloco.cep.text).length != 8) {
       erros[_CamposDoPedido.cep] = _TextosDaPlaquinha.cepTemOitoDigitos;
     }
     if (_logradouro.text.trim().length < 2) {
@@ -351,7 +340,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
 
     final enderecoDoPedido = EnderecoDeEntrega(
       destinatario: _destinatario.text.trim(),
-      cep: _soDigitos(_cep.text),
+      cep: _soDigitos(_cepBloco.cep.text),
       logradouro: _logradouro.text.trim(),
       numero: _numero.text.trim(),
       complemento: _complemento.text.trim(),
@@ -461,23 +450,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     );
   }
 
-  /// A linha que conta o que a busca de CEP fez.
-  Widget _linhaDaBusca(TextTheme textos) {
-    if (_buscandoOCep) {
-      return Text(
-        _TextosDaPlaquinha.buscandoOCep,
-        style: textos.bodySmall,
-      );
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado => _TextosDaPlaquinha.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel => _TextosDaPlaquinha.buscaIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto, style: textos.bodySmall);
-  }
-
   List<ItemDeLista> get _itensDosPets => (_pets ?? <Pet>[])
       .map((pet) => ItemDeLista(codigo: pet.id, rotulo: pet.nome))
       .toList(growable: false);
@@ -552,16 +524,19 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         chave: _CamposDoPedido.cep,
                         autofill: const <String>[AutofillHints.postalCode],
                         rotulo: _TextosDaPlaquinha.cep,
-                        controlador: _cep,
+                        controlador: _cepBloco.cep,
                         limite: limiteDoCep,
                         tipoDeTeclado: TextInputType.number,
-                        formatadores: const <TextInputFormatter>[
-                          MascaraDeCep(),
-                        ],
-                        aoMudarTambem: (_) => _buscarOCep(),
+                        formatadores: formatadoresDeCep,
+                        aoMudarTambem: (_) =>
+                            _cepBloco.buscar(Escopo.of(context).buscaDeCep),
                       ),
-                      if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
-                        _linhaDaBusca(textos),
+                      if (_cepBloco.temDesfecho) ...<Widget>[
+                        LinhaDaBuscaDeCep(
+                          bloco: _cepBloco,
+                          textos: _textosDaBusca,
+                          estilo: textos.bodySmall,
+                        ),
                         const SizedBox(height: BichuEspaco.e4),
                       ],
                       _campo(
@@ -739,8 +714,8 @@ abstract final class _TextosDaPlaquinha {
   static const String telefoneIncompleto = 'Digite DDD e número.';
 
   /// Os tres desfechos da busca de CEP.
-  static const String buscandoOCep = 'Buscando o endereço…';
-  static const String cepNaoEncontrado = 'CEP não encontrado. Preencha abaixo.';
+  /// O terceiro desfecho da busca de CEP; os outros dois sao iguais nas seis
+  /// telas e vivem em `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaIndisponivel = 'Não deu para buscar. Preencha abaixo.';
   static const String confiraOsCampos = 'Confira os campos marcados.';
   static const String confiraEsteCampo = 'Confira este campo.';

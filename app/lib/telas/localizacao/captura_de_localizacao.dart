@@ -1,15 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
-import '../../api/busca_de_cep.dart';
 import '../../formato/cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/modelos_localizacao.dart';
 import '../../dispositivo/localizacao.dart';
 import '../../escopo.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../formulario/origem_dos_valores.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -62,18 +61,9 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   /// mesmo motivo dos outros dois controladores: e o que faz o que foi digitado
   /// sobreviver ao vai e volta entre os dois passos do formulario de achado
   /// (`IndexedStack`, que mantem os dois filhos montados).
-  final TextEditingController _cep = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final FocusNode _focoDoBairro = FocusNode();
-
-  /// O que a ultima busca de CEP devolveu, so para a linha de texto embaixo do
-  /// campo.
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
-
-  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
-  String _cepJaBuscado = '';
 
   /// AS CHAVES DOS TRES CAMPOS do `Onde`, para [OrigemDosValores].
   static const String _chaveBairro = 'bairro';
@@ -86,6 +76,36 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
 
   /// A sigla escolhida na lista de estados, ou nulo.
   String? _uf;
+
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que tem CEP.
+  ///
+  /// **O campo de CEP mora nele**, e e por isso que ele sobrevive ao vai e
+  /// volta entre os dois passos do formulario de achado: o bloco e deste
+  /// estado, e o `IndexedStack` mantem os dois filhos montados.
+  ///
+  /// **Ele nao sabe de localizacao, e isso e a fronteira do ADR-0006.** O
+  /// preenchimento da CIDADE pelo GPS (emenda 1, 19/10/2026) continua sendo
+  /// `_preencherACidadeDaLocalizacao`, nesta tela, escrevendo so em `_cidade`.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    origem: _origem,
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      bairro: _bairro,
+      chaveDoBairro: _chaveBairro,
+      cidade: _cidade,
+      chaveDaCidade: _chaveCidade,
+      chaveDoEstado: _chaveUf,
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+    ),
+  );
+
+  /// Os tres desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: TextosDaLocalizacao.buscaDoCepIndisponivel,
+  );
 
   @override
   void initState() {
@@ -116,7 +136,7 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         ..removeListener(_publicar)
         ..dispose();
     }
-    _cep.dispose();
+    _cepBloco.dispose();
     _focoDoBairro.dispose();
     super.dispose();
   }
@@ -136,37 +156,16 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     widget.aoMudar(montarOnde(ponto: _ponto, area: _area));
   }
 
-  static final RegExp _soDigitos = RegExp(r'[^0-9]');
-
-  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
-  Future<void> _buscarOCep() async {
-    final cep = _cep.text.replaceAll(_soDigitos, '');
-    if (cep.length != 8 || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-      _origem.daBusca(_bairro, endereco.bairro, _chaveBairro);
-      _origem.daBusca(_cidade, endereco.cidade, _chaveCidade);
-      final ufDaBusca = siglaDeEstadoValida(endereco.uf);
-      if (ufDaBusca != null &&
-          _origem.podeVirDaBusca(_chaveUf, vazio: _uf == null)) {
-        _uf = ufDaBusca;
-        _origem.anotarDaConta(_chaveUf, temValor: false);
-      }
-    });
-    _publicar();
+  /// O CEP preenche os campos e, quando preencheu, o `Onde` sai de novo.
+  ///
+  /// **O nome e novo de proposito.** O nome antigo deste metodo e um dos
+  /// marcadores do portao `bloco_de_cep_unico_test.dart`, que reprova a volta
+  /// de uma copia privada do bloco dentro de uma tela -- e o portao nao abre
+  /// excecao para prosa, porque excecao para prosa e por onde a copia volta.
+  /// Aqui so sobrou o que e DESTA tela, publicar o `Onde`: a busca inteira
+  /// esta no bloco compartilhado.
+  Future<void> _oCepPreencheEPublica() async {
+    if (await _cepBloco.buscar(Escopo.of(context).buscaDeCep)) _publicar();
   }
 
   /// A regiao de referencia do tutor nos campos que estao VAZIOS.
@@ -180,24 +179,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
       _uf = ufDaRegiao;
       _origem.anotarDaConta(_chaveUf, temValor: true);
     }
-  }
-
-  /// A linha que conta o que a busca fez.
-  Widget _linhaDaBuscaDoCep() {
-    if (_buscandoOCep) {
-      return Semantics(
-        liveRegion: true,
-        child: const Text(TextosDaLocalizacao.buscandoOCep),
-      );
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado => TextosDaLocalizacao.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel =>
-        TextosDaLocalizacao.buscaDoCepIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto);
   }
 
   /// O caminho de `Usar minha localizacao`.
@@ -369,20 +350,22 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
   List<Widget> _camposDeArea({required bool comFoco}) => <Widget>[
         BichuField(
           rotulo: TextosDaLocalizacao.rotuloCep,
-          controlador: _cep,
+          controlador: _cepBloco.cep,
           opcional: true,
           limite: limiteDoCep,
           tipoDeTeclado: TextInputType.number,
           ajuda: TextosDaLocalizacao.ajudaDoCep,
-          formatadores: const <TextInputFormatter>[
-            MascaraDeCep(),
-          ],
+          formatadores: formatadoresDeCep,
           correcaoAutomatica: false,
-          aoMudar: (_) => _buscarOCep(),
+          aoMudar: (_) => _oCepPreencheEPublica(),
         ),
-        if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+        if (_cepBloco.temDesfecho) ...<Widget>[
           const SizedBox(height: BichuEspaco.e2),
-          _linhaDaBuscaDoCep(),
+          LinhaDaBuscaDeCep(
+            bloco: _cepBloco,
+            textos: _textosDaBusca,
+            anunciarEnquantoBusca: true,
+          ),
         ],
         const SizedBox(height: BichuEspaco.e4),
         BichuField(
