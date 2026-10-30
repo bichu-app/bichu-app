@@ -349,6 +349,13 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/safety/ports/safety-repository.ts', SO_TIPO],
   ['src/modules/sections/ports/contadores-de-secao.ts', SO_TIPO],
   ['src/modules/sections/ports/marcadores-de-secao.ts', SO_TIPO],
+  // A AJUDA (29/10/2026). `duvidas-de-ajuda.ts` declara `DuvidaParaRegistrar`,
+  // `DuvidaNaFila` e a interface `DuvidasDeAjuda`, e mais nada: nenhum `const`,
+  // `function`, `class` nem `enum`, entao o compilado nao tem uma instrucao
+  // sequer e nao ha o que cobrir. Conferido arquivo a arquivo, como as outras.
+  // As outras tres do modulo NAO estao aqui, e nao podem estar: a rota, o
+  // servico e a persistencia exportam funcao, e as suites as carregam.
+  ['src/modules/support/ports/duvidas-de-ajuda.ts', SO_TIPO],
   ['src/modules/showcase/ports/vitrine-repository.ts', SO_TIPO],
   ['src/modules/store/ports/taxonomia-da-vitrine.ts', SO_TIPO],
   ['src/modules/tags/ports/endereco-guardado.ts', SO_TIPO],

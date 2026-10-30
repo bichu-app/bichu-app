@@ -52,6 +52,13 @@ import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http
 // ca: o modulo e o do aviso, e nao o da identidade.
 import { registrarRotasDaCaixaDeNotificacoes } from '../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import { registrarRotasDosContadoresDeSecao } from '../modules/sections/adapters/http/section-counter-routes.js';
+// A DUVIDA DE AJUDA (29/10/2026). Mesmo molde dos contadores: o modulo recebe
+// um `autenticar` e nao o servico de identidade.
+import { registrarRotasDeAjuda } from '../modules/support/adapters/http/help-request-routes.js';
+import { criarDuvidaDeAjudaService } from '../modules/support/application/duvida-de-ajuda-service.js';
+import { criarDuvidasDeAjuda } from '../modules/support/adapters/persistence/kysely-duvidas-de-ajuda.js';
+import { registrarRotasDaFilaDeAjuda } from '../modules/support/adapters/http/admin-help-request-routes.js';
+import { criarFilaDeAjudaService } from '../modules/support/application/fila-de-ajuda-service.js';
 import { criarContadoresDeSecaoService } from '../modules/sections/application/contadores-de-secao-service.js';
 import { criarMarcadoresDeSecao } from '../modules/sections/adapters/persistence/kysely-marcadores-de-secao.js';
 import { criarContagemDePerdidosNovos } from '../modules/lostfound/adapters/persistence/kysely-contagem-de-perdidos-novos.js';
@@ -820,6 +827,30 @@ export async function main(): Promise<void> {
     contrato,
   };
 
+  // A DUVIDA DE AJUDA (pedido do cliente de 29/10/2026).
+  //
+  // **Nenhum notificador entra aqui**, e a ausencia e a decisao: ele escolheu
+  // "grava no banco e vai para o backoffice", na variante SEM notificacao por
+  // e-mail. O servico recebe a porta da fila e o relogio, e mais nada -- entao
+  // nao ha, dentro dele, nada capaz de avisar alguem nem por engano.
+  // A MESMA porta para as duas pontas: o app escreve, o painel le. Uma
+  // instancia so, entao nao ha como a leitura do painel olhar uma tabela e a
+  // escrita do app outra.
+  // `escritaAuditada` e a MESMA instancia das outras escritas do painel: a
+  // escrita e o evento de trilha na mesma transacao, e a falha da trilha
+  // desfaz a marcacao (D49).
+  const duvidasDeAjuda = criarDuvidasDeAjuda(db, ids, escritaAuditada);
+  const dependenciasDasRotasDaFilaDeAjuda = {
+    fila: criarFilaDeAjudaService(duvidasDeAjuda, systemClock),
+  };
+  const dependenciasDasRotasDeAjuda = {
+    duvidas: criarDuvidaDeAjudaService(duvidasDeAjuda, systemClock),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   // O COMUNICADO. `escritaAuditada` e a MESMA instancia das outras escritas do
   // painel: uma transacao, a escrita dentro dela, o evento de trilha na mesma
   // transacao, e o `COMMIT` so depois dos dois (D49). Um comunicado que falhasse
@@ -1472,6 +1503,7 @@ export async function main(): Promise<void> {
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
     registrarRotasDosContadoresDeSecao(escopo, dependenciasDasRotasDosContadores);
+    registrarRotasDeAjuda(escopo, dependenciasDasRotasDeAjuda);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
     // O MURAL (20/10/2026): `GET /timeline`, `GET|POST /me/publications`,
@@ -1597,6 +1629,8 @@ export async function main(): Promise<void> {
           // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`. Fica ao
           // lado da escrita do diretorio de proposito: aprovar uma indicacao
           // GRAVA uma entrada, pela mesma transacao e pela mesma funcao.
+          // A FILA DAS DUVIDAS (29/10/2026): a porta de saida do botao `Ajuda`.
+          registrarRotasDaFilaDeAjuda(administrativo, dependenciasDasRotasDaFilaDeAjuda);
           registrarRotasDaFilaDeIndicacoes(administrativo, {
             fila: filaDeIndicacoes,
             contrato,

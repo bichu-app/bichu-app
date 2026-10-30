@@ -7,6 +7,7 @@ import { Icone, MarcaDaNavegacao, type NomeDoIcone } from '../componentes/Icone.
 import { MenuDeAcoes } from '../componentes/MenuDeAcoes.tsx';
 import { useIndicacoesPendentes } from '../diretorio/fila.ts';
 import { useDenunciasPendentes } from '../moderacao/fila.ts';
+import { useDuvidasPendentes } from '../ajuda/fila.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 
 interface ItemDaNavegacao {
@@ -55,6 +56,17 @@ const ITENS: ItemDaNavegacao[] = [
   // **COM aviso de contagem**: `AdminModerationItemPage` tem `pending_total`,
   // que passa pelo mesmo filtro de conta desabilitada dos outros dois lugares.
   { para: '/moderacao', rotulo: 'Moderação', icone: 'error', ativo: (c) => c === '/moderacao' || c.startsWith('/moderacao/') },
+  // 29/10/2026. A FILA DE DUVIDAS do botao `Ajuda` do aplicativo. Secao
+  // propria e nao sub-item: ela nao e assunto de Loja, Rede, Perto nem
+  // Moderacao -- o que chega aqui e pergunta de tutor sobre o produto, e nao
+  // conteudo a julgar.
+  //
+  // **COM aviso de contagem desde 30/10/2026.** Ele nao tinha, e a ausencia
+  // estava certa enquanto a fila nao tinha estado: o numero seria o total de
+  // tudo que ja existiu. O cliente decidiu marcar como atendida, entao
+  // `AdminHelpRequestPage.pending_total` passou a existir e conta so `open` --
+  // trabalho que espera. Passa pelo mesmo filtro da listagem e da leitura.
+  { para: '/ajuda', rotulo: 'Ajuda', icone: 'info', ativo: (c) => c === '/ajuda' || c.startsWith('/ajuda/') },
   { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
 
@@ -74,9 +86,15 @@ function avisoDoItem(
   para: string,
   indicacoes: number | undefined,
   denuncias: number | undefined,
+  duvidas: number | undefined,
 ): number | undefined {
   if (para === '/perto/indicacoes') return indicacoes ? indicacoes : undefined;
   if (para === '/moderacao') return denuncias ? denuncias : undefined;
+  // 30/10/2026: a AJUDA passou a ter numero. Antes nao tinha, e a ausencia
+  // estava certa: sem nocao de ATENDIDA o numero seria o total de tudo que ja
+  // existiu, crescendo para sempre e sem nunca pedir nada de ninguem. Agora
+  // ele conta so `open`, que e trabalho que espera.
+  if (para === '/ajuda') return duvidas ? duvidas : undefined;
   return undefined;
 }
 
@@ -100,6 +118,7 @@ export function Casca() {
   // -- que e o defeito de dizer "1 pendente" sobre fila vazia.
   const indicacoesPendentes = useIndicacoesPendentes(api);
   const denunciasPendentes = useDenunciasPendentes(api);
+  const duvidasPendentes = useDuvidasPendentes(api);
   const { pathname } = useLocation();
   const [confirmarTodas, setConfirmarTodas] = useState(false);
   const [saindoDeTodas, setSaindoDeTodas] = useState(false);
@@ -117,7 +136,12 @@ export function Casca() {
             const ativo = item.ativo(pathname);
             // So o item da fila carrega aviso, e so quando o servidor respondeu:
             // `undefined` deixa o item sem numero, e isso e diferente de zero.
-            const aviso = avisoDoItem(item.para, indicacoesPendentes, denunciasPendentes);
+            const aviso = avisoDoItem(
+              item.para,
+              indicacoesPendentes,
+              denunciasPendentes,
+              duvidasPendentes,
+            );
             const rotulo = aviso === undefined ? item.rotulo : `${item.rotulo} (${aviso})`;
             return (
               <li key={item.para}>

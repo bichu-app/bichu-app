@@ -170,6 +170,23 @@ export const MODULES = [
   // marcador de "ja vi" por area. Ela e deste modulo e de mais ninguem --
   // `lostfound`, `network` e `professionals` nunca a leem.
   'sections',
+  // 29/10/2026, pedido do cliente: *"no menu do usuario, adicione um botao de
+  // ajuda, que abrira uma pagina com um formulario de duvida"*. A AJUDA e
+  // modulo proprio, e a razao e de fronteira.
+  //
+  // O candidato obvio seria `moderation`, que ja e "uma fila que o painel le".
+  // Nao serve: aquela fila e de DENUNCIA -- ela fala de um terceiro, tem
+  // motivo de lista fechada, ocultacao para quem denunciou e decisao de
+  // moderador. Esta fala de quem escreveu, e texto livre, e o desfecho dela e
+  // alguem responder, nao alguem julgar. Junta-las poria duas regras de
+  // privacidade diferentes sob a mesma porta.
+  //
+  // E nao e canto de `identity`: este modulo NAO le `users` -- nem por juncao
+  // --, so referencia a conta pela chave estrangeira. Nome e e-mail de quem
+  // perguntou sao do cadastro, e quem os resolve sera a tela do painel.
+  //
+  // **Uma tabela**: `help_requests` (migracao `20261029000010`).
+  'support',
   // 20/10/2026, pedido do cliente: *"na secao do mural, nao tem a caixa de
   // texto para o usuario escrever uma mensagem, subir uma foto e publicar o
   // conteudo"*. O MURAL e modulo proprio, e a razao e de fronteira e de

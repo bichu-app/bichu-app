@@ -157,7 +157,7 @@ void main() {
       );
     });
 
-    testWidgets('sao SETE linhas, e `Sair da conta` fora da conta', (tester) async {
+    testWidgets('sao OITO linhas, e `Sair da conta` fora da conta', (tester) async {
       _superficieAlta(tester);
       await _abrirOPerfil(tester);
 
@@ -177,15 +177,30 @@ void main() {
       final deMenu = linhas.where((ItemDeMenu i) => !i.critico);
       final deSaida = linhas.where((ItemDeMenu i) => i.critico);
 
+      // **SETE VIROU OITO EM 29/10/2026, e a linha nova FOI PEDIDA.**
+      //
+      // A decisao de 28/10 (11 -> 7) e de VARREDURA: o cliente olhou o menu e
+      // mandou tirar o que nao servia. Ela nao fechou o menu para sempre --
+      // fechar seria afirmar que nenhum pedido posterior dele pode acrescentar
+      // uma linha, e isso ele nao disse.
+      //
+      // No dia seguinte ele pediu, literal: *"no menu do usuario, adicione um
+      // botao de ajuda, que abrira uma pagina com um formulario de duvida"*. A
+      // oitava linha e `Ajuda`, e ela e DELE, da mesma boca e um dia depois.
+      //
+      // O numero continua travado de proposito: o que este caso protege e que
+      // uma linha entre por DECISAO e nao por descuido de frente. Quem subir
+      // para nove escreve aqui de quem foi o pedido e quando, como esta linha
+      // faz.
       expect(
         deMenu.length,
-        7,
-        reason: 'REPROVA: o menu nao tem sete linhas, e tem '
+        8,
+        reason: 'REPROVA: o menu nao tem oito linhas, e tem '
             '${deMenu.length}: ${deMenu.map((i) => i.rotulo).join(', ')}. '
             'O cliente decidiu 11 -> 7 em 28/10/2026 (`Sair da conta` fora da '
-            'conta nos dois lados). Se este numero mudou por uma linha NOVA, '
-            'ela nao foi pedida; se mudou por uma que sumiu, alguma frente '
-            'varreu demais.',
+            'conta nos dois lados) e acrescentou `Ajuda` em 29/10/2026. Se '
+            'este numero mudou por uma linha NOVA, ela nao foi pedida; se '
+            'mudou por uma que sumiu, alguma frente varreu demais.',
       );
       expect(
         deSaida.length,

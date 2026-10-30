@@ -1289,6 +1289,30 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // -------------------------------------------------------------------------
   // marcador de "ja vi" por secao (20261020000001, 20/10/2026)
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // duvida de ajuda do menu do usuario (20261029000010, 29/10/2026)
+  // -------------------------------------------------------------------------
+  // 30/10/2026: quem MARCOU a duvida como atendida. Conta de `admin_accounts` e
+  // nunca de `users` (ADR-0027 item 20.2). Sem `ON DELETE`, logo `NO ACTION`,
+  // pelo mesmo motivo de `network_events.created_by_admin_id`: conta do painel
+  // nao se apaga, desativa, e a trava e o que faz um expurgo operacional parar
+  // em vez de apagar a autoria.
+  'public.help_requests.help_requests_attended_by_admin_id_fkey': {
+    colunas: ['attended_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'NO ACTION',
+  },
+  'public.help_requests.help_requests_author_user_id_fkey': {
+    colunas: ['author_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a duvida que a propria pessoa mandou para a ajuda. Da propria pessoa, e de mais ' +
+      'ninguem: a tabela nao fala de terceiro e nao guarda copia de nada. `SET NULL` foi ' +
+      'recusado -- duvida sem autor nao e respondivel, e o texto orfao seria dado do ' +
+      'titular retido depois do expurgo dele.',
+  },
+
   'public.section_list_views.section_list_views_user_id_fkey': {
     colunas: ['user_id'],
     referencia: 'public.users',

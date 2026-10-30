@@ -2848,6 +2848,46 @@ export interface SitePageAvailabilityTable {
   updated_at: AtualizadoEm;
 }
 
+/**
+ * `help_requests` -- a duvida que o tutor manda pelo botao `Ajuda` do menu do
+ * usuario (migracao `20261029000010`, 29/10/2026).
+ *
+ * **Nao ha coluna de estado nem de aviso**, e as duas ausencias sao decisao:
+ * o cliente escolheu "grava no banco e vai para o backoffice, sem notificacao
+ * por e-mail", e a tela do painel -- onde "resolvida" nasceria -- e de outra
+ * frente. Quando ela vier, sera coluna de DATA e mudanca de estado, nunca
+ * `DELETE`.
+ */
+export interface HelpRequestsTable {
+  /** UUIDv7 da aplicacao. Sem `Generated`: a coluna nao tem `DEFAULT`. */
+  id: string;
+  /**
+   * O endereco OPACO da duvida, 22 simbolos base64url. E ele que sai para o
+   * painel; o `id` nunca sai (UUIDv7 e ordenavel, SEC-001/SEC-002).
+   */
+  ref: string;
+  /**
+   * FK para `users`, `ON DELETE CASCADE`. Sai da sessao, nunca do corpo, e
+   * **nunca e projetada**: nenhuma leitura devolve dado do autor.
+   */
+  author_user_id: string;
+  /** 2 a 120 por `CHECK`. O mesmo teto esta em `HelpRequestInput`. */
+  subject: string;
+  /** 2 a 4000 por `CHECK`. Texto livre, sem filtro de palavra. */
+  body: string;
+  created_at: CriadoEm;
+  /**
+   * Quando alguem do painel marcou como atendida. **Nula = na fila.**
+   *
+   * Coluna de DATA e nao booleano, como `dismissed_at`. Anda junto com
+   * `attended_by_admin_id`: o `CHECK help_requests_atendida_tem_autor` recusa
+   * uma sem a outra.
+   */
+  attended_at: Date | null;
+  /** Quem marcou, em `admin_accounts` e NUNCA em `users`. `NO ACTION`. */
+  attended_by_admin_id: string | null;
+}
+
 export interface Database {
   handles: HandlesTable;
   user_connections: UserConnectionsTable;
@@ -2939,6 +2979,7 @@ export interface Database {
   publication_reports: PublicationReportsTable;
   app_version_policy: AppVersionPolicyTable;
   site_page_availability: SitePageAvailabilityTable;
+  help_requests: HelpRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -1072,6 +1072,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mandar uma duvida para a ajuda
+         * @description **Grava a duvida numa fila e NAO avisa ninguem.** Pedido do cliente de
+         *     29/10/2026 ("no menu do usuario, adicione um botao de ajuda, que abrira
+         *     uma pagina com um formulario de duvida"), com a decisao de destino
+         *     tomada na mesma conversa: **grava no banco e vai para o backoffice**, na
+         *     variante **sem notificacao por e-mail**.
+         *
+         *     A ausencia de aviso e a decisao, e nao um pedaco que faltou: esta
+         *     operacao nao escreve em `notification_items`, nao dispara e-mail e nao
+         *     cria push. Quem le e um humano, abrindo a fila do painel quando abre.
+         *
+         *     ## DOIS CAMPOS, e o autor nao e um deles
+         *
+         *     `subject` e `body`, e so. **Nao ha nome, e-mail, telefone nem
+         *     endereco** no corpo: o botao mora no menu do usuario, entao existe
+         *     sessao, e o autor sai do `Bearer`. Pedir de novo o que a conta ja tem
+         *     seria pedir ao tutor que digitasse um dado que o servidor erra menos.
+         *
+         *     ## O TETO RECUSA, e nunca trunca
+         *
+         *     `maxLength` em `HelpRequestInput` e o que vira **400 com mensagem**.
+         *     Truncar em silencio foi recusado: quem escreve 4142 caracteres e recebe
+         *     4000 gravados acredita ter contado o problema inteiro, e o que fica de
+         *     fora e o fim, onde o tutor costuma dizer o que ja tentou.
+         *
+         *     ## 202 E NAO 201, pelo mesmo motivo da denuncia
+         *
+         *     `reportPublication` responde `202` porque o que foi aceito e um PEDIDO
+         *     DE ATENCAO HUMANA, nao um recurso criado que o chamador va buscar
+         *     depois. Aqui e igual: **nao existe `GET` desta duvida para o tutor**,
+         *     nao ha historico na tela e nao ha endereco para onde apontar um
+         *     `Location`. `201` prometeria um recurso que o cliente desta operacao
+         *     nunca pode ler.
+         *
+         *     **Nenhum prazo e prometido**, como nas denuncias.
+         */
+        post: operations["createMyHelpRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications/read-all": {
         parameters: {
             query?: never;
@@ -7122,6 +7175,111 @@ export interface paths {
          *     servida pronta.
          */
         post: operations["createAdminCatalogImageIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila das duvidas mandadas pelo botao `Ajuda` do app
+         * @description A porta de saida de `POST /v1/me/help-requests`. Sem ela a duvida e
+         *     gravada e **nenhum humano a alcanca** -- e funcionalidade que ninguem
+         *     alcanca equivale a funcionalidade que nao existe.
+         *
+         *     Da mais nova para a mais velha, em paginas. E a mesma ordem que o
+         *     indice `help_requests_da_fila` serve.
+         *
+         *     ## NADA DO AUTOR SAI AQUI, e a ausencia e a regra e nao um recorte meu
+         *
+         *     Este contrato afirma em TRES lugares que `listAdminNetworkJoinRequests`
+         *     e **"a unica leitura de pessoa do backoffice v1"**, coberta pelo RA-01
+         *     com as decisoes D53 a D57 do cliente (23/09, ADR-0027 item 17). A fila
+         *     de plaquinhas repete a afirmacao e se abstem de ler perfil -- o nome
+         *     que ela projeta e o de quem RECEBE a encomenda, destinatario de
+         *     entrega e nao leitura de conta.
+         *
+         *     Entao daqui sai a DUVIDA e nada do tutor: sem nome, sem e-mail, sem
+         *     telefone, sem UUID, sem identificador estavel e sem historico.
+         *     Projetar qualquer um deles criaria a SEGUNDA leitura de pessoa do
+         *     backoffice e tornaria aquela frase falsa nos tres lugares -- e isso e
+         *     decisao do cliente, do tamanho da D53, nao de quem escreve a rota.
+         *
+         *     **Consequencia que precisa estar escrita:** com esta operacao o
+         *     administrador LE a duvida e **nao tem por onde responder**. O caminho
+         *     de resposta -- seja o e-mail do tutor no painel (uma segunda leitura de
+         *     pessoa) ou uma resposta dentro do app (uma funcionalidade) -- e decisao
+         *     aberta do cliente, e esta nomeada no PR em vez de resolvida aqui.
+         *
+         *     ## SEM `x-audit`, e a ausencia tambem e por regra
+         *
+         *     `listAdminNetworkJoinRequests` e, pelo proprio texto dela, **a unica
+         *     operacao `GET` administrativa com `x-audit`, e a excecao e
+         *     deliberada** -- ela existe porque aquela operacao le PESSOA (D55).
+         *     Esta nao le, entao nao ha leitura de pessoa para registrar, e o par
+         *     `x-audit` + `counts: rows_returned` nao se aplica: o teto conta
+         *     REQUISICOES, como nas outras filas do painel.
+         */
+        get: operations["listAdminHelpRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/help-requests/{requestRef}/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["HelpRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca a duvida como atendida
+         * @description Decisao do cliente de 30/10/2026: ele quer marcar a duvida como
+         *     atendida, e ver no menu quantas faltam.
+         *
+         *     **MUDANCA DE ESTADO, E NUNCA `DELETE`.** A linha continua na tabela e
+         *     so sai da aba `Na fila`: `attended_at` e `attended_by_admin_id` passam
+         *     a ter valor, e nada e apagado. "Nao apague nada" e decisao desta casa.
+         *
+         *     **A transicao e auditavel por dois caminhos**, e os dois sao
+         *     deliberados: `x-audit` grava a acao em `audit.events`, e as duas
+         *     colunas guardam quem marcou e quando -- porque o painel **nao le a
+         *     trilha**, e a tela precisa mostrar a autoria sem abrir outra
+         *     ferramenta.
+         *
+         *     ## SO MARCA, e nao desmarca
+         *
+         *     Nao existe operacao de desfazer, e a ausencia e decisao: "atendida" e
+         *     afirmacao de uma pessoa sobre o trabalho dela, e apaga-la sem registro
+         *     e o tipo de reescrita de historia que "nao apague nada" existe para
+         *     impedir. Se o cliente pedir, e outra operacao, com acao de trilha
+         *     propria.
+         *
+         *     **Idempotente de proposito**: marcar de novo o que ja esta atendido
+         *     responde `200` com a linha como ela esta, e **nao** troca quem marcou
+         *     nem quando. Dois operadores abrindo a mesma fila e uso normal, e um
+         *     `409` ali obrigaria o painel a recarregar para descobrir que o trabalho
+         *     ja estava feito.
+         *
+         *     **NADA DO AUTOR SAI AQUI**, como na listagem: ver a descricao dela.
+         */
+        post: operations["attendAdminHelpRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -15238,6 +15396,92 @@ export interface components {
             limit: number;
             total: number;
         };
+        /**
+         * @description A situacao da duvida na fila (cliente, 30/10/2026).
+         *
+         *     `open` e o trabalho que espera; `attended` e o que alguem do painel ja
+         *     marcou. **Nao ha terceiro valor**, e em particular nao ha `deleted`
+         *     nem `archived`: a duvida nao sai da tabela, e "nao apague nada" e
+         *     decisao desta casa.
+         *
+         *     Derivado de `attended_at` no banco, e nao uma coluna de texto: as duas
+         *     colunas do estado (`attended_at` e `attended_by_admin_id`) andam juntas
+         *     por `CHECK`, e um terceiro lugar guardando a mesma verdade seria um
+         *     lugar a mais para ela divergir.
+         * @enum {string}
+         */
+        AdminHelpRequestStatus: "open" | "attended";
+        /**
+         * @description Uma duvida na fila. **Nada do autor sai aqui** -- sem nome, e-mail,
+         *     telefone, UUID, identificador estavel nem historico. A unica leitura de
+         *     pessoa do backoffice v1 segue sendo `listAdminNetworkJoinRequests`
+         *     (D53 a D57); ver a descricao da operacao.
+         *
+         *     `attended_by` **e a conta do PAINEL** que marcou, e nao o tutor: ela
+         *     vem de `admin_accounts`, e o painel ja mostra o nome de quem esta
+         *     logado. Nao e leitura de pessoa no sentido da D53, que fala de conta do
+         *     APP -- e, mesmo assim, daqui sai so o nome de exibicao da operadora.
+         */
+        AdminHelpRequest: {
+            /**
+             * @description Identificador opaco da DUVIDA, 128 bits aleatorios em base64url.
+             *     Nao e o UUID, pela mesma razao de `AdminJoinRequest.ref`: `id` e
+             *     UUIDv7, ordenavel no tempo, e dois deles entregam a taxa de criacao
+             *     de registros (SEC-001/SEC-002).
+             *
+             *     E por duvida e **nao por pessoa**: duas duvidas do mesmo tutor tem
+             *     `ref` sem relacao entre si, entao o painel nao monta "todas as
+             *     duvidas da Maria" -- que e o que a D53 proibe.
+             */
+            ref: string;
+            subject: string;
+            /**
+             * @description O texto inteiro, e nao um resumo. A fila existe para ser LIDA, e um
+             *     recorte obrigaria uma segunda viagem por duvida so para ver o que
+             *     ja cabia na primeira.
+             */
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            status: components["schemas"]["AdminHelpRequestStatus"];
+            /**
+             * Format: date-time
+             * @description Quando alguem marcou como atendida. Nulo enquanto esta na fila.
+             */
+            attended_at?: string | null;
+            /**
+             * @description O nome de exibicao da OPERADORA que marcou, de `admin_accounts`.
+             *     Nulo enquanto esta na fila.
+             *
+             *     Nao e o tutor: ver a descricao deste schema. Sai o nome e nada
+             *     mais -- sem e-mail, sem papel e sem identificador da conta do
+             *     painel.
+             */
+            attended_by?: string | null;
+        };
+        AdminHelpRequestPage: {
+            items: components["schemas"]["AdminHelpRequest"][];
+            page: number;
+            limit: number;
+            /**
+             * @description Quantas linhas o recorte desta chamada tem, com o filtro aplicado.
+             *     Conta LINHAS e nao pessoas, e nao ha recorte por autor que o torne
+             *     um numero sobre alguem.
+             */
+            total: number;
+            /**
+             * @description **A contagem do aviso do menu**, e ela IGNORA o filtro de
+             *     proposito: o numero que o item da navegacao mostra responde
+             *     "quanto trabalho esta esperando", e nao "quantas linhas esta aba
+             *     tem". Mesma forma e mesma razao de
+             *     `AdminDirectorySuggestionPage.pending_total`.
+             *
+             *     Conta so `open`. Com o filtro em `attended` ele continua dizendo
+             *     quantas faltam -- filtrar os dois juntos faria o painel anunciar
+             *     "0 pendentes" sempre que alguem abrisse a aba dos atendidos.
+             */
+            pending_total: number;
+        };
         StoreTagPage: {
             items: components["schemas"]["StoreTagRef"][];
         };
@@ -15482,6 +15726,28 @@ export interface components {
              *     Ausente, `lost_pets_new` volta sem recorte de geografia.
              */
             city?: string;
+        };
+        /**
+         * @description A duvida, em dois campos. **Nenhum dado pessoal aqui**, de proposito: o
+         *     autor sai da sessao, e nome, e-mail e telefone a fila do painel resolve
+         *     por juncao com a conta. Um campo de contato neste corpo seria um dado
+         *     que o tutor digita, o servidor grava e ninguem confere -- e, sendo
+         *     divergente do da conta, o atendimento responderia para o lugar errado.
+         */
+        HelpRequestInput: {
+            /**
+             * @description O assunto, em poucas palavras. 120 e o que cabe numa linha da fila
+             *     do painel sem reticencias no meio de uma palavra. **Estourar e
+             *     `400`, e nunca corte silencioso.**
+             */
+            subject: string;
+            /**
+             * @description A duvida. Texto livre, sem filtro de palavra -- quem le e um humano
+             *     no painel, como no Mural. 4000 e folgado de proposito: quem escreve
+             *     para o suporte conta o que ja tentou, e cortar isso custa uma ida e
+             *     volta de atendimento.
+             */
+            body: string;
         };
         AdminBroadcastDraft: {
             title: string;
@@ -16771,6 +17037,8 @@ export interface components {
         EventSlug: components["schemas"]["Slug"];
         /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
         JoinRequestRef: string;
+        /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+        HelpRequestRef: string;
         /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
         CollarTagRequestRef: string;
         /**
@@ -18121,6 +18389,25 @@ export interface operations {
                     "application/json": components["schemas"]["SectionCounters"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createMyHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpRequestInput"];
+            };
+        };
+        responses: {
+            202: components["responses"]["Accepted"];
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
@@ -24265,6 +24552,70 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
             422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminHelpRequests: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Sem o parametro vem a fila ABERTA, que e o trabalho que espera.
+                 *     `state` nao serve de nome aqui pela mesma razao da fila de
+                 *     indicacoes: ele ja quer dizer outra coisa no contrato.
+                 */
+                status?: components["schemas"]["AdminHelpRequestStatus"];
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila, da mais nova para a mais velha. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHelpRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    attendAdminHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["HelpRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A duvida como ela ficou. Quem ja estava atendida volta igual, com o
+             *     autor e o instante do PRIMEIRO atendimento.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHelpRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

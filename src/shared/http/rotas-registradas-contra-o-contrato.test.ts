@@ -78,6 +78,10 @@ import * as enderecoDoPet from '../../modules/tags/adapters/http/endereco-do-pet
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import * as contadoresDeSecao from '../../modules/sections/adapters/http/section-counter-routes.js';
+// A DUVIDA DE AJUDA do menu do usuario (29/10/2026).
+import * as ajuda from '../../modules/support/adapters/http/help-request-routes.js';
+// A FILA DAS DUVIDAS no painel (29/10/2026): a porta de saida da de cima.
+import * as filaDeAjuda from '../../modules/support/adapters/http/admin-help-request-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
 // 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
@@ -199,6 +203,11 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // `defineRoute` no disco, e o primeiro reprova por operacao do contrato sem
   // rota -- os dois acusaram a ausencia na primeira execucao da suite.
   contadoresDeSecao,
+  // A DUVIDA DE AJUDA (29/10/2026). Modulo novo entra AQUI, e o terceiro caso
+  // deste arquivo e quem cobra: sem esta linha ele reprova contando
+  // `defineRoute` no disco.
+  ajuda,
+  filaDeAjuda,
   comunicadosAdministrativos,
   // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
   // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele
