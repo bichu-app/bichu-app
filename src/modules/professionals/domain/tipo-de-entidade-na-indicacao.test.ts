@@ -29,22 +29,28 @@ function naFila(sobre: Partial<IndicacaoNaFila> = {}): IndicacaoNaFila {
     decidedAt: null,
     declineReason: null,
     entradaSlug: null,
+    logoThumbKey: null,
+    fotoCardKeys: [],
+    fotosTotal: 0,
     ...sobre,
   };
 }
 
+/** A base de mídia, como `src/bin/api.ts` a injeta. */
+const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
+
 void describe('o tipo de entidade na indicacao (cliente, 29/10/2026)', () => {
   void it('a fila do PAINEL carrega o tipo: e por ele que quem revisa sabe o que aprova', () => {
-    const projetada = projetarIndicacao(naFila({ entityKind: 'organization' }));
+    const projetada = projetarIndicacao(naFila({ entityKind: 'organization' }), URL_DE_MIDIA);
     assert.equal(projetada.entity_kind, 'organization');
   });
 
   void it('`professional` tambem sai, e nao e omitido por ser o padrao', () => {
-    assert.equal(projetarIndicacao(naFila()).entity_kind, 'professional');
+    assert.equal(projetarIndicacao(naFila(), URL_DE_MIDIA).entity_kind, 'professional');
   });
 
   void it('OS DOIS EIXOS ficam separados: `kind` e o que ela FAZ, `entity_kind` e o que ela E', () => {
-    const projetada = projetarIndicacao(naFila({ kind: 'clinic', entityKind: 'organization' }));
+    const projetada = projetarIndicacao(naFila({ kind: 'clinic', entityKind: 'organization' }), URL_DE_MIDIA);
     assert.equal(projetada.kind, 'clinic');
     assert.equal(projetada.entity_kind, 'organization');
   });
@@ -71,7 +77,7 @@ void describe('o tipo de entidade na indicacao (cliente, 29/10/2026)', () => {
   });
 
   void it('a fila do painel NAO entrega nada de quem indicou', () => {
-    const projetada = projetarIndicacao(naFila({ entityKind: 'organization' }));
+    const projetada = projetarIndicacao(naFila({ entityKind: 'organization' }), URL_DE_MIDIA);
     const texto = JSON.stringify(projetada);
     for (const proibido of ['suggested_by', 'user_id', 'author', 'id"']) {
       assert.ok(!texto.includes(proibido), `a projecao carrega ${proibido}: ${texto}`);

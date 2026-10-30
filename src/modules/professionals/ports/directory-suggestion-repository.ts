@@ -30,6 +30,18 @@ export interface SugestaoAGravar {
    * estabelecimento"*).
    */
   readonly logoUploadId: string | null;
+  /**
+   * Os `upload_id` das FOTOS DO ESTABELECIMENTO, **na ordem em que a pessoa as
+   * colocou** (cliente, 29 e 30/10/2026). Vazio e o estado normal -- o APK
+   * publicado nao tem o campo.
+   *
+   * **O indice do array E a `position` da linha**, e a `0` e a capa: nao existe
+   * campo de capa, porque duas formas de dizer qual e a capa e o defeito. As
+   * linhas vao para `directory_suggestion_images`, e NAO para uma coluna de
+   * `directory_suggestions` -- e por isso que
+   * `directory_suggestions_registrar` nao mudou de assinatura nesta migracao.
+   */
+  readonly photoUploadIds: readonly string[];
 }
 
 /** O que a gravacao devolve, e e tudo que o recibo precisa. */
@@ -45,7 +57,18 @@ export interface SugestaoGravada {
  */
 export type RegistroDaSugestao =
   | { readonly tipo: 'gravada'; readonly sugestao: SugestaoGravada }
-  | { readonly tipo: 'envio_nao_serve' };
+  /**
+   * **`campo` entrou em 30/10/2026, com as fotos**: sao DUAS entradas de imagem
+   * no mesmo corpo agora, e o `400` tem de nomear a que nao serviu -- marcar
+   * `logo_upload_id` quando o problema esta numa foto manda a tela pedir de novo
+   * o arquivo errado. O `code` continua sendo `upload_not_usable` nos dois, **sem
+   * dizer qual dos casos ocorreu** (inexistente, de outra conta, de outro
+   * proposito, vencido, ja usado).
+   */
+  | {
+      readonly tipo: 'envio_nao_serve';
+      readonly campo: 'logo_upload_id' | 'photo_upload_ids';
+    };
 
 /** O recorte da lista de quem indicou: paginacao e o estado da revisao. */
 export interface RecorteDasMinhasIndicacoes {
@@ -85,8 +108,8 @@ export interface PaginaDasMinhasIndicacoes {
 
 export interface DirectorySuggestionRepository {
   /**
-   * Grava a indicacao -- e, quando ha logotipo, confirma o envio dele na MESMA
-   * transacao.
+   * Grava a indicacao -- e, quando ha logotipo ou foto, confirma os envios deles
+   * na MESMA transacao.
    */
   registrar(sugestao: SugestaoAGravar): Promise<RegistroDaSugestao>;
   /** As indicacoes DA CONTA, da mais recente para a mais antiga. */

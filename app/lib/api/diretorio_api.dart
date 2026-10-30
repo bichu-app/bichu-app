@@ -47,6 +47,35 @@ class DiretorioApi {
     );
   }
 
+  /// `POST /v1/media/directory-suggestion-photo-intents`
+  /// (`createDirectorySuggestionPhotoUploadIntent`), com conta.
+  ///
+  /// **NAO e a rota do logotipo, e a diferenca nao e arrumacao.** O logotipo e
+  /// a marca -- 512 quadrado, minima 256 -- e a foto do estabelecimento e a
+  /// faixa do topo da ficha -- 1280 x 720, minima 600. Duas geometrias, duas
+  /// minimas, dois propositos (`directory_suggestion_logo` e
+  /// `directory_suggestion_photo`), e por isso duas rotas.
+  ///
+  /// **Uma chamada POR FOTO**, e a tela chama ate quatro vezes: nao existe
+  /// autorizacao "de quatro imagens", porque cada assinatura e uma autorizacao
+  /// de escrita independente.
+  Future<Map<String, dynamic>> intencaoDeFotoDoEstabelecimento({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      caminhoDaIntencaoDeFoto,
+      corpo: <String, dynamic>{
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
+  }
+
+  /// O caminho de `createDirectorySuggestionPhotoUploadIntent`.
+  static const String caminhoDaIntencaoDeFoto =
+      '/media/directory-suggestion-photo-intents';
+
   /// O corpo de `suggestDirectoryEntry`, montado num lugar so.
   static Map<String, dynamic> corpoDaSugestao({
     required String nome,
@@ -60,6 +89,7 @@ class DiretorioApi {
     String? cep,
     String? recado,
     String? logoUploadId,
+    List<String>? fotosDoEstabelecimento,
   }) {
     final cepDoContrato = cep == null ? null : cepParaOContrato(cep);
     return <String, dynamic>{
@@ -77,6 +107,13 @@ class DiretorioApi {
       if (recado != null && recado.isNotEmpty) 'note': recado,
       if (logoUploadId != null && logoUploadId.isNotEmpty)
         'logo_upload_id': logoUploadId,
+      // **SO QUANDO HA PELO MENOS UMA, e nunca `[]` nem `null`.** O esquema e
+      // `minItems: 1`, entao a lista vazia toma `400` -- e `format: uuid` nao
+      // aceita nulo. Os dois casos sao a MESMA intencao ("nao mandei foto")
+      // dita de duas formas, e o contrato recusa as duas de proposito. O
+      // precedente exato esta uma linha acima, em `logo_upload_id`.
+      if (fotosDoEstabelecimento != null && fotosDoEstabelecimento.isNotEmpty)
+        'photo_upload_ids': fotosDoEstabelecimento,
     };
   }
 

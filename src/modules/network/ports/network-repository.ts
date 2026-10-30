@@ -193,10 +193,20 @@ export interface TransacaoDaComunidade {
     readonly eventoId: string;
     readonly agora: Instant;
   }): Promise<string | undefined>;
-  /** A capa na posicao 0. `null` tira a capa. */
-  definirCapa(
+  /**
+   * As imagens do encontro, **na ordem do array**: o indice e a `position`, e a
+   * `0` e a capa. Array VAZIO tira todas.
+   *
+   * **Era `definirCapa(eventoId, capa | null)` ate 30/10/2026**, e a troca e por
+   * conteudo e nao arrumacao: `image_upload_ids` manda ate quatro, e um metodo que
+   * so soubesse gravar a `position` 0 obrigaria quem chama a conhecer a tabela.
+   * `definirCapa(id, null)` virou `definirImagens(id, [])`, e `definirCapa(id, c)`
+   * virou `definirImagens(id, [c])` -- a capa sozinha e o caso de UM item, e nao
+   * um caminho proprio.
+   */
+  definirImagens(
     eventoId: string,
-    capa: { readonly imagemId: string; readonly altText: string | null } | null,
+    imagens: readonly { readonly imagemId: string; readonly altText: string | null }[],
   ): Promise<void>;
 }
 

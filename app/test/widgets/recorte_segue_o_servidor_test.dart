@@ -270,6 +270,7 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
           'DERIVADAS_DA_FOTO_DE_PET',
           'DERIVADAS_DO_ENCONTRO',
           'DERIVADAS_DA_LOGO',
+          'DERIVADAS_DA_FOTO_DO_LOCAL',
           'DERIVADAS_DA_FOTO_DE_USUARIO',
           'DERIVADAS_DA_VITRINE_DO_USUARIO',
           'DERIVADAS_DA_PUBLICACAO',
@@ -299,6 +300,15 @@ export const ESCADA_DA_FAIXA: readonly number[] = [92, 86, 82];
         'DERIVADAS_DA_LOGO',
         'card',
         FormatoDoRecorte.logoDaIndicacao,
+      ),
+      // A SEGUNDA GEOMETRIA DA MESMA TELA, e caso separado de proposito: a
+      // indicacao tem o quadrado da logo E a faixa do estabelecimento, e uma
+      // reprovacao que dissesse "a indicacao" nao diria qual dos dois passou a
+      // enquadrar diferente do que o servidor corta.
+      'fotos do estabelecimento na indicacao': (
+        'DERIVADAS_DA_FOTO_DO_LOCAL',
+        'banner',
+        FormatoDoRecorte.fotoDaIndicacao,
       ),
       'foto da propria pessoa (Meus dados)': (
         'DERIVADAS_DA_FOTO_DE_USUARIO',

@@ -132,6 +132,11 @@ const trilhaDeTeste: AuditEvent[] = [];
 
 /** Um `upload_id` com forma de UUID, que e o que o contrato exige. */
 const ENVIO = '018f3a2b-0000-7000-8000-0000000000c1';
+/** Os outros quatro envios, para a lista de ate quatro imagens (29/10/2026). */
+const OUTRO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c2';
+const TERCEIRO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c3';
+const QUARTO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c4';
+const QUINTO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c5';
 
 /** A capa que entrou: o caminho comum da lista do dono. */
 const CAPA_PRONTA: CapaDoMeuEncontro = {
@@ -274,8 +279,16 @@ function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): 
       capasPedidas.push(entrada.uploadId);
       return Promise.resolve(cenario.capaNaoServe === true ? undefined : 'imagem-da-capa');
     },
-    definirCapa: (_id, capa) => {
-      capasDefinidas.push(capa === null ? null : capa.altText);
+    /**
+     * `definirCapa` virou `definirImagens` em 30/10/2026, com `image_upload_ids`:
+     * o dublê registra `null` para a lista VAZIA (que é o que `cover_image: null`
+     * virou) e o `alt_text` de cada imagem quando há imagens, **que é o mesmo que
+     * ele registrava antes** -- por isso os dois casos da capa continuam valendo
+     * sem uma linha mudada.
+     */
+    definirImagens: (_id, imagens) => {
+      if (imagens.length === 0) capasDefinidas.push(null);
+      else for (const imagem of imagens) capasDefinidas.push(imagem.altText);
       return Promise.resolve();
     },
   };
@@ -877,6 +890,131 @@ void describe('a capa, que e publica', () => {
     assert.equal(resposta.status, 201, resposta.bruto);
     assert.deepEqual(capasPedidas, [ENVIO]);
     assert.deepEqual(capasDefinidas, ['Cães correndo na grama']);
+  });
+
+  /**
+   * ATE QUATRO IMAGENS (cliente, 29/10/2026: *"nas indicacoes de estabelecimento
+   * e eventos so esta sendo possivel enviar uma imagem no app, devemos deixar
+   * enviar ate 4 imagens"*).
+   */
+  void it('ISCA: `image_upload_ids` confirma as QUATRO, na ORDEM, e a primeira e a capa', async () => {
+    capasPedidas.length = 0;
+    capasDefinidas.length = 0;
+    const envios = [ENVIO, OUTRO_ENVIO, TERCEIRO_ENVIO, QUARTO_ENVIO];
+
+    const resposta = await criar({}, { ...CORPO_VALIDO, image_upload_ids: envios });
+
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.deepEqual(
+      capasPedidas,
+      envios,
+      'REPROVA: os quatro envios nao foram confirmados na ordem do array. A ordem E a ' +
+        '`position`, e a `position` 0 e a capa -- nao existe campo de capa.',
+    );
+    assert.equal(
+      capasDefinidas.length,
+      4,
+      'REPROVA: nao foram gravadas quatro imagens. Uma so quer dizer que a lista voltou ' +
+        'a ser tratada como capa; zero quer dizer que `definirImagens` nao foi chamado.',
+    );
+    assert.deepEqual(
+      capasDefinidas,
+      [null, null, null, null],
+      'as quatro entram SEM `alt_text`: a lista nova nao o tem, porque o cliente mandou ' +
+        'remover a descricao de foto do aplicativo em 26/10/2026',
+    );
+  });
+
+  void it('`image_upload_ids` com UMA imagem so tambem e o caminho novo, e nao a capa', async () => {
+    capasPedidas.length = 0;
+    capasDefinidas.length = 0;
+
+    const resposta = await criar({}, { ...CORPO_VALIDO, image_upload_ids: [ENVIO] });
+
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.deepEqual(capasPedidas, [ENVIO]);
+    assert.deepEqual(capasDefinidas, [null]);
+  });
+
+  /**
+   * **OS DOIS JUNTOS SAO `400`**, e nao uma precedencia: duas formas de dizer qual
+   * e a capa no mesmo corpo e o defeito, e qualquer regra ("a lista ganha", "a
+   * capa ganha") seria comportamento que ninguem pediu e que a tela nao mostra.
+   */
+  void it('ISCA: `cover_image` E `image_upload_ids` no mesmo corpo e 400 `cover_and_images_both_sent`', async () => {
+    capasPedidas.length = 0;
+    capasDefinidas.length = 0;
+
+    const resposta = await criar({}, {
+      ...CORPO_VALIDO,
+      cover_image: { upload_id: ENVIO },
+      image_upload_ids: [OUTRO_ENVIO],
+    });
+
+    assert.equal(resposta.status, 400, resposta.bruto);
+    const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+    assert.ok(
+      erros.some((e) => e.field === 'image_upload_ids' && e.code === 'cover_and_images_both_sent'),
+      `REPROVA: os dois campos juntos passaram, ou passaram com outro codigo: ${resposta.bruto}`,
+    );
+    assert.deepEqual(
+      capasPedidas,
+      [],
+      'REPROVA: a recusa aconteceu DEPOIS de confirmar envio. Confirmar e irreversivel: ' +
+        'o corpo tem de ser recusado antes de qualquer escrita.',
+    );
+    assert.deepEqual(capasDefinidas, []);
+  });
+
+  /**
+   * CONTRAPESO do caso acima: a recusa e dos DOIS juntos, e nao de
+   * `image_upload_ids` existir. Sem este caso, um servidor que recusasse
+   * `image_upload_ids` sempre passaria no de cima.
+   */
+  void it('CONTRAPESO: `cover_image` SOZINHO continua funcionando -- o APK publicado so manda ele', async () => {
+    capasPedidas.length = 0;
+    capasDefinidas.length = 0;
+
+    const resposta = await criar({}, {
+      ...CORPO_VALIDO,
+      cover_image: { upload_id: ENVIO, alt_text: 'Cães correndo na grama' },
+    });
+
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.deepEqual(capasPedidas, [ENVIO]);
+    assert.deepEqual(capasDefinidas, ['Cães correndo na grama']);
+  });
+
+  void it('ISCA: UMA das quatro que nao serve recusa o corpo inteiro, com 400 em `image_upload_ids`', async () => {
+    const resposta = await criar({ capaNaoServe: true }, {
+      ...CORPO_VALIDO,
+      image_upload_ids: [ENVIO, OUTRO_ENVIO],
+    });
+
+    assert.equal(resposta.status, 400, resposta.bruto);
+    const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+    assert.ok(
+      erros.some((e) => e.field === 'image_upload_ids' && e.code === 'upload_not_usable'),
+      resposta.bruto,
+    );
+  });
+
+  void it('`image_upload_ids` com CINCO e recusado pelo esquema do contrato (`maxItems: 4`)', async () => {
+    const resposta = await criar({}, {
+      ...CORPO_VALIDO,
+      image_upload_ids: [ENVIO, OUTRO_ENVIO, TERCEIRO_ENVIO, QUARTO_ENVIO, QUINTO_ENVIO],
+    });
+    assert.equal(resposta.status, 400, resposta.bruto);
+  });
+
+  void it('`image_upload_ids: []` e recusado: "lista vazia" e "nao mandei" sao a mesma intencao', async () => {
+    const resposta = await criar({}, { ...CORPO_VALIDO, image_upload_ids: [] });
+    assert.equal(resposta.status, 400, resposta.bruto);
+  });
+
+  void it('o MESMO `upload_id` duas vezes e recusado (`uniqueItems`)', async () => {
+    const resposta = await criar({}, { ...CORPO_VALIDO, image_upload_ids: [ENVIO, ENVIO] });
+    assert.equal(resposta.status, 400, resposta.bruto);
   });
 
   void it('ISCA: envio que nao serve (de outra conta, vencido, de outro proposito) e UM 400 so', async () => {

@@ -142,7 +142,14 @@ async function novoEnvio(opcoes: {
   return id;
 }
 
-/** O corpo mínimo que `registrar` exige, com o logotipo escolhido por caso. */
+/**
+ * O corpo mínimo que `registrar` exige, com o logotipo escolhido por caso.
+ *
+ * `photoUploadIds` é SEMPRE vazio aqui, e isso é desenho: este arquivo mede o
+ * LOGOTIPO. As fotos do estabelecimento (`20261030000002`, cliente de 30/10/2026)
+ * têm arquivo próprio -- `tests/integration/fotos-da-indicacao.test.ts` --, com a
+ * mesma prova por desligamento e com a tabela `directory_suggestion_images`.
+ */
 function aGravar(autor: UserId, logoUploadId: string | null): SugestaoAGravar {
   return {
     autor,
@@ -157,6 +164,7 @@ function aGravar(autor: UserId, logoUploadId: string | null): SugestaoAGravar {
     contatoValue: '+551130612200',
     note: null,
     logoUploadId,
+    photoUploadIds: [],
   };
 }
 

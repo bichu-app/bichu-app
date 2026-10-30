@@ -22,6 +22,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/faixa_de_imagens.dart';
 import '../../widgets/previa_da_foto.dart';
 import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/seletor_de_lista.dart';
@@ -90,6 +91,43 @@ class TelaSugerirProfissional extends StatefulWidget {
   static const String logotipoRecusado =
       'O logotipo não foi aceito. Escolha outra imagem.';
 
+  /// ## AS FOTOS DO ESTABELECIMENTO -- O SEGUNDO CAMPO, E NAO O MESMO
+  ///
+  /// Pedido do cliente de 30/10/2026: *"na pagina de indicacao de
+  /// profissional/estabelecimento, so tem o campo para subir a foto do
+  /// logotipo da empresa, mas nao as fotos do estabelecimento que fica no topo
+  /// da pagina"*; e de 29/10/2026: *"devemos deixar enviar ate 4 imagens"*.
+  ///
+  /// **O logotipo NAO conta entre as quatro**, e isso e do contrato: quem
+  /// indica a clinica do bairro pode mandar a logo dela E quatro fotos do
+  /// lugar. Obrigar a logo a ocupar uma das quatro faria quem tem logo poder
+  /// mandar so tres fotos.
+  static const String tituloDasFotos = 'Fotos do estabelecimento';
+
+  /// **Uma linha, com o "Opcional" dentro dela.** O cliente reprovou texto
+  /// excessivo em tela; a ordem ("a primeira e a capa") e dita pela propria
+  /// faixa, com as imagens na tela.
+  static const String ajudaDasFotos =
+      'Até 4 fotos do lugar, como ele é por dentro. Opcional.';
+
+  /// **Rotulos PROPRIOS, e nao os mesmos do logotipo.** Os dois campos convivem
+  /// no mesmo formulario: dois botoes `Tirar foto` na mesma tela sao
+  /// indistinguiveis para quem usa leitor de tela -- e para quem escreve o caso
+  /// de teste.
+  static const String tirarAFotoDoLugar = 'Tirar foto do lugar';
+
+  static const String escolherAFotoDoLugar = 'Escolher foto do lugar';
+
+  static const String fotoSemSinal =
+      'A foto não subiu: sem conexão agora. Escolha a imagem de novo quando '
+      'tiver internet.';
+
+  static const String fotoRecusada =
+      'A foto não foi aceita. Escolha outra imagem.';
+
+  /// O motivo do bloqueio enquanto os bytes de uma foto estao no ar.
+  static const String esperarAFoto = 'Espere a foto terminar de subir.';
+
   static const String cameraNosAjustes =
       'A câmera está bloqueada nos ajustes do sistema.';
 
@@ -141,7 +179,8 @@ enum _Impedimento {
   semTipoDeContato('Escolha como entrar em contato.'),
   semContato('Preencha o contato público.'),
   telefoneIncompleto('Digite DDD e número.'),
-  logotipoSubindo(TelaSugerirProfissional.esperarOLogotipo);
+  logotipoSubindo(TelaSugerirProfissional.esperarOLogotipo),
+  fotoDoLugarSubindo(TelaSugerirProfissional.esperarAFoto);
 
   const _Impedimento(this.texto);
 
@@ -181,6 +220,24 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   String? _uploadDoLogotipo;
 
   bool _enviandoOLogotipo = false;
+
+  /// As FOTOS DO ESTABELECIMENTO que já subiram, **na ordem em que a pessoa as
+  /// pôs**. A primeira é a capa, e não há campo de capa separado: duas formas
+  /// de dizer qual é a capa é o defeito, e não o recurso.
+  ///
+  /// **Só entra aqui o que já tem `upload_id`.** Uma lista de "escolhidas" e
+  /// outra de "enviadas" divergiriam na primeira falha de rede, e a tela
+  /// mostraria prévia de imagem que o corpo não vai confirmar.
+  final List<_FotoDoLugar> _fotosDoLugar = <_FotoDoLugar>[];
+
+  bool _enviandoFotoDoLugar = false;
+
+  /// A foto cujos bytes estão **subindo agora**, para a prévia provisória.
+  ///
+  /// "Apresentar como vai ficar" foi palavra do cliente, e a derivada do
+  /// servidor não existe nesse instante: sem ela, a pessoa escolhe a foto, a
+  /// folha de recorte fecha e a tela não muda em nada.
+  FotoLocal? _fotoDoLugarSubindo;
 
   /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
   /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
@@ -374,6 +431,145 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     });
   }
 
+  // =========================================================================
+  // AS FOTOS DO ESTABELECIMENTO
+  //
+  // **A AQUISICAO MORA NESTE ARQUIVO, e isso e decisao e nao acidente.** O
+  // portao de exaustividade do recorte
+  // (`app/test/telas/recorte_em_todo_upload_test.dart`) conta ARQUIVOS sob
+  // `app/lib/telas` que chamam `tirarFoto`/`escolherDaGaleria` e exige que cada
+  // um chame `ajustarAFoto`; o mapa `pontos` dele nomeia ESTE arquivo como
+  // "logotipo da indicacao". Mover a aquisicao para uma peca compartilhada
+  // tiraria o ponto de upload do arquivo que o cliente reconhece. A peca
+  // compartilhada (`widgets/faixa_de_imagens.dart`) por isso so DESENHA.
+  // =========================================================================
+
+  /// `Tirar foto` da faixa. Mesma negociacao de permissao do logotipo.
+  Future<void> _tirarAFotoDoLugar() async {
+    final camera = Escopo.of(context).camera;
+    var estado = _permissaoDaCamera;
+    if (estado == EstadoDaPermissao.negada) {
+      estado = await camera.pedirCamera();
+      if (!mounted) return;
+      setState(() => _permissaoDaCamera = estado);
+    }
+    if (estado != EstadoDaPermissao.concedida) return;
+    final foto = await camera.tirarFoto();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustarAFotoDoLugar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheuAFotoDoLugar(ajustada);
+  }
+
+  Future<void> _escolherAFotoDoLugarDaGaleria() async {
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustarAFotoDoLugar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheuAFotoDoLugar(ajustada);
+  }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// **`fotoDaIndicacao` e nao `logoDaIndicacao`**: esta e a faixa 16:9 do topo
+  /// da ficha (`DERIVADAS_DA_FOTO_DO_LOCAL`, variante `banner`), e nao o
+  /// quadrado da marca. Enquadrar no quadrado da logo cortaria exatamente o que
+  /// a faixa existe para mostrar.
+  Future<FotoLocal?> _ajustarAFotoDoLugar(
+    CameraEGaleria camera,
+    FotoLocal foto,
+  ) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.fotoDaIndicacao,
+        titulo: 'Ajuste a foto do lugar',
+      );
+
+  /// A foto escolhida **JA SOBE**, como o logotipo ja faz, e so entra na faixa
+  /// quando os bytes chegaram.
+  Future<void> _escolheuAFotoDoLugar(FotoLocal foto) async {
+    final recusa =
+        recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
+    if (recusa != null) {
+      setState(() => _erro = MensagemDeErro(texto: recusa));
+      return;
+    }
+    // **O teto e conferido AQUI tambem, e nao so no botao desabilitado.** Um
+    // toque que escapasse pela janela entre o envio e o `setState` pediria uma
+    // quinta assinatura, e cada assinatura e uma autorizacao de escrita que
+    // nao se desfaz.
+    if (_fotosDoLugar.length >= FaixaDeImagens.maximoDoContrato) return;
+
+    setState(() {
+      _erro = null;
+      _enviandoFotoDoLugar = true;
+      _fotoDoLugarSubindo = foto;
+    });
+
+    final escopo = Escopo.of(context);
+    final destino = EnvioParaConfirmarDepois(
+      pedir: DiretorioApi(escopo.api).intencaoDeFotoDoEstabelecimento,
+    );
+    final desfecho = await escopo.envioDeFoto.enviar(
+      foto: foto,
+      destino: destino,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _enviandoFotoDoLugar = false;
+      // **A previa provisoria SAI em todos os desfechos.** No caminho que deu
+      // certo ela e substituida pela linha definitiva; nos dois que falharam
+      // ela tem de desaparecer, senao a tela promete uma foto que o corpo nao
+      // vai confirmar -- e prometer e nao cumprir e pior que nao oferecer.
+      _fotoDoLugarSubindo = null;
+      switch (desfecho) {
+        case DesfechoDoEnvio.enviada:
+          final id = destino.uploadId;
+          // `uploadId` nulo com desfecho `enviada` nao acontece pelo contrato
+          // de `EnvioParaConfirmarDepois`; a guarda existe para que, se
+          // acontecesse, a faixa NAO ganhasse uma previa sem identificador --
+          // seria prometer uma imagem que o corpo nao confirma.
+          if (id != null && id.isNotEmpty) {
+            _fotosDoLugar.add(_FotoDoLugar(foto: foto, uploadId: id));
+          } else {
+            _erro = const MensagemDeErro(
+              texto: TelaSugerirProfissional.fotoRecusada,
+            );
+          }
+        case DesfechoDoEnvio.semSinal:
+          _erro = const MensagemDeErro(
+            texto: TelaSugerirProfissional.fotoSemSinal,
+          );
+        case DesfechoDoEnvio.recusada:
+          _erro = const MensagemDeErro(
+            texto: TelaSugerirProfissional.fotoRecusada,
+          );
+      }
+    });
+  }
+
+  /// Troca a ordem de duas fotos. **A primeira e a capa**, entao mover para o
+  /// topo e o jeito de escolher a capa.
+  void _moverAFotoDoLugar(int de, int para) {
+    if (de < 0 || de >= _fotosDoLugar.length) return;
+    if (para < 0 || para >= _fotosDoLugar.length) return;
+    setState(() {
+      final movida = _fotosDoLugar.removeAt(de);
+      _fotosDoLugar.insert(para, movida);
+    });
+  }
+
+  /// Tira a foto da faixa. **Nao cancela o envio**: nao ha rota de cancelamento
+  /// de intencao no contrato, e o varredor recolhe o objeto em dez minutos.
+  void _removerAFotoDoLugar(int indice) {
+    if (indice < 0 || indice >= _fotosDoLugar.length) return;
+    setState(() => _fotosDoLugar.removeAt(indice));
+  }
+
   _Impedimento? get _impedimento {
     final usuario = Escopo.of(context).sessao.usuario;
     if (usuario == null) {
@@ -391,6 +587,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       return _Impedimento.telefoneIncompleto;
     }
     if (_enviandoOLogotipo) return _Impedimento.logotipoSubindo;
+    if (_enviandoFotoDoLugar) return _Impedimento.fotoDoLugarSubindo;
     return null;
   }
 
@@ -417,6 +614,8 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       cep: _cep.text.trim(),
       recado: _recado.text.trim(),
       logoUploadId: _uploadDoLogotipo,
+      fotosDoEstabelecimento:
+          _fotosDoLugar.map((f) => f.uploadId).toList(growable: false),
     );
     final chave = _chave ??= ApiClient.novaChaveDeIdempotencia();
 
@@ -593,6 +792,38 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   aoTirar: enviando ? null : _tirarOLogotipo,
                   aoEscolher: enviando ? null : _escolherOLogotipoDaGaleria,
                   aoAbrirAjustes: _abrirOsAjustes,
+                ),
+                const SizedBox(height: BichuEspaco.e6),
+                // **DEPOIS do logotipo, e campo SEPARADO dele.** O cliente
+                // nomeou as duas ausencias em duas mensagens, como duas
+                // coisas: a marca e a faixa do topo da ficha.
+                FaixaDeImagens(
+                  imagens: _fotosDoLugar
+                      .map((f) => f.foto)
+                      .toList(growable: false),
+                  subindo: _fotoDoLugarSubindo,
+                  enviando: _enviandoFotoDoLugar,
+                  permissao: _permissaoDaCamera,
+                  // **O aviso dos ajustes JA ESTA na tela**, no bloco do
+                  // logotipo acima. Dois avisos iguais dao dois botoes
+                  // `Abrir os ajustes`, indistinguiveis para quem usa leitor
+                  // de tela -- e foi assim que o caso do logotipo reprovou.
+                  mostrarAvisoDeAjustes: false,
+                  textos: const TextosDaFaixaDeImagens(
+                    titulo: TelaSugerirProfissional.tituloDasFotos,
+                    ajuda: TelaSugerirProfissional.ajudaDasFotos,
+                    tirarAFoto: TelaSugerirProfissional.tirarAFotoDoLugar,
+                    escolherDaGaleria:
+                        TelaSugerirProfissional.escolherAFotoDoLugar,
+                    cameraNosAjustes:
+                        TelaSugerirProfissional.cameraNosAjustes,
+                    abrirAjustes: TelaSugerirProfissional.abrirAjustes,
+                  ),
+                  aoTirar: enviando ? null : _tirarAFotoDoLugar,
+                  aoEscolher: enviando ? null : _escolherAFotoDoLugarDaGaleria,
+                  aoAbrirAjustes: _abrirOsAjustes,
+                  aoMover: _moverAFotoDoLugar,
+                  aoRemover: _removerAFotoDoLugar,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
                 Semantics(
@@ -802,6 +1033,22 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     }
     return null;
   }
+}
+
+/// Uma FOTO DO ESTABELECIMENTO que **ja esta no armazenamento**.
+///
+/// A previa e o `upload_id` andam juntos de proposito: uma lista de previas e
+/// outra de identificadores divergiriam na primeira remocao, e a tela mostraria
+/// uma imagem cujo identificador foi para outro lugar do corpo.
+@immutable
+class _FotoDoLugar {
+  const _FotoDoLugar({required this.foto, required this.uploadId});
+
+  /// O arquivo no aparelho, para a miniatura.
+  final FotoLocal foto;
+
+  /// O que `suggestDirectoryEntry` vai confirmar.
+  final String uploadId;
 }
 
 /// O motivo pelo qual o botao esta desabilitado, dito em voz alta.

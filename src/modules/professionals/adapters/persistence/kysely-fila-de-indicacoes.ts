@@ -22,12 +22,49 @@ export type DependenciasDaFilaDeIndicacoes = DependenciasDoDiretorioAdministrati
 /** O predicado da conta de quem indicou, como expressao reusada nas TRES consultas. */
 const AUTOR_ATIVO = sql<boolean>`indicacao_com_autor_ativo(s.id)`;
 
-/** As colunas que saem, por nome. */
+/**
+ * As colunas que saem, por nome -- e **as TRES de imagem saem por SUBCONSULTA na
+ * MESMA consulta**, e nao por leitura por linha (30/10/2026).
+ *
+ * **Isto nao e preferencia de estilo: e a defesa contra o N+1.** A fila e
+ * paginada em ate 20 linhas, e uma leitura de imagem por indicacao seriam 21
+ * consultas numa pagina -- o defeito que `pontuacao-da-listagem-sai-em-uma-
+ * consulta.test.ts` mede para a listagem do `Perto`. A forma e a MESMA de
+ * `GALERIA_DA_ENTRADA` em `kysely-diretorio-administrativo.ts`: `json_agg` com
+ * `ORDER BY` dentro de uma subconsulta correlacionada.
+ *
+ * As tres, e o que cada uma responde:
+ *
+ *  - `logo_thumb_key`: a derivada `thumb` do logotipo. `c.status = 'ready'` esta
+ *    na clausula: os TRES casos de nulo (sem logotipo, worker nao terminou, bytes
+ *    recusados) caem no mesmo `NULL`, que e como `DirectoryEntrySummary.logo_url`
+ *    ja os trata;
+ *  - `foto_card_keys`: as derivadas `card` das fotos, **so as `ready`**, na ordem
+ *    de `position`. `coalesce(..., '[]')` para a indicacao sem foto devolver lista
+ *    vazia e nao `NULL` -- `photo_urls` e `required` no contrato;
+ *  - `fotos_total`: TODAS as linhas da tabela, prontas ou nao, **sem juntar com
+ *    `catalog_images`**. E a juncao que faria a contagem perder a foto cuja imagem
+ *    o varredor apagou, e e justamente essa a diferenca que o painel usa para
+ *    dizer "ainda processando" em vez de "sem fotos".
+ *
+ * **Nenhuma delas devolve `image_id`** (ADR-0010 item 6): sai a chave da
+ * derivada, de onde o dominio monta a URL.
+ */
 const COLUNAS = sql`
   s.ref, s.display_name, s.kind, s.entity_kind, s.city, s.state, s.neighborhood,
   s.contact_kind, s.contact_value, s.note, s.review_status,
   s.created_at, s.decided_at, s.decline_reason,
-  (SELECT p.slug FROM professionals p WHERE p.id = s.approved_entry_id) AS entry_slug`;
+  (SELECT p.slug FROM professionals p WHERE p.id = s.approved_entry_id) AS entry_slug,
+  (SELECT c.thumb_key FROM catalog_images c
+    WHERE c.id = s.logo_image_id AND c.status = 'ready') AS logo_thumb_key,
+  (SELECT coalesce(json_agg(c.public_key ORDER BY i.position), '[]'::json)
+     FROM directory_suggestion_images i
+     JOIN catalog_images c ON c.id = i.image_id
+    WHERE i.suggestion_id = s.id
+      AND c.status = 'ready'
+      AND c.public_key IS NOT NULL) AS foto_card_keys,
+  (SELECT count(*) FROM directory_suggestion_images i
+    WHERE i.suggestion_id = s.id) AS fotos_total`;
 
 interface LinhaDaIndicacao {
   ref: string;
@@ -45,6 +82,11 @@ interface LinhaDaIndicacao {
   decided_at: Date | null;
   decline_reason: string | null;
   entry_slug: string | null;
+  logo_thumb_key: string | null;
+  /** `json_agg`: o driver devolve array de texto. */
+  foto_card_keys: readonly string[];
+  /** `count(*)`: o driver devolve `bigint` como numero, mas `Number()` nao custa. */
+  fotos_total: string | number;
 }
 
 function comoIndicacao(l: LinhaDaIndicacao): IndicacaoNaFila {
@@ -64,6 +106,9 @@ function comoIndicacao(l: LinhaDaIndicacao): IndicacaoNaFila {
     decidedAt: l.decided_at,
     declineReason: l.decline_reason,
     entradaSlug: l.entry_slug,
+    logoThumbKey: l.logo_thumb_key,
+    fotoCardKeys: l.foto_card_keys ?? [],
+    fotosTotal: Number(l.fotos_total ?? 0),
   };
 }
 

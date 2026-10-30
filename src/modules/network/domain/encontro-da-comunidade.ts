@@ -156,6 +156,26 @@ export interface CorpoDoEncontroDaComunidade {
   readonly bring_items?: readonly string[];
   readonly notes?: string;
   readonly cover_image?: CapaDoCorpo;
+  /**
+   * Ate QUATRO imagens do encontro, **na ordem em que o autor as colocou**
+   * (cliente, 29/10/2026: *"nas indicacoes de estabelecimento e eventos so esta
+   * sendo possivel enviar uma imagem no app, devemos deixar enviar ate 4
+   * imagens"*). A **primeira e a capa**, pela `position` e nao por um campo.
+   *
+   * **A rota de autorizacao e a QUE JA EXISTE**
+   * (`createNetworkEventCoverUploadIntent`): o proposito e `network_event` nas
+   * quatro, a minima e 600 x 600 nas quatro e a derivada e `DERIVADAS_DO_ENCONTRO`
+   * nas quatro. Nao ha nada que distinga a segunda imagem da primeira no ENVIO.
+   *
+   * **SE EXCLUI com `cover_image`:** os dois no mesmo corpo sao `400`
+   * (`code: cover_and_images_both_sent`). `cover_image` fica porque o APK
+   * publicado so manda ele -- tira-lo seria `request-property-removed`.
+   *
+   * **Nao ha migracao nesta ponta:** `network_event_images.position` tem
+   * `CHECK (position BETWEEN 0 AND 7)` desde a `20260928000004`, e o aplicativo
+   * passa a ocupar quatro das oito posicoes que a tabela ja tinha.
+   */
+  readonly image_upload_ids?: readonly string[];
 }
 
 /** O corpo de `updateNetworkEvent` (`CommunityNetworkEventPatch`). */

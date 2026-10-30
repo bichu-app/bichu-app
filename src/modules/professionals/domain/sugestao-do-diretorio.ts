@@ -55,6 +55,20 @@ export interface CorpoDaSugestaoDoDiretorio {
    * para o usuario subir e indicar o estabelecimento"*).
    */
   readonly logo_upload_id?: string;
+  /**
+   * Ate QUATRO fotos do ESTABELECIMENTO, **na ordem em que a pessoa as colocou**
+   * (cliente, 29 e 30/10/2026: *"devemos deixar enviar ate 4 imagens"* e *"so tem
+   * o campo para subir a foto do logotipo da empresa, mas nao as fotos do
+   * estabelecimento que fica no topo da pagina"*).
+   *
+   * **A primeira e a capa**, e o LOGOTIPO nao conta entre as quatro: aquele e a
+   * marca (um quadrado ao lado do nome) e estas sao a faixa 16:9 do topo.
+   *
+   * `maxItems`, `minItems` e `uniqueItems` sao do CONTRATO e o esquema do corpo os
+   * cobra antes de o caso de uso ver o corpo -- por isso nao ha conferencia de
+   * forma em `errosDaSugestao`.
+   */
+  readonly photo_upload_ids?: readonly string[];
 }
 
 /** O campo do contato, nomeado como o contrato manda nomea-lo no `400`. */

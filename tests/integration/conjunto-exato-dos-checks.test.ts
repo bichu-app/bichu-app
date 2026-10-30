@@ -302,6 +302,24 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // aprovou chegaria ao `Perto`. **Juntar os dois valores aqui nao e
       // simplificacao: e abrir a fronteira da fila de revisao.**
       'directory_suggestion_logo',
+      // O DECIMO, `20261030000002` (30/10/2026): as FOTOS DO ESTABELECIMENTO que
+      // QUEM INDICOU enviou (pedido do cliente: *"so tem o campo para subir a
+      // foto do logotipo da empresa, mas nao as fotos do estabelecimento que
+      // fica no topo da pagina"* e *"devemos deixar enviar ate 4 imagens"*).
+      //
+      // **SEPARADO de `directory_photo`, pela MESMA razao, palavra por palavra,
+      // que separou `directory_suggestion_logo` de `directory_logo`:**
+      // `imagemDoEnvio` da escrita administrativa exige `directory_photo` para
+      // aceitar um `upload_id` em `professionals.photo_image_id`, e
+      // `professionals` E a superficie publica (`DirectoryEntrySummary`,
+      // `DirectoryEntryDetail`). Com UM proposito para os dois, a foto de uma
+      // indicacao que ninguem aprovou chegaria ao `Perto`.
+      //
+      // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
+      // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
+      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
+      'directory_suggestion_photo',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
@@ -317,7 +335,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
       // valores ao reescrever, e e por isso que estes sete estao declarados
       // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
-      // `catalog_images`.
+      // `catalog_images`. Sao DEZ desde 30/10/2026.
       'user_publication',
     ],
   },
@@ -688,6 +706,24 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // aprovou chegaria ao `Perto`. **Juntar os dois valores aqui nao e
       // simplificacao: e abrir a fronteira da fila de revisao.**
       'directory_suggestion_logo',
+      // O DECIMO, `20261030000002` (30/10/2026): as FOTOS DO ESTABELECIMENTO que
+      // QUEM INDICOU enviou (pedido do cliente: *"so tem o campo para subir a
+      // foto do logotipo da empresa, mas nao as fotos do estabelecimento que
+      // fica no topo da pagina"* e *"devemos deixar enviar ate 4 imagens"*).
+      //
+      // **SEPARADO de `directory_photo`, pela MESMA razao, palavra por palavra,
+      // que separou `directory_suggestion_logo` de `directory_logo`:**
+      // `imagemDoEnvio` da escrita administrativa exige `directory_photo` para
+      // aceitar um `upload_id` em `professionals.photo_image_id`, e
+      // `professionals` E a superficie publica (`DirectoryEntrySummary`,
+      // `DirectoryEntryDetail`). Com UM proposito para os dois, a foto de uma
+      // indicacao que ninguem aprovou chegaria ao `Perto`.
+      //
+      // Ele reusa `DERIVADAS_DA_FOTO_DO_LOCAL` -- a MESMA constante da foto do
+      // painel, e nao uma copia dos numeros --, porque a geometria e a mesma
+      // faixa 16:9 do topo da ficha; a minima e 600 x 600. O que NAO se
+      // compartilha e o proposito, que e o que amarra o envio ao destino (T9).
+      'directory_suggestion_photo',
       'user_photo',
       // O sexto, `20261018000040` (18/10): a vitrine de fotos do usuario, ate
       // nove, visivel so ao dono.
@@ -703,7 +739,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       // primeira versao de uma migracao de vitrine deste projeto APAGOU tres
       // valores ao reescrever, e e por isso que estes sete estao declarados
       // aqui, um a um, nas DUAS tabelas -- `catalog_upload_intents` e
-      // `catalog_images`.
+      // `catalog_images`. Sao DEZ desde 30/10/2026.
       'user_publication',
     ],
   },

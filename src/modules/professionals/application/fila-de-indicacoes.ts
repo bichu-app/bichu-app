@@ -119,7 +119,7 @@ export class FilaDeIndicacoes {
   }): Promise<PaginaDaFilaProjetada> {
     const pagina = await this.deps.repositorio.listar(recorte);
     return {
-      items: pagina.itens.map(projetarIndicacao),
+      items: pagina.itens.map((i) => projetarIndicacao(i, this.deps.urlDeMidia)),
       page: recorte.page,
       limit: recorte.limit,
       total: pagina.total,
@@ -130,7 +130,7 @@ export class FilaDeIndicacoes {
   async ler(ref: string): Promise<IndicacaoProjetada> {
     const indicacao = await this.deps.repositorio.indicacaoPorRef(ref);
     if (indicacao === null) throw problemas.naoEncontrado();
-    return projetarIndicacao(indicacao);
+    return projetarIndicacao(indicacao, this.deps.urlDeMidia);
   }
 
   async aprovar(autor: Autor, ref: string, corpo: AprovacaoDaIndicacao): Promise<IndicacaoAprovada> {
@@ -170,7 +170,7 @@ export class FilaDeIndicacoes {
       );
 
       return {
-        suggestion: projetarIndicacao(aprovada),
+        suggestion: projetarIndicacao(aprovada, this.deps.urlDeMidia),
         entry: projetarEntradaAdministrativa(entrada, this.deps.urlDeMidia),
         entry_created: existente === null,
         etagDaEntrada: comoEtag(entrada.version),
@@ -258,7 +258,7 @@ export class FilaDeIndicacoes {
           after: FilaDeIndicacoes.retrato(recusada),
         }),
       );
-      return projetarIndicacao(recusada);
+      return projetarIndicacao(recusada, this.deps.urlDeMidia);
     });
   }
 }

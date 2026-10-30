@@ -73,6 +73,24 @@ class FormatoDoRecorte {
     altura: 512,
   );
 
+  /// `DERIVADAS_DA_FOTO_DO_LOCAL`, variante `banner`: 1280 x 720.
+  ///
+  /// **A FAIXA do topo da ficha, e nao a marca.** O logotipo da MESMA tela e
+  /// [logoDaIndicacao] -- 512 quadrado --, e as duas geometrias convivem no
+  /// mesmo formulario de proposito: o cliente nomeou as duas ausencias em duas
+  /// mensagens separadas (29 e 30/10/2026), como duas coisas. Enquadrar a foto
+  /// do estabelecimento no quadrado da logo cortaria exatamente o que a faixa
+  /// existe para mostrar.
+  ///
+  /// A variante e `banner` e nao `card` (1024 x 576) porque as duas tem o
+  /// MESMO aspecto 16:9 e `banner` e a que o servidor usa na ficha; o portao
+  /// do espelho cobra a `banner` por nome em
+  /// `test/widgets/recorte_segue_o_servidor_test.dart`.
+  static const FormatoDoRecorte fotoDaIndicacao = FormatoDoRecorte.daDerivada(
+    largura: 1280,
+    altura: 720,
+  );
+
   /// `DERIVADA_DA_FOTO_DO_ACHADO`: 1024 x 1126.
   static const FormatoDoRecorte fotoDoAchado = FormatoDoRecorte.daDerivada(
     largura: 1024,
