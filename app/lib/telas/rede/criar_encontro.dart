@@ -21,6 +21,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../../widgets/saida_da_tela.dart';
 
@@ -593,15 +594,42 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) await _escolheuACapa(foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustarACapa(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheuACapa(ajustada);
   }
 
   Future<void> _escolherACapaDaGaleria() async {
-    final foto = await Escopo.of(context).camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) await _escolheuACapa(foto);
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustarACapa(camera, foto);
+    if (!mounted || ajustada == null) return;
+    await _escolheuACapa(ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o envio.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// **`capaDoEncontro` e onde este recurso mais paga**: a capa e 16:9 --
+  /// `DERIVADAS_DO_ENCONTRO`, variante `banner`, 1280 x 720, em
+  /// `src/modules/media/domain/derivadas.ts` -- e a foto sai de um celular,
+  /// em retrato. O recorte automatico no centro de um retrato 3:4 para uma
+  /// faixa 16:9 joga fora as duas pontas e fica com a barriga da foto -- que e
+  /// literalmente *"cropando no lugar errado"*, o relato de 28/10.
+  Future<FotoLocal?> _ajustarACapa(CameraEGaleria camera, FotoLocal foto) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.capaDoEncontro,
+        titulo: 'Ajuste a capa do encontro',
+      );
 
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();

@@ -77,6 +77,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/conversas_api.dart';
 import '../../api/envio_de_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../api/modelos_conversa.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../escopo.dart';
@@ -471,7 +472,9 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     if (origem == null || !mounted) return;
 
     final camera = _camera;
-    final FotoLocal? escolhida;
+    // NAO e `final`: o recorte SUBSTITUI a foto escolhida, e e a substituida
+    // que atravessa as recusas locais e o envio.
+    FotoLocal? escolhida;
     if (origem == _OrigemDaFoto.camera) {
       // A permissao e pedida **no toque**, e nao na abertura da conversa: uma
       // conversa que pede camera ao abrir pede acesso para uma coisa que a
@@ -485,6 +488,37 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
       escolhida = await camera.escolherDaGaleria();
     }
     if (!mounted || escolhida == null) return;
+
+    // O RECORTE, entre "a pessoa escolheu" e as duas recusas locais abaixo.
+    //
+    // Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+    // upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+    // posicao da imagem"*.
+    //
+    // **A FORMA AQUI FOI UMA CORRECAO DE ROTA, e ela fica escrita.** A previa
+    // da foto na conversa (`PreviaDaFotoDaConversa`) tem altura VARIAVEL --
+    // `min(220, fracao da altura da tela)` -- e nenhum aspecto declarado,
+    // entao este destino PARECIA de forma livre, e a janela ia ser
+    // `FormatoDoRecorte.doProprioArquivo`.
+    //
+    // Nao e. A foto da conversa sobe por
+    // `createFoundReportPhotoUploadIntent`, e o servidor corta aquela imagem
+    // em 1024 x 1126 (`DERIVADA_DA_FOTO_DO_ACHADO`, aplicada por
+    // `higienizar-foto-do-achado.ts`). Janela livre aqui daria o pior dos dois
+    // mundos: a pessoa enquadrando uma coisa e o servidor entregando outra --
+    // o defeito de 28/10 de volta por um caminho novo. Medido em 29/10/2026.
+    //
+    // O ajuste vem ANTES das recusas de propósito: e o arquivo ajustado que
+    // sobe, e e o tamanho DELE que o teto do contrato tem de medir.
+    final ajustada = await ajustarAFoto(
+      context,
+      camera: camera,
+      foto: escolhida,
+      formato: FormatoDoRecorte.fotoDoAchado,
+      titulo: 'Ajuste a foto',
+    );
+    if (!mounted || ajustada == null) return;
+    escolhida = ajustada;
 
     // AS DUAS RECUSAS LOCAIS, antes de qualquer byte sair.
     //

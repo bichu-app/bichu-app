@@ -18,6 +18,7 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_de_opcoes.dart';
 import '../../widgets/grupo_segmentado.dart';
 import '../../widgets/previa_da_foto.dart';
+import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../../widgets/seletor_de_lista.dart';
 import '../localizacao/antessala_de_localizacao.dart';
@@ -207,15 +208,45 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     }
     if (estado != EstadoDaPermissao.concedida) return;
     final foto = await camera.tirarFoto();
-    if (!mounted) return;
-    if (foto != null) setState(() => _rascunho.foto = foto);
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    setState(() => _rascunho.foto = ajustada);
   }
 
   Future<void> _escolherDaGaleria() async {
-    final foto = await Escopo.of(context).camera.escolherDaGaleria();
-    if (!mounted) return;
-    if (foto != null) setState(() => _rascunho.foto = foto);
+    final camera = Escopo.of(context).camera;
+    final foto = await camera.escolherDaGaleria();
+    if (!mounted || foto == null) return;
+    final ajustada = await _ajustar(camera, foto);
+    if (!mounted || ajustada == null) return;
+    setState(() => _rascunho.foto = ajustada);
   }
+
+  /// O RECORTE, entre "a pessoa escolheu" e o rascunho.
+  ///
+  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
+  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
+  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
+  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
+  ///
+  /// **AQUI O CORTE ERRADO CUSTA MAIS QUE EM QUALQUER OUTRO PONTO.** A foto do
+  /// achado e a unica prova de que o animal e aquele: um recorte que ninguem
+  /// escolheu pode tirar da imagem justamente a mancha, a coleira ou a orelha
+  /// que o tutor reconheceria.
+  ///
+  /// A forma vem de `DERIVADA_DA_FOTO_DO_ACHADO` (1024 x 1126) em
+  /// `src/modules/media/domain/derivadas.ts` -- a derivada que
+  /// `higienizarFotoDoAchado` aplica aos dois `kind` de
+  /// `ESPECIES_DO_ACHADO`. Quem manda na janela e quem CORTA.
+  Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
+      ajustarAFoto(
+        context,
+        camera: camera,
+        foto: foto,
+        formato: FormatoDoRecorte.fotoDoAchado,
+        titulo: 'Ajuste a foto do animal',
+      );
 
   // -------------------------------------------------------------------------
   // O quando
