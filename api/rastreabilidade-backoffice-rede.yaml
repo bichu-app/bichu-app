@@ -719,7 +719,8 @@ telas:
 
   - tela: "Diretorio de Perto - fila de indicacoes da comunidade"
     prototipo: nenhum
-    estados: [fila, vazio, decidida, aprovando, duplicata, recusando, recusada]
+    estados: [fila, vazio, decidida, aprovando, duplicata, recusando, recusada,
+              com-imagens, fotos-processando, sem-imagem]
     operacoes:
       - operationId: listAdminDirectorySuggestions
         situacao: contrato
@@ -730,6 +731,12 @@ telas:
           - resp:items
           - resp:total
           - resp:pending_total
+          # AS IMAGENS, na LISTAGEM (PR #122). A linha desenha a logo em `thumb`
+          # e a CONTAGEM das fotos; as `card` so aparecem ao abrir a indicacao,
+          # porque 20 linhas x 4 fotos sao 80 `card` numa primeira pintura.
+          - resp:items[].logo_url
+          - resp:items[].photo_urls
+          - resp:items[].photos_total
           - enum:DirectorySuggestionState.pending
           - enum:DirectorySuggestionState.approved
           - enum:DirectorySuggestionState.declined
@@ -754,6 +761,12 @@ telas:
           - resp:decided_at
           - resp:decline_reason
           - resp:entry_slug
+          # `photos_total` NAO e enfeite da contagem: e ele que separa "nao
+          # enviou nenhuma" de "enviou quatro e nenhuma ficou pronta", que sao
+          # decisoes de revisao diferentes. Sem ele a tela mostraria buraco.
+          - resp:logo_url
+          - resp:photo_urls
+          - resp:photos_total
       - operationId: approveAdminDirectorySuggestion
         situacao: contrato
         usa:

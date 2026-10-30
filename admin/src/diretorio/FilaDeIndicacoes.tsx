@@ -28,10 +28,12 @@ import {
   ROTULO_DA_ABA,
   VAZIO_DA_ABA,
   lugarDa,
+  marcaDasFotos,
   precisaDeTelefone,
   type EstadoDaIndicacao,
   type Indicacao,
 } from './fila.ts';
+import { ImagensDaIndicacao, LogoDaIndicacao } from './ImagensDaIndicacao.tsx';
 
 const POR_PAGINA = 50;
 
@@ -197,29 +199,25 @@ export default function FilaDeIndicacoes() {
                     estado.itens.map((i) => (
                       <tr key={i.reference} data-cy="indicacao-linha" data-ref={i.reference}>
                         <td>
-                          <span className="t-label">{i.display_name}</span>
-                          <br />
-                          <span className="t-caption c-sec">
-                            {
-
-}
-                            {TIPOS_DE_ENTIDADE[i.entity_kind]} · {ATIVIDADES[i.kind]} · indicada em{' '}
-                            {quando(i.created_at)}
-                          </span>
-                          {i.note && (
-                            <>
-                              <br />
-                              <span className="t-caption c-sec">“{i.note}”</span>
-                            </>
-                          )}
-                          {i.decline_reason && (
-                            <>
-                              <br />
+                          <div className="prod">
+                            <LogoDaIndicacao indicacao={i} />
+                            <span className="tx">
+                              <span className="t-label">{i.display_name}</span>
                               <span className="t-caption c-sec">
-                                Recusada: {i.decline_reason}
+                                {TIPOS_DE_ENTIDADE[i.entity_kind]} · {ATIVIDADES[i.kind]} · indicada
+                                em {quando(i.created_at)}
                               </span>
-                            </>
-                          )}
+                              <span className="t-caption fotos-marca" data-cy="marca-de-fotos">
+                                {marcaDasFotos(i)}
+                              </span>
+                              {i.note && <span className="t-caption c-sec">“{i.note}”</span>}
+                              {i.decline_reason && (
+                                <span className="t-caption c-sec">
+                                  Recusada: {i.decline_reason}
+                                </span>
+                              )}
+                            </span>
+                          </div>
                         </td>
                         <td className="w-preco t-body-sm">{lugarDa(i)}</td>
                         <td className="w-upd t-body-sm">
@@ -416,6 +414,7 @@ function DialogoDeAprovacao({
           Contato indicado: {CONTATOS[i.public_contact.kind]} — {i.public_contact.value}.
         </p>
       </div>
+      <ImagensDaIndicacao indicacao={i} />
       {falha && <Banner tipo="erro">{falha}</Banner>}
       <form
         className="form"
@@ -540,6 +539,7 @@ function DialogoDeRecusa({
           não chega a quem indicou.
         </p>
       </div>
+      <ImagensDaIndicacao indicacao={i} />
       {falha && <Banner tipo="erro">{falha}</Banner>}
       <form
         className="form"

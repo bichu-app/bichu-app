@@ -1292,3 +1292,88 @@ tbody tr:hover {
     padding: var(--bichu-space-6) var(--bichu-space-4) var(--bichu-space-8);
   }
 }
+
+/* As IMAGENS DA INDICACAO na fila do diretorio: so leitura.
+   A `.thumb` da linha e a mesma da lista de produtos; o que falta aqui e a
+   faixa 16:9 das fotos `card`, que a galeria de upload nao tem (ela e 1:1). */
+.ind-imgs {
+  margin: var(--bichu-space-4) 0;
+}
+.ind-imgs-tit {
+  display: block;
+  margin: 0 0 var(--bichu-space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ind-imgs-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--bichu-space-3);
+  margin: 0 0 var(--bichu-space-3);
+}
+.ind-fotos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--bichu-space-3);
+}
+.ind-foto {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--bichu-radius-md);
+  overflow: hidden;
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+  background: var(--bichu-cor-surface-sunken);
+  display: grid;
+  place-items: center;
+}
+.ind-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ind-foto-n {
+  position: absolute;
+  left: var(--bichu-space-2);
+  top: var(--bichu-space-2);
+  background: var(--bichu-cor-surface);
+  color: var(--bichu-cor-text-primary);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+  border-radius: var(--bichu-radius-sm);
+  padding: 0 var(--bichu-space-2);
+}
+.ind-sem-img {
+  margin: 0;
+  padding: var(--bichu-space-4);
+  border: var(--bichu-border-hairline) dashed var(--bichu-cor-outline);
+  border-radius: var(--bichu-radius-md);
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-secondary);
+}
+.ind-proc {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--bichu-space-2);
+  margin: var(--bichu-space-3) 0 0;
+  padding: var(--bichu-space-3);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+  border-left: var(--bichu-border-medium) solid var(--bichu-cor-primary);
+  border-radius: var(--bichu-radius-sm);
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-secondary);
+}
+.ind-proc .i {
+  flex: none;
+}
+/* A marca de fotos na linha da fila: contagem, nunca as fotos. */
+.fotos-marca {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: var(--bichu-space-1);
+  padding: 0 var(--bichu-space-2);
+  border-radius: var(--bichu-radius-sm);
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-secondary);
+}
