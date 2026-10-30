@@ -18,32 +18,34 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DuvidasDeAjuda, PaginaDaFila } from '../ports/duvidas-de-ajuda.js';
+import { relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import { criarFilaDeAjudaService } from './fila-de-ajuda-service.js';
 
-const VAZIA: PaginaDaFila = { itens: [], total: 0 };
+const VAZIA: PaginaDaFila = { itens: [], total: 0, abertas: 0 };
 
 function bancada() {
   const pedidos: { pagina: number; limite: number }[] = [];
   const duvidas = {
     registrar: () => Promise.resolve(),
-    listarAFila: (pagina: number, limite: number) => {
+    listarAFila: (_situacao: string, pagina: number, limite: number) => {
       pedidos.push({ pagina, limite });
       return Promise.resolve(VAZIA);
     },
+    marcarAtendida: () => Promise.resolve(undefined),
   } as unknown as DuvidasDeAjuda;
-  return { pedidos, servico: criarFilaDeAjudaService(duvidas) };
+  return { pedidos, servico: criarFilaDeAjudaService(duvidas, relogioParado()) };
 }
 
 void describe('a fila de ajuda no painel', () => {
   void it('deixa passar o que esta dentro do teto', async () => {
     const { pedidos, servico } = bancada();
-    await servico.listar(3, 50);
+    await servico.listar('open', 3, 50);
     assert.deepEqual(pedidos, [{ pagina: 3, limite: 50 }]);
   });
 
   void it('recorta o limite acima do teto', async () => {
     const { pedidos, servico } = bancada();
-    await servico.listar(1, 5000);
+    await servico.listar('open', 1, 5000);
     assert.equal(
       pedidos[0]?.limite,
       100,
@@ -55,7 +57,7 @@ void describe('a fila de ajuda no painel', () => {
 
   void it('pagina abaixo de 1 vira 1', async () => {
     const { pedidos, servico } = bancada();
-    await servico.listar(0, 50);
+    await servico.listar('open', 0, 50);
     assert.equal(
       pedidos[0]?.pagina,
       1,
@@ -67,7 +69,7 @@ void describe('a fila de ajuda no painel', () => {
 
   void it('limite zero vira 1', async () => {
     const { pedidos, servico } = bancada();
-    await servico.listar(1, 0);
+    await servico.listar('open', 1, 0);
     assert.equal(
       pedidos[0]?.limite,
       1,
@@ -79,7 +81,7 @@ void describe('a fila de ajuda no painel', () => {
 
   void it('numero quebrado e truncado, e nao arredondado para cima', async () => {
     const { pedidos, servico } = bancada();
-    await servico.listar(2.9, 10.7);
+    await servico.listar('open', 2.9, 10.7);
     assert.deepEqual(
       pedidos[0],
       { pagina: 2, limite: 10 },

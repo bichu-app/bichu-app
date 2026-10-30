@@ -14,6 +14,7 @@
 ///   POST /v1/me/help-requests`.
 /// - Troque `Recebemos` por `Enviamos` na tela: reprova `a confirmacao nao
 ///   afirma envio`.
+/// - Volte a prometer resposta: reprova `a tela NAO promete resposta`.
 /// - Engula a recusa do servidor: reprova `a recusa do servidor aparece`.
 library;
 
@@ -239,6 +240,63 @@ void main() {
             'NADA e enviado: a duvida espera numa fila que uma pessoa abre. '
             'Achado: $afirmacoes',
       );
+    });
+
+    testWidgets('a tela NAO promete resposta, em nenhum dos dois textos', (tester) async {
+      _superficieAlta(tester);
+      await abrirOApp(tester, rede: servidorQueAceita, deposito: depositoLogado());
+      await abrirOFormulario(tester);
+
+      // ANCORA: sem ela a varredura passaria olhando uma tela que nao abriu.
+      expect(find.byType(TelaDeDuvida), findsOneWidget);
+
+      // A PROMESSA que caiu em 30/10/2026. A tela dizia, nos DOIS textos, "a
+      // gente responde pelo e-mail da sua conta" -- e o produto nao cumpre: a
+      // fila do painel nao projeta nome nem e-mail do autor, e o cliente
+      // decidiu que ela serve para ele LER, e nada mais.
+      //
+      // `respond` pega "responde", "responderemos" e "resposta"; `retorn` pega
+      // "retornamos" e "retorno", que seria a mesma promessa com outra palavra.
+      final promessa = RegExp('respond|respost|retorn', caseSensitive: false);
+
+      final noFormulario = _textosDaTela(tester).where((t) => promessa.hasMatch(t)).toList();
+      expect(
+        noFormulario,
+        isEmpty,
+        reason: 'REPROVA: o formulario promete resposta. Achado: $noFormulario',
+      );
+
+      await tester.enterText(find.widgetWithText(BichuField, 'Assunto'), 'Assunto');
+      await tester.enterText(find.widgetWithText(BichuField, 'Sua dúvida'), 'Dúvida.');
+      await tester.pumpAndSettle();
+      await tocar(tester, find.widgetWithText(FilledButton, 'Enviar dúvida'));
+      expect(find.text('Recebemos sua dúvida'), findsOneWidget);
+
+      final noRecebido = _textosDaTela(tester).where((t) => promessa.hasMatch(t)).toList();
+      expect(
+        noRecebido,
+        isEmpty,
+        reason: 'REPROVA: a tela de recebido promete resposta. O produto nao cumpre: '
+            'a fila do painel nao projeta nome nem e-mail do autor, e o cliente '
+            'decidiu em 30/10/2026 que ela serve para ele LER. Achado: $noRecebido',
+      );
+    });
+
+    testWidgets('a tela NAO promete prazo', (tester) async {
+      _superficieAlta(tester);
+      await abrirOApp(tester, rede: servidorQueAceita, deposito: depositoLogado());
+      await abrirOFormulario(tester);
+      await tester.enterText(find.widgetWithText(BichuField, 'Assunto'), 'Assunto');
+      await tester.enterText(find.widgetWithText(BichuField, 'Sua dúvida'), 'Dúvida.');
+      await tester.pumpAndSettle();
+      await tocar(tester, find.widgetWithText(FilledButton, 'Enviar dúvida'));
+      expect(find.text('Recebemos sua dúvida'), findsOneWidget);
+
+      // Prazo prometido por uma tela e prazo que ninguem do outro lado
+      // assinou. "em ate 3 dias" seria a promessa de cima com um numero.
+      final prazo = RegExp('em até|em ate|dias úteis|dias uteis|horas|prazo', caseSensitive: false);
+      final achados = _textosDaTela(tester).where((t) => prazo.hasMatch(t)).toList();
+      expect(achados, isEmpty, reason: 'REPROVA: a tela promete prazo. Achado: $achados');
     });
 
     testWidgets('a recusa do servidor aparece, e a tela nao vai para o sucesso', (tester) async {

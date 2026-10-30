@@ -34,6 +34,16 @@ import '../../widgets/saida_da_tela.dart';
 /// promete prazo, pela mesma razao das denuncias -- prazo prometido por uma
 /// tela e prazo que ninguem do outro lado assinou.
 ///
+/// **E ELA NAO PROMETE RESPOSTA.** Esta tela ja prometeu: *"A gente responde
+/// pelo e-mail da sua conta"*, nos dois textos, e a promessa era falsa. A fila
+/// do painel **nao projeta nome nem e-mail** do autor -- a unica leitura de
+/// pessoa do backoffice e a de pedidos de encontro (D53 a D57), e o cliente
+/// decidiu em 30/10/2026 que a fila serve para ele LER, e nada mais.
+///
+/// O que a tela pode afirmar, e afirma, e que a duvida foi recebida e vai ser
+/// lida. "Vai ser lida" e verdade medida: ha uma fila no painel, com uma tela
+/// que a mostra e um estado de ATENDIDA que alguem marca.
+///
 /// ## O TETO RECUSA, E NUNCA CORTA
 ///
 /// `BichuField` para de aceitar no teto (`maxLength`), entao o tutor VE o
@@ -197,9 +207,18 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
                         // servidor aceitou e gravou, e nao prova entrega.
                         Text('Recebemos sua dúvida', style: textos.headlineSmall),
                         const SizedBox(height: BichuEspaco.e3),
+                        // **SEM PROMESSA DE RESPOSTA**, e a frase anterior
+                        // prometia: *"A gente responde pelo e-mail da sua
+                        // conta"*. O produto nao cumpre isso -- a fila do
+                        // painel nao projeta nome nem e-mail do autor (a
+                        // unica leitura de pessoa do backoffice e outra, D53 a
+                        // D57), e o cliente decidiu em 30/10/2026 que a fila
+                        // serve para ele LER, e nada mais.
+                        //
+                        // Tambem sem PRAZO: "em ate X dias" seria a mesma
+                        // promessa com numero.
                         Text(
-                          'Ela entrou na nossa fila. A gente responde pelo e-mail '
-                          'da sua conta.',
+                          'Ela entrou na nossa fila e vai ser lida pela nossa equipe.',
                           style: textos.bodyLarge,
                         ),
                       ],
@@ -207,9 +226,9 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
                   ),
                 )
               else ...<Widget>[
+                // Ver a nota da tela de recebido: nada aqui promete resposta.
                 Text(
-                  'Conte o que aconteceu. A gente lê todas as mensagens e '
-                  'responde pelo e-mail da sua conta.',
+                  'Conte o que aconteceu. A gente lê todas as mensagens.',
                   style: textos.bodyLarge,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
@@ -228,7 +247,7 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
                   rotulo: 'Sua dúvida',
                   controlador: _texto,
                   erro: _erroDoTexto,
-                  ajuda: 'Quanto mais detalhe, melhor a resposta.',
+                  ajuda: 'Quanto mais detalhe, melhor a gente entende.',
                   limite: _tetoDoTexto,
                   linhas: 6,
                   capitalizacao: TextCapitalization.sentences,

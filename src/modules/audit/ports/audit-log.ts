@@ -369,6 +369,11 @@ export const ACOES_ADMINISTRATIVAS = [
   // Entram aqui porque `acoes-administrativas.test.ts` confere nos dois
   // sentidos: todo `x-audit.action` do contrato precisa estar nesta lista, e
   // todo valor desta lista precisa estar no contrato.
+  // 30/10/2026: a DUVIDA ATENDIDA. Decisao do cliente de marcar a duvida como
+  // atendida. Entra aqui porque `acoes-administrativas.test.ts` confere nos
+  // dois sentidos: todo `x-audit.action` do contrato precisa estar nesta
+  // lista, e todo valor desta lista precisa estar no contrato.
+  'admin.help_request.attended',
   'admin.directory_entry.created',
   'admin.directory_entry.updated',
   // 18/10/2026: a FILA DE REVISAO das indicacoes da comunidade. Aprovar grava

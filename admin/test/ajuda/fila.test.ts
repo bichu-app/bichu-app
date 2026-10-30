@@ -20,7 +20,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { casaComABusca, COLUNAS, dataCurta, previa, type Duvida } from '../../src/ajuda/fila.ts';
+import {
+  atendimentoDe,
+  casaComABusca,
+  COLUNAS,
+  dataCurta,
+  previa,
+  ROTULO_DA_ABA,
+  type Duvida,
+} from '../../src/ajuda/fila.ts';
 
 function duvida(extra: Partial<Duvida> = {}): Duvida {
   return {
@@ -28,6 +36,7 @@ function duvida(extra: Partial<Duvida> = {}): Duvida {
     subject: 'Não salva o segundo pet',
     body: 'A tela volta para o começo quando eu aperto salvar.',
     created_at: '2026-10-29T23:14:54.000Z',
+    status: 'open',
     ...extra,
   };
 }
@@ -69,9 +78,13 @@ describe('a busca da tela', () => {
 });
 
 describe('as colunas da fila', () => {
-  it('não há coluna de autor nem de situação', () => {
+  it('não há coluna de AUTOR', () => {
+    // `Situação` saiu desta lista em 30/10/2026, e só ela: o cliente decidiu
+    // que a fila tem estado. O que continua proibido é o TUTOR — o painel lê
+    // pessoa num lugar só, e não é aqui (D53 a D57). `Situação` fala do estado
+    // da dúvida e de quem a ATENDEU, que é conta do painel.
     const texto = COLUNAS.join(' ').toLowerCase();
-    for (const proibida of ['autor', 'quem', 'tutor', 'e-mail', 'email', 'situação', 'status']) {
+    for (const proibida of ['autor', 'quem', 'tutor', 'e-mail', 'email']) {
       expect(texto).not.toContain(proibida);
     }
   });
@@ -79,8 +92,50 @@ describe('as colunas da fila', () => {
   it('a última coluna é a das ações, e é anônima', () => {
     // `LinhasCarregando` desenha uma célula por entrada de `COLUNAS`: um
     // esqueleto com menos colunas que a tabela salta na troca.
-    expect(COLUNAS).toHaveLength(4);
+    expect(COLUNAS).toHaveLength(5);
     expect(COLUNAS[COLUNAS.length - 1]).toBe('');
+  });
+
+  it('há coluna de SITUAÇÃO, e ela não é de autor', () => {
+    expect(COLUNAS).toContain('Situação');
+  });
+});
+
+describe('o atendimento, na linha da tabela', () => {
+  it('dúvida na fila não mostra atendimento nenhum', () => {
+    expect(atendimentoDe(duvida())).toBeUndefined();
+  });
+
+  it('atendida mostra QUEM e QUANDO', () => {
+    const texto = atendimentoDe(
+      duvida({
+        status: 'attended',
+        attended_by: 'Marina Rocha',
+        attended_at: '2026-10-30T10:00:00.000Z',
+      }),
+    );
+    expect(texto).toContain('Marina Rocha');
+    expect(texto).toContain('30/10/2026');
+  });
+
+  it('atendida sem nome de exibição ganha rótulo do painel, e NUNCA o e-mail', () => {
+    const texto = atendimentoDe(
+      duvida({ status: 'attended', attended_by: null, attended_at: '2026-10-30T10:00:00.000Z' }),
+    );
+    expect(texto).toContain('Conta sem nome de exibição');
+    expect(texto).not.toContain('@');
+  });
+});
+
+describe('as abas', () => {
+  it('são duas, e nenhuma fala de apagar', () => {
+    const rotulos = Object.values(ROTULO_DA_ABA);
+    expect(rotulos).toEqual(['Na fila', 'Atendidas']);
+    for (const r of rotulos) {
+      for (const proibida of ['apag', 'exclu', 'remov', 'arquiv']) {
+        expect(r.toLowerCase()).not.toContain(proibida);
+      }
+    }
   });
 });
 

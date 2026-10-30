@@ -836,8 +836,13 @@ export async function main(): Promise<void> {
   // A MESMA porta para as duas pontas: o app escreve, o painel le. Uma
   // instancia so, entao nao ha como a leitura do painel olhar uma tabela e a
   // escrita do app outra.
-  const duvidasDeAjuda = criarDuvidasDeAjuda(db, ids);
-  const dependenciasDasRotasDaFilaDeAjuda = { fila: criarFilaDeAjudaService(duvidasDeAjuda) };
+  // `escritaAuditada` e a MESMA instancia das outras escritas do painel: a
+  // escrita e o evento de trilha na mesma transacao, e a falha da trilha
+  // desfaz a marcacao (D49).
+  const duvidasDeAjuda = criarDuvidasDeAjuda(db, ids, escritaAuditada);
+  const dependenciasDasRotasDaFilaDeAjuda = {
+    fila: criarFilaDeAjudaService(duvidasDeAjuda, systemClock),
+  };
   const dependenciasDasRotasDeAjuda = {
     duvidas: criarDuvidaDeAjudaService(duvidasDeAjuda, systemClock),
     autenticador: {

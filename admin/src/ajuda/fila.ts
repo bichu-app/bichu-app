@@ -7,20 +7,21 @@
  * nova faz a mescla ser limpa, e e o mesmo arranjo -- e o mesmo motivo -- de
  * `plaquinhas/fila.ts` e de `diretorio/fila.ts`.
  *
- * ## A FILA NAO TEM ESTADO, e a ausencia e decisao registrada
+ * ## A FILA TEM ESTADO desde 30/10/2026
  *
- * Nao ha abas, nao ha `status`, nao ha chip de recorte. A duvida entra e fica.
+ * O cliente decidiu em 29/10 que a duvida *"grava no banco e vai para o
+ * backoffice"*, **sem notificacao**. Em 30/10 ele decidiu a pergunta que eu
+ * tinha deixado aberta: **quer marcar a duvida como atendida**, e ver no menu
+ * quantas faltam.
  *
- * O cliente decidiu em 29/10/2026 que a duvida *"grava no banco e vai para o
- * backoffice"*, **sem notificacao**. Ele nao decidiu o que torna uma duvida
- * RESOLVIDA -- se e responder, se e o tutor confirmar, se e nunca --, e essa
- * pergunta e dele: ela e o que diz se esta tela e uma fila que esvazia ou um
- * registro que so cresce.
+ * Entao ha DUAS abas (`Na fila` e `Atendidas`) e um botao por linha.
  *
- * Coluna de estado que nenhum codigo escreve seria casca: pareceria uma fila
- * com tratamento e nao teria nenhum. Quando a decisao vier, o estado nasce
- * como MUDANCA DE ESTADO e nunca `DELETE` -- "nao apague nada" e decisao desta
- * casa.
+ * **ATENDIDA E MUDANCA DE ESTADO, E NUNCA `DELETE`**: a linha continua na
+ * tabela e so troca de aba. "Nao apague nada" e decisao desta casa.
+ *
+ * **Nao ha DESMARCAR**, e a ausencia e decisao: "atendida" e afirmacao de uma
+ * pessoa sobre o trabalho dela, e apaga-la sem registro e o tipo de reescrita
+ * de historia que "nao apague nada" existe para impedir.
  *
  * ## E A TELA NAO MOSTRA O AUTOR
  *
@@ -30,21 +31,53 @@
  * consequencia e desconfortavel e precisa estar escrita: quem le a duvida aqui
  * **nao tem por onde responder** pelo painel.
  */
-import type { Esquemas } from '../api/cliente.ts';
+import { useCallback, useEffect, useState } from 'react';
+
+import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 
 export type Duvida = Esquemas['AdminHelpRequest'];
+export type SituacaoDaDuvida = Esquemas['AdminHelpRequestStatus'];
+
+/** As abas, na ordem em que a operadora trabalha. */
+export const ABAS: readonly SituacaoDaDuvida[] = ['open', 'attended'];
+
+export const ROTULO_DA_ABA = {
+  open: 'Na fila',
+  attended: 'Atendidas',
+} as const satisfies Record<SituacaoDaDuvida, string>;
+
+export const VAZIO_DA_ABA = {
+  open: 'Ninguém mandou dúvida ainda.',
+  attended: 'Nenhuma dúvida foi marcada como atendida.',
+} as const satisfies Record<SituacaoDaDuvida, string>;
 
 /**
  * As colunas da tabela. Serve a DOIS usos -- o cabecalho e o
  * `LinhasCarregando` --, entao o esqueleto nunca desenha um numero de colunas
  * diferente do da tabela.
  *
- * Nao ha coluna de autor, e nao ha de situacao. Ver o cabecalho.
+ * **Nao ha coluna de AUTOR**, e nunca vai haver enquanto a D53 valer: o painel
+ * le pessoa num lugar so, e nao e aqui. `Situacao` fala do ESTADO da duvida e
+ * de quem a ATENDEU -- conta do painel, nao o tutor.
  */
-export const COLUNAS = ['Assunto', 'Dúvida', 'Quando', ''];
+export const COLUNAS = ['Assunto', 'Dúvida', 'Quando', 'Situação', ''];
 
 /** Os padroes da lista, constante de modulo porque `useParametrosDaLista` o exige estavel. */
-export const PADROES = { busca: '' };
+export const PADROES = { estado: 'open', busca: '' };
+
+/**
+ * Quem marcou e quando, numa frase -- ou `undefined` na aba `Na fila`.
+ *
+ * O nome e o da OPERADORA, de `admin_accounts`. Quando ele vier nulo com a
+ * duvida atendida, o rotulo e do painel e nunca o e-mail nem parte dele: e a
+ * mesma regra que `AdminJoinRequest.requester.display_name` escreve para a
+ * outra fila.
+ */
+export function atendimentoDe(duvida: Duvida): string | undefined {
+  if (duvida.status !== 'attended') return undefined;
+  const quem = duvida.attended_by ?? 'Conta sem nome de exibição';
+  return `${quem} · ${dataCurta(duvida.attended_at)}`;
+}
 
 export function dataCurta(iso: string | null | undefined): string {
   if (iso === null || iso === undefined || iso === '') return '—';
@@ -77,4 +110,46 @@ export function casaComABusca(duvida: Duvida, busca: string): boolean {
   if (busca === '') return true;
   const alvo = `${duvida.subject} ${duvida.body}`.toLowerCase();
   return alvo.includes(busca);
+}
+
+/**
+ * A contagem do aviso do menu: quantas duvidas estao ABERTAS.
+ *
+ * Mesmo molde de `useIndicacoesPendentes`: pede `limit: 1` porque o que
+ * interessa e `pending_total`, e nao as linhas. O numero vem do SERVIDOR e nao
+ * de uma soma na tela -- uma soma local contaria so a pagina carregada e
+ * diria "2 pendentes" sobre uma fila de duzentas.
+ *
+ * `versao` existe para a tela pedir o numero de novo depois de marcar uma como
+ * atendida: sem isso o menu ficaria com o numero velho ate a proxima troca de
+ * pagina, anunciando trabalho que ja foi feito.
+ */
+export function useDuvidasPendentes(api: ClienteDaApi, versao = 0): number | undefined {
+  const [pendentes, setPendentes] = useState<number>();
+
+  const buscar = useCallback(
+    async (sinal: AbortSignal) => {
+      const { data } = await api.GET('/admin/help-requests', {
+        params: { query: { status: 'open', page: 1, limit: 1 } },
+        signal: sinal,
+      });
+      return data?.pending_total;
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    const controle = new AbortController();
+    void buscar(controle.signal)
+      .then((n) => {
+        if (!controle.signal.aborted && n !== undefined) setPendentes(n);
+      })
+      // Silencio de proposito: um aviso de contagem que nao carregou nao e
+      // motivo para a casca do painel mostrar erro. O item do menu fica sem o
+      // numero, e a tela da fila diz a verdade quando alguem abrir.
+      .catch(() => undefined);
+    return () => controle.abort();
+  }, [buscar, versao]);
+
+  return pendentes;
 }

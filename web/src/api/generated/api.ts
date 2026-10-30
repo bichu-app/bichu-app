@@ -7236,6 +7236,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/help-requests/{requestRef}/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["HelpRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca a duvida como atendida
+         * @description Decisao do cliente de 30/10/2026: ele quer marcar a duvida como
+         *     atendida, e ver no menu quantas faltam.
+         *
+         *     **MUDANCA DE ESTADO, E NUNCA `DELETE`.** A linha continua na tabela e
+         *     so sai da aba `Na fila`: `attended_at` e `attended_by_admin_id` passam
+         *     a ter valor, e nada e apagado. "Nao apague nada" e decisao desta casa.
+         *
+         *     **A transicao e auditavel por dois caminhos**, e os dois sao
+         *     deliberados: `x-audit` grava a acao em `audit.events`, e as duas
+         *     colunas guardam quem marcou e quando -- porque o painel **nao le a
+         *     trilha**, e a tela precisa mostrar a autoria sem abrir outra
+         *     ferramenta.
+         *
+         *     ## SO MARCA, e nao desmarca
+         *
+         *     Nao existe operacao de desfazer, e a ausencia e decisao: "atendida" e
+         *     afirmacao de uma pessoa sobre o trabalho dela, e apaga-la sem registro
+         *     e o tipo de reescrita de historia que "nao apague nada" existe para
+         *     impedir. Se o cliente pedir, e outra operacao, com acao de trilha
+         *     propria.
+         *
+         *     **Idempotente de proposito**: marcar de novo o que ja esta atendido
+         *     responde `200` com a linha como ela esta, e **nao** troca quem marcou
+         *     nem quando. Dois operadores abrindo a mesma fila e uso normal, e um
+         *     `409` ali obrigaria o painel a recarregar para descobrir que o trabalho
+         *     ja estava feito.
+         *
+         *     **NADA DO AUTOR SAI AQUI**, como na listagem: ver a descricao dela.
+         */
+        post: operations["attendAdminHelpRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/broadcasts": {
         parameters: {
             query?: never;
@@ -15347,10 +15397,30 @@ export interface components {
             total: number;
         };
         /**
+         * @description A situacao da duvida na fila (cliente, 30/10/2026).
+         *
+         *     `open` e o trabalho que espera; `attended` e o que alguem do painel ja
+         *     marcou. **Nao ha terceiro valor**, e em particular nao ha `deleted`
+         *     nem `archived`: a duvida nao sai da tabela, e "nao apague nada" e
+         *     decisao desta casa.
+         *
+         *     Derivado de `attended_at` no banco, e nao uma coluna de texto: as duas
+         *     colunas do estado (`attended_at` e `attended_by_admin_id`) andam juntas
+         *     por `CHECK`, e um terceiro lugar guardando a mesma verdade seria um
+         *     lugar a mais para ela divergir.
+         * @enum {string}
+         */
+        AdminHelpRequestStatus: "open" | "attended";
+        /**
          * @description Uma duvida na fila. **Nada do autor sai aqui** -- sem nome, e-mail,
          *     telefone, UUID, identificador estavel nem historico. A unica leitura de
          *     pessoa do backoffice v1 segue sendo `listAdminNetworkJoinRequests`
          *     (D53 a D57); ver a descricao da operacao.
+         *
+         *     `attended_by` **e a conta do PAINEL** que marcou, e nao o tutor: ela
+         *     vem de `admin_accounts`, e o painel ja mostra o nome de quem esta
+         *     logado. Nao e leitura de pessoa no sentido da D53, que fala de conta do
+         *     APP -- e, mesmo assim, daqui sai so o nome de exibicao da operadora.
          */
         AdminHelpRequest: {
             /**
@@ -15373,17 +15443,44 @@ export interface components {
             body: string;
             /** Format: date-time */
             created_at: string;
+            status: components["schemas"]["AdminHelpRequestStatus"];
+            /**
+             * Format: date-time
+             * @description Quando alguem marcou como atendida. Nulo enquanto esta na fila.
+             */
+            attended_at?: string | null;
+            /**
+             * @description O nome de exibicao da OPERADORA que marcou, de `admin_accounts`.
+             *     Nulo enquanto esta na fila.
+             *
+             *     Nao e o tutor: ver a descricao deste schema. Sai o nome e nada
+             *     mais -- sem e-mail, sem papel e sem identificador da conta do
+             *     painel.
+             */
+            attended_by?: string | null;
         };
         AdminHelpRequestPage: {
             items: components["schemas"]["AdminHelpRequest"][];
             page: number;
             limit: number;
             /**
-             * @description O total da fila inteira, e nao da pagina. Conta LINHAS e nao
-             *     pessoas, e nao ha recorte por autor que o torne um numero sobre
-             *     alguem.
+             * @description Quantas linhas o recorte desta chamada tem, com o filtro aplicado.
+             *     Conta LINHAS e nao pessoas, e nao ha recorte por autor que o torne
+             *     um numero sobre alguem.
              */
             total: number;
+            /**
+             * @description **A contagem do aviso do menu**, e ela IGNORA o filtro de
+             *     proposito: o numero que o item da navegacao mostra responde
+             *     "quanto trabalho esta esperando", e nao "quantas linhas esta aba
+             *     tem". Mesma forma e mesma razao de
+             *     `AdminDirectorySuggestionPage.pending_total`.
+             *
+             *     Conta so `open`. Com o filtro em `attended` ele continua dizendo
+             *     quantas faltam -- filtrar os dois juntos faria o painel anunciar
+             *     "0 pendentes" sempre que alguem abrisse a aba dos atendidos.
+             */
+            pending_total: number;
         };
         StoreTagPage: {
             items: components["schemas"]["StoreTagRef"][];
@@ -16940,6 +17037,8 @@ export interface components {
         EventSlug: components["schemas"]["Slug"];
         /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
         JoinRequestRef: string;
+        /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+        HelpRequestRef: string;
         /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
         CollarTagRequestRef: string;
         /**
@@ -24459,6 +24558,12 @@ export interface operations {
     listAdminHelpRequests: {
         parameters: {
             query?: {
+                /**
+                 * @description Sem o parametro vem a fila ABERTA, que e o trabalho que espera.
+                 *     `state` nao serve de nome aqui pela mesma razao da fila de
+                 *     indicacoes: ele ja quer dizer outra coisa no contrato.
+                 */
+                status?: components["schemas"]["AdminHelpRequestStatus"];
                 page?: components["parameters"]["AdminPage"];
                 limit?: components["parameters"]["AdminLimit"];
             };
@@ -24480,6 +24585,37 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    attendAdminHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco da duvida (`AdminHelpRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["HelpRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A duvida como ela ficou. Quem ja estava atendida volta igual, com o
+             *     autor e o instante do PRIMEIRO atendimento.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHelpRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

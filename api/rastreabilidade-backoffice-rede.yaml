@@ -973,21 +973,41 @@ telas:
   # de interface, com zero credenciais no banco e nenhum portao acusando.
   - tela: "Ajuda - fila de duvidas"
     prototipo: nenhum
-    estados: [fila, carregando, vazio, erro, duvida_aberta]
+    estados: [fila, atendidas, carregando, vazio, erro, duvida_aberta, atendendo, atendida]
     operacoes:
       - operationId: listAdminHelpRequests
         situacao: contrato
         usa:
+          - query:status
           - query:page
           - query:limit
           - resp:items
           - resp:page
           - resp:limit
           - resp:total
+          - resp:pending_total
           - resp:items[].ref
           - resp:items[].subject
           - resp:items[].body
           - resp:items[].created_at
+          - resp:items[].status
+          - resp:items[].attended_at
+          - resp:items[].attended_by
+          - enum:AdminHelpRequestStatus.open
+          - enum:AdminHelpRequestStatus.attended
+      # 30/10/2026. MARCAR COMO ATENDIDA: decisao do cliente de que a fila
+      # precisa de estado. Mudanca de estado e nunca DELETE, e a transicao e
+      # auditavel por dois caminhos -- `x-audit` em audit.events, e as colunas
+      # `attended_at`/`attended_by_admin_id` que a TELA mostra, porque o painel
+      # nao le a trilha.
+      - operationId: attendAdminHelpRequest
+        situacao: contrato
+        usa:
+          - path:requestRef
+          - resp:ref
+          - resp:status
+          - resp:attended_at
+          - resp:attended_by
     nota: "NADA do autor aparece nesta tela, e a ausencia e a regra e nao recorte de quem a desenhou: o contrato afirma em TRES lugares que `listAdminNetworkJoinRequests` e a unica leitura de pessoa do backoffice v1 (D53 a D57). Consequencia escrita: o administrador LE a duvida e nao tem por onde responder -- o caminho de resposta e decisao aberta do cliente."
 
 correspondencias:

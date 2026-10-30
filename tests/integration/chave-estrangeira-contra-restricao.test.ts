@@ -1292,6 +1292,16 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // -------------------------------------------------------------------------
   // duvida de ajuda do menu do usuario (20261029000010, 29/10/2026)
   // -------------------------------------------------------------------------
+  // 30/10/2026: quem MARCOU a duvida como atendida. Conta de `admin_accounts` e
+  // nunca de `users` (ADR-0027 item 20.2). Sem `ON DELETE`, logo `NO ACTION`,
+  // pelo mesmo motivo de `network_events.created_by_admin_id`: conta do painel
+  // nao se apaga, desativa, e a trava e o que faz um expurgo operacional parar
+  // em vez de apagar a autoria.
+  'public.help_requests.help_requests_attended_by_admin_id_fkey': {
+    colunas: ['attended_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'NO ACTION',
+  },
   'public.help_requests.help_requests_author_user_id_fkey': {
     colunas: ['author_user_id'],
     referencia: 'public.users',

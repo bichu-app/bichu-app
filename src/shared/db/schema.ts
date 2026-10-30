@@ -2876,6 +2876,16 @@ export interface HelpRequestsTable {
   /** 2 a 4000 por `CHECK`. Texto livre, sem filtro de palavra. */
   body: string;
   created_at: CriadoEm;
+  /**
+   * Quando alguem do painel marcou como atendida. **Nula = na fila.**
+   *
+   * Coluna de DATA e nao booleano, como `dismissed_at`. Anda junto com
+   * `attended_by_admin_id`: o `CHECK help_requests_atendida_tem_autor` recusa
+   * uma sem a outra.
+   */
+  attended_at: Date | null;
+  /** Quem marcou, em `admin_accounts` e NUNCA em `users`. `NO ACTION`. */
+  attended_by_admin_id: string | null;
 }
 
 export interface Database {

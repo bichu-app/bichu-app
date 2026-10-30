@@ -31,8 +31,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { hashDeToken } from '../../../../shared/crypto/digest.js';
 import { criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
 import {
+  CABECALHO_ANTI_CSRF,
   CABECALHO_DA_SUPERFICIE,
   COOKIE_DA_SESSAO_ADMINISTRATIVA,
   escoparRotasAdministrativas,
@@ -46,8 +48,10 @@ import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import {
   registrarRotasDaFilaDeAjuda,
+  rotaDeAtenderDuvida,
   type DependenciasDasRotasDaFilaDeAjuda,
 } from './admin-help-request-routes.js';
+import type { DuvidaNaFila } from '../../ports/duvidas-de-ajuda.js';
 import {
   registrarRotasDeAjuda,
   type DependenciasDasRotasDeAjuda,
@@ -304,15 +308,22 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
       },
     ],
     total: 7,
+    // DIFERENTE de `total`, de proposito: com os dois iguais, uma rota que
+    // trocasse um pelo outro passaria. `abertas` ignora o filtro e e o
+    // numerinho do menu.
+    abertas: 3,
   };
 
-  function dependenciasDaFila(registro: { pedido?: { pagina: number; limite: number } }) {
+  function dependenciasDaFila(registro: {
+    pedido?: { situacao: string; pagina: number; limite: number };
+  }) {
     return {
       fila: {
-        listar: (pagina: number, limite: number) => {
-          registro.pedido = { pagina, limite };
+        listar: (situacao: string, pagina: number, limite: number) => {
+          registro.pedido = { situacao, pagina, limite };
           return Promise.resolve(PAGINA);
         },
+        atender: () => Promise.resolve(undefined),
       },
     } as unknown as DependenciasDasRotasDaFilaDeAjuda;
   }
@@ -368,7 +379,7 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
   void it('ISCA: GET /admin/help-requests nao e 404 -- ela esta registrada', async () => {
     zerarInventario();
-    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const registro: { pedido?: { situacao: string; pagina: number; limite: number } } = {};
     const app = servidorDaFila(dependenciasDaFila(registro));
     try {
       const resposta = await app.inject({
@@ -388,15 +399,33 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
       // O CORPO, campo a campo. **Nenhum portao deste repositorio confere corpo
       // de resposta**: so o corpo da REQUISICAO e validado.
       const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
-      assert.deepEqual(Object.keys(corpo).sort(), ['items', 'limit', 'page', 'total']);
-      assert.equal(corpo['total'], 7, 'REPROVA: `total` nao e o da fila inteira.');
+      assert.deepEqual(Object.keys(corpo).sort(), [
+      'items',
+      'limit',
+      'page',
+      'pending_total',
+      'total',
+    ]);
+      assert.equal(corpo['total'], 7, 'REPROVA: `total` nao e o do recorte desta chamada.');
+      assert.equal(
+        corpo['pending_total'],
+        3,
+        'REPROVA: `pending_total` nao veio, ou veio igual a `total`. Ele e o numerinho ' +
+          'do menu e IGNORA o filtro: com o filtro aplicado nos dois, o menu anunciaria ' +
+          '"0 pendentes" toda vez que alguem abrisse a aba dos atendidos.',
+      );
+      // O CONJUNTO EXATO, e nao "contem": e a lista fechada que impede o autor
+      // de entrar. `attended_at` e `attended_by` falam da OPERADORA que
+      // marcou -- conta do painel --, e `status` e derivado do instante.
+      //
+      // NADA DO TUTOR pode sair: o contrato afirma em TRES lugares que a fila
+      // de pedidos de encontro e "a unica leitura de pessoa do backoffice v1"
+      // (D53 a D57), e projeta-lo aqui criaria a segunda e tornaria aquela
+      // frase falsa nos tres lugares.
       assert.deepEqual(
         Object.keys((corpo['items'] as Record<string, unknown>[])[0] ?? {}).sort(),
-        ['body', 'created_at', 'ref', 'subject'],
-        'REPROVA: a linha carrega campo alem dos quatro. NADA do autor pode sair: o ' +
-          'contrato afirma em TRES lugares que a fila de pedidos de encontro e "a unica ' +
-          'leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor aqui ' +
-          'criaria a segunda e tornaria aquela frase falsa.',
+        ['attended_at', 'attended_by', 'body', 'created_at', 'ref', 'status', 'subject'],
+        'REPROVA: a linha carrega campo fora da lista fechada.',
       );
     } finally {
       await app.close();
@@ -405,7 +434,7 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
   void it('ISCA: `page` e `limit` chegam ao servico -- a fila pagina de verdade', async () => {
     zerarInventario();
-    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const registro: { pedido?: { situacao: string; pagina: number; limite: number } } = {};
     const app = servidorDaFila(dependenciasDaFila(registro));
     try {
       const resposta = await app.inject({
@@ -416,7 +445,7 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
       assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
       assert.deepEqual(
         registro.pedido,
-        { pagina: 3, limite: 10 },
+        { situacao: 'open', pagina: 3, limite: 10 },
         'REPROVA: a rota ignorou `page`/`limit`. Uma fila que devolve sempre a primeira ' +
           'pagina tem fundo falso: o revisor rola, nao chega ao fim, e as duvidas mais ' +
           'velhas nunca sao lidas por ninguem.',
@@ -431,18 +460,188 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
   void it('ISCA: sem `page` nem `limit` a fila usa os padroes do contrato', async () => {
     zerarInventario();
-    const registro: { pedido?: { pagina: number; limite: number } } = {};
+    const registro: { pedido?: { situacao: string; pagina: number; limite: number } } = {};
     const app = servidorDaFila(dependenciasDaFila(registro));
     try {
       await app.inject({ method: 'GET', url: '/admin/help-requests', headers: DO_PAINEL });
       assert.deepEqual(
         registro.pedido,
-        { pagina: 1, limite: 50 },
+        { situacao: 'open', pagina: 1, limite: 50 },
         'REPROVA: os padroes nao sao os do contrato (`AdminPage` default 1, 50 por ' +
           'pagina como as outras duas filas do painel).',
       );
     } finally {
       await app.close();
     }
+  });
+});
+
+void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () => {
+  const ORIGEM_DA_ESCRITA = 'https://painel.exemplo.test';
+  /**
+   * O token anti-CSRF, e o HASH dele na sessao.
+   *
+   * Sem isto a guarda responde **403**, e foi o que ela fez quando eu montei a
+   * bancada com um hash de zeros: o par cookie + `X-CSRF-Token` e exigido em
+   * todo metodo nao seguro, e a rota de marcar e POST. A recusa e o desenho
+   * funcionando -- so que, aqui, ela escondia o que o caso queria medir.
+   */
+  const TOKEN_ANTI_CSRF = 'token-anti-csrf-de-teste';
+  const ATENDIDA: DuvidaNaFila = {
+    ref: 'AAAAAAAAAAAAAAAAAAAAAA',
+    assunto: 'Nao salva o segundo pet',
+    texto: 'A tela volta para o comeco.',
+    criadaEm: Date.parse('2026-10-29T23:14:54.000Z') as unknown as never,
+    atendidaEm: Date.parse('2026-10-30T10:00:00.000Z') as unknown as never,
+    atendidaPor: 'Rita da Operacao',
+  };
+
+  const SESSAO_DA_ESCRITA = {
+    sessionId: 'sessao-de-teste',
+    adminAccountId: 'conta-admin-de-teste',
+    displayName: 'Rita da Operacao',
+    papeis: ['admin'],
+    csrfTokenHash: hashDeToken(TOKEN_ANTI_CSRF),
+    etiqueta: 'aaaaaaaa',
+    instanteDaSenha: new Date(0),
+  } as unknown as SessaoAdministrativaConferida;
+
+  function bancada(atender: DependenciasDasRotasDaFilaDeAjuda['fila']['atender']) {
+    const app = criarServidor({
+      problemBaseUrl: BASE_DE_PROBLEMA,
+      isProduction: false,
+      teto: tetoDeTeste(criarContadorEmMemoria(() => Date.now())),
+      bodyLimitBytes: 1_048_576,
+    });
+    void escoparRotas(app, '', (v1) => {
+      escoparRotasAdministrativas(
+        v1,
+        {
+          origem: ORIGEM_DA_ESCRITA,
+          sessoes: {
+            conferir: () => Promise.resolve(SESSAO_DA_ESCRITA),
+            registrarRecusa: () => Promise.resolve(),
+          } as unknown as PortaDaSessaoAdministrativa,
+        },
+        (adm) => {
+          registrarRotasDaFilaDeAjuda(adm, {
+            fila: {
+              listar: () => Promise.resolve({ itens: [], total: 0, abertas: 0 }),
+              atender,
+            },
+          });
+        },
+      );
+    });
+    return app;
+  }
+
+  /** O painel manda superficie, cookie, Origin e o token anti-CSRF. */
+  const DA_ESCRITA = {
+    [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
+    cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,
+    origin: ORIGEM_DA_ESCRITA,
+    [CABECALHO_ANTI_CSRF]: TOKEN_ANTI_CSRF,
+  };
+
+  void it('ISCA: POST .../attendance nao e 404 -- ela esta registrada', async () => {
+    zerarInventario();
+    const vistos: { ref: string; operadora: string }[] = [];
+    const app = bancada((ator, ref) => {
+      vistos.push({ ref, operadora: ator.adminAccountId });
+      return Promise.resolve(ATENDIDA);
+    });
+    try {
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/admin/help-requests/AAAAAAAAAAAAAAAAAAAAAA/attendance',
+        headers: DA_ESCRITA,
+      });
+      assert.notEqual(
+        resposta.statusCode,
+        404,
+        'REPROVA: a rota respondeu 404. Sem ela o cliente ve o botao e a duvida nunca ' +
+          'sai da fila -- e a fila deixa de significar "o que falta".',
+      );
+      assert.equal(resposta.statusCode, 200, `Corpo: ${resposta.body}`);
+
+      // O CORPO, campo a campo. Nenhum portao deste repositorio confere corpo
+      // de resposta: so o da REQUISICAO e validado.
+      assert.deepEqual(JSON.parse(resposta.body), {
+        ref: 'AAAAAAAAAAAAAAAAAAAAAA',
+        subject: 'Nao salva o segundo pet',
+        body: 'A tela volta para o comeco.',
+        created_at: '2026-10-29T23:14:54.000Z',
+        status: 'attended',
+        attended_at: '2026-10-30T10:00:00.000Z',
+        attended_by: 'Rita da Operacao',
+      });
+
+      assert.deepEqual(
+        vistos,
+        [{ ref: 'AAAAAAAAAAAAAAAAAAAAAA', operadora: 'conta-admin-de-teste' }],
+        'REPROVA: a operadora nao saiu da SESSAO. Quem marcou tem de ser quem estava ' +
+          'logado; aceitar isso do corpo ou da consulta deixaria uma pessoa assinar o ' +
+          'trabalho de outra.',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: `ref` que nao existe e 404, e nao 200 calado', async () => {
+    zerarInventario();
+    const app = bancada(() => Promise.resolve(undefined));
+    try {
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/admin/help-requests/ZZZZZZZZZZZZZZZZZZZZZZ/attendance',
+        headers: DA_ESCRITA,
+      });
+      assert.equal(
+        resposta.statusCode,
+        404,
+        `REPROVA: respondeu ${String(resposta.statusCode)}. Um 200 sobre um ref que ` +
+          'nao existe faria a operadora acreditar que fechou um trabalho que nao existe.',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: a rota NAO aceita GET -- marcar e escrita', async () => {
+    zerarInventario();
+    const app = bancada(() => Promise.resolve(ATENDIDA));
+    try {
+      const resposta = await app.inject({
+        method: 'GET',
+        url: '/admin/help-requests/AAAAAAAAAAAAAAAAAAAAAA/attendance',
+        headers: DA_ESCRITA,
+      });
+      assert.notEqual(
+        resposta.statusCode,
+        200,
+        'REPROVA: um GET marcou a duvida. Metodo seguro que muda estado atravessa ' +
+          'guarda de CSRF e e exatamente o que o ADR-0027 item 3 proibe.',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  void it('ISCA: a rota declara TRILHA, e o verbo e de escrita', () => {
+    // A regra 2 do portao de contrato administrativo cobra isto no contrato; o
+    // `defineRoute` e o espelho dela no codigo, e `rotas-registradas-contra-o-contrato`
+    // compara os dois. Este caso e a terceira linha: ele le a declaracao.
+    assert.deepEqual(rotaDeAtenderDuvida.audit, {
+      action: 'admin.help_request.attended',
+      resourceKind: 'help_request',
+    });
+    assert.equal(
+      rotaDeAtenderDuvida.method,
+      'post',
+      'REPROVA: a rota deixou de ser POST. Escrita administrativa em metodo seguro ' +
+        'passa ao largo do `adminCsrf`.',
+    );
   });
 });

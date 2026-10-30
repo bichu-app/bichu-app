@@ -36,8 +36,14 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
-import { defineRoute } from '../../../../shared/http/route-definition.js';
-import type { DuvidaNaFila, PaginaDaFila } from '../../ports/duvidas-de-ajuda.js';
+import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
+import { problemas } from '../../../../shared/http/errors.js';
+import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
+import type {
+  DuvidaNaFila,
+  PaginaDaFila,
+  SituacaoDaDuvida,
+} from '../../ports/duvidas-de-ajuda.js';
 import type { FilaDeAjudaAdministrativa } from '../../application/fila-de-ajuda-service.js';
 
 const ADMIN = ['admin'] as const;
@@ -45,6 +51,17 @@ const ADMIN = ['admin'] as const;
 const PAGINA_INICIAL = 1;
 /** 50, como as outras duas filas do painel. */
 const TAMANHO_PADRAO = 50;
+/** Sem filtro vem a fila ABERTA: o trabalho que espera. */
+const SITUACAO_PADRAO: SituacaoDaDuvida = 'open';
+
+/** D52: 120 escritas em 10 minutos por conta, somadas todas as do painel. */
+const BALDE_DE_ESCRITA = {
+  bucket: 'admin_write',
+  dimension: ['account'],
+  limit: 120,
+  window: '10m',
+  onExceed: 'deny_429',
+} as const satisfies RateLimitEntry;
 
 export const rotaDeListarDuvidasDeAjuda = defineRoute({
   operationId: 'listAdminHelpRequests',
@@ -57,13 +74,44 @@ export const rotaDeListarDuvidasDeAjuda = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * MARCAR COMO ATENDIDA (cliente, 30/10/2026).
+ *
+ * `audit` e obrigatorio aqui por TIPO e por portao: escrita administrativa sem
+ * trilha e o estado que a D49 proibe, e a regra 2 do portao de contrato
+ * administrativo cobra `x-audit` com `action` e `resource_kind` mais
+ * `adminCsrf` em todo metodo nao seguro.
+ *
+ * **`effects: []` E CORRETO, e vale dizer por que**: marcar como atendida nao
+ * notifica ninguem (o tutor nao e avisado -- nada e enviado, por decisao de
+ * 29/10), nao gera trabalho humano (ela o ENCERRA), nao verifica segredo, nao
+ * revela credencial e nao e consulta cara. E tambem **nao** e
+ * `irreversible_write`: a linha continua inteira na tabela, e o que muda e um
+ * estado. O que o irreversivel descreveria e um `DELETE`, que esta rota nao
+ * faz e que esta casa nao faz.
+ */
+export const rotaDeAtenderDuvida = defineRoute({
+  operationId: 'attendAdminHelpRequest',
+  method: 'post',
+  path: '/admin/help-requests/:requestRef/attendance',
+  effects: [],
+  adminRoles: ADMIN,
+  audit: { action: 'admin.help_request.attended', resourceKind: 'help_request' },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
 export interface DependenciasDasRotasDaFilaDeAjuda {
   readonly fila: FilaDeAjudaAdministrativa;
 }
 
 interface QueryDaFila {
+  status?: SituacaoDaDuvida;
   page?: number | string;
   limit?: number | string;
+}
+
+function parametro(request: FastifyRequest, nome: string): string {
+  return (request.params as Record<string, string>)[nome] ?? '';
 }
 
 /**
@@ -100,6 +148,12 @@ function comoResposta(duvida: DuvidaNaFila): Record<string, unknown> {
     subject: duvida.assunto,
     body: duvida.texto,
     created_at: new Date(duvida.criadaEm).toISOString(),
+    // O ESTADO E DERIVADO do instante, e nao um campo guardado: uma coluna de
+    // texto ao lado seria um segundo lugar para a mesma verdade divergir.
+    status: duvida.atendidaEm === undefined ? 'open' : 'attended',
+    attended_at:
+      duvida.atendidaEm === undefined ? null : new Date(duvida.atendidaEm).toISOString(),
+    attended_by: duvida.atendidaPor ?? null,
   };
 }
 
@@ -113,6 +167,9 @@ function comoPagina(
     page,
     limit,
     total: pagina.total,
+    // IGNORA O FILTRO, de proposito: e o numerinho do menu, e ele responde
+    // "quanto trabalho esta esperando" e nao "quantas linhas esta aba tem".
+    pending_total: pagina.abertas,
   };
 }
 
@@ -138,8 +195,27 @@ export function registrarRotasDaFilaDeAjuda(
       const query = (request.query ?? {}) as QueryDaFila;
       const page = inteiroDaConsulta(query.page, PAGINA_INICIAL);
       const limit = inteiroDaConsulta(query.limit, TAMANHO_PADRAO);
-      const pagina = await deps.fila.listar(page, limit);
+      // `status` chega validado contra o enum do contrato: valor fora da lista
+      // e 400 antes do handler, e e por isso que nao ha `switch` de defesa.
+      const pagina = await deps.fila.listar(query.status ?? SITUACAO_PADRAO, page, limit);
       return reply.send(comoPagina(pagina, page, limit));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeAtenderDuvida,
+    { resolvedores: { account: contaDoTeto } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // A OPERADORA sai da SESSAO administrativa, e nunca do corpo nem da
+      // consulta: quem marcou e quem estava logado, e aceitar isso de fora
+      // deixaria uma pessoa assinar o trabalho de outra.
+      const ator = atorAdministrativoDe(request);
+      const duvida = await deps.fila.atender(ator, parametro(request, 'requestRef'));
+      // 404 e nao 400: `ref` bem formado que nao existe e "nao encontramos
+      // isso", e a forma ja foi conferida pelo esquema do contrato.
+      if (duvida === undefined) throw problemas.naoEncontrado();
+      return reply.send(comoResposta(duvida));
     },
   );
 }

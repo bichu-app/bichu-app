@@ -26,6 +26,7 @@
  * e a disputar com quem esta nele. O que fica pronto aqui e tudo o que a rota
  * precisaria: a porta, a consulta e a prova de que ela le.
  */
+import type { AtorAdministrativo } from '../../audit/ports/trilha-administrativa.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 /** O que o tutor escreveu, ja aparado e dentro dos tetos do contrato. */
@@ -61,18 +62,46 @@ export interface DuvidaNaFila {
   readonly assunto: string;
   readonly texto: string;
   readonly criadaEm: Instant;
+  /**
+   * Quando foi atendida, ou `undefined` enquanto esta na fila.
+   *
+   * O estado NAO e um campo de texto aqui: ele e derivado deste instante, e
+   * `atendidaEm === undefined` e a unica fonte da verdade. Um `status: 'open'`
+   * ao lado seria um segundo lugar guardando a mesma coisa, e um segundo lugar
+   * para ela divergir.
+   */
+  readonly atendidaEm?: Instant;
+  /**
+   * O nome de exibicao da OPERADORA que marcou, ou `undefined`.
+   *
+   * E conta de `admin_accounts` e nao o tutor: ver o cabecalho deste arquivo
+   * sobre a D53. Sai o nome e nada mais.
+   */
+  readonly atendidaPor?: string;
 }
+
+/** O recorte da fila. Derivado de `attended_at`, e nao uma coluna de texto. */
+export type SituacaoDaDuvida = 'open' | 'attended';
 
 /** Uma pagina da fila, no formato que o painel ja usa nas outras duas. */
 export interface PaginaDaFila {
   readonly itens: readonly DuvidaNaFila[];
   /**
-   * O total de duvidas, para o painel desenhar quantas paginas ha.
+   * O total do RECORTE desta chamada, com o filtro aplicado.
    *
    * Conta LINHAS e nao pessoas, e nao ha recorte por autor que o torne um
    * numero sobre alguem.
    */
   readonly total: number;
+  /**
+   * Quantas estao ABERTAS, **ignorando o filtro**.
+   *
+   * E o numerinho do menu, e ele responde "quanto trabalho esta esperando".
+   * Passar o filtro aqui faria o painel anunciar "0 pendentes" toda vez que
+   * alguem abrisse a aba dos atendidos -- que e o defeito que a fila da Rede
+   * ja produziu, e esta registrado no contrato dela.
+   */
+  readonly abertas: number;
 }
 
 export interface DuvidasDeAjuda {
@@ -89,5 +118,34 @@ export interface DuvidasDeAjuda {
    *
    * `pagina` comeca em 1, como em toda pagina do painel.
    */
-  listarAFila(pagina: number, limite: number): Promise<PaginaDaFila>;
+  listarAFila(
+    situacao: SituacaoDaDuvida,
+    pagina: number,
+    limite: number,
+  ): Promise<PaginaDaFila>;
+
+  /**
+   * Marca como atendida, e devolve a duvida como ela ficou. `undefined` quando
+   * o `ref` nao existe.
+   *
+   * **A ESCRITA E O EVENTO DE TRILHA NA MESMA TRANSACAO** (ADR-0027 D49): a
+   * falha da trilha desfaz a marcacao. `x-audit` no contrato e DECLARACAO --
+   * o portao a confere, e nada a escreve. Medi isso numa pilha de pe: com a
+   * declaracao no lugar e sem esta escrita, `audit.events` nao tinha linha
+   * nenhuma de `admin.help_request.attended`, e a transicao que o cliente
+   * pediu auditavel nao era.
+   *
+   * **IDEMPOTENTE**: marcar de novo o que ja esta atendido NAO troca quem
+   * marcou nem quando. Dois operadores na mesma fila e uso normal, e sobrepor
+   * a autoria faria o segundo apagar o registro do primeiro -- um `DELETE`
+   * disfarcado de `UPDATE`.
+   *
+   * Nao existe desmarcar, e a ausencia e decisao: ver o cabecalho da migracao
+   * `20261030000001`.
+   */
+  marcarAtendida(
+    ator: AtorAdministrativo,
+    ref: string,
+    agora: Instant,
+  ): Promise<DuvidaNaFila | undefined>;
 }

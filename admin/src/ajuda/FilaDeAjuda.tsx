@@ -24,9 +24,12 @@
  * Dizer isso ao operador e melhor do que deixa-lo procurar um botao de
  * responder que nao existe.
  *
- * **A situacao.** Nao ha abas nem selo de resolvida: o cliente decidiu que a
- * duvida vai para o backoffice, e nao decidiu o que a encerra. Ver o cabecalho
- * de `fila.ts`.
+ * ## O ESTADO, decidido em 30/10/2026
+ *
+ * Duas abas e um botao por linha. **Atendida e mudanca de estado e nunca
+ * `DELETE`**: a linha troca de aba e continua na tabela.
+ *
+ * **Nao ha desmarcar**, e a ausencia e decisao -- ver `fila.ts`.
  *
  * ## O DETALHE E UM DIALOGO, e nao uma rota
  *
@@ -37,12 +40,24 @@
  */
 import { useCallback, useId, useState } from 'react';
 
-import { Banner, EstadoVazio, LinhasCarregando } from '../componentes/basicos.tsx';
+import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { casaComABusca, COLUNAS, dataCurta, PADROES, previa, type Duvida } from './fila.ts';
+import {
+  ABAS,
+  atendimentoDe,
+  casaComABusca,
+  COLUNAS,
+  dataCurta,
+  PADROES,
+  previa,
+  ROTULO_DA_ABA,
+  VAZIO_DA_ABA,
+  type Duvida,
+  type SituacaoDaDuvida,
+} from './fila.ts';
 
 /** O dialogo com a duvida inteira. So leitura: nao ha acao nenhuma a oferecer. */
 function DialogoDaDuvida({ duvida, aoFechar }: { duvida: Duvida; aoFechar: () => void }) {
@@ -62,29 +77,62 @@ function DialogoDaDuvida({ duvida, aoFechar }: { duvida: Duvida; aoFechar: () =>
   );
 }
 
+/** O que a marcacao devolveu, para a tela dizer a verdade sobre a falha. */
+function mensagemDaFalha(status: number | undefined): string {
+  if (status === 404) return 'Esta dúvida não está mais na fila: alguém marcou antes.';
+  if (status === 429) return 'Muitas marcações em pouco tempo. Tente de novo em alguns minutos.';
+  return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
+}
+
 export default function FilaDeAjuda() {
   const { api } = useSessao();
   const [parametros, mudar] = useParametrosDaLista(PADROES);
   const busca = parametros.busca.trim().toLowerCase();
+  const aba = (ABAS as readonly string[]).includes(parametros.estado)
+    ? (parametros.estado as SituacaoDaDuvida)
+    : 'open';
   const [aberta, setAberta] = useState<Duvida>();
+  const [marcando, setMarcando] = useState<string>();
+  const [aviso, setAviso] = useState<string>();
+  const [falha, setFalha] = useState<string>();
 
   const buscar = useCallback(
     async (pagina: number, sinal: AbortSignal) => {
       const { data } = await api.GET('/admin/help-requests', {
-        params: { query: { page: pagina, limit: 50 } },
+        params: { query: { status: aba, page: pagina, limit: 50 } },
         signal: sinal,
       });
       return data === undefined ? undefined : { itens: data.items ?? [], total: data.total ?? 0 };
     },
-    [api],
+    [api, aba],
   );
 
-  // A chave e constante porque nao ha filtro de servidor nesta fila: a busca e
-  // local, sobre a pagina ja carregada. Com a busca na chave, cada tecla
-  // recomecaria a lista da pagina 1 e jogaria fora o que ja foi rolado.
-  const { estado, carregarMais, recarregar } = useListaPaginada<Duvida>('ajuda', buscar);
+  // A chave carrega a ABA e nao a busca: trocar de aba recomeca da pagina 1,
+  // que e o certo, e cada tecla da busca NAO -- a busca e local, sobre a
+  // pagina ja carregada, e com ela na chave cada tecla jogaria fora o rolado.
+  const { estado, carregarMais, recarregar } = useListaPaginada<Duvida>(aba, buscar);
 
   const itens = estado.itens.filter((d) => casaComABusca(d, busca));
+
+  async function marcarAtendida(duvida: Duvida) {
+    setMarcando(duvida.ref);
+    setFalha(undefined);
+    const { data, response } = await api.POST('/admin/help-requests/{requestRef}/attendance', {
+      params: { path: { requestRef: duvida.ref } },
+    });
+    setMarcando(undefined);
+    if (data === undefined) {
+      setFalha(mensagemDaFalha(response.status));
+      return;
+    }
+    // RECARREGAR e nao trocar o item no lugar: a aba e `open` e a duvida
+    // deixou de pertencer a ela, entao o que tira a linha da lista e a
+    // recarga. Deixa-la ali com o selo trocado mostraria na aba `Na fila`
+    // uma duvida que ja saiu dela.
+    recarregar();
+    setAviso(`“${duvida.subject}” marcada como atendida.`);
+    if (aberta?.ref === duvida.ref) setAberta(data);
+  }
 
   return (
     <>
@@ -93,6 +141,8 @@ export default function FilaDeAjuda() {
         <p className="t-body c-sec">
           As dúvidas que chegam pelo botão <strong>Ajuda</strong> do aplicativo, da mais nova
           para a mais velha. Nada é enviado quando uma dúvida chega: ela espera aqui.
+          Marcar como atendida <strong>não apaga nada</strong> — a dúvida muda de aba e
+          continua guardada.
         </p>
         {/* A limitacao, dita ao operador em vez de descoberta por ele. */}
         <p className="t-body c-sec" data-cy="aviso-sem-resposta">
@@ -100,6 +150,13 @@ export default function FilaDeAjuda() {
           backoffice lê dados de pessoa, e não é esta.
         </p>
       </header>
+
+      {aviso !== undefined && (
+        <Banner tipo="ok" aoFechar={() => setAviso(undefined)}>
+          {aviso}
+        </Banner>
+      )}
+      {falha !== undefined && <Banner tipo="erro">{falha}</Banner>}
 
       {estado.fase === 'erro' && (
         <Banner tipo="erro">
@@ -117,6 +174,10 @@ export default function FilaDeAjuda() {
         placeholder="Assunto ou texto"
         busca={parametros.busca}
         aoBuscar={(valor) => mudar({ busca: valor })}
+        chips={ABAS.map((a) => ({ valor: a, rotulo: ROTULO_DA_ABA[a] }))}
+        chipAtivo={aba}
+        aoEscolherChip={(valor) => mudar({ estado: valor, busca: '' })}
+        rotuloDosChips="Situação da dúvida"
         limpar={
           rotuloDeLimpar(parametros.busca !== '', false)
             ? {
@@ -151,6 +212,18 @@ export default function FilaDeAjuda() {
                 <span className="t-body c-sec">{dataCurta(duvida.created_at)}</span>
               </td>
               <td>
+                {duvida.status === 'attended' ? (
+                  <>
+                    <Selo tipo="ativa" />
+                    <span className="t-body c-sec bloco" data-cy="atendimento">
+                      {atendimentoDe(duvida)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="t-body c-sec">Na fila</span>
+                )}
+              </td>
+              <td>
                 <button
                   type="button"
                   className="btn ghost"
@@ -159,6 +232,18 @@ export default function FilaDeAjuda() {
                 >
                   Abrir
                 </button>
+                {duvida.status === 'open' && (
+                  <button
+                    type="button"
+                    className="btn sec"
+                    data-cy="marcar-atendida"
+                    aria-busy={marcando === duvida.ref || undefined}
+                    disabled={marcando !== undefined}
+                    onClick={() => void marcarAtendida(duvida)}
+                  >
+                    Marcar atendida
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -168,11 +253,7 @@ export default function FilaDeAjuda() {
       {estado.fase === 'pronto' && itens.length === 0 && (
         <EstadoVazio
           titulo="Nada por aqui"
-          corpo={
-            busca === ''
-              ? 'Ninguém mandou dúvida ainda.'
-              : 'Nenhuma dúvida desta página casa com a busca.'
-          }
+          corpo={busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma dúvida desta página casa com a busca.'}
           acao="Ver a fila"
           destino="/ajuda"
         />

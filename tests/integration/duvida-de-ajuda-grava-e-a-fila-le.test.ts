@@ -52,11 +52,17 @@ import { criarDuvidaDeAjudaService } from '../../src/modules/support/application
 import { criarFilaDeAjudaService } from '../../src/modules/support/application/fila-de-ajuda-service.js';
 import type { DuvidasDeAjuda } from '../../src/modules/support/ports/duvidas-de-ajuda.js';
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
+import {
+  criarEscritaAuditada,
+  criarTrilhaTransacional,
+} from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
+import { hashDeToken } from '../../src/shared/crypto/digest.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { carregarContrato } from '../../src/shared/http/contract.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
 import { criarServidor } from '../../src/shared/http/server.js';
 import {
+  CABECALHO_ANTI_CSRF,
   CABECALHO_DA_SUPERFICIE,
   COOKIE_DA_SESSAO_ADMINISTRATIVA,
   escoparRotasAdministrativas,
@@ -72,16 +78,20 @@ import type { UserId } from '../../src/shared/types/brands.js';
 const PREFIXO_DA_API = '/v1';
 const CAMINHO = '/me/help-requests';
 const ORIGEM_DO_PAINEL = 'https://painel.exemplo.test';
+/** O token anti-CSRF: a guarda o exige em todo metodo nao seguro (403 sem ele). */
+const TOKEN_ANTI_CSRF = 'token-anti-csrf-de-teste';
+/** A conta do painel que marca como atendida. O `after` a apaga. */
+const CONTA_DO_PAINEL = '01a18900-0000-7000-8000-00000000ad99';
 
 /** A sessao do painel, de mentira: o caminho do dado e o que esta sob prova. */
 const sessoesDeTeste = {
   conferir: () =>
     Promise.resolve({
       sessionId: 'sessao-de-teste',
-      adminAccountId: 'conta-admin-de-teste',
+      adminAccountId: CONTA_DO_PAINEL,
       displayName: 'Operadora de Teste',
       papeis: ['admin'],
-      csrfTokenHash: Buffer.alloc(32),
+      csrfTokenHash: hashDeToken(TOKEN_ANTI_CSRF),
       etiqueta: 'aaaaaaaa',
       instanteDaSenha: new Date(0),
     } as unknown as SessaoAdministrativaConferida),
@@ -94,16 +104,40 @@ const DO_PAINEL: Record<string, string> = {
   [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
   cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,
   origin: ORIGEM_DO_PAINEL,
+  [CABECALHO_ANTI_CSRF]: TOKEN_ANTI_CSRF,
 };
 
 let banco: { db: Db; close: () => Promise<void> };
 let app: RegistradorDeRotas;
 let base: string;
 let fila: DuvidasDeAjuda;
-/** A conta que manda as duvidas. O `after` a apaga, e a FK leva as duvidas. */
+/**
+ * A conta que esta mandando a duvida AGORA, e a lista de todas as criadas.
+ *
+ * **Uma conta por duvida, e nao uma para o arquivo inteiro.** O motivo e o
+ * teto de chamada da propria rota: `deny_429` com dez por dia POR CONTA. Com
+ * um autor so, este arquivo estourava o proprio teto ao crescer -- e o 429
+ * aparecia num caso que media OUTRA coisa (o teto de 4000 caracteres),
+ * apontando para o lugar errado. Medido: `o teto EXATO passa` reprovou com
+ * `429 !== 202`.
+ *
+ * Rodar com conta nova por duvida tambem e o que o uso real parece: dez
+ * duvidas da mesma pessoa num dia e que seria o caso estranho.
+ */
 let autor: UserId;
+const autores: UserId[] = [];
 
+/** Montada no `before`, quando `db` existe. */
+let criarAutor: () => Promise<UserId>;
+
+/**
+ * Manda uma duvida por uma conta NOVA.
+ *
+ * A conta nova e o que mantem o teto de dez por dia por conta fora do caminho
+ * deste arquivo -- ver o comentario de `autores`.
+ */
 async function chamar(corpo: unknown): Promise<{ status: number; corpo: unknown }> {
+  await criarAutor();
   const resposta = await fetch(`${base}${PREFIXO_DA_API}${CAMINHO}`, {
     method: 'POST',
     headers: {
@@ -128,22 +162,53 @@ before(async () => {
   // A CONTA, inserida direto: o que este arquivo mede e a duvida, e levantar a
   // fiacao inteira de identidade so para ter um `author_user_id` valido poria
   // meia duzia de servicos entre o defeito e a mensagem de falha.
-  autor = ids.uuidv7() as UserId;
+  criarAutor = async () => {
+    const novo = ids.uuidv7() as UserId;
+    await db
+      .insertInto('users')
+      .values({
+        id: novo,
+        email: `ajuda-${randomUUID().slice(0, 8)}@exemplo.invalido`,
+        public_ref: Buffer.from(ids.random128()).toString('base64url'),
+        display_name: 'Tutor de Teste',
+        birth_date: '1990-01-01',
+        sessions_invalid_before: new Date(0),
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .execute();
+    autores.push(novo);
+    autor = novo;
+    return novo;
+  };
+  await criarAutor();
+
+  // A CONTA DO PAINEL precisa existir no banco: `attended_by_admin_id` tem FK
+  // para `admin_accounts`, com `NO ACTION`. Sem a linha, marcar como atendida
+  // reprovaria por chave estrangeira -- que e a FK fazendo o trabalho dela.
   await db
-    .insertInto('users')
+    .insertInto('admin_accounts')
     .values({
-      id: autor,
-      email: `ajuda-${randomUUID().slice(0, 8)}@exemplo.invalido`,
-      public_ref: Buffer.from(ids.random128()).toString('base64url'),
-      display_name: 'Tutor de Teste',
-      birth_date: '1990-01-01',
-      sessions_invalid_before: new Date(0),
-      created_at: new Date(),
-      updated_at: new Date(),
+      id: CONTA_DO_PAINEL,
+      email: `operadora-${randomUUID().slice(0, 8)}@exemplo.invalido`,
+      display_name: 'Rita da Operacao',
+      role: 'admin',
+      password_phc: '$pbkdf2-sha512$i=1$YWFhYWFhYWFhYWFhYWFhYQ$YWFhYQ',
+      password_updated_at: new Date(),
     })
     .execute();
 
-  fila = criarDuvidasDeAjuda(db, ids);
+  // A escrita auditada de verdade: a marcacao e o evento da trilha na MESMA
+  // transacao (D49). Sem ela, `audit.events` nao recebe linha nenhuma -- medido
+  // numa pilha de pe antes de este argumento existir.
+  fila = criarDuvidasDeAjuda(
+    db,
+    ids,
+    criarEscritaAuditada({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+  );
 
   app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
@@ -173,7 +238,7 @@ before(async () => {
       // -- o que o app grava, o painel le --, e quem confere credencial de
       // painel tem portao proprio.
       escoparRotasAdministrativas(escopo, { origem: ORIGEM_DO_PAINEL, sessoes: sessoesDeTeste }, (adm) => {
-        registrarRotasDaFilaDeAjuda(adm, { fila: criarFilaDeAjudaService(fila) });
+        registrarRotasDaFilaDeAjuda(adm, { fila: criarFilaDeAjudaService(fila, systemClock) });
       });
       pronto();
     },
@@ -192,7 +257,15 @@ after(async () => {
     // `after` tambem e, de lambuja, a prova de que a cascata declarada em
     // `CHAVES_ESTRANGEIRAS` e a que o banco tem -- sem ela, este `DELETE`
     // estouraria por violacao de chave estrangeira.
-    await banco.db.deleteFrom('users').where('id', '=', autor).execute();
+    // TODAS as contas criadas, e nao so a ultima: a FK e `ON DELETE CASCADE`,
+    // entao cada uma leva as duvidas dela.
+    for (const id of autores) {
+      await banco.db.deleteFrom('users').where('id', '=', id).execute();
+    }
+    // A conta do painel DEPOIS das duvidas: a FK e `NO ACTION`, entao apagar a
+    // conta com duvida atendida pendurada reprova -- e e assim que ela protege
+    // a autoria de um expurgo operacional.
+    await banco.db.deleteFrom('admin_accounts').where('id', '=', CONTA_DO_PAINEL).execute();
     await banco.close();
   }
 });
@@ -240,13 +313,17 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
       /^[A-Za-z0-9_-]{22}$/,
       'REPROVA: `ref` nao tem a forma de 22 simbolos base64url.',
     );
+    // O CONJUNTO EXATO, e nao "contem": e a lista fechada que impede o autor de
+    // entrar. `attended_at` e `attended_by` falam da OPERADORA do painel, e
+    // `status` e derivado do instante.
+    //
+    // NADA DO TUTOR pode sair: o contrato afirma em TRES lugares que a fila de
+    // pedidos de encontro e "a unica leitura de pessoa do backoffice v1" (D53 a
+    // D57), e projeta-lo aqui criaria a segunda e tornaria aquela frase falsa.
     assert.deepEqual(
       Object.keys(minha).sort(),
-      ['body', 'created_at', 'ref', 'subject'],
-      'REPROVA: a resposta da fila carrega campo alem dos quatro. NADA do autor pode ' +
-        'sair: o contrato afirma em TRES lugares que a fila de pedidos de encontro e ' +
-        '"a unica leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor ' +
-        'aqui criaria a segunda e tornaria aquela frase falsa nos tres lugares.',
+      ['attended_at', 'attended_by', 'body', 'created_at', 'ref', 'status', 'subject'],
+      'REPROVA: a resposta da fila carrega campo fora da lista fechada.',
     );
     assert.ok(
       corpo.total >= 1,
@@ -271,7 +348,7 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
     // so o corpo da REQUISICAO e validado contra o contrato.
     assert.deepEqual(resposta.corpo, { status: 'accepted' });
 
-    const pagina = await fila.listarAFila(1, 10);
+    const pagina = await fila.listarAFila('open', 1, 10);
     const minha = pagina.itens.find((l) => l.assunto === 'Nao salva o segundo pet');
     assert.ok(
       minha !== undefined,
@@ -285,13 +362,14 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
       'REPROVA: o `ref` da duvida nao tem a forma de 22 simbolos base64url. E ele que ' +
         'sai para o painel; o `id` e UUIDv7 e nunca sai (SEC-001/SEC-002).',
     );
+    // Na PORTA os campos do atendimento sao opcionais, entao a duvida aberta
+    // nao os carrega. O que este caso trava e que NENHUM campo de autor
+    // apareca: a lista e fechada nos dois estados.
     assert.equal(
       Object.keys(minha).sort().join(','),
       'assunto,criadaEm,ref,texto',
-      'REPROVA: a linha da fila carrega campo alem dos quatro. NADA do autor pode sair: ' +
-        'o contrato afirma em TRES lugares que a fila de pedidos de encontro e "a unica ' +
-        'leitura de pessoa do backoffice v1" (D53 a D57), e projetar o tutor aqui criaria ' +
-        'a segunda e tornaria aquela frase falsa.',
+      'REPROVA: a linha ABERTA da fila carrega campo a mais. NADA do tutor pode sair ' +
+        '(D53 a D57), e os campos do atendimento so existem depois de alguem marcar.',
     );
     assert.equal(
       minha.texto,
@@ -305,7 +383,7 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
     await chamar({ subject: `Primeira ${marca}`, body: 'Mandada antes.' });
     await chamar({ subject: `Segunda ${marca}`, body: 'Mandada depois.' });
 
-    const pagina = await fila.listarAFila(1, 50);
+    const pagina = await fila.listarAFila('open', 1, 50);
     const minhas = pagina.itens.filter((l) => l.assunto.endsWith(marca));
     assert.equal(
       minhas.length,
@@ -323,16 +401,169 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
     );
   });
 
+  void it('ATENDER: a duvida muda de estado, NAO sai da tabela, e guarda quem marcou', async () => {
+    const marca = randomUUID().slice(0, 8);
+    await chamar({ subject: `Atender ${marca}`, body: 'Para ser marcada como atendida.' });
+
+    const antes = await lerAFila('?status=open&limit=50');
+    const minha = (antes.corpo as { items: Record<string, unknown>[] }).items.find(
+      (i) => i['subject'] === `Atender ${marca}`,
+    );
+    assert.ok(minha !== undefined, 'REPROVA: a duvida nao apareceu na aba aberta.');
+    assert.equal(minha['status'], 'open');
+
+    const ref = String(minha['ref']);
+    const marcou = await fetch(
+      `${base}${PREFIXO_DA_API}/admin/help-requests/${ref}/attendance`,
+      { method: 'POST', headers: DO_PAINEL },
+    );
+    const corpoDaMarcacao = (await marcou.json()) as Record<string, unknown>;
+    assert.equal(
+      marcou.status,
+      200,
+      `REPROVA: marcar respondeu ${String(marcou.status)}. 403 = o par cookie + ` +
+        `X-CSRF-Token nao chegou; 404 = o ref nao existe. Corpo: ${JSON.stringify(corpoDaMarcacao)}`,
+    );
+    assert.equal(corpoDaMarcacao['status'], 'attended');
+    assert.equal(
+      corpoDaMarcacao['attended_by'],
+      'Rita da Operacao',
+      'REPROVA: a autoria nao voltou. A decisao do cliente pede transicao auditavel, e ' +
+        'o painel nao le a trilha -- a coluna e o unico lugar onde a autoria aparece ' +
+        'para quem opera.',
+    );
+    assert.ok(typeof corpoDaMarcacao['attended_at'] === 'string');
+
+    // **NAO SAIU DA TABELA**: so trocou de aba. "Nao apague nada".
+    const naFila = await lerAFila('?status=open&limit=50');
+    assert.equal(
+      (naFila.corpo as { items: Record<string, unknown>[] }).items.filter(
+        (i) => i['ref'] === ref,
+      ).length,
+      0,
+      'REPROVA: a duvida atendida continua na aba aberta.',
+    );
+    const atendidas = await lerAFila('?status=attended&limit=50');
+    assert.equal(
+      (atendidas.corpo as { items: Record<string, unknown>[] }).items.filter(
+        (i) => i['ref'] === ref,
+      ).length,
+      1,
+      'REPROVA: a duvida sumiu das DUAS abas. Marcar como atendida e MUDANCA DE ESTADO ' +
+        'e nunca `DELETE` -- a linha tem de continuar na tabela, e so trocar de aba.',
+    );
+  });
+
+  void it('ATENDER grava na TRILHA, na mesma transacao', async () => {
+    // O defeito que este caso existe para impedir ja aconteceu, e eu o medi:
+    // com `x-audit` declarado no contrato e sem a escrita auditada, a rota
+    // respondia 200, a coluna mudava, e `audit.events` ficava SEM nenhuma
+    // linha de `admin.help_request.attended`. `x-audit` e DECLARACAO -- o
+    // portao a confere e nada a escreve --, e a transicao que o cliente pediu
+    // auditavel nao era.
+    const marca = randomUUID().slice(0, 8);
+    await chamar({ subject: `Trilha ${marca}`, body: 'Para conferir a trilha.' });
+    const abertas = await lerAFila('?status=open&limit=50');
+    const alvo = (abertas.corpo as { items: Record<string, unknown>[] }).items.find(
+      (i) => i['subject'] === `Trilha ${marca}`,
+    );
+    const ref = String(alvo?.['ref']);
+
+    const antes = await banco.db
+      .selectFrom('audit.events')
+      .select((eb) => eb.fn.countAll<string>().as('n'))
+      .where('action', '=', 'admin.help_request.attended')
+      .executeTakeFirstOrThrow();
+
+    const marcou = await fetch(
+      `${base}${PREFIXO_DA_API}/admin/help-requests/${ref}/attendance`,
+      { method: 'POST', headers: DO_PAINEL },
+    );
+    assert.equal(marcou.status, 200);
+
+    const evento = await banco.db
+      .selectFrom('audit.events')
+      .select(['action', 'resource_kind', 'resource_id', 'actor_admin_id', 'actor_kind'])
+      .where('action', '=', 'admin.help_request.attended')
+      .where('resource_id', '=', ref)
+      .executeTakeFirst();
+
+    assert.ok(
+      evento !== undefined,
+      `REPROVA: a marcacao respondeu 200 e a TRILHA nao tem linha para o ref ${ref}. ` +
+        `Antes havia ${antes.n} evento(s) desta acao. O cliente pediu transicao ` +
+        'auditavel, e `x-audit` no contrato nao escreve nada sozinho.',
+    );
+    assert.equal(evento.resource_kind, 'help_request');
+    assert.equal(
+      evento.actor_kind,
+      'admin',
+      'REPROVA: a trilha registrou o ator como outra coisa. Quem marca e conta do ' +
+        'PAINEL, e `actor_admin_id` e nunca `actor_user_id` (ADR-0027 item 20.2).',
+    );
+    assert.equal(evento.actor_admin_id, CONTA_DO_PAINEL);
+  });
+
+  void it('ATENDER DE NOVO e idempotente: nao troca quem marcou nem quando', async () => {
+    const marca = randomUUID().slice(0, 8);
+    await chamar({ subject: `Duas vezes ${marca}`, body: 'Marcada duas vezes.' });
+    const abertas = await lerAFila('?status=open&limit=50');
+    const alvo = (abertas.corpo as { items: Record<string, unknown>[] }).items.find(
+      (i) => i['subject'] === `Duas vezes ${marca}`,
+    );
+    const ref = String(alvo?.['ref']);
+
+    const url = `${base}${PREFIXO_DA_API}/admin/help-requests/${ref}/attendance`;
+    const primeira = (await (await fetch(url, { method: 'POST', headers: DO_PAINEL })).json()) as Record<string, unknown>;
+    const segunda = (await (await fetch(url, { method: 'POST', headers: DO_PAINEL })).json()) as Record<string, unknown>;
+
+    assert.deepEqual(
+      segunda,
+      primeira,
+      'REPROVA: a segunda marcacao mudou a linha. Duas operadoras na mesma fila e uso ' +
+        'normal, e sobrepor a autoria faria a segunda apagar o registro da primeira -- ' +
+        'um `DELETE` disfarcado de `UPDATE`.',
+    );
+  });
+
+  void it('ATENDER um `ref` que nao existe e 404', async () => {
+    const resposta = await fetch(
+      `${base}${PREFIXO_DA_API}/admin/help-requests/ZZZZZZZZZZZZZZZZZZZZZZ/attendance`,
+      { method: 'POST', headers: DO_PAINEL },
+    );
+    assert.equal(
+      resposta.status,
+      404,
+      `REPROVA: respondeu ${String(resposta.status)} sobre um ref inexistente.`,
+    );
+  });
+
+  void it('`pending_total` conta as ABERTAS, e ignora o filtro', async () => {
+    const atendidas = await lerAFila('?status=attended&limit=50');
+    const corpo = atendidas.corpo as { items: unknown[]; total: number; pending_total: number };
+    const abertas = await lerAFila('?status=open&limit=50');
+    const quantas = (abertas.corpo as { total: number }).total;
+
+    assert.equal(
+      corpo.pending_total,
+      quantas,
+      'REPROVA: `pending_total` seguiu o filtro. Ele e o numerinho do menu e responde ' +
+        '"quanto trabalho esta esperando" -- com o filtro aplicado nos dois, o menu ' +
+        'anunciaria "0 pendentes" toda vez que alguem abrisse a aba dos atendidos, que ' +
+        'e o defeito que a fila da Rede ja produziu.',
+    );
+  });
+
   void it('a fila PAGINA, e o `total` conta a fila inteira e nao a pagina', async () => {
     const marca = randomUUID().slice(0, 8);
     for (let i = 1; i <= 3; i++) {
       await chamar({ subject: `Pagina ${i} ${marca}`, body: `Texto ${i}.` });
     }
 
-    const primeira = await fila.listarAFila(1, 2);
+    const primeira = await fila.listarAFila('open', 1, 2);
     assert.equal(primeira.itens.length, 2, 'REPROVA: `limit` nao recortou a pagina.');
 
-    const segunda = await fila.listarAFila(2, 2);
+    const segunda = await fila.listarAFila('open', 2, 2);
     assert.ok(
       segunda.itens.length >= 1,
       'REPROVA: a pagina 2 veio vazia. Sem `offset`, o painel desenharia a mesma ' +
@@ -381,7 +612,7 @@ void describe('A duvida de ajuda grava em help_requests, e a fila do painel a le
         'do banco virou a primeira linha de defesa -- e ai o desfecho seria 500.',
     );
 
-    const pagina = await fila.listarAFila(1, 50);
+    const pagina = await fila.listarAFila('open', 1, 50);
     assert.equal(
       pagina.itens.filter((l) => l.assunto === `X${marca}`).length,
       0,
