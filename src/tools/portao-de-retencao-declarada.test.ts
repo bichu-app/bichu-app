@@ -1,9 +1,6 @@
 /**
- * O portão da retenção declarada contra o repositório real e contra as iscas
- * que ele precisa reprovar (`autoTeste`).
- *
- * ADR-0010, emenda 6 de 26/10/2026 (decisão do cliente): *"não apague nada,
- * mantenha e corrija a política"*.
+ * O portão da retenção declarada contra o repositório real e contra as iscas que
+ * ele precisa reprovar (`autoTeste`).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -35,8 +32,6 @@ void describe('portao da retencao declarada (ADR-0010 emenda 6)', () => {
       `${POLITICA} nao foi encontrada: sem o arquivo este portao nao mede nada`,
     );
     const { vagas, conferidas } = conferirPolitica(conteudo);
-    // A contagem vem junto do veredito: verde com zero celulas conferidas e o
-    // arquivo que mudou de forma, nao a politica que ficou boa.
     assert.ok(
       conferidas >= 30,
       `so ${String(conferidas)} celulas de prazo foram encontradas; a politica tinha 32 em 26/10`,
@@ -65,8 +60,6 @@ void describe('portao da retencao declarada (ADR-0010 emenda 6)', () => {
       [],
       `expurgo declarado cuja decisao escrita nao resolve: ${JSON.stringify(v.decisaoQueNaoResolve)}`,
     );
-    // Lista que sobrevive ao codigo que descreve para de medir em silencio --
-    // e este e tambem o controle positivo da varredura.
     assert.deepEqual(
       v.declaradoSemCodigo,
       [],

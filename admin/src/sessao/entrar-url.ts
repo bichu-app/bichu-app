@@ -1,7 +1,6 @@
 /**
  * O caminho entre o painel e o documento de login `/entrar` (ADR-0027 item 5:
- * documento isolado, recarga completa nos dois sentidos). Nada pessoal vai na
- * URL: so o motivo do banner e a rota para voltar.
+ * documento isolado, recarga completa nos dois sentidos).
  */
 export type MotivoDeEntrar = 'expirada' | 'saiu' | 'saiu_todas';
 
@@ -9,7 +8,10 @@ const MOTIVOS: readonly MotivoDeEntrar[] = ['expirada', 'saiu', 'saiu_todas'];
 
 export const CAMINHO_DE_ENTRAR = '/entrar/';
 
-/** So caminho interno do painel: sem esquema, sem `//host`, sem voltar ao proprio login. */
+/**
+ * So caminho interno do painel: sem esquema, sem `//host`, sem voltar ao proprio
+ * login.
+ */
 export function voltaSegura(volta: string | null | undefined): string {
   if (!volta || !volta.startsWith('/') || volta.startsWith('//') || volta.startsWith('/\\')) return '/';
   if (volta.startsWith('/entrar')) return '/';

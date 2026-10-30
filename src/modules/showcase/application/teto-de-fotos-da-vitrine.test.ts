@@ -1,23 +1,4 @@
-/**
- * ISCA (b, parte do serviço): A VITRINE CHEIA NÃO GANHA A DÉCIMA AUTORIZAÇÃO.
- *
- * O teto de nove é cobrado em três lugares, e cada um responde por uma coisa
- * diferente — o que é desenho, e não repetição:
- *
- * 1. **na escrita** (`conferirVitrinePedida`, medido em
- *    `domain/teto-da-vitrine.test.ts`): recusa um corpo com dez fotos;
- * 2. **aqui, no pedido de autorização**: com nove fotos já na vitrine, **nada é
- *    assinado**. Assinar a décima entregaria uma política de escrita válida por
- *    dez minutos que a vitrine nunca vai aceitar — o objeto subiria para o
- *    balde e ficaria lá, pago e invisível, até o varredor passar;
- * 3. **no banco**, pelo `CHECK (position BETWEEN 0 AND 8)` somado à unicidade
- *    por conta: é o que fecha qualquer caminho que contorne os dois primeiros.
- *
- * O teto de BYTES e a lista de tipos não são medidos aqui: eles vivem no
- * preparador, e são medidos contra o preparador de verdade em
- * `media/application/teto-de-bytes-da-vitrine.test.ts`. Um dublê de preparador
- * não tem como recusar tamanho, e um caso que o usasse mediria a si mesmo.
- */
+/** ISCA (b, parte do serviço): A VITRINE CHEIA NÃO GANHA A DÉCIMA AUTORIZAÇÃO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { VitrineDeFotos } from './vitrine-de-fotos-service.js';
@@ -147,7 +128,6 @@ void describe('o pedido de autorização respeita o teto de fotos da vitrine', (
     });
     assert.equal(comDimensao.assinaturas.length, 1);
 
-    // Declarar é OPCIONAL, e quem decide de verdade é o worker, nos bytes.
     const semDimensao = montar();
     await semDimensao.servico.autorizarEnvio(DONO, { content_type: 'image/jpeg', byte_size: 1024 });
     assert.equal(semDimensao.assinaturas.length, 1);

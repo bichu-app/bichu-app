@@ -1,37 +1,5 @@
-/// O aviso persistente de cadastro incompleto, justificado pelo pet
-/// (BICHUS-75, tela 9.2 do UX).
-///
-/// ## O que esta historia decide, e que nao e obvio
-///
-/// O aviso **nao e um medidor de perfil**. O criterio 8 proibe barra de
-/// progresso, porcentagem e a frase `complete seu cadastro`, e a proibicao tem
-/// razao de produto: perfil completo e objetivo do app, nao da pessoa. O que e
-/// dela e o pet voltar para casa, e e por isso que o texto nomeia o pet.
-///
-/// ## As tres posicoes
-///
-/// 1. `Inicio`: faixa de largura total logo abaixo do cabecalho, acima de tudo.
-/// 2. `Perfil`: item destacado no topo da lista.
-/// 3. No cartao de cada pet: uma linha discreta.
-///
-/// A terceira usa o MESMO texto curto da forma encolhida, e isso e deliberado:
-/// o refinamento de 17/09 registrou duas vezes que essa posicao **nao tem
-/// microcopy escrita**. Inventar uma terceira frase aqui seria decidir texto de
-/// tela, que nao e decisao de quem implementa. Reaproveitar a frase que a
-/// propria historia fixou no criterio 4 entrega a posicao sem inventar nada. A
-/// pergunta fechada esta na pauta de refinamento.
-///
-/// ## O que NAO tem destino, e por isso nao e renderizado
-///
-/// O criterio 6 pede dois botoes no texto de endereco errado: `Corrigir
-/// e-mail` e `Esta certo, reenviar`. O primeiro precisaria de
-/// `POST /v1/me/email-change` (`requestEmailChange`), que **esta no contrato e
-/// nao existe em `src/`** -- conferido em 22/09. Um botao `Corrigir e-mail` que
-/// abrisse para nada e o mesmo defeito que o criterio 2 da BICHUS-62 proibe por
-/// escrito, e o criterio 2 da BICHUS-31 proibe dizer que aconteceu o que nao
-/// aconteceu. Entao ele fica de fora ate a rota existir, e so `Esta certo,
-/// reenviar` e renderizado -- esse sim vai a
-/// `POST /auth/email-verification`, que existe.
+/// O aviso persistente de cadastro incompleto, justificado pelo pet (BICHUS-75,
+/// tela 9.2 do UX).
 library;
 
 import 'package:flutter/material.dart';
@@ -48,10 +16,7 @@ import '../../sessao/registro_do_aviso_de_cadastro.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
-/// Os tamanhos que o aviso assume. O criterio 5 e o que falta nesta lista:
-/// **nao ha um quarto valor** que o remova para sempre, e a ausencia e a
-/// garantia. Um `dispensadoParaSempre` aqui seria o botao que o criterio 5
-/// proibe, e ele teria de ser escrito a mao para existir.
+/// Os tamanhos que o aviso assume.
 enum FormaDoAviso { nenhum, encolhido, cheio }
 
 /// Os textos do aviso, palavra por palavra como a historia os fixou.
@@ -79,8 +44,6 @@ abstract final class TextosDoAvisoDeCadastro {
 
   /// Zero pet cadastrado. Nao ha nome a dizer e nao ha plural a dizer, e o
   /// criterio 7 so dispensa o aviso de quem ja verificou -- entao ele aparece.
-  /// A frase e a que ja estava na faixa de `Inicio` antes desta historia, e nao
-  /// uma quarta redacao inventada aqui.
   static const String seuPet = 'seu pet';
 
   /// Criterio 6 e 9.
@@ -88,25 +51,15 @@ abstract final class TextosDoAvisoDeCadastro {
 
   /// Criterio 10. **Microcopy sem fonte escrita**: a historia diz o que a frase
   /// precisa comunicar (ha troca em curso, e o endereco novo e este) e nao diz
-  /// com que palavras. Pergunta fechada na pauta.
+  /// com que palavras.
   static const String trocaEmCurso = 'Confirme o e-mail novo';
   static String corpoDaTroca(String novo) =>
       'Falta confirmar $novo. É para lá que a gente vai avisar.';
 
-  /// O que o leitor de tela ouve quando o reenvio deu certo. **So depois de o
-  /// servidor responder**: o criterio 2 da BICHUS-31 proibe dizer que
-  /// aconteceu o que nao aconteceu.
+  /// O que o leitor de tela ouve quando o reenvio deu certo.
   static const String reenviado = 'E-mail reenviado.';
 
   /// O corpo do criterio 1, com a concordancia resolvida pelo sexo do pet.
-  ///
-  /// `modelos_pet.dart` ja registrou a decisao de que a microcopy fala do pet
-  /// **pelo nome**, e nao por pronome. Aqui o nome vem precedido de artigo
-  /// porque a historia escreveu `a <nome do pet>` com todas as letras, e artigo
-  /// em portugues tem genero. Quando o sexo nao foi informado (`unknown` no
-  /// contrato, e o padrao do cadastro), o artigo **sai**: `encontrar Nina` e
-  /// gramatical e nao atribui um genero que o cadastro nao afirma. Inventar um
-  /// seria escrever dado de negocio.
   static String corpoJustificadoPeloPet(List<Pet> pets) {
     final String alvo;
     if (pets.isEmpty) {
@@ -127,11 +80,6 @@ abstract final class TextosDoAvisoDeCadastro {
 }
 
 /// O que a tela deve desenhar, decidido fora de qualquer widget.
-///
-/// Separado do widget de proposito: as regras dos criterios 4, 6, 7, 9 e 10 sao
-/// combinacao de tres entradas (conta, registro, relogio) e um caso que
-/// precisasse montar a arvore para exercitar cada combinacao custaria um
-/// `pumpAndSettle` por linha de tabela.
 class AvisoDecidido {
   const AvisoDecidido({
     required this.forma,
@@ -164,17 +112,11 @@ AvisoDecidido decidirAviso({
   required EstadoDoAviso registro,
   required bool silencioVale,
 }) {
-  // Criterio 7: verificou, o aviso nao existe em lugar nenhum.
   if (usuario.emailVerificado) return AvisoDecidido.nenhum;
 
   final naoEntregavel = !usuario.emailEntregavel;
   final trocaEmCurso = usuario.emailPendente;
 
-  // A FORMA e o ciclo do criterio 4, com a excecao do criterio 9.
-  //
-  // `naoEntregavel` atravessa o silencio porque endereco que volta do provedor
-  // nao e lembrete adiavel: sem isto, o tutor de e-mail invalido dispensa uma
-  // vez e passa sete dias sem saber que ninguem consegue avisa-lo.
   final forma = (naoEntregavel || !silencioVale)
       ? FormaDoAviso.cheio
       : FormaDoAviso.encolhido;
@@ -187,9 +129,6 @@ AvisoDecidido decidirAviso({
     );
   }
 
-  // Criterio 10 vence o criterio 6: quem ja pediu a troca nao precisa ouvir
-  // "o endereco antigo esta certo?". Ele ja respondeu essa pergunta, com "nao",
-  // e repeti-la mandaria a pessoa corrigir o que ela acabou de corrigir.
   if (trocaEmCurso != null && trocaEmCurso.isNotEmpty) {
     return AvisoDecidido(
       forma: FormaDoAviso.cheio,
@@ -200,7 +139,6 @@ AvisoDecidido decidirAviso({
     );
   }
 
-  // Criterio 6: tres dispensas seguidas OU devolucao definitiva.
   if (naoEntregavel || registro.dispensas >= dispensasQueTrocamOTexto) {
     return AvisoDecidido(
       forma: FormaDoAviso.cheio,
@@ -210,7 +148,6 @@ AvisoDecidido decidirAviso({
     );
   }
 
-  // Criterios 1 e 3.
   return AvisoDecidido(
     forma: FormaDoAviso.cheio,
     titulo: TextosDoAvisoDeCadastro.confirmeSeuEmail,
@@ -237,15 +174,6 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
   String? _erro;
 
   /// A confirmacao do reenvio, VISIVEL.
-  ///
-  /// Ela nao existia na primeira versao, e a falta era defeito de duas formas.
-  /// A primeira: quem enxerga tocava em `Reenviar` e a tela nao mudava nada --
-  /// o botao que parece nao fazer nada, e o dedo volta nele. A segunda so
-  /// apareceu ao provar a isca: com a confirmacao existindo apenas como
-  /// anuncio de leitor de tela, nenhum caso conseguia OBSERVAR que a tela
-  /// havia dito "reenviado", e a isca do criterio 2 da BICHUS-31 passava
-  /// inclusive com o anuncio movido para ANTES da resposta do servidor.
-  /// Verificacao que nao consegue verificar precisa reprovar, nao aprovar.
   String? _confirmacao;
   bool _carregou = false;
 
@@ -299,18 +227,10 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
             email: widget.usuario.emailPendente,
           );
       if (!mounted) return;
-      // A confirmacao so acontece DEPOIS de o servidor responder. Dize-la
-      // antes seria afirmar que o e-mail saiu quando ele pode nao ter saido,
-      // que e o que o criterio 2 da BICHUS-31 proibe.
       setState(() => _confirmacao = TextosDoAvisoDeCadastro.reenviado);
       anunciar(context, TextosDoAvisoDeCadastro.reenviado);
     } on FalhaDeConexao {
       if (!mounted) return;
-      // Sem rede o reenvio NAO entra na fila offline, e isso e escolha.
-      // A fila existe para o que a pessoa digitou e nao pode perder -- o caso
-      // de perdido, o achado. Um reenvio enfileirado sairia horas depois,
-      // possivelmente ja com o e-mail confirmado por outro caminho, e o efeito
-      // util dele (a pessoa abre a caixa de entrada AGORA) ja teria passado.
       setState(() => _erro = MensagensDeErro.semConexaoImpossivel);
     } on FalhaDeChamada {
       if (!mounted) return;
@@ -425,10 +345,6 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
 }
 
 /// A forma encolhida do criterio 4, no mesmo lugar da faixa cheia.
-///
-/// Uma parada so de leitor de tela, e ela **e um botao de verdade**: anunciar
-/// `button` sem acao de toque e o defeito que a suite de acessibilidade
-/// reprova, e o texto e a acao sao inseparaveis aqui.
 class _LinhaEncolhida extends StatelessWidget {
   const _LinhaEncolhida({required this.aoTocar});
 

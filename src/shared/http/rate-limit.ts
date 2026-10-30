@@ -1,46 +1,12 @@
-/**
- * Contador de limite de chamadas, nas duas implementações da porta.
- *
- * O limite é aplicado na borda **e revalidado aqui**: basta um job, uma rota
- * interna nova ou um endpoint publicado por engano para a borda ser contornada,
- * e aí o limite vira decoração (ADR-0001).
- *
- * O driver em memória só é correto com **uma** instância. Com duas, cada uma
- * conta o seu contador e todo número da política de `docs/04-seguranca.md` dobra
- * sem nenhum alarme. Isso não é degradação elegante, é a proteção valendo
- * metade; por isso `assertSafeBoot` recusa a subida na combinação errada.
- */
+/** Contador de limite de chamadas, nas duas implementações da porta. */
 import { sql } from 'kysely';
 import type { Db } from '../db/pool.js';
 import type { RateLimitDecision, RateLimitStore } from '../ports/rate-limit-store.js';
 
-/**
- * `lifetime`, em segundos: cem anos.
- *
- * O contrato declara `window: lifetime` em `createFoundReportPhotoUploadIntent`
- * — o teto de três fotos por aviso do achador (SEC-009) não é "três por hora",
- * é "três, e acabou". Sem esta entrada, `janelaEmSegundos` lançava, e a rota
- * respondia 500 a **toda** chamada, inclusive à primeira.
- *
- * O número não é arbitrário nem é uma aproximação de "para sempre" escolhida
- * por conveniência: ele é o que faz `inicioDaJanela` devolver a **época** para
- * qualquer instante que este sistema vá ver, e é isso que importa. Um balde
- * cujo início é a época nunca vira, então a contagem nunca reinicia — que é
- * exatamente a semântica de `lifetime`. Qualquer janela menor que a idade do
- * relógio Unix faria o balde rolar, e o quarto upload de um aviso passaria a
- * ser permitido no dia da virada, em silêncio.
- */
+/** `lifetime`, em segundos: cem anos. */
 export const JANELA_VITALICIA_EM_SEGUNDOS = 100 * 365 * 86400;
 
-/**
- * A janela declarada é a vitalícia?
- *
- * Existe porque o **corpo do 429 muda** quando ela é: um teto vitalício
- * estourado não reabre, e o texto que promete prazo estaria mentindo. A
- * pergunta se responde aqui, ao lado de `janelaEmSegundos`, para que a grafia
- * aceita seja uma só — comparar `entrada.window === 'lifetime'` no chamador
- * voltaria a divergir no dia em que esta função passasse a aceitar outra forma.
- */
+/** A janela declarada é a vitalícia? */
 export function ehJanelaVitalicia(janela: string): boolean {
   return janela.trim() === 'lifetime';
 }
@@ -61,27 +27,7 @@ export function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: n
   return new Date(Math.floor(agoraEmMilissegundos / janelaEmMilissegundos) * janelaEmMilissegundos);
 }
 
-/**
- * A decisão a partir da contagem JÁ APURADA.
- *
- * `hit` compara depois de somar (`contagem <= limite`), e `peek` compara antes
- * (`contagem < limite`). Os dois usam este mesmo cálculo para que a fronteira
- * não seja escrita duas vezes: um deslize de um em qualquer dos dois faz o
- * balde recusar uma requisição cedo demais ou tarde demais, e nada acusa.
- */
-/**
- * Teto do `Retry-After`, em segundos: 24 h.
- *
- * Existe por causa da janela `lifetime`. Sem ele, o balde vitalício produziria
- * um `Retry-After` de quase cem anos — e `setTimeout` de um cliente que o
- * respeitasse estouraria o inteiro de 32 bits e dispararia **na hora**, que é o
- * oposto do que o cabeçalho pediu.
- *
- * O número é um teto de FORMATO, não uma promessa de que a janela acabou: um
- * teto vitalício estourado não reabre em 24 h, e é o corpo do problema, e não o
- * cabeçalho, que diz isso a quem lê. Preferi um cabeçalho que o cliente
- * consegue obedecer a um número exato que ele transforma em laço de reenvio.
- */
+/** A decisão a partir da contagem JÁ APURADA. */
 const TETO_DO_RETRY_AFTER_EM_SEGUNDOS = 24 * 3600;
 
 function decidir(
@@ -109,8 +55,6 @@ export function criarContadorEmMemoria(agora: () => number): RateLimitStore {
       const chave = `${bucketKey}|${inicio.getTime()}`;
       const expiraEm = inicio.getTime() + janela * 1000;
 
-      // Varredura preguiçosa: sem ela o mapa cresce com toda chave já vencida, e
-      // "limite em memória" vira vazamento de memória em produção.
       for (const [existente, valor] of baldes) {
         if (valor.expiraEm <= agoraEmMilissegundos) baldes.delete(existente);
       }
@@ -123,11 +67,8 @@ export function criarContadorEmMemoria(agora: () => number): RateLimitStore {
     },
 
     /**
-     * Lê sem somar, e pergunta o que aconteceria **se** a próxima entrasse —
-     * daí o `contagem + 1`. O balde com `limite` tentativas inválidas dentro já
-     * chegou ao teto, e a próxima é a que precisa ser recusada antes de custar
-     * trabalho. Sem o `+ 1`, a 21ª de um teto de 20 ainda passaria e só a 22ª
-     * seria barrada.
+     * Lê sem somar, e pergunta o que aconteceria **se** a próxima entrasse — daí o
+     * `contagem + 1`.
      */
     peek: (bucketKey, limite, janela) => {
       const agoraEmMilissegundos = agora();
@@ -158,8 +99,6 @@ export function criarContadorEmPostgres(
       const inicio = inicioDaJanela(agoraEmMilissegundos, janela);
       const expiraEm = inicio.getTime() + janela * 1000;
 
-      // Incremento atômico: ler e depois somar permitiria a dois pedidos
-      // simultâneos passarem pelo mesmo teto.
       const linha = await db
         .insertInto('rate_limit_counters')
         .values({ bucket_key: bucketKey, window_start: inicio, count: 1 })
@@ -175,10 +114,9 @@ export function criarContadorEmPostgres(
     },
 
     /**
-     * Lê sem somar, e por isso **não** precisa ser atômico: dois pedidos
-     * simultâneos lendo o mesmo balde podem ambos passar, e o pior caso é uma
-     * tentativa inválida a mais sendo conferida. O que não pode escapar é a
-     * contagem, e ela continua no `hit()` atômico de cima.
+     * Lê sem somar, e por isso **não** precisa ser atômico: dois pedidos simultâneos
+     * lendo o mesmo balde podem ambos passar, e o pior caso é uma tentativa inválida a
+     * mais sendo conferida.
      */
     peek: async (bucketKey, limite, janela) => {
       const agoraEmMilissegundos = agora();
@@ -196,8 +134,6 @@ export function criarContadorEmPostgres(
     },
 
     reset: async (prefixo) => {
-      // Só existe para o preparo de cenário de teste. Recusa em produção: um
-      // zerador de contador alcançável em produção é o próprio limite desligado.
       if (producao) {
         throw new Error('Zerar contador de limite não é permitido em produção.');
       }

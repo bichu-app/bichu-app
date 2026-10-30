@@ -1,17 +1,4 @@
-/**
- * `contract.ts` sob teste com documentos pequenos, montados caso a caso.
- *
- * Por que documentos montados aqui, e não `api/openapi.yaml`: o que este módulo
- * precisa provar é o que ele **recusa**, e a especificação de verdade é (por
- * construção) o caso que passa. Uma suíte que só a carrega prova que o contrato
- * bom carrega, e não prova nada sobre o contrato ruim — que é o único que chega
- * numa revisão. Cada caso abaixo é uma especificação com um defeito só, escrita
- * para que o defeito seja o motivo da reprovação.
- *
- * O carregador lê de disco (`readFileSync`), então os documentos vão para um
- * diretório temporário próprio, apagado no fim. Isso não é banco: é o mesmo
- * `parse` de YAML que roda em produção, sobre texto que o teste escolheu.
- */
+/** `contract.ts` sob teste com documentos pequenos, montados caso a caso. */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -79,10 +66,6 @@ ${schemaYaml
 
 void describe('o contrato que NÃO pode carregar', () => {
   void it('YAML quebrado falha nomeando o arquivo, e não com o erro cru do parser', () => {
-    // Sem o `try/catch` deste módulo, o que sobe é um `YAMLParseError` sobre
-    // linha e coluna, sem dizer de qual arquivo. Numa subida em produção isso
-    // vira meia hora procurando qual dos documentos do repositório quebrou, e a
-    // mensagem precisa dizer também que não é no código que se conserta.
     const caminho = caminhoNovo();
     writeFileSync(caminho, 'paths:\n\t- isto é tabulação\n', 'utf8');
 
@@ -97,10 +80,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('chave repetida na especificação é recusada, e não vence a última em silêncio', () => {
-    // `uniqueKeys` fica no padrão de propósito. Se ele fosse afrouxado, um
-    // `security:` colado duas vezes na mesma operação faria a segunda vencer: a
-    // especificação diria uma coisa para quem a lê na revisão e outra para quem
-    // a carrega, e a rota rodaria com a autenticação que ninguém aprovou.
     assert.throws(
       carregarTextoEsperandoFalha(`${CABECALHO}paths:
   /pets:
@@ -115,9 +94,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('documento que não é mapa (uma lista, um escalar) é recusado', () => {
-    // YAML aceita `- a\n- b` como documento inteiro. Sem esta guarda o acesso a
-    // `spec['paths']` daria `undefined` e o erro seguinte seria "Contrato sem
-    // `paths`", que manda a pessoa procurar o defeito no lugar errado.
     assert.throws(carregarTextoEsperandoFalha('- a\n- b\n'), /não é um documento YAML de mapa/);
   });
 
@@ -126,9 +102,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('contrato com `paths` vazio é recusado: zero operações não é um contrato', () => {
-    // Silêncio não é aprovação. Um `paths: {}` (por exemplo depois de um merge
-    // que comeu o bloco) carregaria sem reclamar, o portão de contrato
-    // conferiria zero operações e diria que está tudo certo.
     assert.throws(
       carregarTextoEsperandoFalha(`${CABECALHO}paths: {}\n`),
       /sem nenhuma operação/,
@@ -136,10 +109,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('operação sem `operationId` derruba a carga em vez de sumir do índice', () => {
-    // O `operationId` é a única costura entre a especificação e a rota. Se a
-    // operação sem ele fosse apenas ignorada, ela desapareceria do índice e o
-    // portão de contrato deixaria de conferir justamente a rota mal escrita — e
-    // a rota continuaria servindo, sem ninguém a olhando.
     assert.throws(
       carregarTextoEsperandoFalha(`${CABECALHO}paths:
   /pets:
@@ -152,18 +121,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('`security` como LISTA DE TEXTO derruba a carga, em vez de virar rota pública', () => {
-    // O erro mais natural do arquivo inteiro: `security: [bearerAuth]`, sem os
-    // dois-pontos e as chaves — porque `tags` e `x-effects` logo ao lado são
-    // listas de texto e a mão escreve no automático.
-    //
-    // Antes de 18/09 isso passava: `Array.isArray` aceitava, o filtro de mapas
-    // esvaziava, e o resultado era `security: []` — que este módulo documenta
-    // como PÚBLICA. Uma rota escrita para exigir conta virava pública em
-    // silêncio, e o portão que existe justamente para pegar rota
-    // acidentalmente pública era enganado pela mesma leitura.
-    //
-    // Não havia nada errado escrito: havia a coisa certa escrita na forma
-    // errada, que é o defeito que mais sobrevive a revisão.
     assert.throws(
       carregarTextoEsperandoFalha(`${CABECALHO}paths:
   /pets:
@@ -181,8 +138,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('`security: []` continua valendo: é a forma CERTA de dizer pública', () => {
-    // A correção acima não pode ter engolido o caso legítimo. Lista vazia é a
-    // declaração explícita de rota sem conta, e o produto tem 28 delas.
     const c = carregarTexto(`${CABECALHO}paths:
   /health:
     get:
@@ -194,11 +149,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('operação sem `security` declarado derruba a carga, e a mensagem nomeia qual', () => {
-    // Este é o caso que o arquivo existe para pegar. Sem `security` na operação,
-    // OpenAPI manda herdar o `security` global — e a rota some de qualquer
-    // conferência que leia a declaração da operação. Uma rota que devia exigir
-    // conta passa a valer o padrão global, e ninguém percebe porque não há nada
-    // escrito errado: há algo não escrito.
     assert.throws(
       carregarTextoEsperandoFalha(`${CABECALHO}paths:
   /pets:
@@ -219,9 +169,6 @@ void describe('o contrato que NÃO pode carregar', () => {
   });
 
   void it('`security: []` é declaração de rota PÚBLICA e carrega — o que reprova é a ausência', () => {
-    // A metade que fecha o caso acima. Se alguém "consertasse" a regra tratando
-    // lista vazia como ausência, toda rota deliberadamente pública (a página do
-    // QR, a sonda de saúde) deixaria de carregar e o produto não subiria.
     const contrato = carregarTexto(`${CABECALHO}paths:
   /tags/{code}:
     get:
@@ -266,9 +213,6 @@ void describe('indexação das operações', () => {
 `);
 
   void it('caminho e método ficam guardados como estão na especificação', () => {
-    // O casamento entre rota registrada e operação é feito por `método caminho`.
-    // Se o caminho fosse normalizado aqui (barra final, `{id}` virando `:id`), a
-    // conferência de subida pararia de casar e passaria a aprovar por vacuidade.
     const operacao = contrato.operacoes.get('criarPet');
     assert.ok(operacao !== undefined);
     assert.equal(operacao.method, 'post');
@@ -276,30 +220,17 @@ void describe('indexação das operações', () => {
   });
 
   void it('caminho nulo e método nulo são ignorados em vez de derrubarem a carga', () => {
-    // `/rascunho: ~` é o que sobra quando alguém abre o caminho e ainda não
-    // escreveu a operação, e `get: ~` é o mesmo um nível abaixo. Sem as guardas
-    // de objeto isso é um TypeError na subida do servidor, não uma mensagem — e
-    // um rascunho esquecido num merge derrubaria a subida inteira.
     assert.equal(contrato.operacoes.has('listarPets'), true);
     assert.equal(contrato.operacoes.has('criarPet'), true);
     assert.equal(contrato.operacoes.has('saude'), true);
   });
 
   void it('só os cinco métodos com corpo/efeito entram no índice: `options` fica de fora', () => {
-    // Deliberado, e precisa continuar deliberado. O índice existe para o portão
-    // de subida casar rota registrada com operação; o Fastify registra HEAD
-    // sozinho para cada GET e o preflight de CORS vem de plugin, nenhum dos dois
-    // escrito à mão. Se `options`/`head` entrassem, o portão passaria a acusar
-    // "rota fora do contrato" em rotas que ninguém escreveu, e a reprovação
-    // ruidosa e falsa é o caminho mais curto para alguém desligar o portão.
     assert.equal(contrato.operacoes.has('preflight'), false);
     assert.equal(contrato.operacoes.size, 3);
   });
 
   void it('`x-effects` descarta o que não é string em vez de deixar passar', () => {
-    // Um número ou um mapa dentro de `x-effects` é erro de escrita da
-    // especificação. Deixá-lo entrar espalharia o valor estranho para quem
-    // consome a lista de efeitos, e o defeito apareceria longe daqui.
     const operacao = contrato.operacoes.get('criarPet');
     assert.deepEqual(operacao?.effects, ['cria-pet']);
   });
@@ -309,20 +240,12 @@ void describe('indexação das operações', () => {
   });
 
   void it('`x-rate-limit: []` NÃO conta como limite declarado', () => {
-    // A lista vazia é a forma de dizer "este bloco existe e não declara nada".
-    // Contá-la como limite faria a sonda de saúde parecer protegida por um
-    // limitador que não existe — e o que se perde é justamente a chance de
-    // notar que falta limite na rota que apanha primeiro num pico.
     assert.equal(contrato.operacoes.get('saude')?.hasRateLimit, false);
     assert.equal(contrato.operacoes.get('criarPet')?.hasRateLimit, true);
     assert.equal(contrato.operacoes.get('listarPets')?.hasRateLimit, false);
   });
 
   void it('`security` com alternativa pública guarda as DUAS coisas: os esquemas e a lista crua', () => {
-    // `[{bearerAuth: []}, {}]` quer dizer "autenticação opcional". Quem só olha
-    // `securitySchemes` vê `['bearerAuth']` e conclui "exige conta" — conclusão
-    // errada, e é por isso que a lista crua continua aqui. Achatar sem guardar o
-    // original apagaria a diferença entre exigir e aceitar.
     const operacao = contrato.operacoes.get('criarPet');
     assert.deepEqual(operacao?.securitySchemes, ['bearerAuth']);
     assert.equal(operacao?.security.length, 2);
@@ -332,10 +255,6 @@ void describe('indexação das operações', () => {
 
 void describe('resolução de `$ref`', () => {
   void it('referência EXTERNA é recusada, e não buscada', () => {
-    // Um `$ref` para outro arquivo ou para uma URL transformaria o carregamento
-    // da especificação em leitura de algo de fora do repositório: o que valida o
-    // corpo das requisições passaria a depender de um documento que ninguém
-    // revisou junto. A recusa é explícita para que a tentação não passe calada.
     const contrato = carregarTexto(
       specComRequestBody(`$ref: "https://exemplo.invalid/outro.yaml#/components/schemas/Pet"`),
     );
@@ -343,10 +262,6 @@ void describe('resolução de `$ref`', () => {
   });
 
   void it('referência interna que não existe derruba, em vez de virar schema vazio', () => {
-    // Este é o defeito caro: `$ref` apontando para um schema renomeado resolve
-    // para `undefined`. Sem a checagem, o Fastify receberia "sem schema" e a
-    // rota passaria a aceitar QUALQUER corpo — validação desligada numa rota de
-    // escrita, sem nenhum sinal.
     const contrato = carregarTexto(
       specComRequestBody(`$ref: "#/components/schemas/NaoExiste"`, 'components:\n  schemas: {}\n'),
     );
@@ -354,9 +269,6 @@ void describe('resolução de `$ref`', () => {
   });
 
   void it('schema recursivo falha com mensagem, e não com a pilha estourada', () => {
-    // Expansão de `$ref` é literal: um schema que se referencia expandiria para
-    // sempre. A diferença entre as duas falhas é prática — `RangeError: Maximum
-    // call stack size exceeded` na subida não diz qual schema, e a mensagem diz.
     const contrato = carregarTexto(
       specComRequestBody(
         `$ref: "#/components/schemas/Ninho"`,
@@ -373,11 +285,6 @@ void describe('resolução de `$ref`', () => {
   });
 
   void it('o MESMO `$ref` em ramos irmãos NÃO é confundido com recursão', () => {
-    // A metade que fecha o caso acima, e a que pega o defeito de verdade: a
-    // guarda precisa ser o caminho percorrido, não um conjunto de "já vistos".
-    // Se virar "já vistos", reusar `#/components/schemas/Especie` em dois
-    // campos do mesmo corpo — coisa banal numa especificação — derruba a subida
-    // inteira acusando recursão onde não há.
     const contrato = carregarTexto(
       specComRequestBody(
         `type: object
@@ -417,11 +324,6 @@ properties:
   });
 
   void it('o ponteiro JSON desescapa `~1` e `~0`, senão nenhum `$ref` para um caminho resolve', () => {
-    // `#/paths/~1v1~1pets/post` é a forma normal de apontar para uma operação:
-    // a barra do caminho PRECISA vir escapada. Sem o desescape, o segmento
-    // procurado seria a chave literal `~1v1~1pets`, que não existe, e a
-    // referência resolveria para `undefined` — que é o mesmo buraco do caso
-    // "referência não resolvida", só que disfarçado de erro de escrita.
     const contrato = carregarTexto(`${CABECALHO}paths:
   /v1/pets:
     post:
@@ -436,9 +338,6 @@ properties:
   });
 
   void it('ponteiro que atravessa um escalar devolve `undefined`, e não o escalar do meio', () => {
-    // `#/info/title/qualquer` passa por uma string. Devolver a string seria pior
-    // que devolver nada: um `$ref` mal escrito entregaria `"bichu"` como se
-    // fosse um schema, e o validador aceitaria o que desse.
     const contrato = carregarTexto(`${CABECALHO}paths:
   /pets:
     get:
@@ -484,11 +383,6 @@ properties:
   const propriedades = comoObjeto(schema['properties']);
 
   void it('o vocabulário de OpenAPI sai do schema', () => {
-    // `discriminator`, `example` e as extensões `x-` não são JSON Schema. O
-    // Ajv do Fastify roda em modo estrito: palavra desconhecida no schema é
-    // exceção no REGISTRO da rota, ou seja, o servidor não sobe. Fora do modo
-    // estrito é pior — a palavra é ignorada em silêncio e quem escreveu acha
-    // que declarou alguma coisa.
     assert.equal('discriminator' in schema, false);
     assert.equal('example' in schema, false);
     assert.equal('x-origem' in schema, false);
@@ -501,10 +395,6 @@ properties:
   });
 
   void it('as RESTRIÇÕES sobrevivem à conversão — sem elas o corpo deixaria de ser validado', () => {
-    // A metade obrigatória do caso acima. Uma "limpeza" que levasse junto
-    // `minLength`, `required` ou `additionalProperties` não quebraria nenhum
-    // teste de rota: a rota continuaria respondendo, aceitando nome vazio,
-    // corpo sem nome e campo desconhecido. O estrago aparece no banco, depois.
     assert.equal(schema['type'], 'object');
     assert.equal(schema['additionalProperties'], false);
     assert.deepEqual(schema['required'], ['name']);
@@ -515,10 +405,6 @@ properties:
   });
 
   void it('`nullable: true` vira união com `null` e a palavra `nullable` some', () => {
-    // `nullable` é forma de OpenAPI 3.0 e não existe em JSON Schema. Deixá-la
-    // passar faz o validador enxergar só `type: string` e recusar `null` num
-    // campo que a especificação declara anulável: o tutor que tenta APAGAR a
-    // raça do pet (mandando `breed_id: null`) leva 400 e não consegue.
     const breed = comoObjeto(propriedades['breed_id']);
     assert.deepEqual(breed['type'], ['string', 'null']);
     assert.equal('nullable' in breed, false);
@@ -529,24 +415,11 @@ properties:
   });
 
   void it('`null` já presente na união não é duplicado', () => {
-    // `['string','null','null']` é aceito pelo Ajv, mas é lixo que vaza para a
-    // documentação gerada e para os tipos gerados de `openapi-typescript`.
     assert.deepEqual(comoObjeto(propriedades['apelido'])['type'], ['string', 'null']);
   });
 });
 
 void describe('palavra-chave de OpenAPI x NOME de campo', () => {
-  // O CASO QUE ESTE BLOCO GUARDA, e que nao e hipotetico por muito tempo:
-  // `CHAVES_DESCARTADAS` e o corte de `x-` se aplicavam em TODO nivel do
-  // documento, inclusive dentro de `properties` -- onde a chave nao e palavra
-  // de OpenAPI, e sim o NOME DO CAMPO que a pessoa escolheu.
-  //
-  // O estrago era mudo e total: o campo sumia de `properties`, continuava em
-  // `required`, e com `additionalProperties: false` a rota passava a recusar
-  // TODA requisicao, para sempre. A especificacao continuaria parecendo certa
-  // para quem a lesse, porque ela ESTAVA certa; quem estava errado era o
-  // conversor. Nenhum campo do contrato de hoje tem esses nomes -- e por isso
-  // que o defeito precisava de teste antes de alguem esbarrar nele.
   const contrato = carregarTexto(
     specComRequestBody(
       `type: object
@@ -581,26 +454,17 @@ properties:
   });
 
   void it('campo com nome comecando em `x-` tambem sobrevive', () => {
-    // O corte de `x-` existe para EXTENSAO de OpenAPI. `x-origem` como nome de
-    // campo de corpo e um nome como outro qualquer, e o contrato ja usa
-    // prefixo `x-` no topo (`x-problem-types`), entao a confusao e plausivel.
     const propriedades = comoObjeto(comoObjeto(schema)['properties']);
     assert.ok('x-origem' in propriedades, 'REPROVA: campo `x-origem` descartado como extensao.');
   });
 
   void it('campo chamado `$ref` e nome, e nao referencia a resolver', () => {
-    // Sem a separacao, `properties: { $ref: {...} }` seria lido como "este
-    // objeto inteiro e uma referencia", e o schema do corpo viraria outra
-    // coisa em silencio.
     const propriedades = comoObjeto(comoObjeto(schema)['properties']);
     assert.ok('$ref' in propriedades, 'REPROVA: campo `$ref` tratado como referencia.');
     assert.equal(comoObjeto(propriedades['$ref'])['type'], 'string');
   });
 
   void it('e dentro do campo as palavras-chave CONTINUAM sendo descartadas', () => {
-    // A correcao nao pode virar o oposto: um nivel abaixo do nome, `example` e
-    // `deprecated` voltam a ser vocabulario de OpenAPI e precisam sair, senao o
-    // validador de JSON Schema recusa o documento que o proprio contrato gera.
     const comAnotacao = carregarTexto(
       specComRequestBody(
         `type: object
@@ -648,9 +512,6 @@ void describe('schema de corpo de requisição', () => {
 `);
 
   void it('operação FORA do contrato devolve `undefined`, e não um schema permissivo', () => {
-    // Se um `operationId` errado devolvesse `{}`, a rota seria registrada com um
-    // schema que aceita tudo. O `undefined` obriga quem chama a decidir; um
-    // objeto vazio decidiria por ele, e decidiria errado.
     assert.equal(contrato.requestBodySchema('operacaoQueNaoExiste'), undefined);
   });
 
@@ -659,16 +520,10 @@ void describe('schema de corpo de requisição', () => {
   });
 
   void it('corpo que NÃO é `application/json` não é devolvido como se fosse', () => {
-    // O envio de foto é `multipart/form-data`. Entregar o schema do multipart
-    // para o validador de JSON faria o Fastify recusar todo upload — ou, pior,
-    // validar bytes com regras de campo de texto.
     assert.equal(contrato.requestBodySchema('enviarFoto'), undefined);
   });
 
   void it('duas leituras do mesmo corpo devolvem o mesmo schema', () => {
-    // O schema é lido na subida (registro da rota) e de novo pelo portão de
-    // contrato. Se as duas leituras divergissem, o que o portão confere não
-    // seria o que valida a requisição — e a conferência viraria enfeite.
     const primeira = contrato.requestBodySchema('criarPet');
     const segunda = contrato.requestBodySchema('criarPet');
     assert.deepEqual(segunda, primeira);
@@ -703,9 +558,6 @@ components:
 `);
 
   void it('status NÃO declarado devolve `undefined`, e não o schema de outro status', () => {
-    // Cair para "algum schema" é o defeito que faz o serializador do Fastify
-    // podar campos usando as regras da resposta errada. Um 500 serializado com o
-    // schema do 201 sai com o corpo vazio e o app não tem o que mostrar.
     assert.equal(contrato.responseSchema('criarPet', '500'), undefined);
   });
 
@@ -722,10 +574,6 @@ components:
   });
 
   void it('`application/problem+json` é lido como qualquer outra mídia', () => {
-    // Todo erro do produto responde `application/problem+json` (RFC 9457). Se a
-    // busca fosse fixada em `application/json`, NENHUMA resposta de erro teria
-    // schema, e é justamente o corpo de erro que o app usa para decidir o que
-    // fazer com o usuário.
     const schema = comoObjeto(contrato.responseSchema('criarPet', '409'));
     assert.deepEqual(comoObjeto(schema['properties'])['type'], { type: 'string' });
   });
@@ -737,13 +585,8 @@ components:
 });
 
 /**
- * `x-nao-recusado-na-borda`: a palavra isenta sai do esquema de borda, e a
- * isenção que **não casa nada** levanta.
- *
- * A segunda metade é a que importa. Uma isenção escrita errada (`minlength`) ou
- * sobrevivente de um `schema` que mudou seria um no-op silencioso: a borda
- * voltaria a recusar e a descrição do contrato continuaria prometendo que não —
- * exatamente o defeito que esta chave existe para consertar, uma volta depois.
+ * `x-nao-recusado-na-borda`: a palavra isenta sai do esquema de borda, e a isenção
+ * que **não casa nada** levanta.
  */
 function specComParametro(parametroYaml: string): string {
   return `${CABECALHO}paths:
@@ -840,9 +683,6 @@ void describe('isenção de palavra no esquema de borda', () => {
 });
 
 void describe('o contrato de verdade continua carregando', () => {
-  // Um caso só, e de propósito: os documentos montados acima provam as regras;
-  // este prova que `api/openapi.yaml` ainda passa por todas elas. Se este cair
-  // sozinho, o defeito está na especificação, não neste módulo.
   const contrato = carregarContrato('api/openapi.yaml');
 
   void it('toda operação indexada declara `security` e tem caminho e método', () => {

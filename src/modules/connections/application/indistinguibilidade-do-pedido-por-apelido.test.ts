@@ -1,37 +1,6 @@
 /**
- * **A ISCA DA INDISTINGUIBILIDADE: apelido inexistente e apelido de quem
- * bloqueou você dão a MESMA resposta.**
- *
- * Este arquivo existe separado porque este é **o caso que alguém vai
- * "simplificar" depois**. A simplificação tem uma forma previsível e parece
- * uma melhoria de usabilidade:
- *
- * ```ts
- * // "ajuda quem digitou errado"
- * if (alvo === undefined) throw problemas.naoEncontrado('Apelido não encontrado');
- * if (bloqueado) throw problemas.naoEncontrado('Não é possível conectar');
- * ```
- *
- * As duas linhas respondem **404**, as duas parecem inofensivas, e juntas elas
- * entregam o bloqueio: quem recebe a segunda mensagem sabe que a pessoa existe
- * **e** que ela o bloqueou. É o aviso de bloqueio que o desenho não dá, servido
- * por um `detail` diferente.
- *
- * ## Por que este arquivo compara a RESPOSTA INTEIRA
- *
- * Porque comparar só o código de estado não mede nada aqui: os dois caminhos
- * **sempre** foram 404. O que distingue um oráculo de um não-oráculo é o resto
- * — `problemType`, `detail`, `errors`, e até a existência da chave. Um 404 com
- * `detail` diferente continua sendo um oráculo, só mais discreto.
- *
- * ## O que este arquivo NÃO prova, e está dito em voz alta
- *
- * Que o tempo de resposta não distingue os dois. A fusão de custo é estrutural
- * e mora no SQL — mesma consulta, mesmos predicados, nenhum ramo que faça uma
- * segunda leitura num dos casos — e está medida em
- * `../adapters/persistence/convite-e-apelido-na-clausula-where.test.ts`, que lê
- * o SQL compilado. Aqui se prova que a CAMADA DE APLICAÇÃO não introduz a
- * diferença que o SQL evitou.
+ * **A ISCA DA INDISTINGUIBILIDADE: apelido inexistente e apelido de quem bloqueou
+ * você dão a MESMA resposta.**
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -62,15 +31,7 @@ const contexto = (quem: UserId): ContextoDoChamador => ({
   ip: undefined,
 });
 
-/**
- * Monta o serviço com um resolvedor de apelido que devolve o que o cenário
- * pedir.
- *
- * **`undefined` é o único valor negativo possível**, e é essa a forma do tipo
- * que este arquivo defende: a porta não tem como dizer "existe mas não para
- * você", então o cenário "bloqueado" e o cenário "inexistente" são expressos
- * pelo **mesmo** valor — que é exatamente o ponto.
- */
+/** Monta o serviço com um resolvedor de apelido que devolve o que o cenário pedir. */
 function montar(alvo: UserId | undefined, bloqueado = false) {
   const bancada = conexoesEmMemoria(PESSOAS, AGORA);
   const trilha: AuditEvent[] = [];
@@ -134,11 +95,7 @@ function respostaInteira(erro: AppError): Record<string, unknown> {
 
 void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTINGUIVEIS', () => {
   void it('ISCA: as duas respostas sao IGUAIS, campo por campo', async () => {
-    // "Inexistente": a porta nao resolve -- o `undefined` que funde os seis
-    // motivos do `WHERE`, entre eles o proprio bloqueio.
     const inexistente = montar(undefined);
-    // "Bloqueou voce": o alvo resolve, e o leitor de bloqueio barra. Este e o
-    // caminho que existe no codigo HOJE para o par bloqueado chegar ao `if`.
     const bloqueou = montar(ANA, true);
 
     const a = await erroDe(() => inexistente.servico.pedirPorApelido(contexto(BIA), 'nao-existe'));
@@ -180,9 +137,8 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
 
   /**
    * **O CONTRAPESO.** Sem ele, todos os casos acima passariam num mundo em que
-   * `pedirPorApelido` sempre falha — e eles não distinguiriam "indistinguível"
-   * de "quebrado". Um teste que só verifica que duas coisas falham igual é
-   * satisfeito por tudo falhar.
+   * `pedirPorApelido` sempre falha — e eles não distinguiriam "indistinguível" de
+   * "quebrado".
    */
   void it('CONTRAPESO: apelido que resolve e nao esta bloqueado CRIA a aresta', async () => {
     const { servico, bancada } = montar(ANA, false);
@@ -198,8 +154,7 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
 
   /**
    * A isca da própria isca: ela prova que `respostaInteira` **enxerga** uma
-   * divergência. Sem este caso, a comparação de cima passaria no dia em que
-   * alguém a reduzisse a um objeto vazio.
+   * divergência.
    */
   void it('ISCA: a comparacao REPROVA quando um `detail` e acrescentado', () => {
     const base = { status: 404, problemType: 'not-found', detail: undefined, title: 'x', errors: undefined };
@@ -214,12 +169,7 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
 });
 
 void describe('o pedido por APELIDO e o pedido por CONVITE nao se distinguem na recusa', () => {
-  /**
-   * As duas credenciais, as duas falhando. **Importa porque a tela de destino do
-   * link é a mesma do resultado de busca**: se a recusa por token revogado
-   * dissesse algo diferente da recusa por apelido invisível, quem tem um link
-   * velho descobriria pela diferença que a pessoa ainda existe.
-   */
+  /** As duas credenciais, as duas falhando. */
   void it('token que nao resolve e apelido que nao resolve dao a MESMA resposta', async () => {
     const montagem = montar(undefined);
     const porToken = await erroDe(() => montagem.servico.pedir(contexto(BIA), 'token-qualquer'));

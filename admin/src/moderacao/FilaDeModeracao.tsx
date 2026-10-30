@@ -1,52 +1,4 @@
-/**
- * A FILA DE MODERACAO no painel: remover o conteudo ou descartar a denuncia.
- *
- * ## O que esta tela responde, literal
- *
- * Decisao do cliente de 18/10/2026: "quem modera vai ser o administrador, deve
- * ir para a pagina de backoffice".
- *
- * O estado antes: `conversation_reports` gravava denuncia desde 28/09 e
- * **nenhuma tela, nem rota, a lia**. A denuncia de avaliacao tinha remocao pelo
- * administrador, mas enderecada pelo `ref` que alguem tirava da pagina publica
- * do local -- porque nao havia fila navegavel. Esta e ela.
- *
- * ## UMA LINHA E UM ALVO, e nao uma denuncia
- *
- * Tres pessoas denunciando a mesma avaliacao viram UMA linha, com "3 denúncias".
- * Se a linha fosse a denuncia, quem modera decidiria a mesma coisa tres vezes
- * sem nunca ver o numero que importa -- e **a contagem de repeticao e o sinal
- * que separa briga de problema real**.
- *
- * ## AS DUAS ACOES, E O MOTIVO OBRIGATORIO NAS DUAS
- *
- * "Remover conteúdo" esconde (exclusao logica: nada e apagado) e "Descartar"
- * deixa o conteudo no ar. As duas exigem motivo escrito, e as duas vao para a
- * trilha de auditoria. O motivo nao e publicado e nao chega a ninguem.
- *
- * ## O QUE ESTA TELA NAO FAZ, e as ausencias sao a regra
- *
- * - **nao desabilita conta.** Nao ha botao, nao ha menu e nao ha caminho.
- *   Desabilitar conta e outro poder, com outro evento de trilha, e nao entra
- *   nesta fila;
- * - **nao avisa ninguem.** Quem denunciou nao recebe resultado e quem foi
- *   denunciado nao e avisado -- avisar o denunciado e retaliacao, e e decisao
- *   de desenho ja tomada. Nao ha campo de mensagem em nenhum dos dois dialogos;
- * - **nao mostra quem denunciou nem quem foi denunciado.** A resposta nao
- *   carrega nome, conta nem identificador de nenhum dos dois: a decisao e sobre
- *   o CONTEUDO;
- * - **nao mostra prazo.** Nao ha vencimento nem contador: o produto nao promete
- *   prazo a ninguem;
- * - **nao modera automaticamente.** Nada aqui olha o texto para sugerir
- *   decisao: o juizo e de pessoa, e e por isso que o motivo e obrigatorio.
- *
- * ## O CONTEUDO DA CONVERSA NAO APARECE, E A TELA DIZ ISSO
- *
- * `content` vem nulo na origem `conversation`, sempre: a conversa e privada
- * entre duas pessoas e nada neste produto autoriza o administrador a le-la. A
- * tela escreve a frase em vez de mostrar um campo vazio -- vazio sem explicacao
- * faria quem modera achar que a tela quebrou. Ver [conteudoDo] em `fila.ts`.
- */
+/** A FILA DE MODERACAO no painel: remover o conteudo ou descartar a denuncia. */
 import { useCallback, useId, useRef, useState } from 'react';
 
 import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
@@ -77,9 +29,8 @@ import {
 } from './fila.ts';
 
 /**
- * Os padroes da lista, constante de modulo porque `useParametrosDaLista` o
- * exige estavel. **Sem `as const`**: com ele os valores viram tipos literais e
- * `mudar` passa a aceitar so a string que esta aqui.
+ * Os padroes da lista, constante de modulo porque `useParametrosDaLista` o exige
+ * estavel.
  */
 const PADROES = { estado: 'open', origem: '', busca: '' };
 
@@ -117,12 +68,7 @@ function mensagemDaFalha(status: number | undefined): string {
   return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
 }
 
-/**
- * A confirmacao com MOTIVO OBRIGATORIO, uma para as duas acoes.
- *
- * **Nao ha campo de mensagem e nao ha caixa de "desabilitar a conta"**, e as
- * duas ausencias sao a regra: ninguem e avisado, e conta e outro poder.
- */
+/** A confirmacao com MOTIVO OBRIGATORIO, uma para as duas acoes. */
 function DialogoDaDecisao({
   item,
   acao,
@@ -271,13 +217,10 @@ export default function FilaDeModeracao() {
   );
 
   /**
-   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o
-   * contrato de `listAdminModerationReports` nao tem `q`, e inventar um aqui
-   * faria a tela mandar um parametro que o servidor ignora -- que e pior que
-   * nao ter busca, porque parece funcionar.
-   *
-   * Ela filtra pelo ASSUNTO (nome do local ou do pet) e pelo relato de quem
-   * denunciou. **Nao filtra por pessoa**, porque pessoa nao sai nesta resposta.
+   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o contrato
+   * de `listAdminModerationReports` nao tem `q`, e inventar um aqui faria a tela
+   * mandar um parametro que o servidor ignora -- que e pior que nao ter busca,
+   * porque parece funcionar.
    */
   const itens =
     busca === ''
@@ -300,8 +243,6 @@ export default function FilaDeModeracao() {
       body: { reason: motivo },
     });
     if (data === undefined) return { ok: false, mensagem: mensagemDaFalha(response.status) };
-    // A aba e `open` e o item deixou de estar na fila: recarregar e o que tira
-    // a linha, em vez de deixa-la la com o selo trocado.
     recarregar();
     setAviso(
       acao === 'remover'
@@ -328,8 +269,8 @@ export default function FilaDeModeracao() {
       )}
       {falhaDaLinha && <Banner tipo="erro">{falhaDaLinha}</Banner>}
 
-      {/* Busca, filtro e ordenacao no TOPO DO CORPO da tela, e nunca na barra
-          de navegacao: e o padrao de toda pagina com registros neste painel. */}
+      {
+}
       <BarraDeListagem
         rotuloDaBusca="Buscar denúncia"
         placeholder="Local, pet ou relato"
@@ -345,10 +286,6 @@ export default function FilaDeModeracao() {
             rotuloAcessivel: 'Origem da denúncia',
             prefixoVisivel: 'Origem',
             valor: origemFiltrada,
-            // As opcoes vem de `ROTULO_DA_ORIGEM`, e nao de uma lista escrita
-            // aqui: quando a frente de comunidade acrescentar `profile` ou
-            // `photo` ao contrato, a opcao aparece sozinha -- e o `satisfies`
-            // daquele mapa reprova a compilacao se o rotulo faltar.
             opcoes: [
               { valor: '', rotulo: 'Todas as origens' },
               ...Object.entries(ROTULO_DA_ORIGEM).map(([valor, rotulo]) => ({ valor, rotulo })),
@@ -417,9 +354,8 @@ export default function FilaDeModeracao() {
                   )}
                 </td>
                 <td data-cy="repeticao">
-                  {/* O SINAL DE REPETICAO. Tres denunciantes distintos e o mesmo
-                      numero que o contrato ja trata como `raise_queue_priority`
-                      -- a tela nao inventa limiar. */}
+                  {
+}
                   <span className={eInsistente(item) ? 't-label-lg' : 't-body'}>
                     {repeticaoDe(item)}
                   </span>

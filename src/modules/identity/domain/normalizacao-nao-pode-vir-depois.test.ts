@@ -1,43 +1,4 @@
-/**
- * Normalização Unicode e a conferência de endereço: a ordem é a defesa inteira.
- *
- * ## O achado
- *
- * `smtp-mailer.test.ts` já mede que **nenhum** ponto de código produz CR ou LF
- * sob qualquer forma de normalização, e conclui — corretamente — que um passo
- * de normalização antes da conferência seria rito sem efeito contra quebra de
- * linha.
- *
- * Só que quebra de linha não é a classe inteira. A classe recusada inclui `;`,
- * `,`, `:`, `<`, `>` e o espaço, e **82 pontos de código passam na conferência
- * e viram um caractere proibido depois de normalizados**. O mais afiado é
- * `U+037E`, a interrogação grega, que vira `U+003B` — o ponto e vírgula, que
- * separa endereços numa lista de cabeçalho.
- *
- * **E ele não precisa de NFKC para isso: `U+037E` vira `;` já sob NFC**, que é
- * a forma canônica e sem perda, a que um sistema bem-comportado aplica sem
- * anunciar. O relato original falava em NFKC/NFKD; a medição deste arquivo é
- * mais dura que o relato, e é ela que vale.
- *
- * ## Por que isso não é uma vulnerabilidade hoje
- *
- * Porque nada normaliza depois da conferência. O único tratamento que o
- * endereço recebe é `normalizarEmail` (`trim` + `toLowerCase`), ele roda
- * **antes** da validação, e o caso abaixo mede que nenhuma das duas conversões
- * de caixa produz caractere proibido a partir de um que passava.
- *
- * ## Então por que este arquivo existe
- *
- * Porque "nada normaliza depois" é uma propriedade do código de hoje, e ela
- * cairia em silêncio. Um adaptador de provedor que chamasse `.normalize('NFC')`
- * ao montar o JSON do Postmark, uma coluna que normalizasse na gravação, uma
- * biblioteca de IDNA no domínio: qualquer um deles reabre o furo **sem tocar
- * numa linha da conferência**, e nenhum teste existente ficaria vermelho.
- *
- * Uma frase num comentário dizendo "não normalize depois" evapora. Estes casos
- * medem, e a obrigação está escrita em `ports/mailer.ts`, que é onde quem
- * escrever o próximo transporte vai olhar.
- */
+/** Normalização Unicode e a conferência de endereço: a ordem é a defesa inteira. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -51,10 +12,8 @@ function ponto(cp: number): string {
 }
 
 /**
- * Os pontos de código que a conferência **aceita** e que a normalização
- * transforma em algo que ela **recusaria**. Recalculado a cada execução a
- * partir da conferência viva, e não lido de uma lista: uma lista congelada
- * deixaria de acusar exatamente quando a classe recusada mudasse.
+ * Os pontos de código que a conferência **aceita** e que a normalização transforma
+ * em algo que ela **recusaria**.
  */
 function perigososSobNormalizacao(): { cp: number; forma: string; vira: string }[] {
   const achados: { cp: number; forma: string; vira: string }[] = [];
@@ -75,10 +34,6 @@ function perigososSobNormalizacao(): { cp: number; forma: string; vira: string }
 
 void describe('BICHUS-198 — normalizar DEPOIS de conferir reabriria o furo', () => {
   void it('a conversão de caixa do `normalizarEmail` não cria caractere proibido — este é o passo que de fato roda', () => {
-    // A garantia que protege o produto hoje, e a única que o nosso código pode
-    // dar sozinho. `normalizarEmail` faz `trim` e `toLowerCase`, e roda ANTES
-    // da validação: se alguma conversão de caixa produzisse `;` ou espaço a
-    // partir de um caractere aceito, a ordem atual já não bastaria.
     const culpados: string[] = [];
     for (let cp = 0; cp <= 0x10ffff; cp++) {
       if (cp >= 0xd800 && cp <= 0xdfff) continue;
@@ -101,10 +56,6 @@ void describe('BICHUS-198 — normalizar DEPOIS de conferir reabriria o furo', (
   });
 
   void it('o endereço que a validação aprovou é o MESMO texto que `normalizarEmail` produziu', () => {
-    // O que impede a classe de furos inteira: entre normalizar e validar não
-    // existe passo nenhum, e entre validar e enviar também não. Se um dia
-    // `normalizarEmail` ganhar um `.normalize()`, este caso continua válido —
-    // e é o de cima que acusa se a transformação virar perigosa.
     for (const bruto of ['  Tutora@Exemplo.Test  ', 'ANA.PAULA+Bichu@Exemplo.COM.BR']) {
       const normalizado = normalizarEmail(bruto);
       assert.equal(emailTemFormaValida(normalizado), true, normalizado);
@@ -117,9 +68,6 @@ void describe('BICHUS-198 — normalizar DEPOIS de conferir reabriria o furo', (
   });
 
   void it('há pontos de código que passam e viram proibido sob normalização — medido, não afirmado', () => {
-    // Este caso NÃO descreve um defeito nosso. Ele mantém viva a medição que
-    // sustenta o aviso do `ports/mailer.ts`: no dia em que ela der zero, o
-    // aviso vira folclore e alguém o apaga por parecer paranoia.
     const perigosos = perigososSobNormalizacao();
 
     assert.ok(
@@ -143,7 +91,6 @@ void describe('BICHUS-198 — normalizar DEPOIS de conferir reabriria o furo', (
   });
 
   void it('`U+037E` passa na conferência e o `;` que ele viraria não passa — é essa diferença que a ordem protege', () => {
-    // A demonstração concreta, em duas linhas, do que o aviso da porta descreve.
     const comGrego = 'tutora;x@exemplo.test';
     assert.equal(emailTemFormaValida(comGrego), true, 'o caractere grego é aceito, e isso está certo');
     assert.equal(

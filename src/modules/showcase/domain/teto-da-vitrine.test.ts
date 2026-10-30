@@ -1,23 +1,4 @@
-/**
- * O TETO DE NOVE FOTOS, COBRADO NO SERVIDOR — e os dois casos que importam.
- *
- * ## ISCA (b): o teto não é da tela
- *
- * A tela também o cobra, e isso não basta por um motivo que não é hipótese: o
- * cliente é o que o chamador controla. Uma décima foto aceita aqui só falharia
- * no `CHECK (position BETWEEN 0 AND 8)` do banco — e chegaria ao app como
- * violação de restrição, sem campo e sem motivo, com a tela dizendo "erro
- * inesperado" para uma pessoa que só precisava saber que já tem nove.
- *
- * O caso de dez REPROVA se alguém tirar a conferência do servidor. O
- * CONTRAPESO de nove PASSA — sem ele, uma conferência que recusasse tudo (ou
- * que recusasse a partir da segunda foto) também deixaria o primeiro caso
- * verde, e o teto deixaria de ser nove sem ninguém medir.
- *
- * O número é lido de `TETO_DE_FOTOS_DA_VITRINE`, e **nunca escrito como `9`
- * aqui**: um teste que repete o literal continua verde no dia em que o teto
- * mudar num lugar só, que é o defeito que ele deveria pegar.
- */
+/** O TETO DE NOVE FOTOS, COBRADO NO SERVIDOR — e os dois casos que importam. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -57,7 +38,6 @@ void describe('o teto de fotos da vitrine é cobrado no SERVIDOR', () => {
   void it(`CONTRAPESO -- exatamente ${String(TETO_DE_FOTOS_DA_VITRINE)} são ACEITAS`, () => {
     const gravar = conferirVitrinePedida(fotos(TETO_DE_FOTOS_DA_VITRINE));
     assert.equal(gravar.length, TETO_DE_FOTOS_DA_VITRINE);
-    // E a última posição é `teto - 1`, que é o topo do `CHECK` do banco.
     assert.equal(gravar.at(-1)?.position, TETO_DE_FOTOS_DA_VITRINE - 1);
   });
 

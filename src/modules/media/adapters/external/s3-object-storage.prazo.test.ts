@@ -1,20 +1,4 @@
-/**
- * Toda chamada de rede do armazenamento tem prazo.
- *
- * O `fetch` do Node não tem prazo padrão. Sem um, um armazenamento que aceita a
- * conexão e nunca responde prende o trabalho do worker para sempre, e a única
- * coisa que o libera é a varredura de órfãos — minutos depois, sem nenhum erro
- * no log dizendo por quê.
- *
- * Aqui o servidor é REAL (`node:http` na porta efêmera), e não um dublê de
- * `fetch`: o que se prova é que o pedido que sai pela rede é abortado, inclusive
- * quando o cabeçalho chega e o corpo trava no meio.
- *
- * **Os casos de "servidor mudo" correm contra uma guarda.** Sem prazo no
- * adaptador a chamada não rejeita nunca, e um teste que só espera a rejeição
- * ficaria pendurado em vez de reprovar. A guarda transforma "pendurou" em
- * falha com nome: é esse o caso que reprova se o prazo for removido.
- */
+/** Toda chamada de rede do armazenamento tem prazo. */
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -53,8 +37,6 @@ let armazenamento: ReturnType<typeof criarObjectStorage>;
 
 before(async () => {
   servidor = createServer((pedido, resposta) => {
-    // O corpo do PUT precisa ser consumido, senão o cliente trava no envio e
-    // o caso mediria o buffer do socket, e não o prazo.
     pedido.resume();
     comportamento(pedido, resposta);
   });
@@ -63,8 +45,6 @@ before(async () => {
 });
 
 after(async () => {
-  // As conexões dos casos mudos nunca terminam sozinhas; sem isto o `close`
-  // espera por elas e a suíte não sai.
   servidor.closeAllConnections();
   await new Promise<void>((fechado) => servidor.close(() => fechado()));
 });
@@ -82,12 +62,7 @@ const responde = (status: number, corpo?: Buffer): Comportamento => (_pedido, re
   resposta.end(corpo);
 };
 
-/**
- * Espera a chamada rejeitar, e reprova se ela não rejeitar antes da guarda.
- *
- * Devolve o erro e quanto tempo levou, para que o caso confira também que o
- * prazo usado foi o certo — o curto no HEAD, o longo no GET.
- */
+/** Espera a chamada rejeitar, e reprova se ela não rejeitar antes da guarda. */
 async function rejeicaoDentroDaGuarda(chamada: () => Promise<unknown>): Promise<{ erro: unknown; ms: number }> {
   const inicio = performance.now();
   let guarda: NodeJS.Timeout | undefined;
@@ -112,7 +87,6 @@ function assertPrazoEsgotado(erro: unknown, operacao: string, prazoMs: number): 
   assert.ok(erro instanceof PrazoDoArmazenamentoEsgotadoError, `esperava erro de prazo, veio ${String(erro)}`);
   assert.equal(erro.operacao, operacao);
   assert.equal(erro.prazoMs, prazoMs);
-  // Sem vazar detalhe: nem endereço, nem bucket, nem chave, nem credencial.
   for (const proibido of ['127.0.0.1', 'privado-de-teste', 'pets/p/original', 'chave-de-teste', 'segredo']) {
     assert.ok(!erro.message.includes(proibido), `a mensagem vazou "${proibido}": ${erro.message}`);
   }
@@ -148,8 +122,6 @@ void describe('servidor que aceita a conexão e nunca responde', () => {
   });
 
   void it('GET cujo corpo trava no meio também é abortado: o prazo cobre a leitura dos bytes', async () => {
-    // O cabeçalho chegou, `fetch` já resolveu. Um prazo que valesse só até o
-    // cabeçalho deixaria o `arrayBuffer()` pendurado exatamente aqui.
     comportamento = corpoQueTrava;
     const { erro } = await rejeicaoDentroDaGuarda(() => armazenamento.get('privado', CHAVE));
     assertPrazoEsgotado(erro, 'GET', PRAZO_DE_TRANSFERENCIA_MS);

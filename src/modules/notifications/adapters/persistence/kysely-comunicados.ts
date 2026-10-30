@@ -1,26 +1,6 @@
 /**
  * `RepositorioDeComunicados` sobre `notification_broadcasts` e a funcao
  * `comunicado_disparar` (migracao `20261018000020`).
- *
- * ## O disparo e UMA chamada de funcao, dentro da transacao de quem chama
- *
- * `comunicado_disparar` faz tres coisas numa transacao: confere o teto diario,
- * grava o comunicado e abre em leque uma notificacao por conta habilitada.
- * **O teto mora la e nao aqui** porque a contagem e a insercao tem de ser
- * atomicas -- teto conferido numa consulta anterior e teto que duas abas furam.
- *
- * Ela devolve ZERO LINHAS quando o teto foi atingido, e esse e o contrato
- * interno: `undefined` sobe para a aplicacao, que sabe qual `Problem` ele e.
- * Excecao de banco aqui obrigaria este arquivo a conhecer codigo de erro do
- * Postgres para distinguir "teto" de "banco fora".
- *
- * ## A janela de disparo nao grava e nao pode gravar
- *
- * `janelaDeDisparo` sao duas contagens e nada mais. Ela NAO chama
- * `comunicado_disparar` com algum sinalizador de simulacao: um caminho de
- * escrita que aceita "nao escreva de verdade" e um caminho de escrita que um dia
- * escreve por engano. E ela nao recebe o rascunho: nenhum dos numeros depende
- * do texto.
  */
 import { sql } from 'kysely';
 
@@ -59,15 +39,7 @@ function comoComunicado(l: LinhaDoComunicado): Comunicado {
   };
 }
 
-/**
- * As colunas que saem, por nome.
- *
- * `dispatched_by` e o NOME DE EXIBICAO da conta de painel, vindo de uma
- * subconsulta -- e nao o `dispatched_by_admin`, que e UUID e nao atravessa a
- * borda (ADR-0010). A juncao e subconsulta e nao `JOIN` para a ausencia da
- * conta nao sumir com o comunicado: `ON DELETE RESTRICT` ja impede apagar a
- * conta, mas um `JOIN` interno aqui seria a segunda coisa a confiar nisso.
- */
+/** As colunas que saem, por nome. */
 const COLUNAS = sql`
   b.id, b.ref, b.title, b.body, b.dispatched_at, b.recipients_total,
   (SELECT a.display_name FROM admin_accounts a WHERE a.id = b.dispatched_by_admin)
@@ -105,9 +77,6 @@ export function criarRepositorioDeComunicados(db: Db): RepositorioDeComunicados 
 
       return {
         alcancaria,
-        // `Math.max(0, ...)`: se o teto cair de valor um dia, a conta do dia
-        // anterior pode ser maior que ele, e um numero negativo na tela seria
-        // pior que zero.
         restamHoje: Math.max(0, TETO_DIARIO_DE_COMUNICADOS - hoje),
         tetoDiario: TETO_DIARIO_DE_COMUNICADOS,
       };
@@ -123,7 +92,6 @@ export function criarRepositorioDeComunicados(db: Db): RepositorioDeComunicados 
           FROM comunicado_disparar(${adminId}, ${rascunho.titulo}, ${rascunho.corpo})`.execute(trx);
 
       const linha = disparo.rows[0];
-      // ZERO LINHAS = teto diario atingido. Nada foi gravado.
       if (linha === undefined) return undefined;
 
       const lido = await sql<LinhaDoComunicado>`
@@ -133,10 +101,6 @@ export function criarRepositorioDeComunicados(db: Db): RepositorioDeComunicados 
 
       const gravado = lido.rows[0];
       if (gravado === undefined) {
-        // Inalcancavel: a leitura e na MESMA transacao que acabou de gravar.
-        // Lancar e nao devolver `undefined` de proposito -- `undefined` aqui
-        // seria lido como "teto atingido", e a trilha registraria um teto que
-        // nao houve.
         throw new Error('comunicado_disparar gravou mas a linha nao foi lida na mesma transacao');
       }
       return { id: gravado.id, comunicado: comoComunicado(gravado) };

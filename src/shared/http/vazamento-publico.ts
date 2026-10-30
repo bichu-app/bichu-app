@@ -1,35 +1,3 @@
-/**
- * Detector de vazamento em resposta pública, para os testes das rotas sem conta.
- *
- * A regra do produto não tem exceção: **resposta pública nunca expõe telefone,
- * endereço, e-mail nem id interno do tutor** (ADR-0021, "resposta pública não
- * tem ramo privilegiado"; SEC-001; SEC-002). O portão `portao-contrato-publico`
- * confere o que o CONTRATO declara. Este arquivo confere o que a ROTA responde,
- * e as duas coisas divergem exatamente onde dói: propriedade a mais na resposta
- * não quebra cliente nenhum, então nenhum comparador de contrato a acusa.
- *
- * Quatro verificações, porque cada uma pega um defeito que as outras deixam
- * passar:
- *
- * 1. **Propriedade fora do contrato.** O corpo só pode ter as propriedades que o
- *    schema da resposta declara. É a que pega `owner_user_id` acrescentado "só
- *    para depurar", com qualquer nome.
- * 2. **Nome proibido em qualquer profundidade.** `email`, `phone`, `id`,
- *    `pet_id`... mesmo dentro de um objeto aninhado que o contrato declare.
- * 3. **Valor plantado.** O teste planta o e-mail, o telefone, o endereço e os
- *    UUIDs do tutor no que a porta devolve (inclusive dentro de texto livre), e
- *    nenhum deles pode aparecer no corpo. Telefone é comparado pelos oito
- *    últimos dígitos, porque `+55 11 98765-4321` e `87654321` escrito num
- *    recado são o mesmo número para quem liga, com ou sem DDI e DDD.
- * 4. **Qualquer UUID.** Superfície pública não carrega UUID nenhum (SEC-001: o
- *    UUIDv7 carrega o instante de criação), então um valor com forma de UUID é
- *    vazamento mesmo que ninguém o tenha plantado.
- *
- * O arquivo de teste deste detector carrega as iscas: um corpo que vaza de cada
- * um dos quatro jeitos, e a exigência de que cada um seja acusado. Detector que
- * não acusa a isca reprova a si mesmo.
- */
-
 /** Nomes que não saem em resposta a quem não tem conta, em nenhuma profundidade. */
 export const CHAVES_PROIBIDAS_EM_RESPOSTA_PUBLICA: ReadonlySet<string> = new Set([
   'id',
@@ -65,7 +33,6 @@ export const CHAVES_PROIBIDAS_EM_RESPOSTA_PUBLICA: ReadonlySet<string> = new Set
 /**
  * O único UUID legítimo em corpo público: o `correlation_id` do Problem Details,
  * que identifica a REQUISIÇÃO no log e existe para a pessoa citar ao suporte.
- * Ele não aponta para registro nenhum do banco.
  */
 const CAMPOS_COM_UUID_LEGITIMO: ReadonlySet<string> = new Set(['correlation_id']);
 
@@ -76,7 +43,7 @@ export interface ValorPlantado {
   /** Para a mensagem: "e-mail do tutor", "UUID do pet". */
   readonly rotulo: string;
   readonly valor: string;
-  /** Compara pelos oito últimos dígitos, sem pontuação. Para telefone. */
+  /** Compara pelos oito últimos dígitos, sem pontuação. */
   readonly porDigitos?: true;
 }
 
@@ -104,8 +71,6 @@ export function propriedadesDeclaradas(schema: unknown): ReadonlySet<string> {
   };
   visitar(schema);
   if (nomes.size === 0) {
-    // Sem propriedade declarada não há contra o que comparar, e comparar contra
-    // nada aprovaria qualquer corpo. Falha ruidosa, com o motivo.
     throw new Error(
       'O schema de resposta não declara propriedade nenhuma: o detector não tem ' +
         'contra o que comparar e reprova em vez de aprovar por omissão.',
@@ -151,7 +116,7 @@ function varrerTextos(valor: unknown, caminho: string, visitar: (texto: string, 
 export function achadosDeVazamento(
   corpo: unknown,
   opcoes: {
-    /** As propriedades do schema da resposta. Omitido para corpo de erro. */
+    /** As propriedades do schema da resposta. */
     readonly declaradas?: ReadonlySet<string>;
     readonly plantados: readonly ValorPlantado[];
   },

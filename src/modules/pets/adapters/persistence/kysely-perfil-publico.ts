@@ -1,18 +1,4 @@
-/**
- * Persistência do perfil público do pet, pelo `slug`.
- *
- * **Esta consulta não toca `users`** e não seleciona `pets.id` nem
- * `owner_user_id`. O teste `perfil-publico-sem-dado-do-tutor.test.ts` lê o SQL
- * compilado e reprova se algum deles entrar na lista de saída.
- *
- * **O filtro é todo no `WHERE`** (ADR-0021): perfil desligado, pet excluído e
- * pet falecido ou arquivado não voltam do banco. A consulta que traria o perfil
- * desligado para a aplicação descartá-lo num `if` responde igual até o dia em
- * que alguém mexe no `if`.
- *
- * `is_lost` vem de `lost_cases` e não de `pets.status`: abrir um caso não muda
- * `pets.status` hoje, e o caso aberto é a fonte da verdade sobre "perdido".
- */
+/** Persistência do perfil público do pet, pelo `slug`. */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { LeituraDoPerfilPublico, PerfilPublicoDoPet } from '../../ports/perfil-publico.js';
 
@@ -60,8 +46,6 @@ export function criarLeituraDoPerfilPublico(db: Db): LeituraDoPerfilPublico {
   return {
     async porSlug(slug): Promise<PerfilPublicoDoPet | undefined> {
       const linha = await construtorDoPerfilPublico(db, slug).executeTakeFirst();
-      // `slug` nunca é nulo aqui (o WHERE compara com ele), mas a coluna é
-      // anulável no esquema; a conferência mantém o tipo honesto.
       if (linha === undefined || linha.slug === null) return undefined;
       return {
         slug: linha.slug,

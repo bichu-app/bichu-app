@@ -28,7 +28,10 @@ type Item = Esquemas['AdminStoreItem'];
 
 const POR_PAGINA = 20;
 
-/** Chips de escolha unica (secao 25.5): `Preco vencido` e `price_status`, os outros sao `publication_state`. */
+/**
+ * Chips de escolha unica (secao 25.5): `Preco vencido` e `price_status`, os outros
+ * sao `publication_state`.
+ */
 const CHIPS = [
   { valor: 'todos', rotulo: 'Todos' },
   { valor: 'published', rotulo: 'Publicados' },
@@ -37,7 +40,10 @@ const CHIPS = [
   { valor: 'vencido', rotulo: 'Preço vencido' },
 ] as const;
 
-/** "Atualizados por ultimo" e o padrao da tela; `sort` do contrato em `correspondencia_de_ordem` da matriz. */
+/**
+ * "Atualizados por ultimo" e o padrao da tela; `sort` do contrato em
+ * `correspondencia_de_ordem` da matriz.
+ */
 const ORDENS = [
   { valor: 'atualizado', rotulo: 'Atualizados por último' },
   { valor: 'nome', rotulo: 'Nome (A a Z)' },
@@ -80,9 +86,6 @@ function textoDaContagem(
   if (f) t += ` em ${f}`;
   const doVocabulario = categoriaDoVocabulario(taxonomia, categoria);
   if (doVocabulario) t += ` · ${doVocabulario.label}`;
-  // A subcategoria entra DEPOIS da categoria e so com ela: "· Bifinhos" sem
-  // "· Petiscos e ossos" na frente deixaria a linha afirmar um recorte menor
-  // do que o que de fato valeu.
   const subDoVocabulario = doVocabulario?.subcategories.find((sc) => sc.code === subcategoria);
   if (subDoVocabulario) t += ` · ${subDoVocabulario.label}`;
   if (eEspecie(especie)) t += ` · ${ESPECIES[especie]}`;
@@ -106,11 +109,7 @@ export default function ListaDeProdutos() {
   const [avisoLocal, setAvisoLocal] = useState<{ tipo: 'ok' | 'erro'; texto: string }>();
   const [renovar, setRenovar] = useState<Item>();
   const [retirar, setRetirar] = useState<Item>();
-  /**
-   * O vocabulario dos dois niveis. **Nao bloqueia a lista**: sem ele os dois
-   * seletores ficam sem opcao e a tabela continua carregando, porque o rotulo
-   * da categoria de cada linha vem do proprio item (`category_label`).
-   */
+  /** O vocabulario dos dois niveis. */
   const [taxonomia, setTaxonomia] = useState<Taxonomia>();
 
   useEffect(() => {
@@ -121,8 +120,7 @@ export default function ListaDeProdutos() {
         if (data) setTaxonomia(data);
       })
       .catch(() => {
-        // Silencio deliberado: o recorte por categoria deixa de ser oferecido,
-        // e nada mais na tela depende disto.
+        // Silencio deliberado: o recorte por categoria deixa de ser oferecido, e nada mais na tela depende disto.
       });
     return () => controle.abort();
   }, [api]);
@@ -287,18 +285,12 @@ export default function ListaDeProdutos() {
               { valor: '', rotulo: 'Todas as categorias' },
               ...(taxonomia?.categories ?? []).map((c) => ({ valor: c.code, rotulo: c.label })),
             ],
-            // Trocar a categoria LIMPA a subcategoria, sempre. Manter a
-            // anterior deixaria o recorte ser um par que nao existe, e a lista
-            // voltaria vazia sem a pessoa entender por que.
             aoMudar: (v) => mudar({ categoria: v, subcategoria: '' }),
           },
           {
             id: 'f-subcat',
             rotuloAcessivel: 'Subcategoria',
             valor: p.subcategoria,
-            // Sem categoria escolhida ha uma opcao so, e o seletor nao oferece
-            // as 83 de uma vez: oferecer todas devolveria a pessoa ao problema
-            // que os dois niveis existem para resolver.
             opcoes: [
               {
                 valor: '',
@@ -435,8 +427,8 @@ function LinhaDoProduto({ item, menu, aoRenovar }: { item: Item; menu: ItemDoMen
             <Link className="nome" to={`/loja/${item.slug}`} title={item.title}>
               {item.title}
             </Link>
-            {/* Rascunho pode nao ter parceiro nem destino (17/10/2026): sem
-                eles a linha vira texto, e nao um link para lugar nenhum. */}
+            {
+}
             {item.partner && item.target_url ? (
               <a className="sub t-body-sm" href={item.target_url} target="_blank" rel="noopener noreferrer" title="Abre a página do produto no parceiro, em nova aba">
                 {item.partner.name} <Icone nome="open" tamanho="s16" />
@@ -446,14 +438,8 @@ function LinhaDoProduto({ item, menu, aoRenovar }: { item: Item; menu: ItemDoMen
               <span className="sub t-body-sm c-sec">{item.partner ? item.partner.name : 'Sem parceiro'}</span>
             )}
             <span className="t-caption c-sec">
-              {/*
-                O rotulo vem do SERVIDOR (`category_label`), e nao de um mapa
-                do painel -- o mapa `CATEGORIAS` morreu com o `enum` do
-                contrato. `?? item.category` e a reserva para o rotulo que o
-                servidor nao resolveu; `'Sem categoria'` e o RASCUNHO sem
-                categoria, que a `20261017000002` permitiu e que nao pode
-                aparecer como linha vazia na lista.
-              */}
+              {
+}
               {item.category === null
                 ? 'Sem categoria'
                 : (item.category_label ?? item.category)}

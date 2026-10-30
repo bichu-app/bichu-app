@@ -1,69 +1,6 @@
 /**
  * O teto de tentativas invalidas de `GET /tags/{code}`, medido pela POSICAO da
  * recusa, na dimensao `finder_identity`.
- *
- * ===========================================================================
- * POR QUE ESTA ENTRADA, E POR QUE ELA PRIMEIRO
- * ===========================================================================
- * `resolveTagCode` e a rota que o QR da coleira abre. Ela e **publica**: nao ha
- * conta, nao ha token, e qualquer pessoa na internet chega nela com um codigo
- * na URL. O codigo tem 75 bits de aleatoriedade (`tag-code.ts`), entao adivinhar
- * um por forca bruta nao e o risco; o risco e o laco barato -- quem varre codigos
- * paga quase nada por tentativa e o servico paga uma consulta por chamada.
- *
- * A quinta entrada de `x-rate-limit` desta operacao e o freio disso: cinco
- * tentativas INVALIDAS em dez minutos, por identidade de achador, com
- * `deny_429`. Ate 22/09 ela nao tinha teste nenhum -- nem o compilador a
- * alcancava, porque apagar UMA entrada de uma lista de seis nao viola o tipo
- * `NonEmpty` de `defineRoute`.
- *
- * As DUAS entradas de `invalid_attempts` desta operacao sao medidas aqui, cada
- * uma na posicao em que ela e observavel: a quinta (5 por `finder_identity`, em
- * 10 min) pela sexta tentativa do mesmo aparelho, e a sexta (20 por `ip`, em
- * 1 h) por um aparelho LIMPO que chega depois de quatro outros terem gasto cinco
- * cada. Nenhuma das duas tinha teste ate 22/09.
- *
- * ===========================================================================
- * AS DUAS ARMADILHAS DESTA CASA, E COMO CADA UMA E DESARMADA AQUI
- * ===========================================================================
- * **1. A mesma rota tem DUAS entradas de `invalid_attempts`, as duas
- * `deny_429`.** Alem desta (5 por identidade, em 10 min) existe a sexta: 20 por
- * IP, em 1 h. Apagar a de `finder_identity` NAO faz o 429 sumir -- a de IP
- * continua recusando, so que na VIGESIMA PRIMEIRA chamada em vez da sexta. Um
- * teste que afirme "alguma chamada levou 429" passa nos dois mundos e nao vigia
- * nada. Por isso o que este arquivo afirma e a POSICAO: as cinco primeiras
- * respondem 404 e a SEXTA responde 429. Quadruplicar o que um varredor consegue
- * antes de ser barrado e exatamente a regressao que a medicao por presenca
- * deixaria passar.
- *
- * **2. Blocos de `rateLimit` de rotas diferentes sao identicos byte a byte.**
- * Por isso o caso de declaracao deste arquivo ancora no `operationId` -- ele le
- * `rotaDeResolucaoDaTag`, que e a declaracao exportada, e nao um trecho de
- * texto. Nenhuma busca textual decide nada aqui.
- *
- * **3. O numero esperado NAO sai da declaracao da rota.** `TETO_DE_INVALIDAS`
- * e literal, com a fonte citada. Um teste que tirasse o esperado do mesmo lugar
- * que exercita e tautologia: trocar 5 por 50 na rota passaria com a suite verde.
- * Isso tambem e o que este arquivo acrescenta a
- * `src/shared/http/rotas-registradas-contra-o-contrato.test.ts`, que compara a
- * rota contra o YAML: uma edicao COORDENADA nos dois arquivos passa la, e
- * reprova aqui.
- *
- * O CAMINHO, ao contrario do numero, sai da declaracao
- * (`rotaDeResolucaoDaTag.path`): caminho escrito a mao vira 404 em silencio, e
- * 404 aqui e justamente a resposta que o caso espera nas cinco primeiras -- a
- * isca reprovaria pelo motivo errado, ou pior, passaria por ele.
- *
- * ===========================================================================
- * O QUE O BANCO NAO ACRESCENTARIA
- * ===========================================================================
- * Nada deste arquivo depende de Postgres. Quem conta e
- * `criarContadorEmMemoria`, quem aplica e `registrarRota` com os ganchos de
- * verdade, e quem resolve `finder_identity` e o resolvedor de producao
- * (`resolvedoresDaTag`, que chama `hmacDeIdentidadeDoAchador`). O duble e o
- * REPOSITORIO, e so ele: uma plaquinha que nao existe e exatamente o que
- * `resolverPorCodigo` devolvendo `undefined` significa. Subir banco para provar
- * em qual chamada o 429 chega seria medir a mesma coisa mais devagar.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -97,31 +34,21 @@ const AGORA = 1_800_000_000_000 as Instant;
 /** Da DECLARACAO, nunca escrito a mao: caminho errado vira 404 em silencio. */
 const RESOLUCAO = rotaDeResolucaoDaTag.path;
 
-/**
- * O teto de tentativas INVALIDAS por identidade de achador, literal e com fonte.
- *
- * Fonte: `api/openapi.yaml`, operacao `resolveTagCode`, quinta entrada de
- * `x-rate-limit` (`dimension: [finder_identity]`, `applies_to: invalid_attempts`,
- * `limit: 5`, `window: 10m`, `on_exceed: deny_429`). ADR-0016 define o mecanismo.
- */
+/** O teto de tentativas INVALIDAS por identidade de achador, literal e com fonte. */
 const TETO_DE_INVALIDAS = 5;
 
-/** O OUTRO teto de invalidas da MESMA rota, que torna a medicao por presenca inutil. */
+/**
+ * O OUTRO teto de invalidas da MESMA rota, que torna a medicao por presenca
+ * inutil.
+ */
 const TETO_DE_INVALIDAS_POR_IP = 20;
 
-/** Dois aparelhos distintos atras do mesmo endereco. E o par que forma a identidade. */
+/** Dois aparelhos distintos atras do mesmo endereco. */
 const APARELHO_A = 'Mozilla/5.0 (Android 14; Pixel 7) AppleWebKit/537.36';
 const APARELHO_B = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)';
 const ENDERECO = '203.0.113.44';
 
-/**
- * Quantos aparelhos distintos cabem no teto por IP antes de ele estourar.
- *
- * Quatro, porque cada um gasta `TETO_DE_INVALIDAS` antes de ser barrado pelo
- * proprio balde: 4 x 5 = 20, que e exatamente `TETO_DE_INVALIDAS_POR_IP`. E a
- * conta que o contrato fez ao escolher os dois numeros, e escreve-la aqui e o
- * que faz este arquivo reprovar se qualquer um dos dois mudar sem o outro.
- */
+/** Quantos aparelhos distintos cabem no teto por IP antes de ele estourar. */
 const APARELHOS_ATE_O_TETO_DE_IP = TETO_DE_INVALIDAS_POR_IP / TETO_DE_INVALIDAS;
 
 function naoUsado(nome: string): never {
@@ -130,15 +57,13 @@ function naoUsado(nome: string): never {
 
 /**
  * Bancada nova a cada caso: contador em memoria zerado, e nenhum caso herda o
- * balde do anterior. Contador compartilhado faria a POSICAO medida depender da
- * ordem de execucao, que e o defeito que este arquivo existe para nao ter.
+ * balde do anterior.
  */
 function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.now())): RegistradorDeRotas {
   /**
    * O duble e so o repositorio, e ele devolve `undefined` SEMPRE: e assim que
    * `resolverPorCodigo` diz "nao existe plaquinha com este codigo", e o servico
-   * traduz isso em `tag-code-not-found` (`tag-service.ts`). E esse tipo de
-   * problema que `registrar-rota.ts` classifica como tentativa invalida.
+   * traduz isso em `tag-code-not-found` (`tag-service.ts`).
    */
   const repositorio: TagRepository = {
     resolverPorCodigo: () => Promise.resolve(undefined),
@@ -170,8 +95,6 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
     clock,
     trilha,
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
-    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
-    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
     fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
@@ -191,10 +114,6 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
   const app = criarServidor({
     problemBaseUrl: PROBLEM_BASE_URL,
     isProduction: false,
-    // EM MEMORIA por padrao, e nao desligado. Um contador desligado faria este
-    // arquivo inteiro medir o nada, verde, para sempre. O unico caso que passa
-    // `criarContadorDesligado()` e a isca do fim, e ele o passa na linha, onde
-    // a revisao ve.
     teto: tetoDeTeste(contador),
   });
   const deps: DependenciasDasRotasDeTag = {
@@ -217,14 +136,7 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
   return app;
 }
 
-/**
- * Um codigo VALIDO e diferente a cada tentativa.
- *
- * Quem varre plaquinhas tenta codigos diferentes, e e por isso que o teto conta
- * por identidade e nao por codigo. Repetir o mesmo codigo nas seis chamadas
- * mediria um cenario que nao existe, e ainda deixaria a entrada por `[code]`
- * (100 por 24 h, `notify_owner`) participar da conta.
- */
+/** Um codigo VALIDO e diferente a cada tentativa. */
 function codigoValido(semente: number): string {
   return gerarCodigoDaTag(new Uint8Array(10).fill(semente));
 }
@@ -262,9 +174,6 @@ async function tentar(
 void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa', () => {
   void it('a sexta plaquinha inexistente do mesmo achador responde 429; as cinco antes, 404', async () => {
     const app = bancada();
-    // EM SERIE, de proposito. A contagem da invalida acontece em `onResponse`,
-    // DEPOIS de a resposta sair: em paralelo a sexta poderia chegar ao teto
-    // antes de a quinta ter sido contada, e a posicao medida seria outra.
     const respostas: Resposta[] = [];
     for (let i = 0; i < TETO_DE_INVALIDAS + 1; i += 1) {
       respostas.push(await tentar(app, APARELHO_A, i + 1));
@@ -316,17 +225,6 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
   });
 
   void it('o balde e do par (endereco, aparelho): outro aparelho no mesmo IP ainda e atendido', async () => {
-    // O QUE DISTINGUE `finder_identity` DE `ip`, e por que a distincao e cara.
-    //
-    // O CGNAT das operadoras brasileiras poe muita gente atras de poucos
-    // enderecos (e por isso que existe a dimensao `ip_24`, ao lado). Se esta
-    // entrada passasse a contar por `ip`, cinco erros de digitacao de UMA pessoa
-    // trancariam a rua inteira por dez minutos -- e a rota trancada e justamente
-    // a que alguem abre com um cachorro perdido na mao.
-    //
-    // Este caso reprova a troca de `['finder_identity']` por `['ip']`, que
-    // COMPILA (`ip` e dimensao generica e nao exige resolvedor) e que passaria
-    // pelo caso de posicao acima sem mudar uma linha do resultado.
     const app = bancada();
     for (let i = 0; i < TETO_DE_INVALIDAS; i += 1) {
       await tentar(app, APARELHO_A, i + 1);
@@ -352,23 +250,6 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
   });
 
   void it('esgotados quatro aparelhos, o quinto ja chega recusado: o teto por IP', async () => {
-    // ===================================================================
-    // A SEXTA ENTRADA, QUE E O PAR DA QUINTA
-    // ===================================================================
-    // `resolveTagCode` tem DUAS entradas `invalid_attempts`, e a de IP existe
-    // para o caso que a de identidade nao alcanca: quem troca o `User-Agent` a
-    // cada tentativa ganha um balde novo de cinco, e faria varredura sem fim
-    // por um preco desprezivel. A de IP fecha isso em vinte por hora.
-    //
-    // Este caso mede a POSICAO dela pelo unico caminho em que ela e observavel:
-    // quatro aparelhos gastando cinco invalidas cada, e um QUINTO aparelho,
-    // limpo, que precisa chegar ja recusado. Sem a entrada de IP, esse quinto
-    // aparelho responderia 404 -- ele tem o proprio balde de identidade
-    // intacto, e nada mais o barraria.
-    // Divisao exata, e ela precisa continuar exata: o caso distribui as
-    // invalidas em aparelhos INTEIROS, e um resto faria a ultima rodada parar
-    // no meio -- o quinto aparelho chegaria com o balde de IP ainda com folga e
-    // o 404 dele seria lido como "a entrada sumiu".
     assert.equal(
       TETO_DE_INVALIDAS_POR_IP % TETO_DE_INVALIDAS,
       0,
@@ -420,10 +301,6 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
   });
 
   void it('a rota declara o teto que o contrato declara', () => {
-    // O OUTRO LADO DA PINCA, independente do caso de posicao DE PROPOSITO.
-    // Aquele prova que o mecanismo recusa onde deve; este prova que o numero nao
-    // mudou. Se o esperado saisse da propria rota, trocar 5 por 50 passaria nos
-    // dois, porque os dois teriam passado a cobrar 50.
     const declaradas: readonly RateLimitEntry[] = rotaDeResolucaoDaTag.rateLimit;
     const porIdentidade = declaradas.filter(
       (entrada) =>
@@ -499,13 +376,6 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
 });
 
 void it('ISCA: com o contador desligado a sexta tentativa passa, e o caso da posicao reprova', async () => {
-  // A prova negativa, no formato que `registrar-rota.test.ts` estabeleceu.
-  //
-  // Sem ela, o caso da posicao poderia estar verde por qualquer coisa -- um 429
-  // vindo de outro teto, ou a bancada nao chegando a resolver a plaquinha. Com
-  // ela, o repositorio guarda o que aquele caso mede: desligar o contador, e SO
-  // isso, muda a sexta resposta de 429 para 404. Foi exatamente assim que este
-  // projeto passou semanas com `hit()` nunca chamado e a suite verde.
   const app = bancada(criarContadorDesligado());
   const status: number[] = [];
   for (let i = 0; i < TETO_DE_INVALIDAS + 1; i += 1) {

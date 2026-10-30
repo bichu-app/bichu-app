@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 
 /**
- * Busca, filtro e ordenacao moram na URL (sobrevivem a recarga, dao link e
- * voltar do detalhe preserva). Valor ausente e o padrao, e o padrao nao vai
- * para a URL. `padroes` precisa ser estavel (constante de modulo).
+ * Busca, filtro e ordenacao moram na URL (sobrevivem a recarga, dao link e voltar
+ * do detalhe preserva).
  */
 export function useParametrosDaLista<T extends Record<string, string>>(padroes: T) {
   const [busca, setBusca] = useSearchParams();
@@ -30,9 +29,8 @@ export function useParametrosDaLista<T extends Record<string, string>>(padroes: 
 }
 
 /**
- * O aviso de sucesso que o formulario deixa para a lista (banner persistente
- * com Fechar, secao 25.5). Vem no estado da navegacao, nao na URL; fechar
- * limpa o estado, e recarregar a pagina nao o traz de volta.
+ * O aviso de sucesso que o formulario deixa para a lista (banner persistente com
+ * Fechar, secao 25.5).
  */
 export function useAvisoDaNavegacao(): [string | undefined, () => void] {
   const location = useLocation();
@@ -57,12 +55,7 @@ interface Resultado<T> {
   erro: boolean;
 }
 
-/**
- * Lista paginada por "Carregar mais" (secao 11.20). `buscar(pagina, sinal)`
- * chama a operacao do contrato e precisa ser memorizada pela `chave` dos
- * filtros: chave nova recomeca da pagina 1. O estado e derivado da resposta
- * guardada, sem `setState` sincrono em efeito.
- */
+/** Lista paginada por "Carregar mais" (secao 11.20). */
 export function useListaPaginada<T>(
   chave: string,
   buscar: (pagina: number, sinal: AbortSignal) => Promise<{ itens: T[]; total: number } | undefined>,

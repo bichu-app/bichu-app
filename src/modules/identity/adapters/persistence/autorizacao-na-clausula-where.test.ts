@@ -1,35 +1,4 @@
-/**
- * A autorização está na cláusula `WHERE`, e o SQL compilado prova isso.
- *
- * ## Por que conferir o SQL e não o comportamento
- *
- * O teste de comportamento — "a conta B não vê a localização da conta A" —
- * existe, roda contra Postgres de verdade e está em
- * `tests/integration/localizacao-de-referencia.test.ts`. Ele é necessário e não
- * é suficiente, por um motivo concreto: ele passa igual se a consulta trouxer a
- * linha de A e um `if` na aplicação a descartar depois. As duas implementações
- * são indistinguíveis pelo lado de fora **até** o dia em que alguém mexe no
- * `if`, e aí não existe teste que acuse, porque o `if` era o teste.
- *
- * O ADR-0021 não diz "não devolva a linha do outro". Ele diz **onde** a decisão
- * mora. Este arquivo é o único lugar do repositório que consegue verificar essa
- * parte, porque ela não é observável na resposta: ele compila as consultas sem
- * executá-las e lê o predicado.
- *
- * ## A isca, e como ela foi provada
- *
- * Desligada, rodada e vista reprovar em 22/09/2026, e depois restaurada:
- *
- * | o que foi desligado em `kysely-localizacao-de-referencia.ts` | reprovaram |
- * |---|---|
- * | `.where('user_id', '=', dono)` removido de `construtorDaLeitura` | 3 casos |
- * | `.where('user_id', '=', dono)` removido de `construtorDoApagamento` | 2 casos |
- * | `.where('expires_at', '>', ...)` removido da leitura | 1 caso |
- * | `=` virando `is not` em `construtorDaLeitura` | 1 caso |
- *
- * A última linha importa: um predicado com o nome certo e o operador errado
- * passaria por uma conferência que só procurasse `user_id` no texto.
- */
+/** A autorização está na cláusula `WHERE`, e o SQL compilado prova isso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
@@ -48,13 +17,7 @@ const AGORA = 1_800_000_000_000 as Instant;
 /** SEC-021: a sessão de aparelho, que entra no WHERE ao lado do dono. */
 const FAMILIA = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-0000000000f1');
 
-/**
- * Kysely sem banco: ele compila a consulta e não a executa.
- *
- * É o caminho REAL — o mesmo construtor, o mesmo compilador de dialeto do
- * Postgres que a aplicação usa. Um SQL escrito à mão aqui seria o atalho que
- * parece equivalente e esconde exatamente o que se foi conferir.
- */
+/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -64,12 +27,7 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/**
- * O predicado do dono, como o compilador do Postgres o escreve: `"user_id" = $n`.
- *
- * A regex cobra o OPERADOR junto do nome. Sem isso, um `is not` com a coluna
- * certa passaria — e `is not $1` casa toda linha da tabela.
- */
+/** O predicado do dono, como o compilador do Postgres o escreve: `"user_id" = $n`. */
 const PREDICADO_DO_DONO = /"user_id"\s*=\s*\$\d+/;
 
 interface Compilada {
@@ -107,11 +65,6 @@ void describe('toda consulta que toca a localização de alguém carrega o dono 
 
   void it('SEC-021: o apagamento tem `"session_family_id" = $n` junto do dono', () => {
     const { sql, parameters } = compilar(construtorDoApagamento(semBanco, DONO, FAMILIA));
-    // ISCA: tire `.where('session_family_id', ...)` de `construtorDoApagamento`
-    // e este caso reprova. É a outra metade da SEC-021, e é a que o teste de
-    // unidade do logout não alcança: lá o repositório é dublê, e um dublê
-    // chaveado pelo par continua se comportando bem enquanto o SQL de verdade
-    // apaga a tabela inteira daquela pessoa.
     assert.match(
       sql,
       /"session_family_id"\s*=\s*\$\d+/,
@@ -127,9 +80,6 @@ void describe('toda consulta que toca a localização de alguém carrega o dono 
 
   void it('SEC-021: a leitura também é por aparelho, e não pela pessoa', () => {
     const { sql, parameters } = compilar(construtorDaLeitura(semBanco, DONO, FAMILIA, AGORA));
-    // ISCA: tire o mesmo `.where` de `construtorDaLeitura` e este caso reprova.
-    // Sem ele, o `GET /v1/me/location` de um aparelho devolveria o lugar que o
-    // OUTRO aparelho informou — um lugar em que quem pergunta nunca esteve.
     assert.match(
       sql,
       /"session_family_id"\s*=\s*\$\d+/,
@@ -186,8 +136,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o dono', () =
   });
 
   void it('um WHERE com a coluna certa e o operador errado também é acusado', () => {
-    // `is not $1` tem o nome da coluna e casa toda linha da tabela. É por isso
-    // que o predicado cobra o `=` junto do nome.
     const operadorErrado = semBanco
       .deleteFrom('user_reference_locations')
       .where('user_id', 'is not', DONO)

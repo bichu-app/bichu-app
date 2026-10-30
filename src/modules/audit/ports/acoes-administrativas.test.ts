@@ -1,11 +1,6 @@
 /**
- * As acoes da trilha administrativa contra o `x-audit` do contrato, e a
- * montagem do evento.
- *
- * `ACOES_ADMINISTRATIVAS` e escrita a mao, e o contrato tambem. Os dois
- * sentidos importam: `x-audit.action` que nao esta na lista faria a primeira
- * escrita daquela operacao lancar em producao; valor na lista que nenhuma
- * operacao declara e nenhum evento interno usa e acao que ninguem grava.
+ * As acoes da trilha administrativa contra o `x-audit` do contrato, e a montagem
+ * do evento.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

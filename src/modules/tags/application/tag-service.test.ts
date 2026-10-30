@@ -1,21 +1,4 @@
-/**
- * As operações da tag. O que se prova aqui é o **efeito**, não a chamada.
- *
- * Três casos abaixo são os que o ADR-0021 e o ADR-0004 mandaram existir, e os
- * três são escritos de forma que passar por engano seja difícil:
- *
- * - **O corpo público é o mesmo nos três `viewer`.** A asserção não lê campo por
- *   campo: ela serializa a resposta inteira sem o `viewer` e compara os três
- *   textos. Um ramo privilegiado acrescentado depois quebra aqui, mesmo que
- *   quem o acrescentou não conheça este teste.
- * - **`getTagOwnerContext` faz UMA consulta, e é a vinculada.** O repositório de
- *   memória conta as chamadas dos dois métodos: a prova de que não há "busca a
- *   tag e compara o dono depois" é `resolverPorCodigo` ter sido chamado zero
- *   vezes.
- * - **Tag revogada responde 410 e o aviso nunca é descartado.** O contador de
- *   linhas gravadas é o que sustenta a segunda metade: agrupar muda
- *   `owner_notified`, não muda quantos avisos existem.
- */
+/** As operações da tag. O que se prova aqui é o **efeito**, não a chamada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -57,8 +40,7 @@ const TAG = '018f3a2b-0000-7000-8000-0000000000dd' as TagId;
 
 /**
  * A forma IMPRESSA de um código válido: quatro grupos de quatro, com símbolo de
- * verificação correto. O serviço normaliza antes de qualquer coisa, então esta
- * bancada exercita a volta da plaquinha digitada com hífen.
+ * verificação correto.
  */
 const CODIGO = 'GQSM-0XHB-T4D9-G31S';
 
@@ -122,9 +104,6 @@ function repositorioDeMemoria(
     buscarContextoDoDono: (_hash, dono) => {
       contadores.buscarContextoDoDono += 1;
       contadores.donoUsadoNaBusca.push(dono);
-      // O repositório de verdade resolve os dois predicados no banco. Aqui o
-      // vínculo é reproduzido: quem não é o dono do estado não recebe nada, e
-      // recebe exatamente o mesmo nada de quem pediu um código inexistente.
       if (estado.contextoDoDono === undefined) return Promise.resolve(undefined);
       return Promise.resolve(dono === DONO ? estado.contextoDoDono : undefined);
     },
@@ -132,10 +111,6 @@ function repositorioDeMemoria(
       Promise.resolve(dono === DONO ? ([] as readonly TagDoTutor[]) : undefined),
     buscarParaReimpressao: (petId, tagId, dono) => {
       contadores.buscasParaReimpressao.push({ petId, tagId, dono });
-      // O repositório de verdade resolve os TRÊS predicados no `WHERE`. Aqui o
-      // vínculo é reproduzido inteiro: pet errado, tag errada e tutor errado
-      // recebem o mesmo nada, e o `undefined` que sai daqui é indistinguível
-      // entre os três — que é a propriedade do ADR-0021.
       if (estado.reimpressao === undefined) return Promise.resolve(undefined);
       if (dono !== DONO || petId !== PET || tagId !== TAG) return Promise.resolve(undefined);
       return Promise.resolve(estado.reimpressao);
@@ -199,10 +174,8 @@ function servico(estado: EstadoDoRepositorio) {
     decrypt: (bytes) => Promise.resolve(new TextDecoder().decode(bytes)),
   };
   /**
-   * O rasterizador não é exercitado aqui: a prova de que o PNG decodifica mora
-   * em `adapters/external/png-do-qr.test.ts`, com um leitor de verdade. O que
-   * este dublê acrescenta é a contagem — ela é o que torna verificável a frase
-   * "quando a autorização recusa, **nada** chega a ser gerado".
+   * O rasterizador não é exercitado aqui: a prova de que o PNG decodifica mora em
+   * `adapters/external/png-do-qr.test.ts`, com um leitor de verdade.
    */
   const desenhosRasterizados: DesenhoDoQr[] = [];
   const rasterizador: RasterizadorDeQr = {
@@ -213,8 +186,8 @@ function servico(estado: EstadoDoRepositorio) {
   };
 
   /**
-   * BICHUS-43. A conversa mediada só nasce de um aviso, e este dublê é o que
-   * torna essa frase verificável deste lado: ele guarda o que `avisar` entrega.
+   * BICHUS-43. A conversa mediada só nasce de um aviso, e este dublê é o que torna
+   * essa frase verificável deste lado: ele guarda o que `avisar` entrega.
    */
   const conversasAbertas: Parameters<AberturaDeConversaPorAviso['aoRegistrarAviso']>[0][] = [];
   const conversaDoAviso: AberturaDeConversaPorAviso = {
@@ -225,12 +198,8 @@ function servico(estado: EstadoDoRepositorio) {
   };
 
   /**
-   * O QUE FOI PARA A FILA, e e o que torna verificavel a frase que faltava:
-   * escanear a plaquinha **enfileira a entrega do aviso ao tutor**.
-   *
-   * Antes desta entrega esta lista ficava vazia em todos os caminhos, e
-   * `owner_notified: true` saia na resposta de qualquer forma: o campo
-   * registrava INTENCAO, nao entrega.
+   * O QUE FOI PARA A FILA, e e o que torna verificavel a frase que faltava: escanear
+   * a plaquinha **enfileira a entrega do aviso ao tutor**.
    */
   const trabalhosEnfileirados: { kind: string; payload: unknown }[] = [];
 
@@ -241,12 +210,6 @@ function servico(estado: EstadoDoRepositorio) {
       ids,
       clock,
       trilha,
-      // As duas eram o MESMO valor aqui, e enquanto foram, este arquivo inteiro
-      // não conseguia acusar a troca de uma pela outra: `assert.equal` passava
-      // dos dois jeitos. Hosts diferentes -- o arranjo que o cliente decidiu em
-      // 19/09 -- são o que transforma a asserção da URL impressa em isca: trocar
-      // `baseDaTag` por `baseDaWeb` em `src/bin/api.ts` reprova aqui, e não na
-      // primeira leva de plaquinha prensada (ADR-0004).
       baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
       baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,
@@ -305,9 +268,6 @@ void describe('resolveTagCode: a operação mais pública do produto', () => {
     const semViewer = async (quem: UserId | undefined): Promise<string> => {
       const { tags } = servico({ tag: tagAtiva() });
       const resolucao = await tags.resolver(CODIGO, chamador(quem));
-      // A cópia sem `viewer` é feita por remoção de chave, e não listando os
-      // campos esperados: um ramo privilegiado acrescentado depois entra na
-      // serialização sozinho, e a comparação acusa sem ninguém atualizar o teste.
       const copia: Record<string, unknown> = { ...resolucao };
       delete copia['viewer'];
       return JSON.stringify(copia);
@@ -331,8 +291,6 @@ void describe('resolveTagCode: a operação mais pública do produto', () => {
   void it('não devolve UUID nenhum, nem para o dono', async () => {
     const { tags } = servico({ tag: tagAtiva() });
     const serializada = JSON.stringify(await tags.resolver(CODIGO, chamador(DONO)));
-    // A busca é por forma, e não por nome de campo: um `pet_id` renomeado para
-    // `identificador` continuaria sendo o vazamento que o SEC-001 descreve.
     assert.doesNotMatch(serializada, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
   });
 
@@ -360,9 +318,6 @@ void describe('resolveTagCode: a operação mais pública do produto', () => {
   });
 
   void it('pet indisponível responde o mesmo 410, sem dizer por quê', async () => {
-    // Óbito e exclusão chegam aqui. O corpo é idêntico ao da tag revogada de
-    // propósito: ninguém precisa descobrir a morte de um animal por uma página
-    // web (ADR-0004).
     const { tags } = servico({ tag: { ...tagAtiva(), petIndisponivel: true } });
     const erro = await capturar(() => tags.resolver(CODIGO, chamador(undefined)));
     assert.equal(erro.status, 410);
@@ -388,7 +343,6 @@ void describe('resolveTagCode: a operação mais pública do produto', () => {
     const erro = await capturar(() => tags.resolver('U' + CODIGO, chamador(undefined)));
     assert.equal(erro.status, 400);
     assert.equal(erro.problemType, 'tag-code-malformed');
-    // E o banco nem foi tocado: o formato se decide antes da consulta.
     assert.equal(contadores.resolverPorCodigo, 0);
   });
 });
@@ -402,10 +356,6 @@ void describe('getTagOwnerContext: a busca vinculada do ADR-0021', () => {
     await tags.contextoDoDono(CODIGO, DONO);
 
     assert.equal(contadores.buscarContextoDoDono, 1);
-    // Esta é a asserção que sustenta a regra. Se alguém trocar a implementação
-    // por "busca a tag e compara o dono depois", `resolverPorCodigo` passa a ser
-    // chamado e o teste acusa — que é a diferença entre a versão correta e o
-    // BOLA que o SEC-001 descreve.
     assert.equal(contadores.resolverPorCodigo, 0);
     assert.deepEqual(contadores.donoUsadoNaBusca, [DONO]);
   });
@@ -419,8 +369,6 @@ void describe('getTagOwnerContext: a busca vinculada do ADR-0021', () => {
     const inexistente = await capturar(() => servico({}).tags.contextoDoDono(CODIGO, DONO));
 
     const revogada = await capturar(() =>
-      // Tag que existe e foi revogada: o repositório vinculado exige `active`,
-      // então o resultado que chega aqui é o mesmo vazio.
       servico({ tag: { ...tagAtiva(), status: 'revoked' } }).tags.contextoDoDono(CODIGO, DONO),
     );
 
@@ -435,8 +383,6 @@ void describe('getTagOwnerContext: a busca vinculada do ADR-0021', () => {
       assert.equal(erro.status, 404);
       assert.equal(erro.problemType, 'not-found');
     }
-    // Corpos idênticos: distinguir confirmaria tag alheia a qualquer pessoa com
-    // conta, e faria da rota um oráculo de enumeração com cadastro grátis.
     assert.equal(inexistente.title, deOutroTutor.title);
     assert.equal(inexistente.detail, deOutroTutor.detail);
     assert.equal(revogada.title, deOutroTutor.title);
@@ -452,9 +398,6 @@ void describe('issuePetTag: a única resposta que traz o código em claro', () =
 
     assert.equal(gravada.codeHash.length, 32);
     assert.equal(gravada.codeSuffix, emitida.codigo.slice(-4));
-    // O que a coluna de resumo guarda não é o código: um HMAC-SHA-256 de 32
-    // bytes não contém os 16 caracteres, e a conferência abaixo é a que
-    // acusaria alguém trocando o resumo pelo valor.
     assert.notEqual(Buffer.from(gravada.codeHash).toString('utf8'), emitida.codigo);
   });
 
@@ -468,11 +411,6 @@ void describe('issuePetTag: a única resposta que traz o código em claro', () =
   void it('o que o QR codifica vem da BASE DA TAG, e nunca da base da web', async () => {
     const { tags } = servico({});
     const emitida = await tags.emitir(PET, DONO, null, chamador(DONO));
-    // A asserção positiva acima já fixa o valor. Esta é a negativa, e ela é a
-    // que importa: ela reprova a troca silenciosa das duas bases. O endereço
-    // que sai daqui é prensado em plástico e não se corrige (ADR-0004), então
-    // a hora de descobrir que ele veio da variável errada é esta, e não a da
-    // primeira coleira na rua.
     assert.ok(
       emitida.url.startsWith('https://tag.exemplo.invalido/'),
       `a URL da plaquinha saiu de outra base: ${emitida.url}`,
@@ -522,9 +460,6 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
   void it('a conversa do achador vem da BASE DA WEB: é página, não é plaquinha', async () => {
     const { tags } = servico({ tag: tagAtiva() });
     const criado = await tags.avisar(CODIGO, chamador(undefined), {});
-    // O contrário da isca da emissão, e pelo mesmo motivo: mandar o achador
-    // para o host da plaquinha entrega um endereço que o time web não serve, e
-    // quem paga é a pessoa que está com o animal na mão agora.
     assert.ok(
       criado.conversationUrl.startsWith('https://exemplo.invalido/c/'),
       `a conversa do achador saiu de outra base: ${criado.conversationUrl}`,
@@ -558,8 +493,6 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
     const criado = await tags.avisar(CODIGO, chamador(undefined), {});
 
     assert.equal(criado.ownerNotified, false);
-    // A metade que costuma faltar: o aviso continua existindo. Contar a linha
-    // gravada é o que separa "agrupou" de "engoliu".
     assert.equal(contadores.avisosGravados.length, 1);
   });
 
@@ -601,28 +534,7 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
   });
 });
 
-/**
- * ISCA 3: a autorização da reimpressão do QR mora na cláusula `WHERE`.
- *
- * `getPetTagQrImage` é a segunda superfície da API que revela o código em claro
- * — e a única que o revela mais de uma vez. Ela é, por isso, o pior lugar do
- * produto para um BOLA: o que vaza não é um registro, é a credencial impressa na
- * coleira de um animal de outra pessoa, e ela é irrevogável sem reemitir a
- * plaquinha.
- *
- * Os casos abaixo são escritos para que **sair do `WHERE` reprove**, e não para
- * conferir que hoje está certo:
- *
- * - O serviço faz **uma** chamada ao repositório, e ela leva o dono. Duas
- *   chamadas seriam "busca a tag e compara o tutor depois", que é a forma errada
- *   que parece certa na revisão (ADR-0021, risco médio registrado).
- * - O `dono` que chega ao repositório é o do chamador, e **nunca** um valor do
- *   caminho. Um serviço que passasse o dono lido da própria linha encontrada
- *   satisfaria "tem dono no WHERE" e não autorizaria nada.
- * - Nada do PNG é gerado quando a busca vem vazia. Decifrar antes de autorizar
- *   colocaria o código em claro na memória de uma requisição que não tinha
- *   direito a ele.
- */
+/** ISCA 3: a autorização da reimpressão do QR mora na cláusula `WHERE`. */
 void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por comparação', () => {
   const ATIVA: TagParaReimpressao = {
     status: 'active',
@@ -636,8 +548,6 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
 
     assert.equal(imagem.codeSuffix, CODIGO_CANONICO.slice(-4));
     assert.equal(desenhosRasterizados.length, 1);
-    // O desenho é o da versão 4, que é a medida do código de 16 caracteres
-    // contra a base desta bancada. Ver `domain/qr-da-tag.test.ts`.
     assert.equal(desenhosRasterizados[0]?.medida.versao, 4);
   });
 
@@ -680,9 +590,6 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
       servico({ reimpressao: ATIVA }).tags.imagemDoQr(PET, TAG, OUTRO_TUTOR),
     );
 
-    // A asserção não lê campo por campo: compara o problema inteiro. Um ramo
-    // que distinguisse os casos quebra aqui mesmo que quem o escreveu não
-    // conheça este teste.
     const comoTexto = (erro: AppError): string =>
       JSON.stringify({
         type: erro.problemType,
@@ -720,9 +627,6 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
   });
 
   void it('cifrado apagado numa tag ativa também é 410, e não um PNG de lixo', async () => {
-    // A revogação apaga `code_ciphertext` por restrição do ADR-0004. Se a linha
-    // chegar aqui ativa e sem cifrado, não há código para codificar: gerar um QR
-    // mesmo assim é o modo de falha caro desta história.
     const { tags } = servico({ reimpressao: { status: 'active', codeCiphertext: null } });
 
     const erro = await capturar(() => tags.imagemDoQr(PET, TAG, DONO));
@@ -731,10 +635,6 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
   });
 
   void it('código decifrado que não normaliza para ele mesmo falha ruidosamente', async () => {
-    // Critério 9 da história: a normalização da emissão e a da resolução são a
-    // mesma e são idempotentes. Um cifrado de formato anterior (26 caracteres,
-    // antes da BICHUS-154) produziria uma plaquinha impressa que a própria
-    // plataforma não resolve — e o formato impresso é irreversível.
     const { tags } = servico({
       reimpressao: {
         status: 'active',
@@ -750,22 +650,7 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
   });
 });
 
-/**
- * ISCA — O AVISO AO TUTOR SAI DA FILA, E SO QUANDO DEVE.
- *
- * Esta e a prova por desligamento do buraco central do produto. Antes dela,
- * `avisar` gravava o aviso, abria a conversa, devolvia `owner_notified: true`
- * e **nao enfileirava entrega nenhuma** — e nenhum teste reprovava, porque
- * nenhum olhava para a fila.
- *
- * Os dois casos sao um par, e nenhum serve sozinho:
- *
- * - o primeiro reprova se o emissor for removido ou renomeado;
- * - o segundo (CONTRAPESO) reprova se o emissor virar incondicional. Um
- *   `enqueue` solto no comeco de `avisar` passaria no primeiro caso e faria o
- *   telefone do tutor tocar a cada re-escaneamento do MESMO achador na janela
- *   de 6 h, que e exatamente o que o agrupamento existe para evitar.
- */
+/** ISCA — O AVISO AO TUTOR SAI DA FILA, E SO QUANDO DEVE. */
 void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => {
   void it('o aviso novo enfileira `tag.scan_notify` com o id do aviso gravado', async () => {
     const { tags, contadores, trabalhosEnfileirados } = servico({ tag: tagAtiva() });
@@ -781,8 +666,6 @@ void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => 
         'campo registra intencao, e o tutor nao recebe nada.',
     );
     assert.equal(trabalhosEnfileirados[0]?.kind, 'tag.scan_notify');
-    // O payload leva SO o identificador (§11.5), e e o id do aviso que esta
-    // linha acabou de gravar -- nao um id novo, nao o do pet, nao o da tag.
     assert.deepEqual(trabalhosEnfileirados[0]?.payload, {
       found_report_id: contadores.avisosGravados[0]?.id,
     });
@@ -797,8 +680,6 @@ void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => 
     const criado = await tags.avisar(CODIGO, chamador(undefined), {});
 
     assert.equal(criado.ownerNotified, false);
-    // O aviso continua sendo GRAVADO: agrupar muda a notificacao, nao descarta
-    // o fato. As duas asserccoes juntas e que fecham o cerco.
     assert.equal(contadores.avisosGravados.length, 1);
     assert.equal(
       trabalhosEnfileirados.length,
@@ -810,9 +691,6 @@ void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => 
   });
 
   void it('`owner_notified` e o enfileiramento sao a MESMA decisao', async () => {
-    // A isca que impede as duas metades de divergirem no futuro: o que o
-    // achador le na tela e o que o tutor recebe no telefone saem da mesma
-    // expressao. Dois `if` separados divergem, e o divergente aqui e invisivel.
     for (const recente of [undefined, { id: 'anterior', criadoEm: comoData(AGORA as Instant) }]) {
       const { tags, trabalhosEnfileirados } = servico({
         tag: tagAtiva(),

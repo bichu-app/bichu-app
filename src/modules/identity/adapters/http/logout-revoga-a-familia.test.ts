@@ -1,60 +1,6 @@
 /**
- * `POST /v1/auth/logout` chamado **exatamente como o contrato declara**
- * (BICHUS-81 critério 6, corrigido pela emenda 1 do ADR-0002).
- *
- * ## Por que este arquivo existe
- *
- * Havia três peças que não se encaixavam, e as três passavam em revisão:
- *
- * - `api/openapi.yaml` declarava `logout` **sem corpo de requisição**, e o tipo
- *   gerado trazia `requestBody?: never`;
- * - o manipulador em `routes.ts` lia `corpo.refresh_token`;
- * - `sair()` só revogava `if (refreshApresentado !== undefined)`.
- *
- * Quem seguisse o contrato ao pé da letra não mandava campo nenhum, nada era
- * revogado, e a resposta era `204` igual. A família continuava viva no banco
- * até vencer por inatividade, e um refresh já copiado renovava por até 180
- * dias. **O sucesso era indistinguível do nada.**
- *
- * ## Como este arquivo evita repetir o defeito que ele cobre
- *
- * O corpo da requisição **não é escrito à mão aqui**. Ele é montado a partir de
- * `contrato.requestBodySchema('logout')`, lido de `api/openapi.yaml` em tempo
- * de execução — quer dizer, o caso envia o que o contrato manda enviar, e nada
- * além. Isso não é preciosismo: um caso com `{ refresh_token: ... }` escrito à
- * mão passaria **hoje**, com o contrato ainda dizendo que não há corpo, porque
- * o manipulador lê o campo de qualquer jeito. Ele provaria o código contra ele
- * mesmo, e o desencontro entre documento e implementação — que é o defeito —
- * continuaria invisível.
- *
- * Prova de reprovação, rodada antes de esta linha ser escrita: com o
- * `requestBody` removido de `logout` em `api/openapi.yaml`,
- * `montarCorpoDoContrato` não encontra schema, a requisição sai sem corpo e o
- * caso "revoga a família do aparelho" reprova em
- * `repo.revogacoes.length` — 0 onde tem de ser 1.
- *
- * ## A segunda isca, que cobre o outro lado do mesmo critério
- *
- * `sair` deste aparelho **não pode tocar** `users.sessions_invalid_before`.
- * Essa coluna é de `users`, por pessoa e não por sessão: empurrá-la no logout
- * comum derrubaria o tablet e o celular de quem mora na mesma casa, e faria
- * `logout` virar `signOutAllDevices` com outro nome. O critério 6 da BICHUS-81,
- * do jeito que está escrito na issue, manda fazer exatamente isso — e é por
- * isso que a isca precisa existir em vez de a ausência ser assumida: um dublê
- * que só grita quando é chamado não reprova quem passa a chamar.
- *
- * ## O que este arquivo NÃO cobre
- *
- * - **O banco de verdade.** O que se afirma aqui é o efeito na porta
- *   `IdentityRepository`, com o dublê espelhando a semântica do SQL de
- *   `kysely-identity-repository.ts` (revogar só o que ainda não fora revogado;
- *   a busca por hash devolve a linha **inclusive revogada**, que é o que torna
- *   a repetição idempotente). Que o `UPDATE` de fato alcance as linhas é de
- *   `tests/integration/`.
- * - **O apagamento do cache no aparelho** (critérios 2 a 4 da BICHUS-81) e a
- *   baixa do token de push (BICHUS-91): são do app e de outro módulo.
- * - **A janela de até 15 minutos do token de acesso já emitido.** Ela é
- *   decisão declarada da emenda, não defeito, e nada aqui a fecha.
+ * `POST /v1/auth/logout` chamado **exatamente como o contrato declara** (BICHUS-81
+ * critério 6, corrigido pela emenda 1 do ADR-0002).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -83,20 +29,12 @@ import { RepositorioQueRecusaTudo } from '../persistence/repositorio-que-recusa-
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const OUTRA_PESSOA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
 const FAMILIA_DESTE_APARELHO = 'fam-do-celular-da-tutora';
-/**
- * SEC-021: a MESMA tutora, no tablet de casa. Família diferente, porque é outro
- * aparelho, e é essa diferença que o caso dos dois aparelhos mede.
- */
+/** SEC-021: a MESMA tutora, no tablet de casa. */
 const FAMILIA_DO_TABLET = 'fam-do-tablet-da-tutora';
 const FAMILIA_ALHEIA = 'fam-de-outra-conta';
 const AGORA = INSTANTE_FIXO;
 
-/**
- * O refresh que o aparelho apresenta. Precisa de 20 caracteres ou mais: é o
- * piso que o contrato declara, e um valor menor seria recusado pela validação
- * antes de chegar ao serviço — o caso passaria a provar o `minLength` em vez da
- * revogação.
- */
+/** O refresh que o aparelho apresenta. */
 const REFRESH_DESTE_APARELHO = 'refresh-do-celular-da-tutora-0001';
 const REFRESH_DE_OUTRA_CONTA = 'refresh-de-outra-conta-0002-abcd';
 
@@ -110,8 +48,6 @@ function hashDe(token: string): TokenHash {
 /**
  * A chave do mapa, porque `TokenHash` passou a ser `Buffer`: dois `Buffer` de
  * conteúdo igual são chaves DIFERENTES num `Map`, que compara por identidade.
- * Sem este passo o dublê devolveria `undefined` para o token certo e os casos
- * reprovariam por uma razão que não é a deles.
  */
 function chaveDe(hash: TokenHash): string {
   return hash.toString('hex');
@@ -127,8 +63,6 @@ function contaAtiva(): Conta {
     email: 'tutora@exemplo.test',
     emailVerifiedAt: dataFixa(1),
     displayName: 'Tutora',
-    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
-    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
     handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
@@ -144,27 +78,8 @@ function contaAtiva(): Conta {
   };
 }
 
-/**
- * Dublê do repositório com a semântica do SQL, e não com a conveniência do
- * teste.
- *
- * Dois pontos copiados de `kysely-identity-repository.ts` de propósito, porque
- * são eles que decidem o desfecho dos casos abaixo:
- *
- * 1. `buscarRefreshPorHash` **não filtra por `revoked_at`** — a linha volta
- *    mesmo revogada. É isso que faz o segundo logout com o mesmo token ser
- *    idempotente em vez de virar 400.
- * 2. `revogarFamilia` só alcança o que ainda está com `revoked_at` nulo, e
- *    devolve **quantas linhas mudaram**. A segunda chamada devolve zero, e zero
- *    não é erro.
- */
+/** Dublê do repositório com a semântica do SQL, e não com a conveniência do teste. */
 class RepositorioFalso extends RepositorioQueRecusaTudo {
-  // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-  // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-  // avatar da barra do app caia na inicial do nome em todas as paginas.
-  // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-  // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-  // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
   override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
     return Promise.resolve(null);
   }
@@ -174,16 +89,12 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
   }
 
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
-  /**
-   * A isca do "sair de todos os aparelhos disfarçado". Fica como lista, e não
-   * como `naoUsado`, porque o que precisa reprovar é a chamada EXISTIR.
-   */
+  /** A isca do "sair de todos os aparelhos disfarçado". */
   public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
   /**
    * A outra metade da mesma isca, e ela so passou a existir com a BICHUS-125:
    * `sairDeTodosOsAparelhos` revoga as familias EM MASSA alem de empurrar
-   * `sessions_invalid_before`. Sair deste aparelho nao pode chamar nenhuma das
-   * duas, e uma isca que so olhasse a coluna deixaria passar a outra.
+   * `sessions_invalid_before`.
    */
   public readonly revogacoesEmMassa: { userId: UserId; motivo: MotivoDeRevogacao; agora: Instant }[] =
     [];
@@ -263,13 +174,9 @@ interface Bancada {
   readonly contrato: Contrato;
   readonly eventos: AuditEvent[];
   /**
-   * SEC-021: as localizações de referência vivas, chaveadas pelo PAR
-   * `(dono, família)` — o mesmo par que é chave primária de
-   * `user_reference_locations` desde a migração `20260923000001`.
-   *
-   * Chavear só pelo dono faria o caso dos dois aparelhos passar por acidente:
-   * um `Map` por pessoa não tem como representar duas regiões, então ele daria
-   * a resposta certa sem que o código estivesse certo.
+   * SEC-021: as localizações de referência vivas, chaveadas pelo PAR `(dono,
+   * família)` — o mesmo par que é chave primária de `user_reference_locations` desde
+   * a migração `20260923000001`.
    */
   readonly localizacoes: Map<string, string>;
 }
@@ -279,20 +186,10 @@ function chaveDaLocalizacao(dono: string, familia: string): string {
   return `${dono}\u0000${familia}`;
 }
 
-/**
- * Sobe o servidor de verdade com o contrato de verdade e o serviço de verdade.
- * Só as portas de fora do processo são dublês.
- *
- * O contrato é `api/openapi.yaml`, e não um documento montado aqui: é
- * justamente o desencontro entre ele e o código que este arquivo existe para
- * acusar. Um contrato de mentira provaria o teste contra o teste.
- */
+/** Sobe o servidor de verdade com o contrato de verdade e o serviço de verdade. */
 function montar(): Bancada {
   const repo = new RepositorioFalso(contaAtiva());
   const eventos: AuditEvent[] = [];
-  // SEC-021. Duas linhas, uma pessoa, dois aparelhos: é o estado que a decisão
-  // do cliente de 23/09 tornou possível, e é o estado em que o logout de um
-  // aparelho tem de deixar o outro em paz.
   const localizacoes = new Map<string, string>([
     [chaveDaLocalizacao(TUTORA, FAMILIA_DESTE_APARELHO), 'Paulista'],
     [chaveDaLocalizacao(TUTORA, FAMILIA_DO_TABLET), 'Pinheiros'],
@@ -336,15 +233,7 @@ function montar(): Bancada {
 
   const auth = criarAuthService({
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
-    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
-    // não é sobre isso, então a função é contada e não observada. O caso que
-    // PROVA a remoção, lendo a linha de `user_devices` depois, é
-    // `sair-de-todos-os-aparelhos.test.ts` e
-    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
-    // SEC-021: o dublê apaga pelo PAR, como o `DELETE ... WHERE user_id = $1
-    // AND session_family_id = $2` do repositório de verdade. Apagar só pelo
-    // dono aqui deixaria os dois casos novos verdes com o código errado.
     apagarLocalizacaoDaSessao: (dono, familia) =>
       Promise.resolve(localizacoes.delete(chaveDaLocalizacao(dono, familia)) ? 1 : 0),
     repositorio: repo,
@@ -354,8 +243,6 @@ function montar(): Bancada {
       uuidv7: () => 'id-novo',
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
-      // BICHUS-154: a porta passou a ter `random80` (codigo da tag). Identidade
-      // nao emite tag nenhuma; o valor so precisa existir e ser estavel.
       random80: () => new Uint8Array(10),
     },
     clock: relogioParado(AGORA),
@@ -376,15 +263,7 @@ function montar(): Bancada {
   const app = criarServidor({
     problemBaseUrl: PROBLEM_BASE_URL,
     isProduction: false,
-    // Exigido desde a BICHUS-178: `registrarRota` recusa um servidor sem
-    // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
-    // casos exercitem a mesma fiacao que roda.
     teto: tetoDeTeste(),
-    // BICHUS-48: `registrarRota` recusa, na subida, um servidor sem verificador
-    // quando alguma rota declara `reauthScope` -- e `logout-all` declara. Este
-    // arquivo nao exercita a janela de reautenticacao, entao o verificador
-    // LANCA em vez de aprovar: um verificador que dissesse "ok" faria estes
-    // casos rodarem contra uma porta destrutiva aberta e ninguem veria.
     reautenticacao: () => {
       throw new Error(
         'Verificador de reautenticacao chamado: nenhum caso deste arquivo exercita ' +
@@ -398,7 +277,6 @@ function montar(): Bancada {
     contrato,
     issuer: 'https://api.bichu.test',
     apiBaseUrl: 'https://api.bichu.test',
-    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   void app.register(
@@ -413,14 +291,8 @@ function montar(): Bancada {
 }
 
 /**
- * O corpo **que o contrato manda enviar**, montado a partir do schema da
- * própria especificação.
- *
- * Devolve `undefined` quando a operação não declara corpo — que é o estado em
- * que `logout` estava, e é o que faz as iscas reprovarem se alguém desfizer a
- * correção do contrato. Propriedade obrigatória sem valor conhecido é **falha
- * ruidosa**, e não um campo omitido em silêncio: campo novo no contrato precisa
- * aparecer aqui como erro, não como caso que continua verde cobrindo menos.
+ * O corpo **que o contrato manda enviar**, montado a partir do schema da própria
+ * especificação.
  */
 function montarCorpoDoContrato(
   contrato: Contrato,
@@ -476,9 +348,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
     const resposta = await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
 
     assert.equal(resposta.status, 204, 'o logout conforme o contrato precisa concluir');
-    // ISCA: era aqui que o defeito morava. Com o contrato sem `requestBody`, o
-    // cliente que o seguisse não mandava campo nenhum, esta lista ficava vazia,
-    // e a resposta era 204 do mesmo jeito.
     assert.deepEqual(
       bancada.repo.revogacoes.map((r) => ({ familyId: r.familyId, motivo: r.motivo })),
       [{ familyId: FAMILIA_DESTE_APARELHO, motivo: 'logout' }],
@@ -496,10 +365,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
     const resposta = await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
 
     assert.equal(resposta.status, 204);
-    // ISCA: apague a chamada a `apagarLocalizacaoDaSessao` em `sair()`
-    // (auth-service.ts) e este caso reprova com a mensagem abaixo. Era o estado
-    // do repositório até hoje: o ADR-0010 prometia "apagada ao sair da conta" e
-    // o gatilho da migração 20260922000006 cobria só a EXCLUSÃO da conta.
     assert.ok(
       !bancada.localizacoes.has(chaveDaLocalizacao(TUTORA, FAMILIA_DESTE_APARELHO)),
       'a localização de referência SOBREVIVEU ao logout deste aparelho. O ADR-0010 ' +
@@ -516,16 +381,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
 
     await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
 
-    // ISCA DO OUTRO LADO, e ela é a razão de a localização ter deixado de ser
-    // da PESSOA. Troque o `DELETE` por um que apague só pelo dono — em
-    // `construtorDoApagamento`, ou no dublê acima — e este caso reprova: o
-    // tablet perde a localização dele num logout que não foi dele.
-    //
-    // Sem este caso, a regra nova não está provada. O caso de cima passaria
-    // igual com um apagamento por pessoa, porque com UM aparelho os dois
-    // comportamentos são indistinguíveis — que é exatamente a ambiguidade que
-    // travou a SEC-021 até o cliente decidir, em 23/09, que "a localização
-    // deveria ser por aparelho".
     assert.equal(
       bancada.localizacoes.get(chaveDaLocalizacao(TUTORA, FAMILIA_DO_TABLET)),
       'Pinheiros',
@@ -555,11 +410,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
         'não ter resposta em lugar nenhum: 0 e 1 são estados diferentes e precisam ser ' +
         'distinguíveis depois do fato.',
     );
-    // A COORDENADA NÃO ENTRA NA TRILHA, e a razão está no serviço de
-    // localização: a trilha sobrevive à exclusão da conta de propósito, e
-    // gravar o ponto nela desfaria o direito de apagamento por uma porta
-    // lateral. A família também não entra no metadado — ela já está em
-    // `resourceId`, que é onde ela pertence.
     assert.deepEqual(
       Object.keys(logout.metadata ?? {}).sort(),
       ['locations_removed'],
@@ -573,11 +423,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
 
     await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
 
-    // ISCA: o critério 6 da BICHUS-81, ao pé da letra, manda atualizar
-    // `sessions_invalid_before`. Essa coluna é de `users`, por PESSOA: fazer
-    // isso aqui derrubaria o tablet e o celular de quem mora junto, e tornaria
-    // `logout` idêntico a `signOutAllDevices`. A emenda 1 do ADR-0002 decidiu
-    // contra, e é esta linha que segura a decisão.
     assert.deepEqual(
       bancada.repo.invalidacoesDeSessao,
       [],
@@ -627,9 +472,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
     });
 
     assert.equal(inexistente.status, deOutraConta.status);
-    // `correlation_id` e `instance` mudam a cada requisição, de propósito. O
-    // resto precisa ser idêntico: distinguir os dois contaria a quem pergunta
-    // se aquele token existe em algum lugar.
     const semRuido = (corpo: unknown): unknown => {
       const resto = { ...(corpo as Record<string, unknown>) };
       delete resto['correlation_id'];
@@ -660,8 +502,6 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
 
     const logout = bancada.eventos.filter((evento) => evento.action === 'auth.logout');
     assert.equal(logout.length, 1);
-    // Sem `resourceId` a trilha registrava que alguém saiu e não dizia de onde,
-    // que é o mesmo silêncio do 204 vazio, por outro transporte.
     assert.equal(logout[0]?.resourceId, FAMILIA_DESTE_APARELHO);
   });
 

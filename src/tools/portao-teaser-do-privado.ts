@@ -1,29 +1,3 @@
-/**
- * P19, a metade do contrato (ADR-0027 12.12, `04-seguranca.md` 22.10.4): o
- * encontro privado so sai como teaser, por LISTA PERMITIDA.
- *
- * O que ele reprova:
- *
- * 1. `NetworkEventPrivateTeaser` ausente, ou com propriedades diferentes das
- *    cinco de 12.10 (`slug`, `title`, `local_date`, `visibility`, `status`),
- *    ou sem `additionalProperties: false`, ou com `required` diferente. Campo
- *    novo no teaser reprova, e campo que alguem acrescentar ao encontro fica
- *    fora dele sem ninguem lembrar.
- * 2. Operacao da `Rede` que devolve encontro sem usar o teaser. Onde
- *    `NetworkEventPublic` aparece num `oneOf`, o teaser tem de ser irmao; fora
- *    de `oneOf`, so vale na operacao que declara, com o motivo escrito em
- *    `SO_PUBLICO`, por que o privado nao vaza por ela -- ou porque ela o
- *    exclui (`listNearbyNetworkEvents`, ADR-0027 12.14), ou porque quem pede e
- *    o AUTOR do encontro (as tres da ADR-0025 emenda 3). Leia `SO_PUBLICO`: a
- *    diferenca entre as duas razoes esta escrita la.
- * 3. `NetworkEventPrivateDetails` alcancavel por qualquer operacao que nao
- *    seja `getNetworkEventPrivateDetails`.
- * 4. Nenhuma operacao usando o teaser: portao sem alvo reprova.
- *
- * A metade da execucao (sentinelas no corpo, presenca, `slug`, respostas de
- * erro) e `tests/integration/rede-p19-privado.test.ts`.
- */
-
 export const TEASER = 'NetworkEventPrivateTeaser';
 export const PUBLICO = 'NetworkEventPublic';
 export const DETALHES = 'NetworkEventPrivateDetails';
@@ -31,28 +5,11 @@ export const CAMPOS_DO_TEASER = ['local_date', 'slug', 'status', 'title', 'visib
 
 /**
  * Operacoes que por desenho nunca devolvem privado a quem nao pode ver, com o
- * motivo escrito. Sao duas razoes diferentes, e vale distingui-las:
- *
- * - `listNearbyNetworkEvents` exclui o privado da resposta;
- * - as tres da autoria devolvem encontro privado INTEIRO, e podem, porque quem
- *   pede e o autor dele. O teaser esconde o lugar de quem nao foi admitido --
- *   nunca de quem criou o encontro.
+ * motivo escrito.
  */
 export const SO_PUBLICO: Readonly<Record<string, string>> = {
   listNearbyNetworkEvents:
     'a posicao do privado numa lista por distancia ja e localizacao (ADR-0027 12.14)',
-  // As tres da ADR-0025 emenda 3 (17/10/2026), "quem criou o encontro
-  // administra aquele encontro". Elas operam SOMENTE em encontro de
-  // `origin: community` da propria conta: o de outra pessoa, e o do painel,
-  // respondem 404 identico ao de `slug` inexistente (ADR-0021), entao nao ha
-  // caminho por onde o encontro de um terceiro saia por aqui.
-  //
-  // Um encontro da comunidade PODE ter virado privado pelo painel
-  // (`changeAdminNetworkEventAccess`), e nesse caso estas tres devolvem o
-  // privado inteiro -- de proposito. O autor nao e "quem nao foi admitido": o
-  // lugar que o teaser esconde e o lugar que ele mesmo escreveu. Devolver
-  // teaser aqui tornaria a edicao impossivel, porque o autor nao veria o que
-  // esta editando.
   createNetworkEvent:
     'o autor recebe o encontro que ele mesmo acabou de criar, e ele nasce publico: esta operacao nao aceita `visibility` (ADR-0025 emenda 3)',
   updateNetworkEvent:
@@ -75,8 +32,8 @@ function nomeDoRef(ref: string): string | undefined {
 }
 
 /**
- * Os schemas nomeados alcancados a partir de `raiz`, e se o publico foi
- * alcancado fora de um `oneOf` que tambem tem o teaser.
+ * Os schemas nomeados alcancados a partir de `raiz`, e se o publico foi alcancado
+ * fora de um `oneOf` que tambem tem o teaser.
  */
 function alcancados(
   raiz: unknown,

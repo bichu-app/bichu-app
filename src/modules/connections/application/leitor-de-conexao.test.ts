@@ -1,22 +1,7 @@
 /**
  * `criarLeitorDeConexao`: **a primeira implementação de
- * `connections/ports/conexao.ts`**, e os casos que provam que ela projeta o
- * estado pela regra do domínio em vez de uma cópia dela.
- *
- * ## Por que estes casos moram AQUI e não na fatia que consome
- *
- * Porque a regra é desta fatia. A fatia G (o perfil de outra pessoa) recebe a
- * **porta**, e a porta é onde a fronteira da arquitetura corta: um caso em
- * `people/` que montasse `conexoesEmMemoria` estaria importando
- * `connections/adapters/`, e o `eslint` desta casa reprova — com razão, porque
- * seria a fatia G passando a depender de como a conexão guarda as linhas.
- *
- * Então a divisão é: **aqui** se prova que `pending`, `accepted`, expirado,
- * recusado-em-descanso e a própria conta viram o que devem virar; **lá** se
- * prova o recorte do perfil, com a porta dublada.
- *
- * A bancada é `conexoesEmMemoria`, a mesma que a fatia F usa, então
- * `estadoNoApp` é exercitado de verdade.
+ * `connections/ports/conexao.ts`**, e os casos que provam que ela projeta o estado
+ * pela regra do domínio em vez de uma cópia dela.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -54,8 +39,6 @@ void describe('criarLeitorDeConexao', () => {
     const { banca, leitor } = bancada();
     const ref = banca.semear({ pedinte: BIA, destinatario: ANA });
 
-    // A MESMA linha, lida pelos dois lados, devolve estados diferentes: a
-    // direção é derivada de quem pergunta, e não guardada por leitor.
     assert.deepEqual(await leitor.arestaVivaEntre(ANA, BIA, AGORA), {
       estado: 'pending_received',
       ref,
@@ -74,18 +57,12 @@ void describe('criarLeitorDeConexao', () => {
   });
 
   void it('ISCA -- pendente EXPIRADO devolve `undefined`, e nao um pendente eterno', async () => {
-    // Ninguém apaga pendente expirado: a linha fica, e é a projeção que decide
-    // que ela não vale mais. Sem isto, uma aresta morta de 2026 continuaria
-    // habilitando dado de conectado para sempre.
     const { banca, leitor } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, expiraEm: AGORA - 1 });
     assert.equal(await leitor.arestaVivaEntre(ANA, BIA, AGORA), undefined);
   });
 
   void it('ISCA -- RECUSA nao vira estado: ela devolve `undefined` para quem pediu', async () => {
-    // **É isto que mantém a recusa silenciosa.** Um valor próprio para
-    // recusado seria o *"ela recusou você"* que faz as pessoas aceitarem
-    // estranhos para não criar atrito.
     const { banca, leitor } = bancada();
     banca.semear({
       pedinte: ANA,
@@ -108,7 +85,6 @@ void describe('criarLeitorDeConexao', () => {
     banca.semear({ pedinte: BIA, destinatario: ANA, estado: 'accepted' });
     banca.desabilitar(BIA);
     assert.equal(await leitor.arestaVivaEntre(ANA, BIA, AGORA), undefined);
-    // E reabilitar DEVOLVE a conexão intacta: a linha não é apagada.
     banca.reabilitar(BIA);
     assert.equal((await leitor.arestaVivaEntre(ANA, BIA, AGORA))?.estado, 'connected');
   });
@@ -125,22 +101,11 @@ void describe('criarLeitorDeConexao', () => {
 
   /**
    * **A porta tem QUATRO métodos desde 22/10/2026, e eram três.**
-   * `estadosPorApelido` entrou com a decisão do cliente que autorizou a lista
-   * das próprias conexões, e ela serve ao estado do par nos resultados da
-   * busca. **A conferência continua sendo igualdade de conjunto**, então um
-   * quinto método reprova exatamente como o quarto reprovava ontem.
-   *
-   * **E `conexoes` está na lista de proibidos, que é a parte que importa.** O
-   * repositório ganhou `conexoes` em 22/10/2026 — a lista das próprias conexões
-   * —, e ela **não atravessa esta porta**: a lista é servida à rota do próprio
-   * módulo, e nenhum outro módulo a alcança. É a fronteira que
-   * `src/architecture.rules.mjs` impõe a `people`, e é ela que impede a lista
-   * de virar, de fora, a lista de conexões de terceiro.
+   * `estadosPorApelido` entrou com a decisão do cliente que autorizou a lista das
+   * próprias conexões, e ela serve ao estado do par nos resultados da busca.
    */
   void it('ISCA -- a porta NAO oferece escrita NEM a lista, e nao ha como alcancar o repositorio', () => {
     const { leitor } = bancada();
-    // A ordem e a de `Array.sort()` sobre os nomes: `estaConectado` vem antes
-    // de `estadosPorApelido` porque `C` (0x43) < `d` (0x64).
     assert.deepEqual(Object.keys(leitor).sort(), [
       'arestaVivaEntre',
       'contarConexoes',
@@ -153,9 +118,6 @@ void describe('criarLeitorDeConexao', () => {
       'encerrar',
       'desfazerPorBloqueio',
       'pedidos',
-      // A LISTA DAS PROPRIAS CONEXOES (22/10/2026). Ela existe no repositorio e
-      // na rota deste modulo, e **nao aqui**: quem a quisesse de fora teria de
-      // acrescentar metodo na porta, que e o lugar onde alguem ve.
       'conexoes',
       'arestasPorApelido',
     ]) {

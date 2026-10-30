@@ -1,13 +1,6 @@
 /**
  * ISCA — a contagem de entradas novas do diretorio conta O QUE A SUB-ABA
  * `Comunidade` MOSTRA, e nenhuma entrada publicada fica invisivel.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Em `kysely-contagem-de-entradas-novas.ts`: apague o `if (recorte.desde !==
- * undefined)` -> reprova `ISCA: ver a sub-aba Comunidade zera`. Troque o
- * `COALESCE(published_at, created_at)` por `published_at` -> reprova
- * `ISCA: entrada publicada com published_at nulo NAO fica invisivel`.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

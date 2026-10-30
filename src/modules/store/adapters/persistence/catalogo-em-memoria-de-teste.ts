@@ -1,12 +1,6 @@
 /**
- * O repositorio da escrita administrativa da `Loja` em memoria, para os testes
- * do caso de uso e das rotas. Nunca e ligado em `api.ts`.
- *
- * Imita as coisas do banco de que o caso de uso depende: a versao lida no
- * `WHERE` (devolve `null` quando mudou), o `ROLLBACK` (o rascunho da
- * transacao so vira estado se o trabalho inteiro terminar), a unicidade de
- * `slug` e a de imagem por item. A prova contra Postgres de verdade e de
- * `tests/integration/escrita-administrativa-da-loja.test.ts`.
+ * O repositorio da escrita administrativa da `Loja` em memoria, para os testes do
+ * caso de uso e das rotas.
  */
 import { comoData } from '../../../../shared/time/clock.js';
 import type { Instant } from '../../../../shared/types/brands.js';
@@ -44,15 +38,7 @@ import {
   type TransacaoDoCatalogo,
 } from '../../ports/catalogo-administrativo.js';
 
-/**
- * O item como o dublê o guarda: as ligacoes ficam fora, como no banco.
- *
- * Os ROTULOS tambem ficam fora, e pelo mesmo motivo: no banco eles vem de
- * `store_categories`/`store_subcategories` por juncao, nunca de coluna do
- * item. Um dublê que guardasse o rotulo junto do item passaria verde sobre a
- * renomeacao de categoria -- que e justamente o que ela precisa poder fazer
- * sem tocar em item nenhum.
- */
+/** O item como o dublê o guarda: as ligacoes ficam fora, como no banco. */
 type ItemGuardado = Omit<
   ItemAdministrativo,
   'species' | 'tags' | 'imagens' | 'partner' | 'categoryLabel' | 'subcategoryLabel'
@@ -60,24 +46,14 @@ type ItemGuardado = Omit<
   /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
   readonly partnerId: string | null;
   /**
-   * A coluna `store_items.target_host`, gravada na ESCRITA como no adaptador
-   * real: nula quando o host era o do proprio parceiro, e o subdominio quando
-   * o item mora num. Recalcula-la na leitura amarraria o endereco guardado ao
-   * host ATUAL do parceiro, e trocar o dominio de um parceiro deixaria de
-   * levar os itens junto -- o oposto do que a coluna existe para garantir.
+   * A coluna `store_items.target_host`, gravada na ESCRITA como no adaptador real:
+   * nula quando o host era o do proprio parceiro, e o subdominio quando o item mora
+   * num.
    */
   readonly targetHost: string | null;
 };
 
-/**
- * O vocabulario dos dois niveis que o dublê conhece.
- *
- * **E um RECORTE, e nao o vocabulario.** A autoridade e a migracao
- * `20261017000003` (14 categorias, 83 subcategorias da arvore de cachorro), e
- * quem confirma que a semente casa com ela e a suite de integracao. Aqui ficam
- * os 14 codigos -- porque errar um codigo e o engano barato -- e as
- * subcategorias das poucas categorias que os casos de uso exercitam.
- */
+/** O vocabulario dos dois niveis que o dublê conhece. */
 const VOCABULARIO: ReadonlyMap<string, { label: string; subs: ReadonlyMap<string, string> }> =
   new Map([
     [
@@ -159,9 +135,6 @@ export interface EnvioSemeado {
 function montarItem(e: Estado, id: string): ItemAdministrativo {
   const guardado = e.itens.get(id);
   if (guardado === undefined) throw new Error(`item ${id} inexistente no dublê`);
-  // Rascunho sem parceiro e estado normal desde a `20261017000002`; o que
-  // continua sendo defeito do dublê é `partnerId` que aponta para parceiro
-  // inexistente.
   const parceiro = guardado.partnerId === null ? null : e.parceiros.get(guardado.partnerId);
   if (parceiro === undefined) throw new Error('parceiro inexistente no dublê');
   return {
@@ -170,15 +143,6 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     title: guardado.title,
     summary: guardado.summary,
     category: guardado.category,
-    // Os rotulos sao RESOLVIDOS na leitura, como a juncao do banco faz. Os
-    // `??` nao sao zelo: um item pode apontar para categoria que saiu do
-    // vocabulario, e nesse caso o codigo continua saindo e o rotulo cai para
-    // ele -- nunca para texto inventado.
-    //
-    // **Categoria nula nao tem rotulo**, e o dublê precisa dizer isso igual ao
-    // banco: lá a juncao e EXTERNA na leitura do painel, e devolve nulo para o
-    // rascunho sem categoria (`20261017000002`). Um dublê que devolvesse o
-    // codigo nulo coagido a texto esconderia o rascunho incompleto.
     categoryLabel:
       guardado.category === null
         ? null
@@ -189,16 +153,6 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
         ? null
         : (VOCABULARIO.get(guardado.category)?.subs.get(guardado.subcategory) ??
           guardado.subcategory),
-    // Como o banco: guarda o CAMINHO (com query e fragmento) e o host so
-    // quando ele e um subdominio do parceiro; compoe os dois na leitura. O
-    // duble refaz o CAMINHO em vez de devolver `guardado.targetUrl` inteira,
-    // porque e o truncamento do caminho que ele precisa reproduzir -- um duble
-    // que devolvesse a URL original passaria verde sobre o defeito que a
-    // gravacao teria. O HOST, ao contrario, vem da coluna gravada na escrita:
-    // o parceiro de hoje resolve o nulo, e e isso que leva os itens junto
-    // quando o dominio do parceiro muda.
-    //
-    // Sem parceiro nao ha host, e o destino nao tem como ser lido de volta.
     targetUrl:
       parceiro === null || guardado.targetUrl === null
         ? null
@@ -333,9 +287,6 @@ export function repositorioEmMemoria(
           return Promise.resolve({
             categoriaAtiva: encontrada !== undefined,
             subcategoriaNaCategoria: encontrada?.subs.has(subcategoria) ?? false,
-            // A varredura e pelo CODIGO em todas as categorias, como a consulta
-            // do adaptador real: e o que separa "e de outra categoria" de "nao
-            // existe", e sao duas mensagens diferentes no painel.
             subcategoriaEmAlgumaCategoria: [...VOCABULARIO.values()].some((c) =>
               c.subs.has(subcategoria),
             ),
@@ -353,8 +304,6 @@ export function repositorioEmMemoria(
             category: novo.category,
             subcategory: novo.subcategory,
             targetUrl: novo.targetUrl,
-            // Nulo quando o host e o do proprio parceiro, que e o caso comum,
-            // e nulo tambem no rascunho sem destino ou sem parceiro.
             targetHost:
               novo.targetUrl === null || novo.partnerHost === null
                 ? null
@@ -383,11 +332,7 @@ export function repositorioEmMemoria(
             ...(m.title === undefined ? {} : { title: m.title }),
             ...(m.summary === undefined ? {} : { summary: m.summary }),
             ...(m.category === undefined ? {} : { category: m.category }),
-            // `in`, e nao `=== undefined`: aqui `null` APAGA a subcategoria e
-            // ausente preserva, e os dois precisam ser distinguidos.
             ...('subcategory' in m ? { subcategory: m.subcategory ?? null } : {}),
-            // Os dois andam JUNTOS, como no adaptador real: caminho novo com
-            // host antigo levaria a pessoa ao caminho novo no dominio errado.
             ...(m.destino === undefined
               ? {}
               : {
@@ -493,7 +438,6 @@ export function repositorioEmMemoria(
           r.trilha.push(evento);
         },
       };
-      // O ROLLBACK: o rascunho so vira estado se o trabalho inteiro terminar.
       const resultado = await trabalho(tx);
       estado = r;
       return resultado;

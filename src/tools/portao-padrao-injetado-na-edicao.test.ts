@@ -1,9 +1,6 @@
 /**
- * O portao do padrao injetado na edicao contra o contrato real, e contra uma
- * isca por regra. Cada isca e o contrato real com UMA alteracao, feita sobre
- * uma COPIA em memoria -- `api/openapi.yaml` nunca e tocado. Se o portao
- * deixar de acusar qualquer uma, ele deixou de verificar aquilo, e este
- * arquivo reprova dizendo qual.
+ * O portao do padrao injetado na edicao contra o contrato real, e contra uma isca
+ * por regra.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -60,11 +57,8 @@ void describe('portao do padrao injetado na edicao', () => {
   });
 
   /**
-   * O inventario da divida nao e uma lista de nomes: cada linha dela existe
-   * porque ha um `default` ALCANCAVEL do corpo daquela operacao. Este caso e o
-   * que prende as duas coisas -- se o contrato parar de alcancar o `default`,
-   * o caso acima ja reprova mandando tirar a linha; se alcancar outro, ele
-   * aparece aqui.
+   * O inventario da divida nao e uma lista de nomes: cada linha dela existe porque
+   * ha um `default` ALCANCAVEL do corpo daquela operacao.
    */
   void it('a divida de hoje e exatamente a que foi medida, com a trilha ate cada default', () => {
     const { alcancados } = conferirPadraoInjetadoNaEdicao(TEXTO);
@@ -85,16 +79,11 @@ void describe('portao do padrao injetado na edicao', () => {
 
   const iscas: readonly { nome: string; regra: RegExp; alterar: (spec: Spec) => void }[] = [
     {
-      // A isca central: um `default` NOVO num corpo de PATCH que hoje nao
-      // alcanca nenhum. E exatamente o defeito que o portao existe para pegar.
       nome: 'default novo num corpo de PATCH limpo (AdminStoreItemPatch)',
       regra: /updateAdminStoreItem .*: o corpo da edicao alcanca um default \(AdminStoreItemPatch\/properties\/sort_order = 0\)/,
       alterar: (s) => void (propriedades(s, 'AdminStoreItemPatch')['sort_order'] = { type: 'integer', default: 0 }),
     },
     {
-      // O mesmo, so que de longe: o `default` entra num schema que o corpo do
-      // PATCH so alcanca ATRAVESSANDO dois `$ref`. Sem resolucao transitiva o
-      // portao passaria batido, e a trilha da mensagem e o que diz onde mexer.
       nome: 'default atras de dois $ref a partir de um corpo de PATCH',
       regra:
         /updateAdminStorePartner .*: o corpo da edicao alcanca um default \(AdminStorePartnerPatch\/properties\/images -> StoreCatalogImagesInput\/items -> StoreCatalogImageInput\/properties\/alt_text = "x"\)/,
@@ -104,8 +93,6 @@ void describe('portao do padrao injetado na edicao', () => {
       },
     },
     {
-      // `*Input` reusado como corpo de PATCH: o portao varre por OPERACAO, e
-      // nao por nome de schema terminando em `Patch`.
       nome: 'corpo de PATCH que e um *Input de criacao, com default',
       regra: /updateAdminStoreTag .*: o corpo da edicao alcanca um default \(AdminStoreItemInput\/properties\/sort_order = 0\)/,
       alterar: (s) => {
@@ -128,8 +115,6 @@ void describe('portao do padrao injetado na edicao', () => {
       },
     },
     {
-      // A linha da divida que deixou de ter divida: se alguem tirar o
-      // `default` do corpo do PATCH da Rede e esquecer a linha, o portao cobra.
       nome: 'linha da divida cujo default sumiu do contrato',
       regra: /updateLostCase: listado em PADRAO_INJETADO_ACEITO_HOJE e o corpo da edicao nao alcanca mais/,
       alterar: (s) => void delete campo(s, 'LostCaseInput', 'share_to_public_list')['default'],

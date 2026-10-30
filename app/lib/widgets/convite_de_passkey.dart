@@ -8,46 +8,6 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 
 /// O convite para cadastrar a passkey, logo depois do cadastro da conta.
-///
-/// E o que o cliente pediu: _"vamos implementar apos o usuario realizar o
-/// cadastro o passkeys para que ele possa logar com credenciais digitais"_.
-///
-/// ## ELE E DISPENSAVEL, E ISSO E A PROPRIEDADE QUE MAIS IMPORTA AQUI
-///
-/// **Quem recusa a biometria tem de conseguir terminar o cadastro.** A conta
-/// JA EXISTE quando esta folha abre -- `POST /auth/register` ja respondeu 201
-/// com o par de tokens e `ControladorDeSessao.abrir` ja os guardou. Entao esta
-/// folha nao pode ter nenhum desfecho que segure a pessoa:
-///
-/// | o que a pessoa faz | o que acontece |
-/// |---|---|
-/// | toca em `Ativar` e a folha nativa confirma | credencial cadastrada, segue |
-/// | toca em `Ativar` e fecha a folha nativa | **segue** |
-/// | toca em `Agora nao` | **segue**, sem ida a rede |
-/// | arrasta a folha para baixo | **segue** |
-/// | usa o gesto de voltar do sistema | **segue** |
-/// | o servidor recusa (409 de teto, 429, rede fora) | **segue** |
-///
-/// Os seis desfechos levam ao mesmo lugar, e e por isso que [mostrarConviteDePasskey]
-/// devolve `void` em vez de um `bool` que alguem pudesse testar para decidir
-/// se continua. Nao existe "nao continuar".
-///
-/// ## Nenhuma faixa de erro, de proposito
-///
-/// Um 409 de teto de credenciais ou um aparelho sem passkey nao viram texto
-/// aqui. A pessoa acabou de criar a conta e esta a um toque de usar o app; uma
-/// faixa vermelha no fim de um cadastro que **deu certo** ensina que algo
-/// quebrou quando nada quebrou. O desfecho vai para o canal de
-/// observabilidade por `FiacaoDoPasskey`, que e quem precisa saber.
-///
-/// ## Isto NAO passou pelo Figma
-///
-/// A regra do projeto e tela e componente pelo Figma antes do codigo. Esta
-/// folha foi montada **so** com primitivas que o design system ja define
-/// (folha inferior do 11.9, `BichuEspaco`, `BichuAlvoDeToque`, os pares de
-/// cor de `BichuColors`) e nao introduz forma nova nenhuma -- mas a
-/// composicao, o texto e o icone nao foram desenhados. Vale como fiacao
-/// funcional, e o desenho de saida continua devendo.
 class ConviteDePasskey extends StatefulWidget {
   const ConviteDePasskey({
     super.key,
@@ -55,33 +15,10 @@ class ConviteDePasskey extends StatefulWidget {
     this.permitirRecusaFormal = false,
   });
 
-  /// A FOLHA OFERECE `Não quero ativar`? (28/10/2026)
-  ///
-  /// **Falso depois do CADASTRO, verdadeiro depois do LOGIN**, e a diferenca
-  /// nao e estetica:
-  ///
-  ///   - no fim do cadastro a folha aparece **uma vez na vida da conta**, e
-  ///     `Agora não` resolve: nao ha o que calar para o futuro;
-  ///   - depois do login ela aparece **em toda entrada** de quem nao tem
-  ///     credencial e nao recusou (regra do cliente de 28/10). Sem uma recusa
-  ///     DEFINITIVA, quem nao quer passkey seria perguntada para sempre -- e
-  ///     a regra dele diz, com estas palavras, *"nao tiver rejeitado
-  ///     formalmente"*, o que pressupoe que exista como rejeitar.
-  ///
-  /// **`Agora não` CONTINUA EXISTINDO quando este e verdadeiro, e nao e o
-  /// mesmo botao.** Os dois desfechos sao diferentes de proposito: `Agora não`
-  /// (e arrastar, e o voltar do sistema) e *"nao agora"* e a oferta volta no
-  /// proximo login; `Não quero ativar` grava a recusa e a oferta nao volta.
-  /// Confundir os dois faria a pessoa perder a funcao por um gesto acidental,
-  /// que e o dano que os dois casos de fronteira da isca cobram.
+  /// A FOLHA OFERECE `Não quero ativar`?
   final bool permitirRecusaFormal;
 
   /// O nome sugerido para o aparelho, ou nulo.
-  ///
-  /// Nulo e o caso normal nesta entrega: sem ele o servidor guarda nulo e a
-  /// tela de aparelhos -- que ainda nao existe -- mostraria a data. Inventar
-  /// "Celular do Leandro" aqui exigiria ler o nome do aparelho, que e outra
-  /// permissao e outra frente.
   final String? rotuloDoAparelho;
 
   @override
@@ -91,16 +28,8 @@ class ConviteDePasskey extends StatefulWidget {
 class _ConviteDePasskeyState extends State<ConviteDePasskey> {
   bool _emAndamento = false;
 
-  /// GRAVA A RECUSA FORMAL e fecha. **So este caminho recusa.**
-  ///
-  /// Nem `Agora não`, nem arrastar a folha, nem o gesto de voltar do sistema
-  /// chegam aqui -- os tres sao *"agora nao"*. Ver
-  /// `PasskeyNesteAparelho.registrarRecusa`.
+  /// GRAVA A RECUSA FORMAL e fecha.
   Future<void> _naoQuero() async {
-    // `registrarRecusa` NAO ESTOURA: falha de disco deixa a memoria com o
-    // valor certo, entao esta execucao do app nao pergunta de novo, e a
-    // proxima abertura pergunta -- que custa uma pergunta, nao uma funcao
-    // perdida.
     await Escopo.of(context).passkeyNesteAparelho.registrarRecusa();
     if (!mounted) return;
     Navigator.of(context).pop(DesfechoDoCadastroDePasskey.naoCadastrada);
@@ -110,18 +39,11 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
     setState(() => _emAndamento = true);
     final escopo = Escopo.of(context);
 
-    // `oferecerCadastro` NAO ESTOURA -- ela devolve `naoCadastrada` em todo
-    // desfecho que nao e sucesso, inclusive 409, 429 e rede fora. E por isso
-    // que nao ha `try` aqui: nao ha o que capturar, e um `catch` daria a
-    // impressao de que existe um caminho de erro que esta folha trata.
     final desfecho = await escopo.passkey.oferecerCadastro(
       rotulo: widget.rotuloDoAparelho,
     );
 
     if (!mounted) return;
-    // FECHA NOS DOIS DESFECHOS. Nao reabrir, nao insistir, nao explicar: quem
-    // fechou a folha nativa ja disse o que queria, e repetir o pedido e
-    // transformar uma recusa em obstaculo.
     Navigator.of(context).pop(desfecho);
   }
 
@@ -135,9 +57,6 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
       namesRoute: true,
       explicitChildNodes: true,
       label: _titulo,
-      // ROLA, pelo mesmo motivo da folha destrutiva: a fonte do sistema em
-      // 200% estoura o `RenderFlex` com o conteudo minimo, e o que estoura e o
-      // FIM da coluna -- onde ficam as duas acoes.
       child: SingleChildScrollView(
         child: Padding(
           padding: EdgeInsets.only(
@@ -150,7 +69,6 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const _AlcaDoConvite(),
-              // Decorativo: o titulo logo abaixo ja diz o que o icone ilustra.
               ExcludeSemantics(
                 child: Icon(
                   Icons.fingerprint,
@@ -169,37 +87,17 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
               const SizedBox(height: BichuEspaco.e3),
               Text(_corpo, style: textos.bodyMedium),
               const SizedBox(height: BichuEspaco.e3),
-              // A FRASE QUE NAO PODE SAIR. A passkey SOMA a senha, e dizer
-              // isso na tela nao e zelo: quem entende que a biometria
-              // SUBSTITUI a senha para de lembrar da senha, e passkey e presa
-              // ao aparelho -- trocar de celular trancaria a pessoa fora da
-              // conta.
               Text(_aSenhaContinua, style: textos.bodyMedium),
               const SizedBox(height: BichuEspaco.e6),
 
-              // Folha NAO destrutiva: a acao principal fica em cima e leva o
-              // alvo grande. A inversao do 11.9.1 vale so para destruicao.
               _BotaoDeAtivar(carregando: _emAndamento, aoTocar: _ativar),
               const SizedBox(height: BichuEspaco.e4),
               _BotaoDeAgoraNao(
-                // Desabilitado enquanto a folha nativa esta aberta: o pedido
-                // ja saiu, e deixar `Agora nao` ativo sugeriria que ele nao
-                // saiu. Quem desistir fecha a folha do sistema, que e onde o
-                // gesto agora mora.
                 aoTocar: _emAndamento
                     ? null
                     : () => Navigator.of(context)
                         .pop(DesfechoDoCadastroDePasskey.naoCadastrada),
               ),
-              // `Não quero ativar` SO NO CONVITE DO LOGIN (28/10/2026) -- ver
-              // [ConviteDePasskey.permitirRecusaFormal].
-              //
-              // **TERCEIRO na ordem, e com a menor enfase.** Ela e a acao
-              // menos reversivel das tres: `Ativar` e desfeita por revogar, e
-              // `Agora não` e desfeita pelo proximo login; esta cala a oferta
-              // ate a pessoa vir ligar a mao em `Meus dados`. Por ela em cima,
-              // ou com o peso de `Agora não`, poria a saida definitiva no
-              // caminho do gesto apressado.
               if (widget.permitirRecusaFormal) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
                 _BotaoDeNaoQuero(
@@ -225,15 +123,6 @@ class _ConviteDePasskeyState extends State<ConviteDePasskey> {
 }
 
 /// Abre o convite.
-///
-/// **Devolve `void`, e isso e deliberado.** Nenhum chamador pode condicionar o
-/// que vem depois ao desfecho: o cadastro da conta esta completo antes desta
-/// folha abrir, e nao existe desfecho que o desfaca. Um `Future<bool>` aqui
-/// seria um convite a escrever `if (cadastrou)` em cima do fim do cadastro.
-///
-/// A folha e **dispensavel pelos tres gestos**: `Agora nao`, arrastar para
-/// baixo e o gesto de voltar do sistema. `isDismissible` e `enableDrag` ficam
-/// no padrao (verdadeiros) justamente por isso.
 Future<void> mostrarConviteDePasskey(
   BuildContext context, {
   String? rotuloDoAparelho,
@@ -253,10 +142,9 @@ Future<void> mostrarConviteDePasskey(
       permitirRecusaFormal: permitirRecusaFormal,
     ),
   );
-  // O retorno e DESCARTADO de proposito. Ver a documentacao acima.
 }
 
-/// A alca de 36 x 4, decorativa. Mesma do 11.9.
+/// A alca de 36 x 4, decorativa.
 class _AlcaDoConvite extends StatelessWidget {
   const _AlcaDoConvite();
 
@@ -291,10 +179,6 @@ class _BotaoDeAtivar extends StatelessWidget {
     final textos = Theme.of(context).textTheme;
     final cores = BichuColors.of(context).cores;
 
-    // A acao numa variavel so, usada pelos tres lugares que precisam
-    // concordar: `onPressed`, o `onTap` da semantica e o `enabled` anunciado.
-    // Mesma disciplina do `BotaoPrimario` -- enquanto os tres divergiram, o
-    // botao carregando se anunciava habilitado sem ter acao nenhuma.
     final VoidCallback? acao = carregando ? null : aoTocar;
 
     return Semantics(
@@ -302,9 +186,6 @@ class _BotaoDeAtivar extends StatelessWidget {
       enabled: acao != null,
       label: carregando ? '$_rotulo, em andamento' : _rotulo,
       excludeSemantics: true,
-      // Sem esta linha o no sai da arvore com `btn=true tap=false` e
-      // `test/a11y/acao_de_controle_test.dart` reprova -- corretamente: quem
-      // usa leitor de tela ouviria que o botao existe e nao poderia aciona-lo.
       onTap: acao,
       child: SizedBox(
         width: double.infinity,
@@ -326,8 +207,6 @@ class _BotaoDeAtivar extends StatelessWidget {
                 ),
                 const SizedBox(width: BichuEspaco.e2),
               ],
-              // O rotulo continua visivel no estado carregando, pelo mesmo
-              // motivo do `BotaoPrimario`.
               Flexible(
                 child: Text(
                   _rotulo,
@@ -346,10 +225,6 @@ class _BotaoDeAtivar extends StatelessWidget {
 }
 
 /// A saida: `secondary`, largura total, 48 dp.
-///
-/// **O rotulo e `Agora nao`, e nao `Cancelar`.** O cliente pediu esta palavra,
-/// e ela e mais honesta: a oferta volta a existir -- a conta continua sem
-/// passkey e nada aqui e definitivo.
 class _BotaoDeAgoraNao extends StatelessWidget {
   const _BotaoDeAgoraNao({required this.aoTocar});
 
@@ -366,19 +241,6 @@ class _BotaoDeAgoraNao extends StatelessWidget {
 }
 
 /// `Não quero ativar`: a RECUSA FORMAL (28/10/2026).
-///
-/// **`TextButton` e nao `OutlinedButton`**, e a enfase e a mensagem: ela e a
-/// acao menos reversivel da folha, e a forma mais leve e o que a mantem fora do
-/// caminho do gesto apressado. Nao e `critico` nem vermelha -- nao ha nada de
-/// destrutivo em nao querer um recurso, e pintar de alerta sugeriria que ha.
-///
-/// **O alvo continua em [BichuAlvoDeToque.min]**: enfase menor nao e alvo
-/// menor, e o piso do SC 2.5.8 nao depende de quanto a casa quer que a pessoa
-/// toque num botao.
-///
-/// O rotulo diz o que ela recusa (`ativar`) e nao so `Não quero`: sozinho, ele
-/// leria como resposta a pergunta do titulo (*"Entrar sem digitar a senha?"*),
-/// que e o que `Agora não` ja responde.
 class _BotaoDeNaoQuero extends StatelessWidget {
   const _BotaoDeNaoQuero({required this.aoTocar});
 

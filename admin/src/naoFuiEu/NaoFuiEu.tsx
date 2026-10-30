@@ -1,13 +1,6 @@
 /**
- * "Nao fui eu" do painel (D62, ADR-0027 item 20.5): o e-mail de sessao aberta
- * leva `<painel>/nao-fui-eu#t=<token>`. O token vem no **fragmento**, que o
- * navegador nao manda ao servidor nem poe em `Referer`, e sai da barra de
- * endereco assim que e lido. So vai ao servidor por `POST`
- * (`disavowAdminSessionAlert`) e **so depois do clique**: cliente de e-mail e
- * antivirus que pre-carregam o link nao disparam o bloqueio.
- *
- * Fica fora da sessao: existe para quem pode ter perdido a sua. Sem
- * `X-CSRF-Token`; o navegador manda `Origin`, que o servidor confere.
+ * "Nao fui eu" do painel (D62, ADR-0027 item 20.5): o e-mail de sessao aberta leva
+ * `<painel>/nao-fui-eu#t=<token>`.
  */
 import { useMemo, useState } from 'react';
 

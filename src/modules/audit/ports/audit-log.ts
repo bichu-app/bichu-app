@@ -1,50 +1,26 @@
-/**
- * Porta da trilha de auditoria.
- *
- * É a única coisa que outro módulo enxerga de `audit` (§6 de
- * docs/03-arquitetura.md). Quem grava um evento não sabe, e não precisa saber,
- * que existe um esquema separado e um papel de banco sem `UPDATE` nem `DELETE`
- * do outro lado.
- *
- * **O ator é sempre o UUID interno, nunca o e-mail** (BICHUS-56, critério 3), e
- * é por isso que `actorUserId` é `UserId` e não `string`: passar um e-mail aqui
- * não compila.
- *
- * **Nunca registrar** senha, token de qualquer espécie, código de tag em claro,
- * coordenada bruta nem conteúdo de mensagem (docs/04-seguranca.md 9).
- */
+/** Porta da trilha de auditoria. */
 import type { DbTransaction } from '../../../shared/db/pool.js';
 import type { AdminAccountId, UserId } from '../../../shared/types/brands.js';
 
 /**
  * Ações da trilha. União fechada pelo mesmo motivo de `ProblemType`: ação
- * inventada no meio do código não compila, e a lista de eventos obrigatórios
- * fica verificável em vez de depender de quem lembrou de chamar.
+ * inventada no meio do código não compila, e a lista de eventos obrigatórios fica
+ * verificável em vez de depender de quem lembrou de chamar.
  */
 export type AuditAction =
-  // Identidade e sessão
   | 'auth.account_created'
   | 'auth.login_succeeded'
   | 'auth.login_failed'
   | 'auth.logout'
   | 'auth.session_refreshed'
   | 'auth.refresh_reuse_detected'
-  /** Refresh anterior a `sessions_invalid_before` (SEC-006). Tentativa negada. */
+  /** Refresh anterior a `sessions_invalid_before` (SEC-006). */
   | 'auth.refresh_rejected_revoked_session'
   | 'auth.sessions_revoked'
   | 'auth.password_changed'
   /** Tentativa de troca de senha recusada por senha atual errada (BICHUS-125). */
   | 'auth.password_change_refused'
-  /**
-   * BICHUS-48. A janela de reautenticacao de 5 minutos.
-   *
-   * Sao quatro eventos e nao dois, porque as duas metades respondem perguntas
-   * diferentes numa investigacao de tomada de conta: `reauth_refused` em
-   * sequencia e alguem testando senhas de dentro de uma sessao tomada;
-   * `reauth_window_refused` em sequencia e alguem tentando reaproveitar,
-   * mover de aparelho ou trocar o escopo de uma janela. O `metadata` carrega o
-   * escopo e o motivo interno da recusa -- que nunca sai no corpo da resposta.
-   */
+  /** BICHUS-48. A janela de reautenticacao de 5 minutos. */
   | 'auth.reauth_granted'
   | 'auth.reauth_refused'
   | 'auth.reauth_window_used'
@@ -52,246 +28,89 @@ export type AuditAction =
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
-  // Credencial digital / passkey (BICHUS-301)
   | 'auth.passkey_registered'
   | 'auth.passkey_revoked'
   /**
    * Contador de assinatura REPETIU ou RETROCEDEU: repeticao de uma assercao
-   * capturada, ou autenticador clonado. O servidor revoga a credencial por
-   * conta propria e responde o mesmo 401 de credencial invalida.
-   *
-   * E evento proprio, e nao `auth.login_failed`, porque a pergunta que ele
-   * responde e outra: `login_failed` e alguem errando a senha, e isto e sinal
-   * de que uma chave privada saiu do aparelho dela.
+   * capturada, ou autenticador clonado.
    */
   | 'auth.passkey_counter_regression'
   /**
-   * Nasceu uma sessao a partir do link do e-mail, e NAO de uma senha
-   * (`POST /v1/auth/email-verification/confirm`). O metadado diz qual dos dois
-   * propositos do token a abriu, `email_verify` ou `email_change`.
-   *
-   * E evento proprio, e nao `auth.login_succeeded`, porque a pergunta que a
-   * trilha responde numa tomada de conta e exatamente esta: quais sessoes
-   * desta conta nasceram sem que alguem apresentasse a senha. Um
-   * `login_succeeded` aqui apagaria a diferenca justamente onde ela importa.
+   * Nasceu uma sessao a partir do link do e-mail, e NAO de uma senha (`POST
+   * /v1/auth/email-verification/confirm`).
    */
   | 'auth.session_opened_by_email_link'
-  /**
-   * Pediram a troca do e-mail da conta (BICHUS-42). Fica na trilha mesmo
-   * quando nenhum token é emitido — o pedido para um endereço que já tem dono
-   * é indistinguível na resposta, e a trilha é o único lugar onde ele aparece.
-   */
+  /** Pediram a troca do e-mail da conta (BICHUS-42). */
   | 'auth.email_change_requested'
   /** A troca foi confirmada no endereço novo e `users.email` mudou. */
   | 'auth.email_changed'
-  // Autorização
   | 'authz.denied'
-  /**
-   * ADR-0027 item 20.3 (D51). A conta do painel criada, com senha redefinida,
-   * desativada, reativada ou com as sessoes encerradas pelo comando
-   * `src/bin/conta-admin.ts`, e so por ele. Ator `system`: quem executa e o
-   * comando no servidor, e quem digitou vai em `metadata.operator`. Fora de
-   * `ACOES_ADMINISTRATIVAS` de proposito: aquela lista espelha o `x-audit` do
-   * contrato HTTP, e nada disto e operacao HTTP (D61).
-   */
+  /** ADR-0027 item 20.3 (D51). */
   | 'admin.account.created'
   | 'admin.account.password_reset'
   | 'admin.account.disabled'
   | 'admin.account.enabled'
   | 'admin.account.sessions_closed'
   | 'profile.updated'
-  // Cadastro do pet
   | 'pet.created'
   | 'pet.updated'
   | 'pet.deleted'
-  // Tag, caso, conversa e moderação entram com as histórias que as criam.
   | 'tag.issued'
   | 'tag.revoked'
   | 'lost_case.opened'
-  /**
-   * O tutor corrigiu ONDE e QUANDO o pet foi visto (`PATCH /v1/lost-cases/{id}`).
-   * O metadado carrega `has_location`, nunca a coordenada: a trilha não guarda
-   * coordenada bruta (docs/04-seguranca.md 9). Separada de `lost_case.opened`
-   * porque a pergunta de investigação é outra — "o alerta saiu para o lugar
-   * certo?" depende de saber se o lugar mudou depois do disparo.
-   */
+  /** O tutor corrigiu ONDE e QUANDO o pet foi visto (`PATCH /v1/lost-cases/{id}`). */
   | 'lost_case.updated'
   | 'lost_case.closed'
-  /**
-   * O tutor REABRIU o caso que ele havia encerrado (`reopenLostCase`).
-   *
-   * **Separada de `lost_case.opened`**, e a separação é o que torna a métrica
-   * de reencontro auditável: um caso reaberto não é um caso novo, e contá-lo
-   * como abertura inflaria o denominador. A pergunta de investigação que só
-   * esta ação responde é "este desfecho `reunited` foi desfeito?" — e ela
-   * importa porque `closeLostCase` é um toque único, sem confirmação até agora,
-   * numa tela que a pessoa abre em pânico.
-   *
-   * O metadado carrega o desfecho DESFEITO (`undone_outcome`) e o prazo que
-   * valia (`reopen_deadline`). Nunca coordenada, como no resto do módulo.
-   *
-   * Está aqui também porque o `node-pg-migrate` DESCARTA `RAISE NOTICE` e
-   * `WARNING`: contagem e diagnóstico deste módulo vão para `audit.events`, que
-   * é o único lugar onde alguém os encontra depois.
-   */
+  /** O tutor REABRIU o caso que ele havia encerrado (`reopenLostCase`). */
   | 'lost_case.reopened'
   | 'lost_case.alert_dispatched'
-  /**
-   * O tutor pediu o REENVIO do alerta (`POST /v1/lost-cases/{id}/alerts`).
-   * Separada de `lost_case.alert_dispatched`, que é do worker e diz que o alerta
-   * SAIU: esta diz que ele foi pedido, e é a única que tem autor humano. Juntá-las
-   * tornaria impossível responder quantas vezes um tutor pediu e quantas saíram.
-   */
+  /** O tutor pediu o REENVIO do alerta (`POST /v1/lost-cases/{id}/alerts`). */
   | 'lost_case.alert_resent'
   | 'match.candidate_decided'
-  /** BICHUS-43. A conversa nasceu de um aviso. Ator anônimo quando o achador não tem conta. */
+  /** BICHUS-43. A conversa nasceu de um aviso. */
   | 'conversation.opened'
-  /**
-   * BICHUS-43, critérios 10 e 11. A conversa foi retida para revisão humana.
-   * O metadado carrega o MOTIVO, e nunca o texto das mensagens.
-   */
+  /** BICHUS-43, critérios 10 e 11. */
   | 'conversation.held_for_review'
   | 'conversation.reported'
-  /**
-   * FATIA E da frente de comunidade: bloquear alguem.
-   *
-   * **O `resourceId` e o ENDERECO PUBLICO do alvo** (`users.public_ref`, 128
-   * bits opacos), e nunca o UUID interno: a trilha guarda o ATO e nao a
-   * vitima, e o endereco publico e o que um suporte consegue ligar a uma linha
-   * sem que a trilha passe a ser uma lista de quem bloqueou quem por id.
-   *
-   * **Nenhum destes eventos chega a quem foi bloqueado ou denunciado.** A
-   * trilha e de quem audita.
-   */
+  /** FATIA E da frente de comunidade: bloquear alguem. */
   | 'user_block.created'
   | 'user_block.removed'
-  /**
-   * FATIA E: denuncia de perfil, de foto ou de publicacao. O `resourceKind`
-   * diz qual dos tres.
-   *
-   * O metadado carrega o MOTIVO escolhido e **nunca o relato**: relato e texto
-   * que uma pessoa escreveu sobre outra, e `docs/04-seguranca.md` secao 9
-   * proibe conteudo na trilha pelo mesmo juizo. Quem precisa do relato e quem
-   * modera, e ele esta na fila.
-   */
+  /** FATIA E: denuncia de perfil, de foto ou de publicacao. */
   | 'content_report.created'
   | 'conversation.blocked'
   | 'moderation.decided'
   /**
-   * ADR-0025 emenda 3. Uma conta do app criou, editou ou cancelou um encontro
-   * da `Rede`.
-   *
-   * **E aqui que a autoria vive de verdade**: a coluna `created_by_*` de
-   * `network_events` leva a marca "nunca sai do servidor" e e carimbada na
-   * mesma transacao por `network_events_gravar_autoria`, mas e esta linha que
-   * sobrevive a exclusao da conta e responde "quem criou este encontro, e quem
-   * mexeu nele" numa resposta a abuso.
-   *
-   * `submitted` manteve o nome da fatia em que o encontro nascia em revisao, e
-   * o nome continua verdadeiro: alguem submeteu um encontro. Desde 17/10/2026
-   * ele nasce publicado, sem fila.
-   *
-   * `updated` grava os NOMES dos campos alterados, nunca o conteudo: texto
-   * livre de pessoa na trilha sobrevive a exclusao da conta de proposito, e
-   * nao e isso que a trilha existe para responder.
+   * ADR-0025 emenda 3. Uma conta do app criou, editou ou cancelou um encontro da
+   * `Rede`.
    */
   | 'network_event.submitted'
   | 'network_event.updated'
   | 'network_event.cancelled'
-  /**
-   * `suggestDirectoryEntry`. Uma conta do app SUGERIU uma entrada para o
-   * diretorio de `Perto`, e a sugestao entrou na fila de revisao.
-   *
-   * **A acao existe porque a coluna de autoria nao responde sozinha.** A coluna
-   * de `directory_suggestions` que guarda quem sugeriu leva a marca
-   * "nunca sai do servidor" -- o nome dela nao cabe neste arquivo, e e a funcao
-   * `directory_suggestions_registrar` da migracao `20261017000004` que a
-   * escreve. E esta linha que sobrevive a exclusao da conta e responde "quem
-   * sugeriu isto, e quantas vezes" numa resposta a abuso -- que e a pergunta de
-   * quem recebe uma fila de trabalho humano aberta a qualquer conta.
-   *
-   * O metadado carrega `kind`, `city`, `state` e o TIPO do contato. **Nunca o
-   * valor do contato, o nome sugerido nem o recado**: sao dado de um terceiro
-   * que nao pediu para estar aqui, e a trilha sobrevive a exclusao da conta de
-   * proposito. Nao ha par `approved`/`declined` ainda, porque as operacoes do
-   * painel que trabalham esta fila nao existem no contrato.
-   */
+  /** `suggestDirectoryEntry`. */
   | 'directory_suggestion.submitted'
   | 'privacy.account_deletion_requested'
   /**
-   * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`
-   * deixou de existir.
-   *
-   * `audit.events` nao referencia `users` de proposito, entao este evento
-   * sobrevive ao que ele registra: e a UNICA memoria de que aquela conta
-   * existiu e de quando ela foi apagada, e e o que torna o prazo do ADR-0010
-   * verificavel por quem audita de fora. O metadado nao carrega e-mail, nome
-   * nem coordenada -- o que sobrevive a exclusao nao pode reconstituir o
-   * perfil que a exclusao existe para apagar.
+   * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users` deixou
+   * de existir.
    */
   | 'privacy.account_purged'
-  /**
-   * BICHUS-215, gatilho 4 do SEC-006. Alguem respondeu "Nao fui eu" ao aviso
-   * de reuso, pelo link do e-mail, sem conta. `actorKind` e `anonymous`: quem
-   * apresentou o token provou ter a caixa de entrada, e nao provou ser o
-   * titular.
-   */
+  /** BICHUS-215, gatilho 4 do SEC-006. */
   | 'auth.session_disavowed'
   | 'privacy.data_export_requested'
-  /**
-   * BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia.
-   * O metadado carrega a ORIGEM e a PRECISAO; a coordenada nao entra aqui,
-   * pela regra do cabecalho deste arquivo e porque a trilha sobrevive a
-   * exclusao da conta de proposito.
-   */
+  /** BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia. */
   | 'privacy.reference_location_set'
   /** A conta saiu do raio de alerta por `DELETE /v1/me/location`. */
   | 'privacy.reference_location_cleared'
-  // Aparelho e token de push (BICHUS-91)
-  /**
-   * `POST /v1/me/devices`. O metadado carrega plataforma e permissao; **o token
-   * nao entra**, pela regra do cabecalho deste arquivo ("nunca registrar ...
-   * token de qualquer especie") e porque a trilha sobrevive a exclusao da conta.
-   */
   | 'device.registered'
-  /**
-   * O aparelho deixou de existir, e o metadado diz por que (`reason`). E a
-   * UNICA memoria da revogacao: a linha e apagada, e a trilha nao referencia
-   * `users`, entao ela responde "por que este aparelho parou de receber?"
-   * inclusive depois de a conta ter sido apagada.
-   */
+  /** O aparelho deixou de existir, e o metadado diz por que (`reason`). */
   | 'device.revoked'
-  // Transferencia de pet (BICHUS-66). Quatro eventos e nao um com `status`: a
-  // pergunta que a trilha responde e "quando cada coisa aconteceu", e um evento
-  // unico com estado obrigaria a reconstruir a ordem por carimbo.
-  //
-  // O metadado NUNCA carrega token nem endereco em claro: `pet_transfer.started`
-  // grava `recipient_email_masked`, e a razao e que a trilha sobrevive a
-  // exclusao da conta -- o endereco em claro ficaria ali depois de a pessoa ter
-  // pedido para sumir, e ela pode nem ter tido conta.
   | 'pet_transfer.started'
   | 'pet_transfer.accepted'
   /** Ator anonimo quando o cancelamento veio pelo link do e-mail, sem conta. */
   | 'pet_transfer.cancelled'
-  /**
-   * A posse mudou e as tags cairam. Ator `system`: quem executa e o trabalho
-   * agendado 24 h antes, e nao a pessoa que aceitou.
-   */
+  /** A posse mudou e as tags cairam. */
   | 'pet_transfer.consummated'
-  /**
-   * FATIA F (18/10/2026). A conexao entre pessoas, SIMETRICA, com aceite.
-   *
-   * **O recurso e a ARESTA (`resourceKind: 'user_connection'`, `resourceId` =
-   * `user_connections.ref`), e nunca a conta do outro lado.** A trilha e lida
-   * por gente, e trilha que nomeia o outro lado de uma recusa CONTA a recusa --
-   * que e exatamente o que o desenho nao da ("nenhum 'ela recusou voce'").
-   *
-   * Sao cinco verbos porque a investigacao pergunta cinco coisas diferentes, e
-   * `declined`/`cancelled`/`undone` respondem a mesma rota HTTP: quem encerrou
-   * uma aresta, e em que estado ela estava. `removed_by_block` tem ator
-   * `system`: quem executa e a escrita do bloqueio (fatia E), e nao a pessoa
-   * que bloqueou -- o bloqueio tem trilha propria, la.
-   */
+  /** FATIA F (18/10/2026). A conexao entre pessoas, SIMETRICA, com aceite. */
   | 'connection.requested'
   | 'connection.accepted'
   | 'connection.declined'
@@ -299,44 +118,14 @@ export type AuditAction =
   | 'connection.undone'
   | 'connection.removed_by_block'
   /**
-   * 20/10/2026, decisao do cliente: O CONVITE DO PROPRIO PERFIL, que alimenta o
-   * LINK e o QR.
-   *
-   * **O recurso e a CONTA (`resourceKind: 'user'`, `resourceId` = a propria
-   * conta), e nao a linha de `connection_invites`.** Duas razoes, e as duas
-   * valem: ha **um** convite ativo por conta (indice
-   * `connection_invites_um_ativo_por_conta`), entao a conta ja identifica o
-   * convite sem ambiguidade; e `connection_invites.id` e UUID interno, que nao
-   * sai (ADR-0010 item 6).
-   *
-   * **O TOKEN NUNCA ENTRA NA TRILHA**, nem em `resourceId` nem em `metadata`.
-   * A trilha e lida por gente, viaja em despejo de diagnostico e sobrevive a
-   * desabilitacao da conta: o token em claro ali abriria o perfil de alguem a
-   * quem leia o registro, que e o que o ADR-0022 proibe. O que se registra e
-   * que houve emissao ou revogacao, e quando.
-   *
-   * Nao existe `connection.invite.resolved`: registrar cada resolucao seria
-   * gravar quem olhou o perfil de quem, que e a lista de quem viu alguem --
-   * informacao que ninguem pediu e que o plano 4-B nao reconhece.
+   * 20/10/2026, decisao do cliente: O CONVITE DO PROPRIO PERFIL, que alimenta o LINK
+   * e o QR.
    */
   | 'connection.invite.issued'
   | 'connection.invite.revoked'
-  // Backoffice (ADR-0027, apendice A.5). O padrao e `admin.<recurso>.<verbo>`
-  // (D49), e cada valor e o `x-audit.action` de uma operacao do contrato, ou um
-  // dos eventos que o item 8 manda gravar sem ser escrita (login recusado,
-  // recusa da guarda). A lista entra inteira de uma vez, e nao fatia a fatia:
-  // `src/modules/audit/ports/acoes-administrativas.test.ts` confere que todo
-  // `x-audit.action` do contrato esta aqui, e o contrato ja declara todas.
   | AcaoAdministrativa;
 
-/**
- * As acoes da superficie administrativa, como valor e como tipo.
- *
- * Existe como lista, e nao so como uniao, porque a declaracao da rota mora em
- * `shared/http/route-definition.ts`, que nao conhece este modulo: la a acao e
- * uma cadeia `admin.*`, e e aqui que ela vira `AuditAction` (ver
- * `eventoAdministrativo`, em `trilha-administrativa.ts`).
- */
+/** As acoes da superficie administrativa, como valor e como tipo. */
 export const ACOES_ADMINISTRATIVAS = [
   'admin.session.opened',
   'admin.session.denied',
@@ -350,7 +139,6 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.store_item.updated',
   'admin.store_item.published',
   'admin.store_item.retired',
-  // Emenda do item 16 do ADR-0027 (23/09): o vocabulario de tags da Loja.
   'admin.store_tag.created',
   'admin.store_tag.updated',
   'admin.network_event.created',
@@ -358,110 +146,22 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.network_event.relocated',
   'admin.network_event.cancelled',
   'admin.network_event.removed',
-  // Emenda do item 17 do ADR-0027 (23/09): encontro privado e fila de pedidos.
-  // Entram aqui porque o contrato ja as declara em `x-audit`, e a conferencia
-  // de `acoes-administrativas.test.ts` e nos dois sentidos.
   'admin.network_event.access_changed',
   'admin.network_join_request.listed',
   'admin.network_join_request.approved',
   'admin.network_join_request.declined',
-  // BICHUS-189 (17/10/2026): a escrita administrativa do diretorio de `Perto`.
-  // Entram aqui porque `acoes-administrativas.test.ts` confere nos dois
-  // sentidos: todo `x-audit.action` do contrato precisa estar nesta lista, e
-  // todo valor desta lista precisa estar no contrato.
-  // 30/10/2026: a DUVIDA ATENDIDA. Decisao do cliente de marcar a duvida como
-  // atendida. Entra aqui porque `acoes-administrativas.test.ts` confere nos
-  // dois sentidos: todo `x-audit.action` do contrato precisa estar nesta
-  // lista, e todo valor desta lista precisa estar no contrato.
   'admin.help_request.attended',
   'admin.directory_entry.created',
   'admin.directory_entry.updated',
-  // 18/10/2026: a FILA DE REVISAO das indicacoes da comunidade. Aprovar grava
-  // uma entrada do diretorio, e recusar grava um motivo que o proximo revisor
-  // vai ler: as duas sao decisao de pessoa sobre o que a comunidade mandou, e
-  // sem rastro ninguem responde quem decidiu o que.
-  //
-  // **Nao ha `.listed` nem `.read`.** `x-audit` em `GET` administrativo e so da
-  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
-  // esta fila nao le pessoa nenhuma: a coluna que guarda quem indicou nunca sai
-  // do servidor, e a projecao e so da entidade indicada. Mesma ausencia, e pelo
-  // mesmo motivo, da fila da plaquinha.
   'admin.directory_suggestion.approved',
   'admin.directory_suggestion.declined',
 
-  // 18/10/2026: a moderacao das AVALIACOES do diretorio. `resource_kind` e
-  // `professional_review` e nao `directory_entry`: o alvo e a avaliacao, e uma
-  // investigacao que procurasse pela entrada nao acharia a remocao.
-  //
-  // Nao ha `.restored` ainda, e a ausencia e declarada: `status` aceita
-  // `'published'` de volta, entao restaurar nao exige migracao -- so a rota,
-  // que nao cabia nesta fatia.
   'admin.directory_review.removed',
-  // A fila do pedido da plaquinha da coleira. SOLICITAR nao e EMITIR: emitir e
-  // `issuePetTag` (irreversivel, ADR-0004) e sai na trilha do app; o que entra
-  // aqui e a decisao do painel sobre o OBJETO FISICO. Nao ha `.listed`: a fila
-  // nao le pessoa, e `x-audit` em `GET` administrativo e so da leitura de
-  // pessoa, que anda junto do teto por `rows_returned` (D55/D56).
   'admin.collar_tag_request.fulfilled',
   'admin.collar_tag_request.declined',
-  // 18/10/2026: a ENTREGA do objeto fisico -- o passo da encomenda e o codigo
-  // de rastreio, que o cliente pediu na mesma frase ("mudar o status da
-  // entrega e inserir o codigo de rastreio"). Uma acao so, porque e uma
-  // escrita so.
-  //
-  // `before`/`after` carregam `delivery_state` e `tracking_code`, e **nenhum
-  // campo do endereco de entrega** -- a regra 4 da migracao `20261017000012`,
-  // que esta frente nao afrouxa. O rastreio ENTRA de proposito: e numero de
-  // encomenda e nao dado pessoal, e e justamente o campo cuja troca alguem vai
-  // querer auditar depois.
   'admin.collar_tag_request.delivery_updated',
-  // 18/10/2026: a FILA DE MODERACAO do painel. Decisao do cliente, literal:
-  // "quem modera vai ser o administrador, deve ir para a pagina de backoffice".
-  //
-  // `resource_kind` e `moderation_report` nas duas, e nao `professional_review`
-  // nem `conversation`: o alvo da DECISAO e o item de fila, e a ORIGEM vai em
-  // `metadata.origin`. Uma investigacao que procurasse por `moderation_report`
-  // acha as duas acoes das duas origens numa consulta so, que e a pergunta que
-  // se faz de uma fila de moderacao.
-  //
-  // **As duas sao obrigatorias, e `dismissed` nao e menos importante.**
-  // Descartar tambem e decisao sobre o trabalho de outra pessoa -- alguem
-  // denunciou e um administrador disse que nao procedia --, e sem rastro
-  // ninguem responde quem decidiu o que. `after.reason` carrega o motivo, que
-  // e texto do ADMINISTRADOR sobre o proprio trabalho; `before`/`after`
-  // **nunca** carregam o conteudo denunciado nem o relato de quem denunciou
-  // (docs/04-seguranca.md 9, e a trilha sobrevive a exclusao da conta).
-  //
-  // Nao ha `.listed` nem `.read`: `x-audit` em `GET` administrativo e so da
-  // leitura de PESSOA, que anda junto do teto por `rows_returned` (D55/D56), e
-  // esta fila nao le pessoa -- nem o denunciante nem o denunciado aparecem em
-  // campo nenhum da resposta. Mesma ausencia das duas outras filas do painel.
-  //
-  // **Nao ha acao de conta aqui.** Desabilitar conta e outro poder
-  // (`admin.account.disabled`, `privacy.account_deletion_requested`) e nao
-  // entra nesta fila.
   'admin.moderation_report.content_removed',
   'admin.moderation_report.dismissed',
-  // 18/10/2026: o COMUNICADO -- o unico aviso do produto com alcance total.
-  //
-  // E a acao desta lista que mais precisa existir, e por um motivo que nenhuma
-  // das outras tem: o comunicado nao tem destinatario a quem perguntar depois.
-  // Uma escrita da Loja errada aparece na Loja; um comunicado errado chega a
-  // toda caixa e nao deixa rastro em nenhuma delas de QUEM o mandou. Sem esta
-  // linha, "quem disparou aquilo" nao tem resposta. Megafone sem trilha e o que
-  // vira incidente.
-  //
-  // `before`/`after`: nao ha `before` (o comunicado nasce, nao muda), e o
-  // `after` carrega `title`, `recipients_total` e o `ref`. **O CORPO NAO
-  // ENTRA**: ele e texto livre de pessoa, a trilha sobrevive a exclusao da
-  // conta de proposito, e o corpo ja vive em `notification_broadcasts`, que
-  // nao tem caminho de exclusao. A trilha responde quem e quando; a tabela
-  // responde o que.
-  //
-  // Nao ha `.deleted` nem `.updated`, e as ausencias sao a regra: comunicado
-  // disparado fica registrado, e o contrato nao declara `DELETE` nem `PATCH`.
-  // Nao ha `.previewed`: pre-visualizar nao e escrita, e uma trilha por tecla
-  // digitada afogaria a do disparo, que e a que importa.
   'admin.broadcast.dispatched',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
@@ -471,17 +171,15 @@ export const ACOES_ADMINISTRATIVAS = [
 export type AcaoAdministrativa = (typeof ACOES_ADMINISTRATIVAS)[number];
 
 /**
- * Quem agiu. `admin` é a conta do PAINEL (`admin_accounts`, ADR-0027 item
- * 20.2), e vai em coluna própria: a trilha nunca mistura UUIDs de duas tabelas
- * em `actor_user_id`.
+ * Quem agiu. `admin` é a conta do PAINEL (`admin_accounts`, ADR-0027 item 20.2), e
+ * vai em coluna própria: a trilha nunca mistura UUIDs de duas tabelas em
+ * `actor_user_id`.
  */
 export type ActorKind = 'user' | 'anonymous' | 'system' | 'admin';
 
 /**
- * O ator, como união discriminada: `user` carrega `actorUserId`, `admin`
- * carrega `actorAdminId`, e os outros dois não carregam nenhum. Trocar um
- * `AdminAccountId` por `UserId`, ou gravar ator do painel como `user`, não
- * compila (T18 de `04-seguranca.md` 22.11).
+ * O ator, como união discriminada: `user` carrega `actorUserId`, `admin` carrega
+ * `actorAdminId`, e os outros dois não carregam nenhum.
  */
 export type AtorDaTrilha =
   | { readonly actorKind: 'user'; readonly actorUserId: UserId; readonly actorAdminId?: undefined }
@@ -495,7 +193,7 @@ export type AtorDaTrilha =
 export type AuditEvent = AtorDaTrilha & DadosDoEventoDeTrilha;
 
 export interface DadosDoEventoDeTrilha {
-  /** Endereço de origem em claro. A porta o transforma em HMAC; o domínio não. */
+  /** Endereço de origem em claro. */
   readonly actorIp?: string | undefined;
   readonly correlationId?: string | undefined;
   readonly action: AuditAction;
@@ -510,33 +208,15 @@ export interface DadosDoEventoDeTrilha {
  * A trilha do app. `record` abre a PROPRIA transacao e, se falhar, avisa por
  * `onFailure` sem derrubar o pedido: um incidente no esquema de auditoria nao e
  * motivo para o tutor nao conseguir avisar que o pet sumiu.
- *
- * **Nao serve a escrita administrativa** (ADR-0027 item 8, D49): la a falha da
- * trilha desfaz a escrita. Para isso existem `TrilhaTransacional` e
- * `EscritaAuditada`, abaixo.
  */
 export interface AuditLog {
   record(event: AuditEvent): Promise<void>;
 }
 
-/**
- * A transacao em que a escrita e a trilha acontecem juntas.
- *
- * E a transacao do Kysely, e o nome proprio diz o papel dela aqui: quem a
- * recebe escreve **dentro** dela e nunca a confirma nem a desfaz por conta
- * propria. Quem confirma e `EscritaAuditada.executar`.
- */
+/** A transacao em que a escrita e a trilha acontecem juntas. */
 export type TransacaoDeEscrita = DbTransaction;
 
-/**
- * A forma transacional da trilha (ADR-0027 item 8).
- *
- * `recordIn` grava o evento **na transacao recebida**, assumindo
- * `bichu_audit_writer` so para o `INSERT` e devolvendo o papel anterior logo
- * depois, e **lanca** quando nao consegue. Nao ha `onFailure` aqui, e a
- * ausencia e a regra: quem chama deixa a excecao subir, e a transacao inteira
- * e desfeita, escrita incluida (D49, P17).
- */
+/** A forma transacional da trilha (ADR-0027 item 8). */
 export interface TrilhaTransacional {
   recordIn(trx: TransacaoDeEscrita, event: AuditEvent): Promise<void>;
 }
@@ -544,17 +224,15 @@ export interface TrilhaTransacional {
 /**
  * A soma de um campo numerico de `metadata` nos eventos de um ator, numa janela,
  * lida NA transacao de quem chama (D56).
- *
- * Existe para o teto por linhas devolvidas da fila de pedidos da `Rede`: o que
- * se mede e quanto dado de pessoa saiu, e a trilha ja guarda esse numero em
- * toda leitura (D55). Somar da trilha faz o teto e o registro serem a mesma
- * fonte: uma leitura sem trilha nao aconteceu, e nao conta, porque nao saiu.
  */
 export interface ContagemNaTrilha {
   somarNaJanela(
     trx: TransacaoDeEscrita,
     consulta: {
-      /** A leitura auditada e do painel: a conta e de `admin_accounts` (ADR-0027 item 20.2). */
+      /**
+       * A leitura auditada e do painel: a conta e de `admin_accounts` (ADR-0027 item
+       * 20.2).
+       */
       readonly actorAdminId: AdminAccountId;
       readonly action: AuditAction;
       readonly campo: string;
@@ -563,10 +241,8 @@ export interface ContagemNaTrilha {
   ): Promise<{ readonly total: number; readonly maisAntigo: Date | null }>;
 
   /**
-   * Quantos eventos de `action` sobre `resourceId`, com `metadata.reason =
-   * motivo`, desde `desde`. E a contagem duravel das falhas de login do painel
-   * (D44): 10 em 24 horas bloqueiam a conta, e um reinicio do processo nao
-   * pode zerar isso.
+   * Quantos eventos de `action` sobre `resourceId`, com `metadata.reason = motivo`,
+   * desde `desde`.
    */
   contarNaJanela(
     trx: TransacaoDeEscrita,
@@ -583,29 +259,16 @@ export interface ContagemNaTrilha {
 export interface ResultadoAuditado<T> {
   readonly resultado: T;
   /**
-   * O evento, montado DEPOIS da escrita (ja com o `id` que ela gerou e com o
-   * `after` que ela produziu). Um trabalho que nao grava evento nao e escrita
-   * auditada: o tipo nao admite ausencia.
+   * O evento, montado DEPOIS da escrita (ja com o `id` que ela gerou e com o `after`
+   * que ela produziu).
    */
   readonly evento: AuditEvent;
 }
 
 /**
- * **A interface que toda escrita administrativa usa.** Uma transacao, a
- * escrita dentro dela, o evento gravado na mesma transacao, e o `COMMIT` so
- * depois dos dois. Falha do trabalho ou da trilha: `ROLLBACK` de tudo, e a
- * excecao sobe (vira 500 na rota, com o dado intacto).
- *
- *   const item = await escrita.executar(async (trx) => {
- *     const gravado = await repositorio.criarItem(trx, dados);
- *     return {
- *       resultado: gravado,
- *       evento: eventoAdministrativo(rota.audit, ator, { resourceId: gravado.id, after: ... }),
- *     };
- *   });
- *
- * O evento e gravado por ULTIMO, depois do trabalho: nenhum comando da escrita
- * roda sob o papel da trilha.
+ * **A interface que toda escrita administrativa usa.** Uma transacao, a escrita
+ * dentro dela, o evento gravado na mesma transacao, e o `COMMIT` so depois dos
+ * dois.
  */
 export interface EscritaAuditada {
   executar<T>(trabalho: (trx: TransacaoDeEscrita) => Promise<ResultadoAuditado<T>>): Promise<T>;

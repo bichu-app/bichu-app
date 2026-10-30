@@ -1,9 +1,4 @@
-/**
- * O que os bytes dizem, contra o que o cliente declarou.
- *
- * Os casos negativos são o motivo do arquivo. Um teste que só confirmasse "JPEG
- * é reconhecido como JPEG" passaria com a função devolvendo o tipo declarado.
- */
+/** O que os bytes dizem, contra o que o cliente declarou. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { formatoRealDe } from './numeros-magicos.js';
@@ -31,11 +26,6 @@ void describe('números mágicos — o que é aceito', () => {
 
 void describe('números mágicos — o que precisa ser recusado', () => {
   void it('RECUSA SVG, inclusive com o cabeçalho XML na frente', () => {
-    // SVG é documento com script. Ele entraria por aqui declarado como
-    // `image/svg+xml`, que parece imagem para qualquer lista feita por analogia.
-    // A fixture vai sem `xmlns` de proposito: o namespace e uma URL literal, o
-    // portao de portabilidade reprova URL literal em `src/`, e ele esta certo em
-    // ser cego. O que se testa aqui e o numero magico, que nunca olha o conteudo.
     assert.equal(formatoRealDe(Buffer.from('<svg width="10" height="10"></svg>')), null);
     assert.equal(formatoRealDe(Buffer.from('<?xml version="1.0"?><svg></svg>')), null);
   });
@@ -54,9 +44,6 @@ void describe('números mágicos — o que precisa ser recusado', () => {
   });
 
   void it('RECUSA um poliglota: JPEG só nos três primeiros bytes não basta', () => {
-    // Um arquivo que começa com a assinatura certa e continua sendo outra coisa
-    // ainda é recusado pela biblioteca ao reescrever; aqui o que se garante é
-    // que a assinatura é conferida no OFFSET certo, e não procurada no arquivo.
     const escondido = Buffer.concat([Buffer.from('GIF89a'), jpeg]);
     assert.equal(formatoRealDe(escondido), null);
   });

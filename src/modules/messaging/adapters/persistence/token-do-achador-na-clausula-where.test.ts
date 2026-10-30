@@ -1,19 +1,6 @@
 /**
  * O token do achador está na cláusula `WHERE`, como RESUMO, e o SQL compilado
  * prova (BICHUS-41).
- *
- * Mesmo instrumento de `autorizacao-na-clausula-where.test.ts`: compila com
- * `DummyDriver`, sem banco, lê o predicado e confere o valor ligado À POSIÇÃO
- * dele. `parameters.includes(resumo)` seria frouxo: numa consulta que liga dois
- * valores, aprovaria o resumo ligado à coluna errada.
- *
- * O que cada caso cobra:
- *
- * - toda consulta que responde ao achador filtra por `finder_token_hash`, e o
- *   valor ligado ali é o resumo (32 bytes), nunca o token;
- * - a de mensagens, a de bloqueio e a de leitura resolvem a conversa pela
- *   SUBCONSULTA do token, e não por um id que a aplicação leu antes;
- * - o bloqueio só escreve onde ainda não há bloqueio.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

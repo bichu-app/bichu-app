@@ -1,55 +1,4 @@
-/**
- * O COMUNICADO -- as iscas da trava.
- *
- * ===========================================================================
- * O QUE CADA CASO MEDE
- * ===========================================================================
- *
- * 1. **O disparo grava a trilha NA MESMA transacao da escrita** (D49). O duble
- *    de `EscritaAuditada` so conclui quando o trabalho devolve o par
- *    `{resultado, evento}`; um disparo que nao montasse evento nao compila, e
- *    um que o montasse fora da transacao nao apareceria aqui. **E a acao e a do
- *    contrato**, `admin.broadcast.dispatched`, com ator `admin` e o `id`
- *    INTERNO em `resourceId` -- nunca o `ref` (ADR-0027 item 8).
- *
- * 2. **O CORPO DO COMUNICADO NAO ENTRA NA TRILHA.** A varredura procura o texto
- *    do corpo no evento inteiro serializado, com um valor que nao aparece em
- *    mais lugar nenhum deste arquivo: um `before`/`after`/`metadata` que amanha
- *    carregue o corpo reprova aqui sem ninguem lembrar de incluir o campo. A
- *    razao e que a trilha sobrevive a exclusao da conta de proposito, e o corpo
- *    ja vive em `notification_broadcasts`, que nao tem caminho de exclusao.
- *
- * 3. **O TETO DIARIO recusa com 409 e NAO GRAVA NADA.** O porto devolve
- *    `undefined`, o servico lanca, e a excecao sobe por dentro de
- *    `EscritaAuditada.executar` -- que por isso NAO confirma a transacao. A
- *    isca mede as duas coisas: o tipo do problema e o fato de a transacao nao
- *    ter sido confirmada. CONTRAPESO: abaixo do teto, grava e confirma.
- *
- * 4. **409 e nao 429.** 429 e teto de CHAMADA e passa em um minuto, entao a
- *    tela oferece "tentar de novo"; este e teto de PRODUTO, e tentar de novo
- *    nao resolve. Um dia alguem vai achar que sao a mesma coisa.
- *
- * 5. **A janela de disparo nao grava e nao toca a transacao.** Ela nao passa por
- *    `EscritaAuditada` nenhuma: o duble registraria a chamada, e o caso afirma
- *    que ela nao houve. Um caminho de escrita que aceita "nao escreva de
- *    verdade" e um caminho de escrita que um dia escreve por engano, e aqui o
- *    engano alcanca todas as caixas de uma vez.
- *
- * ===========================================================================
- * O QUE ESTE ARQUIVO NAO MEDE, e onde isso foi medido
- * ===========================================================================
- *
- * O **papel de administrador** nao e conferido aqui: ele e `x-admin-roles` no
- * contrato e `adminRoles` na rota, e quem o aplica e
- * `escoparRotasAdministrativas`, ANTES de qualquer gancho desta camada. A isca
- * do papel esta em `adapters/http/comunicado-exige-papel.test.ts`.
- *
- * O **teto de verdade** -- a contagem do dia -- mora dentro de
- * `comunicado_disparar` na migracao `20261018000020`, e so um Postgres o
- * executa. Ele foi exercitado em `BEGIN`/`ROLLBACK`: tres passaram, o quarto
- * devolveu zero linhas e nada foi gravado. Aqui o duble devolve `undefined`
- * para medir o que a APLICACAO faz com essa resposta.
- */
+/** O COMUNICADO -- as iscas da trava. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -81,10 +30,8 @@ const ID_INTERNO = 'bc000000-0000-4000-8000-00000000000b';
 const REF_PUBLICO = 'refDoComunicadoAAAAAA';
 
 /**
- * O corpo do comunicado, com um valor que NAO aparece em mais lugar nenhum
- * deste arquivo. E essa unicidade que faz a varredura do caso 2 valer: se o
- * texto estivesse tambem num titulo, achar a cadeia no evento nao provaria de
- * onde ela veio.
+ * O corpo do comunicado, com um valor que NAO aparece em mais lugar nenhum deste
+ * arquivo.
  */
 const CORPO_SECRETO = 'texto-do-corpo-que-nao-pode-entrar-na-trilha-9f3a';
 
@@ -95,8 +42,6 @@ function gravado(): ComunicadoGravado {
       ref: REF_PUBLICO,
       titulo: 'Manutencao',
       corpo: CORPO_SECRETO,
-      // `comoData` sobre um `Instant`, e nunca `new Date(...)`: tempo real so
-      // em `shared/time/clock.ts`, e o lint deste repositorio cobra isso.
       disparadoEm: comoData(1_760_788_800_000 as Instant),
       disparadoPor: 'Operadora',
       destinatarios: 42,
@@ -121,7 +66,6 @@ function bancada(opcoes: { tetoAtingido?: boolean } = {}): Bancada {
   const eventos: AuditEvent[] = [];
   const disparos: { adminId: string; titulo: string; corpo: string }[] = [];
 
-  // Sem `async`: duble que nao espera nada nao e assincrono.
   const repositorio: RepositorioDeComunicados = {
     listar(pagina, limite) {
       return Promise.resolve({ itens: [], pagina, limite, total: 0 });
@@ -136,9 +80,6 @@ function bancada(opcoes: { tetoAtingido?: boolean } = {}): Bancada {
     },
   };
 
-  // O duble de `EscritaAuditada`: ele so grava o evento e conta a confirmacao
-  // quando o trabalho CONCLUI. Um lancamento de dentro do trabalho sai por aqui
-  // sem passar por nenhum dos dois -- que e exatamente o ROLLBACK.
   const escrita: EscritaAuditada = {
     async executar(trabalho) {
       const { resultado, evento } = await trabalho({} as TransacaoDoComunicado);

@@ -1,17 +1,4 @@
-/**
- * A fronteira entre `admin-access` e `identity` (ADR-0027 item 20.1).
- *
- * Duas camadas, e cada uma pega o que a outra nao pega:
- *
- * 1. **A regra `fronteira-de-modulo` do ESLint**, rodada de verdade contra
- *    iscas: `admin-access` importando `identity/domain` reprova, e o inverso
- *    tambem. Sem a isca, a regra poderia deixar de valer para o modulo novo (um
- *    nome fora de `MODULES`, um caminho que ela nao resolve) e ninguem veria.
- * 2. **A lista exata do que `admin-access` importa de `identity`**: so
- *    `ports/senha.ts` e `ports/lista-de-senhas-vazadas.ts`. A regra do ESLint
- *    aceita qualquer porta; o ADR restringe a duas, porque qualquer outra porta
- *    de `identity` le `users`, e o painel nao le o cadastro do app (D42).
- */
+/** A fronteira entre `admin-access` e `identity` (ADR-0027 item 20.1). */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -31,7 +18,7 @@ function arquivosTs(diretorio: string): string[] {
   return achados;
 }
 
-/** Os especificadores de `import`/`export ... from` de um arquivo. */
+/** Os especificadores de `import`/`export ... */
 function importacoes(texto: string): string[] {
   return [...texto.matchAll(/(?:import|export)\s[^;]*?from\s+'([^']+)'/g)].map((m) => m[1] as string);
 }
@@ -45,16 +32,7 @@ function alvoNoModulo(arquivo: string, especificador: string): string | undefine
   return rel.split(sep).join('/');
 }
 
-/**
- * O ESLint de verdade, com a configuracao do repositorio, num processo filho.
- *
- * Filho, e nao `new ESLint()` aqui dentro: carregado neste processo, o ESLint
- * leva `eslint.config.mjs` e `architecture.rules.mjs` para o relatorio de
- * cobertura da suite, que so aceita fonte TypeScript. `NODE_V8_COVERAGE` vai
- * vazio para o filho pelo mesmo motivo. So a regra de fronteira roda: as que
- * precisam do programa TypeScript inteiro nao rodam sobre arquivo que nao
- * existe no disco.
- */
+/** O ESLint de verdade, com a configuracao do repositorio, num processo filho. */
 const SCRIPT_DO_LINT = `
 import { ESLint } from 'eslint';
 const { filePath, texto } = JSON.parse(process.argv[1]);
@@ -68,9 +46,6 @@ process.stdout.write(JSON.stringify((r?.messages ?? []).map((m) => (m.ruleId ?? 
 `;
 
 function lint(filePath: string, texto: string): Promise<string[]> {
-  // Vazio, e nao apagado: o Node repoe `NODE_V8_COVERAGE` no filho quando a
-  // chave falta no `env` passado (e assim que a cobertura atravessa processos),
-  // e so respeita a escolha de quem a declara.
   const ambiente = { ...process.env, NODE_V8_COVERAGE: '' };
   const filho = spawnSync(
     process.execPath,
@@ -132,8 +107,6 @@ void describe('o que admin-access importa de identity, e o que identity importa 
       }
     }
     assert.deepEqual(fora, []);
-    // Sem nenhum import de identity o hash nao seria o do app: a porta de senha
-    // TEM de estar em uso, e contar zero aqui e defeito, nao limpeza.
     assert.ok(conferidos > 0, 'admin-access nao importa a porta de senha de identity');
   });
 

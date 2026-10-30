@@ -1,11 +1,6 @@
 /**
  * QA, 28/09: o desafio de desenvolvimento do login do painel so sobe na pilha
- * local. `assertSafeBoot` roda antes de a API ouvir qualquer porta
- * (`bin/api.ts`), e e ele que recusa.
- *
- * As iscas deste arquivo sao os casos que PRECISAM derrubar o boot: producao,
- * ambiente que nao e dev, e host que nao e local. Se a trava deixar de
- * existir, os tres reprovam.
+ * local.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -14,8 +9,6 @@ import { assertSafeBoot, ehHostLocal, recusaDoCaptchaDeDesenvolvimento } from '.
 
 const ORIGINAL = { ...process.env };
 const LIGA = { CAPTCHA_DESENVOLVIMENTO_LOCAL: 'aprovar-token-de-desenvolvimento' };
-// Hosts de teste que o portao de portabilidade aceita: `*.localhost`, `*.test`,
-// loopback IPv6 e dominios reservados (`.invalid`), nunca um host de verdade.
 const LOCAL = { PUBLIC_BASE_URL: 'http://app.localhost:3000', ADMIN_ORIGIN: 'http://admin.localhost' };
 
 afterEach(() => {

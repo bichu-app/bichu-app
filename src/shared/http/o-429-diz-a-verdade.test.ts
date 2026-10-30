@@ -1,30 +1,4 @@
-/**
- * Iscas do corpo do 429: a mensagem do teto **não pode voltar a mentir**.
- *
- * Até 22/09/2026 ela mentia duas vezes, e cada mentira tem uma isca aqui:
- *
- * 1. *"Recebemos muitos pedidos **deste aparelho**"* — o balde nunca foi de
- *    aparelho. São doze dimensões, e num balde de IP (CGNAT de operadora, NAT de
- *    escritório) a frase acusava quem estava fazendo o primeiro pedido do dia.
- * 2. *"Tente de novo **em instantes**"* — a janela é fixa, e o `Retry-After` da
- *    mesma resposta já trazia o número certo.
- *
- * ## Por que estes casos leem a RESPOSTA, e não a constante
- *
- * Três testes deste repositório comparavam o texto renderizado com a mesma
- * constante que o produzia. Isso é tautologia: fica verde com qualquer texto,
- * inclusive com a mentira de volta. Aqui nenhum caso importa `problemas`: cada
- * asserção é uma cadeia **escrita neste arquivo** confrontada com o JSON que
- * saiu pelo fio, depois de `montarProblema` e de `reply.send`.
- *
- * ## Por que as rotas são as de verdade
- *
- * `requestPasswordReset` e `createFoundReportPhotoUploadIntent` são rotas do
- * produto, com os NÚMEROS delas — 3 por hora por e-mail, e 3 por aviso **para
- * sempre**. A segunda é a única `window: lifetime` do contrato, e é ela que
- * exercita o caminho em que prometer prazo seria a mesma mentira com um número
- * mais convincente.
- */
+/** Iscas do corpo do 429: a mensagem do teto **não pode voltar a mentir**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -37,14 +11,7 @@ import type { AbsoluteUrl } from '../types/brands.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-/**
- * Toda palavra que afirma **por onde** a contagem acontece.
- *
- * `aparelho` e `dispositivo` são a mentira antiga. `rede`, `IP`, `wi-fi` e
- * `conexão` são a troca fácil e errada: seriam verdade em `ip` e `ip_24`, falso
- * nas outras dez dimensões, e em qualquer uma delas diriam a quem está sondando
- * o teto o que rotacionar para contorná-lo.
- */
+/** Toda palavra que afirma **por onde** a contagem acontece. */
 const AFIRMA_A_DIMENSAO =
   /aparelho|dispositivo|celular|smartphone|\brede\b|\bip\b|endere[çc]o|wi-?fi|conex[ãa]o|navegador/i;
 
@@ -98,7 +65,7 @@ async function estourar(
   }
 }
 
-/** `requestPasswordReset`: 3 por hora por e-mail, `deny_429`. A 4ª estoura. */
+/** `requestPasswordReset`: 3 por hora por e-mail, `deny_429`. */
 function pedidoDeRedefinicao(app: ReturnType<typeof servidor>): void {
   registrarRota(
     app,
@@ -112,7 +79,7 @@ function pedidoDeRedefinicao(app: ReturnType<typeof servidor>): void {
   );
 }
 
-/** `createFoundReportPhotoUploadIntent`: 3 por aviso, `lifetime`. A 4ª estoura. */
+/** `createFoundReportPhotoUploadIntent`: 3 por aviso, `lifetime`. */
 function intencaoDeFotoDoAchado(app: ReturnType<typeof servidor>): void {
   registrarRota(
     app,
@@ -144,15 +111,10 @@ void describe('o 429 de janela que reabre', () => {
 
     assert.doesNotMatch(lida.texto, PRAZO_VAGO, `o prazo voltou a ser vago: ${lida.texto}`);
 
-    // O cabeçalho existe, é um inteiro de segundos, e cabe na janela de 1 h que
-    // a rota declara.
     assert.ok(lida.retryAfter !== undefined, 'o 429 saiu sem `Retry-After`');
     const segundos = Number(lida.retryAfter);
     assert.ok(Number.isInteger(segundos) && segundos > 0 && segundos <= 3600, lida.retryAfter);
 
-    // E o texto diz o MESMO prazo, em palavras. A unidade é conferida contra o
-    // cabeçalho: o par (número, unidade) da frase tem que caber no número do
-    // cabeçalho, senão as duas metades da resposta voltaram a discordar.
     const casado = /Tente de novo em (\d+) (segundos?|minutos?|horas?)/.exec(lida.corpo.title ?? '');
     assert.ok(casado !== null, `título sem prazo em palavras: ${String(lida.corpo.title)}`);
     const quantidade = Number(casado[1]);
@@ -161,8 +123,6 @@ void describe('o 429 de janela que reabre', () => {
       : casado[2]?.startsWith('minuto')
         ? quantidade * 60
         : quantidade;
-    // Arredonda para cima, então o prazo escrito é >= o do cabeçalho, e nunca
-    // mais de uma unidade acima dele.
     assert.ok(
       emSegundos >= segundos && emSegundos < segundos + 3600,
       `o texto diz ${String(emSegundos)}s e o cabeçalho diz ${String(segundos)}s`,
@@ -185,8 +145,6 @@ void describe('o 429 de teto que NÃO reabre (`window: lifetime`)', () => {
 
     assert.equal(lida.status, 429);
     assert.doesNotMatch(lida.texto, PRAZO_VAGO, lida.texto);
-    // Nenhum "em 24 horas": o teto de formato do `Retry-After` não é promessa de
-    // reabertura, e escrevê-lo no corpo seria a mentira antiga com outro número.
     assert.doesNotMatch(
       lida.texto,
       /\d+\s*(segundo|minuto|hora|dia)/i,
@@ -216,8 +174,6 @@ void describe('o 429 de teto que NÃO reabre (`window: lifetime`)', () => {
 });
 
 void describe('as três primeiras passam: o teto recusa a quarta, e só ela', () => {
-  // O contraponto. Sem ele, um mecanismo que recusasse tudo passaria em todos os
-  // casos acima, e as iscas provariam apenas que o servidor sabe responder 429.
   void it('a 3ª chamada da redefinição ainda é 202', async () => {
     const app = servidor();
     pedidoDeRedefinicao(app);

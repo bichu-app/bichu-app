@@ -1,22 +1,4 @@
-/**
- * AS ISCAS (d) E (e) DA FOTO DO PRÓPRIO USUÁRIO (cliente, 18/10/2026).
- *
- * ## (d) A foto não aparece em resposta pública
- *
- * A metade da regra que mora no CONTRATO — "`MyPhoto` é referenciado num lugar
- * só" — é medida em `src/tools/foto-de-pessoa-nao-sai-em-publico.test.ts`, que
- * lê a especificação do disco; `domain/` não conhece arquivo. Aqui fica a
- * metade que é da PROJEÇÃO: o campo existe para o dono, é `null` quando não há
- * foto, e a URL nunca é um endereço que daria 404.
- *
- * ## (e) O selo é a validação que já existe, e o contrapeso importa
- *
- * `email_verified` é derivado de `users.email_verified_at`. Um teste que só
- * afirmasse "o selo aparece para quem é validado" passaria para uma projeção
- * que devolvesse `true` fixo — que é exatamente o defeito que um selo pode ter,
- * porque ele afirma algo sobre uma pessoa para outras. Então cada caso aqui tem
- * o par negativo, e o último compara os dois lados do MESMO objeto.
- */
+/** AS ISCAS (d) E (e) DA FOTO DO PRÓPRIO USUÁRIO (cliente, 18/10/2026). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,8 +18,6 @@ function conta(mudanca: Partial<Conta> = {}): Conta {
     email: 'tutor@exemplo.invalid',
     emailVerifiedAt: null,
     displayName: 'Maria',
-    // `handle: null` e o estado NORMAL: o apelido entrou em 18/10/2026 e nenhum
-    // fluxo obriga a escolher. Os casos de FOTO nao dependem dele.
     handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
@@ -62,13 +42,9 @@ const PRONTA: FotoDoPerfil = {
 
 void describe('(d) a foto do usuário não sai em resposta pública', () => {
 
-
-
   void it('a foto do usuário NÃO aparece na projeção pública de nada: a função que a monta é só esta', () => {
     const projetada = projetarMeuPerfil(conta(), PRONTA, URL_DE_MIDIA);
     assert.ok('photo' in projetada, 'o dono vê a foto');
-    // CONTRAPESO: sem foto, o campo é `null` e não desaparece. Um campo que
-    // some faria o app distinguir "sem foto" de "campo não implementado".
     assert.equal(projetarMeuPerfil(conta(), null, URL_DE_MIDIA)['photo'], null);
   });
 
@@ -83,8 +59,6 @@ void describe('(d) a foto do usuário não sai em resposta pública', () => {
     );
     assert.equal(recusada?.url, null, 'recusada com chave ainda não serve');
     assert.equal(recusada?.rejection_reason, 'não é imagem');
-    // CONTRAPESO: pronta COM chave produz a URL, senão a asserção acima
-    // passaria para uma projeção que nunca monta URL nenhuma.
     assert.equal(
       projetarFotoDoPerfil(PRONTA, URL_DE_MIDIA)?.url,
       'https://img.bichu.test/people/card/KioqKioqKioqKioqKioqKg.jpeg',
@@ -103,16 +77,11 @@ void describe('(e) o selo só aparece para quem tem a validação', () => {
   });
 
   void it('CONTRAPESO: conta NÃO verificada, com a MESMA foto, é falso', () => {
-    // Este é o caso que reprova um `true` fixo. A foto é a mesma; o que muda é
-    // só `emailVerifiedAt`, e a resposta tem de mudar com ele.
     const projetada = projetarMeuPerfil(conta({ emailVerifiedAt: null }), PRONTA, URL_DE_MIDIA);
     assert.equal(projetada['email_verified'], false);
   });
 
   void it('o selo NÃO está dentro do objeto da foto: ele é da CONTA', () => {
-    // Gravar o selo dentro da foto (no JPEG ou no objeto da resposta) faria a
-    // imagem mentir no dia em que a pessoa trocasse de e-mail, e não há como
-    // despintar um pixel. O selo é derivado na leitura, sempre.
     const foto = projetarFotoDoPerfil(PRONTA, URL_DE_MIDIA);
     assert.ok(foto !== null);
     assert.deepEqual(Object.keys(foto).sort(), ['rejection_reason', 'status', 'url']);
@@ -122,8 +91,6 @@ void describe('(e) o selo só aparece para quem tem a validação', () => {
   });
 
   void it('o selo vale SEM foto também: validação é da pessoa, não da imagem', () => {
-    // Quem é validado e não enviou foto continua validado. Amarrar o selo à
-    // existência da foto transformaria "conta verificada" em "conta com foto".
     const semFoto = projetarMeuPerfil(
       conta({ emailVerifiedAt: comoData(VERIFICADO_EM) }),
       null,

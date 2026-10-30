@@ -1,19 +1,4 @@
-/**
- * O status e o `type` de um problema, lidos do CONTRATO, para os testes.
- *
- * Existe porque o esperado escrito à mão num teste é a segunda definição que o
- * contrato existe para não ter: na BICHUS-41 o código respondia 403 e o 410
- * contava o desfecho do caso, o contrato mudou para 401 e corpo fixo, e a suíte
- * continuou 1609/1609 porque cada teste comparava com a string que ele mesmo
- * escrevia. Lendo daqui, a mudança no contrato reprova o código que não a
- * acompanhou.
- *
- * Três fontes, conferidas entre si, e a divergência entre elas é falha ruidosa:
- *
- * - `components/responses/<Nome>`: o exemplo diz o `type` e o `status`;
- * - `x-problem-types`: o status único com que aquele `type` pode sair;
- * - `paths.<op>.responses`: a operação declara aquela resposta naquele status.
- */
+/** O status e o `type` de um problema, lidos do CONTRATO, para os testes. */
 import { carregarContrato, type Contrato } from './contract.js';
 
 export interface ProblemaDeclarado {
@@ -51,7 +36,10 @@ function statusDoTipo(slug: string): number {
   throw new Error(`\`${slug}\` não está em \`x-problem-types\`.`);
 }
 
-/** A resposta `components/responses/<nome>`, com status e `type` conferidos entre as fontes. */
+/**
+ * A resposta `components/responses/<nome>`, com status e `type` conferidos entre
+ * as fontes.
+ */
 export function problemaDaResposta(nome: string): ProblemaDeclarado {
   const componentes = mapa(contrato().spec['components'], 'components');
   const resposta = mapa(mapa(componentes['responses'], 'components.responses')[nome], `responses.${nome}`);
@@ -75,9 +63,8 @@ export function problemaDaResposta(nome: string): ProblemaDeclarado {
 }
 
 /**
- * O nome da resposta que a operação declara naquele status, quando ela é um
- * `$ref` a `components/responses`. `undefined` quando a resposta é escrita na
- * própria operação.
+ * O nome da resposta que a operação declara naquele status, quando ela é um `$ref`
+ * a `components/responses`.
  */
 export function respostaDeclarada(operationId: string, status: number): string | undefined {
   const operacao = contrato().operacoes.get(operationId);

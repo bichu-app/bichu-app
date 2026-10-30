@@ -25,83 +25,6 @@ import '../seguranca/menu_do_perfil.dart';
 /// **O PERFIL DE OUTRA PESSOA** — a tela que o cliente disse não ter subido
 /// ("*a parte do usuário adicionar outras pessoas, ou o perfil do usuário,
 /// também não subiu*", 18/10/2026).
-///
-/// ## O que ela mostra, e a lista é decisão do cliente
-///
-/// Perguntado em 19/10/2026 o que alguém que **não é conexão** pode ver, ele
-/// respondeu, literal: *"ele pode ver nome, quantidade de pets, conexões, mas
-/// não as fotos publicadas e nem a timeline do usuário"*. É a emenda 2 do
-/// ADR-0010.
-///
-/// | | Não é conexão | Pedido pendente | Conexão aceita |
-/// |---|---|---|---|
-/// | nome | vê | vê | vê |
-/// | **quantidade** de pets | vê | vê | vê |
-/// | **quantidade** de conexões | vê | vê | vê |
-/// | fotos da vitrine | **não** | **não** | vê |
-/// | denunciar e bloquear | pode | pode | pode |
-///
-/// **"Conexões" é a CONTAGEM e não a lista**, e a leitura está declarada na
-/// emenda: a lista não aparece a ninguém, nem ao dono (plano 4-B), não existe
-/// `GET /connections` e expor a rede de alguém a um estranho não foi pedido.
-/// Está no relatório da entrega como pendência de confirmação com ele.
-///
-/// **A quantidade de pets é NÚMERO, e não um atalho.** Não há nome de pet, não
-/// há miniatura e não há toque que leve a um pet: o item 7 do ADR-0010 proíbe
-/// *"outros pets do mesmo tutor, e qualquer coisa que permita agrupá-los"*, e a
-/// emenda abriu a **contagem**. O modelo desta tela não carrega atributo de pet
-/// nenhum — não é disciplina de quem desenha, é o tipo.
-///
-/// **Não há timeline, não há publicação e não há curtida.** Não existem no
-/// produto: a migração `20261018000030` registra *"uma timeline de quem você
-/// segue É a lista de presença com hora... Encerrado, não se reabre"*.
-///
-/// **Não há cidade e não há bairro.** Ele não mencionou nenhum dos dois.
-///
-/// ## A DENÚNCIA NÃO É NOVA, E É POR ISSO QUE ELA ESTÁ AQUI
-///
-/// [MenuDoPerfil] já existia em `telas/seguranca/` desde 18/10 e **nunca teve
-/// hospedeiro**: ele foi escrito para *"o ⋮ da barra do perfil"* de uma tela que
-/// não existia. Esta tela é essa barra. Nada de moderação foi criado aqui —
-/// nenhum filtro de palavra, nenhuma segunda folha de motivos, nenhuma lista de
-/// denúncia —, e o motivo é decisão do cliente: o modelo é mínimo e **quem
-/// modera é o administrador, no backoffice**.
-///
-/// ## A PORTA DE PEDIR CONEXÃO, e o que mudou em 20/10/2026
-///
-/// **O parágrafo que estava aqui dizia o contrário do que o código faz hoje, e
-/// foi corrigido em vez de deixado contradizendo o método ao lado.** Ele dizia
-/// que `POST /connections` recebe *"um token de convite, nunca um apelido"*, e
-/// que por isso o botão só existia com um convite na mão. As duas frases
-/// deixaram de valer: o cliente reverteu aquela recusa junto com a busca de
-/// pessoas, e `ConnectionInvite` passou a ser um `oneOf` de **uma** das duas
-/// credenciais.
-///
-/// Hoje o botão **aparece sempre que a permissão da comunidade permite**, e o
-/// que varia é a credencial que ele manda:
-///
-/// - **com** [tokenDoConvite] — quem chegou pelo QR de convite de alguém —, ele
-///   manda o token, e o servidor grava procedência `invite_link`;
-/// - **sem** token — quem chegou pela aba `Usuários` ou por um link interno —,
-///   ele manda o **apelido**, e a procedência é `people_search`.
-///
-/// **O que a reversão não comprou**, e é o que impede isto de virar um oráculo:
-/// apelido inexistente, apelido de pet, apelido reservado, conta desabilitada,
-/// quem bloqueou quem pede e perfil que quem pede denunciou respondem o **mesmo
-/// 404**, fundidos na cláusula `WHERE`. Esta tela não distingue qual dos seis
-/// foi, e não tem como.
-///
-/// A porta respeita a **mesma** regra das outras ações de comunidade
-/// ([podeAgirNaComunidade]): sessão **e** e-mail verificado, como em
-/// `podeCriarNaComunidade`. Política nova não foi inventada.
-///
-/// ## O 404 é ambíguo, e a tela não tenta desfazer a ambiguidade
-///
-/// Pessoa inexistente, apelido de pet, conta desabilitada, par bloqueado e
-/// perfil que esta pessoa denunciou: o **mesmo** 404 (ADR-0021, nunca 403). A
-/// tela diz [naoEncontramos] e oferece voltar. É a mesma frase que
-/// `MenuDoPerfil.aoPerderOAlvo` já usava, pela mesma razão: descobrir que foi
-/// bloqueado é o que gera retaliação.
 class TelaDePerfilDePessoa extends StatefulWidget {
   const TelaDePerfilDePessoa({
     required this.apelido,
@@ -126,63 +49,17 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   /// A porta de denunciar e bloquear, entregue a [MenuDoPerfil].
   final SegurancaApi seguranca;
 
-  /// Sessão **e** e-mail verificado, como `podeCriarNaComunidade`. Pedir
-  /// conexão é ação de comunidade, e a porta é a mesma.
+  /// Sessão **e** e-mail verificado, como `podeCriarNaComunidade`.
   final bool podeAgirNaComunidade;
 
-  /// O **token de convite**, quando quem abriu esta tela tem um. Nulo não
-  /// desenha a porta de pedir.
+  /// O **token de convite**, quando quem abriu esta tela tem um.
   final String? tokenDoConvite;
 
   /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296), **ou nulo**.
-  ///
-  /// Está aqui por uma razão só: **esta tela é a única que sabe a quem a foto
-  /// pertence no instante em que a permissão de vê-la termina.** Desfazer
-  /// conexão e bloquear moram aqui, e os dois endereçam a pessoa por coisas que
-  /// não servem de chave de cache — `endConnection` recebe o `ref` da aresta e
-  /// `blockPerson` recebe o `public_ref` —, enquanto a chave do cache é o
-  /// **apelido**, que é justamente o endereço desta tela (`widget.apelido`).
-  ///
-  /// Sem esta linha, desfazer conexão deixaria a foto da pessoa no disco, e a
-  /// **Emenda 3 do ADR-0010** — *"a foto aparece SÓ quando as duas pessoas já
-  /// aceitaram conexão"* — valeria só enquanto a tela não pintasse. Cache que
-  /// sobrevive à perda de permissão transforma uma decisão de privacidade do
-  /// cliente em regra de interface.
-  ///
-  /// **Opcional porque nulo não tem nada a esquecer**, e porque campo novo e
-  /// obrigatório quebraria toda tela de teste que constrói esta — a mesma razão
-  /// escrita no cabeçalho desta rota, em `roteamento/rotas.dart`.
   final CacheDeImagensNoAparelho? cacheDeImagens;
 
   /// **O TÍTULO DA BARRA DE TOPO DESTA TELA É A PALAVRA `Perfil`**, e não o
   /// nome da pessoa (cliente, 23/10/2026).
-  ///
-  /// Palavras dele, literais: *"a barra principal fica perfil e logo abaixo o
-  /// titulo da pagina fica o nome do usuário do jeito que esta atualmente. Me
-  /// refiro na pagina que outro usuário acessa, que mostra a vitrine com as
-  /// publicações do usuário."*
-  ///
-  /// **A SEGUNDA METADE DO PEDIDO JÁ ESTAVA FEITA, e isso foi medido antes de
-  /// mexer em qualquer coisa.** O nome já era o primeiro elemento do corpo —
-  /// [NomeComSelo] em `titleLarge`, logo abaixo da barra (ver [_corpo]) —,
-  /// desde a fatia G desta tela. O que havia de errado era o nome aparecer
-  /// **duas vezes**: na barra e no corpo. Então o conserto é de um lado só, a
-  /// barra, e o *"do jeito que esta atualmente"* dele é cumprido por não se
-  /// tocar no nome do corpo: ele continua exatamente o que era, com o mesmo
-  /// estilo e o mesmo selo.
-  ///
-  /// **ISTO NÃO ALCANÇA A TELA DA PRÓPRIA CONTA, e a separação é estrutural e
-  /// não disciplina.** A seção `Perfil` do dono é `AbaPerfil`
-  /// (`telas/abas.dart`), que monta a barra por `TelaDeAba`
-  /// (`telas/casca_com_abas.dart`) e tira o título de `tituloDaTelaDaConta` —
-  /// outro arquivo, outro widget, outra função. Esta tela monta um `Scaffold`
-  /// e um `AppBar` próprios e **não usa `TelaDeAba`**: não há parâmetro a
-  /// passar porque não há componente compartilhado entre as duas barras. A
-  /// decisão do cliente de 19/10 (*"a tela do usuario, deve ter como titulo da
-  /// pagina na barra principal o slug do usuario"*) continua valendo intacta,
-  /// e quem a cobra é
-  /// `test/telas/navegacao_mensagens_e_avatar_test.dart` — que afirma
-  /// `findsNothing` para a palavra `Perfil` no `AppBar` **daquela** tela.
   static const String tituloDaBarra = 'Perfil';
 
   static const String naoEncontramos = 'Não encontramos este usuário.';
@@ -192,59 +69,18 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   static const String aceitar = 'Aceitar';
   static const String recusar = 'Recusar';
   static const String cancelarPedido = 'Cancelar pedido';
-  // `desfazerConexao` SAIU DAQUI EM 26/10/2026, e não foi renomeado: o rótulo
-  // mora agora em `MenuDoPerfil.desfazerConexao`, com o controle. Deixar a
-  // constante aqui, sem uso, convidaria a próxima pessoa a desenhar um segundo
-  // `Desfazer conexão` no corpo — que é exatamente o que o cliente tirou.
   static const String pedidoEnviado = 'Pedido enviado. Ela decide quando responder.';
   static const String pedidoRecebido = 'Este usuário quer se conectar com você.';
 
-  // A LINHA `Vocês estão conectados.` SAIU (cliente, 22/10/2026): *"Retire o
-  // texto vocês estão conectados."*
-  //
-  // **Ela nao era pedido dele**, e isto foi conferido antes de apagar: ela
-  // nasceu com a fatia G do perfil de terceiro (`108b6832`), que cita o
-  // cliente sobre O QUE SE VE no perfil de quem nao e conexao -- nunca sobre
-  // esta frase. Nao ha decisao dele sendo desfeita aqui.
-  //
-  // **O ARGUMENTO QUE SUSTENTAVA ESTA AUSENCIA ERA MEU, E ENVELHECEU EM
-  // 26/10/2026 -- mas a ausencia da FRASE continua sendo pedido dele.**
-  //
-  // O texto daqui dizia: *"E o estado continua dito, por quem nao e texto de
-  // apoio. O ramo `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e so
-  // quem **é** conexao ve esse botao: a acao afirma o vinculo melhor que a
-  // frase, porque ela tambem o resolve."*
-  //
-  // Esse botao **saiu do corpo** em 26/10/2026, por outro pedido dele, do MESMO
-  // dia 22/10: *"o botao desfazer conexao deve ir para os 3 pontinhos, junto
-  // com o denunciar"*. Entao o argumento acima perdeu o apoio -- nao por estar
-  // errado, mas por o controle que ele citava ter mudado de lugar.
-  //
-  // **AS DUAS DECISOES DELE CONTINUAM VALENDO, e nenhuma cancela a outra**: a
-  // frase saiu (22/10) e o botao foi para o `⋮` (22/10). O ramo de `conectado`
-  // no corpo e **vazio** hoje, e o vinculo e dito pela vitrine, que so existe
-  // para quem e conexao aceita.
-  //
-  // **Quem for devolver a frase OU o botao ao corpo apoiado no paragrafo citado
-  // acima esta revertendo dois pedidos dele com um raciocinio meu.** Ja
-  // aconteceu hoje com os icones da barra.
-
   /// **A frase do estado de estranho**, e ela diz o que falta e não o que é
   /// proibido: a vitrine não é um recurso bloqueado, é uma coisa que a conexão
-  /// abre. Sem esta linha a tela terminaria em branco embaixo das contagens, e a
-  /// pessoa não saberia que há mais ali.
+  /// abre.
   static const String fotosSoParaConexao = 'As fotos aparecem para quem é conexão.';
 
-  /// O vazio de quem **é** conexão. Diferente da frase acima de propósito: uma
-  /// diria "você não pode ver" para quem pode.
+  /// O vazio de quem **é** conexão.
   static const String conexaoSemFoto = 'Este usuário ainda não publicou fotos.';
 
-  /// O que o toque na célula faz. **Vai em `hint`, e não no nome** — o leitor
-  /// de tela espera a AÇÃO ali, e o NOME da célula é o texto alternativo da
-  /// foto. A palavra é a MESMA de `VitrineDeFotosDoUsuario.dicaDeAmpliar`, e a
-  /// repetição é deliberada: as duas grades são telas diferentes, e importar a
-  /// constante de uma para a outra faria a tela de terceiro depender da tela
-  /// do dono por uma palavra.
+  /// O que o toque na célula faz.
   static const String dicaDeAmpliar = 'Ampliar';
 
   /// O lado da célula, em dp — **o mesmo da vitrine do dono**, e por isso a
@@ -252,8 +88,7 @@ class TelaDePerfilDePessoa extends StatefulWidget {
   static const double ladoDaCelula = 104;
   static const double vaoDaGrade = 2;
 
-  /// O rótulo da contagem de pets. Plural tratado porque "1 pets" é o tipo de
-  /// detalhe que faz uma tela parecer inacabada.
+  /// O rótulo da contagem de pets.
   static String rotuloDePets(int quantos) => quantos == 1 ? '1 pet' : '$quantos pets';
 
   static String rotuloDeConexoes(int quantas) =>
@@ -269,13 +104,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   bool _perdeuOAlvo = false;
   String? _falha;
 
-  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
-  ///
-  /// Separado de [_falha] porque os dois desenham coisas diferentes, e porque
-  /// o que esta tela desenhava para o 401 era o defeito de 19/10 inteiro: o
-  /// catalogo devolve `texto: ''` para `unauthenticated` desde 18/10, entao a
-  /// faixa saia com o icone de ERRO, NENHUMA frase e um `Tentar de novo` ao
-  /// lado -- e tentar de novo sai igualmente sem conta.
+  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   bool _agindo = false;
 
@@ -303,15 +132,10 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       if (!mounted) return;
       setState(() {
         _carregando = false;
-        // **404 NÃO é "falha de rede"**, e misturar os dois daria um botão de
-        // "tentar de novo" para uma pessoa que não existe — a tela ficaria
-        // tentando em laço. O 404 é um desfecho; o resto é uma falha.
         if (falha is FalhaDaApi && falha.tipo == ProblemTipo.naoEncontrado) {
           _perdeuOAlvo = true;
           _perfil = null;
         } else if (faltaConta(falha)) {
-          // SEM CONTA NAO E ERRO. Decidido pelo `next_action` do corpo, e nao
-          // pelo status. Ver `widgets/convite_para_entrar.dart`.
           _faltaConta = true;
           _perfil = null;
         } else {
@@ -323,25 +147,11 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
 
   /// **APAGA DO DISCO AS FOTOS DESTA PESSOA**, porque a permissão de vê-las
   /// acabou de terminar.
-  ///
-  /// Chamado por [_encerrar] (recusar, cancelar e desfazer — as três passam por
-  /// `endConnection`) e pelo bloqueio. Recusar e cancelar tratam de um pedido
-  /// que **nunca** foi aceito: ali não deveria haver foto em disco, e apagar
-  /// ainda assim é o que torna a regra uma só em vez de três.
-  ///
-  /// **Antes do `_carregar()` de propósito.** O recarregamento é o que repinta
-  /// a tela sem a foto; apagar depois deixaria uma janela em que a tela já não
-  /// mostra a foto e o arquivo ainda está lá — curta, mas é a janela em que o
-  /// aplicativo fechado congelaria o arquivo no disco para sempre.
-  ///
-  /// Não lança: `esquecerPessoa` engole falha de sistema de arquivos. Uma pasta
-  /// que não sai não pode derrubar o desfazer, que é a ação que a pessoa pediu.
   Future<void> _esquecerAsFotosDela() async {
     await widget.cacheDeImagens?.esquecerPessoa(widget.apelido);
   }
 
-  /// `endConnection` **e** a limpeza do cache, nesta ordem. Ver
-  /// [_esquecerAsFotosDela].
+  /// `endConnection` **e** a limpeza do cache, nesta ordem.
   Future<void> _encerrar(String ref) async {
     await widget.conexoes.encerrar(ref);
     await _esquecerAsFotosDela();
@@ -357,10 +167,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       await acao();
       if (!mounted) return;
       setState(() => _agindo = false);
-      // **Recarrega em vez de adivinhar o estado novo.** Quem decide o estado é
-      // o servidor (o teto de 150, o descanso de 90 dias, uma corrida com a
-      // outra pessoa), e uma tela que escrevesse o próximo estado por conta
-      // própria mostraria "conectados" sobre um pedido que foi recusado.
       await _carregar();
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
@@ -371,10 +177,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
           _perfil = null;
           return;
         }
-        // A SESSAO CAIU NO MEIO DA ACAO. O corpo do perfil ja esta na tela, e
-        // ele e que sai: a pessoa nao pode aceitar nem recusar nada sem conta,
-        // e deixar os botoes de pe com uma faixa vazia em cima e o defeito que
-        // este campo existe para fechar.
         if (faltaConta(falha)) {
           _faltaConta = true;
           _perfil = null;
@@ -393,71 +195,23 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
 
     return Scaffold(
       appBar: AppBar(
-        // **`Perfil`, e não o nome da pessoa** (cliente, 23/10/2026). O nome é
-        // o título da PÁGINA, logo abaixo desta barra, e quem o pinta é
-        // `NomeComSelo` no topo de `_corpo` — onde ele já estava. Ver
-        // [TelaDePerfilDePessoa.tituloDaBarra] para o pedido inteiro e para a
-        // razão pela qual isto não alcança a tela da própria conta.
         title: const Text(TelaDePerfilDePessoa.tituloDaBarra),
         actions: <Widget>[
-          // **O "⋮" EM TODOS OS ESTADOS DO PERFIL**, menos quando não há alvo:
-          // sem `public_ref` não há a quem endereçar denúncia nem bloqueio, e
-          // um menu que abrisse sem alvo seria um controle que falha no toque.
           if (perfil != null)
             MenuDoPerfil(
               refDaPessoa: perfil.publicRef,
               api: widget.seguranca,
-              // Depois de denunciar, o servidor **oculta** este perfil para
-              // quem denunciou — a próxima leitura responde 404. Então a tela
-              // não recarrega: ela passa ao estado de alvo perdido, que é o que
-              // de fato aconteceu.
               aoPerderOAlvo: () => setState(() {
                 _perdeuOAlvo = true;
                 _perfil = null;
               }),
-              // BLOQUEAR TAMBÉM APAGA AS FOTOS DELA DO DISCO (BICHUS-296).
-              //
-              // Bloquear **desfaz a conexão** no servidor, e o predicado da
-              // Emenda 3 do ADR-0010 carrega `NOT bloqueio_entre` dentro dele:
-              // a partir daqui a foto não sai mais em resposta nenhuma. Um
-              // arquivo que ficasse no aparelho seria o rosto de quem a pessoa
-              // acabou de bloquear, guardado pelo aplicativo.
-              //
-              // **Só ao bloquear, e não ao desbloquear**: desbloquear não
-              // devolve conexão nenhuma (são duas escritas, e a segunda é um
-              // pedido novo), e não há nada a repovoar.
               aoMudarOBloqueio: (bloqueada) => unawaited(() async {
                 if (bloqueada) await _esquecerAsFotosDela();
                 await _carregar();
               }()),
-              // (o `aoMudarOBloqueio: (_) => unawaited(_carregar())` deste lado
-              //  saiu na uniao: o do #72, acima, faz o MESMO `_carregar()` e
-              //  ainda apaga as fotos. Manter os dois era argumento nomeado em
-              //  duplicidade, que o `flutter analyze` acusou.)
-              // **`DESFAZER CONEXÃO` NO `⋮`** (cliente, 22/10/2026). **O
-              // RECORTE POR ESTADO MORA AQUI, e não no menu**: o `⋮` aparece
-              // nos QUATRO estados da relação (é o `if (perfil != null)` acima),
-              // então passar isto sempre ofereceria desfazer a quem não é
-              // conexão -- o espelho exato do defeito que ele cobrou na busca.
-              //
-              // `connectionRef == null` também esconde: sem `ref` de aresta não
-              // há o que encerrar, e item que falha no toque é pior que item
-              // ausente.
-              //
-              // **É o MESMO `_agir` que o botão do corpo chamava**, com a mesma
-              // chamada `encerrar(ref)` -- é isso que preserva o recarregamento
-              // do perfil, o 404 como alvo perdido e o freio de toque duplo.
               aoDesfazerConexao:
                   perfil.connectionState == EstadoDaConexao.conectado &&
                           perfil.connectionRef != null
-                      // NA UNIAO DE 27/10: passa por `_encerrar`, e NAO por
-                      // `widget.conexoes.encerrar` como este lado fazia. `_encerrar`
-                      // e `encerrar` + `_esquecerAsFotosDela()` (entrega do #72).
-                      // Com a chamada crua, desfazer conexao pelo `⋮` -- que depois
-                      // do pedido de 22/10/2026 e o UNICO caminho de desfazer --
-                      // deixaria a foto da pessoa no disco, e a Emenda 3 do ADR-0010
-                      // valeria so enquanto a tela nao pintasse. As outras tres
-                      // chamadas desta tela ja passam por `_encerrar`.
                       ? () => _agir(
                             () => _encerrar(perfil.connectionRef!),
                           )
@@ -465,15 +219,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
             ),
         ],
       ),
-      // ACHADO DA MESCLA DE 19/10/2026: era `RefreshIndicator` cru.
-      //
-      // A frente `estado-deslogado-nas-secoes` trouxe o ponto unico do gesto
-      // (`widgets/arrastar_para_atualizar.dart`) e o portao
-      // `nenhuma tela usa RefreshIndicator cru`, que le `lib/` do disco. Esta
-      // tela nasceu noutra frente, com o indicador colado dentro, e as duas
-      // nao se cruzam em nenhuma linha -- o git mesclou sem conflito e o
-      // portao reprovou sobre a UNIAO. A conversao e a mesma que
-      // `tela_pedidos_de_conexao.dart` recebeu em 18/10.
       body: ArrastarParaAtualizar(
         aoAtualizar: _carregar,
         child: ListView(
@@ -487,13 +232,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
               ),
               const SizedBox(height: BichuEspaco.e4),
             ],
-            // SEM CONTA VEM PRIMEIRO, e os dois estados sao exclusivos por
-            // construcao: `_carregar` liga UM dos dois, e uma acao so pode
-            // falhar com o perfil carregado -- que e justamente quando
-            // `_perdeuOAlvo` e falso. A ordem esta escrita para o dia em que
-            // alguem acrescentar um terceiro caminho: sem conta o servidor
-            // nao chegou a dizer se o alvo existe, e afirmar `nao
-            // encontramos` seria a tela contando o que nao mediu.
             if (_faltaConta)
               const ConviteParaEntrar(secao: SecaoComConta.paginaDaPessoa)
             else if (_perdeuOAlvo)
@@ -513,8 +251,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     );
   }
 
-  /// O estado de alvo perdido. **Uma frase e uma saída**, e nenhuma explicação
-  /// do motivo: os cinco motivos do 404 são indistinguíveis de propósito.
+  /// O estado de alvo perdido.
   Widget _semAlvo(BichuCores cores, TextTheme textos) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,24 +271,12 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
 
   List<Widget> _corpo(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     return <Widget>[
-      // O NOME, no corpo e não só na barra: a barra corta em telas estreitas, e
-      // o nome é a primeira das três coisas que o cliente liberou.
-      //
-      // **E É AQUI QUE O SELO DE VALIDADO ENTRA, e não no título da barra** —
-      // emenda do ADR-0010 de 21/10/2026. A razão é a mesma frase acima: a barra
-      // corta em telas estreitas, e um selo lá custaria 24 dp de um orçamento
-      // que já é o mais apertado da tela. No corpo o nome tem a largura inteira
-      // menos as margens, e é `NomeComSelo` que resolve a disputa — o nome
-      // encolhe com `…` e o selo fica.
       NomeComSelo(
         nome: perfil.nomeParaLer,
         comSelo: perfil.canalConfirmado,
         estilo: textos.titleLarge?.copyWith(color: cores.textPrimary),
       ),
       const SizedBox(height: BichuEspaco.e1),
-      // O apelido embaixo do nome, porque é o endereço dela — e é ele que uma
-      // pessoa repete para outra. Quando o nome é nulo, `nomeParaLer` já é o
-      // apelido, e esta linha não repete.
       if (perfil.displayName != null && perfil.displayName!.trim().isNotEmpty)
         Text(
           '@${perfil.handle}',
@@ -566,15 +291,10 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     ];
   }
 
-  /// As DUAS contagens, lado a lado. **Texto, e não controle**: nenhuma das duas
-  /// é tocável, porque não há para onde ir — a lista de pets e a lista de
-  /// conexões não existem para terceiro, e um toque que não leva a nada é pior
-  /// do que nenhum.
+  /// As DUAS contagens, lado a lado.
   Widget _contagens(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     final estilo = textos.bodyLarge?.copyWith(color: cores.textPrimary);
     return Semantics(
-      // Um rótulo só para as duas: o leitor de tela anuncia a linha inteira em
-      // vez de parar duas vezes em dois números sem contexto.
       label:
           '${TelaDePerfilDePessoa.rotuloDePets(perfil.petsCount)}, '
           '${TelaDePerfilDePessoa.rotuloDeConexoes(perfil.connectionsCount)}',
@@ -612,10 +332,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
             aoTocar: ref == null ? null : () => unawaited(_agir(() => widget.conexoes.aceitar(ref))),
           ),
           const SizedBox(height: BichuEspaco.e2),
-          // **Recusar e desfazer são a MESMA operação** (`DELETE`), e o app não
-          // diz qual: a semântica é derivada do estado no servidor. A resposta é
-          // 204 sem corpo, e é isso que mantém a recusa silenciosa — não há nada
-          // para a tela da outra pessoa ler que diga "ela recusou você".
           BotaoSecundario(
             rotulo: TelaDePerfilDePessoa.recusar,
             carregando: _agindo,
@@ -635,46 +351,9 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         ];
 
       case EstadoDaConexao.conectado:
-        // NA UNIAO DE 27/10: o lado do #72 trazia o `BotaoSecundario` de
-        // volta a este ramo. NAO e entrega dele -- o #72 nasceu de
-        // `90dfaee7`, antes de o botao sair do corpo, e o diff dele neste
-        // arquivo e so o cache de imagem. O ramo segue VAZIO: devolver o
-        // botao seria reverter o pedido do cliente de 22/10/2026 com
-        // codigo velho em vez de com uma decisao.
-        // **O RAMO É VAZIO, e as DUAS ausências são pedido dele.**
-        //
-        // 1. **Sem linha de estado** (22/10/2026): *"Retire o texto vocês estão
-        //    conectados."*;
-        // 2. **Sem botão** (22/10/2026): *"o botão desfazer conexão deve ir
-        //    para os 3 pontinhos, junto com o denunciar"*. `Desfazer conexão`
-        //    agora é item de [MenuDoPerfil], e chega lá por
-        //    `aoDesfazerConexao` -- ver `build`, que o passa SÓ neste estado.
-        //
-        // **O ARGUMENTO QUE ESTAVA AQUI ERA MEU, E NÃO DELE -- e ele fica
-        // escrito para ninguém "consertar" isto de volta.** O comentário dizia:
-        // *"o estado continua dito, por quem não é texto de apoio. O ramo
-        // `EstadoDaConexao.conectado` desenha `Desfazer conexão`, e só quem é
-        // conexão vê esse botão: a ação afirma o vínculo melhor que a frase,
-        // porque ela também o resolve."*
-        //
-        // Era raciocínio defensável, e foi escrito em 22/10 -- **no mesmo dia em
-        // que ele pediu o contrário**. A decisão dele é mais nova e vence; o
-        // argumento não estava errado, estava **sobreposto**. Quem for devolver
-        // o botão ao corpo apoiado nessa frase está revertendo um pedido dele
-        // com um raciocínio meu.
-        //
-        // **E o vínculo continua dito**, só não por um botão: a vitrine abaixo
-        // só existe para quem é conexão aceita (`perfil.vitrine != null`), e é
-        // ela o sinal. O que NÃO pode voltar é a linha de texto -- ele a cortou
-        // por escrito.
         return const <Widget>[];
 
       case null:
-        // SEM RELAÇÃO. **A porta de pedir deixou de depender de um convite na
-        // mão em 20/10/2026**, e o parágrafo do cabeçalho que a condicionava ao
-        // token foi corrigido junto, e não deixado aqui contradizendo o código.
-        // Ela continua condicionada à mesma permissão das outras ações da
-        // comunidade.
         if (!widget.podeAgirNaComunidade) return const <Widget>[];
         final convite = widget.tokenDoConvite;
         return <Widget>[
@@ -683,23 +362,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
             carregando: _agindo,
             aoTocar: () => unawaited(
               _agir(() async {
-                // **A CREDENCIAL É UMA DAS DUAS, e a tela sabe qual tem.** O
-                // `oneOf` do contrato recusa corpo com as duas e corpo com
-                // nenhuma, e é por isso que há dois métodos em `ConexoesApi` e
-                // não um com dois parâmetros anuláveis.
-                //
-                // **O token GANHA quando existe**, e a escolha não é
-                // indiferente: é ele que o servidor grava como procedência
-                // (`invite_link` contra `people_search`). Mandar o apelido de
-                // quem chegou por um convite registraria uma busca que não
-                // houve.
-                //
-                // `idempotencyKey` é obrigatória: um reenvio da mesma tentativa
-                // não pode virar um segundo pedido na caixa da outra pessoa. A
-                // chave sai da CREDENCIAL e não de um sorteio por toque — dois
-                // toques no mesmo botão são a mesma tentativa. E ela é
-                // prefixada pela credencial para a mesma pessoa alcançada pelos
-                // dois caminhos não dividir uma chave só.
                 if (convite != null) {
                   await widget.conexoes.pedir(
                     tokenDoConvite: convite,
@@ -727,20 +389,14 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   Widget _vitrine(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     final fotos = perfil.vitrine;
 
-    // `null` é "você não pode ver" — a chave nem veio na resposta. A frase diz o
-    // que a conexão abre, e não o que está proibido.
     if (fotos == null) {
       return _recado(TelaDePerfilDePessoa.fotosSoParaConexao, cores, textos);
     }
-    // `[]` é "esta conexão não publicou nada". Frase diferente de propósito: a
-    // de cima diria "você não pode ver" para quem pode.
     if (fotos.isEmpty) {
       return _recado(TelaDePerfilDePessoa.conexaoSemFoto, cores, textos);
     }
 
     return GridView.builder(
-      // `shrinkWrap` porque a grade mora dentro de um `ListView`: duas áreas de
-      // rolagem encaixadas é o que faz o gesto da pessoa ir para a errada.
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
@@ -751,7 +407,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
         crossAxisSpacing: TelaDePerfilDePessoa.vaoDaGrade,
         childAspectRatio: 1,
       ),
-      // A LISTA INTEIRA, e nao a foto dela sozinha: ver [_celula].
       itemBuilder: (context, indice) => _celula(fotos, indice),
     );
   }
@@ -774,35 +429,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   }
 
   /// Uma célula da grade.
-  ///
-  /// **`ImagemDaRede`, e nunca `Image.network` cru.** Ela faz as duas coisas que
-  /// decidem o peso desta tela — `cacheWidth` pela largura que a célula
-  /// realmente pinta, e `errorBuilder` sempre. A medição que motivou a regra:
-  /// 88 MiB numa página sem `cacheWidth` contra 2,15 MiB com ele.
-  ///
-  /// **`gridUrl` e nunca `openUrl`**: a derivada de 1024 px é 1,6x mais dado do
-  /// que a célula pinta, e a grade desenha até nove de uma vez.
-  ///
-  /// ## O TOQUE ENTROU EM 26/10/2026, E A CÉLULA NÃO TINHA NENHUM
-  ///
-  /// Pedido do cliente, repetido: *"na pagina do perfil do usuário, as fotos
-  /// publicadas devem ser clicaveis e abrir no tamanho maior com um botão para
-  /// avançar ou retroceder para a proxima imagem, isso eu já tinha te pedido
-  /// tambem"*.
-  ///
-  /// Esta grade **não tinha `onTap` nenhum**: era uma [ImagemDaRede] pelada. A
-  /// derivada de 1024 px já viajava em `showcase[].open_url` desde que a tela
-  /// nasceu — e nada no app a desenhava.
-  ///
-  /// **A guarda da URL ausente não se repete aqui, e a razão é do contrato**:
-  /// [FotoDoPerfil.openUrl] **não é anulável** (ao contrário de
-  /// `FotoDaVitrineLida.urlAberta`), porque o servidor só manda foto de
-  /// terceiro com as duas derivadas prontas — foto em `processing` ou
-  /// `rejected` não entra nesta lista. Ainda assim o índice é contado na lista
-  /// FILTRADA e não na da grade: [VisualizadorDeImagem.abrirVarias] descarta
-  /// URL em branco antes de empilhar a rota, e um `open_url: ""` que escapasse
-  /// do contrato encurtaria a lista e faria o toque na terceira célula abrir a
-  /// quarta foto. O custo de contar certo é uma passada em até nove itens.
   Widget _celula(List<FotoDoPerfil> fotos, int indice) {
     final foto = fotos[indice];
 
@@ -810,14 +436,7 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       url: foto.gridUrl,
       descricao: foto.altText,
       raio: BichuRaio.sm,
-      // O retrato de uma pessoa falhando pede outro desenho que uma fachada
-      // falhando, e é por isso que este símbolo é parâmetro.
       simboloDeFalha: Icons.photo_outlined,
-      // O CACHE EM DISCO, ESCOPADO NA PESSOA (BICHUS-296) — e aqui o escopo
-      // **não é opcional**. A vitrine é o que o aceite da conexão abre (ADR-0010,
-      // emenda 2): guardá-la como imagem pública a deixaria no aparelho depois de
-      // a conexão ser desfeita, que é a emenda valendo só na tela. O dono é
-      // `widget.apelido`, que é o endereço desta tela.
       cache: ChaveDeImagem.dePessoa(foto.gridUrl, apelido: widget.apelido),
     );
 
@@ -830,10 +449,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
       abertas.add(url);
     }
 
-    // **SEM `excludeSemantics`**: o nome acessível da célula é o texto
-    // alternativo da foto, que vem de dentro da [ImagemDaRede]. Este
-    // `Semantics` só acrescenta a FUNÇÃO (botão) e a AÇÃO (`hint`) — excluir o
-    // de dentro trocaria o nome da foto pelo silêncio.
     return Semantics(
       button: true,
       hint: TelaDePerfilDePessoa.dicaDeAmpliar,

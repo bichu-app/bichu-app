@@ -33,29 +33,7 @@ import { CAMINHO_DA_LISTA } from './rotas.tsx';
 
 type Resultado = { ok: true } | { ok: false; mensagem: string };
 
-/**
- * A tela de disparo do comunicado.
- *
- * O arranjo todo serve a UMA regra: **ninguem dispara um texto que nao
- * conferiu**. "Ver prévia" le `getAdminBroadcastDispatchWindow` -- um `GET`
- * sem corpo, que nao escreve nada e nao leva o rascunho para a rede -- e
- * guarda os numeros do servidor (`would_reach`, `remaining_today`,
- * `daily_cap`) JUNTO com o rascunho exato que estava na tela. A caixa de
- * previa renderiza esse rascunho guardado, que o painel ja tem na mao.
- *
- * So com uma previa VALIDA do texto que esta na tela o disparo se abre; mudar
- * uma letra depois disso vence a previa e trava o disparo de novo. A
- * comparacao e entre o rascunho guardado e o que esta escrito agora, e e por
- * isso que a previa continua obrigatoria mesmo sem o servidor ver o texto.
- *
- * `remaining_today === 0` trava o disparo aqui, com o motivo escrito, em vez de
- * deixar a pessoa descobrir o teto pelo `409`. O `409` continua tratado: entre
- * a previa e o clique, outro operador pode ter disparado o terceiro do dia.
- *
- * **Nenhuma senha.** Desde 07/10/2026 nenhuma escrita do painel pede senha nem
- * reautenticacao (ADR-0027 item 23, aditamento): o que confirma e o dialogo com
- * a consequencia escrita, como em `DialogoDeConfirmacao`.
- */
+/** A tela de disparo do comunicado. */
 export default function FormularioDeComunicado() {
   const { api, registrarRascunho } = useSessao();
   const navigate = useNavigate();
@@ -76,15 +54,10 @@ export default function FormularioDeComunicado() {
   useLayoutEffect(() => {
     valoresRef.current = valores;
   });
-  // O que foi digitado e nao disparado sobrevive a queda da sessao, como no
-  // formulario do parceiro e no do encontro.
   useEffect(() => registrarRascunho(() => guardarRascunho(pathname, valoresRef.current)), [registrarRascunho, pathname]);
 
   const erros = tentou ? { ...errosDoServidor, ...validarComunicado(valores) } : errosDoServidor;
   const trava = travaDoDisparo(valores, guardada);
-  // A previa guardada deixou de descrever o que esta escrito. Ela CONTINUA na
-  // tela, marcada como vencida: apagar a previa ao primeiro toque de tecla
-  // esconderia a referencia justamente de quem esta corrigindo o texto.
   const vencida = guardada !== undefined && textoDoRascunho(guardada.rascunho) !== textoDoComunicado(valores);
 
   function mudar(mudanca: Partial<ValoresDoComunicado>) {
@@ -108,8 +81,6 @@ export default function FormularioDeComunicado() {
       return;
     }
     setCarregandoPrevia(true);
-    // O rascunho de AGORA, aparado: e ele que a previa passa a mostrar e e dele
-    // que sai a identidade usada para saber se a previa venceu depois.
     const rascunho = rascunhoDe(valores);
     try {
       const { data, response } = await api.GET('/admin/broadcasts/dispatch-window');
@@ -127,17 +98,10 @@ export default function FormularioDeComunicado() {
   }
 
   async function disparar(): Promise<Resultado> {
-    // A trava e conferida DE NOVO aqui: o dialogo pode ter ficado aberto
-    // enquanto algo mudou, e um botao desligado nao e uma garantia.
     const travaAgora = travaDoDisparo(valores, guardada);
     if (travaAgora !== undefined || !guardada) {
       return { ok: false, mensagem: motivoDaTrava(travaAgora ?? 'sem-previa', guardada?.janela) };
     }
-    // Vai o rascunho GUARDADO, que e o que a previa mostrou -- e nao o que
-    // esta na tela agora. A trava acima ja garante que os dois sao o mesmo
-    // texto; mandar o guardado faz dessa garantia uma questao de estrutura, e
-    // nao de inferencia, e e a diferenca entre "nao pode divergir" e "nao
-    // divergiu quando eu conferi".
     const { data, error, response } = await api.POST('/admin/broadcasts', { body: guardada.rascunho });
     if (data) {
       liberado.current = true;
@@ -148,8 +112,6 @@ export default function FormularioDeComunicado() {
       });
       return { ok: true };
     }
-    // O teto sai da janela que autorizou este disparo: quem monta o texto do
-    // `409` e o numero do servidor, e nao uma constante do painel.
     return { ok: false, mensagem: mensagemDoErroDoDisparo(response.status, error, guardada.janela.daily_cap) };
   }
 
@@ -230,12 +192,8 @@ export default function FormularioDeComunicado() {
               <strong className="t-label-lg" data-cy="previa-titulo">
                 {guardada.rascunho.title}
               </strong>
-              {/*
-               * TEXTO, nunca marcacao: o corpo entra como filho de texto do
-               * `<p>` e a quebra de linha aparece pelo `white-space: pre-wrap`
-               * da folha. `<b>negrito</b>` no rascunho sai com os sinais de
-               * maior e menor na tela, e nenhum elemento novo nasce.
-               */}
+              {
+}
               <p className={`t-body ${estilos.corpo ?? ''}`} data-cy="previa-corpo">
                 {guardada.rascunho.body}
               </p>
@@ -281,17 +239,7 @@ export default function FormularioDeComunicado() {
   );
 }
 
-/**
- * A confirmacao do disparo: a consequencia escrita em paragrafos, e nada mais.
- * Mesma forma de `DialogoComMotivo` da Rede (copiada, e nao importada: uma
- * secao do painel que importa componente de outra secao e o acoplamento que a
- * revisao da Rede pediu para evitar), sem o campo de motivo -- o contrato de
- * `dispatchAdminBroadcast` so tem titulo e corpo, e inventar um campo aqui
- * mandaria ao servidor o que ele nao pediu.
- *
- * O foco inicial vai para Cancelar, que e o lado seguro de uma acao que nao se
- * desfaz. **Sem senha** (ADR-0027 item 23).
- */
+/** A confirmacao do disparo: a consequencia escrita em paragrafos, e nada mais. */
 function DialogoDeDisparo({
   titulo,
   alcance,

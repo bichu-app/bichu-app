@@ -1,6 +1,6 @@
 /**
- * Massa do duble, tipada pelos schemas do contrato: se o contrato muda de
- * forma, isto deixa de compilar. Lugares e nomes sao ficticios ou publicos.
+ * Massa do duble, tipada pelos schemas do contrato: se o contrato muda de forma,
+ * isto deixa de compilar.
  */
 import type { Encontro, Pedido } from '../dominio/tipos.ts';
 

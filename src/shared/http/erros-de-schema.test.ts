@@ -1,75 +1,4 @@
-/**
- * `campoDoErro` e `camposDoSchema`: o 400 de validação diz **qual** campo.
- *
- * ## Por que este arquivo existe
- *
- * `erros-de-schema.ts` é a única tradução entre o achado do Ajv e o
- * `errors[].field` do `Problem`, e é dela que toda tela de formulário dos
- * quatro clientes tira "falta o CEP" em vez de "não foi possível".
- *
- * Ela NÃO estava descoberta, e dizer que estava seria o erro simétrico:
- * `o-400-nomeia-o-campo.test.ts` já a exercita por quatro casos, pelo fio, com
- * a rota real `createPetPhotoUploadIntent`. O que faltava era uma dimensão
- * específica — **aninhamento**. O corpo daquela rota é PLANO
- * (`pet_id`, `content_type`, `byte_size`), então todos os seus `required`
- * nascem na raiz, onde o `instancePath` do Ajv vem vazio. Nenhum caso da
- * árvore exercitava um `required` dentro de um objeto, e é só lá que o defeito
- * abaixo aparece. Nenhuma função deste módulo era chamada por nome em
- * `*.test.ts` nenhum, então nenhum caso cobria a tradução em unidade.
- *
- * ## O DEFEITO QUE ESTES CASOS PRENDEM (medido em 18/10/2026)
- *
- * `campoDoErro` **escolhia** entre o caminho da instância e a propriedade
- * nomeada nos `params`, devolvendo o primeiro que existisse:
- *
- * ```ts
- * if (caminho !== '') return caminho;              // <- saía aqui
- * return textoDe(params['missingProperty']) ?? ... // <- nunca chegava
- * ```
- *
- * O cabeçalho do arquivo justificava isso dizendo que, num `required`, "o
- * `instancePath` vem vazio". Isso só vale quando a propriedade que faltou é da
- * **raiz** do corpo. Num objeto aninhado o Ajv reporta o `required` no objeto
- * que perdeu a propriedade: `instancePath` vem `/delivery_address`, não-vazio,
- * e o nome que faltou fica em `params.missingProperty` — que a saída antecipada
- * jogava fora.
- *
- * Consequência medida: `POST /v1/pets/{petId}/tag-requests` sem
- * `recipient_name` respondia
- * `errors: [{ field: 'delivery_address', code: 'required' }]`, apontando o
- * CONTÊINER. O contrato promete o contrário com estas palavras: "Campo de
- * endereco faltando ou malformado responde `400` apontando **qual** campo,
- * pelo `errors[].field`" (`api/openapi.yaml`, `requestCollarTag`). O
- * formulário do endereço tem oito campos obrigatórios e recebia um só nome
- * para todos eles.
- *
- * ## O QUE DESLIGAR PARA VER CADA CASO REPROVAR
- *
- * Em `campoDoErro`, dentro de `erros-de-schema.ts`:
- *
- * - **soma das duas pontas:** troque o fim da função por
- *   `if (caminho !== '') return caminho;` seguido do `?? ''` antigo. Reprova
- *   `required aninhado` e `additionalProperties aninhado` — e são esses dois
- *   que o defeito real produzia;
- * - **a ponta do caminho:** devolva só `propriedade ?? ''`. Reprova
- *   `pattern num campo aninhado` e `pattern na raiz`;
- * - **a ponta da propriedade:** devolva só `caminho`. Reprova
- *   `required na raiz`, `required aninhado` e `additionalProperties aninhado`;
- * - **a tradução de `/` para `.`:** tire o segundo `replace`. Reprova
- *   `pattern num campo aninhado` e `item de lista`;
- * - **o `code`:** fixe `code: 'schema'` em `campoDoSchema`. Reprova
- *   `o código vem do keyword do Ajv`;
- * - **o silêncio sobre o valor:** acrescente o `data` do achado à `message`.
- *   Reprova `o valor recebido NUNCA sai`;
- * - **o `undefined` de lote vazio:** devolva `[]` em `camposDoSchema`.
- *   Reprova `lote vazio é indistinguível de lote inexistente`.
- *
- * Nenhum caso aqui afirma o próprio arranjo: todos partem da forma que o Ajv
- * produz de verdade, e a forma é conferida por execução em
- * `o formato do achado é o que o Ajv realmente entrega`, que valida com o Ajv
- * do Fastify e lê `erro.validation` em vez de montar o objeto à mão. Sem esse
- * caso, os outros estariam afirmando uma suposição sobre a biblioteca.
- */
+/** `campoDoErro` e `camposDoSchema`: o 400 de validação diz **qual** campo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -85,7 +14,7 @@ import type { AbsoluteUrl } from '../types/brands.js';
 
 const UM_PET = '018f3a2b-0000-7000-8000-0000000000bb';
 
-/** O endereço válido do contrato. Cada caso abaixo estraga UM campo dele. */
+/** O endereço válido do contrato. */
 const ENDERECO: Record<string, unknown> = {
   recipient_name: 'Mariana Destinataria',
   recipient_phone: '+5511987654321',
@@ -178,7 +107,6 @@ void describe('campoDoSchema: o código e a mensagem', () => {
       instancePath: '/new_password',
       keyword: 'minLength',
       message: 'must NOT have fewer than 12 characters',
-      // O Ajv carrega o dado reprovado em alguns achados; nada dele pode vazar.
       params: { limit: 12, data: senha },
     });
     assert.equal(campo.field, 'new_password');
@@ -213,19 +141,7 @@ void describe('camposDoSchema: o lote', () => {
   });
 });
 
-/**
- * A ponte com a realidade. Os casos acima montam o achado do Ajv à mão; este
- * confere, POR EXECUÇÃO e pelo fio, que a forma montada é a que o Ajv do
- * Fastify produz — `instancePath` não-vazio junto de `params.missingProperty`
- * num `required` **aninhado**. Sem ele, todo o resto deste arquivo seria uma
- * afirmação sobre a biblioteca, e o dia em que o Ajv mudasse a forma os casos
- * continuariam verdes medindo um mundo que não existe mais.
- *
- * A rota é a de verdade (`requestCollarTag`) com o corpo do contrato de
- * verdade, no mesmo arranjo de `o-400-nomeia-o-campo.test.ts`. Ela foi
- * escolhida por ser a única com objeto aninhado obrigatório
- * (`delivery_address`, oito campos), que é a dimensão que faltava.
- */
+/** A ponte com a realidade. */
 void describe('o formato do achado é o que o Ajv realmente entrega', () => {
   async function recusar(
     payload: Record<string, unknown>,
@@ -280,18 +196,6 @@ void describe('o formato do achado é o que o Ajv realmente entrega', () => {
     );
   });
 
-  /*
-   * NÃO existe caso de `additionalProperties` aninhado POR AQUI, e a ausência é
-   * deliberada. Nesta configuração o Ajv do Fastify roda com `removeAdditional`
-   * ativo: campo desconhecido é APAGADO antes de virar achado, então ele nunca
-   * chega a `erros-de-schema.ts` e um caso aqui estaria medindo a camada
-   * errada. Quem recusa campo desconhecido é o guarda de
-   * `corpo-fechado.ts`, com `code: 'unknown_field'`, e é lá que o caminho
-   * aninhado é afirmado (`corpo-fechado.test.ts`). O mapeamento em si — um
-   * achado de `additionalProperties` virar `delivery_address.cpf` — fica
-   * provado em unidade, no caso `additionalProperties aninhado` acima, e é ele
-   * que continua valendo no dia em que `removeAdditional: false` entrar.
-   */
   void it('required na RAIZ continua nomeando o campo da raiz', async () => {
     const erros = await recusar({});
     assert.deepEqual(

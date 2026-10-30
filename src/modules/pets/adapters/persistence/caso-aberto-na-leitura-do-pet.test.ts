@@ -1,74 +1,4 @@
-/**
- * `Pet.open_case_id` SAI DA CONSULTA, e o SQL compilado prova isso.
- *
- * ## O defeito que este arquivo fecha, medido e não suposto
- *
- * O cliente, em 20/10/2026: *"o botão para desmarcar o pet como perdido no
- * perfil do usuário também não está funcionando."*
- *
- * A ação existe desde 19/10 — `Encontrei meu pet`, em
- * `app/lib/telas/pet/tela_detalhe_do_pet.dart`, chamando `closeLostCase` com
- * `outcome: reunited`. O servidor encerra certo; medido em 20/10/2026 contra
- * Postgres de verdade, com o mesmo artefato que a homologação roda:
- *
- *   POST /v1/lost-cases/{caseId}/close  {"outcome":"reunited"}
- *   -> 200  {"status":"closed_reunited", "closed_at":"...",
- *            "reopen_deadline":"<+7 dias>",
- *            "resolution":{"outcome":"reunited","reunion_channel":null}}
- *
- * O botão para PEDIR isso é que nunca foi desenhado. Ele vive no ramo
- * `_jaProcurado` da tela, que é o OU de dois campos da ficha do pet —
- * `status == lost` e `open_case_id != null`. Com um caso `open` no banco, a
- * ficha respondia, na MESMA medição:
- *
- *   GET /v1/pets/{petId}
- *   -> 200  {"status":"active","open_case_id":null}
- *
- * `pets.status` ficar `active` é de propósito e está escrito no cabeçalho de
- * `kysely-perfil-publico.ts`: *"abrir um caso não muda `pets.status` hoje, e o
- * caso aberto é a fonte da verdade sobre 'perdido'"*. Então `open_case_id` é o
- * ÚNICO campo que podia carregar o sinal — e `comoPet` o fixava em `null`, com
- * o comentário "o caso de perdido chega com o módulo `lostfound`". O módulo
- * chegou; a linha ficou. Os dois campos diziam, juntos, que o animal não estava
- * sendo procurado, e a tela acreditava nos dois.
- *
- * ## Por que o SQL compilado, e não a resposta da rota
- *
- * Porque a vacuidade deste repositório é exatamente esta: a frente do aplicativo
- * tem DEZENAS de casos verdes sobre o estado perdido
- * (`app/test/telas/pet_perdido_pagina_e_estados_test.dart`), e todos eles montam
- * a ficha à mão com `petDoContrato(status: 'lost', casoAberto: ...)` — uma
- * resposta que o servidor nunca emitiu. Teste que fabrica a entrada não tem como
- * acusar o produtor dela.
- *
- * Este arquivo lê o SQL que o compilador do Postgres escreve, nunca o
- * texto-fonte do adaptador: uma conferência que procurasse `lost_cases` no
- * arquivo casaria com a menção dentro deste próprio comentário e ficaria verde
- * com a subconsulta removida.
- *
- * O **efeito** — a ficha trazer o identificador do caso aberto e voltar a nulo
- * no encerramento — é de `tests/integration/caso-aberto-chega-na-ficha-do-pet.test.ts`,
- * que roda contra Postgres. Este arquivo não alcança isso, e aquele não alcança
- * a forma da consulta. Os dois são necessários e nenhum basta sozinho.
- *
- * ## A isca, e como ela foi provada
- *
- * Em 20/10/2026, Node v22.23.2. Cada desligamento foi confirmado por diferença
- * de conteúdo do arquivo ANTES de a suíte rodar.
- *
- * Base de `npm test`: 3456 casos em 253 arquivos, 3455 passaram, 1 reprovou --
- * a pré-existente de `viacep-com-brasilapi`, que tem dono em
- * `fix/cep-prazo-laco-vazio`.
- *
- * | o que foi desligado em `kysely-pet-repository.ts` | placar | reprovaram, por nome |
- * |---|---|---|
- * | a subconsulta inteira de `open_case_id` | 3451/5 | `a leitura do dono traz o caso ABERTO do pet`, `o recorte da subconsulta é o estado ABERTO, e ele é o campo`, `a subconsulta é CORRELACIONADA pelo pet da linha de fora` e, no arquivo vizinho, `a leitura do dono liga o dono a $3, e não a $1: DUAS subconsultas vem antes` (a quinta é a do `viacep`) |
- * | `openCaseId: linha.open_case_id` de volta para `openCaseId: null` | 3455/1 | **NENHUM**: a suíte unitária inteira ficou verde fora da do `viacep`. Reprovaram três casos de `tests/integration/caso-aberto-chega-na-ficha-do-pet.test.ts` |
- *
- * A segunda linha é por que o arquivo de integração existe, e vale dito em voz
- * alta: devolver a projeção para `null` reabre o defeito INTEIRO e nada fora do
- * banco acusa. A projeção em memória não aparece no SQL compilado.
- */
+/** `Pet.open_case_id` SAI DA CONSULTA, e o SQL compilado prova isso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -85,7 +15,10 @@ import { construtorDaLeituraDoDono } from './kysely-pet-repository.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 
-/** O mesmo arranjo de `autorizacao-na-clausula-where.test.ts`: compila, não executa. */
+/**
+ * O mesmo arranjo de `autorizacao-na-clausula-where.test.ts`: compila, não
+ * executa.
+ */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -95,13 +28,7 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/**
- * A subconsulta de `open_case_id`, como o compilador do Postgres a escreve.
- *
- * O apelido entra na regex de propósito: uma subconsulta a `lost_cases` que
- * saísse com outro nome de coluna não alimentaria `linha.open_case_id`, e a
- * ficha voltaria a dizer nulo com a consulta certa do lado.
- */
+/** A subconsulta de `open_case_id`, como o compilador do Postgres a escreve. */
 const SUBCONSULTA_DO_CASO =
   /\(select\s+"lost_cases"\."id"\s+from\s+"lost_cases"\s+where\s+[^)]*\)\s+as\s+"open_case_id"/;
 
@@ -132,9 +59,6 @@ void describe('a ficha do pet diz que ele está sendo procurado, porque ela LÊ 
       /"lost_cases"\."status"\s*=\s*\$(\d+)/,
       `a subconsulta perdeu o recorte de estado. SQL: ${compilada.sql}`,
     );
-    // O VALOR ligado, e não só a coluna: `status = 'closed_reunited'` tem a
-    // coluna certa, o operador certo, e faria a ficha anunciar como caso aberto
-    // justamente o caso que o tutor acabou de encerrar.
     const posicao = /"lost_cases"\."status"\s*=\s*\$(\d+)/.exec(compilada.sql)?.[1];
     assert.ok(posicao !== undefined, 'a posição do parâmetro não foi lida de volta');
     assert.equal(
@@ -159,9 +83,6 @@ void describe('a ficha do pet diz que ele está sendo procurado, porque ela LÊ 
   });
 
   void it('o dono continua no WHERE da consulta de fora, com a subconsulta nova no meio', () => {
-    // A subconsulta nova empurrou o parâmetro do dono de `$2` para `$3`. A
-    // conferência do ADR-0021 lê a posição de volta, e não um índice fixo; este
-    // caso existe para que a mudança de posição não passe por aqui calada.
     const compilada = construtorDaLeituraDoDono(semBanco, DONO).compile();
     const achado = /"owner_user_id"\s*=\s*\$(\d+)/.exec(compilada.sql);
 
@@ -201,9 +122,6 @@ void describe('ISCA: a mesma conferência REPROVA uma leitura sem o caso aberto'
   });
 
   void it('uma subconsulta a `lost_cases` SEM recorte de estado é acusada', () => {
-    // Coluna certa, tabela certa, apelido certo — e nenhum recorte. Ela
-    // devolveria o caso ENCERRADO como se estivesse aberto, e o pet reencontrado
-    // continuaria com a faixa de urgência e o botão de desmarcar na tela.
     const semRecorte = semBanco
       .selectFrom('pets')
       .select((eb) => [

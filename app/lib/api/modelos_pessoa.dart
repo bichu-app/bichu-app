@@ -1,72 +1,12 @@
 /// Os modelos das pessoas que **não são a própria conta**, campo por campo do
 /// contrato: o perfil (`#/components/schemas/PersonProfile`) e o resultado da
 /// busca (`PersonSearchResult` / `PersonSearchPage`).
-///
-/// **A BUSCA ENTROU EM 20/10/2026, e este arquivo dizia o contrário.** Até
-/// aquela data não havia busca de pessoas em lugar nenhum do produto, e a
-/// recusa estava registrada em quatro lugares. O cliente a reverteu, literal:
-/// *"vamos implementar a busca pelo usuario"*. Os freios que vieram com a
-/// reversão são parte da decisão e não enfeite — piso de três caracteres,
-/// campo vazio nunca lista ninguém, teto de consultas por conta, e resposta
-/// limitada a nome e duas contagens.
-///
-/// **O que a reversão NÃO abriu**, e vale escrito porque é o que a próxima
-/// pessoa vai querer acrescentar: continua não existindo rota de
-/// disponibilidade de apelido, continua não existindo lista de conexões para
-/// ninguém (nem para o dono), e continua não existindo "seguir".
-///
-/// **Regra do cliente (23/09/2026): o app usa exatamente os nomes do
-/// `api/openapi.yaml`.** Por isso toda leitura de resposta acontece dentro da
-/// própria classe, com `json['campo']`: leitura por outro nome de variável
-/// escaparia do portão de conformidade.
-///
-/// ## A decisão que estes campos são
-///
-/// Cliente, 19/10/2026, literal: *"ele pode ver nome, quantidade de pets,
-/// conexões, mas não as fotos publicadas e nem a timeline do usuário"*. É a
-/// emenda 2 do ADR-0010, e a lista de campos aqui é ela.
-///
-/// ## O que o app NÃO lê, e por que
-///
-/// - **Nenhum identificador interno.** Não há `id`, não há UUID e não há conta
-///   de ninguém (ADR-0010 item 6). O que endereça a pessoa é o **apelido**; o
-///   que endereça a aresta é [PerfilDePessoa.connectionRef]; o que endereça a
-///   pessoa para **denunciar e bloquear** é [PerfilDePessoa.publicRef], que é
-///   opaco e já é o que as três rotas de segurança recebem.
-/// - **Nenhum atributo de pet.** Só [PerfilDePessoa.petsCount]. Não há campo de
-///   nome, de slug, de foto nem de espécie, e por isso não há como uma tela
-///   desenhar um sem alguém acrescentar campo aqui.
-/// - **Nenhuma timeline, publicação, curtida nem contador.** Não existe no
-///   produto: a decisão está registrada na migração `20261018000030` — *"uma
-///   timeline de quem você segue É a lista de presença com hora... Encerrado,
-///   não se reabre"*.
-/// - **Nenhuma cidade e nenhum bairro.** Ele não mencionou nenhum dos dois em
-///   19/10, e o teto de "bairro e cidade" do ADR-0010 é limite de precisão e
-///   não permissão de expor onde a pessoa mora.
-/// - **Nenhuma lista de conexões.** Só a contagem. A lista não aparece a
-///   ninguém, nem ao dono (plano 4-B), e não existe no contrato.
-///
-/// ## O que entrou depois, e por decisão
-///
-/// **O SELO DE VALIDADO** (`contact_channel_verified`), pela emenda do ADR-0010
-/// de 21/10/2026. A lista de campos acima é FECHADA e a emenda 2 a fechou; o
-/// selo só entra porque a emenda nova NOMEIA `PersonProfile` — não porque ele
-/// "cabia".
 library;
 
 import 'modelos_conexao.dart';
 
 /// `#/components/schemas/PersonShowcasePhoto` — a foto da vitrine de **outra**
 /// pessoa.
-///
-/// **Menor que a foto do dono, de propósito.** Não tem `status`, não tem
-/// `rejection_reason`, não tem `position` e não tem `upload_id`: os dois
-/// primeiros são estado de moderação da vitrine de quem a publicou, e os dois
-/// últimos são de edição. Foto que não está pronta **não chega nesta lista**, e
-/// é por isso que não há estado para a tela desenhar.
-///
-/// As duas URLs **não são anuláveis** aqui, ao contrário da foto do dono: o
-/// servidor só manda foto com as duas derivadas prontas.
 class FotoDoPerfil {
   const FotoDoPerfil({
     required this.gridUrl,
@@ -82,9 +22,7 @@ class FotoDoPerfil {
     );
   }
 
-  /// A derivada de **320 x 320**. É ela que a grade pede, e nunca [openUrl]: a
-  /// célula tem 104 dp (312 px reais a 3x), e a grade desenha até nove de uma
-  /// vez — a medição que motivou isso foi 88 MiB contra 2,15 MiB.
+  /// A derivada de **320 x 320**.
   final String gridUrl;
 
   /// A derivada de **1024 x 1024**, para a foto aberta.
@@ -116,24 +54,11 @@ class PerfilDePessoa {
       displayName: json['display_name'] as String?,
       petsCount: json['pets_count'] as int,
       connectionsCount: json['connections_count'] as int,
-      // `none` não existe em `EstadoDaConexao` — ele é o valor de
-      // `connection_state` que diz "nenhuma relação", e no app ele é **nulo**.
-      // A conversão é por igualdade explícita e não por `porCodigo`: aquela
-      // devolve nulo para código DESCONHECIDO, e confundir "nenhuma relação"
-      // com "não entendi o estado" faria a tela desenhar o estado de estranho
-      // para um valor que o servidor passou a mandar e este build não conhece.
       connectionState: json['connection_state'] == 'none'
           ? null
           : EstadoDaConexao.porCodigo(json['connection_state'] as String?),
       connectionRef: json['connection_ref'] as String?,
-      // **Padrão `false`: na dúvida o selo NÃO nasce.** O campo é obrigatório no
-      // contrato e sai nos QUATRO estados de conexão; este padrão é o que o app
-      // faz se um dia ele faltar.
       canalConfirmado: json['contact_channel_verified'] as bool? ?? false,
-      // **Ausente e `[]` são coisas diferentes, e a tela depende disso.**
-      // Ausente é "você não pode ver"; `[]` é "esta conexão não tem foto".
-      // Mapear ausente para lista vazia aqui apagaria a distinção antes de a
-      // tela poder usá-la.
       vitrine: fotos
           ?.cast<Map<String, dynamic>>()
           .map(FotoDoPerfil.doJson)
@@ -141,12 +66,11 @@ class PerfilDePessoa {
     );
   }
 
-  /// O apelido, que é o identificador público da pessoa. **Não anulável**: quem
-  /// não tem apelido não tem endereço, e por isso não tem esta página.
+  /// O apelido, que é o identificador público da pessoa.
   final String handle;
 
   /// `users.public_ref`: o endereço opaco de 22 símbolos que `blockUser` e
-  /// `reportUserProfile` recebem. **Não é UUID e não é o apelido.**
+  /// `reportUserProfile` recebem.
   final String publicRef;
 
   /// O nome de exibição. Anulável, como em `ConnectionPerson`.
@@ -155,46 +79,26 @@ class PerfilDePessoa {
   /// **A contagem, e nada além dela** (emenda 2 do ADR-0010).
   final int petsCount;
 
-  /// Quantas conexões aceitas a pessoa tem. **O número, nunca a lista.**
+  /// Quantas conexões aceitas a pessoa tem.
   final int connectionsCount;
 
   /// A relação com quem está olhando, ou **nulo para nenhuma**.
   final EstadoDaConexao? connectionState;
 
-  /// O `ref` da **aresta**, nulo quando não há aresta viva. Nunca de uma pessoa.
+  /// O `ref` da **aresta**, nulo quando não há aresta viva.
   final String? connectionRef;
 
   /// **O SELO DE VALIDADO** — `contact_channel_verified`, emenda do ADR-0010 de
   /// 21/10/2026, decisão do cliente.
-  ///
-  /// O que ele prova é **um canal de contato confirmado**
-  /// (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL` no
-  /// servidor), que é a MESMA régua dos quatro 409
-  /// `contact-channel-unverified`. **Na prática é e-mail**, porque nada no
-  /// servidor grava a confirmação de telefone — e é por isso que o rótulo que a
-  /// tela desenha diz "e-mail confirmado" e nunca "verificado" nem "confiável".
-  ///
-  /// **`false` não desenha nada**, e não desenha um selo apagado: selo cinza ao
-  /// lado do nome diria "esta conta foi reprovada", e `false` significa que
-  /// ninguém conferiu nada.
-  ///
-  /// **Chega nos QUATRO estados de conexão**, ao contrário de [vitrine]: a
-  /// vitrine é conteúdo que a pessoa publicou para quem ela aceitou, e o selo é
-  /// atributo da conta, que vale igual para quem chega pelo apelido.
   final bool canalConfirmado;
 
-  /// As fotos, ou **nulo quando quem olha não pode vê-las**. Lista vazia é uma
-  /// conexão sem foto.
+  /// As fotos, ou **nulo quando quem olha não pode vê-las**.
   final List<FotoDoPerfil>? vitrine;
 
   /// Já é conexão aceita?
   bool get conectado => connectionState == EstadoDaConexao.conectado;
 
-  /// Como a pessoa é escrita na tela. **O nome vem primeiro, e o apelido é a
-  /// queda** — o inverso de `PessoaDaConexao.nomeParaLer`, e de propósito: ali
-  /// a lista é de pedidos e o apelido é a chave de leitura; aqui a pessoa está
-  /// olhando o perfil DELA, e o cliente disse que o que se vê é o *nome*.
-  /// Nunca devolve nulo, porque [handle] nunca é nulo.
+  /// Como a pessoa é escrita na tela.
   String get nomeParaLer {
     final nome = displayName;
     if (nome != null && nome.trim().isNotEmpty) return nome;
@@ -204,46 +108,6 @@ class PerfilDePessoa {
 
 /// `#/components/schemas/PersonSearchResult` — uma pessoa **como a busca a
 /// entrega**.
-///
-/// ## Seis campos, e as duas ausências têm dono
-///
-/// Este modelo é **menor** que [PerfilDePessoa], e de propósito. Ele não
-/// reusa aquele nem herda dele: um modelo só para os dois obrigaria a tornar
-/// anuláveis os campos que a busca não manda, e campo anulável é convite
-/// a preencher depois.
-///
-/// | Falta aqui | Está em [PerfilDePessoa] porque |
-/// |---|---|
-/// | `public_ref` | aquela tela hospeda denunciar e bloquear, e as três operações são endereçadas por ele. A busca não hospeda nenhuma das três, e referência pública sem uso é superfície de graça |
-/// | `connection_ref` | `ref` de aresta existe quando há aresta, e é ele que deixa **desfazer** — e desfazer mora no perfil de uma pessoa, não numa lista que se rola com o polegar |
-///
-/// **`connection_state` ESTAVA NESTA TABELA, e saiu dela em 26/10/2026**: a
-/// linha dizia *"numa lista, vinte estados por requisição são o material de que
-/// uma lista de conexões se faz do lado de fora"* — e isso deixou de ser
-/// verdade em **22/10/2026**, quando o campo entrou no contrato por decisão do
-/// cliente. Ele é [estadoDaConexao], está declarado logo abaixo, e a tabela
-/// seguia afirmando a ausência do campo que o próprio arquivo lê. **Linha de
-/// documentação que contradiz o código ao lado dela é pior que linha nenhuma**:
-/// esta mandou um diagnóstico inteiro para o lugar errado em 26/10.
-///
-/// ## A FOTO SAI AQUI, E ESTE BLOCO DIZIA O CONTRÁRIO (21/10/2026)
-///
-/// Até 21/10/2026 este modelo não tinha foto, e o parágrafo aqui citava a
-/// **emenda 5 item 2 do ADR-0010** — *"a foto não sai para quem não é conexão
-/// aceita"*. **O cliente emendou a própria decisão**, literal: *"o resultado
-/// tras foto sim, para identificar usuarios com nomes parecidos."*
-///
-/// Com só o nome, duas `Maria Silva` são indistinguíveis. Numa busca cujo
-/// propósito é achar **uma pessoa específica que você conhece**, tirar a foto
-/// transforma a lista em adivinhação.
-///
-/// É a derivada **`thumb`**, a menor que o contrato devolve. Os três freios que
-/// separam isso de um catálogo de rostos estão no cabeçalho de
-/// `CartaoDePessoaEncontrada`. E [inicial] **não foi apagada**: ela é a queda de
-/// quem não tem foto pronta, e é o recurso que a emenda 3 manda usar.
-///
-/// **Nenhum identificador interno** (ADR-0010 item 6): o que endereça a pessoa
-/// é o apelido.
 class PessoaEncontrada {
   const PessoaEncontrada({
     required this.handle,
@@ -261,15 +125,6 @@ class PessoaEncontrada {
       petsCount: json['pets_count'] as int,
       connectionsCount: json['connections_count'] as int,
       photoIconUrl: json['photo_icon_url'] as String?,
-      // **`none` VIRA NULO, e nao um valor de enum.** `EstadoDaConexao` nao
-      // tem `none` -- ele e a AUSENCIA de aresta, e o cartao ja trata nulo
-      // como "nenhuma relacao". Acrescentar `none` ao enum mudaria a caixa de
-      // pedidos, onde "nenhuma relacao" nao e um estado possivel.
-      //
-      // E codigo DESCONHECIDO tambem cai em nulo, por `porCodigo`: nao ha
-      // valor seguro para onde cair, e a tela nao afirma nada sobre um estado
-      // que nao entende. Ela volta a oferecer `Pedir conexao`, e o servidor
-      // recusa se precisar -- que e a ordem certa de errar.
       estadoDaConexao: EstadoDaConexao.porCodigo(json['connection_state'] as String?),
     );
   }
@@ -279,68 +134,24 @@ class PessoaEncontrada {
   /// credencial de `requestConnection`.
   final String handle;
 
-  /// O nome de exibição, **anulável no contrato**. A coluna é anulável em
-  /// `users`, e omitir da busca quem não preencheu nome faria a pessoa
-  /// desaparecer por um campo que ela não escolheu deixar vazio. Quem não tem
-  /// nome é achável pelo apelido, e a tela cai para `@handle`.
+  /// O nome de exibição, **anulável no contrato**.
   final String? displayName;
 
-  /// **A contagem, e nada além do número** (emenda 2 do ADR-0010). Nenhum
-  /// atributo de pet acompanha: nome, miniatura e slug seguem proibidos pelo
-  /// item 7.
+  /// **A contagem, e nada além do número** (emenda 2 do ADR-0010).
   final int petsCount;
 
-  /// Quantas conexões aceitas. **O número, nunca a lista** — é o "sinal de
-  /// confiança" do plano 4-B.
+  /// Quantas conexões aceitas.
   final int connectionsCount;
 
   /// **A RELAÇÃO ENTRE QUEM BUSCA E ESTA PESSOA** — `connection_state`, que
   /// entrou no contrato em **22/10/2026**.
-  ///
-  /// ## O defeito que este campo conserta
-  ///
-  /// O cliente relatou, por escrito: *"após eu ter aceito, ainda aparece para
-  /// solicitar conexão a um usuário que ja foi adicionado e aceito"*. A causa
-  /// era **estrutural**: `PersonSearchResult` omitia o estado de propósito, e o
-  /// contrato dizia por quê — *"numa lista, vinte estados por requisição são o
-  /// material de que uma lista de conexões se faz do lado de fora"*. Sem ele, o
-  /// cartão não tinha como saber que o aceite já havia acontecido, e desenhava
-  /// `Pedir conexão` ao lado de quem já era conexão.
-  ///
-  /// **O argumento caiu no dia em que o cliente autorizou a lista das próprias
-  /// conexões** (22/10/2026): com `GET /connections`, o dono já obtém o
-  /// conjunto por uma rota legítima, então o estado nos resultados da busca
-  /// **dele** não entrega nada novo.
-  ///
-  /// ## Nulo é `none`, e nulo é também "não entendi"
-  ///
-  /// `EstadoDaConexao` tem três valores e **não tem `none`**: a ausência de
-  /// aresta é a ausência do valor. Os dois caminhos que dão nulo — o servidor
-  /// mandando `none`, e o servidor mandando um código que este build não
-  /// conhece — levam ao MESMO cartão de estranho, com `Pedir conexão`. É a
-  /// ordem certa de errar: a ação continua oferecida e o servidor recusa se
-  /// precisar.
-  ///
-  /// **Nunca `declined`.** O servidor projeta a recusa como `pending_sent` para
-  /// quem pediu enquanto a validade corre, e depois ela desaparece — e por isso
-  /// não há rótulo nem ramo de tela para recusa.
   final EstadoDaConexao? estadoDaConexao;
 
   /// A **derivada `thumb`** da foto da pessoa, ou nulo quando não há foto
   /// pronta.
-  ///
-  /// A menor derivada que existe, e a escolha é do contrato: a `card` custa
-  /// cerca de 51 KB por rosto, e numa página de vinte resultados isso é rede e
-  /// memória de uma lista que a pessoa rola.
-  ///
-  /// **A chave vem sempre, com nulo quando não há** — foto em `processing` ou
-  /// `rejected` não sai. Nulo cai para [inicial], e não para um quadrado vazio.
   final String? photoIconUrl;
 
-  /// Como a pessoa é escrita no cartão. **O nome primeiro, o apelido é a
-  /// queda**, igual a [PerfilDePessoa.nomeParaLer]: o cartão leva ao perfil, e
-  /// as duas telas chamando a mesma pessoa por nomes diferentes seria o app
-  /// duvidando de si mesmo no meio de uma navegação.
+  /// Como a pessoa é escrita no cartão.
   String get nomeParaLer {
     final nome = displayName;
     if (nome != null && nome.trim().isNotEmpty) return nome;
@@ -348,11 +159,6 @@ class PessoaEncontrada {
   }
 
   /// A letra do círculo, que é o que substitui a foto aqui.
-  ///
-  /// Sai de [nomeParaLer] e não de [displayName] para quem não tem nome ter
-  /// letra também — a primeira do apelido, e nunca o `@`, que não é letra de
-  /// ninguém. Cadeia vazia quando não há caractere aproveitável; quem desenha
-  /// decide o que pôr no lugar, e é a mesma regra da marca neutra da conversa.
   String get inicial {
     final limpo = nomeParaLer.replaceFirst('@', '').trimLeft();
     if (limpo.isEmpty) return '';
@@ -361,16 +167,6 @@ class PessoaEncontrada {
 }
 
 /// `#/components/schemas/PersonSearchPage`.
-///
-/// **`items` vazio e `total: 0` são a resposta para três situações
-/// diferentes**, e a fusão é do servidor e não desta classe: termo que não
-/// casou ninguém, e termo que só casaria gente que não existe para quem busca
-/// (conta desabilitada, par bloqueado, perfil denunciado por quem busca).
-/// Distinguir as duas seria dizer *"existe alguém assim, mas não para você"*,
-/// que é o oráculo que a busca não pode ser.
-///
-/// A terceira situação — termo abaixo do piso — **não chega aqui**: a tela não
-/// chama a busca abaixo do piso. Ver [PessoasApi.buscar].
 class PaginaDeBuscaDePessoas {
   const PaginaDeBuscaDePessoas({
     required this.itens,
@@ -394,11 +190,6 @@ class PaginaDeBuscaDePessoas {
 
   /// A página vazia que a tela usa **sem chamar o servidor**, quando não há o
   /// que buscar.
-  ///
-  /// Existe para o estado "não busquei nada ainda" não ser representado por
-  /// nulo em todo lugar que lê a página: nulo é "não consegui perguntar", e as
-  /// duas telas são diferentes. `page: 1` e `limit: 20` repetem os padrões do
-  /// contrato.
   static const PaginaDeBuscaDePessoas semBusca = PaginaDeBuscaDePessoas(
     itens: <PessoaEncontrada>[],
     total: 0,

@@ -1,33 +1,4 @@
-/**
- * A conversa de quem achou o pet e não tem conta (BICHUS-41).
- *
- * É a outra porta da MESMA conversa mediada de `conversation-service.ts`: a
- * mesma tabela, a mesma redação, a mesma retenção. O que muda é quem chama e
- * como ele prova quem é. Aqui a prova é o token do aviso, e o token é o próprio
- * endereço (`/c/{finderToken}`): as rotas não têm id no caminho, e por isso não
- * existe o arranjo "id no caminho + credencial na outra mão" que faria da
- * autorização uma verificação a lembrar (SEC-001).
- *
- * ## A ordem da resolução do token, que é a regra inteira
- *
- *   1. forma: o que não tem a forma de um `opaqueToken` não vira consulta;
- *   2. consulta com o RESUMO no `WHERE` (o token em claro não existe no banco);
- *   3. comparação do resumo gravado com o apresentado, em tempo constante;
- *   4. validade: caso aberto, ou 30 dias do aviso, ou 30 dias depois do
- *      encerramento (`acesso-do-achador.ts`).
- *
- * Os passos 1 a 3 respondem `finder-link-invalid` (401) com o mesmo corpo:
- * distinguir "malformado" de "não existe" diria a quem tenta que chegou perto.
- * O passo 4 responde `conversation-closed` (410) com corpo FIXO, nas quatro
- * operações: o token existiu, e responder 401 diria que ele nunca valeu. O
- * corpo não conta o desfecho do caso (ver `problemas.acessoDoAchadorVencido`).
- *
- * ## O que nunca sai daqui
- *
- * Nada do tutor além do primeiro nome (`participantesVisiveis`), e nenhum id:
- * `ConversaParaOAchador` não tem campo de identificador, e a rota monta a
- * resposta campo a campo a partir dela.
- */
+/** A conversa de quem achou o pet e não tem conta (BICHUS-41). */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken, iguaisEmTempoConstante } from '../../../shared/crypto/digest.js';
 import { redigirCanalMediado, type TrechoRedigido } from '../../../shared/redaction/redigir.js';
@@ -59,16 +30,13 @@ import type { FotoDaConversa } from '../ports/foto-da-conversa.js';
 
 const VINTE_E_QUATRO_HORAS_EM_MS = 24 * 60 * 60 * 1000;
 
-/** De onde veio o pedido, para a trilha. Nunca vai para resposta nenhuma. */
+/** De onde veio o pedido, para a trilha. */
 export interface OrigemDoPedido {
   readonly correlationId?: string | undefined;
   readonly ip?: string | undefined;
 }
 
-/**
- * A conversa na forma que o achador vê. **Sem campo de id nenhum**, e a
- * ausência é o contrato (`FinderConversation`).
- */
+/** A conversa na forma que o achador vê. */
 export interface ConversaParaOAchador {
   readonly petDisplayName: string;
   readonly status: EstadoDaConversa;
@@ -82,10 +50,7 @@ export interface MensagemParaOAchador {
   readonly senderRole: MensagemGravada['senderRole'];
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
-  /**
-   * A chave HIGIENIZADA da foto, ou `null`. **Chave e não URL**: a URL
-   * assinada é montada na borda, a partir da base vigente (§11.1 proibição 9).
-   */
+  /** A chave HIGIENIZADA da foto, ou `null`. */
   readonly photoObjectKey: string | null;
   readonly createdAt: Date;
 }
@@ -127,27 +92,11 @@ export class ConversaDoAchadorService {
         nomeDoAchador: conversa.nomeDoAchador,
         tutorDesabilitado: conversa.tutorDesabilitado,
         achadorDesabilitado: conversa.achadorDesabilitado,
-        // O ACHADOR SEM CONTA. `papelDoChamador: 'finder'` e um fato do
-        // caminho, e nao uma escolha: esta rota e resolvida por TOKEN, e o
-        // token e sempre do lado de quem achou.
         papelDoChamador: 'finder',
-        // **OS DOIS NULOS SAO ESTRUTURAIS, e nao um default.** A emenda 3 do
-        // ADR-0010 abre a foto so entre CONEXOES ACEITAS, e quem nao tem conta
-        // nao tem conexao com ninguem -- nao ha aresta a medir e nao ha
-        // chamador de quem medi-la. Nao existe, nesta ponta, consulta que
-        // devolva apelido ou foto: `ConversaDoAchador` nao tem esses campos, e
-        // por isso o nulo aqui nao e uma decisao que alguem possa reverter sem
-        // acrescentar coluna, consulta e campo de porta.
-        //
-        // E e por isso que `FinderConversation` tem schema PROPRIO no contrato:
-        // uma descricao dizendo "a foto nao vale para o achador" nao e
-        // contrato, e o cliente gerado nasceria com o campo.
         apelidoDoOutro: null,
         chaveDaFotoDoOutro: null,
       }),
       messages: mensagens.map(paraOAchador),
-      // Página cheia pode ter continuação; página curta é o fim. A posição é a
-      // da próxima mensagem, e não o id da última (ver `acesso-do-achador.ts`).
       nextCursor:
         mensagens.length < pagina.limit
           ? null
@@ -155,14 +104,7 @@ export class ConversaDoAchadorService {
     };
   }
 
-  /**
-   * `POST /v1/finder/conversation/messages`.
-   *
-   * A mesma ordem do lado com conta: recusa a conversa fechada ou bloqueada
-   * (410, uma resposta para os dois motivos), redige, grava, e só então conta
-   * para a retenção. A mensagem que estoura as 200 em 24 h é gravada e a
-   * conversa é marcada em silêncio (`hold_for_review` não é recusa).
-   */
+  /** `POST /v1/finder/conversation/messages`. */
   async enviar(
     token: string,
     texto: string,
@@ -173,13 +115,6 @@ export class ConversaDoAchadorService {
     const { conversa, resumo } = await this.resolverValida(token);
     if (!aceitaMensagem(estadoDe(conversa))) throw problemas.conversaEncerrada();
 
-    // Depois do guarda de estado, pela mesma razão do lado com conta: é a ordem
-    // que faz o bloqueio impedir envio COM foto sem uma linha nova, e que evita
-    // responder "tente de novo" a quem foi bloqueado.
-    //
-    // O RESUMO DO TOKEN é o predicado, e não o id da conversa: quem não tem
-    // conta é nomeado pelo resumo (SEC-001), e é a forma que
-    // `intencaoDeFotoDoAchadorPelaReferencia` já usa.
     const chaveDaFoto =
       fotoUploadRef === undefined
         ? null
@@ -193,12 +128,9 @@ export class ConversaDoAchadorService {
       id: this.deps.ids.uuidv7(),
       conversationId: conversa.id,
       senderRole: 'finder',
-      // Quem escreve por aqui não apresentou conta nenhuma, mesmo que tenha
-      // uma: o papel é o que a tela mostra, e a conta não é afirmada sem prova.
       senderUserId: null,
       body: redigido.texto,
       redactions: redigido.retirados,
-      // A chave HIGIENIZADA. Ver `ports/foto-da-conversa.ts`.
       photoObjectKey: chaveDaFoto,
     });
 
@@ -208,9 +140,6 @@ export class ConversaDoAchadorService {
         conversationId: conversa.id,
         body: AVISO_DE_DADO_RETIRADO,
         redactions: [],
-        // Explicação de interface, e não AVISO: sai do contador do tutor pela
-        // regra geral (BICHUS-278). Marcá-la como aviso deixaria o sino do
-        // tutor aceso por uma frase dirigida a quem achou o pet.
         especie: 'redaction_warning',
       });
     }
@@ -219,11 +148,7 @@ export class ConversaDoAchadorService {
     return paraOAchador(gravada);
   }
 
-  /**
-   * `POST /v1/finder/conversation/block`. Responde igual quando já estava
-   * bloqueada: repetir o bloqueio não é erro, e dizer "já estava" contaria a
-   * quem bloqueia o que o outro lado fez.
-   */
+  /** `POST /v1/finder/conversation/block`. */
   async bloquear(token: string, origem: OrigemDoPedido): Promise<void> {
     const { conversa, resumo } = await this.resolverValida(token);
     await this.deps.repositorio.bloquearPeloAchador(resumo, this.deps.clock.now());
@@ -237,12 +162,7 @@ export class ConversaDoAchadorService {
     });
   }
 
-  /**
-   * `POST /v1/finder/conversation/report`. Vai para a fila de quem modera, e
-   * **nunca age sobre o alvo**: nem bloqueia, nem encerra, nem avisa o tutor.
-   * O detalhe entra como a pessoa escreveu, porque é prova para quem modera, e
-   * não sai para lado nenhum da conversa.
-   */
+  /** `POST /v1/finder/conversation/report`. */
   async denunciar(
     token: string,
     motivo: MotivoDaDenuncia,
@@ -264,15 +184,13 @@ export class ConversaDoAchadorService {
       action: 'conversation.reported',
       resourceKind: 'conversation',
       resourceId: conversa.id,
-      // O motivo, nunca o texto: a trilha sobrevive à exclusão da conta.
       metadata: { reason: motivo, reporter_role: 'finder' },
     });
   }
 
   /**
-   * O alvo da denúncia, para a dimensão `report_target` do teto: o par
-   * (conversa, papel denunciado). `undefined` quando o token não resolve, e aí
-   * o teto não conta ninguém e a recusa sai do handler.
+   * O alvo da denúncia, para a dimensão `report_target` do teto: o par (conversa,
+   * papel denunciado).
    */
   async alvoDaDenuncia(token: string): Promise<string | undefined> {
     try {
@@ -283,10 +201,7 @@ export class ConversaDoAchadorService {
     }
   }
 
-  /**
-   * Para o módulo `found`: a situação do token, sem lançar. Lá o contrato de
-   * cada operação decide qual status cada situação vira.
-   */
+  /** Para o módulo `found`: a situação do token, sem lançar. */
   async acesso(token: string): Promise<AcessoDoAchador> {
     const resolvida = await this.resolver(token);
     if (resolvida === undefined) return { situacao: 'recusado' };
@@ -295,16 +210,15 @@ export class ConversaDoAchadorService {
   }
 
   /**
-   * Para o módulo `found`: o recado de "Contar mais" entra na conversa como
-   * mensagem do achador, redigido, pelo mesmo caminho de `enviar`. É o único
-   * jeito de o tutor ler o recado: o aviso em si não tem tela do lado dele.
+   * Para o módulo `found`: o recado de "Contar mais" entra na conversa como mensagem
+   * do achador, redigido, pelo mesmo caminho de `enviar`.
    */
   async entregarRecado(token: string, recado: string, origem: OrigemDoPedido): Promise<string> {
     const mensagem = await this.enviar(token, recado, origem);
     return mensagem.body;
   }
 
-  /** Passos 1 a 3 do cabeçalho. `undefined` é sempre `finder-link-invalid` para quem chama. */
+  /** Passos 1 a 3 do cabeçalho. */
   private async resolver(token: string): Promise<Resolvida | undefined> {
     if (!tokenBemFormado(token)) return undefined;
     const resumo = hashDeToken(token);
@@ -331,8 +245,7 @@ export class ConversaDoAchadorService {
 
   /**
    * O teto de 200 mensagens em 24 h, que a borda declara e não aplica
-   * (`hold_for_review`). Não há dimensão de casos distintos deste lado: o
-   * token tem escopo de uma conversa só (nota do contrato, critério 7).
+   * (`hold_for_review`).
    */
   private async avaliarRetencao(conversa: ConversaDoAchador, origem: OrigemDoPedido): Promise<void> {
     const agora = this.deps.clock.now();
@@ -365,15 +278,6 @@ function estadoDe(conversa: ConversaDoAchador): EstadoDaConversa {
     encerradaEm: conversa.encerradaEm,
     bloqueadaEm: conversa.bloqueadaEm,
     casoEncerrado: conversa.caso !== null && !conversa.caso.aberto,
-    // O PONTO ÚNICO DA TRAVA, lado SEM CONTA (17/10). `enviar` e a leitura são
-    // os dois consumidores de `estadoDe`, então a trava e o `status` que a tela
-    // do achador lê saem do mesmo sinal.
-    //
-    // ESTE É O LADO QUE IMPLEMENTA O "NÃO RECEBER". Quem desabilitou a conta é
-    // o tutor, e é o achador -- que não tem login -- quem continuaria
-    // escrevendo. Sem esta linha, "bloquear o chat para não enviar ou receber
-    // mais nenhuma nova mensagem" ficaria pela metade justamente no caminho que
-    // não pede credencial.
     participanteDesabilitado: conversa.tutorDesabilitado || conversa.achadorDesabilitado,
   });
 }
@@ -384,8 +288,6 @@ function paraOAchador(mensagem: MensagemGravada): MensagemParaOAchador {
     senderRole: mensagem.senderRole,
     body: mensagem.body,
     redactions: mensagem.redactions,
-    // A CHAVE, que a borda assina. Ela era descartada aqui até a BICHUS-35, e
-    // com isso o achador não via nem a foto que ele mesmo mandou.
     photoObjectKey: mensagem.photoObjectKey,
     createdAt: mensagem.createdAt,
   };

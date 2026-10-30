@@ -90,203 +90,71 @@ class BichuApp extends StatefulWidget {
 
   final AppConfig config;
 
-  /// Injetavel para teste. Em producao e `null`, e `ContadoresDeNaoLido` cai
-  /// em [DistintivoInerte].
-  ///
-  /// **O padrao INERTE e o valor correto de hoje, nao um esboco.** As quatro
-  /// pendencias que o mantem assim estao em `distintivo_do_aplicativo.dart`:
-  /// a carga do push nao leva contagem, o push nao sai, nao ha pacote que
-  /// pinte o numero com o app vivo, e o iOS nao tem a chave APNs. O ponto de
-  /// injecao existe para o portao exercer o caminho sem acender nada.
+  /// Injetavel para teste. Em producao e `null`, e `ContadoresDeNaoLido` cai em
+  /// [DistintivoInerte].
   final DistintivoDoAplicativo? distintivoDoApp;
 
   /// Injetavel para teste. Em producao e o chaveiro do sistema.
   final DepositoDeSessao? deposito;
 
   /// Injetavel para teste. Em producao e o cliente HTTP do proprio pacote.
-  ///
-  /// Existe para que o teste de widget exercite o caminho inteiro: tela,
-  /// `AuthApi`, `ApiClient` e a traducao de `Problem`. Um teste que so chama a
-  /// funcao de mensagem nao pega o defeito de a tela **parar de usa-la**, e e
-  /// esse defeito que volta calado numa refatoracao.
   final http.Client? clienteHttp;
 
-  /// Injetavel para teste. Em producao e [CameraDoAparelho] desde a
-  /// BICHUS-161.
-  ///
-  /// O padrao **era** [CameraNaoEmbarcada], porque nenhum plugin de camera
-  /// tinha entrado no `pubspec.yaml`. Entraram o `image_picker` e o
-  /// `permission_handler`, e a troca acontece aqui e em lugar nenhum mais:
-  /// nenhuma tela do assistente de cadastro mudou de codigo, que era o
-  /// criterio 10 daquela historia.
-  ///
-  /// Os testes continuam passando a camera por parametro (ver
-  /// `test/telas/ajuda_de_tela.dart`), entao nenhum caso de widget encosta num
-  /// canal de plataforma. Os que montam o app sem passar nada recebem a
-  /// implementacao real, que responde `indisponivel` sem canal -- e essa e a
-  /// resposta certa num ambiente sem aparelho, nao um remendo.
+  /// Injetavel para teste. Em producao e [CameraDoAparelho] desde a BICHUS-161.
   final CameraEGaleria? camera;
 
   /// Injetavel para teste. Em producao e [LeitorDeQrDoAparelho] desde a
   /// BICHUS-54.
-  ///
-  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera na
-  /// BICHUS-161. Em teste de widget nao ha canal de plataforma, e a
-  /// implementacao real responde `embarcado == false` ali -- que e a resposta
-  /// certa, e nao um remendo. Os casos que precisam de uma leitura passam o
-  /// duble de `test/telas/ajuda_de_tela.dart`.
   final LeitorDeQr? leitorDeQr;
 
   /// A folha de credencial do sistema, ou `null` para a de verdade.
-  ///
-  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera e a
-  /// do leitor de QR. Em producao e nulo e vale [CredencialDoAparelhoReal]; o
-  /// teste de widget passa um duble, porque o pacote `passkeys` fala por canal
-  /// de plataforma e canal de plataforma nao existe em `flutter test`.
-  ///
-  /// **O padrao NAO e um duble que recusa.** Era tentador deixar
-  /// `SemPasskeyNesteBuild` como padrao para o teste nao precisar passar nada,
-  /// e seria o mesmo defeito que `CameraNaoEmbarcada` como padrao ja foi:
-  /// producao rodaria com a porta desligada e nenhuma isca acusaria, porque
-  /// toda isca estaria medindo o duble.
   final CredencialDoAparelho? credencialDoAparelho;
 
   /// Injetavel para teste. Em producao e [AvisosPorFirebase] quando o `main()`
   /// conseguiu inicializar o Firebase, e [AvisosNaoEmbarcados] quando nao.
-  ///
-  /// O padrao aqui e [AvisosNaoEmbarcados] de proposito: teste de widget nao
-  /// tem canal de plataforma ligado, e um `FirebaseMessaging.instance` no
-  /// caminho travaria a suite inteira num `Future` que nunca resolve.
   final Avisos? avisos;
 
   /// Injetavel para teste. Em producao e [MensagensDePushPorFirebase] quando o
   /// `main()` conseguiu inicializar o Firebase, e
   /// [MensagensDePushNaoEmbarcadas] quando nao.
-  ///
-  /// O padrao aqui e [MensagensDePushNaoEmbarcadas] pela mesma razao do padrao
-  /// de [avisos], e com um agravante: `FirebaseMessaging.onMessage` num
-  /// ambiente sem canal de plataforma devolve uma stream que **nunca emite e
-  /// nunca fecha**, e `getInitialMessage()` um `Future` que nunca resolve. O
-  /// `await` do arranque penduraria a suite inteira, sem mensagem.
-  ///
-  /// **E o unico jeito de um caso exercitar os tres estados do push.** Nao ha
-  /// como pedir ao Flutter que mate o processo e o reabra por um toque em
-  /// notificacao; sem esta porta, o estado `fechado` so seria verificavel num
-  /// aparelho, a mao, uma vez.
   final MensagensDePush? mensagensDePush;
 
   /// Injetavel para teste. Em producao e [LocalizacaoPorGeolocator].
-  ///
-  /// **O padrao ERA [LocalizacaoNaoEmbarcada], e isso era o defeito**: esta
-  /// frase dizia "em producao e `LocalizacaoPorGeolocator`" desde a BICHUS-23,
-  /// e `main.dart` nunca passou nada -- entao o binario inteiro rodava com a
-  /// implementacao ausente. Medido no emulador em 17/10/2026: tocar em `Usar
-  /// minha localizacao` respondia `indisponivel` NA HORA, sem dialogo de
-  /// permissao e sem leitura nenhuma. O pacote estava no `pubspec.yaml` e a
-  /// permissao no manifesto; o que faltava era a linha que escolhe.
-  ///
-  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera na
-  /// BICHUS-161. Em teste de widget nao ha canal de plataforma, e por isso
-  /// `test/telas/ajuda_de_tela.dart` passa [LocalizacaoNaoEmbarcada] por
-  /// parametro: `Geolocator.checkPermission()` sem canal lanca
-  /// `MissingPluginException` dentro de um `Future` em `setState`, que e o
-  /// formato de falha que nao aponta para a causa.
   final Localizacao? localizacao;
 
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
-  ///
-  /// O envelope de intencao (UX 8.3) precisa sobreviver ao app ser **encerrado
-  /// pelo sistema**, e por isso mora em disco. O teste de widget nao tem disco
-  /// de aparelho, e por isso ele entra por aqui -- do mesmo jeito que o
-  /// deposito de sessao.
   final DepositoDaIntencao? depositoDeIntencao;
 
   /// Injetavel para teste. Em producao nasce vazio a cada arranque, porque e
   /// cache de memoria e nao de disco.
-  ///
-  /// Entra por aqui para que o caso do criterio 7 da BICHUS-62 -- cache quente
-  /// e atualizacao que falha -- seja exercitavel sem depender de duas idas ao
-  /// servidor em sequencia.
   final CacheDeMeusPets? cacheDeMeusPets;
 
   /// Onde a ultima cidade escolhida na listagem de perdidos e guardada.
-  ///
-  /// **Injetavel para teste, e aqui a injecao nao e conveniencia.** O padrao
-  /// chama `getApplicationDocumentsDirectory()`, que em teste de widget trava o
-  /// `pumpAndSettle` para sempre, sem mensagem -- a mesma armadilha do
-  /// deposito de intencao, e por isso a mesma saida.
   final DepositoDaCidade? depositoDaCidade;
 
   /// Injetavel para teste, pelo mesmo motivo do [cacheDeMeusPets]: um caso
-  /// precisa conseguir OLHAR dentro dele depois do logout, e o que ele guarda
-  /// e uma credencial.
+  /// precisa conseguir OLHAR dentro dele depois do logout, e o que ele guarda e
+  /// uma credencial.
   final CofreDaImagemDoQr? cofreDoQr;
 
-  /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296). **Injetavel, e nulo em teste.**
-  ///
-  /// Nulo nao e um esboco: em producao esta raiz constroi um apontado para
-  /// `getApplicationCacheDirectory()`, e em teste de widget **nao se constroi
-  /// nenhum**, porque aquele e um canal de plataforma que trava o
-  /// `pumpAndSettle` para sempre, sem mensagem -- a mesma armadilha de
-  /// `CidadeEscolhida`. Sem cache, `ImagemDaRede` desenha `Image.network` como
-  /// antes desta frente.
+  /// O CACHE DE IMAGEM NO APARELHO (BICHUS-296).
   final CacheDeImagensNoAparelho? cacheDeImagens;
 
   /// Onde o registro das duas oportunidades mora (BICHUS-24).
-  ///
-  /// Injetavel pelo mesmo motivo do envelope de intencao: o padrao e um
-  /// arquivo no diretorio do app, e `getApplicationDocumentsDirectory()` e um
-  /// canal de plataforma que nao existe em teste de widget. Sem esta injecao
-  /// qualquer caso que chegue a F1.6 travaria sem mensagem, esperando um
-  /// `Future` que nunca resolve.
-  ///
-  /// **E tambem o unico jeito de um caso provar o limite de duas.** Ele
-  /// precisa montar o app com uma oportunidade JA gasta, que e o estado de
-  /// quem cadastrou um pet ontem -- e nenhum teste consegue produzir isso
-  /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
   final DepositoDeOportunidades? depositoDeOportunidades;
 
   /// Onde mora a marca de "ha credencial digital neste aparelho" (28/10/2026).
-  ///
-  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
-  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o teste
-  /// de widget num `Future` que nunca resolve.
-  ///
-  /// **E e o unico jeito de um caso provar as DUAS metades da isca**: sem marca
-  /// a tela de entrar nao pode gastar requisicao nenhuma, e com marca ela tem
-  /// de entrar sem toque extra. Nenhum teste produz o segundo estado passando
-  /// pelo cadastro primeiro, porque cada `pumpWidget` e um app novo.
   final DepositoDePasskeyNoAparelho? depositoDePasskeyNoAparelho;
 
   /// Onde o registro de dispensas do aviso persistente mora (BICHUS-75).
-  ///
-  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
-  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o
-  /// `pumpAndSettle` para sempre em teste de widget.
   final DepositoDoAvisoDeCadastro? depositoDoAvisoDeCadastro;
 
   /// O relogio do ciclo de 7 dias do criterio 4 da BICHUS-75.
-  ///
-  /// **Entra pela porta, e a razao esta escrita no refinamento de 17/09:** "o
-  /// ciclo de 7 dias nao e observavel em treze dias sem relogio injetavel". Um
-  /// `DateTime.now()` dentro do registro tornaria o criterio 4 uma frase --
-  /// verdadeira ou falsa, ninguem saberia antes do oitavo dia de producao.
   final DateTime Function()? agora;
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
-  ///
-  /// Entra por aqui pela mesma razao do [depositoDeIntencao], e com o mesmo
-  /// sintoma quando falta: `DepositoEmArquivo` chama
-  /// `getApplicationDocumentsDirectory()`, um canal de plataforma que nao
-  /// existe em teste de widget. Sem esta injecao, qualquer caso que faca a
-  /// tela ENFILEIRAR trava para sempre e sem mensagem -- o `pumpAndSettle`
-  /// espera um `Future` que nunca resolve.
   final DepositoDaFila? depositoDaFila;
 
-  /// Onde o registro de fotos pendentes mora. Injetavel pelo mesmo motivo do
-  /// [depositoDaFila], e com o mesmo sintoma quando falta: `DepositoDeFotosEmArquivo`
-  /// chama `getApplicationDocumentsDirectory()`, canal de plataforma que nao
-  /// existe em teste de widget, e o `pumpAndSettle` esperaria para sempre um
-  /// `Future` que nunca resolve.
+  /// Onde o registro de fotos pendentes mora.
   final DepositoDeFotosPendentes? depositoDeFotos;
 
   @override
@@ -294,13 +162,6 @@ class BichuApp extends StatefulWidget {
 }
 
 /// A raiz observa o ciclo de vida por causa da fila offline.
-///
-/// **`WidgetsBindingObserver` aqui, e nao um segundo `VigiaDeAviso`.** O vigia
-/// de permissao ja observa `resumed`, e seria tentador pendurar o dreno nele --
-/// mas ele existe para reconciliar permissao de notificacao, e uma classe que
-/// tambem drenasse fila passaria a ter dois motivos para mudar. O `State` da
-/// raiz e quem tem os dois objetos (a sessao e a fila) e e quem vive tanto
-/// quanto o processo.
 class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final ApiClient _api;
   late final AuthApi _auth;
@@ -350,36 +211,16 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final ContadoresDeNaoLido _contadores;
   late final ContadorDeAvisos _contadorDeAvisos;
 
-  /// A consulta ao veredito de versao (19/10/2026). Fica aqui, e nao no
-  /// `Escopo`, porque **um unico widget a consome** -- o portao de versao, no
-  /// `builder` abaixo. Nenhuma tela chama esta porta, e nenhuma deve: o
-  /// veredito nao e informacao de tela, e a decisao de fechar o aplicativo
-  /// mora num lugar so.
+  /// A consulta ao veredito de versao (19/10/2026).
   late final VersaoApi _versao;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // O cliente pergunta o token ao controlador a cada chamada, em vez de
-    // receber uma copia: assim a renovacao chega a requisicao seguinte sem
-    // ninguem precisar reconstruir o cliente.
     _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
-    // SEM limpeza ao sair, de proposito: o nome de uma cidade e do
-    // APARELHO e nao da conta, e sair da conta nao muda em que cidade este
-    // telefone esta. Ver o cabecalho de `cidade_escolhida.dart`.
     _cidadeEscolhida = CidadeEscolhida(deposito: widget.depositoDaCidade);
     _cofreDoQr = widget.cofreDoQr ?? CofreDaImagemDoQr();
-    // O CACHE DE IMAGEM EM DISCO (BICHUS-296), e **nao ha queda para um padrao
-    // aqui**: com `widget.cacheDeImagens` nulo o aplicativo fica sem cache em
-    // disco, de proposito.
-    //
-    // Construir um `CacheDeImagensNoAparelho` com
-    // `getApplicationCacheDirectory` nesta linha travaria a suite inteira na
-    // secao em que o aplicativo ABRE -- canal de plataforma dentro de
-    // `initState` e exatamente o que `CidadeEscolhida` aprendeu a custo de uma
-    // execucao pendurada. Quem monta producao e `main.dart`, que ja esta fora
-    // de `flutter_test`.
     _cacheDeImagens = widget.cacheDeImagens;
     _api = ApiClient(
       config: widget.config,
@@ -390,75 +231,26 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     _versao = VersaoApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
-    // A porta das conexoes, do mesmo `ApiClient` das outras (uniao 18/10/2026).
     _conexoes = ConexoesApi(_api);
-    // O convite do proprio perfil: o que alimenta o QR de `Convide tutores` e
-    // o que o leitor resolve quando le um.
     _convites = ConvitesApi(_api);
-    // As rotas `tags: [me]`, ligadas pela tela de dados pessoais (18/10/2026).
-    // Antes dela nenhuma tela chamava `GET /me` nem `PATCH /me`.
     _me = MeApi(_api);
     _achados = AchadosApi(_api);
     _diretorio = DiretorioApi(_api);
     _loja = LojaApi(_api);
-    // A PORTA DE CONVERSAS NO ESCOPO, e nao so dentro da area de mensagens: o
-    // contador da aba `AuAu` pergunta o numero na abertura e na retomada, e
-    // nos dois momentos nao existe tela de mensagens para ter a porta dela.
     _conversas = ConversasApi(_api);
-    // O CONTADOR, com o caminho do icone do aplicativo pendurado nele.
-    //
-    // `widget.distintivoDoApp ?? const DistintivoInerte()`: o padrao e o
-    // INERTE, e e o valor correto de hoje -- ver
-    // `distintivo_do_aplicativo.dart` para as quatro pendencias que o mantem
-    // assim. O ponto de injecao existe para o portao poder exercer o caminho
-    // sem acender nada, e e por ele que a implementacao de verdade entra no
-    // dia em que o push sair.
     _contadores = ContadoresDeNaoLido(
       _conversas,
-      // AS TRES CONTAGENS NOVAS (20/10/2026). A porta e exigida e nao opcional
-      // de proposito: fiacao esquecida com padrao nulo desligaria os tres
-      // contadores em SILENCIO, que e letra por letra o defeito que custou o
-      // contador de mensagens inteiro -- uma chamada de `registrarRota` que
-      // faltava, sem portao nenhum olhando.
       secoes: ContadoresApi(_api),
-      // A cidade do contador de `Pets` sai do MESMO deposito que
-      // `lista_de_perdidos.dart` grava a cada carga, e e isso que mantem o selo
-      // e a lista no mesmo recorte sem resolver localizacao duas vezes.
-      // `_cidadeEscolhida` e construida logo acima.
       cidade: _cidadeEscolhida,
       distintivo: widget.distintivoDoApp,
     );
-    // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
-    // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
-    // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
-    // ela em pe. UMA instancia no app inteiro: duas sobre o mesmo arquivo
-    // guardariam listas diferentes em memoria e uma sobrescreveria a outra.
     _fila = FilaOffline(
       deposito: widget.depositoDaFila ?? DepositoEmArquivo(),
     );
-    // O DRENO DA FILA, LIGADO.
-    //
-    // `reenviarTudo` existia desde a BICHUS-31 e **nao tinha nenhum call
-    // site**: duas telas enfileiravam de verdade e nada nunca tirava nada de
-    // la. Caso de perdido e achado registrados sem sinal ficavam no disco para
-    // sempre, com a tela prometendo o contrario.
     _retomadaDaFila = RetomadaDaFila(fila: _fila, api: _api);
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
-    // **O caminho de bytes, ligado** (22/09/2026). Ele existia como ideia e
-    // nao existia como codigo: `intencaoDeFotoDoPet` estava escrita desde a
-    // BICHUS-62 e nunca era chamada, e a foto escolhida em F1.4 morria no
-    // aparelho.
-    //
-    // O cliente HTTP e o mesmo objeto injetado em teste, e em producao e um
-    // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
-    // importa: este cliente nao conhece o token da sessao, e o endereco para
-    // onde os bytes vao e outro host, escolhido pelo servidor.
-    // A busca de CEP, pelo MESMO padrao do envio de fotos acima: cliente
-    // injetado em teste, proprio em producao, e **sem o token da sessao**.
-    // Ela fala com servico publico de terceiro (BrasilAPI, ViaCEP) e o unico
-    // dado que sai e o CEP -- ver `api/busca_de_cep.dart`.
     _buscaDeCep = BuscaDeCep(cliente: widget.clienteHttp);
     _envioDeFoto = EnvioDeFoto(
       camera: _camera,
@@ -496,240 +288,45 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       agora: widget.agora ?? DateTime.now,
     );
     _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
-    // O CONTADOR DO SINO, LIGADO (19/10/2026).
-    //
-    // `GET /v1/me/notifications/count` e `NotificacoesApi.contar()` existiam
-    // desde que a caixa de avisos nasceu, e **nenhuma linha de `lib/` as
-    // chamava**: o sino da barra de topo era montado com `naoLidas` nulo por
-    // falta de objeto de contagem no app. Este e o objeto.
-    //
-    // UM no app inteiro, pelo motivo escrito em `Escopo.contadorDeAvisos`: os
-    // ramos da casca ficam montados, e um sino que buscasse sozinho pediria o
-    // numero uma vez por secao visitada. A politica de atualizacao -- os
-    // quatro momentos, e o que acontece depois de `seen` -- esta por extenso
-    // em `ContadorDeAvisos`.
     _contadorDeAvisos = ContadorDeAvisos(
       notificacoes: NotificacoesApi(_api),
     );
-    // O OUVINTE DE PUSH, LIGADO.
-    //
-    // Ele nao existia: `firebase_messaging` estava no `pubspec`, o aparelho era
-    // registrado e o token subia, e **nada no app escutava**. O servidor
-    // disparava o alerta de 5 km, o FCM entregava, e a mensagem morria no
-    // aparelho -- sem nada falhar em lugar nenhum.
-    //
-    // `ligar()` e chamado de `_arrancar()`, e nao aqui: ele tem um `await`
-    // (`getInitialMessage`), e o `initState` nao espera.
     _avisosRecebidos = OuvinteDeAvisos(
       mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
     );
-    // **SEM `const`**: `LocalizacaoPorGeolocator` deixou de ser constante em
-    // 19/10/2026, quando ganhou a memoria da ultima resolucao de cidade (a
-    // grade de ~100 m que a emenda 1 do ADR-0006 exige). Objeto com estado nao
-    // e `const`, e a instancia aqui e uma por processo de qualquer forma.
     _localizacao = widget.localizacao ?? LocalizacaoPorGeolocator();
-    // **UMA instancia por app, e e ela que faz a autorizacao valer para TODAS
-    // as secoes** (cliente, 22/10/2026). A porta continua sendo uma; o que
-    // faltava era um lugar que GUARDASSE o que ela ja respondeu. Ver
-    // `sessao/localizacao_da_sessao.dart`, inclusive por que nada disto vai
-    // para o disco.
     _localizacaoDaSessao = LocalizacaoDaSessao(_localizacao);
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
-      // O registro das acoes executaveis. Hoje ha uma: `cadastrar_pet` e a
-      // unica das seis de 8.3 cujo fluxo inteiro existe neste build. As outras
-      // entram aqui junto com as telas delas -- e, ate entrarem, uma intencao
-      // guardada para elas volta para a tela de retorno em vez de sumir.
       acoes: <AcaoDeIntencao, AcaoExecutavel>{
         AcaoDeIntencao.cadastrarPet: cadastroDePetExecutavel(_pets),
-        // `marcar_perdido` e a SEGUNDA acao executavel deste build. O criterio
-        // 7 da BICHUS-21 e o que ela cumpre: depois de autenticar, o caso e
-        // CRIADO e a pessoa cai em F3.3 -- nunca no formulario de novo e nunca
-        // na home.
         AcaoDeIntencao.marcarPerdido: casoDePerdidoExecutavel(_pets, _casos),
-        // `registrar_achado` e a TERCEIRA acao executavel deste build, e o
-        // criterio 3 da BICHUS-35 e o que ela cumpre: depois de autenticar, o
-        // achado e REGISTRADO e a pessoa cai na tela do achado registrado --
-        // nunca no formulario de novo e nunca na home.
-        //
-        // Ela precisa de UMA camada so, e a diferenca em relacao a
-        // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
-        // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
-        // **A QUARTA, e a unica que nao escreve nada** (20/10/2026).
-        //
-        // `ver_conteudo` existe porque o convite de deslogado das paginas de
-        // conteudo mandava a pessoa para `/pets` depois do login, e nao para a
-        // pagina que ela tinha pedido -- medido. A prosa inteira, inclusive
-        // por que uma LEITURA entra num mecanismo feito para acoes e por que
-        // o `executar` dela nao chama o servidor, esta em
-        // `intencao/leitura_como_intencao.dart`.
         AcaoDeIntencao.verConteudo: leituraExecutavel(),
-        // **`pedir_para_participar` NAO esta mais aqui.** O executavel dela
-        // mandava o pedido depois do login e devolvia a pessoa ao detalhe do
-        // evento; a tela de detalhe saiu em 19/10/2026 por decisao do
-        // cliente, e com ela o unico lugar do app que criava essa intencao.
-        //
-        // O valor do `enum` FICA em `intencao/intencao_pendente.dart`, de
-        // proposito: um envelope `pedir_para_participar` ja gravado no disco
-        // de alguem continua legivel, `GuardaDeAcao` nao acha executavel para
-        // ele e a pessoa cai na agenda da `Rede` em vez de num erro. Tirar o
-        // valor do `enum` faria a leitura do envelope LANCAR -- caminho que o
-        // registro de erro cobre, mas que nao ha motivo para exercitar.
       },
     );
     _sessao = ControladorDeSessao(
       auth: _auth,
       deposito: widget.deposito ?? DepositoNoChaveiro(),
-      // Sair da conta apaga o envelope (regra 7 de 8.3).
       guardaDeAcao: _guarda,
-      // O cache de `Perfil` > `Meus pets` morre junto com a sessao, nos QUATRO
-      // desfechos de `sair()` -- inclusive o que nao passa por botao nenhum: a
-      // sessao derrubada por refresh recusado (401 em `_renovar`). Enquanto a
-      // limpeza morava no `onPressed` de `abas.dart`, esse caminho deixava os
-      // pets da conta anterior em memoria para quem entrasse depois no mesmo
-      // aparelho. E a isca `SEG` da BICHUS-62 chegando pela porta de tras.
-      //
-      // Esta e a fiacao que a BICHUS-164 nao tinha como fazer: `LimpezaAoSair`
-      // nasceu na BICHUS-81 (`a84a286`) e nao existia na base daquele branch.
-      //
-      // O `limpar` e sincrono e `LimpezaAoSair` devolve `Future<void>`, entao
-      // o tear-off direto nao tipa (`void` nao e subtipo de `Future<void>`).
-      // O fecho `async` e o que a lista pede, e nao um adiamento.
-      // A imagem do QR entra na MESMA lista, e pelo mesmo motivo (BICHUS-229).
-      // Ela carrega o codigo da tag dentro dos pixels e cai no cache global de
-      // imagem do Flutter, que nao tem nocao de sessao: descartar a tela tira a
-      // referencia viva e DEIXA a entrada no cache. Limpar no `dispose` da tela
-      // repetiria o defeito do `cacheDeMeusPets` -- a sessao derrubada por
-      // refresh recusado nao passa por tela nenhuma.
-      //
-      // O QUE **NAO** ENTRA NESTA LISTA, e por que (BICHUS-24): o registro das
-      // duas oportunidades de aviso (`OportunidadesDeAviso`). Esta lista e do
-      // que e da CONTA -- dado e credencial de uma pessoa, que nao podem vazar
-      // para a proxima que entrar neste aparelho. O registro das oportunidades
-      // e do APARELHO: o dialogo de notificacao do iOS e gasto uma vez por
-      // instalacao, nao por login. Limpa-lo aqui daria ao tutor seguinte duas
-      // antessalas novas cujo `Sim` abriria um dialogo que o sistema nao mostra
-      // mais, e ele ficaria olhando para um botao que nao faz nada. A isca que
-      // segura esta decisao esta em
-      // `test/dispositivo/oportunidades_de_aviso_test.dart`.
-      // A FILA OFFLINE ENTRA NA MESMA LISTA, e e a entrada mais cara de
-      // esquecer das tres. O cache de pets e o cofre do QR vivem em MEMORIA:
-      // eles morrem com o processo, e o pior caso e a proxima pessoa que
-      // entrar na mesma sessao do app. A fila vive em DISCO, e o corpo de cada
-      // acao carrega o que a tutora digitou -- nome do pet, endereco de
-      // referencia, telefone de contato. Sobrevivendo ao logout, esses dados
-      // esperam no aparelho a proxima pessoa que entrar nele, e o aparelho
-      // compartilhado e caso real no publico deste produto.
-      //
-      // `limpar` e assincrono e devolve `Future<void>`, entao o tear-off
-      // direto tipa: nao ha fecho aqui porque nao ha nada a adiar.
-      // O REGISTRO DE FOTOS PENDENTES ENTRA NA MESMA LISTA, e pelo mesmo
-      // motivo da fila: ele vive em DISCO e carrega o caminho de um arquivo no
-      // aparelho -- a foto do animal da tutora anterior. Sobrevivendo ao
-      // logout, ela espera a proxima pessoa que entrar neste aparelho, e a
-      // varredura de arranque a subiria para a conta dela.
       limpezasAoSair: <LimpezaAoSair>[
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
         _fila.limpar,
         _fotosPendentes.limpar,
-        // O REGISTRO DE DISPENSAS DO AVISO PERSISTENTE ENTRA AQUI (BICHUS-75),
-        // e a diferenca em relacao ao registro de oportunidades logo acima e a
-        // razao de as duas decisoes serem opostas. Aquele e do APARELHO: o
-        // dialogo de notificacao do iOS e gasto uma vez por instalacao. Este e
-        // da CONTA: ele guarda que a Marina pediu silencio sobre o e-mail DELA.
-        //
-        // Sem esta linha, o tutor seguinte neste aparelho herdaria o silencio
-        // de sete dias comprado pela anterior -- e com tres dispensas herdadas
-        // veria de cara "O e-mail <o dele> esta certo?" sobre um endereco que
-        // esta certo. A isca esta em
-        // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
         _avisoDeCadastro.limpar,
-        // O CONTADOR ENTRA AQUI, e pelo mesmo critério das linhas acima: o
-        // numero e da CONTA. `esquecer()` o devolve a NULO -- "ninguem contou
-        // ainda" -- e nao a zero: zero afirmaria que a conta que acabou de
-        // sair nao tinha recado nenhum, e a aba pintaria essa afirmacao para
-        // quem nem conta tem. Sem esta linha, o tutor seguinte neste aparelho
-        // veria na aba `AuAu` o numero de mensagens do anterior.
         () async => _contadores.esquecer(),
-        // O NUMERO DO SINO SAI NO LOGOUT, e ele e da CONTA pelo mesmo
-        // argumento da linha acima: sem esta entrada, o tutor seguinte neste
-        // aparelho abriria o app com o `3` da pessoa anterior pintado no sino
-        // -- e tocaria nele esperando ver avisos que nao sao dele. Volta a
-        // NULO e nao a zero: ver `ContadorDeAvisos.limpar`.
         () async => _contadorDeAvisos.limpar(),
-        // O CACHE DE FOTO DE PESSOA SAI NO LOGOUT (BICHUS-296), e ele e da
-        // CONTA pelo critério das linhas acima -- com um agravante que nenhuma
-        // delas tem: **este vive em DISCO**.
-        //
-        // O cache de pets e o cofre do QR vivem em memoria e morrem com o
-        // processo; a foto de uma conexao gravada em arquivo espera no aparelho
-        // a proxima pessoa que entrar nele, e o aparelho compartilhado e caso
-        // real no publico deste produto. Sem esta linha, quem entrasse em
-        // seguida teria no disco o rosto das conexoes de quem saiu -- e a
-        // **Emenda 3 do ADR-0010** (a foto sai so entre conexoes aceitas)
-        // estaria sendo desobedecida por um arquivo, com a tela toda certa.
-        //
-        // **So a pasta das pessoas, e nunca a publica**: foto de pet perdido e
-        // capa de encontro nao sao de ninguem, nao vazam de uma conta para a
-        // seguinte, e apaga-las jogaria fora exatamente o que o cliente pediu
-        // -- abertura rapida -- sem fechar risco nenhum.
         () async => _cacheDeImagens?.esquecerTodasAsPessoas(),
       ],
-      // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
-      // paga o preco da correcao do servidor.
-      //
-      // Qualquer revogacao em massa -- sair de todos, troca de senha,
-      // redefinicao, "nao fui eu" -- passou a apagar a linha de `user_devices`
-      // de TODOS os aparelhos da conta, inclusive o de quem pediu, porque o
-      // servidor nao tem como saber qual linha e o telefone que esta pedindo.
-      // Sem esta entrada, a pessoa entra de novo, ve o app funcionando e fica
-      // sem alerta de pet perdido por tempo indeterminado: `reconciliar` so age
-      // quando a permissao do SISTEMA muda, e sair de todos nao muda nenhuma.
-      //
-      // Ela mora aqui, e nao no `onPressed` de `tela_entrar.dart`, pelo mesmo
-      // motivo de `limpezasAoSair`: sao quatro caminhos de login hoje e nada
-      // garante que o quinto lembre.
-      //
-      // O QUE **NAO** ENTRA EM `limpezasAoSair`, e a ausencia e deliberada: o
-      // vigia zerando o que sabia no LOGOUT. Aquela lista e do que e da CONTA
-      // -- dado e credencial de uma pessoa, que nao podem vazar para a proxima
-      // que entrar neste aparelho --, e `_ultimoConhecido` e do APARELHO: e a
-      // permissao de notificacao do sistema operacional, o mesmo argumento que
-      // mantem `OportunidadesDeAviso` fora dela. Zerar no logout tambem seria
-      // redundante, porque `esquecerEReconciliar` zera no login seguinte, que
-      // e o unico momento em que ha sessao para registrar o aparelho.
-      // O CONTADOR PERGUNTA DEPOIS DE TODO LOGIN, e mora aqui pelo mesmo
-      // motivo do re-registro do aparelho: sao quatro caminhos de login hoje e
-      // nada garante que o quinto lembre. Sem esta entrada, quem acaba de
-      // entrar com doze recados na caixa ve a aba `AuAu` apagada ate a
-      // primeira retomada do app.
       aoEntrar: <AoEntrar>[
         _vigiaDeAviso.esquecerEReconciliar,
         _contadores.atualizar,
-        // O SEGUNDO dos quatro momentos do contador (ver `ContadorDeAvisos`).
-        //
-        // Mora aqui, e nao no `onPressed` de `tela_entrar.dart`, pela razao
-        // que `AoEntrar` escreve: sao quatro caminhos de login hoje e nada
-        // garante que o quinto lembre. Sem ele, quem acabou de entrar fica com
-        // o sino vazio ate fechar e reabrir o app -- e `iniciar()` **nao**
-        // passa por esta lista, entao o arranque e coberto separadamente em
-        // `_arrancar`.
-        //
-        // Nao derruba o login: `_reporOQueOLoginRepoe` isola cada passo, e
-        // `atualizar()` nao estoura por conta propria.
         _contadorDeAvisos.atualizar,
       ],
     );
     _roteador = criarRoteador(_sessao);
-    // **NAO esperado de proposito, mas NAO desobservado.** O primeiro quadro
-    // nao pode esperar esta fila -- e por isso que ela e disparada e nao
-    // aguardada. So que, chamada pelada, uma excecao aqui virava erro
-    // assincrono nao tratado: nao falhava alto, nao aparecia em tela, e o que
-    // sobrava era a pessoa numa tela parada sem nenhuma pista. O `catchError`
-    // nao conserta a falha, ele a torna legivel.
     unawaited(
       _arrancar().catchError((Object erro) {
         debugPrint(
@@ -742,71 +339,22 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
 
   /// O arranque: ler o chaveiro e, **so depois disso**, retomar a foto que
   /// ficou.
-  ///
-  /// **A ordem e o ponto.** `iniciar()` le a sessao do chaveiro de forma
-  /// assincrona, e ate ela terminar `tokenValido()` responde nulo -- nao
-  /// porque a pessoa esta deslogada, mas porque o app ainda nao sabe. Uma
-  /// varredura disparada em paralelo veria sempre "sem sessao" e nunca
-  /// enviaria nada, com a frase da tela prometendo o contrario. O defeito
-  /// ficaria invisivel em teste manual: basta tocar no botao `Tentar agora`
-  /// para a foto subir.
   Future<void> _arrancar() async {
     await _sessao.iniciar();
-    // **O OUVINTE DE PUSH vem ANTES do que depende de sessao, e depois de
-    // `iniciar()`.** Depois, porque `getInitialMessage()` pode levar a pessoa a
-    // uma tela e o roteador ainda esta redirecionando para a abertura enquanto
-    // a sessao carrega. Antes das varreduras, porque um aviso que abriu o app
-    // e o motivo pelo qual a pessoa o abriu: ele nao espera duas idas a rede.
-    //
-    // A falha inteira e engolida dentro de `ligar()`: isto roda antes de
-    // qualquer tela existir, e uma excecao aqui derrubaria o arranque do app
-    // por causa de um plugin.
     await _avisosRecebidos.ligar();
     await _retomarAsFotos();
     await _drenarAFila();
-    // O CONTADOR DA ABA `AuAu`, uma chamada por abertura do app.
-    //
-    // Por ultimo de proposito: ele e o menos urgente dos quatro -- a fila
-    // carrega caso de pet sumido, e um numero na aba pode esperar uma volta do
-    // laco de eventos. **Atras da sessao, como os dois acima**: a rota e
-    // `bearerAuth`, e a guarda vive dentro de `_contarNaoLidas`.
     await _contarNaoLidas();
     await _contarOsAvisos();
   }
 
   /// O PRIMEIRO dos quatro momentos do contador do sino: o app abriu.
-  ///
-  /// **Atras da sessao, pela mesma armadilha que `_drenarAFila` documenta
-  /// acima.** `GET /v1/me/notifications/count` e `bearerAuth`; sem token ela
-  /// responde 401, e uma busca sem esta guarda seria um 401 garantido no
-  /// arranque de todo mundo que abre o app deslogado -- para desenhar um numero
-  /// num sino que, deslogado, nem e pintado.
-  ///
-  /// **E o ULTIMO da fila de arranque, de proposito.** Os tres acima salvam
-  /// trabalho que a pessoa JA fez e que esta preso no aparelho -- a foto que
-  /// nao subiu, o caso de perdido enfileirado. Este desenha um distintivo. Se
-  /// a rede so der para uma coisa, que seja a primeira.
-  ///
-  /// A falha inteira fica dentro de `atualizar()`, que mantem o valor anterior
-  /// (ou o nulo) e nunca publica zero.
   Future<void> _contarOsAvisos() async {
     if (await _sessao.tokenValido() == null) return;
     await _contadorDeAvisos.atualizar();
   }
 
-  /// A fila offline sai do disco. **O primeiro dos DOIS momentos**; o outro e a
-  /// retomada do app, em [didChangeAppLifecycleState].
-  ///
-  /// **Atras da sessao, e isso nao e detalhe -- e a mesma armadilha que
-  /// `_retomarAsFotos` documenta.** As duas rotas que a fila carrega sao
-  /// `bearerAuth`; sem token elas respondem 401. Uma varredura sem esta guarda
-  /// rodaria no arranque de quem esta deslogado e, se a classificacao de 401
-  /// escorregasse para "recusa permanente", apagaria exatamente o caso do pet
-  /// sumido que a fila existe para salvar.
-  ///
-  /// A defesa e dupla de proposito: esta guarda cobre o arranque, e
-  /// `RetomadaDaFila` classifica 401 como "mantem" para cobrir o token que
-  /// expira **no meio** da varredura -- que a guarda nao ve.
+  /// A fila offline sai do disco.
   Future<void> _drenarAFila() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -817,16 +365,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   }
 
   /// O criterio 7 da BICHUS-87: a foto que nao subiu sobe quando da.
-  ///
-  /// **Atras da sessao, e isso nao e detalhe.** A rota de intencao e
-  /// `bearerAuth`; sem token ela responde 401, que o mecanismo classifica como
-  /// recusa -- e recusa DESCARTA o pendente. Uma varredura sem esta guarda
-  /// apagaria, no arranque de quem esta deslogado, exatamente a foto que ela
-  /// existe para salvar.
-  ///
-  /// A falha inteira e engolida de proposito: isto roda antes de qualquer tela
-  /// existir, e uma excecao aqui derrubaria o arranque do app por causa de uma
-  /// foto.
   Future<void> _retomarAsFotos() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -837,33 +375,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   }
 
   /// O SEGUNDO momento em que a fila drena: o app voltou para o primeiro plano.
-  ///
-  /// **Por que os dois, e nao so o arranque.** O arranque cobre o app que o
-  /// sistema MATOU para liberar memoria, que e o caso do aparelho barato com o
-  /// app em segundo plano. Esta cobre o app que ficou VIVO no bolso enquanto a
-  /// pessoa saia do elevador ou do metro: sem ela, a fila so drenaria quando o
-  /// sistema resolvesse matar o processo, o que pode nao acontecer por dias --
-  /// e a tela prometeu "assim que o sinal voltar".
-  ///
-  /// **O que isto NAO e: reagir ao sinal voltar.** Detectar mudanca de
-  /// conectividade exige um pacote que este app nao declara. A retomada e a
-  /// aproximacao honesta, e ela esta escrita como aproximacao.
-  ///
-  /// `unawaited` porque o ciclo de vida nao tem como esperar, e a varredura nao
-  /// pode segurar a volta do app. A falha e tratada dentro de `_drenarAFila`.
-  /// O contador da aba `AuAu` pergunta ao servidor. **Atras da sessao.**
-  ///
-  /// `GET /v1/conversations` e `bearerAuth`: sem token ela responde 401, e uma
-  /// pergunta no arranque de quem esta deslogado gastaria uma requisicao para
-  /// receber um erro. A guarda e a mesma de `_drenarAFila` e de
-  /// `_retomarAsFotos`, e por isso tem a mesma forma.
-  ///
-  /// **Deslogado o contador fica NULO e nao zero**, e e `esquecer()` quem
-  /// garante isso no logout: sair da conta nao e a afirmacao de que nao ha
-  /// mensagem.
-  ///
-  /// A falha da chamada e engolida DENTRO de `atualizar()`, com o motivo
-  /// escrito la: um numero velho e mais verdadeiro que um zero inventado.
   Future<void> _contarNaoLidas() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -873,36 +384,13 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     }
   }
 
-  /// O app voltou para o primeiro plano: a fila drena **e o contador pergunta**.
-  ///
-  /// **A retomada e a politica inteira de atualizacao do contador, junto com a
-  /// abertura e com a propria area de mensagens -- e NAO HA INTERVALO.** A
-  /// razao, com o custo em requisicoes, esta em `ContadoresDeNaoLido`. O preco
-  /// esta dito la em voz alta: com o app aberto parado em outra aba, o numero
-  /// so muda na proxima retomada. Instagram e LinkedIn resolvem isso por push,
-  /// e o push deste produto nao sai.
-  ///
-  /// `unawaited` pelo mesmo motivo da fila: o ciclo de vida nao espera, e um
-  /// contador nao pode segurar a volta do app.
+  /// O app voltou para o primeiro plano: a fila drena **e o contador
+  /// pergunta**.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(_drenarAFila());
     unawaited(_contarNaoLidas());
-    // O TERCEIRO momento do contador, e **o que faz o sino valer a pena**.
-    //
-    // O caso para o qual ele existe e o aviso que chegou com o app no bolso: a
-    // pessoa toca no push e o app RETOMA -- nao arranca, porque o processo esta
-    // vivo. Sem esta linha ela veria o numero do arranque, de horas atras, e um
-    // sino que mostra o numero velho justamente quando ha novidade e pior que
-    // um sino sem numero.
-    //
-    // **Nao e polling**, e a distincao e o custo: isto e um evento que o app ja
-    // observava (a fila offline drena na mesma transicao, e `VigiaDeAviso`
-    // reconcilia a permissao nela), e nao um temporizador -- este repositorio
-    // nao tem nenhum. Um intervalo minimo entre duas retomadas e pergunta
-    // aberta com o cliente (`.jarvis/DECISOES-PARA-19-10.md`), e hoje nao ha
-    // nenhum: cada retomada custa um `GET` pequeno.
     unawaited(_contarOsAvisos());
   }
 
@@ -965,45 +453,20 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         theme: BichuTheme.claro,
         darkTheme: BichuTheme.escuro,
-        // A preferencia de tema e do sistema. A tela do achador e a pagina do
-        // QR respeitam essa preferencia, com o ajuste de borda da secao 6.6.
         themeMode: ThemeMode.system,
-        // O app e escrito em portugues do Brasil e nao oferece troca de
-        // idioma. Sem estes dois campos o Flutter cai no ingles para o que ELE
-        // desenha: o tooltip de voltar, o menu de colar do campo de texto e os
-        // rotulos que o VoiceOver e o TalkBack leem em Scaffold e Dialog. A
-        // tela ficava bilingue e so quem usa leitor de tela percebia.
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         supportedLocales: const <Locale>[Locale('pt', 'BR')],
         routerConfig: _roteador,
         builder: (context, filho) {
-          // Escala de fonte do sistema respeitada ate 200% (SC 1.4.4). O teto
-          // existe porque acima disso nenhum layout de celular sobrevive; ele
-          // nao e uma trava de estilo, e o limite que a norma pede.
           final escala = MediaQuery.textScalerOf(context).clamp(
             minScaleFactor: 1,
             maxScaleFactor: 2,
           );
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: escala),
-            // O PORTAO DE VERSAO EMBRULHA TODA ROTA, e e por isso que ele
-            // esta no `builder` e nao numa rota: instalado como rota, ele
-            // seria contornavel por um deep link apontando para outra. Aqui
-            // nao ha rota a que escapar.
-            //
-            // Ele nasce LIBERADO e nao espera resposta nenhuma para pintar o
-            // app: `PortaoDeVersao` so troca de estado se o servidor disser
-            // explicitamente que esta versao nao serve.
             child: PortaoDeVersao(
               versaoApi: _versao,
               versaoDoApp: widget.config.versaoDoApp,
-              // A SONDA DE CONEXAO (cliente, 26/10/2026). **Ela nao e
-              // opcional em producao**: sem ela o recado de abertura sem
-              // internet so apareceria em build com `APP_VERSION`, e o
-              // mecanismo ficaria desligado em silencio no build de iOS --
-              // que e o defeito de 19/10 que `verificar-apk.sh` existe para
-              // nao deixar voltar. O nulo do parametro serve aos casos de
-              // widget que medem versao e nao conectividade.
               sonda: SondaDeConexao(_api),
               child: filho ?? const SizedBox.shrink(),
             ),
@@ -1015,14 +478,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   }
 
   /// Poe o cache de imagem no escopo da arvore, **ou nao poe nada**.
-  ///
-  /// Sem cache devolve [filho] intocado, e a arvore fica sem o
-  /// `CacheDeImagensDoAplicativo` -- que e exatamente o que faz `ImagemDaRede`
-  /// desenhar `Image.network` como antes da BICHUS-296. E o caso de todo teste
-  /// de widget, e e por isso que nenhum deles passou a tocar o disco.
-  ///
-  /// `InheritedWidget` proprio e nao um campo lido do [Escopo]: a razao esta no
-  /// cabecalho de `CacheDeImagensDoAplicativo`.
   Widget _comCacheDeImagens(Widget filho) {
     final cache = _cacheDeImagens;
     if (cache == null) return filho;

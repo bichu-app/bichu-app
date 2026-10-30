@@ -3,11 +3,6 @@ import 'falhas.dart';
 import 'problem.dart';
 
 /// O que a tela mostra quando algo falha.
-///
-/// Toda mensagem diz **o que houve** e **o que fazer agora**. Nenhuma contem as
-/// palavras "erro", "invalido", "falhou", "ops", "algo deu errado", nem codigo
-/// tecnico. Os textos sao os da tabela 12.4 de docs/05-ux-research.md, copiados
-/// e nao reescritos: microcopy e especificacao.
 class MensagemDeErro {
   const MensagemDeErro({
     required this.texto,
@@ -27,54 +22,14 @@ class MensagemDeErro {
 
   /// O endereco **dentro do app** para onde [acao] leva, quando a saida e uma
   /// navegacao simples e nao uma operacao.
-  ///
-  /// Existe porque um rotulo de acao sem destino e o defeito que a BICHUS-62
-  /// veio fechar: `Ver meus pets` estava escrito em dois lugares deste arquivo
-  /// e nao levava a lugar nenhum, e a tela que o renderizava com um toque
-  /// **reenviava o cadastro**, porque era o unico `aoTocarNaAcao` que ela
-  /// tinha. Quem renderiza a faixa le este campo **antes** de decidir o que o
-  /// toque faz.
-  ///
-  /// Nao e `ProximaAcao`: aquele enum carrega os valores de `next_action` que
-  /// o **servidor** manda, e inventar um membro para uma navegacao que o
-  /// contrato nunca declarou poria vocabulario nosso dentro do vocabulario
-  /// dele.
   final String? rotaDaAcao;
 }
 
 /// Local: qual situacao de tela estava em curso quando a recusa chegou,
-/// decidida no aparelho. **Nao espelha lista fechada nenhuma do contrato**, e
-/// nao poderia: o que viaja e o `type` `contact-channel-unverified`, que e UM
-/// para as quatro rotas, e o contrato nao tem campo que diga qual delas
-/// recusou. Quem escolhe o membro e a TELA que chamou, antes de a resposta
-/// existir -- por isso ele nao tem [codigo] e nao e lido de resposta nenhuma.
-///
-/// O que a pessoa estava tentando fazer quando a recusa chegou.
-///
-/// Existe por causa de **um `type` que serve a quatro rotas**:
-/// `contact-channel-unverified` recusa abrir caso de pet perdido, criar
-/// encontro na `Rede`, indicar profissional no `Perto` e avaliar um local do
-/// diretorio. O servidor manda o mesmo `type` nos quatro de proposito e isso
-/// esta escrito em `src/shared/http/errors.ts` tres vezes: *"a regua de conta
-/// validada e uma so no produto, e um segundo `type` para a mesma pergunta
-/// faria o app decidir por dois onde ha um conceito"*. O `type` e um; o texto
-/// nao pode ser, porque a consequencia de cada uma e diferente.
-///
-/// **E a SITUACAO que esta nomeada aqui, nao a rota.** O nome do membro diz o
-/// que a pessoa estava fazendo, em palavras do produto, e nao o metodo e o
-/// caminho HTTP. Dois motivos: o mesmo caminho pode servir a duas situacoes de
-/// tela, e amarrar microcopy a `POST /v1/...` poria vocabulario de transporte
-/// dentro do vocabulario de tela.
-///
-/// **Por que o parametro e geral e nao um `bool` deste `type`.** O arquivo ja
-/// tinha um precedente de situacao vinda de quem chama -- `codigoDigitado`, que
-/// separa o 404 da tag digitada do 404 da tag escaneada --, e a forma dele nao
-/// escala: um `bool` por rota viraria quatro `bool` neste `type` e outros
-/// tantos no proximo. Declarado assim, a proxima recusa que precisar variar por
-/// tela reusa o mesmo canal, e quem chama ja passa a situacao sem mudar
-/// assinatura.
+/// decidida no aparelho.
 enum AcaoEmCurso {
-  /// `POST /v1/lost-cases` (F3.1), a partir de `perdido/tela_alcance_do_alerta`.
+  /// `POST /v1/lost-cases` (F3.1), a partir de
+  /// `perdido/tela_alcance_do_alerta`.
   avisarPetPerdido,
 
   /// `POST /v1/community/events`, a partir de `rede/criar_encontro`.
@@ -88,28 +43,6 @@ enum AcaoEmCurso {
 }
 
 /// Traduz uma falha de chamada na mensagem da tela.
-///
-/// **A decisao e por `type` e por situacao, nunca pelo texto que o servidor
-/// mandou.** Mudar `title` ou `detail` no backend nao pode mudar o que a tela
-/// faz, e ha teste que exige isso.
-///
-/// **E por isso que [AcaoEmCurso] existe em vez de a tela mostrar o `detail`.**
-/// O servidor JA manda texto diferente por rota no `409
-/// contact-channel-unverified`: sao quatro fabricas em
-/// `src/shared/http/errors.ts`, com quatro `title` e quatro `detail`. Pegar
-/// esse texto resolveria a frase errada numa linha, e e justamente o que este
-/// arquivo nao faz -- por duas razoes medidas, nao por gosto:
-///
-/// 1. `app/test/api/problem_test.dart` exige o contrario: mudar `title` e
-///    `detail` no backend nao pode mudar nada na tela, e esse teste e criterio
-///    de aceite.
-/// 2. O app instalado sobrevive ao servidor. Uma versao antiga continua no
-///    aparelho por semanas depois de o backend mudar, e e o mesmo argumento
-///    que ja esta escrito em [_limiteDePets] sobre nao gravar o numero do teto
-///    no binario -- aplicado ao texto.
-///
-/// A situacao vem de quem chama **a chamada**, que e quem sabe o que a pessoa
-/// estava fazendo, e a frase mora aqui.
 abstract final class MensagensDeErro {
   /// Texto da acao que da para enfileirar e vai sair quando o sinal voltar.
   static const String semConexaoEnfileirada =
@@ -120,9 +53,6 @@ abstract final class MensagensDeErro {
       'Isso precisa de conexão. Tente de novo quando tiver sinal.';
 
   /// O rotulo das duas saidas que apontavam para o vazio ate a BICHUS-62.
-  ///
-  /// Escrito uma vez so: eram duas copias da mesma frase, e a terceira era
-  /// questao de tempo. O destino e `Perfil` > `Meus pets` (UX 27.6).
   static const String verMeusPets = 'Ver meus pets';
 
   static const String servidorFora =
@@ -137,21 +67,6 @@ abstract final class MensagensDeErro {
       'Este e-mail já tem conta no Bichu.';
 
   /// O agradecimento de quem abriu o cartaz de um pet **que ja voltou**.
-  ///
-  /// Palavras do cliente, 28/10/2026: *"crie uma pagina padrao, agradecendo a
-  /// preocupacao do usuario e avisando-o que aquele pet ja foi encontrado, que
-  /// ele nao precisa mais se preocupar."* Os tres movimentos que ele pediu
-  /// estao na frase, nesta ordem: agradece, conta o desfecho, e dispensa a
-  /// preocupacao.
-  ///
-  /// **Escrito uma vez so**, aqui e nao na tela, porque `telas/` importa `api/`
-  /// e nunca o contrario -- a frase na tela obrigaria este catalogo a importar
-  /// `telas/`, que e a dependencia ao contrario. [TelaDoCasoPublico] le esta
-  /// constante.
-  ///
-  /// **Nao nomeia o pet, o tutor nem quem achou**, e nem poderia: o corpo do
-  /// 410 nao traz nenhum dos tres. "Este pet" e tudo o que a projecao publica
-  /// permite dizer.
   static const String petReencontrado =
       'Obrigado por se preocupar. Este pet já foi encontrado e está em casa, '
       'e você não precisa mais se preocupar com ele.';
@@ -170,17 +85,13 @@ abstract final class MensagensDeErro {
   static const String confiraOEmail =
       'Confira o e-mail. Parece que faltou o arroba.';
 
-  /// C.2, sem conexao (UX 8.2.2). Texto proprio: a segunda frase e verdadeira,
-  /// porque os campos permanecem preenchidos.
+  /// C.2, sem conexao (UX 8.2.2).
   static const String precisamosDeConexaoParaEntrar =
       'Precisamos de conexão para entrar. O que você escreveu está salvo aqui.';
 
   static const String tentarDeNovo = 'Tentar de novo';
 
-  /// A saida dos dois desfechos de `If-Match` (412 e 428). **Nao e
-  /// [tentarDeNovo]**, e a diferenca nao e de palavra: tentar de novo com a
-  /// MESMA versao que acabou de ser recusada falha igual, para sempre. O que
-  /// resolve e reler.
+  /// A saida dos dois desfechos de `If-Match` (412 e 428).
   static const String recarregar = 'Recarregar';
 
   static const String esqueciMinhaSenha = 'Esqueci minha senha';
@@ -194,62 +105,22 @@ abstract final class MensagensDeErro {
       'caractere a mais. O código está impresso embaixo do QR, na plaquinha.';
 
   /// `tag-code-not-found`, 404 (UX 12.6).
-  ///
-  /// **Este texto deixou de ser o destino de um erro de digitacao**, e era esse
-  /// o defeito dele. Ate a Emenda 1 do ADR-0004 o codigo nao tinha simbolo de
-  /// verificacao, entao um caractere trocado normalizava para um codigo bem
-  /// formado e inexistente e caia AQUI: a tela acusava a plaquinha ("nao e do
-  /// Bichu") quando o que houve foi um dedo no lugar errado. Com o simbolo de
-  /// verificacao, esse caso vira 400 e [codigoMalformado], e este texto passa a
-  /// dizer a verdade -- ele so aparece quando o codigo e mesmo de outra coisa.
   static const String codigoNaoEncontrado =
       'Esse código não é de nenhuma tag do Bichu. Confira se a plaquinha é do '
       'Bichu.';
 
   /// `tag-code-not-found`, 404, **quando o codigo veio do campo de digitacao**
-  /// (BICHUS-153). Microcopy da UX: nao reescrever.
-  ///
-  /// **Os dois textos existem porque as duas situacoes sao diferentes, e nao
-  /// porque uma e mais gentil.** No caminho escaneado o dedo nao participou:
-  /// a camera leu o que estava impresso, entao "confira se a plaquinha e do
-  /// Bichu" e verdade e continua sendo o texto de la. No caminho digitado a
-  /// pessoa pode ter errado um caractere, e acusar a plaquinha de ser de outro
-  /// produto manda embora quem so precisava corrigir uma letra.
-  ///
-  /// **O simbolo de verificacao do ADR-0004 nao fecha este caso.** Ele
-  /// transforma a maior parte dos erros de dedo em 400, e isso e ganho real --
-  /// mas o 404 legitimo nunca desaparece: tag revogada, tag de outro produto,
-  /// codigo inventado com sorte, e a propria transposicao que o simbolo nao
-  /// pega. Para esse resto o texto continua precisando estar certo.
-  ///
-  /// Quem le isto esta na rua com um animal no colo, ja falhou em escanear e
-  /// esta no caminho degradado. Um empurrao a mais aqui e uma desistencia, e
-  /// do outro lado dela ha um tutor esperando (risco R1 do UX).
+  /// (BICHUS-153).
   static const String codigoNaoEncontradoDigitado =
       'Esse código não é de nenhuma tag do Bichu. Confira se algum caractere '
       'saiu trocado, ou registre o achado sem o código.';
 
-  /// O campo do codigo vazio, no toque em `Continuar` (UX secao 13: o
-  /// requisito e dito antes do erro, e o toque que nao faz nada e o erro que
-  /// nao se diz).
-  ///
-  /// Mesma forma de [digiteSeuEmail] e [digiteSuaSenha], porque e o mesmo
-  /// caso: campo obrigatorio vazio na hora de enviar.
+  /// O campo do codigo vazio, no toque em `Continuar` (UX secao 13: o requisito
+  /// e dito antes do erro, e o toque que nao faz nada e o erro que nao se diz).
   static const String digiteOCodigo = 'Digite o código.';
 
   /// O codigo digitado nao tem 16 simbolos, conferido **no app** antes da
   /// chamada.
-  ///
-  /// **O numero entra na frase**, e e ele que faz a mensagem valer a pena. O
-  /// defeito que esta frase fecha era a mascara cortar no 16o em silencio:
-  /// quem colava 26 simbolos via 16 na tela, mandava um fragmento e recebia do
-  /// servidor uma recusa sobre um codigo que nunca digitou. Dizer "confira o
-  /// codigo" aqui seria trocar um silencio por um encolher de ombros; dizer o
-  /// numero e a unica forma de a pessoa entender por que.
-  ///
-  /// Duas frases curtas, e nenhuma explicacao de por que sao 16:
-  /// [ajudaDoCampoDeCodigo] ja esta acima do campo, e repetir a regra dentro
-  /// do erro e o texto a mais que o cliente reprovou em 28/09.
   static String codigoComTamanhoDiferente(int digitados) =>
       'O código tem 16 caracteres. Você digitou $digitados.';
 
@@ -259,123 +130,48 @@ abstract final class MensagensDeErro {
       'Confira o código. Tem um caractere que a plaquinha não usa.';
 
   /// A saida que devolve o foco ao campo **com o que foi digitado** (UX 12.4).
-  ///
-  /// Limpar o campo aqui seria cobrar de novo o trabalho que ja falhou uma
-  /// vez: a pessoa precisa trocar um caractere, e nao redigitar dezesseis.
   static const String digitarDeNovo = 'Digitar de novo';
 
   /// A ajuda do campo de digitacao do codigo (UX 12.4).
-  ///
-  /// Sem esta linha a tolerancia do contrato existe e ninguem usa: o campo
-  /// continua parecendo exigir transcricao exata dos 16 caracteres.
   static const String ajudaDoCampoDeCodigo =
       'São 16 caracteres, em quatro grupos de quatro. Pode digitar com ou sem '
       'hífen, em maiúscula ou minúscula. Se confundir I com 1 ou O com 0, a '
       'gente entende.';
 
-  /// A saida das quatro recusas de canal nao verificado. **Uma**: o movimento
-  /// que resolve e o mesmo nas quatro, e so o motivo muda.
+  /// A saida das quatro recusas de canal nao verificado.
   static const String confirmarMeuEmail = 'Confirmar meu e-mail';
 
   /// `contact-channel-unverified` ao **abrir caso de pet perdido**.
-  ///
-  /// Era esta a frase que os quatro desfechos devolviam, e nos outros tres ela
-  /// prometia coisa que nao ia acontecer. Aqui ela esta certa, e e por isso que
-  /// ela nao virou texto generico: este e o unico dos quatro casos em que o
-  /// e-mail E o canal pelo qual a pessoa vai ser avisada, e dizer isso e o que
-  /// torna o pedido de confirmar razoavel para quem esta em panico.
-  ///
-  /// Texto da secao 9 do UX. A copia que `perdido/tela_alcance_do_alerta`
-  /// mantinha palavra por palavra no bloqueio local virou referencia a esta
-  /// constante: a mesma regra recusada no app e recusada pelo servidor nao pode
-  /// ser dita com duas redacoes que divergem na primeira correcao.
   static const String canalNaoVerificadoParaAvisar =
       'Confirme seu e-mail antes de avisar. Os tutores por perto vão receber '
       'a foto. Se alguém encontrar, é pelo seu e-mail que a gente avisa.';
 
   /// `contact-channel-unverified` ao **criar encontro na `Rede`**.
-  ///
-  /// Nao fala de foto nem de achador, porque um evento nao tem nenhum dos
-  /// dois. O que pesa aqui e a publicacao: o encontro entra na agenda na hora,
-  /// com o nome de quem marcou.
-  ///
-  /// Mesma frase que `rede/criar_encontro` ja usava no bloqueio local, e e a
-  /// constante de la que passou a apontar para esta.
   static const String canalNaoVerificadoParaCriarEncontro =
       'Confirme seu e-mail antes de criar. O evento vai aparecer para toda '
       'a comunidade com o seu nome.';
 
   /// `contact-channel-unverified` ao **indicar profissional no `Perto`**.
-  ///
-  /// Nao avisa ninguem, nao manda foto e nao publica: a indicacao nasce
-  /// pendente e vai para fila de conferencia humana, e a propria tela promete
-  /// isso acima dos campos. O que pesa aqui e o **terceiro** -- um
-  /// estabelecimento de verdade que nao pediu para aparecer --, e quem confere
-  /// precisa saber de quem a indicacao veio.
-  ///
-  /// **Redacao da PR #40**, copiada e nao reescrita: a sessao do aviso antes do
-  /// formulario ja decidiu esta microcopy com o motivo escrito, e uma quinta
-  /// redacao da mesma frase e exatamente o defeito que esta tarefa veio fechar.
   static const String canalNaoVerificadoParaIndicar =
       'Confirme seu e-mail antes de indicar. A indicação fala de um '
       'estabelecimento de verdade, e quem confere precisa saber de quem ela '
       'veio.';
 
   /// `contact-channel-unverified` ao **avaliar um local do diretorio**.
-  ///
-  /// O quarto desfecho, **que nao estava no achado**: ele sai de
-  /// `directory-routes.ts` na escrita da minha avaliacao, e chega a faixa do
-  /// formulario de `perto/pagina_do_local`. Ate aqui essa tela dizia a quem
-  /// avaliou um veterinario que os tutores por perto iam receber a foto.
-  ///
-  /// O motivo e o que a propria tela ja declara no bloqueio local dela: a
-  /// avaliacao sai com o nome de quem escreveu, na pagina de um negocio real.
-  /// **A frase e nossa, nao a do servidor**: o `detail` daquela rota diz a
-  /// mesma coisa porque a decisao e a mesma, e nao porque este texto venha de
-  /// lá -- ver [de].
   static const String canalNaoVerificadoParaAvaliar =
       'Confirme seu e-mail antes de avaliar. A avaliação aparece com o seu '
       'nome na página de um negócio real.';
 
   /// `contact-channel-unverified` **sem situacao declarada por quem chama**.
-  ///
-  /// Nao e o texto generico que esta tarefa recusou: e o fundo de poco para
-  /// quem nao passou a situacao -- um caminho que nao existe hoje, e que vai
-  /// existir no dia em que uma quinta rota recusar por este `type` sem o
-  /// `acaoEmCurso` dela.
-  ///
-  /// **Nao promete nada**, e e so por isso que ela serve a qualquer rota: diz a
-  /// regra e a saida, sem descrever consequencia nenhuma. A frase de pet
-  /// perdido no lugar disto e o defeito que acabou de ser consertado, ao
-  /// contrario.
   static const String canalNaoVerificadoSemSituacao =
       'Confirme seu e-mail antes de continuar. É a confirmação do e-mail que '
       'libera criar e escrever na comunidade.';
 
   /// `validation-failed` que chegou **sem nomear campo nenhum** (UX 12.6).
-  ///
-  /// O contrato manda o servidor nomear o campo em `errors[]`, e quando ele
-  /// nao nomeia o defeito e nosso. A tela nao pode ficar muda, mas tambem nao
-  /// pode acusar um campo que ninguem apontou.
   static const String naoConseguimosSalvar =
       'Não conseguimos salvar. Confira o que você preencheu e tente de novo.';
 
   /// A mensagem de uma falha qualquer, fora do contexto de um formulario.
-  ///
-  /// [podeEnfileirar] separa as duas linhas de "sem conexao" da tabela 12.4:
-  /// acao que o produto consegue guardar para reenviar, e acao que exige
-  /// servidor agora. A diferenca nao e de tom, e de verdade.
-  /// [acaoEmCurso] diz **o que a pessoa estava fazendo**, e so o `409
-  /// contact-channel-unverified` muda de texto por causa dele hoje -- ver
-  /// [AcaoEmCurso] para por que ele e geral e nao um `bool` daquele `type`.
-  /// Omiti-lo nao quebra a tela: ela cai em [canalNaoVerificadoSemSituacao],
-  /// que nao promete nada.
-  /// [codigoDigitado] diz que o codigo saiu do campo de digitacao, e nao da
-  /// camera. **So o 404 da tag muda de texto por causa dele** (BICHUS-153);
-  /// todos os outros desfechos, inclusive o 400 de [codigoMalformado],
-  /// continuam identicos. Fundir os dois desfechos desfaria a separacao de
-  /// 17/09 em F4.5, e nao e isto que esta acontecendo aqui: o que se separa e
-  /// a **origem** do codigo, dentro de um desfecho so.
   static MensagemDeErro de(
     FalhaDeChamada falha, {
     bool podeEnfileirar = false,
@@ -392,10 +188,6 @@ abstract final class MensagensDeErro {
         ),
       FalhaDaApi(:final problem) =>
           _daApi(problem, codigoDigitado, acaoEmCurso),
-      // O endereco veio de um corpo de resposta e nao e desta API, entao a
-      // requisicao NAO saiu e o token NAO viajou. Para quem esta lendo a tela
-      // isso e indistinguivel de servidor fora, e o movimento util e o mesmo;
-      // o diagnostico de verdade esta no `type` da classe, nao no texto.
       FalhaDeEnderecoRecusado() => const MensagemDeErro(
           texto: servidorFora,
           acao: tentarDeNovo,
@@ -416,9 +208,6 @@ abstract final class MensagensDeErro {
           acao: 'Entrar com este e-mail',
           proximaAcao: ProximaAcao.entrar,
         ),
-      // **Um `type`, quatro textos.** A escolha e por [AcaoEmCurso], que quem
-      // chama declara; a saida e a mesma nos quatro, porque o movimento que
-      // resolve e um so.
       ProblemTipo.canalDeContatoNaoVerificado => MensagemDeErro(
           texto: _canalNaoVerificado(acaoEmCurso),
           acao: confirmarMeuEmail,
@@ -437,66 +226,23 @@ abstract final class MensagensDeErro {
           acao: 'Registrar que achei um pet',
           proximaAcao: ProximaAcao.registrarAchadoAvulso,
         ),
-      // `conversation-closed` (410). **A area de mensagens NAO passa por aqui**:
-      // ela trata o 410 como estado da conversa -- modo leitura, sem caixa de
-      // texto -- e nao como erro, porque "nao foi possivel" numa conversa que
-      // acabou faria a pessoa tentar de novo para sempre. Ver
-      // `telas/mensagens/tela_da_conversa.dart`.
-      //
-      // O texto existe porque este catalogo e exaustivo e o compilador cobra:
-      // ele e a rede de seguranca para um 410 que chegue por um caminho que
-      // ainda nao existe, e diz o estado em vez de prometer uma saida.
       ProblemTipo.conversaEncerrada => const MensagemDeErro(
           texto: 'Esta conversa está encerrada e não aceita mensagem nova. '
               'Você continua lendo o que foi escrito.',
           acao: 'Voltar para as mensagens',
         ),
-      // `lost-case-closed` (410). **A pagina publica do caso NAO passa por
-      // aqui**, pela mesma razao da conversa encerrada: la o 410 e ESTADO e nao
-      // erro, e a tela diz o estado com a saida que o contrato nomeia em
-      // `next_action` (`register_stray_found_report`). Ver
-      // `telas/perdido/tela_do_caso_publico.dart`.
-      //
-      // O texto existe porque este catalogo e exaustivo e o compilador cobra, e
-      // ele diz o que o contrato permite dizer: o link nao leva mais a caso
-      // aberto, sem contar qual dos cinco motivos foi.
       ProblemTipo.casoEncerrado => const MensagemDeErro(
           texto: 'Este link não leva mais a um caso aberto.',
           acao: 'Registrar um achado',
         ),
-      // O REENCONTRADO, e ele e o unico dos cinco motivos do 410 publico que
-      // se nomeia (cliente, 28/10/2026). Ver [ProblemTipo.casoReencontrado].
-      //
-      // **Sem `acao`, e a ausencia e o pedido do cliente.** A entrada de cima
-      // oferece `Registrar um achado` porque quem a le pode estar com um
-      // animal desconhecido no colo; aqui o animal esta em casa, e empurrar
-      // esta pessoa para o formulario de achado era LITERALMENTE o defeito
-      // relatado -- "ele nao precisa mais se preocupar" nao termina num
-      // formulario de nove campos.
-      //
-      // Como o resto deste catalogo, o texto e do APP e nao do servidor: o
-      // contrato manda decidir por `type` e nunca pelo `title`/`detail`, que
-      // podem ser reescritos sem o app saber.
       ProblemTipo.casoReencontrado => const MensagemDeErro(
           texto: petReencontrado,
         ),
-      // Os DOIS desfechos de `If-Match` (ADR-0027), e eles existem aqui para
-      // NAO cair na faixa generica. Sem estas duas entradas o 412 e o 428
-      // chegavam como `desconhecido` e a tela dizia "algo deu errado" -- a
-      // frase que esconde justamente o que resolve.
-      //
-      // `precondition-failed` (412) e COLISAO ENTRE PESSOAS: outra pessoa
-      // salvou depois de esta ter lido. O texto diz isso em linguagem de
-      // gente, sem `ETag`, sem `If-Match` e sem numero de versao, porque
-      // nenhuma dessas palavras e da pessoa que marcou um passeio no parque.
       ProblemTipo.precondicaoFalhou => const MensagemDeErro(
           texto: 'Alguém mexeu neste evento enquanto você olhava. Recarregue '
               'para ver como ele está agora.',
           acao: recarregar,
         ),
-      // `precondition-required` (428) e defeito de QUEM CHAMOU: o app deixou
-      // de mandar a versao que leu. O texto nao culpa quem tocou no botao nem
-      // explica precondicao: diz o movimento que resolve.
       ProblemTipo.precondicaoNecessaria => const MensagemDeErro(
           texto: 'Não conseguimos confirmar a versão deste evento. Recarregue '
               'e tente de novo.',
@@ -507,27 +253,6 @@ abstract final class MensagensDeErro {
               'pedimos a senha de novo.',
           acao: 'Confirmar',
         ),
-      // Os tres 401 que agora tem tipo proprio. Textos da tabela 12.6 do UX,
-      // que e o catalogo geral; a tela de entrar tem os seus, diferentes para
-      // dois deles, e por isso ela usa [deEntrar] e nao este caminho.
-      // **O TEXTO SAIU, A SAIDA FICOU** (18/10/2026, literal do cliente:
-      // *"remova esse bloco de texto 'entre na sua conta para continuar. O que
-      // você escreveu esta salvo aqui.'"*).
-      //
-      // `texto: ''` e deliberado, e nao esquecimento. `acao` e `proximaAcao`
-      // continuam exatamente como estavam: a faixa deste 401 passa a ser **so
-      // a saida**, o botao `Entrar`, e `FaixaDeAviso` deixa de desenhar a
-      // linha de texto quando ela e vazia (sem a guarda, sobrava um no de
-      // texto vazio e 8 dp de respiro para nada).
-      //
-      // **O caminho de entrar nao depende desta frase.** As cinco telas que
-      // fazem acao com sessao -- `perdido/tela_alcance_do_alerta.dart`,
-      // `pet/tela_cadastrar_sinais.dart`, `perto/sugerir_profissional.dart`,
-      // `rede/criar_encontro.dart`, `achado/tela_registrar_achado.dart` --
-      // interceptam `naoAutenticado` ANTES de montar mensagem: guardam o
-      // rascunho na guarda de intencao e empurram `Rotas.entrar` sozinhas.
-      // Esta entrada do catalogo e o que sobra para quem apenas LE, e nela o
-      // botao `Entrar` e o caminho.
       ProblemTipo.naoAutenticado => const MensagemDeErro(
           texto: '',
           acao: 'Entrar',
@@ -542,10 +267,6 @@ abstract final class MensagensDeErro {
           texto: credencialNaoConfere,
           acao: esqueciMinhaSenha,
         ),
-      // Os quatro desfechos de `GET /v1/tags/{code}` (F2.1 e F4.5). As quatro
-      // mensagens carregam **a mesma saida**, com o mesmo texto e o mesmo
-      // botao, e e isso que impede o beco sem saida: quem esta com um animal
-      // no colo nao precisa do codigo para registrar o achado (UX 12.4 e F4.5).
       ProblemTipo.codigoDeTagMalformado => const MensagemDeErro(
           texto: codigoMalformado,
           acao: registrarAchado,
@@ -572,9 +293,6 @@ abstract final class MensagensDeErro {
 
     if (porTipo != null) return porTipo;
 
-    // Fallback por familia de status. Nao e o contrato: o contrato manda
-    // decidir por `type`, e so seis `type` estao nomeados na especificacao
-    // hoje. Enquanto o catalogo nao fecha, isto evita tela muda.
     return switch (problem.status) {
       401 => const MensagemDeErro(texto: sessaoExpirou, acao: 'Entrar'),
       429 => MensagemDeErro(
@@ -591,25 +309,8 @@ abstract final class MensagensDeErro {
   }
 
   /// A mensagem da tela **C.2 — Entrar** (UX 8.2.2).
-  ///
-  /// Existe separada de [de] porque dois dos quatro 401 tem texto diferente
-  /// aqui e no resto do produto, e a diferenca nao e de tom:
-  ///
-  /// - `unauthenticated` fora daqui diz "entre na sua conta"; **dentro** daqui
-  ///   isso seria absurdo, porque a pessoa ja esta entrando e
-  ///   `POST /auth/login` e operacao aberta. Se este tipo chegar como resposta
-  ///   do envio, e defeito nosso, e o texto e o de servidor fora.
-  /// - `token-expired` aqui e **estado de chegada** e nao resposta do envio.
-  ///
-  /// **A decisao e por `type`, nunca por status.** Um `switch` em 401 acerta
-  /// hoje por sorte, porque so `invalid-credentials` chega a esta tela, e erra
-  /// calado no dia em que outro dos quatro chegar: a tela diria a pessoa que a
-  /// senha esta errada e ela trocaria uma senha que estava certa. Ha teste que
-  /// cobra os quatro.
   static MensagemDeErro deEntrar(FalhaDeChamada falha) {
     if (falha is FalhaDeConexao) {
-      // O botao continua habilitado sem conexao e a tentativa acontece: o
-      // detector de offline erra, e deixar a pessoa sem caminho e pior.
       return const MensagemDeErro(texto: precisamosDeConexaoParaEntrar);
     }
 
@@ -625,17 +326,10 @@ abstract final class MensagensDeErro {
           acao: tentarDeNovo,
         ),
       ProblemTipo.tokenExpirado => const MensagemDeErro(texto: sessaoExpirou),
-      // `reauthentication-required` nao e esta tela (e a folha de confirmacao
-      // de senha da acao sensivel) e `forbidden` e 403 e nunca aparece aqui.
-      // Os dois caem no catalogo geral de proposito: se chegarem, a tela mostra
-      // o texto do catalogo em vez de mentir que a credencial nao confere.
       _ => null,
     };
     if (porTipo != null) return porTipo;
 
-    // 429. A saida para a recuperacao de senha **fica**: quem estourou o limite
-    // quase sempre nao lembra a senha, e manda-la esperar sem o unico caminho
-    // que resolve e desenhar um beco (UX 8.2.2).
     if (falha.problem.status == 429) {
       return MensagemDeErro(
         texto: _muitasTentativas(falha.problem.tenteDepoisDe),
@@ -643,18 +337,10 @@ abstract final class MensagensDeErro {
       );
     }
 
-    // Tipo que este build nao conhece, ou 500. O catalogo geral resolve, e
-    // nenhum caminho daqui afirma que a credencial nao confere.
     return de(falha);
   }
 
   /// A frase do `409 contact-channel-unverified`, pela situacao de quem chama.
-  ///
-  /// **O `switch` nomeia os quatro membros em vez de usar `_ =>`**, e isso e o
-  /// portao: no dia em que uma quinta situacao entrar em [AcaoEmCurso], este
-  /// arquivo deixa de compilar e alguem tem de decidir a frase dela. Com
-  /// `_ =>` a quinta rota herdaria em silencio o texto de outra, que e
-  /// literalmente o defeito que esta funcao veio fechar.
   static String _canalNaoVerificado(AcaoEmCurso? acaoEmCurso) =>
       switch (acaoEmCurso) {
         AcaoEmCurso.avisarPetPerdido => canalNaoVerificadoParaAvisar,
@@ -665,14 +351,6 @@ abstract final class MensagensDeErro {
       };
 
   /// `pet-limit-reached`, 409 (UX 12.6).
-  ///
-  /// **O numero vem da resposta, nunca escrito na frase.** O esquema `Problem`
-  /// de `api/openapi.yaml` nao declara campo nenhum que o carregue hoje; se um
-  /// dia declarar, e so ele chegar, esta funcao passa a dizer o teto. Enquanto
-  /// nao chega, a tela diz que o limite foi atingido **sem numero**, em vez de
-  /// escrever "20" no binario: uma versao antiga do app continua instalada por
-  /// semanas depois de o servidor mudar o teto, e ela repetiria o numero
-  /// errado com a mesma confianca.
   static MensagemDeErro _limiteDePets(Problem problem) {
     final limite = problem.inteiro('limit') ?? problem.inteiro('pet_limit');
     final abertura = limite == null
@@ -686,14 +364,6 @@ abstract final class MensagensDeErro {
   }
 
   /// `community-event-limit-reached`, 409 (ADR-0025 emenda 3).
-  ///
-  /// **O numero vem da resposta, nunca escrito na frase** -- a mesma regra de
-  /// [_limiteDePets], e pela mesma razao.
-  ///
-  /// **A saida e a propria agenda, e nao o perfil.** O que destrava esta
-  /// recusa e encerrar ou cancelar um encontro que ja existe, e os encontros
-  /// da pessoa estao na `Rede`. Mandar para o perfil seria um rotulo de acao
-  /// que leva para longe do que resolve.
   static MensagemDeErro _limiteDeEncontros(Problem problem) {
     final limite = problem.inteiro('limit');
     final abertura = limite == null

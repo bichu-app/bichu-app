@@ -1,47 +1,6 @@
 /**
- * SÓ O REENCONTRADO GANHA NOME: os outros quatro motivos do 410 público
- * continuam fundidos.
- *
- * ===========================================================================
- * O QUE ESTE ARQUIVO PROVA, E POR QUE ELE É O ARQUIVO QUE IMPORTA
- * ===========================================================================
- *
- * O 410 de `getPublicLostCase` fundia **cinco** situações num corpo só -- caso
- * encerrado, pet excluído, pet falecido, pet arquivado, e token desconhecido --
- * e a fusão é de privacidade. Em 28/10/2026 o cliente autorizou abrir **um**
- * deles, com estas palavras: *"crie uma página padrão, agradecendo a
- * preocupação do usuário e avisando-o que aquele pet já foi encontrado, que ele
- * não precisa mais se preocupar."*
- *
- * A autorização cobre esse motivo e **nenhum outro**. Os quatro que ficaram têm
- * razão própria para ficar:
- *
- * - dizer *"já foi encontrado"* de um pet **falecido** é mentira cruel;
- * - dizer isso de um **token desconhecido** entrega que o token não existe, que
- *   é enumeração;
- * - **excluído** e **arquivado** são assunto privado do tutor.
- *
- * Então a prova precisa correr nos **dois sentidos**, e é isso que o cruzamento
- * abaixo faz: o reencontrado com o pet de pé é o ÚNICO par (desfecho, pet) que
- * liga `reencontrado`, e **todos** os outros pares ficam desligados. Uma prova
- * que só medisse o caso feliz aprovaria um `reencontrado: true` constante.
- *
- * ---------------------------------------------------------------------------
- * PARA VER REPROVANDO
- * ---------------------------------------------------------------------------
- *
- * Em `kysely-leitura-publica-do-caso.ts`:
- *
- * 1. tire o `&& petDePe` de `reencontrado` -- as três linhas cruéis (pet
- *    excluído, falecido e arquivado com o caso `closed_reunited`) ficam
- *    vermelhas, e são exatamente as que a decisão proíbe;
- * 2. troque `STATUS_DE_CASO_REENCONTRADO` por `'closed_not_found'` -- o caso
- *    que terminou SEM o animal passa a agradecer, e o par feliz apaga;
- * 3. devolva `reencontrado: true` fixo -- oito das nove linhas reprovam.
- *
- * O cruzamento tem **controle positivo embutido**: `O_PAR_QUE_FALA` é contado,
- * e se um dia nenhuma linha ligar o campo o arquivo falha por não ter
- * conseguido medir nada, em vez de passar verde com zero.
+ * SÓ O REENCONTRADO GANHA NOME: os outros quatro motivos do 410 público continuam
+ * fundidos.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -56,8 +15,8 @@ const VISTO_EM = 1_789_929_000_000 as Instant;
 
 /**
  * Uma linha da consulta. O pet nasce **de pé** -- vivo, não excluído, não
- * arquivado --, porque o estado hostil de cada caso é escrito por extenso em
- * quem o usa, e não herdado do molde.
+ * arquivado --, porque o estado hostil de cada caso é escrito por extenso em quem
+ * o usa, e não herdado do molde.
  */
 function linha(parcial: Partial<LinhaDoCasoPublico> = {}): LinhaDoCasoPublico {
   return {
@@ -91,10 +50,7 @@ const CONDICOES_DO_PET: readonly { rotulo: string; linha: Partial<LinhaDoCasoPub
   { rotulo: 'pet ARQUIVADO', linha: { pet_status: 'archived' } },
 ];
 
-/**
- * Os desfechos de caso que chegam ao 410. `open` fica fora porque não é motivo
- * de 410 nenhum: com o pet de pé ele responde 200.
- */
+/** Os desfechos de caso que chegam ao 410. */
 type DesfechoDoCaso = LinhaDoCasoPublico['status'];
 
 const DESFECHOS_ENCERRADOS: readonly DesfechoDoCaso[] = [
@@ -134,14 +90,10 @@ void describe('só o reencontrado ganha nome: o cruzamento (desfecho × pet)', (
 
         if (caso.reencontrado) ligados += 1;
 
-        // `aberto` e `reencontrado` nunca sobem juntos: nenhum destes desfechos
-        // é `open`, então a projeção de 200 não é alcançável por aqui.
         assert.equal(caso.aberto, false, `REPROVA: ${desfecho} respondeu como caso ABERTO.`);
       }
     }
 
-    // CONTROLE POSITIVO: sem isto, um `reencontrado: false` constante passaria
-    // todas as asserções negativas e o arquivo ficaria verde medindo nada.
     assert.equal(
       ligados,
       1,
@@ -152,10 +104,6 @@ void describe('só o reencontrado ganha nome: o cruzamento (desfecho × pet)', (
   });
 
   void it('o pet que voltou para casa e DEPOIS morreu não é agradecido', () => {
-    // O caso concreto que a conjunção `&& petDePe` existe para pegar: o
-    // desfecho daquele caso continua `closed_reunited` para sempre, porque ele
-    // de fato terminou com o animal em casa. Quem abre o cartaz hoje, porém,
-    // leria "ele já está em casa, não se preocupe" sobre um animal morto.
     const caso = casoDaLinha(linha({ status: 'closed_reunited', pet_status: 'deceased' }));
     assert.equal(
       caso.reencontrado,
@@ -186,9 +134,6 @@ void describe('só o reencontrado ganha nome: o cruzamento (desfecho × pet)', (
   });
 
   void it('nenhum dos dois campos deduz o outro: `closed_reunited` fecha o caso', () => {
-    // `aberto` e `reencontrado` são perguntas diferentes, e uma tela que
-    // derivasse um do outro (`reencontrado = !aberto`) mandaria os quatro
-    // motivos fundidos para a página de agradecimento.
     const reencontrado = casoDaLinha(linha({ status: 'closed_reunited' }));
     assert.deepEqual(
       [reencontrado.aberto, reencontrado.reencontrado],

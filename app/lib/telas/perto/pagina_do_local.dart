@@ -31,64 +31,6 @@ import 'lista_do_diretorio.dart';
 
 /// A pagina de um local do `Perto`: `GET /v1/directory/entries/{slug}`
 /// (`getDirectoryEntry`), com as avaliacoes de `listDirectoryEntryReviews`.
-///
-/// **Ela existe por um pedido do cliente de 18/10/2026**: que os locais do
-/// diretorio virassem clicaveis, com pagina propria, pontuacao de 1 a 5 e
-/// recomendacao em texto "onde ficara disponivel para outros usuarios, como
-/// acontece na playstore". Ate aqui o `Perto` era uma lista sem destino, e o
-/// comentario de `CartaoDoDiretorio` dizia isso com todas as letras.
-///
-/// ## Ordem, de cima para baixo (prototipo de desenho de 18/10)
-///
-/// Cabecalho (nome, atividade, lugar, distancia, **o que foi verificado**,
-/// `Ligar`); `Informações` com o `about`; `Avaliações` com media, contagem e
-/// histograma; `A minha avaliação`; `O que outras pessoas disseram`, com a
-/// ordenacao no corpo e o rodape de paginacao.
-///
-/// ## O que esta tela NAO tem, e nenhuma ausencia e esquecimento
-///
-/// - **Site, e-mail, WhatsApp, redes sociais, horario de funcionamento, foto,
-///   capa, endereco de rua, mapa e preco.** Nao sao colunas de
-///   `professionals`: nao ha de onde preenche-los e eles nao estao no
-///   contrato. Desenhar espaco para eles produziria uma tela com seis linhas
-///   vazias permanentes, que e pior do que uma tela curta.
-/// - **Selo generico.** A verificacao diz O QUE foi provado, por
-///   `VerificacaoDaEntrada.oQueFoiVerificado`. A BICHUS-165 nao passou
-///   justamente por carimbar "Verificado" sem dizer o que.
-/// - **`Denunciar este local`**, que o protótipo desenha. Nao existe operacao
-///   para isso no contrato -- `reportDirectoryEntryReview` denuncia uma
-///   AVALIACAO, nunca a entrada. Um botao aqui seria acao sem destino, que e o
-///   defeito que o criterio 2 da BICHUS-62 proibe.
-/// - **Filtro "só com comentário"**, que o protótipo desenha ao lado da
-///   ordenacao. `listDirectoryEntryReviews` aceita `sort` e mais nada;
-///   filtrar em memoria a pagina de 10 seria um filtro que funciona com 10
-///   avaliacoes e mente com 128.
-/// - **Resposta do profissional.** O ADR-0011 lhe da direito de resposta
-///   publica, e o contrato ainda nao tem a rota.
-///
-/// ## A ordenacao fica no CORPO, e isso nao contradiz 17/10
-///
-/// Em 17/10 o cliente mandou o acesso ao filtro e a ordem das **listagens de
-/// aba** subir para a barra de titulo, pelo slot unico de `casca_com_abas.dart`
-/// (`BarraDeListagem`). Esta tela e **empilhada** e nao tem aquele slot: ela
-/// tem barra propria, com `Voltar` no lugar do `leading` e o nome do local no
-/// titulo. A ordenacao das avaliacoes mora no topo do conteudo da secao a que
-/// ela pertence, que e onde a pessoa esta olhando quando decide reordenar.
-///
-/// ## Quem ve o que
-///
-/// - **Sem conta**: nao ha o que mostrar. `getDirectoryEntry` exige conta no
-///   contrato -- ela devolve `phone_e164`, que
-///   `src/tools/portao-contrato-publico.ts` proibe em rota publica --, entao a
-///   tela **nao faz a chamada** e convida a entrar. Chamar para colher 401
-///   seria gastar uma requisicao para descobrir o que o contrato ja diz.
-/// - **Conta sem e-mail confirmado** (`can_review: false` com
-///   `review_blocked_reason: unverified_channel`): le tudo, e **o campo nao e
-///   desenhado**. No lugar dele vai a frase e a porta de confirmar o e-mail --
-///   oferecer o campo faria a pessoa escrever um texto e perde-lo num 403.
-/// - **Conta que pode avaliar**: o campo, com a nota obrigatoria e o texto
-///   opcional.
-/// - **Conta que ja avaliou**: a minha no topo, com `Editar` e `Apagar`.
 class PaginaDoLocal extends StatefulWidget {
   const PaginaDoLocal({required this.slug, super.key});
 
@@ -104,8 +46,7 @@ class PaginaDoLocal extends StatefulWidget {
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String carregandoOLocal = 'Carregando o local';
 
-  /// O titulo do bloco das atividades. **Sem bloco ainda**: ver as iscas de
-  /// `test/telas/atividades_do_local_test.dart`.
+  /// O titulo do bloco das atividades.
   static const String tituloDasAtividades = 'Atividades';
 
   static const String tituloDasInformacoes = 'Informações';
@@ -114,31 +55,14 @@ class PaginaDoLocal extends StatefulWidget {
   static const String tituloDasOutras = 'O que outras pessoas disseram';
 
   /// O 404 do contrato, com **uma** frase.
-  ///
-  /// Rascunho, oculto, removido e inexistente sao quatro causas e um texto: a
-  /// tela nao tem o que fazer com a diferenca, e distinguir contaria a quem
-  /// esta de fora que existe uma entrada que ninguem publicou (ADR-0021).
-  /// **O TEXTO MUDOU EM 28/10/2026, e o NOME da constante fica.** Era
-  /// `Este local saiu do Perto`, e `Perto` deixou de ser seção em 19/10/2026 --
-  /// o diretório virou a aba `Comunidade` da `Rede`. O cliente leu o texto
-  /// velho nesta rodada e nomeou a troca: *"está trazendo o conceito antigo
-  /// ainda de perto e não de rede"*.
-  ///
-  /// **`Rede`, a mesma palavra de [rotuloDeVoltarParaPerto]**, que é o botão
-  /// desenhado logo abaixo desta frase: a frase diz de onde o local saiu e o
-  /// botão leva ao mesmo lugar, e duas palavras ali seriam dois nomes para uma
-  /// seção.
   static const String tituloDoNaoEncontrado = 'Este local saiu da Rede';
 
   static const String explicacaoDoNaoEncontrado =
       'Ele pode ter sido retirado. Veja quem está atendendo na sua região '
       'agora.';
 
-  /// **O TEXTO MUDOU EM 19/10/2026 com a secao.** Era `Ver o Perto`, e
-  /// `Perto` deixou de existir: o diretorio virou a aba `Comunidade` da
-  /// `Rede`. Um botao que oferece uma secao que o app nao tem e um caminho
-  /// que promete e nao entrega. O NOME da constante fica, para nao espalhar
-  /// a renomeacao por quem a le.
+  /// **O TEXTO MUDOU EM 19/10/2026 com a secao.** Era `Ver o Perto`, e `Perto`
+  /// deixou de existir: o diretorio virou a aba `Comunidade` da `Rede`.
   static const String rotuloDeVoltarParaPerto = 'Ver a Rede';
 
   /// Sem conta nao ha leitura, e a frase diz por que **sem culpar a pessoa**.
@@ -146,8 +70,7 @@ class PaginaDoLocal extends StatefulWidget {
 
   /// **A frase nao promete mais o telefone.** Ela dizia *"mostra o telefone
   /// comercial e a distância até você"*, e a primeira metade deixou de ser
-  /// verdade em 19/10/2026: o numero saiu da tela por pedido do cliente. O
-  /// que sobrou e o que a pagina de fato da a quem entra.
+  /// verdade em 19/10/2026: o numero saiu da tela por pedido do cliente.
   static const String explicacaoDoVisitante =
       'A página de um profissional mostra a distância até você, e o Bichu só '
       'mostra isso para quem tem conta. Depois de entrar, você lê as '
@@ -162,53 +85,14 @@ class PaginaDoLocal extends StatefulWidget {
       'Seja a primeira pessoa a contar como foi o atendimento aqui.';
 
   /// O rotulo **VISIVEL** do botao de contato: so `Ligar`.
-  ///
-  /// Pedido do cliente em 18/10/2026: *"os botoes de ligar para devem ser
-  /// apenas 'Ligar' com o icone, nao devem trazer repetidamente o nome da
-  /// clinica"*. Nesta pagina o nome e o TITULO, a poucos dp acima do botao:
-  /// repeti-lo dentro dele era a terceira vez que a mesma tela dizia a mesma
-  /// palavra.
   static const String rotuloDeLigar = 'Ligar';
 
-  /// O que o toque na foto principal FAZ. Vai em `hint`, e nao no nome: o nome
-  /// e [fotoDe], e o leitor de tela espera a acao na dica.
-  ///
-  /// A mesma palavra da capa do encontro e da vitrine do perfil
-  /// (`Ampliar`): tres palavras para o mesmo gesto fariam o app parecer ter
-  /// tres recursos.
+  /// O que o toque na foto principal FAZ.
   static const String dicaDeAmpliarAFoto = 'Ampliar';
 
-  // -- Compartilhar o local (cliente, 22/10/2026) ---------------------------
-  //
-  // Pedido literal: *"adicione um botao compartilhar igual tem na pagina de
-  // eventos"*.
-  //
-  // **"IGUAL" FOI LIDO COMO FORMA, E A FORMA FOI COPIADA INTEIRA** de
-  // `telas/rede/encontro_da_rede.dart` (21/10/2026), que por sua vez copiou a
-  // da ficha do pet perdido (20/10/2026): `BotaoSecundario` na primeira dobra
-  // logo depois do titulo, rotulo `Compartilhar`, nome acessivel dizendo DE
-  // QUE, saida por `SaidaDoApp.compartilharTexto` (a folha do sistema,
-  // `ACTION_SEND`), e aviso quando ela nao abre. Nenhum pacote novo: quem fala
-  // com a folha e a porta em `dispositivo/`, e tela nenhuma importa
-  // `share_plus` -- o portao de `porta_nao_contornada_test.dart` proibe.
-  //
-  // **A TERCEIRA COPIA DESTAS FRASES, E ISSO ESTA REGISTRADO EM VEZ DE
-  // ESCONDIDO.** `TelaDoEncontro.falhaDoCompartilhar` e
-  // `TextosDoDetalhe.folhaNaoAbriu` ja sao, hoje, a MESMA frase em duas
-  // constantes; esta e a terceira, caractere por caractere. O precedente desta
-  // casa para convergir isso e `dispositivo/textos_do_app_de_mapas.dart`, que
-  // nasceu porque a mesma acao tinha TRES redacoes de mapa -- e ele proprio
-  // registra que *"unificar e mudar redacao sao dois trabalhos"*. Entao:
-  // **nao ha redacao nova aqui**, e o caso
-  // `as tres superficies dizem a MESMA frase` de
-  // `test/telas/listagem_e_pagina_do_profissional_test.dart` compara as tres
-  // constantes para que a QUARTA nao possa divergir em silencio. Unificar num
-  // arquivo de `dispositivo/` e o trabalho seguinte, e ele toca duas telas que
-  // nao sao deste pedido.
-
-  /// O rotulo da acao. **`Compartilhar`, a mesma palavra do encontro e da
-  /// ficha do pet**, e nao `Compartilhar no WhatsApp`: quem decide o que a
-  /// folha lista e o sistema.
+  /// O rotulo da acao. **`Compartilhar`, a mesma palavra do encontro e da ficha
+  /// do pet**, e nao `Compartilhar no WhatsApp`: quem decide o que a folha
+  /// lista e o sistema.
   static const String rotuloDeCompartilhar = 'Compartilhar';
 
   /// O nome acessivel: diz DE QUE a acao e, porque o leitor de tela le os
@@ -216,47 +100,12 @@ class PaginaDoLocal extends StatefulWidget {
   static String compartilharAcessivel(String nome) =>
       'Compartilhar o local $nome';
 
-  /// Quando a folha do sistema nao abriu. **Nao diz "WhatsApp"** e nao manda
-  /// instalar nada: a unica coisa que o app sabe aqui e que ela nao abriu.
+  /// Quando a folha do sistema nao abriu.
   static const String falhaDoCompartilhar =
       'Não conseguimos abrir as opções de compartilhamento agora. '
       'Tente de novo.';
 
   /// A MENSAGEM QUE SAI DO PRODUTO E CHEGA EM ESTRANHOS.
-  ///
-  /// ## NAO HA LINK, E ISSO FOI MEDIDO E NAO SUPOSTO
-  ///
-  /// O encontro ganhou `share_url` em 21/10/2026 porque ganhou **pagina
-  /// publica** no mesmo dia. O profissional **nao tem**: em `api/openapi.yaml`,
-  /// `DirectoryEntryDetail` nao declara `share_url` nem `public_url` (as
-  /// ocorrencias de `share_url` no arquivo sao do caso de pet perdido e do
-  /// encontro), e nao ha rota publica de entrada de diretorio.
-  ///
-  /// **Entao o texto sai SEM endereco, e o app nao monta um.** Um literal
-  /// `'/profissional/' + slug` aqui viraria link morto num binario instalado
-  /// que nao se corrige -- e botao que manda link morto por WhatsApp e pior
-  /// que botao nenhum. No dia em que o campo existir, ele entra como entrou no
-  /// encontro: campo do servidor, uma linha, sem APK novo.
-  ///
-  /// **A REDACAO E A MINIMA VERDADEIRA, e ela pode ser revista pelo cliente.**
-  /// Ela nao promete recurso nenhum e nao convida a nada que o produto nao
-  /// faca: `Encontrei no Bichu.` afirma um fato. A frase do encontro
-  /// (`Encontrei no Bichu. Vamos juntos?`) nao serve aqui -- `vamos juntos`
-  /// convida para um evento com dia e hora, e um profissional nao tem nenhum
-  /// dos dois.
-  ///
-  /// ## O QUE NAO ENTRA, DE PROPOSITO
-  ///
-  /// - **o telefone comercial**: `phone_e164` so existe porque a operacao
-  ///   exige conta (ADR-0011 secao 4), e esta mensagem e lida por quem nao
-  ///   tem. O produto nem o PINTA na tela desde 19/10/2026;
-  /// - **o logradouro e o complemento**: [lugar] e a linha publica de bairro,
-  ///   cidade e UF -- a MESMA que a listagem mostra. O endereco de porta sai
-  ///   so em `DirectoryEntryDetail`, que exige conta, e o complemento e a
-  ///   parte que localiza a porta de alguem. Mesma fronteira que o encontro
-  ///   desenhou quando deixou `street_address` fora da mensagem dele;
-  /// - **a nota e a quantidade de avaliacoes**: nao foram pedidas, e uma media
-  ///   fora de contexto e numero sem o histograma que o explica.
   static String mensagemDeCompartilhar({
     required String nome,
     String? atividade,
@@ -269,23 +118,8 @@ class PaginaDoLocal extends StatefulWidget {
   }
 
   /// O assunto, que vira `EXTRA_SUBJECT` no Android e o assunto do e-mail
-  /// quando o destino escolhido e um aplicativo de e-mail. Nos destinos que nao
-  /// tem assunto -- WhatsApp, Telegram, copiar -- o sistema o ignora, e ele nao
-  /// aparece duplicado no corpo.
+  /// quando o destino escolhido e um aplicativo de e-mail.
   static String assuntoDeCompartilhar(String nome) => 'Encontrei no Bichu: $nome';
-
-  // O ROTULO DO MAPA E A FRASE DE FALHA NAO MORAM MAIS AQUI.
-  //
-  // Sao `TextosDoAppDeMapas.rotuloDoEndereco` e
-  // `TextosDoAppDeMapas.falhaAoAbrir`, em
-  // `lib/dispositivo/textos_do_app_de_mapas.dart`. As duas linhas desta pagina
-  // que abrem mapa (a de lugar e a de logradouro) e o encontro da Rede leem a
-  // MESMA constante -- nao uma copia medida contra a outra, como a onda 4
-  // deixou. Um portao de fonte reprova qualquer arquivo de `app/lib/` que
-  // escreva o literal a mao, e e ele que impede a quarta redacao de voltar.
-  //
-  // A historia das tres redacoes e a razao de a frase de falha NAO atribuir
-  // causa estao no cabecalho daquele arquivo, e e la que se discute mudanca.
 
   static const String rotuloDaNota = 'Sua nota';
   static const String ajudaDaNota = 'Toque nas estrelas para dar de 1 a 5.';
@@ -297,10 +131,6 @@ class PaginaDoLocal extends StatefulWidget {
   static const String rotuloDeSalvarEdicao = 'Salvar alteração';
 
   /// A publicacao e IMEDIATA, e a tela diz isso **antes** do toque.
-  ///
-  /// Nao ha fila de aprovacao (decisao do cliente, 18/10), e isto fala do nome
-  /// de um negocio real: quem escreve tem de saber que aparece na hora e com o
-  /// seu nome de exibicao.
   static const String avisoDePublicacaoImediata =
       'A sua avaliação aparece na hora, junto com o seu nome de exibição.';
 
@@ -335,19 +165,10 @@ class PaginaDoLocal extends StatefulWidget {
   static const String rotuloDeConfirmarEmail = 'Confirmar o meu e-mail';
 
   /// `can_review: false` sem motivo declarado.
-  ///
-  /// O `enum` do contrato tem um valor so hoje e e aberto de proposito: no dia
-  /// em que o bloqueio por moderacao entrar, uma versao antiga do app cai
-  /// aqui. **Ela nao desenha o campo** -- oferecer o campo levaria a um 403
-  /// depois do texto escrito.
   static const String bloqueioSemMotivo =
       'Não é possível avaliar este local com a sua conta agora.';
 
   /// Quando a lista de avaliacoes nao chega, mas a pagina chegou.
-  ///
-  /// **A pagina FICA.** Nome, telefone e media vieram de outra chamada e
-  /// continuam certos; apagar a tela por causa da lista puniria quem so queria
-  /// o telefone.
   static const String falhaDasAvaliacoes =
       'Não foi possível carregar as avaliações agora.';
 
@@ -362,34 +183,12 @@ class PaginaDoLocal extends StatefulWidget {
       : 'Você viu todas as $total avaliações deste local.';
 
   /// `Ligar para a Clínica Pata Firme` — o nome **ACESSIVEL**, e nao o visivel.
-  ///
-  /// **O rotulo visivel encurtou em 18/10/2026; este NAO.** O nome acessivel
-  /// leva PARA QUEM e a ligacao: `Ligar` sozinho e um controle indistinguivel
-  /// para quem navega por leitor de tela e chegou nele sem ver a tela inteira
-  /// (WCAG 2.1 SC 4.1.2). Ele chega ao botao por `nomeAcessivel`, e nao por
-  /// `rotulo`.
-  ///
-  /// O SC 2.5.3 continua satisfeito: [rotuloDeLigar] e PREFIXO desta string,
-  /// entao quem usa comando de voz diz "Ligar" e acerta o controle.
   static String ligarPara(String nome) => '$rotuloDeLigar para $nome';
 
   /// O rotulo da faixa do local, para quem nao ve a imagem.
-  ///
-  /// **A faixa NAO e decorativa, ao contrario da logo no cartao da lista.** La
-  /// a logo fica ao lado do nome e o nome e o rotulo; aqui a faixa vem ANTES
-  /// do nome, e e a fachada ou o ambiente -- a unica informacao desta pagina
-  /// que nao esta escrita em lugar nenhum. Imagem sem rotulo seria uma parada
-  /// de foco muda sobre um dado que ninguem mais conta.
   static String fotoDe(String nome) => 'Foto de $nome';
 
   /// A minha avaliacao existe, mas nao esta em nenhuma pagina ja carregada.
-  ///
-  /// **`my_review_ref` diz que ela existe; ele nao traz a nota nem o texto**, e
-  /// nao ha operacao no contrato que leia a minha sozinha (`GET
-  /// .../reviews/me` nao existe). Com 128 avaliacoes, a minha pode estar na
-  /// pagina 7. Entao a tela **nao finge** ter o conteudo: ela diz onde ele
-  /// esta e oferece as duas acoes que nao dependem dele -- carregar mais, e
-  /// apagar, que o `DELETE` resolve so com a conta.
   static const String minhaForaDaPagina =
       'Você já avaliou este local. A sua avaliação aparece na lista abaixo; '
       'carregue mais avaliações para encontrá-la e editar.';
@@ -399,12 +198,6 @@ class PaginaDoLocal extends StatefulWidget {
 }
 
 /// Os desfechos de uma carga.
-///
-/// **`naoEncontrado` e `semConta` sao separados de `falha`**, e os tres pedem
-/// coisas diferentes: um pede a volta para o `Perto` (a pergunta chegou e a
-/// resposta foi "nao existe"), um pede entrar (a pergunta nao pode nem ser
-/// feita) e o terceiro pede `Atualizar` (a pergunta nao chegou). Um estado so
-/// ofereceria `Atualizar` para quem vai receber o mesmo 404 de novo.
 enum _Fase { carregando, pronto, naoEncontrado, semConta, falha }
 
 class _PaginaDoLocalState extends State<PaginaDoLocal> {
@@ -414,15 +207,9 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
 
   /// A pontuacao **de agora**, que comeca na do detalhe e e trocada pela que
   /// volta no `PUT` e pela recarga depois do `DELETE`.
-  ///
-  /// Ela nao fica dentro de [_detalhe] porque [DetalheDoLocal] e imutavel e a
-  /// media muda sem o resto da pagina mudar: o contrato manda a pontuacao nova
-  /// na resposta da escrita exatamente para a tela nao precisar de uma segunda
-  /// chamada -- e para a media nao ficar velha se essa segunda chamada
-  /// falhasse.
   PontuacaoDoLocal? _pontuacao;
 
-  /// O `ref` da minha avaliacao, ou nulo. Comeca em `my_review_ref`.
+  /// O `ref` da minha avaliacao, ou nulo.
   String? _refDaMinha;
 
   /// A minha avaliacao, quando a tela tem o objeto dela: ou porque ela veio
@@ -435,27 +222,19 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   PaginaDeAvaliacoes? _paginaDeAvaliacoes;
   OrdemDasAvaliacoes _ordem = OrdemDasAvaliacoes.recentes;
   bool _carregandoAvaliacoes = false;
-  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   String? _falhaDasAvaliacoes;
   bool _carregandoMais = false;
   String? _falhaDeMais;
 
-  /// O campo esta aberto para escrever. Fora da edicao ele so aparece quando
-  /// ainda nao ha avaliacao minha.
+  /// O campo esta aberto para escrever.
   bool _editando = false;
   int? _nota;
   final TextEditingController _texto = TextEditingController();
   bool _enviando = false;
 
   /// A recusa do envio da minha avaliacao, **inteira**.
-  ///
-  /// **Nao e `String`, e a diferenca nao e de tipo.** Guardar so o `.texto`
-  /// descarta `acao` e `proximaAcao`, e e por eles que a faixa sabe que saida
-  /// oferecer: no `409 contact-channel-unverified` a mensagem chega com
-  /// `Confirmar meu e-mail` e `verify_email`, e com o estado em `String` os
-  /// dois morriam aqui -- a pessoa lia que precisa confirmar o e-mail e nao
-  /// tinha onde tocar. Quem resolve o destino e [saidaDaMensagem].
   MensagemDeErro? _erroDoFormulario;
   String? _erroDaNota;
 
@@ -487,9 +266,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   Future<void> _carregar() async {
     if (!mounted) return;
 
-    // **Sem conta a chamada nao sai.** `getDirectoryEntry` e `bearerAuth` no
-    // contrato: pedir para colher 401 gastaria uma requisicao para descobrir
-    // o que o contrato ja diz, e o 401 chegaria como "servidor fora".
     if (!_logado) {
       setState(() {
         _fase = _Fase.semConta;
@@ -531,8 +307,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         return;
       }
       setState(() {
-        // `next_action: sign_in` do servidor. Medido:
-        // `/v1/directory/entries/{slug}` responde `401 unauthenticated`.
         _faltaConta = faltaConta(falha);
         _textoDaFalha =
             textoDoTetoDoDiretorio(falha) ?? MensagensDeErro.de(falha).texto;
@@ -559,9 +333,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   }
 
   /// A **primeira** pagina de avaliacoes da ordem atual, sempre.
-  ///
-  /// A falha aqui nao derruba a pagina: ver
-  /// [PaginaDoLocal.falhaDasAvaliacoes].
   Future<void> _carregarAvaliacoes() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
@@ -607,10 +378,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   }
 
   /// Pede a pagina seguinte e **acrescenta** o que vier.
-  ///
-  /// A falha aqui nao apaga as avaliacoes na tela, ao contrario da falha da
-  /// pagina 1: aqui a ordem e a mesma, e o que esta na tela continua sendo a
-  /// resposta certa para ela.
   Future<void> _carregarMais() async {
     if (!mounted || _carregandoMais) return;
     final atual = _paginaDeAvaliacoes;
@@ -653,10 +420,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   }
 
   /// Tira a minha do fluxo da lista.
-  ///
-  /// **O servidor manda a minha na mesma lista, marcada com `mine: true`**, e
-  /// nao num bloco separado -- isso evita a resposta em que a mesma avaliacao
-  /// chega duas vezes. Quem a separa e esta linha.
   void _acharAMinha() {
     for (final a in _avaliacoes) {
       if (a.minha || (a.ref == _refDaMinha && _refDaMinha != null)) {
@@ -683,61 +446,16 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     if (context.canPop()) {
       context.pop();
     } else {
-      // `Rotas.rede` e nao `Rotas.perto`: a secao `Perto` deixou de
-      // existir em 19/10 e esta pagina virou filha do ramo da `Rede`.
       context.go(Rotas.rede);
     }
   }
 
   /// Abre o endereco no aplicativo de mapas do aparelho.
-  ///
-  /// ## O dado que alimenta isto AINDA NAO EXISTE por inteiro, e isso nao e
-  /// defeito
-  ///
-  /// O cliente pediu em 20/10/2026 *"o endereco do profissional tambem deve
-  /// ser clicavel e abrir as ferramentas de maps, como google maps ou waze, de
-  /// acordo com a ferramenta de padrao do usuario"*. O mecanismo e este, e ele
-  /// esta completo -- mas `DirectoryEntryDetail` **nao tem logradouro**:
-  /// `linhaDeLugar` e bairro, cidade e UF, e e so isso que o contrato devolve.
-  ///
-  /// **Ou seja: hoje isto abre um BAIRRO no mapa, e nao uma porta.** As colunas
-  /// `street`, `street_number`, `postal_code` e `complement` existem em
-  /// `professionals` desde a migracao `20261018000001`, e aquela migracao diz,
-  /// na prosa dela, que **nenhuma saida ganhou campo novo** porque exibir
-  /// endereco completo e decisao do cliente e ela nao foi tomada.
-  ///
-  /// No dia em que ela for, a entrada ganha o campo no contrato,
-  /// `linhaDeLugar` (ou um irmao dela) passa a trazer o logradouro, e **esta
-  /// funcao nao muda uma linha**: o que vai para o sistema e TEXTO, e quem o
-  /// resolve em lugar e o aplicativo de mapas do aparelho (ADR-0006, e o
-  /// ADR-0027 item 21 ja consagrou o desenho em `network_events`).
-  ///
-  /// **A porta e a MESMA do encontro da `Rede`**, e isso e requisito: uma
-  /// funcao (`SaidaDoApp.abrirEnderecoNoAppDeMapas`), dois chamadores
-  /// (`local_do_encontro.dart` e esta tela). O encontro tem logradouro de
-  /// verdade e e la que o mecanismo se prova; aqui ele chega pronto.
   Future<void> _ligar(String telefoneE164) async {
-    // `tel:` vai para o discador do sistema, que **mostra o numero e espera a
-    // pessoa confirmar**: o app nao disca sozinho. Mesmo caminho do cartao da
-    // listagem.
     await launchUrl(Uri(scheme: 'tel', path: telefoneE164));
   }
 
   /// Abre o endereco comercial no aplicativo de mapas do aparelho.
-  ///
-  /// **`SaidaDoApp.abrirEnderecoNoAppDeMapas`, e nao um caminho novo.** E a
-  /// MESMA porta que o encontro da Rede usa (`local_do_encontro.dart`):
-  /// intencao `geo:0,0?q=<texto>`, uma implementacao, um lugar. Escrever um
-  /// segundo jeito de abrir mapa aqui seria duplicar o que ja existe.
-  ///
-  /// O texto vem de `textoParaBuscaNoMapa`, que **nao e a linha exibida**: o
-  /// complemento sai e o bairro, a cidade e a UF entram. Nulo nao chega aqui --
-  /// quem desenha o toque e quem ja decidiu que ha endereco.
-  ///
-  /// **A uniao da onda 4 definiu este metodo DUAS VEZES nesta classe**, sem
-  /// conflito de texto: as duas frentes escreveram o mesmo mecanismo com a
-  /// mesma porta, diferindo so na frase de falha. Ficou um, e a frase e a do
-  /// encontro (ver `TextosDoAppDeMapas.falhaAoAbrir`).
   Future<void> _abrirNoMapa(String endereco) async {
     final abriu =
         await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
@@ -749,24 +467,11 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   }
 
   /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do local.
-  ///
-  /// **A recusa aparece em `SnackBar`, e nao em faixa**, que e onde esta tela
-  /// difere da ficha do pet -- de proposito. A acao vizinha desta pagina
-  /// ([_abrirNoMapa]) ja recusa assim, e as duas sao a mesma coisa para quem
-  /// olha: uma saida do aparelho que nao abriu. Dois desenhos de recusa na
-  /// mesma tela fariam a pessoa procurar a diferenca que nao existe. E e a
-  /// mesma escolha que o encontro fez (`_avisar`).
-  ///
-  /// **Nao ha tratamento de "WhatsApp nao instalado"**: quem decide o que a
-  /// folha lista e o sistema, e perguntar o que esta instalado exigiria
-  /// `QUERY_ALL_PACKAGES` no Android 11+.
   Future<void> _compartilharOLocal(DetalheDoLocal detalhe) async {
     final abriu = await SaidaDoApp.atual.compartilharTexto(
       texto: PaginaDoLocal.mensagemDeCompartilhar(
         nome: detalhe.nome,
         atividade: detalhe.atividade?.rotulo,
-        // A linha PUBLICA de lugar, e nao o logradouro. Ver a prosa de
-        // `mensagemDeCompartilhar`.
         lugar: detalhe.linhaDeLugar,
       ),
       assunto: PaginaDoLocal.assuntoDeCompartilhar(detalhe.nome),
@@ -777,10 +482,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
   }
-
-  // -------------------------------------------------------------------------
-  // A minha avaliacao
-  // -------------------------------------------------------------------------
 
   void _abrirEdicao() {
     final minha = _minha;
@@ -805,9 +506,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
 
   Future<void> _enviar() async {
     final nota = _nota;
-    // **A nota e obrigatoria e o texto nao.** Enviar sem nota seria enviar uma
-    // avaliacao sem avaliacao: a nota E a avaliacao, e o contrato a declara
-    // `required` com `CHECK` no banco atras.
     if (nota == null) {
       setState(() => _erroDaNota = PaginaDoLocal.notaObrigatoria);
       return;
@@ -832,13 +530,7 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         _editando = false;
         _minha = gravada.avaliacao;
         _refDaMinha = gravada.avaliacao.ref;
-        // **A media e a contagem sao as da RESPOSTA, sem segunda chamada.** O
-        // contrato manda `rating` ja com esta avaliacao dentro justamente para
-        // isto, e uma segunda chamada deixaria a media velha na tela se ela
-        // falhasse.
         _pontuacao = gravada.pontuacao;
-        // A minha sai do fluxo das outras na hora, inclusive quando ela ja
-        // estava na lista carregada (edicao).
         for (var i = 0; i < _avaliacoes.length; i++) {
           if (_avaliacoes[i].ref == gravada.avaliacao.ref) {
             _avaliacoes[i] = gravada.avaliacao;
@@ -847,8 +539,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         _texto.clear();
         _nota = null;
       });
-      // **A frase sai de `created`, nao do estado que a tela tinha.** Esse
-      // estado pode estar velho: outra sessao da mesma conta pode ter escrito.
       anunciar(
         context,
         gravada.criada
@@ -859,26 +549,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        // O nome do campo recusado vem do `Problem`, e e o que diz a quem
-        // escreveu 1600 caracteres qual dos dois campos o servidor negou.
-        //
-        // **AS DUAS METADES DO MESMO CONSERTO, e elas vieram de PRs
-        // diferentes que mexeram nesta mesma linha.**
-        //
-        // `acaoEmCurso` (do #49) e o que faz o `409
-        // contact-channel-unverified` desta rota falar de AVALIACAO. Sem ele
-        // esta faixa dizia a quem avaliou um veterinario que *"os tutores por
-        // perto vao receber a foto"*: o `type` e o mesmo de abrir caso de pet
-        // perdido, de proposito, e era a frase de la que chegava aqui.
-        //
-        // A ausencia de `.texto` (do #51) e o que faz a mensagem ir INTEIRA
-        // para o estado. Com `.texto`, o rotulo e o `next_action` -- a saida
-        // `Confirmar meu e-mail` -- eram jogados fora antes de a faixa
-        // existir, e a pessoa lia o motivo sem ter onde tocar.
-        //
-        // Pegar um lado so reintroduz um dos dois defeitos, e **as duas formas
-        // COMPILAM**: nenhum teste de tipo acusaria a escolha errada. Esta
-        // linha foi conferida a mao depois da uniao, nos dois `catch`.
         _erroDoFormulario = MensagensDeErro.de(
           falha,
           acaoEmCurso: AcaoEmCurso.avaliarLocal,
@@ -888,8 +558,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        // O irmao da linha acima, e com as duas metades pelo mesmo motivo:
-        // `acaoEmCurso` do #49, sem `.texto` do #51.
         _erroDoFormulario = MensagensDeErro.de(
           falha,
           acaoEmCurso: AcaoEmCurso.avaliarLocal,
@@ -899,10 +567,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        // **Sem `acao`, e de proposito**: nao ha endereco que resolva
-        // resposta fora do contrato, e `Tentar de novo` aqui ofereceria um
-        // reenvio que vai falhar igual. A faixa sai so com a frase, como
-        // saia antes.
         _erroDoFormulario = const MensagemDeErro(
           texto: MensagensDeErro.servidorFora,
         );
@@ -927,15 +591,8 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     );
     if (!mounted || !apagou) return;
     anunciar(context, PaginaDoLocal.avaliacaoApagada);
-    // **Recarrega, e nao desconta um da media na mao.** A media e calculada na
-    // consulta e o `DELETE` responde 204 sem corpo: subtrair aqui seria a tela
-    // reimplementando uma agregacao que ela nao tem como acertar.
     await _carregar();
   }
-
-  // -------------------------------------------------------------------------
-  // A denuncia de uma avaliacao
-  // -------------------------------------------------------------------------
 
   Future<void> _denunciar(AvaliacaoDoLocal avaliacao) async {
     final escopo = Escopo.of(context);
@@ -961,8 +618,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   Future<void> _entrar() async {
     await context.push<void>(Rotas.entrar);
     if (!mounted) return;
-    // Quem voltou com conta ve a pagina; quem voltou sem conta ve o convite de
-    // novo. Quem decide e `_logado`, e nao o desfecho da rota.
     await _carregar();
   }
 
@@ -970,27 +625,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   Widget build(BuildContext context) {
     final detalhe = _detalhe;
 
-    // O TITULO SAIU DA BARRA EM 28/10/2026, E A CASCA E A DA FICHA DO EVENTO.
-    //
-    // Pedido do cliente: *"na pagina interna da comunidade, vamos tirar o
-    // titulo e manter o padrao do botao voltar igual da pagina de eventos."*
-    // Esta pagina desenhava um `AppBar` com `Voltar` no `leading` e o nome do
-    // local no titulo; a ficha do evento desenhava capa com `Voltar` flutuante
-    // e a barra que entra na rolagem. Agora as duas desenham a MESMA
-    // `CascaDaPaginaInterna` -- "o mesmo padrao" virou o mesmo codigo, e nao
-    // duas copias que divergem na primeira edicao.
-    //
-    // **O NOME CONTINUA ANUNCIAVEL, e nao por sorte**: quem anuncia a pagina e
-    // o `Semantics` de rota da casca (`namesRoute`, `'Local: <nome>'`), que
-    // esta pagina JA tinha -- com o `AppBar` por cima, o nome era anunciado
-    // DUAS vezes. Tirar o titulo tirou a repeticao, nao a informacao. Ele
-    // tambem volta a ser VISIVEL na barra assim que a capa sai da tela.
-    //
-    // **`temCapa` e a foto, e nao uma constante**: a faixa 16:9 so existe com
-    // `photo_url`, e `photo_url` e nulo em tres casos normais (sem foto, ainda
-    // processando, recusada nos bytes) -- a maioria das entradas. Sem capa a
-    // casca nasce com a barra visivel, porque um botao redondo flutuante
-    // pousaria em cima do nome; ver a prosa dela.
     if (_fase == _Fase.pronto && detalhe != null) {
       return CascaDaPaginaInterna(
         nome: detalhe.nome,
@@ -1003,11 +637,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
 
-    // CARGA, FALHA, SEM CONTA E NAO ENCONTRADO MANTEM A BARRA COM TITULO, e e
-    // o que a ficha do evento faz nas mesmas fases. Sem nome para mostrar, a
-    // barra e o unico lugar onde `Voltar` cabe -- e aqui o titulo nao e
-    // repeticao de nada: e a unica palavra que diz em que pagina a pessoa
-    // esta enquanto ela nao carregou.
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: BichuAlvoDeToque.critico,
@@ -1073,7 +702,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
 
     if (_fase == _Fase.falha || detalhe == null) {
-      // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
       if (_faltaConta) {
         return const <Widget>[
           _Margem(child: ConviteParaEntrar(secao: SecaoComConta.paginaDoLocal)),
@@ -1093,27 +721,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     final pontuacao = _pontuacao ?? detalhe.pontuacao;
 
     return <Widget>[
-      // A FOTO DO LUGAR, de borda a borda, acima de tudo (cliente,
-      // 18/10/2026: "pode liberar as imagens do profissional no app").
-      //
-      // **Fora de `_Margem`, e e o unico filho desta pagina que fica fora
-      // dela.** A derivada e `banner` 1280 x 720 e o servidor a mediu para
-      // exatamente esta pintura: 360 a 430 dp de borda a borda, 1080 a
-      // 1290 px a 3x.
-      // Enfiada na margem de 16 dp de cada lado ela pagaria o mesmo peso para
-      // pintar menos.
-      //
-      // **Local sem foto nao tem faixa vazia**: `fotoUrl` e nulo em tres casos
-      // normais (sem foto, ainda processando, recusada nos bytes) e a pagina
-      // abre no nome, exatamente como antes de a foto existir.
-      //
-      // **Sem foto a pagina continua abrindo no nome, e NAO numa faixa 16:9
-      // vazia.** Quem desenha o tipo nesse caso e o quadrado do
-      // [_Cabecalho] -- ver a prosa dele. Um retangulo cinza de borda a borda
-      // e da altura de uma faixa empurraria `Informações` e a media para
-      // baixo da dobra em toda entrada sem foto, que e a maioria delas; foi
-      // medido aqui, com `Atende cão e gato.` saindo da arvore do `ListView`
-      // ao tentar.
       if (detalhe.fotoUrl case final String foto) ...<Widget>[
         _FaixaDoLocal(url: foto, nome: detalhe.nome),
         const SizedBox(height: BichuEspaco.e4),
@@ -1125,26 +732,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
           aoAbrirNoMapa: _abrirNoMapa,
         ),
       ),
-      // `Compartilhar` (cliente, 22/10/2026: *"adicione um botao compartilhar
-      // igual tem na pagina de eventos"*).
-      //
-      // **POR QUE AQUI, E NAO NA BARRA DE TOPO**: e o mesmo lugar do encontro,
-      // e pela mesma razao registrada la -- na PRIMEIRA DOBRA, logo depois do
-      // titulo e do contato, que e o momento em que a pessoa decide se manda o
-      // local para alguem. O slot de acao da barra desta pagina fica vazio de
-      // proposito (ver o `AppBar` de `build`), e por o botao la o esconderia
-      // atras de um menu.
-      //
-      // **`BotaoSecundario` e nao primario**, tambem como o encontro: a acao
-      // principal desta tela e `Ligar`, que e `BotaoPrimario` tres linhas
-      // acima. Dois botoes cheios na mesma dobra fariam a pessoa escolher pela
-      // posicao.
-      //
-      // **SEM TRAVA DE ESTADO, e a ausencia e medida**: o encontro esconde a
-      // acao no cancelado e no encerrado porque convidar para um evento que
-      // nao vai acontecer manda gente a um lugar vazio. Entrada de diretorio
-      // nao tem esses estados -- o que sai de `/directory/entries/{slug}` esta
-      // publicado, e `404` cai na fase `naoEncontrado`, que nem chega aqui.
       const SizedBox(height: BichuEspaco.e4),
       _Margem(
         child: BotaoSecundario(
@@ -1153,26 +740,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
           aoTocar: () => _compartilharOLocal(detalhe),
         ),
       ),
-      // AS ATIVIDADES, EM TAGS (cliente, 28/10/2026): *"no backoffice voce
-      // pode escolher varios segmentos, e no aplicativo so esta aparecendo um.
-      // Adicione um bloco na pagina, trazendo as tags que foram escolhidas."*
-      //
-      // **O dado ja era plural e o app e que nao lia**: `kinds` existe no
-      // contrato desde 21/10/2026 e `DetalheDoLocal` lia so o `kind` singular.
-      // Ver `DetalheDoLocal.atividades`.
-      //
-      // **POR QUE AQUI, logo acima de `Informações`**: a atividade e o que a
-      // pessoa esta procurando quando abre a ficha de um lugar -- ela quer
-      // saber se o lugar FAZ o que ela precisa antes de ler endereco e nota.
-      // O bloco fica depois de `Compartilhar` para nao empurrar aquele botao
-      // para fora da primeira dobra, que e uma decisao de 22/10 com a razao
-      // escrita acima.
-      //
-      // **SEM BLOCO VAZIO**: lista vazia nao desenha nem o titulo nem o
-      // divisor. Ela e vazia em dois casos (todas as atividades desconhecidas,
-      // ou nem `kinds` nem `kind`), e um titulo com nada embaixo e secao que
-      // promete e nao entrega -- o mesmo criterio que mantem a faixa 16:9 fora
-      // da pagina sem foto.
       if (detalhe.atividades.isNotEmpty) ...<Widget>[
         const _Divisor(),
         _Secao(
@@ -1211,7 +778,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
 
   /// O bloco `A minha avaliação`, nos quatro estados do protótipo.
   Widget _blocoDaMinha(DetalheDoLocal detalhe) {
-    // (d) ja avaliei, e a tela tem o objeto: a minha com `Editar` e `Apagar`.
     if (_minha case final AvaliacaoDoLocal minha when !_editando) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1228,8 +794,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
 
-    // Ja avaliei, mas a minha nao esta em nenhuma pagina carregada. A tela nao
-    // finge ter o conteudo: ver `PaginaDoLocal.minhaForaDaPagina`.
     if (_refDaMinha != null && !_editando) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1254,7 +818,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
 
-    // (c) pode avaliar, ou esta editando a que ja escreveu.
     if (_editando || detalhe.podeAvaliar) {
       return _Formulario(
         nota: _nota,
@@ -1272,7 +835,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
 
-    // (b) conta com e-mail nao confirmado. **O campo nao e desenhado.**
     if (detalhe.motivoDeNaoPoderAvaliar ==
         MotivoDeNaoPoderAvaliar.canalNaoVerificado) {
       return _Caixa(
@@ -1296,7 +858,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
       );
     }
 
-    // `can_review: false` com motivo que esta versao do app nao conhece.
     return const _Caixa(child: _Corpo(texto: PaginaDoLocal.bloqueioSemMotivo));
   }
 
@@ -1328,12 +889,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // **A ordenacao no CORPO, no topo do conteudo.** Ver o cabecalho da
-        // classe: a reversao de 17/10 vale para as listagens de aba, que tem o
-        // slot da casca; esta tela e empilhada e nao tem aquele slot.
-        //
-        // So aparece quando ha mais de uma avaliacao: reordenar uma lista de
-        // um item e um controle que nao faz nada.
         if (pagina.total > 1) ...<Widget>[
           _ChipsDeOrdem(ordem: _ordem, aoTrocar: _trocarOrdem),
           const SizedBox(height: BichuEspaco.e4),
@@ -1356,10 +911,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
         if (_avaliacoes.isNotEmpty) ...<Widget>[
           const SizedBox(height: espacoAcimaDoRodape),
           RodapeDaPaginacao(
-            // `carregados` conta TUDO o que veio, inclusive a minha: ela
-            // tambem e uma avaliacao do local e tambem conta no `total`. Tirar
-            // a minha daqui faria o rodape pedir eternamente uma pagina que
-            // nao existe.
             carregados: _avaliacoes.length,
             total: pagina.total,
             carregando: _carregandoMais,
@@ -1373,31 +924,14 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// O cabecalho
-// ---------------------------------------------------------------------------
-
 /// A faixa 16:9 com a foto do lugar, de borda a borda.
-///
-/// ## O custo, medido e nao estimado
-///
-/// `cacheWidth` pede ao decodificador a largura que a tela PINTA. Num aparelho
-/// de 412 dp a 3x isso da 1236 px, e a imagem decodificada custa
-/// `1236 x 695 x 4` = **3,28 MiB**; sem `cacheWidth` ela custaria os 1280 x
-/// 720 do arquivo, 3,52 MiB, em qualquer aparelho. A 2x o mesmo codigo cobra
-/// 1,11 MiB, e e esse o ponto: o numero acompanha a tela.
-///
-/// **Uma por pagina, e e por isso que ela cabe.** Vinte destas numa listagem
-/// seriam 65,6 MiB de imagem decodificada (20 x 3,28 MiB), e e exatamente a
-/// conta que mantem a faixa fora do cartao do `Perto`.
 class _FaixaDoLocal extends StatelessWidget {
   const _FaixaDoLocal({required this.url, required this.nome});
 
   final String url;
   final String nome;
 
-  /// 16:9, a proporcao da derivada `banner` do contrato. Recortar numa
-  /// proporcao diferente da que o servidor cortou deixaria tarja.
+  /// 16:9, a proporcao da derivada `banner` do contrato.
   static const double proporcao = 16 / 9;
 
   @override
@@ -1406,38 +940,10 @@ class _FaixaDoLocal extends StatelessWidget {
       url: url,
       descricao: PaginaDoLocal.fotoDe(nome),
       proporcao: proporcao,
-      // Sem raio: de borda a borda, raio arredondaria contra a borda da
-      // tela e deixaria quatro cantos de fundo aparecendo.
       raio: BichuRaio.none,
       simboloDeFalha: Icons.storefront_outlined,
     );
 
-    // **A FOTO PRINCIPAL AMPLIA AO TOQUE** (cliente, 22/10/2026: *"coloque
-    // link na imagem principal para aumentar e tornar um carrosel de imagens,
-    // caso tenha mais do que uma foto cadastrada"*).
-    //
-    // **REUSO, e nao caminho novo**: quem abre e
-    // `widgets/visualizador_de_imagem.dart`, o MESMO da capa do encontro
-    // (20/10/2026) e da vitrine de fotos do perfil. Ele ganhou lista e indice
-    // inicial em 22/10 para servir as tres superficies; um segundo ampliador
-    // aqui seria a duplicacao que o cliente ja cobrou em outro assunto.
-    //
-    // **A LISTA TEM UM ELEMENTO, E ISSO E O CONTRATO E NAO UMA SIMPLIFICACAO.**
-    // `DirectoryEntryDetail` declara UM `photo_url` (mais `logo_url`, que e
-    // logo e nao foto) e nao ha galeria de entrada de diretorio em rota
-    // nenhuma: medido em `api/openapi.yaml`, as quatro rotas publicas de
-    // `/directory/entries` nao devolvem lista de imagens. Entao a metade
-    // `carrosel` do pedido **nao tem dado que a acenda hoje** -- o mecanismo
-    // esta de pe e medido no visualizador, e acende sem APK novo no dia em que
-    // o contrato ganhar a galeria, trocando esta lista de um elemento pela
-    // dele. A logo NAO entra aqui: logo nao e foto do lugar, e enfia-la num
-    // carrossel de fotos inventaria produto.
-    //
-    // **UM no semantico, e nao dois.** `ImagemDaRede` ja poe `descricao` na
-    // imagem; sem `excludeSemantics` o leitor de tela anunciaria o nome da
-    // foto e depois o botao, como se fossem duas coisas. O nome e o da foto, a
-    // funcao e `button`, e o que o toque FAZ vai em `hint` -- que e onde o
-    // leitor de tela espera a acao. Mesma forma da capa do encontro.
     return Semantics(
       button: true,
       label: PaginaDoLocal.fotoDe(nome),
@@ -1456,26 +962,6 @@ class _FaixaDoLocal extends StatelessWidget {
 }
 
 /// Nome, atividade, lugar, distancia, **o que foi verificado** e `Ligar`.
-///
-/// ## O quadrado do TIPO, ao lado do nome
-///
-/// Pedido do cliente em 18/10/2026: *"tem que colocar o icone de clinica,
-/// estabelecimento, profissional, caso a foto/logo da empresa nao tenha sido
-/// cadastrada"*. Ele entra AQUI, e nao no lugar da faixa, por duas razoes:
-///
-/// 1. **medida**: um `IconeDoInscrito` em 16:9 de borda a borda no topo
-///    empurrava `Informações` e a media para fora da arvore do `ListView` numa
-///    pagina sem foto -- o caso `local SEM foto nao tem faixa vazia` deixou de
-///    achar `Atende cão e gato.` na primeira tentativa desta entrega. A pagina
-///    sem foto tem de abrir no nome, e esse era o motivo original de nao haver
-///    faixa vazia;
-/// 2. **o mesmo desenho da lista**: no cartao do `Perto` o glifo fica num
-///    quadrado de `larguraFotoSm` ao lado do nome, e e o mesmo quadrado aqui.
-///    Duas geometrias para o mesmo conceito divergem na primeira edicao.
-///
-/// **So quando nao ha faixa.** Com `photo_url`, a foto do lugar ja esta
-/// desenhada acima e o tipo esta escrito em palavras na linha da atividade:
-/// um terceiro lugar dizendo a mesma coisa seria ruido.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({
     required this.detalhe,
@@ -1488,15 +974,10 @@ class _Cabecalho extends StatelessWidget {
 
   /// Recebe o TEXTO da busca, ja montado, e repassa a
   /// `SaidaDoApp.abrirEnderecoNoAppDeMapas` -- a mesma porta do encontro.
-  ///
-  /// **Subiu de `_Informacoes` para ca em 22/10/2026**, com a linha que ele
-  /// serve. Ver a prosa de `build`.
   final Future<void> Function(String endereco) aoAbrirNoMapa;
 
   @override
   Widget build(BuildContext context) {
-    // `cores` saiu com a linha da atividade (28/10/2026): ela era a unica
-    // consumidora dele neste `build`.
     final textos = Theme.of(context).textTheme;
 
     final lugar = detalhe.linhaDeLugar;
@@ -1506,8 +987,6 @@ class _Cabecalho extends StatelessWidget {
       cidade: detalhe.cidade,
       estado: detalhe.estado,
     );
-    // A MESMA formatacao do cartao da listagem, e de proposito: o servidor
-    // arredonda a 100 m (ADR-0006) e `2,73 km` inventaria dois digitos.
     final distancia =
         CartaoDoDiretorio.distanciaEmTexto(detalhe.distanciaEmMetros);
     final verificacao = detalhe.verificacao.oQueFoiVerificado;
@@ -1522,22 +1001,6 @@ class _Cabecalho extends StatelessWidget {
             children: <Widget>[
               if (detalhe.fotoUrl == null)
                 Row(
-                  // **ALINHADOS NA VERTICAL** (cliente, 22/10/2026: *"Alinhe o
-                  // titulo do estabelecimento e a imagem na vertical"*).
-                  //
-                  // `center` e nao `start`, e a diferenca e visivel: o quadrado
-                  // tem `larguraFotoSm` (56 dp) e a linha do titulo tem a
-                  // altura de `headlineSmall` (~32 dp), entao com `start` o
-                  // nome encostava no topo de um quadrado mais alto que ele e
-                  // sobrava um vao embaixo do texto. Centrar no eixo cruzado e
-                  // o que "alinhar na vertical" significa numa `Row`.
-                  //
-                  // **O cartao da listagem continua em `start`, de proposito**:
-                  // lá o quadrado e do mesmo tamanho mas o titulo e
-                  // `titleMedium` e tem uma pilha de linhas embaixo dele, e
-                  // centrar o conjunto desalinharia o nome das linhas que o
-                  // seguem. O pedido fala do "titulo do estabelecimento", que e
-                  // esta tela.
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
                     IconeDoInscrito(
@@ -1561,48 +1024,6 @@ class _Cabecalho extends StatelessWidget {
                   header: true,
                   child: Text(detalhe.nome, style: textos.headlineSmall),
                 ),
-              // A LINHA DA ATIVIDADE SAIU DAQUI EM 28/10/2026, e nao foi
-              // apagada: ela virou o bloco `Atividades`, em tags, no corpo da
-              // pagina. Ela escrevia `detalhe.atividade?.rotulo`, que e o
-              // `kind` SINGULAR -- a versao quebrada da mesma informacao, e
-              // exatamente o que o cliente relatou (*"no aplicativo so esta
-              // aparecendo um"*). Mantê-la ao lado do bloco faria a primeira
-              // atividade aparecer DUAS vezes na mesma dobra.
-              // O LUGAR APARECE **UMA** VEZ NA PAGINA, EMBAIXO DO TITULO, E
-              // E CLICAVEL (cliente, 22/10/2026).
-              //
-              // Ele contou o que via: *"tem o bairro abaixo do titulo, o
-              // endereco la embaixo na descricao e o bairro novamente. Deixe
-              // apenas o endereco embaixo do titulo e clicavel."* Eram TRES
-              // linhas do mesmo lugar -- esta (bairro), a do logradouro em
-              // `_Informacoes` e a de bairro de novo em `_Informacoes` --, e
-              // passaram a ser uma, aqui.
-              //
-              // **ISTO NAO DESFAZ A DECISAO DE 21/10/2026, e e a continuacao
-              // dela.** A regra `um botao, nunca dois` de
-              // `local_do_encontro.dart` dizia qual das duas linhas e o
-              // controle; o item 5 diz quantas linhas existem. As duas valem
-              // juntas, e a composicao e a mesma de antes:
-              //
-              // 1. **com logradouro** -- a linha dele e o controle, e a de
-              //    lugar nao e desenhada (antes ela ficava embaixo; era a
-              //    terceira ocorrencia que o cliente contou);
-              // 2. **sem logradouro** -- a linha de lugar e o controle. E o
-              //    caso do autonomo, e e a MAIORIA das entradas;
-              // 3. **sem nenhum dos dois** -- nenhuma linha, e nenhum
-              //    controle. Nao precisa de codigo: nao ha `else`.
-              //
-              // Num e noutro ha **exatamente um** alvo de mapa na pagina, e
-              // `aoAbrirNoMapa` e a porta unica (`geo:0,0?q=<texto>`) --
-              // *"o maps padrao do usuario"* e o seletor que o Android abre, e
-              // nao uma escolha nossa (ADR-0006: o Bichu nao geocodifica).
-              //
-              // O rotulo ANUNCIADO poe a acao antes do dado
-              // (`Abrir no mapa: Rua X, 1020`): quem ouve o endereco primeiro
-              // precisa da linha inteira para descobrir que ela leva a algum
-              // lugar. As duas condicoes de cada bloco sao a MESMA
-              // (`temEnderecoDeRua`) e estao as duas escritas porque o tipo nao
-              // as liga -- sem a segunda, o uso de `busca` seria uma aposta.
               if (endereco != null && busca != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e3),
                 Semantics(
@@ -1633,10 +1054,6 @@ class _Cabecalho extends StatelessWidget {
                       '${TextosDoAppDeMapas.rotuloDoEndereco}: $lugar',
                 ),
               ],
-              // Distancia nula **nao escreve linha nenhuma**: nem "distância
-              // indisponível", nem traco. Ela e nula com frequencia aqui, e
-              // quem chegou por link direto nao perdeu nada que soubesse que
-              // existia.
               if (distancia != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
                 _LinhaComIcone(
@@ -1647,24 +1064,15 @@ class _Cabecalho extends StatelessWidget {
             ],
           ),
         ),
-        // **O QUE foi verificado, nunca "Verificado".** `oQueFoiVerificado`
-        // devolve nulo em `level: none` -- que e estado legitimo e publicavel
-        // (ADR-0011) -- e tambem quando a resposta afirma ter verificado sem
-        // listar a prova. Nos dois casos a tela fica calada em vez de inventar
-        // a palavra.
         if (verificacao != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e4),
           _Selo(texto: verificacao),
         ],
-        // **A unica acao de contato e ligar, e so com telefone.** Sem
-        // `phone_e164` nao ha botao desabilitado: nao ha botao.
         if (telefone != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e5),
           SizedBox(
             width: double.infinity,
             child: BotaoPrimario(
-              // VISIVEL `Ligar`, com o telefone; ANUNCIADO `Ligar para <nome>`.
-              // Ver `rotuloDeLigar` e `ligarPara`.
               rotulo: PaginaDoLocal.rotuloDeLigar,
               nomeAcessivel: PaginaDoLocal.ligarPara(detalhe.nome),
               icone: Icons.call_outlined,
@@ -1677,44 +1085,7 @@ class _Cabecalho extends StatelessWidget {
   }
 }
 
-/// `Informações`: o `about` e o lugar. **O telefone NAO.**
-///
-/// ## O numero saiu daqui, e era o unico lugar que o pintava
-///
-/// Ate 19/10/2026 esta secao desenhava `Telefone comercial: +5511987654321`
-/// -- o `phone_e164` do contrato, por extenso, em texto. O cliente pediu
-/// *"sem aparecer o telefone quando for profissionais/clinicas"*, e esta
-/// linha era o pedido inteiro: medido, nao havia outro lugar do app que
-/// escrevesse o numero na tela.
-///
-/// **O botao `Ligar` do cabecalho FICA.** Ele nao mostra numero nenhum: o
-/// rotulo visivel e `Ligar` e o nome acessivel e `Ligar para <nome>`. O
-/// numero so aparece depois, no discador do sistema, que e tela do aparelho
-/// e nao desta pagina -- e e o discador que mostra o numero e espera a
-/// confirmacao, que e a razao de o app nunca discar sozinho.
-///
-/// ## O ENDERECO COMERCIAL entrou em 21/10/2026
-///
-/// Decisao do cliente, nestas palavras: *"o endereco completo do
-/// profissional"*, para a pessoa tocar nele e abrir o aplicativo de mapas. A
-/// prosa anterior dizia que o protótipo "marca onde caberia o endereco e diz na
-/// mesma linha que nada disso existe hoje"; o endereco existe, e os outros
-/// continuam valendo a frase.
-///
-/// **TRES CASOS, os mesmos tres do `local_do_encontro.dart` da Rede**, porque
-/// sao as tres formas que o dado chega:
-///
-/// 1. **com endereco de rua** -- a linha do endereco e TOCAVEL e abre o mapa,
-///    e a linha de lugar continua embaixo dela;
-/// 2. **sem endereco de rua, com bairro/cidade/UF** -- so a linha de lugar, sem
-///    toque. E o caso do autonomo, e e a maioria;
-/// 3. **sem nada** -- nenhuma linha. **Endereco ausente nao vira toque que abre
-///    o mapa no nada**, e e por isso que a condicao e `temEnderecoDeRua` e nao
-///    "algum dos quatro campos veio".
-///
-/// **E so isso que existe.** E-mail, WhatsApp, redes e horario continuam sem
-/// coluna, e nenhum deles e desenhado aqui: espaco reservado ensinaria quem le
-/// que o dado vem.
+/// `Informações`: o `about` e o lugar.
 class _Informacoes extends StatelessWidget {
   const _Informacoes({required this.detalhe});
 
@@ -1730,47 +1101,16 @@ class _Informacoes extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // O texto INTEIRO, com as quebras de linha que o painel gravou: nao ha
-        // `Ler mais` nesta tela, pela mesma razao do detalhe do produto -- a
-        // pagina e de um local so e nao ha o que empurrar para baixo.
         if (sobre != null && sobre.isNotEmpty)
           _Corpo(texto: sobre)
         else
           const _Corpo(texto: semSobre),
-        // **AS DUAS LINHAS DE LUGAR SAIRAM DAQUI EM 22/10/2026**, e esta
-        // secao voltou a ser so a apresentacao.
-        //
-        // Elas eram duas das TRES ocorrencias do mesmo lugar que o cliente
-        // contou: *"tem o bairro abaixo do titulo, o endereco la embaixo na
-        // descricao e o bairro novamente. Deixe apenas o endereco embaixo do
-        // titulo e clicavel."* **Esta secao e a `descricao` das palavras
-        // dele**, e era dentro dela que o endereco morava -- o que ele pediu
-        // no item 4 (*"deve ser um campo separado"*) e exatamente tira-lo de
-        // dentro da apresentacao e por como irmao do titulo.
-        //
-        // **A regra `um botao, nunca dois` de 21/10/2026 nao mudou de
-        // conteudo, mudou de endereco**: ela agora mora inteira no
-        // `_Cabecalho`, nas duas condicoes do bloco de lugar. O que NAO existe
-        // mais e esta secao ter alvo de mapa -- se um voltar para ca, havera
-        // dois na mesma rolagem, e e isso que o caso
-        // `ISCA — um controle de mapa, nunca dois` reprova.
-        //
-        // **E-mail, WhatsApp, redes e horario continuam sem coluna** e
-        // continuam fora: espaco reservado ensinaria quem le que o dado vem.
       ],
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// A pontuacao
-// ---------------------------------------------------------------------------
-
 /// A media, a contagem e o histograma — **ou o estado zero**.
-///
-/// O estado zero **nao tem media e nao tem estrela**: `average` e nulo quando
-/// `count` e zero, e desenhar `0,0` diria "pessimo" sobre um local que ninguem
-/// avaliou.
 class _BlocoDaPontuacao extends StatelessWidget {
   const _BlocoDaPontuacao({required this.pontuacao});
 
@@ -1835,10 +1175,6 @@ class _BlocoDaPontuacao extends StatelessWidget {
 }
 
 /// As cinco barras, de 5 para 1.
-///
-/// **As cinco existem sempre, inclusive vazias** (contrato): a barra de uma
-/// nota que ninguem deu precisa existir, senao o grafico muda de forma e deixa
-/// de ser comparavel entre locais.
 class _Histograma extends StatelessWidget {
   const _Histograma({required this.pontuacao});
 
@@ -1887,17 +1223,14 @@ class _Histograma extends StatelessWidget {
 }
 
 /// Cinco estrelas preenchidas por [fracao], de 0 a 1.
-///
-/// **Decorativas**: a arvore de acessibilidade recebe [rotulo], que diz a nota
-/// por extenso. Cinco icones anunciados um a um nao dizem nota nenhuma.
 class _Estrelas extends StatelessWidget {
   const _Estrelas({required this.fracao, required this.rotulo});
 
   final double fracao;
   final String rotulo;
 
-  /// 16 dp: a medida em que cinco estrelas cabem ao lado da data sem empurrar
-  /// a linha para baixo com a fonte do sistema em 200%.
+  /// 16 dp: a medida em que cinco estrelas cabem ao lado da data sem empurrar a
+  /// linha para baixo com a fonte do sistema em 200%.
   static const double _medida = BichuEspaco.e4;
 
   @override
@@ -1924,8 +1257,6 @@ class _Estrelas extends StatelessWidget {
                     ),
                 ],
               ),
-              // O recorte pela fracao desenha meia estrela sem precisar de um
-              // icone de meia estrela, que nao existe em todas as medidas.
               ClipRect(
                 clipper: _RecorteDaFracao(fracao.clamp(0.0, 1.0)),
                 child: Row(
@@ -1955,10 +1286,6 @@ class _RecorteDaFracao extends CustomClipper<Rect> {
   @override
   bool shouldReclip(_RecorteDaFracao antigo) => antigo.fracao != fracao;
 }
-
-// ---------------------------------------------------------------------------
-// O formulario da minha avaliacao
-// ---------------------------------------------------------------------------
 
 /// A nota (obrigatoria) e o texto (opcional, com limite e contador).
 class _Formulario extends StatelessWidget {
@@ -1999,10 +1326,6 @@ class _Formulario extends StatelessWidget {
             aoEscolher: aoEscolherNota,
           ),
           const SizedBox(height: BichuEspaco.e5),
-          // **Opcional em TEXTO no rotulo**, que e o padrao do campo do app: a
-          // nota e a avaliacao e o texto e o extra (decisao do cliente,
-          // 18/10). O contador e o limite saem de `limiteDoTextoDaAvaliacao`,
-          // que e o limite da COLUNA -- texto maior leva 400.
           BichuField(
             rotulo: PaginaDoLocal.rotuloDoTexto,
             controlador: texto,
@@ -2015,11 +1338,6 @@ class _Formulario extends StatelessWidget {
           ),
           if (erro != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e4),
-            // A SAIDA SAI DA MENSAGEM, e nao desta tela: o catalogo diz o
-            // rotulo e `saidaDaMensagem` diz o destino. Rotulo de operacao
-            // (`Tentar de novo`) nao tem endereco e nao vira botao -- a faixa
-            // so o desenha com rotulo E callback, e e isso que impede saida
-            // que nao leva a lugar nenhum.
             FaixaDeAviso(
               texto: erro!.texto,
               rotuloDaAcao: erro!.acao,
@@ -2056,13 +1374,6 @@ class _Formulario extends StatelessWidget {
 }
 
 /// As cinco estrelas de toque.
-///
-/// **E um grupo com rotulo, e cada estrela diz a nota que ela da.** Cinco
-/// botoes chamados `★` seriam cinco paradas indistinguiveis no leitor de tela.
-/// Cada alvo tem 48 dp, que e o minimo do 11.1.
-///
-/// **Nao ha meia estrela**: o cliente pediu nota de 1 a 5, e meia estrela
-/// mudaria o tipo da coluna depois de haver dado gravado.
 class _SeletorDeNota extends StatelessWidget {
   const _SeletorDeNota({
     required this.nota,
@@ -2142,26 +1453,7 @@ class _SeletorDeNota extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Uma avaliacao na lista
-// ---------------------------------------------------------------------------
-
 /// O cartao de uma avaliacao: quem escreveu, a nota, a data, o texto.
-///
-/// Tres regras do contrato vivem aqui:
-///
-/// - **`author_display_name` nulo escreve `Alguém da comunidade`**, por
-///   `AvaliacaoDoLocal.nomeDeQuemLe`. Linha muda parece defeito de
-///   carregamento.
-/// - **`body` nulo nao desenha paragrafo**, e isso e normal e frequente: quem
-///   deu so a nota.
-/// - **`edited_at` nao nulo escreve `editada`.** Avaliacao reescrita depois de
-///   alguem ter lido a primeira versao e um formato conhecido de ma-fe.
-///
-/// **Nada do autor alem do nome sai daqui**: nem conta, nem quantos pets tem,
-/// nem as outras avaliacoes dele. A BICHUS-174 proibe expor vinculo entre duas
-/// pessoas, e um nome navegavel seria exatamente isso -- e por isso o nome
-/// **nao e um link**.
 class _CartaoDeAvaliacao extends StatelessWidget {
   const _CartaoDeAvaliacao({
     required this.avaliacao,
@@ -2177,9 +1469,7 @@ class _CartaoDeAvaliacao extends StatelessWidget {
   final VoidCallback? aoEditar;
   final VoidCallback? aoApagar;
 
-  /// O nome acessivel do controle de denuncia. Numa lista de dez, dez
-  /// controles chamados so `Denunciar` sao dez paradas indistinguiveis no
-  /// leitor de tela.
+  /// O nome acessivel do controle de denuncia.
   static String denunciarDe(String nome) => 'Denunciar a avaliação de $nome';
 
   @override
@@ -2202,9 +1492,6 @@ class _CartaoDeAvaliacao extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Nome, nota, data e texto sao UMA parada de foco: quem usa leitor de
-          // tela ouve a avaliacao inteira num deslize. Os controles ficam fora
-          // do merge, porque cada um precisa da propria parada.
           MergeSemantics(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2224,8 +1511,6 @@ class _CartaoDeAvaliacao extends StatelessWidget {
                     const SizedBox(width: BichuEspaco.e2),
                     Text(
                       avaliacao.foiEditada
-                          // A data mostrada e a da edicao, e a palavra diz que
-                          // houve uma: a data sozinha esconderia o fato.
                           ? '${avaliacao.dataEmTexto} · '
                               '${PaginaDoLocal.marcaDeEditada}'
                           : avaliacao.dataEmTexto,
@@ -2234,7 +1519,6 @@ class _CartaoDeAvaliacao extends StatelessWidget {
                     ),
                   ],
                 ),
-                // **Avaliacao so com nota nao ganha paragrafo vazio.**
                 if (texto != null) ...<Widget>[
                   const SizedBox(height: BichuEspaco.e3),
                   Text(
@@ -2274,8 +1558,6 @@ class _CartaoDeAvaliacao extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: cores.textSecondary,
                 ),
-                // Numa lista de dez, dez controles chamados so `Denunciar` sao
-                // dez paradas indistinguiveis no leitor de tela.
                 label: Text(denunciarDe(avaliacao.nomeDeQuemLe)),
               ),
             ),
@@ -2287,9 +1569,6 @@ class _CartaoDeAvaliacao extends StatelessWidget {
 }
 
 /// As tres ordens do contrato, no corpo da tela.
-///
-/// **Nao ha "mais útil"**: nao existe voto de utilidade neste produto, e
-/// oferecer a ordem sem o voto ordenaria por nada.
 class _ChipsDeOrdem extends StatelessWidget {
   const _ChipsDeOrdem({required this.ordem, required this.aoTrocar});
 
@@ -2330,9 +1609,6 @@ class _ChipsDeOrdem extends StatelessWidget {
                       color:
                           o == ordem ? cores.primaryContainer : cores.surface,
                       borderRadius: BorderRadius.circular(BichuRaio.full),
-                      // A diferenca **nao e so de cor**: a espessura da borda
-                      // muda, e `Semantics.selected` a diz por extenso
-                      // (SC 1.4.1).
                       border: Border.all(
                         color: o == ordem ? cores.primary : cores.outline,
                         width: o == ordem
@@ -2358,19 +1634,7 @@ class _ChipsDeOrdem extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// A folha da denuncia
-// ---------------------------------------------------------------------------
-
-/// A denuncia de uma avaliacao: motivo de **lista fechada** e detalhe
-/// opcional.
-///
-/// **Lista fechada e nao texto livre**, pelo desenho de `conversation_reports`:
-/// a fila de moderacao precisa ser triada, e campo livre nao tria.
-///
-/// **O desfecho e `202`, e o texto nao promete decisao.** A rota promete que o
-/// pedido foi recebido; prometer analise seria mentir sobre o que existe --
-/// nao ha equipe de moderacao de plantao.
+/// A denuncia de uma avaliacao: motivo de **lista fechada** e detalhe opcional.
 class _FolhaDeDenuncia extends StatefulWidget {
   const _FolhaDeDenuncia({
     required this.nomeDeQuemEscreveu,
@@ -2525,10 +1789,6 @@ class _FolhaDeDenunciaState extends State<_FolhaDeDenuncia> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// As pecas de pagina, no mesmo vocabulario do detalhe do produto
-// ---------------------------------------------------------------------------
-
 /// A margem lateral da pagina: a mesma de `loja/produto_da_loja.dart` e de
 /// `rede/encontro_da_rede.dart`.
 class _Margem extends StatelessWidget {
@@ -2603,21 +1863,6 @@ class _Divisor extends StatelessWidget {
 }
 
 /// O bloco `Atividades`: uma tag por atividade escolhida (cliente, 28/10/2026).
-///
-/// **Reusa [_Selo], que ja era a pilula desta pagina** -- a mesma que carrega
-/// o nivel de verificacao e o selo da minha avaliacao. Um widget novo aqui
-/// seria a segunda definicao do mesmo desenho no mesmo arquivo.
-///
-/// **`Wrap` e nao `Row`**: sao de 1 a 6 atividades e os rotulos tem
-/// comprimentos bem diferentes (`Veterinário`, `Banho e tosa`). Uma `Row`
-/// estouraria a largura com quatro tags e o Flutter pintaria a faixa amarela
-/// de overflow.
-///
-/// **SEM `ExcludeSemantics`, e isso e deliberado**: cada tag e uma palavra que
-/// a pessoa precisa ouvir. Em outros pontos desta pagina o `ExcludeSemantics`
-/// existe para tirar glifo decorativo da arvore; aqui nao ha glifo, ha o
-/// conteudo. Um `Wrap` de tags dentro de `ExcludeSemantics` desenharia as tres
-/// e anunciaria nenhuma.
 class _Atividades extends StatelessWidget {
   const _Atividades({required this.atividades});
 
@@ -2711,9 +1956,6 @@ class _Nota extends StatelessWidget {
 }
 
 /// A pilula neutra: a palavra e a informacao, e nenhuma cor diz nada.
-///
-/// **No cabecalho ela diz O QUE foi verificado**, nunca "Verificado" sozinho:
-/// a BICHUS-165 nao passou por selo generico.
 class _Selo extends StatelessWidget {
   const _Selo({required this.texto});
 
@@ -2742,11 +1984,7 @@ class _Selo extends StatelessWidget {
   }
 }
 
-/// Uma linha de meta: icone e texto. **Tocavel so quando [aoTocar] vem.**
-///
-/// A distancia e a atividade usam a forma sem toque, e continuam exatamente
-/// como eram -- o parametro e opcional de proposito, para a linha do endereco
-/// nao exigir um widget novo nem um `if` em cada chamador.
+/// Uma linha de meta: icone e texto.
 class _LinhaComIcone extends StatelessWidget {
   const _LinhaComIcone({
     required this.icone,
@@ -2765,8 +2003,7 @@ class _LinhaComIcone extends StatelessWidget {
   /// Nulo: a linha e texto, como sempre foi.
   final VoidCallback? aoTocar;
 
-  /// O que o leitor de tela anuncia no lugar do texto visivel. Obrigatorio
-  /// junto com [aoTocar], pelo `assert` do construtor.
+  /// O que o leitor de tela anuncia no lugar do texto visivel.
   final String? rotuloAcessivel;
 
   @override
@@ -2796,15 +2033,9 @@ class _LinhaComIcone extends StatelessWidget {
     return Semantics(
       button: true,
       label: rotuloAcessivel,
-      // **`excludeSemantics`, e nao um `Semantics` por fora.** Sem ele o
-      // leitor de tela anuncia o rotulo E o texto visivel em seguida --
-      // "Abrir Pinheiros, Sao Paulo - SP no mapa, Pinheiros, Sao Paulo - SP".
       excludeSemantics: true,
       child: InkWell(
         onTap: toque,
-        // O alvo minimo do design system. A linha tem a altura de uma linha de
-        // `bodyMedium`, que fica abaixo do minimo: sem isto o alvo e menor do
-        // que o dedo, e isso nao aparece em teste de widget nenhum.
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: BichuAlvoDeToque.min),
           child: Align(alignment: Alignment.centerLeft, child: linha),
@@ -2815,9 +2046,6 @@ class _LinhaComIcone extends StatelessWidget {
 }
 
 /// O esqueleto da pagina: nome, duas linhas de meta e o bloco da pontuacao.
-///
-/// **Anunciado**: sem o `Semantics` o leitor de tela encontraria uma pagina
-/// sem nada enquanto a chamada esta em voo.
 class _EsqueletoDoLocal extends StatelessWidget {
   const _EsqueletoDoLocal();
 
@@ -2878,9 +2106,6 @@ class _Barra extends StatelessWidget {
       alignment: Alignment.centerLeft,
       widthFactor: fracao,
       child: Container(
-        // A altura acompanha a escala de fonte do sistema: esqueleto de altura
-        // fixa fica menor que o texto que ele representa em 200% e a pagina
-        // pula quando carrega.
         height: MediaQuery.textScalerOf(context).scale(BichuEspaco.e3),
         decoration: BoxDecoration(
           color: cores.surfaceSunken,

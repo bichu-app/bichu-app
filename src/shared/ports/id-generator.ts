@@ -1,13 +1,4 @@
-/**
- * Geração de identificador.
- *
- * `uuidv7()` para chave primária: ordenável no tempo, o que dá localidade de
- * índice. **Por ser ordenável, ele não sai em superfície pública** — dois
- * UUIDv7 publicados entregam a taxa de criação de registros da plataforma
- * (SEC-001 e SEC-002). Para o que é público existe `opaqueToken`.
- *
- * Injetável pelo mesmo motivo do relógio: teste determinístico.
- */
+/** Geração de identificador. */
 import type { OpaqueToken } from '../types/brands.js';
 
 export interface IdGenerator {
@@ -19,12 +10,7 @@ export interface IdGenerator {
   random128(): Uint8Array;
   /**
    * 80 bits de CSPRNG, dos quais o código da tag usa **75** (ADR-0004, Emenda 1,
-   * §13.2). Os 5 bits mais altos são descartados por máscara, e 75 bits não são
-   * um número inteiro de bytes: por isso a porta entrega 10 bytes e não 9.
-   *
-   * Separada de `random128` de propósito. Um único método "aleatório" com
-   * tamanho por parâmetro deixaria o número que importa — o que vira plaquinha
-   * impressa — escondido num argumento de chamada.
+   * §13.2).
    */
   random80(): Uint8Array;
 }

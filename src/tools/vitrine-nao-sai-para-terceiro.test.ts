@@ -1,63 +1,4 @@
-/**
- * ISCA (a): A VITRINE NÃO SAI PARA NINGUÉM ALÉM DO DONO — medido NO CONTRATO.
- *
- * Mora em `src/tools/` e não junto da projeção porque **lê `api/openapi.yaml` do
- * disco**, como os vizinhos deste diretório: `domain/` não conhece arquivo, e o
- * `eslint` deste repositório recusa `node:fs` ali com razão.
- *
- * ## Por que a regra é medida assim, e não chamando a rota do dono
- *
- * Ela é de **OMISSÃO**: "a vitrine sai em `getMyShowcase` e em nenhuma outra
- * resposta". Omissão não se mede exercitando a única superfície que deve
- * mostrar o campo — se mede **varrendo as outras e provando que nenhuma o
- * declara**. Um caso que chamasse `getMyShowcase` e achasse as fotos passaria
- * igual num mundo em que a vitrine também sai no encontro, na avaliação e na
- * conversa mediada.
- *
- * ## A decisão que estes casos impõem, e que não é desta frente
- *
- * - o **ADR-0025 item 2** proíbe avatar de pessoa na superfície da `Rede`, por
- *   nome;
- * - o contrato afirma em **dois lugares** que `Conversation.participants` nunca
- *   traz telefone, e-mail nem foto de perfil.
- *
- * Mostrar a vitrine a terceiro contrariava decisão registrada e era decisão do
- * cliente. **Ela chegou em 19/10/2026**, e é de escopo fechado — literal:
- * *"ele pode ver nome, quantidade de pets, conexões, mas não as fotos
- * publicadas e nem a timeline do usuário"*. É a emenda 2 do ADR-0010.
- *
- * ## O QUE A DECISÃO DE 19/10 MUDOU AQUI, E O QUE ELA NÃO MUDOU
- *
- * **A recusa para quem NÃO é conexão continua inteira, e os casos que a medem
- * não foram afrouxados.** O que passou a existir é UMA superfície a mais, e ela
- * é nomeada: `getPersonProfile`, que só entrega foto quando
- * `connection_state` é `connected`.
- *
- * O desenho foi escolhido para que a regra de autorização **não precise ser
- * repetida** — que era a objeção original:
- *
- * - a vitrine de terceiro tem **schema próprio** (`PersonShowcasePhoto`), menor
- *   que `ShowcasePhoto`, então `MyShowcase` e `ShowcasePhoto` continuam com UM
- *   hospedeiro cada e os casos de contagem continuam valendo literalmente;
- * - o predicado de **conexão aceita mora na cláusula `WHERE`** da consulta das
- *   fotos (`people/adapters/persistence/kysely-perfil-de-pessoa.ts`), e não num
- *   `if` de camada acima: chamar aquela consulta por engano devolve lista vazia.
- *   Quem mede isso é
- *   `people/adapters/persistence/autorizacao-na-clausula-where.test.ts`;
- * - o que a foto de terceiro carrega é **menos** do que o dono vê: sem `status`,
- *   sem `rejection_reason`, sem `position` e sem `upload_id`.
- *
- * **O que este arquivo NÃO consegue medir** é o recorte em tempo de execução: o
- * contrato declara `showcase` como campo opcional, e "opcional" não distingue
- * "ausente porque não é conexão" de "ausente por esquecimento". As duas pontas
- * disso são medidas em `people/application/perfil-de-pessoa.test.ts` — a isca
- * (a) e o contrapeso dela.
- *
- * O CONTRAPESO (último caso) prova que a vitrine sai para o DONO. Sem ele,
- * todos os casos acima passariam num mundo em que a vitrine não existe em
- * contrato nenhum — que é a forma mais fácil de um teste de omissão ficar verde
- * sem ter medido nada.
- */
+/** ISCA (a): A VITRINE NÃO SAI PARA NINGUÉM ALÉM DO DONO — medido NO CONTRATO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -69,69 +10,21 @@ const spec = parseYaml(texto) as {
   components: { schemas: Record<string, unknown> };
 };
 
-/**
- * Os esquemas da vitrine que carregam FOTO. `*Input` são de escrita.
- *
- * `PersonShowcasePhoto` entrou em 19/10/2026: ele é a vitrine vista por uma
- * CONEXÃO, e deixá-lo fora desta lista faria toda varredura abaixo ficar cega
- * para a superfície nova — que é a forma exata do defeito recorrente desta
- * casa. Com ele dentro, uma operação **sem conta** que o carregasse reprova
- * pelo mesmo caso que já reprovava `MyShowcase`.
- */
+/** Os esquemas da vitrine que carregam FOTO. */
 const ESQUEMAS_DE_LEITURA = ['MyShowcase', 'ShowcasePhoto', 'PersonShowcasePhoto'] as const;
 
-/**
- * As operações que podem carregar vitrine, **por nome**. Lista FECHADA.
- *
- * Enumerar o PERMITIDO e não o proibido: operação nova cai no caso padrão, que
- * é reprovar. Enumerar o proibido erra aceitando, que já foi o defeito de dois
- * portões deste repositório.
- */
+/** As operações que podem carregar vitrine, **por nome**. */
 const OPERACOES_COM_VITRINE = [
   'get /me/showcase',
   'get /people/{handle}',
-  /**
-   * **20/10/2026, decisão do cliente: a tela de destino do link e do QR.**
-   *
-   * Ela carrega vitrine porque devolve **`PersonProfile`** — a MESMA resposta e a
-   * MESMA projeção de `get /people/{handle}`. O cliente pediu que o link levasse
-   * *"para a página do perfil do usuário com o botão de adicionar"*: a página, não
-   * uma parecida.
-   *
-   * **Isto NÃO abre a vitrine a mais ninguém**, e a razão é que não há segunda
-   * consulta: a vitrine sai pelo `WHERE` de `construtorDaVitrineDeConexao`, que
-   * exige **conexão aceita** nos dois sentidos do par. Resolver um convite não
-   * cria conexão e não dispensa aceite — então, para quem acabou de clicar num
-   * link, `connection_state` é `none` e `showcase` vem **ausente**. Quem já era
-   * conexão aceita e abre o link vê a vitrine que já veria pelo apelido.
-   *
-   * A alternativa — projetar um perfil "sem vitrine" só para esta rota — seria
-   * uma segunda implementação do recorte da emenda 2 do ADR-0010, e é ela que
-   * divergiria no primeiro campo novo.
-   */
+  /** **20/10/2026, decisão do cliente: a tela de destino do link e do QR.** */
   'post /connection-invites/resolution',
   'put /me/showcase',
-  // **`post /me/showcase/photo-intents` NÃO está aqui, e descobrir por quê
-  // valeu o caso.** A primeira versão desta varredura procurava
-  // `'#/components/schemas/' + nome` por SUBSTRING, e
-  // `#/components/schemas/ShowcasePhotoIntentInput` **contém**
-  // `#/components/schemas/ShowcasePhoto`: a intenção de envio aparecia como se
-  // carregasse a vitrine, e `getPersonProfile` — que carrega de verdade, por
-  // `$ref` indireto — não aparecia. Os dois erros juntos deixariam a lista
-  // "certa" por acidente. A varredura agora casa NOME EXATO (`Set.has`) e
-  // segue `$ref` em profundidade.
 ] as const;
 
 /**
  * Os schemas alcançáveis a partir de um bloco, seguindo `$ref` **em
  * profundidade**.
- *
- * Sem isto a varredura fica cega para `$ref` indireto, e foi exatamente o que
- * aconteceu na primeira versão do caso abaixo: `getPersonProfile` referencia
- * `PersonProfile`, que referencia `PersonShowcasePhoto` — procurar o segundo no
- * JSON da operação não acha nada, e a operação que CARREGA a vitrine passava
- * como se não carregasse. Mesma técnica de
- * `conexao-nao-expoe-lista-nem-identificador.test.ts`.
  */
 function schemasAlcancados(bloco: unknown): Set<string> {
   const vistos = new Set<string>();
@@ -166,7 +59,7 @@ function operacoes(): { caminho: string; metodo: string; op: Record<string, unkn
   return saida;
 }
 
-/** O chamador desta operação tem conta? `security: []`, `tagCode` e `finderToken` não têm. */
+/** O chamador desta operação tem conta? */
 function ehDeQuemNaoTemConta(op: Record<string, unknown>): boolean {
   const security = op['security'];
   if (!Array.isArray(security)) return false;
@@ -221,16 +114,10 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
   });
 
   void it('ISCA (a) -- a vitrine sai em QUATRO operacoes nomeadas, e nenhuma quinta', () => {
-    // A varredura é sobre os três esquemas de leitura E sobre as duas derivadas
-    // por NOME DE CAMPO: um schema novo chamado de outra coisa, com `grid_url`
-    // dentro, cai aqui mesmo sem estar na lista de esquemas.
     const comVitrine = operacoes()
       .filter(({ op }) => {
         const alcancados = schemasAlcancados(op);
         if (ESQUEMAS_DE_LEITURA.some((e) => alcancados.has(e))) return true;
-        // E por NOME DE CAMPO, na operação e em tudo que ela alcança: um schema
-        // novo, chamado de outra coisa e fora da lista de esquemas, cai aqui
-        // mesmo assim se tiver uma das duas derivadas dentro.
         const corpo = [
           JSON.stringify(op),
           ...[...alcancados].map((nome) => JSON.stringify(spec.components.schemas[nome] ?? null)),
@@ -261,10 +148,6 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
   });
 
   void it('ISCA (a) -- `showcase` NAO e obrigatorio em `PersonProfile`: omitir e o estado de nao-conexao', () => {
-    // É esta linha do contrato que deixa a borda OMITIR a chave em vez de
-    // mandar `[]`. Com `showcase` em `required`, "não é conexão" teria de ser
-    // representado por lista vazia — que afirma "ela não tem foto", sobre uma
-    // vitrine que quem chama não pode ver.
     const perfil = spec.components.schemas['PersonProfile'] as {
       required?: readonly string[];
       properties?: Record<string, unknown>;
@@ -274,7 +157,6 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
       !(perfil.required ?? []).includes('showcase'),
       '`showcase` obrigatório obrigaria a borda a mandar `[]` para quem não é conexão',
     );
-    // E a condição está ESCRITA, com o nome do estado que a libera.
     assert.match(
       String((perfil.properties?.['showcase'] as { description?: string }).description),
       /connected/,
@@ -301,19 +183,12 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
   });
 
   void it('ISCA (a) -- `PersonProfile` NAO alcanca `MyShowcase` nem `ShowcasePhoto`', () => {
-    // Se alguém "simplificasse" reusando o schema do dono, `status` e
-    // `rejection_reason` voltariam junto — e os dois casos de contagem acima
-    // reprovariam. Este caso diz isso na própria fronteira, para a mensagem de
-    // reprovação apontar o lugar certo.
     const perfil = JSON.stringify(spec.components.schemas['PersonProfile']);
     assert.ok(!perfil.includes('#/components/schemas/MyShowcase'));
     assert.ok(!perfil.includes('#/components/schemas/ShowcasePhoto'));
   });
 
   void it('ISCA -- a vitrine não entrou em `Conversation`, `NetworkEvent` nem avaliação', () => {
-    // Os três lugares em que "completar o perfil da pessoa" é a tentação óbvia:
-    // o participante da conversa mediada, quem fez check-in no encontro e quem
-    // escreveu a avaliação do profissional.
     for (const esquema of [
       'Conversation',
       'ConversationParticipant',
@@ -334,10 +209,6 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
   });
 
   void it('ISCA -- a vitrine não traz legenda, curtida, contador nem pessoa marcada', () => {
-    // Confere o NOME DAS PROPRIEDADES, e não o texto do bloco. A primeira
-    // versão deste caso procurava as palavras no JSON inteiro e reprovava na
-    // própria descrição de `alt_text`, que diz "e não legenda" — um portão que
-    // acusa a si mesmo é um portão que alguém desliga.
     const propriedades = Object.keys(
       (spec.components.schemas['ShowcasePhoto'] as { properties?: Record<string, unknown> })
         .properties ?? {},
@@ -367,8 +238,6 @@ void describe('a vitrine de fotos não sai para terceiro (contrato)', () => {
       ['alt_text', 'grid_url', 'open_url', 'position', 'rejection_reason', 'status', 'upload_id'],
       'um campo a mais na foto da vitrine precisa de decisão, e este caso é onde ela aparece',
     );
-    // MARCAR PESSOA é dado biométrico, e a recomendação registrada é recusar
-    // para sempre. Não é omissão a ser preenchida depois.
     assert.ok(!texto.includes('face_landmarks'), 'marcar pessoa é dado biométrico: recusado para sempre');
   });
 

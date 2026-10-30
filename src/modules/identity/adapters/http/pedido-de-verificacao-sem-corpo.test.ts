@@ -1,29 +1,4 @@
-/**
- * `POST /v1/auth/email-verification` **sem corpo nenhum**.
- *
- * ## O defeito
- *
- * O contrato declara esta operação com `requestBody: { required: false }`, e a
- * descrição promete "responde sempre 202, exista ou nao a conta". O manipulador
- * diz a mesma coisa ao ler `request.body ?? {}`: com token no cabeçalho o
- * e-mail sai da sessão, e não há corpo a enviar.
- *
- * A rota, porém, declarava `schema: { body }` e nada mais. O Fastify valida
- * `request.body` **mesmo quando não veio corpo**, e `undefined` contra
- * `{ type: 'object' }` reprova com `body must be object`. Quem chamasse a
- * operação do jeito que o documento permite recebia **400**, não 202.
- *
- * É a mesma classe do `logout` e do `client_note`, virada do avesso: lá o
- * contrato não descrevia o corpo que a rota lia; aqui o contrato descreve um
- * corpo opcional e o runtime passou a exigi-lo.
- *
- * ## Isca
- *
- * Tirar `corpoAusenteEhCorpoVazio` de `routes.ts` reprova o primeiro caso com
- * `400` no lugar de `202`. Tirar o `schema` inteiro deixaria os dois casos
- * verdes cobrindo menos, e é por isso que o segundo caso existe: ele prova que
- * a validação continua de pé para o corpo que **veio** torto.
- */
+/** `POST /v1/auth/email-verification` **sem corpo nenhum**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -51,19 +26,9 @@ function naoUsado(nome: string): never {
   );
 }
 
-/**
- * Repositório que **recusa tudo**. É o dublê certo aqui: o caso principal envia
- * uma requisição que não identifica ninguém, e a rota promete 202 sem consultar
- * nada. Qualquer chamada de porta é, por si só, a reprovação.
- */
+/** Repositório que **recusa tudo**. */
 function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
-    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-    // avatar da barra do app caia na inicial do nome em todas as paginas.
-    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
       return Promise.resolve(null);
     }
@@ -91,14 +56,7 @@ function montar(): RegistradorDeRotas {
 
   const auth = criarAuthService({
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
-    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
-    // não é sobre isso, então a função é contada e não observada. O caso que
-    // PROVA a remoção, lendo a linha de `user_devices` depois, é
-    // `sair-de-todos-os-aparelhos.test.ts` e
-    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
-    // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
-    // resposta honesta de "não havia localização gravada".
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio: repositorioQueNaoDeveriaSerTocado(),
     assinador,
@@ -127,15 +85,7 @@ function montar(): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: PROBLEM_BASE_URL,
     isProduction: false,
-    // Exigido desde a BICHUS-178: `registrarRota` recusa um servidor sem
-    // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
-    // casos exercitem a mesma fiacao que roda.
     teto: tetoDeTeste(),
-    // BICHUS-48: `registrarRota` recusa, na subida, um servidor sem verificador
-    // quando alguma rota declara `reauthScope` -- e `logout-all` declara. Este
-    // arquivo nao exercita a janela de reautenticacao, entao o verificador
-    // LANCA em vez de aprovar: um verificador que dissesse "ok" faria estes
-    // casos rodarem contra uma porta destrutiva aberta e ninguem veria.
     reautenticacao: () => {
       throw new Error(
         'Verificador de reautenticacao chamado: nenhum caso deste arquivo exercita ' +
@@ -149,7 +99,6 @@ function montar(): RegistradorDeRotas {
     contrato: carregarContrato('api/openapi.yaml'),
     issuer: 'https://api.bichu.test',
     apiBaseUrl: 'https://api.bichu.test',
-    // A foto do perfil (18/10/2026) nao e exercitada neste arquivo.
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
   };
   void app.register(
@@ -168,9 +117,6 @@ void describe('POST /v1/auth/email-verification com o corpo que o contrato chama
 
     const resposta = await app.inject({ method: 'POST', url: '/v1/auth/email-verification' });
 
-    // ISCA: com `schema` declarado e sem o gancho de corpo ausente, isto era
-    // 400 `body must be object` numa operação que o contrato declara
-    // `required: false` e que promete responder sempre 202.
     assert.equal(resposta.statusCode, 202, 'corpo opcional é corpo que pode não vir');
   });
 

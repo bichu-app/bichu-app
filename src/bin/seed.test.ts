@@ -1,26 +1,4 @@
-/**
- * A trava de ambiente do `seed`, e a massa que ele grava.
- *
- * ## Por que este arquivo existe
- *
- * `seed.ts` recusa semear em producao desde que foi escrito, e ate hoje essa
- * recusa estava a **0% de cobertura**. Uma trava sem teste e uma trava por
- * confianca: ninguem a exercita, ninguem sabe o dia em que ela para de valer, e
- * o dia em que ela para de valer e o dia em que alguem apaga dado real.
- *
- * O caso mais importante deste arquivo e o penultimo: ele NAO afirma que a
- * trava recusa -- afirma que ela **precisa** recusar, e ele foi conferido
- * desligando a trava no codigo de producao.
- *
- * | o que foi desligado em `seed.ts` | `fail` |
- * |---|---|
- * | `NODE_ENV === 'production'` removido | 1 |
- * | `AMBIENTES_QUE_ACEITAM_MASSA` ganhando `'prod'` | 2 |
- * | `nivelDaEntrada` devolvendo `'document_verified'` fixo | 2 |
- *
- * (Medido em 22/09/2026, Node 22 desta maquina, com a alteracao conferida no
- * disco por `git diff --stat` nao vazio antes de rodar.)
- */
+/** A trava de ambiente do `seed`, e a massa que ele grava. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -52,9 +30,6 @@ void describe('a trava de ambiente do seed', () => {
   });
 
   void it('recusa ambiente que ninguem previu, em vez de deixar passar', () => {
-    // A ARMADILHA QUE ESTE CASO FECHA: com uma lista de PROIBIDOS, um ambiente
-    // novo cairia no caso padrao -- que seria semear. Aqui a pergunta e a
-    // inversa, e o desconhecido recusa.
     assert.throws(
       () => {
         conferirAmbiente({ ENVIRONMENT: 'homologacao-do-cliente' });
@@ -108,11 +83,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('todo slug cabe no formato que o banco impoe', () => {
-    // `professionals_slug_formato` e `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`: no
-    // maximo 30 caracteres, minusculas, sem hifen nas pontas. Este caso existe
-    // porque a massa ja estourou o limite uma vez, e o unico lugar que acusou
-    // foi o banco -- no meio da suite de integracao, com a metade das linhas
-    // gravadas.
     const formato = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
     for (const entrada of MASSA_DO_DIRETORIO) {
       assert.match(entrada.slug, formato, `slug '${entrada.slug}' nao passa no CHECK do banco`);
@@ -120,8 +90,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('todo nome de exibicao cabe entre 2 e 120 caracteres', () => {
-    // `professionals_display_name_tamanho`. O teto de 120 e o mesmo do
-    // contrato, e o piso de 2 e o que impede um nome de uma letra.
     for (const entrada of MASSA_DO_DIRETORIO) {
       assert.ok(
         entrada.displayName.length >= 2 && entrada.displayName.length <= 120,
@@ -131,8 +99,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('todo telefone cabe no formato internacional que a coluna impoe', () => {
-    // `professionals_telefone_formato` e `^\+[1-9][0-9]{7,14}$`, e ele e
-    // DIFERENTE do telefone de conta de usuario, que aceita so o Brasil.
     const formato = /^\+[1-9][0-9]{7,14}$/;
     for (const entrada of MASSA_DO_DIRETORIO) {
       if (entrada.phoneE164 === null) continue;
@@ -148,12 +114,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('todo endereco publico de titular cabe na forma que a coluna impoe', () => {
-    // `users_public_ref_forma` e `^[A-Za-z0-9_-]{22}$`, e `users_public_ref_unico`
-    // e indice unico GLOBAL. A massa escreve o valor LITERAL (ela e
-    // deterministica por contrato), entao os dois invariantes do banco passam a
-    // depender do que esta escrito a mao em `massa-do-diretorio.ts` -- e e aqui
-    // que isso para de depender de atencao de quem revisa. Sem este caso, um
-    // literal de 21 simbolos ou um par repetido so apareceria no `make seed`.
     const forma = /^[A-Za-z0-9_-]{22}$/;
     for (const entrada of MASSA_DO_DIRETORIO) {
       assert.match(entrada.titularPublicRef, forma, entrada.slug);
@@ -190,8 +150,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('a variedade que o cliente vai julgar existe de fato', () => {
-    // Cada afirmacao aqui e um caso de DESENHO que uma lista homogenea
-    // esconderia, e nao um numero bonito.
     assert.ok(
       PUBLICADAS.some((uma) => uma.displayName.length > 40),
       'sem nome longo, ninguem descobre que o cartao quebra em duas linhas.',
@@ -260,17 +218,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('nenhuma entrada promete campo que o banco nao tem onde guardar', () => {
-    // Horario, rua, foto, site, e-mail, redes, servicos, preco e avaliacao NAO
-    // tem coluna em `professionals`. Este caso vigia a forma do objeto para que
-    // a tela nao seja desenhada em cima de dado que a rota nunca vai devolver.
-    //
-    // `titularId`, `titularEmail` e `titularPublicRef` sao a excecao ja
-    // existente, e sao de `users` e nao de `professionals`: a massa cria UMA
-    // CONTA por entrada, como no mundo real. `titularPublicRef` entrou em
-    // 19/10/2026 porque `users.public_ref` e `NOT NULL` sem valor padrao desde
-    // a `20261018000031` e a massa nao preenchia -- `make seed` reprovava com
-    // 23502, medido pela suite de integracao. Ele NAO promete campo de tela
-    // nenhum: `public_ref` nao sai em resposta de profissional.
     const permitidos = new Set([
       'id', 'titularId', 'titularEmail', 'titularPublicRef', 'slug', 'kind',
       'displayName', 'about', 'city', 'state', 'neighborhood', 'ponto',
@@ -288,9 +235,6 @@ void describe('a massa do diretorio', () => {
   });
 
   void it('o par de coordenada esta em (lon, lat), a ordem de ST_MakePoint', () => {
-    // Sao Paulo fica por volta de lon -46,5 e lat -23,5. Trocar os dois nao
-    // falha em lugar nenhum: grava o Brasil no meio da Somalia, e so uma
-    // medicao de distancia acusa. Este caso pega a troca ANTES de o banco subir.
     for (const entrada of MASSA_DO_DIRETORIO) {
       if (entrada.ponto === null) continue;
       const [lon, lat] = entrada.ponto;

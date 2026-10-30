@@ -22,10 +22,7 @@ function plural(n: number) {
   return n === 1 ? 'parceiro' : 'parceiros';
 }
 
-/**
- * 5 · Parceiros (secao 25.5.4). A ordem e a da vitrine (`sort_order`), a unica
- * que o contrato tem para esta lista: por isso a barra nao tem seletor de ordem.
- */
+/** 5 · Parceiros (secao 25.5.4). */
 export default function ListaDeParceiros() {
   const { api } = useSessao();
   const [p, mudar] = useParametrosDaLista(PADROES);

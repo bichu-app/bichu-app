@@ -1,11 +1,4 @@
-/**
- * A base de senhas vazadas de hoje nao existe, e a porta diz isso (D43).
- *
- * `desconhecido`, e nunca `false`: "limpa" e uma afirmacao que ninguem
- * conferiu. O login administrativo trata as duas respostas de jeitos
- * diferentes, e trocar uma pela outra aqui desligaria a regra em silencio no
- * dia em que a base entrar.
- */
+/** A base de senhas vazadas de hoje nao existe, e a porta diz isso (D43). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

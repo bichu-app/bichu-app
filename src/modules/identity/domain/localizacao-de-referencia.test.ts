@@ -1,24 +1,4 @@
-/**
- * A quantização e a validade, sem banco, sem servidor e sem rede.
- *
- * ## A isca, e como ela foi provada
- *
- * Cada mecanismo foi **desligado no arquivo de produção, rodado e visto
- * reprovar** em 22/09/2026, e depois restaurado. A contagem é sobre este
- * arquivo **mais** `localizacao-de-referencia-routes.test.ts`, que é onde o
- * efeito de borda aparece:
- *
- * | o que foi desligado em `localizacao-de-referencia.ts` | reprovaram |
- * |---|---|
- * | `quantizar` devolvendo a coordenada intacta | 7 casos |
- * | `PASSO_DA_GRADE_EM_GRAUS` de `0.001` para `0.0001` (célula de 11 m) | 5 casos |
- * | `localizacaoAGravar` usando `bruta` em vez de `quantizar(bruta)` | 4 casos |
- * | `estaValida` com `>=` no lugar de `>` | 1 caso |
- * | `+ 0` removido do zero negativo | 1 caso |
- *
- * A linha mais importante da tabela é a terceira: ela é a que impede o
- * caminho "quantiza numa função que ninguém chama".
- */
+/** A quantização e a validade, sem banco, sem servidor e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Instant } from '../../../shared/types/brands.js';
@@ -35,12 +15,11 @@ import {
 const AGORA = 1_800_000_000_000 as Instant;
 const DIA = 24 * 60 * 60 * 1000;
 
-/** Metros por grau de latitude. Constante, e é o que torna a grade previsível. */
+/** Metros por grau de latitude. */
 const METROS_POR_GRAU_DE_LATITUDE = 111_320;
 
 void describe('a coordenada é quantizada numa grade de cerca de 100 m', () => {
   void it('snap para o vértice de grade mais próximo', () => {
-    // Avenida Paulista, 1578. O ponto exato existe; o gravado não.
     assert.deepEqual(quantizar({ lat: -23.561414, lon: -46.655981 }), {
       lat: -23.561,
       lon: -46.656,
@@ -48,7 +27,6 @@ void describe('a coordenada é quantizada numa grade de cerca de 100 m', () => {
   });
 
   void it('dois pontos a menos de 100 m caem na MESMA célula', () => {
-    // 0.0002 grau de latitude são cerca de 22 m.
     const a = quantizar({ lat: -23.5612, lon: -46.6558 });
     const b = quantizar({ lat: -23.5614, lon: -46.6559 });
     assert.deepEqual(a, b, 'a grade não está colapsando vizinhos, e é para isso que ela existe');
@@ -61,7 +39,6 @@ void describe('a coordenada é quantizada numa grade de cerca de 100 m', () => {
   });
 
   void it('o deslocamento máximo é meio passo, e não mais que isso', () => {
-    // O pior caso: exatamente no meio entre dois vértices.
     const bruto = { lat: -23.5615, lon: -46.6555 };
     const { lat } = quantizar(bruto);
     const deslocamento = Math.abs(lat - bruto.lat) * METROS_POR_GRAU_DE_LATITUDE;
@@ -74,7 +51,6 @@ void describe('a coordenada é quantizada numa grade de cerca de 100 m', () => {
   });
 
   void it('a célula mede entre 92 m e 111 m em toda a caixa do Brasil', () => {
-    // As duas latitudes extremas que `UserLocationInput` aceita: 6 N e 34 S.
     for (const latitude of [6, -34]) {
       const ladoNorteSul = PASSO_DA_GRADE_EM_GRAUS * METROS_POR_GRAU_DE_LATITUDE;
       const ladoLesteOeste =

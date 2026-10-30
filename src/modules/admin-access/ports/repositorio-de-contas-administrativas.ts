@@ -1,14 +1,4 @@
-/**
- * O cadastro do painel, `admin_accounts` (ADR-0027 item 20.1).
- *
- * Nada aqui le `users`, `user_identities`, `local_credentials` nem
- * `user_roles`: o login do painel nao acha conta do app, e essa e a D42 na
- * forma de 28/09. `cadastros-separados` (P21) vigia o codigo deste modulo.
- *
- * As escritas que acompanham um evento de trilha recebem a transacao da
- * escrita auditada (D49). O registro do login e o rehash transparente nao sao
- * escrita administrativa: rodam fora dela, como no app.
- */
+/** O cadastro do painel, `admin_accounts` (ADR-0027 item 20.1). */
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type { PapelAdministrativo } from '../../../shared/http/route-definition.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
@@ -29,7 +19,7 @@ export interface ContaAdministrativa {
 }
 
 export interface RepositorioDeContasAdministrativas {
-  /** Pelo e-mail JA normalizado. So `admin_accounts`. */
+  /** Pelo e-mail JA normalizado. */
   buscarPorEmail(email: string): Promise<ContaAdministrativa | undefined>;
   buscarPorId(id: AdminAccountId): Promise<ContaAdministrativa | undefined>;
   /** As contas ativas, para os avisos que vao a TODOS os administradores (D46, D61). */
@@ -40,11 +30,11 @@ export interface RepositorioDeContasAdministrativas {
   /** Empurra `sessions_invalid_before`, sem nunca recua-la. */
   empurrarBarreira(trx: TransacaoDeEscrita, id: AdminAccountId, barreira: Instant): Promise<void>;
   /**
-   * `SELECT ... FOR UPDATE` na conta: serializa as falhas de login concorrentes
-   * da mesma conta, para que duas tentativas simultaneas nao contem nove cada
-   * e nenhuma bloqueie (D44).
+   * `SELECT ... FOR UPDATE` na conta: serializa as falhas de login concorrentes da
+   * mesma conta, para que duas tentativas simultaneas nao contem nove cada e nenhuma
+   * bloqueie (D44).
    */
   travarParaContarFalhas(trx: TransacaoDeEscrita, id: AdminAccountId): Promise<void>;
-  /** Grava o bloqueio que so `conta-admin redefinir-senha` desfaz. Nao sobrescreve bloqueio anterior. */
+  /** Grava o bloqueio que so `conta-admin redefinir-senha` desfaz. */
   bloquear(trx: TransacaoDeEscrita, id: AdminAccountId, motivo: MotivoDoBloqueio, agora: Instant): Promise<void>;
 }

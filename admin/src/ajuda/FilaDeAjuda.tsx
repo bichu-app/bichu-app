@@ -1,43 +1,4 @@
-/**
- * `Ajuda` — a fila das duvidas mandadas pelo botao `Ajuda` do aplicativo.
- *
- * ## POR QUE ESTA TELA EXISTE, e por que ela nao podia esperar
- *
- * `POST /v1/me/help-requests` entrou em 29/10/2026 e grava a duvida numa
- * tabela. Sem esta tela, **nenhum humano alcanca o que foi gravado** -- e
- * funcionalidade que ninguem alcanca equivale a funcionalidade que nao existe.
- *
- * Nao e hipotese nesta casa: o passkey foi entregue com servidor, contrato,
- * entitlement e digital no lugar e **nenhuma porta de interface**. O banco
- * tinha zero credenciais e nenhum portao acusou, porque nenhum portao pergunta
- * se alguem consegue chegar.
- *
- * ## O QUE ESTA TELA NAO MOSTRA, e nao e escolha dela
- *
- * **O autor.** `AdminHelpRequest` nao tem campo de pessoa: nem nome, nem
- * e-mail, nem identificador estavel. Este painel le pessoa num lugar so -- a
- * fila de pedidos de encontro --, e `api/openapi.yaml` afirma isso em TRES
- * pontos, com as decisoes D53 a D57 do cliente (23/09).
- *
- * A consequencia esta na propria tela, no paragrafo do cabecalho, em vez de
- * escondida aqui: quem le a duvida **nao tem por onde responder pelo painel**.
- * Dizer isso ao operador e melhor do que deixa-lo procurar um botao de
- * responder que nao existe.
- *
- * ## O ESTADO, decidido em 30/10/2026
- *
- * Duas abas e um botao por linha. **Atendida e mudanca de estado e nunca
- * `DELETE`**: a linha troca de aba e continua na tabela.
- *
- * **Nao ha desmarcar**, e a ausencia e decisao -- ver `fila.ts`.
- *
- * ## O DETALHE E UM DIALOGO, e nao uma rota
- *
- * E a convencao das tres filas que ja existem (`FilaDeModeracao`,
- * `FilaDePlaquinhas`, `FilaDeIndicacoes`): nenhuma tem `:ref` na URL. O item
- * ja vem inteiro na pagina -- o contrato devolve `body` completo --, entao
- * abrir nao custa viagem nenhuma.
- */
+/** `Ajuda` — a fila das duvidas mandadas pelo botao `Ajuda` do aplicativo. */
 import { useCallback, useId, useState } from 'react';
 
 import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
@@ -59,16 +20,15 @@ import {
   type SituacaoDaDuvida,
 } from './fila.ts';
 
-/** O dialogo com a duvida inteira. So leitura: nao ha acao nenhuma a oferecer. */
+/** O dialogo com a duvida inteira. */
 function DialogoDaDuvida({ duvida, aoFechar }: { duvida: Duvida; aoFechar: () => void }) {
   const idDoCorpo = useId();
   return (
     <Dialogo titulo={duvida.subject} aoFechar={aoFechar} papel="dialog" descricaoId={idDoCorpo} largo>
       <div id={idDoCorpo}>
         <p className="t-body c-sec">Chegou em {dataCurta(duvida.created_at)}</p>
-        {/* `white-space: pre-wrap` e o que preserva os paragrafos que o tutor
-            escreveu. Sem ele o texto vira um bloco so e a leitura piora
-            exatamente no caso que mais precisa dela: a duvida longa. */}
+        {
+}
         <p className="t-body" style={{ whiteSpace: 'pre-wrap' }} data-cy="texto-da-duvida">
           {duvida.body}
         </p>
@@ -107,9 +67,6 @@ export default function FilaDeAjuda() {
     [api, aba],
   );
 
-  // A chave carrega a ABA e nao a busca: trocar de aba recomeca da pagina 1,
-  // que e o certo, e cada tecla da busca NAO -- a busca e local, sobre a
-  // pagina ja carregada, e com ela na chave cada tecla jogaria fora o rolado.
   const { estado, carregarMais, recarregar } = useListaPaginada<Duvida>(aba, buscar);
 
   const itens = estado.itens.filter((d) => casaComABusca(d, busca));
@@ -125,10 +82,6 @@ export default function FilaDeAjuda() {
       setFalha(mensagemDaFalha(response.status));
       return;
     }
-    // RECARREGAR e nao trocar o item no lugar: a aba e `open` e a duvida
-    // deixou de pertencer a ela, entao o que tira a linha da lista e a
-    // recarga. Deixa-la ali com o selo trocado mostraria na aba `Na fila`
-    // uma duvida que ja saiu dela.
     recarregar();
     setAviso(`“${duvida.subject}” marcada como atendida.`);
     if (aberta?.ref === duvida.ref) setAberta(data);
@@ -144,7 +97,7 @@ export default function FilaDeAjuda() {
           Marcar como atendida <strong>não apaga nada</strong> — a dúvida muda de aba e
           continua guardada.
         </p>
-        {/* A limitacao, dita ao operador em vez de descoberta por ele. */}
+        {}
         <p className="t-body c-sec" data-cy="aviso-sem-resposta">
           O painel não mostra quem escreveu nem tem como responder: só uma tela deste
           backoffice lê dados de pessoa, e não é esta.
@@ -167,8 +120,8 @@ export default function FilaDeAjuda() {
         </Banner>
       )}
 
-      {/* Busca no TOPO DO CORPO da tela, e nunca na barra de navegacao: e o
-          padrao de toda pagina com registros neste painel. */}
+      {
+}
       <BarraDeListagem
         rotuloDaBusca="Buscar dúvida"
         placeholder="Assunto ou texto"

@@ -1,37 +1,6 @@
 /**
- * A autorizacao da transferencia esta na clausula `WHERE`, e o SQL compilado
- * prova isso.
- *
- * ## Por que conferir o SQL compilado, e nao o texto-fonte nem a resposta
- *
- * O cabecalho de `kysely-transfer-repository.ts` afirma que "a consulta que
- * devolveria a transferencia de outro tutor nao existe neste arquivo". Sem este
- * arquivo, essa frase valeria por confianca.
- *
- * As duas formas erradas de conferir, e as duas foram vistas ficando verdes com
- * a autorizacao removida em outro lugar deste repositorio no mesmo dia:
- *
- * 1. **procurar o texto no arquivo-fonte.** Casa com a mencao da coluna dentro
- *    deste proprio comentario e dentro do comentario do adaptador. Fica verde
- *    com a clausula apagada.
- * 2. **procurar o nome da coluna no SQL inteiro.** Acha a ocorrencia de outro
- *    lugar da mesma consulta -- num `SET`, numa juncao, num `RETURNING` -- e
- *    aprova um `WHERE` que nao tem predicado nenhum.
- *
- * A conferencia aqui le o predicado com o OPERADOR junto, e depois le de volta
- * o **valor ligado a posicao `$n` que aquele predicado ocupa**. As tres iscas do
- * fim do arquivo provam que a conferencia reprova: coluna ausente, operador
- * errado (`is not $1` casa toda linha da tabela) e valor errado (a coluna certa
- * comparada com o id do pet, com o dono ainda entre os parametros).
- *
- * ## O metodo da prova, e a exigencia que ele carrega
- *
- * Cada mecanismo foi desligado em `kysely-transfer-repository.ts`, a suite
- * rodou, e o mecanismo foi restaurado. **Cada desligamento foi confirmado por
- * diferenca de conteudo do arquivo ANTES de a suite rodar** (hash e `git diff`
- * nao vazio): uma substituicao que nao casa com o texto reescreve o mesmo
- * conteudo, a suite fica verde, e o que se mede e o silencio da propria
- * tentativa. A tabela esta na entrega da BICHUS-66.
+ * A autorizacao da transferencia esta na clausula `WHERE`, e o SQL compilado prova
+ * isso.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -60,7 +29,7 @@ const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const TRANSFER = '018f3a2b-0000-7000-8000-0000000000dd';
 const QUANDO = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: compila a consulta e nao a executa. O caminho REAL. */
+/** Kysely sem banco: compila a consulta e nao a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -78,33 +47,14 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/**
- * O valor REALMENTE ligado a posicao que o predicado ocupa.
- *
- * `parameters.includes(DONO)` seria frouxo aqui e quase nada no `UPDATE` do
- * aceite, que liga cinco valores no `SET` antes de chegar ao `WHERE`: uma
- * consulta com `where('from_user_id', '=', petId)` teria coluna certa, operador
- * certo, valor errado, e o dono ainda entre os parametros por causa de outro
- * predicado.
- */
+/** O valor REALMENTE ligado a posicao que o predicado ocupa. */
 function ligadoAo(predicado: RegExp, compilada: Compilada): unknown {
   const achado = predicado.exec(clausulaWhere(compilada));
   assert.ok(achado !== null, `o predicado sumiu do WHERE. SQL compilado: ${compilada.sql}`);
-  // A posicao `$n` e GLOBAL na instrucao, mesmo com o texto recortado: e por
-  // isso que o recorte nao estraga a leitura de volta do valor.
   return compilada.parameters[Number(achado[1]) - 1];
 }
 
-/**
- * SO A CLAUSULA `WHERE`, e este recorte e a correcao mais importante do arquivo.
- *
- * Sem ele, `construtorDaTrocaDeDono` passava com a autorizacao removida: o
- * `UPDATE` grava `set "owner_user_id" = $1`, entao a expressao
- * `"owner_user_id" = $n` casa no SET e a conferencia le o DESTINO como se fosse
- * o predicado de posse. Escrito primeiro sem o recorte, este arquivo reprovou a
- * si mesmo -- e e exatamente o modo de falhar do item 2 do cabecalho: procurar
- * no SQL inteiro e achar a ocorrencia de outro lugar.
- */
+/** SO A CLAUSULA `WHERE`, e este recorte e a correcao mais importante do arquivo. */
 function clausulaWhere(compilada: Compilada): string {
   const posicao = compilada.sql.indexOf(' where ');
   assert.ok(
@@ -115,17 +65,7 @@ function clausulaWhere(compilada: Compilada): string {
   return compilada.sql.slice(posicao);
 }
 
-/**
- * O `SET` do `UPDATE`, ate ANTES do ` where ` -- e REPROVANDO se nao o achar.
- *
- * O recorte existe pelo motivo que o cabecalho deste arquivo conta: o `UPDATE`
- * grava `set "owner_user_id" = $1`, entao a expressao `"owner_user_id" = $n`
- * casa no `SET` e a conferencia leria o DESTINO como se fosse o predicado de
- * posse. O que faltava era a GUARDA (21/10/2026): sem ela, `indexOf` em -1 faz
- * `slice(0, -1)` devolver o enunciado inteiro menos um caractere, e o recorte
- * deixa de ser "o SET" -- passa a incluir o `WHERE`, que e exatamente a
- * confusao que ele existe para evitar.
- */
+/** O `SET` do `UPDATE`, ate ANTES do ` where ` -- e REPROVANDO se nao o achar. */
 function setAntesDoWhere(sql: string): string {
   const fim = sql.indexOf(' where ');
   assert.ok(
@@ -136,7 +76,6 @@ function setAntesDoWhere(sql: string): string {
   return sql.slice(0, fim);
 }
 
-// AS DUAS DIRECOES DO RECORTE DO SET.
 void describe('o recorte do SET', () => {
   void it('REPROVA um `UPDATE` sem `WHERE`', () => {
     assert.throws(
@@ -146,8 +85,6 @@ void describe('o recorte do SET', () => {
   });
 
   void it('com `WHERE`, o recorte NAO alcanca o predicado de posse', () => {
-    // A isca do cego: se o recorte engolisse o `WHERE`, o `"owner_user_id" = $n`
-    // do predicado entraria no que se le como SET.
     const recorte = setAntesDoWhere(
       'update "pet_tags" set "code_ciphertext" = $1 where "owner_user_id" = $2',
     );
@@ -206,10 +143,6 @@ void describe('toda consulta de transferencia que responde a um tutor carrega o 
       PREDICADO_DO_DONO_DO_PET,
       `o UPDATE que troca o dono perdeu a condicao de posse. SQL: ${compilada.sql}`,
     );
-    // O CASO CRUEL, e o que este arquivo existe para pegar: o `SET` grava
-    // `owner_user_id = DESTINO`, entao a coluna aparece duas vezes no SQL e o
-    // DESTINO esta entre os parametros. Uma conferencia por nome de coluna, ou
-    // por `parameters.includes`, aprovaria um `WHERE` sem predicado nenhum.
     assert.equal(
       ligadoAo(PREDICADO_DO_DONO_DO_PET, compilada),
       DONO,
@@ -234,10 +167,6 @@ void describe('as condicoes de ESTADO tambem moram no WHERE', () => {
     assert.ok(posicaoDoWhere > 0, `o UPDATE ficou sem WHERE: ${compilada.sql}`);
     const clausula = compilada.sql.slice(posicaoDoWhere);
 
-    // RECORTADO NO `WHERE`, e nao procurado no SQL inteiro: `status` aparece no
-    // `SET` (virando 'accepted') e em `RETURNING`. Uma busca no texto todo
-    // acharia `"status"` tres vezes e aprovaria um UPDATE sem condicao nenhuma
-    // -- que e o segundo modo de falhar descrito no cabecalho.
     assert.match(
       clausula,
       /"status"\s*=\s*\$\d+/,
@@ -278,8 +207,6 @@ void describe('as condicoes de ESTADO tambem moram no WHERE', () => {
     const valores = posicoes.map((i) => compilada.parameters[i]);
     assert.ok(valores.includes('pending_acceptance'), `WHERE: ${clausula}`);
     assert.ok(valores.includes('accepted'), `WHERE: ${clausula}`);
-    // E os dois estados TERMINAIS nao podem estar na lista: cancelar o que ja
-    // se consumou e exatamente o que a janela existe para impedir.
     assert.equal(valores.includes('effective'), false, `WHERE: ${clausula}`);
     assert.equal(valores.includes('cancelled'), false, `WHERE: ${clausula}`);
   });
@@ -294,21 +221,7 @@ void describe('as condicoes de ESTADO tambem moram no WHERE', () => {
       /"status"\s*=\s*\$\d+/,
       `sem isto a revogacao reescreveria tags ja revogadas. WHERE: ${clausula}`,
     );
-    // O motivo E do contrato e do ADR. Trocar por `owner_request` faria a rota
-    // publica da plaquinha contar outra historia sobre por que ela morreu.
     assert.ok(compilada.parameters.includes('pet_transferred'), `SQL: ${compilada.sql}`);
-    // O cifrado morre junto: reimprimir uma plaquinha revogada entregaria um
-    // arquivo com cara de bom para uma coleira que responde "tag desativada".
-    //
-    // O Kysely LIGA o nulo como parametro (`"code_ciphertext" = $4`) em vez de
-    // escrever `null` no texto. Procurar o literal aqui foi a primeira versao, e
-    // ela reprovou -- conferir a clausula que EXISTE, e nao a que se espera
-    // encontrar. A leitura certa e pela posicao.
-    // O recorte do SET para ANTES do `WHERE`, e ele reprova se nao achar o
-    // marcador: com `indexOf` em -1, `slice(0, -1)` devolve o enunciado inteiro
-    // menos um caractere -- o recorte deixa de ser "o SET" e passa a incluir o
-    // `WHERE`, que e exatamente a confusao que o cabecalho deste arquivo conta
-    // ter pago (ler o DESTINO do `UPDATE` como se fosse o predicado de posse).
     const achadoDoCifrado = /"code_ciphertext"\s*=\s*\$(\d+)/.exec(
       setAntesDoWhere(compilada.sql),
     );
@@ -337,7 +250,6 @@ void describe('ISCA: a mesma conferencia REPROVA uma consulta sem autorizacao', 
   });
 
   void it('coluna certa com operador errado tambem e acusada', () => {
-    // `is not $1` casa toda linha da tabela, e tem o nome da coluna no texto.
     const operadorErrado = semBanco
       .selectFrom('pet_transfers')
       .select('id')
@@ -375,9 +287,6 @@ void describe('ISCA: a mesma conferencia REPROVA uma consulta sem autorizacao', 
   });
 
   void it('no UPDATE de troca de dono, o valor errado e acusado mesmo com o dono no SET', () => {
-    // A versao que a consumacao de verdade torna possivel: `owner_user_id`
-    // aparece no `SET`, entao o nome esta no SQL e o valor esta nos parametros,
-    // e mesmo assim o `WHERE` nao autoriza nada.
     const updateErrado = semBanco
       .updateTable('pets')
       .set({ owner_user_id: DONO })

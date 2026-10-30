@@ -3,9 +3,8 @@ import type { ReactElement } from 'react';
 import { LOCKUP, LOGO_HORIZONTAL, SIMBOLO_REDUZIDO } from './marca.g.ts';
 
 /**
- * Os icones provisorios do backoffice (06-design-system.md secao 25.7: saem
- * quando a biblioteca Material Symbols entrar). Traco em `currentColor`, entao
- * a cor e sempre a do texto em volta, que vem de token.
+ * Os icones provisorios do backoffice (06-design-system.md secao 25.7: saem quando
+ * a biblioteca Material Symbols entrar).
  */
 const TRACOS = {
   search: (
@@ -135,7 +134,10 @@ interface PropsDoIcone {
   espelhado?: boolean;
 }
 
-/** Icone decorativo: sempre `aria-hidden`, o nome acessivel e do controle que o contem. */
+/**
+ * Icone decorativo: sempre `aria-hidden`, o nome acessivel e do controle que o
+ * contem.
+ */
 export function Icone({ nome, tamanho, espelhado = false }: PropsDoIcone) {
   const classes = ['i', tamanho, espelhado ? 'espelhado' : undefined].filter(Boolean).join(' ');
   return (
@@ -162,7 +164,10 @@ export function LogoHorizontal() {
   return <Vetor vetor={LOGO_HORIZONTAL} classe="logo-h" rotulo="Bichu, a rede dos pets" />;
 }
 
-/** Lockup sem descritor e simbolo reduzido: a navegacao troca um pelo outro no trilho. */
+/**
+ * Lockup sem descritor e simbolo reduzido: a navegacao troca um pelo outro no
+ * trilho.
+ */
 export function MarcaDaNavegacao() {
   return (
     <>

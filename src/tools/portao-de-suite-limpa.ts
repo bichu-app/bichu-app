@@ -1,36 +1,4 @@
-/**
- * Portão da suíte limpa.
- *
- * ## O defeito que este arquivo existe para impedir
- *
- * `npm test` compila para `dist/_tests` e manda o `node --test` varrer
- * `dist/_tests/src/**\/*.test.js`. O `tsc` **acrescenta**, nunca remove: arquivo
- * de teste apagado ou renomeado no fonte deixa o `.js` antigo no disco, e ele
- * continua sendo executado em toda rodada seguinte. Medido nesta base: apagar o
- * `.test.ts` e rodar de novo mantinha os 637 testes, com o nome do arquivo morto
- * ainda na saída.
- *
- * Isso corrompe **todos** os outros portões do projeto, não só o teste morto. Um
- * commit verde pode estar verde por causa de um binário que ninguém mais
- * consegue ler, e uma falha fantasma manda a investigação para um fonte que não
- * existe. É a família de "verde produzido por não verificar" que já aparece três
- * vezes no histórico deste repositório.
- *
- * ## As duas conferências, e por que são duas
- *
- * 1. `conferirLimpezaDosScripts` lê `package.json` e exige que todo script que
- *    produz `dist/_tests` remova o diretório **antes** de compilar. Ela reprova
- *    no instante em que a limpeza sai do script, sem depender de haver lixo.
- * 2. `procurarCompiladosOrfaos` varre `dist/_tests` e acusa todo `.js` sem
- *    `.ts` correspondente. Ela acusa o dano de fato, inclusive o que chegar por
- *    um caminho que a primeira não prevê (alguém rodando o `tsc` à mão, um
- *    `outDir` novo, um script de CI próprio).
- *
- * A primeira sozinha vira conferência de texto: passa a valer por acreditar que
- * a string implica o efeito. A segunda sozinha é surda enquanto ninguém apaga um
- * teste — ela só acusa na conjunção "limpeza removida E arquivo apagado", que é
- * tarde demais. Juntas, uma cobre o buraco da outra.
- */
+/** Portão da suíte limpa. */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -48,22 +16,11 @@ export interface QueixaDeScript {
   readonly motivo: string;
 }
 
-/**
- * Reconhece uma etapa que de fato apaga o diretório de saída.
- *
- * Aceita `rm -rf dist/_tests` e `tsc --build --clean`, que são as duas formas
- * que resolvem. Não aceita `rm` sem `-r`, que falha em diretório, nem remoção de
- * um caminho diferente: a etapa precisa apagar **este** diretório.
- */
+/** Reconhece uma etapa que de fato apaga o diretório de saída. */
 function ehEtapaDeLimpeza(etapa: string): boolean {
   const texto = etapa.trim();
   const alvo = DIRETORIO_DE_TESTES_COMPILADOS;
   const removeComRm =
-    // O grupo externo repetido continha duas repetições sobre a mesma classe de
-    // letras, que é a forma que S5852 acusa. Aqui não há atacante -- a entrada
-    // são os `scripts` do package.json deste repositório, em tempo de
-    // construção -- e o retrocesso não se materializa (32.000 caracteres de
-    // pior caso, 0,02 ms). A troca sai porque é barata, não porque protege.
     /(^|\s)rm\s+-[a-zA-Z]*r[a-zA-Z]*(\s+-[a-zA-Z]+)*\s+/.test(texto) &&
     new RegExp(`(^|\\s)${alvo.replace(/\//g, '\\/')}(\\s|$|\\/)`).test(texto);
   const limpaComTsc = /(^|\s)tsc\s/.test(texto) && /--build/.test(texto) && /--clean/.test(texto);
@@ -78,32 +35,17 @@ function ehEtapaQueCompila(etapa: string): boolean {
   );
 }
 
-/**
- * Quebra o comando do script nas etapas encadeadas por `&&`.
- *
- * `;` e `||` ficam de fora de propósito: etapa encadeada por `;` roda mesmo
- * depois de a anterior falhar, e uma limpeza assim não garante ordem nenhuma.
- * Se alguém escrever o script desse jeito, a etapa não é reconhecida e o portão
- * reprova, que é o desfecho certo.
- */
+/** Quebra o comando do script nas etapas encadeadas por `&&`. */
 function etapasDo(comando: string): string[] {
   return comando.split('&&').map((parte) => parte.trim());
 }
 
-/**
- * Confere que todo script que compila para `dist/_tests` o apaga antes.
- *
- * Devolve a lista de queixas. Lista vazia é aprovação.
- */
+/** Confere que todo script que compila para `dist/_tests` o apaga antes. */
 export function conferirLimpezaDosScripts(scripts: readonly ScriptDoPacote[]): QueixaDeScript[] {
   const queixas: QueixaDeScript[] = [];
   const queCompilam = scripts.filter((script) => ehEtapaQueCompila(script.comando));
 
   if (queCompilam.length === 0) {
-    // Falha ruidosa: se nenhum script compila para `dist/_tests`, ou o diretório
-    // mudou de nome ou o script mudou de forma. Nos dois casos este portão
-    // deixou de olhar o que ele foi escrito para olhar, e aprovar aqui seria
-    // exatamente a confiança falsa que ele existe para impedir.
     queixas.push({
       script: '(nenhum)',
       motivo:
@@ -168,12 +110,7 @@ export interface CompiladoOrfao {
   readonly fonteEsperado: string;
 }
 
-/**
- * Varre `dist/_tests` e devolve todo `.js` cujo `.ts` de origem não existe mais.
- *
- * Um único órfão já é motivo de reprovação: ele é, por definição, código que
- * ninguém consegue ler e que mesmo assim está sendo executado pela suíte.
- */
+/** Varre `dist/_tests` e devolve todo `.js` cujo `.ts` de origem não existe mais. */
 export function procurarCompiladosOrfaos(raiz: string): CompiladoOrfao[] {
   const saida = resolve(raiz, DIRETORIO_DE_TESTES_COMPILADOS);
   const orfaos: CompiladoOrfao[] = [];

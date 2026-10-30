@@ -14,10 +14,7 @@ export interface ContextoDaSessao {
   avisoDoTeto: boolean;
   sair: () => Promise<void>;
   sairDeTodas: () => Promise<void>;
-  /**
-   * Registra quem guarda o formulario quando a sessao cai (UX 29.2). Devolve a
-   * funcao que tira o registro.
-   */
+  /** Registra quem guarda o formulario quando a sessao cai (UX 29.2). */
   registrarRascunho: (guardar: () => void) => () => void;
 }
 
@@ -31,7 +28,7 @@ export function useSessao(): ContextoDaSessao {
 
 export interface PropsDoProvedor {
   children: ReactNode;
-  /** Navegacao de documento inteiro (para `/entrar/`). Injetavel para teste. */
+  /** Navegacao de documento inteiro (para `/entrar/`). */
   navegarParaFora?: (url: string) => void;
   /** Injetavel para teste. */
   fetch?: typeof globalThis.fetch;
@@ -56,9 +53,9 @@ interface Conexao {
 }
 
 /**
- * A sessao do painel: carrega `getAdminSession` (nome, prazos e o token
- * anti-CSRF, que fica so em memoria), manda para `/entrar/` quando a sessao
- * cai, e cuida dos avisos S.1 e S.2 (UX 29.2).
+ * A sessao do painel: carrega `getAdminSession` (nome, prazos e o token anti-CSRF,
+ * que fica so em memoria), manda para `/entrar/` quando a sessao cai, e cuida dos
+ * avisos S.1 e S.2 (UX 29.2).
  */
 export function ProvedorDeSessao({
   children,
@@ -82,7 +79,6 @@ export function ProvedorDeSessao({
     (motivo: MotivoDeEntrar | undefined, voltarDepois: boolean, guarda?: GuardaDoTokenAntiCsrf) => {
       if (saindo.current) return;
       saindo.current = true;
-      // Quem volta depois de entrar volta com o formulario (UX 29.2).
       if (voltarDepois) rascunhos.forEach((guardar) => guardar());
       guarda?.trocar(undefined);
       saidaDoPainel.liberada = true;
@@ -100,8 +96,6 @@ export function ProvedorDeSessao({
     setInstante(agoraMs);
   }, []);
 
-  // O cliente nasce aqui, fora da renderizacao: ele guarda o token em memoria
-  // e avisa quando a sessao e usada ou perdida.
   useEffect(() => {
     let ativo = true;
     let conectado = false;
@@ -116,8 +110,6 @@ export function ProvedorDeSessao({
           setInstante(agoraMs);
         },
         aoPerderAutorizacao: (resposta) => {
-          // 401 de senha errada na reautenticacao nao derruba nada: so os dois
-          // tipos de sessao perdida mandam entrar de novo.
           void resposta
             .clone()
             .json()
@@ -125,7 +117,6 @@ export function ProvedorDeSessao({
             .then((corpo: unknown) => {
               const tipo = tipoDoProblema(corpo) ?? '';
               if (!ativo || !TIPOS_DE_SESSAO_PERDIDA.has(tipo)) return;
-              // Primeira visita sem cookie so manda entrar; sessao que existia e caiu diz que terminou (1.7).
               derrubar(conectado || tipo === 'token-expired' ? 'expirada' : undefined, true, guarda);
             });
         },
@@ -139,7 +130,7 @@ export function ProvedorDeSessao({
           conectado = true;
           aplicar(data, guarda);
           setConexao({ api, guarda });
-        } else if (response.status !== 401) derrubar(undefined, false, guarda); // 401: o middleware ja mandou entrar
+        } else if (response.status !== 401) derrubar(undefined, false, guarda);
       })
       .catch(() => {
         if (ativo) derrubar(undefined, false, guarda);
@@ -149,7 +140,6 @@ export function ProvedorDeSessao({
     };
   }, [fetch, aplicar, derrubar]);
 
-  // S.1 e S.2: um relogio so, que acorda no proximo limiar.
   const leitura = useMemo(() => (prazos ? lerPrazos(prazos, instante) : undefined), [prazos, instante]);
   useEffect(() => {
     if (!leitura) return;
@@ -184,7 +174,6 @@ export function ProvedorDeSessao({
     else throw new Error(`logout-all respondeu ${response.status}`);
   }, [conexao, derrubar]);
 
-
   const registrarRascunho = useCallback(
     (guardar: () => void) => {
       rascunhos.add(guardar);
@@ -212,7 +201,7 @@ export function ProvedorDeSessao({
   );
 }
 
-/** S.1: aos 28 min sem uso. Foco inicial em "Continuar conectado". */
+/** S.1: aos 28 min sem uso. */
 function AvisoDeInatividade({ aoSair, aoContinuar }: { aoSair: () => void; aoContinuar: () => Promise<void> }) {
   const [renovando, setRenovando] = useState(false);
   return (

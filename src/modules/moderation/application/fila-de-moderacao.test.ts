@@ -1,28 +1,4 @@
-/**
- * As ISCAS de comportamento da fila de moderacao, por DESLIGAMENTO.
- *
- * Cada caso aponta o que exatamente deixa de passar se a protecao for
- * removida, e cada um tem o seu contrapeso -- o caso que prova que a condicao
- * NAO esta sempre verdadeira, que e o que separa isca de teste que passaria
- * sobre codigo vazio.
- *
- * | o que apagar | reprova |
- * |---|---|
- * | `tx.removerConteudo` em `remover` | 1a (o conteudo nao fica escondido) |
- * | o motivo do `after` da trilha em `remover` | 1b (motivo nao chega a trilha) |
- * | `tx.resolverDenuncias` em `descartar` | 2 |
- * | trocar `resolverDenuncias` por um `delete` | 2 (a denuncia sumiria) |
- * | `erroSeJaResolvido` em `itemAberto` | 4a |
- * | o `if (resolucao.quantidade === 0)` de `descartar` | 4b |
- * | `registrarNaTrilha` em qualquer das duas | 5 |
- *
- * A isca (c) -- denuncia de conta desabilitada fora da listagem, da leitura e
- * da contagem -- mora em
- * `adapters/persistence/conta-desabilitada-sai-da-fila-de-moderacao.test.ts`,
- * porque ali o que se mede e o SQL compilado: um caso de comportamento
- * passaria igual sobre um `filter` na aplicacao, e e justamente o `filter` que
- * nao se quer.
- */
+/** As ISCAS de comportamento da fila de moderacao, por DESLIGAMENTO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -61,9 +37,6 @@ function itemDeExemplo(parcial: Partial<ItemDaFila> = {}): ItemDaFila {
     detalhe: 'o texto fala do dono e nao do servico',
     reportCount: 3,
     repeatTotal: 7,
-    // `comoData` e nao `new Date(...)`: a regra de arquitetura proibe construir
-    // tempo em `application/`, e vale para o teste tambem -- e com razao, porque
-    // e justamente aqui que um `new Date()` sem argumento passaria despercebido.
     primeiraEm: comoData((AGORA - 86_400_000) as Instant),
     ultimaEm: comoData(AGORA),
     conteudoRemovido: false,
@@ -74,14 +47,7 @@ function itemDeExemplo(parcial: Partial<ItemDaFila> = {}): ItemDaFila {
   };
 }
 
-/**
- * O BANCO DE MENTIRA, e ele guarda o estado de verdade.
- *
- * Nao e um espiao de chamadas: ele mantem `conteudoEscondido` e a LISTA de
- * denuncias, e as leituras publicas simuladas (`lerPublico`) consultam esse
- * estado. E o que faz o caso 1a medir o EFEITO -- "o conteudo deixou de
- * aparecer" -- e nao a chamada de um metodo.
- */
+/** O BANCO DE MENTIRA, e ele guarda o estado de verdade. */
 function bancada(inicial: Partial<ItemDaFila> = {}) {
   const estado = {
     item: itemDeExemplo(inicial),
@@ -96,21 +62,12 @@ function bancada(inicial: Partial<ItemDaFila> = {}) {
     eventos: [] as AuditEvent[],
   };
 
-  /**
-   * A LEITURA PUBLICA simulada: o conteudo aparece enquanto nao foi escondido.
-   *
-   * E o espelho das quatro clausulas `WHERE` de
-   * `kysely-conversation-repository.ts` e do filtro `status = 'published'` da
-   * leitura da avaliacao. O caso 1a le por aqui.
-   */
+  /** A LEITURA PUBLICA simulada: o conteudo aparece enquanto nao foi escondido. */
   const lerPublico = (): string | null => (estado.item.conteudoRemovido ? null : estado.item.conteudo);
 
   const transacao: TransacaoDaModeracao = {
     itemPorAlvo: () => {
       const abertas = estado.denuncias.filter((d) => d.resolvida === null);
-      // A LEITURA DA TRANSACAO so ve item com denuncia ABERTA, igual ao
-      // adaptador (`apenasAbertas`). Mas a decisao ja gravada permanece
-      // visivel no item, porque e ela que o caso 4a le.
       if (abertas.length === 0 && estado.item.decisao === null) return Promise.resolve(null);
       return Promise.resolve({ ...estado.item, reportCount: abertas.length });
     },
@@ -120,8 +77,6 @@ function bancada(inicial: Partial<ItemDaFila> = {}) {
       _ref: string,
       motivo: string,
     ): Promise<AlvoRemovido | null> => {
-      // `null` quando JA estava fora do ar: o motivo da primeira remocao e de
-      // quem auditar, e sobrescreve-lo apagaria a decisao que valeu.
       if (estado.item.conteudoRemovido) return Promise.resolve(null);
       estado.item = { ...estado.item, conteudoRemovido: true };
       estado.motivoNoConteudo = motivo;
@@ -152,9 +107,6 @@ function bancada(inicial: Partial<ItemDaFila> = {}) {
 
   const fila = new FilaDeModeracao({
     repositorio,
-    // O detector de D59 de verdade e de `network/domain` e chega por porta; aqui
-    // o dobre aprova o que passar pelo tamanho, porque o que estes casos medem
-    // nao e a deteccao de contato.
     conferencias: {
       errosDeTextoDeUsuario: (campo, valor, minimo, maximo) =>
         valor.trim().length >= minimo && valor.trim().length <= maximo
@@ -187,7 +139,6 @@ void describe('(a) remover conteudo esconde das leituras publicas E registra mot
       null,
       'o conteudo continua visivel depois da remocao: a exclusao logica nao chegou as leituras.',
     );
-    // **Exclusao LOGICA**: o conteudo continua gravado, com o motivo ao lado.
     assert.equal(
       estado.item.conteudo,
       'texto da avaliacao',
@@ -218,7 +169,6 @@ void describe('(a) remover conteudo esconde das leituras publicas E registra mot
         'nao registra por que, que e a diferenca entre moderacao e arbitrio.',
     );
     assert.equal((evento.after as Record<string, unknown>).content_removed, true);
-    // A NOTA entra (explica o efeito na media do local); o TEXTO nao.
     assert.equal((evento.before as Record<string, unknown>).rating, 1);
     const trilhaInteira = JSON.stringify(evento);
     assert.ok(
@@ -231,7 +181,6 @@ void describe('(a) remover conteudo esconde das leituras publicas E registra mot
       !trilhaInteira.includes('o texto fala do dono'),
       `o RELATO DE QUEM DENUNCIOU foi copiado para a trilha. Evento: ${trilhaInteira}`,
     );
-    // E os dois numeros da repeticao vao, porque sao o que explica a decisao.
     assert.equal((evento.before as Record<string, unknown>).repeat_total, 7);
   });
 });

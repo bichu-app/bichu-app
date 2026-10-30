@@ -11,46 +11,6 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/grupo_de_opcoes.dart';
 
 /// A FOLHA DE DENÚNCIA — a mesma para os três alvos, com a lista do alvo.
-///
-/// ## A CONTAGEM DE TOQUES, que é o requisito e não um detalhe
-///
-/// **1 toque para achar, 2 para chegar aos motivos, 4 para concluir.**
-///
-/// | Toque | O que acontece |
-/// |---|---|
-/// | 1 | o "⋮" da barra do perfil abre o menu — *achar* |
-/// | 2 | "Denunciar este perfil" abre **esta folha, com os motivos à vista** |
-/// | 3 | escolher o motivo **seleciona**, e não envia |
-/// | 4 | **"Enviar"**, explícito |
-///
-/// O terceiro toque não envia, e isso é a decisão mais importante da folha:
-/// **denúncia não tem desfazer**, e o erro custa a quem foi denunciado. Uma
-/// folha que disparasse no toque do motivo entregaria uma denúncia a cada
-/// polegar errado, sobre uma pessoa real, sem volta.
-///
-/// Os motivos aparecem **na própria folha** e não atrás de outro passo: um
-/// terceiro nível ("Ajustes → Privacidade → Denunciar") é o padrão em que a
-/// pessoa desiste, e quem precisa denunciar está desconfortável e não vai caçar
-/// o botão.
-///
-/// ## A frase de que o outro não é avisado vem ANTES do envio
-///
-/// Antes, e não na confirmação. Quem está decidindo se denuncia precisa saber
-/// que a outra pessoa não fica sabendo **enquanto decide** — depois do envio
-/// seria um alívio; antes, é o que faz a pessoa conseguir tocar no botão.
-///
-/// ## O que esta folha NÃO diz
-///
-/// **Nenhum prazo.** Não existe prazo, e nenhuma frase daqui promete "vamos
-/// analisar em X" nem "nossa equipe responderá". O que ela promete é o que
-/// acontece de verdade e na hora: *"Você não vai mais ver este conteúdo."*
-///
-/// **Nada sobre o que o outro vai ver**, porque o outro não vê nada.
-///
-/// ## Sem campo de motivo livre
-///
-/// `relato` é opcional e é contexto *sobre o motivo escolhido*. Não existe
-/// caminho de enviar sem motivo: `Enviar` fica desabilitado até haver um.
 class FolhaDeDenuncia extends StatefulWidget {
   const FolhaDeDenuncia({
     required this.alvo,
@@ -60,7 +20,7 @@ class FolhaDeDenuncia extends StatefulWidget {
 
   final AlvoDaDenuncia alvo;
 
-  /// Recebe o valor do contrato e o relato aparado. Lança [FalhaDaApi] em erro.
+  /// Recebe o valor do contrato e o relato aparado.
   final Future<void> Function(String motivo, String? relato) aoEnviar;
 
   @override
@@ -94,8 +54,6 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
       if (!mounted) return;
       setState(() {
         _enviando = false;
-        // A FRASE É DO SERVIDOR, e a tela não a reescreve: ele é quem sabe o
-        // que recusou e por quê. Mesma regra de `criar_encontro.dart`.
         _erro = MensagensDeErro.de(falha);
       });
     }
@@ -118,14 +76,11 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
               style: textos.titleLarge?.copyWith(color: cores.textPrimary),
             ),
             const SizedBox(height: BichuEspaco.e2),
-            // A FRASE QUE FAZ DENUNCIAR PARECER SEGURO, e ela está aqui — antes
-            // do envio — de propósito.
             Text(
               oOutroNaoEAvisado,
               style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
             ),
             const SizedBox(height: BichuEspaco.e5),
-            // OS MOTIVOS, À VISTA. Nenhum passo a mais entre o menu e eles.
             Flexible(
               child: SingleChildScrollView(
                 child: Column(
@@ -137,9 +92,6 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
                           .map((m) => OpcaoDeLinha<String>(valor: m.valor, rotulo: m.rotulo))
                           .toList(),
                       selecionado: _motivo,
-                      // SELECIONA, E NÃO ENVIA. Ver o cabeçalho: o quarto toque
-                      // é um `Enviar` explícito porque denúncia não tem
-                      // desfazer.
                       aoSelecionar: (valor) => setState(() => _motivo = valor),
                     ),
                     const SizedBox(height: BichuEspaco.e4),
@@ -147,24 +99,6 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
                       controller: _relato,
                       maxLines: 3,
                       maxLength: 1000,
-                      // TOCAR FORA FECHA O TECLADO. `TextField` cru, e nao
-                      // `BichuField`: ver a prosa em
-                      // `widgets/bichu_field.dart`. Com `maxLines: 3` a tecla
-                      // de retorno insere linha, e esta folha e modal -- o
-                      // teclado aberto cobria o `Enviar` dela sem ter como
-                      // descer.
-                      //
-                      // **E ela nao leva a faixa de `Concluir`, por DECISAO
-                      // medida (20/10/2026).** A faixa de
-                      // `widgets/barra_do_teclado.dart` se encosta em
-                      // `bottom: viewInsets.bottom`, e o conteudo desta folha
-                      // e empurrado para cima do teclado pelo mesmo numero:
-                      // ela cairia sobre o rodape da propria folha -- onde
-                      // mora o `Enviar` --, trocando um controle escondido por
-                      // outro. A saida daqui e o toque fora, e a excecao e
-                      // geometrica: vale tambem para
-                      // `mensagens/tela_da_conversa.dart`, e nao deve ser
-                      // "completada" depois.
                       onTapOutside: (PointerDownEvent _) =>
                           FocusManager.instance.primaryFocus?.unfocus(),
                       decoration: const InputDecoration(
@@ -187,8 +121,6 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
             BotaoPrimario(
               rotulo: 'Enviar',
               carregando: _enviando,
-              // DESABILITADO ATÉ HAVER MOTIVO: não existe caminho de enviar sem
-              // dizer o que aconteceu, porque motivo vazio não se tria.
               aoTocar: _motivo == null ? null : _enviar,
             ),
           ],
@@ -199,10 +131,6 @@ class _EstadoDaFolhaDeDenuncia extends State<FolhaDeDenuncia> {
 }
 
 /// Abre a folha. Devolve `true` quando a denúncia foi aceita.
-///
-/// O gesto de voltar devolve nulo, que vira `false`: **um `?? true` aqui
-/// transformaria o gesto de voltar do sistema num enviador de denúncia**, e
-/// seria invisível na revisão. Mesma regra de `mostrarFolhaDestrutiva`.
 Future<bool> mostrarFolhaDeDenuncia(
   BuildContext context, {
   required AlvoDaDenuncia alvo,

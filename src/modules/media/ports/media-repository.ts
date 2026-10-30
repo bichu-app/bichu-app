@@ -1,14 +1,4 @@
-/**
- * Porta de persistência da mídia.
- *
- * Mesma decisão do ADR-0021 aplicada aqui: **todo método que toca uma foto ou
- * uma intenção recebe o dono como argumento obrigatório**, e a busca é
- * vinculada. A consulta que devolveria a foto de outro tutor não existe.
- *
- * Nenhum método devolve nem aceita URL. O que trafega é `ObjectKey`; a URL é
- * montada na leitura (§11.1 proibição 9), e os tipos marcados impedem gravar uma
- * no lugar da outra em tempo de compilação.
- */
+/** Porta de persistência da mídia. */
 import type { Instant, ObjectKey, PetId, UserId } from '../../../shared/types/brands.js';
 import type { Classe } from './object-storage.js';
 
@@ -28,15 +18,7 @@ export interface IntencaoDeEnvio {
 export interface FotoDoPet {
   readonly id: string;
   readonly status: StatusDaFoto;
-  /**
-   * O MOTIVO DA RECUSA, em texto, para a tela dizer por quê.
-   *
-   * Ele era gravado em `pet_photos.rejection_reason` desde a BICHUS-87 e **não
-   * chegava a ninguém**: o contrato não tinha o campo e a resposta não o
-   * enviava, então a tela dizia "recusada" e a pessoa não tinha como saber se o
-   * problema era o formato, o tamanho ou o arquivo truncado — e portanto não
-   * tinha como consertar. Nulo em `processing` e em `ready`.
-   */
+  /** O MOTIVO DA RECUSA, em texto, para a tela dizer por quê. */
   readonly rejectionReason: string | null;
   readonly isPrimary: boolean;
   readonly originalKey: ObjectKey;
@@ -56,7 +38,7 @@ export interface NovaIntencao {
 }
 
 export interface MediaRepository {
-  /** Confere que o pet é do chamador. Sem isso, qualquer conta pede envio para qualquer pet. */
+  /** Confere que o pet é do chamador. */
   petEhDoTutor(pet: PetId, dono: UserId): Promise<boolean>;
 
   registrarIntencao(nova: NovaIntencao): Promise<void>;
@@ -67,10 +49,6 @@ export interface MediaRepository {
   /**
    * Cria a foto e marca a intenção como confirmada **na mesma transação**, e
    * enfileira o processamento junto.
-   *
-   * Os três juntos não são zelo: foto criada sem trabalho enfileirado fica
-   * `processing` para sempre, e trabalho enfileirado sem foto falha em laço
-   * procurando uma linha que não existe.
    */
   confirmarEnvio(entrada: {
     readonly fotoId: string;
@@ -84,14 +62,7 @@ export interface MediaRepository {
 
   listarDoPet(pet: PetId, dono: UserId): Promise<readonly FotoDoPet[]>;
 
-  /**
-   * As fotos de VÁRIOS pets numa consulta só.
-   *
-   * Existe por causa de `listMyPets`, que devolve a lista inteira do tutor: uma
-   * consulta por pet transformaria a tela inicial do app em N+1 no caminho mais
-   * percorrido que existe. Não recebe dono porque quem chama já provou a posse
-   * ao carregar os pets — e a lista de ids vem dessa mesma leitura.
-   */
+  /** As fotos de VÁRIOS pets numa consulta só. */
   porPets(pets: readonly PetId[]): Promise<ReadonlyMap<string, readonly FotoDoPet[]>>;
 
   /** `null` quando não existe ou não é do chamador. */
@@ -100,10 +71,8 @@ export interface MediaRepository {
   excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean>;
 
   /**
-   * A foto como o WORKER precisa dela: sem dono, porque quem chama é o processo
-   * de trabalho e não uma requisição de usuário. É o único método desta porta
-   * que não recebe o tutor, e a exceção é deliberada e limitada — ele devolve
-   * chave de objeto e nada mais que sirva para montar uma resposta.
+   * A foto como o WORKER precisa dela: sem dono, porque quem chama é o processo de
+   * trabalho e não uma requisição de usuário.
    */
   buscarParaProcessar(foto: string): Promise<FotoParaProcessar | null>;
 
@@ -117,49 +86,13 @@ export interface MediaRepository {
   /** Estado FINAL (critério 19): não volta para a fila. */
   marcarRecusada(foto: string, motivo: string, agora: Instant): Promise<void>;
 
-  /**
-   * As intenções vencidas que ninguém confirmou (critério 13).
-   *
-   * Existem porque o envio direto ao armazenamento **não passa por nós**: o
-   * cliente pede a autorização, some, e o objeto pode ou não estar lá. Sem esta
-   * varredura, cada desistência deixa um arquivo pago e invisível no bucket
-   * privado — invisível porque nenhuma linha de `pet_photos` aponta para ele.
-   *
-   * **NÃO DEVOLVE FOTO DE ACHADO.** As duas espécies do achado
-   * (`ESPECIES_DO_ACHADO`) estão fora desta lista por decisão do cliente de
-   * 17/10/2026: nenhum apagamento automático toca informação de perdido ou
-   * achado. Ver o cabeçalho de `varrer-envios-vencidos.ts`.
-   */
+  /** As intenções vencidas que ninguém confirmou (critério 13). */
   listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]>;
 
-  /** Some com a linha depois que o objeto saiu. Nesta ordem, nunca na inversa. */
+  /** Some com a linha depois que o objeto saiu. */
   descartarIntencao(id: string): Promise<void>;
 
-  /**
-   * TODAS as chaves de objeto de uma conta, para o expurgo definitivo
-   * (SEC-020).
-   *
-   * **Lida ANTES do `DELETE FROM users`, e é por isso que ela existe.** As
-   * chaves só vivem dentro das linhas que a cascata apaga — `upload_intents`,
-   * `pet_photos` e `conversation_messages` — então o `DELETE` destrói o único
-   * ponteiro que existia para o arquivo. Um objeto sem linha é lixo que ninguém
-   * consegue nomear, e o custo de encontrá-lo depois é listar o balde inteiro e
-   * cruzar com o banco, que é literalmente o que o cabeçalho de
-   * `varrer-envios-vencidos.ts` diz para evitar.
-   *
-   * **Não recebe dono como segundo argumento porque o dono É o argumento.** Não
-   * há identificador de recurso vindo de fora, então não há 403 nem 404 a
-   * decidir (ADR-0021), e a consulta que alcançaria a foto de outra conta não
-   * existe deste lado da porta.
-   *
-   * Devolve a CLASSE junto com a chave porque são dois baldes fisicamente
-   * separados: o original e a foto de achador no privado, as derivadas `card` e
-   * `thumb` no público. Quem apaga precisa saber em qual, e uma lista só de
-   * chaves obrigaria quem chama a reconstruir essa regra — que é a segunda
-   * definição de onde cada objeto mora.
-   *
-   * Lista vazia é resposta normal: conta sem foto nenhuma é o caso comum.
-   */
+  /** TODAS as chaves de objeto de uma conta, para o expurgo definitivo (SEC-020). */
   chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]>;
 }
 
@@ -169,20 +102,7 @@ export interface ObjetoDaConta {
   readonly chave: ObjectKey;
 }
 
-/**
- * A espécie de uma intenção vencida.
- *
- * Os três primeiros são os `kind` de `upload_intents`; `'catalog_image'` é o
- * envio do painel (`catalog_upload_intents`, ADR-0027 A.3), que não tem coluna
- * `kind` porque aquela tabela só guarda um tipo de coisa.
- *
- * A união é escrita aqui e não importada de `shared/db/schema.ts` pelo mesmo
- * motivo de `StatusDaFoto` logo acima: a porta não depende do esquema do banco.
- *
- * Ela existe para que a varredura possa RECUSAR o que não deve apagar. Sem a
- * espécie viajando junto, o caso de uso recebia um `id` e uma chave e não tinha
- * como saber que estava apagando a foto de um achado — e não soube.
- */
+/** A espécie de uma intenção vencida. */
 export type EspecieVencida =
   | 'pet_photo'
   | 'found_report_photo'

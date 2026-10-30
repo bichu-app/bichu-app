@@ -1,18 +1,11 @@
-/**
- * O código da tag fora do log. O caso que importa aqui é **negativo**, e por isso
- * ele é o primeiro: o código não pode aparecer na saída.
- *
- * Um teste que só confirmasse "a URL foi reescrita" passaria com uma reescrita
- * que mantém o código em algum lugar da linha. Todas as asserções abaixo
- * procuram o valor original no resultado e exigem que ele não esteja lá.
- */
+/** O código da tag fora do log. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 
 const CODIGO = 'GQSM0XHBT4D9G31S';
 const IMPRESSO = 'GQSM-0XHB-T4D9-G31S';
-/** O formato anterior, de 26 caracteres. Não existe mais, e não é redigido. */
+/** O formato anterior, de 26 caracteres. */
 const CODIGO_DO_FORMATO_ANTIGO = '7K2F9QJB3XR05TWD8MNCVH1234';
 
 void describe('o código da tag não entra no log em claro', () => {
@@ -59,10 +52,6 @@ void describe('o código da tag não entra no log em claro', () => {
   });
 
   void it('o intervalo do padrão acompanhou o contrato, e o de 26 não casa mais', () => {
-    // A isca do acoplamento: este arquivo carrega uma cópia do `pattern` do
-    // parâmetro `TagCode`. Se alguém encurtar o código e esquecer aqui, nada
-    // quebra — o código passa a viajar EM CLARO no log de acesso, em silêncio.
-    // O caso confere os dois lados: 16 é redigido, 26 não casa com o padrão.
     assert.match(ocultarCodigoDaTagNaUrl(`/v1/tags/${CODIGO}`), /sha256:/);
     assert.equal(
       ocultarCodigoDaTagNaUrl(`/v1/tags/${CODIGO_DO_FORMATO_ANTIGO}`),

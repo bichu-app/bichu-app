@@ -1,21 +1,4 @@
-/**
- * O código da tag não entra no log de acesso em claro.
- *
- * Regra do ADR-0004, seção "Higiene da rota pública": o código viaja na URL
- * porque é isso que um QR codifica, e daí em diante ele é uma credencial ao
- * portador passeando por todo lugar que registra caminho de requisição. O log de
- * acesso é o pior desses lugares: ele é agregado, enviado para fora, guardado
- * por mais tempo que qualquer outra coisa e lido por gente que não precisa
- * daquele valor.
- *
- * **Registra-se o hash.** O que o log perde é a capacidade de abrir a página do
- * pet a partir de uma linha de log; o que ele mantém é a de correlacionar
- * leituras do mesmo código, que é para o que o log serve aqui.
- *
- * Isto não substitui a trilha de scans, que é o registro de produto. É higiene
- * do registro de infraestrutura, e as duas coisas existem por motivos
- * diferentes.
- */
+/** O código da tag não entra no log de acesso em claro. */
 import { createHash } from 'node:crypto';
 
 /**
@@ -27,17 +10,7 @@ const CARACTERES_DO_RESUMO = 12;
 /**
  * Casa os dois caminhos que carregam o código: `/v1/tags/<código>` e tudo o que
  * pende dele (`/owner-context`, `/found-reports`), com ou sem prefixo de versão.
- *
- * O segmento é capturado por tamanho e alfabeto, e não por "qualquer coisa": um
- * caminho que não é código não deve virar hash, porque aí o log deixa de dizer
- * o que aconteceu sem nenhum ganho.
  */
-// O intervalo espelha o `pattern` do parametro `TagCode` em `api/openapi.yaml`,
-// e os dois andam JUNTOS: eram `{25,39}` com 26 caracteres e passaram a
-// `{15,23}` com 16. Deixar o antigo aqui nao produziria erro nenhum visivel --
-// produziria o codigo VIAJANDO EM CLARO no log de acesso, que e exatamente o
-// que este arquivo existe para impedir, e ninguem olha um log para conferir se
-// ele esta redigido.
 const CAMINHO_DA_TAG = /(\/tags\/)([0-9A-Za-z][0-9A-Za-z-]{15,23})(?=$|[/?])/;
 
 export function ocultarCodigoDaTagNaUrl(url: string): string {

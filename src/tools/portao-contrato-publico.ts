@@ -1,46 +1,11 @@
-/**
- * Portão de contrato: nenhuma resposta pública devolve campo privado.
- *
- * Lê `api/openapi.yaml` e percorre **toda** operação cujo chamador não tem
- * conta: `security: []`, `tagCode` ou `finderToken`. Reprova quando a resposta
- * declarada traz coordenada, telefone, e-mail, endereço ou UUID interno, e
- * quando o PEDIDO declara parâmetro de coordenada, distância ou raio.
- *
- * Os dois lados estão aqui porque o vazamento não precisa aparecer na resposta
- * para existir. Uma rota pública que aceita um centro escolhido por quem chama
- * é um oráculo de posição: variando o centro e lendo a ORDEM da página dá para
- * trilaterar o ponto de cada caso sem um único número de coordenada sair no
- * corpo. O ADR-0006 proíbe nominalmente para a listagem pública de perdidos
- * ("filtra por cidade e bairro digitados, jamais por latitude e longitude") e o
- * ADR-0010 itens 4 e 5 proíbem coordenada e distância em superfície alcançável
- * sem conta.
- *
- * Três decisões que fazem este portão valer alguma coisa:
- *
- * 1. **Ele lê o contrato, não a lista de rotas de hoje.** Rota pública criada
- *    depois do dia 30 é coberta sem ninguém precisar lembrar de nada.
- * 2. **Não achar alvo é reprovação.** Filtro que não filtra termina verde e
- *    ninguém desconfia. A ausência de operação para percorrer é falha ruidosa
- *    com o motivo na mensagem.
- * 3. **O caso que ele PRECISA reprovar mora aqui dentro e roda sempre.** Prova
- *    negativa que vive numa frase evapora: se a isca passar, o portão falha por
- *    não ter conseguido verificar, e diz isso.
- *
- * Uso: `node dist/tools/portao-contrato-publico.js [caminho-da-spec]`
- * Saída: 0 aprovado, 1 reprovado.
- */
+/** Portão de contrato: nenhuma resposta pública devolve campo privado. */
 import { parse as parseYaml } from 'yaml';
 import { readFileSync } from 'node:fs';
 import { carregarContrato, type OperacaoDoContrato } from '../shared/http/contract.js';
 
 export const VERSAO_DO_PORTAO = '1.3.0';
 
-/**
- * Nomes proibidos em resposta a quem não tem conta. Comparação por nome exato:
- * `recipient_email_masked` não é `email`, e tratar por substring transformaria o
- * portão numa fonte de achado falso, que é como portão perde a confiança de quem
- * o lê.
- */
+/** Nomes proibidos em resposta a quem não tem conta. */
 const CAMPOS_PROIBIDOS = new Set([
   'lat',
   'lon',
@@ -54,26 +19,6 @@ const CAMPOS_PROIBIDOS = new Set([
   'address',
   'street',
   'zip',
-  // ---------------------------------------------------------------------
-  // BICHUS-92. A granularidade que sai em superfície pública é bairro,
-  // cidade e UF, e **nunca mais fino** (ADR-0010, "o que a rota pública
-  // jamais exibe", itens 4 e 5).
-  //
-  // As sete primeiras são a coordenada por outros nomes. `reference_point`
-  // é a coluna nova, e está aqui porque a lista acima cobria `lat`/`lon` e
-  // deixaria passar o nome da coluna: uma resposta pública declarando
-  // `reference_point: { type: string }` (o WKT de um ponto é texto)
-  // atravessava as duas listas sem um achado.
-  //
-  // `distance_m`, `distance_km` e `radius_m` não são coordenada e são
-  // igualmente proibidas em superfície pública, pelo motivo que o ADR-0010
-  // registra: distância implica centro, e três distâncias a partir de
-  // centros conhecidos trilateram o centro desconhecido. No contrato de
-  // hoje as três aparecem apenas em operação com `bearerAuth`
-  // (`LostCaseReachPreview` e a lista de candidatos), e é justamente por
-  // isso que declará-las aqui não muda nada hoje e fecha a porta amanhã.
-  //
-  // `map_url` fecha o item 5 (mapa com pino, em qualquer zoom).
   'point',
   'reference_point',
   'geo',
@@ -87,51 +32,7 @@ const CAMPOS_PROIBIDOS = new Set([
   'map_url',
   'street_number',
   'house_number',
-  // ---------------------------------------------------------------------
-  // AS DUAS ADICOES DE 21/10/2026 SOBREVIVEM A UNIAO, e isto foi conferido
-  // nome por nome. Duas frentes acrescentaram campo a esta lista no MESMO dia e
-  // pelo MESMO motivo de fundo -- a comparacao e por nome EXATO, e um nome
-  // vizinho nao cobre o outro. Perder uma das duas na mescla reabriria o buraco
-  // que ela fechou, em silencio e com o portao verde.
-  // `complement` entrou em 21/10/2026, junto com a decisao do cliente que
-  // abriu `postal_code`, `street`, `street_number` e `complement` em
-  // `DirectoryEntryDetail` -- operacao COM conta, que este portao nao
-  // percorre.
-  //
-  // Ele estava faltando. A migracao `20261018000001` criou as QUATRO colunas
-  // de endereco de `professionals` e esta lista tinha TRES: quem publicasse
-  // amanha uma superficie de diretorio sem conta levando `complement` --
-  // "apto 52", "casa dos fundos" -- atravessaria o portao sem um achado,
-  // enquanto as outras tres reprovavam. Abrir a porta do lado de dentro e
-  // deixar a fresta do lado de fora e como o vazamento entra depois, por uma
-  // coluna que ninguem reparou.
-  //
-  // **Acrescentar nao afrouxa nada e nao dispensa nada**: o portao continua
-  // olhando so operacao alcancavel sem conta, e nenhuma operacao de hoje
-  // declara `complement` sem conta. A isca de granularidade cobra as quatro.
   'complement',
-  // `street_address` ENTROU EM 21/10/2026, e a ausencia dele era um buraco
-  // MEDIDO, nao teorico.
-  //
-  // A comparacao desta lista e **por nome exato** (ver o cabecalho do
-  // `CAMPOS_PROIBIDOS`), de proposito. Mas `network_events.street_address` se
-  // chama exatamente isso, e nao `street` nem `address`: ele atravessava as
-  // duas entradas vizinhas sem um achado. Entao, antes desta linha, o portao
-  // APROVAVA um `street_address` acrescentado a `NetworkEventPublic` -- que e
-  // resposta de `getNetworkEvent`, operacao de autenticacao OPCIONAL e
-  // portanto publica para este portao.
-  //
-  // O ADR-0027 item 21.2 e literal: o endereco por extenso do encontro sai
-  // **so** em `getNetworkEventLocation`, com `bearerAuth`, e "nunca na agenda,
-  // no detalhe publico, no teaser nem nos detalhes do privado". Trocar essa
-  // regra para publica exige, no mesmo commit, o campo em `NetworkEventPublic`
-  // e `NetworkEventPrivateDetails` e uma emenda naquele ADR -- e, agora,
-  // tirar o nome daqui, que e o terceiro lugar onde a decisao aparece.
-  //
-  // A pagina publica do encontro (`/encontro/{slug}`, emenda 4 do ADR-0017) e
-  // o motivo de isto virar urgente: ela e lida por quem nao tem conta, e o
-  // `street_address` indo para ela e o endereco do encontro indo para um grupo
-  // de WhatsApp.
   'street_address',
   'address_line',
   'address_line1',
@@ -141,26 +42,14 @@ const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);
 
 /**
  * `correlation_id` termina em `_id` e é um UUID, e **não** é identificador de
- * recurso: é o mesmo valor propagado no log e no trace, que o contrato manda
- * estar em todo `Problem`, inclusive nos públicos. Ele não ordena nada nem
- * revela taxa de criação de registro, que é o dano que o SEC-001 descreve.
+ * recurso: é o mesmo valor propagado no log e no trace, que o contrato manda estar
+ * em todo `Problem`, inclusive nos públicos.
  */
 const CAMPOS_DISPENSADOS = new Set(['correlation_id']);
 
 /**
  * Operações que **abrem sessão**: cadastro, login, renovação, confirmação de
- * e-mail e entrada por credencial digital. Elas declaram `security: []` porque
- * quem chama ainda não tem token,
- * mas o corpo que devolvem é a conta **de quem acabou de provar a credencial na
- * mesma requisição** — não a de um terceiro. Exigir que a resposta de login não
- * traga o próprio e-mail tornaria a operação impossível.
- *
- * A regra do SEC-001 é escrita no contrato com escopo estreito, e é este:
- * "toda resposta a chamador com `tagCode` ou `finderToken`". A dispensa abaixo
- * é a leitura fiel dele, e não um alargamento de conveniência.
- *
- * As dispensas são **impressas a cada execução**. Lista de exceção que ninguém
- * vê é lista que cresce.
+ * e-mail e entrada por credencial digital.
  */
 const OPERACOES_QUE_ABREM_SESSAO: ReadonlyMap<string, string> = new Map([
   ['registerUser', 'devolve a sessão e a conta recém-criada a quem a criou'],
@@ -226,8 +115,6 @@ function percorrerSchema(
     for (const [nome, definicao] of Object.entries(propriedades)) {
       const alvo = ehObjeto(definicao) ? definicao : {};
       if (CAMPOS_DISPENSADOS.has(nome)) {
-        // Segue percorrendo o que está abaixo dele: a dispensa é do nome, não
-        // da subárvore.
         percorrerSchema(definicao, spec, operationId, `${onde}.${nome}`, vistos, achados);
         continue;
       }
@@ -258,13 +145,7 @@ function percorrerSchema(
 }
 
 export function ehOperacaoSemConta(operacao: OperacaoDoContrato): boolean {
-  // `security: []` — pública.
   if (operacao.security.length === 0) return true;
-  // `bearerAuth` mais `{}` — autenticação OPCIONAL. Existe um caminho sem conta,
-  // e é justamente ele que precisa ser olhado: é assim que o contrato declara a
-  // rota da tag em modo dono, onde a resposta muda se houver token. Tratar a
-  // lista só pelos nomes dos esquemas faz a alternativa vazia desaparecer, e
-  // some com ela a única rota pública que serve dois públicos diferentes.
   if (operacao.security.some((entrada) => Object.keys(entrada).length === 0)) return true;
   return operacao.securitySchemes.some((nome) => ESQUEMAS_SEM_CONTA.has(nome));
 }
@@ -298,67 +179,8 @@ export function inspecionarCamposPublicos(
   return achados;
 }
 
-/**
- * Tokens proibidos em NOME DE PARÂMETRO de operação alcançável sem conta.
- *
- * ## Por que esta lista é PRÓPRIA, e não a `CAMPOS_PROIBIDOS` da resposta
- *
- * A pergunta foi medida antes de ser respondida, nas 53 nomes de parâmetro que
- * o contrato declara hoje. Três coisas saíram da medição, e a primeira decide:
- *
- * 1. **`max_km` não está em `CAMPOS_PROIBIDOS`, e é um parâmetro deste
- *    contrato.** Ele é o nome que esta casa já usa para raio
- *    (`listNearbyNetworkEvents`, `bearerAuth`). A lista da resposta tem
- *    `radius_m` e não tem `max_km`, por um motivo correto: `max_km` nunca
- *    aparece numa resposta, só num pedido. Reusar a lista da resposta deixaria
- *    passar, numa rota pública, exatamente o nome que o projeto escolheu para
- *    dizer "raio" — o buraco fechado com a mão esquerda e reaberto com a
- *    direita.
- * 2. **A lista da resposta é mais larga do que esta regra autoriza.** Ela traz
- *    `phone`, `email`, `address`, `cep`, `street`, `zip`, `street_number`,
- *    `house_number`, `map_url`. Proibir `email` no PEDIDO de rota pública pode
- *    muito bem ser certo, mas por outro defeito (enumeração de conta), com
- *    outra evidência e em outra história. O que o ADR-0006 e o ADR-0010 itens 4
- *    e 5 proíbem é coordenada, distância e raio. Arrastar o resto para dentro
- *    desta mudança seria alargar a regra sem ADR atrás.
- * 3. **A lista da resposta muda por motivo de resposta.** O comentário dela diz
- *    isso de `reference_point`: entrou porque era o nome de uma COLUNA nova. No
- *    dia em que o mascaramento chegar e `phone` sair de lá, o lado do pedido
- *    perderia cobertura que nunca derivou dali. Acoplar faz uma mudança cair no
- *    raio da outra sem ninguém raciocinar sobre isso.
- *
- * O argumento contrário — uma lista só não divergir — é real, e perde: as duas
- * listas respondem a perguntas diferentes, e a divergência já é necessária
- * (`radius_m` de um lado, `max_km` do outro). O que não pode acontecer é
- * qualquer das duas ENCOLHER calada, e disso cuidam as iscas, uma por lista.
- *
- * O teste de `listagem-publica-de-perdidos.test.ts` já tinha feito esta mesma
- * escolha, por escrito e com a mesma razão ("a lista de lá é sobre o que SAI e
- * pode mudar por outra razão"). Divergir dela agora é que seria a incoerência.
- *
- * ## Por que o casamento é por SEGMENTO, e não por nome exato
- *
- * Na resposta o nome exato basta, e o arquivo explica por quê: substring
- * transformaria o portão numa fonte de achado falso. No pedido, não basta —
- * nome de parâmetro é naturalmente composto, e `max_km` está aí para provar.
- * `center_lat`, `lat_min` e `sw_lat` são a mesma coordenada com um prefixo, e
- * nome exato não alcança nenhum deles.
- *
- * Então o nome é quebrado em `_`, `-` e `.`, e cada segmento é comparado com os
- * tokens abaixo. Medido: nos 53 nomes de parâmetro do contrato de hoje isso
- * casa com TRÊS — `lat`, `lon` e `max_km` — e os três estão em operação com
- * `bearerAuth`. Zero achado falso. `page`, `limit`, `period`, `q`, `city`,
- * `neighborhood`, `size`, `sort`, `species`, `cursor`, `price_status` e
- * `verification_level` passam, e passam medidos, não por esperança.
- *
- * Fora da lista de propósito: `long`, `around`, `within` e `bounds`. São
- * palavras inglesas que nomeiam outra coisa com naturalidade (`long_name`), e
- * um achado falso custa ao portão a confiança de quem o lê — que é o que o
- * resto deste arquivo passa o tempo tentando não gastar. As formas compostas
- * que importam já caem pelo token geográfico ao lado (`lat`, `lon`, `km`).
- */
+/** Tokens proibidos em NOME DE PARÂMETRO de operação alcançável sem conta. */
 const TOKENS_PROIBIDOS_NO_PEDIDO: ReadonlySet<string> = new Set([
-  // Coordenada, por todos os nomes que ela usa.
   'lat',
   'latitude',
   'lon',
@@ -374,15 +196,9 @@ const TOKENS_PROIBIDOS_NO_PEDIDO: ReadonlySet<string> = new Set([
   'geometry',
   'point',
   'centroid',
-  // O CENTRO escolhido por quem chama. É o coração do defeito: um `?center=`
-  // empacotando os dois números num texto só não tem segmento `lat` nem `lon`,
-  // e passaria por tudo acima.
   'center',
   'centre',
   'bbox',
-  // Distância e raio. O ADR-0010 registra o motivo e ele não é zelo: distância
-  // implica centro, e três distâncias a partir de centros conhecidos trilateram
-  // o centro desconhecido.
   'radius',
   'distance',
   'dist',
@@ -391,23 +207,6 @@ const TOKENS_PROIBIDOS_NO_PEDIDO: ReadonlySet<string> = new Set([
   'near',
   'nearby',
 ]);
-
-/**
- * Por que o PEDIDO não dispensa `OPERACOES_QUE_ABREM_SESSAO`.
- *
- * A dispensa da resposta tem uma razão estreita e boa: o corpo que o login
- * devolve é a conta de quem acabou de provar a credencial na mesma requisição.
- * Nada disso vale para o lado do pedido — `login` não tem negócio nenhum
- * aceitando um `lat` de query string. A dispensa é da resposta, e fica lá.
- *
- * E por que o CORPO da requisição não é percorrido, que é uma fronteira e não
- * um esquecimento: um `lat` no corpo de `createFoundReportFromTag` é quem achou
- * o pet dizendo onde o achou — entrada legítima, e o ADR-0010 fala do que a
- * superfície pública EXIBE. O que faz o parâmetro ser diferente é que ele é um
- * SELETOR: vive na URL, é registrado em log, cai em cache e é compartilhado, e
- * é onde o OpenAPI declara filtro e ordenação. Coordenada que entra por direito
- * entra pelo corpo; esta varredura não toca no corpo.
- */
 
 /** O que a varredura de parâmetros conseguiu olhar, além do que ela achou. */
 export interface ResultadoDoPedido {
@@ -454,11 +253,6 @@ export function inspecionarParametrosPublicos(
   }
 
   if (parametrosConferidos === 0) {
-    // "Não achar alvo é reprovação", a regra deste arquivo. Se NENHUMA operação
-    // sem conta declarar um parâmetro, esta varredura não percorreu nada e um
-    // verde dela não diz nada. Vai como achado, e não como saída antecipada, de
-    // propósito: as outras iscas precisam continuar vendo os achados de campo
-    // que o `.esperado` delas cobra.
     achados.push({
       operationId: `(${operacoes.length} operação(ões) sem conta)`,
       onde: 'parâmetros',
@@ -472,21 +266,7 @@ export function inspecionarParametrosPublicos(
   return { achados, operacoesConferidas: operacoes.length, parametrosConferidos };
 }
 
-/**
- * Cabeçalhos exigidos nas páginas HTML públicas (critério 5).
- *
- * Desde o ADR-0017 o contrato não tem mais nenhuma resposta `text/html`: as 12
- * operações que renderizavam página saíram, e a renderização foi para outro
- * time. Este bloco continua aqui, e continua armado, porque a decisão foi tirar
- * as páginas DESTE serviço, não decidir que página pública dispensa cabeçalho.
- *
- * A distinção que o relatório precisa fazer, e que é o defeito que este projeto
- * mais persegue: **"não havia o que conferir" não pode sair igual a "conferi e
- * está certo"**. Ausência de página é dita com essas palavras e não reprova;
- * página presente sem cabeçalho reprova como sempre reprovou. Quem garante que
- * a segunda metade continua enxergando é a isca do autoteste, que roda a cada
- * execução com uma página nua e exige os seis achados de volta.
- */
+/** Cabeçalhos exigidos nas páginas HTML públicas (critério 5). */
 const CABECALHOS_EXIGIDOS: readonly { readonly rotulo: string; readonly agulha: RegExp }[] = [
   { rotulo: 'X-Robots-Tag: noindex', agulha: /noindex/i },
   { rotulo: 'Referrer-Policy: no-referrer', agulha: /no-referrer/i },
@@ -538,8 +318,7 @@ function declaraHtml(operacao: OperacaoDoContrato): boolean {
 
 /**
  * A isca. Um contrato minúsculo com uma rota pública que devolve `lat` e um
- * `pet_id` de UUID: o portão **precisa** reprovar os dois. Ela roda em toda
- * execução, e não numa suíte que alguém pode pular.
+ * `pet_id` de UUID: o portão **precisa** reprovar os dois.
  */
 const ISCA = `
 openapi: 3.1.0
@@ -640,15 +419,6 @@ function autoTeste(): string[] {
     falhas.push('a isca com `pet_id` de UUID passou: o portão parou de enxergar id interno');
   }
 
-  // ---------------------------------------------------------------------
-  // A ISCA DE GRANULARIDADE (BICHUS-92).
-  //
-  // Ela declara bairro, cidade e UF -- que PRECISAM passar, porque são
-  // exatamente a granularidade permitida -- lado a lado com quatro campos mais
-  // finos que precisam ser reprovados. Sem a metade que passa, a isca não
-  // distinguiria um portão que enxerga de um portão que reprova tudo, e um
-  // portão que reprova tudo é retirado na primeira sexta-feira.
-  // ---------------------------------------------------------------------
   const granularidade: OperacaoDoContrato = {
     operationId: 'iscaDeGranularidadeFinaDemais',
     method: 'get',
@@ -661,11 +431,6 @@ function autoTeste(): string[] {
     parameters: [],
   };
   const achadosDaGranularidade = inspecionarCamposPublicos(spec, [granularidade]);
-  // As QUATRO colunas de endereco de `professionals` estao na lista desde
-  // 21/10/2026, e estao aqui pelo motivo que o ADR-0011 secao 4 separa: o
-  // endereco comercial sai em `DirectoryEntryDetail`, que **exige conta**, e
-  // continua proibido em toda superficie que nao exige. Sem a isca, tirar
-  // qualquer uma das quatro da lista passaria verde.
   for (const fino of [
     'reference_point',
     'distance_m',
@@ -692,11 +457,6 @@ function autoTeste(): string[] {
     }
   }
 
-  // A isca de cabeçalho existe por causa do ADR-0017. O contrato real não tem
-  // mais página HTML, então a conferência de cabeçalho deixou de ser exercitada
-  // por ele: sem esta isca, ela poderia quebrar e ninguém saberia, porque o
-  // relatório continuaria dizendo o mesmo. Aqui ela é obrigada a acusar, a cada
-  // execução, uma página pública sem nenhum dos seis itens.
   const paginaNua: OperacaoDoContrato = {
     operationId: 'iscaDePaginaNua',
     method: 'get',
@@ -722,19 +482,6 @@ function autoTeste(): string[] {
     );
   }
 
-  // ---------------------------------------------------------------------
-  // A ISCA DO PEDIDO.
-  //
-  // Mesma construção da isca de granularidade, e pelo mesmo motivo: metade dela
-  // PRECISA passar. `page`, `limit`, `period`, `q`, `city` e `neighborhood` são
-  // os filtros que o ADR-0006 manda a listagem pública usar — se o portão
-  // reprovasse qualquer um deles ele não distinguiria nada e seria retirado na
-  // primeira sexta-feira. A outra metade cobre as três formas que nome exato
-  // não alcança: `lat` (nome cru), `center_lon` (composto, com o prefixo que o
-  // oráculo usaria) e `max_km` (o nome que ESTA casa já usa para raio, e que a
-  // lista da resposta não tem). `X-Near-Me` está aí porque cabeçalho é pedido
-  // também: um oráculo não fica menos oráculo por entrar pelo cabeçalho.
-  // ---------------------------------------------------------------------
   const pedido: OperacaoDoContrato = {
     operationId: 'iscaDeCoordenadaNoPedido',
     method: 'get',
@@ -774,8 +521,6 @@ function autoTeste(): string[] {
       );
     }
   }
-  // E a outra metade da regra: sem alvo, reprova. Uma operação sem parâmetro
-  // nenhum não pode terminar verde por omissão.
   const semAlvo = inspecionarParametrosPublicos([paginaNua]);
   if (!semAlvo.achados.some((a) => a.campo === 'nenhum parâmetro para percorrer')) {
     falhas.push(
@@ -788,8 +533,6 @@ function autoTeste(): string[] {
 }
 
 export function executar(caminhoDaSpec: string): number {
-  // A versão é dita no relatório: regra testada numa versão e pinada em outra já
-  // foi declarada funcionando sendo cega.
   const versaoDoYaml = (() => {
     try {
       const pacote: unknown = JSON.parse(readFileSync('node_modules/yaml/package.json', 'utf8'));
@@ -811,10 +554,6 @@ export function executar(caminhoDaSpec: string): number {
   }
   console.info('autoteste: a isca foi reprovada como deveria.');
 
-  // `carregarContrato` já reprova operação sem `security` e contrato sem
-  // operação nenhuma. Os dois são critério desta história, e valem aqui e na
-  // subida da aplicação, pelo mesmo código — o portão não tem uma segunda
-  // implementação da regra, que divergiria da que o servidor usa.
   let contrato;
   try {
     contrato = carregarContrato(caminhoDaSpec);
@@ -847,10 +586,6 @@ export function executar(caminhoDaSpec: string): number {
 
   const cabecalhos = inspecionarCabecalhos(semConta);
   if (cabecalhos.paginasConferidas === 0) {
-    // Dito com estas palavras de propósito. "Conferi e está certo" e "não havia
-    // o que conferir" são desfechos diferentes, e o relatório que os funde é o
-    // que faz uma verificação morrer sem ninguém notar. A capacidade de acusar
-    // continua provada pela isca de página nua, logo acima.
     console.info(
       'cabeçalhos: NÃO HAVIA O QUE CONFERIR — nenhuma página HTML pública no contrato. ' +
         'É o esperado desde o ADR-0017, que tirou as respostas `text/html` deste serviço. ' +
@@ -860,9 +595,6 @@ export function executar(caminhoDaSpec: string): number {
     console.info(`cabeçalhos: ${cabecalhos.paginasConferidas} página(s) HTML pública(s) conferida(s).`);
   }
 
-  // O lado do PEDIDO. Ele percorre as `semConta` inteiras, sem a dispensa de
-  // `OPERACOES_QUE_ABREM_SESSAO`: a dispensa é da resposta, pelo motivo escrito
-  // junto dela, e não há razão nenhuma para `login` aceitar um `lat` de query.
   const pedido = inspecionarParametrosPublicos(semConta);
   console.info(
     `pedido: ${pedido.parametrosConferidos} parâmetro(s) conferido(s) em ` +

@@ -1,12 +1,4 @@
-/**
- * As iscas do detector de vazamento em resposta pública.
- *
- * Os testes das rotas públicas afirmam "zero achados". Essa afirmação só vale se
- * o detector ACUSA quando há o que acusar, e é isso que este arquivo prova: um
- * corpo que vaza de cada um dos quatro jeitos, e a exigência de que cada jeito
- * seja acusado. Se alguém afrouxar o detector, é aqui que reprova, e não em
- * produção com o telefone de alguém num cartaz.
- */
+/** As iscas do detector de vazamento em resposta pública. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

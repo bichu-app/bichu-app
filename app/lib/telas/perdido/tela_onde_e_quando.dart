@@ -18,35 +18,6 @@ import '../../widgets/saida_da_tela.dart';
 import 'cabecalho_do_pet.dart';
 
 /// **F3.1 — Confirmar perdido: onde e quando.** A tela desta historia.
-///
-/// ## O que ela NAO faz, e cada ausencia e decisao
-///
-/// - **Nao chama rede, nem uma vez.** O criterio 6 e literal: *"Dado que estou
-///   sem conexao, quando uso F3.1, entao a tela inteira funciona: o envio
-///   acontece em F3.2."* Uma chamada aqui -- nem que fosse so para adiantar a
-///   previa do alcance -- criaria um estado de carregamento numa tela que tem
-///   de abrir pronta no elevador.
-/// - **Nao pede permissao de localizacao e nao le coordenada.** O app nao tem
-///   porta de localizacao hoje, e a antessala de 10.2 e a porta sao trabalho de
-///   aparelho que esta historia nao contem. O que ela **nao pode** fazer, e nao
-///   faz nem quando a porta existir, e transformar coordenada em bairro: o
-///   ADR-0006 proibe geocodificacao no MVP, e rotular o ponto onde o pet sumiu
-///   com o bairro de casa do tutor e mentira de aparencia plausivel.
-/// - **Nao tem mapa com pino**, que e proibido em todo o produto, e nao tem
-///   raio configuravel, fixo em 5 km no MVP ("Fora desta historia").
-///
-/// ## De onde vem o bairro preenchido, e por que nao e da localizacao
-///
-/// O criterio 2 pede o bairro *"ja preenchido pela localizacao, se
-/// autorizada"*. **Isso nao e implementavel sem geocodificacao**, que o
-/// ADR-0006 proibe: coordenada nao vira nome de bairro. A fonte honesta do
-/// preenchimento e a **localizacao de referencia do tutor** (`Me.reference_area`,
-/// BICHUS-92), que ja e texto -- bairro, cidade e UF -- e que o proprio tutor
-/// cadastrou. Ela e tambem, literalmente, *"a ultima regiao usada"* da segunda
-/// metade do criterio.
-///
-/// Sem ela, o campo abre **vazio e com o foco dentro dele**, que e o resto do
-/// criterio 2. A divergencia esta registrada na pauta de refinamento.
 class TelaOndeEQuando extends StatefulWidget {
   const TelaOndeEQuando({
     required this.rascunho,
@@ -58,15 +29,9 @@ class TelaOndeEQuando extends StatefulWidget {
   final RascunhoDoCaso rascunho;
 
   /// A falha da abertura que trouxe a pessoa de volta (UX 8.3, regra 4).
-  ///
-  /// Nao e estado da tela: e o que ela recebe ao nascer. A faixa some assim
-  /// que a pessoa mexe em qualquer campo, porque a partir dai o texto fala de
-  /// uma tentativa que nao e mais a que esta na tela.
   final String? erroInicial;
 
-  /// O relogio entra pela porta. Sem isso, "amanha nao e aceito" so seria
-  /// exercitavel esperando um dia, e a regra ficaria sem isca -- que e
-  /// exatamente o estado em que ela estava no servidor.
+  /// O relogio entra pela porta.
   final DateTime Function() agora;
 
   static const String titulo = 'Marcar como perdido';
@@ -82,11 +47,6 @@ class TelaOndeEQuando extends StatefulWidget {
   /// O que o seletor mostra enquanto nada foi escolhido.
   static const String escolherOEstado = 'Escolher na lista';
 
-  // `estadoEmBrancoFunciona` SAIU EM 26/10/2026, com a ajuda do campo `Estado`
-  // -- cliente, 22/10/2026: *"Retire o texto so se voce souber, em branco
-  // funciona"*. A constante sai junto com o uso de proposito: constante orfa
-  // volta a ser usada.
-
   /// O campo opcional do criterio 4, palavra por palavra.
   static const String perguntaDeAjuda =
       'Alguma coisa que ajude quem for procurar?';
@@ -96,8 +56,8 @@ class TelaOndeEQuando extends StatefulWidget {
 
   static const String rotuloDeContinuar = 'Continuar';
 
-  /// O criterio 10 dito na tela: o padrao e verdadeiro e a pessoa **ve** que
-  /// e, em vez de responder mais uma pergunta no pior momento.
+  /// O criterio 10 dito na tela: o padrao e verdadeiro e a pessoa **ve** que e,
+  /// em vez de responder mais uma pergunta no pior momento.
   static const String rotuloDaListaPublica =
       'Entrar na lista pública de pets perdidos';
 
@@ -115,21 +75,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
   late final TextEditingController _ajuda;
 
   /// A sigla do estado escolhida na lista de 27, ou nulo.
-  ///
-  /// **Escolha e nao digitacao** (cliente, 17/10/2026), e esta era a terceira
-  /// e ultima tela que ainda digitava a sigla -- `Meus dados`, o pedido da
-  /// plaquinha e o registro de achado ja escolhem na lista.
-  ///
-  /// **Ela conserta DADO, e nao so atrito.** `Area.state` do contrato e so
-  /// "dois caracteres": `SA`, `XX` e o `S.` de quem errou a tecla passavam
-  /// pelo campo, pelo rascunho e pelo servidor, e chegavam GRAVADOS no caso de
-  /// um animal perdido. Com a lista nao existe valor fora dela.
-  ///
-  /// **Nasce da sigla do rascunho so quando ela esta NA LISTA.** O rascunho
-  /// sobrevive ao app fechar, e um ja gravado pode trazer `SAO` do campo
-  /// antigo; aceita-lo aqui faria o seletor mostrar "Escolher na lista" e o
-  /// envio sair com `SAO` de qualquer jeito -- o pior dos dois mundos, porque
-  /// a tela pareceria vazia e o corpo nao estaria.
   String? _uf;
 
   /// O foco do bairro. O criterio 5 manda o foco para ELE quando o motivo do
@@ -139,8 +84,7 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
 
   bool _preencheuDaReferencia = false;
 
-  /// A faixa da falha anterior, enquanto ela ainda descreve o que esta na
-  /// tela.
+  /// A faixa da falha anterior, enquanto ela ainda descreve o que esta na tela.
   String? _erro;
 
   @override
@@ -160,10 +104,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
     if (_preencheuDaReferencia) return;
     _preencheuDaReferencia = true;
 
-    // A regiao de referencia do tutor, quando ela existe e o rascunho ainda
-    // esta em branco. **Nao sobrescreve o que a pessoa digitou**: o rascunho
-    // pode chegar preenchido pela volta de um envelope de intencao, e
-    // sobrescrever ali apagaria o que ela escreveu antes do login.
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao != null && widget.rascunho.area == null) {
       setState(() {
@@ -174,9 +114,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
       });
     }
 
-    // Criterio 2, segunda metade: *"sem autorizacao, o campo fica vazio com o
-    // teclado aberto"*. O foco vai depois do quadro porque pedir foco durante
-    // a construcao nao chega ao teclado.
     if (widget.rascunho.area == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focoDoBairro.requestFocus();
@@ -201,11 +138,8 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
       ..descricao = _ajuda.text;
   }
 
-
-
   void _aoDigitar(String _) => setState(() {
         _sincronizar();
-        // A falha anterior deixa de valer quando a pessoa muda o rascunho.
         _erro = null;
       });
 
@@ -215,10 +149,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
       context: context,
       initialDate: widget.rascunho.dataEscolhida ?? agora,
       firstDate: agora.subtract(const Duration(days: 365)),
-      // **O calendario nao oferece o futuro.** Ele e a primeira das tres
-      // defesas contra "visto pela ultima vez amanha"; as outras duas sao o
-      // impedimento do rascunho, que e o que segura relogio de aparelho
-      // adiantado, e a borda do servidor, que e a autoridade.
       lastDate: agora,
       helpText: 'Quando ele foi visto pela última vez',
     );
@@ -230,9 +160,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
     final agora = widget.agora();
     final impedimento = widget.rascunho.impedimentoEm(agora);
     if (impedimento == ImpedimentoDeContinuar.semBairro) {
-      // O criterio 5 manda o foco para o campo. Ele so chega aqui se alguem
-      // acionar o botao desabilitado por outro caminho (teclado fisico,
-      // automacao), e mesmo assim a tela responde a coisa certa.
       _focoDoBairro.requestFocus();
       return;
     }
@@ -258,11 +185,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
         bottom: false,
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
-          // Pelo mesmo motivo da BICHUS-62: o padrao do `ListView` embrulha
-          // cada filho direto num `IndexedSemantics`, e com ele cada bloco
-          // desta tela viraria UM no de semantica com tudo colapsado dentro --
-          // o cabecalho do pet, os campos e o grupo de opcoes. Este e o corpo
-          // rolavel de uma pagina, e nao uma lista de itens.
           addSemanticIndexes: false,
           children: <Widget>[
             CabecalhoDoPet(pet: r.pet),
@@ -295,35 +217,11 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
               aoMudar: _aoDigitar,
               limite: 80,
               capitalizacao: TextCapitalization.words,
-              // **`done` e nao `next`: a cidade virou o ULTIMO campo de
-              // digitacao do bloco do "onde".** O estado deixou de ser campo
-              // de texto e passou a ser seletor, que nao recebe teclado --
-              // `next` aqui empurraria o foco para um botao e deixaria o
-              // teclado na tela sem nada para digitar.
               acaoDeTeclado: TextInputAction.done,
-              // O requisito dito ANTES da tentativa (UX secao 13): a cidade e
-              // o unico campo que o contrato exige, e descobrir isso pelo
-              // botao desabilitado seria descobrir tarde.
               ajuda: 'A cidade é o que a gente precisa para achar quem está '
                   'por perto.',
             ),
             const SizedBox(height: BichuEspaco.e4),
-            // **Lista de 27, e nao sigla digitada** (cliente, 17/10/2026). Ver
-            // o campo `_uf`: o seletor mostra o NOME e guarda a SIGLA, e nao
-            // existe valor fora da lista.
-            //
-            // **Continua opcional**: quem exige o `onde` e a CIDADE, e so ela
-            // (`Area.required: [city]`).
-            //
-            // **SEM LINHA DE AJUDA** (cliente, 22/10/2026): *"Retire o texto
-            // so se voce souber, em branco funciona"*. A frase saiu do
-            // formulario do achado naquele dia e SOBREVIVEU nesta tela e em
-            // `localizacao/captura_de_localizacao.dart` -- as duas sairam em
-            // 26/10, juntas, porque metade da troca e o que deixa duas
-            // redacoes do mesmo campo no produto.
-            //
-            // O seletor continua dizendo `Escolher na lista` enquanto nada foi
-            // escolhido, e e isso que mostra que o campo aceita vazio.
             SeletorDeLista(
               rotulo: TelaOndeEQuando.rotuloDoEstado,
               estadoInicial: TelaOndeEQuando.escolherOEstado,
@@ -346,13 +244,8 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
               aoSelecionar: (escolha) {
                 setState(() {
                   r.quando = escolha;
-                  // Trocar de `Outra data` para outra opcao **apaga** a data
-                  // escolhida: deixa-la guardada faria o caso ser gravado com
-                  // a data de um calendario que a pessoa ja abandonou se ela
-                  // voltasse a tocar em `Outra data` e fechasse sem escolher.
                   if (!escolha.pedeCalendario) r.dataEscolhida = null;
                 });
-                // **O calendario so aparece em `Outra data`** (criterio 3).
                 if (escolha.pedeCalendario) _escolherData();
               },
             ),
@@ -368,8 +261,6 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
               rotulo: TelaOndeEQuando.perguntaDeAjuda,
               controlador: _ajuda,
               aoMudar: _aoDigitar,
-              // Criterio 4: marcado como opcional **em texto**, e nao por
-              // asterisco. `BichuField` escreve "(opcional)" no rotulo.
               opcional: true,
               linhas: 3,
               limite: RascunhoDoCaso.limiteDaDescricao,
@@ -386,24 +277,13 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
           ],
         ),
       ),
-      // A barra de acao fixa do 11.8, no `bottomNavigationBar` para que o
-      // `Scaffold` a levante junto com o teclado -- que nesta tela abre sozinho
-      // no campo de bairro.
       bottomNavigationBar: BarraDeAcaoFixa(
         acoes: <Widget>[
-          // **O MOTIVO, VISIVEL, AO LADO DO BOTAO** (criterio 5). Ele fica
-          // ACIMA do botao e nao abaixo porque a ordem de leitura precisa
-          // entregar o motivo antes do controle: quem usa leitor de tela
-          // chegaria no botao desabilitado sem ter ouvido por que.
           if (impedimento != null)
             _MotivoDoBloqueio(texto: impedimento.texto, cor: cores.textPrimary),
           BotaoPrimario(
             rotulo: TelaOndeEQuando.rotuloDeContinuar,
-            // O piso critico de 64 dp: o 6.5 estaciona os 64 dp na barra de
-            // acao fixa desta historia, e esta e a acao primaria dela.
             critico: true,
-            // Nulo desabilita. Desabilitado **com o motivo dito** e o unico
-            // jeito de desabilitar que o produto aceita.
             aoTocar: impedimento == null ? _continuar : null,
           ),
         ],
@@ -433,10 +313,6 @@ class _MotivoDoBloqueio extends StatelessWidget {
 }
 
 /// A data que o calendario devolveu, escrita por extenso.
-///
-/// **Ela e mostrada, e nao so guardada.** Sem esta linha, `Outra data` fica
-/// selecionada sem a tela dizer qual data -- e quem fechou o calendario por
-/// engano nao tem como descobrir o que ficou gravado.
 class _DataEscolhida extends StatelessWidget {
   const _DataEscolhida({required this.data, required this.aoTrocar});
 
@@ -520,9 +396,6 @@ class _ListaPublica extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: BichuEspaco.e3),
-              // Dentro do `Semantics` com `excludeSemantics`: o interruptor do
-              // M3 publicaria uma segunda parada de leitor de tela com o mesmo
-              // significado da linha inteira.
               Switch(value: ligado, onChanged: aoTrocar),
             ],
           ),

@@ -1,17 +1,4 @@
 /// A ação `cadastrar_pet` dentro do envelope de 8.3.
-///
-/// É a **única das seis ações de 8.3 que este build sabe executar**, porque é
-/// a única cujo fluxo inteiro existe em código hoje: o assistente de F1.3 a
-/// F1.5, o `POST /pets` e a tela de resultado F1.6. As outras cinco
-/// (`marcar_perdido`, `registrar_achado`, `responder_conversa`,
-/// `encerrar_caso`, `gerar_tag`) entram aqui quando as telas delas entrarem —
-/// o envelope já as aceita, e a guarda já sabe o que fazer com uma ação sem
-/// executor registrado.
-///
-/// O que este arquivo demonstra, e que é o ponto da regra 3, é a diferença
-/// entre executar e navegar: depois do login, o pet é **criado**, e a pessoa
-/// chega em F1.6 com o pet dela na tela. Ela não volta para F1.5 para tocar em
-/// `Cadastrar` de novo.
 library;
 
 import '../api/api_client.dart';
@@ -26,17 +13,9 @@ import 'guarda_de_acao.dart';
 import 'intencao_pendente.dart';
 
 /// O ID de tela de UX para onde o cadastro volta quando a criação falha.
-///
-/// F1.5 e não F1.3: é a tela do último passo, onde o botão foi tocado, e é
-/// onde a faixa de erro faz sentido. Voltar para o primeiro passo obrigaria a
-/// pessoa a atravessar o assistente inteiro de novo.
 const String telaDeRetornoDoCadastro = 'F1.5';
 
 /// Monta o envelope a partir do rascunho do assistente.
-///
-/// **A foto vai por caminho** (`FotoLocal.caminho`), e é por isso que este
-/// envelope continua com alguns bytes de JSON mesmo quando a pessoa fotografou
-/// um animal com a câmera de 48 MP do aparelho dela.
 IntencaoPendente intencaoDeCadastrarPet(
   RascunhoDePet rascunho, {
   required DateTime criadaEm,
@@ -46,8 +25,6 @@ IntencaoPendente intencaoDeCadastrarPet(
   final foto = rascunho.foto;
   return IntencaoPendente(
     acao: AcaoDeIntencao.cadastrarPet,
-    // Nulo: o alvo desta ação é o pet, e ele só passa a existir quando ela
-    // executa. É o mesmo caso do achado avulso do exemplo de 8.3.
     alvo: null,
     telaDeRetorno: telaDeRetornoDoCadastro,
     criadaEm: criadaEm,
@@ -79,10 +56,6 @@ IntencaoPendente intencaoDeCadastrarPet(
 }
 
 /// Reconstrói o rascunho do assistente a partir do envelope.
-///
-/// É o que faz a tela de retorno abrir preenchida em vez de em branco. O
-/// `ChangeNotifier` é novo, e não o de antes do login: o anterior morreu junto
-/// com o processo, que é a situação que o envelope cobre.
 RascunhoDePet rascunhoDoEnvelope(IntencaoPendente intencao) {
   final campos = intencao.rascunho.campos;
   String? texto(String chave) => campos[chave] as String?;
@@ -103,9 +76,6 @@ RascunhoDePet rascunhoDoEnvelope(IntencaoPendente intencao) {
   final fotos = intencao.rascunho.fotos;
   if (fotos.isNotEmpty) {
     final foto = fotos.first;
-    // O arquivo continua no disco: o envelope guardou o endereço dele, e é
-    // esse endereço que volta para o rascunho. Nenhum byte de imagem
-    // atravessou a serialização.
     rascunho.foto = FotoLocal(
       caminho: foto.caminho,
       tipoDeConteudo: foto.tipoDeConteudo,
@@ -133,12 +103,6 @@ AcaoExecutavel cadastroDePetExecutavel(PetsApi pets) {
         nome: rascunho.nome,
         especie: rascunho.especie!,
         porte: rascunho.porte!,
-        // A chave nasce aqui, na execução, e não no envelope: uma chave
-        // gravada em disco seria reapresentada por um envelope que o servidor
-        // já aceitou e devolveria um cadastro antigo como se fosse novo. Com
-        // envelope apagado ao executar, cada envelope produz no máximo uma
-        // criação — e o reenvio depois de `FalhaDeTempo` é da tela de retorno,
-        // que tem a chave dela.
         idempotencyKey: ApiClient.novaChaveDeIdempotencia(),
         breedCode: rascunho.breedCode,
         breedFreeText: rascunho.breedFreeTextParaEnvio,

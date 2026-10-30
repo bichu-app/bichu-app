@@ -4,50 +4,18 @@ import 'modelos_pet.dart';
 
 /// As operacoes de `/v1/pets`, `/v1/media` e `/v1/public/reference-data` do
 /// contrato.
-///
-/// Ela e escrita contra `api/openapi.yaml`, e nao contra uma implementacao: e
-/// o contrato que e a entrada. Onde o servidor ainda nao responde, a chamada
-/// termina em `FalhaDeConexao` ou num `Problem` de 404, e as telas ja tratam
-/// os dois. Nenhum caminho devolve resposta falsa para a tela ficar bonita.
-///
-/// **Esta linha dizia "nenhuma rota desta classe existe no servidor ainda", e
-/// deixou de ser verdade.** `GET /pets/{petId}`, `PATCH /pets/{petId}` e
-/// `DELETE /pets/{petId}` estao implementados em `src/modules/pets/` desde
-/// antes da BICHUS-60 e da BICHUS-61 -- `pet-routes.ts` declara as tres,
-/// `pet-service.ts` as atende e `kysely-pet-repository.ts` as grava. O
-/// comentario ficou para tras e foi corrigido aqui em vez de repetido: um
-/// aviso de "isto nao existe" sobre codigo que existe treina quem le a nao
-/// acreditar no cabecalho.
 class PetsApi implements IntencaoEConfirmacaoDePet {
   const PetsApi(this._api);
 
   final ApiClient _api;
 
   /// `GET /public/reference-data`.
-  ///
-  /// Aberta: nao exige token. E cacheavel por 24 h no contrato, e o cache
-  /// ainda nao existe aqui -- a tela trata a falha de carregamento com a saida
-  /// escrita em F1.3 (cadastrar sem raca e escolher depois em `Editar`).
   Future<DadosDeReferencia> dadosDeReferencia() async {
     final json = await _api.get('/public/reference-data', exigeToken: false);
     return DadosDeReferencia.doJson(json);
   }
 
   /// `GET /pets` (`operationId: listMyPets`).
-  ///
-  /// **Lista completa, sem paginacao.** O contrato fixa o teto em 20 pets por
-  /// conta e por isso nao declara nem `limit` nem cursor: paginar aqui seria
-  /// inventar parametro que a operacao nao tem.
-  ///
-  /// Devolve `items` tipado. Uma entrada que nao seja objeto e descartada, e
-  /// uma que seja objeto e nao tenha `id` **estoura**: `Pet.doJson` le `id`
-  /// sem `??`, de proposito. Pet sem identidade nao e pet degradado, e um
-  /// cartao sem `id` seguiria para a tela de detalhe apontando para nada.
-  ///
-  /// O que esta funcao **nao** faz: nao trata falha e nao devolve lista vazia
-  /// quando a chamada quebra. Quem chama precisa distinguir "voce nao tem pet"
-  /// de "nao consegui perguntar", e um `catch` que devolvesse `[]` apagaria
-  /// essa diferenca -- que e exatamente o estado vazio que parece sucesso.
   Future<List<Pet>> listarMeusPets() async {
     final json = await _api.get('/pets');
     final itens = json['items'];
@@ -64,23 +32,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `POST /pets`.
-  ///
-  /// **Raca sao dois campos, e a regra do contrato e que eles nao convivem.**
-  /// [breedFreeText] so e aceito com [breedCode] em `outro_dog`, `outro_cat`
-  /// ou `outro_other`; enviado junto de uma raca da lista, a resposta e
-  /// `validation-failed`. Esta funcao **nao corrige** a combinacao errada: a
-  /// autoridade e do servidor, e um cliente que "arruma" o corpo antes de
-  /// enviar esconde o defeito da tela que o produziu. Quem impede o erro e a
-  /// tela, fazendo o campo livre existir so com a opcao de saida escolhida.
-  ///
-  /// [refDataVersion] e a versao da lista **que o cliente tinha em maos**, e
-  /// nao a corrente do servidor. Sem ela, o servidor grava a corrente no
-  /// momento da escrita, que responde "qual e a lista de hoje" e nao "de qual
-  /// lista este pet foi escolhido".
-  ///
-  /// A chave de idempotencia e obrigatoria: um reenvio depois de
-  /// [FalhaDeTempo] pode cair num pet que ja foi criado, e sem a chave o tutor
-  /// termina com dois cadastros do mesmo animal.
   Future<Pet> cadastrarPet({
     required String nome,
     required Especie especie,
@@ -121,43 +72,12 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `GET /pets/{petId}` (`operationId: getPet`).
-  ///
-  /// **A autorizacao esta na clausula `WHERE` do servidor, e a resposta de
-  /// "nao e seu" e 404** (ADR-0021; `pet-service.ts`, `buscar`). O app nao
-  /// tenta distinguir "nao existe" de "nao e seu", e nao deve: distinguir as
-  /// duas confirmaria a existencia do registro para quem nao e o dono. Quem
-  /// chama trata o 404 como "este pet nao esta na sua conta", e nada mais.
   Future<Pet> buscarPet(String petId) async {
     final json = await _api.get('/pets/${Uri.encodeComponent(petId)}');
     return Pet.doJson(json);
   }
 
   /// `PATCH /pets/{petId}` (`operationId: updatePet`).
-  ///
-  /// **O verbo e `PATCH` e o comportamento e de substituicao inteira.** Nao e
-  /// desatencao de quem escreveu: o contrato declara o corpo como um
-  /// `PetInput` completo (`required: [name, species, size]`) e o repositorio
-  /// grava TODAS as colunas a partir dele
-  /// (`kysely-pet-repository.ts`, `atualizar`), com ausente e nulo tratados
-  /// como a mesma coisa (`ouNulo`, em `pet-routes.ts`).
-  ///
-  /// A consequencia decide a assinatura desta funcao: **enviar so o que mudou
-  /// apaga o resto.** Corrigir o nome de um pet com um corpo de um campo so
-  /// zeraria cor, sexo, sinais particulares e cartao de manejo, no servidor,
-  /// sem erro nenhum e sem nada no app acusando. Por isso todos os campos
-  /// entram aqui, e por isso a tela de edicao carrega o pet inteiro antes de
-  /// abrir: o que ela nao souber ler, ela apaga.
-  ///
-  /// **A regra de vazio tambem muda em relacao a [cadastrarPet].** La, campo
-  /// vazio some do corpo, porque no cadastro "vazio" e "nao informado" sao a
-  /// mesma coisa. Aqui nao: apagar o cartao de manejo e uma edicao legitima, e
-  /// um campo que sumisse do corpo seria um campo que o tutor nao consegue
-  /// esvaziar. Vazio vai como **`null` explicito**, que e o que o contrato
-  /// declara anulavel e o que `ouNulo` transforma em coluna nula.
-  ///
-  /// Sem `Idempotency-Key`: o contrato nao o declara para esta operacao, e
-  /// `ApiClient.patch` nao o aceita. Repetir um `PATCH` identico chega no
-  /// mesmo estado, que e o que idempotencia significa aqui.
   Future<Pet> atualizarPet({
     required String petId,
     required String nome,
@@ -184,10 +104,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
         'name': nome,
         'species': especie.valor,
         'size': porte.valor,
-        // Os anulaveis vao SEMPRE, inclusive nulos. Ver o cabecalho: chave
-        // ausente e chave nula significam a mesma coisa para o servidor, e o
-        // que nao viaja e apagado de qualquer jeito. Mandar o nulo explicito
-        // faz o corpo dizer o que a tela quis dizer.
         'breed_code': semVazio(breedCode),
         'breed_free_text': semVazio(breedFreeText),
         'ref_data_version': semVazio(refDataVersion),
@@ -202,42 +118,11 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `DELETE /pets/{petId}` (`operationId: deletePet`).
-  ///
-  /// **Nao tem volta pela interface.** O contrato declara
-  /// `x-effects: [irreversible_write]` e o teto de 10 por conta por dia. O
-  /// registro continua existindo para a trilha (exclusao logica, `deleted_at`),
-  /// e e por isso que o efeito e `irreversible_write` e nao `deletes` -- mas
-  /// nada disso e desfazivel pelo tutor, e a tela nao pode sugerir que seja.
-  ///
-  /// **O que some junto e o que o texto da confirmacao precisa dizer:** o
-  /// servidor revoga todas as tags do pet com `pet_deleted`, e a partir dali o
-  /// codigo daquela plaquinha responde 410 para sempre (ADR-0004). O codigo
-  /// **nao volta ao estoque e nao e reciclado**: "o codigo pertence ao pet e e
-  /// imutavel; nao se edita, nao se transfere para outro pet, nao se reativa".
-  ///
-  /// **Nao exige `X-Reauth-Token`**, e isso e leitura do contrato e nao
-  /// suposicao: `deletePet` declara `security: [bearerAuth]` sozinho, enquanto
-  /// `revokePetTag` declara `bearerAuth` mais `reauth: []` com
-  /// `x-reauth-scope: tag_revocation`. O paragrafo 11.9.1 do design system diz
-  /// o mesmo do lado da tela: para as destruicoes que nao exigem
-  /// reautenticacao nao ha campo nenhum, so as duas acoes, porque "friction
-  /// inventada onde o contrato nao pede e friction que as pessoas aprendem a
-  /// atravessar sem ler".
   Future<void> excluirPet(String petId) async {
     await _api.delete('/pets/${Uri.encodeComponent(petId)}');
   }
 
   /// `GET /pets/{petId}/tags` (`operationId: listPetTags`).
-  ///
-  /// **Nao traz o codigo, e e por isso que esta chamada existe.** O contrato e
-  /// explicito: a rota "nunca devolve o codigo em claro, nem para o dono:
-  /// apenas os quatro ultimos caracteres". O que a tela do detalhe quer daqui
-  /// nao e o codigo -- e o `tagId`, que e o que falta para montar o endereco
-  /// de [enderecoDaImagemDoQr] e deixar o SERVIDOR desenhar o QR.
-  ///
-  /// A ordem e a do servidor. Quem precisa da tag em vigor filtra por
-  /// [TagDoPet.ativa]: o teto e de cinco por pet (ADR-0004) e revogada
-  /// responde 410 no `qr.png`.
   Future<List<TagDoPet>> listarTags(String petId) async {
     final json = await _api.get('/pets/${Uri.encodeComponent(petId)}/tags');
     final itens = json['items'];
@@ -249,17 +134,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// O endereco de `GET /pets/{petId}/tags/{tagId}/qr.png`.
-  ///
-  /// **O QR nao e desenhado no aparelho, e isso e medicao e nao preferencia.**
-  /// O conteudo dele e `{base}/t/{codigo}` (`src/modules/tags/domain/
-  /// qr-da-tag.ts`), e o codigo em claro **nao esta no app**: ele saiu uma vez
-  /// em `issuePetTag`, na F1.6, e o contrato manda nao persistir. Um gerador
-  /// de QR do lado de ca nao teria o que codificar.
-  ///
-  /// Montado por [ApiClient.enderecoDe], e nao por interpolacao com `v1` a
-  /// mao: a versao e o host vivem num lugar so, e e o que faz
-  /// [ApiClient.baixarImagem] aceitar este endereco pela conferencia de
-  /// mesma origem.
   String enderecoDaImagemDoQr({required String petId, required String tagId}) {
     return _api
         .enderecoDe(
@@ -270,11 +144,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `POST /pets/{petId}/tags`.
-  ///
-  /// **A unica resposta do contrato que traz o codigo em claro.** O valor nao
-  /// e persistido em lugar nenhum deste app: ele vive na memoria da tela F1.6
-  /// e morre com ela. Para reimprimir, o caminho e `qr.png`, e nao um codigo
-  /// guardado.
   Future<TagEmitida> emitirTag({
     required String petId,
     required String idempotencyKey,
@@ -287,26 +156,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `POST /pets/{petId}/tag-requests`.
-  ///
-  /// O pedido do OBJETO FISICO da plaquinha. **Nao emite codigo**: emitir e
-  /// [emitirTag], e o codigo e irreversivel (ADR-0004).
-  ///
-  /// **Idempotente sem chave de idempotencia**: o servidor mantem no maximo um
-  /// pedido pendente por pet, e pedir de novo devolve o que ja existe. Por
-  /// isso esta chamada nao passa `idempotencyKey` -- uma chave aqui seria um
-  /// segundo mecanismo para a propriedade que o banco ja garante.
-  ///
-  /// **A autorizacao esta na clausula `WHERE` do servidor, e pet de outra
-  /// pessoa responde 404 e nunca 403** (ADR-0021): para quem pede, o pet de
-  /// outro tutor nao existe.
-  ///
-  /// **O endereco e obrigatorio** (decisao do cliente, 17/10): sem ele a
-  /// administracao nao cumpre. Campo faltando responde 400 `validation-failed`
-  /// com o campo nomeado em `errors[].field`, e e dai que o formulario tira
-  /// qual campo cobrar.
-  ///
-  /// **O endereco nao volta na resposta**, e e de proposito: dado pessoal nao
-  /// e ecoado para quem acabou de digita-lo.
   Future<PedidoDePlaquinha> solicitarPlaquinha({
     required String petId,
     required EnderecoDeEntrega endereco,
@@ -323,56 +172,11 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `GET /pets/{petId}/delivery-address` (`getPetDeliveryAddress`).
-  ///
-  /// ## As duas decisoes dele, com as datas e as palavras -- e a de 21/10 cai
-  ///
-  /// **21/10/2026**, escolhendo entre tres opcoes apresentadas, e esta frase
-  /// esta citada literal em `tela_solicitar_plaquinha.dart`:
-  ///
-  ///     "Endereco guardado de verdade -- um endereco de entrega salvo na
-  ///      CONTA, reusado em todo pedido e editavel num lugar so."
-  ///
-  /// **27/10/2026**, pedido dele:
-  ///
-  ///     "o endereco de entrega da plaquinha tem que estar dentro do cadastro
-  ///      do pet"
-  ///
-  /// e, com a frase de 21/10 posta na mesa, nomeada e datada:
-  ///
-  ///     "endereco um por pet"
-  ///
-  /// **A de 21/10 CAI e a de 27/10 vale**, e nao foi descuido dele: a decisao
-  /// anterior estava em maos quando a nova foi tomada. `MeApi.lerEnderecoGuardado`
-  /// continua existindo -- a decisao dele de **26/10/2026** e *"nao apague
-  /// nada"*, e foi daquele endereco que a migracao `20261027000001` copiou para
-  /// os pets de cada tutor --, mas **nenhum pedido de plaquinha le de la.**
-  ///
-  /// ## `null` nao e erro, e 404 e outra coisa
-  ///
-  /// Os dois vazios sao diferentes e a tela os desenha diferente:
-  ///
-  /// - **`null`** -- o pet e seu e ainda nao tem endereco. E o estado de TODO
-  ///   pet cadastrado depois da `20261027000001`, e nele o formulario abre
-  ///   vazio, como se endereco guardado nao existisse. Mesma forma de
-  ///   `MeApi.lerEnderecoGuardado` e de `getMyLocation`;
-  /// - **404** -- o pet nao e seu, nao existe ou foi excluido. Lanca
-  ///   `FalhaDeChamada`, e **nunca 403** (ADR-0021): para quem pergunta, o pet
-  ///   de outra pessoa nao existe.
-  ///
-  /// A COSTURA DO CORPO `null` e a mesma de `MeApi.lerEnderecoGuardado`, e a
-  /// razao esta escrita por extenso la: `ApiClient` devolve sempre um mapa, e
-  /// `jsonDecode('null')` chega aqui embrulhado em `{'data': null}`. Ler
-  /// `json['recipient_name']` direto daria cadeia vazia e o formulario abriria
-  /// com nove campos preenchidos de nada -- pior que abrir vazio, porque a
-  /// pessoa teria de limpar antes de digitar.
   Future<EnderecoDeEntrega?> lerEnderecoDoPet(String petId) async {
     final json = await _api.get(
       '/pets/${Uri.encodeComponent(petId)}/delivery-address',
     );
-    // 204 ou corpo vazio: nao acontece nesta rota, mas o mesmo tratamento do
-    // `null` serve, e um `if` a mais e mais barato que um campo vazio na tela.
     if (json.isEmpty) return null;
-    // O corpo era `null` cru. Ver a secao acima.
     if (json.length == 1 && json.containsKey('data') && json['data'] == null) {
       return null;
     }
@@ -380,24 +184,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `PUT /pets/{petId}/delivery-address` (`putPetDeliveryAddress`).
-  ///
-  /// **O UNICO caminho do app que escreve o endereco de um pet**, e o unico que
-  /// o pedido da plaquinha le. Decisao do cliente de 27/10/2026: *"endereco um
-  /// por pet"* -- ver [lerEnderecoDoPet] para as duas datas e as palavras dele.
-  ///
-  /// **Escrever no pet A nao toca o pet B, e nao toca o endereco da CONTA**
-  /// (`MeApi.salvarEnderecoGuardado`). E o "um por pet" que ele pediu: editar um
-  /// e editar um.
-  ///
-  /// **O endereco inteiro vai junto**, e nao campo a campo: o contrato declara
-  /// `PUT` com `DeliveryAddress` obrigatorio. Trocar de casa troca os nove
-  /// campos de uma vez, e uma escrita parcial deixaria o pet numa mistura de
-  /// duas casas -- rua nova com bairro antigo chega no lugar errado sem nada ter
-  /// dado erro.
-  ///
-  /// Devolve o endereco **como ficou guardado**, ja normalizado pelo servidor
-  /// (CEP sem mascara, UF em maiuscula, bordas sem espaco), e nao o que foi
-  /// enviado: a tela mostra o que esta no banco.
   Future<EnderecoDeEntrega> salvarEnderecoDoPet(
     String petId,
     EnderecoDeEntrega endereco,
@@ -406,22 +192,10 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
       '/pets/${Uri.encodeComponent(petId)}/delivery-address',
       corpo: endereco.paraJson(),
     );
-    // `doJson` nunca devolve nulo aqui: o `PUT` sempre responde o endereco. O
-    // `!` e sobre o tipo e nao sobre uma suposicao de rede -- corpo que nao
-    // seja objeto ja teria estourado em `_lerResposta`.
     return EnderecoDeEntrega.doJson(json)!;
   }
 
   /// `GET /pets/{petId}/tag-requests`: os pedidos da plaquinha deste pet.
-  ///
-  /// A leitura da PAGINA DE ACOMPANHAMENTO (decisao do cliente, 18/10). E
-  /// privada e so devolve o que e da propria conta: **pet de outra pessoa
-  /// responde 404 e nunca 403** (ADR-0021), e para quem le os dois casos sao
-  /// a mesma coisa -- o pet nao existe.
-  ///
-  /// **Lista vazia nao e erro**: e o pet que e seu e ainda nao teve pedido.
-  /// Quem chama decide o que mostrar nesse caso, e a pagina do pet usa
-  /// exatamente isso para NAO oferecer um link que levaria ao vazio.
   Future<List<PedidoDePlaquinha>> listarPedidosDePlaquinha(String petId) async {
     final json = await _api.get(
       '/pets/${Uri.encodeComponent(petId)}/tag-requests',
@@ -435,11 +209,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `POST /media/pet-photo-intents`.
-  ///
-  /// Caminho novo (ADR-0016): o `pet_id` saiu do caminho e entrou no corpo. O
-  /// backend nunca recebe os bytes -- ele assina a requisicao de upload para o
-  /// armazenamento, e o cliente **le** o campo `method` em vez de presumir a
-  /// forma.
   @override
   Future<Map<String, dynamic>> intencaoDeFotoDoPet({
     required String petId,
@@ -457,9 +226,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `POST /pets/{petId}/photos`.
-  ///
-  /// E **esta** chamada que enfileira o processamento, e nao a chegada dos
-  /// bytes no armazenamento: o produto nao depende de notificacao de bucket.
   @override
   Future<void> confirmarFotoDoPet({
     required String petId,
@@ -476,23 +242,6 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
   }
 
   /// `DELETE /pets/{petId}/photos/{photoId}`.
-  ///
-  /// **A rota existia no contrato e no servidor, e nenhum caminho do app a
-  /// chamava.** `deletePetPhoto` esta declarada desde a BICHUS-87 e
-  /// `excluirFoto` esta implementada em `media-service`; faltava so o cliente
-  /// Dart. Enquanto faltou, a unica forma de a pessoa se livrar de uma foto
-  /// errada era enviar outra por cima -- e quem nao queria foto nenhuma nao
-  /// tinha saida.
-  ///
-  /// **Remover NAO exige substituir**, e isso e do servidor: `excluirFoto`
-  /// apaga a linha e devolve 204, sem pedir foto nova em troca.
-  ///
-  /// **O 409 do contrato nao e emitido pelo servidor de hoje.** O contrato
-  /// declara "e a unica foto de um pet com caso aberto" como 409, e
-  /// `excluirFoto` **nao confere caso aberto nenhum**: ela apaga e pronto. A
-  /// divergencia e do servidor, nao deste metodo, e esta nomeada no relatorio.
-  /// Quem chama trata o 409 de todo jeito -- o dia em que o servidor passar a
-  /// emiti-lo nao pode ser o dia em que o app comeca a engolir a recusa.
   Future<void> excluirFotoDoPet({
     required String petId,
     required String photoId,
@@ -511,37 +260,12 @@ class TagsApi {
   final ApiClient _api;
 
   /// `GET /tags/{code}`.
-  ///
-  /// **Publica: a posse do codigo e a credencial.** Vai com token quando ha
-  /// um, porque e o token que faz o servidor responder `viewer: owner` e o app
-  /// abrir o modo dono; sem token a resposta e a mesma, com `viewer:
-  /// anonymous`. O corpo **nao cresce** na presenca do token.
-  ///
-  /// Os quatro desfechos de erro decidem por `type` e nunca por status:
-  /// `tag-code-malformed` (400), `tag-code-not-found` (404), `tag-revoked`
-  /// (410, com `next_action`) e `rate-limited` (429).
   Future<TagResolvida> resolver(String codigo) async {
     final json = await _api.get('/tags/${Uri.encodeComponent(codigo)}');
     return TagResolvida.doJson(json);
   }
 
   /// `GET /tags/{code}/owner-context` — os identificadores da PROPRIA tag.
-  ///
-  /// **Exige conta, e nao tem caminho anonimo** (`exigeToken` padrao, e aqui
-  /// isso e exigencia de verdade: sem token o servidor responde 401). E a
-  /// contrapartida autenticada de `viewer: owner` em `GET /tags/{code}`.
-  ///
-  /// **Quem chama e o modo dono da tela da tag, e ninguem mais.** O dono que
-  /// aponta a camera para a plaquinha do proprio pet quer a pagina do pet, e a
-  /// pagina do pet e enderecada por `pet_id` -- que o corpo publico da
-  /// resolucao nao traz de proposito. Esta era a operacao que faltava para o
-  /// modo dono oferecer acao alguma; enquanto ela nao tinha cliente, o dono
-  /// escaneava a coleira do proprio animal e chegava numa tela so de leitura.
-  ///
-  /// **O 404 cobre tres casos** -- codigo inexistente, revogado, ou de outro
-  /// tutor --, e distinguir seria transformar a rota num oraculo de enumeracao
-  /// de codigo com um cadastro gratuito na frente (ADR-0010, item 9). Quem
-  /// chama trata os tres igual, porque o servidor os trata igual.
   Future<ContextoDoDonoDaTag> contextoDoDono(String codigo) async {
     final json = await _api.get(
       '/tags/${Uri.encodeComponent(codigo)}/owner-context',
@@ -550,40 +274,10 @@ class TagsApi {
   }
 
   /// O caminho de `POST /tags/{code}/found-reports`, num lugar so.
-  ///
-  /// Existe como funcao porque a fila offline grava o **caminho** da acao, e
-  /// nao a chamada: quem enfileira um aviso monta o caminho por aqui, e uma
-  /// segunda interpolacao a mao seria a segunda definicao da mesma rota.
   static String caminhoDoAviso(String codigo) =>
       '/tags/${Uri.encodeComponent(codigo)}/found-reports';
 
   /// `POST /tags/{code}/found-reports` -- **avisar o tutor**.
-  ///
-  /// A operacao mais critica do produto, e a **excecao permanente** do
-  /// contrato: `security: [bearerAuth, {}]`, ou seja, ela **nao exige conta**.
-  /// Quem acha um animal na rua nao vai criar cadastro com o bicho no colo, e
-  /// e por isso que o corpo tambem e opcional -- um toque, zero campos. Data e
-  /// hora sao do servidor; o codigo ja veio no caminho.
-  ///
-  /// `exigeToken: true` **nao** contradiz isso: no [ApiClient] essa marca quer
-  /// dizer "leve o `Authorization` se houver um", e nao "recuse sem ele". Com
-  /// sessao o aviso sai identificado, que e o que faz o tutor ver quem falou;
-  /// sem sessao sai anonimo, e o servidor responde 201 igual.
-  ///
-  /// **`Idempotency-Key` e obrigatoria, e quem reenvia usa a MESMA.** O
-  /// contrato a declara obrigatoria porque este pedido e reenviado por fila
-  /// quando a rede cai, e o tutor nao pode receber o mesmo aviso tres vezes.
-  /// Por isso ela e **parametro**, e nao gerada aqui dentro: gerar aqui faria
-  /// o reenvio nascer com chave nova e derrubaria a garantia inteira, em
-  /// silencio.
-  ///
-  /// **A foto do achador nao entra aqui, e a ausencia e do contrato.**
-  /// `FoundReportFromTagInput` tem dois campos (`found_at`, `client_note`) e
-  /// nenhum de imagem: a foto chega depois, por
-  /// `PATCH /found-reports/{foundReportId}` com o `finder_token` e um
-  /// `photo_upload_ref` de
-  /// `POST /finder/found-report/photo-upload-intent`. Nenhuma das duas tem
-  /// cliente neste app, e nenhuma e pre-requisito do aviso.
   Future<AvisoDoAchadorCriado> avisarOTutor(
     String codigo, {
     required String idempotencyKey,
@@ -602,10 +296,6 @@ class TagsApi {
   }
 
   /// O corpo do aviso, **separado para a fila offline gravar o mesmo**.
-  ///
-  /// Devolve mapa vazio quando nada foi digitado, e nao nulo: o corpo vazio e
-  /// o caminho principal desta operacao, e um mapa vazio atravessa a fila (que
-  /// grava `Map<String, dynamic>`) sem virar caso especial.
   static Map<String, dynamic> corpoDoAviso({
     String? recadoDoAchador,
     DateTime? achadoEm,

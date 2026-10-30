@@ -11,15 +11,11 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 
 /// Em que ponto esta o ponto do encontro.
-///
-/// O ponto so existe com conta (`getNetworkEventLocation`). A tela decide a
-/// variante; este bloco so a desenha.
 sealed class PontoNoBloco {
   const PontoNoBloco();
 }
 
-/// Sem conta, cancelado, ou o encontro nao tem ponto: **so o endereco**. Sem
-/// area de mapa, sem distancia fora das regras, sem botao.
+/// Sem conta, cancelado, ou o encontro nao tem ponto: **so o endereco**.
 class SoEndereco extends PontoNoBloco {
   const SoEndereco();
 }
@@ -39,19 +35,7 @@ class PontoConhecido extends PontoNoBloco {
   final PontoDoEncontro ponto;
 }
 
-/// De onde vem cada tile do mapa estatico. Troca so em teste.
-///
-/// **O provedor e o OpenStreetMap**, o mesmo que o backoffice usa para marcar
-/// o ponto (ADR-0027 item 6, `tile.openstreetmap.org`). A politica de uso dele
-/// pede identificacao do app no `User-Agent` e atribuicao visivel, e as duas
-/// estao aqui. Nao ha chave nem segredo no binario. O estilo do mapa nao e
-/// token (pedido P-M2, design system 24.8).
-///
-/// **O endereco dos tiles e o `User-Agent` vem do build**, e nao do codigo
-/// (portao de portabilidade, docs/07-devops.md 3.9): `--dart-define-from-file=
-/// config/mapa.json`, o mesmo arquivo que `infra/verificacao/verificar-apk.sh`
-/// usa. Build sem o arquivo nao tem de onde tirar o mapa: o bloco cai no
-/// estado "Nao conseguimos carregar o mapa agora.", sem pedido a host nenhum.
+/// De onde vem cada tile do mapa estatico.
 abstract final class FonteDeTiles {
   /// Modelo com `{z}`, `{x}` e `{y}`.
   static const String modelo = String.fromEnvironment('MAP_TILES_URL');
@@ -86,28 +70,6 @@ class _SemFonteDeTiles extends ImageProvider<_SemFonteDeTiles> {
 }
 
 /// O bloco `Local do encontro` (design system 24.4, textos da UX 28.1).
-///
-/// ```
-/// [ mapa estatico 180 dp, com o pino ]          (so com ponto)
-/// (lugar) Praça Benedito Calixto
-///         Pinheiros · São Paulo, SP
-///         A cerca de 1 km da sua região          (so publico, a vir)
-/// [ Abrir no app de mapas  ↗ ]                    (so com ponto)
-/// ```
-///
-/// ## O que o tipo impede (UX 28.4)
-///
-/// O bloco recebe [LugarDoEncontro] e [PontoNoBloco], que so nasce de
-/// `getNetworkEventLocation`. **Nao ha construtor que aceite latitude e
-/// longitude soltas**, e nenhum arquivo de `telas/perdido` ou `telas/achado`
-/// importa este: o mapa do encontro nao tem como virar mapa de pet perdido.
-///
-/// ## A area do mapa esta fora da arvore de acessibilidade
-///
-/// O endereco em texto e o nome acessivel do lugar em todas as variantes, e o
-/// botao rotulado e o caminho acessivel. O mapa carregado e tocavel e faz o
-/// mesmo que o botao (UX 28.3, decisao 4), sem entrar no foco. A excecao e o
-/// `Tentar de novo` do erro, que e controle.
 class LocalDoEncontro extends StatefulWidget {
   const LocalDoEncontro({
     required this.lugar,
@@ -122,12 +84,7 @@ class LocalDoEncontro extends StatefulWidget {
   final LugarDoEncontro lugar;
   final PontoNoBloco ponto;
 
-  /// `street_address`, de `getNetworkEventLocation`. **Nulo sem conta**, e
-  /// nulo tambem quando o encontro nao tem endereco escrito: nos dois casos a
-  /// linha e o botao nao aparecem, e a tela nao promete o que nao vai mostrar.
-  ///
-  /// Nao tem par sem conta: a chamada que o traz exige conta (emenda de 01/10
-  /// do ADR-0027), e a tela fica com os rotulos do lugar.
+  /// `street_address`, de `getNetworkEventLocation`.
   final String? enderecoPorExtenso;
 
   /// Refaz a pergunta a `/location` quando ELA falhou.
@@ -142,16 +99,6 @@ class LocalDoEncontro extends StatefulWidget {
   static const String textoDoErro = 'Não conseguimos carregar o mapa agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
   static const String nomeDeTentar = 'Tentar carregar o mapa de novo';
-  // OS TRES TEXTOS DE ABRIR MAPA NAO MORAM MAIS AQUI.
-  //
-  // `TextosDoAppDeMapas.rotuloDoPonto` (o botao sob a area de mapa),
-  // `TextosDoAppDeMapas.rotuloDoEndereco` (o toque do endereco por extenso) e
-  // `TextosDoAppDeMapas.falhaAoAbrir` (a frase de falha dos dois) estao em
-  // `lib/dispositivo/textos_do_app_de_mapas.dart`, ao lado da porta que as
-  // tres superficies chamam. Esta tela era a regua enquanto havia tres
-  // redacoes; agora a regua e a fonte, e um portao de fonte reprova qualquer
-  // arquivo de `app/lib/` que escreva estes literais a mao. O cabecalho
-  // daquele arquivo tem a historia e a razao da redacao da falha.
 
   /// A chave da area do mapa, para as iscas acharem a area sem depender de
   /// texto (a area nao tem texto de proposito).
@@ -258,17 +205,12 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
             setState(() => _imagem = _Imagem.pronta);
             if (_focarBotaoQuandoPronto) {
               _focarBotaoQuandoPronto = false;
-              // `Tentar de novo` deixou de existir: o foco vai para o botao
-              // de mapas (UX 28.1).
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _focoDoBotao.requestFocus();
               });
             }
           }
         },
-        // As escutas FICAM depois do primeiro erro: os outros tiles ainda vao
-        // responder, e erro de imagem sem escuta vira excecao nao tratada.
-        // Elas saem na proxima carga ou no `dispose`.
         onError: (_, _) {
           if (!mounted || _imagem != _Imagem.carregando) return;
           _prazo?.cancel();
@@ -313,7 +255,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
       widget.aoTentarDeNovo();
       return;
     }
-    // Repete so a imagem: nao recarrega o encontro nem move o foco.
     _larguraCarregada = null;
     setState(() {});
   }
@@ -324,9 +265,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
     final ponto = widget.ponto;
     final temArea = ponto is! SoEndereco;
     final endereco = widget.enderecoPorExtenso;
-    // **Um botao, nunca dois.** Com endereco escrito, ele e o caminho: e o que
-    // o painel passou a preencher em 01/10. O botao do ponto fica para o
-    // encontro antigo, que tem ponto marcado e nao tem endereco.
     final temBotao = endereco == null && ponto is PontoConhecido;
 
     return Container(
@@ -483,7 +421,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
           }
 
           if (!pronto) {
-            // Carregando: so o indicador, sem texto (UX 28.1), fora da arvore.
             return ExcludeSemantics(
               child: ColoredBox(
                 color: cores.surfaceSunken,
@@ -512,8 +449,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
                         height: _tamanhoDoTile,
                         child: Image(image: t.imagem, fit: BoxFit.fill),
                       ),
-                    // O pino: ponta na coordenada, com halo de `surface` para
-                    // nao sumir sobre a praca no tema escuro (24 e P-M2).
                     Positioned(
                       left: largura / 2 - BichuEspaco.e6 - BichuBorda.medium,
                       top: alturaDoMapa / 2 - BichuEspaco.e12,

@@ -1,16 +1,4 @@
-/**
- * Gravação da trilha no esquema `audit`.
- *
- * O detalhe que faz o critério 8 da BICHUS-56 ser verdadeiro em vez de escrito:
- * **cada gravação assume o papel `bichu_audit_writer` com `SET LOCAL ROLE`**.
- * Sem isso, a aplicação escreveria com o papel de login, que no ambiente local é
- * o dono da tabela — e **dono contorna qualquer GRANT**. A ausência de `UPDATE`
- * e `DELETE` no papel só protege alguma coisa se o papel for de fato assumido.
- *
- * `SET LOCAL` e não `SET`: o papel volta sozinho no fim da transação, inclusive
- * quando ela falha. Um `SET ROLE` sem `LOCAL` sobreviveria à devolução da
- * conexão ao pool.
- */
+/** Gravação da trilha no esquema `audit`. */
 import { sql } from 'kysely';
 import { assumirPapel, type Db, type DbTransaction } from '../../../../shared/db/pool.js';
 import { hmacDeEnderecoIp } from '../../../../shared/crypto/digest.js';
@@ -36,12 +24,7 @@ export interface DependenciasDaTrilha {
   readonly clock: Clock;
   /** Chave do HMAC de IP. Hash sem chave não anonimiza nada (SEC-010). */
   readonly ipHmacKey: Buffer;
-  /**
-   * Chamado quando a gravação falha. A trilha **não pode derrubar o pedido do
-   * usuário**: um incidente no esquema de auditoria não é motivo para o tutor
-   * não conseguir abrir o caso do pet perdido. Mas falha silenciosa também não
-   * serve, então ela sai por aqui, ruidosa, para o log e o alerta.
-   */
+  /** Chamado quando a gravação falha. */
   readonly onFailure: (erro: unknown, evento: AuditEvent) => void;
 }
 
@@ -50,10 +33,10 @@ function comoJson(valor: Record<string, unknown> | undefined): unknown {
 }
 
 /**
- * O tipo ja impede o evento incoerente; esta conferencia existe para o que
- * chega por conversao (`as`) ou por JavaScript sem tipo, e ela antecipa o que
- * os dois `CHECK` de `audit.events` recusariam, com uma mensagem que diz qual
- * ator estava errado.
+ * O tipo ja impede o evento incoerente; esta conferencia existe para o que chega
+ * por conversao (`as`) ou por JavaScript sem tipo, e ela antecipa o que os dois
+ * `CHECK` de `audit.events` recusariam, com uma mensagem que diz qual ator estava
+ * errado.
  */
 function exigirAtorCoerente(evento: AuditEvent): void {
   const temUsuario = evento.actorUserId !== undefined;
@@ -111,26 +94,7 @@ export function criarTrilhaDeAuditoria(deps: DependenciasDaTrilha): AuditLog {
   };
 }
 
-/**
- * A trilha que grava DENTRO da transacao de quem chama (ADR-0027 item 8, D49).
- *
- * ## Por que o papel e devolvido
- *
- * `SET LOCAL ROLE` vale ate o fim da transacao, e a transacao aqui nao e da
- * trilha: e da escrita administrativa. Se o papel ficasse, qualquer comando
- * depois do evento rodaria como `bichu_audit_writer`, que so tem `INSERT` e
- * `SELECT` em `audit.events`, e a escrita falharia por permissao num lugar que
- * ninguem associaria a trilha. O papel anterior e lido antes e reposto logo
- * depois do `INSERT`, tambem com `LOCAL`: se a transacao cair no meio, o banco
- * desfaz os dois.
- *
- * ## Por que lanca
- *
- * Nao ha `onFailure`. A falha sobe, a transacao da escrita e desfeita, e a
- * escrita de conteudo publico sem autor gravado deixa de ser um estado
- * possivel. E exatamente o que o `record` do app faz ao contrario, e pelo
- * motivo oposto.
- */
+/** A trilha que grava DENTRO da transacao de quem chama (ADR-0027 item 8, D49). */
 export function criarTrilhaTransacional(deps: DependenciasDaGravacao): TrilhaTransacional {
   return {
     async recordIn(trx, evento) {
@@ -148,9 +112,8 @@ export function criarTrilhaTransacional(deps: DependenciasDaGravacao): TrilhaTra
 }
 
 /**
- * A soma na trilha, sob `bichu_audit_writer` (que tem `SELECT` em
- * `audit.events`) e com o papel anterior reposto logo depois, pelo mesmo motivo
- * de `recordIn`.
+ * A soma na trilha, sob `bichu_audit_writer` (que tem `SELECT` em `audit.events`)
+ * e com o papel anterior reposto logo depois, pelo mesmo motivo de `recordIn`.
  */
 export function criarContagemNaTrilha(): ContagemNaTrilha {
   return {
@@ -193,11 +156,7 @@ export function criarContagemNaTrilha(): ContagemNaTrilha {
   };
 }
 
-/**
- * A unidade de trabalho de toda escrita administrativa. Ver `EscritaAuditada`
- * na porta: uma transacao, o trabalho, o evento por ULTIMO, e o `COMMIT` so
- * depois dos dois.
- */
+/** A unidade de trabalho de toda escrita administrativa. */
 export function criarEscritaAuditada(deps: {
   readonly db: Db;
   readonly trilha: TrilhaTransacional;
@@ -217,13 +176,7 @@ export interface ResultadoDoExpurgo {
   readonly limite: Date;
 }
 
-/**
- * Expurgo da retenção de 24 meses (BICHUS-56, critério 6).
- *
- * Roda com o papel `bichu_audit_purger`, que é o único com `DELETE`. Separar os
- * dois papéis é o que impede o caminho normal da aplicação de carregar a
- * permissão de apagar trilha.
- */
+/** Expurgo da retenção de 24 meses (BICHUS-56, critério 6). */
 export async function expurgarEventosVencidos(
   db: Db,
   agoraEmMilissegundos: number,

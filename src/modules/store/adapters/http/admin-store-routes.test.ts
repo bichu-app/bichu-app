@@ -1,25 +1,6 @@
 /**
  * As rotas da escrita administrativa da `Loja`, montadas DENTRO da guarda do
  * prefixo `/v1/admin`, sem banco (BICHUS-266 e BICHUS-267).
- *
- * A sessao e um dublê da porta que o modulo de identidade entrega, o mesmo
- * desenho de `superficie-administrativa.test.ts`; o caso de uso e o de verdade,
- * sobre o repositorio em memoria. O que este arquivo prova sao as iscas do
- * briefing que dependem da ROTA, e nao do caso de uso:
- *
- * - **tutor recebe recusa sem escrita**: conta sem papel `admin` leva 403 e o
- *   repositorio continua vazio, sem linha de trilha;
- * - **retirar passa so com a sessao** desde 07/10 (ADR-0027 item 23); sem sessao, 401,
- *   e o item continua publicado;
- * - **corpo com campo extra recebe 400**, e nada e gravado (o Ajv do Fastify o
- *   apagaria em silencio e responderia 201);
- * - **nenhum UUID interno na resposta**, e o `ETag` sai em toda leitura e
- *   escrita;
- * - a declaracao de cada rota bate com o contrato em papel, trilha, escopo de
- *   reautenticacao e balde compartilhado.
- *
- * A mesma matriz contra Postgres, com a sessao real, esta em
- * `tests/integration/escrita-da-loja-pelo-http.test.ts`.
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
@@ -155,8 +136,6 @@ async function chamar(
   };
 }
 
-// `site_url` e o campo do CORPO desde 17/10 (endereco completo, com `https://`);
-// `host` continua sendo o que a RESPOSTA e a coluna guardam, extraido dele.
 const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',

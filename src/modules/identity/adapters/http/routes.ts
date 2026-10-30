@@ -1,15 +1,4 @@
-/**
- * Rotas de conta e sessão.
- *
- * Cada rota é declarada com `defineRoute`, e o `operationId` é o mesmo da
- * especificação — é a chave de rastreio entre os dois documentos. O `effects` e
- * o `rateLimit` **espelham** `api/openapi.yaml`; a política é de
- * `docs/04-seguranca.md` e não é redefinida aqui.
- *
- * Rota com efeito e sem teto **não compila** (`shared/http/route-definition.ts`).
- * Remover o `rateLimit` de qualquer bloco abaixo é erro de compilação, não
- * achado de revisão.
- */
+/** Rotas de conta e sessão. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import {
@@ -66,10 +55,6 @@ export const rotaDeRenovacao = defineRoute({
   method: 'post',
   path: '/auth/refresh',
   effects: ['verifies_secret'],
-  // `challenge` não pode ser usado aqui: quem chama é o app em segundo plano, e
-  // não há quem responda ao desafio. O efeito real não seria desafiar, seria a
-  // sessão morrer em silêncio — e o usuário descobre no dia em que abre o app
-  // com o pet sumido.
   noChallenge: true,
   rateLimit: [
     { dimension: ['token_family'], limit: 10, window: '1m', onExceed: 'deny_429' },
@@ -88,8 +73,6 @@ export const rotaDeLogout = defineRoute({
   operationId: 'logout',
   method: 'post',
   path: '/auth/logout',
-  // Revogar a própria sessão não alcança ninguém de fora do processo. O teto
-  // existe assim mesmo, por decisão da política: a regra é piso, não teto.
   effects: [],
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
@@ -97,11 +80,6 @@ export const rotaDeLogout = defineRoute({
 /**
  * O outro verbo. Ver a emenda 1 do ADR-0002: `logout` é este aparelho,
  * `logout-all` é a conta inteira.
- *
- * O teto é 10/h e não 60/h como o do logout comum. A diferença é o alcance: uma
- * chamada aqui derruba todos os aparelhos da pessoa, então um token de acesso
- * roubado, repetido em laço, manteria o titular fora da própria conta sem
- * precisar da senha dele.
  */
 export const rotaDeLogoutTotal = defineRoute({
   operationId: 'logoutAllDevices',
@@ -109,28 +87,12 @@ export const rotaDeLogoutTotal = defineRoute({
   path: '/auth/logout-all',
   effects: ['notifies'],
   rateLimit: [{ dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' }],
-  // BICHUS-48. O escopo é próprio e não reaproveita nenhum dos outros: uma
-  // janela aberta para excluir a conta não derruba as sessões, e vice-versa.
-  // Declarar aqui é o que instala a conferência — ver `registrarRota`.
   reauthScope: 'session_revocation',
 });
 
 /**
- * A operação que abre a janela, e a única do sistema que confere a senha de
- * alguém já autenticado (critério 10 da BICHUS-48).
- *
- * **Os dois tetos são do contrato, e o segundo é o que importa.** 10 por hora
- * por conta limita o uso legítimo; 5 **inválidas** por hora por conta é a
- * defesa contra força bruta, e ela existe porque reautenticação é oráculo de
- * senha por construção: quem tomou a sessão pode testar senhas aqui sem
- * disparar nada do login, que se defende por e-mail e por IP e não por conta.
- *
- * `deny_429` e não `challenge`: não há quem responda a um desafio nesta rota, e
- * um desafio seria mais uma maneira de continuar tentando. Cinco erros fecham a
- * porta destrutiva por uma hora **sem derrubar a sessão normal** — a pessoa
- * continua usando o app, e só o ato destrutivo espera. E a recuperação de senha
- * continua aberta pelo seu próprio caminho (critério 9), porque o teto é desta
- * rota e não da conta.
+ * A operação que abre a janela, e a única do sistema que confere a senha de alguém
+ * já autenticado (critério 10 da BICHUS-48).
  */
 export const rotaDeReautenticacao = defineRoute({
   operationId: 'reauthenticate',
@@ -181,26 +143,7 @@ export const rotaDeEdicaoDoPerfil = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * O teto é de CONTA, 5 por 24 horas, e espelha `api/openapi.yaml`.
- *
- * A dimensão é `account` e não `ip` porque esta rota exige sessão: sem conta
- * não há pedido, e um balde por IP puniria a rede do prédio pelo que uma
- * pessoa fez. Cinco por dia é folgado para quem errou uma letra e apertado
- * para quem quer usar a nossa saída de SMTP: cada pedido manda DUAS mensagens,
- * uma ao endereço novo e outra ao antigo, e o endereço novo é escolhido por
- * quem chama. Sem teto, uma sessão viraria um disparador de e-mail nosso
- * contra endereço alheio, e um caminho de enumeração pelo tempo de resposta.
- *
- * `reauthScope` É declarado aqui, e a condição que o adiava caiu nesta
- * integração. A autora escreveu que a ausência era deliberada porque «a
- * maquinaria de reautenticação não existe em `src/` ainda» e «o tipo
- * `ReauthScope` sequer carrega `'email_change'`»: as duas coisas passaram a
- * existir com a BICHUS-48, e o portão de `rotas-registradas-contra-o-contrato`
- * passou a cobrar contrato e código nos dois sentidos. Com a maquinaria na
- * árvore, é a AUSÊNCIA que vira a divergência — operação destrutiva que o
- * documento promete sob senha e o código serve sem ela.
- */
+/** O teto é de CONTA, 5 por 24 horas, e espelha `api/openapi.yaml`. */
 export const rotaDeTrocaDeEmail = defineRoute({
   operationId: 'requestEmailChange',
   method: 'post',
@@ -221,32 +164,7 @@ export const rotaDePedidoDeVerificacao = defineRoute({
   ],
 });
 
-/**
- * Confirmar o e-mail pelo token do link.
- *
- * **`appliesTo: 'invalid_attempts'` nao e detalhe de redacao: e o que decide
- * quem paga o teto.** Sem a qualificacao, a entrada vai por `hit()`
- * (`shared/http/aplicacao-de-teto.ts`) e conta TODA requisicao -- "20
- * tentativas invalidas por hora" vira "20 requisicoes por hora". E a dimensao
- * e `ip`: vinte e uma confirmacoes de boa-fe atras do mesmo endereco nao sao
- * um ataque, sao vinte e uma pessoas no CGNAT de uma operadora movel ou na
- * rede de um escritorio, e a vigesima primeira fica trancada para fora
- * exatamente da confirmacao que estava tentando concluir. O proprio
- * `aplicacao-de-teto.ts` ja escreve o argumento na justificativa de `ip_24`:
- * teto por IP puro e armadilha no Brasil.
- *
- * A qualificacao nao afrouxa nada. O balde e CONSULTADO na chegada (`peek`) e
- * so incrementado depois, em `onResponse`, quando a resposta foi recusa de
- * credencial (`registrar-rota.ts`, `TIPOS_DE_TENTATIVA_INVALIDA`): quem varre
- * token continua sendo recusado na 21a tentativa, e recusado ANTES de
- * qualquer consulta ao banco. O que muda e que a pessoa que acertou o link
- * deixa de gastar o teto de quem errou.
- *
- * O contrato sempre declarou `applies_to: invalid_attempts` aqui
- * (`api/openapi.yaml`, `confirmEmailVerification`); era o codigo que tinha
- * perdido a qualificacao. A prova do efeito, e nao da declaracao, esta em
- * `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
- */
+/** Confirmar o e-mail pelo token do link. */
 export const rotaDeConfirmacaoDeEmail = defineRoute({
   operationId: 'confirmEmailVerification',
   method: 'post',
@@ -274,24 +192,7 @@ export const rotaDePedidoDeRedefinicao = defineRoute({
   ],
 });
 
-/**
- * Definir a senha nova pelo token do link.
- *
- * Mesmo argumento de `rotaDeConfirmacaoDeEmail`, e aqui ele custa mais caro:
- * sem `appliesTo: 'invalid_attempts'` a entrada conta toda requisicao, e a
- * vigesima primeira pessoa que redefine a senha atras do mesmo IP recebe 429
- * no meio de uma recuperacao de acesso -- que e o momento em que ela ja nao
- * consegue entrar na conta e nao tem outro caminho. O teto vira o oposto do
- * remedio.
- *
- * Com a qualificacao, o balde conta so o que saiu como recusa de credencial:
- * varrer token de redefinicao continua parando na 21a tentativa, e quem abriu
- * o proprio link nao entra na conta.
- *
- * Contrato: `api/openapi.yaml`, `confirmPasswordReset` (dimension [ip], limit
- * 20, window 1h, on_exceed deny_429, applies_to invalid_attempts). Prova de
- * efeito em `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
- */
+/** Definir a senha nova pelo token do link. */
 export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
   operationId: 'confirmPasswordReset',
   method: 'post',
@@ -308,66 +209,7 @@ export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
   ],
 });
 
-/**
- * Diz se o link de redefinição ainda vale.
- *
- * Só lê. É a página do time web perguntando "vale a pena mostrar o
- * formulário?" antes de a pessoa digitar uma senha para um link morto.
- *
- * ## O teto: `log_and_alert`, e não `deny_429`. O argumento, medido
- *
- * Até 22/09/2026 esta rota declarava `60/1h deny_429` no código contra
- * `30/1h log_and_alert` no contrato, e ninguém cruzava os dois. O código cedeu,
- * nos dois campos, e a razão não é "o contrato manda":
- *
- * **1. O token não é adivinhável, então o teto não é a defesa.** São 256 bits
- * de CSPRNG (`shared/id/uuidv7.ts`, `opaqueToken`), guardados só como SHA-256,
- * uso único consumido atomicamente, validade de 30 minutos. Mesmo com um
- * atacante de um milhão de endereços a 60 por hora cada, dentro da janela de
- * meia hora, a chance de acertar um token vivo fica na ordem de 10^-64. Entre
- * 30 e 60 não há diferença de segurança nenhuma contra enumeração.
- *
- * **2. Recusar aqui não fecha o oráculo, porque ele não é exclusivo desta
- * rota.** `POST /auth/password-reset/confirm` também responde 410 para token
- * que não vale, e já carrega `20/1h deny_429 applies_to invalid_attempts`.
- * Quem for recusado aqui troca de verbo. O `deny_429` desta rota encarecia o
- * caminho mais barato sem fechar caminho nenhum.
- *
- * **3. Recusar aqui quebra o remédio, e na hora pior.** A dimensão é `ip`, e o
- * CGNAT das operadoras brasileiras agrupa muita gente atrás de poucos
- * endereços — o argumento está escrito em `aplicacao-de-teto.ts` (justificativa
- * de `ip_24`) e duas vezes no ADR-0016. Esta rota é chamada ao ABRIR o link do
- * e-mail: recarregar a página, abrir no outro aparelho e o varredor de link do
- * cliente de e-mail somam chamadas que a pessoa não fez conscientemente. Um 429
- * aqui deixa a página sem mostrar o formulário, e a pessoa não entra na conta
- * (é por isso que ela está redefinindo a senha) nem tem outro caminho. A
- * operação existe para que ninguém chegue a um beco; recusar transforma a
- * própria operação no beco, mais cedo. E o dia em que muita gente redefine a
- * senha na mesma hora atrás do mesmo IP é o dia do incidente, que é exatamente
- * quando o remédio precisa funcionar.
- *
- * **4. `challenge` não é opção**, e a rota declara `x-no-challenge`: não há
- * ninguém para responder a um desafio numa chamada que a página faz ao carregar.
- *
- * **O que `log_and_alert` NÃO faz, dito por extenso:** ele não recusa. O balde
- * continua contando (`hit()`) e o estouro continua virando linha de log em
- * `aplicacao-de-teto.ts`, mas a requisição passa. A proteção volumétrica desta
- * rota é da borda (ADR-0016, item 4), e hoje a borda só limita tamanho de
- * corpo. Isso é lacuna conhecida e compartilhada com `jwks`,
- * `openidConfiguration`, `resolveTag` e o webhook de entrega, que escolheram
- * `log_and_alert` pelo mesmo motivo; não é lacuna criada aqui.
- *
- * **O número 30 é do contrato e está em aberto.** 30 por hora por IP, a 1–4
- * chamadas por redefinição legítima, alerta a partir de 8 pessoas por hora
- * atrás do mesmo endereço — pouco para um pool de CGNAT, e alerta que dispara
- * em tráfego normal é alerta que alguém silencia. A pergunta fechada está em
- * `.jarvis/PAUTA-DE-REFINAMENTO-22-09.md` ("O teto de `GET
- * /public/password-reset/{token}`: 30 por hora por IP, ou 60?"). Enquanto ela não for
- * respondida vale o contrato, que é a fonte declarada do número.
- *
- * A isca que impede este teto de ser "endurecido" de volta em silêncio está em
- * `tests/integration/teto-da-conferencia-do-link.test.ts`.
- */
+/** Diz se o link de redefinição ainda vale. */
 export const rotaDeConferenciaDeRedefinicao = defineRoute({
   operationId: 'checkPasswordResetToken',
   method: 'get',
@@ -376,15 +218,7 @@ export const rotaDeConferenciaDeRedefinicao = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 30, window: '1h', onExceed: 'log_and_alert' }],
 });
 
-/**
- * A exclusão de conta. Teto de 3 por 24 h, que é o do contrato.
- *
- * `reauthScope` está declarado e a verificação **não** é desta branch: ela é a
- * BICHUS-48, ainda não mesclada. A linha existe aqui desde já porque o portão
- * que a BICHUS-48 traz cobra o contrato e o código nos DOIS sentidos —
- * operação com `x-reauth-scope` cuja rota não declare o mesmo valor reprova —
- * e uma rota nova que chegasse sem ela quebraria aquele portão no merge.
- */
+/** A exclusão de conta. Teto de 3 por 24 h, que é o do contrato. */
 export const rotaDeExclusaoDaConta = defineRoute({
   operationId: 'deleteMyAccount',
   method: 'delete',
@@ -394,22 +228,7 @@ export const rotaDeExclusaoDaConta = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 3, window: '24h', onExceed: 'deny_429' }],
 });
 
-/**
- * O "Não fui eu", e ele é a única rota de revogação sem conta do produto.
- *
- * Três coisas dela são decisão, e não configuração:
- *
- * - **teto por `ip`, e `log_and_alert` em vez de `deny_429`.** Recusar aqui
- *   trabalharia contra quem a rota protege: quem está com a conta tomada pode
- *   estar atrás do mesmo NAT de um laço automatizado. O que defende a rota é o
- *   token de 256 bits, não o contador; o contador existe para o laço aparecer;
- * - **`noChallenge`**, porque não há quem responda a um desafio: o clique vem
- *   de um cliente de e-mail, muitas vezes de um navegador sem sessão;
- * - **sem GET equivalente.** Cliente de e-mail e antivírus de borda
- *   pré-carregam link por GET. Uma revogação disparada por pré-carga derrubaria
- *   a sessão de quem nunca clicou, e o defeito seria indistinguível de um
- *   ataque.
- */
+/** O "Não fui eu", e ele é a única rota de revogação sem conta do produto. */
 export const rotaDoNaoFuiEu = defineRoute({
   operationId: 'disavowSessionAlert',
   method: 'post',
@@ -418,7 +237,6 @@ export const rotaDoNaoFuiEu = defineRoute({
   noChallenge: true,
   rateLimit: [{ dimension: ['ip'], limit: 10, window: '1h', onExceed: 'log_and_alert' }],
 });
-
 
 export const rotaDoJwks = defineRoute({
   operationId: 'jwks',
@@ -444,22 +262,11 @@ export interface DependenciasDasRotas {
   readonly contrato: Contrato;
   readonly issuer: string;
   readonly apiBaseUrl: string;
-  /**
-   * A URL publica de uma chave de derivada (18/10/2026, com a foto do perfil).
-   * Injetada como na `Loja`, na `Rede` e no diretorio.
-   */
+  /** A URL publica de uma chave de derivada (18/10/2026, com a foto do perfil). */
   readonly urlDeMidia: (chave: string) => string;
 }
 
-/**
- * Higiene da rota que carrega token na URL.
- *
- * O token de redefinição viaja no caminho porque ele vem de um link de e-mail,
- * e isso é inevitável. O que dá para impedir é que ele seja indexado, que vaze
- * pelo cabeçalho `Referer` para todo terceiro que a página carregar, e que
- * fique guardado em cache intermediário (critério 11: o token não aparece em
- * registro nenhum).
- */
+/** Higiene da rota que carrega token na URL. */
 function aplicarHigieneDeTokenNaUrl(reply: FastifyReply): void {
   void reply.header('X-Robots-Tag', 'noindex, nofollow');
   void reply.header('Referrer-Policy', 'no-referrer');
@@ -484,19 +291,7 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   return token;
 }
 
-/**
- * `email` para o teto, **resumido**, nunca em claro.
- *
- * O balde vai para `rate_limit_counters.bucket_key`, no Postgres: lido por quem
- * opera o banco, exportado em despejo de diagnóstico e sobrevivente à exclusão
- * da conta. Um endereço em claro ali é o mesmo problema que o SEC-010 descreve
- * para o IP, num lugar onde ninguém vai procurá-lo — e aqui é pior, porque a
- * lista de endereços que TENTARAM entrar inclui gente que nunca teve conta.
- *
- * A normalização vem do domínio (`normalizarEmail`) e não é escrita aqui: se o
- * teto normalizasse diferente do login, `A@x.com` e `a@x.com` cairiam em baldes
- * distintos e o teto de 5 por hora viraria 10 para quem alternasse a caixa.
- */
+/** `email` para o teto, **resumido**, nunca em claro. */
 const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   const corpo = (request.body ?? {}) as { email?: unknown };
   if (typeof corpo.email !== 'string' || corpo.email === '') return undefined;
@@ -504,14 +299,7 @@ const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   return normalizado === '' ? undefined : sigilo.hmac(`email:${normalizado}`);
 };
 
-/**
- * Autenticação MEMOIZADA por requisição.
- *
- * O teto por `account` roda antes do handler e precisa saber de quem é a
- * sessão; o handler precisa da mesma coisa. Sem a memória, toda rota
- * autenticada passaria a verificar RS256 e ler `users` duas vezes — dobrar a
- * carga do banco para aplicar um teto que existe para reduzir carga.
- */
+/** Autenticação MEMOIZADA por requisição. */
 function autenticado(request: FastifyRequest, deps: DependenciasDasRotas): Promise<Autenticado> {
   return memoDaRequisicao(request, 'identity:autenticado', () =>
     deps.auth.autenticar(tokenDoCabecalho(request)),
@@ -521,14 +309,6 @@ function autenticado(request: FastifyRequest, deps: DependenciasDasRotas): Promi
 /**
  * `account` para o teto: o id da conta, ou `undefined` para quem não apresentou
  * credencial válida.
- *
- * Engolir a falha aqui é correto e não é atalho: quem não tem sessão não tem
- * balde de conta, e a recusa dele é 401 do handler, não 429. O que sustenta o
- * caso de quem martela sem credencial são as entradas por `ip` da mesma rota.
- *
- * O valor vai em claro na chave do balde, e essa é a exceção declarada do
- * `Sigilo`: é UUID interno, `bucket_key` não sai em resposta nenhuma, e o
- * resumo tornaria impossível responder "qual conta bateu no teto".
  */
 async function contaDoTeto(
   request: FastifyRequest,
@@ -545,28 +325,7 @@ export function registrarRotasDeIdentidade(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotas,
 ): void {
-  /**
-   * O perfil como o contrato o declara, campo a campo.
-   *
-   * `pending_profile_fields` e `can_open_lost_case` são calculados na leitura, e
-   * não guardados: são função do estado da conta. Uma coluna que os guardasse
-   * seria uma segunda fonte, e ela envelheceria na primeira verificação de
-   * e-mail que alguém esquecesse de propagar.
-   *
-   * `reference_area` sai **nula inteira** quando nenhum dos campos existe, em
-   * vez de um objeto com quatro nulos: a tela distingue "não informou" de
-   * "informou parcialmente", e quatro nulos dentro de um objeto parecem a
-   * segunda coisa.
-   */
-  /**
-   * A resposta `Me`, numa funcao PURA em `domain/resposta-do-perfil.ts`.
-   *
-   * Ela saiu daqui em 18/10/2026 para poder ser medida sem subir Fastify: as
-   * duas regras novas sao de OMISSAO (a foto sai so nesta resposta; o selo e
-   * derivado na leitura -- `contact_channel_verified` desde 21/10/2026 -- e nao
-   * um campo de escrita), e regra de omissao se mede mal por injecao de
-   * requisicao.
-   */
+  /** O perfil como o contrato o declara, campo a campo. */
   const comoRespostaDoPerfil = (conta: Conta, foto: FotoDoPerfil | null): Record<string, unknown> =>
     projetarMeuPerfil(conta, foto, deps.urlDeMidia);
 
@@ -576,13 +335,6 @@ export function registrarRotasDeIdentidade(
     {
       schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) },
       resolvedores: { account: (request) => contaDoTeto(request, deps) },
-      // Esta é a outra operação do contrato com `requestBody: required: false`,
-      // e o manipulador abaixo diz isso ao ler `request.body ?? {}`: com token
-      // no cabeçalho, o e-mail vem da sessão e não há corpo a enviar. Sem este
-      // gancho, o schema acima sozinho recusava a chamada sem corpo com 400
-      // `body must be object`, porque o Fastify valida `request.body` mesmo
-      // quando ele é `undefined` — a rota prometia 202 "exista ou não a conta"
-      // e respondia 400 para quem não mandasse campo nenhum.
       preValidation: [
         corpoAusenteEhCorpoVazio(deps.contrato, rotaDePedidoDeVerificacao.operationId),
       ],
@@ -591,16 +343,12 @@ export function registrarRotasDeIdentidade(
       const corpo = (request.body ?? {}) as { email?: string };
       const cabecalho = request.headers.authorization;
 
-      // A operação aceita conta OU e-mail no corpo. Com conta, o endereço vem
-      // da sessão e o do corpo é ignorado: aceitar o do corpo deixaria alguém
-      // logado disparar e-mail nosso para um endereço qualquer.
       let email = corpo.email;
       if (typeof cabecalho === 'string' && cabecalho.startsWith('Bearer ')) {
         const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
         email = conta.email;
       }
 
-      // 202 mesmo sem e-mail nenhum: a resposta não varia com a entrada.
       if (email !== undefined && email !== '') {
         await deps.auth.solicitarVerificacaoDeEmail(email, contextoDe(request));
       }
@@ -612,11 +360,6 @@ export function registrarRotasDeIdentidade(
     app,
     rotaDeConfirmacaoDeEmail,
     { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeEmail.operationId) } },
-    // O 200 desta operação é `SessionResponse`, e não `Me`. Até 29/09/2026 o
-    // código devolvia o perfil: quem abria o link confirmava o e-mail e caía
-    // sem token, com a intenção pendente que a própria descrição do contrato
-    // promete executar em seguida morrendo ali. O argumento inteiro está no
-    // corpo de `confirmarVerificacaoDeEmail`.
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { token } = request.body as { token: string };
       const sessao = await deps.auth.confirmarVerificacaoDeEmail(token, contextoDe(request));
@@ -634,8 +377,6 @@ export function registrarRotasDeIdentidade(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { email } = request.body as { email: string };
       await deps.auth.solicitarRedefinicaoDeSenha(email, contextoDe(request));
-      // SEMPRE 202, exista a conta ou não (critério 2). Qualquer diferença aqui
-      // é um oráculo de existência de e-mail, consultável sem conta nenhuma.
       return reply.status(202).send();
     },
   );
@@ -644,9 +385,6 @@ export function registrarRotasDeIdentidade(
     aplicarHigieneDeTokenNaUrl(reply);
     const { token } = request.params as { token: string };
     await deps.auth.conferirTokenDeRedefinicao(token);
-    // Corpo vazio de propósito: a página só precisa saber se vale mostrar o
-    // formulário. Devolver o e-mail aqui entregaria o endereço a quem tivesse o
-    // link — que é exatamente quem pode não ser o titular.
     return reply.status(200).send({ valid: true });
   });
 
@@ -663,8 +401,6 @@ export function registrarRotasDeIdentidade(
 
   registrarRota(app, rotaDoMeuPerfil, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const { conta } = await autenticado(request, deps);
-    // Duas leituras e nao uma: a foto sai de uma consulta propria, porque so
-    // esta resposta a quer. Ver `FotoDoPerfil` em `ports/identity-repository.ts`.
     const [perfil, foto] = await Promise.all([
       deps.auth.meuPerfil(conta.id),
       deps.auth.minhaFoto(conta.id),
@@ -694,34 +430,7 @@ export function registrarRotasDeIdentidade(
         };
       };
 
-      // `undefined` é "não mexer". A área vem aninhada no contrato e achatada no
-      // banco, e é aqui que a tradução acontece — o repositório não conhece a
-      // forma do JSON e o contrato não conhece a forma da tabela.
-      // A FOTO PRIMEIRO, e numa chamada propria. Duas razoes:
-      //
-      // 1. A confirmacao do envio tem de acontecer na MESMA transacao em que
-      //    `users.photo_image_id` muda, senao um envio confirmado poderia
-      //    apontar para uma conta que nao foi atualizada -- e e a confirmacao
-      //    que tira a linha da varredura de envios vencidos.
-      // 2. A foto e a unica recusa possivel deste corpo (`upload_not_usable`).
-      //    Recusa-la ANTES de gravar os outros campos evita um `PATCH` que
-      //    muda o telefone e devolve 400 sobre a imagem.
-      //
-      // `undefined` nao mexe; `null` tira a foto; `upload_id` troca.
       if (corpo.photo_upload_id !== undefined) {
-        // A TRAVA DO NOME ANTES DA FOTO, e a ordem e o conserto.
-        //
-        // A trava ("nao atualiza o cadastro sem nome", cliente 18/10/2026)
-        // morava so em `atualizarMeuPerfil`, que roda DEPOIS e em outra
-        // transacao. O efeito medido na pilha de integracao em 18/10/2026: um
-        // `PATCH /v1/me` com so `photo_upload_id` -- que e exatamente o que o
-        // app manda ao subir a foto do perfil -- de uma conta sem nome
-        // CONFIRMAVA a foto, comitava, e depois devolvia
-        // `400 display_name required`. O `GET /v1/me` seguinte ja trazia
-        // `photo.status: "processing"`: o app dizia "nao deu" e a foto estava
-        // gravada. Em homologacao ha 2 contas sem nome, de 7.
-        //
-        // Cobrada aqui, nada e escrito e a resposta nomeia o campo a preencher.
         await deps.auth.exigirNomeJaCadastrado(conta.id, corpo.display_name);
         await deps.auth.trocarMinhaFoto(conta.id, corpo.photo_upload_id, contextoDe(request));
       }
@@ -731,14 +440,6 @@ export function registrarRotasDeIdentidade(
         conta.id,
         {
           ...(corpo.display_name === undefined ? {} : { displayName: corpo.display_name }),
-          // O APELIDO, na edição do perfil (cliente, 18/10/2026).
-          //
-          // `undefined` é "não mexer", como todo campo deste `PATCH`. **Não há
-          // caminho para apagar**: `MeUpdate.handle` não é `nullable` no
-          // contrato e `CamposDoPerfil.handle` não aceita `null` -- soltar um
-          // apelido de volta ao pool é o furo do plano 4-C.7. A string vazia
-          // cai no `code: 'required'` de `verificarApelido`, e não em
-          // "apagar", que é a diferença que importa aqui.
           ...(corpo.handle === undefined ? {} : { handle: corpo.handle as string }),
           ...(corpo.phone_e164 === undefined ? {} : { phoneE164: corpo.phone_e164 }),
           ...(area?.postal_code === undefined ? {} : { referencePostalCode: area.postal_code }),
@@ -768,10 +469,6 @@ export function registrarRotasDeIdentidade(
 
       await deps.auth.solicitarTrocaDeEmail(conta.id, new_email, contextoDe(request));
 
-      // 202 SEMPRE, e o corpo é vazio nos dois ramos. Endereço livre, endereço
-      // que já tem dono e endereço igual ao atual produzem a mesma resposta: é
-      // o que impede esta rota de virar oráculo de existência de e-mail para
-      // qualquer pessoa com uma sessão.
       return reply.status(202).send();
     },
   );
@@ -784,15 +481,7 @@ export function registrarRotasDeIdentidade(
       const corpo = request.body as {
         email: string;
         password: string;
-        // `unknown` e não `string`, mesmo com `required` no schema: esta rota é
-        // pública e o serviço é quem confere. Declarar `string` aqui faria o
-        // tipo afirmar o que só o schema garante, e o dia em que o schema
-        // mudasse a afirmação continuaria de pé sem ninguém olhar.
         birth_date?: unknown;
-        // `unknown` pela mesma razão de `birth_date`, e **OPCIONAL** porque o
-        // contrato não o declara em `required`: ausente significa "não escolhi
-        // apelido", e a conta nasce sem ele, com a tela caindo para o nome de
-        // exibição.
         handle?: unknown;
         display_name?: string;
         accepted_terms_version?: string;
@@ -801,14 +490,7 @@ export function registrarRotasDeIdentidade(
         {
           email: corpo.email,
           password: corpo.password,
-          // Repassada CRUA. Quem confere forma, futuro, absurdo e os 16 anos é
-          // `verificarDataDeNascimento`, no serviço — a rota não decide nada
-          // sobre idade, e não há segunda conta de aniversário em lugar nenhum.
           birthDate: corpo.birth_date,
-          // Repassado CRU. Quem confere faixa, forma e reservadas é
-          // `verificarApelido`, no serviço; quem decide disponibilidade é o
-          // índice de `handles`, na escrita. A rota não decide nada sobre
-          // apelido, e não há consulta de disponibilidade em lugar nenhum.
           handle: corpo.handle,
           displayName: corpo.display_name,
           acceptedTermsVersion: corpo.accepted_terms_version,
@@ -832,7 +514,6 @@ export function registrarRotasDeIdentidade(
         {
           email: corpo.email,
           password: corpo.password,
-          // A escolha nasce desmarcada. Ausente é falso, nunca verdadeiro.
           staySignedIn: corpo.stay_signed_in === true,
         },
         contextoDe(request),
@@ -863,21 +544,7 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  /**
-   * Sair **deste** aparelho (ADR-0002, emenda 1).
-   *
-   * O `schema` não é enfeite. Enquanto ele não estava aqui, o contrato declarava
-   * a operação sem corpo e este manipulador lia `corpo.refresh_token` assim
-   * mesmo: quem seguisse o contrato não mandava campo nenhum, nada era revogado,
-   * e a resposta era 204 — sucesso indistinguível do nada. Com `corpoDe`, o
-   * corpo vem da própria especificação, e o dia em que alguém apagar o
-   * `requestBody` de lá esta rota deixa de subir, com o motivo escrito, em vez
-   * de voltar a mentir em silêncio.
-   *
-   * O corpo é lido como `{ refresh_token: string }`, sem `??`, porque o schema
-   * acima já recusou a chamada sem ele com 400 — e porque `auth.sair` exige a
-   * cadeia: sem ela não há família a revogar.
-   */
+  /** Sair **deste** aparelho (ADR-0002, emenda 1). */
   registrarRota(
     app,
     rotaDeLogout,
@@ -893,12 +560,7 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  /**
-   * Sem corpo, e é a decisão. A conta que cai é a do token — pedir um
-   * identificador no corpo criaria um campo que alguém um dia confiaria, e
-   * derrubar a sessão de outra pessoa passaria a depender de uma conferência
-   * que pode ser esquecida (ADR-0021).
-   */
+  /** Sem corpo, e é a decisão. */
   registrarRota(
     app,
     rotaDeLogoutTotal,
@@ -926,8 +588,6 @@ export function registrarRotasDeIdentidade(
         corpo.scope,
         contextoDe(request),
       );
-      // A janela em claro sai daqui e de lugar nenhum mais: `server.ts` já
-      // esconde `x-reauth-token` do log, e ela não vai para a trilha.
       return reply.status(200).send({
         reauth_token: janela.reauthToken,
         expires_in: janela.expiresIn,
@@ -943,19 +603,11 @@ export function registrarRotasDeIdentidade(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const sessao: Autenticado = await autenticado(request, deps);
       await deps.auth.excluirMinhaConta(sessao, contextoDe(request));
-      // 202, e não 204: o contrato promete exclusão lógica imediata e expurgo
-      // definitivo em 30 dias. Responder 204 prometeria um efeito que só
-      // termina daqui a um mês.
       return reply.status(202).send();
     },
   );
 
-  /**
-   * O token viaja no caminho porque vem de um link de e-mail, e isso é
-   * inevitável. O que dá para impedir é que ele seja indexado, que vaze pelo
-   * `Referer` e que fique em cache intermediário — mesma higiene da rota de
-   * conferência de redefinição.
-   */
+  /** O token viaja no caminho porque vem de um link de e-mail, e isso é inevitável. */
   registrarRota(
     app,
     rotaDoNaoFuiEu,
@@ -992,14 +644,6 @@ export function registrarRotasDeIdentidade(
 /**
  * O verificador que `criarServidor` instala, e que `registrarRota` chama em toda
  * rota que declara `reauthScope`.
- *
- * Ele mora aqui, e não em `shared/http`, porque conferir a janela exige o
- * serviço de identidade. O que `shared/http` conhece é a **assinatura**, e é
- * assim que a dependência anda na direção certa.
- *
- * `autenticado` é o memo por requisição: a conferência da janela precisa da
- * conta e do `jti`, e o manipulador da rota vai precisar dos mesmos. Sem o
- * memo, toda operação destrutiva verificaria RS256 e leria `users` duas vezes.
  */
 export function criarVerificadorDeReautenticacao(
   deps: DependenciasDasRotas,
@@ -1007,26 +651,21 @@ export function criarVerificadorDeReautenticacao(
   return async (request: FastifyRequest, escopo: ReauthScope): Promise<void> => {
     const sessao: Autenticado = await autenticado(request, deps);
     const cabecalho = request.headers[CABECALHO_DE_REAUTENTICACAO];
-    // Cabeçalho repetido chega como lista. Concatenar o que o cliente mandou
-    // duas vezes produziria um valor que não é nenhum dos dois; a primeira
-    // ocorrência é o que o resto da pilha também leria.
     const apresentado = Array.isArray(cabecalho) ? cabecalho[0] : cabecalho;
     await deps.auth.consumirReautenticacao(sessao, apresentado, escopo, contextoDe(request));
   };
 }
 
 /**
- * Rotas de descoberta, fora do prefixo `/v1`: quem as consulta não é o nosso
- * app, e sim o sistema operacional ou uma biblioteca, que espera encontrá-las na
- * raiz do host da API.
+ * Rotas de descoberta, fora do prefixo `/v1`: quem as consulta não é o nosso app,
+ * e sim o sistema operacional ou uma biblioteca, que espera encontrá-las na raiz
+ * do host da API.
  */
 export function registrarRotasDeDescoberta(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotas,
 ): void {
   registrarRota(app, rotaDoJwks, {}, async (_request: FastifyRequest, reply: FastifyReply) => {
-    // Cacheável por 1 hora, e quem consome deve rebuscar quando encontrar um
-    // `kid` desconhecido, em vez de recusar.
     return reply
       .header('Cache-Control', 'public, max-age=3600')
       .send({ keys: deps.assinador.jwks() });

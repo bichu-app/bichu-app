@@ -1,19 +1,4 @@
-/**
- * Idempotência por cabeçalho `Idempotency-Key` (BICHUS-31, critérios 11 a 13).
- *
- * Três regras, e a segunda é a que costuma faltar:
- *
- * 1. Mesma chave, mesmo dono, mesma rota, mesmo corpo, dentro de 24 h: devolve a
- *    resposta original **sem executar de novo**.
- * 2. Mesma chave com corpo diferente, ou com outro dono, ou em outra rota: a
- *    requisição é **recusada**. Chave reaproveitada para outra coisa é erro, não
- *    atalho — e devolver o corpo gravado só pela igualdade da chave entregaria a
- *    resposta de um usuário a outro que adivinhou o UUID.
- * 3. A reserva é feita **antes** de executar, com `ON CONFLICT DO NOTHING`. Duas
- *    tentativas simultâneas da mesma chave não podem executar as duas: a que
- *    perde a corrida espera o resultado da que ganhou, em vez de repetir o
- *    efeito.
- */
+/** Idempotência por cabeçalho `Idempotency-Key` (BICHUS-31, critérios 11 a 13). */
 import { sql } from 'kysely';
 import type { RegistradorDeRotas } from './registrar-rota.js';
 import type { Db } from '../db/pool.js';
@@ -25,15 +10,8 @@ import { AppError, problemas } from './errors.js';
 const VALIDADE_EM_HORAS = 24;
 
 /**
- * A reserva grava `response_status = NULL`, e não um número de fora do domínio
- * da coluna.
- *
- * A versão anterior usava `0` como "ainda não há resposta". Zero não é status
- * HTTP, a coluna tem `CHECK (response_status BETWEEN 100 AND 599)`, e toda
- * chamada a uma rota idempotente terminava em 500 na reserva — antes de chegar
- * ao efeito. O defeito atravessou a suíte porque ela exercita esta camada contra
- * um dobre em memória, que não tem restrição nenhuma (migração
- * 20260917000008).
+ * A reserva grava `response_status = NULL`, e não um número de fora do domínio da
+ * coluna.
  */
 const RESERVADA = null;
 
@@ -44,9 +22,9 @@ export interface RespostaGravada {
 
 export interface Idempotencia {
   /**
-   * Devolve a resposta original quando a chave já foi concluída, `undefined`
-   * quando é a primeira vez (e a reserva ficou registrada em nome de quem
-   * chamou), e lança quando a chave está sendo usada para outra coisa.
+   * Devolve a resposta original quando a chave já foi concluída, `undefined` quando
+   * é a primeira vez (e a reserva ficou registrada em nome de quem chamou), e lança
+   * quando a chave está sendo usada para outra coisa.
    */
   reservar(entrada: EntradaDeIdempotencia): Promise<RespostaGravada | undefined>;
   concluir(chave: string, status: number, corpo: unknown): Promise<void>;
@@ -71,15 +49,8 @@ function conflitoDeChave(): AppError {
 }
 
 /**
- * A consulta da reserva, isolada para que o **SQL gerado** possa ser conferido
- * sem banco.
- *
- * Existe porque o defeito que ela carrega não aparece em nenhum outro lugar: a
- * ordem de `.where()` e `.doUpdateSet()` muda o SQL de `do update ... where`
- * para `on conflict (key) where ... do update`, o Postgres aceita as duas
- * formas, e só a primeira restringe o `UPDATE`. Com a segunda, toda segunda
- * tentativa executa o efeito de novo — e nada acusa, porque o dobre em memória
- * da suíte não gera SQL nenhum.
+ * A consulta da reserva, isolada para que o **SQL gerado** possa ser conferido sem
+ * banco.
  */
 export function montarReservaDeIdempotencia(
   db: Db,
@@ -99,17 +70,6 @@ export function montarReservaDeIdempotencia(
       expires_at: expiresAt,
     })
     .onConflict((oc) =>
-      // Reaproveita a linha quando ela já venceu: a validade é de 24 h, e uma
-      // chave vencida é uma chave livre.
-      //
-      // **A ordem das chamadas decide o SQL, e a errada desliga a idempotência
-      // inteira em silêncio.** `.where()` ANTES de `.doUpdateSet()` vira o
-      // predicado de índice do `ON CONFLICT`, que é outra coisa: o Postgres
-      // aceita, a condição deixa de restringir o `UPDATE`, e a linha é
-      // sobrescrita mesmo com a chave viva e já concluída. O efeito observável é
-      // a fila offline avisando o tutor duas vezes. DEPOIS de `.doUpdateSet()`,
-      // a mesma chamada vira `do update set ... where ...`, que é o que se quer.
-      // Conferido por `idempotency.test.ts`, sobre o SQL compilado.
       oc
         .column('key')
         .doUpdateSet({
@@ -147,8 +107,6 @@ export function criarIdempotencia(db: Db): Idempotencia {
         .executeTakeFirst();
 
       if (existente === undefined) {
-        // A linha sumiu entre a tentativa e a leitura (expurgo concorrente). Não
-        // inventamos resultado: o cliente repete e a próxima tentativa reserva.
         throw problemas.interno();
       }
       if (
@@ -159,9 +117,6 @@ export function criarIdempotencia(db: Db): Idempotencia {
         throw conflitoDeChave();
       }
       if (existente.response_status === RESERVADA) {
-        // A primeira tentativa ainda está em curso. Recusar é melhor do que
-        // executar em paralelo: o efeito duplicado é justamente o que a chave
-        // existe para impedir.
         throw problemas.limiteDeChamadas(1);
       }
       return { status: existente.response_status, body: existente.response_body };
@@ -179,20 +134,13 @@ export function criarIdempotencia(db: Db): Idempotencia {
       await db
         .deleteFrom('idempotency_keys')
         .where('key', '=', chave)
-        // Só apaga o que ainda está reservado. Uma chave já concluída não pode
-        // ser liberada por um `catch`: apagá-la faria o reenvio executar de novo
-        // o efeito que ela existe para não repetir.
         .where('response_status', 'is', null)
         .execute();
     },
   };
 }
 
-/**
- * Forma canônica do corpo para o hash: chaves ordenadas em todos os níveis.
- * Sem isso, o mesmo pedido com os campos em outra ordem produziria outro hash e
- * a segunda tentativa da fila offline seria recusada como se fosse outra coisa.
- */
+/** Forma canônica do corpo para o hash: chaves ordenadas em todos os níveis. */
 export function canonicalizarCorpo(valor: unknown): string {
   if (valor === null || typeof valor !== 'object') return JSON.stringify(valor ?? null);
   if (Array.isArray(valor)) return `[${valor.map(canonicalizarCorpo).join(',')}]`;
@@ -203,22 +151,12 @@ export function canonicalizarCorpo(valor: unknown): string {
   return `{${entradas.join(',')}}`;
 }
 
-// ---------------------------------------------------------------------------
-// LIGACAO COM O CONTRATO
-// ---------------------------------------------------------------------------
-// O que decide se uma rota é idempotente NÃO é o julgamento de quem escreve o
-// handler: é o `Idempotency-Key` declarado na operação em `api/openapi.yaml`.
-// Ligar por julgamento produz o par de defeitos que ninguém vê — rota que
-// promete idempotência no contrato e não a executa, e rota que a executa sem
-// prometer. Aqui a especificação é lida em tempo de execução e a divergência
-// derruba a subida.
-
 const CABECALHO_DE_IDEMPOTENCIA = 'idempotency-key';
 
 /** O contrato declara `Idempotency-Key` nesta operação, e como. */
 export type ExigenciaDeIdempotencia = 'ausente' | 'opcional' | 'obrigatoria';
 
-/** `format: uuid` do contrato. Recusar aqui evita gravar chave que não é chave. */
+/** `format: uuid` do contrato. */
 const FORMATO_DE_CHAVE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parametroResolvido(
@@ -238,8 +176,6 @@ export function exigenciaDeIdempotencia(
 ): ExigenciaDeIdempotencia {
   const operacao = contrato.operacoes.get(operationId);
   if (operacao === undefined) {
-    // Rota que cita um `operationId` que a especificação não tem é rastro
-    // quebrado entre os dois documentos, e não vale como "não declara".
     throw new Error(`Operação fora do contrato: ${operationId}`);
   }
   const parametros = operacao.raw['parameters'];
@@ -274,24 +210,7 @@ export interface PedidoIdempotente {
   /** UUID do usuário, ou o hash da credencial ao portador quando não há conta. */
   readonly donoOuToken: string;
   readonly endpoint: string;
-  /**
-   * Os parâmetros de caminho desta requisição, normalmente `request.params`.
-   *
-   * **Obrigatório, e a obrigatoriedade é o mecanismo.** `endpoint` é o MOLDE da
-   * rota (`POST /pets/:petId/lost-cases`), não a URL: duas requisições para
-   * recursos diferentes têm o mesmo `endpoint`. Sem os valores do caminho no
-   * resumo do corpo, a mesma chave da mesma conta em dois recursos diferentes
-   * devolve a resposta do primeiro dentro do segundo — foi assim em
-   * `openLostCase` e em `cancelTransferByToken`.
-   *
-   * Passar `{}` numa rota com parâmetro não é atalho: `corpoCanonicoDoPedido`
-   * recusa, e a rota deixa de responder até alguém ligar o valor. Uma rota nova
-   * com id no caminho nasce fechada, e não silenciosamente furada.
-   *
-   * Passe o valor **canônico**, não o que chegou na URL, quando a rota tiver uma
-   * forma canônica (a plaquinha com e sem hífen é o mesmo código, e o reenvio da
-   * fila offline precisa casar com a primeira tentativa).
-   */
+  /** Os parâmetros de caminho desta requisição, normalmente `request.params`. */
   readonly parametrosDeCaminho: unknown;
   readonly corpo: unknown;
   readonly agoraEmMilissegundos: number;
@@ -302,14 +221,7 @@ export function parametrosDoEndpoint(endpoint: string): string[] {
   return [...endpoint.matchAll(/:([A-Za-z0-9_]+)/g)].map((achado) => achado[1] as string);
 }
 
-/**
- * A forma canônica que vai para o hash, **com o id do caminho dentro**.
- *
- * A rota sem parâmetro de caminho continua produzindo exatamente o que produzia
- * antes desta função existir. Isso é deliberado: acrescentar envelope onde não
- * há defeito invalidaria chave em voo de `createPet` e de
- * `createStrayFoundReport` sem fechar nada.
- */
+/** A forma canônica que vai para o hash, **com o id do caminho dentro**. */
 export function corpoCanonicoDoPedido(pedido: PedidoIdempotente): string {
   const nomes = parametrosDoEndpoint(pedido.endpoint);
   if (nomes.length === 0) return canonicalizarCorpo(pedido.corpo);
@@ -329,9 +241,6 @@ export function corpoCanonicoDoPedido(pedido: PedidoIdempotente): string {
     caminho[nome] = valor;
   }
   if (faltando.length > 0) {
-    // Defeito de fiação, e ele precisa ser ruidoso. Silenciar aqui devolveria a
-    // resposta de um recurso dentro de outro, que é o defeito que esta função
-    // existe para impedir — e ninguém procura o que acredita já ter.
     throw new Error(
       `Rota idempotente com id no caminho fora da chave: \`${pedido.endpoint}\` não recebeu ` +
         `${faltando.join(', ')} em \`parametrosDeCaminho\`. Sem esses valores, a mesma chave em ` +
@@ -354,36 +263,19 @@ function chaveMalformada(): AppError {
   );
 }
 
-/**
- * Executa o efeito **uma vez por chave**.
- *
- * Isto é o que faltava entre a tabela `idempotency_keys` e as rotas: sem esta
- * função no caminho da requisição, a tabela existe, o adaptador existe, e o
- * segundo envio executa o efeito de novo.
- *
- * `executar` só é chamado quando a reserva foi ganha. Quando ele lança, a
- * reserva é liberada, porque uma tentativa que não produziu efeito não pode
- * bloquear a repetição da chave pelas 24 h seguintes.
- */
+/** Executa o efeito **uma vez por chave**. */
 export async function executarComIdempotencia(
   idempotencia: Idempotencia,
   pedido: PedidoIdempotente,
   executar: () => Promise<RespostaGravada>,
 ): Promise<RespostaGravada> {
   if (pedido.exigencia === 'ausente') {
-    // Defeito de fiação, não de quem chamou: a rota mandou passar por aqui e o
-    // contrato não promete idempotência nela. Silenciar aqui faria a rota
-    // ganhar comportamento que a especificação não declara.
     throw new Error(
       'Rota sem `Idempotency-Key` no contrato passando pela idempotência. ' +
         'Declare o parâmetro na operação ou tire a rota daqui.',
     );
   }
 
-  // ANTES do caminho sem chave, e a ordem é o ponto. Fiação quebrada que só
-  // reprovasse na requisição COM chave deixaria a rota parecer sã enquanto
-  // ninguém mandasse `Idempotency-Key` — e quem manda é a fila offline, que só
-  // aparece no primeiro cliente sem rede, em produção.
   const corpoCanonico = corpoCanonicoDoPedido(pedido);
 
   const bruto = typeof pedido.chaveDoCabecalho === 'string' ? pedido.chaveDoCabecalho.trim() : '';
@@ -414,22 +306,14 @@ export async function executarComIdempotencia(
   return resposta;
 }
 
-// ---------------------------------------------------------------------------
-// O PORTAO DE SUBIDA
-// ---------------------------------------------------------------------------
-
 /** Marca, na própria rota, que ela passa por `executarComIdempotencia`. */
 export interface ConfigDeRotaIdempotente {
   readonly idempotencia?: true;
 }
 
 /**
- * Caminho do Fastify (`/pets/:petId`) na forma do contrato (`/pets/{petId}`),
- * já sem o prefixo da API.
- *
- * Exportado porque a validação de parâmetros precisa da mesma tradução, e duas
- * cópias dela divergiriam em silêncio: um portão passaria a casar rota com
- * operação e o outro não, os dois calados.
+ * Caminho do Fastify (`/pets/:petId`) na forma do contrato (`/pets/{petId}`), já
+ * sem o prefixo da API.
  */
 export function caminhoDoContrato(url: string, prefixoDaApi: string): string {
   const semPrefixo =
@@ -437,17 +321,7 @@ export function caminhoDoContrato(url: string, prefixoDaApi: string): string {
   return semPrefixo.replace(/:([^/]+)/g, '{$1}');
 }
 
-/**
- * Confere, na subida, que rota idempotente e contrato dizem a mesma coisa.
- *
- * Registre ANTES das rotas e chame a função devolvida DEPOIS do registro. Ela
- * reprova nos dois sentidos: operação que declara `Idempotency-Key` e rota que
- * não passa pela idempotência, e rota que passa sem o contrato declarar.
- *
- * Silêncio aqui não é aprovação: quando não há nenhuma rota idempotente
- * registrada, a conferência diz isso com essas palavras no log, em vez de
- * terminar calada como se tivesse conferido alguma coisa.
- */
+/** Confere, na subida, que rota idempotente e contrato dizem a mesma coisa. */
 export function vigiarIdempotenciaDasRotas(
   app: RegistradorDeRotas,
   contrato: Contrato,

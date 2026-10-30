@@ -1,19 +1,6 @@
 /**
- * `GET /v1/connections` **na borda**: o corpo que sai, o 401 sem conta, e a
- * prova de que **não existe endereço para a lista de outra pessoa**.
- *
- * ## Por que este arquivo existe ao lado da suíte de comportamento
- *
- * `lista-das-proprias-conexoes.test.ts` mede a REGRA (quem entra na lista), com
- * a bancada em memória. Este mede a BORDA, e as três coisas que só a borda tem:
- *
- * 1. **o conjunto de chaves do corpo** — e isto não é zelo: *nenhum portão deste
- *    repositório confere o CORPO da resposta*, então a única forma de medir as
- *    chaves é chamar a projeção ou a rota;
- * 2. **o 401 sem conta**, antes de qualquer consulta;
- * 3. **o 404 de um endereço de lista de TERCEIRO**, byte a byte igual ao de um
- *    caminho que não existe. É a metade da decisão de 18/10/2026 que o cliente
- *    **não** emendou em 22/10, e aqui ela se mede no protocolo e não na prosa.
+ * `GET /v1/connections` **na borda**: o corpo que sai, o 401 sem conta, e a prova
+ * de que **não existe endereço para a lista de outra pessoa**.
  */
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
@@ -134,9 +121,9 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
   });
 
   /**
-   * **A ISCA DO CORPO, por conjunto EXATO de chaves.** Uma asserção que só
-   * negasse `connection_ref` passaria no dia em que alguém acrescentasse
-   * `public_ref`, `city` ou `showcase`.
+   * **A ISCA DO CORPO, por conjunto EXATO de chaves.** Uma asserção que só negasse
+   * `connection_ref` passaria no dia em que alguém acrescentasse `public_ref`,
+   * `city` ou `showcase`.
    */
   void it('ISCA: o corpo de cada pessoa e EXATAMENTE os cinco de `PersonSearchResult`', () => {
     const corpo = comoRespostaDaConexao(
@@ -156,7 +143,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
       'pets_count',
       'photo_icon_url',
     ]);
-    // A URL e montada na BORDA: o banco guarda chave de objeto e nunca endereco.
     assert.equal(corpo['photo_icon_url'], 'https://midia.exemplo.test/u/ab/cdef/thumb.jpg');
   });
 
@@ -179,8 +165,8 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
   });
 
   /**
-   * **ISCA do corpo**: sem ela, as duas de cima passariam por a projeção
-   * devolver pouco por acaso — e não por a varredura reconhecer uma chave nova.
+   * **ISCA do corpo**: sem ela, as duas de cima passariam por a projeção devolver
+   * pouco por acaso — e não por a varredura reconhecer uma chave nova.
    */
   void it('ISCA: a varredura de chaves REPROVA um campo acrescentado depois', () => {
     const comVazamento = {
@@ -210,29 +196,7 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     assert.deepEqual(autenticacoes, [], 'o 401 vem ANTES de qualquer consulta');
   });
 
-  /**
-   * **ISCA DE VAZAMENTO ENTRE CONTAS, no protocolo.**
-   *
-   * A emenda do cliente de 22/10/2026 abriu a lista do **próprio dono**. A de
-   * terceiro continua *nunca*, e a prova aqui é que **não existe endereço para
-   * pedi-la**: as quatro formas que alguém tentaria respondem **404**, e o
-   * problema é o MESMO de um caminho inventado. *"Não é seu"* fica
-   * indistinguível de *"não existe"* (ADR-0021), e nunca 403.
-   *
-   * **A comparação é do problema, e NÃO do corpo byte a byte** — e a razão está
-   * medida, não suposta: duas respostas 404 desta casa diferem sempre em dois
-   * campos, e nenhum dos dois conta nada.
-   *
-   * | Campo | Por que ele difere, e por que isso não é oráculo |
-   * |---|---|
-   * | `correlation_id` | é sorteado por requisição; duas chamadas ao MESMO caminho inventado também diferem nele |
-   * | `instance` | é o caminho que **quem chama mandou**, ecoado. Ele não pode contar nada que o cliente não tenha escrito, e o caso abaixo cobra exatamente essa igualdade |
-   *
-   * O que **não** pode diferir é `type`, `title` e `status`: é por aí que um 404
-   * de *"existe, mas não para você"* se distinguiria de um 404 de *"não
-   * existe"*. Era essa a diferença medida byte a byte em outra rota, e é essa
-   * que este caso cobra.
-   */
+  /** **ISCA DE VAZAMENTO ENTRE CONTAS, no protocolo.** */
   void it('ISCA DE VAZAMENTO: nao existe endereco para a lista de OUTRA pessoa', async () => {
     const { app } = await bancada();
     const cabecalhos = { authorization: 'Bearer t' };
@@ -241,9 +205,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     /** O problema sem os dois campos que diferem por desenho. */
     const problemaDe = (corpo: string): Record<string, unknown> => {
       const problema = JSON.parse(corpo) as Record<string, unknown>;
-      // `delete` e nao desestruturacao com descarte: o `eslint` desta casa
-      // reprova variavel atribuida e nao usada, mesmo com prefixo de
-      // sublinhado, e o conserto nao e uma dispensa -- e nao criar a variavel.
       delete problema['correlation_id'];
       delete problema['instance'];
       return problema;
@@ -276,16 +237,12 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
         `o problema de \`${tentativa}\` difere do de um caminho inventado -- e a diferenca ` +
           'conta que aquele endereco significa algo.',
       );
-      // E `instance` ECOA o caminho pedido, e so ele: um `instance` que
-      // apontasse para outro lugar contaria onde aquele endereco "deveria" ser.
       assert.equal((JSON.parse(resposta.body) as { instance?: string }).instance, tentativa);
     }
 
     /**
-     * **ISCA da isca**: duas chamadas ao MESMO caminho inventado também diferem
-     * no corpo byte a byte. Sem isto, a comparação acima pareceria frouxa por
-     * escolha; ela é frouxa porque o corpo inteiro NÃO é comparável — e os dois
-     * campos descartados são exatamente os que variam entre chamadas iguais.
+     * **ISCA da isca**: duas chamadas ao MESMO caminho inventado também diferem no
+     * corpo byte a byte.
      */
     const outraVez = await app.inject({
       method: 'GET',
@@ -302,9 +259,9 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
   });
 
   /**
-   * **A rota não aceita filtro de pessoa**, e o contrato é quem recusa: o vigia
-   * de parâmetros instala o esquema da especificação, e `handle` não está entre
-   * os dois parâmetros declarados (`page` e `limit`).
+   * **A rota não aceita filtro de pessoa**, e o contrato é quem recusa: o vigia de
+   * parâmetros instala o esquema da especificação, e `handle` não está entre os dois
+   * parâmetros declarados (`page` e `limit`).
    */
   void it('a lista nao aceita `handle` nem `q`: nao ha filtro de pessoa', async () => {
     const { app } = await bancada();
@@ -313,9 +270,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
       url: '/v1/connections?handle=bia-vet&q=bia',
       headers: { authorization: 'Bearer t' },
     });
-    // O Fastify descarta o desconhecido em vez de recusar; o que importa e que
-    // ele NAO filtra -- a lista devolve a conexao, e nao "a conexao chamada
-    // bia". Um 200 com o conjunto inteiro prova que o parametro nao tem efeito.
     assert.equal(resposta.statusCode, 200);
     const corpo = JSON.parse(resposta.body) as CorpoDaLista;
     assert.equal(corpo.total, 1);

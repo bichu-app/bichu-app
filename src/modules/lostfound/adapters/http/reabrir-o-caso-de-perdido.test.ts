@@ -1,42 +1,6 @@
 /**
- * `POST /v1/lost-cases/:caseId/reopen` (`reopenLostCase`) — a ROTA que o
- * contrato prometia e que não existia.
- *
- * ## O defeito que este arquivo trava
- *
- * `api/openapi.yaml` promete, na descrição de `closeLostCase`, que *"Encerrar e
- * reversivel por **7 dias**"*, e declara a operação que faz a reversão:
- * `reopenLostCase`, com `200`, `400`, `403` e um `410` cuja descrição é
- * *"Passou dos 7 dias"*. A operação **nunca ganhou rota**: ela era uma linha de
- * `OPERACOES_AINDA_SEM_ROTA` em `rotas-registradas-contra-o-contrato.test.ts`,
- * e o caminho respondia 404.
- *
- * O que isso custava a quem usa: `Encontrei meu pet`, na página do pet, chama
- * `closeLostCase` com `outcome: reunited` num toque. Quem tocasse por engano —
- * numa tela que se abre em pânico — **não tinha desfazer nenhum**, embora o
- * documento prometesse sete dias para desfazer.
- *
- * ## O que cada caso mede, e por que a medida é o STATUS e o CORPO
- *
- * Nenhum portão deste repositório confere o corpo da RESPOSTA: só o corpo da
- * requisição é validado contra a spec. Então os casos abaixo leem o corpo real
- * campo a campo — `status`, `closed_at`, `reopen_deadline` e `resolution` —, e
- * não só o `200`. Olhar só o status é o que deixa passar uma rota que responde
- * certo e grava errado.
- *
- * | caso | mede |
- * |---|---|
- * | dentro da janela | 200, e o caso volta a `open` com as quatro colunas do encerramento em `NULL` |
- * | FORA da janela | 410 com `type` `lost-case-closed`, e **nunca** 404 nem 403 |
- * | caso de OUTRO tutor | 404 `not-found`, e **nunca** 403 (ADR-0021) |
- * | reenvio da fila offline | 200 com o caso aberto, e não 404 |
- * | pet com OUTRO caso aberto | 409 `pet-already-lost`, e não 500 do índice único |
- * | a trilha | `lost_case.reopened`, com o desfecho DESFEITO no metadado |
- *
- * O repositório desta bancada é **derivado do `WHERE` do `UPDATE`** de
- * `kysely-lost-case-repository.ts`, predicado por predicado, e o cabeçalho de
- * `reabrir` lá os lista. Um dublê com um `if` a mais ou a menos faria estes
- * casos medirem o dublê.
+ * `POST /v1/lost-cases/:caseId/reopen` (`reopenLostCase`) — a ROTA que o contrato
+ * prometia e que não existia.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -69,13 +33,7 @@ const AGORA = 1_800_000_000_000;
 const UM_DIA = 24 * 3_600_000;
 const SETE_DIAS = 7 * UM_DIA;
 
-/**
- * O caso ENCERRADO, com o prazo de reabertura que `encerrar` grava.
- *
- * `prazoDaqui` é a distância do prazo até `AGORA`, em milissegundos: positivo é
- * janela aberta, negativo é janela vencida. É o único eixo que os dois primeiros
- * casos movem.
- */
+/** O caso ENCERRADO, com o prazo de reabertura que `encerrar` grava. */
 function casoEncerrado(prazoDaqui: number): CasoGravado {
   return {
     id: CASO,
@@ -101,13 +59,7 @@ interface Bancada {
   readonly trilhado: () => readonly AuditEvent[];
 }
 
-/**
- * O repositório da bancada, DERIVADO do `WHERE` do `UPDATE` real.
- *
- * Os cinco predicados, na ordem em que o SQL os escreve: `id`,
- * `owner_user_id = :dono`, `status <> 'open'`, `reopen_deadline > :agora` e
- * `NOT EXISTS (outro caso aberto do mesmo pet)`. Nada mais, e nada menos.
- */
+/** O repositório da bancada, DERIVADO do `WHERE` do `UPDATE` real. */
 function repositorioDeMemoria(
   inicial: CasoGravado,
   { dono = DONO, petTemOutroCasoAberto = false }: { dono?: UserId; petTemOutroCasoAberto?: boolean } = {},
@@ -122,8 +74,6 @@ function repositorioDeMemoria(
     estadoParaAbertura: naoUsado,
     estadoParaPrevia: naoUsado,
     abrir: naoUsado,
-    // A autorização mora no `WHERE`: dono diferente é `null`, e não um caso
-    // devolvido para alguém comparar depois.
     buscarDoTutor: (caso, quem) =>
       Promise.resolve(caso === guardado.id && quem === dono ? guardado : null),
     atualizarOndeEQuando: naoUsado,
@@ -227,13 +177,9 @@ function bancada(
       concluir: () => Promise.resolve(),
       liberar: () => Promise.resolve(),
     },
-    // O contrato DE VERDADE, e não uma cópia: é dele que `registrarRota` lê o
-    // schema dos parâmetros desta rota.
     contrato: carregarContrato('api/openapi.yaml'),
     clock,
     baseDaWeb: BASE_DA_WEB,
-    // Interruptor das paginas publicas DESLIGADO: e o estado de producao em
-    // 20/10/2026, e nenhum caso deste arquivo fala de `share_url`.
     paginas: paginaNenhumaPublicada,
   });
 
@@ -258,7 +204,6 @@ async function reabrir(
 
 void describe('reopenLostCase: a rota que o contrato prometia', () => {
   void it('ISCA (a) — DENTRO da janela de 7 dias: 200, e o caso volta a `open` sem resto do encerramento', async () => {
-    // Encerrado ontem: faltam seis dias de janela.
     const { app, trilhado } = bancada(casoEncerrado(6 * UM_DIA));
     const { status, corpo } = await reabrir(app, DONO);
     await app.close();
@@ -279,10 +224,6 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
         'rota que responde 200 com o caso ainda encerrado é indistinguível de ' +
         'uma que funcionou, para quem só olha o status.',
     );
-    // As quatro colunas do encerramento. O `CHECK
-    // lost_cases_encerrado_tem_desfecho` RECUSA `status = 'open'` com desfecho
-    // ou `closed_at` preenchidos: um resto aqui não é cosmético, é linha que o
-    // banco não aceita.
     assert.equal(
       corpo['closed_at'],
       null,
@@ -325,7 +266,6 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
   });
 
   void it('ISCA (b) — FORA da janela: 410 pelo motivo certo, e NUNCA 404 nem 403', async () => {
-    // Encerrado há oito dias: a janela de sete venceu ontem.
     const { app, trilhado } = bancada(casoEncerrado(-UM_DIA));
     const { status, corpo } = await reabrir(app, DONO);
     await app.close();
@@ -346,17 +286,12 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
         'slug fora dela é exatamente o que aquela lista existe para impedir.',
     );
     assert.equal(corpo['status'], 410);
-    // O motivo CERTO, e não um 410 qualquer: o texto precisa dizer o prazo, que
-    // é a informação que falta a quem chegou tarde.
     assert.match(
       String(corpo['detail']),
       /7 dias/u,
       'REPROVA: o corpo do 410 não diz qual é o prazo. Quem chegou no oitavo dia ' +
         'precisa saber que existiam sete, e qual é a saída.',
     );
-    // A ausência é parte da medida: `register_stray_found_report` é a saída do
-    // 410 PÚBLICO (quem abriu um cartaz). Aqui quem recebe é o tutor do próprio
-    // caso, e mandá-lo registrar um achado avulso do pet dele é a saída errada.
     assert.equal(
       corpo['next_action'],
       undefined,
@@ -370,8 +305,6 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
   });
 
   void it('ISCA (c) — caso de OUTRO tutor: 404, e NUNCA 403 (ADR-0021)', async () => {
-    // A janela está ABERTA de propósito: o que recusa aqui é o dono, e não o
-    // prazo. Com o prazo vencido o caso passaria por acidente, medindo o 410.
     const { app } = bancada(casoEncerrado(6 * UM_DIA));
     const { status, corpo } = await reabrir(app, OUTRO_TUTOR);
     await app.close();
@@ -397,11 +330,6 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
       'REPROVA: o 404 saiu com outro `type`. O app decide por `type`.',
     );
 
-    // **A GUARDA CONTRA ESTE CASO PASSAR POR VAZIO.** Sem ela, uma rota que não
-    // existe produz 404 para todo mundo e este caso fica VERDE medindo nada —
-    // foi exatamente o que a isca (a) desligada mostrou. A mesma bancada, com o
-    // DONO, tem de responder 200: o 404 de cima só vale como medida se o
-    // caminho funcionar para quem é dono.
     const comODono = bancada(casoEncerrado(6 * UM_DIA));
     const doDono = await reabrir(comODono.app, DONO);
     await comODono.app.close();
@@ -450,7 +378,6 @@ void describe('reopenLostCase: a rota que o contrato prometia', () => {
   });
 
   void it('a rota desta bancada é a `reopenLostCase` do contrato, em `/reopen`', () => {
-    // Guarda contra a bancada passar a medir outra rota.
     assert.equal(rotaDeReabertura.operationId, 'reopenLostCase');
     assert.equal(rotaDeReabertura.method, 'post');
     assert.equal(rotaDeReabertura.path, '/lost-cases/:caseId/reopen');

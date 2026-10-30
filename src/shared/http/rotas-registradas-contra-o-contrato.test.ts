@@ -1,27 +1,4 @@
-/**
- * Todas as rotas declaradas no código, conferidas contra o contrato.
- *
- * `vigiarParametrosDasRotas` derruba a **subida** quando uma rota registrada não
- * tem operação no contrato, ou quando uma operação pode recusar um parâmetro e
- * não declara 400. Isso é o comportamento certo, e é tarde demais para ser a
- * única rede: a subida acontece num contêiner, e o erro aparece como um serviço
- * que não sobe, num log que alguém precisa ir ler.
- *
- * Aqui a mesma conferência roda na suíte, sobre **todas** as `defineRoute` do
- * repositório, sem banco, sem servidor e sem Docker. Rota nova que nasça fora do
- * contrato reprova em segundos, na máquina de quem a escreveu.
- *
- * A lista de módulos abaixo é a única parte manual, e ela tem guarda própria: o
- * último caso confere que o número de rotas encontradas aqui bate com o número
- * de `defineRoute` que existem em `src/`. Um módulo novo que não entre na lista
- * reprova, em vez de passar despercebido — que é exatamente o modo de falhar de
- * uma lista escrita à mão.
- *
- * O que cada caso confere: método e caminho, o 400 de parâmetro, o escopo de
- * reautenticação e — desde 22/09 — o **teto de chamada**, entrada por entrada.
- * O do teto tem cabeçalho próprio, no corpo do caso, com o motivo de ele não ser
- * tautologia e com o risco que ele deliberadamente não cobre.
- */
+/** Todas as rotas declaradas no código, conferidas contra o contrato. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -34,8 +11,6 @@ import { _decisaoDeStatus } from './validacao-de-parametros.js';
 import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
 
 import * as identidade from '../../modules/identity/adapters/http/routes.js';
-// BICHUS-301. A credencial digital (passkey), em modulo proprio: as seis
-// operacoes sao uma frente inteira, e `routes.js` ja tem mil linhas.
 import * as passkey from '../../modules/identity/adapters/http/passkey-routes.js';
 import * as localizacao from '../../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
 import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
@@ -74,109 +49,48 @@ import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-p
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import * as enderecoGuardado from '../../modules/tags/adapters/http/endereco-guardado-routes.js';
 import * as enderecoDoPet from '../../modules/tags/adapters/http/endereco-do-pet-routes.js';
-// 18/10/2026. A fila de moderacao do painel.
 import * as moderacaoAdministrativa from '../../modules/moderation/adapters/http/admin-moderation-routes.js';
 import * as caixaDeNotificacoes from '../../modules/notifications/adapters/http/caixa-de-notificacoes-routes.js';
 import * as contadoresDeSecao from '../../modules/sections/adapters/http/section-counter-routes.js';
-// A DUVIDA DE AJUDA do menu do usuario (29/10/2026).
 import * as ajuda from '../../modules/support/adapters/http/help-request-routes.js';
-// A FILA DAS DUVIDAS no painel (29/10/2026): a porta de saida da de cima.
 import * as filaDeAjuda from '../../modules/support/adapters/http/admin-help-request-routes.js';
 import * as comunicadosAdministrativos from '../../modules/notifications/adapters/http/admin-comunicado-routes.js';
 import * as seguranca from '../../modules/safety/adapters/http/safety-routes.js';
-// 19/10/2026. O veredito de versao do aplicativo (`tags: [ops]`), ao lado da
-// sonda e deliberadamente separado dela.
 import * as vereditoDeVersao from '../../modules/app-release/adapters/http/version-status-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
 const MODULOS: readonly Record<string, unknown>[] = [
   identidade,
-  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem cobra:
-  // sem esta linha ele reprova contando `defineRoute` no disco.
   passkey,
   localizacao,
   pets,
   referencia,
   midia,
   casos,
-  // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
   casoPublico,
-  // A listagem publica de perdidos: a operacao saiu de
-  // `OPERACOES_AINDA_SEM_ROTA` no mesmo commit que trouxe esta linha.
   perdidosPublicos,
   perfilPublico,
-  // A VITRINE DE FOTOS DO USUARIO (18/10/2026). Modulo novo entra AQUI, e o
-  // terceiro caso deste arquivo e quem cobra: sem esta linha ele reprova
-  // contando `defineRoute` no disco -- e foi o que ele fez.
   vitrineDeFotos,
-  // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
-  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   achados,
   tags,
   conversas,
-  // BICHUS-41. As seis operações de `finderToken`, em dois módulos.
   conversaDoAchador,
   avisoDoAchador,
-  // BICHUS-66. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
-  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   transferencias,
   webhook,
   aparelhos,
-  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
-  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   diretorio,
-  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
-  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   vitrine,
-  // BICHUS-259. A sessao administrativa, primeira familia de `/v1/admin`.
   sessaoAdministrativa,
-  // BICHUS-266/267. A escrita administrativa da Loja, dentro da guarda do
-  // prefixo /v1/admin.
   lojaAdministrativa,
-  // ADR-0025. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
-  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   rede,
-  // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
-  // prefixo /v1/admin.
   redeAdministrativa,
-  // FATIA F (18/10). A conexao entre pessoas, SIMETRICA, com aceite. Modulo
-  // novo entra AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha
-  // ele reprova contando `defineRoute` no disco -- foi exatamente assim que a
-  // ausencia dela apareceu, na primeira execucao da suite desta fatia.
   conexoes,
-  // FATIA G (19/10). O perfil de OUTRA pessoa, pelo apelido. Modulo novo entra
-  // AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha
-  // um deles reprova contando `defineRoute` no disco (175 contra 176) e o
-  // outro reprova dizendo que `getPersonProfile` e operacao do contrato sem
-  // rota -- os dois reprovaram, exatamente assim, na primeira execucao da
-  // suite desta fatia.
   pessoas,
-  // OS TRES CAMINHOS DE CONEXAO (20/10). O CONVITE do proprio perfil -- emitir e
-  // revogar --, que alimenta o link do WhatsApp e o QR. Arquivo novo entra AQUI,
-  // e os dois ultimos casos deste arquivo sao quem cobra: sem esta linha um
-  // deles reprova contando `defineRoute` no disco e o outro reprova listando
-  // `issueConnectionInvite` e `revokeConnectionInvite` como operacao do
-  // contrato sem rota.
   convites,
-  // OS TRES CAMINHOS DE CONEXAO (20/10). A BUSCA DE PESSOAS, com os freios do
-  // cliente. Arquivo novo entra AQUI, pela mesma razao das linhas acima --
-  // `searchPeople` reprovaria como operacao do contrato sem rota.
-  //
-  // `resolveConnectionInvite` NAO precisa de linha propria: ela e declarada em
-  // `person-profile-routes.ts`, que ja esta em `pessoas`.
   buscaDePessoas,
-  // O MURAL (20/10). A publicacao do usuario e a linha do tempo. Modulo novo
-  // entra AQUI, e os dois ultimos casos deste arquivo sao quem cobra: sem esta
-  // linha um deles reprova contando `defineRoute` no disco (181 contra 186) e o
-  // outro reprova listando as CINCO operacoes do Mural como operacao do
-  // contrato sem rota -- os dois reprovaram, exatamente assim, na primeira
-  // execucao da suite desta fatia.
   mural,
-  // 17-18/10. As seis familias que entraram com a fatia do diretorio, da
-  // plaquinha e da busca de CEP. Modulo novo entra AQUI, e o ultimo caso deste
-  // arquivo e quem cobra: sem estas linhas ele reprova contando `defineRoute`
-  // no disco -- foi exatamente assim que a ausencia delas apareceu.
   cep,
   sugestaoDoDiretorio,
   diretorioAdministrativo,
@@ -184,111 +98,38 @@ const MODULOS: readonly Record<string, unknown>[] = [
   pedidoDePlaquinha,
   plaquinhasAdministrativas,
   enderecoGuardado,
-  // O ENDERECO DE ENTREGA DO PET (cliente, 27/10/2026: *"endereco um por
-  // pet"*), que SUPERA a decisao de 21/10/2026 que criou o modulo de cima. As
-  // duas ficam na lista: o endereco da conta nao foi apagado (decisao dele de
-  // 26/10/2026, *"nao apague nada"*), ele perdeu o papel -- nenhum pedido de
-  // plaquinha le de la.
   enderecoDoPet,
   moderacaoAdministrativa,
-  // FATIA E da frente de comunidade: bloquear e denunciar. Modulo novo entra
-  // AQUI, e o terceiro caso deste arquivo e quem cobra -- sem esta linha ele
-  // reprova contando `defineRoute` no disco.
   seguranca,
   saude,
-  // 18/10/2026. A caixa de notificacoes (5 rotas) e o comunicado (3).
   caixaDeNotificacoes,
-  // 20/10/2026. Os contadores das abas `Pets` e `Rede` (2 rotas). Modulo novo
-  // entra AQUI: sem esta linha o ultimo caso deste arquivo reprova contando
-  // `defineRoute` no disco, e o primeiro reprova por operacao do contrato sem
-  // rota -- os dois acusaram a ausencia na primeira execucao da suite.
   contadoresDeSecao,
-  // A DUVIDA DE AJUDA (29/10/2026). Modulo novo entra AQUI, e o terceiro caso
-  // deste arquivo e quem cobra: sem esta linha ele reprova contando
-  // `defineRoute` no disco.
   ajuda,
   filaDeAjuda,
   comunicadosAdministrativos,
-  // 19/10/2026. A politica de versao minima do aplicativo. Modulo novo entra
-  // AQUI, e o ultimo caso deste arquivo e quem cobra: sem esta linha ele
-  // reprova contando `defineRoute` no disco -- foi exatamente assim que a
-  // ausencia dela apareceu, na primeira execucao da suite desta historia.
   vereditoDeVersao,
 ];
 
 /**
  * As operacoes de `/admin/` que o contrato ja declara e que ainda nao tem rota
  * (ADR-0027: a `Loja`, a `Rede` e a intencao de envio de imagem sao de outras
- * fatias). A lista e EXATA nos dois sentidos, e e ela que torna o caso de baixo
- * verificavel: operacao administrativa nova no contrato sem rota e fora daqui
- * reprova; operacao daqui que ganhou rota e continua listada reprova tambem.
- * Quem implementa uma delas tira a linha no mesmo commit.
+ * fatias).
  */
 const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
-  // Vazia desde BICHUS-273/292: a `Loja` e a intencao de envio de imagem sairam
-  // com BICHUS-266/267, e a `Rede` e a fila de pedidos com esta fatia. Operacao
-  // administrativa nova no contrato sem rota entra aqui, no mesmo commit.
 ];
 
-/**
- * As operacoes que a BORDA serve, e nao a aplicacao. Nao sao divida: elas
- * respondem 200 em producao, por arquivo estatico no Caddy
- * (`infra/caddy/Caddyfile`, blocos `handle /.well-known/...`, servindo
- * `infra/caddy/well-known/`). Nao existe `defineRoute` para elas porque nao
- * deve existir: o alcance do deep link nao pode depender de a API estar de pe.
- *
- * A lista e EXATA nos dois sentidos, como a de baixo.
- */
+/** As operacoes que a BORDA serve, e nao a aplicacao. */
 const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
   'wellKnownAssetLinks',
   'wellKnownAppleAppSiteAssociation',
 ];
 
-/**
- * As operacoes que o contrato declara e que NAO TEM CODIGO NENHUM.
- *
- * Esta lista e o inventario de uma divida, e nao uma dispensa: cada linha e uma
- * operacao que o contrato promete a quatro clientes (app, backoffice, site e
- * quem le a spec) e que responde 404. Ela existe porque o caso de baixo passou
- * a cobrir TODAS as rotas, e nao so as de `/admin/` -- antes disso, declaracao
- * sem codigo fora de `/admin/` passava calada, e foi assim que as seis rotas do
- * achador (BICHUS-41) ficaram no contrato sem handler.
- *
- * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
- * duas delas servidas pela borda (a lista acima), sobrando 11. Cinco delas
- * ganharam rota depois (as tres do caso de perdido e as duas da conversa do lado
- * com conta), e a divida esta em SEIS. Com `reopenLostCase`, que o contrato
- * prometia como reversao por 7 dias e nunca ganhou rota, a divida esta em
- * CINCO.
- *
- * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
- * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
- * ganhou rota e continua listada reprova tambem. Quem implementa uma delas tira
- * a linha no mesmo commit. Quem quer a linha fora sem implementar precisa
- * tirar a operacao DO CONTRATO -- que e decisao do cliente, e nao de quem
- * mexe neste arquivo.
- */
+/** As operacoes que o contrato declara e que NAO TEM CODIGO NENHUM. */
 const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   'requestDataExport',
   'updatePetPublicProfile',
   'revokePetTag',
-  // `updateLostCase`, `resendLostCaseAlert`, `listLostCaseCandidates`,
-  // `blockConversation` e `reportConversation` SAIRAM desta lista: as cinco
-  // ganharam rota no commit que furou o laco central do produto (o tutor podia
-  // DECIDIR sobre um candidato que nao tinha como ver, e so o achador tinha
-  // bloqueio e denuncia). Quem implementa uma linha daqui tira a linha no mesmo
-  // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
-  // `reopenLostCase` SAIU desta lista: ela ganhou rota
-  // (`rotaDeReabertura`, em `lost-case-routes.ts`) no commit que fechou o
-  // desfazer do encerramento. O contrato prometia, em `closeLostCase`, que
-  // "encerrar e reversivel por 7 dias" e nomeava a operacao -- e ela respondia
-  // 404. Quem implementa uma linha daqui tira a linha no mesmo commit, e e
-  // esta lista exata nos dois sentidos que cobra o contrario.
   'snoozeLostCaseReminder',
-  // `listPublicLostPets` SAIU desta lista: ela ganhou rota
-  // (`listagem-publica-de-perdidos-routes.ts`) no commit que encheu a aba
-  // `Pets`, que era a tela em que o aplicativo abre e que dizia "a lista de
-  // pets perdidos esta em construcao".
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {
@@ -306,19 +147,12 @@ function rotasDeclaradas(): RouteDefinition[] {
   return MODULOS.flatMap((modulo) => Object.values(modulo).filter(ehRota));
 }
 
-/** `/pets/:petId` na forma do contrato. Mesma tradução de `caminhoDoContrato`. */
+/** `/pets/:petId` na forma do contrato. */
 function comoNoContrato(caminho: string): string {
   return caminho.replace(/:([^/]+)/g, '{$1}');
 }
 
-/**
- * Os campos que uma entrada de `x-rate-limit` pode ter no contrato.
- *
- * `note` e o unico ignorado, e e ignorado NOMEADAMENTE: ele e prosa para quem
- * le o documento (por exemplo "SEC-003, o desafio e verificado ANTES da consulta
- * de unicidade") e nao tem contrapartida em `RateLimitEntry`. Campo novo que
- * apareca aqui reprova em vez de ser comparado contra nada.
- */
+/** Os campos que uma entrada de `x-rate-limit` pode ter no contrato. */
 const CAMPOS_DA_ENTRADA_DO_CONTRATO: ReadonlySet<string> = new Set([
   'dimension',
   'counts',
@@ -330,7 +164,7 @@ const CAMPOS_DA_ENTRADA_DO_CONTRATO: ReadonlySet<string> = new Set([
   'note',
 ]);
 
-/** A forma comparavel de uma entrada de teto. Os dois lados chegam nela. */
+/** A forma comparavel de uma entrada de teto. */
 interface EntradaComparavel {
   readonly dimension: readonly unknown[];
   readonly counts: unknown;
@@ -341,21 +175,7 @@ interface EntradaComparavel {
   readonly onExceed: unknown;
 }
 
-/**
- * A entrada do contrato na forma comparavel.
- *
- * O contrato escreve `on_exceed` e `applies_to`; o codigo escreve `onExceed` e
- * `appliesTo`. A traducao e so de grafia, e esta escrita num lugar so.
- *
- * `applies_to: all` vira ausencia, e esta e a unica equivalencia que esta
- * funcao declara. Motivo: `all` e o PADRAO no proprio contrato ("quais
- * requisicoes entram na conta. Padrao, todas", `info.description`), e
- * `RateLimitEntry.appliesTo` nao tem como expressa-lo — o tipo so admite
- * `invalid_attempts`. Sem a equivalencia, escrever o padrao explicitamente no
- * YAML reprovaria uma rota correta. Com ela, trocar `invalid_attempts` por
- * `all` continua reprovando, que e a direcao que importa: e essa troca que faz
- * a entrada passar a contar a tentativa VALIDA junto.
- */
+/** A entrada do contrato na forma comparavel. */
 function doContratoParaComparacao(entrada: Record<string, unknown>): EntradaComparavel {
   const appliesTo = entrada['applies_to'];
   return {
@@ -369,7 +189,7 @@ function doContratoParaComparacao(entrada: Record<string, unknown>): EntradaComp
   };
 }
 
-/** A entrada da rota na mesma forma. `dimension` e copiada: a da rota e tupla. */
+/** A entrada da rota na mesma forma. */
 function daDeclaracaoParaComparacao(entrada: RateLimitEntry): EntradaComparavel {
   return {
     dimension: [...entrada.dimension],
@@ -411,9 +231,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('toda rota cujos parâmetros podem recusar declara 400 no contrato', () => {
-    // Erro é contrato também: responder 400 sem o contrato prometê-lo é a mesma
-    // divergência que não validar, na direção oposta. É a terceira queixa do
-    // portão de subida, antecipada para a suíte.
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const semQuatrocentos: string[] = [];
 
@@ -444,37 +261,12 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('a exigência de X-Reauth-Token bate nos dois sentidos: contrato e código', () => {
-    // ===================================================================
-    // ESTE É O CASO QUE IMPEDE UMA DAS SEIS DE FICAR SEM SENHA (BICHUS-48)
-    // ===================================================================
-    //
-    // `registrarRota` instala a conferência a partir de `rota.reauthScope`.
-    // Isso torna "esqueci de exigir a senha no manipulador" inexprimível, e
-    // deixa UM buraco: esquecer o `reauthScope` na declaração. É esse buraco
-    // que este caso fecha, e ele o fecha nos dois sentidos.
-    //
-    // A direção óbvia: operação que o contrato marca com `reauth: []` e cuja
-    // rota existe em `src/` PRECISA declarar o escopo. Sem ela, `Desativar a
-    // tag` poderia entrar sem senha nenhuma, que é o desfecho que esta
-    // história existe para impedir.
-    //
-    // A direção que ninguém olha: rota que declara um escopo que o contrato
-    // não exige. Ela não quebra ninguém — apenas pede uma senha que o
-    // documento não promete — e é exatamente por isso que atravessaria a
-    // revisão. Quem lê o contrato acreditaria numa coisa e quem chama a API
-    // encontraria outra, os dois com razão.
-    //
-    // A comparação é do VALOR do escopo, e não da presença dele: um
-    // `reauthScope: 'tag_revocation'` numa operação que o contrato marca como
-    // `account_deletion` passaria por uma conferência que só perguntasse "tem
-    // escopo?", e a janela aberta para revogar uma plaquinha valeria para
-    // apagar a conta.
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const divergentes: string[] = [];
 
     for (const rota of rotasDeclaradas()) {
       const operacao = contrato.operacoes.get(rota.operationId);
-      if (operacao === undefined) continue; // o primeiro caso já reprovou.
+      if (operacao === undefined) continue;
 
       const doContrato = operacao.raw['x-reauth-scope'];
       const doCodigo = rota.reauthScope;
@@ -499,12 +291,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('toda operação com `reauth: []` no contrato declara o mesmo escopo em `x-reauth-scope`', () => {
-    // A metade do contrato que o caso acima não alcança: operação marcada com
-    // `reauth: []` cuja rota ainda NÃO existe em `src/`. São quatro hoje
-    // (excluir a conta, trocar o e-mail, exportar os dados, transferir o pet),
-    // e elas precisam chegar ao código já com o escopo escrito — senão o caso
-    // acima aprova por ausência, que é a forma de portão que este projeto já
-    // pagou para aprender.
     const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
       paths: Record<string, Record<string, Record<string, unknown>>>;
     };
@@ -535,9 +321,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
       }
     }
 
-    // Portão que não acha alvo reprova. Um `security` que mudasse de forma
-    // deixaria `marcadas` em zero e todas as asserções acima passariam por
-    // percorrer lista vazia.
     assert.ok(
       marcadas >= 6,
       `só ${String(marcadas)} operações com \`reauth: []\` encontradas no contrato, e as seis ` +
@@ -553,60 +336,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('o teto de chamada bate entrada por entrada, nos dois sentidos', () => {
-    // =====================================================================
-    // POR QUE ISTO NAO E TAUTOLOGIA
-    // =====================================================================
-    //
-    // O esperado sai de `api/openapi.yaml`, que e **artefato independente**:
-    // ele tem portao proprio (`infra/verificacao/verificar-limite-de-chamada.mjs`,
-    // BICHUS-25), vocabulario proprio (`x-rate-limit-vocabulary`) e caminho de
-    // revisao proprio — mexer num numero la e mexer no contrato, e isso e lido
-    // como contrato. A declaracao da rota sai de `src/`, e e ela que
-    // `registrar-rota.ts` aplica de fato.
-    //
-    // **Hoje ninguem cruza os dois.** O verificador do contrato nunca abre
-    // `src/` (esta escrito no cabecalho dele, e ele passou com "80 operacoes, 0
-    // achados" durante todo o periodo em que nenhuma rota aplicava nada). E os
-    // casos deste mesmo arquivo comparam metodo, caminho, 400 e escopo de
-    // reautenticacao — nao o teto.
-    //
-    // =====================================================================
-    // O QUE O COMPILADOR NAO VE, E QUE E O MOTIVO DESTE CASO
-    // =====================================================================
-    //
-    // `defineRoute` recusa `rateLimit: []` numa rota com `effects`, entao APAGAR
-    // o teto de 25 das 34 entradas aplicaveis nao compila. Isso nao e
-    // vigilancia: e o tipo impedindo uma forma de escrever. O tipo continua
-    // satisfeito quando a entrada MUDA:
-    //
-    //   - `onExceed: 'deny_429'` vira `'log_and_alert'` — tipo valido, a rota
-    //     continua declarando teto, e `recusa()` simplesmente para de recusar;
-    //   - `limit: 5` vira `limit: 500`;
-    //   - `window: '10m'` vira `'24h'`;
-    //   - `appliesTo: 'invalid_attempts'` some, e a entrada passa a contar toda
-    //     requisicao em vez de so as invalidas.
-    //
-    // Medido em 22/09: trocar `deny_429` por `log_and_alert` em `deletePet`,
-    // `updateMe` e `issuePetTag` deixou as duas suites VERDES. Tres de quatro
-    // amostras passavam em silencio.
-    //
-    // =====================================================================
-    // O RISCO RESIDUAL, E POR QUE ISTO NAO SUBSTITUI AS ISCAS DE POSICAO
-    // =====================================================================
-    //
-    // Uma edicao COORDENADA nos dois arquivos passa aqui: quem baixar o teto no
-    // contrato e na rota tem os dois lados concordando, e concordancia e tudo o
-    // que este caso mede. Ele tambem nao alcanca COMPORTAMENTO: se
-    // `aplicacao-de-teto.ts` parar de chamar `hit()`, ou se a ordem dos ganchos
-    // de `registrar-rota.ts` inverter, as duas declaracoes continuam iguais e
-    // este caso fica verde com o teto desligado.
-    //
-    // Quem cobre essas duas coisas sao as iscas de POSICAO, por rota, que medem
-    // em qual chamada o 429 chega (`tests/integration/teto-da-troca-de-senha.test.ts`,
-    // `tests/integration/teto-por-pet-achado-e-plaquinha.test.ts`,
-    // `src/tools/portao-de-vigencia-do-teto.ts`). Este caso e o outro lado da
-    // pinca: ele cobre as 65 entradas de uma vez, sem banco; elas cobrem o
-    // mecanismo, uma rota de cada vez.
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const divergentes: string[] = [];
     const camposDesconhecidos: string[] = [];
@@ -614,14 +343,12 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
 
     for (const rota of rotasDeclaradas()) {
       const operacao = contrato.operacoes.get(rota.operationId);
-      if (operacao === undefined) continue; // o primeiro caso ja reprovou.
+      if (operacao === undefined) continue;
 
       const doContrato = operacao.raw['x-rate-limit'];
       const bruto: unknown[] = Array.isArray(doContrato) ? doContrato : [];
       const declarado = rota.rateLimit ?? [];
 
-      // Presenca, nos dois sentidos, antes de comparar valor: sem isto uma
-      // lista vazia de um lado casaria por vacuidade com a do outro.
       if (bruto.length !== declarado.length) {
         divergentes.push(
           `${rota.operationId}: o contrato declara ${String(bruto.length)} entrada(s) de ` +
@@ -647,7 +374,7 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
         }
 
         const daRota = declarado[indice];
-        if (daRota === undefined) continue; // impossivel: os tamanhos ja casaram.
+        if (daRota === undefined) continue;
         const esperado = doContratoParaComparacao(entradaBruta as Record<string, unknown>);
         const obtido = daDeclaracaoParaComparacao(daRota);
         conferidas += 1;
@@ -673,10 +400,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
         '`doContratoParaComparacao`, ou entra em `RateLimitEntry` — nunca so no YAML.',
     );
 
-    // Comparacao que nao comparou nada aprova em silencio. `rotasDeclaradas()`
-    // ja e guardado pelo ultimo caso deste arquivo, mas a lista de entradas nao:
-    // uma mudanca na leitura de `x-rate-limit` deixaria `bruto` vazio em TODAS as
-    // operacoes e os tamanhos casariam com as rotas que tambem nao declaram nada.
     assert.ok(
       conferidas > 0,
       'nenhuma entrada de `x-rate-limit` foi comparada. A leitura do contrato deixou de casar, ' +
@@ -704,7 +427,7 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
 
     for (const rota of rotasDeclaradas()) {
       const operacao = contrato.operacoes.get(rota.operationId);
-      if (operacao === undefined) continue; // o primeiro caso ja reprovou.
+      if (operacao === undefined) continue;
       const bruto = operacao.raw;
       const ehAdministrativa = operacao.path.startsWith('/admin/');
       if (ehAdministrativa) administrativas += 1;
@@ -764,19 +487,6 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('TODA operacao do contrato tem rota, exceto as servidas pela borda e as listadas como sem codigo', () => {
-    // A CEGUEIRA QUE ESTE CASO FECHA
-    //
-    // O caso de cima confere o mesmo, mas so sob `/admin/`. Fora daquele
-    // prefixo, uma operacao podia ser declarada no contrato SEM UMA LINHA DE
-    // CODIGO e a suite inteira continuava verde -- que e a forma classica de um
-    // portao aprovar por ausencia. Nao e hipotese: as seis operacoes do achador
-    // (BICHUS-41) atravessaram dias assim, declaradas e respondendo 404, e
-    // `api/openapi.yaml` e contrato UNICO de backend, app, backoffice e site.
-    //
-    // As duas listas acima sao exatas nos dois sentidos, entao este caso reprova
-    // nos tres jeitos de errar: declarar sem implementar e sem registrar aqui;
-    // implementar e esquecer de tirar da lista; e listar o que o contrato nao
-    // declara (por exemplo depois de a operacao ser removida do contrato).
     const contrato = carregarContrato(CAMINHO_DA_SPEC);
     const comRota = new Set(rotasDeclaradas().map((rota) => rota.operationId));
     const doContrato = [...contrato.operacoes.values()].map((operacao) => operacao.operationId);
@@ -804,20 +514,10 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
   });
 
   void it('a lista de módulos acima cobre TODAS as `defineRoute` de src/', () => {
-    // A guarda da lista escrita à mão. Sem ela, um módulo novo ficaria fora dos
-    // dois casos acima e os dois continuariam verdes sem nunca tê-lo olhado —
-    // que é a forma clássica de um portão passar a aprovar por ausência.
-    //
-    // `grep -rc` em vez de `--include`: o grep desta máquina é `ugrep` e o
-    // `--include` filtra em silêncio, o que já produziu duas afirmações falsas
-    // de "não existe" neste projeto.
     const saida = execFileSync(
       '/bin/sh',
       [
         '-c',
-        // `route-definition.ts` fica de fora porque a ocorrência dele é o
-        // EXEMPLO do próprio comentário de documentação da função, e não uma
-        // rota. Conferido: é a única ocorrência daquele arquivo.
         "find src -name '*.ts' ! -name '*.test.ts' " +
           "! -path 'src/shared/http/route-definition.ts' " +
           "-exec grep -c 'defineRoute({' {} + | awk -F: '{s+=$2} END {print s+0}'",

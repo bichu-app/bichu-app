@@ -1,41 +1,14 @@
-/**
- * A TABELA de comparacao de versao, e nao um caso.
- *
- * ## A isca central: a DEZENA
- *
- * `1.10.0` e mais nova que `1.9.0`. Comparado como texto, `'1.10.0' <
- * '1.9.0'`, porque `'1'` vem antes de `'9'` -- e o aplicativo que fizesse essa
- * conta bloquearia justamente quem acabou de atualizar. O caso
- * `1.10.0 > 1.9.0` abaixo e o que acusa isso, e ele nao esta sozinho: a tabela
- * cobre a dezena nos TRES componentes, porque trocar `compararLidas` por
- * `localeCompare` quebraria so o componente testado.
- *
- * ## Como estas iscas foram provadas (19/10/2026, Node 22)
- *
- * As duas bancadas rodadas juntas (`domain/versao.test.ts` mais
- * `adapters/http/version-status-routes.test.ts`), 59 casos na linha de base:
- *
- * | o que foi desligado em `versao.ts` | reprovaram |
- * |---|---|
- * | `compararLidas` comparando por `localeCompare` do texto | **8** |
- * | `lerVersao` aceitando zero a esquerda (`[0-9]{1,4}` no lugar de `0|[1-9]...`) | 2 |
- * | `lerVersao` aparando espaco (`bruta.trim().split`) | 3 |
- *
- * Os oito da primeira linha sao os seis casos de dezena desta tabela MAIS os
- * dois casos de dezena da rota -- a comparacao errada aparece nas duas
- * bancadas, e e isso que se quer de uma isca que guarda o erro mais caro.
- */
+/** A TABELA de comparacao de versao, e nao um caso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { compararVersoes, lerVersao } from './versao.js';
 
 /**
- * A tabela de ordem. `esperado` e o SINAL de `comparar(a, b)`: `-1` quando `a`
- * e mais antiga, `0` quando sao a mesma, `1` quando `a` e mais nova.
+ * A tabela de ordem. `esperado` e o SINAL de `comparar(a, b)`: `-1` quando `a` e
+ * mais antiga, `0` quando sao a mesma, `1` quando `a` e mais nova.
  */
 const ORDEM: readonly { a: string; b: string; esperado: -1 | 0 | 1; porque: string }[] = [
-  // A DEZENA, nos tres componentes. Esta e a isca da tarefa.
   { a: '1.10.0', b: '1.9.0', esperado: 1, porque: 'menor 10 e mais novo que menor 9' },
   { a: '1.9.0', b: '1.10.0', esperado: -1, porque: 'o mesmo, do outro lado' },
   { a: '10.0.0', b: '9.9.9', esperado: 1, porque: 'maior 10 e mais novo que maior 9' },
@@ -43,17 +16,14 @@ const ORDEM: readonly { a: string; b: string; esperado: -1 | 0 | 1; porque: stri
   { a: '2.0.0', b: '10.0.0', esperado: -1, porque: 'maior 2 e mais antigo que maior 10' },
   { a: '1.100.0', b: '1.99.0', esperado: 1, porque: 'a centena tambem' },
 
-  // Igualdade, que e o caso que decide se "igual a minima" bloqueia.
   { a: '1.4.0', b: '1.4.0', esperado: 0, porque: 'a mesma versao' },
   { a: '0.0.0', b: '0.0.0', esperado: 0, porque: 'zero e versao valida' },
 
-  // Precedencia entre componentes: maior manda sobre menor, menor sobre correcao.
   { a: '2.0.0', b: '1.99.99', esperado: 1, porque: 'maior manda sobre menor' },
   { a: '1.2.0', b: '1.1.99', esperado: 1, porque: 'menor manda sobre correcao' },
   { a: '1.0.1', b: '1.0.0', esperado: 1, porque: 'a correcao decide o empate' },
   { a: '0.1.0', b: '0.0.99', esperado: 1, porque: 'vale tambem abaixo de 1.0.0' },
 
-  // O teto de quatro digitos, que e o mesmo do contrato.
   { a: '9999.9999.9999', b: '9999.9999.9998', esperado: 1, porque: 'o teto ainda compara' },
 ];
 
@@ -89,8 +59,6 @@ void describe('a comparacao de versao nao erra na dezena', () => {
   }
 
   void it('a tabela cobre a dezena nos tres componentes, e nao um caso so', () => {
-    // ISCA DA ISCA: uma tabela que encolhesse para o caso facil deixaria de
-    // medir o defeito. Este caso reprova quem apagar linhas dela.
     const dezenas = ORDEM.filter(
       (c) => c.a.includes('10') || c.b.includes('10') || c.a.includes('100'),
     );
@@ -103,7 +71,6 @@ void describe('valor que nao se entende devolve `undefined`, e nao lanca', () =>
   for (const caso of NAO_E_VERSAO) {
     void it(`"${caso.bruta}" nao e versao (${caso.porque})`, () => {
       assert.equal(lerVersao(caso.bruta), undefined);
-      // E a comparacao com ele tambem nao se entende -- em qualquer dos lados.
       assert.equal(compararVersoes(caso.bruta, '1.4.0'), undefined);
       assert.equal(compararVersoes('1.4.0', caso.bruta), undefined);
     });

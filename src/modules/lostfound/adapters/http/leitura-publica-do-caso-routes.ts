@@ -1,25 +1,6 @@
 /**
  * Rotas públicas do caso, pelo `share_token` (BICHUS-76): a página do caso
- * (`getPublicLostCase`) e o cartaz (`getLostCasePoster`). São as operações que o
- * site consome em `/p/{shareToken}` e `/cartaz/{shareToken}` (ADR-0028), e a
- * primeira é também o destino do toque no push do alerta.
- *
- * Três pontos desta fiação que não são detalhe:
- *
- * - **Os tetos são os do contrato, copiados dele.** Nenhuma das duas declara
- *   efeito, então o teto não é obrigatório por tipo; ele está aqui porque o
- *   contrato o declara, e `rotas-registradas-contra-o-contrato.test.ts` compara
- *   entrada por entrada. A dimensão é só `ip`, que o registro resolve sozinho.
- * - **Autenticação opcional só na página do caso.** O token de acesso serve para
- *   uma coisa: saber se quem chama é o tutor, e esconder dele o botão "vi este
- *   pet". Token presente e inválido RECUSA, pela mesma razão da rota da tag
- *   (`tag-routes.ts`, `chamadorOpcional`): rebaixar para anônimo esconderia do
- *   app que a sessão acabou. O cartaz declara `security: []` e não lê o
- *   cabeçalho: o papel é igual para todo mundo.
- * - **`Cache-Control: no-store` nas duas.** A página varia com quem chama, e um
- *   cache compartilhado que guardasse a versão do tutor serviria
- *   `can_report_sighting: false` ao vizinho. O cache de 60 s do ADR-0028 é do
- *   site, sobre o HTML que ele monta, e não desta resposta.
+ * (`getPublicLostCase`) e o cartaz (`getLostCasePoster`).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -58,8 +39,8 @@ function aplicarHigieneDaRotaPublica(reply: FastifyReply): void {
 
 /**
  * O token do caminho. Ausente vira o mesmo 410 do token desconhecido: as duas
- * operações não declaram 404, e segmento vazio é só mais um token que não leva
- * a caso nenhum.
+ * operações não declaram 404, e segmento vazio é só mais um token que não leva a
+ * caso nenhum.
  */
 function tokenDoCaminho(request: FastifyRequest): string {
   const { shareToken } = request.params as { shareToken?: unknown };

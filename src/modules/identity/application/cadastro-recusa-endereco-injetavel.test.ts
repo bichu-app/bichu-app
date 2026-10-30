@@ -1,26 +1,4 @@
-/**
- * A ordem dos acontecimentos no cadastro (BICHUS-198, critérios 2, 3 e 4).
- *
- * ## O que estava errado, e não era a segurança
- *
- * `a@b.test;x` passava na validação de forma, **a conta era criada**, a sessão
- * era aberta, a trilha gravava `auth.account_created` — e só então o envio da
- * verificação recusava o endereço. O `smtp-mailer` fazia a coisa certa; o que
- * estava na camada errada era a conferência. A pessoa recebia 500 com a conta
- * já existindo, em vez de 400 sem conta nenhuma. Tentar de novo com o endereço
- * corrigido esbarraria no 409 da própria conta fantasma.
- *
- * ## Por que o dublê de repositório recusa TUDO
- *
- * O que estes casos afirmam é uma **ausência**: nada foi gravado. Um dublê que
- * registrasse as chamadas numa lista provaria o mesmo, mas só para as chamadas
- * que alguém lembrasse de conferir. Este recusa qualquer método, dizendo o
- * nome — então uma implementação futura que gravasse a conta por outro caminho
- * (um `atualizarPerfil`, um `registrarLogin`) também reprova, sem que este
- * arquivo precise prever o caminho.
- *
- * O mailer segue a mesma regra: chegar ao envio já é o defeito.
- */
+/** A ordem dos acontecimentos no cadastro (BICHUS-198, critérios 2, 3 e 4). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -43,11 +21,7 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/**
- * O endereço do relato da issue. O `;` separa endereços numa lista de
- * cabeçalho — é o caractere que o `U+037E` grego produziria sob NFKC, e o mais
- * barato de digitar num formulário.
- */
+/** O endereço do relato da issue. */
 const ENDERECO_DO_RELATO = 'a@b.test;x';
 
 function naoDeveriaTerChegado(nome: string): never {
@@ -62,12 +36,6 @@ function naoDeveriaTerChegado(nome: string): never {
 /** Toda porta de escrita e de leitura recusa: o caminho não pode chegar a nenhuma. */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
-    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-    // avatar da barra do app caia na inicial do nome em todas as paginas.
-    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
       return Promise.resolve(null);
     }
@@ -105,14 +73,7 @@ function montar(): Bancada {
 
   const servico = criarAuthService({
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
-    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
-    // não é sobre isso, então a função é contada e não observada. O caso que
-    // PROVA a remoção, lendo a linha de `user_devices` depois, é
-    // `sair-de-todos-os-aparelhos.test.ts` e
-    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
-    // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
-    // resposta honesta de "não havia localização gravada".
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio: repositorioQueRecusaTudo(),
     assinador,
@@ -142,9 +103,6 @@ function montar(): Bancada {
 async function recusaDe(email: string): Promise<AppError> {
   const bancada = montar();
   try {
-    // `birthDate` entrou em 18/10/2026 com a idade minima de 16 anos. Data fixa
-    // e longe do corte: o que estes testes medem e o ENDERECO, e idade colada
-    // no limite faria a suite comecar a falhar sozinha com o tempo.
     await bancada.servico.cadastrar(
       { email, password: SENHA_BOA, birthDate: '1990-05-12', displayName: 'Tutora' },
       CONTEXTO,
@@ -160,13 +118,7 @@ async function recusaDe(email: string): Promise<AppError> {
 }
 
 void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
-  /**
-   * ISCA do critério 2, e a que reproduz o relato da issue.
-   *
-   * Desligada uma vez: com `emailTemFormaValida` de volta no `!/\s/.test(email)`,
-   * este caso reprova em `criarContaLocal` — que é literalmente a conta
-   * nascendo antes de o envio falhar.
-   */
+  /** ISCA do critério 2, e a que reproduz o relato da issue. */
   void it('`a@b.test;x` não chega a tocar o repositório nem o mailer', async () => {
     const erro = await recusaDe(ENDERECO_DO_RELATO);
 
@@ -177,17 +129,8 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     ]);
   });
 
-  /**
-   * A classe inteira, e não só o `;` do relato. Um a um, porque um caso que
-   * varresse tudo num `for` e afirmasse só "algum recusou" ficaria verde com
-   * metade da lista de pé.
-   */
+  /** A classe inteira, e não só o `;` do relato. */
   void it('toda a classe de gramática é recusada com 400 no cadastro, e nenhuma escreve', async () => {
-    // Por sequencia de escape, e NUNCA por literal: cinco destes sao
-    // invisiveis no editor, e um deles e NUL. Escritos crus, eles fazem o
-    // arquivo virar binario para o git, somem numa copia descuidada e levam
-    // a defesa junto sem que a linha pareca ter mudado. E a mesma razao
-    // pela qual `QUEBRAS_DE_LINHA_NO_ASSUNTO` e escrita por ponto de codigo.
     const perigosos: readonly (readonly [string, string])[] = [
       ['ponto e vírgula', 'a@b.test;x'],
       ['vírgula', 'a@b.test,x'],
@@ -211,8 +154,8 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
   });
 
   /**
-   * ISCA do critério 4. Endereço é dado pessoal e mensagem de erro vai para o
-   * log — uma recusa que vazasse o endereço trocaria um defeito por outro.
+   * ISCA do critério 4. Endereço é dado pessoal e mensagem de erro vai para o log —
+   * uma recusa que vazasse o endereço trocaria um defeito por outro.
    */
   void it('nem a mensagem nem o corpo do problema carregam o endereço recusado', async () => {
     const erro = await recusaDe('tutora.silva@exemplo.test;bcc@mal.test');
@@ -230,16 +173,10 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
   });
 
   /**
-   * A outra metade do critério 5, vista de cima: a borda não pode ficar mais
-   * rígida que o fio. Sem este caso, uma "correção" que recusasse todo endereço
-   * passaria em tudo acima e mataria o cadastro inteiro.
+   * A outra metade do critério 5, vista de cima: a borda não pode ficar mais rígida
+   * que o fio.
    */
   void it('endereço legítimo continua passando da borda para dentro', async () => {
-    // O dublê recusa tudo, então o endereço legítimo termina numa exceção — mas
-    // numa exceção DE OUTRO TIPO, vinda de `criarContaLocal`. É essa diferença
-    // que prova que a borda deixou passar: um `AppError` de validação aqui
-    // significaria que a correção passou a recusar endereço que o envio
-    // entregaria, que é a outra metade do critério 5.
     const bancada = montar();
     await assert.rejects(
       bancada.servico.cadastrar(

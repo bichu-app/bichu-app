@@ -1,12 +1,4 @@
-/**
- * As regras de abertura do caso de perdido.
- *
- * O caso central é **negativo pela ausência**: falta de coordenada NÃO bloqueia.
- * É o erro fácil de escrever — "sem localização não dá para alertar, então não
- * deixa abrir" — e ele exclui exatamente quem negou a permissão de localização,
- * que é muita gente e especialmente quem instalou o app na pressa, no dia em
- * que precisou dele.
- */
+/** As regras de abertura do caso de perdido. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -52,13 +44,6 @@ void describe('bloqueios para abrir caso', () => {
   });
 
   void it('vários bloqueios saem JUNTOS, na ordem da dificuldade de resolver', () => {
-    // Juntos porque a folha de bloqueio precisa dizer tudo de uma vez: mandar
-    // resolver um, voltar, e descobrir o próximo é uma ida à caixa de entrada
-    // por bloqueio.
-    //
-    // E nesta ordem: verificar o e-mail a maior parte das pessoas resolve na
-    // hora, com o link que já está na caixa. A foto exige sair da tela e
-    // voltar. Pedir a difícil primeiro faz desistir quem resolveria a fácil.
     assert.deepEqual(
       bloqueiosParaAbrirCaso({
         temCanalVerificado: false,
@@ -84,15 +69,12 @@ void describe('teto de casos abertos por conta', () => {
   });
 
   void it('o teto é 3, e o número tem razão de privacidade além de produto', () => {
-    // A lista pública mostra bairro e data. Uma conta sem teto entregaria a um
-    // observador uma SÉRIE de pontos no tempo e no espaço da mesma pessoa.
     assert.equal(TETO_DE_CASOS_ABERTOS_POR_CONTA, 3);
   });
 });
 
 void describe('onde o pet foi visto — a ausência que NÃO bloqueia', () => {
   void it('SÓ ÁREA ABRE O CASO: falta de coordenada não impede nada', () => {
-    // Critério 5. Este é o caso que o erro fácil quebraria.
     const soArea = { city: 'São Paulo', neighborhood: 'Vila Madalena' };
     assert.equal(temOndeSuficiente(soArea), true);
     assert.equal(temCoordenada(soArea), false, 'has_location precisa sair FALSO');
@@ -105,8 +87,6 @@ void describe('onde o pet foi visto — a ausência que NÃO bloqueia', () => {
   });
 
   void it('NEM uma NEM outra não abre: seria um caso invisível', () => {
-    // Sem ponto e sem cidade ele não apareceria no alerta NEM na lista pública.
-    // O tutor acharia que abriu.
     assert.equal(temOndeSuficiente({}), false);
     assert.equal(temOndeSuficiente({ neighborhood: 'Vila Madalena' }), false,
       'bairro sem cidade não localiza nada: há Centro em toda cidade do país');
@@ -130,8 +110,6 @@ void describe('rótulo de área — o que sai em superfície pública', () => {
   });
 
   void it('A COORDENADA NUNCA APARECE, nem quando existe', () => {
-    // Nem arredondada: ponto arredondado ainda é ponto, e 100 m no meio de um
-    // bairro residencial aponta para o quarteirão.
     const rotulo = rotuloDaArea({ lat: -23.5505, lon: -46.6333, city: 'São Paulo' });
     assert.equal(rotulo, 'São Paulo');
     assert.ok(!/-?\d+\.\d+/.test(rotulo ?? ''), 'vazou número decimal no rótulo público');

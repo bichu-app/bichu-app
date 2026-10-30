@@ -1,17 +1,4 @@
-/**
- * Barril dos links do encontro.
- *
- * As regras do link do convite e do handle do Instagram moram em
- * `./link-do-convite.ts`, que nao tem nenhum especificador de modulo para poder
- * ser importado pela suite da raiz (ver o cabecalho de la). As de ENDERECO
- * COMPLETO (site do parceiro e URL do Instagram) moram em
- * `src/endereco/enderecos.ts`, e nao aqui: elas valem para a aplicacao inteira
- * desde o padrao do cliente de 17/10/2026, e a Loja precisa delas. Um modulo da
- * `rede/` importado de dentro da `loja/` seria a dependencia errada.
- *
- * Este arquivo existe para que `import { ... } from './links.ts'` continue
- * valendo em todos os chamadores.
- */
+/** Barril dos links do encontro. */
 export {
   handleDoInstagram,
   LIMITE_DO_LINK_DO_CONVITE,

@@ -1,43 +1,6 @@
 /**
  * As ISCAS do piso da busca de pessoas **na borda**, e elas medem uma coisa que
  * nenhuma isca deste repositório media: o que o SERVIDOR devolve.
- *
- * ## O defeito que estas iscas existem para prender
- *
- * `busca-de-pessoas.test.ts` já provava que o caso de uso devolve lista vazia
- * abaixo de três caracteres **sem consultar**. Ele passava verde, e o servidor
- * respondia **400 `validation-failed`** com `{"field":"q","code":"minLength"}` —
- * medido em homologação em 21/10/2026. As duas afirmações não se contradiziam:
- * o caso de uso nunca era chamado, porque o vigia de parâmetros
- * (`validacao-de-parametros.ts`) recusava a requisição na borda, usando o
- * `minLength: 3` que o contrato declara.
- *
- * E o contrato declara aquele `minLength` dizendo, por escrito, que ele **não**
- * recusa: *"`minLength: 3` nao e recusado com 400 quando menor (...) a resposta
- * e lista vazia"*. O código divergia do contrato, e num produto em que o
- * `openapi.yaml` manda em quatro aplicações a divergência é do código.
- *
- * ## Por que a bancada é um servidor de verdade, com o vigia instalado
- *
- * Porque é o vigia que produzia o 400. Uma bancada que chamasse
- * `BuscaDePessoas` direto mediria de novo o que já estava medido e verde, e
- * passaria com o defeito inteiro no lugar. O contrato vem do **disco**
- * (`api/openapi.yaml`), e não de uma cópia de mentira: o que se mede é o
- * documento que manda.
- *
- * ## As duas metades de cada isca, e a segunda é a que importa
- *
- * Cada caso abaixo afirma **o corpo** (200 e lista vazia) e **a ausência de
- * consulta** (o dublê do repositório registra cada termo que recebe; a lista
- * tem de ficar vazia). Só o corpo provaria que a resposta melhorou; só a
- * ausência de consulta provaria que alguém recusou em algum lugar. O freio que
- * o cliente pediu é *"abaixo do piso não se consulta o banco"*, e é isso que a
- * segunda metade mede.
- *
- * O **contrapeso** (`q` com três caracteres consulta e devolve) não é enfeite:
- * sem ele, "lista vazia sem consulta" seria verdade num mundo em que a busca
- * nunca busca — o pior defeito possível aqui, porque ele se parece com
- * segurança.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -76,9 +39,9 @@ const MARINA: PessoaEncontrada = {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Os termos com que a PORTA foi chamada. Vazio = nenhuma consulta ao banco. */
+  /** Os termos com que a PORTA foi chamada. */
   readonly termos: string[];
-  /** Quantas vezes o token foi apresentado. Mede que a rota exige conta. */
+  /** Quantas vezes o token foi apresentado. */
   readonly autenticacoes: string[];
 }
 
@@ -89,8 +52,6 @@ async function bancada(): Promise<Bancada> {
     isProduction: false,
     teto: tetoDeTeste(),
   });
-  // O vigia de parâmetros é o que produzia o 400. Instalá-lo aqui é o ponto
-  // inteiro da bancada: sem ele, estas iscas passariam com o defeito no lugar.
   vigiarParametrosDasRotas(app, contrato, PREFIXO);
 
   const termos: string[] = [];
@@ -107,9 +68,6 @@ async function bancada(): Promise<Bancada> {
       registrarRotasDeBuscaDePessoas(escopo, {
         busca: new BuscaDePessoas({
           busca: repositorio,
-          // **Sem aresta nenhuma**: este arquivo mede o PISO da busca, e o
-          // estado da conexao (22/10/2026) nao entra na conta. Um dublê que
-          // devolvesse estado faria estes casos medirem duas coisas.
           conexoes: {
             estaConectado: () => Promise.resolve(false),
             contarConexoes: () => Promise.resolve(0),
@@ -141,17 +99,11 @@ interface CorpoDaBusca {
   readonly limit: number;
 }
 
-/**
- * Os casos que **não podem** virar consulta nem erro, com o nome de cada um.
- *
- * Separados num mapa e não num `for` sobre strings soltas porque o nome do caso
- * é o que aparece no relatório quando ele reprova — e `q` vazio e `q` curto são
- * pressões futuras diferentes (ver o cabeçalho de `termo-de-busca.ts`).
- */
+/** Os casos que **não podem** virar consulta nem erro, com o nome de cada um. */
 interface CasoAbaixoDoPiso {
   readonly nome: string;
   readonly url: string;
-  /** O termo que chega, já decodificado. `undefined` = `q` ausente. */
+  /** O termo que chega, já decodificado. */
   readonly termo: string | undefined;
 }
 
@@ -227,11 +179,6 @@ void describe('o piso da busca de pessoas NAO recusa na borda', () => {
   });
 
   void it('o piso medido aqui e o numero que a producao usa', () => {
-    // Um caso que escrevesse `3` à mão passaria a medir outro número no dia em
-    // que alguém mudasse o da produção. O que se afirma é que a lista acima
-    // cobre o termo MAIOR que ainda não busca — `MINIMO - 1` caracteres — e que
-    // nenhum caso dela já está no piso, o que faria uma isca "não consulta"
-    // reprovar por estar certa.
     const maiorQueNaoBusca = MINIMO_DE_CARACTERES_DA_BUSCA - 1;
     assert.ok(
       ABAIXO_DO_PISO.some((caso) => (caso.termo?.trim().length ?? 0) === maiorQueNaoBusca),
@@ -250,9 +197,6 @@ void describe('o piso da busca de pessoas NAO recusa na borda', () => {
   void it('ISCA QUE CONTINUA VALENDO: a busca EXIGE conta', async () => {
     const { app, termos } = await bancada();
     try {
-      // Sem `Authorization` nenhum, e com um termo que BUSCARIA se houvesse
-      // conta: é isso que separa "recusou por falta de conta" de "nao buscou
-      // porque o termo era curto".
       const resposta = await app.inject({ method: 'GET', url: `${PREFIXO}/people?q=mas` });
       assert.equal(
         resposta.statusCode,
@@ -267,10 +211,6 @@ void describe('o piso da busca de pessoas NAO recusa na borda', () => {
   });
 
   void it('ISCA: nenhuma pessoa a mais sai por causa da mudanca', async () => {
-    // A diferença entre 400 e lista vazia é a FORMA da recusa, e nada mais.
-    // Este caso varre todos os termos abaixo do piso e afirma que a soma de
-    // gente devolvida por eles é ZERO — a afirmação que o cliente cobrou
-    // explicitamente ao autorizar a mudança.
     const { app, termos } = await bancada();
     try {
       let pessoas = 0;
@@ -303,9 +243,6 @@ void describe('o `minLength` de `q` nao chega ao validador da borda', () => {
   });
 
   void it('o `maxLength` CONTINUA recusando: so o piso saiu', async () => {
-    // A descrição do contrato isenta o `minLength`, e **só** ele. Termo de 41
-    // caracteres continua sendo pedido malformado, e 400 continua sendo a
-    // resposta certa — senão a correção teria aberto a borda inteira do `q`.
     const { app, termos } = await bancada();
     try {
       const resposta = await app.inject({

@@ -1,22 +1,3 @@
-/**
- * Conveniencia de tela para `notes` (NetworkEventNotes, D59): recusa antes do
- * envio o que o servidor vai recusar com `contact_or_payment_detected`. A
- * autoridade e do servidor; este detector so evita a viagem e diz o motivo no
- * campo.
- *
- * **Espelha a regra do servidor**, e nao uma regra propria: `errosDasObservacoes`
- * em `src/modules/network/domain/escrita-do-encontro.ts`, que usa o detector do
- * canal mediado (`src/shared/redaction/redigir.ts`: forma canonica sem largura
- * zero, homoglifo e numero por extenso; telefone de 8 a 13 digitos, e-mail,
- * link, CEP, logradouro, ponto de encontro com numero) e, por cima, a
- * conferencia de `normalizarParaConferencia` (letra quebrada e digito que imita
- * letra), dominio e encurtador, `@usuario`, meios de pagamento e dados
- * bancarios. Antes de tudo, `semDatas` troca as datas dd.mm.aaaa e dd/mm/aaaa
- * por um marcador, como o servidor faz. Recusar aqui o que o servidor aceita,
- * ou aceitar o que ele recusa, e defeito: `test/rede/observacoes-contra-o-servidor.test.ts`
- * compara os dois caso a caso.
- */
-
 export type Achado = 'telefone' | 'email' | 'link' | 'endereco' | 'pix' | 'bidi';
 
 const LARGURA_ZERO = /[\u200B-\u200F\u2060-\u2064\uFEFF\u00AD]/u;
@@ -45,7 +26,10 @@ const SIMBOLO_POR_EXTENSO: Record<string, string> = { arroba: '@', ponto: '.' };
 
 const tirarAcento = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-/** A forma canonica do servidor (`canonizar`), sem o mapa de posicoes, que aqui nao serve. */
+/**
+ * A forma canonica do servidor (`canonizar`), sem o mapa de posicoes, que aqui nao
+ * serve.
+ */
 export function canonizar(original: string): string {
   const unidades: Array<{ c: string; simbolo?: boolean }> = [];
   const letra = /\p{L}/u;
@@ -135,7 +119,7 @@ function temTelefone(canonico: string): boolean {
   return false;
 }
 
-/** O que o texto traz de canal de contato ou de pagamento. Vazio = limpo. */
+/** O que o texto traz de canal de contato ou de pagamento. */
 export function achadosNasObservacoes(texto: string): Achado[] {
   if (BIDI.test(texto)) return ['bidi'];
   const semData = semDatas(texto.normalize('NFKC'));

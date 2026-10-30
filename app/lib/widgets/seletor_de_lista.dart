@@ -12,21 +12,6 @@ class ItemDeLista {
 }
 
 /// O campo que abre uma **lista fechada**.
-///
-/// **Por que nao e o campo com sugestao do paragrafo 11.19 do design system.**
-/// Aquele componente foi especificado quando raca era um campo so, e ele diz,
-/// com todas as letras, que "o campo nunca bloqueia texto que nao esta na
-/// lista". Em 2026-09-17 o contrato separou `breed_code` (lista fechada, e a
-/// unica coisa que o cruzamento le) de `breed_free_text` (texto, exibido e
-/// nunca cruzado), e a cor perdeu o texto livre inteiro. Um campo que aceita
-/// texto fora da lista **nao consegue** produzir `breed_code`, e e por isso
-/// que a saida e uma opcao da propria lista (`Outra`) e nao a digitacao
-/// direta: o codigo de cruzamento nasce sujo justamente no caso mais comum do
-/// Brasil.
-///
-/// **Acessibilidade.** E um campo com lista, e nao um menu de icones: cada
-/// opcao tem o nome escrito (WCAG 2.1 SC 1.4.1), o item tem 48 dp e o estado
-/// atual e anunciado junto do rotulo do campo.
 class SeletorDeLista extends StatelessWidget {
   const SeletorDeLista({
     required this.rotulo,
@@ -56,9 +41,7 @@ class SeletorDeLista extends StatelessWidget {
   /// O que o campo mostra enquanto nada foi escolhido.
   final String estadoInicial;
 
-  /// Falso enquanto a lista nao carregou. O campo continua visivel e diz o
-  /// motivo pela [ajuda] ou pela faixa da tela; ele **nao vira** campo de
-  /// texto livre como plano B.
+  /// Falso enquanto a lista nao carregou.
   final bool habilitado;
 
   ItemDeLista? get _escolhido {
@@ -108,14 +91,8 @@ class SeletorDeLista extends StatelessWidget {
         Semantics(
           button: true,
           enabled: habilitado,
-          // O valor atual entra no nome acessivel: quem usa leitor de tela
-          // precisa saber o que esta escolhido sem abrir a lista.
           label: '$rotulo, ${escolhido?.rotulo ?? estadoInicial}',
           excludeSemantics: true,
-          // Sem esta linha o seletor habilitado sai com `button: true`,
-          // `enabled: true` e ZERO acoes: `excludeSemantics: true` leva junto
-          // a acao do `InkWell`. O leitor de tela anunciava o valor escolhido
-          // e nao tinha como abrir a lista (WCAG 2.1 SC 4.1.2).
           onTap: habilitado ? () => _abrir(context) : null,
           child: InkWell(
             onTap: habilitado ? () => _abrir(context) : null,
@@ -215,7 +192,6 @@ class _FolhaDeEscolha extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final item = itens[i];
                   return ListTile(
-                    // 48 dp de piso por item, como manda o paragrafo 11.19.
                     minTileHeight: BichuAlvoDeToque.min,
                     title: Text(item.rotulo),
                     selected: item.codigo == selecionado,

@@ -1,17 +1,4 @@
-/**
- * A porta de persistência da conversa mediada.
- *
- * **Todo método que toca uma conversa específica recebe o chamador como
- * argumento obrigatório**, e não por simetria: é a assinatura que torna
- * inexprimível a consulta que traria a conversa de outra pessoa para a
- * aplicação decidir depois. O ADR-0021 não diz "não devolva a linha do outro",
- * ele diz onde a decisão mora — e uma porta cujo método de leitura aceitasse só
- * o id deixaria o adaptador livre para ignorar o dono sem que nada acusasse.
- *
- * A consequência visível: conversa de terceiro responde **404**, nunca 403. Um
- * 403 confirmaria que aquele id existe, que é o oráculo de enumeração que o
- * mesmo ADR fecha nas tags.
- */
+/** A porta de persistência da conversa mediada. */
 import type { TrechoRedigido } from '../../../shared/redaction/redigir.js';
 import type { CasoDaConversa } from '../domain/acesso-do-achador.js';
 import type { Papel } from '../domain/conversa-mediada.js';
@@ -29,141 +16,50 @@ export type MotivoDeEncerramento = 'case_closed' | 'pet_returned' | 'retention';
 
 /** O aviso que abre (ou reabre a conversa de) um escaneamento. */
 export interface AberturaPorAviso {
-  /** UUIDv7 da conversa nova. Ignorado quando o aviso é agrupado. */
+  /** UUIDv7 da conversa nova. */
   readonly id: ConversationId;
   readonly foundReportId: FoundReportId;
   readonly petId: PetId;
-  /** A conta de quem achou, quando ela existe. Nula no caminho principal. */
+  /** A conta de quem achou, quando ela existe. */
   readonly achadorComConta: UserId | null;
 }
 
-/**
- * A conversa como as duas rotas autenticadas a leem.
- *
- * Não existe aqui um identificador do outro participante, e a ausência é o
- * ponto: ver `participantesVisiveis` em `domain/conversa-mediada.ts`.
- */
+/** A conversa como as duas rotas autenticadas a leem. */
 export interface ConversaDoChamador {
   readonly id: ConversationId;
-  /**
-   * O AVISO que abriu esta conversa.
-   *
-   * `conversations.found_report_id` e `NOT NULL UNIQUE` -- um aviso, uma
-   * conversa --, entao nao ha caso nulo a desenhar.
-   *
-   * Ele sai na vista do chamador AUTENTICADO porque sem ele a foto do tutor
-   * e inalcancavel: `createFoundReportPhotoUploadIntent` EXIGE
-   * `found_report_id` no corpo, e o tutor nao e o relator do aviso -- ele nao
-   * aparece em `listFoundReports`, e `case_id` e o caso de perdido, nao o
-   * aviso. Sem este campo, a ampliacao da autorizacao da BICHUS-35 fica
-   * correta e **inalcancavel**: o tutor tem permissao para pedir a intencao e
-   * nao tem de onde tirar o argumento.
-   *
-   * **Nao sai para quem nao tem conta.** `ConversaDoAchador` nao tem este
-   * campo e nao pode ganhar: o token do achador JA endereca o aviso (e por
-   * isso que `createFinderPhotoUploadIntent` nao pede id nenhum), e entregar
-   * um UUIDv7 -- com o instante de criacao dentro -- a quem nao tem conta e o
-   * que o SEC-001 proibe.
-   */
+  /** O AVISO que abriu esta conversa. */
   readonly foundReportId: FoundReportId;
   readonly caseId: CaseId | null;
   readonly petDisplayName: string;
-  /**
-   * Quando ela nasceu.
-   *
-   * **A lista NÃO ordena mais por aqui** (18/10/2026): ela ordena por
-   * `coalesce(ultimaMensagemEm, abertaEm)`, porque a conversa que se procura é
-   * a que acabou de receber recado. Este campo é o segundo termo desse
-   * `coalesce` — o único instante que a conversa sem mensagem tem.
-   */
+  /** Quando ela nasceu. */
   readonly abertaEm: Date;
-  /** De que lado está quem chamou. Sai da consulta, não de um `if` depois dela. */
+  /** De que lado está quem chamou. */
   readonly papelDoChamador: Exclude<Papel, 'system'>;
   readonly encerradaEm: Date | null;
   readonly motivoDoEncerramento: MotivoDeEncerramento | null;
   readonly bloqueadaEm: Date | null;
-  /** O caso ligado deixou de estar aberto. Falso quando não há caso. */
+  /** O caso ligado deixou de estar aberto. */
   readonly casoEncerrado: boolean;
   readonly nomeDoTutor: string | null;
   readonly nomeDoAchador: string | null;
-  /**
-   * O achador tem conta (`conversations.finder_user_id IS NOT NULL`).
-   *
-   * O FATO, nunca a conclusão. Quem decide o significado é
-   * [fotoAlcancaOutroLado] (`domain/leitura-da-foto.ts`), e a separação importa
-   * mais aqui que de costume: a conclusão depende de um guarda de SEC-001 que
-   * mora na BORDA do achador, e montá-la num `CASE` da consulta esconderia essa
-   * dependência dentro de um SQL que ninguém relaciona com aquele guarda.
-   *
-   * **Falso é o caminho PRINCIPAL e não a exceção**: o achador civil não tem
-   * conta e não vai criar uma (migração `20260922000012`).
-   *
-   * **Não dá para reaproveitar `achadorDesabilitado`**: aquele é nulo tanto para
-   * "não está desabilitado" quanto para "não há achador com conta", e a
-   * ambiguidade está declarada como inofensiva *para aquela pergunta*. Para esta
-   * ela é exatamente a resposta.
-   */
+  /** O achador tem conta (`conversations.finder_user_id IS NOT NULL`). */
   readonly achadorTemConta: boolean;
-  /**
-   * As duas pontas desabilitaram a conta? (17/10)
-   *
-   * `users.deleted_at !== null` de cada lado. O domínio usa isto para duas
-   * coisas: despersonalizar o lado que saiu (`participantesVisiveis`) e travar
-   * a conversa nos dois sentidos (`estadoDaConversa` devolve `closed`).
-   *
-   * Dois campos e não um: o lado que saiu é o que perde o nome, e um booleano
-   * só não diria qual.
-   */
+  /** As duas pontas desabilitaram a conta? */
   readonly tutorDesabilitado: boolean;
   readonly achadorDesabilitado: boolean;
-  /**
-   * Há mensagem que ESTE lado ainda não leu (BICHUS-278).
-   *
-   * Não conta a mensagem do próprio chamador, e **não** é afetado por ele ter
-   * aberto a lista: "lido" é o item aberto. Ver a migração
-   * `20261018000014_leitura-da-conversa-por-participante.sql`.
-   */
+  /** Há mensagem que ESTE lado ainda não leu (BICHUS-278). */
   readonly naoLida: boolean;
-  /**
-   * O corpo da última mensagem, **como está no banco** — isto é, já redigido.
-   *
-   * `null` quando a conversa não tem mensagem. O corte é do domínio
-   * (`previaDaMensagem`), e não da consulta: cortar no SQL faria o teto virar
-   * um número escrito em dois lugares.
-   */
+  /** O corpo da última mensagem, **como está no banco** — isto é, já redigido. */
   readonly corpoDaUltima: string | null;
   readonly ultimaMensagemEm: Date | null;
   /**
    * **O APELIDO DO OUTRO LADO, e so quando ele e CONEXAO ACEITA de quem chama**
    * (emenda 3 do ADR-0010, decisao do cliente de 19/10/2026).
-   *
-   * `null` funde cinco estados, e a fusao e a regra (ADR-0021): nao e conexao
-   * aceita, o par esta bloqueado, o outro lado nao tem conta, o outro lado
-   * desabilitou a conta, ou e conexao e nao escolheu apelido -- nenhum fluxo
-   * obriga a escolher (plano 4-C.8).
-   *
-   * **O recorte e a clausula `WHERE` da subconsulta que produz este campo**, e
-   * nao um `if` de camada acima. Chamar a leitura de um caminho novo devolve
-   * `null` em vez de apelido: e esta metade que sobrevive a alguem mexer no
-   * servico, e e ela que a isca de SQL mede.
    */
   readonly apelidoDoOutro: string | null;
   /**
-   * **A CHAVE da derivada `thumb` (176 x 176) da foto do OUTRO LADO**, pela
-   * mesma regra e no mesmo `WHERE` de [apelidoDoOutro].
-   *
-   * CHAVE e nao URL: o banco guarda a chave do objeto e a URL e montada na
-   * borda, com o dominio de midia do ambiente. Gravar URL absoluta amarraria a
-   * linha ao provedor do dia em que ela foi escrita (§11.1 proibicao 9).
-   *
-   * `thumb` e nao `card`: o icone da conversa pinta 40 dp, que a 3x sao 120 px
-   * reais -- a de 176 cobre sem ampliar, e a `card` de 512 seria 4,3x mais dado
-   * do que a celula pinta, dez vezes por pagina.
-   *
-   * `null` nos cinco estados de [apelidoDoOutro], mais um sexto: a conexao
-   * aceita cuja foto nao esta `ready`. Foto em `processing` carrega o EXIF do
-   * celular ate o trabalhador reescrever a derivada, e servi-la entregaria a
-   * coordenada de onde ela foi tirada (ADR-0010 item 4).
+   * **A CHAVE da derivada `thumb` (176 x 176) da foto do OUTRO LADO**, pela mesma
+   * regra e no mesmo `WHERE` de [apelidoDoOutro].
    */
   readonly chaveDaFotoDoOutro: string | null;
 }
@@ -174,13 +70,7 @@ export interface MensagemGravada {
   /** Já redigido: é o que está no banco. */
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
-  /**
-   * Chave de objeto da foto do achado, quando houver. `string` e não
-   * `ObjectKey`: a marca só é emitida por `comoObjectKey`, que mora no domínio
-   * de `media`, e um módulo não enxerga o domínio de outro (§6). Quando a foto
-   * entrar, ela chega marcada pela porta de `media` — e não por um `as` aqui,
-   * que promete ao compilador que alguém validou quando ninguém validou.
-   */
+  /** Chave de objeto da foto do achado, quando houver. */
   readonly photoObjectKey: string | null;
   readonly createdAt: Date;
 }
@@ -190,55 +80,17 @@ export interface NovaMensagem {
   readonly conversationId: ConversationId;
   readonly senderRole: Papel;
   readonly senderUserId: UserId | null;
-  /** Já redigido pelo serviço. A porta não redige, e não é lugar de redigir. */
+  /** Já redigido pelo serviço. */
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
-  /**
-   * A CHAVE HIGIENIZADA da foto do achado, ou `null`.
-   *
-   * ## A INVARIANTE: aqui entra `sanitized_key`, NUNCA `object_key`
-   *
-   * Quem resolve a referência de upload nesta chave é
-   * [FotoDaConversa](./foto-da-conversa.ts), e a porta dela **não tem um caso
-   * que devolva a chave do original** — o caminho errado não está
-   * representado. Leia aquele cabeçalho antes de mexer neste campo: ele é o que
-   * fecha o vazamento de coordenada de GPS do EXIF, e é por causa dele que a
-   * LEITURA não precisa consultar estado nenhum para saber se pode servir a
-   * chave.
-   *
-   * `string` e não `ObjectKey`, pela mesma razão de
-   * [MensagemGravada.photoObjectKey]: a marca só é emitida por `comoObjectKey`,
-   * que mora no domínio de `media`, e um módulo não enxerga o domínio de outro
-   * (§6). Um `as` aqui prometeria ao compilador que alguém validou quando
-   * ninguém validou.
-   *
-   * Opcional e não obrigatório-anulável: a mensagem de sistema e os caminhos que
-   * não tratam foto não têm o que dizer sobre ela, e obrigá-los a escrever
-   * `photoObjectKey: null` espalharia a decisão por chamadores que não a
-   * tomam.
-   */
+  /** A CHAVE HIGIENIZADA da foto do achado, ou `null`. */
   readonly photoObjectKey?: string | null;
 }
 
-/**
- * As três espécies de mensagem do Bichu (BICHUS-278).
- *
- * As duas primeiras são AVISO, e por isso não saem do contador quando a pessoa
- * abre a lista. A terceira é explicação de interface e sai pela regra geral.
- *
- * Existe para que a espécie seja ARGUMENTO de quem grava, e não deduzida depois
- * pelo texto: uma heurística sobre a microcopy quebraria no dia em que a frase
- * mudasse, e quebraria em silêncio — o aviso sumiria do contador.
- */
+/** As três espécies de mensagem do Bichu (BICHUS-278). */
 export type EspecieDoSistema = 'scan_notice' | 'found_notice' | 'redaction_warning';
 
-/**
- * A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41).
- *
- * `id` está aqui para o serviço gravar a mensagem na conversa certa, e **não
- * sai**: `FinderConversation` não tem `id` nem `case_id` (SEC-001), e a rota
- * monta a resposta campo a campo sem ele.
- */
+/** A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41). */
 export interface ConversaDoAchador {
   readonly id: ConversationId;
   readonly petDisplayName: string;
@@ -249,12 +101,7 @@ export interface ConversaDoAchador {
   /** Ver `ConversaDoChamador`: as duas pontas desabilitadas (17/10). */
   readonly tutorDesabilitado: boolean;
   readonly achadorDesabilitado: boolean;
-  /**
-   * O resumo GRAVADO do token do aviso. O serviço o compara com o resumo do
-   * token apresentado em tempo constante: a igualdade do índice já achou a
-   * linha, e a comparação é a segunda chave, que não depende de o banco ter
-   * comparado do jeito que se espera.
-   */
+  /** O resumo GRAVADO do token do aviso. */
   readonly resumoDoToken: Uint8Array;
   readonly tokenExpiraEm: Date;
   readonly caso: CasoDaConversa | null;
@@ -285,39 +132,14 @@ export interface Pagina {
   readonly depoisDe: { readonly criadaEm: Date; readonly id: string } | undefined;
 }
 
-/**
- * A janela da LISTA de conversas: a de [Pagina], mais o recorte da busca.
- *
- * **Interface própria, e não um campo opcional em [Pagina].** `Pagina` também
- * paginha as MENSAGENS de uma conversa (`mensagens`), e ali não existe busca:
- * um `termo` opcional ali seria um campo que metade dos chamadores precisa
- * ignorar, e campo que se ignora é campo que alguém um dia passa sem efeito.
- *
- * `termo` é **obrigatório e explicitamente `undefined`**, no mesmo estilo de
- * `depoisDe`: quem monta a janela precisa dizer que não há recorte, em vez de
- * esquecer a chave e receber "sem recorte" por omissão.
- */
+/** A janela da LISTA de conversas: a de [Pagina], mais o recorte da busca. */
 export interface PaginaDaLista extends Pagina {
-  /**
-   * O termo da busca, já sem espaço nas pontas, ou `undefined`.
-   *
-   * O piso de 2 caracteres é do contrato (`ConversationSearch`) e é cobrado
-   * pela validação da rota, e não aqui: a porta recebe o que o contrato já
-   * aceitou.
-   */
+  /** O termo da busca, já sem espaço nas pontas, ou `undefined`. */
   readonly termo: string | undefined;
 }
 
 export interface ConversationRepository {
-  /**
-   * Abre a conversa do aviso, uma vez. Repetir com o mesmo `foundReportId` não
-   * cria a segunda: o índice único faz a idempotência, e não um `SELECT` antes
-   * do `INSERT`, que perde a corrida entre duas requisições simultâneas.
-   *
-   * O tutor e o caso **não** vêm por argumento: eles são derivados do pet
-   * dentro da própria escrita. Recebê-los de fora faria a abertura confiar em
-   * quem chama para dizer de quem é o pet.
-   */
+  /** Abre a conversa do aviso, uma vez. */
   abrirPorAviso(abertura: AberturaPorAviso): Promise<void>;
 
   /** A conversa daquele aviso, para anexar o segundo escaneamento do mesmo achador. */
@@ -328,15 +150,7 @@ export interface ConversationRepository {
     pagina: PaginaDaLista,
   ): Promise<readonly ConversaDoChamador[]>;
 
-  /**
-   * Quantas conversas o recorte tem, **sem `limit`** (`ConversationPage.total`).
-   *
-   * Consulta separada da lista, e não `items.length`: a linha de resumo da
-   * listagem diz quantas existem, e o tamanho da página diria `10` a quem tem
-   * 57. O mesmo `WHERE` da lista — a autorização está nele (ADR-0021), então
-   * uma contagem que não passasse pelo mesmo predicado contaria conversa de
-   * terceiro.
-   */
+  /** Quantas conversas o recorte tem, **sem `limit`** (`ConversationPage.total`). */
   contarDoChamador(chamador: UserId, termo: string | undefined): Promise<number>;
 
   buscarDoChamador(
@@ -344,13 +158,7 @@ export interface ConversationRepository {
     chamador: UserId,
   ): Promise<ConversaDoChamador | undefined>;
 
-  /**
-   * As mensagens, com o chamador no `WHERE` da própria consulta.
-   *
-   * O id da conversa sozinho **não** é chave aqui. Fosse, a autorização
-   * dependeria de quem chama ter lido a conversa antes — e um caminho novo que
-   * esquecesse a leitura publicaria a conversa inteira.
-   */
+  /** As mensagens, com o chamador no `WHERE` da própria consulta. */
   mensagens(
     conversa: ConversationId,
     chamador: UserId,
@@ -359,14 +167,7 @@ export interface ConversationRepository {
 
   gravarMensagem(mensagem: NovaMensagem): Promise<MensagemGravada>;
 
-  /**
-   * Mensagem do Bichu. Sem remetente humano, e por isso sem chamador.
-   *
-   * `especie` é obrigatória desde a BICHUS-278: é ela que decide se o aviso
-   * sobrevive a uma passada de olho na lista. Obrigatória e não opcional de
-   * propósito — um default silencioso faria a próxima mensagem de sistema
-   * nascer fora do contador sem ninguém decidir isso.
-   */
+  /** Mensagem do Bichu. Sem remetente humano, e por isso sem chamador. */
   gravarMensagemDeSistema(
     mensagem: Omit<NovaMensagem, 'senderRole' | 'senderUserId'> & {
       readonly especie: EspecieDoSistema;
@@ -380,65 +181,26 @@ export interface ConversationRepository {
     desde: Instant,
   ): Promise<number>;
 
-  /**
-   * Em quantos CASOS DISTINTOS esta conta escreveu **como achadora**.
-   *
-   * Casos, não mensagens (critério 17). Conversa sem caso conta como um caso
-   * próprio: o escaneamento de uma plaquinha com o pet em casa é uma abordagem
-   * a um tutor como qualquer outra, e deixá-la de fora daria ao falso achador
-   * em série um caminho grátis.
-   *
-   * "Como achadora" é o recorte que a nota do critério 11 nomeia e que a
-   * dimensão `account` sozinha não diz. Ver o adaptador: contar o tutor aqui
-   * reteria, sem avisar, quem tem três animais perdidos ao mesmo tempo.
-   */
+  /** Em quantos CASOS DISTINTOS esta conta escreveu **como achadora**. */
   contarCasosDistintosDaConta(conta: UserId, desde: Instant): Promise<number>;
 
-  /**
-   * O chamador COM CONTA bloqueia a outra parte (BICHUS-40).
-   *
-   * **A assimetria que isto fecha**: `bloquearPeloAchador` já existia e estava no
-   * ar, e o lado autenticado não tinha nada — um tutor sendo extorquido no canal
-   * mediado não tinha saída. A coluna (`blocked_at`, `blocked_by_role`) já
-   * existia, e o envio já respeita o bloqueio: é só a escrita que faltava.
-   *
-   * `chamador` entra no `WHERE` da própria escrita, como em toda consulta deste
-   * arquivo. Conversa que não é dele não é bloqueada nem respondida: zero linhas,
-   * e o serviço já respondeu 404 antes (a leitura vinculada vem primeiro).
-   *
-   * **O papel NÃO vem por argumento.** Ele é derivado da mesma consulta, pelo
-   * lado em que o chamador está: recebê-lo de fora faria a escrita confiar em
-   * quem chama para dizer de que lado ele é, e `blocked_by_role` é o que diz à
-   * outra pessoa quem fechou a porta.
-   *
-   * Idempotente: `blocked_at IS NULL` no `WHERE` preserva quem bloqueou e
-   * quando. Repetir não é erro — `accept_and_deduplicate` no contrato —, e
-   * responder "já estava" contaria a quem bloqueia o que o outro lado fez.
-   */
+  /** O chamador COM CONTA bloqueia a outra parte (BICHUS-40). */
   bloquearPeloChamador(
     conversa: ConversationId,
     chamador: UserId,
     agora: Instant,
   ): Promise<void>;
 
-  /**
-   * Marca a conversa para revisão humana. **Não notifica ninguém** (critérios
-   * 10 e 11), e não muda o `status` que os dois lados leem.
-   */
+  /** Marca a conversa para revisão humana. */
   reterParaRevisao(
     conversa: ConversationId,
     motivo: MotivoDeRetencao,
     agora: Instant,
   ): Promise<void>;
 
-  // -------------------------------------------------------------------------
-  // O achador sem conta (BICHUS-41). O "chamador" é o RESUMO do token, e ele
-  // entra no `WHERE` de toda consulta, pela mesma razão do chamador com conta.
-  // -------------------------------------------------------------------------
-
   /**
-   * A conversa do aviso cujo token tem este resumo, ou a do aviso ao qual ele
-   * foi agrupado. `undefined` quando o token não é de aviso nenhum.
+   * A conversa do aviso cujo token tem este resumo, ou a do aviso ao qual ele foi
+   * agrupado.
    */
   buscarPeloTokenDoAchador(resumo: Uint8Array): Promise<ConversaDoAchador | undefined>;
 
@@ -448,52 +210,22 @@ export interface ConversationRepository {
     pagina: PaginaDoAchador,
   ): Promise<readonly MensagemGravada[]>;
 
-  /** O achador bloqueia o tutor. Só o primeiro bloqueio conta. */
+  /** O achador bloqueia o tutor. */
   bloquearPeloAchador(resumo: Uint8Array, agora: Instant): Promise<void>;
 
   /**
-   * Põe a denúncia na fila, ou soma à que o mesmo lado já tem aberta nesta
-   * conversa (`accept_and_deduplicate`).
+   * Põe a denúncia na fila, ou soma à que o mesmo lado já tem aberta nesta conversa
+   * (`accept_and_deduplicate`).
    */
   registrarDenuncia(denuncia: NovaDenuncia): Promise<void>;
 
-  // -------------------------------------------------------------------------
-  // A LEITURA, e o contador do sino (BICHUS-278)
-  //
-  // Três métodos e não um, porque são três fatos diferentes. Juntá-los faria
-  // abrir a lista marcar tudo como lido — o defeito exato que a regra proíbe.
-  // -------------------------------------------------------------------------
-
-  /**
-   * Quantas conversas entram no contador do sino AGORA.
-   *
-   * **Não é "quantas estão não lidas".** Abrir a lista zera este número e deixa
-   * as marcas de item como estavam; o aviso de plaquinha lida e o de achado
-   * (`system_kind`) **não** saem daqui ao abrir a lista — só quando a conversa
-   * deles é aberta.
-   *
-   * Derivado na leitura, nunca materializado: duas fontes para o mesmo fato
-   * divergem no primeiro caminho que esquecer de decrementar uma delas.
-   */
+  /** Quantas conversas entram no contador do sino AGORA. */
   contarParaOSino(chamador: UserId): Promise<number>;
 
-  /**
-   * A CONTA viu a área de mensagens. Zera o contador, **sem** marcar item.
-   *
-   * Idempotente por `ON CONFLICT`: chamar duas vezes seguidas grava o instante
-   * novo e responde igual. Não recebe lista de conversas de propósito — se
-   * recebesse, alguém acabaria passando todas e marcando-as como lidas.
-   */
+  /** A CONTA viu a área de mensagens. */
   marcarListaVista(chamador: UserId, agora: Instant): Promise<void>;
 
-  /**
-   * ESTE LADO abriu a conversa: marca o item como lido até `agora`.
-   *
-   * O `chamador` entra no `WHERE` da própria escrita, como em todo método deste
-   * arquivo: conversa que não é dele não é marcada. O PAPEL **não** vem por
-   * argumento — ele é derivado do lado em que o chamador está, pela mesma razão
-   * de `bloquearPeloChamador`.
-   */
+  /** ESTE LADO abriu a conversa: marca o item como lido até `agora`. */
   marcarConversaLida(
     conversa: ConversationId,
     chamador: UserId,

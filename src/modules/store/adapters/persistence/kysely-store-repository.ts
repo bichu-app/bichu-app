@@ -1,30 +1,4 @@
-/**
- * Persistencia da vitrine da `Loja`.
- *
- * ## `active` mora na clausula `WHERE`, e em lugar nenhum alem
- *
- * Mesmo desenho de `kysely-directory-repository.ts`, e pelo mesmo motivo: a
- * diferenca entre filtrar na consulta e filtrar depois aparece no dia em que
- * alguem esquece o `if`. Item retirado da vitrine fica na tabela, marcado
- * inativo e nunca apagado (criterio 22 da BICHUS-185, mesma regra da
- * BICHUS-90) -- e a unica coisa que o mantem fora da tela e este predicado.
- *
- * Vale para as DUAS tabelas: um item ativo de um parceiro desativado nao
- * aparece. Desativar um parceiro e como se retira a vitrine dele inteira, e um
- * item orfao na tela levaria a um site que decidimos nao mais apontar.
- *
- * ## A busca e `ILIKE` com escape, e nao busca de texto completo
- *
- * `to_tsvector` acertaria radical e plural, e custaria um indice GIN, uma
- * configuracao de idioma e uma segunda definicao de "o que casa" que diverge da
- * que a pessoa ve. A vitrine curada tem dezenas de itens, nao milhares:
- * `ILIKE` sobre titulo e resumo responde em tempo que ninguem percebe e casa o
- * que a pessoa digitou.
- *
- * **`%`, `_` e `\` sao escapados.** Sem isso, digitar `%` na busca casa tudo e
- * a contagem da barra de listagem passa a dizer o total da vitrine para um
- * termo que a pessoa acha que filtrou.
- */
+/** Persistencia da vitrine da `Loja`. */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import {
@@ -68,23 +42,12 @@ interface LinhaDoItem {
 /**
  * Escapa os curingas do `LIKE` para que o termo da pessoa seja procurado como
  * texto, e nao como padrao.
- *
- * A barra invertida vem primeiro: escapar `%` depois dela duplicaria a barra
- * que acabou de ser inserida.
  */
 export function escaparCuringas(termo: string): string {
   return termo.replace(/\\/g, '\\\\').replace(/[%_]/g, (c) => `\\${c}`);
 }
 
-/**
- * `price_checked_at` como `AAAA-MM-DD`.
- *
- * O driver devolve `Date` para `date`, e `Date.toISOString()` passa por UTC. Em
- * fuso negativo, uma data pura lida como meia-noite local vira o dia anterior
- * em UTC -- e o preco de um item passaria a ter sido consultado um dia antes,
- * silenciosamente aproximando o vencimento. As tres partes sao lidas em UTC,
- * que e como o driver monta a data pura.
- */
+/** `price_checked_at` como `AAAA-MM-DD`. */
 export function comoDataSimples(valor: Date | string | null): string | null {
   if (valor === null) return null;
   if (typeof valor === 'string') return valor.slice(0, 10);
@@ -97,31 +60,12 @@ export function comoDataSimples(valor: Date | string | null): string | null {
 /**
  * O construtor da listagem, separado para poder ser **compilado e lido** por um
  * teste sem subir banco, como `construtorDaListagem` faz em `Perto`.
- *
- * E o que permite que "o item inativo esta fora" seja verificavel em vez de
- * combinado: o teste compila esta consulta e confere o predicado.
  */
 export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
   let consulta = db
     .selectFrom('store_items as i')
-    // A juncao e pela identidade INTERNA (ADR-0024). O `slug` do parceiro
-    // continua sendo o que sai na resposta, projetado logo abaixo -- o que
-    // mudou foi por onde as duas tabelas se ligam, nao o que a tela recebe.
     .innerJoin('store_partners as p', 'p.id', 'i.partner_id')
-    // O rotulo da categoria vem na MESMA consulta, e a juncao e INTERNA de
-    // proposito: a chave estrangeira `store_items_categoria_existe` garante que
-    // a linha existe, entao uma juncao externa aqui prometeria um nulo que o
-    // banco nao admite -- e o nulo prometido viraria `?? ''` em algum lugar.
-    //
-    // A coluna `i.category` virou ANULAVEL na `20261017000002`, e a juncao
-    // segue interna AQUI pelo mesmo motivo que a do parceiro ao lado: esta
-    // leitura e so do item publicado (`i.active`), e publicado com categoria
-    // nula e estado que o `CHECK store_items_publicado_esta_completo` recusa.
-    // Na leitura do PAINEL, que mostra rascunho, as duas sao externas.
     .innerJoin('store_categories as c', 'c.code', 'i.category')
-    // A da SUBcategoria e externa, porque a coluna e opcional. As duas
-    // condicoes vao no `on`, e nao num `where`: no `where`, item sem
-    // subcategoria sairia da lista.
     .leftJoin('store_subcategories as sc', (juncao) =>
       juncao
         .onRef('sc.category_code', '=', 'i.category')
@@ -134,13 +78,6 @@ export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
     consulta = consulta.where('i.category', '=', recorte.category);
   }
 
-  // O segundo nivel. **Independe de `category`**: o par `(category,
-  // subcategory)` do item ja e coerente por chave estrangeira, entao filtrar
-  // so pela subcategoria nao precisa da categoria para ser correto.
-  //
-  // Subcategoria inexistente, inativa ou de outra categoria nao casa com item
-  // nenhum e a lista volta VAZIA, sem 400 -- a mesma regra de `tag`, pela mesma
-  // razao: o link antigo continua abrindo.
   if (recorte.subcategory !== undefined) {
     consulta = consulta.where('i.subcategory', '=', recorte.subcategory);
   }
@@ -158,8 +95,6 @@ export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
     );
   }
 
-  // A tag precisa estar ATIVA, e a condicao mora aqui dentro: tag inativa ou
-  // inexistente nao casa com item nenhum e a lista volta vazia, sem 400.
   if (recorte.tag !== undefined) {
     const slug = recorte.tag;
     consulta = consulta.where((eb) =>
@@ -188,7 +123,7 @@ export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
   return consulta;
 }
 
-/** As colunas que a lista e o detalhe projetam. Uma definicao so. */
+/** As colunas que a lista e o detalhe projetam. */
 const COLUNAS_DO_ITEM = [
   'i.id as id',
   'i.slug as slug',
@@ -212,27 +147,21 @@ const COLUNAS_DO_ITEM = [
 interface Complementos {
   readonly especies: ReadonlyMap<string, string[]>;
   readonly tags: ReadonlyMap<string, TagDaVitrine[]>;
-  /**
-   * So as PRONTAS, em ordem de `position`.
-   *
-   * `altText` e `string | null` porque a COLUNA e nula desde a migracao
-   * `20261017000002`: o tipo dizia `string` e o nulo do banco atravessava por
-   * baixo dele.
-   */
+  /** So as PRONTAS, em ordem de `position`. */
   readonly imagens: ReadonlyMap<string, { chave: string; altText: string | null }[]>;
 }
 
 export class KyselyStoreRepository implements StoreRepository {
   constructor(
     private readonly db: Db,
-    /** A URL publica da derivada, montada na leitura. O banco guarda so a chave. */
+    /** A URL publica da derivada, montada na leitura. */
     private readonly urlDeMidia: (chave: string) => string,
   ) {}
 
   /**
-   * Especie, tags ativas e imagens prontas dos itens da pagina, em TRES
-   * consultas por pagina, e nao tres por item: a vitrine e a tela mais aberta
-   * da `Loja`, e N+1 nela e a primeira lentidao que alguem sente.
+   * Especie, tags ativas e imagens prontas dos itens da pagina, em TRES consultas
+   * por pagina, e nao tres por item: a vitrine e a tela mais aberta da `Loja`, e N+1
+   * nela e a primeira lentidao que alguem sente.
    */
   private async complementos(ids: readonly string[]): Promise<Complementos> {
     if (ids.length === 0) return { especies: new Map(), tags: new Map(), imagens: new Map() };
@@ -250,8 +179,6 @@ export class KyselyStoreRepository implements StoreRepository {
         .where('t.active', '=', true)
         .orderBy('t.label', 'asc')
         .execute(),
-      // `status = 'ready'` NA CONSULTA: a imagem em processamento carrega o
-      // arquivo original sem limpeza, e nao pode chegar nem perto da projecao.
       this.db
         .selectFrom('store_item_images as ii')
         .innerJoin('catalog_images as c', 'c.id', 'ii.image_id')
@@ -284,8 +211,6 @@ export class KyselyStoreRepository implements StoreRepository {
   private comoItem(linha: LinhaDoItem, extra: Complementos): ItemDaVitrine {
     const daPagina = extra.imagens.get(linha.id) ?? [];
     const principal = daPagina[0];
-    // O banco guarda caminho; o endereco externo e composto aqui, com o host do
-    // parceiro que a juncao trouxe. Ver `enderecoNoParceiro`.
     const externa =
       linha.image_path === null ? null : enderecoNoParceiro(linha.partner_host, linha.image_path);
     return {
@@ -295,27 +220,13 @@ export class KyselyStoreRepository implements StoreRepository {
       category: linha.category,
       categoryLabel: linha.category_label,
       subcategory: linha.subcategory,
-      // O rotulo so existe com a subcategoria, e a juncao externa ja devolve
-      // nulo nos dois quando ela falta. A conjuncao explicita existe para o
-      // caso de a subcategoria apontar para uma linha INATIVA: o codigo
-      // continua saindo (o item ja o usa), e um rotulo sem linha nao e
-      // inventado aqui.
       subcategoryLabel: linha.subcategory === null ? null : linha.subcategory_label,
       imageUrl: principal !== undefined ? this.urlDeMidia(principal.chave) : externa,
       imageAltText:
         principal !== undefined ? principal.altText : externa === null ? null : linha.title,
-      // **A lista INTEIRA, e nao so a primeira.** Ela ja estava aqui: a
-      // consulta de `complementos` traz todas as imagens prontas de todos os
-      // itens da pagina ordenadas por `position`, e este mapeamento lia o
-      // indice 0 e jogava o resto fora. Projetar o que ja foi buscado nao
-      // acrescenta consulta nenhuma -- e por isso o carrossel da vitrine nao
-      // cria N+1.
       imagens: daPagina.map((i) => ({ url: this.urlDeMidia(i.chave), altText: i.altText })),
       species: ordenarEspecies(extra.especies.get(linha.id) ?? []),
       tags: extra.tags.get(linha.id) ?? [],
-      // O host do ITEM quando ele mora num subdominio do parceiro
-      // (`www.cobasi.com.br`), e o do parceiro no caso comum. A imagem acima
-      // continua no host do parceiro: ela e da massa, nao do destino.
       targetUrl: enderecoNoParceiro(
         hostDoDestinoDoItem(linha.partner_host, linha.target_host),
         linha.target_path,
@@ -332,18 +243,11 @@ export class KyselyStoreRepository implements StoreRepository {
   async listarVitrine(recorte: RecorteDaVitrine): Promise<PaginaDaVitrine> {
     const base = construtorDaVitrine(this.db, recorte);
 
-    // O total do RECORTE. Consulta separada e nao `COUNT(*) OVER ()` porque a
-    // janela some quando a pagina nao tem linha nenhuma, e e justamente ai que
-    // a tela precisa do total para distinguir "filtrou e nao sobrou" de "a
-    // vitrine esta vazia".
     const contagem = await base
       .select((eb) => eb.fn.countAll<string>().as('total'))
       .executeTakeFirst();
     const total = Number(contagem?.total ?? 0);
 
-    // O desempate por `slug` nao e enfeite: sem ele, duas linhas com o mesmo
-    // `sort_order` (ou o mesmo titulo) podem trocar de lugar entre duas
-    // chamadas, e a paginacao passa a repetir e a pular itens sem nada acusar.
     const consulta =
       recorte.sort === 'nome'
         ? base.orderBy('i.title', 'asc').orderBy('i.slug', 'asc')
@@ -360,19 +264,12 @@ export class KyselyStoreRepository implements StoreRepository {
   }
 
   async detalhe(slug: string): Promise<DetalheDaVitrine | null> {
-    // O MESMO construtor da lista, e portanto o mesmo `WHERE`: item ativo de
-    // parceiro ativo. Rascunho, retirado e parceiro inativo caem fora pela
-    // mesma clausula que os tira da lista, e o 404 nao distingue nenhum deles.
     const linha = (await construtorDaVitrine(this.db, { sort: 'curadoria', page: 1, limit: 1 })
       .where('i.slug', '=', slug)
       .select([...COLUNAS_DO_ITEM])
       .executeTakeFirst()) as unknown as LinhaDoItem | undefined;
     if (linha === undefined) return null;
     const extra = await this.complementos([linha.id]);
-    // O item ja carrega a mesma lista em `imagens` (ver `comoItem`); ela
-    // continua saindo como campo proprio do detalhe porque `DetalheDaVitrine` e
-    // a porta que `projetarDetalhe` consome, e mudar a forma dessa porta mexeria
-    // numa tela que ja funciona.
     const item = this.comoItem(linha, extra);
     return { item, imagens: item.imagens };
   }

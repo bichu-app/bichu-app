@@ -1,34 +1,4 @@
-/**
- * Portão da matriz de rastreabilidade (ADR-0027 item 18).
- *
- * Regra do cliente, 23/09/2026: tudo segue `api/openapi.yaml`, e backend, app,
- * backoffice e site usam os mesmos campos, valores e funcionalidades. A matriz
- * `api/rastreabilidade-backoffice-rede.yaml` liga cada tela dos protótipos à
- * operação que ela chama e a cada campo, filtro, valor de lista fechada e tipo
- * de problema que ela usa. Este portão lê a matriz e o contrato e reprova
- * quando os dois deixam de concordar.
- *
- * O que ele reprova:
- *
- * 1. operação de `situacao: contrato` cujo `operationId` não existe;
- * 2. referência (`req:`, `resp:`, `query:`, `path:`, `header:`, `problem:`,
- *    `enum:`) que não resolve, seguindo `$ref`, `allOf`, `oneOf`, `anyOf` e
- *    itens de lista;
- * 3. operação `pendente` sem `onde`;
- * 4. operação do contrato sob `/admin/` que não aparece nem em `telas` nem em
- *    `contrato_sem_tela`: operação nova que ninguém classificou;
- * 5. `operationId` de `contrato_sem_tela` que não existe;
- * 6. correspondência código → rótulo com código fora da lista fechada, ou
- *    `um_para_um: true` com valor da lista sem rótulo;
- * 7. **matriz sem nenhuma tela**, ou sem nenhuma referência resolvida: portão
- *    que não tem o que conferir reprova, nunca aprova.
- *
- * O que ele NÃO pega, dito por escrito: se a tela real (o código do app, do
- * painel ou do site) usa o que a matriz diz. A matriz é declaração; o que ela
- * garante é que a declaração e o contrato não divergem em silêncio. A ligação
- * entre a matriz e o código de cada ponta é o próximo passo, e é de cada
- * ponta.
- */
+/** Portão da matriz de rastreabilidade (ADR-0027 item 18). */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -47,7 +17,7 @@ function texto(valor: unknown): string | undefined {
   return typeof valor === 'string' ? valor : undefined;
 }
 
-/** Segue `$ref` locais até um schema concreto. Ciclo ou ref quebrada devolve `undefined`. */
+/** Segue `$ref` locais até um schema concreto. */
 function desreferenciar(spec: Mapa, valor: unknown): Mapa | undefined {
   let atual: unknown = valor;
   for (let passo = 0; passo < 32; passo++) {
@@ -286,7 +256,7 @@ export const MATRIZ = 'api/rastreabilidade-backoffice-rede.yaml';
 export const CONTRATO = 'api/openapi.yaml';
 export const ISCA = 'src/tools/iscas/rastreabilidade-deve-reprovar.yaml';
 
-/** Os achados que a isca permanente PRECISA produzir. Se algum faltar, o portão ficou cego. */
+/** Os achados que a isca permanente PRECISA produzir. */
 export const ACHADOS_DA_ISCA: readonly string[] = [
   'operationId não existe no contrato',
   'não resolve `req:campo_que_nao_existe`',

@@ -1,32 +1,6 @@
 /**
- * O dominio do COMUNICADO (broadcast): a mensagem que o painel manda para a
- * caixa de notificacoes de todo mundo.
- *
- * Tres regras decidem esta tela, e todas as tres moram aqui como funcao pura,
- * para que o teste as alcance sem montar a tela:
- *
- * 1. **Previa antes do disparo, sempre.** O operador escreve, pede a previa, ve
- *    o texto exatamente como a caixa vai mostrar e so entao pode disparar.
- *    Mudar o texto depois da previa VENCE a previa, e o disparo volta a ficar
- *    travado -- senao o painel mandaria um texto que ninguem conferiu.
- * 2. **Teto diario.** `remaining_today === 0` trava o disparo na tela, com o
- *    motivo escrito. Descobrir o teto pelo `409` seria descobrir depois de
- *    apertar o botao, e o `409` continua tratado porque outro operador pode
- *    disparar no meio.
- * 3. **Irreversivel.** Nao ha editar nem apagar: a lista e o registro
- *    permanente.
- *
- * **O rascunho nao atravessa a rede antes do disparo.** A previa pede ao
- * servidor so os NUMEROS (`getAdminBroadcastDispatchWindow`, um `GET` sem
- * corpo); quem renderiza titulo e corpo e o painel, que ja os tem na mao. A
- * previa continua obrigatoria -- ela so deixou de precisar de uma ida ao
- * servidor carregando o texto.
- *
- * **O teto vem do servidor** (`daily_cap`), e nao de uma constante daqui: duas
- * copias do mesmo numero divergem, e a que diverge e a que diz "resta 1" sobre
- * um teto que o banco ja fechou.
- *
- * Os tipos vem do contrato (`api/openapi.yaml`), nunca escritos a mao aqui.
+ * O dominio do COMUNICADO (broadcast): a mensagem que o painel manda para a caixa
+ * de notificacoes de todo mundo.
  */
 import type { Esquemas } from '../api/cliente.ts';
 import { tipoDoProblema } from '../api/problema.ts';
@@ -62,11 +36,7 @@ export function rascunhoDe(v: ValoresDoComunicado): RascunhoDoComunicado {
   return { title: v.titulo.trim(), body: v.corpo.trim() };
 }
 
-/**
- * A identidade de um rascunho. E por ela que se sabe se a previa guardada ainda
- * descreve o que esta escrito: comparar o texto cru deixaria um espaco no fim
- * vencer a previa sem mudar nada do que seria enviado.
- */
+/** A identidade de um rascunho. */
 export function textoDoRascunho(r: RascunhoDoComunicado): string {
   return JSON.stringify([r.title, r.body]);
 }
@@ -84,13 +54,8 @@ export function validarComunicado(v: ValoresDoComunicado): Partial<Record<CampoD
 }
 
 /**
- * A previa: o rascunho EXATO que ela mostrou, junto com os numeros que o
- * servidor deu naquele momento.
- *
- * O rascunho e guardado, e nao relido da tela, por duas razoes: e dele que sai
- * a identidade que decide se a previa venceu, e e ele que a caixa de previa
- * renderiza -- previa vencida continua mostrando o que foi conferido, e nao o
- * que esta sendo digitado agora.
+ * A previa: o rascunho EXATO que ela mostrou, junto com os numeros que o servidor
+ * deu naquele momento.
  */
 export interface JanelaGuardada {
   rascunho: RascunhoDoComunicado;
@@ -99,11 +64,7 @@ export interface JanelaGuardada {
 
 export type TravaDoDisparo = 'texto-invalido' | 'sem-previa' | 'previa-vencida' | 'teto-atingido';
 
-/**
- * O que impede o disparo AGORA, ou `undefined` quando nada impede. A ordem
- * importa: sem texto valido nao ha previa a pedir, e e isso que a tela diz
- * primeiro.
- */
+/** O que impede o disparo AGORA, ou `undefined` quando nada impede. */
 export function travaDoDisparo(v: ValoresDoComunicado, guardada: JanelaGuardada | undefined): TravaDoDisparo | undefined {
   if (Object.keys(validarComunicado(v)).length > 0) return 'texto-invalido';
   if (!guardada) return 'sem-previa';
@@ -112,13 +73,7 @@ export function travaDoDisparo(v: ValoresDoComunicado, guardada: JanelaGuardada 
   return undefined;
 }
 
-/**
- * O motivo ESCRITO de cada trava: botao desligado sem explicacao e o defeito.
- *
- * O texto do teto so sai com numero quando ha janela na mao -- antes da primeira
- * previa o painel nao sabe qual e o teto, e chutar 3 aqui seria a segunda copia
- * do numero que o contrato passou a entregar.
- */
+/** O motivo ESCRITO de cada trava: botao desligado sem explicacao e o defeito. */
 export function motivoDaTrava(trava: TravaDoDisparo, janela: JanelaDeDisparo | undefined): string {
   switch (trava) {
     case 'texto-invalido':
@@ -136,8 +91,7 @@ export function motivoDaTrava(trava: TravaDoDisparo, janela: JanelaDeDisparo | u
 
 /**
  * O teto batido pelo `409`, e nao pela janela: outro operador disparou entre a
- * previa e este clique. O texto diz as duas coisas que a pessoa precisa saber
- * -- que nada foi enviado, e que a saida nao e tentar de novo.
+ * previa e este clique.
  */
 export function mensagemDoTetoNoDisparo(teto: number): string {
   return (
@@ -154,14 +108,7 @@ export function mensagemDoErroDoDisparo(status: number, erro: unknown, teto: num
   return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo. Nada foi enviado.';
 }
 
-/**
- * A falha da janela nunca fala de envio: ela e um `GET` que nao escreve nada.
- *
- * **Sem ramo de `400`.** `getAdminBroadcastDispatchWindow` nao tem corpo de
- * requisicao e nao declara `400` no contrato: nao ha o que o servidor recuse.
- * O titulo e a mensagem continuam conferidos aqui, por `validarComunicado`,
- * antes de qualquer ida ao servidor.
- */
+/** A falha da janela nunca fala de envio: ela e um `GET` que nao escreve nada. */
 export function mensagemDoErroDaJanela(status: number): string {
   if (status === 429) return 'Muitos pedidos em pouco tempo. Espere alguns minutos e tente de novo.';
   return 'Não conseguimos saber quantas caixas o comunicado alcança. Confira a internet e tente de novo.';

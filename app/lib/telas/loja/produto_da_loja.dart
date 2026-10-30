@@ -16,49 +16,6 @@ import 'vitrine_da_loja.dart';
 
 /// A pagina de um produto da `Loja`: `GET /v1/store/items/{itemSlug}`
 /// (`getStoreItem`).
-///
-/// **Ela existe porque a galeria nao tinha onde aparecer.** O painel aceita
-/// oito imagens com ordem e capa escolhivel; a vitrine mostra UMA
-/// (`image_url`, a de posicao 0) porque a lista nao carrega as outras de
-/// proposito, para nao pesar. A rota do detalhe traz as oito e **nunca tinha
-/// sido chamada por ninguem**: das oito que o administrador cadastrava, o
-/// tutor via uma.
-///
-/// ## Ordem, de cima para baixo
-///
-/// Galeria (quadro grande + fita de miniaturas); cabecalho (titulo, parceiro,
-/// categoria, preco); o aviso de que a compra e do parceiro; `Sobre o
-/// produto`, com a descricao **inteira**; o botao de abrir no site.
-///
-/// ## O "Ler mais" nao vem para ca, e isso e o ponto
-///
-/// O corte de 500 caracteres de `ItemDaLoja.trechoDoResumo` e do CARTAO, onde
-/// uma descricao de 3000 caracteres empurraria a vitrine inteira para baixo.
-/// Aqui a pagina e de um produto so: nao ha o que empurrar, e esconder metade
-/// do texto atras de um botao numa tela dedicada a ele seria esconder por
-/// habito. A descricao sai inteira, com as quebras de linha que o painel
-/// gravou.
-///
-/// ## O que esta tela NAO tem, pelas mesmas razoes da vitrine
-///
-/// Sem carrinho, sem pedido, sem pagamento, sem estado de compra (criterio 5
-/// da BICHUS-185). Sem preco riscado, "de/por" nem desconto (criterio 19).
-/// Sem compartilhar e sem favorito: nao existem no contrato.
-///
-/// ## Quatro estados, e o quarto nao e tela em branco
-///
-/// - **carregando**: o esqueleto, na proporcao do quadro da galeria;
-/// - **carregado**: a pagina;
-/// - **sem imagem nenhuma**: a galeria **nao e desenhada**, e nada ocupa o
-///   lugar dela. Nao e falha -- o contrato diz "vazia e estado normal", e a
-///   Loja de hml hoje tem zero produto. Nao entra banner da marca aqui: o
-///   `BannerDaMarca` de `pecas_da_rede.dart` desenha ceu, sol e tres arvores,
-///   que e o pilar "encontros", e por um produto ele afirmaria a coisa errada;
-/// - **nao encontrado**: os quatro 404 do contrato (rascunho, retirado,
-///   inexistente, parceiro inativo) viram UM texto. **Rascunho da nao
-///   encontrado, e nao tela vazia**: o detalhe nao e uma pre-visualizacao do
-///   painel, e um produto que ninguem publicou nao esta aqui;
-/// - **erro**: a faixa com `Atualizar`, como no resto do app.
 class TelaDoProduto extends StatefulWidget {
   const TelaDoProduto({required this.slug, super.key});
 
@@ -69,10 +26,6 @@ class TelaDoProduto extends StatefulWidget {
   static const String tituloDaDescricao = 'Sobre o produto';
 
   /// O 404, nos quatro casos do contrato, com **uma** frase.
-  ///
-  /// Nao diz "rascunho" nem "retirado": distinguir os quatro contaria a quem
-  /// esta de fora que existe um produto que ninguem publicou, e a tela nao tem
-  /// o que fazer com a diferenca -- nos quatro casos ele nao esta aqui.
   static const String tituloDoNaoEncontrado = 'Este produto saiu da vitrine';
 
   static const String explicacaoDoNaoEncontrado =
@@ -84,8 +37,8 @@ class TelaDoProduto extends StatefulWidget {
   /// O que o leitor de tela anuncia enquanto a pagina carrega.
   static const String carregandoOProduto = 'Carregando o produto';
 
-  /// Empilha o produto no ramo da `Loja`, com a barra de abas: voltar devolve
-  /// a vitrine com a busca e o filtro de quem estava lendo.
+  /// Empilha o produto no ramo da `Loja`, com a barra de abas: voltar devolve a
+  /// vitrine com a busca e o filtro de quem estava lendo.
   static Future<void> abrir(BuildContext context, String slug) {
     return context.push<void>(Rotas.produtoDaLojaDe(slug));
   }
@@ -94,10 +47,7 @@ class TelaDoProduto extends StatefulWidget {
   State<TelaDoProduto> createState() => _TelaDoProdutoState();
 }
 
-/// Os desfechos de uma carga. **`naoEncontrado` e separado de `falha`**: um
-/// pede `Atualizar` (a pergunta nao chegou) e o outro pede a volta para a
-/// vitrine (a pergunta chegou e a resposta foi "nao existe"). Um estado so
-/// ofereceria `Atualizar` para quem vai receber 404 de novo.
+/// Os desfechos de uma carga.
 enum _Fase { carregando, pronto, naoEncontrado, falha }
 
 class _TelaDoProdutoState extends State<TelaDoProduto> {
@@ -105,8 +55,7 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
   DetalheDoProduto? _detalhe;
   String? _textoDaFalha;
 
-  /// Qual imagem da galeria esta no quadro grande. Indice no array do
-  /// contrato, onde 0 e a capa.
+  /// Qual imagem da galeria esta no quadro grande.
   int _imagemAtual = 0;
 
   final PageController _quadros = PageController();
@@ -138,9 +87,6 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
       if (!mounted) return;
       setState(() {
         _detalhe = detalhe;
-        // A capa volta a ser o quadro aberto depois de recarregar: manter o
-        // indice 5 sobre uma galeria que agora tem duas imagens abriria a
-        // pagina no vazio.
         _imagemAtual = 0;
         _fase = _Fase.pronto;
       });
@@ -262,9 +208,6 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
     final item = detalhe.item;
 
     return <Widget>[
-      // **Produto sem imagem nenhuma nao ganha substituto.** A galeria
-      // simplesmente nao e montada, do mesmo jeito que o cartao da vitrine nao
-      // desenha imagem quando `image_url` e nulo.
       if (!detalhe.semImagem)
         _Galeria(
           imagens: detalhe.imagens,
@@ -275,20 +218,12 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
         ),
       const SizedBox(height: BichuEspaco.e4),
       _Margem(child: _Cabecalho(item: item)),
-      // O AVISO DO PARCEIRO SAIU daqui e da vitrine (pedido do cliente,
-      // 17/10/2026). O texto continua em
-      // `VitrineDaLoja.avisoDeQueNaoSomosOVendedor`, com a razao ao lado.
       const SizedBox(height: BichuEspaco.e6),
-      // A descricao INTEIRA, sem corte e sem botao: ver o cabecalho da classe.
       _Secao(
         icone: Icons.notes_outlined,
         titulo: TelaDoProduto.tituloDaDescricao,
         child: _DescricaoInteira(resumo: item.resumo),
       ),
-      // O botao so existe com destino `https` utilizavel, a mesma regra do
-      // cartao da vitrine: a conferencia e de `ItemDaLoja.destinoExterno`, e
-      // sem destino a tela termina na descricao em vez de desenhar um botao
-      // que nao leva a lugar nenhum.
       if (item.destinoExterno case final Uri destino) ...<Widget>[
         const SizedBox(height: BichuEspaco.e6),
         _Margem(
@@ -299,38 +234,7 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// A galeria
-// ---------------------------------------------------------------------------
-
 /// A galeria do produto: o quadro grande, e a fita de miniaturas abaixo.
-///
-/// ## A ordem e a do painel, e nada aqui reordena
-///
-/// `StoreItemImage` nao tem campo de posicao: a ordem do array **e** a ordem
-/// que o administrador escolheu, e a primeira e a capa (a mesma `image_url`
-/// que o cartao desenha). A galeria percorre a lista como ela chegou.
-///
-/// ## Dois jeitos de navegar, e o segundo nao e enfeite
-///
-/// Arrastar o quadro troca a imagem (`PageView`); tocar numa miniatura abre
-/// aquela. **Os dois existem porque arrastar nao se anuncia**: com oito
-/// imagens, quem nao descobre o arraste ve a capa e mais nada, que e o
-/// problema que esta tela existe para resolver. A fita diz quantas ha, e a
-/// miniatura aberta fica marcada.
-///
-/// A fita so aparece com **duas ou mais**: uma fita de um quadradinho nao
-/// navega para lugar nenhum.
-///
-/// ## A miniatura pede a imagem GRANDE, e isso e um desperdicio conhecido
-///
-/// `StoreItemImage` tem `url` e `alt_text` e mais nada. `NetworkEventImage`
-/// tem `thumb_url` (480 x 360) exatamente para a galeria do detalhe nao baixar
-/// 1024 px para pintar 144 dp; `StoreItemImage` **nao tem o campo**, nem no
-/// contrato de hoje nem no de `feat/tratamento-de-imagem`. Entao aqui a
-/// miniatura desenha a mesma `url` do quadro grande. O conserto e um campo no
-/// contrato, que manda nas quatro aplicacoes, e nao um recorte inventado nesta
-/// tela.
 class _Galeria extends StatelessWidget {
   const _Galeria({
     required this.imagens,
@@ -347,9 +251,6 @@ class _Galeria extends StatelessWidget {
   final PageController controlador;
 
   /// A miniatura: 96 dp, na proporcao do quadro grande.
-  ///
-  /// Menor que os 144 dp de `Rede` porque aqui ela convive com o quadro
-  /// grande na mesma tela e a tela tem mais secoes abaixo.
   static const double _larguraDaMiniatura = 96;
 
   /// `3 de 8`, para quem precisa saber que ha mais.
@@ -372,9 +273,6 @@ class _Galeria extends StatelessWidget {
             itemBuilder: (context, i) => Image.network(
               imagens[i].url,
               fit: BoxFit.cover,
-              // O texto do painel quando ha, o nome do produto quando nao ha.
-              // A escolha e do modelo (`ImagemDoProduto.nomeDaImagem`), e nao
-              // desta linha.
               semanticLabel: imagens[i].nomeDaImagem(tituloDoProduto),
               errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),
             ),
@@ -414,11 +312,6 @@ class _Galeria extends StatelessWidget {
 }
 
 /// Uma miniatura da fita.
-///
-/// **O nome anunciado diz a POSICAO, e nao o texto alternativo da imagem.**
-/// Numa fita de oito, "Bola Pop vista de cima, botão" repetido nao diz a quem
-/// usa leitor de tela onde ele esta: `Imagem 3 de 8` diz. O texto alternativo
-/// e do quadro grande, que e onde a imagem de fato aparece.
 class _Miniatura extends StatelessWidget {
   const _Miniatura({
     required this.imagem,
@@ -455,9 +348,6 @@ class _Miniatura extends StatelessWidget {
           width: largura,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(BichuRaio.md),
-            // A moldura marca a aberta. **A diferenca nao e so de cor**: a
-            // espessura muda tambem, e `Semantics.selected` a diz por extenso
-            // (SC 1.4.1).
             border: Border.all(
               color: aberta ? cores.primary : cores.outline,
               width: aberta ? BichuBorda.thick : BichuBorda.hairline,
@@ -480,32 +370,7 @@ class _Miniatura extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// O resto da pagina
-// ---------------------------------------------------------------------------
-
-/// Titulo, parceiro e categoria. **Sem preco desde 18/10/2026.**
-///
-/// O preco saiu da secao `Loja` inteira por pedido literal do cliente --
-/// *"Retire o preco dos produtos da loja e o texto de 'preco de referencia'"*
-/// --, e "inteira" inclui esta pagina. Ela esta PARADA e sem entrada desde
-/// 17/10 (nada no aplicativo navega para ca), e e exatamente por isso que o
-/// preco saiu daqui tambem: deixado de pe, ele voltaria a tela no dia em que
-/// alguem reabrisse a rota, e a decisao do cliente precisaria ser aplicada uma
-/// segunda vez por alguem que nao a conhece.
-///
-/// **O que saiu**, nos mesmos tres pedacos do cartao: o valor
-/// (`item.linhaDoPreco`), o `semanticsLabel` que carregava
-/// "Preco de referencia" junto dele, e o ramo de
-/// `VitrineDaLoja.precoNaoConfirmado` -- a clausula visual que acompanhava o
-/// preco vencido e que fica orfa sem valor nenhum na tela.
-///
-/// **O que NAO saiu:** a clausula juridica dos termos. Ela continua inteira em
-/// `web/src/conteudo/juridico/termos.md`, e fala do que a plataforma e -- nao
-/// vende nada, precos sao referencia -- e nao do que esta pagina pinta.
-///
-/// O arranjo da pagina continua intocado no resto, como a decisao de 17/10
-/// manda: nada foi redesenhado aqui, so o preco deixou de ser desenhado.
+/// Titulo, parceiro e categoria.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.item});
 
@@ -515,13 +380,6 @@ class _Cabecalho extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    // A CLASSIFICACAO, e nao mais so a categoria. O detalhe do produto nasceu
-    // no lote anterior de 17/10, quando a categoria era um `enum` do binario e
-    // `item.categoria` era o proprio valor com `rotulo`. Na mescla dos dois
-    // niveis ela virou DADO: `categoria` passou a ser o CODIGO (`String?`) e o
-    // rotulo chega na resposta. `linhaDaClassificacao` e o mesmo texto que o
-    // cartao da vitrine mostra -- "Racoes · Racao seca" --, para a pilula do
-    // detalhe e a linha da lista nunca divergirem.
     final classificacao = item.linhaDaClassificacao;
 
     return Column(
@@ -536,14 +394,10 @@ class _Cabecalho extends StatelessWidget {
           item.parceiro.nome,
           style: textos.labelLarge?.copyWith(color: cores.textSecondary),
         ),
-        // A categoria, quando ha. Pilula neutra: a palavra e a informacao, e
-        // nenhuma cor diz nada.
         if (classificacao != null) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),
           _PilulaDaCategoria(rotulo: classificacao),
         ],
-        // **O PRECO ERA DESENHADO AQUI**, e os dois ramos sairam em
-        // 18/10/2026 por pedido do cliente. Ver a prosa da classe.
       ],
     );
   }
@@ -577,11 +431,6 @@ class _PilulaDaCategoria extends StatelessWidget {
 }
 
 /// A descricao, **inteira**.
-///
-/// Sem `maxLines` e sem botao de expandir: ver o cabecalho de [TelaDoProduto].
-/// A quebra de linha vai no valor e `Text` a desenha -- nada aqui troca `\n`
-/// por espaco, porque a area de texto do painel existe para a pessoa escrever
-/// em paragrafos.
 class _DescricaoInteira extends StatelessWidget {
   const _DescricaoInteira({required this.resumo});
 
@@ -598,15 +447,7 @@ class _DescricaoInteira extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// As pecas de pagina, no mesmo vocabulario do detalhe do encontro
-// ---------------------------------------------------------------------------
-
 /// A margem lateral da pagina: a mesma de `rede/encontro_da_rede.dart`.
-///
-/// A galeria fica FORA dela de proposito -- imagem de detalhe vai de borda a
-/// borda nas duas telas, e e por isso que a margem e um embrulho e nao um
-/// `padding` do `ListView`.
 class _Margem extends StatelessWidget {
   const _Margem({required this.child});
   final Widget child;
@@ -678,9 +519,6 @@ class _BotaoVoltar extends StatelessWidget {
 }
 
 /// O esqueleto, na proporcao do quadro da galeria.
-///
-/// **Anunciado**: sem o `Semantics` o leitor de tela encontraria uma pagina
-/// sem nada enquanto a chamada esta em voo.
 class _EsqueletoDoProduto extends StatelessWidget {
   const _EsqueletoDoProduto();
 

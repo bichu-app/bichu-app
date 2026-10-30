@@ -1,24 +1,4 @@
-/**
- * `TETO_DE_CARE_NOTES` é o `CHECK` da coluna, lido do disco.
- *
- * Esta isca é a ÂNCORA de `application/pet-service.test.ts`. Os casos de lá
- * medem comportamento — nota no teto com telefone dentro sai 400 e não 500 — e
- * usam `TETO_DE_CARE_NOTES` como teto. Quem garante que esse número é o da
- * coluna é este arquivo, e ele mora em `adapters/persistence/` por duas razões:
- * a restrição é um fato de persistência, e `application/` não pode importar
- * `node:fs` (pureza do domínio, `eslint.config.mjs`).
- *
- * **Por que a coluna e não o contrato.** Medido em 18/10/2026: isca que lê o
- * `maxLength` de `api/openapi.yaml` ACOMPANHA quem o sabota — sobe o contrato
- * para 320 e a isca passa a aprovar 320, que é exatamente o número que o
- * `CHECK` recusa. Ancorada na coluna, a sabotagem do contrato reprova.
- *
- * **O defeito que a corrente inteira existe para impedir.** A redação de canal
- * mediado roda DEPOIS da validação do schema e CRESCE o texto:
- * `[telefone removido]` tem 19 caracteres e substitui os 11 de um celular.
- * Nota de 280 com telefone dentro sai da redação com 288, e sem conferência
- * pós-redação é o `CHECK` que recusa — como erro de servidor.
- */
+/** `TETO_DE_CARE_NOTES` é o `CHECK` da coluna, lido do disco. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -27,8 +7,8 @@ import { describe, it } from 'node:test';
 import { TETO_DE_CARE_NOTES } from '../../application/pet-service.js';
 
 /**
- * O `<= n` de `pets_care_notes_tamanho`, procurado em TODA migração em vez de
- * num nome de arquivo fixo: migração renomeada derruba a leitura por caminho, e
+ * O `<= n` de `pets_care_notes_tamanho`, procurado em TODA migração em vez de num
+ * nome de arquivo fixo: migração renomeada derruba a leitura por caminho, e
  * derrubar é o certo — aprovar por ausência de dado é o defeito desta isca.
  */
 function tetoDaColuna(): number {

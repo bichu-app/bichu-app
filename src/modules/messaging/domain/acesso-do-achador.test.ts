@@ -1,7 +1,4 @@
-/**
- * A validade do token do achador, o cursor sem id e a forma do token.
- * Domínio puro: sem servidor, sem banco, sem rede.
- */
+/** A validade do token do achador, o cursor sem id e a forma do token. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -29,8 +26,6 @@ void describe('"valido enquanto o caso estiver aberto mais 30 dias"', () => {
   });
 
   void it('com o caso ABERTO, continua valendo depois do 30º dia', () => {
-    // É o caso que a coluna sozinha erraria: o animal ainda está na rua, e a
-    // conversa pararia de funcionar exatamente quando mais importa.
     const caso = { aberto: true, encerradoEm: null };
     assert.equal(tokenDoAchadorVale({ expiraEm: EXPIRA, caso }, em(90)), true);
   });

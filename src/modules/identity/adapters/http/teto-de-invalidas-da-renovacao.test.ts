@@ -1,42 +1,6 @@
 /**
  * O teto de tentativa inválida de `POST /v1/auth/refresh`, que **não responde
  * 429** — e é por isso que ele precisava de um caso diferente de todos os outros.
- *
- * ## Por que aqui não se mede status
- *
- * As outras entradas `applies_to: invalid_attempts` do produto são `deny_429`, e
- * a prova delas é a posição da recusa. Esta é `log_and_alert`, por decisão
- * registrada na própria rota: quem chama a renovação é o app em segundo plano, e
- * não há quem responda a um desafio. O comentário de `rotaDeRenovacao` diz o
- * efeito real de recusar aqui — «a sessão morrer em silêncio, e o usuário
- * descobre no dia em que abre o app com o pet sumido».
- *
- * Então esta entrada tem DOIS deveres, e um caso para cada:
- *
- * 1. **Ela precisa acusar.** `log_and_alert` que não registra nada é a mesma
- *    coisa que não existir: `aplicarNaEntrada` consulta o balde com `peek` e a
- *    única saída observável é a linha `teto de tentativas invalidas atingido`.
- *    Apagar a entrada da rota faz essa linha nunca nascer, e nada mais muda —
- *    nenhum status, nenhum cabeçalho, nenhum corpo. Sem este caso, é uma
- *    proteção que se apaga sem deixar marca.
- * 2. **Ela não pode trancar.** Trocar `log_and_alert` por `deny_429` aqui
- *    passaria por uma revisão distraída como «endurecimento», e o efeito seria
- *    derrubar a sessão de quem tem o aparelho atrás do mesmo NAT de um atacante.
- *    O segundo caso afirma que as 501 respostas são 401, e nenhuma é 429.
- *
- * ## Por que a POSIÇÃO também aqui
- *
- * A rota declara outra entrada `log_and_alert`, `['ip']` de 2000 por hora, que
- * conta TODA requisição e registra a mensagem `teto de chamada atingido`. Medir
- * "alguma coisa foi registrada" não distingue as duas. O caso exige a linha na
- * 501ª e a ausência dela nas 500 antes, e confere a mensagem, a dimensão e o
- * `on_exceed` do evento.
- *
- * ## O relógio é congelado, pelo mesmo motivo do arquivo das plaquinhas
- *
- * As janelas são fixas e alinhadas ao epoch (`inicioDaJanela`), não deslizantes.
- * 501 requisições com `Date.now()` podem atravessar a virada da hora, o balde
- * zerar no meio e a linha não nascer onde o caso a espera.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -53,17 +17,20 @@ import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.j
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-/** O endereço de onde vem a enxurrada. O mesmo nas 501: o teto é por IP. */
+/** O endereço de onde vem a enxurrada. */
 const ENDERECO = '203.0.113.44';
 
 /**
  * O número que `api/openapi.yaml` declara em `refreshSession`, repetido aqui de
  * propósito: lê-lo de `rotaDeRenovacao.rateLimit` seria comparar a declaração
- * consigo mesma. O último caso deste arquivo é o que cruza os dois lugares.
+ * consigo mesma.
  */
 const TETO_DE_INVALIDAS = 500;
 
-/** A outra entrada `log_and_alert` da MESMA rota, que torna a medição por presença inútil. */
+/**
+ * A outra entrada `log_and_alert` da MESMA rota, que torna a medição por presença
+ * inútil.
+ */
 const TETO_GERAL_DE_CHAMADAS = 2000;
 
 /** A mensagem exata que `aplicarNaEntrada` registra para a entrada de invalidas. */
@@ -77,9 +44,7 @@ interface EventoRegistrado {
   readonly mensagem: string;
 }
 
-/**
- * A bancada. O `log` é espião porque neste teto ele é a ÚNICA saída observável.
- */
+/** A bancada. O `log` é espião porque neste teto ele é a ÚNICA saída observável. */
 function bancada(contador: RateLimitStore): {
   app: ReturnType<typeof criarServidor>;
   registrados: EventoRegistrado[];
@@ -99,20 +64,10 @@ function bancada(contador: RateLimitStore): {
     rotaDeRenovacao,
     {
       resolvedores: {
-        // O resolvedor DE PRODUÇÃO pergunta a família ao serviço
-        // (`deps.auth.familiaDoRefresh`). Um token forjado ou já revogado não
-        // tem família no armazém, e o serviço devolve `undefined` — a entrada
-        // `['token_family']` de 10/min é PULADA, que é o que permite a este caso
-        // chegar à 501ª. Se ela contasse, a 11ª seria 429 e o teto por IP nunca
-        // seria alcançado: é justamente por isso que a defesa contra enxurrada
-        // de token roubado tem de ser por endereço, e não por família.
         token_family: () => Promise.resolve(undefined),
       },
     },
     () =>
-      // O que `deps.auth.renovar` lança para um token que não serve.
-      // `invalid-credentials` está em `TIPOS_DE_TENTATIVA_INVALIDA`, e é isso
-      // que faz `onResponse` contar a tentativa.
       Promise.reject(problemas.credencialRecusada()),
   );
 
@@ -133,9 +88,8 @@ async function renovarComTokenForjado(
 }
 
 /**
- * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`,
- * depois de a resposta sair. Em paralelo a 501ª poderia alcançar o `peek` antes
- * de a 500ª ter sido contada, e a posição medida seria outra.
+ * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`, depois
+ * de a resposta sair.
  */
 async function enxurrada(
   app: ReturnType<typeof criarServidor>,
@@ -205,12 +159,6 @@ void describe('POST /auth/refresh — o teto de invalidas acusa, e acusa na posi
 
 void describe('POST /auth/refresh — o teto de invalidas NÃO pode trancar a renovação', () => {
   void it(`as ${String(TETO_DE_INVALIDAS + 1)}ª respostas são 401, e nenhuma é 429`, async () => {
-    // O OUTRO DEVER DESTA ENTRADA, e o motivo de ela não ser `deny_429`: quem
-    // chama é o app em segundo plano, e não há quem responda a um desafio. Se
-    // esta entrada passar a recusar, o aparelho que está atrás do mesmo NAT de
-    // um atacante perde a sessão sem nada na tela — e o tutor descobre no dia em
-    // que abre o app com o pet sumido. Está escrito assim no comentário de
-    // `rotaDeRenovacao`, e sem este caso é só um comentário.
     zerarInventario();
     const { app, registrados } = bancada(criarContadorEmMemoria(() => AGORA));
     try {
@@ -231,7 +179,6 @@ void describe('POST /auth/refresh — o teto de invalidas NÃO pode trancar a re
         `alguma resposta não foi 401: ${JSON.stringify([...new Set(status)])}. O token ` +
           'forjado tem UMA resposta, e ela não muda por causa do teto.',
       );
-      // E o alerta continua nascendo: não trancar não pode virar não acusar.
       assert.equal(
         invalidasRegistradas(registrados).length,
         1,
@@ -247,10 +194,6 @@ void describe('POST /auth/refresh — o teto de invalidas NÃO pode trancar a re
 
 void describe('POST /auth/refresh — a rota declara o teto que o contrato declara', () => {
   void it('a entrada de invalidas está lá, com dimensão, número, janela e efeito', () => {
-    // O OUTRO LADO DA PINÇA, independente dos casos acima de propósito. Eles
-    // provam que o alerta nasce onde deve; este prova que o número e o EFEITO
-    // não mudaram. O `onExceed` entra aqui porque é ele que decide se esta rota
-    // tranca ou não — trocá-lo é mudança de comportamento, não de forma.
     const declaradas: readonly RateLimitEntry[] = rotaDeRenovacao.rateLimit ?? [];
     const invalidas = declaradas.filter((entrada) => entrada.appliesTo === 'invalid_attempts');
 
@@ -284,9 +227,6 @@ void describe('POST /auth/refresh — a rota declara o teto que o contrato decla
 
 void describe('POST /auth/refresh — a isca do alerta', () => {
   void it('ISCA — com o contador DESLIGADO o alerta nunca nasce, e este arquivo reprova', async () => {
-    // Sem esta isca, o caso de posição passaria num sistema que registrasse a
-    // linha por qualquer outro motivo: é preciso afirmar que o contador é quem
-    // decide. Com ele desligado, `peek` sempre permite e não há o que acusar.
     zerarInventario();
     const { app, registrados } = bancada(criarContadorDesligado());
     try {

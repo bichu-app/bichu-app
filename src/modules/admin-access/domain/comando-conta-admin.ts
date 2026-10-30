@@ -1,21 +1,6 @@
 /**
- * As regras do comando `conta-admin` (ADR-0027 item 20.3; D43, D51, D61, D63),
- * sem banco, sem terminal e sem rede.
- *
- * O painel tem cadastro proprio (`admin_accounts`), e a senha dele nao se
- * define por tela nenhuma (D61): quem define e o cliente, digitando no
- * terminal do servidor. Este arquivo decide o que o comando aceita ANTES de
- * abrir conexao com o banco.
- *
- * ## A senha nunca entra por argumento
- *
- * Argumento fica no historico do shell, em `ps` de qualquer usuario da maquina
- * e no log do orquestrador de container. Variavel de ambiente fica em
- * `/proc/<pid>/environ` e em `docker inspect`. Arquivo fica no disco. O unico
- * canal que nao deixa rastro e o terminal sem eco, e e o unico que o comando
- * le. Uma opcao com cara de senha e recusada pelo NOME, e a recusa nunca repete
- * o valor: quem digitou `--senha x` ja expos `x` no historico, e o comando nao
- * vai expor de novo no log.
+ * As regras do comando `conta-admin` (ADR-0027 item 20.3; D43, D51, D61, D63), sem
+ * banco, sem terminal e sem rede.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import {
@@ -26,9 +11,9 @@ import {
 } from '../../identity/ports/senha.js';
 
 /**
- * Os codigos de saida, os mesmos do `conceder-papel` que este comando
- * substitui (item 20.3, regra 6), com o `3` significando agora "nao ha conta
- * administrativa com esse e-mail".
+ * Os codigos de saida, os mesmos do `conceder-papel` que este comando substitui
+ * (item 20.3, regra 6), com o `3` significando agora "nao ha conta administrativa
+ * com esse e-mail".
  */
 export const SAIDA = {
   OK: 0,
@@ -37,11 +22,17 @@ export const SAIDA = {
   USO: 2,
   /** Nao ha conta administrativa com esse e-mail. */
   CONTA_INEXISTENTE: 3,
-  /** Senha curta, longa, vazada, igual a do app, digitacoes diferentes, ou base de vazadas fora do ar. */
+  /**
+   * Senha curta, longa, vazada, igual a do app, digitacoes diferentes, ou base de
+   * vazadas fora do ar.
+   */
   SENHA_RECUSADA: 4,
   /** O operador nao confirmou, ou interrompeu. */
   CANCELADO: 5,
-  /** O estado nao permite o pedido (e-mail ja em uso no `criar`, conta ja desativada, ja ativa). */
+  /**
+   * O estado nao permite o pedido (e-mail ja em uso no `criar`, conta ja desativada,
+   * ja ativa).
+   */
   CONFLITO: 6,
 } as const;
 
@@ -87,10 +78,7 @@ export type ResultadoDaInterpretacao =
   | { readonly tipo: 'ajuda' }
   | { readonly tipo: 'recusa'; readonly codigo: CodigoDeSaida; readonly mensagem: string };
 
-/**
- * Nome de opcao com cara de senha. Casa pelo nome, com ou sem `=valor`, e em
- * qualquer caixa. `-p` entra porque e o atalho que `mysql` e `psql` ensinaram.
- */
+/** Nome de opcao com cara de senha. */
 const OPCAO_DE_SENHA = /^(?:--?(?:senha|password|passwd|pass|pwd|secret|segredo|nova-senha)|-p)(?:=|$)/i;
 
 const OPCOES_COM_VALOR = new Set(['--email', '--nome', '--operador']);
@@ -131,9 +119,9 @@ function separar(argumento: string): { nome: string; valor: string | undefined }
 }
 
 /**
- * Le a linha de comando. Senha por argumento e olhada em TODOS os argumentos
- * antes de qualquer outra coisa, para que um erro de outra opcao nao esconda a
- * recusa que mais importa.
+ * Le a linha de comando. Senha por argumento e olhada em TODOS os argumentos antes
+ * de qualquer outra coisa, para que um erro de outra opcao nao esconda a recusa
+ * que mais importa.
  */
 export function interpretarArgumentos(argumentos: readonly string[]): ResultadoDaInterpretacao {
   if (argumentos.some((argumento) => OPCAO_DE_SENHA.test(argumento))) {
@@ -146,7 +134,6 @@ export function interpretarArgumentos(argumentos: readonly string[]): ResultadoD
   const [primeiro, ...resto] = argumentos;
   if (primeiro === undefined) return recusa(SAIDA.USO, 'recusado: falta o subcomando. Use --ajuda.');
   if (!(SUBCOMANDOS as readonly string[]).includes(primeiro)) {
-    // O valor NAO entra na mensagem: o caso tipico e a senha colada no lugar do subcomando.
     return recusa(SAIDA.USO, 'recusado: subcomando desconhecido (valor omitido). Use --ajuda.');
   }
   const subcomando = primeiro as Subcomando;
@@ -212,11 +199,7 @@ export function interpretarArgumentos(argumentos: readonly string[]): ResultadoD
 // eslint-disable-next-line no-control-regex -- o que se procura aqui e justamente o controle.
 const CONTROLE = /[\u0000-\u001f\u007f-\u009f]/;
 
-/**
- * O nome de quem roda o comando vai para a trilha, que sobrevive 24 meses. Sem
- * caractere de controle: uma sequencia de escape gravada ali repinta o terminal
- * de quem ler a trilha depois.
- */
+/** O nome de quem roda o comando vai para a trilha, que sobrevive 24 meses. */
 export function validarNomeDoOperador(nome: string): string | undefined {
   const limpo = nome.trim();
   if (limpo.length === 0) return 'nao pode ser vazio.';
@@ -227,7 +210,7 @@ export function validarNomeDoOperador(nome: string): string | undefined {
   return undefined;
 }
 
-/** O nome que aparece no painel e nos avisos. O mesmo `CHECK` da tabela, e sem controle. */
+/** O nome que aparece no painel e nos avisos. */
 export function validarNome(nome: string): string | undefined {
   const limpo = nome.trim();
   if (limpo.length < TAMANHO_MINIMO_DO_NOME || limpo.length > TAMANHO_MAXIMO_DO_NOME) {
@@ -237,12 +220,7 @@ export function validarNome(nome: string): string | undefined {
   return undefined;
 }
 
-/**
- * D43: a politica do produto (NIST SP 800-63B) com o minimo de 15 e o teto de
- * 256. O `too_short` do app, de 10, sai para nao dizer duas coisas diferentes
- * sobre o mesmo tamanho. A base de vazadas e a conferencia com a senha do app
- * (D63) sao porta e ficam fora daqui, porque sao rede e banco.
- */
+/** D43: a politica do produto (NIST SP 800-63B) com o minimo de 15 e o teto de 256. */
 export function validarSenhaAdministrativa(senha: string, contexto: { email: string }): ProblemFieldError[] {
   const erros = validarSenha(senha, contexto).filter((erro) => erro.code !== 'too_short' && erro.code !== 'too_long');
   if ([...senha].length > TAMANHO_MAXIMO_DA_SENHA_ADMINISTRATIVA) {

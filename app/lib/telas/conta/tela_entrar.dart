@@ -18,27 +18,6 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// C.2 — Entrar.
-///
-/// O 401 do contrato e identico para e-mail inexistente e senha errada, e a
-/// tela respeita isso: uma mensagem so, com a saida para a recuperacao de
-/// senha ao lado dela. Distinguir os dois casos entregaria a lista de quem tem
-/// conta.
-///
-/// **Sem caixa de "continuar conectado"**, por decisao do cliente de
-/// 22/09/2026: a sessao persistente virou comportamento padrao nesta tela e na
-/// F1.1. Ver `AuthApi.sessaoPersistentePorPadrao`.
-///
-/// **Esta tela e um desvio, e nao um destino.** A regra de produto (visao de
-/// produto, secao 5 e matriz 8.6) e que o app e navegavel deslogado e que sao
-/// as acoes que exigem conta. Quem toca em `Entrar` e desiste precisa voltar a
-/// navegar; hoje isso significava fechar o app. Por isso, duas coisas juntas e
-/// nao uma:
-///
-/// 1. Quem abre esta tela usa `push`, e nao `go`. `go` substitui a pilha, e
-///    sem nada para desempilhar nao existe volta -- nem a seta automatica, nem
-///    o gesto de voltar do sistema.
-/// 2. A barra traz uma saida **explicita**, que funciona tambem quando a
-///    pilha esta vazia (link direto). Ver `SaidaDaTela`.
 class TelaEntrar extends StatefulWidget {
   const TelaEntrar({super.key, this.emailInicial});
 
@@ -71,23 +50,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
   @override
   void initState() {
     super.initState();
-    // A PORTA DA PASSKEY, TENTADA AO ABRIR A TELA (BICHUS-301).
-    //
-    // Este e o caminho de MENOS interface que existe: nao ha botao `Entrar com
-    // passkey`, porque a folha do sistema operacional **aparece sozinha**
-    // quando ha credencial no aparelho, e nao aparece quando nao ha. Um botao
-    // obrigaria a tela a responder, antes do toque, se esta pessoa tem
-    // passkey -- e a tela nao sabe: a credencial e *discoverable* e quem sabe
-    // e o aparelho.
-    //
-    // **NAO ha `await` aqui, e nao pode haver**: `initState` nao e assincrono,
-    // e segurar o primeiro quadro atras de uma ida a rede deixaria a tela de
-    // entrar em branco em quem nao tem passkey nenhuma -- que e quase todo
-    // mundo. O formulario monta na hora e a tentativa corre atras dele.
-    //
-    // `addPostFrameCallback` e nao chamada direta: a tentativa usa
-    // `Escopo.of(context)`, e `dependOnInheritedWidgetOfExactType` dentro de
-    // `initState` nao e permitido.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _tentarPasskey();
@@ -95,39 +57,13 @@ class _TelaEntrarState extends State<TelaEntrar> {
   }
 
   /// Tenta entrar com uma passkey que **ja exista** no aparelho.
-  ///
-  /// ## O QUE ESTA FUNCAO NAO FAZ, QUE E O REQUISITO
-  ///
-  /// **Quem nao tem passkey nao pode ser atrapalhado.** `tentarEntrar`
-  /// devolve `null` -- e nunca estoura -- em todos estes casos: nao ha
-  /// credencial no aparelho, a pessoa fechou a folha nativa, o aparelho nao
-  /// faz passkey, o dominio nao esta associado, a rede caiu, o servidor
-  /// respondeu 401 ou 429. Em TODOS, esta funcao nao faz absolutamente nada:
-  ///
-  /// - **nao** poe faixa de erro;
-  /// - **nao** mexe no `_email` nem no `_senha`;
-  /// - **nao** toca em `_enviando`, entao o botao `Entrar` nunca fica cinza
-  ///   nem girando por causa de uma tentativa que a pessoa nao pediu;
-  /// - **nao** rola a tela.
-  ///
-  /// O resultado e que, para quem usa senha, abrir esta tela e
-  /// indistinguivel de antes desta frente existir -- e ha isca cobrando
-  /// exatamente isso.
   Future<void> _tentarPasskey() async {
     final escopo = Escopo.of(context);
     final sessao = await escopo.passkey.tentarEntrar();
-    // `null` e o caminho dominante. Sair em silencio E o comportamento certo.
     if (sessao == null) return;
     if (!mounted) return;
 
     await escopo.sessao.abrir(sessao);
-    // DAQUI PARA BAIXO E O MESMO FIM DE `_entrar`, e de proposito: o contrato
-    // devolve a MESMA `SessionResponse` nas duas portas, e a secao 8.3 vale
-    // igual -- quem tocou em `Registrar achado` antes de entrar nao toca de
-    // novo porque entrou pela biometria. Duplicar as duas linhas e mais
-    // honesto que extrair um metodo: elas precisam ficar iguais, e um metodo
-    // compartilhado esconderia o dia em que uma das duas portas precisar de
-    // outro destino.
     final destino = await escopo.guarda.executarDepoisDoLogin();
     if (!mounted) return;
     irParaODestinoDoLogin(context, destino);
@@ -144,16 +80,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
   }
 
   /// Traz o alvo da recusa para dentro da janela.
-  ///
-  /// Necessario desde que o botao saiu da rolagem: quem toca num botao
-  /// alcancavel de qualquer ponto pode estar num ponto em que a recusa fica
-  /// fora da tela, e recusar onde ninguem olha e indistinguivel de nao
-  /// responder.
-  ///
-  /// Roda **depois do quadro**, porque quem chama acabou de fazer `setState` e
-  /// a faixa ainda nao tem altura: medir antes do relayout leva a pessoa para
-  /// onde a faixa nao esta. `alignment: 0.5` centraliza, porque conteudo
-  /// colado na borda fica meio escondido atras do teclado.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -168,15 +94,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
   }
 
   /// Validacao local, antes de gastar uma ida a rede.
-  ///
-  /// Nao e zelo de formulario: enviar campo vazio devolve o 401 de credencial
-  /// recusada, que e **falso** (a credencial nao foi recusada, ela nao foi
-  /// escrita) e ainda **queima uma das cinco tentativas por e-mail** antes de o
-  /// desafio antiabuso aparecer. A pessoa paga duas vezes por um campo que ela
-  /// nem preencheu (UX 8.2.2).
-  ///
-  /// A autoridade continua no servidor: isto e conveniencia, e o servidor
-  /// recusa de novo o que for o caso.
   bool _camposPreenchidos() {
     final email = _email.text.trim();
     final senha = _senha.text;
@@ -185,8 +102,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
     if (email.isEmpty) {
       erroDoEmail = MensagensDeErro.digiteSeuEmail;
     } else if (!emailPlausivel(email)) {
-      // Validacao tolerante (UX 13): recusa o obviamente errado, aceita o
-      // incomum. Endereco real e mais estranho que a maioria das expressoes.
       erroDoEmail = MensagensDeErro.confiraOEmail;
     }
     final erroDaSenha = senha.isEmpty ? MensagensDeErro.digiteSuaSenha : null;
@@ -197,16 +112,12 @@ class _TelaEntrarState extends State<TelaEntrar> {
       _erroDoEmail = erroDoEmail;
       _erroDaSenha = erroDaSenha;
     });
-    // O foco vai para o primeiro campo com erro. Aqui sabemos qual e, ao
-    // contrario da credencial recusada, em que nao se sabe e o foco vai para a
-    // mensagem.
     (erroDoEmail != null ? _focoDoEmail : _focoDaSenha).requestFocus();
     return false;
   }
 
   /// Conferencia ao sair do campo, com a mensagem curta de
-  /// `formato/email.dart`. Campo vazio nao erra aqui: quem tocou o campo e
-  /// desistiu nao levou erro. Vazio continua sendo erro no envio.
+  /// `formato/email.dart`.
   void _conferirOEmailAoSair() {
     final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
     if (erro != _erroDoEmail) setState(() => _erroDoEmail = erro);
@@ -225,129 +136,25 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
     final escopo = Escopo.of(context);
     try {
-      // `continuarConectado` NAO e passado: virou o padrao de `AuthApi`, por
-      // decisao do cliente de 22/09/2026. Ver
-      // `AuthApi.sessaoPersistentePorPadrao`.
       final sessao = await escopo.auth.entrar(
         email: _email.text.trim(),
         senha: _senha.text,
       );
       await escopo.sessao.abrir(sessao);
-      // A MARCA DO APARELHO, POSTA EM DIA -- e **sem `await`**, de proposito
-      // (28/10/2026).
-      //
-      // A entrada por passkey agora exige sinal local de que ha credencial
-      // aqui, e a marca nasce de um cadastro feito NESTE aparelho. Credencial
-      // que chegou por sincronizacao (Google Password Manager, Chaveiro do
-      // iCloud), por reinstalacao ou por restauracao de backup nao tem marca --
-      // e sem esta linha a pessoa teria passkey e um app que nunca a tentaria.
-      //
-      // `reconciliarComAConta` NAO ESTOURA e nao devolve nada que esta tela
-      // use. Esperar por ela seria por uma leitura auxiliar no caminho critico
-      // de uma entrada que **ja deu certo**: a sessao esta aberta, e segurar a
-      // navegacao atras de `listPasskeys` poria o giro do botao na frente de
-      // quem acabou de entrar. O efeito dela aparece na ABERTURA SEGUINTE da
-      // tela, que e quando o portao e consultado -- e ela tem o resto desta
-      // sessao do app para terminar.
-      //
-      // `unawaited` e nao chamada pelada: `unawaited_futures` reprova a
-      // segunda, e um `Future` esquecido sem marca nenhuma e o jeito de
-      // ninguem notar que ele existe.
-      //
-      // ==================================================================
-      // ELA PASSOU A SER ESPERADA EM 28/10/2026, DENTRO DE
-      // `deveOferecerCadastro`, E O MOTIVO E UMA REGRA DE PRODUTO NOVA.
-      // ==================================================================
-      //
-      // Cliente, verbatim: *"na hora do usuario fazer o login, se ele nao
-      // tiver o passkey habilitado e nao tiver rejeitado formalmente, devemos
-      // solicitar ele. Pois pode ser um cenario onde o usuario tenha feito o
-      // cadastro, desinstalado o app e esta voltando"*.
-      //
-      // **A CONSULTA CONTINUA SENDO UMA SO.** `deveOferecerCadastro` chama
-      // `reconciliarComAConta` por dentro -- e por isso a chamada solta saiu
-      // daqui em vez de ficar ao lado dela. Duas chamadas gastariam dois
-      // `listPasskeys` por login, e `passkey_e_dispensavel_test.dart` cobra
-      // que seja exatamente um, com a razao escrita.
-      //
-      // **O EFEITO DE MARCAR O APARELHO NAO SE PERDEU**, e ele e o que o PR
-      // #85 entregou: quem recebeu a credencial por sincronizacao, por
-      // reinstalacao ou por restauracao de backup continua ficando marcado,
-      // porque a reconciliacao acontece ANTES da pergunta de suporte dentro
-      // daquele metodo -- ver a prosa dela.
-      //
-      // **O QUE SE PAGA E LATENCIA, e so para quem precisa da oferta.** Quem
-      // ja tem marca local sai na primeira linha de `deveOferecerCadastro`,
-      // sem rede nenhuma -- e e a maioria de quem entra por senha depois da
-      // primeira vez. Quem nao tem espera UM `GET` antes de a tela navegar, e
-      // essa pessoa e exatamente a que o cliente quer alcancar.
-      //
-      // **O CONVITE NAO BLOQUEIA A NAVEGACAO**, que foi a ressalva dele: a
-      // folha e dispensavel pelos tres gestos (`Agora não`, arrastar para
-      // baixo, voltar do sistema), `mostrarConviteDePasskey` devolve `void` e
-      // o destino do login e calculado DEPOIS dela, intacto. Quem quer usar o
-      // app fecha a folha e segue.
       if (await escopo.passkey.deveOferecerCadastro()) {
         if (!mounted) return;
-        // ================================================================
-        // O GIRO DO BOTAO SAI ANTES DA FOLHA, E ISSO NAO E ESTETICA.
-        // ================================================================
-        //
-        // **MEDIDO, e e a MESMA armadilha que `tela_criar_conta.dart` ja
-        // documenta**: sem esta linha, `_enviando` continua `true` enquanto a
-        // folha esta aberta (o `finally` so roda depois), o
-        // `CircularProgressIndicator` do botao `Entrar` fica girando ATRAS
-        // dela, e `pumpAndSettle` **nunca assenta** -- animacao infinita na
-        // arvore. Reproduzido nesta rodada em TRES casos de
-        // `passkey_e_dispensavel_test.dart` antes desta linha existir.
-        //
-        // E para a pessoa tambem esta certo: a entrada JA deu certo neste
-        // ponto, e um botao girando atras do convite diria que ainda nao.
         setState(() => _enviando = false);
-        // `permitirRecusaFormal: true` **so aqui**, e nao no convite do fim do
-        // cadastro: aquele aparece uma vez na vida da conta, e este aparece em
-        // toda entrada de quem nao tem credencial. Sem uma recusa definitiva,
-        // quem nao quer passkey seria perguntada para sempre -- e a regra do
-        // cliente pressupoe que exista como rejeitar (*"nao tiver rejeitado
-        // formalmente"*).
         await mostrarConviteDePasskey(context, permitirRecusaFormal: true);
         if (!mounted) return;
       }
-      // O destino depois do login e a intencao pendente (UX 8.3), e nao a
-      // home. **A acao guardada e executada aqui**, antes de qualquer
-      // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a
-      // pessoa ao formulario preenchido para que ela toque no botao de novo e
-      // a meia-entrega que a propria secao nomeia. Quem tocou em `Registrar
-      // achado` antes do login nao toca de novo depois dele.
-      //
-      // O Inicio continua sendo um destino possivel, e so um caso chega la:
-      // nao havia intencao, ou ela passou das 24 horas e foi descartada em
-      // silencio (regra 2). Falha de execucao **nao** vai para a home: vai
-      // para a tela de retorno, com o rascunho e o erro (regra 4).
       final destino = await escopo.guarda.executarDepoisDoLogin();
       if (!mounted) return;
       irParaODestinoDoLogin(context, destino);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      // **A decisao e por `type`, nunca pelo status.** O contrato declara
-      // QUATRO tipos com status 401 (`invalid-credentials`, `unauthenticated`,
-      // `token-expired`, `reauthentication-required`). Um `if (status == 401)`
-      // acerta hoje por sorte, porque so o primeiro chega a esta tela, e erra
-      // calado no dia em que outro chegar: a tela diria a pessoa que a senha
-      // esta errada e ela trocaria uma senha que estava certa. O mapa dos
-      // quatro esta em `MensagensDeErro.deEntrar`, e ha teste que cobra cada um.
-      //
-      // Nada e apagado: nem o e-mail, nem a senha. O caso dominante e um
-      // caractere trocado, e quem digita de novo do zero erra de novo.
       setState(() => _faixa = MensagensDeErro.deEntrar(falha));
       _levarAte(_alvoDaFaixa);
     } on Object catch (erro, pilha) {
-      // O QUE NAO E FalhaDeChamada -- 201 fora do contrato faz `Sessao.doJson`
-      // estourar `TypeError`, e o chaveiro pode estourar `PlatformException`.
-      // O `finally` abaixo ja desligava o carregando, entao a tela nao girava
-      // para sempre; ela ficava CALADA, que e o outro lado do mesmo defeito.
-      // A pessoa ve o formulario do jeito que estava e toca de novo achando
-      // que o primeiro toque nao pegou.
       registrarFalhaInesperada(erro, pilha, onde: 'ao entrar na conta');
       if (!mounted) return;
       setState(
@@ -362,59 +169,20 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
   @override
   Widget build(BuildContext context) {
-    // O TECLADO E MEDIDO AQUI, ACIMA DO `Scaffold`, E NAO LA DENTRO.
-    //
-    // `Scaffold` com `resizeToAvoidBottomInset` -- que e o padrao -- ja trata o
-    // teclado: ele ENCOLHE o corpo e entrega ao corpo um `MediaQuery` com
-    // `viewInsets.bottom` **zerado**. Quem perguntar pelo teclado de dentro do
-    // corpo recebe "fechado" com o teclado aberto na cara. Este `context` e o
-    // do `State`, acima do `Scaffold`, e e o unico ponto desta tela que ve o
-    // numero de verdade. Mesmo motivo escrito em `escanear/tela_leitor_de_qr`.
     final tecladoAberto = MediaQuery.viewInsetsOf(context).bottom > 0;
     final alturaDaTela = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
       appBar: const BarraDeConta(titulo: 'Entrar', saida: TipoDeSaida.voltar),
-      // O BOTAO DE ENTRAR NAO ROLA COM O FORMULARIO, E ISSO FOI MEDIDO.
-      //
-      // Medido em 23/09/2026 nos quatro gabaritos do design system (secao 13),
-      // com o teclado de 270 dp aberto e os dois campos preenchidos. O botao
-      // ocupava 286..334 dp de um conteudo de 414 dp, e a area rolavel era:
-      //
-      //   320 x 568  ->  234 dp de janela, faltavam 100 dp de rolagem
-      //   360 x 640  ->  306 dp de janela, faltavam  28 dp de rolagem
-      //   375 x 667  ->  333 dp de janela, o botao cabia
-      //   412 x 915  ->  581 dp de janela, o botao cabia
-      //
-      // O numero que decide nao e esse. E o da tela DEPOIS do 401, que e o
-      // estado de quem digitou a senha errada -- ou seja, exatamente quem ja
-      // tem conta e voltou. A faixa de recusa acrescenta 236 dp acima do
-      // botao, e ai faltavam 360 dp em 320 x 568, 264 dp em 360 x 640 e 231 dp
-      // em 375 x 667, um gabarito em que a tela estava certa antes do erro.
-      // A pessoa erra a senha e o caminho para tentar de novo sai da tela.
-      //
-      // Pior que a rolagem: em 320 x 568 o `ListView` **nao chegava a
-      // construir** o botao. Ele nao estava na arvore, entao nao podia ser
-      // focado nem lido por leitor de tela, e nenhum portao pegava isso.
       bottomNavigationBar: BarraDeAcaoFixa(
         acoes: <Widget>[
           BotaoPrimario(
             rotulo: 'Entrar',
             carregando: _enviando,
-            // Continua habilitado sem conexao, pelo mesmo motivo de F1.1: o
-            // detector de offline erra, e deixar a pessoa sem caminho e pior
-            // que deixa-la tentar.
             aoTocar: _entrar,
           ),
         ],
       ),
-      // **`SingleChildScrollView` + `Column`, e nao `ListView`**, pelo motivo
-      // registrado em `pet/tela_editar_pet.dart` e em F1.1: o `ListView` so
-      // constroi o que cabe, e o que nao existe na arvore nao e alcancavel por
-      // leitor de tela. Sao sete filhos e nenhuma lista de tamanho aberto:
-      // construir todos custa nada, e e o que da a `_levarAte` para onde
-      // rolar. Preguica de construcao serve a lista de registros, nao a
-      // formulario de seis campos.
       body: SafeArea(
         child: SingleChildScrollView(
           controller: _rolagem,
@@ -422,12 +190,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // A ILUSTRACAO DA IDENTIDADE VISUAL, no alto da porta de entrada
-              // (pedido do cliente: "a imagem da identidade visual das pessoas
-              // com o pet no parque", na TELA DE ENTRAR).
-              //
-              // **Ela SAI com o teclado aberto**, e essa e a parte que decide
-              // se a tela continua usavel -- ver `_IlustracaoDaEntrada`.
               if (!tecladoAberto) ...<Widget>[
                 _IlustracaoDaEntrada(alturaDaTela: alturaDaTela),
                 const SizedBox(height: BichuEspaco.e6),
@@ -439,14 +201,10 @@ class _TelaEntrarState extends State<TelaEntrar> {
                 erro: _erroDoEmail,
                 tipoDeTeclado: TextInputType.emailAddress,
                 autofill: const <String>[AutofillHints.email],
-                // Endereco nao tem correcao automatica nem maiuscula
-                // automatica: as duas transformam o que a pessoa escreveu.
                 correcaoAutomatica: false,
                 capitalizacao: TextCapitalization.none,
                 acaoDeTeclado: TextInputAction.next,
                 aoPerderFoco: _conferirOEmailAoSair,
-                // Depois que o campo errou uma vez, revalidar enquanto digita,
-                // para o erro sumir assim que for corrigido (UX 13).
                 aoMudar: _erroDoEmail == null
                     ? null
                     : (_) => setState(() => _erroDoEmail = null),
@@ -475,9 +233,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  // `push`: recuperar a senha e um passo **adiante** no mesmo
-                  // desvio. Voltar de la devolve esta tela com o e-mail ainda
-                  // digitado, que e o que `go` destruia.
                   onPressed: () => context.push(
                     Rotas.esqueciMinhaSenha,
                     extra: _email.text.trim(),
@@ -502,10 +257,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
               const SizedBox(height: BichuEspaco.e6),
               Center(
                 child: TextButton(
-                  // `pushReplacement`, e nao `push`: `Entrar` e `Criar conta`
-                  // sao o mesmo passo do mesmo desvio, e nao dois passos. Quem
-                  // alterna entre as duas e volta quer sair do desvio, nao
-                  // percorrer de tras para a frente cada troca que fez.
                   onPressed: () => context.pushReplacement(Rotas.criarConta),
                   child: const Text('Criar conta'),
                 ),
@@ -519,42 +270,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
 }
 
 /// A ilustracao da identidade visual no alto da tela de entrar.
-///
-/// **De onde sai a imagem.** `assets/ilustracoes/tres-pessoas-no-parque.webp`,
-/// derivada da arte do cliente -- as tres pessoas com os pets, arvores e os
-/// predios do bairro atras. A procedencia, o comando que refaz o arquivo e o
-/// porque do formato estao escritos em `app/pubspec.yaml`, ao lado da
-/// declaracao do asset. **Embarcada**: nada de rede, porque a tela de login
-/// pode ser a primeira coisa que o aparelho abre e com sinal ruim ela ficaria
-/// feia exatamente quando precisa estar de pe.
-///
-/// **DECORATIVA, e por isso `excludeFromSemantics`.** Quem usa leitor de tela
-/// chega aqui ja ouvindo `Entrar` da barra de topo e encontra logo abaixo os
-/// rotulos `E-mail` e `Senha`: a ilustracao nao diz nada que o texto da tela
-/// nao diga, e esse e exatamente o criterio de decorativo do WCAG 1.1.1.
-/// Descreve-la ("tres pessoas com seus pets") custaria um anuncio inteiro
-/// antes do primeiro campo, sem entregar nada que mude o que a pessoa faz
-/// aqui. Nenhuma frase nova entrou em tela junto dela.
-///
-/// **TECLADO ABERTO: ela nao aparece.** Quem chama decide isso (o `if` em
-/// `build`), porque so la em cima o `viewInsets` e visivel. Esta tela tem dois
-/// campos e o teclado come perto da metade da altura util; dividir o que
-/// sobra com uma imagem de 128 a 192 dp empurraria o campo da senha e a faixa
-/// de recusa para fora da dobra, que e o erro classico de imagem grande em
-/// tela de login. Com o teclado na tela o formulario volta a ser EXATAMENTE o
-/// que era antes desta mudanca, inclusive a conta de rolagem medida em
-/// 23/09/2026 que esta no comentario do `bottomNavigationBar`. E o corpo
-/// continua sendo `SingleChildScrollView`: mesmo com o teclado fechado, numa
-/// tela curta a coluna inteira rola -- nada e cortado, nem estoura.
-///
-/// **Tela pequena e tela grande.** A altura e 20% da altura da tela, presa
-/// entre [_piso] e [_teto], que sao multiplos do passo de espaco do tema e nao
-/// numero inventado. Nos quatro gabaritos do design system: 320x568 e 360x640
-/// batem no piso de 128 dp; 375x667 fica em 133 dp; 412x915 vai a 183 dp. A
-/// largura vem esticada da coluna e o `BoxFit.contain` preserva a proporcao
-/// 2:1 da arte -- em tela larga sobra transparente dos lados, e nunca corta
-/// pessoa nem pet. O maior retangulo que a imagem chega a ocupar e 384x192 dp,
-/// que e de onde sai a largura de 1152 px do arquivo (384 x 3).
 class _IlustracaoDaEntrada extends StatelessWidget {
   const _IlustracaoDaEntrada({required this.alturaDaTela});
 
@@ -579,10 +294,7 @@ class _IlustracaoDaEntrada extends StatelessWidget {
       caminho,
       height: alturaPara(alturaDaTela),
       fit: BoxFit.contain,
-      // Decorativa: fora da arvore de semantica. Ver a nota da classe.
       excludeFromSemantics: true,
-      // O arquivo e dimensionado para a densidade 3x; em aparelho 2x ele
-      // encolhe, e `low` (o padrao) serrilha o traco chapado desta arte.
       filterQuality: FilterQuality.medium,
     );
   }

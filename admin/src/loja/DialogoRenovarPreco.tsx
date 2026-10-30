@@ -11,11 +11,7 @@ import { centavosParaCampo, hojeCivil, precoEmCentavos } from './dominio.ts';
 
 type Item = Esquemas['AdminStoreItem'];
 
-/**
- * `BO/Dialogo · renovar consulta de preco` (3.8). Renovar pede o preco de novo,
- * pre-preenchido: renovar sem olhar o valor e o caminho para um preco errado
- * com data nova (secao 25.5, aprovado em 29.7). A data e hoje.
- */
+/** `BO/Dialogo · renovar consulta de preco` (3.8). */
 export function DialogoRenovarPreco({
   item,
   etag,
@@ -51,7 +47,6 @@ export function DialogoRenovarPreco({
         params: { path: { itemSlug: item.slug }, header: { 'If-Match': etag ?? versaoComoEtag(item.version) } },
         body: { price: { amount, currency: 'BRL', checked_at: hojeCivil() } },
       });
-      // O If-Match seguinte sai do `version`, e nao do ETag que a borda sufixa.
       if (data) aoRenovar(data, versaoComoEtag(data.version));
       else if (tipoDoProblema(error) === 'precondition-failed') aoConflito();
       else setFalha('Não conseguimos renovar a consulta. Tente de novo.');
@@ -68,8 +63,8 @@ export function DialogoRenovarPreco({
         {item.partner ? `${item.title}, em ${item.partner.name}.` : `${item.title}.`} Confira o preço no site do parceiro
         hoje e confirme o valor.
       </p>
-      {/* Rascunho sem parceiro nao tem destino (os dois andam juntos): sem link
-          para abrir, a linha some em vez de virar um `href` vazio. */}
+      {
+}
       {item.target_url && (
         <a className="link t-label" href={item.target_url} target="_blank" rel="noopener noreferrer">
           Abrir a página do produto no parceiro <Icone nome="open" tamanho="s16" />

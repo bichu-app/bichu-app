@@ -1,15 +1,4 @@
-/**
- * Iscas do portão da suíte limpa.
- *
- * As duas primeiras são as que valem: elas rodam contra o `package.json` e o
- * `dist/_tests` **de verdade** deste repositório, não contra uma amostra. Tirar
- * a etapa de limpeza do script reprova a primeira na rodada seguinte.
- *
- * As demais exercitam o reconhecedor com as formas erradas que alguém escreveria
- * de boa fé — limpeza depois do tsc, `rm` sem `-r`, alvo trocado —, porque um
- * reconhecedor que aprova qualquer coisa parecida com limpeza é o mesmo que não
- * ter portão.
- */
+/** Iscas do portão da suíte limpa. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -100,8 +89,6 @@ void test('`tsc --build --clean` também resolve, e é aceito', () => {
 });
 
 void test('sem nenhum script que compile para dist/_tests, o portão REPROVA em vez de aprovar', () => {
-  // Verificação que não consegue verificar precisa reprovar. Se o diretório de
-  // saída mudar de nome, o silêncio deste portão seria confiança falsa.
   const queixas = conferirLimpezaDosScripts([{ nome: 'lint', comando: 'eslint .' }]);
   assert.equal(queixas.length, 1);
   assert.match(queixas[0]?.motivo ?? '', /ficou cego/);

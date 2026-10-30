@@ -1,7 +1,6 @@
 /**
- * O texto de tela para cada falha do cliente (regra de 12.4 da UX: o que
- * houve e o que fazer). Decide pelo tipo e pelo `code` do contrato, nunca
- * pelo texto do servidor.
+ * O texto de tela para cada falha do cliente (regra de 12.4 da UX: o que houve e o
+ * que fazer).
  */
 import { ERRO_DAS_OBSERVACOES } from '../dominio/observacoes.ts';
 import { esperaPorExtenso, type Falha } from './redeApi.ts';
@@ -17,8 +16,8 @@ const CODIGOS: Record<string, string> = {
 };
 
 /**
- * 409 `event-not-open` na fila (UX 30.7 R2): com o estado conhecido, a frase
- * diz qual; sem ele, a generica.
+ * 409 `event-not-open` na fila (UX 30.7 R2): com o estado conhecido, a frase diz
+ * qual; sem ele, a generica.
  */
 export function textoDeEncontroFechado(e?: { publication_status: string; timing: string }): string {
   const estado =

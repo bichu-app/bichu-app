@@ -1,40 +1,4 @@
 /// O que a pessoa preencheu em F3.5, entre a tela e o envio.
-///
-/// **Vive fora de `telas/` de proposito**, pelo mesmo motivo de
-/// `perdido/rascunho_do_caso.dart`: o que esta aqui e regra -- o que o
-/// formulario exige, o que ele aceita vazio e o que impede o envio --, e regra
-/// que so se exercita montando widget e regra que fica sem isca.
-///
-/// ## O QUE O FORMULARIO EXIGE, e de onde vem cada exigencia
-///
-/// A lista **nao** foi escolhida por desenho: ela e `StrayFoundReportInput` do
-/// contrato, lido campo a campo.
-///
-/// ```yaml
-/// required: [species, size, found_at]
-/// anyOf:
-///   - required: [location]
-///   - required: [area]
-/// ```
-///
-/// Sao quatro coisas, e todas as quatro **quem acha um cao na rua consegue
-/// responder olhando para ele**:
-///
-/// - `species`: cao, gato ou outro. Ve-se;
-/// - `size`: P, M, G ou GG. Ve-se;
-/// - `found_at`: quando. Quem achou sabe;
-/// - `location` **ou** `area`: onde. A captura de localizacao resolve os dois
-///   ramos, e o ramo digitado pede so a cidade (`Area.required: [city]`).
-///
-/// E o resto do contrato e **opcional**, campo a campo: `breed_code`,
-/// `breed_free_text`, `ref_data_version`, `primary_color_code`, `sex`,
-/// `share_token`, `notes`, `photo_upload_id`. Nada que quem acha um animal na
-/// rua nao tenha como saber -- raca, idade, nome -- e exigido, e e isto que o
-/// titulo da historia decide: *"com o que da para ver"*.
-///
-/// **Se o contrato passar a exigir um desses, o lugar do conserto e o
-/// contrato.** A isca `porta_da_frente_test.dart` reprova se esta tela comecar
-/// a exigir alem dos quatro.
 library;
 
 import '../api/modelos_localizacao.dart';
@@ -44,40 +8,11 @@ import '../perdido/quando_foi_visto.dart';
 
 /// O motivo pelo qual `Registrar` esta desabilitado, ou nulo quando ele nao
 /// esta.
-///
-/// Um tipo, e nao um booleano com um texto ao lado, pela mesma razao de
-/// `ImpedimentoDeContinuar`: botao desabilitado sem motivo dito e desenho
-/// preguicoso, e enquanto o motivo for um `String?` solto alguem desabilita o
-/// botao sem preenche-lo e ninguem ve.
-///
-/// **A lista tem exatamente os campos que o contrato exige, e mais nenhum.**
-/// Acrescentar um item aqui e acrescentar uma exigencia ao formulario.
 enum ImpedimentoDeRegistrar {
   semEspecie('Diga se é cachorro, gato ou outro bicho.'),
 
   /// **`porte` E NAO `tamanho`, e a troca e UMA PALAVRA (cliente,
   /// 22/10/2026).**
-  ///
-  /// Era *"Diga o tamanho, do jeito que deu para ver."*. Ele escolheu a
-  /// palavra deste campo no mesmo dia -- *"Altere o texto do tamanho de quê?
-  /// para Qual é o porte?"* --, e o rotulo visivel virou
-  /// `TextosDoAchado.rotuloDoPorte`, *"Qual é o porte?"*. Deixar o motivo em
-  /// *"tamanho"* manteria DUAS palavras para o mesmo campo na mesma tela.
-  ///
-  /// **E a inconsistencia tinha deixado de ser so de texto.** Desde que o
-  /// passo 1 passou a carregar o motivo no nome acessivel do `Continuar`
-  /// desabilitado, esta frase e **o que o leitor de tela ANUNCIA**: quem ve a
-  /// tela lia "porte" e quem nao ve ouvia "tamanho" -- mesmo campo,
-  /// vocabulario diferente, e a diferenca aparecendo so para quem depende do
-  /// leitor.
-  ///
-  /// O resto da frase ficou intacto de proposito: trocar mais que a palavra
-  /// seria redacao nova, e redacao e decisao dele.
-  ///
-  /// **Vale nos DOIS passos, e isso e vantagem e nao efeito colateral**:
-  /// `impedimentoEm` consulta `impedimentoDoPasso1` primeiro, entao esta
-  /// frase pode aparecer tanto no nome acessivel do `Continuar` quanto no
-  /// motivo visivel do `Registrar achado`. E o mesmo campo nas duas.
   semPorte('Diga o porte, do jeito que deu para ver.'),
   semOnde('Diga onde você achou: use a localização ou escreva a cidade.'),
   semQuando('Diga quando você achou.'),
@@ -90,16 +25,11 @@ enum ImpedimentoDeRegistrar {
 }
 
 /// O texto de futuro vem do modulo de regra, e nao e redigitado aqui: a borda
-/// do servidor usa a mesma frase, e duas redacoes da mesma recusa fazem quem
-/// le a tela achar que sao duas coisas diferentes.
+/// do servidor usa a mesma frase, e duas redacoes da mesma recusa fazem quem le
+/// a tela achar que sao duas coisas diferentes.
 const String dataNoFuturoTexto = dataNoFuturo;
 
 /// O rascunho do achado.
-///
-/// `ChangeNotifier` porque ele atravessa a tela, a barra de acao fixa e o
-/// trecho de captura de localizacao: sem notificacao, o campo que so chama
-/// `atualizar` grava o valor **sem redesenhar**, que foi o defeito da
-/// BICHUS-156 no cadastro de pet.
 class RascunhoDoAchado {
   RascunhoDoAchado({
     this.especie,
@@ -116,71 +46,44 @@ class RascunhoDoAchado {
     this.foto,
   });
 
-  /// `StrayFoundReportInput.species`. **Exigido pelo contrato.**
+  /// `StrayFoundReportInput.species`.
   Especie? especie;
 
-  /// `StrayFoundReportInput.size`. **Exigido pelo contrato.**
+  /// `StrayFoundReportInput.size`.
   Porte? porte;
 
   /// `sex`. Opcional: um animal assustado no colo nao se examina.
   Sexo? sexo;
 
   /// `breed_code`. Opcional, e **so da lista fechada**.
-  ///
-  /// Nao ha `breed_free_text` nesta tela, e a ausencia e decisao. O contrato
-  /// so aceita o texto livre junto de `breed_code` em `outro_<especie>`, e o
-  /// par certo depende de a pessoa escolher a saida da lista primeiro -- um
-  /// erro que o cadastro de pet evita com um campo que aparece e some. Aqui
-  /// quem digita a raca e quem acha um animal na rua e nao sabe a raca: o
-  /// campo seria uma pergunta que produz falso negativo no cruzamento
-  /// (criterio 8) e nenhum ganho. O que ela quiser dizer cabe em `notes`.
   String? racaCodigo;
 
   /// `primary_color_code`. Opcional, lista fechada de `reference-data`.
-  ///
-  /// **Rotulada em texto, nunca amostra de cor sem nome** (criterio 2). Quem
-  /// escolhe e `SeletorDeLista`, que so conhece rotulo.
   String? corCodigo;
 
   /// `ref_data_version`: a versao da lista **que o cliente tinha em maos**.
   String? versaoDaReferencia;
 
-  /// O `Quando?`, na mesma forma de F3.1. **Exigido pelo contrato**
-  /// (`found_at`).
+  /// O `Quando?`, na mesma forma de F3.1.
   QuandoFoiVisto? quando;
 
   /// So usada com [QuandoFoiVisto.outraData].
   DateTime? dataEscolhida;
 
-  /// O `onde`, como a captura de localizacao o publica. **Exigido pelo
-  /// contrato**, num dos dois ramos do `anyOf`.
+  /// O `onde`, como a captura de localizacao o publica.
   Onde? onde;
 
   /// `notes`. Opcional.
   String observacao = '';
 
-  /// `share_token`: so existe para quem chegou pelo push de um caso
-  /// especifico (criterio 10). Nao ha campo na tela, e nao deve haver: ele
-  /// vem do link, e nao dos dedos de ninguem.
+  /// `share_token`: so existe para quem chegou pelo push de um caso especifico
+  /// (criterio 10).
   String? shareToken;
 
   /// A foto, **no aparelho**.
-  ///
-  /// Nao vai em [campos] e nao vai no corpo do registro. O contrato declara
-  /// `photo_upload_id`, mas nao existe valor que se possa honrar antes do
-  /// registro: `createFoundReportPhotoUploadIntent` exige `found_report_id` no
-  /// corpo, ou seja, exige que o achado ja exista. A foto e o passo seguinte,
-  /// sempre -- que e exatamente o que o criterio 4 descreve.
   FotoLocal? foto;
 
   /// O teto de `StrayFoundReportInput.notes` no contrato: **500**.
-  ///
-  /// Era 1000 aqui, e o contrato dizia 500 -- a coluna `found_reports.notes`
-  /// nunca aceitou mais que isso (`found_reports_notes_tamanho`). O contador da
-  /// tela prometia 1000, a pessoa escrevia 700 sem nenhum aviso e o servidor
-  /// recusava o aviso inteiro no envio. Contador que promete o que o servidor
-  /// recusa e pior que contador nenhum: ele garante que a pessoa so descobre
-  /// depois de ter escrito.
   static const int limiteDaObservacao = 500;
 
   DateTime? instanteEm(DateTime agora) => instanteDoAvistamento(
@@ -190,11 +93,6 @@ class RascunhoDoAchado {
       );
 
   /// O que impede **avancar do passo 1**, na ordem em que o passo 1 pergunta.
-  ///
-  /// **O passo 1 nao cobra campo do passo 2**, e e por isso que ele tem um
-  /// impedimento proprio: um `Continuar` que exigisse a localizacao obrigaria
-  /// a pessoa a adivinhar que o motivo esta numa pagina que ela ainda nao
-  /// viu. Raca, sexo e foto sao opcionais no contrato e nao entram aqui.
   ImpedimentoDeRegistrar? impedimentoDoPasso1() {
     if (especie == null) return ImpedimentoDeRegistrar.semEspecie;
     if (porte == null) return ImpedimentoDeRegistrar.semPorte;
@@ -202,11 +100,6 @@ class RascunhoDoAchado {
   }
 
   /// O que impede `Registrar` **dentro do passo 2**.
-  ///
-  /// A ordem e a ordem do passo 2, de cima para baixo -- `Quando?` antes de
-  /// `Onde?`, como o cliente pediu em 17/10/2026. Quem le o motivo procura o
-  /// campo, e apontar para o fim da pagina quando falta o comeco e mandar a
-  /// pessoa procurar.
   ImpedimentoDeRegistrar? impedimentoDoPasso2(DateTime agora) {
     if (quando == null) return ImpedimentoDeRegistrar.semQuando;
     final instante = instanteEm(agora);
@@ -219,47 +112,21 @@ class RascunhoDoAchado {
   }
 
   /// O que impede `Registrar`, olhando os dois passos.
-  ///
-  /// **O passo 1 vem primeiro mesmo quando a pessoa esta no 2**: um botao
-  /// final que reclamasse da localizacao enquanto a especie esta vazia mandaria
-  /// a pessoa consertar a pagina errada.
   ImpedimentoDeRegistrar? impedimentoEm(DateTime agora) =>
       impedimentoDoPasso1() ?? impedimentoDoPasso2(agora);
 
   bool podeRegistrarEm(DateTime agora) => impedimentoEm(agora) == null;
 
   /// Tem ponto, e portanto o cruzamento tem o criterio de distancia.
-  ///
-  /// Sem ponto, o cruzamento **nao deixa de existir**: ele passa a valer
-  /// dentro da mesma cidade (criterio 6). A tela usa isto para dizer a
-  /// verdade, e **nunca** para bloquear o envio.
   bool get temCoordenada => onde?.temCoordenada ?? false;
 
   /// Tem rotulo de area para aparecer com bairro e cidade.
-  ///
-  /// **Esta e a pergunta que a coordenada nao responde.** `area_label` e
-  /// montado no servidor a partir dos campos DIGITADOS (`rotuloDaArea` le
-  /// `city` e `neighborhood`, e nada mais), e derivar bairro de coordenada e
-  /// o que o ADR-0006 proibe. Entao um achado so com GPS chega sem rotulo
-  /// nenhum -- e a tela precisa dizer isso em vez de deixar a pessoa
-  /// descobrir depois.
   bool get temRotuloDeArea => switch (onde) {
         OndePorArea() || OndeComPontoEArea() => true,
         OndePorPonto() || null => false,
       };
 
-  /// O ponto capturado, decomposto em dois numeros. Nulo quando nao ha.
-  ///
-  /// Existe para o envelope de intencao: `LocalizacaoDaIntencao` guarda
-  /// latitude, longitude e **o carimbo de tempo**, e e ela que tem a regra de
-  /// 30 minutos (UX 8.3, regra 6). Coordenada gravada sem carimbo vira
-  /// coordenada de ontem passando por coordenada de agora, e o achado e
-  /// registrado no lugar errado -- que e pior que nao ter lugar nenhum,
-  /// porque a busca acontece em volta dele.
-  ///
-  /// **Por isso a coordenada NAO entra em [campos]**: la ela seria mais um par
-  /// de numeros sem hora, exatamente a forma que a regra 6 existe para
-  /// impedir.
+  /// O ponto capturado, decomposto em dois numeros.
   ({double lat, double lon})? get coordenada => switch (onde) {
         OndePorPonto(:final ponto) || OndeComPontoEArea(:final ponto) =>
           (lat: ponto.lat, lon: ponto.lon),
@@ -273,15 +140,6 @@ class RascunhoDoAchado {
       };
 
   /// Os campos do rascunho como o envelope de intencao os guarda (UX 8.3).
-  ///
-  /// So texto, numero e booleano: `RascunhoDaIntencao` recusa o resto, e a
-  /// recusa e o que impede alguem de enfiar os bytes de uma foto aqui.
-  ///
-  /// **A area vai como TEXTO e a coordenada nao vai.** Area e o que a pessoa
-  /// digitou; coordenada e medicao do aparelho, e ela tem lugar proprio no
-  /// envelope ([coordenada] e `LocalizacaoDaIntencao`), com o carimbo de tempo
-  /// que a regra 6 exige. As duas continuam sem se converter uma na outra,
-  /// atravessando o disco.
   Map<String, Object?> campos() {
     final area = areaDigitada;
     return <String, Object?>{
@@ -302,14 +160,6 @@ class RascunhoDoAchado {
   }
 
   /// Reconstroi o rascunho a partir dos campos do envelope.
-  ///
-  /// **A foto nao volta por aqui**: o que o envelope guarda dela e o caminho
-  /// do arquivo, e quem o guarda e `RascunhoDaIntencao.fotos`.
-  ///
-  /// **A coordenada tambem nao**, e por [lat] e [lon]: ela mora em
-  /// `LocalizacaoDaIntencao`, com o carimbo de tempo, e quem decide se ela
-  /// ainda vale e quem executa. Um rascunho que a remontasse sozinho
-  /// devolveria a coordenada de tres horas atras sem ninguem perguntar.
   static RascunhoDoAchado dosCampos(
     Map<String, Object?> campos, {
     double? lat,

@@ -25,59 +25,6 @@ import 'textos_do_achado.dart';
 
 /// **Achei ESTE pet** — o destino de `Encontrei este animal` na pagina publica
 /// de um caso.
-///
-/// ## O defeito que ela conserta
-///
-/// O cliente, 26/10/2026, palavra por palavra: *"nao subiu o fluxo de quando
-/// clicar no pet, nao levar ele para a pagina de registrar um achado, porque
-/// **se ele encontrou o pet, ele nao tem que cadastrar as informacoes
-/// novamente**"*.
-///
-/// O toque caia em [TelaRegistrarAchado] (F3.5), que pergunta **especie,
-/// porte, raca e cor** — e os quatro ja estao respondidos do outro lado: o
-/// pet tem cadastro, o caso esta aberto, e a projecao publica que esta tela
-/// acabou de ler traz os dados. Quem achou um animal IDENTIFICADO era obrigado
-/// a redigitar o que o sistema sabia.
-///
-/// ## O que ela pergunta, e o que ela NAO pergunta
-///
-/// **Nao pergunta**: especie, porte, raca, cor, sexo, nome. Os dois primeiros
-/// vao para o corpo vindos de [PerdidoPublico] — e `species` e `size` sao
-/// **obrigatorios em `PublicLostPet`**, entao nao existe caso em que eles
-/// faltem e a tela tenha de perguntar. (`primary_color` e `breed_label` sao
-/// anulaveis NO CONTRATO, e por isso nao viajam: eles tambem sao **rotulo** e
-/// o corpo pede **codigo** (`primary_color_code`, `breed_code`), e converter
-/// rotulo em codigo no cliente e inventar dado. Os dois sao opcionais em
-/// `StrayFoundReportInput`, entao a omissao nao perde nada que o cruzamento
-/// precise — e o cruzamento nem corre: o `share_token` vincula direto.)
-///
-/// **Pergunta**, e so: `Quando?`, `Onde?`, o recado e a foto. E exatamente o
-/// que ninguem alem de quem achou tem como saber.
-///
-/// ## O `share_token` e o fio, e ele nao vem dos dedos de ninguem
-///
-/// `StrayFoundReportInput.share_token` existe, no contrato, *"para o vizinho
-/// que chegou pelo push de um caso especifico e esta dizendo 'vi este pet': o
-/// achado e vinculado diretamente aquele caso, sem depender do cruzamento por
-/// atributos"*. E `PublicLostCase.can_report_sighting` nomeia este caminho:
-/// *"o toque leva a `POST /found-reports` com o `share_token` do caso"*.
-///
-/// **Nenhuma operacao nova de contrato foi inventada.** O caminho ja existia
-/// inteiro; o que faltava era a tela parar de pedir o que o caso ja diz.
-///
-/// ## O que ela NAO faz
-///
-/// - **Nao monta corpo nem navega por conta propria.** Quem envia e
-///   [enviarAchado], a MESMA funcao de F3.5: um segundo envio daria duas
-///   copias dos cinco desfechos (conta que falta, rede caida, sessao vencida,
-///   falha de api, registro).
-/// - **Nao tem passo 1.** Nao ha o que colapsar: os campos do passo 1 nao
-///   existem aqui. O que a tela desenha no lugar e um cartao de LEITURA, para
-///   a pessoa poder dizer "nao e este animal" e voltar.
-/// - **Nao le o caso do servidor.** O `extra` chega da pagina que acabou de
-///   ler; uma segunda leitura aqui seria a mesma resposta duas vezes e um
-///   segundo estado de carregando no meio do caminho de quem esta com o
-///   animal na mao.
 class TelaEncontreiEstePet extends StatefulWidget {
   const TelaEncontreiEstePet({
     required this.perdido,
@@ -85,14 +32,11 @@ class TelaEncontreiEstePet extends StatefulWidget {
     this.agora = DateTime.now,
   });
 
-  /// O caso, como a pagina publica o leu. **`shareToken`, `nome`, `especie` e
-  /// `porte` nao sao anulaveis** nesta classe, e a garantia e do contrato:
-  /// `PublicLostPet` os declara `required`, e `PerdidoPublico.doJson` estoura
-  /// `FormatException` se `species` ou `size` vierem fora da lista.
+  /// O caso, como a pagina publica o leu.
   final PerdidoPublico perdido;
 
-  /// O relogio entra pela porta, como em F3.5: sem isso, "amanha nao e
-  /// aceito" so seria exercitavel esperando um dia.
+  /// O relogio entra pela porta, como em F3.5: sem isso, "amanha nao e aceito"
+  /// so seria exercitavel esperando um dia.
   final DateTime Function() agora;
 
   @override
@@ -103,10 +47,6 @@ enum _Fase { preenchendo, enviando }
 
 class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
   /// O rascunho **ja nasce com o animal respondido**.
-  ///
-  /// Esta e a linha que conserta o defeito. Especie e porte vem do caso;
-  /// `shareToken` vem do caso; e e por isso que [RascunhoDoAchado] nao precisou
-  /// de campo novo nem de modo novo — ele sempre soube carregar os tres.
   late final RascunhoDoAchado _rascunho = RascunhoDoAchado(
     especie: widget.perdido.especie,
     porte: widget.perdido.porte,
@@ -120,8 +60,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
   /// A chave de idempotencia **da primeira tentativa**, e nao de cada uma.
-  /// Mesma razao de F3.5: uma chave por tentativa faria cada reenvio virar um
-  /// achado novo, e a mesma tutora receberia a mesma sugestao varias vezes.
   String? _chave;
 
   bool _consultou = false;
@@ -150,9 +88,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
     final camera = Escopo.of(context).camera;
     final foto = await camera.tirarFoto();
     if (!mounted) return;
-    // A consulta a camera corre mesmo sem foto: ela existe para a tela saber
-    // se `Tirar foto` ainda leva a algum lugar, e cancelar o seletor nao muda
-    // essa resposta. Era assim antes do recorte e continua sendo.
     if (foto == null) {
       await _consultarACamera();
       return;
@@ -173,21 +108,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
   }
 
   /// O RECORTE, entre "a pessoa escolheu" e o rascunho.
-  ///
-  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
-  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
-  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
-  /// seletor devolve quando ela desiste de escolher.
-  ///
-  /// **Esta e a tela de quem NAO TEM CONTA**: a foto sobe por
-  /// `createFinderPhotoUploadIntent`, e o `kind` dela (`finder_photo`) esta
-  /// na MESMA `ESPECIES_DO_ACHADO` do registro com conta -- entao o servidor
-  /// aplica a MESMA `DERIVADA_DA_FOTO_DO_ACHADO` de 1024 x 1126. Medido em
-  /// 29/10/2026 em `src/bin/worker.ts`, cuja varredura de higiene *"liga o
-  /// worker aos DOIS caminhos do achado"*; nao foi presumido da outra tela.
-  ///
-  /// E aqui o corte errado custa o mesmo: a foto e a unica prova de que o
-  /// animal e aquele.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -204,8 +124,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
       context: context,
       initialDate: _rascunho.dataEscolhida ?? agora,
       firstDate: DateTime(agora.year - 1),
-      // **Hoje e o ultimo dia aceito.** Achado no futuro nao e achado, e a
-      // mesma recusa existe na borda do servidor.
       lastDate: agora,
     );
     if (!mounted) return;
@@ -239,9 +157,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final agora = widget.agora();
-    // **SO o impedimento do passo 2.** `impedimentoDoPasso1` (especie e porte)
-    // esta satisfeito por construcao, e chama-lo aqui seria perguntar ao
-    // rascunho uma coisa que a tela ja resolveu.
     final impedimento = _rascunho.impedimentoDoPasso2(agora);
 
     return Scaffold(
@@ -280,9 +195,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
               ],
               aoSelecionar: (escolha) {
                 _rascunho.quando = escolha;
-                // Trocar de `Outra data` para outra opcao **apaga** a data:
-                // deixa-la guardada gravaria o achado com a data de um
-                // calendario que a pessoa ja abandonou.
                 if (!escolha.pedeCalendario) _rascunho.dataEscolhida = null;
                 setState(() {});
                 if (escolha.pedeCalendario) _escolherData();
@@ -290,11 +202,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
             ),
             if (_rascunho.quando?.pedeCalendario ?? false) ...<Widget>[
               const SizedBox(height: BichuEspaco.e3),
-              // A MESMA peca de F3.5, e nao uma segunda: o rotulo acessivel
-              // dela redeclara `onTap` por cima do `excludeSemantics` (a forma
-              // `btn=true tap=false` que este app ja pagou quatro vezes), e o
-              // formato `dd/mm/aaaa` nao depende de `intl`. Reescrever as duas
-              // coisas aqui seria reabrir os dois defeitos.
               DataEscolhidaDoAchado(
                 data: _rascunho.dataEscolhida,
                 aoTrocar: _escolherData,
@@ -309,17 +216,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
               ),
             ),
             const SizedBox(height: BichuEspaco.e4),
-            // A PECA DA BICHUS-23, EMBUTIDA — a mesma de F3.5, e com o MESMO
-            // ponto de uso: `registrarAchado`. Um valor novo no enum seria um
-            // ponteiro sem texto proprio, e o portao `enum-sem-valores-lidos`
-            // reprova enum cujo valor ninguem le.
-            //
-            // **Sem os dois botoes, e pelo ponto de uso** (cliente,
-            // 29/10/2026). As duas telas de achado mudam JUNTAS: sao o mesmo
-            // fluxo e tinham a mesma promessa, e deixar uma com botoes e a
-            // outra sem seria a inconsistencia que o produto relataria no dia
-            // seguinte. Ver `_ofereceCaptura` na peca e o cabecalho de
-            // `tela_registrar_achado.dart` para o custo medido da decisao.
             CapturaDeLocalizacao(
               pontoDeUso: PontoDeUsoDaLocalizacao.registrarAchado,
               aoMudar: (onde) {
@@ -375,10 +271,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
 }
 
 /// O cartao de LEITURA do pet: foto, nome, especie e porte.
-///
-/// **Nenhum campo editavel aqui, e e esse o ponto da tela.** Um `SeletorDeLista`
-/// pre-preenchido continuaria sendo uma pergunta, e o cliente nao pediu um
-/// padrao melhor — ele pediu para nao perguntar.
 class _CartaoDoPet extends StatelessWidget {
   const _CartaoDoPet({required this.perdido});
 
@@ -399,9 +291,6 @@ class _CartaoDoPet extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // **Sem foto nao desenha retangulo cinza.** `photo_url` e anulavel no
-          // contrato (caso aberto antes de a derivada ficar pronta), e
-          // `ImagemDaRede` recebe `url` nao anulavel de proposito.
           if (url != null) ...<Widget>[
             ImagemDaRede(
               url: url,

@@ -1,22 +1,4 @@
-/**
- * Os casos de uso da escrita administrativa da `Loja`, sem banco e sem servidor.
- *
- * O dublê aqui e um repositorio em memoria que imita as duas coisas que o banco
- * garante e que o caso de uso depende: a versao lida no `WHERE` (zero linhas
- * quando mudou) e o `ROLLBACK` quando algo lanca dentro da transacao. A prova
- * contra Postgres de verdade, pela rota, e de
- * `tests/integration/escrita-administrativa-da-loja.test.ts`.
- *
- * ## As iscas deste arquivo
- *
- * - **toda escrita grava a trilha**: cada operacao que muda estado deixa
- *   exatamente uma linha, com a acao do contrato, o `id` INTERNO e a sessao;
- * - **a falha da trilha desfaz a escrita**: com a trilha lancando, nada fica;
- * - **publicar e retirar sao idempotentes sem trilha nova**;
- * - **rascunho nao se retira** (`not_published`);
- * - **sem `If-Match`, 428 antes de ler o recurso; versao velha, 412 sem gravar**;
- * - **o item nasce rascunho**.
- */
+/** Os casos de uso da escrita administrativa da `Loja`, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -69,8 +51,6 @@ function codigos(erro: unknown): string[] {
   return (erro.errors ?? []).map((e) => e.code);
 }
 
-// `site_url` e o campo do CORPO desde 17/10 (endereco completo); `host` continua
-// sendo o que a coluna guarda, e sai dele.
 const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',
@@ -458,8 +438,6 @@ void describe('escrita administrativa da Loja', () => {
       );
       assert.equal(m.estado().trabalhos.length, 2);
 
-      // Reordenar e mandar a ordem nova; o envio ja confirmado e reaproveitado,
-      // sem imagem nova e sem trabalho novo.
       const reordenado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
         images: [
           { upload_id: b, alt_text: 'Tabela nutricional' },
@@ -578,10 +556,6 @@ void describe('escrita administrativa da Loja', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // A capa, a ordem das imagens e o texto alternativo opcional (17/10/2026)
-  // -------------------------------------------------------------------------
-
   void describe('capa e ordem da galeria', () => {
     async function tresEnvios(c: ReturnType<typeof montar>): Promise<[string, string, string]> {
       const ids: string[] = [];
@@ -628,8 +602,6 @@ void describe('escrita administrativa da Loja', () => {
           { upload_id: c, alt_text: 'Terceira' },
         ],
       });
-      // O painel manda a galeria inteira na ordem nova. E so isso que
-      // "escolher a capa" quer dizer: nao ha sinalizador a mandar.
       const depois = await m.catalogo.alterarItem(AUTOR, ITEM.slug, criado.etag, {
         images: [
           { upload_id: c, alt_text: 'Terceira' },
@@ -659,7 +631,6 @@ void describe('escrita administrativa da Loja', () => {
           { upload_id: c, alt_text: 'Terceira' },
         ],
       });
-      // Remover e OMITIR da lista. A capa saiu.
       const depois = await m.catalogo.alterarItem(AUTOR, ITEM.slug, criado.etag, {
         images: [
           { upload_id: b, alt_text: 'Segunda' },
@@ -689,12 +660,10 @@ void describe('escrita administrativa da Loja', () => {
         { upload_id: b, alt_text: 'Segunda' },
         { upload_id: a, alt_text: 'Primeira' },
       ];
-      // O que a borda entrega ao painel quando comprime a resposta.
       const comSufixo = await m.catalogo.alterarItem(AUTOR, ITEM.slug, 'W/"1-zstd"', { images: trocado });
       assert.equal(trocado[0]?.upload_id, comSufixo.recurso.images[0]?.upload_id);
       assert.equal(comSufixo.etag, '"2"');
 
-      // Versao velha COM sufixo continua sendo versao velha.
       const erro = await m.catalogo
         .alterarItem(AUTOR, ITEM.slug, '"1-gzip"', { images: trocado })
         .catch((e: unknown) => e);
@@ -720,10 +689,6 @@ void describe('escrita administrativa da Loja', () => {
       assert.deepEqual(codigos(erro), ['length'], 'presente e curto continua erro de campo, nao rascunho');
     });
   });
-
-  // -------------------------------------------------------------------------
-  // As duas reguas: rascunho minimo, publicacao completa (17/10/2026)
-  // -------------------------------------------------------------------------
 
   void describe('rascunho incompleto e a regua da publicacao', () => {
     void it('RASCUNHO SO COM O NOME: cria sem parceiro, descricao, categoria, especie nem link', async () => {
@@ -753,7 +718,6 @@ void describe('escrita administrativa da Loja', () => {
         ],
         'a ordem e a dos campos da tela, e cada falta tem o seu proprio campo e codigo',
       );
-      // E NADA foi publicado: o produto incompleto nao chega a vitrine do app.
       const depois = await m.catalogo.lerItem(criado.recurso.slug);
       assert.equal(depois.recurso.publication_state, 'draft');
       assert.deepEqual(
@@ -837,10 +801,6 @@ void describe('escrita administrativa da Loja', () => {
         .catch((e: unknown) => e);
       assert.deepEqual(codigos(com3001), ['length']);
 
-      // 2999 letras + uma quebra NO MEIO = 3000 exatos. A quebra tem de ficar
-      // no meio: o teto e medido (e o texto gravado) depois de `btrim`, como o
-      // `CHECK store_items_resumo_tem_tamanho` o mede, e uma quebra no FIM e
-      // espaco de borda -- ela sai, e 2999 seria o tamanho gravado.
       const noLimite = await m.catalogo.criarItem(AUTOR, {
         title: 'No limite com quebra',
         summary: `${'a'.repeat(2998)}\na`,
@@ -856,20 +816,8 @@ void describe('escrita administrativa da Loja', () => {
 });
 
 /**
- * Os DOIS NIVEIS da categoria (decisao do cliente de 17/10/2026: "dois
- * niveis, com subcategorias como a petlove").
- *
- * ## A isca que importa aqui
- *
- * A categoria deixou de ser `enum` do contrato. Antes, valor desconhecido
- * morria no esquema de corpo, e o caso de uso nunca o via. Agora quem recusa e
- * o caso de uso, lendo o vocabulario DENTRO da transacao -- e, se ele nao
- * recusar, a chave estrangeira composta do banco recusa e o painel recebe erro
- * de integridade onde esperava erro de campo.
- *
- * O caso que mais importa e o ultimo: **trocar a categoria sem mandar a
- * subcategoria**. A gravada pertence a categoria antiga, e deixa-la para tras
- * grava o par que o banco nao admite.
+ * Os DOIS NIVEIS da categoria (decisao do cliente de 17/10/2026: "dois niveis, com
+ * subcategorias como a petlove").
  */
 void describe('categoria e subcategoria, os dois niveis', () => {
   let m: ReturnType<typeof montar>;
@@ -906,7 +854,6 @@ void describe('categoria e subcategoria, os dois niveis', () => {
 
   void it('subcategoria de OUTRA categoria: 400 `subcategory_not_in_category`', async () => {
     await assert.rejects(
-      // `bifinhos` existe no vocabulario, e e de `treats`.
       () => m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'bifinhos' }),
       (erro: unknown) => {
         assert.deepEqual(codigos(erro), ['subcategory_not_in_category']);
@@ -934,7 +881,6 @@ void describe('categoria e subcategoria, os dois niveis', () => {
   });
 
   void it('alterar SEM mandar subcategoria preserva a gravada', async () => {
-    // Ausente nao e `null`: editar o titulo nao pode apagar a classificacao.
     const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
     const editado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
       title: 'Racao 10 kg',
@@ -951,7 +897,6 @@ void describe('categoria e subcategoria, os dois niveis', () => {
         return true;
       },
     );
-    // Nada mudou: nem a categoria, nem a versao.
     const atual = await m.catalogo.lerItem(ITEM.slug);
     assert.equal(atual.recurso.category, 'food');
     assert.equal(atual.recurso.subcategory, 'racao_seca');
@@ -970,8 +915,6 @@ void describe('categoria e subcategoria, os dois niveis', () => {
   });
 
   void it('trocar para categoria SEM arvore levantada, limpando a subcategoria: passa', async () => {
-    // `bed` nao tem subcategoria no recorte do dublê, e e assim que 11 das 14
-    // categorias ficam para gato, passaro, peixe e outros ate a arvore vir.
     const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
     const trocado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
       category: 'bed',
@@ -982,8 +925,6 @@ void describe('categoria e subcategoria, os dois niveis', () => {
   });
 
   void it('o retrato da trilha carrega os dois niveis', async () => {
-    // A trilha e o que responde "o que mudou" depois. Sem a subcategoria nela,
-    // uma reclassificacao de segundo nivel seria uma escrita sem rastro.
     await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
     const depois = m.estado().trilha.at(-1)?.after;
     assert.equal(depois?.['category'], 'food');

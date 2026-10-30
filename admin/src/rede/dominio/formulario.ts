@@ -1,14 +1,6 @@
 /**
  * O formulario do encontro como dado: estado, validacao de conveniencia e a
- * montagem dos corpos do contrato. Fica fora do componente para ser testado
- * em milissegundos; a autoridade de toda regra e do servidor.
- *
- * Numa edicao, o contrato separa tres operacoes (ADR-0027, 12.9 e D40):
- *   - updateAdminNetworkEvent: titulo, descricao, fotos, o que levar,
- *     observacoes e detalhes, sem senha;
- *   - relocateAdminNetworkEvent: data, horario e lugar, com senha e motivo;
- *   - changeAdminNetworkEventAccess: visibilidade e custo, com senha e motivo.
- * `planoDeEdicao` diz quais das tres o que mudou exige.
+ * montagem dos corpos do contrato.
  */
 import { campoDoInstante, dataCurta, faixaDeHorario, FUSO_PADRAO, instanteDoCampo } from './horario.ts';
 import { achadosNasObservacoes, ERRO_DAS_OBSERVACOES } from './observacoes.ts';
@@ -36,14 +28,17 @@ export const LIMITE_DE_FOTOS = 8;
 export const LIMITE_DAS_OBSERVACOES = 500;
 /** `summary` do encontro: ate 200 (pedido do cliente de 01/10; antes, 180). */
 export const LIMITE_DO_RESUMO = 200;
-/** `place.street_address`: 5 a 200 code points, como o servidor (`errosDoEndereco`). */
+/**
+ * `place.street_address`: 5 a 200 code points, como o servidor
+ * (`errosDoEndereco`).
+ */
 export const LIMITE_DO_ENDERECO = 200;
 export const LIMITE_DO_MOTIVO = 280;
 
 /**
- * Mesma forma da imagem da galeria compartilhada do painel: `enviando` e
- * `erro` so existem no navegador; `enviada` e o envio que a escrita do
- * encontro ainda vai confirmar; `processing`, `ready` e `rejected` sao o
+ * Mesma forma da imagem da galeria compartilhada do painel: `enviando` e `erro` so
+ * existem no navegador; `enviada` e o envio que a escrita do encontro ainda vai
+ * confirmar; `processing`, `ready` e `rejected` sao o
  * `AdminCatalogGalleryImage.status` que o servidor devolve.
  */
 export type EstadoDaFoto = 'enviando' | 'erro' | 'enviada' | 'processing' | 'ready' | 'rejected';
@@ -60,11 +55,7 @@ export interface FotoDoFormulario {
 
 const FOTO_QUE_VAI = new Set<EstadoDaFoto>(['enviada', 'processing', 'ready']);
 
-/**
- * Chave estavel de uma foto que veio do servidor. `upload_id` pode ser nulo
- * (AdminCatalogGalleryImage): a foto continua no encontro e precisa de uma chave
- * que nao dependa dele. A posicao e unica na galeria lida.
- */
+/** Chave estavel de uma foto que veio do servidor. */
 export function chaveDaImagem(img: { upload_id: string | null; position: number }): string {
   return img.upload_id ?? `sem-envio-${img.position}`;
 }
@@ -97,11 +88,17 @@ export interface EstadoDoFormulario {
   inicio: string;
   fim: string;
   local: string;
-  /** Endereco por extenso (`place.street_address`, 01/10), opcional: 5 a 200 code points. */
+  /**
+   * Endereco por extenso (`place.street_address`, 01/10), opcional: 5 a 200 code
+   * points.
+   */
   endereco: string;
   /** `ticket_url`, opcional (ADR-0027 item 22). */
   linkDoConvite: string;
-  /** `instagram_url`, opcional: a URL COMPLETA do perfil, com `https://` (padrao de 17/10). */
+  /**
+   * `instagram_url`, opcional: a URL COMPLETA do perfil, com `https://` (padrao de
+   * 17/10).
+   */
   instagram: string;
   bairro: string;
   cidade: string;
@@ -123,24 +120,13 @@ export interface EstadoDoFormulario {
 /**
  * O que vem marcado na caixa "o que levar" de um encontro NOVO (decisao do
  * cliente, 20/10/2026): agua, guia e saquinho.
- *
- * Sao os tres que valem para qualquer encontro de cachorro em lugar publico, e
- * por isso o padrao poupa tres cliques em todo cadastro em vez de adivinhar.
- * **`vaccination_card` fica de fora por decisao explicita dele** -- exigir
- * carteira de vacinacao e escolha do organizador, e marca-la por padrao faria
- * o painel pedir documento em encontro que nao pede.
- *
- * Os outros quatro (`water_bowl`, `treats`, `towel`, `toy`) ele nao citou, e
- * continuam desmarcados como estavam.
- *
- * **Isto e padrao de CRIACAO, nunca de edicao.** `formularioDoEncontro` monta o
- * estado a partir de `bring_items` do encontro salvo e nao passa por aqui: um
- * padrao que alcancasse a edicao remarcaria, ao reabrir, exactamente o que o
- * organizador desmarcou de proposito.
  */
 export const ITENS_MARCADOS_POR_PADRAO: readonly ItemParaLevar[] = ['water', 'leash', 'poop_bags'];
 
-/** Padroes do contrato: todos os portes, qualquer idade, vacina exigida, sem area cercada, publico e gratuito. */
+/**
+ * Padroes do contrato: todos os portes, qualquer idade, vacina exigida, sem area
+ * cercada, publico e gratuito.
+ */
 export function formularioVazio(): EstadoDoFormulario {
   return {
     titulo: '',
@@ -180,16 +166,6 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     local: e.place.place_name,
     endereco: e.street_address ?? '',
     linkDoConvite: e.ticket_url ?? '',
-    // **A URL COMPLETA que o servidor devolve**, e nao `@handle`: desde 17/10 o
-    // campo exige endereco completo, e reabrir um encontro com `@x` deixaria
-    // todo evento ja salvo invalido no proprio formulario que o abriu.
-    //
-    // `instagram_url` sai nula quando `INSTAGRAM_PROFILE_BASE_URL` nao esta
-    // configurada no ambiente. Nesse caso cai no `@handle`, que o campo vai
-    // marcar como invalido -- e isso e melhor que as duas alternativas:
-    // montar a URL aqui seria o literal de host que o portao de
-    // portabilidade reprova, e deixar o campo vazio APAGARIA o Instagram do
-    // encontro no primeiro salvamento, sem ninguem perceber.
     instagram: e.instagram_url ?? (e.instagram_handle ? `@${e.instagram_handle}` : ''),
     bairro: e.place.neighborhood,
     cidade: e.place.city,
@@ -202,11 +178,6 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
         ...(img.upload_id ? { uploadId: img.upload_id } : {}),
         previa: img.url ?? null,
         motivo: img.rejection_reason ?? null,
-        // `alt_text` e anulavel no schema de leitura, e desde 21/10/2026 o nulo
-        // ACONTECE tambem na `Rede` (decisao do cliente): a escrita deixou de
-        // exigir a descricao. `''` e como a tela guarda "sem descricao", e a
-        // montagem omite o campo nesse caso -- as duas pontas combinam em
-        // `planoDeEdicao`.
         alt: img.alt_text ?? '',
       })),
     visibilidade: e.visibility,
@@ -222,8 +193,6 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     estrutura: [...e.amenities],
   };
 }
-
-// ------------------------------------------------------------------ validacao
 
 export type Campo =
   | 'titulo'
@@ -252,11 +221,9 @@ export interface ErroDeCampo {
 export type Modo = 'novo' | 'editar';
 
 /**
- * As duas contagens moram em `./texto.ts`, que nao tem nenhum `import`, para
- * que a suite da raiz possa importa-las e provar, caso a caso, que elas contam
- * igual ao servidor (`src/modules/network/domain/paridade-com-o-backoffice.test.ts`).
- * Reexportadas aqui porque `FormularioDoEncontro.tsx` e a suite do painel ja as
- * importavam deste arquivo.
+ * As duas contagens moram em `./texto.ts`, que nao tem nenhum `import`, para que a
+ * suite da raiz possa importa-las e provar, caso a caso, que elas contam igual ao
+ * servidor (`src/modules/network/domain/paridade-com-o-backoffice.test.ts`).
  */
 export { cortarEmCodePoints, tamanhoComoOServidor } from './texto.ts';
 
@@ -277,17 +244,6 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   } else if (f.fotos.some((x) => x.estado === 'erro' || x.estado === 'rejected')) {
     e('fotos', 'Fotos', 'Remova ou envie de novo a foto que não foi aceita.');
   }
-  // A DESCRICAO DA IMAGEM E OPCIONAL DESDE 21/10/2026 (decisao do cliente,
-  // dita duas vezes: "pode remover a descricao da imagem").
-  //
-  // VAZIO PASSA, UMA LETRA NAO, e a distincao nao e capricho: o contrato recusa
-  // `alt_text` de um caractere (`minLength: 2`), e deixar `"a"` passar aqui
-  // trocaria um erro de campo por um `400` sem endereco na tela. Vazio quer
-  // dizer "nao escrevi" e o campo e OMITIDO do corpo (ver `imagens()`); `"a"`
-  // quer dizer "escrevi errado".
-  //
-  // E a mesma regra que a `Loja` aplica desde 17/10 via
-  // `descricaoAceitavel(alt, false)`.
   f.fotos.forEach((foto, i) => {
     if (FOTO_QUE_VAI.has(foto.estado) && foto.alt.trim() !== '' && !entre(foto.alt, 2, 150)) {
       e(`alt-${i}`, 'Descrição da imagem', 'Escreva pelo menos duas letras, ou deixe o campo vazio.');
@@ -311,12 +267,6 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
     const recusa = recusaDoLinkDoConvite(f.linkDoConvite);
     if (recusa) e('linkDoConvite', 'Link do convite ou ingresso', MENSAGEM_DO_LINK[recusa]);
   }
-  // Pelo MOTIVO, e nao por uma frase so: o apelido cru, o `http://`, o espaco,
-  // um perfil de outro site e o endereco sem perfil no fim sao recusas
-  // diferentes e pedem textos diferentes. Uma frase para todas e o defeito que
-  // custou o tempo do cliente em 17/10 -- e e por isso que a escolha da frase
-  // nao pode sair de um mapa de `code`: dois motivos dividem o mesmo `code`,
-  // exatamente como no servidor (`errosDoInstagram`).
   if (f.instagram.trim()) {
     const recusa = mensagemDoInstagram(f.instagram);
     if (recusa !== null) e('instagram', 'Instagram para dúvidas', recusa);
@@ -337,16 +287,10 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   return erros;
 }
 
-// ----------------------------------------------------------------- montagem
-
 function imagens(f: EstadoDoFormulario): ImagemInput[] {
   return f.fotos
     .filter((x): x is FotoDoFormulario & { uploadId: string } => !!x.uploadId && FOTO_QUE_VAI.has(x.estado))
     .map((x) => {
-      // `alt_text` e OMITIDO quando vazio, e nao mandado como `""`: o contrato
-      // pede de 2 a 150 caracteres QUANDO o campo vem, e ausente e o unico
-      // jeito de dizer "nao escrevi". Mesmo molde de
-      // `loja/formulario-do-produto.ts`.
       const alt = x.alt.trim();
       return { upload_id: x.uploadId, ...(alt === '' ? {} : { alt_text: alt }) };
     });
@@ -368,11 +312,7 @@ function acesso(f: EstadoDoFormulario): NonNullable<EncontroInput['admission']> 
   return { kind: 'paid', price: { amount, currency: 'BRL', unit: unidadeComoAparece(f.unidade) } };
 }
 
-/**
- * Corpo de `createAdminNetworkEvent`. Sem `slug` (o servidor deriva). O
- * `time_zone` vai explicito com o padrao do contrato: o gerador de tipos torna
- * obrigatorio no corpo todo campo que declara `default`.
- */
+/** Corpo de `createAdminNetworkEvent`. */
 export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
   const starts = instanteDoCampo(f.inicio);
   if (!starts) throw new Error('inicio invalido chegou a montagem; valide antes');
@@ -397,9 +337,6 @@ export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
     ...(notas ? { notes: notas } : {}),
     ...(f.endereco.trim() ? { street_address: f.endereco.trim() } : {}),
     ...(f.linkDoConvite.trim() ? { ticket_url: f.linkDoConvite.trim() } : {}),
-    // A URL COMPLETA, como a pessoa digitou. O servidor extrai o handle; o
-    // painel nao o manda mais, senao o campo do contrato voltaria a receber
-    // apelido por um caminho que ninguem olha.
     ...(f.instagram.trim() ? { instagram_url: f.instagram.trim() } : {}),
   };
 }
@@ -420,31 +357,19 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const patch: EncontroPatch = {};
   if (f.titulo.trim() !== original.title) patch.title = f.titulo.trim();
   if (f.resumo.trim() !== original.summary) patch.summary = f.resumo.trim();
-  // A galeria compara pela chave estavel de cada foto, e nao pelo `upload_id`: a foto com
-  // `upload_id` nulo (conta que a enviou foi apagada) nao pode ir em `images`, e mandar a
-  // galeria sem ela a remove. So vai `images` quando as fotos mudaram de verdade.
   const antigas = [...original.images].sort((a, b) => a.position - b.position);
   const fotosIguais =
     f.fotos.length === antigas.length &&
     f.fotos.every((x, i) => {
       const a = antigas[i];
-      // `a.alt_text` e nulo na imagem gravada sem descricao, e a tela guarda
-      // `''` para o mesmo estado (ver a leitura, `alt: img.alt_text ?? ''`).
-      // Sem o `?? ''` aqui, `'' === null` daria falso e o patch mandaria
-      // `images` em TODO salvamento, mesmo sem a galeria ter mudado.
       return !!a && x.chave === chaveDaImagem(a) && x.alt.trim() === (a.alt_text ?? '');
     });
   if (!fotosIguais) patch.images = imagens(f);
   if (!mesmoConjunto(f.levar, original.bring_items)) patch.bring_items = [...f.levar];
   const notas = f.observacoes.trim() || null;
   if (notas !== (original.notes ?? null)) patch.notes = notas;
-  // Links vao no PATCH, sem senha; o servidor avisa os administradores por e-mail.
   const link = f.linkDoConvite.trim() || null;
   if (link !== (original.ticket_url ?? null)) patch.ticket_url = link;
-  // **A COMPARACAO e por handle, e o ENVIO e a URL.** Comparar as URLs faria
-  // o mesmo perfil com e sem `www.` parecer
-  // mudanca -- e cada "mudanca" de link avisa todos os administradores por
-  // e-mail. O handle e a forma canonica, e e o que a coluna guarda.
   const handle = f.instagram.trim() ? handleDoInstagram(f.instagram) : null;
   if (handle !== (original.instagram_handle ?? null)) {
     patch.instagram_url = f.instagram.trim() || null;
@@ -473,15 +398,9 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const p = original.place;
   const lugarMudou = f.local.trim() !== p.place_name || f.bairro.trim() !== p.neighborhood || f.cidade.trim() !== p.city || f.uf !== p.state;
   if (lugarMudou) {
-    // O backoffice nao tem mapa (decisao do cliente de 01/10): o ponto nao se
-    // edita aqui. Mudando o lugar, o ponto antigo e de outro lugar e sai
-    // (`point: null`), para o app nao mostrar o mapa no endereco velho. Sem
-    // mudanca de lugar, nada vai, e o ponto que existir continua.
     mudanca.place = { ...lugar(f), ...(p.point ? { point: null } : {}) };
     oQueMudou.add('local');
   }
-  // O endereco muda por relocation, com senha e motivo (o PATCH nao o aceita).
-  // So o endereco nao tira o ponto: corrigir um numero nao muda o lugar.
   const enderecoNovo = f.endereco.trim() || null;
   if (enderecoNovo !== (original.street_address ?? null)) {
     mudanca.street_address = enderecoNovo;
@@ -494,8 +413,6 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const amountNovo = f.pago ? centavosDoTexto(f.valor) : null;
   const custoMudou =
     f.pago !== (original.admission.kind === 'paid') ||
-    // `per_dog` antigo e `per_pet` sao a mesma unidade para quem le: so muda se o
-    // valor ou a unidade mudarem de verdade, e entao vai `per_pet`, nunca `per_dog`.
     (f.pago &&
       (amountNovo !== precoAntigo?.amount || !precoAntigo || unidadeComoAparece(f.unidade) !== unidadeComoAparece(precoAntigo.unit)));
   if (custoMudou) acessoNovo.admission = acesso(f);
@@ -508,8 +425,6 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
     acesso: Object.keys(acessoNovo).length ? acessoNovo : null,
   };
 }
-
-// ------------------------------------------------ textos do dialogo com senha
 
 /** "data", "data e local", "data, horário e local". */
 export function listaEmPortugues(itens: readonly string[]): string {
@@ -542,15 +457,11 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     partes.push('Quem usa o app não é avisado da mudança.');
     frases.push(partes.join(' '));
     if (plano.mudanca.place?.point === null) frases.push('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
-    // Mudou o lugar e nao mexeu no endereco salvo: o endereco antigo pode ter
-    // ficado para tras, e o dialogo pede para conferir antes da senha.
     if (plano.mudanca.place && plano.mudanca.street_address === undefined && original.street_address) {
       frases.push(`O endereço continua: ${original.street_address}. Se mudou, corrija antes de confirmar.`);
     }
   }
   if (plano.acesso) {
-    // O que muda no ENCONTRO ("agora e privado", "agora e pago") e o que muda no
-    // VALOR sao sujeitos diferentes: "O encontro o valor muda..." era o defeito (QA r5).
     const doEncontro: string[] = [];
     let novoValor: string | null = null;
     if (plano.acesso.visibility) doEncontro.push(plano.acesso.visibility === 'private' ? 'agora é privado' : 'agora é público');
@@ -569,7 +480,6 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     }
     if (plano.acesso.visibility === 'private') frases.push('O link antigo do evento para de funcionar.');
   }
-  // UX 30, B3 e B11: o aviso aos administradores e uma frase so, no fim, e nao uma por mudanca.
   if (plano.mudanca || plano.acesso) frases.push('Todos os administradores recebem um e-mail com o antes e o depois.');
   return frases;
 }

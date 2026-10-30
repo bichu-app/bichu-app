@@ -1,50 +1,6 @@
 /**
  * O teto de emissao de plaquinhas de `POST /pets/{petId}/tags`, medido pela
  * POSICAO da recusa, na dimensao `pet`.
- *
- * ===========================================================================
- * A ARMADILHA DESTA ROTA, E ELA E PIOR QUE A DAS OUTRAS
- * ===========================================================================
- * O teto de 10 emissoes por pet em 24 h existe DUAS VEZES, em duas camadas, e
- * as duas respondem **429 com o mesmo `type: rate-limited`**:
- *
- *   1. na borda, pela entrada `x-rate-limit` da rota (`dimension: [pet]`,
- *      `limit: 10`, `window: 24h`, `on_exceed: deny_429`), aplicada por
- *      `registrarRota` em `preValidation`;
- *   2. no repositorio, por `ResultadoDaEmissao.teto_diario`
- *      (`kysely-tag-repository.ts`), que `tag-service.ts` traduz em
- *      `problemas.limiteDeChamadas`.
- *
- * Consequencia direta: **apagar a entrada da borda nao muda nem o status nem o
- * corpo da decima primeira chamada em producao.** Um teste que afirmasse
- * "a 11a responde 429 `rate-limited`" ficaria verde com o teto da borda
- * removido -- e ficaria verde tambem se a ordem dos ganchos de
- * `registrar-rota.ts` invertesse, porque o segundo mecanismo recusa de qualquer
- * jeito. Seria uma isca que nasce inutil, que e como a primeira de
- * `POST /auth/reauth` nasceu.
- *
- * O que separa as duas camadas e **onde a recusa acontece**: o teto da borda
- * roda ANTES do manipulador, entao a 11a chamada nunca chega ao repositorio. Por
- * isso a assercao que carrega este arquivo nao e o status: e a CONTAGEM DE
- * CHAMADAS AO REPOSITORIO. Dez emissoes pedidas, dez chegadas; onze pedidas,
- * dez chegadas. Se a decima primeira chegar la, a borda deixou de frear e o que
- * sobrou e o freio que custa uma transacao por tentativa.
- *
- * O duble deste arquivo **nunca** devolve `teto_diario`. Isso e deliberado: com
- * a segunda camada fora do caminho, o unico 429 possivel aqui e o da borda.
- *
- * ===========================================================================
- * O NUMERO E LITERAL, E O CAMINHO SAI DA DECLARACAO
- * ===========================================================================
- * `TETO_POR_PET` e escrito a mao com a fonte citada, e nao lido de
- * `rotaDeEmissaoDeTag.rateLimit`: teste que tira o esperado do mesmo lugar que
- * exercita e tautologia, e passaria a cobrar 50 no dia em que alguem escrevesse
- * 50. Isso tambem e o que este arquivo acrescenta a
- * `src/shared/http/rotas-registradas-contra-o-contrato.test.ts`: uma edicao
- * coordenada no YAML e na rota passa la, e reprova aqui.
- *
- * O caminho, ao contrario, sai de `rotaDeEmissaoDeTag.path`: caminho escrito a
- * mao vira 404 em silencio, e 404 nao e 429.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -88,13 +44,7 @@ const TOKEN_DE_ACESSO = 'acesso-do-tutor';
 /** Da DECLARACAO, nunca escrito a mao. */
 const EMISSAO = rotaDeEmissaoDeTag.path;
 
-/**
- * O teto de emissoes por pet, literal e com fonte.
- *
- * Fonte: `api/openapi.yaml`, operacao `issuePetTag`, unica entrada de
- * `x-rate-limit` (`dimension: [pet]`, `limit: 10`, `window: 24h`,
- * `on_exceed: deny_429`). ADR-0016 define o mecanismo.
- */
+/** O teto de emissoes por pet, literal e com fonte. */
 const TETO_POR_PET = 10;
 
 function naoUsado(nome: string): never {
@@ -103,7 +53,7 @@ function naoUsado(nome: string): never {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Toda emissao que chegou ao repositorio, na ordem. E o que este arquivo mede. */
+  /** Toda emissao que chegou ao repositorio, na ordem. */
   readonly emitidas: NovaTag[];
 }
 
@@ -112,8 +62,6 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
   let sequencia = 0;
 
   const repositorio: TagRepository = {
-    // NUNCA `teto_diario`. Ver o cabecalho: com a segunda camada fora do
-    // caminho, o unico 429 possivel neste arquivo e o da borda.
     emitir: (nova) => {
       emitidas.push(nova);
       const tag: TagDoTutor = {
@@ -160,8 +108,6 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
     clock,
     trilha,
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
-    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
-    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
     fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
@@ -219,8 +165,6 @@ void describe('o teto de emissao por pet de POST /pets/{petId}/tags, pela posica
   void it('a decima primeira plaquinha do mesmo pet responde 429, e NAO chega ao repositorio', async () => {
     const b = bancada();
     const status: number[] = [];
-    // EM SERIE: o teto conta em `preValidation`, e em paralelo duas chamadas
-    // poderiam ler o mesmo balde antes de qualquer uma somar.
     for (let i = 0; i < TETO_POR_PET + 1; i += 1) {
       status.push(await emitirPara(b, PET_A));
     }
@@ -241,11 +185,6 @@ void describe('o teto de emissao por pet de POST /pets/{petId}/tags, pela posica
         'uma credencial ao portador impressa, e sem teto uma conta gera codigo sem fim.',
     );
 
-    // A ASSERCAO QUE CARREGA ESTE ARQUIVO. Em producao o repositorio tem o seu
-    // proprio teto de 10 por pet, que responde o MESMO 429 `rate-limited`.
-    // Contar quantas chamadas chegaram la e o que distingue "a borda freou" de
-    // "a borda deixou passar e o banco recusou": a borda freia em
-    // `preValidation`, antes do manipulador, e por isso a 11a nao chega.
     assert.equal(
       b.emitidas.length,
       TETO_POR_PET,
@@ -259,13 +198,6 @@ void describe('o teto de emissao por pet de POST /pets/{petId}/tags, pela posica
   });
 
   void it('o balde e do PET: o segundo pet do mesmo tutor comeca do zero', async () => {
-    // O que distingue `pet` de `account`, e o motivo esta escrito no proprio
-    // `aplicacao-de-teto.ts`: teto por conta faria o segundo animal da casa
-    // ficar sem plaquinha nenhuma depois de o primeiro gastar as dez.
-    //
-    // Este caso tambem reprova a troca de `['pet']` por `['ip']`, que COMPILA
-    // (`ip` e generica e nao exige resolvedor) e que passaria intacta pelo caso
-    // de posicao acima.
     const b = bancada();
     for (let i = 0; i < TETO_POR_PET; i += 1) {
       await emitirPara(b, PET_A);
@@ -290,7 +222,6 @@ void describe('o teto de emissao por pet de POST /pets/{petId}/tags, pela posica
   });
 
   void it('a rota declara o teto que o contrato declara', () => {
-    // O outro lado da pinca, independente do caso de posicao de proposito.
     const declaradas: readonly RateLimitEntry[] = rotaDeEmissaoDeTag.rateLimit;
     assert.equal(
       declaradas.length,
@@ -317,9 +248,6 @@ void describe('o teto de emissao por pet de POST /pets/{petId}/tags, pela posica
 });
 
 void it('ISCA: com o contador desligado a decima primeira emissao chega ao repositorio', async () => {
-  // A prova negativa, no formato de `registrar-rota.test.ts`. Desligar o
-  // contador, e so isso, faz a 11a atravessar a borda. E o que guarda, no
-  // repositorio, o significado do verde dos casos acima.
   const b = bancada(criarContadorDesligado());
   const status: number[] = [];
   for (let i = 0; i < TETO_POR_PET + 1; i += 1) {

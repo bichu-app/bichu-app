@@ -24,64 +24,6 @@ import 'porta_do_perfil_do_autor.dart';
 import '../casca_com_abas.dart';
 
 /// O corpo da secao `Mural`: **a linha do tempo.**
-///
-/// ## O que esta frente construiu
-///
-/// A frente de 19/10 construiu o LUGAR — o slot na barra de baixo (`Mural` pede
-/// 50,90 dp num slot de 64,00, medido), o ramo do `IndexedStack`, a rota
-/// [Rotas.mural] e um estado vazio honesto que dizia, por escrito, que publicar
-/// *"ainda nao esta no ar"*. Estava certo: nao havia onde guardar publicacao.
-///
-/// **Agora ha.** `user_publications` existe (migracao `20261020000002`),
-/// `GET /timeline` e `POST /me/publications` existem, e esta tela desenha o que
-/// elas devolvem. O estado vazio deixou de prometer o futuro e passou a
-/// descrever o presente.
-///
-/// ## O RECORTE NAO E DESTA TELA, e isso e a parte que importa
-///
-/// Esta tela desenha **exatamente** o que `GET /timeline` devolveu, e nao tem um
-/// `if` que esconda item nenhum. Quem decide o que entra e a clausula `WHERE` da
-/// consulta do servidor (ADR-0021): publicacao de quem nao e conexao aceita de
-/// quem chama **nao chega aqui** — nao chega vazia, nao chega marcada, nao
-/// chega. Nao existe campo nesta resposta que diga "voce nao pode ver isto",
-/// porque nao existe estado assim.
-///
-/// **E por isso que a isca do app e sobre a AUSENCIA de outra fonte**, e nao
-/// sobre um filtro: `mural_nao_tem_outra_fonte_test.dart` prova que a unica
-/// coisa que esta tela pinta vem de `LeituraDoMural.linhaDoTempo`, e que ela nao
-/// alcanca nenhuma outra leitura do app. Um filtro de tela seria o recorte
-/// migrando para o cliente — e o cliente e onde ele nao pode estar.
-///
-/// ## OS DOIS ESTADOS VAZIOS, e eles sao diferentes de proposito
-///
-/// `items: []` tem duas causas, e a pessoa precisa saber qual:
-///
-/// - **ninguem publicou ainda** (ela tem conexao, ou publicou algo): a lista
-///   vazia e temporaria, e o texto diz isso;
-/// - **ela nao tem conexao nenhuma e nao publicou nada**: a lista vazia e
-///   estrutural, e dizer "quando alguem publicar aparece aqui" seria mentir —
-///   nao ha ninguem de quem esperar.
-///
-/// A distincao sai de `listMyPublications`, que **nao depende de conexao**: se
-/// ela tambem vem vazia, a pessoa nao publicou nada. E por isso que esta tela
-/// faz DUAS leituras e nao uma.
-///
-/// ## O TEXTO NAO PROMETE AVISO, e isso continua medido
-///
-/// Nenhuma frase desta tela diz "a gente te avisa": o envio de push esta
-/// bloqueado em producao por falta de permissao da conta de servico, e a rota de
-/// contagem da caixa de notificacoes nem esta no contrato. O sino esta na barra;
-/// o aviso nao esta.
-///
-/// ## A BARRA DE LISTAGEM NAO E DESENHADA, e isso e o padrao sendo OBEDECIDO
-///
-/// As tres regras de `barra_de_listagem.dart`, aplicadas: nao existe rota de
-/// busca de publicacao (campo que mente sobre o alcance e pior que campo
-/// ausente); uma linha do tempo tem UMA ordem (mais recente primeiro, e uma
-/// opcao nao e uma escolha); e nao ha grupo de filtro que o servidor aceite. Com
-/// os tres ausentes o componente devolveria `SizedBox.shrink()` sozinho — entao
-/// ele nao e chamado. **No dia em que o servidor oferecer um recorte, a barra
-/// aparece no lugar padrao, sem desenho novo.**
 class CorpoDoMural extends StatefulWidget {
   const CorpoDoMural({
     required this.leitura,
@@ -92,22 +34,16 @@ class CorpoDoMural extends StatefulWidget {
   });
 
   /// A leitura, por interface ESTREITA: esta tela nao alcanca `publicar` nem
-  /// `apagar` por aqui. Quem publica e a tela de publicar, aberta pela acao
-  /// flutuante.
+  /// `apagar` por aqui.
   final LeituraDoMural leitura;
 
-  /// Curtir, descurtir e comentar. Interface ESTREITA, pelo mesmo motivo de
-  /// [leitura]: o cartao que curte nao deve alcancar `apagar` da publicacao --
-  /// um toque errado apagaria a publicacao em vez de descurtir.
+  /// Curtir, descurtir e comentar.
   final InteracaoDoMural interacao;
 
-  /// Abre a denuncia de uma publicacao de OUTRA pessoa. Nulo nao desenha a
-  /// opcao — `reportPublication` existe no contrato, e quem a liga na tela e
-  /// quem montar a folha de denuncia; ate la a opcao **nao nasce**, em vez de
-  /// nascer sem destino (criterio 2 da BICHUS-62).
+  /// Abre a denuncia de uma publicacao de OUTRA pessoa.
   final void Function(PublicacaoDaLinha)? aoDenunciar;
 
-  /// Apaga a PROPRIA publicacao. Nulo nao desenha a opcao, pelo mesmo motivo.
+  /// Apaga a PROPRIA publicacao.
   final Future<void> Function(PublicacaoDaLinha)? aoApagar;
 
   static const String tituloSemConexao = 'Comece pelas suas conexões';
@@ -116,17 +52,6 @@ class CorpoDoMural extends StatefulWidget {
       'nenhuma — e também pode publicar, que aparece aqui para elas.';
 
   /// A SAIDA do vazio sem conexao, e **a unica acao que este estado tem**.
-  ///
-  /// Ela entrou em 21/10/2026, com a aba `Usuarios`. Antes dela este vazio era
-  /// verdadeiro e **sem porta**: ele dizia que o Mural mostra o que as conexoes
-  /// publicam, dizia que a pessoa nao tem nenhuma, e nao dizia o que fazer. Foi
-  /// por isso que o cliente descobriu que conexao nao funcionava -- o produto
-  /// nao oferecia caminho nenhum para a primeira.
-  ///
-  /// **E por que ela e aqui, e nao so a aba.** A aba `Usuarios` e a terceira de
-  /// uma barra rolavel: em 320 dp ela nasce 40% visivel, e a 200% de escala
-  /// nasce fora da tela. Este vazio e o lugar por onde todo mundo passa no
-  /// primeiro dia. Os dois caminhos existem; este e o que de fato se usa.
   static const String buscarPessoas = 'Buscar usuários';
 
   static const String tituloSemPublicacao = 'As publicações ficam aqui';
@@ -135,18 +60,9 @@ class CorpoDoMural extends StatefulWidget {
 
   /// O rotulo da foto para quem usa leitor de tela **quando quem publicou nao
   /// escreveu uma descricao**.
-  ///
-  /// Generico, e **nao `ExcludeSemantics`**: quem nao ve precisa saber que ha
-  /// uma foto ali, mesmo sem saber o que ela mostra. Esconder a imagem do leitor
-  /// apagaria metade da publicacao para essa pessoa.
   static const String fotoSemDescricao = 'Foto da publicação';
 
   /// O INTERVALO MINIMO entre duas recargas pedidas pelo TOQUE NA BARRA.
-  ///
-  /// Publico porque a isca o LE em vez de repetir o numero: um caso que
-  /// escrevesse `31` a mao continuaria verde no dia em que o valor mudasse.
-  /// A escolha, as quatro razoes dela e a pendencia do sino estao na prosa
-  /// de `_CorpoDoMuralState.intervaloMinimoEntreRecargas`.
   static const Duration intervaloMinimoEntreRecargas = Duration(seconds: 30);
 
   @override
@@ -158,173 +74,47 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   /// A BUSCA QUE O ARRASTO REFAZ (cliente, 20/10/2026: *"a pagina do mural nao
   /// esta funcionando a funcionalidade de atualizar a pagina puxando pra
   /// baixo"*).
-  ///
-  /// **A mesma funcao de [recarregar] e da carga inicial**, e nao uma copia:
-  /// duas buscas com dois nomes divergem na primeira correcao. Quem desenha a
-  /// roda e a casca da secao, por `SlotDeAtualizacao` — ver
-  /// `widgets/arrastar_para_atualizar.dart`. Um `RefreshIndicator` cru aqui
-  /// reintroduziria o defeito da fisica sem pai que aquele arquivo registra.
-  ///
-  /// O Mural era a **unica** tela de listagem do app sem o gesto: as outras
-  /// dezessete ja o tinham, e esta metade nunca foi ligada embora a outra
-  /// ([_carregar]) existisse desde o nascimento da tela.
   @override
   Future<void> aoArrastarParaAtualizar() => _carregar();
 
   List<PublicacaoDaLinha>? _linha;
 
-  /// Se a propria pessoa tem alguma publicacao. **E ele que escolhe qual estado
-  /// vazio desenhar** — ver o cabecalho.
+  /// Se a propria pessoa tem alguma publicacao.
   bool _tenhoPublicacao = false;
 
   bool _carregando = true;
   MensagemDeErro? _faixa;
 
   /// A falha da carga e **falta de conta**, e nao defeito.
-  ///
-  /// Separado de [_faixa] de proposito: os dois estados desenham coisas
-  /// diferentes e nao podem ser o mesmo campo. Quem le `/timeline` sem conta
-  /// recebe `401 unauthenticated` com `next_action: sign_in`, e o catalogo
-  /// devolve para ele `texto: ''` desde 18/10/2026 — entao mandar este 401
-  /// para [FaixaDeAviso] desenhava **o icone de erro e mais nada** sobre o
-  /// botao `Entrar`. Quem decide e `faltaConta`, pelo `next_action` do corpo
-  /// `problem+json`, e nunca um `switch` no status: sem rede a pessoa pode
-  /// estar perfeitamente logada, e trocar o Mural dela por um convite diria
-  /// que a conta nao existe porque o elevador nao tem sinal.
   bool _faltaConta = false;
 
-  /// ---------------------------------------------------------------------
-  /// A FOTO QUE AINDA ESTA SENDO PROCESSADA, E A RELEITURA QUE A ALCANCA
-  /// ---------------------------------------------------------------------
-  ///
-  /// **O defeito que isto fecha, com relato e medicao.** O cliente disse, em
-  /// 20/10/2026: *"os posts no mural, nao esta publicando a foto, apenas o
-  /// texto"*. A foto **era** gravada e **era** servida — medido em homologacao
-  /// de ponta a ponta (intencao `201`, envio ao armazenamento `204`,
-  /// `POST /me/publications` `201`, a linha com `image_id`, a derivada em
-  /// `people/card/` e a URL `200` pela borda) e pintada pelo APK **release**
-  /// no emulador Android. O que falhava era o RELOGIO:
-  ///
-  /// ```text
-  ///   t=+  24 ms  POST /me/publications    201   image.status=processing, url=null
-  ///   t=+ 320 ms  GET  /timeline           200   image=null
-  ///   t=+ 721 ms  GET  /timeline           200   image=null
-  ///   t=+1018 ms  GET  /timeline           200   image=null
-  ///   t=+1521 ms  GET  /timeline           200   image={url: .../people/card/...}
-  /// ```
-  ///
-  /// `AbaMural` troca a `Key` desta tela assim que a tela de publicar fecha, o
-  /// corpo remonta e [_carregar] sai **dentro** dessa janela. A linha do tempo
-  /// devolve `image: null` — o predicado `status = ready` esta no `JOIN` do
-  /// servidor —, e `PublicacaoDaLinha` **nao tem estado** para distinguir "sem
-  /// foto" de "foto a caminho". O cartao desenhava so o texto, e nao havia
-  /// segunda leitura nenhuma: sem o gesto de arrastar (o outro defeito desta
-  /// branch) e com o `IndexedStack` mantendo a aba montada, a foto so aparecia
-  /// quando a pessoa **matava o aplicativo e voltava**. Foi assim que o iPhone
-  /// dele mostrou e o Android nao: nao e plataforma, e o instante da leitura.
-  ///
-  /// **A resposta ja esta em maos, e por isso isto nao custa uma chamada a
-  /// mais.** [_carregar] ja le `minhasPublicacoes`, e `MyPublicationImage` TEM
-  /// `status` (`EstadoDaFotoDaPublicacao`). Se alguma publicacao minha esta em
-  /// `processando`, a tela relê sozinha — ate [_releiturasMaximas] vezes, a
-  /// cada [_intervaloDaReleitura]. O teto existe para a foto `rejected` que
-  /// nunca sai de `processing` por falha do worker nao virar laco eterno.
+  /// --------------------------------------------------------------------- A
+  /// FOTO QUE AINDA ESTA SENDO PROCESSADA, E A RELEITURA QUE A ALCANCA
   static const Duration _intervaloDaReleitura = Duration(seconds: 2);
   static const int _releiturasMaximas = 5;
 
   Timer? _releitura;
   int _releiturasRestantes = _releiturasMaximas;
 
+  /// --------------------------------------------------------------------- O
+  /// TOQUE NO ICONE DA BARRA RECARREGA (cliente, 20/10/2026)
   /// ---------------------------------------------------------------------
-  /// O TOQUE NO ICONE DA BARRA RECARREGA (cliente, 20/10/2026)
-  /// ---------------------------------------------------------------------
-  ///
-  /// Literal: *"toda vez que eu clicar no icone, ele deve fazer uma nova
-  /// requisicao para garantir que o conteudo esta atualizado e o usuario nao
-  /// precisar forcar a atualizacao, por mais que esse recurso deva acontecer,
-  /// caso o usuario queira"*. A segunda metade da frase e explicita: o
-  /// arrastar-para-atualizar **continua**, e este gesto e ADICIONAL.
-  ///
-  /// ## NADA EM `casca_com_abas.dart` MUDOU, e isso foi deliberado
-  ///
-  /// A barra e o avatar moram naquele arquivo e outra frente esta nele agora.
-  /// Os dois sinais de que esta tela precisa **ja sao emitidos** pela casca e
-  /// pelo roteador, e e so escuta-los daqui:
-  ///
-  /// - **entrar na aba vindo de outra** -> `StatefulShellRoute.indexedStack`
-  ///   embrulha cada ramo em `TickerMode(enabled: ramo == atual)`
-  ///   (`go_router` 17.5, `route.dart:1634`). `TickerMode.of(context)` vira
-  ///   `true` no quadro em que a secao aparece, e `didChangeDependencies` e
-  ///   chamado por causa disso;
-  /// - **tocar o icone ja estando na aba** -> a casca chama
-  ///   `goBranch(ramo, initialLocation: true)`, que cai em `GoRouter.go` para
-  ///   o MESMO endereco. `_setValue` compara caminho, consulta, fragmento **e
-  ///   `state`** (`information_provider.dart:242`), e `RouteInformationState`
-  ///   nao define `==` — entao o objeto novo nunca e igual ao anterior e o
-  ///   provedor **notifica mesmo com a URL identica**. E por isso que este
-  ///   caso existe sem um canal novo na barra.
-  ///
-  /// A distincao entre os dois sai de graca pela ORDEM: o ouvinte do roteador
-  /// roda dentro de `notifyListeners`, antes do quadro em que o `TickerMode`
-  /// vira — entao, vindo de outra aba, [_visivel] ainda e `false` quando
-  /// [_aoNavegar] roda, e so o caminho de "entrar" dispara.
-  ///
-  /// ## O INTERVALO MINIMO E ESCOLHA DE ENGENHARIA, E O NUMERO E ESTE
-  ///
-  /// **30 segundos**, e as razoes sao quatro:
-  ///
-  /// 1. `GET /v1/timeline` **nao tem teto de chamadas** no contrato
-  ///    (`publicacao-routes.ts`: `effects: []`, sem `rateLimit`). Nao ha
-  ///    numero do servidor a que ancorar: o teto esta sendo posto aqui, de
-  ///    proposito, e ele segura a aba em **no maximo 2 chamadas por minuto**
-  ///    por mais rapido que o dedo seja;
-  /// 2. o Mural e um feed ESCRITO A MAO por uma comunidade de bairro, e nao
-  ///    um fluxo ao vivo. Abaixo de 30 s nao ha o que encontrar de novo;
-  /// 3. o toque **nunca parece inerte**, mesmo quando pula a requisicao: ele
-  ///    leva a lista ao topo de qualquer jeito (ver [_aoNavegar]), que e o que
-  ///    a pessoa espera de tocar o icone da aba em que ja esta;
-  /// 4. a releitura da foto em `processing` **nao passa por aqui** — ela tem
-  ///    o proprio contador e os proprios 2 s, porque mede outra coisa. O
-  ///    arrastar-para-atualizar tambem nao: ele e a forca bruta que o cliente
-  ///    manteve de proposito, e estrangula-la seria desfazer o pedido dele.
-  ///
-  /// **ISTO E ESCOLHA MINHA, E NAO DECISAO DELE.** A pergunta do *"intervalo
-  /// minimo entre retomadas"* do sino esta aberta em
-  /// `.jarvis/DECISOES-PARA-19-10.md`; quando ele responder, os dois numeros
-  /// viram um so e este valor muda junto.
   static const Duration intervaloMinimoEntreRecargas =
       CorpoDoMural.intervaloMinimoEntreRecargas;
 
   /// A JANELA DE SILENCIO, e por que ela e um `Timer` e nao um carimbo de
   /// `DateTime.now()`.
-  ///
-  /// `DateTime.now()` le o relogio de parede, e **nenhum teste consegue
-  /// adianta-lo**: a janela de 30 s so seria exercitavel esperando 30 s de
-  /// verdade, e a isca do "toque dentro do intervalo NAO recarrega" seria o
-  /// unico caso do arquivo que nao distingue o mecanismo ligado do desligado.
-  /// `Timer` anda com o relogio do `flutter_test`, entao a isca mede os dois
-  /// lados com um `pump`.
-  ///
-  /// Ele e armado em [_carregar], o funil UNICO: arrasto, carga inicial e
-  /// releitura da foto tambem renovam a janela, porque todos sao leitura — um
-  /// toque logo depois de qualquer um deles nao tem o que buscar.
   Timer? _janelaDeSilencio;
 
   bool get _emSilencio => _janelaDeSilencio?.isActive ?? false;
 
-  /// Se a secao esta visivel. Ver a prosa de [intervaloMinimoEntreRecargas].
+  /// Se a secao esta visivel.
   bool _visivel = false;
 
   /// A carga EM VOO, e a razao de ela existir.
-  ///
-  /// Dois toques rapidos nao podem virar duas requisicoes concorrentes: a
-  /// resposta da primeira pode chegar **depois** da segunda e pintar conteudo
-  /// velho em cima do novo. Quem chega no meio **espera a que ja esta no ar**,
-  /// em vez de abrir outra.
   Future<void>? _emVoo;
 
   ValueListenable<RouteInformation>? _enderecos;
-
 
   @override
   void initState() {
@@ -336,32 +126,20 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // `maybeOf` e nao `of`: [CorpoDoMural] e montado fora de roteador em
-    // teste de widget, e um `of` que lanca ali trocaria "o Mural desenha o
-    // cartao" por "o Mural precisa de um `GoRouter` para existir". Sem
-    // roteador simplesmente nao ha o sinal do toque na barra -- ele e da
-    // casca, e sem casca nao ha barra.
     final enderecos = GoRouter.maybeOf(context)?.routeInformationProvider;
     if (!identical(enderecos, _enderecos)) {
       _enderecos?.removeListener(_aoNavegar);
       _enderecos = enderecos?..addListener(_aoNavegar);
     }
 
-    // `valuesOf` e nao `of`: `of` esta depreciado desde 3.35, e o portao de
-    // analise e zero.
     final visivel = TickerMode.valuesOf(context).enabled;
     final entrou = visivel && !_visivel;
     _visivel = visivel;
-    // ENTRAR NA ABA. Sem rolagem ao topo: voltar a uma aba devolve a pessoa
-    // onde ela estava, e e o toque na aba em que ela JA esta que significa
-    // "me leva para o topo".
     if (entrou) _recargaPedidaPelaCasca(aoTopo: false);
   }
 
   @override
   void dispose() {
-    // O temporizador morre com a tela: sem isto, uma secao que saiu da arvore
-    // continuaria chamando `_carregar` e o `setState` reprovaria por limpeza.
     _releitura?.cancel();
     _releitura = null;
     _janelaDeSilencio?.cancel();
@@ -374,36 +152,12 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   /// O roteador navegou. Ver a prosa de [intervaloMinimoEntreRecargas].
   void _aoNavegar() {
     if (!mounted || !_visivel) return;
-    // So o endereco do Mural, e nao qualquer navegacao do aplicativo: tocar
-    // outro slot da barra tambem cai aqui, e nao e o gesto que o cliente
-    // descreveu.
     if (_enderecos?.value.uri.path != Rotas.mural) return;
     _recargaPedidaPelaCasca(aoTopo: true);
   }
 
-  // NAO HA GUARDA DE "ISTO E VOLTA E NAO TOQUE" AQUI, e a ausencia e MEDIDA.
-  //
-  // Uma versao desta tela guardava o endereco anterior para distinguir o toque
-  // no icone de uma volta (`/mural/publicar` -> `/mural`). Desligar essa
-  // guarda nao reprovava caso nenhum -- ela nao guardava nada. O motivo e que
-  // as quatro telas irmas da casca (`publicar`, `entrar`, ...) sao rotas de
-  // RAIZ, declaradas antes do ramo: empilhar uma tira o ramo do `TickerMode`,
-  // e voltar o devolve. Para esta tela isso e *entrar na aba*, e quem responde
-  // por ele e [didChangeDependencies] com `aoTopo: false` -- e por isso que a
-  // volta recarrega e NAO move a lista. A isca disso e
-  // `ISCA (volta) — VOLTAR para o Mural de outra tela NAO pula para o topo`.
-  //
-  // Mecanismo que nenhuma isca derruba e portao cego, e esta casa nao os
-  // guarda.
-
   /// A recarga que a BARRA pede, com o intervalo minimo e a rolagem ao topo.
   void _recargaPedidaPelaCasca({required bool aoTopo}) {
-    // A ROLAGEM VEM ANTES DO ESTRANGULAMENTO, e de proposito: e ela que faz o
-    // toque ter efeito visivel mesmo quando a requisicao e pulada.
-    //
-    // `Scrollable.maybeOf` alcanca o `ListView` da CASCA — quem rola a secao e
-    // `TelaDeAba`, e nao este corpo. E por isso que o topo tambem se resolve
-    // daqui, sem tocar em `casca_com_abas.dart`.
     if (aoTopo) {
       final rolagem = Scrollable.maybeOf(context);
       final posicao = rolagem?.position;
@@ -429,21 +183,9 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   }
 
   /// O FUNIL UNICO de toda leitura desta tela, e o que ele garante.
-  ///
-  /// **UMA DE CADA VEZ.** Ver [_emVoo]: quem pede no meio recebe a carga que
-  /// ja esta no ar, em vez de abrir uma segunda. O `RefreshIndicator` do
-  /// arrasto continua correto com isso -- ele gira enquanto o `Future` que
-  /// recebe nao completa, e o `Future` que recebe e o da carga de verdade.
-  ///
-  /// **A JANELA DE SILENCIO abre aqui**, e por isso vale para todas as
-  /// entradas: carga inicial, arrasto, releitura da foto e toque na barra.
-  /// Quem a CONSULTA e so [_recargaPedidaPelaCasca] -- as outras tres nao
-  /// passam por ela, de proposito.
   Future<void> _carregar({bool silenciosa = false}) {
     final emVoo = _emVoo;
     if (emVoo != null) return emVoo;
-    // A janela abre no COMECO da carga e nao no fim: uma resposta lenta nao
-    // pode esticar o silencio depois dela.
     _janelaDeSilencio?.cancel();
     _janelaDeSilencio = Timer(intervaloMinimoEntreRecargas, () {});
     final nova = _carregarAgora(silenciosa: silenciosa);
@@ -454,26 +196,15 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   }
 
   /// [silenciosa] nao troca a lista pela roda.
-  ///
-  /// A releitura da foto em `processing` e a recarga do toque na barra
-  /// acontecem com a lista ja na tela: pôr `_carregando = true` ali faria o
-  /// Mural piscar a cada leitura. A carga inicial, o `Tentar de novo` e o
-  /// arrasto continuam ruidosos, porque ali a roda e a resposta certa.
   Future<void> _carregarAgora({bool silenciosa = false}) async {
     if (!silenciosa) {
       setState(() {
         _carregando = true;
         _faixa = null;
-        // Baixa junto com a faixa: a carga ruidosa mostra a roda, e nao o
-        // convite da tentativa anterior por cima de uma leitura em curso.
         _faltaConta = false;
       });
     }
     try {
-      // AS DUAS LEITURAS. A segunda nao e luxo: sem ela os dois estados vazios
-      // ficam indistinguiveis, e a tela escolheria a frase errada em metade dos
-      // casos. Ver o cabecalho. **E e dela que sai o `status` da foto**, que a
-      // linha do tempo nao carrega.
       final linha = await widget.leitura.linhaDoTempo();
       final minhas = await widget.leitura.minhasPublicacoes();
       if (!mounted) return;
@@ -481,11 +212,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
         _linha = linha.itens;
         _tenhoPublicacao = minhas.itens.isNotEmpty;
         _carregando = false;
-        // **A BANDEIRA NAO FICA PRESA ENTRE CARGAS.** Quem entra pela tela de
-        // login e volta ao Mural faz uma carga que da certo; sem baixar a
-        // bandeira aqui, a pessoa continuaria vendo o convite para entrar
-        // depois de ter entrado. A carga silenciosa nao passa pelo `setState`
-        // de cima, entao limpar so la nao alcanca este caminho.
         _faltaConta = false;
       });
       _agendarReleituraSeAFotoAindaProcessa(minhas.itens);
@@ -493,15 +219,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
       if (!mounted) return;
       setState(() {
         _carregando = false;
-        // SEM CONTA NAO E ERRO. Antes de 22/10/2026 esta linha era
-        // `_faixa = MensagensDeErro.de(falha)` para **toda** falha, inclusive o
-        // `401 unauthenticated` — e e dai que saia a tarja do Mural deslogado
-        // com o icone, o botao `Entrar` e nenhuma frase. A metade da SAIDA foi
-        // consertada em 20/10 (`rotuloDaAcao` + `aoTocarNaAcao`); a metade da
-        // FRASE nao tinha conserto possivel por aqui, porque o texto do
-        // catalogo e `''` por decisao do cliente de 18/10 e **nao volta**. O
-        // conserto e o mesmo das outras quinze superficies muradas: o 401 sai
-        // do caminho de erro e vai para `ConviteParaEntrar`.
         _faltaConta = faltaConta(falha);
         _faixa = _faltaConta ? null : MensagensDeErro.de(falha);
       });
@@ -509,9 +226,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   }
 
   /// Arma UMA releitura quando alguma foto minha ainda esta em `processing`.
-  ///
-  /// Nada em `processando` **zera o contador**: a proxima publicacao recomeca
-  /// com as cinco tentativas, em vez de herdar o que a anterior gastou.
   void _agendarReleituraSeAFotoAindaProcessa(List<MinhaPublicacao> minhas) {
     _releitura?.cancel();
     _releitura = null;
@@ -530,8 +244,7 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     });
   }
 
-  /// Recarrega, para quem publicou agora. Publico porque a acao flutuante vive
-  /// em `AbaMural`, fora desta arvore.
+  /// Recarrega, para quem publicou agora.
   Future<void> recarregar() => _carregar();
 
   @override
@@ -539,14 +252,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     final faixa = _faixa;
     final linha = _linha;
 
-    // SEM CONTA VEM ANTES DE TUDO, como na area de mensagens: nao ha linha do
-    // tempo para mostrar, nao ha `Tentar de novo` que funcione — a tentativa
-    // seguinte sai igualmente sem `Authorization` e volta o mesmo 401 — e o
-    // que a pessoa precisa saber e o que esta secao e.
-    //
-    // **O convite nao e uma [FaixaDeAviso]**, e a forma diz isso: fundo
-    // rebaixado e borda fina do estado vazio, sem icone de erro, sem borda de
-    // 2 px e sem botao de recarregar.
     if (_faltaConta) {
       return const Padding(
         padding: EdgeInsets.only(bottom: BichuEspaco.e4),
@@ -557,21 +262,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     if (faixa != null) {
       return Padding(
         padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
-        // **A SAIDA SAI DA MENSAGEM, e nao desta tela.** Guardar so o `.texto`
-        // descartava `acao` e `proximaAcao`, que sao por onde a faixa sabe que
-        // saida oferecer — a mesma forma de `perto/pagina_do_local.dart`.
-        //
-        // O caso que isto fecha e o 401 `unauthenticated`: o cliente mandou
-        // remover o TEXTO dele em 18/10/2026 e **a saida ficou** (ver
-        // `api/mensagens_de_erro.dart` e `widgets/faixa_de_aviso.dart`). Sem o
-        // rotulo e sem o toque, o Mural deslogado abria com uma faixa vermelha
-        // com o icone e **mais nada** — sem frase e sem botao, que e o que
-        // `faixa_de_aviso.dart` chama, com estas palavras, de *falha calada*.
-        // Reproduzido no emulador com o APK release.
-        //
-        // Rotulo de OPERACAO (`Tentar de novo`, `Recarregar`) nao tem endereco
-        // e `saidaDaMensagem` devolve `null` para ele: a faixa so desenha o
-        // botao com rotulo **e** callback, entao nao nasce botao morto.
         child: FaixaDeAviso(
           texto: faixa.texto,
           rotuloDaAcao: faixa.acao,
@@ -588,26 +278,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     }
 
     if (linha.isEmpty) {
-      // OS DOIS ESTADOS VAZIOS, E AGORA ELES TEM ACOES DIFERENTES.
-      //
-      // **`Publicar` continua fora dos dois**, e a razao nao mudou: a porta de
-      // publicar e a acao flutuante da secao, que esta sempre no canto -- um
-      // segundo botao aqui seria a mesma porta em dois lugares, e o
-      // `EstadoVazio` com acao repetida e o criterio 2 sendo quebrado dentro do
-      // componente que existe para nao quebra-lo.
-      //
-      // **O que entrou e `Buscar pessoas`, e so no vazio SEM CONEXAO.** Ela nao
-      // e a mesma porta duas vezes: nao ha nenhuma outra nesta tela, e a aba de
-      // destino nasce 40% visivel em 320 dp. Ver `CorpoDoMural.buscarPessoas`.
-      //
-      // **No vazio COM conexao ela nao aparece**, e a distincao e o ponto: quem
-      // ja tem conexao e esta esperando a primeira publicacao nao precisa
-      // buscar mais ninguem, e um botao de buscar ali sugeriria que o Mural
-      // vazio e culpa de ter poucas conexoes.
-      //
-      // `go` e nao `push`: o destino e uma SECAO, e trocar de secao e trocar de
-      // ramo da casca. `push` deixaria o Mural embaixo e a barra de baixo
-      // continuaria acesa no slot errado.
       return EstadoVazio(
         titulo: _tenhoPublicacao
             ? CorpoDoMural.tituloSemPublicacao
@@ -648,43 +318,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
 }
 
 /// Um cartao da linha do tempo.
-///
-/// ## A FOTO DO AUTOR (Emenda 5 do ADR-0010, 20/10/2026)
-///
-/// Decisao do cliente: *"tras a foto, algo bem parecido com o instagram"*. Ela
-/// nasceu ausente, de proposito -- a Emenda 3 limitava a foto de pessoa a
-/// `Conversation.participants[]` *"e em mais nenhuma resposta deste contrato"*
-/// --, a frente parou e perguntou, e a emenda nomeou esta superficie.
-///
-/// Redonda, 40 dp, pela derivada `thumb` de 176 que a emenda nomeia. Quem pinta
-/// e [ImagemDaRede], nunca `Image.network` cru: ela passa `cacheWidth` pela
-/// largura PINTADA, e e esse numero que decide o custo em memoria. A 3x cada
-/// foto custa 120 x 120 x 4 = **57,6 KiB** decodificados; com a `card` de 512 e
-/// sem `cacheWidth` seriam 1 MiB por cartao.
-///
-/// **Nula e o estado normal**, em tres casos que a tela nao distingue: a pessoa
-/// nao tem foto, a foto nao esta `ready`, ou a conta esta desabilitada. Ai
-/// desenha a INICIAL do nome, como a conversa mediada ja faz.
-///
-/// **"Parecido com o Instagram" foi dito sobre a FOTO**, e o item 7 da Emenda 5
-/// registra que isso nao e autorizacao de redesenho: nao entra contagem de
-/// seguidores (nao existe seguir), nao entra carrossel, nao entra lista de quem
-/// curtiu.
-///
-/// ## O QUE ELE NAO DESENHA, e cada ausencia tem dono
-///
-/// - **nenhum pet**: nem nome, nem miniatura, nem link. Foto de pet dentro da
-///   foto da publicacao e permitida (cliente, 19/10); LIGAR a ficha dele
-///   agruparia os pets de um tutor (item 7 do ADR-0010), e nao ha campo que o
-///   permita;
-/// - **nenhuma LISTA de quem curtiu.** Curtir e comentar existem desde
-///   20/10/2026 (migracao `20261020000006`), e o que o cartao desenha e a
-///   CONTAGEM -- nunca quem. O item 7 da Emenda 5 do ADR-0010 registra que a
-///   decisao do cliente de 19/10 sobre curtir e contagem, e contagem nao diz
-///   quem; nao existe `GET /publications/{ref}/likes`, entao nao ha o que abrir;
-/// - **nenhuma contagem de seguidores.** Nao existe seguir neste produto, e
-///   "parecido com o Instagram" foi dito sobre a FOTO (item 7 da Emenda 5);
-/// - **nenhum lugar** (ADR-0006).
 class _CartaoDaPublicacao extends StatelessWidget {
   const _CartaoDaPublicacao({
     required this.publicacao,
@@ -699,53 +332,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
   final Future<void> Function()? aoApagar;
 
   /// A ORDEM DO CARTAO, e ela e DUAS e nao uma.
-  ///
-  /// **O pedido do cliente, de 29/10/2026, verbatim:** *"vamos melhorar a
-  /// interface dos posts no mural e deixar mais parecido com o instagram, onde o
-  /// texto digitado vai pra baixo dos likes e comentarios, o nome do usuario e a
-  /// foto dele, fica sobre a imagem."*
-  ///
-  /// ### Antes (ate 29/10/2026)
-  ///
-  ///     autor (foto + nome + ⋮)  ->  texto  ->  imagem  ->  acoes
-  ///
-  /// ### Depois, COM imagem
-  ///
-  ///     imagem (autor SOBREPOSTO nela)  ->  acoes  ->  legenda
-  ///
-  /// ### Depois, SEM imagem
-  ///
-  ///     autor (foto + nome + ⋮)  ->  texto  ->  acoes
-  ///
-  /// ## POR QUE O CASO SEM IMAGEM NAO SEGUE O PEDIDO, e e decisao a confirmar
-  ///
-  /// **Publicacao so de texto existe, e nao e caso de borda.** Em
-  /// `publicar_no_mural.dart` o texto e OBRIGATORIO (`textoObrigatorio` barra o
-  /// envio sem ele) e a foto e OPCIONAL (`uploadId: _uploadPendente`, que pode
-  /// ser nulo). Entao a metade do pedido que diz *"a foto dele fica sobre a
-  /// imagem"* nao tem onde acontecer: nao ha imagem.
-  ///
-  /// E a outra metade cai com ela. *"O texto vai pra baixo dos likes"* e o
-  /// desenho do Instagram porque lá o texto e **legenda de uma foto** — a foto e
-  /// o conteudo, e a legenda comenta o conteudo. Numa publicacao sem foto o
-  /// texto NAO e legenda: ele e a publicacao inteira. Pô-lo embaixo do coracao
-  /// deixaria o cartao como `Camila / ♥ 💬 / texto`, com o conteudo abaixo dos
-  /// controles que agem sobre ele.
-  ///
-  /// **Esta e a decisao desta frente que mais precisa do aval dele**, e esta
-  /// escrita aqui porque a foto de referencia que ele citou nao chegou na
-  /// mensagem: o protitipo de
-  /// `workspace/artefatos-app/mural-cartao-no-desenho-do-instagram-29-10.html`
-  /// desenha os tres estados e e por ele que a aprovacao passa.
-  ///
-  /// ## O AUTOR SOBRE A IMAGEM VAI NUMA TARJA OPACA, e isso e medicao
-  ///
-  /// Nome claro direto sobre foto arbitraria mede **1,02:1** contra uma foto
-  /// branca, e sobre o `scrim` translucido mede **4,94:1** — passa o piso de 4,5
-  /// raspando e reprova o de 7,0. [TarjaSobreMidia] mede **16,47:1** no tema
-  /// claro e **16,02:1** no escuro, e mede isso contra QUALQUER foto, porque nao
-  /// ha foto atras do texto. A tabela inteira e o motivo estao no cabecalho de
-  /// `widgets/tarja_sobre_midia.dart`.
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -754,11 +340,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
     final comImagem = urlDaImagem != null && urlDaImagem.isNotEmpty;
 
     return Container(
-      // **O PADDING SAIU DO CARTAO e foi para o corpo**, e nao e arrumacao: com
-      // ele aqui a foto nascia com 16 dp de margem de cada lado, e autor
-      // sobreposto a uma foto recuada leria como autor sobre um retangulo
-      // qualquer. Agora a midia encosta na borda arredondada (`clipBehavior`) e
-      // quem paga o respiro e o corpo, por dentro.
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: cores.surface,
@@ -781,16 +362,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
       children: <Widget>[
         Stack(
           children: <Widget>[
-            // `ImagemDaRede` e nunca `Image.network` cru: ela trata
-            // `cacheWidth` pelo que a tela PINTA e tem `errorBuilder` sempre.
-            // A derivada e a `card` de 1024 x 1024 (1:1), e o cartao a desenha
-            // na largura do corpo — por isso `proporcao: 1`, que e o que faz a
-            // altura ser reservada antes de os bytes chegarem e a rolagem nao
-            // saltar.
-            //
-            // **E e ela, nao-posicionada, que da tamanho ao `Stack`**: o veu
-            // esta num `Positioned` e nao conta para a medida. Sem uma filha
-            // nao-posicionada o `Stack` colapsaria para o tamanho do pai.
             ImagemDaRede(
               url: urlDaImagem,
               descricao: (imagem?.textoAlternativo?.trim().isNotEmpty ?? false)
@@ -798,10 +369,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
                   : CorpoDoMural.fotoSemDescricao,
               proporcao: 1,
             ),
-            // A BARRA, ENCOSTADA NO TOPO E DE PONTA A PONTA (`left`/`right` em
-            // zero). Recuo nenhum: o cliente pediu que ela nao interfira na
-            // foto, e uma pastilha recuada ocupa a mesma altura E ainda deixa
-            // uma faixa de foto morta acima dela.
             Positioned(
               top: 0,
               left: 0,
@@ -810,15 +377,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
                 child: _linhaDoAutor(context, sobreOVeu: true),
               ),
             ),
-            // O `⋮` FICA FORA DA BARRA, e e ele que decide a altura dela.
-            //
-            // Dentro da `Row` do veu, o alvo de 48 dp de
-            // [BichuAlvoDeToque.min] esticaria a barra para 48 -- o alvo e
-            // piso de acessibilidade e nao encolhe. Aqui ele e um irmao no
-            // `Stack`: a CAIXA de toque continua com 48 dp e transborda a
-            // barra 8 dp para baixo, invisivel sobre a foto, enquanto o GLIFO
-            // (24 dp, centrado em 24) ocupa de 12 a 36 e fica inteiro dentro
-            // dos 40 dp do veu.
             if (_temMenu)
               Positioned(top: 0, right: 0, child: _menu(context)),
           ],
@@ -838,13 +396,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
                 interacao: interacao,
               ),
               const SizedBox(height: BichuEspaco.e2),
-              // A LEGENDA, como a pessoa escreveu. Sem recorte, sem "ver mais"
-              // e sem nenhum tratamento de conteudo: ela cabe em 280
-              // caracteres, e o cliente mandou deixa-la livre.
-              //
-              // **Sem o nome do autor repetido na frente dela.** O Instagram
-              // prefixa a legenda com o apelido em negrito; aqui o nome ja esta
-              // na tarja, a poucos milimetros, e repetir seria ruido.
               Text(publicacao.texto, style: textos.bodyLarge),
             ],
           ),
@@ -853,8 +404,7 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// A publicacao SO DE TEXTO. Ver a prosa de [build] para o porque da ordem
-  /// aqui ser a antiga.
+  /// A publicacao SO DE TEXTO.
   Widget _semImagem(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     return Padding(
@@ -873,47 +423,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
   }
 
   /// A LINHA DO AUTOR — foto, nome e, fora do veu, o selo de validado.
-  ///
-  /// **Uma funcao e nao duas copias**: ela desenha o mesmo nos dois estados, e o
-  /// que muda sai de [sobreOVeu]. Duas copias divergiriam na primeira correcao,
-  /// e as portas do perfil abaixo sao justamente o tipo de detalhe que se
-  /// corrige num lugar e se esquece no outro.
-  ///
-  /// ## O QUE [sobreOVeu] MUDA, E POR QUE CADA COISA
-  ///
-  /// - **a foto cai de 40 para 28 dp** e **o nome de `title` (18 px) para
-  ///   `label` (14 px)**: e aqui que o *"diminua bastante"* do cliente cabe.
-  ///   A `thumb` do icone e de 176 px e continua sobrando (2,1x de cobertura a
-  ///   3x, contra 1,47x nos 40 dp);
-  /// - **a tinta vira clara nos dois temas** ([VeuDoAutorSobreMidia.tinta]),
-  ///   porque atras dela ha uma foto e uma foto nao troca com o tema;
-  /// - **o `⋮` nao entra na linha**: ele e um irmao no `Stack`, pelo alvo de
-  ///   toque. Ver a prosa no `Positioned` que o pendura;
-  /// - **o selo de validado NAO e desenhado**, e isto e uma PERDA conhecida e
-  ///   medida, nao um esquecimento. Ver abaixo.
-  ///
-  /// ## O SELO SOBRE O VEU, E A COR QUE ELE PRECISOU GANHAR
-  ///
-  /// [SeloDeValidado] pintava em `cores.success` e nao tinha parametro de cor.
-  /// Sobre o veu preto, com foto BRANCA, isso media:
-  ///
-  /// - tema claro, `success` `#1F7A46` sobre o composto `#6E6D6C`: **1,04:1**;
-  /// - tema escuro, `success` `#A9CFBB` sobre `#474747`: 5,46:1.
-  ///
-  /// O piso de elemento nao textual e **3,0:1** (SC 1.4.11), e **nao ha
-  /// opacidade de veu que salve o tema claro**: quanto mais escuro o veu, pior
-  /// fica o verde escuro.
-  ///
-  /// **A primeira volta desta frente OMITIU o selo sobre a foto**, porque o
-  /// conserto exigia um arquivo fora do alcance dela. Omitir era melhor que
-  /// entregar 1,04:1, mas era regressao visivel -- um autor validado perdia o
-  /// selo justamente ao publicar com foto, que e quando o cartao tem mais
-  /// visibilidade. Com a autorizacao para mexer em
-  /// `widgets/selo_de_validado.dart`, o selo VOLTOU, com a mesma tinta clara do
-  /// nome: **4,94:1 no tema claro e 8,89:1 no escuro**, contra o piso de 3,0.
-  ///
-  /// **Nenhum token mudou.** O padrao de [SeloDeValidado] continua
-  /// `cores.success`, e as outras quatro superficies nao sentiram nada.
   Widget _linhaDoAutor(BuildContext context, {required bool sobreOVeu}) {
     final tema = BichuColors.of(context);
     final textos = Theme.of(context).textTheme;
@@ -923,13 +432,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
 
     return Row(
       children: <Widget>[
-        // A FOTO E PORTA DO PERFIL (cliente, 22/10/2026), e o toque mora AQUI e
-        // nao dentro de `_FotoDoAutor`: ver a prosa de `PortaDoPerfilDoAutor`.
-        // Sem apelido ela devolve a foto crua.
-        //
-        // **A FOTO LEVA ROTULO e o nome nao**: o circulo nao tem texto proprio,
-        // entao sem rotulo o leitor de tela anunciaria um botao sem dizer o que
-        // ele abre.
         PortaDoPerfilDoAutor(
           autor: publicacao.autor,
           rotulo: PortaDoPerfilDoAutor.rotuloDaPorta(
@@ -941,32 +443,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
           ),
         ),
         SizedBox(width: sobreOVeu ? BichuEspaco.e2 : BichuEspaco.e3),
-        // O NOME, COM O SELO DE VALIDADO AO LADO quando a conta tem canal de
-        // contato confirmado — emenda do ADR-0010 de 21/10/2026, decisao do
-        // cliente: *"os usuarios que validados deve ter um simbolo em frente de
-        // seu nome nos posts"*.
-        //
-        // **O selo custa 24 dp de largura** (`SeloDeValidado.custoDeLargura`), e
-        // e o NOME que paga: `NomeComSelo` poe o texto num `Flexible`, entao ele
-        // encolhe com `…` e o selo fica. Um nome com `…` ainda e legivel; um
-        // selo que desaparece e informacao perdida. A medicao dessa troca a 320,
-        // 375 e 430 dp esta em `app/test/widgets/selo_de_validado_test.dart`.
-        //
-        // **`comSelo: false` SOBRE O VEU**, e o motivo com numero esta no
-        // cabecalho desta funcao: o verde escuro de `success` mede 1,04:1 sobre
-        // o veu com foto branca, contra um piso de 3,0.
-        //
-        // **O NOME TAMBEM E PORTA** -- cliente, 22/10/2026: *"Inclua um link que
-        // seja o usuario a pagina do perfil"*. Ele e o alvo grande e o que a
-        // pessoa le; a foto sozinha seria um alvo de 28 dp para o mesmo destino.
-        //
-        // **SEM `rotulo` aqui, de proposito**: trocar a semantica desta
-        // sub-arvore por uma frase apagaria o selo que `NomeComSelo` anuncia ao
-        // lado do nome.
-        //
-        // **A porta fica DENTRO do `Expanded` e nao por fora**: por fora ela
-        // embrulharia tambem o `⋮` de `_menu`, e o menu tem desfecho proprio --
-        // um toque nele abriria o perfil.
         Expanded(
           child: PortaDoPerfilDoAutor(
             autor: publicacao.autor,
@@ -974,18 +450,11 @@ class _CartaoDaPublicacao extends StatelessWidget {
               nome: publicacao.autor.nomeExibido,
               comSelo: publicacao.autor.canalConfirmado,
               estilo: estiloDoNome,
-              // **A MESMA TINTA DO NOME**, e pelo mesmo motivo: sobre o veu o
-              // verde de `cor/success` mede 1,04:1 com foto branca, contra um
-              // piso de 3,0. Fora do veu e nulo, e o selo continua `success`.
               corDoSelo: sobreOVeu ? VeuDoAutorSobreMidia.tinta(tema) : null,
             ),
           ),
         ),
-        // **O `⋮` so entra na linha QUANDO NAO HA VEU.** Sobre a foto ele e um
-        // irmao no `Stack`, para que o alvo de 48 dp nao estique a barra.
         if (!sobreOVeu) _menu(context),
-        // O vao que o `⋮` ocupava sobre o veu: sem ele o nome passaria por baixo
-        // do menu que flutua a direita.
         if (sobreOVeu && _temMenu)
           const SizedBox(width: BichuAlvoDeToque.min),
       ],
@@ -994,21 +463,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
 
   /// O `⋮` do cartao: **`Apagar` na propria, `Denunciar` na de outra pessoa, e
   /// nunca as duas.**
-  ///
-  /// Quem decide e `publicacao.minha`, que vem do SERVIDOR como coluna
-  /// calculada — e nao de uma comparacao de apelido nesta camada: a tela nao tem
-  /// o apelido de quem chama em toda rolagem, e comparar aqui seria a
-  /// autorizacao migrando para o cliente.
-  ///
-  /// **Denunciar a propria publicacao nao existe**, e isso e produto e nao
-  /// economia: o caminho para o proprio conteudo e apaga-lo, que e imediato, e o
-  /// servidor responde `400 own_content` a quem tentar. Oferecer as duas seria
-  /// desenhar um controle cujo unico desfecho e um erro.
-  /// **Se o `⋮` NASCE.** Um so lugar decide, porque agora sao DOIS que
-  /// perguntam: quem pendura o botao sobre a foto e quem reserva o vao dele na
-  /// linha do autor. Dois `if` com a mesma condicao divergem na primeira
-  /// edicao, e o sintoma seria um buraco de 48 dp a direita de um nome, sem
-  /// botao nenhum.
   bool get _temMenu =>
       (publicacao.minha && aoApagar != null) ||
       (!publicacao.minha && aoDenunciar != null);
@@ -1020,26 +474,10 @@ class _CartaoDaPublicacao extends StatelessWidget {
       if (!publicacao.minha && aoDenunciar != null)
         const PopupMenuItem<String>(value: 'denunciar', child: Text('Denunciar')),
     ];
-    // **Menu sem opcao nao nasce.** Um `⋮` que abre uma folha vazia e um toque
-    // que termina em nada.
     if (opcoes.isEmpty) return const SizedBox.shrink();
 
     return PopupMenuButton<String>(
-      // **48 dp, E ISSO CONSERTA UM DEFEITO QUE JA ESTAVA AQUI.**
-      //
-      // O padrao do `PopupMenuButton` e `EdgeInsets.all(8)` com glifo de 24 --
-      // **40 x 40 dp**, abaixo do piso de [BichuAlvoDeToque.min] (WCAG 2.5.5 e
-      // o paragrafo 6.5). Medido, e nao suposto: o caso
-      // `ISCA (discricao) — o alvo de toque do `⋮` continua com 48 dp`
-      // reprovou com `40.0 x 40.0` antes desta linha existir, no layout velho
-      // e no novo.
-      //
-      // Ele saiu desta frente por tabela: a barra sobre a foto so pode ter 40
-      // dp porque o alvo do menu transborda para fora dela, e medir esse
-      // transbordo exigiu medir o alvo -- que estava errado desde antes.
-      // `12 + 24 + 12 = 48`.
       padding: const EdgeInsets.all(BichuEspaco.e3),
-      // O nome acessivel do alvo. Sem ele o leitor de tela anuncia so "botao".
       tooltip: 'Opções da publicação',
       itemBuilder: (_) => opcoes,
       onSelected: (escolha) {
@@ -1054,26 +492,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
 }
 
 /// A FOTO DO AUTOR no cartao do Mural — **Emenda 5 do ADR-0010 (20/10/2026)**.
-///
-/// ## Por que ela nao reusa `MarcaNeutraDoParticipante`
-///
-/// Aquele widget existe, faz o mesmo desenho e mora em
-/// `telas/mensagens/area_de_mensagens.dart` — mas a API dele e sobre uma
-/// CONVERSA: ele recebe `ParticipanteDaConversa?` e decide o toque por
-/// `PortaDoPerfilDoParticipante`. Reusa-lo aqui acoplaria o Mural ao modulo de
-/// mensagens e ao modelo da conversa, e generaliza-lo exigiria mexer naquela
-/// tela — mais raio de alteracao do que esta frente tem.
-///
-/// **O que NAO esta duplicado e a regra que importa.** `cacheWidth` pela
-/// largura pintada, `errorBuilder` sempre e a politica de decodificacao moram
-/// em [ImagemDaRede], e e ela que pinta nos dois lugares. O que se repete aqui
-/// sao as poucas linhas da inicial de reserva.
-///
-/// **A TERCEIRA SUPERFICIE APARECEU, E A EXTRACAO ACONTECEU (21/10/2026).** O
-/// desenho mora agora em `widgets/marca_da_pessoa.dart`, que e o lugar que o
-/// paragrafo acima nomeou. Este widget ficou — ele e o que decide, PARA O MURAL,
-/// o lado de 40 dp e a ausencia de toque, e as duas decisoes sao desta tela e
-/// nao do desenho.
 class _FotoDoAutor extends StatelessWidget {
   const _FotoDoAutor({required this.autor, this.lado = lado40});
 
@@ -1084,46 +502,18 @@ class _FotoDoAutor extends StatelessWidget {
   final double lado;
 
   /// 40 dp, o tamanho para o qual a `thumb` de 176 foi medida: 120 px reais a
-  /// 3x, 1,47x de cobertura. **Nao e numero escolhido aqui** — ele vem da
-  /// Emenda 3 e a Emenda 5 o reusa por nome.
-  ///
-  /// E o tamanho da publicacao SEM foto, onde a linha do autor e o cabecalho do
-  /// cartao e nao tem com que competir.
+  /// 3x, 1,47x de cobertura.
   static const double lado40 = 40;
 
   /// 28 dp, SOBRE O VEU — o *"diminua bastante"* do cliente de 29/10/2026.
-  ///
-  /// A `thumb` de 176 px cobre 84 px reais a 3x, **2,1x**: mais folga do que os
-  /// 1,47x para os quais ela foi medida, entao a reducao nao custa nitidez.
   static const double ladoNoVeu = 28;
 
   @override
   Widget build(BuildContext context) {
-    // **ESTE WIDGET CONTINUA SO DESENHANDO, e o toque continua nao estando
-    // aqui dentro.** O que mudou em 26/10/2026 foi o PONTO DE USO: quem
-    // embrulha a foto no toque e `PortaDoPerfilDoAutor`, no cartao.
-    //
-    // O paragrafo que estava escrito aqui dizia *"a ausencia de toque e
-    // deliberada"* e dava a razao: o apelido pode ser nulo, e *"um circulo que
-    // se anuncia como botao e nao leva a lugar nenhum e o toque sem desfecho
-    // que o criterio 2 da BICHUS-62 proibe"*. **A razao nao caiu -- ela foi
-    // ATENDIDA.** A mesma linha ja dizia o preco de ligar o toque (*"quem
-    // trouxer o toque para o perfil traz com ele o estado de apelido nulo"*),
-    // e e exatamente isso que `PortaDoPerfilDoAutor` faz: sem apelido ela nao
-    // monta `InkWell` nenhum e devolve esta foto crua.
-    //
-    // **A regra de camada tambem continua**: `MarcaDaPessoa` desenha e nao
-    // toca, e quem poe o `InkWell` fica por FORA -- era
-    // `MarcaNeutraDoParticipante` na conversa, e agora e
-    // `PortaDoPerfilDoAutor` no Mural.
     return MarcaDaPessoa(
       urlDoIcone: autor.urlDoIcone,
       inicial: MarcaDaPessoa.letraDe(autor.nomeExibido),
       lado: lado,
-      // O DONO DA FOTO, para o cache em disco (BICHUS-296). `apelido` e
-      // anulavel aqui pelo mesmo motivo de o toque nao existir: a pessoa pode
-      // nao ter escolhido apelido, e ai nao se cacheia -- ver
-      // `MarcaDaPessoa.apelido`.
       apelido: autor.apelido,
     );
   }
@@ -1131,25 +521,6 @@ class _FotoDoAutor extends StatelessWidget {
 
 /// A LINHA DE ACOES do cartao: **curtir e comentar**, decisao do cliente de
 /// 19/10/2026.
-///
-/// ## O coracao e OTIMISTA, e o servidor manda
-///
-/// O toque pinta o estado novo na hora e so depois espera a resposta -- curtir
-/// tem de parecer instantaneo. **Mas o numero que fica e o do SERVIDOR**: a
-/// resposta devolve `like_count` lido das linhas, e e ele que substitui o
-/// palpite. Se a chamada falhar, o estado volta ao que era.
-///
-/// E por isso que `curtir` e idempotente do outro lado: dois toques rapidos
-/// mandam duas requisicoes, e as duas respondem a MESMA contagem -- a unicidade
-/// e a chave primaria de `publication_likes`, no banco, nao nesta tela.
-///
-/// ## NAO HA LISTA DE QUEM CURTIU, e o numero nao e um toque
-///
-/// O contador e TEXTO, e nao botao. Nao existe `GET /publications/{ref}/likes`
-/// no contrato, entao um toque no numero nao levaria a lugar nenhum -- e o
-/// criterio 2 da BICHUS-62 proibe renderizar acao sem destino. A ausencia da
-/// rota e o item 7 da Emenda 5 do ADR-0010: a decisao de 19/10 sobre curtir e
-/// CONTAGEM, e contagem nao diz quem.
 class _AcoesDaPublicacao extends StatefulWidget {
   const _AcoesDaPublicacao({required this.publicacao, required this.interacao});
 
@@ -1174,7 +545,6 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
     if (_emVoo) return;
     final eraCurti = _curti;
     final eramCurtidas = _curtidas;
-    // OTIMISTA: pinta agora. Ver o cabecalho.
     setState(() {
       _emVoo = true;
       _curti = !eraCurti;
@@ -1185,8 +555,6 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
           ? await widget.interacao.descurtir(widget.publicacao.ref)
           : await widget.interacao.curtir(widget.publicacao.ref);
       if (!mounted) return;
-      // **O NUMERO DO SERVIDOR SUBSTITUI O PALPITE.** Ele foi lido das linhas,
-      // e o palpite era so para a tela nao esperar.
       setState(() {
         _emVoo = false;
         _curti = reacao.curtiEu;
@@ -1194,8 +562,6 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
       });
     } on FalhaDeChamada {
       if (!mounted) return;
-      // VOLTA ao que era: deixar o coracao pintado depois de uma falha seria a
-      // tela afirmando uma curtida que o servidor nao tem.
       setState(() {
         _emVoo = false;
         _curti = eraCurti;
@@ -1210,16 +576,11 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
         builder: (_) => ComentariosDaPublicacao(
           ref: widget.publicacao.ref,
           interacao: widget.interacao,
-          // `mine` da linha do tempo: e ele que decide se o `Apagar` nasce num
-          // comentario de TERCEIRO (decisao do cliente de 20/10/2026).
           minhaPublicacao: widget.publicacao.minha,
         ),
       ),
     );
     if (!mounted) return;
-    // A folha devolve o TOTAL que passou a valer: comentar ou apagar lá muda o
-    // numero aqui, e sem isto o cartao ficaria com o numero velho até a
-    // proxima recarga da linha do tempo.
     if (total != null) setState(() => _comentarios = total);
   }
 
@@ -1232,8 +593,6 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
       children: <Widget>[
         IconButton(
           onPressed: _emVoo ? null : _alternarCurtida,
-          // O nome acessivel diz o que o toque FAZ, e muda com o estado: quem
-          // usa leitor de tela ouve `Descurtir` no que ja esta curtido.
           tooltip: _curti
               ? _AcoesDaPublicacao.descurtir
               : _AcoesDaPublicacao.curtir,
@@ -1242,8 +601,6 @@ class _AcoesDaPublicacaoState extends State<_AcoesDaPublicacao> {
             color: _curti ? cores.urgency : cores.textSecondary,
           ),
         ),
-        // O CONTADOR E TEXTO, e nao botao: nao existe rota de lista de quem
-        // curtiu, e um toque aqui nao levaria a lugar nenhum.
         Text(
           '$_curtidas',
           style: textos.bodyMedium?.copyWith(color: cores.textSecondary),

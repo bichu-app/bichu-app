@@ -1,25 +1,4 @@
-/**
- * As três fixtures de metadado do critério 20 de `BICHUS-87`.
- *
- * Foto de celular carrega GPS. GPS é **a casa do tutor**, e a derivada é
- * servida publicamente — é o vazamento mais grave que este produto pode ter, e
- * ele é invisível: a imagem aparece certinha na tela com a coordenada dentro.
- *
- * O critério pede três fixtures (GPS em EXIF, GPS em XMP, e IPTC) e que a
- * verificação **reprove** se a derivada tiver qualquer um dos três. E pede mais
- * uma coisa, que é a que dá valor às outras: *"se as fixtures não forem
- * encontradas, o job falha com o motivo"*.
- *
- * Aqui isso vira uma guarda explícita: **antes** de olhar a derivada, cada caso
- * confirma que a ENTRADA de fato carrega o metadado. Sem essa guarda, uma
- * fixture que perdesse o GPS numa mudança de biblioteca faria a suíte passar
- * provando nada — verde por ausência de alvo, que é o modo de falha que este
- * projeto persegue em todos os portões.
- *
- * A remoção não é uma lista de campos conhecidos: a imagem é **reescrita a
- * partir dos pixels** e nada é copiado. Lista de campos esquece o campo que
- * ainda não existia quando ela foi escrita.
- */
+/** As três fixtures de metadado do critério 20 de `BICHUS-87`. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import sharp, { type Sharp } from 'sharp';
@@ -69,8 +48,8 @@ async function comGpsEmXmp(): Promise<Buffer> {
 }
 
 /**
- * IPTC não tem escritor no `sharp`, então o segmento é montado à mão: APP13
- * com o bloco `8BIM` de id `0x0404` e um dataset IIM de legenda.
+ * IPTC não tem escritor no `sharp`, então o segmento é montado à mão: APP13 com o
+ * bloco `8BIM` de id `0x0404` e um dataset IIM de legenda.
  */
 async function comIptc(): Promise<Buffer> {
   const jpeg = await base().jpeg().toBuffer();
@@ -105,22 +84,12 @@ async function conferirDerivadaLimpa(derivada: Buffer, marcas: readonly string[]
   assert.equal(meta.xmp, undefined, 'a derivada carrega bloco XMP');
   assert.equal(meta.iptc, undefined, 'a derivada carrega bloco IPTC');
 
-  // Segunda conferência, por bytes: se um dia o leitor de metadado mudar de
-  // comportamento, a busca crua continua pegando a coordenada.
   for (const marca of marcas) {
     assert.ok(!derivada.includes(Buffer.from(marca)), `a derivada contém "${marca}"`);
   }
 }
 
-
-/**
- * A derivada, ou um erro de teste com o motivo.
- *
- * `derivar` passou a devolver `MotivoDeRecusa` no lugar de lançar quando o
- * decodificador não abre os pixels (o caso do HEIC sem decodificador HEVC), e
- * cada teste daqui espera uma derivada. Esta função é o lugar onde "veio motivo
- * em vez de derivada" falha nomeando o motivo, em vez de quinze `as` espalhados.
- */
+/** A derivada, ou um erro de teste com o motivo. */
 async function derivada(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada> {
   const r = await processador.derivar(bytes, pedido);
   if (typeof r === 'string') assert.fail(`esperava derivada e veio o motivo "${r}"`);
@@ -179,15 +148,11 @@ void describe('inspeção: o que os bytes dizem, e o teto de 50 megapixels', () 
   });
 
   void it('RECUSA SVG, mesmo sendo formato que a biblioteca abre', async () => {
-    // O libvips ABRE SVG. Quem recusa é a nossa lista de números mágicos, e é
-    // por isso que ela vem antes da biblioteca e não depois.
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
     assert.equal(await processador.inspecionar(svg), 'formato_nao_aceito');
   });
 
   void it('RECUSA acima de 50 megapixels, sem decodificar', async () => {
-    // 8000x7000 = 56 MP. O arquivo comprimido é pequeno; decodificado seriam
-    // ~168 MB. É a bomba de descompressão, e ela é recusada pelo cabeçalho.
     const grande = await sharp({
       create: { width: 8000, height: 7000, channels: 3, background: { r: 0, g: 0, b: 0 } },
     })
@@ -209,9 +174,6 @@ void describe('derivação: tamanho e formato', () => {
     const thumb = await derivada(original, semCorte(176));
     assert.equal(card.largura, 1024);
     assert.equal(thumb.largura, 176);
-    // O formato é o do PONTO ÚNICO, e a asserção lê de lá de propósito: o
-    // cliente pediu JPEG e pode voltar atrás, e um `'image/jpeg'` escrito aqui
-    // faria a troca de uma constante reprovar um teste que não fala de formato.
     assert.equal(card.contentType, FORMATO_DAS_DERIVADAS.contentType);
     assert.equal(card.extensao, FORMATO_DAS_DERIVADAS.extensao);
   });
@@ -223,9 +185,6 @@ void describe('derivação: tamanho e formato', () => {
   });
 
   void it('CORTA na proporção pedida quando o pedido traz altura', async () => {
-    // 2000 x 1500 é 4:3; o pedido é 1 : 1,1 (retrato), a proporção da moldura.
-    // Sem corte a saída sairia 4:3 e a moldura cortaria no cliente — que é o
-    // que o cliente pediu para deixarmos de fazer.
     const original = await base(2000, 1500).jpeg().toBuffer();
     const d = await derivada(original, {
       largura: 1024,
@@ -238,9 +197,6 @@ void describe('derivação: tamanho e formato', () => {
   });
 
   void it('o original NÃO é tocado: derivar duas vezes dá o mesmo original', async () => {
-    // O corte é da derivada. Se `derivar` mutasse o buffer de entrada, a
-    // segunda chamada receberia a imagem já cortada — e seria assim que o
-    // cachorro perderia a cabeça sem ninguém ver.
     const original = await base(2000, 1500).jpeg().toBuffer();
     const copia = Buffer.from(original);
     await derivada(original, { largura: 400, altura: 440, escada: ESCADA_ENXUTA, tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA });
@@ -266,9 +222,6 @@ void describe('a escada de qualidade, e o teto de 500 KB', () => {
   });
 
   void it('PARA NO PRIMEIRO QUE CABE: a escada não desce além do necessário', async () => {
-    // Um teto folgado tem de sair no PRIMEIRO degrau. Uma implementação que
-    // percorresse a escada inteira entregaria a pior qualidade que cabe em vez
-    // da melhor, e o teste de bytes não veria diferença.
     const original = await base(800, 600).jpeg().toBuffer();
     const d = await derivada(original, {
       largura: 320,
@@ -292,27 +245,7 @@ void describe('a escada de qualidade, e o teto de 500 KB', () => {
   });
 });
 
-/**
- * Um WebP ANIMADO de verdade, montado chunk por chunk.
- *
- * **Por que à mão, e não pelo `sharp`.** A forma óbvia é a tira vertical —
- * `sharp({ create: { height: 64 * 3, pageHeight: 64 } }).webp()` — porque o
- * libvips representa animação como páginas empilhadas. Medido nesta instalação
- * (sharp 0.35.4, libvips 8.18.6, libwebp 1.6.0), ela **não produz animação**: a
- * saída tem 76 bytes, nenhum chunk `VP8X`/`ANIM`/`ANMF`, e `metadata()` devolve
- * 64 x 64 com `pages` ausente. O codificador escreveu um quadro só e não
- * avisou. Uma fixture assim deixa o caso vermelho sem defeito nenhum do lado
- * de cá — que é a outra metade do modo de falha que o cabeçalho deste arquivo
- * persegue: verde sem alvo, e vermelho sem culpado.
- *
- * O contêiner animado é o do formato (RIFF/WebP, seção "Animation"): `VP8X` com
- * o bit de animação, `ANIM` com cor de fundo e contagem de voltas, e um `ANMF`
- * por quadro embrulhando o bitstream. O bitstream vem do `sharp`, de um WebP
- * parado — só o contêiner é nosso, e nenhum binário entra no repositório.
- *
- * Confirmado contra o mesmo `metadata()` que a implementação lê: com este
- * arquivo ele devolve `pages: 3`.
- */
+/** Um WebP ANIMADO de verdade, montado chunk por chunk. */
 async function webpAnimado(lado = 64, quadros = 3): Promise<Buffer> {
   /** Um chunk RIFF: fourcc, tamanho em 32 bits LE, corpo, e byte de alinhamento. */
   function chunk(fourcc: string, corpo: Buffer): Buffer {
@@ -323,10 +256,8 @@ async function webpAnimado(lado = 64, quadros = 3): Promise<Buffer> {
     return Buffer.concat([cabecalho, corpo, alinhamento]);
   }
 
-  // O bitstream de um quadro, tirado de um WebP parado que o `sharp` sabe
-  // escrever: é o `VP8 ` (lossy) ou `VP8L` (lossless) de dentro do arquivo.
   const parado = await base(lado, lado).webp().toBuffer();
-  let posicao = 12; // pula `RIFF<tamanho>WEBP`
+  let posicao = 12;
   let bitstream: { fourcc: string; corpo: Buffer } | undefined;
   while (posicao + 8 <= parado.length) {
     const fourcc = parado.toString('ascii', posicao, posicao + 4);
@@ -340,22 +271,22 @@ async function webpAnimado(lado = 64, quadros = 3): Promise<Buffer> {
   assert.notEqual(bitstream, undefined, 'o WebP parado não trouxe bitstream: a fixture provaria nada');
 
   const vp8x = Buffer.alloc(10);
-  vp8x.writeUInt8(0b0000_0010, 0); // o bit de ANIMAÇÃO
-  vp8x.writeUIntLE(lado - 1, 4, 3); // largura do canvas, menos um
-  vp8x.writeUIntLE(lado - 1, 7, 3); // altura do canvas, menos um
+  vp8x.writeUInt8(0b0000_0010, 0);
+  vp8x.writeUIntLE(lado - 1, 4, 3);
+  vp8x.writeUIntLE(lado - 1, 7, 3);
 
   const anim = Buffer.alloc(6);
-  anim.writeUInt32LE(0xffff_ffff, 0); // cor de fundo
-  anim.writeUInt16LE(0, 4); // voltas: infinitas
+  anim.writeUInt32LE(0xffff_ffff, 0);
+  anim.writeUInt16LE(0, 4);
 
   const quadro = (): Buffer => {
     const cabecalho = Buffer.alloc(16);
-    cabecalho.writeUIntLE(0, 0, 3); // deslocamento x, em pares de pixel
-    cabecalho.writeUIntLE(0, 3, 3); // deslocamento y, em pares de pixel
+    cabecalho.writeUIntLE(0, 0, 3);
+    cabecalho.writeUIntLE(0, 3, 3);
     cabecalho.writeUIntLE(lado - 1, 6, 3);
     cabecalho.writeUIntLE(lado - 1, 9, 3);
-    cabecalho.writeUIntLE(80, 12, 3); // duração do quadro, em ms
-    cabecalho.writeUInt8(0, 15); // sem canal alfa, sem descarte
+    cabecalho.writeUIntLE(80, 12, 3);
+    cabecalho.writeUInt8(0, 15);
     return chunk('ANMF', Buffer.concat([cabecalho, chunk(bitstream!.fourcc, bitstream!.corpo)]));
   };
 
@@ -375,9 +306,6 @@ void describe('WebP animado: recusa explícita, e não o primeiro quadro em sil�
   void it('RECUSA o WebP animado na inspeção', async () => {
     const animado = await webpAnimado();
 
-    // A GUARDA, na forma do resto deste arquivo: antes de cobrar a recusa,
-    // confirma que a ENTRADA é de fato animada. Sem ela, uma fixture que
-    // perdesse a animação faria o caso reprovar acusando a implementação.
     assert.equal((await sharp(animado).metadata()).pages, 3, 'a fixture não é animada');
 
     assert.equal(await processador.inspecionar(animado), 'imagem_animada');
@@ -392,11 +320,6 @@ void describe('WebP animado: recusa explícita, e não o primeiro quadro em sil�
 
 void describe('HEIC: o cabeçalho abre e o pixel não (medido nesta instalação)', () => {
   void it('a derivação devolve MOTIVO em vez de lançar', async () => {
-    // Um HEIC de verdade não dá para gerar aqui — este `sharp` não codifica
-    // HEVC. O que este teste prova é o contrato: entrada que passa a inspeção
-    // e não decodifica sai como recusa FINAL, e não como exceção que a fila
-    // tenta cinco vezes. O `ftypheic` com corpo inválido é o caminho mais curto
-    // para esse estado.
     const falso = Buffer.concat([
       Buffer.from([0x00, 0x00, 0x00, 0x24]),
       Buffer.from('ftypheic'),
@@ -407,30 +330,7 @@ void describe('HEIC: o cabeçalho abre e o pixel não (medido nesta instalação
   });
 });
 
-// ===========================================================================
-// O RECORTE ESCOLHIDO PELA PESSOA (cliente, 20/10/2026)
-// ===========================================================================
-// *"devemos implementar um recurso de ajustar a imagem antes de fazer o crop,
-// pois a maioria esta cortando informacao relevante"*.
-//
-// O que estes casos provam, e cada um prova UMA coisa:
-//
-//   1. com regiao, o recorte e EXATAMENTE o retangulo pedido -- e nao o que a
-//      heuristica acharia;
-//   2. sem regiao, nada muda: `attention` continua decidindo, e o que ja esta
-//      gravado continua saindo igual;
-//   3. **a regiao e medida DEPOIS da rotacao do EXIF** -- a armadilha;
-//   4. regiao impossivel e presa na borda, e nao vira excecao no worker;
-//   5. a proporcao secundaria sai da regra, e nao de um segundo ajuste.
-
-/**
- * Uma foto em RETRATO com uma marca no alto, e nada mais.
- *
- * A marca e um retangulo de cor chapada nos 25% de cima. Cor chapada de
- * proposito: o que cada caso mede e ONDE o recorte caiu, e para isso basta
- * perguntar a cor do pixel do meio -- que e uma pergunta sem ambiguidade,
- * diferente de "a imagem parece certa".
- */
+/** Uma foto em RETRATO com uma marca no alto, e nada mais. */
 async function retratoComMarcaNoAlto(): Promise<Buffer> {
   return sharp({
     create: { width: 600, height: 1000, channels: 3, background: { r: 20, g: 20, b: 200 } },
@@ -476,8 +376,6 @@ function comRecorte(
 
 void describe('o recorte escolhido pela pessoa', () => {
   void it('CONTROLE POSITIVO: a fixture tem mesmo a marca no alto e o fundo embaixo', async () => {
-    // Sem isto, todos os casos abaixo poderiam estar medindo uma imagem
-    // chapada e concordando por acidente.
     const bytes = await retratoComMarcaNoAlto();
     const meta = await sharp(bytes).metadata();
     assert.equal(meta.width, 600);
@@ -496,7 +394,6 @@ void describe('o recorte escolhido pela pessoa', () => {
 
   void it('com regiao no ALTO, a derivada sai da marca', async () => {
     const bytes = await retratoComMarcaNoAlto();
-    // Os 20% de cima: dentro da marca.
     const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0, w: 1, h: 0.2 }));
     assert.ok(
       ehVermelho(await corDoMeio(d.bytes)),
@@ -505,8 +402,6 @@ void describe('o recorte escolhido pela pessoa', () => {
   });
 
   void it('com regiao EMBAIXO, a mesma foto da a outra faixa', async () => {
-    // A ISCA NEGATIVA do caso acima: sem ela, um adaptador que ignorasse a
-    // regiao e sempre cortasse o alto passaria nos dois.
     const bytes = await retratoComMarcaNoAlto();
     const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0.7, w: 1, h: 0.2 }));
     assert.ok(
@@ -522,28 +417,9 @@ void describe('o recorte escolhido pela pessoa', () => {
     assert.equal(d.altura, 225);
   });
 
-  // =========================================================================
-  // A ARMADILHA: a regiao e medida DEPOIS da rotacao do EXIF
-  // =========================================================================
-  // O servidor chama `.rotate()` antes de cortar. Uma regiao medida sobre a
-  // imagem ARMAZENADA, e nao sobre a imagem VISTA, sai com os eixos trocados --
-  // e o resultado e um recorte plausivel da parte errada da foto, **sem erro,
-  // sem log e sem nada**.
-  //
-  // Este caso existe porque e o defeito mais provavel de toda a mudanca, e o
-  // unico que nenhum tipo pega.
   void it('ARMADILHA -- a regiao vale sobre a imagem VISTA, e nao sobre a armazenada', async () => {
-    // A MESMA foto de cima, girada: os pixels ficam DEITADOS (1000 x 600) e o
-    // EXIF Orientation 6 manda girar 90 graus ao mostrar. Quem olha ve de novo
-    // um retrato 600 x 1000 com a marca no alto.
     const bytes = await sharp(await retratoComMarcaNoAlto())
       .rotate(270)
-      // `withMetadata({ orientation })`, e NAO `withExif`. Medido nesta
-      // instalacao (sharp 0.35.4 / libvips 8.18.6): `withExif({ IFD0:
-      // { Orientation: '6' } })` grava o bloco e o leitor devolve
-      // `orientation: 1` -- a fixture sairia sem armadilha nenhuma e o caso
-      // passaria por nao ter alvo. A asercao logo abaixo existe exatamente
-      // para esse engano nao passar calado.
       .withMetadata({ orientation: 6 })
       .jpeg({ quality: 95 })
       .toBuffer();
@@ -557,7 +433,6 @@ void describe('o recorte escolhido pela pessoa', () => {
       'sem o EXIF a armadilha nao existe e o caso nao prova nada',
     );
 
-    // A pessoa viu um RETRATO e enquadrou o alto dele.
     const d = await derivada(bytes, comRecorte(400, 225, { x: 0, y: 0, w: 1, h: 0.2 }));
 
     assert.ok(
@@ -569,22 +444,10 @@ void describe('o recorte escolhido pela pessoa', () => {
   });
 
   void it('regiao que estoura a borda e PRESA, e nao vira excecao na fila', async () => {
-    // Regiao mal medida pelo cliente nao pode virar excecao: a fila entenderia
-    // "culpa nossa" e tentaria cinco vezes.
-    //
-    // A regiao pedida comeca em 90% e tem 50% de lado: ela sai pela direita e
-    // por baixo. Presa, ela vira 60 x 100 px -- o que resta ate a borda.
-    //
-    // **E a derivada sai MENOR que os 200 x 200 pedidos, de proposito**:
-    // `withoutEnlargement` nao amplia, e ampliar 60 px para 200 nao
-    // acrescentaria informacao nenhuma. Cobrar 200 aqui seria cobrar a
-    // ampliacao que o resto deste arquivo existe para impedir.
     const bytes = await retratoComMarcaNoAlto();
     const d = await derivada(bytes, comRecorte(200, 200, { x: 0.9, y: 0.9, w: 0.5, h: 0.5 }));
     assert.ok(d.largura > 0 && d.altura > 0, 'a derivada precisa existir');
     assert.ok(d.largura <= 200 && d.altura <= 200, 'nao pode ter ampliado');
-    // O canto de baixo e fundo, e nao a marca: a janela foi presa no lugar
-    // certo, e nao reposicionada para dentro.
     assert.ok(
       ehAzul(await corDoMeio(d.bytes)),
       'REPROVA: a janela presa veio do lugar errado da foto.',
@@ -597,25 +460,7 @@ void describe('o recorte escolhido pela pessoa', () => {
     assert.notEqual(typeof r, 'string', 'devia sair derivada, e nao motivo de recusa');
   });
 
-  // =========================================================================
-  // DENTRO do recorte da pessoa, a heuristica NAO decide de novo
-  // =========================================================================
-  // A regiao escolhida quase nunca tem exactamente a proporcao da derivada --
-  // ela tem a proporcao PRINCIPAL, e as outras saem dela. Entao, depois do
-  // `extract`, ainda sobra um corte pequeno para fechar a geometria.
-  //
-  // **Quem faz esse corte importa.** Com `attention`, o libvips procura de
-  // novo a regiao de maior energia e desliza para FORA do que a pessoa
-  // centralizou -- o mesmo defeito, agora escondido dentro do recorte dela e
-  // menor, que e justamente o tipo que ninguem nota. Com `centre`, o que
-  // sobra sai igual dos dois lados.
-  //
-  // Este caso existe porque a mutacao provou que faltava: trocar `centre` por
-  // `attention` aqui passava verde nos outros casos, porque as fixtures deles
-  // sao chapadas e as duas estrategias davam a mesma cor.
   void it('o corte que FECHA a geometria e centrado, e nao por energia', async () => {
-    // Uma faixa com tres tercos: ruido de alto contraste a esquerda (o ima da
-    // heuristica), verde no meio, azul a direita.
     const ruido = Buffer.alloc(200 * 200 * 3);
     for (let i = 0; i < ruido.length; i += 3) {
       const claro = (i / 3) % 2 === 0;
@@ -639,7 +484,6 @@ void describe('o recorte escolhido pela pessoa', () => {
       .jpeg({ quality: 95 })
       .toBuffer();
 
-    // A faixa colada no meio de um retrato 600 x 1000.
     const bytes = await sharp({
       create: { width: 600, height: 1000, channels: 3, background: { r: 90, g: 90, b: 90 } },
     })
@@ -647,9 +491,6 @@ void describe('o recorte escolhido pela pessoa', () => {
       .jpeg({ quality: 95 })
       .toBuffer();
 
-    // A pessoa enquadrou a FAIXA INTEIRA (600 x 200, ou 3:1). A derivada e
-    // 100 x 200 (1:2), bem mais estreita: sobra muito corte horizontal para
-    // fechar -- e e nele que a heuristica decidiria de novo.
     const d = await derivada(bytes, comRecorte(100, 200, { x: 0, y: 0.4, w: 1, h: 0.2 }));
 
     const c = await corDoMeio(d.bytes);
@@ -663,9 +504,7 @@ void describe('o recorte escolhido pela pessoa', () => {
   });
 });
 
-
 void describe('a proporcao secundaria sai da regiao, sem segundo ajuste', () => {
-  // O original do exemplo e 600 x 1000.
   const proporcaoDoOriginal = 600 / 1000;
 
   void it('o centro da regiao NAO anda', () => {

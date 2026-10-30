@@ -1,37 +1,6 @@
 /**
  * ISCA (d), METADE DO SERVIDOR: **a foto da publicação é confirmada na MESMA
  * transação da escrita, e a publicação ABANDONADA não confirma nada.**
- *
- * ## O padrão de foto, e qual metade dele este arquivo mede
- *
- * Decisão do cliente de 19/10/2026: escolher **envia na hora**, a prévia é do
- * arquivo local, e o `Publicar` **confirma**. Nada de botão separado de salvar
- * foto — foi exatamente o defeito que ele relatou duas vezes.
- *
- * Isso tem duas metades, em dois lugares:
- *
- * - **no aplicativo**, a prévia aparece na escolha e o `upload_id` só é enviado
- *   no `Publicar`. Medido em `app/test/mural/...`;
- * - **no servidor**, `confirmed_at` passa a valer no mesmo instante em que a
- *   publicação passa a existir. É o que este arquivo mede.
- *
- * ## Por que a segunda metade é um teste de EXECUTOR, e não de resultado
- *
- * Porque a promessa não é "a confirmação acontece": é "ela acontece na MESMA
- * transação". A varredura de vencidos apaga intenção **não confirmada e
- * vencida**, e apagou a foto do achado — medido com hora: subida 01:18:44,
- * apagada 01:29:10. Dez minutos, e sempre. A causa era a foto do achado não ter
- * confirmação nenhuma.
- *
- * Com a confirmação em transação SEPARADA da escrita existiria uma janela em
- * que a publicação está gravada e a intenção dela ainda não — e nessa janela a
- * varredura é correta em recolher o objeto, e a foto desaparece de uma
- * publicação que a pessoa já publicou. **Medir o resultado não enxerga essa
- * janela**; medir qual executor recebeu cada escrita, sim. É a forma de
- * `showcase/adapters/persistence/confirmacao-na-mesma-transacao.test.ts`.
- *
- * A suíte não tem banco: o dublê abaixo não executa SQL nenhum, porque o que
- * está sendo medido é **quem** recebeu cada escrita.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -52,7 +21,7 @@ interface Operacao {
   readonly valores?: Record<string, unknown>;
 }
 
-/** O envio que a `SELECT` do dublê devolve. Trocado por caso. */
+/** O envio que a `SELECT` do dublê devolve. */
 interface EnvioDoDuble {
   readonly id: string;
   readonly expires_at: Date;
@@ -171,8 +140,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('ISCA (d) -- publicacao de TEXTO PURO nao confirma envio nenhum', async () => {
-    // O caminho comum, e ele tem de ser barato: nenhuma ida ao banco atras de
-    // envio, nenhuma imagem, nenhum trabalho.
     const registro: Operacao[] = [];
     const desfecho = await publicar(registro, undefined, null);
 
@@ -196,10 +163,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('ISCA (d) -- ENVIO ABANDONADO (nao encontrado) nao grava publicacao nenhuma', async () => {
-    // `undefined` do dublê é o que o `WHERE` devolve para envio de outra conta,
-    // de outro propósito, ou inexistente. **Nada pode ser gravado**: uma
-    // publicação que nascesse sem a foto deixaria a pessoa com um texto que ela
-    // não pediso publicar sozinho.
     const registro: Operacao[] = [];
     const desfecho = await publicar(registro, undefined, ENVIO);
 
@@ -212,9 +175,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('ISCA (d) -- envio JA USADO nao vira uma segunda publicacao', async () => {
-    // `catalog_images.upload_intent_id` é `UNIQUE`, então o banco recusaria --
-    // mas com erro de banco sem campo. Aqui a recusa vira `400` com
-    // `code: conflict`, e nada é gravado antes dela.
     const registro: Operacao[] = [];
     const desfecho = await publicar(
       registro,
@@ -226,10 +186,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('ISCA (d) -- envio VENCIDO nao grava, e a mensagem manda enviar de novo', async () => {
-    // A intenção vence em 600 s (medido contra a homologação em 19/10/2026:
-    // `expires_at` veio 599 s à frente do instante do pedido). Confirmar uma
-    // intenção vencida criaria uma imagem cujo objeto o varredor já pode ter
-    // recolhido.
     const registro: Operacao[] = [];
     const desfecho = await publicar(
       registro,
@@ -241,9 +197,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('CONTRAPESO -- a publicacao gravada leva autor, endereco, corpo e texto alternativo', async () => {
-    // Sem ele, todos os casos de "nada foi gravado" passariam num mundo em que
-    // NADA e gravado nunca -- que e a forma mais facil de um teste de omissao
-    // ficar verde sem ter medido nada.
     const registro: Operacao[] = [];
     await publicar(registro, envioAberto, ENVIO);
     const publicacao = registro.find(
@@ -257,9 +210,6 @@ void describe('ISCA (d): a foto da publicacao confirma na MESMA transacao do pub
   });
 
   void it('CONTRAPESO -- a resposta do publicar sai com a foto em `processing` e sem URL', async () => {
-    // Antes de o worker reescrever a derivada a foto carrega o EXIF do celular
-    // (ADR-0010 item 4). O contrato diz isso no `status`, em vez de deixar o
-    // aplicativo descobrir pela ausencia da URL.
     const desfecho = await publicar([], envioAberto, ENVIO);
     assert.notEqual(typeof desfecho, 'string');
     if (typeof desfecho === 'string') return;

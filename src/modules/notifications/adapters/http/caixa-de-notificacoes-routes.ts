@@ -2,56 +2,6 @@
  * As SEIS rotas de `/v1/me/notifications` -- a CAIXA DE NOTIFICACOES, que e o
  * destino do toque no sino da barra superior -- mais `getMyBroadcast`, que e a
  * PAGINA INTERMEDIARIA do comunicado.
- *
- * ## Por que o comunicado tem pagina e os outros nove tipos nao
- *
- * Desde 20/10/2026 cada linha diz PARA ONDE leva (`destination` e
- * `destination_ref`). Oito tipos levam a uma tela que ja existe -- o pet, o
- * achado, o caso, o encontro, a indicacao, a plaquinha --, porque a pessoa
- * quer ver a coisa e nao um intermediario. **`broadcast` e o unico sem destino
- * natural**: ele nao fala de pet, de caso nem de encontro, e e texto que
- * precisa de onde ser lido. E `match_suggested` nao tem destino NENHUM, porque
- * nao existe tela de confirmar candidato neste app.
- *
- * `getMyBroadcast` mora aqui, e nao num modulo proprio, porque ele existe SO
- * para essa pagina: a caixa carrega o titulo do comunicado e nao o corpo.
- *
- * `effects`, `rateLimit` e `operationId` **espelham** `api/openapi.yaml`, e
- * `rotas-registradas-contra-o-contrato` compara os dois.
- *
- * ## `read` e `dismiss` sao DUAS rotas, e os dois eixos sao independentes
- *
- * `markNotificationRead` tira o aviso do CONTADOR e o deixa na lista dizendo
- * `read: true`. `dismissNotification` (cliente, 20/10/2026 -- o "x" da linha)
- * o tira da LISTA, e **nao** o marca como lido. Nos dois sentidos: dispensar
- * sem ter lido e o caso COMUM, porque quem limpa a lista nao abre cada linha
- * antes. Uma rota so com bandeira forcaria uma ordem entre os dois eventos
- * que o produto nao tem.
- *
- * ## Por que seis rotas, e nao duas
- *
- * `listNotifications` e `markNotificationsListSeen` sao SEPARADAS, e e a
- * separacao que implementa o requisito: **abrir a lista zera o numero e os
- * itens continuam nao lidos**. Se a leitura zerasse o contador por efeito, nao
- * haveria como chamar uma sem a outra -- nem no app, nem num teste --, e a
- * regra deixaria de ser verificavel. Alem disso `GET` que escreve e `GET` que
- * nao pode ser repetido nem cacheado.
- *
- * `getNotificationCount` e rota propria pelo motivo oposto: a barra vive em
- * TODA tela e precisa so do numero. Fazer a barra chamar `listNotifications`
- * para desenhar um numero faria cada troca de tela baixar 30 linhas.
- *
- * ## A resposta e montada campo a campo
- *
- * Nunca por espalhamento. Dois campos existem no servidor e **nao podem sair**:
- * o `id` interno (ADR-0010) e o autor do aviso -- que existe so para agrupar, e
- * cuja saida poria na tela quem causou o aviso numa caixa que de proposito nao
- * tem autor nem avatar.
- *
- * ## Nenhuma rota aqui e publica
- *
- * As cinco exigem `bearerAuth`, e o dono do token e o unico `user_id` que chega
- * ao `WHERE`. `markNotificationRead` responde **404 e nunca 403** (ADR-0021).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -130,31 +80,15 @@ export interface DependenciasDasRotasDaCaixa {
   readonly contrato: Contrato;
 }
 
-/**
- * Uma linha, campo a campo, exatamente como `NotificationItem` a declara.
- *
- * **Os campos que NAO estao aqui sao a parte que importa:** o `id` interno
- * (ADR-0010) e o autor do aviso. O autor existe no servidor so para agrupar por
- * (tipo, autor, dia); publicar nome ou identificador dele poria na tela quem
- * causou o aviso, numa caixa que nao tem autor nem avatar de proposito.
- */
+/** Uma linha, campo a campo, exatamente como `NotificationItem` a declara. */
 function comoResposta(aviso: AvisoDaCaixa): Record<string, unknown> {
   return {
     ref: aviso.ref,
     kind: aviso.tipo,
     subject: aviso.assunto,
-    // `.toISOString()` e nao `comoIso`: `comoIso` recebe `Instant` (numero) e
-    // o que vem do banco e `Date`. Mesma forma de `decided_at` na fila de
-    // indicacoes.
     occurred_at: aviso.aconteceuEm.toISOString(),
     read: aviso.lido,
     grouped_count: aviso.agrupados,
-    // **O DESTINO, e os dois campos saem SEMPRE -- nulos juntos.**
-    //
-    // Omiti-los quando nulos faria o app distinguir "sem destino" de "campo
-    // que este servidor nao manda", e as duas coisas pedem comportamentos
-    // diferentes: a primeira e uma linha sem toque, a segunda e um contrato
-    // mais velho. Com o campo sempre presente, `null` significa uma coisa so.
     destination: aviso.destino,
     destination_ref: aviso.destinoRef,
   };
@@ -182,9 +116,7 @@ function paginaComoResposta(pagina: PaginaDaCaixa): Record<string, unknown> {
 
 /**
  * MEMOIZADA por requisicao, pelo mesmo motivo das rotas de aparelho: o teto por
- * `account` precisa do dono antes do handler, e o handler precisa do mesmo
- * dono. Sem a memoria, cada `POST` verificaria a assinatura e leria `users`
- * duas vezes.
+ * `account` precisa do dono antes do handler, e o handler precisa do mesmo dono.
  */
 function chamadorAutenticado(
   request: FastifyRequest,
@@ -229,9 +161,6 @@ export function registrarRotasDaCaixaDeNotificacoes(
 ): void {
   registrarRota(app, rotaDeListarNotificacoes, {}, async (request, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
-    // `page` e `limit` chegam validados: `vigiarParametrosDasRotas` instala
-    // `schema.querystring` a partir do contrato, e e o contrato que limita
-    // `limit` a 30.
     const busca = request.query as BuscaDaListagem;
     const pagina = await deps.caixa.listar(chamador, {
       ...(busca.page === undefined ? {} : { pagina: busca.page }),
@@ -253,10 +182,6 @@ export function registrarRotasDaCaixaDeNotificacoes(
     async (request, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
       await deps.caixa.listaVista(chamador);
-      // 204 e nao 200 com corpo: a resposta nao tem nada a dizer, e devolver o
-      // contador novo aqui faria a tela acreditar num numero que ela acabou de
-      // zerar -- a plaquinha e o achado ATRAVESSAM o zero, entao o numero
-      // depois de "vista" nao e necessariamente zero.
       return reply.status(204).send();
     },
   );
@@ -279,8 +204,6 @@ export function registrarRotasDaCaixaDeNotificacoes(
     async (request, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
       const { notificationRef } = request.params as { notificationRef: string };
-      // O servico lanca 404 quando o aviso nao e desta conta -- e NUNCA 403
-      // (ADR-0021), porque um 403 confirmaria que o `ref` existe.
       await deps.caixa.marcarLida(chamador, notificationRef);
       return reply.status(204).send();
     },
@@ -293,15 +216,7 @@ export function registrarRotasDaCaixaDeNotificacoes(
     async (request, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
       const { notificationRef } = request.params as { notificationRef: string };
-      // DISPENSAR, e **nao** marcar como lida. Nao ha chamada a
-      // `marcarLida` aqui, e a ausencia e o requisito: o aviso sai da lista e
-      // do contador e continua `read: false`. Mesmo 404 e nunca 403
-      // (ADR-0021).
       await deps.caixa.dispensar(chamador, notificationRef);
-      // 204 pelo mesmo motivo de `read`: nao ha nada a dizer. Em especial
-      // NAO devolve o contador novo -- a tela que acabou de fechar uma linha
-      // leria um numero montado na mesma requisicao que o mudou, e o numero
-      // do sino tem uma fonte so (`getNotificationCount`).
       return reply.status(204).send();
     },
   );
@@ -309,12 +224,6 @@ export function registrarRotasDaCaixaDeNotificacoes(
   registrarRota(app, rotaDoComunicado, {}, async (request, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
     const { broadcastRef } = request.params as { broadcastRef: string };
-    // O servico lanca 404 para "nao existe" e para "existe e nao chegou a esta
-    // conta" -- indistinguiveis de proposito, porque um 403 confirmaria que
-    // aquele `ref` foi disparado (ADR-0021).
-    //
-    // **Esta leitura NAO marca o aviso como lido.** Quem marca e
-    // `markNotificationRead`, com o `ref` da NOTIFICACAO, que e outro `ref`.
     const comunicado = await deps.caixa.buscarComunicado(chamador, broadcastRef);
     return reply.status(200).send(comunicadoComoResposta(comunicado));
   });

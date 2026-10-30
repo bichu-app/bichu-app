@@ -1,35 +1,6 @@
 /**
- * O vocabulario da FILA DA PLAQUINHA DA COLEIRA no painel, e a maquina de
- * estados da entrega do lado da tela.
- *
- * ## Arquivo proprio, e nao linhas em outro modulo
- *
- * Sete frentes mexem neste repositorio ao mesmo tempo, e `admin/src/diretorio/`
- * esta sendo trabalhado por outra. Modulo novo em pasta nova faz a mescla ser
- * limpa, e e o mesmo arranjo -- e o mesmo motivo -- de `diretorio/fila.ts`.
- *
- * ## OS DOIS EIXOS, e por que a tela precisa dos dois
- *
- * O pedido tem DOIS estados, e eles respondem a perguntas diferentes:
- *
- * - `status` e a DECISAO do painel: `pending` (ninguem decidiu), `fulfilled`
- *   (aceito) e `declined` (recusado). E o que as ABAS recortam;
- * - `delivery_state` e a ENTREGA: `requested` (solicitado), `in_transit` (em
- *   transporte) e `arrived` (chegou). E o que o SELO da linha mostra, e o que a
- *   pessoa acompanha no aplicativo.
- *
- * Eles nao sao independentes: o servidor so deixa a entrega andar em pedido
- * `fulfilled` (`CHECK collar_tag_requests_entrega_exige_atendimento`). A tela
- * respeita isso oferecendo o botao certo em cada linha, e nao escondendo a
- * regra -- [proximaAcao] e onde ela mora.
- *
- * ## A TELA NAO DECIDE NADA, e isso e deliberado
- *
- * [proximaAcao] e [erroDoRastreio] existem para a tela nao OFERECER o que o
- * servidor vai recusar -- e nao para substituir a recusa. Quem decide e o caso
- * de uso, com `FOR UPDATE` sobre a linha; se estas funcoes forem apagadas, a
- * escrita continua recusada, so que depois do clique. E por isso que nenhuma
- * delas tem ramo que "corrija" valor nenhum.
+ * O vocabulario da FILA DA PLAQUINHA DA COLEIRA no painel, e a maquina de estados
+ * da entrega do lado da tela.
  */
 import type { Esquemas } from '../api/cliente.ts';
 import type { TipoDeSelo } from '../componentes/basicos.tsx';
@@ -57,13 +28,7 @@ export const VAZIO_DA_ABA = {
   declined: 'Nenhum pedido recusado.',
 } as const satisfies Record<DecisaoDoPedido, string>;
 
-/**
- * Os passos, nas palavras do cliente.
- *
- * `satisfies Record<...>` como trava: se o `enum` do contrato ganhar um passo, o
- * compilador do painel reprova aqui em vez de a tela mostrar `in_transit` cru
- * para quem atende. E a mesma trava de `CONTATOS` em `diretorio/fila.ts`.
- */
+/** Os passos, nas palavras do cliente. */
 export const ROTULO_DO_PASSO = {
   requested: 'Solicitado',
   in_transit: 'Em transporte',
@@ -86,24 +51,7 @@ export const AJUDA_DO_RASTREIO =
   'Opcional: nem todo envio tem rastreio. Cole o código como a transportadora o escreve — ' +
   'nenhum formato é exigido.';
 
-/**
- * A proxima acao da linha, e e ela que decide qual botao aparece.
- *
- * Espelha a tabela de transicoes do servidor
- * (`src/modules/tags/domain/entrega-da-plaquinha.ts`), e as ausencias sao as
- * mesmas:
- *
- * - pedido `pending` -> `atender` (e `recusar`, que a tela oferece ao lado). A
- *   entrega nao anda antes do aceite;
- * - pedido `declined` -> nada. Recusado nao anda, e nao volta;
- * - `requested` -> `despachar` (o passo "em transporte");
- * - `in_transit` -> `confirmar` (o passo "chegou");
- * - `arrived` -> nada. **Nao se volta atras**: desfazer uma chegada marcada por
- *   engano nao e transicao, e a tela nao oferece o que o servidor recusa.
- *
- * O rastreio pode ser corrigido em `in_transit` e em `arrived` -- repetir o
- * passo e permitido --, e isso e [podeCorrigirRastreio], que e outra pergunta.
- */
+/** A proxima acao da linha, e e ela que decide qual botao aparece. */
 export type ProximaAcao = 'atender' | 'despachar' | 'confirmar' | undefined;
 
 export function proximaAcao(pedido: Pedido): ProximaAcao {
@@ -114,7 +62,7 @@ export function proximaAcao(pedido: Pedido): ProximaAcao {
   return undefined;
 }
 
-/** O passo que cada acao de entrega alcanca. `atender` nao e de entrega. */
+/** O passo que cada acao de entrega alcanca. */
 export const PASSO_DA_ACAO = {
   despachar: 'in_transit',
   confirmar: 'arrived',
@@ -126,27 +74,12 @@ export const ROTULO_DA_ACAO = {
   confirmar: 'Marcar que chegou',
 } as const satisfies Record<'atender' | 'despachar' | 'confirmar', string>;
 
-/**
- * O rastreio pode ser corrigido nesta linha?
- *
- * Verdadeiro so depois de o pedido ter saido: o `CHECK`
- * `collar_tag_requests_rastreio_so_apos_sair` proibe rastreio em pedido que nao
- * saiu, e oferecer o campo antes disso seria oferecer um 400.
- */
+/** O rastreio pode ser corrigido nesta linha? */
 export function podeCorrigirRastreio(pedido: Pedido): boolean {
   return pedido.status === 'fulfilled' && pedido.delivery_state !== 'requested';
 }
 
-/**
- * O que esta errado no codigo de rastreio digitado, ou `undefined`.
- *
- * **Vazio e valido**: o rastreio e opcional, e campo em branco quer dizer "sem
- * rastreio". O que se recusa e so o que e claramente invalido -- e **nao ha
- * conferencia de formato de transportadora**, de proposito: Correios tem 13
- * simbolos, FedEx de 12 a 22, DHL 10, e regional tem o que quiser e muda. Uma
- * regra de formato aqui barraria envio legitimo, e a tela e o pior lugar para
- * essa barreira porque quem atende nao tem como contorna-la.
- */
+/** O que esta errado no codigo de rastreio digitado, ou `undefined`. */
 export function erroDoRastreio(valor: string): string | undefined {
   const limpo = valor.trim();
   if (limpo === '') return undefined;
@@ -159,16 +92,7 @@ export function erroDoRastreio(valor: string): string | undefined {
   return undefined;
 }
 
-/**
- * O que vai no corpo da atualizacao de entrega.
- *
- * Os TRES casos do rastreio, e os tres sao diferentes:
- *
- * - campo em branco com rastreio gravado -> `null`, que APAGA;
- * - campo em branco sem rastreio gravado -> ausente, porque nao ha o que mudar
- *   e mandar `null` registraria na trilha uma troca que nao houve;
- * - campo preenchido -> o texto, sem espaco nas bordas.
- */
+/** O que vai no corpo da atualizacao de entrega. */
 export function corpoDaEntrega(
   pedido: Pedido,
   passo: PassoAlcancavel,
@@ -182,17 +106,7 @@ export function corpoDaEntrega(
   return { delivery_state: passo, tracking_code: null };
 }
 
-/**
- * O endereco de entrega em linhas, MASCARADO para leitura.
- *
- * CEP e telefone passam pelas mascaras de `formato/` -- `cepDosOitoDigitos` e
- * `telefoneDoE164` --, e nao por um `replace` escrito aqui: quem atende le
- * `05435-000` e `(11) 98765-4321`, e uma segunda regra de mascara neste arquivo
- * divergiria da do resto do painel.
- *
- * **Este endereco e dado pessoal.** Ele sai nesta tela e so nela, nunca vai
- * para a trilha de auditoria e nunca e geocodificado (ADR-0006).
- */
+/** O endereco de entrega em linhas, MASCARADO para leitura. */
 export function enderecoEmLinhas(pedido: Pedido): readonly string[] {
   const e = pedido.delivery_address;
   const rua = e.complement
@@ -212,7 +126,7 @@ export function petDo(pedido: Pedido): string {
   return `${pedido.pet.display_name} · ${pedido.pet.species}`;
 }
 
-/** A data como o painel a escreve. Sem hora: a fila trabalha por dia. */
+/** A data como o painel a escreve. */
 export function dataCurta(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR');

@@ -1,68 +1,4 @@
-/**
- * A CAIXA DE NOTIFICACOES -- as iscas da camada de aplicacao.
- *
- * ===========================================================================
- * O QUE ESTE ARQUIVO PODE E O QUE NAO PODE MEDIR
- * ===========================================================================
- *
- * Esta e suite UNITARIA: ela roda sem banco. As regras que moram em SQL --
- * o agrupamento por (tipo, autor, dia), a regra do zero do contador, a excecao
- * da plaquinha e do achado, a retencao de 90 dias e o filtro de
- * `conta_habilitada` nos tres lugares -- **nao sao exercitadas aqui, e nao
- * podem ser**: elas sao as funcoes da migracao `20261018000020`, e so um
- * Postgres de verdade as executa.
- *
- * Elas FORAM exercitadas, contra um Postgres 16 com todas as migracoes
- * aplicadas, em `BEGIN`/`ROLLBACK`. O que esta aqui e o que o duble consegue
- * provar: que a aplicacao passa o dono certo, que ela nao inventa caminho para
- * a caixa de outra conta, e que "nao achei" vira 404 e nunca 403.
- *
- * ===========================================================================
- * O QUE CADA CASO MEDE
- * ===========================================================================
- *
- * 1. **Toda operacao vai ao porto com o dono vindo do token.** A isca e o
- *    `userId` registrado pelo duble: um servico que aceitasse um identificador
- *    de conta de fora, ou que trocasse os dois, reprova aqui.
- *
- * 2. **`marcarLida` traduz "nao achei" em 404, e NUNCA 403** (ADR-0021). O
- *    porto devolve `false` para "nao existe" e para "e de outra conta" -- as
- *    duas sao indistinguiveis de proposito, porque um 403 confirmaria que o
- *    `ref` existe. CONTRAPESO: quando o porto devolve `true`, nada e lancado.
- *
- * 3. **`listaVista` e `listar` sao caminhos SEPARADOS.** Listar NAO zera o
- *    contador, e zerar NAO marca item. E a separacao que implementa "abrir a
- *    lista zera o numero, os itens continuam nao lidos": se `listar` chamasse
- *    `listaVista` por dentro, este caso nao teria como existir.
- *
- * 4. **O limite e recortado em 30.** O contrato ja recusa 31 na borda; este
- *    recorte e o que impede um chamador interno de pedir 10 000 linhas por uma
- *    porta que nao passa pela borda.
- *
- * 5. **`dispensar` traduz "nao achei" em 404, e NUNCA 403** (ADR-0021), pela
- *    mesma razao de `marcarLida`. CONTRAPESO: quando o porto devolve `true`,
- *    nada e lancado.
- *
- * 7. **O COMUNICADO que nao chegou a esta conta vira 404, e NUNCA 403**
- *    (ADR-0021). O porto devolve `undefined` para "nao existe" e para "existe
- *    e nao chegou aqui", e as duas sao indistinguiveis de proposito -- um 403
- *    confirmaria que aquele `ref` foi disparado. CONTRAPESO: quando o porto
- *    acha, o comunicado volta inteiro e nada e lancado.
- *
- * 8. **Ler o comunicado NAO marca o aviso como lido nem o dispensa.** Abrir a
- *    pagina e abrir o item sao dois fatos, e encadea-los tiraria do app a
- *    unica forma de ler o texto sem afirmar que abriu o aviso.
- *
- * 6. **OS DOIS EIXOS SAO INDEPENDENTES, nos dois sentidos** -- e esta e a isca
- *    do pedido do cliente de 20/10/2026. `dispensar` nao chama `marcarLida`
- *    (dispensar sem ter lido e o caso COMUM: quem limpa a lista nao abre cada
- *    linha antes), e `marcarLida` nao chama `dispensar` (ler nao tira a linha
- *    da lista). Um servico que encadeasse as duas -- em qualquer direcao --
- *    reprova aqui, e reprova pelo NOME do caso. A regra em si (a linha sai da
- *    lista, o contador cai, e `read_at` fica nulo) e SQL da `20261020000011` e
- *    esta na suite de integracao; o que o duble prova e que a aplicacao nao
- *    costura os dois efeitos por tras.
- */
+/** A CAIXA DE NOTIFICACOES -- as iscas da camada de aplicacao. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -74,13 +10,7 @@ import type { CaixaDeNotificacoes } from '../ports/caixa-de-notificacoes.js';
 import { CaixaDeNotificacoesService } from './caixa-de-notificacoes-service.js';
 
 const DONO = 'c0ffee00-0000-4000-8000-000000000001' as UserId;
-/**
- * A data do comunicado, por `comoData` sobre um `Instant`.
- *
- * Construir a data direto reprova a regra `injectableClock` em `application/`:
- * tempo real mora so em `shared/time/clock.ts`, e `comoData` e a porta que
- * converte. Mesma forma de `comunicados-administrativos.test.ts`.
- */
+/** A data do comunicado, por `comoData` sobre um `Instant`. */
 const DISPARADO_EM = comoData(Date.UTC(2026, 9, 20, 12, 0, 0) as Instant);
 const OUTRA_CONTA = 'c0ffee00-0000-4000-8000-000000000002' as UserId;
 
@@ -99,8 +29,8 @@ function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
 }
 
 /**
- * O duble do porto. `marcarLidaDevolve` e o unico comportamento configuravel:
- * e ele que separa "achei" de "nao achei", que e a diferenca entre 204 e 404.
+ * O duble do porto. `marcarLidaDevolve` e o unico comportamento configuravel: e
+ * ele que separa "achei" de "nao achei", que e a diferenca entre 204 e 404.
  */
 function dubleDaCaixa(
   opcoes: {
@@ -121,9 +51,6 @@ function dubleDaCaixa(
     dispensar: [],
     buscarComunicado: [],
   };
-  // Sem `async`: um duble que nao espera nada nao e assincrono, e `async` sem
-  // `await` reprova o lint deste repositorio. `Promise.resolve` diz a mesma
-  // coisa sem a mentira.
   const porto: CaixaDeNotificacoes = {
     listar(usuario, pagina, limite) {
       chamadas.listar.push({ usuario, pagina, limite });

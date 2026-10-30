@@ -19,50 +19,6 @@ import '../../widgets/recorte_de_imagem.dart';
 import '../../widgets/visualizador_de_imagem.dart';
 
 /// A VITRINE DE FOTOS DO USUARIO — **visivel so ao dono**.
-///
-/// ## O que esta tela e, e o que ela nao e
-///
-/// Uma grade de ate NOVE fotos da propria conta, com a CAPA na posicao 0.
-/// **Ela nao aparece em nenhuma outra tela, para ninguem.** O ADR-0025 item 2
-/// proibe avatar de pessoa na superficie da `Rede` por nome, e o contrato
-/// afirma em dois lugares que `Conversation.participants` nunca traz foto de
-/// perfil — entao nao ha rota de vitrine de outra pessoa, e por isso nao ha
-/// tela que a desenhe. A ausencia e a defesa.
-///
-/// **Fora de proposito, e cada ausencia e deliberada:** legenda, curtida,
-/// contador e **marcar pessoa**. O ultimo e dado biometrico, e a recomendacao
-/// registrada e recusar para sempre. Nao e omissao a ser preenchida depois.
-///
-/// **Os pets nao entram aqui.** Foto de pet mora em `pet_photos`, com o ciclo
-/// de vida do cadastro do animal. Copiar a foto do pet para a vitrine criaria
-/// duas fotos do mesmo animal que divergem na primeira troca.
-///
-/// **E a tela nao aponta mais para a pagina deles**: o atalho que dizia isso em
-/// palavras saiu por pedido do cliente em 22/10/2026 (a nota esta no `build`).
-/// A separacao entre as duas midias continua inteira -- o que saiu foi a linha
-/// que a explicava, e nao a regra.
-///
-/// ## O PESO DA TELA, que e o motivo de a derivada de 320 px existir
-///
-/// A celula da grade tem [ladoDaCelula] = 104 dp. A 3x isso da **312 px
-/// reais**, e e por isso que a grade pede `grid_url` (a derivada de 320 px) e
-/// **nunca** `open_url` (1024 px) nem o original:
-///
-/// - a derivada de 176 px da foto unica do perfil seria **ampliada 1,8x**, e
-///   ampliar nao acrescenta informacao nenhuma — so borra;
-/// - a de 1024 px e dado demais, e a grade desenha ate NOVE de uma vez, entao o
-///   desperdicio e multiplicado por nove. Foi assim que a vitrine da Loja
-///   chegou a 9,8 MB numa tela.
-///
-/// E `cacheWidth` fecha a conta no decodificador: sem ele o `ui.Image` em
-/// memoria custa a area do ARQUIVO e nao a do quadro, e nove deles engasgam um
-/// aparelho modesto mesmo com o download pequeno.
-///
-/// ## `errorBuilder` em toda foto, e nao um retangulo cinza
-///
-/// Imagem que nao carrega vira a celula vazia COM RECADO, e nao um retangulo
-/// que promete algo que nao vem. Acontece de verdade: a derivada pode ainda nao
-/// existir (`status: processing`), e a rede do produto e usada na rua.
 class VitrineDeFotosDoUsuario extends StatefulWidget {
   const VitrineDeFotosDoUsuario({
     required this.api,
@@ -75,40 +31,17 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
   /// A LEITURA, e nao a `VitrineApi` inteira.
   final LeituraDaVitrine api;
 
-  /// A ESCRITA, em interface propria: `intencaoDeFotoDaVitrine` e
-  /// `substituir`, e nada mais.
-  ///
-  /// **Ate 19/10/2026 esta tela era SO DE LEITURA, e isso era o buraco.**
-  /// Medido: `FotoDaVitrine` e `VitrineApi.substituir` nao eram construidas
-  /// nem chamadas em lugar nenhum de `app/lib` nem de `app/test`, e o estado
-  /// vazio da tela dizia *"Adicione uma foto para comecar a sua vitrine"* sem
-  /// haver como adicionar. O cliente pediu a vitrine em 18/10 (*"perfil do
-  /// usuario com vitrine de fotos, parecido com instagram"*).
-  ///
-  /// Ela e um parametro proprio, e nao a `VitrineApi` inteira, pela razao que
-  /// o cabecalho de `EscritaDaVitrine` explica: a troca entre duas funcoes de
-  /// assinatura identica foi o defeito desta semana, e a interface estreita e
-  /// o que mantem a troca visivel.
+  /// A ESCRITA, em interface propria: `intencaoDeFotoDaVitrine` e `substituir`,
+  /// e nada mais.
   final EscritaDaVitrine escrita;
 
-  /// A fronteira com o aparelho. Parametro, e nao `Escopo`, como as outras
-  /// portas desta tela: e o que permite medir os quatro estados de permissao
-  /// sem aparelho.
+  /// A fronteira com o aparelho.
   final CameraEGaleria camera;
 
-  /// O unico caminho de bytes do app. Parametro pelo mesmo motivo.
+  /// O unico caminho de bytes do app.
   final EnvioDeFoto envio;
 
-  // `aoAbrirMeusPets` SAIU (cliente, 22/10/2026).
-  //
-  // Ele existia para UMA coisa: desenhar o atalho de `Meus pets` no pe da
-  // vitrine, e nulo nao o desenhava. Com a frase removida (ver a nota no
-  // `build`) o parametro nao tem mais o que ligar -- mantido, seria porta de
-  // entrada publica que nao faz nada, e a proxima pessoa a passaria achando
-  // que ela ainda desenha o atalho.
-
-  /// O lado da celula, em dp. 104 dp — tres colunas com folga numa tela de
-  /// 360 dp, e o numero de que saem os 312 px reais a 3x.
+  /// O lado da celula, em dp.
   static const double ladoDaCelula = 104;
 
   /// O vao entre celulas. 2 dp: a grade e um mosaico, e nao uma lista de
@@ -123,23 +56,17 @@ class VitrineDeFotosDoUsuario extends StatefulWidget {
 
   static const String recadoDeFotoQueNaoAbriu = 'Não deu para mostrar esta foto.';
 
-  /// O que o toque na celula faz. Vai em `hint`, e nao no nome: o leitor de
-  /// tela espera a ACAO ali, e o NOME da celula e o texto alternativo da foto.
+  /// O que o toque na celula faz.
   static const String dicaDeAmpliar = 'Ampliar';
 
   static const String rotuloDaCapa = 'Capa';
-
-  // -------------------------------------------------------------------------
-  // O CONTROLE DE ADICIONAR (19/10/2026)
-  // -------------------------------------------------------------------------
 
   static const String tirarFoto = 'Tirar foto';
 
   static const String escolherDaGaleria = 'Escolher da galeria';
 
   /// O unico botao de salvar desta tela, e ele so existe quando ha o que
-  /// salvar. **Nao e um "salvar foto" ao lado de outro salvar**: a tela nao
-  /// tem formulario, e este e o `Salvar` dela.
+  /// salvar.
   static const String salvar = 'Salvar';
 
   static const String aFotoEscolhida = 'A foto que você escolheu';
@@ -177,28 +104,14 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   String? _falha;
   bool _carregando = true;
 
-  /// A falha foi **falta de conta**, e nao defeito. Ver [faltaConta].
+  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  // -------------------------------------------------------------------------
-  // ACRESCENTAR UMA FOTO (19/10/2026)
-  // -------------------------------------------------------------------------
-
-  /// A foto que a pessoa escolheu no aparelho. **A fonte da PREVIA, e ela vem
-  /// do ARQUIVO LOCAL.**
-  ///
-  /// Nao se espera a derivada do servidor: a foto nasce `processing` com
-  /// `grid_url: null` -- medido contra a homologacao, o `PUT /v1/me/showcase`
-  /// respondeu `200` com `status: processing` e as duas URLs nulas, e so o
-  /// `GET` seguinte trouxe `status: ready`. Uma previa que esperasse por elas
-  /// ficaria vazia segundos depois da escolha, parecendo travada.
+  /// A foto que a pessoa escolheu no aparelho.
   FotoLocal? _escolhida;
 
   /// O `upload_id` de uma foto cujos **bytes ja estao no armazenamento** e que
   /// ainda **nao esta na vitrine**, ou nulo quando nao ha nenhuma.
-  ///
-  /// E este campo que o [salvar] manda em `ShowcasePhotoInput.upload_id`, e e
-  /// ele a diferenca entre "ha foto escolhida" e "ha foto para gravar".
   String? _uploadPendente;
 
   bool _enviando = false;
@@ -253,16 +166,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   }
 
   /// O RECORTE, entre "a pessoa escolheu" e o envio.
-  ///
-  /// Cliente, 29/10/2026: *"precisamos implementar em todo sistema que tem
-  /// upload de imagem ou foto, o recurso pro usuario fazer o crop e ajustar a
-  /// posicao da imagem"*. Nulo e a pessoa cancelando -- **o mesmo nulo** que o
-  /// seletor devolve quando ela desiste de escolher, e que esta tela ja trata.
-  ///
-  /// A forma vem de `DERIVADAS_DA_VITRINE_DO_USUARIO` (1024 x 1024) em
-  /// `src/modules/media/domain/derivadas.ts` -- o corte que o SERVIDOR faz.
-  /// A grade desta tela usa `childAspectRatio: 1` e concorda, mas quem manda
-  /// na janela e quem corta.
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: widget.camera,
@@ -273,24 +176,8 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
 
   Future<void> _abrirOsAjustes() => widget.camera.abrirAjustesDoSistema();
 
-  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor
-  /// dizer qualquer coisa.
-  ///
-  /// Padrao decidido pelo cliente em 19/10/2026: *"quando o usuario fizer o
-  /// upload de qualquer foto no app, voce deve fazer o upload e apresentar
-  /// como vai ficar de preview, e ao salvar o voce salva a foto"*.
-  ///
-  /// **HEIC ENTRA AQUI**, e esta e a diferenca em relacao a capa do evento:
-  /// `ShowcasePhotoIntentInput.content_type` declara
-  /// `[image/jpeg, image/png, image/heic, image/webp]`, com a razao escrita no
-  /// contrato -- *"a vitrine sai de um CELULAR, e foto de iPhone e HEIC;
-  /// recusa-lo na entrada tiraria a vitrine da mao de metade dos aparelhos"*.
-  /// Por isso a lista usada e `tiposDeFotoAceitos`, e nao
-  /// `tiposDeFotoAceitosSemHeic`.
-  ///
-  /// **Trocar de foto antes de salvar**: o `upload_id` anterior e descartado
-  /// aqui. O objeto do primeiro envio cai no expurgo de dez minutos do
-  /// servidor -- nao ha rota de cancelamento de intencao no contrato.
+  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
+  /// qualquer coisa.
   Future<void> _escolheu(FotoLocal foto) async {
     final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
     if (recusa != null) {
@@ -312,22 +199,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       _enviando = true;
     });
 
-    // `EnvioParaConfirmarDepois` com a FUNCAO DA ROTA, e nao com uma etiqueta
-    // de proposito: `ShowcasePhotoIntentInput` nao tem campo `purpose`, e e a
-    // rota (`POST /v1/me/showcase/photo-intents`) que fixa o `user_showcase`.
-    //
-    // **E A FUNCAO E A DA VITRINE, conferida aqui por escrito.** O defeito
-    // consertado em 19/10 era exatamente este: a vitrine chamando o
-    // registrador de capa de encontro e gravando `network_event` numa foto de
-    // pessoa. As duas funcoes tem assinatura identica e a troca COMPILA.
-    // Medido contra a homologacao em 19/10/2026: a intencao desta rota nasce
-    // em `people/original/jhA9w3MKgA3cK5NpPp72ag` e a derivada da grade sai em
-    // `https://img-hml.bichu.app/people/thumb/...` -- o prefixo `people/` e a
-    // cara do `user_showcase`, e o da capa e `events/`.
-    //
-    // **`FotoDaVitrine` NAO e usada aqui, e a ausencia e deliberada.** Ela
-    // tambem nao confirma nada (`confirmar` vazio), mas ela nao GUARDA o
-    // `upload_id` -- e sem ele a tela nao tem o que mandar no `PUT`.
     final destino = EnvioParaConfirmarDepois(
       pedir: widget.escrita.intencaoDeFotoDaVitrine,
     );
@@ -341,9 +212,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
           _uploadPendente = destino.uploadId;
           _confirmacao = VitrineDeFotosDoUsuario.fotoProntaParaSalvar;
         case DesfechoDoEnvio.semSinal:
-          // **A previa SAI quando o envio falha**: o `Salvar` nao teria o que
-          // gravar, e manter um retrato na tela depois de um envio que nao
-          // aconteceu e a tela prometendo uma foto que nao existe.
           _escolhida = null;
           _faixa = const MensagemDeErro(
             texto: VitrineDeFotosDoUsuario.fotoSemSinal,
@@ -365,28 +233,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   }
 
   /// O `Salvar`: a foto pendente **entra na vitrine**.
-  ///
-  /// ## A escrita e DECLARATIVA, e e por isso que as fotos que ja estao vao
-  /// junto
-  ///
-  /// `PUT /me/showcase` manda a vitrine INTEIRA, na ordem: `photos: []` tira
-  /// todas. Mandar so a foto nova apagaria as outras oito -- e o teste que
-  /// medisse "a foto nova esta na resposta" ficaria verde nisso.
-  ///
-  /// **A foto nova vai no FIM**, e nao no comeco: a posicao 0 e a capa, e
-  /// acrescentar nao e trocar a capa. Quem quiser trocar reordena, que e a
-  /// outra funcao do mesmo `PUT` e nao e desta entrega.
-  ///
-  /// **A foto sem `upload_id` e descartada da lista**, e isso e o contrato e
-  /// nao descuido: `ShowcasePhotoLida.uploadId` fica nulo depois que o
-  /// varredor apagou a intencao, e `ShowcasePhotoInput.upload_id` e
-  /// obrigatorio. Mandar nulo e um `400` que apagaria a vitrine inteira pela
-  /// metade.
-  ///
-  /// **E a CONFIRMACAO da intencao e esta gravacao**, na mesma transacao do
-  /// servidor -- nao ha operacao de confirmacao separada no contrato. Sem ela
-  /// a varredura de vencidos apagaria a foto dez minutos depois, que foi o que
-  /// aconteceu com a foto do achado.
   Future<void> _salvar() async {
     final pendente = _uploadPendente;
     if (pendente == null) return;
@@ -424,9 +270,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       anunciar(context, VitrineDeFotosDoUsuario.fotoSalva);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      // **A previa e o `upload_id` FICAM**: o envio aconteceu, e tentar de
-      // novo e so o `PUT`. Limpar aqui faria a pessoa escolher e subir a foto
-      // outra vez por uma falha que nao foi dela.
       final mensagem = MensagensDeErro.de(falha);
       setState(() {
         _salvando = false;
@@ -453,15 +296,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
-        // Falha NAO vira vitrine vazia: "ainda nao ha foto" e "nao deu para
-        // carregar" sao coisas diferentes, e a segunda tem botao de tentar de
-        // novo. Mostrar o vazio no lugar do erro faria a pessoa achar que as
-        // fotos dela sumiram.
-        // **O 401 DEIXAVA ESTA TELA SEM FRASE NENHUMA.** O catalogo devolve
-        // `texto: ''` para `unauthenticated` desde 18/10, e `_erro` desenhava
-        // esse vazio seguido de um `Tentar de novo` -- um botao solto embaixo
-        // de nada. Medido: `/v1/me/showcase` responde `401 unauthenticated`
-        // com `next_action: sign_in`.
         _faltaConta = faltaConta(falha);
         _falha = MensagensDeErro.de(falha).texto;
         _carregando = false;
@@ -476,22 +310,12 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
 
     return Scaffold(
       appBar: AppBar(title: const Text(VitrineDeFotosDoUsuario.tituloDaTela)),
-      // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
-      // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
-      // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
-      // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
-      // `Tentar de novo` da faixa.
       body: SafeArea(
         child: ArrastarParaAtualizar(
           aoAtualizar: _carregar,
           child: ListView(
             padding: const EdgeInsets.all(BichuEspaco.e4),
             children: [
-            // A ORIENTACAO DE TAMANHO, uma linha, VISIVEL NA TELA e antes de
-            // qualquer envio — o cliente pediu expressamente. Ela vem de
-            // `orientacaoDeTamanhoDaImagem`, o ponto unico: o teto de 5 MB
-            // tambem vale na politica assinada e no servidor, e um texto
-            // proprio aqui seria o segundo numero que divergiria do primeiro.
             Text(
               orientacaoDeTamanhoDaImagem,
               style: textos.bodySmall?.copyWith(color: cores.textSecondary),
@@ -499,7 +323,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             const SizedBox(height: BichuEspaco.e4),
             if (_carregando)
               const Center(child: Padding(padding: EdgeInsets.all(BichuEspaco.e4), child: CircularProgressIndicator()))
-            // SEM CONTA NAO E ERRO. Ver `widgets/convite_para_entrar.dart`.
             else if (_faltaConta)
               const ConviteParaEntrar(secao: SecaoComConta.minhasFotos)
             else if (_falha != null)
@@ -507,40 +330,8 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             else ...<Widget>[
               _grade(_vitrine, cores, textos),
               const SizedBox(height: BichuEspaco.e4),
-              // O CONTROLE DE ADICIONAR, que a tela NAO TINHA ate 19/10/2026.
-              // Ele fica depois da grade porque e o que se faz com a grade na
-              // tela: a ordem de leitura entrega o que ja existe antes do que
-              // acrescenta.
               _bloco(cores, textos),
             ],
-            // ---------------------------------------------------------------
-            // O ATALHO DOS PETS SAIU INTEIRO (cliente, 22/10/2026)
-            // ---------------------------------------------------------------
-            // Literal: *"remova essa frase dentro de minhas fotos, as fotos
-            // dos seus pets ficam na pagina de cada um"*.
-            //
-            // **SAIU A LINHA INTEIRA, e nao so o texto dela.** A frase ERA o
-            // atalho: a linha tinha um `Text` e um `chevron_right` dentro de um
-            // `InkWell`, e nada mais. Apagar so o texto deixaria uma seta
-            // tocavel sem nome nenhum -- controle sem rotulo acessivel, que e o
-            // SC 4.1.2, e alvo de 100% da largura que nao diz para onde vai.
-            //
-            // **E NENHUM CAMINHO SE FECHOU, e isto foi conferido:** `Meus
-            // pets` continua sendo o primeiro bloco da secao `Perfil` (a ordem
-            // que o cliente fixou em 18/10), que e de onde se chega a esta
-            // vitrine. O atalho era um segundo caminho para o lugar de onde a
-            // pessoa veio.
-            //
-            // **A frase nao era pedido dele**, e isto foi medido antes de
-            // apagar: ela existe desde o commit mais antigo que esta arvore
-            // alcanca neste arquivo (`62e0a4d3`, 18/10) e nenhum commit a
-            // introduz com citacao do cliente. Ela ATRAVESSOU a remocao dos
-            // textos de apoio de 18/10 (*"isso esta deixando o app poluido"*)
-            // sem ser removida -- e e essa remocao que ele esta completando
-            // aqui, nao revertendo.
-            //
-            // `aoAbrirMeusPets` saiu junto com ela: ver a nota do construtor.
-            // ---------------------------------------------------------------
           ],
         ),
         ),
@@ -549,13 +340,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   }
 
   /// O bloco de acrescentar: previa, recado, os dois botoes e o `Salvar`.
-  ///
-  /// **Com a vitrine CHEIA nao ha botao nenhum**, e isso e o contrato e nao
-  /// zelo: com nove fotos `createShowcasePhotoUploadIntent` responde `400` em
-  /// vez de assinar, com a razao escrita -- *"assinar a decima seria entregar
-  /// autorizacao de escrita que a vitrine nunca vai aceitar, e o objeto
-  /// ficaria no balde ate o varredor passar"*. Um botao que leva a `400` e um
-  /// botao que promete.
   Widget _bloco(BichuCores cores, TextTheme textos) {
     final vitrine = _vitrine;
     final cheia = vitrine != null && vitrine.estaCheia && _uploadPendente == null;
@@ -582,7 +366,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
         if (cheia)
           FaixaDeAviso(
             peso: PesoDaFaixa.informativo,
-            // O numero sai da RESPOSTA, e nao de uma constante da tela.
             texto: VitrineDeFotosDoUsuario.vitrineCheia(vitrine.teto),
           )
         else ...<Widget>[
@@ -593,10 +376,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
                 height: _alturaDaPrevia,
                 width: double.infinity,
                 child: local != null
-                    // `PreviaDaFoto` porque desenhar arquivo do aparelho pede
-                    // `dart:io`, proibido dentro de `lib/telas` pelo portao de
-                    // diretivas -- e ela ja pede `cacheWidth` ao
-                    // decodificador. **Nunca `Image.file` cru.**
                     ? PreviaDaFoto(
                         foto: local,
                         descricao: VitrineDeFotosDoUsuario.aFotoEscolhida,
@@ -617,9 +396,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             ),
             const SizedBox(height: BichuEspaco.e3),
           ],
-          // **Sem camera o botao SOME**: um botao que nao leva a nada e pior
-          // que a ausencia dele. A galeria continua, e ela nao tem estado de
-          // permissao proprio (ver `CameraDoAparelho`).
           if (_permissaoDaCamera != EstadoDaPermissao.indisponivel) ...<Widget>[
             BotaoSecundario(
               rotulo: VitrineDeFotosDoUsuario.tirarFoto,
@@ -634,9 +410,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             ),
             child: const Text(VitrineDeFotosDoUsuario.escolherDaGaleria),
           ),
-          // **O `Salvar` so existe quando ha o que salvar**, e ele e o UNICO
-          // botao primario desta tela. Nao e um "salvar foto" ao lado de um
-          // outro salvar: a tela nao tem formulario, e este e o salvar dela.
           if (_uploadPendente != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e3),
             BotaoPrimario(
@@ -650,9 +423,9 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  /// A altura da previa. Mais alta que a celula da grade de proposito: a
-  /// previa existe para a pessoa ver a foto que escolheu, e 104 dp nao mostram
-  /// uma foto -- mostram uma miniatura dela.
+  /// A altura da previa. Mais alta que a celula da grade de proposito: a previa
+  /// existe para a pessoa ver a foto que escolheu, e 104 dp nao mostram uma
+  /// foto -- mostram uma miniatura dela.
   static const double _alturaDaPrevia = 220;
 
   Widget _erro(String mensagem, BichuCores cores, TextTheme textos) {
@@ -688,9 +461,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       );
     }
 
-    // `shrinkWrap` porque a grade mora dentro de um `ListView`: ate nove
-    // celulas nao justificam uma area de rolagem propria, e duas areas de
-    // rolagem encaixadas e o que faz o gesto da pessoa ir para a errada.
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -700,73 +470,13 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
         maxCrossAxisExtent: VitrineDeFotosDoUsuario.ladoDaCelula,
         mainAxisSpacing: VitrineDeFotosDoUsuario.vaoDaGrade,
         crossAxisSpacing: VitrineDeFotosDoUsuario.vaoDaGrade,
-        // 1:1. A derivada da grade e quadrada e cortada na origem, entao a
-        // celula tem a mesma proporcao e nao sobra faixa vazia.
         childAspectRatio: 1,
       ),
-      // **A LISTA INTEIRA vai para a celula, e nao a foto dela sozinha**
-      // (cliente, 26/10/2026). Ver [_celula] para o porque: sem a lista, o
-      // toque abre o visualizador com UMA URL e o carrossel que ele tem fica
-      // inalcancavel daqui.
       itemBuilder: (context, indice) => _celula(fotos, indice, cores, textos),
     );
   }
 
   /// Uma celula da grade, **tocavel quando ha a foto ABERTA**.
-  ///
-  /// ## A derivada da foto aberta existia desde antes da tela que a abre
-  ///
-  /// `DERIVADAS_DA_VITRINE_DO_USUARIO` declara `card` 1024 x 1024 e a
-  /// descreve, por escrito, como *"a foto ABERTA, que e a unica que a pessoa
-  /// olha grande, e portanto a unica que mira a faixa de 300-500 KB"*. O
-  /// contrato a entrega em `open_url`, e `FotoDaVitrineLida.urlAberta` a
-  /// decodifica desde que o modelo existe.
-  ///
-  /// **E nenhuma celula tinha `onTap`.** O app baixava 320 px para a grade,
-  /// guardava 1024 px no balde, e nao havia gesto que os mostrasse. Medido em
-  /// 20/10/2026, ao procurar visualizador para reusar no evento: nao havia
-  /// visualizador NENHUM no app -- nem `InteractiveViewer`, nem `photo_view`,
-  /// nem `Hero`, nem um `onDoubleTap`.
-  ///
-  /// Agora ha um, em `widgets/visualizador_de_imagem.dart`, e foi posto em
-  /// `widgets/` exactamente para esta segunda superficie nao o duplicar.
-  ///
-  /// ## Celula SEM foto nao oferece toque
-  ///
-  /// `processing` e `rejected` nao tem `open_url`, e a celula desenha o
-  /// ESTADO em texto. Envolve-la num `InkWell` faria um quadrado que pinta
-  /// respingo, se anuncia como botao e abre uma tela preta. A guarda e a
-  /// ausencia da URL, e nao o enum: `ready` sem derivada e estado possivel.
-  ///
-  /// ## O CARROSSEL ESTAVA AQUI E NAO ERA ALCANCAVEL (26/10/2026)
-  ///
-  /// O cliente repetiu o pedido de 22/10 porque ele nao tinha sido atendido
-  /// desta tela: *"as fotos publicadas devem ser clicaveis e abrir no tamanho
-  /// maior com um botão para avançar ou retroceder para a proxima imagem, isso
-  /// eu já tinha te pedido tambem"*.
-  ///
-  /// E ele estava certo, e o defeito era de UMA linha: a celula chamava
-  /// `VisualizadorDeImagem.abrir`, que recebe **uma** URL. O visualizador
-  /// ganhou `PageView`, setas e contador em 22/10 -- e com lista de um
-  /// elemento ele nao desenha nenhum dos tres, de proposito (um carrossel de
-  /// um promete navegacao que nao tem para onde ir). Entao a foto abria
-  /// ampliada, sozinha, e **nao havia como avancar**: o carrossel existia no
-  /// app e nunca era alcancado por esta tela.
-  ///
-  /// Agora a celula chama [VisualizadorDeImagem.abrirVarias] com a vitrine
-  /// INTEIRA e o indice da foto tocada.
-  ///
-  /// ## O INDICE E CONTADO NA LISTA FILTRADA, E ISSO NAO E DETALHE
-  ///
-  /// [VisualizadorDeImagem.abrirVarias] **descarta URL em branco** antes de
-  /// empilhar a rota (`Image.network('')` lanca, e branco e o que chega de
-  /// uma derivada ainda em processamento). Entao passar o indice da GRADE
-  /// seria um defeito silencioso: uma foto `processing` na posicao 0 encurta a
-  /// lista em um, e tocar a terceira celula abriria a quarta foto.
-  ///
-  /// A mesma varredura que monta as URLs conta o indice, numa passada: quem
-  /// nao tem [FotoDaVitrineLida.urlAberta] nao entra na lista **e nao ocupa
-  /// posicao nela**.
   Widget _celula(
     List<FotoDaVitrineLida> fotos,
     int indice,
@@ -788,9 +498,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
             decoration: moldura,
             child: _imagemDaCelula(foto, cores, textos),
           ),
-          // A CAPA, marcada. `position: 0` e a capa, e reordenar troca a capa:
-          // o rotulo sai da ORDEM e nao de um campo proprio, que divergiria
-          // dela na primeira reordenacao.
           if (foto.ehCapa)
             Positioned(
               left: BichuEspaco.e1,
@@ -817,8 +524,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     final aberta = foto.urlAberta;
     if (aberta == null || aberta.isEmpty) return conteudo;
 
-    // AS URLS ABERTAS e o indice da tocada DENTRO delas, numa passada so.
-    // Ver a prosa acima: o indice da grade nao serve porque a lista encurta.
     final abertas = <String>[];
     var inicial = 0;
     for (var i = 0; i < fotos.length; i++) {
@@ -828,11 +533,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       abertas.add(url);
     }
 
-    // **SEM `excludeSemantics`, ao contrario da capa do evento**, e a
-    // diferenca e de conteudo e nao de gosto: ali dentro ha DOIS nos que
-    // valem -- o texto alternativo da foto e o rotulo `Capa` --, e excluir
-    // calaria o segundo. O `Semantics` daqui so acrescenta a FUNCAO (botao) e
-    // a ACAO (`hint`); o NOME continua vindo de dentro.
     return Semantics(
       button: true,
       hint: VitrineDeFotosDoUsuario.dicaDeAmpliar,
@@ -841,10 +541,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
         onTap: () => VisualizadorDeImagem.abrirVarias(
           context,
           urls: abertas,
-          // **O texto alternativo e o da foto TOCADA**, e e o que o
-          // visualizador documenta: ele tem um campo para o conjunto, nao um
-          // por item, porque nenhuma das superficies de hoje traz `alt_text`
-          // por foto ali dentro.
           textoAlternativo: foto.textoAlternativo,
           inicial: inicial,
         ),
@@ -856,9 +552,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   Widget _imagemDaCelula(FotoDaVitrineLida foto, BichuCores cores, TextTheme textos) {
     final endereco = foto.urlDaGrade;
 
-    // Sem derivada ainda (`processing`) ou recusada: a celula diz o estado em
-    // vez de prometer uma imagem que nao vem. O motivo da recusa SAI na tela --
-    // sem ele a pessoa le "recusada" e nao tem como consertar.
     if (endereco == null || endereco.isEmpty) {
       final recado = foto.estado == EstadoDaFoto.recusada
           ? (foto.motivoDaRecusa ?? VitrineDeFotosDoUsuario.recadoDeFotoQueNaoAbriu)
@@ -875,21 +568,10 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
       );
     }
 
-    // `ImagemDaRede`, e NAO um `Image.network` proprio. Ela ja faz as duas
-    // coisas que decidem o peso desta tela -- `cacheWidth` pela largura que a
-    // celula REALMENTE pinta, e `errorBuilder` sempre -- e mora fora de
-    // `lib/telas`, onde `dart:io` e proibido. Reescrever aqui seria a segunda
-    // definicao de "como o app desenha imagem de servidor", e a segunda e a
-    // que esquece o `cacheWidth` na primeira edicao.
-    //
-    // `proporcao: 1` porque a derivada da grade e QUADRADA e cortada na origem
-    // (320 x 320): a celula tem a mesma proporcao e nao sobra faixa vazia.
     return ImagemDaRede(
       url: endereco,
       descricao: foto.textoAlternativo,
       raio: BichuRaio.sm,
-      // O retrato de uma pessoa falhando pede outro desenho que uma fachada
-      // falhando, e e por isso que este simbolo e parametro.
       simboloDeFalha: Icons.photo_outlined,
     );
   }

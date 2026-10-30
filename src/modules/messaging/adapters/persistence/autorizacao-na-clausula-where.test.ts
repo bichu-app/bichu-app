@@ -1,40 +1,4 @@
-/**
- * A autorização da conversa está na cláusula `WHERE`, e o SQL compilado prova.
- *
- * ## Por que conferir o SQL, e não a resposta
- *
- * `application/conversation-service.test.ts` afirma que conversa de outra
- * pessoa responde 404, e ele passa. Ele passa porque **o dublê devolve
- * `undefined`**, e não porque a consulta filtra: o repositório de verdade não
- * participa daquele arquivo. Um `buscarDoChamador` que ignorasse o segundo
- * argumento continuaria verde lá com o furo de pé.
- *
- * O ADR-0021 não diz "não devolva a linha do outro". Ele diz **onde** a decisão
- * mora, e isso não é observável de fora: a consulta que traz a linha do outro e
- * a descarta num `if` responde igual — até o dia em que alguém mexe no `if`, e
- * aí não existe teste que acuse, porque o `if` era o teste.
- *
- * Este arquivo é o instrumento da BICHUS-92
- * (`identity/adapters/persistence/autorizacao-na-clausula-where.test.ts`) com a
- * emenda da BICHUS-237, aplicado ao adaptador de conversas: ele compila as
- * consultas com `DummyDriver`, sem banco e sem executá-las, lê o predicado, e
- * confere o valor ligado à posição `$n` **daquele** predicado. Conferir
- * `parameters.includes(CHAMADOR)` seria mais frouxo do que parece — numa
- * consulta que também liga o id da conversa, ela aprovaria
- * `where('tutor_user_id', '=', conversaId)`: coluna certa, operador certo,
- * valor errado.
- *
- * Ele lê o **SQL compilado**, nunca o texto-fonte do adaptador. A distinção
- * importa: uma conferência que procurasse a coluna no arquivo casaria com a
- * menção dentro deste comentário e dentro do comentário do próprio adaptador, e
- * ficaria verde com a cláusula removida.
- *
- * ## A isca, e como ela foi provada
- *
- * Cada mecanismo foi desligado em `kysely-conversation-repository.ts`, a suíte
- * rodou, e o mecanismo foi restaurado. Os números medidos estão no rodapé do
- * arquivo, escritos depois da execução.
- */
+/** A autorização da conversa está na cláusula `WHERE`, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -61,13 +25,7 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const DESDE = 1_790_000_000_000 as Instant;
 const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
-/**
- * Kysely sem banco: ele compila a consulta e não a executa.
- *
- * É o caminho REAL — o mesmo construtor e o mesmo compilador de dialeto do
- * Postgres que a aplicação usa. Um SQL escrito à mão aqui seria o atalho que
- * parece equivalente e esconde exatamente o que se foi conferir.
- */
+/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -77,12 +35,7 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/**
- * Os dois predicados do chamador, como o compilador do Postgres os escreve.
- *
- * As expressões cobram o OPERADOR junto do nome. Sem isso, um `is not` com a
- * coluna certa passaria — e `is not $1` casa toda linha da tabela.
- */
+/** Os dois predicados do chamador, como o compilador do Postgres os escreve. */
 const PREDICADO_DO_TUTOR = /"tutor_user_id"\s*=\s*\$(\d+)/g;
 const PREDICADO_DO_ACHADOR = /"finder_user_id"\s*=\s*\$(\d+)/g;
 
@@ -91,30 +44,9 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/**
- * **A cláusula `WHERE`, e nada antes dela.**
- *
- * Esta função existe por um furo medido, e o furo é o motivo deste comentário
- * ser longo. A leitura da conversa menciona `tutor_user_id` DUAS vezes: uma no
- * `WHERE`, que autoriza, e outra na expressão `CASE` que decide de que lado
- * está quem chamou, que não autoriza nada. A primeira versão desta bancada
- * procurava o predicado no SQL inteiro — e, com a cláusula de autorização
- * REMOVIDA do `WHERE`, ela continuava achando a ocorrência do `CASE` e
- * **aprovava**. Medido: a suíte inteira ficou verde com o furo de pé, 0 casos
- * reprovados.
- *
- * É a forma exata do defeito que a bancada existe para impedir, um nível acima:
- * conferir a cláusula que se espera encontrar em vez da que existe. Agora o
- * recorte é explícito — só o texto a partir do primeiro ` where ` conta, e o
- * `CASE` da lista de seleção fica de fora dele.
- */
+/** **A cláusula `WHERE`, e nada antes dela.** */
 function clausulaWhere(sql: string): string {
   const corte = sql.indexOf(' where ');
-  // 21/10/2026: antes devolvia `''`. Num SQL sem `WHERE` -- que e a forma mais
-  // completa de perder a autorizacao -- o recorte vazio nao tem predicado
-  // nenhum a achar, e isso tem a mesma cor de "conferi e esta no lugar".
-  // Corte que nao encontra o ponto de corte reprova; e a licao do conserto de
-  // `busca-nao-e-oraculo.test.ts`, do mesmo dia.
   assert.ok(
     corte >= 0,
     'a consulta ficou SEM clausula WHERE: ela atinge a tabela inteira, e o ' +
@@ -123,8 +55,6 @@ function clausulaWhere(sql: string): string {
   return sql.slice(corte);
 }
 
-// AS DUAS DIRECOES DO RECORTE. A que reprova e a que decide: sem ela, voltar
-// para `return ''` deixa o arquivo verde com a autorizacao fora do `WHERE`.
 void describe('o recorte da clausula WHERE', () => {
   void it('REPROVA um SQL sem `WHERE`, em vez de devolver vazio', () => {
     assert.throws(
@@ -134,8 +64,6 @@ void describe('o recorte da clausula WHERE', () => {
   });
 
   void it('com `WHERE`, o recorte deixa a lista de selecao FORA', () => {
-    // O motivo historico esta no cabecalho: o `CASE` da lista de selecao fazia
-    // a conferencia achar a ocorrencia de outro lugar e APROVAR.
     const recorte = clausulaWhere(
       'select case when "m"."sender" = $1 then 1 else 0 end as "meu" ' +
         'from "messages" as "m" where "m"."conversation" = $2',
@@ -145,14 +73,7 @@ void describe('o recorte da clausula WHERE', () => {
   });
 });
 
-/**
- * TODOS os valores ligados às posições que aquele predicado ocupa NO `WHERE`.
- *
- * Plural de propósito: uma consulta pode carregar o chamador em mais de um
- * predicado, e todos precisam estar ligados a ele. A posição `$n` é lida de
- * volta contra a lista completa de parâmetros, porque a numeração do Postgres é
- * do enunciado inteiro e não do recorte.
- */
+/** TODOS os valores ligados às posições que aquele predicado ocupa NO `WHERE`. */
 function valoresLigadosA(predicado: RegExp, compilada: Compilada): unknown[] {
   const copia = new RegExp(predicado.source, 'g');
   const clausula = clausulaWhere(compilada.sql);
@@ -205,10 +126,6 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
   });
 
   void it('as MENSAGENS carregam o chamador na própria consulta', () => {
-    // Este é o caso que justifica o `INNER JOIN` do adaptador. Sem ele, a
-    // autorização passaria a depender de quem chama ter lido a conversa antes,
-    // e um caminho novo que esquecesse a leitura publicaria a conversa inteira
-    // sem que nenhum teste de comportamento acusasse.
     const compilada = construtorDasMensagens(semBanco, CONVERSA, CHAMADOR, PAGINA).compile();
     exigirChamadorNoWhere(compilada, 'a leitura de mensagens');
     assert.match(
@@ -242,10 +159,6 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
   });
 
   void it('a contagem do falso achador em série olha só o lado do ACHADOR', () => {
-    // Sem este predicado, quem tem três animais perdidos ao mesmo tempo escreve
-    // em três casos distintos em 24 h fazendo o que o produto existe para ele
-    // fazer, e é retido para revisão humana SEM ser avisado — porque o critério
-    // 11 manda não avisar. A nota do contrato nomeia o alvo: quem ABORDA.
     const compilada = construtorDosCasosDistintosDaConta(semBanco, CHAMADOR, DESDE).compile();
     const achado = /"finder_user_id"\s*=\s*\$(\d+)/.exec(compilada.sql);
     assert.ok(
@@ -256,9 +169,6 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
   });
 
   void it('a contagem conta CASOS DISTINTOS, e não mensagens (critério 17)', () => {
-    // `count(*)` aqui inverteria a contramedida: trinta mensagens num caso só
-    // disparariam o gatilho do falso achador em série, e uma mensagem em três
-    // casos diferentes não disparia.
     const { sql } = construtorDosCasosDistintosDaConta(semBanco, CHAMADOR, DESDE).compile();
     assert.match(
       sql,
@@ -268,16 +178,7 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
   });
 });
 
-/**
- * Duas junções cuja quebra NÃO aparece em predicado nenhum.
- *
- * O predicado do chamador responde "esta pessoa é parte de ALGUMA conversa".
- * Quem responde "estas mensagens são DESTA conversa" e "este nome é do tutor
- * DESTA conversa" é a correlação entre as tabelas, e ela é coluna contra
- * coluna: nenhum parâmetro é ligado, então uma isca que só lesse `$n` fica
- * verde com a correlação removida e a consulta passa a perguntar a pergunta
- * errada com a resposta certa ao lado.
- */
+/** Duas junções cuja quebra NÃO aparece em predicado nenhum. */
 void describe('a correlação entre as tabelas, e não só o predicado', () => {
   void it('as mensagens são correlacionadas À conversa, coluna contra coluna', () => {
     const { sql } = construtorDasMensagens(semBanco, CONVERSA, CHAMADOR, PAGINA).compile();
@@ -310,8 +211,6 @@ void describe('a correlação entre as tabelas, e não só o predicado', () => {
   });
 
   void it('o estado do caso vem do caso DESTA conversa', () => {
-    // Quebrada, o critério 8 inverte de lado: a conversa fecharia (ou deixaria
-    // de fechar) pelo caso de outra pessoa.
     const { sql } = construtorDaBuscaDoChamador(semBanco, CONVERSA, CHAMADOR).compile();
     assert.match(
       sql,
@@ -330,8 +229,6 @@ void describe('a correlação entre as tabelas, e não só o predicado', () => {
   });
 
   void it('ISCA — uma junção correlacionada a um PARÂMETRO é outra pergunta', () => {
-    // A forma exata do defeito que o molde de predicado não pega: o dono certo
-    // continua ligado no SQL, e a consulta deixa de correlacionar as tabelas.
     const solta = semBanco
       .selectFrom('conversation_messages')
       .innerJoin('conversations', (j) => j.on('conversations.id', '=', CONVERSA))
@@ -339,7 +236,6 @@ void describe('a correlação entre as tabelas, e não só o predicado', () => {
       .where('conversations.tutor_user_id', '=', CHAMADOR)
       .where('conversations.finder_user_id', '=', CHAMADOR)
       .compile();
-    // O predicado do chamador está intacto: a conferência de cima APROVA isto.
     exigirChamadorNoWhere(solta, 'a isca da correlação');
     assert.ok(
       !/on "conversations"\."id" = "conversation_messages"\."conversation_id"/.test(solta.sql),
@@ -350,8 +246,6 @@ void describe('a correlação entre as tabelas, e não só o predicado', () => {
 
 void describe('a retenção preserva a primeira, e não a última', () => {
   void it('ela só escreve quando ainda não havia retenção', () => {
-    // Sobrescrever faria a fila de moderação perder há quanto tempo aquilo está
-    // esperando, que é o único número pelo qual ela se organiza.
     const { sql } = construtorDaRetencao(semBanco, CONVERSA, 'serial_finder', DESDE).compile();
     assert.match(sql, /"held_for_review_at"\s+is\s+null/, `SQL: ${sql}`);
     assert.match(sql, /"id"\s*=\s*\$\d+/, `SQL: ${sql}`);
@@ -375,7 +269,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o chamador', 
   });
 
   void it('um WHERE com a coluna certa e o operador errado também é acusado', () => {
-    // `is not $1` tem o nome da coluna e casa toda linha da tabela.
     const operadorErrado = semBanco
       .selectFrom('conversations')
       .select(['id'])
@@ -391,9 +284,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o chamador', 
   });
 
   void it('um WHERE com a coluna e o operador certos e o VALOR errado é acusado', () => {
-    // A emenda da BICHUS-237. `parameters.includes(CHAMADOR)` aprovaria esta
-    // consulta, porque o chamador está entre os parâmetros por causa do outro
-    // predicado.
     const valorErrado = semBanco
       .selectFrom('conversations')
       .select(['id'])
@@ -412,12 +302,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o chamador', 
   });
 
   void it('ISCA — o predicado que só existe no `CASE` NÃO conta como autorização', () => {
-    // O furo medido, e o motivo de `clausulaWhere` existir. A leitura real
-    // menciona `tutor_user_id` na lista de seleção, dentro do `CASE` que decide
-    // o papel do chamador. Uma bancada que procurasse o predicado no SQL
-    // inteiro acharia essa ocorrência e aprovaria a consulta SEM autorização
-    // nenhuma no `WHERE` — e foi exatamente o que aconteceu na primeira versão
-    // deste arquivo: a mutação que removeu a cláusula reprovou 0 casos.
     const soNoCase = semBanco
       .selectFrom('conversations')
       .select((eb) => [
@@ -445,9 +329,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o chamador', 
   });
 
   void it('perder UM dos dois lados é acusado, e não só perder os dois', () => {
-    // O furo realista: alguém "simplifica" o `OR` e deixa só o tutor. O achador
-    // com conta passa a receber 404 na própria conversa, e nenhum teste de
-    // comportamento do tutor acusa.
     const soOTutor = semBanco
       .selectFrom('conversations')
       .select(['id'])

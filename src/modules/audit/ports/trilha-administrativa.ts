@@ -1,17 +1,4 @@
-/**
- * O evento de trilha de uma operacao administrativa, montado de um jeito so.
- *
- * A rota administrativa declara a acao e o tipo de recurso em `defineRoute`
- * (`audit`), e o portao `rotas-registradas-contra-o-contrato` confere os dois
- * contra o `x-audit` do contrato. Esta funcao e a ponte entre aquela
- * declaracao, que em `shared/http` e so uma cadeia, e a uniao fechada
- * `AuditAction` deste modulo: acao fora da lista lanca aqui, na primeira
- * escrita, em vez de gravar uma acao que ninguem declarou.
- *
- * O `metadata` sai sempre com `surface: 'admin'` e os oito primeiros bytes do
- * hash da sessao (ADR-0027 item 8): e o que liga uma escrita a UMA sessao numa
- * investigacao de conta tomada, sem gravar nada que reabra a sessao.
- */
+/** O evento de trilha de uma operacao administrativa, montado de um jeito so. */
 import type { AdminAccountId } from '../../../shared/types/brands.js';
 import {
   ACOES_ADMINISTRATIVAS,
@@ -71,8 +58,6 @@ export function eventoAdministrativo(
     resourceId: dados.resourceId,
     before: dados.before,
     after: dados.after,
-    // `surface` e `session` depois do que veio de fora: um trabalho nao
-    // consegue apagar de que sessao a escrita saiu.
     metadata: { ...dados.metadata, surface: 'admin', session: ator.sessao },
   };
 }

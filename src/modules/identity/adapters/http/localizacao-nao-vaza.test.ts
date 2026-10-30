@@ -1,48 +1,6 @@
 /**
- * A coluna geográfica não atravessa a borda, e a superfície pública não fica
- * mais fina que bairro, cidade e UF.
- *
- * ## Por que este arquivo existe, e por que ele não repete nomes
- *
- * `users` passou a ter uma localização de verdade. O dado mais sensível de uma
- * conta neste produto é onde a pessoa mora, e ele é sensível de um jeito
- * específico: ele não precisa vazar em claro para causar dano. Um campo
- * "aproximado" numa resposta pública, uma distância ao lado de um bairro, um
- * raio a partir de um centro — os três reconstroem o endereço.
- *
- * Três coisas fazem este arquivo valer mais que uma revisão atenta:
- *
- * 1. **O nome da coluna é LIDO DA MIGRAÇÃO**, e não escrito aqui. Duas listas
- *    que precisam ser mantidas em sincronia divergem; uma fonte só, não. Quem
- *    renomear `reference_point` amanhã continua coberto, e quem apagar a coluna
- *    derruba este arquivo com o motivo na mensagem — porque **não achar alvo é
- *    reprovação**, nunca aprovação.
- * 2. **A varredura é a DO PORTÃO**, `inspecionarContrato` de
- *    `portao-colunas-que-nao-saem.ts`, e não uma segunda implementação da mesma
- *    ideia. Duas implementações divergem, e a que diverge em silêncio é sempre
- *    a que ninguém está olhando.
- * 3. **A isca roda em toda execução.** Hoje o contrato tem ZERO ocorrência do
- *    nome da coluna, e "não achei nada" tem exatamente a mesma cor de "conferi
- *    e está limpo". A isca desfaz o empate: a mesma varredura, sobre um
- *    contrato construído para ser reprovado, precisa acusar.
- *
- * ## A isca, e como ela foi provada
- *
- * Desligada e vista reprovar em 22/09/2026, e depois restaurada:
- *
- * | o que foi desligado | reprovaram |
- * |---|---|
- * | `reference_point` acrescentado a `UserLocation` em `api/openapi.yaml` | 1 caso |
- * | `reference_point` removido de `CAMPOS_PROIBIDOS` do portão público | 1 caso (a isca) |
- * | `distance_m`, `distance_km` e `radius_m` removidos de `CAMPOS_PROIBIDOS` | 1 caso (a isca) |
- * | `bearerAuth` retirado de `getMyLocation` no contrato | 2 casos |
- * | `geography(Point,4326)` virando `text` na migração | 2 casos, por não ter o que conferir |
- *
- * As duas linhas do meio são a razão de este arquivo existir com isca, e não
- * só com afirmação: hoje o contrato **não** declara `reference_point` nem
- * `distance_m` em superfície pública, então quem acusa o portão cego não é o
- * caso que olha o contrato real — é a isca. Sem ela, apagar um nome da lista
- * do portão passaria com a suíte inteira verde.
+ * A coluna geográfica não atravessa a borda, e a superfície pública não fica mais
+ * fina que bairro, cidade e UF.
  */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -62,12 +20,7 @@ const CAMINHO_DA_SPEC = 'api/openapi.yaml';
 /** `<coluna> geography(Point, 4326)` em qualquer migração, com ou sem espaço. */
 const COLUNA_GEOGRAFICA = /^\s*([a-z_][a-z0-9_]*)\s+geography\s*\(\s*Point\s*,\s*4326\s*\)/gim;
 
-/**
- * As colunas `geography` das migrações, lidas do disco.
- *
- * Não achar nenhuma é falha, e não silêncio: uma varredura sem alvo termina
- * verde e ninguém desconfia. É o defeito que este repositório mais persegue.
- */
+/** As colunas `geography` das migrações, lidas do disco. */
 function colunasGeograficas(): { readonly nome: string; readonly origem: string }[] {
   const diretorio = 'migrations';
   const achadas: { nome: string; origem: string }[] = [];
@@ -213,20 +166,7 @@ paths:
   });
 });
 
-/**
- * Critério 6 e ADR-0006: **CEP e bairro não viram coordenada.**
- *
- * A tentação aqui é óbvia e é a errada: `users` já tem CEP, bairro, cidade e
- * UF, e "só" faltaria transformá-los em ponto. Transformar exige geocodificação,
- * que não existe no MVP e não está contratada — e usar o bairro de cadastro
- * como se fosse o ponto mentiria toda vez que a pessoa não estivesse em casa.
- *
- * A conferência é por caminho de código: os arquivos da localização não podem
- * sequer LER as colunas de texto. Não é a mesma coisa que provar ausência de
- * geocodificação (isso o portão de portabilidade faz, procurando provedor), mas
- * é a metade que aquele portão não enxerga: uma conversão escrita à mão, sem
- * provedor nenhum, passaria por ele e não passa por aqui.
- */
+/** Critério 6 e ADR-0006: **CEP e bairro não viram coordenada.** */
 void describe('CEP e bairro não viram coordenada (critério 6, ADR-0006)', () => {
   const ARQUIVOS_DA_LOCALIZACAO = [
     'src/modules/identity/domain/localizacao-de-referencia.ts',
@@ -246,8 +186,6 @@ void describe('CEP e bairro não viram coordenada (critério 6, ADR-0006)', () =
     const achados: string[] = [];
     for (const arquivo of ARQUIVOS_DA_LOCALIZACAO) {
       const conteudo = readFileSync(arquivo, 'utf8');
-      // O cabeçalho da migração cita os nomes para explicar por que eles NÃO
-      // servem; código é outra coisa, e é o código que esta varredura lê.
       const semComentarios = conteudo.replace(/\/\*[^]*?\*\/|\/\/.*$/gm, '');
       for (const coluna of COLUNAS_DE_TEXTO) {
         if (semComentarios.includes(coluna)) achados.push(`${arquivo}: ${coluna}`);

@@ -1,26 +1,4 @@
-/**
- * Casos de uso da sessao do backoffice (ADR-0027 itens 2, 5, 8 e 20).
- *
- * Este servico e tambem a `PortaDaSessaoAdministrativa` que a guarda do
- * prefixo `/v1/admin` usa: `conferir`, `registrarRecusa` e
- * `consumirReautenticacao`. A guarda nao sabe o que e conta, papel ou banco;
- * este arquivo nao sabe o que e HTTP.
- *
- * ## A conta e do painel, e so do painel
- *
- * Tudo aqui le `admin_accounts` (item 20). O login do painel nao consulta
- * `users`: um e-mail que so existe no app e, para esta porta, um e-mail sem
- * conta, com o mesmo 401 e o mesmo tempo (D42, D44, P21). De `identity` este
- * modulo so usa a porta de senha, para o hash ser o mesmo do app.
- *
- * ## Toda escrita vai com a trilha, na mesma transacao
- *
- * Abrir, encerrar, encerrar todas, rotacionar, abrir janela e revogar por conta
- * desativada passam por `EscritaAuditada.executar`: se a trilha nao grava, a
- * sessao nao existe (D49). Os eventos que nao acompanham escrita nenhuma (login
- * recusado, recusa da guarda sem revogacao) vao pela trilha comum, que nao
- * derruba o pedido.
- */
+/** Casos de uso da sessao do backoffice (ADR-0027 itens 2, 5, 8 e 20). */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { problemas } from '../../../shared/http/errors.js';
 import type { EscopoDeReautenticacaoAdministrativa } from '../../../shared/http/route-definition.js';
@@ -68,10 +46,7 @@ import {
 /** A acao do reCAPTCHA que o documento `/entrar` declara ao colher o token. */
 export const ACAO_DO_CAPTCHA_ADMINISTRATIVO = 'admin_login';
 
-/**
- * Uma linha de log estruturado. Tipo estrutural, e nao o logger do Fastify:
- * `application/` nao conhece framework.
- */
+/** Uma linha de log estruturado. */
 export type RegistrarOcorrencia = (dados: Record<string, unknown>, mensagem: string) => void;
 
 export interface DependenciasDaSessaoAdministrativa {
@@ -79,7 +54,10 @@ export interface DependenciasDaSessaoAdministrativa {
   readonly contas: RepositorioDeContasAdministrativas;
   readonly escrita: EscritaAuditada;
   readonly trilha: AuditLog;
-  /** A contagem duravel das falhas de login, lida da trilha (D44: 10 em 24 h bloqueiam). */
+  /**
+   * A contagem duravel das falhas de login, lida da trilha (D44: 10 em 24 h
+   * bloqueiam).
+   */
   readonly contagem: ContagemNaTrilha;
   readonly captcha: VerificadorDeCaptcha;
   readonly senhasVazadas: ListaDeSenhasVazadas;
@@ -87,10 +65,7 @@ export interface DependenciasDaSessaoAdministrativa {
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly hmacDeIp: (ip: string | undefined) => Buffer | null;
-  /**
-   * `ADMIN_ORIGIN`, a origem exata do painel. O link "nao fui eu" aponta para a
-   * pagina `/nao-fui-eu` do PROPRIO painel, e nao para o site do app.
-   */
+  /** `ADMIN_ORIGIN`, a origem exata do painel. */
   readonly origemDoPainel: string;
   readonly registrarOcorrencia: RegistrarOcorrencia;
 }
@@ -124,7 +99,7 @@ export interface JanelaAberta {
   readonly csrfToken: string;
 }
 
-/** Quantos escopos uma reautenticacao abre de uma vez. O contrato declara o mesmo teto. */
+/** Quantos escopos uma reautenticacao abre de uma vez. */
 export const MAXIMO_DE_ESCOPOS_POR_REAUTENTICACAO = 2;
 
 type ContextoDaRequisicao = ContextoDaGuarda;
@@ -136,11 +111,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     session: etiqueta,
   });
 
-  /**
-   * Login recusado: vai para a trilha comum, porque nao ha escrita a
-   * acompanhar. O ator e anonimo mesmo quando o e-mail tem conta: quem errou a
-   * senha nao provou ser o dono dela. A conta, quando existe, vai como recurso.
-   */
+  /** Login recusado: vai para a trilha comum, porque nao ha escrita a acompanhar. */
   async function registrarLoginRecusado(
     contexto: ContextoDaRequisicao,
     motivo: string,
@@ -157,16 +128,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     });
   }
 
-  /**
-   * Senha errada de conta que existe (D44). Numa transacao: trava a conta,
-   * conta as falhas da janela de 24 horas na trilha, bloqueia na decima
-   * (`failed_logins`, que so `conta-admin redefinir-senha` desfaz) e grava a
-   * recusa DESTA tentativa, na mesma transacao. Falha da trilha desfaz o
-   * bloqueio: bloqueio sem registro seria uma conta trancada sem explicacao.
-   *
-   * A resposta continua o mesmo 401 da senha errada, antes e depois do
-   * bloqueio: o bloqueio nao diz a quem tenta que a conta existe.
-   */
+  /** Senha errada de conta que existe (D44). */
   async function registrarSenhaErrada(conta: ContaAdministrativa, contexto: ContextoDaRequisicao): Promise<void> {
     const agora = deps.clock.now();
     const bloqueou = await deps.escrita.executar(async (trx) => {
@@ -201,8 +163,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       { evento: 'admin.account.blocked_failed_logins', conta: conta.id, correlationId: contexto.correlationId },
       'ALERTA: conta do painel bloqueada por dez falhas de login em 24 horas',
     );
-    // Sem `await`: o envio nao pode alongar esta resposta em relacao a da senha
-    // errada comum, pelo mesmo motivo de `avisarSenhaVazada`.
     void avisarTodosOsAdministradores(
       {
         assunto: 'Uma conta do painel do Bichu foi bloqueada por tentativas de senha',
@@ -236,13 +196,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
 
   /**
    * D43, forma de 28/09: a senha certa que esta numa base de vazadas NAO tem
-   * resposta propria. O login devolve o mesmo 401 da senha errada, e o aviso vai
-   * por e-mail a TODOS os administradores ativos, o dono incluido: a conta
-   * precisa de `conta-admin redefinir-senha`, rodado no servidor. Nao ha link
-   * de redefinicao, porque nao ha redefinicao fora do comando (item 20.4).
-   *
-   * Sem `await` em quem chama: o envio nao pode alongar esta resposta em
-   * relacao a da senha errada. Falha de envio vai para o log, com a conta.
+   * resposta propria.
    */
   function avisarSenhaVazada(conta: ContaAdministrativa, agora: Instant, contexto: ContextoDaRequisicao): void {
     void avisarTodosOsAdministradores(
@@ -260,11 +214,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     );
   }
 
-  /**
-   * Um e-mail para CADA administrador ativo (D46, D61, D62). Falha de um envio
-   * nao impede os outros nem desfaz o que ja foi gravado; quem nao recebeu sai
-   * no log, pelo `id` da conta e nunca pelo endereco.
-   */
+  /** Um e-mail para CADA administrador ativo (D46, D61, D62). */
   async function avisarTodosOsAdministradores(
     mensagem: { readonly assunto: string; readonly corpo: string },
     ocorrencia: Record<string, unknown>,
@@ -287,13 +237,8 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
   }
 
   /**
-   * D46: o dono da conta recebe um e-mail a cada sessao aberta, com o link "nao
-   * fui eu" do proprio painel (D62). O token vai no FRAGMENTO (`#t=`), que o
-   * navegador nao manda ao servidor nem poe em `Referer`: nao chega a log de
-   * borda nenhum. A pagina o envia por `POST /v1/admin/auth/disavow`.
-   *
-   * Falha do envio nao desfaz o login: a sessao ja esta aberta e gravada com a
-   * trilha. Mas nao some: sai no log com a correlacao.
+   * D46: o dono da conta recebe um e-mail a cada sessao aberta, com o link "nao fui
+   * eu" do proprio painel (D62).
    */
   async function avisarSessaoAberta(
     conta: ContaAdministrativa,
@@ -369,10 +314,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         absoluteExpiresAt: comoData(armazenada.absoluteExpiresAt),
       };
 
-      // Conta desativada com sessao viva: `conta-admin desativar` revoga na
-      // mesma transacao, entao isto so acontece se alguem desativou por fora do
-      // comando. A guarda nao confia nisso: derruba todas as sessoes da conta e
-      // recusa com 403 nesta mesma requisicao.
       if (conta.status !== 'active') {
         await porta.registrarRecusa(conferida, 'account_disabled', contexto);
         throw problemas.proibidoNoPainel();
@@ -398,9 +339,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         metadata: metadataDaSessao(sessao.etiqueta, { reason: motivo }),
       });
 
-      // D38: a conta desativada, ou que perdeu TODO papel que abre o painel,
-      // perde as sessoes administrativas. A que tem papel de painel e nao tem o
-      // da operacao so e recusada nesta requisicao.
       const revogacao =
         motivo === 'account_disabled'
           ? 'account_disabled'
@@ -451,14 +389,8 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     ...porta,
 
     /**
-     * `POST /v1/admin/auth/login`, na ordem do contrato depois do teto: desafio,
-     * senha (com o hash de descarte), conta ativa, base de vazadas, sessao.
-     *
-     * E-mail sem conta do painel (inclusive o de uma conta do app), senha
-     * errada, senha certa de conta desativada e senha certa que esta numa base
-     * de vazadas respondem o MESMO 401, e todas passam pela derivacao da senha e
-     * pela consulta a base: o login nao conta a ninguem quem e administrador nem
-     * que a senha confere (T3, D43, D44).
+     * `POST /v1/admin/auth/login`, na ordem do contrato depois do teto: desafio, senha
+     * (com o hash de descarte), conta ativa, base de vazadas, sessao.
      */
     async entrar(entrada: EntradaDoLoginAdministrativo, contexto: ContextoDaRequisicao): Promise<SessaoAberta> {
       const nota = await deps.captcha.avaliar(entrada.captchaToken, ACAO_DO_CAPTCHA_ADMINISTRATIVO);
@@ -471,10 +403,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         throw problemas.captchaRecusado();
       }
 
-      // A base de vazadas e consultada em TODA tentativa, e em paralelo com a
-      // derivacao: se so a senha certa a consultasse, a latencia da consulta
-      // diria a quem mede o tempo que a senha confere, que e exatamente o que o
-      // 401 unico existe para esconder. Base fora do ar vale como "nao sei".
       const consultaAVazadas = deps.senhasVazadas
         .contem(entrada.password)
         .catch((): 'desconhecido' => 'desconhecido');
@@ -497,24 +425,18 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         await registrarLoginRecusado(contexto, 'inactive_account', conta.id);
         throw problemas.credencialDoPainelRecusada();
       }
-      // Conta bloqueada ("nao fui eu" ou dez falhas): o mesmo 401. Um corpo
-      // proprio aqui diria, a quem tem a senha, que ela confere; o dono sabe que
-      // clicou no link, e o caminho e o mesmo da senha vazada: o comando.
       if (conta.blockedReason !== null) {
         await registrarLoginRecusado(contexto, `blocked_${conta.blockedReason}`, conta.id);
         throw problemas.credencialDoPainelRecusada();
       }
 
       const agora = deps.clock.now();
-      // D43. A recusa e o mesmo 401; o que a distingue fica na trilha e no
-      // e-mail aos administradores, que so quem opera o painel le.
       if (vazada) {
         await registrarLoginRecusado(contexto, 'breached_password', conta.id);
         avisarSenhaVazada(conta, agora, contexto);
         throw problemas.credencialDoPainelRecusada();
       }
 
-      // D19: os parametros do hash sobem sem redefinicao em massa.
       if (precisaDeRehash(conta.passwordPhc)) {
         await deps.contas.regravarSenha(conta.id, await gerarHashDeSenha(entrada.password), agora);
       }
@@ -548,8 +470,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
             action: 'admin.session.opened',
             resourceKind: 'admin_session',
             resourceId: id,
-            // Base de vazadas fora do ar no login: entra (decisao do cliente,
-            // 28/09), e a trilha diz que a senha NAO foi conferida.
             metadata: metadataDaSessao(
               etiqueta,
               vereditoDaBase === 'desconhecido' ? { breach_check: 'unavailable' } : {},
@@ -573,17 +493,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       };
     },
 
-    /**
-     * `POST /v1/admin/auth/disavow` (D62). Numa transacao: trava o aviso,
-     * revoga todas as sessoes da conta (`disavowed`), empurra a barreira, grava
-     * o bloqueio, grava a trilha e so entao consome o token. Revogar duas vezes
-     * tem o mesmo efeito de revogar uma; gastar o token antes deixaria uma
-     * falha passageira do banco queimar o unico remedio de quem perdeu a conta.
-     *
-     * Vencido, usado e inexistente: o mesmo `410`. O ator da trilha e anonimo:
-     * quem apresentou o token provou ter a caixa de entrada, e nao ser o
-     * titular.
-     */
+    /** `POST /v1/admin/auth/disavow` (D62). */
     async desautorizar(tokenBruto: string, contexto: ContextoDaRequisicao): Promise<void> {
       const agora = deps.clock.now();
       const alvo = await deps.escrita.executar(async (trx) => {
@@ -623,7 +533,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       );
     },
 
-    /** `GET /v1/admin/session`. O anti-CSRF e recalculado do cookie, nunca lido de lugar nenhum. */
+    /** `GET /v1/admin/session`. */
     visaoDaSessao(sessao: SessaoAdministrativaConferida, valorDoCookie: string): VisaoDaSessaoAdministrativa {
       return visao(
         sessao.displayName,
@@ -652,9 +562,8 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
 
     /**
      * `POST /v1/admin/auth/logout-all`: empurra
-     * `admin_accounts.sessions_invalid_before`, que a guarda le a cada
-     * requisicao, e revoga as linhas vivas. As duas coisas e o evento numa
-     * transacao so.
+     * `admin_accounts.sessions_invalid_before`, que a guarda le a cada requisicao, e
+     * revoga as linhas vivas.
      */
     async sairDeTodas(sessao: SessaoAdministrativaConferida, contexto: ContextoDaRequisicao): Promise<void> {
       const agora = deps.clock.now();
@@ -678,14 +587,9 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
 
     /**
      * `POST /v1/admin/auth/reauth` (D40): confere a senha, ROTACIONA a sessao
-     * (identificador e anti-CSRF novos, mesmo instante da senha, mesmo teto) e
-     * abre uma janela de 5 minutos por escopo pedido, cada uma de uso unico e
-     * presa a sessao nova.
-     *
-     * Um ou dois escopos distintos, e UMA rotacao so. Duas reautenticacoes
-     * seguidas nao serviam para gravar duas operacoes sensiveis juntas: a
-     * segunda rotacionava a sessao, e a janela da primeira ficava presa a uma
-     * sessao revogada (`consumirJanela` exige a sessao corrente).
+     * (identificador e anti-CSRF novos, mesmo instante da senha, mesmo teto) e abre
+     * uma janela de 5 minutos por escopo pedido, cada uma de uso unico e presa a
+     * sessao nova.
      */
     async reautenticar(
       sessao: SessaoAdministrativaConferida,
@@ -693,9 +597,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       escopos: readonly EscopoDeReautenticacaoAdministrativa[],
       contexto: ContextoDaRequisicao,
     ): Promise<JanelaAberta> {
-      // O contrato ja recusa na borda; aqui a regra vale para quem chamar o
-      // servico por outro caminho. Escopo repetido daria dois tokens para a
-      // mesma operacao, que e uma segunda chance que a janela nao concede.
       if (
         escopos.length === 0 ||
         escopos.length > MAXIMO_DE_ESCOPOS_POR_REAUTENTICACAO ||
@@ -727,8 +628,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
 
       await deps.escrita.executar(async (trx) => {
         const revogou = await deps.sessoes.revogar(trx, sessao.sessionId, 'rotated', agora);
-        // Outra requisicao rotacionou ou encerrou esta sessao no meio do
-        // caminho: nada e gravado, e quem chegou depois entra de novo.
         if (!revogou) throw problemas.sessaoDoPainelVencida();
         await deps.sessoes.criar(trx, {
           id: novaId,

@@ -1,25 +1,6 @@
 /**
- * `/v1/admin/network/...`: a escrita administrativa da `Rede` e a fila de
- * pedidos (BICHUS-273 e BICHUS-292; ADR-0027 itens 7, 8, 11, 12 e 17).
- *
- * ## O que NAO esta aqui, porque ja aconteceu antes
- *
- * Estas rotas so sobem dentro de `escoparRotasAdministrativas`: a guarda do
- * escopo confere superficie, cookie de sessao, `Origin`, `X-CSRF-Token` e o
- * papel de `adminRoles` antes de qualquer gancho daqui. **Nenhuma escrita
- * daqui pede reautenticacao** desde 07/10/2026 (decisao do cliente, ADR-0027
- * item 23): mover, mudar acesso, cancelar e remover passam so com a sessao, e
- * ficam o aviso a todos os administradores e a trilha. **Nenhuma verificacao
- * de papel mora aqui nem no caso de uso.**
- *
- * ## A declaracao e a do contrato
- *
- * Papel, trilha, escopo de reautenticacao e teto sao copiados do contrato, e
- * `rotas-registradas-contra-o-contrato` os compara. O teto por linhas da fila
- * (`counts: rows_returned`, D56) nao e exprimivel pela porta de teto de
- * requisicoes: ele e declarado aqui como o contrato o escreve, a subida o lista
- * como nao aplicado pela porta, e quem o aplica e o caso de uso, somando da
- * trilha.
+ * `/v1/admin/network/...`: a escrita administrativa da `Rede` e a fila de pedidos
+ * (BICHUS-273 e BICHUS-292; ADR-0027 itens 7, 8, 11, 12 e 17).
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -42,7 +23,10 @@ import type {
   Visibilidade,
 } from '../../domain/escrita-do-encontro.js';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas administrativas. */
+/**
+ * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
+ * administrativas.
+ */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -51,7 +35,10 @@ const BALDE_DE_ESCRITA = {
   onExceed: 'deny_429',
 } as const satisfies RateLimitEntry;
 
-/** D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de evento. */
+/**
+ * D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de
+ * evento.
+ */
 const BALDE_DE_PUBLICACAO = {
   bucket: 'admin_publication',
   dimension: ['account'],
@@ -110,10 +97,7 @@ export const rotaDeRemoverEncontro = defineRoute({
 
 /**
  * Mover (T11). **Compatibilidade desde 01/10/2026:** o painel deixou de usar o
- * mapa, e o `place.point` desta rota fica so para quem ainda o manda. A rota
- * continua sendo o unico caminho para mudar o lugar de um encontro existente,
- * inclusive o `street_address`, com motivo e aviso (sem reautenticacao desde
- * 07/10/2026, ADR-0027 item 23).
+ * mapa, e o `place.point` desta rota fica so para quem ainda o manda.
  */
 export const rotaDeMoverEncontro = defineRoute({
   operationId: 'relocateAdminNetworkEvent',
@@ -145,10 +129,7 @@ export const rotaDeMudarAcesso = defineRoute({
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
-/**
- * A unica leitura administrativa com trilha (D55). O teto por linhas (D56) e
- * aplicado no caso de uso, porque a porta de teto conta requisicoes e nao linhas.
- */
+/** A unica leitura administrativa com trilha (D55). */
 export const rotaDeListarPedidos = defineRoute({
   operationId: 'listAdminNetworkJoinRequests',
   method: 'get',
@@ -191,8 +172,6 @@ const TAMANHO_PADRAO = 50;
 
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
-  // `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem
-  // chave (ADR-0027 item 20.2).
   return conta === undefined ? undefined : `admin:${conta}`;
 };
 
@@ -343,7 +322,6 @@ export function registrarRotasDaRedeAdministrativa(
       page: query.page ?? PAGINA_INICIAL,
       limit: query.limit ?? TAMANHO_PADRAO,
     });
-    // Dado de pessoa: a superficie administrativa ja responde `no-store`.
     return reply.send(pagina);
   });
 

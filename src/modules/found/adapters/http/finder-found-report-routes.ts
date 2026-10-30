@@ -1,14 +1,6 @@
 /**
  * As duas rotas do aviso para quem avisou sem conta (BICHUS-41; a emenda 3 do
  * ADR-0017 as lista também sob a BICHUS-72).
- *
- * `PATCH /v1/finder/found-report` e `POST /v1/media/finder-photo-intents`, com
- * `finderToken` e só ele. Nenhuma das duas tem id no caminho nem no corpo: o
- * token diz de qual aviso se trata (SEC-001).
- *
- * As respostas são montadas campo a campo. `FinderFoundReportView` não tem id,
- * dado do tutor nem coordenada; `FinderUploadIntent` devolve `upload_ref`, que é
- * opaco, e nunca o `upload_id` da linha, que é UUIDv7.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -35,9 +27,8 @@ export const rotaDoEnriquecimentoDoAchador = defineRoute({
 });
 
 /**
- * Teto vitalício de três por token, que é três por aviso: o token tem escopo de
- * um aviso só. A borda conta requisição (inclusive a que vai responder 415); a
- * contagem de `upload_intents` do serviço é a garantia de verdade.
+ * Teto vitalício de três por token, que é três por aviso: o token tem escopo de um
+ * aviso só.
  */
 export const rotaDaFotoDoAchador = defineRoute({
   operationId: 'createFinderPhotoUploadIntent',
@@ -67,15 +58,13 @@ export function comoVistaDoAviso(vista: VistaDoAvisoParaOAchador): Record<string
   };
 }
 
-/** `FinderUploadIntent`, campo a campo. `upload_ref`, nunca `upload_id`. */
+/** `FinderUploadIntent`, campo a campo. */
 export function comoIntencaoDoAchador(foto: FotoDoAchadorAutorizada): Record<string, unknown> {
   const { autorizacao } = foto;
   return {
     upload_ref: foto.uploadRef,
     method: autorizacao.metodo,
     url: autorizacao.url,
-    // Um dos dois, nunca os dois: `POST` leva campos de formulário, `PUT` leva
-    // cabeçalhos assinados. O cliente lê `method` em vez de presumir.
     ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
     ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
     expires_at: autorizacao.expiraEm.toISOString(),

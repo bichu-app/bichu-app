@@ -1,22 +1,4 @@
-/**
- * Testes do conteúdo do push (ADR-0008 + ADR-0010).
- *
- * O que está sob teste não é o texto: é **a porteira**. Notificação aparece na
- * tela bloqueada, passa por um terceiro e fica no histórico do sistema — as
- * três coisas que fazem dela superfície pública, e portanto sujeita à lista do
- * ADR-0010 §"O que a rota pública jamais exibe", inclusive o item 6 (`pet_id`,
- * `user_id`, `case_id` ou qualquer UUID de banco, **sem exceção**).
- *
- * Cada caso abaixo é uma isca: ele **liga** o defeito e exige que a montagem
- * reprove. Uma defesa que só foi exercitada no caminho feliz vale pela
- * confiança do dia em que foi escrita — e esta aqui protege um dado que, uma
- * vez na bandeja de notificação de alguém, não volta com `UPDATE` nenhum.
- *
- * O caso central é `o mundo inteiro entra e nada sensível sai`: ele passa para
- * a montagem telefone, endereço, e-mail e três UUIDs de verdade, e confere o
- * payload SERIALIZADO — não campo a campo, que é como se esquece de conferir o
- * campo novo que alguém acrescentar no ano que vem.
- */
+/** Testes do conteúdo do push (ADR-0008 + ADR-0010). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -65,9 +47,6 @@ function contexto(ajuste: Partial<ContextoDoAviso> = {}): ContextoDoAviso {
 
 void describe('nenhum dado sensível entra no payload', () => {
   void it('o mundo inteiro entra e nada sensível sai', () => {
-    // A montagem recebe TUDO o que o chamador tem em mãos ao ler a linha do
-    // banco. Se algum dia alguém "aproveitar" um desses campos para enriquecer
-    // o aviso, este caso reprova antes de o dado chegar a uma tela bloqueada.
     const conteudo = montarMensagemDePush(contexto());
     const noFio = JSON.stringify(conteudo);
 
@@ -88,19 +67,13 @@ void describe('nenhum dado sensível entra no payload', () => {
       );
     }
 
-    // E o que PODE sair, saiu: sem isto o caso passaria com um payload vazio,
-    // que é a forma mais fácil de não vazar nada e não servir para nada.
     assert.equal(conteudo.dados['ref'], TOKEN_PUBLICO);
     assert.equal(conteudo.dados['tipo'], 'tagEscaneada');
     assert.ok(conteudo.titulo.includes('Nina'));
-    // Bairro é o TETO de precisão geográfica em superfície pública, e os textos
-    // de UX 12.2 o usam de propósito. Ele não é vazamento.
     assert.ok(conteudo.corpo.includes('Vila Madalena'));
   });
 
   void it('o payload tem DOIS campos de dados, e nenhum a mais', () => {
-    // A lista fechada é a defesa contra o enriquecimento silencioso: um campo
-    // novo aqui é uma decisão, não um detalhe de implementação.
     assert.deepEqual(Object.keys(montarMensagemDePush(contexto()).dados).sort(), [
       'ref',
       'tipo',
@@ -121,8 +94,6 @@ void describe('a porteira reprova cada forma proibida (as iscas)', () => {
         (erro: unknown) =>
           erro instanceof VazamentoNoPushError &&
           erro.padrao === padrao &&
-          // O VALOR que casou não pode estar na mensagem: ela vai para o log,
-          // e log é o lugar de onde o dado pessoal não sai mais.
           erro.message.includes('NÃO é impresso'),
         `REPROVA: a porteira deixou passar "${padrao}".`,
       );
@@ -213,8 +184,6 @@ void describe('a porteira reprova cada forma proibida (as iscas)', () => {
       assegurarSuperficiePublica({
         titulo: 'Alguém está com Nina',
         corpo: 'Toque para falar.',
-        // O valor aqui é opaco e inofensivo. O que se recusa é o convite: o
-        // próximo leitor "corrige" este campo pondo o case_id de verdade.
         dados: { case_id: TOKEN_PUBLICO },
         chaveDeAgrupamento: 'tagEscaneada:x',
       }),
@@ -256,15 +225,11 @@ void describe('o texto não inventa gênero que o banco não tem', () => {
   });
 
   void it('o tutor que ainda NÃO sabe recebe o fato cru, e não a consequência', () => {
-    // É o caso mais urgente do produto (UX 12.2): o pet não está marcado como
-    // perdido, então o tutor não faz ideia. O título diz o que aconteceu.
     const conteudo = montarMensagemDePush(contexto({ casoAberto: false }));
     assert.equal(conteudo.titulo, 'Alguém escaneou a tag de Nina');
   });
 
   void it('a possível correspondência não afirma que é o pet: ela pede que a pessoa olhe', () => {
-    // O texto NÃO pode dizer "acharam a Nina". Um falso positivo dito como
-    // certeza põe o tutor na rua atrás do animal de outra pessoa.
     const conteudo = montarMensagemDePush(
       contexto({ tipo: 'possivelCorrespondencia', bairro: 'Pinheiros' }),
     );
@@ -294,23 +259,17 @@ void describe('prioridade e validade seguem o ADR-0008', () => {
   });
 
   void it('avisos de tipos diferentes sobre a mesma referência NÃO se engolem', () => {
-    // O ADR-0008 manda agrupar por caso. Agrupar SÓ por caso faria o alerta de
-    // vizinhança substituir na bandeja o aviso de que alguém está com o
-    // animal — informações diferentes, e nenhuma substitui a outra.
     const scan = montarMensagemDePush(contexto({ tipo: 'tagEscaneada' }));
     const vizinhanca = montarMensagemDePush(
       contexto({ tipo: 'alertaDeVizinhanca', especie: 'cão' }),
     );
     assert.notEqual(scan.chaveDeAgrupamento, vizinhanca.chaveDeAgrupamento);
 
-    // E dois avisos do MESMO tipo sobre a mesma referência se agrupam, que é o
-    // que o ADR-0008 pede: um caso nunca empilha várias notificações.
     const outroScan = montarMensagemDePush(contexto({ tipo: 'tagEscaneada', bairro: 'Pinheiros' }));
     assert.equal(scan.chaveDeAgrupamento, outroScan.chaveDeAgrupamento);
   });
 });
 
-// BICHUS-292 (ADR-0027 item 17).
 void describe('o push de pedido aprovado leva so o titulo', () => {
   void it('titulo e corpo: a frase fixa e o titulo do encontro; dados so com o tipo', () => {
     const c = montarAvisoDePedidoAprovado('Encontro de galgos');

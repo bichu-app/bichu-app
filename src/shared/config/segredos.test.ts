@@ -1,16 +1,4 @@
-/**
- * Testes da resolução de segredos de runtime (ADR-0022).
- *
- * O caso que importa é negativo, e é fácil escrever um teste que não o pega: um
- * teste que preenche tudo e confere que `process.env` ficou certo passaria com
- * a falha ruidosa inteira arrancada — os valores estariam lá de qualquer jeito.
- * O que prova a defesa é a SUBIDA QUE MORRE citando **quais** segredos faltaram,
- * e o `process.env` que fica INTACTO quando ela morre.
- *
- * Nenhum valor daqui é segredo de lugar nenhum: são descartáveis, e o
- * `VALOR_QUE_NAO_PODE_VAZAR` existe justamente para ser procurado dentro das
- * mensagens de erro.
- */
+/** Testes da resolução de segredos de runtime (ADR-0022). */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
@@ -62,9 +50,6 @@ void describe('falha ruidosa: a subida morre citando QUAL segredo faltou', () =>
   });
 
   void it('faltando dois, a mensagem traz OS DOIS e não só o primeiro', async () => {
-    // Morrer no primeiro obriga o operador a sete viagens para descobrir que
-    // faltavam sete. Este teste é o que impede alguém de "simplificar" o laço
-    // para um `throw` na primeira falha.
     await assert.rejects(
       () => resolverSegredos(provedorFalso({}), [A, B]),
       (erro: unknown) => erro instanceof Error && erro.message.includes(A) && erro.message.includes(B),
@@ -72,10 +57,6 @@ void describe('falha ruidosa: a subida morre citando QUAL segredo faltou', () =>
   });
 
   void it('nada é escrito em process.env quando um único segredo falta', async () => {
-    // A ORDEM importa e é o ponto do caso: `B` resolve ANTES de `A` falhar.
-    // Com `[A, B]` o teste passaria mesmo se a escrita fosse feita à medida que
-    // os valores chegam, porque `B` nunca chegaria a ser lido — seria um teste
-    // que não prova nada.
     delete process.env[A];
     delete process.env[B];
     await assert.rejects(() => resolverSegredos(provedorFalso({ [B]: 'presente' }), [B, A]));
@@ -83,9 +64,6 @@ void describe('falha ruidosa: a subida morre citando QUAL segredo faltou', () =>
   });
 
   void it('erro CRU do provedor não escapa sem o nome do segredo', async () => {
-    // A exigência 2 da porta. Um adaptador malfeito que deixe vazar
-    // `permission denied` produz a mensagem inútil que este ADR existe para
-    // evitar; o resolvedor embrulha e põe o nome dentro.
     const cru = new Error('permission denied');
     await assert.rejects(
       () => resolverSegredos(provedorFalso({ [A]: cru, [B]: 'presente' }), [A, B]),
@@ -110,17 +88,12 @@ void describe('o valor chega ao ambiente exatamente como foi gravado', () => {
   });
 
   void it('não faz trim: a quebra final de um PEM sobrevive', async () => {
-    // Exigência 4 da porta. `createPrivateKey` aceita o PEM sem a quebra, mas
-    // outras ferramentas não, e a decisão de aparar não é do transporte.
     const comQuebra = '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n';
     await resolverSegredos(provedorFalso({ [A]: comQuebra }), [A]);
     assert.equal(process.env[A], comQuebra);
   });
 
   void it('sobrescreve o que já estava no ambiente', async () => {
-    // Se o ambiente vencesse, um arquivo esquecido no disco da VM continuaria
-    // sendo a fonte de verdade em silêncio — e a rotação no gerenciador não
-    // teria efeito nenhum, sem nada acusar.
     process.env[A] = 'valor-antigo-do-arquivo';
     await resolverSegredos(provedorFalso({ [A]: 'valor-novo-do-gerenciador' }), [A]);
     assert.equal(process.env[A], 'valor-novo-do-gerenciador');
@@ -137,8 +110,6 @@ void describe('adaptador de variável de ambiente: o que roda em dev e em teste'
   });
 
   void it('vazia é ausência, e não valor', async () => {
-    // Exigência 3. Subir com `IP_HMAC_KEY=` produziria hash de IP com chave
-    // vazia, e o defeito apareceria longe daqui.
     process.env[A] = '';
     await assert.rejects(
       () => criarSecretProviderDeAmbiente().obter(A),
@@ -147,8 +118,6 @@ void describe('adaptador de variável de ambiente: o que roda em dev e em teste'
   });
 
   void it('rejeita a PROMESSA, sem lançar de forma síncrona', () => {
-    // Função que promete devolver promessa e lança antes de devolvê-la quebra
-    // quem trata com `.catch()`: o `catch` nunca chega a ser instalado.
     delete process.env[A];
     const provedor = criarSecretProviderDeAmbiente();
     assert.doesNotThrow(() => void provedor.obter(A).catch(() => undefined));
@@ -170,29 +139,12 @@ void describe('onde o gerenciador entra, e onde ele deliberadamente não entra',
   });
 
   void it('NODE_ENV=production vale sozinho, com ENVIRONMENT dizendo outra coisa', () => {
-    // A imagem de produção do Dockerfile define NODE_ENV e pode não definir
-    // ENVIRONMENT. Olhar só o rótulo deixaria escapar o ambiente que mais
-    // precisa da regra — é o mesmo raciocínio do `exigeChaveDeRotacao`, e os
-    // dois usam o MESMO predicado de propósito.
     process.env['NODE_ENV'] = 'production';
     assert.equal(exigeGerenciadorDeSegredos('dev'), true);
   });
 });
 
-/**
- * A lista de segredos de runtime e o token do provedor de e-mail.
- *
- * O caso é uma isca de **cobertura da lista**, e não de comportamento da
- * resolução: o mecanismo que ele desliga é a linha `'MAIL_API_TOKEN'` em
- * `SEGREDOS_DE_RUNTIME`. Sem ela, nada reprova — a subida em ambiente hospedado
- * fica verde, o token nunca é buscado no cofre, `requireEnv('MAIL_API_TOKEN')`
- * morre no arranque por uma variável que ninguém foi pedir, e a mensagem manda o
- * operador procurar um `.env` que o ADR-0022 tirou de lá.
- *
- * A lista de segredos é justamente o tipo de coisa que nenhum teste de caminho
- * feliz cobre: ela é lida uma vez, na subida, num ambiente que a suíte não
- * levanta.
- */
+/** A lista de segredos de runtime e o token do provedor de e-mail. */
 void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
   void it('MAIL_API_TOKEN esta em SEGREDOS_DE_RUNTIME, junto com o codigo que o le', () => {
     assert.ok(
@@ -206,9 +158,6 @@ void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
   });
 
   void it('a resolucao escreve o valor do cofre em process.env sob o MESMO nome', async () => {
-    // O outro lado da isca: estar na lista só serve se a resolução de fato puser
-    // o valor onde `app-config.ts` vai ler. Um dublê, nunca a chave real — quem
-    // dispara com chave de verdade é o cliente ou o deploy.
     const original = process.env['MAIL_API_TOKEN'];
     try {
       delete process.env['MAIL_API_TOKEN'];
@@ -226,17 +175,6 @@ void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
 /**
  * A ISCA DA REGRESSAO DE 29/09: o token do provedor so e RESOLVIDO quando o
  * transporte precisa dele.
- *
- * O mecanismo que estes casos desligam e o `filter` de `segredosDeRuntime()`.
- * Sem ele a lista volta a ser resolvida inteira, e `api` e `worker` voltam a
- * morrer na subida por `MAIL_API_TOKEN` vazio COM `MAIL_TRANSPORT=smtp` -- que
- * e o padrao do `.env.example` e o caminho que o README manda um desenvolvedor
- * novo seguir. Foi assim, medido, com a suite inteira verde.
- *
- * O caso de `postmark` e a outra metade, e ele existe contra a correcao
- * preguicosa: tirar o nome da lista em todo caso deixaria o ambiente hospedado
- * sem o token que `postmark-mailer.ts` emite no cabecalho, e o primeiro pedido
- * de redefinicao de senha de alguem voltaria 401.
  */
 void describe('ISCA: o token do provedor so e resolvido no transporte que o le', () => {
   void it('com `smtp`, MAIL_API_TOKEN fica FORA da lista que a subida resolve', () => {
@@ -268,10 +206,6 @@ void describe('ISCA: o token do provedor so e resolvido no transporte que o le',
   });
 
   void it('valor desconhecido nao busca o token: quem morre por ele e app-config', () => {
-    // `MAIL_TRANSPORT=mailpit` foi o valor de verdade encontrado em 19/09.
-    // Cobrar o token aqui trocaria a mensagem boa ("nao e um transporte
-    // conhecido", com os aceitos) por "falta MAIL_API_TOKEN", que manda a
-    // pessoa para o lugar errado.
     assert.ok(!segredosDeRuntime('mailpit').includes('MAIL_API_TOKEN'));
   });
 
@@ -289,8 +223,6 @@ void describe('ISCA: o token do provedor so e resolvido no transporte que o le',
   });
 
   void it('a subida com `smtp` e sem token NAO morre: nenhum nome e cobrado', async () => {
-    // O caso de comportamento, e nao de lista: um provedor que nao tem o token
-    // e uma resolucao que, mesmo assim, precisa terminar sem lancar.
     const original = process.env['MAIL_API_TOKEN'];
     try {
       delete process.env['MAIL_API_TOKEN'];

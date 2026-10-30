@@ -1,39 +1,4 @@
-/**
- * A ISCA do interruptor da pagina publica: **toda ausencia ESCONDE.**
- *
- * ====================================================================
- * POR QUE ESTA ISCA EXISTE
- * ====================================================================
- *
- * `estaPublicada` tem um contrato escrito na porta -- "somente `true` explicito
- * acende" -- e um contrato escrito e uma frase enquanto ninguem o mede. O jeito
- * de ele apodrecer e especifico e conhecido: alguem acha o `try { } catch {
- * return false }` do adaptador "suspeito" (e ele PARECE suspeito -- a casa tem
- * uma regra contra engolir erro), troca por um `throw`, a suite verde nao
- * acusa, e no dia em que a tabela ficar inalcancavel `getLostCase` passa a
- * responder 500. Em `closeLostCase` isso vira o tutor sem conseguir dizer
- * "encontrei meu pet".
- *
- * O caminho oposto e pior e mais silencioso: alguem troca
- * `linha.is_published === true` por `!!linha.is_published`, ou devolve `true`
- * quando a linha nao existe ("nenhuma restricao escrita, entao liberado"), e a
- * acao de compartilhar acende sobre uma pagina que da 404.
- *
- * ====================================================================
- * O DUBLE DEVOLVE O QUE O DRIVER DEVOLVE, E SO ISSO
- * ====================================================================
- *
- * Nada aqui monta resposta de servidor. O duble e um encadeador que termina em
- * `executeTakeFirst`, e os valores que ele devolve sao os tres que o driver de
- * fato produz para esta consulta: a linha com o booleano, `undefined` quando
- * nao ha linha, e a excecao quando a consulta nao completa. O quarto caso --
- * `'t'` em vez de `true` -- esta aqui porque e o que um driver entregaria se o
- * tipo da coluna mudasse, e e justamente o caso que `!!` aprovaria.
- *
- * A consulta em si (o `WHERE page = ...`, o `select` explicito) nao e provada
- * aqui e nao pode ser: SQL se prova contra Postgres. O que esta isca prova e a
- * TRADUCAO do que voltou em acender/esconder, que e onde o erro caro mora.
- */
+/** A ISCA do interruptor da pagina publica: **toda ausencia ESCONDE.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Db } from '../../../../shared/db/pool.js';
@@ -42,13 +7,7 @@ import { criarDisponibilidadeDaPagina } from './kysely-disponibilidade-da-pagina
 /** O que `executeTakeFirst` vai fazer: devolver algo, ou estourar. */
 type Desfecho = { readonly linha: unknown } | { readonly estoura: Error };
 
-/**
- * Um banco de MENTIRA, encadeavel como o Kysely, que termina no desfecho dado.
- *
- * Registra as tabelas consultadas para que o CONTROLE de cada caso possa provar
- * que a consulta aconteceu -- sem isso, um adaptador que devolvesse `false` sem
- * nunca consultar passaria todos os casos negativos.
- */
+/** Um banco de MENTIRA, encadeavel como o Kysely, que termina no desfecho dado. */
 function bancoQue(desfecho: Desfecho, consultadas: string[]): Db {
   const executor: Record<string, unknown> = {};
   executor['selectFrom'] = (tabela: string) => {
@@ -113,9 +72,6 @@ void describe('o interruptor da pagina publica: somente `true` explicito acende'
       bancoQue({ estoura: new Error('relation "site_page_availability" does not exist') }, consultadas),
     );
 
-    // `doesNotReject` e a metade que importa: se um `throw` voltar ao
-    // adaptador, a resposta de `LostCase` inteira passa a 500 -- e `LostCase` e
-    // o corpo de encerrar e de reabrir o caso, nao so de ler.
     await assert.doesNotReject(
       () => porta.estaPublicada('lost_case'),
       'A porta declara que NUNCA lanca. Uma tabela de configuracao inalcancavel ' +

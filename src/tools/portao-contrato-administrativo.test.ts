@@ -1,8 +1,6 @@
 /**
  * O portao do contrato administrativo contra o contrato real, e contra uma isca
- * por regra. Cada isca e o contrato real com UMA alteracao; se o portao deixar
- * de acusar qualquer uma, ele deixou de verificar aquilo, e este arquivo
- * reprova dizendo qual.
+ * por regra.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -76,8 +74,6 @@ void describe('portao do contrato administrativo', () => {
       alterar: (s) => void (operacao(s, '/me', 'get')['security'] = [{ bearerAuth: [], adminSession: [] }]),
     },
     {
-      // Desde 07/10 (ADR-0027 item 23) nenhuma operacao do contrato pede
-      // reautenticacao; a isca a poe de volta pela metade, so no `security`.
       nome: 'adminReauth sem x-admin-reauth-scope',
       regra: /retireAdminStoreItem: adminReauth e x-admin-reauth-scope precisam andar juntos/,
       alterar: (s) =>

@@ -1,25 +1,4 @@
-/**
- * O desafio de passkey: prazo, uso único e dono — sem banco e sem servidor.
- *
- * ## O que este arquivo cobre, e o que ele NÃO cobre
- *
- * Cobre as recusas que acontecem **antes** de a biblioteca de verificação ser
- * chamada, e são elas que decidem se uma atestação ou asserção chega a ser
- * examinada: desafio inexistente, vencido, já consumido, de outro propósito, de
- * outra conta, e perdido numa corrida.
- *
- * **NÃO cobre a verificação criptográfica.** Assinatura, CBOR, COSE, `rpIdHash`
- * e origem são de `@simplewebauthn/server`, e esta suíte não os reimplementa
- * nem os simula — um teste que mockasse a biblioteca mediria o mock. O que a
- * decisão de usar a biblioteca compra é justamente não ter esse código aqui; o
- * que ela custa é que a correção dele não é medida por este repositório. Está
- * dito em voz alta de propósito.
- *
- * Também não cobre a cláusula `WHERE` que de fato consome o desafio e avança o
- * contador — isso é `KyselyPasskeyRepository`, e aqui o dublê apenas obedece.
- * Uma regra correta aqui e um `WHERE` incompleto lá seria um desafio reusável
- * com teste verde em cima.
- */
+/** O desafio de passkey: prazo, uso único e dono — sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -40,8 +19,7 @@ const OUTRA_CONTA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 
 /**
  * Um `clientDataJSON` como o aparelho o manda: base64url de um JSON com
- * `challenge`. É só o que estes casos precisam — nenhum deles chega à
- * verificação da assinatura.
+ * `challenge`.
  */
 function clientDataCom(desafio: string): string {
   return Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: desafio }), 'utf8')
@@ -131,7 +109,6 @@ async function tipoDoErro(fn: () => Promise<unknown>): Promise<string> {
     assert.ok(e instanceof AppError, `esperava AppError, veio ${String(e)}`);
     return e.problemType;
   }
-  // `assert.fail` lanca; o `return` depois dele existe so para o tipo.
   assert.fail('a chamada devia ter lancado');
   return '';
 }
@@ -151,7 +128,6 @@ void describe('cadastro: as recusas antes da verificacao', () => {
       await tipoDoErro(() => servicoCom(repo).concluirCadastro(DONO_DA_CREDENCIAL, corpoDeCadastro)),
       'token-expired',
     );
-    // E nao consome nada: nao havia o que consumir.
     assert.deepEqual(repo.consumidos, []);
   });
 
@@ -178,8 +154,6 @@ void describe('cadastro: as recusas antes da verificacao', () => {
   });
 
   void it('desafio de ENTRADA nao serve para cadastrar', async () => {
-    // Propositos nao se misturam: um desafio de entrada apresentado aqui
-    // pularia a conferencia de dono, que so o de cadastro tem.
     const repo = new RepositorioDePasskeyDeTeste({
       ...desafioBom,
       purpose: 'authentication',
@@ -192,8 +166,6 @@ void describe('cadastro: as recusas antes da verificacao', () => {
   });
 
   void it('desafio de OUTRA CONTA recusa -- e a recusa e a mesma do inexistente', async () => {
-    // Pendurar credencial em conta alheia nao e erro de formulario, e a recusa
-    // nao conta que o desafio existe.
     const repo = new RepositorioDePasskeyDeTeste({ ...desafioBom, userId: OUTRA_CONTA });
     assert.equal(
       await tipoDoErro(() => servicoCom(repo).concluirCadastro(DONO_DA_CREDENCIAL, corpoDeCadastro)),
@@ -203,8 +175,6 @@ void describe('cadastro: as recusas antes da verificacao', () => {
   });
 
   void it('quem PERDE a corrida do uso unico e recusado', async () => {
-    // `consumirDesafio` devolve falso quando outra requisicao chegou primeiro.
-    // A decisao e do banco, e o servico a respeita.
     class PerdeACorrida extends RepositorioDePasskeyDeTeste {
       override consumirDesafio(): Promise<boolean> {
         return Promise.resolve(false);
@@ -281,18 +251,15 @@ void describe('entrada: as recusas antes da verificacao', () => {
   });
 
   void it('credencial DESCONHECIDA recusa como credencial invalida', async () => {
-    // `acharPorCredentialId` devolve undefined no dublê base.
     const repo = new RepositorioDePasskeyDeTeste(desafioDeEntrada);
     assert.equal(
       await tipoDoErro(() => servicoCom(repo).concluirEntrada(corpoDeEntrada)),
       'invalid-credentials',
     );
-    // O desafio FOI consumido: de sucesso ou de falha, ele nao vale de novo.
     assert.deepEqual(repo.consumidos, ['d2']);
   });
 
   void it('credencial REVOGADA recusa com o MESMO tipo da desconhecida', async () => {
-    // A porta nao diz qual dos dois foi.
     class ComRevogada extends RepositorioDePasskeyDeTeste {
       override acharPorCredentialId(): Promise<CredencialDePasskey | undefined> {
         return Promise.resolve({
@@ -313,8 +280,6 @@ void describe('entrada: as recusas antes da verificacao', () => {
   });
 
   void it('`user_handle` DIVERGENTE recusa: ele e conferido, nao aceito', async () => {
-    // O `userHandle` volta do aparelho sem autenticacao nenhuma. Trata-lo como
-    // identidade seria aceitar como prova o campo que quem chama escolhe.
     class ComCredencialDoDono extends RepositorioDePasskeyDeTeste {
       override acharPorCredentialId(): Promise<CredencialDePasskey | undefined> {
         return Promise.resolve({

@@ -1,6 +1,6 @@
 /**
- * Os prazos, a revogacao e a derivacao do anti-CSRF da sessao administrativa
- * (D38, D39), com relogio controlado e sem banco.
+ * Os prazos, a revogacao e a derivacao do anti-CSRF da sessao administrativa (D38,
+ * D39), com relogio controlado e sem banco.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -68,7 +68,6 @@ void describe('prazos da sessao administrativa (D38)', () => {
   void it('a barreira empurrada derruba a sessao anterior, nunca recua, e a seguinte nasce valida', () => {
     const barreira = instanteDaBarreira(em(400), T0);
     assert.equal(barreira, em(400));
-    // Barreira atual adiantada ao relogio: a nova fica no segundo seguinte a ela.
     assert.equal(instanteDaBarreira(em(400), em(700)), em(1_001));
     assert.equal(avaliarSessao({ ...prazosDeNovaSessao(em(300)), revokedAt: null }, barreira, em(500)), 'anterior_a_barreira');
     const depois = prazosDeNovaSessao(instanteDaSenha(em(500), barreira));
@@ -84,10 +83,6 @@ void describe('prazos da sessao administrativa (D38)', () => {
 });
 
 void describe('papeis', () => {
-  // Ate 28/09 este caso provava tambem a "conta dedicada" de D42 (papel em
-  // `user_roles` recusado na porta do app). Com cadastros separados a D42 e do
-  // esquema, e a prova dela e P21 (`cadastros-separados.test.ts` e o bloco P21
-  // de `sessao-administrativa-pelo-http.test.ts`).
   void it('so admin abre o painel na v1', () => {
     assert.equal(abreSessaoAdministrativa(['admin']), true);
     assert.equal(abreSessaoAdministrativa(['moderator']), false);

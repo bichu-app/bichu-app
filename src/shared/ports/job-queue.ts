@@ -1,17 +1,4 @@
-/**
- * Fila de trabalho do domínio.
- *
- * Hoje: tabela `jobs` no Postgres, consumida com `FOR UPDATE SKIP LOCKED`
- * (ADR-0001). Amanhã: fila gerenciada, **se algum dia houver motivo** — e não há
- * hoje, de propósito: é um componente a menos para operar e zero vínculo com
- * provedor. O passo 4 da §16 depende de `SKIP LOCKED` já ser seguro para várias
- * instâncias, e ele é.
- *
- * Regra normativa do payload (§11.5): **carrega identificador, nunca conteúdo
- * renderizado.** Enfileirar um corpo de e-mail já montado gravaria a URL base
- * vigente numa linha que só vai ser lida horas depois — é a forma mais provável
- * de `localhost` vazar para produção, e é silenciosa.
- */
+/** Fila de trabalho do domínio. */
 import type { Instant } from '../types/brands.js';
 
 export type JobKind =
@@ -20,12 +7,15 @@ export type JobKind =
   | 'case.reminder'
   | 'case.transfer_consummate'
   | 'media.process_upload'
-  /** ADR-0027 item 10: a imagem de catalogo enviada pelo painel (item da Loja, encontro da Rede). */
+  /**
+   * ADR-0027 item 10: a imagem de catalogo enviada pelo painel (item da Loja,
+   * encontro da Rede).
+   */
   | 'media.process_catalog_image'
   /**
    * A higiene da foto do ACHADO: conferir os bytes e reescrever a imagem sem
-   * metadado nenhum, porque o EXIF de foto de celular carrega coordenada de
-   * GPS e aquele caminho nao passava por worker nenhum.
+   * metadado nenhum, porque o EXIF de foto de celular carrega coordenada de GPS e
+   * aquele caminho nao passava por worker nenhum.
    */
   | 'media.sanitize_found_photo'
   | 'media.purge_expired'
@@ -33,12 +23,14 @@ export type JobKind =
   | 'push.send'
   /**
    * O aviso ao TUTOR de que alguem escaneou a plaquinha do pet dele
-   * (`tags/ports/aviso-ao-tutor.ts`). A API enfileira na mesma passagem que
-   * grava o aviso do achador; o worker entrega por push e por e-mail.
+   * (`tags/ports/aviso-ao-tutor.ts`).
    */
   | 'tag.scan_notify'
   | 'match.recompute'
-  /** ADR-0027 item 17: o push de pedido aprovado para encontro privado, so com o titulo. */
+  /**
+   * ADR-0027 item 17: o push de pedido aprovado para encontro privado, so com o
+   * titulo.
+   */
   | 'network.join_request_approved';
 
 export interface JobRecord<P = unknown> {
@@ -50,15 +42,7 @@ export interface JobRecord<P = unknown> {
   readonly maxAttempts: number;
 }
 
-/**
- * O que a varredura de órfãos encontrou e o que ela fez com cada linha.
- *
- * `desistiu` é a informação que o chamador não consegue deduzir: um trabalho
- * devolvido à fila vai ser tentado outra vez e não precisa de nada de ninguém;
- * um trabalho que esgotou a tolerância a orfandade é **final**, e quem sabe o
- * que aquele trabalho prometia a alguém tem de desfazer a promessa. É por essa
- * porta que a foto sai de `processing`.
- */
+/** O que a varredura de órfãos encontrou e o que ela fez com cada linha. */
 export interface TrabalhoRecuperado {
   readonly id: string;
   readonly kind: JobKind;
@@ -70,40 +54,24 @@ export interface TrabalhoRecuperado {
 }
 
 export interface CriteriosDeOrfandade {
-  /**
-   * Quanto tempo de `running` sem sinal de vida é órfão.
-   *
-   * Prazo curto rouba trabalho legítimo no meio; prazo longo deixa a foto presa.
-   * O número e o argumento estão em `worker.ts`, junto da medição que o
-   * sustenta.
-   */
+  /** Quanto tempo de `running` sem sinal de vida é órfão. */
   readonly prazoEmMs: number;
-  /**
-   * Quantas orfandades o mesmo trabalho pode acumular antes de ser final.
-   *
-   * Não é `max_attempts`: aquele conta falha por exceção, que acusa o ambiente.
-   * Este conta morte de processo com o trabalho na mão, que acusa a carga.
-   */
+  /** Quantas orfandades o mesmo trabalho pode acumular antes de ser final. */
   readonly tetoDeOrfandade: number;
   /** Teto de linhas por varredura, para uma passada não virar uma transação longa. */
   readonly limite: number;
 }
 
 export interface JobQueue {
-  /** `payload` só com identificador. Ver a regra acima. */
+  /** `payload` só com identificador. */
   enqueue<P>(kind: JobKind, payload: P, runAt?: Instant): Promise<string>;
   /** Reserva até `limit` itens prontos, com trava de linha. */
   claim(limit: number): Promise<readonly JobRecord[]>;
   complete(id: string): Promise<void>;
   fail(id: string, error: string, retryAt?: Instant): Promise<void>;
   /**
-   * Devolve à fila o que ficou `running` além do prazo, e declara final o que
-   * já foi recuperado vezes demais.
-   *
-   * **Sem isto, `running` não tem saída nenhuma.** `claim` só olha `pending`, e
-   * `complete`/`fail` só são alcançados por um processo vivo: trabalho cujo
-   * processo morreu fica `running` para sempre, sem erro, sem alarme e sem
-   * ninguém para tentar de novo.
+   * Devolve à fila o que ficou `running` além do prazo, e declara final o que já foi
+   * recuperado vezes demais.
    */
   recuperarOrfaos(criterios: CriteriosDeOrfandade): Promise<readonly TrabalhoRecuperado[]>;
 }

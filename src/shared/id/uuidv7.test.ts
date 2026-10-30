@@ -1,11 +1,4 @@
-/**
- * Testes do gerador de identificador (BICHUS-19).
- *
- * O que estes casos travam é a propriedade pela qual o v7 foi escolhido: a
- * ordenação temporal. Um gerador que produz UUID válido mas fora de ordem passa
- * em qualquer teste de formato e devolve, em produção, exatamente a fragmentação
- * de índice que o v4 causaria.
- */
+/** Testes do gerador de identificador (BICHUS-19). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { canonicalizarUuid, criarIdGenerator } from './uuidv7.js';
@@ -38,8 +31,6 @@ void describe('uuidv7', () => {
 
     const gerados: string[] = [];
     for (let i = 0; i < 50; i += 1) {
-      // Metade no mesmo milissegundo, metade com o relógio andando: é o primeiro
-      // caso que quebra um v7 sem contador monotônico.
       if (i % 2 === 0) relogio += 1;
       gerados.push(ids.uuidv7());
     }
@@ -48,20 +39,7 @@ void describe('uuidv7', () => {
     assert.deepEqual(gerados, ordenados, 'a ordem de geração precisa ser a ordem lexicográfica');
   });
 
-  /**
-   * Isca da BICHUS-208, e o portão da propriedade inteira.
-   *
-   * O caso acima reprovava **por sorte**: com 25 pares no mesmo milissegundo e um
-   * contador de 12 bits semeado ao acaso em [0, 4095], a virada `0xfff -> 0x000`
-   * caía nele em 0,63% das execuções. Reprovação rara é o que ensina a ignorar
-   * reprovação.
-   *
-   * Aqui a condição é **forçada**: 4097 identificadores no mesmo milissegundo
-   * controlado não cabem num contador de 4096 valores, então a virada é obrigatória
-   * por casa dos pombos, qualquer que seja a semente. Não depende do relógio da
-   * máquina nem de quantos microssegundos passaram entre chamadas — reprovava em
-   * 30 de 30 execuções contra o gerador antigo.
-   */
+  /** Isca da BICHUS-208, e o portão da propriedade inteira. */
   void it('não anda para trás quando o contador de 12 bits vira no mesmo milissegundo', () => {
     const ids = criarIdGenerator(() => 1_760_000_100_000);
     const gerados = Array.from({ length: 4097 }, () => ids.uuidv7());
@@ -77,15 +55,7 @@ void describe('uuidv7', () => {
     );
   });
 
-  /**
-   * Autoteste da isca acima. Sem ele, a isca vale por confiança no dia em que foi
-   * escrita: uma verificação que não consegue reprovar fica verde para sempre e
-   * ninguém procura o que acredita já ter.
-   *
-   * O gerador abaixo é o de antes da BICHUS-208 — semente uniforme nos 12 bits e
-   * incremento com `& 0x0fff`, sem tratar a virada. A mesma função que aprova o
-   * gerador de produção **precisa** reprovar este.
-   */
+  /** Autoteste da isca acima. */
   void it('a isca acusa um gerador que não trata a virada', () => {
     let sequencia = 0x0ffe;
     const carimbo = 1_760_000_200_000;
@@ -112,13 +82,7 @@ void describe('uuidv7', () => {
     );
   });
 
-  /**
-   * Localidade de índice, que é a razão de o ADR-0002 ter escolhido o v7 sobre o
-   * v4. O conserto da virada adianta o carimbo de tempo (RFC 9562 §6.2), e um
-   * conserto que adiantasse demais espalharia as chaves pelo B-tree e trocaria um
-   * defeito raro por custo constante de escrita. Em carga normal o carimbo tem de
-   * seguir o relógio exatamente, sem um milissegundo de deriva.
-   */
+  /** Localidade de índice, que é a razão de o ADR-0002 ter escolhido o v7 sobre o v4. */
   void it('não deriva do relógio em carga normal', () => {
     let relogio = 1_760_000_300_000;
     const ids = criarIdGenerator(() => relogio);
@@ -156,7 +120,6 @@ void describe('uuidv7', () => {
   void it('o token opaco tem 256 bits e não é ordenável', () => {
     const ids = criarIdGenerator(() => 1_760_000_000_000);
     const token = ids.opaqueToken();
-    // 32 bytes em base64url dão 43 caracteres sem preenchimento.
     assert.equal(token.length, 43);
     assert.notEqual(ids.opaqueToken(), token);
   });
@@ -171,8 +134,6 @@ void describe('canonicalização de UUID vindo do cliente', () => {
   });
 
   void it('recusa o que não é UUID, em vez de deixar passar adiante', () => {
-    // Confiar no texto cru permite que dois valores diferentes designem a mesma
-    // linha, e que um deles escape de uma verificação feita por igualdade.
     assert.equal(canonicalizarUuid('018f7c1e7a2b7c3d9e4f2b1a0c9d8e7f'), undefined);
     assert.equal(canonicalizarUuid("018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f' or '1'='1"), undefined);
     assert.equal(canonicalizarUuid(''), undefined);

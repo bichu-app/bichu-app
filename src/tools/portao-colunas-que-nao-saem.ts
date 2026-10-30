@@ -1,34 +1,6 @@
 /**
  * Portão de saída: coluna marcada como "nunca sai do servidor" não aparece em
  * resposta nenhuma, nem em código que monta resposta.
- *
- * Por que ele existe. `professionals.created_by_user_id` era "quem cadastrou"
- * enquanto o perfil nascia da comunidade. A emenda 1 do ADR-0011 (21/09) negou
- * essa premissa, e com convite e aceite a coluna virou **"quem convidou"** —
- * um **vínculo entre duas pessoas**, que é exatamente o que a BICHUS-174 proíbe
- * expor em superfície pública, inclusive na forma de contagem e inclusive na
- * forma da existência. O ADR chama isso de "critério de reprovação em revisão".
- * Revisão humana esquece; este arquivo não.
- *
- * **Isto é restrição de SAÍDA, não de coluna.** A coluna fica, porque a trilha
- * precisa dela. O que não pode é ela atravessar a borda.
- *
- * Três decisões que fazem este portão valer alguma coisa:
- *
- * 1. **A lista de colunas é LIDA DAS MIGRAÇÕES, não escrita aqui.** Quem marcar
- *    uma coluna nova com `NUNCA sai do servidor` no `COMMENT ON COLUMN` ganha a
- *    cobertura sem precisar lembrar deste arquivo. Duas listas que precisam ser
- *    mantidas em sincronia divergem; uma fonte só, não.
- * 2. **Não achar alvo é reprovação.** Migração sem nenhuma coluna marcada,
- *    contrato que não carrega, `src/` que não existe: falha ruidosa com o
- *    motivo. Portão que não consegue verificar precisa reprovar, nunca aprovar.
- * 3. **O caso que ele PRECISA reprovar mora aqui dentro e roda sempre.** Hoje o
- *    contrato tem ZERO ocorrência das colunas marcadas, porque as tabelas
- *    nasceram sem rota. Sem a isca, este portão ficaria verde por não ter olhado
- *    para nada, e continuaria verde no dia em que quebrasse.
- *
- * Uso: `node dist/tools/portao-colunas-que-nao-saem.js [raiz-do-projeto]`
- * Saída: 0 aprovado, 1 reprovado.
  */
 import { parse as parseYaml } from 'yaml';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -36,12 +8,7 @@ import { join, relative, sep } from 'node:path';
 
 export const VERSAO_DO_PORTAO = '1.0.0';
 
-/**
- * A marca que promove uma coluna a "não sai". Ela é conferida contra o texto do
- * `COMMENT ON COLUMN`, e não contra o nome da coluna: nome muda, intenção
- * escrita no banco fica. O acento é opcional porque as migrações deste projeto
- * são escritas sem acento.
- */
+/** A marca que promove uma coluna a "não sai". */
 const MARCA = /nunca sai do servidor/i;
 
 /** Extrai `COMMENT ON COLUMN <tabela>.<coluna> IS '<corpo>'`. */
@@ -68,13 +35,7 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/**
- * Lê as colunas marcadas a partir do texto das migrações.
- *
- * Duas migrações podem marcar colunas homônimas em tabelas diferentes; o
- * conjunto de NOMES é o que interessa para a busca, porque uma resposta JSON
- * não carrega o nome da tabela junto.
- */
+/** Lê as colunas marcadas a partir do texto das migrações. */
 export function lerColunasQueNaoSaem(migracoes: readonly Arquivo[]): ColunaQueNaoSai[] {
   const encontradas: ColunaQueNaoSai[] = [];
   for (const migracao of migracoes) {
@@ -88,15 +49,7 @@ export function lerColunasQueNaoSaem(migracoes: readonly Arquivo[]): ColunaQueNa
   return encontradas;
 }
 
-/**
- * Percorre o contrato inteiro — **toda** operação, e não só as públicas.
- *
- * A leitura estreita seria "nenhuma resposta pública". O título da seção 4 do
- * ADR-0011 é mais forte e é o que vale aqui: *"`created_by_user_id` nunca sai do
- * servidor"*. Quem convidou quem é vínculo entre duas pessoas, e ele não fica
- * menos sensível porque o leitor tem conta: um profissional autenticado saberia
- * quais tutores o indicaram.
- */
+/** Percorre o contrato inteiro — **toda** operação, e não só as públicas. */
 export function inspecionarContrato(
   spec: Record<string, unknown>,
   proibidas: ReadonlySet<string>,
@@ -118,9 +71,6 @@ export function inspecionarContrato(
       percorrer(respostas, spec, id, 'responses', new Set(), proibidas, achados);
     }
   }
-  // Um schema de componente pode ser referenciado por uma resposta futura sem
-  // que ninguém reabra este arquivo. Percorrer os componentes fecha essa porta
-  // antes de ela existir.
   const componentes = spec['components'];
   if (componentes !== undefined) {
     percorrer(componentes, spec, 'components', 'components', new Set(), proibidas, achados);
@@ -168,34 +118,7 @@ function percorrer(
   }
 }
 
-/**
- * O texto do arquivo **sem comentario**, preservando a contagem de linhas.
- *
- * ## Por que isto existe
- *
- * Em 21/10/2026 este portao reprovou a onda 4 com TRES achados de
- * `created_by_user_id`, e os tres eram COMENTARIO. Um deles diz, literalmente,
- * *"`created_by_user_id` continua fora desta lista"* -- ou seja: o portao
- * acusava a prosa que documenta a invariante que ele existe para defender.
- *
- * Apagar os comentarios deixaria o portao verde e tiraria a documentacao da
- * regra: seria trocar o conserto pelo silencio. O defeito e da LEITURA.
- *
- * ## O que ele faz, e o que NAO faz
- *
- * Troca por espaco o conteudo de `//` ate o fim da linha e de `/* ... *\/`,
- * **fora de literal de texto**. Mantem `\n`, porque o achado reporta NUMERO DE
- * LINHA e um corte que encurtasse o arquivo moveria a linha reportada.
- *
- * Nome de coluna dentro de STRING continua sendo achado, e isso e deliberado:
- * `select('created_by_user_id')` e codigo, nao prosa.
- *
- * **O limite, dito em voz alta:** nao distingue `/` de divisao de `/` de
- * literal de expressao regular. Uma regex contendo `//` ou `/*` seria tratada
- * como comeco de comentario. Nao existe nenhuma em `src/` hoje, e o caso que
- * importa -- a coluna citada em codigo de verdade -- tem isca propria logo
- * abaixo.
- */
+/** O texto do arquivo **sem comentario**, preservando a contagem de linhas. */
 export function semComentarios(texto: string): string {
   let saida = '';
   let i = 0;
@@ -242,23 +165,13 @@ export function semComentarios(texto: string): string {
   return saida;
 }
 
-/**
- * Procura o nome da coluna no código que roda no servidor.
- *
- * **O alcance desta varredura é o nome literal, e isso precisa ser dito em voz
- * alta em vez de descoberto depois:** `select created_by_user_id as invited_by`
- * passa por aqui. Ela pega o caminho comum — a coluna carregada para dentro de
- * um DTO com o próprio nome — e não pega o apelido. O que fecha o apelido é
- * revisão, e é por isso que o comentário da migração diz a regra por extenso.
- */
+/** Procura o nome da coluna no código que roda no servidor. */
 export function inspecionarFontes(
   arquivos: readonly Arquivo[],
   proibidas: ReadonlySet<string>,
 ): Achado[] {
   const achados: Achado[] = [];
   for (const arquivo of arquivos) {
-    // SEM COMENTARIO. Ver `semComentarios`: a prosa que documenta a invariante
-    // nao e violacao dela, e o numero de linha continua o do arquivo real.
     const codigo = semComentarios(arquivo.conteudo);
     for (const proibida of proibidas) {
       if (!codigo.includes(proibida)) continue;
@@ -273,11 +186,7 @@ export function inspecionarFontes(
   return achados;
 }
 
-/**
- * Arquivos que **podem** citar o nome, porque eles são a regra e não a
- * violação. Comparação por componente de caminho, nunca por `startsWith` de
- * texto: `tools-outro/` começa com `tools` sem estar dentro dele.
- */
+/** Arquivos que **podem** citar o nome, porque eles são a regra e não a violação. */
 const DISPENSADOS: readonly string[][] = [
   ['src', 'tools', 'portao-colunas-que-nao-saem.ts'],
   ['src', 'tools', 'portao-colunas-que-nao-saem.test.ts'],
@@ -305,19 +214,6 @@ function listarTypeScript(raiz: string, diretorio: string, saida: Arquivo[]): vo
     saida.push({ caminho: relativo, conteudo: readFileSync(completo, 'utf8') });
   }
 }
-
-// ---------------------------------------------------------------------------
-// A ISCA
-// ---------------------------------------------------------------------------
-// Hoje o contrato tem ZERO ocorrência das colunas marcadas: `professionals` e
-// `entity_verifications` nasceram vazias e sem rota, exatamente como o ADR
-// manda. Isso significa que as duas varreduras acima, rodando sobre o material
-// real, não têm nada para achar — e "não achei nada" tem a mesma cor de
-// "conferi e está limpo".
-//
-// A isca desfaz o empate. Ela desliga a dúvida obrigando as três peças a
-// acusarem, a cada execução, um caso construído para ser reprovado. Se a isca
-// passar, o portão reprova a si mesmo e diz qual peça parou de enxergar.
 
 const MIGRACAO_ISCA = `
 CREATE TABLE isca (
@@ -357,7 +253,6 @@ export function montarResposta(linha: { quem_convidou: string }) {
 export function autoTeste(): string[] {
   const falhas: string[] = [];
 
-  // Peça 1: a leitura das migrações separa a coluna marcada da coluna comum.
   const colunas = lerColunasQueNaoSaem([{ caminho: 'isca.sql', conteudo: MIGRACAO_ISCA }]);
   const nomes = new Set(colunas.map((c) => c.coluna));
   if (!nomes.has('quem_convidou')) {
@@ -373,8 +268,6 @@ export function autoTeste(): string[] {
     );
   }
 
-  // Peça 2: o contrato. Com a coluna marcada e a inocente lado a lado, só a
-  // primeira pode ser acusada.
   const spec = parseYaml(CONTRATO_ISCA) as Record<string, unknown>;
   const noContrato = inspecionarContrato(spec, new Set(['quem_convidou']));
   if (!noContrato.some((a) => a.coluna === 'quem_convidou')) {
@@ -387,7 +280,6 @@ export function autoTeste(): string[] {
     );
   }
 
-  // Peça 3: a varredura de código.
   const naFonte = inspecionarFontes(
     [{ caminho: 'isca.ts', conteudo: FONTE_ISCA }],
     new Set(['quem_convidou']),
@@ -482,9 +374,6 @@ export function executar(raiz: string): number {
     return 1;
   }
 
-  // O alcance é dito a cada execução. "Não havia o que conferir" não pode sair
-  // igual a "conferi e está certo": hoje as duas tabelas não têm rota, então o
-  // zero abaixo é esperado, e quem faz a regra valer é a isca acima.
   console.info(
     `APROVADO — ${Object.keys((spec['paths'] as Record<string, unknown>) ?? {}).length} caminhos do contrato ` +
       `e ${fontes.length} arquivos de src/ percorridos, zero saída indevida.`,

@@ -1,31 +1,4 @@
-/**
- * As três rotas de `/me/location` sobre um Fastify de verdade.
- *
- * O servidor sobe em vez de o handler ser chamado direto porque três coisas que
- * as rotas prometem só existem com o framework no caminho: o 429 do teto (que é
- * gancho `onRequest`, não `if` de handler), a validação do corpo a partir do
- * schema do contrato, e a **serialização real da resposta** — que é onde uma
- * coordenada mais precisa vazaria.
- *
- * ## As iscas deste arquivo, e como foram provadas
- *
- * Cada mecanismo foi desligado no código de produção, rodado e visto reprovar
- * em 22/09/2026, e depois restaurado:
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | `quantizar` devolvendo a coordenada intacta | 3 casos |
- * | `comoResposta` devolvendo algo diferente do gravado | 2 casos |
- * | `deny_429` virando `log_and_alert` | 1 caso |
- * | `chamadorAutenticado` deixando passar sem `Authorization` | 3 casos |
- * | `rateLimit` removido da declaração da rota | **não compila** |
- * | dimensão `account` declarada sem resolvedor | **não compila** (TS2345) |
- * | `app.put` direto, fora de `registrarRota` | o portão de registro reprova |
- *
- * A penúltima linha é a razão de existir o caso marcado `ISCA`: o mesmo
- * caminho com `criarContadorDesligado()` precisa deixar a 61ª passar. Sem ele,
- * o caso do 429 mediria a capacidade de contar até 61, e não o limite.
- */
+/** As três rotas de `/me/location` sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -52,16 +25,7 @@ const OUTRO = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 const CAMINHO = '/me/location';
 
-/**
- * Repositório em memória que **guarda por dono**.
- *
- * Um `Map` por conta e não uma variável só: com uma variável, a gravação de um
- * apareceria na leitura do outro e o caso que prova o critério 11 passaria por
- * acidente, medindo o dublê em vez do código.
- */
-/**
- * SEC-021: a sessão de aparelho padrão dos casos que falam de um aparelho só.
- */
+/** Repositório em memória que **guarda por dono**. */
 const APARELHO_UNICO = '018f3a2b-0000-7000-8000-00000000d001';
 
 /** O tablet da MESMA pessoa: outro aparelho, outra família. */
@@ -78,9 +42,6 @@ function repositorio(): LocalizacaoDeReferenciaRepository & {
   const linhas = new Map<string, LocalizacaoDeReferencia>();
   return {
     linhas,
-    // SEC-021: a chave do dublê é o PAR, como a chave primária da tabela. Um
-    // dublê chaveado só pelo dono não conseguiria reprovar o caso dos dois
-    // aparelhos: ele daria a resposta certa pelo motivo errado.
     gravar: (dono, familia, localizacao) => {
       linhas.set(chave(dono, familia), localizacao);
       return Promise.resolve();
@@ -100,18 +61,9 @@ function repositorio(): LocalizacaoDeReferenciaRepository & {
 interface Cenario {
   readonly contador?: RateLimitStore;
   readonly agora?: Instant;
-  /**
-   * SEC-021: o `sid` que o autenticador devolve. `null` é o token SEM `sid`,
-   * que o ADR-0002 emenda 1 declara que existe e o verificador aceita.
-   */
+  /** SEC-021: o `sid` que o autenticador devolve. */
   readonly sid?: string | null;
-  /**
-   * O mesmo repositório em duas montagens.
-   *
-   * Os casos de dois aparelhos precisam de dois servidores — um por `sid` — em
-   * cima da MESMA tabela. Sem isto, cada montagem teria a sua, os dois
-   * aparelhos nunca se encontrariam, e o caso passaria sem medir nada.
-   */
+  /** O mesmo repositório em duas montagens. */
   readonly repositorioCompartilhado?: ReturnType<typeof repositorio>;
 }
 
@@ -127,8 +79,6 @@ function montar(cenario: Cenario = {}): {
     bodyLimitBytes: 1_048_576,
   });
 
-  // SEC-021: compartilhável entre duas montagens, porque os casos de dois
-  // aparelhos precisam de dois servidores (um por `sid`) sobre a MESMA tabela.
   const repo = cenario.repositorioCompartilhado ?? repositorio();
   const eventos: AuditEvent[] = [];
   const trilha: AuditLog = {
@@ -141,14 +91,6 @@ function montar(cenario: Cenario = {}): {
 
   registrarRotasDeLocalizacao(app, {
     localizacao: new LocalizacaoDeReferenciaService({ repositorio: repo, clock, trilha }),
-    // O token É o id da conta neste dublê: cada caso diz de quem é a sessão.
-    //
-    // SEC-021: ele passou a devolver também o `sid`, que é a sessão de aparelho.
-    // Por padrão é `APARELHO_UNICO` — os casos herdados falam de uma pessoa com
-    // um aparelho só, e amarrá-los todos à mesma família é o que os mantém
-    // medindo o que foram escritos para medir. `cenario.sid` deixa um caso
-    // escolher outro aparelho, ou NENHUM (`null`), que é o token emitido antes
-    // da emenda 1 do ADR-0002.
     autenticador: {
       autenticar: (token: string) =>
         Promise.resolve({
@@ -156,8 +98,6 @@ function montar(cenario: Cenario = {}): {
           ...(cenario.sid === null ? {} : { sid: cenario.sid ?? APARELHO_UNICO }),
         }),
     },
-    // O contrato DE VERDADE: é ele que decide o schema do corpo, e uma cópia
-    // aqui deixaria de acusar mudança na especificação.
     contrato: carregarContrato('api/openapi.yaml'),
   });
 
@@ -269,8 +209,6 @@ void describe('PUT /me/location grava a coordenada JÁ quantizada', () => {
 void describe('o corpo é validado pelo schema do contrato, na borda', () => {
   void it('recusa 400 uma latitude fora da caixa do Brasil', async () => {
     const { app, repo } = montar();
-    // Londres. O ponto é válido no planeta e não é válido neste produto: ele
-    // entraria na consulta de raio de um caso aberto em Recife.
     const { status } = await pedir(app, {
       metodo: 'PUT',
       corpo: { lat: 51.5, lon: -0.12, source: 'device_gps' },
@@ -315,7 +253,6 @@ void describe('GET /me/location devolve null em vez de 404', () => {
     assert.equal(repo.linhas.size, 1);
     await app.close();
 
-    // Trinta e um dias depois, com a MESMA linha gravada.
     const depois = montar({ agora: (AGORA + 31 * 24 * 60 * 60 * 1000) as Instant });
     const gravada = repo.linhas.get(chave(DONO, APARELHO_UNICO));
     assert.ok(gravada !== undefined);
@@ -416,9 +353,6 @@ void describe('SEC-021: a localização é do APARELHO, e o aparelho é o `sid`'
     await tablet.app.close();
     assert.equal(r2.status, 200, `o PUT do tablet nao passou: ${r2.bruto}`);
 
-    // ISCA: faça o repositório ignorar a família (chavear só pelo dono) e este
-    // caso reprova — a segunda gravação teria sobrescrito a primeira, e seria a
-    // volta do comportamento anterior, em que a pessoa só podia estar num lugar.
     assert.equal(
       repo.linhas.size,
       2,
@@ -453,14 +387,6 @@ void describe('SEC-021: a localização é do APARELHO, e o aparelho é o `sid`'
   });
 
   void it('token SEM `sid` é recusado em vez de gravar linha sem aparelho', async () => {
-    // O ADR-0002, emenda 1, seção 2, declara que o `sid` foi acrescentado a um
-    // token que já circulava, e o verificador aceita os dois — "aceita o token
-    // SEM `sid`: é o que já está no aparelho das pessoas".
-    //
-    // ISCA: tire o `if (typeof sid !== 'string' ...)` de `chamadorAutenticado` e
-    // este caso reprova com 200 no lugar de 401. O que ele impede é uma linha
-    // gravada sem sessão de aparelho: nenhum logout a alcançaria, e ela seria
-    // uma coordenada imortal com aparência de linha correta.
     const { app, repo } = montar({ sid: null });
     const { status, corpo } = await pedir(app, {
       metodo: 'PUT',
@@ -474,9 +400,6 @@ void describe('SEC-021: a localização é do APARELHO, e o aparelho é o `sid`'
       0,
       'a recusa respondeu 401 e ainda assim gravou: o 401 precisa ser antes da escrita',
     );
-    // `session-expired` e não `unauthenticated`: é o que a situação de fato é, e
-    // é a resposta a que o app já reage renovando o refresh — o token novo
-    // nasce com `sid` e a requisição seguinte passa.
     assert.match(
       JSON.stringify(corpo),
       /token-expired/,

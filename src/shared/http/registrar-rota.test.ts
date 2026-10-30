@@ -1,17 +1,4 @@
-/**
- * BICHUS-178: o teto declarado passa a ser aplicado pelo REGISTRO da rota.
- *
- * Cada bloco abaixo nomeia o critério de aceite que ele fecha. Onde o critério
- * diz "isca", há um segundo caso que **precisa reprovar** com o mecanismo
- * desligado: sem ele, um teste de limite que passa com o limitador desligado não
- * testa limite nenhum — e era exatamente o estado do repositório até 21/09, em
- * que o 429 só existia dentro de teste.
- *
- * As rotas reais (`rotaDeRenovacao`, `rotaDePedidoDeRedefinicao`) são usadas com
- * os NÚMEROS delas, e não com números inventados aqui. Um teste que declarasse o
- * seu próprio teto de 10/min provaria que o mecanismo conta, e não que o teto do
- * produto vale.
- */
+/** BICHUS-178: o teto declarado passa a ser aplicado pelo REGISTRO da rota. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import Fastify from 'fastify';
@@ -40,8 +27,6 @@ function servidor(contador: RateLimitStore = contadorNovo()) {
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
     teto: tetoDeTeste(contador),
-    // Silencia o log do Fastify: 21 requisições por caso tornam a saída
-    // ilegível, e o que este arquivo mede é status, não linha de log.
     bodyLimitBytes: 1_048_576,
   });
 }
@@ -65,7 +50,7 @@ void describe('critério 1: o registro aplica o teto sem o autor da rota chamar 
     rateLimit: [{ dimension: ['ip'], limit: 2, window: '1h', onExceed: 'deny_429' }],
   });
 
-  /** O handler não sabe que existe teto. É esse o ponto. */
+  /** O handler não sabe que existe teto. */
   async function statusDasTres(contador: RateLimitStore): Promise<number[]> {
     const app = servidor(contador);
     registrarRota(app, rotaDeExemplo, {}, async (_request, reply) => reply.status(200).send({}));
@@ -108,7 +93,6 @@ void describe('critério 1: o registro aplica o teto sem o autor da rota chamar 
 
     assert.equal(ultima.statusCode, 429);
     assert.equal(tipoDe(ultima.body), 'rate-limited');
-    // RFC 9110: 429 sem `Retry-After` deixa o cliente offline martelando.
     assert.ok(Number(ultima.headers['retry-after']) >= 1);
   });
 });
@@ -139,7 +123,6 @@ void describe('critério 4: token_family 10/min na renovação', () => {
     registrarRota(
       app,
       rotaDeRenovacao,
-      // Uma família fixa: o que se mede é o teto da dimensão, não a resolução.
       { resolvedores: { token_family: () => 'familia-unica' } },
       async (_request, reply) => reply.status(200).send({}),
     );
@@ -219,8 +202,8 @@ void describe('critério 8: a tentativa válida não consome o contador de invá
   });
 
   /**
-   * `?ok=1` responde 200; qualquer outra coisa lança `unauthenticated`, que é um
-   * dos tipos que significam credencial recusada.
+   * `?ok=1` responde 200; qualquer outra coisa lança `unauthenticated`, que é um dos
+   * tipos que significam credencial recusada.
    */
   function bancada(contador: RateLimitStore) {
     const app = servidor(contador);
@@ -244,8 +227,6 @@ void describe('critério 8: a tentativa válida não consome o contador de invá
   void it('alternando válida e inválida, só as inválidas contam', async () => {
     const app = bancada(contadorNovo());
 
-    // VINTE VÁLIDAS NÃO GASTAM NADA. É este laço que fecha o critério 8: com
-    // `hit()` na entrada, a décima já teria estourado um teto de 2.
     for (let i = 0; i < 20; i += 1) {
       assert.equal(await bater(app, true), 200, `a ${String(i + 1)}ª válida consumiu o balde`);
     }
@@ -254,11 +235,6 @@ void describe('critério 8: a tentativa válida não consome o contador de invá
     assert.equal(await bater(app, true), 200, 'a válida continua passando com 1 de 2 no balde');
     assert.equal(await bater(app, false), 401, '2ª inválida: o balde chega ao teto');
 
-    // DEPOIS DO TETO, TUDO É RECUSADO — inclusive o que teria sido válido, e a
-    // consequência é deliberada, não um efeito colateral. O servidor não tem
-    // como saber que uma tentativa era válida sem fazer a conferência cara, que
-    // é exatamente o trabalho que o teto existe para não pagar. Estourar as 2
-    // inválidas fecha a rota para aquele endereço até a janela virar.
     const depoisDoTeto = await app.inject({
       method: 'POST',
       url: '/confere?ok=1',

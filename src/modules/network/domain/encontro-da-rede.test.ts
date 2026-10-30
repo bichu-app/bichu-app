@@ -1,27 +1,6 @@
 /**
  * O rotulo `status`, a projecao do encontro e a do ponto, sem banco e sem
  * servidor.
- *
- * ## As iscas deste arquivo, e como cada uma foi provada
- *
- * Cada linha foi desligada no codigo de producao, a suite rodou e reprovou com
- * o nome do caso na saida, e o arquivo foi restaurado. As linhas marcadas
- * "23/09, emenda" foram medidas na emenda da BICHUS-251 (ADR-0027 12), Node 22
- * (`/opt/homebrew/opt/node@22`); as outras vem da primeira versao.
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `agora < startsAt` virando `<=` (a borda de abertura) | 1 |
- * | `agora <= endsAt` virando `<` (a borda de fechamento) | 1 |
- * | sem `endsAt`, devolver `happening` em vez de `ended` | 2 |
- * | `statusDoEncontro` devolvendo `ended` SEMPRE (a isca negativa) | 3 |
- * | 23/09, emenda: o cancelado ignorado (sempre temporal) | 5 |
- * | 23/09, emenda: o cancelado sempre `cancelled`, mesmo depois do fim | 2 |
- * | 28/09, fatia 2: o recusado separado do pendente (`declined` vira `expired`) | 2, com o de rota |
- * | 28/09, fatia 2: o privado sai inteiro em vez de teaser | 4, com o de rota |
- *
- * **A isca negativa da quarta linha e obrigatoria.** Provar que um encontro de
- * tres semanas atras sai `ended` nao prova nada se o de amanha tambem sair.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -42,12 +21,7 @@ import {
 } from './encontro-da-rede.js';
 import type { AbsoluteUrl, Instant } from '../../../shared/types/brands.js';
 
-/**
- * Um instante fixo. Nada aqui depende do relogio de quem roda.
- *
- * E um `Instant` -- milissegundos --, e nao um `Date`, porque e isso que o
- * dominio recebe.
- */
+/** Um instante fixo. Nada aqui depende do relogio de quem roda. */
 const AGORA = Date.UTC(2026, 8, 23, 12, 0, 0) as Instant;
 const UMA_HORA = 3_600_000;
 
@@ -90,9 +64,6 @@ void describe('o rotulo do encontro, e as bordas dele', () => {
   });
 
   void it('EXATAMENTE no comeco ja e `happening`, e nao `upcoming`', () => {
-    // Quem abre a agenda na hora marcada precisa ler `Acontecendo agora`, e nao
-    // a data de um encontro que comeca neste segundo. ISCA: com `<=` no lugar
-    // de `<` na primeira comparacao, este caso devolve `upcoming`.
     const agora = AGORA;
     const marcado = encontro({ startsAt: agora, endsAt: (agora + UMA_HORA) as Instant });
     assert.equal(statusDoEncontro(marcado, agora), 'happening');
@@ -107,8 +78,6 @@ void describe('o rotulo do encontro, e as bordas dele', () => {
   });
 
   void it('EXATAMENTE no fim ainda e `happening`', () => {
-    // Do outro lado, pela mesma razao: o encontro que termina neste segundo
-    // ainda esta acontecendo. ISCA: com `<` no lugar de `<=`, devolve `ended`.
     const agora = AGORA;
     const terminando = encontro({ startsAt: (agora - UMA_HORA) as Instant, endsAt: agora });
     assert.equal(statusDoEncontro(terminando, agora), 'happening');
@@ -131,9 +100,6 @@ void describe('o rotulo do encontro, e as bordas dele', () => {
   });
 
   void it('A ISCA NEGATIVA: um encontro de amanha NAO e `ended`', () => {
-    // Sem este caso, um servidor que devolvesse `ended` para tudo passaria em
-    // todos os casos acima. Provar que o passado e rotulado como passado nao
-    // prova nada se o futuro tambem for.
     const amanha = encontro({
       startsAt: (AGORA + 24 * UMA_HORA) as Instant,
       endsAt: (AGORA + 26 * UMA_HORA) as Instant,
@@ -149,9 +115,6 @@ void describe('o encontro SEM fim declarado', () => {
   });
 
   void it('EXATAMENTE no comeco ja e `ended`, e NUNCA `happening`', () => {
-    // ADR-0025 secao 6: sem `ends_at` nao existe `happening`. A alternativa
-    // seria inventar uma duracao padrao, que e o servidor afirmando
-    // `Acontecendo agora` sobre um encontro que ele nao sabe se acabou.
     const agora = AGORA;
     const semFim = encontro({ startsAt: agora, endsAt: null });
     assert.equal(statusDoEncontro(semFim, agora), 'ended');
@@ -165,8 +128,6 @@ void describe('o encontro SEM fim declarado', () => {
 
 void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)', () => {
   void it('antes do comeco e `cancelled`, e nao `upcoming`', () => {
-    // O cancelado nao conta como agendado: quem se programou para ir precisa
-    // ler "cancelado" antes de sair de casa.
     assert.equal(statusDoEncontro(encontro({ publicacao: 'cancelled' }), AGORA), 'cancelled');
   });
 
@@ -180,8 +141,6 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
   });
 
   void it('EXATAMENTE no fim previsto ainda e `cancelled`', () => {
-    // A borda e a mesma do `happening`: o fim e fechado. Um cancelado nao pode
-    // virar `ended` um instante antes do publicado equivalente.
     const noFim = encontro({
       publicacao: 'cancelled',
       startsAt: (AGORA - UMA_HORA) as Instant,
@@ -191,8 +150,6 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
   });
 
   void it('DEPOIS do fim segue a regra do encerrado: `ended`', () => {
-    // ISCA: com o cancelado sempre `cancelled`, este caso le `cancelled`. Um
-    // encontro de ontem, cancelado ou nao, e passado.
     const passado = encontro({
       publicacao: 'cancelled',
       startsAt: (AGORA - 3 * UMA_HORA) as Instant,
@@ -202,8 +159,6 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
   });
 
   void it('ISCA (regra antiga): sem fim declarado, o cancelado NAO vira `ended` no comeco', () => {
-    // A regra ate 28/09 dava `ended` a partir do `startsAt`, e apagava o
-    // "cancelado" no proprio dia do encontro. Este caso reprova essa regra.
     const noComeco = encontro({ publicacao: 'cancelled', startsAt: AGORA, endsAt: null });
     assert.equal(statusDoEncontro(noComeco, AGORA), 'cancelled');
     const horasDepois = encontro({ publicacao: 'cancelled', startsAt: (AGORA - 5 * UMA_HORA) as Instant, endsAt: null });
@@ -211,13 +166,11 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
   });
 
   void it('sem fim declarado, e `cancelled` ate 23:59:59 do dia no fuso do encontro, e `ended` depois', () => {
-    // 23/09 em Sao Paulo (UTC-3): o dia acaba em 24/09 02:59:59Z.
     const fim = Date.UTC(2026, 8, 24, 2, 59, 59) as Instant;
     assert.equal(fimDoDiaLocal('2026-09-23', 'America/Sao_Paulo'), fim);
     const semFim = encontro({ publicacao: 'cancelled', startsAt: (AGORA - UMA_HORA) as Instant, endsAt: null });
     assert.equal(statusDoEncontro(semFim, fim), 'cancelled');
     assert.equal(statusDoEncontro(semFim, (fim + 1000) as Instant), 'ended');
-    // O fuso e o do encontro: em Manaus (UTC-4) o mesmo dia acaba uma hora depois.
     assert.equal(fimDoDiaLocal('2026-09-23', 'America/Manaus'), (fim + UMA_HORA) as Instant);
   });
 
@@ -227,8 +180,6 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
   });
 
   void it('A ISCA NEGATIVA: o PUBLICADO de amanha continua `upcoming`', () => {
-    // Sem este caso, um dominio que rotulasse tudo `cancelled` passaria nos
-    // casos acima.
     assert.equal(statusDoEncontro(encontro({ publicacao: 'published' }), AGORA), 'upcoming');
   });
 });
@@ -253,10 +204,6 @@ void describe('a projecao do encontro', () => {
   });
 
   void it('as chaves do corpo publico sao EXATAMENTE as de `NetworkEventPublic`', () => {
-    // Por campo A MAIS e que uma resposta se afasta do documento sem alarme.
-    // `cover_banner_url` entrou em `6973e88` (derivada de 1280 px para a capa
-    // de borda a borda do detalhe), no contrato e na projecao; esta lista ficou
-    // sem ele porque aquele commit mexeu no caso da derivada e nao neste.
     assert.deepEqual(Object.keys(projetarEncontro(encontro(), AGORA)).sort(), [
       'accepted_sizes',
       'admission',
@@ -271,11 +218,6 @@ void describe('a projecao do encontro', () => {
       'instagram_handle',
       'instagram_url',
       'notes',
-      // A ORIGEM (`admin` | `community`), de 20/10/2026. Ela entra nesta
-      // lista porque esta lista E a isca: campo a mais sem alarme e como a
-      // resposta se afasta do documento. **Nao e campo com pessoa** -- o caso
-      // `NAO devolve UUID nem campo com pessoas`, logo abaixo, continua verde,
-      // e `created_by_user_id` segue fora da projecao e fora do SELECT.
       'origin',
       'place',
       'slug',
@@ -487,7 +429,6 @@ void describe('o encontro PRIVADO na leitura publica (ADR-0027 12.10)', () => {
   });
 
   void it('controle positivo: os detalhes privados trazem TODAS as sentinelas', () => {
-    // Sem este caso, uma varredura que nao enxerga a sentinela aprovaria qualquer coisa.
     const bruto = JSON.stringify(projetarDetalhesPrivados(privadoComSentinelas(), AGORA));
     for (const sentinela of SENTINELAS) {
       assert.equal(bruto.includes(sentinela), true, `${sentinela} faltou nos detalhes do aprovado`);
@@ -540,10 +481,6 @@ const PAGINA_APAGADA = { baseDaWeb: BASE_DA_WEB, publicada: false };
 const ENDERECO_ESPERADO = 'https://site.exemplo.invalid/encontro/encontro-de-domingo-na-benedito';
 
 void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () => {
-  // -------------------------------------------------------------------------
-  // CONTROLE POSITIVO: sem este caso, todos os `null` abaixo passariam mesmo
-  // com a funcao devolvendo `null` sempre.
-  // -------------------------------------------------------------------------
   void it('CONTROLE POSITIVO -- com a pagina acesa, o encontro publico futuro TEM link', () => {
     assert.equal(linkPublicoDoEncontro(encontro(), AGORA, PAGINA_ACESA), ENDERECO_ESPERADO);
   });
@@ -566,9 +503,6 @@ void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () =
     assert.equal(linkPublicoDoEncontro(agora, AGORA, PAGINA_ACESA), ENDERECO_ESPERADO);
   });
 
-  // -------------------------------------------------------------------------
-  // ISCA -- O INTERRUPTOR
-  // -------------------------------------------------------------------------
   void it('ISCA -- interruptor APAGADO nao da link', () => {
     assert.equal(
       linkPublicoDoEncontro(encontro(), AGORA, PAGINA_APAGADA),
@@ -588,9 +522,6 @@ void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () =
     );
   });
 
-  // -------------------------------------------------------------------------
-  // ISCA (c) -- PRIVADO, CANCELADO E ENCERRADO
-  // -------------------------------------------------------------------------
   void it('ISCA DE VAZAMENTO -- encontro PRIVADO nao ganha pagina publica, nem com a pagina acesa', () => {
     assert.equal(
       linkPublicoDoEncontro(encontro({ visibilidade: 'private' }), AGORA, PAGINA_ACESA),
@@ -624,9 +555,6 @@ void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () =
     );
   });
 
-  // -------------------------------------------------------------------------
-  // A PROJECAO, que e quem leva o campo para a resposta
-  // -------------------------------------------------------------------------
   void it('a projecao publica leva `share_url` com a pagina acesa', () => {
     const projetado = projetarEncontro(encontro(), AGORA, PAGINA_ACESA) as EncontroPublicoProjetado;
     assert.equal(projetado.share_url, ENDERECO_ESPERADO);
@@ -654,8 +582,6 @@ void describe('o link da pagina publica do encontro (cliente, 21/10/2026)', () =
   });
 
   void it('ISCA -- o link NAO carrega logradouro nem coordenada, nem com endereco gravado', () => {
-    // O encontro TEM endereco na mao aqui: sem isso nao haveria o que vazar, e
-    // a isca nao seria isca.
     const comEndereco = encontro({ endereco: 'R. Teodoro Sampaio, 1020' });
     const link = linkPublicoDoEncontro(comEndereco, AGORA, PAGINA_ACESA);
     assert.equal(link, ENDERECO_ESPERADO);

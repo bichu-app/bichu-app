@@ -1,16 +1,4 @@
-/**
- * Rotas da foto.
- *
- * São três, e nenhuma recebe bytes. A do meio é a que explica o desenho:
- * `confirmPetPhoto` responde **202**, e não 201. A foto existe e ainda não
- * serve — antes de o worker remover o EXIF ela carrega a coordenada da casa do
- * tutor, e o contrato diz isso no status em vez de deixar o cliente descobrir
- * pela ausência de `card_url`.
- *
- * `thumb_url` e `card_url` saem **nulos enquanto as derivadas não existem**.
- * Montar o endereço de um objeto que ninguém gravou seria uma promessa que o
- * cliente descobre quebrada na hora de desenhar a tela.
- */
+/** Rotas da foto. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -37,24 +25,11 @@ export const rotaDeIntencaoDeFoto = defineRoute({
   operationId: 'createPetPhotoUploadIntent',
   method: 'post',
   path: '/media/pet-photo-intents',
-  // Grava a intenção e assina uma autorização que não se desfaz dentro da
-  // validade: revogar uma política de POST já entregue não é possível.
   effects: ['irreversible_write'],
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A capa do encontro da comunidade (ADR-0025 emenda 3).
- *
- * Mora aqui, e nao no modulo `network`, pelo mesmo motivo que
- * `createPetPhotoUploadIntent` nao mora em `pets`: o que esta rota faz e
- * assinar envio, e quem sabe assinar e este modulo. A escrita que USA o
- * `upload_id` e do encontro, e e la que a conta do chamador e conferida de
- * novo, na clausula `WHERE`.
- *
- * O mesmo teto de 20/h da foto de pet: assinar e barato, mas cada assinatura e
- * uma autorizacao de escrita que nao se desfaz dentro da validade.
- */
+/** A capa do encontro da comunidade (ADR-0025 emenda 3). */
 export const rotaDeIntencaoDeCapaDeEncontro = defineRoute({
   operationId: 'createNetworkEventCoverUploadIntent',
   method: 'post',
@@ -63,17 +38,7 @@ export const rotaDeIntencaoDeCapaDeEncontro = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A FOTO DO PROPRIO USUARIO (cliente, 18/10/2026).
- *
- * Mora aqui pelo mesmo motivo da capa do encontro: o que esta rota faz e
- * assinar envio, e quem sabe assinar e este modulo. A escrita que USA o
- * `upload_id` e `PATCH /v1/me`, e e la que a conta do chamador e conferida de
- * novo, na clausula `WHERE` -- e e la, e nao aqui, que a imagem deixa de ser
- * candidata da varredura de envios vencidos.
- *
- * O mesmo teto de 20/h da foto de pet.
- */
+/** A FOTO DO PROPRIO USUARIO (cliente, 18/10/2026). */
 export const rotaDeIntencaoDeFotoDoUsuario = defineRoute({
   operationId: 'createMyPhotoUploadIntent',
   method: 'post',
@@ -82,23 +47,7 @@ export const rotaDeIntencaoDeFotoDoUsuario = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * O LOGOTIPO DA INDICACAO (cliente, 29/10/2026).
- *
- * Mora aqui pelo mesmo motivo da capa do encontro e da foto do usuario: o que
- * esta rota faz e assinar envio, e quem sabe assinar e este modulo. A escrita
- * que USA o `upload_id` e `suggestDirectoryEntry`, e e la que a conta do
- * chamador e conferida de novo, na clausula `WHERE`.
- *
- * O mesmo teto de 20/h das outras tres intencoes do app, e o mesmo motivo:
- * assinar e barato, mas cada assinatura e uma autorizacao de escrita que nao se
- * desfaz dentro da validade.
- *
- * **O `rateLimit` daqui espelha o `x-rate-limit` do contrato entrada por
- * entrada**, e isso nao e redundancia que o `typecheck` cubra: nenhum portao de
- * `$ref` compara os dois lados, e um teto so num deles e um teto que nao existe
- * ou que recusa onde o contrato promete.
- */
+/** O LOGOTIPO DA INDICACAO (cliente, 29/10/2026). */
 export const rotaDeIntencaoDoLogotipoDaIndicacao = defineRoute({
   operationId: 'createDirectorySuggestionLogoUploadIntent',
   method: 'post',
@@ -175,14 +124,7 @@ function petIdDoCaminho(request: FastifyRequest): PetId {
   return petId as PetId;
 }
 
-/**
- * A foto como o contrato a declara.
- *
- * A URL é montada AQUI, na leitura, a partir do domínio de mídia — o banco
- * guarda só a chave (§11.1 proibição 9). Gravar URL absoluta amarraria cada
- * linha ao provedor e ao domínio do dia em que ela foi escrita, e a migração de
- * armazenamento do ADR-0007 quebraria toda foto já compartilhada.
- */
+/** A foto como o contrato a declara. */
 function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   const url = (chave: string | null): string | null =>
     chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
@@ -191,8 +133,6 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
     id: foto.id,
     status: foto.status,
     is_primary: foto.isPrimary,
-    // O MOTIVO DA RECUSA, que era gravado e não saía. Sem ele a tela dizia
-    // "recusada" e a pessoa não tinha como saber o que consertar.
     rejection_reason: foto.rejectionReason,
     thumb_url: url(foto.thumbKey),
     card_url: url(foto.cardKey),
@@ -200,12 +140,7 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
   };
 }
 
-/**
- * `UploadIntent`, do contrato. **Um dos dois, nunca os dois**: `POST` leva
- * campos de formulario, `PUT` leva cabecalhos assinados. O cliente LE `method`
- * em vez de presumir, e e isso que faz a troca de provedor nao virar mudanca de
- * app publicado.
- */
+/** `UploadIntent`, do contrato. */
 function comoAutorizacao(
   uploadId: string,
   autorizacao: {
@@ -307,9 +242,6 @@ export function registrarRotasDeMidia(
         upload_id: uploadId,
         method: autorizacao.metodo,
         url: autorizacao.url,
-        // Um dos dois, nunca os dois: `POST` leva campos de formulário, `PUT`
-        // leva cabeçalhos assinados. O cliente LÊ `method` em vez de presumir, e
-        // é isso que faz a troca de provedor não virar mudança de app publicado.
         ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
         ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
         expires_at: autorizacao.expiraEm.toISOString(),
@@ -336,7 +268,6 @@ export function registrarRotasDeMidia(
         corpo.set_as_primary ?? true,
       );
 
-      // 202: aceito, ainda não pronto. Ver o cabeçalho deste arquivo.
       return reply.status(202).send(comoRespostaDaFoto(foto, deps.baseDeMidia));
     },
   );

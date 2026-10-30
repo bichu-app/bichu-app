@@ -1,14 +1,4 @@
-/**
- * Testes do portão de saída (ADR-0011, emenda 1, seção 4).
- *
- * O portão carrega uma isca interna que roda a cada execução. Este arquivo é a
- * segunda camada: ele **varia** a isca, coisa que a interna não faz, e cobra o
- * caso que mais importa — o portão continuar enxergando a coluna real,
- * `created_by_user_id`, na forma em que ela de fato vazaria.
- *
- * Quase todos os casos são negativos, porque reprovar o que deve ser reprovado
- * é a única coisa que um portão promete.
- */
+/** Testes do portão de saída (ADR-0011, emenda 1, seção 4). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -63,12 +53,6 @@ void describe('a lista de colunas sai das migrações, e não daqui', () => {
   });
 
   void it('a migração real desta rodada marca created_by_user_id', () => {
-    // Este caso é o que liga o portão ao produto. Se alguém apagar a frase do
-    // COMMENT ON COLUMN da migração, a lista fica vazia, o portão passa a não
-    // ter o que procurar, e ele hoje reprova por isso — mas a reprovação diria
-    // "nenhuma coluna marcada", que é uma pista fraca. Aqui a mensagem é direta.
-    // Caminho relativo à raiz: os testes rodam compilados a partir de
-    // `dist/_tests/`, e `npm test` é executado da raiz do projeto.
     const conteudo = readFileSync(
       'migrations/20260921000002_profissionais-e-verificacoes-de-entidade.sql',
       'utf8',
@@ -124,8 +108,6 @@ paths:
 
 void describe('o contrato', () => {
   void it('reprova a coluna numa resposta, mesmo em operação autenticada', () => {
-    // A leitura estreita seria "só resposta pública". Quem convidou quem é
-    // vínculo entre duas pessoas também para quem tem conta.
     const achados = inspecionarContrato(
       spec(`
 openapi: 3.1.0
@@ -177,8 +159,6 @@ components:
   });
 
   void it('reprova o componente declarado mesmo sem rota que o use ainda', () => {
-    // A rota chega depois do schema com frequência. Esperar a rota seria
-    // descobrir tarde.
     const achados = inspecionarContrato(
       spec(`
 openapi: 3.1.0
@@ -243,19 +223,6 @@ void describe('o código de servidor', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// COMENTÁRIO NÃO É CÓDIGO — as duas direções, e as duas são obrigatórias
-// ---------------------------------------------------------------------------
-//
-// Em 21/10/2026 este portão reprovou a onda 4 com três achados de
-// `created_by_user_id`, e os três eram COMENTÁRIO. Um deles diz, literalmente,
-// "`created_by_user_id` continua fora desta lista": o portão acusava a prosa
-// que documenta a invariante que ele existe para defender.
-//
-// **As duas direções estão aqui de propósito.** A que passa prova que o falso
-// positivo morreu; a que REPROVA prova que o conserto não deixou o portão
-// cego — e essa é a que importa mais, porque portão cego é o mesmo defeito
-// virado do outro lado, e esse não dá sinal nenhum.
 void describe('comentário não é código, e código continua sendo código', () => {
   void it('NÃO acusa a coluna citada em comentário de linha', () => {
     const achados = inspecionarFontes(
@@ -298,8 +265,6 @@ void describe('comentário não é código, e código continua sendo código', (
   });
 
   void it('REPROVA a coluna em código DEPOIS de um comentário que a cita', () => {
-    // A isca do cego: se a limpeza comesse código junto com a prosa, este caso
-    // ficaria verde e o portão teria morrido em silêncio.
     const achados = inspecionarFontes(
       [
         {
@@ -338,8 +303,6 @@ void describe('comentário não é código, e código continua sendo código', (
   });
 
   void it('`semComentarios` preserva a contagem de linhas', () => {
-    // O achado reporta NÚMERO DE LINHA. Um corte que encurtasse o arquivo
-    // moveria a linha reportada e mandaria quem lê procurar no lugar errado.
     const texto = ['// um', '/* dois', '   ainda dois */', 'const tres = 3;'].join('\n');
     assert.equal(
       semComentarios(texto).split('\n').length,

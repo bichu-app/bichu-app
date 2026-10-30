@@ -1,29 +1,4 @@
-/**
- * O disparo, orquestrado: o que ele grava, o que ele manda, e o que ele recusa.
- *
- * Esta suíte usa dublês e por isso tem um limite que precisa estar escrito: ela
- * prova a **ordem das decisões**, não que a consulta filtra. Quem prova o filtro
- * é `sete-criterios-na-consulta.test.ts` (sobre o SQL compilado) e
- * `tests/integration/alcance-e-disparo.test.ts` (contra PostGIS de verdade). Um
- * dublê que devolve a lista que eu escrevi não sabe nada sobre `ST_DWithin`.
- *
- * ## As iscas, e como foram provadas
- *
- * Desligadas em `disparo-do-alerta-service.ts`, rodadas e vistas reprovar em
- * 22/09/2026, e depois restauradas. A conferência de que o arquivo mudou foi
- * por CONTEÚDO, e não por `git diff`: o arquivo é novo e não rastreado.
- *
- * | o que foi desligado | reprovaram, aqui |
- * |---|---|
- * | `podeDispararDeNovo` deixando de ser consultado | 3 casos |
- * | `unavailable` virando `computed` com zero | 2 casos |
- * | a gravação passando para DEPOIS do laço de envio | 6 casos |
- * | o caso encerrado deixando de ser recusado | 1 caso |
- *
- * A base é 20 casos verdes. A terceira linha derruba seis porque a ordem entre
- * gravar e mandar sustenta também as asserções sobre o que foi gravado: sem a
- * chamada antes do laço, não há o que conferir.
- */
+/** O disparo, orquestrado: o que ele grava, o que ele manda, e o que ele recusa. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -68,7 +43,7 @@ interface Cenario {
 function montar(cenario: Cenario = {}) {
   const conclusoes: ConclusaoDoDisparo[] = [];
   const avisos: AvisoDeVizinhanca[] = [];
-  /** A ordem entre gravar e mandar. Ver o caso que a cobra. */
+  /** A ordem entre gravar e mandar. */
   const linhaDoTempo: string[] = [];
 
   const contexto: ContextoDoCaso | null =
@@ -160,10 +135,6 @@ void describe('o critério 7: um disparo por caso por dia', () => {
   });
 
   void it('a recusa acontece ANTES da consulta cara', async () => {
-    // Uma retentativa da fila contra um caso que já disparou não deve custar
-    // uma varredura geoespacial para descobrir que não vai mandar nada. Se a
-    // ordem se inverter, este caso continua passando pelo desfecho — por isso
-    // ele cobra que a consulta que ESTOURA nem chegue a ser chamada.
     const umaHoraAtras = (Number(AGORA) - 3_600_000) as Instant;
     const { servico } = montar({ ultimoEnvio: umaHoraAtras, alcanceEstoura: true });
 
@@ -181,9 +152,6 @@ void describe('o critério 7: um disparo por caso por dia', () => {
   });
 
   void it('a retentativa da fila é idempotente pelo mesmo critério', async () => {
-    // O worker pode reentregar o trabalho depois de um reinício. A segunda
-    // passada lê o `dispatched_at` que a primeira gravou e desiste — sem uma
-    // trava nova, e sem 500 pessoas acordadas duas vezes.
     const { servico, avisos } = montar({ ultimoEnvio: AGORA });
 
     await servico.disparar(CASO);
@@ -202,9 +170,6 @@ void describe('o alcance vira o disparo gravado', () => {
 
     assert.deepEqual(desfecho, { tipo: 'rodou', estado: 'computed', avisados: 2 });
     assert.equal(conclusoes[0]?.estado, 'computed');
-    // DUAS contas e TRÊS aparelhos: o número do disparo conta PESSOAS, não
-    // envios. Contar aparelhos faria `reachable_tutors` crescer com quem tem
-    // celular e tablet, e a tela prometeria mais vizinhos do que existem.
     assert.equal(conclusoes[0]?.avisados.length, 2);
     assert.equal(avisos.length, 3);
   });
@@ -225,10 +190,6 @@ void describe('o alcance vira o disparo gravado', () => {
   });
 
   void it('a gravação vem ANTES do primeiro envio', async () => {
-    // Se o processo morrer no meio do laço, o pior desfecho é um disparo
-    // registrado que alcançou menos gente do que diz. O desfecho oposto —
-    // mandar e não registrar — faz a retentativa acordar as mesmas pessoas de
-    // novo, e o teto de fadiga fica sem o que contar.
     const { servico, linhaDoTempo } = montar({
       alcance: { destinatarios: [vizinho(1), vizinho(2)], tetoAtingido: false },
     });
@@ -240,9 +201,6 @@ void describe('o alcance vira o disparo gravado', () => {
   });
 
   void it('o teto atingido é gravado, porque muda a leitura da métrica', async () => {
-    // Critério 9 da BICHUS-18: 500 com corte e 500 sem corte são fatos
-    // diferentes, e quem lê o painel meses depois não tem como distinguir os
-    // dois se o fato não estiver gravado.
     const { servico, conclusoes } = montar({
       alcance: { destinatarios: [vizinho(1)], tetoAtingido: true },
     });
@@ -253,10 +211,6 @@ void describe('o alcance vira o disparo gravado', () => {
   });
 
   void it('alcance ZERO grava `computed` com zero, e não vira silêncio', async () => {
-    // A BICHUS-20 inteira em um caso. "Não há ninguém num raio de 5 km" é uma
-    // resposta, e ela precisa ficar registrada como resposta: um disparo que
-    // sumisse deixaria a tela sem saber a diferença entre "ninguém por perto" e
-    // "o alerta não rodou".
     const { servico, conclusoes, avisos } = montar({
       alcance: { destinatarios: [], tetoAtingido: false },
     });
@@ -281,9 +235,6 @@ void describe('falha de cálculo não vira zero', () => {
   });
 
   void it('`unavailable` e `computed` com zero são desfechos DIFERENTES', async () => {
-    // ADR-0006: "mostrar zero quando houve erro é a forma mais barata de mentir
-    // para alguém em pânico". Os dois casos acima passariam juntos se o serviço
-    // colapsasse as duas respostas; este é o que exige que elas se distingam.
     const falhou = await montar({ alcanceEstoura: true }).servico.disparar(CASO);
     const vazio = await montar({
       alcance: { destinatarios: [], tetoAtingido: false },
@@ -302,9 +253,6 @@ void describe('falha de cálculo não vira zero', () => {
 
 void describe('os casos em que nenhum alerta sai', () => {
   void it('caso sem coordenada não dispara, e não é falha de envio', async () => {
-    // Critério 14 da BICHUS-18. Ele não deveria chegar aqui — um caso sem
-    // centro nasce `no_location` e não é enfileirado — e a guarda existe porque
-    // o worker recebe um identificador e não pode assumir o que o produtor fez.
     const { servico, conclusoes, avisos } = montar({ contexto: { centro: undefined } });
 
     assert.deepEqual(await servico.disparar(CASO), { tipo: 'semCentro' });
@@ -313,9 +261,6 @@ void describe('os casos em que nenhum alerta sai', () => {
   });
 
   void it('caso ENCERRADO não acorda ninguém', async () => {
-    // O animal voltou, ou a busca acabou. Um alerta que saísse agora mandaria
-    // 500 pessoas procurar um pet que está em casa, e a próxima vez que o aviso
-    // de verdade chegar elas já terão aprendido a ignorá-lo.
     const { servico, avisos } = montar({ contexto: { aberto: false } });
 
     assert.deepEqual(await servico.disparar(CASO), { tipo: 'casoEncerrado' });
@@ -353,8 +298,6 @@ void describe('o que atravessa a porta de entrega', () => {
   });
 
   void it('vai o bairro, e nenhuma coordenada de tutor nenhum', async () => {
-    // Critério 8 da BICHUS-18. O alcance traz conta e aparelho, e nenhuma
-    // distância: o dado não existe neste caminho, então não há o que vazar.
     const { servico, avisos } = montar();
 
     await servico.disparar(CASO);

@@ -1,32 +1,4 @@
-/**
- * ISCA (B): `GET /v1/tags/{code}` devolve a FOTO do pet.
- *
- * ## O defeito que ela desliga
- *
- * O cliente escaneou a plaquinha e a tela do pet abriu **sem a foto**. A causa
- * não estava no aplicativo: `tag-routes.ts` escrevia `photo_url: null` numa
- * linha fixa, com um comentário dizendo que o módulo `media` não existia nesta
- * entrega. Ele existe (`src/modules/media/`), o contrato declara
- * `TagResolution.pet.photo_url` desde sempre e o próprio exemplo de 200 de
- * `resolveTagCode` traz um endereço. O aplicativo lia o campo, recebia `null`
- * todas as vezes, e — corretamente, pela regra 5.4 do design system — não
- * desenhava moldura nenhuma.
- *
- * ## Por que ela é prova por DESLIGAMENTO, e não asserção trivial
- *
- * O primeiro caso dá ao repositório um pet COM chave de foto e exige o
- * endereço montado no corpo. Devolver `null` fixo outra vez — que é a linha
- * exata que estava aqui — reprova. Montar o endereço com a base errada
- * (`baseDaWeb`, que é outro host por decisão do cliente) também reprova,
- * porque o caso compara com a base de mídia e elas são diferentes de propósito.
- *
- * O segundo caso é o contrapeso, e sem ele o primeiro poderia ser satisfeito
- * por um endereço constante: sem chave de foto o campo volta a ser `null`, e
- * `null` aqui significa "este pet não tem capa pronta", nunca "esta rota não
- * sabe responder". É essa distinção que o defeito apagava.
- *
- * ESCRITA E NÃO RODADA nesta entrega, por instrução do cliente.
- */
+/** ISCA (B): `GET /v1/tags/{code}` devolve a FOTO do pet. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -128,8 +100,6 @@ function montar(photoKey: string | null) {
     clock,
     trilha,
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
-    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
-    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
     fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,

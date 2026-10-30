@@ -1,14 +1,4 @@
-/**
- * `GET /v1/public/reference-data` — espécie, raça, porte e cor.
- *
- * Pública, sem conta, cacheável por 24 h. `ETag` é a própria versão do conjunto:
- * a lista só muda por migração, então o revalidador barato existe de graça e o
- * app deixa de rebaixar a mesma carga a cada abertura.
- *
- * A cor sai **rotulada em texto**. Amostra de cor sem nome é adivinhação sob
- * sol e para quem não distingue cores, e é por isso que `label` é obrigatório
- * em todo item e não há campo de valor hexadecimal nesta resposta.
- */
+/** `GET /v1/public/reference-data` — espécie, raça, porte e cor. */
 import { casaIfNoneMatch } from '../../../../shared/http/if-match.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -19,9 +9,6 @@ export const rotaDeDadosDeReferencia = defineRoute({
   operationId: 'getReferenceData',
   method: 'get',
   path: '/public/reference-data',
-  // Nenhum efeito fora do processo: é leitura de lista fixa. O teto existe
-  // assim mesmo, por decisão da política, e ao estourar serve do cache em vez
-  // de recusar — recusar esta rota deixaria o cadastro sem sugestão nenhuma.
   effects: [],
   rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'serve_cache' }],
 });
@@ -43,7 +30,6 @@ export function registrarRotasDeReferencia(
       void reply.header('Cache-Control', `public, max-age=${CACHE_EM_SEGUNDOS}`);
       void reply.header('ETag', etag);
 
-      // Comparacao fraca, que ignora o sufixo que a borda poe no ETag (07/10).
       if (casaIfNoneMatch(request.headers['if-none-match'], etag)) {
         return reply.status(304).send();
       }

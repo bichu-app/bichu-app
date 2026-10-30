@@ -1,43 +1,6 @@
 /**
- * As ISCAS de SQL do **convite** e do **alvo por apelido**: os predicados estão
- * na cláusula `WHERE`, e são os **mesmos** nas duas resoluções.
- *
- * ## Por que medir o SQL, e não só o comportamento
- *
- * Porque a afirmação do ADR-0021 é sobre a FORMA da consulta, e porque a
- * indistinguibilidade é uma propriedade de **custo** além de uma de resposta. Um
- * caso de comportamento mede o que uma chamada devolveu; o que precisa valer é
- * que **não existe** ramo neste arquivo que faça um dos casos custar diferente
- * do outro — e isso se lê no SQL compilado.
- *
- * A suíte não tem banco: o `DummyDriver` compila e devolve o texto.
- *
- * ## A IGUALDADE DOS PREDICADOS NÃO É MEDIDA AQUI, E O MOTIVO É A FRONTEIRA
- *
- * `construtorDoAlvoPorApelido` tem de cobrar os **mesmos seis** predicados que
- * `construtorDoPerfilPorApelido`, que é de **outro módulo** (`people`) — e um
- * módulo só enxerga `ports/` de outro (`src/architecture.rules.mjs`). Comparar
- * os dois SQL aqui faria `connections` importar `people/adapters/`, que a regra
- * proíbe com razão.
- *
- * Por isso essa comparação mora em **`src/tools/pedido-por-apelido-cobra-o-mesmo-que-o-perfil.test.ts`**,
- * fora de `src/modules` — é onde os outros portões que atravessam módulo já
- * vivem. Ela importa porque, se os dois conjuntos divergirem, abre-se um dos
- * dois buracos, e os dois são ruins:
- *
- * - a busca/perfil mostra alguém a quem o pedido não chega — a pessoa vê um
- *   botão que só pode falhar;
- * - **o pedido chega a quem a busca esconde** — e aí o 404 do perfil passa a ser
- *   contornável por `POST /connections`, que é a porta de trás que a decisão de
- *   18/10 temia, reaberta por descuido em vez de por decisão.
- *
- * ## O que estes casos NÃO provam, e está dito em voz alta
- *
- * Que o Postgres se comporta como o texto diz. `conta_habilitada`,
- * `bloqueio_entre` e `perfil_ocultado_para_quem_denunciou` são funções SQL das
- * migrações `20261017000013`, `20261018000031` e `20261018000032`, e o que elas
- * fazem é medido onde elas moram. Aqui se prova que esta camada as CHAMA, no
- * `WHERE`, nas duas resoluções — que é a metade que um refator quebra.
+ * As ISCAS de SQL do **convite** e do **alvo por apelido**: os predicados estão na
+ * cláusula `WHERE`, e são os **mesmos** nas duas resoluções.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -70,33 +33,7 @@ const semBanco = new Kysely<Database>({
 const sqlDoApelido = (): string =>
   construtorDoAlvoPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 
-/**
- * A LISTA DE SELEÇÃO da consulta — o que de fato sai dela.
- *
- * ## O CORTE É NO `FROM` DE TOPO, E NÃO NO PRIMEIRO ` from `
- *
- * A primeira versão cortava em `indexOf(' from ')` cru e não conferia nada. As
- * asserções deste recorte são todas NEGATIVAS (`!selecao.includes(...)`), e é
- * essa combinação que torna o corte cru perigoso: **um portão que varre menos
- * do que diz passa por não achar nada.**
- *
- * Hoje este SQL tem UM ` from ` só — foi medido em 21/10/2026, e por isso o
- * corte cru ainda dava a resposta certa. Ele estava a uma subconsulta de
- * distância de parar de dar: bastaria um `(select count(*) from pets ...) as
- * "pets_count"` na lista de seleção para o corte cair DENTRO dela, e aí tudo o
- * que fosse selecionado depois — `public_key`, `display_name`, foto — ficaria
- * invisível para as asserções, **passando verde**.
- *
- * É o mesmo defeito que `busca-nao-e-oraculo.test.ts` pagou e consertou no
- * mesmo dia, e o que o caso irmão do perfil (`people`) já documentava: *"a
- * primeira versão deste caso contava quatro e reprovava a consulta correta"*.
- *
- * `from "handles"` é o `FROM` de topo e ele é único no SQL: a resolução por
- * apelido parte de `handles` e junta `users`.
- *
- * **E ele REPROVA se não achar o ponto de corte.** Corte que não encontra o
- * marcador vira varredura cega e silenciosa — que é a lição inteira.
- */
+/** A LISTA DE SELEÇÃO da consulta — o que de fato sai dela. */
 function selecaoDa(sql: string): string {
   const corte = sql.toLowerCase().indexOf(' from "handles"');
   assert.ok(
@@ -110,19 +47,8 @@ function selecaoDa(sql: string): string {
 const sqlDoConvite = (): string =>
   construtorDoConvitePorToken(semBanco, TOKEN, QUEM_CHAMA, AGORA).sql;
 
-// ---------------------------------------------------------------------------
-// AS ISCAS DO PRÓPRIO RECORTE — AS DUAS DIREÇÕES
-// ---------------------------------------------------------------------------
-//
-// O recorte é o que decide o ALCANCE das asserções negativas acima. Se ele
-// corta no lugar errado, elas continuam verdes sem olhar para nada — e essa é
-// a forma de defeito que não dá sinal nenhum.
-//
-// A direção que REPROVA é obrigatória: sem ela, trocar o `assert.ok` por um
-// `return ''` deixaria este arquivo inteiro verde.
 void describe('o recorte da lista de selecao', () => {
   void it('REPROVA quando o `FROM` de topo nao esta no SQL', () => {
-    // Corte que não acha o marcador vira varredura cega. Ele tem de gritar.
     assert.throws(
       () => selecaoDa('select "u"."id" as "user_id" from "outra_tabela" as "o"'),
       /FROM` de topo/,
@@ -132,9 +58,6 @@ void describe('o recorte da lista de selecao', () => {
   });
 
   void it('corta DEPOIS da lista inteira, mesmo com subconsulta antes do topo', () => {
-    // A isca do cego, na direção que importa: um ` from ` de SUBCONSULTA antes
-    // do `FROM` de topo não pode encurtar o recorte. Com o corte cru antigo,
-    // `public_key` cairia fora e um vazamento passaria verde.
     const comSubconsulta =
       'select "u"."id" as "user_id", ' +
       '(select count(*) from "pets" as "p" where "p"."owner" = "u"."id") as "pets_count", ' +
@@ -266,8 +189,6 @@ void describe('o convite por token cobra os predicados dele na clausula WHERE', 
       'o token em claro esta nos PARAMETROS. O banco guarda os 32 bytes do SHA-256 ' +
         '(`connection_invites.token_hash`), e a comparacao e sobre o resumo.',
     );
-    // `Buffer.isBuffer` ja estreita o tipo, entao um `as Buffer` aqui seria a
-    // documentacao falsa que a regra `no-unnecessary-type-assertion` recusa.
     const resumo = parameters.find((p) => Buffer.isBuffer(p));
     assert.equal(
       resumo?.length,

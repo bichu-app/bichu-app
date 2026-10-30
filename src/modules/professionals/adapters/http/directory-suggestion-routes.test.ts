@@ -1,26 +1,6 @@
 /**
- * `POST /directory/suggestions`, sobre um Fastify de verdade e com o CONTRATO
- * de verdade.
- *
- * Sobe o servidor em vez de chamar o manipulador porque quatro coisas que esta
- * operacao promete so existem com o framework no caminho: o **401** de quem nao
- * tem conta (a credencial e lida na borda), o **429** do teto (gancho, e nao um
- * `if`), a **recusa do campo desconhecido** (um `preValidation`, antes do Ajv) e
- * a **serializacao real** da resposta -- que e onde um `id` vazaria.
- *
- * O esquema do corpo e o do `api/openapi.yaml` carregado do disco, e nao um
- * objeto inline: e esse carregamento que faz estes casos reprovarem quando a
- * operacao sai da especificacao ou muda de forma la.
- *
- * ## O limite deste arquivo, dito em voz alta
- *
- * O detector de D59 de verdade (`errosDeTextoDeUsuario`, de
- * `modules/network/domain`) **nao pode ser importado daqui**:
- * `arquitetura/fronteira-de-modulo` reprova, inclusive em `.test.ts`. Em
- * producao ele chega por `src/bin/api.ts`. Entao os casos de D59 aqui provam o
- * CAMINHO -- que os dois textos vao ao detector e que a recusa dele vira um
- * `400` com campo e `code` --, e nao o detector. Um caso de ponta a ponta com o
- * texto real precisa morar em `tests/`, que nao tem essa fronteira.
+ * `POST /directory/suggestions`, sobre um Fastify de verdade e com o CONTRATO de
+ * verdade.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -73,16 +53,11 @@ interface Cenario {
   readonly contador?: RateLimitStore;
   /** Campos que o detector de texto deve recusar, com o `code` de D59. */
   readonly recusarTexto?: readonly string[];
-  /**
-   * A conta que chama tem canal de contato verificado? **O padrao e `true`**,
-   * e o padrao e que torna o caso da isca honesto: todo outro cenario deste
-   * arquivo mede outra coisa, e com o padrao `false` eles passariam a medir a
-   * trava de validacao sem dizer.
-   */
+  /** A conta que chama tem canal de contato verificado? */
   readonly validada?: boolean;
 }
 
-/** O que o repositorio recebeu, por cenario. Zerado em cada `servidor()`. */
+/** O que o repositorio recebeu, por cenario. */
 let gravadas: SugestaoAGravar[] = [];
 let trilhaDeTeste: AuditEvent[] = [];
 
@@ -90,20 +65,11 @@ function repositorio(): DirectorySuggestionRepository {
   return {
     registrar: (sugestao) => {
       gravadas.push(sugestao);
-      // **`tipo: 'gravada'` desde 29/10/2026.** `registrar` passou a poder
-      // RECUSAR, porque com o logotipo ela confirma o envio na mesma transacao
-      // -- e um `upload_id` de outra conta, de outro proposito, vencido ou ja
-      // usado devolve `envio_nao_serve`. Este dobre sempre GRAVA: o caminho de
-      // recusa e medido contra a pilha de verdade, onde existe envio para
-      // conferir.
       return Promise.resolve({
         tipo: 'gravada' as const,
         sugestao: { ref: REF, createdAt: CRIADO_EM },
       });
     },
-    // Este arquivo nao mede a LEITURA: o dobre recusa em voz alta em vez de
-    // devolver pagina vazia, que passaria por resultado legitimo. Quem mede
-    // `listarDoAutor` e `minhas-indicacoes-routes.test.ts`.
     listarDoAutor: () =>
       Promise.reject(new Error('cenario de escrita: listarDoAutor nao e exercitado aqui')),
   };
@@ -164,7 +130,6 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       conferencias: conferencias(cenario),
       canal: canal(cenario),
     }),
-    // O CONTRATO DE VERDADE, do disco.
     contrato: carregarContrato(resolve(process.cwd(), 'api/openapi.yaml')),
   });
   return app;
@@ -256,9 +221,6 @@ void describe('a rota esta REGISTRADA, e com o teto que o contrato declara', () 
   });
 
   void it('o teto nao e por `ip`: no CGNAT das operadoras isso pegaria vizinho inocente', () => {
-    // `dimension.includes('ip')` aqui **nao compila**: `defineRoute` preserva a
-    // tupla, entao a dimensao e o literal `'account'` e perguntar por `'ip'` e
-    // erro de tipo. O caso confere o conteudo, que e o que resta para conferir.
     for (const entrada of rotaDaSugestaoDoDiretorio.rateLimit) {
       assert.deepEqual([...entrada.dimension], ['account']);
     }
@@ -362,11 +324,6 @@ void describe('o corpo e FECHADO: campo desconhecido e RECUSADO, e nao apagado e
       { street_address: 'Avenida Brasil, 200' },
       { geo: { lat: -23.5, lon: -46.6 } },
       { review_status: 'approved' },
-      // A tentativa de escrever a AUTORIA pelo corpo. O nome real da coluna nao
-      // pode ser escrito aqui -- `portao-colunas-que-nao-saem` reprova o nome
-      // literal em qualquer `.ts` de `src/`, comentario incluido --, e essa
-      // impossibilidade e parte da protecao: o campo nao existe no contrato, e
-      // o nome dele nao existe no codigo do servidor.
       { suggested_by: QUEM_CHAMA },
     ]) {
       const resposta = await sugerir(servidor(), { corpo: { ...CORPO_VALIDO, ...extra } });
@@ -492,8 +449,6 @@ void describe('a trilha: `directory_suggestion.submitted`', () => {
 
   void it('o IP vai EM CLARO para a porta, que o transforma em HMAC (SEC-010)', async () => {
     await sugerir(servidor());
-    // A porta da trilha e quem aplica o HMAC. Um hash aplicado tambem aqui
-    // seria uma segunda implementacao da mesma regra, e duas divergem.
     assert.equal(typeof trilhaDeTeste[0]?.actorIp, 'string');
     assert.equal(trilhaDeTeste[0]?.actorIp?.includes('127.0.0.1'), true);
   });
@@ -514,25 +469,7 @@ void describe('a trilha: `directory_suggestion.submitted`', () => {
   });
 });
 
-/**
- * A ISCA DA TRAVA DE CONTA VALIDADA (regra do cliente, dita duas vezes).
- *
- * ## Por que ela existe, e por que ela nao mede a tela
- *
- * A tela esconde o icone de sugerir de quem nao validou, e isso e cortesia --
- * nao e recusa. Estes casos chamam a rota **direto**, sem passar pela tela, que
- * e exatamente o que um cliente curioso, um script ou uma versao antiga do app
- * fazem. A trava que vive so no app nao recusa nada aqui.
- *
- * ## O contrapeso NAO e enfeite
- *
- * O segundo caso e o que torna o primeiro uma medicao: um `temCanalVerificado`
- * fixo em `false` passaria no caso da recusa, e passaria pelo motivo errado. Os
- * dois casos sao o mesmo caminho com o mecanismo nos dois estados.
- *
- * ESCRITA E NAO RODADA nesta sessao (ordem do cliente: nada de suite unitaria
- * nem de integracao). O que foi rodado esta no relatorio.
- */
+/** A ISCA DA TRAVA DE CONTA VALIDADA (regra do cliente, dita duas vezes). */
 void describe('ISCA: so conta VALIDADA sugere, e a recusa e do SERVIDOR', () => {
   void it('conta valida e NAO validada, chamando a rota direto, recebe 409 `contact-channel-unverified`', async () => {
     const app = servidor({ validada: false });
@@ -583,19 +520,7 @@ void describe('ISCA: so conta VALIDADA sugere, e a recusa e do SERVIDOR', () => 
   });
 });
 
-/**
- * A MODERACAO DE PALAVRAS, medida **pela rota** e nao pelo dominio.
- *
- * Este bloco existe separado das conferencias de D59 por um motivo de prova: as
- * iscas de `shared/texto/moderacao.test.ts` provam a FUNCAO, e uma funcao certa
- * que ninguem chama nao protege nada. O que falta provar e que a recusa
- * acontece **no caminho de escrita**, com `app.inject` falando HTTP direto --
- * sem aplicativo, sem tela e sem nenhum aviso de formulario no meio. E essa a
- * unica forma da pergunta "um `curl` escreveria isto?".
- *
- * **Desligamento**: tire `errosDeModeracao` de `errosDaSugestao` e os tres
- * primeiros casos viram `201`.
- */
+/** A MODERACAO DE PALAVRAS, medida **pela rota** e nao pelo dominio. */
 void describe('ISCA: a moderacao de palavras vale CHAMANDO A API DIRETO', () => {
   void it('xingamento em `display_name` responde 400 e NAO grava na fila', async () => {
     const resposta = await sugerir(servidor(), {
@@ -614,8 +539,6 @@ void describe('ISCA: a moderacao de palavras vale CHAMANDO A API DIRETO', () => 
     });
     assert.equal(resposta.status, 400);
     assert.equal(errosDe(resposta)[0]?.code, 'inappropriate_language');
-    // A palavra medida nao volta em NENHUMA posicao da resposta, e a lista
-    // tambem nao: o `400` nao e oraculo de quem quer descobri-la.
     for (const vazamento of ['merda', 'babaca', 'otario']) {
       assert.equal(resposta.bruto.toLowerCase().includes(vazamento), false, vazamento);
     }

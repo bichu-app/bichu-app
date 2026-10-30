@@ -1,24 +1,6 @@
 /**
- * As regras da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292;
- * ADR-0027 itens 12, 13 e 17, apendice A.4 a A.6), sem banco e sem servidor.
- *
- * ## O que mora aqui
- *
- * - a conferencia de texto como o `CHECK` mede (depois de `btrim`), o
- *   controle bidirecional recusado em todo texto administrativo e o detector
- *   de contato e pagamento das observacoes (D59);
- * - as regras de tempo do encontro (fim depois do inicio, encontro que ja
- *   terminou) e a existencia do fuso;
- * - a condicao de acesso (gratuito ou pago, so o valor, informativo);
- * - o `slug` gerado do encontro privado, aleatorio, e o derivado do publico;
- * - as transicoes de publicacao e de decisao do pedido;
- * - as projecoes do painel, sem `id` interno e sem autor.
- *
- * ## O que NAO mora aqui
- *
- * Papel e reautenticacao: sao da guarda do prefixo e da declaracao da rota
- * (ADR-0027 item 7). O que chega aos casos de uso ja e um administrador, e a
- * janela de reautenticacao ja foi consumida.
+ * As regras da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292; ADR-0027
+ * itens 12, 13 e 17, apendice A.4 a A.6), sem banco e sem servidor.
  */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
@@ -29,16 +11,7 @@ import {
 import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
-// ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
-
-/**
- * O estado de publicacao como o painel o ve. **Nao ha `pending_review`**: ele
- * existiu por algumas horas em 17/10/2026, enquanto o encontro da comunidade
- * tinha fila de revisao, e saiu com a decisao do cliente de publicar direto
- * (ADR-0025 emenda 3). A migracao `20261001000005` o tirou do `CHECK`.
- */
+/** O estado de publicacao como o painel o ve. */
 export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
@@ -65,15 +38,14 @@ export interface Lugar {
 
 /** Uma imagem da galeria do encontro, como a escrita a enxerga. */
 export interface ImagemDoEncontroAdministrativa {
-  /** O envio de que ela nasceu. Nulo depois que a conta que enviou foi apagada. */
+  /** O envio de que ela nasceu. */
   readonly uploadId: string | null;
-  /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
+  /** `catalog_images.id`, interno. */
   readonly imageId: string;
   readonly position: number;
   /**
-   * **Anulavel desde 21/10/2026** (decisao do cliente, migracao
-   * `20261020000013`): nulo quer dizer que o painel gravou a imagem sem
-   * descricao. O painel LE o nulo como nulo -- ver `ImagemProjetada.alt_text`.
+   * **Anulavel desde 21/10/2026** (decisao do cliente, migracao `20261020000013`):
+   * nulo quer dizer que o painel gravou a imagem sem descricao.
    */
   readonly altText: string | null;
   readonly status: EstadoDaImagem;
@@ -93,7 +65,7 @@ export interface EncontroAdministrativo {
   readonly endsAt: Date | null;
   readonly timeZone: string;
   readonly visibilidade: Visibilidade;
-  /** `admin` ou `community` (ADR-0025 emenda 3). **Nao e o autor.** */
+  /** `admin` ou `community` (ADR-0025 emenda 3). */
   readonly origem: OrigemDoEncontro;
   readonly entrada: Entrada;
   readonly portes: readonly string[];
@@ -103,11 +75,11 @@ export interface EncontroAdministrativo {
   readonly estrutura: readonly string[];
   readonly paraLevar: readonly string[];
   readonly observacoes: string | null;
-  /** Endereco por extenso (01/10/2026). O painel o ve; o app, so em `location`. */
+  /** Endereco por extenso (01/10/2026). */
   readonly endereco: string | null;
-  /** Link de ingresso (ADR-0027 item 22). Publico. */
+  /** Link de ingresso (ADR-0027 item 22). */
   readonly linkDeIngresso: string | null;
-  /** O handle do Instagram, puro. Publico. */
+  /** O handle do Instagram, puro. */
   readonly instagram: string | null;
   readonly publicacao: PublicacaoAdministrativa;
   readonly publishedAt: Date | null;
@@ -144,10 +116,6 @@ export interface PedidoNaFila {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Constantes do contrato e do banco
-// ---------------------------------------------------------------------------
-
 export const PORTES = ['P', 'M', 'G', 'GG'] as const;
 export const FUSO_PADRAO = 'America/Sao_Paulo';
 export const TETO_DE_IMAGENS = 8;
@@ -160,17 +128,13 @@ export const DIAS_DE_RETENCAO_DO_PEDIDO = 30;
 
 const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
-// ---------------------------------------------------------------------------
-// Texto
-// ---------------------------------------------------------------------------
-
 /** U+202A a U+202E e U+2066 a U+2069: invertem a ordem de exibicao do texto. */
 const CONTROLE_BIDIRECIONAL = /[‪-‮⁦-⁩]/u;
 
 /**
- * Tamanho de texto como o `CHECK` do banco o mede, depois de `btrim`, e o
- * controle bidirecional, recusado em todo texto administrativo (D59): ele faz o
- * painel e o app mostrarem uma coisa e gravarem outra.
+ * Tamanho de texto como o `CHECK` do banco o mede, depois de `btrim`, e o controle
+ * bidirecional, recusado em todo texto administrativo (D59): ele faz o painel e o
+ * app mostrarem uma coisa e gravarem outra.
  */
 export function errosDeTexto(campo: string, valor: string, minimo: number, maximo: number): ProblemFieldError[] {
   if (CONTROLE_BIDIRECIONAL.test(valor)) {
@@ -189,16 +153,7 @@ export function errosDeTexto(campo: string, valor: string, minimo: number, maxim
   return [];
 }
 
-/**
- * O texto na forma em que a conferencia de D59 o le.
- *
- * - `base`: NFKC, sem acento, minusculo, sem caractere de largura zero. E a
- *   forma em que numero continua numero (CPF, conta, agencia).
- * - `letras`: a `base` com o digito que imita letra trocado por ela dentro de
- *   palavra (`P1X` vira `pix`) e com os separadores entre letras soltas
- *   tirados (`p i x`, `p-i-x`, `p.i.x` viram `pix`). E a forma em que palavra
- *   continua palavra, por mais que alguem a quebre.
- */
+/** O texto na forma em que a conferencia de D59 o le. */
 export function normalizarParaConferencia(texto: string): { base: string; letras: string } {
   const base = texto
     .normalize('NFKC')
@@ -207,9 +162,6 @@ export function normalizarParaConferencia(texto: string): { base: string; letras
     .replace(/[\u200b-\u200f\u2060-\u2064\ufeff\u00ad]/gu, '')
     .toLowerCase();
   const IMITA_LETRA: Readonly<Record<string, string>> = { '1': 'i', '0': 'o', '3': 'e', '4': 'a', '5': 's', '7': 't', '$': 's' };
-  // Tres ou mais caracteres soltos com o MESMO separador entre eles (espaco,
-  // ponto, hifen, sublinhado, barra, asterisco) viram uma palavra so. O mesmo
-  // separador em toda a sequencia evita colar a palavra seguinte.
   const juntado = base.replace(
     /(?<![a-z0-9$])([a-z0-9$])([\s.\-_*/|]+)(?:[a-z0-9$]\2){1,}[a-z0-9$](?![a-z0-9$])/g,
     (m) => m.replace(/[^a-z0-9$]/g, ''),
@@ -221,13 +173,15 @@ export function normalizarParaConferencia(texto: string): { base: string; letras
 }
 
 /**
- * Nome de dominio de primeiro nivel que um link encurtado ou uma pagina de
- * perfil usa. Lista aberta de proposito, com os genericos e os de pais que
- * encurtador usa (`bit.ly`, `linktr.ee`, `wa.me`, `t.co`, `is.gd`).
+ * Nome de dominio de primeiro nivel que um link encurtado ou uma pagina de perfil
+ * usa.
  */
 const TLD = 'com|net|org|br|me|io|ly|ee|app|link|gg|co|info|site|online|store|shop|xyz|tv|to|bio|page|sh|cc|gd|in|us|so|ai|dev|click|live|social|pay|money|bank|digital|vip|top|club|ws|biz|tk|ml|ga|cf|gq';
 
-/** Token com cara de dominio, com ou sem caminho: `algo.tld`, `algo.tld/abc`, `algo . tld`. */
+/**
+ * Token com cara de dominio, com ou sem caminho: `algo.tld`, `algo.tld/abc`, `algo
+ * .
+ */
 const DOMINIO = new RegExp(`(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\s?\\.\\s?(?:${TLD})(?![a-z0-9])`);
 /** Qualquer `algo.algo/caminho`, mesmo com TLD fora da lista. */
 const DOMINIO_COM_CAMINHO = /[a-z0-9-]+\.[a-z]{2,}\/\S+/;
@@ -237,25 +191,23 @@ const ARROBA = /(?:^|[^a-z0-9])@[a-z0-9_.]{2,}/;
 /** Pagamento pela palavra, na forma `letras`. */
 const PAGAMENTO_POR_PALAVRA = /\b(?:pix(?!el|ot|ar)|picpay|pic\s?pay|mercado\s?pago|nubank|paypal|pagseguro|chave\s+aleatoria)\b/;
 
-/** Pagamento pelo numero, na forma `base`: CPF, CNPJ, chave aleatoria e dados bancarios. */
+/**
+ * Pagamento pelo numero, na forma `base`: CPF, CNPJ, chave aleatoria e dados
+ * bancarios.
+ */
 const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
   /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/,
   /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,
   /\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\b/,
-  // "ag 1234", "agencia: 1234-5", "ag. 0001"
   /\b(?:ag|agencia|agenc)\s*[.:]?\s*\d{3,5}(?:-?\d)?\b/,
-  // "cc 56789-0", "c/c 1234", "conta 12345-6", "conta corrente: 123456"
   /\b(?:cc|c\/c|conta(?:\s+corrente)?|conta\s+poupanca|cp)\s*[.:]?\s*\d{4,}(?:-?[\dx])?\b/,
   /\bbanco\s*[.:]?\s*\d{3}\b/,
 ];
 
 /**
  * Data de calendario nos dois formatos que a equipe escreve: `dd.mm.aaaa` e
- * `dd/mm/aaaa`, dia 1 a 31 (com ou sem zero), mes 1 a 12, ano 19xx ou 20xx,
- * sem digito colado antes nem depois (nem separador seguido de digito). O detector de telefone do canal mediado le "10.10.2026"
- * como numero de oito digitos; nas observacoes do encontro a data e trocada
- * por um marcador antes de conferir. `redigir.ts` (a conversa mediada) nao
- * muda.
+ * `dd/mm/aaaa`, dia 1 a 31 (com ou sem zero), mes 1 a 12, ano 19xx ou 20xx, sem
+ * digito colado antes nem depois (nem separador seguido de digito).
  */
 const DATA_DE_CALENDARIO = /(?<!\d)(?<!\d[./])(?:0?[1-9]|[12]\d|3[01])([./])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}(?!\d)(?![./]\d)/g;
 
@@ -264,15 +216,9 @@ export function semDatas(texto: string): string {
 }
 
 /**
- * As observacoes (D59): telefone, e-mail, link (inclusive encurtador e
- * qualquer token com cara de dominio), perfil `@usuario`, endereco, CEP,
- * chave PIX, meio de pagamento e dados bancarios sao recusados com `400`.
- *
- * Duas camadas. O detector do canal mediado (`redigirCanalMediado`) ja
- * normaliza largura zero, homoglifo e numero por extenso, e aqui e usado para
- * RECUSAR, e nao para redigir: texto publicado pela equipe nao chega ao app com
- * buraco no meio. Por cima, `normalizarParaConferencia` desfaz as quebras que
- * ele nao cobre (`p i x`, `P1X`, `Pïx`, `bit . ly`).
+ * As observacoes (D59): telefone, e-mail, link (inclusive encurtador e qualquer
+ * token com cara de dominio), perfil `@usuario`, endereco, CEP, chave PIX, meio de
+ * pagamento e dados bancarios sao recusados com `400`.
  */
 export function errosDasObservacoes(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 2, 500);
@@ -287,21 +233,7 @@ export function errosDasObservacoes(campo: string, valor: string): ProblemFieldE
   ];
 }
 
-/**
- * O DETECTOR de D59, sem tamanho e sem nome de campo.
- *
- * Extraido de `errosDasObservacoes` quando o encontro da comunidade passou a
- * publicar direto (ADR-0025 emenda 3, 17/10/2026): sem revisao humana, a mesma
- * conferencia precisa valer em TODO texto que a pessoa escreve -- titulo,
- * descricao, observacoes e texto alternativo da capa --, e escrever um segundo
- * detector ao lado deste seria manter dois.
- *
- * As duas camadas continuam as mesmas: o detector do canal mediado
- * (`redigirCanalMediado`), usado aqui para RECUSAR e nao para redigir, e por
- * cima `normalizarParaConferencia`, que desfaz as quebras que ele nao cobre
- * (`p i x`, `P1X`, `Pïx`, `bit . ly`). A data de calendario e trocada por um
- * marcador antes, senao "10.10.2026" passa por telefone.
- */
+/** O DETECTOR de D59, sem tamanho e sem nome de campo. */
 export function temContatoOuPagamento(valor: string): boolean {
   const limpo = semDatas(valor.normalize('NFKC'));
   const { base, letras } = normalizarParaConferencia(limpo);
@@ -318,31 +250,6 @@ export function temContatoOuPagamento(valor: string): boolean {
 /**
  * O MESMO D59, **menos o endereco**, para o campo que tem regra propria de
  * endereco: `place_name` (`errosDoNomeDoLugar`).
- *
- * ## Por que o detector inteiro nao serve aqui
- *
- * O redator do canal mediado redige CONVERSA entre desconhecidos, e ali
- * qualquer palavra de logradouro e um endereco sendo passado: ele retira
- * "Avenida Paulista" inteira, com `kind: 'address'`. No NOME DO LUGAR nao e
- * endereco -- e como o lugar se chama --, e a decisao de 17/10/2026 e que ele
- * passa, junto de "Rua 25 de Marco", "Praca 14 de Janeiro" e "Quadra 302
- * Norte". Com o detector inteiro os quatro saiam recusados por
- * `contact_or_payment_detected`: a recusa errada, e por um motivo que a frase
- * nem nomeia.
- *
- * ## Por que telefone e e-mail sao lidos DIRETO, e nao pelo achado do redator
- *
- * Medido: em "Praca do Bairro (11) 98765-4321" o redator classifica o trecho
- * como ENDERECO, e nao como telefone -- o padrao de endereco dele casa primeiro
- * e come o numero. Descartar o achado de endereco e parar ai levaria o telefone
- * embora junto, que e exatamente o que este campo nao pode deixar passar. Por
- * isso `TELEFONE_COM_DDD` e `EMAIL` entram por cima, como ja entram em
- * `errosDoEndereco` -- o outro campo cujo conteudo legitimo e endereco.
- *
- * **Nada mais sai**: telefone, e-mail, link, encurtador, dominio, perfil
- * `@usuario`, chave PIX e dados bancarios continuam recusados aqui, e o
- * endereco embutido no nome continua recusado pela regra do proprio campo, com
- * `code: address_in_place_name`.
  */
 export function temContatoOuPagamentoSemEndereco(valor: string): boolean {
   const limpo = semDatas(valor.normalize('NFKC'));
@@ -360,28 +267,19 @@ export function temContatoOuPagamentoSemEndereco(valor: string): boolean {
 }
 
 /**
- * Telefone com DDD, nas formas em que se escreve: `(11) 91234-5678`,
- * `+55 11 91234 5678`, `11 3456-7890` e os 10 ou 11 digitos colados. O CEP
- * (`05416-001` ou `05416001`, 8 digitos) e o numero da casa ao lado dele
- * (`12 05416001`) nao casam: sem separador no meio do par de quatro, so 10 ou
- * 11 digitos colados contam.
+ * Telefone com DDD, nas formas em que se escreve: `(11) 91234-5678`, `+55 11 91234
+ * 5678`, `11 3456-7890` e os 10 ou 11 digitos colados.
  */
 const TELEFONE_COM_DDD =
   /(?<!\d)(?:(?:\+?55[\s.-]?)?\(\d{2}\)[\s.-]?9?\d{4}[\s.-]?\d{4}|\+?55[\s.-]?\d{2}[\s.-]?9?\d{4}[\s.-]?\d{4}|\d{2}[\s.-]?9?\d{4}[\s.-]\d{4}|\d{10,11})(?!\d)/;
 /** E-mail, na forma `base`. */
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/;
-/** Link: esquema, `www.` ou dominio COLADO (`loja.com.br`). Abreviacao com espaco (`Av. Brasil`) nao casa. */
+/** Link: esquema, `www.` ou dominio COLADO (`loja.com.br`). */
 const LINK = new RegExp(`https?:\\/\\/|\\bwww\\.|(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\.(?:${TLD})(?:\\.[a-z]{2})?(?![a-z0-9.])`);
 
 /**
- * O endereco por extenso do encontro (decisao do cliente de 01/10/2026): 5 a
- * 200 code points, aparado, sem controle bidirecional.
- *
- * **O detector de D59 das observacoes NAO se aplica inteiro aqui**, e isso e
- * de proposito: ele recusa endereco, CEP e numero de casa, que sao o conteudo
- * deste campo. Do D59 fica o que nunca e endereco -- link, e-mail, perfil
- * `@usuario`, telefone com DDD, chave PIX e dados de pagamento --, para o campo
- * nao virar a porta lateral do canal de contato que as observacoes fecham.
+ * O endereco por extenso do encontro (decisao do cliente de 01/10/2026): 5 a 200
+ * code points, aparado, sem controle bidirecional.
  */
 export function errosDoEndereco(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 5, 200);
@@ -401,23 +299,22 @@ export function errosDoEndereco(campo: string, valor: string): ProblemFieldError
   return [];
 }
 
-// ---------------------------------------------------------------------------
-// Links do encontro (ADR-0027 item 22): a excecao explicita ao D59
-// ---------------------------------------------------------------------------
-//
-// So estes dois campos aceitam link. As observacoes continuam recusando
-// (`errosDasObservacoes`), e nada aqui as toca.
-
-/** Host que nao e endereco publico na internet: loopback, rede local, nome sem ponto. */
+/**
+ * Host que nao e endereco publico na internet: loopback, rede local, nome sem
+ * ponto.
+ */
 const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan|home|home\.arpa|corp|test|invalid|example)$/;
-/** IPv4 literal, inclusive com zero a esquerda; o IPv6 literal chega entre colchetes. */
+/**
+ * IPv4 literal, inclusive com zero a esquerda; o IPv6 literal chega entre
+ * colchetes.
+ */
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 export const TETO_DO_LINK_DE_INGRESSO = 500;
 
 /**
- * O link de ingresso: `https`, ate 500, sem usuario e senha, sem IP literal e
- * sem host local. `javascript:`, `data:` e `http:` caem no esquema.
+ * O link de ingresso: `https`, ate 500, sem usuario e senha, sem IP literal e sem
+ * host local.
  */
 export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFieldError[] {
   const recusa = (code: string, message: string): ProblemFieldError[] => [{ field: campo, code, message }];
@@ -426,7 +323,6 @@ export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFiel
   if (texto.length === 0 || texto.length > TETO_DO_LINK_DE_INGRESSO) {
     return recusa('length', `De 1 a ${String(TETO_DO_LINK_DE_INGRESSO)} caracteres.`);
   }
-  // Espaco ou caractere de controle (abaixo de U+0020, e U+007F).
   if ([...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) {
     return recusa('ticket_url_invalid', 'O link não pode ter espaço.');
   }
@@ -436,17 +332,12 @@ export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFiel
   } catch {
     return recusa('ticket_url_invalid', 'Isso não é um link.');
   }
-  // O texto cru tambem precisa comecar por `https://`: `HTTPS://` ou `https:/x`
-  // o URL aceita e normaliza, e o banco confere o texto guardado.
   if (url.protocol !== 'https:' || !texto.startsWith('https://')) {
     return recusa('ticket_url_not_https', 'O link precisa começar com https://.');
   }
   if (url.username !== '' || url.password !== '' || /^https:\/\/[^/?#]*@/.test(texto)) {
     return recusa('ticket_url_has_credentials', 'O link não pode ter usuário e senha.');
   }
-  // O ponto final e o mesmo host em DNS (`localhost.` e `localhost`), e sem
-  // tira-lo antes ele escapa de toda regra abaixo (QA r5). Tirado uma vez,
-  // aqui, e todas as regras leem o mesmo nome.
   const host = url.hostname.toLowerCase().replace(/\.+$/, '');
   if (host === '') return recusa('ticket_url_invalid', 'Isso não é um link.');
   if (host.startsWith('[') || IPV4.test(host) || /^\d+$/.test(host) || /^0x/i.test(host)) {
@@ -458,28 +349,7 @@ export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFiel
   return [];
 }
 
-/**
- * O handle a GUARDAR, a partir da URL completa do perfil.
- *
- * ## O que mudou em 17/10/2026, e por que
- *
- * Esta funcao **aceitava** `usuario`, `@usuario` ou a URL, e normalizava os
- * tres. O cliente decidiu o padrao contrario para a aplicacao inteira: todo
- * campo de site ou URL recebe o endereco completo, com `https://`. Quem valida
- * isso agora e [errosDoInstagram]; esta funcao passou a ser so a EXTRACAO, e
- * pressupoe um valor que aquela ja aprovou.
- *
- * **Ela continua aceitando o apelido cru**, e isso e deliberado: ela tambem le
- * o que ja esta GRAVADO. A coluna guarda handle (`bichu.app`), e passa por
- * aqui quando o painel reabre um encontro para edicao. Endurecer a extracao
- * junto com a entrada quebraria a leitura do dado existente para resolver um
- * problema que e da entrada.
- *
- * Aceita a URL do perfil em `instagram.com` (com ou sem `www.`/`m.`,
- * `http`/`https`, barra final e consulta) e devolve o handle puro em
- * minusculas -- ou `null`, quando nao da para tirar um handle valido. Padrao do
- * Instagram: 1 a 30 de letras, digitos, ponto e sublinhado.
- */
+/** O handle a GUARDAR, a partir da URL completa do perfil. */
 export function handleDoInstagram(valor: string): string | null {
   let texto = valor.trim();
   const daUrl = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i.exec(texto);
@@ -492,33 +362,8 @@ export function handleDoInstagram(valor: string): string | null {
 export const TETO_DA_URL_DO_INSTAGRAM = 120;
 
 /**
- * A URL do perfil do Instagram, **completa e com `https://`** (padrao do
- * cliente de 17/10/2026).
- *
- * ## O apelido cru passou a ser RECUSADO, e e a mudanca de desenho
- *
- * `@bichu.app` e `bichu.app` eram aceitos e viravam handle. Agora sao
- * recusados, com uma linha que mostra a forma certa -- a pessoa nao precisa
- * descobrir sozinha que o campo mudou. **Nao ha completacao em silencio**: o
- * campo nao acrescenta a base do perfil ao que ela digitou.
- *
- * ## O que NAO mudou, e vale dizer
- *
- * - **O perfil continua tendo de ser do `instagram.com`.** O campo se chama
- *   Instagram; aceitar outro dominio aqui faria dele um campo de link
- *   qualquer, e a excecao ao D59 foi concedida a ESTE campo e nao a um campo
- *   de link livre.
- * - **A coluna continua guardando o handle**, e `instagram_url` continua sendo
- *   montada por [urlDoInstagram] a partir de `INSTAGRAM_PROFILE_BASE_URL`. A
- *   configuracao NAO virou morta. Guardar o handle mantem uma forma canonica:
- *   `instagram.com/x`, `www.instagram.com/x` e `m.instagram.com/x/` sao o
- *   mesmo perfil, e guardar o texto cru deixaria tres linhas dizendo a mesma
- *   coisa de tres jeitos.
- * - **Nenhum dado existente quebra**, e isto foi MEDIDO e nao suposto: em
- *   17/10/2026 os 6 encontros de hml tinham `instagram_handle` nulo, entao
- *   zero linha precisa de conversao e **nao ha migracao**. O que estivesse
- *   gravado continuaria funcionando de qualquer forma: a coluna nao mudou de
- *   formato, e so a ENTRADA ficou mais estrita.
+ * A URL do perfil do Instagram, **completa e com `https://`** (padrao do cliente
+ * de 17/10/2026).
  */
 export function errosDoInstagram(campo: string, valor: string): ProblemFieldError[] {
   const erros = errosDoEnderecoCompleto(campo, valor, {
@@ -527,8 +372,6 @@ export function errosDoInstagram(campo: string, valor: string): ProblemFieldErro
   });
   if (erros.length > 0) return erros;
 
-  // Passou nas regras gerais de endereco. Falta a regra que so este campo tem:
-  // ser um perfil do Instagram.
   const host = hostDoEndereco(valor);
   if (!/^(?:www\.|m\.)?instagram\.com$/.test(host)) {
     return [
@@ -556,11 +399,7 @@ export function urlDoInstagram(handle: string | null, base: string | null): stri
   return `${base.replace(/\/+$/, '')}/${handle}/`;
 }
 
-// ---------------------------------------------------------------------------
-// Tempo e fuso
-// ---------------------------------------------------------------------------
-
-/** A zona existe no catalogo IANA do runtime. O banco confere de novo no gatilho. */
+/** A zona existe no catalogo IANA do runtime. */
 export function fusoExiste(nome: string): boolean {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: nome });
@@ -571,8 +410,8 @@ export function fusoExiste(nome: string): boolean {
 }
 
 /**
- * Fim depois do inicio, e o encontro nao pode ter terminado (`event_in_past`):
- * o fim, ou o inicio quando nao ha fim, precisa estar no futuro (ADR-0027 A.4.2).
+ * Fim depois do inicio, e o encontro nao pode ter terminado (`event_in_past`): o
+ * fim, ou o inicio quando nao ha fim, precisa estar no futuro (ADR-0027 A.4.2).
  */
 export function errosDoHorario(
   startsAt: Date,
@@ -596,23 +435,22 @@ export function errosDoHorario(
   return erros;
 }
 
-/** O mesmo rotulo temporal da leitura publica: sem fim, depois do inicio e encerrado. */
+/**
+ * O mesmo rotulo temporal da leitura publica: sem fim, depois do inicio e
+ * encerrado.
+ */
 export function tempoDoEncontro(e: Pick<EncontroAdministrativo, 'startsAt' | 'endsAt'>, agora: Instant): TempoDoEncontro {
   if (agora < e.startsAt.getTime()) return 'upcoming';
   if (e.endsAt === null) return 'ended';
   return agora <= e.endsAt.getTime() ? 'happening' : 'ended';
 }
 
-// ---------------------------------------------------------------------------
-// Condicao de acesso
-// ---------------------------------------------------------------------------
-
 export interface EntradaDoCorpo {
   readonly kind: 'free' | 'paid';
   readonly price?: { readonly amount: number; readonly currency: 'BRL'; readonly unit: UnidadeDoValor } | null;
 }
 
-/** Pago exige o valor; gratuito o recusa. O Bichu nao cobra: e so o valor informado. */
+/** Pago exige o valor; gratuito o recusa. */
 export function entradaDoCorpo(corpo: EntradaDoCorpo | undefined): { entrada: Entrada } | { erros: ProblemFieldError[] } {
   if (corpo === undefined) return { entrada: { tipo: 'free' } };
   const preco = corpo.price ?? null;
@@ -636,14 +474,9 @@ export function mesmaEntrada(a: Entrada, b: Entrada): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-// ---------------------------------------------------------------------------
-// Slug
-// ---------------------------------------------------------------------------
-
 /**
  * O `slug` do encontro PRIVADO: 128 bits aleatorios em base 36, 25 caracteres,
- * sempre dentro do formato do `CHECK`. Ele sai no teaser para todo mundo, entao
- * nao pode carregar nada que o administrador digitou (ADR-0027 12.10).
+ * sempre dentro do formato do `CHECK`.
  */
 export function slugDoPrivado(aleatorio: Uint8Array): string {
   let n = 0n;
@@ -671,30 +504,13 @@ export function sufixoCurto(aleatorio: Uint8Array): string {
   return (n % 1_679_616).toString(36).padStart(4, '0');
 }
 
-// ---------------------------------------------------------------------------
-// Versao (If-Match)
-// ---------------------------------------------------------------------------
-
 export function comoEtag(version: number): string {
   return `"${String(version)}"`;
 }
 
-// `lerIfMatch` e `VersaoLida` moram em `shared/http/if-match.ts`, num ponto so
-// para a Loja e a Rede: a borda sufixa o ETag (`"3-gzip"`) e as duas leem igual.
 export { lerIfMatch, type VersaoLida } from '../../../shared/http/if-match.js';
 
-// ---------------------------------------------------------------------------
-// Transicoes
-// ---------------------------------------------------------------------------
-
-/**
- * A decisao sobre um pedido (ADR-0027 item 17, emenda de 23/09):
- *
- * - aprovar vem de `pending` ou de `declined` (o painel reverte a recusa; o
- *   tutor nunca soube dela), sempre sem desistencia;
- * - recusar vem SO de `pending` sem desistencia;
- * - aprovado nao volta: o tutor ja viu o lugar.
- */
+/** A decisao sobre um pedido (ADR-0027 item 17, emenda de 23/09): */
 export function podeDecidir(
   pedido: Pick<PedidoNaFila, 'decisao' | 'withdrawnAt'>,
   decisao: 'approved' | 'declined',
@@ -704,12 +520,7 @@ export function podeDecidir(
   return pedido.decisao === 'pending';
 }
 
-/**
- * O encontro ainda recebe decisao sobre pedido? So o publicado que nao terminou
- * (a mesma regra de `expired` que o app aplica ao pedido). Cancelado, removido
- * ou encerrado responde 409 `event-not-open`: aprovar ali mandaria push sobre um
- * encontro que nao vai acontecer.
- */
+/** O encontro ainda recebe decisao sobre pedido? */
 export function encontroAbertoParaDecisao(
   encontro: Pick<PedidoNaFila['encontro'], 'publicacao' | 'startsAt' | 'endsAt'>,
   agora: Instant,
@@ -717,21 +528,13 @@ export function encontroAbertoParaDecisao(
   return encontro.publicacao === 'published' && tempoDoEncontro(encontro, agora) !== 'ended';
 }
 
-// ---------------------------------------------------------------------------
-// Projecoes
-// ---------------------------------------------------------------------------
-
 export interface ImagemProjetada {
   readonly upload_id: string | null;
   readonly position: number;
   /**
-   * **Anulavel**, e o painel precisa do nulo CRU: se a leitura caisse no titulo
-   * do encontro, o formulario reabriria com o campo preenchido e quem edita nao
-   * teria como distinguir "descrevi com o titulo" de "nao descrevi". O contrato
-   * ja declarava `[string, 'null']` em `AdminCatalogGalleryImage.alt_text`.
-   *
-   * A leitura DO APP e o contrario: lá a reserva e aplicada no servidor. Ver
-   * `camposProjetados` em `encontro-da-rede.ts`.
+   * **Anulavel**, e o painel precisa do nulo CRU: se a leitura caisse no titulo do
+   * encontro, o formulario reabriria com o campo preenchido e quem edita nao teria
+   * como distinguir "descrevi com o titulo" de "nao descrevi".
    */
   readonly alt_text: string | null;
   readonly source: 'uploaded';
@@ -789,16 +592,12 @@ export function projetarAdmissao(entrada: Entrada): EncontroAdministrativoProjet
     : { kind: 'paid', price: { amount: entrada.centavos, currency: 'BRL', unit: entrada.unidade } };
 }
 
-/**
- * O encontro como o painel o ve (`AdminNetworkEvent`). **Sem autor e sem `id`**.
- * O ponto sai aqui porque o painel e autenticado e e quem o marcou; a trilha,
- * ao contrario, nunca o recebe cru.
- */
+/** O encontro como o painel o ve (`AdminNetworkEvent`). */
 export function projetarEncontroAdministrativo(
   e: EncontroAdministrativo,
   agora: Instant,
   urlDeMidia: (chave: string) => string,
-  /** A base do perfil do Instagram, da configuracao. Nula, e `instagram_url` sai nula. */
+  /** A base do perfil do Instagram, da configuracao. */
   baseDoInstagram: string | null = null,
 ): EncontroAdministrativoProjetado {
   return {
@@ -841,8 +640,6 @@ export function projetarEncontroAdministrativo(
     pending_request_count: e.visibilidade === 'private' ? e.pedidosPendentes : 0,
     publication_status: e.publicacao,
     timing: tempoDoEncontro(e, agora),
-    // Todo encontro de administrador nasce publicado (12.9), entao a data
-    // existe; o `createdAt` so cobre uma linha que nao cumpra isso.
     published_at: (e.publishedAt ?? e.createdAt).toISOString(),
     cancelled_at: e.cancelledAt === null ? null : e.cancelledAt.toISOString(),
     cancellation_note: e.cancellationNote,
@@ -866,7 +663,10 @@ export interface PedidoProjetado {
   readonly withdrawn_at: string | null;
 }
 
-/** Ano e mes (`AAAA-MM`) no horario de Brasilia: a conta criada 31/03 as 22h em Sao Paulo e de marco, e nao de abril. */
+/**
+ * Ano e mes (`AAAA-MM`) no horario de Brasilia: a conta criada 31/03 as 22h em Sao
+ * Paulo e de marco, e nao de abril.
+ */
 export function mesEmSaoPaulo(instante: Date): string {
   const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).formatToParts(instante);
   const n = (tipo: string): string => partes.find((x) => x.type === tipo)?.value ?? '';
@@ -874,8 +674,8 @@ export function mesEmSaoPaulo(instante: Date): string {
 }
 
 /**
- * D53: do solicitante sai **so** o nome de exibicao (ou `null`, nunca o
- * e-mail), o mes de criacao da conta e o booleano do e-mail confirmado.
+ * D53: do solicitante sai **so** o nome de exibicao (ou `null`, nunca o e-mail), o
+ * mes de criacao da conta e o booleano do e-mail confirmado.
  */
 export function projetarPedido(p: PedidoNaFila): PedidoProjetado {
   return {
@@ -898,16 +698,7 @@ export function projetarPedido(p: PedidoNaFila): PedidoProjetado {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Retrato para a trilha
-// ---------------------------------------------------------------------------
-
-/**
- * Os campos do encontro como a trilha os grava. Catalogo e evento nao sao dado
- * pessoal, entao o valor vai inteiro, **exceto a coordenada**: a porta proibe
- * coordenada bruta na trilha, e ali vai so se ha ponto (ADR-0027 item 8). A
- * diferenca entre dois retratos vira `point_changed`.
- */
+/** Os campos do encontro como a trilha os grava. */
 export function retratoDoEncontro(e: EncontroAdministrativo): Record<string, unknown> {
   return {
     slug: e.slug,

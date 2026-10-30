@@ -1,19 +1,4 @@
-/**
- * As portas da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292).
- *
- * ## A transacao e a unidade
- *
- * Toda escrita acontece dentro de `emTransacao`, e a trilha e gravada por
- * `registrarNaTrilha` NA MESMA transacao (ADR-0027 item 8, D49): se a trilha
- * falhar, a escrita e desfeita. A leitura da fila de pedidos tambem abre
- * transacao, porque ela grava na trilha (D55) e le dela o teto de linhas (D56).
- *
- * ## A versao lida decide
- *
- * `atualizarEncontro` recebe a versao que a pessoa leu e devolve `null` quando
- * ela nao e mais a atual: a comparacao e na clausula `WHERE` do `UPDATE`, e nao
- * num `SELECT` antes, que deixaria dois administradores passarem juntos.
- */
+/** As portas da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292). */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type { EnvioDeCatalogo } from '../../media/ports/imagem-de-catalogo.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
@@ -28,7 +13,7 @@ import type {
   Visibilidade,
 } from '../domain/escrita-do-encontro.js';
 
-/** Violacao do indice unico do `slug`. O caso de uso a traduz para 409. */
+/** Violacao do indice unico do `slug`. */
 export class SlugDoEncontroOcupado extends Error {
   constructor() {
     super('slug de encontro ja usado');
@@ -38,14 +23,7 @@ export class SlugDoEncontroOcupado extends Error {
 
 export interface NovoEncontro {
   readonly id: string;
-  /**
-   * Quem criou, para a coluna de autoria do painel.
-   *
-   * **Nao e o nome da coluna de proposito**: ele e reprovado em `src/` pelo
-   * portao de colunas que nao saem, e o carimbo passa pela funcao
-   * `network_events_gravar_autoria` da migracao `20261001000004`, na mesma
-   * transacao do `INSERT`. Antes disso a coluna existia e nunca era escrita.
-   */
+  /** Quem criou, para a coluna de autoria do painel. */
   readonly autorDoPainel: AdminAccountId;
   readonly slug: string;
   readonly title: string;
@@ -66,7 +44,7 @@ export interface NovoEncontro {
   readonly agora: Instant;
 }
 
-/** O que muda numa escrita. Campo ausente nao muda. */
+/** O que muda numa escrita. */
 export interface MudancaDeEncontro {
   readonly slug?: string;
   readonly title?: string;
@@ -94,9 +72,7 @@ export interface ImagemNaPosicao {
   readonly position: number;
   /**
    * **Anulavel desde 21/10/2026** (decisao do cliente): `alt_text` saiu do
-   * `required` de `CatalogImageInput`. Nulo quer dizer que o painel nao
-   * escreveu descricao; quando vem, de 2 a 150 caracteres aparados. A COLUNA
-   * aceita nulo desde a migracao `20261020000013`.
+   * `required` de `CatalogImageInput`.
    */
   readonly altText: string | null;
 }
@@ -132,7 +108,7 @@ export interface TransacaoDaRede {
   existeSlug(slug: string): Promise<boolean>;
   /** Lanca `SlugDoEncontroOcupado`. */
   inserirEncontro(novo: NovoEncontro): Promise<void>;
-  /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugDoEncontroOcupado`. */
+  /** `null` quando `versaoLida` nao e mais a atual. */
   atualizarEncontro(id: string, versaoLida: number, mudanca: MudancaDeEncontro, agora: Instant): Promise<boolean>;
   substituirPortes(eventoId: string, portes: readonly string[]): Promise<void>;
   substituirEstrutura(eventoId: string, estrutura: readonly string[]): Promise<void>;
@@ -169,11 +145,7 @@ export interface RedeAdministrativaRepository {
   listarEncontros(recorte: RecorteDoPainel): Promise<Pagina<EncontroAdministrativo>>;
 }
 
-/**
- * O aviso a todos os administradores (D52, D60). Sai DEPOIS do `COMMIT`: um
- * e-mail sobre uma escrita que foi desfeita seria um aviso falso. Falha do envio
- * nao desfaz a escrita, e quem implementa registra a falha.
- */
+/** O aviso a todos os administradores (D52, D60). */
 export interface AvisoAosAdministradores {
   avisar(aviso: { readonly assunto: string; readonly linhas: readonly string[] }): Promise<void>;
 }

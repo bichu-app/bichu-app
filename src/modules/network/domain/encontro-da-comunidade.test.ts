@@ -1,13 +1,6 @@
 /**
- * As regras da proposta de encontro pela comunidade (ADR-0025 emenda 3), sem
- * banco e sem servidor.
- *
- * Cada caso aqui e ISCA no sentido do projeto: desligar o mecanismo que ele
- * guarda faz o caso reprovar. Em particular, `errosDoNomeDoLugar` fecha um furo
- * MEDIDO -- `street_address` sai so em resposta autenticada, e dois encontros
- * do painel tem o endereco escrito dentro de `place_name`, que sai na agenda
- * publica. Se a conferencia virar so tamanho, a primeira lista abaixo passa a
- * aceitar endereco e o teste reprova.
+ * As regras da proposta de encontro pela comunidade (ADR-0025 emenda 3), sem banco
+ * e sem servidor.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -25,7 +18,6 @@ const codigos = (nome: string): string[] =>
 void describe('place_name nao aceita endereco embutido', () => {
   void it('ISCA: cada forma de endereco dentro do nome do lugar e recusada', () => {
     for (const nome of [
-      // A forma exata dos dois encontros medidos em producao.
       'Praca do Bairro - Avenida Brasil, 200',
       'Parque Municipal, 1500',
       'Quadra da escola nº 42',
@@ -46,8 +38,6 @@ void describe('place_name nao aceita endereco embutido', () => {
   });
 
   void it('ISCA: o endurecimento de 17/10 -- s/n, quilometro e numero de quatro digitos', () => {
-    // Entraram quando a revisao humana saiu: esta funcao passou a ser a unica
-    // protecao do endereco na agenda publica.
     for (const nome of [
       'Praca da Matriz, s/n',
       'Praca da Matriz s/nº',
@@ -73,8 +63,6 @@ void describe('place_name nao aceita endereco embutido', () => {
   void it('ISCA: nome de lugar legitimo PASSA, inclusive com numero e com logradouro', () => {
     for (const nome of [
       'Parque Ibirapuera',
-      // Logradouro sozinho e como o lugar se chama: recusa-lo obrigaria a
-      // pessoa a mentir o nome.
       'Avenida Paulista',
       'Rua 25 de Marco',
       'Praca 14 de Janeiro',
@@ -106,9 +94,6 @@ void describe('quem pode criar, e quantos', () => {
   });
 
   void it('ISCA: o teto e 3, e ele e o mesmo numero de caso aberto por conta', () => {
-    // Sem revisao humana (decisao do cliente de 17/10/2026), este teto e o de
-    // chamada da rota sao a UNICA contencao de volume: afrouxa-lo nao e so
-    // produto.
     assert.equal(TETO_DE_ENCONTROS_ATIVOS, 3);
     const estado = (n: number) => ({ temCanalVerificado: true, encontrosAtivos: n });
     assert.equal(atingiuTetoDeEncontros(estado(2)), false);

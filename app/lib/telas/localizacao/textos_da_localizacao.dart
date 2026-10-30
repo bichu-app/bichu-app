@@ -1,29 +1,7 @@
 /// A microcopia da captura de localizacao.
-///
-/// ## PROCEDENCIA: estes textos sao INVENCAO DESTA HISTORIA
-///
-/// Diferente de `avisos/antessala_de_aviso.dart`, que copiou `docs/05-ux-research.md`
-/// secao 10.1 palavra por palavra, **o UX nao escreve a microcopia da
-/// antessala de localizacao**. O que existe sao os criterios 3 e 4 da
-/// BICHUS-23, e eles ditam a frase: o criterio 3 da o titulo e o corpo de F3.1
-/// entre crases, e o criterio 4 da os de F3.5.
-///
-/// As frases que os criterios ditam estao marcadas `-- DO CRITERIO --` e nao
-/// podem ser reescritas sem mudar a issue. Todo o resto deste arquivo esta
-/// marcado `-- DEDUZIDO --`: sao as frases dos estados que os criterios nao
-/// cobrem (o servico desligado, o GPS que nao fixa, a recusa definitiva, a
-/// precisao), e **o cliente pode mexer nelas**. Elas nao sao decisao de
-/// produto tomada em lugar nenhum: sao o default sensato de quem precisou
-/// escrever alguma coisa para a tela nao ficar muda.
 library;
 
 abstract final class TextosDaLocalizacao {
-  // -- DO CRITERIO 3 (F3.1, marcar perdido) --------------------------------
-  //
-  // "entao ela diz `De onde a gente deve avisar os tutores?` com `A gente usa
-  // sua localizacao so para encontrar quem esta num raio de 5 km. Seu endereco
-  // nao aparece para ninguem, nem no alerta, nem no cartaz.`, e oferece `Usar
-  // minha localizacao` e `Prefiro digitar o bairro`."
 
   static const String tituloPerdido = 'De onde a gente deve avisar os tutores?';
 
@@ -36,53 +14,15 @@ abstract final class TextosDaLocalizacao {
 
   static const String preferoDigitarOBairro = 'Prefiro digitar o bairro';
 
-  // -- O QUE CADA CAMINHO PREENCHE, dito ANTES do toque --------------------
-  //
-  // **Esta frase nasceu de um relato que NAO era defeito.** O cliente, em
-  // 26/10/2026: *"na pagina achei esse pet, quando eu seleciono a localizacao,
-  // ele ta trazendo apenas a cidade, mas nao o cep, bairro e estado
-  // preenchidos"*. O comportamento esta certo e e o unico que o ADR-0006
-  // autoriza -- a emenda 1 abre **coordenada -> nome de cidade**, e a tabela
-  // dela recusa `coordenada -> bairro` em uma frase (*"bairro e mais fino que o
-  // que a pessoa escolheu entregar"*) e nao fala de UF nenhuma.
-  //
-  // O que faltava era a tela DIZER isso, e no unico instante em que dizer
-  // ajuda: **antes do toque**, quando a pessoa ainda esta formando a
-  // expectativa. Depois do toque ela ja comparou o que esperava com o que veio
-  // e concluiu que faltou algo -- foi o que aconteceu.
-  //
-  // Ela nomeia o CEP porque o CEP esta na tela, logo abaixo, preenchendo
-  // exactamente os dois campos que o ponto nao preenche. Sem essa ponte a
-  // pessoa procura o botao que nao existe em vez do campo que existe.
-
   static const String oQueCadaCaminhoPreenche =
       'O botão marca o ponto aproximado e preenche a cidade. Bairro e estado '
       'vêm do CEP, logo abaixo, ou você escreve.';
-
-  // -- DO CRITERIO 4 (F3.5, registrar achado avulso) ------------------------
-  //
-  // "entao ela diz `Onde voce achou esse pet?` com `Serve para a gente cruzar
-  // com os tutores que estao procurando por perto.`"
-  //
-  // O criterio 4 NAO enumera os dois botoes, e eles sao os mesmos do criterio
-  // 3 de proposito: a antessala e a mesma peca nos dois pontos de uso, e duas
-  // duplas de rotulos diferentes para a mesma escolha seria a pessoa
-  // reaprendendo o fluxo na segunda tela.
 
   static const String tituloAchado = 'Onde você achou esse pet?';
 
   static const String corpoAchado =
       'Serve para a gente cruzar com os tutores que estão procurando por '
       'perto.';
-
-  // -- DEDUZIDO: a precisao ------------------------------------------------
-  //
-  // A BICHUS-23 pede que o app diga o que capturou sem prometer exatidao que
-  // nao tem. "Localizacao capturada" sozinho promete um ponto; o aparelho
-  // entregou um circulo, e ele sabe o raio.
-  //
-  // O numero aparece ARREDONDADO PARA CIMA em centenas de metros, e nao cru:
-  // "cerca de 380 m" sugere uma medicao que a propria medicao nao sustenta.
 
   /// Quando o aparelho declara o raio.
   static String pontoComPrecisao(int metros) =>
@@ -95,30 +35,11 @@ abstract final class TextosDaLocalizacao {
       'é o bairro.';
 
   /// A saida de quem capturou e quer corrigir.
-  ///
-  /// E a unica correcao que esta historia oferece, porque `map_pin` exige
-  /// mapa e mapa esta em *Fora desta historia*.
   static const String trocarPeloBairro = 'Trocar pelo bairro digitado';
-
-  // -- DEDUZIDO: o bairro junto com o GPS ----------------------------------
-  //
-  // O caminho conservador da pergunta que foi para a pauta de refinamento. Ver
-  // `OndeComPontoEArea`: sem isto, quem concede o GPS aparece na lista publica
-  // sem rotulo de area, porque converter a coordenada em bairro e o que o
-  // ADR-0006 proibe.
 
   static const String bairroOpcionalComGps =
       'Se quiser, diga o bairro. É ele que aparece para as outras pessoas '
       '— a gente não consegue descobrir o bairro sozinho a partir do ponto.';
-
-  // -- DEDUZIDO: os cinco motivos de nao ter ponto -------------------------
-  //
-  // Cinco frases e nao uma, porque as cinco situacoes levam a acoes
-  // diferentes. A generica ("nao foi possivel obter a localizacao") mandaria
-  // quem esta com o servico desligado procurar uma permissao que ela ja deu.
-  //
-  // Nenhuma delas e apresentada como erro do fluxo: em todas, o campo de
-  // bairro aparece e o envio continua possivel. E o criterio 5.
 
   static const String negouDestaVez =
       'Tudo bem. Diga o bairro e a cidade, e o resto funciona igual.';
@@ -143,39 +64,26 @@ abstract final class TextosDaLocalizacao {
       'Este aparelho não tem localização disponível. Digite o bairro e a '
       'cidade.';
 
-  // -- DEDUZIDO: os campos -------------------------------------------------
-
   static const String rotuloBairro = 'Bairro';
   static const String rotuloCidade = 'Cidade';
-  /// **"Estado", e nao "UF"** (cliente, 17/10/2026). A sigla continua sendo o
-  /// valor; o rotulo e a palavra que a pessoa usa.
+  /// **"Estado", e nao "UF"** (cliente, 17/10/2026).
   static const String rotuloEstado = 'Estado';
 
   static const String escolherOEstado = 'Escolher na lista';
 
-  // `estadoEmBrancoFunciona` SAIU EM 26/10/2026, com a ajuda do campo
-  // `Estado` de `captura_de_localizacao.dart` -- cliente, 22/10/2026:
-  // *"Retire o texto so se voce souber, em branco funciona"*. A constante sai
-  // junto com o uso de proposito: constante orfa volta a ser usada.
-
-  /// A cidade e o unico campo exigido, e o contrato concorda
-  /// (`Area.required: [city]`).
+  /// A cidade e o unico campo exigido, e o contrato concorda (`Area.required:
+  /// [city]`).
   static const String cidadeObrigatoria = 'Diga ao menos a cidade.';
 
   /// O que a pessoa le enquanto o aparelho mede.
   static const String capturando = 'Procurando sua localização...';
-
-  // -- O CEP, que e campo de BUSCA e nao campo do corpo --------------------
 
   static const String rotuloCep = 'CEP';
 
   static const String ajudaDoCep =
       'Preenche bairro, cidade e estado. Você pode mudar depois.';
 
-  /// Os tres desfechos da busca de CEP. **Nenhum e erro**: nenhum marca campo,
-  /// nenhum desabilita `Registrar` e nenhum impede o envio. Quem esta com um
-  /// animal na rua nao pode ficar preso num formulario por causa de um
-  /// servico de terceiro.
+  /// Os tres desfechos da busca de CEP.
   static const String buscandoOCep = 'Buscando o endereço…';
 
   static const String cepNaoEncontrado =

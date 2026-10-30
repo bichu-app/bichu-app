@@ -1,22 +1,4 @@
-/**
- * Iscas da validação de parâmetros.
- *
- * A primeira é a que vale, e ela é dupla: um `petId` torto precisa responder
- * **400** e precisa **não ter chegado ao repositório**. As duas metades são
- * necessárias. Só o status provaria que a resposta melhorou; só a ausência de
- * consulta provaria que alguém recusou em algum lugar. Juntas, provam que a
- * recusa aconteceu na borda, que é onde ela tem que acontecer.
- *
- * O repositório aqui **imita o Postgres**: recebendo um id que não é UUID ele
- * levanta o mesmo `invalid input syntax for type uuid` que o banco levanta. É o
- * que faz a isca reprovar de verdade quando a validação é removida — sem isso,
- * tirar a validação daria 404 em vez de 500 e a isca ainda passaria pela metade.
- *
- * Todas as rotas deste arquivo são registradas nos caminhos do contrato real
- * (`api/openapi.yaml`), e o contrato é carregado do disco. Uma bancada com um
- * contrato de mentira provaria que o código funciona contra o contrato de
- * mentira.
- */
+/** Iscas da validação de parâmetros. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -25,11 +7,6 @@ import { escoparRotas, registrarRota, type RegistradorDeRotas } from './registra
 import { defineRoute } from './route-definition.js';
 import { tetoDeTeste } from './teto-de-teste.js';
 
-// As rotas que as bancadas registram. Elas passam por `registrarRota` como
-// qualquer outra: o portao de registro da BICHUS-206 nao isenta arquivo de
-// teste, de proposito, e o que estes casos provam -- que o vigia de parametro
-// REPROVA a subida -- continua sendo provado, porque o vigia se instala por
-// `onRoute` e `registrarRota` tambem passa por la.
 const ROTA_DA_TAG = defineRoute({
   operationId: 'resolveTagCode',
   method: 'get',
@@ -81,7 +58,7 @@ const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 const PREFIXO = '/v1';
 const BASE_DE_PROBLEMAS = 'https://problemas.invalid/problems/' as AbsoluteUrl;
 
-/** UUID bem formado que nenhum pet tem. É o caso de "não é seu / não existe". */
+/** UUID bem formado que nenhum pet tem. */
 const UUID_INEXISTENTE = '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f';
 /** Os quatro jeitos de um id chegar torto que já apareceram de verdade. */
 const IDS_TORTOS = ['abc', 'undefined', '1', '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f-extra'];
@@ -100,7 +77,6 @@ class RepositorioQueImitaOPostgres implements PetRepository {
   private conferir(pet: PetId): void {
     this.recebidos.push(pet);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pet)) {
-      // Texto do erro 22P02 do Postgres, que é o que chega hoje sem validação.
       throw new Error(`invalid input syntax for type uuid: "${pet}"`);
     }
   }
@@ -155,7 +131,6 @@ async function bancadaDePets(): Promise<Bancada> {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMAS,
     isProduction: false,
-    // Exigido desde a BICHUS-178. Contador EM MEMORIA, nao desligado.
     teto: tetoDeTeste(),
   });
   const conferir = vigiarParametrosDasRotas(app, contrato, PREFIXO);
@@ -243,10 +218,6 @@ void describe('petId torto na rota do dono', () => {
   });
 
   void it('o valor recebido não é ecoado em `detail` nem em `errors`', () => {
-    // `instance` carrega o caminho por definição da RFC 9457, e ele é a própria
-    // requisição de quem chamou. O que não pode acontecer é o valor voltar
-    // dentro do texto do problema, que é o que acaba colado em chamado de
-    // suporte e em relato de defeito.
     const problema = _decisaoDeStatus.problemaDeParametroMalformado(
       [{ instancePath: '/petId', keyword: 'format', message: 'must match format "uuid"' }],
       new Map(),
@@ -257,8 +228,6 @@ void describe('petId torto na rota do dono', () => {
   });
 
   void it('id BEM FORMADO que não é seu continua respondendo 404, e aí sim consulta', async () => {
-    // Esta é a metade que a ADR-0021 protege, e ela não pode ter mudado: a
-    // distinção entre "não existe" e "não é seu" continua fechada.
     const { app, repositorio } = await bancadaDePets();
     try {
       const resposta = await app.inject({
@@ -297,9 +266,6 @@ void describe('petId torto na rota do dono', () => {
   });
 
   void it('corpo inválido continua respondendo o que respondia: o formatador não vazou', async () => {
-    // O `schemaErrorFormatter` é por ROTA, não por lugar. Se ele não devolvesse
-    // o erro do framework para `body`, instalar a validação de parâmetro teria
-    // mudado, de lado, o corpo de erro de toda rota que valida corpo.
     const { app } = await bancadaDePets();
     try {
       const resposta = await app.inject({
@@ -322,7 +288,6 @@ void describe('código da tag: o `type` é o que o contrato declara', () => {
     const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMAS,
     isProduction: false,
-    // Exigido desde a BICHUS-178. Contador EM MEMORIA, nao desligado.
     teto: tetoDeTeste(),
   });
     const conferir = vigiarParametrosDasRotas(app, contrato, PREFIXO);
@@ -356,12 +321,6 @@ void describe('código da tag: o `type` é o que o contrato declara', () => {
   });
 
   void it('o que a borda ACEITA como código é exatamente o que o log OCULTA', () => {
-    // Consistência que não é óbvia e que vale caro: `ocultarCodigoDaTagNaUrl`
-    // hasheia o segmento por tamanho e alfabeto, e `instance` do problema sai
-    // por ele. Se alguém alargar o `pattern` do contrato sem alargar a redação,
-    // um código PLAUSÍVEL passaria a chegar em claro no corpo de erro e no log
-    // de acesso — a credencial ao portador do ADR-0004, exatamente onde ela não
-    // pode estar. As duas expressões precisam aceitar as mesmas formas.
     const doContrato = (
       (
         contratoDoDisco().parameterSchemas('resolveTagCode').params?.['properties'] as Record<
@@ -395,10 +354,6 @@ void describe('código da tag: o `type` é o que o contrato declara', () => {
   void it('código com a forma certa passa pela borda e chega ao manipulador', async () => {
     const { app, alcancado } = await bancadaDaTag();
     try {
-      // BICHUS-154: 16 caracteres, nao 27. O `pattern` do contrato foi de
-      // `{15,39}` para `{15,23}` -- a amostra antiga deixou de passar na borda,
-      // e o caso media a recusa em vez da travessia. O valor e o mesmo exemplo
-      // que o proprio contrato declara em `TagCode`.
       const codigo = 'GQSM-0XHB-T4D9-G31S';
       const resposta = await app.inject({ method: 'GET', url: `${PREFIXO}/tags/${codigo}` });
       assert.equal(resposta.statusCode, 200);
@@ -411,10 +366,6 @@ void describe('código da tag: o `type` é o que o contrato declara', () => {
 
 void describe('o contrato de verdade produz os schemas de verdade', () => {
   void it('todo parâmetro de caminho do contrato vira `params`, inclusive os do item de caminho', () => {
-    // Esta é a isca do defeito que quase entrou: a maior parte dos parâmetros
-    // de caminho deste contrato está declarada no NÍVEL DO ITEM DE CAMINHO, e
-    // ler só `raw['parameters']` devolveria schema vazio para quase tudo — com
-    // toda a aparência de estar validando.
     const contrato = contratoDoDisco();
     const semParams: string[] = [];
     for (const operacao of contrato.operacoes.values()) {
@@ -452,20 +403,6 @@ void describe('o contrato de verdade produz os schemas de verdade', () => {
       maximum: 20,
       default: 20,
     });
-    // **`listPublicLostPets` NÃO TEM MAIS PARÂMETRO OBRIGATÓRIO NENHUM.**
-    //
-    // Este caso exigia `required: ['city']`, com o comentário "`city` é o único
-    // obrigatório da operação, e o resto não pode virar obrigatório". A metade
-    // que importava era a segunda, e ela continua medida aqui: o que não pode
-    // acontecer é um parâmetro desta operação virar obrigatório por descuido.
-    //
-    // `city` perdeu o `required: true` em 19/10/2026, por decisão do cliente
-    // (*"o campo cidade do filtro da página pet não deve ser obrigatório"*), e
-    // sem nenhum obrigatório o carregador de contrato não emite a chave
-    // `required` — daí `undefined`, e não `[]`.
-    //
-    // DESLIGANDO: reponha `required: true` em qualquer parâmetro de
-    // `listPublicLostPets` em `api/openapi.yaml` e este caso reprova pelo nome.
     assert.equal(
       esquemas.querystring?.['required'],
       undefined,
@@ -490,13 +427,7 @@ void describe('o contrato de verdade produz os schemas de verdade', () => {
   });
 });
 
-/**
- * Uma cópia do contrato de verdade com UM status apagado de UMA operação.
- *
- * É o recorte mínimo que faz a isca reprovar: tudo o mais continua sendo o
- * documento do disco. Escrever um contrato de mentira inteiro provaria que o
- * portão funciona contra o contrato de mentira.
- */
+/** Uma cópia do contrato de verdade com UM status apagado de UMA operação. */
 function semOStatus(contrato: Contrato, operationId: string, status: string): Contrato {
   return {
     ...contrato,
@@ -547,7 +478,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMAS,
     isProduction: false,
-    // Exigido desde a BICHUS-178. Contador EM MEMORIA, nao desligado.
     teto: tetoDeTeste(),
   });
     const conferir = vigiarParametrosDasRotas(app, contrato, PREFIXO);
@@ -585,7 +515,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
 
   void it('nenhuma rota coberta derruba a subida: silêncio não é aprovação', async () => {
     const { conferir, app } = await subir((escopo) => {
-      // `/pets` não tem parâmetro nenhum: nada a validar, nada coberto.
       registrarRota(escopo, ROTA_DE_PETS, {}, (_r, reply) =>
         Promise.resolve(reply.send({ items: [] })),
       );
@@ -598,8 +527,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
   });
 
   void it('operação que pode recusar e não declara 400 derruba a subida', async () => {
-    // Erro é contrato também. Responder um status que a especificação não
-    // promete é a mesma divergência que não validar, na direção oposta.
     const contrato = contratoDoDisco();
     const semQuatrocentos: Contrato = {
       ...contrato,
@@ -631,7 +558,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMAS,
     isProduction: false,
-    // Exigido desde a BICHUS-178. Contador EM MEMORIA, nao desligado.
     teto: tetoDeTeste(),
   });
     const conferir = vigiarParametrosDasRotas(app, semQuatrocentos, PREFIXO);
@@ -646,17 +572,7 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     }
   });
 
-  /**
-   * A isca do CORPO, que é a metade que o portão não tinha.
-   *
-   * `createPetPhotoUploadIntent` não tem parâmetro nenhum: até 22/09 ela saía do
-   * laço do vigia antes de qualquer conferência, e por isso passou verde durante
-   * meses sem declarar o 400 que o `enum` de `content_type` produz. Aqui a rota é
-   * a de verdade, o corpo é o do contrato de verdade, e o único desvio é apagar
-   * o `400` de uma CÓPIA do contrato — o mesmo recorte do caso de parâmetro logo
-   * acima, e a mesma razão: uma bancada com contrato inventado provaria que o
-   * portão funciona contra um contrato inventado.
-   */
+  /** A isca do CORPO, que é a metade que o portão não tinha. */
   void it('operação que valida CORPO e não declara 400 derruba a subida', async () => {
     const contrato = contratoDoDisco();
     const semQuatrocentos = semOStatus(contrato, 'createPetPhotoUploadIntent', '400');
@@ -669,8 +585,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     const conferir = vigiarParametrosDasRotas(app, semQuatrocentos, PREFIXO);
     await escoparRotas(app, PREFIXO, (escopo) => {
       registrarIntencaoDeFoto(escopo, contrato);
-      // Uma rota com parâmetro junto: sem ela `cobertas` seria zero e o portão
-      // reprovaria por OUTRO motivo, e a isca passaria sem provar nada.
       registrarRota(escopo, ROTA_DE_PET, {}, (_r, reply) => Promise.resolve(reply.send({})));
     });
     await app.ready();
@@ -683,8 +597,7 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
 
   /**
    * O lado permissivo, que é metade do valor de um portão: ele não pode passar a
-   * reprovar quem está certo. Portão que acusa o inocente é desligado na primeira
-   * semana, e aí vale menos que não existir.
+   * reprovar quem está certo.
    */
   void it('a mesma rota, com o 400 declarado no contrato de verdade, APROVA', async () => {
     const contrato = contratoDoDisco();
@@ -707,10 +620,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
   });
 
   void it('o contrato de verdade, com as rotas de pets de verdade, APROVA', async () => {
-    // O contraponto dos casos acima: sem ele, um portão que reprova tudo também
-    // passaria em todos eles. E é aqui que o `/v1` e o HEAD que o Fastify
-    // registra sozinho para cada GET são exercitados de verdade — os dois
-    // derrubariam a subida se o casamento entre rota e contrato os tratasse mal.
     const { app, conferir } = await bancadaDePets();
     try {
       assert.doesNotThrow(conferir);
@@ -739,8 +648,6 @@ void describe('a decisão de status, no único lugar que a contém', () => {
   });
 
   void it('com `x-problem-type` que a borda não sabe produzir, FALHA RUIDOSA', () => {
-    // O contrário seria cair no genérico e responder um `type` que o contrato
-    // não promete — em silêncio, e justamente no campo pelo qual o app decide.
     assert.throws(
       () =>
         _decisaoDeStatus.problemaDeParametroMalformado(
@@ -778,9 +685,6 @@ void describe('a rota de 405 do painel nao e cobrada como operacao do contrato',
   void it('o POST do contrato e as rotas de 405 dos outros metodos sobem, e a conferencia de subida aprova', async () => {
     const { app, conferir } = bancadaDoPainel();
     await app.ready();
-    // A bancada so tem uma rota, sem parametro, entao a conferencia reclama de
-    // "nenhuma rota recebeu validacao"; o que este caso cobra e a OUTRA queixa,
-    // a de rota sem operacao no contrato, que as rotas de 405 disparavam.
     let queixa = '';
     try {
       conferir();

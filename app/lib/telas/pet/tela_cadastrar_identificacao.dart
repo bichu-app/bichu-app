@@ -10,19 +10,7 @@ import 'campos_do_pet.dart';
 import 'rascunho_de_pet.dart';
 import 'textos_do_cadastro.dart';
 
-/// F1.3 — Cadastrar pet: identificacao. Figma `89:45`.
-///
-/// **A tela nao guarda mais os campos: ela os hospeda.** Os campos vivem em
-/// [CamposDeIdentificacao] (`campos_do_pet.dart`), porque a tela de EDICAO
-/// mexe nos mesmos atributos do mesmo animal e duas formas diferentes de
-/// editar os mesmos campos e defeito, nao escolha. O que continua sendo desta
-/// tela e o que so ela sabe: o passo do assistente, o botao `Continuar` e para
-/// onde ele leva.
-///
-/// A regra dos campos -- raca em dois campos, campo livre que so existe atras
-/// da opcao `Outra`, lista que falha sem travar o cadastro -- esta escrita
-/// junto dos campos, e nao aqui. Se ela estivesse aqui, a tela de edicao
-/// precisaria de uma copia, e e a copia que diverge.
+/// F1.3 — Cadastrar pet: identificacao.
 class TelaCadastrarIdentificacao extends StatefulWidget {
   const TelaCadastrarIdentificacao({super.key, this.rascunhoExistente});
 
@@ -41,15 +29,10 @@ class _TelaCadastrarIdentificacaoState
       widget.rascunhoExistente ?? RascunhoDePet();
 
   /// A porta para [CamposDeIdentificacaoState.validar]: a tela confere os
-  /// campos **pelo metodo deles** antes de navegar, e nao por uma segunda
-  /// copia da regra escrita aqui.
+  /// campos **pelo metodo deles** antes de navegar, e nao por uma segunda copia
+  /// da regra escrita aqui.
   final GlobalKey<CamposDeIdentificacaoState> _campos =
       GlobalKey<CamposDeIdentificacaoState>();
-
-  // Sem `dispose` do rascunho, de proposito: quando ele veio do `Voltar` de
-  // F1.4 o dono e quem navegou, e a tela seguinte ainda o usa. Quem cria o
-  // `RascunhoDePet` e dono do `dispose()`, e aqui ele atravessa os tres passos
-  // do assistente.
 
   void _continuar() {
     if (_campos.currentState?.validar() != true) return;

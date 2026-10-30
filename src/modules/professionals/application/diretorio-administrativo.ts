@@ -1,32 +1,6 @@
 /**
- * O caso de uso da escrita administrativa do diretorio de `Perto`
- * (BICHUS-189; ADR-0027).
- *
- * ## O que NAO esta aqui, porque ja aconteceu antes
- *
- * **Nenhuma verificacao de autenticacao, de CSRF, de origem nem de papel.** As
- * quatro acontecem na guarda do escopo (`escoparRotasAdministrativas`), uma
- * unica vez, antes de qualquer gancho da rota. **Nenhuma escrita daqui pede
- * reautenticacao por senha**: ela foi removida de toda escrita administrativa em
- * 07/10/2026 por decisao do cliente (ADR-0027 item 23), e reintroduzi-la aqui
- * desfaria aquela decisao em vez de corrigir um esquecimento.
- *
- * ## A ordem de toda escrita, e ela nao e negociavel
- *
- * 1. `If-Match` ANTES de qualquer leitura: escrita sem versao nao chega a
- *    perguntar se o recurso existe (428), e versao que nao e versao e 412.
- * 2. Forma dos campos (tamanho, UF, telefone): 400 com erro POR CAMPO, para a
- *    tela marcar todos de uma vez.
- * 3. Regra de negocio (`planejarEdicao`): completude da publicacao.
- * 4. `UPDATE ... WHERE id = $1 AND version = $2`. Zero linhas e 412.
- * 5. A trilha, na MESMA transacao (ADR-0027 item 8): falha dela desfaz a
- *    escrita.
- *
- * ## 404 e nao 403 (ADR-0021)
- *
- * Entrada inexistente e entrada removida respondem o mesmo 404. O painel nao
- * tem permissao por linha -- quem entrou tem papel `admin` e ve o diretorio
- * inteiro --, entao nao ha um terceiro caso para distinguir.
+ * O caso de uso da escrita administrativa do diretorio de `Perto` (BICHUS-189;
+ * ADR-0027).
  */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import { lerIfMatch } from '../../../shared/http/if-match.js';
@@ -80,7 +54,7 @@ import type { TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type { StatusDaEntrada } from '../domain/escrita-do-diretorio.js';
 
 export interface Autor {
-  /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
+  /** `admin_accounts.id` (ADR-0027 item 20). */
   readonly adminAccountId: AdminAccountId;
   /** Os 8 primeiros bytes, em hex, do hash da sessao (ADR-0027 item 8). */
   readonly sessao: string;
@@ -104,13 +78,7 @@ export interface DependenciasDoDiretorioAdministrativo {
   readonly repositorio: DiretorioAdministrativoRepository;
   readonly ids: IdGenerator;
   readonly clock: Clock;
-  /**
-   * A URL publica de uma chave de derivada (18/10/2026, com a logo e a foto).
-   *
-   * Injetada como na `Loja` e na `Rede`, e nao montada aqui: o host de midia e
-   * `MEDIA_PUBLIC_BASE_URL`, que e configuracao, e um caso de uso que leia
-   * variavel de ambiente deixa de ser testavel sem ambiente.
-   */
+  /** A URL publica de uma chave de derivada (18/10/2026, com a logo e a foto). */
   readonly urlDeMidia: (chave: string) => string;
 }
 
@@ -128,15 +96,7 @@ function faltaVersao(): AppError {
   return new AppError('precondition-required', 'Falta a versão que você leu');
 }
 
-/**
- * 428 antes de qualquer leitura, e 412 para o que nao e uma versao.
- *
- * `lerIfMatch` e o leitor tolerante de `shared/http/if-match.ts`, e usa-lo aqui
- * nao e reuso de conveniencia: a borda ACRESCENTA o sufixo da codificacao ao
- * `ETag` da resposta comprimida (`"3-gzip"`), o painel devolve o que recebeu, e
- * uma leitura propria recusaria toda escrita com 412 sem ninguem ter alterado
- * nada. Isso foi medido em hml, nao previsto.
- */
+/** 428 antes de qualquer leitura, e 412 para o que nao e uma versao. */
 function versaoExigida(ifMatch: string | string[] | undefined): number {
   const lida = lerIfMatch(ifMatch);
   if (lida.tipo === 'ausente') throw faltaVersao();
@@ -170,18 +130,7 @@ function diferenca(
   return { before, after };
 }
 
-/**
- * A forma dos campos que VIERAM, e so deles.
- *
- * Serve a criacao e a edicao com uma funcao so, porque a regra de forma e a
- * mesma nos dois: o que muda e quais campos sao obrigatorios, e isso o schema
- * do contrato ja decidiu. `null` (apagar) nao tem forma a conferir -- a
- * completude de quem esta publicado e decidida por `planejarEdicao`.
- *
- * O texto e medido APARADO porque e aparado que ele vai ser gravado: o contrato
- * mede `minLength` sobre o texto cru, e `"  a "` passaria na borda para morrer
- * no `CHECK` como 500.
- */
+/** A forma dos campos que VIERAM, e so deles. */
 function errosDaForma(campos: {
   display_name?: string | undefined;
   about?: string | null | undefined;
@@ -211,9 +160,6 @@ function errosDaForma(campos: {
   if (campos.neighborhood !== undefined && campos.neighborhood !== null) {
     erros.push(...errosDeTexto('neighborhood', campos.neighborhood, MINIMO_DA_CIDADE, MAXIMO_DO_BAIRRO));
   }
-  // O endereco de rua. Nenhum dos quatro e obrigatorio -- nem no rascunho, nem
-  // na publicacao --, e por isso a conferencia aqui e so de FORMA: o que veio
-  // tem de caber na coluna. `null` apaga e nao tem forma a conferir.
   if (campos.postal_code !== undefined && campos.postal_code !== null) {
     erros.push(...errosDoCep('postal_code', campos.postal_code));
   }
@@ -233,35 +179,13 @@ function errosDaForma(campos: {
   if (campos.phone_e164 !== undefined && campos.phone_e164 !== null) {
     erros.push(...errosDoTelefone('phone_e164', campos.phone_e164));
   }
-  // O SITE (cliente, 21/10/2026). `null` apaga e nao tem forma a conferir, como
-  // os demais. Quem decide o formato e `errosDoSiteDaEntrada`, que delega ao
-  // validador de `shared/url` -- nao ha regra de URL escrita neste arquivo.
   if (campos.site_url !== undefined && campos.site_url !== null) {
     erros.push(...errosDoSiteDaEntrada('site_url', campos.site_url));
   }
   return erros;
 }
 
-/**
- * A forma da GALERIA (cliente, 29/10/2026).
- *
- * **COPIA DELIBERADA de `errosDaGaleria` da `Rede`**, e nao uma abstracao
- * compartilhada: a diferenca entre as duas e o teto (o mesmo numero, de outra
- * tabela) e nada mais, e fatorar quinze linhas num modulo comum faria o dominio
- * do diretorio depender do dominio da `Rede` -- a dependencia que a secao 6
- * proibe, e a mesma razao pela qual `errosDeTexto` esta repetida nos tres.
- *
- * Tres conferencias, e nenhuma delas o schema do contrato faz:
- *
- * 1. **O teto** (`too_many_images`). O contrato declara `maxItems: 8`, entao o
- *    Ajv ja recusa -- esta linha existe para a recusa ter `field: 'images'` e
- *    uma frase, e para o caso de a lista chegar por outro caminho.
- * 2. **`upload_id` repetido** (`duplicate_upload`). O schema nao sabe comparar
- *    itens entre si, e sem isto a mesma imagem ocuparia duas posicoes -- que o
- *    `UNIQUE` de `professional_images.image_id` recusaria como `500`.
- * 3. **`alt_text` presente e curto** (tamanho). AUSENTE e estado legitimo e
- *    nao e conferido; `""` e `"a"` sao `400`.
- */
+/** A forma da GALERIA (cliente, 29/10/2026). */
 function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined): ProblemFieldError[] {
   if (imagens === undefined) return [];
   const erros: ProblemFieldError[] = [];
@@ -272,8 +196,6 @@ function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined):
       message: `Até ${String(TETO_DE_IMAGENS_DA_GALERIA)} imagens.`,
     });
   }
-  // `toLowerCase` porque UUID e insensivel a caixa e dois textos diferentes
-  // podem ser o mesmo identificador -- a mesma normalizacao que a `Rede` faz.
   if (new Set(imagens.map((i) => i.upload_id.toLowerCase())).size !== imagens.length) {
     erros.push({
       field: 'images',
@@ -282,16 +204,13 @@ function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined):
     });
   }
   imagens.forEach((imagem, n) => {
-    // Ausente e estado legitimo (a descricao e opcional nas tres galerias deste
-    // produto); vazio e de uma letra continuam `400`. Sem este desvio
-    // `errosDeTexto` cobraria o campo que o cliente mandou tirar.
     if (imagem.alt_text === undefined) return;
     erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
   });
   return erros;
 }
 
-/** O texto aparado, ou `null` quando ele apaga o campo. Ausente continua ausente. */
+/** O texto aparado, ou `null` quando ele apaga o campo. */
 function aparado(valor: string | null | undefined): string | null | undefined {
   if (valor === undefined) return undefined;
   if (valor === null) return null;
@@ -358,28 +277,14 @@ export class DiretorioAdministrativo {
   }
 
   /**
-   * Cadastra. **A entrada nasce PUBLICADA desde 29/10/2026** (decisao do
-   * cliente: *"cobrar os dados no cadastro"*), e cobra `city`, `state` e
-   * `phone_e164` no proprio `POST`.
-   *
-   * A regua e `planejarCriacao`, que delega a `faltasParaPublicar` -- a MESMA
-   * funcao da edicao e da projecao. **A recusa e daqui, e nao do formulario**:
-   * um chamador que mande o corpo direto, sem passar pelo painel, recebe o
-   * mesmo `400` com os campos nomeados.
-   *
-   * `status: draft` continua sendo escolha explicita e nao cobra nada.
+   * Cadastra. **A entrada nasce PUBLICADA desde 29/10/2026** (decisao do cliente:
+   * *"cobrar os dados no cadastro"*), e cobra `city`, `state` e `phone_e164` no
+   * proprio `POST`.
    */
   async criarEntrada(autor: Autor, corpo: CriacaoDaEntrada): Promise<Escrito<EntradaProjetada>> {
-    // A forma dos campos e a da GALERIA na MESMA lista de erros: a tela precisa
-    // marcar tudo de uma vez, e duas chamadas a `problemas.validacao` faria o
-    // operador descobrir o segundo problema depois de consertar o primeiro.
     const erros = [...errosDaForma(corpo), ...errosDaGaleria(corpo.images)];
     if (erros.length > 0) throw problemas.validacao(erros);
 
-    // AS ATIVIDADES, de `kinds` ou de `kind`. Na CRIACAO a ausencia dos dois e
-    // `required`: a atividade e o que a entrada E, e o contrato tirou `kind` de
-    // `required` justamente porque quem decide agora e esta linha, e nao o
-    // schema -- o schema nao consegue dizer "um destes dois".
     const atividades = atividadesDoCorpo('kinds', corpo);
     if ('erros' in atividades) throw problemas.validacao(atividades.erros);
     if (atividades.ok === undefined) {
@@ -387,21 +292,13 @@ export class DiretorioAdministrativo {
         { field: 'kinds', code: 'required', message: 'Escolha ao menos uma atividade.' },
       ]);
     }
-    // Amarrado num `const` porque o estreitamento acima nao sobrevive a entrada
-    // no fecho de `emTransacao`.
     const kinds = atividades.ok;
 
-    // A SITUACAO EM QUE A ENTRADA NASCE, e a completude que ela exige (cliente,
-    // 29/10/2026). Depois da forma e das atividades, e ANTES da transacao: nao
-    // ha por que abrir transacao para uma criacao que a regra ja recusou.
     const planejada = planejarCriacao(corpo);
     if (!planejada.ok) throw problemas.validacao([...planejada.erros]);
     const plano = planejada.plano;
 
     return this.deps.repositorio.emTransacao(async (tx) => {
-      // A logo e a foto sao confirmadas ANTES do `INSERT`, na mesma transacao:
-      // `imagemDoEnvio` recusa com `400` o envio que nao serve, e recusar antes
-      // de inserir evita gravar a entrada e desfaze-la em seguida.
       const logoImageId = await this.imagemDoEnvio(tx, 'logo_upload_id', 'directory_logo', corpo.logo_upload_id);
       const photoImageId = await this.imagemDoEnvio(tx, 'photo_upload_id', 'directory_photo', corpo.photo_upload_id);
       const criada = await comSlugLivre(() =>
@@ -413,9 +310,6 @@ export class DiretorioAdministrativo {
           displayName: corpo.display_name.trim(),
           about: aparado(corpo.about) ?? null,
           city: aparado(corpo.city) ?? null,
-          // A UF e gravada em MAIUSCULA, sempre: o `CHECK` so mede o tamanho, e
-          // `sp` e `SP` na mesma coluna fariam o filtro por UF da listagem
-          // perder metade das linhas sem erro nenhum.
           state: aparado(corpo.state)?.toUpperCase() ?? null,
           neighborhood: aparado(corpo.neighborhood) ?? null,
           postalCode: aparado(corpo.postal_code) ?? null,
@@ -423,35 +317,17 @@ export class DiretorioAdministrativo {
           streetNumber: aparado(corpo.street_number) ?? null,
           complement: aparado(corpo.complement) ?? null,
           phoneE164: aparado(corpo.phone_e164) ?? null,
-          // O site e APARADO e nada mais: aparar espaco das pontas nao muda o
-          // endereco, e o validador recusa espaco no meio. Nenhuma outra
-          // normalizacao -- nao se acrescenta esquema nem se tira `www`.
           siteUrl: aparado(corpo.site_url) ?? null,
           logoImageId,
           photoImageId,
           status: plano.status,
-          // `published_at` so quando a entrada JA NASCE no ar. Ate 28/10/2026
-          // nenhuma criacao o gravava porque nenhuma publicava, e a coluna
-          // responde "desde quando esta no ar" -- deixa-la nula numa entrada
-          // publicada faria o painel ler a entrada como rascunho.
           gravaMarcoDePublicacao: plano.gravaMarcoDePublicacao,
           source: ORIGEM_DO_PAINEL,
           claimStatus: TITULARIDADE_DO_PAINEL,
           agora: this.agora(),
         }),
       );
-      // O `id` interno vai para a trilha e NUNCA para a resposta: a trilha
-      // precisa de uma chave que sobreviva a troca de `slug`.
       const id = await tx.idPorSlug(criada.slug);
-      // A GALERIA e escrita DEPOIS do `INSERT`, e nao junto: ela vive em
-      // `professional_images` e precisa do `id` da entrada, que so existe
-      // depois dele. Por isso tambem a releitura abaixo -- `criada` foi lida
-      // antes da galeria existir, e devolve-la faria o `POST` responder
-      // `images: []` tendo gravado oito.
-      //
-      // `id` nulo aqui seria a entrada desaparecendo dentro da propria
-      // transacao que a inseriu. Nao ha galeria a escrever nesse caso, e o
-      // ramo existe para nao mentir um `id` que nao se leu.
       let completa = criada;
       if (corpo.images !== undefined && id !== null) {
         await this.aplicarGaleria(tx, id, corpo.images);
@@ -476,11 +352,6 @@ export class DiretorioAdministrativo {
     const erros = [...errosDaForma(patch), ...errosDaGaleria(patch.images)];
     if (erros.length > 0) throw problemas.validacao(erros);
 
-    // AS ATIVIDADES na EDICAO. A mesma funcao da criacao, e a diferenca e so
-    // esta: aqui a ausencia dos dois campos quer dizer **nao mexer**, e nao
-    // `required`. `kinds` (ou `kind`, que vale `[kind]`) SUBSTITUI a lista
-    // inteira -- nao ha "acrescentar uma atividade", pelo mesmo idioma de
-    // `images` da `Rede`: a lista que vem e a lista que fica.
     const atividades = atividadesDoCorpo('kinds', patch);
     if ('erros' in atividades) throw problemas.validacao(atividades.erros);
     const kinds = atividades.ok;
@@ -517,8 +388,6 @@ export class DiretorioAdministrativo {
       const decidido = planejarEdicao(atual, normalizado);
       if (!decidido.ok) throw problemas.validacao([...decidido.erros]);
 
-      // O `id` interno e lido ANTES do bloco abaixo porque `imagemDoEnvio`
-      // precisa dele para recusar a logo que ja esta em OUTRA entrada.
       const id = await tx.idPorSlug(slug);
       if (id === null) throw problemas.naoEncontrado();
 
@@ -545,8 +414,6 @@ export class DiretorioAdministrativo {
         ...(normalizado.complement === undefined ? {} : { complement: normalizado.complement }),
         ...(normalizado.phone_e164 === undefined ? {} : { phoneE164: normalizado.phone_e164 }),
         ...(normalizado.site_url === undefined ? {} : { siteUrl: normalizado.site_url }),
-        // A logo e a foto: ausente nao mexe, `null` TIRA, `upload_id` novo
-        // TROCA. A confirmacao acontece aqui dentro, na transacao da escrita.
         ...(patch.logo_upload_id === undefined
           ? {}
           : {
@@ -578,14 +445,6 @@ export class DiretorioAdministrativo {
       );
       if (alterada === null) throw versaoMudou();
 
-      // A GALERIA vem DEPOIS do `UPDATE`, e a ordem nao e negociavel: e o
-      // `UPDATE ... WHERE version = $2` que confere a versao lida e a
-      // incrementa. Substituir a galeria antes dele deixaria a galeria nova
-      // gravada numa transacao que vai morrer em 412 -- e, pior, faria uma
-      // escrita que perdeu a corrida mexer no recurso antes de perde-la.
-      //
-      // `patch.images` substitui a lista inteira, inclusive com `[]`, e e por
-      // isso que o teste e contra `undefined` e nao contra tamanho.
       let completa = alterada;
       if (patch.images !== undefined) {
         await this.aplicarGaleria(tx, id, patch.images, id);
@@ -607,39 +466,6 @@ export class DiretorioAdministrativo {
   /**
    * O `catalog_images.id` de um `upload_id` da logo ou da foto da entrada
    * (18/10/2026), ou `null` quando o corpo mandou `null` para TIRAR a imagem.
-   *
-   * **COPIA DELIBERADA DE `CatalogoAdministrativo.imagemDoEnvio`**, e nao uma
-   * abstracao nova: a diferenca entre os dois e o nome do campo no erro, o
-   * proposito exigido e a tabela do dono. Fatorar os tres numa funcao
-   * compartilhada trocaria quinze linhas por um parametro de injecao em tres
-   * modulos, e a regra que importa -- "o proposito do envio tem de ser o do
-   * campo" -- ficaria a um salto de distancia de quem a le.
-   *
-   * ## Por que a recusa nao diz QUAL dos casos ocorreu
-   *
-   * Envio inexistente, de outro proposito, vencido, ou ja usado em outra
-   * entrada: os quatro saem como o mesmo `400 upload_not_usable`. Distinguir
-   * entregaria a quem adivinha `upload_id` um oraculo de "este existe mas e de
-   * outra entrada", e e a mesma razao do ADR-0021.
-   *
-   * ## E ESTA FUNCAO QUE PROTEGE A IMAGEM DA VARREDURA DE VENCIDOS
-   *
-   * `confirmarEnvioDeCatalogo` grava `confirmed_at`, e e isso que tira a linha
-   * da lista de `listarIntencoesVencidas`. Um proposito que chegasse ate o
-   * balde sem passar por uma confirmacao seria apagado dez minutos depois, que
-   * e exatamente o que aconteceu com a foto do achado -- duas vezes, medido.
-   */
-  /**
-   * Substitui a galeria da entrada pela lista do corpo (cliente, 29/10/2026).
-   *
-   * Confirma cada envio NA ORDEM da lista, e e a ordem que vira `position`: a
-   * posicao 0 e a capa da galeria, e "escolher a capa" no painel e por a imagem
-   * em primeiro lugar. Nenhum campo de capa existe, exatamente como na `Rede`.
-   *
-   * `entradaId` entra DUAS vezes com o mesmo valor na edicao (o dono da galeria
-   * e o dono permitido da imagem) e uma so na criacao, onde ainda nao ha imagem
-   * de outra entrada para reaproveitar. O segundo parametro e o que permite ao
-   * painel mandar o formulario inteiro a cada salvamento sem perder a galeria.
    */
   private async aplicarGaleria(
     tx: TransacaoDoDiretorio,
@@ -650,9 +476,6 @@ export class DiretorioAdministrativo {
     const galeria: ImagemDaGaleriaNaPosicao[] = [];
     for (const [position, imagem] of imagens.entries()) {
       const imageId = await this.imagemDaGaleriaDoEnvio(tx, imagem.upload_id, donoPermitido);
-      // Vazio depois de aparar grava NULO, e nao `''`: `''` morreria no `CHECK`
-      // de tamanho como 500. O contrato ja recusa `""`, e esta linha e a rede
-      // embaixo para quem chegar por outro caminho.
       const altText = imagem.alt_text?.trim();
       galeria.push({
         imageId,
@@ -663,21 +486,7 @@ export class DiretorioAdministrativo {
     await tx.substituirImagens(entradaId, galeria);
   }
 
-  /**
-   * O `catalog_images.id` de um `upload_id` da GALERIA.
-   *
-   * Irma de `imagemDoEnvio` (a logo e a foto) e **nao a mesma funcao**, e a
-   * diferenca nao e cosmetica: aqui o proposito exigido e `directory_gallery`,
-   * o campo do erro e `images` -- e nao `logo_upload_id` --, a pergunta de dono
-   * e a outra tabela (`entradaDaImagemDaGaleria`), e o valor devolvido nunca e
-   * nulo, porque nao existe "imagem de galeria ausente": ausente e a lista nao
-   * ter aquele item.
-   *
-   * A recusa nao diz QUAL dos casos ocorreu -- envio inexistente, de outro
-   * proposito, vencido, ou ja usado em outra entrada saem como o mesmo
-   * `400 upload_not_usable`. Distinguir entregaria a quem adivinha `upload_id`
-   * um oraculo de "este existe mas e de outra entrada" (ADR-0021).
-   */
+  /** O `catalog_images.id` de um `upload_id` da GALERIA. */
   private async imagemDaGaleriaDoEnvio(
     tx: TransacaoDoDiretorio,
     uploadId: string,
@@ -697,14 +506,8 @@ export class DiretorioAdministrativo {
     if (envio === null || envio.kind !== 'catalog_image' || envio.purpose !== 'directory_gallery') {
       recusa();
     }
-    // `envio` ja nao e nulo aqui; o TypeScript nao sabe disso por causa do
-    // `never` dentro de `recusa`. Mesma assercao, e mesmo preco, de
-    // `imagemDoEnvio`.
     const aberto = envio as NonNullable<typeof envio>;
     if (aberto.confirmedAt !== null) {
-      // Envio ja confirmado e REAPROVEITADO quando e desta mesma entrada: o
-      // painel manda a galeria inteira a cada salvamento, e recusar aqui faria
-      // a segunda gravacao de um telefone perder todas as fotos.
       if (aberto.catalogImageId === null) recusa();
       const dono = await tx.entradaDaImagemDaGaleria(aberto.catalogImageId as string);
       if (dono !== null && dono !== donoPermitido) recusa();
@@ -745,14 +548,8 @@ export class DiretorioAdministrativo {
 
     const envio = await tx.envioDeCatalogo(uploadId);
     if (envio === null || envio.kind !== 'catalog_image' || envio.purpose !== proposito) recusa();
-    // `envio` ja nao e nulo aqui; o TypeScript nao sabe disso por causa do
-    // `never` dentro de `recusa`, e a assercao abaixo e o preco de manter a
-    // recusa numa funcao so.
     const aberto = envio as NonNullable<typeof envio>;
     if (aberto.confirmedAt !== null) {
-      // Envio ja confirmado e REAPROVEITADO quando e desta mesma entrada: o
-      // painel manda o formulario inteiro a cada salvamento, e recusar aqui
-      // faria a segunda gravacao de um telefone perder a logo.
       if (aberto.catalogImageId === null) recusa();
       const dono = await tx.entradaDaImagem(aberto.catalogImageId as string);
       if (dono !== null && dono !== entradaId) recusa();
@@ -772,24 +569,7 @@ export class DiretorioAdministrativo {
     return imagemId;
   }
 
-  /**
-   * Tira uma avaliacao do ar, com o motivo na trilha.
-   *
-   * **O motivo e obrigatorio, e e a diferenca entre moderacao e arbitrio.**
-   * Quem remove escreve por que, e isso fica legivel para quem auditar depois.
-   * O contrato ja o exige (`minLength: 3`); aqui ele e aparado e reconferido,
-   * porque 500 espacos passam por `minLength`.
-   *
-   * **`resourceKind` e `professional_review`, nao `directory_entry`**, e por
-   * isso este metodo nao usa `this.evento()`: o alvo e a avaliacao, e uma
-   * investigacao que procurasse pela entrada do diretorio nao acharia a
-   * remocao.
-   *
-   * O `before`/`after` carrega a NOTA e nao o texto. A nota explica o efeito na
-   * media -- que e o que muda na tela de todo mundo -- e o texto de uma
-   * avaliacao removida por ser ofensivo nao precisa ser recopiado para a
-   * trilha, onde ficaria sem o mesmo controle de acesso.
-   */
+  /** Tira uma avaliacao do ar, com o motivo na trilha. */
   async removerAvaliacao(autor: Autor, ref: string, motivo: string): Promise<void> {
     const aparado = motivo.trim();
     if (aparado.length < 3 || aparado.length > 500) {
@@ -800,9 +580,6 @@ export class DiretorioAdministrativo {
 
     return this.deps.repositorio.emTransacao(async (tx) => {
       const removida = await tx.removerAvaliacao(ref, aparado, this.agora());
-      // 404 e nao 403, e tambem quando a avaliacao JA estava removida: o `ref`
-      // de algo que nao esta no ar nao tem alvo, e o motivo da primeira remocao
-      // e de quem auditar -- sobrescreve-lo apagaria a decisao que valeu.
       if (removida === null) throw problemas.naoEncontrado();
 
       await tx.registrarNaTrilha({

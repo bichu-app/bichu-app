@@ -1,30 +1,4 @@
-/**
- * `GET /v1/public/lost-pets` (`listPublicLostPets`), pela borda HTTP.
- *
- * Três coisas se provam aqui, e as três eram afirmação sem medida antes deste
- * arquivo — a operação estava no contrato e **não tinha rota**:
- *
- * 1. **A listagem mostra pet perdido de verdade**, com foto, bairro e quando
- *    foi visto, e o cartão carrega o `share_token` como chave. O contrapeso é a
- *    lista vazia: recorte sem resultado responde 200 com `total: 0` e `items:
- *    []`, nunca um erro.
- * 2. **Nenhum UUID interno sai.** O dublê da porta é HOSTIL, pela mesma receita
- *    de `leitura-publica-do-caso.test.ts`: ele devolve o e-mail, o telefone, o
- *    endereço e os UUIDs do tutor, do pet e do caso como propriedades a mais, e
- *    planta os mesmos dados dentro do texto livre. A resposta passa por
- *    `shared/http/vazamento-publico.ts`, que reprova por propriedade não
- *    declarada, nome proibido, valor plantado e **qualquer UUID**. É o cenário
- *    de alguém acrescentar `...linha` à projeção um dia.
- * 3. **A rota é alcançável SEM CONTA.** A operação declara `security: []`, e
- *    este arquivo pede sem cabeçalho `Authorization` nenhum. Um 401 aqui seria
- *    a porta pela qual a vizinhança acha o pet, fechada.
- *
- * O que este arquivo NÃO cobre: a consulta SQL. Com dublê no lugar da porta,
- * uma consulta que juntasse `users` ou que esquecesse `conta_habilitada`
- * passaria aqui. Quem cobre é
- * `adapters/persistence/listagem-publica-de-perdidos-sem-id-interno.test.ts`,
- * que lê o SQL compilado.
- */
+/** `GET /v1/public/lost-pets` (`listPublicLostPets`), pela borda HTTP. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -70,9 +44,7 @@ const PLANTADOS: readonly ValorPlantado[] = [
 
 /**
  * O perdido legítimo, com os dados sensíveis plantados no texto livre e com as
- * propriedades a mais que uma porta descuidada carregaria. O `as` é o ponto: a
- * interface não admite esses campos, e o dublê os força para provar que a
- * projeção é lista branca e não cópia.
+ * propriedades a mais que uma porta descuidada carregaria.
  */
 function perdidoHostil(parcial: Partial<PerdidoPublico> = {}): PerdidoPublico {
   const legitimo: PerdidoPublico = {
@@ -83,8 +55,6 @@ function perdidoHostil(parcial: Partial<PerdidoPublico> = {}): PerdidoPublico {
     racaRotulo: `Poodle, fala com ${EMAIL_DO_TUTOR}`,
     corRotulo: 'Caramelo',
     vistoPorUltimoEm: new Date('2026-10-17T18:30:00.000Z'),
-    // O selo entrou em 20/10/2026. `false` aqui porque este dublê é o item do
-    // conjunto de casos ABERTOS, que é o que a rota devolve sem `case_state`.
     encontradoPelaComunidade: false,
     cidade: 'São Paulo',
     bairro: 'Vila Mariana',
@@ -152,7 +122,7 @@ interface Resposta {
   readonly corpo: Record<string, unknown>;
 }
 
-/** **Sem `Authorization`, de propósito**: a operação é pública e deslogada. */
+/** Sem `Authorization`, de propósito**: a operação é pública e deslogada. */
 async function pedirSemConta(bancada: Bancada, url: string): Promise<Resposta> {
   const resposta = await bancada.app.inject({ method: 'GET', url });
   return {
@@ -188,8 +158,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
       'https://midia.exemplo.invalid/pets/abc/thumb/f00d.webp',
     );
     assert.equal(itens[0]?.['share_url'], `https://web.exemplo.invalid/p/${TOKEN}`);
-    // `total` alimenta "Mostrando 1 a 20 de 87", e os padrões do contrato
-    // (`page: 1`, `limit: 20`) voltam na resposta para a tela não supor.
     assert.equal(resposta.corpo['total'], 87);
     assert.equal(resposta.corpo['page'], 1);
     assert.equal(resposta.corpo['limit'], 20);
@@ -206,17 +174,7 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
 
   /**
    * ISCA do contrato: `period` perdeu o `default: 30d` em `api/openapi.yaml`
-   * (cliente, 18/10/2026), e é por isso que a ausência chega INDEFINIDA à
-   * porta.
-   *
-   * Este é o caso que mede o Ajv, e não o nosso `??`. O Fastify monta o Ajv com
-   * `useDefaults: true`, então enquanto o contrato declarava o `default` era o
-   * VALIDADOR quem escrevia `period: '30d'` na query de quem não mandou nada —
-   * antes de o manipulador existir. Tirar o `?? JANELA_PADRAO` da aplicação
-   * sozinho não teria mudado nada aqui.
-   *
-   * Reponha `default: 30d` no `period` de `listPublicLostPets` no contrato e
-   * este caso reprova pelo nome, porque o esquema de `querystring` sai de lá.
+   * (cliente, 18/10/2026), e é por isso que a ausência chega INDEFINIDA à porta.
    */
   void it('ISCA: `period` ausente chega INDEFINIDO à porta — janela aberta', async () => {
     const bancada = montar({ itens: [], total: 0 });
@@ -231,23 +189,16 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.equal(recorte?.cidade, 'São Paulo');
     assert.equal(recorte?.pagina, 1);
     assert.equal(recorte?.limite, 20);
-    // O relógio é injetado: a janela não lê `Date.now()`.
     assert.equal(recorte?.agora.getTime(), AGORA);
   });
 
   void it('ISCA: sem `period`, `applied_filters` NÃO cita `period`', async () => {
-    // É por `applied_filters` que a tela escreve a linha do recorte e conta os
-    // filtros ativos. Um `period` aqui faria a página de pets abrir dizendo
-    // "1 filtro ativo" sem ninguém ter escolhido nada, que é o defeito literal
-    // que o cliente reclamou.
     const bancada = montar({ itens: [], total: 0 });
     const resposta = await pedirSemConta(bancada, URL_DA_LISTA);
     assert.deepEqual(resposta.corpo['applied_filters'], { city: 'São Paulo' });
   });
 
   void it('CONTRAPESO: `period=30d` PEDIDO continua valendo e aparece', async () => {
-    // A janela não foi removida do produto: ela deixou de ser imposta. Sem este
-    // caso, apagar `period` da consulta passaria pelas duas iscas acima.
     const bancada = montar({ itens: [], total: 0 });
     const resposta = await pedirSemConta(
       bancada,
@@ -278,14 +229,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
   /**
    * ISCA (a) do pedido do cliente de 19/10/2026: *"o campo cidade do filtro da
    * página pet não deve ser obrigatório"*.
-   *
-   * Este caso MEDIU 400 até hoje, e o 400 era o comportamento correto do
-   * contrato anterior: `city` era `required` e o Ajv do Fastify recusava a
-   * ausência antes do manipulador. O caso foi invertido junto com o contrato.
-   *
-   * DESLIGANDO: reponha `required: true` no parâmetro `city` de
-   * `listPublicLostPets` em `api/openapi.yaml` e este caso reprova pelo nome —
-   * o esquema de `querystring` sai de lá, não daqui.
    */
   void it('ISCA: a lista abre SEM `city` — 200, e com itens', async () => {
     const bancada = montar({ itens: [perdidoHostil()], total: 87 });
@@ -296,24 +239,7 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.equal(resposta.corpo['total'], 87);
   });
 
-  /**
-   * ISCA do texto vazio: `city` ausente chega INDEFINIDA, e não como `''`.
-   *
-   * Importa porque `''` responderia 200 igual ao caso de cima e devolveria
-   * página VAZIA: o adaptador compararia `texto_para_busca('')`, que não casa
-   * com nada. Seria "não há perdidos" no lugar de "todos os perdidos".
-   *
-   * **DESLIGANDO — e o mecanismo não é o que eu supus.** A primeira versão
-   * desta nota dizia para repor o `?? ''` na rota. MEDIDO em 19/10/2026: com o
-   * `?? ''` de volta na rota, **este caso continua passando**, porque
-   * `aparado(pedido.city)` na camada de aplicação transforma `''` em
-   * `undefined` logo depois. O `?? ''` saiu da rota de qualquer forma — ele não
-   * tem mais razão de existir —, mas quem sustenta esta isca é o `aparado`.
-   *
-   * Para desligar de verdade: troque `const cidade = aparado(pedido.city)` por
-   * `pedido.city ?? ''` em `application/listagem-publica-de-perdidos.ts`. Este
-   * caso e o de `applied_filters` reprovam pelo nome.
-   */
+  /** ISCA do texto vazio: `city` ausente chega INDEFINIDA, e não como `''`. */
   void it('ISCA: `city` ausente chega INDEFINIDA à porta, e não como texto vazio', async () => {
     const bancada = montar({ itens: [], total: 0 });
     await pedirSemConta(bancada, '/v1/public/lost-pets');
@@ -328,9 +254,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
   });
 
   void it('ISCA: sem `city`, `applied_filters` NÃO cita `city`', async () => {
-    // Mesmo motivo do `period`: é por `applied_filters` que a tela escreve a
-    // linha do recorte e conta os filtros ativos. Uma cidade aqui faria a
-    // página abrir dizendo que filtrou por um lugar que ninguém escolheu.
     const bancada = montar({ itens: [], total: 0 });
     const resposta = await pedirSemConta(bancada, '/v1/public/lost-pets');
     assert.deepEqual(resposta.corpo['applied_filters'], {});
@@ -339,27 +262,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
   /**
    * ISCA (f) do refinamento de 19/10: *"devemos filtrar pelos 20 últimos pets
    * cadastrados"*.
-   *
-   * **Prova pela PÁGINA e pelo LIMITE que chegam à porta**, e o `limite: 20`
-   * não é escolha desta tela nem desta rota: é o `default: 20` que o contrato
-   * declara em `limit`, com `maximum: 20`. Quem é "os 20 últimos" pela DATA se
-   * prova um nível abaixo, no SQL compilado — ver
-   * `adapters/persistence/listagem-publica-de-perdidos-sem-id-interno.test.ts`,
-   * caso 'ISCA: a ordem é o mais recente primeiro'.
-   *
-   * DESLIGANDO: troque o `default: 20` de `limit` de `listPublicLostPets` em
-   * `api/openapi.yaml` para outro número. Este caso reprova pelo nome (medido
-   * em 19/10/2026 com `default: 10`: três casos deste arquivo reprovam).
-   *
-   * **E NÃO adianta trocar o `TAMANHO_PADRAO` da aplicação: MEDIDO, a suíte
-   * fica VERDE.** Vale registrar porque é contraintuitivo e porque a nota
-   * anterior desta isca oferecia os dois caminhos como equivalentes: o Ajv que
-   * o Fastify monta tem `useDefaults: true`, então ele ESCREVE `limit: 20` na
-   * query de quem não mandou nada, antes de o manipulador rodar. O
-   * `pedido.limit ?? TAMANHO_PADRAO` da aplicação nunca vê a ausência por esta
-   * borda — a constante só vale para quem chama o serviço direto. É o mesmo
-   * mecanismo que fez o `default: 30d` de `period` recortar a lista em 30 dias
-   * depois de o app parar de mandar `period`.
    */
   void it('ISCA: o recorte padrão pede a página 1 com limite 20', async () => {
     const bancada = montar({ itens: [], total: 0 });
@@ -369,10 +271,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
   });
 
   void it('CONTRAPESO: `city` com UMA letra continua 400 — `minLength: 2` vale', async () => {
-    // Sem este caso, apagar o `minLength: 2` do contrato passaria pelas iscas
-    // acima: elas medem a AUSÊNCIA, e ausência continua sendo 200. Omitir é
-    // geografia aberta; mandar um valor inválido é erro, e os dois não são a
-    // mesma coisa.
     const bancada = montar({ itens: [], total: 0 });
     const resposta = await pedirSemConta(bancada, '/v1/public/lost-pets?city=S');
     assert.equal(resposta.status, 400, JSON.stringify(resposta.corpo));
@@ -380,8 +278,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
   });
 
   void it('CONTRAPESO: `city` PEDIDA continua recortando e aparece', async () => {
-    // A cidade não saiu do produto: ela deixou de ser imposta. Sem este caso,
-    // IGNORAR `city` de quem a mandou passaria por todas as iscas acima.
     const bancada = montar({ itens: [], total: 0 });
     const resposta = await pedirSemConta(bancada, URL_DA_LISTA);
     assert.equal(bancada.recortes[0]?.cidade, 'São Paulo');
@@ -390,10 +286,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
 
   void it('a rota passa pelo guarda de parâmetros sem derrubar a subida', async () => {
     const bancada = montar({ itens: [], total: 0 });
-    // O pedido vem PRIMEIRO de propósito: é ele que leva o Fastify a `ready()`
-    // e registra as rotas. Conferir antes acusa "nenhuma rota recebeu
-    // validação" sobre um servidor que ainda não tem rota nenhuma — e foi
-    // exatamente assim que esta isca reprovou na primeira rodada.
     await pedirSemConta(bancada, URL_DA_LISTA);
     bancada.conferirParametros();
   });
@@ -414,7 +306,6 @@ void describe('não-vazamento: a listagem pública não carrega id interno nem d
   });
 
   void it('ISCA: um UUID no lugar do `share_token` é PEGO pelo detector', async () => {
-    // Sem esta isca o caso de cima provaria apenas que o detector foi chamado.
     const bancada = montar({
       itens: [perdidoHostil({ shareToken: CASO_ID })],
       total: 1,
@@ -434,8 +325,6 @@ void describe('não-vazamento: a listagem pública não carrega id interno nem d
     });
     const resposta = await pedirSemConta(bancada, URL_DA_LISTA);
     const itens = resposta.corpo['items'] as Record<string, unknown>[];
-    // Nulo, e não "Região não informada": rótulo fixo dentro de um campo de
-    // dado é indistinguível de um bairro com esse nome. O texto é do cliente.
     assert.equal(itens[0]?.['area_label'], null);
   });
 
@@ -448,80 +337,8 @@ void describe('não-vazamento: a listagem pública não carrega id interno nem d
 });
 
 /**
- * O ADR-0006 PROÍBE COORDENADA NOS DOIS SENTIDOS NESTA ROTA, E SÓ UM DELES
- * TINHA PORTÃO.
- *
- * O documento é literal sobre a listagem pública de perdidos: *"a listagem
- * pública de perdidos filtra por cidade e bairro digitados, **jamais por
- * latitude e longitude**"*. São duas proibições, e elas têm coberturas
- * diferentes:
- *
- * 1. **Coordenada ou distância na RESPOSTA** — já tem portão.
- *    `src/tools/portao-contrato-publico.ts` reprova `lat`, `lon`, `point`,
- *    `distance_m`, `distance_km` e `radius_m` em qualquer operação alcançável
- *    sem conta. MEDIDO em 19/10/2026: acrescentar `distance_m` a
- *    `PublicLostPet` reprova o portão com **dois** achados (`listPublicLostPets`
- *    e `getPublicLostCase`, que reusa o esquema), com saída 1.
- * 2. **Coordenada no PEDIDO** — NÃO TINHA PORTÃO NENHUM, e este bloco é ele.
- *    MEDIDO na mesma data: acrescentar `lat`, `lon` e `radius_m` como
- *    parâmetros de `querystring` desta operação e rodar o portão de contrato
- *    público devolve **APROVADO, com saída 0**. O portão percorre a RESPOSTA
- *    declarada e não olha `parameters` — e está certo em não olhar, porque o
- *    SEC-001 que ele implementa é sobre o que SAI. O lado do pedido ficava
- *    protegido por uma frase num ADR, e frase não reprova ninguém.
- *
- * Por que a proibição vale para o pedido também, e não é zelo: ordenar ou
- * filtrar por um centro que quem chama escolhe transforma a rota pública num
- * oráculo de posição. Quem varia o centro e lê a ORDEM da página trilatera o
- * ponto de cada caso sem que um único número de coordenada apareça na
- * resposta — é o mesmo dano que o item 4 do ADR-0010 existe para impedir,
- * alcançado pelo caminho que o portão não cobre.
- *
- * E a proibição de GEOCODIFICAÇÃO fecha a volta: *"não há serviço de
- * geocodificação contratado"*, então coordenada não vira nome de cidade nem
- * cidade vira coordenada. É por isso que o recorte geográfico desta rota é
- * texto contra texto.
- *
- * ESTE CASO ESTÁ ANCORADO NO QUE O CONTRATO DECLARA, e não num comentário:
- * ele lê `parameters` da operação pelo próprio carregador de contrato.
- */
-/**
- * ADR-0006: a listagem pública não aceita coordenada NEM distância no pedido.
- *
- * ## O que este describe ainda faz, agora que o portão lê o pedido
- *
- * Quando ele foi escrito, `portao-contrato-publico.ts` olhava só a RESPOSTA
- * declarada, e esta era a ÚNICA coisa no repositório medindo o lado do pedido —
- * de uma rota só. O portão passou a percorrer o contrato também pelo pedido, e
- * cobre esta rota de forma geral e mais forte: casamento por segmento (alcança
- * `center_lat` e `max_km`, que nome exato não alcança), nas 38 operações
- * alcançáveis sem conta, e operação pública nova nasce coberta.
- *
- * Os três casos abaixo FICAM, e cada um por um motivo próprio — a redundância
- * é de um só deles, e é barata:
- *
- * 1. `a operação declara parâmetro...` NÃO é redundante. A regra do portão é
- *    GLOBAL: ela reprova quando nenhuma das 38 operações declara parâmetro
- *    nenhum. Esta aqui é POR OPERAÇÃO. Se `listPublicLostPets` sozinha perdesse
- *    os `parameters`, o portão seguiria percorrendo 46 parâmetros das outras e
- *    terminaria verde, enquanto este caso reprova.
- * 2. `ISCA: nenhum parâmetro da rota é coordenada...` É redundante com o
- *    portão, e mais fraca que ele. Fica porque é outro MECANISMO sobre a mesma
- *    afirmação, por ~15 linhas: o portão roda no passo de esteira
- *    (`verificar-contrato-publico.sh`), este caso roda na suíte do backend.
- *    Quem apagar um não apaga o outro.
- * 3. `ISCA: o recorte que a porta recebe...` NÃO é redundante, e é o caso que
- *    mais importa. Ele mede o TEMPO DE EXECUÇÃO: dispara `?lat&lon&radius_m` na
- *    rota montada e exige que o recorte entregue à porta não os carregue. O
- *    portão lê o CONTRATO, por construção — o próprio arquivo dele diz "ele lê
- *    o contrato, não a lista de rotas de hoje". Um parâmetro FORA do contrato,
- *    lido à mão de `request.query`, é invisível para ele e visível só aqui.
- *
- * A lista abaixo é a mesma família de nomes que `portao-contrato-publico.ts`
- * reprova. Copiada e não importada **de propósito**: a de lá é sobre o que SAI,
- * a do pedido do portão é sobre o que ENTRA em qualquer rota pública, e esta é
- * sobre o que entra NESTA rota. Importar qualquer uma faria uma mudança lá
- * alterar em silêncio o que este caso mede.
+ * O ADR-0006 PROÍBE COORDENADA NOS DOIS SENTIDOS NESTA ROTA, E SÓ UM DELES TINHA
+ * PORTÃO.
  */
 void describe('ADR-0006: a listagem pública não aceita coordenada NEM distância no pedido', () => {
   const NOMES_DE_COORDENADA = [
@@ -548,9 +365,6 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
   function operacao(): { readonly parameters: readonly Record<string, unknown>[] } {
     const op = carregarContrato('api/openapi.yaml').operacoes.get('listPublicLostPets');
     if (op === undefined) {
-      // Não achar a operação é REPROVAÇÃO, e não aprovação por omissão: foi
-      // assim que um portão desta casa passou verde porque a rota ausente fazia
-      // tudo responder 404.
       throw new Error(
         'O contrato não declara `listPublicLostPets`: este caso não tem o que ' +
           'percorrer e reprova em vez de aprovar por omissão.',
@@ -560,8 +374,6 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
   }
 
   void it('a operação declara parâmetro, e há o que percorrer', () => {
-    // Filtro que não filtra termina verde. Se `parameters` vier vazio, os dois
-    // casos abaixo passariam sem medir nada.
     assert.ok(
       operacao().parameters.length > 0,
       'sem parâmetro declarado não há como afirmar que nenhum é coordenada',
@@ -570,25 +382,9 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
 
   /**
    * DESLIGANDO: acrescente `- name: lat` / `in: query` aos `parameters` de
-   * `listPublicLostPets` em `api/openapi.yaml`. Este caso reprova pelo nome.
-   *
-   * O portão de contrato público TAMBÉM reprova, desde que passou a ler o
-   * pedido — e a frase que estava aqui dizia o contrário ("o portão continua
-   * APROVANDO"), que era verdade quando foi escrita e deixou de ser. Ela ficaria
-   * contando ao próximo leitor que o portão é cego para isto, e foi corrigida
-   * por isso: comentário errado sobre uma verificação é pior que comentário
-   * nenhum, porque convence.
-   *
-   * A razão de este caso continuar existindo passou a ser outra, e está no
-   * cabeçalho do describe: ele é outro mecanismo, na suíte do backend, sobre a
-   * mesma afirmação que o passo de esteira faz.
+   * `listPublicLostPets` em `api/openapi.yaml`.
    */
   void it('ISCA: nenhum parâmetro da rota é coordenada, distância ou raio', () => {
-    // `typeof === 'string'` e nao `String(...)`: o `name` de um parametro e
-    // texto no contrato, mas o tipo dele aqui e `unknown`, e `String(unknown)`
-    // produz `[object Object]` para um objeto -- um nome que nunca casaria com
-    // a lista e que faria este caso aprovar em silencio. `@typescript-eslint/
-    // no-base-to-string` acusou isso, e com razao.
     const achados = operacao()
       .parameters.map((p) => p['name'])
       .filter((nome): nome is string => typeof nome === 'string')
@@ -603,9 +399,6 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
   });
 
   void it('ISCA: o recorte que a porta recebe não tem campo de coordenada', () => {
-    // O contrato é um lado; o outro é o que a aplicação MONTA. Um parâmetro
-    // fora do contrato ainda chegaria à porta se a rota o lesse de
-    // `request.query` à mão.
     const bancada = montar({ itens: [], total: 0 });
     return pedirSemConta(
       bancada,

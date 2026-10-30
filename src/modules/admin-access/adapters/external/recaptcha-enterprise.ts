@@ -1,25 +1,4 @@
-/**
- * O reCAPTCHA Enterprise do login administrativo (D41), por HTTP, sem SDK.
- *
- * **Este e o unico arquivo do produto que sabe que o desafio e do Google.**
- * Quem consome enxerga `VerificadorDeCaptcha`, que devolve uma nota ou nada.
- *
- * ## Por que Enterprise, e de onde vem a credencial
- *
- * E o transporte que `.env.example` ja declarava (`CAPTCHA_TRANSPORT`,
- * `CAPTCHA_SITE_KEY`, `CAPTCHA_PROJECT`), e que nenhum codigo lia. Enterprise
- * nao tem chave secreta: o servidor chama a API de avaliacao com o token da
- * conta de servico da VM, do servidor de metadados, pelo mesmo caminho do
- * Secret Manager (`shared/adapters/external/gcp-secret-manager.ts`). Nenhuma
- * chave de conta de servico em arquivo.
- *
- * ## O que ele faz quando nao consegue avaliar
- *
- * Devolve `undefined`, e o servico responde `403 captcha-rejected`. Sem
- * configuracao, o verificador e `captchaNaoConfigurado`, que tambem recusa
- * sempre. **Nao existe modo que aprove sem avaliar**: um desafio que se
- * desliga por variavel e um desafio que um dia sobe desligado.
- */
+/** O reCAPTCHA Enterprise do login administrativo (D41), por HTTP, sem SDK. */
 import {
   captchaNaoConfigurado,
   type VerificadorDeCaptcha,
@@ -86,14 +65,10 @@ export function criarVerificadorDeCaptcha(
         const propriedades = corpo['tokenProperties'];
         const analise = corpo['riskAnalysis'];
         if (!ehObjeto(propriedades) || propriedades['valid'] !== true) return undefined;
-        // Token valido colhido para OUTRA acao (outra pagina do mesmo site) nao
-        // serve aqui: e o reaproveitamento que a acao esperada existe para barrar.
         if (propriedades['action'] !== acaoEsperada) return undefined;
         if (!ehObjeto(analise) || typeof analise['score'] !== 'number') return undefined;
         return analise['score'];
       } catch {
-        // Rede, tempo esgotado, JSON quebrado: nao deu para avaliar, e quem
-        // decide o que isso significa e o servico (recusa).
         return undefined;
       }
     },

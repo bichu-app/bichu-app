@@ -1,8 +1,4 @@
-/**
- * O adaptador do reCAPTCHA Enterprise, sem rede: o `fetch` e um dublê. O que
- * se prova e que ele so devolve nota quando o token e valido, da acao certa, e
- * que toda outra saida e "nao deu para avaliar" (que o servico recusa).
- */
+/** O adaptador do reCAPTCHA Enterprise, sem rede: o `fetch` e um dublê. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -10,10 +6,8 @@ import { captchaNaoConfigurado } from '../../ports/verificador-de-captcha.js';
 import { criarVerificadorDeCaptcha, type Buscar } from './recaptcha-enterprise.js';
 
 /**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia
- * 404 na VM e passava aqui, porque o duble respondia a qualquer URL com
- * `metadata`). Literal, e nao importado: trocar a constante do adaptador
- * reprova este arquivo.
+ * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
+ * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
  */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
@@ -26,7 +20,6 @@ function buscarQueResponde(avaliacao: unknown, status = 200): { buscar: Buscar; 
     if (url === METADADOS_EXATO) {
       return Promise.resolve(new Response(JSON.stringify({ access_token: 't', expires_in: 3600 })));
     }
-    // Qualquer outra forma do endereco de metadados: 404, como na VM.
     if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
     corpos.push(init?.body === undefined ? undefined : JSON.parse(init.body));
     return Promise.resolve(new Response(JSON.stringify(avaliacao), { status }));

@@ -1,6 +1,6 @@
 /**
- * P21 (c): o portao dos cadastros separados contra o codigo real e contra as
- * iscas que precisa reprovar (`autoTeste`).
+ * P21 (c): o portao dos cadastros separados contra o codigo real e contra as iscas
+ * que precisa reprovar (`autoTeste`).
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

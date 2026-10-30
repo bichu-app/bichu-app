@@ -1,51 +1,6 @@
 /**
- * A FILA DA PLAQUINHA DA COLEIRA no painel: atender, recusar e, agora,
- * ACOMPANHAR A ENTREGA.
- *
- * ## O que esta tela responde, literal
- *
- * Pedido do cliente de 18/10/2026: "deve ser inserido uma rota no backoffice
- * para o adminstrador mudar o status da entrega e inserir o codigo de rastreio
- * e atualizar a entrega".
- *
- * O backend da fila existia desde 17/10 -- `listAdminCollarTagRequests`,
- * `fulfillAdminCollarTagRequest` e `declineAdminCollarTagRequest` --, e a
- * matriz de rastreabilidade dizia, nas tres, "tela: resolvido quando a tela
- * existir". **Nenhuma tela chamava nenhuma das tres.** Esta e ela, e por isso
- * as tres sairam de `contrato_sem_tela` no mesmo commit.
- *
- * ## OS DOIS EIXOS NA MESMA LINHA
- *
- * A aba recorta a DECISAO (`status`); o selo mostra o passo da ENTREGA
- * (`delivery_state`). Sao perguntas diferentes, e e por isso que aparecem nos
- * dois lugares: o operador escolhe "Atendidos" e ve, linha por linha, o que
- * ainda nao saiu, o que esta em transporte e o que chegou.
- *
- * A regra de qual botao cada linha oferece mora em `fila.ts`
- * ([proximaAcao]) e espelha a tabela de transicoes do servidor. A tela nao
- * decide: ela deixa de OFERECER o que o servidor recusaria.
- *
- * ## O ENDERECO DE ENTREGA APARECE AQUI, E SO AQUI
- *
- * E o que quem atende le para enviar a plaquinha, e e o unico dado pessoal
- * desta tela. Ele nao vai para a trilha de auditoria, nao e geocodificado
- * (ADR-0006) e nao sai em superficie nenhuma sem conta. CEP e telefone passam
- * pelas mascaras de `formato/`.
- *
- * ## O QUE ESTA TELA NAO MOSTRA, e a ausencia e a regra
- *
- * - **o codigo da plaquinha.** Ele e credencial ao portador (ADR-0004) e a
- *   resposta nao o carrega. O que identifica o pedido e o `ref` e o nome do pet;
- * - **nada do perfil de quem pediu.** Nem e-mail, nem conta, nem quantas
- *   plaquinhas a mesma pessoa pediu. O nome que aparece e o de quem RECEBE a
- *   encomenda, dentro do endereco;
- * - **nenhum valor.** Cobranca segue fora de escopo por decisao do cliente.
- *
- * ## NAO HA CONSULTA A TRANSPORTADORA
- *
- * O codigo de rastreio e TEXTO que quem atende digita. Esta tela nao chama
- * Correios nem ninguem, e nao mostra situacao de encomenda: seria custo
- * recorrente, e a decisao e do cliente.
+ * A FILA DA PLAQUINHA DA COLEIRA no painel: atender, recusar e, agora, ACOMPANHAR
+ * A ENTREGA.
  */
 import { useCallback, useId, useRef, useState } from 'react';
 
@@ -77,9 +32,7 @@ import {
 
 /**
  * Os padroes da lista, constante de modulo porque `useParametrosDaLista` o exige
- * estavel. **Sem `as const`**: com ele os valores viram tipos literais e `mudar`
- * passa a aceitar so a string que esta aqui -- mesma forma de `PADROES` em
- * `diretorio/ListaDeEntradas.tsx`.
+ * estavel.
  */
 const PADROES = { status: 'pending', passo: '', busca: '' };
 
@@ -95,12 +48,8 @@ function mensagemDaFalha(status: number | undefined): string {
 }
 
 /**
- * O dialogo da ENTREGA: o passo e o codigo de rastreio, numa confirmacao so --
- * que e como o cliente pediu, numa frase so.
- *
- * O campo vem PREENCHIDO com o rastreio que ja estava gravado: quem abre para
- * marcar a chegada nao precisa redigitar o codigo, e deixar o campo vazio faria
- * `corpoDaEntrega` interpretar isso como "apagar".
+ * O dialogo da ENTREGA: o passo e o codigo de rastreio, numa confirmacao so -- que
+ * e como o cliente pediu, numa frase so.
  */
 function DialogoDaEntrega({
   pedido,
@@ -121,8 +70,6 @@ function DialogoDaEntrega({
   const idDoRastreio = useId();
   const campo = useRef<HTMLInputElement>(null);
 
-  // Corrigir so o rastreio REPETE o passo atual, e o servidor aceita isso de
-  // proposito: e o caminho de consertar um codigo digitado errado.
   const passo =
     acao === 'rastreio'
       ? (pedido.delivery_state as 'in_transit' | 'arrived')
@@ -265,11 +212,10 @@ export default function FilaDePlaquinhas() {
   );
 
   /**
-   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o
-   * contrato de `listAdminCollarTagRequests` nao tem `q`, e inventar um aqui
-   * faria a tela mandar um parametro que o servidor ignora -- que e pior que
-   * nao ter busca, porque parece funcionar. Ela filtra pelo nome do pet e pelo
-   * destinatario, que e o que quem atende tem na mao.
+   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o contrato
+   * de `listAdminCollarTagRequests` nao tem `q`, e inventar um aqui faria a tela
+   * mandar um parametro que o servidor ignora -- que e pior que nao ter busca,
+   * porque parece funcionar.
    */
   const itens = busca === ''
     ? estado.itens
@@ -290,8 +236,6 @@ export default function FilaDePlaquinhas() {
       return;
     }
     substituir((p) => p.ref === pedido.ref, data);
-    // A aba e `pending` e o pedido deixou de ser pendente: recarregar e o que
-    // tira a linha da fila, em vez de deixa-la la com o selo trocado.
     recarregar();
     setAviso(`Pedido de ${pedido.pet.display_name} atendido. Agora registre a entrega.`);
   }
@@ -342,8 +286,8 @@ export default function FilaDePlaquinhas() {
       )}
       {falhaDaLinha && <Banner tipo="erro">{falhaDaLinha}</Banner>}
 
-      {/* Busca, filtro e ordenacao no TOPO DO CORPO da tela, e nunca na barra
-          de navegacao: e o padrao de toda pagina com registros neste painel. */}
+      {
+}
       <BarraDeListagem
         rotuloDaBusca="Buscar pedido"
         placeholder="Pet, quem recebe ou rastreio"
@@ -402,8 +346,8 @@ export default function FilaDePlaquinhas() {
               <tr key={pedido.ref} data-cy="linha-do-pedido">
                 <td>
                   <span className="t-label-lg">{petDo(pedido)}</span>
-                  {/* O endereco de entrega, mascarado. Dado pessoal: sai aqui e
-                      so aqui, e nao entra na trilha de auditoria. */}
+                  {
+}
                   <span className="t-body c-sec bloco">{enderecoEmLinhas(pedido).join(' · ')}</span>
                   {pedido.notes && <span className="t-body c-sec bloco">“{pedido.notes}”</span>}
                 </td>

@@ -1,7 +1,7 @@
 /**
  * A entrega do push de pedido aprovado a cada aparelho da conta: so o titulo no
- * fio, aparelho que sumiu revogado na hora, falha do transporte contada, e
- * titulo com cara de endereco barrado pela porteira antes de qualquer envio.
+ * fio, aparelho que sumiu revogado na hora, falha do transporte contada, e titulo
+ * com cara de endereco barrado pela porteira antes de qualquer envio.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

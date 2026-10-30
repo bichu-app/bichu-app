@@ -1,32 +1,4 @@
-/**
- * A recusa de dimensao declarada pequena tem **uma fonte so**, e esta e a guarda.
- *
- * ## O que foi medido
- *
- * Em 21/10/2026, sobre `f60ba3fc`, o bloco que recusa a dimensao DECLARADA
- * abaixo da minima estava escrito **cinco vezes**:
- *
- * - `media/application/capa-de-encontro-da-comunidade.ts` (`network_event`)
- * - `media/application/foto-do-proprio-usuario.ts` (`user_photo`)
- * - `publications/application/mural-service.ts` (`user_publication`)
- * - `showcase/application/vitrine-de-fotos-service.ts` (`user_showcase`)
- * - `store/application/catalogo-administrativo.ts` (`corpo.purpose`)
- *
- * Normalizando so a expressao do proposito, as cinco eram identicas em
- * execucao. Dentro do bloco esta a FRASE que o usuario le (`Mínimo de N
- * pixels.`) e o CODIGO de campo (`minimum`) que o app usa para decidir onde
- * pintar o erro -- ou seja, nao e duplicacao de enfeite: e a mesma mensagem de
- * usuario em cinco arquivos, que foi exatamente como o rotulo do selo chegou a
- * cinco redacoes.
- *
- * ## Este arquivo mora em `src/tools/` porque le o disco
- *
- * O `eslint` deste repositorio recusa `node:fs` em `domain/` e `application/`,
- * e com razao. Os portoes que leem arquivo de fonte moram aqui -- e a
- * conferencia da fonte unica so pode ser feita lendo a fonte.
- *
- * **Nenhum portao existente de `src/tools/` foi tocado para acrescentar este.**
- */
+/** A recusa de dimensao declarada pequena tem **uma fonte so**, e esta e a guarda. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,18 +15,16 @@ const FONTE = 'src/modules/media/ports/imagem-de-catalogo.ts';
 /**
  * ESTE arquivo, excluido das duas varreduras -- e a exclusao e UMA, nomeada, e
  * conferida pelo controle positivo abaixo.
- *
- * Ele cita a frase e o bloco para poder procura-los, entao sem isto a guarda
- * acusa a si mesma. Medido: foi o que aconteceu na primeira execucao. A
- * exclusao e por caminho, e nao por "ignore arquivos de teste" -- uma regra
- * larga assim abriria o buraco para QUALQUER `*.test.ts` remontar o bloco.
  */
 const ESTE_ARQUIVO = 'src/tools/dimensao-declarada-numa-fonte-so.test.ts';
 
 /** A frase do usuario. Quem a montar fora da fonte reprova. */
 const FRASE = /Mínimo de \$\{String\(/;
 
-/** O bloco que foi reduzido: `dimensaoDeclaradaAbaixoDaMinima` + `DIMENSAO_MINIMA[` juntos. */
+/**
+ * O bloco que foi reduzido: `dimensaoDeclaradaAbaixoDaMinima` + `DIMENSAO_MINIMA[`
+ * juntos.
+ */
 function montaARecusaNaMao(texto: string): boolean {
   return /dimensaoDeclaradaAbaixoDaMinima\(/.test(texto) && /DIMENSAO_MINIMA\[/.test(texto);
 }
@@ -77,12 +47,8 @@ void describe('a recusa de dimensão declarada pequena tem uma fonte só', () =>
   const fontes = todosOsFontes('src');
 
   void it('a varredura alcança a árvore de verdade, e não uma lista vazia', () => {
-    // Controle POSITIVO: sem ele, caminho errado aprovaria por omissão.
     assert.ok(fontes.length > 300, `a varredura achou só ${String(fontes.length)} arquivos`);
     assert.ok(fontes.includes(FONTE), `a fonte ${FONTE} não está na varredura`);
-    // A exclusao de si mesmo so e legitima enquanto ela nomear um arquivo que
-    // EXISTE: renomeado, ela viraria um `filter` que nao tira nada e a guarda
-    // voltaria a acusar a si mesma -- ou, pior, passaria a ignorar nada.
     assert.ok(fontes.includes(ESTE_ARQUIVO), `a exclusão aponta para ${ESTE_ARQUIVO}, que não existe`);
   });
 
@@ -99,8 +65,6 @@ void describe('a recusa de dimensão declarada pequena tem uma fonte só', () =>
   });
 
   void it('só a fonte junta `dimensaoDeclaradaAbaixoDaMinima` com `DIMENSAO_MINIMA[`', () => {
-    // A frase sozinha não basta: alguém pode remontar o bloco com outra
-    // redação, que é a divergência -- e é ela que esta conferência pega.
     const outros = fontes
       .filter((f) => f !== FONTE && f !== ESTE_ARQUIVO)
       .filter((f) => montaARecusaNaMao(readFileSync(f, 'utf8')));

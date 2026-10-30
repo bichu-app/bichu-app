@@ -1,20 +1,9 @@
-/**
- * Serialização do `Problem` para o formato do contrato.
- *
- * Existe separado de `problem.ts` porque a forma interna e a forma do fio são
- * diferentes de propósito: dentro do processo os campos são `camelCase`, no fio
- * são `snake_case` porque é assim que `api/openapi.yaml` os declara.
- *
- * **Este arquivo é o único lugar onde um corpo de erro é montado.** Campo a mais
- * numa resposta não quebra nenhum cliente e por isso passa despercebido — e é
- * exatamente por ali que a implementação se afasta do documento sem nenhum
- * alarme. Concentrar a montagem faz a conferência campo a campo ser possível.
- */
+/** Serialização do `Problem` para o formato do contrato. */
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { AppError } from './errors.js';
 import type { ProblemType } from './problem.js';
 
-/** Forma exata do schema `Problem` do contrato. Nada além destas chaves. */
+/** Forma exata do schema `Problem` do contrato. */
 export interface ProblemBody {
   type: string;
   title: string;

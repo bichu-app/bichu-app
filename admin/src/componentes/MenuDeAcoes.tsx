@@ -21,9 +21,9 @@ function ganchoDoRotulo(rotulo: string): string {
 }
 
 /**
- * Botao de menu (WAI-ARIA APG, Menu Button): Enter, Espaco e seta para baixo
- * abrem com o foco no primeiro item; setas percorrem; Esc fecha e devolve o foco
- * ao botao; clique fora fecha.
+ * Botao de menu (WAI-ARIA APG, Menu Button): Enter, Espaco e seta para baixo abrem
+ * com o foco no primeiro item; setas percorrem; Esc fecha e devolve o foco ao
+ * botao; clique fora fecha.
  */
 export function MenuDeAcoes({
   rotuloDoBotao,

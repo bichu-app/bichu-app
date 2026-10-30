@@ -1,16 +1,4 @@
-/**
- * Configuração da aplicação, lida uma vez na subida.
- *
- * Tudo aqui vem de ambiente (§11.2). Nenhum valor padrão aponta para provedor,
- * para hostname ou para segredo: a ausência derruba a aplicação com o nome da
- * variável, que é melhor do que um padrão que funciona só na máquina de quem
- * escreveu.
- *
- * As chaves de assinatura são **duas desde o início** (ADR-0002): a ativa
- * assina, e a de rotação já é publicada no JWKS. Publicar só a ativa impede
- * rotacionar sem derrubar sessão, porque quem valida precisa conhecer a próxima
- * antes de ela começar a assinar.
- */
+/** Configuração da aplicação, lida uma vez na subida. */
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { boolEnv, optionalEnv, requireEnv } from './env.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';
@@ -27,14 +15,10 @@ export interface SigningKey {
 export interface TokenConfig {
   readonly issuer: string;
   readonly audience: string;
-  /**
-   * Lista de emissores aceitos, e não um emissor fixo (ADR-0002). Uma lista com
-   * um item hoje é uma linha de configuração amanhã, e é o que permite dois
-   * emissores coexistirem durante a virada para o Keycloak.
-   */
+  /** Lista de emissores aceitos, e não um emissor fixo (ADR-0002). */
   readonly trustedIssuers: readonly string[];
   readonly activeKey: SigningKey;
-  /** Ativa mais a de rotação, nesta ordem. É o que o JWKS publica. */
+  /** Ativa mais a de rotação, nesta ordem. */
   readonly allKeys: readonly SigningKey[];
   readonly accessTokenTtlSeconds: number;
   readonly clockToleranceSeconds: number;
@@ -45,10 +29,7 @@ export interface SessionConfig {
   readonly idleTtlSeconds: number;
   /** Janela de inatividade com "continuar conectado", que nasce desmarcado. */
   readonly staySignedInIdleTtlSeconds: number;
-  /**
-   * Teto absoluto desde a autenticação com senha. Sem ele a rotação transforma
-   * roubo de refresh em acesso permanente: cada uso empurra a inatividade.
-   */
+  /** Teto absoluto desde a autenticação com senha. */
   readonly absoluteTtlSeconds: number;
 }
 
@@ -58,57 +39,27 @@ export interface AppConfig {
   readonly port: number;
   readonly bindHost: string;
   readonly databaseUrl: string;
-  /**
-   * Endereço público DESTE serviço, e nada mais desde 19/09.
-   *
-   * Ele carregava cinco coisas (ADR-0017 item 2): o que o QR codifica, o
-   * cartaz, o link do caso, os links dos e-mails e o destino do deep link.
-   * Duas delas saíram para `tagBaseUrl` e `webBaseUrl`, porque uma dessas
-   * cinco **não é reversível** e a variável única apagava justamente essa
-   * informação. O que sobrou aqui é o endereço que a borda atende e do qual
-   * sai o `type` do `application/problem+json` — quer dizer, a identidade
-   * deste processo, não a das páginas.
-   */
+  /** Endereço público DESTE serviço, e nada mais desde 19/09. */
   readonly publicBaseUrl: AbsoluteUrl;
-  /**
-   * O que o QR da plaquinha codifica: `{TAG_BASE_URL}/t/{código}`.
-   *
-   * **É o único valor da configuração que vira plástico.** Depois de prensada,
-   * a plaquinha não se corrige (ADR-0004): trocar este valor não conserta tag
-   * nenhuma que já saiu, só muda as próximas. Toda guarda em volta dele existe
-   * por isso.
-   */
+  /** O que o QR da plaquinha codifica: `{TAG_BASE_URL}/t/{código}`. */
   readonly tagBaseUrl: AbsoluteUrl;
   /**
-   * Onde vivem as páginas públicas do time web (ADR-0017): cartaz, caso,
-   * perfil, conversa do achador, verificação de e-mail, redefinição de senha e
-   * cancelamento de transferência. É a base dos links dos e-mails.
-   *
-   * Reversível: trocar o valor troca o link do próximo e-mail enviado, e
-   * nenhum link já entregue deixa de ser um link que alguém tem.
+   * Onde vivem as páginas públicas do time web (ADR-0017): cartaz, caso, perfil,
+   * conversa do achador, verificação de e-mail, redefinição de senha e cancelamento
+   * de transferência.
    */
   readonly webBaseUrl: AbsoluteUrl;
-  /**
-   * A identidade do Relying Party do passkey (BICHUS-301).
-   *
-   * `rpId` e o HOSTNAME de `webBaseUrl`, e nao uma variavel propria: e o unico
-   * parametro do WebAuthn que nao pode mudar depois, e uma variavel propria
-   * seria uma segunda fonte para alguem apontar errado. Em producao esse
-   * hostname JA E o apex; em `prod`/`preprod` a subida recusa subdominio.
-   */
+  /** A identidade do Relying Party do passkey (BICHUS-301). */
   readonly passkey: {
     readonly rpId: string;
     readonly rpName: string;
-    /** `android:apk-key-hash:...`, NAO uma URL. Ver o comentario na montagem. */
+    /** `android:apk-key-hash:...`, NAO uma URL. */
     readonly origensAceitas: readonly string[];
   };
   /**
-   * `ADMIN_ORIGIN`: a origem exata do painel (em producao, o host `admin.bichu.app` com esquema https), contra
-   * a qual o `Origin` de toda escrita administrativa e comparado (ADR-0027 item
-   * 3, D39). **Opcional de proposito:** sem ela o prefixo `/v1/admin` nao e
-   * registrado e responde 404, que e o estado de hoje. Um ambiente que ainda
-   * nao tem painel continua subindo como sobe, e nenhum ambiente serve a
-   * superficie administrativa sem saber de que origem ela aceita escrita.
+   * `ADMIN_ORIGIN`: a origem exata do painel (em producao, o host `admin.bichu.app`
+   * com esquema https), contra a qual o `Origin` de toda escrita administrativa e
+   * comparado (ADR-0027 item 3, D39).
    */
   readonly adminOrigin: string | undefined;
   readonly apiBaseUrl: AbsoluteUrl;
@@ -118,28 +69,13 @@ export interface AppConfig {
   readonly problemBaseUrl: AbsoluteUrl;
   readonly token: TokenConfig;
   readonly session: SessionConfig;
-  /** Chave do HMAC de endereço IP (SEC-010). Nunca hash sem chave. */
+  /** Chave do HMAC de endereço IP (SEC-010). */
   readonly ipHmacKey: Buffer;
-  /**
-   * Chave da cifra do código da tag, 32 bytes em hexadecimal (`TAG_CODE_KEY`).
-   *
-   * Ela abre o `code_ciphertext`, que existe para **reimprimir o QR** e nada
-   * mais: a resolução pública busca por `code_hash` e nunca decifra. A validação
-   * do tamanho está no adaptador, junto do algoritmo que a exige.
-   */
+  /** Chave da cifra do código da tag, 32 bytes em hexadecimal (`TAG_CODE_KEY`). */
   readonly tagCodeKey: Buffer;
   /**
    * Chave do índice cego do código da tag, 32 bytes em hexadecimal
-   * (`TAG_CODE_INDEX_KEY`). É ela que entra no HMAC-SHA-256 que produz
-   * `code_hash` (ADR-0004, Emenda 1, §3.1).
-   *
-   * **Não é a mesma de `tagCodeKey`, e a subida recusa se for.** Quem vaza uma
-   * vazaria a outra, e o índice cego deixaria de ser cego para quem já tivesse
-   * a chave do `code_ciphertext`.
-   *
-   * **Não é rotacionável sozinha:** o valor buscado depende dela, então trocá-la
-   * exige recalcular `code_hash` da base inteira a partir de `code_ciphertext`.
-   * O procedimento está em `infra/roteiro-provisionamento.md`, passo 4.1.
+   * (`TAG_CODE_INDEX_KEY`).
    */
   readonly tagCodeIndexKey: Buffer;
   readonly openapiSpecPath: string;
@@ -149,99 +85,42 @@ export interface AppConfig {
   readonly push: PushConfig;
 }
 
-/**
- * Push (ADR-0008).
- *
- * Mesma convenção de `MailConfig`: o comportamento é escolhido por ambiente e
- * não por `if (isProduction)` espalhado pelo código. `log` existe para o
- * desenvolvimento e para a esteira — ele **prova o disparo**, e o ADR-0008 é
- * explícito sobre o que ele não prova: que o telefone vibra.
- *
- * Quem lê isto para escolher o adaptador é `criarPushSender`, em
- * `modules/notifications/adapters/external/`. A escolha mora lá pelo mesmo
- * motivo de `criarSecretProvider`: o `import` do arquivo do FCM carrega o nome
- * do provedor no caminho, e nome de provedor não entra em `config/`.
- */
+/** Push (ADR-0008). */
 export interface PushConfig {
   readonly transport: 'fcm' | 'log';
   /**
    * O projeto para onde o envio vai: o endereço do HTTP v1 é
    * `/v1/projects/{projeto}/messages:send`.
-   *
-   * `undefined` com `log`, e é assim que se lê, do próprio tipo, que **ninguém
-   * envia nada** — e não um projeto vazio que viraria um endereço de envio sem
-   * projeto no meio. Com `fcm` ele é obrigatório; ver `exigeProjetoDoFcm`.
    */
   readonly projeto: string | undefined;
 }
 
-/**
- * E-mail transacional.
- *
- * `transport` segue a convenção de `PUSH_TRANSPORT` e `KMS_TRANSPORT`: o
- * comportamento é escolhido por ambiente, não por `if (isProduction)` espalhado
- * no código. `log` existe para teste e para a esteira — ele **prova o disparo**
- * sem provar a entrega, e a diferença entre as duas coisas precisa ficar
- * visível no nome.
- */
+/** E-mail transacional. */
 export interface MailConfig {
   /**
-   * `postmark` e o unico que entrega a gente de verdade (ADR-0009); `smtp` fala
-   * com o receptor local (mailpit) e nao sabe autenticar; `log` escreve e nao
-   * manda. A ordem aqui e a da entrega, e nao a alfabetica, de proposito.
+   * `postmark` e o unico que entrega a gente de verdade (ADR-0009); `smtp` fala com
+   * o receptor local (mailpit) e nao sabe autenticar; `log` escreve e nao manda.
    */
   readonly transport: 'smtp' | 'postmark' | 'log';
   readonly host: string;
   readonly port: number;
-  /**
-   * Precisa ser em `@mail.<domínio>`, não no apex. O DMARC do apex está em
-   * `p=reject` com `adkim=s`: um remetente no apex quebra o alinhamento estrito
-   * e o e-mail é **descartado em silêncio** — sem devolução, sem erro, sem nada.
-   */
+  /** Precisa ser em `@mail.<domínio>`, não no apex. */
   readonly from: string;
   readonly fromName: string;
   readonly replyTo: string;
   /**
    * Segredo do webhook de entrega (`MAIL_WEBHOOK_SECRET`), o que `api/openapi.yaml`
    * declara no esquema `webhookSignature`.
-   *
-   * **`Buffer` e não `string`, e isso não é estilo.** A comparação precisa ser
-   * em tempo constante (`iguaisEmTempoConstante`), que só opera sobre bytes.
-   * Deixar `string` aqui convidaria o `===` de volta na rota — e `===` sobre
-   * segredo vaza o tamanho do prefixo comum pelo tempo de resposta, que é
-   * medível de fora e transforma "adivinhar 32 bytes" em "adivinhar 32 vezes um
-   * byte".
    */
   readonly webhookSecret: Buffer;
   /**
    * O token de servidor do provedor (`MAIL_API_TOKEN`), que vai no cabecalho
-   * `X-Postmark-Server-Token` de cada envio. Vem do gerenciador de segredos
-   * (ADR-0022), e o nome do segredo no cofre e igual ao da variavel.
-   *
-   * `undefined` com `smtp` e com `log`, e e assim que se le, do proprio tipo,
-   * que **nenhum envio autentica em provedor nenhum** -- e nao um token vazio
-   * que iria no cabecalho e voltaria como 401 no primeiro pedido de redefinicao
-   * de senha de alguem. Com `postmark` ele e obrigatorio; ver
-   * `exigeTokenDoProvedor`. E exatamente a forma de `PushConfig.projeto`.
-   *
-   * **`string` e nao `Buffer`, ao contrario de `webhookSecret` logo acima, e a
-   * assimetria tem motivo:** aquele e COMPARADO com o que chega de fora, e
-   * comparacao de segredo precisa ser em tempo constante, o que so opera sobre
-   * bytes. Este e EMITIDO num cabecalho HTTP, nunca comparado com nada. Um
-   * `Buffer` aqui so adiaria a conversao para dentro do adaptador.
+   * `X-Postmark-Server-Token` de cada envio.
    */
   readonly apiToken: string | undefined;
 }
 
-/**
- * Armazenamento de objeto compatível com S3 (ADR-0007).
- *
- * **Nenhum valor aqui tem padrão que aponte para provedor**, e nenhum nome
- * carrega marca: o ADR trata o armazenamento como interface, não como produto.
- * Trocar MinIO por S3, GCS, R2 ou Spaces é mexer nestas variáveis e no DNS de
- * mídia — nenhuma linha de código.
- */
-/** Recusa valor desconhecido na subida: um dialeto errado so apareceria como 403 no primeiro envio. */
+/** Armazenamento de objeto compatível com S3 (ADR-0007). */
 function dialetoDeAssinaturaEnv(): 'amz' | 'goog' {
   const valor = optionalEnv('OBJECT_STORAGE_SIGNATURE_DIALECT') ?? 'amz';
   if (valor !== 'amz' && valor !== 'goog') {
@@ -257,20 +136,12 @@ export interface ObjectStorageConfig {
   readonly endpoint: string | undefined;
   /**
    * `OBJECT_STORAGE_PUBLIC_ENDPOINT`: o endereco pelo qual o NAVEGADOR e o app
-   * alcancam o armazenamento. Entra so nas duas URLs que saem para o cliente
-   * (a autorizacao de envio e a leitura assinada); o worker continua falando
-   * com `endpoint`, pela rede interna.
-   *
-   * Existe porque em hospedagem propria o `endpoint` e um nome interno
-   * (`http://objeto:9000`) que nenhum cliente resolve: a URL assinada saia com
-   * ele e todo envio de foto falhava antes de chegar a borda. Vazio, vale o
-   * `endpoint`, que e o caso do provedor gerenciado, onde os dois coincidem.
+   * alcancam o armazenamento.
    */
   readonly publicEndpoint?: string | undefined;
   /**
-   * `OBJECT_STORAGE_SIGNATURE_DIALECT`: `amz` (padrao; API S3, MinIO) ou `goog`
-   * (o XML API do armazenamento gerenciado com chave HMAC). Ver
-   * `DialetoDeAssinatura` no adaptador e a Emenda 1 do ADR-0007.
+   * `OBJECT_STORAGE_SIGNATURE_DIALECT`: `amz` (padrao; API S3, MinIO) ou `goog` (o
+   * XML API do armazenamento gerenciado com chave HMAC).
    */
   readonly dialetoDeAssinatura?: 'amz' | 'goog';
   readonly region: string;
@@ -278,19 +149,13 @@ export interface ObjectStorageConfig {
   readonly secretAccessKey: string;
   /** `true` no MinIO, `false` na maioria dos gerenciados. */
   readonly forcePathStyle: boolean;
-  /** Originais e derivadas privadas. Nasce sem leitura anônima. */
+  /** Originais e derivadas privadas. */
   readonly bucketPrivate: string;
   /** SÓ as derivadas que a rota pública mostra, servidas pelo domínio de mídia. */
   readonly bucketPublic: string;
-  /**
-   * Prazo de HEAD e DELETE: sem corpo, é ida e volta de metadado.
-   *
-   * O `fetch` do Node não tem prazo padrão. Sem este número, um armazenamento
-   * que aceita a conexão e não responde prende o trabalho do worker até a
-   * varredura de órfãos o soltar.
-   */
+  /** Prazo de HEAD e DELETE: sem corpo, é ida e volta de metadado. */
   readonly prazoCurtoMs: number;
-  /** Prazo de GET e PUT, que carregam os bytes da foto. Cobre a leitura do corpo. */
+  /** Prazo de GET e PUT, que carregam os bytes da foto. */
   readonly prazoDeTransferenciaMs: number;
 }
 
@@ -308,38 +173,19 @@ const TOLERANCIA_DE_RELOGIO = 60 * SEGUNDO;
 const MILISSEGUNDO_POR_SEGUNDO = 1000;
 
 /**
- * HEAD e DELETE. Cinco segundos é duas ordens de grandeza acima do que o MinIO
- * na mesma rede leva, e ainda folgado para um gerenciado do outro lado da
- * internet. Mais que isso não é lentidão, é armazenamento fora do ar.
+ * HEAD e DELETE. Cinco segundos é duas ordens de grandeza acima do que o MinIO na
+ * mesma rede leva, e ainda folgado para um gerenciado do outro lado da internet.
  */
 export const PRAZO_CURTO_DO_ARMAZENAMENTO_MS = 5 * MILISSEGUNDO_POR_SEGUNDO;
 
-/**
- * Vazão mínima que o prazo de transferência tolera: 256 KiB/s, ou 2 Mbit/s.
- *
- * O prazo sai do TAMANHO, e não de um número redondo: o maior objeto que
- * trafega é o original da foto, cujo teto é 10 MiB (`TETO_DE_BYTES`, em
- * `modules/media/domain/chave-de-objeto.ts`). 10 MiB a 256 KiB/s são 40 s; com
- * o prazo curto somado para a ida e volta do cabeçalho, 45 s.
- *
- * O teto não é importado daqui porque `shared/` não depende de módulo. O teste
- * de `app-config.test.ts` importa os dois e reprova se o teto subir sem que
- * este prazo acompanhe.
- */
+/** Vazão mínima que o prazo de transferência tolera: 256 KiB/s, ou 2 Mbit/s. */
 export const VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO = 256 * 1024;
 const MAIOR_OBJETO_TRAFEGADO_BYTES = 10 * 1024 * 1024;
 export const PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS =
   (MAIOR_OBJETO_TRAFEGADO_BYTES / VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO) * MILISSEGUNDO_POR_SEGUNDO +
   PRAZO_CURTO_DO_ARMAZENAMENTO_MS;
 
-/**
- * Prazo em milissegundos, inteiro e positivo, ou o padrão quando ausente.
- *
- * Valor inválido DERRUBA a subida em vez de cair no padrão: `30s` lido por
- * `parseInt` vira 30 ms e aborta toda transferência, e `0` ou `NaN` no
- * `AbortSignal.timeout` desligariam o prazo ou abortariam na hora — nenhum dos
- * dois aparece como erro de configuração, aparece como foto que não processa.
- */
+/** Prazo em milissegundos, inteiro e positivo, ou o padrão quando ausente. */
 function milissegundosEnv(nome: string, padrao: number): number {
   const bruto = optionalEnv(nome);
   if (bruto === undefined) return padrao;
@@ -352,11 +198,7 @@ function milissegundosEnv(nome: string, padrao: number): number {
   return Number(bruto.trim());
 }
 
-/**
- * Aceita PEM cru ou PEM em base64. As duas formas existem porque quebra de
- * linha dentro de um arquivo `.env` é a origem mais comum de chave que "sumiu"
- * na subida, e o operador não deveria precisar saber disso.
- */
+/** Aceita PEM cru ou PEM em base64. */
 function lerPem(bruto: string, nomeDaVariavel: string): string {
   const texto = bruto.includes('-----BEGIN')
     ? bruto
@@ -370,20 +212,7 @@ function lerPem(bruto: string, nomeDaVariavel: string): string {
   return texto;
 }
 
-/**
- * Recebe o `kid` e o PEM ja lidos, e nao o sufixo para monta-los.
- *
- * O arranjo anterior montava os nomes com template literal
- * (`JWT_${sufixo}_KID`), e isso tinha um custo que so apareceu em 18/09: a
- * guarda da esteira le `requireEnv('NOME')` por TEXTO, entao ela nunca viu
- * `JWT_ACTIVE_KID` -- uma variavel sem a qual a API nao sobe -- e mesmo assim
- * imprimia "todas preenchidas". Guarda com ponto cego e pior que guarda
- * nenhuma, porque a nenhuma ninguem confia.
- *
- * `nomeDoPem` continua entrando porque as mensagens de erro citam a variavel
- * pelo nome, e erro de subida que nao diz QUAL variavel esta errada e o defeito
- * que esta guarda inteira existe para evitar.
- */
+/** Recebe o `kid` e o PEM ja lidos, e nao o sufixo para monta-los. */
 function carregarChave(
   kid: string | undefined,
   pem: string | undefined,
@@ -401,30 +230,8 @@ function carregarChave(
   return { kid, privateKey, publicKey: createPublicKey(privateKey) };
 }
 
-/**
- * Onde a chave de rotação deixa de ser conveniência e passa a ser obrigação.
- *
- * O critério é **o mesmo que `src/bin/seed.ts` já usa** para recusar semear:
- * `NODE_ENV=production` (o que os estágios de produção do `Dockerfile` definem)
- * ou `ENVIRONMENT` em `prod`/`preprod`. Reusar a definição que já existe é de
- * propósito — duas respostas diferentes para "estou num ambiente de gente de
- * verdade?" viram duas verdades, e a que fica para trás é sempre a que protege.
- *
- * `preprod` entra junto com `prod` porque quem consome o JWKS **não é este
- * serviço**: é terceiro, que cacheia. Homologação é o ambiente que o time web
- * consome (`infra/verificacao/docs-fechada.yml`) e é onde a rotação vai ser
- * exercitada pela primeira vez (dívida 9.10). Descobrir lá que a segunda chave
- * nunca esteve publicada é descobrir no dia da rotação, que é tarde.
- *
- * `dev` e teste ficam de fora de propósito: ninguém cacheia o JWKS de
- * `localhost`, e exigir a segunda chave para rodar `npm test` ou subir o compose
- * seria atrito novo sem risco atrás dele.
- */
+/** Onde a chave de rotação deixa de ser conveniência e passa a ser obrigação. */
 function exigeChaveDeRotacao(environment: string): boolean {
-  // O predicado saiu daqui para `ambiente-hospedado.ts` quando o ADR-0022
-  // precisou da MESMA pergunta para decidir de onde vêm os segredos. Delegar,
-  // e não copiar, é o que o parágrafo acima exige: duas respostas viram duas
-  // verdades, e a que fica para trás é sempre a que protege.
   return ehAmbienteHospedado(environment);
 }
 
@@ -435,30 +242,8 @@ function carregarToken(environment: string): TokenConfig {
     requireEnv('JWT_ACTIVE_PRIVATE_KEY'),
     'JWT_ACTIVE_PRIVATE_KEY',
   );
-  // `activeKey` nao pode ser `undefined` aqui: os dois `requireEnv` acima ja
-  // morreram citando a variavel exata, que e uma mensagem melhor do que esta
-  // linha daria. A checagem fica mesmo assim, e nao e redundancia inutil --
-  // `carregarChave` devolve `undefined` por contrato de tipo, e tirar isto
-  // trocaria a falha ruidosa por um `SigningKey | undefined` vazando para o
-  // resto da configuracao no dia em que alguem afrouxar o carregamento.
   if (activeKey === undefined) throw new Error('JWT_ACTIVE_KID e JWT_ACTIVE_PRIVATE_KEY são obrigatórias.');
 
-  // O contrato promete **"Sempre duas chaves"** em `GET /.well-known/jwks.json`
-  // (api/openapi.yaml), e até aqui isso era comentário no `.env.example` — não
-  // guarda. A aplicação subia com uma chave só e o JWKS respondia 200 com um
-  // `kid` sozinho: falha silenciosa onde a regra do projeto é falha ruidosa.
-  // O estrago não aparece na subida, e sim no dia da rotação, quando rotacionar
-  // sem a próxima chave já publicada derruba toda sessão de quem cacheou o
-  // arquivo antigo.
-  //
-  // As duas chamadas são `requireEnv` com o nome LITERAL, e não um `if` sobre
-  // `nextKey`, por dois motivos: a mensagem morre citando a variável exata que
-  // falta, e o passo "nenhuma variavel exigida ficou vazia" da esteira
-  // (.github/workflows/ci.yml) lê os `requireEnv('X')` de `src/` e `bin/` por
-  // texto — escrito assim, variável esquecida no workflow reprova em segundos
-  // com o nome dela, em vez de matar a subida de um ambiente hospedado. O valor
-  // devolvido é descartado porque quem o lê é o `carregarChave` logo abaixo; o
-  // que interessa aqui é a recusa.
   if (exigeChaveDeRotacao(environment)) {
     requireEnv('JWT_NEXT_KID');
     requireEnv('JWT_NEXT_PRIVATE_KEY');
@@ -494,34 +279,12 @@ function carregarToken(environment: string): TokenConfig {
   };
 }
 
-/**
- * Recebe o VALOR ja exigido, e nao o nome da variavel.
- *
- * A diferenca nao e estilo: a guarda da esteira le `requireEnv('NOME')` por
- * texto, e `requireEnv(nome)` escondia o nome atras de um parametro. Variavel
- * que a guarda nao enxerga e variavel que ela jura estar conferindo e nao
- * confere -- foi assim que `JWT_ACTIVE_KID` passou despercebida.
- */
+/** Recebe o VALOR ja exigido, e nao o nome da variavel. */
 function urlAbsoluta(valor: string): AbsoluteUrl {
   return valor.replace(/\/+$/, '') as AbsoluteUrl;
 }
 
-/**
- * Base pública de página, conferida na FORMA e não só aparada.
- *
- * `urlAbsoluta` acima corta a barra final e acredita no resto, e isso bastava
- * enquanto errar a base dava página errada — coisa que se conserta com um
- * `docker compose up`. `TAG_BASE_URL` é de outra natureza: o valor é
- * concatenado em `{base}/t/{código}` e o resultado sai **prensado no plástico**
- * (ADR-0004). `bichu.app` sem esquema vira `bichu.app/t/ABC`, que leitor de QR
- * nenhum abre como endereço; um `?` ou um `#` no fim viram um link que leva a
- * lugar nenhum. A hora de descobrir isso é a subida, com o nome da variável na
- * mensagem, e não a primeira leva impressa.
- *
- * Recebe o nome como SEGUNDO parâmetro, já literal na chamada: quem chama
- * escreve `requireEnv('TAG_BASE_URL')` por extenso, que é o que a guarda da
- * esteira lê por texto.
- */
+/** Base pública de página, conferida na FORMA e não só aparada. */
 function baseDePaginaPublica(valor: string, nome: string): AbsoluteUrl {
   const aparada = valor.trim().replace(/\/+$/, '');
   let url: URL;
@@ -551,77 +314,18 @@ function baseDePaginaPublica(valor: string, nome: string): AbsoluteUrl {
   return aparada as AbsoluteUrl;
 }
 
-/**
- * Os dois últimos rótulos do host. Aproximação deliberada de "domínio
- * registrável": não carrega lista pública de sufixos, e não precisa carregar —
- * ela só decide se dois hosts NOSSOS são da mesma casa. Em `.com.br` a
- * comparação fica mais frouxa (`com.br` dos dois lados), o que produz
- * aprovação a mais e nunca reprovação a mais; para o que esta guarda protege,
- * errar para o lado de deixar subir é o lado certo de errar.
- */
+/** Os dois últimos rótulos do host. */
 function dominioRegistravel(host: string): string {
   const rotulos = host.split('.');
   return rotulos.length <= 2 ? host : rotulos.slice(-2).join('.');
 }
 
-/**
- * Onde o projeto do FCM deixa de ser conveniência e passa a ser obrigação.
- *
- * O critério é **o transporte, e não o ambiente**, e a diferença é deliberada.
- * `exigeChaveDeRotacao` pergunta "estou num ambiente de gente de verdade?"
- * porque quem consome o JWKS é terceiro e cacheia — a obrigação nasce do
- * ambiente. Aqui a obrigação nasce de outro lugar: quem **usa** o projeto é o
- * adaptador do FCM, e ele só existe quando `PUSH_TRANSPORT=fcm`. Com `log`
- * ninguém envia nada, e exigir o projeto para rodar `npm test` ou subir o
- * compose seria atrito novo sem risco atrás dele — a mesma frase que o
- * `.env.example` já usa para `SECRET_STORE_PROJECT`.
- *
- * E há uma razão concreta para NÃO reusar `ehAmbienteHospedado` aqui, apesar de
- * a forma ser a mesma: **homologação roda em `log` hoje**, de propósito
- * (docs/07-devops.md 4.1 — o projeto Firebase com o app registrado é pendência
- * do cliente, ADR-0008). Amarrar a exigência ao ambiente recusaria subir
- * justamente o ambiente que a decisão do cliente ainda não desbloqueou, e a
- * saída de quem estivesse às onze da noite seria inventar um valor — que é o
- * pior desfecho possível, porque projeto errado não dá erro de configuração:
- * dá `SENDER_ID_MISMATCH` por aparelho, que parece token inválido.
- *
- * Função nomeada, e não um `if` solto, pelo mesmo motivo do original: a
- * pergunta tem resposta única e o raciocínio precisa morar ao lado dela.
- */
+/** Onde o projeto do FCM deixa de ser conveniência e passa a ser obrigação. */
 function exigeProjetoDoFcm(transporte: 'fcm' | 'log'): boolean {
   return transporte === 'fcm';
 }
 
-/**
- * `exigeTokenDoProvedor` MUDOU DE CASA, e o motivo e o mesmo de
- * `ehAmbienteHospedado`: `segredos.ts` passou a precisar da mesma pergunta para
- * decidir QUAIS segredos sao resolvidos na subida, e copia-la teria criado a
- * segunda verdade. Ela vive em `./transporte-de-email.js`, importada no topo
- * deste arquivo, e continua sendo lida aqui com o nome de sempre.
- *
- * A copia ja cobrou o preco uma vez: enquanto este arquivo exigia o token so no
- * ramo `postmark` e `segredos.ts` o resolvia sempre, `api` e `worker` morriam na
- * subida por `MAIL_API_TOKEN` vazio com `MAIL_TRANSPORT=smtp`.
- */
-
-/**
- * O transporte do push, e o projeto quando ele for usado.
- *
- * **O padrão é `log`, e não `fcm`.** A assimetria é a mesma da porteira de
- * `conteudo-do-push.ts`: push que não sai é barulhento (o log registra, o teste
- * reprova, a fila acusa) e push que sai sem ninguém ter pedido é irreversível —
- * o telefone de um tutor toca uma vez só, e a bandeja de notificação não tem
- * `UPDATE`. Um padrão que enviasse de verdade transformaria "esqueci de definir
- * a variável" em alerta real na tela de bloqueio de alguém.
- *
- * O valor desconhecido **derruba a subida citando o que veio e os aceitos**, e
- * isso não é preciosismo: é literalmente a família de `MAIL_TRANSPORT`, que até
- * 19/09 era `=== 'log' ? 'log' : 'smtp'` e mandava e-mail de verdade para
- * QUALQUER valor fora dos dois. Escrito frouxo aqui, `PUSH_TRANSPORT=logs`,
- * `PUSH_TRANSPORT=local` ou um valor herdado de outro ambiente viraria envio
- * real em silêncio — com a agravante de que push não tem receptor local
- * nenhum para segurar o estrago, como o mailpit segurou aquele.
- */
+/** O transporte do push, e o projeto quando ele for usado. */
 function carregarPush(): PushConfig {
   const transporteBruto = optionalEnv('PUSH_TRANSPORT') ?? 'log';
   if (transporteBruto !== 'fcm' && transporteBruto !== 'log') {
@@ -636,14 +340,6 @@ function carregarPush(): PushConfig {
     );
   }
 
-  // `requireEnv` com o nome LITERAL, e dentro do ramo — igual ao
-  // `requireEnv('SECRET_STORE_PROJECT')` de `criarSecretProvider`. A guarda da
-  // esteira lê `requireEnv('X')` por TEXTO e não conhece condicional, então
-  // `FCM_PROJECT` precisa de um valor descartável no passo "ambiente de teste"
-  // do workflow mesmo sem nunca ser lida em `dev`. Isso é o ponto cego
-  // conhecido da guarda, e ele é de propósito: ensiná-la a entender `if` faria
-  // dela uma análise de fluxo, e análise de fluxo incompleta aprova o que não
-  // entende.
   const projeto = exigeProjetoDoFcm(transporteBruto)
     ? requireEnv('FCM_PROJECT')
     : optionalEnv('FCM_PROJECT');
@@ -655,22 +351,9 @@ export function loadAppConfig(): AppConfig {
   const environment = optionalEnv('ENVIRONMENT') ?? 'dev';
   const publicBaseUrl = urlAbsoluta(requireEnv('PUBLIC_BASE_URL'));
 
-  // As duas bases que o ADR-0017 item 2 separou de `PUBLIC_BASE_URL`, e a
-  // separação inteira existe para registrar QUAL das cinco coisas que a
-  // variável única carregava é a irreversível: esta primeira.
-  //
-  // Obrigatórias e sem padrão embutido, como o resto do arquivo. Um padrão aqui
-  // seria pior do que a ausência: a aplicação subiria emitindo tag com o
-  // endereço da máquina de quem escreveu o padrão, e cada tag emitida assim é
-  // plástico que não volta atrás (ADR-0004).
   const tagBaseUrl = baseDePaginaPublica(requireEnv('TAG_BASE_URL'), 'TAG_BASE_URL');
   const webBaseUrl = baseDePaginaPublica(requireEnv('WEB_BASE_URL'), 'WEB_BASE_URL');
 
-  // `http` na base da tag é aceitável em desenvolvimento e inaceitável em
-  // ambiente de gente de verdade: o QR guarda o esquema junto com o host, e um
-  // `http://` prensado continua `http://` para sempre. Não há redirecionamento
-  // que conserte plaquinha — e no `.app`, que tem HSTS pré-carregado, o
-  // endereço em `http` nem chega a sair do telefone.
   if (ehAmbienteHospedado(environment) && !tagBaseUrl.startsWith('https://')) {
     throw new Error(
       `TAG_BASE_URL="${tagBaseUrl}" não é https, e o ambiente é hospedado. ` +
@@ -679,25 +362,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // O ADR-0017 item 2 exige que os dois hosts sejam O MESMO e manda a aplicação
-  // recusar subir se divergirem. **O cliente decidiu em 19/09 valores que
-  // divergem** -- `tag.<domínio>` para a plaquinha e o apex para as páginas --,
-  // e implementar a invariante ao pé da letra seria entregar uma aplicação que
-  // não sobe com a configuração que ela acabou de receber.
-  //
-  // Então a guarda protege o que continua valendo, e o que ela deixou de
-  // proteger está escrito aqui e no relato, em vez de sumir: a invariante
-  // servia aos arquivos de associação de deep link, que o sistema operacional
-  // busca NO HOST DO LINK. Com os hosts separados, o host da plaquinha precisa
-  // dos seus próprios `/.well-known/*` — e a falta deles não produz erro em
-  // lugar nenhum, só o link abrindo o navegador em vez do app (ADR-0017 item
-  // 3). Isso virou alvo de `infra/verificacao/associacao.yml`, que é onde dá
-  // para verificar de fora; aqui não dá.
-  //
-  // O que a subida ainda consegue afirmar é que as duas bases são da mesma
-  // casa. Divergir de domínio registrável é o erro que custa caro e é fácil de
-  // cometer com copiar e colar: a plaquinha apontaria para um domínio que não é
-  // nosso, e nenhuma tag já impressa voltaria atrás.
   const hostDaTag = new URL(tagBaseUrl).hostname;
   const hostDaWeb = new URL(webBaseUrl).hostname;
   if (dominioRegistravel(hostDaTag) !== dominioRegistravel(hostDaWeb)) {
@@ -710,52 +374,7 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // ----------------------------------------------------------------------
-  // A identidade do Relying Party do passkey (BICHUS-301)
-  // ----------------------------------------------------------------------
-  //
-  // O `rpId` e o HOSTNAME de `WEB_BASE_URL`, e nao o dominio registravel. A
-  // diferenca decide se o passkey funciona em homologacao, e custou uma volta:
-  //
-  //   * quem busca `/.well-known/assetlinks.json` e o Android, e ele busca NO
-  //     HOST DO `rpId` -- nao no host da API;
-  //   * com o dominio registravel, homologacao (`WEB_BASE_URL=https://hml.bichu.app`)
-  //     daria `rpId = bichu.app`, e o Android iria buscar o arquivo no APEX --
-  //     que ainda responde pelos quatro registros A da Squarespace
-  //     (`infra/verificacao/associacao.yml`). O passkey nao funcionaria no
-  //     ambiente em que o cliente testa, e a falha seria silenciosa;
-  //   * com o hostname, cada ambiente busca no proprio host, e os tres blocos
-  //     da borda que importam `(associacao_deep_link)` ja servem o arquivo --
-  //     a origem da aplicacao (que em homologacao E `hml.bichu.app`), o apex do
-  //     site e o host da tag (ADR-0028 item 6).
-  //
-  // E em PRODUCAO o hostname JA E o apex (`WEB_BASE_URL=https://bichu.app`),
-  // entao nao se perde nada: o `rpId` de producao continua sendo `bichu.app`,
-  // que e o que faz a credencial valer em qualquer subdominio e o que serve o
-  // iOS depois por `webcredentials:bichu.app`.
-  //
-  // A GUARDA ABAIXO e o que impede o unico jeito de isso dar errado. O `rpId` e
-  // o unico parametro do WebAuthn que NAO pode mudar depois -- trocar invalida
-  // toda credencial ja emitida --, entao producao servindo de um SUBDOMINIO
-  // (por exemplo `www.bichu.app`) emitiria credencial que nao sobe para o apex,
-  // e corrigir depois exigiria invalidar todas. Em ambiente de gente de verdade
-  // a subida recusa em vez de deixar isso acontecer.
   const passkeyRpId = hostDaWeb;
-  // `environment === 'prod'` e SO isso, e a estreiteza e deliberada -- medida,
-  // nao suposta:
-  //
-  //   * `ehAmbienteHospedado` NAO serve aqui. Ela e verdadeira quando
-  //     `NODE_ENV=production`, e os estagios de producao do `Dockerfile`
-  //     (linhas 198 e 232) definem isso na imagem que **homologacao tambem
-  //     roda**. Usa-la faria a subida de homologacao RECUSAR, porque la o host
-  //     da web e `hml.bichu.app` -- exatamente o ambiente que esta mudanca
-  //     existe para destravar;
-  //   * `preprod` fica fora pelo mesmo motivo: e ambiente de ensaio, e pode
-  //     legitimamente servir de um subdominio.
-  //
-  // E o rotulo `prod` nao e esperanca: `.env.example` ja exige `ENVIRONMENT` em
-  // `prod`/`preprod` para a chave de rotacao do JWKS, e sem ele aquela guarda
-  // reprova antes desta. Producao sem o rotulo nao sobe hoje, por outro motivo.
   if (environment === 'prod' && passkeyRpId !== dominioRegistravel(passkeyRpId)) {
     throw new Error(
       `WEB_BASE_URL aponta para o subdominio "${passkeyRpId}" e o ambiente e ` +
@@ -766,22 +385,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // As origens que o `clientDataJSON` do app Android traz.
-  //
-  // ATENCAO a quem for mexer: no Android a origem NAO e `https://bichu.app`.
-  // Ela e `android:apk-key-hash:<SHA-256 do certificado de assinatura, em
-  // base64url, sem preenchimento>` -- derivada da MESMA digital que esta em
-  // `infra/caddy/well-known/assetlinks.json`. Conferir contra uma URL aqui
-  // reprovaria toda chamada legitima do app, e o erro apareceria como
-  // "credencial invalida" no aparelho do usuario.
-  //
-  // O padrao e a digital de DEBUG, medida em 27/10 nos 31 APKs de
-  // `workspace/artefatos-app/` (todos com a mesma). Ela esta duplicada entre
-  // este arquivo e o `assetlinks.json` porque os dois consumidores sao
-  // diferentes -- o sistema operacional le o JSON da borda, o servidor le isto
-  // --, e a duplicacao esta declarada aqui em voz alta em vez de escondida:
-  // **as duas listas tem de casar, e a digital de RELEASE falta nas duas**.
-  // Ver o `LEIA-ME.md` daquela pasta.
   const digitaisDoApk = (
     optionalEnv('PASSKEY_ANDROID_CERT_FINGERPRINTS') ??
     '5D:7A:C5:50:5F:C6:C4:77:28:F9:86:75:F8:F9:7E:9A:64:27:AB:95:4A:2E:B7:74:B8:FF:72:6F:CA:3F:12:55'
@@ -790,9 +393,6 @@ export function loadAppConfig(): AppConfig {
     .map((d) => d.trim())
     .filter((d) => d !== '');
   for (const digital of digitaisDoApk) {
-    // 32 bytes em hexadecimal separado por `:`. Digital malformada aqui nao
-    // reprova nada visivel -- ela so faz toda assercao falhar --, entao a
-    // subida recusa em vez de deixar o defeito aparecer no aparelho.
     if (!/^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}$/.test(digital)) {
       throw new Error(
         `PASSKEY_ANDROID_CERT_FINGERPRINTS tem uma digital malformada (${digital}). ` +
@@ -814,9 +414,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // 32 bytes exatos: AES-256 com chave curta não é uma cifra mais fraca, é uma
-  // chamada que falha. E falhar aqui, com o nome da variável e o comando para
-  // gerar, é melhor do que falhar na primeira emissão de tag.
   const tagCodeKey = Buffer.from(requireEnv('TAG_CODE_KEY').trim(), 'hex');
   if (tagCodeKey.length !== 32) {
     throw new Error(
@@ -825,10 +422,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // O índice cego (ADR-0004, Emenda 1, §3.1). A recusa aqui é o ponto inteiro
-  // desta variável: chave ausente que degradasse para hash sem chave devolveria
-  // o estado em que um dump do banco entrega a base de códigos, e nenhum teste
-  // funcional acusaria, porque a resolução continuaria encontrando as tags.
   const tagCodeIndexKey = Buffer.from(requireEnv('TAG_CODE_INDEX_KEY').trim(), 'hex');
   if (tagCodeIndexKey.length !== 32) {
     throw new Error(
@@ -845,17 +438,10 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // As duas credenciais são exigidas juntas: uma sozinha assina requisição que
-  // o armazenamento recusa, e a falha aparece no primeiro envio de foto de um
-  // usuário real, e não na subida.
   const objectStorage: ObjectStorageConfig = {
     endpoint: optionalEnv('OBJECT_STORAGE_ENDPOINT'),
     publicEndpoint: optionalEnv('OBJECT_STORAGE_PUBLIC_ENDPOINT'),
     dialetoDeAssinatura: dialetoDeAssinaturaEnv(),
-    // SEM padrão embutido. Região é obrigatória na assinatura V4 e o valor
-    // varia por provedor; um padrão aqui seria marca de provedor em código, que
-    // o ADR-0007 proíbe e o portão de portabilidade reprova — foi ele que pegou
-    // esta linha.
     region: requireEnv('OBJECT_STORAGE_REGION'),
     accessKeyId: requireEnv('OBJECT_STORAGE_ACCESS_KEY_ID'),
     secretAccessKey: requireEnv('OBJECT_STORAGE_SECRET_ACCESS_KEY'),
@@ -869,28 +455,12 @@ export function loadAppConfig(): AppConfig {
     ),
   };
 
-  // `MAIL_TRANSPORT` recusa valor desconhecido, e isso nao e preciosismo: a
-  // forma anterior era `=== 'log' ? 'log' : 'smtp'`, entao QUALQUER valor fora
-  // dos dois virava envio real em silencio. Achado em 19/09 com o `.env` desta
-  // maquina em `MAIL_TRANSPORT=mailpit` -- um valor que ninguem definiu, que
-  // parecia dizer "manda para o receptor local", e que na verdade dizia "manda
-  // para o mundo". A unica razao de nao ter doido e o host apontar para o
-  // mailpit; trocar o host sem trocar isto mandaria e-mail de verdade para
-  // endereco de teste.
-  //
-  // Falha ruidosa, como o resto da configuracao: morre citando o valor visto e
-  // os aceitos.
   const transporteBruto = optionalEnv('MAIL_TRANSPORT') ?? 'smtp';
   if (
     transporteBruto !== 'smtp' &&
     transporteBruto !== 'postmark' &&
     transporteBruto !== 'log'
   ) {
-    // `postmark` ENTROU na uniao, e a mensagem propria que ele tinha aqui foi
-    // embora com o adaptador que passou a existir. Ela dizia "o adaptador ainda
-    // NAO existe (ADR-0009)... use `log` em homologacao", e mandar alguem para o
-    // `log` agora seria mandar para um transporte que nao entrega -- o defeito
-    // que o cartao deste adaptador existe para fechar.
     throw new Error(
       `MAIL_TRANSPORT="${transporteBruto}" nao e um transporte conhecido. ` +
         'Use "postmark" (o provedor do ADR-0009: entrega de verdade, por HTTP, e ' +
@@ -901,16 +471,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // OBRIGATORIA, e sem padrao embutido, porque um padrao aqui seria pior do que
-  // a ausencia: o webhook de entrega e chamada DE ENTRADA, vinda da internet
-  // aberta, e o unico que separa o provedor de qualquer um e este segredo.
-  // Subir com um valor de exemplo daria um endpoint que aceita evento forjado e
-  // parece configurado -- quem quisesse marcar o e-mail de um tutor como nao
-  // entregavel so precisaria saber o `MessageID`, e o tutor pararia de receber
-  // aviso de pet perdido sem nada acusar. Falha ruidosa no start, §11.2.
-  //
-  // 32 bytes e o piso: o segredo e comparado byte a byte e nao deriva nada, e
-  // abaixo disso a forca bruta deixa de ser teorica.
   const webhookSecret = Buffer.from(requireEnv('MAIL_WEBHOOK_SECRET').trim(), 'utf8');
   if (webhookSecret.length < 32) {
     throw new Error(
@@ -922,18 +482,6 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
-  // `requireEnv` com o nome LITERAL, e DENTRO do ramo -- igual ao
-  // `requireEnv('FCM_PROJECT')` de `carregarPush`, e pelo mesmo motivo escrito
-  // la: a guarda da esteira le `requireEnv('X')` por TEXTO e nao conhece
-  // condicional, entao `MAIL_API_TOKEN` precisa de um valor descartavel no passo
-  // "ambiente de teste" do workflow mesmo sem nunca ser lida com `smtp`. Isso e
-  // o ponto cego conhecido da guarda, e ele e de proposito: ensina-la a entender
-  // `if` faria dela uma analise de fluxo, e analise de fluxo incompleta aprova o
-  // que nao entende.
-  //
-  // O token NAO tem padrao embutido e NAO e aceito vazio. Um padrao aqui iria
-  // para o cabecalho `X-Postmark-Server-Token` e voltaria 401 no primeiro pedido
-  // de redefinicao de senha de alguem -- em producao, com a pessoa na tela.
   const apiToken = exigeTokenDoProvedor(transporteBruto)
     ? requireEnv('MAIL_API_TOKEN')
     : optionalEnv('MAIL_API_TOKEN');
@@ -966,17 +514,10 @@ export function loadAppConfig(): AppConfig {
     adminOrigin: optionalEnv('ADMIN_ORIGIN'),
     apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
     mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),
-    // A base do perfil do Instagram, para montar `instagram_url` do encontro
-    // (ADR-0027 item 22). Configuracao, e nao literal em `src/`: o portao de
-    // portabilidade reprova host escrito no codigo. Opcional: o valor padrao
-    // vem do `compose.yaml`, e sem ele a URL sai nula e o handle continua.
     instagramProfileBaseUrl: (() => {
       const bruto = optionalEnv('INSTAGRAM_PROFILE_BASE_URL');
       return bruto === undefined ? null : urlAbsoluta(bruto);
     })(),
-    // O contrato fixa `type` sob `<domínio>/problems/`. O domínio vem de
-    // ambiente: hostname literal em `src/` é reprovado pelo portão de
-    // portabilidade, e com razão — trocar o domínio precisa ser uma linha.
     problemBaseUrl: `${publicBaseUrl}/problems` as AbsoluteUrl,
     token: carregarToken(environment),
     session: {
@@ -1000,16 +541,7 @@ export function rateLimitDisabled(): boolean {
   return boolEnv('RATE_LIMIT_DISABLED');
 }
 
-/**
- * Qual contador de teto a subida usa.
- *
- * `requireEnv` e não um padrão embutido, pela §11.2: o padrão silencioso aqui
- * seria o mais caro de todos, porque a escolha errada não quebra nada — ela
- * apenas deixa de proteger, e o serviço responde 200 a tudo como se estivesse
- * certo. Faltando a variável, o boot morre nomeando ela.
- *
- * `disabled` fora de `dev` não chega aqui: `assertSafeBoot` já derrubou.
- */
+/** Qual contador de teto a subida usa. */
 export function rateLimitDriver(): RateLimitDriver {
   const bruto = requireEnv('RATE_LIMIT_DRIVER');
   if (bruto === 'memory' || bruto === 'postgres' || bruto === 'disabled') return bruto;

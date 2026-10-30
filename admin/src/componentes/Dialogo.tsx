@@ -7,7 +7,7 @@ const FOCAVEIS =
 export interface PropsDoDialogo {
   titulo: ReactNode;
   children: ReactNode;
-  /** Esc e o retorno de foco. Ausente, Esc nao fecha. */
+  /** Esc e o retorno de foco. */
   aoFechar?: (() => void) | undefined;
   /** `alertdialog` para confirmacao (secao 25.4.1); `dialog` para formulario simples. */
   papel?: 'dialog' | 'alertdialog';
@@ -17,9 +17,8 @@ export interface PropsDoDialogo {
 }
 
 /**
- * O dialogo base do backoffice: modal, foco preso, Esc fecha, foco volta a
- * quem o abriu (WAI-ARIA APG, Dialog Modal). O foco inicial vai para o
- * elemento marcado com `data-foco-inicial`, ou para o primeiro focavel.
+ * O dialogo base do backoffice: modal, foco preso, Esc fecha, foco volta a quem o
+ * abriu (WAI-ARIA APG, Dialog Modal).
  */
 export function Dialogo({ titulo, children, aoFechar, papel = 'alertdialog', largo = false, descricaoId }: PropsDoDialogo) {
   const idDoTitulo = useId();
@@ -59,7 +58,6 @@ export function Dialogo({ titulo, children, aoFechar, papel = 'alertdialog', lar
         primeiro?.focus();
       }
     }
-    // Foco que escapa (clique fora, leitor de tela) volta para dentro.
     function aoFocar(evento: FocusEvent) {
       if (el && evento.target instanceof Node && !el.contains(evento.target)) {
         (el.querySelector<HTMLElement>(FOCAVEIS) ?? el).focus();

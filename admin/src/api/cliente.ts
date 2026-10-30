@@ -8,7 +8,10 @@ export type ClienteDaApi = Client<paths>;
 export type Esquemas = components['schemas'];
 
 export interface OpcoesDoCliente {
-  /** URL base com o prefixo de versao: `/v1` (mesma origem) ou uma URL absoluta, so em desenvolvimento. */
+  /**
+   * URL base com o prefixo de versao: `/v1` (mesma origem) ou uma URL absoluta, so
+   * em desenvolvimento.
+   */
   baseUrl?: string;
   sessao?: EstrategiaDeSessao;
   /** Injetavel para teste. */
@@ -16,9 +19,8 @@ export interface OpcoesDoCliente {
 }
 
 /**
- * Base relativa (`/v1`) vira absoluta na origem da pagina, que e o que o
- * navegador faria sozinho. Resolver aqui deixa a regra explicita e igual em
- * todo ambiente de execucao; URL absoluta passa sem mudanca.
+ * Base relativa (`/v1`) vira absoluta na origem da pagina, que e o que o navegador
+ * faria sozinho.
  */
 function resolverNaOrigem(base: string): string {
   return new URL(base, globalThis.location.href).href.replace(/\/+$/, '');

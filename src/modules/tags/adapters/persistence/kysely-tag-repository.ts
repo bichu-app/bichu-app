@@ -1,16 +1,4 @@
-/**
- * Persistência das tags.
- *
- * **A consulta de `buscarContextoDoDono` é o artefato principal deste arquivo.**
- * Uma consulta só, com `pet_tags.code_hash` e `pets.owner_user_id` na mesma
- * cláusula `WHERE`. Não há um segundo `select` do pet, e não há comparação de
- * dono em JavaScript: o banco devolve linha ou não devolve, e "não devolve" é o
- * mesmo resultado para código inexistente, revogado e de outro tutor.
- *
- * Feito com duas consultas e um `if`, isto vira o BOLA que o SEC-001 descreve —
- * é o mesmo defeito do par id-no-caminho mais token, e foi registrado como risco
- * médio no ADR-0021 justamente porque a versão errada *parece* certa na revisão.
- */
+/** Persistência das tags. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, PetId, TagId, UserId } from '../../../../shared/types/brands.js';
@@ -32,20 +20,12 @@ import type {
 /** Teto de tags ativas por pet (ADR-0004). */
 const TETO_DE_TAGS_ATIVAS = 5;
 
-/** Teto de emissões por pet em 24 h. Emissão em massa é o vetor de abuso da rota. */
+/** Teto de emissões por pet em 24 h. */
 const TETO_DE_EMISSOES_POR_DIA = 10;
 
 const JANELA_DE_EMISSAO_EM_MS = 24 * 3600 * 1000;
 
-/**
- * O pet está fora de cena para a rota pública.
- *
- * `deceased` e `archived` respondem 410 pelo mesmo caminho da tag revogada, e
- * com o mesmo texto: o ADR-0004 manda revogar as tags nesses eventos, e enquanto
- * a operação de revogação em cascata não existir, a leitura precisa chegar ao
- * mesmo resultado sozinha. Deixar responder 200 exibiria a ficha de um animal
- * morto a quem escaneou uma plaquinha achada na rua.
- */
+/** O pet está fora de cena para a rota pública. */
 const STATUS_INDISPONIVEIS = ['deceased', 'archived'];
 
 interface LinhaDeTagDoTutor {
@@ -64,10 +44,6 @@ function comoTagDoTutor(linha: LinhaDeTagDoTutor): TagDoTutor {
   return {
     id: linha.id as TagId,
     status: linha.status as StatusDaTag,
-    // `char(4)` volta preenchido com espaço se algo gravar menos de quatro
-    // caracteres. O `CHECK` da migração impede, e o corte aqui é a segunda
-    // linha: o sufixo vai para a tela do tutor e espaço em branco à direita
-    // seria lido como parte do código.
     codeSuffix: linha.code_suffix.trim(),
     label: linha.label,
     scanCount: linha.scan_count,
@@ -79,34 +55,10 @@ function comoTagDoTutor(linha: LinhaDeTagDoTutor): TagDoTutor {
 }
 
 /**
- * ## Os construtores, e por que a autorização passou a sair por eles
- *
- * ADR-0021: a autorização mora na cláusula `WHERE`, e em lugar nenhum além
- * dela. Essa afirmação **não é observável pela resposta da rota** — uma consulta
- * que traz a linha do outro e a descarta num `if` responde igual, até o dia em
- * que alguém mexe no `if`, e aí não existe teste que acuse, porque o `if` era o
- * teste.
- *
- * Até a BICHUS-237 a afirmação valia por confiança: removida a linha
- * `.where('pets.owner_user_id', '=', dono)` de `buscarParaReimpressao`, os 967
- * casos unitários e os 61 de integração continuavam verdes, numa rota marcada
- * `reveals_credential` cujo QR carrega o código da plaquinha dentro dos pixels.
- *
- * `construtorD*` existe para que a afirmação seja **verificável**:
- * `autorizacao-na-clausula-where.test.ts` compila o SQL destas funções sem
- * executá-las, exige o predicado do dono ligado ao valor certo, e carrega a
- * isca que precisa reprovar. É o mesmo instrumento que a BICHUS-92 montou em
- * `identity/adapters/persistence/kysely-localizacao-de-referencia.ts`.
- *
- * Eles recebem `DbExecutor` e não `Db` porque a emissão os chama de dentro de
- * uma transação: o predicado conferido é o mesmo nos dois caminhos.
- */
-
-/**
  * **A busca vinculada do ADR-0021.** Os dois predicados são irmãos no mesmo
- * `WHERE`, e o `status` ativo está junto deles pelo mesmo motivo: a tag
- * revogada do próprio tutor também é 404 aqui, e quem chama não recebe nada
- * com que pudesse distinguir os casos.
+ * `WHERE`, e o `status` ativo está junto deles pelo mesmo motivo: a tag revogada
+ * do próprio tutor também é 404 aqui, e quem chama não recebe nada com que pudesse
+ * distinguir os casos.
  */
 export function construtorDoContextoDoDono(db: DbExecutor, codeHash: Uint8Array, dono: UserId) {
   return db
@@ -122,11 +74,6 @@ export function construtorDoContextoDoDono(db: DbExecutor, codeHash: Uint8Array,
 /**
  * O pet é deste tutor? É a consulta que impede listar e emitir plaquinha de pet
  * alheio a partir de um id adivinhado.
- *
- * Uma só para os dois caminhos, de propósito: listar e emitir precisam do mesmo
- * predicado, e duas cópias são duas chances de uma delas divergir sem ninguém
- * acusar. A emissão adiciona `.forUpdate()` no ponto de chamada, porque o
- * bloqueio é decisão da transação e não do predicado.
  */
 export function construtorDaConferenciaDoPet(db: DbExecutor, petId: PetId, dono: UserId) {
   return db
@@ -137,30 +84,7 @@ export function construtorDaConferenciaDoPet(db: DbExecutor, petId: PetId, dono:
     .where('deleted_at', 'is', null);
 }
 
-/**
- * A contagem da janela de emissão, com a emissão mais antiga dentro dela.
- *
- * A mais ANTIGA é quem decide quando o balde volta a ter vaga: é ela que sai da
- * contagem primeiro. Enquanto o retorno era a janela inteira, o corpo do 429
- * dizia "24 horas" para quem tinha dez minutos de espera.
- *
- * **`Date | null` e não `Date`, e a anotação é o assunto desta função.** `MIN()`
- * sobre zero linhas devolve `NULL` em SQL, e o Kysely adota como tipo da coluna
- * exatamente o que se escreve aqui: `fn.min<Date>` prometia não-nulo o que o
- * banco pode devolver nulo. Era a ANOTAÇÃO que mentia, não a guarda de quem lê
- * o resultado — e era a mentira dela que fazia a análise estática classificar
- * aquela guarda como "comparação sempre falsa". Aceitar a sugestão da
- * ferramenta e apagar a guarda deixaria `new Date(null).getTime()` valer época
- * zero e o `Retry-After` do 429 sair como 1 segundo no dia em que esta consulta
- * mudar de forma.
- *
- * Ela está aqui fora, e não embutida na transação, pelo mesmo motivo dos
- * construtores vizinhos, mais um: **assim o tipo do resultado tem nome e pode
- * ser cobrado em tempo de compilação.** Ver
- * `anotacao-da-janela-nao-mente.test.ts`, que reprova se `mais_antiga` voltar a
- * ser não-anulável. Sem isso, desfazer a correção não acusava em lugar nenhum:
- * medido, `tsc --noEmit` continua saindo 0 com `fn.min<Date>` de volta.
- */
+/** A contagem da janela de emissão, com a emissão mais antiga dentro dela. */
 export function construtorDaJanelaDeEmissao(
   db: DbExecutor,
   petId: PetId,
@@ -195,24 +119,7 @@ export function construtorDaListaDeTags(db: DbExecutor, petId: PetId, dono: User
     .orderBy('pet_tags.created_at', 'desc');
 }
 
-/**
- * O cifrado para reimprimir o QR. **Uma consulta**, com o dono, o pet e a tag
- * na mesma cláusula `WHERE`.
- *
- * Não há `select` do pet seguido de `if`, e não há comparação de tutor em
- * JavaScript: o banco devolve linha ou não devolve, e "não devolve" é o mesmo
- * resultado para tag inexistente, tag de outro pet e pet de outro tutor. Feito
- * com duas consultas e uma comparação, isto vira o BOLA do SEC-001 numa rota
- * que **revela credencial** — o caso mais caro dessa família, porque o que vaza
- * é o que está impresso na coleira de alguém.
- *
- * `pets.deleted_at is null` fecha o quarto caso: pet excluído não reimprime.
- *
- * `status` NÃO entra no `WHERE`. A tag revogada precisa ser distinguível da
- * inexistente para que a resposta seja 410 e não 404 (ADR-0004), e essa é a
- * única distinção que esta consulta devolve: ela não diz de quem é a tag, diz
- * que existe uma tag **sua** que está morta.
- */
+/** O cifrado para reimprimir o QR. */
 export function construtorDaBuscaParaReimpressao(
   db: DbExecutor,
   petId: PetId,
@@ -237,13 +144,6 @@ export function criarTagRepository(db: Db): TagRepository {
         .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
         .leftJoin('ref_breeds', 'ref_breeds.code', 'pets.breed_code')
         .leftJoin('ref_colors', 'ref_colors.code', 'pets.primary_color_code')
-        // A FOTO DE CAPA. Mesma juncao do perfil publico
-        // (`kysely-perfil-publico.ts`), e de proposito: as duas superficies
-        // publicas do mesmo pet tem de mostrar a MESMA imagem. `is_primary`
-        // escolhe a capa, `status = 'ready'` deixa de fora a que ainda esta
-        // sendo processada (endereco de objeto que ninguem gravou da quadro
-        // quebrado na mao de quem esta com o animal), e `deleted_at is null`
-        // deixa de fora a que o tutor removeu.
         .leftJoin('pet_photos', (juncao) =>
           juncao
             .onRef('pet_photos.pet_id', '=', 'pets.id')
@@ -283,9 +183,6 @@ export function criarTagRepository(db: Db): TagRepository {
         pet: {
           displayName: linha.name,
           species: linha.species_code,
-          // A raça da lista quando há código; o texto que a pessoa escreveu
-          // quando não há. Os dois campos existem justamente porque um cruza e o
-          // outro só descreve (migração 5).
           breedLabel: linha.breed_label ?? linha.breed_free_text,
           size: linha.size_code,
           primaryColor: linha.color_label,
@@ -305,8 +202,6 @@ export function criarTagRepository(db: Db): TagRepository {
     },
 
     async listarTagsDoPet(petId, dono): Promise<readonly TagDoTutor[] | undefined> {
-      // Pet inexistente e pet de outra conta são o MESMO `undefined`: quem
-      // pergunta não recebe nada com que distinguir os dois.
       const pet = await construtorDaConferenciaDoPet(db, petId, dono).executeTakeFirst();
       if (pet === undefined) return undefined;
 
@@ -331,13 +226,8 @@ export function criarTagRepository(db: Db): TagRepository {
     },
 
     /**
-     * Emissão e tetos na **mesma transação**, e os dois `count` com `FOR UPDATE`
-     * sobre a linha do pet.
-     *
-     * Contar fora da transação e inserir depois deixa duas emissões simultâneas
-     * passarem pelo teto de cinco, e a janela é grande o bastante para um duplo
-     * toque na tela alcançá-la. O bloqueio é na linha do pet porque é ela que
-     * define o conjunto que está sendo contado.
+     * Emissão e tetos na **mesma transação**, e os dois `count` com `FOR UPDATE` sobre
+     * a linha do pet.
      */
     async emitir(nova: NovaTag, dono: UserId, agora: Instant): Promise<ResultadoDaEmissao> {
       return db.transaction().execute(async (trx) => {
@@ -399,19 +289,7 @@ export function criarTagRepository(db: Db): TagRepository {
       });
     },
 
-    /**
-     * O scan e o contador andam juntos.
-     *
-     * `scan_count` poderia sair de um `count(*)` sobre `tag_scans`, mas o
-     * contador é cumulativo e a tabela é a evidência: são duas coisas
-     * diferentes, e um `count(*)` as confundiria.
-     *
-     * O motivo escrito aqui antes era outro — *"a retenção dos scans é de 90
-     * dias, e no dia do expurgo o contador andaria para trás"*. Aquele expurgo
-     * nunca existiu, e a emenda 6 do ADR-0010 (26/10/2026, decisão do cliente)
-     * decidiu que ele não vai existir: não há apagamento por prazo. A separação
-     * continua certa pela razão que sobrou, e não pela que caiu.
-     */
+    /** O scan e o contador andam juntos. */
     async registrarScan(scan: NovoScan): Promise<void> {
       await db.transaction().execute(async (trx) => {
         await trx
@@ -461,10 +339,6 @@ export function criarTagRepository(db: Db): TagRepository {
       finderIdentityHash,
       desde,
     ): Promise<AvisoRecente | undefined> {
-      // Sem identidade derivada não há como dizer que é o mesmo achador, e
-      // agrupar por "todo mundo sem identidade" juntaria pessoas diferentes num
-      // aviso só — que é justamente o que o tutor não pode perder de vista
-      // quando há gente em cima do animal dele.
       if (finderIdentityHash === null) return undefined;
 
       const linha = await db

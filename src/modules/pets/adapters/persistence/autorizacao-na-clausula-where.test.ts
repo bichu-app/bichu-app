@@ -1,71 +1,6 @@
 /**
  * A autorização do cadastro do pet está na cláusula `WHERE`, e o SQL compilado
  * prova isso.
- *
- * ## Por que conferir o SQL, e não a resposta da rota
- *
- * O cabeçalho de `kysely-pet-repository.ts` afirma que "a consulta que
- * devolveria o pet de outro tutor não existe neste arquivo". Até esta branch
- * essa frase valia por confiança: **cada uma das quatro cláusulas de dono deste
- * adaptador foi removida, uma por vez, e os 967 casos unitários continuaram
- * verdes nas quatro**. O comportamento estava correto; o que faltava era a
- * verificação.
- *
- * O ADR-0021 não diz "não devolva o pet do outro". Ele diz **onde** a decisão
- * mora, e isso não é observável de fora: a consulta que traz o pet do outro e o
- * descarta num `if` responde igual — até o dia em que alguém mexe no `if`, e aí
- * não existe teste que acuse, porque o `if` era o teste.
- *
- * Este arquivo é o instrumento da BICHUS-92 aplicado ao adaptador de pets, com
- * a emenda da BICHUS-237. Ele compila as consultas com `DummyDriver`, sem banco
- * e sem executá-las, e lê o predicado.
- *
- * Ele lê o **SQL compilado**, nunca o texto-fonte do adaptador. A distinção
- * importa: uma conferência que procurasse a coluna no arquivo casaria com a
- * menção dentro deste comentário e dentro do comentário do próprio adaptador, e
- * ficaria verde com a cláusula removida.
- *
- * ## Por que a posição `$n`, e não `parameters.includes(dono)`
- *
- * O molde original da BICHUS-92 conferia `parameters.includes(DONO)`. Aqui isso
- * seria quase inútil, e `construtorDaAtualizacao` mostra por quê: o `UPDATE`
- * liga **dezessete** valores no `SET` antes de chegar ao `WHERE`, e o dono cai
- * na posição `$19`. Uma conferência por lista de parâmetros aprovaria
- * `where('owner_user_id', '=', petId)` — coluna certa, operador certo, valor
- * errado, com o dono ainda na lista por causa do `id = $18`. Este arquivo lê de
- * volta a posição que o **próprio predicado** ocupa.
- *
- * ## O AVISO DE MÉTODO: exija que o arquivo mude antes de rodar a prova
- *
- * O autor da BICHUS-237 tentou desligar uma cláusula, a substituição **não
- * casou com o texto do arquivo** e reescreveu o mesmo conteúdo. A suíte ficou
- * verde e ele quase concluiu "a isca não pega esse caso". Uma prova de isca só
- * conta quando o arquivo de fato mudou entre o antes e o depois — `git diff`
- * não vazio, ou um `sed` cujo resultado difere da origem. Sem essa exigência, o
- * que se mede é o silêncio da própria tentativa.
- *
- * ## A isca, e como ela foi provada
- *
- * Cada mecanismo foi desligado em `kysely-pet-repository.ts`, a suíte rodou, e
- * o mecanismo foi restaurado. Cada desligamento foi confirmado por diferença de
- * conteúdo do arquivo ANTES de a suíte rodar. Em 22/09/2026, Node v26.8.2:
- *
- * Base: 987 casos, 987 passaram.
- *
- * | o que foi desligado em `kysely-pet-repository.ts` | reprovaram |
- * |---|---|
- * | `.where('pets.owner_user_id', '=', dono)` de `construtorDaLeituraDoDono` | 3 casos |
- * | `.where('owner_user_id', '=', dono)` de `construtorDaContagemDoTutor` | 1 caso |
- * | `.where('owner_user_id', '=', dono)` de `construtorDaAtualizacao` | 1 caso |
- * | `.where('owner_user_id', '=', dono)` de `construtorDaExclusao` | 1 caso |
- * | `=` virando `is not` na leitura do dono | 2 casos |
- * | o `dono` do predicado da atualização virando `petId` | 1 caso |
- * | `.where('pets.deleted_at', 'is', null)` da leitura do dono | 1 caso |
- *
- * A quinta e a sexta linhas são o motivo de o predicado cobrar o operador e o
- * **valor ligado** à posição `$n`, e não a presença do nome da coluna no texto:
- * `is not $1` casa toda linha da tabela, e `owner_user_id = :petId` é uma
- * igualdade acidental esperando dois uuids coincidirem.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -111,13 +46,7 @@ const DADOS: DadosDoPet = {
   sinpatinhasId: null,
 };
 
-/**
- * Kysely sem banco: ele compila a consulta e não a executa.
- *
- * É o caminho REAL — o mesmo construtor e o mesmo compilador de dialeto do
- * Postgres que a aplicação usa. Um SQL escrito à mão aqui seria o atalho que
- * parece equivalente e esconde exatamente o que se foi conferir.
- */
+/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -128,11 +57,8 @@ const semBanco = new Kysely<Database>({
 });
 
 /**
- * O predicado do dono, como o compilador do Postgres o escreve:
- * `"owner_user_id" = $n`, com ou sem o `"pets".` na frente.
- *
- * A regex cobra o OPERADOR junto do nome. Sem isso, um `is not` com a coluna
- * certa passaria — e `is not $1` casa toda linha da tabela.
+ * O predicado do dono, como o compilador do Postgres o escreve: `"owner_user_id" =
+ * $n`, com ou sem o `"pets".` na frente.
  */
 const PREDICADO_DO_DONO = /"owner_user_id"\s*=\s*\$(\d+)/;
 
@@ -141,16 +67,7 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/**
- * O valor REALMENTE ligado à posição que o predicado do dono ocupa.
- *
- * Conferir `parameters.includes(DONO)` seria mais frouxo do que parece, e no
- * `UPDATE` de `atualizar` seria quase nada: dezessete valores do `SET` vêm
- * antes, e o dono cai em `$19`. Uma consulta com
- * `where('owner_user_id', '=', petId)` teria coluna certa, operador certo,
- * valor errado, e o dono ainda entre os parâmetros por causa de outro
- * predicado. Aqui a posição `$n` do próprio predicado é lida de volta.
- */
+/** O valor REALMENTE ligado à posição que o predicado do dono ocupa. */
 function donoLigadoAoPredicado(compilada: Compilada): unknown {
   const achado = PREDICADO_DO_DONO.exec(compilada.sql);
   assert.ok(
@@ -178,9 +95,6 @@ void describe('toda consulta de pet que responde a um tutor carrega o dono no WH
   });
 
   void it('a leitura do dono é a base de buscar, listar e da releitura de criar', () => {
-    // Um construtor só para os três caminhos, de propósito: três cópias seriam
-    // três chances de uma delas divergir sem ninguém acusar. `buscarDoTutor`
-    // adiciona `pets.id = :pet` no ponto de chamada, e o dono já está aqui.
     const { sql } = construtorDaLeituraDoDono(semBanco, DONO)
       .where('pets.id', '=', PET)
       .compile();
@@ -195,14 +109,6 @@ void describe('toda consulta de pet que responde a um tutor carrega o dono no WH
   });
 
   void it('a leitura do dono liga o dono a $3, e não a $1: DUAS subconsultas vem antes', () => {
-    // O detalhe que torna `parameters[0]` uma leitura errada: o `count(*)` de
-    // tags ativas liga `'active'` em `$1`, a subconsulta do caso aberto liga
-    // `'open'` em `$2`, e o dono só aparece em `$3`.
-    //
-    // Era `$2` até 20/10/2026. A posição andou porque `open_case_id` passou a
-    // sair da consulta em vez de ser fixado em nulo em `comoPet` -- ver
-    // `caso-aberto-na-leitura-do-pet.test.ts`. O caso continua medindo o que
-    // media: que ler o dono por posição fixa só vale com a posição conferida.
     const compilada = construtorDaLeituraDoDono(semBanco, DONO).compile();
 
     assert.deepEqual(
@@ -277,8 +183,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o dono', () =
   });
 
   void it('um WHERE com a coluna certa e o operador errado também é acusado', () => {
-    // `is not $1` tem o nome da coluna e casa toda linha da tabela. É por isso
-    // que o predicado cobra o `=` junto do nome.
     const operadorErrado = semBanco
       .selectFrom('pets')
       .select('id')
@@ -296,9 +200,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o dono', () =
   });
 
   void it('a coluna e o operador certos com o VALOR errado são acusados', () => {
-    // O caso que `parameters.includes(DONO)` deixaria passar: o dono continua
-    // entre os parâmetros, ligado a outro predicado, e a autorização é feita
-    // contra o id do pet.
     const valorErrado = semBanco
       .selectFrom('pets')
       .select('id')
@@ -319,9 +220,6 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o dono', () =
   });
 
   void it('no UPDATE, o valor errado é acusado mesmo com o dono no SET', () => {
-    // A versão mais cruel do caso anterior, e a que o `atualizar` de verdade
-    // torna possível: o dono aparece cedo na lista de parâmetros por estar num
-    // valor gravado, e o predicado autoriza contra outra coisa.
     const updateErrado = semBanco
       .updateTable('pets')
       .set({ name: DONO })

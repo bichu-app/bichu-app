@@ -1,9 +1,4 @@
-/**
- * `admin_accounts` em Postgres (ADR-0027 item 20.1).
- *
- * Este arquivo nao cita nenhuma tabela do app, e `cadastros-separados` (P21)
- * reprova se passar a citar.
- */
+/** `admin_accounts` em Postgres (ADR-0027 item 20.1). */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -51,7 +46,6 @@ function comoConta(linha: LinhaDaConta): ContaAdministrativa {
 export function criarRepositorioDeContasAdministrativas(db: Db): RepositorioDeContasAdministrativas {
   return {
     async buscarPorEmail(email) {
-      // `citext`: a comparacao ja ignora caixa, e o indice unico cobre a busca.
       const linha = await db.selectFrom('admin_accounts').select(COLUNAS).where('email', '=', email).executeTakeFirst();
       return linha === undefined ? undefined : comoConta(linha);
     },
@@ -98,8 +92,6 @@ export function criarRepositorioDeContasAdministrativas(db: Db): RepositorioDeCo
     },
 
     async bloquear(trx, id, motivo, agora) {
-      // `blocked_reason IS NULL` na clausula: o primeiro motivo fica. Um "nao
-      // fui eu" sobre uma conta ja bloqueada por falhas nao apaga a historia.
       await trx
         .updateTable('admin_accounts')
         .set({ blocked_reason: motivo, blocked_at: new Date(agora) })

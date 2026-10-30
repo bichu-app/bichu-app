@@ -1,12 +1,4 @@
-/**
- * Testes do HMAC de endereço IP (SEC-010, critério 4 de BICHUS-56).
- *
- * O caso que importa aqui é negativo e fácil de perder de vista: o resultado
- * precisa depender da CHAVE. Um SHA-256 sem chave passaria em qualquer teste de
- * "gera bytes diferentes para IPs diferentes" e continuaria sendo o IP em claro
- * com um passo a mais, porque a tabela dos 4,3 bilhões de IPv4 se monta em
- * minutos numa GPU comum.
- */
+/** Testes do HMAC de endereço IP (SEC-010, critério 4 de BICHUS-56). */
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
@@ -73,21 +65,11 @@ void describe('comparação em tempo constante', () => {
   void it('compara conteúdo e recusa tamanhos diferentes sem lançar', () => {
     assert.equal(iguaisEmTempoConstante(Buffer.from('abc'), Buffer.from('abc')), true);
     assert.equal(iguaisEmTempoConstante(Buffer.from('abc'), Buffer.from('abd')), false);
-    // `timingSafeEqual` lança com tamanhos diferentes; quem chama não deve
-    // precisar saber disso para não derrubar o pedido.
     assert.equal(iguaisEmTempoConstante(Buffer.from('abc'), Buffer.from('abcd')), false);
   });
 });
 
-/**
- * Índice cego do código da tag (ADR-0004, Emenda 1, seção 3.1).
- *
- * O caso que fecha o critério 1 é negativo e tem que **reprovar com o mecanismo
- * desligado**: trocar a chave e obter o mesmo resumo significa que a função
- * voltou a ser `createHash('sha256')`, e um dump do banco volta a entregar a
- * base inteira por enumeração. O teste de "resumos diferentes para códigos
- * diferentes" passaria igual nos dois mundos, e é por isso que ele não basta.
- */
+/** Índice cego do código da tag (ADR-0004, Emenda 1, seção 3.1). */
 void describe('índice cego do código da tag', () => {
   const CODIGO = 'GQSM0XHBT4D9G31S' as TagCodeCanonical;
 
@@ -100,8 +82,6 @@ void describe('índice cego do código da tag', () => {
   });
 
   void it('não é SHA-256 sem chave: o resumo sem chave não pode ser alcançável', () => {
-    // A prova direta de que a implementação trocou de função. Se alguém voltar
-    // para `createHash`, este caso reprova citando o valor exato.
     const semChave = createHash('sha256').update(CODIGO, 'utf8').digest();
     assert.equal(iguaisEmTempoConstante(hashDoCodigoDaTag(CODIGO, CHAVE_A), semChave), false);
     assert.equal(iguaisEmTempoConstante(hashDoCodigoDaTag(CODIGO, CHAVE_B), semChave), false);

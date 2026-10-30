@@ -1,9 +1,7 @@
 /**
- * Testes da senha local. Rodam sem servidor, sem banco e sem rede: se uma regra
- * de negócio precisasse de infraestrutura para ser testada, o acoplamento seria
- * o defeito.
- *
- * Cada caso aqui corresponde a um critério de aceite de BICHUS-17.
+ * Testes da senha local. Rodam sem servidor, sem banco e sem rede: se uma regra de
+ * negócio precisasse de infraestrutura para ser testada, o acoplamento seria o
+ * defeito.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -18,8 +16,6 @@ import {
   verificarSenha,
 } from './password.js';
 
-// A derivação é cara de propósito: 210.000 iterações custam centenas de
-// milissegundos, e é isso que protege o hash. O teto do teste acomoda isso.
 const TEMPO_LIMITE = 30_000;
 
 void describe('senha local em PBKDF2-HMAC-SHA512', { timeout: TEMPO_LIMITE }, () => {
@@ -36,8 +32,6 @@ void describe('senha local em PBKDF2-HMAC-SHA512', { timeout: TEMPO_LIMITE }, ()
   });
 
   void it('recusa bcrypt e qualquer outro formato que não emitimos (critério 3)', () => {
-    // O Keycloak não importa bcrypt nativamente, e é por isso que ele está
-    // proibido. Um hash de bcrypt na coluna precisa ser ilegível para nós.
     assert.equal(decodificarPhc('$2b$12$KIXQJ9m1yQm5r6uZbYt3LeJxvGq1f0O8pZ2m4n6q8s0u2w4y6a8c'), undefined);
     assert.equal(decodificarPhc('$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA'), undefined);
     assert.equal(decodificarPhc('$pbkdf2-sha512$i=0$c2FsdA$aGFzaA'), undefined);
@@ -51,8 +45,6 @@ void describe('senha local em PBKDF2-HMAC-SHA512', { timeout: TEMPO_LIMITE }, ()
     ]);
 
     assert.notEqual(primeiro, segundo, 'o sal aleatório precisa separar os dois');
-    // E os dois continuam verificando a mesma senha: sal diferente não pode
-    // significar hash inutilizável.
     assert.equal(await verificarSenha('a mesma senha exatamente', primeiro), true);
     assert.equal(await verificarSenha('a mesma senha exatamente', segundo), true);
   });
@@ -74,8 +66,6 @@ void describe('senha local em PBKDF2-HMAC-SHA512', { timeout: TEMPO_LIMITE }, ()
     const vigente = codificarPhc({ iteracoes: ITERACOES_VIGENTES, sal: salCurto, derivado });
     assert.equal(precisaDeRehash(vigente), false, 'hash na política vigente não é regravado à toa');
 
-    // Formato ilegível conta como "precisa de rehash": é a resposta segura, e
-    // não deixa um hash estranho sobreviver por omissão.
     assert.equal(precisaDeRehash('$2b$12$qualquercoisa'), true);
   });
 });

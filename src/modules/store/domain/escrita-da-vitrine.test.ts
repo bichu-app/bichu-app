@@ -1,14 +1,4 @@
-/**
- * As regras da escrita administrativa da `Loja`, sem banco e sem servidor.
- *
- * Tres iscas deste arquivo sao as do briefing da fatia e do ADR-0027 item 14:
- *
- * - o painel VE o preco vencido (e o caso negativo: o app continua sem ve-lo,
- *   pela MESMA regra de vencimento);
- * - o destino fora do host EXATO do parceiro e recusado com `host_mismatch`, inclusive
- *   o subdominio e o host que so termina com o texto do parceiro;
- * - nenhuma projecao do painel carrega o `id` interno.
- */
+/** As regras da escrita administrativa da `Loja`, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,15 +26,7 @@ import {
 } from './escrita-da-vitrine.js';
 import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
 
-/**
- * `https://` montado em duas partes.
- *
- * O portao de portabilidade casa `https://` COLADO num host `.com`/`.com.br`,
- * e estes casos precisam do host de verdade: e o link que o cliente tentou
- * cadastrar em 17/10, e trocar `cobasi.com.br` por um host de exemplo faria o
- * teste deixar de ser sobre o que aconteceu. Mesma saida de
- * `escrita-do-encontro.test.ts`.
- */
+/** `https://` montado em duas partes. */
 const HTTPS = 'https:' + '//';
 const HTTP = 'http:' + '//';
 import { projetarItem } from './item-da-vitrine.js';
@@ -112,10 +94,6 @@ void describe('o preco no painel', () => {
 
   void it('ISCA NEGATIVA: o mesmo item, pela projecao publica, sai SEM o valor', () => {
     const vencido = item({ priceCheckedAt: '2026-08-23' });
-    // A projecao publica so recebe item PUBLICADO, e publicado tem as quatro
-    // colunas do rascunho preenchidas (`store_items_publicado_esta_completo`).
-    // Os `??` abaixo sao do tipo, nao do caso: sem eles o teste nao compila
-    // desde que o rascunho passou a aceitar nulo.
     assert.ok(vencido.partner !== null);
     const publico = projetarItem(
       {
@@ -173,15 +151,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
   const texto = (url: string): string[] =>
     errosDoDestino('target_url', url, HOST).map((e) => e.message ?? '');
 
-  // -------------------------------------------------------------------------
-  // O CASO QUE BLOQUEOU O CLIENTE, por extenso
-  // -------------------------------------------------------------------------
-  //
-  // 17/10/2026: ele tentou cadastrar um produto da Cobasi e a tela disse que o
-  // link "precisa comecar com https://" sobre um link que comecava com
-  // `https://`. Eram DUAS recusas somadas (query e `www.`) escondidas atras de
-  // UMA mensagem errada. O link esta aqui inteiro, e nao montado por helper:
-  // um helper esconderia justamente as duas partes que eram o problema.
   void it('o link do cliente passa', () => {
     const doCliente =
       `${HTTPS}www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673`;
@@ -198,10 +167,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     assert.deepEqual(codigos('https://LojaDoBairro.TEST/x'), []);
   });
 
-  // -------------------------------------------------------------------------
-  // A FRONTEIRA DE ROTULO: o ponto e a regra inteira
-  // -------------------------------------------------------------------------
-
   void it('subdominio do parceiro passa', () => {
     for (const url of [
       'https://www.lojadobairro.test/x',
@@ -213,11 +178,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     }
   });
 
-  // ISCA -- em `ehDoParceiro`, troque `host.endsWith(`.${alvo}`)` por
-  // `host.endsWith(alvo)`. Este caso reprova, e ele e a razao de a funcao
-  // existir separada: `endsWith` cru deixa `malcobasi.com.br` passar por
-  // `cobasi.com.br`, e e o jeito mais barato de fazer um link nosso levar para
-  // fora sem ninguem notar lendo o codigo.
   void it('ISCA: host que so TERMINA com o texto do parceiro e recusado', () => {
     for (const url of [
       'https://falsalojadobairro.test/x',
@@ -231,10 +191,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     }
   });
 
-  // -------------------------------------------------------------------------
-  // QUERY E FRAGMENTO PASSAM, e chegam inteiros ao caminho guardado
-  // -------------------------------------------------------------------------
-
   void it('parametro e ancora passam', () => {
     for (const url of [
       'https://lojadobairro.test/x?idsku=1197673',
@@ -247,18 +203,11 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     }
   });
 
-  // ISCA -- em `caminhoDoDestino`, volte a devolver so `url.pathname`. Este
-  // caso reprova. Sem ele o defeito seria SILENCIOSO: o item gravaria, a
-  // vitrine mostraria, e a pessoa cairia numa pagina que nao e a do produto.
   void it('ISCA: o caminho guardado leva query e fragmento junto', () => {
     assert.equal(caminhoDoDestino('https://lojadobairro.test/p?idsku=9'), '/p?idsku=9');
     assert.equal(caminhoDoDestino('https://lojadobairro.test/p#ficha'), '/p#ficha');
     assert.equal(caminhoDoDestino('https://lojadobairro.test/p?a=1#b'), '/p?a=1#b');
   });
-
-  // -------------------------------------------------------------------------
-  // O QUE CONTINUA RECUSADO, e agora cada um diz o PROPRIO motivo
-  // -------------------------------------------------------------------------
 
   void it('D47: http, javascript, data, userinfo e IP literal continuam recusados', () => {
     assert.deepEqual(codigos('http://lojadobairro.test/x'), ['url_not_https']);
@@ -272,12 +221,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     assert.deepEqual(codigos('nao e url'), ['invalid_url']);
   });
 
-  // ISCA -- em `errosDoDestino`, volte a devolver `invalid_url` com a mesma
-  // mensagem para todas as recusas. Este caso reprova.
-  //
-  // Ele mede a MENSAGEM, e nao so o `code`, porque foi a mensagem que mentiu
-  // para o cliente: "precisa comecar com https://" para um link que comecava
-  // com `https://`. Nenhuma recusa que nao seja de esquema pode dizer isso.
   void it('ISCA: cada recusa diz o proprio motivo, e so a de esquema fala de https', () => {
     const sobreHttps = (url: string): boolean => texto(url).some((m) => m.includes('https://'));
 
@@ -296,10 +239,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     }
   });
 
-  // -------------------------------------------------------------------------
-  // `target_host`: nulo no caso comum, preenchido no subdominio
-  // -------------------------------------------------------------------------
-
   void it('o host guardado e nulo quando e o do proprio parceiro', () => {
     assert.equal(hostDoDestino('https://lojadobairro.test/x', HOST), null);
     assert.equal(hostDoDestino('https://LojaDoBairro.TEST/x', HOST), null);
@@ -317,14 +256,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
     assert.equal(ehDoParceiro('lojadobairro.test.golpe.invalid', HOST), false);
   });
 
-  // -------------------------------------------------------------------------
-  // O caminho guardado continua cabendo no CHECK do banco
-  // -------------------------------------------------------------------------
-
-  // O CHECK de `store_items.target_path` depois da migracao
-  // `20261017000001`: comeca em `/`, sem espaco em branco, com `?` e `#`
-  // permitidos. Copiado dela de proposito -- se os dois divergirem, a escrita
-  // passa aqui e morre no banco como 500.
   void it('o caminho guardado casa com o CHECK de store_items.target_path', () => {
     const check = /^\/\S*$/;
     for (const url of [
@@ -343,13 +274,6 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
 });
 
 void describe('o site do parceiro e o endereco COMPLETO, com https', () => {
-  // Padrao do cliente de 17/10/2026: "todo campo de site/url, o usuario deve
-  // preencher completo o endereco completo, inclusive com o https".
-  //
-  // Antes deste dia o campo era `host` e pedia o nome pelado
-  // (`cobasi.com.br`), com a ajuda "So o endereco, sem https:// e sem barra".
-  // O sentido inverteu, e a COLUNA nao mudou: ela continua guardando o host,
-  // que sai do endereco por `hostDoEndereco`.
   const codigos = (v: string): string[] => errosDoSiteDoParceiro('site_url', v).map((e) => e.code);
   const frase = (v: string): string => errosDoSiteDoParceiro('site_url', v)[0]?.message ?? '';
 
@@ -367,12 +291,9 @@ void describe('o site do parceiro e o endereco COMPLETO, com https', () => {
   void it('o host guardado sai do endereco, em minusculas', () => {
     assert.equal(hostDoEndereco(`${HTTPS}Cobasi.COM.BR/`), 'cobasi.com.br');
     assert.equal(hostDoEndereco(`${HTTPS}www.cobasi.com.br`), 'www.cobasi.com.br');
-    // O ponto final e o mesmo host em DNS, e sai aqui.
     assert.equal(hostDoEndereco(`${HTTPS}cobasi.com.br./loja`), 'cobasi.com.br');
   });
 
-  // ISCA -- em `errosDoSiteDoParceiro`, troque a chamada por `return []`. Os
-  // dois casos abaixo passam a aceitar tudo e reprovam.
   void it('ISCA: o nome pelado e recusado, e a frase mostra a forma certa', () => {
     for (const pelado of ['cobasi.com.br', 'www.cobasi.com.br', 'cobasi.com.br/loja']) {
       assert.deepEqual(codigos(pelado), ['site_url_not_https'], pelado);
@@ -393,14 +314,11 @@ void describe('o site do parceiro e o endereco COMPLETO, com https', () => {
     assert.deepEqual(codigos(`${HTTPS}cobasi .com.br`), ['site_url_invalid']);
     assert.deepEqual(codigos(''), ['site_url_length']);
 
-    // Nenhuma recusa que nao seja de esquema fala de `https://`.
     for (const ruim of [`${HTTPS}u:s@cobasi.com.br`, 'https://203.0.113.5', `${HTTPS}localhost`]) {
       assert.ok(!frase(ruim).includes('https://'), ruim);
     }
   });
 
-  // O vinculo do item com o dominio do parceiro, depois que o host sai de um
-  // endereco completo: a fronteira de rotulo continua valendo igual.
   void it('o vinculo do produto com o parceiro continua valendo', () => {
     const host = hostDoEndereco(`${HTTPS}cobasi.com.br/`);
     assert.equal(ehDoParceiro('www.cobasi.com.br', host), true);
@@ -426,7 +344,6 @@ void describe('ETag e If-Match', () => {
     assert.deepEqual(lerIfMatch(''), { tipo: 'ausente' });
     assert.deepEqual(lerIfMatch('"7"'), { tipo: 'numero', versao: 7 });
     assert.deepEqual(lerIfMatch(' "12" '), { tipo: 'numero', versao: 12 });
-    // `W/"7"` e `"7-gzip"` sao a versao 7 vinda pela borda (07/10, shared/http/if-match.ts).
     assert.deepEqual(lerIfMatch('W/"7"'), { tipo: 'numero', versao: 7 });
     for (const lixo of ['*', '7', '"0"', '"-1"', '"99999999999"', '"7", "8"']) {
       assert.deepEqual(lerIfMatch(lixo), { tipo: 'invalida' }, lixo);
@@ -542,10 +459,6 @@ void describe('o vocabulario de tags', () => {
     assert.deepEqual(conferirRotulo('label', 'Gatos').erros, []);
   });
 
-  // -------------------------------------------------------------------------
-  // Pontuacao de nome de marca (o cliente travado em `N&D`, 17/10/2026)
-  // -------------------------------------------------------------------------
-
   void it('O CASO: `N&D` e aceito, e o slug dele nao tem `&`', () => {
     const conferido = conferirRotulo('label', 'N&D');
     assert.deepEqual(conferido.erros, []);
@@ -568,7 +481,6 @@ void describe('o vocabulario de tags', () => {
       const conferido = conferirRotulo('label', rotulo);
       assert.deepEqual(conferido.erros, [], rotulo);
       assert.equal(conferido.slug, slug, rotulo);
-      // O que vai na query string do filtro publico (`tag`, esquema `Slug`).
       assert.match(conferido.slug, /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/, rotulo);
       assert.equal(encodeURIComponent(conferido.slug), conferido.slug, rotulo);
     }
@@ -582,9 +494,6 @@ void describe('o vocabulario de tags', () => {
   });
 
   void it('ISCA: `.` e `/` continuam fora, entao link e dominio nao viram rotulo', () => {
-    // O alfabeto e o que fecha esta porta aqui: o detector de D59 mora em
-    // `modules/network/domain` e a fronteira de modulo nao o alcanca deste
-    // dominio. Se alguem liberar `.` ou `/`, este teste reprova primeiro.
     for (const rotulo of ['bit.ly/x', 'loja.com.br', 'www.pet.io', 'a@b.io', 'x/y', 'promo!', 'R$ 50']) {
       assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['tag_charset'], rotulo);
     }
@@ -618,7 +527,6 @@ void describe('o vocabulario de tags', () => {
     }
     assert.deepEqual(conferirRotulo('label', 'a'.repeat(25)).erros.map((e) => e.code), ['length']);
     assert.deepEqual(conferirRotulo('label', 'a'.repeat(24)).erros, []);
-    // Teto medido depois de aparar e juntar espacos, como o `CHECK` do banco.
     assert.deepEqual(conferirRotulo('label', `  ${'a'.repeat(24)}  `).erros, []);
   });
 
@@ -628,20 +536,8 @@ void describe('o vocabulario de tags', () => {
 });
 
 /**
- * A classificacao em dois niveis (decisao do cliente de 17/10/2026: "dois
- * niveis, com subcategorias como a petlove").
- *
- * ## Por que estes casos existem, e o que eles substituem
- *
- * Ate 17/10 a categoria era `enum` no contrato, e **nao havia nada para
- * testar aqui**: o esquema de corpo instalado a partir do contrato recusava
- * valor desconhecido antes de a aplicacao ver. O vocabulario virou dado, o
- * contrato passou a declarar `string` com formato, e a recusa por CAMPO
- * mudou de casa -- veio para `errosDaClassificacao`.
- *
- * O que estes casos guardam, portanto, e a garantia que a troca de `enum` por
- * tabela poderia ter perdido em silencio: o painel continua recebendo erro de
- * CAMPO, com o codigo certo, e nao erro de integridade do banco.
+ * A classificacao em dois niveis (decisao do cliente de 17/10/2026: "dois niveis,
+ * com subcategorias como a petlove").
  */
 void describe('a classificacao em dois niveis', () => {
   const ACHOU_TUDO = {
@@ -677,9 +573,6 @@ void describe('a classificacao em dois niveis', () => {
   });
 
   void it('subcategoria de OUTRA categoria: `subcategory_not_in_category`, e nao "nao existe"', () => {
-    // E o caso de trocar a categoria de um item e deixar a subcategoria
-    // antiga para tras. Dizer "nao existe" faria a pessoa procurar um erro de
-    // digitacao que nao esta la.
     const erros = errosDaClassificacao('food', 'bifinhos', {
       categoriaAtiva: true,
       subcategoriaNaCategoria: false,
@@ -701,9 +594,6 @@ void describe('a classificacao em dois niveis', () => {
   });
 
   void it('categoria desconhecida E subcategoria solta: os DOIS erros, num 400 so', () => {
-    // Dois campos errados produzem duas entradas, e nao a primeira delas: o
-    // formulario do painel pinta os dois de uma vez, e uma recusa por vez
-    // faria a pessoa salvar duas.
     const erros = errosDaClassificacao('areia', 'arranhador', {
       categoriaAtiva: false,
       subcategoriaNaCategoria: false,
@@ -716,9 +606,6 @@ void describe('a classificacao em dois niveis', () => {
   });
 
   void it('ISCA NEGATIVA: subcategoria nula nao produz erro nem quando o codigo existe por ai', () => {
-    // Item sem segundo nivel e estado normal. Um `if` que olhasse
-    // `subcategoriaEmAlgumaCategoria` sem olhar antes se ha subcategoria
-    // transformaria "nao classifiquei" em erro de campo.
     assert.deepEqual(
       errosDaClassificacao('food', null, {
         categoriaAtiva: true,
@@ -748,7 +635,6 @@ void describe('os dois niveis na projecao do painel', () => {
     );
     assert.equal(projetado.subcategory, null);
     assert.equal(projetado.subcategory_label, null);
-    // A categoria continua obrigatoria: ela nunca e nula.
     assert.equal(projetado.category_label, 'Rações');
   });
 });

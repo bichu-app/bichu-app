@@ -1,35 +1,9 @@
 /// O "onde" que o caso (F3.1) e o achado (F3.5) mandam para a API.
-///
-/// Duas formas, e o contrato aceita as duas: `LostCaseInput` e
-/// `StrayFoundReportInput` declaram
-/// `anyOf: [required:[location], required:[area]]`. Nenhuma das duas e o
-/// caminho de excecao -- quem nega a permissao usa a area e o caso existe do
-/// mesmo jeito (criterio 5 da BICHUS-23).
-///
-/// ## A regra que este arquivo existe para nao deixar quebrar
-///
-/// **Area nunca vira coordenada, e coordenada nunca vira area.** ADR-0006: nao
-/// ha geocodificacao no MVP. Bairro, cidade e UF sao rotulo de exibicao e
-/// filtro de listagem; coordenada vem de `device_gps` ou de `map_pin`, e de
-/// mais nada.
-///
-/// Por isso [AreaDigitada] **nao tem** `lat` nem `lon`, e [PontoCapturado]
-/// **nao tem** bairro. Nao e esquecimento e nao e para ser corrigido: sao dois
-/// tipos que nao se convertem porque a conversao e o que esta proibido. Quando
-/// os dois existem juntos ([OndeComPontoEArea]) e porque a PESSOA digitou o
-/// bairro, e nao porque alguem derivou um do outro.
-///
-/// O portao que cobra isso e `app/test/dispositivo/sem_geocodificacao_test.dart`.
 library;
 
 import '../dispositivo/localizacao.dart';
 
 /// Bairro, cidade e UF, **como a pessoa digitou**.
-///
-/// So `cidade` e obrigatoria, e isso vem do contrato (`Area.required: [city]`).
-/// Bairro e UF ficam opcionais porque quem esta digitando pode nao saber a
-/// sigla do estado de onde encontrou o animal, e exigir a sigla para registrar
-/// um achado e exatamente o tipo de campo que a BICHUS-35 proibe.
 class AreaDigitada {
   const AreaDigitada({required this.cidade, this.bairro, this.uf});
 
@@ -70,11 +44,6 @@ sealed class Onde {
   const Onde();
 
   /// Tem centro, e portanto o alerta de 5 km pode ter raio.
-  ///
-  /// E o `LostCase.has_location` do contrato. A tela usa para explicar por que
-  /// nao houve alerta, em vez de deixar a secao de alcance vazia -- e
-  /// **nunca** para impedir o envio: `no_location` nao e bloqueio (criterio 12
-  /// da BICHUS-23).
   bool get temCoordenada;
 
   /// As chaves do `StrayFoundReportInput` (`location` / `area`).
@@ -105,11 +74,6 @@ class OndePorPonto extends Onde {
 }
 
 /// So a area: a pessoa digitou, e coordenada nao ha.
-///
-/// **O que se perde e exatamente uma coisa**, e ela esta escrita no criterio
-/// 11: o alerta de 5 km nao dispara, porque sem centro nao ha raio. O caso
-/// continua entrando na lista publica da cidade e do bairro, e a tag continua
-/// levando qualquer pessoa direto ao tutor.
 class OndePorArea extends Onde {
   const OndePorArea(this.area);
 
@@ -130,23 +94,6 @@ class OndePorArea extends Onde {
 }
 
 /// A coordenada **e** o bairro que a pessoa digitou junto.
-///
-/// ## Por que este terceiro caso existe
-///
-/// Porque `area_label` sai nulo sem ele, e esse e um defeito de tela que so
-/// apareceria depois. O rotulo que o produto mostra a outra pessoa e bairro e
-/// cidade, e quem o monta no servidor (`rotuloDaArea`) le **apenas** os campos
-/// digitados: coordenada nao entra ali, nem arredondada. Entao um caso aberto
-/// so com GPS chega a lista publica sem rotulo nenhum.
-///
-/// A saida obvia seria converter a coordenada em bairro. **E ela e justamente
-/// a proibida** (ADR-0006). A outra saida e perguntar, e e essa: quando a
-/// captura da certo, a tela continua oferecendo o campo de bairro, agora
-/// opcional. Quem preencher aparece com rotulo; quem nao preencher aparece sem
-/// -- e nenhuma coordenada foi convertida em nada.
-///
-/// O contrato aceita os dois campos juntos: `anyOf` exige **ao menos um**, e
-/// nao no maximo um.
 class OndeComPontoEArea extends Onde {
   const OndeComPontoEArea({required this.ponto, required this.area});
 
@@ -170,10 +117,6 @@ class OndeComPontoEArea extends Onde {
 }
 
 /// Monta o `Onde` a partir do que a tela tem na mao.
-///
-/// Devolve nulo quando nao ha nem ponto nem cidade -- o unico caso em que o
-/// envio ainda nao pode acontecer, e que a tela trata pedindo a cidade, nunca
-/// derivando coisa alguma.
 Onde? montarOnde({PontoCapturado? ponto, AreaDigitada? area}) {
   if (ponto != null && area != null) {
     return OndeComPontoEArea(ponto: ponto, area: area);
@@ -185,31 +128,6 @@ Onde? montarOnde({PontoCapturado? ponto, AreaDigitada? area}) {
 
 /// O `Onde` remontado a partir de uma coordenada que **ja foi capturada** e
 /// atravessou o envelope de intencao (UX 8.3).
-///
-/// ## Por que ela mora aqui, e nao em `lib/intencao/`
-///
-/// O criterio 1 da BICHUS-23 diz que a porta `Localizacao` e nomeada em uma
-/// lista curta de arquivos, e este e um deles -- **pelos tipos**, e nao para
-/// falar com o aparelho. Esta funcao nao mede nada, nao pede permissao e nao
-/// abre dialogo: ela recebe dois numeros que alguem ja tinha e monta o mesmo
-/// `Onde` que a captura montaria.
-///
-/// Escrita em `lib/intencao/`, ela obrigaria aquele diretorio a importar a
-/// porta -- e ai o portao de ponto de uso reprovaria, com razao: um terceiro
-/// arquivo nomeando a porta e como o "dois pontos de uso" deixa de ser
-/// verdade.
-///
-/// ## O que se perde na volta, e por que nao e problema
-///
-/// A **precisao** nao atravessa: `LocalizacaoDaIntencao` guarda latitude,
-/// longitude e o carimbo de tempo, e nada mais. `GeoPoint.accuracy_m` e
-/// opcional no contrato, e o que ele alimenta e o texto "cerca de 300 m" da
-/// tela de captura -- que ja foi lido por quem capturou. Inventar um numero
-/// aqui seria pior que a ausencia dele.
-///
-/// **A origem e `deviceGps`, e nao um palpite**: nao ha pino no mapa em todo o
-/// produto, entao a medicao do aparelho e o unico caminho que existe para uma
-/// coordenada chegar a este app.
 Onde? ondeJaCapturado({
   double? lat,
   double? lon,

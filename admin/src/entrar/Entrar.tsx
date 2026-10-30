@@ -9,12 +9,7 @@ import { LogoHorizontal } from '../componentes/Icone.tsx';
 import { lerMotivo, voltaSegura } from '../sessao/entrar-url.ts';
 import { CaptchaIndisponivel, type ObterTokenDoCaptcha } from './captcha.ts';
 
-/**
- * 1 · Login (secao 25.3, UX 29.1). Conta inexistente, senha errada e conta sem
- * papel administrativo dao **a mesma tela** (D44): mesma mensagem, e-mail
- * mantido, senha limpa, foco na senha. Nada aqui distingue os tres casos, e o
- * teste `test/entrar.test.tsx` confere isso.
- */
+/** 1 · Login (secao 25.3, UX 29.1). */
 export const MENSAGEM_UNICA =
   'E-mail ou senha incorretos, ou esta conta não tem acesso ao backoffice. O acesso usa uma conta de administrador, separada da conta do app.';
 
@@ -52,14 +47,10 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
   const [aviso, setAviso] = useState<Aviso | undefined>(AVISO_DO_MOTIVO[lerMotivo(parametros.get('motivo')) ?? '']);
   const [bloqueadoAte, setBloqueadoAte] = useState<number>();
   const [errosDosCampos, setErrosDosCampos] = useState<{ email?: string; senha?: string }>({});
-  // Erro de FORMA do endereco, local: aparece ao sair do campo e sai sozinho
-  // quando o endereco volta a ser plausivel. Separado de `errosDosCampos`
-  // porque o erro do servidor sabe mais e tem de ganhar a frente.
   const [emailMalEscrito, setEmailMalEscrito] = useState(false);
   const campoDaSenha = useRef<HTMLInputElement>(null);
   const campoDoEmail = useRef<HTMLInputElement>(null);
 
-  // 1.4: Entrar volta sozinho quando o prazo passa, sem contagem ao vivo.
   useEffect(() => {
     if (bloqueadoAte === undefined) return;
     const id = setTimeout(() => setBloqueadoAte(undefined), Math.max(0, bloqueadoAte - Date.now()));
@@ -87,13 +78,9 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
       }
       const { data, error, response } = await api.POST('/admin/auth/login', {
         params: { header: { 'X-Captcha-Token': token } },
-        // `emailParaEnvio` apara espaco e **nao** abaixa a caixa: quem
-        // normaliza e `normalizarEmail` no servidor, e duas normalizacoes do
-        // mesmo endereco divergem sem ninguem ver.
         body: { email: emailParaEnvio(email), password: senha },
       });
       if (data) {
-        // Recarga completa: o painel busca a sessao (e o token anti-CSRF) sozinho.
         setSenha('');
         navegarParaFora(voltaSegura(parametros.get('volta')));
         return;
@@ -110,7 +97,6 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         setAviso(VERIFICACAO_RECUSADA);
         return;
       }
-      // invalid-credentials, validation-failed e qualquer outra recusa: a mesma tela (D44).
       setSenha('');
       setAviso({ tipo: 'erro', texto: MENSAGEM_UNICA });
       requestAnimationFrame(() => campoDaSenha.current?.focus());
@@ -149,7 +135,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         <h1 className="t-title-lg" id="titulo-entrar">
           Entrar no backoffice
         </h1>
-        {/* Os avisos sao anunciados: erro e role=alert, o resto role=status. */}
+        {}
         {banner}
         <CampoDeEmail
           id="l-email"

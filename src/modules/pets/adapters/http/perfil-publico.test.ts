@@ -1,19 +1,4 @@
-/**
- * `GET /v1/public/pets/{slug}`, pela borda HTTP (BICHUS-45).
- *
- * ## O teste de não-vazamento
- *
- * Mesmo desenho de `lostfound/adapters/http/leitura-publica-do-caso.test.ts`: o
- * dublê da porta é HOSTIL. Ele devolve o perfil legítimo com o e-mail, o
- * telefone, o endereço e os UUIDs do tutor e do pet como propriedades a mais, e
- * planta os mesmos dados no texto livre (nome, raça digitada, marcas). A
- * resposta passa pelo detector `shared/http/vazamento-publico.ts`, contra as
- * propriedades que `api/openapi.yaml` declara para `PublicPetProfile`, lidas em
- * tempo de execução.
- *
- * A consulta SQL é coberta por
- * `adapters/persistence/perfil-publico-sem-dado-do-tutor.test.ts`.
- */
+/** `GET /v1/public/pets/{slug}`, pela borda HTTP (BICHUS-45). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -82,7 +67,6 @@ function montar(resposta: PerfilPublicoDoPet | undefined): {
     isProduction: false,
     teto: tetoDeTeste(),
   });
-  // O mesmo par de `src/bin/api.ts`: sem ele não há o 400 do `pattern` do slug.
   const conferirParametros = vigiarParametrosDasRotas(app, carregarContrato('api/openapi.yaml'), '/v1');
   void app.register(
     (escopo, _opcoes, pronto) => {
@@ -190,9 +174,6 @@ void describe('getPublicPetBySlug: os status emitidos são os que o contrato dec
   });
 
   void it('acima do teto de 60/h, a resposta sai com status declarado', async () => {
-    // O contrato declara 429 (`challenge` sem `X-Captcha-Token`, ADR-0020), e
-    // `aplicacao-de-teto.ts` hoje deixa `challenge` passar. Cobra-se só que o
-    // status seja um dos declarados; a divergência está fora deste PR.
     const { app } = montar(perfilHostil());
     let ultima = 0;
     for (let i = 0; i < 61; i += 1) ultima = (await pedir(app, SLUG)).status;

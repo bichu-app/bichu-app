@@ -1,35 +1,4 @@
-/**
- * A atualizacao do perfil **nao deixa a conta ficar sem nome**.
- *
- * ## A decisao, nas palavras do cliente (18/10/2026)
- *
- * *"atualizar o contrato para tornar o nome obrigatorio / nao permitir
- * atualizar o cadastro, se nao tiver algum nome cadastrado"*.
- *
- * ## A assimetria que isto fecha
- *
- * No mesmo dia o cadastro passou a exigir o nome
- * (`cadastro-exige-nome.test.ts`). Sobrou o outro lado: `MeUpdate` aceitava
- * `display_name: ""`, o repositorio so ignora `undefined`, e a coluna era
- * zerada. A tela de `Meus dados` **oferecia isso em texto** -- *"Escreva o seu
- * nome, ou deixe o campo vazio para tira-lo."* Exigir na entrada e permitir
- * apagar depois nao e regra, e so um pedagio.
- *
- * ## O RISCO DESTA HISTORIA E O BECO, E E O CASO (c) QUE RESPONDE POR ELE
- *
- * "Nao atualizar sem nome" aplicado sem cuidado prende as contas que **ja**
- * estao sem nome: elas nao poderiam atualizar nada, inclusive o nome, e nao
- * haveria saida nenhuma. Em homologacao sao 2 de 7 contas (medido em 18/10).
- *
- * A regra tem duas metades, e so a primeira e obvia:
- *
- * 1. nome que VEM no corpo precisa ter nome dentro -- fecha o apagar;
- * 2. nome que NAO vem exige que a conta ja tenha um -- cobra quem esta sem.
- *
- * A saida e a metade 1: quem esta sem nome manda `display_name` junto e salva.
- * O caso (c) deste arquivo e o unico que reprova se alguem endurecer a metade
- * 2 ate tapar essa porta, e e por isso que ele existe.
- */
+/** A atualizacao do perfil **nao deixa a conta ficar sem nome**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -67,8 +36,6 @@ function conta(displayName: string | null): Conta {
     email: 'marina@exemplo.com.br',
     emailVerifiedAt: null,
     displayName,
-    // `handle: null` e o estado NORMAL de conta sem apelido: o apelido entrou
-    // em 18/10/2026 e **nenhum fluxo obriga a escolher** (plano 4-C.8).
     handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
@@ -87,25 +54,19 @@ function conta(displayName: string | null): Conta {
 interface Bancada {
   readonly servico: ReturnType<typeof criarAuthService>;
   readonly eventos: AuditEvent[];
-  /** O que `atualizarPerfil` recebeu. Vazio = nada foi escrito. */
+  /** O que `atualizarPerfil` recebeu. */
   readonly gravados: CamposDoPerfil[];
 }
 
 /**
- * `nomeAtual` e o estado da conta ANTES do PATCH: `null` e a conta sem nome,
- * que e o estado das 2 contas de homologacao.
+ * `nomeAtual` e o estado da conta ANTES do PATCH: `null` e a conta sem nome, que e
+ * o estado das 2 contas de homologacao.
  */
 function montar(nomeAtual: string | null): Bancada {
   const eventos: AuditEvent[] = [];
   const gravados: CamposDoPerfil[] = [];
 
   const base: IdentityRepository = new (class extends RepositorioQueRecusaTudo {
-    // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-    // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-    // avatar da barra do app caia na inicial do nome em todas as paginas.
-    // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-    // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-    // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
       return Promise.resolve(null);
     }
@@ -196,10 +157,7 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
   /**
    * ISCA (a). Desligada: tirando o `nomeDeExibicaoAparado` do caminho de
    * `atualizarMeuPerfil`, este caso reprova em `atualizarPerfil` -- que e
-   * literalmente o nome sendo apagado. Conferido.
-   *
-   * Entra pela APLICAÇÃO e não pela tela: `PATCH /v1/me` e alcancavel por
-   * qualquer pessoa logada, sem passar por widget nenhum.
+   * literalmente o nome sendo apagado.
    */
   void it('`display_name` VAZIO no corpo é recusado, e nada é escrito', async () => {
     const erro = await recusaDe('Marina', { displayName: '' }, '`display_name` vazio');
@@ -221,14 +179,7 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /**
-   * O caso que escapa do schema. `minLength: 1` de `MeUpdate` nao alcanca
-   * `"   "`; quem alcanca e o `trim` do servidor.
-   *
-   * Os tres espacos vem de `' '.repeat(3)` e nao de um literal: espaco no fim
-   * de string literal e a primeira coisa que um formatador apara, e aparado
-   * este caso viraria uma copia do primeiro sem ninguem notar.
-   */
+  /** O caso que escapa do schema. */
   void it('`display_name` SÓ COM ESPAÇO é recusado, e nada é escrito', async () => {
     const erro = await recusaDe(
       'Marina',
@@ -242,14 +193,7 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /**
-   * A metade 2 da regra: quem NAO tem nome e omite o campo nao atualiza.
-   *
-   * Esta e a parte literal do pedido do cliente -- *"nao permitir atualizar o
-   * cadastro, se nao tiver algum nome cadastrado"*. A mensagem difere da das
-   * outras de proposito: aqui a pessoa nao estava mexendo no nome, e precisa
-   * saber que e ele que esta barrando ("para continuar").
-   */
+  /** A metade 2 da regra: quem NAO tem nome e omite o campo nao atualiza. */
   void it('conta SEM nome que omite `display_name` não atualiza nada mais', async () => {
     const erro = await recusaDe(
       null,
@@ -285,13 +229,7 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     );
   });
 
-  /**
-   * ISCA (b) — O CONTRAPESO.
-   *
-   * Uma recusa fixa em `atualizarMeuPerfil` deixaria todos os casos acima
-   * verdes. Este e o primeiro que reprovaria. Ele afirma o que chegou na porta
-   * de escrita, **aparado**.
-   */
+  /** ISCA (b) — O CONTRAPESO. */
   void it('atualizar COM nome passa, e o que vai ao banco é o nome aparado', async () => {
     const bancada = montar('Marina');
 
@@ -317,19 +255,8 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
   });
 
   /**
-   * ISCA (c) — A QUE PROTEGE CONTRA O BECO, e a razao de este arquivo existir
-   * em vez de duas linhas dentro de outro.
-   *
-   * As 2 contas sem nome de homologacao precisam ter saida. Se alguem
-   * endurecer a metade 2 da regra -- por exemplo lendo a conta e recusando
-   * ANTES de olhar o corpo -- os quatro casos de recusa acima continuam
-   * verdes, o contrapeso acima continua verde (a conta dele tem nome), e **so
-   * este reprova**. Ele e a unica coisa que separa "cobrar o nome" de "prender
-   * a conta".
-   *
-   * Desligada: pondo a leitura de `buscarContaPorId` fora do
-   * `if (campaNome === undefined)` e recusando sempre que a conta nao tem
-   * nome, este caso reprova e nenhum outro acusa.
+   * ISCA (c) — A QUE PROTEGE CONTRA O BECO, e a razao de este arquivo existir em vez
+   * de duas linhas dentro de outro.
    */
   void it('conta SEM nome CONSEGUE preencher o nome e salvar: não há beco', async () => {
     const bancada = montar(null);
@@ -350,8 +277,8 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
   });
 
   /**
-   * E a saida vale junto com os outros campos, que e como a tela de `Meus
-   * dados` salva de verdade: um `PATCH` com tudo o que mudou.
+   * E a saida vale junto com os outros campos, que e como a tela de `Meus dados`
+   * salva de verdade: um `PATCH` com tudo o que mudou.
    */
   void it('conta SEM nome salva o nome junto com os outros campos', async () => {
     const bancada = montar(null);

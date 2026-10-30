@@ -1,37 +1,7 @@
-/**
- * AS TRES LISTAS FECHADAS DE MOTIVO -- e por que sao tres, e nao uma.
- *
- * Decisão do desenho da frente de comunidade, fatia E: **lista curta e fechada,
- * sem texto livre de motivo**. Campo de motivo livre vira desabafo e não se
- * tria, e uma fila que não se tria é uma fila que ninguém trabalha. O padrão de
- * valor novo em lista fechada é o do ADR-0023 §3.
- *
- * ## Por que TRÊS listas e não uma
- *
- * Porque as três superfícies falam de coisas diferentes, e misturar as listas
- * ofereceria motivos impossíveis:
- *
- * - *nudez* e *maus-tratos a animal* são de **imagem** — não há o que responder
- *   a "este perfil tem nudez" quando o que incomoda é uma foto, e o
- *   administrador precisaria adivinhar qual;
- * - *não é quem diz ser* é de **perfil** — uma publicação não finge ser alguém;
- * - *informação falsa sobre um pet perdido* é de **publicação**, e só existe
- *   neste produto: **um avistamento inventado manda a pessoa para o bairro
- *   errado e custa horas de busca**. É por isso que ela não cabia em `other` —
- *   em `other` ela chegaria à fila sem dizer que é urgente.
- *
- * ## O que este arquivo NÃO faz
- *
- * Não traduz. Os rótulos em português são da tela (`app/lib/telas/seguranca/`)
- * e do painel; aqui ficam os valores do contrato, que são os mesmos nos quatro
- * clientes por regra da casa.
- *
- * Não decide ordem de fila. `minor_suspected` e `child_at_risk` vão ao topo, e
- * isso é da consulta da fila, que é de outro módulo.
- */
+/** AS TRES LISTAS FECHADAS DE MOTIVO -- e por que sao tres, e nao uma. */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 
-/** Denúncia de PERFIL: sobre quem a pessoa é. Cinco. */
+/** Denúncia de PERFIL: sobre quem a pessoa é. */
 export const MOTIVOS_DE_PERFIL = [
   'impersonation',
   'harassment',
@@ -81,19 +51,7 @@ export interface DenunciaValidada {
   readonly relato: string | null;
 }
 
-/**
- * Valida o corpo de uma denúncia, para qualquer dos três alvos.
- *
- * **Motivo fora da lista do alvo é RECUSADO**, e isso inclui o motivo que
- * existe em OUTRA lista: `nudity_or_sexual` numa denúncia de perfil é recusado
- * do mesmo jeito que uma palavra inventada seria. É deliberado — aceitar o
- * motivo da lista vizinha porque "ele existe em algum lugar" é como as três
- * listas voltariam a ser uma.
- *
- * O `CHECK` do banco recusa igual, e a redundância é a mesma do resto da casa:
- * a validação aqui dá `400` com o nome do campo, e o banco é o que garante que
- * nenhum caminho de escrita futuro contorne a lista.
- */
+/** Valida o corpo de uma denúncia, para qualquer dos três alvos. */
 export function validarDenuncia(
   alvo: AlvoDaDenuncia,
   corpo: unknown,
@@ -116,9 +74,6 @@ export function validarDenuncia(
     if (typeof relatoCru !== 'string') {
       erros.push({ field: 'detail', code: 'invalid', message: 'O relato precisa ser texto.' });
     } else {
-      // APARADO ANTES DE MEDIR, como na avaliação: mil espaços não são um
-      // relato de mil caracteres, e recusá-los pelo tamanho explicaria a coisa
-      // errada.
       const aparado = relatoCru.trim();
       if (aparado === '') relato = null;
       else if (aparado.length > TAMANHO_MAXIMO_DO_RELATO) {

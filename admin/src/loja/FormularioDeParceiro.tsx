@@ -23,10 +23,7 @@ interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
-  /**
-   * O endereco COMPLETO do site, com `https://` (padrao do cliente de
-   * 17/10/2026). O servidor extrai o host, que e o que a coluna guarda.
-   */
+  /** O endereco COMPLETO do site, com `https://` (padrao do cliente de 17/10/2026). */
   site: string;
   ordem: string;
   ativo: boolean;
@@ -43,11 +40,6 @@ export function validarParceiro(v: Valores): Partial<Record<Campo, string>> {
   const nome = v.nome.trim();
   if (nome.length < 2 || nome.length > 80) e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
   if (!PADRAO_DO_SLUG.test(v.slug)) e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
-  // Pelo MOTIVO, com a mesma regra do servidor: "falta o https://", "troque
-  // http:// por https://", "tem usuario e senha" e "e um IP" sao recusas
-  // diferentes e pedem textos diferentes. A escolha da frase nao pode sair de
-  // um mapa de `code`: `site_url_not_https` cobre DOIS motivos, exatamente
-  // como no servidor (`errosDoEnderecoCompleto`).
   const recusa = mensagemDoSite(v.site);
   if (recusa !== null) e['p-host'] = recusa;
   const ordem = Number(v.ordem);
@@ -56,11 +48,6 @@ export function validarParceiro(v: Valores): Partial<Record<Campo, string>> {
 }
 
 function valoresDo(p: Parceiro): Valores {
-  // O servidor devolve o HOST (e a coluna guarda host). O campo mostra o
-  // endereco completo, e o `https://` vem daqui e nao de um palpite: o
-  // esquema de um parceiro ja gravado e sempre `https`, porque e o unico que
-  // a escrita aceitou. Isto NAO e completar em silencio o que a pessoa
-  // digitou -- e exibir o que ja foi validado.
   return { nome: p.name, slug: p.slug, slugEditado: true, site: `https://${p.host}`, ordem: String(p.sort_order), ativo: p.active };
 }
 
@@ -100,7 +87,6 @@ export default function FormularioDeParceiro() {
           return;
         }
         setParceiro(data);
-        // Do `version`, e nao do ETag: a borda o sufixa ("3-zstd") e o If-Match daria 412.
         setEtag(versaoComoEtag(data.version));
         setBase(valoresDo(data));
         setValores(retomarRascunho<Valores>(pathname) ?? valoresDo(data));
@@ -158,13 +144,10 @@ export default function FormularioDeParceiro() {
       const patch: Esquemas['AdminStorePartnerPatch'] = {
         ...(nome !== parceiro.name ? { name: nome } : {}),
         ...(valores.slug !== parceiro.slug ? { slug: valores.slug } : {}),
-        // Compara pelo HOST, que e o que o servidor guarda: so o esquema ou a
-        // barra final mudarem nao e mudanca de parceiro.
         ...(hostDoSite(site) !== parceiro.host ? { site_url: site } : {}),
         ...(ordem !== parceiro.sort_order ? { sort_order: ordem } : {}),
         ...(valores.ativo !== parceiro.active ? { active: valores.ativo } : {}),
       };
-      // Sem mudanca nada vai ao servidor, e a tela diz isso em vez de voltar calada.
       if (Object.keys(patch).length === 0) return setFalha({ texto: 'Nada mudou. Altere algum campo antes de salvar.', informativo: true });
       const { data, error } = await api.PATCH('/admin/store/partners/{partnerSlug}', {
         params: { path: { partnerSlug: parceiro.slug }, header: { 'If-Match': etag } },

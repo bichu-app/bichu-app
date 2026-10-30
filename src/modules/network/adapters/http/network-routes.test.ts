@@ -1,31 +1,4 @@
-/**
- * As tres rotas da `Rede`, sobre um Fastify de verdade.
- *
- * Sobe o servidor em vez de chamar o manipulador porque o que estas rotas
- * prometem so existe com o framework no caminho: o **401** de quem pede o
- * ponto sem conta, o **404** do encontro invisivel, o **429** do teto (que e
- * um gancho, e nao um `if`) e a **serializacao real** da resposta -- que e onde
- * uma coordenada vazaria.
- *
- * ## As iscas deste arquivo, e como cada uma foi provada
- *
- * Cada linha foi desligada no codigo de producao, a suite rodou e reprovou com
- * o nome do caso na saida, e o arquivo foi restaurado. As linhas "23/09,
- * emenda" foram medidas na emenda da BICHUS-251 (ADR-0027 12), Node 22
- * (`/opt/homebrew/opt/node@22`).
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `ordemPadraoDe` devolvendo `proximos` tambem para `past` | 2 |
- * | `effective_when` saindo fixo em `upcoming` | 1 |
- * | `deny_429` virando `log_and_alert` no teto da agenda | 1 |
- * | 23/09, emenda: `location` sem `chamadorAutenticado` (responde sem conta) | 4 |
- * | 23/09, emenda: `location` consultando ANTES de autenticar | 2 |
- * | 23/09, emenda: o 404 do `location` virando 403 | 1 |
- * | 23/09, emenda: o detalhe levando o ponto junto (`point` no corpo publico) | 1 |
- * | `rateLimit` removido da agenda (tem efeito) | **nao compila** |
- * | dimensao `account` do `location` declarada sem resolvedor | **nao compila** |
- */
+/** As tres rotas da `Rede`, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -93,9 +66,6 @@ const ENCONTRO: EncontroDaRede = {
   endsAt: (AGORA + 3 * UMA_HORA) as Instant,
   timeZone: 'America/Sao_Paulo',
   publicacao: 'published',
-  // `admin` e o `DEFAULT` da coluna e o caso comum. A isca da autoria, mais
-  // abaixo neste arquivo, continua cobrando que NENHUMA coluna de autoria saia
-  // -- e `origin` nao e uma: sao dois valores fixos, sem pessoa.
   origem: 'admin',
   dataLocal: '2026-09-23',
   visibilidade: 'public',
@@ -128,10 +98,7 @@ interface Cenario {
   readonly estadoDaConta?: EstadoDaContaParaCriar;
   /** `undefined` e "nao e seu OU nao existe" -- o mesmo caso, de proposito. */
   readonly meuEncontro?: EncontroDoAutor | undefined;
-  /**
-   * A capa como a leitura do DONO a entrega. `undefined` no cenario e
-   * "encontro sem capa nenhuma", que e diferente de `processing`.
-   */
+  /** A capa como a leitura do DONO a entrega. */
   readonly capaDoDono?: CapaDoMeuEncontro | undefined;
   readonly versaoMudou?: boolean;
   readonly capaNaoServe?: boolean;
@@ -142,21 +109,11 @@ interface Cenario {
   readonly desistencia?: DesfechoDaDesistencia;
   readonly detalhes?: EncontroDaRede | undefined;
   readonly temRegiao?: boolean;
-  /**
-   * `site_page_availability` diz que a pagina publica do encontro existe?
-   *
-   * **`undefined` e `false` -- desligado e o padrao**, e e o estado medido em
-   * 21/10/2026. Nenhum caso que nao fale de compartilhamento precisou mudar por
-   * causa de `share_url`, e nenhum passa a ver o campo por descuido.
-   */
+  /** `site_page_availability` diz que a pagina publica do encontro existe? */
   readonly paginaDoEncontroPublicada?: boolean;
 }
 
-/**
- * `WEB_BASE_URL` do teste. **Com barra no fim de proposito**: o montador do
- * endereco tem que aparar a barra, e uma base "limpa" nunca provaria isso -- o
- * defeito que escapa e `https://site.exemplo.invalid//encontro/<slug>`.
- */
+/** `WEB_BASE_URL` do teste. */
 const BASE_DA_WEB = 'https://site.exemplo.invalid/' as AbsoluteUrl;
 
 const recortesVistos: RecorteDaAgenda[] = [];
@@ -183,13 +140,7 @@ const CAPA_PRONTA: CapaDoMeuEncontro = {
   motivoDaRecusa: null,
 };
 
-/**
- * A capa RECUSADA, com o motivo que o servidor devolve.
- *
- * O texto e um dos exemplos REAIS medidos em 19/10/2026, e nao uma frase
- * inventada: e ele que a tela mostra, e e por isso que a isca o procura
- * literalmente.
- */
+/** A capa RECUSADA, com o motivo que o servidor devolve. */
 const CAPA_RECUSADA: CapaDoMeuEncontro = {
   estado: 'rejected',
   url: null,
@@ -216,14 +167,6 @@ const idsDeTeste = {
 } as unknown as IdGenerator;
 
 function repositorio(cenario: Cenario): NetworkRepository {
-  // O ESTADO QUE A TRANSACAO MUDA E AS LEITURAS VEEM DEPOIS.
-  //
-  // Sem ele, o dobre respondia `published` depois de `cancelarEncontro` ter
-  // rodado, e um caso que afirmasse "o encontro virou cancelled" estaria
-  // medindo a constante do arquivo e nao o desfecho da chamada -- vacuidade,
-  // que e o defeito recorrente deste repositorio. Com ele, a leitura DEPOIS do
-  // cancelamento devolve `cancelled` e a versao avanca, como o `UPDATE` de
-  // verdade faz.
   let cancelado = false;
   const encontroAtual = (): EncontroDaRede | undefined => {
     const base = 'encontro' in cenario ? cenario.encontro : ENCONTRO;
@@ -233,11 +176,7 @@ function repositorio(cenario: Cenario): NetworkRepository {
   /** O dono, pela MESMA regra de `encontroDoAutor`: `undefined` e o 404. */
   const dono = (): EncontroDoAutor | undefined =>
     'meuEncontro' in cenario ? cenario.meuEncontro : MEU_ENCONTRO;
-  /**
-   * A capa do dono. O default e `ready`: o caminho comum e a capa que entrou.
-   * `capaDoDono: undefined` no cenario e "encontro SEM capa", que e o terceiro
-   * estado e nao um sinonimo de `processing`.
-   */
+  /** A capa do dono. O default e `ready`: o caminho comum e a capa que entrou. */
   const capaDoCenario = (): CapaDoMeuEncontro | null =>
     'capaDoDono' in cenario ? (cenario.capaDoDono ?? null) : CAPA_PRONTA;
 
@@ -248,9 +187,6 @@ function repositorio(cenario: Cenario): NetworkRepository {
     },
     buscarEncontro: (): Promise<EncontroDaRede | undefined> => Promise.resolve(encontroAtual()),
     listarMeusEncontros: (recorte): Promise<PaginaDosMeusEncontros> => {
-      // O RECORTE E GUARDADO, e e sobre ele que o caso da autoria afirma: a
-      // conta que chega aqui tem de ser a do token, e nao algo que a consulta
-      // da requisicao tenha dito.
       recortesDosMeus.push(recorte);
       const encontro = encontroAtual();
       const itens =
@@ -264,8 +200,6 @@ function repositorio(cenario: Cenario): NetworkRepository {
       const meu = dono();
       const encontro = encontroAtual();
       if (meu === undefined || encontro === undefined) return Promise.resolve(undefined);
-      // A versao avanca depois do cancelamento, como o `UPDATE` faz: e isso que
-      // torna o 412 de versao velha mensuravel sem dobre nenhum a mais.
       return Promise.resolve({
         encontro,
         capa: capaDoCenario(),
@@ -311,14 +245,7 @@ function repositorio(cenario: Cenario): NetworkRepository {
   };
 }
 
-/**
- * O dobre da transacao da comunidade.
- *
- * `encontroDoAutor` devolve `undefined` quando o cenario diz que o encontro
- * **nao e desta conta** -- e e assim que o dobre imita a clausula `WHERE` do
- * Kysely: a borda nao tem como saber a diferenca entre "nao existe" e "nao e
- * seu", e e disso que o 404 do ADR-0021 depende.
- */
+/** O dobre da transacao da comunidade. */
 function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): TransacaoDaComunidade {
   return {
     encontroDoAutor: (slug) => {
@@ -335,8 +262,6 @@ function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): 
     },
     cancelarEncontro: (_id, versaoLida, nota) => {
       cancelamentos.push(nota);
-      // `null` e "a versao mudou": o `UPDATE` nao casou, e NADA foi gravado --
-      // por isso `aoCancelar` nao e chamado neste ramo.
       if (cenario.versaoMudou === true) return Promise.resolve(null);
       versoesDoCancelamento.push(versaoLida);
       aoCancelar();
@@ -374,8 +299,6 @@ function servidor(
     autenticador: { autenticar },
     clock,
     baseDaWeb: BASE_DA_WEB,
-    // Dobre da porta `DisponibilidadeDaPagina`: so `true` explicito acende, e o
-    // padrao do cenario e desligado.
     paginas: {
       estaPublicada: (pagina) =>
         Promise.resolve(pagina === 'network_event' && cenario.paginaDoEncontroPublicada === true),
@@ -391,9 +314,6 @@ function servidor(
       ids: idsDeTeste,
       clock,
     }),
-    // O ESQUEMA DO CORPO E O DO CONTRATO DE VERDADE, e nao um objeto inline:
-    // e esse carregamento que faz o teste reprovar quando a operacao sai da
-    // especificacao ou muda de forma la.
     contrato: carregarContrato(resolve(process.cwd(), 'api/openapi.yaml')),
   });
   return app;
@@ -449,17 +369,12 @@ void describe('a agenda e publica, e a ordem depende do recorte de tempo', () =>
   });
 
   void it('sem `when`, o recorte que vale e `upcoming` e a ordem e `proximos`', async () => {
-    // O default de `when` importa: uma agenda que abre misturando o que passou
-    // com o que vem e o defeito mais comum de agenda.
     const resposta = await pedir(servidor());
     assert.equal(resposta.corpo['effective_when'], 'upcoming');
     assert.equal(resposta.corpo['effective_sort'], 'proximos');
   });
 
   void it('com `when=past` e SEM `sort`, a ordem que vale e `recentes`', async () => {
-    // ISCA: com `ordemPadraoDe` devolvendo `proximos` para tudo, este caso le
-    // `proximos`. O cliente que nao mandou `sort` nao tem como saber a ordem
-    // sem `effective_sort`, e a barra de listagem mostra a ordem REAL.
     const resposta = await pedir(servidor(), { url: '/network/events?when=past' });
     assert.equal(resposta.corpo['effective_when'], 'past');
     assert.equal(resposta.corpo['effective_sort'], 'recentes');
@@ -479,9 +394,6 @@ void describe('a agenda e publica, e a ordem depende do recorte de tempo', () =>
   });
 
   void it('a ordem e o recorte que valeram chegam ao repositorio, e nao so a resposta', async () => {
-    // Devolver `effective_sort` correto e consultar em outra ordem seria a
-    // resposta afirmando uma ordem sobre uma lista que o servidor ordenou de
-    // outro jeito -- exatamente o que este campo existe para impedir.
     recortesVistos.length = 0;
     await pedir(servidor(), { url: '/network/events?when=past' });
     const recorte = recortesVistos.at(-1);
@@ -504,9 +416,6 @@ void describe('a agenda e publica, e a ordem depende do recorte de tempo', () =>
   });
 
   void it('`when` NAO entra em `applied_filters`: ele tem campo proprio', async () => {
-    // Poe-lo tambem ali faria a tela mostrar "Proximos" como filtro escolhido,
-    // e o botao de limpar filtros passaria a prometer que apaga o estado normal
-    // da agenda.
     const resposta = await pedir(servidor(), { url: '/network/events?when=past' });
     assert.deepEqual(resposta.corpo['applied_filters'], { scope: 'all' });
   });
@@ -533,9 +442,6 @@ void describe('nenhuma coordenada e nenhuma pessoa nas leituras publicas', () =>
   });
 
   void it('o detalhe, COM conta, continua sem ponto: o corpo e um so', async () => {
-    // ISCA: se o detalhe levar o ponto junto quando ha token, este caso acusa.
-    // `getNetworkEvent` tem autenticacao opcional, e para o portao de contrato
-    // publico isso e operacao publica (ADR-0027 12.5).
     const comConta = await pedir(servidor(), { url: `/network/events/${SLUG}`, como: QUEM_CHAMA });
     const semConta = await pedir(servidor(), { url: `/network/events/${SLUG}` });
     assert.equal(comConta.status, 200);
@@ -546,8 +452,6 @@ void describe('nenhuma coordenada e nenhuma pessoa nas leituras publicas', () =>
   });
 
   void it('o detalhe com token INVALIDO atende como quem nao tem conta', async () => {
-    // O detalhe nao le o token. Um token vencido nao pode virar 401 numa rota
-    // que atende sem token nenhum.
     const app = servidor({}, () => Promise.reject(new Error('token vencido')));
     const resposta = await pedir(app, { url: `/network/events/${SLUG}`, como: QUEM_CHAMA });
     assert.equal(resposta.status, 200);
@@ -571,9 +475,6 @@ void describe('nenhuma coordenada e nenhuma pessoa nas leituras publicas', () =>
 
 void describe('getNetworkEventLocation: o ponto, so com conta', () => {
   void it('ISCA -- SEM cabecalho de credencial, 401, e o repositorio nem e consultado', async () => {
-    // A prova negativa da emenda 1 do ADR-0010: sem conta, nao ha ponto. E o
-    // 401 vem ANTES da consulta -- sem conta nao se descobre nem se o `slug`
-    // existe.
     locaisPedidos.length = 0;
     const resposta = await pedir(servidor(), { url: URL_DO_LOCAL, como: null });
     assert.equal(resposta.status, 401);
@@ -591,8 +492,6 @@ void describe('getNetworkEventLocation: o ponto, so com conta', () => {
   });
 
   void it('ISCA -- com token recusado pelo servico de identidade, 401', async () => {
-    // O servico de identidade recusa com o mesmo problema que ele devolve em
-    // producao; a rota nao traduz nem engole.
     const app = servidor({}, () => Promise.reject(problemas.naoAutenticado()));
     const resposta = await pedir(app, { url: URL_DO_LOCAL, como: QUEM_CHAMA });
     assert.equal(resposta.status, 401);
@@ -700,7 +599,6 @@ const ROTAS_COM_CONTA: readonly { metodo: 'GET' | 'POST' | 'DELETE'; url: string
   { metodo: 'GET', url: `/network/events/${SLUG}/join-request` },
   { metodo: 'DELETE', url: `/network/events/${SLUG}/join-request` },
   { metodo: 'GET', url: '/network/join-requests' },
-  // As duas de 19/10: a lista do dono e a leitura que entrega o `ETag`.
   { metodo: 'GET', url: '/network/my-events' },
   { metodo: 'GET', url: `/network/my-events/${SLUG}` },
 ];
@@ -809,29 +707,6 @@ void describe('a regra do default de ordem, isolada', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// As tres escritas da comunidade (ADR-0025 emenda 3)
-// ---------------------------------------------------------------------------
-//
-// ## As iscas desta secao, e o que cada uma reprova quando desligada
-//
-// | o que se desliga em producao | reprova |
-// |---|---|
-// | `atingiuTetoDeEncontros` sempre `false` | o caso do teto |
-// | `bloqueiosParaCriarEncontro` devolvendo `[]` | o caso do canal |
-// | a ordem invertida (canal antes do teto) | o caso da ORDEM |
-// | `publication_status` nascendo em qualquer coisa que nao `published` | o caso do 201 |
-// | `errosDoNomeDoLugar` virando `errosDeTexto` | os dois casos de `place_name` |
-// | `temContatoOuPagamento` fora de `title`/`summary`/`alt_text` | o caso do D59 |
-// | `origin` nascendo `admin` | o caso da autoria |
-// | `encontroDoAutor` sem a conta na clausula `WHERE` | o caso do 404 alheio |
-// | o 404 de encontro alheio virando 403 | o mesmo caso |
-// | `versaoExigida` deixando de exigir | o caso do 428 |
-// | `lerIfMatch` trocado por uma regex sem sufixo | o caso do `"1-zstd"` |
-// | `meuEncontro` deixando de barrar encerrado | o caso do encerrado |
-// | `capaDoEnvio` sem a conta na clausula `WHERE` | o caso da capa alheia |
-// | `chamadorAutenticado` saindo de qualquer manipulador | o caso do 401 |
-
 const CORPO_VALIDO = {
   title: 'Encontro na praça',
   summary: 'Um domingo de manhã com os cães do bairro.',
@@ -872,13 +747,10 @@ void describe('criar encontro: quem pode, quantos, e ele PUBLICA direto', () => 
     gravados.length = 0;
     const resposta = await criar();
     assert.equal(resposta.status, 201);
-    // A resposta e a leitura publica: o mesmo corpo de `getNetworkEvent`.
     assert.equal(resposta.corpo['slug'], SLUG);
     assert.equal(resposta.corpo['visibility'], 'public');
-    // Nenhum estado de revisao em lugar nenhum: a fila nao existe mais.
     assert.equal(resposta.bruto.includes('pending_review'), false);
     assert.equal(resposta.bruto.includes('review_state'), false);
-    // Nenhum UUID interno (ADR-0010 item 6) e nenhuma coordenada (ADR-0006).
     assert.equal(resposta.bruto.includes('018f3a2b'), false);
     assert.equal(/"lat"|"lon"|street_address/.test(resposta.bruto), false);
     assert.equal(resposta.cache, 'private, no-store');
@@ -924,9 +796,6 @@ void describe('criar encontro: quem pode, quantos, e ele PUBLICA direto', () => 
   });
 
   void it('ISCA: a ORDEM -- o teto vem ANTES do canal, e nao o contrario', async () => {
-    // Quem esta nos dois casos recebe o teto: mandar a pessoa confirmar o
-    // e-mail para ela descobrir depois que ja tem tres encontros e uma ida a
-    // caixa de entrada a toa. Inverter os dois `if` reprova so este caso.
     const resposta = await criar({ estadoDaConta: { temCanalVerificado: false, encontrosAtivos: 3 } });
     assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/community-event-limit-reached`);
   });
@@ -1042,7 +911,6 @@ void describe('o autor administra o proprio encontro: editar', () => {
       ifMatch: '"1"',
     });
     assert.equal(inexistente.status, 404);
-    // O corpo e identico: nada distingue "nao e seu" de "nao existe".
     assert.equal(alheio.corpo['type'], inexistente.corpo['type']);
     assert.equal(alheio.corpo['title'], inexistente.corpo['title']);
   });
@@ -1053,8 +921,6 @@ void describe('o autor administra o proprio encontro: editar', () => {
   });
 
   void it('ISCA: o ETag sufixado pela borda VALE (`"1-zstd"`, `W/"1"`)', async () => {
-    // O defeito de 05/10: o Caddy acrescenta o sufixo da codificacao e a
-    // escrita caia em 412 sem ninguem ter alterado nada.
     for (const forma of ['"1-zstd"', '"1-gzip"', '"1-br"', 'W/"1"']) {
       const resposta = await editar({}, { title: 'Encontro na praça, de tarde' }, forma);
       assert.equal(resposta.status, 200, `${forma}: ${resposta.bruto}`);
@@ -1157,28 +1023,6 @@ void describe('o autor administra o proprio encontro: cancelar', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// "Meus eventos": a lista do dono, o `ETag` e o caminho ate o cancelamento
-// (19/10/2026, decisao do cliente)
-// ---------------------------------------------------------------------------
-//
-// ## AS ISCAS DESTA SECAO, e o que cada uma reprova quando desligada
-//
-// | o que se desliga em producao | reprova |
-// |---|---|
-// | `chamadorAutenticado` trocado por constante na lista | `a conta que chega ao repositorio e a DO TOKEN` |
-// | `comoEtag` fora do `reply.header` de `getMyNetworkEvent` | `a leitura do dono emite o ETag da versao` |
-// | `buscarMeuEncontro` devolvendo o encontro de qualquer conta | `encontro de OUTRA pessoa: 404` |
-// | o 404 da leitura do dono virando 403 | o mesmo caso |
-// | `projetarMeuEncontro` trocado por `projetarEncontro` | `a projecao do dono tem SETE propriedades` |
-// | `versaoExigida` do cancelamento deixando de comparar | `com ETag velho, 412` |
-//
-// **O que esta secao NAO prova, dito por escrito**: que o encontro de outra
-// pessoa nao entra na CONSULTA. Aqui o dobre decide quem e o dono, e afirmar
-// isso sobre o dobre seria medir a constante do arquivo. A prova disso e
-// `tests/integration/meus-encontros-da-rede.test.ts`, contra Postgres, com duas
-// contas e quatro linhas.
-
 const URL_DOS_MEUS = '/network/my-events';
 const URL_DO_MEU = `/network/my-events/${SLUG}`;
 
@@ -1187,10 +1031,6 @@ const PROPRIEDADES_DO_MEU = ['cover', 'ends_at', 'slug', 'starts_at', 'status', 
 
 void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
   void it('ISCA: a conta que chega ao repositorio e a DO TOKEN, e nao da consulta', async () => {
-    // O defeito que este caso pega: um `chamador` que viesse da requisicao (ou
-    // uma constante) faria a lista de uma pessoa aparecer para outra. A
-    // operacao NAO tem parametro de autoria -- o caso de baixo prova isso
-    // contra o contrato --, entao a unica origem possivel e o token.
     recortesDosMeus.length = 0;
     const outra = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
     assert.equal((await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA })).status, 200);
@@ -1202,16 +1042,6 @@ void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
   });
 
   void it('ISCA: o contrato da lista NAO tem parametro de autoria nenhum', () => {
-    // A metade de contrato da isca de cima. Um `author`, `mine` ou `user_id`
-    // aqui seria uma porta para pedir a lista de outra pessoa, e o `WHERE` do
-    // repositorio deixaria de ser o unico lugar que decide autoria.
-    //
-    // **O `$ref` E RESOLVIDO, e nao lido cru.** Em 27/10/2026 a operacao ganhou
-    // `status` por `$ref`, e `p.name` sobre um `$ref` devolve `undefined`: a
-    // lista virou `['limit','page',undefined]` e o caso reprovou -- medido.
-    // Ler o nome cru era a falha do INSTRUMENTO, e nao da protecao: um
-    // `$ref` para um parametro de autoria passaria como `undefined` e o caso
-    // ficaria verde. Resolver e o que fecha isso.
     const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
       paths: Record<string, Record<string, { operationId?: string; parameters?: { name?: string; $ref?: string }[] }>>;
       components?: { parameters?: Record<string, { name?: string }> };
@@ -1235,15 +1065,8 @@ void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
       return resolvido as string;
     });
 
-    // `status` E O UNICO recorte, e ele nao nomeia pessoa: ele e a situacao
-    // CALCULADA do encontro (`NetworkEventStatus`). A frase do contrato que
-    // dizia "nao ha busca, filtro nem ordem escolhivel" foi reescrita no mesmo
-    // dia -- ver a descricao da operacao.
     assert.deepEqual(nomes.slice().sort(), ['limit', 'page', 'status']);
 
-    // E a conferencia que de fato importa, independente da lista acima: nenhum
-    // nome fala de pessoa. Ela continua valendo quando alguem acrescentar o
-    // proximo recorte legitimo.
     for (const nome of nomes) {
       assert.doesNotMatch(
         nome,
@@ -1255,19 +1078,11 @@ void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
   });
 
   void it('ISCA: a projecao do dono tem SETE propriedades, e nenhuma do corpo publico', async () => {
-    // Trocar `projetarMeuEncontro` por `projetarEncontro` faz este caso
-    // reprovar nomeando as propriedades extras. A lista do dono e menor que a
-    // vitrine de proposito (decisao de 19/10: o cartao e foto + titulo), e o
-    // que entra alem disso esta justificado no esquema.
     const resposta = await pedir(servidor(), { url: URL_DOS_MEUS, como: QUEM_CHAMA });
     assert.equal(resposta.status, 200, resposta.bruto);
     const itens = resposta.corpo['items'] as Record<string, unknown>[];
     assert.equal(itens.length, 1);
     assert.deepEqual(Object.keys(itens[0] ?? {}).sort(), PROPRIEDADES_DO_MEU);
-    // Nada de lugar, resumo, preco nem UUID: a varredura e no JSON cru.
-    // `Benedito` NAO entra nesta lista: ele esta no TITULO do encontro de
-    // teste ("Encontro de domingo na Benedito Calixto"), que e uma das sete
-    // propriedades legitimas. Procurar por ele reprovaria o caso certo.
     for (const proibido of ['place_name', 'summary', 'admission', 'Pinheiros', 'visibility']) {
       assert.equal(resposta.bruto.includes(proibido), false, `${proibido} na lista do dono`);
     }
@@ -1300,15 +1115,6 @@ void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {
 
 void describe('a leitura do dono: a FONTE do `ETag` da Rede', () => {
   void it('ISCA: a leitura do dono emite o `ETag` da versao, e as publicas NAO emitem', async () => {
-    // ESTE E O DEFEITO QUE A ENTREGA FECHA. Medido em homologacao em
-    // 19/10/2026: nenhuma leitura da Rede devolvia `ETag`, e por isso a
-    // primeira escrita versionada era impossivel -- `cancelNetworkEvent` exige
-    // `If-Match` e nao havia de onde tirar o valor.
-    //
-    // As duas metades estao no mesmo caso de proposito: afirmar so que a nova
-    // emite deixaria passar um `ETag` posto por engano na agenda, que e o
-    // cabecalho que NAO serve (uma versao de pagina apresentada como versao de
-    // um item da 412 em toda tentativa).
     const app = servidor();
     const minha = await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA });
     assert.equal(minha.status, 200, minha.bruto);
@@ -1339,7 +1145,6 @@ void describe('a leitura do dono: a FONTE do `ETag` da Rede', () => {
     assert.equal(inexistente.status, 404);
     assert.equal(alheio.corpo['type'], inexistente.corpo['type']);
     assert.equal(alheio.corpo['title'], inexistente.corpo['title']);
-    // E sem `ETag`: um cabecalho de versao num 404 contaria que a linha existe.
     assert.equal(alheio.etag, undefined);
   });
 
@@ -1357,10 +1162,6 @@ void describe('a leitura do dono: a FONTE do `ETag` da Rede', () => {
 
 void describe('o caminho inteiro: ler a versao, cancelar com ela, e o encontro vira `cancelled`', () => {
   void it('ISCA: com o `ETag` da leitura, o cancelamento passa e o encontro vira `cancelled`', async () => {
-    // O CAMINHO COMPLETO, num servidor so: a tela le a versao, manda o valor
-    // em `If-Match` e, depois do 200, o encontro aparece cancelado. Desligar o
-    // `reply.header('ETag', ...)` da leitura faz o primeiro `assert` reprovar;
-    // desligar a comparacao de versao do `UPDATE` faz o caso do 412 reprovar.
     versoesDoCancelamento.length = 0;
     const app = servidor();
 
@@ -1376,23 +1177,15 @@ void describe('o caminho inteiro: ler a versao, cancelar com ela, e o encontro v
       ifMatch: leitura.etag,
     });
     assert.equal(cancelamento.status, 200, cancelamento.bruto);
-    // A versao que o `UPDATE` comparou e a que a LEITURA entregou: e isto que
-    // prova que o valor atravessou o caminho inteiro, e nao que alguem mandou
-    // um `"1"` escrito a mao.
     assert.deepEqual(versoesDoCancelamento, [1]);
     assert.equal(cancelamento.corpo['status'], 'cancelled');
 
-    // E a leitura seguinte ja ve o estado novo e a versao nova.
     const depois = await pedir(app, { url: URL_DO_MEU, como: QUEM_CHAMA });
     assert.equal(depois.corpo['status'], 'cancelled');
     assert.equal(depois.etag, '"2"');
   });
 
   void it('ISCA: com `ETag` VELHO, 412 e nada vira `cancelled`', async () => {
-    // O 412 e colisao entre pessoas: alguem salvou depois desta leitura. O que
-    // este caso exige a mais do que o status e que **nada foi gravado**: sem a
-    // segunda afirmacao, uma implementacao que cancelasse e depois respondesse
-    // 412 passaria.
     const app = servidor({ versaoMudou: true });
     versoesDoCancelamento.length = 0;
     const resposta = await pedir(app, {
@@ -1409,8 +1202,6 @@ void describe('o caminho inteiro: ler a versao, cancelar com ela, e o encontro v
   });
 
   void it('o 428 e o 412 tem tipos DIFERENTES: a tela os distingue', async () => {
-    // Sem isto os dois cairiam na faixa generica do app, que e a frase que
-    // esconde justamente o que resolve.
     const semVersao = await pedir(servidor(), {
       metodo: 'POST',
       url: `/network/events/${SLUG}/cancellation`,
@@ -1423,17 +1214,8 @@ void describe('o caminho inteiro: ler a versao, cancelar com ela, e o encontro v
 });
 
 void describe('a capa do dono: o unico lugar que conta que a foto foi recusada', () => {
-  // POR QUE ESTA SECAO EXISTE: outra frente mediu, em 19/10/2026, que a capa
-  // sobe no mesmo `POST` de criar o encontro e que o processador pode RECUSA-LA
-  // depois do `201`. `NetworkEventPublic` nao tem `rejection_reason`, a pagina
-  // de detalhe do encontro foi apagada por decisao do cliente e o cartao da
-  // agenda e foto + titulo -- entao nao havia superficie nenhuma que contasse a
-  // recusa a quem enviou a imagem. A lista do dono e o lugar.
 
   void it('ISCA: capa RECUSADA sai com o motivo DO SERVIDOR, literal', async () => {
-    // Um texto generico aqui ("a foto nao foi aceita") passaria num caso que
-    // afirmasse so `status: rejected`. Este caso exige a FRASE, porque e ela
-    // que diz a pessoa o que consertar.
     const resposta = await pedir(servidor({ capaDoDono: CAPA_RECUSADA }), {
       url: URL_DOS_MEUS,
       como: QUEM_CHAMA,
@@ -1444,8 +1226,6 @@ void describe('a capa do dono: o unico lugar que conta que a foto foi recusada',
       | undefined;
     assert.equal(capa?.['status'], 'rejected');
     assert.equal(capa?.['rejection_reason'], 'A imagem precisa ter pelo menos 600 x 600 pixels.');
-    // E sem url: servir o endereco de uma derivada que nao existe e promessa
-    // que a tela descobre quebrada.
     assert.equal(capa?.['url'], null);
   });
 
@@ -1481,9 +1261,6 @@ void describe('a capa do dono: o unico lugar que conta que a foto foi recusada',
   });
 
   void it('ISCA: o estado da capa NAO sai na agenda publica nem no detalhe publico', async () => {
-    // A outra metade da decisao: estado de processamento de imagem e assunto
-    // entre quem enviou e o servidor. Se ele vazasse para a agenda, qualquer
-    // visitante leria o motivo da recusa da foto de outra pessoa.
     const app = servidor({ capaDoDono: CAPA_RECUSADA });
     for (const url of ['/network/events', `/network/events/${SLUG}`]) {
       const resposta = await pedir(app, { url });

@@ -1,61 +1,6 @@
 /**
  * O guarda de corpo fechado: campo que o contrato não aceita é RECUSADO, e não
  * apagado em silêncio.
- *
- * ## Por que este arquivo existe
- *
- * `corpo-fechado.ts` não tinha caso nenhum. Ele é a única coisa que impede uma
- * escrita de responder **2xx a um campo que não foi gravado** — o Ajv do
- * Fastify roda com `removeAdditional` ativo, então sem o guarda o campo
- * desconhecido desaparece antes de o manipulador existir e quem chamou recebe
- * um recibo de sucesso por um dado que o banco nunca viu.
- *
- * ## O DEFEITO QUE ESTES CASOS PRENDEM (medido em 18/10/2026)
- *
- * O guarda era **raso**. Ele montava os nomes aceitos com
- * `Object.keys(schema.properties)` e varria `Object.keys(corpo)`, só isso:
- * objeto aninhado passava inteiro, mesmo fechado no contrato. Medido nas duas
- * rotas que o instalam, com o corpo real delas:
- *
- * - `suggestDirectoryEntry` com
- *   `public_contact: { kind: 'phone', value, label: 'comercial' }` → **201**.
- *   `DirectorySuggestionContact` declara `additionalProperties: false`;
- * - `requestCollarTag` com `delivery_address: { …, cpf: '…' }` → **200**.
- *   `DeliveryAddress` declara `additionalProperties: false`, e um CPF é dado
- *   pessoal: recibo de sucesso por um dado descartado é o pior desfecho da
- *   rota.
- *
- * ## O QUE DESLIGAR PARA VER CADA CASO REPROVAR
- *
- * Em `desconhecidosDe`, dentro de `corpo-fechado.ts`:
- *
- * - **a descida:** apague o último laço (`for (const [nome, subSchema] of
- *   Object.entries(propriedades))`). Reprovam `campo desconhecido DENTRO de
- *   objeto fechado`, `o caminho inteiro sai no field` e
- *   `dentro de item de LISTA`. São esses três que o defeito real produzia;
- * - **o prefixo:** passe `prefixo` sempre como `''` na chamada recursiva.
- *   Reprova `o caminho inteiro sai no field`;
- * - **a descida em lista:** apague o ramo `Array.isArray(corpo)`. Reprova
- *   `dentro de item de LISTA`;
- * - **o respeito ao objeto ABERTO:** troque a condição
- *   `schema['additionalProperties'] === false` por `true`. Reprova
- *   `objeto aberto no contrato NÃO vira recusa`, que é o caso que impede o
- *   guarda de inventar regra que o contrato não tem;
- * - **a recusa em si:** devolva `[]` no fim de `desconhecidosDe`. Reprovam
- *   todos os casos de recusa, e passa a reprovar também
- *   `o corpo válido inteiro passa` só se alguém trocar o 400 por 200 — que é a
- *   outra ponta;
- * - **a guarda de subida:** instale o guarda sobre um schema sem
- *   `additionalProperties: false`. Reprova
- *   `guarda sobre corpo ABERTO derruba a subida`.
- *
- * Nenhum caso aqui monta schema de mentira para o caminho principal: os quatro
- * primeiros grupos usam a rota real `requestCollarTag` com o corpo que
- * `api/openapi.yaml` declara, pelo fio, como em `o-400-nomeia-o-campo.test.ts`.
- * Os casos de forma (lista, objeto aberto, subida) usam schema próprio, porque
- * o contrato hoje não tem uma lista de objetos fechados numa rota que instale o
- * guarda — e inventar uma rota no contrato para poder testar seria mudar o
- * contrato para caber no teste.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -73,7 +18,7 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 const UM_PET = '018f3a2b-0000-7000-8000-0000000000bb';
 
-/** O endereço válido do contrato. Cada caso estraga UM campo dele. */
+/** O endereço válido do contrato. */
 const ENDERECO: Record<string, unknown> = {
   recipient_name: 'Mariana Destinataria',
   recipient_phone: '+5511987654321',
@@ -204,7 +149,6 @@ void describe('a forma do guarda', () => {
       },
       aberto: {
         type: 'object',
-        // SEM `additionalProperties: false`: aberto de propósito.
         properties: { conhecido: { type: 'string' } },
       },
     },
@@ -213,9 +157,6 @@ void describe('a forma do guarda', () => {
   function achados(corpo: unknown): string[] {
     const capturados: { field?: string; code?: string }[] = [];
     const guarda = recusarCampoDesconhecido(COM_LISTA, 'operacaoDeTeste');
-    // O tipo do gancho do Fastify declara `this: FastifyInstance`. Este guarda
-    // nao usa `this` (ver `corpo-fechado.ts`), e `Reflect.apply` entrega o
-    // contexto sem precisar afirmar um servidor que o caso nao tem.
     Reflect.apply(guarda, undefined, [
       { body: corpo } as never,
       {} as never,

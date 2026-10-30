@@ -1,51 +1,4 @@
-/**
- * O caso de uso do **perfil de outra pessoa** (fatia G).
- *
- * ## A decisão que ele implementa
- *
- * Cliente, 19/10/2026, literal: *"ele pode ver nome, quantidade de pets,
- * conexões, mas não as fotos publicadas e nem a timeline do usuário"*. É a
- * emenda 2 do ADR-0010, e este arquivo é onde ela vira recorte.
- *
- * | | Quem **não** é conexão | Conexão aceita |
- * |---|---|---|
- * | nome, contagem de pets, contagem de conexões | vê | vê |
- * | vitrine de fotos | **não** | vê |
- * | nome, miniatura, slug ou link de pet | **nunca** | **nunca** |
- * | cidade, bairro, telefone, e-mail, nascimento | nunca | nunca |
- * | timeline, publicação, curtida, contador | não existe | não existe |
- *
- * ## Por que a timeline não é uma ausência a preencher
- *
- * Ela **não existe no produto**, e não ficou para depois: a migração
- * `20261018000030` registra a decisão por extenso — *"uma timeline de quem você
- * segue É a lista de presença com hora... Encerrado, não se reabre"*. Não há
- * tabela de publicação, não há schema, não há campo aqui e não há como um
- * aparecer sem alguém reabrir aquela decisão.
- *
- * ## Por que a contagem de pets é segura e a lista não seria
- *
- * O item 7 do ADR-0010 proíbe *"outros pets do mesmo tutor, e qualquer coisa que
- * permita agrupá-los"* porque **agrupar entrega a casa**: com os pets nomeados,
- * um caso de perdido de um deles localiza os outros. A contagem agrupa no
- * sentido de afirmar "são três", e é por isso que ela precisou de emenda — mas
- * ela não é navegável: não há ficha a alcançar a partir dela.
- *
- * ## Por que `none` é um valor e não uma ausência
- *
- * `connection_state` vem sempre, e `none` cobre junto "nunca houve nada", "o
- * pedido expirou" e "a recusa está em descanso". A fusão é a mesma do 204 de
- * `endConnection`: um valor próprio para recusado seria o *"ela recusou você"*
- * que faz as pessoas aceitarem estranhos para não criar atrito.
- *
- * ## O 404, e por que ele não é decidido aqui
- *
- * `perfilPorApelido` devolve `undefined` para apelido inexistente, apelido
- * reservado, apelido de **pet**, conta desabilitada, par bloqueado e perfil
- * denunciado por quem olha — **os seis no `WHERE`** (ADR-0021). Este arquivo
- * levanta `naoEncontrado()` para o `undefined` e não tem um segundo ramo: não há
- * aqui um `if` que escolha entre 404 e 403, e não há caminho que produza 403.
- */
+/** O caso de uso do **perfil de outra pessoa** (fatia G). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
@@ -63,13 +16,7 @@ export type EstadoDaConexaoNoPerfil =
   | 'pending_received'
   | 'connected';
 
-/**
- * O perfil projetado, **sem URL e sem `UserId`**.
- *
- * As chaves de objeto saem daqui e a URL é montada na borda, a partir do domínio
- * de mídia: o banco guarda chave e não URL (§11.1 proibição 9), e montar a URL
- * aqui amarraria o caso de uso ao provedor do dia.
- */
+/** O perfil projetado, **sem URL e sem `UserId`**. */
 export interface PerfilDePessoaProjetado {
   readonly handle: string;
   readonly publicRef: string;
@@ -77,33 +24,14 @@ export interface PerfilDePessoaProjetado {
   readonly petsCount: number;
   readonly connectionsCount: number;
   /**
-   * **O SELO DE VALIDADO** (emenda do ADR-0010, 21/10/2026, decisão do
-   * cliente): a conta tem um canal de contato confirmado.
-   *
-   * `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a **MESMA**
-   * régua dos quatro `409 contact-channel-unverified`. Duas definições de
-   * "validado" seriam duas réguas, e a mesma conta sairia validada numa tela e
-   * não na outra. **Na prática é e-mail**: nada em `src/` grava
-   * `phone_verified_at`.
-   *
-   * **Não anulável** — a conta ou confirmou um canal ou não confirmou, e um
-   * terceiro estado faria a tela escolher um lado. **Só o booleano**: nem o
-   * endereço, nem a data, nem qual dos dois canais.
-   *
-   * **Sai nos quatro estados de conexão**, ao contrário da vitrine: o selo é
-   * atributo da conta e não conteúdo que a pessoa publicou para quem aceitou.
+   * **O SELO DE VALIDADO** (emenda do ADR-0010, 21/10/2026, decisão do cliente): a
+   * conta tem um canal de contato confirmado.
    */
   readonly canalVerificado: boolean;
   readonly connectionState: EstadoDaConexaoNoPerfil;
-  /** O `ref` da **aresta**, nulo quando o estado é `none`. Nunca de uma pessoa. */
+  /** O `ref` da **aresta**, nulo quando o estado é `none`. */
   readonly connectionRef: string | null;
-  /**
-   * A vitrine, **`undefined` quando o estado não é `connected`** — e não `[]`.
-   *
-   * A diferença é o que a borda precisa para omitir a chave: lista vazia diria
-   * "ela não tem foto", que é uma afirmação sobre a vitrine de alguém que quem
-   * olha não pode ver. Conexão **com** vitrine vazia chega como `[]`.
-   */
+  /** A vitrine, **`undefined` quando o estado não é `connected`** — e não `[]`. */
   readonly vitrine: readonly FotoDoPerfilDeOutraPessoa[] | undefined;
 }
 
@@ -111,13 +39,8 @@ export interface DependenciasDoPerfilDePessoa {
   readonly perfis: PerfilDePessoaRepository;
   readonly conexoes: LeitorDeConexao;
   /**
-   * O resolvedor de convite, **para a tela de destino do link e do QR**
-   * (decisão do cliente de 20/10/2026).
-   *
-   * Importado de `connections/ports/`, que é o caminho que a regra de fronteira
-   * oferece — o mesmo por onde `LeitorDeConexao` já entra. `people` continua sem
-   * tabela e sem escrita: ele **lê** o convite por esta porta e não conhece
-   * `connection_invites`.
+   * O resolvedor de convite, **para a tela de destino do link e do QR** (decisão do
+   * cliente de 20/10/2026).
    */
   readonly convites: ResolvedorDeConvite;
   readonly clock: Clock;
@@ -126,19 +49,9 @@ export interface DependenciasDoPerfilDePessoa {
 export class PerfilDePessoa {
   constructor(private readonly deps: DependenciasDoPerfilDePessoa) {}
 
-  /**
-   * O perfil de um apelido, visto por `quemOlha`.
-   *
-   * **O apelido chega como a borda o recebeu**, e a normalização é do banco:
-   * `handles.handle` é `citext` e a coluna de `users` também, então `@Maria` e
-   * `@maria` são a mesma chave sem este arquivo saber disso. Normalizar aqui
-   * seria a segunda definição da regra, e a segunda divergiria do `CHECK`.
-   */
+  /** O perfil de um apelido, visto por `quemOlha`. */
   async porApelido(quemOlha: UserId, apelido: string): Promise<PerfilDePessoaProjetado> {
     const pessoa = await this.deps.perfis.perfilPorApelido(apelido, quemOlha);
-    // UM caminho de recusa, e ele é 404. Os seis motivos já vieram fundidos do
-    // `WHERE`; não há o que distinguir aqui, e é por isso que não há um segundo
-    // `throw` neste método.
     if (pessoa === undefined) throw problemas.naoEncontrado();
 
     const agora = this.deps.clock.now();
@@ -149,15 +62,6 @@ export class PerfilDePessoa {
 
     const connectionState: EstadoDaConexaoNoPerfil = aresta?.estado ?? 'none';
 
-    // **A VITRINE SÓ É PEDIDA QUANDO O ESTADO É `connected`**, e as duas metades
-    // desta linha são necessárias e nenhuma substitui a outra:
-    //
-    // 1. aqui, a consulta não acontece — não se gasta leitura para jogar fora, e
-    //    quem lê este arquivo vê o recorte;
-    // 2. no `WHERE` de `vitrineDeConexao`, o predicado de conexão aceita impede
-    //    que uma chamada feita por engano (um caminho novo, um refator) devolva
-    //    foto. É a segunda metade que sobrevive a alguém mexer nesta linha, e é
-    //    ela que a isca de SQL mede.
     const vitrine =
       connectionState === 'connected'
         ? await this.deps.perfis.vitrineDeConexao(pessoa.userId, quemOlha)
@@ -167,14 +71,8 @@ export class PerfilDePessoa {
       handle: pessoa.handle,
       publicRef: pessoa.publicRef,
       displayName: pessoa.displayName,
-      // **A CONTAGEM, e só ela.** `PessoaVisivel` não tem campo de pet para
-      // copiar além deste, e isso é o item 7 do ADR-0010 escrito no tipo.
       petsCount: pessoa.petsCount,
       connectionsCount,
-      // O SELO DE VALIDADO, lido da MESMA consulta do perfil. **Não é uma
-      // segunda leitura e não é um `if` daqui**: a condição mora no `SELECT` de
-      // `construtorDoPerfilPorApelido`, e é por isso que ela não pode divergir
-      // do recorte de seis predicados que já admitiu a pessoa.
       canalVerificado: pessoa.canalVerificado,
       connectionState,
       connectionRef: aresta?.ref ?? null,
@@ -182,44 +80,10 @@ export class PerfilDePessoa {
     };
   }
 
-  /**
-   * **A tela de destino do link de convite e do QR**: o perfil de quem emitiu.
-   *
-   * > *"ao clicar vai para a página do perfil do usuário com o botão de
-   * > adicionar"*
-   *
-   * ## É o MESMO perfil, e isso é o ponto
-   *
-   * Este método resolve o token para um apelido e chama `porApelido`. Ele **não
-   * projeta uma segunda versão do perfil**, e a razão é a que o cliente acabou
-   * de descrever sem saber: ele pediu que o link levasse *"para a página do
-   * perfil do usuário"* — a página, não uma parecida. Uma projeção própria aqui
-   * divergiria da outra no primeiro campo que alguém acrescentasse a uma só, e o
-   * recorte da emenda 2 do ADR-0010 passaria a ter duas implementações.
-   *
-   * De graça, por reusar: o `connection_state` certo (então a tela sabe se o
-   * botão é "adicionar", "pedido enviado" ou "conectado"), a regra da vitrine, e
-   * os seis predicados da cláusula `WHERE`.
-   *
-   * ## Os dois 404, e por que eles são o mesmo
-   *
-   * 1. **o convite não resolve** — inexistente, vencido, revogado, de dono sem
-   *    apelido, ou de quem bloqueou quem chama. `ResolvedorDeConvite` já funde
-   *    os cinco num `undefined` só;
-   * 2. **o perfil não resolve** — os seis predicados de `perfilPorApelido`, que
-   *    incluem o perfil que quem chama denunciou.
-   *
-   * Os dois levantam `problemas.naoEncontrado()`, e quem chama não tem como
-   * saber qual dos dois aconteceu. **Isso importa**: distinguir "o convite
-   * morreu" de "a pessoa não está disponível para você" diria a quem foi
-   * bloqueado que o link que ele guardou um dia foi válido — e esse é o aviso de
-   * bloqueio que o desenho não dá.
-   */
+  /** **A tela de destino do link de convite e do QR**: o perfil de quem emitiu. */
   async porConvite(quemOlha: UserId, token: string): Promise<PerfilDePessoaProjetado> {
     const convite = await this.deps.convites.resolver(token, quemOlha);
     if (convite === undefined) throw problemas.naoEncontrado();
-    // O apelido vem do convite, e dali ele e um apelido como qualquer outro: o
-    // caminho seguinte e exatamente o de quem digitou o apelido na busca.
     return this.porApelido(quemOlha, convite.apelido);
   }
 }

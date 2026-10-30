@@ -1,13 +1,4 @@
-/**
- * O comando de verdade, como processo, sem terminal e SEM banco.
- *
- * As recusas daqui acontecem antes de qualquer conexao, e o teste prova isso
- * pelo caminho mais curto: o processo roda sem `DATABASE_URL`. Se alguma
- * recusa passasse a depender do banco, ela sairia 1 (configuracao ausente) e
- * nao 2, e o caso reprovaria.
- *
- * Toda saida capturada (stdout e stderr) e conferida contra a sentinela.
- */
+/** O comando de verdade, como processo, sem terminal e SEM banco. */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

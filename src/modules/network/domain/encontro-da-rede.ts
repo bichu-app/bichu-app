@@ -1,58 +1,14 @@
-/**
- * A projecao de um encontro da secao `Rede`, a regra de `status` e o ponto.
- *
- * ## O que NAO sai daqui, e cada ausencia e uma decisao
- *
- * - **Ninguem.** Nao existe campo com pessoas em forma nenhuma. Check-in e
- *   galeria sairam desta versao por decisao do cliente (23/09/2026, ADR-0027
- *   12.4); quando voltarem, voltam pelas decisoes 1 a 3 do ADR-0025: presenca
- *   como numero e nunca como lista, foto sem autor.
- * - **Nenhum UUID.** `network_events` tem `id uuid` (ADR-0024) e ele nao chega
- *   ate aqui: o repositorio nao o seleciona para leitura.
- * - **Coordenada, na agenda e no detalhe.** As duas leituras sao alcancaveis
- *   sem conta, e o ponto do encontro so sai em resposta autenticada, numa
- *   operacao propria (ADR-0027 12.5, emenda 1 do ADR-0010). Por isso o ponto
- *   nao e campo de `EncontroDaRede`: ele tem tipo e projecao separados,
- *   `PontoDoEncontro` e `projetarLocalizacao`, e nao ha como uma projecao
- *   publica o levar junto por espalhamento.
- * - **`publication_status`.** Chega ate aqui so o que e visivel. O filtro mora
- *   na clausula `WHERE` (ADR-0021), e nao num `if` desta funcao. O que a
- *   projecao sabe da publicacao e so se o encontro foi CANCELADO, porque isso
- *   muda o rotulo.
- *
- * ## `status` e calculado no SERVIDOR, e e por isso que ele mora aqui
- *
- * Mesma razao do vencimento do preco da `Loja` (ADR-0025 secao 6): se a regra
- * morasse no aplicativo, um aparelho com relogio errado ou com build antiga
- * chamaria de `upcoming` um encontro de tres semanas atras, e nao haveria como
- * corrigir isso sem passar pela loja de aplicativos.
- *
- * O instante vem do `Clock`, injetado. `Date.now()` e `new Date()` sao
- * proibidos nesta camada (`src/architecture.rules.mjs`).
- */
-
 import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import { comoIso } from '../../../shared/time/clock.js';
 import type { AbsoluteUrl, Instant } from '../../../shared/types/brands.js';
 
-/**
- * Os rotulos que a tela escreve, **calculados no servidor**.
- *
- * Espelham o `enum` de `NetworkEventStatus` no contrato. `cancelled` entrou com
- * a emenda (ADR-0027 12.6) e prevalece sobre o estado temporal enquanto o
- * encontro nao terminou; depois do fim, o cancelado segue a regra do
- * encerrado (decisao do cliente de 23/09/2026).
- */
+/** Os rotulos que a tela escreve, **calculados no servidor**. */
 export type StatusDoEncontro = 'upcoming' | 'happening' | 'ended' | 'cancelled';
 
-/**
- * Os estados de publicacao que a LEITURA enxerga. `pending_review` e `removed`
- * nao estao aqui porque nunca saem da consulta: o tipo diz o que a clausula
- * `WHERE` ja garantiu.
- */
+/** Os estados de publicacao que a LEITURA enxerga. */
 export type PublicacaoVisivel = 'published' | 'cancelled';
 
-/** O encontro como o repositorio o entrega. Sem UUID e sem ponto. */
+/** O encontro como o repositorio o entrega. */
 export interface EncontroDaRede {
   readonly slug: string;
   readonly title: string;
@@ -61,31 +17,18 @@ export interface EncontroDaRede {
   readonly neighborhood: string;
   readonly city: string;
   readonly state: string;
-  /**
-   * O instante absoluto. A hora de PAREDE sai de `timeZone`, e nao daqui. E um
-   * `Instant` -- a mesma marca que o `Clock` produz -- porque ele so existe
-   * para ser comparado com `agora`.
-   */
+  /** O instante absoluto. A hora de PAREDE sai de `timeZone`, e nao daqui. */
   readonly startsAt: Instant;
   /** Nulo quando o encontro nao declara fim, e a ausencia e estado normal. */
   readonly endsAt: Instant | null;
   /** O nome IANA da zona. Sem ele o instante esta certo e a hora de parede, errada. */
   readonly timeZone: string;
   readonly publicacao: PublicacaoVisivel;
-  /**
-   * Quem CADASTROU: `admin` (a equipe) ou `community` (uma conta do app).
-   *
-   * **Nao e o autor.** `created_by_user_id` nunca sai do servidor, e este
-   * campo nao o contorna: sao dois valores fixos, e nenhum deles identifica
-   * pessoa. Ele existe porque o app precisa dizer quem cadastrou o evento sem
-   * poder -- nem querer -- dizer QUEM.
-   */
+  /** Quem CADASTROU: `admin` (a equipe) ou `community` (uma conta do app). */
   readonly origem: OrigemDoEncontro;
   /**
-   * A data local (`AAAA-MM-DD`) no fuso do encontro, calculada pelo banco com
-   * `AT TIME ZONE`. E o que o teaser do privado leva no lugar de `starts_at`,
-   * `ends_at` e `time_zone` (ADR-0027 12.10): o nome do fuso entregaria o
-   * estado.
+   * A data local (`AAAA-MM-DD`) no fuso do encontro, calculada pelo banco com `AT
+   * TIME ZONE`.
    */
   readonly dataLocal: string;
   readonly visibilidade: 'public' | 'private';
@@ -102,11 +45,11 @@ export interface EncontroDaRede {
    * `REGRA_DO_ENDERECO` -- hoje, nunca na leitura aberta.
    */
   readonly endereco: string | null;
-  /** Link de ingresso, https (ADR-0027 item 22). PUBLICO. */
+  /** Link de ingresso, https (ADR-0027 item 22). */
   readonly linkDeIngresso: string | null;
-  /** O handle do Instagram, puro. PUBLICO; a URL e montada na projecao. */
+  /** O handle do Instagram, puro. */
   readonly instagram: string | null;
-  /** A URL do perfil, montada pelo repositorio com a base da configuracao. Nula sem handle ou sem base. */
+  /** A URL do perfil, montada pelo repositorio com a base da configuracao. */
   readonly instagramUrl: string | null;
   /** Na ordem do painel; a primeira e a capa. */
   readonly imagens: readonly ImagemDoEncontro[];
@@ -122,33 +65,19 @@ export type EntradaDoEncontro =
       readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
     };
 
-/**
- * Uma imagem, com as URLs ja compostas a partir das chaves publicas.
- *
- * Tres derivadas e nao uma, porque a MESMA imagem e desenhada em tres tamanhos
- * muito diferentes, e isso foi medido na tela: 144 dp na galeria do detalhe,
- * ~328 dp no cartao da agenda e 360 a 430 dp de borda a borda na capa do
- * detalhe. Com uma derivada so (1024 px), a galeria baixava cinco vezes o dado
- * que pinta e a capa borrava de leve.
- *
- * `urlDaMiniatura` e `urlDoBanner` sao ANULAVEIS, e a ausencia e esperada: a
- * imagem gravada antes destas derivadas existirem tem so a de 1024, e a imagem
- * de produto da Loja tem so ela por decisao (aquela tela nao foi medida). Quem
- * recebe nulo cai em `url`, que e o comportamento de antes.
- */
+/** Uma imagem, com as URLs ja compostas a partir das chaves publicas. */
 export interface ImagemDoEncontro {
   readonly url: string;
   readonly urlDaMiniatura: string | null;
   readonly urlDoBanner: string | null;
   /**
-   * **Anulavel desde 21/10/2026**: a coluna perdeu o `NOT NULL`
-   * (`20261020000013`, decisao do cliente). O DOMINIO carrega o nulo; a
-   * PROJECAO para o app nao o deixa sair. Ver `camposProjetados`.
+   * **Anulavel desde 21/10/2026**: a coluna perdeu o `NOT NULL` (`20261020000013`,
+   * decisao do cliente).
    */
   readonly textoAlternativo: string | null;
 }
 
-/** Os campos do item 17, na forma do fio. Comuns ao publico e ao privado aprovado. */
+/** Os campos do item 17, na forma do fio. */
 interface CamposDoEncontroProjetados {
   readonly slug: string;
   readonly title: string;
@@ -196,19 +125,13 @@ interface CamposDoEncontroProjetados {
 /** O encontro publico, como a leitura publica o declara (`NetworkEventPublic`). */
 export interface EncontroPublicoProjetado extends CamposDoEncontroProjetados {
   readonly visibility: 'public';
-  /**
-   * O endereco da pagina publica do encontro no site. **So existe quando
-   * [linkPublicoDoEncontro] devolveu endereco**, e a ausencia e o interruptor
-   * (ver o campo `share_url` no contrato). Opcional no tipo pelo mesmo motivo
-   * que e opcional no contrato: a agenda nao o emite.
-   */
+  /** O endereco da pagina publica do encontro no site. */
   readonly share_url?: string;
 }
 
 /**
  * O teaser do privado (`NetworkEventPrivateTeaser`): **exatamente** cinco
- * propriedades. Lista permitida, e o portao P19 cobra o contrato; esta
- * interface cobra o codigo.
+ * propriedades.
  */
 export interface TeaserDoPrivado {
   readonly slug: string;
@@ -219,18 +142,8 @@ export interface TeaserDoPrivado {
 }
 
 /**
- * O encontro na lista do DONO (`MyNetworkEvent`, 19/10/2026): **exatamente
- * sete propriedades**. Lista permitida, como o teaser: esta interface cobra o
- * codigo e o `additionalProperties: false` do contrato cobra o documento.
- *
- * Nao estende `CamposDoEncontroProjetados`: a projecao do dono responde "qual
- * dos meus encontros e este, e da para cancelar?", e nao "como e este
- * encontro?". Herdar a projecao publica e apagar o que sobra deixa passar campo
- * novo -- e o mesmo motivo pelo qual `projetarTeaser` nao deriva dela.
- *
- * **Nao ha campo de versao aqui.** A versao sai no `ETag`, e so la: dois
- * lugares para o mesmo numero divergiriam, e o contrato declara esta forma sem
- * ele.
+ * O encontro na lista do DONO (`MyNetworkEvent`, 19/10/2026): **exatamente sete
+ * propriedades**.
  */
 export interface MeuEncontroProjetado {
   readonly slug: string;
@@ -242,14 +155,7 @@ export interface MeuEncontroProjetado {
   readonly status: StatusDoEncontro;
 }
 
-/**
- * A capa do dono (`MyNetworkEventCover`): a imagem e o que aconteceu com ela.
- *
- * **Ela NAO tem equivalente na projecao publica**, e a assimetria e o motivo de
- * a operacao de dono ser separada da agenda: `processing` e `rejected` sao
- * estado de processamento, e estado de processamento de imagem e assunto entre
- * quem enviou e o servidor.
- */
+/** A capa do dono (`MyNetworkEventCover`): a imagem e o que aconteceu com ela. */
 export interface CapaDoMeuEncontroProjetada {
   readonly status: 'processing' | 'ready' | 'rejected';
   readonly url: string | null;
@@ -262,13 +168,7 @@ export type EncontroProjetado = EncontroPublicoProjetado | TeaserDoPrivado;
 /** O conteudo oculto do privado, so para aprovado (`NetworkEventPrivateDetails`). */
 export type DetalhesPrivadosProjetados = CamposDoEncontroProjetados;
 
-/**
- * O ponto do encontro, marcado no mapa pelo administrador (`map_pin`).
- *
- * Tipo proprio, e nao campo de `EncontroDaRede`, de proposito: as duas leituras
- * publicas projetam `EncontroDaRede`, e um campo de ponto la dentro ficaria a
- * um espalhamento distraido de sair sem conta.
- */
+/** O ponto do encontro, marcado no mapa pelo administrador (`map_pin`). */
 export interface PontoDoEncontro {
   readonly lat: number;
   readonly lon: number;
@@ -280,26 +180,14 @@ export interface LocalizacaoProjetada {
   readonly street_address: string | null;
 }
 
-/**
- * ONDE O ENDERECO DO ENCONTRO SAI -- A REGRA, NUM PONTO SO.
- *
- * Decisao do cliente de 01/10/2026 (emenda de 01/10 do ADR-0027): o endereco
- * sai SO em `getNetworkEventLocation`, com conta, pela regra do ponto (emenda 1
- * do ADR-0010). A visibilidade ainda pode mudar por decisao dele, entao ela
- * mora aqui e em nenhum outro lugar:
- *
- * - `so_com_conta`: o endereco sai so em `location` (hoje);
- * - `publico`: sai tambem na agenda, no detalhe publico e nos detalhes do
- *   privado. Trocar para isto exige, no MESMO commit, acrescentar
- *   `street_address` a `NetworkEventPublic` e `NetworkEventPrivateDetails` em
- *   `api/openapi.yaml` -- o contrato manda -- e emendar o ADR-0027.
- *
- * `location` leva o endereco nas duas regras.
- */
+/** ONDE O ENDERECO DO ENCONTRO SAI -- A REGRA, NUM PONTO SO. */
 export type RegraDoEndereco = 'so_com_conta' | 'publico';
 export const REGRA_DO_ENDERECO: RegraDoEndereco = 'so_com_conta';
 
-/** O endereco na leitura aberta (agenda, detalhe, detalhes do privado), conforme a regra. */
+/**
+ * O endereco na leitura aberta (agenda, detalhe, detalhes do privado), conforme a
+ * regra.
+ */
 export function enderecoNaLeituraAberta(
   endereco: string | null,
   regra: RegraDoEndereco = REGRA_DO_ENDERECO,
@@ -307,17 +195,7 @@ export function enderecoNaLeituraAberta(
   return regra === 'publico' ? { street_address: endereco } : {};
 }
 
-/**
- * O rotulo temporal, sem olhar a publicacao.
- *
- * - **Exatamente em `startsAt` ja e `happening`.** A comparacao e
- *   `agora >= startsAt`.
- * - **Exatamente em `endsAt` ainda e `happening`.** A comparacao e
- *   `agora <= endsAt`.
- * - **Sem `endsAt` nao existe `happening`.** Passou de `startsAt`, e `ended`
- *   (ADR-0025 secao 6): inventar uma duracao padrao seria o servidor afirmando
- *   `Acontecendo agora` sobre um encontro que ele nao sabe se acabou.
- */
+/** O rotulo temporal, sem olhar a publicacao. */
 function statusTemporal(
   encontro: EncontroDaRede,
   agora: Instant,
@@ -343,11 +221,7 @@ function deslocamentoDoFuso(instante: number, timeZone: string): number {
   return Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second')) - Math.floor(instante / 1000) * 1000;
 }
 
-/**
- * 23:59:59 do dia `dataLocal` (`AAAA-MM-DD`) no fuso `timeZone`, como instante.
- * Duas passadas corrigem o deslocamento quando o dia atravessa mudanca de
- * horario.
- */
+/** 23:59:59 do dia `dataLocal` (`AAAA-MM-DD`) no fuso `timeZone`, como instante. */
 export function fimDoDiaLocal(dataLocal: string, timeZone: string): Instant {
   const [ano, mes, dia] = dataLocal.split('-').map(Number);
   const parede = Date.UTC(ano ?? 1970, (mes ?? 1) - 1, dia ?? 1, 23, 59, 59);
@@ -357,24 +231,14 @@ export function fimDoDiaLocal(dataLocal: string, timeZone: string): Instant {
 }
 
 /**
- * Ate quando o cancelado aparece COMO cancelado: o fim previsto, ou, sem
- * `endsAt`, 23:59:59 do dia do encontro no fuso dele (decisao de 28/09). O
- * cancelado existe para as pessoas confirmarem que nao vai acontecer, e virar
- * `ended` no `startsAt` apagaria essa informacao no proprio dia.
+ * Ate quando o cancelado aparece COMO cancelado: o fim previsto, ou, sem `endsAt`,
+ * 23:59:59 do dia do encontro no fuso dele (decisao de 28/09).
  */
 export function fimDoCancelado(encontro: Pick<EncontroDaRede, 'endsAt' | 'dataLocal' | 'timeZone'>): Instant {
   return encontro.endsAt ?? fimDoDiaLocal(encontro.dataLocal, encontro.timeZone);
 }
 
-/**
- * O rotulo do encontro, agora.
- *
- * **O cancelado nao conta como agendado nem como acontecendo agora**: ate o
- * fim previsto (`fimDoCancelado`) ele e `cancelled`, e quem se programou para
- * ir descobre antes de sair de casa. **Depois disso, segue a regra do
- * encerrado**: um cancelado de tres semanas atras e passado. Decisoes do
- * cliente de 23/09 e de 28/09/2026.
- */
+/** O rotulo do encontro, agora. */
 export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): StatusDoEncontro {
   if (encontro.publicacao === 'cancelled') {
     return agora <= fimDoCancelado(encontro) ? 'cancelled' : 'ended';
@@ -382,41 +246,13 @@ export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): Stat
   return statusTemporal(encontro, agora);
 }
 
-/** Os campos comuns, campo a campo. Nunca `{ ...encontro }`. */
+/** Os campos comuns, campo a campo. */
 function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEncontroProjetados {
-  // ========================================================================
-  // A RESERVA DO TEXTO ALTERNATIVO MORA AQUI, NO SERVIDOR, E NAO NO APP.
-  // ========================================================================
-  // Desde 21/10/2026 a coluna `network_event_images.alt_text` aceita nulo
-  // (decisao do cliente, migracao `20261020000013`). `NetworkEventImage`
-  // continua declarando `alt_text` como `string` EXIGIDO, e nao e desatencao:
-  //
-  // MEDIDO em `app/lib/api/modelos_rede.dart`, em `ImagemDoEncontro.doJson`:
-  //
-  //     if (url is! String || alt is! String) return null;
-  //
-  // e `daLista` DESCARTA o item nulo. Ou seja: `alt_text: null` no corpo nao
-  // deixaria a imagem sem nome acessivel -- ela DESAPARECERIA da lista, e a
-  // capa do encontro sumiria da agenda e do detalhe no APK que esta em
-  // aparelho hoje. Isso e pior do que o custo que o cliente aceitou, e ele nao
-  // aceitou isso.
-  //
-  // Entao a reserva e aplicada antes de o campo sair: o TITULO do encontro, que
-  // e a mesma reserva que o `down` da migracao usa, a mesma que o comentario da
-  // coluna anuncia e a mesma forma que a `Loja` usa para a imagem externa
-  // (`item-da-vitrine.ts`, `?? item.title`). `title` e de 2 a 120 caracteres no
-  // contrato, entao a reserva sempre cabe na faixa de 2 a 150 de `alt_text`.
-  //
-  // O PAINEL NAO PASSA POR AQUI e continua vendo o nulo cru
-  // (`ImagemProjetada.alt_text`): se o formulario reabrisse com o titulo no
-  // campo, quem edita nao distinguiria "descrevi" de "nao descrevi".
   const imagens = encontro.imagens.map((imagem) => ({
     url: imagem.url,
     thumb_url: imagem.urlDaMiniatura,
     alt_text: imagem.textoAlternativo ?? encontro.title,
   }));
-  // A capa e a imagem de posicao 0, nas duas derivadas: a de 1024 para o
-  // cartao da agenda e a de 1280 para a capa de borda a borda do detalhe.
   const capa = encontro.imagens[0];
   return {
     slug: encontro.slug,
@@ -428,16 +264,11 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
       city: encontro.city,
       state: encontro.state,
     },
-    // `comoIso` e o unico caminho declarado de `Instant` para o texto do fio.
     starts_at: comoIso(encontro.startsAt),
     ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
-    // A ORIGEM. Projetada campo a campo, como todo o resto deste objeto, e
-    // nao por espalhamento: `{ ...encontro }` aqui seria o caminho pelo qual
-    // a autoria sairia no dia em que alguem a carregasse na entidade.
     origin: encontro.origem,
-    // Derivada da imagem de posicao 0, nunca gravada no banco.
     cover_image_url: capa?.url ?? null,
     cover_banner_url: capa?.urlDoBanner ?? null,
     images: imagens,
@@ -459,7 +290,6 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     amenities: [...encontro.estrutura],
     bring_items: [...encontro.paraLevar],
     notes: encontro.observacoes,
-    // Publicos de proposito (ADR-0027 item 22): servem para comprar e tirar duvida.
     ticket_url: encontro.linkDeIngresso,
     instagram_handle: encontro.instagram,
     instagram_url: encontro.instagramUrl,
@@ -467,11 +297,7 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
   };
 }
 
-/**
- * O teaser do privado, **construido** com as cinco propriedades e nenhuma
- * outra. Nao deriva de `camposProjetados` de proposito: montar o publico e
- * depois apagar campos e lista proibida, e campo novo passaria.
- */
+/** O teaser do privado, **construido** com as cinco propriedades e nenhuma outra. */
 export function projetarTeaser(encontro: EncontroDaRede, agora: Instant): TeaserDoPrivado {
   return {
     slug: encontro.slug,
@@ -482,53 +308,17 @@ export function projetarTeaser(encontro: EncontroDaRede, agora: Instant): Teaser
   };
 }
 
-/**
- * Onde a pagina publica do encontro mora, e se ela existe de verdade.
- *
- * Os dois juntos num objeto, e nao dois parametros soltos: `baseDaWeb` sem
- * `publicada` e um endereco que ninguem conferiu se responde 200, e foi
- * exatamente esse par faltando que fez a acao de compartilhar nascer sem link
- * em 21/10/2026.
- */
+/** Onde a pagina publica do encontro mora, e se ela existe de verdade. */
 export interface PaginaDoEncontroNoSite {
   /** `WEB_BASE_URL`: onde o site mora. */
   readonly baseDaWeb: AbsoluteUrl;
-  /**
-   * `site_page_availability` disse `true` para `network_event`? Vem da porta
-   * `lostfound/ports/disponibilidade-da-pagina.ts`, que **nunca lanca** e
-   * devolve `false` para banco fora, linha ausente e coluna de tipo trocado.
-   */
+  /** `site_page_availability` disse `true` para `network_event`? */
   readonly publicada: boolean;
 }
 
 /**
- * O endereco da pagina publica deste encontro, ou `null` -- e `null` e a
- * resposta na maioria dos dias.
- *
- * ## OS QUATRO MOTIVOS DE DEVOLVER `null`, e cada um e uma decisao
- *
- * 1. **Ninguem passou a pagina** (`pagina === undefined`). E o caso da agenda e
- *    da busca por distancia, que nao emitem o campo de proposito: a acao de
- *    compartilhar vive na pagina do encontro, e vinte enderecos por pagina de
- *    lista nao servem a tela nenhuma.
- * 2. **O interruptor esta apagado** (`publicada === false`). E o estado de
- *    21/10/2026, medido de fora nos dois ambientes com controle positivo. Sem
- *    isto o produto poria um link morto num grupo de bairro, e aquela mensagem
- *    saiu do nosso dominio no instante do envio.
- * 3. **O encontro e PRIVADO.** Esta guarda e cinto, e nao o desenho: o privado
- *    sai por [projetarTeaser], que e construido com cinco propriedades e nao
- *    deriva de `camposProjetados`, entao nao ha onde o campo caber. Ela existe
- *    porque um dia alguem pode chamar isto de outro lugar, e porque o encontro
- *    privado nao tem pagina publica nenhuma (ADR-0027 12.10).
- * 4. **O encontro foi CANCELADO ou JA TERMINOU.** Convidar um estranho para um
- *    encontro que nao vai acontecer o manda a um lugar vazio -- e quem abre o
- *    link nao tem conta, nao tem a agenda e nao tem como descobrir sozinho que
- *    aquilo acabou. O teto aqui e o `status` CALCULADO (`statusDoEncontro`), e
- *    nao uma coluna: `cancelled` prevalece sobre o estado temporal ate o fim
- *    previsto, e depois disso vira `ended`.
- *
- * `happening` **emite**: um encontro que esta acontecendo agora e o melhor
- * momento possivel para alguem ser convidado a aparecer.
+ * O endereco da pagina publica deste encontro, ou `null` -- e `null` e a resposta
+ * na maioria dos dias.
  */
 export function linkPublicoDoEncontro(
   encontro: EncontroDaRede,
@@ -542,14 +332,7 @@ export function linkPublicoDoEncontro(
   return `${pagina.baseDaWeb.replace(/\/$/, '')}/encontro/${encontro.slug}`;
 }
 
-/**
- * Projeta o encontro para a agenda e o detalhe. A forma vem da propriedade do
- * EVENTO, igual para qualquer chamador (ADR-0021): o privado sai como teaser
- * inclusive para quem foi aprovado.
- *
- * `pagina` e opcional, e **omiti-la e o padrao**: so `getNetworkEvent` a passa.
- * Quem nao a passa nao emite `share_url`, e nenhuma lista precisou mudar.
- */
+/** Projeta o encontro para a agenda e o detalhe. */
 export function projetarEncontro(
   encontro: EncontroDaRede,
   agora: Instant,
@@ -560,44 +343,18 @@ export function projetarEncontro(
   return {
     ...camposProjetados(encontro, agora),
     visibility: 'public',
-    // Espalhamento condicional, e nao `share_url: link ?? undefined`: o segundo
-    // poe a CHAVE no objeto com valor `undefined`, e `JSON.stringify` a omite
-    // mas `Object.keys` nao -- e e por `Object.keys` que o teste de lista
-    // permitida varre a projecao.
     ...(link === null ? {} : { share_url: link }),
   };
 }
 
-/**
- * A capa como a LEITURA do dono a entrega.
- *
- * Declarada aqui, no dominio, e nao importada da porta: o dominio nao depende
- * de `ports/`, e esta forma e a fronteira entre a consulta e a projecao. A
- * porta usa os mesmos tres campos, e o compilador liga as duas no adaptador.
- */
+/** A capa como a LEITURA do dono a entrega. */
 export interface CapaDaLeituraDoDono {
   readonly estado: 'processing' | 'ready' | 'rejected';
   readonly url: string | null;
   readonly motivoDaRecusa: string | null;
 }
 
-/**
- * A projecao do DONO, **construida** com as sete propriedades e nenhuma outra.
- *
- * Vale para o item de `listMyNetworkEvents` e para `getMyNetworkEvent`: o corpo
- * dos dois e o mesmo, e a segunda operacao existe pela VERSAO no `ETag` e nao
- * por ter mais conteudo.
- *
- * **Sem `visibility`**, e a ausencia e deliberada: todo encontro da comunidade
- * nasce publico e o autor nao pode mudar isso. Se o painel tiver tornado um
- * deles privado, o dono continua vendo a propria lista igual -- o teaser esconde
- * o lugar de quem NAO foi admitido, nunca de quem criou o encontro --, e esta
- * projecao nao carrega lugar nenhum de todo jeito.
- *
- * `status` vem de `statusDoEncontro`, a MESMA funcao da agenda: o rotulo do
- * cancelado e calculado num lugar so, e por isso a lista do dono e a vitrine
- * publica nunca discordam sobre o estado do mesmo encontro.
- */
+/** A projecao do DONO, **construida** com as sete propriedades e nenhuma outra. */
 export function projetarMeuEncontro(
   encontro: EncontroDaRede,
   capa: CapaDaLeituraDoDono | null,
@@ -606,16 +363,6 @@ export function projetarMeuEncontro(
   return {
     slug: encontro.slug,
     title: encontro.title,
-    // A capa e a imagem de posicao 0, na derivada de 1024 -- a mesma do cartao
-    // da agenda. Nao ha `cover_banner_url`: a capa de borda a borda e do
-    // detalhe, e a lista do dono nao tem detalhe.
-    //
-    // **O ESTADO VEM DA CONSULTA DO DONO, e nao de `encontro.imagens`.**
-    // `imagens` so carrega o que esta `ready` com chave publica -- e exatamente
-    // por isso a recusa era invisivel: ela nao chegava nem a aparecer como
-    // ausencia distinguivel de "sem capa". `null` aqui e "este encontro nao tem
-    // capa"; `processing` e "tem, e o worker nao terminou"; `rejected` e "tem, e
-    // nao serviu", e a frase do servidor diz por que.
     cover:
       capa === null
         ? null
@@ -631,7 +378,7 @@ export function projetarMeuEncontro(
   };
 }
 
-/** O conteudo oculto, para `getNetworkEventPrivateDetails`. So quem chama sabe se pode. */
+/** O conteudo oculto, para `getNetworkEventPrivateDetails`. */
 export function projetarDetalhesPrivados(
   encontro: EncontroDaRede,
   agora: Instant,
@@ -644,11 +391,7 @@ export function distanciaArredondada(metros: number | null): number | null {
   return metros === null ? null : Math.round(metros / 100) * 100;
 }
 
-/**
- * O estado que o tutor ve (`JoinRequestAppState`). **Nunca `declined`**
- * (ADR-0027 12.11): o recusado e o pendente nao se distinguem, e os dois viram
- * `expired` quando o encontro termina.
- */
+/** O estado que o tutor ve (`JoinRequestAppState`). */
 export type EstadoDoPedidoNoApp = 'requested' | 'approved' | 'withdrawn' | 'expired';
 
 export function estadoDoPedidoNoApp(
@@ -657,9 +400,6 @@ export function estadoDoPedidoNoApp(
   agora: Instant,
 ): EstadoDoPedidoNoApp {
   if (decisao === 'approved') return 'approved';
-  // `pending` e `declined` caem no MESMO ramo, e e isso que torna a recusa
-  // invisivel. Separa-los aqui seria o defeito que o P19 item 3 existe para
-  // pegar.
   return statusTemporal(encontro, agora) === 'ended' ? 'expired' : 'requested';
 }
 
@@ -668,11 +408,7 @@ export function encontroEncerrado(encontro: EncontroDaRede, agora: Instant): boo
   return statusTemporal(encontro, agora) === 'ended';
 }
 
-/**
- * Projeta o ponto para `getNetworkEventLocation`. Nulo e estado normal: o ponto
- * e opcional (ADR-0027 12.2), e sem ele a tela mostra os rotulos e nao mostra
- * mapa.
- */
+/** Projeta o ponto para `getNetworkEventLocation`. */
 export function projetarLocalizacao(
   ponto: PontoDoEncontro | null,
   endereco: string | null = null,

@@ -1,40 +1,4 @@
-/**
- * A lista de conversas ordena pela ULTIMA MENSAGEM, e o SQL compilado prova.
- *
- * ## O que esta bancada existe para impedir
- *
- * Pedido do cliente de 18/10/2026, literal: *"ordene por ultima mensagem"*.
- * Ate aqui `construtorDaListaDoChamador` ordenava por
- * `conversations.opened_at` -- quando a conversa NASCEU --, e o cursor saia da
- * mesma coluna.
- *
- * **Nao da para conferir isso pela resposta.** Com um duble de repositorio, a
- * ordem e a do array que o duble devolve; com o banco de integracao, uma massa
- * em que a ordem de abertura coincide com a ordem da ultima mensagem passa com
- * a chave antiga de pe -- e massa em que elas coincidem e o caso comum, porque
- * a conversa recem-aberta costuma ser a que acabou de receber mensagem. O fato
- * mora no `ORDER BY`, e o `ORDER BY` so e observavel lendo o SQL.
- *
- * Mesmo instrumento de `autorizacao-na-clausula-where.test.ts`: `DummyDriver`
- * compila a consulta REAL, com o mesmo construtor e o mesmo compilador de
- * dialeto da aplicacao, e nao a executa. Um SQL escrito a mao aqui seria o
- * atalho que parece equivalente e esconde justamente o que se foi conferir.
- *
- * ## A SEGUNDA PAGINA e o caso que decide
- *
- * O caso `o cursor da segunda pagina carrega a MESMA chave do ORDER BY` e o
- * mais importante do arquivo, e nao e redundante com o primeiro: a ordem e o
- * cursor sao dois textos diferentes no mesmo construtor, e com eles divergindo
- * a PRIMEIRA pagina sai perfeita -- o defeito aparece so depois de a pessoa
- * rolar, pulando e repetindo linhas. E o defeito que a rolagem infinita de 10
- * em 10 encontra dez vezes mais rapido que o botao `Carregar mais`.
- *
- * ## A isca, e como ela foi provada
- *
- * Em `kysely-conversation-repository.ts`, `CHAVE_DA_ORDEM` foi trocada por
- * `sql`conversations.opened_at``, a suite rodou, os casos reprovaram pelo nome,
- * e a constante foi restaurada. Os numeros medidos estao no rodape.
- */
+/** A lista de conversas ordena pela ULTIMA MENSAGEM, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -70,22 +34,7 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/**
- * ## OS DOIS RECORTES REPROVAM QUANDO NAO ACHAM O MARCADOR (21/10/2026)
- *
- * Os dois devolviam `''` quando o marcador faltava, e `''` e o pior valor
- * possivel aqui: **as assercoes negativas deste arquivo passam todas sobre
- * texto vazio.** `!where.includes('conversations.id) < (')`, que e o caso da
- * primeira pagina, fica verde num SQL que perdeu a clausula inteira -- e o
- * portao nao da sinal nenhum.
- *
- * E a licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: corte
- * que nao encontra o ponto de corte vira varredura cega e silenciosa. Toda
- * consulta deste arquivo tem `WHERE` e tem `ORDER BY` -- sao lista paginada com
- * cursor; a falta de um dos dois e defeito, nao caso de borda.
- */
-
-/** Do primeiro ` order by ` em diante. REPROVA se nao houver `ORDER BY`. */
+/** Do primeiro ` order by ` em diante. */
 function clausulaOrderBy(sql: string): string {
   const corte = sql.indexOf(' order by ');
   assert.ok(
@@ -96,12 +45,7 @@ function clausulaOrderBy(sql: string): string {
   return sql.slice(corte);
 }
 
-/**
- * Do primeiro ` where ` ate o ` order by `, que e onde o cursor mora.
- *
- * REPROVA se nao houver `WHERE`: sem ele a consulta atinge a tabela inteira, e
- * as assercoes negativas sobre o recorte passariam sobre texto vazio.
- */
+/** Do primeiro ` where ` ate o ` order by `, que e onde o cursor mora. */
 function clausulaWhere(sql: string): string {
   const inicio = sql.indexOf(' where ');
   assert.ok(
@@ -113,13 +57,6 @@ function clausulaWhere(sql: string): string {
   return fim < 0 ? sql.slice(inicio) : sql.slice(inicio, fim);
 }
 
-// ---------------------------------------------------------------------------
-// AS ISCAS DOS DOIS RECORTES -- AS DUAS DIRECOES
-// ---------------------------------------------------------------------------
-//
-// A direcao que REPROVA e a que decide se o conserto valeu: sem ela, voltar os
-// dois ajudantes para `return ''` deixaria este arquivo verde, e com ele todas
-// as assercoes negativas de cursor.
 void describe('os recortes de clausula', () => {
   void it('`clausulaWhere` REPROVA um SQL sem `WHERE`', () => {
     assert.throws(
@@ -147,13 +84,7 @@ void describe('os recortes de clausula', () => {
   });
 });
 
-/**
- * A chave que o `ORDER BY` (ou o cursor) usa, com os espacos colapsados.
- *
- * Colapsar o espaco e o que permite comparar as duas por IGUALDADE DE TEXTO: a
- * subconsulta e escrita em varias linhas, e a comparacao caractere a caractere
- * reprovaria por indentacao em vez de por chave diferente.
- */
+/** A chave que o `ORDER BY` (ou o cursor) usa, com os espacos colapsados. */
 function semEspaco(texto: string): string {
   return texto.replace(/\s+/g, ' ').trim();
 }
@@ -191,7 +122,6 @@ void describe('a lista de conversas ordena pela ultima mensagem, e nao pela aber
     const where = semEspaco(clausulaWhere(compilada.sql));
     const ordem = semEspaco(clausulaOrderBy(compilada.sql));
 
-    // A tupla do cursor: `(<chave>, conversations.id) < ($n, $m)`.
     const tupla = /\((coalesce\(.*?\)), conversations\.id\) < \(\$(\d+), \$(\d+)\)/.exec(where);
     assert.ok(
       tupla !== null,
@@ -212,7 +142,6 @@ void describe('a lista de conversas ordena pela ultima mensagem, e nao pela aber
         'REPETIDAS. Com rolagem infinita de 10 em 10 isso acontece a cada dez linhas.',
     );
 
-    // E o valor ligado a tupla e o que o cursor trouxe, e nao outro parametro.
     assert.deepEqual(
       [compilada.parameters[Number(tupla[2]) - 1], compilada.parameters[Number(tupla[3]) - 1]],
       [QUANDO, SEGUNDA.depoisDe.id],
@@ -323,13 +252,3 @@ void describe('o `q` recorta a lista e a contagem, e nunca substitui o `WHERE` d
   });
 });
 
-/**
- * ---------------------------------------------------------------------------
- * A ISCA, MEDIDA
- *
- * Os numeros abaixo foram escritos DEPOIS de rodar, e nao antes.
- *
- * Ver o relatorio da entrega: `CHAVE_DA_ORDEM` trocada por
- * `sql`conversations.opened_at`` em `kysely-conversation-repository.ts`,
- * `npm test` com Node 22, casos reprovados pelo nome, constante restaurada.
- */

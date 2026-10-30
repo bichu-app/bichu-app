@@ -68,7 +68,10 @@ interface RascunhoDoProduto {
   etag?: string;
 }
 
-/** Todos os parceiros ativos, pagina por pagina (o `limit` do contrato vai ate 100). */
+/**
+ * Todos os parceiros ativos, pagina por pagina (o `limit` do contrato vai ate
+ * 100).
+ */
 async function carregarParceirosAtivos(api: ClienteDaApi, sinal: AbortSignal): Promise<Parceiro[] | undefined> {
   const todos: Parceiro[] = [];
   for (let page = 1; page <= 50; page += 1) {
@@ -80,7 +83,10 @@ async function carregarParceirosAtivos(api: ClienteDaApi, sinal: AbortSignal): P
   return todos;
 }
 
-/** O que vai para o rascunho da sessao: sem arquivo e sem previa local, que nao sobrevivem a recarga. */
+/**
+ * O que vai para o rascunho da sessao: sem arquivo e sem previa local, que nao
+ * sobrevivem a recarga.
+ */
 function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   return {
     ...v,
@@ -90,15 +96,7 @@ function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   };
 }
 
-/**
- * A frase da opcao vazia do segundo select, e ela diz QUAL dos tres estados e.
- *
- * Tres, e nao dois: "escolha a categoria primeiro" (nada escolhido), "esta
- * categoria ainda nao tem subcategoria" (arvore nao levantada -- o caso de
- * gato, passaro, peixe e outros em 17/10) e "sem subcategoria" (ha opcoes e a
- * pessoa pode nao escolher nenhuma). Uma frase so para os tres faria a tela
- * parecer quebrada em dois deles.
- */
+/** A frase da opcao vazia do segundo select, e ela diz QUAL dos tres estados e. */
 function rotuloVazioDaSubcategoria(taxonomia: Taxonomia | undefined, categoria: string): string {
   if (categoria === '') return 'Escolha a categoria primeiro';
   if (subcategoriasDaCategoria(taxonomia, categoria).length === 0) {
@@ -144,14 +142,12 @@ export default function FormularioDeProduto() {
   const chaveDaCarga = `${itemSlug ?? 'novo'}#${versao}`;
   const fase = carga?.chave === chaveDaCarga ? carga.fase : 'carregando';
 
-  // Mudar um campo tira o erro que o servidor tinha apontado: a validacao local reassume.
   const mudar = useCallback(<K extends keyof ValoresDoProduto>(campo: K, valor: ValoresDoProduto[K]) => {
     setValores((v) => ({ ...v, [campo]: valor }));
     setErrosDoServidorNaTela({});
     setTagsRecusadas([]);
   }, []);
 
-  // Carga: item (com ETag), parceiros ativos e o vocabulario de tags ativas.
   useEffect(() => {
     const controle = new AbortController();
     const sinal = controle.signal;
@@ -161,11 +157,6 @@ export default function FormularioDeProduto() {
         itemSlug ? api.GET('/admin/store/items/{itemSlug}', { params: { path: { itemSlug } }, signal: sinal }) : Promise.resolve(undefined),
         carregarParceirosAtivos(api, sinal),
         api.GET('/admin/store/tags', { params: { query: { active: true, limit: 100 } }, signal: sinal }),
-        // O vocabulario dos dois niveis entra na MESMA carga do item e dos
-        // parceiros, e a falha dele reprova a carga junto: sem vocabulario nao
-        // ha como oferecer a categoria, e `category` e campo obrigatorio.
-        // Deixar o formulario abrir com o select vazio faria a pessoa achar
-        // que o produto nao tem categoria para escolher.
         api.GET('/store/taxonomy', { signal: sinal }),
       ]);
       if (sinal.aborted) return;
@@ -184,9 +175,6 @@ export default function FormularioDeProduto() {
       const rascunho = retomarRascunho<RascunhoDoProduto>(rotaDoRascunho);
       if (respostaDoItem?.data) {
         setItem(respostaDoItem.data);
-        // Rascunho de antes do login volta com o ETag que a pessoa tinha lido: se
-        // alguem salvou no meio, o If-Match antigo da 412 e nada se sobrescreve.
-        // Do `version`, e nao do ETag: a borda o sufixa ("4-zstd") e o If-Match daria 412.
         setEtag(rascunho?.etag ?? versaoComoEtag(respostaDoItem.data.version));
         doServidor = valoresDoItem(respostaDoItem.data);
       }
@@ -202,7 +190,6 @@ export default function FormularioDeProduto() {
     return () => controle.abort();
   }, [api, itemSlug, rotaDoRascunho, chaveDaCarga]);
 
-  // UX 29.2: se a sessao cair, o formulario fica guardado para depois do login.
   const valoresRef = useRef(valores);
   const etagRef = useRef(etag);
   useLayoutEffect(() => {
@@ -220,7 +207,6 @@ export default function FormularioDeProduto() {
     [registrarRascunho, rotaDoRascunho],
   );
 
-  // Imagem em conferencia (`processing`): o worker muda o estado depois da escrita.
   const temConferencia = valores.imagens.some((im) => im.estado === 'processing');
   useEffect(() => {
     if (!itemSlug || !temConferencia) return;
@@ -249,7 +235,6 @@ export default function FormularioDeProduto() {
   const parceiroEscolhido = useMemo(() => {
     const ativo = parceiros.find((p) => p.slug === valores.parceiro);
     if (ativo) return { host: ativo.host };
-    // `item.partner` e nulo no rascunho sem parceiro (17/10/2026).
     if (item?.partner && item.partner.slug === valores.parceiro) return { host: item.partner.host };
     return undefined;
   }, [parceiros, item, valores.parceiro]);
@@ -257,17 +242,9 @@ export default function FormularioDeProduto() {
   const sujo = fase === 'pronto' && comparavel(valores) !== comparavel(base);
   const publicado = item?.publication_state === 'published';
 
-  /**
-   * A regua de cada botao (pedido do cliente de 17/10/2026). `rascunho` cobra
-   * so o nome; `salvar` e `publicar` cobram o conjunto -- `salvar` porque so
-   * aparece em item publicado ou retirado, que ja passou pela regua inteira
-   * uma vez e nao pode voltar incompleto.
-   */
+  /** A regua de cada botao (pedido do cliente de 17/10/2026). */
   const reguaDa = (acao: Acao): ReguaDoProduto => (acao === 'rascunho' ? 'rascunho' : 'publicacao');
 
-  // Depois da primeira tentativa, a validacao acompanha a digitacao: o erro some
-  // quando o campo fica certo. Com a regua DA ACAO que a pessoa tentou: quem
-  // clicou em "Salvar rascunho" nao passa a ver cobranca de campo de publicacao.
   const erros: ErrosDoProduto = tentouSalvar
     ? {
         ...errosDoServidorNaTela,
@@ -275,9 +252,6 @@ export default function FormularioDeProduto() {
       }
     : errosDoServidorNaTela;
 
-  // O que falta para publicar, pelo que esta na tela AGORA. E a mesma pergunta
-  // que `missing_to_publish` responde no servidor, e serve para o botao de
-  // publicar DIZER o que falta em vez de so recusar depois do clique.
   const faltas = publicado ? [] : faltaParaPublicar(valores);
   const avisoDaFalta = fase === 'pronto' ? fraseDaFalta(faltas) : null;
 
@@ -333,9 +307,9 @@ export default function FormularioDeProduto() {
   }
 
   /**
-   * O item ja esta gravado. Se a publicacao falhar, por resposta ou por excecao,
-   * a pessoa vai para a edicao do item: ficar em /loja/novo faria o proximo
-   * clique criar outro item igual.
+   * O item ja esta gravado. Se a publicacao falhar, por resposta ou por excecao, a
+   * pessoa vai para a edicao do item: ficar em /loja/novo faria o proximo clique
+   * criar outro item igual.
    */
   async function publicarDepoisDeGravar(slug: string, versaoAtual: string) {
     try {
@@ -371,7 +345,7 @@ export default function FormularioDeProduto() {
       }
     }
     if (tipo === 'precondition-failed') return setFalha({ texto: CONFLITO, recarregar: true });
-    if (status === 401) return; // a sessao caiu: o provedor guarda o formulario e manda entrar
+    if (status === 401) return;
     setFalha({ texto: 'Não conseguimos salvar o produto. Confira os campos e tente de novo.' });
   }
 
@@ -416,7 +390,6 @@ export default function FormularioDeProduto() {
   const n = listaDeErros.length;
   const erro = (c: CampoDoProduto) => erros[c];
   const tagsAtivas = new Set(tags.map((t) => t.slug));
-  // A tag desativada que ja estava no item continua aparecendo, marcada; desmarcada, nao volta (inactive_tag).
   const tagsDoItemInativas = (item?.tags ?? []).filter((t) => !t.active && !tagsAtivas.has(t.slug));
   const cheio = valores.tags.length >= MAXIMO_DE_TAGS;
   const parceiroDoItem = item?.partner ?? null;
@@ -470,9 +443,8 @@ export default function FormularioDeProduto() {
       </p>
 
       <CampoDeTexto dataCy="produto-nome" id="f-nome" rotulo="Nome *" valor={valores.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erro('f-nome')} />
-      {/* AREA DE TEXTO, e nao campo de uma linha (pedido do cliente de
-          17/10/2026). A quebra de linha vai no valor e conta nos 180
-          caracteres; o app desenha com `Text`, que preserva a quebra. */}
+      {
+}
       <CampoDeTexto
         dataCy="produto-descricao"
         id="f-desc"
@@ -494,11 +466,6 @@ export default function FormularioDeProduto() {
               data-cy="produto-categoria"
               id="f-categoria"
               value={valores.categoria}
-              // Trocar a categoria LIMPA a subcategoria, no mesmo `setValores`.
-              // Nao e zelo de tela: a subcategoria antiga pertence a categoria
-              // antiga, e o servidor recusaria o par com
-              // `subcategory_not_in_category`. Limpar junto faz a recusa nao
-              // ter como acontecer, em vez de ter mensagem bonita.
               onChange={(e) => {
                 const escolhida = eCategoria(taxonomia, e.target.value) ? e.target.value : '';
                 setValores((v) => ({ ...v, categoria: escolhida, subcategoria: '' }));
@@ -526,10 +493,6 @@ export default function FormularioDeProduto() {
               data-cy="produto-subcategoria"
               id="f-subcategoria"
               value={valores.subcategoria}
-              // **Desabilitado enquanto nao ha categoria, e tambem quando a
-              // categoria escolhida nao tem arvore de segundo nivel
-              // levantada.** Sao dois estados diferentes e a frase da opcao
-              // unica diz qual e: um select habilitado e vazio parece defeito.
               disabled={subcategoriasDaCategoria(taxonomia, valores.categoria).length === 0}
               onChange={(e) =>
                 mudar(
@@ -613,7 +576,7 @@ export default function FormularioDeProduto() {
               />
             );
           })}
-          {/* UX 30.4 L3: tag marcada que o servidor nao reconhece mais (renomeada) continua visivel, marcada com o erro. */}
+          {}
           {valores.tags
             .filter((slug) => !tags.some((t) => t.slug === slug) && !tagsDoItemInativas.some((t) => t.slug === slug))
             .map((slug) => (
@@ -660,8 +623,6 @@ export default function FormularioDeProduto() {
         proposito="store_item"
         mostrarErrosDeDescricao={!!tentouSalvar}
         erro={erro('imagens')}
-        // OPCIONAL desde 17/10/2026 (pedido do cliente). A `Rede` passou a
-        // desligar tambem, em 21/10/2026, pela mesma razao.
         descricaoObrigatoria={false}
         marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />
@@ -723,8 +684,8 @@ export default function FormularioDeProduto() {
           </Banner>
         )}
         <div className="row2">
-          {/* O valor guardado continua sendo texto; `precoEmCentavos` e quem
-              o transforma em `price.amount`, em centavos inteiros. */}
+          {
+}
           <CampoDeValorEmReais dataCy="produto-preco" id="f-preco" rotulo="Preço (R$)" valor={valores.preco} aoMudar={(v) => mudar('preco', v)} erro={erro('f-preco')} />
           <CampoDeTexto dataCy="produto-consultado-em" id="f-data" rotulo="Consultado em" valor={valores.consultadoEm} aoMudar={(v) => mudar('consultadoEm', v)} tipo="date" erro={erro('f-data')} />
         </div>
@@ -761,9 +722,8 @@ export default function FormularioDeProduto() {
           </>
         )}
       </div>
-      {/* O botao de publicar NAO fica morto: ele continua clicavel (e o clique
-          leva ao resumo de erros, com foco). Esta frase e para a pessoa saber o
-          que falta ANTES de clicar. */}
+      {
+}
       {avisoDaFalta && (
         <p className="t-body-sm c-sec" data-cy="produto-falta-publicar">
           {avisoDaFalta}
@@ -834,7 +794,7 @@ export default function FormularioDeProduto() {
   );
 }
 
-/** Chip de tag (aria-pressed). Recusada pelo servidor: borda de erro, icone e o erro do campo como descricao. */
+/** Chip de tag (aria-pressed). */
 function ChipDeTag({
   rotulo,
   marcada,

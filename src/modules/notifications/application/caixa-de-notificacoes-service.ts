@@ -1,17 +1,4 @@
-/**
- * A CAIXA DE NOTIFICACOES, do lado da aplicacao.
- *
- * Camada fina de proposito: as regras que custam dinheiro -- agrupamento,
- * retencao, a regra do zero do contador e o filtro de conta desabilitada nos
- * tres lugares -- moram nas funcoes SQL da migracao `20261018000020`, porque e
- * la que elas sao a mesma consulta que as paga. O que esta classe acrescenta e
- * o que NAO cabe em SQL: o recorte da pagina contra o teto do contrato, e a
- * traducao de "nao achei" em 404.
- *
- * **Nenhum metodo aqui recebe um identificador de conta de fora.** O dono vem
- * sempre do token, por `ChamadorDaCaixa`, e e esse o unico `user_id` que chega
- * ao `WHERE`. Nao ha caminho de codigo que leia a caixa de um terceiro.
- */
+/** A CAIXA DE NOTIFICACOES, do lado da aplicacao. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {
@@ -33,14 +20,7 @@ export interface DependenciasDaCaixa {
 export class CaixaDeNotificacoesService {
   constructor(private readonly deps: DependenciasDaCaixa) {}
 
-  /**
-   * Uma pagina da caixa.
-   *
-   * O recorte do limite acontece aqui e tambem no contrato (`maximum: 30`), e a
-   * repeticao e deliberada: o contrato recusa 31 na borda com 400, e este
-   * `Math.min` e o que impede um chamador interno -- um teste, um trabalho
-   * agendado -- de pedir 10 000 linhas por uma porta que nao passa pela borda.
-   */
+  /** Uma pagina da caixa. */
   async listar(
     chamador: ChamadorDaCaixa,
     pedido: { readonly pagina?: number; readonly limite?: number },
@@ -50,71 +30,34 @@ export class CaixaDeNotificacoesService {
     return this.deps.caixa.listar(chamador.userId, pagina, limite);
   }
 
-  /** O numero do sino, inteiro. O recorte em `9+` e da barra, nao daqui. */
+  /** O numero do sino, inteiro. */
   async contar(chamador: ChamadorDaCaixa): Promise<number> {
     return this.deps.caixa.contar(chamador.userId);
   }
 
-  /**
-   * A lista foi aberta: zera o numero e NAO marca nada.
-   *
-   * Metodo proprio, e nao um efeito de `listar`. Se ele fosse efeito de
-   * `listar`, "abrir a lista nao marca os itens" deixaria de ser verificavel --
-   * nao haveria como chamar um sem o outro num teste.
-   */
+  /** A lista foi aberta: zera o numero e NAO marca nada. */
   async listaVista(chamador: ChamadorDaCaixa): Promise<void> {
     await this.deps.caixa.listaVista(chamador.userId);
   }
 
-  /**
-   * Marca UM aviso como lido.
-   *
-   * **404 e nunca 403** (ADR-0021): a porta devolve `false` para "nao existe" e
-   * para "e de outra conta", e as duas sao indistinguiveis aqui de proposito --
-   * um 403 confirmaria que o `ref` existe.
-   */
+  /** Marca UM aviso como lido. */
   async marcarLida(chamador: ChamadorDaCaixa, ref: string): Promise<void> {
     const marcada = await this.deps.caixa.marcarLida(chamador.userId, ref);
     if (!marcada) throw problemas.naoEncontrado();
   }
 
-  /** "Marcar todas como lidas", explicito. Devolve quantas foram. */
+  /** "Marcar todas como lidas", explicito. */
   async marcarTodasLidas(chamador: ChamadorDaCaixa): Promise<number> {
     return this.deps.caixa.marcarTodasLidas(chamador.userId);
   }
 
-  /**
-   * DISPENSA a LINHA da caixa -- o "x".
-   *
-   * O recorte do GRUPO mora no SQL (`notificacao_dispensar`), e nao aqui: ele
-   * usa a mesma chave de agrupamento da listagem, e duas copias dessa chave --
-   * uma em SQL, outra em TypeScript -- seriam duas definicoes de "a mesma
-   * linha" para divergirem na proxima mudanca.
-   *
-   * **Nao chama `marcarLida`, e nao e chamada por ela.** Dispensar tira da
-   * LISTA e ler tira do CONTADOR; encadear as duas aqui faria o app perder a
-   * unica forma de limpar a lista sem afirmar que leu -- e a independencia dos
-   * dois eixos e requisito, nao detalhe.
-   *
-   * **404 e nunca 403** (ADR-0021), pela mesma razao de `marcarLida`.
-   */
+  /** DISPENSA a LINHA da caixa -- o "x". */
   async dispensar(chamador: ChamadorDaCaixa, ref: string): Promise<void> {
     const dispensada = await this.deps.caixa.dispensar(chamador.userId, ref);
     if (!dispensada) throw problemas.naoEncontrado();
   }
 
-  /**
-   * O COMUNICADO, para a pagina intermediaria.
-   *
-   * **404 e nunca 403** (ADR-0021), e aqui isso cobre DOIS casos que precisam
-   * ser indistinguiveis: o comunicado que nao existe e o que existe mas nao
-   * chegou a esta conta. O segundo e o que importa -- um 403 confirmaria que
-   * aquele `ref` foi disparado.
-   *
-   * **Nao marca o aviso como lido.** Abrir a pagina e abrir o item sao dois
-   * fatos, e encadea-los aqui tiraria do app a unica forma de ler o texto sem
-   * afirmar que abriu o aviso.
-   */
+  /** O COMUNICADO, para a pagina intermediaria. */
   async buscarComunicado(chamador: ChamadorDaCaixa, ref: string): Promise<ComunicadoDaCaixa> {
     const comunicado = await this.deps.caixa.buscarComunicado(chamador.userId, ref);
     if (comunicado === undefined) throw problemas.naoEncontrado();

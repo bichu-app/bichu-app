@@ -1,40 +1,6 @@
 /**
- * **A ISCA CENTRAL DO CAMINHO POR APELIDO: o pedido cobra os MESMOS predicados
- * que a leitura do perfil.**
- *
- * ## Por que isto é a isca central, e não um detalhe de simetria
- *
- * Desde 20/10/2026 há duas superfícies que resolvem um apelido:
- *
- * - `getPersonProfile` → `construtorDoPerfilPorApelido` (módulo `people`);
- * - `requestConnection` com `handle` → `construtorDoAlvoPorApelido` (módulo
- *   `connections`).
- *
- * Se os dois conjuntos de predicados divergirem, abre-se um dos dois buracos, e
- * o segundo é grave:
- *
- * 1. a busca e o perfil mostram alguém a quem o pedido **não** chega — a pessoa
- *    vê um botão "adicionar" que só pode falhar. Ruim, e visível;
- * 2. **o pedido chega a quem o perfil esconde** — e aí `POST /connections` passa
- *    a contornar o 404 de `getPersonProfile`. Quem foi bloqueado descobre, pela
- *    diferença entre as duas respostas, que a outra pessoa existe. Essa é a
- *    *"porta de trás"* que a decisão de 18/10 temia, reaberta por descuido em vez
- *    de por decisão — e ela não aparece em nenhum teste de uma superfície só,
- *    porque cada uma delas, isolada, está correta.
- *
- * ## Por que este arquivo mora em `src/tools/`
- *
- * Porque ele compara **dois módulos**, e um módulo só enxerga `ports/` de outro
- * (`src/architecture.rules.mjs`, docs/03-arquitetura.md §6). Dentro de qualquer
- * um dos dois, este arquivo importaria `adapters/` alheio — que é o que a regra
- * proíbe, com razão. `src/tools/` está fora de `src/modules`, e é onde os outros
- * portões que atravessam módulo já vivem.
- *
- * ## O que este arquivo NÃO prova
- *
- * Que o Postgres se comporta como o texto diz — isso é medido onde as funções
- * SQL moram (`20261017000013`, `20261018000031`, `20261018000032`). Aqui se
- * prova que as duas camadas as **chamam**, no `WHERE`, com o mesmo conjunto.
+ * **A ISCA CENTRAL DO CAMINHO POR APELIDO: o pedido cobra os MESMOS predicados que
+ * a leitura do perfil.**
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -67,15 +33,7 @@ const sqlDoPerfil = (): string =>
   construtorDoPerfilPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 const sqlDoAlvo = (): string => construtorDoAlvoPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 
-/**
- * Os predicados que as DUAS consultas têm de cobrar, **cada um com nome
- * próprio**.
- *
- * O nome está aqui e não numa asserção comum de propósito: o pedido desta
- * entrega foi *"iscas de verdade, conferidas pelo nome do caso"*. Uma asserção
- * que varresse os cinco num `assert.ok(todos)` reprovaria dizendo "faltou algum"
- * — e quem lesse a reprovação não saberia qual, nem por que ele existia.
- */
+/** Os predicados que as DUAS consultas têm de cobrar, **cada um com nome próprio**. */
 const PREDICADOS = [
   {
     nome: 'conta_habilitada do lado OLHADO',
@@ -136,8 +94,8 @@ void describe('o pedido por apelido cobra os MESMOS predicados que a leitura do 
   }
 
   /**
-   * **A isca da isca.** Sem ela, os casos acima passariam por os dois SQL terem
-   * os predicados hoje — e não por a varredura saber reconhecer a falta de um.
+   * **A isca da isca.** Sem ela, os casos acima passariam por os dois SQL terem os
+   * predicados hoje — e não por a varredura saber reconhecer a falta de um.
    */
   void it('ISCA: a varredura REPROVA quando um predicado falta numa das duas', () => {
     for (const { nome, re } of PREDICADOS) {
@@ -152,10 +110,8 @@ void describe('o pedido por apelido cobra os MESMOS predicados que a leitura do 
   });
 
   /**
-   * O contrapeso de conjunto: as duas consultas têm de cobrar **a mesma
-   * quantidade** de predicados de autorização. Um predicado novo só no perfil
-   * reabriria a divergência pelo outro lado — e nenhum dos casos acima pegaria,
-   * porque eles varrem uma lista fixa.
+   * O contrapeso de conjunto: as duas consultas têm de cobrar **a mesma quantidade**
+   * de predicados de autorização.
    */
   void it('as duas consultas cobram a MESMA quantidade de predicados de autorizacao', () => {
     const contar = (sql: string): number =>

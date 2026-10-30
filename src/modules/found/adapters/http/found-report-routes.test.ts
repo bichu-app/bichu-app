@@ -1,41 +1,4 @@
-/**
- * As cinco rotas do achado avulso, sobre um Fastify de verdade.
- *
- * Sobe o servidor em vez de chamar o handler porque quatro das coisas que estas
- * rotas prometem só existem com o framework no caminho: o **429 do teto** (que é
- * um gancho `onRequest`/`preValidation`, e não um `if` do handler), o
- * `application/problem+json` do 404, a validação de corpo vinda do contrato, e a
- * serialização real da resposta — que é onde um `case_id` vazaria.
- *
- * ## As iscas deste arquivo, e como cada uma foi provada
- *
- * Cada linha foi desligada no código de produção, a mudança foi conferida no
- * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
- * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
- * O número é o `fail` que o próprio `node --test` reporta.
- *
- * | o que foi desligado | `fail` |
- * |---|---|
- * | `deny_429` virando `log_and_alert` no teto da foto | 2 |
- * | `window: 'lifetime'` virando `'1h'` no teto da foto | 1 |
- * | `JANELA_VITALICIA_EM_SEGUNDOS` de 100 anos para 1 h | 1 |
- * | a segunda contagem do serviço (SEC-009) | 1 |
- * | o teto de 2 MB virando os 10 MB da foto de pet | 1 |
- * | a chave da foto voltando para o prefixo `pets/` | 1 |
- * | `naoEncontrado()` virando `semPermissao()` (403 no lugar de 404) | 1 |
- * | `case_id` acrescentado ao montador da resposta | 1 |
- * | o vínculo direto do critério 10 virando enfileiramento | 1 |
- * | `deny_429` virando `hold_for_review` no registro | **não compila** |
- * | `rateLimit` removido de qualquer rota com efeito | **não compila** |
- * | dimensão `found_report` declarada sem resolvedor | **não compila** |
- * | `app.post` direto, fora de `registrarRota` | o portão de registro reprova |
- *
- * As três linhas de "não compila" são a forma mais forte: o tipo de
- * `defineRoute` e o de `registrarRota` recusam o arranjo antes de a suíte
- * existir. E é por elas que a isca do teto precisa ser **automática** — o mesmo
- * caminho com `criarContadorDesligado()` deixa a quarta foto passar, e é isso
- * que prova que o caso mede LIMITE, e não a capacidade de contar até quatro.
- */
+/** As cinco rotas do achado avulso, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -78,13 +41,7 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const RELATOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 /** Sabe o UUID do achado do `RELATOR` e tenta mesmo assim. */
 const INTRUSO = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
-/**
- * O TUTOR DO PET a que o aviso se refere (BICHUS-35). **Não é o relator**: quem
- * relata é quem achou o animal. Ele existe nesta bancada porque a conversa
- * mediada é simétrica e ele precisa conseguir anexar foto — e porque a diferença
- * entre ele e o `INTRUSO` é a única coisa que separa "autorização ampliada" de
- * "autorização removida".
- */
+/** O TUTOR DO PET a que o aviso se refere (BICHUS-35). */
 const TUTOR = '018f3a2b-0000-7000-8000-0000000000cc' as UserId;
 
 const ACHADO_DO_RELATOR = '018f3a2b-0000-7000-8000-00000000f001' as FoundReportId;
@@ -95,15 +52,7 @@ const CASO_DO_SHARE_TOKEN = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 const AGORA = 1_800_000_000_000;
 const SHARE_TOKEN = 'tok'.padEnd(24, 'x');
 
-/**
- * A base de MÍDIA, de onde sai `matched_pet.photo_url`.
- *
- * `BASE_DA_WEB` existe ao lado dela e **não é usada na fiação**: ela é o engano
- * que o caso da foto tem de poder reprovar. As duas são hosts diferentes por
- * decisão do cliente (ver a fiação em `src/bin/api.ts`), e um endereço montado
- * sobre a base errada é exatamente o defeito que passou em `tag-routes.ts` até
- * `foto-na-resolucao-da-tag.test.ts` cobrar a base certa por comparação.
- */
+/** A base de MÍDIA, de onde sai `matched_pet.photo_url`. */
 const BASE_DE_MIDIA = 'https://midia.bichu.test' as AbsoluteUrl;
 const BASE_DA_WEB = 'https://www.bichu.test' as AbsoluteUrl;
 
@@ -114,27 +63,20 @@ const NOME_DO_PET = 'Aurora';
 interface Cenario {
   readonly contador?: RateLimitStore;
   /**
-   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar
-   * o dono — é o equivalente exato de tirar `reporter_user_id = :dono` da
-   * cláusula `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
+   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar o
+   * dono — é o equivalente exato de tirar `reporter_user_id = :dono` da cláusula
+   * `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
    */
   readonly autorizacaoDesligada?: boolean;
   /**
-   * **A isca da AMPLIAÇÃO (BICHUS-35).** Com `true`, `avisoParaAnexarFoto`
-   * volta a aceitar só o relator — é o equivalente exato de não ter acrescentado
-   * `OR pets.owner_user_id = :chamador` ao `WHERE`. O caso do tutor tem de
-   * reprovar, e o do intruso tem de continuar passando (404).
+   * **A isca da AMPLIAÇÃO (BICHUS-35).** Com `true`, `avisoParaAnexarFoto` volta a
+   * aceitar só o relator — é o equivalente exato de não ter acrescentado `OR
+   * pets.owner_user_id = :chamador` ao `WHERE`.
    */
   readonly ampliacaoDesligada?: boolean;
   readonly statusDoAchado?: AchadoGravado['status'];
   readonly fotosJaPedidas?: number;
-  /**
-   * O pet JA identificado, quando o cenario tem um.
-   *
-   * Ausente por padrao de proposito: o achado avulso cruzado por semelhanca e o
-   * caso comum, e e nele que a emenda 7 do ADR-0010 manda foto e nome NAO
-   * sairem. Quem quer a foto pede o pet.
-   */
+  /** O pet JA identificado, quando o cenario tem um. */
   readonly petCorrespondente?: PetCorrespondente | null;
 }
 
@@ -154,24 +96,12 @@ function achadoGravado(ajustes: Partial<AchadoGravado> = {}): AchadoGravado {
     temFoto: false,
     observacao: 'Coleira azul, sem plaquinha.',
     criadoEm: new Date(AGORA),
-    // O PADRÃO É O ACHADO AVULSO SEM PET CERTO, e isso é o estado que a emenda
-    // 7 do ADR-0010 mantém fechado: `null` aqui é o que o repositório devolve
-    // quando `COALESCE(pet_id, lost_cases.pet_id)` não achou linha. Os casos
-    // que exigem a foto e o nome **pedem** o pet explicitamente, e é por isso
-    // que eles medem alguma coisa.
     petCorrespondente: null,
     ...ajustes,
   };
 }
 
-/**
- * O repositório, com a autorização **dentro da consulta**.
- *
- * `buscarDoRelator` devolve `null` para qualquer chamador que não seja o dono, e
- * essa é a única coisa que o serviço recebe: ele não tem como saber se o achado
- * existe e é de outra pessoa, ou se não existe. Os dois casos chegam idênticos, e
- * é isso que faz o 404 ser estrutural em vez de lembrado.
- */
+/** O repositório, com a autorização **dentro da consulta**. */
 function repositorio(cenario: Cenario): FoundReportRepository {
   const meu = (achado: FoundReportId, dono: UserId): boolean =>
     achado === ACHADO_DO_RELATOR && (cenario.autorizacaoDesligada === true || dono === RELATOR);
@@ -223,9 +153,6 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       ),
     statusDoRelator: (achado, dono) =>
       Promise.resolve(meu(achado, dono) ? (cenario.statusDoAchado ?? 'open') : null),
-    // A AMPLIAÇÃO: o relator **ou o tutor do pet**. O dublê imita o `OR` do
-    // `WHERE` e nada mais -- o `INTRUSO` continua recebendo `null`, que é
-    // o que faz o 404 do terceiro continuar sendo estrutural.
     avisoParaAnexarFoto: (achado, chamador) =>
       Promise.resolve(
         meu(achado, chamador) ||
@@ -242,7 +169,6 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       gravadas.push(...sugestoes);
       return Promise.resolve(sugestoes.length);
     },
-    // O achador sem conta tem bancada própria (`finder-found-report-routes.test.ts`).
     avisoPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
     enriquecerPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
     intencaoDeFotoDoAchadorPelaReferencia: () => Promise.reject(new Error('fora desta bancada')),
@@ -295,9 +221,6 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       return Promise.resolve('job-1');
     },
     claim: () => Promise.resolve([]),
-    // Este teste nao exercita a fila; a varredura de orfaos entra na porta
-    // porque o tipo a exige, e devolver lista vazia e o que um dublê honesto
-    // faz -- inventar orfao aqui seria o dublê contando uma historia propria.
     recuperarOrfaos: () => Promise.resolve([]),
     complete: () => Promise.resolve(),
     fail: () => Promise.resolve(),
@@ -318,8 +241,6 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       liberar: () => Promise.resolve(),
     },
     baseDeMidia: BASE_DE_MIDIA,
-    // O contrato DE VERDADE: é ele que decide o schema do corpo, e uma cópia
-    // aqui deixaria de acusar mudança na spec.
     contrato: carregarContrato('api/openapi.yaml'),
     clock,
   });
@@ -387,13 +308,6 @@ function tetoDoRecadoNoContrato(): number {
 /**
  * O teto de `found_reports.notes` lido do **CHECK da migração**, e não escrito
  * aqui.
- *
- * É esta ponta que faz os casos abaixo medirem o defeito de verdade. Ler o teto
- * do contrato e depois conferir o contrato contra si mesmo é tautologia: com o
- * contrato de volta em 1000, um caso que envia `teto + 1` manda 1001 e continua
- * sendo recusado -- ele acompanha o contrato em vez de prendê-lo. O número que
- * manda é o da COLUNA, porque é ele que produz o erro de servidor, e o contrato
- * é que tem de casar com ele.
  */
 function tetoDaColunaNaMigracao(): number {
   const sql = readFileSync('migrations/20260917000007_tags-e-avisos-do-achador.sql', 'utf8');
@@ -404,8 +318,6 @@ function tetoDaColunaNaMigracao(): number {
 
 void describe('as rotas existem e respondem o que o contrato declara', () => {
   void it('`notes` no teto do contrato passa, e um caractere a mais é 400 antes do banco', async () => {
-    // O contrato dizia 1000 e o banco (`found_reports_notes_tamanho`) aceita
-    // 500: o texto entre os dois passava pela borda e morria no INSERT como 500.
     const teto = tetoDoRecadoNoContrato();
     const app = servidor();
     const noTeto = await pedir(app, {
@@ -494,8 +406,6 @@ void describe('as rotas existem e respondem o que o contrato declara', () => {
   });
 
   void it('enriquecer um achado já encerrado responde 410, e não 404', async () => {
-    // O achado existe e é de quem está perguntando. Esconder isso faria a pessoa
-    // achar que perdeu o próprio relato.
     const app = servidor({ statusDoAchado: 'closed' });
     const { status, corpo } = await pedir(app, {
       metodo: 'PATCH',
@@ -524,9 +434,6 @@ void describe('ADR-0021: recurso de outra conta responde 404, nunca 403', () => 
   });
 
   void it('o 404 do achado alheio é INDISTINGUÍVEL do 404 do inexistente', async () => {
-    // Se os dois diferissem em qualquer coisa — status, `type`, `detail` —, a
-    // rota viraria um oráculo: quem tivesse um UUID descobriria se ele é um
-    // achado de verdade, e um achado carrega onde um animal foi visto.
     const app = servidor();
     const alheio = await pedir(app, {
       url: `/found-reports/${ACHADO_DO_RELATOR}`,
@@ -552,8 +459,6 @@ void describe('ADR-0021: recurso de outra conta responde 404, nunca 403', () => 
       corpo: { message: 'oi' },
     });
     await app.close();
-    // O 410 é o ramo de quem JÁ provou ser dono. Para o intruso, o achado não
-    // existe — inclusive o encerrado.
     assert.equal(status, 404);
   });
 
@@ -576,11 +481,6 @@ void describe('ADR-0021: recurso de outra conta responde 404, nunca 403', () => 
 
 void describe('ADR-0010: o que NÃO sai na resposta', () => {
   void it('nenhuma resposta carrega coordenada, `case_id`, `pet_id` nem `reporter_user_id`', async () => {
-    // O achado pode ter se ligado a um caso pelo `share_token`. Devolver qual
-    // contaria a quem registrou qual pet de qual tutor está sendo procurado —
-    // antes de confirmação humana nenhuma, e para quem, no pior caso, é o falso
-    // achador. O portão de contrato só procura o que SUMIU: propriedade a mais
-    // passa por ele.
     const app = servidor();
     const criado = await pedir(app, {
       metodo: 'POST',
@@ -626,8 +526,6 @@ void describe('ADR-0010: o que NÃO sai na resposta', () => {
     await app.close();
 
     assert.equal(corpo['area_label'], 'Pinheiros, São Paulo');
-    // Ponto arredondado ainda é ponto: um arredondamento de 100 m no meio de um
-    // bairro residencial aponta para o quarteirão.
     assert.ok(!/-23\.\d|-46\.\d|-23,|-46,/.test(JSON.stringify(corpo)));
   });
 });
@@ -652,10 +550,6 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
   });
 
   void it('**o vínculo direto NÃO confirma nada**: a sugestão não carrega decisão', async () => {
-    // Score 1,0 e a pessoa dizendo "vi este pet" é o caso mais forte que existe,
-    // e é exatamente onde a regra precisa não ter exceção: quem chega pelo link
-    // do caso é quem mais facilmente erraria o animal de boa-fé, e quem mais
-    // facilmente mentiria de má-fé.
     gravadas.length = 0;
     const app = servidor();
     await pedir(app, {
@@ -672,7 +566,6 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
   });
 
   void it('sem `share_token`, o cruzamento é ENFILEIRADO e não roda na requisição', async () => {
-    // Seção 4.10: "é um job na fila, nunca síncrono na requisição".
     gravadas.length = 0;
     enfileirados.length = 0;
     const app = servidor();
@@ -685,8 +578,6 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
   });
 
   void it('um `share_token` que não resolve não impede o registro', async () => {
-    // A pessoa chegou por um push que envelheceu. O achado dela continua valendo
-    // como achado avulso, e vale por 30 dias.
     enfileirados.length = 0;
     const app = servidor();
     const { status } = await pedir(app, {
@@ -701,19 +592,7 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
   });
 });
 
-/**
- * BICHUS-35: A AMPLIAÇÃO DA AUTORIZAÇÃO DA INTENÇÃO DE FOTO.
- *
- * O fato protegido: **o tutor do pet consegue obter intenção de foto, e um
- * terceiro não.** Os dois casos juntos, porque separados nenhum dos dois mede o
- * que importa -- só o tutor mediria "alguém passa", e só o intruso mediria
- * "alguém é recusado".
- *
- * A isca é `ampliacaoDesligada`, que devolve o dublê ao comportamento de
- * `buscarDoRelator` (só o relator). Com ela ligada o caso do tutor REPROVA e o
- * do intruso continua verde -- é essa assimetria que prova que a conferência
- * mede a ampliação e não a existência de uma recusa qualquer.
- */
+/** BICHUS-35: A AMPLIAÇÃO DA AUTORIZAÇÃO DA INTENÇÃO DE FOTO. */
 void describe('BICHUS-35: o tutor do pet obtém intenção de foto, e o terceiro não', () => {
   const corpoDaIntencao = {
     found_report_id: ACHADO_DO_RELATOR,
@@ -742,15 +621,11 @@ void describe('BICHUS-35: o tutor do pet obtém intenção de foto, e o terceiro
   });
 
   void it('CONTROLE POSITIVO: o RELATOR continua recebendo 201 nos dois estados', async () => {
-    // Passa com a ampliação ligada e desligada. Sem ele, desligar a ampliação
-    // poderia estar quebrando a rota inteira, e o caso do tutor reprovaria por
-    // um motivo que não é o medido.
     assert.equal(await pedirComo({}, RELATOR), 201);
     assert.equal(await pedirComo({ ampliacaoDesligada: true }, RELATOR), 201);
   });
 
   void it('CONTROLE NEGATIVO: o achado INEXISTENTE é 404 nos dois estados', async () => {
-    // A ampliação não pode inventar aviso. Nos dois estados, 404.
     for (const cenario of [{}, { ampliacaoDesligada: true }]) {
       const app = servidor(cenario);
       const { status } = await pedir(app, {
@@ -765,10 +640,7 @@ void describe('BICHUS-35: o tutor do pet obtém intenção de foto, e o terceiro
   });
 
   void it('ISCA: com a ampliação desligada, o tutor volta a receber 404', async () => {
-    // É este caso que mede que a ampliação EXISTE. Se ele passar com a
-    // ampliação ligada, o `OR` do `WHERE` não está fazendo efeito nenhum.
     assert.equal(await pedirComo({ ampliacaoDesligada: true }, TUTOR), 404);
-    // E o terceiro continua recusado: desligar a ampliação não abre nada.
     assert.equal(await pedirComo({ ampliacaoDesligada: true }, INTRUSO), 404);
   });
 });
@@ -795,8 +667,6 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('ISCA: com o contador desligado, a quarta passa — o caso acima mede LIMITE', async () => {
-    // Sem esta metade, o caso acima poderia estar medindo qualquer coisa que
-    // falha na quarta chamada.
     const app = servidor({ contador: criarContadorDesligado() });
     const status: number[] = [];
     for (let i = 0; i < 4; i += 1) {
@@ -816,14 +686,10 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('o teto é por AVISO, e não por conta', async () => {
-    // Um teto por conta faria o segundo animal da noite ficar sem foto nenhuma.
     const app = servidor();
     for (let i = 0; i < 3; i += 1) {
       await pedir(app, { metodo: 'POST', url: '/media/found-report-photo-intents', corpo: corpoDaFoto });
     }
-    // Outro aviso, mesma conta. O dobre do repositório diz que só o
-    // `ACHADO_DO_RELATOR` é do relator, então este responde 404 — e o que
-    // importa é que ele NÃO responde 429, que é o que um teto por conta daria.
     const outro = await pedir(app, {
       metodo: 'POST',
       url: '/media/found-report-photo-intents',
@@ -835,21 +701,13 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('a janela `lifetime` não vira: o balde começa na época', () => {
-    // Um teto vitalício que rolasse deixaria a quarta foto passar no dia da
-    // virada, em silêncio. `inicioDaJanela` precisa devolver a época para
-    // qualquer instante que este sistema vá ver.
     const janela = janelaEmSegundos('lifetime');
     assert.equal(inicioDaJanela(AGORA, janela).getTime(), 0);
     assert.equal(inicioDaJanela(Date.now(), janela).getTime(), 0);
-    // E o contrário: uma janela de 1 h rola, e é por isso que a de cima precisa
-    // ser vitalícia para valer.
     assert.notEqual(inicioDaJanela(AGORA, janelaEmSegundos('1h')).getTime(), 0);
   });
 
   void it('a segunda contagem, a do serviço, recusa mesmo com o teto da borda desligado', async () => {
-    // Duas contagens independentes de propósito (ADR-0001): basta um job ou uma
-    // rota interna nova para a borda ser contornada, e aí o limite vira
-    // decoração. A mais restritiva vence.
     const app = servidor({ contador: criarContadorDesligado(), fotosJaPedidas: 3 });
     const { status, corpo } = await pedir(app, {
       metodo: 'POST',
@@ -863,31 +721,6 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('SVG nunca passa, e ele é recusado na BORDA pelo enum do contrato', async () => {
-    // **Quem recusa é o schema do corpo, antes do handler.** O contrato declara
-    // `content_type` como enum fechado, com a mesma lista de `TIPOS_ACEITOS`
-    // (`media/domain/chave-de-objeto.ts`), então SVG não chega ao serviço e o
-    // status é 400. Isso NÃO é divergência com o contrato: medido em
-    // `api/openapi.yaml`, `createFoundReportPhotoUploadIntent` declara 400, o
-    // caso afirma 400, e os dois concordam — o mesmo vale para
-    // `createPetPhotoUploadIntent` e para as outras CINCO operações de upload
-    // intent, que declaram 400 e 415.
-    //
-    // **São SETE no total, e a contagem foi medida na mescla do terceiro lote
-    // de 20/10/2026, não copiada.** O comentário dizia "outras três" (cinco no
-    // total) e isso envelheceu duas vezes no mesmo dia: entrou
-    // `createNetworkEventCoverUploadIntent` (a capa do encontro) e entrou
-    // `createPublicationPhotoUploadIntent` (a foto da publicação do Mural), e
-    // esta última entrou na ONDA 1 DESTE MESMO LOTE. A afirmação substantiva
-    // continua verdadeira e foi reconferida uma a uma contra
-    // `api/openapi.yaml`: as sete declaram 400 e 415.
-    //
-    // **O que mudou é que o 415 deixou de ser alcançável nesta operação.** Os
-    // dois caminhos que o produziam — tipo fora da lista e tamanho acima do
-    // teto — agora são recusados pelo schema com 400, e o 415 próprio do
-    // Fastify (cabeçalho `Content-Type` da requisição) vira 400 em
-    // `src/shared/http/server.ts`. O 415 continua declarado e NÃO deve sair do
-    // contrato sem decisão do cliente: remover resposta declarada é quebra de
-    // contrato.
     const app = servidor();
     const { status, corpo } = await pedir(app, {
       metodo: 'POST',
@@ -898,37 +731,10 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
 
     assert.equal(status, 400);
     assert.equal(tipoDe(corpo), 'validation-failed');
-    // O que importa de verdade: ele NÃO passa. Documento com script servido do
-    // domínio de mídia é o que o ADR-0007 fecha, e 400 fecha igual a 415.
     assert.notEqual(status, 201);
   });
 
   void it('acima do teto ÚNICO de envio não passa, e ele é recusado na BORDA pelo schema', async () => {
-    // **O teto desta rota era 2 MB, e deixou de ser.** O cliente unificou o
-    // envio em 5 MB em 17/10/2026 — "em toda a aplicação, seja para foto do
-    // pet, evento, loja ou qualquer outro recurso que utilize imagem" — e o
-    // número passou a morar num lugar só (`media/domain/derivadas.ts`), de onde
-    // `TETO_DE_BYTES_DA_FOTO_DO_ACHADO` o lê. O contrato diz o mesmo, em
-    // `UploadIntentInput.byte_size`. O caso lê a constante de propósito: um
-    // `2 * 1024 * 1024` escrito aqui é exatamente o que divergiu.
-    //
-    // **E o 415 deixou de ser alcançável por este caminho.** Enquanto o schema
-    // aceitava 10 MB e o serviço recusava em 2, o que respondia era o serviço,
-    // com 415. Agora os dois carregam o MESMO número (`byte_size.maximum:
-    // 5242880` no contrato, `TETO_DE_BYTES` em
-    // `media/domain/chave-de-objeto.ts`), então quem recusa é o schema do
-    // corpo, antes do handler, com 400 — a mesma forma do caso do SVG logo
-    // acima. E 400 é o que o contrato declara aqui: medido em
-    // `api/openapi.yaml`, `createFoundReportPhotoUploadIntent` tem
-    // `'400': ValidationFailed`, então o caso e o contrato concordam.
-    //
-    // O 415 segue declarado sem caminho que o produza: os dois que o produziam
-    // viraram 400 no schema, e o 415 próprio do Fastify (cabeçalho
-    // `Content-Type` da requisição) é convertido em 400 por
-    // `src/shared/http/server.ts`. Tirá-lo do contrato é quebra de contrato e
-    // depende de decisão do cliente. A conferência de `ehTipoAceito` e
-    // `TETO_DE_BYTES` no serviço continua escrita, por defesa em profundidade,
-    // e não é mais ela que responde aqui.
     const app = servidor();
     const acimaDoTeto = await pedir(app, {
       metodo: 'POST',
@@ -942,7 +748,6 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
     });
     await app.close();
 
-    // O que importa de verdade: um byte acima do teto NÃO vira autorização.
     assert.notEqual(acimaDoTeto.status, 201);
     assert.equal(acimaDoTeto.status, 400);
     assert.equal(tipoDe(acimaDoTeto.corpo), 'validation-failed');
@@ -950,9 +755,6 @@ void describe('SEC-009: o teto de três fotos por aviso VALE', () => {
   });
 
   void it('a chave do objeto fica sob `found-reports/`, e não sob `pets/`', async () => {
-    // Prefixos separados é o que permite a uma política de bucket e a uma
-    // varredura de expurgo tratarem os dois de formas diferentes: a foto do
-    // achador some 30 dias depois do encerramento, a do pet segue o cadastro.
     const app = servidor();
     const { corpo } = await pedir(app, {
       metodo: 'POST',
@@ -999,8 +801,6 @@ void describe('o teto do registro é o do contrato, e ele RECUSA', () => {
   });
 
   void it('as duas entradas do contrato estão declaradas, e só uma delas recusa', () => {
-    // `hold_for_review` NÃO vira 429 (`aplicacao-de-teto.ts`): ele conta e
-    // alerta. Está aqui porque o contrato o declara, não porque a rota o quis.
     const recusam = rotaDeRegistroDeAchado.rateLimit.filter((e) => e.onExceed === 'deny_429');
     assert.equal(rotaDeRegistroDeAchado.rateLimit.length, 2);
     assert.equal(recusam.length, 1);
@@ -1019,8 +819,6 @@ void describe('o teto do registro é o do contrato, e ele RECUSA', () => {
 
 void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
   void it('com a autorização desligada, o intruso passa a ler o achado alheio', async () => {
-    // Este caso não é uma garantia: ele é a prova de que os casos de 404 acima
-    // medem a autorização, e não o fato de o dobre devolver `null` para tudo.
     const app = servidor({ autorizacaoDesligada: true });
     const { status } = await pedir(app, {
       url: `/found-reports/${ACHADO_DO_RELATOR}`,
@@ -1037,25 +835,7 @@ void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
   });
 });
 
-
-/**
- * O RECADO DO ENRIQUECIMENTO, nas duas bordas.
- *
- * `FoundReportEnrichment.message` declarava `maxLength: 1000` e grava em
- * `found_reports.notes`, que SEMPRE recusou acima de 500
- * (`found_reports_notes_tamanho`, migração 20260917000007). O texto entre 501 e
- * 1000 passava pela validação e estourava no banco: quem avisa recebia **erro de
- * servidor** em vez de recusa explicada, e o recado se perdia -- com o animal na
- * mão de quem estava tentando ajudar.
- *
- * As DUAS bordas, e não só a de cima, porque é em `<=` contra `<` que o erro de
- * comparação mora: um teto escrito como 499 recusaria 500 e passaria neste
- * arquivo se só o 501 fosse medido.
- *
- * A recusa é medida **chamando a aplicação**, pelo `inject` do Fastify de
- * verdade -- a tela não participa. O teto sai do contrato (`tetoNoContrato`) e
- * não de um número escrito aqui: uma cópia deixaria de acusar mudança na spec.
- */
+/** O RECADO DO ENRIQUECIMENTO, nas duas bordas. */
 void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bordas', () => {
   void it('500 exatos é ACEITO e chega gravado na resposta', async () => {
     const teto = tetoDaColunaNaMigracao();
@@ -1074,8 +854,6 @@ void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bo
       'o contrato voltou a prometer mais do que a coluna aceita: é o defeito de novo',
     );
     assert.equal(resposta.status, 200);
-    // Gravado, e não apenas aceito: `notes` da resposta é `observacao` do que o
-    // repositório devolveu depois do `UPDATE`.
     assert.equal(resposta.corpo['notes'], 'a'.repeat(teto));
   });
 
@@ -1096,8 +874,6 @@ void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bo
     );
     assert.equal(tipoDe(resposta.corpo), 'validation-failed');
 
-    // A recusa precisa DIZER O LIMITE: "inválido" manda a pessoa adivinhar
-    // quanto cortar de um texto que ela acabou de escrever.
     const erros = resposta.corpo['errors'] as { field: string; code: string; message: string }[];
     const doRecado = erros.find((e) => e.field === 'message');
     assert.ok(doRecado, `o 400 não nomeia o campo \`message\`: ${resposta.bruto}`);
@@ -1110,9 +886,6 @@ void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bo
   });
 
   void it('o 501 é recusado ANTES do repositório: nada foi gravado', async () => {
-    // Se a validação do contrato deixasse passar, o `UPDATE` iria ao banco e o
-    // 500 viria dele. Aqui o dobre devolveria 200 com o texto inteiro, e é por
-    // isso que o status acima prova a borda e não a sorte.
     const teto = tetoDaColunaNaMigracao();
     const app = servidor();
     const resposta = await pedir(app, {
@@ -1127,33 +900,9 @@ void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bo
   });
 });
 
-/**
- * O TETO DE `ref_data_version`, ancorado no `CHECK` DA MIGRAÇÃO.
- *
- * O defeito medido: `StrayFoundReportInput.ref_data_version` não tinha
- * `maxLength` nenhum no contrato, contra `found_reports.ref_data_version` com
- * `CHECK ... BETWEEN 1 AND 40`. 41 caracteres passavam pela borda e morriam no
- * `INSERT` — erro de servidor em vez de recusa explicada. É a mesma forma do
- * caso de `notes` no topo deste arquivo, e a assimetria era com `PetInput`, cujo
- * caminho já devolvia 400 (`pet-service.ts` confere a versão contra
- * `ref_data_versions` antes de gravar).
- *
- * **O teto vem da COLUNA, não do contrato**, e a diferença não é estilo: uma
- * isca que lê o `maxLength` do contrato acompanha quem o sabota — sobe o
- * contrato para 80 e a isca passa a aprovar 80, que é exatamente o número que o
- * banco recusa. Lido da migração, sabotar o contrato REPROVA.
- *
- * As duas bordas (40 e 41) estão aqui porque é onde erro de comparação mora:
- * `<` no lugar de `<=` passa no teto e reprova uma abaixo dele, e um caso só
- * não distingue os dois.
- */
+/** O TETO DE `ref_data_version`, ancorado no `CHECK` DA MIGRAÇÃO. */
 void describe('o teto de `ref_data_version` é o da coluna, e a recusa diz o limite', () => {
-  /**
-   * O `BETWEEN 1 AND 40` de `found_reports_ref_data_version_tamanho`, lido do
-   * disco. A varredura procura a RESTRIÇÃO em qualquer migração em vez de abrir
-   * um nome de arquivo: migração renomeada derrubaria uma leitura por caminho
-   * fixo, e derrubar é o certo — aprovar por ausência de dado não é.
-   */
+  /** O `BETWEEN 1 AND 40` de `found_reports_ref_data_version_tamanho`, lido do disco. */
   function tetoDaColuna(): number {
     const pasta = resolve(process.cwd(), 'migrations');
     const achados: number[] = [];
@@ -1224,52 +973,6 @@ void describe('o teto de `ref_data_version` é o da coluna, e a recusa diz o lim
   });
 });
 
-// ===========================================================================
-// EMENDA 7 DO ADR-0010 (28/10/2026): A FOTO E O NOME DO PET
-// ===========================================================================
-//
-// A QUEIXA, repetida pelo cliente: o achado registrado aparece **sem foto nem
-// nome do pet**. A AUTORIZAÇÃO, hoje, literal: *"pode colocar a foto e o nome
-// do pet."*
-//
-// A frase não disse onde, e o recorte é da emenda: foto e nome saem nos dois
-// caminhos em que **quem lê já sabe qual animal é** — a plaquinha foi lida
-// (`origin: 'tag_scan'`), ou a pessoa colou o `share_token` que o tutor
-// publicou. No achado **avulso**, cruzado por semelhança, não saem: o cliente
-// mediu o golpe do falso achador em 20/10/2026, e foto e nome de um palpite da
-// máquina são o insumo que falta ao golpista para "achei seu pet" soar
-// verdadeiro.
-//
-// ## O QUE ESTE BLOCO MEDE, E O QUE ELE NÃO PODE MEDIR
-//
-// Aqui o repositório é **dublê**: ele devolve o pet que o caso lhe manda
-// devolver. Então este bloco prova que a BORDA projeta `matched_pet` quando o
-// recebe, e que ela não o inventa quando não recebe — o que é a metade de
-// cima da entrega.
-//
-// A metade de baixo — que a CONSULTA de verdade não traz o pet no achado
-// avulso — não é observável daqui, e um `JOIN` em `match_candidates`
-// acrescentado amanhã passaria por este arquivo inteiro. Ela é medida em
-// `../persistence/so-o-pet-certo-sai-no-achado.test.ts`, no SQL compilado.
-// Os dois arquivos juntos são a prova; nenhum deles sozinho é.
-//
-// ## DESLIGAR PARA VER REPROVAR -- medido (28/10/2026, Node 22.23.2)
-//
-// Linha de base deste arquivo: **48 casos, 48 passam, 0 reprovam.**
-//
-// | o que foi desligado em `found-report-routes.ts` | `fail` |
-// |---|---|
-// | `matched_pet` fixo em `null` (volta ao defeito de 28/10) | 5 |
-// | `matched_pet` montado SEMPRE, ignorando o nulo (alarga a emenda) | 1 |
-//
-// As duas linhas são o ponto, e elas reprovam casos DIFERENTES. A primeira
-// derruba os quatro casos de presença **e a isca do sentido contrário** -- que
-// é o que impede os casos de ausência de ficarem verdes sobre uma rota que
-// simplesmente não sabe projetar o pet. A segunda derruba só o caso de
-// ausência, e é a que importa para a privacidade: ela é a prova de que, no
-// achado avulso, a foto e o nome **não saem** porque a decisão diz que não
-// saem, e não por acidente de implementação.
-
 const PET_IDENTIFICADO = { nome: NOME_DO_PET, chaveDaFoto: CHAVE_DA_CAPA };
 
 void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () => {
@@ -1305,10 +1008,6 @@ void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () =
   });
 
   void it('a base é a de MÍDIA, e não a da web — elas são hosts diferentes por decisão', async () => {
-    // Sem este caso, o anterior ficaria satisfeito por qualquer base. As duas
-    // são hosts diferentes por decisão do cliente (ver a fiação em
-    // `src/bin/api.ts`), e montar sobre a errada é o defeito que passou em
-    // `tag-routes.ts` até `foto-na-resolucao-da-tag.test.ts` cobrar a certa.
     const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
     const { corpo, bruto } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
     await app.close();
@@ -1327,10 +1026,6 @@ void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () =
   });
 
   void it('sem capa pronta, o nome sai e `photo_url` é nulo', async () => {
-    // O contrapeso: sem ele, os casos acima poderiam ser satisfeitos por um
-    // endereço constante. `null` aqui significa "este pet não tem capa pronta",
-    // nunca "a rota não sabe responder" — e `display_name` é `required` no
-    // contrato, então ele continua saindo.
     const app = servidor({ petCorrespondente: { nome: NOME_DO_PET, chaveDaFoto: null } });
     const { corpo } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
     await app.close();
@@ -1347,8 +1042,6 @@ void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () =
   });
 
   void it('o detalhe e a LISTA trazem o pet, e não só o 201 do registro', async () => {
-    // A tela "Meus achados" lê a lista, e o cliente reclamou das duas. Um
-    // conserto que só alcançasse o 201 deixaria a lista como estava.
     const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
     const lista = await pedir(app, { url: '/found-reports' });
     await app.close();
@@ -1368,9 +1061,6 @@ void describe('emenda 7: com o pet JÁ identificado, a foto e o nome SAEM', () =
 
 void describe('emenda 7: no achado AVULSO, a foto e o nome NÃO saem', () => {
   void it('`matched_pet` é nulo, e nem o nome nem a chave da capa aparecem no corpo', async () => {
-    // `servidor()` sem `petCorrespondente` é o achado avulso: é o que o
-    // repositório devolve quando `COALESCE(pet_id, lost_cases.pet_id)` não acha
-    // linha, e é o caso COMUM do produto.
     const app = servidor();
     const criado = await pedir(app, {
       metodo: 'POST',
@@ -1386,10 +1076,6 @@ void describe('emenda 7: no achado AVULSO, a foto e o nome NÃO saem', () => {
       ['o detalhe', detalhe],
       ['a lista', lista],
     ] as const) {
-      // ÂNCORA PRIMEIRO. `assert(!bruto.includes('Aurora'))` fica verde com a
-      // rota caída, com 404 e com corpo vazio — é o portão cego que este
-      // repositório já produziu mais de uma vez. Então todo caso de ausência
-      // daqui ancora no que TEM de existir antes de cobrar o que não pode.
       assert.equal(
         resposta.status,
         onde === 'o 201 do registro' ? 201 : 200,
@@ -1435,19 +1121,6 @@ void describe('emenda 7: no achado AVULSO, a foto e o nome NÃO saem', () => {
   });
 
   void it('ISCA NO SENTIDO CONTRÁRIO: com o pet no cenário, o MESMO corpo passa a trazê-los', async () => {
-    // ESTE CASO É O QUE FAZ O DE CIMA MEDIR ALGUMA COISA.
-    //
-    // As três ausências acima ficariam verdes para sempre se a borda nunca
-    // soubesse projetar o pet — por um campo com nome errado, por uma projeção
-    // que devolve `undefined`, por um `matched_pet` que o serializador come. Aí
-    // o arquivo estaria medindo a INCAPACIDADE da rota, e não a decisão de
-    // privacidade, e ninguém saberia a diferença.
-    //
-    // Então aqui o MESMO corpo, pelas MESMAS três superfícies, com a única
-    // diferença sendo o pet no cenário: as agulhas que lá têm de estar ausentes
-    // aqui têm de estar presentes. Uma das duas direções reprova em qualquer
-    // defeito que apague a projeção, e a outra em qualquer defeito que a
-    // alargue.
     const app = servidor({ petCorrespondente: PET_IDENTIFICADO });
     const criado = await pedir(app, {
       metodo: 'POST',
@@ -1479,9 +1152,6 @@ void describe('emenda 7: no achado AVULSO, a foto e o nome NÃO saem', () => {
   });
 
   void it('o nulo do pet não arrasta os outros campos do achado', async () => {
-    // `matched_pet: null` não pode ter custo: o resto da resposta é o que a
-    // tela já desenhava, e uma projeção que explodisse no nulo transformaria o
-    // caso comum do produto em tela vazia.
     const app = servidor();
     const { status, corpo } = await pedir(app, { url: `/found-reports/${ACHADO_DO_RELATOR}` });
     await app.close();

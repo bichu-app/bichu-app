@@ -1,26 +1,4 @@
-/**
- * As rotas da secao `Rede` no app (ADR-0025, ADR-0027 secao 12).
- *
- * ## Duas leituras alcancaveis sem conta, e o resto so com conta
- *
- * `listNetworkEvents` e publica e `getNetworkEvent` tem autenticacao opcional:
- * a `Rede` e navegavel deslogado. Nenhuma das duas carrega coordenada, e o
- * encontro privado sai nelas como teaser (so titulo, data local e estado) para
- * qualquer chamador, inclusive o aprovado. A forma vem do EVENTO, e nao de quem
- * pergunta (ADR-0021).
- *
- * As outras sete exigem conta (`bearerAuth` sem alternativa vazia): o ponto, a
- * agenda por distancia, o conteudo do privado, o pedido para participar (criar,
- * ler, desistir) e "meus pedidos". **O 401 vem antes de qualquer consulta**:
- * sem conta nao se descobre nem se o `slug` existe.
- *
- * ## O que este arquivo nao decide
- *
- * Quem pode ver o conteudo do privado e decidido na clausula `WHERE` do
- * repositorio (um `EXISTS` sobre o pedido aprovado), e nao aqui. O estado que o
- * app ve e derivado no dominio, e o recusado e o pendente caem no mesmo ramo
- * la. A validacao de query e de caminho vem do contrato, pelo `operationId`.
- */
+/** As rotas da secao `Rede` no app (ADR-0025, ADR-0027 secao 12). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -63,7 +41,7 @@ import {
 import type { StatusDoEncontro } from '../../domain/encontro-da-rede.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
-/** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
+/** Os tetos sao os do contrato, COPIADOS de la. */
 export const rotaDaAgenda = defineRoute({
   operationId: 'listNetworkEvents',
   method: 'get',
@@ -88,10 +66,7 @@ export const rotaDaAgendaPorDistancia = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * `account`, e nao `ip` (ADR-0027 12.5). O mesmo teto do detalhe: a tela do
- * encontro chama as operacoes a cada abertura.
- */
+/** `account`, e nao `ip` (ADR-0027 12.5). */
 export const rotaDoLocal = defineRoute({
   operationId: 'getNetworkEventLocation',
   method: 'get',
@@ -133,23 +108,8 @@ export const rotaDaDesistencia = defineRoute({
 });
 
 /**
- * "Meus eventos": a lista do DONO e a leitura que entrega o `ETag`
- * (19/10/2026, decisao do cliente).
- *
- * **As duas exigem conta e nao tem alternativa vazia**, ao contrario das duas
- * leituras publicas deste arquivo: a pergunta que elas respondem e "o que EU
- * criei", e sem conta ela nao tem resposta. O 401 vem antes de qualquer
- * consulta, como nas outras sete.
- *
- * Os tetos sao por `account`, e os numeros sao copiados de operacoes irmas:
- * 300/1h na lista (o de `listMyNetworkEventJoinRequests`, a outra colecao
- * "minha") e 600/1h na leitura de um (o do detalhe publico, porque abrir e
- * fechar a folha de confirmacao varias vezes e uso normal e cada abertura rele
- * a versao).
- *
- * **Nenhuma das duas declara `effects`**: as duas sao leitura. `expensive_query`
- * tambem nao -- a lista e recortada pela conta, e o teto de 3 encontros ativos
- * limita o tamanho dela na origem.
+ * "Meus eventos": a lista do DONO e a leitura que entrega o `ETag` (19/10/2026,
+ * decisao do cliente).
  */
 export const rotaDosMeusEncontros = defineRoute({
   operationId: 'listMyNetworkEvents',
@@ -175,25 +135,7 @@ export const rotaDosMeusPedidos = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * As tres escritas da comunidade (ADR-0025 emenda 3).
- *
- * `irreversible_write` nas tres: criar PUBLICA na hora (nao ha revisao que
- * desfaca), editar grava versao nova e cancelar e um estado que nao volta. Com
- * efeito nao vazio, `defineRoute` torna a ausencia de `rateLimit` erro de
- * compilacao (ADR-0016).
- *
- * Os tetos sao por `account`, e nao por `ip`: as tres exigem conta, entao
- * `account` existe e e exato, e o CGNAT das operadoras brasileiras faria um
- * teto por IP pegar vizinho inocente. **O teto de criar e o mais apertado**
- * (5/24h) porque, sem revisao humana, ele e o teto de 3 ativos sao a unica
- * contencao de volume; editar e mais folgado porque corrigir um texto e comum e
- * nao publica nada novo.
- *
- * O teto de 3 encontros ativos NAO esta aqui: ele conta LINHAS, e a porta de
- * teto conta requisicoes (a mesma limitacao de D56). Quem o aplica e o caso de
- * uso.
- */
+/** As tres escritas da comunidade (ADR-0025 emenda 3). */
 export const rotaDaCriacaoDeEncontro = defineRoute({
   operationId: 'createNetworkEvent',
   method: 'post',
@@ -225,7 +167,7 @@ const SEM_CACHE = 'private, no-store';
 
 /**
  * O default de `sort` **depende de `when`**: com `past` e `recentes`, com os
- * outros e `proximos`. E por isso que `effective_sort` existe na resposta.
+ * outros e `proximos`.
  */
 export function ordemPadraoDe(quando: RecorteNoTempo): OrdemDaAgenda {
   return quando === 'past' ? 'recentes' : 'proximos';
@@ -234,18 +176,12 @@ export function ordemPadraoDe(quando: RecorteNoTempo): OrdemDaAgenda {
 export interface Autenticador {
   /**
    * `sid` e a familia de refresh que emitiu o token -- a SESSAO DE APARELHO do
-   * ADR-0002, emenda 1, secao 2. Ele chega aqui porque desde a SEC-021 a
-   * regiao de referencia e do aparelho, e e dela que a agenda por distancia
-   * mede.
-   *
-   * **Opcional porque e opcional no token**: o que nasceu antes da emenda 1 nao
-   * o carrega. A ausencia nao recusa a rota -- a agenda sai por data e sem
-   * distancia, como para quem nunca informou onde estava.
+   * ADR-0002, emenda 1, secao 2.
    */
   autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
 }
 
-/** Quem chama e de qual aparelho. `familia` indefinida: token sem `sid`. */
+/** Quem chama e de qual aparelho. */
 interface ChamadorDaRede {
   readonly userId: UserId;
   readonly familia: FamiliaDeSessao | undefined;
@@ -260,20 +196,13 @@ export interface DependenciasDasRotasDaRede {
   /** De onde sai o esquema do corpo: a declaracao e a do contrato. */
   readonly contrato: Contrato;
   /**
-   * `WEB_BASE_URL`: onde o site mora, e de onde sai o endereco da pagina
-   * publica do encontro.
+   * `WEB_BASE_URL`: onde o site mora, e de onde sai o endereco da pagina publica do
+   * encontro.
    */
   readonly baseDaWeb: AbsoluteUrl;
   /**
-   * O interruptor das paginas publicas do site (`site_page_availability`,
-   * migracoes `20261020000010` e `20261020000017`).
-   *
-   * **Porta de `lostfound`, e isso e deliberado.** A tabela e do SITE, nao do
-   * modulo: a primeira pagina com interruptor foi a do caso, e importar a porta
-   * que ja existe e mais honesto que uma segunda definicao do mesmo conceito
-   * dentro de `network` -- a segunda definicao e a que diverge. Importar porta
-   * de outro modulo e o padrao desta base (`professionals` le
-   * `identity/ports`, `identity` le `media/ports`).
+   * O interruptor das paginas publicas do site (`site_page_availability`, migracoes
+   * `20261020000010` e `20261020000017`).
    */
   readonly paginas: DisponibilidadeDaPagina;
 }
@@ -283,9 +212,8 @@ interface QueryDaAgenda {
   readonly city?: string;
   readonly when?: RecorteNoTempo;
   /**
-   * A situacao CALCULADA. **Fora de `filtrosDaAgenda`, de proposito**: aquele
-   * objeto e espalhado nos DOIS recortes, e `listNearbyNetworkEvents` nao
-   * declara `status`. Dentro dele, o campo chegaria a um recorte que o ignora.
+   * A situacao CALCULADA. **Fora de `filtrosDaAgenda`, de proposito**: aquele objeto
+   * e espalhado nos DOIS recortes, e `listNearbyNetworkEvents` nao declara `status`.
    */
   readonly status?: StatusDoEncontro;
   readonly sort?: string;
@@ -304,13 +232,7 @@ interface QueryDosMeusPedidos {
   readonly limit?: number;
 }
 
-/**
- * `listMyNetworkEvents`: a pagina e, desde 27/10/2026, `status`.
- *
- * O tipo serve SO esta rota (medido: uma unica referencia neste arquivo), e o
- * nome ficou do tempo em que a pagina era tudo que ela aceitava. O campo e
- * opcional, e ausente nao recorta.
- */
+/** `listMyNetworkEvents`: a pagina e, desde 27/10/2026, `status`. */
 interface QueryDaPagina {
   readonly status?: StatusDoEncontro;
   readonly page?: number;
@@ -326,10 +248,7 @@ function aparado(valor: string | undefined): string | undefined {
   return t === undefined || t === '' ? undefined : t;
 }
 
-/**
- * O recorte que de fato valeu, para a tela escrever. `scope: all` quando nada
- * foi recortado. `when` e `sort` tem campo proprio.
- */
+/** O recorte que de fato valeu, para a tela escrever. */
 function recortesAplicados(entradas: Record<string, string | undefined>): Record<string, string> {
   const aplicados: Record<string, string> = {};
   for (const [nome, valor] of Object.entries(entradas)) {
@@ -364,23 +283,15 @@ function identidadeDoChamador(
   return memoDaRequisicao(request, 'rede:chamador', async () => {
     const token = tokenDaRequisicao(request);
     if (token === undefined) throw problemas.naoAutenticado();
-    // O 401 de token vencido ou forjado e do servico de identidade. Nao ha
-    // `catch`: engolir o erro transformaria falha de banco em 401.
     const { userId, sid } = await deps.autenticador.autenticar(token);
     return {
       userId,
-      // Vazio e ausente sao o mesmo caso: nenhum dos dois nomeia um aparelho.
       familia: typeof sid === 'string' && sid !== '' ? comoFamiliaDeSessao(sid) : undefined,
     };
   });
 }
 
-/**
- * So o dono, para as rotas que nao medem distancia.
- *
- * Projeta `identidadeDoChamador` e nao le a credencial de novo: e o mesmo memo
- * e a mesma chave, entao continua havendo uma autenticacao por requisicao.
- */
+/** So o dono, para as rotas que nao medem distancia. */
 async function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -400,7 +311,7 @@ async function contaDoTeto(
   }
 }
 
-/** Quem escreve, para o caso de uso e para a trilha. O IP vai EM CLARO: a porta da trilha o transforma em HMAC (SEC-010). */
+/** Quem escreve, para o caso de uso e para a trilha. */
 async function contextoDoAutor(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -408,7 +319,7 @@ async function contextoDoAutor(
   return { userId: await chamadorAutenticado(request, deps), correlationId: request.id, ip: request.ip };
 }
 
-/** O pedido no vocabulario do app. Os mesmos campos para pendente e recusado. */
+/** O pedido no vocabulario do app. */
 function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
   return {
     state: estadoDoPedidoNoApp(pedido.decisao, pedido.encontro, agora),
@@ -416,10 +327,7 @@ function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
   };
 }
 
-/**
- * O 400 das regras de estado do pedido. `code` e fixo por regra e nao depende
- * da decisao guardada: o pendente e o recusado recebem o mesmo corpo.
- */
+/** O 400 das regras de estado do pedido. */
 function recusaDoPedido(code: 'event_ended' | 'join_request_final') {
   return problemas.validacao(
     [{ field: 'eventSlug', code, message: code === 'event_ended' ? 'O encontro ja terminou.' : 'O pedido nao pode mais mudar.' }],
@@ -434,20 +342,9 @@ export function registrarRotasDaRede(
   const porConta = { resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) } };
 
   /**
-   * Criar. **201 com o proprio encontro**, na mesma forma de `getNetworkEvent`:
-   * ele existe e ja esta em publico, e o app desenha a tela com o que recebeu
-   * em vez de pedir de novo.
-   *
-   * ## O guarda de corpo fechado NAO e opcional nestas tres rotas
-   *
-   * O Fastify monta o Ajv com `removeAdditional: true`: `additionalProperties:
-   * false` no contrato **apaga** o campo desconhecido em silencio em vez de
-   * recusar (ver `corpo-fechado.ts`, medido em 23/09). Aqui isso seria mentir
-   * sobre o que foi gravado em cada campo que estas operacoes NAO aceitam: quem
-   * mandasse `visibility: private` receberia 201 e um encontro PUBLICO, e quem
-   * mandasse `street_address` acreditaria ter dado o endereco.
-   * `registrarRota` instala o guarda sozinho so na superficie administrativa,
-   * entao aqui ele entra a mao.
+   * Criar. **201 com o proprio encontro**, na mesma forma de `getNetworkEvent`: ele
+   * existe e ja esta em publico, e o app desenha a tela com o que recebeu em vez de
+   * pedir de novo.
    */
   const corpoDaCriacao = corpoDe(deps.contrato, rotaDaCriacaoDeEncontro.operationId);
   registrarRota(
@@ -473,27 +370,10 @@ export function registrarRotasDaRede(
 
   /**
    * Editar o proprio. **O 404 de encontro alheio vem da clausula `WHERE`**
-   * (ADR-0021): esta borda nao sabe de quem e o encontro, e nao tem `if` que
-   * decida isso.
+   * (ADR-0021): esta borda nao sabe de quem e o encontro, e nao tem `if` que decida
+   * isso.
    */
   const corpoDaEdicao = corpoDe(deps.contrato, rotaDaEdicaoDoEncontro.operationId);
-  // Sem os `default` do contrato. `CommunityNetworkEventPatch` herda dois das
-  // formas que a CRIACAO reusa -- `accepted_sizes` (`[P, M, G, GG]`) e
-  // `dog_age` (`any`) --, e numa criacao eles estao certos: o encontro tem de
-  // nascer com porte e idade. Num `PATCH` o `useDefaults` do Ajv os injeta e o
-  // resultado e o contrario do que a operacao promete. Medido em 17/10/2026 com
-  // `{"title": "...", "notes": "..."}`:
-  //
-  //   corpo visto pelo manipulador:
-  //     { title, notes, accepted_sizes: [P,M,G,GG], dog_age: 'any' }
-  //
-  // Duas consequencias, as duas silenciosas: quem aceitava so porte P e corrige
-  // o titulo sai aceitando os quatro, com `200` e sem aviso; e a trilha mente,
-  // porque `fields` sai do `Object.keys` do corpo e passa a nomear campo que o
-  // autor nao tocou. O porque geral esta em `sem-padroes.ts`.
-  //
-  // O guarda de campo desconhecido continua lendo o schema ORIGINAL -- a lista
-  // de nomes aceitos nao muda, e e nela que ele se baseia.
   registrarRota(
     app,
     rotaDaEdicaoDoEncontro,
@@ -579,13 +459,6 @@ export function registrarRotasDaRede(
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
     const encontro = await deps.rede.buscarEncontro(eventSlug);
     if (encontro === undefined) throw problemas.naoEncontrado();
-    // **O UNICO ponto que passa a pagina**, e por isso `share_url` so sai aqui:
-    // a agenda e a busca por distancia chamam `projetarEncontro` sem ela.
-    //
-    // A leitura vem ANTES da projecao e nao dentro dela porque o dominio nao
-    // fala com banco. `estaPublicada` nunca lanca (ver a porta): tabela fora
-    // devolve `false`, que ESCONDE o endereco -- e esconder e o unico estado
-    // honesto de quem nao conseguiu perguntar se a pagina existe.
     const publicada = await deps.paginas.estaPublicada('network_event');
     return reply.send(
       projetarEncontro(encontro, deps.clock.now(), {
@@ -612,7 +485,6 @@ export function registrarRotasDaRede(
       const pagina = await deps.rede.listarPorDistancia({
         ...filtros,
         chamador: chamador.userId,
-        // SEC-021: de qual aparelho sai a regiao que mede a distancia.
         familia: chamador.familia,
         when,
         sort: pedida,
@@ -622,12 +494,9 @@ export function registrarRotasDaRede(
         limit,
       });
 
-      // Sem regiao nao ha distancia: a ordem efetiva e a de data, e a resposta
-      // diz isso em vez de fingir que ordenou.
       const efetiva = pagina.temRegiao ? pedida : 'proximos';
       return reply.send({
         items: pagina.itens.map(({ encontro, distanciaM }) => ({
-          // A consulta so devolve publico; o `as` registra isso para o tipo.
           ...(projetarEncontro(encontro, agora) as EncontroPublicoProjetado),
           distance_m: distanciaArredondada(distanciaM),
         })),
@@ -648,7 +517,6 @@ export function registrarRotasDaRede(
     const chamador = await chamadorAutenticado(request, deps);
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
     const local = await deps.rede.buscarLocalDoEncontro(eventSlug, chamador);
-    // Invisivel, inexistente e privado sem aprovacao: o mesmo 404.
     if (local === undefined) throw problemas.naoEncontrado();
     return reply.header('Cache-Control', SEM_CACHE).send(projetarLocalizacao(local.ponto, local.endereco));
   });
@@ -661,7 +529,6 @@ export function registrarRotasDaRede(
       const chamador = await chamadorAutenticado(request, deps);
       const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
       const encontro = await deps.rede.buscarDetalhesPrivados(eventSlug, chamador);
-      // Nao e privado, nao existe, ou a conta nao foi aprovada: um 404 so.
       if (encontro === undefined) throw problemas.naoEncontrado();
       return reply
         .header('Cache-Control', SEM_CACHE)
@@ -705,18 +572,8 @@ export function registrarRotasDaRede(
 
   /**
    * A lista do DONO. **A autoria esta na clausula `WHERE`** do repositorio
-   * (ADR-0021): esta borda nao tem parametro de autoria e nao tem `if` que
-   * decida de quem e o encontro -- nao existe forma de pedir a lista de outra
-   * pessoa.
-   *
-   * O corpo e `MyNetworkEvent`, a projecao do dono: sete propriedades, montadas
-   * por `projetarMeuEncontro`. Ela NAO e `projetarEncontro`, e isso e o ponto:
-   * a lista do dono e menor que a vitrine publica de proposito, e o que entra
-   * alem de capa e titulo esta justificado no esquema do contrato.
-   *
-   * **Sem `ETag` aqui**: um cabecalho vale para a resposta inteira, e o
-   * `If-Match` do cancelamento e a versao de UM encontro. A versao sai na rota
-   * de baixo.
+   * (ADR-0021): esta borda nao tem parametro de autoria e nao tem `if` que decida de
+   * quem e o encontro -- nao existe forma de pedir a lista de outra pessoa.
    */
   registrarRota(
     app,
@@ -738,28 +595,11 @@ export function registrarRotasDaRede(
     },
   );
 
-  /**
-   * Um encontro meu, **com a versao no `ETag`**.
-   *
-   * ESTA E A FONTE DO `ETag` DA SECAO `Rede`, e e por isso que a rota existe.
-   * Medido contra homologacao em 19/10/2026: nenhuma outra leitura da secao
-   * emite o cabecalho -- nem a agenda, nem o detalhe publico, nem o `201` de
-   * criar --, e so as duas escritas o emitiam. Uma versao que so a escrita
-   * entrega nao autoriza a PRIMEIRA escrita, e por isso cancelar o proprio
-   * encontro era impossivel por construcao.
-   *
-   * O `ETag` sai por `comoEtag`, a MESMA funcao que as duas escritas usam para
-   * montar o valor que elas devolvem: a leitura e a escrita falam da mesma
-   * versao, no mesmo formato, e `lerIfMatch` a le de volta.
-   *
-   * O 404 de encontro alheio vem da clausula `WHERE` (ADR-0021), pela mesma
-   * funcao de banco da escrita: esta borda nao sabe de quem e o encontro.
-   */
+  /** Um encontro meu, **com a versao no `ETag`**. */
   registrarRota(app, rotaDoMeuEncontro, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
     const meu = await deps.rede.buscarMeuEncontro(eventSlug, chamador);
-    // Inexistente, de outra pessoa, do painel e removido: o mesmo 404.
     if (meu === undefined) throw problemas.naoEncontrado();
     return reply
       .header('ETag', comoEtag(meu.versao))

@@ -1,21 +1,4 @@
-/**
- * Rotas do caso de perdido.
- *
- * Três pontos desta fiação que não são detalhe:
- *
- * - **`openLostCase` passa por `executarComIdempotencia`.** O contrato declara
- *   `Idempotency-Key`, e o portão de subida derruba a aplicação se a rota
- *   divergir. O defeito que isso evita é o pior do módulo: a fila offline
- *   reenvia em rajada quando o sinal volta, e sem a máquina cada reenvio seria
- *   um alerta novo para os mesmos vizinhos.
- * - **A conversão de data acontece AQUI**, na borda. A camada de aplicação não
- *   constrói `Date`, e uma data malformada precisa virar `validation-failed`
- *   com o nome do campo antes de chegar ao serviço.
- * - **A resposta não tem coordenada.** Nem para o dono: ele já sabe onde o pet
- *   dele sumiu, e o campo só existiria para vazar depois — por um `console.log`
- *   de depuração, por uma captura de tela, por uma rota pública nova que
- *   reaproveite este montador.
- */
+/** Rotas do caso de perdido. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -63,38 +46,12 @@ export const rotaDeAberturaDeCaso = defineRoute({
   path: '/pets/:petId/lost-cases',
   effects: ['notifies', 'expensive_query', 'human_work'],
   rateLimit: [
-    // **O CASO SEMPRE ABRE.** O que é retido acima do teto é o DISPARO do
-    // alerta, nunca a criação: portão aberto com três cães na casa e um evento
-    // é acidente, não abuso, e recusar o terceiro caso seria o produto falhando
-    // exatamente no dia em que ele existe para funcionar.
     { dimension: ['account'], limit: 5, window: '24h', onExceed: 'accept_and_defer_dispatch' },
     { dimension: ['account'], limit: 20, window: '24h', onExceed: 'hold_for_review' },
   ],
 });
 
-/**
- * A prévia do alcance (`previewLostCaseReach`, F3.2).
- *
- * **Os dois tetos são os do contrato, copiados dele e não escolhidos aqui.** A
- * operação declara `x-effects: [expensive_query]`, e com efeito não vazio
- * `defineRoute` torna a ausência de `rateLimit` erro de compilação. As duas
- * dimensões são específicas (`account` e `pet`), então `registrarRota` exige um
- * resolvedor para cada uma — também por tipo, também sem chance de esquecer.
- *
- * Por que `account` é a dimensão que RECUSA, e o que ela protege:
- *
- * - A rota é autenticada, então `account` existe e é exata. Teto por `ip` seria
- *   armadilha no Brasil, onde o CGNAT das operadoras põe muita gente atrás de
- *   poucos endereços: ele pegaria vizinhos inocentes e erraria o abusador.
- * - O que se protege é uma **consulta geoespacial de 5 km** sobre índice GiST,
- *   disparada por uma tela que a pessoa reabre enquanto decide. Trinta por hora
- *   cobre o uso legítimo mais folgado — abrir, fechar, voltar, tentar com outra
- *   posição — e ainda impede uma conta de virar gerador de carga no caminho mais
- *   caro do produto.
- * - `pet` com `serve_cache` **não recusa**: só `deny_429` recusa
- *   (`aplicacao-de-teto.ts`). Ele conta e alerta, e está aqui porque o contrato
- *   o declara — não porque a rota o tenha inventado.
- */
+/** A prévia do alcance (`previewLostCaseReach`, F3.2). */
 export const rotaDePreviaDoCaso = defineRoute({
   operationId: 'previewLostCaseReach',
   method: 'get',
@@ -113,18 +70,7 @@ export const rotaDoCaso = defineRoute({
   effects: [],
 });
 
-/**
- * A correção de onde e quando (`updateLostCase`).
- *
- * **`effects` é vazio, e é o contrato que diz**: corrigir a data não avisa
- * ninguém. O teto de 60/1h vem dele também, e não de uma escolha desta linha —
- * com efeito vazio `defineRoute` torna `rateLimit` opcional, então ele está aqui
- * porque o documento o declara.
- *
- * **Esta rota NÃO redispara o alerta.** O reenvio é `POST /alerts`, com teto de
- * um por dia. Fundir as duas faria cada correção de digitação acordar os
- * vizinhos outra vez.
- */
+/** A correção de onde e quando (`updateLostCase`). */
 export const rotaDeAtualizacaoDoCaso = defineRoute({
   operationId: 'updateLostCase',
   method: 'patch',
@@ -133,24 +79,7 @@ export const rotaDeAtualizacaoDoCaso = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * O reenvio do alerta (`resendLostCaseAlert`).
- *
- * **A dimensão do teto é `case`, e não `account`**, e a diferença é o produto:
- * quem tem dois animais perdidos ao mesmo tempo precisa poder reenviar o aviso
- * dos dois. Um teto por conta daria a ele um reenvio por dia no total, e o
- * segundo animal ficaria sem o segundo aviso.
- *
- * `dimension: ['case']` estreou aqui, e é por isso que `case` entra em
- * `DIMENSOES_CONHECIDAS` neste mesmo commit: aquela lista cresce quando uma rota
- * que declara a dimensão passa a existir, e não quando o contrato passa a
- * declará-la (ver o cabeçalho de `aplicacao-de-teto.ts`).
- *
- * O balde recebe o `caseId` em claro, pela mesma exceção declarada para
- * `account` e `pet`: `rate_limit_counters.bucket_key` não sai em resposta
- * nenhuma, e o resumo tornaria impossível responder qual caso bateu no teto
- * numa investigação. O ADR-0010 proíbe UUID interno em **saída pública**.
- */
+/** O reenvio do alerta (`resendLostCaseAlert`). */
 export const rotaDeReenvioDoAlerta = defineRoute({
   operationId: 'resendLostCaseAlert',
   method: 'post',
@@ -159,15 +88,7 @@ export const rotaDeReenvioDoAlerta = defineRoute({
   rateLimit: [{ dimension: ['case'], limit: 1, window: '24h', onExceed: 'deny_429' }],
 });
 
-/**
- * A lista de correspondências (`listLostCaseCandidates`).
- *
- * **`effects` vazio é verdade, e não economia**: o cruzamento é um job na fila, e
- * esta operação lê `match_candidates`. O teto de 120/1h é o do contrato, e ele
- * existe num `x-effects` vazio porque a regra é piso, não teto (§5): a tela que
- * o tutor reabre a cada dois minutos enquanto espera é exatamente a que precisa
- * de um teto generoso e existente.
- */
+/** A lista de correspondências (`listLostCaseCandidates`). */
 export const rotaDeCandidatosDoCaso = defineRoute({
   operationId: 'listLostCaseCandidates',
   method: 'get',
@@ -184,34 +105,7 @@ export const rotaDeEncerramento = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A REABERTURA do caso encerrado por engano (`reopenLostCase`).
- *
- * **A operação não é nova; a rota é.** `reopenLostCase` está em
- * `api/openapi.yaml` desde o começo e era uma linha de
- * `OPERACOES_AINDA_SEM_ROTA`: o contrato prometia a quatro clientes que
- * *"encerrar e reversivel por 7 dias"*, nomeava a operação, e ela respondia
- * 404. Promessa escrita no contrato e não cumprida é defeito, e não pendência
- * de produto.
- *
- * **`effects` e o teto são os do contrato, copiados dele.** A operação declara
- * `x-effects: [notifies]` e `account 60/1h deny_429`; com efeito não vazio
- * `defineRoute` torna a ausência de `rateLimit` erro de compilação (ADR-0016),
- * e o portão de subida derruba a aplicação se a rota divergir do documento.
- *
- * **`notifies` está declarado e esta rota não avisa ninguém** — e a divergência
- * é do contrato, não desta linha. Quem reenvia o aviso à vizinhança é
- * `POST /alerts`, com teto de um por dia; reabrir por engano não pode acordar
- * os vizinhos de novo. O mesmo vale do outro lado: `closeLostCase` também
- * declara `notifies`, e nada no servidor manda mensagem de sistema ao encerrar
- * (a conversa vira modo leitura por `estadoDaConversa`, DERIVADO do estado do
- * caso na leitura, sem gravar nada). Está escrito aqui porque é o tipo de coisa
- * que, não escrita, volta como uma tela afirmando que alguém foi avisado.
- *
- * **Sem `Idempotency-Key`**, porque o contrato não o declara nesta operação —
- * e ela não precisa: reabrir um caso já aberto devolve 200 com o caso aberto,
- * que é a resposta certa para o reenvio da fila offline.
- */
+/** A REABERTURA do caso encerrado por engano (`reopenLostCase`). */
 export const rotaDeReabertura = defineRoute({
   operationId: 'reopenLostCase',
   method: 'post',
@@ -220,17 +114,7 @@ export const rotaDeReabertura = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * A decisão humana sobre uma correspondência (BICHUS-86, critérios 4, 5 e 12).
- *
- * **Os dois tetos vêm do contrato**, que declara `x-effects: [notifies]` e
- * `account 60/1h deny_429`. Não são escolha desta linha: com efeito não vazio,
- * `defineRoute` torna a ausência de `rateLimit` erro de compilação (ADR-0016).
- *
- * `notifies` é verdade e precisa estar declarado: confirmar abre a conversa
- * mediada, e a abertura grava a primeira mensagem do sistema, que é o que o
- * tutor e quem achou recebem.
- */
+/** A decisão humana sobre uma correspondência (BICHUS-86, critérios 4, 5 e 12). */
 export const rotaDaDecisaoDoCandidato = defineRoute({
   operationId: 'decideLostCaseCandidate',
   method: 'post',
@@ -251,32 +135,11 @@ export interface DependenciasDasRotasDeCaso {
   readonly clock: Clock;
   /** Base das páginas públicas: de onde saem o link de compartilhar e o cartaz. */
   readonly baseDaWeb: AbsoluteUrl;
-  /**
-   * O interruptor das páginas públicas do site (`site_page_availability`).
-   *
-   * **MEDIDO em 20/10/2026:** `{baseDaWeb}/p/{shareToken}` e
-   * `{baseDaWeb}/cartaz/{shareToken}` respondem **404** em homologação e em
-   * produção, e `web/src/pages/` não tem as duas pastas. `baseDaWeb` diz ONDE a
-   * página moraria; esta porta diz SE ela existe, e as duas perguntas são
-   * diferentes — montar o endereço sempre deu certo, e é exatamente por isso que
-   * ninguém notou que o destino não existia.
-   *
-   * Sem ela, `share_url` sairia apontando para um 404 cuja pré-visualização diz
-   * `og:title: Página não encontrada · Bichu` — e o aplicativo ofereceria
-   * compartilhar isso num grupo de bairro.
-   */
+  /** O interruptor das páginas públicas do site (`site_page_availability`). */
   readonly paginas: DisponibilidadeDaPagina;
 }
 
-/**
- * O `petId` do caminho, ou `undefined` quando ele não veio utilizável.
- *
- * Devolve `undefined` em vez de lançar porque ele é lido em DOIS lugares com
- * significados diferentes: no resolvedor do teto, onde ausência significa "esta
- * entrada não se aplica e é pulada", e no handler, onde ela vira 404. Um
- * lançamento aqui recusaria a requisição de dentro de um gancho de teto, que é
- * o lugar errado para decidir isso.
- */
+/** O `petId` do caminho, ou `undefined` quando ele não veio utilizável. */
 function petIdDoCaminho(request: FastifyRequest): PetId | undefined {
   const { petId } = request.params as { petId?: unknown };
   if (typeof petId !== 'string' || petId === '') return undefined;
@@ -300,14 +163,7 @@ function donoAutenticado(
   });
 }
 
-/**
- * `account` para o teto de abertura de caso.
- *
- * As duas entradas desta rota são `accept_and_defer_dispatch` e
- * `hold_for_review`, e **nenhuma das duas recusa**: o caso sempre abre. Estourar
- * o teto aqui registra e alerta, e é assim de propósito — portão aberto com três
- * cães e um evento é acidente, não abuso.
- */
+/** `account` para o teto de abertura de caso. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeCaso,
@@ -319,13 +175,7 @@ async function contaDoTeto(
   }
 }
 
-/**
- * A data de "visto pela última vez", vinda como ISO.
- *
- * Recusa o que não é data E o que está no futuro: "visto pela última vez amanhã"
- * é erro de digitação ou de fuso, e gravado assim ele ordena a lista pública
- * errado e o cartaz sai com uma data que não aconteceu.
- */
+/** A data de "visto pela última vez", vinda como ISO. */
 function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
   const ms = typeof bruto === 'string' ? Date.parse(bruto) : Number.NaN;
   if (Number.isNaN(ms)) {
@@ -333,7 +183,6 @@ function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
       { field: 'last_seen_at', code: 'invalid', message: 'Data inválida.' },
     ]);
   }
-  // Um minuto de folga para relógio de aparelho adiantado, que é comum.
   if (ms > Number(agora) + 60_000) {
     throw problemas.validacao([
       { field: 'last_seen_at', code: 'in_future', message: 'Essa data ainda não chegou.' },
@@ -342,30 +191,14 @@ function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
   return ms as Instant;
 }
 
-/**
- * O `caseId` do caminho, ou `undefined` quando ele não veio utilizável.
- *
- * `undefined` em vez de lançamento pelo mesmo motivo de `petIdDoCaminho`: ele é
- * lido em dois lugares com significados diferentes — no resolvedor do teto, onde
- * ausência significa "esta entrada é pulada", e no handler, onde ela vira 404.
- * Lançar aqui recusaria a requisição de dentro de um gancho de teto.
- *
- * A FORMA já foi conferida contra `format: uuid` do contrato por
- * `vigiarParametrosDasRotas`; o que sobra é o segmento ausente.
- */
+/** O `caseId` do caminho, ou `undefined` quando ele não veio utilizável. */
 function caseIdDoCaminho(request: FastifyRequest): CaseId | undefined {
   const { caseId } = request.params as { caseId?: unknown };
   if (typeof caseId !== 'string' || caseId === '') return undefined;
   return caseId as CaseId;
 }
 
-/**
- * A janela da lista de candidatos.
- *
- * `limiteEfetivoDeCandidatos` converte e prende entre 1 e 50 aqui também, e não
- * só no schema do contrato: a rota não depende de o gancho de parâmetros estar
- * instalado antes dela, que é o mesmo cuidado de `rotaDaConversaDoAchador`.
- */
+/** A janela da lista de candidatos. */
 function paginaDeCandidatosDaQuery(request: FastifyRequest): PaginaDeCandidatos {
   const { cursor, limit } = request.query as { cursor?: string; limit?: number | string };
   const posicao = decodificarCursorDeCandidato(cursor);
@@ -375,19 +208,7 @@ function paginaDeCandidatosDaQuery(request: FastifyRequest): PaginaDeCandidatos 
   };
 }
 
-/**
- * `AlertDispatch`, a partir da linha do disparo.
- *
- * **Quatro campos, e nenhum a mais.** `next_resend_allowed_at` é declarado pelo
- * contrato e fica de fora: nada hoje reenvia (não há rota de reenvio nesta
- * entrega), e devolver um instante a partir do qual um reenvio que não existe
- * seria permitido é prometer à tela um caminho que não está lá.
- *
- * `alerta` é `null` para caso aberto antes desta história, e aí a resposta cai
- * no que a tela já sabia ler: `queued` com coordenada, `no_location` sem ela.
- * Inventar `computed` com zero destinatários diria "não há ninguém por perto"
- * quando a verdade é "este caso é de antes de existir disparo".
- */
+/** `AlertDispatch`, a partir da linha do disparo. */
 function comoRespostaDoAlerta(
   caso: CasoGravado,
   alerta: DisparoGravado | null,
@@ -402,43 +223,23 @@ function comoRespostaDoAlerta(
   }
   return {
     reach_status: alerta.estado,
-    // `null` em tudo que não é `computed`, e o CHECK do banco garante o par.
-    // Zero aqui, para um disparo que não calculou, é a mentira que a BICHUS-20
-    // existe para impedir.
     recipients_total: alerta.destinatarios,
     radius_m: alerta.raioEmMetros,
     dispatched_at: alerta.enviadoEm === null ? null : alerta.enviadoEm.toISOString(),
   };
 }
 
-/**
- * Quais endereços públicos deste caso podem SAIR na resposta.
- *
- * Dois booleanos e não um: `/p/{shareToken}` e `/cartaz/{shareToken}` são duas
- * páginas (ADR-0017, quadro das oito rotas), e um booleano só obrigaria a
- * mentir sobre uma das duas no dia em que a primeira subisse. `poster_url`
- * termina em papel colado em poste, que não se corrige.
- */
+/** Quais endereços públicos deste caso podem SAIR na resposta. */
 interface LinksQuePodemSair {
   readonly caso: boolean;
   readonly cartaz: boolean;
 }
 
-/**
- * O corpo de `LostCase`, lendo o interruptor das páginas antes de montá-lo.
- *
- * Existe para que os CINCO pontos que respondem `LostCase` — abrir, ler,
- * corrigir, encerrar e reabrir — passem pelo mesmo lugar. Enquanto a leitura do
- * interruptor ficasse em cada um deles, o sexto ponto nasceria sem ela, e o
- * defeito seria `share_url` voltando a sair sozinho num caminho só.
- */
+/** O corpo de `LostCase`, lendo o interruptor das páginas antes de montá-lo. */
 async function corpoDoCaso(
   deps: DependenciasDasRotasDeCaso,
   casoComAlerta: CasoComAlerta,
 ): Promise<Record<string, unknown>> {
-  // As duas leituras em paralelo: são duas linhas por chave primária na mesma
-  // tabela, e `estaPublicada` não lança (ver a porta). `Promise.all` aqui não
-  // esconde falha nenhuma, porque não há falha a esconder.
   const [caso, cartaz] = await Promise.all([
     deps.paginas.estaPublicada('lost_case'),
     deps.paginas.estaPublicada('poster'),
@@ -451,9 +252,6 @@ function comoRespostaDoCaso(
   baseDaWeb: AbsoluteUrl,
   publicados: LinksQuePodemSair,
 ): Record<string, unknown> {
-  // Um montador só para os links do caso, o mesmo das rotas públicas. Enquanto
-  // eram dois, este saía em `/c/`, que é a conversa do achador (ADR-0017), e o
-  // link compartilhado pelo tutor abria a página errada.
   const links = linksDoCaso(baseDaWeb, caso.shareToken);
   return {
     id: caso.id,
@@ -462,33 +260,13 @@ function comoRespostaDoCaso(
     opened_at: caso.openedAt.toISOString(),
     last_seen_at: caso.lastSeenAt.toISOString(),
     area_label: caso.areaLabel,
-    // Falso quando o caso nasceu só com área. A tela usa isto para explicar por
-    // que não houve alerta, em vez de deixar a seção de alcance vazia — que
-    // parece defeito e faz a pessoa tocar de novo.
     has_location: caso.hasLocation,
     description: caso.description,
     alert: comoRespostaDoAlerta(caso, alerta),
     candidate_count: 0,
     unread_message_count: 0,
-    // **AUSENTES enquanto a página não existir**, e `share_url` é opcional no
-    // contrato desde sempre (`LostCase.required` lista só `id`, `pet_id`,
-    // `status`, `opened_at` e `alert`) -- então omitir é resposta legítima, e
-    // não contrato quebrado.
-    //
-    // A ausência é o interruptor, e isso é deliberado: um booleano novo ao lado
-    // do endereço poderia DISCORDAR do endereço, e aí alguém teria de decidir
-    // qual dos dois manda. O endereço não discorda de si mesmo, e o aplicativo
-    // não tem como remontá-lo -- `LostCase` não carrega `share_token`, só `id`,
-    // que é UUID e o ADR-0010 proíbe em saída pública. Sem o campo não há como
-    // oferecer a ação, nem por descuido de quem escrever a tela depois.
     ...(publicados.caso ? { share_url: links.shareUrl } : {}),
     ...(publicados.cartaz ? { poster_url: links.posterUrl } : {}),
-    // `LostCase.reopen_deadline`, que o contrato declara e **nada emitia**. Sem
-    // ele o aplicativo não tem como saber se a janela de 7 dias ainda está
-    // aberta, e a alternativa seria o app refazer a conta de 7 dias em cima de
-    // `closed_at` -- número de produto recalculado no cliente, que envelhece no
-    // bolso de quem não atualiza. Nulo em caso aberto: é o prazo DAQUELE
-    // encerramento, e `reabrir` o devolve a `NULL`.
     reopen_deadline: caso.reopenDeadline === null ? null : caso.reopenDeadline.toISOString(),
     closed_at: caso.closedAt === null ? null : caso.closedAt.toISOString(),
     resolution:
@@ -502,27 +280,7 @@ function comoRespostaDoCaso(
   };
 }
 
-/**
- * O centro do raio, vindo da consulta.
- *
- * Validação explícita e não `schema.querystring` por um motivo concreto: o
- * tradutor de erro do servidor transforma `FST_ERR_VALIDATION` num
- * `validation-failed` com `field: ''`, e a tela que precisa dizer "essa posição
- * não parece do Brasil" ficaria sem saber qual dos dois campos recusou.
- *
- * As três recusas, e o que cada uma impede:
- *
- * - **Não é número.** `?lat=abc` viraria `NaN` e `NaN` atravessa comparação sem
- *   ninguém reclamar, virando um centro que o PostGIS recusa lá no fundo.
- * - **Um sem o outro.** Meia coordenada não é meio centro. Aceitá-la faria a
- *   rota escolher em silêncio entre ignorar o que a pessoa mandou e inventar o
- *   que faltou — e a resposta viria `no_location` como se nada tivesse chegado.
- * - **Fora da faixa do contrato.** Os limites são os declarados em
- *   `api/openapi.yaml` (lat de -34 a 6, lon de -74 a -32), que é o retângulo do
- *   Brasil. Coordenada trocada de ordem — o erro mais comum de quem monta a
- *   consulta à mão — cai fora dele e é recusada aqui, e não depois de rodar a
- *   consulta cara sobre um ponto no meio do oceano Índico.
- */
+/** O centro do raio, vindo da consulta. */
 const FAIXA_DE_LATITUDE = { min: -34, max: 6 } as const;
 const FAIXA_DE_LONGITUDE = { min: -74, max: -32 } as const;
 
@@ -571,17 +329,7 @@ function centroDaConsulta(request: FastifyRequest): CentroDoAlcance | undefined 
   return centroDe(lat, lon);
 }
 
-/**
- * `LostCaseReachPreview`, campo a campo como o contrato declara.
- *
- * **Cinco campos, e nenhum a mais.** O que sai daqui não tem `pet_id`, não tem
- * `case_id` e não tem contagem de casos da conta — e a ausência do último é a
- * menos óbvia: o serviço lê `casosAbertosDaConta` para nada nesta rota, e
- * devolvê-lo "porque já está na mão" agruparia os pets do tutor numa resposta
- * que o contrato não declara. O ADR-0010 proíbe o agrupamento no item 7; o
- * portão de contrato, que só procura o que SUMIU, não veria a propriedade a
- * mais.
- */
+/** `LostCaseReachPreview`, campo a campo como o contrato declara. */
 function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
   return {
     reach_status: previa.estadoDoAlcance,
@@ -592,22 +340,7 @@ function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
   };
 }
 
-/**
- * `MatchCandidate`, campo a campo como o contrato declara.
- *
- * **O `score` VAI no corpo e não vai para a tela.** Ele é obrigatório no schema
- * (`required: [id, found_report, score, status]`) e o critério 2 da BICHUS-86
- * proíbe exibi-lo — "o número ordena a lista e não vai para a tela, porque
- * número inventa precisão que o sistema não tem". Quem cumpre o critério 2 é o
- * app; tirá-lo daqui quebraria o contrato para resolver um problema de outra
- * camada.
- *
- * **O que NÃO sai:** `pet_id`, `case_id` e o identificador de quem registrou o
- * achado. Nenhum dos três está em `MatchCandidate`, e o portão de contrato só
- * procura o que sumiu — propriedade a mais passa por ele. O `case_id` é o mais
- * tentador, porque quem chama acabou de mandá-lo no caminho; devolvê-lo
- * começaria o agrupamento que o item 7 do ADR-0010 proíbe.
- */
+/** `MatchCandidate`, campo a campo como o contrato declara. */
 function comoRespostaDoCandidato(candidato: CandidatoDoCaso): Record<string, unknown> {
   return {
     id: candidato.id,
@@ -647,11 +380,6 @@ export function registrarRotasDeCasos(
     {
       resolvedores: {
         account: (request) => contaDoTeto(request, deps),
-        // UUID interno em claro na chave do balde, pelo mesmo motivo declarado
-        // em `aplicacao-de-teto.ts`: `rate_limit_counters.bucket_key` não sai em
-        // resposta nenhuma, e o resumo tornaria impossível responder qual pet
-        // bateu no teto numa investigação. O SEC-010 fala de IP, e o IP desta
-        // rota nem chega a virar chave: a dimensão que recusa é `account`.
         pet: (request) => petIdDoCaminho(request),
       },
     },
@@ -693,11 +421,6 @@ export function registrarRotasDeCasos(
           chaveDoCabecalho: request.headers['idempotency-key'],
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeAberturaDeCaso.method.toUpperCase()} ${rotaDeAberturaDeCaso.path}`,
-          // O PET ENTRA NA CHAVE. `endpoint` e o molde da rota
-          // (`POST /pets/:petId/lost-cases`) e nao a URL: sem `petId` aqui, o
-          // mesmo tutor abrindo caso para dois pets com a mesma chave receberia
-          // o caso do PRIMEIRO pet como resposta do segundo, e o segundo animal
-          // ficaria sem alerta nenhum sem nada acusar.
           parametrosDeCaminho: { petId },
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
@@ -736,24 +459,7 @@ export function registrarRotasDeCasos(
     return reply.status(200).send(await corpoDoCaso(deps, caso));
   });
 
-  /**
-   * `PATCH /v1/lost-cases/:caseId`.
-   *
-   * A conversão de data acontece AQUI, na borda, como na abertura: a camada de
-   * aplicação não constrói `Date`, e uma data malformada precisa virar
-   * `validation-failed` com o nome do campo antes de chegar ao serviço.
-   * `instanteDeVistoPorUltimo` é o MESMO da abertura — inclusive a recusa de
-   * data no futuro, que aqui é mais provável do que lá: corrigir a data é
-   * justamente onde o dedo escorrega para o mês que vem.
-   *
-   * **O corpo é validado SEM os `default` do contrato** (`corpoSemPadroes`). A
-   * operação reusa `LostCaseInput`, o mesmo `$ref` da criação, e lá
-   * `share_to_public_list` tem `default: true`: com o `useDefaults` do Ajv o
-   * padrão entra no corpo da edição e o caso que o tutor tirou da lista pública
-   * volta a aparecer nela quando ele corrige onde o pet foi visto — com `200` e
-   * sem aviso. O `undefined` que o repositório procura para manter o valor
-   * antigo só existe por causa desta chamada. Ver `sem-padroes.ts`.
-   */
+  /** `PATCH /v1/lost-cases/:caseId`. */
   registrarRota(
     app,
     rotaDeAtualizacaoDoCaso,
@@ -794,25 +500,12 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /**
-   * `POST /v1/lost-cases/:caseId/alerts` — 202, e não 201.
-   *
-   * O contrato declara `202` com `AlertDispatch`, e ele está certo: **a API
-   * enfileira e o worker envia** (ADR-0001). Um 201 prometeria que o alerta
-   * saiu; o que saiu foi o pedido, e `reach_status: queued` é o que a tela
-   * precisa dizer.
-   *
-   * **Sem `Idempotency-Key`**, porque o contrato não o declara nesta operação — e
-   * ele não é necessário aqui: o teto de um por caso por dia já faz o reenvio em
-   * rajada da fila offline ser inofensivo, e a segunda chamada recebe 429 em vez
-   * de um segundo alerta.
-   */
+  /** `POST /v1/lost-cases/:caseId/alerts` — 202, e não 201. */
   registrarRota(
     app,
     rotaDeReenvioDoAlerta,
     {
       resolvedores: {
-        // O `caseId` em claro no balde: ver o cabeçalho de `rotaDeReenvioDoAlerta`.
         case: (request) => caseIdDoCaminho(request),
       },
     },
@@ -822,10 +515,6 @@ export function registrarRotasDeCasos(
       if (caseId === undefined) throw problemas.naoEncontrado();
 
       const disparo = await deps.casos.reenviarAlerta(caseId, chamador);
-      // `comoRespostaDoAlerta` precisa do caso só para o par
-      // `queued`/`no_location` do caso antigo sem linha de disparo, e aqui a
-      // linha ACABOU de ser gravada. Montar a resposta a partir do disparo é o
-      // caminho sem o ramo de `alerta === null`, que não acontece neste fluxo.
       return reply.status(202).send({
         reach_status: disparo.estado,
         recipients_total: disparo.destinatarios,
@@ -835,15 +524,7 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /**
-   * `GET /v1/lost-cases/:caseId/candidates` — a lista que faltava.
-   *
-   * **`CandidatePage`, e os dois campos que ele declara.** `items` e
-   * `next_cursor`, montados campo a campo: um espalhamento publicaria `caseId`,
-   * `petId` e `relatorUserId`, que existem do lado de dentro porque confirmar
-   * abre a conversa — e o portão de contrato só procura o que SUMIU, então
-   * propriedade a mais passa por ele.
-   */
+  /** `GET /v1/lost-cases/:caseId/candidates` — a lista que faltava. */
   registrarRota(
     app,
     rotaDeCandidatosDoCaso,
@@ -894,22 +575,7 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /**
-   * `POST /v1/lost-cases/:caseId/reopen` — o desfazer do encerramento.
-   *
-   * **Sem `schema.body`, e a ausência é do contrato**: `reopenLostCase` não
-   * declara `requestBody`. `corpoDe` lançaria aqui, de propósito — ele existe
-   * para que uma rota que espera corpo sem o contrato declarar um morra na
-   * subida em vez de validar contra nada.
-   *
-   * O `caseId` ausente vira **404 e não 400**, pela mesma razão escrita na
-   * decisão do candidato: a forma já foi conferida contra `format: uuid` por
-   * `vigiarParametrosDasRotas`, e o que sobra é o segmento não ter chegado —
-   * ausência de segmento não é valor malformado.
-   *
-   * Os quatro desfechos (200, 404, 409 e 410) são decididos na camada de
-   * aplicação, e não aqui: ver `LostCaseService.reabrir`.
-   */
+  /** `POST /v1/lost-cases/:caseId/reopen` — o desfazer do encerramento. */
   registrarRota(
     app,
     rotaDeReabertura,
@@ -937,10 +603,6 @@ export function registrarRotasDeCasos(
         caseId?: string;
         candidateId?: string;
       };
-      // A forma dos dois já foi conferida contra `format: uuid` do contrato por
-      // `vigiarParametrosDasRotas`, que instala o schema no registro. O que
-      // sobra aqui é o caso de o parâmetro não ter chegado, que vira 404 e não
-      // 400: ausência de segmento não é valor malformado.
       if (typeof caseId !== 'string' || caseId === '') throw problemas.naoEncontrado();
       if (typeof candidateId !== 'string' || candidateId === '') {
         throw problemas.naoEncontrado();

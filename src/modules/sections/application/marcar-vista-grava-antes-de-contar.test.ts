@@ -1,37 +1,4 @@
-/**
- * ISCA — `marcarVista` GRAVA e SO DEPOIS conta, com o MESMO instante.
- *
- * ## O defeito que isto impede, e ele ja aconteceu neste produto
- *
- * A primeira versao de `ContadoresDeNaoLido.marcarMensagensVistas`, no app,
- * **zerava o numero localmente** -- e estava errada, porque a medicao do
- * `WHERE` do servidor mostrou que ver a lista nao tira tudo do contador. A
- * licao que ficou escrita la e esta: **quem decide o numero depois da visita e
- * o servidor.**
- *
- * Esta operacao devolve o numero no corpo justamente para honrar isso sem pagar
- * uma viagem a mais. Mas devolver numero no corpo cria uma forma nova de
- * mentir, e sao duas:
- *
- * 1. **contar ANTES de gravar** -- a resposta traz o numero de ANTES, e a tela
- *    acende de novo o selo que a pessoa acabou de olhar. Visualmente e
- *    indistinguivel de o contador nao zerar;
- * 2. **dois `clock.now()`** -- o marcador fica num instante e a contagem em
- *    outro, e o item publicado no vao entre os dois **sai da contagem sem nunca
- *    ter sido visto**. Esse e o pior dos dois, porque desaparece conteudo em
- *    vez de repetir.
- *
- * Nenhum portao deste repositorio olha ordem de chamada nem igualdade de
- * instante.
- *
- * ## COMO DESLIGAR O MECANISMO E VER ESTE ARQUIVO REPROVAR
- *
- * Em `contadores-de-secao-service.ts`, dentro de `marcarVista`: mova o
- * `return deps.contadores.contar(...)` para ANTES do `await
- * deps.contadores.marcarVista(...)` -> reprova `ISCA: grava e SO DEPOIS
- * conta`. Troque o `agora` da contagem por um `deps.clock.now()` novo ->
- * reprova `ISCA: o marcador e a contagem usam o MESMO instante`.
- */
+/** ISCA — `marcarVista` GRAVA e SO DEPOIS conta, com o MESMO instante. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -56,14 +23,7 @@ interface Diario {
   cidadeDaContagem?: string | undefined;
 }
 
-/**
- * Um relogio que ANDA a cada leitura.
- *
- * E o que torna o segundo caso capaz de reprovar: com um relogio parado, dois
- * `now()` devolveriam o mesmo numero e a igualdade de instante passaria sem o
- * mecanismo. O relogio que anda transforma "chamei duas vezes" em valores
- * diferentes, que e a unica forma de o caso enxergar o defeito.
- */
+/** Um relogio que ANDA a cada leitura. */
 function relogioQueAnda(diario: Diario): Clock {
   let proximo = PRIMEIRO;
   return {
@@ -76,13 +36,7 @@ function relogioQueAnda(diario: Diario): Clock {
   };
 }
 
-/**
- * As quatro portas, dubladas.
- *
- * **A contagem de perdidos registra o `agora` e a `cidade` que recebeu**, e sao
- * esses dois valores que os casos leem: a ordem e a igualdade de instante nao
- * sao observaveis de outro jeito sem subir banco.
- */
+/** As quatro portas, dubladas. */
 function portasDeTeste(diario: Diario): DependenciasDosContadores {
   const marcadores: MarcadoresDeSecao = {
     ler: () => {

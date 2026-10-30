@@ -16,130 +16,29 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// `Perfil` > **`Meus achados`**: os avisos de achado que esta conta registrou.
-///
-/// ---------------------------------------------------------------------------
-/// ## POR QUE ELA MORA EM `Perfil`, E NÃO NA ABA `Pets`
-///
-/// A decisão é medida em três coisas, e nenhuma delas é gosto:
-///
-/// 1. **A aba `Pets` é pública e deslogada.** A listagem de perdidos que vive
-///    lá declara `security: []` no contrato — é o que faz a vizinhança achar o
-///    pet, e o visitante sem conta chega nela. `listMyFoundReports` declara
-///    `bearerAuth` e a autorização está no `WHERE` do servidor
-///    (`reporter_user_id = :dono`). Uma lista que só existe com conta, dentro
-///    da seção que existe sem conta, obriga a seção a significar duas coisas —
-///    e a primeira coisa que quem não tem conta veria ali seria uma lista vazia
-///    que não é dele.
-/// 2. **`Perfil` é onde "o meu" já mora, e está escrito.** `abas.dart` registra
-///    a regra com todas as letras: *"`Pets` é a vizinhança (perdidos, achados,
-///    adoções); cadastrar o **meu** pet é custódia, e custódia é conta"*, e por
-///    isso `Meus pets` é o primeiro bloco de `Perfil`. `Meus achados` é a mesma
-///    categoria de coisa: registro meu, sob a minha conta.
-/// 3. **A forma de `Perfil` aceita a porta sem reestruturar nada.** A seção é
-///    um menu de `ItemDeMenu` desde 18/10/2026, e item novo entra entre
-///    `Meus dados` e `Sair da conta`. Uma aba em `Pets` exigiria um `TabBar`
-///    novo no corpo de uma seção que está sendo reestruturada por outra frente.
-///
-/// O contraexemplo honesto é `Minhas indicações`, que virou **aba** de `Perto`.
-/// A diferença é a seção: `Perto` é o diretório inteiro e exige conta para
-/// quase tudo; `Pets` é a vitrine pública do produto.
-///
-/// ---------------------------------------------------------------------------
-/// ## A OPERAÇÃO EXISTIA E NÃO TINHA CHAMADOR
-///
-/// `GET /v1/found-reports` (`listMyFoundReports`) está registrada no servidor
-/// desde a BICHUS-35 (`found-report-routes.ts`) e **nenhuma tela a chamava**: o
-/// único caminho do app até um achado registrado era o `Ver o achado` do
-/// desfecho do registro, que serve a um achado — o último. Quem registrou três
-/// na semana não tinha como voltar a dois deles.
-///
-/// A tela de detalhe (`TelaDoAchado`, `Rotas.achadoDe`) já existia. Esta lista
-/// é o que faltava para ela ter mais de um caminho de entrada.
-///
-/// ---------------------------------------------------------------------------
-/// ## PAGINAÇÃO POR CURSOR, E AQUI O CONTRATO MANDA CURSOR
-///
-/// `FoundReportPage` declara `next_cursor` e **não declara `total`**, então esta
-/// tela não pode dizer "1 a 20 de 87" — e não finge. `RodapeDaPaginacao` exige
-/// `total` para decidir se há mais, e com cursor esse número não existe; por
-/// isso o pé daqui é próprio, e pequeno: `Carregar mais` enquanto houver cursor,
-/// e a contagem do que **está na tela** quando não houver.
-///
-/// É deliberadamente diferente da listagem pública de perdidos, que é numerada.
-/// As duas seguem o contrato, e o contrato segue o uso.
-///
-/// ## SEM FOTO NO CARTÃO, E ISSO NÃO É ECONOMIA
-///
-/// `FoundReport.photo_url` volta **nulo** enquanto não houver conversa mediada
-/// (critério 9): a foto do achador é vista pelo tutor dentro da conversa, e só.
-/// Esta lista custa **zero byte de imagem**, e um lugar reservado de foto que
-/// nunca preenche pareceria defeito.
 class MeusAchados extends StatefulWidget {
   const MeusAchados({super.key});
 
-  /// O NOME DA TELA, E O ROTULO DO MENU. **Uma constante para os dois**, e e
-  /// por isso que ela mudou em 28/10/2026.
-  ///
-  /// Era `'Meus achados'`. O cliente decidiu que achados viram **uma entrada**
-  /// chamada `Achados`, e com o menu dizendo `Achados` e a barra dizendo
-  /// `Meus achados` quem procura a funcao pelo nome do menu nao a reconheceria
-  /// na tela que abriu. Trocar as duas pontas e trocar esta linha.
-  ///
-  /// **O "meu" nao se perdeu do produto**, so do rotulo: `listMyFoundReports`
-  /// exige conta e tem a autorizacao no `WHERE` do servidor, e esta tela
-  /// continua morando em `Perfil` por isso -- a prosa do cabecalho tem a conta
-  /// inteira. O que a barra diz e o que o menu diz.
+  /// O NOME DA TELA, E O ROTULO DO MENU.
   static const String titulo = 'Achados';
 
   /// O ROTULO DO BOTAO FIXO NO TOPO DO CORPO (28/10/2026).
-  ///
-  /// `Registrar achado avulso` era um item do menu do `Perfil` e virou este
-  /// botao, por decisao do cliente. **TERCEIRA CASA DO ROTULO EM OITO DIAS**:
-  /// folha do alvo secundario de `Pets` -> item de menu -> este botao.
-  ///
-  /// **A palavra `avulso` FICOU de proposito.** A prosa de `abas.dart`
-  /// registrou, quando a acao virou item de menu, que o rotulo foi mantido
-  /// igual ao da folha *"porque quem usava a acao acha pelo texto"* -- e a
-  /// mesma razao vale aqui. O que mudou foi o artigo (`um`), e isso esta
-  /// reportado como a perda que e.
-  ///
-  /// **O MESMO ROTULO NO VAZIO E NA LISTA CHEIA.** Ele nao cresce, nao muda de
-  /// tinta e nao vira *"Registrar o seu primeiro achado"*: botao que muda entre
-  /// o vazio e a lista e um botao que a pessoa aprende duas vezes.
   static const String rotuloDeRegistrar = 'Registrar um achado avulso';
 
   /// Uma linha, e só uma, em cada estado em que a lista não tem o que mostrar.
   static const String vazio = 'Você ainda não registrou nenhum achado.';
   /// **O TEXTO DE `semConta` SAIU, E A PAGINA ENTROU** (19/10/2026).
-  ///
-  /// Era *'Entre na sua conta para ver os achados que você registrou.'* numa
-  /// `_UmaLinha` -- uma frase sem saida nenhuma, nem `Entrar` nem
-  /// `Criar conta`. Quem chegava aqui sem conta lia o que nao podia fazer e
-  /// nao tinha como fazer. O estado de deslogado agora e
-  /// `ConviteParaEntrar(secao: SecaoComConta.meusAchados)`, que diz o que a
-  /// secao e e carrega as duas portas.
   static const String falha = 'Não foi possível carregar os seus achados agora.';
 
   static const String rotuloDeCarregarMais = 'Carregar mais';
 
-  /// O estado do aviso, em palavra. **Nunca em cor sozinha** (SC 1.4.1), e o
-  /// desconhecido vira a palavra neutra: versão antiga do app continua no
-  /// bolso de alguém quando o servidor ganhar um estado novo, e um `switch` que
-  /// não o conhece não pode derrubar a tela.
+  /// O estado do aviso, em palavra.
   static String rotuloDoEstado(StatusDoAchado status) => switch (status) {
         StatusDoAchado.aberto => 'Em análise',
         StatusDoAchado.comCorrespondencia => 'Possível tutor encontrado',
         StatusDoAchado.encerrado => 'Encerrado',
         StatusDoAchado.desconhecido => 'Registrado',
       };
-
-  // **PUBLICO, e nao privado no cartao.** Ele morava em `_CartaoDoMeuAchado`,
-  // onde so esta lista o alcancava. `achado/tela_do_achado.dart` passou a
-  // mostrar o estado do MESMO `status`, e um segundo `switch` la seria a
-  // segunda traducao do mesmo campo: `Meus achados` diria `Possível tutor
-  // encontrado` e a tela do achado diria outra coisa sobre o mesmo registro, na
-  // mesma conta, a dois toques de distancia. E o mesmo arranjo de
-  // `MinhasIndicacoes.rotuloDoEstado`, que ja e publico por esta razao.
 
   static String fimDaLista(int quantos) => quantos == 1
       ? 'Você registrou 1 achado.'
@@ -231,11 +130,6 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
         return;
       }
       _itens = const <AchadoRegistrado>[];
-      // **A SESSAO PODE CAIR DEPOIS DA GUARDA.** `_carregar` confere
-      // `sessao.logado` antes de chamar, mas o refresh pode ser recusado
-      // dentro da chamada: o 401 chega aqui, e nao na guarda. Sem este ramo,
-      // quem foi deslogada no meio do uso veria faixa de erro com
-      // `Tentar de novo`.
       _fase = semConta ? _Fase.semConta : _Fase.falha;
     });
   }
@@ -250,84 +144,12 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
       ),
       body: SafeArea(
         top: false,
-        // **`bottom` FICA LIGADO**, e e o mesmo conserto que
-        // `achado/tela_do_achado.dart` recebeu em 22/10/2026, pela mesma causa
-        // e com a mesma forma de medicao.
-        //
-        // Esta tela **nao tem `bottomNavigationBar`**. O `Scaffold` encolhe o
-        // `body` pelo que a barra de baixo ocupa, e e dentro de
-        // `BarraDeAcaoFixa` -- que mora nesse slot -- que a `SafeArea`
-        // inferior e aplicada. Aqui nao ha barra nenhuma no slot, entao
-        // `bottom: false` -- copiado das telas que TEM barra, no commit
-        // `f2ba257b` que criou a tela -- jogava fora o unico recuo que
-        // existia, e o `ListView` passava a ter viewport ate o chao fisico.
-        //
-        // MEDIDO em 390 x 844 dp com 48 dp de barra do sistema,
-        // `devicePixelRatio` 1, rolado ate `maxScrollExtent`:
-        //
-        //   estado da lista              ultimo controle   chao   sobra
-        //   20 itens + `Carregar mais`   780..828 dp       796     -32
-        //   20 itens, fim da lista       614..794 dp       796      +2
-        //
-        // 32 dos 48 dp de altura do `Carregar mais` caiam na faixa 796..844,
-        // que pertence a barra de navegacao do sistema -- e o toque ali e do
-        // sistema, nao do app. O estado sem cursor escapava por **2 dp**, e
-        // por acidente: o que o salvava era a altura da linha de texto de
-        // `fimDaLista` logo abaixo do ultimo cartao. Nao e margem, e sorte.
-        //
-        // **A isca disto nao pode ser um toque.** `tocarSemRolar` usa
-        // `warnIfMissed: false`, e em teste de widget nao existe barra do
-        // sistema para roubar o evento: um `tap` acerta um botao desenhado em
-        // 780..828 dp. A isca de `perfil_controles_acima_da_barra_test.dart`
-        // afirma RETANGULO dentro da area visivel, com a area do sistema
-        // descontada.
-        //
-        // `BarraDeAcaoFixa` **nao foi tocada**, pelo mesmo motivo de 22/10: a
-        // `SafeArea` dela ja esta correta, e 20 telas dependem daquela
-        // familia.
         child: AnimatedBuilder(
           animation: sessao,
-          // O ARRASTAR-PARA-ATUALIZAR (cliente, 18/10/2026): *"Crie uma acao no
-          // aplicativo de atualizar a pagina conforme o usuario puxa a pagina para
-          // baixo"*. Por `ArrastarParaAtualizar`, o ponto unico do app -- nenhum
-          // `RefreshIndicator` cru em tela nenhuma. A funcao e a MESMA do
-          // `Tentar de novo` da faixa.
           builder: (context, _) => ArrastarParaAtualizar(
             aoAtualizar: _carregar,
-            // ============================================================
-            // O CORPO VIROU `CustomScrollView` EM 28/10/2026, E O MOTIVO E O
-            // BOTAO FIXO.
-            // ============================================================
-            //
-            // Era uma `ListView`. O cliente pediu `Registrar um achado avulso`
-            // **fixo no topo do corpo, com a lista passando por baixo**, e
-            // `position: sticky` em Flutter e um `SliverPersistentHeader`
-            // com `pinned: true` -- a unica forma em que o conteudo rola por
-            // DEBAIXO do controle em vez de parar antes dele.
-            //
-            // **Por que FIXO e nao so a primeira linha da lista**: com 20
-            // itens e `Carregar mais`, um botao que rola embora obriga a
-            // voltar ao inicio para registrar o proximo achado -- e quem
-            // registra um achado costuma estar **na rua, com um animal na
-            // mao**. Um botao que fosse o primeiro filho da `ListView`
-            // passaria em quase todos os casos da isca e reprovaria no que
-            // rola a lista, que e o que importa.
-            //
-            // **NA BARRA, NUNCA.** O padrao de listagem deste projeto manda
-            // por controle no topo do CORPO da tela, e o cliente pediu
-            // exatamente isso.
-            //
-            // `addSemanticIndexes: false` sobreviveu a troca, no
-            // `SliverChildListDelegate`: com os indices, o corpo inteiro vira
-            // um no anunciado como botao.
             child: CustomScrollView(
               slivers: <Widget>[
-                // **A LINHA SO APARECE COM CONTA.** No estado `semConta` o
-                // corpo inteiro e o convite para entrar, e um botao de acao
-                // grudado no topo dele seria um controle acima de uma tela que
-                // existe para dizer que nao ha sessao. A ACAO EM SI nao exige
-                // conta -- e nao exigia na folha de `Pets` --, mas esta tela so
-                // e alcancada logada.
                 if (_fase != _Fase.semConta)
                   SliverPersistentHeader(
                     pinned: true,
@@ -417,11 +239,6 @@ class _EstadoDeMeusAchados extends State<MeusAchados> {
 }
 
 /// O cartão de um achado meu.
-///
-/// **O toque leva a `Rotas.achadoDe`**, a tela de detalhe que já existia. É o
-/// mesmo destino do `Ver o achado` do desfecho do registro, e é por isso que
-/// esta lista não desenha nada além do que identifica o aviso: quem quiser o
-/// resto abre.
 class _CartaoDoMeuAchado extends StatelessWidget {
   const _CartaoDoMeuAchado({required this.achado});
 
@@ -429,8 +246,7 @@ class _CartaoDoMeuAchado extends StatelessWidget {
 
   /// O título. O achado avulso não tem nome de pet — ele é de um animal que
   /// ninguém identificou ainda —, e por isso o título é **o que a pessoa
-  /// informou**: espécie e porte. `FoundReport.species` e `size` são opcionais
-  /// no contrato, e sem os dois sobra a origem do aviso.
+  /// informou**: espécie e porte.
   static String tituloDe(AchadoRegistrado achado) {
     return switch (achado.origem) {
       OrigemDoAchado.leituraDeTag => 'Achado pela plaquinha',
@@ -438,8 +254,7 @@ class _CartaoDoMeuAchado extends StatelessWidget {
     };
   }
 
-  /// `dd/mm/aaaa` no fuso de quem lê, sem `intl`. **`found_at` é anulável** no
-  /// contrato, e o nulo não vira data inventada: a linha simplesmente não sai.
+  /// `dd/mm/aaaa` no fuso de quem lê, sem `intl`.
   static String? quandoDe(AchadoRegistrado achado) {
     final quando = achado.achadoEm;
     if (quando == null) return null;
@@ -544,37 +359,6 @@ class _UmaLinha extends StatelessWidget {
 }
 
 /// O CHAO FIXO COM `Registrar um achado avulso`, no topo do corpo.
-///
-/// Decisao do cliente de 28/10/2026, desenhada em
-/// `design/prototipos/menu-unificado/`.
-///
-/// ## Por que um `SliverPersistentHeaderDelegate`, e nao uma `Column`
-///
-/// Com uma `Column` o botao ficaria **acima** do corpo rolante e a lista
-/// comecaria embaixo dele: nada passaria por baixo, e a viewport encolheria. O
-/// cliente pediu o botao fixo **com a lista passando por baixo**, que e o que
-/// `pinned: true` faz -- o conteudo rola por DEBAIXO do cabecalho.
-///
-/// ## O CHAO E OPACO, E ISSO NAO E ENFEITE
-///
-/// Sem `color` o cabecalho seria transparente e o texto do primeiro cartao
-/// apareceria ATRAS do botao enquanto a lista rolasse -- duas camadas de texto
-/// no mesmo lugar, que e pior que nao ter botao fixo. O chao e `surface` (o
-/// mesmo da tela) com um `outline` de cabelo na base, que e o que separa o
-/// controle da lista sem o fazer parecer um cartao.
-///
-/// ## A ALTURA
-///
-/// Fixa, e amarrada ao token: o alvo de toque de 48 dp mais a folga de `e3` de
-/// cada lado. [maxExtent] e [minExtent] sao iguais de proposito -- um
-/// cabecalho que encolhe na rolagem e um alvo de toque que muda de tamanho
-/// debaixo da mao da pessoa.
-///
-/// **A fonte do sistema a 200% nao cabe nesta altura, e isso esta reportado.**
-/// `BotaoPrimario` quebraria o rotulo em duas linhas dentro de um chao de
-/// altura fixa. Um `SliverPersistentHeader` exige extensao conhecida, e medir o
-/// texto aqui seria reimplementar o layout do botao; a saida certa e o chao
-/// crescer com a escala, e ela nao foi feita nesta frente.
 class _BarraDeRegistrar extends SliverPersistentHeaderDelegate {
   const _BarraDeRegistrar({required this.aoTocar});
 
@@ -593,7 +377,6 @@ class _BarraDeRegistrar extends SliverPersistentHeaderDelegate {
   Widget build(BuildContext context, double deslocamento, bool sobrepondo) {
     final cores = BichuColors.of(context).cores;
     return Container(
-      // OPACO -- ver a prosa da classe.
       decoration: BoxDecoration(
         color: cores.surface,
         border: Border(

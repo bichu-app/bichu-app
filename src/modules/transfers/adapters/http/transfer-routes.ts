@@ -1,35 +1,4 @@
-/**
- * Rotas da transferencia de pet (BICHUS-66).
- *
- * Cinco operacoes, duas superficies: tres exigem conta, duas vivem no `/public`
- * porque o tutor que precisa desfazer pode estar em outro aparelho, deslogado,
- * com o app desinstalado -- e o momento de desfazer a operacao mais destrutiva
- * do produto nao e o momento de pedir login.
- *
- * O `operationId` de cada rota e o mesmo do contrato, e `effects`/`rateLimit`
- * **espelham** `api/openapi.yaml`: rota com efeito e sem teto nao compila
- * (`shared/http/route-definition.ts`).
- *
- * ## O teto do convite, que e o caminho de abuso obvio
- *
- * `startPetTransfer` manda e-mail para um endereco escolhido por quem chama.
- * Sem teto, uma conta manda convite para mil enderecos e o Bichu vira remetente
- * de spam com reputacao propria. O teto de 5 por conta em 24 h vem do contrato,
- * e a dimensao e `account` e nao `ip`: quem abusa tem conta, e o IP de um
- * celular em rede movel e compartilhado com o bairro inteiro.
- *
- * As duas rotas publicas tem teto por `ip` com `log_and_alert` em vez de
- * `deny_429`, e isso tambem vem do contrato: recusar o cancelamento de um pet
- * transferido por engano porque o vizinho estourou o balde seria a protecao
- * trabalhando contra quem ela protege.
- *
- * ## A resposta e montada campo a campo
- *
- * Nunca por espalhamento do objeto do dominio. `TransferenciaGravada` carrega
- * `recipientEmail` **em claro** -- e um `...transferencia` publicaria o endereco
- * de outra pessoa no primeiro dia. A mascara e montada aqui, e a lista explicita
- * faz a decisao de expor ser sempre uma decisao.
- */
+/** Rotas da transferencia de pet (BICHUS-66). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -56,15 +25,8 @@ export const rotaDeInicioDaTransferencia = defineRoute({
   operationId: 'startPetTransfer',
   method: 'post',
   path: '/pets/:petId/transfer',
-  // `verifies_secret` porque a operacao consome a janela de reautenticacao, e
-  // `notifies` porque ela manda e-mail para um endereco escolhido por quem
-  // chama. Os dois espelham `x-effects` do contrato.
   effects: ['notifies', 'verifies_secret'],
   rateLimit: [{ dimension: ['account'], limit: 5, window: '24h', onExceed: 'deny_429' }],
-  // A MARCA, E SO A MARCA. Quem valida `X-Reauth-Token` e o mecanismo da
-  // historia de reautenticacao, que esta sendo construida agora. Declarar aqui e
-  // o que faz o portao conferir esta rota contra `x-reauth-scope` do contrato;
-  // escrever uma segunda verificacao seria a segunda definicao da mesma regra.
   reauthScope: 'pet_transfer',
 });
 
@@ -74,8 +36,6 @@ export const rotaDeCancelamentoDaTransferencia = defineRoute({
   path: '/pets/transfers/:transferId/cancel',
   effects: ['notifies'],
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
-  // Sem `reauthScope`, e a ausencia e a decisao: o que exige senha e
-  // transferir, nao desistir.
 });
 
 export const rotaDeAceiteDaTransferencia = defineRoute({
@@ -96,44 +56,8 @@ export const rotaDeAceiteDaTransferencia = defineRoute({
 });
 
 /**
- * ====================================================================
- * AS DUAS ROTAS DE TOKEN DE CANCELAMENTO NAO FILTRAM CONTA DESABILITADA
- * ====================================================================
- *
- * Decisao de 18/10, e ela e deliberada: a decisao do cliente de 17/10 --
- * "filtro as paginas para que esse usuario nao seja mais encontrado em nenhuma
- * pagina ou funcionalidade" -- NAO se aplica aqui. Os quatro motivos, medidos:
- *
- * 1. **O corpo nao carrega pessoa nenhuma.** `buscarPorTokenDeCancelamento`
- *    seleciona cinco coisas: o id da transferencia, o NOME DO PET, o estado, o
- *    instante de consumacao e o de criacao. Nem nome, nem e-mail, nem foto, nem
- *    identificador de nenhum dos dois lados. Nao ha ninguem para "nao ser
- *    encontrado": filtrar aqui nao esconderia dado de pessoa, so apagaria um
- *    botao.
- *
- * 2. **Filtrar quebraria o desfazer do OUTRO lado.** O token de cancelamento e
- *    o unico caminho de desfazer dentro da janela, e quem o segura e a
- *    contraparte -- normalmente uma conta ATIVA, que nao decidiu nada sobre a
- *    saida de quem saiu. Esconder a transferencia dela por causa da conta do
- *    outro e punir quem ficou.
- *
- * 3. **E e exatamente o caso que a heranca por `pets` cria.** O gatilho
- *    `users_desabilitada_marca_pets` (migracao `20261017000013`) marca os pets
- *    da conta, e `construtorDaTrocaDeDono` exige `deleted_at is null`: uma
- *    transferencia aceita de um pet de conta desabilitada NAO consuma, e fica
- *    parada em `accepted`. O token de cancelamento e o que resolve essa parada.
- *    Fecha-lo deixaria a contraparte presa numa transferencia que nunca anda e
- *    que ela nao pode desfazer.
- *
- * 4. **O token E a credencial, e ele nao e descobrivel.** `cancel_token_hash`
- *    guarda so o resumo, o token vive na caixa de entrada de quem o recebeu, e
- *    as duas rotas tem teto por IP (30/h e 10/h, com `log_and_alert`). Nao e
- *    superficie que alguem varre: e um link que chegou a uma pessoa.
- *
- * O que isto NAO autoriza: as rotas autenticadas de transferencia continuam
- * fechadas para a conta desabilitada, e nao por filtro daqui -- `autenticar()`
- * passa por `buscarContaPorId`, que exige `deleted_at is null`, e a conta
- * desabilitada recebe 401 em qualquer rota autenticada.
+ * ==================================================================== AS DUAS
+ * ROTAS DE TOKEN DE CANCELAMENTO NAO FILTRAM CONTA DESABILITADA
  */
 export const rotaDaTransferenciaPorToken = defineRoute({
   operationId: 'getTransferByCancelToken',
@@ -171,8 +95,6 @@ function comoRespostaDaTransferencia(t: TransferenciaGravada): Record<string, un
     id: t.id,
     pet_id: t.petId,
     status: t.status,
-    // MASCARADO, SEMPRE. O endereco em claro existe na linha porque o aceite
-    // precisa compara-lo; ele nunca atravessa a borda.
     recipient_email_masked: mascararEmail(t.recipientEmail),
     expires_at: t.inviteExpiresAt.toISOString(),
     accepted_at: t.acceptedAt === null ? null : t.acceptedAt.toISOString(),
@@ -182,20 +104,14 @@ function comoRespostaDaTransferencia(t: TransferenciaGravada): Record<string, un
 }
 
 /**
- * A visao publica. `TransferCancelView`, e o contrato e explicito sobre o que
- * NAO esta aqui: sem `pet_id`, sem `transfer_id` e sem o e-mail do
- * destinatario. Quem tem o link e o tutor atual, que ja sabe para quem
- * transferiu, e imprimir o endereco de outra pessoa numa pagina publica nao
- * acrescenta nada a decisao dele (ADR-0010).
+ * A visao publica. `TransferCancelView`, e o contrato e explicito sobre o que NAO
+ * esta aqui: sem `pet_id`, sem `transfer_id` e sem o e-mail do destinatario.
  */
 function comoVisaoDeCancelamento(
   t: TransferenciaPorTokenDeCancelamento,
 ): Record<string, unknown> {
   return {
     pet_display_name: t.petDisplayName,
-    // `podeCancelar` ja recusou o que nao tem instante, entao o nulo aqui nao
-    // acontece. O `??` e para o compilador, e a data vazia seria visivel na
-    // tela se algum dia acontecesse -- melhor que `null` num campo obrigatorio.
     effective_at: (t.effectiveAt ?? t.requestedAt).toISOString(),
     requested_at: t.requestedAt.toISOString(),
   };
@@ -249,8 +165,6 @@ export function registrarRotasDeTransferencia(
         corpo.recipient_email,
         chamador,
       );
-      // 202 e nao 201: o que terminou foi o PEDIDO, e o convite ainda precisa
-      // ser aceito. Um 201 prometeria um recurso pronto.
       return reply.status(202).send(comoRespostaDaTransferencia(t));
     },
   );
@@ -297,10 +211,6 @@ export function registrarRotasDeTransferencia(
     app,
     rotaDeCancelamentoPorToken,
     {
-      // A marca que o portao de subida confere contra o contrato, que declara
-      // `Idempotency-Key` nesta operacao. Ela nao faz a idempotencia acontecer
-      // -- quem faz e `executarComIdempotencia`, abaixo --, ela faz a
-      // divergencia entre os dois ser impossivel de passar batida.
       config: { idempotencia: true },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -314,18 +224,8 @@ export function registrarRotasDeTransferencia(
             rotaDeCancelamentoPorToken.operationId,
           ),
           chaveDoCabecalho: request.headers['idempotency-key'],
-          // NAO HA CONTA AQUI, e e o ponto da rota. O escopo da chave e o
-          // RESUMO do token ao portador: a chave de quem tem um token nunca
-          // devolve o resultado de outra transferencia, e o token em claro nao
-          // vira coluna de `idempotency_keys`.
           donoOuToken: hashDeToken(cancelToken).toString('base64'),
           endpoint: `${rotaDeCancelamentoPorToken.method.toUpperCase()} ${rotaDeCancelamentoPorToken.path}`,
-          // A TRANSFERENCIA ENTRA NA CHAVE, pelo RESUMO do token e nao por ele.
-          // Hoje `donoOuToken` acima ja e derivado deste mesmo token, entao as
-          // duas travas dizem a mesma coisa -- e e exatamente por isso que esta
-          // precisa existir: a de cima e coincidencia desta rota (a unica sem
-          // conta), e no dia em que o escopo virar a conta de quem cancela, o
-          // corpo canonico continua sendo `null` para TODA transferencia.
           parametrosDeCaminho: { cancelToken: hashDeToken(cancelToken).toString('base64') },
           corpo: null,
           agoraEmMilissegundos: deps.clock.now(),

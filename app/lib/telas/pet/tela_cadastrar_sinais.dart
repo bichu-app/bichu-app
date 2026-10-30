@@ -18,21 +18,7 @@ import 'rascunho_de_pet.dart';
 import 'resultado_do_cadastro.dart';
 import 'textos_do_cadastro.dart';
 
-/// F1.5 — Cadastrar pet: sinais. Figma `91:51`.
-///
-/// **A tela nao guarda mais os campos: ela os hospeda.** Os campos vivem em
-/// [CamposDeSinais] (`campos_do_pet.dart`), pelo mesmo motivo de F1.3: a tela
-/// de EDICAO da BICHUS-61 mexe nos mesmos atributos do mesmo animal, e duas
-/// formas diferentes de editar os mesmos campos e defeito, nao escolha.
-///
-/// O que continua sendo desta tela e o que so ela sabe: o passo do assistente,
-/// a chave de idempotencia, a criacao do pet e a captura da intencao quando a
-/// sessao cai no meio.
-///
-/// A regra dos campos -- a cor como lista fechada de duas posicoes, o aviso de
-/// `care_notes` lido antes da digitacao -- esta escrita junto dos campos, e
-/// nao aqui. Se ela estivesse aqui, a tela de edicao precisaria de uma copia,
-/// e e a copia que diverge.
+/// F1.5 — Cadastrar pet: sinais.
 class TelaCadastrarSinais extends StatefulWidget {
   const TelaCadastrarSinais({
     required this.rascunho,
@@ -43,12 +29,6 @@ class TelaCadastrarSinais extends StatefulWidget {
   final RascunhoDePet rascunho;
 
   /// A faixa que a tela ja abre mostrando.
-  ///
-  /// Existe por causa da regra 4 de UX 8.3: quando a acao guardada e executada
-  /// depois do login e o servidor recusa, a pessoa volta para **esta** tela
-  /// com o rascunho carregado **e o erro explicado**. E estado de chegada, e
-  /// nao resposta a um toque -- por isso ele ja esta na tela antes do primeiro
-  /// toque, como a faixa de sessao expirada de C.2.
   final MensagemDeErro? erroInicial;
 
   @override
@@ -56,15 +36,15 @@ class TelaCadastrarSinais extends StatefulWidget {
 }
 
 class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
-  /// A porta para [CamposDeSinaisState.validar]: a tela grava os campos
-  /// **pelo metodo deles** antes de cadastrar, e nao por uma segunda copia dos
+  /// A porta para [CamposDeSinaisState.validar]: a tela grava os campos **pelo
+  /// metodo deles** antes de cadastrar, e nao por uma segunda copia dos
   /// controladores escrita aqui.
   final GlobalKey<CamposDeSinaisState> _campos =
       GlobalKey<CamposDeSinaisState>();
 
   /// **A chave nasce com a tela, e nao com o toque.** Um reenvio depois de
-  /// `FalhaDeTempo` precisa levar a chave da PRIMEIRA tentativa: gerar uma
-  /// nova a cada toque derruba a garantia inteira e o tutor termina com dois
+  /// `FalhaDeTempo` precisa levar a chave da PRIMEIRA tentativa: gerar uma nova
+  /// a cada toque derruba a garantia inteira e o tutor termina com dois
   /// cadastros do mesmo animal.
   final String _chaveDeIdempotencia = ApiClient.novaChaveDeIdempotencia();
 
@@ -74,9 +54,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
   Future<void> _cadastrar() async {
     final rascunho = widget.rascunho;
 
-    // **Grava os campos ANTES de qualquer outra coisa, e desiste se eles
-    // recusarem.** Os controladores moram em [CamposDeSinais]; sem esta
-    // chamada o cadastro sairia com o que o rascunho tinha antes da digitacao.
     if (_campos.currentState?.validar() != true) return;
 
     setState(() {
@@ -100,8 +77,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
             cuidados: rascunho.cuidados,
           );
       if (!mounted) return;
-      // O pet existe. A emissao da tag e da tela seguinte, e o cadastro **nao**
-      // e revertido se ela falhar: F1.6 diz isso na primeira frase.
       context.pushReplacement(
         Rotas.petCadastrado,
         extra: ResultadoDoCadastro(pet: pet, fotoPendente: rascunho.foto),
@@ -109,25 +84,10 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
 
-      // **A SESSÃO CAIU NO MEIO DA AÇÃO** (critério 6 de BICHUS-15).
-      //
-      // É o caso da tutora que não abre o app há quatro meses: o refresh dela
-      // venceu, e ela descobre isso só agora, com o cadastro inteiro
-      // preenchido. Sem isto ela veria "entre de novo", perderia os três
-      // passos, e refaria tudo — ou desistiria, que é o desfecho mais provável
-      // de quem já estava com pressa.
-      //
-      // O envelope guarda o rascunho INTEIRO (campos, foto por caminho de
-      // arquivo, passo e rolagem) e a guarda executa o cadastro assim que o
-      // login terminar. Ela cai em F1.6 com o pet criado, e não no formulário
-      // de novo — a diferença que a seção 8.3 do UX chama de meia-entrega.
       if (falha is FalhaDaApi && _sessaoAcabou(falha)) {
         await Escopo.of(context).guarda.guardar(
               intencaoDeCadastrarPet(
                 rascunho,
-                // A hora real, e não uma injetada: a validade de 24 h do
-                // envelope é sobre o relógio do aparelho, que é o único que
-                // existe quando o app está sem sessão.
                 criadaEm: DateTime.now(),
                 passo: 3,
               ),
@@ -139,10 +99,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
 
       setState(() => _faixa = _mensagem(falha));
     } on Object catch (erro, pilha) {
-      // O QUE NAO E FalhaDeChamada. O `finally` ja desligava o carregando,
-      // entao a tela nao gira para sempre -- ela fica CALADA, que e o outro
-      // lado do mesmo defeito: nada aconteceu, nada foi dito, e a pessoa toca
-      // de novo achando que o primeiro toque nao pegou.
       registrarFalhaInesperada(erro, pilha, onde: 'ao cadastrar o pet');
       if (!mounted) return;
       setState(
@@ -154,26 +110,12 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
   }
 
   /// **A decisao e por `type`, nunca por status.**
-  ///
-  /// `validation-failed` nao e generico nunca: o erro e do campo que o
-  /// servidor nomeou, com a mensagem daquele campo. Se o servidor nao nomear
-  /// campo nenhum, e defeito nosso, e a tela diz isso sem acusar um campo que
-  /// ninguem apontou.
-  /// A sessão acabou, e por isso a ação não pôde acontecer.
-  ///
-  /// **Decide por `type`, nunca por status.** O contrato declara quatro tipos
-  /// com status 401, e dois deles não são "a sessão acabou": `invalid-credentials`
-  /// é senha errada e `reauthentication-required` é sessão válida pedindo
-  /// confirmação. Capturar a intenção nesses dois mandaria a pessoa para o
-  /// login sem motivo, com um rascunho guardado que ela não pediu.
   bool _sessaoAcabou(FalhaDaApi falha) =>
       falha.problem.tipo == ProblemTipo.naoAutenticado ||
       falha.problem.tipo == ProblemTipo.tokenExpirado;
 
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDeConexao) {
-      // O cadastro e acao que o produto consegue guardar: a fila local e de
-      // outra historia, mas a promessa da tela ja e a certa.
       return const MensagemDeErro(
         texto: MensagensDeErro.semConexaoEnfileirada,
       );
@@ -191,10 +133,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
   }
 
   /// O que o toque na saida da faixa faz.
-  ///
-  /// Tres casos, nesta ordem: a mensagem aponta um endereco e o toque navega;
-  /// a mensagem tem rotulo e nenhum endereco, e o toque repete a operacao
-  /// desta tela; nao ha rotulo, e nao ha toque.
   VoidCallback? _acaoDaFaixa() {
     final faixa = _faixa;
     if (faixa == null || faixa.acao == null) return null;
@@ -238,11 +176,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
               FaixaDeAviso(
                 texto: _faixa!.texto,
                 rotuloDaAcao: _faixa!.acao,
-                // **A saida da mensagem decide, e nao a tela.** Ate a
-                // BICHUS-62 este callback era sempre `_cadastrar`, e por isso
-                // o 409 de limite de pets mostrava `Ver meus pets` e, ao
-                // toque, **reenviava o cadastro** -- que devolvia o mesmo 409.
-                // O rotulo prometia uma coisa e o botao fazia outra, em laco.
                 aoTocarNaAcao: _acaoDaFaixa(),
               ),
             ],

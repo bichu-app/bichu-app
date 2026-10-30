@@ -1,16 +1,4 @@
-/**
- * O serviço do cadastro, sem banco e sem relógio de parede.
- *
- * Três dos casos abaixo são o motivo do arquivo, e os três são negativos:
- *
- * - **pet de outro tutor responde 404**, e não 403. Um 403 confirma que o
- *   registro existe a quem não deveria saber que ele existe.
- * - **`care_notes` chega redigido ao repositório**. A prova é feita no ponto de
- *   escrita, e não na resposta: redigir só na resposta deixaria o telefone em
- *   claro no banco, e é justamente esse o erro que o teste precisa pegar.
- * - **o teto da conta é conferido antes de gerar o id**, para que a recusa não
- *   deixe rastro.
- */
+/** O serviço do cadastro, sem banco e sem relógio de parede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
@@ -84,7 +72,6 @@ class RepositorioFalso implements PetRepository {
   }
 
   buscarDoTutor(_pet: PetId, dono: UserId): Promise<PetGravado | null> {
-    // O falso imita a cláusula WHERE vinculada da porta: dono diferente não vê.
     return Promise.resolve(dono === DONO ? this.guardado : null);
   }
 
@@ -146,7 +133,6 @@ void describe('cadastro do pet', () => {
     const gravado = repo.criados[0]!.dados;
     assert.ok(!/\d{8}/.test(gravado.careNotes!.replace(/\D/g, '')), 'o telefone foi para o banco');
     assert.deepEqual(gravado.careNotesRedactions.map((r) => r.kind), ['phone']);
-    // O resto da nota sobrevive: a redação tira o telefone, não a informação.
     assert.ok(gravado.careNotes!.includes('medo de fogos'));
   });
 
@@ -172,10 +158,8 @@ void describe('cadastro do pet', () => {
 
 void describe('códigos de referência inválidos', () => {
   /**
-   * Cada ramo destes existe para que o erro seja `validation-failed` **com o
-   * nome do campo**, e não a violação de `CHECK` que o banco devolveria como
-   * 500. A pessoa que digitou um código inválido precisa saber qual campo
-   * recusar, e "erro interno" não diz nada a ninguém.
+   * Cada ramo destes existe para que o erro seja `validation-failed` **com o nome do
+   * campo**, e não a violação de `CHECK` que o banco devolveria como 500.
    */
   const casos: { nome: string; ausente: string; campo: string }[] = [
     { nome: 'espécie desconhecida', ausente: 'especieExiste', campo: 'species' },
@@ -216,8 +200,6 @@ void describe('códigos de referência inválidos', () => {
   }
 
   void it('vários inválidos de uma vez saem JUNTOS, e não um por vez', async () => {
-    // Devolver o primeiro e esconder os outros faz a pessoa corrigir, reenviar,
-    // e descobrir o próximo — uma vez por campo.
     const s = montar();
     s.repo.conferirCodigos = () =>
       Promise.resolve({
@@ -330,43 +312,13 @@ void describe('cadastro do pet — pet de outro tutor', () => {
   });
 });
 
-/**
- * A REDAÇÃO CRESCE O TEXTO, E O TETO É CONFERIDO DEPOIS DELA.
- *
- * O defeito medido em 18/10/2026: `pets.care_notes` declara 280 no contrato e
- * 280 na coluna (`pets_care_notes_tamanho`) — **iguais**, e é justamente a
- * igualdade que não deixa folga. A redação roda DEPOIS da validação do schema e
- * substitui o trecho achado por uma marca MAIS LONGA que ele:
- *
- * | o que entra | o que sai | delta | nota de 280 vira |
- * |---|---|---|---|
- * | `11987654321` (11) | `[telefone removido]` (19) | +8 | 288 |
- * | `(11) 98765-4321` (15) | `[telefone removido]` (19) | +4 | 284 |
- * | `a@b.co` (6) | `[e-mail removido]` (17) | +11 | 291 |
- * | `x.io` (4) | `[link removido]` (15) | +11 | 291 |
- *
- * Medido chamando `redigirCanalMediado` sobre textos de exatamente 280: os
- * quatro estouram. Sem conferência pós-redação é o `CHECK` do banco que recusa,
- * e um `CHECK` violado sai como ERRO DE SERVIDOR — a pessoa escreveu uma nota
- * dentro do limite e recebeu 500.
- *
- * **O teto desta bancada vem do `CHECK` DA MIGRAÇÃO**, nunca do contrato: uma
- * isca que lê o `maxLength` do contrato acompanha quem o sabota.
- *
- * **O dobre do repositório imita o `CHECK`** em vez de aceitar tudo. Um dobre
- * que grava qualquer tamanho não distingue "o serviço recusou explicando" de "o
- * serviço deixou passar e o banco vai derrubar depois" — e era a segunda que
- * acontecia.
- */
+/** A REDAÇÃO CRESCE O TEXTO, E O TETO É CONFERIDO DEPOIS DELA. */
 void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
   /**
-   * O teto destes casos. É `TETO_DE_CARE_NOTES`, e não o `maxLength` do
-   * contrato, de propósito: `application/` não lê disco (pureza do domínio,
-   * `eslint.config.mjs`), então quem prende este número ao `CHECK` da coluna é
-   * `adapters/persistence/teto-de-care-notes-vem-da-coluna.test.ts`. A corrente
-   * é isca -> constante -> `pets_care_notes_tamanho`, e o contrato não entra
-   * nela em nenhum ponto — uma isca que lesse o `maxLength` do contrato
-   * acompanharia quem o sabota.
+   * O teto destes casos. É `TETO_DE_CARE_NOTES`, e não o `maxLength` do contrato, de
+   * propósito: `application/` não lê disco (pureza do domínio, `eslint.config.mjs`),
+   * então quem prende este número ao `CHECK` da coluna é
+   * `adapters/persistence/teto-de-care-notes-vem-da-coluna.test.ts`.
    */
   function tetoDaColuna(): number {
     return TETO_DE_CARE_NOTES;
@@ -379,10 +331,7 @@ void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
     return nota;
   }
 
-  /**
-   * O repositório que recusa como o Postgres recusa. `quantosGravou` existe para
-   * o contrapeso: ele prova que a nota aceita FOI gravada, e não só não explodiu.
-   */
+  /** O repositório que recusa como o Postgres recusa. */
   class RepositorioQueImitaOCheck extends RepositorioFalso {
     public readonly teto: number;
 
@@ -393,8 +342,6 @@ void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
 
     override criar(id: PetId, dono: UserId, dados: DadosDoPet): Promise<PetGravado> {
       if (dados.careNotes !== null && [...dados.careNotes].length > this.teto) {
-        // A forma do erro que o node-pg-migrate/pg devolve: violação de CHECK,
-        // sem campo nem mensagem para quem chamou. É o que vira 500.
         return Promise.reject(
           Object.assign(
             new Error(
@@ -427,8 +374,6 @@ void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
   }
 
   void it('a redação REALMENTE cresce: nota no teto com telefone dentro passa dele', () => {
-    // Este caso é a medição, e não uma garantia: sem ele os dois casos abaixo
-    // poderiam estar medindo um texto que nunca estourou.
     const teto = tetoDaColuna();
     const nota = notaDe(teto, '11987654321');
     const depois = [...redigirCanalMediado(nota).texto].length;
@@ -468,8 +413,6 @@ void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
   });
 
   void it('CONTRAPESO: a MESMA nota no teto SEM telefone é aceita e gravada', async () => {
-    // O contrapeso do caso acima. Sem ele, um serviço que recusasse toda nota de
-    // 280 passaria igual, e a isca mediria o teto em vez do CRESCIMENTO.
     const teto = tetoDaColuna();
     const nota = notaDe(teto, 'coleira azul');
     const { servico, repo } = montarComOCheck(teto);
@@ -480,8 +423,6 @@ void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
   });
 
   void it('CONTRAPESO: o dobre do banco recusa de verdade, e não é inerte', async () => {
-    // Prova que o `assert.notEqual(e.code, '23514')` do caso principal mede algo:
-    // um dobre que aceitasse tudo deixaria o caso passar por outro motivo.
     const teto = tetoDaColuna();
     const { repo } = montarComOCheck(teto);
     await assert.rejects(

@@ -1,16 +1,4 @@
-/**
- * A transferencia de pet, medida sem banco, sem servidor e sem rede.
- *
- * Quatro casos aqui sao ISCAS no sentido estrito: eles existem para reprovar se
- * alguem afrouxar a regra, e cada um esta anotado com o que precisa quebrar para
- * que ele fique vermelho. Rodei os quatro com a regra desligada antes de
- * entregar; a prova esta na entrega, e a reexecucao e o proprio teste.
- *
- *   1. transferir pet que nao e seu   -> 404, e NUNCA a transferencia aberta
- *   2. a janela de 24 h               -> nao consuma antes, consuma depois
- *   3. cancelar por token apos consumar -> 410, e o estado nao volta
- *   4. consumar sem aceite            -> nunca troca dono nem revoga tag
- */
+/** A transferencia de pet, medida sem banco, sem servidor e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -50,15 +38,7 @@ const TRANSFER = '018f0000-0000-7000-8000-0000000000b1' as TransferId;
 const EMAIL_TUTOR = 'tutor@exemplo.com.br';
 const EMAIL_DESTINO = 'destino@exemplo.com.br';
 
-/**
- * O banco de mentira, e ele e uma MAQUINA DE ESTADO de verdade.
- *
- * Um dublê que devolvesse valores fixos nao poderia responder "o cancelamento
- * por token para de funcionar depois de consumada", porque essa frase e sobre o
- * estado mudar. As condicoes que o adaptador real poe no `WHERE` estao
- * reproduzidas aqui como `if`, e e a suite de integracao que confere que o
- * adaptador real as poe mesmo -- este arquivo mede a REGRA, aquele mede o SQL.
- */
+/** O banco de mentira, e ele e uma MAQUINA DE ESTADO de verdade. */
 interface Mundo {
   petsDoTutor: Map<PetId, UserId>;
   petsComCasoAberto: Set<PetId>;
@@ -135,8 +115,6 @@ function repositorioDe(mundo: Mundo): TransferRepository {
 
     buscarDoTutor(t: TransferId, dono: UserId): Promise<TransferenciaGravada | undefined> {
       const l = mundo.linhas.get(t);
-      // A CLAUSULA `WHERE` INTEIRA, e as duas condicoes juntas. Tirar a segunda
-      // e o que a isca 1 exercita.
       if (l === undefined || l.fromUserId !== dono) return Promise.resolve(undefined);
       return Promise.resolve(comoGravada(l));
     },
@@ -187,7 +165,6 @@ function repositorioDe(mundo: Mundo): TransferRepository {
 
     cancelar(e): Promise<TransferenciaGravada | undefined> {
       const l = mundo.linhas.get(e.transferencia);
-      // A CONDICAO DE ESTADO. Tirar esta linha e o que a isca 3 exercita.
       if (l === undefined || !VIVOS.includes(l.status)) return Promise.resolve(undefined);
       l.status = 'cancelled';
       l.cancelledAt = comoData(e.quando);
@@ -224,7 +201,6 @@ function repositorioDe(mundo: Mundo): TransferRepository {
       if (l === undefined || l.status !== 'accepted' || l.effectiveAt === null) {
         return Promise.resolve({ tipo: 'ja_resolvida' });
       }
-      // A JANELA. Trocar `<` por `<=` aqui e o que a isca 2 exercita.
       if (agora < l.effectiveAt.getTime()) {
         return Promise.resolve({ tipo: 'ainda_na_janela', effectiveAt: l.effectiveAt });
       }
@@ -308,9 +284,6 @@ function bancada(mundo = mundoNovo()): Bancada {
         return Promise.resolve('job-1');
       },
       claim: () => Promise.resolve([]),
-      // Este teste nao exercita a fila; a varredura de orfaos entra na porta
-      // porque o tipo a exige, e devolver lista vazia e o que um dublê honesto
-      // faz -- inventar orfao aqui seria o dublê contando uma historia propria.
       recuperarOrfaos: () => Promise.resolve([]),
       complete: () => Promise.resolve(),
       fail: () => Promise.resolve(),
@@ -346,13 +319,6 @@ async function recusa(fn: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a chamada devia ter sido recusada e nao foi');
 }
 
-// ---------------------------------------------------------------------------
-// ISCA 1 -- transferir pet que nao e seu
-// ---------------------------------------------------------------------------
-// PARA FICAR VERMELHA: tire `l.fromUserId !== dono` de `buscarDoTutor`, ou tire
-// a conferencia de `petsDoTutor` de `abrir`. No adaptador real, a linha
-// equivalente e `.where('pet_transfers.from_user_id', '=', dono)` e
-// `.where('pets.owner_user_id', '=', nova.fromUserId)`.
 void describe('isca: transferir pet que nao e seu', () => {
   void it('responde 404 e NAO abre transferencia nenhuma', async () => {
     const b = bancada();
@@ -360,9 +326,6 @@ void describe('isca: transferir pet que nao e seu', () => {
 
     assert.equal(erro.status, 404);
     assert.equal(erro.problemType, 'not-found');
-    // O que a isca precisa ver e o EFEITO, nao so o status: um 404 devolvido
-    // depois de a linha ter sido gravada seria a mesma resposta com o dano
-    // feito.
     assert.equal(b.mundo.linhas.size, 0, 'nenhuma linha podia existir');
     assert.equal(b.enviados.length, 0, 'nenhum convite podia sair');
   });
@@ -373,7 +336,6 @@ void describe('isca: transferir pet que nao e seu', () => {
     const inexistente = await recusa(() =>
       b.servico.iniciar('018f0000-0000-7000-8000-0000000000ff' as PetId, EMAIL_DESTINO, chamador(OUTRO)),
     );
-    // As duas respostas IDENTICAS. Distinguir confirmaria a existencia do pet.
     assert.equal(doOutro.status, inexistente.status);
     assert.equal(doOutro.problemType, inexistente.problemType);
   });
@@ -388,12 +350,6 @@ void describe('isca: transferir pet que nao e seu', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// ISCA 2 -- a janela de 24 h
-// ---------------------------------------------------------------------------
-// PARA FICAR VERMELHA: troque `agora < l.effectiveAt.getTime()` por
-// `agora <= ...` no dublê (ou troque `>=` por `>` em `podeConsumar`). O primeiro
-// caso passa a consumar antes da hora.
 void describe('isca: a janela de 24 h vale', () => {
   void it('nao consuma um milissegundo antes, consuma no instante exato', async () => {
     const b = bancada();
@@ -422,8 +378,6 @@ void describe('isca: a janela de 24 h vale', () => {
     const trabalho = b.enfileirados[0]!;
     assert.equal(trabalho.kind, 'case.transfer_consummate');
     assert.equal(trabalho.runAt, instanteDaConsumacao(T0));
-    // REGRA NORMATIVA DA FILA: identificador, nunca conteudo. O payload nao
-    // pode carregar token nem endereco -- ele e GRAVADO e sobrevive ao envio.
     assert.deepEqual(trabalho.payload, { transferId: TRANSFER });
     const serializado = JSON.stringify(trabalho.payload);
     for (const t of b.tokens) {
@@ -437,8 +391,6 @@ void describe('isca: a janela de 24 h vale', () => {
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
     await b.servico.aceitar(b.tokens[0]!, chamador(DESTINO));
 
-    // ADR-0004 dizia "aceitar revoga"; o contrato moveu a revogacao para a
-    // consumacao, e e o contrato que vale. Este caso e o que impede a volta.
     assert.equal(b.mundo.tagsAtivas.get(PET), 3);
     assert.equal(b.mundo.donoDoPet.get(PET), TUTOR);
   });
@@ -452,12 +404,6 @@ void describe('isca: a janela de 24 h vale', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// ISCA 3 -- cancelamento por token depois de consumada
-// ---------------------------------------------------------------------------
-// PARA FICAR VERMELHA: tire `!VIVOS.includes(l.status)` de `cancelar` no dublê.
-// No adaptador real, a linha equivalente e
-// `.where('status', 'in', [...ESTADOS_VIVOS])`.
 void describe('isca: o token de cancelamento para de funcionar apos a consumacao', () => {
   void it('depois de consumada o token responde 410 e o estado NAO volta', async () => {
     const b = bancada();
@@ -470,9 +416,6 @@ void describe('isca: o token de cancelamento para de funcionar apos a consumacao
 
     const erro = await recusa(() => b.servico.cancelarPorToken(tokenDeCancelamento));
     assert.equal(erro.status, 410);
-    // O EFEITO, e nao so o status: o pet continua com o dono novo e as tags
-    // continuam revogadas. Um cancelamento tardio que "funcionasse" devolveria
-    // um pet sem plaquinha nenhuma para o tutor antigo.
     assert.equal(b.mundo.linhas.get(TRANSFER)?.status, 'effective');
     assert.equal(b.mundo.donoDoPet.get(PET), DESTINO);
     assert.equal(b.mundo.tagsAtivas.get(PET), 0);
@@ -502,19 +445,12 @@ void describe('isca: o token de cancelamento para de funcionar apos a consumacao
     assert.equal(b.mundo.donoDoPet.get(PET), TUTOR);
     assert.equal(b.mundo.tagsAtivas.get(PET), 3);
 
-    // E a consumacao agendada, quando acordar, nao faz nada.
     b.avancar(2 * 3_600_000);
     assert.equal((await b.servico.consumar(TRANSFER)).tipo, 'nada_a_fazer');
     assert.equal(b.mundo.donoDoPet.get(PET), TUTOR);
   });
 });
 
-// ---------------------------------------------------------------------------
-// ISCA 4 -- consumar sem aceite
-// ---------------------------------------------------------------------------
-// PARA FICAR VERMELHA: tire `l.status !== 'accepted'` de `consumar` no dublê.
-// No adaptador real, a linha equivalente e o `if (linha.status !== 'accepted')`
-// dentro da transacao, depois do `FOR UPDATE`.
 void describe('isca: a transferencia nao conclui sem o aceite', () => {
   void it('convite pendente nunca consuma, por mais tempo que passe', async () => {
     const b = bancada();
@@ -532,8 +468,6 @@ void describe('isca: a transferencia nao conclui sem o aceite', () => {
     const b = bancada();
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
 
-    // A camada 2: a posse do token nao basta. 403 e nao 410, porque o token
-    // esta certo e quem apresenta e que nao e o destinatario.
     const erro = await recusa(() => b.servico.aceitar(b.tokens[0]!, chamador(OUTRO)));
     assert.equal(erro.status, 403);
     assert.equal(erro.problemType, 'forbidden');
@@ -544,24 +478,17 @@ void describe('isca: a transferencia nao conclui sem o aceite', () => {
   void it('conta sem e-mail verificado responde igual a conta errada', async () => {
     const b = bancada();
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
-    // `OUTRO` nao tem e-mail verificado na bancada. As duas respostas precisam
-    // ser identicas: separa-las daria a quem tem o token uma pista sobre o
-    // cadastro do destinatario.
     const semVerificar = await recusa(() => b.servico.aceitar(b.tokens[0]!, chamador(OUTRO)));
     assert.equal(semVerificar.problemType, 'forbidden');
   });
 });
 
-// ---------------------------------------------------------------------------
-// O caso que a issue pediu: pet marcado como perdido no meio da janela
-// ---------------------------------------------------------------------------
 void describe('pet marcado como perdido durante a janela de 24 h', () => {
   void it('a transferencia e cancelada e NENHUMA tag e revogada', async () => {
     const b = bancada();
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
     await b.servico.aceitar(b.tokens[0]!, chamador(DESTINO));
 
-    // Hora 3 da janela: o tutor abre o caso de perdido.
     b.avancar(3 * 3_600_000);
     b.mundo.petsComCasoAberto.add(PET);
     await b.servico.cancelarPorCasoAberto(PET);
@@ -569,8 +496,6 @@ void describe('pet marcado como perdido durante a janela de 24 h', () => {
     const linha = b.mundo.linhas.get(TRANSFER)!;
     assert.equal(linha.status, 'cancelled');
     assert.equal(linha.cancellationReason, 'lost_case_opened');
-    // O QUE IMPORTA: a plaquinha da coleira continua viva. E ela que liga o
-    // animal ao tutor enquanto ele esta na rua.
     assert.equal(b.mundo.tagsAtivas.get(PET), 3);
     assert.equal(b.mundo.donoDoPet.get(PET), TUTOR);
   });
@@ -597,9 +522,6 @@ void describe('pet marcado como perdido durante a janela de 24 h', () => {
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
     await b.servico.aceitar(b.tokens[0]!, chamador(DESTINO));
 
-    // O caso abre e NINGUEM avisa a transferencia -- a corrida entre a
-    // checagem e a escrita, ou um caminho de abertura que alguem escreva amanha
-    // sem lembrar de chamar a porta.
     b.mundo.petsComCasoAberto.add(PET);
     b.avancar(24 * 3_600_000);
 
@@ -620,9 +542,6 @@ void describe('pet marcado como perdido durante a janela de 24 h', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// O resto do escopo
-// ---------------------------------------------------------------------------
 void describe('o convite', () => {
   void it('o token NAO aparece na resposta, e sai so no corpo do e-mail', async () => {
     const b = bancada();
@@ -645,8 +564,6 @@ void describe('o convite', () => {
     const b = bancada();
     await b.servico.iniciar(PET, '  DesTino@Exemplo.Com.BR  ', chamador(TUTOR));
     assert.equal(b.mundo.linhas.get(TRANSFER)?.recipientEmail, EMAIL_DESTINO);
-    // E o aceite reconhece a mesma pessoa: sem a normalizacao dos dois lados,
-    // `Marina@` deixaria de ser a mesma pessoa que `marina@`.
     const aceita = await b.servico.aceitar(b.tokens[0]!, chamador(DESTINO));
     assert.equal(aceita.status, 'accepted');
   });
@@ -656,8 +573,6 @@ void describe('o convite', () => {
     const erro = await recusa(() => b.servico.iniciar(PET, 'TUTOR@exemplo.com.br', chamador(TUTOR)));
     assert.equal(erro.status, 400);
     assert.equal(b.mundo.linhas.size, 0);
-    // Consumado, ele revogaria todas as tags e devolveria o pet ao mesmo dono
-    // sem plaquinha nenhuma: destruicao sem transferencia.
     assert.equal(b.mundo.tagsAtivas.get(PET), 3);
   });
 
@@ -704,9 +619,6 @@ void describe('o cancelamento pelo tutor', () => {
     await b.servico.consumar(TRANSFER);
 
     const erro = await recusa(() => b.servico.cancelarPeloTutor(TRANSFER, chamador(TUTOR)));
-    // 409 e nao 410: a rota exige conta, e o tutor tem direito de saber em que
-    // pe esta a propria transferencia. O 410 sem distincao e da superficie
-    // publica do token.
     assert.equal(erro.status, 409);
     assert.equal(erro.problemType, 'transfer-already-effective');
   });
@@ -722,7 +634,6 @@ void describe('a visao publica do token de cancelamento', () => {
     assert.equal(v.petDisplayName, 'Nina');
     assert.equal(v.effectiveAt?.getTime(), instanteDaConsumacao(T0));
 
-    // ADR-0010: nem o endereco do destinatario, nem os identificadores internos.
     const serializado = JSON.stringify(v);
     assert.equal(serializado.includes(EMAIL_DESTINO), false);
     assert.equal(serializado.includes(PET), false);
@@ -749,7 +660,6 @@ void describe('o destinatario que apagou a conta', () => {
     await b.servico.iniciar(PET, EMAIL_DESTINO, chamador(TUTOR));
     await b.servico.aceitar(b.tokens[0]!, chamador(DESTINO));
 
-    // `ON DELETE SET NULL`: a conta do destinatario sumiu.
     b.mundo.linhas.get(TRANSFER)!.toUserId = null;
     b.avancar(24 * 3_600_000);
 
@@ -768,8 +678,6 @@ void describe('o dominio e a implementacao concordam', () => {
       effectiveAt: instanteDaConsumacao(T0),
     };
     const virada = instanteDaConsumacao(T0);
-    // Nunca os dois verdadeiros ao mesmo tempo: se fossem, haveria um instante
-    // em que cancelar e consumar competiriam pela mesma linha.
     for (const delta of [-2, -1, 0, 1, 2]) {
       const t = (virada + delta) as Instant;
       assert.equal(podeCancelar(estado, t) && podeConsumar(estado, t), false, `delta ${delta}`);

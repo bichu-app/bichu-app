@@ -11,14 +11,6 @@ import 'falhas.dart';
 import 'problem.dart';
 
 /// A camada de acesso a API.
-///
-/// Tres coisas ela faz e nenhuma outra: monta a URL a partir de
-/// `API_BASE_URL`, carrega os cabecalhos que o contrato exige, e converte
-/// qualquer resposta de erro no formato unico ([Problem], RFC 9457).
-///
-/// O que ela **nao** faz, de proposito: nao decide texto de tela, nao guarda
-/// token e nao tem fila offline. A fila local e persistida em disco e o reenvio
-/// com a mesma `Idempotency-Key` sao da BICHU-26.
 class ApiClient {
   ApiClient({
     required this.config,
@@ -30,8 +22,7 @@ class ApiClient {
   final AppConfig config;
   final http.Client _cliente;
 
-  /// De onde sai o `Authorization: Bearer`. Nulo quando deslogado, e isso e
-  /// um estado normal: o app e navegavel sem conta.
+  /// De onde sai o `Authorization: Bearer`.
   final Future<String?> Function()? tokenDeAcesso;
 
   final Duration tempoLimite;
@@ -48,24 +39,6 @@ class ApiClient {
   }
 
   /// `GET` que devolve o corpo **e o `ETag`**.
-  ///
-  /// Existe porque [_lerResposta] descarta os cabecalhos, e o `ETag` de uma
-  /// leitura e o unico caminho ate uma escrita versionada: `updateNetworkEvent`
-  /// e `cancelNetworkEvent` exigem `If-Match` com a versao da ultima leitura, e
-  /// sem este metodo o app nao tinha de onde tirar o valor. Era este o buraco
-  /// que deixava o primeiro cancelamento impossivel -- do lado do servidor
-  /// faltava a leitura emitir o cabecalho, e deste lado faltava alguem lê-lo.
-  ///
-  /// **Nulo quando a resposta nao traz o cabecalho, e nao uma cadeia vazia**:
-  /// quem chama precisa distinguir "o servidor nao mandou versao" de "a versao
-  /// e vazia". Uma cadeia vazia em `If-Match` e o caminho do 428, e ele
-  /// pareceria defeito do servidor.
-  ///
-  /// O valor sai **como veio**, sem aparar o `W/` nem o sufixo de codificacao
-  /// que a borda acrescenta (`"1-zstd"`): quem o le de volta e `lerIfMatch`, no
-  /// servidor, que tolera as duas formas por decisao de 05/10. Normalizar aqui
-  /// seria uma segunda regra de leitura de `ETag`, num lugar que nao e o dono
-  /// dela.
   Future<({Map<String, dynamic> corpo, String? etag})> getComEtag(
     String caminho, {
     Map<String, String>? query,
@@ -77,20 +50,12 @@ class ApiClient {
       query: query,
       exigeToken: exigeToken,
     );
-    // A LEITURA DO CORPO VEM PRIMEIRO, de proposito: ela e quem estoura
-    // `FalhaDaApi` no erro, e um `ETag` lido de uma resposta 404 nao serve para
-    // nada.
     final corpo = _lerResposta(resposta);
     final etag = resposta.headers['etag'];
     return (corpo: corpo, etag: etag);
   }
 
   /// `POST`.
-  ///
-  /// [idempotencyKey] e obrigatoria em toda operacao de criacao com efeito
-  /// colateral que possa ser reenviada. Repetir a mesma chave dentro de 24 h
-  /// devolve a resposta original em vez de executar de novo, e e isso que
-  /// impede o tutor de receber o mesmo aviso varias vezes.
   Future<Map<String, dynamic>> post(
     String caminho, {
     Object? corpo,
@@ -109,18 +74,6 @@ class ApiClient {
   }
 
   /// `PATCH`.
-  ///
-  /// [ifMatch] e o `ETag` da ULTIMA LEITURA, e nao um enfeite: e controle de
-  /// concorrencia (`#/components/parameters/IfMatch`). Treze operacoes do
-  /// contrato o exigem -- `updateNetworkEvent` e `cancelNetworkEvent` do app,
-  /// mais onze do painel --, e nenhum verbo desta classe tinha como mandar o
-  /// cabecalho antes de 19/10/2026: a lista de cabecalhos de [_enviar] e
-  /// fechada, e quem chamava so podia escolher `Idempotency-Key`. A operacao
-  /// respondia **428** (`precondition-required`) em toda tentativa, medido em
-  /// homologacao.
-  ///
-  /// Ausente quando a operacao exige: `428`. Diferente da versao atual:
-  /// `412`, e outra pessoa salvou depois de voce ter lido.
   Future<Map<String, dynamic>> patch(
     String caminho, {
     Object? corpo,
@@ -137,15 +90,6 @@ class ApiClient {
   }
 
   /// `PUT`, **e sem `Idempotency-Key`**.
-  ///
-  /// A ausencia da chave nao e esquecimento: `PUT` e idempotente por
-  /// definicao, e o reenvio e exatamente o que o verbo promete tratar. A
-  /// operacao que trouxe este metodo e `putMyDirectoryEntryReview`, onde o
-  /// segundo envio **e a edicao** -- o contrato escolheu `PUT` em vez de
-  /// `POST` para que a regra "uma avaliacao por pessoa por local, que ela
-  /// possa editar" morasse no metodo, e o banco a cobra em
-  /// `UNIQUE (professional_id, author_user_id)`. Uma chave de idempotencia
-  /// aqui faria a segunda edicao devolver a resposta da primeira.
   Future<Map<String, dynamic>> put(
     String caminho, {
     Object? corpo,
@@ -170,24 +114,6 @@ class ApiClient {
   }
 
   /// Baixa o corpo binario de uma rota **autenticada desta API**.
-  ///
-  /// Existe porque `Image.network` **nao manda cabecalho nenhum**: ele abre um
-  /// `HttpClient` proprio, por fora desta camada, e por ali nao passa
-  /// `Authorization`. A rota da imagem do QR e `bearerAuth` no contrato e esta
-  /// marcada `reveals_credential`; pela `Image.network` ela responde 401 e a
-  /// tela nao mostra QR algum.
-  ///
-  /// **O endereco vem do corpo de uma resposta, e por isso ele e conferido.**
-  /// `qr_png_url` e montado pelo servidor. Mandar o `Bearer` para qualquer host
-  /// que um campo de resposta nomear entrega a credencial da sessao no primeiro
-  /// dia em que esse campo apontar para outro lugar. So a **mesma origem** de
-  /// `API_BASE_URL` (esquema, host e porta) recebe o cabecalho; qualquer outra
-  /// e recusada com [FalhaDeEnderecoRecusado] **antes** de a requisicao sair.
-  ///
-  /// Recusa tambem resposta que nao seja imagem: um corpo JSON devolvido com
-  /// 200 por um portal cativo no meio do caminho viraria bytes quebrados no
-  /// decodificador, e o erro apareceria como falha de imagem e nao como falha
-  /// de rede.
   Future<Uint8List> baixarImagem(String endereco) async {
     final uri = Uri.tryParse(endereco);
     final base = config.apiBaseUrl;
@@ -238,15 +164,9 @@ class ApiClient {
   }
 
   /// Gera uma chave de idempotencia nova.
-  ///
-  /// Quem reenvia uma acao da fila **nao** chama isto: reenvio usa a chave da
-  /// primeira tentativa, e trocar a chave no reenvio derruba a garantia
-  /// inteira.
   static String novaChaveDeIdempotencia() => _uuidV4();
 
   void fechar() => _cliente.close();
-
-  // ------------------------------------------------------------------------
 
   Future<Map<String, dynamic>> _enviar(
     String metodo,
@@ -271,11 +191,6 @@ class ApiClient {
   }
 
   /// Monta, envia e devolve a resposta INTEIRA, cabecalhos incluidos.
-  ///
-  /// Separado de [_enviar] para que [getComEtag] leia um cabecalho sem que
-  /// exista um segundo lugar que monte URL, cabecalhos e token. Quem chama
-  /// daqui e quem decide o que fazer com a resposta; a conversao de erro em
-  /// [Problem] continua inteira em [_lerResposta].
   Future<http.Response> _trocar(
     String metodo,
     String caminho, {
@@ -330,31 +245,6 @@ class ApiClient {
   }
 
   /// Manda a requisicao e le o corpo INTEIRO, sob **um** prazo so.
-  ///
-  /// O prazo cobre as duas metades de proposito, e essa e a correcao: antes
-  /// ele vivia em `_cliente.send(...).timeout(tempoLimite)` e cobria apenas
-  /// ate os CABECALHOS chegarem. `http.Response.fromStream` ficava de fora, e
-  /// resposta que abre e nao fecha -- portal cativo, proxy que segura o corpo,
-  /// conexao que morre com os cabecalhos ja entregues -- pendurava a chamada
-  /// **para sempre**, sem `FalhaDeTempo` e sem mensagem. A tela que esperava
-  /// por ela ficava girando sem saida, que e o estado que este app nao pode
-  /// ter. Medido: com `tempoLimite` de 2 s, a chamada seguia viva depois de
-  /// 6 s. A isca esta em `test/api/prazo_cobre_o_corpo_test.dart`.
-  ///
-  /// [tempoLimite] passa a ser o orcamento de **uma resposta inteira**, e nao
-  /// o de um aperto de mao: e o que a tela promete a quem toca no botao.
-  ///
-  /// **A chamada comeca AGORA, e nao no proximo giro do laco de eventos.** O
-  /// fecho e invocado na hora (`(){...}()`) em vez de embrulhado num
-  /// `Future(...)`, e a diferenca nao e de estilo: `Future(...)` agenda o
-  /// corpo como TAREFA do laco de eventos, enquanto o prazo comeca a contar
-  /// imediatamente. Em teste de widget, onde o relogio e falso e so anda
-  /// quando alguem bombeia, isso separa o inicio do prazo do inicio da
-  /// requisicao e deixa um temporizador de 20 s pendurado que o
-  /// `pumpAndSettle` precisa queimar -- quatro casos de logout passaram de
-  /// 2 s para minutos por causa disto. O fecho invocado na hora roda ate o
-  /// primeiro `await` de forma sincrona, que e exatamente o que o codigo
-  /// anterior fazia.
   Future<http.Response> _enviarELerOCorpo(http.BaseRequest requisicao) {
     return () async {
       final fluxo = await _cliente.send(requisicao);
@@ -382,9 +272,6 @@ class ApiClient {
   Problem _problem(http.Response resposta, int status, Duration? esperar) {
     final tipoDeConteudo = resposta.headers['content-type'] ?? '';
     if (!tipoDeConteudo.contains('json') || resposta.bodyBytes.isEmpty) {
-      // Um proxy no meio do caminho devolve HTML num 502. Nao e motivo para o
-      // app travar: vira um Problem sintetico e a tela mostra o texto de
-      // servidor fora, que e o certo para o momento.
       return Problem.semCorpo(status, tenteDepoisDe: esperar);
     }
     try {
@@ -399,15 +286,6 @@ class ApiClient {
   }
 
   /// O endereco absoluto de um caminho **desta** API.
-  ///
-  /// Existe para quem precisa da URL antes de ter a resposta -- o caso e
-  /// `qr.png`, cuja imagem e buscada por [baixarImagem] e cujo endereco so
-  /// aparece no corpo de `issuePetTag`, que a tela do detalhe nao chama. Sai
-  /// pelo **mesmo** [_url] que todas as outras chamadas: a base, o `/v1` e os
-  /// segmentos sao montados num lugar so, e nenhuma tela interpola `v1` a mao.
-  ///
-  /// E por isso que ele passa pela conferencia de origem de [baixarImagem] sem
-  /// precisar de excecao: o endereco nasce de `API_BASE_URL`.
   Uri enderecoDe(String caminho) => _url(caminho, null);
 
   Uri _url(String caminho, Map<String, String>? query) {

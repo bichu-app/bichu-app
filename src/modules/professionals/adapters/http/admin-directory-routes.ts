@@ -1,27 +1,6 @@
 /**
  * `/v1/admin/directory/...`: a escrita administrativa do diretorio de `Perto`
  * (BICHUS-189; ADR-0027).
- *
- * ## O que NAO esta aqui, porque ja aconteceu antes
- *
- * Estas rotas so sobem dentro de `escoparRotasAdministrativas`: a guarda do
- * escopo confere superficie, cookie de sessao, `Origin`, `X-CSRF-Token` e o
- * papel de `adminRoles` antes de qualquer gancho daqui. **Nenhuma escrita daqui
- * pede reautenticacao** (decisao do cliente de 07/10/2026, ADR-0027 item 23), e
- * **nenhuma verificacao de papel mora aqui nem no caso de uso**.
- *
- * ## A declaracao e a do contrato
- *
- * Papel, trilha e teto sao copiados do contrato, e
- * `rotas-registradas-contra-o-contrato` os compara. O schema do corpo tambem
- * vem do contrato, pelo `operationId`: declarar um aqui criaria a segunda
- * definicao, que e a que diverge.
- *
- * ## A validacao de query nao esta aqui
- *
- * `vigiarParametrosDasRotas` instala `schema.querystring` a partir do contrato.
- * O `400` que ela produz esta declarado na operacao, e o portao de subida
- * reprova se sair de la.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -38,7 +17,10 @@ import type {
 } from '../../domain/escrita-do-diretorio.js';
 import type { OrdemDoDiretorioAdministrativo } from '../../ports/diretorio-administrativo.js';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas administrativas. */
+/**
+ * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
+ * administrativas.
+ */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -94,7 +76,10 @@ const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 50;
 const ORDEM_PADRAO: OrdemDoDiretorioAdministrativo = 'name';
 
-/** `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave (ADR-0027 item 20.2). */
+/**
+ * `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave
+ * (ADR-0027 item 20.2).
+ */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;
@@ -119,13 +104,7 @@ interface QueryDeEntradas {
   readonly limit?: number;
 }
 
-/**
- * O recorte que de fato valeu, para a tela poder escreve-lo.
- *
- * `scope: all` quando nada foi filtrado: "nada filtrado" e uma informacao, e um
- * objeto vazio faria a tela adivinhar a diferenca entre "sem filtro" e "filtro
- * que nao coube na resposta". Mesma forma da listagem publica.
- */
+/** O recorte que de fato valeu, para a tela poder escreve-lo. */
 function filtrosAplicados(query: QueryDeEntradas): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();
@@ -137,24 +116,7 @@ function filtrosAplicados(query: QueryDeEntradas): Record<string, string> {
   return aplicados;
 }
 
-/**
- * `DELETE /v1/admin/directory/reviews/{reviewRef}` -- a moderacao da avaliacao.
- *
- * **Entra na MESMA fatia que a avaliacao, e nao depois.** A publicacao e
- * imediata (decisao do cliente de 18/10) e isto fala de negocio real com nome e
- * endereco: publicacao imediata sem caminho de remocao e uma funcionalidade que
- * nao se pode desligar.
- *
- * `DELETE` no metodo e EXCLUSAO LOGICA no banco, e as duas coisas nao se
- * contradizem: o que o cliente da API apaga e a PUBLICACAO. A linha fica,
- * porque o ADR-0011 manda a remocao ser registrada na trilha com o motivo.
- *
- * **O que o painel ainda NAO tem, e esta declarado para nao ser descoberto
- * depois:** nao ha operacao de LISTAR as denuncias nem as avaliacoes. O
- * administrador remove por `reviewRef`, que ele obtem pela leitura publica da
- * pagina do local. A fila de moderacao navegavel e a continuacao natural e nao
- * cabia aqui.
- */
+/** `DELETE /v1/admin/directory/reviews/{reviewRef}` -- a moderacao da avaliacao. */
 export const rotaDeRemoverAvaliacao = defineRoute({
   operationId: 'removeAdminDirectoryReview',
   method: 'delete',

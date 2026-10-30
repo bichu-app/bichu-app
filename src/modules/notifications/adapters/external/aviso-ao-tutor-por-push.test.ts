@@ -1,16 +1,4 @@
-/**
- * ISCA — O PUSH DO AVISO AO TUTOR, E O QUE ELE NAO PODE CARREGAR.
- *
- * O texto para `tagEscaneada` existia desde a BICHUS-91 e **nunca teve
- * emissor**: o unico chamador de `montarMensagemDePush` fixava
- * `alertaDeVizinhanca`. Este arquivo prova que o emissor existe e que o que ele
- * emite e pobre de proposito.
- *
- * O caso que esta suite trava, e que nenhum outro travava, e o do NEGATIVO: o
- * corpo e o titulo passam por uma varredura de endereco, ponto, coordenada,
- * CEP, telefone, e-mail e UUID. Uma mao futura que acrescente "visto na Rua X"
- * ou o bairro ao texto reprova aqui, e nao na tela de bloqueio de um tutor.
- */
+/** ISCA — O PUSH DO AVISO AO TUTOR, E O QUE ELE NAO PODE CARREGAR. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -70,22 +58,12 @@ function aviso(parcial: Partial<AvisoAoTutorParaEntrega> = {}): AvisoAoTutorPara
   };
 }
 
-/**
- * As formas que nao podem aparecer no fio. Deliberadamente mais estreitas que
- * a porteira do dominio: aqui o que se prova e que **este** texto nao as tem,
- * e nao que a porteira funciona (isso e `conteudo-do-push.test.ts`).
- */
+/** As formas que nao podem aparecer no fio. */
 const FORMAS_DE_LUGAR: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   { nome: 'logradouro', regex: /\b(?:rua|avenida|av\.|alameda|travessa|rodovia|estrada|pra[cç]a)\b/iu },
   { nome: 'coordenada', regex: /-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/u },
   { nome: 'CEP', regex: /\b\d{5}-?\d{3}\b/u },
   { nome: 'numero de porta', regex: /,\s*\d{1,5}\b/u },
-  // A clausula de lugar que `onde()` acrescenta quando o chamador passa um
-  // bairro. Bairro E permitido em superficie publica pelo ADR-0010 e os textos
-  // de UX 12.2 o usam de proposito -- mas no push da PLAQUINHA ele nao entra:
-  // o produto mostra bairro na tela do caso, e um aviso que acende na tela de
-  // bloqueio e mais pobre que a tela. Sem esta linha, um `bairro` ligado aqui
-  // passaria por toda a varredura acima sem reprovar nada.
   { nome: 'clausula de lugar (", na ...")', regex: /,\s+n[ao]\s/u },
   { nome: 'UUID', regex: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu },
   { nome: 'telefone', regex: /(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/u },
@@ -124,8 +102,6 @@ void describe('ISCA — o aviso ao tutor sai por push, e sai pobre', () => {
       enviados[0]?.corpo,
       'Isso aconteceu agora. Se Thor deveria estar com você, confira.',
     );
-    // Sem caso nao ha chave publica do caso, e `ref` sai vazio. O destino do
-    // toque nao depende dele (ver `aviso-ao-tutor-por-push.ts`).
     assert.deepEqual(enviados[0]?.dados, { tipo: 'tagEscaneada', ref: '' });
   });
 
@@ -151,18 +127,8 @@ void describe('ISCA — o aviso ao tutor sai por push, e sai pobre', () => {
           );
         }
       }
-      // Nem o nome, nem o recado, nem a foto de quem achou. O achador e visto
-      // dentro da conversa mediada, e so la.
       assert.equal(m.imagemUrl, undefined);
       assert.deepEqual(Object.keys(m.dados).sort(), ['ref', 'tipo']);
-      // **NEM O ID DA CONVERSA**, e esta linha existe por causa de uma
-      // tentacao concreta: a area de mensagens do app ganhou a rota
-      // `/mensagens/:conversaId`, e mandar o `conversaId` no push abriria a
-      // conversa direto. Nao da -- `ConversationId` e `{format: uuid}` no
-      // contrato e `conversations` nao tem coluna `ref`: seria UUID interno em
-      // superficie publica (ADR-0010 item 6). O toque leva a LISTA, que nao
-      // precisa de identificador. A porteira do dominio tambem barra a chave
-      // pelo nome; esta asserccao barra o VALOR entrando por `ref`.
       assert.equal(
         'conversation_id' in m.dados || 'conversationId' in m.dados,
         false,
@@ -187,9 +153,6 @@ void describe('ISCA — o aviso ao tutor sai por push, e sai pobre', () => {
   });
 
   void it('ISCA: pet com nome de rua e barrado, e o desfecho conta a falha', async () => {
-    // A troca esta assumida de olhos abertos no cabecalho de
-    // `conteudo-do-push.ts`: a porteira falha FECHADO. Um pet chamado "Rua"
-    // perde o push e e coberto pela rede de seguranca por e-mail.
     const { entrega, enviados } = montar({ [TUTOR]: { a: 'aceito' } });
 
     const r = await entrega.avisar(aviso({ nomeDoPet: 'Rua' }));

@@ -1,73 +1,3 @@
-/**
- * A massa fixa da secao `Rede`: treze encontros, dois deles privados.
- *
- * ## Por que ela mora num arquivo proprio
- *
- * Mesma razao de `massa-do-diretorio.ts` e de `massa-da-vitrine.ts`: `seed.ts`
- * e o MECANISMO e isto e o CONTEUDO. Separar permite que as regras que a massa
- * precisa respeitar sejam afirmaveis por um teste sem subir banco, e
- * `massa-da-rede.test.ts` as afirma -- inclusive os tetos dos `CHECK`.
- *
- * ## O que ela e: material para o cliente JULGAR O VISUAL
- *
- * Cada encontro abaixo cobre **um caso que muda o desenho**:
- *
- * - titulo curto ao lado de um que **quebra em duas linhas** e do que encosta
- *   no teto de 120;
- * - encontros **com e sem ponto no mapa** (ADR-0027 12.8): a tela do encontro,
- *   com conta, desenha o mapa quando ha ponto e so os rotulos quando nao ha;
- * - **hoje, semana que vem e ja passado**, e um **ACONTECENDO AGORA**;
- * - acento e cedilha em toda parte;
- * - **seis cidades e tres fusos**;
- * - **o caso feio**: `encontro-do-mindu-em-manaus` junta titulo, resumo e nome
- *   de lugar nos tetos, bairro comprido, e nenhum ponto.
- *
- * ## O que NAO esta aqui
- *
- * **Nenhuma pessoa e nenhum pet.** Check-in e galeria sairam desta versao
- * (ADR-0027 12.4), e com eles os tutores e as fotos que esta massa semeava. O
- * desenho anterior esta na branch `guarda/rede-checkin-galeria`.
- *
- * **Nenhum encontro cancelado.** O aplicativo emendado ainda nao escreve o
- * rotulo `cancelled`: um cancelado na massa apareceria na tela de QA como um
- * encontro normal, que e o engano que o rotulo existe para impedir. O estado e
- * coberto pelos testes de dominio, de rota e de integracao.
- *
- * ## O ponto e SEMPRE de lugar publico
- *
- * Os pontos abaixo sao de pracas, parques e orlas, e nunca de endereco de
- * alguem (ADR-0027 secao 13). Vale tambem para massa: um ponto de massa copiado
- * para um ambiente de demonstracao continua sendo um ponto no mapa.
- *
- * ## Nao ha capa
- *
- * A coluna saiu da migracao (o banco nao guarda URL); a capa volta como a
- * posicao 0 das imagens do encontro, na fatia seguinte, e a massa ganha imagem
- * junto. Ate la todo cartao sai sem capa, que o app ja sabe desenhar.
- *
- * ## AS DATAS SAO CALCULADAS, E NUNCA LITERAIS
- *
- * Com datas literais a massa INTEIRA vira passado sozinha em poucas semanas.
- * Cada encontro guarda um DESLOCAMENTO, e o instante sai dele e de um
- * `hoje: Date` injetado, exatamente como `semearVitrine(db, hoje)` faz.
- *
- * ## O FUSO, E COMO O INSTANTE E MONTADO
- *
- * **A conversao e feita pelo POSTGRES, com `::timestamp AT TIME ZONE <zona>`.**
- * A massa produz o texto da hora de parede e o nome IANA, e o banco resolve o
- * deslocamento: o catalogo de zonas ja e a autoridade (o gatilho
- * `network_events_fuso_existe` o consulta), e fazer a conta em JavaScript seria
- * reimplementar horario de verao.
- *
- * ### As duas ancoras, e por que existem duas
- *
- * A maioria dos encontros e ancorada na PAREDE: tantos dias a frente, aquela
- * hora, naquela zona. Dois sao ancorados no INSTANTE, porque o estado
- * `happening` so existe entre `starts_at` e `ends_at`, e uma hora de parede
- * fixa nao consegue prometer que o relogio de quem abrir a tela vai cair dentro
- * da janela.
- */
-
 /** A hora de parede: tantos dias a frente, aquela hora, na zona do encontro. */
 export interface AncoraDeParede {
   readonly ancora: 'parede';
@@ -79,7 +9,7 @@ export interface AncoraDeParede {
   readonly duracaoEmMinutos: number | null;
 }
 
-/** O deslocamento a partir do relogio de quem olha. Ver "as duas ancoras". */
+/** O deslocamento a partir do relogio de quem olha. */
 export interface AncoraDeInstante {
   readonly ancora: 'instante';
   /** Negativo comeca no passado recente, que e o que faz `happening` existir. */
@@ -101,24 +31,15 @@ export interface EncontroSemeado {
   readonly quando: QuandoAcontece;
   /** Nome IANA. Precisa EXISTIR no catalogo do Postgres, e nao so parecer um. */
   readonly timeZone: string;
-  /**
-   * O ponto no mapa, ou nulo. Sempre de lugar publico (ADR-0027 secao 13), e a
-   * origem e sempre `map_pin`: e o ponto que o administrador tocaria no mapa.
-   */
+  /** O ponto no mapa, ou nulo. */
   readonly ponto: PontoSemeado | null;
-  /**
-   * `published` ou `removed`. Nao ha `draft` (ADR-0027 12.9), e nao ha
-   * cancelado na massa -- ver o cabecalho.
-   */
+  /** `published` ou `removed`. */
   readonly publicationStatus: 'published' | 'removed';
   /** Os campos do item 17. Ausente vale o padrao da migracao. */
   readonly campos?: CamposSemeados;
 }
 
-/**
- * Os campos do encontro (ADR-0027 item 17). Todos opcionais na massa: o que
- * falta vale o padrao da migracao, e `camposDe` o resolve num lugar so.
- */
+/** Os campos do encontro (ADR-0027 item 17). */
 export interface CamposSemeados {
   readonly visibility?: 'public' | 'private';
   readonly admission?: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people' } | null;
@@ -169,19 +90,12 @@ export interface PontoSemeado {
 export const MOMENTO_DA_REDE = '2026-09-23T12:00:00.000Z';
 
 /**
- * As tres zonas que a massa usa, e as tres EXISTEM no catalogo do Postgres --
- * o gatilho `network_events_fuso_existe` recusa a linha se nao existirem.
- *
- * Tres e de proposito: `America/Manaus` e `America/Recife` tem deslocamento
- * diferente do de `America/Sao_Paulo`, entao um cartao renderizado com o fuso
- * do aparelho em vez do fuso do encontro mostra a hora errada em pelo menos
- * dois cartoes desta massa. Com uma zona so, o defeito nao teria como aparecer.
+ * As tres zonas que a massa usa, e as tres EXISTEM no catalogo do Postgres -- o
+ * gatilho `network_events_fuso_existe` recusa a linha se nao existirem.
  */
 export const FUSOS_DA_REDE = ['America/Sao_Paulo', 'America/Manaus', 'America/Recife'] as const;
 
 export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
-  // 1. SEMANA QUE VEM e PONTO NO MAPA. O cartao mais completo que a
-  //    secao produz, e e ele que da a medida dos outros.
   {
     slug: 'benedito-calixto-de-manha',
     title: 'Encontro de cães na Praça Benedito Calixto',
@@ -200,7 +114,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
       paraLevar: ['water', 'water_bowl', 'leash', 'poop_bags'],
     },
   },
-  // 2. TITULO QUE QUEBRA EM DUAS LINHAS, e ponto.
   {
     slug: 'caminhada-no-ibirapuera',
     title: 'Caminhada coletiva com cães de porte grande no Parque Ibirapuera, com veterinária',
@@ -219,12 +132,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
       paraLevar: ['water', 'leash', 'vaccination_card'],
     },
   },
-  // 3. SEM CAPA, SEM PONTO e SEM FIM DECLARADO. Tres ausencias no mesmo
-  //    cartao, e nenhuma delas e defeito. A tela do encontro, com conta,
-  //    mostra os rotulos e nao mostra mapa.
-  //
-  //    Segunda cidade e segundo estado da massa: e daqui que o filtro de cidade
-  //    tira o que filtrar.
   {
     slug: 'tarde-no-jardim-botanico',
     title: 'Tarde no Jardim Botânico',
@@ -238,13 +145,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: null,
     publicationStatus: 'published',
   },
-  // 4. ACONTECENDO AGORA. Comecou ha 45 minutos e termina daqui a duas horas e
-  //    quinze, entao `status` sai `happening` para quem abrir a tela em
-  //    qualquer momento das proximas duas horas.
-  //
-  //    Ancorado no INSTANTE e nao na parede, e o cabecalho explica por que: com
-  //    hora de parede fixa, quem semeasse as 20h nao veria nenhum encontro
-  //    acontecendo, e o estado `happening` ficaria sem ninguem olhando.
   {
     slug: 'agora-na-praca-da-liberdade',
     title: 'Cãominhada na Praça da Liberdade',
@@ -258,11 +158,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: { lat: -19.932, lon: -43.938 },
     publicationStatus: 'published',
   },
-  // 5. JA PASSOU: nove dias atras. `status` sai `ended` e a tela escreve
-  //    `Encerrado` junto da data. Sem ele, o unico estado que a secao calcula
-  //    no servidor nunca seria visto por olho humano -- e o motivo de calcular
-  //    no servidor e justamente que o aparelho erraria este.
-  //
   {
     slug: 'feira-de-adocao-de-sabado',
     title: 'Feira de adoção na Praça Roosevelt',
@@ -276,12 +171,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: { lat: -23.5486, lon: -46.6461 },
     publicationStatus: 'published',
   },
-  // 6. HOJE, MAIS TARDE. Tambem ancorado no instante, pela mesma razao do 4: um
-  //    cartaz marcado para as 18h ja teria passado para quem semeia as 19h, e
-  //    "hoje" e a linha que a agenda abre.
-  //
-  //    **Fuso diferente** (`America/Recife`, sem o deslocamento de Sao Paulo):
-  //    o cartao precisa escrever a hora de LA. Terceira cidade, terceiro estado.
   {
     slug: 'fim-de-tarde-na-orla-recife',
     title: 'Fim de tarde na orla de Boa Viagem',
@@ -295,27 +184,10 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: { lat: -8.1197, lon: -34.8979 },
     publicationStatus: 'published',
   },
-  // 7. **O CASO FEIO, e ele e deliberado.**
-  //
-  //    Titulo ENCOSTADO no teto de 120, resumo ENCOSTADO no teto de 180, nome
-  //    de lugar ENCOSTADO no teto de 80, bairro comprido e nenhum
-  //    ponto. E o pior cartao que esta secao consegue
-  //    produzir: se o desenho aguenta este, aguenta os outros dez.
-  //
-  //    Os tetos sao cobrados por `massa-da-rede.test.ts` em segundos, e pelo
-  //    banco na hora de inserir. A `Loja` descobriu o dela do jeito caro.
-  //
-  //    `America/Manaus` e a terceira zona: uma hora a menos que Sao Paulo o ano
-  //    inteiro, e e esse o cartao em que a hora renderizada com o fuso do
-  //    aparelho aparece errada.
   {
     slug: 'encontro-do-mindu-em-manaus',
     title:
       'Encontro mensal de tutores de cães e gatos do Parque Municipal do Mindu com roda de conversa e feira de adoção',
-    // 179 de 180 e 80 de 80, MEDIDOS e nao estimados. A primeira versao deste
-    // encontro dizia "encostado no teto" e tinha 195 e 81: os dois passariam
-    // pelo TypeScript e morreriam no `INSERT`, que e exatamente como a `Loja`
-    // descobriu o caso feio dela (183 contra um `CHECK` de 180).
     summary:
       'Roda de conversa sobre calor, carrapato e hidratação na Amazônia, feira de adoção com a ONG '
       + 'local, pesagem gratuita e orientação sobre vermífugo para quem levar a carteira do pet.',
@@ -328,10 +200,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: null,
     publicationStatus: 'published',
   },
-  // 8. Titulo curto e sem ponto.
-  //
-  //    Quarta cidade. Gato e de proposito: a `Rede` nao e so de cachorro, e um
-  //    cartao inteiro de gato e a unica forma de isso aparecer na tela.
   {
     slug: 'encontro-de-gatos-em-santos',
     title: 'Encontro de tutores de gatos',
@@ -346,10 +214,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     publicationStatus: 'published',
     campos: { vacinacao: false },
   },
-  // 9. SEM CAPA, SEM PONTO e SEM FIM DECLARADO, um mes a frente. O encontro distante e o que testa a ordenacao: com `when=upcoming`
-  //    ele e o ultimo da lista, e com `sort=recentes` ele e o primeiro.
-  //
-  //    Quinta cidade, e a mais ao sul.
   {
     slug: 'passeio-noturno-redencao',
     title: 'Passeio noturno no Parque da Redenção',
@@ -363,7 +227,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     ponto: null,
     publicationStatus: 'published',
   },
-  // 10. Ponto, no fim de semana que vem.
   {
     slug: 'piquenique-na-villa-lobos',
     title: 'Piquenique no Villa-Lobos',
@@ -384,12 +247,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     },
   },
 
-  // ------------------------------------------------------------------
-  // ENCONTROS PRIVADOS (ADR-0027 item 17). Para quem nao foi aprovado, a
-  // agenda mostra so titulo e data. O `slug` e aleatorio, como o servidor o
-  // gera: um `slug` digitado poderia dizer o lugar. O titulo e publico, entao
-  // ele tambem nao diz o lugar.
-  // ------------------------------------------------------------------
   {
     slug: 'p-7k2m9x4qd3',
     title: 'Encontro fechado de cães reativos',
@@ -426,18 +283,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     campos: { visibility: 'private', paraLevar: ['toy'] },
   },
 
-  // ------------------------------------------------------------------
-  // O que NUNCA aparece. Ele e o que da o que medir o filtro de visibilidade.
-  // ------------------------------------------------------------------
-  //
-  // Uma massa so com encontros visiveis faria o caso "encontro retirado nao
-  // aparece" passar contra uma consulta que nunca filtrou nada -- foi assim que
-  // a BICHUS-91 passou 1037 casos com `revogarDoDono` virado num `no-op`.
-  //
-  // Ele e FUTURO de proposito: se fosse passado, o filtro `when=upcoming`
-  // sozinho o esconderia e o de `publication_status` continuaria sem ser
-  // exercido. E TEM PONTO de proposito: e o caso em que o `location` precisa
-  // responder 404 e nao devolver o ponto de um encontro retirado.
   {
     slug: 'encontro-retirado-do-mes',
     title: 'Encontro retirado da agenda',
@@ -471,15 +316,7 @@ export const ENCONTROS_COM_PONTO: readonly EncontroSemeado[] = ENCONTROS_VISIVEI
 const MINUTO = 60_000;
 const DIA_EM_MS = 86_400_000;
 
-/**
- * A data civil do encontro, a partir do deslocamento em dias.
- *
- * Em UTC, e o motivo e o mesmo de `dataDaConsulta` no `seed.ts`: somar dias
- * sobre um `Date` no fuso local faz a data virar o dia anterior em fuso
- * negativo, e o deslocamento inteiro andaria um dia em silencio. Aqui ela e
- * **data civil e nao instante** -- o instante sai dela mais a hora de parede,
- * e quem resolve o deslocamento e o Postgres.
- */
+/** A data civil do encontro, a partir do deslocamento em dias. */
 export function dataCivilDoEncontro(diasAPartirDeHoje: number, hoje: Date): string {
   const base = Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate());
   const alvo = new Date(base + diasAPartirDeHoje * DIA_EM_MS);
@@ -495,13 +332,8 @@ function comoTimestampUtc(quando: Date): string {
 }
 
 /**
- * Como o instante de um encontro e montado, em uma estrutura que o `seed.ts`
- * so precisa despejar no `INSERT`.
- *
- * Os dois casos devolvem a MESMA forma -- um texto e a zona em que ele deve ser
- * lido --, e e o `seed.ts` que faz `::timestamp AT TIME ZONE <zona>`. Com a
- * ancora de instante a zona e `UTC`, porque ali o texto ja e o instante
- * absoluto e nao a hora de parede: converter de novo o moveria.
+ * Como o instante de um encontro e montado, em uma estrutura que o `seed.ts` so
+ * precisa despejar no `INSERT`.
  */
 export interface MomentoDoEncontro {
   readonly inicioLocal: string;
@@ -517,9 +349,6 @@ export function momentoDoEncontro(encontro: EncontroSemeado, hoje: Date): Moment
     if (encontro.quando.duracaoEmMinutos === null) {
       return { inicioLocal, fimLocal: null, zonaDeLeitura: encontro.timeZone };
     }
-    // Aritmetica sobre a hora de PAREDE, e nao sobre o instante: "das 9h as
-    // 12h" e o que o cartaz diz, e e assim que quem esta na praca le. A
-    // conversao para instante vem depois, no banco, uma vez so.
     const ingenuo = new Date(`${inicioLocal}Z`);
     const fim = new Date(ingenuo.getTime() + encontro.quando.duracaoEmMinutos * MINUTO);
     return {
@@ -537,9 +366,6 @@ export function momentoDoEncontro(encontro: EncontroSemeado, hoje: Date): Moment
   return {
     inicioLocal: comoTimestampUtc(inicio),
     fimLocal: fim === null ? null : comoTimestampUtc(fim),
-    // O texto acima JA e o instante absoluto. Le-lo na zona do encontro o
-    // deslocaria de tres horas, e o encontro "acontecendo agora" deixaria de
-    // acontecer agora.
     zonaDeLeitura: 'UTC',
   };
 }

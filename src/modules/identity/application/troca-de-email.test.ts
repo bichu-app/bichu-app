@@ -1,32 +1,4 @@
-/**
- * BICHUS-42 — o que só um teste de unidade prova na troca de e-mail.
- *
- * A prova contra Postgres está em `tests/integration/troca-de-email.test.ts`, e
- * é lá que moram as afirmações sobre coluna, expiração e teto. Aqui ficam as
- * três que o banco NÃO pega, porque não são sobre estado — são sobre **ordem**
- * e sobre **o que nunca chega a acontecer**:
- *
- * 1. **A ordem das duas mensagens.** O aviso ao endereço antigo tem de sair
- *    ANTES do link para o endereço novo. Depois que a troca vale, avisar não
- *    serve para nada: a recuperação de senha já mudou de dono. O banco não
- *    guarda ordem de envio; a bancada guarda.
- * 2. **O endereço injetável nunca alcança o mailer.** O caso histórico é o `>`
- *    fechando o `RCPT TO:` e enxertando parâmetro ESMTP sem nenhuma quebra de
- *    linha. Contra o banco isso não se vê: o pedido simplesmente não produz
- *    nada, e "nada aconteceu" é indistinguível de "o caso não rodou". Com
- *    dublê, dá para afirmar que o mailer **não foi chamado** e que o motivo
- *    ficou registrado.
- * 3. **Nenhum token é emitido quando o endereço já tem dono.** A resposta é
- *    idêntica (isso o teste de integração prova); o que só se vê por dentro é
- *    que `criarTokenDeVerificacao` não foi chamado.
- *
- * ## Iscas conferidas
- *
- * - aviso ao antigo movido para DEPOIS de `emitirEEnviarToken`: o caso 1
- *   reprova sozinho, imprimindo a ordem real das mensagens;
- * - a conferência de forma removida de `solicitarTrocaDeEmail`: o caso 2
- *   reprova dizendo que o endereço com `>` chegou ao mailer.
- */
+/** BICHUS-42 — o que só um teste de unidade prova na troca de e-mail. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -57,8 +29,6 @@ function contaDe(email: string): Conta {
     email,
     emailVerifiedAt: dataFixa(AGORA),
     displayName: 'Tutora',
-    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
-    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
     handle: null,
     phoneE164: null,
     phoneVerifiedAt: null,
@@ -79,12 +49,6 @@ function naoUsado(nome: string): never {
 }
 
 class RepositorioDaTroca extends RepositorioQueRecusaTudo {
-  // **A PROJECAO DA SESSAO LE A FOTO desde 21/10/2026**: `Me.photo` esta no
-  // contrato desde 18/10 e `SessionResponse.user` nao a entregava, entao o
-  // avatar da barra do app caia na inicial do nome em todas as paginas.
-  // Qualquer caso que ABRE SESSAO passa por aqui agora -- por isso esta
-  // porta responde em vez de recusar. `null` e a resposta certa: o dublê
-  // nao tem foto, e e esse o estado de toda conta que nunca cadastrou uma.
   override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
     return Promise.resolve(null);
   }
@@ -171,14 +135,7 @@ function montar(opcoes: { enderecoNovoTemDono?: boolean } = {}): Bancada {
   let contador = 0;
   const servico = criarAuthService({
     urlDeMidia: (chave: string) => `https://midia.invalido/${chave}`,
-    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
-    // não é sobre isso, então a função é contada e não observada. O caso que
-    // PROVA a remoção, lendo a linha de `user_devices` depois, é
-    // `sair-de-todos-os-aparelhos.test.ts` e
-    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
-    // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
-    // resposta honesta de "não havia localização gravada".
     apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio: repo,
     assinador,
@@ -229,15 +186,12 @@ void describe('BICHUS-42 — a ordem dos avisos e o que nunca chega ao mailer', 
         'trocar a senha e cancelar o pedido antes de a troca valer.',
     );
 
-    // Só o endereço NOVO recebe link. O antigo recebe aviso, e aviso não confirma.
     assert.doesNotMatch((b.mensagens[0] as Mensagem).corpo, /[?&]token=/);
     assert.match((b.mensagens[1] as Mensagem).corpo, /[?&]token=/);
   });
 
   void it('ISCA — endereço com `>` não chega ao mailer, e o pedido não grava nada', async () => {
     const b = montar();
-    // O caso histórico: o `>` fecha o `RCPT TO:<…>` e o resto vira argumento do
-    // comando. Injeção de SMTP sem uma quebra de linha sequer.
     await b.servico.solicitarTrocaDeEmail(DONO, 'vitima@exemplo.invalid> NOTIFY=SUCCESS', CONTEXTO);
 
     assert.equal(
@@ -260,8 +214,6 @@ void describe('BICHUS-42 — a ordem dos avisos e o que nunca chega ao mailer', 
     assert.equal(b.repo.tokensGravados.length, 0, 'emitimos token para endereço de outra conta');
     assert.equal(b.repo.pedidosGravados.length, 0, '`pending_email` reservou o endereço alheio');
 
-    // O aviso ao endereço antigo sai NOS DOIS ramos, e com o mesmo texto: variar
-    // aqui transformaria a caixa de entrada do titular num oráculo.
     const livre = montar();
     await livre.servico.solicitarTrocaDeEmail(DONO, EMAIL_NOVO, CONTEXTO);
 

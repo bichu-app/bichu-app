@@ -1,28 +1,6 @@
 /**
  * As ISCAS de SQL do perfil de outra pessoa: **o predicado está na cláusula
  * `WHERE`, e o que não pode sair não está no `SELECT`**.
- *
- * ## Por que medir o SQL, e não só o comportamento
- *
- * Porque a afirmação do ADR-0021 é sobre a FORMA da consulta: *"a autorização é
- * a própria cláusula `WHERE`"*. Um caso que chamasse o repositório com um banco
- * de verdade mediria o resultado de **uma** chamada; o que precisa valer é que
- * **não existe** consulta neste arquivo que alcance o que ela não deve — e isso
- * se mede compilando e lendo o SQL. É a forma que
- * `connections/adapters/persistence/autorizacao-na-clausula-where.test.ts` e
- * `safety/adapters/persistence/bloqueio-e-ocultacao-na-clausula-where.test.ts`
- * já usam nesta casa.
- *
- * A suíte não tem banco: o `DummyDriver` compila e devolve o texto.
- *
- * ## O que estes casos NÃO provam, e está dito em voz alta
- *
- * Que o Postgres se comporta como o texto diz. `conta_habilitada`,
- * `bloqueio_entre`, `perfil_ocultado_para_quem_denunciou` e
- * `foto_ocultada_para_quem_denunciou` são funções SQL das migrações
- * `20261017000013`, `20261018000031` e `20261018000032`, e o que elas fazem é
- * medido onde elas moram. Aqui se prova que esta camada as CHAMA, no `WHERE`, em
- * toda consulta — que é a metade que um refator quebra.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -62,19 +40,7 @@ const TODAS = {
 
 const sqlDo = (nome: keyof typeof TODAS): string => TODAS[nome]().sql;
 
-/**
- * A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar.
- *
- * O corte em ` from "handles"` (e nao no primeiro ` from `) ja era deliberado e
- * esta explicado nos casos: o primeiro ` from ` esta DENTRO da subconsulta de
- * contagem. O que faltava era a GUARDA. Sem ela, um `indexOf` em -1 faz
- * `slice(0, -1)` devolver o SQL inteiro menos um caractere: a contagem de
- * ` as "` passa a ser a do enunciado todo, e o caso reprova dizendo que a lista
- * cresceu quando o que aconteceu foi o corte nao ter achado onde cortar.
- *
- * Licao do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: todo corte
- * por marcador reprova quando nao acha o marcador.
- */
+/** A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar. */
 function selecaoAteOTopo(sql: string, marcadorDeTopo: string): string {
   const corte = sql.toLowerCase().indexOf(marcadorDeTopo);
   assert.ok(
@@ -86,7 +52,6 @@ function selecaoAteOTopo(sql: string, marcadorDeTopo: string): string {
   return sql.slice(0, corte);
 }
 
-// AS DUAS DIRECOES DO CORTE DE TOPO.
 void describe('o corte da lista de selecao', () => {
   void it('REPROVA quando o marcador de topo nao esta no SQL', () => {
     assert.throws(
@@ -98,9 +63,6 @@ void describe('o corte da lista de selecao', () => {
   void it('nao para na subconsulta: conta a lista INTEIRA', () => {
     const selecao = selecaoAteOTopo(
       'select "u"."id" as "id", ' +
-        // Sem alias interno de proposito: ` as "` tambem casaria o alias da
-        // subconsulta, e a contagem passaria a medir a minha fixture em vez do
-        // corte. (Medido: com `as "p"` aqui, da 4 e nao 3.)
         '(select count(*) from "pets") as "pets_count", ' +
         '"u"."display_name" as "display_name" ' +
         'from "handles" as "h"',
@@ -116,9 +78,6 @@ void describe('o corte da lista de selecao', () => {
 });
 
 void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', () => {
-  // ------------------------------------------------------------------
-  // ISCA (d): 404 E NUNCA 403 -- OS SEIS PREDICADOS
-  // ------------------------------------------------------------------
 
   void it('ISCA (d) -- a leitura do perfil nega conta desabilitada nos DOIS lados', () => {
     const sql = sqlDo('perfil');
@@ -147,10 +106,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
   });
 
   void it('ISCA (d) -- apelido de PET e apelido RESERVADO nao sao perfil: `kind = pessoa` no WHERE', () => {
-    // O espaço de nomes é COMPARTILHADO (`20261018000021`): `handles` hospeda
-    // `pessoa`, `pet` e `reservado`. Sem este predicado, `/people/bidu`
-    // devolveria o perfil de quem estiver em `handles.user_id` — ou viraria um
-    // oráculo de "este apelido existe e é de um pet".
     assert.match(sqlDo('perfil'), /"?h"?\."?kind"? = \$\d+/);
     const { parameters } = TODAS.perfil();
     assert.ok(
@@ -160,8 +115,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
   });
 
   void it('ISCA (d) -- NENHUMA das duas consultas tem ramo, `CASE` ou `UNION` que escolha visibilidade', () => {
-    // 403 não existe porque não existe caminho que o produza. Um `CASE` no
-    // `WHERE` seria o lugar onde "se for conexão vê tudo, senão 403" nasceria.
     for (const nome of Object.keys(TODAS) as (keyof typeof TODAS)[]) {
       const sql = sqlDo(nome);
       assert.ok(!/\bUNION\b/i.test(sql), `${nome}: UNION e um segundo ramo de leitura`);
@@ -179,10 +132,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
       assert.ok(parameters.includes(QUEM_OLHA), `${nome}: quem olha nao chegou como parametro`);
     }
   });
-
-  // ------------------------------------------------------------------
-  // ISCA (c): PET É CONTAGEM, E A CONSULTA NÃO ALCANÇA MAIS NADA DELE
-  // ------------------------------------------------------------------
 
   void it('ISCA (c) -- a leitura do perfil conta pets e NAO seleciona nome, slug nem foto de pet', () => {
     const sql = sqlDo('perfil');
@@ -210,30 +159,12 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
   });
 
   void it('ISCA (c) -- a contagem e SUBCONSULTA e nao juncao: `pets` nao entra no escopo do SELECT', () => {
-    // Com `LEFT JOIN pets` + `GROUP BY`, as colunas do animal ficam a um
-    // caractere de distância de quem mexer aqui depois. Com a subconsulta, só o
-    // número existe no escopo.
     const sql = sqlDo('perfil');
     assert.ok(!/join\s+"?pets"?/i.test(sql), 'a consulta do perfil passou a JUNTAR `pets`');
     assert.ok(!/group by/i.test(sql), '`GROUP BY` aqui significa que a contagem virou agregacao da junção');
   });
 
-  /**
-   * O SQL com as DUAS colunas do selo de validado apagadas.
-   *
-   * **A excecao e estreita, e esta aqui porque tem de ser lida junto com a
-   * varredura logo abaixo.** A emenda do ADR-0010 de 21/10/2026 fez o perfil
-   * derivar o selo de
-   * `u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL`, e
-   * `email_verified_at` CONTEM `email` -- a varredura e por substring, e sem
-   * esta subtracao ela reprovaria a consulta correta.
-   *
-   * **O que sai da varredura sao os dois NOMES COMPLETOS, nunca o prefixo**:
-   * `email` cru continua reprovando, e e o caso de MUTACAO abaixo que prova que
-   * a varredura nao ficou cega. Apagar `email` da lista em vez de subtrair estas
-   * duas colunas era o conserto facil, e teria aberto a porta para o endereco
-   * entrar sem ninguem ver.
-   */
+  /** O SQL com as DUAS colunas do selo de validado apagadas. */
   const semAsColunasDoSelo = (sql: string): string =>
     sql.replaceAll('email_verified_at', 'selo_de_validado').replaceAll('phone_verified_at', 'selo_de_validado');
 
@@ -256,11 +187,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
   });
 
   void it('ISCA (c) -- a MUTACAO reprova: `u.email` cru na lista de selecao', () => {
-    // **Sem este caso, a subtracao de `semAsColunasDoSelo` seria um buraco.**
-    // Ela existe para que `u.email_verified_at` passe; se ela tambem deixasse
-    // passar o endereco, o caso de cima ficaria verde com o e-mail de outra
-    // pessoa saindo no perfil -- e e essa a familia de defeito que o item 1 do
-    // ADR-0010 fecha.
     const comOEndereco = sqlDo('perfil').replace(
       '"u"."display_name" as "display_name"',
       '"u"."email" as "display_name"',
@@ -278,21 +204,12 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
   });
 
   void it('EMENDA 21/10 -- o SELO DE VALIDADO e DERIVADO no SQL, e sai so como booleano', () => {
-    // A emenda do ADR-0010 de 21/10/2026, decisao do cliente. **A condicao e a
-    // MESMA regua dos quatro `409 contact-channel-unverified`**
-    // (`kysely-canal-verificado-do-chamador.ts` e `estadoParaCriarEncontro`):
-    // duas definicoes de "validado" seriam duas reguas, e a mesma conta sairia
-    // validada numa tela e nao na outra. Este caso reprova quem trocar o `OR`
-    // por `AND` -- com `AND` ninguem teria selo, porque nada em `src/` grava
-    // `phone_verified_at`.
     const sql = sqlDo('perfil');
     assert.match(
       sql,
       /\(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\) as "canal_verificado"/i,
       'o selo de validado nao e a regua unica, ou deixou de ser derivado no SQL',
     );
-    // **O que sai e o booleano, e nunca a data.** "O e-mail dela foi confirmado
-    // em marco" nao e assunto de terceiro.
     assert.ok(
       !/"?u"?\."?email_verified_at"? as /i.test(sql),
       'a DATA de confirmacao de e-mail entrou na lista de selecao do perfil',
@@ -301,17 +218,11 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
       !/"?u"?\."?phone_verified_at"? as /i.test(sql),
       'a DATA de confirmacao de telefone entrou na lista de selecao do perfil',
     );
-    // A VITRINE continua sem o selo: ela e consulta de FOTO, e o selo e da
-    // conta. Uma copia da condicao ali seria a segunda regua.
     assert.ok(
       !sqlDo('vitrine').includes('email_verified_at'),
       'a consulta da vitrine passou a derivar o selo: ele sai do perfil, uma vez',
     );
   });
-
-  // ------------------------------------------------------------------
-  // ISCA (a): A VITRINE NÃO SAI PARA QUEM NÃO É CONEXÃO
-  // ------------------------------------------------------------------
 
   void it('ISCA (a) -- a leitura do perfil NAO alcanca a vitrine: nenhuma das duas derivadas', () => {
     const sql = sqlDo('perfil');
@@ -378,7 +289,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
         `\`${coluna}\` saiu na vitrine de outra pessoa: motivo de recusa e assunto entre o dono e quem modera, e posicao e de edicao`,
       );
     }
-    // `position` continua no `ORDER BY`: a ordem é a da resposta.
     assert.match(sql, /order by "?v"?\."?position"? asc/i);
   });
 
@@ -387,14 +297,7 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     assert.ok(TODAS.vitrine().parameters.includes('user_showcase'));
   });
 
-  // ------------------------------------------------------------------
-  // CONTRAPESOS
-  // ------------------------------------------------------------------
-
   void it('CONTRAPESO -- a consulta da vitrine SELECIONA as duas derivadas e o texto alternativo', () => {
-    // Sem ele, todas as iscas de omissao acima passariam num mundo em que a
-    // consulta da vitrine nao devolve nada -- que e a forma mais facil de um
-    // teste de omissao ficar verde sem ter medido nada.
     const sql = sqlDo('vitrine');
     assert.match(sql, /"?c"?\."?thumb_key"? as "?grade_key"?/);
     assert.match(sql, /"?c"?\."?public_key"? as "?aberta_key"?/);
@@ -404,19 +307,12 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
 
   void it('CONTRAPESO -- a consulta do perfil SELECIONA o que o cliente liberou, e nada mais', () => {
     const { sql } = TODAS.perfil();
-    // As quatro colunas, a contagem e o selo de validado (emenda de 21/10/2026,
-    // CALCULADO). A lista é FECHADA: coluna nova aqui significa campo novo na
-    // resposta, e este caso é onde alguém vê.
     assert.match(sql, /"?u"?\."?id"? as "?user_id"?/);
     assert.match(sql, /"?h"?\."?handle"? as "?handle"?/);
     assert.match(sql, /"?u"?\."?public_ref"? as "?public_ref"?/);
     assert.match(sql, /"?u"?\."?display_name"? as "?display_name"?/);
     assert.match(sql, /as "?pets_count"?/);
     assert.match(sql, /as "?canal_verificado"?/);
-    // O corte e em ` from "handles"` e nao no primeiro ` from `: o primeiro
-    // esta DENTRO da subconsulta de contagem (`FROM pets p`), e cortar ali
-    // deixava `pets_count` de fora -- a primeira versao deste caso contava
-    // quatro e reprovava a consulta correta.
     const listaDeSelecao = selecaoAteOTopo(sql, ' from "handles"');
     assert.equal(
       (listaDeSelecao.match(/ as "/g) ?? []).length,

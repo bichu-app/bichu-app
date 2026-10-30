@@ -1,11 +1,4 @@
-/**
- * As chamadas da Rede no backoffice, tipadas pelo contrato. Toda chamada
- * devolve um `Resultado`: a tela decide pelo `tipo` da falha (RFC 9457,
- * `Problem.type`), nunca pelo texto do servidor.
- *
- * Nenhuma escrita pede senha desde 07/10 (decisao do cliente, ADR-0027 item
- * 23): basta a sessao com `X-CSRF-Token` e o `If-Match`.
- */
+/** As chamadas da Rede no backoffice, tipadas pelo contrato. */
 import type { ClienteDaApi } from '../../api/cliente.ts';
 import type {
   Encontro,
@@ -53,14 +46,9 @@ export function falhaDaResposta(resposta: Response, corpo: unknown): Falha {
     case 404:
       return { tipo: 'nao-encontrado' };
     case 409:
-      // `event-not-open`: o encontro foi cancelado, removido ou terminou, e a fila dele fechou.
       return slug === 'event-not-open' ? { tipo: 'encontro-fechado' } : { tipo: 'endereco-ocupado' };
     case 412:
       return { tipo: 'versao' };
-    // `precondition-required`: a escrita saiu sem `If-Match`. O servidor responde
-    // isto ANTES de conferir a sessao e a reautenticacao, entao chega aqui mesmo
-    // numa operacao com senha. Nao e conflito com outra pessoa: e a tela que nao
-    // tinha a versao, e o caminho e reler o recurso.
     case 428:
       return { tipo: 'sem-versao' };
     case 429: {
@@ -149,7 +137,10 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
     pedidos: (slug: string, status: EstadoDoPedido, page = 1): Promise<Resultado<PaginaDePedidos>> =>
       executar(() => cliente.GET('/admin/network/join-requests', { params: { query: { event: slug, status, page, limit: 50 } } })),
 
-    /** So a contagem de uma aba: `limit=1` devolve no maximo uma linha (D56 conta linhas). */
+    /**
+     * So a contagem de uma aba: `limit=1` devolve no maximo uma linha (D56 conta
+     * linhas).
+     */
     contarPedidos: (slug: string, status: EstadoDoPedido): Promise<Resultado<PaginaDePedidos>> =>
       executar(() => cliente.GET('/admin/network/join-requests', { params: { query: { event: slug, status, page: 1, limit: 1 } } })),
 
@@ -159,7 +150,7 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
     recusar: (ref: string): Promise<Resultado<Pedido>> =>
       executar(() => cliente.POST('/admin/network/join-requests/{requestRef}/decline', { params: { path: { requestRef: ref } } })),
 
-    /** Pede a politica de envio e manda os bytes direto ao armazenamento. Devolve o `upload_id`. */
+    /** Pede a politica de envio e manda os bytes direto ao armazenamento. */
     async enviarFoto(arquivo: File): Promise<Resultado<string>> {
       const tipo = arquivo.type as 'image/jpeg' | 'image/png' | 'image/webp';
       const intencao = await executar(() =>

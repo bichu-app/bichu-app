@@ -17,21 +17,6 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// C.4 — Esqueci minha senha.
-///
-/// **A confirmacao e identica para e-mail existente e inexistente.** "Se essa
-/// conta existir" soa burocratico de proposito: qualquer redacao mais calorosa
-/// ("Pronto, enviamos") afirma que a conta existe, e isso entrega uma lista de
-/// quem tem conta no Bichu.
-///
-/// O pedido **nao** entra em fila offline. Um pedido de redefinicao disparado
-/// sozinho meia hora depois, sem a pessoa presente, gasta o token no vazio.
-///
-/// **Desvio, e o mais fundo dos tres.** Ela e alcancada por `push` a partir da
-/// C.2, e voltar devolve a C.2 com o e-mail ainda digitado. A saida continua
-/// valendo depois do pedido enviado: a confirmacao e o fim do que esta tela
-/// faz, e nao ha passo seguinte dentro do app -- o proximo passo esta na caixa
-/// de entrada da pessoa (C.5 e uma pagina web). Sem a saida, a unica coisa a
-/// fazer depois de ler a confirmacao era fechar o app.
 class TelaEsqueciMinhaSenha extends StatefulWidget {
   const TelaEsqueciMinhaSenha({super.key, this.emailInicial});
 
@@ -71,12 +56,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
   }
 
   /// Traz o alvo da recusa para dentro da janela.
-  ///
-  /// Necessario desde que o botao saiu da rolagem: o botao e alcancavel de
-  /// qualquer ponto da rolagem, entao a recusa pode nascer fora da tela de
-  /// quem tocou nele, e recusar onde ninguem olha e indistinguivel de nao
-  /// responder. Roda depois do quadro, porque a faixa ainda nao tem altura no
-  /// instante do `setState`.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -91,8 +70,7 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
   }
 
   /// Conferencia ao sair do campo, com a mensagem curta de
-  /// `formato/email.dart`. Campo vazio nao erra aqui: quem tocou o campo e
-  /// desistiu nao levou erro. Vazio continua sendo erro no envio.
+  /// `formato/email.dart`.
   void _conferirOEmailAoSair() {
     final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
     if (erro != _erroDoCampo) setState(() => _erroDoCampo = erro);
@@ -104,8 +82,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
       _faixa = null;
     });
 
-    // A condicao de plausibilidade e de `formato/email.dart`, e nao mais uma
-    // terceira copia escrita a mao aqui dentro.
     final email = emailParaEnvio(_email.text);
     if (!emailPlausivel(email)) {
       setState(() => _erroDoCampo = 'Digite o e-mail da sua conta.');
@@ -134,10 +110,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
       setState(() => _faixa = MensagensDeErro.de(falha));
       _levarAte(_alvoDaFaixa);
     } on Object catch (erro, pilha) {
-      // O QUE NAO E FalhaDeChamada. O `finally` ja desligava o carregando,
-      // entao a tela nao gira para sempre -- ela fica CALADA, que e o outro
-      // lado do mesmo defeito: nada aconteceu, nada foi dito, e a pessoa toca
-      // de novo achando que o primeiro toque nao pegou.
       registrarFalhaInesperada(
         erro,
         pilha,
@@ -181,25 +153,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
         titulo: 'Esqueci minha senha',
         saida: TipoDeSaida.voltar,
       ),
-      // A ACAO DESTA TELA NAO ROLA COM O CONTEUDO, E ISSO FOI MEDIDO.
-      //
-      // Medido em 23/09/2026 nos quatro gabaritos do design system (secao 13),
-      // com o teclado de 270 dp aberto e o e-mail preenchido. `Enviar o link`
-      // ocupava 264..312 dp de um conteudo de 328 dp, e a area rolavel era:
-      //
-      //   320 x 568  ->  234 dp de janela, faltavam 78 dp de rolagem
-      //   360 x 640  ->  306 dp de janela, faltavam  6 dp de rolagem
-      //   375 x 667  ->  333 dp de janela, o botao cabia
-      //   412 x 915  ->  581 dp de janela, o botao cabia
-      //
-      // Os 6 dp de 360 x 640 sao o pior numero da tabela, e nao o melhor: um
-      // botao cortado por uma tira de 6 dp parece inteiro e nao responde ao
-      // toque na parte que falta. E em 320 x 568 o `ListView` nao chegava a
-      // CONSTRUIR o botao -- ele nao estava na arvore, entao nao podia ser
-      // focado nem lido por leitor de tela.
-      //
-      // A barra troca de acao com a fase porque a tela tem duas: antes do
-      // pedido a acao e enviar, depois dele e reenviar, e nunca as duas.
       bottomNavigationBar: BarraDeAcaoFixa(
         acoes: <Widget>[
           if (!_pedido)
@@ -217,10 +170,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
             ),
         ],
       ),
-      // **`SingleChildScrollView` + `Column`, e nao `ListView`**, pelo motivo
-      // registrado em `pet/tela_editar_pet.dart` e em F1.1: o `ListView` so
-      // constroi o que cabe, e o que nao existe na arvore nao e alcancavel por
-      // leitor de tela. O conteudo desta tela tem meia duzia de filhos fixos.
       body: SafeArea(
         child: SingleChildScrollView(
           controller: _rolagem,
@@ -241,8 +190,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
                   erro: _erroDoCampo,
                   tipoDeTeclado: TextInputType.emailAddress,
                   autofill: const <String>[AutofillHints.email],
-                  // Endereco nao tem correcao automatica nem maiuscula
-                  // automatica: as duas transformam o que a pessoa escreveu.
                   correcaoAutomatica: false,
                   capitalizacao: TextCapitalization.none,
                   acaoDeTeclado: TextInputAction.done,

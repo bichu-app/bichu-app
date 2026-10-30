@@ -1,36 +1,4 @@
-/**
- * O cruzamento contra os números da seção 4.10 de `docs/03-arquitetura.md`.
- *
- * Aquela seção diz "quem implementa segue estes números, e **quem testa reprova
- * contra eles**". Este arquivo é essa reprovação: cada peso, cada faixa e cada
- * tolerância aparece aqui como número literal, copiado do documento e **não**
- * lido da constante que o código exporta. Ler a constante faria o teste
- * concordar com o código mesmo quando os dois divergissem do documento, que é a
- * forma clássica de uma suíte verde não provar nada.
- *
- * ## A isca que importa mais que todas
- *
- * `ISCA: sugerir não é afirmar`. Ela reprova se alguém acrescentar a `Sugestao`
- * qualquer forma de decisão — `status`, `confirmado`, `decidido_por` — porque é
- * por aí que um falso positivo vira uma tutora indo atrás do cão errado.
- *
- * ## Como as iscas foram provadas
- *
- * Cada linha foi desligada no código de produção, a mudança foi conferida no
- * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
- * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
- * O número é o `fail` que o próprio `node --test` reporta.
- *
- * | o que foi desligado em `cruzamento.ts` | `fail` |
- * |---|---|
- * | `PENALIDADE_DE_SEXO_DIVERGENTE` de `0.7` para `1` | 1 |
- * | a redistribuição do peso (divisor fixo em `1`) | 1 |
- * | `CORTE_DE_SCORE` de `0.45` para `0` | 1 |
- * | `PONTO_DE_RACA_INDEFINIDA` de `0.4` para `0` | 1 |
- * | o filtro de espécie removido de `excluir` | 1 |
- * | `TETO_DE_CANDIDATOS_POR_CASO` de `10` para `100` | 1 |
- * | **`Sugestao` passando a carregar `status: 'confirmed'`** | 1 |
- */
+/** O cruzamento contra os números da seção 4.10 de `docs/03-arquitetura.md`. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -98,8 +66,6 @@ void describe('os filtros eliminatórios não pontuam: excluem', () => {
   });
 
   void it('achado mais de 6 h antes do desaparecimento sai', () => {
-    // O relato de "última vez que vi" é estimado, e erra para menos: 6 h de
-    // tolerância. 5 h antes passa; 7 h antes, não.
     assert.equal(excluir(caso(), achado({ achadoEm: SUMIU_EM - 5 * HORA })), null);
     assert.equal(
       excluir(caso(), achado({ achadoEm: SUMIU_EM - 7 * HORA })),
@@ -130,8 +96,6 @@ void describe('os filtros eliminatórios não pontuam: excluem', () => {
   });
 
   void it('a cidade compara sem acento, sem caixa e sem espaço repetido', () => {
-    // Quem digita numa tela de celular com o animal no colo escreve dos três
-    // jeitos, e o filtro 5 descartaria o par certo se comparasse o texto cru.
     assert.equal(normalizarCidade('  São   PAULO '), 'sao paulo');
     assert.equal(
       excluir(
@@ -150,9 +114,6 @@ void describe('os filtros eliminatórios não pontuam: excluem', () => {
   });
 
   void it('os dois lados com coordenada e distância nula é consulta quebrada, e LANÇA', () => {
-    // Silêncio aqui esconderia um `SELECT` que parou de medir; aceitar deixaria
-    // um par de 900 km entrar com o peso da proximidade redistribuído, como se
-    // fosse falta de permissão de localização.
     assert.throws(
       () => excluir(caso({ temCoordenada: true }), achado({ temCoordenada: true, distanciaEmMetros: null })),
       /distância chegou nula/,
@@ -177,12 +138,6 @@ void describe('a tabela de pesos, valor por valor', () => {
   });
 
   void it('raça: um dos dois SRD ou ausente vale 0,4, e não 0', () => {
-    // A decisão menos óbvia da tabela: a maioria dos cães de rua é registrada
-    // como SRD por quem acha. Tratar isso como incompatibilidade descartaria o
-    // caso mais comum do Brasil.
-    // Os códigos são os REAIS de `ref_colors`/`ref_breeds`: `srd_dog` e
-    // `srd_cat`, um por espécie. Um teste escrito com `'srd'` passaria enquanto
-    // o código também dissesse `'srd'`, e os dois estariam errados juntos.
     assert.equal(pontuarRaca('labrador', 'labrador'), 1);
     assert.equal(pontuarRaca('labrador', 'srd_dog'), 0.4);
     assert.equal(pontuarRaca('srd_cat', 'persa'), 0.4);
@@ -226,7 +181,6 @@ void describe('sexo não pontua: ele penaliza', () => {
     const iguais = pontuar(caso({ sexo: 'male' }), achado({ sexo: 'male' })).score;
     const divergentes = pontuar(caso({ sexo: 'male' }), achado({ sexo: 'female' })).score;
     assert.equal(divergentes, Math.round(iguais * 0.7 * 1000) / 1000);
-    // E não elimina: quem acha um animal na rua erra o sexo com frequência.
     assert.ok(divergentes > 0);
   });
 
@@ -242,9 +196,6 @@ void describe('sem coordenada, o peso de 0,15 é REDISTRIBUÍDO e não zerado', 
   const semPonto = { temCoordenada: false, distanciaEmMetros: null } as const;
 
   void it('o par perfeito sem coordenada continua somando 1,00', () => {
-    // Zerar o item sem redistribuir puniria quem não deu permissão de
-    // localização, que é exatamente quem o desenho decidiu não punir (critério
-    // 6 da BICHUS-35). Se o peso fosse só descartado, o teto viraria 0,85.
     const { score } = pontuar(
       caso({ temCoordenada: false, racaCodigo: 'labrador' }),
       achado({ ...semPonto, racaCodigo: 'labrador', achadoEm: SUMIU_EM + HORA }),
@@ -263,7 +214,6 @@ void describe('sem coordenada, o peso de 0,15 é REDISTRIBUÍDO e não zerado', 
 
 void describe('o corte, o teto e a ordem', () => {
   void it('score abaixo de 0,45 não vira candidato', () => {
-    // Espécie igual (passa o filtro), tudo o mais divergente.
     const fraco: Par = {
       caso: caso({ porte: 'P', corPrimaria: 'preto', racaCodigo: 'poodle', sexo: 'male' }),
       achado: achado({
@@ -280,8 +230,6 @@ void describe('o corte, o teto e a ordem', () => {
   });
 
   void it('no máximo 10 candidatos, por score decrescente', () => {
-    // Trinta "possíveis correspondências" não é ajuda: é trabalho transferido
-    // para alguém que está em pânico.
     const pares: Par[] = Array.from({ length: 25 }, (_, i) => ({
       caso: caso({ caseId: `018f3a2b-0000-7000-8000-0000000${String(100 + i)}` as CaseId }),
       achado: achado({ distanciaEmMetros: 100 + i * 10 }),
@@ -301,8 +249,6 @@ void describe('o corte, o teto e a ordem', () => {
   });
 
   void it('a mesma entrada em ordem trocada produz a mesma saída', () => {
-    // Reprodutibilidade em teste (seção 4.10): a função é pura e a ordem é
-    // determinística, senão nenhum caso acima é reexecutável.
     const a: Par = { caso: caso({ caseId: 'c-a' as CaseId }), achado: achado({ distanciaEmMetros: 400 }) };
     const b: Par = { caso: caso({ caseId: 'c-b' as CaseId }), achado: achado({ distanciaEmMetros: 400 }) };
     assert.deepEqual(cruzar([a, b]), cruzar([b, a]));
@@ -319,9 +265,6 @@ void describe('critério 10: o vínculo direto não passa pelo cruzamento', () =
   });
 
   void it('a origem é campo próprio, e não deduzida do score', () => {
-    // Um `score === 1` por atributos é possível — mesmo porte, mesma cor, mesma
-    // raça, a 300 m, no mesmo dia. Deduzir a origem do score faria as duas se
-    // confundirem exatamente no caso mais forte, que é o que vai para a tela.
     const porAtributos = cruzar([
       {
         caso: caso({ racaCodigo: 'labrador' }),
@@ -336,10 +279,6 @@ void describe('critério 10: o vínculo direto não passa pelo cruzamento', () =
 
 void describe('ISCA: sugerir não é afirmar, e o tipo é quem garante', () => {
   void it('nenhuma saída do cruzamento carrega decisão de nenhuma forma', () => {
-    // **Esta é a isca do critério 7.** Ela reprova no dia em que alguém
-    // acrescentar a `Sugestao` um campo que consiga dizer "é este mesmo" — e a
-    // lista é de NOMES porque o tipo desaparece em tempo de execução, então a
-    // conferência precisa olhar o objeto, não a declaração.
     const proibidos = [
       'status',
       'confirmado',
@@ -372,8 +311,6 @@ void describe('ISCA: sugerir não é afirmar, e o tipo é quem garante', () => {
   });
 
   void it('a mesma conferência ACUSA um objeto que carrega decisão', () => {
-    // Sem esta metade, o caso acima estaria medindo o próprio silêncio: um
-    // `Object.keys` que parasse de funcionar aprovaria tudo.
     const comDecisao = { ...vinculoDireto(ACHADO, CASO), status: 'confirmed' };
     assert.ok(
       Object.keys(comDecisao).includes('status'),

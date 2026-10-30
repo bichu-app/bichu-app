@@ -1,11 +1,4 @@
-/**
- * O processamento da imagem de catalogo, sem armazenamento nem banco.
- *
- * Iscas: a dimensao minima por proposito (800 x 800 no produto, 600 x 600 no
- * encontro desde 01/10; antes 1600 x 900) recusa com o numero no motivo; HEIC e recusado mesmo passando na
- * inspecao da foto do pet; objeto que nunca chegou e recusa final; e `ready`
- * so depois de a derivada estar no bucket publico.
- */
+/** O processamento da imagem de catalogo, sem armazenamento nem banco. */
 import assert from 'node:assert/strict';
 import { FORMATO_DAS_DERIVADAS } from '../domain/derivadas.js';
 import { describe, it } from 'node:test';
@@ -32,10 +25,6 @@ function bancada(opcoes: {
         originalKey: comoObjectKey('catalog/original/KioqKioqKioqKioqKioqKg'),
       }),
     marcarPronta: (_id, chaves) => {
-      // As tres variantes numa linha, na ordem em que a tela as usa. `thumb` e
-      // `banner` ausentes saem como `-`: e o que distingue "imagem de produto,
-      // uma derivada por decisao" de "imagem de encontro sem miniatura", que
-      // seria defeito.
       eventos.push(
         `pronta:${chaves.card}:${chaves.thumb ?? '-'}:${chaves.banner ?? '-'}`,
       );
@@ -133,9 +122,6 @@ void describe('processamento da imagem de catalogo', () => {
     await processarImagemDeCatalogo(b.deps, { catalog_image_id: 'c7' });
     assert.equal(b.eventos.length, 2);
     assert.match(b.eventos[0] ?? '', /^put:products\/card\//);
-    // `thumb` e `banner` saem como `-` porque a imagem de PRODUTO tem uma
-    // derivada por decisão — é a forma que a bancada acima registra, e o `-`
-    // aqui é o que distingue isso de "imagem de encontro sem miniatura".
     assert.equal(b.eventos[1], `pronta:${(b.eventos[0] ?? '').slice(4)}:-:-`);
   });
 });

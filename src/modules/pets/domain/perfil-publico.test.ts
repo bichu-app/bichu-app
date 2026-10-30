@@ -1,9 +1,4 @@
-/**
- * A projeção do perfil público do pet (BICHUS-45), sem servidor e sem banco.
- *
- * O teste de não-vazamento de ponta a ponta mora em
- * `adapters/http/perfil-publico.test.ts`.
- */
+/** A projeção do perfil público do pet (BICHUS-45), sem servidor e sem banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

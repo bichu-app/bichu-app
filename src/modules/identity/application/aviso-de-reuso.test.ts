@@ -1,21 +1,4 @@
-/**
- * A montagem do aviso de reuso de refresh (BICHUS-15 critério 10, BICHUS-129).
- *
- * `auth-service.test.ts` prova a metade de cá da porta: o serviço chama
- * `avisarTitular`. O que não tinha prova nenhuma era a metade de lá — a função
- * que transforma o aviso em mensagem, que até BICHUS-129 era uma lambda dentro
- * de `src/bin/api.ts` e ficava em 0% de cobertura porque nenhum teste carrega a
- * raiz de composição.
- *
- * Quem paga essa conta é a vítima: se o aviso deixar de sair, ela lê a
- * revogação como "o app me deslogou", faz login de novo e segue com o invasor
- * dentro da conta. É por isso que o caso da conta apagada afirma o **não
- * envio** e não só o retorno: um teste que só olhasse o retorno passaria com o
- * `if` invertido, que é o defeito que manda o e-mail para ninguém.
- *
- * O transporte (`smtp-mailer.ts`) NÃO é testado aqui: ele abre socket e é
- * integração, contra o receptor local. Aqui a porta é um dublê.
- */
+/** A montagem do aviso de reuso de refresh (BICHUS-15 critério 10, BICHUS-129). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -35,27 +18,16 @@ const AVISO: AvisoAoTitular = {
   userId: VITIMA,
   ocorridoEm: INSTANTE_FIXO,
   correlationId: 'corr-do-reuso',
-  // De quem APRESENTOU o refresh reusado. O aviso o carrega para o token do
-  // "Nao fui eu" nascer com o unico rastro forense daquele instante.
   ipHmac: Buffer.from('hmac-de-quem-reusou'.padEnd(32, '.')),
 };
 
-/**
- * Uma conta cheia de dado pessoal de propósito.
- *
- * Telefone, endereço de referência e nome estão aqui para que o caso de
- * contato mediado tenha o que procurar: se algum dia alguém "melhorar" a
- * mensagem citando o nome ou a cidade da pessoa, o teste precisa ter esses
- * valores em mãos para reprovar.
- */
+/** Uma conta cheia de dado pessoal de propósito. */
 function contaDaVitima(): Conta {
   return {
     id: VITIMA,
     email: ENDERECO_DA_VITIMA,
     emailVerifiedAt: dataFixa(),
     displayName: 'Marina Prado',
-    // `handle: null` e o estado NORMAL de conta sem apelido: nenhum fluxo
-    // obriga a escolher (plano 4-C.8), e as 7 contas de hml estao assim.
     handle: null,
     phoneE164: '+5511987654321',
     phoneVerifiedAt: dataFixa(),
@@ -136,9 +108,6 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
 
     const mensagem = unicaMensagem(bancada);
     assert.equal(mensagem.para, ENDERECO_DA_VITIMA);
-    // O destinatário sai da CONTA, e nunca do aviso: o aviso nasce do lado de
-    // quem apresentou o token roubado. Se um dia o endereço vier de lá, o
-    // atacante escolhe para onde vai o alerta da própria vítima.
     assert.deepEqual(bancada.consultados, [VITIMA]);
     assert.equal(mensagem.assunto, 'Encerramos as sessões da sua conta no Bichu');
   });
@@ -160,14 +129,8 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
     await bancada.avisar(AVISO);
 
     const corpo = unicaMensagem(bancada).corpo;
-    // As duas ações, na ordem em que a pessoa precisa delas: voltar a entrar, e
-    // trocar a senha se desconfiar. Um aviso que para em "detectamos atividade
-    // suspeita" deixa a pessoa assustada e sem saída — é quase não avisar.
     assert.match(corpo, /entre de novo no aplicativo/i);
     assert.match(corpo, /se não foi você, abra este link/i);
-    // E a consequência do link, que é o que faz a pessoa clicar: sem ela, a
-    // frase é burocracia e ela ignora. "Não pede senha nem login" é a parte que
-    // importa para quem já não consegue entrar.
     assert.match(corpo, /encerra TODAS as sessões/i);
     assert.match(corpo, /não pede senha nem login/i);
   });
@@ -179,10 +142,6 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
     await bancada.avisar(AVISO);
 
     const mensagem = unicaMensagem(bancada);
-    // Um e-mail é saída pública: ele é encaminhado, cai em caixa compartilhada
-    // e aparece na notificação da tela bloqueada. Telefone e endereço nunca
-    // aparecem para ninguém; UUID de banco é proibido sem exceção, porque
-    // UUIDv7 é ordenável e carrega o instante de criação.
     const tudo = `${mensagem.assunto}\n${mensagem.corpo}`;
     for (const proibido of [
       conta.phoneE164,
@@ -210,11 +169,7 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
     assert.equal(token.proposito, 'session_disavow');
     assert.equal(token.userId, VITIMA);
     assert.equal(token.enviadoPara, ENDERECO_DA_VITIMA);
-    // Sete dias a partir do instante da detecção. Mais longo que os outros dois
-    // links de propósito: quem lê este aviso pode estar sem o aparelho.
     assert.equal(token.expiraEm, INSTANTE_FIXO + 7 * 24 * 60 * 60 * 1000);
-    // O HMAC é de quem APRESENTOU o refresh reusado, e não da vítima. É o único
-    // rastro forense daquele instante, e ele vem do aviso, não do relógio.
     assert.deepEqual(token.ipHmac, AVISO.ipHmac);
 
     assert.match(
@@ -229,15 +184,7 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
     await bancada.avisar(AVISO);
 
     const token = bancada.tokens[0]!;
-    // A porta recebe `tokenHash`, e o que vai para o banco é isso. Uma
-    // `verification_tokens` com o valor em claro transformaria um vazamento de
-    // leitura de banco numa revogação em massa disparável por qualquer um — e,
-    // pior, num rastro de quem teve a conta invadida.
     assert.notEqual(token.tokenHash, TOKEN_EM_CLARO);
-    // `hashDeToken`, e nao um `createHash` reescrito aqui: o resumo era
-    // reimplementado neste arquivo com `.digest('base64')`, e era essa
-    // duplicacao que fazia o caso concordar com um adaptador que gravava os 44
-    // bytes do texto base64 numa coluna `bytea` (medido em 19/10/2026).
     assert.deepEqual(token.tokenHash, hashDeToken(TOKEN_EM_CLARO));
     assert.equal(
       token.tokenHash.length,
@@ -251,9 +198,6 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
 
     await bancada.avisar(AVISO);
 
-    // O valor em claro existe na função e no corpo do e-mail, e em nenhum outro
-    // lugar. Registrar "o aviso saiu" com o link dentro transforma o log numa
-    // cópia da credencial, legível por quem investiga qualquer outra coisa.
     const tudoQueFoiRegistrado = JSON.stringify(bancada.registros);
     assert.ok(
       !tudoQueFoiRegistrado.includes(TOKEN_EM_CLARO),
@@ -266,21 +210,14 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
 
     await bancada.avisar(AVISO);
 
-    // Sem conta não há para quem escrever, e um token emitido para ninguém é
-    // uma credencial viva sem destinatário — o pior estado possível.
     assert.deepEqual(bancada.tokens, []);
   });
-
 
   void it('conta apagada entre a detecção e o aviso: não envia nada', async () => {
     const bancada = montar(undefined);
 
     await bancada.avisar(AVISO);
 
-    // Esta é a afirmação que pega o `if (conta === undefined) return` invertido.
-    // Com ele invertido, `conta` é `undefined` e o envio acontece assim mesmo:
-    // ou estoura ao ler `conta.email`, ou manda o e-mail para `undefined`. Nos
-    // dois casos o alerta da vítima some, que é o defeito que importa.
     assert.deepEqual(bancada.enviadas, [], 'sem conta não há para quem escrever');
   });
 

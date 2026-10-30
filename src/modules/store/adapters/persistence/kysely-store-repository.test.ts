@@ -1,33 +1,4 @@
-/**
- * O que acontece com a linha da vitrine DEPOIS que ela chega do banco.
- *
- * ## Por que este arquivo existe
- *
- * Ele não existia, e a ausência tinha consequência medida: `kysely-store-
- * repository.ts` não aparecia em relatório de cobertura NENHUM — nem no
- * unitário, que não o carregava, nem no de integração, porque
- * `tests/integration/vitrine-da-loja.test.ts` fala com o Postgres por um
- * cliente `pg` cru e nunca importa o adaptador. Para o SonarCloud, arquivo de
- * fonte sem dado de cobertura é arquivo com 0%, e ele não reclama: publica o
- * número.
- *
- * O que morde aqui é a **composição do endereço**. Desde que a migração
- * `20260922000009` passou a guardar CAMINHO em vez de URL, é este adaptador
- * que junta o `host` do parceiro ao caminho do item. Desligar a composição —
- * devolver `linha.target_path` cru, como o código fazia antes — não quebra
- * tipo nenhum, não muda o contrato e faria o aplicativo abrir `/bola-pop` como
- * se fosse endereço. O caso `o destino sai absoluto` é quem reprova isso, pelo
- * nome.
- *
- * ## Por que dá para fazer isso sem Postgres
- *
- * Mesmo desenho de `kysely-media-repository.test.ts`: o Kysely separa o
- * dialeto do construtor de consulta, então trocando só o motor por um que
- * devolve linhas combinadas o adaptador roda INTEIRO — as mesmas cláusulas, o
- * mesmo `.select()`, o mesmo mapeamento de linha para `ItemDaVitrine`. O que o
- * dublê não cobre é o que só o banco responde (se a coluna existe, se o índice
- * é usado), e isso continua em `tests/integration/`.
- */
+/** O que acontece com a linha da vitrine DEPOIS que ela chega do banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -52,12 +23,7 @@ import {
   escaparCuringas,
 } from './kysely-store-repository.js';
 
-/**
- * Um `Db` que compila a consulta de verdade e devolve os lotes combinados.
- *
- * Pedir mais consultas do que o teste preparou é ERRO e não lote vazio: lote
- * vazio faria um adaptador que consultasse a tabela errada passar calado.
- */
+/** Um `Db` que compila a consulta de verdade e devolve os lotes combinados. */
 function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   const fila = [...lotes];
 
@@ -94,11 +60,7 @@ function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   });
 }
 
-/**
- * O mesmo compilador do Postgres, sem conexão. Serve para LER o SQL que o
- * construtor produz: SQL escrito à mão no teste seria o atalho que parece
- * equivalente e esconde exatamente o que se foi conferir.
- */
+/** O mesmo compilador do Postgres, sem conexão. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -158,15 +120,11 @@ void describe('o endereço do item é COMPOSTO, e o host não vem do item', () =
   });
 
   void it('item sem imagem continua sem imagem, e não vira o host sozinho', async () => {
-    // Compor sobre `null` produziria `https://<host>null`, que é uma URL
-    // válida e uma imagem quebrada em todo cartão sem foto.
     const item = await umItem({ image_path: null });
     assert.equal(item.imageUrl, null);
   });
 
   void it('trocar o parceiro troca o host dos dois endereços', async () => {
-    // É o que prova que o host vem da JUNÇÃO e não do item: o caminho é o
-    // mesmo e o endereço muda.
     const item = await umItem({ partner_host: 'mundo-pet.example' });
     assert.equal(item.targetUrl, 'https://mundo-pet.example/bola-pop-borracha');
     assert.equal(item.imageUrl, 'https://mundo-pet.example/vitrine/bola-pop.jpg');
@@ -191,8 +149,6 @@ void describe('a linha vira `ItemDaVitrine` sem perder nem inventar campo', () =
   });
 
   void it('o preço chega como número inteiro, mesmo vindo do driver como texto', async () => {
-    // O driver do Postgres devolve `numeric`/`bigint` como string. Sem a
-    // conversão, o centavo viraria texto e a projeção o entregaria assim.
     const item = await umItem({ price_amount: '124990' });
     assert.equal(item.priceAmount, 124_990);
   });
@@ -207,10 +163,6 @@ void describe('a linha vira `ItemDaVitrine` sem perder nem inventar campo', () =
 
 void describe('`comoDataSimples` lê a data pura em UTC', () => {
   void it('a `Date` de meia-noite UTC não anda um dia para trás', () => {
-    // O defeito que esta função existe para impedir: em fuso negativo, ler a
-    // data por componentes locais devolveria o dia anterior, e o preço
-    // passaria a ter sido consultado um dia antes — aproximando o vencimento
-    // em silêncio.
     assert.equal(comoDataSimples(new Date(Date.UTC(2026, 8, 1))), '2026-09-01');
   });
 
@@ -241,32 +193,7 @@ void describe('`escaparCuringas` procura o que a pessoa digitou, e não um padr�
   });
 });
 
-/**
- * Só a cláusula `WHERE` do SQL compilado, sem as junções.
- *
- * As junções da taxonomia de dois níveis nomeiam `i.category` e `i.subcategory`
- * em todo `SELECT` da vitrine, filtrado ou não; é no `WHERE` que se vê o que o
- * recorte estreitou.
- *
- * ## SEM `WHERE` ELE REPROVA, E ANTES DEVOLVIA VAZIO (21/10/2026)
- *
- * A versão anterior devolvia `''` e dizia que *"aí não há predicado nenhum a
- * achar, que é a leitura certa"*. **A leitura estava errada, e o motivo é o uso
- * NEGATIVO deste recorte:** `assert.doesNotMatch(comum, /"i"."category"/)`
- * passa sobre texto vazio. Num SQL que perdeu o `WHERE` inteiro — que é
- * exatamente o estado em que os dois predicados de `active` desapareceram — a
- * asserção que existe para pegar "a categoria entrou sem recorte" ficaria
- * verde por não ter onde olhar.
- *
- * Toda consulta da vitrine carrega `WHERE`: os dois `active` são incondicionais
- * (é o caso logo abaixo). A falta dele é defeito, não caso de borda — e é a
- * lição do conserto de `busca-nao-e-oraculo.test.ts`, do mesmo dia: corte que
- * não encontra o ponto de corte vira varredura cega e silenciosa.
- *
- * **Nada mudou no que o portão cobra**: os mesmos predicados, a mesma
- * taxonomia, as mesmas asserções. Mudou só o que acontece quando não há onde
- * ler.
- */
+/** Só a cláusula `WHERE` do SQL compilado, sem as junções. */
 function whereDaVitrine(sql: string): string {
   const corte = sql.indexOf(' where ');
   assert.ok(
@@ -278,12 +205,6 @@ function whereDaVitrine(sql: string): string {
   return sql.slice(corte + ' where '.length);
 }
 
-// ---------------------------------------------------------------------------
-// AS ISCAS DO RECORTE -- AS DUAS DIRECOES
-// ---------------------------------------------------------------------------
-//
-// A que REPROVA e a que importa: sem ela, voltar o `assert.ok` para
-// `corte === -1 ? '' : ...` deixaria verde todo `doesNotMatch` deste arquivo.
 void describe('o recorte do WHERE da vitrine', () => {
   void it('REPROVA um SQL sem `WHERE`, em vez de devolver vazio', () => {
     assert.throws(
@@ -311,8 +232,6 @@ void describe('o recorte do WHERE da vitrine', () => {
 
 void describe('o item retirado e o parceiro desativado ficam fora pela cláusula WHERE', () => {
   void it('a consulta carrega os DOIS predicados de `active`', () => {
-    // Filtrar depois, num `if`, é o que quebra no dia em que alguém esquece o
-    // `if`. O predicado é lido do SQL que o próprio Kysely compila.
     const { sql } = construtorDaVitrine(semBanco, RECORTE).compile();
     assert.match(sql, /"i"\."active"\s*=\s*\$\d+/, `o predicado do item sumiu. SQL: ${sql}`);
     assert.match(sql, /"p"\."active"\s*=\s*\$\d+/, `o predicado do parceiro sumiu. SQL: ${sql}`);
@@ -329,12 +248,6 @@ void describe('o item retirado e o parceiro desativado ficam fora pela cláusula
   });
 
   void it('a categoria entra no WHERE quando o recorte a traz, e só então', () => {
-    // O recorte é medido no WHERE, e não no SQL inteiro: desde a taxonomia de
-    // dois níveis (`20261017000003`), `i.category` aparece SEMPRE nas junções
-    // que trazem o rótulo — a interna de `store_categories` e a externa de
-    // `store_subcategories`. Procurar a coluna no texto todo passaria a acusar
-    // as junções, que são o desenho, e deixaria de medir o que importa: o
-    // predicado que estreita a lista.
     const comum = whereDaVitrine(construtorDaVitrine(semBanco, RECORTE).compile().sql);
     assert.doesNotMatch(comum, /"i"\."category"/, `a categoria entrou no WHERE sem recorte: ${comum}`);
     const filtrada = construtorDaVitrine(semBanco, { ...RECORTE, category: 'food' }).compile();

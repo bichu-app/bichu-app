@@ -1,21 +1,4 @@
-/**
- * Isca do `errors[].field`: o 400 de corpo precisa dizer QUAL campo.
- *
- * Até 22/09/2026 todo 400 de validação de corpo saía com `field: ''` — a borda
- * respondia "um ou mais campos não passaram na validação" e nada mais. O schema
- * `Problem` declara `errors[].field` justamente para a tela marcar o campo, e
- * uma cadeia vazia não marca nada: num formulário de nove campos a pessoa relê
- * tudo. O dado já estava disponível o tempo inteiro, em `erro.validation`.
- *
- * Os três casos são as três formas que o Ajv reporta, e a do meio é a que faz
- * este arquivo existir: em `required` o achado vem **no objeto**, com
- * `instancePath` vazio e o nome em `params.missingProperty`. Campo obrigatório
- * ausente é o erro mais comum de qualquer formulário, então ler só
- * `instancePath` deixaria de nomear exatamente o caso que mais precisa.
- *
- * A rota é a de verdade (`createPetPhotoUploadIntent`) com o corpo do contrato
- * de verdade, e as asserções leem o JSON que saiu pelo fio.
- */
+/** Isca do `errors[].field`: o 400 de corpo precisa dizer QUAL campo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -102,8 +85,6 @@ void describe('o 400 de corpo nomeia o campo que reprovou', () => {
   });
 
   void it('nenhum campo sai com o VALOR recebido junto', async () => {
-    // O valor nunca entra na resposta: corpo pode carregar senha, e parâmetro de
-    // caminho pode ser o código da tag, que é credencial ao portador.
     const corpo = await recusar({
       pet_id: UM_PET,
       content_type: 'image/svg+xml',

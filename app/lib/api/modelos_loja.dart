@@ -1,56 +1,11 @@
 /// Os modelos da secao `Loja`: a vitrine curada de `GET /v1/store/items`.
-///
-/// ## O preco chega em CENTAVOS, e sai daqui em texto
-///
-/// `price_amount` e um inteiro de centavos. Ele nunca vira `double` neste
-/// arquivo: ponto flutuante para dinheiro erra na soma e o erro aparece meses
-/// depois, num total que ninguem confere. A conversao para texto e feita por
-/// divisao inteira, e o resultado e uma `String` -- que e o unico tipo que a
-/// tela precisa.
-///
-/// ## O servidor ja omitiu o que venceu
-///
-/// Quando `price_status` e `vencido`, `price_amount` **nao vem**. Nao ha nada
-/// a esconder aqui, e nao existe caminho neste arquivo que reconstrua um valor
-/// vencido: o que nao chegou nao pode ser remontado por build nenhum, que e
-/// exatamente a razao de a regra morar no servidor.
 library;
 
-// `formatarReais` mora em `formato/dinheiro.dart`, que e o unico lugar do
-// app que faz a conta de centavos para texto. Reexportado aqui porque as
-// telas e `app/test/telas/loja_com_dados_test.dart` ja o importam deste
-// arquivo, e trocar o caminho de import nao e o assunto desta mudanca.
 import '../formato/dinheiro.dart';
 
 export '../formato/dinheiro.dart' show formatarReais, reaisEmTexto;
 
 /// Os rotulos que ESTE binario carrega para as seis categorias antigas.
-///
-/// ## Por que ele existe, e por que nao e a lista de categorias
-///
-/// Ate 17/10/2026 a categoria era um `enum` de seis valores no contrato
-/// (`CategoriaDaLoja`), e este arquivo guardava os seis rotulos nele. O
-/// cliente decidiu dois niveis com subcategorias como a petlove: 14 categorias
-/// e 83 subcategorias, e a lista virou DADO -- ela mora em `store_categories`
-/// e sai por `GET /v1/store/taxonomy`, com o rotulo de cada uma.
-///
-/// Este mapa sobrou como **rede de seguranca de uma versao so**: a resposta
-/// agora traz `category_label`, e e ele que a tela mostra. Quando o campo
-/// faltar -- servidor mais antigo que o aplicativo, que e o caso de um
-/// aparelho que atualizou antes do deploy --, o rotulo cai para ca, e so para
-/// os seis codigos que existiam antes. Codigo novo sem `category_label` nao
-/// ganha rotulo inventado: a tela simplesmente nao escreve a linha.
-///
-/// **Os rotulos aqui sao os deste BINARIO, de proposito.** `food` passou a se
-/// chamar "Racoes" no vocabulario do servidor; este mapa continua dizendo
-/// "Alimentacao" porque e o que este binario mostrava, e inventar o rotulo
-/// novo aqui faria a tela afirmar um vocabulario que ela nao leu.
-///
-/// **`toy` e `accessory` estao no PLURAL**, e isso nao e descuido de copia: o
-/// cliente pediu "Brinquedos" e "Acessorios" no plural em 17/10/2026, no mesmo
-/// dia e no lote anterior a este, e esta e a reserva do binario que JA carrega
-/// aquela mudanca. Trazer o singular de volta aqui desfaria o pedido dele
-/// justamente no caminho de reserva, onde ninguem iria olhar.
 const Map<String, String> rotulosLegadosDaCategoria = <String, String>{
   'food': 'Alimentação',
   'toy': 'Brinquedos',
@@ -76,11 +31,8 @@ class SubcategoriaDaLoja {
   }
 }
 
-/// Uma categoria do vocabulario, com as subcategorias dela (`StoreTaxonomyCategory`).
-///
-/// A subcategoria chega DENTRO da categoria, como o contrato a aninha: duas
-/// listas irmas obrigariam esta tela a cruzar `category_code` por conta
-/// propria, e e justamente essa relacao que o `enum` nao sabia expressar.
+/// Uma categoria do vocabulario, com as subcategorias dela
+/// (`StoreTaxonomyCategory`).
 class CategoriaDaLoja {
   const CategoriaDaLoja({
     required this.codigo,
@@ -130,10 +82,6 @@ class TaxonomiaDaLoja {
   }
 
   /// As subcategorias da categoria escolhida, **e so dela**.
-  ///
-  /// Sem categoria escolhida a lista e vazia, e o grupo de filtro do segundo
-  /// nivel nao aparece: oferecer as 83 de uma vez devolveria a pessoa ao
-  /// problema que os dois niveis existem para resolver.
   List<SubcategoriaDaLoja> subcategoriasDe(String? categoria) {
     if (categoria == null) return <SubcategoriaDaLoja>[];
     return porCodigo(categoria)?.subcategorias ?? <SubcategoriaDaLoja>[];
@@ -154,13 +102,6 @@ class TaxonomiaDaLoja {
 }
 
 /// `#/components/schemas/StorePriceStatus` do contrato.
-///
-/// Os tres estados de preco. **Tres, e nao dois.**
-///
-/// `semPreco` e `vencido` produzem a mesma ausencia de numero e pedem textos
-/// diferentes: um item que nunca teve preco nao mostra linha nenhuma, e um com
-/// preco vencido diz que o preco nao esta confirmado e aponta o parceiro. Um
-/// booleano faria a tela escolher uma frase so para os dois casos.
 enum EstadoDoPreco {
   vigente('vigente'),
   vencido('vencido'),
@@ -174,14 +115,11 @@ enum EstadoDoPreco {
     for (final e in EstadoDoPreco.values) {
       if (e.codigo == codigo) return e;
     }
-    // Estado desconhecido cai em `semPreco`, que e o estado que **nao mostra
-    // numero**. Cair em `vigente` faria uma resposta que este app nao entende
-    // virar um preco na tela.
     return EstadoDoPreco.semPreco;
   }
 }
 
-/// O parceiro que vende o item. Sem UUID: `slug` e a chave.
+/// O parceiro que vende o item.
 class ParceiroDaLoja {
   const ParceiroDaLoja({
     required this.slug,
@@ -232,62 +170,32 @@ class ItemDaLoja {
   final String slug;
   final String titulo;
   final String resumo;
-  /// O CODIGO da categoria, como o servidor o mandou. Nulo so se a resposta
-  /// vier sem o campo.
+  /// O CODIGO da categoria, como o servidor o mandou.
   final String? categoria;
 
   /// O rotulo da categoria, **lido da resposta** (`category_label`).
-  ///
-  /// Nulo quando nem a resposta nem [rotulosLegadosDaCategoria] sabem dizer, e
-  /// nesse caso a linha de classificacao nao e desenhada. **A tela nunca mostra
-  /// o codigo cru**: `treats` na tela nao e um rotulo, e um codigo vazando
-  /// parece defeito.
   final String? rotuloDaCategoria;
 
-  /// O codigo do segundo nivel. Nulo e estado normal: a subcategoria e opcional.
+  /// O codigo do segundo nivel.
   final String? subcategoria;
 
-  /// O rotulo do segundo nivel. Nulo junto com [subcategoria].
+  /// O rotulo do segundo nivel.
   final String? rotuloDaSubcategoria;
 
   final String? urlDaImagem;
 
   /// O `image_alt_text` do servidor, **cru**: nulo quando o painel nao escreveu
   /// descricao para a imagem (ela e opcional desde 17/10/2026).
-  ///
-  /// Quem desenha nao usa este campo direto, usa [nomeDaImagem]: ler o cru na
-  /// tela e o caminho para alguem esquecer a reserva e deixar a imagem sem nome
-  /// acessivel.
   final String? textoDaImagem;
 
   /// `images`: TODAS as imagens prontas do item, na ordem do painel
-  /// (17/10/2026). A primeira e a mesma de [urlDaImagem].
-  ///
-  /// **Opcional no contrato, e por isso tem padrao vazio aqui.** O campo e
-  /// aditivo: `StoreItemSummary` nao o declara em `required`, e resposta de
-  /// servidor que ainda nao o emite continua valida. Lista vazia nao e erro --
-  /// e o que este app desenha quando so ha [urlDaImagem], que e exatamente o
-  /// comportamento de antes desta mudanca.
-  ///
-  /// **[urlDaImagem] continua sendo lido e nao foi substituido.** Ele e o campo
-  /// que o APK instalado le, e a capa do cartao sai dele quando esta lista vem
-  /// vazia. Trocar um pelo outro quebraria o app publicado, que foi o que
-  /// aconteceu neste produto com a unidade de preco.
+  /// (17/10/2026).
   final List<ImagemDoProduto> imagens;
 
   /// Ha mais de uma foto para mostrar?
-  ///
-  /// **O que decide se o cartao vira carrossel.** Com uma foto so nao ha
-  /// indicador, nao ha gesto e nao ha `PageView`: um carrossel de um elemento e
-  /// um controle que promete navegacao e nao tem para onde ir.
   bool get temGaleria => imagens.length > 1;
 
   /// As fotos a desenhar no cartao, com a capa de reserva.
-  ///
-  /// Quando `images` vem vazia (servidor antigo, ou item da massa com imagem
-  /// externa), devolve a lista de um elemento montada a partir de
-  /// [urlDaImagem] -- a MESMA composicao que o servidor faz em `galeriaDoItem`.
-  /// Assim a tela tem um caminho so para desenhar foto, e nao dois.
   List<ImagemDoProduto> get fotosDoCartao {
     if (imagens.isNotEmpty) return imagens;
     final capa = urlDaImagem;
@@ -303,54 +211,17 @@ class ItemDaLoja {
   /// **Centavos, inteiro.** Nulo quando nao ha preco e quando ele venceu.
   final int? precoEmCentavos;
 
-  /// `AAAA-MM-DD`, como o servidor a manda. Nula junto com o valor.
+  /// `AAAA-MM-DD`, como o servidor a manda.
   final String? consultadoEm;
 
   final EstadoDoPreco estadoDoPreco;
 
   /// O destino do produto como `Uri`, **so quando ele e `https` absoluto**.
-  ///
-  /// Nulo e o que a tela usa para NAO desenhar o botao de saida: sem destino
-  /// utilizavel nao ha para onde levar a pessoa, e um botao que nao faz nada e
-  /// pior que botao ausente.
-  ///
-  /// ## Por que o esquema e conferido AQUI, e nao so no servidor
-  ///
-  /// `target_url` e dado CADASTRADO: ele entra pelo painel, e a escrita o
-  /// confere (`errosDoDestino`, em `escrita-da-vitrine.ts`: so `https`, sem
-  /// usuario e senha, sem IP literal, no host exato do parceiro). Mas o que
-  /// chega ao aparelho e uma `String` da resposta, e `launchUrl` abre o que o
-  /// sistema souber abrir -- `intent:`, `market:`, `tel:`, `javascript:`,
-  /// `file:`. Entregar a string crua ao sistema faria do cadastro de produto um
-  /// canal para disparar qualquer coisa no aparelho da pessoa, e a unica trava
-  /// seria a escrita de um ambiente que este binario nao controla.
-  ///
-  /// **`http` em claro tambem e recusado**, e nao e zelo: a vitrine leva a
-  /// pessoa para uma pagina de compra. Sugerir uma pagina sem TLS e sugerir que
-  /// ela digite dado de pagamento em canal aberto.
-  ///
-  /// Nao e defesa contra o servidor: e a recusa de ampliar o que um registro de
-  /// catalogo consegue fazer.
   Uri? get destinoExterno {
     final bruto = urlDeDestino.trim();
     if (bruto.isEmpty) return null;
     final u = Uri.tryParse(bruto);
     if (u == null) return null;
-    // **Sem `isAbsolute`, e isso nao e descuido.** Em Dart, `Uri.isAbsolute` e
-    // FALSO quando a URI tem fragmento -- e a definicao da linguagem, nao um
-    // detalhe: "an absolute URI has a scheme and no fragment". Com a
-    // conferencia aqui, `https://loja.exemplo.invalid/bola-pop#descricao` era
-    // recusado, e produto com `#` no `target_url` perdia o destino: o cartao
-    // nao fica tocavel e o `Compre agora` nao e desenhado. Ou seja, o link que
-    // o painel gravou nao abria, e nada falhava em lugar nenhum.
-    //
-    // O servidor passou a aceitar query e fragmento em 17/10/2026, entao o
-    // caso nao e teorico.
-    //
-    // As duas linhas abaixo ja dizem tudo o que importa, e dizem melhor: o
-    // esquema tem de ser `https` (o que recusa `http:`, `javascript:`,
-    // `intent:`, `tel:`, `file:` e `market:`, e tambem o caminho relativo, cujo
-    // esquema e vazio) e tem de haver host (o que recusa `https:///caminho`).
     if (u.scheme != 'https') return null;
     if (u.host.isEmpty) return null;
     return u;
@@ -358,28 +229,13 @@ class ItemDaLoja {
 
   /// Quantos caracteres do resumo o cartao da vitrine mostra antes de pedir
   /// para expandir (decisao do cliente de 17/10/2026).
-  ///
-  /// O teto do campo e 3000; desenhar 3000 num cartao de lista empurra a
-  /// vitrine inteira para baixo, e e por isso que existe o corte.
   static const int tetoDoResumoNoCartao = 500;
 
   /// O resumo cabe no cartao sem corte?
-  ///
-  /// Quem desenha usa isto para **nao desenhar o botao de expandir** quando
-  /// nao ha nada escondido: botao que nao faz nada e pior que nenhum botao.
   bool get resumoCabeNoCartao => resumo.length <= tetoDoResumoNoCartao;
 
   /// Os primeiros [tetoDoResumoNoCartao] caracteres, **cortados no ultimo
   /// espaco**, com reticencias.
-  ///
-  /// Corte por palavra, e nao por caractere cru: `substring(0, 500)` parte a
-  /// palavra no meio, e isso as vezes muda o sentido do que sobrou. Quando nao
-  /// ha espaco nenhum na segunda metade do trecho (texto sem espaco, ou uma
-  /// palavra longuissima), o corte volta a ser no caractere: devolver 250
-  /// caracteres seria pior que uma palavra partida.
-  ///
-  /// **A quebra de linha e preservada**: nada aqui troca `\n` por espaco. A
-  /// area de texto do painel existe para a pessoa escrever em paragrafos.
   String get trechoDoResumo {
     if (resumoCabeNoCartao) return resumo;
     final bruto = resumo.substring(0, tetoDoResumoNoCartao);
@@ -389,16 +245,6 @@ class ItemDaLoja {
   }
 
   /// O nome acessivel da imagem do item, que **nunca e vazio**.
-  ///
-  /// O texto que o administrador escreveu, quando ele escreveu;
-  /// `Foto de {titulo}` quando nao escreveu. Nunca nulo e nunca `''`: imagem com
-  /// `semanticLabel` vazio e imagem que o leitor de tela ANUNCIA SEM DIZER
-  /// NADA, que e pior que a reserva generica.
-  ///
-  /// Por que nao esta na tela: a reserva e regra do modelo, nao desenho. Ate
-  /// 17/10/2026 a tela montava `Foto de <titulo>` e IGNORAVA o texto do
-  /// painel -- o campo existia e nao chegava a ninguem. Com a reserva aqui, as
-  /// duas respostas saem do mesmo lugar e nenhuma tela pode esquecer uma delas.
   String get nomeDaImagem {
     final escrito = textoDaImagem?.trim();
     if (escrito != null && escrito.isNotEmpty) return escrito;
@@ -406,9 +252,6 @@ class ItemDaLoja {
   }
 
   /// O preco formatado em portugues do Brasil, ou nulo.
-  ///
-  /// Nulo quando nao ha valor, e a tela **nao** desenha a linha. Nao existe
-  /// "preço sob consulta" nem espaço reservado vazio.
   String? get precoFormatado {
     final centavos = precoEmCentavos;
     if (centavos == null) return null;
@@ -416,28 +259,6 @@ class ItemDaLoja {
   }
 
   /// A linha do preco, que e **so o valor**.
-  ///
-  /// **18/10/2026, literal do cliente:** *"remova o texto 'preço de
-  /// referência, consultado em 17/10', porque você já colocou como eu pedi
-  /// acima do titulo"*. O rabo da linha -- o rótulo e a data -- saiu do texto
-  /// VISIVEL: `CartaoDaLoja.rotuloDePrecoDeReferencia` ja diz
-  /// "Preço de referência" acima do nome do produto, e repetir a mesma
-  /// afirmacao duas linhas abaixo era a duplicacao que ele mandou tirar.
-  ///
-  /// **O criterio 15 da BICHUS-185 nao foi jogado fora: mudou de endereco.**
-  /// Ele dizia que o numero nunca aparece sozinho, e quem usa leitor de tela
-  /// ouvia a afirmacao DENTRO deste mesmo no de texto -- e e por isso que o
-  /// rotulo visivel acima do nome e `ExcludeSemantics`. Apagar o rabo e so
-  /// isso deixaria quem nao ve com o numero e nada mais. A afirmacao foi para
-  /// o `semanticsLabel` do proprio no do preco
-  /// (`CartaoDaLoja.rotuloAcessivelDoPreco`), que e o mesmo endereco de antes
-  /// para o leitor de tela e **nao e mais texto na tela**.
-  ///
-  /// **A guarda da data FICA.** `consultadoEm` saiu da TELA, nao da condicao:
-  /// sem ela, um item que chegasse com valor e sem data passaria a mostrar um
-  /// preco que hoje nao mostra -- e isso seria mudanca de produto, nao remocao
-  /// de texto. `dataCurta` continua existindo e continua coberta por teste
-  /// proprio; o que saiu foi o uso dela nesta frase.
   String? get linhaDoPreco {
     final valor = precoFormatado;
     final data = consultadoEm;
@@ -446,12 +267,6 @@ class ItemDaLoja {
   }
 
   /// A linha de classificacao do cartao: "Rações · Ração seca".
-  ///
-  /// **Uma string so, e nao dois campos**, pela mesma razao de
-  /// [linhaDoPreco]: dois getters separados permitiriam que alguem desenhasse
-  /// so o segundo nivel, e "Ração seca" sozinho nao diz de que categoria e.
-  ///
-  /// Nula quando nao ha rotulo de categoria -- e a tela nao desenha a linha.
   String? get linhaDaClassificacao {
     final categoria = rotuloDaCategoria;
     if (categoria == null) return null;
@@ -470,9 +285,6 @@ class ItemDaLoja {
     final preco = json['price_amount'];
     final data = json['price_checked_at'];
     final imagem = json['image_url'];
-    // `image_alt_text` e anulavel no contrato, e desde 17/10/2026 o nulo e
-    // estado NORMAL (o painel pode gravar a imagem sem descricao). A reserva
-    // mora em `nomeDaImagem`.
     final texto = json['image_alt_text'];
     final codigo = json['category'] is String ? json['category'] as String : null;
     final rotuloDaCategoria = json['category_label'];
@@ -483,22 +295,15 @@ class ItemDaLoja {
       titulo: titulo,
       resumo: resumo,
       categoria: codigo,
-      // O rotulo vem da RESPOSTA; o mapa deste binario e so a rede de
-      // seguranca para servidor que ainda nao manda `category_label`.
       rotuloDaCategoria: rotuloDaCategoria is String
           ? rotuloDaCategoria
           : (codigo == null ? null : rotulosLegadosDaCategoria[codigo]),
       subcategoria: subcategoria is String ? subcategoria : null,
-      // Rotulo de subcategoria sem o codigo dela nao e desenhado: seria um
-      // segundo nivel que a lista nao sabe filtrar de volta.
       rotuloDaSubcategoria: subcategoria is String && rotuloDaSubcategoria is String
           ? rotuloDaSubcategoria
           : null,
       urlDaImagem: imagem is String ? imagem : null,
       textoDaImagem: texto is String ? texto : null,
-      // `images` e OPCIONAL no contrato: ausente e nulo sao o mesmo caso, e
-      // nenhum dos dois e erro. Item que nao e lista tambem cai aqui, em vez de
-      // explodir a pagina inteira por causa de um campo acessorio.
       imagens: json['images'] is List
           ? (json['images'] as List<dynamic>)
               .map(ImagemDoProduto.doJson)
@@ -514,11 +319,6 @@ class ItemDaLoja {
 }
 
 /// `2026-03-14` para `14/03`.
-///
-/// Dia e mes, sem ano: a data de consulta de um preco que vence em trinta dias
-/// nunca cruza o ano de forma que o ano acrescente informacao, e `14/03/2026`
-/// numa linha que ja tem o valor e o rotulo e tres numeros disputando a mesma
-/// leitura.
 String dataCurta(String iso) {
   final partes = iso.split('-');
   if (partes.length < 3) return iso;
@@ -526,8 +326,6 @@ String dataCurta(String iso) {
 }
 
 /// `#/components/schemas/StoreItemPage/properties/effective_sort` do contrato.
-///
-/// A ordem em que a vitrine sai.
 enum OrdemDaLoja {
   curadoria('curadoria', 'Seleção do Bichu'),
   nome('nome', 'Nome');
@@ -562,10 +360,6 @@ class PaginaDaLoja {
   final int total;
 
   /// **A ordem em que a lista esta**, lida da resposta e nao do estado local.
-  ///
-  /// A barra de listagem mostra a ordem REAL. Ler a ordem do proprio estado
-  /// faria a tela afirmar a ordem pedida sobre uma lista que o servidor pode
-  /// ter ordenado de outro jeito.
   final OrdemDaLoja ordemEfetiva;
 
   final Map<String, String> filtrosAplicados;
@@ -613,18 +407,13 @@ class RecorteDaLoja {
   /// servidor desde 17/10.
   final String? categoria;
 
-  /// O CODIGO da subcategoria. Sempre dentro da categoria escolhida -- trocar
-  /// a categoria limpa este campo, em [com].
+  /// O CODIGO da subcategoria.
   final String? subcategoria;
   final OrdemDaLoja ordem;
   final int pagina;
   final int limite;
 
-  /// Quantos GRUPOS de filtro estao ativos. A busca **nao** conta aqui: ela e
-  /// um controle proprio, e a barra de listagem ja a considera por conta
-  /// propria ao decidir se o recorte esta ativo.
-  /// Quantos GRUPOS de filtro estao ativos. A subcategoria conta como grupo
-  /// proprio: ela e um recorte a mais, e a barra de listagem mostra o numero.
+  /// Quantos GRUPOS de filtro estao ativos.
   int get quantidadeDeFiltros =>
       (categoria == null ? 0 : 1) + (subcategoria == null ? 0 : 1);
 
@@ -634,9 +423,6 @@ class RecorteDaLoja {
 
   Map<String, String> get query => <String, String>{
         if (termo != null && termo!.trim().isNotEmpty) 'q': termo!.trim(),
-        // `?valor` e a entrada null-aware: a chave so entra quando o valor
-        // existe. E o `use_null_aware_elements` do analisador deste
-        // repositorio, e nao gosto.
         'category': ?categoria,
         'subcategory': ?subcategoria,
         'sort': ordem.codigo,
@@ -654,16 +440,10 @@ class RecorteDaLoja {
     bool limparCategoria = false,
     bool limparSubcategoria = false,
   }) {
-    // **Trocar a categoria limpa a subcategoria, e limpar a categoria tambem.**
-    // A subcategoria antiga pertence a categoria antiga; mante-la produziria um
-    // recorte que nenhum item satisfaz, e a lista voltaria vazia sem a pessoa
-    // entender por que. A regra mora aqui, e nao na tela, para valer tambem
-    // quando o recorte for montado de outro lugar.
     final categoriaNova = limparCategoria ? null : (categoria ?? this.categoria);
     final trocouCategoria = categoriaNova != this.categoria;
     final String? subcategoriaNova;
     if (trocouCategoria) {
-      // So o que vier NESTA chamada: a guardada era da categoria anterior.
       subcategoriaNova = subcategoria;
     } else if (limparSubcategoria) {
       subcategoriaNova = null;
@@ -682,27 +462,14 @@ class RecorteDaLoja {
 }
 
 /// Uma imagem da galeria do produto: `#/components/schemas/StoreItemImage`.
-///
-/// **So `url` e `alt_text` existem no contrato.** Nao ha derivada de miniatura
-/// para a Loja: `NetworkEventImage` tem `thumb_url` (480 x 360, 4:3, para a
-/// galeria do detalhe do encontro) e `AdminPetPhoto` tem `thumb_url` e
-/// `card_url`, mas `StoreItemImage` tem um campo de imagem so. A galeria desta
-/// tela desenha miniatura de 144 dp a partir da MESMA `url` que o quadro
-/// grande usa -- o desperdicio que o encontro ja resolveu, e que aqui nao tem
-/// como resolver sem o campo. **Relatado, nao contornado**: o contrato manda
-/// nas quatro aplicacoes e nao se mexe nele por conveniencia de uma tela.
 class ImagemDoProduto {
   const ImagemDoProduto({required this.url, required this.textoAlternativo});
 
-  /// A derivada publica, sempre pronta. Imagem em processamento ou recusada
-  /// nunca chega aqui.
+  /// A derivada publica, sempre pronta.
   final String url;
 
   /// O `alt_text` do servidor, **cru**: nulo quando o painel gravou a imagem
   /// sem descricao (opcional desde 17/10/2026).
-  ///
-  /// Quem desenha usa [nomeDaImagem], e nao este campo: a reserva e regra do
-  /// modelo, pelo mesmo motivo de [ItemDaLoja.nomeDaImagem].
   final String? textoAlternativo;
 
   static ImagemDoProduto doJson(Object? bruto) {
@@ -721,9 +488,6 @@ class ImagemDoProduto {
   }
 
   /// O nome acessivel desta imagem, que **nunca e vazio**.
-  ///
-  /// O texto do painel quando ha; `Foto de {titulo do produto}` quando nao ha.
-  /// Recebe o titulo de fora porque a imagem nao conhece o produto dela.
   String nomeDaImagem(String tituloDoProduto) {
     final escrito = textoAlternativo?.trim();
     if (escrito != null && escrito.isNotEmpty) return escrito;
@@ -733,39 +497,16 @@ class ImagemDoProduto {
 
 /// `#/components/schemas/StoreItemDetail`: o item da vitrine **mais todas as
 /// imagens prontas**, na ordem do painel.
-///
-/// A rota e `GET /v1/store/items/{itemSlug}` (`getStoreItem`), publica, e
-/// **ela existia sem nenhum chamador** desde que entrou no contrato: das oito
-/// imagens que o painel aceita, o app mostrava uma (a `image_url` da lista, no
-/// cartao). Esta classe e a tela de detalhe sao o chamador.
-///
-/// ## A ordem e a da LISTA, e nao ha campo de posicao
-///
-/// `StoreItemImage` nao tem `position`: a ordem do painel **e** a ordem do
-/// array, e a primeira e a capa (a mesma de `image_url`). Por isso
-/// [ImagemDoProduto] nao guarda indice e nada aqui reordena: ordenar por
-/// conta propria seria inventar uma regra que o contrato nao tem.
-///
-/// ## Lista vazia e estado NORMAL
-///
-/// "Vazia e estado normal", diz o contrato por extenso. Nao e falha, nao e
-/// item quebrado e nao e tela em branco: a hml de hoje tem zero produto, e um
-/// produto sem foto nenhuma e o primeiro caso que a tela vai encontrar quando
-/// tiver.
 class DetalheDoProduto {
   const DetalheDoProduto({required this.item, required this.imagens});
 
   /// O produto, no mesmo tipo que o cartao da vitrine ja desenha.
-  ///
-  /// Nao e heranca nem copia de campo: `StoreItemDetail` e `allOf` de
-  /// `StoreItemSummary` no contrato, e repetir os treze campos aqui criaria
-  /// dois lugares para o preco ser formatado.
   final ItemDaLoja item;
 
-  /// Todas as imagens prontas, na ordem do painel. Pode ser vazia.
+  /// Todas as imagens prontas, na ordem do painel.
   final List<ImagemDoProduto> imagens;
 
-  /// O produto nao tem imagem nenhuma. **Estado da tela, nao erro.**
+  /// O produto nao tem imagem nenhuma.
   bool get semImagem => imagens.isEmpty;
 
   static DetalheDoProduto doJson(Map<String, dynamic> json) {

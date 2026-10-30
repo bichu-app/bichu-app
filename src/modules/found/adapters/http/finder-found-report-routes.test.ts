@@ -1,12 +1,6 @@
 /**
  * "Contar mais" e a foto de quem avisou sem conta, sobre um Fastify de verdade,
  * com o serviço de verdade e o contrato de verdade (BICHUS-41).
- *
- * Como em `finder-conversation-routes.test.ts`, o repositório daqui entrega
- * demais de propósito (ids e dados do tutor pendurados no aviso), e o
- * armazenamento devolve a chave do objeto nos campos assinados, como o S3 faz.
- * Os casos de "não vaza" procuram contato do tutor, chave de id e QUALQUER UUID
- * no corpo.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -89,7 +83,6 @@ function bancada(cenario: Cenario = {}): Bancada {
       recado: 'Estou com ela na padaria, liga 11 98765-4321',
       nomeDoPet: 'Aurora',
       resumoDoToken: new Uint8Array(resumoCerto),
-      // O que um adaptador que selecionasse colunas a mais traria junto.
       ...{
         tutorUserId: DO_TUTOR.userId,
         emailDoTutor: DO_TUTOR.email,
@@ -129,8 +122,6 @@ function bancada(cenario: Cenario = {}): Bancada {
     },
   } as unknown as FoundReportRepository;
 
-  // Como o S3 faz com política de POST: a chave vai nos campos assinados, e
-  // portanto SAI para quem envia.
   const armazenamento: ObjectStorage = {
     createUploadIntent: (pedido): Promise<AutorizacaoDeEnvio> =>
       Promise.resolve({
@@ -170,15 +161,12 @@ function bancada(cenario: Cenario = {}): Bancada {
     avisos: new AvisoDoAchadorService({
       repositorio,
       conversa: {
-        // A porta da conversa recebe o token, e é o serviço de `messaging` que
-        // o resume. O que este arquivo cobra é o repositório DESTE módulo.
         acesso: (token) =>
           Promise.resolve(
             token === TOKEN
               ? (cenario.acesso ?? { situacao: 'valido', aceitaMensagem: true })
               : { situacao: 'recusado' },
           ),
-        // A conversa redige; aqui o dublê faz o mesmo que o serviço real faz.
         entregarRecado: (_token, recado) => {
           recados.push(recado);
           return Promise.resolve(redigirCanalMediado(recado).texto);
@@ -282,7 +270,7 @@ function geoPointDoContrato(): {
   };
 }
 
-/** A checagem de não-vazamento. Ver o cabeçalho. */
+/** A checagem de não-vazamento. */
 function exigirQueNaoVaza(resposta: Resposta, onde: string): void {
   for (const proibido of [DO_TUTOR.email, DO_TUTOR.telefone, DO_TUTOR.endereco, '98765-4321']) {
     assert.ok(!resposta.bruto.includes(proibido), `${onde}: \`${proibido}\` vazou: ${resposta.bruto}`);
@@ -322,8 +310,6 @@ void describe('enrichFinderFoundReport: "Contar mais", sem id e sem coordenada d
     assert.ok(!resposta.bruto.includes('99876-5432'), 'o telefone do recado voltou em claro');
     assert.deepEqual(recados, ['Ela está calma. Me liga 11 99876-5432']);
 
-    // O recado NÃO vai para o aviso: ele vai para a conversa, que é onde o
-    // tutor lê. O que o aviso recebe é ponto, nome, e-mail e foto.
     assert.equal(mudancas.length, 1);
     assert.equal(mudancas[0]?.nome, 'Ana Paula');
     assert.equal(mudancas[0]?.email, 'ana@exemplo.invalid');
@@ -471,19 +457,11 @@ void describe('createFinderPhotoUploadIntent: referência opaca, nunca o id', ()
     assert.equal(intencoes.length, 1);
     assert.equal(intencoes[0]?.uploadRef, resposta.corpo['upload_ref']);
     assert.equal(intencoes[0]?.foundReportId, AVISO, 'a intenção não ficou ligada ao aviso do token');
-    // A chave do objeto SAI nos campos assinados. Com o id do aviso nela, o
-    // achador receberia um UUIDv7 interno pela porta do lado.
     assert.ok(!String(intencoes[0]?.objectKey).includes(AVISO), 'a chave do objeto carrega o id do aviso');
     exigirQueNaoVaza(resposta, 'POST /media/finder-photo-intents');
   });
 
   void it('acima do teto único de envio é recusado, e a quarta foto do aviso não sai', async () => {
-    // O teto desta rota era 2 MB (SEC-009) e a unificação de 17/10/2026 o
-    // afrouxa para os 5 MB de toda a aplicação — o contrato diz isso na própria
-    // descrição da operação, e o que continua contendo volume aqui é o teto de
-    // TRÊS fotos por aviso, que não reabre e que a segunda metade deste caso
-    // mede. A constante vem do serviço de propósito: um `2_097_153` escrito
-    // aqui é o número que divergiu.
     const grande = bancada();
     const acima = await pedir(grande.app, {
       metodo: 'POST',

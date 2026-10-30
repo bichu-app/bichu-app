@@ -1,30 +1,4 @@
-/**
- * AS ISCAS DA MODERACAO DE PALAVRAS. **Escritas e NAO rodadas** nesta rodada,
- * por regra do cliente: nenhuma suite unitaria nem de integracao foi executada
- * aqui.
- *
- * ## A PROVA E POR DESLIGAMENTO, e cada isca diz o que a derruba
- *
- * Uma isca que passa com o mecanismo desligado nao prova nada. Os dois jeitos
- * de desligar, e o que cada um deve pintar de vermelho:
- *
- * - **Esvaziar `PALAVRAS_RECUSADAS`** (ou fazer `errosDeModeracao` devolver
- *   sempre `[]`): caem as iscas de `xingamento e RECUSADO` e a isca de rota
- *   `a trava vale chamando a API direto`. As iscas de nome proprio continuam
- *   verdes -- e proposital: elas medem a AUSENCIA de bloqueio, e so o
- *   excesso de lista as derruba.
- * - **Trocar o casamento por `includes` de pedaco de palavra**, ou tirar
- *   `EXCECOES` da frente do bloqueio: cai `Clinica Pinto`, cai `Cadela` e caem
- *   os nomes proprios. E este o defeito que o filtro CRIA, e por isso este
- *   arquivo tem mais isca contra ele do que a favor do bloqueio.
- *
- * ## O que estas iscas NAO provam
- *
- * Que o filtro pega ofensa. Ele pega **palavra** da lista. Frase ofensiva sem
- * palavra proibida, palavra grudada em outra e troca de caractere nao prevista
- * passam, e a lista do que passa esta por extenso no cabecalho de
- * `moderacao.ts`. Nenhuma isca aqui promete o contrario.
- */
+/** AS ISCAS DA MODERACAO DE PALAVRAS. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -134,8 +108,6 @@ void describe('(b) A ISCA QUE MAIS IMPORTA: nome proprio e palavra legitima PASS
   });
 
   void it('as duas listas entram normalizadas: cada palavra da lista pega a si mesma', () => {
-    // `burro` normaliza para `buro`: lista guardada crua pararia de casar, e a
-    // excecao teria deixado de proteger em silencio.
     for (const palavra of PALAVRAS_RECUSADAS) {
       assert.equal(temPalavraRecusada(palavra), true, palavra);
     }
@@ -165,20 +137,10 @@ void describe('(c) a palavra proibida NAO aparece na mensagem de erro nem em log
 
   void it('o modulo nao tem como registrar nada: nem `console`, nem logger, nem trilha', () => {
     const fonte = readFileSync(resolve(process.cwd(), 'src/shared/texto/moderacao.ts'), 'utf8');
-    // A varredura e sobre o CODIGO, sem os comentarios. Sobre o texto cru ela
-    // acusava a unica ocorrencia de `logger` no arquivo, que esta no cabecalho
-    // de `moderacao.ts` (linha 40) e e a PROPRIA promessa que esta isca mede:
-    // "Nao ha `console`, nao ha `logger`, nao ha evento de auditoria". Prosa
-    // nao registra nada; quem registra e codigo -- e sobre o codigo a varredura
-    // continua inteira, com os mesmos quatro nomes.
     const codigo = fonte.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     for (const proibido of ['console.', 'logger', 'auditLog', 'request.log']) {
       assert.equal(codigo.includes(proibido), false, proibido);
     }
-    // E a trava que nenhum comentario alcanca, e que vale mais que a varredura
-    // de nome: o modulo so importa o TIPO do erro de campo e as duas listas de
-    // palavras. Sem porta de log nem de trilha no alcance dele, nao ha o que
-    // registrar -- nem por engano, nem amanha.
     const importados = [...codigo.matchAll(/from '([^']+)'/g)].map((casado) => casado[1] ?? '');
     assert.deepEqual(importados.sort(), ['../http/problem.js', './lista-de-moderacao.js']);
   });

@@ -1,44 +1,4 @@
-/**
- * As avaliacoes de um local do diretorio, sobre um Fastify de verdade.
- *
- * Mesmo arranjo de `directory-routes.test.ts` e pelo mesmo motivo: tres coisas
- * que estas rotas prometem so existem com o framework no caminho -- o **401**
- * de quem nao tem conta (a credencial e lida na borda), o **429** do teto (que
- * e gancho e nao `if`) e a **serializacao real**, que e onde um `id` interno
- * vazaria.
- *
- * ## ESTADO DAS ISCAS: RODADAS
- *
- * Elas nasceram sem ser rodadas -- o cliente havia suspendido a suite na
- * rodada de 18/10/2026, e o cabecalho dizia isso. **A suspensao acabou e a
- * suite rodou**: as iscas (a) a (d) e as de moderacao (m1) a (m5) passaram na
- * unitaria do backend. Este paragrafo e atualizado junto com o estado, e nao
- * depois dele.
- *
- * As quatro iscas que o pedido exige, com **o que desligar** para provar cada
- * uma. Quem for rodar: desligue UMA por vez, confira o disco com
- * `git diff --stat`, rode, confirme que reprova **so** o caso nomeado, e
- * restaure.
- *
- * | isca | o que desligar para provar | onde |
- * |---|---|---|
- * | (a) o segundo envio ATUALIZA, nao cria | trocar o `ON CONFLICT ... DO UPDATE` por `DO NOTHING`, ou o `INSERT` por `INSERT` puro | `kysely-directory-repository.ts`, `gravarMinhaAvaliacao` |
- * | (b) quem nao confirmou e-mail NAO avalia | devolver sempre `true` em vez de `'sem-canal-verificado'` | o mesmo metodo, logo apos `TEM_CANAL_VERIFICADO` |
- * | (c) avaliacao de conta desabilitada NAO e listada | tirar `conta_habilitada(...)` de `AVALIACAO_VISIVEL` | `kysely-directory-repository.ts`, a constante |
- * | (d) nota fora de 1--5 e recusada | tirar o ramo `out_of_range` de `validarEntradaDaAvaliacao` | `avaliacao-do-local.ts` |
- * | (m1) xingamento e recusado na escrita | tirar `errosDeModeracaoDaAvaliacao` do manipulador | `directory-routes.ts`, `rotaDeGravarMinhaAvaliacao` |
- * | (m2) `Clinica Pinto` e `cadela` passam | acrescentar uma delas a `PALAVRAS_RECUSADAS` | `lista-de-moderacao.ts` |
- * | (m3) a palavra nao vai para resposta nem log | devolver a palavra em `message`, ou logar o corpo | `moderacao.ts` / o manipulador |
- * | (m4) avaliacao limpa e aceita | fazer `temPalavraRecusada` devolver sempre `true` | `moderacao.ts` |
- * | (m5) `409` do canal vence o `400` da moderacao | mover a moderacao para antes do `if` do canal | `directory-routes.ts` |
- *
- * **(c) e a unica que este arquivo NAO consegue provar sozinho**, e a limitacao
- * precisa estar escrita: `conta_habilitada` e uma funcao do BANCO, e o dobre em
- * memoria daqui nao a executa. O caso de (c) abaixo mede o contrato da porta --
- * que o repositorio NAO devolve a linha da conta desabilitada --, o que e o
- * acordo que a borda consome. A prova de que o SQL cumpre o acordo e de
- * integracao, contra Postgres, e esta nomeada no fim do arquivo como pendente.
- */
+/** As avaliacoes de um local do diretorio, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -72,7 +32,7 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio } from './directory-routes.js';
 
-/** A montagem de URL de midia, pela porta. Nenhum caso deste arquivo tem imagem. */
+/** A montagem de URL de midia, pela porta. */
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
@@ -106,23 +66,16 @@ const SEM_AVALIACAO: PontuacaoDoLocal = {
 
 /**
  * O estado do dobre: uma avaliacao por (local, autor), como o indice unico do
- * banco impoe. **O dobre guarda num `Map` com a MESMA chave do indice**, e nao
- * numa lista: uma lista deixaria o dobre aceitar a segunda avaliacao da mesma
- * pessoa, e a isca (a) passaria aqui enquanto o banco a recusava -- o dobre
- * mentindo a favor do codigo.
+ * banco impoe.
  */
 interface Cenario {
-  /** Quem tem canal verificado. Fora daqui, `podeAvaliar` e falso. */
+  /** Quem tem canal verificado. */
   readonly comCanalVerificado?: readonly UserId[];
   /** Avaliacoes ja gravadas, por autor. */
   readonly avaliacoes?: ReadonlyMap<UserId, AvaliacaoDoLocal>;
   /** Autores cuja conta esta DESABILITADA: o repositorio nao os lista. */
   readonly contasDesabilitadas?: readonly UserId[];
-  /**
-   * O ENDERECO COMERCIAL da entrada (cliente, 21/10/2026). Ausente aqui quer
-   * dizer os quatro nulos, que e o estado normal: profissional autonomo nao tem
-   * endereco comercial.
-   */
+  /** O ENDERECO COMERCIAL da entrada (cliente, 21/10/2026). */
   readonly enderecoComercial?: EnderecoComercial;
 }
 
@@ -143,8 +96,6 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
   const habilitada = (u: UserId): boolean => !(cenario.contasDesabilitadas ?? []).includes(u);
 
   const pontuacao = (): PontuacaoDoLocal => {
-    // A agregacao usa o MESMO recorte da listagem (conta habilitada), que e o
-    // acordo que impede "128 avaliacoes" sobre uma lista de 126.
     const visiveis = [...avaliacoes.entries()].filter(([autor]) => habilitada(autor));
     if (visiveis.length === 0) return SEM_AVALIACAO;
     const histograma = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -180,8 +131,6 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
 
     listarAvaliacoes: (r: RecorteDasAvaliacoes): Promise<PaginaDeAvaliacoes | undefined> => {
       if (r.slug !== SLUG) return Promise.resolve(undefined);
-      // O FILTRO DE CONTA DESABILITADA, que no codigo de producao e
-      // `conta_habilitada(uuid)` dentro de `AVALIACAO_VISIVEL`.
       const visiveis = [...avaliacoes.entries()]
         .filter(([autor]) => habilitada(autor))
         .map(([autor, a]) => ({ ...a, minha: autor === r.chamador }));
@@ -205,7 +154,6 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
         editadaEm: jaTinha === undefined ? null : new Date(AGORA),
         minha: true,
       };
-      // CHAVE (local, autor): sobrescreve. E o que o indice unico faz.
       avaliacoes.set(chamador, gravada);
       espiao.gravacoes.push({ autor: chamador, entrada, criada: jaTinha === undefined });
       return Promise.resolve({
@@ -215,9 +163,6 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
       });
     },
 
-    // O MESMO `temCanal` que `gravarMinhaAvaliacao` usa: o dobre nao pode ter
-    // duas opinioes sobre a mesma conta, senao a ordem entre `409` e `400`
-    // passaria a depender de qual metodo foi chamado.
     temCanalVerificadoParaAvaliar: (chamador: UserId): Promise<boolean> =>
       Promise.resolve(temCanal(chamador)),
 
@@ -238,36 +183,17 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
 
 const clock: Clock = { now: () => AGORA as Instant };
 
-/**
- * O teto entra DESLIGADO neste arquivo, e a escolha e deliberada.
- *
- * `directory-routes.test.ts` usa `criarContadorEmMemoria` porque o 429 e uma
- * das coisas que ele mede. Aqui o alvo sao as quatro regras de produto, e um
- * contador vivo as atrapalharia: a isca (d) faz sete escritas seguidas na mesma
- * conta e encostaria no teto de 20/h antes de terminar -- a isca passaria a
- * medir o teto em vez da faixa da nota.
- *
- * **O teto NAO fica sem prova por isso**: ele e declarado na rota
- * (`rateLimit`, que o tipo exige quando ha efeito) e o inventario da subida o
- * confere. O que falta e um caso que o exercite, e isso esta na lista do fim do
- * arquivo.
- */
+/** O teto entra DESLIGADO neste arquivo, e a escolha e deliberada. */
 function servidor(cenario: Cenario, espiao: Espiao, log?: string[]): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
     teto: tetoDeTeste(criarContadorDesligado()),
     bodyLimitBytes: 1_048_576,
-    // O LOG CAPTURADO, quando a isca precisa afirmar o que NAO foi escrito
-    // nele. `level: 'debug'` fora de producao, entao o que passar por aqui e
-    // tudo o que a rota produziu -- e a unica forma honesta de medir a
-    // ausencia da palavra no log.
     ...(log === undefined ? {} : { destinoDoLog: { write: (linha: string) => void log.push(linha) } }),
   });
   registrarRotasDoDiretorio(app, {
     diretorio: repositorio(cenario, espiao),
-    // Nenhum caso deste arquivo tem logo: `logoPublicKey` e nulo nas fixturas, e
-    // `urlDaDerivada` devolve nulo sem chamar esta funcao.
     urlDeMidia: URL_DE_MIDIA,
     autenticador: {
       autenticar: (token: string) =>
@@ -321,7 +247,6 @@ function obj(corpo: Record<string, unknown>, chave: string): Record<string, unkn
 }
 
 void describe('a avaliacao de um local do diretorio', () => {
-  // ---------------------------------------------------------------- isca (a)
   void it(
     'ISCA (a): o SEGUNDO envio da mesma pessoa ATUALIZA a avaliacao dela, e nao cria uma segunda',
     async () => {
@@ -343,10 +268,8 @@ void describe('a avaliacao de um local do diretorio', () => {
         });
         assert.equal(segunda.status, 200);
 
-        // O QUE A ISCA MEDE, e e esta a linha que importa:
         assert.equal(segunda.corpo['created'], false, 'a segunda ATUALIZA, nao cria');
 
-        // E a consequencia que a pessoa ve: UMA avaliacao, com a nota nova.
         const lista = await pedir(app, {
           method: 'GET',
           url: `/directory/entries/${SLUG}/reviews`,
@@ -355,14 +278,11 @@ void describe('a avaliacao de um local do diretorio', () => {
         const itens = lista.corpo['items'] as { rating: number }[];
         assert.equal(itens[0]?.rating, 3, 'a nota e a da ultima edicao');
 
-        // A MEDIA acompanha, e nao e a media das duas.
         assert.equal(obj(segunda.corpo, 'rating')['count'], 1);
         assert.equal(obj(segunda.corpo, 'rating')['average'], 3);
 
-        // E o `ref` NAO muda: links e denuncias existentes continuam valendo.
         assert.equal(obj(segunda.corpo, 'review')['ref'], obj(primeira.corpo, 'review')['ref']);
 
-        // `edited_at` nasce nulo e passa a existir -- a tela escreve "editada".
         assert.equal(obj(primeira.corpo, 'review')['edited_at'], null);
         assert.notEqual(obj(segunda.corpo, 'review')['edited_at'], null);
       } finally {
@@ -371,10 +291,8 @@ void describe('a avaliacao de um local do diretorio', () => {
     },
   );
 
-  // ---------------------------------------------------------------- isca (b)
   void it('ISCA (b): quem NAO confirmou o e-mail nao consegue avaliar, e recebe 409', async () => {
     const espiao: Espiao = { gravacoes: [] };
-    // `comCanalVerificado` vazio: ninguem tem e-mail confirmado.
     const app = servidor({ comCanalVerificado: [] }, espiao);
     try {
       const r = await pedir(app, {
@@ -389,9 +307,7 @@ void describe('a avaliacao de um local do diretorio', () => {
         `${BASE_DE_PROBLEMA}/contact-channel-unverified`,
         'o MESMO tipo de problema que criar encontro: a regra e a mesma regra',
       );
-      // A SAIDA vai na resposta: sem ela a tela diz "nao e possivel" sem caminho.
       assert.equal(r.corpo['next_action'], 'verify_email');
-      // E NADA foi gravado. Um 409 que gravasse seria o pior dos dois mundos.
       assert.equal(espiao.gravacoes.length, 0, 'nada foi escrito');
     } finally {
       await app.close();
@@ -407,18 +323,12 @@ void describe('a avaliacao de um local do diretorio', () => {
         url: `/directory/entries/${SLUG}`,
       });
       assert.equal(r.status, 200, 'ler e permitido');
-      // E a tela SABE que nao pode escrever, antes de montar o campo.
       assert.equal(r.corpo['can_review'], false);
       assert.equal(r.corpo['review_blocked_reason'], 'unverified_channel');
     } finally {
       await app.close();
     }
   });
-
-  // ------------------------------------------------------------------
-  // O ENDERECO COMERCIAL (cliente, 21/10/2026):
-  // *"o endereco completo do profissional"*, para tocar e abrir o mapa.
-  // ------------------------------------------------------------------
 
   void it('o ENDERECO COMERCIAL sai no detalhe, nos quatro campos e como gravado', async () => {
     const espiao: Espiao = { gravacoes: [] };
@@ -436,9 +346,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     try {
       const r = await pedir(app, { method: 'GET', url: `/directory/entries/${SLUG}` });
       assert.equal(r.status, 200);
-      // O CEP sai na forma GRAVADA -- oito digitos, sem mascara. A mascara
-      // vive na tela, como no painel: duas formas do mesmo CEP no mesmo
-      // produto e o defeito que a duplicacao produz.
       assert.equal(r.corpo['postal_code'], '05422030');
       assert.equal(r.corpo['street'], 'Rua Teodoro Sampaio');
       assert.equal(r.corpo['street_number'], '1020');
@@ -449,11 +356,6 @@ void describe('a avaliacao de um local do diretorio', () => {
   });
 
   void it('ISCA: entrada SEM endereco devolve os quatro NULOS, e nao campo ausente', async () => {
-    // Autonomo -- adestrador, passeador, veterinario que atende em casa -- nao
-    // tem endereco comercial, e a entrada dele continua publicavel. Nulo
-    // declarado e o que faz a tela saber que NAO desenha a linha nem o botao
-    // de mapa; campo ausente e `undefined` em Dart, que e o mesmo acidente por
-    // um caminho mais escuro.
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
@@ -472,11 +374,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
-      // `semConta: true` -- sem ele a isca mandava o `Authorization` do cenario
-      // padrao e media o caminho da conta VALIDA (200 de `putMyDirectoryEntryReview`),
-      // que e o oposto do que o titulo afirma. O 401 e do contrato:
-      // `api/openapi.yaml`, `putMyDirectoryEntryReview` -- "Visitante sem conta
-      // nao escreve e nao e surpreendido: 401".
       const escrita = await pedir(app, {
         method: 'PUT',
         url: `/directory/entries/${SLUG}/reviews/me`,
@@ -486,12 +383,6 @@ void describe('a avaliacao de um local do diretorio', () => {
       assert.equal(escrita.status, 401);
       assert.equal(espiao.gravacoes.length, 0);
 
-      // "e a leitura tambem": o titulo afirma as DUAS e so a escrita estava
-      // escrita. A leitura exige conta e NAO e publica -- `getDirectoryEntry`
-      // declara `security: [bearerAuth]` em `api/openapi.yaml` (linha 3722) e a
-      // propria descricao diz por que: ela devolve `phone_e164`, e
-      // `src/tools/portao-contrato-publico.ts` reprova esse campo em qualquer
-      // operacao alcancavel sem conta.
       const leitura = await pedir(app, {
         method: 'GET',
         url: `/directory/entries/${SLUG}`,
@@ -503,7 +394,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     }
   });
 
-  // ---------------------------------------------------------------- isca (c)
   void it(
     'ISCA (c): a avaliacao de uma conta DESABILITADA nao e listada, e nao conta na media',
     async () => {
@@ -534,9 +424,6 @@ void describe('a avaliacao de um local do diretorio', () => {
           },
         ],
       ]);
-      // Bruno desabilitou a conta: decisao do cliente de 17/10 -- conta
-      // desabilitada "nao e mais encontrada em nenhuma pagina ou
-      // funcionalidade".
       const app = servidor(
         { avaliacoes, contasDesabilitadas: [OUTRA_PESSOA] },
         espiao,
@@ -555,9 +442,6 @@ void describe('a avaliacao de um local do diretorio', () => {
           'a avaliacao da conta desabilitada NAO aparece, e nao vira anonima',
         );
 
-        // E A CONTAGEM CONCORDA COM A LISTA. Este par de afirmacoes e o que
-        // pega o defeito de recorte duplicado: "2 avaliacoes" sobre uma lista
-        // de 1.
         assert.equal(lista.corpo['total'], 1);
         const local = await pedir(app, {
           method: 'GET',
@@ -571,7 +455,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     },
   );
 
-  // ---------------------------------------------------------------- isca (d)
   void it('ISCA (d): nota fora de 1--5 e recusada, com 400 e o campo nomeado', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
@@ -584,7 +467,6 @@ void describe('a avaliacao de um local do diretorio', () => {
         });
         assert.equal(r.status, 400, `nota ${String(nota)} e recusada`);
       }
-      // E as da faixa passam, senao a isca aprovaria um codigo que recusa tudo.
       for (const nota of [1, 3, 5]) {
         const r = await pedir(app, {
           method: 'PUT',
@@ -600,13 +482,10 @@ void describe('a avaliacao de um local do diretorio', () => {
   });
 
   void it('ISCA (d2): nota fracionada e recusada -- a escala e inteira', () => {
-    // No dominio, porque e onde a regra mora e porque o schema do contrato
-    // (`type: integer`) e a PRIMEIRA recusa, nao a unica.
     assert.equal(validarEntradaDaAvaliacao({ rating: 4.5 }).entrada, undefined);
     assert.equal(validarEntradaDaAvaliacao({ rating: 4 }).entrada?.nota, 4);
   });
 
-  // -------------------------------------------- o texto opcional, e o HTML
   void it('o TEXTO e opcional: dar so a nota funciona e grava nulo', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
@@ -625,9 +504,6 @@ void describe('a avaliacao de um local do diretorio', () => {
   });
 
   void it('texto so com espaco vira NULO, e nao string vazia', () => {
-    // Uma unica representacao de "sem texto". Duas obrigariam cada tela a
-    // conhecer as duas, e a primeira que esquecesse mostraria um paragrafo
-    // vazio.
     assert.equal(validarEntradaDaAvaliacao({ rating: 5, body: '   ' }).entrada?.texto, null);
   });
 
@@ -642,7 +518,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     assert.equal(validarEntradaDaAvaliacao({ rating: 5, body: 'a'.repeat(1500) }).entrada?.texto?.length, 1500);
   });
 
-  // ------------------------------------------------------- 404 e nao 403
   void it('slug que nao e de entrada publicada responde 404, nunca 403', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
@@ -669,7 +544,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     }
   });
 
-  // ------------------------------------------------- apagar, e a idempotencia
   void it('apagar a minha e idempotente: sem avaliacao, ainda e 204', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
@@ -689,7 +563,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     }
   });
 
-  // ------------------------------------------------------------- a denuncia
   void it('denunciar a PROPRIA avaliacao e recusado: a porta dela e o DELETE', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const avaliacoes = new Map<UserId, AvaliacaoDoLocal>([
@@ -742,11 +615,8 @@ void describe('a avaliacao de um local do diretorio', () => {
         url: `/directory/entries/${SLUG}/reviews/ref-do-bruno-bbbbbbbb/reports`,
         payload: { reason: 'false_information', detail: 'Nunca atenderam essa pessoa.' },
       });
-      // 202: o pedido foi recebido, nao que alguem ja olhou.
       assert.equal(r.status, 202);
 
-      // E A AVALIACAO CONTINUA NO AR. Se a denuncia escondesse, uma denuncia
-      // seria todo o custo de apagar a avaliacao de um concorrente.
       const lista = await pedir(app, {
           method: 'GET',
         url: `/directory/entries/${SLUG}/reviews`,
@@ -757,7 +627,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     }
   });
 
-  // ------------------------------------------------- o que NAO sai na resposta
   void it('nenhum UUID e nenhum identificador de autor sai nas respostas', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const avaliacoes = new Map<UserId, AvaliacaoDoLocal>([
@@ -781,9 +650,6 @@ void describe('a avaliacao de um local do diretorio', () => {
           url,
         });
         const cru = r.bruto;
-        // O ADR-0010 item 6 proibe UUID interno em saida publica, e a
-        // BICHUS-174 proibe expor vinculo entre duas pessoas: o `author_user_id`
-        // de quem escreveu nao pode aparecer de forma nenhuma.
         assert.ok(!cru.includes(OUTRA_PESSOA), `${url} nao vaza a conta do autor`);
         assert.ok(!cru.includes(QUEM_CHAMA), `${url} nao vaza a conta de quem chama`);
         assert.ok(!/"id"\s*:/.test(cru), `${url} nao tem campo id`);
@@ -802,8 +668,6 @@ void describe('a avaliacao de um local do diretorio', () => {
           method: 'GET',
         url: `/directory/entries/${SLUG}`,
       });
-      // Zero se le como "pessimo" numa escala de 1 a 5, e um local que ninguem
-      // avaliou nao e pessimo. A tela escreve "Ainda sem avaliacoes".
       assert.equal(obj(r.corpo, 'rating')['average'], null, 'NULA, nunca 0');
       assert.equal(obj(r.corpo, 'rating')['count'], 0);
       const histograma = obj(obj(r.corpo, 'rating'), 'histogram');
@@ -813,28 +677,10 @@ void describe('a avaliacao de um local do diretorio', () => {
     }
   });
 
-  // ====================================================================
-  // A MODERACAO DE PALAVRAS NA AVALIACAO (18/10/2026)
-  //
-  // O achado que originou estas iscas: `errosDeModeracao` existia, o cabecalho
-  // de `shared/texto/moderacao.ts` afirmava cobrir a indicacao E a
-  // recomendacao, e **a recomendacao publicava sem filtro nenhum**. As iscas
-  // abaixo medem a LIGACAO, e nao a funcao -- a funcao ja tem as suas em
-  // `shared/texto/moderacao.test.ts`.
-  //
-  // **Desligamento (prova de que elas medem algo):** tire
-  // `errosDeModeracaoDaAvaliacao` do manipulador de `rotaDeGravarMinhaAvaliacao`
-  // em `directory-routes.ts` e (m1), (m3) e (m5) reprovam; (m2) e (m4)
-  // continuam passando, porque sao o contrapeso.
-  // ====================================================================
-
   void it('ISCA (m1): avaliacao com xingamento e RECUSADA, chamando a aplicacao direto', async () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
-      // **Pela APLICACAO e nao pela tela**, e e isso que a isca prova: um aviso
-      // de formulario no app nao protege nada, porque esta rota atende chamada
-      // direta. `app.inject` e o `curl` desta suite.
       const r = await pedir(app, {
         method: 'PUT',
         url: `/directory/entries/${SLUG}/reviews/me`,
@@ -845,12 +691,8 @@ void describe('a avaliacao de um local do diretorio', () => {
       const erros = r.corpo['errors'] as { field: string; code: string }[];
       assert.equal(erros.length, 1);
       assert.equal(erros[0]?.field, 'body');
-      // O MESMO `code` da indicacao, e nao um codigo novo: o app ja sabe
-      // tratar este.
       assert.equal(erros[0]?.code, CODIGO_DA_MODERACAO);
 
-      // E NADA foi gravado. A avaliacao aparece na hora: se ela fosse gravada
-      // e recusada depois, o texto ja teria aparecido para outra pessoa.
       assert.equal(espiao.gravacoes.length, 0, 'nada chegou ao repositorio');
     } finally {
       await app.close();
@@ -861,10 +703,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
-      // O autor da lista tirou dela 30+ palavras justamente por colidirem com
-      // nome proprio e com vocabulario veterinario. Esta isca e a que protege
-      // essa decisao: se um dia alguem "reforcar" a lista, ela reprova aqui, e
-      // nao na pagina de um negocio real que parou de receber avaliacao.
       const r = await pedir(app, {
         method: 'PUT',
         url: `/directory/entries/${SLUG}/reviews/me`,
@@ -899,21 +737,13 @@ void describe('a avaliacao de um local do diretorio', () => {
       });
       assert.equal(r.status, 400);
 
-      // 1. NAO ESTA NA RESPOSTA. Devolve-la transformaria o 400 em oraculo:
-      // quem quer descobrir a lista manda uma palavra por requisicao e le a
-      // resposta.
       assert.ok(
         !r.bruto.toLowerCase().includes(PALAVRA),
         'a palavra recusada vazou no corpo da resposta',
       );
-      // A mensagem e a canonica, inteira, vinda do modulo -- a borda nao a
-      // reescreve nem a enriquece com o texto recusado.
       const erros = r.corpo['errors'] as { message: string }[];
       assert.equal(erros[0]?.message, MENSAGEM_DA_MODERACAO);
 
-      // 2. NAO ESTA NO LOG, e nem o texto que a continha. O corpo da
-      // requisicao nao e logado por esta rota, e esta linha e o que impede
-      // alguem de acrescentar um `request.log` "para depurar".
       const tudo = log.join('\n').toLowerCase();
       assert.ok(tudo.length > 0, 'o log foi capturado de verdade (senao a isca nao mede nada)');
       assert.ok(!tudo.includes(PALAVRA), 'a palavra recusada vazou no log');
@@ -927,9 +757,6 @@ void describe('a avaliacao de um local do diretorio', () => {
     const espiao: Espiao = { gravacoes: [] };
     const app = servidor({}, espiao);
     try {
-      // "critica negativa pode, ofensa nao" -- e a propria mensagem da recusa
-      // que promete isso. Sem esta isca, um filtro que recusasse TUDO passaria
-      // por (m1) e (m3) e pareceria certo.
       const r = await pedir(app, {
         method: 'PUT',
         url: `/directory/entries/${SLUG}/reviews/me`,
@@ -947,8 +774,6 @@ void describe('a avaliacao de um local do diretorio', () => {
 
   void it('ISCA (m5): a trava de e-mail confirmado vem ANTES da moderacao -- 409 e nao 400', async () => {
     const espiao: Espiao = { gravacoes: [] };
-    // Conta SEM e-mail confirmado E texto com xingamento: os dois erros de uma
-    // vez. A ordem decide qual a pessoa ve.
     const app = servidor({ comCanalVerificado: [] }, espiao);
     try {
       const r = await pedir(app, {
@@ -957,15 +782,9 @@ void describe('a avaliacao de um local do diretorio', () => {
         payload: { rating: 1, body: 'o atendente e um babaca' },
       });
 
-      // 409 E NAO 400, e e a MESMA ordem da indicacao
-      // (`application/sugestao-do-diretorio.ts`: o `if` do canal vem antes de
-      // `errosDaSugestao`). Duas ordens para a mesma regra do cliente fariam a
-      // tela decidir por dois caminhos onde ha um -- e mandariam a pessoa
-      // reescrever um texto que ela nao pode publicar de todo jeito.
       assert.equal(r.status, 409, 'o canal verificado vence a moderacao');
       assert.equal(r.corpo['type'], `${BASE_DE_PROBLEMA}/contact-channel-unverified`);
       assert.equal(r.corpo['next_action'], 'verify_email');
-      // E a palavra continua nao vazando, nem neste caminho.
       assert.ok(!r.bruto.toLowerCase().includes('babaca'));
       assert.equal(espiao.gravacoes.length, 0);
     } finally {
@@ -974,20 +793,3 @@ void describe('a avaliacao de um local do diretorio', () => {
   });
 });
 
-/**
- * O QUE ESTE ARQUIVO NAO PROVA, e a lista e curta de proposito:
- *
- * 1. **Que `conta_habilitada(uuid)` de fato filtra no SQL.** Aqui o filtro e do
- *    dobre. A prova e de integracao, contra Postgres: inserir duas avaliacoes,
- *    marcar `users.deleted_at` de uma e conferir que a lista, a contagem E a
- *    media caem juntas. Pendente.
- * 2. **Que o `ON CONFLICT (professional_id, author_user_id)` impede a segunda
- *    linha sob concorrencia.** O dobre usa um `Map`, que serializa por
- *    construcao. A prova e de integracao, com duas transacoes simultaneas.
- * 3. **Que `pontuacao_do_local` arredonda a uma casa e devolve NULO sem
- *    avaliacao.** Isso foi exercitado em `BEGIN`/`ROLLBACK` contra o banco em
- *    18/10 (media nula com contagem zero, confirmado), mas nao por teste
- *    automatizado.
- * 4. **Que a remocao pelo administrador tira a linha da media.** A rota existe
- *    (`removeAdminDirectoryReview`) e nao tem isca escrita nesta rodada.
- */

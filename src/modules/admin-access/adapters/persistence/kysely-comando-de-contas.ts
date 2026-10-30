@@ -1,20 +1,4 @@
-/**
- * `ComandoDeContas` em Postgres (ADR-0027 item 20.3).
- *
- * Cada escrita e UMA transacao com o evento da trilha dentro dela
- * (`TrilhaTransacional.recordIn`, D49): falha da trilha desfaz a escrita, e o
- * teste de integracao forca essa falha para provar que nao sobra conta.
- *
- * ## Por que a barreira E a revogacao linha a linha
- *
- * `sessions_invalid_before` e o que a guarda le a cada requisicao: empurra-la
- * derruba toda sessao da conta na proxima chamada, inclusive a que nasceu
- * entre a leitura e o commit. A revogacao linha a linha grava o MOTIVO em cada
- * sessao, que e o que a investigacao le depois. As duas andam juntas.
- *
- * Nada aqui le `users`: o unico contato do comando com o mundo do app (D63)
- * mora no ponto de composicao, `src/bin/conta-admin.ts`.
- */
+/** `ComandoDeContas` em Postgres (ADR-0027 item 20.3). */
 import { sql } from 'kysely';
 
 import type { Db, DbTransaction } from '../../../../shared/db/pool.js';
@@ -28,11 +12,7 @@ function ehViolacaoDeUnicidade(erro: unknown): boolean {
   return typeof erro === 'object' && erro !== null && (erro as { code?: unknown }).code === '23505';
 }
 
-/**
- * O evento do comando, montado de um jeito so. `surface` e `command` depois do
- * que veio de fora: quem monta os dados nao consegue apagar de onde a escrita
- * saiu.
- */
+/** O evento do comando, montado de um jeito so. */
 export function eventoDoComandoDeConta(
   action: AuditAction,
   dados: {

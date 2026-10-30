@@ -1,34 +1,4 @@
-/**
- * ISCAS (b) e (c) do perfil de outra pessoa, medidas **NO CONTRATO**.
- *
- * A decisão do cliente, 19/10/2026, literal: *"ele pode ver nome, quantidade de
- * pets, conexões, mas não as fotos publicadas e nem a timeline do usuário"*. É
- * a emenda 2 do ADR-0010.
- *
- * ## Por que estas duas regras são medidas no contrato, e não só no corpo
- *
- * Porque as duas são de **OMISSÃO**, e omissão não se mede exercitando a
- * superfície que deve mostrar o campo: mede-se varrendo o que ela declara e
- * provando que o proibido não está lá. O corpo é medido também, em
- * `people/application/perfil-de-pessoa.test.ts` — as duas metades são
- * necessárias e nenhuma substitui a outra:
- *
- * - **o contrato** pega o campo que alguém DECLARA e esquece de implementar, e
- *   pega o que os quatro clientes (app, backoffice, site, backend) passariam a
- *   esperar;
- * - **o corpo** pega o campo que alguém implementa e esquece de declarar — e
- *   esse é o caminho real do vazamento, porque **nenhum portão deste
- *   repositório confere o corpo da resposta**: o Fastify valida a REQUISIÇÃO.
- *
- * ## Por que a timeline não é uma ausência a preencher
- *
- * Ela **não existe no produto**. A migração `20261018000030` registra a decisão
- * por extenso — *"uma timeline de quem você segue É a lista de presença com
- * hora... Encerrado, não se reabre"* — e não há tabela de publicação nesta base
- * (`safety/ports/safety-repository.ts` diz isso ao justificar por que
- * `denunciarPublicacao` não confere o alvo). Um campo de timeline aqui não seria
- * um campo novo: seria aquela decisão reaberta.
- */
+/** ISCAS (b) e (c) do perfil de outra pessoa, medidas **NO CONTRATO**. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -106,24 +76,8 @@ function todasAsPropriedadesDoPerfil(): string[] {
 }
 
 void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', () => {
-  // ------------------------------------------------------------------
-  // A OPERAÇÃO: UMA, COM CONTA, E SEM COLEÇÃO
-  // ------------------------------------------------------------------
 
-  /**
-   * **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.**
-   *
-   * Ele cobrava que `people` tivesse **uma** operação, e a mensagem de reprovação
-   * dizia: *"uma segunda operação em `people` é busca, listagem ou descoberta por
-   * outro nome: nenhuma das três foi decidida"*. Duas delas **foram decididas**:
-   *
-   * > *"vamos implementar a busca pelo usuário (...) e vamos implementar o link
-   * > de convite, (...) ao clicar vai para a página do perfil do usuário"*
-   *
-   * O caso não foi afrouxado para "qualquer número": ele passou a cobrar a lista
-   * **exata** de três, e uma quarta continua reprovando. É esse número que faz
-   * uma operação nova nesta etiqueta ser vista por alguém.
-   */
+  /** **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.** */
   void it('a etiqueta `people` tem TRES operacoes, e a lista e exata', () => {
     assert.deepEqual(
       operacoesDePessoa()
@@ -141,11 +95,7 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  /**
-   * As três operações de `people` exigem conta, **sem alternativa vazia**. A
-   * coluna "sem conta" da tabela 4-B é vazia inteira, e a busca não a abriu: uma
-   * busca de pessoas alcançável sem conta não teria nem teto por conta possível.
-   */
+  /** As três operações de `people` exigem conta, **sem alternativa vazia**. */
   void it('as TRES operacoes de `people` exigem conta, sem alternativa vazia', () => {
     for (const { metodo, caminho, op } of operacoesDePessoa()) {
       const seguranca = op.security ?? [];
@@ -177,13 +127,7 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
   /**
    * **ESTE CASO MUDOU EM 20/10/2026.** Ele cobrava que não existisse caminho
    * `/people` sem apelido, porque *"coleção de pessoas é enumeração, e não existe
-   * busca de pessoas neste produto"*. O cliente pediu a busca, e a coleção passou
-   * a existir — **com freios**.
-   *
-   * O caso passou a cobrar os dois caminhos exatos. O que ele defende agora é que
-   * não apareça um **terceiro**: `/people/{handle}/pets`,
-   * `/people/{handle}/showcase`, `/people/available` ou `/people/suggestions`
-   * seriam cada um uma superfície nova, e nenhuma delas foi decidida.
+   * busca de pessoas neste produto"*.
    */
   void it('os caminhos `/people` sao EXATAMENTE dois: a colecao e o apelido', () => {
     const caminhos = Object.keys(spec.paths)
@@ -201,8 +145,8 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
 
   /**
    * **A busca existe, e os freios dela são parte da decisão.** Sem este caso, a
-   * mudança acima teria aberto a coleção sem nada cobrar o que o cliente pediu
-   * junto com ela.
+   * mudança acima teria aberto a coleção sem nada cobrar o que o cliente pediu junto
+   * com ela.
    */
   void it('a colecao `/people` SO existe com busca: sem `q` ela nao lista ninguem', () => {
     const busca = spec.paths['/people']?.get as
@@ -225,10 +169,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
         'nenhum e a consulta vira varredura da tabela de contas inteira.',
     );
   });
-
-  // ------------------------------------------------------------------
-  // ISCA (b): NADA DE TIMELINE OU PUBLICAÇÃO
-  // ------------------------------------------------------------------
 
   void it('ISCA (b) -- nenhuma propriedade de timeline, publicacao ou seguidor no perfil', () => {
     const propriedades = todasAsPropriedadesDoPerfil();
@@ -282,10 +222,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     }
   });
 
-  // ------------------------------------------------------------------
-  // ISCA (c): PET É CONTAGEM, E SÓ CONTAGEM
-  // ------------------------------------------------------------------
-
   void it('ISCA (c) -- a UNICA propriedade que fala de pet e `pets_count`, e ela e inteira', () => {
     const doPerfil = todasAsPropriedadesDoPerfil().filter((chave) => chave.includes('pet'));
     assert.deepEqual(
@@ -323,13 +259,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
   });
 
   void it('ISCA (c) -- a lista de propriedades de `PersonProfile` e FECHADA', () => {
-    // Ancora no CONJUNTO e não em "não contém X": lista de proibidos falha
-    // exatamente no item que ninguém previu, e falha para verde. Campo novo
-    // aqui é decisão do cliente, e este caso é onde ela aparece.
-    // `contact_channel_verified` entrou em 21/10/2026 pela emenda do ADR-0010 --
-    // decisao do cliente, e a emenda NOMEIA este schema. Ele esta nesta lista e
-    // nao na de proibidos logo abaixo porque e um BOOLEANO sobre a conta: ele
-    // nao identifica, nao localiza e nao conta nada de pet.
     assert.deepEqual(propriedadesDe('PersonProfile').sort(), [
       'connection_ref',
       'connection_state',
@@ -383,10 +312,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     assert.equal(campo?.pattern, '^[A-Za-z0-9_-]{22}$');
   });
 
-  // ------------------------------------------------------------------
-  // ISCA (d): 404, NUNCA 403
-  // ------------------------------------------------------------------
-
   void it('ISCA (d) -- a operacao declara 404 e NAO declara 403', () => {
     const respostas = Object.keys(operacaoDoPerfil().responses ?? {});
     assert.ok(respostas.includes('404'), 'sem 404 declarado, o cliente não sabe tratar perfil invisível');
@@ -394,10 +319,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
       !respostas.includes('403'),
       '403 contaria que existe algo ali e que alguém decidiu barrar: para quem foi bloqueado, isso é o aviso de bloqueio (ADR-0021)',
     );
-    // O 400 e do apelido FORA DA FAIXA, recusado na borda, e ele e
-    // obrigatorio: `vigiarParametrosDasRotas` derruba a subida da aplicacao
-    // quando uma rota valida parametro e nao declara 400. Ele nao e oraculo --
-    // diz que o apelido esta malformado, nao que a pessoa existe.
     assert.deepEqual(respostas.sort(), ['200', '400', '401', '404', '429']);
   });
 
@@ -411,8 +332,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
   });
 
   void it('ISCA (d) -- a descricao DIZ que os cinco caminhos sao o mesmo 404', () => {
-    // A frase escrita é o que os quatro clientes leem. Sem ela, o app poderia
-    // tratar 404 como "erro" em vez de "não encontramos esta pessoa".
     const descricao = String(operacaoDoPerfil().description);
     assert.match(descricao, /404 e nunca 403/i);
     assert.match(descricao, /desabilitada/i);
@@ -420,14 +339,7 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     assert.match(descricao, /de PET/i, 'apelido de pet precisa estar nomeado: o espaço de nomes é compartilhado');
   });
 
-  // ------------------------------------------------------------------
-  // A FAIXA DO APELIDO É A MESMA EM QUATRO LUGARES
-  // ------------------------------------------------------------------
-
   void it('o apelido tem a MESMA faixa no parametro, no schema e no `CHECK` da migracao', () => {
-    // Esta casa já pagou por divergência de faixa entre contrato e coluna: o
-    // recado do achado aceitava 1000 no contrato e a coluna recusava acima de
-    // 500, e a pessoa recebia erro de servidor em vez de recusa explicada.
     const PADRAO = '^[a-z0-9][a-z0-9-]{3,18}[a-z0-9]$';
     const parametro = spec.components.parameters['PersonHandleParam'] as {
       schema?: { minLength?: number; maxLength?: number; pattern?: string };
@@ -452,14 +364,7 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  // ------------------------------------------------------------------
-  // CONTRAPESO
-  // ------------------------------------------------------------------
-
   void it('CONTRAPESO -- o perfil declara AS TRES coisas que o cliente liberou', () => {
-    // Sem ele, todas as iscas de omissão acima passariam num mundo em que
-    // `PersonProfile` é um objeto vazio — que é a forma mais fácil de um teste
-    // de omissão ficar verde sem ter medido nada.
     const schema = spec.components.schemas['PersonProfile'] as {
       required?: readonly string[];
       properties: Record<string, unknown>;
@@ -472,8 +377,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
   });
 
   void it('CONTRAPESO -- a decisao de 19/10/2026 esta CITADA na operacao', () => {
-    // Decisão de produto sem a frase dela ao lado é decisão que ninguém
-    // reconstrói seis meses depois.
     const descricao = String(operacaoDoPerfil().description);
     assert.match(descricao, /19\/10\/2026/);
     assert.match(descricao, /quantidade de\s+pets/);

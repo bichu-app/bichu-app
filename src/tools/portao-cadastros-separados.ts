@@ -1,34 +1,7 @@
 /**
- * Portao dos cadastros separados: o codigo do painel nao cita tabela do app, e
- * o codigo do app nao cita tabela do painel (ADR-0027 item 20; D42 e P21 (c) de
+ * Portao dos cadastros separados: o codigo do painel nao cita tabela do app, e o
+ * codigo do app nao cita tabela do painel (ADR-0027 item 20; D42 e P21 (c) de
  * `docs/04-seguranca.md` 22.11).
- *
- * O esquema ja impede a chave estrangeira (P21 (b), `cadastros-separados.test.ts`
- * na integracao). O que o esquema nao impede e uma consulta: `admin-access`
- * fazendo `selectFrom('users')` para "so conferir uma coisa" religaria os dois
- * cadastros sem nenhuma FK, e a porta do tutor voltaria a ser oraculo da senha
- * do painel (T2). Este portao reprova isso no codigo.
- *
- * ## O que ele le
- *
- * O texto dos literais de cadeia e de modelo (`'users'`, `` `from users` ``),
- * depois de tirar os comentarios. Comentario pode falar de `users` para
- * explicar a separacao, e explicar nao e consultar; literal e por onde o nome
- * da tabela chega ao Kysely e ao SQL cru.
- *
- * ## Tres decisoes que fazem ele valer alguma coisa
- *
- * 1. **Nao achar arquivo reprova.** Zero arquivos em qualquer um dos dois
- *    modulos e diretorio errado ou modulo renomeado, e "nada citado" teria a
- *    mesma cor de "conferi e esta limpo".
- * 2. **As iscas moram aqui e rodam sempre** (`autoTeste`): uma consulta a
- *    `users` em `admin-access`, uma a `admin_accounts` em `identity`, e um
- *    comentario que cita `users` e NAO pode ser acusado. Se qualquer uma sair
- *    do esperado, o portao reprova a si mesmo.
- * 3. **O alcance e o nome literal**, e isso fica dito: um nome de tabela
- *    montado por concatenacao passa. O que fecha esse caminho e a fronteira de
- *    modulo do ESLint (`admin-access` nao alcanca os repositorios de
- *    `identity`) e a revisao.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -57,15 +30,7 @@ export const REGRAS: readonly Regra[] = [
   },
 ];
 
-/**
- * O texto dos literais de um arquivo TypeScript, sem os comentarios.
- *
- * Maquina de estados de um passo: codigo, comentario de linha, comentario de
- * bloco, cadeia com aspas simples ou duplas, e modelo com crase. Expressao
- * regular tambem e literal no TypeScript, mas nome de tabela nao chega ao banco
- * por ela, e tratar `/` como divisao aqui so arrisca ler um pedaco de regex
- * como codigo, o que nunca esconde literal nenhum.
- */
+/** O texto dos literais de um arquivo TypeScript, sem os comentarios. */
 export function literaisDe(texto: string): string[] {
   const literais: string[] = [];
   let i = 0;
@@ -164,10 +129,6 @@ export function arquivosReais(raiz: string): (modulo: string) => Arquivo[] {
     return saida;
   };
 }
-
-// ---------------------------------------------------------------------------
-// AS ISCAS
-// ---------------------------------------------------------------------------
 
 const ISCAS: Readonly<Record<string, readonly Arquivo[]>> = {
   'admin-access': [

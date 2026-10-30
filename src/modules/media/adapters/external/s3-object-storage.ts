@@ -1,30 +1,4 @@
-/**
- * Armazenamento de objeto pela API S3, com assinatura V4 escrita aqui.
- *
- * **Este é o único arquivo do sistema que sabe que existe S3**, e é por isso que
- * ele mora em `adapters/external/` — o único lugar onde o ADR-0007 permite falar
- * com provedor. Nenhum outro módulo o importa; todos enxergam a porta.
- *
- * ## Por que a assinatura é escrita à mão, e não trazida por SDK
- *
- * O projeto tem quatro dependências de produção (`fastify`, `kysely`, `pg`,
- * `yaml`). O SDK da AWS traria dezenas de pacotes transitivos para usar três
- * operações, e — pior — o nome do provedor entraria em `package.json`, que é o
- * lugar mais difícil de tirar depois. O ADR-0007 mantém a porta aberta para S3,
- * GCS em modo de interoperabilidade, R2 ou Spaces; a assinatura V4 é a **mesma**
- * nos quatro, porque é isso que "compatível com S3" significa.
- *
- * São ~150 linhas de aritmética bem documentada, contra um acoplamento que o
- * ADR existe para evitar. A decisão pode se inverter no dia em que precisarmos
- * de upload multiparte ou de replicação — e nesse dia ela se inverte AQUI, sem
- * tocar em mais nada.
- *
- * ## O que este arquivo não faz
- *
- * Não recebe bytes de foto pela rota HTTP. `put` e `get` existem para o WORKER,
- * que precisa ler o original para validar e gravar as derivadas. O caminho do
- * usuário é: pede autorização → envia direto ao armazenamento → confirma.
- */
+/** Armazenamento de objeto pela API S3, com assinatura V4 escrita aqui. */
 import { createHash, createHmac } from 'node:crypto';
 import type {
   AutorizacaoDeEnvio,
@@ -39,20 +13,7 @@ import { ehTipoAceito, ehTipoDeDerivada } from '../../domain/chave-de-objeto.js'
 import type { ObjectStorageConfig } from '../../../../shared/config/app-config.js';
 import type { AbsoluteUrl, ObjectKey } from '../../../../shared/types/brands.js';
 
-/**
- * O DIALETO da assinatura V4 (ADR-0007 Emenda 1). O algoritmo e o mesmo nos
- * dois -- HMAC-SHA256 sobre o pedido canonico, chave derivada por data, regiao
- * e servico --, e o que muda e so nome: o prefixo dos campos e cabecalhos, o
- * prefixo da chave derivada, o servico e o terminador do escopo.
- *
- * `amz` e o da API S3 (MinIO, e a interoperabilidade dos gerenciados para
- * pedido comum e URL assinada). `goog` existe por causa de UMA operacao: o
- * envio por formulario com politica. A documentacao do XML API do armazenamento
- * gerenciado descreve esse formulario SO com `x-goog-algorithm`,
- * `x-goog-credential`, `x-goog-date` e `x-goog-signature`, e nao aceita o
- * campo de criptografia no servidor (la a criptografia em repouso e sempre
- * ligada). Assinar o formulario no dialeto errado e 403 no primeiro envio.
- */
+/** O DIALETO da assinatura V4 (ADR-0007 Emenda 1). */
 export type DialetoDeAssinatura = 'amz' | 'goog';
 
 interface Dialeto {
@@ -64,7 +25,7 @@ interface Dialeto {
   readonly campo: string;
   /** Prefixo dos parametros da URL assinada. */
   readonly parametro: string;
-  /** O formulario exige criptografia no servidor declarada? (so `amz`). */
+  /** O formulario exige criptografia no servidor declarada? */
   readonly exigeCriptografiaNoFormulario: boolean;
 }
 
@@ -105,21 +66,14 @@ function sha256Hex(dado: Buffer | string): string {
   return createHash('sha256').update(dado).digest('hex');
 }
 
-/**
- * A cadeia de derivação da V4: data, região, serviço, `aws4_request`.
- *
- * Quatro HMACs encadeados, e a ordem é normativa. Ela existe para que a chave
- * que assina um pedido **não sirva** para outra data, outra região ou outro
- * serviço: uma assinatura vazada expira com o dia.
- */
+/** A cadeia de derivação da V4: data, região, serviço, `aws4_request`. */
 function chaveDeAssinatura(d: Dialeto, secret: string, dataCurta: string, regiao: string): Buffer {
   return hmac(hmac(hmac(hmac(`${d.prefixoDaChave}${secret}`, dataCurta), regiao), d.servico), d.terminador);
 }
 
 /**
  * `AbortSignal.timeout` rejeita com `DOMException` de nome `TimeoutError`, no
- * `fetch` e também na leitura do corpo que ele já tinha começado. É só esse
- * nome que vira erro de prazo; qualquer outra falha segue como veio.
+ * `fetch` e também na leitura do corpo que ele já tinha começado.
  */
 function ehEstouroDePrazo(erro: unknown): boolean {
   return erro instanceof Error && erro.name === 'TimeoutError';
@@ -130,13 +84,7 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
   const ALGORITMO = d.algoritmo;
   const escopoDe = (curto: string): string => `${curto}/${config.region}/${d.servico}/${d.terminador}`;
   const chaveDe = (curto: string): Buffer => chaveDeAssinatura(d, config.secretAccessKey, curto, config.region);
-  /**
-   * Roda a chamada inteira — pedido E leitura da resposta — sob um prazo só.
-   *
-   * O sinal vai para o `fetch` e continua valendo depois dele: o `arrayBuffer()`
-   * do GET lê pelo mesmo corpo, então um corpo que trava no meio também aborta.
-   * Um prazo que parasse no cabeçalho deixaria exatamente esse caso pendurado.
-   */
+  /** Roda a chamada inteira — pedido E leitura da resposta — sob um prazo só. */
   const comPrazo = async <T>(
     operacao: OperacaoDeRede,
     prazoMs: number,
@@ -153,18 +101,9 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
   const bucketDa = (classe: Classe): string =>
     classe === 'privado' ? config.bucketPrivate : config.bucketPublic;
 
-  /**
-   * O endereço do bucket.
-   *
-   * `forcePathStyle` não é preferência: o MinIO serve por caminho
-   * (`http://host:9000/bucket/chave`) e a maioria dos gerenciados serve por
-   * subdomínio (`https://bucket.host/chave`). O contrato do ADR-0007 é que isso
-   * seja **variável de ambiente**, e não um `if` por provedor espalhado no código.
-   */
+  /** O endereço do bucket. */
   const baseDoBucket = (classe: Classe, paraOCliente = false): URL => {
     const bucket = bucketDa(classe);
-    // Para o cliente, o endereco publico; para o worker, o interno. Ver
-    // `ObjectStorageConfig.publicEndpoint`.
     const endpoint = paraOCliente ? (config.publicEndpoint ?? config.endpoint) : config.endpoint;
     const base = new URL(endpoint ?? `https://${SERVICO}.${config.region}.amazonaws.com`);
     if (config.forcePathStyle) {
@@ -182,7 +121,7 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     return url;
   };
 
-  /** Assina um pedido comum (cabeçalho `Authorization`). Usado pelo worker. */
+  /** Assina um pedido comum (cabeçalho `Authorization`). */
   const assinar = (
     metodo: string,
     url: URL,
@@ -226,22 +165,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
 
   return {
     createUploadIntent(pedido: PedidoDeEnvio): Promise<AutorizacaoDeEnvio> {
-      // O `contentType` entra na POLÍTICA ASSINADA algumas linhas abaixo, como
-      // condição e como campo do formulário. Assinado, ele deixa de ser um
-      // valor e vira PERMISSÃO: o armazenamento aceita o envio porque a nossa
-      // assinatura disse que estava certo, e não tem como recusar depois.
-      //
-      // A conferência existia só em `media-service.ts`, o único chamador de
-      // hoje. Defesa em um call site vale enquanto ninguém escreve o segundo —
-      // e um `image/svg+xml` que chegasse por ele seria documento com script
-      // hospedado por nós, que é exatamente o que o critério 22 proíbe na
-      // entrada. É a mesma recusa que o `put` já faz do lado da gravação
-      // (BICHUS-133), por IGUALDADE e nunca por prefixo.
-      //
-      // REJEITA em vez de lançar: a porta declara `Promise`, e um método que
-      // devolve promessa mas lança de forma síncrona escapa do `.catch()` de
-      // quem o chamar sem `await`. A recusa precisa chegar pelo caminho que o
-      // contrato promete.
       if (!ehTipoAceito(pedido.contentType)) {
         return Promise.reject(
           new Error(
@@ -258,31 +181,13 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
         ? { [`${d.campo}server-side-encryption`]: 'AES256' }
         : {};
 
-      // A POLÍTICA É O CONTRATO COM O ARMAZENAMENTO, e cada condição abaixo é
-      // uma coisa que o cliente NÃO consegue fazer com esta autorização.
       const politica = {
         expiration: expiraEm.toISOString(),
         conditions: [
           { bucket: bucketDa(pedido.classe) },
-          // Chave EXATA, não prefixo: com prefixo, quem recebe a autorização de
-          // uma foto pode sobrescrever qualquer outra abaixo dele.
           { key: pedido.chave },
-          // Igualdade, NUNCA `starts-with: image/` (critério 22): o prefixo
-          // aceitaria `image/svg+xml`, que é documento com script.
           { 'Content-Type': pedido.contentType },
-          // O teto de tamanho vive AQUI e não na aplicação: o backend nunca vê
-          // os bytes, então recusar depois seria recusar o que já foi gravado.
-          // O piso é 1 e não 0: objeto de zero byte é upload que falhou e
-          // passou, e ele chega ao worker como imagem corrompida.
           ['content-length-range', 1, pedido.maxBytes],
-          // Criptografia no servidor, obrigatória pelo critério 22.
-          //
-          // **Ela precisa estar na POLÍTICA e no formulário, e a assimetria não
-          // perdoa:** o campo sem a condição faz o armazenamento recusar o envio
-          // inteiro com `AccessDenied` ("each form field must appear in the list
-          // of policy conditions"), e a condição sem o campo faz o cliente ser
-          // recusado por omitir. Foi assim que esta linha nasceu — o campo entrou
-          // primeiro, a condição não, e o upload voltou 403.
           ...(d.exigeCriptografiaNoFormulario ? [criptografia] : []),
           { [`${d.campo}algorithm`]: ALGORITMO },
           { [`${d.campo}credential`]: credencial },
@@ -316,8 +221,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     getSignedReadUrl(classe, chave, validadeEmSegundos): Promise<AbsoluteUrl> {
       const agora = new Date();
       const { longo, curto } = carimbos(agora);
-      // Assinada com o host PUBLICO: a V4 da leitura assina `host`, e quem a
-      // apresenta e o cliente, pelo nome que ele alcanca.
       const url = urlDoObjeto(classe, chave, true);
       const escopo = escopoDe(curto);
 
@@ -378,15 +281,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     },
 
     async put(classe, chave, bytes, contentType): Promise<void> {
-      // O `contentType` vira o cabeçalho do PUT três linhas abaixo, e é com ele
-      // que o armazenamento devolve o objeto para quem baixar depois. Um
-      // adaptador de imagem que devolvesse `text/html` gravaria uma página
-      // executável servida pelo domínio de mídia — que é separado da origem do
-      // app exatamente para conter XSS.
-      //
-      // A entrada já recusa tipo fora da lista (critério 22, por igualdade e
-      // nunca por prefixo); a gravação não recusava nada. A defesa de um lado
-      // só vale enquanto ninguém acrescenta um caminho do outro.
       if (!ehTipoDeDerivada(contentType)) {
         throw new Error(
           `PUT recusado: content-type ${JSON.stringify(contentType)} não é tipo de derivada.`,
@@ -412,7 +306,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
           headers: assinar('DELETE', url, undefined, new Date()),
           signal,
         });
-        // 404 no apagar é sucesso: o estado desejado é "não existe".
         if (!resposta.ok && resposta.status !== 404) {
           throw new Error(`DELETE ${String(resposta.status)} no armazenamento`);
         }

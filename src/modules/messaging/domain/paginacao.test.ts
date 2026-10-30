@@ -1,9 +1,4 @@
-/**
- * O cursor, e o teto de `limit` que o servidor impõe.
- *
- * Coleção sem paginação é incidente esperando a base crescer, e cursor que
- * vira `NaN` é o mesmo incidente com a página inteira na resposta.
- */
+/** O cursor, e o teto de `limit` que o servidor impõe. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,8 +31,6 @@ void describe('cursor ilegível é tratado como ausente, nunca como zero', () =>
   });
 
   void it('data inválida não vira `NaN` e não vira início da lista', () => {
-    // Este é o caso caro: um `new Date('xyz')` comparado no `WHERE` devolve
-    // linha nenhuma, ou, dependendo do driver, a tabela inteira.
     const torto = Buffer.from(`nao-e-data|${ID}`, 'utf8').toString('base64url');
     assert.equal(decodificarCursor(torto), undefined);
   });

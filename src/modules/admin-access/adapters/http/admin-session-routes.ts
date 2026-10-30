@@ -1,12 +1,4 @@
-/**
- * As rotas da sessao administrativa (ADR-0027 item 5), em `/v1/admin`.
- *
- * Nenhuma delas confere papel, `Origin` nem anti-CSRF: isso e da guarda do
- * prefixo, que le `adminRoles` daqui (`shared/http/superficie-administrativa.ts`).
- * O `effects`, o `rateLimit`, o `adminRoles`, o `audit` e o `adminPublic`
- * espelham `api/openapi.yaml`, e `rotas-registradas-contra-o-contrato.test.ts`
- * confere os cinco.
- */
+/** As rotas da sessao administrativa (ADR-0027 item 5), em `/v1/admin`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
@@ -82,12 +74,7 @@ export const rotaDeReautenticacaoAdministrativa = defineRoute({
   ],
 });
 
-/**
- * O "nao fui eu" do painel (D62). Sem sessao, como o login, e por isso na lista
- * fechada de operacoes sem sessao; `Origin` exato continua valendo pela guarda.
- * Teto por IP com `log_and_alert`, e nao `deny_429`: recusar trabalharia contra
- * quem a rota protege, e o token de 256 bits e a defesa real.
- */
+/** O "nao fui eu" do painel (D62). */
 export const rotaDoNaoFuiEuAdministrativo = defineRoute({
   operationId: 'disavowAdminSessionAlert',
   method: 'post',
@@ -104,11 +91,7 @@ export interface DependenciasDasRotasDaSessaoAdministrativa {
   readonly contrato: Contrato;
 }
 
-/**
- * O e-mail do corpo, normalizado e em HMAC, como na rota de login do app. O
- * balde existe para e-mail que nao tem conta tambem: o bloqueio que so valesse
- * para conta existente contaria a quem testa quem tem conta (D44).
- */
+/** O e-mail do corpo, normalizado e em HMAC, como na rota de login do app. */
 const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   const corpo = (request.body ?? {}) as { email?: unknown };
   if (typeof corpo.email !== 'string' || corpo.email === '') return undefined;
@@ -116,11 +99,7 @@ const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   return normalizado === '' ? undefined : sigilo.hmac(`admin-email:${normalizado}`);
 };
 
-/**
- * A conta da sessao que a guarda conferiu. A guarda roda antes de todo teto da
- * rota. O prefixo `admin:` e o que impede um balde do painel e um do app de
- * dividirem chave, mesmo que um dia dois UUIDs coincidam (T18, item 20.2).
- */
+/** A conta da sessao que a guarda conferiu. */
 const contaDaSessao: ResolvedorDeDimensao = (request) => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;
@@ -166,7 +145,6 @@ export function registrarRotasDaSessaoAdministrativa(
 
   registrarRota(app, rotaDaSessaoAdministrativa, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const valor = lerCookieDaSessao(request.headers.cookie);
-    // A guarda ja conferiu este mesmo cookie; a ausencia aqui e fiacao quebrada.
     if (valor === undefined) throw new Error('GET /admin/session sem cookie depois da guarda');
     return reply.status(200).send(deps.sessoes.visaoDaSessao(sessaoAdministrativaDe(request), valor));
   });
@@ -201,8 +179,6 @@ export function registrarRotasDaSessaoAdministrativa(
       resolvedores: { account: contaDaSessao },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // O contrato aceita `scope` OU `scopes` (oneOf), e o Ajv ja recusou os
-      // dois juntos e a lista repetida ou vazia.
       const corpo = request.body as {
         password: string;
         scope?: EscopoDeReautenticacaoAdministrativa;

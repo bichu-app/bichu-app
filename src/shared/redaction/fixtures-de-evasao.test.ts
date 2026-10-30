@@ -1,29 +1,6 @@
 /**
  * Os critérios 14 e 15 da BICHUS-43, que são sobre a VERIFICAÇÃO e não sobre a
  * redação.
- *
- * ## Por que as fixtures saíram de dentro do `it(...)`
- *
- * `redigir.test.ts` já exercia as três evasões, e continua exercendo. O que ele
- * não conseguia dar é o que o critério 15 pede: **uma lista que o job possa não
- * encontrar**. Um caso de evasão escrito dentro de um `it(...)` desaparece na
- * primeira reescrita do arquivo, e ninguém percebe, porque a suíte continua
- * verde — a ausência de um caso nunca reprova nada.
- *
- * Então a lista virou dado versionado
- * (`evasoes-da-redacao.fixtures.json`), e este arquivo é o job:
- *
- * 1. **Não achar a lista é REPROVAÇÃO, com o motivo na mensagem.** Verificação
- *    que não consegue verificar precisa reprovar, nunca aprovar. Uma lista
- *    ausente lida como "nenhuma evasão passou" seria confiança falsa, que é pior
- *    que nenhuma verificação — ninguém procura o que acredita já ter.
- * 2. **Menos de três classes é reprovação.** O critério 14 nomeia as três
- *    (largura zero, homoglifo, por extenso) e exige que a esteira reprove se
- *    qualquer uma passar. Uma lista que perdesse uma classe deixaria a esteira
- *    verde sobre um buraco, e o número de casos até subiria.
- * 3. **Metade dos casos é NEGATIVA.** Uma redação que engole "toma 2
- *    comprimidos às 8h" cumpre a promessa de privacidade destruindo a
- *    informação pela qual a mensagem existe.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -34,7 +11,7 @@ import { redigirCanalMediado, type TrechoRedigido } from './redigir.js';
 
 const CAMINHO = resolve(process.cwd(), 'src/shared/redaction/evasoes-da-redacao.fixtures.json');
 
-/** As três que o critério 14 nomeia. Perder qualquer uma é reprovação. */
+/** As três que o critério 14 nomeia. */
 const CLASSES_EXIGIDAS = ['largura_zero', 'homoglifo', 'por_extenso'] as const;
 
 interface Evasao {
@@ -55,13 +32,7 @@ interface Lista {
   readonly negativas: Negativa[];
 }
 
-/**
- * Carrega, ou **reprova com o motivo**.
- *
- * Nenhum caminho daqui devolve lista vazia. Lista vazia comparada com um
- * resultado vazio dá "nenhuma divergência", e é assim que um portão passa a
- * aprovar por não ter tido o que olhar.
- */
+/** Carrega, ou **reprova com o motivo**. */
 function carregar(): Lista {
   let cru: string;
   try {
@@ -103,8 +74,6 @@ void describe('critério 15 — a lista de fixtures é encontrada, ou o job repr
   });
 
   void it('ISCA — um caminho inexistente REPROVA, e diz por quê', () => {
-    // Sem este caso, `carregar` poderia deixar de lançar e ninguém notaria: os
-    // casos acima passariam a medir o silêncio dele.
     assert.throws(
       () => {
         readFileSync(resolve(process.cwd(), 'src/shared/redaction/nao-existe.json'), 'utf8');
@@ -135,7 +104,6 @@ void describe('critério 14 — nenhuma evasão atravessa a redação', () => {
         evasao.espera,
         `a evasão passou inteira: ${evasao.texto}`,
       );
-      // E o dado precisa mesmo ter saído do texto, não só ter sido contado.
       assert.doesNotMatch(texto, /\d{4}/u, `sobrou sequência de dígitos: ${texto}`);
       assert.doesNotMatch(texto, /[０-９]/u, `sobrou dígito de largura plena: ${texto}`);
     });
