@@ -35,6 +35,12 @@
  *    frase passa a valer por confianca. Mais de um e pior -- ja aconteceu aqui
  *    uma substituicao casar no bloco errado porque duas funcoes tinham texto
  *    identico.
+ *      Esta conferencia roda DUAS vezes, e as duas sao necessarias. Antes de
+ *    qualquer coisa ser armada, `conferirAncoras` mede as ancoras de TODAS as
+ *    iscas e reprova nomeando isca e arquivo (veja o comentario dela para o
+ *    que custou aprender isso). Depois, dentro de `exercitar`, a medicao e
+ *    repetida por isca, porque e ela que guarda a janela entre a medicao e a
+ *    escrita no disco.
  * 2. **O SHA-256 do arquivo MUDA**, medido antes e depois. Mesmo hash significa
  *    que nada foi escrito, independente do que o `replace` disse ter feito.
  * 3. **`git diff` NAO e vazio.** Outra testemunha para a mesma pergunta: o hash
@@ -54,8 +60,14 @@
  * quebrada, banco indisponivel e isca pega saem todos diferentes de zero, com
  * a mesma cor.
  *
- *   node infra/integracao/iscas/rodar-iscas.mjs            # as duas
- *   node infra/integracao/iscas/rodar-iscas.mjs sem-envio  # so a que casar
+ *   node infra/integracao/iscas/rodar-iscas.mjs             # todas
+ *   node infra/integracao/iscas/rodar-iscas.mjs sem-envio   # so a que casar
+ *   node infra/integracao/iscas/rodar-iscas.mjs --conferir  # so as ancoras
+ *
+ * `--conferir` mede as ancoras e para: nada e armado e nenhuma pilha sobe. E a
+ * forma barata de descobrir que uma isca perdeu o alvo -- segundos, em vez da
+ * suite inteira. Ele nao substitui a execucao: ancora que casa nao e isca que
+ * pega, e so a suite reprovando prova a segunda coisa.
  *
  * O arquivo alterado e restaurado em qualquer desfecho, inclusive `SIGINT`, e a
  * restauracao confere o SHA-256 de volta: restaurar sem conferir deixaria a
@@ -85,16 +97,34 @@ const ISCAS = [
       'chamada. Nenhum byte de derivada sai do processo, e tudo o mais continua igual -- ' +
       'a foto vira `ready`, o banco grava as chaves, o worker diz `pronta`.',
     alvo: 'src/modules/media/application/processar-foto.ts',
-    // As DUAS linhas juntas, e nao so a do `card`: elas sao quase identicas, e
-    // ancorar numa so casaria uma vez hoje e duas no dia em que alguem
-    // renomear uma variavel. O par e um texto que existe uma vez no arquivo
-    // inteiro -- e a conferencia de casamento unico transforma essa escolha em
-    // garantia em vez de expectativa.
-    trecho: `  await deps.armazenamento.put('publico', chaveDoCard, card.bytes, card.contentType);
-  await deps.armazenamento.put('publico', chaveDoThumb, thumb.bytes, thumb.contentType);`,
-    substituto: `  // ISCA DE BICHUS-245 EM EXECUCAO. Se voce esta lendo isto num arquivo do
-  // repositorio, a isca nao foi restaurada e o defeito desta semana voltou:
-  // a derivada nunca sai do processo.`,
+    // REANCORADA EM 30/10/2026 (BICHUS-320). A ancora anterior eram as DUAS
+    // chamadas de envio literais, uma do `card` e outra do `thumb`. O arquivo
+    // foi refatorado: as derivadas passaram a ser geradas por
+    // `DERIVADAS_DA_FOTO_DE_PET` dentro de um laco, e os dois envios viraram UM
+    // envio por volta. As duas linhas antigas casavam ZERO vez, a isca abortava
+    // aqui, e por abortar na PRIMEIRA ela levava as outras seis com ela.
+    //
+    // O envio UNICO do laco e o que esta isca quer desligar, e ele e melhor que
+    // o par antigo: desligado, NENHUMA derivada sobe -- nao duas delas.
+    //
+    // A ancora leva a linha seguinte (`geradas.set`) de proposito, por duas
+    // razoes. A primeira e unicidade: `await deps.armazenamento.put(` sozinho
+    // nao e um texto generico neste arquivo hoje, mas e curto o bastante para
+    // casar de novo no dia em que outra variante ganhar um envio proprio. A
+    // segunda, e a mais importante, e que o substituto PRECISA repor essa
+    // linha: e ela que mantem a isca medindo o defeito certo, e nao outro.
+    trecho: `    await deps.armazenamento.put('publico', chave, derivada.bytes, derivada.contentType);
+    geradas.set(especificacao.variante, { chave, derivada });`,
+    // O `put` sai e o `geradas.set` FICA. E a diferenca entre reproduzir o
+    // defeito de producao e so quebrar o processamento: a chave continua sendo
+    // gerada, `marcarPronta` continua gravando `card` e `thumb`, o worker
+    // continua dizendo `pronta` e o resultado continua `pronta`. So o byte nao
+    // sobe. Era exatamente assim que o defeito vivia -- tudo com cara de ter
+    // dado certo, e nenhuma foto no balde.
+    substituto: `    // ISCA DE BICHUS-245 EM EXECUCAO. Se voce esta lendo isto num arquivo do
+    // repositorio, a isca nao foi restaurada e o defeito desta semana voltou:
+    // a derivada nunca sai do processo.
+    geradas.set(especificacao.variante, { chave, derivada });`,
     casoQueReprova: '1 — o byte sobe pelo caminho do produto e a derivada volta do balde público',
   },
   {
@@ -366,7 +396,64 @@ function exercitar(isca) {
   }
 }
 
-const filtro = process.argv[2];
+// ===========================================================================
+// A CONFERENCIA PREVIA DAS ANCORAS, ANTES DE ARMAR QUALQUER COISA
+// ===========================================================================
+/**
+ * Mede o `trecho` de CADA isca contra o seu alvo e devolve as que nao casam
+ * exatamente uma vez.
+ *
+ * Isto existe por causa do estado em que este arquivo foi encontrado em
+ * 30/10/2026, e o estado era o pior possivel: a PRIMEIRA isca tinha a ancora
+ * velha. `processar-foto.ts` foi refatorado, a gravacao das derivadas virou
+ * laco, e as duas linhas literais que ela procurava deixaram de existir. A
+ * conferencia de casamento unico dentro de `exercitar` funcionou -- ela abortou
+ * o processo, como manda -- e foi justamente por funcionar que escondeu o
+ * resto: o `process.exit(1)` da primeira isca derrubava a execucao e as outras
+ * SEIS nunca eram medidas. Nenhuma das sete iscas do projeto podia ser armada,
+ * e o sintoma nao se parecia com "ancora velha": parecia um erro no meio da
+ * primeira. Duas frentes tropecaram nisso e uma quase concluiu que o proprio
+ * trabalho tinha quebrado algo.
+ *
+ * A conferencia por isca dentro de `exercitar` continua onde estava, e nao e
+ * redundante: ela guarda a janela entre esta medicao e a escrita no disco. O
+ * que esta funcao acrescenta e a ORDEM e a COMPLETUDE -- todas as ancoras sao
+ * medidas antes de a primeira pilha subir, e uma ancora velha REPROVA nomeando
+ * a isca e o arquivo, em vez de abortar no meio escondendo as seguintes.
+ *
+ * As sete sao medidas mesmo quando o filtro seleciona uma: ancora velha numa
+ * isca que voce nao pediu e exatamente o defeito que ficou invisivel aqui. O
+ * que o filtro muda e o PESO -- quebrada entre as que vao rodar reprova;
+ * quebrada fora delas avisa, porque nao e por ela que voce chamou o script.
+ */
+function conferirAncoras(iscas) {
+  const resultado = [];
+  for (const isca of iscas) {
+    if (!existsSync(isca.alvo)) {
+      resultado.push({ isca, casamentos: null, motivo: 'o arquivo alvo NAO EXISTE' });
+      continue;
+    }
+    const casamentos = readFileSync(isca.alvo, 'utf8').split(isca.trecho).length - 1;
+    const motivo =
+      casamentos === 1
+        ? null
+        : casamentos === 0
+          ? 'a ancora NAO EXISTE MAIS no alvo (o codigo mudou e a isca perdeu o alvo)'
+          : 'a ancora casa em MAIS DE UM lugar (a isca desligaria o mecanismo errado)';
+    resultado.push({ isca, casamentos, motivo });
+  }
+  return resultado;
+}
+
+/** Reprova com mensagem lida, em vez de estourar com erro cru. */
+function reprovar(mensagem) {
+  console.error(`\nANCORA VELHA: ${mensagem}\n`);
+  process.exit(1);
+}
+
+const argumentos = process.argv.slice(2);
+const soConferir = argumentos.includes('--conferir');
+const filtro = argumentos.find((a) => !a.startsWith('--'));
 const aRodar = filtro === undefined ? ISCAS : ISCAS.filter((i) => i.nome.includes(filtro));
 if (aRodar.length === 0) {
   morrer(
@@ -374,6 +461,63 @@ if (aRodar.length === 0) {
       `Filtro que nao casa nada sairia ZERO sem exercitar isca nenhuma, que e a mesma ` +
       `confianca falsa que estas iscas existem para impedir.`,
   );
+}
+
+const conferencia = conferirAncoras(ISCAS);
+const selecionadas = new Set(aRodar.map((i) => i.nome));
+
+console.log(`\nconferencia previa das ancoras das ${String(ISCAS.length)} iscas:`);
+for (const { isca, casamentos, motivo } of conferencia) {
+  const marca = motivo === null ? 'ok  ' : selecionadas.has(isca.nome) ? 'VELHA' : 'velha';
+  const alcance = selecionadas.has(isca.nome) ? 'vai rodar' : 'fora do filtro';
+  console.log(
+    `  [${marca}] ${isca.nome} (${alcance})\n` +
+      `         ${isca.alvo} -- casa ${casamentos === null ? 'arquivo ausente' : String(casamentos)} vez(es)`,
+  );
+}
+
+const quebradasFora = conferencia.filter((c) => c.motivo !== null && !selecionadas.has(c.isca.nome));
+for (const { isca, casamentos, motivo } of quebradasFora) {
+  console.error(
+    `\nAVISO: a isca \`${isca.nome}\` esta com ancora velha em ${isca.alvo} ` +
+      `(casa ${casamentos === null ? 'arquivo ausente' : String(casamentos)} vez(es)): ${motivo}. ` +
+      `Ela esta FORA do filtro desta execucao, entao nao reprova aqui -- mas ela nao pode ser ` +
+      `armada por ninguem enquanto estiver assim.`,
+  );
+}
+
+const quebradasQueVaoRodar = conferencia.filter(
+  (c) => c.motivo !== null && selecionadas.has(c.isca.nome),
+);
+if (quebradasQueVaoRodar.length > 0) {
+  reprovar(
+    `${String(quebradasQueVaoRodar.length)} de ${String(aRodar.length)} isca(s) desta execucao ` +
+      `tem o \`trecho\` desancorado, e nenhuma suite foi executada. Toda isca precisa casar ` +
+      `EXATAMENTE UMA VEZ no seu alvo antes de qualquer coisa ser armada: zero e a isca que ` +
+      `nao morde (a suite fica verde e alguem le isso como prova), mais de um desliga o ` +
+      `mecanismo errado.\n` +
+      quebradasQueVaoRodar
+        .map(
+          ({ isca, casamentos, motivo }) =>
+            `\n  isca:      \`${isca.nome}\`\n` +
+            `  arquivo:   ${isca.alvo}\n` +
+            `  casamentos: ${casamentos === null ? 'arquivo ausente' : String(casamentos)} (precisa ser 1)\n` +
+            `  motivo:    ${motivo}\n` +
+            `  conserto:  releia ${isca.alvo} e reancore o campo \`trecho\` desta isca no codigo\n` +
+            `             como ele e HOJE, sem mudar o que a isca mede.`,
+        )
+        .join('\n'),
+  );
+}
+
+console.log(
+  `\ntodas as ${String(ISCAS.length)} ancoras casam exatamente uma vez. ` +
+    `${String(aRodar.length)} isca(s) a exercitar.`,
+);
+
+if (soConferir) {
+  console.log('`--conferir`: so a conferencia previa. Nada foi armado e nenhuma suite subiu.');
+  process.exit(0);
 }
 
 for (const isca of aRodar) exercitar(isca);
