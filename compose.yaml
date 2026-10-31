@@ -383,6 +383,23 @@ services:
       # `instagram_url` do encontro com ela. Configuracao porque host literal
       # em `src/` reprova no portao de portabilidade.
       INSTAGRAM_PROFILE_BASE_URL: ${INSTAGRAM_PROFILE_BASE_URL:-https://www.instagram.com}
+      # O DESAFIO DO LOGIN DO PAINEL NA PILHA LOCAL, DESLIGADO POR PADRAO
+      # (BICHUS-319). Ver `captcha-de-desenvolvimento-local.ts`.
+      #
+      # `:-` COM PADRAO VAZIO, e o vazio e o ponto: `optionalEnv` devolve
+      # `undefined` para string vazia, e `recusaDoCaptchaDeDesenvolvimento`
+      # trata vazio como AUSENTE. Entao `make up`, a homologacao e producao
+      # continuam com o verificador de verdade, sem ninguem precisar lembrar.
+      #
+      # Quem liga e o ambiente de QUEM CHAMA o `up`: a esteira o faz no `env:`
+      # do passo `sobe a pilha inteira, do zero`, para a suite de integracao
+      # poder exercitar `POST /admin/auth/login`. Esta linha e o encanamento
+      # que torna aquilo possivel SEM passar pelo `.env` do job -- que e
+      # compartilhado por treze passos, um deles o `docker run --env-file .env`
+      # do alvo `prod`, onde a mera presenca da variavel derruba a subida.
+      #
+      # Nao esta no `worker`: ele nao atende login.
+      CAPTCHA_DESENVOLVIMENTO_LOCAL: ${CAPTCHA_DESENVOLVIMENTO_LOCAL:-}
       # `BUILD_COMMIT` NAO ESTA MAIS AQUI, e a ausencia e a correcao.
       #
       # Ate 22/09 ele era declarado como variavel de RUNTIME, com padrao vazio.
