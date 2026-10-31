@@ -161,6 +161,73 @@ jobs:
       - name: as iscas do juizo do alvo prod reprovam
         run: python3 infra/verificacao/verificar_boot_do_alvo_prod.py --autoteste
 
+      # O PORTAO DE SEGREDOS EXISTIA E NAO RODAVA AQUI (PR #124).
+      #
+      # `verificar-segredos-do-gerenciador` nasceu como alvo do `Makefile` e o
+      # autoteste dele entrou em `make verificar`. Mas esta esteira NAO chama o
+      # agregado -- cada portao tem passo proprio -- entao o portao simplesmente
+      # nao rodava em PR nenhum. O defeito que ele existe para pegar ficou vivo
+      # de 08/10 a 29/10: o boot sobrescrevia a chave certa do GCS pela do
+      # MinIO, de 29/09, e TODO envio de foto do app voltava 403. Seis rodadas
+      # de diagnostico.
+      #
+      # AQUI RODA O AUTOTESTE, E NAO A CONFERENCIA DE VERDADE. Medido nesta
+      # maquina, sem credencial do GCP (que e a condicao do runner):
+      #
+      #   --autoteste              exit 0, 66 casos, 0,7 s, sem rede e sem segredo
+      #   (conferencia de verdade) exit 2 INCONCLUSIVO, nomeando cada variavel
+      #   (idem, com `--exigir`)   exit 1 REPROVA
+      #
+      # A conferencia de verdade aqui seria vermelho em todo PR, e vermelho que
+      # nao acusa defeito nenhum e tao inutil quanto verde que nao verifica: ela
+      # precisa das DUAS fontes, e o `.env` da subida e o gerenciador nao estao
+      # ao alcance do runner. Quem sobe chama `make
+      # verificar-segredos-do-gerenciador` com `--exigir`. O que ESTE passo
+      # prova e que o juizo continua ENXERGANDO -- isca igual aprova,
+      # divergencia plantada reprova nomeando a variavel.
+      #
+      # INCONCLUSIVO EM SILENCIO E O QUE NAO PODE ACONTECER, e o `2` abaixo NAO
+      # e ramo morto: se o argumento `--autoteste` for perdido num rename ou num
+      # erro de digitacao, o script cai em `principal()` e, sem credencial, sai
+      # 2. Medido: `--auto-teste` (com o hifen a mais) sai 2. Sem o `case`, um
+      # dia alguem leria esse 2 como "o portao rodou".
+      #
+      # E o exit vem de uma VARIAVEL, nao de um cano: `| tee` devolveria o
+      # codigo do `tee` e esconderia o do node. `set +e` e proibido neste
+      # repositorio fora de `if: always()`/`if: failure()`
+      # (`verificar_consulta_externa.py`), por isso o codigo e capturado no
+      # cabecalho de um `if`.
+      - name: as iscas do portao de segredos do gerenciador reprovam
+        run: |
+          log="$RUNNER_TEMP/segredos-do-gerenciador-autoteste.log"
+          if node infra/verificacao/verificar-segredos-do-gerenciador.mjs --autoteste > "$log" 2>&1; then
+            codigo=0
+          else
+            codigo=$?
+          fi
+          cat "$log"
+          case "$codigo" in
+            0) ;;
+            2)
+              echo "::error::o portao de segredos saiu 2 (INCONCLUSIVO), e este passo pede o AUTOTESTE, que nunca sai 2. O argumento \`--autoteste\` nao chegou ao script e ele caiu na conferencia de verdade, que nao tem como rodar aqui (sem \`.env\` de subida e sem credencial do GCP). Isto NAO e aprovacao: nenhuma isca foi exercitada"
+              exit 1
+              ;;
+            *)
+              echo "::error::as iscas do portao de segredos nao se comportaram como a regra manda (exit $codigo). Ver a lista de casos acima: cada um nomeia o que deixou de valer"
+              exit 1
+              ;;
+          esac
+          # CONTROLE POSITIVO DO ZERO. Exit 0 sozinho nao prova que os 66 casos
+          # rodaram -- prova que um processo terminou. A linha de veredito so e
+          # impressa depois de o ultimo caso passar, e e ela que este passo
+          # cobra.
+          grep -q '^autoteste APROVADO' "$log" || {
+            echo "::error::o portao de segredos saiu 0 SEM imprimir o veredito do autoteste. Zero sem controle positivo nao e aprovacao: as iscas podem nao ter sido armadas"
+            exit 1
+          }
+          echo "a esteira conferiu o JUIZO do portao de segredos, nao os segredos: a comparacao entre o \`.env\` da subida e o Secret Manager precisa das duas fontes e roda na subida, com \`make verificar-segredos-do-gerenciador\` (\`--exigir\`)." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       # BICHUS-216, as iscas primeiro. Cada caso guardado precisa reprovar pela
       # regra DELE e so por ela: o autoteste compara conjuntos de regras, porque
       # isca que reprova por dois motivos ao mesmo tempo continua verde depois de
