@@ -157,7 +157,7 @@ console.log(`ambiente:  ${ENV} gerado, ${String(conferidas)} variaveis exigidas 
 // suite precisa migrar do zero para provar o que ela afirma sobre o esquema.
 compose(['down', '-v', '--remove-orphans', '--timeout', '5'], { stdio: 'ignore' });
 
-exigir(compose(['build', 'testes', 'migracao']), 'a construcao da imagem de teste falhou');
+exigir(compose(['build', 'testes', 'migracao', 'api']), 'a construcao da imagem de teste falhou');
 // `objeto` entra aqui e nao so no `depends_on` do `testes` de proposito: com
 // `--wait` a sonda que nao fica verde reprova NESTE passo, com esta mensagem.
 // Deixado so no `depends_on`, um armazenamento que nao sobe apareceria como
