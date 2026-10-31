@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -601,7 +601,8 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # 28/09: `npm run lint` vivia so no `ci.yml`, e `eslint.config.mjs` tem DUAS
 # regras proprias -- `arquitetura/fronteira-de-modulo` e
 # `arquitetura/marca-so-pela-porta` -- que ninguem exercitava desde que a esteira
-# parou. Medido: 590 arquivos lintados, zero mensagens. Lint que nao acha arquivo
+# parou. Medido EM 28/09: 590 arquivos lintados, zero mensagens (hoje sao 845 --
+# a contagem abaixo e a de agora). Lint que nao acha arquivo
 # aprova tudo calado, e por isso o numero de arquivos esta escrito aqui.
 #
 # ELE NAO REPROVA ARVORE SUJA LEGITIMA, e isso foi conferido: o `eslint` nao
@@ -609,8 +610,48 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # rastreado) -- saida 0, e o arquivo nao rastreado foi lintado junto. E a
 # diferenca que custou uma iteracao no portao dos tipos gerados, onde a forma da
 # esteira (`git diff --exit-code`) reprovava quem tinha regerado e nao commitado.
-verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (590 arquivos, `workspace/**` fora do escopo)
+#
+# O ALVO COBRIA 845 ARQUIVOS E DIZIA 590, E NAO COBRIA O PAINEL DE JEITO NENHUM.
+#
+# `eslint.config.mjs` ignora `admin/**` DE PROPOSITO, e o motivo esta escrito la:
+# o painel tem `package.json`, `tsconfig` e `eslint.config.mjs` proprios, e o
+# servico de projeto da raiz nao conhece o tsconfig dele -- o parser morreria
+# antes de qualquer regra. A exclusao esta certa. O que estava errado era o
+# SILENCIO: o alvo se anunciava como "ESLint" e saia 0 com erro real dentro de
+# `admin/`, e quem mexe no painel lia esse verde como "o diff esta limpo".
+#
+# Medido com `console.log` plantado em `admin/src/config.ts`:
+#
+#   `eslint .` na raiz                 exit 0, zero mensagens
+#   `npx eslint admin/src/config.ts`   exit 0 -- "File ignored because of a
+#                                      matching ignore pattern" e WARNING
+#   `cd admin && npm run lint`         exit 1, `no-console` nomeando o arquivo
+#
+# Um portao que precisa que o nome do arquivo seja digitado a mao para acusar
+# nao e portao. A esteira cobria (o job do backoffice roda o lint de la), entao
+# isto nunca foi buraco de esteira -- era armadilha de confianca local, e as
+# armadilhas locais sao as que fazem alguem abrir PR achando que mediu.
+#
+# O CONSERTO E RODAR OS DOIS, e isso foi medido antes de ser escrito: sao dois
+# PROCESSOS de eslint, cada um com a raiz de tsconfig dele (`tsconfigRootDir`
+# aponta para o diretorio do proprio config), e por isso o parser nao morre --
+# o que morreria e um unico `eslint .` tentando cobrir as duas arvores com o
+# servico de projeto da raiz. Raiz 19,4 s + painel 8,1 s, medidos.
+verificar-lint: verificar-lint-do-painel ## ESLint da raiz (845 arquivos) E do painel (143), dois processos; `workspace/**` fora do escopo
 	npm run lint
+
+# Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
+# e ele que `verificar-lint` deixava de fora.
+#
+# A ausencia de `admin/node_modules` REPROVA nomeando a receita, em vez de sair
+# 127 ("eslint: command not found") parecendo defeito de codigo. Mesma doutrina
+# do portao de segredos: nao conseguir conferir nao e aprovacao.
+verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (143 arquivos; a raiz ignora `admin/**` e nao tem como lintar)
+	@test -d admin/node_modules || { \
+	  echo "admin/node_modules ausente: o lint do painel NAO RODOU. Rode \`cd admin && npm ci\`."; \
+	  echo "Isto nao e aprovacao -- a raiz ignora \`admin/**\` e ninguem mais confere o painel aqui."; \
+	  exit 1; }
+	cd admin && npm run lint
 
 verificar-passos-condicionais: ## nenhum passo de workflow e pulado por premissa do proprio job, iscas dentro (0,07 s)
 	python3 infra/verificacao/verificar_passos_condicionais.py

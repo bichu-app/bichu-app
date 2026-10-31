@@ -235,6 +235,21 @@ export default tseslint.config(
       // eslint.config.mjs dele (`cd admin && npm run lint`). O servico de
       // projeto daqui nao conhece o tsconfig de admin/ e o parser morreria
       // antes de qualquer regra.
+      //
+      // ESTA EXCLUSAO E CERTA, E ERA SILENCIOSA. Medido: com um `no-console`
+      // plantado em `admin/src/config.ts`, `eslint .` daqui sai 0 e zero
+      // mensagens, e `eslint admin/src/config.ts` -- com o arquivo NOMEADO --
+      // tambem sai 0, porque "File ignored because of a matching ignore
+      // pattern" e WARNING. Quem mexia no painel e rodava `make verificar-lint`
+      // lia esse verde como "o diff esta limpo".
+      //
+      // Quem fecha o buraco agora e o `Makefile`: `verificar-lint` depende de
+      // `verificar-lint-do-painel`, que roda o eslint de dentro de `admin/`,
+      // num processo separado e com o `tsconfigRootDir` de la. Dois processos,
+      // duas raizes de projeto -- e por isso o parser nao morre. Se voltar a
+      // haver arvore ignorada aqui SEM lint proprio em algum lugar, o que ela
+      // produz e exatamente o verde que nao verifica (ver `web/**` acima, que
+      // ainda e esse caso e esta declarado como DIVIDA).
       'admin/**',
       // Iscas do portao de saida: arvores de mentira que existem para ser
       // REPROVADAS por `verificar-colunas-que-nao-saem.sh`. Elas imitam
