@@ -1090,9 +1090,11 @@ void describe('BICHUS-319: o rastro de TODA escrita administrativa, pela rota e 
             `\`${'CAPTCHA_DESENVOLVIMENTO_LOCAL'}=aprovar-token-de-desenvolvimento\` no ` +
             `ambiente DELA. São DUAS pilhas, e cada uma se liga no seu lugar: o ` +
             `\`environment:\` do serviço \`api\` em ` +
-            `\`infra/integracao/compose.integracao.yaml\` (worktree) e o \`.env\` do ` +
-            `passo \`ambiente de teste\` do job \`integracao\` de ` +
-            `\`.github/workflows/ci.yml\` (esteira). ` +
+            `\`infra/integracao/compose.integracao.yaml\` (worktree) e o \`env:\` do ` +
+            `passo \`sobe a pilha inteira, do zero\` do job \`integracao\` de ` +
+            `\`.github/workflows/ci.yml\` (esteira), que o compose da raiz interpola ` +
+            `no serviço \`api\`. NÃO ponha no \`.env\` do job: treze passos leem aquele ` +
+            `arquivo, e a presença da variável derruba o alvo \`prod\`. ` +
             `\`src/shared/config/captcha-nas-duas-pilhas.test.ts\` reprova quando as ` +
             `duas divergem; se ele passou e este caso chegou aqui, a api que atendeu ` +
             `não é a da pilha medida.`,

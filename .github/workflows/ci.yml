@@ -967,33 +967,6 @@ jobs:
           # que e o comportamento certo: ela e a UNICA autenticacao do webhook
           # de entrega, e `app-config.ts` recusa menos de 32 bytes.
           sed -i "s|^MAIL_WEBHOOK_SECRET=.*|MAIL_WEBHOOK_SECRET=ci-descartavel-$(openssl rand -hex 24)|" .env
-          # O DESAFIO DO LOGIN DO PAINEL, NA FORMA LOCAL (BICHUS-319).
-          #
-          # `POST /admin/auth/login` e uma das 34 escritas administrativas que
-          # `tests/integration/rastro-de-toda-escrita-administrativa.test.ts`
-          # exercita, e sem esta linha ela cai no reCAPTCHA Enterprise de
-          # verdade e responde 403 `captcha-rejected`. Foi exatamente o que
-          # aconteceu na execucao 124430445974: 877 de 878, e o unico caso
-          # vermelho era este. A variavel estava no `environment:` do servico
-          # `api` de `infra/integracao/compose.integracao.yaml` -- e ESTE job
-          # nao usa aquele arquivo. Ele usa o `compose.yaml` da raiz com este
-          # `.env`.
-          #
-          # NAO E AFROUXAMENTO, e a guarda de producao continua mandando:
-          # `recusaDoCaptchaDeDesenvolvimento` (src/shared/config/env.ts)
-          # DERRUBA A SUBIDA se esta variavel aparecer com
-          # `ENVIRONMENT` diferente de `dev`, com `NODE_ENV=production` ou com
-          # host que nao e local em `PUBLIC_BASE_URL`/`ADMIN_ORIGIN`. O `.env`
-          # deste job sai do `.env.example`, que tem `ENVIRONMENT=dev`,
-          # `PUBLIC_BASE_URL=http://localhost:3000` e
-          # `ADMIN_ORIGIN=http://localhost:5173`: os tres locais. No dia em que
-          # deixarem de ser, a api NAO sobe -- e a reprovacao diz o porque, em
-          # vez de o login passar a aprovar um token fixo em silencio.
-          #
-          # `src/shared/config/captcha-nas-duas-pilhas.test.ts` reprova se esta
-          # linha e a do compose da pilha efemera divergirem.
-          sed -i 's|^CAPTCHA_DESENVOLVIMENTO_LOCAL=.*|CAPTCHA_DESENVOLVIMENTO_LOCAL=aprovar-token-de-desenvolvimento|' .env
-          grep -q '^CAPTCHA_DESENVOLVIMENTO_LOCAL=' .env || echo 'CAPTCHA_DESENVOLVIMENTO_LOCAL=aprovar-token-de-desenvolvimento' >> .env
           # Chaves geradas NO JOB e jogadas fora com o runner: chave de
           # assinatura de verdade nunca entra em repositorio nem em log.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null
@@ -1117,6 +1090,42 @@ jobs:
         # quando toda sonda passou. Sem ele, o job ficaria verde com a api
         # morta e a falha apareceria no `curl` de baixo sem dizer qual servico
         # nao subiu.
+        #
+        # O DESAFIO DO LOGIN DO PAINEL, E POR QUE ELE MORA NO `env:` DESTE PASSO
+        # E NAO NO `.env` DO JOB (BICHUS-319).
+        #
+        # `POST /admin/auth/login` e uma das 34 escritas administrativas que
+        # `tests/integration/rastro-de-toda-escrita-administrativa.test.ts`
+        # exercita, e sem o desafio local ela cai no reCAPTCHA Enterprise de
+        # verdade e responde 403 `captcha-rejected` (execucao 124430445974).
+        #
+        # A PRIMEIRA CORRECAO ESCREVEU A VARIAVEL NO `.env` DO JOB, E AQUILO
+        # QUEBROU O ALVO `prod` (execucao 124436463888). Medido: TREZE passos
+        # deste job tocam aquele arquivo, e um deles -- `o alvo de producao
+        # constroi, e morre pelo motivo certo` -- faz
+        # `docker run --env-file .env -e NODE_ENV=production`. A guarda
+        # `recusaDoCaptchaDeDesenvolvimento` entao derrubava o alvo `prod` na
+        # PRESENCA da variavel, antes de ele chegar ao gerenciador de segredos,
+        # e o portao recusou com razao: passo que aprova qualquer morte nao
+        # prova nada. O arquivo compartilhado era largo demais.
+        #
+        # Aqui o valor alcanca UM processo: a api que o `up` abaixo cria. Ele
+        # entra pelo `environment:` do servico `api` em `compose.yaml`, que o
+        # declara como `${CAPTCHA_DESENVOLVIMENTO_LOCAL:-}` -- VAZIO por
+        # padrao, e vazio a guarda trata como ausente. Fora deste passo nada
+        # muda: `.env` fica limpo, o `docker run` do alvo `prod` nao o recebe,
+        # `make up` e a homologacao continuam sem o desafio.
+        #
+        # A guarda de producao NAO foi tocada e continua mandando: se
+        # `ENVIRONMENT` sair de `dev` ou `PUBLIC_BASE_URL`/`ADMIN_ORIGIN`
+        # deixarem de ser host local, a api NAO sobe -- e `--wait` reprova
+        # ESTE passo, dizendo o porque.
+        #
+        # `src/shared/config/captcha-nas-duas-pilhas.test.ts` reprova se esta
+        # linha, a do compose da raiz ou a da pilha efemera divergirem -- e
+        # reprova tambem se a variavel VOLTAR para o `.env` do job.
+        env:
+          CAPTCHA_DESENVOLVIMENTO_LOCAL: aprovar-token-de-desenvolvimento
         run: docker compose --profile dev up -d --wait
 
       - name: as seis migracoes rodaram em banco vazio
