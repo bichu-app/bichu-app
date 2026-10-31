@@ -261,6 +261,12 @@ async function trilhaDa(correlacao: string): Promise<LinhaDaTrilha[]> {
   return linhas;
 }
 
+/** O `slug` do tipo de problema da resposta, quando ela é um problema. */
+function problemaDe(resposta: Resposta): string | undefined {
+  const tipo = resposta.corpo?.['type'];
+  return typeof tipo === 'string' ? tipo.split('/').pop() : undefined;
+}
+
 function sufixo(): string {
   return randomUUID().replace(/-/g, '').slice(0, 10);
 }
@@ -1069,6 +1075,29 @@ void describe('BICHUS-319: o rastro de TODA escrita administrativa, pela rota e 
         ...(chamada.semSessao === true ? { comSessao: false } : {}),
         correlacao,
       });
+      // A FRASE QUE A PILHA MERECE, ANTES DO VEREDITO GENÉRICO.
+      //
+      // `captcha-rejected` só chega aqui quando o desafio de desenvolvimento
+      // NÃO está ligado no processo que atendeu -- e aí o 403 fala de captcha
+      // enquanto o problema é fiação de pilha. Foi assim que a execução
+      // 124430445974 reprovou 877 de 878: a variável estava no compose da
+      // pilha efêmera, e o job da esteira sobe o `compose.yaml` da raiz.
+      // Quem montou a pilha merece ler isto, e não deduzir do 403.
+      if (problemaDe(resposta) === 'captcha-rejected') {
+        assert.fail(
+          `${op.operationId}: 403 \`captcha-rejected\`. O desafio de ` +
+            `desenvolvimento do login NÃO está ligado na API que atendeu: falta ` +
+            `\`${'CAPTCHA_DESENVOLVIMENTO_LOCAL'}=aprovar-token-de-desenvolvimento\` no ` +
+            `ambiente DELA. São DUAS pilhas, e cada uma se liga no seu lugar: o ` +
+            `\`environment:\` do serviço \`api\` em ` +
+            `\`infra/integracao/compose.integracao.yaml\` (worktree) e o \`.env\` do ` +
+            `passo \`ambiente de teste\` do job \`integracao\` de ` +
+            `\`.github/workflows/ci.yml\` (esteira). ` +
+            `\`src/shared/config/captcha-nas-duas-pilhas.test.ts\` reprova quando as ` +
+            `duas divergem; se ele passou e este caso chegou aqui, a api que atendeu ` +
+            `não é a da pilha medida.`,
+        );
+      }
       assert.ok(
         resposta.status >= 200 && resposta.status < 300,
         `${op.operationId}: a operação respondeu ${String(resposta.status)} ` +
