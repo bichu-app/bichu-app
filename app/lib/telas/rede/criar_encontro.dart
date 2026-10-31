@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/api_client.dart';
-import '../../api/busca_de_cep.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -95,11 +94,8 @@ class TelaCriarEncontro extends StatefulWidget {
       'é publicado.';
 
   /// Os tres desfechos da busca.
-  static const String buscandoOCep = 'Buscando o endereço…';
-
-  static const String cepNaoEncontrado =
-      'CEP não encontrado. Preencha abaixo.';
-
+  /// O terceiro desfecho da busca de CEP; os outros dois sao iguais nas seis
+  /// telas e vivem em `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaIndisponivel =
       'A busca de CEP está fora do ar. Preencha abaixo.';
 
@@ -140,10 +136,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   final TextEditingController _resumo = TextEditingController();
   final TextEditingController _lugar = TextEditingController();
 
-  /// **Campo de busca, e nao campo do corpo.** Ver o bloco do CEP em
-  /// [TelaCriarEncontro].
-  final TextEditingController _cep = TextEditingController();
-
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final TextEditingController _observacoes = TextEditingController();
@@ -151,12 +143,31 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   /// A sigla do estado escolhida na lista de 27, ou nulo.
   String? _uf;
 
-  /// O que a ultima busca de CEP devolveu.
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que tem CEP.
+  ///
+  /// **O campo de CEP mora nele, e e campo de BUSCA, nao campo do corpo**: o
+  /// que se digita aqui preenche bairro, cidade e estado e nao viaja no
+  /// `AdminNetworkEventInput` -- o CEP do encontro nao e publicado.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      bairro: _bairro,
+      chaveDoBairro: 'place.neighborhood',
+      cidade: _cidade,
+      chaveDaCidade: 'place.city',
+      chaveDoEstado: 'place.state',
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+      aoPreencher: _esquecerOErroDoCampo,
+    ),
+  );
 
-  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
-  String _cepJaBuscado = '';
+  /// Os tres desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: TelaCriarEncontro.buscaIndisponivel,
+  );
 
   DateTime? _comeca;
   DateTime? _termina;
@@ -244,7 +255,7 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     _titulo.dispose();
     _resumo.dispose();
     _lugar.dispose();
-    _cep.dispose();
+    _cepBloco.dispose();
     _bairro.dispose();
     _cidade.dispose();
     _observacoes.dispose();
@@ -260,64 +271,9 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
         _errosDeCampo = const <String, String>{};
       });
 
-  static final RegExp _soDigitos = RegExp(r'[^0-9]');
-
-  /// Busca o endereco do CEP e preenche **so o que estiver VAZIO**.
-  Future<void> _buscarOCep() async {
-    final cep = _cep.text.replaceAll(_soDigitos, '');
-    if (cep.length != 8 || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-      _preencherSeVazio(_bairro, endereco.bairro, 'place.neighborhood');
-      _preencherSeVazio(_cidade, endereco.cidade, 'place.city');
-      final uf = siglaDeEstadoValida(endereco.uf);
-      if (_uf == null && uf != null) {
-        _uf = uf;
-        _errosDeCampo = <String, String>{..._errosDeCampo}
-          ..remove('place.state');
-      }
-    });
-  }
-
-  /// Campo vazio recebe; campo escrito fica.
-  void _preencherSeVazio(
-    TextEditingController campo,
-    String valor,
-    String chave,
-  ) {
-    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
-    campo.text = valor;
+  /// O erro daquele campo sai, porque a busca de CEP acabou de preenche-lo.
+  void _esquecerOErroDoCampo(String chave) {
     _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
-  }
-
-  /// A linha que conta o que a busca fez.
-  Widget _linhaDaBusca(TextTheme textos) {
-    if (_buscandoOCep) {
-      return Text(
-        TelaCriarEncontro.buscandoOCep,
-        style: textos.bodySmall,
-      );
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado => TelaCriarEncontro.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel => TelaCriarEncontro.buscaIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto, style: textos.bodySmall);
   }
 
   _Impedimento? get _impedimento {
@@ -775,23 +731,27 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(
                   rotulo: TelaCriarEncontro.rotuloDoCep,
-                  controlador: _cep,
+                  controlador: _cepBloco.cep,
                   opcional: true,
                   limite: limiteDoCep,
                   tipoDeTeclado: TextInputType.number,
                   ajuda: TelaCriarEncontro.ajudaDoCep,
-                  formatadores: const <TextInputFormatter>[MascaraDeCep()],
+                  formatadores: formatadoresDeCep,
                   correcaoAutomatica: false,
                   habilitado: !enviando,
                   acaoDeTeclado: TextInputAction.next,
                   aoMudar: (valor) {
                     _aoDigitar(valor);
-                    _buscarOCep();
+                    _cepBloco.buscar(Escopo.of(context).buscaDeCep);
                   },
                 ),
-                if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+                if (_cepBloco.temDesfecho) ...<Widget>[
                   const SizedBox(height: BichuEspaco.e2),
-                  _linhaDaBusca(textos),
+                  LinhaDaBuscaDeCep(
+                    bloco: _cepBloco,
+                    textos: _textosDaBusca,
+                    estilo: textos.bodySmall,
+                  ),
                 ],
                 const SizedBox(height: BichuEspaco.e4),
                 BichuField(

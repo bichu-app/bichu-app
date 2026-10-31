@@ -83,12 +83,9 @@ abstract final class TextosDaLocalizacao {
   static const String ajudaDoCep =
       'Preenche bairro, cidade e estado. Você pode mudar depois.';
 
-  /// Os tres desfechos da busca de CEP.
-  static const String buscandoOCep = 'Buscando o endereço…';
-
-  static const String cepNaoEncontrado =
-      'CEP não encontrado. Preencha abaixo.';
-
+  /// O terceiro desfecho da busca de CEP. Os outros dois ("Buscando o
+  /// endereço…" e "CEP não encontrado. Preencha abaixo.") sao IGUAIS nas seis
+  /// telas e vivem em `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaDoCepIndisponivel =
       'Não deu para buscar o CEP agora. Preencha abaixo.';
 }

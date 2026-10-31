@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../api/busca_de_cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -9,6 +8,7 @@ import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
 import '../../formato/cep.dart';
+import '../../formulario/bloco_de_cep.dart';
 import '../../formulario/origem_dos_valores.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/saida_da_mensagem.dart';
@@ -34,7 +34,6 @@ class TelaEnderecoDeEntrega extends StatefulWidget {
 
 class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   final TextEditingController _destinatario = TextEditingController();
-  final TextEditingController _cep = TextEditingController();
   final TextEditingController _logradouro = TextEditingController();
   final TextEditingController _numero = TextEditingController();
   final TextEditingController _complemento = TextEditingController();
@@ -44,16 +43,39 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
 
   String? _uf;
 
-  /// O que a última busca de CEP devolveu.
-  ResultadoDaBusca? _buscaDoCep;
-  bool _buscandoOCep = false;
-
-  /// O CEP que a última busca usou, para não repetir a chamada a cada tecla.
-  String _cepJaBuscado = '';
-
   /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
   /// substituir e o que não pode.
   final OrigemDosValores _origem = OrigemDosValores();
+
+  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
+  /// das outras cinco telas que têm CEP. **O campo de CEP mora nele.**
+  ///
+  /// Antes de 30/10/2026 esta tela tinha a própria cópia do bloco, e a cópia
+  /// **não conferia a sigla do estado**: ela aceitava qualquer par de letras
+  /// que a base de CEP devolvesse. O bloco chama `siglaDeEstadoValida`, e
+  /// agora esta tela também.
+  late final BlocoDeCep _cepBloco = BlocoDeCep(
+    origem: _origem,
+    atualizar: setState,
+    montado: () => mounted,
+    destino: DestinoDoCep(
+      logradouro: _logradouro,
+      chaveDoLogradouro: _CamposDoEndereco.logradouro,
+      bairro: _bairro,
+      chaveDoBairro: _CamposDoEndereco.bairro,
+      cidade: _cidade,
+      chaveDaCidade: _CamposDoEndereco.cidade,
+      chaveDoEstado: _CamposDoEndereco.uf,
+      estadoEscolhido: () => _uf,
+      aoEscolherEstado: (sigla) => _uf = sigla,
+      aoPreencher: _erros.remove,
+    ),
+  );
+
+  /// Os três desfechos da busca, nos textos DESTA tela.
+  static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
+    indisponivel: _TextosDoEndereco.buscaIndisponivel,
+  );
 
   /// O erro de cada campo, pela mesma chave que o servidor usa em
   /// `errors[].field`.
@@ -80,7 +102,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   void dispose() {
     for (final c in <TextEditingController>[
       _destinatario,
-      _cep,
       _logradouro,
       _numero,
       _complemento,
@@ -90,6 +111,7 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     ]) {
       c.dispose();
     }
+    _cepBloco.dispose();
     super.dispose();
   }
 
@@ -121,7 +143,7 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   /// Joga o endereço nos campos.
   void _preencherCom(EnderecoDeEntrega endereco) {
     _destinatario.text = endereco.destinatario;
-    _cep.text = mascaraDeCep(endereco.cep);
+    _cepBloco.cep.text = mascaraDeCep(endereco.cep);
     _logradouro.text = endereco.logradouro;
     _numero.text = endereco.numero;
     _complemento.text = endereco.complemento ?? '';
@@ -142,44 +164,7 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     ]) {
       _origem.anotarDaConta(chave, temValor: valor.isNotEmpty);
     }
-    _cepJaBuscado = endereco.cep;
-  }
-
-  /// Busca o endereço do CEP e preenche o que estiver VAZIO.
-  Future<void> _buscarOCep() async {
-    final cep = cepParaOContrato(_cep.text);
-    if (cep == null || cep == _cepJaBuscado) return;
-    _cepJaBuscado = cep;
-
-    setState(() {
-      _buscandoOCep = true;
-      _buscaDoCep = null;
-    });
-
-    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
-    if (!mounted) return;
-
-    setState(() {
-      _buscandoOCep = false;
-      _buscaDoCep = resposta.resultado;
-      final endereco = resposta.endereco;
-      if (endereco == null) return;
-      _preencherSeVazio(_logradouro, endereco.logradouro, _CamposDoEndereco.logradouro);
-      _preencherSeVazio(_bairro, endereco.bairro, _CamposDoEndereco.bairro);
-      _preencherSeVazio(_cidade, endereco.cidade, _CamposDoEndereco.cidade);
-      if (_origem.podeVirDaBusca(_CamposDoEndereco.uf, vazio: _uf == null) &&
-          endereco.uf.length == 2) {
-        _uf = endereco.uf;
-        _origem.soltar(_CamposDoEndereco.uf);
-        _erros.remove(_CamposDoEndereco.uf);
-      }
-    });
-  }
-
-  /// Preenche o campo quando ele está vazio **ou quando ainda carrega o valor
-  /// que veio da conta**, sem a pessoa ter tocado nele.
-  void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
-    if (_origem.daBusca(campo, valor, chave)) _erros.remove(chave);
+    _cepBloco.naoBuscarDeNovo(endereco.cep);
   }
 
   /// Valida **campo por campo**, e devolve os erros todos de uma vez.
@@ -188,7 +173,7 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     if (_destinatario.text.trim().length < 2) {
       erros[_CamposDoEndereco.destinatario] = _TextosDoEndereco.digiteODestinatario;
     }
-    if (cepParaOContrato(_cep.text) == null) {
+    if (cepParaOContrato(_cepBloco.cep.text) == null) {
       erros[_CamposDoEndereco.cep] = _TextosDoEndereco.cepTemOitoDigitos;
     }
     if (_logradouro.text.trim().length < 2) {
@@ -237,7 +222,7 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
         widget.petId,
         EnderecoDeEntrega(
           destinatario: _destinatario.text.trim(),
-          cep: cepParaOContrato(_cep.text)!,
+          cep: cepParaOContrato(_cepBloco.cep.text)!,
           logradouro: _logradouro.text.trim(),
           numero: _numero.text.trim(),
           complemento: _complemento.text.trim(),
@@ -329,20 +314,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     );
   }
 
-  /// A linha que conta o que a busca de CEP fez.
-  Widget _linhaDaBusca(TextTheme textos) {
-    if (_buscandoOCep) {
-      return Text(_TextosDoEndereco.buscandoOCep, style: textos.bodySmall);
-    }
-    final texto = switch (_buscaDoCep) {
-      ResultadoDaBusca.naoEncontrado => _TextosDoEndereco.cepNaoEncontrado,
-      ResultadoDaBusca.indisponivel => _TextosDoEndereco.buscaIndisponivel,
-      _ => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Text(texto, style: textos.bodySmall);
-  }
-
   @override
   Widget build(BuildContext context) {
     final textos = Theme.of(context).textTheme;
@@ -381,14 +352,19 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
                     _campo(
                       chave: _CamposDoEndereco.cep,
                       rotulo: _TextosDoEndereco.cep,
-                      controlador: _cep,
+                      controlador: _cepBloco.cep,
                       limite: limiteDoCep,
                       tipoDeTeclado: TextInputType.number,
-                      formatadores: const <TextInputFormatter>[MascaraDeCep()],
-                      aoMudarTambem: (_) => _buscarOCep(),
+                      formatadores: formatadoresDeCep,
+                      aoMudarTambem: (_) =>
+                          _cepBloco.buscar(Escopo.of(context).buscaDeCep),
                     ),
-                    if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
-                      _linhaDaBusca(textos),
+                    if (_cepBloco.temDesfecho) ...<Widget>[
+                      LinhaDaBuscaDeCep(
+                        bloco: _cepBloco,
+                        textos: _textosDaBusca,
+                        estilo: textos.bodySmall,
+                      ),
                       const SizedBox(height: BichuEspaco.e4),
                     ],
                     _campo(
@@ -541,9 +517,8 @@ abstract final class _TextosDoEndereco {
   static const String escolhaOEstado = 'Escolha o estado.';
   static const String telefoneIncompleto = 'Digite DDD e número.';
 
-  /// Os três desfechos da busca de CEP.
-  static const String buscandoOCep = 'Buscando o endereço…';
-  static const String cepNaoEncontrado = 'CEP não encontrado. Preencha abaixo.';
+  /// O terceiro desfecho da busca de CEP; os outros dois são iguais nas seis
+  /// telas e vivem em `TextosDaBuscaDeCep`, no bloco compartilhado.
   static const String buscaIndisponivel = 'Não deu para buscar. Preencha abaixo.';
   static const String confiraOsCampos = 'Confira os campos marcados.';
   static const String confiraEsteCampo = 'Confira este campo.';
