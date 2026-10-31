@@ -126,8 +126,3 @@ export function petDo(pedido: Pedido): string {
   return `${pedido.pet.display_name} · ${pedido.pet.species}`;
 }
 
-/** A data como o painel a escreve. */
-export function dataCurta(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pt-BR');
-}

@@ -1,8 +1,16 @@
 /** `Ajuda` — a fila das duvidas mandadas pelo botao `Ajuda` do aplicativo. */
 import { useCallback, useId, useState } from 'react';
 
-import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
+import { Selo } from '../componentes/basicos.tsx';
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
+import {
+  AvisosDaFila,
+  CabecalhoDaFila,
+  dataCurta,
+  ErroDaFila,
+  RodapeDaFila,
+  TabelaDaFila,
+} from '../componentes/casca-de-fila.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
@@ -11,7 +19,6 @@ import {
   atendimentoDe,
   casaComABusca,
   COLUNAS,
-  dataCurta,
   PADROES,
   previa,
   ROTULO_DA_ABA,
@@ -89,8 +96,7 @@ export default function FilaDeAjuda() {
 
   return (
     <>
-      <header className="cab">
-        <h1 className="t-title-lg">Ajuda</h1>
+      <CabecalhoDaFila titulo="Ajuda">
         <p className="t-body c-sec">
           As dúvidas que chegam pelo botão <strong>Ajuda</strong> do aplicativo, da mais nova
           para a mais velha. Nada é enviado quando uma dúvida chega: ela espera aqui.
@@ -102,23 +108,11 @@ export default function FilaDeAjuda() {
           O painel não mostra quem escreveu nem tem como responder: só uma tela deste
           backoffice lê dados de pessoa, e não é esta.
         </p>
-      </header>
+      </CabecalhoDaFila>
 
-      {aviso !== undefined && (
-        <Banner tipo="ok" aoFechar={() => setAviso(undefined)}>
-          {aviso}
-        </Banner>
-      )}
-      {falha !== undefined && <Banner tipo="erro">{falha}</Banner>}
+      <AvisosDaFila aviso={aviso} aoFecharAviso={() => setAviso(undefined)} falha={falha} />
 
-      {estado.fase === 'erro' && (
-        <Banner tipo="erro">
-          Não conseguimos carregar a fila.{' '}
-          <button type="button" className="btn ghost" onClick={recarregar}>
-            Tentar de novo
-          </button>
-        </Banner>
-      )}
+      <ErroDaFila estado={estado} aoTentarDeNovo={recarregar} />
 
       {
 }
@@ -141,88 +135,65 @@ export default function FilaDeAjuda() {
         }
       />
 
-      <table className="tabela">
-        <thead>
-          <tr>
-            {COLUNAS.map((c, i) => (
-              <th key={c === '' ? `acoes-${String(i)}` : c} scope="col">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={COLUNAS} />}
-          {itens.map((duvida) => (
-            <tr key={duvida.ref} data-cy="linha-da-duvida">
-              <td>
-                <span className="t-label-lg">{duvida.subject}</span>
-              </td>
-              <td>
-                <span className="t-body c-sec">{previa(duvida.body)}</span>
-              </td>
-              <td>
-                <span className="t-body c-sec">{dataCurta(duvida.created_at)}</span>
-              </td>
-              <td>
-                {duvida.status === 'attended' ? (
-                  <>
-                    <Selo tipo="ativa" />
-                    <span className="t-body c-sec bloco" data-cy="atendimento">
-                      {atendimentoDe(duvida)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="t-body c-sec">Na fila</span>
-                )}
-              </td>
-              <td>
+      <TabelaDaFila colunas={COLUNAS} estado={estado}>
+        {itens.map((duvida) => (
+          <tr key={duvida.ref} data-cy="linha-da-duvida">
+            <td>
+              <span className="t-label-lg">{duvida.subject}</span>
+            </td>
+            <td>
+              <span className="t-body c-sec">{previa(duvida.body)}</span>
+            </td>
+            <td>
+              <span className="t-body c-sec">{dataCurta(duvida.created_at)}</span>
+            </td>
+            <td>
+              {duvida.status === 'attended' ? (
+                <>
+                  <Selo tipo="ativa" />
+                  <span className="t-body c-sec bloco" data-cy="atendimento">
+                    {atendimentoDe(duvida)}
+                  </span>
+                </>
+              ) : (
+                <span className="t-body c-sec">Na fila</span>
+              )}
+            </td>
+            <td>
+              <button
+                type="button"
+                className="btn ghost"
+                data-cy="abrir-duvida"
+                onClick={() => setAberta(duvida)}
+              >
+                Abrir
+              </button>
+              {duvida.status === 'open' && (
                 <button
                   type="button"
-                  className="btn ghost"
-                  data-cy="abrir-duvida"
-                  onClick={() => setAberta(duvida)}
+                  className="btn sec"
+                  data-cy="marcar-atendida"
+                  aria-busy={marcando === duvida.ref || undefined}
+                  disabled={marcando !== undefined}
+                  onClick={() => void marcarAtendida(duvida)}
                 >
-                  Abrir
+                  Marcar atendida
                 </button>
-                {duvida.status === 'open' && (
-                  <button
-                    type="button"
-                    className="btn sec"
-                    data-cy="marcar-atendida"
-                    aria-busy={marcando === duvida.ref || undefined}
-                    disabled={marcando !== undefined}
-                    onClick={() => void marcarAtendida(duvida)}
-                  >
-                    Marcar atendida
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              )}
+            </td>
+          </tr>
+        ))}
+      </TabelaDaFila>
 
-      {estado.fase === 'pronto' && itens.length === 0 && (
-        <EstadoVazio
-          titulo="Nada por aqui"
-          corpo={busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma dúvida desta página casa com a busca.'}
-          acao="Ver a fila"
-          destino="/ajuda"
-        />
-      )}
-
-      {estado.fase === 'pronto' && estado.itens.length < estado.total && (
-        <button
-          type="button"
-          className="btn sec"
-          data-cy="carregar-mais"
-          aria-busy={estado.carregandoMais || undefined}
-          onClick={carregarMais}
-        >
-          Carregar mais
-        </button>
-      )}
+      <RodapeDaFila
+        estado={estado}
+        visiveis={itens.length}
+        corpoVazio={
+          busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma dúvida desta página casa com a busca.'
+        }
+        destino="/ajuda"
+        aoCarregarMais={carregarMais}
+      />
 
       {aberta && <DialogoDaDuvida duvida={aberta} aoFechar={() => setAberta(undefined)} />}
     </>

@@ -4,8 +4,16 @@
  */
 import { useCallback, useId, useRef, useState } from 'react';
 
-import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
+import { Banner, Selo } from '../componentes/basicos.tsx';
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
+import {
+  AvisosDaFila,
+  CabecalhoDaFila,
+  dataCurta,
+  ErroDaFila,
+  RodapeDaFila,
+  TabelaDaFila,
+} from '../componentes/casca-de-fila.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
@@ -20,7 +28,6 @@ import {
   SELO_DO_PASSO,
   VAZIO_DA_ABA,
   corpoDaEntrega,
-  dataCurta,
   enderecoEmLinhas,
   erroDoRastreio,
   petDo,
@@ -271,20 +278,18 @@ export default function FilaDePlaquinhas() {
 
   return (
     <>
-      <header className="cab">
-        <h1 className="t-title-lg">Plaquinhas da coleira</h1>
+      <CabecalhoDaFila titulo="Plaquinhas da coleira">
         <p className="t-body c-sec">
           Os pedidos do objeto físico. Atender não emite código nenhum: o código da plaquinha já
           existe, e quem o emitiu foi o tutor.
         </p>
-      </header>
+      </CabecalhoDaFila>
 
-      {aviso && (
-        <Banner tipo="ok" aoFechar={() => setAviso(undefined)}>
-          {aviso}
-        </Banner>
-      )}
-      {falhaDaLinha && <Banner tipo="erro">{falhaDaLinha}</Banner>}
+      <AvisosDaFila
+        aviso={aviso}
+        aoFecharAviso={() => setAviso(undefined)}
+        falha={falhaDaLinha}
+      />
 
       {
 }
@@ -322,122 +327,95 @@ export default function FilaDePlaquinhas() {
         }
       />
 
-      {estado.fase === 'erro' && (
-        <Banner tipo="erro">
-          Não conseguimos carregar a fila. <button type="button" className="btn ghost" onClick={recarregar}>Tentar de novo</button>
-        </Banner>
-      )}
+      <ErroDaFila estado={estado} aoTentarDeNovo={recarregar} />
 
-      <table className="tabela">
-        <thead>
-          <tr>
-            {COLUNAS.map((c) => (
-              <th key={c} scope="col">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={COLUNAS} />}
-          {itens.map((pedido) => {
-            const acao = proximaAcao(pedido);
-            return (
-              <tr key={pedido.ref} data-cy="linha-do-pedido">
-                <td>
-                  <span className="t-label-lg">{petDo(pedido)}</span>
-                  {
+      <TabelaDaFila colunas={COLUNAS} estado={estado}>
+        {itens.map((pedido) => {
+          const acao = proximaAcao(pedido);
+          return (
+            <tr key={pedido.ref} data-cy="linha-do-pedido">
+              <td>
+                <span className="t-label-lg">{petDo(pedido)}</span>
+                {
 }
-                  <span className="t-body c-sec bloco">{enderecoEmLinhas(pedido).join(' · ')}</span>
-                  {pedido.notes && <span className="t-body c-sec bloco">“{pedido.notes}”</span>}
-                </td>
-                <td>
-                  {pedido.status === 'declined' ? (
-                    <Selo tipo="retirado" />
-                  ) : (
-                    <>
-                      <Selo tipo={SELO_DO_PASSO[pedido.delivery_state ?? 'requested']} />
-                      <span className="t-body c-sec bloco">
-                        {ROTULO_DO_PASSO[pedido.delivery_state ?? 'requested']}
-                        {pedido.shipped_at ? ` · saiu ${dataCurta(pedido.shipped_at)}` : ''}
-                        {pedido.delivered_at ? ` · chegou ${dataCurta(pedido.delivered_at)}` : ''}
-                      </span>
-                    </>
-                  )}
-                </td>
-                <td>
-                  <span className="t-body">{pedido.tracking_code ?? '—'}</span>
-                  {podeCorrigirRastreio(pedido) && (
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      data-cy="corrigir-rastreio"
-                      onClick={() => setEmEntrega({ pedido, acao: 'rastreio' })}
-                    >
-                      {pedido.tracking_code ? 'Corrigir' : 'Informar'}
-                    </button>
-                  )}
-                </td>
-                <td>{dataCurta(pedido.requested_at)}</td>
-                <td>
-                  {acao === 'atender' && (
-                    <>
-                      <button
-                        type="button"
-                        className="btn pri"
-                        data-cy="atender-pedido"
-                        onClick={() => void atender(pedido)}
-                      >
-                        {ROTULO_DA_ACAO.atender}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn sec"
-                        data-cy="recusar-pedido"
-                        onClick={() => void recusar(pedido)}
-                      >
-                        Recusar
-                      </button>
-                    </>
-                  )}
-                  {(acao === 'despachar' || acao === 'confirmar') && (
+                <span className="t-body c-sec bloco">{enderecoEmLinhas(pedido).join(' · ')}</span>
+                {pedido.notes && <span className="t-body c-sec bloco">“{pedido.notes}”</span>}
+              </td>
+              <td>
+                {pedido.status === 'declined' ? (
+                  <Selo tipo="retirado" />
+                ) : (
+                  <>
+                    <Selo tipo={SELO_DO_PASSO[pedido.delivery_state ?? 'requested']} />
+                    <span className="t-body c-sec bloco">
+                      {ROTULO_DO_PASSO[pedido.delivery_state ?? 'requested']}
+                      {pedido.shipped_at ? ` · saiu ${dataCurta(pedido.shipped_at)}` : ''}
+                      {pedido.delivered_at ? ` · chegou ${dataCurta(pedido.delivered_at)}` : ''}
+                    </span>
+                  </>
+                )}
+              </td>
+              <td>
+                <span className="t-body">{pedido.tracking_code ?? '—'}</span>
+                {podeCorrigirRastreio(pedido) && (
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    data-cy="corrigir-rastreio"
+                    onClick={() => setEmEntrega({ pedido, acao: 'rastreio' })}
+                  >
+                    {pedido.tracking_code ? 'Corrigir' : 'Informar'}
+                  </button>
+                )}
+              </td>
+              <td>{dataCurta(pedido.requested_at)}</td>
+              <td>
+                {acao === 'atender' && (
+                  <>
                     <button
                       type="button"
                       className="btn pri"
-                      data-cy={`entrega-${acao}`}
-                      onClick={() => setEmEntrega({ pedido, acao })}
+                      data-cy="atender-pedido"
+                      onClick={() => void atender(pedido)}
                     >
-                      {ROTULO_DA_ACAO[acao]}
+                      {ROTULO_DA_ACAO.atender}
                     </button>
-                  )}
-                  {acao === undefined && <span className="t-body c-sec">—</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    <button
+                      type="button"
+                      className="btn sec"
+                      data-cy="recusar-pedido"
+                      onClick={() => void recusar(pedido)}
+                    >
+                      Recusar
+                    </button>
+                  </>
+                )}
+                {(acao === 'despachar' || acao === 'confirmar') && (
+                  <button
+                    type="button"
+                    className="btn pri"
+                    data-cy={`entrega-${acao}`}
+                    onClick={() => setEmEntrega({ pedido, acao })}
+                  >
+                    {ROTULO_DA_ACAO[acao]}
+                  </button>
+                )}
+                {acao === undefined && <span className="t-body c-sec">—</span>}
+              </td>
+            </tr>
+          );
+        })}
+      </TabelaDaFila>
 
-      {estado.fase === 'pronto' && itens.length === 0 && (
-        <EstadoVazio
-          titulo="Nada por aqui"
-          corpo={busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhum pedido desta página casa com a busca.'}
-          acao="Ver a fila"
-          destino="/plaquinhas"
-        />
-      )}
-
-      {estado.fase === 'pronto' && estado.itens.length < estado.total && (
-        <button
-          type="button"
-          className="btn sec"
-          data-cy="carregar-mais"
-          aria-busy={estado.carregandoMais || undefined}
-          onClick={carregarMais}
-        >
-          Carregar mais
-        </button>
-      )}
+      <RodapeDaFila
+        estado={estado}
+        visiveis={itens.length}
+        corpoVazio={
+          busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhum pedido desta página casa com a busca.'
+        }
+        destino="/plaquinhas"
+        aoCarregarMais={carregarMais}
+      />
 
       {emEntrega && (
         <DialogoDaEntrega

@@ -1,8 +1,16 @@
 /** A FILA DE MODERACAO no painel: remover o conteudo ou descartar a denuncia. */
 import { useCallback, useId, useRef, useState } from 'react';
 
-import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
+import { Banner, Selo } from '../componentes/basicos.tsx';
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
+import {
+  AvisosDaFila,
+  CabecalhoDaFila,
+  dataCurta,
+  ErroDaFila,
+  RodapeDaFila,
+  TabelaDaFila,
+} from '../componentes/casca-de-fila.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
@@ -17,7 +25,6 @@ import {
   SELO_DA_DECISAO,
   VAZIO_DA_ABA,
   conteudoDo,
-  dataCurta,
   eInsistente,
   erroDoMotivo,
   notaDe,
@@ -254,20 +261,18 @@ export default function FilaDeModeracao() {
 
   return (
     <>
-      <header className="cab">
-        <h1 className="t-title-lg">Moderação</h1>
+      <CabecalhoDaFila titulo="Moderação">
         <p className="t-body c-sec">
           O que a comunidade denunciou. Remover esconde o conteúdo e não apaga nada; descartar
           deixa o conteúdo no ar. As duas pedem motivo, e ninguém é avisado.
         </p>
-      </header>
+      </CabecalhoDaFila>
 
-      {aviso && (
-        <Banner tipo="ok" aoFechar={() => setAviso(undefined)}>
-          {aviso}
-        </Banner>
-      )}
-      {falhaDaLinha && <Banner tipo="erro">{falhaDaLinha}</Banner>}
+      <AvisosDaFila
+        aviso={aviso}
+        aoFecharAviso={() => setAviso(undefined)}
+        falha={falhaDaLinha}
+      />
 
       {
 }
@@ -303,139 +308,109 @@ export default function FilaDeModeracao() {
         }
       />
 
-      {estado.fase === 'erro' && (
-        <Banner tipo="erro">
-          Não conseguimos carregar a fila.{' '}
-          <button type="button" className="btn ghost" onClick={recarregar}>
-            Tentar de novo
-          </button>
-        </Banner>
-      )}
+      <ErroDaFila estado={estado} aoTentarDeNovo={recarregar} />
 
-      <table className="tabela">
-        <thead>
-          <tr>
-            {COLUNAS.map((c) => (
-              <th key={c} scope="col">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={COLUNAS} />}
-          {itens.map((item) => {
-            const conteudo = conteudoDo(item);
-            return (
-              <tr key={`${item.origin}|${item.target_ref}`} data-cy="linha-da-denuncia">
-                <td>
-                  <span className="t-label-lg">{ROTULO_DA_ORIGEM[item.origin]}</span>
-                  <span className="t-body c-sec bloco">{item.subject}</span>
-                  {item.rating !== null && item.rating !== undefined && (
-                    <span className="t-body c-sec bloco">Nota {notaDe(item)}</span>
-                  )}
-                </td>
-                <td>
-                  <span className={conteudo.ausente ? 't-body c-sec' : 't-body'}>
-                    {conteudo.ausente ? conteudo.texto : `“${conteudo.texto}”`}
+      <TabelaDaFila colunas={COLUNAS} estado={estado}>
+        {itens.map((item) => {
+          const conteudo = conteudoDo(item);
+          return (
+            <tr key={`${item.origin}|${item.target_ref}`} data-cy="linha-da-denuncia">
+              <td>
+                <span className="t-label-lg">{ROTULO_DA_ORIGEM[item.origin]}</span>
+                <span className="t-body c-sec bloco">{item.subject}</span>
+                {item.rating !== null && item.rating !== undefined && (
+                  <span className="t-body c-sec bloco">Nota {notaDe(item)}</span>
+                )}
+              </td>
+              <td>
+                <span className={conteudo.ausente ? 't-body c-sec' : 't-body'}>
+                  {conteudo.ausente ? conteudo.texto : `“${conteudo.texto}”`}
+                </span>
+                {item.detail && (
+                  <span className="t-body c-sec bloco" data-cy="relato-do-denunciante">
+                    Relato: “{item.detail}”
                   </span>
-                  {item.detail && (
-                    <span className="t-body c-sec bloco" data-cy="relato-do-denunciante">
-                      Relato: “{item.detail}”
-                    </span>
-                  )}
-                </td>
-                <td>
-                  <span className="t-body">{rotuloDoMotivo(item.reason)}</span>
-                  {item.reasons.length > 1 && (
-                    <span className="t-body c-sec bloco">
-                      {item.reasons.map(rotuloDoMotivo).join(' · ')}
-                    </span>
-                  )}
-                </td>
-                <td data-cy="repeticao">
-                  {
+                )}
+              </td>
+              <td>
+                <span className="t-body">{rotuloDoMotivo(item.reason)}</span>
+                {item.reasons.length > 1 && (
+                  <span className="t-body c-sec bloco">
+                    {item.reasons.map(rotuloDoMotivo).join(' · ')}
+                  </span>
+                )}
+              </td>
+              <td data-cy="repeticao">
+                {
 }
-                  <span className={eInsistente(item) ? 't-label-lg' : 't-body'}>
-                    {repeticaoDe(item)}
+                <span className={eInsistente(item) ? 't-label-lg' : 't-body'}>
+                  {repeticaoDe(item)}
+                </span>
+                {eInsistente(item) && (
+                  <span className="t-body c-sec bloco">Muitos denunciantes diferentes.</span>
+                )}
+              </td>
+              <td>
+                <span className="t-body">{dataCurta(item.first_reported_at)}</span>
+                {item.last_reported_at !== item.first_reported_at && (
+                  <span className="t-body c-sec bloco">
+                    última {dataCurta(item.last_reported_at)}
                   </span>
-                  {eInsistente(item) && (
-                    <span className="t-body c-sec bloco">Muitos denunciantes diferentes.</span>
-                  )}
-                </td>
-                <td>
-                  <span className="t-body">{dataCurta(item.first_reported_at)}</span>
-                  {item.last_reported_at !== item.first_reported_at && (
+                )}
+              </td>
+              <td>
+                {item.resolution ? (
+                  <>
+                    <Selo tipo={SELO_DA_DECISAO[item.resolution]} />
                     <span className="t-body c-sec bloco">
-                      última {dataCurta(item.last_reported_at)}
+                      {ROTULO_DA_DECISAO[item.resolution]} · {dataCurta(item.resolved_at)}
                     </span>
-                  )}
-                </td>
-                <td>
-                  {item.resolution ? (
-                    <>
-                      <Selo tipo={SELO_DA_DECISAO[item.resolution]} />
-                      <span className="t-body c-sec bloco">
-                        {ROTULO_DA_DECISAO[item.resolution]} · {dataCurta(item.resolved_at)}
-                      </span>
-                      {item.resolution_reason && (
-                        <span className="t-body c-sec bloco">“{item.resolution_reason}”</span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {!item.content_removed && (
-                        <button
-                          type="button"
-                          className="btn danger"
-                          data-cy="remover-conteudo"
-                          onClick={() => setEmDecisao({ item, acao: 'remover' })}
-                        >
-                          {BOTAO_DA_ACAO.remover}
-                        </button>
-                      )}
+                    {item.resolution_reason && (
+                      <span className="t-body c-sec bloco">“{item.resolution_reason}”</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {!item.content_removed && (
                       <button
                         type="button"
-                        className="btn sec"
-                        data-cy="descartar-denuncia"
-                        onClick={() => setEmDecisao({ item, acao: 'descartar' })}
+                        className="btn danger"
+                        data-cy="remover-conteudo"
+                        onClick={() => setEmDecisao({ item, acao: 'remover' })}
                       >
-                        {BOTAO_DA_ACAO.descartar}
+                        {BOTAO_DA_ACAO.remover}
                       </button>
-                      {item.content_removed && (
-                        <span className="t-body c-sec bloco">
-                          O conteúdo já está fora do ar. Resta decidir a denúncia.
-                        </span>
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    )}
+                    <button
+                      type="button"
+                      className="btn sec"
+                      data-cy="descartar-denuncia"
+                      onClick={() => setEmDecisao({ item, acao: 'descartar' })}
+                    >
+                      {BOTAO_DA_ACAO.descartar}
+                    </button>
+                    {item.content_removed && (
+                      <span className="t-body c-sec bloco">
+                        O conteúdo já está fora do ar. Resta decidir a denúncia.
+                      </span>
+                    )}
+                  </>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </TabelaDaFila>
 
-      {estado.fase === 'pronto' && itens.length === 0 && (
-        <EstadoVazio
-          titulo="Nada por aqui"
-          corpo={busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma denúncia desta página casa com a busca.'}
-          acao="Ver a fila"
-          destino="/moderacao"
-        />
-      )}
-
-      {estado.fase === 'pronto' && estado.itens.length < estado.total && (
-        <button
-          type="button"
-          className="btn sec"
-          data-cy="carregar-mais"
-          aria-busy={estado.carregandoMais || undefined}
-          onClick={carregarMais}
-        >
-          Carregar mais
-        </button>
-      )}
+      <RodapeDaFila
+        estado={estado}
+        visiveis={itens.length}
+        corpoVazio={
+          busca === '' ? VAZIO_DA_ABA[aba] : 'Nenhuma denúncia desta página casa com a busca.'
+        }
+        destino="/moderacao"
+        aoCarregarMais={carregarMais}
+      />
 
       {emDecisao && (
         <DialogoDaDecisao
