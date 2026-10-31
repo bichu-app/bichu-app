@@ -50,7 +50,15 @@
  *   desta operação".
  * - **negativo (o estado)**: `publishAdminStoreItem` chamada DUAS vezes grava
  *   uma linha só. A segunda responde 200 e não muda coluna nenhuma, e é o
- *   único 200-sem-linha que este portão aceita, nomeado.
+ *   primeiro 200-sem-linha que este portão aceita, nomeado.
+ * - **negativo (o estado)**: `attendAdminHelpRequest` chamada DUAS vezes grava
+ *   uma linha só, e sobre `ref` INEXISTENTE não grava nenhuma. Até 31/10/2026
+ *   ela gravava nos dois casos -- a segunda chamada com
+ *   `before.status: 'attended'`, e o 404 com um `resource_id` que não existe --,
+ *   medido pela rota e lendo a tabela. É o inverso do defeito que originou este
+ *   arquivo: trilha SEM mudança nenhuma, na única prova de quem fez o quê no
+ *   painel. A operação continua idempotente com 200, como o contrato promete em
+ *   texto; o que deixou de existir é a linha.
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
@@ -1165,6 +1173,58 @@ void describe('BICHUS-319: o rastro de TODA escrita administrativa, pela rota e 
     assert.ok(
       linhasAchadas > 0,
       'nenhuma linha de trilha foi achada no arquivo inteiro: a consulta não mede nada.',
+    );
+  });
+
+  void it('200 sem linha, nomeado: marcar dúvida JÁ atendida não grava de novo', async () => {
+    const ref = await duvidaDeAjuda();
+    const primeira = randomUUID();
+    const marcada = await chamar('POST', `/admin/help-requests/${ref}/attendance`, {
+      correlacao: primeira,
+    });
+    assert.equal(marcada.status, 200);
+    assert.equal(marcada.corpo?.['status'], 'attended');
+    assert.equal((await trilhaDa(primeira)).length, 1, 'a primeira marcação não gravou');
+
+    const segunda = randomUUID();
+    const denovo = await chamar('POST', `/admin/help-requests/${ref}/attendance`, {
+      correlacao: segunda,
+    });
+    assert.equal(
+      denovo.status,
+      200,
+      'marcar de novo devia ser idempotente: o contrato promete `200` com a linha ' +
+        'como ela está, e recusa o `409` em texto ("obrigaria o painel a recarregar ' +
+        'para descobrir que o trabalho já estava feito").',
+    );
+    assert.equal(
+      denovo.corpo?.['attended_at'],
+      marcada.corpo?.['attended_at'],
+      'a segunda chamada trocou o instante do atendimento, e o contrato diz que ela ' +
+        'não troca quem marcou nem quando.',
+    );
+    assert.deepEqual(
+      await trilhaDa(segunda),
+      [],
+      'marcar dúvida JÁ atendida gravou linha. Não mudou coluna nenhuma: a linha ' +
+        'gravava `before.status: "attended"` e `after.status: "attended"` -- trilha ' +
+        'afirmando mudança onde não houve, na tabela que é a única prova de autoria ' +
+        'do painel.',
+    );
+  });
+
+  void it('404 sem linha: atender dúvida que não existe não grava trilha', async () => {
+    const correlacao = randomUUID();
+    const r = await chamar('POST', `/admin/help-requests/${refOpaca()}/attendance`, {
+      correlacao,
+    });
+    assert.equal(r.status, 404, `esperado 404, veio ${String(r.status)} ${JSON.stringify(r.corpo)}`);
+    assert.deepEqual(
+      await trilhaDa(correlacao),
+      [],
+      'a operação respondeu 404 e gravou linha em `audit.events`, com `resource_id` ' +
+        'de um `ref` que não existe. Trilha de operação que não aconteceu é pior que ' +
+        'trilha sem mudança: ela inventa o recurso.',
     );
   });
 
