@@ -564,7 +564,7 @@ void main() {
       // nenhum dos tres**, que e a segunda metade da afirmacao: o campo
       // realmente substitui os tres teclados.
       await digitar(TelaCriarEncontro.rotuloDoCep, '22041001');
-      await evento.escolherComecoAmanha(tester);
+      await evento.escolherComecoNoMesSeguinte(tester);
       await rolarAte(
         tester,
         find.text(TelaCriarEncontro.rotuloDeMarcar),
