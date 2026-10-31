@@ -928,27 +928,76 @@ Future<void> preencherOMinimo(WidgetTester tester) async {
   // lista mostra o nome e guarda a sigla, e o caso continua afirmando `RJ` no
   // corpo que sai -- e e o corpo que importa.
   await escolherEstadoNaLista(tester, 'RJ', scrollable: corpoDoFormulario);
-  await escolherComecoAmanha(tester);
+  await escolherComecoNoMesSeguinte(tester);
 }
 
-/// Escolhe o começo no dia seguinte, pelos dois seletores do Flutter.
+/// Escolhe o começo no DIA 1 DO MÊS SEGUINTE, pelos dois seletores do Flutter.
 ///
 /// Tocar só nos dois `OK` escolhe HOJE e a hora de AGORA, que a tela recusa
 /// (ver [preencherOMinimo]). O relógio não dá para fixar por aqui: a rota
 /// monta `const TelaCriarEncontro()` (`rotas.dart`, linha 565) e o `agora` do
 /// app não chega até ela, então a escolha é no calendário.
-Future<void> escolherComecoAmanha(WidgetTester tester) async {
+///
+/// **Avança um mês SEMPRE, e não só na virada.** A forma anterior escolhia
+/// amanhã e só tocava no `>` quando amanhã caía no mês seguinte -- um dia por
+/// mês. Nos outros trinta o ramo não rodava, e por isso o finder inglês
+/// `find.byTooltip('Next month')` ficou errado desde que foi escrito e só
+/// reprovou em 31/10/2026, na esteira, levando dezessete casos em cinco
+/// arquivos pelo mesmo helper. Dia 1 do mês seguinte é sempre futuro
+/// (`firstDate: agora`) e está sempre dentro de `lastDate` (`agora + 365
+/// dias`, `criar_encontro.dart`, `_escolherQuando`), então o MESMO caminho
+/// roda em toda execução, todo dia -- e um dia por mês deixa de ser o único
+/// em que ele é medido.
+///
+/// **O tooltip sai de `MaterialLocalizations`, e não escrito à mão.** A
+/// árvore do app é `pt_BR` (`app.dart`: `GlobalMaterialLocalizations.delegates`
+/// e `supportedLocales: [Locale('pt', 'BR')]`), então o texto renderizado é
+/// `Próximo mês` e não `Next month`. Cravar `Próximo mês` aqui repetiria o
+/// mesmo defeito em outro idioma: o `IconButton` do Flutter usa
+/// `_localizations.nextMonthTooltip` (`calendar_date_picker.dart`), e é desse
+/// mesmo getter que o esperado vem. (Cuidado ao sondar isto: num
+/// `MaterialApp` pelado, sem os delegates, o tooltip É `Next month`. A sonda
+/// tem de ser dentro da árvore de verdade.)
+Future<void> escolherComecoNoMesSeguinte(WidgetTester tester) async {
   await rolarAte(tester, find.text('Começa'), scrollable: corpoDoFormulario);
   await tocar(tester, find.text('Começa'));
-  final hoje = DateTime.now();
-  final amanha = hoje.add(const Duration(days: 1));
-  // Virada de mês: o grid abre no mês de HOJE e amanhã pode estar no
-  // seguinte. Sem este passo o caso reprovaria um dia por mês, e teste que
-  // falha por causa do calendário é pior que teste que não existe.
-  if (amanha.month != hoje.month) {
-    await tocar(tester, find.byTooltip('Next month'));
-  }
-  await tocar(tester, find.text('${amanha.day}'));
+
+  final seletorDeDia = find.byType(DatePickerDialog);
+  expect(
+    seletorDeDia,
+    findsOneWidget,
+    reason: 'REPROVA: tocar em `Começa` não abriu o seletor de dia, então '
+        'não há de onde ler o idioma da árvore.',
+  );
+  final proximoMes =
+      MaterialLocalizations.of(tester.element(seletorDeDia)).nextMonthTooltip;
+
+  final avancarUmMes = find.byTooltip(proximoMes);
+  expect(
+    avancarUmMes,
+    findsOneWidget,
+    reason: 'REPROVA: o `>` de avançar um mês não casou EXATAMENTE uma vez '
+        'pelo tooltip `$proximoMes`, que é o que '
+        '`MaterialLocalizations.nextMonthTooltip` devolve nesta árvore. '
+        'Zero casamentos significa que o botão saiu, mudou de forma, ou que '
+        'o mês exibido já é o último permitido por `lastDate` -- aí o Flutter '
+        'põe o tooltip como `null`. Esta afirmação existe para reprovar '
+        'DIZENDO o que mudou: sem ela, o toque estoura em `Bad state: No '
+        'element`, que não diz nada.',
+  );
+  await tocar(tester, avancarUmMes);
+
+  final diaUm = find.text('1');
+  expect(
+    diaUm,
+    findsOneWidget,
+    reason: 'REPROVA: `1` não casou EXATAMENTE uma vez no grid do mês '
+        'seguinte. O cabeçalho em pt_BR escreve a data por extenso '
+        '(`dom., 1 de nov.`), que não casa exato, então uma segunda casa '
+        'significa que o seletor passou a mostrar dias de outro mês junto.',
+  );
+  await tocar(tester, diaUm);
+
   await tocar(tester, find.text('OK'));
   await tocar(tester, find.text('OK'));
 }
