@@ -258,7 +258,7 @@ async function trilhaDa(correlacao: string): Promise<LinhaDaTrilha[]> {
     ])
     .where('correlation_id', '=', correlacao)
     .execute();
-  return linhas as LinhaDaTrilha[];
+  return linhas;
 }
 
 function sufixo(): string {
