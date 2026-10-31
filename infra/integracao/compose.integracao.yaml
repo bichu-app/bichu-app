@@ -307,6 +307,17 @@ services:
       NODE_ENV: development
       # A API do mailpit, que e outra porta que a SMTP de MAIL_PORT.
       MAILPIT_API_PORT: "8025"
+      # A API DE VERDADE, pelo nome do servico dentro desta rede (BICHUS-319).
+      #
+      # `tests/integration/rastro-de-toda-escrita-administrativa.test.ts` exercita
+      # TODA escrita administrativa do contrato contra o processo que SOBE, e nao
+      # contra uma instancia montada no proprio arquivo com dubles. A diferenca e
+      # o ponto: o defeito que originou a BICHUS-319 era rota que respondia 200 e
+      # nao gravava em `audit.events`, e dubles de trilha nao o alcancam.
+      #
+      # Sem porta publicada, como todo o resto desta pilha: quem chama e o
+      # servico `testes`, de dentro da rede.
+      API_INTERNA_BASE_URL: "http://api:3000"
       # Marca lida pela guarda de banco descartavel. Nao substitui a guarda:
       # ela pergunta ao BANCO se ele se declara descartavel, e nao ao ambiente
       # de quem chama. Isto aqui so aparece na mensagem de erro.
@@ -335,6 +346,12 @@ services:
       # `NoSuchBucket` no meio do envio, que e uma falha com a cor errada.
       objeto_init:
         condition: service_completed_successfully
+      # `service_healthy` e nao `service_started`: a sonda do `api` toca o banco,
+      # e a suite do rastro administrativo chama a rota na primeira linha. Com
+      # `started`, os trinta e quatro casos reprovariam por ECONNREFUSED e o
+      # relatorio diria "sem trilha" onde o problema e ordem de subida.
+      api:
+        condition: service_healthy
     # Nada por padrao: este servico existe para `docker compose run --rm testes`.
     command: ["node", "-e", "console.error('use `npm run test:integration`'); process.exit(1)"]
     restart: "no"
@@ -377,6 +394,18 @@ services:
       # por `exec` no proprio conteiner, mas um `depends_on` de outro servico
       # nao alcancaria.
       BIND_HOST: "0.0.0.0"
+      # O DESAFIO DO LOGIN, NA FORMA LOCAL (BICHUS-319).
+      #
+      # `POST /admin/auth/login` e uma das 34 escritas administrativas do
+      # contrato, e o portao de rastro a exercita como as outras. Com o
+      # verificador de producao ela exigiria reCAPTCHA Enterprise -- chamada de
+      # rede a um projeto do Google a partir de uma pilha efemera -- e o caso
+      # mediria a rede, nao a trilha.
+      #
+      # O valor e o MESMO que `captcha-de-desenvolvimento-local.ts` exige para
+      # se ligar, e ele so vale aqui: `verificar-boot-do-alvo-prod` mede o alvo
+      # de producao, onde esta variavel nao existe.
+      CAPTCHA_DESENVOLVIMENTO_LOCAL: "aprovar-token-de-desenvolvimento"
     command: ["node", "dist/bin/api.js"]
     depends_on:
       db:

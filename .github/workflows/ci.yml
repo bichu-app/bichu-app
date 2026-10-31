@@ -1090,6 +1090,42 @@ jobs:
         # quando toda sonda passou. Sem ele, o job ficaria verde com a api
         # morta e a falha apareceria no `curl` de baixo sem dizer qual servico
         # nao subiu.
+        #
+        # O DESAFIO DO LOGIN DO PAINEL, E POR QUE ELE MORA NO `env:` DESTE PASSO
+        # E NAO NO `.env` DO JOB (BICHUS-319).
+        #
+        # `POST /admin/auth/login` e uma das 34 escritas administrativas que
+        # `tests/integration/rastro-de-toda-escrita-administrativa.test.ts`
+        # exercita, e sem o desafio local ela cai no reCAPTCHA Enterprise de
+        # verdade e responde 403 `captcha-rejected` (execucao 124430445974).
+        #
+        # A PRIMEIRA CORRECAO ESCREVEU A VARIAVEL NO `.env` DO JOB, E AQUILO
+        # QUEBROU O ALVO `prod` (execucao 124436463888). Medido: TREZE passos
+        # deste job tocam aquele arquivo, e um deles -- `o alvo de producao
+        # constroi, e morre pelo motivo certo` -- faz
+        # `docker run --env-file .env -e NODE_ENV=production`. A guarda
+        # `recusaDoCaptchaDeDesenvolvimento` entao derrubava o alvo `prod` na
+        # PRESENCA da variavel, antes de ele chegar ao gerenciador de segredos,
+        # e o portao recusou com razao: passo que aprova qualquer morte nao
+        # prova nada. O arquivo compartilhado era largo demais.
+        #
+        # Aqui o valor alcanca UM processo: a api que o `up` abaixo cria. Ele
+        # entra pelo `environment:` do servico `api` em `compose.yaml`, que o
+        # declara como `${CAPTCHA_DESENVOLVIMENTO_LOCAL:-}` -- VAZIO por
+        # padrao, e vazio a guarda trata como ausente. Fora deste passo nada
+        # muda: `.env` fica limpo, o `docker run` do alvo `prod` nao o recebe,
+        # `make up` e a homologacao continuam sem o desafio.
+        #
+        # A guarda de producao NAO foi tocada e continua mandando: se
+        # `ENVIRONMENT` sair de `dev` ou `PUBLIC_BASE_URL`/`ADMIN_ORIGIN`
+        # deixarem de ser host local, a api NAO sobe -- e `--wait` reprova
+        # ESTE passo, dizendo o porque.
+        #
+        # `src/shared/config/captcha-nas-duas-pilhas.test.ts` reprova se esta
+        # linha, a do compose da raiz ou a da pilha efemera divergirem -- e
+        # reprova tambem se a variavel VOLTAR para o `.env` do job.
+        env:
+          CAPTCHA_DESENVOLVIMENTO_LOCAL: aprovar-token-de-desenvolvimento
         run: docker compose --profile dev up -d --wait
 
       - name: as seis migracoes rodaram em banco vazio
