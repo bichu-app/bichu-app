@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -637,7 +637,33 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # aponta para o diretorio do proprio config), e por isso o parser nao morre --
 # o que morreria e um unico `eslint .` tentando cobrir as duas arvores com o
 # servico de projeto da raiz. Raiz 19,4 s + painel 8,1 s, medidos.
-verificar-lint: verificar-lint-do-painel ## ESLint da raiz (845 arquivos) E do painel (143), dois processos; `workspace/**` fora do escopo
+#
+# 31/10: O SITE ERA O MESMO BURACO, E ESTAVA ESCRITO COMO DIVIDA no proprio
+# `eslint.config.mjs` ("DIVIDA: dar ao `web/` um eslint proprio depois; hoje ele
+# nao tem lint dedicado"). `web/**` era ignorado aqui e NAO TINHA eslint em
+# lugar nenhum -- nem config, nem `devDependency`, nem script, nem alvo. Medido
+# com `console.log` plantado em `web/src/api/chamar.ts`, antes do conserto:
+#
+#   `eslint .` na raiz                 exit 0, ZERO mensagens
+#   `npx eslint web/src/api/chamar.ts` exit 0 (o arquivo NOMEADO: "File ignored
+#                                      because of a matching ignore pattern" e
+#                                      WARNING)
+#   `make verificar-lint`              exit 0
+#
+# Palavra por palavra o desfecho do painel. `verificar-lint-do-site` fecha, pela
+# mesma forma: terceiro processo, terceira raiz de tsconfig.
+#
+# AS TRES CONTAGENS SAO DE ARVORE LIMPA, medidas em 31/10 neste worktree com
+# `eslint . -f json` e as duas somas (arquivos lintados e mensagens):
+#
+#   raiz    847 arquivos, 0 mensagens   16,6 - 19,9 s
+#   painel  143 arquivos, 0 mensagens    8,6 -  9,2 s
+#   site     47 arquivos, 0 mensagens    2,0 s (inclui o `astro sync`)
+#
+# `make verificar-lint` inteiro: 27,0 s. A contagem da raiz subiu de 845 para
+# 847 desde 30/10 porque a arvore cresceu -- e o numero esta escrito aqui
+# porque LINT QUE NAO ACHA ARQUIVO APROVA TUDO CALADO.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (847 arquivos), do painel (143) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
@@ -652,6 +678,35 @@ verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (143 arqu
 	  echo "Isto nao e aprovacao -- a raiz ignora \`admin/**\` e ninguem mais confere o painel aqui."; \
 	  exit 1; }
 	cd admin && npm run lint
+
+# O MESMO, PARA O SITE (31/10/2026). `web/eslint.config.mjs` nasceu com este
+# alvo: antes de hoje o site nao tinha lint em LUGAR NENHUM -- nao era so o
+# agregado que o deixava de fora.
+#
+# 47 ARQUIVOS, E ELES NAO SAO OS 85 DA ARVORE: `.astro` fica fora, e a razao
+# esta escrita em `web/eslint.config.mjs`. Em resumo: `eslint-plugin-astro`
+# exige `eslint >= 10` e a raiz e o painel estao em 9. Os 37 `.astro` tem portao
+# -- `astro check`, que ja roda em `verificar-site` e na esteira -- so nao tem
+# regra de lint. A diferenca com `web/**` na raiz e exatamente essa: la nao
+# havia portao nenhum.
+#
+# `npm run lint` do site e `astro sync && eslint .`, e o `astro sync` NAO E
+# ENFEITE. Medido nos dois estados: sem `web/.astro/` (gerado, nunca
+# versionado), `astro:middleware` nao resolve, `defineMiddleware` vira `any` e o
+# lint cospe 9 erros de `no-unsafe-*` em `src/middleware.ts` que nao existem no
+# codigo -- e, pelo outro lado, `any` engole as conferencias que as regras com
+# tipo fariam ali. Com o sync: 47 arquivos, zero mensagens. Portao que mede a
+# ausencia de um arquivo gerado nao esta medindo o codigo.
+#
+# A ausencia de `web/node_modules` REPROVA nomeando a receita, em vez de sair
+# 127 ("eslint: command not found") parecendo defeito de codigo. Mesma doutrina
+# do painel: nao conseguir conferir nao e aprovacao.
+verificar-lint-do-site: ## ESLint do site, com o tsconfig dele (47 arquivos; a raiz ignora `web/**` e nao tem como lintar)
+	@test -d web/node_modules || { \
+	  echo "web/node_modules ausente: o lint do site NAO RODOU. Rode \`cd web && npm ci\`."; \
+	  echo "Isto nao e aprovacao -- a raiz ignora \`web/**\` e ninguem mais confere o site aqui."; \
+	  exit 1; }
+	cd web && npm run lint
 
 verificar-passos-condicionais: ## nenhum passo de workflow e pulado por premissa do proprio job, iscas dentro (0,07 s)
 	python3 infra/verificacao/verificar_passos_condicionais.py

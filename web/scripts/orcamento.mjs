@@ -99,7 +99,9 @@ function subir(comando, args, env, url) {
       for (let i = 0; i < 100; i++) {
         try {
           if ((await fetch(url)).ok) return;
-        } catch {}
+        } catch {
+          // Conexao recusada enquanto o servidor ainda sobe: tentar de novo.
+        }
         await new Promise((r) => setTimeout(r, 100));
       }
       throw new Error(`nao subiu: ${comando}`);

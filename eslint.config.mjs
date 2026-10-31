@@ -225,10 +225,21 @@ export default tseslint.config(
       // proprias, como o `app/` Flutter acima. As regras deste config sao do
       // backend Node/TypeScript e nao servem para `.astro`, para o runtime de
       // navegador nem para o tsconfig do site -- rodar `eslint .` sobre `web/`
-      // produzia mais de mil erros de parser/projeto. A qualidade do site e
-      // coberta por `make verificar-site` (astro check, verify:api,
-      // verify:valores-soltos e a suite de unidade). DIVIDA: dar ao `web/` um
-      // eslint proprio depois; hoje ele nao tem lint dedicado.
+      // produzia mais de mil erros de parser/projeto.
+      //
+      // A DIVIDA QUE ESTAVA ESCRITA AQUI FOI PAGA EM 31/10/2026: o site tem
+      // `web/eslint.config.mjs` proprio (47 arquivos), e `verificar-lint` do
+      // `Makefile` depende de `verificar-lint-do-site`, que roda o eslint de
+      // DENTRO de `web/`. Terceiro processo, terceira raiz de tsconfig -- e por
+      // isso o parser nao morre; o que morreria e um unico `eslint .` cobrindo
+      // as tres arvores com o servico de projeto daqui.
+      //
+      // O QUE A EXCLUSAO FAZIA ANTES DISSO, medido com um `console.log`
+      // plantado em `web/src/api/chamar.ts`: `eslint .` daqui saia 0 com ZERO
+      // mensagens, e `eslint web/src/api/chamar.ts` -- com o arquivo NOMEADO --
+      // tambem saia 0, porque "File ignored because of a matching ignore
+      // pattern" e WARNING. E `make verificar-lint` saia 0. Era o mesmo verde
+      // que nao verificava de `admin/**` antes do PR #129.
       'web/**',
       'web/dist/**',
       // Backoffice web: projeto proprio, com package.json, tsconfig e
@@ -248,8 +259,11 @@ export default tseslint.config(
       // num processo separado e com o `tsconfigRootDir` de la. Dois processos,
       // duas raizes de projeto -- e por isso o parser nao morre. Se voltar a
       // haver arvore ignorada aqui SEM lint proprio em algum lugar, o que ela
-      // produz e exatamente o verde que nao verifica (ver `web/**` acima, que
-      // ainda e esse caso e esta declarado como DIVIDA).
+      // produz e exatamente o verde que nao verifica. `web/**` acima era o
+      // outro caso, e foi fechado pela mesma forma em 31/10/2026; hoje nao
+      // sobra arvore de codigo deste repositorio ignorada aqui sem lint
+      // proprio -- as que sobram sao gerado, saida de build, worktree de agente
+      // e fixture de defeito, e cada uma diz acima por que nao e codigo.
       'admin/**',
       // Iscas do portao de saida: arvores de mentira que existem para ser
       // REPROVADAS por `verificar-colunas-que-nao-saem.sh`. Elas imitam
