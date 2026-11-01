@@ -7,7 +7,6 @@ import type {
   ImageProcessor,
   MotivoDeRecusa,
   PedidoDeDerivada,
-  RegiaoDoRecorte,
 } from '../../ports/image-processor.js';
 import { formatoRealDe } from '../../domain/numeros-magicos.js';
 import { FORMATO_DAS_DERIVADAS } from '../../domain/derivadas.js';
@@ -38,32 +37,6 @@ async function codificar(
   }
 }
 
-/** As dimensões da imagem **como ela é vista**, aplicando o `Orientation`. */
-export function dimensoesVistas(meta: {
-  width?: number | undefined;
-  height?: number | undefined;
-  orientation?: number | undefined;
-}): { largura: number; altura: number } {
-  const largura = meta.width ?? 0;
-  const altura = meta.height ?? 0;
-  const girado = (meta.orientation ?? 1) >= 5;
-  return girado ? { largura: altura, altura: largura } : { largura, altura };
-}
-
-/** A região em frações vira a janela em pixels, **presa dentro da imagem**. */
-export function janelaEmPixels(
-  regiao: RegiaoDoRecorte,
-  largura: number,
-  altura: number,
-): { left: number; top: number; width: number; height: number } {
-  const presoEm = (valor: number, teto: number) => Math.min(Math.max(valor, 0), teto);
-  const left = presoEm(Math.round(regiao.x * largura), Math.max(largura - 1, 0));
-  const top = presoEm(Math.round(regiao.y * altura), Math.max(altura - 1, 0));
-  const width = presoEm(Math.max(Math.round(regiao.w * largura), 1), largura - left);
-  const height = presoEm(Math.max(Math.round(regiao.h * altura), 1), altura - top);
-  return { left, top, width, height };
-}
-
 export function criarImageProcessor(): ImageProcessor {
   return {
     async inspecionar(bytes: Buffer): Promise<DimensoesDaImagem | MotivoDeRecusa> {
@@ -88,25 +61,10 @@ export function criarImageProcessor(): ImageProcessor {
     },
 
     async derivar(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada | MotivoDeRecusa> {
-      let janela: { left: number; top: number; width: number; height: number } | null = null;
-      if (pedido.recorte !== undefined && pedido.altura !== undefined) {
-        try {
-          const meta = await sharp(bytes, { failOn: 'error' }).metadata();
-          const vistas = dimensoesVistas(meta);
-          if (vistas.largura > 0 && vistas.altura > 0) {
-            janela = janelaEmPixels(pedido.recorte, vistas.largura, vistas.altura);
-          }
-        } catch {
-          janela = null;
-        }
-      }
-
       let cru: { data: Buffer; info: OutputInfo };
       try {
-        const girada = sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
-          .rotate();
-
-        const pipeline = (janela === null ? girada : girada.extract(janela))
+        const pipeline = sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
+          .rotate()
           .resize(
             pedido.altura === undefined
               ?
@@ -115,7 +73,7 @@ export function criarImageProcessor(): ImageProcessor {
                   width: pedido.largura,
                   height: pedido.altura,
                   fit: 'cover',
-                  position: janela === null ? sharp.strategy.attention : 'centre',
+                  position: sharp.strategy.attention,
                   withoutEnlargement: true,
                 },
           );
