@@ -24,11 +24,11 @@ import {
   atendimentoDe,
   casaComABusca,
   COLUNAS,
-  dataCurta,
   previa,
   ROTULO_DA_ABA,
   type Duvida,
 } from '../../src/ajuda/fila.ts';
+import { dataCurta } from '../../src/componentes/casca-de-fila.tsx';
 
 function duvida(extra: Partial<Duvida> = {}): Duvida {
   return {
