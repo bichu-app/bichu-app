@@ -28,9 +28,6 @@ class _TelaCadastrarIdentificacaoState
   late final RascunhoDePet _rascunho =
       widget.rascunhoExistente ?? RascunhoDePet();
 
-  /// A porta para [CamposDeIdentificacaoState.validar]: a tela confere os
-  /// campos **pelo metodo deles** antes de navegar, e nao por uma segunda copia
-  /// da regra escrita aqui.
   final GlobalKey<CamposDeIdentificacaoState> _campos =
       GlobalKey<CamposDeIdentificacaoState>();
 

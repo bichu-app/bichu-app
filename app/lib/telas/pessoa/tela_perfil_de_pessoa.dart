@@ -104,7 +104,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
   bool _perdeuOAlvo = false;
   String? _falha;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   bool _agindo = false;
 
@@ -145,13 +144,10 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     }
   }
 
-  /// **APAGA DO DISCO AS FOTOS DESTA PESSOA**, porque a permissão de vê-las
-  /// acabou de terminar.
   Future<void> _esquecerAsFotosDela() async {
     await widget.cacheDeImagens?.esquecerPessoa(widget.apelido);
   }
 
-  /// `endConnection` **e** a limpeza do cache, nesta ordem.
   Future<void> _encerrar(String ref) async {
     await widget.conexoes.encerrar(ref);
     await _esquecerAsFotosDela();
@@ -251,7 +247,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     );
   }
 
-  /// O estado de alvo perdido.
   Widget _semAlvo(BichuCores cores, TextTheme textos) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,7 +286,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     ];
   }
 
-  /// As DUAS contagens, lado a lado.
   Widget _contagens(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     final estilo = textos.bodyLarge?.copyWith(color: cores.textPrimary);
     return Semantics(
@@ -313,7 +307,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     );
   }
 
-  /// A área de ação, **uma por estado**.
   List<Widget> _acoesDaRelacao(
     PerfilDePessoa perfil,
     BichuCores cores,
@@ -384,8 +377,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     return Text(frase, style: textos.bodyMedium?.copyWith(color: cores.textSecondary));
   }
 
-  /// A VITRINE. **Três estados, e os três são diferentes**: fora de alcance,
-  /// conexão sem foto, e a grade.
   Widget _vitrine(PerfilDePessoa perfil, BichuCores cores, TextTheme textos) {
     final fotos = perfil.vitrine;
 
@@ -428,7 +419,6 @@ class _EstadoDoPerfilDePessoa extends State<TelaDePerfilDePessoa> {
     );
   }
 
-  /// Uma célula da grade.
   Widget _celula(List<FotoDoPerfil> fotos, int indice) {
     final foto = fotos[indice];
 

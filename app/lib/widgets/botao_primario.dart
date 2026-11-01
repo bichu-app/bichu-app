@@ -102,7 +102,6 @@ class BotaoSecundario extends StatelessWidget {
   /// rotulo visivel.
   final String? nomeAcessivel;
 
-  /// Embrulha em [Semantics] **somente quando ha nome proprio a anunciar**.
   Widget _comNome(Widget filho, VoidCallback? acao) {
     final nome = nomeAcessivel;
     if (nome == null) return filho;

@@ -81,7 +81,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
 
   _Fase _fase = _Fase.antesDeBuscar;
 
-  /// O termo que **produziu** a lista na tela, e nunca o que está digitado.
   String? _termoAplicado;
 
   PaginaDeBuscaDePessoas? _pagina;
@@ -91,17 +90,13 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
   String? _textoDaFalha;
   bool _faltaConta = false;
 
-  /// Quantos pedidos ainda cabem na janela corrida de 24 h, **vindo do
-  /// servidor**.
   int? _pedidosQueAindaCabem;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
 
-  /// A espera em curso entre a última tecla e a busca, ou nulo.
   Timer? _espera;
 
-  /// O texto da última notificação que MEXEU no texto.
   String _ultimoTexto = '';
 
   @override
@@ -157,7 +152,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
 
   PessoasApi get _pessoas => widget.pessoas;
 
-  /// Lê `getMyConnectionSummary` **antes de qualquer pedido**.
   Future<void> _lerOTeto() async {
     try {
       final resumo = await _conexoes.resumo();
@@ -207,7 +201,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     }
   }
 
-  /// A reação à tecla: **agenda**, e nunca busca na hora.
   void _aoDigitar() {
     final texto = _campo.text;
     if (texto == _ultimoTexto) return;
@@ -239,7 +232,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     setState(() {});
   }
 
-  /// A explicação do vazio: a contagem de letras **quando ela existe**.
   String? _explicacaoDoVazio() {
     final faltam = _controleDaBusca().faltamLetras;
     if (faltam == null) return null;
@@ -284,7 +276,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     }
   }
 
-  /// O pedido de conexão **a partir do cartão**, e o estado que ele devolve.
   Future<Conexao?> _pedir(PessoaEncontrada pessoa) async {
     final conexao = await _conexoes.pedirPorApelido(
       apelido: pessoa.handle,
@@ -327,7 +318,6 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     );
   }
 
-  /// A contagem do resultado, **só com termo aplicado**.
   List<Widget> _contagem() {
     final pagina = _pagina;
     if (pagina == null || _termoAplicado == null) return const <Widget>[];
@@ -422,10 +412,8 @@ class _EstadoDaBuscaDePessoas extends State<BuscaDePessoas>
     }
   }
 
-  /// O texto quando a falha chegou sem mensagem legivel.
   static const String _falhaSemTexto = 'Não foi possível buscar agora.';
 
-  /// O fim da lista, **nos dois ramos, e eles mudam JUNTOS**.
   String _fimDaLista(int total) {
     if (total == 1) return 'Um usuário encontrado em sua busca.';
     return 'Você viu todos os $total usuários encontrados em sua busca.';

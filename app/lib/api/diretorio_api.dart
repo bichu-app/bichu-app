@@ -107,11 +107,6 @@ class DiretorioApi {
       if (recado != null && recado.isNotEmpty) 'note': recado,
       if (logoUploadId != null && logoUploadId.isNotEmpty)
         'logo_upload_id': logoUploadId,
-      // **SO QUANDO HA PELO MENOS UMA, e nunca `[]` nem `null`.** O esquema e
-      // `minItems: 1`, entao a lista vazia toma `400` -- e `format: uuid` nao
-      // aceita nulo. Os dois casos sao a MESMA intencao ("nao mandei foto")
-      // dita de duas formas, e o contrato recusa as duas de proposito. O
-      // precedente exato esta uma linha acima, em `logo_upload_id`.
       if (fotosDoEstabelecimento != null && fotosDoEstabelecimento.isNotEmpty)
         'photo_upload_ids': fotosDoEstabelecimento,
     };

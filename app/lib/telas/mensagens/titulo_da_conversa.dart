@@ -22,7 +22,6 @@ class TituloDaConversa extends StatelessWidget {
   /// O QUE A BARRA TIRA DO TITULO, em dp, antes de sobrar vao para o texto.
   static const double vaoTiradoPelaBarra = 88.0;
 
-  /// O respiro vertical acima e abaixo do titulo, somado uma vez.
   static const double _respiroVertical = BichuEspaco.e2;
 
   /// O TETO DE ESCALA QUE A `AppBar` APLICA AO TITULO DELA, e nao um teto
@@ -61,7 +60,6 @@ class TituloDaConversa extends StatelessWidget {
 
   static bool _temPet(String? pet) => pet != null && pet.trim().isNotEmpty;
 
-  /// O estilo do titulo da barra, tal como o tema o define -- e nao uma copia.
   static TextStyle _estiloDoNome(ThemeData tema) {
     return tema.appBarTheme.titleTextStyle ??
         tema.textTheme.headlineSmall ??

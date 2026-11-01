@@ -120,19 +120,14 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   final TextEditingController _codigo = TextEditingController();
   final FocusNode _focoDoCodigo = FocusNode();
 
-  /// **A tela abre sem afirmar nada**, e so depois de a porta responder ela
-  /// escolhe entre camera, permissao e ausencia.
   EstadoDoLeitor _estado = EstadoDoLeitor.consultando;
 
   EstadoDaPermissao _permissao = EstadoDaPermissao.negada;
 
-  /// O codigo que foi lido e ainda nao resolveu.
   String? _codigoLido;
 
-  /// De onde saiu [_codigoLido]: do campo de digitacao, ou da camera.
   bool _codigoFoiDigitado = false;
 
-  /// O que o campo do codigo mostra **embaixo dele**, quando a forma nao fecha.
   String? _erroDoCampo;
 
   int _tentativa = 0;
@@ -142,17 +137,14 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   Timer? _limparAviso;
   bool _resolvendo = false;
 
-  /// Ha uma rota EMPILHADA POR CIMA do leitor.
   bool _rotaSobreposta = false;
 
   bool _demorou = false;
   MensagemDeErro? _faixa;
   String? _avisoEfemero;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
-  /// Tres tentativas automaticas, de 5 em 5 segundos, com o estado visivel.
   static const int _maximoDeTentativas = 3;
   static const int _esperaEntreTentativas = 5;
 
@@ -174,7 +166,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     super.dispose();
   }
 
-  /// Le o estado **sem abrir dialogo**, e decide a tela com ele.
   Future<void> _consultarPermissao() async {
     final escopo = Escopo.of(context);
     if (!escopo.leitorDeQr.embarcado) {
@@ -199,7 +190,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     };
   }
 
-  /// Pede a permissao. **So daqui**, e nunca da montagem da tela.
   Future<void> _ligarACamera() async {
     final camera = Escopo.of(context).camera;
     if (_permissao != EstadoDaPermissao.negada) return;
@@ -212,7 +202,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
   }
 
-  /// Arma a oferta de digitacao para quem ficou procurando sem achar.
   void _comecarAProcurar() {
     _demorou = false;
     _ofertaManual?.cancel();
@@ -222,7 +211,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
   }
 
-  /// Um simbolo chegou da camera.
   void _aoLer(LeituraDeQr leitura) {
     if (_resolvendo || _rotaSobreposta) return;
 
@@ -246,7 +234,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     _resolver(codigo, digitado: false);
   }
 
-  /// Resolve um token de convite e abre o perfil de quem o emitiu.
   Future<void> _resolverConvite(String token) async {
     setState(() {
       _resolvendo = true;
@@ -285,7 +272,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     }
   }
 
-  /// O aviso do criterio 3: aparece **sobre** o visor e some sozinho.
   void _mostrarAvisoEfemero(String texto) {
     if (_avisoEfemero == texto && (_limparAviso?.isActive ?? false)) return;
     setState(() => _avisoEfemero = texto);
@@ -296,7 +282,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
   }
 
-  /// Abre o campo de digitacao.
   void _irParaDigitacao() {
     _ofertaManual?.cancel();
     setState(() {
@@ -305,7 +290,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
   }
 
-  /// O texto que a pessoa le para cada motivo de [FormaDoCodigo].
   static String? _textoDaForma(FormaDoCodigo forma, String digitado) {
     return switch (forma) {
       FormaDoCodigo.valida => null,
@@ -316,7 +300,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     };
   }
 
-  /// Confere a forma a cada toque, e avisa **so do que nao melhora sozinho**.
   void _conferirEnquantoDigita(String texto) {
     final forma = formaDoCodigoDeTag(texto.trim());
     final aviso = switch (forma) {
@@ -328,7 +311,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     setState(() => _erroDoCampo = aviso);
   }
 
-  /// O toque em `Continuar`: **confere a forma aqui, e so chama se fechar.**
   void _enviarODigitado() {
     final digitado = _codigo.text.trim();
     final forma = formaDoCodigoDeTag(digitado);
@@ -344,7 +326,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     _resolver(digitado, digitado: true);
   }
 
-  /// Devolve o foco ao campo **sem tocar no que esta escrito nele**.
   void _voltarAoCampo() {
     _focoDoCodigo.requestFocus();
     _codigo.selection = TextSelection(
@@ -353,7 +334,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     );
   }
 
-  /// Resolve o codigo contra `GET /v1/tags/{code}`.
   Future<void> _resolver(String codigo, {required bool digitado}) async {
     _contagem?.cancel();
     _ofertaManual?.cancel();
@@ -410,8 +390,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     }
   }
 
-  /// Abre uma rota POR CIMA do leitor e mantem a camera calada enquanto ela
-  /// estiver na pilha.
   Future<void> _abrirSobreposta(String rota, {Object? extra}) async {
     if (!_rotaSobreposta) setState(() => _rotaSobreposta = true);
     await context.push(rota, extra: extra);
@@ -420,7 +398,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
   }
 
-  /// Nova tentativa automatica em 5 s, tres vezes, **com o estado visivel**.
   void _agendarNovaTentativa() {
     if (_tentativa >= _maximoDeTentativas) return;
     _tentativa++;
@@ -511,7 +488,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     };
   }
 
-  /// O controle que abre o campo.
   Widget _acaoDeDigitar({required bool principal}) {
     if (principal) {
       return BotaoPrimario(
@@ -1003,7 +979,6 @@ class _EspacoDaPlaquinha extends StatelessWidget {
 class _PlaquinhaDaMarca extends StatelessWidget {
   const _PlaquinhaDaMarca();
 
-  /// 96 dp de largura, 105,6 de altura pela proporcao da moldura.
   static const double _largura = 96;
 
   @override

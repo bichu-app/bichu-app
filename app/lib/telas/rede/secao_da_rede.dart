@@ -51,7 +51,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     with SingleTickerProviderStateMixin {
   late AbaDaSecaoRede _aba = widget.abaInicial ?? AbaDaSecaoRede.eventos;
 
-  /// Comprimento FIXO 3: as tres abas existem em todo estado de sessao.
   late final TabController _abas = TabController(
     length: 3,
     initialIndex: _aba.index,
@@ -76,7 +75,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     _trocarAba(pedida);
   }
 
-  /// A BUSCA QUE O CORPO DA ABA PUBLICA NO TOPO FIXO.
   final ValueNotifier<BuscaFixaDaSecao?> _buscaDoTopo =
       ValueNotifier<BuscaFixaDaSecao?>(null);
 
@@ -93,7 +91,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     _marcarVista(aba);
   }
 
-  /// Avisa o contador de que esta sub-aba foi vista.
   void _marcarVista(AbaDaSecaoRede aba) {
     final secao = switch (aba) {
       AbaDaSecaoRede.eventos => SecaoComContador.eventosDaRede,
@@ -127,7 +124,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     );
   }
 
-  /// AS TRES ABAS DA SECAO.
   Widget _abasDaSecao() {
     return TabBar(
         controller: _abas,
@@ -151,7 +147,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     );
   }
 
-  /// O TOPO QUE NAO ROLA: as tres abas e a linha de busca.
   Widget _topoFixo() {
     final cores = BichuColors.of(context).cores;
     return DecoratedBox(
@@ -175,7 +170,6 @@ class _SecaoDaRedeState extends State<SecaoDaRede>
     );
   }
 
-  /// A PORTA DE CRIAR DA SECAO REUNIDA: **uma so, e ela TROCA COM A ABA.**
   Widget? _acaoDeCriar(BuildContext context, ControladorDeSessao sessao) {
     if (!podeCriarNaComunidade(sessao)) return null;
     switch (_aba) {

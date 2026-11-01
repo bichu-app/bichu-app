@@ -33,28 +33,22 @@ class TelaPetCadastrado extends StatefulWidget {
 }
 
 class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
-  /// A mesma chave em toda tentativa de emitir a tag desta tela: `Tentar de
-  /// novo` depois de um tempo esgotado **nao** pode emitir uma segunda tag.
   final String _chaveDeIdempotencia = ApiClient.novaChaveDeIdempotencia();
 
   TagEmitida? _tag;
   bool _emitindo = true;
   MensagemDeErro? _faixa;
 
-  /// Em qual dos quatro estados a IMAGEM do QR esta.
   _EstadoDoQr _estadoDoQr = _EstadoDoQr.semEndereco;
 
-  /// O provedor que o `Image` desenha.
   MemoryImage? _qr;
 
-  /// Em qual dos quatro estados o ENVIO DA FOTO esta.
   late _EstadoDaFoto _estadoDaFoto = widget.resultado.fotoPendente == null
       ? _EstadoDaFoto.semFoto
       : _EstadoDaFoto.subindo;
 
   Pet get _pet => widget.resultado.pet;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
   @override
@@ -66,10 +60,6 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     _enviarAFoto();
   }
 
-  /// **O envio que nao existia.** Ate 22/09/2026 nenhum caminho do app mandava
-  /// bytes para lugar nenhum: `PetsApi.intencaoDeFotoDoPet` estava escrita
-  /// desde a BICHUS-62 e nunca era chamada, e esta tela ja anunciava "a foto
-  /// ainda esta sendo enviada" sobre um envio inexistente.
   Future<void> _enviarAFoto() async {
     final foto = widget.resultado.fotoPendente;
     if (foto == null) return;
@@ -133,7 +123,6 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     }
   }
 
-  /// Busca a imagem do QR **com o `Authorization` que a rota exige**.
   Future<void> _baixarOQr(TagEmitida tag) async {
     final endereco = tag.qrPngUrl;
     if (endereco == null || endereco.isEmpty) {
@@ -166,7 +155,6 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     }
   }
 
-  /// A primeira das DUAS oportunidades de UX 10.1 (BICHUS-24).
   Future<void> _resolverAviso() async {
     final desfecho = await PedidoDeAviso.oferecer(
       context,
@@ -182,7 +170,6 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     });
   }
 
-  /// O que a tela diz sobre a foto, nos quatro estados.
   List<Widget> _linhaDaFoto(TextTheme textos, BichuCores cores) {
     final discreto = textos.bodyMedium?.copyWith(color: cores.textSecondary);
     switch (_estadoDaFoto) {
@@ -315,7 +302,6 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
   }
 }
 
-/// O QR, o codigo por extenso, o `Copiar o código` ao lado, e a linha 6.
 enum _EstadoDoQr {
   /// A emissao nao prometeu imagem (`qr_png_url` ausente).
   semEndereco,
@@ -330,7 +316,6 @@ enum _EstadoDoQr {
   falhou,
 }
 
-/// Em qual estado esta o ENVIO da foto escolhida em F1.4.
 enum _EstadoDaFoto {
   /// O cadastro veio sem foto.
   semFoto,
@@ -348,7 +333,6 @@ enum _EstadoDaFoto {
   recusada,
 }
 
-/// O lado do quadrado do QR, em dp.
 const double _ladoDoQr = 200;
 
 class _BlocoDoCodigo extends StatelessWidget {

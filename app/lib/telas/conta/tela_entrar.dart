@@ -38,7 +38,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
   final ScrollController _rolagem = ScrollController();
 
-  /// Onde a faixa de recusa nasce, para `_levarAte` ter um alvo.
   final GlobalKey _alvoDaFaixa = GlobalKey();
 
   bool _senhaVisivel = false;
@@ -56,7 +55,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
     });
   }
 
-  /// Tenta entrar com uma passkey que **ja exista** no aparelho.
   Future<void> _tentarPasskey() async {
     final escopo = Escopo.of(context);
     final sessao = await escopo.passkey.tentarEntrar();
@@ -79,7 +77,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
     super.dispose();
   }
 
-  /// Traz o alvo da recusa para dentro da janela.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -93,7 +90,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
     });
   }
 
-  /// Validacao local, antes de gastar uma ida a rede.
   bool _camposPreenchidos() {
     final email = _email.text.trim();
     final senha = _senha.text;
@@ -116,8 +112,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
     return false;
   }
 
-  /// Conferencia ao sair do campo, com a mensagem curta de
-  /// `formato/email.dart`.
   void _conferirOEmailAoSair() {
     final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
     if (erro != _erroDoEmail) setState(() => _erroDoEmail = erro);
@@ -278,10 +272,8 @@ class _IlustracaoDaEntrada extends StatelessWidget {
 
   static const String caminho = 'assets/ilustracoes/tres-pessoas-no-parque.webp';
 
-  /// Fracao da altura da tela que a ilustracao pode ocupar.
   static const double _fracaoDaAltura = 0.2;
 
-  /// Piso e teto, em passos do espaco do tema (`BichuEspaco.e16` = 64).
   static const double _piso = BichuEspaco.e16 * 2;
   static const double _teto = BichuEspaco.e16 * 3;
 

@@ -62,7 +62,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
 
   FotoLocal? _escolhida;
 
-  /// O `upload_id` que o `Publicar` vai mandar.
   String? _uploadPendente;
 
   bool _enviando = false;
@@ -91,15 +90,12 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     });
   }
 
-  /// Quantos caracteres faltam.
   int get _usados => _texto.text.characters.length;
 
   bool get _temTexto => _texto.text.trim().isNotEmpty;
   bool get _cabe => _usados <= PublicarNoMural.tetoDoTexto;
   bool get _ocupado => _enviando || _publicando;
 
-  /// `Tirar uma foto`. Pede a permissao quando ainda da para pedir, e desiste
-  /// **calada** quando nao da.
   Future<void> _tirarFoto() async {
     var estado = await widget.camera.estadoDaCamera();
     if (!mounted) return;
@@ -123,7 +119,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     await _escolheu(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: widget.camera,
@@ -132,8 +127,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
         titulo: 'Ajuste a foto da publicação',
       );
 
-  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
-  /// qualquer coisa.
   Future<void> _escolheu(FotoLocal foto) async {
     final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
     if (recusa != null) {
@@ -177,7 +170,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     if (aviso != null) anunciar(context, aviso);
   }
 
-  /// Tira a foto escolhida **sem publicar nada**.
   void _tirarAFoto() {
     setState(() {
       _escolhida = null;
@@ -185,7 +177,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     });
   }
 
-  /// O `Publicar`: **a unica confirmacao desta tela.**
   Future<void> _publicar() async {
     if (!_temTexto) {
       setState(() => _erroDoTexto = PublicarNoMural.textoObrigatorio);
@@ -317,7 +308,6 @@ class _PublicarNoMuralState extends State<PublicarNoMural> {
     );
   }
 
-  /// O contador. Ele avisa, e nao julga: o texto e livre.
   Widget _contador(TextTheme textos, BichuCores cores) {
     final restantes = PublicarNoMural.tetoDoTexto - _usados;
     final passou = restantes < 0;

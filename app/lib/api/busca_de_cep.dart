@@ -56,11 +56,8 @@ class BuscaDeCep {
 
   static final RegExp _soDigitos = RegExp(r'[^0-9]');
 
-  /// **Principal, por pedido do cliente de 17/10** ("pode implementar o via
-  /// cep").
   static const String _viaCep = 'https://viacep.com.br/ws';
 
-  /// Reserva, usada **so quando a principal falha ou nao responde**.
   static const String _brasilApi = 'https://brasilapi.com.br/api/cep/v2';
 
   /// O endereco do CEP, ou o motivo de nao ter vindo.
@@ -89,7 +86,6 @@ class BuscaDeCep {
     }
   }
 
-  /// Roda uma tentativa e engole tudo o que der errado.
   Future<RespostaDaBuscaDeCep?> _tentar(
     Future<RespostaDaBuscaDeCep?> Function() tentativa,
   ) async {
@@ -100,7 +96,6 @@ class BuscaDeCep {
     }
   }
 
-  /// `null` quando o servico falhou (e a reserva deve ser tentada).
   Future<RespostaDaBuscaDeCep?> _daBrasilApi(http.Client cliente, String cep) async {
     final resposta = await cliente.get(Uri.parse('$_brasilApi/$cep'));
     if (resposta.statusCode == 404) return null;

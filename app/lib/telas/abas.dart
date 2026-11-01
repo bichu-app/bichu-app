@@ -105,7 +105,6 @@ class AbaMural extends StatefulWidget {
 }
 
 class _AbaMuralState extends State<AbaMural> {
-  /// Quantas vezes a pessoa publicou nesta sessao da tela.
   int _publicacoes = 0;
 
   Future<void> _abrirPublicar() async {
@@ -331,8 +330,6 @@ class _LinhaDeConexoes extends StatefulWidget {
 class _EstadoDaLinhaDeConexoes extends State<_LinhaDeConexoes> {
   int? _recebidos;
 
-  /// **A LEITURA SAI DE `didChangeDependencies` E NAO DE `initState`, e isso
-  /// foi MEDIDO e nao copiado.**
   bool _pediu = false;
 
   @override

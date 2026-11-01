@@ -58,7 +58,6 @@ class _CascaDaPaginaInternaState extends State<CascaDaPaginaInterna> {
     super.dispose();
   }
 
-  /// Sem capa a barra esta sempre la; com capa, ela entra quando a capa sai.
   bool get _barraVisivel => !widget.temCapa || _rolou;
 
   void _aoRolar() {

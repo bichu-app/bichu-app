@@ -32,7 +32,6 @@ class DevicesApi {
     }
   }
 
-  /// A traducao para o vocabulario do contrato.
   static String _permissaoNoContrato(PermissaoDeAviso permissao) {
     switch (permissao) {
       case PermissaoDeAviso.concedida:

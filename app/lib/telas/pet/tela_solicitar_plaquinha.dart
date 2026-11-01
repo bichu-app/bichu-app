@@ -49,17 +49,8 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   String? _petEscolhido;
   String? _uf;
 
-  /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
-  /// substituir e o que não pode.
   final OrigemDosValores _origem = OrigemDosValores();
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele.**
-  ///
-  /// Antes de 30/10/2026 esta tela tinha a propria copia do bloco, e a copia
-  /// **nao conferia a sigla do estado**: ela aceitava qualquer par de letras
-  /// que a base de CEP devolvesse. O bloco chama `siglaDeEstadoValida`, e
-  /// agora esta tela tambem.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     origem: _origem,
     atualizar: setState,
@@ -78,32 +69,22 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     ),
   );
 
-  /// Os tres desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: _TextosDaPlaquinha.buscaIndisponivel,
   );
 
-  /// Havia endereço guardado **no pet escolhido** quando esta tela o leu?
   bool? _haviaEnderecoGuardado;
 
-  /// De qual pet é o que está em [_haviaEnderecoGuardado] e nos campos.
   String? _petDoEnderecoLido;
 
-  /// O erro de cada campo, pela mesma chave que o servidor usa em
-  /// `errors[].field`.
   final Map<String, String> _erros = <String, String>{};
   bool _carregando = true;
   bool _enviando = false;
   bool _enviado = false;
 
-  /// O pedido **como o servidor o devolveu**, e nao um objeto montado aqui.
   PedidoDePlaquinha? _pedido;
   MensagemDeErro? _faixa;
 
-  /// Ver o mesmo sinalizador em F1.4, F1.6 e na edicao do pet: `Escopo` e
-  /// `InheritedWidget`, e le-lo em `initState` e erro de framework -- o
-  /// `dependOnInheritedWidgetOfExactType` estoura antes de `initState`
-  /// terminar, a listagem nunca sai e a tela abre dizendo "servidor fora".
   bool _iniciou = false;
 
   @override
@@ -122,7 +103,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (inicial != null) _carregarOEnderecoDoPet(inicial);
   }
 
-  /// O pet mudou: o endereco pre-preenchido era de OUTRO pet.
   void _trocarDePet(String? escolhido) {
     final soltas = _origem.soltarOQueVeioDoGuardado();
     setState(() {
@@ -144,8 +124,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (escolhido != null) _carregarOEnderecoDoPet(escolhido);
   }
 
-  /// O controlador daquele campo do endereco, ou nulo quando a chave nao e de
-  /// um campo de texto (`state`, que e seletor, e `pet`).
   TextEditingController? _campoDe(String chave) {
     return switch (chave) {
       _CamposDoPedido.destinatario => _destinatario,
@@ -203,8 +181,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
   }
 
-  /// Abre o formulário PREENCHIDO com o endereço guardado **naquele pet**, se
-  /// houver.
   Future<void> _carregarOEnderecoDoPet(String petId) async {
     final EnderecoDeEntrega? guardado;
     try {
@@ -261,8 +237,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     });
   }
 
-  /// Põe o valor do endereço guardado num campo **vazio**, e anota que aquele
-  /// campo ainda não foi tocado pela pessoa.
   Future<void> _guardarSeNaoHavia(String petId, EnderecoDeEntrega endereco) async {
     if (_haviaEnderecoGuardado != false) return;
     if (_petDoEnderecoLido != petId) return;
@@ -284,7 +258,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     if (_origem.doGuardado(campo, valor, chave)) _erros.remove(chave);
   }
 
-  /// Valida **campo por campo**, e devolve os erros todos de uma vez.
   Map<String, String> _conferir() {
     final erros = <String, String>{};
     if (_petEscolhido == null) {
@@ -377,9 +350,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
   }
 
-  /// **Decide por `tipo`, nunca por status**, como as outras telas deste
-  /// modulo, e cai em `MensagensDeErro.de` no resto -- a traducao comum de
-  /// falha de rede e de 5xx mora la, e uma segunda redacao divergiria dela.
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDaApi &&
         falha.problem.tipo == ProblemTipo.validacaoFalhou &&
@@ -410,7 +380,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     return MensagensDeErro.de(falha);
   }
 
-  /// Um campo do endereco, com o espacamento e o erro no mesmo lugar.
   Widget _campo({
     required String chave,
     required String rotulo,
@@ -639,7 +608,6 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   }
 }
 
-/// Os textos da tela.
 abstract final class _CamposDoPedido {
   static const String pet = 'pet';
   static const String destinatario = 'recipient_name';

@@ -176,7 +176,6 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
     }
   }
 
-  /// A barra de bytes.
   Widget _barra(BichuCores cores, TextTheme textos) {
     final bool temNumero = total > 0;
     final bool terminou = temNumero && enviados >= total;
@@ -232,7 +231,6 @@ class PreviaDaFotoDaConversa extends StatelessWidget {
     style: textos.bodySmall?.copyWith(color: cores.textSecondary),
   );
 
-  /// A linha da localizacao.
   Widget _avisoDeLocalizacao(BichuCores cores, TextTheme textos) => Padding(
     padding: const EdgeInsets.only(top: BichuEspaco.e1),
     child: Text(

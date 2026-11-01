@@ -42,7 +42,6 @@ class SegurancaApi {
     await _api.post('/publications/$refDaPublicacao/reports', corpo: _corpo(motivo, relato));
   }
 
-  /// `detail` so vai quando ha algo escrito.
   static Map<String, dynamic> _corpo(String motivo, String? relato) {
     final limpo = relato?.trim();
     return <String, dynamic>{

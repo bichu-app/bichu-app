@@ -36,7 +36,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
 
   final ScrollController _rolagem = ScrollController();
 
-  /// Onde a faixa de erro nasce, para `_levarAte` ter um alvo.
   final GlobalKey _alvoDaFaixa = GlobalKey();
 
   bool _enviando = false;
@@ -55,7 +54,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
     super.dispose();
   }
 
-  /// Traz o alvo da recusa para dentro da janela.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -69,8 +67,6 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
     });
   }
 
-  /// Conferencia ao sair do campo, com a mensagem curta de
-  /// `formato/email.dart`.
   void _conferirOEmailAoSair() {
     final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
     if (erro != _erroDoCampo) setState(() => _erroDoCampo = erro);

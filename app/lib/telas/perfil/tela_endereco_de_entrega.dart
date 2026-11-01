@@ -43,17 +43,8 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
 
   String? _uf;
 
-  /// De onde veio o valor de cada campo, para a busca de CEP saber o que pode
-  /// substituir e o que não pode.
   final OrigemDosValores _origem = OrigemDosValores();
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que têm CEP. **O campo de CEP mora nele.**
-  ///
-  /// Antes de 30/10/2026 esta tela tinha a própria cópia do bloco, e a cópia
-  /// **não conferia a sigla do estado**: ela aceitava qualquer par de letras
-  /// que a base de CEP devolvesse. O bloco chama `siglaDeEstadoValida`, e
-  /// agora esta tela também.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     origem: _origem,
     atualizar: setState,
@@ -72,13 +63,10 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     ),
   );
 
-  /// Os três desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: _TextosDoEndereco.buscaIndisponivel,
   );
 
-  /// O erro de cada campo, pela mesma chave que o servidor usa em
-  /// `errors[].field`.
   final Map<String, String> _erros = <String, String>{};
 
   bool _carregando = true;
@@ -86,8 +74,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   bool _salvou = false;
   MensagemDeErro? _faixa;
 
-  /// Ver o mesmo sinalizador na tela de solicitar a plaquinha: `Escopo` é
-  /// `InheritedWidget`, e lê-lo em `initState` é erro de framework.
   bool _iniciou = false;
 
   @override
@@ -115,7 +101,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     super.dispose();
   }
 
-  /// Abre com o endereço **deste pet**, se houver.
   Future<void> _carregar() async {
     try {
       final guardado = await Escopo.of(context).pets.lerEnderecoDoPet(widget.petId);
@@ -140,7 +125,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     }
   }
 
-  /// Joga o endereço nos campos.
   void _preencherCom(EnderecoDeEntrega endereco) {
     _destinatario.text = endereco.destinatario;
     _cepBloco.cep.text = mascaraDeCep(endereco.cep);
@@ -167,7 +151,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     _cepBloco.naoBuscarDeNovo(endereco.cep);
   }
 
-  /// Valida **campo por campo**, e devolve os erros todos de uma vez.
   Map<String, String> _conferir() {
     final erros = <String, String>{};
     if (_destinatario.text.trim().length < 2) {
@@ -251,8 +234,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     }
   }
 
-  /// **Decide por `tipo`, nunca por status**, como as outras telas, e cai em
-  /// `MensagensDeErro.de` no resto.
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDaApi &&
         falha.problem.tipo == ProblemTipo.validacaoFalhou &&
@@ -274,7 +255,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
     return MensagensDeErro.de(falha);
   }
 
-  /// Um campo do endereço, com o espaçamento e o erro no mesmo lugar.
   Widget _campo({
     required String chave,
     required String rotulo,
@@ -445,7 +425,6 @@ class _TelaEnderecoDeEntregaState extends State<TelaEnderecoDeEntrega> {
   }
 }
 
-/// As chaves de campo, iguais dos dois lados.
 abstract final class _CamposDoEndereco {
   static const String destinatario = 'recipient_name';
   static const String cep = 'postal_code';
@@ -480,9 +459,6 @@ abstract final class _CamposDoEndereco {
   }
 }
 
-/// Os textos da tela. **Curtos de propósito**: não há promessa de prazo e não
-/// há aviso sobre entrega — prazo e entrega dependem de decisão de produto que
-/// não foi tomada, e prometer aqui o que ninguém decidiu é pior que calar.
 abstract final class _TextosDoEndereco {
   static const String titulo = 'Endereço de entrega';
 

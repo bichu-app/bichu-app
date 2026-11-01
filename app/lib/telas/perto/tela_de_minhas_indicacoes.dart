@@ -17,7 +17,6 @@ class TelaDeMinhasIndicacoes extends StatefulWidget {
 }
 
 class _TelaDeMinhasIndicacoesState extends State<TelaDeMinhasIndicacoes> {
-  /// O ponto onde o corpo publica a propria busca.
   final RecargaDaSecao _recarga = RecargaDaSecao();
 
   @override

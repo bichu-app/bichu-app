@@ -201,17 +201,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
   late final OuvinteDeAvisos _avisosRecebidos;
-  /// A porta de conversas. **Ela nao existia neste arquivo** -- a area de
-  /// mensagens construia a sua propria (`ConversasApi(Escopo.of(context).api)`)
-  /// --, e o contador precisa dela fora de qualquer tela: ele pergunta na
-  /// abertura e na retomada, quando tela de mensagens nao ha.
   late final ConversasApi _conversas;
 
-  /// O CONTADOR DE NAO LIDO da barra de baixo (20/10/2026).
   late final ContadoresDeNaoLido _contadores;
   late final ContadorDeAvisos _contadorDeAvisos;
 
-  /// A consulta ao veredito de versao (19/10/2026).
   late final VersaoApi _versao;
 
   @override
@@ -337,8 +331,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     );
   }
 
-  /// O arranque: ler o chaveiro e, **so depois disso**, retomar a foto que
-  /// ficou.
   Future<void> _arrancar() async {
     await _sessao.iniciar();
     await _avisosRecebidos.ligar();
@@ -348,13 +340,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     await _contarOsAvisos();
   }
 
-  /// O PRIMEIRO dos quatro momentos do contador do sino: o app abriu.
   Future<void> _contarOsAvisos() async {
     if (await _sessao.tokenValido() == null) return;
     await _contadorDeAvisos.atualizar();
   }
 
-  /// A fila offline sai do disco.
   Future<void> _drenarAFila() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -364,7 +354,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     }
   }
 
-  /// O criterio 7 da BICHUS-87: a foto que nao subiu sobe quando da.
   Future<void> _retomarAsFotos() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -374,7 +363,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     }
   }
 
-  /// O SEGUNDO momento em que a fila drena: o app voltou para o primeiro plano.
   Future<void> _contarNaoLidas() async {
     try {
       if (await _sessao.tokenValido() == null) return;
@@ -477,7 +465,6 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     );
   }
 
-  /// Poe o cache de imagem no escopo da arvore, **ou nao poe nada**.
   Widget _comCacheDeImagens(Widget filho) {
     final cache = _cacheDeImagens;
     if (cache == null) return filho;

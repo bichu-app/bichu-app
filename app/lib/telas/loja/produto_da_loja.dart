@@ -47,7 +47,6 @@ class TelaDoProduto extends StatefulWidget {
   State<TelaDoProduto> createState() => _TelaDoProdutoState();
 }
 
-/// Os desfechos de uma carga.
 enum _Fase { carregando, pronto, naoEncontrado, falha }
 
 class _TelaDoProdutoState extends State<TelaDoProduto> {
@@ -55,7 +54,6 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
   DetalheDoProduto? _detalhe;
   String? _textoDaFalha;
 
-  /// Qual imagem da galeria esta no quadro grande.
   int _imagemAtual = 0;
 
   final PageController _quadros = PageController();
@@ -250,7 +248,6 @@ class _Galeria extends StatelessWidget {
   final ValueChanged<int> aoMostrar;
   final PageController controlador;
 
-  /// A miniatura: 96 dp, na proporcao do quadro grande.
   static const double _larguraDaMiniatura = 96;
 
   /// `3 de 8`, para quem precisa saber que ha mais.

@@ -66,7 +66,6 @@ class TelaDeMinhasConexoes extends StatefulWidget {
 }
 
 class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
-  /// As pessoas já carregadas, de todas as páginas pedidas até agora.
   final List<PessoaConectada> _pessoas = <PessoaConectada>[];
   int _total = 0;
   int _proximaPagina = 1;
@@ -75,7 +74,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
   bool _carregandoMais = false;
   String? _falha;
 
-  /// A falha foi **falta de conta**, e não defeito.
   bool _faltaConta = false;
 
   @override
@@ -84,7 +82,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     unawaited(_carregar());
   }
 
-  /// Carrega a PRIMEIRA página, do zero.
   Future<void> _carregar() async {
     setState(() {
       _carregando = true;
@@ -126,7 +123,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     }
   }
 
-  /// A página seguinte, **acrescentada** ao que já está na tela.
   Future<void> _carregarMais() async {
     if (_carregandoMais) return;
     setState(() {
@@ -158,9 +154,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     }
   }
 
-  /// Ainda há página? **Pelo `total` do servidor**, e não por a última página
-  /// ter vindo cheia: uma página cheia que é a última faria o botão aparecer e
-  /// trazer vazio.
   bool get _temMais => _pessoas.length < _total;
 
   @override
@@ -208,7 +201,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
-  /// **Só números**, e eles ficam ao lado da lista e não no lugar dela.
   Widget _linhaDoResumo(BichuCores cores, TextTheme textos, ResumoDeConexoes resumo) {
     return Semantics(
       container: true,
@@ -219,9 +211,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
-  /// O vazio **diz o que fazer**, e o caminho que ele aponta existe: a busca de
-  /// pessoas é a aba `Usuários` da `Comunidade`, e o convite é do próprio
-  /// perfil.
   Widget _estadoVazio(BichuCores cores, TextTheme textos) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e8),
@@ -245,8 +234,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
-  /// `Buscar usuários` -- **a porta de adicionar desta tela**, construida num
-  /// lugar so.
   BotaoPrimario _acaoDeBuscar() {
     return BotaoPrimario(
       rotulo: TelaDeMinhasConexoes.buscarUsuarios,
@@ -266,9 +253,6 @@ class _EstadoDasMinhasConexoes extends State<TelaDeMinhasConexoes> {
     );
   }
 
-  /// UMA pessoa. **A linha inteira é a porta do perfil**, e aqui isso é seguro
-  /// — ao contrário do cartão de pedido, que tem `Aceitar`/`Recusar` dentro e
-  /// por isso só deixa o NOME ser tocável.
   Widget _linha(BichuCores cores, TextTheme textos, PessoaConectada pessoa) {
     final nome = pessoa.nomeParaLer;
     return Semantics(

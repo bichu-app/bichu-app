@@ -40,7 +40,6 @@ abstract final class PortaDoPerfilDoParticipante {
   /// O endereco do perfil de [outro], ou `null` quando ele nao existe.
   static String? Function(ParticipanteDaConversa outro) destino = _semDestino;
 
-  /// O default, nomeado para a isca poder voltar a ele num `addTearDown`.
   static String? _semDestino(ParticipanteDaConversa outro) => null;
 
   /// Volta ao estado de fabrica.
@@ -137,10 +136,8 @@ class AreaDeMensagens extends StatefulWidget {
 class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   final List<Conversa> _conversas = <Conversa>[];
 
-  /// O que a pessoa DIGITA. Intencao, e nao recorte: ver [_termoAplicado].
   final TextEditingController _buscaControlador = TextEditingController();
 
-  /// O controlador da rolagem, e **a origem da pagina seguinte**.
   final ScrollController _rolagem = ScrollController();
 
   ConversasApi get _api =>
@@ -150,19 +147,14 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
   bool _carregandoMais = false;
   String? _falha;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  /// O termo que **produziu** a lista que esta na tela, ou nulo.
   String? _termoAplicado;
 
-  /// `ConversationPage.total`: quantas conversas o recorte tem **no servidor**.
   int _total = 0;
 
-  /// A pagina seguinte comeca a ser buscada a esta distancia do fim, em dp.
   static const double _folgaDoGatilho = 400;
 
-  /// O numero do sino, como o SERVIDOR mandou.
   int _naoLidas = 0;
 
   @override
@@ -181,8 +173,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     super.dispose();
   }
 
-  /// ROLOU: a pagina seguinte, quando falta menos de [_folgaDoGatilho] para o
-  /// fim.
   void _aoRolar() {
     if (!_rolagem.hasClients) return;
     final posicao = _rolagem.position;
@@ -190,7 +180,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     _carregarMais();
   }
 
-  /// A LISTA QUE NAO ROLA tambem precisa crescer.
   void _completarATela() {
     if (!mounted || _cursor == null) return;
     if (!_rolagem.hasClients) return;
@@ -198,9 +187,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     _carregarMais();
   }
 
-  /// Depois do quadro, porque a extensao da rolagem so existe depois do
-  /// `layout`: chamar [_completarATela] dentro do `setState` leria o
-  /// `maxScrollExtent` do quadro ANTERIOR.
   void _aposOQuadro() {
     WidgetsBinding.instance.addPostFrameCallback((_) => _completarATela());
   }
@@ -248,7 +234,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     }
   }
 
-  /// A BUSCA foi aplicada: volta para a PRIMEIRA pagina do recorte novo.
   void _aplicarBusca(String? termo) {
     if (termo == _termoAplicado) return;
     setState(() {
@@ -258,7 +243,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     _carregar();
   }
 
-  /// A pagina seguinte, **por cursor**.
   Future<void> _carregarMais() async {
     final cursor = _cursor;
     if (cursor == null || _carregandoMais || _carregando) return;
@@ -306,7 +290,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     );
   }
 
-  /// O campo de busca, para a [BarraDeListagem].
   ControleDeBusca _controleDeBusca() {
     return ControleDeBusca(
       controlador: _buscaControlador,
@@ -401,7 +384,6 @@ class _EstadoDaAreaDeMensagens extends State<AreaDeMensagens> {
     );
   }
 
-  /// O RODAPE DA ROLAGEM INFINITA.
   Widget _rodape() {
     final falha = _falha;
     if (falha != null) {

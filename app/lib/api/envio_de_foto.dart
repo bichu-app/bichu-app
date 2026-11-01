@@ -4,8 +4,6 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
-// `foundation` traz `debugPrint`, `@immutable` E reexporta `Uint8List` --
-// `dart:typed_data` aqui seria import redundante, e o analisador reprova.
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -372,22 +370,12 @@ class EnvioDeFoto {
   /// de widget exercitar o envio inteiro sem disco de aparelho.
   final CameraEGaleria camera;
 
-  /// **Um cliente proprio, e nao o da [ApiClient].** Ele nao conhece o token da
-  /// sessao, entao nao ha como a credencial sair junto dos bytes para um host
-  /// que o servidor nomeou.
   final http.Client _cliente;
 
   /// Mais folgado que o da API de proposito: aqui sobe um arquivo de megabytes
   /// por rede de celular, e 20 s derrubaria envio que ia dar certo.
   final Duration tempoLimite;
 
-  /// O identificador do problema para o registro.
-  ///
-  /// `ProblemTipo` e um enum FECHADO: um `type` que este build nao conhece vira
-  /// `desconhecido`, cujo slug e vazio. E o caso de `unsupported-media-type`
-  /// (415), que e exatamente o que as rotas de catalogo devolvem para tipo
-  /// fora da lista -- o motivo mais provavel de uma recusa nossa. Cair na URI
-  /// crua mantem a informacao no log em vez de anotar string vazia.
   static String? _identificadorDoProblema(Problem problema) {
     final slug = problema.tipo.slug;
     return slug.isNotEmpty ? slug : (problema.tipoUri.isEmpty ? null : problema.tipoUri);
@@ -401,12 +389,6 @@ class EnvioDeFoto {
   DiagnosticoDoEnvio? get ultimoDiagnostico => _ultimoDiagnostico;
   DiagnosticoDoEnvio? _ultimoDiagnostico;
 
-  /// Anota a causa, escreve UMA linha no registro do aparelho, e devolve o
-  /// desfecho que a tela consome.
-  ///
-  /// O registro não é enfeite: sem ele, a única informação que sai de um
-  /// aparelho de verdade é a frase da tela, e foi exatamente isso que mandou
-  /// três rodadas de diagnóstico para o lugar errado.
   DesfechoDoEnvio _anotar(
     DesfechoDoEnvio desfecho,
     MotivoDoDesfecho motivo, {
@@ -468,9 +450,6 @@ class EnvioDeFoto {
         MotivoDoDesfecho.intencaoSemRede,
       );
     } on FalhaDaApi catch (falha) {
-      // **O ramo que faltava.** A nossa rota recusando (415, 422, 429) caía no
-      // `on Object` abaixo e virava a MESMA recusa do armazenamento. O status e
-      // o tipo do problema saem daqui para o registro do aparelho.
       return _anotar(
         DesfechoDoEnvio.recusada,
         MotivoDoDesfecho.intencaoRecusadaPelaApi,
@@ -478,10 +457,6 @@ class EnvioDeFoto {
         codigo: _identificadorDoProblema(falha.problem),
       );
     } on Object {
-      // Sobra o que não é rede nem recusa da API: corpo que não decodifica,
-      // `url`/`upload_id` ausentes. Fica em `intencaoRecusadaPelaApi` SEM
-      // status, e a ausência de status é o que o separa de uma recusa de
-      // verdade no registro.
       return _anotar(
         DesfechoDoEnvio.recusada,
         MotivoDoDesfecho.intencaoRecusadaPelaApi,
@@ -534,9 +509,6 @@ class EnvioDeFoto {
     aoProgredir?.call(0, bytes.length);
 
     final http.BaseRequest requisicao;
-    // **O QUE FOI PARA O FIO, anotado antes de ir.** Depois de `send` a
-    // requisicao esta finalizada e a lista nao se recupera -- e ela e metade
-    // do diagnostico de um 403 de politica de POST.
     List<String>? camposNoFio;
     String? tipoDaParte;
     if (autorizacao.metodo == 'PUT') {
@@ -556,9 +528,6 @@ class EnvioDeFoto {
       final multipart = http.MultipartRequest('POST', autorizacao.url)
         ..fields.addAll(autorizacao.campos)
         ..files.add(arquivo);
-      // `file` entra na lista porque a ordem e o que o armazenamento cobra: a
-      // parte do arquivo tem de ser a ULTIMA, e `package:http` escreve os
-      // campos antes dos arquivos. A lista prova isso sem captura de pacote.
       camposNoFio = <String>[
         ...multipart.fields.keys,
         ...multipart.files.map((a) => a.field),
@@ -589,21 +558,12 @@ class EnvioDeFoto {
 
     final status = resposta.statusCode;
     if (status >= 200 && status < 300) {
-      // No caminho feliz o corpo e vazio (204) ou irrelevante, e drenar e o
-      // que libera o socket.
       await resposta.stream.drain<void>();
       return DesfechoDoEnvio.enviada;
     }
 
-    // **O CORPO DE QUEM RECUSOU, e nao o `drain` que o jogava fora.** O status
-    // sozinho tem quatro causas (ver [DiagnosticoDoEnvio.corpo]); o corpo
-    // nomeia a condicao. Em 30/10/2026 isso custou horas de cliente parado.
     final corpo = await _recortarOCorpo(resposta);
 
-    // **O STATUS DO ARMAZENAMENTO, anotado.** Era aqui que a informação
-    // morria: a tela recebia `recusada` e nada dizia se o 403 foi de política,
-    // o 400 de campo fora das condições, ou se quem recusou foi a nossa API
-    // um passo antes.
     return _anotar(
       DesfechoDoEnvio.recusada,
       MotivoDoDesfecho.armazenamentoRecusou,
@@ -614,18 +574,9 @@ class EnvioDeFoto {
     );
   }
 
-  /// Os primeiros [_caracteresDoCorpoRecusado] caracteres do corpo, numa linha.
-  ///
-  /// **Nunca estoura.** Um corpo que nao decodifica, uma conexao que cai no
-  /// meio da leitura ou um corpo gigante nao podem transformar uma recusa
-  /// diagnosticavel em `armazenamentoSemRede` -- seria trocar a informacao que
-  /// esta funcao existe para trazer por uma causa errada. Sem corpo, devolve
-  /// nulo e o diagnostico fica como era antes dela.
   static Future<String?> _recortarOCorpo(http.StreamedResponse resposta) async {
     try {
       final bruto = await resposta.stream.bytesToString();
-      // Uma linha: o XML do Google vem indentado, e quebra de linha no meio do
-      // registro do aparelho e no meio da faixa da tela nao se le.
       final numaLinha = bruto.replaceAll(RegExp(r'\s+'), ' ').trim();
       if (numaLinha.isEmpty) return null;
       return numaLinha.length <= _caracteresDoCorpoRecusado
@@ -642,17 +593,10 @@ class EnvioDeFoto {
 /// Quantos bytes do ARQUIVO o cliente HTTP ja aceitou, de quantos no total.
 typedef ProgressoDeEnvio = void Function(int enviados, int total);
 
-/// Quanto o gerador entrega por vez.
 const int _pedacoDoEnvio = 64 * 1024;
 
-/// Quanto do corpo de quem recusou cabe no diagnóstico.
-///
-/// O `<Code>` e o `<Message>` do XML do Google, mais a condição nomeada,
-/// chegam bem antes disto; o teto existe para um corpo de HTML de proxy não
-/// virar o registro inteiro do aparelho.
 const int _caracteresDoCorpoRecusado = 300;
 
-/// Os bytes do arquivo, em pedacos, **contando o que o socket ja aceitou**.
 Stream<List<int>> _emPedacos(Uint8List bytes, ProgressoDeEnvio? aoProgredir) {
   if (bytes.isEmpty) return const Stream<List<int>>.empty();
   return _gerarPedacos(bytes, aoProgredir);

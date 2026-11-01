@@ -79,17 +79,13 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
 
   List<PublicacaoDaLinha>? _linha;
 
-  /// Se a propria pessoa tem alguma publicacao.
   bool _tenhoPublicacao = false;
 
   bool _carregando = true;
   MensagemDeErro? _faixa;
 
-  /// A falha da carga e **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  /// --------------------------------------------------------------------- A
-  /// FOTO QUE AINDA ESTA SENDO PROCESSADA, E A RELEITURA QUE A ALCANCA
   static const Duration _intervaloDaReleitura = Duration(seconds: 2);
   static const int _releiturasMaximas = 5;
 
@@ -102,16 +98,12 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   static const Duration intervaloMinimoEntreRecargas =
       CorpoDoMural.intervaloMinimoEntreRecargas;
 
-  /// A JANELA DE SILENCIO, e por que ela e um `Timer` e nao um carimbo de
-  /// `DateTime.now()`.
   Timer? _janelaDeSilencio;
 
   bool get _emSilencio => _janelaDeSilencio?.isActive ?? false;
 
-  /// Se a secao esta visivel.
   bool _visivel = false;
 
-  /// A carga EM VOO, e a razao de ela existir.
   Future<void>? _emVoo;
 
   ValueListenable<RouteInformation>? _enderecos;
@@ -149,14 +141,12 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     super.dispose();
   }
 
-  /// O roteador navegou. Ver a prosa de [intervaloMinimoEntreRecargas].
   void _aoNavegar() {
     if (!mounted || !_visivel) return;
     if (_enderecos?.value.uri.path != Rotas.mural) return;
     _recargaPedidaPelaCasca(aoTopo: true);
   }
 
-  /// A recarga que a BARRA pede, com o intervalo minimo e a rolagem ao topo.
   void _recargaPedidaPelaCasca({required bool aoTopo}) {
     if (aoTopo) {
       final rolagem = Scrollable.maybeOf(context);
@@ -182,7 +172,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     _carregar();
   }
 
-  /// O FUNIL UNICO de toda leitura desta tela, e o que ele garante.
   Future<void> _carregar({bool silenciosa = false}) {
     final emVoo = _emVoo;
     if (emVoo != null) return emVoo;
@@ -195,7 +184,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     return _emVoo!;
   }
 
-  /// [silenciosa] nao troca a lista pela roda.
   Future<void> _carregarAgora({bool silenciosa = false}) async {
     if (!silenciosa) {
       setState(() {
@@ -225,7 +213,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     }
   }
 
-  /// Arma UMA releitura quando alguma foto minha ainda esta em `processing`.
   void _agendarReleituraSeAFotoAindaProcessa(List<MinhaPublicacao> minhas) {
     _releitura?.cancel();
     _releitura = null;
@@ -352,7 +339,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// A ordem NOVA: imagem com o autor sobreposto, acoes, legenda.
   Widget _comImagem(BuildContext context, String urlDaImagem) {
     final textos = Theme.of(context).textTheme;
     final imagem = publicacao.imagem;
@@ -404,7 +390,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// A publicacao SO DE TEXTO.
   Widget _semImagem(BuildContext context) {
     final textos = Theme.of(context).textTheme;
     return Padding(
@@ -422,7 +407,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// A LINHA DO AUTOR — foto, nome e, fora do veu, o selo de validado.
   Widget _linhaDoAutor(BuildContext context, {required bool sobreOVeu}) {
     final tema = BichuColors.of(context);
     final textos = Theme.of(context).textTheme;
@@ -461,8 +445,6 @@ class _CartaoDaPublicacao extends StatelessWidget {
     );
   }
 
-  /// O `⋮` do cartao: **`Apagar` na propria, `Denunciar` na de outra pessoa, e
-  /// nunca as duas.**
   bool get _temMenu =>
       (publicacao.minha && aoApagar != null) ||
       (!publicacao.minha && aoDenunciar != null);

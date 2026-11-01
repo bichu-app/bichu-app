@@ -53,10 +53,8 @@ class TelaDePedidosDeConexao extends StatefulWidget {
 }
 
 class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
-  /// A caixa que esta na frente.
   CaixaDePedidos _caixa = CaixaDePedidos.recebidos;
 
-  /// A PÁGINA JÁ CARREGADA DE CADA CAIXA, e a razão de ela ser um MAPA.
   final Map<CaixaDePedidos, PaginaDePedidosDeConexao> _paginas =
       <CaixaDePedidos, PaginaDePedidosDeConexao>{};
 
@@ -64,7 +62,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
   bool _carregando = true;
   String? _falha;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   final Set<String> _emCurso = <String>{};
 
@@ -133,7 +130,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     }
   }
 
-  /// O TOQUE NA ABA. **Só a caixa inédita pergunta ao servidor.**
   void _trocarCaixa(CaixaDePedidos escolhida) {
     if (escolhida == _caixa) return;
     final bool jaVista = _paginas.containsKey(escolhida);
@@ -214,7 +210,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     );
   }
 
-  /// **Só números.** Esta linha é o que existe no lugar da lista de conexões.
   Widget _linhaDoResumo(BichuCores cores, TextTheme textos, ResumoDeConexoes resumo) {
     return Semantics(
       container: true,
@@ -226,7 +221,6 @@ class _EstadoDosPedidos extends State<TelaDePedidosDeConexao> {
     );
   }
 
-  /// O NOME DE QUEM PEDIU, e a porta do perfil dele quando há apelido.
   Widget _nomeDeQuemPediu(
     BichuCores cores,
     TextTheme textos,

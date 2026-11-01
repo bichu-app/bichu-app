@@ -74,17 +74,12 @@ class _TelaOndeEQuandoState extends State<TelaOndeEQuando> {
   late final TextEditingController _cidade;
   late final TextEditingController _ajuda;
 
-  /// A sigla do estado escolhida na lista de 27, ou nulo.
   String? _uf;
 
-  /// O foco do bairro. O criterio 5 manda o foco para ELE quando o motivo do
-  /// botao desabilitado e a falta de bairro, e o criterio 2 manda o teclado
-  /// abrir nele quando a tela nasce sem regiao nenhuma.
   final FocusNode _focoDoBairro = FocusNode();
 
   bool _preencheuDaReferencia = false;
 
-  /// A faixa da falha anterior, enquanto ela ainda descreve o que esta na tela.
   String? _erro;
 
   @override

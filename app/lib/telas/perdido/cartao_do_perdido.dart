@@ -25,7 +25,6 @@ class CartaoDoPerdido extends StatelessWidget {
 
   final VoidCallback? aoTocar;
 
-  /// O toque QUE VALE: [aoTocar], **menos o do pet que já voltou**.
   VoidCallback? get _toqueQueVale =>
       perdido.encontradoPelaComunidade ? null : aoTocar;
 
@@ -67,14 +66,12 @@ class CartaoDoPerdido extends StatelessWidget {
     return 'Visto por último $frase';
   }
 
-  /// Dias de calendário entre os dois, no fuso de quem lê.
   static int _diasDeDiferenca(DateTime quando, DateTime agora) {
     final a = DateTime(quando.year, quando.month, quando.day);
     final b = DateTime(agora.year, agora.month, agora.day);
     return b.difference(a).inDays;
   }
 
-  /// `dd/mm/aaaa`, no fuso de quem lê.
   static String _comoData(DateTime quando) {
     final local = quando.toLocal();
     final dia = local.day.toString().padLeft(2, '0');

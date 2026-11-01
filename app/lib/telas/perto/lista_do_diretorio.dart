@@ -76,7 +76,6 @@ class ListaDoDiretorio extends StatefulWidget {
   State<ListaDoDiretorio> createState() => _ListaDoDiretorioState();
 }
 
-/// Os desfechos de uma carga.
 enum _Fase { carregando, lista, falha }
 
 class _ListaDoDiretorioState extends State<ListaDoDiretorio>
@@ -88,11 +87,9 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   _Fase _fase = _Fase.carregando;
   RecorteDoDiretorio _recorte = const RecorteDoDiretorio();
 
-  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
   final PreservacaoDaListagem _preservacao =
       PreservacaoDaListagem(teto: tetoDeItensPreservados);
 
-  /// A pergunta que as entradas na tela respondem.
   String get _assinaturaDaListagem => assinaturaDaListagem(
         pergunta: <String, String>{
           ..._recorte.query,
@@ -101,8 +98,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         referencia: _referenciaDaConta,
       );
 
-  /// A localizacao de referencia da conta -- o gatilho de invalidacao que
-  /// ninguem lembraria.
   String? get _referenciaDaConta {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return null;
@@ -116,31 +111,23 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
   PaginaDoDiretorio? _pagina;
   String? _textoDaFalha;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  /// As entradas de **todas** as paginas ja pedidas, na ordem em que chegaram.
   final List<EntradaDoDiretorio> _itens = <EntradaDoDiretorio>[];
 
-  /// A pagina seguinte esta em voo.
   bool _carregandoMais = false;
 
-  /// Por que a pagina seguinte nao chegou.
   String? _falhaDeMais;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
 
-  /// O campo de busca por nome (`q`, desde 30/09).
   final TextEditingController _busca = TextEditingController();
 
-  /// As cidades que esta lista JA VIU, para o grupo `Cidade` da folha.
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
 
-  /// A CIDADE DO APARELHO, pela mesma peca que `Pets` e `Eventos` usam.
   CidadeDoAparelho? _cidadeDoAparelho;
 
-  /// A FOLHA decidiu a cidade, e por isso a derivada nao manda mais.
   bool _folhaDecidiuACidade = false;
 
   /// Recarrega quando a tela volta a aparecer, pelo mesmo mecanismo de `Perfil`
@@ -166,7 +153,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     _agendarCarga();
   }
 
-  /// Cria o resolvedor de cidade e **dispara a resolucao de abertura**.
   void _criarAResolucaoDaCidade() {
     if (_cidadeDoAparelho != null) return;
     final resolvedor = CidadeDoAparelho.doEscopo(context)
@@ -181,30 +167,21 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// A caixa e a frase dela dependem do resolvedor; `setState` vazio basta.
   void _aResolucaoAndou() {
     if (!mounted) return;
     setState(() {});
   }
 
-  /// A CIDADE QUE VALE AGORA, e e ela que vai para `city` na rota.
   String? get _cidadeEmUso =>
       _folhaDecidiuACidade ? _recorte.cidade : _cidadeDoAparelho?.cidade;
 
-  /// O recorte como ele vai para a ROTA: com a cidade em uso aplicada.
   RecorteDoDiretorio _paraAChamada(RecorteDoDiretorio base) {
     final cidade = _cidadeEmUso;
     return base.com(cidade: cidade, limparCidade: cidade == null);
   }
 
-  /// Em que estado de sessao a lista na tela foi carregada.
   bool? _logadoDaUltimaCarga;
 
-  /// **A UNICA decisao de qual operacao atende a lista**, e ela e uma so de
-  /// proposito: ha DOIS chamadores (a primeira pagina e o `Carregar mais`), e
-  /// um deles escolhendo diferente faria a pagina 2 vir de outra operacao que a
-  /// 1 -- entrada repetida e entrada faltando no fim da lista, pelo mesmo
-  /// motivo que `_paraAChamada` mora num lugar so.
   Future<PaginaDoDiretorio> _pedirPagina(
     Escopo escopo,
     RecorteDoDiretorio recorte,
@@ -215,7 +192,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
         : escopo.diretorio.listarPublico(chamada);
   }
 
-  /// O TOQUE em `Usar minha localização`.
   Future<void> _usarMinhaLocalizacao() async {
     final resolvedor = _cidadeDoAparelho;
     if (resolvedor == null) return;
@@ -240,7 +216,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     });
   }
 
-  /// Carrega a **primeira** pagina do recorte atual, sempre.
   Future<void> _carregar() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
@@ -298,7 +273,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     super.dispose();
   }
 
-  /// Recolhe as cidades das entradas que chegaram, para o grupo `Cidade`.
   void _guardarAsCidades(List<EntradaDoDiretorio> entradas) {
     for (final e in entradas) {
       final c = e.cidade?.trim();
@@ -311,7 +285,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     _carregar();
   }
 
-  /// Pede a pagina seguinte e **acrescenta** o que vier.
   Future<void> _carregarMais() async {
     if (!mounted || _carregandoMais) return;
     final atual = _pagina;
@@ -352,7 +325,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     }
   }
 
-  /// O TOQUE NO CARTAO, e o destino dele.
   void _tocarNoCartao(EntradaDoDiretorio entrada, {required bool logado}) {
     if (!logado) {
       unawaited(
@@ -423,7 +395,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// A busca por NOME, servida pelo servidor (`q`).
   ControleDeBusca _controleDeBusca() {
     return ControleDeBusca(
       controlador: _busca,
@@ -439,8 +410,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// O filtro: atividade e nivel de verificacao, que sao os dois recortes que a
-  /// rota aceita.
   ControleDeFiltro _controleDeFiltro() {
     final cidades = SplayTreeSet<String>.from(_cidadesConhecidas);
     final emUso = _cidadeEmUso;
@@ -497,8 +466,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// Os dois grupos **e a ordem** de uma vez, no `Aplicar`: uma chamada a rota,
-  /// e a lista sempre de volta a `pagina: 1`.
   void _aplicarAFolha(EscolhaDaFolha escolha) {
     final atividade = escolha.filtros['kind'];
     final nivel = escolha.filtros['verification_level'];
@@ -536,7 +503,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// A ordenacao, montada a partir do que **de fato** aconteceu.
   ControleDeOrdenacao _controleDeOrdenacao(PaginaDoDiretorio pagina) {
     final efetiva = pagina.ordemEfetiva;
 
@@ -549,7 +515,6 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio>
     );
   }
 
-  /// O corpo da lista.
   List<Widget> _corpo({required bool logado}) {
     if (_fase == _Fase.carregando) {
       return const <Widget>[

@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 /// Os oito digitos do CEP.
 const int digitosDoCep = 8;
 
-/// `01310`: o que vem antes do hifen.
 const int _digitosDoPrefixo = 5;
 
 /// O que a mascara brasileira ocupa: `01310-100`.

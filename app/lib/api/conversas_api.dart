@@ -101,7 +101,6 @@ class ConversasApi {
     }
   }
 
-  /// O id vem da resposta do servidor: vai codificado, como nas outras rotas.
   static String _caminho(String conversaId) =>
       '/conversations/${Uri.encodeComponent(conversaId)}';
 }

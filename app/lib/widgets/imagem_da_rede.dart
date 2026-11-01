@@ -96,7 +96,6 @@ class ImagemDaRede extends StatelessWidget {
     );
   }
 
-  /// De onde os bytes vem: o disco antes da rede, ou **so a rede**.
   ImageProvider<Object> _provedor(BuildContext context) {
     final chave = cache;
     if (chave == null) return NetworkImage(url);
@@ -110,7 +109,6 @@ class ImagemDaRede extends StatelessWidget {
     );
   }
 
-  /// O lugar da imagem que nao carregou.
   Widget _falha(BichuCores cores) {
     final simbolo = Icon(
       simboloDeFalha,

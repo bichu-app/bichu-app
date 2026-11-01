@@ -301,7 +301,6 @@ abstract final class Rotas {
   }
 }
 
-/// O rascunho que vem no `extra`, venha ele do assistente ou de um envelope.
 RascunhoDePet? _rascunhoDoExtra(Object? extra) {
   return switch (extra) {
     RascunhoDePet rascunho => rascunho,
@@ -323,7 +322,6 @@ void ligarPortaDoPerfilDoParticipante() {
   };
 }
 
-/// Uma rota de PRIMEIRO PLANO: empilhada, e com a barra de baixo por baixo.
 GoRoute _comBarraFixa({
   required String path,
   required Widget Function(BuildContext, GoRouterState) builder,
@@ -353,7 +351,6 @@ void ligarPortaDoDestinoDoAviso() {
   };
 }
 
-/// A TELA UNICA DAS CONEXOES, montada pelas TRES rotas que apontam para ela.
 Widget _asConexoes(
   BuildContext context, {
   AbaDeConexoes aba = AbaDeConexoes.conexoes,

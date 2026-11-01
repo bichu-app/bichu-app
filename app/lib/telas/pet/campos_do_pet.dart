@@ -16,7 +16,6 @@ import '../../widgets/seletor_de_lista.dart';
 import 'rascunho_de_pet.dart';
 import 'textos_do_cadastro.dart';
 
-/// A leitura de `reference-data`, num lugar so.
 Future<DadosDeReferencia?> _buscarReferencia(BuildContext context) async {
   try {
     return await Escopo.of(context).pets.dadosDeReferencia();
@@ -57,8 +56,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   bool _carregandoReferencia = true;
   bool _listaFalhou = false;
 
-  /// Verdadeiro depois de a pessoa escolher `Continuar sem a raça`: a faixa
-  /// some e o seletor fica desabilitado, mas **nao vira** campo de texto.
   bool _seguiuSemRaca = false;
 
   String? _erroDoNome;
@@ -66,7 +63,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
   String? _erroDoPorte;
   String? _erroDaRacaLivre;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
   @override
@@ -75,7 +71,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
     _rascunho.addListener(_oRascunhoMudou);
   }
 
-  /// O rascunho mudou por qualquer caminho: redesenha.
   void _oRascunhoMudou() {
     if (!mounted) return;
     setState(() {});
@@ -122,8 +117,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
     });
   }
 
-  /// A lista mostrada no seletor: as racas da especie escolhida **mais** a
-  /// opcao de saida, que e microcopy e nao dado do servidor.
   List<ItemDeLista> get _itensDeRaca {
     final especie = _rascunho.especie;
     final referencia = _referencia;
@@ -160,7 +153,6 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
     });
   }
 
-  /// A saída do critério 6: sem a lista, a pessoa digita a raça.
   void _digitarARaca() {
     final especie = _rascunho.especie;
     if (especie == null) return;
@@ -392,7 +384,6 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
 
   DadosDeReferencia? _referencia;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
   @override

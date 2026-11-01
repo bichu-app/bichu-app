@@ -101,17 +101,12 @@ class ListaDePerdidos extends StatefulWidget {
   State<ListaDePerdidos> createState() => _EstadoDaListaDePerdidos();
 }
 
-/// **`semCidade` SAIU em 19/10/2026.** Ela era a fase em que a tela não tinha o
-/// que mostrar porque ninguém havia digitado uma cidade, e a cidade deixou de
-/// ser obrigatória: não há mais pergunta a fazer antes de listar.
 enum _Fase { carregando, lista, falha }
 
-/// O RECORTE COM QUE A PÁGINA ABRE: **`case_state=open`, só os perdidos.**
 const RecorteDePerdidos _recorteDeAbertura = RecorteDePerdidos(
   estado: EstadoDoCasoNaLista.aberto,
 );
 
-/// De onde veio a cidade que esta valendo.
 enum _OrigemDaCidade {
   /// A pessoa digitou (ou apagou) na folha de filtro.
   escolhida,
@@ -129,7 +124,6 @@ enum _OrigemDaCidade {
   nenhuma,
 }
 
-/// O QUE O TOQUE EM `Usar minha localização` DEIXOU NA TELA.
 enum _AvisoDaLocalizacao {
   /// O aparelho está medindo.
   procurando,
@@ -160,18 +154,14 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   List<PerdidoPublico> _itens = const <PerdidoPublico>[];
 
-  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
   final PreservacaoDaListagem _preservacao =
       PreservacaoDaListagem(teto: tetoDeItensPreservados);
 
-  /// A pergunta que os cartoes na tela respondem.
   String get _assinaturaDaListagem => assinaturaDaListagem(
         pergunta: _recorte?.query ?? const <String, String>{},
         referencia: _referenciaDaConta,
       );
 
-  /// A localizacao de referencia da conta: `Me.reference_area`, que recorta
-  /// esta lista pela cidade.
   String? get _referenciaDaConta {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return null;
@@ -187,35 +177,24 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   RecorteDePerdidos? _recorte;
 
-  /// A PESSOA mexeu no campo de cidade.
   bool _pessoaMexeu = false;
 
-  /// A cidade que a pessoa escolheu.
   String? _cidadeDigitada;
 
-  /// A cidade resolvida pelo aparelho, quando deu.
   String? _cidadeDoAparelho;
 
-  /// A última cidade que ficou valendo **neste aparelho**, lida de
-  /// [CidadeEscolhida].
   String? _cidadeDaUltimaBusca;
 
-  /// A leitura do depósito já foi PEDIDA.
   bool _pediuODeposito = false;
 
-  /// A resolução já foi PEDIDA nesta montagem.
   bool _pediuAResolucao = false;
 
-  /// A permissão de localização, como a porta a vê.
   PermissaoDeLocalizacao? _permissao;
 
-  /// O que o último TOQUE em `Usar minha localização` deixou na tela.
   _AvisoDaLocalizacao? _aviso;
 
-  /// A cidade que [_AvisoDaLocalizacao.semPetsNaCidade] nomeia.
   String? _cidadeDoAviso;
 
-  /// O CÓDIGO do motivo do último aviso, e o detalhe que a plataforma deu.
   String? _codigoDoAviso;
   String? _detalheDoAviso;
 
@@ -224,16 +203,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
 
   final TextEditingController _buscaControlador = TextEditingController();
 
-  /// Cada carga ganha um número; resposta de carga velha é descartada.
   int _geracao = 0;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
 
-  /// O instante de referência das frases relativas dos cartões, fixado **por
-  /// carga** e não lido a cada pintura: um `DateTime.now()` dentro do `build`
-  /// faria dois cartões da mesma lista discordarem sobre o que é "hoje" na
-  /// virada da meia-noite.
   DateTime _agora = DateTime.now();
 
   @override
@@ -278,12 +252,10 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     });
   }
 
-  /// A cidade que vale agora.
   String? get _cidadeEmUso => _pessoaMexeu
       ? _cidadeDigitada
       : (_cidadeDoAparelho ?? _cidadeDaRegiao ?? _cidadeDaUltimaBusca);
 
-  /// De onde a cidade que está valendo veio.
   _OrigemDaCidade get _origemDaCidade {
     if (_cidadeEmUso == null) return _OrigemDaCidade.nenhuma;
     if (_pessoaMexeu) return _OrigemDaCidade.escolhida;
@@ -292,16 +264,13 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     return _OrigemDaCidade.ultimaBusca;
   }
 
-  /// A cidade da região cadastrada: a **segunda** reserva da cadeia.
   String? get _cidadeDaRegiao {
     final c = _regiao?.cidade?.trim();
     return (c == null || c.isEmpty) ? null : c;
   }
 
-  /// Onde a última cidade fica guardada **neste aparelho**.
   CidadeEscolhida get _cidadeGuardada => Escopo.of(context).cidadeEscolhida;
 
-  /// Lê a última cidade guardada neste aparelho, **sem a tela esperar**.
   Future<void> _lerODeposito() async {
     final guardada = await _cidadeGuardada.ler();
     if (!mounted || guardada == null) return;
@@ -314,7 +283,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     await _carregar();
   }
 
-  /// Resolve a cidade pelo aparelho, **sem a tela esperar**.
   Future<void> _resolverACidade() async {
     final sessao = Escopo.of(context).localizacaoDaSessao;
     final permissao = await sessao.estado();
@@ -324,7 +292,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     await _resolverEAplicar(sessao, porToque: false);
   }
 
-  /// O caminho do TOQUE: pede a permissão e, concedida, resolve.
   Future<void> _pedirEResolver() async {
     if (_aviso == _AvisoDaLocalizacao.procurando) return;
     final sessao = Escopo.of(context).localizacaoDaSessao;
@@ -370,7 +337,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     await _resolverEAplicar(sessao, porToque: true);
   }
 
-  /// Resolve a cidade e aplica, **por um dos DOIS caminhos**.
   Future<void> _resolverEAplicar(
     LocalizacaoDaSessao sessao, {
     required bool porToque,
@@ -428,7 +394,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         }
     }
   }
-  /// A região cadastrada do tutor.
   RegiaoDeReferencia? get _regiao =>
       Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
 
@@ -525,7 +490,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     );
   }
 
-  /// O campo de cidade da folha.
   CampoDeTextoDoFiltro get _campoDaCidade => CampoDeTextoDoFiltro(
         chave: 'city',
         rotulo: ListaDePerdidos.rotuloDaCidade,
@@ -602,7 +566,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     );
   }
 
-  /// O `Aplicar` da folha: **um** recorte, **uma** chamada à rota.
   void _aplicarAFolha(EscolhaDaFolha escolha) {
     final base = _recorte ?? _recorteDeAbertura;
     _pessoaMexeu = true;
@@ -625,11 +588,9 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     );
   }
 
-  /// ## A CAIXA DO RECORTE APARECE, OU NÃO — decisão do cliente, 20/10/2026
   bool get _caixaDoRecorteAparece =>
       _cidadeEmUso == null || _podeOferecerLocalizacao || _localizacaoPendente;
 
-  /// A localização ainda não entregou cidade, e a caixa tem função.
   bool get _localizacaoPendente => switch (_aviso) {
         null => false,
         _AvisoDaLocalizacao.procurando ||
@@ -641,14 +602,11 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
         _AvisoDaLocalizacao.semPetsNaCidade => false,
       };
 
-  /// Oferecer `Usar minha localização` só faz sentido quando ela ainda pode dar
-  /// em algo.
   bool get _podeOferecerLocalizacao {
     if (_cidadeDoAparelho != null && !_pessoaMexeu) return false;
     return _permissao != PermissaoDeLocalizacao.indisponivel;
   }
 
-  /// A frase da faixa do toque, ou nula quando não há faixa.
   String? get _textoDoAviso => switch (_aviso) {
         null => null,
         _AvisoDaLocalizacao.procurando => ListaDePerdidos.avisoProcurando,
@@ -663,7 +621,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
           ListaDePerdidos.avisoSemPetsNaCidade(_cidadeDoAviso ?? ''),
       };
 
-  /// A frase da faixa COM o código do motivo, que é o que a tela mostra.
   String? get _textoDaFaixa {
     final frase = _textoDoAviso;
     final codigo = _codigoDoAviso;
@@ -671,7 +628,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
     return ListaDePerdidos.comCodigo(frase, codigo, _detalheDoAviso);
   }
 
-  /// A saída que a faixa oferece, **e ela não é a mesma nas quatro**.
   String? get _rotuloDaAcaoDoAviso => switch (_aviso) {
         _AvisoDaLocalizacao.semPermissao ||
         _AvisoDaLocalizacao.servicoDesligado =>
@@ -699,7 +655,6 @@ class _EstadoDaListaDePerdidos extends State<ListaDePerdidos>
           null,
       };
 
-  /// `Ver todas`: tira a cidade do recorte, venha ela de onde vier.
   void _verTodas() {
     _pessoaMexeu = true;
     _cidadeDigitada = null;

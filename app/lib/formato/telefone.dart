@@ -10,7 +10,6 @@ const int digitosDoFixo = 8;
 const int digitosDoCelular = 9;
 const int _digitosDoDdd = 2;
 
-/// DDD + fixo, e DDD + celular.
 const int _minimoDeDigitos = _digitosDoDdd + digitosDoFixo;
 const int _maximoDeDigitos = _digitosDoDdd + digitosDoCelular;
 

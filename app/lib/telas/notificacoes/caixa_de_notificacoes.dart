@@ -32,7 +32,6 @@ abstract final class PortaDoDestinoDoAviso {
   /// O endereco de [aviso], ou `null` quando ele nao tem destino.
   static String? Function(AvisoDaCaixa aviso) destino = _semDestino;
 
-  /// O default, nomeado para a isca poder voltar a ele num `addTearDown`.
   static String? _semDestino(AvisoDaCaixa aviso) => null;
 
   /// Volta ao estado de fabrica.
@@ -92,7 +91,6 @@ enum _Fase { carregando, lista, falha }
 class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   _Fase _fase = _Fase.carregando;
 
-  /// A falha da lista foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   List<AvisoDaCaixa> _itens = const <AvisoDaCaixa>[];
   int _total = 0;
@@ -102,15 +100,11 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
   String? _falhaDeMais;
   String? _falhaDaAcao;
 
-  /// O mesmo sinalizador de `TelaAcompanharPlaquinha` e das outras telas que
-  /// leem `Escopo`: ler um `InheritedWidget` em `initState` estoura
-  /// `dependOnInheritedWidgetOfExactType ...
   bool _iniciou = false;
 
   NotificacoesApi get _api =>
       widget.notificacoes ?? NotificacoesApi(Escopo.of(context).api);
 
-  /// O contador do sino, **ou nulo quando esta tela esta montada fora do app**.
   ContadorDeAvisos? _contador;
 
   @override
@@ -207,7 +201,6 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     }
   }
 
-  /// O toque na linha: o item foi ABERTO, e a pessoa vai ao destino.
   Future<void> _abrir(AvisoDaCaixa aviso) async {
     setState(() => _falhaDaAcao = null);
     try {
@@ -226,7 +219,6 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     }
   }
 
-  /// O toque no "x": a linha foi DISPENSADA.
   Future<void> _dispensar(AvisoDaCaixa aviso) async {
     setState(() => _falhaDaAcao = null);
     try {
@@ -245,7 +237,6 @@ class _CaixaDeNotificacoesState extends State<CaixaDeNotificacoes> {
     }
   }
 
-  /// Empilha a tela de destino, **quando ha uma**.
   void _irAoDestino(AvisoDaCaixa aviso) {
     if (!mounted) return;
     if (!aviso.temDestino) return;

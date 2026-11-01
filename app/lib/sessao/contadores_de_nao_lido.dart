@@ -16,8 +16,6 @@ class ContadoresDeNaoLido extends ChangeNotifier {
     required CidadeEscolhida cidade,
     DistintivoDoAplicativo? distintivo,
   })
-      // nomeado exige nome publico, e os dois PRECISAM ser nomeados -- a porta
-      // de conversas e a posicional, como `PetsApi(api)` e as outras camadas.
       // ignore: prefer_initializing_formals
       : _secoes = secoes,
         // ignore: prefer_initializing_formals
@@ -26,11 +24,8 @@ class ContadoresDeNaoLido extends ChangeNotifier {
 
   final ConversasApi _conversas;
 
-  /// A porta das TRES contagens novas.
   final ContadoresApi _secoes;
 
-  /// De onde sai a cidade do contador de `Pets`: o MESMO deposito que
-  /// `lista_de_perdidos.dart` grava a cada carga.
   final CidadeEscolhida _cidade;
 
   final DistintivoDoAplicativo _distintivo;
@@ -38,11 +33,9 @@ class ContadoresDeNaoLido extends ChangeNotifier {
   int? _mensagens;
   ContadoresDeSecao? _secoesContadas;
 
-  /// A ultima cidade LIDA do deposito, ou nulo enquanto ninguem leu.
   String? _cidadeConhecida;
   bool _pediuACidade = false;
 
-  /// Se o objeto ja foi descartado.
   bool _descartado = false;
 
   /// Quantas mensagens nao lidas a CONTA tem, ou **nulo**.
@@ -106,7 +99,6 @@ class ContadoresDeNaoLido extends ChangeNotifier {
     }
   }
 
-  /// Pede a cidade ao deposito **uma vez**, e nao espera a resposta.
   void _lerACidadeSemEsperar() {
     if (_pediuACidade) return;
     _pediuACidade = true;

@@ -54,7 +54,6 @@ class _EstadoDeConexoes extends State<TelaDeConexoes>
     vsync: this,
   );
 
-  /// Quantos pedidos RECEBIDOS esperam decisao, ou nulo quando ninguem contou.
   int? _recebidos;
 
   @override
@@ -69,7 +68,6 @@ class _EstadoDeConexoes extends State<TelaDeConexoes>
     super.dispose();
   }
 
-  /// **A falha deixa a pastilha de fora e NAO desenha faixa de erro.**
   Future<void> _lerOResumo() async {
     try {
       final resumo = await widget.conexoes.resumo();

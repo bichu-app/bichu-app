@@ -46,7 +46,6 @@ class TelaEncontreiEstePet extends StatefulWidget {
 enum _Fase { preenchendo, enviando }
 
 class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
-  /// O rascunho **ja nasce com o animal respondido**.
   late final RascunhoDoAchado _rascunho = RascunhoDoAchado(
     especie: widget.perdido.especie,
     porte: widget.perdido.porte,
@@ -59,7 +58,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
   MensagemDeErro? _erro;
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
-  /// A chave de idempotencia **da primeira tentativa**, e nao de cada uma.
   String? _chave;
 
   bool _consultou = false;
@@ -107,7 +105,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
     setState(() => _rascunho.foto = ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o rascunho.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -117,7 +114,6 @@ class _TelaEncontreiEstePetState extends State<TelaEncontreiEstePet> {
         titulo: 'Ajuste a foto do animal',
       );
 
-  /// O calendario de `Outra data`, igual ao de F3.5.
   Future<void> _escolherData() async {
     final agora = widget.agora();
     final escolhida = await showDatePicker(

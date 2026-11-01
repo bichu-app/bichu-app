@@ -50,7 +50,6 @@ class VersaoApi {
 
   static const String caminho = '/app/version-status';
 
-  /// Os vereditos que ESTE binario conhece, pelo texto do contrato.
   static const Map<String, VereditoDeVersao> _vereditos = <String, VereditoDeVersao>{
     'supported': VereditoDeVersao.liberado,
     'update_recommended': VereditoDeVersao.recomendado,
@@ -85,7 +84,6 @@ class VersaoApi {
     }
   }
 
-  /// A URL da loja, ou nula.
   static Uri? _loja(Object? bruto) {
     if (bruto is! String || bruto.isEmpty) return null;
     final uri = Uri.tryParse(bruto);

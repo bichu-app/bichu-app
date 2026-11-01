@@ -51,7 +51,6 @@ class TelaDoCasoPublico extends StatefulWidget {
   State<TelaDoCasoPublico> createState() => _TelaDoCasoPublicoState();
 }
 
-/// Os desfechos de uma abertura.
 enum _Fase {
   carregando,
   carregado,
@@ -117,24 +116,20 @@ class _TelaDoCasoPublicoState extends State<TelaDoCasoPublico> {
     }
   }
 
-  /// **Decide pelo `type`, e o status e so o cinto.**
   bool _ehCasoEncerrado(FalhaDeChamada falha) =>
       falha is FalhaDaApi &&
       falha.problem.tipo != ProblemTipo.casoReencontrado &&
       (falha.problem.tipo == ProblemTipo.casoEncerrado ||
           falha.problem.status == 410);
 
-  /// **O reencontrado, e ele compara SO o `type`.**
   bool _ehCasoReencontrado(FalhaDeChamada falha) =>
       falha is FalhaDaApi &&
       falha.problem.tipo == ProblemTipo.casoReencontrado;
 
-  /// A porta do achado, **com o caso inteiro**.
   void _encontrei() {
     context.push(Rotas.encontreiEstePet, extra: _caso!.perdido);
   }
 
-  /// A porta do achado **sem** token, no caminho do 410.
   void _registrarAchadoAvulso() => context.push(Rotas.registrarAchado);
 
   @override
