@@ -168,8 +168,6 @@ class FaixaDeImagens extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textoDoTema = Theme.of(context).textTheme;
     final provisoria = subindo;
-    // **O teto conta a que está subindo.** Sem isso o botão volta a ficar
-    // tocável na janela do envio e a tela pede uma quinta assinatura.
     final cheio = imagens.length + (provisoria == null ? 0 : 1) >= maximo;
     final nadaNaTela = imagens.isEmpty && provisoria == null;
 
@@ -236,10 +234,6 @@ class FaixaDeImagens extends StatelessWidget {
           ),
           const SizedBox(height: BichuEspaco.e3),
         ],
-        // **Os dois botões continuam na tela com o teto alcançado, e
-        // DESABILITADOS.** Esconder o controle quando a ação não cabe faz a
-        // pessoa procurar o que desapareceu; a linha de apoio acima diz o
-        // motivo.
         if (permissao != EstadoDaPermissao.indisponivel) ...<Widget>[
           BotaoSecundario(
             rotulo: textos.tirarAFoto,
@@ -299,10 +293,6 @@ class _LinhaDaImagem extends StatelessWidget {
           child: SizedBox(
             width: FaixaDeImagens.larguraDaMiniatura,
             height: FaixaDeImagens.alturaDaMiniatura,
-            // **`comInvolucroProprio: false` de propósito**: o quadro é este
-            // `ClipRRect`, e o involucro de `PreviaDaFoto` fixaria a altura
-            // padrão de 300 dp -- o que decodificaria a imagem muito maior do
-            // que esta linha desenha.
             child: PreviaDaFoto(
               foto: foto,
               descricao: FaixaDeImagens.descricaoDaImagem(indice, total),

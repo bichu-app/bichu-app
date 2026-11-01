@@ -24,7 +24,6 @@ class ArrastarParaAtualizar extends StatelessWidget {
   /// A busca de quem a conhece na construcao.
   final Future<void> Function()? _fixa;
 
-  /// A busca de quem a recebe depois, pelo slot.
   final RecargaDaSecao? _doSlot;
 
   /// O rolavel. Ver o item 3 do cabecalho.

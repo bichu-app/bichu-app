@@ -108,9 +108,6 @@ class AchadoRegistrado {
   /// nulo e a decisao e nao a falta de dado -- ver [PetCorrespondenteDoAchado].
   final PetCorrespondenteDoAchado? petCorrespondente;
 
-  /// **`id`, `origin`, `status` e `created_at` sao lidos sem `??`**, de
-  /// proposito: o contrato os declara obrigatorios, e um achado sem identidade
-  /// nao e um achado degradado -- e uma resposta que a tela nao deve desenhar.
   static DateTime? _data(Object? bruto) =>
       bruto is String ? DateTime.tryParse(bruto) : null;
 

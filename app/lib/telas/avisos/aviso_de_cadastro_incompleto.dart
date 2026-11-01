@@ -173,7 +173,6 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
   bool _reenviando = false;
   String? _erro;
 
-  /// A confirmacao do reenvio, VISIVEL.
   String? _confirmacao;
   bool _carregou = false;
 

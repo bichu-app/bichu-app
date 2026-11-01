@@ -238,8 +238,6 @@ abstract final class TextosDoDetalhe {
   static const String exclusaoPrecisaDeConexao =
       'Precisamos de conexão para excluir. Nada foi apagado.';
 
-  /// `o`/`a` pelo nome nao da para adivinhar, e o contrato nao traz genero de
-  /// nome proprio: [Pet.sexo] e do animal, nao da palavra.
   static String _o(String nome) => nome;
 
   static String _de(String nome) => 'de $nome';

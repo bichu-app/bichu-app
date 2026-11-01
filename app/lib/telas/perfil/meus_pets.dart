@@ -92,7 +92,6 @@ class MeusPets extends StatefulWidget {
   State<MeusPets> createState() => _MeusPetsState();
 }
 
-/// Os quatro desfechos de uma abertura da tela.
 enum _Fase { carregando, lista, falhaComCache, falhaSemCache }
 
 class _MeusPetsState extends State<MeusPets>
@@ -103,12 +102,10 @@ class _MeusPetsState extends State<MeusPets>
 
   _Fase _fase = _Fase.carregando;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   List<Pet> _pets = const <Pet>[];
   String? _textoDaFalha;
 
-  /// Se a tela estava visivel na ultima vez que as dependencias mudaram.
   bool _visivel = false;
 
   bool _cargaAgendada = false;
@@ -126,7 +123,6 @@ class _MeusPetsState extends State<MeusPets>
     _agendarCarga();
   }
 
-  /// Carrega depois do quadro, e nunca duas vezes para o mesmo retorno.
   void _agendarCarga() {
     if (_cargaAgendada) return;
     _cargaAgendada = true;
@@ -192,7 +188,6 @@ class _MeusPetsState extends State<MeusPets>
     }
   }
 
-  /// ## O TITULO DESTA SECAO (corrigido em 18/10/2026)
   bool get _temMaisQueOTeto {
     final teto = widget.teto;
     return teto != null && _pets.length > teto;
@@ -211,7 +206,6 @@ class _MeusPetsState extends State<MeusPets>
     );
   }
 
-  /// A LINHA DO CABECALHO: `Meus pets` a esquerda, `Ver todos` a direita.
   Widget _cabecalho() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -229,7 +223,6 @@ class _MeusPetsState extends State<MeusPets>
     );
   }
 
-  /// O corpo do bloco, por fase.
   List<Widget> _corpo(BichuCores cores) {
     return switch (_fase) {
       _Fase.carregando when _pets.isEmpty => <Widget>[
@@ -283,7 +276,6 @@ class _MeusPetsState extends State<MeusPets>
     };
   }
 
-  /// `Cadastrar meu pet`, construida num lugar so.
   BotaoPrimario _acaoDeCadastrar() {
     return BotaoPrimario(
       rotulo: 'Cadastrar meu pet',
@@ -291,7 +283,6 @@ class _MeusPetsState extends State<MeusPets>
     );
   }
 
-  /// Os cartoes, um por pet, na ordem em que o servidor mandou.
   List<Widget> _cartoes() {
     final saida = <Widget>[];
     final teto = widget.teto;
@@ -326,7 +317,6 @@ class TelaDeTodosOsPets extends StatefulWidget {
 }
 
 class _TelaDeTodosOsPetsState extends State<TelaDeTodosOsPets> {
-  /// O SLOT que [MeusPets] ja sabe preencher.
   final RecargaDaSecao _recarga = RecargaDaSecao();
 
   @override

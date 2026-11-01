@@ -42,16 +42,12 @@ class PortaoDeVersao extends StatefulWidget {
 }
 
 class _PortaoDeVersaoState extends State<PortaoDeVersao> {
-  /// Liberado desde o primeiro quadro.
   RespostaDeVersao _resposta = const RespostaDeVersao.liberado();
 
-  /// O aviso brando foi dispensado nesta sessao.
   bool _avisoDispensado = false;
 
-  /// A ABERTURA NAO ALCANCOU O SERVIDOR (cliente, 26/10/2026).
   bool _semConexao = false;
 
-  /// A pessoa escolheu seguir sem internet.
   bool _semConexaoDispensado = false;
 
   @override
@@ -78,7 +74,6 @@ class _PortaoDeVersaoState extends State<PortaoDeVersao> {
     });
   }
 
-  /// Pergunta ao servidor se ele esta ai.
   Future<void> _sondar() async {
     final sonda = widget.sonda;
     if (sonda == null) return;
@@ -87,7 +82,6 @@ class _PortaoDeVersaoState extends State<PortaoDeVersao> {
     setState(() => _semConexao = !respondeu);
   }
 
-  /// `Tentar de novo`: refaz a pergunta inteira, do jeito que o arranque fez.
   void _tentarDeNovo() {
     setState(() => _semConexao = false);
     unawaited(_perguntar());
@@ -116,10 +110,8 @@ class _PortaoDeVersaoState extends State<PortaoDeVersao> {
     }
   }
 
-  /// Ha recado de conexao a dar agora?
   bool _semRede() => _semConexao && !_semConexaoDispensado;
 
-  /// O recado do pedido de 26/10/2026, com as duas saidas.
   Widget _recadoSemConexao() {
     return TelaDeAberturaSemConexao(
       aoTentarDeNovo: _tentarDeNovo,

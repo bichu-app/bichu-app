@@ -36,16 +36,9 @@ class TelaCadastrarSinais extends StatefulWidget {
 }
 
 class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
-  /// A porta para [CamposDeSinaisState.validar]: a tela grava os campos **pelo
-  /// metodo deles** antes de cadastrar, e nao por uma segunda copia dos
-  /// controladores escrita aqui.
   final GlobalKey<CamposDeSinaisState> _campos =
       GlobalKey<CamposDeSinaisState>();
 
-  /// **A chave nasce com a tela, e nao com o toque.** Um reenvio depois de
-  /// `FalhaDeTempo` precisa levar a chave da PRIMEIRA tentativa: gerar uma nova
-  /// a cada toque derruba a garantia inteira e o tutor termina com dois
-  /// cadastros do mesmo animal.
   final String _chaveDeIdempotencia = ApiClient.novaChaveDeIdempotencia();
 
   bool _enviando = false;
@@ -109,7 +102,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
     }
   }
 
-  /// **A decisao e por `type`, nunca por status.**
   bool _sessaoAcabou(FalhaDaApi falha) =>
       falha.problem.tipo == ProblemTipo.naoAutenticado ||
       falha.problem.tipo == ProblemTipo.tokenExpirado;
@@ -132,7 +124,6 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
     return MensagensDeErro.de(falha, podeEnfileirar: true);
   }
 
-  /// O que o toque na saida da faixa faz.
   VoidCallback? _acaoDaFaixa() {
     final faixa = _faixa;
     if (faixa == null || faixa.acao == null) return null;

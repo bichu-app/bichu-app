@@ -1,8 +1,6 @@
 /// O **unico** lugar do app que escreve dinheiro.
 library;
 
-/// `1249` -> `1.249`. O ponto de milhar entra a cada tres digitos contados **da
-/// direita**.
 String _comMilhar(int inteiros) {
   final digitos = inteiros.toString();
   final buffer = StringBuffer();

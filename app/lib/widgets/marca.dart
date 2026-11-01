@@ -155,7 +155,6 @@ class _PinturaDaMarca extends StatelessWidget {
   }
 }
 
-/// Resolve o nome do papel emitido pelo gerador.
 Color _corDoPapel(BichuCores cores, String papel) {
   switch (papel) {
     case 'primary':

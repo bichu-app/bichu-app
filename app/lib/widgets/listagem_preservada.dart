@@ -113,7 +113,6 @@ class _EstadoDePreservaARolagem extends State<PreservaARolagem> {
   late final ScrollController _controlador = ScrollController()
     ..addListener(_anotarODeslocamento);
 
-  /// O ultimo deslocamento anotado COM A LISTA EM CENA, ou nulo.
   double? _guardado;
 
   bool _visivel = false;
@@ -133,7 +132,6 @@ class _EstadoDePreservaARolagem extends State<PreservaARolagem> {
     }
   }
 
-  /// A LISTA FOI DESCARTADA: o deslocamento morre com ela.
   void _aListaFoiDescartada() => _guardado = null;
 
   @override
@@ -149,7 +147,6 @@ class _EstadoDePreservaARolagem extends State<PreservaARolagem> {
     _reaplicar();
   }
 
-  /// ANOTA O DESLOCAMENTO A CADA QUADRO DE ROLAGEM.
   void _anotarODeslocamento() {
     if (!_controlador.hasClients) return;
     final posicao = _controlador.positions.first;
@@ -157,7 +154,6 @@ class _EstadoDePreservaARolagem extends State<PreservaARolagem> {
     _guardado = posicao.pixels;
   }
 
-  /// Reaplica o deslocamento no quadro seguinte.
   void _reaplicar() {
     final alvo = _guardado;
     if (alvo == null) return;

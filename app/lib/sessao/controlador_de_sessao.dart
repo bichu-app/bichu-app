@@ -131,13 +131,10 @@ class ControladorDeSessao extends ChangeNotifier {
   final AuthApi _auth;
   final DepositoDeSessao _deposito;
 
-  /// A guarda da intencao pendente (UX 8.3).
   final GuardaDeAcao? _guardaDeAcao;
 
-  /// Tudo o mais que o app guardou localmente desta conta.
   final List<LimpezaAoSair> _limpezasAoSair;
 
-  /// O que refaz o registro do aparelho depois do login.
   final List<AoEntrar> _aoEntrar;
 
   final ObservadorDeSaida _observadorDeSaida;
@@ -186,7 +183,6 @@ class ControladorDeSessao extends ChangeNotifier {
     await _reporOQueOLoginRepoe();
   }
 
-  /// O que precisa acontecer de novo a cada login.
   Future<void> _reporOQueOLoginRepoe() async {
     for (final passo in _aoEntrar) {
       try {
@@ -275,7 +271,6 @@ class ControladorDeSessao extends ChangeNotifier {
     return revogacao;
   }
 
-  /// O apagamento local, que acontece nos quatro desfechos.
   Future<void> _apagarTudoDestaConta() async {
     await _deposito.apagar();
     await _guardaDeAcao?.descartar();

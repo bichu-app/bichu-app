@@ -104,27 +104,19 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
   String? _falha;
   bool _carregando = true;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  /// A foto que a pessoa escolheu no aparelho.
   FotoLocal? _escolhida;
 
-  /// O `upload_id` de uma foto cujos **bytes ja estao no armazenamento** e que
-  /// ainda **nao esta na vitrine**, ou nulo quando nao ha nenhuma.
   String? _uploadPendente;
 
   bool _enviando = false;
   bool _salvando = false;
 
-  /// A faixa de recado -- recusa de tipo, envio que nao saiu, falha ao gravar.
   MensagemDeErro? _faixa;
 
-  /// O recado de sucesso, que sai no mesmo lugar e e outra coisa.
   String? _confirmacao;
 
-  /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
-  /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
   @override
@@ -140,8 +132,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     setState(() => _permissaoDaCamera = estado);
   }
 
-  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
-  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
   Future<void> _tirarFoto() async {
     var estado = _permissaoDaCamera;
     if (estado == EstadoDaPermissao.negada) {
@@ -165,7 +155,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     await _escolheu(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: widget.camera,
@@ -176,8 +165,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
 
   Future<void> _abrirOsAjustes() => widget.camera.abrirAjustesDoSistema();
 
-  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
-  /// qualquer coisa.
   Future<void> _escolheu(FotoLocal foto) async {
     final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
     if (recusa != null) {
@@ -232,7 +219,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  /// O `Salvar`: a foto pendente **entra na vitrine**.
   Future<void> _salvar() async {
     final pendente = _uploadPendente;
     if (pendente == null) return;
@@ -339,7 +325,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  /// O bloco de acrescentar: previa, recado, os dois botoes e o `Salvar`.
   Widget _bloco(BichuCores cores, TextTheme textos) {
     final vitrine = _vitrine;
     final cheia = vitrine != null && vitrine.estaCheia && _uploadPendente == null;
@@ -423,9 +408,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  /// A altura da previa. Mais alta que a celula da grade de proposito: a previa
-  /// existe para a pessoa ver a foto que escolheu, e 104 dp nao mostram uma
-  /// foto -- mostram uma miniatura dela.
   static const double _alturaDaPrevia = 220;
 
   Widget _erro(String mensagem, BichuCores cores, TextTheme textos) {
@@ -476,7 +458,6 @@ class _EstadoDaVitrine extends State<VitrineDeFotosDoUsuario> {
     );
   }
 
-  /// Uma celula da grade, **tocavel quando ha a foto ABERTA**.
   Widget _celula(
     List<FotoDaVitrineLida> fotos,
     int indice,

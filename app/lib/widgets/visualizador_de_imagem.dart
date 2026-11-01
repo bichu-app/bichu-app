@@ -291,7 +291,6 @@ class _ImagemAmpliavelState extends State<_ImagemAmpliavel> {
     super.dispose();
   }
 
-  /// Alterna entre inteira e ampliada, no ponto em que a pessoa tocou.
   static const double _folgaDaEscala = 0.001;
 
   void _alternar(TapDownDetails toque) {

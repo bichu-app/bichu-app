@@ -43,7 +43,6 @@ class ContadoresDeSecao {
     );
   }
 
-  /// **Campo ausente ou de outro tipo e `FormatException`, e nao zero.**
   static int _inteiro(Object? valor) {
     if (valor is int) return valor < 0 ? 0 : valor;
     throw FormatException('contador fora do contrato: $valor');

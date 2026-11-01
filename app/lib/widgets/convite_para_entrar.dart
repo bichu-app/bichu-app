@@ -31,7 +31,6 @@ class ConviteParaEntrar extends StatelessWidget {
   /// Este convite esta dentro de uma folha, e nao no corpo de uma tela.
   final bool emFolha;
 
-  /// Guarda a volta, fecha a folha se houver uma, e abre [rota].
   Future<void> _abrir(BuildContext context, String rota) async {
     final volta = rotaDeVolta;
     final roteador = GoRouter.of(context);

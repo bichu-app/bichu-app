@@ -184,7 +184,6 @@ class GeocodificacaoDaPlataforma implements ServicoDeGeocodificacao {
       _plataforma.placemarkFromCoordinates(lat, lon);
 }
 
-/// O que a reserva do ultimo ponto conhecido tinha a dizer.
 class _Reserva {
   const _Reserva(this.ponto, this.detalhe);
   final PontoCapturado? ponto;
@@ -220,7 +219,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
     ServicoDeGeocodificacao? geocodificacao,
   }) : _servico = geocodificacao ?? GeocodificacaoDaPlataforma();
 
-  /// O servico de plataforma, **trocavel so para medir**.
   final ServicoDeGeocodificacao _servico;
 
   /// No Android, usar o `LocationManager` do sistema em vez do provedor fundido
@@ -281,7 +279,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
     }
   }
 
-  /// O ponto que a medicao devolveu, traduzido.
   static PontoCapturado _pontoDe(Position posicao) => PontoCapturado(
         lat: posicao.latitude,
         lon: posicao.longitude,
@@ -295,7 +292,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
   /// Quantas vezes a reserva de fato salvou uma captura nesta sessao.
   int reservasUsadas = 0;
 
-  /// O ULTIMO PONTO QUE O SISTEMA GUARDOU, quando ele ainda serve.
   Future<_Reserva> _ultimoPontoConhecido() async {
     final Position? guardado;
     try {
@@ -320,7 +316,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
     return _Reserva(_pontoDe(guardado), 'reserva usada (${idade.inMinutes}min)');
   }
 
-  /// O que der para dizer sobre o erro, em pouco texto e sem dado pessoal.
   static String _detalheDoErro(Object erro) {
     if (erro is PlatformException) {
       final partes = <String>[erro.code];
@@ -331,8 +326,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
     return erro.runtimeType.toString();
   }
 
-  /// Os ajustes que vao para o lado nativo -- e **o unico lugar que le
-  /// [forcarGerenciadorDoSistema]**.
   LocationSettings _ajustesDaMedicao(Duration prazo) {
     const precisao = LocationAccuracy.low;
 
@@ -388,7 +381,6 @@ class LocalizacaoPorGeolocator implements Localizacao {
     }
   }
 
-  /// A cidade da ultima resolucao, quando o aparelho nao saiu da celula.
   String? _cidadeGuardadaPara(PontoCapturado ponto) {
     final anterior = _ultimoPonto;
     final cidade = _ultimaCidade;

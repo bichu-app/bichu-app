@@ -137,8 +137,6 @@ class FotosPendentes {
     return List.unmodifiable(sobreviventes);
   }
 
-  /// **So contagem, nunca conteudo.** O caminho do arquivo identifica o
-  /// aparelho e a pessoa, e isto aqui sai do aparelho.
   void _relatar(Object erro, StackTrace? pilha, String oQueAconteceu) {
     FlutterError.reportError(
       FlutterErrorDetails(

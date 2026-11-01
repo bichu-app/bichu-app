@@ -73,7 +73,6 @@ class VitrineDaLoja extends StatefulWidget {
   State<VitrineDaLoja> createState() => _VitrineDaLojaState();
 }
 
-/// Os desfechos de uma carga.
 enum _Fase { carregando, lista, falha }
 
 class _VitrineDaLojaState extends State<VitrineDaLoja>
@@ -87,19 +86,14 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
   PaginaDaLoja? _pagina;
   String? _textoDaFalha;
 
-  /// O vocabulario dos dois niveis (`GET /v1/store/taxonomy`).
   TaxonomiaDaLoja _taxonomia = TaxonomiaDaLoja.vazia;
 
-  /// Os itens de **todas** as paginas ja pedidas, na ordem em que chegaram.
   final List<ItemDaLoja> _itens = <ItemDaLoja>[];
 
-  /// A pagina seguinte esta em voo.
   bool _carregandoMais = false;
 
-  /// Por que a pagina seguinte nao chegou.
   String? _falhaDeMais;
 
-  /// O controlador da busca vive no ESTADO, e nao no `build`.
   final TextEditingController _buscaControlador = TextEditingController();
 
   bool _visivel = false;
@@ -134,7 +128,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     });
   }
 
-  /// Carrega a **primeira** pagina do recorte atual, sempre.
   Future<void> _carregarTaxonomia() async {
     if (!mounted || _taxonomia.categorias.isNotEmpty) return;
     final escopo = Escopo.of(context);
@@ -195,7 +188,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     _carregar();
   }
 
-  /// Pede a pagina seguinte e **acrescenta** o que vier.
   Future<void> _carregarMais() async {
     if (!mounted || _carregandoMais) return;
     final atual = _pagina;
@@ -258,7 +250,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     );
   }
 
-  /// A busca. Alcance de SERVIDOR, porque `q` entrou no contrato desta rota.
   ControleDeBusca _controleDeBusca() {
     return ControleDeBusca(
       controlador: _buscaControlador,
@@ -272,7 +263,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     );
   }
 
-  /// O filtro: categoria e, **dentro dela**, subcategoria.
   ControleDeFiltro _controleDeFiltro() {
     final subcategorias = _taxonomia.subcategoriasDe(_recorte.categoria);
     return ControleDeFiltro(
@@ -302,7 +292,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     );
   }
 
-  /// Os dois niveis **e a ordem** de uma vez, no `Aplicar`.
   void _aplicarAFolha(EscolhaDaFolha escolha) {
     final categoria = escolha.filtros['category'];
     final subcategoria = escolha.filtros['subcategory'];
@@ -318,7 +307,6 @@ class _VitrineDaLojaState extends State<VitrineDaLoja>
     );
   }
 
-  /// A ordenacao, montada a partir do que **de fato** aconteceu.
   ControleDeOrdenacao _controleDeOrdenacao(PaginaDaLoja pagina) {
     return ControleDeOrdenacao(
       opcoes: <OpcaoDeRecorte>[

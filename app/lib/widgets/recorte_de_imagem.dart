@@ -369,14 +369,12 @@ class _EstadoDaFolhaDeRecorte extends State<FolhaDeRecorte> {
     super.dispose();
   }
 
-  /// O zoom no inicio do gesto de pinca.
   double _zoomNoInicioDoGesto = 1;
 
   double get _aspectoDaJanela =>
       widget.formato.aspecto ??
       widget.imagem.larguraDoArquivo / widget.imagem.alturaDoArquivo;
 
-  /// A janela, para uma largura de palco.
   Size _janelaPara(double larguraDisponivel, double alturaMaxima) {
     var largura = math.max(1.0, larguraDisponivel);
     var altura = largura / _aspectoDaJanela;

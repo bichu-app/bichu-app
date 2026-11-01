@@ -84,7 +84,6 @@ class AcompanhamentoDoPedido extends StatelessWidget {
 /// em dois faria o passo atual parecer concluido ou parecer futuro.
 enum SituacaoDoPasso { concluido, agora, aindaNao, recusado }
 
-/// Um passo desenhado na tela.
 @immutable
 class _PassoDoPedido {
   const _PassoDoPedido({
@@ -203,7 +202,6 @@ class _LinhaDoPasso extends StatelessWidget {
   final BichuCores cores;
   final TextTheme textos;
 
-  /// O diametro do marcador. Multiplo do passo de espaco do tema.
   static const double _marcador = BichuEspaco.e10;
 
   Color get _tinta => switch (passo.situacao) {
@@ -350,7 +348,6 @@ class _ValorCopiavel extends StatelessWidget {
   }
 }
 
-/// Os textos do acompanhamento.
 abstract final class _TextosDoAcompanhamento {
   static const String pedidoFeito = 'Pedido feito';
   static const String emPreparacao = 'Em preparação';

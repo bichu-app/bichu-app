@@ -60,7 +60,6 @@ Future<void> arrancar({
   );
 }
 
-/// Liga o transporte de push, ou diz por que nao ligou.
 Future<Avisos> _avisos(
   Future<void> Function() inicializar,
   Duration teto,

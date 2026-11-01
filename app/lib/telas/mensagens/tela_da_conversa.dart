@@ -66,26 +66,19 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   IntencaoDeFotoDeAchado get _intencaoDeFoto =>
       widget.intencaoDeFoto ?? Escopo.of(context).achados;
 
-  /// A foto que a pessoa escolheu e **ainda nao mandou**.
   FotoLocal? _foto;
 
   FaseDaFotoEscolhida _faseDaFoto = FaseDaFotoEscolhida.subindo;
 
-  /// Bytes do arquivo ja aceitos pelo socket, e o total.
   int _bytesEnviados = 0;
   int _bytesTotais = 0;
 
-  /// O texto da recusa, **do servidor quando ele mandou um**.
   String? _motivoDaRecusaDaFoto;
 
-  /// O destino que guarda o `upload_id` depois de os bytes chegarem.
   EnvioParaConfirmarDepois? _destinoDaFoto;
 
-  /// Quantas vezes a mensagem foi recusada por **higiene da foto em curso**.
   int _tentativasDePreparo = 0;
 
-  /// A espera entre as tentativas quando o servidor diz que a foto nao esta
-  /// pronta: **crescente, e com fim**.
   static const List<Duration> _esperasDoPreparo = <Duration>[
     Duration(milliseconds: 400),
     Duration(milliseconds: 800),
@@ -99,17 +92,12 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   bool _carregandoAnteriores = false;
   bool _enviando = false;
 
-  /// Por que a tela nao carregou.
   String? _falhaDeCarga;
 
-  /// A falha de carga foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
 
-  /// Por que o ENVIO falhou. Nulo quando nao falhou.
   String? _falhaDeEnvio;
 
-  /// A conversa fechou. Vem do `status` no carregamento, **ou do 410 no
-  /// envio**.
   bool _emLeitura = false;
 
   @override
@@ -170,7 +158,6 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     }
   }
 
-  /// As mensagens anteriores, **por cursor**.
   Future<void> _carregarAnteriores() async {
     final cursor = _cursor;
     if (cursor == null || _carregandoAnteriores) return;
@@ -196,17 +183,13 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     }
   }
 
-  /// O aviso de achado desta conversa, ou nulo.
   String? get _avisoDoAchado => _conversa?.foundReportId;
 
-  /// Ha botao de anexar nesta tela.
   bool get _podeAnexarFoto =>
       !_emLeitura && !_faltaConta && _avisoDoAchado != null;
 
-  /// Uma foto que esta pessoa mandar vai ser legivel pelo outro lado.
   bool get _fotoAlcancaOOutroLado => _conversa?.fotoAlcancaOOutroLado ?? true;
 
-  /// QUEM ESCREVEU esta mensagem, entre os participantes da conversa.
   ParticipanteDaConversa? _autorDe(MensagemDaConversa mensagem) {
     final conversa = _conversa;
     if (conversa == null) return null;
@@ -215,18 +198,14 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     }
     return null;
   }
-  /// O PAPEL DE QUEM ESTA USANDO O APP nesta conversa.
   PapelNaConversa get _papelDoChamador =>
       _conversa?.papelDoChamador ?? PapelNaConversa.tutor;
 
-  /// A legenda esta vazia. Ver [TextosDaFotoNaConversa.aFotoPrecisaDeLegenda].
   bool get _faltaLegenda => _controlador.text.trim().isEmpty;
 
-  /// A foto nao impede o envio da mensagem.
   bool get _fotoPermiteEnviar =>
       _foto == null || _destinoDaFoto?.uploadId != null;
 
-  /// Abre a folha com as duas origens e sobe o que vier.
   Future<void> _anexarFoto() async {
     if (_foto != null || !_podeAnexarFoto) return;
 
@@ -316,7 +295,6 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     await _subirAFoto();
   }
 
-  /// Sobe os bytes e guarda o `upload_id`.
   Future<void> _subirAFoto() async {
     final foto = _foto;
     final aviso = _avisoDoAchado;
@@ -368,7 +346,6 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     });
   }
 
-  /// Descarta a previa. **Nao manda nada e nao fala com a rede.**
   void _descartarAFoto() {
     setState(() {
       _foto = null;
@@ -381,7 +358,6 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
     });
   }
 
-  /// Envia, e **nao limpa o campo antes da confirmacao**.
   Future<void> _enviar() async {
     final texto = _controlador.text.trim();
     if (texto.isEmpty || _enviando || _emLeitura) return;
@@ -673,10 +649,8 @@ class _EstadoDaTelaDaConversa extends State<TelaDaConversa> {
   }
 }
 
-/// De onde a foto vem. Local: e escolha de aparelho, e nao campo de contrato.
 enum _OrigemDaFoto { camera, galeria }
 
-/// Os dois rotulos da folha de origem.
 abstract final class _TextosDaFolhaDeFoto {
   static const String tirarFoto = 'Tirar foto';
   static const String escolherDaGaleria = 'Escolher da galeria';
@@ -738,7 +712,6 @@ class _Bolha extends StatelessWidget {
   /// O fato do CANAL: uma foto que ESTE chamador mandar alcanca o outro lado.
   final bool fotoAlcancaOOutroLado;
 
-  /// ESTA foto alcancou o outro lado.
   bool get _alcancouOOutroLado =>
       mensagem.senderRole != papelDoChamador || fotoAlcancaOOutroLado;
 
@@ -751,7 +724,6 @@ class _Bolha extends StatelessWidget {
   /// A fração da largura da tela que a fala podia ocupar ANTES da marca.
   static const double fracaoDaLargura = 0.78;
 
-  /// O que sobra para a bolha depois de a marca e o respiro serem pagos.
   static double _larguraMaximaDaBolha(double larguraDaTela) {
     final teto =
         larguraDaTela * fracaoDaLargura - (ladoDaMarca + respiroDaMarca);

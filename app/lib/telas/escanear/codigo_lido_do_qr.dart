@@ -81,7 +81,6 @@ int simbolosDoCodigo(String texto) {
   return simbolos;
 }
 
-/// Le o texto como URI, aceitando a forma impressa sem esquema.
 Uri? _comoUri(String bruto) {
   final tentativa = Uri.tryParse(bruto);
   if (tentativa != null && tentativa.hasScheme && tentativa.host.isNotEmpty) {

@@ -33,7 +33,6 @@ class _TelaDoAchadoState extends State<TelaDoAchado> {
   MensagemDeErro? _erro;
   String? _ausente;
 
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   bool _carregando = true;
   bool _iniciou = false;

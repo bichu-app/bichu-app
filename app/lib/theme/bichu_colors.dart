@@ -110,7 +110,6 @@ class BichuColors extends ThemeExtension<BichuColors> {
     );
   }
 
-  /// Anel de foco de 3px, desenhado com 2px de afastamento.
   WidgetStateProperty<BorderSide?> _ladoDeFoco() {
     return WidgetStateProperty.resolveWith((estados) {
       if (estados.contains(WidgetState.focused)) {

@@ -136,7 +136,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
 
   PontoNoBloco _ponto = const SoEndereco();
 
-  /// `street_address`, que vem da mesma chamada do ponto e exige conta.
   String? _endereco;
 
   bool _cargaAgendada = false;
@@ -191,7 +190,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     }
   }
 
-  /// O ponto so e perguntado com conta, com lugar na tela e sem cancelamento.
   bool get _deveBuscarPonto {
     final e = _encontro;
     if (!_logado || e == null) return false;
@@ -258,7 +256,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     if (!abriu && mounted) _avisar(TelaDoEncontro.falhaDoCalendario);
   }
 
-  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do encontro.
   Future<void> _compartilharOEncontro(
     EncontroDaRede encontro,
     ConteudoDoEncontro c,
@@ -719,7 +716,6 @@ class _Fotos extends StatelessWidget {
   /// As derivadas GRANDES, na ordem de [imagens].
   final List<String> urlsParaAmpliar;
 
-  /// A miniatura: 144 dp de largura (pedido P-M6), 4:3.
   static const double _largura = 144;
 
   @override

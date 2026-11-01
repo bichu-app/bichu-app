@@ -160,7 +160,6 @@ class TelaDadosPessoais extends StatefulWidget {
   State<TelaDadosPessoais> createState() => _TelaDadosPessoaisState();
 }
 
-/// Os desfechos de uma abertura.
 enum _Fase { carregando, formulario, falhaNaLeitura }
 
 class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
@@ -172,13 +171,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
 
   String? _uf;
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele.**
-  ///
-  /// Antes de 30/10/2026 esta tela tinha a sua propria copia do bloco, e a
-  /// copia **nao conferia a sigla do estado**: ela aceitava qualquer par de
-  /// letras que a base de CEP devolvesse. O bloco chama
-  /// `siglaDeEstadoValida`, e agora esta tela tambem.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     atualizar: setState,
     montado: () => mounted,
@@ -194,12 +186,10 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     ),
   );
 
-  /// Os tres desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: _TextosDosDados.buscaIndisponivel,
   );
 
-  /// O que o servidor devolveu na ultima leitura.
   DadosPessoais? _lido;
 
   _Fase _fase = _Fase.carregando;
@@ -208,19 +198,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   String? _confirmacao;
   MensagemDeErro? _faixa;
 
-  /// O erro de cada campo, pela mesma chave que o servidor usa em
-  /// `errors[].field`.
   final Map<String, String> _erros = <String, String>{};
 
-  /// A foto que a pessoa escolheu no aparelho.
   FotoLocal? _fotoEscolhida;
 
-  /// O `upload_id` de uma foto cujos **bytes ja estao no armazenamento** e que
-  /// ainda **nao foi confirmada**, ou nulo quando nao ha nenhuma.
   String? _uploadDaFoto;
 
-  /// Comeca em `negada` como no registro de achado: `negada` e o estado em que
-  /// ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
   bool _enviandoAFoto = false;
@@ -236,15 +219,12 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     _lerAPermissaoDaCamera();
   }
 
-  /// O estado da camera, lido **antes** de a pessoa tocar em nada.
   Future<void> _lerAPermissaoDaCamera() async {
     final estado = await Escopo.of(context).camera.estadoDaCamera();
     if (!mounted) return;
     setState(() => _permissaoDaCamera = estado);
   }
 
-  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
-  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
   Future<void> _tirarAFoto() async {
     final camera = Escopo.of(context).camera;
     var estado = _permissaoDaCamera;
@@ -270,7 +250,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     await _escolheu(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -283,8 +262,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
 
-  /// A foto escolhida **JA SOBE**, e a previa aparece antes de o servidor dizer
-  /// qualquer coisa.
   Future<void> _escolheu(FotoLocal foto) async {
     final recusa = recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitos);
     if (recusa != null) {
@@ -392,7 +369,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
 
   static String _soDigitos(String bruto) => bruto.replaceAll(RegExp(r'\D'), '');
 
-  /// Confere campo por campo e devolve os erros TODOS de uma vez.
   Map<String, String> _conferir() {
     final erros = <String, String>{};
     final lido = _lido;
@@ -440,7 +416,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     return erros;
   }
 
-  /// O valor a enviar, ou nulo quando **nao mudou**.
   String? _seMudou(String agora, String? antes) {
     final anterior = antes ?? '';
     return agora == anterior ? null : agora;
@@ -562,7 +537,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     }
   }
 
-  /// **Decide por `tipo`, nunca por status**, como as outras telas do produto.
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDaApi &&
         falha.problem.tipo == ProblemTipo.validacaoFalhou &&
@@ -783,7 +757,6 @@ class _TelaDadosPessoaisState extends State<TelaDadosPessoais> {
     );
   }
 
-  /// Um campo, com o espacamento e o erro no mesmo lugar.
   Widget _campo({
     required String chave,
     required String rotulo,
@@ -937,7 +910,6 @@ class _BlocoDaFoto extends StatelessWidget {
     );
   }
 
-  /// O que desenhar no quadrado, na ordem de precedencia que a pessoa espera.
   Widget _retrato(FotoLocal? local, String? remota, BichuCores cores) {
     if (local != null) {
       return PreviaDaFoto(
@@ -1077,7 +1049,6 @@ class _EmailDeLeitura extends StatelessWidget {
   }
 }
 
-/// As chaves de campo, iguais dos dois lados.
 abstract final class _CamposDosDados {
   static const String nome = 'display_name';
   static const String apelido = 'handle';
@@ -1108,7 +1079,6 @@ abstract final class _CamposDosDados {
   }
 }
 
-/// Os textos da tela, num lugar so.
 abstract final class _TextosDosDados {
 
   static const String apelido = 'Apelido';
@@ -1223,10 +1193,8 @@ class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
   bool _emitindo = false;
   String? _falha;
 
-  /// Quantas pessoas a conta trouxe, ou **nulo quando ninguem contou**.
   int? _placar;
 
-  /// **O PLACAR SO E LIDO QUANDO A SECAO ABRE**, e isso e deliberado.
   Future<void> _lerOPlacar() async {
     try {
       final resumo = await widget.conexoes.resumo();
@@ -1290,7 +1258,6 @@ class _EstadoDoBlocoDoConvite extends State<_BlocoDoConvite> {
     );
   }
 
-  /// A LINHA QUE ABRE E FECHA.
   Widget _cabecalho(BichuCores cores) {
     final textos = Theme.of(context).textTheme;
     return Semantics(
@@ -1418,7 +1385,6 @@ class _BlocoDoPasskey extends StatefulWidget {
   State<_BlocoDoPasskey> createState() => _EstadoDoBlocoDoPasskey();
 }
 
-/// O que a secao sabe sobre esta conta e este aparelho.
 enum _EstadoDoPasskey {
   /// Ainda lendo. **Nada e afirmado**: sem isto a secao piscaria `Ativar` por
   /// um quadro para quem ja tem o login ligado.
@@ -1443,11 +1409,8 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
   String? _falha;
   bool _pediu = false;
 
-  /// As credenciais ATIVAS da conta, para a pessoa escolher qual revogar
-  /// (29/10/2026).
   List<Passkey> _credenciais = const <Passkey>[];
 
-  /// O `id` da credencial cuja revogacao esta em curso, ou nulo.
   String? _revogando;
 
   @override
@@ -1458,7 +1421,6 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
     unawaited(_ler());
   }
 
-  /// Decide qual dos quatro estados vale, na ordem do mais barato ao mais caro.
   Future<void> _ler() => _lerOEstado().timeout(
         FiacaoDoPasskey.tetoDaDecisao,
         onTimeout: () {
@@ -1507,7 +1469,6 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
     }
   }
 
-  /// ATIVA, pelo MESMO caminho do cadastro e do convite do login.
   Future<void> _ativar() async {
     if (_ativando) return;
     setState(() {
@@ -1526,7 +1487,6 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
     });
   }
 
-  /// DESATIVA uma credencial, atras da folha destrutiva (29/10/2026).
   Future<void> _desativar(Passkey credencial) async {
     if (_revogando != null) return;
     final fiacao = Escopo.of(context).passkey;
@@ -1649,7 +1609,6 @@ class _EstadoDoBlocoDoPasskey extends State<_BlocoDoPasskey> {
     ];
   }
 
-  /// A LISTA DE APARELHOS, cada um com a sua revogacao (29/10/2026).
   List<Widget> _aparelhos(BichuCores cores, TextTheme textos) {
     if (_credenciais.isEmpty) return const <Widget>[];
     return <Widget>[

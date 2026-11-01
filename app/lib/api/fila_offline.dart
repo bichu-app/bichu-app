@@ -187,8 +187,6 @@ class FilaOffline {
     return List.unmodifiable(sobreviventes);
   }
 
-  /// Manda a perda para o canal que a observabilidade escuta (Sentry,
-  /// ADR-0008).
   void _relatar(
     Object erro,
     StackTrace? pilha,
@@ -267,7 +265,6 @@ class RetomadaDaFila {
     }
   }
 
-  /// Reenvia UMA ação, com a chave da primeira tentativa.
   Future<ResultadoDoEnvio> _enviar(AcaoEnfileirada acao) async {
     try {
       if (acao.metodo != 'POST') return ResultadoDoEnvio.semSinal;
@@ -282,7 +279,6 @@ class RetomadaDaFila {
     }
   }
 
-  /// Traduz a falha em um dos três desfechos que a fila entende.
   static ResultadoDoEnvio _desfecho(FalhaDeChamada falha) {
     return switch (falha) {
       FalhaDeConexao() => ResultadoDoEnvio.semSinal,

@@ -36,7 +36,6 @@ class CidadeDoAparelho extends ChangeNotifier {
   factory CidadeDoAparelho.doEscopo(BuildContext context) =>
       CidadeDoAparelho(Escopo.of(context).localizacaoDaSessao);
 
-  /// A LOCALIZACAO DA SESSAO, e nao a porta do aparelho.
   final LocalizacaoDaSessao _sessao;
 
   /// A cidade resolvida pelo aparelho, ou nulo.
@@ -112,7 +111,6 @@ class CidadeDoAparelho extends ChangeNotifier {
     return _resolver(porToque: true);
   }
 
-  /// A resolucao em si, pelos dois caminhos.
   Future<bool> _resolver({required bool porToque}) async {
     final anterior = _sessao.cidadeDoAparelho;
     final resultado = await _sessao.cidade(forcar: porToque);

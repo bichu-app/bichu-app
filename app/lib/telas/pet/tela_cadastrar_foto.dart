@@ -29,7 +29,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
   EstadoDaPermissao _permissao = EstadoDaPermissao.negada;
   bool _consultando = true;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
   @override
@@ -49,12 +48,10 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     });
   }
 
-  /// A camera so e a acao principal quando ela pode funcionar.
   bool get _cameraEPrincipal =>
       _permissao == EstadoDaPermissao.concedida ||
       _permissao == EstadoDaPermissao.negada;
 
-  /// Nao ha camera nem galeria neste build.
   bool get _semCameraNoBuild => _permissao == EstadoDaPermissao.indisponivel;
 
   Future<void> _tirarFoto() async {
@@ -88,7 +85,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     setState(() {});
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e "a tela usa".
   Future<FotoLocal?> _ajustar(FotoLocal foto) => ajustarAFoto(
         context,
         camera: Escopo.of(context).camera,
@@ -106,7 +102,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     context.push(Rotas.cadastrarPetSinais, extra: widget.rascunho);
   }
 
-  /// BICHUS-157: o avanco que nao depende da foto.
   void _seguirSemFoto() {
     if (widget.rascunho.foto != null) {
       widget.rascunho.atualizar(() => widget.rascunho.foto = null);
@@ -114,7 +109,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     context.push(Rotas.cadastrarPetSinais, extra: widget.rascunho);
   }
 
-  /// As acoes de **obter** a foto, que dependem do estado do aparelho.
   List<Widget> _acoesDaFoto({required bool temFoto}) {
     if (temFoto) {
       return <Widget>[
@@ -159,7 +153,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     ];
   }
 
-  /// A acao de avancar sem foto: **botao, e nos quatro estados**.
   Widget _acaoDeSeguirSemFoto() {
     return Semantics(
       button: true,
@@ -172,7 +165,6 @@ class _TelaCadastrarFotoState extends State<TelaCadastrarFoto> {
     );
   }
 
-  /// A faixa do estado do aparelho, quando ha uma a mostrar.
   Widget? _faixaDoEstado() {
     if (_permissao == EstadoDaPermissao.negadaPermanentemente) {
       return FaixaDeAviso(

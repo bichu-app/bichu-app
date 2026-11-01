@@ -76,18 +76,12 @@ class PasskeyNesteAparelho {
   /// parametro nomeado.
   final DateTime Function() agora;
 
-  /// Cache de leitura: o arquivo e lido uma vez por processo.
   bool? _memoria;
 
-  /// Cache da RECUSA FORMAL, pelo mesmo motivo de [_memoria].
   bool? _memoriaDaRecusa;
 
-  /// A chave gravada. Escrita a mao, e nao derivada de nome de simbolo: o
-  /// arquivo e um contrato com o passado, e renomear algo em Dart nao pode
-  /// apagar a marca de ninguem.
   static const String _chave = 'ha_credencial';
 
-  /// A chave da RECUSA FORMAL (28/10/2026).
   static const String _chaveDaRecusa = 'recusou_formalmente';
 
   /// Verdadeiro quando ha prova de credencial neste aparelho.
@@ -104,7 +98,6 @@ class PasskeyNesteAparelho {
     return corpo[chave] == true;
   }
 
-  /// O JSON gravado, ou um mapa VAZIO quando nao ha nada legivel.
   Future<Map<String, dynamic>> _corpo() async {
     final String? cru;
     try {

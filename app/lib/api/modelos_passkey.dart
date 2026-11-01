@@ -1,7 +1,6 @@
 /// Os modelos de passkey do contrato (BICHUS-301).
 library;
 
-/// Le um campo de texto obrigatorio que pode vir em qualquer das duas grafias.
 String _texto(Map<String, dynamic> json, String contrato, String servidor) {
   final valor = json[contrato] ?? json[servidor];
   if (valor is String) return valor;
@@ -12,7 +11,6 @@ String _texto(Map<String, dynamic> json, String contrato, String servidor) {
   );
 }
 
-/// O mesmo para um numero obrigatorio.
 int _numero(Map<String, dynamic> json, String contrato, String servidor) {
   final valor = json[contrato] ?? json[servidor];
   if (valor is int) return valor;
@@ -22,7 +20,6 @@ int _numero(Map<String, dynamic> json, String contrato, String servidor) {
   );
 }
 
-/// O mesmo para uma lista de objetos.
 List<Map<String, dynamic>> _lista(
   Map<String, dynamic> json,
   String contrato,

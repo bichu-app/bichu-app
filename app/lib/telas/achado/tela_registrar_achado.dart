@@ -62,10 +62,8 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
   DadosDeReferencia? _referencia;
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
-  /// A chave de idempotencia **da primeira tentativa**, e nao de cada uma.
   String? _chave;
 
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   bool _iniciou = false;
 
   @override
@@ -89,7 +87,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     super.dispose();
   }
 
-  /// A lista fechada de `GET /public/reference-data` (criterio 8).
   Future<void> _carregarReferencia() async {
     try {
       final dados = await Escopo.of(context).pets.dadosDeReferencia();
@@ -110,9 +107,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     setState(() => _permissaoDaCamera = estado);
   }
 
-  /// `Tirar foto` e a **primeira acao** (criterio 1), e ela continua visivel
-  /// com a permissao negada: toca-la abre o dialogo enquanto ele ainda abre, e
-  /// leva aos ajustes quando ele nao abre mais.
   Future<void> _tirarFoto() async {
     final camera = Escopo.of(context).camera;
     var estado = _permissaoDaCamera;
@@ -138,7 +132,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     setState(() => _rascunho.foto = ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o rascunho.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -197,7 +190,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     ];
   }
 
-  /// Em qual dos dois passos a pessoa esta (0 ou 1).
   int _passo = 0;
 
   @override
@@ -242,7 +234,6 @@ class _TelaRegistrarAchadoState extends State<TelaRegistrarAchado> {
     );
   }
 
-  /// A barra de baixo, que muda com o passo -- e **sempre** diz o que falta.
   Widget _barra(BichuCores cores, DateTime agora) {
     if (_passo == 0) {
       final impedimento = _rascunho.impedimentoDoPasso1();

@@ -34,7 +34,6 @@ class FiacaoDoPasskey {
   final PasskeysApi _passkeys;
   final CredencialDoAparelho _aparelho;
 
-  /// O sinal LOCAL de que ha credencial neste aparelho.
   final PasskeyNesteAparelho _registro;
 
   /// O CONVITE DEVE SER OFERECIDO AGORA?

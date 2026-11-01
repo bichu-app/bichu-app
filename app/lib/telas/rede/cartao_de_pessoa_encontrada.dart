@@ -100,17 +100,13 @@ class CartaoDePessoaEncontrada extends StatefulWidget {
 
 class _EstadoDoCartaoDePessoaEncontrada
     extends State<CartaoDePessoaEncontrada> {
-  /// A relação como o cartão a conhece.
   late EstadoDaConexao? _estado = widget.pessoa.estadoDaConexao;
 
-  /// O `ref` da **aresta**, nunca da pessoa.
   String? _ref;
 
   bool _agindo = false;
   String? _recusa;
 
-  /// Roda [acao] com o cartão em `carregando`, e **relê o estado do que ela
-  /// devolveu** em vez de supô-lo.
   Future<void> _agir(Future<void> Function() acao) async {
     if (_agindo) return;
     setState(() {
@@ -136,8 +132,6 @@ class _EstadoDoCartaoDePessoaEncontrada
     }
   }
 
-  /// Traduz a falha na frase certa, **decidindo por `errors[].code` e nunca
-  /// pelo status sozinho**.
   String _motivoDaRecusa(FalhaDaApi falha) {
     if (falha.tipo == ProblemTipo.naoEncontrado) {
       return 'Não encontramos este usuário.';
@@ -220,7 +214,6 @@ class _EstadoDoCartaoDePessoaEncontrada
     );
   }
 
-  /// O avatar: **a foto quando há uma, a inicial quando não há.**
   Widget _avatar(BichuCores cores, TextTheme textos) {
     final url = widget.pessoa.photoIconUrl;
     if (url == null || url.isEmpty) return _circuloDaInicial(cores, textos);
@@ -237,7 +230,6 @@ class _EstadoDoCartaoDePessoaEncontrada
     );
   }
 
-  /// O círculo com a inicial — **a queda de quem não tem foto pronta**.
   Widget _circuloDaInicial(BichuCores cores, TextTheme textos) {
     final inicial = widget.pessoa.inicial.isEmpty
         ? CartaoDePessoaEncontrada.inicialDeQuemNaoTem
@@ -285,7 +277,6 @@ class _EstadoDoCartaoDePessoaEncontrada
     );
   }
 
-  /// A área de ação: **uma por estado**, e nunca duas ao mesmo tempo.
   List<Widget> _areaDeAcao(BichuCores cores, TextTheme textos) {
     final recusa = _recusa;
     final ref = _ref;

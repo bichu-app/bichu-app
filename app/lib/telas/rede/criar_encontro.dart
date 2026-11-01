@@ -111,7 +111,6 @@ class TelaCriarEncontro extends StatefulWidget {
 
 enum _Fase { preenchendo, enviando }
 
-/// O primeiro impedimento, ou nulo.
 enum _Impedimento {
   semConta(TelaCriarEncontro.entreParaMarcar),
   semEmailConfirmado(TelaCriarEncontro.semEmailConfirmado),
@@ -140,15 +139,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   final TextEditingController _cidade = TextEditingController();
   final TextEditingController _observacoes = TextEditingController();
 
-  /// A sigla do estado escolhida na lista de 27, ou nulo.
   String? _uf;
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que tem CEP.
-  ///
-  /// **O campo de CEP mora nele, e e campo de BUSCA, nao campo do corpo**: o
-  /// que se digita aqui preenche bairro, cidade e estado e nao viaja no
-  /// `AdminNetworkEventInput` -- o CEP do encontro nao e publicado.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     atualizar: setState,
     montado: () => mounted,
@@ -164,7 +156,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     ),
   );
 
-  /// Os tres desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: TelaCriarEncontro.buscaIndisponivel,
   );
@@ -172,35 +163,17 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   DateTime? _comeca;
   DateTime? _termina;
 
-  /// As imagens que já subiram, **na ordem em que a pessoa as pôs**.
-  ///
-  /// **A primeira é a capa, e não há campo de capa separado** -- é a mesma
-  /// leitura de `AdminNetworkEventInput.images`, onde a capa é a `position` 0.
-  /// Duas formas de dizer qual é a capa, no mesmo corpo, é o defeito: o
-  /// contrato recusa `cover_image` junto de `image_upload_ids` com `400`
-  /// (`code: cover_and_images_both_sent`).
-  ///
-  /// **Só entra aqui o que já tem `upload_id`.** Uma lista de "escolhidas" e
-  /// outra de "enviadas" divergiriam na primeira falha de rede.
   final List<_ImagemDoEncontro> _imagens = <_ImagemDoEncontro>[];
 
   bool _enviandoACapa = false;
 
-  /// A imagem cujos bytes estão **subindo agora**, para a prévia provisória.
-  ///
-  /// "Apresentar como vai ficar" foi palavra do cliente, e a derivada do
-  /// servidor não existe nesse instante.
   FotoLocal? _imagemSubindo;
 
-  /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
-  /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
   _Fase _fase = _Fase.preenchendo;
   MensagemDeErro? _erro;
 
-  /// Nomeados pelo `400` do servidor, para marcar o campo em vez de so mostrar
-  /// uma faixa.
   Map<String, String> _errosDeCampo = const <String, String>{};
 
   static const List<String> _ordemDosCampos = <String>[
@@ -215,15 +188,12 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     'notes',
   ];
 
-  /// Onde cada campo esta na lista, para rolar ate ele.
   final Map<String, GlobalKey> _ancoras = <String, GlobalKey>{
     for (final String chave in _ordemDosCampos) chave: GlobalKey(),
   };
 
-  /// A rolagem do corpo do formulario.
   final ScrollController _rolagem = ScrollController();
 
-  /// O foco de cada campo de DIGITACAO.
   final Map<String, FocusNode> _focos = <String, FocusNode>{
     for (final String chave in <String>[
       'title',
@@ -236,8 +206,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       chave: FocusNode(),
   };
 
-  /// **Nasce uma vez e sobrevive a retentativa.** Duas tentativas da mesma
-  /// pessoa com o mesmo texto nao podem virar dois encontros na agenda.
   String? _chave;
 
   bool _preencheu = false;
@@ -271,7 +239,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
         _errosDeCampo = const <String, String>{};
       });
 
-  /// O erro daquele campo sai, porque a busca de CEP acabou de preenche-lo.
   void _esquecerOErroDoCampo(String chave) {
     _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
   }
@@ -297,15 +264,12 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     return null;
   }
 
-  /// O estado da camera, lido **antes** de a pessoa tocar em nada.
   Future<void> _lerAPermissaoDaCamera() async {
     final estado = await Escopo.of(context).camera.estadoDaCamera();
     if (!mounted) return;
     setState(() => _permissaoDaCamera = estado);
   }
 
-  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
-  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
   Future<void> _tirarACapa() async {
     final camera = Escopo.of(context).camera;
     var estado = _permissaoDaCamera;
@@ -331,7 +295,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     await _escolheuACapa(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustarACapa(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -344,15 +307,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
 
-  /// A imagem escolhida **JA SOBE**, e so entra na faixa quando os bytes
-  /// chegaram ao armazenamento.
-  ///
-  /// **A ROTA DE INTENCAO E A QUE JA EXISTE, e nao uma nova**
-  /// (`createNetworkEventCoverUploadIntent`, proposito `network_event`): as
-  /// quatro imagens tem a mesma geometria, a mesma minima e a mesma derivada, e
-  /// nada no envio distingue a segunda da primeira. Quem e a capa e a POSICAO
-  /// na lista, e nao o proposito do envio -- uma segunda rota so para dizer
-  /// "esta nao e a capa" inventaria uma fronteira que nao existe.
   Future<void> _escolheuACapa(FotoLocal foto) async {
     final recusa =
         recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
@@ -360,10 +314,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
       setState(() => _erro = MensagemDeErro(texto: recusa));
       return;
     }
-    // **O teto e conferido AQUI tambem, e nao so no botao desabilitado.** Um
-    // toque que escapasse pela janela entre o envio e o `setState` pediria uma
-    // quinta assinatura, e cada assinatura e uma autorizacao de escrita que
-    // nao se desfaz.
     if (_imagens.length >= FaixaDeImagens.maximoDoContrato) return;
 
     setState(() {
@@ -384,17 +334,10 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
 
     setState(() {
       _enviandoACapa = false;
-      // **A previa provisoria SAI em todos os desfechos.** No caminho que deu
-      // certo ela e substituida pela linha definitiva; nos dois que falharam
-      // ela tem de desaparecer, senao o `Criar evento` promete uma capa que o
-      // corpo nao vai confirmar.
       _imagemSubindo = null;
       switch (desfecho) {
         case DesfechoDoEnvio.enviada:
           final id = destino.uploadId;
-          // `uploadId` nulo com desfecho `enviada` nao acontece pelo contrato
-          // de `EnvioParaConfirmarDepois`; a guarda existe para que, se
-          // acontecesse, a faixa NAO ganhasse uma previa sem identificador.
           if (id != null && id.isNotEmpty) {
             _imagens.add(_ImagemDoEncontro(foto: foto, uploadId: id));
           } else {
@@ -414,8 +357,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     });
   }
 
-  /// Troca a ordem de duas imagens. **A primeira e a capa**, entao mover para o
-  /// topo e o jeito de escolher a capa.
   void _moverAImagem(int de, int para) {
     if (de < 0 || de >= _imagens.length) return;
     if (para < 0 || para >= _imagens.length) return;
@@ -425,15 +366,11 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     });
   }
 
-  /// Tira a imagem da faixa. **Nao cancela o envio**: nao ha rota de
-  /// cancelamento de intencao no contrato, e o varredor recolhe o objeto em dez
-  /// minutos.
   void _removerAImagem(int indice) {
     if (indice < 0 || indice >= _imagens.length) return;
     setState(() => _imagens.removeAt(indice));
   }
 
-  /// Dia e hora, nessa ordem, numa escolha so.
   Future<DateTime?> _escolherQuando(DateTime? atual, String ajuda) async {
     final agora = widget.agora();
     final dia = await showDatePicker(
@@ -541,7 +478,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     }
   }
 
-  /// Os campos que o `400` nomeou, pela frase do servidor.
   void _levarAoPrimeiroRecusado() {
     final String? primeiro = _ordemDosCampos
         .where(_errosDeCampo.containsKey)
@@ -550,11 +486,8 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     _alcancar(primeiro, 0);
   }
 
-  /// Quantos saltos de rolagem o alcance tenta antes de desistir.
   static const int _saltosDeAlcance = 8;
 
-  /// Leva a janela ate [campo] e o centraliza, em no maximo [_saltosDeAlcance]
-  /// saltos.
   void _alcancar(String campo, int salto) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -583,7 +516,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     });
   }
 
-  /// [campo] esta ACIMA da janela?
   bool _estaAcimaDaJanela(String campo) {
     final int alvo = _ordemDosCampos.indexOf(campo);
     bool achouConstruido = false;
@@ -856,7 +788,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
     );
   }
 
-  /// A saida da faixa de erro, quando a mensagem tem uma.
   VoidCallback? _saidaDoErro(BuildContext context, MensagemDeErro mensagem) {
     if (mensagem.acao == null) return null;
     final rota = mensagem.rotaDaAcao;
@@ -872,12 +803,6 @@ class _TelaCriarEncontroState extends State<TelaCriarEncontro> {
   }
 }
 
-/// Uma IMAGEM DO ENCONTRO que **ja esta no armazenamento**.
-///
-/// A previa e o `upload_id` andam juntos de proposito: uma lista de previas e
-/// outra de identificadores divergiriam na primeira remocao, e a tela mostraria
-/// uma imagem cujo identificador foi para outra posicao do corpo -- o que, aqui,
-/// quer dizer outra CAPA.
 @immutable
 class _ImagemDoEncontro {
   const _ImagemDoEncontro({required this.foto, required this.uploadId});

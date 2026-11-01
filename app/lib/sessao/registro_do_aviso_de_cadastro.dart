@@ -106,7 +106,6 @@ class AvisoDeCadastro {
   /// inicializacao privado, que a linguagem nao permite em parametro nomeado.
   final DateTime Function() agora;
 
-  /// Cache de leitura: o arquivo e lido uma vez por processo.
   EstadoDoAviso? _memoria;
   String? _contaEmMemoria;
 

@@ -12,7 +12,6 @@ const int limiteDaData = digitosDaData + 2;
 /// A idade minima do Bichu, em anos completos (cliente, 18/10/2026).
 const int idadeMinimaDoBichu = 16;
 
-/// O fuso em que o aniversario e contado, **igual ao do servidor**.
 const Duration _deslocamentoDeSaoPaulo = Duration(hours: -3);
 
 String _somenteDigitos(String valor) => valor.replaceAll(RegExp(r'[^0-9]'), '');

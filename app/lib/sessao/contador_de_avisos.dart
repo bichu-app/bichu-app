@@ -17,10 +17,8 @@ class ContadorDeAvisos extends ChangeNotifier {
 
   int? _naoLidas;
 
-  /// Qual numero cada geracao esta autorizada a publicar.
   int _geracao = 0;
 
-  /// Se o objeto ja foi descartado.
   bool _descartado = false;
 
   /// Quantos nao lidos, ou **nulo enquanto ninguem contou**.

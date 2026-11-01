@@ -51,7 +51,6 @@ class TelaDeQuemEOCaso extends StatefulWidget {
 }
 
 class _TelaDeQuemEOCasoState extends State<TelaDeQuemEOCaso> {
-  /// **Nasce nulo, e continua nulo até alguém tocar.** Ver o cabeçalho.
   String? _escolhido;
 
   void _continuar(List<Pet> elegiveis) {
@@ -135,7 +134,6 @@ class _TelaDeQuemEOCasoState extends State<TelaDeQuemEOCaso> {
   }
 }
 
-/// A linha de atributos do 11.3, com o mesmo separador.
 String _atributosDe(Pet pet) {
   final partes = <String>[
     pet.especie.rotulo,

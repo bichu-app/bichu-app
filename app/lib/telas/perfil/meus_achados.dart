@@ -364,7 +364,6 @@ class _BarraDeRegistrar extends SliverPersistentHeaderDelegate {
 
   final VoidCallback aoTocar;
 
-  /// `e3` em cima e embaixo do alvo de 48 dp.
   static const double _altura = BichuAlvoDeToque.min + BichuEspaco.e3 * 2;
 
   @override

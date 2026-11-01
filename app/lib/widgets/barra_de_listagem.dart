@@ -37,10 +37,8 @@ class BarraDeListagem extends StatefulWidget {
   /// nao o desenha de novo.
   final bool buscaAcima;
 
-  /// Ha pelo menos um controle com desfecho.
   bool get _temControle => busca != null || _temFolha;
 
-  /// A folha de filtro e ordem tem o que oferecer, e tem para onde mandar.
   bool get _temFolha =>
       aoAplicar != null &&
       ((filtro?.temOpcao ?? false) || (ordenacao?.temEscolha ?? false));
@@ -48,7 +46,6 @@ class BarraDeListagem extends StatefulWidget {
   @override
   State<BarraDeListagem> createState() => _EstadoDaBarraDeListagem();
 
-  /// A pessoa recortou a lista de alguma forma.
   bool get _recorteAtivo =>
       (filtro?.ativos ?? 0) > 0 ||
       (busca?.termoAplicado?.trim().isNotEmpty ?? false);
@@ -72,7 +69,6 @@ class BarraDeListagem extends StatefulWidget {
     return total != 0 || barra._recorteAtivo;
   }
 
-  /// `12 resultados · Nome`.
   String get _resumo {
     final contagem = '$total ${total == 1 ? substantivo.singular : substantivo.plural}';
     final ordem = ordenacao;
@@ -80,7 +76,6 @@ class BarraDeListagem extends StatefulWidget {
     return '$contagem · ${ordem.rotuloEfetivo}';
   }
 
-  /// O nome acessivel do unico controle de recorte, agora na `AppBar`.
   String get _rotuloDaFolha {
     final ordena = ordenacao?.temEscolha ?? false;
     final filtra = filtro?.temOpcao ?? false;
@@ -160,7 +155,6 @@ class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
     super.dispose();
   }
 
-  /// O que a `AppBar` desenha agora, ou nulo quando nao ha folha a abrir.
   AcaoDeListagem? _acao(BuildContext context) {
     final b = widget;
     return acaoDeRecorte(
@@ -471,13 +465,10 @@ class CampoDeBuscaDaListagem extends StatelessWidget {
 
   final ControleDeBusca busca;
 
-  /// O termo digitado agora, sem espaco nas pontas.
   String get _digitado => busca.controlador.text.trim();
 
-  /// O que a lupa manda: nulo quando o campo ficou vazio.
   String? get _aAplicar => _digitado.isEmpty ? null : _digitado;
 
-  /// Ha termo digitado diferente do aplicado, e ele pode ir.
   bool get _podeAplicar {
     if (_aAplicar == busca.termoAplicado) return false;
     if (_aAplicar == null) return true;
@@ -510,7 +501,6 @@ class CampoDeBuscaDaListagem extends StatelessWidget {
     );
   }
 
-  /// O nome acessivel da lupa, que carrega o ESTADO e nao so o verbo.
   String get _rotuloDaLupa {
     if (_podeAplicar) return 'Buscar';
     if (_aAplicar == null) return 'Buscar, nada digitado';
@@ -767,7 +757,6 @@ class BuscaNoTopoFixo extends StatefulWidget {
 class _EstadoDaBuscaNoTopoFixo extends State<BuscaNoTopoFixo> {
   SlotDaBuscaFixa? _slot;
 
-  /// O ultimo valor que ESTE estado publicou, ou nulo.
   BuscaFixaDaSecao? _publicada;
 
   @override
@@ -992,15 +981,12 @@ class _FolhaDeFiltros extends StatefulWidget {
 }
 
 class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
-  /// A escolha de cada grupo declarado, como ela esta **nesta folha**.
   late final Map<String, String?> _pendente = <String, String?>{
     for (final g in widget.grupos) g.chave: g.selecionado,
   };
 
-  /// A ordem escolhida nesta folha.
   late String? _ordemPendente = widget.ordenacao?.efetiva;
 
-  /// Um controlador por campo digitado, criado com o valor APLICADO.
   late final Map<String, TextEditingController> _digitado =
       <String, TextEditingController>{
     for (final c in widget.campos)
@@ -1015,7 +1001,6 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
     super.dispose();
   }
 
-  /// O texto de cada campo, aparado.
   Map<String, String?> get _textosPendentes => <String, String?>{
         for (final c in widget.campos)
           c.chave: _digitado[c.chave]?.text.trim().isEmpty ?? true
@@ -1023,18 +1008,15 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
               : _digitado[c.chave]!.text.trim(),
       };
 
-  /// Todos os campos digitados servem para ir a rota.
   bool get _camposServem => widget.campos
       .every((c) => c.serve(_digitado[c.chave]?.text ?? ''));
 
-  /// O que esta aplicado na lista agora -- pastilhas e campos digitados.
   Map<String, String?> get _aplicado => <String, String?>{
         for (final g in widget.grupos) g.chave: g.selecionado,
         for (final c in widget.campos)
           c.chave: (c.valor?.trim().isEmpty ?? true) ? null : c.valor!.trim(),
       };
 
-  /// Ha diferenca entre o que a folha mostra e o que a lista tem.
   bool get _mudou {
     if (!_camposServem) return false;
     final aplicado = _aplicado;
@@ -1044,13 +1026,11 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
     return _ordemPendente != widget.ordenacao?.efetiva;
   }
 
-  /// Ha algum FILTRO pendente para o `Limpar` tirar.
   bool get _temEscolha =>
       _pendente.values.any((v) => v != null) ||
       widget.campos.any((c) =>
           !c.obrigatorio && (_digitado[c.chave]?.text.trim().isNotEmpty ?? false));
 
-  /// Os grupos desenhados: com opcao, e com o pai ainda no valor aplicado.
   List<GrupoDeFiltro> get _visiveis {
     final aplicado = _aplicado;
     return widget.grupos.where((g) {

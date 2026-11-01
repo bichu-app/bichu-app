@@ -90,11 +90,8 @@ class _EstadoDeMeusEventos extends State<MeusEventos> {
 
   List<MeuEncontro> _itens = const <MeuEncontro>[];
 
-  /// A faixa de erro de uma AÇÃO (ler a versão, cancelar), separada da fase da
-  /// lista: a lista continua na tela enquanto a faixa explica o que não deu.
   String? _erroDaAcao;
 
-  /// O `slug` cuja versão está sendo lida.
   String? _lendoAVersaoDe;
 
   int _geracao = 0;
@@ -152,7 +149,6 @@ class _EstadoDeMeusEventos extends State<MeusEventos> {
     });
   }
 
-  /// O toque em `Cancelar`: lê a versão, abre a folha, e só então cancela.
   Future<void> _cancelar(MeuEncontro encontro) async {
     final api = _api(Escopo.of(context).api);
     setState(() {
@@ -212,7 +208,6 @@ class _EstadoDeMeusEventos extends State<MeusEventos> {
     await _carregar();
   }
 
-  /// O toque no cartao: a pagina do encontro, pelo `slug` (BICHUS-297).
   void _abrirODetalhe(MeuEncontro encontro) {
     unawaited(TelaDoEncontro.abrir(context, encontro.slug));
   }
@@ -440,12 +435,10 @@ class CartaoDoMeuEncontro extends StatelessWidget {
   }
 }
 
-/// A primeira frase da faixa da capa recusada.
 abstract final class _FotoRecusada {
   static const String rotulo = 'A foto deste encontro foi recusada.';
 }
 
-/// A frase da capa que ainda esta sendo processada.
 abstract final class _FotoEmPreparo {
   static const String rotulo =
       'A foto deste encontro chegou e está sendo preparada. '

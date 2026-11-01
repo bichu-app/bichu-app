@@ -197,7 +197,6 @@ class PaginaDoLocal extends StatefulWidget {
   State<PaginaDoLocal> createState() => _PaginaDoLocalState();
 }
 
-/// Os desfechos de uma carga.
 enum _Fase { carregando, pronto, naoEncontrado, semConta, falha }
 
 class _PaginaDoLocalState extends State<PaginaDoLocal> {
@@ -205,36 +204,27 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
   String? _textoDaFalha;
   DetalheDoLocal? _detalhe;
 
-  /// A pontuacao **de agora**, que comeca na do detalhe e e trocada pela que
-  /// volta no `PUT` e pela recarga depois do `DELETE`.
   PontuacaoDoLocal? _pontuacao;
 
-  /// O `ref` da minha avaliacao, ou nulo.
   String? _refDaMinha;
 
-  /// A minha avaliacao, quando a tela tem o objeto dela: ou porque ela veio
-  /// numa pagina carregada, ou porque o `PUT` acabou de devolve-la.
   AvaliacaoDoLocal? _minha;
 
-  /// As avaliacoes de **todas** as paginas pedidas, na ordem em que chegaram.
   final List<AvaliacaoDoLocal> _avaliacoes = <AvaliacaoDoLocal>[];
 
   PaginaDeAvaliacoes? _paginaDeAvaliacoes;
   OrdemDasAvaliacoes _ordem = OrdemDasAvaliacoes.recentes;
   bool _carregandoAvaliacoes = false;
-  /// A falha foi **falta de conta**, e nao defeito.
   bool _faltaConta = false;
   String? _falhaDasAvaliacoes;
   bool _carregandoMais = false;
   String? _falhaDeMais;
 
-  /// O campo esta aberto para escrever.
   bool _editando = false;
   int? _nota;
   final TextEditingController _texto = TextEditingController();
   bool _enviando = false;
 
-  /// A recusa do envio da minha avaliacao, **inteira**.
   MensagemDeErro? _erroDoFormulario;
   String? _erroDaNota;
 
@@ -332,7 +322,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// A **primeira** pagina de avaliacoes da ordem atual, sempre.
   Future<void> _carregarAvaliacoes() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
@@ -377,7 +366,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// Pede a pagina seguinte e **acrescenta** o que vier.
   Future<void> _carregarMais() async {
     if (!mounted || _carregandoMais) return;
     final atual = _paginaDeAvaliacoes;
@@ -419,7 +407,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// Tira a minha do fluxo da lista.
   void _acharAMinha() {
     for (final a in _avaliacoes) {
       if (a.minha || (a.ref == _refDaMinha && _refDaMinha != null)) {
@@ -430,7 +417,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// As avaliacoes das OUTRAS pessoas: a lista carregada menos a minha.
   List<AvaliacaoDoLocal> get _dasOutras => <AvaliacaoDoLocal>[
         for (final a in _avaliacoes)
           if (!a.minha && a.ref != _refDaMinha) a,
@@ -450,12 +436,10 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// Abre o endereco no aplicativo de mapas do aparelho.
   Future<void> _ligar(String telefoneE164) async {
     await launchUrl(Uri(scheme: 'tel', path: telefoneE164));
   }
 
-  /// Abre o endereco comercial no aplicativo de mapas do aparelho.
   Future<void> _abrirNoMapa(String endereco) async {
     final abriu =
         await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
@@ -466,7 +450,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     }
   }
 
-  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do local.
   Future<void> _compartilharOLocal(DetalheDoLocal detalhe) async {
     final abriu = await SaidaDoApp.atual.compartilharTexto(
       texto: PaginaDoLocal.mensagemDeCompartilhar(
@@ -776,7 +759,6 @@ class _PaginaDoLocalState extends State<PaginaDoLocal> {
     ];
   }
 
-  /// O bloco `A minha avaliação`, nos quatro estados do protótipo.
   Widget _blocoDaMinha(DetalheDoLocal detalhe) {
     if (_minha case final AvaliacaoDoLocal minha when !_editando) {
       return Column(
@@ -1229,8 +1211,6 @@ class _Estrelas extends StatelessWidget {
   final double fracao;
   final String rotulo;
 
-  /// 16 dp: a medida em que cinco estrelas cabem ao lado da data sem empurrar a
-  /// linha para baixo com a fonte do sistema em 200%.
   static const double _medida = BichuEspaco.e4;
 
   @override

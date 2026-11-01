@@ -299,7 +299,6 @@ class CascaComAbas extends StatefulWidget {
 }
 
 class _CascaComAbasState extends State<CascaComAbas> {
-  /// A chave do `Scaffold` da casca.
   final GlobalKey<ScaffoldState> _casca = GlobalKey<ScaffoldState>(
     debugLabel: 'casca-com-abas',
   );
@@ -401,7 +400,6 @@ class BarraDeBaixo extends StatelessWidget {
     );
   }
 
-  /// Quantas novidades ESTA aba mostra, ou **nulo**.
   static int? _naoLidasDaAba(
     DestinoDeNavegacao destino,
     ContadoresDeNaoLido contadores,
@@ -585,21 +583,15 @@ class TelaDeAba extends StatefulWidget {
 }
 
 class _EstadoDaTelaDeAba extends State<TelaDeAba> {
-  /// O SLOT UNICO DE ACAO da barra de topo (11.23.1), que a listagem preenche.
   final ValueNotifier<AcaoDeListagem?> _acaoDaListagem =
       ValueNotifier<AcaoDeListagem?>(null);
 
-  /// A BUSCA QUE O ARRASTO REFAZ, publicada pelo corpo da secao.
   final RecargaDaSecao _recargaDaSecao = RecargaDaSecao();
 
-  /// A ASSINATURA DA LISTAGEM, que decide se a rolagem preservada vale
-  /// (BICHUS-316).
   final RolagemDaListagem _rolagemDaListagem = RolagemDaListagem();
 
-  /// O RESPIRO EXTRA NO PE DA LISTA quando ha acao flutuante.
   static const double _folgaDaAcaoFlutuante = BichuEspaco.e12 + BichuEspaco.e2;
 
-  /// Poe o topo fixo acima do rolavel -- **ou devolve o rolavel intacto**.
   Widget _comCabecalho(Widget rolavel) {
     final cabecalho = widget.cabecalhoFixo;
     if (cabecalho == null) return rolavel;
@@ -783,7 +775,6 @@ class SinoDeNotificacoes extends StatelessWidget {
   }
 }
 
-/// A inicial do nome de quem esta logado, ou nulo.
 String? _inicialDaSessao(BuildContext context) {
   final sessao = Escopo.of(context).sessao;
   if (sessao.estado != EstadoDaSessao.logado) return null;
@@ -792,7 +783,6 @@ String? _inicialDaSessao(BuildContext context) {
   return nome.characters.first.toUpperCase();
 }
 
-/// A URL DA FOTO de quem esta logado, ou nulo.
 String? _fotoDaSessao(BuildContext context) {
   final sessao = Escopo.of(context).sessao;
   if (sessao.estado != EstadoDaSessao.logado) return null;

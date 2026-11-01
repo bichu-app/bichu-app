@@ -259,7 +259,6 @@ class CameraDoAparelho implements CameraEGaleria {
 
   ImagePicker get _seletor => _seletorInjetado ?? ImagePicker();
 
-  /// Camera so existe onde ha aparelho.
   bool get _plataformaTemCamera =>
       defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
@@ -375,7 +374,6 @@ class CameraDoAparelho implements CameraEGaleria {
   }
 }
 
-/// O que atravessa para o isolado do recorte.
 @immutable
 class _PedidoDeRecorte {
   const _PedidoDeRecorte({required this.bytes, required this.recorte});
@@ -384,7 +382,6 @@ class _PedidoDeRecorte {
   final RecorteDaFoto recorte;
 }
 
-/// Decodifica, corta e recodifica em JPEG.
 Uint8List? _recortarEmJpeg(_PedidoDeRecorte pedido) {
   final decodificada = img.decodeImage(pedido.bytes);
   if (decodificada == null) return null;

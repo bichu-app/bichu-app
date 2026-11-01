@@ -43,50 +43,28 @@ class CapturaDeLocalizacao extends StatefulWidget {
 enum _Fase { escolhendo, capturando, comPonto, digitando }
 
 class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
-  /// **O achado NAO oferece a captura** (cliente, 29/10/2026: *"remove os
-  /// botoes e deixa os campos de cep, endereco para o usuario preencher, no
-  /// mesmo padrao das outras paginas"*).
   bool get _ofereceCaptura =>
       widget.pontoDeUso != PontoDeUsoDaLocalizacao.registrarAchado;
 
   late _Fase _fase;
 
-  /// A regiao de referencia ja foi aplicada na montagem.
   bool _regiaoAplicada = false;
 
   PontoCapturado? _ponto;
   MotivoDeNaoTerPonto? _motivo;
 
-  /// **Campo de busca, e nao campo do `Onde`.** Mora no estado desta peca pelo
-  /// mesmo motivo dos outros dois controladores: e o que faz o que foi digitado
-  /// sobreviver ao vai e volta entre os dois passos do formulario de achado
-  /// (`IndexedStack`, que mantem os dois filhos montados).
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
   final FocusNode _focoDoBairro = FocusNode();
 
-  /// AS CHAVES DOS TRES CAMPOS do `Onde`, para [OrigemDosValores].
   static const String _chaveBairro = 'bairro';
   static const String _chaveCidade = 'cidade';
   static const String _chaveUf = 'uf';
 
-  /// DE ONDE VEIO O VALOR DE CADA CAMPO -- o mecanismo COMPARTILHADO, e nao um
-  /// segundo.
   final OrigemDosValores _origem = OrigemDosValores();
 
-  /// A sigla escolhida na lista de estados, ou nulo.
   String? _uf;
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que tem CEP.
-  ///
-  /// **O campo de CEP mora nele**, e e por isso que ele sobrevive ao vai e
-  /// volta entre os dois passos do formulario de achado: o bloco e deste
-  /// estado, e o `IndexedStack` mantem os dois filhos montados.
-  ///
-  /// **Ele nao sabe de localizacao, e isso e a fronteira do ADR-0006.** O
-  /// preenchimento da CIDADE pelo GPS (emenda 1, 19/10/2026) continua sendo
-  /// `_preencherACidadeDaLocalizacao`, nesta tela, escrevendo so em `_cidade`.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     origem: _origem,
     atualizar: setState,
@@ -102,7 +80,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     ),
   );
 
-  /// Os tres desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: TextosDaLocalizacao.buscaDoCepIndisponivel,
   );
@@ -147,7 +124,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         uf: _uf,
       );
 
-  /// A pessoa comecou a descrever a area e deixou a cidade de fora.
   bool get _faltaACidade =>
       _cidade.text.trim().isEmpty &&
       (_bairro.text.trim().isNotEmpty || _uf != null);
@@ -156,19 +132,10 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     widget.aoMudar(montarOnde(ponto: _ponto, area: _area));
   }
 
-  /// O CEP preenche os campos e, quando preencheu, o `Onde` sai de novo.
-  ///
-  /// **O nome e novo de proposito.** O nome antigo deste metodo e um dos
-  /// marcadores do portao `bloco_de_cep_unico_test.dart`, que reprova a volta
-  /// de uma copia privada do bloco dentro de uma tela -- e o portao nao abre
-  /// excecao para prosa, porque excecao para prosa e por onde a copia volta.
-  /// Aqui so sobrou o que e DESTA tela, publicar o `Onde`: a busca inteira
-  /// esta no bloco compartilhado.
   Future<void> _oCepPreencheEPublica() async {
     if (await _cepBloco.buscar(Escopo.of(context).buscaDeCep)) _publicar();
   }
 
-  /// A regiao de referencia do tutor nos campos que estao VAZIOS.
   void _preencherDaRegiaoDeReferencia() {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return;
@@ -181,7 +148,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     }
   }
 
-  /// O caminho de `Usar minha localizacao`.
   Future<void> _usarALocalizacao() async {
     final porta = Escopo.of(context).localizacao;
     var permissao = await porta.estado();
@@ -222,7 +188,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     }
   }
 
-  /// A CIDADE DA LOCALIZACAO AUTORIZADA, nos campos que estao vazios.
   Future<void> _preencherACidadeDaLocalizacao() async {
     final resultado = await Escopo.of(context).localizacaoDaSessao.cidade();
     if (!mounted) return;
@@ -236,8 +201,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     setState(() {});
   }
 
-  /// Vai para o campo de bairro **com o teclado aberto** (criterio 5), **a nao
-  /// ser que o bairro ja venha preenchido**.
   void _irParaODigitado(MotivoDeNaoTerPonto? motivo) {
     setState(() {
       _ponto = null;
@@ -346,7 +309,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
     }
   }
 
-  /// CEP, bairro, cidade e estado, na mesma ordem nas duas fases.
   List<Widget> _camposDeArea({required bool comFoco}) => <Widget>[
         BichuField(
           rotulo: TextosDaLocalizacao.rotuloCep,
@@ -401,7 +363,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         ),
       ];
 
-  /// Arredonda para cima, em centenas de metros.
   static int _arredondarPrecisao(double metros) {
     if (metros <= 0) return 100;
     return (metros / 100).ceil() * 100;
@@ -418,8 +379,6 @@ class _CapturaDeLocalizacaoState extends State<CapturaDeLocalizacao> {
         MotivoDeNaoTerPonto.indisponivel => TextosDaLocalizacao.indisponivel,
       };
 
-  /// So dois dos cinco motivos tem acao, e os outros tres nao ganham uma de
-  /// enfeite: um botao que nao muda nada e pior que nenhum botao.
   String? _rotuloDaAcaoDoMotivo(MotivoDeNaoTerPonto motivo) =>
       switch (motivo) {
         MotivoDeNaoTerPonto.permissaoNegadaPermanentemente ||

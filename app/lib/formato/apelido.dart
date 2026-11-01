@@ -17,7 +17,6 @@ class FormaDoApelido {
   static final RegExp regex = RegExp(r'^[a-z0-9][a-z0-9-]{3,18}[a-z0-9]$');
 }
 
-/// O que o filtro de digitacao deixa passar: minuscula, digito e hifen.
 final RegExp _aceitoNoApelido = RegExp(r'[^a-z0-9-]');
 
 /// O apelido normalizado: minusculo e aparado, e nada mais.
@@ -69,8 +68,6 @@ class IdentificadorDoApelido {
   /// frase**, de proposito.
   static const String indisponivel = 'Esse apelido não está disponível.';
 
-  /// O mapa dos parecidos, **por GRUPO**, igual ao `translate` de
-  /// `handle_esqueleto` na migracao e ao `PARECIDOS` do TypeScript.
   static const Map<String, String> _parecidos = <String, String>{
     '0': 'o',
     '1': 'l',
@@ -95,7 +92,6 @@ class IdentificadorDoApelido {
     'undefined',
   ];
 
-  /// A palavra cuja regra e **CONTEM**, e nao igualdade.
   static const String _contidaProibida = 'bichu';
 
   /// O esqueleto de um apelido: sem hifen e com os parecidos colapsados.

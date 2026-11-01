@@ -35,7 +35,6 @@ class TelaDetalheDoPet extends StatefulWidget {
   State<TelaDetalheDoPet> createState() => _TelaDetalheDoPetState();
 }
 
-/// Os desfechos de uma abertura.
 enum _Fase { carregando, carregado, foraDaConta, semConta, falha }
 
 class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
@@ -43,39 +42,26 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
   Pet? _pet;
   String? _textoDaFalha;
 
-  /// O estado da imagem do QR.
   EstadoDoQrDaPlaquinha _estadoDoQr = EstadoDoQrDaPlaquinha.carregando;
 
-  /// O provedor que o cofre devolveu.
   ImageProvider? _qr;
 
-  /// `code_suffix` da tag em vigor.
   String _sufixoDaTag = '';
 
-  /// Se este pet TEM pedido da plaquinha, e por isso se o link de
-  /// acompanhamento tem para onde levar.
   bool _temPedidoDePlaquinha = false;
 
-  /// Se o encerramento do caso esta em curso.
   bool _encerrandoOCaso = false;
 
-  /// O que deu errado ao encerrar, se deu.
   String? _erroAoEncerrar;
 
-  /// O caso que ESTA TELA acabou de encerrar, enquanto a janela de reabertura
-  /// estiver aberta.
   CasoDePerdido? _casoEncerradoAgora;
 
-  /// O CASO ABERTO deste pet, lido do servidor.
   CasoDePerdido? _casoAberto;
 
-  /// O que deu errado ao abrir a FOLHA de compartilhamento, se deu.
   String? _erroAoCompartilhar;
 
-  /// Se a reabertura esta em curso.
   bool _reabrindoOCaso = false;
 
-  /// O que deu errado ao REABRIR, se deu.
   String? _erroAoReabrir;
 
   bool _iniciou = false;
@@ -126,7 +112,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  /// Pergunta ao servidor se este pet tem pedido da plaquinha.
   Future<void> _carregarOPedidoDaPlaquinha(Pet pet) async {
     try {
       final pedidos =
@@ -139,7 +124,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  /// Le o caso ABERTO do pet, quando ha um.
   Future<void> _carregarOCasoAberto(Pet pet) async {
     final caseId = pet.idDoCasoAberto;
     if (caseId == null || caseId.isEmpty) {
@@ -157,7 +141,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  /// `Compartilhar`: abre a FOLHA DO SISTEMA com o texto do caso.
   Future<void> _compartilharOCaso(Pet pet) async {
     final caso = _casoAberto;
     final url = caso?.urlDeCompartilhar;
@@ -178,7 +161,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     setState(() => _erroAoCompartilhar = TextosDoDetalhe.folhaNaoAbriu);
   }
 
-  /// Busca a tag em vigor e, com o `tagId` dela, a IMAGEM do QR.
   Future<void> _carregarOQr(Pet pet) async {
     final escopo = Escopo.of(context);
     final api = escopo.api;
@@ -245,12 +227,10 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  /// `Marcar como perdido`, **reaproveitando o fluxo que ja existe**.
   void _marcarComoPerdido(Pet pet) {
     context.push(Rotas.marcarPerdido, extra: RascunhoDoCaso(pet: pet));
   }
 
-  /// `Encontrei meu pet`: a ACAO INVERSA, pedida pelo cliente em 18/10/2026.
   Future<void> _encontreiMeuPet(Pet pet) async {
     final caseId = pet.idDoCasoAberto;
     if (caseId == null || caseId.isEmpty) return;
@@ -311,7 +291,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  /// A FOLHA DE CONFIRMACAO do encerramento.
   Future<bool> _confirmarEncerramento(Pet pet) async {
     final confirmou = await showModalBottomSheet<bool>(
       context: context,
@@ -331,7 +310,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     return confirmou ?? false;
   }
 
-  /// `Reabrir o caso`: o desfazer que o contrato prometia e que nao existia.
   Future<void> _reabrirOCaso(CasoDePerdido caso) async {
     final escopo = Escopo.of(context);
     setState(() {
@@ -386,7 +364,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
       (falha.problem.tipo == ProblemTipo.naoEncontrado ||
           falha.problem.status == 404);
 
-  /// Abre a edicao e **recarrega com o que ela devolveu**.
   Future<void> _editar() async {
     final pet = _pet;
     if (pet == null) return;
@@ -398,7 +375,6 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     setState(() => _pet = atualizado);
   }
 
-  /// A exclusao (BICHUS-60).
   Future<void> _excluir() async {
     final pet = _pet;
     if (pet == null) return;
@@ -590,11 +566,9 @@ class _Conteudo extends StatelessWidget {
   final bool temPedidoDePlaquinha;
   final VoidCallback aoAcompanharPlaquinha;
 
-  /// Se o pet **ja** esta sendo procurado.
   bool get _jaProcurado =>
       pet.status == StatusDoPet.perdido || pet.idDoCasoAberto != null;
 
-  /// O ENDERECO PUBLICO do caso, ou `null` quando nao ha o que compartilhar.
   String? get _linkDoCaso {
     final caso = casoAberto;
     if (caso == null) return null;
@@ -604,8 +578,6 @@ class _Conteudo extends StatelessWidget {
     return url;
   }
 
-  /// A ACAO DE ESTADO DO ANIMAL, nas DUAS direcoes e com **aparencia diferente
-  /// em cada uma** (cliente, 18/10/2026).
   List<Widget> _acaoDeEstadoDoPet(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
@@ -668,7 +640,6 @@ class _Conteudo extends StatelessWidget {
     ];
   }
 
-  /// A oferta de REABRIR, ou `null` quando ela nao se aplica.
   List<Widget>? _ofertaDeReabrir(BuildContext context) {
     final caso = casoEncerradoAgora;
     if (caso == null) return null;
