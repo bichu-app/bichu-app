@@ -1,4 +1,3 @@
-/** O serviço do registro de aparelho: registrar, listar e revogar. */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';

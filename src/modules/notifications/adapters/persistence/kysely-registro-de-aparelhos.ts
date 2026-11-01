@@ -1,4 +1,3 @@
-/** Persistência do aparelho e do token de push. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
@@ -14,7 +13,6 @@ import type {
 } from '../../ports/registro-de-aparelhos.js';
 import type { TokenDeAparelho } from '../../ports/push-sender.js';
 
-/** As colunas que compõem um `Aparelho`. */
 const COLUNAS = [
   'id',
   'user_id',

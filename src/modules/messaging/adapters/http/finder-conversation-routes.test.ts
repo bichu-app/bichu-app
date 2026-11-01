@@ -1,7 +1,3 @@
-/**
- * As quatro rotas da conversa do achador sem conta, sobre um Fastify de verdade,
- * com o serviço de verdade e o contrato de verdade (BICHUS-41).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -35,13 +31,11 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const DIA = 24 * 60 * 60 * 1000;
 const AGORA = Date.parse('2026-09-23T12:00:00Z') as Instant;
 
-/** O token de verdade tem 43 caracteres de base64url. */
 const TOKEN = 'T'.repeat(21) + 'o'.repeat(22);
 const OUTRO_TOKEN = 'X'.repeat(43);
 
 const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 
-/** O que o tutor tem e o achador NUNCA pode ver. */
 const DO_TUTOR = {
   userId: '018f3a2b-0000-7000-8000-0000000000aa',
   email: 'leandro.tutor@exemplo.invalid',
@@ -60,13 +54,10 @@ interface Cenario {
   readonly contador?: RateLimitStore;
   readonly bloqueada?: boolean;
   readonly encerrada?: boolean;
-  /** O aviso tem mais de 30 dias. */
   readonly tokenVencidoPeloAviso?: boolean;
   readonly caso?: ConversaDoAchador['caso'];
-  /** O banco que compara errado: devolve a conversa para qualquer resumo. */
   readonly bancoSemFiltro?: boolean;
   readonly mensagensDoAchadorEm24h?: number;
-  /** O TUTOR desabilitou a conta (17/10). */
   readonly tutorDesabilitado?: boolean;
 }
 
@@ -80,10 +71,6 @@ interface Bancada {
   readonly eventos: AuditEvent[];
 }
 
-/**
- * A mensagem como um adaptador desatento a devolveria: com o id, a conta de quem
- * mandou e a chave do objeto.
- */
 function mensagemComExtras(parcial: Partial<MensagemGravada>): MensagemGravada {
   return {
     id: '018f3a2b-0000-7000-8000-00000000e001',
@@ -286,7 +273,6 @@ function tipoDe(corpo: Record<string, unknown>): string | undefined {
   return typeof type === 'string' ? type.slice(type.lastIndexOf('/') + 1) : undefined;
 }
 
-/** As quatro operações, com um pedido válido de cada uma. */
 const OPERACOES: readonly {
   readonly operationId: string;
   readonly pedido: { metodo?: 'GET' | 'POST'; url: string; corpo?: unknown };
@@ -303,7 +289,6 @@ const OPERACOES: readonly {
   },
 ];
 
-/** O corpo do problema sem `correlation_id`, que muda a cada requisição. */
 function corpoSemCorrelacao(resposta: Resposta): string {
   const resto = { ...resposta.corpo };
   delete resto['correlation_id'];
@@ -311,7 +296,6 @@ function corpoSemCorrelacao(resposta: Resposta): string {
   return JSON.stringify(resto);
 }
 
-/** As propriedades que o contrato declara para um schema, lidas do YAML. */
 function propriedadesDoContrato(nome: string): Set<string> {
   const spec = parseYaml(readFileSync('api/openapi.yaml', 'utf8')) as {
     components: { schemas: Record<string, { properties?: Record<string, unknown> }> };
@@ -321,11 +305,6 @@ function propriedadesDoContrato(nome: string): Set<string> {
   return new Set(Object.keys(schema.properties));
 }
 
-/**
- * **A checagem de não-vazamento.** Reprova quando o corpo carrega qualquer dado de
- * contato do tutor, o sobrenome, qualquer UUID (conhecido ou não), ou uma chave de
- * identificador.
- */
 function exigirQueNaoVaza(resposta: Resposta, onde: string): void {
   const bruto = resposta.bruto;
   for (const proibido of [
@@ -560,7 +539,6 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
     assert.equal(corpos[0], corpos[1]);
   });
 
-  /** ISCA DO ENVIO TRAVADO, lado SEM CONTA (17/10). */
   void it('ISCA: tutor desabilitado trava o envio do ACHADOR por token, 410', async () => {
     const { app, gravadas } = bancada({ tutorDesabilitado: true });
     const resposta = await pedir(app, {

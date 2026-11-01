@@ -1,4 +1,3 @@
-/** A imagem de catalogo, como os outros modulos a enxergam (ADR-0027 item 10). */
 import { problemas } from '../../../shared/http/errors.js';
 import { TIPOS_ACEITOS, comoObjectKey, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
 
@@ -73,8 +72,6 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   directory_photo: { largura: 600, altura: 600 },
   directory_gallery: { largura: 600, altura: 600 },
   directory_suggestion_logo: { largura: 256, altura: 256 },
-  // 600 x 600 e nao os 256 do logotipo: a derivada `banner` e 1280 x 720 e
-  // `sharp` nao amplia. A MESMA minima de `directory_photo`, que e a mesma faixa.
   directory_suggestion_photo: { largura: 600, altura: 600 },
   user_photo: { largura: 300, altura: 300 },
   user_showcase: { largura: 600, altura: 600 },

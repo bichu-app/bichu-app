@@ -1,4 +1,3 @@
-/** O cadastro dispara o e-mail de verificação (BICHUS-147). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -45,7 +44,6 @@ interface Registro {
   readonly mensagem: string;
 }
 
-/** A porta é grande e o cadastro usa cinco métodos. */
 function naoUsado(nome: string): never {
   throw new Error(`o dublê não implementa ${nome}: nenhum caso deste arquivo deveria chegar aqui`);
 }
@@ -84,7 +82,6 @@ class RepositorioDeCadastro extends RepositorioQueRecusaTudo {
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly familiasAbertas: NovoRefresh[] = [];
 
-  /** `undefined` é o que a unicidade do banco devolve quando o e-mail já tem conta. */
   constructor(private readonly conta: Conta | undefined) {
     super();
 }
@@ -126,10 +123,6 @@ interface Bancada {
   readonly mailerConfigurado: boolean;
 }
 
-/**
- * `mailerFalha` é o cenário do critério 3, e `semDubleDeMailer` é o do critério
- * 10: a suíte rodando sem o dublê **não pode** ficar verde em silêncio.
- */
 function montar(
   opcoes: {
     emailJaTemConta?: boolean;
@@ -153,7 +146,6 @@ function montar(
     },
   };
 
-  /** O que fica no lugar do dublê quando ele não foi configurado. */
   const semDuble: Mailer = {
     enviar() {
       return Promise.reject(
@@ -233,7 +225,6 @@ function eventosDeEnvio(bancada: Bancada, evento: string): Registro[] {
   return bancada.registros.filter((r) => r.dados['evento'] === evento);
 }
 
-/** A guarda do critério 10, e ela existe por causa do critério 3. */
 function exigirQueOEnvioNaoTenhaFalhado(bancada: Bancada): void {
   const falhas = eventosDeEnvio(bancada, 'email.send_failed');
   if (falhas.length === 0) return;
@@ -245,10 +236,6 @@ function exigirQueOEnvioNaoTenhaFalhado(bancada: Bancada): void {
   });
 }
 
-/**
- * O link vem do corpo da mensagem, que é o único lugar onde o token em claro
- * existe.
- */
 function tokenDoLink(corpo: string): string {
   const casado = /[?&]token=([^\s&]+)/.exec(corpo);
   if (casado?.[1] === undefined) {
@@ -274,10 +261,6 @@ function cadastroValido(): Parameters<ReturnType<typeof criarAuthService>['cadas
 }
 
 void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critérios 1, 2 e 8)', () => {
-  /**
-   * ISCA (critério 1). Apagar a linha `await enviarVerificacaoDoCadastro(...)` de
-   * `cadastrar` faz este caso reprovar em `tokensGravados.length`, que vira 0.
-   */
   void it('grava UM token `email_verify` e produz UMA mensagem para o endereço cadastrado', async () => {
     const bancada = montar({});
     await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -295,10 +278,6 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
     assert.match(bancada.mensagens[0]?.corpo ?? '', /https:\/\/bichu\.test\/verificar-email\?token=/);
   });
 
-  /**
-   * O que o banco guarda é o SHA-256 do que foi para o e-mail, e não outro valor
-   * qualquer.
-   */
   void it('o hash gravado é o do token que foi no link, e o valor em claro não é persistido', async () => {
     const bancada = montar({});
     await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -311,11 +290,6 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
     assert.notEqual(gravado, token, 'o que se guarda é o resumo, nunca o valor');
   });
 
-  /**
-   * ISCA (critério 2). É este evento, e não a entrega, que prova que o caminho foi
-   * percorrido: foi a ausência dele em hml, diante de um 201, que identificou o
-   * defeito.
-   */
   void it('registra `email.send` com propósito `email_verify` e o correlation_id da requisição', async () => {
     const bancada = montar({});
     await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -327,10 +301,6 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
     assert.equal(enviados[0]?.dados['userId'], CONTA_NOVA);
   });
 
-  /**
-   * ISCA (critério 8). A frase de F1.2 — "Enviamos um link para <e-mail>" — tem que
-   * ser verdadeira **sem** o app fazer uma segunda chamada.
-   */
   void it('a mensagem existe sem o cliente ter chamado `requestEmailVerification`', async () => {
     const bancada = montar({});
     const sessao = await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -342,7 +312,6 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
     assert.ok(sessao.user.pending_profile_fields.includes('email_verification'));
   });
 
-  /** Critério 9: a correção **não muda o contrato**. */
   void it('`registerUser` continua declarando o efeito `notifies` que já estava no contrato', () => {
     assert.ok(
       rotaDeCadastro.effects.includes('notifies'),
@@ -352,11 +321,6 @@ void describe('cadastro dispara a verificação de e-mail (BICHUS-147, critério
 });
 
 void describe('o e-mail que não sai não derruba a conta que nasceu (BICHUS-147, critério 3)', () => {
-  /**
-   * ISCA (critério 3). Trocar o `try/catch` de `enviarVerificacaoDoCadastro` por uma
-   * chamada nua faz `cadastrar` propagar o erro do mailer, e os três casos abaixo
-   * reprovam — o primeiro deles com o erro do provedor à vista.
-   */
   void it('devolve o par de tokens mesmo com o mailer lançando', async () => {
     const bancada = montar({ mailerFalha: true });
     const sessao = await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -392,7 +356,6 @@ void describe('o e-mail que não sai não derruba a conta que nasceu (BICHUS-147
     assert.equal(eventosDeEnvio(bancada, 'email.send').length, 0, 'não registra envio que não houve');
   });
 
-  /** A guarda do critério 10, exercitada. */
   void it('sem o dublê de mailer, a conferência REPROVA dizendo o motivo', async () => {
     const bancada = montar({ semDubleDeMailer: true });
     await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -413,12 +376,6 @@ void describe('o e-mail que não sai não derruba a conta que nasceu (BICHUS-147
 });
 
 void describe('e-mail já cadastrado: 409 sem mensagem e sem token (BICHUS-147, critério 6)', () => {
-  /**
-   * ISCA (critério 6). Este caso existe para impedir que o envio seja posto
-   * **antes** da consulta de unicidade — o que transformaria o cadastro num
-   * disparador de e-mail para endereço alheio: bastaria um POST com o endereço de
-   * outra pessoa para este serviço escrever para ela.
-   */
   void it('responde 409 e não produz mensagem nem token', async () => {
     const bancada = montar({ emailJaTemConta: true });
     const erro = await capturar(bancada.servico.cadastrar(cadastroValido(), CONTEXTO));
@@ -446,10 +403,6 @@ void describe('e-mail já cadastrado: 409 sem mensagem e sem token (BICHUS-147, 
 });
 
 void describe('o token em claro não aparece em lugar nenhum (BICHUS-147, critério 7)', () => {
-  /**
-   * ISCA (critério 7). O caso varre o corpo da resposta, a saída de log inteira e a
-   * trilha atrás do **valor exato** do token.
-   */
   void it('não está na resposta, no log, na trilha nem no correlation_id', async () => {
     const bancada = montar({});
     const sessao = await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);
@@ -467,10 +420,6 @@ void describe('o token em claro não aparece em lugar nenhum (BICHUS-147, crité
 });
 
 void describe('o cadastro não paga pela cota de reenvio (BICHUS-147, critério 5)', () => {
-  /**
-   * Quatro toques em `Reenviar` dentro da mesma hora: os três primeiros atendidos, o
-   * quarto 429.
-   */
   const politicaPorConta = rotaDePedidoDeVerificacao.rateLimit.find((regra) =>
     (regra.dimension as readonly string[]).includes('account'),
   );
@@ -491,7 +440,6 @@ void describe('o cadastro não paga pela cota de reenvio (BICHUS-147, critério 
     const contador = criarContadorEmMemoria(() => AGORA);
     const bancada = montar({});
 
-    /** Um toque em `Reenviar`, como a operação `requestEmailVerification` o conta. */
     const reenviar = async (): Promise<number> => {
       const decisao = await contador.hit(`account:${CONTA_NOVA}`, limite, janela);
       if (!decisao.allowed) {
@@ -519,11 +467,6 @@ void describe('o cadastro não paga pela cota de reenvio (BICHUS-147, critério 
     assert.equal(bancada.repo.tokensGravados.length, 1 + limite);
   });
 
-  /**
-   * O contrapeso do caso acima: o reenvio continua sendo o caminho de recuperação de
-   * F1.2 (critério 4, e critérios 3 e 4 de BICHUS-79) mesmo quando o e-mail do
-   * cadastro falhou.
-   */
   void it('depois de o e-mail do cadastro falhar, o reenvio ainda produz mensagem e token', async () => {
     const bancada = montar({ mailerFalha: false });
     await bancada.servico.cadastrar(cadastroValido(), CONTEXTO);

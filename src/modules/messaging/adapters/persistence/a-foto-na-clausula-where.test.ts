@@ -1,7 +1,3 @@
-/**
- * A RESOLUÇÃO DA FOTO: o recorte está na cláusula `WHERE`, e o SQL compilado prova
- * isso.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -25,7 +21,6 @@ const UPLOAD = '018f3a2b-0000-7000-8000-00000000f001';
 const UPLOAD_REF = 'abcdefghijklmnopqrstuv';
 const RESUMO = new Uint8Array(32).fill(7);
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),

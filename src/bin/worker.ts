@@ -1,4 +1,3 @@
-/** Processo de trabalho. */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { resolverSegredos } from '../shared/config/segredos.js';
@@ -78,31 +77,22 @@ import type { CaseId } from '../shared/types/brands.js';
 
 const INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
-/** De quanto em quanto tempo os envios vencidos são varridos. */
 const INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS = 15 * 60 * 1000;
 
-/** Quanto o worker espera entre duas passadas na fila. */
 const INTERVALO_DA_FILA_EM_MILISSEGUNDOS = 2000;
 
-/** De quanto em quanto tempo as localizações de referência vencidas são apagadas. */
 const INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
-/** Quantos trabalhos por passada. */
 const TRABALHOS_POR_PASSADA = 1;
 
-/** Quantas fotos de achado a varredura enfileira por passada. */
 const FOTOS_DE_ACHADO_POR_VARREDURA = 20;
 
-/** QUANTO TEMPO DE `running` SEM SINAL DE VIDA É ÓRFÃO: cinco minutos. */
 const PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS = 5 * 60 * 1000;
 
-/** QUANTAS ORFANDADES ANTES DE DESISTIR: duas. */
 const TETO_DE_ORFANDADE = 2;
 
-/** De quanto em quanto tempo os órfãos são varridos: um minuto. */
 const INTERVALO_DA_VARREDURA_DE_ORFAOS_EM_MILISSEGUNDOS = 60 * 1000;
 
-/** Teto de linhas por varredura: uma passada não pode virar transação longa. */
 const ORFAOS_POR_VARREDURA = 20;
 
 export async function main(): Promise<void> {
@@ -135,10 +125,6 @@ export async function main(): Promise<void> {
     ids,
   };
 
-  /**
-   * A HIGIENE DA FOTO DO ACHADO, pelo MESMO processador e o MESMO armazenamento da
-   * foto de pet.
-   */
   const dependenciasDaHigieneDoAchado = {
     fotos: criarFotosDoAchadoDoWorker(banco.db),
     armazenamento: dependenciasDaFoto.armazenamento,
@@ -201,7 +187,6 @@ export async function main(): Promise<void> {
     baseDaWeb: config.webBaseUrl,
   });
 
-  /** A VARREDURA DE ÓRFÃOS, e ela é o que dá saída a `running`. */
   const rodarVarreduraDeOrfaos = async (): Promise<void> => {
     const recuperados = await fila.recuperarOrfaos({
       prazoEmMs: PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS,
@@ -367,7 +352,6 @@ export async function main(): Promise<void> {
     }
   };
 
-  /** BICHUS-66. A REDE DE SEGURANCA DA JANELA, e ela nao e redundancia inutil. */
   const rodarVarreduraDeTransferencias = async (): Promise<void> => {
     const agora = systemClock.now();
     const { aExpirar, aConsumar } = await transferenciasVencidas(banco.db, agora, 50);
@@ -383,10 +367,6 @@ export async function main(): Promise<void> {
     }
   };
 
-  /**
-   * A VARREDURA DA HIGIENE, e é ela que liga o worker aos DOIS caminhos do achado
-   * sem rota nova nenhuma.
-   */
   const rodarVarreduraDeHigiene = async (): Promise<void> => {
     const pendentes = await dependenciasDaHigieneDoAchado.fotos.pendentes(
       FOTOS_DE_ACHADO_POR_VARREDURA,
@@ -426,11 +406,6 @@ export async function main(): Promise<void> {
     }
   };
 
-  /**
-   * O expurgo de conta excluída, e ele mora aqui e não na API pelo mesmo motivo do
-   * expurgo da trilha: `DELETE /v1/me` responde 202 porque o efeito completo tem
-   * prazo de 30 dias, e o que tem prazo é do worker.
-   */
   const contas = criarIdentityRepository(banco.db, ids);
   const trilhaDoExpurgo = criarTrilhaDeAuditoria({
     db: banco.db,
@@ -542,7 +517,6 @@ export async function main(): Promise<void> {
   }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
   temporizadorDeTransferencias.unref();
 
-  /** A PASSADA DA FILA NÃO CORRE SOBRE SI MESMA, e sem esta linha ela corria. */
   const passadaDaFila = criarPassadaSemReentrada(rodarFila);
 
   const temporizadorDaFila = setInterval(() => {

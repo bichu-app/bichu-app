@@ -66,7 +66,6 @@ async function envioDe(dialeto: 'amz' | 'goog'): Promise<Envio> {
   return { campos, condicoes: bruta.conditions, politicaB64 };
 }
 
-/** As condições que são objeto de um par só, como `{ key: '...' }`. */
 function paresDeCondicao(condicoes: readonly unknown[]): Map<string, unknown> {
   const pares = new Map<string, unknown>();
   for (const c of condicoes) {
@@ -100,10 +99,6 @@ void describe('dialeto `goog` — os nomes que o armazenamento gerenciado exige'
   });
 
   void it('NÃO declara criptografia no servidor, nem campo nem condição', async () => {
-    // O XML API do armazenamento gerenciado **não aceita** o campo de
-    // criptografia no formulário — lá a criptografia em repouso é sempre
-    // ligada. Mandá-lo é recusa do envio inteiro, e foi esta assimetria que a
-    // Emenda 1 do ADR-0007 existe para separar dos provedores de API S3.
     const { campos, condicoes } = await envioDe('goog');
     for (const nome of Object.keys(campos)) {
       assert.ok(
@@ -116,10 +111,6 @@ void describe('dialeto `goog` — os nomes que o armazenamento gerenciado exige'
   });
 
   void it('a assinatura confere com a cadeia GOOG4 recomputada POR FORA', async () => {
-    // A derivação, refeita aqui à mão: data, região, `storage`, `goog4_request`,
-    // com o prefixo `GOOG4` no segredo. É este caso que reprova a troca de
-    // qualquer um dos quatro elos — e nenhum deles aparece no formulário, então
-    // só a recomputação os alcança.
     const { campos, politicaB64 } = await envioDe('goog');
     const dataCurta = campos['x-goog-date']!.slice(0, 8);
     const hmac = (chave: Buffer | string, dado: string): Buffer =>
@@ -134,15 +125,6 @@ void describe('dialeto `goog` — os nomes que o armazenamento gerenciado exige'
 });
 
 void describe('simetria entre política e formulário — vale nos DOIS dialetos', () => {
-  // **A regra do armazenamento é binária e vale nas duas direções**: todo campo
-  // do formulário tem de aparecer nas condições da política (senão o envio é
-  // recusado inteiro, "each form field must appear in the list of policy
-  // conditions"), e toda condição tem de ter o campo correspondente (senão o
-  // cliente é recusado por omitir). `policy` e a assinatura são os dois únicos
-  // isentos, e `bucket` é condição que não viaja como campo.
-  //
-  // Esta é a isca que generaliza: ela pega campo novo sem condição e condição
-  // nova sem campo, em qualquer dialeto, sem listar nomes.
   for (const dialeto of ['amz', 'goog'] as const) {
     void it(`[${dialeto}] todo campo do formulário tem condição, com o MESMO valor`, async () => {
       const { campos, condicoes } = await envioDe(dialeto);
@@ -174,9 +156,6 @@ void describe('simetria entre política e formulário — vale nos DOIS dialetos
 });
 
 void describe('o controle positivo: `amz` continua sendo `amz`', () => {
-  // Sem este bloco, uma implementação que assinasse SEMPRE no dialeto `goog`
-  // passaria em tudo acima e quebraria o MinIO da bancada e todo provedor de
-  // API S3 — que é o caminho de hoje da pilha local e da integração.
   void it('o dialeto da API S3 mantém `x-amz-` e a criptografia declarada', async () => {
     const { campos, condicoes } = await envioDe('amz');
     assert.equal(campos['x-amz-algorithm'], 'AWS4-HMAC-SHA256');
@@ -192,9 +171,6 @@ void describe('o controle positivo: `amz` continua sendo `amz`', () => {
   });
 
   void it('os dois dialetos NÃO produzem a mesma assinatura', async () => {
-    // Prova que o dialeto entra de fato na cadeia de derivação, e não só nos
-    // nomes dos campos: se `prefixoDaChave`, `servico` ou `terminador` fossem
-    // ignorados, as duas assinaturas coincidiriam sobre a mesma política.
     const a = await envioDe('amz');
     const g = await envioDe('goog');
     assert.notEqual(a.campos['x-amz-signature'], g.campos['x-goog-signature']);

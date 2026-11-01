@@ -1,7 +1,3 @@
-/**
- * `POST /v1/auth/logout` chamado **exatamente como o contrato declara** (BICHUS-81
- * critério 6, corrigido pela emenda 1 do ADR-0002).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -29,26 +25,19 @@ import { RepositorioQueRecusaTudo } from '../persistence/repositorio-que-recusa-
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const OUTRA_PESSOA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
 const FAMILIA_DESTE_APARELHO = 'fam-do-celular-da-tutora';
-/** SEC-021: a MESMA tutora, no tablet de casa. */
 const FAMILIA_DO_TABLET = 'fam-do-tablet-da-tutora';
 const FAMILIA_ALHEIA = 'fam-de-outra-conta';
 const AGORA = INSTANTE_FIXO;
 
-/** O refresh que o aparelho apresenta. */
 const REFRESH_DESTE_APARELHO = 'refresh-do-celular-da-tutora-0001';
 const REFRESH_DE_OUTRA_CONTA = 'refresh-de-outra-conta-0002-abcd';
 
-/** Montada como `loadAppConfig()` monta: base pública mais `/problems`. */
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 
 function hashDe(token: string): TokenHash {
   return hashDeToken(token) as TokenHash;
 }
 
-/**
- * A chave do mapa, porque `TokenHash` passou a ser `Buffer`: dois `Buffer` de
- * conteúdo igual são chaves DIFERENTES num `Map`, que compara por identidade.
- */
 function chaveDe(hash: TokenHash): string {
   return hash.toString('hex');
 }
@@ -78,7 +67,6 @@ function contaAtiva(): Conta {
   };
 }
 
-/** Dublê do repositório com a semântica do SQL, e não com a conveniência do teste. */
 class RepositorioFalso extends RepositorioQueRecusaTudo {
   override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
     return Promise.resolve(null);
@@ -89,13 +77,7 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
   }
 
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
-  /** A isca do "sair de todos os aparelhos disfarçado". */
   public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
-  /**
-   * A outra metade da mesma isca, e ela so passou a existir com a BICHUS-125:
-   * `sairDeTodosOsAparelhos` revoga as familias EM MASSA alem de empurrar
-   * `sessions_invalid_before`.
-   */
   public readonly revogacoesEmMassa: { userId: UserId; motivo: MotivoDeRevogacao; agora: Instant }[] =
     [];
 
@@ -173,20 +155,13 @@ interface Bancada {
   readonly repo: RepositorioFalso;
   readonly contrato: Contrato;
   readonly eventos: AuditEvent[];
-  /**
-   * SEC-021: as localizações de referência vivas, chaveadas pelo PAR `(dono,
-   * família)` — o mesmo par que é chave primária de `user_reference_locations` desde
-   * a migração `20260923000001`.
-   */
   readonly localizacoes: Map<string, string>;
 }
 
-/** A chave do dublê: o mesmo par da chave primária da tabela. */
 function chaveDaLocalizacao(dono: string, familia: string): string {
   return `${dono}\u0000${familia}`;
 }
 
-/** Sobe o servidor de verdade com o contrato de verdade e o serviço de verdade. */
 function montar(): Bancada {
   const repo = new RepositorioFalso(contaAtiva());
   const eventos: AuditEvent[] = [];
@@ -290,10 +265,6 @@ function montar(): Bancada {
   return { app, repo, contrato, eventos, localizacoes };
 }
 
-/**
- * O corpo **que o contrato manda enviar**, montado a partir do schema da própria
- * especificação.
- */
 function montarCorpoDoContrato(
   contrato: Contrato,
   operationId: string,

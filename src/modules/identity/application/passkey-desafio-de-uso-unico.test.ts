@@ -1,4 +1,3 @@
-/** O desafio de passkey: prazo, uso único e dono — sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,10 +16,6 @@ const AGORA = 1_800_000_000_000 as Instant;
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const OUTRA_CONTA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 
-/**
- * Um `clientDataJSON` como o aparelho o manda: base64url de um JSON com
- * `challenge`.
- */
 function clientDataCom(desafio: string): string {
   return Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: desafio }), 'utf8')
     .toString('base64url');
@@ -28,7 +23,6 @@ function clientDataCom(desafio: string): string {
 
 const DESAFIO = 'ZGVzYWZpby1kZS10ZXN0ZQ';
 
-/** Recusa tudo: cada caso liga só a porta de que precisa. */
 class RepositorioDePasskeyDeTeste implements PasskeyRepository {
   public consumidos: string[] = [];
   public revogados: { id: string; razao: string }[] = [];

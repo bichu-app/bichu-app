@@ -1,4 +1,3 @@
-/** O cruzamento contra os números da seção 4.10 de `docs/03-arquitetura.md`. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -25,7 +24,6 @@ const CASO = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 const HORA = 3_600_000;
 const DIA = 24 * HORA;
 
-/** 15/01/2027, 12:00 UTC. Qualquer instante fixo serve; o relógio não entra aqui. */
 const SUMIU_EM = 1_800_000_000_000;
 
 function caso(ajustes: Partial<LadoDoCaso> = {}): LadoDoCaso {

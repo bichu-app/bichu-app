@@ -1,4 +1,3 @@
-/** As DUAS LISTAS DE EXCECAO nao divergiram do banco. */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,7 +19,6 @@ function migracao(): string {
   return readFileSync(CAMINHO_DA_MIGRACAO, 'utf8');
 }
 
-/** Os valores de `IN (...)` do corpo de uma funcao `notificacao_*`. */
 function valoresDaFuncao(sql: string, nome: string): string[] {
   const inicio = sql.indexOf(`CREATE FUNCTION ${nome}(`);
   assert.notEqual(
@@ -35,10 +33,6 @@ function valoresDaFuncao(sql: string, nome: string): string[] {
   return [...lista[1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
 }
 
-/**
- * Os valores do `CHECK` de `notification_items.item_kind`, **da migracao mais
- * recente que o define**.
- */
 function tiposDoCheck(): string[] {
   const dir = resolve(process.cwd(), 'migrations');
   const candidatas = readdirSync(dir)

@@ -1,4 +1,3 @@
-/** A projecao de uma entrada do diretorio: o que a secao `Perto` mostra. */
 import {
   projetarPontuacao,
   type PontuacaoDoLocal,
@@ -92,7 +91,6 @@ export function distanciaNaGrade(metros: number | null): number | null {
   return Math.max(GRADE_EM_METROS, Math.round(metros / GRADE_EM_METROS) * GRADE_EM_METROS);
 }
 
-/** A FORMA DE UMA CHAVE DE DERIVADA PUBLICA, e por que ela e conferida AQUI. */
 const FORMA_DA_DERIVADA = /^[a-z-]+\/(?:thumb|card|banner)\/[A-Za-z0-9_-]+\.[a-z]+$/;
 
 export function urlDaDerivada(

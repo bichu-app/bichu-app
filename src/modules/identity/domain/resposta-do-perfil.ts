@@ -1,4 +1,3 @@
-/** A resposta `Me`, montada numa FUNÇÃO PURA. */
 import type { Conta, FotoDoPerfil } from '../ports/identity-repository.js';
 import { canalDeContatoConfirmado } from '../../../shared/db/canal-de-contato-confirmado.js';
 import { camposPendentesDoPerfil, podeAbrirCasoDePerdido } from './completude-do-perfil.js';

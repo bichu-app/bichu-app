@@ -1,4 +1,3 @@
-/** Testes do portão de contrato (BICHUS-55). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { parse as parseYaml } from 'yaml';

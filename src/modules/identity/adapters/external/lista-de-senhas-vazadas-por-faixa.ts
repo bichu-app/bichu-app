@@ -1,4 +1,3 @@
-/** A base de senhas vazadas (D43) pela consulta de faixa do Pwned Passwords. */
 import { createHash } from 'node:crypto';
 
 import type { ListaDeSenhasVazadas } from '../../ports/lista-de-senhas-vazadas.js';

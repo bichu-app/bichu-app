@@ -1,4 +1,3 @@
-/** Listagem pública de perdidos (`listPublicLostPets`). */
 import { comoData, type Clock } from '../../../shared/time/clock.js';
 import type { components } from '../../../shared/types/generated/api.js';
 import {

@@ -1,4 +1,3 @@
-/** As rotas da VITRINE DE FOTOS DO USUÁRIO. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -53,7 +52,6 @@ export interface DependenciasDasRotasDaVitrineDeFotos {
   readonly baseDeMidia: AbsoluteUrl;
 }
 
-/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
 function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaVitrineDeFotos,
@@ -80,7 +78,6 @@ async function contaDoTeto(
   }
 }
 
-/** Uma foto da vitrine como o contrato a declara. */
 function comoRespostaDaFoto(foto: FotoDaVitrine, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   const url = (chave: string | null): string | null =>
     chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;

@@ -1,7 +1,5 @@
-/** O código da tag: geração, normalização, símbolo de verificação e forma impressa. */
 import type { TagCodeCanonical } from '../../../shared/types/brands.js';
 
-/** Crockford Base32: 32 símbolos, sem `I`, `L`, `O` e `U`. */
 const ALFABETO = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 /** 15 símbolos de aleatoriedade mais 1 de verificação. */
@@ -18,21 +16,14 @@ const BITS_POR_SIMBOLO = 5;
 /** 75 bits **não são um número inteiro de bytes**: são 9,375. */
 export const BYTES_DO_GERADOR = 10;
 
-/** Tamanho do grupo na forma impressa. */
 const TAMANHO_DO_GRUPO = 4;
 
 const VALIDO = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 
-/** Polinômio primitivo de `GF(2^5)`: `x^5 + x^2 + 1`, isto é `0x25`. */
 const POLINOMIO_PRIMITIVO = 0x25;
 
-/** Gerador do corpo. A ordem de 2 em `GF(32)*` é 31, logo ele é primitivo. */
 const GERADOR = 2;
 
-/**
- * Multiplicação em `GF(2^5)`: produto de polinômios sobre `GF(2)`, reduzido pelo
- * primitivo sempre que o bit 5 aparecer.
- */
 function multiplicarEmGf32(a: number, b: number): number {
   let resultado = 0;
   let esquerdo = a;
@@ -46,7 +37,6 @@ function multiplicarEmGf32(a: number, b: number): number {
   return resultado;
 }
 
-/** Os pesos `α^1 … α^15`: `2, 4, 8, 16, 5, 10, 20, 13, 26, 17, 7, 14, 28, 29, 31`. */
 const PESOS: readonly number[] = (() => {
   const pesos: number[] = [];
   let atual = 1;
@@ -57,7 +47,6 @@ const PESOS: readonly number[] = (() => {
   return pesos;
 })();
 
-/** O símbolo de verificação dos quinze primeiros: `c = ⊕ᵢ (α^i ⊗ vᵢ)`. */
 function simboloDeVerificacao(quinzePrimeiros: string): string {
   let acumulado = 0;
   for (let posicao = 0; posicao < SIMBOLOS_DE_ALEATORIEDADE; posicao += 1) {
@@ -82,7 +71,6 @@ export function normalizarCodigoDaTag(bruto: string): TagCodeCanonical | undefin
   return comSubstituicoesDeCrockford as TagCodeCanonical;
 }
 
-/** Codifica 75 bits em 15 símbolos e anexa o de verificação. */
 function codificarEmCrockford(bytes: Uint8Array): string {
   let acumulador = 0n;
   for (const octeto of bytes) acumulador = (acumulador << 8n) | BigInt(octeto);

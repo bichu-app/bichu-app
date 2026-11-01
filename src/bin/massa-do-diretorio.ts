@@ -1,4 +1,3 @@
-/** A massa fixa do diretorio de `Perto`: doze entradas, dez publicadas. */
 import type { TipoDeProfissional } from '../modules/professionals/domain/entrada-do-diretorio.js';
 import type { TipoDeEvidencia } from '../modules/professionals/domain/nivel-de-verificacao.js';
 
@@ -41,7 +40,6 @@ export interface EntradaSemeada {
 /** 2026-09-01T12:00:00Z. Literal, como tudo nesta massa. */
 export const MOMENTO_DA_MASSA = '2026-09-01T12:00:00Z';
 
-/** `.invalid` e reservado por RFC 2606: nenhum e-mail daqui sai para o mundo. */
 const DOMINIO = 'exemplo.invalid';
 
 export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [

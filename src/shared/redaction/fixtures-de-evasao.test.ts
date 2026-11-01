@@ -1,7 +1,3 @@
-/**
- * Os critérios 14 e 15 da BICHUS-43, que são sobre a VERIFICAÇÃO e não sobre a
- * redação.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -11,7 +7,6 @@ import { redigirCanalMediado, type TrechoRedigido } from './redigir.js';
 
 const CAMINHO = resolve(process.cwd(), 'src/shared/redaction/evasoes-da-redacao.fixtures.json');
 
-/** As três que o critério 14 nomeia. */
 const CLASSES_EXIGIDAS = ['largura_zero', 'homoglifo', 'por_extenso'] as const;
 
 interface Evasao {
@@ -32,7 +27,6 @@ interface Lista {
   readonly negativas: Negativa[];
 }
 
-/** Carrega, ou **reprova com o motivo**. */
 function carregar(): Lista {
   let cru: string;
   try {

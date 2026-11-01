@@ -1,4 +1,3 @@
-/** A FOTO DE PESSOA NÃO SAI EM RESPOSTA PÚBLICA — medido NO CONTRATO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -9,7 +8,6 @@ const spec = parseYaml(contrato) as {
   components: { schemas: Record<string, unknown> };
 };
 
-/** Os campos da EMENDA 3 do ADR-0010 (19/10/2026). */
 const CAMPOS_DA_EMENDA = ['handle', 'photo_icon_url'] as const;
 
 function propriedadesDoParticipante(esquema: string): string[] {

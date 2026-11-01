@@ -1,7 +1,3 @@
-/**
- * As escritas do comando `conta-admin` sobre `admin_accounts` (ADR-0027 item
- * 20.3).
- */
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { EstadoDaContaAdministrativa, MotivoDoBloqueio } from './repositorio-de-contas-administrativas.js';
 

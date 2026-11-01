@@ -1,4 +1,3 @@
-/** Testes da resolução de segredos de runtime (ADR-0022). */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
@@ -26,7 +25,6 @@ afterEach(() => {
   }
 });
 
-/** Um provedor que responde o que o caso mandar, e nada mais. */
 function provedorFalso(mapa: Record<string, string | Error>): SecretProvider {
   return {
     fonte: 'provedor de teste',
@@ -144,7 +142,6 @@ void describe('onde o gerenciador entra, e onde ele deliberadamente não entra',
   });
 });
 
-/** A lista de segredos de runtime e o token do provedor de e-mail. */
 void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
   void it('MAIL_API_TOKEN esta em SEGREDOS_DE_RUNTIME, junto com o codigo que o le', () => {
     assert.ok(
@@ -172,10 +169,6 @@ void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
   });
 });
 
-/**
- * A ISCA DA REGRESSAO DE 29/09: o token do provedor so e RESOLVIDO quando o
- * transporte precisa dele.
- */
 void describe('ISCA: o token do provedor so e resolvido no transporte que o le', () => {
   void it('com `smtp`, MAIL_API_TOKEN fica FORA da lista que a subida resolve', () => {
     assert.ok(

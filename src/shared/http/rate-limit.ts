@@ -1,4 +1,3 @@
-/** Contador de limite de chamadas, nas duas implementações da porta. */
 import { sql } from 'kysely';
 import type { Db } from '../db/pool.js';
 import type { RateLimitDecision, RateLimitStore } from '../ports/rate-limit-store.js';
@@ -27,7 +26,6 @@ export function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: n
   return new Date(Math.floor(agoraEmMilissegundos / janelaEmMilissegundos) * janelaEmMilissegundos);
 }
 
-/** A decisão a partir da contagem JÁ APURADA. */
 const TETO_DO_RETRY_AFTER_EM_SEGUNDOS = 24 * 3600;
 
 function decidir(
@@ -66,10 +64,6 @@ export function criarContadorEmMemoria(agora: () => number): RateLimitStore {
       return Promise.resolve(decidir(balde.contagem, limite, expiraEm, agoraEmMilissegundos));
     },
 
-    /**
-     * Lê sem somar, e pergunta o que aconteceria **se** a próxima entrasse — daí o
-     * `contagem + 1`.
-     */
     peek: (bucketKey, limite, janela) => {
       const agoraEmMilissegundos = agora();
       const inicio = inicioDaJanela(agoraEmMilissegundos, janela);
@@ -113,11 +107,6 @@ export function criarContadorEmPostgres(
       return decidir(linha.count, limite, expiraEm, agoraEmMilissegundos);
     },
 
-    /**
-     * Lê sem somar, e por isso **não** precisa ser atômico: dois pedidos simultâneos
-     * lendo o mesmo balde podem ambos passar, e o pior caso é uma tentativa inválida a
-     * mais sendo conferida.
-     */
     peek: async (bucketKey, limite, janela) => {
       const agoraEmMilissegundos = agora();
       const inicio = inicioDaJanela(agoraEmMilissegundos, janela);

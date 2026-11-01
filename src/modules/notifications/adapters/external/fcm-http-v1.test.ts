@@ -1,4 +1,3 @@
-/** Testes do adaptador de push (ADR-0008). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -6,10 +5,6 @@ import { VazamentoNoPushError } from '../../domain/conteudo-do-push.js';
 import { PushNaoEnviadoError, type MensagemDePush } from '../../ports/push-sender.js';
 import { criarPushSenderFcm, type Buscar } from './fcm-http-v1.js';
 
-/**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
- * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
- */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
 
@@ -31,10 +26,6 @@ function mensagem(ajuste: Partial<MensagemDePush> = {}): MensagemDePush {
   };
 }
 
-/**
- * `fetch` falso: responde a credencial no endereço de metadados e delega o resto
- * ao caso.
- */
 function buscarFalso(responder: (url: string) => Response): {
   buscar: Buscar;
   chamadas: { url: string; corpo: string | undefined }[];
@@ -66,7 +57,6 @@ function recusa(status: number, errorCode?: string): Response {
   return new Response(JSON.stringify(corpo), { status });
 }
 
-/** Sucesso do transporte: ele devolve o nome da mensagem, e nada mais. */
 function aceito(): Response {
   return new Response(JSON.stringify({ name: 'projects/x/messages/1' }), { status: 200 });
 }

@@ -1,4 +1,3 @@
-/** O COMUNICADO -- as iscas da trava. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -29,10 +28,6 @@ const ATOR: AtorAdministrativo = {
 const ID_INTERNO = 'bc000000-0000-4000-8000-00000000000b';
 const REF_PUBLICO = 'refDoComunicadoAAAAAA';
 
-/**
- * O corpo do comunicado, com um valor que NAO aparece em mais lugar nenhum deste
- * arquivo.
- */
 const CORPO_SECRETO = 'texto-do-corpo-que-nao-pode-entrar-na-trilha-9f3a';
 
 function gravado(): ComunicadoGravado {
@@ -57,10 +52,6 @@ interface Bancada {
   previas: number;
 }
 
-/**
- * `tetoAtingido` troca a resposta do porto para `undefined`, que e como o banco
- * diz "nao cabe mais hoje".
- */
 function bancada(opcoes: { tetoAtingido?: boolean } = {}): Bancada {
   const estado = { confirmadas: 0, previas: 0 };
   const eventos: AuditEvent[] = [];

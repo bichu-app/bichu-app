@@ -1,4 +1,3 @@
-/** Registro de rota. **É aqui que o teto de chamada passa a existir.** */
 import type {
   FastifyInstance,
   FastifyPluginCallback,
@@ -50,21 +49,11 @@ export type VerificadorDeReautenticacao = (
 
 declare module 'fastify' {
   interface FastifyInstance {
-    /** Instalado por `criarServidor`. */
     tetoDeChamada?: DependenciasDoTeto;
-    /**
-     * Instalado por `criarServidor` quando `OpcoesDoServidor.reautenticacao` vem
-     * preenchido.
-     */
     reautenticacao?: VerificadorDeReautenticacao;
   }
   interface FastifyRequest {
-    /** Marcada em `onError` quando o problema é recusa de credencial. */
     tentativaInvalida?: true;
-    /**
-     * O consumo da janela de reautenticacao desta requisicao, para devolver em
-     * 412/428.
-     */
     reautenticacaoConsumida?: ReautenticacaoConsumida | undefined;
   }
 }
@@ -81,7 +70,6 @@ export const TIPOS_DE_TENTATIVA_INVALIDA: ReadonlySet<ProblemType> = new Set<Pro
   'finder-link-invalid',
 ]);
 
-/** As dimensões que aparecem na tupla `rateLimit` da rota, como união literal. */
 type DimensoesDeclaradas<T extends RouteDefinition> = T extends {
   readonly rateLimit: readonly RateLimitEntry[];
 }
@@ -90,16 +78,11 @@ type DimensoesDeclaradas<T extends RouteDefinition> = T extends {
 
 type DimensaoGenerica = (typeof DIMENSOES_GENERICAS)[number];
 
-/** O que a rota precisa resolver: tudo que ela declara e o registro não sabe. */
 type DimensoesExigidas<T extends RouteDefinition> = Exclude<
   DimensoesDeclaradas<T>,
   DimensaoGenerica
 >;
 
-/**
- * Obrigatório quando a rota declara alguma dimensão específica; ausente quando não
- * declara nenhuma.
- */
 type ResolvedoresExigidos<T extends RouteDefinition> = [DimensoesExigidas<T>] extends [never]
   ? { readonly resolvedores?: undefined }
   : { readonly resolvedores: Readonly<Record<DimensoesExigidas<T>, ResolvedorDeDimensao>> };
@@ -116,10 +99,6 @@ export type OpcoesDeRegistro<T extends RouteDefinition> = ResolvedoresExigidos<T
 
 export type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
-/**
- * O que a subida precisa dizer em voz alta: as entradas declaradas que este
- * mecanismo **não** aplica.
- */
 const naoAplicadas: EntradaNaoAplicavel[] = [];
 
 export function inventarioDoQueNaoEAplicado(): readonly EntradaNaoAplicavel[] {
@@ -131,7 +110,6 @@ export function zerarInventario(): void {
   naoAplicadas.length = 0;
 }
 
-/** O método declarado, no vocabulário do framework. */
 const METODOS = {
   get: 'GET',
   post: 'POST',
@@ -140,10 +118,6 @@ const METODOS = {
   delete: 'DELETE',
 } as const satisfies Record<RouteDefinition['method'], string>;
 
-/**
- * Os membros do servidor que **registram rota**, e que ninguém fora deste arquivo
- * pode alcançar.
- */
 type MetodoDeRegistro = Extract<
   keyof FastifyInstance,
   'get' | 'head' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'all' | 'route'
@@ -186,7 +160,6 @@ function tetoDe(app: RegistradorDeRotas): DependenciasDoTeto {
   return teto;
 }
 
-/** O portão da segunda credencial, e **ele nasce da declaração da rota**. */
 function portaoDeReautenticacao(
   app: RegistradorDeRotas,
   rota: RouteDefinition,
@@ -209,10 +182,6 @@ function portaoDeReautenticacao(
   };
 }
 
-/**
- * A rota administrativa so sobe dentro do escopo da guarda, e o escopo so aceita
- * rota administrativa (ADR-0027 item 7).
- */
 function exigirFronteiraAdministrativa(
   rota: RouteDefinition,
   superficie: OpcoesDaSuperficieAdministrativa | undefined,
@@ -255,11 +224,6 @@ function exigirFronteiraAdministrativa(
   if (rota.method !== 'get' && rota.audit === undefined) falha('escrita administrativa sem audit (D49)');
 }
 
-/**
- * O portao de `X-Admin-Reauth-Token`, nascido da declaracao da rota, no mesmo
- * lugar e pelo mesmo motivo de `portaoDeReautenticacao`: esquecer de exigir a
- * senha deixa de ser exprimivel.
- */
 function portaoDeReautenticacaoAdministrativa(
   rota: RouteDefinition,
   superficie: OpcoesDaSuperficieAdministrativa | undefined,
@@ -282,17 +246,8 @@ function portaoDeReautenticacaoAdministrativa(
   };
 }
 
-/**
- * Respostas que provam que a escrita NAO aconteceu: a versao do `If-Match` nao
- * confere (412) ou faltou (428).
- */
 const DEVOLVEM_A_JANELA: ReadonlySet<number> = new Set([412, 428]);
 
-/**
- * Devolve a janela ANTES de a resposta sair (`onSend`, e nao `onResponse`): quem
- * recebe o 412 recarrega e tenta de novo na hora, e a janela precisa ja estar de
- * volta quando o segundo pedido chegar.
- */
 function devolucaoDaReautenticacaoAdministrativa(
   rota: RouteDefinition,
   superficie: OpcoesDaSuperficieAdministrativa | undefined,
@@ -387,7 +342,6 @@ export function registrarRota<const T extends RouteDefinition>(
   });
 }
 
-/** Os metodos declarados por caminho, em cada escopo administrativo. */
 const metodosDaSuperficie = new WeakMap<OpcoesDaSuperficieAdministrativa, Map<string, Set<string>>>();
 
 function anotarMetodoDaSuperficie(superficie: OpcoesDaSuperficieAdministrativa, rota: RouteDefinition): void {

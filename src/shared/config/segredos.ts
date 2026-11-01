@@ -1,4 +1,3 @@
-/** Os segredos de runtime, e o passo que os coloca no ambiente antes da subida. */
 import type { NomeDeSegredo, SecretProvider } from '../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../ports/secret-provider.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';

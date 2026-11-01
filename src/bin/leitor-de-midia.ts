@@ -1,4 +1,3 @@
-/** **Leitor da midia publica** (ADR-0007 Emenda 1, item 4). */
 import { createServer } from 'node:http';
 
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
@@ -10,10 +9,6 @@ import { resolverSegredos } from '../shared/config/segredos.js';
 import type { ObjectKey } from '../shared/types/brands.js';
 
 const PORTA = Number(optionalEnv('LEITOR_DE_MIDIA_PORTA') ?? '8080');
-/**
- * A FORMA DA DERIVADA PÚBLICA, e é esta linha que garante que o app nunca recebe o
- * original.
- */
 const FORMA_DE_DERIVADA = new RegExp(
   `^(?:(?:${CATEGORIAS_PUBLICAS.join('|')})/)?(?:thumb|card|banner)/[A-Za-z0-9_-]+\\.(?:webp|jpg|jpeg)$`,
 );

@@ -1,4 +1,3 @@
-/** A persistência da conexão. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
@@ -26,16 +25,10 @@ import type {
   RecortePedidos,
 } from '../../ports/connections-repository.js';
 
-/** A conversão mora em `shared/time/clock.ts`; aqui ela só é usada. */
 const instanteComoData = comoData;
 
-/**
- * **O SELO DE VALIDADO da outra ponta**, derivado no SQL a partir do alias `outro`
- * (`users`), que as três projeções de aresta deste arquivo já têm.
- */
 const CANAL_VERIFICADO_DO_OUTRO = canalDeContatoConfirmadoNoSql('outro');
 
-/** As colunas que uma aresta projeta, **e só elas**. */
 const COLUNAS_DA_ARESTA = sql`
       c.ref                                   AS ref,
       c.state                                 AS state,
@@ -48,7 +41,6 @@ const COLUNAS_DA_ARESTA = sql`
       ${CANAL_VERIFICADO_DO_OUTRO}            AS canal_verificado
 `;
 
-/** A junção que resolve "a outra ponta", com `conta_habilitada` nos dois lados. */
 function juncaoDaAresta(quemChama: UserId) {
   return sql`
     FROM user_connections c
@@ -71,7 +63,6 @@ interface LinhaDaAresta {
   readonly rest_until: Date | null;
   readonly display_name: string | null;
   readonly handle: string | null;
-  /** O selo de validado da outra ponta. */
   readonly canal_verificado: boolean;
 }
 
@@ -128,7 +119,6 @@ interface ContagemCrua {
   readonly do_dia: string | number;
 }
 
-/** `count(*)` vem como `bigint`, e o driver o entrega como texto. */
 function comoNumero(valor: string | number): number {
   return typeof valor === 'number' ? valor : Number.parseInt(valor, 10);
 }
@@ -420,10 +410,6 @@ export function construtorDosPedidos(
   `.compile(db);
 }
 
-/**
- * A linha de [construtorDasArestasPorApelido]: o apelido mais as colunas de estado
- * da aresta.
- */
 interface LinhaDaArestaPorApelido {
   readonly handle: string;
   readonly state: EstadoGuardado;
@@ -433,7 +419,6 @@ interface LinhaDaArestaPorApelido {
   readonly rest_until: Date | null;
 }
 
-/** A linha que a lista das próprias conexões devolve. */
 interface LinhaDaConexao {
   readonly handle: string;
   readonly display_name: string | null;
@@ -506,7 +491,6 @@ export function construtorDasArestasPorApelido(
   `.compile(db);
 }
 
-/** A linha crua como [PessoaConectada]. */
 function comoPessoaConectada(linha: LinhaDaConexao): PessoaConectada {
   return {
     apelido: linha.handle,
@@ -571,7 +555,6 @@ export function criarConnectionsRepository(db: Kysely<Database>): ConnectionsRep
       };
     },
 
-    /** As PRÓPRIAS conexões aceitas (cliente, 22/10/2026). */
     async arestasPorApelido(
       quemChama: UserId,
       apelidos: readonly string[],

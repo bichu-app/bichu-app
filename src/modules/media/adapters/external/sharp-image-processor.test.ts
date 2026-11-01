@@ -1,4 +1,3 @@
-/** As três fixtures de metadado do critério 20 de `BICHUS-87`. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import sharp, { type Sharp } from 'sharp';
@@ -17,7 +16,6 @@ function base(largura = 200, altura = 150): Sharp {
   return sharp({ create: { width: largura, height: altura, channels: 3, background: { r: 120, g: 90, b: 60 } } });
 }
 
-/** Coordenada de verdade, em São Paulo: é o que não pode sobreviver. */
 const LAT = '23/1 33/1 0/1';
 const LON = '46/1 38/1 0/1';
 
@@ -42,10 +40,6 @@ async function comGpsEmXmp(): Promise<Buffer> {
   return base().withXmp(xmp).jpeg().toBuffer();
 }
 
-/**
- * IPTC não tem escritor no `sharp`, então o segmento é montado à mão: APP13 com o
- * bloco `8BIM` de id `0x0404` e um dataset IIM de legenda.
- */
 async function comIptc(): Promise<Buffer> {
   const jpeg = await base().jpeg().toBuffer();
   const dado = Buffer.from('Foto tirada em Vila Madalena, Sao Paulo');
@@ -72,7 +66,6 @@ async function comIptc(): Promise<Buffer> {
   return Buffer.concat([jpeg.subarray(0, 2), app13, jpeg.subarray(2)]);
 }
 
-/** O que a derivada não pode ter, conferido de dois jeitos independentes. */
 async function conferirDerivadaLimpa(derivada: Buffer, marcas: readonly string[]): Promise<void> {
   const meta = await sharp(derivada).metadata();
   assert.equal(meta.exif, undefined, 'a derivada carrega bloco EXIF');
@@ -84,14 +77,12 @@ async function conferirDerivadaLimpa(derivada: Buffer, marcas: readonly string[]
   }
 }
 
-/** A derivada, ou um erro de teste com o motivo. */
 async function derivada(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada> {
   const r = await processador.derivar(bytes, pedido);
   if (typeof r === 'string') assert.fail(`esperava derivada e veio o motivo "${r}"`);
   return r;
 }
 
-/** O pedido mais simples: largura, sem corte, escada e teto do ponto único. */
 function semCorte(largura: number): PedidoDeDerivada {
   return { largura, escada: ESCADA_DA_FAIXA, tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA };
 }
@@ -240,9 +231,7 @@ void describe('a escada de qualidade, e o teto de 500 KB', () => {
   });
 });
 
-/** Um WebP ANIMADO de verdade, montado chunk por chunk. */
 async function webpAnimado(lado = 64, quadros = 3): Promise<Buffer> {
-  /** Um chunk RIFF: fourcc, tamanho em 32 bits LE, corpo, e byte de alinhamento. */
   function chunk(fourcc: string, corpo: Buffer): Buffer {
     const cabecalho = Buffer.alloc(8);
     cabecalho.write(fourcc, 0, 4, 'ascii');

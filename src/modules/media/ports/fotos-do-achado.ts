@@ -1,4 +1,3 @@
-/** A foto do achado, como o WORKER a enxerga. */
 import type { ObjectKey } from '../../../shared/types/brands.js';
 
 /** O trabalho da fila. Mesmo prefixo de `media.process_upload`. */

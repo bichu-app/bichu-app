@@ -1,4 +1,3 @@
-/** ISCA (d): A VARREDURA DE VENCIDOS NÃO APAGA A FOTO DA VITRINE. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { varrerEnviosVencidos } from './varrer-envios-vencidos.js';

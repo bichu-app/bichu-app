@@ -1,7 +1,3 @@
-/**
- * O rotulo `status`, a projecao do encontro e a do ponto, sem banco e sem
- * servidor.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +17,6 @@ import {
 } from './encontro-da-rede.js';
 import type { AbsoluteUrl, Instant } from '../../../shared/types/brands.js';
 
-/** Um instante fixo. Nada aqui depende do relogio de quem roda. */
 const AGORA = Date.UTC(2026, 8, 23, 12, 0, 0) as Instant;
 const UMA_HORA = 3_600_000;
 
@@ -310,7 +305,6 @@ void describe('a projecao do ponto (getNetworkEventLocation)', () => {
   });
 });
 
-/** Um privado com TODO campo oculto preenchido por sentinela. */
 function privadoComSentinelas(): EncontroDaRede {
   return encontro({
     slug: 'p-q8w3n5z1ty',
@@ -471,10 +465,6 @@ void describe('a distancia da agenda por distancia', () => {
   });
 });
 
-/**
- * `WEB_BASE_URL` do teste, **com barra no fim de proposito**: o montador tem de
- * apara-la, e uma base limpa nunca mostraria `//encontro/`.
- */
 const BASE_DA_WEB = 'https://site.exemplo.invalid/' as AbsoluteUrl;
 const PAGINA_ACESA = { baseDaWeb: BASE_DA_WEB, publicada: true };
 const PAGINA_APAGADA = { baseDaWeb: BASE_DA_WEB, publicada: false };

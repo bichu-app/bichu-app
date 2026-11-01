@@ -1,4 +1,3 @@
-/** Testes do HMAC de endereço IP (SEC-010, critério 4 de BICHUS-56). */
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
@@ -69,7 +68,6 @@ void describe('comparação em tempo constante', () => {
   });
 });
 
-/** Índice cego do código da tag (ADR-0004, Emenda 1, seção 3.1). */
 void describe('índice cego do código da tag', () => {
   const CODIGO = 'GQSM0XHBT4D9G31S' as TagCodeCanonical;
 

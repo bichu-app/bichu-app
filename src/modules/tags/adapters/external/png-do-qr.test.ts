@@ -1,4 +1,3 @@
-/** ISCA 1: o PNG do QR decodifica de volta para o código certo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import * as jsqrModulo from 'jsqr';
@@ -15,17 +14,14 @@ import { formaImpressaDoCodigo, normalizarCodigoDaTag } from '../../domain/tag-c
 import { urlDaTag } from '../../domain/qr-da-tag.js';
 import { criarRasterizadorDeQr } from './sharp-rasterizador-de-qr.js';
 
-/** O que se usa do decodificador: os pixels entram, o texto lido sai. */
 type Decodificador = (
   pixels: Uint8ClampedArray,
   largura: number,
   altura: number,
 ) => { readonly data: string } | null;
 
-/** `jsqr` é CommonJS e este projeto é ESM. */
 const jsQR = (jsqrModulo as unknown as { default: Decodificador }).default;
 
-/** A base da tag nos testes: o **tamanho** da base de produção, não o nome dela. */
 const BASE_DA_TAG = 'https://tag.teste.inv' as AbsoluteUrl;
 const CODIGO = normalizarCodigoDaTag('GQSM-0XHB-T4D9-G31S') as TagCodeCanonical;
 const PET_ID = '018f3a2b-0000-7000-8000-0000000000cc';
@@ -36,10 +32,6 @@ function png(conteudo: string): Promise<Buffer> {
   return rasterizador.paraPng(desenharQr(conteudo));
 }
 
-/**
- * Decodifica um PNG como um leitor de verdade faria: rasteriza para RGBA e entrega
- * os pixels ao decodificador.
- */
 async function decodificar(arquivo: Buffer): Promise<string | undefined> {
   const { data, info } = await sharp(arquivo)
     .ensureAlpha()
@@ -49,7 +41,6 @@ async function decodificar(arquivo: Buffer): Promise<string | undefined> {
   return lido === null ? undefined : lido.data;
 }
 
-/** O mesmo desenho com a margem de silêncio trocada. */
 function desenharComMargem(conteudo: string, margem: number): DesenhoDoQr {
   const original = desenharQr(conteudo);
   const lado = original.medida.modulosDoSimbolo;
@@ -74,7 +65,6 @@ function desenharComMargem(conteudo: string, margem: number): DesenhoDoQr {
   };
 }
 
-/** Põe o arquivo sobre fundo escuro, com folga em volta. */
 async function sobreFundoEscuro(arquivo: Buffer): Promise<Buffer> {
   const { width } = await sharp(arquivo).metadata();
   const lado = (width ?? 0) + 80;

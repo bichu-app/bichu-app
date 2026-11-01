@@ -1,4 +1,3 @@
-/** O vocabulario da FILA DE MODERACAO do painel (18/10/2026). */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { DecisaoDaModeracao } from '../../../shared/db/schema.js';
 
@@ -57,7 +56,6 @@ export function ehOrigemDecidivel(valor: string): valor is OrigemDecidivel {
   return (ORIGENS_DECIDIVEIS as readonly string[]).includes(valor);
 }
 
-/** A forma de um UUID, as oito-quatro-quatro-quatro-doze em hexadecimal. */
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

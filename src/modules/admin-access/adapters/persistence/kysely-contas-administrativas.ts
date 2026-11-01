@@ -1,4 +1,3 @@
-/** `admin_accounts` em Postgres (ADR-0027 item 20.1). */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';

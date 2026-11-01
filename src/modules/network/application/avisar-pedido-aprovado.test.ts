@@ -1,7 +1,3 @@
-/**
- * O trabalho do push de pedido aprovado: pedido que sumiu ou deixou de estar
- * aprovado nao e falha e nao entrega nada; o aprovado entrega so o titulo.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

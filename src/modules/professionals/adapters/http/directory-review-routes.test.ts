@@ -1,4 +1,3 @@
-/** As avaliacoes de um local do diretorio, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -32,7 +31,6 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio } from './directory-routes.js';
 
-/** A montagem de URL de midia, pela porta. */
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
@@ -64,18 +62,10 @@ const SEM_AVALIACAO: PontuacaoDoLocal = {
   histograma: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
 };
 
-/**
- * O estado do dobre: uma avaliacao por (local, autor), como o indice unico do
- * banco impoe.
- */
 interface Cenario {
-  /** Quem tem canal verificado. */
   readonly comCanalVerificado?: readonly UserId[];
-  /** Avaliacoes ja gravadas, por autor. */
   readonly avaliacoes?: ReadonlyMap<UserId, AvaliacaoDoLocal>;
-  /** Autores cuja conta esta DESABILITADA: o repositorio nao os lista. */
   readonly contasDesabilitadas?: readonly UserId[];
-  /** O ENDERECO COMERCIAL da entrada (cliente, 21/10/2026). */
   readonly enderecoComercial?: EnderecoComercial;
 }
 
@@ -183,7 +173,6 @@ function repositorio(cenario: Cenario, espiao: Espiao): DirectoryRepository {
 
 const clock: Clock = { now: () => AGORA as Instant };
 
-/** O teto entra DESLIGADO neste arquivo, e a escolha e deliberada. */
 function servidor(cenario: Cenario, espiao: Espiao, log?: string[]): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
@@ -212,12 +201,6 @@ interface Resposta {
   readonly bruto: string;
 }
 
-/**
- * `JSON.parse` tipado em vez de `resposta.json()`, pelo mesmo motivo do arquivo
- * irmao: `json()` devolve `any`, e `any` desliga o lint que confere o acesso --
- * num arquivo cujo trabalho e afirmar a FORMA da resposta, ler o corpo sem tipo
- * seria afirmar sobre o que nao se conferiu.
- */
 async function pedir(
   app: RegistradorDeRotas,
   opcoes: {
@@ -241,7 +224,6 @@ async function pedir(
   };
 }
 
-/** Um campo aninhado, tipado, para o lint nao precisar de `any`. */
 function obj(corpo: Record<string, unknown>, chave: string): Record<string, unknown> {
   return corpo[chave] as Record<string, unknown>;
 }

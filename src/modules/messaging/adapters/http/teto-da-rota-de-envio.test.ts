@@ -1,4 +1,3 @@
-/** O teto da rota de envio, exercido pelo servidor de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -28,7 +27,6 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc';
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 const OUTRA_CONVERSA = '018f3a2b-0000-7000-8000-0000000000dd';
 
-/** O número que o contrato declara. */
 const TETO_POR_HORA = 30;
 
 function servidor(contador: RateLimitStore) {
@@ -47,7 +45,6 @@ function servidor(contador: RateLimitStore) {
   return app;
 }
 
-/** As dependências que os resolvedores de produção exigem. */
 function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
   return {
     autenticador: { autenticar: () => Promise.resolve({ userId: CONTA as UserId }) },
@@ -112,7 +109,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
     }
   });
 
-  /** O relógio parado em 00:00 UTC, que é quando o defeito aparecia. */
   void it('duas entradas na mesma dimensão não se somam, nem às 00:00 UTC', async () => {
     zerarInventario();
     const MEIA_NOITE_UTC = Date.parse('2026-09-23T00:00:00.000Z');
@@ -133,7 +129,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
     }
   });
 
-  /** O mesmo, no MEIO da hora da colisão, e com a premissa medida. */
   void it('00:30 UTC — a hora em que as duas entradas somavam no mesmo balde', async () => {
     zerarInventario();
     const dentroDaColisao = Date.parse('2026-09-29T00:30:00Z');

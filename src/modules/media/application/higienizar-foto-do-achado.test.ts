@@ -1,7 +1,3 @@
-/**
- * A higiene da foto do achado — e o que estes casos protegem é um vazamento de
- * coordenada de GPS.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -23,9 +19,7 @@ interface Cenario {
   readonly derivada?: MotivoDeRecusa | Derivada;
   readonly contentLength?: number;
   readonly getLanca?: boolean;
-  /** O armazenamento recusa a exclusão do original. */
   readonly deleteLanca?: boolean;
-  /** O banco cai na hora de gravar `sanitized_key`. */
   readonly marcarLanca?: boolean;
 }
 

@@ -1,14 +1,11 @@
-/** O adaptador de push que **não envia**, e a escolha entre os dois. */
 import { assegurarSuperficiePublica } from '../../domain/conteudo-do-push.js';
 import type { MensagemDePush, PushSender, ResultadoDoEnvio } from '../../ports/push-sender.js';
 import { hashDeToken } from '../../../../shared/crypto/digest.js';
 import type { PushConfig } from '../../../../shared/config/app-config.js';
 import { criarPushSenderFcm } from './fcm-http-v1.js';
 
-/** Quantos caracteres do resumo vão para o log. */
 const CARACTERES_DO_RESUMO = 12;
 
-/** O aparelho, sem o endereço dele. */
 function resumoDoAparelho(token: string): string {
   return hashDeToken(token).toString('hex').slice(0, CARACTERES_DO_RESUMO);
 }

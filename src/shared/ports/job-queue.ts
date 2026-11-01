@@ -1,4 +1,3 @@
-/** Fila de trabalho do domínio. */
 import type { Instant } from '../types/brands.js';
 
 export type JobKind =

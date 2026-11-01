@@ -1,4 +1,3 @@
-/** Cadastro e entrada por credencial digital (passkey). */
 import {
   generateRegistrationOptions,
   generateAuthenticationOptions,
@@ -53,7 +52,6 @@ function base64url(b: Buffer | Uint8Array): string {
   return Buffer.from(b).toString('base64url');
 }
 
-/** SHA-256 do desafio em base64url. */
 function hashDoDesafio(desafioBase64url: string): Buffer {
   return createHash('sha256').update(desafioBase64url, 'utf8').digest();
 }

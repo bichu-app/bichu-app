@@ -1,4 +1,3 @@
-/** O cursor, e o teto de `limit` que o servidor impõe. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

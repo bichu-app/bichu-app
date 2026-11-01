@@ -1,4 +1,3 @@
-/** A avaliação do local: a faixa da nota, a recusa de escrita e o que NÃO sai. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -19,7 +18,6 @@ import type { Instant } from '../../../shared/types/brands.js';
 
 const CRIADA_EM = comoData(Date.UTC(2026, 9, 18, 12, 0, 0) as Instant);
 
-/** Os campos que o 400 nomeou, na ordem. */
 const campos = (erros: readonly { field: string; code: string }[]): string[] =>
   erros.map((e) => `${e.field}:${e.code}`);
 

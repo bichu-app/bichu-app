@@ -1,4 +1,3 @@
-/** Persistência do módulo `identity`. */
 import { sql, type Insertable } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Selectable } from 'kysely';
@@ -26,7 +25,6 @@ import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-c
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 
-/** Uma troca de apelido a cada 60 dias (plano 4-C.7, `9d99ac0f`). */
 const DIAS_ENTRE_TROCAS_DE_APELIDO = 60;
 
 const VIOLACAO_DE_UNICIDADE = '23505';
@@ -360,9 +358,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .returning(COLUNAS_DA_CONTA)
             .executeTakeFirst();
 
-          // `return undefined` aqui COMITARIA o apelido anterior rebaixado a
-          // `reservado` e a linha nova em `handles`, para uma conta que nao
-          // existe mais. Lancar desfaz; o `catch` devolve o mesmo `undefined`.
           if (linha === undefined) throw new ContaSumiuNaTransacao();
           return paraConta(linha as LinhaSelecionada);
         });
@@ -372,7 +367,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       }
     },
 
-    /** A foto do perfil desta conta (cliente, 18/10/2026). */
     async fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null> {
       const linha = await db
         .selectFrom('users')
@@ -389,7 +383,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       };
     },
 
-    /** Troca ou tira a foto do perfil, com a CONTA NA CLAUSULA `WHERE`. */
     async trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined> {
       try {
         return await db.transaction().execute(async (trx) => {
@@ -459,12 +452,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             .returning(COLUNAS_DA_CONTA)
             .executeTakeFirst();
 
-          // Este e o defeito da BICHUS-321 na sua forma original: acima ja
-          // foram gravados o `confirmed_at` do envio, a linha em
-          // `catalog_images` e o trabalho em `jobs`. `return undefined`
-          // COMITARIA os tres com `photo_image_id` nunca apontando para a
-          // imagem -- envio confirmado, imagem orfa e trabalho enfileirado para
-          // ninguem. Lancar desfaz; o `catch` devolve o mesmo `undefined`.
           if (linha === undefined) throw new ContaSumiuNaTransacao();
           return paraConta(linha as LinhaSelecionada);
         });
@@ -642,7 +629,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.length;
     },
 
-    /** O predicado mora em {@link construtorDaRevogacaoEmMassa}. */
     async revogarTodasAsFamilias(
       userId: UserId,
       motivo: MotivoDeRevogacao,
@@ -709,7 +695,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
     },
 
-    /** O predicado mora em {@link construtorDaInvalidacaoDeTokensPendentes}. */
     async invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
       const r = await construtorDaInvalidacaoDeTokensPendentes(db, userId, agora).executeTakeFirst();
       return Number(r.numUpdatedRows);
@@ -731,7 +716,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .execute();
     },
 
-    /** O predicado mora em {@link construtorDoConsumoDaJanela}. */
     async consumirJanelaDeReautenticacao(
       consumo: ConsumoDeJanela,
     ): Promise<ResultadoDoConsumoDaJanela> {
@@ -774,7 +758,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .execute();
     },
 
-    /** Exclusão lógica e revogação das tags, numa transação só. */
     async registrarPedidoDeExclusao(
       userId: UserId,
       agora: Instant,
@@ -881,7 +864,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
   };
 }
 
-/** Sinal interno de corrida perdida na rotação. */
 class RotacaoPerdida extends Error {
   constructor() {
     super('refresh já consumido por outro pedido');

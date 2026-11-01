@@ -1,7 +1,3 @@
-/**
- * O guarda de corpo fechado: campo que o contrato não aceita é RECUSADO, e não
- * apagado em silêncio.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -18,7 +14,6 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 const UM_PET = '018f3a2b-0000-7000-8000-0000000000bb';
 
-/** O endereço válido do contrato. */
 const ENDERECO: Record<string, unknown> = {
   recipient_name: 'Mariana Destinataria',
   recipient_phone: '+5511987654321',
@@ -35,7 +30,6 @@ interface Resposta {
   readonly errors: { field?: string; code?: string }[];
 }
 
-/** A rota de verdade, com o corpo de verdade e o guarda que ela instala. */
 async function enviar(payload: Record<string, unknown>): Promise<Resposta> {
   const contrato = carregarContrato(CAMINHO_DA_SPEC);
   const corpo = contrato.requestBodySchema(rotaDePedidoDePlaquinha.operationId);
@@ -134,7 +128,6 @@ void describe('o guarda desce no corpo inteiro', () => {
 });
 
 void describe('a forma do guarda', () => {
-  /** Um schema fechado com lista de objetos fechados, que o contrato hoje não tem. */
   const COM_LISTA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,

@@ -1,7 +1,3 @@
-/**
- * Detecção de reuso de refresh e barreira do SEC-006, com dublês das portas
- * (BICHUS-15, critérios 4, 8 e 10).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -43,7 +39,6 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/** A porta é grande e o caso usa quatro métodos. */
 function naoUsado(nome: string): never {
   throw new Error(`o dublê não implementa ${nome}: nenhum caso deste arquivo deveria chegar aqui`);
 }
@@ -69,7 +64,6 @@ function contaAtiva(sessionsInvalidBefore: Instant): Conta {
   };
 }
 
-/** O que a redefinição de senha encontra do outro lado da porta (BICHUS-126). */
 interface RedefinicaoPendente {
   readonly pendente: TokenConsumido | undefined;
   readonly consumido: TokenConsumido | undefined;
@@ -88,31 +82,20 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   public readonly rotacoes: NovoRefresh[] = [];
 
-  /**
-   * BICHUS-126: esta porta era `naoUsado('invalidarSessoes')`, e um dublê que só
-   * grita quando é chamado não reprova quem DEIXA de chamar.
-   */
   public readonly invalidacoesDeSessao: { userId: UserId; barreira: Instant; agora: Instant }[] =
     [];
-  /** BICHUS-125: a outra metade da revogação em massa. */
   public readonly revogacoesEmMassa: {
     userId: UserId;
     motivo: MotivoDeRevogacao;
     agora: Instant;
   }[] = [];
-  /** Quantas linhas de refresh a conta tem vivas, para a contagem da trilha. */
   public familiasVivas = 2;
   public readonly invalidacoesDeTokens: { userId: UserId; agora: Instant }[] = [];
   public readonly credenciaisRegravadas: { identityId: string; agora: Instant }[] = [];
-  /** Quantas vezes o link foi GASTO. */
   public readonly consumosDeToken: Instant[] = [];
   public readonly familiasAbertas: NovoRefresh[] = [];
   public readonly loginsRegistrados: { identityId: string; agora: Instant }[] = [];
 
-  /**
-   * A conta é MUTÁVEL de propósito (BICHUS-132): entre duas chamadas do mesmo caso
-   * de teste, a vítima redefine a senha e `sessions_invalid_before` anda.
-   */
   public conta: Conta | undefined;
 
   constructor(
@@ -126,10 +109,6 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
     this.conta = conta;
   }
 
-  /**
-   * Devolve o que a bancada montou, ou — quando o caso subiu a pilha de verdade e
-   * abriu a família por `entrar()` — a linha que foi REALMENTE gravada.
-   */
   override buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
     const gravado = this.familiasAbertas.at(-1);
     if (gravado === undefined) return Promise.resolve(this.refresh);
@@ -182,7 +161,6 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
     this.familiasAbertas.push(novo);
     return Promise.resolve();
   }
-  /** O dublê MOVE a conta, porque o banco move — e com o mesmo piso. */
   override invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, barreira, agora });
     if (this.conta !== undefined) {
@@ -193,7 +171,6 @@ class RepositorioFalso extends RepositorioQueRecusaTudo {
     }
     return Promise.resolve();
   }
-  /** BICHUS-125: mesma razão do `invalidarSessoes` logo acima. */
   override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
@@ -245,11 +222,6 @@ function montar(opcoes: {
   redefinicao?: RedefinicaoPendente | undefined;
   login?: CredencialLocal | undefined;
   agora?: Instant | undefined;
-  /**
-   * Relógio próprio, para o caso em que o tempo precisa ANDAR dentro de um mesmo
-   * caso — duas revogações e um login entre elas não cabem num instante só, e é
-   * justamente a distância entre eles que está sendo provada.
-   */
   relogio?: Clock | undefined;
 }): Bancada {
   const repo = new RepositorioFalso(
@@ -275,10 +247,6 @@ function montar(opcoes: {
       return Promise.resolve();
     },
   };
-  /**
-   * O dublê do assinador guarda o `iat` de cada token que emitiu e devolve o MESMO
-   * valor na verificação.
-   */
   const iatPorToken = new Map<string, number>();
   const assinador: TokenSigner = {
     emitir: (sub, agora, jti) => {
@@ -366,7 +334,6 @@ async function capturar(promessa: Promise<unknown>): Promise<AppError> {
 }
 
 void describe('reuso de refresh token (BICHUS-15, critérios 4 e 10)', () => {
-  /** Um token que já foi rotacionado uma vez e volta: é a assinatura do roubo. */
   const jaConsumido = () =>
     montar({
       refresh: refreshArmazenado({ rotatedToId: 'refresh-2' }),
@@ -493,7 +460,6 @@ void describe('confirmarRedefinicaoDeSenha(): o gatilho que sobrou do critério 
     mustChange: false,
   };
 
-  /** O caminho feliz inteiro: link vale, senha serve, credencial existe. */
   const redefinicaoQueCompleta = () =>
     montar({
       conta: contaAtiva(0 as Instant),
@@ -559,17 +525,13 @@ void describe('confirmarRedefinicaoDeSenha(): o gatilho que sobrou do critério 
   });
 });
 
-/** Entrar no MESMO SEGUNDO em que a senha foi redefinida (BICHUS-132). */
 void describe('entrar no mesmo segundo da redefinição de senha (BICHUS-132)', () => {
   const EMAIL_DA_CONTA = 'tutora@exemplo.test';
   const SENHA_NOVA = 'chuva-de-marco-no-quintal';
   const IDENTIDADE = 'identidade-local-1';
 
-  /** O relógio do login: 734 ms depois da virada do segundo. */
   const LOGIN_EM = (INSTANTE_FIXO + 734) as Instant;
-  /** A redefinição caiu 234 ms antes — o MESMO segundo de relógio. */
   const REDEFINIDA_EM = (INSTANTE_FIXO + 500) as Instant;
-  /** A marca que a conta tinha antes de a vítima trocar a senha. */
   const ANTES_DA_TROCA = (INSTANTE_FIXO - 60_000) as Instant;
 
   let phcGuardado: string | undefined;
@@ -644,17 +606,14 @@ void describe('entrar no mesmo segundo da redefinição de senha (BICHUS-132)', 
   });
 });
 
-/** Duas revogações no MESMO SEGUNDO (SEC-006). */
 void describe('duas revogações no mesmo segundo (SEC-006)', () => {
   const EMAIL_DA_CONTA = 'tutora@exemplo.test';
   const SENHA = 'chuva-de-marco-no-quintal';
   const IDENTIDADE = 'identidade-local-1';
 
-  /** `INSTANTE_FIXO` é virada de segundo exata; os três cabem no mesmo segundo. */
   const PRIMEIRA_REVOGACAO = (INSTANTE_FIXO + 200) as Instant;
   const LOGIN_DO_INVASOR = (INSTANTE_FIXO + 400) as Instant;
   const SEGUNDA_REVOGACAO = (INSTANTE_FIXO + 600) as Instant;
-  /** A marca que a conta tinha antes de tudo isso: nada de revogação recente. */
   const ANTES = (INSTANTE_FIXO - 60_000) as Instant;
 
   let phcGuardado: string | undefined;
@@ -663,7 +622,6 @@ void describe('duas revogações no mesmo segundo (SEC-006)', () => {
     return phcGuardado;
   }
 
-  /** Bancada com relógio conduzido: `relogio.agora` é escrito pelo caso. */
   async function bancadaComRelogio(): Promise<{ bancada: Bancada; mover: (q: Instant) => void }> {
     let agora: Instant = ANTES;
     const bancada = montar({
@@ -777,9 +735,7 @@ void describe('duas revogações no mesmo segundo (SEC-006)', () => {
   });
 });
 
-/** O refresh anterior à troca de senha (BICHUS-77 critério 5, BICHUS-125). */
 void describe('renovar() respeita sessions_invalid_before (BICHUS-77 critério 5)', () => {
-  /** A troca de senha caiu 1 s depois de o refresh do invasor nascer. */
   const TROCA_EM = (AGORA + 1_000) as Instant;
 
   void it('A ISCA: recusa o refresh emitido ANTES da troca de senha', async () => {
@@ -855,10 +811,6 @@ void describe('renovar() respeita sessions_invalid_before (BICHUS-77 critério 5
   });
 });
 
-/**
- * A ponta que faltava do critério 7 de BICHUS-126: a prova de que **empurrar
- * `sessions_invalid_before` tem efeito**.
- */
 void describe('a troca de senha derruba a renovação, de ponta a ponta (BICHUS-126 critério 7)', () => {
   const EMAIL_DA_CONTA = 'tutora@exemplo.test';
   const SENHA_NOVA = 'chuva-de-marco-no-quintal';
@@ -876,10 +828,6 @@ void describe('a troca de senha derruba a renovação, de ponta a ponta (BICHUS-
     };
   }
 
-  /**
-   * O relógio ANDA aqui, e a razão é o cenário: o login, a renovação e a redefinição
-   * acontecem em instantes diferentes, como na vida.
-   */
   function relogioQueAnda(inicio: Instant): { clock: Clock; avancar: (ms: number) => void } {
     let agora = inicio;
     return { clock: { now: () => agora }, avancar: (ms) => { agora = (agora + ms) as Instant; } };
@@ -919,21 +867,17 @@ void describe('a troca de senha derruba a renovação, de ponta a ponta (BICHUS-
   });
 });
 
-/** O refresh que nasce JÁ revogado, no encontro de BICHUS-207 com BICHUS-77. */
 void describe('o refresh emitido logo depois de uma revogação dupla renova (BICHUS-207 + BICHUS-77)', () => {
   const EMAIL_DA_CONTA = 'tutora@exemplo.test';
   const SENHA = 'chuva-de-marco-no-quintal';
   const IDENTIDADE = 'identidade-local-1';
 
-  /** `INSTANTE_FIXO` é virada de segundo exata; os quatro cabem no mesmo segundo. */
   const PRIMEIRA_REVOGACAO = (INSTANTE_FIXO + 200) as Instant;
   const SEGUNDA_REVOGACAO = (INSTANTE_FIXO + 400) as Instant;
   const LOGIN = (INSTANTE_FIXO + 600) as Instant;
   const PRIMEIRA_RENOVACAO = (INSTANTE_FIXO + 800) as Instant;
-  /** A marca que a conta tinha antes de tudo isso: nada de revogação recente. */
   const ANTES = (INSTANTE_FIXO - 60_000) as Instant;
 
-  /** A barreira que a revogação dupla deixa gravada: `ceil((FIXO+200)/1000)*1000+1`. */
   const BARREIRA_ADIANTADA = (INSTANTE_FIXO + 1_001) as Instant;
 
   let phcGuardado: string | undefined;

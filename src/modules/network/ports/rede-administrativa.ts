@@ -1,4 +1,3 @@
-/** As portas da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292). */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type { EnvioDeCatalogo } from '../../media/ports/imagem-de-catalogo.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';

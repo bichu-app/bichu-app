@@ -1,7 +1,3 @@
-/**
- * As regras de tempo e de transicao da transferencia de pet, sem banco, sem
- * relogio de parede e sem framework.
- */
 import type { Instant } from '../../../shared/types/brands.js';
 
 const HORA_EM_MS = 60 * 60 * 1000;

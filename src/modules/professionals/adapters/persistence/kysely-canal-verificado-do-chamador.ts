@@ -1,7 +1,3 @@
-/**
- * A leitura de apoio da sugestao do diretorio: a conta que chama tem canal de
- * contato VERIFICADO?
- */
 import type { SqlBool } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';

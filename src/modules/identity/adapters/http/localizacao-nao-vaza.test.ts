@@ -1,7 +1,3 @@
-/**
- * A coluna geográfica não atravessa a borda, e a superfície pública não fica mais
- * fina que bairro, cidade e UF.
- */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,10 +13,8 @@ import { carregarContrato } from '../../../../shared/http/contract.js';
 
 const CAMINHO_DA_SPEC = 'api/openapi.yaml';
 
-/** `<coluna> geography(Point, 4326)` em qualquer migração, com ou sem espaço. */
 const COLUNA_GEOGRAFICA = /^\s*([a-z_][a-z0-9_]*)\s+geography\s*\(\s*Point\s*,\s*4326\s*\)/gim;
 
-/** As colunas `geography` das migrações, lidas do disco. */
 function colunasGeograficas(): { readonly nome: string; readonly origem: string }[] {
   const diretorio = 'migrations';
   const achadas: { nome: string; origem: string }[] = [];
@@ -166,7 +160,6 @@ paths:
   });
 });
 
-/** Critério 6 e ADR-0006: **CEP e bairro não viram coordenada.** */
 void describe('CEP e bairro não viram coordenada (critério 6, ADR-0006)', () => {
   const ARQUIVOS_DA_LOCALIZACAO = [
     'src/modules/identity/domain/localizacao-de-referencia.ts',

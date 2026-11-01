@@ -1,7 +1,3 @@
-/**
- * As amarras da janela de reautenticação estão na cláusula `WHERE`, e o SQL
- * compilado prova isso.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -32,7 +28,6 @@ const consumo: ConsumoDeJanela = {
   agora: AGORA,
 };
 
-/** Kysely sem banco: compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -42,7 +37,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Cada amarra, com o OPERADOR junto do nome. */
 const PREDICADOS: readonly { readonly amarra: string; readonly regex: RegExp; readonly oQueImpede: string }[] = [
   {
     amarra: 'token_hash',
@@ -90,7 +84,6 @@ function compilar(construtor: { compile(): Compilada }): Compilada {
   return construtor.compile();
 }
 
-/** A clausula `WHERE` do SQL compilado, do primeiro ` where ` em diante. */
 function clausulaDoWhere(sql: string): string {
   const posicao = sql.toLowerCase().indexOf(' where ');
   assert.ok(

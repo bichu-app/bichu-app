@@ -1,4 +1,3 @@
-/** **Quem decide a correspondência é o tutor do caso**, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -21,7 +20,6 @@ const CASO = '018f3a2b-0000-7000-8000-0000000000dd' as CaseId;
 const CANDIDATO = '018f3a2b-0000-7000-8000-0000000000ee';
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -31,13 +29,10 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** **A REGRA DE AUTORIZAÇÃO DESTA OPERAÇÃO, em uma frase:** */
 const PREDICADO_DO_DONO = /"lost_cases"\."owner_user_id"\s*=\s*\$(\d+)/;
 
-/** A correlação. Sem ela o dono responde sobre o conjunto errado. */
 const CORRELACAO_DO_CASO = /"lost_cases"\."id"\s*=\s*"match_candidates"\."case_id"/;
 
-/** O que faz *"rejeitado não volta"* ser propriedade da escrita. */
 const PREDICADO_DE_SUGERIDO = /"match_candidates"\."status"\s*=\s*\$(\d+)/;
 
 interface Compilada {
@@ -45,16 +40,11 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** O SQL **até** o `RETURNING`. */
 function apenasOWhere(compilada: Compilada): string {
   const corte = compilada.sql.indexOf(' returning ');
   return corte === -1 ? compilada.sql : compilada.sql.slice(0, corte);
 }
 
-/**
- * Confere que o predicado existe **e** que o valor ligado à posição dele é o
- * esperado.
- */
 function exigirNaPosicao(
   compilada: Compilada,
   predicado: RegExp,

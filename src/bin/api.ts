@@ -1,4 +1,3 @@
-/** Processo HTTP: API `/v1` e as rotas de descoberta. */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { registrarRotaDoWebhookDeEntrega } from '../modules/notifications/adapters/http/webhook-de-entrega.js';
@@ -439,7 +438,6 @@ export async function main(): Promise<void> {
     trilha,
   });
 
-  /** A URL ASSINADA da foto da conversa (BICHUS-35), para os DOIS lados. */
   const assinarFotoDaConversa = (chave: string): Promise<AbsoluteUrl> =>
     criarObjectStorage(config.objectStorage).getSignedReadUrl(
       'privado',
@@ -468,7 +466,6 @@ export async function main(): Promise<void> {
 
   const repositorioDeMidia = criarMediaRepository(db);
 
-  /** A URL da derivada pública, montada na leitura. */
   const urlDeMidia = (chave: string): string =>
     `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`;
 

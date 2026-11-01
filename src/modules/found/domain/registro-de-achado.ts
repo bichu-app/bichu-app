@@ -10,7 +10,6 @@ export const RETENCAO_EM_DIAS = 30;
 
 const MILISSEGUNDOS_POR_DIA = 24 * 60 * 60 * 1000;
 
-/** Um minuto de folga para relógio de aparelho adiantado, que é comum. */
 const FOLGA_DE_RELOGIO_EM_MILISSEGUNDOS = 60_000;
 
 export interface OndeFoiAchado {

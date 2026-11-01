@@ -1,4 +1,3 @@
-/** AS ISCAS DOS TRÊS PROPÓSITOS DE IMAGEM QUE ENTRARAM EM 18/10/2026. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -29,7 +28,6 @@ import type { ObjectStorage, PedidoDeEnvio } from '../ports/object-storage.js';
 import { criarPreparadorDeEnvioDeCatalogo } from './preparar-envio-de-catalogo.js';
 import { varrerEnviosVencidos } from './varrer-envios-vencidos.js';
 
-/** Os três propósitos que entraram em 18/10/2026. */
 const NOVOS: readonly PropositoDaImagem[] = ['directory_logo', 'directory_photo', 'user_photo'];
 
 const IDS = {
@@ -153,10 +151,6 @@ void describe('(b) a derivada sai em JPEG, no tamanho alvo de cada propósito', 
 });
 
 void describe('(c) A VARREDURA DE VENCIDOS NÃO APAGA OS PROPÓSITOS NOVOS', () => {
-  /**
-   * A varredura recebe de `listarIntencoesVencidas` as DUAS tabelas de intenção num
-   * `UNION ALL`.
-   */
   function bancadaDaVarredura(lista: IntencaoVencida[]) {
     const apagados: string[] = [];
     const restantes = [...lista];

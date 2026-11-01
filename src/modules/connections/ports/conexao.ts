@@ -1,7 +1,3 @@
-/**
- * **A única camada deste módulo que outro módulo enxerga** (ADR-0001,
- * docs/03-arquitetura.md §6), e ela é curta de propósito.
- */
 import type { EstadoNoApp } from '../domain/conexao.js';
 
 /**

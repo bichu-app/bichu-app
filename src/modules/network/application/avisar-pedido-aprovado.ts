@@ -1,4 +1,3 @@
-/** O trabalho `network.join_request_approved`, no worker. */
 import type {
   EntregaDoAvisoDeAprovacao,
   LeituraDoPedidoAprovado,

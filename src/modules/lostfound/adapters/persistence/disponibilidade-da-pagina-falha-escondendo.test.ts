@@ -1,13 +1,10 @@
-/** A ISCA do interruptor da pagina publica: **toda ausencia ESCONDE.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Db } from '../../../../shared/db/pool.js';
 import { criarDisponibilidadeDaPagina } from './kysely-disponibilidade-da-pagina.js';
 
-/** O que `executeTakeFirst` vai fazer: devolver algo, ou estourar. */
 type Desfecho = { readonly linha: unknown } | { readonly estoura: Error };
 
-/** Um banco de MENTIRA, encadeavel como o Kysely, que termina no desfecho dado. */
 function bancoQue(desfecho: Desfecho, consultadas: string[]): Db {
   const executor: Record<string, unknown> = {};
   executor['selectFrom'] = (tabela: string) => {

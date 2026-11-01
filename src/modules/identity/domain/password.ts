@@ -1,4 +1,3 @@
-/** Senha local: PBKDF2-HMAC-SHA512, parâmetros gravados junto do hash. */
 import { pbkdf2, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
@@ -76,7 +75,6 @@ export function precisaDeRehash(phc: string): boolean {
   );
 }
 
-/** Hash de descarte, usado quando o e-mail não existe. */
 let phcDeDescarte: string | undefined;
 
 export async function consumirTempoDeVerificacao(senha: string): Promise<void> {

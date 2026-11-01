@@ -1,7 +1,3 @@
-/**
- * **A FOTO SÓ SAI ENTRE CONEXÕES ACEITAS, e o recorte está na cláusula `WHERE`.**
- * O SQL compilado prova.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -38,7 +34,6 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** O texto da subconsulta projetada com este apelido de coluna. */
 function subconsultaProjetada(sql: string, alias: string): string {
   const fim = sql.indexOf(`) as "${alias}"`);
   if (fim < 0) return '';
@@ -54,10 +49,8 @@ function subconsultaProjetada(sql: string, alias: string): string {
   return '';
 }
 
-/** Os dois campos da emenda 3, e as duas subconsultas que os produzem. */
 const CAMPOS_DA_EMENDA = ['apelido_do_outro', 'chave_da_foto_do_outro'] as const;
 
-/** Todos os valores ligados às posições `$n` que aparecem NESTE trecho de SQL. */
 function valoresLigadosNoTrecho(trecho: string, compilada: Compilada): unknown[] {
   const valores: unknown[] = [];
   for (const achado of trecho.matchAll(/\$(\d+)/g)) {
@@ -66,7 +59,6 @@ function valoresLigadosNoTrecho(trecho: string, compilada: Compilada): unknown[]
   return valores;
 }
 
-/** As duas consultas que PROJETAM participante. */
 function consultasQueProjetam(): { nome: string; compilada: Compilada }[] {
   return [
     {

@@ -1,4 +1,3 @@
-/** A persistência da vitrine de fotos do usuário. */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { FotoDaVitrineParaGravar } from '../../domain/vitrine-de-fotos.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';

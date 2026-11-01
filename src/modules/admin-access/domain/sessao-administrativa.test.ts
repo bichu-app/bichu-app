@@ -1,7 +1,3 @@
-/**
- * Os prazos, a revogacao e a derivacao do anti-CSRF da sessao administrativa (D38,
- * D39), com relogio controlado e sem banco.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

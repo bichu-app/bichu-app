@@ -1,7 +1,3 @@
-/**
- * AS ISCAS DE VAZAMENTO DA PAGINA PUBLICA DO ENCONTRO (emenda 4 do ADR-0017,
- * decisao do cliente de 21/10/2026).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -31,7 +27,6 @@ function esquema(s: Spec, nome: string): Esquema {
   return alvo;
 }
 
-/** As operacoes sem conta do contrato do disco, como o portao as enxerga. */
 function operacoesSemConta() {
   const contrato = carregarContrato(CAMINHO);
   const semConta = [...contrato.operacoes.values()].filter((o) => ehOperacaoSemConta(o));
@@ -42,7 +37,6 @@ function operacoesSemConta() {
   return { contrato, semConta };
 }
 
-/** Roda o portao sobre um contrato em que `NetworkEventPublic` ganhou `campos`. */
 function achadosComCamposInjetados(campos: Record<string, unknown>): string[] {
   const s = spec();
   const publico = esquema(s, 'NetworkEventPublic');

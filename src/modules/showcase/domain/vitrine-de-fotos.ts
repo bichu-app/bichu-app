@@ -1,7 +1,3 @@
-/**
- * A VITRINE DE FOTOS DO USUÁRIO, as regras que não dependem de banco nem de HTTP
- * (pedido do cliente de 18/10/2026: *"vitrine de fotos, parecido com instagram"*).
- */
 import { problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 
@@ -19,11 +15,9 @@ export function recusarTetoDaVitrine(): never {
   ]);
 }
 
-/** De 2 a 150 caracteres, o mesmo intervalo do `CHECK` e das outras galerias. */
 const MINIMO_DO_TEXTO_ALTERNATIVO = 2;
 const MAXIMO_DO_TEXTO_ALTERNATIVO = 150;
 
-/** U+202A a U+202E e U+2066 a U+2069: invertem a ordem de exibição do texto. */
 const CONTROLE_BIDIRECIONAL = /[‪-‮⁦-⁩]/u;
 
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

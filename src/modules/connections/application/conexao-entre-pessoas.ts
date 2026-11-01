@@ -1,4 +1,3 @@
-/** O caso de uso da conexão entre pessoas: pedir, aceitar, encerrar, contar. */
 import { problemas } from '../../../shared/http/errors.js';
 import { comoIso } from '../../../shared/time/clock.js';
 import type { AuditAction, AuditLog } from '../../audit/ports/audit-log.js';
@@ -22,7 +21,6 @@ import type {
 import type { LeitorDeBloqueio } from '../ports/leitor-de-bloqueio.js';
 import type { ResolvedorDeApelido, ResolvedorDeConvite } from '../ports/convite-de-conexao.js';
 
-/** As acoes de trilha desta fatia. */
 type AcaoDaConexao = Extract<AuditAction, `connection.${string}`>;
 
 /** Quem chama, e o contexto que a trilha guarda. */
@@ -53,12 +51,10 @@ export interface DependenciasDaConexao {
   readonly clock: Clock;
 }
 
-/** 128 bits em base64url: 22 caracteres sem preenchimento, como o `CHECK` cobra. */
 function refDaAresta(ids: IdGenerator): string {
   return Buffer.from(ids.random128()).toString('base64url');
 }
 
-/** A recusa de teto, no vocabulário do contrato. */
 function recusaLegivel(code: string, field: string): never {
   const mensagens: Record<string, string> = {
     connection_limit_reached: `Você chegou ao limite de ${String(TETO_DE_CONEXOES)} conexões.`,

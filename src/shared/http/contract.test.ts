@@ -1,4 +1,3 @@
-/** `contract.ts` sob teste com documentos pequenos, montados caso a caso. */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,7 +22,6 @@ function caminhoNovo(): string {
   return join(RAIZ, `contrato-${String(sequencia)}.yaml`);
 }
 
-/** Grava o texto e carrega, exatamente como a subida do servidor faria. */
 function carregarTexto(yaml: string): Contrato {
   const caminho = caminhoNovo();
   writeFileSync(caminho, yaml, 'utf8');
@@ -36,7 +34,6 @@ function carregarTextoEsperandoFalha(yaml: string): () => Contrato {
   return () => carregarContrato(caminho);
 }
 
-/** Estreita `unknown` para objeto sem espalhar asserção de tipo pelos casos. */
 function comoObjeto(valor: unknown): Record<string, unknown> {
   assert.ok(ehObjetoDoContrato(valor), `esperava um objeto e veio ${String(valor)}`);
   return valor;
@@ -44,7 +41,6 @@ function comoObjeto(valor: unknown): Record<string, unknown> {
 
 const CABECALHO = 'openapi: 3.1.0\ninfo: { title: bichu, version: "1" }\n';
 
-/** Operação mínima que carrega: tem `operationId` e declara `security`. */
 function specComRequestBody(schemaYaml: string, extras = ''): string {
   return `${CABECALHO}${extras}paths:
   /pets:
@@ -584,10 +580,6 @@ components:
   });
 });
 
-/**
- * `x-nao-recusado-na-borda`: a palavra isenta sai do esquema de borda, e a isenção
- * que **não casa nada** levanta.
- */
 function specComParametro(parametroYaml: string): string {
   return `${CABECALHO}paths:
   /coisas:

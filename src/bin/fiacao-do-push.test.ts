@@ -1,9 +1,7 @@
-/** A fiação do push em `src/bin/worker.ts`, conferida por TEXTO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-/** Lidos do diretório de trabalho, que é a raiz do repositório. */
 const DO_WORKER = 'src/bin/worker.ts';
 const DA_API = 'src/bin/api.ts';
 

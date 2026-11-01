@@ -1,4 +1,3 @@
-/** O comando de verdade, como processo, sem terminal e SEM banco. */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

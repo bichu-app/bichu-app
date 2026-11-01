@@ -1,16 +1,13 @@
-/** Testes do gerador de identificador (BICHUS-19). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { canonicalizarUuid, criarIdGenerator } from './uuidv7.js';
 
 const FORMATO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Índice do primeiro identificador menor que o anterior, ou -1 se não houver. */
 function primeiraRegressao(valores: readonly string[]): number {
   return valores.findIndex((valor, i) => i > 0 && valor < (valores[i - 1] ?? ''));
 }
 
-/** Os 48 bits de milissegundo que o identificador carrega, em decimal. */
 function carimboDe(valor: string): number {
   return Number.parseInt(valor.slice(0, 8) + valor.slice(9, 13), 16);
 }
@@ -39,7 +36,6 @@ void describe('uuidv7', () => {
     assert.deepEqual(gerados, ordenados, 'a ordem de geração precisa ser a ordem lexicográfica');
   });
 
-  /** Isca da BICHUS-208, e o portão da propriedade inteira. */
   void it('não anda para trás quando o contador de 12 bits vira no mesmo milissegundo', () => {
     const ids = criarIdGenerator(() => 1_760_000_100_000);
     const gerados = Array.from({ length: 4097 }, () => ids.uuidv7());
@@ -55,7 +51,6 @@ void describe('uuidv7', () => {
     );
   });
 
-  /** Autoteste da isca acima. */
   void it('a isca acusa um gerador que não trata a virada', () => {
     let sequencia = 0x0ffe;
     const carimbo = 1_760_000_200_000;
@@ -82,7 +77,6 @@ void describe('uuidv7', () => {
     );
   });
 
-  /** Localidade de índice, que é a razão de o ADR-0002 ter escolhido o v7 sobre o v4. */
   void it('não deriva do relógio em carga normal', () => {
     let relogio = 1_760_000_300_000;
     const ids = criarIdGenerator(() => relogio);
@@ -95,10 +89,6 @@ void describe('uuidv7', () => {
     }
   });
 
-  /**
-   * E quando a virada acontece, o empréstimo é de 1 ms e se devolve sozinho: assim
-   * que o relógio real alcança o carimbo adiantado, o gerador volta a segui-lo.
-   */
   void it('o empréstimo da virada é de 1 ms e se devolve quando o relógio alcança', () => {
     let relogio = 1_760_000_400_000;
     const ids = criarIdGenerator(() => relogio);

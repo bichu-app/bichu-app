@@ -1,11 +1,9 @@
-/** O adaptador local da porta `SecretProvider`, e a escolha entre os dois. */
 import { requireEnv, optionalEnv } from '../../config/env.js';
 import type { NomeDeSegredo, SecretProvider } from '../../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
 import { exigeGerenciadorDeSegredos } from '../../config/segredos.js';
 import { criarSecretProviderGerenciado } from './gcp-secret-manager.js';
 
-/** `latest` é o padrão; ver o porquê em `GcpSecretManagerConfig.versao`. */
 const VERSAO_PADRAO = 'latest';
 
 export function criarSecretProviderDeAmbiente(): SecretProvider {

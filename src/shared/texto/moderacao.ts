@@ -1,8 +1,3 @@
-/**
- * A MODERACAO DE PALAVRAS dos textos que a comunidade escreve sobre profissionais:
- * a **indicacao** (`suggestDirectoryEntry`) e a **recomendacao** com nota e texto
- * (`putMyDirectoryEntryReview`).
- */
 import type { ProblemFieldError } from '../http/problem.js';
 import { EXCECOES, PALAVRAS_RECUSADAS } from './lista-de-moderacao.js';
 
@@ -18,10 +13,8 @@ export const MENSAGEM_DA_MODERACAO =
   'entra palavra ofensiva, xingamento nem termo que discrimine alguém. Conte o que ' +
   'achou do atendimento com suas palavras: crítica negativa pode, ofensa não.';
 
-/** Invisivel que se usa para partir uma palavra no meio sem a tela mostrar. */
 const INVISIVEL = /[\u200b-\u200f\u2060-\u2064\ufeff\u00ad]/gu;
 
-/** As trocas de caractere obvias. */
 const IMITA_LETRA: Readonly<Record<string, string>> = {
   '0': 'o',
   '1': 'i',
@@ -33,13 +26,8 @@ const IMITA_LETRA: Readonly<Record<string, string>> = {
   '$': 's',
 };
 
-/** Separador que alguem poe DENTRO da palavra para quebra-la: `p.u.t.a`, `foda-se`. */
 const SEPARADOR_INTERNO = /(?<=[a-z0-9])[.\-_*'`/|]+(?=[a-z0-9])/g;
 
-/**
- * Tres ou mais caracteres soltos com o MESMO separador entre eles viram uma
- * palavra.
- */
 const SOLTOS = /(?<![a-z0-9])([a-z0-9])([\s.\-_*/|]+)(?:[a-z0-9]\2){1,}[a-z0-9](?![a-z0-9])/g;
 
 /**
@@ -63,18 +51,15 @@ export function normalizarParaModeracao(texto: string): string {
   return semImitacao.replace(/([a-z0-9])\1+/g, '$1');
 }
 
-/** Os tokens do texto normalizado. */
 function tokens(normalizado: string): string[] {
   return normalizado.split(/[^a-z0-9]+/).filter((t) => t !== '');
 }
 
-/** O conjunto, com o plural em `s` resolvido na comparacao e nao na lista. */
 function contem(conjunto: ReadonlySet<string>, token: string): boolean {
   if (conjunto.has(token)) return true;
   return token.endsWith('s') && conjunto.has(token.slice(0, -1));
 }
 
-/** As duas listas entram **ja normalizadas**, e isto nao e detalhe. */
 const RECUSADAS = new Set(PALAVRAS_RECUSADAS.map((p) => normalizarParaModeracao(p)));
 const PERMITIDAS = new Set(EXCECOES.map((p) => normalizarParaModeracao(p)));
 

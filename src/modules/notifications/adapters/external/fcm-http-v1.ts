@@ -1,4 +1,3 @@
-/** Push entregue ao FCM, pela API HTTP v1, por HTTP, sem SDK. */
 import { assegurarSuperficiePublica } from '../../domain/conteudo-do-push.js';
 import type {
   MensagemDePush,
@@ -8,13 +7,10 @@ import type {
 import { PushNaoEnviadoError } from '../../ports/push-sender.js';
 import { TOKEN_DA_CONTA_DE_SERVICO } from '../../../../shared/adapters/external/metadados-do-gcp.js';
 
-/** Fonte da credencial da instância. */
 const METADADOS = TOKEN_DA_CONTA_DE_SERVICO;
 const ENVIO = 'https://fcm.googleapis.com/v1';
 
-/** O envio não pode ficar pendurado: a fila reenfileira, o processo segue. */
 const TIMEOUT_MS = 10_000;
-/** Margem antes do vencimento do token, igual à do adaptador de segredos. */
 const MARGEM_DO_TOKEN_MS = 60_000;
 
 export interface FcmConfig {
@@ -29,7 +25,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null;
 }
 
-/** O `errorCode` do transporte, quando ele vem. */
 function errorCodeDoCorpo(corpo: unknown): string | undefined {
   const erro = ehObjeto(corpo) ? corpo['error'] : undefined;
   if (!ehObjeto(erro)) return undefined;
@@ -44,7 +39,6 @@ function errorCodeDoCorpo(corpo: unknown): string | undefined {
   return typeof erro['status'] === 'string' ? erro['status'] : undefined;
 }
 
-/** Traduz a falha do transporte para o que quem chamou precisa decidir. */
 function motivoDoErro(
   status: number,
   errorCode: string | undefined,

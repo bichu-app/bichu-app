@@ -1,14 +1,9 @@
-/**
- * O caso de uso do **convite do próprio perfil** — o que alimenta o link e o QR
- * (decisão do cliente de 20/10/2026).
- */
 import type { AuditAction, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import { comoIso } from '../../../shared/time/clock.js';
 import type { EmissorDeConvite } from '../ports/convite-de-conexao.js';
 import type { ContextoDoChamador } from './conexao-entre-pessoas.js';
 
-/** As acoes de trilha desta fatia. */
 type AcaoDoConvite = Extract<AuditAction, `connection.invite.${string}`>;
 
 /** O convite, no vocabulário do contrato. */

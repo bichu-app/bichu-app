@@ -1,4 +1,3 @@
-/** Massa fixa de qa. */
 import { sql } from 'kysely';
 import { optionalEnv, requireEnv } from '../shared/config/env.js';
 import { createDb } from '../shared/db/pool.js';
@@ -27,10 +26,8 @@ import {
   momentoDoEncontro,
 } from './massa-da-rede.js';
 
-/** Sai 2, e nao 1: separa "recusei" de "quebrei" para quem le em esteira. */
 const SAIDA_MASSA_NAO_DEFINIDA = 2;
 
-/** Tabelas que a massa precisa encontrar. */
 const TABELAS_EXIGIDAS = [
   'users',
   'user_identities',
@@ -85,7 +82,6 @@ async function conferirEsquema(db: Db): Promise<void> {
   }
 }
 
-/** Apaga a massa ANTERIOR, e so ela. */
 async function limparMassaAnterior(db: Db): Promise<void> {
   const entradas = MASSA_DO_DIRETORIO.map((uma) => uma.id);
   const titulares = MASSA_DO_DIRETORIO.map((uma) => uma.titularId);
@@ -204,7 +200,6 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
   }
 }
 
-/** O ponto entra por SQL, e a ORDEM E (lon, lat). */
 function pontoDaEntrada(entrada: EntradaSemeada) {
   if (entrada.ponto === null) return sql`null`;
   const [lon, lat] = entrada.ponto;

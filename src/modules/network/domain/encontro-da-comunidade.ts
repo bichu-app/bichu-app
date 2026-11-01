@@ -1,4 +1,3 @@
-/** O encontro criado PELA COMUNIDADE (ADR-0025, emenda 3 de 17/10/2026). */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
@@ -39,36 +38,22 @@ export function atingiuTetoDeEncontros(estado: EstadoParaCriarEncontro): boolean
   return estado.encontrosAtivos >= TETO_DE_ENCONTROS_ATIVOS;
 }
 
-/** O CEP, nas duas formas em que se escreve. */
 const CEP = /(?<!\d)\d{5}-?\d{3}(?!\d)/;
 
-/** Palavra de logradouro. Lista aberta, com a abreviacao que as pessoas escrevem. */
 const LOGRADOURO =
   /\b(?:rua|r|avenida|av|alameda|al|travessa|tv|estrada|est|rodovia|rod|via|viela|ladeira|servidao|marginal|anel|largo|rotula)\b/;
 
-/**
- * Logradouro seguido IMEDIATAMENTE do numero, que e quando o numero e parte do
- * NOME e nao a porta: "Rua 25 de Marco", "Avenida 9 de Julho", "Rua 3".
- */
 const NUMERO_NO_NOME_DO_LOGRADOURO =
   /\b(?:rua|r|avenida|av|alameda|al|travessa|tv|estrada|est|rodovia|rod|via|viela|ladeira|servidao|marginal|anel|largo|rotula)\.?\s+\d{1,4}\b/g;
 
-/** O marcador de quilometro de rodovia. */
 const QUILOMETRO = /\bkm\s*\.?\s*\d/;
 
-/**
- * Numero de porta. E o que transforma um nome em endereco, e so aparece depois de
- * separador: virgula, hifen, `n`, `no`, `num`, `nro`, `numero` ou `#`.
- */
 const NUMERO_DE_PORTA = /(?:,\s*|\s-\s*|\bn\.?o?\.?\s*|\bnu?m?(?:ero)?\.?\s*|#\s*)\d{1,6}\b/;
 
-/** "Sem numero", nas formas em que se escreve. */
 const SEM_NUMERO = /\bs\s*[/.]\s*n(?:o|\u00ba)?(?![a-z])|\bsem\s+numero\b/;
 
-/** Quatro digitos seguidos ou mais. */
 const NUMERO_LONGO = /(?<!\d)\d{4,}(?!\d)/;
 
-/** Complemento de endereco residencial. */
 const COMPLEMENTO = /\b(?:apto|apartamento|bloco|bl|casa|cs|fundos|sobrado|conjunto|cj|andar|sala)\b\s*\d|\bcond(?:ominio)?\b/;
 
 /**
@@ -103,7 +88,6 @@ export function errosDoNomeDoLugar(campo: string, valor: string): ProblemFieldEr
   return [];
 }
 
-/** A recusa de D59, na forma que `errosDeTextoDeUsuario` tambem devolve. */
 function erroDeContato(campo: string): ProblemFieldError {
   return {
     field: campo,

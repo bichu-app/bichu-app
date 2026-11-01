@@ -1,4 +1,3 @@
-/** O TETO DE NOVE FOTOS, COBRADO NO SERVIDOR — e os dois casos que importam. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -7,7 +6,6 @@ import {
   type FotoPedidaNaVitrine,
 } from './vitrine-de-fotos.js';
 
-/** `n` fotos com `upload_id` distintos e bem formados. */
 function fotos(n: number): FotoPedidaNaVitrine[] {
   return Array.from({ length: n }, (_, i) => ({
     upload_id: `018f7c1e-7a2b-7c3d-9e4f-${String(i).padStart(12, '0')}`,

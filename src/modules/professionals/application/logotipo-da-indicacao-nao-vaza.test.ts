@@ -1,7 +1,3 @@
-/**
- * A FRONTEIRA DA FILA DE INDICACAO, medida: **a imagem de uma indicacao que
- * ninguem aprovou nao tem caminho ate superficie publica.**
- */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -38,14 +34,12 @@ const AUTOR: Autor = {
 
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
-/** Cidade, UF e telefone, que a criacao cobra desde 29/10/2026. */
 const COMPLETA_PARA_PUBLICAR = {
   city: 'São Paulo',
   state: 'SP',
   phone_e164: '+551130612200',
 } as const;
 
-/** Um envio aberto, do proposito pedido, que ainda nao venceu. */
 function envioAberto(id: string, purpose: PropositoDaImagem): EnvioDeCatalogo {
   return {
     id,

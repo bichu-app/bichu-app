@@ -1,4 +1,3 @@
-/** A fronteira entre `admin-access` e `identity` (ADR-0027 item 20.1). */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -18,12 +17,10 @@ function arquivosTs(diretorio: string): string[] {
   return achados;
 }
 
-/** Os especificadores de `import`/`export ... */
 function importacoes(texto: string): string[] {
   return [...texto.matchAll(/(?:import|export)\s[^;]*?from\s+'([^']+)'/g)].map((m) => m[1] as string);
 }
 
-/** O alvo de um import relativo, como `<modulo>/<resto>` a partir de `src/modules`. */
 function alvoNoModulo(arquivo: string, especificador: string): string | undefined {
   if (!especificador.startsWith('.')) return undefined;
   const absoluto = resolve(arquivo, '..', especificador);
@@ -32,7 +29,6 @@ function alvoNoModulo(arquivo: string, especificador: string): string | undefine
   return rel.split(sep).join('/');
 }
 
-/** O ESLint de verdade, com a configuracao do repositorio, num processo filho. */
 const SCRIPT_DO_LINT = `
 import { ESLint } from 'eslint';
 const { filePath, texto } = JSON.parse(process.argv[1]);

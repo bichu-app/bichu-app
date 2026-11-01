@@ -1,4 +1,3 @@
-/** Cifra de segredo em repouso: AES-256-GCM com chave de ambiente. */
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import type { SecretCipher } from '../../../../shared/ports/index.js';
 
@@ -23,7 +22,6 @@ export function criarSecretCipher(chave: Buffer): SecretCipher {
       return Promise.resolve(new Uint8Array(Buffer.concat([iv, cifra.getAuthTag(), cifrado])));
     },
 
-    /** A falha sai como **promessa rejeitada**, nunca como exceção síncrona. */
     decrypt(ciphertext: Uint8Array): Promise<string> {
       try {
         const bytes = Buffer.from(ciphertext);

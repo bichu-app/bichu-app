@@ -1,4 +1,3 @@
-/** O que acontece com a foto quando o trabalho dela não tem mais tentativa. */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { MediaRepository } from '../ports/media-repository.js';
 

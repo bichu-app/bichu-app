@@ -1,4 +1,3 @@
-/** AS ISCAS (d) E (e) DA FOTO DO PRÓPRIO USUÁRIO (cliente, 18/10/2026). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -9,7 +8,6 @@ import { projetarFotoDoPerfil, projetarMeuPerfil } from './resposta-do-perfil.js
 
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
-/** O instante da verificação, pela porta do tempo: `domain/` não constrói data. */
 const VERIFICADO_EM = Date.UTC(2026, 9, 2, 10, 0, 0) as Instant;
 
 function conta(mudanca: Partial<Conta> = {}): Conta {

@@ -1,4 +1,3 @@
-/** Toda chamada de rede do armazenamento tem prazo. */
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -9,7 +8,6 @@ import { PrazoDoArmazenamentoEsgotadoError } from '../../ports/object-storage.js
 
 const PRAZO_CURTO_MS = 150;
 const PRAZO_DE_TRANSFERENCIA_MS = 300;
-/** Folga larga sobre os prazos acima, para a máquina lenta da esteira. */
 const GUARDA_MS = 3_000;
 
 const CHAVE = comoObjectKey('pets/p/original/abc');
@@ -51,7 +49,6 @@ after(async () => {
 
 const mudo: Comportamento = () => undefined;
 
-/** Manda o cabeçalho e metade do corpo, e para. */
 const corpoQueTrava: Comportamento = (_pedido, resposta) => {
   resposta.writeHead(200, { 'content-length': '1024', 'content-type': 'image/jpeg' });
   resposta.write(Buffer.alloc(512));
@@ -62,7 +59,6 @@ const responde = (status: number, corpo?: Buffer): Comportamento => (_pedido, re
   resposta.end(corpo);
 };
 
-/** Espera a chamada rejeitar, e reprova se ela não rejeitar antes da guarda. */
 async function rejeicaoDentroDaGuarda(chamada: () => Promise<unknown>): Promise<{ erro: unknown; ms: number }> {
   const inicio = performance.now();
   let guarda: NodeJS.Timeout | undefined;

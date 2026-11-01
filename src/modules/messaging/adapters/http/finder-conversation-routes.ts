@@ -1,4 +1,3 @@
-/** As quatro rotas da conversa do achador sem conta (BICHUS-41). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';

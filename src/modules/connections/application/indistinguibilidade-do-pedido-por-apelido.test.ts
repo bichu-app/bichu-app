@@ -1,7 +1,3 @@
-/**
- * **A ISCA DA INDISTINGUIBILIDADE: apelido inexistente e apelido de quem bloqueou
- * você dão a MESMA resposta.**
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -31,7 +27,6 @@ const contexto = (quem: UserId): ContextoDoChamador => ({
   ip: undefined,
 });
 
-/** Monta o serviço com um resolvedor de apelido que devolve o que o cenário pedir. */
 function montar(alvo: UserId | undefined, bloqueado = false) {
   const bancada = conexoesEmMemoria(PESSOAS, AGORA);
   const trilha: AuditEvent[] = [];
@@ -82,7 +77,6 @@ async function erroDe(acao: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a ação não falhou, e era o que o teste media');
 }
 
-/** Tudo o que atravessa a borda, para comparar as respostas INTEIRAS. */
 function respostaInteira(erro: AppError): Record<string, unknown> {
   return {
     status: erro.status,
@@ -135,11 +129,6 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
     }
   });
 
-  /**
-   * **O CONTRAPESO.** Sem ele, todos os casos acima passariam num mundo em que
-   * `pedirPorApelido` sempre falha — e eles não distinguiriam "indistinguível" de
-   * "quebrado".
-   */
   void it('CONTRAPESO: apelido que resolve e nao esta bloqueado CRIA a aresta', async () => {
     const { servico, bancada } = montar(ANA, false);
     const conexao = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
@@ -152,10 +141,6 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
     );
   });
 
-  /**
-   * A isca da própria isca: ela prova que `respostaInteira` **enxerga** uma
-   * divergência.
-   */
   void it('ISCA: a comparacao REPROVA quando um `detail` e acrescentado', () => {
     const base = { status: 404, problemType: 'not-found', detail: undefined, title: 'x', errors: undefined };
     const comPista = { ...base, detail: 'Apelido não encontrado' };
@@ -169,7 +154,6 @@ void describe('ISCA: apelido inexistente e apelido que te bloqueou sao INDISTING
 });
 
 void describe('o pedido por APELIDO e o pedido por CONVITE nao se distinguem na recusa', () => {
-  /** As duas credenciais, as duas falhando. */
   void it('token que nao resolve e apelido que nao resolve dao a MESMA resposta', async () => {
     const montagem = montar(undefined);
     const porToken = await erroDe(() => montagem.servico.pedir(contexto(BIA), 'token-qualquer'));

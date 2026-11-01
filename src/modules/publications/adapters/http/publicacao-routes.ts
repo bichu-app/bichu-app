@@ -1,4 +1,3 @@
-/** As rotas do **Mural**: a publicação do usuário e a linha do tempo. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -114,7 +113,6 @@ export interface DependenciasDasRotasDoMural {
   readonly baseDeMidia: AbsoluteUrl;
 }
 
-/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
 function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDoMural,
@@ -141,12 +139,10 @@ async function contaDoTeto(
   }
 }
 
-/** A URL é montada AQUI, na leitura, a partir do domínio de mídia. */
 function url(base: AbsoluteUrl, chave: string | null): string | null {
   return chave === null ? null : `${base.replace(/\/$/, '')}/${chave}`;
 }
 
-/** Uma publicação como o DONO a vê. */
 function comoMinhaPublicacao(
   publicacao: PublicacaoDoDono,
   baseDeMidia: AbsoluteUrl,
@@ -223,7 +219,6 @@ function comoPagina<T>(
   return { items: pagina.itens.map(converter), next_cursor: pagina.proximoCursor };
 }
 
-/** O recorte da consulta, como a borda o lê. */
 function recorteDa(request: FastifyRequest): RecortePedido {
   const consulta = (request.query ?? {}) as Record<string, unknown>;
   return { cursor: consulta.cursor, limit: consulta.limit };

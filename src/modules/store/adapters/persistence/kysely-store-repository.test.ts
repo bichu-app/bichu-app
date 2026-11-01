@@ -1,4 +1,3 @@
-/** O que acontece com a linha da vitrine DEPOIS que ela chega do banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -23,7 +22,6 @@ import {
   escaparCuringas,
 } from './kysely-store-repository.js';
 
-/** Um `Db` que compila a consulta de verdade e devolve os lotes combinados. */
 function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   const fila = [...lotes];
 
@@ -60,7 +58,6 @@ function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   });
 }
 
-/** O mesmo compilador do Postgres, sem conexão. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -72,10 +69,8 @@ const semBanco = new Kysely<Database>({
 
 const RECORTE: RecorteDaVitrine = { sort: 'curadoria', page: 1, limit: 20 };
 
-/** A derivada de imagem de catalogo, que o item desta massa nao tem. */
 const URL_DE_MIDIA = (chave: string): string => `https://midia.example/${chave}`;
 
-/** Especie, tags e imagens da pagina: tres consultas, vazias nesta massa. */
 const COMPLEMENTOS_VAZIOS: readonly (readonly unknown[])[] = [[], [], []];
 
 function linhaDaVitrine(sobrescrever: Record<string, unknown> = {}): Record<string, unknown> {
@@ -193,7 +188,6 @@ void describe('`escaparCuringas` procura o que a pessoa digitou, e não um padr�
   });
 });
 
-/** Só a cláusula `WHERE` do SQL compilado, sem as junções. */
 function whereDaVitrine(sql: string): string {
   const corte = sql.indexOf(' where ');
   assert.ok(

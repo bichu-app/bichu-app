@@ -1,7 +1,3 @@
-/**
- * O id do caminho entra na chave de idempotência — em TODA rota, inclusive na que
- * ainda não existe.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -31,7 +27,6 @@ const AGORA = Date.UTC(2026, 8, 22, 12, 0, 0);
 const CHAVE = '5b2f8d10-9c3a-4e77-8a11-6d0f2c4b9e33';
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa';
 
-/** A tabela `idempotency_keys` em memória, com as três regras que importam. */
 function idempotenciaEmMemoria(): Idempotencia {
   const linhas = new Map<string, { resumo: string; dono: string; gravada?: RespostaGravada }>();
   return {
@@ -185,12 +180,10 @@ void describe('o caso plantado: uma rota com id no caminho que esquece o id', ()
   });
 });
 
-/** O veredito de cada operação idempotente do contrato. */
 type Veredito =
   | { readonly operationId: string; readonly path: string }
   | { readonly operationId: string; readonly semHandler: string };
 
-/** As rotas entram pelo OBJETO, e o `operationId` sai dele. */
 const VEREDITOS: readonly Veredito[] = [
   rotaDeCadastroDePet,
   rotaDeRegistroDeAchado,

@@ -1,13 +1,10 @@
-/** Persistência da leitura pública do caso, pelo `share_token`. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { CasoPublico, LeituraPublicaDoCaso } from '../../ports/leitura-publica-do-caso.js';
 
-/** Pet nesses estados não tem mais caso público, mesmo com o caso aberto. */
 const STATUS_DE_PET_SEM_CASO_PUBLICO: readonly string[] = ['deceased', 'archived'];
 
-/** O desfecho que diz que o animal VOLTOU (`StatusDoCaso`). */
 const STATUS_DE_CASO_REENCONTRADO = 'closed_reunited';
 
 export function construtorDaLeituraPublicaDoCaso(

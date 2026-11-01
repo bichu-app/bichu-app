@@ -1,4 +1,3 @@
-/** As cinco rotas do achado avulso, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -39,44 +38,28 @@ import {
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
 const RELATOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
-/** Sabe o UUID do achado do `RELATOR` e tenta mesmo assim. */
 const INTRUSO = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
-/** O TUTOR DO PET a que o aviso se refere (BICHUS-35). */
 const TUTOR = '018f3a2b-0000-7000-8000-0000000000cc' as UserId;
 
 const ACHADO_DO_RELATOR = '018f3a2b-0000-7000-8000-00000000f001' as FoundReportId;
-/** Não é de ninguém. O 404 dele precisa ser indistinguível do 404 do achado alheio. */
 const ACHADO_INEXISTENTE = '018f3a2b-0000-7000-8000-00000000f002' as FoundReportId;
 const CASO_DO_SHARE_TOKEN = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 
 const AGORA = 1_800_000_000_000;
 const SHARE_TOKEN = 'tok'.padEnd(24, 'x');
 
-/** A base de MÍDIA, de onde sai `matched_pet.photo_url`. */
 const BASE_DE_MIDIA = 'https://midia.bichu.test' as AbsoluteUrl;
 const BASE_DA_WEB = 'https://www.bichu.test' as AbsoluteUrl;
 
-/** `pet_photos.card_key` como o worker a grava: 128 bits aleatórios no caminho. */
 const CHAVE_DA_CAPA = 'pets/9f2c/card/4a7b1e0d9c3f.webp';
 const NOME_DO_PET = 'Aurora';
 
 interface Cenario {
   readonly contador?: RateLimitStore;
-  /**
-   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar o
-   * dono — é o equivalente exato de tirar `reporter_user_id = :dono` da cláusula
-   * `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
-   */
   readonly autorizacaoDesligada?: boolean;
-  /**
-   * **A isca da AMPLIAÇÃO (BICHUS-35).** Com `true`, `avisoParaAnexarFoto` volta a
-   * aceitar só o relator — é o equivalente exato de não ter acrescentado `OR
-   * pets.owner_user_id = :chamador` ao `WHERE`.
-   */
   readonly ampliacaoDesligada?: boolean;
   readonly statusDoAchado?: AchadoGravado['status'];
   readonly fotosJaPedidas?: number;
-  /** O pet JA identificado, quando o cenario tem um. */
   readonly petCorrespondente?: PetCorrespondente | null;
 }
 
@@ -101,7 +84,6 @@ function achadoGravado(ajustes: Partial<AchadoGravado> = {}): AchadoGravado {
   };
 }
 
-/** O repositório, com a autorização **dentro da consulta**. */
 function repositorio(cenario: Cenario): FoundReportRepository {
   const meu = (achado: FoundReportId, dono: UserId): boolean =>
     achado === ACHADO_DO_RELATOR && (cenario.autorizacaoDesligada === true || dono === RELATOR);
@@ -290,7 +272,6 @@ const CORPO_MINIMO = {
   area: { city: 'São Paulo', neighborhood: 'Pinheiros' },
 };
 
-/** O `maxLength` que o contrato declara, lido dele e não escrito aqui. */
 function tetoNoContrato(schema: string, campo: string): number {
   const spec = carregarContrato('api/openapi.yaml').spec as {
     components?: { schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }> };
@@ -300,15 +281,10 @@ function tetoNoContrato(schema: string, campo: string): number {
   return teto as number;
 }
 
-/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
 function tetoDoRecadoNoContrato(): number {
   return tetoNoContrato('StrayFoundReportInput', 'notes');
 }
 
-/**
- * O teto de `found_reports.notes` lido do **CHECK da migração**, e não escrito
- * aqui.
- */
 function tetoDaColunaNaMigracao(): number {
   const sql = readFileSync('migrations/20260917000007_tags-e-avisos-do-achador.sql', 'utf8');
   const achado = /CHECK \(notes IS NULL OR char_length\(notes\) <= (\d+)\)/.exec(sql);
@@ -592,7 +568,6 @@ void describe('critério 10: o `share_token` vincula direto, e ainda assim só S
   });
 });
 
-/** BICHUS-35: A AMPLIAÇÃO DA AUTORIZAÇÃO DA INTENÇÃO DE FOTO. */
 void describe('BICHUS-35: o tutor do pet obtém intenção de foto, e o terceiro não', () => {
   const corpoDaIntencao = {
     found_report_id: ACHADO_DO_RELATOR,
@@ -835,7 +810,6 @@ void describe('ISCA: o dobre da autorização REPROVA quando desligado', () => {
   });
 });
 
-/** O RECADO DO ENRIQUECIMENTO, nas duas bordas. */
 void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bordas', () => {
   void it('500 exatos é ACEITO e chega gravado na resposta', async () => {
     const teto = tetoDaColunaNaMigracao();
@@ -900,9 +874,7 @@ void describe('o recado do enriquecimento casa com o teto da coluna, nas duas bo
   });
 });
 
-/** O TETO DE `ref_data_version`, ancorado no `CHECK` DA MIGRAÇÃO. */
 void describe('o teto de `ref_data_version` é o da coluna, e a recusa diz o limite', () => {
-  /** O `BETWEEN 1 AND 40` de `found_reports_ref_data_version_tamanho`, lido do disco. */
   function tetoDaColuna(): number {
     const pasta = resolve(process.cwd(), 'migrations');
     const achados: number[] = [];

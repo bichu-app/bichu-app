@@ -1,4 +1,3 @@
-/** Persistência da mídia. */
 import { sql } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
@@ -341,7 +340,6 @@ export function criarMediaRepository(db: Db): MediaRepository {
       }));
     },
 
-    /** Todas as chaves de objeto da conta, nos dois baldes (SEC-020). */
     async chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]> {
       const vistos = new Set<string>();
       const todos: ObjetoDaConta[] = [];

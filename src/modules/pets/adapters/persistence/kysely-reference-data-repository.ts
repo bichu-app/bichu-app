@@ -1,4 +1,3 @@
-/** Leitura dos dados de referência, com cache em processo. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type {
   DadosDeReferencia,

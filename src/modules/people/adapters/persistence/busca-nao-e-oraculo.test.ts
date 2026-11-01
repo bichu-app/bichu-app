@@ -1,7 +1,3 @@
-/**
- * As ISCAS de SQL da **busca de pessoas**: os seis predicados estão na cláusula
- * `WHERE`, e **nada de foto nem de identificador está no `SELECT`**.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -31,7 +27,6 @@ const semBanco = new Kysely<Database>({
 const compilada = () => construtorDaBuscaDePessoas(semBanco, TERMO, QUEM_BUSCA, 1, 20);
 const sqlDaBusca = (): string => compilada().sql;
 
-/** O trecho entre `SELECT` e o primeiro ` FROM ` — o que de fato sai. */
 function selecaoDa(sql: string): string {
   const corte = sql.toLowerCase().indexOf(' from "handles"');
   assert.ok(

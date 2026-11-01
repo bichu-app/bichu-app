@@ -1,4 +1,3 @@
-/** O cadastro **exige o nome de exibição**, e a exigência é do servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -31,7 +30,6 @@ function naoDeveriaTerChegado(nome: string): never {
   });
 }
 
-/** Toda porta recusa, dizendo o nome do método. */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
@@ -69,14 +67,9 @@ interface Bancada {
   readonly servico: ReturnType<typeof criarAuthService>;
   readonly eventos: AuditEvent[];
   readonly mensagens: Mensagem[];
-  /** O que `criarContaLocal` recebeu, quando o repositório aceita. */
   readonly recebidas: NovaConta[];
 }
 
-/**
- * `aceitandoEscrita` liga o caminho inteiro do cadastro: ele existe **só** para o
- * contrapeso.
- */
 function montar(aceitandoEscrita = false): Bancada {
   const eventos: AuditEvent[] = [];
   const mensagens: Mensagem[] = [];
@@ -157,7 +150,6 @@ function montar(aceitandoEscrita = false): Bancada {
   return { servico, eventos, mensagens, recebidas };
 }
 
-/** Cadastra com o nome dado e devolve a recusa, ou reprova se foi aceito. */
 async function recusaComNome(nome: string | undefined, rotulo: string): Promise<AppError> {
   const bancada = montar();
   try {
@@ -183,11 +175,6 @@ async function recusaComNome(nome: string | undefined, rotulo: string): Promise<
 }
 
 void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2026)', () => {
-  /**
-   * ISCA (a). Desligada: apagando a guarda `if (displayName === undefined ||
-   * displayName.length === 0)` de `cadastrar`, este caso reprova em
-   * `criarContaLocal` — que é literalmente a conta sem nome nascendo.
-   */
   void it('chave `display_name` AUSENTE é recusada com 400, e nada é gravado', async () => {
     const erro = await recusaComNome(undefined, 'um cadastro sem a chave `display_name`');
 
@@ -198,7 +185,6 @@ void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2
     ]);
   });
 
-  /** A string vazia, que é o que um formulário manda quando ninguém digitou. */
   void it('`display_name` vazio é recusado com 400, e nada é gravado', async () => {
     const erro = await recusaComNome('', 'um cadastro com `display_name` vazio');
 
@@ -208,7 +194,6 @@ void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2
     ]);
   });
 
-  /** ISCA (b), E O CASO QUE ESCAPA DE TODOS OS OUTROS. */
   void it('`display_name` SÓ COM ESPAÇO é recusado com 400, e nada é gravado', async () => {
     const erro = await recusaComNome(' '.repeat(3), 'um cadastro com `display_name` só com espaço');
 
@@ -221,7 +206,6 @@ void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2
     );
   });
 
-  /** O teto do contrato (`maxLength: 80`) também é do servidor. */
   void it('`display_name` acima de 80 caracteres é recusado com 400, e nada é gravado', async () => {
     const erro = await recusaComNome('a'.repeat(81), 'um nome de 81 caracteres');
 
@@ -235,7 +219,6 @@ void describe('o cadastro exige nome de exibição (queixa do cliente de 18/10/2
     ]);
   });
 
-  /** ISCA (c) — O CONTRAPESO, e sem ele este arquivo não vale nada. */
   void it('cadastro COM nome continua funcionando, e o que chega ao banco é o nome aparado', async () => {
     const bancada = montar(true);
 

@@ -1,4 +1,3 @@
-/** A persistência do **convite de conexão** e do **alvo por apelido**. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
@@ -15,7 +14,6 @@ import type {
   ResolvedorDeConvite,
 } from '../../ports/convite-de-conexao.js';
 
-/** Trinta dias em milissegundos: o prazo do convite, igual ao do pendente. */
 const VALIDADE_DO_CONVITE_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface LinhaDoConvite {

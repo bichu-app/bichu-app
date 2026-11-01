@@ -1,7 +1,3 @@
-/**
- * **A lista de candidatos carrega o TUTOR DO CASO no `WHERE`**, e o SQL compilado
- * prova.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -37,10 +33,6 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/**
- * Confere que o predicado existe **e** que o valor ligado à posição dele é o
- * esperado.
- */
 function exigirNaPosicao(
   compilada: Compilada,
   predicado: RegExp,

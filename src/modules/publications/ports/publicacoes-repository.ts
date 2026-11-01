@@ -1,4 +1,3 @@
-/** A porta de persistência do Mural. */
 import type { Instant, ObjectKey, UserId } from '../../../shared/types/brands.js';
 import type { CursoDaLinhaDoTempo } from '../domain/publicacao.js';
 

@@ -1,4 +1,3 @@
-/** O evento de trilha de uma operacao administrativa, montado de um jeito so. */
 import type { AdminAccountId } from '../../../shared/types/brands.js';
 import {
   ACOES_ADMINISTRATIVAS,

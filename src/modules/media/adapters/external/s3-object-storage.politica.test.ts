@@ -1,4 +1,3 @@
-/** A política assinada do envio direto (critérios 21, 22 e 24 de `BICHUS-87`). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';
@@ -35,7 +34,6 @@ async function politicaDe(maxBytes = TETO_DE_BYTES): Promise<{
   return { condicoes: bruta.conditions, expiration: bruta.expiration, campos: a.campos! };
 }
 
-/** Acha a condição de objeto com a chave pedida. */
 function condicao(condicoes: unknown[], nome: string): unknown {
   for (const c of condicoes) {
     if (typeof c === 'object' && c !== null && !Array.isArray(c) && nome in c) {
@@ -102,10 +100,6 @@ void describe('política assinada — o que ela limita', () => {
   });
 });
 
-/**
- * O `contentType` que ENTRA na política, e que estava sem exigência na porta
- * (BICHUS-134 item 3).
- */
 async function politicaOuNada(contentType: string): Promise<Record<string, string> | null> {
   try {
     const a = await armazenamento.createUploadIntent({

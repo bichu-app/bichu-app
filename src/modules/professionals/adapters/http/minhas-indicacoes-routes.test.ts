@@ -1,7 +1,3 @@
-/**
- * `GET /directory/suggestions` — **Minhas indicacoes**, sobre um Fastify de
- * verdade e com o CONTRATO de verdade.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -33,7 +29,6 @@ const AGORA = 1_800_000_000_000;
 const CRIADO_EM = comoData(Date.UTC(2026, 9, 17, 12, 0, 0) as Instant);
 const DECIDIDO_EM = comoData(Date.UTC(2026, 9, 18, 9, 30, 0) as Instant);
 
-/** O molde de uma indicacao do dobre. */
 function indicacao(sobre: Partial<MinhaIndicacao> = {}): MinhaIndicacao {
   return {
     ref: 'u7YkQwE2tLm9ZpR4sAbC',
@@ -59,7 +54,6 @@ interface Cenario {
   readonly total?: number;
 }
 
-/** Os recortes que o repositorio recebeu. */
 let recortes: RecorteDasMinhasIndicacoes[] = [];
 
 function repositorio(cenario: Cenario): DirectorySuggestionRepository {

@@ -1,7 +1,3 @@
-/**
- * A autorizacao da transferencia esta na clausula `WHERE`, e o SQL compilado prova
- * isso.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -29,7 +25,6 @@ const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const TRANSFER = '018f3a2b-0000-7000-8000-0000000000dd';
 const QUANDO = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: compila a consulta e nao a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -47,14 +42,12 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** O valor REALMENTE ligado a posicao que o predicado ocupa. */
 function ligadoAo(predicado: RegExp, compilada: Compilada): unknown {
   const achado = predicado.exec(clausulaWhere(compilada));
   assert.ok(achado !== null, `o predicado sumiu do WHERE. SQL compilado: ${compilada.sql}`);
   return compilada.parameters[Number(achado[1]) - 1];
 }
 
-/** SO A CLAUSULA `WHERE`, e este recorte e a correcao mais importante do arquivo. */
 function clausulaWhere(compilada: Compilada): string {
   const posicao = compilada.sql.indexOf(' where ');
   assert.ok(
@@ -65,7 +58,6 @@ function clausulaWhere(compilada: Compilada): string {
   return compilada.sql.slice(posicao);
 }
 
-/** O `SET` do `UPDATE`, ate ANTES do ` where ` -- e REPROVANDO se nao o achar. */
 function setAntesDoWhere(sql: string): string {
   const fim = sql.indexOf(' where ');
   assert.ok(

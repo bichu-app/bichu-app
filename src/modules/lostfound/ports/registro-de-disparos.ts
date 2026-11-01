@@ -1,4 +1,3 @@
-/** A memória do disparo: quem foi avisado, quando, e quantos. */
 import type { EstadoDoDisparo } from '../domain/disparo-do-alerta.js';
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
 import type { CaseId, Instant, UserId } from '../../../shared/types/brands.js';

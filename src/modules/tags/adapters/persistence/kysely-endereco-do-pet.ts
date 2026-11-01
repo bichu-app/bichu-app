@@ -1,4 +1,3 @@
-/** O endereco de entrega guardado no pet, no Postgres. */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -6,14 +5,12 @@ import type { PetId, UserId } from '../../../../shared/types/brands.js';
 import type { EnderecoDoPetRepository } from '../../ports/endereco-do-pet.js';
 import type { EnderecoDeEntrega } from '../../ports/pedido-de-plaquinha.js';
 
-/** As colunas do endereco, **nomeadas uma a uma**. */
 const COLUNAS_DO_ENDERECO = sql`
   d.recipient_name, d.recipient_phone, d.postal_code,
   d.street, d.street_number, d.complement,
   d.neighborhood, d.city, d.state
 `;
 
-/** As MESMAS nove colunas, **sem o apelido da tabela**, para o `RETURNING`. */
 const COLUNAS_DO_ENDERECO_GRAVADO = sql`
   recipient_name, recipient_phone, postal_code,
   street, street_number, complement,
@@ -32,7 +29,6 @@ interface LinhaDoEndereco {
   readonly state: string;
 }
 
-/** A linha para o tipo do dominio, **campo a campo**. */
 function comoEndereco(linha: LinhaDoEndereco): EnderecoDeEntrega {
   return {
     destinatario: linha.recipient_name,

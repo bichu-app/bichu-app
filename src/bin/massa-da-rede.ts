@@ -326,7 +326,6 @@ export function dataCivilDoEncontro(diasAPartirDeHoje: number, hoje: Date): stri
   return `${ano}-${mes}-${dia}`;
 }
 
-/** O texto `YYYY-MM-DD HH:MM:SS` de um instante, em UTC. */
 function comoTimestampUtc(quando: Date): string {
   return `${quando.toISOString().slice(0, 19).replace('T', ' ')}`;
 }

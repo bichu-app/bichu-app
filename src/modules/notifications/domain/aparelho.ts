@@ -1,4 +1,3 @@
-/** O aparelho registrado para push, e a única regra de negócio que ele carrega. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { TokenDeAparelho } from '../ports/push-sender.js';
 

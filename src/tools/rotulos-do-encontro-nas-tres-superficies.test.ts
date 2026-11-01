@@ -1,7 +1,3 @@
-/**
- * Os rotulos de lista fechada do encontro dizem a MESMA coisa nas TRES superficies
- * -- e este arquivo e o unico lugar que confere isso.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -12,7 +8,6 @@ const SITE = 'web/src/conteudo/encontro.ts';
 
 type Mapa = Readonly<Record<string, string>>;
 
-/** Recorta o bloco de um seletor, e EXPLODE em vez de devolver vazio. */
 function recortar(texto: string, padrao: RegExp, onde: string): string {
   const casado = padrao.exec(texto);
   if (casado === null || casado[1] === undefined) {
@@ -21,7 +16,6 @@ function recortar(texto: string, padrao: RegExp, onde: string): string {
   return casado[1];
 }
 
-/** `qualquer('any', 'Qualquer idade'),` de dentro de um `enum` do Dart. */
 function doEnumDart(texto: string, nomeDoEnum: string): Mapa {
   const bloco = recortar(texto, new RegExp(`enum ${nomeDoEnum} \\{([\\s\\S]*?)\\n\\n`), DART);
   const mapa: Record<string, string> = {};
@@ -34,7 +28,6 @@ function doEnumDart(texto: string, nomeDoEnum: string): Mapa {
   return mapa;
 }
 
-/** `water: 'Água',` de dentro de um literal de objeto de TypeScript. */
 function doObjetoTs(texto: string, abertura: string, onde: string): Mapa {
   const bloco = recortar(texto, new RegExp(`${abertura}([\\s\\S]*?)\\n\\s*\\}`), onde);
   const mapa: Record<string, string> = {};
@@ -51,7 +44,6 @@ const dart = readFileSync(DART, 'utf8');
 const painel = readFileSync(PAINEL, 'utf8');
 const site = readFileSync(SITE, 'utf8');
 
-/** Os tres grupos, com o TAMANHO ESPERADO -- que e o controle positivo. */
 const GRUPOS = [
   {
     nome: 'NetworkEventDogAge',

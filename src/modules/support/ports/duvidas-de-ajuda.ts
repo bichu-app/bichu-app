@@ -1,4 +1,3 @@
-/** A fila das duvidas que chegam pelo botao `Ajuda` do menu do usuario. */
 import type { AtorAdministrativo } from '../../audit/ports/trilha-administrativa.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 

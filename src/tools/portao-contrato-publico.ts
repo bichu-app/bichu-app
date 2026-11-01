@@ -1,11 +1,9 @@
-/** Portão de contrato: nenhuma resposta pública devolve campo privado. */
 import { parse as parseYaml } from 'yaml';
 import { readFileSync } from 'node:fs';
 import { carregarContrato, type OperacaoDoContrato } from '../shared/http/contract.js';
 
 export const VERSAO_DO_PORTAO = '1.3.0';
 
-/** Nomes proibidos em resposta a quem não tem conta. */
 const CAMPOS_PROIBIDOS = new Set([
   'lat',
   'lon',
@@ -40,17 +38,8 @@ const CAMPOS_PROIBIDOS = new Set([
 
 const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);
 
-/**
- * `correlation_id` termina em `_id` e é um UUID, e **não** é identificador de
- * recurso: é o mesmo valor propagado no log e no trace, que o contrato manda estar
- * em todo `Problem`, inclusive nos públicos.
- */
 const CAMPOS_DISPENSADOS = new Set(['correlation_id']);
 
-/**
- * Operações que **abrem sessão**: cadastro, login, renovação, confirmação de
- * e-mail e entrada por credencial digital.
- */
 const OPERACOES_QUE_ABREM_SESSAO: ReadonlyMap<string, string> = new Map([
   ['registerUser', 'devolve a sessão e a conta recém-criada a quem a criou'],
   ['login', 'devolve a sessão e a conta a quem apresentou a senha'],
@@ -82,7 +71,6 @@ function resolver(spec: Record<string, unknown>, ref: string): unknown {
   return atual;
 }
 
-/** Um `id` de UUID numa resposta sem conta é o vazamento do SEC-001. */
 function ehUuidInterno(nome: string, schema: Record<string, unknown>): boolean {
   if (nome !== 'id' && !nome.endsWith('_id')) return false;
   return schema['format'] === 'uuid';
@@ -179,7 +167,6 @@ export function inspecionarCamposPublicos(
   return achados;
 }
 
-/** Tokens proibidos em NOME DE PARÂMETRO de operação alcançável sem conta. */
 const TOKENS_PROIBIDOS_NO_PEDIDO: ReadonlySet<string> = new Set([
   'lat',
   'latitude',
@@ -266,7 +253,6 @@ export function inspecionarParametrosPublicos(
   return { achados, operacoesConferidas: operacoes.length, parametrosConferidos };
 }
 
-/** Cabeçalhos exigidos nas páginas HTML públicas (critério 5). */
 const CABECALHOS_EXIGIDOS: readonly { readonly rotulo: string; readonly agulha: RegExp }[] = [
   { rotulo: 'X-Robots-Tag: noindex', agulha: /noindex/i },
   { rotulo: 'Referrer-Policy: no-referrer', agulha: /no-referrer/i },
@@ -316,10 +302,6 @@ function declaraHtml(operacao: OperacaoDoContrato): boolean {
   );
 }
 
-/**
- * A isca. Um contrato minúsculo com uma rota pública que devolve `lat` e um
- * `pet_id` de UUID: o portão **precisa** reprovar os dois.
- */
 const ISCA = `
 openapi: 3.1.0
 info: { title: isca, version: '0' }

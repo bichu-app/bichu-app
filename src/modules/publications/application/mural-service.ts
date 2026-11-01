@@ -1,4 +1,3 @@
-/** O caso de uso do Mural. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';

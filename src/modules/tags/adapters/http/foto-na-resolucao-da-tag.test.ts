@@ -1,4 +1,3 @@
-/** ISCA (B): `GET /v1/tags/{code}` devolve a FOTO do pet. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -29,11 +28,9 @@ const CODIGO = 'GQSM-0XHB-T4D9-G31S';
 const AGORA = 1_800_000_000_000 as Instant;
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 
-/** A base de mídia, DIFERENTE da base da web de propósito: ver o cabeçalho. */
 const BASE_DE_MIDIA = 'https://midia.exemplo.invalido' as AbsoluteUrl;
 const BASE_DA_WEB = 'https://web.exemplo.invalido' as AbsoluteUrl;
 
-/** A chave de um objeto de capa já pronto, como `pet_photos.card_key` a grava. */
 const CHAVE_DA_CAPA = 'p/018f3a2b00007000800000000000cc/card.webp';
 
 function naoUsado(nome: string): never {

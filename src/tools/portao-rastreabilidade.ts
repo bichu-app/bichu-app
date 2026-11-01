@@ -1,4 +1,3 @@
-/** Portão da matriz de rastreabilidade (ADR-0027 item 18). */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -17,7 +16,6 @@ function texto(valor: unknown): string | undefined {
   return typeof valor === 'string' ? valor : undefined;
 }
 
-/** Segue `$ref` locais até um schema concreto. */
 function desreferenciar(spec: Mapa, valor: unknown): Mapa | undefined {
   let atual: unknown = valor;
   for (let passo = 0; passo < 32; passo++) {
@@ -34,7 +32,6 @@ function desreferenciar(spec: Mapa, valor: unknown): Mapa | undefined {
   return undefined;
 }
 
-/** O schema e todas as alternativas e composições dele, já desreferenciados. */
 function variantes(spec: Mapa, schema: unknown, vistos = new Set<unknown>()): Mapa[] {
   const concreto = desreferenciar(spec, schema);
   if (concreto === undefined || vistos.has(concreto)) return [];

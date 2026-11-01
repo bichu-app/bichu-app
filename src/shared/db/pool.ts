@@ -1,14 +1,9 @@
-/** Pool de conexões e unidade de trabalho. */
 import { Kysely, PostgresDialect, sql, type Transaction } from 'kysely';
 import pg from 'pg';
 import type { Database } from './schema.js';
 
 const { Pool, types } = pg;
 
-/**
- * `bigint` (OID 20) chega como string por padrão no driver, porque nem todo bigint
- * cabe num `number` de JavaScript.
- */
 types.setTypeParser(types.builtins.INT8, (valor) => Number.parseInt(valor, 10));
 
 export type Db = Kysely<Database>;

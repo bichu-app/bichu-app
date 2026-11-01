@@ -1,7 +1,3 @@
-/**
- * A contagem de encontros novos (BICHUS-278), **sobre o construtor da propria
- * agenda**.
- */
 import type { Db } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type {

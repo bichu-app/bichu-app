@@ -1,7 +1,3 @@
-/**
- * As rotas do **convite de conexão** — o segredo que alimenta o link e o QR
- * (decisão do cliente de 20/10/2026).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -32,7 +28,6 @@ export const rotaDaRevogacaoDeConvite = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
-/** Convite é segredo ao portador: nada daqui entra em cache compartilhado. */
 const SEM_CACHE = 'private, no-store';
 
 export interface Autenticador {
@@ -77,11 +72,6 @@ export function registrarRotasDeConvite(
     account: async (request: FastifyRequest) => chamador(request, deps),
   };
 
-  /**
-   * Emitir. **201**, porque uma linha nova de convite nasce — e o token em claro sai
-   * nesta resposta e em lugar nenhum mais: o banco guarda o resumo de 32 bytes,
-   * então nem esta casa nem um despejo do banco o recuperam depois.
-   */
   registrarRota(
     app,
     rotaDaEmissaoDeConvite,
@@ -92,7 +82,6 @@ export function registrarRotasDeConvite(
     },
   );
 
-  /** Revogar. **204 sem corpo, e idempotente**: sem convite ativo também é 204. */
   registrarRota(
     app,
     rotaDaRevogacaoDeConvite,

@@ -1,4 +1,3 @@
-/** O que se prova aqui é a **recusa**, e não a aceitação. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -27,12 +26,6 @@ void describe('chaveDeDerivadaPublica', () => {
     });
   });
 
-  /**
-   * A ISCA DO DEFEITO DE 20/10/2026, e ela reprova de verdade com o mecanismo
-   * desligado: com a alternação `(?:pets|products|events)` digitada à mão de volta
-   * no lugar da derivação de `CATEGORIAS_PUBLICAS`, os casos `people` e `directory`
-   * deste bloco falham, e o `TODA categoria` falha junto.
-   */
   void describe('serve TODA categoria pública, e a lista não é escrita aqui', () => {
     for (const categoria of CATEGORIAS_PUBLICAS) {
       for (const variante of ['thumb', 'card', 'banner'] as const) {

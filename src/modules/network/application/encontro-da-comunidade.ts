@@ -1,7 +1,3 @@
-/**
- * As tres escritas do encontro da comunidade (ADR-0025 emenda 3): criar, editar o
- * proprio e cancelar o proprio.
- */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { lerIfMatch } from '../../../shared/http/if-match.js';
@@ -64,7 +60,6 @@ function recusa(field: string, code: string, message: string): AppError {
   return problemas.validacao([{ field, code, message }]);
 }
 
-/** O `If-Match`, pelo leitor TOLERANTE de `shared/http/if-match.ts`. */
 function versaoExigida(ifMatch: string | string[] | undefined): number {
   const lida = lerIfMatch(ifMatch);
   if (lida.tipo === 'ausente') {
@@ -80,7 +75,6 @@ function versaoMudou(): AppError {
   });
 }
 
-/** A data vinda como ISO. A conversao e aqui, na aplicacao, e nao no dominio. */
 function comoDataDoCorpo(texto: string, campo: string): Date {
   const instante = Date.parse(texto);
   if (Number.isNaN(instante)) {
@@ -89,7 +83,6 @@ function comoDataDoCorpo(texto: string, campo: string): Date {
   return comoData(instante as Instant);
 }
 
-/** Os portes aceitos, contra a lista fechada do contrato. */
 function errosDosPortes(portes: readonly string[] | undefined): ProblemFieldError[] {
   if (portes === undefined) return [];
   const validos = portes.every((p) => (PORTES as readonly string[]).includes(p));
@@ -99,7 +92,6 @@ function errosDosPortes(portes: readonly string[] | undefined): ProblemFieldErro
   return [];
 }
 
-/** Os tres rotulos do lugar. */
 function errosDoLugar(lugar: LugarDaComunidade): ProblemFieldError[] {
   return [
     ...errosDoNomeDoLugar('place.place_name', lugar.place_name),
@@ -114,16 +106,6 @@ function errosDaCapa(capa: CapaDoCorpo | null | undefined): ProblemFieldError[] 
   return errosDeTextoDeUsuario('cover_image.alt_text', capa.alt_text, 2, TETO_DO_TEXTO_ALTERNATIVO);
 }
 
-/**
- * **`cover_image` e `image_upload_ids` SE EXCLUEM**, e os dois juntos sao `400`
- * (`code: cover_and_images_both_sent`).
- *
- * Nao e zelo: sao duas formas de dizer qual e a capa no MESMO corpo, e qualquer
- * regra de precedencia ("a lista ganha", "a capa ganha") seria comportamento que
- * ninguem pediu e que a tela nao mostra. O aplicativo publicado manda
- * `cover_image`; o novo manda `image_upload_ids`, **inclusive quando e uma imagem
- * so**. Nenhum dos dois manda os dois.
- */
 function errosDaCapaComAsImagens(corpo: CorpoDoEncontroDaComunidade): ProblemFieldError[] {
   if (corpo.cover_image === undefined || corpo.image_upload_ids === undefined) return [];
   return [
@@ -212,7 +194,6 @@ export class EncontroDaComunidade {
       publication_status: 'published',
       origin: 'community',
       has_cover: corpo.cover_image !== undefined,
-      /** QUANTAS imagens vieram pela lista nova, e nao quais. */
       image_count: (corpo.image_upload_ids ?? []).length,
     });
     return this.lerDepoisDeEscrever(slug, 1);
@@ -354,14 +335,6 @@ export class EncontroDaComunidade {
       await this.aplicarCapa(tx, eventoId, autor, corpo.cover_image, agora);
       return;
     }
-    /**
-     * NA ORDEM DO ARRAY, e sequencial de proposito: cada volta trava a linha do
-     * envio com `FOR UPDATE`, e `Promise.all` abriria a porta a impasse entre dois
-     * encontros que mandassem os mesmos envios em ordens diferentes.
-     *
-     * **Sem `alt_text`**: a lista nova nao o tem, porque o cliente mandou remover
-     * a descricao de foto do aplicativo em 26/10/2026.
-     */
     const imagens: { imagemId: string; altText: string | null }[] = [];
     for (const uploadId of corpo.image_upload_ids) {
       const imagemId = await tx.capaDoEnvio({ uploadId, chamador: autor.userId, eventoId, agora });

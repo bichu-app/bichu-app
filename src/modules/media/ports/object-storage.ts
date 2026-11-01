@@ -1,4 +1,3 @@
-/** Porta do armazenamento de objeto (ADR-0007). */
 import type { AbsoluteUrl, ObjectKey } from '../../../shared/types/brands.js';
 
 /** As duas classes de mídia, fisicamente separadas e nunca no mesmo lugar. */

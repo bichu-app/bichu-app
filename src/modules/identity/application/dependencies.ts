@@ -1,4 +1,3 @@
-/** O que os casos de uso de identidade exigem do mundo. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { FamiliaDeSessao } from '../ports/localizacao-de-referencia-repository.js';
 import type { Mailer } from '../ports/mailer.js';

@@ -1,4 +1,3 @@
-/** Processamento de imagem com `sharp` / `libvips`. */
 import sharp from 'sharp';
 import type { OutputInfo } from 'sharp';
 import type {
@@ -11,18 +10,12 @@ import type {
 import { formatoRealDe } from '../../domain/numeros-magicos.js';
 import { FORMATO_DAS_DERIVADAS } from '../../domain/derivadas.js';
 
-/** Critério 18: acima disso é recusa final, e não retentativa. */
 const TETO_DE_MEGAPIXELS = 50;
 
 const TETO_DE_PIXELS = TETO_DE_MEGAPIXELS * 1_000_000;
 
-/**
- * O CACHE DO LIBVIPS FICA DESLIGADO, e isto não é afinação: é o que mantém o
- * processo vivo depois da segunda foto.
- */
 sharp.cache(false);
 
-/** A codificação de UM degrau da escada, a partir do pixel cru. */
 async function codificar(
   cru: Buffer,
   entrada: { readonly raw: { width: number; height: number; channels: 1 | 2 | 3 | 4 } },

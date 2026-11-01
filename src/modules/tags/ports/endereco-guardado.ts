@@ -1,4 +1,3 @@
-/** O ENDERECO DE ENTREGA GUARDADO NA CONTA. */
 import type { UserId } from '../../../shared/types/brands.js';
 import type { EnderecoDeEntrega } from './pedido-de-plaquinha.js';
 

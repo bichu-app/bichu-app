@@ -1,10 +1,7 @@
-/** O dublê de `IdentityRepository` que recusa TODAS as portas, num lugar só. */
 import type { IdentityRepository } from '../../ports/identity-repository.js';
 
-/** Porta da interface, pelo nome. */
 type Porta = keyof IdentityRepository;
 
-/** Os parâmetros e o retorno saem da PRÓPRIA interface, e não de uma cópia. */
 type Argumentos<N extends Porta> = Parameters<IdentityRepository[N]>;
 type Retorno<N extends Porta> = ReturnType<IdentityRepository[N]>;
 

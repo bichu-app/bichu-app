@@ -1,14 +1,9 @@
-/** Testes do adaptador do gerenciador de segredos (ADR-0022). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
 import { criarSecretProviderGerenciado, type Buscar } from './gcp-secret-manager.js';
 
-/**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
- * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
- */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
 
@@ -18,10 +13,6 @@ const VALOR_QUE_NAO_PODE_VAZAR = 'valor-descartavel-que-nao-pode-aparecer-em-log
 
 const TOKEN = JSON.stringify({ access_token: 'token-descartavel', expires_in: 3600 });
 
-/**
- * `fetch` falso: responde o token no endereço de metadados e delega o resto ao
- * caso.
- */
 function buscarFalso(
   responder: (url: string) => Response,
 ): { buscar: Buscar; chamadas: string[] } {

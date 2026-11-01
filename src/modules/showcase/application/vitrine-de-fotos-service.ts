@@ -1,4 +1,3 @@
-/** O caso de uso da vitrine de fotos do usuário. */
 import type { UserId } from '../../../shared/types/brands.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import {

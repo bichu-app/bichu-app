@@ -1,14 +1,9 @@
-/**
- * Portão da retenção declarada (ADR-0010, emenda 6 de 26/10/2026 — decisão do
- * cliente: *"não apague nada, mantenha e corrija a política"*).
- */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /** O texto publicado, relativo à raiz do repositório. */
 export const POLITICA = 'web/src/conteudo/juridico/privacidade.md';
 
-/** O cabeçalho que marca a coluna de prazo de guarda nas tabelas da política. */
 const COLUNA_DE_PRAZO = 'por quanto tempo';
 
 /** A redação vaga, por extenso. */
@@ -149,7 +144,6 @@ export const EXPURGOS_DECLARADOS: readonly ExpurgoDeclarado[] = [
   },
 ];
 
-/** O que torna um `DELETE` um expurgo **por prazo**, e não uma edição. */
 const PADROES_DE_PRAZO: readonly RegExp[] = [
   /'(?:\w*(?:_at|_until))'\s*,\s*'<=?'/,
   /\b\w*(?:_at|_until)\b\s*<=?\s*[^=<]/,

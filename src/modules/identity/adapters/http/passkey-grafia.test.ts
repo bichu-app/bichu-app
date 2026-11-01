@@ -1,7 +1,3 @@
-/**
- * A ISCA: o corpo REAL das duas rotas de `options` de passkey contra o schema que
- * `api/openapi.yaml` DECLARA para elas.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,7 +32,6 @@ const RP_ID = 'bichu.app';
 
 const contrato = carregarContrato('api/openapi.yaml');
 
-/** Repositório que só guarda o desafio. */
 class RepositorioQueSoGuardaDesafio implements PasskeyRepository {
   public guardados = 0;
 
@@ -76,7 +71,6 @@ class RepositorioQueSoGuardaDesafio implements PasskeyRepository {
   }
 }
 
-/** O serviço de verdade, com a biblioteca de verdade. */
 function servicoDePasskey(repositorio: PasskeyRepository): PasskeyService {
   return new PasskeyService({
     repositorio,
@@ -91,7 +85,6 @@ function servicoDePasskey(repositorio: PasskeyRepository): PasskeyService {
   });
 }
 
-/** Só `autenticar` é dublado, porque só ele é chamado nestes casos. */
 const authQueAutentica = {
   autenticar: () =>
     Promise.resolve({

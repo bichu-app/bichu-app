@@ -1,4 +1,3 @@
-/** Quem verifica o token de acesso, do ponto de vista de `tags`. */
 import type { UserId } from '../../../shared/types/brands.js';
 
 export interface Autenticador {

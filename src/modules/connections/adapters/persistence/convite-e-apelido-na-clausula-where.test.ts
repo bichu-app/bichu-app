@@ -1,7 +1,3 @@
-/**
- * As ISCAS de SQL do **convite** e do **alvo por apelido**: os predicados estão na
- * cláusula `WHERE`, e são os **mesmos** nas duas resoluções.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -33,7 +29,6 @@ const semBanco = new Kysely<Database>({
 const sqlDoApelido = (): string =>
   construtorDoAlvoPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 
-/** A LISTA DE SELEÇÃO da consulta — o que de fato sai dela. */
 function selecaoDa(sql: string): string {
   const corte = sql.toLowerCase().indexOf(' from "handles"');
   assert.ok(

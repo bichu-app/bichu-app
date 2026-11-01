@@ -1,8 +1,3 @@
-/**
- * As SEIS rotas de `/v1/me/notifications` -- a CAIXA DE NOTIFICACOES, que e o
- * destino do toque no sino da barra superior -- mais `getMyBroadcast`, que e a
- * PAGINA INTERMEDIARIA do comunicado.
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Contrato } from '../../../../shared/http/contract.js';
@@ -80,7 +75,6 @@ export interface DependenciasDasRotasDaCaixa {
   readonly contrato: Contrato;
 }
 
-/** Uma linha, campo a campo, exatamente como `NotificationItem` a declara. */
 function comoResposta(aviso: AvisoDaCaixa): Record<string, unknown> {
   return {
     ref: aviso.ref,
@@ -94,7 +88,6 @@ function comoResposta(aviso: AvisoDaCaixa): Record<string, unknown> {
   };
 }
 
-/** Um comunicado, campo a campo, como `MyBroadcast` o declara. */
 function comunicadoComoResposta(c: ComunicadoDaCaixa): Record<string, unknown> {
   return {
     ref: c.ref,
@@ -114,10 +107,6 @@ function paginaComoResposta(pagina: PaginaDaCaixa): Record<string, unknown> {
   };
 }
 
-/**
- * MEMOIZADA por requisicao, pelo mesmo motivo das rotas de aparelho: o teto por
- * `account` precisa do dono antes do handler, e o handler precisa do mesmo dono.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaCaixa,
@@ -134,11 +123,6 @@ function chamadorAutenticado(
   });
 }
 
-/**
- * `account` para o teto. Quem nao apresentou credencial valida nao tem balde de
- * conta -- a recusa dele e o 401 do handler, e nao um 429 que confundiria "sem
- * sessao" com "chamou demais".
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaCaixa,

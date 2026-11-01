@@ -1,4 +1,3 @@
-/** Porta de persistência das tags. */
 import type { Instant, PetId, TagCodeCanonical, TagId, UserId } from '../../../shared/types/brands.js';
 
 /**

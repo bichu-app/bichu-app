@@ -1,7 +1,3 @@
-/**
- * "Contar mais" e a foto de quem avisou sem conta, sobre um Fastify de verdade,
- * com o serviço de verdade e o contrato de verdade (BICHUS-41).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -209,7 +205,6 @@ async function pedir(
   };
 }
 
-/** O corpo do problema sem o que muda a cada requisição ou rota. */
 function corpoSemCorrelacao(resposta: Resposta): string {
   const resto = { ...resposta.corpo };
   delete resto['correlation_id'];
@@ -217,7 +212,6 @@ function corpoSemCorrelacao(resposta: Resposta): string {
   return JSON.stringify(resto);
 }
 
-/** As duas operações, com um pedido válido de cada uma. */
 const OPERACOES = [
   {
     operationId: 'enrichFinderFoundReport',
@@ -247,7 +241,6 @@ function propriedadesDoContrato(nome: string): Set<string> {
   return new Set(Object.keys(schema.properties));
 }
 
-/** A faixa de `GeoPoint`, lida do contrato. */
 function geoPointDoContrato(): {
   lat: { minimo: number; maximo: number };
   lon: { minimo: number; maximo: number };
@@ -270,7 +263,6 @@ function geoPointDoContrato(): {
   };
 }
 
-/** A checagem de não-vazamento. */
 function exigirQueNaoVaza(resposta: Resposta, onde: string): void {
   for (const proibido of [DO_TUTOR.email, DO_TUTOR.telefone, DO_TUTOR.endereco, '98765-4321']) {
     assert.ok(!resposta.bruto.includes(proibido), `${onde}: \`${proibido}\` vazou: ${resposta.bruto}`);

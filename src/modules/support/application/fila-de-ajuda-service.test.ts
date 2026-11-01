@@ -1,4 +1,3 @@
-/** O teto da pagina da fila, e por que ele existe DUAS vezes. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

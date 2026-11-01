@@ -1,7 +1,3 @@
-/**
- * As duas leituras de apoio da transferencia: o e-mail **verificado** de uma conta
- * e o nome de um pet.
- */
 import type { Db } from '../../../../shared/db/pool.js';
 import type {
   EmailVerificadoDoChamador,

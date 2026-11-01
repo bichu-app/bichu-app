@@ -1,23 +1,3 @@
-/**
- * ISCA — a rota nova da FOTO DO ESTABELECIMENTO exige a credencial DE FATO, e não
- * só no contrato.
- *
- * ## POR QUE ESTE ARQUIVO EXISTE
- *
- * O contrato declara `security: [{ bearerAuth: [] }]`, e `carregarContrato`
- * derruba a aplicação se alguma operação NÃO declarar nenhuma -- isso cobre a
- * DECLARAÇÃO. **Não cobre o servidor:** `security` no YAML não registra
- * autenticação em lugar nenhum, e um `registrarRota` que esquecesse
- * `donoAutenticado` subiria verde com a operação declarada como autenticada e a
- * rota aberta. Operação sem credencial exigida já derrubou uma subida inteira
- * neste projeto (577 casos em 135 arquivos, por uma causa só), e a declaração
- * estava lá.
- *
- * O que se mede aqui é o 401, com o servidor de verdade e o esquema de corpo do
- * contrato de verdade -- e que o caso de uso **não é alcançado**: assinar uma
- * autorização de envio é escrita irreversível, e ela não pode acontecer antes de
- * o chamador ser conhecido.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -44,7 +24,6 @@ const CONTA = '0192a3b4-0000-7000-8000-00000000aaaa' as UserId;
 const ID_DO_ENVIO = '0192a3b4-0000-7000-8000-00000000bbbb';
 const TOKEN = 'um-token-que-o-autenticador-de-teste-aceita';
 
-/** O corpo mínimo que `DirectorySuggestionPhotoIntentInput` exige. */
 const CORPO: CorpoDaIntencaoDaFoto = {
   content_type: 'image/jpeg',
   byte_size: 900_000,
@@ -55,7 +34,6 @@ const CORPO: CorpoDaIntencaoDaFoto = {
 interface Medicao {
   readonly status: number;
   readonly corpo: string;
-  /** Quantas vezes o caso de uso foi ALCANÇADO. Zero é o ponto do 401. */
   readonly autorizacoes: number;
 }
 
@@ -77,11 +55,6 @@ async function pedir(cabecalho: string | undefined): Promise<Medicao> {
       autenticar: (token: string) =>
         token === TOKEN
           ? Promise.resolve({ userId: CONTA })
-          // `problemas.naoAutenticado()`, e NÃO um `Error` qualquer: é o que o
-          // `AuthService` de verdade lança (`auth-service.ts`, sete pontos). Um
-          // `Error` cru aqui daria 500 e o caso mediria o dublê -- foi o que a
-          // primeira versão deste arquivo fez, e o 500 que ela viu não existe no
-          // caminho do produto.
           : Promise.reject(problemas.naoAutenticado()),
     },
     fotosDeIndicacao: {
@@ -99,8 +72,6 @@ async function pedir(cabecalho: string | undefined): Promise<Medicao> {
         });
       },
     },
-    // As outras rotas do módulo não são exercitadas aqui, e o dublê que as
-    // alcançasse esconderia uma chamada que não deveria acontecer.
     capasDeEncontro: { autorizar: naoChamar },
     fotosDoUsuario: { autorizar: naoChamar },
     logotiposDeIndicacao: { autorizar: naoChamar },
@@ -123,9 +94,6 @@ async function pedir(cabecalho: string | undefined): Promise<Medicao> {
 
 void describe('a rota da foto da indicação exige a credencial DE FATO', () => {
   void it('ISCA: SEM `Authorization` é 401, e o caso de uso NÃO é alcançado', async () => {
-    // DESLIGAR PARA VER REPROVAR: em `media-routes.ts`, troque
-    // `await donoAutenticado(request, deps)` por `CONTA` no handler desta rota.
-    // A rota passa a assinar autorização de envio para quem não se identificou.
     const medicao = await pedir(undefined);
 
     assert.equal(
@@ -159,10 +127,6 @@ void describe('a rota da foto da indicação exige a credencial DE FATO', () => 
     assert.match(problema.type ?? '', /\/unauthenticated$/);
   });
 
-  /**
-   * CONTRAPESO: sem este caso, uma rota que respondesse 401 a TUDO -- inclusive
-   * a quem se identificou -- passaria nos três de cima.
-   */
   void it('CONTRAPESO: COM a credencial a rota responde 201 e devolve o `UploadIntent`', async () => {
     const medicao = await pedir(`Bearer ${TOKEN}`);
 
@@ -174,7 +138,6 @@ void describe('a rota da foto da indicação exige a credencial DE FATO', () => 
     assert.ok(typeof corpo['expires_at'] === 'string');
   });
 
-  /** O espelho do `x-rate-limit` do contrato, no caminho que a rota usa. */
   void it('o teto declarado na rota é 20 por hora, por conta -- o MESMO do logotipo', () => {
     assert.deepEqual(rotaDeIntencaoDaFotoDaIndicacao.rateLimit, [
       { dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' },

@@ -1,4 +1,3 @@
-/** As decisões do disparo, exercitadas sem banco, sem rede e sem relógio. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

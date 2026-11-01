@@ -1,7 +1,3 @@
-/**
- * O repositorio da escrita administrativa da `Rede` em memoria, para os testes do
- * caso de uso e das rotas.
- */
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
 import type { EnvioDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
 import { comoData } from '../../../../shared/time/clock.js';
@@ -310,7 +306,6 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
   return {
     repo,
     estado: () => estado,
-    /** Semeia fora de transacao: conta, envio e pedido, que o painel nao cria. */
     semear: (ajuste: (e: EstadoDaRede) => void) => {
       const r = clonar(estado);
       ajuste(r);

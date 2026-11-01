@@ -1,4 +1,3 @@
-/** BICHUS-35: O AVISO SAI NA VISTA AUTENTICADA, E NÃO NA DO ACHADOR. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -13,7 +12,6 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const AVISO = '018f3a2b-0000-7000-8000-0000000000ee';
 const BASE_DE_MIDIA = 'https://midia.test' as AbsoluteUrl;
 
-/** As propriedades que o contrato declara para um schema, lidas do YAML. */
 function propriedadesDeSchema(nome: string): Set<string> {
   const spec = parseYaml(readFileSync('api/openapi.yaml', 'utf8')) as {
     components: { schemas: Record<string, { properties?: Record<string, unknown> }> };
@@ -23,7 +21,6 @@ function propriedadesDeSchema(nome: string): Set<string> {
   return new Set(Object.keys(schema.properties));
 }
 
-/** A lista `required` que o contrato declara para um schema. */
 function obrigatoriosDeSchema(nome: string): readonly string[] {
   const spec = parseYaml(readFileSync('api/openapi.yaml', 'utf8')) as {
     components: { schemas: Record<string, { required?: readonly string[] }> };

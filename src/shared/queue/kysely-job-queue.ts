@@ -1,4 +1,3 @@
-/** A fila, no próprio Postgres, com `FOR UPDATE SKIP LOCKED`. */
 import { sql } from 'kysely';
 import type { Db } from '../db/pool.js';
 import type {
@@ -11,12 +10,10 @@ import type {
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { Instant } from '../types/brands.js';
 
-/** Espera entre tentativas: 1 min, 5 min, 25 min... */
 function proximaTentativaEmMs(tentativas: number): number {
   return Math.min(60_000 * 5 ** (tentativas - 1), 6 * 60 * 60 * 1000);
 }
 
-/** O texto que fica em `last_error` quando a recuperação encontra um órfão. */
 const MOTIVO_DA_ORFANDADE =
   'trabalho orfao: o processo morreu segurando a reserva e a trava venceu';
 
@@ -110,7 +107,6 @@ export function criarJobQueue(db: Db, ids: IdGenerator): JobQueue {
         .execute();
     },
 
-    /** A ÚNICA saída de `running`, e é por isso que ela existe. */
     async recuperarOrfaos(criterios: CriteriosDeOrfandade): Promise<readonly TrabalhoRecuperado[]> {
       const segundosDoPrazo = criterios.prazoEmMs / 1000;
 

@@ -1,4 +1,3 @@
-/** Portão de **vigência** do teto de chamada. */
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
 import { dependenciasDoTeto } from '../shared/http/aplicacao-de-teto.js';

@@ -1,4 +1,3 @@
-/** As três rotas de `/v1/me/location`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -58,7 +57,6 @@ interface CorpoDaLocalizacao {
   source: 'device_gps' | 'map_pin';
 }
 
-/** A resposta, campo a campo, exatamente como `UserLocation` a declara. */
 function comoResposta(localizacao: LocalizacaoDeReferencia): Record<string, unknown> {
   return {
     lat: localizacao.lat,
@@ -70,10 +68,6 @@ function comoResposta(localizacao: LocalizacaoDeReferencia): Record<string, unkn
   };
 }
 
-/**
- * MEMOIZADA por requisição, pelo mesmo motivo das rotas de pet: o teto por
- * `account` precisa do dono antes do handler, e o handler precisa do mesmo dono.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDaLocalizacao,
@@ -96,11 +90,6 @@ function chamadorAutenticado(
   });
 }
 
-/**
- * `account` para o teto. Quem não apresentou credencial válida não tem balde de
- * conta — a recusa dele é o 401 do handler, e não um 429 que confundiria "sem
- * sessão" com "chamou demais".
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDaLocalizacao,

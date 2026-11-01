@@ -1,4 +1,3 @@
-/** A autorização do aparelho está na cláusula `WHERE`, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,7 +26,6 @@ const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const APARELHO = '018f3a2b-0000-7000-8000-0000000000cc';
 const TOKEN = 'fcm-token-de-teste' as TokenDeAparelho;
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -37,13 +35,10 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** O predicado do dono, como o compilador do Postgres o escreve. */
 const PREDICADO_DO_DONO = /"user_id"\s*=\s*\$\d+/;
 
-/** O predicado da permissão. */
 const PREDICADO_DA_PERMISSAO = /"push_permission"\s*=\s*\$\d+/;
 
-/** O predicado do token. `is not null` é literal no SQL, não parâmetro. */
 const PREDICADO_DO_TOKEN = /"push_token"\s+is\s+not\s+null/i;
 
 interface Compilada {

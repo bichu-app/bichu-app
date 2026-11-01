@@ -1,4 +1,3 @@
-/** As operações do código da tag. */
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator, SecretCipher } from '../../../shared/ports/index.js';
 import { problemas } from '../../../shared/http/errors.js';
@@ -28,10 +27,8 @@ import type {
 
 const HORA = 3600 * 1000;
 
-/** "Você já avisou" muda o texto do botão; não impede avisar de novo. */
 const JANELA_DE_JA_AVISOU_EM_MS = 24 * HORA;
 
-/** O token do achador vale enquanto o caso estiver aberto, mais 30 dias. */
 const VALIDADE_DO_TOKEN_DO_ACHADOR_EM_MS = 30 * 24 * HORA;
 
 export type Viewer = 'owner' | 'authenticated_other' | 'anonymous';
@@ -126,18 +123,12 @@ export interface AvisoCriado {
   readonly petDisplayName: string;
 }
 
-/**
- * Normaliza ou recusa. É a primeira coisa que toda operação de código faz, e o
- * `400` que ela produz é diferente do `404` de propósito: um diz "confira o que
- * você digitou", o outro diz "não encontramos este código".
- */
 function exigirCodigoNormalizado(bruto: string): TagCodeCanonical {
   const canonico = normalizarCodigoDaTag(bruto);
   if (canonico === undefined) throw problemas.tagCodeMalformado();
   return canonico;
 }
 
-/** A recusa da rota pública, para tag revogada **e** para pet indisponível. */
 function enderecoDaFoto(chave: string | null, baseDeMidia: AbsoluteUrl): string | null {
   return chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
 }
@@ -153,7 +144,6 @@ export function criarTagService(deps: DependenciasDeTags) {
   }
 
   return {
-    /** `GET /v1/tags/{code}` — a operação mais pública do produto. */
     async resolver(codigoBruto: string, chamador: Chamador): Promise<ResolucaoDaTag> {
       const codigo = exigirCodigoNormalizado(codigoBruto);
       const tag = await deps.repositorio.resolverPorCodigo(hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo));
@@ -192,7 +182,6 @@ export function criarTagService(deps: DependenciasDeTags) {
       };
     },
 
-    /** `GET /v1/tags/{code}/owner-context` — os identificadores, só para o dono. */
     async contextoDoDono(codigoBruto: string, dono: UserId): Promise<ContextoDoDono> {
       const codigo = exigirCodigoNormalizado(codigoBruto);
       const contexto = await deps.repositorio.buscarContextoDoDono(hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo), dono);
@@ -200,18 +189,12 @@ export function criarTagService(deps: DependenciasDeTags) {
       return contexto;
     },
 
-    /** `GET /v1/pets/{petId}/tags`. */
     async listar(petId: PetId, dono: UserId): Promise<readonly TagDoTutor[]> {
       const tags = await deps.repositorio.listarTagsDoPet(petId, dono);
       if (tags === undefined) throw problemas.naoEncontrado();
       return tags;
     },
 
-    /**
-     * `POST /v1/pets/{petId}/tags` — **a única resposta que traz o código em claro.**
-     * Depois daqui ele não é recuperável por API: o banco guarda o resumo e o cifrado,
-     * e o cifrado só serve para reimprimir o QR.
-     */
     async emitir(
       petId: PetId,
       dono: UserId,
@@ -258,11 +241,6 @@ export function criarTagService(deps: DependenciasDeTags) {
       };
     },
 
-    /**
-     * `GET /v1/pets/{petId}/tags/{tagId}/qr.png` — o arquivo para mandar imprimir, e a
-     * **reimpressão**: a emissão devolve o código em claro uma vez só, e depois dela
-     * este é o único caminho até o QR.
-     */
     async imagemDoQr(petId: PetId, tagId: TagId, dono: UserId): Promise<ImagemDoQr> {
       const tag = await deps.repositorio.buscarParaReimpressao(petId, tagId, dono);
       if (tag === undefined) throw problemas.naoEncontrado();
@@ -288,7 +266,6 @@ export function criarTagService(deps: DependenciasDeTags) {
       };
     },
 
-    /** `POST /v1/tags/{code}/found-reports` — o aviso de quem achou. */
     async avisar(
       codigoBruto: string,
       chamador: Chamador,
@@ -353,7 +330,6 @@ export function criarTagService(deps: DependenciasDeTags) {
   };
 }
 
-/** `found_at` do corpo, quando veio, e o instante do servidor quando não veio. */
 function instanteDeFoundAt(bruto: string | undefined, agora: Instant): Instant {
   if (bruto === undefined) return agora;
   const informado = Date.parse(bruto);

@@ -1,4 +1,3 @@
-/** As regras puras da credencial digital (passkey), BICHUS-301. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 /** Teto de credenciais ATIVAS por conta. */

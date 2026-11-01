@@ -1,4 +1,3 @@
-/** As ISCAS de comportamento da fila de moderacao, por DESLIGAMENTO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -47,22 +46,18 @@ function itemDeExemplo(parcial: Partial<ItemDaFila> = {}): ItemDaFila {
   };
 }
 
-/** O BANCO DE MENTIRA, e ele guarda o estado de verdade. */
 function bancada(inicial: Partial<ItemDaFila> = {}) {
   const estado = {
     item: itemDeExemplo(inicial),
-    /** As denuncias, como linhas: `resolvida` nula enquanto na fila. */
     denuncias: [
       { id: 'd1', resolvida: null as string | null, motivo: null as string | null },
       { id: 'd2', resolvida: null as string | null, motivo: null as string | null },
       { id: 'd3', resolvida: null as string | null, motivo: null as string | null },
     ],
-    /** O motivo gravado na linha DO CONTEUDO (nao na da denuncia). */
     motivoNoConteudo: null as string | null,
     eventos: [] as AuditEvent[],
   };
 
-  /** A LEITURA PUBLICA simulada: o conteudo aparece enquanto nao foi escondido. */
   const lerPublico = (): string | null => (estado.item.conteudoRemovido ? null : estado.item.conteudo);
 
   const transacao: TransacaoDaModeracao = {

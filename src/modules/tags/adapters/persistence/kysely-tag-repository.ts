@@ -1,4 +1,3 @@
-/** Persistência das tags. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, PetId, TagId, UserId } from '../../../../shared/types/brands.js';
@@ -17,15 +16,12 @@ import type {
   TagResolvida,
 } from '../../ports/tag-repository.js';
 
-/** Teto de tags ativas por pet (ADR-0004). */
 const TETO_DE_TAGS_ATIVAS = 5;
 
-/** Teto de emissões por pet em 24 h. */
 const TETO_DE_EMISSOES_POR_DIA = 10;
 
 const JANELA_DE_EMISSAO_EM_MS = 24 * 3600 * 1000;
 
-/** O pet está fora de cena para a rota pública. */
 const STATUS_INDISPONIVEIS = ['deceased', 'archived'];
 
 interface LinhaDeTagDoTutor {
@@ -225,10 +221,6 @@ export function criarTagRepository(db: Db): TagRepository {
       };
     },
 
-    /**
-     * Emissão e tetos na **mesma transação**, e os dois `count` com `FOR UPDATE` sobre
-     * a linha do pet.
-     */
     async emitir(nova: NovaTag, dono: UserId, agora: Instant): Promise<ResultadoDaEmissao> {
       return db.transaction().execute(async (trx) => {
         const pet = await construtorDaConferenciaDoPet(trx, nova.petId, dono)
@@ -289,7 +281,6 @@ export function criarTagRepository(db: Db): TagRepository {
       });
     },
 
-    /** O scan e o contador andam juntos. */
     async registrarScan(scan: NovoScan): Promise<void> {
       await db.transaction().execute(async (trx) => {
         await trx

@@ -5,10 +5,6 @@ export interface Versao {
   readonly correcao: number;
 }
 
-/**
- * Teto por componente, e ele e o MESMO do `pattern` do contrato
- * (`[1-9][0-9]{0,3}`): quatro digitos.
- */
 const MAIOR_COMPONENTE = 9999;
 
 /** Le `MAIOR.MENOR.CORRECAO`. */

@@ -1,4 +1,3 @@
-/** O cadastro do painel, `admin_accounts` (ADR-0027 item 20.1). */
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type { PapelAdministrativo } from '../../../shared/http/route-definition.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';

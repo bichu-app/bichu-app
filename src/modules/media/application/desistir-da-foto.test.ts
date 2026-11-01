@@ -1,4 +1,3 @@
-/** A saída de `processing`, medida sem banco: é regra de domínio, não de SQL. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

@@ -1,7 +1,3 @@
-/**
- * ISCA — a pontuacao dos cartoes sai na MESMA consulta da pagina, e o numero de
- * consultas da rota **nao cresce com o numero de cartoes**.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,7 +12,6 @@ const CONTA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const APARELHO = '018f3a2b-0000-7000-8000-0000000000cc' as FamiliaDeSessao;
 const AGORA = 1_792_500_000_000 as Instant;
 
-/** O `ids` nao e exercitado por `listarPublicados`: so a escrita sorteia `ref`. */
 const IDS = {
   uuidv7: () => '018f3a2b-0000-7000-8000-00000000ffff',
   opaqueToken: () => 'nao-usado' as OpaqueToken,
@@ -24,7 +19,6 @@ const IDS = {
   random80: () => new Uint8Array(10),
 };
 
-/** Uma linha da pagina, com as colunas da entrada E as sete da pontuacao. */
 function linha(n: number): Record<string, unknown> {
   return {
     slug: `local-${String(n)}`,
@@ -55,17 +49,10 @@ interface Medicao {
   readonly consultas: readonly string[];
 }
 
-/** A consulta da PAGINA, reconhecida por uma coluna da projecao dela. */
 const DA_PAGINA = (sql: string): boolean => sql.includes('as "logo_public_key"');
 
-/** A consulta que CHAMA a funcao da pontuacao, seja ela qual for. */
 const CHAMA_A_PONTUACAO = (sql: string): boolean => sql.includes('pontuacao_do_local');
 
-/**
- * `comConta` e uma propriedade EXPLICITA e nao um parametro com padrao: um padrao
- * (`chamador = CONTA`) e aplicado tambem quando se passa `undefined` de proposito,
- * e o caso "sem conta" media a leitura COM conta sem acusar nada.
- */
 async function listar(opcoes: { cartoes: number; comConta: boolean }): Promise<Medicao> {
   const { cartoes, comConta } = opcoes;
   const { db, compilado } = bancoDeMentira<Database>((sql) => {

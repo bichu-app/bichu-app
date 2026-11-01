@@ -1,7 +1,3 @@
-/**
- * O conjunto `case_state=reunited` da listagem publica: os TRES predicados do
- * selo, e o conjunto de casos ABERTOS intacto.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -22,7 +18,6 @@ import {
   inicioDaJanelaDoSelo,
 } from './kysely-listagem-publica-de-perdidos.js';
 
-/** O mesmo arranjo dos vizinhos: compila, nao executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -32,7 +27,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Instante fixo: a borda da janela nao sai do relogio da maquina. */
 const AGORA = new Date('2026-10-20T13:00:00.000Z');
 
 function recorte(ajustes: Partial<RecorteDePerdidos> = {}): RecorteDePerdidos {
@@ -43,16 +37,11 @@ function compilado(ajustes: Partial<RecorteDePerdidos> = {}) {
   return construtorDaListagemPublicaDePerdidos(semBanco, recorte(ajustes)).compile();
 }
 
-/**
- * O `WHERE` compilado do conjunto de casos ABERTOS, como `origin/development`
- * (`fb3a0fba`) o escrevia ANTES desta mudanca.
- */
 const ONDE_DO_CONJUNTO_ABERTO_ANTES =
   'where "lost_cases"."status" = $3 and "lost_cases"."share_to_public_list" = $4 ' +
   'and conta_habilitada(lost_cases.owner_user_id) and "pets"."deleted_at" is null ' +
   'and "pets"."status" not in ($5, $6)';
 
-/** Os parametros do conjunto aberto, na ordem, como `origin/development` os ligava. */
 const PARAMETROS_DO_CONJUNTO_ABERTO_ANTES: readonly unknown[] = [
   true,
   'ready',

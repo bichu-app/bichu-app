@@ -1,11 +1,9 @@
-/** O código da tag fora do log. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 
 const CODIGO = 'GQSM0XHBT4D9G31S';
 const IMPRESSO = 'GQSM-0XHB-T4D9-G31S';
-/** O formato anterior, de 26 caracteres. */
 const CODIGO_DO_FORMATO_ANTIGO = '7K2F9QJB3XR05TWD8MNCVH1234';
 
 void describe('o código da tag não entra no log em claro', () => {

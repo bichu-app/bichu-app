@@ -1,4 +1,3 @@
-/** `GET /v1/store/items` — a secao `Loja`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -54,12 +53,10 @@ export const rotaDaTaxonomiaDaVitrine = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
-/** Os mesmos defaults que o contrato declara. */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const ORDEM_PADRAO: OrdemDaVitrine = 'curadoria';
 
-/** O mesmo teto de `reference-data`: a lista so muda por migracao. */
 const CACHE_DA_TAXONOMIA_EM_SEGUNDOS = 86_400;
 
 export interface DependenciasDasRotasDaVitrine {
@@ -79,7 +76,6 @@ interface QueryDaVitrine {
   readonly limit?: number;
 }
 
-/** O recorte que de fato valeu, para a tela poder escreve-lo. */
 function recortesAplicados(query: QueryDaVitrine): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();

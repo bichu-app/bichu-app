@@ -1,7 +1,3 @@
-/**
- * As ISCAS de SQL do perfil de outra pessoa: **o predicado está na cláusula
- * `WHERE`, e o que não pode sair não está no `SELECT`**.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -32,7 +28,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** As DUAS consultas desta camada, para varrer em lote. */
 const TODAS = {
   perfil: () => construtorDoPerfilPorApelido(semBanco, APELIDO, QUEM_OLHA),
   vitrine: () => construtorDaVitrineDeConexao(semBanco, MARINA, QUEM_OLHA),
@@ -40,7 +35,6 @@ const TODAS = {
 
 const sqlDo = (nome: keyof typeof TODAS): string => TODAS[nome]().sql;
 
-/** A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar. */
 function selecaoAteOTopo(sql: string, marcadorDeTopo: string): string {
   const corte = sql.toLowerCase().indexOf(marcadorDeTopo);
   assert.ok(
@@ -164,7 +158,6 @@ void describe('a autorizacao do perfil de outra pessoa mora na clausula WHERE', 
     assert.ok(!/group by/i.test(sql), '`GROUP BY` aqui significa que a contagem virou agregacao da junção');
   });
 
-  /** O SQL com as DUAS colunas do selo de validado apagadas. */
   const semAsColunasDoSelo = (sql: string): string =>
     sql.replaceAll('email_verified_at', 'selo_de_validado').replaceAll('phone_verified_at', 'selo_de_validado');
 

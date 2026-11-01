@@ -1,4 +1,3 @@
-/** A porta da CAIXA DE NOTIFICACOES. */
 import type { UserId } from '../../../shared/types/brands.js';
 import type { ComunicadoDaCaixa, PaginaDaCaixa } from '../domain/caixa.js';
 

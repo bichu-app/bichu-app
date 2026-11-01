@@ -1,4 +1,3 @@
-/** Testes do portão de tipos de problema. */
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -74,10 +73,6 @@ void describe('o que o portão precisa reprovar', () => {
     );
   });
 
-  /**
-   * Esta é a isca que reproduz o defeito que deu origem ao portão: `forbidden`
-   * saindo com 401.
-   */
   void it('acusa `forbidden` com 401', () => {
     const achados = conferir(contrato, { forbidden: 401, unauthenticated: 401 });
     assert.deepEqual(

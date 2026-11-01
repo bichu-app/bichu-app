@@ -1,4 +1,3 @@
-/** A montagem do aviso de reuso de refresh (BICHUS-15 critério 10, BICHUS-129). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +20,6 @@ const AVISO: AvisoAoTitular = {
   ipHmac: Buffer.from('hmac-de-quem-reusou'.padEnd(32, '.')),
 };
 
-/** Uma conta cheia de dado pessoal de propósito. */
 function contaDaVitima(): Conta {
   return {
     id: VITIMA,
@@ -94,7 +92,6 @@ function montar(conta: Conta | undefined): Bancada {
   return { avisar, enviadas, consultados, registros, tokens };
 }
 
-/** A única mensagem enviada, ou uma falha dizendo quantas saíram. */
 function unicaMensagem(bancada: Bancada): Mensagem {
   assert.equal(bancada.enviadas.length, 1, 'a detecção de reuso manda exatamente um e-mail');
   return bancada.enviadas[0]!;

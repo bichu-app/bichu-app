@@ -1,19 +1,3 @@
-/**
- * A autorizacao de envio de UMA FOTO DO ESTABELECIMENTO na indicacao (pedido do
- * cliente, 30/10/2026: *"na pagina de indicacao de profissional/estabelecimento,
- * so tem o campo para subir a foto do logotipo da empresa, mas nao as fotos do
- * estabelecimento que fica no topo da pagina"*).
- *
- * **Irmao exato de `logotipo-da-indicacao.ts`, e as duas diferencas sao de
- * conteudo e nao de arrumacao:** o proposito e `directory_suggestion_photo` (que
- * e SEPARADO de `directory_photo` -- ver o `COMMENT ON COLUMN` da
- * `20261030000002`) e a dimensao minima e 600 x 600 em vez dos 256 do logotipo,
- * porque a derivada `banner` e 1280 x 720 e `sharp` nao amplia.
- *
- * **Uma chamada por foto, e a tela chama ate QUATRO vezes.** Nao existe
- * autorizacao "de quatro imagens": cada assinatura e uma autorizacao de escrita
- * independente, e o varredor recolhe as que ninguem confirmar.
- */
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {

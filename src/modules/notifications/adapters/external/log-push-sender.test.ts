@@ -1,4 +1,3 @@
-/** O transporte `log` e a escolha entre os dois adaptadores (ADR-0008). */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
@@ -29,7 +28,6 @@ afterEach(() => {
   globalThis.fetch = fetchOriginal;
 });
 
-/** Tudo o que o adaptador escreveu, como uma linha só, para procurar dentro. */
 function capturarLog(): { linhas: string[] } {
   const linhas: string[] = [];
   console.info = (...argumentos: unknown[]): void => {
@@ -38,7 +36,6 @@ function capturarLog(): { linhas: string[] } {
   return { linhas };
 }
 
-/** Troca o `fetch` global por um que EXPLODE. */
 function envenenarRede(): { tentativas: string[] } {
   const tentativas: string[] = [];
   globalThis.fetch = (entrada: unknown): Promise<Response> => {

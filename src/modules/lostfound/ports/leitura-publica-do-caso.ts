@@ -1,4 +1,3 @@
-/** Porta da leitura pública do caso, pelo `share_token`. */
 import type { UserId } from '../../../shared/types/brands.js';
 
 export type EspecieDoCaso = 'dog' | 'cat' | 'other';

@@ -1,4 +1,3 @@
-/** A escrita administrativa da `Rede` em Postgres (BICHUS-273 e BICHUS-292). */
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type {
@@ -33,7 +32,6 @@ import { escaparCuringas } from './kysely-network-repository.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 const INDICE_DO_SLUG = 'network_events_slug_unico';
-/** Uma trava por conta, no espaco de chaves da fila: `hashtext` do texto abaixo. */
 const PREFIXO_DA_TRAVA_DA_FILA = 'admin.network_join_request.listed:';
 
 interface LinhaDoEncontro {
@@ -86,7 +84,6 @@ interface LinhaDaImagem {
   rejection_reason: string | null;
 }
 
-/** As colunas do encontro, nomeadas uma a uma. */
 const COLUNAS = sql`
   e.id, e.slug, e.title, e.summary, e.place_name, e.neighborhood, e.city, e.state,
   ST_Y(e.geo::geometry) AS lat, ST_X(e.geo::geometry) AS lon,
@@ -223,7 +220,6 @@ interface LinhaDoPedido {
   email_verified: boolean;
 }
 
-/** D53: so o nome de exibicao, a data de criacao da conta e o booleano do e-mail. */
 const COLUNAS_DO_PEDIDO = sql`
   j.id, j.ref, j.status, j.requested_at, j.decided_at, j.withdrawn_at,
   e.slug AS event_slug, e.title AS event_title, e.starts_at AS event_starts_at,
@@ -255,10 +251,6 @@ function comoPedido(l: LinhaDoPedido): PedidoNaFila {
   };
 }
 
-/**
- * O pedido pelo `ref` ou pelo `id`, de encontro privado em qualquer estado do
- * painel: o removido tambem e lido, para a decisao responder 409 e nao 404.
- */
 async function lerPedido(db: DbExecutor, onde: ReturnType<typeof sql<SqlBool>>, travar: boolean): Promise<PedidoNaFila | null> {
   const r = await sql<LinhaDoPedido>`
     SELECT ${COLUNAS_DO_PEDIDO}

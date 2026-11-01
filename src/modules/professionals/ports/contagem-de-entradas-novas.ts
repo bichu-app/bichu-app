@@ -1,4 +1,3 @@
-/** BICHUS-278 -- quantas entradas entraram no diretorio DEPOIS de um instante. */
 import type { Instant } from '../../../shared/types/brands.js';
 import type { UserId } from '../../../shared/types/brands.js';
 

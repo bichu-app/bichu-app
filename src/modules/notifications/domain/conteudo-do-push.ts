@@ -27,7 +27,6 @@ export class VazamentoNoPushError extends Error {
   }
 }
 
-/** As formas que não podem sair, com o nome que o operador entende. */
 const PADROES_PROIBIDOS: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   { nome: 'UUID de banco', regex: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i },
   { nome: 'UUID sem hífens', regex: /(?:^|[^0-9a-z])[0-9a-f]{32}(?:[^0-9a-z]|$)/i },
@@ -44,7 +43,6 @@ const PADROES_PROIBIDOS: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   { nome: 'coordenada geográfica', regex: /-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/ },
 ];
 
-/** Chaves que não existem no payload, nem com valor inofensivo. */
 const CHAVES_PROIBIDAS: ReadonlySet<string> = new Set([
   'pet_id', 'petid', 'user_id', 'userid', 'case_id', 'caseid',
   'device_id', 'deviceid', 'conversation_id', 'conversationid',
@@ -54,7 +52,6 @@ const CHAVES_PROIBIDAS: ReadonlySet<string> = new Set([
   'sobrenome', 'last_name', 'lastname', 'cpf',
 ]);
 
-/** Um campo de texto que vai sair, com o nome pelo qual o erro vai chamá-lo. */
 interface CampoQueSai {
   readonly nome: string;
   readonly valor: string;
@@ -139,12 +136,9 @@ export interface ConteudoDoPush {
   readonly prioridade: 'alta' | 'normal';
 }
 
-/** Seis horas: o TTL que o ADR-0008 fixa para o alerta de vizinhança. */
 const SEIS_HORAS = 6 * 60 * 60;
-/** Vinte e quatro horas. Ver a justificativa de cada tipo em `PERFIL`. */
 const VINTE_E_QUATRO_HORAS = 24 * 60 * 60;
 
-/** Prioridade e validade por tipo. */
 const PERFIL: Readonly<
   Record<TipoDeAvisoPush, { validadeEmSegundos: number; prioridade: 'alta' | 'normal' }>
 > = {
@@ -158,7 +152,6 @@ function onde(bairro: string | undefined): string {
   return bairro === undefined || bairro === '' ? '' : `, na ${bairro}`;
 }
 
-/** Os textos, derivados de UX 12.2 e 12.3. */
 function texto(contexto: ContextoDoAviso): { titulo: string; corpo: string } {
   const nome = contexto.nomeDoPet;
   const lugar = onde(contexto.bairro);

@@ -1,4 +1,3 @@
-/** ISCA (c): A GRADE DA VITRINE USA A DERIVADA DE 320 px, E NUNCA OUTRA. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -9,7 +8,6 @@ import {
   escadaDo,
 } from './derivadas.js';
 
-/** A célula da grade, medida na tela, e a densidade do pior caso comum. */
 const CELULA_EM_DP = 104;
 const DENSIDADE = 3;
 const PIXEIS_REAIS_DA_CELULA = CELULA_EM_DP * DENSIDADE;

@@ -1,4 +1,3 @@
-/** ISCA — `markMyConversationsSeen` está REGISTRADA, e não só declarada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -15,12 +14,6 @@ import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 
-/**
- * Quem o serviço recebeu. É `undefined` até a rota chamar, e é por isso que o
- * segundo caso consegue distinguir "respondeu 204" de "respondeu 204 e fez a
- * coisa": um handler que devolvesse 204 sem chamar o serviço passaria no primeiro
- * caso e reprovaria no segundo.
- */
 let chamadorQueChegou: string | undefined;
 
 function dependenciasDeTeste(): DependenciasDasRotasDeConversa {

@@ -1,7 +1,3 @@
-/**
- * Leitura pública do caso: a página (`getPublicLostCase`) e o cartaz
- * (`getLostCasePoster`), as duas pelo `share_token`.
- */
 import { type AppError, problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { components } from '../../../shared/types/generated/api.js';

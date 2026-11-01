@@ -1,4 +1,3 @@
-/** Leitura do interruptor da pagina publica, por chave primaria. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type {
   DisponibilidadeDaPagina,

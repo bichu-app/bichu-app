@@ -1,4 +1,3 @@
-/** O disparo do alerta de 5 km (BICHUS-18), do lado do worker. */
 import {
   contagemDe,
   podeDispararDeNovo,

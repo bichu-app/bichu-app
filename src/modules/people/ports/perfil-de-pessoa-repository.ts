@@ -1,4 +1,3 @@
-/** A porta da leitura do perfil de **outra** pessoa (fatia G). */
 import type { ObjectKey, UserId } from '../../../shared/types/brands.js';
 
 /** A pessoa, no recorte que não depende da relação com quem olha. */

@@ -1,4 +1,3 @@
-/** `POST /v1/auth/email-verification` **sem corpo nenhum**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -26,7 +25,6 @@ function naoUsado(nome: string): never {
   );
 }
 
-/** Repositório que **recusa tudo**. */
 function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {

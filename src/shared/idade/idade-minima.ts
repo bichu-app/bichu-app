@@ -1,4 +1,3 @@
-/** A regra da **idade mínima**, num lugar só. */
 import { problemas } from '../http/errors.js';
 import type { Instant } from '../types/brands.js';
 
@@ -14,13 +13,10 @@ export const IDADE_MINIMA_EM_ANOS = 16;
  */
 export const ANO_MAIS_ANTIGO_ACEITO = 1900;
 
-/** O campo, como o contrato o nomeia. */
 const CAMPO = 'birth_date';
 
-/** `YYYY-MM-DD`, e nada mais — a forma que `format: date` promete. */
 const FORMA_ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Ano, mês e dia de um calendário civil. */
 interface DataCivil {
   readonly ano: number;
   readonly mes: number;

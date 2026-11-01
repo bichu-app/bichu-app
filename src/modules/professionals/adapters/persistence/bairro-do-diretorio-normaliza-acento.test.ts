@@ -1,7 +1,3 @@
-/**
- * O filtro de BAIRRO do diretorio compara SEM ACENTO, e a resposta continua
- * devolvendo o bairro COM acento.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -44,19 +40,16 @@ const RECORTE_COM_BAIRRO: RecorteDoDiretorio = {
   neighborhood: 'Jardim America',
 };
 
-/** O SQL dos PREDICADOS da listagem. */
 function sqlDaListagem(recorte: RecorteDoDiretorio): string {
   return construtorDaListagem(semBanco, recorte).select(['slug']).compile().sql;
 }
 
-/** O trecho depois do primeiro `where`: os predicados, e nada mais. */
 function clausulaWhere(sql: string): string {
   const achado = /\swhere\s([\s\S]*)$/i.exec(sql);
   assert.ok(achado?.[1] !== undefined, `SQL sem clausula where: ${sql}`);
   return achado[1];
 }
 
-/** Uma entrada publicada em `Jardim América`, com o acento e a maiuscula. */
 const ENTRADA_DO_JARDIM_AMERICA: EntradaDoDiretorio = {
   slug: 'hospital-mais-pet',
   kinds: ['clinic'],

@@ -1,7 +1,3 @@
-/**
- * **A LISTA DAS PRÓPRIAS CONEXÕES** — e as iscas que provam que ela é só a
- * própria.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -18,7 +14,6 @@ const ANA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const BIA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const CARLA = '018f3a2b-0000-7000-8000-0000000000cc' as UserId;
 const DORA = '018f3a2b-0000-7000-8000-0000000000dd' as UserId;
-/** Sem apelido: ela existe, é conexão, e **não** aparece na lista. */
 const ELO = '018f3a2b-0000-7000-8000-0000000000ee' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 
@@ -70,7 +65,6 @@ function bancada(): { banca: BancadaDeConexoes; servico: ConexaoEntrePessoas } {
   return { banca, servico };
 }
 
-/** Os apelidos da página, na ordem em que ela os devolveu. */
 async function apelidosDe(
   servico: ConexaoEntrePessoas,
   quem: UserId,
@@ -90,10 +84,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet', 'carla-ong']);
   });
 
-  /**
-   * **PENDENTE NÃO ENTRA**, e esta é a linha que separa as duas listas: a caixa de
-   * pedidos é o que espera decisão, e esta é o que já decidiu.
-   */
   void it('pendente NAO entra, nem o que eu mandei nem o que eu recebi', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -103,17 +93,12 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet']);
   });
 
-  /**
-   * **RECUSADO NÃO ENTRA**, e a recusa continua silenciosa: ela não aparece aqui
-   * como ausência explicável, porque um pendente não respondido também não aparece.
-   */
   void it('recusado NAO entra, e e indistinguivel de nunca ter havido nada', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'declined' });
     assert.deepEqual([...(await apelidosDe(servico, ANA))], []);
   });
 
-  /** **ISCA DE VAZAMENTO ENTRE CONTAS, e é o caso mais importante do arquivo.** */
   void it('ISCA DE VAZAMENTO: a conta A nao ve NADA da lista da conta B', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -134,11 +119,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.ok(!deAna.includes('ana-tutora'));
   });
 
-  /**
-   * **ISCA DA ISCA DE VAZAMENTO.** Sem ela, o caso de cima passaria por os dois
-   * pares serem disjuntos **na bancada**, e não por a consulta recortar por quem
-   * chama.
-   */
   void it('ISCA: uma leitura que ignorasse quem chama devolveria as QUATRO pontas', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -156,11 +136,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(comRecorte.length, 1);
   });
 
-  /**
-   * **CONTA DESABILITADA SAI DA LISTA, e a linha não é apagada** — decisão do
-   * cliente de 17/10: conta desabilitada *"não é mais encontrada em nenhuma página
-   * ou funcionalidade"*.
-   */
   void it('conta desabilitada de qualquer lado sai da lista, e reabilitar a devolve', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -171,11 +146,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.deepEqual([...(await apelidosDe(servico, ANA))], ['bia-vet']);
   });
 
-  /**
-   * **SEM APELIDO NÃO ENTRA**, e a consequência vale dita: esta lista pode ter menos
-   * linhas que `connected_count`, e a diferença são exactamente as conexões sem
-   * apelido.
-   */
   void it('conexao SEM apelido nao entra: a linha seria uma porta que nao abre', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: ELO, estado: 'accepted' });
@@ -186,7 +156,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(pagina.total, 1, 'o total conta o MESMO conjunto que a pagina devolve');
   });
 
-  /** **O RECORTE DE CADA PESSOA É O DA BUSCA: cinco campos, e nada mais.** */
   void it('ISCA: cada pessoa da lista tem EXATAMENTE os cinco campos da busca', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -201,7 +170,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     ]);
   });
 
-  /** **NENHUM IDENTIFICADOR INTERNO sai** (ADR-0010 item 6). */
   void it('ISCA: nenhum UUID de conta aparece no JSON da pagina', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -217,10 +185,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     }
   });
 
-  /**
-   * **ISCA DA ISCA do UUID.** Sem ela, o caso de cima passaria por a bancada não ter
-   * UUID em lugar nenhum da forma — e não por a varredura saber reconhecer um.
-   */
   void it('ISCA: a varredura de UUID REPROVA uma conta acrescentada a forma', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -236,7 +200,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     );
   });
 
-  /** As contagens de cada pessoa são **números**, e não cadeias do driver. */
   void it('as contagens de cada pessoa sao numeros, e a foto vem com nulo explicito', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -267,10 +230,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(segunda.total, 3);
   });
 
-  /**
-   * **A LISTA E `connected_count` CONTAM O MESMO**, e têm de contar: os dois
-   * recortam `accepted` com conta habilitada nos dois lados.
-   */
   void it('o total da lista e `connected_count` nao divergem (descontado o sem apelido)', async () => {
     const { banca, servico } = bancada();
     banca.semear({ pedinte: ANA, destinatario: BIA, estado: 'accepted' });
@@ -281,7 +240,6 @@ void describe('a lista das PRÓPRIAS conexões (cliente, 22/10/2026)', () => {
     assert.equal(pagina.total, resumo.connected_count);
   });
 
-  /** **A LISTA NÃO É ENDEREÇÁVEL A UMA PESSOA, e isso é de tipo e não de regra.** */
   void it('ISCA: o metodo nao tem por onde receber OUTRA pessoa', () => {
     const { servico } = bancada();
     assert.equal(

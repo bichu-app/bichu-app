@@ -1,4 +1,3 @@
-/** O desenho do QR da plaquinha. */
 import QRCode from 'qrcode';
 import type { AbsoluteUrl, TagCodeCanonical } from '../../../shared/types/brands.js';
 
@@ -23,7 +22,6 @@ export const LARGURA_UTIL_DA_PLAQUINHA_EM_MM = 44;
 /** Dimensão X mínima para leitura por câmera de celular, em milímetros. */
 export const MODULO_MINIMO_EM_MM = 0.396;
 
-/** Valor do pixel escuro e do claro no mapa de um canal. */
 const ESCURO = 0;
 const CLARO = 255;
 

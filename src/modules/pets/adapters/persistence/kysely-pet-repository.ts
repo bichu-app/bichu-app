@@ -1,4 +1,3 @@
-/** Persistência do cadastro do pet. */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { rotuloDaRaca } from '../../domain/breed.js';
 import type {
@@ -11,7 +10,6 @@ import type {
 import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 import type { TrechoRedigido } from '../../../../shared/redaction/redigir.js';
 
-/** As colunas da leitura do dono, num lugar só: três consultas usam a mesma lista. */
 const COLUNAS = [
   'pets.id',
   'pets.name',
@@ -200,7 +198,6 @@ export function construtorDaExclusao(db: DbExecutor, pet: PetId, dono: UserId, q
 }
 
 export function criarPetRepository(db: Db): PetRepository {
-  /** A leitura do dono, com o rótulo da raça e a contagem de tags ativas. */
   const leituraDoDono = (dono: UserId) => construtorDaLeituraDoDono(db, dono);
 
   return {

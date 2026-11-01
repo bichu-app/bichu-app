@@ -1,4 +1,3 @@
-/** Contas do painel administrativo (ADR-0027 item 20.3; D43, D51, D61, D63). */
 import { resolverSegredos } from '../shared/config/segredos.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { optionalEnv } from '../shared/config/env.js';

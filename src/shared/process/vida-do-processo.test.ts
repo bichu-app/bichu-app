@@ -1,23 +1,13 @@
-/**
- * O worker saía sozinho a cada ~30 s e o Docker o ressuscitava, com `RestartCount`
- * subindo e `docker compose ps` verde o tempo todo.
- */
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { describe, it } from 'node:test';
 import { manterProcessoVivo } from './vida-do-processo.js';
 
-/**
- * Tempo de observação. Precisa ser maior que o atraso de arranque do Node e
- * folgado em relação a zero: um processo cujo laço esvazia sai em dezenas de
- * milissegundos, não em centenas.
- */
 const JANELA_DE_OBSERVACAO_EM_MS = 1_000;
 const LIMITE_PARA_SAIDA_EM_MS = 10_000;
 
 const MODULO = new URL('./vida-do-processo.js', import.meta.url).href;
 
-/** O padrão defeituoso, preservado na íntegra. */
 const BAIT = `
   async function main() {
     const t = setInterval(() => undefined, 6 * 60 * 60 * 1000);
@@ -27,7 +17,6 @@ const BAIT = `
   main().catch(() => process.exit(1));
 `;
 
-/** O padrão corrigido: a permanência é declarada, não herdada de um soquete. */
 const VIVO = `
   import { manterProcessoVivo } from ${JSON.stringify(MODULO)};
   async function main() {
@@ -39,7 +28,6 @@ const VIVO = `
   main().catch(() => process.exit(1));
 `;
 
-/** O corrigido, com pedido de parada: precisa sair, e sair com 0. */
 const VIVO_E_ENCERRA = `
   import { manterProcessoVivo } from ${JSON.stringify(MODULO)};
   async function main() {
@@ -59,7 +47,6 @@ interface Desfecho {
   readonly codigo: number | null;
 }
 
-/** Espera até `limite`; devolve o desfecho real, sem inventar o que não viu. */
 function aguardarDesfecho(filho: ChildProcess, limite: number): Promise<Desfecho> {
   return new Promise<Desfecho>((resolve) => {
     const relogio = setTimeout(() => {

@@ -1,7 +1,3 @@
-/**
- * O token do achador está na cláusula `WHERE`, como RESUMO, e o SQL compilado
- * prova (BICHUS-41).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -33,7 +29,6 @@ const semBanco = new Kysely<Database>({
 const TOKEN = 'T'.repeat(43);
 const RESUMO = createHash('sha256').update(TOKEN, 'utf8').digest();
 
-/** Cada `finder_token_hash = $n` do SQL, com o valor ligado àquela posição. */
 function ligacoesDoToken(compilado: { sql: string; parameters: readonly unknown[] }): unknown[] {
   const padrao = /"?finder_token_hash"?\s*=\s*\$(\d+)/g;
   const valores: unknown[] = [];

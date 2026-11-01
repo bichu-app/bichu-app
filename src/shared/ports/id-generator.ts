@@ -1,4 +1,3 @@
-/** Geração de identificador. */
 import type { OpaqueToken } from '../types/brands.js';
 
 export interface IdGenerator {

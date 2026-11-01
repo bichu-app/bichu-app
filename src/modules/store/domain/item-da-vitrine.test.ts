@@ -1,4 +1,3 @@
-/** A projecao do item da vitrine e o vencimento do preco, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,7 +35,6 @@ function item(ajustes: Partial<ItemDaVitrine> = {}): ItemDaVitrine {
   };
 }
 
-/** Um instante fixo. Nada aqui depende do relogio de quem roda. */
 const AGORA = Date.UTC(2026, 8, 22, 12) as Instant;
 
 void describe('o vencimento do preco', () => {
@@ -147,7 +145,6 @@ void describe('a projecao publica', () => {
   });
 });
 
-/** Os dois niveis na projecao PUBLICA (decisao do cliente de 17/10/2026). */
 void describe('categoria e subcategoria na projecao publica', () => {
   void it('codigo e rotulo saem lado a lado, nos dois niveis', () => {
     const projetado = projetarItem(item(), AGORA);

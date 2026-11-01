@@ -1,15 +1,11 @@
-/** Segredo de runtime lido do Secret Manager do GCP, por HTTP, sem SDK. */
 import type { NomeDeSegredo, SecretProvider } from '../../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
 import { TOKEN_DA_CONTA_DE_SERVICO } from './metadados-do-gcp.js';
 
-/** Fonte da credencial da instância. */
 const METADADOS = TOKEN_DA_CONTA_DE_SERVICO;
 const GERENCIADOR = 'https://secretmanager.googleapis.com/v1';
 
-/** A subida não pode ficar pendurada esperando rede. */
 const TIMEOUT_MS = 5_000;
-/** Margem antes do vencimento do token. */
 const MARGEM_DO_TOKEN_MS = 60_000;
 
 export interface GcpSecretManagerConfig {
@@ -33,7 +29,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null;
 }
 
-/** Traduz a resposta do provedor para a exigência 2 da porta. */
 function motivoDoStatus(status: number, projeto: string, versao: string): string {
   if (status === 403) {
     return (

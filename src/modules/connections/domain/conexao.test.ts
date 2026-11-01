@@ -1,7 +1,3 @@
-/**
- * **ISCA (a): o pedido exige ACEITE.** Sem aceite, o predicado que todo dado de
- * conectado atravessa é falso; depois do aceite é verdadeiro.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

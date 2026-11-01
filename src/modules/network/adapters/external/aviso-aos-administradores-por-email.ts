@@ -1,8 +1,3 @@
-/**
- * O aviso a todos os administradores (D52, D60), por e-mail, a cada encontro
- * criado, movido, cancelado, com condicao de acesso trocada ou com observacoes
- * mudadas.
- */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { Mailer } from '../../../identity/ports/mailer.js';
 import type { AvisoAosAdministradores } from '../../ports/rede-administrativa.js';

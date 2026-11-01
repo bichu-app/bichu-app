@@ -1,4 +1,3 @@
-/** A porta de leitura do diretorio. */
 import type {
   EnderecoComercial,
   EntradaDoDiretorio,

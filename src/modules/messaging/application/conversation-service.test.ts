@@ -1,4 +1,3 @@
-/** O serviço da conversa mediada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -33,36 +32,20 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const PET = '018f3a2b-0000-7000-8000-0000000000dd' as PetId;
 const AVISO = '018f3a2b-0000-7000-8000-0000000000ee' as FoundReportId;
 
-/** O `photo_upload_id` que a pessoa anexa. */
 const UPLOAD = '018f3a2b-0000-7000-8000-00000000f001';
-/** Uma intencao que existe, mas e de OUTRO aviso. */
 const UPLOAD_DE_OUTRO_AVISO = '018f3a2b-0000-7000-8000-00000000f002';
-/** A chave do ORIGINAL, com o EXIF e a coordenada de GPS dentro. */
 const CHAVE_DO_ORIGINAL = 'found-reports/aviso/original/abc.jpg';
-/** A derivada que o trabalhador reescreveu do zero, sem metadado nenhum. */
 const CHAVE_HIGIENIZADA = 'found-reports/aviso/sanitized/def.webp';
 
 interface Estado {
   readonly conversa?: Partial<ConversaDoChamador> | undefined;
-  /** O desfecho que [FotoDaConversa] devolve para `UPLOAD`. */
   readonly foto?: FotoParaAMensagem | undefined;
-  /**
-   * **A ISCA DA INVARIANTE.** Com `true`, o duble devolve a chave do ORIGINAL no
-   * lugar da higienizada -- e o equivalente exato de o adaptador selecionar
-   * `object_key` em vez de `sanitized_key`.
-   */
   readonly invarianteDesligada?: boolean | undefined;
   readonly mensagensDoParticipante?: number | undefined;
   readonly casosDistintos?: number | undefined;
   readonly conversaDoAviso?: ConversationId | undefined;
-  /** BICHUS-278: o que `contarParaOSino` devolve. */
   readonly naoLidasNoSino?: number | undefined;
-  /**
-   * A LISTA que `listarDoChamador` devolve, quando o caso precisa de mais de uma
-   * linha (a ordem e o cursor da pagina seguinte).
-   */
   readonly lista?: readonly Partial<ConversaDoChamador>[] | undefined;
-  /** O que `contarDoChamador` devolve: `ConversationPage.total`. */
   readonly totalDoRecorte?: number | undefined;
 }
 
@@ -176,7 +159,6 @@ function bancada(estado: Estado = {}) {
     },
   };
 
-  /** O duble da resolucao da foto. */
   const fotos: FotoDaConversa = {
     porUploadId: (_conversa, _chamador, uploadId): Promise<FotoParaAMensagem> =>
       Promise.resolve(
@@ -223,9 +205,7 @@ function chamador(userId: UserId): Chamador {
 
 const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
-/** BICHUS-35: A FOTO NA CONVERSA MEDIADA, do lado com conta. */
 void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
-  /** FATO 1: a imagem CHEGA na mensagem gravada. */
   void it('a chave da foto CHEGA na mensagem gravada', async () => {
     const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
     await servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD);
@@ -239,10 +219,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     );
   });
 
-  /**
-   * FATO 2: A INVARIANTE. A mensagem recebe a chave HIGIENIZADA, e NUNCA a do
-   * original -- que e a copia que carrega a coordenada de GPS no EXIF.
-   */
   void it('a chave gravada e a HIGIENIZADA, e nunca a do ORIGINAL', async () => {
     const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
     await servico.enviar(CONVERSA, 'Achei ela!', chamador(TUTOR), UPLOAD);
@@ -257,11 +233,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     );
   });
 
-  /**
-   * ISCA DO FATO 2. Com `invarianteDesligada`, o duble devolve a chave do original
-   * -- o equivalente exato de o adaptador selecionar `object_key` em vez de
-   * `sanitized_key`.
-   */
   void it('ISCA: com a invariante desligada, a chave gravada e a do ORIGINAL', async () => {
     const { servico, gravadas } = bancada({
       conversa: { papelDoChamador: 'tutor' },
@@ -273,10 +244,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     assert.equal(doTutor?.photoObjectKey, CHAVE_DO_ORIGINAL);
   });
 
-  /**
-   * FATO 3: higiene `pendente` NAO grava mensagem com foto -- e nao grava mensagem
-   * nenhuma.
-   */
   void it('higiene `pendente`: recusa com `photo-not-ready` e NADA e gravado', async () => {
     const { servico, gravadas } = bancada({
       conversa: { papelDoChamador: 'tutor' },
@@ -330,7 +297,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     assert.deepEqual(gravadas, []);
   });
 
-  /** FATO 4: a intencao de OUTRO aviso nao entra nesta conversa. */
   void it('a intencao de OUTRO aviso nao entra nesta conversa, e nada e gravado', async () => {
     const { servico, gravadas } = bancada({ conversa: { papelDoChamador: 'tutor' } });
 
@@ -346,7 +312,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     assert.deepEqual(gravadas, []);
   });
 
-  /** FATO 6: BLOQUEAR impede novo envio COM foto. */
   void it('conversa BLOQUEADA recusa envio COM foto, com o 410 da conversa', async () => {
     const { servico, gravadas } = bancada({
       conversa: { papelDoChamador: 'tutor', bloqueadaEm: comoData(AGORA) },
@@ -368,7 +333,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     assert.deepEqual(gravadas, [], 'gravou mensagem com foto numa conversa bloqueada');
   });
 
-  /** FATO 6, A MEDIÇÃO QUE ENXERGA A ORDEM. */
   void it('conversa BLOQUEADA com foto PENDENTE responde pelo BLOQUEIO, e não pela foto', async () => {
     const { servico, gravadas } = bancada({
       conversa: { papelDoChamador: 'tutor', bloqueadaEm: comoData(AGORA) },
@@ -393,10 +357,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     assert.deepEqual(gravadas, []);
   });
 
-  /**
-   * CONTROLE POSITIVO: o envio SEM foto continua funcionando, em todos os estados de
-   * higiene.
-   */
   void it('CONTROLE POSITIVO: envio SEM foto passa em qualquer estado de higiene', async () => {
     for (const foto of [
       { situacao: 'pendente' } as const,
@@ -414,10 +374,6 @@ void describe('BICHUS-35: a foto entra na mensagem, e so a HIGIENIZADA', () => {
     }
   });
 
-  /**
-   * CONTROLE NEGATIVO: a conversa ENCERRADA recusa, com foto e sem foto, e com o
-   * mesmo tipo.
-   */
   void it('CONTROLE NEGATIVO: conversa ENCERRADA recusa com e sem foto', async () => {
     for (const anexo of [undefined, UPLOAD]) {
       const { servico, gravadas } = bancada({
@@ -529,7 +485,6 @@ void describe('critério 8 — conversa em modo leitura não recebe mensagem', (
     await assert.rejects(() => servico.enviar(CONVERSA, 'oi', chamador(TUTOR)));
   });
 
-  /** ISCA DO ENVIO TRAVADO, lado COM CONTA (17/10). */
   void it('ISCA: tutor desabilitado trava o envio do OUTRO lado, com 410', async () => {
     const { servico, gravadas } = bancada({ conversa: { tutorDesabilitado: true } });
     await assert.rejects(
@@ -638,13 +593,11 @@ void describe('a conversa que sai do servidor', () => {
   });
 });
 
-/** A SEGUNDA PÁGINA da lista (18/10/2026). */
 void describe('o cursor da lista sai da ÚLTIMA MENSAGEM, e não da abertura', () => {
   const ABERTA_EM = comoData(1_780_000_000_000 as Instant);
   const ULTIMA_EM = comoData(1_789_000_000_000 as Instant);
   const OUTRA = '018f3a2b-0000-7000-8000-0000000000f1' as ConversationId;
 
-  /** Duas linhas, página cheia (`limit: 2`): só assim há próxima página. */
   const DUAS = [
     { id: CONVERSA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
     { id: OUTRA, abertaEm: ABERTA_EM, ultimaMensagemEm: ULTIMA_EM },
@@ -691,7 +644,6 @@ void describe('o cursor da lista sai da ÚLTIMA MENSAGEM, e não da abertura', (
   });
 });
 
-/** `ConversationPage.total` (18/10/2026): quantas conversas o RECORTE tem. */
 void describe('o total do recorte vem do repositório, e nunca da página', () => {
   void it('ISCA -- `total` é a contagem do repositório, e não `items.length`', async () => {
     const { servico } = bancada({ conversa: {}, totalDoRecorte: 57 });
@@ -755,7 +707,6 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
   });
 });
 
-/** A recusa, capturada como `AppError`. */
 async function capturar(executar: () => Promise<unknown>): Promise<AppError> {
   try {
     await executar();
@@ -766,7 +717,6 @@ async function capturar(executar: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a operação não recusou, e deveria ter recusado');
 }
 
-/** O que estas duas suítes cobram, e o que elas NÃO cobram. */
 void describe('blockConversation: o lado com conta também bloqueia', () => {
   void it('o tutor bloqueia, e a escrita recebe a conversa e o chamador', async () => {
     const { servico, bloqueios } = bancada({ conversa: {} });

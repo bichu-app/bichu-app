@@ -1,4 +1,3 @@
-/** As cinco amarras da janela de reautenticação, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,7 +16,6 @@ const OUTRA_CONTA = '018f3a2b-0000-7000-8000-0000000000bb';
 const JTI = '018f3a2b-0000-7000-8000-00000000cc01';
 const OUTRO_JTI = '018f3a2b-0000-7000-8000-00000000cc02';
 
-/** Uma barreira bem antiga: nenhum caso abaixo é recusado por ela sem pedir. */
 const BARREIRA_VELHA = (AGORA - 90 * 24 * 60 * 60 * 1000) as Instant;
 
 const janelaBoa: JanelaDeReautenticacao = {
@@ -55,7 +53,6 @@ void describe('a janela boa vale', () => {
 });
 
 void describe('cada amarra recusa sozinha, e nomeia o motivo', () => {
-  /** Cada linha muda **uma** coisa em relação ao caso que vale. */
   const casos: readonly {
     nome: string;
     janela?: Partial<JanelaDeReautenticacao>;

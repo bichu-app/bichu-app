@@ -1,4 +1,3 @@
-/** A projeção pública do caso e o cartaz (BICHUS-76), sem servidor e sem banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,7 +15,6 @@ const BASES = {
   baseDeMidia: 'https://midia.exemplo.invalid' as AbsoluteUrl,
 };
 const TOKEN = 'k3J9-share-token-opaco-0001';
-/** 2026-09-20T18:30:00.000Z */
 const VISTO_EM = 1_789_929_000_000 as Instant;
 
 function caso(parcial: Partial<CasoPublico> = {}): CasoPublico {

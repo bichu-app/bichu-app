@@ -1,7 +1,3 @@
-/**
- * As ISCAS do piso da busca de pessoas **na borda**, e elas medem uma coisa que
- * nenhuma isca deste repositório media: o que o SERVIDOR devolve.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -39,9 +35,7 @@ const MARINA: PessoaEncontrada = {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Os termos com que a PORTA foi chamada. */
   readonly termos: string[];
-  /** Quantas vezes o token foi apresentado. */
   readonly autenticacoes: string[];
 }
 
@@ -99,11 +93,9 @@ interface CorpoDaBusca {
   readonly limit: number;
 }
 
-/** Os casos que **não podem** virar consulta nem erro, com o nome de cada um. */
 interface CasoAbaixoDoPiso {
   readonly nome: string;
   readonly url: string;
-  /** O termo que chega, já decodificado. */
   readonly termo: string | undefined;
 }
 

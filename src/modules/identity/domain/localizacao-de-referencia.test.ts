@@ -1,4 +1,3 @@
-/** A quantização e a validade, sem banco, sem servidor e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Instant } from '../../../shared/types/brands.js';
@@ -15,7 +14,6 @@ import {
 const AGORA = 1_800_000_000_000 as Instant;
 const DIA = 24 * 60 * 60 * 1000;
 
-/** Metros por grau de latitude. */
 const METROS_POR_GRAU_DE_LATITUDE = 111_320;
 
 void describe('a coordenada é quantizada numa grade de cerca de 100 m', () => {

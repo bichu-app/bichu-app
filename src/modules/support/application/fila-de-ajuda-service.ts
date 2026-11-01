@@ -1,4 +1,3 @@
-/** A leitura da fila pelo painel, e a marcacao de atendida. */
 import type { AtorAdministrativo } from '../../audit/ports/trilha-administrativa.js';
 import type { Clock } from '../../../shared/time/clock.js';
 import type {
@@ -8,7 +7,6 @@ import type {
   SituacaoDaDuvida,
 } from '../ports/duvidas-de-ajuda.js';
 
-/** O teto da pagina, e o mesmo do contrato (`AdminLimit`, `maximum: 100`). */
 const TETO_DA_PAGINA = 100;
 const PAGINA_MINIMA = 1;
 

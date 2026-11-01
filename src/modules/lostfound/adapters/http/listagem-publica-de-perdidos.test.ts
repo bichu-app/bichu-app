@@ -1,4 +1,3 @@
-/** `GET /v1/public/lost-pets` (`listPublicLostPets`), pela borda HTTP. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -42,10 +41,6 @@ const PLANTADOS: readonly ValorPlantado[] = [
   { rotulo: 'UUID do caso', valor: CASO_ID },
 ];
 
-/**
- * O perdido legítimo, com os dados sensíveis plantados no texto livre e com as
- * propriedades a mais que uma porta descuidada carregaria.
- */
 function perdidoHostil(parcial: Partial<PerdidoPublico> = {}): PerdidoPublico {
   const legitimo: PerdidoPublico = {
     shareToken: TOKEN,
@@ -122,7 +117,6 @@ interface Resposta {
   readonly corpo: Record<string, unknown>;
 }
 
-/** Sem `Authorization`, de propósito**: a operação é pública e deslogada. */
 async function pedirSemConta(bancada: Bancada, url: string): Promise<Resposta> {
   const resposta = await bancada.app.inject({ method: 'GET', url });
   return {
@@ -172,10 +166,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.equal(resposta.corpo['total'], 0);
   });
 
-  /**
-   * ISCA do contrato: `period` perdeu o `default: 30d` em `api/openapi.yaml`
-   * (cliente, 18/10/2026), e é por isso que a ausência chega INDEFINIDA à porta.
-   */
   void it('ISCA: `period` ausente chega INDEFINIDO à porta — janela aberta', async () => {
     const bancada = montar({ itens: [], total: 0 });
     await pedirSemConta(bancada, URL_DA_LISTA);
@@ -226,10 +216,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     });
   });
 
-  /**
-   * ISCA (a) do pedido do cliente de 19/10/2026: *"o campo cidade do filtro da
-   * página pet não deve ser obrigatório"*.
-   */
   void it('ISCA: a lista abre SEM `city` — 200, e com itens', async () => {
     const bancada = montar({ itens: [perdidoHostil()], total: 87 });
     const resposta = await pedirSemConta(bancada, '/v1/public/lost-pets');
@@ -239,7 +225,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.equal(resposta.corpo['total'], 87);
   });
 
-  /** ISCA do texto vazio: `city` ausente chega INDEFINIDA, e não como `''`. */
   void it('ISCA: `city` ausente chega INDEFINIDA à porta, e não como texto vazio', async () => {
     const bancada = montar({ itens: [], total: 0 });
     await pedirSemConta(bancada, '/v1/public/lost-pets');
@@ -259,10 +244,6 @@ void describe('a listagem pública de perdidos mostra pet perdido de verdade', (
     assert.deepEqual(resposta.corpo['applied_filters'], {});
   });
 
-  /**
-   * ISCA (f) do refinamento de 19/10: *"devemos filtrar pelos 20 últimos pets
-   * cadastrados"*.
-   */
   void it('ISCA: o recorte padrão pede a página 1 com limite 20', async () => {
     const bancada = montar({ itens: [], total: 0 });
     await pedirSemConta(bancada, '/v1/public/lost-pets');
@@ -336,10 +317,6 @@ void describe('não-vazamento: a listagem pública não carrega id interno nem d
   });
 });
 
-/**
- * O ADR-0006 PROÍBE COORDENADA NOS DOIS SENTIDOS NESTA ROTA, E SÓ UM DELES TINHA
- * PORTÃO.
- */
 void describe('ADR-0006: a listagem pública não aceita coordenada NEM distância no pedido', () => {
   const NOMES_DE_COORDENADA = [
     'lat',
@@ -380,10 +357,6 @@ void describe('ADR-0006: a listagem pública não aceita coordenada NEM distânc
     );
   });
 
-  /**
-   * DESLIGANDO: acrescente `- name: lat` / `in: query` aos `parameters` de
-   * `listPublicLostPets` em `api/openapi.yaml`.
-   */
   void it('ISCA: nenhum parâmetro da rota é coordenada, distância ou raio', () => {
     const achados = operacao()
       .parameters.map((p) => p['name'])

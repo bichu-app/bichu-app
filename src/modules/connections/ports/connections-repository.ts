@@ -1,4 +1,3 @@
-/** A porta de persistência da conexão. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { ArestaGuardada, OrigemDoPedido } from '../domain/conexao.js';
 import type { ContagensDaConta } from '../domain/teto-de-conexoes.js';

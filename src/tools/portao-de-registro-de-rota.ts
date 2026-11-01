@@ -1,4 +1,3 @@
-/** Portão do registro de rota: **nenhuma rota entra pela porta dos fundos**. */
 import path from 'node:path';
 
 import ts from 'typescript';
@@ -6,7 +5,6 @@ import ts from 'typescript';
 /** Quem pode chamar o framework direto. */
 export const UNICO_AUTORIZADO = path.join('src', 'shared', 'http', 'registrar-rota.ts');
 
-/** A interface do framework cujos membros este portão vigia. */
 const INTERFACE_DO_SERVIDOR = 'FastifyInstance';
 
 /** Os membros do servidor que **não** registram rota, e só eles. */
@@ -89,7 +87,6 @@ export function criarPrograma(raiz: string = process.cwd(), extras?: ArquivosEmM
   return ts.createProgram(nomes, opcoes, hospedeiro);
 }
 
-/** O membro é declarado na interface do servidor do framework? */
 function ehMembroDoServidor(simbolo: ts.Symbol | undefined): boolean {
   return (simbolo?.getDeclarations() ?? []).some((declaracao) => {
     const pai: ts.Node = declaracao.parent;
@@ -97,10 +94,6 @@ function ehMembroDoServidor(simbolo: ts.Symbol | undefined): boolean {
   });
 }
 
-/**
- * O nome do membro chamado, quando a chamada é sobre um membro resolvido do
- * servidor.
- */
 function membroDoServidorChamado(
   chamada: ts.CallExpression,
   verificador: ts.TypeChecker,
@@ -208,11 +201,6 @@ const SONDA_DOS_MEMBROS = path.join('src', 'tools', '_sondas', 'membros.ts');
 const SONDA_DA_CHAMADA_ESCONDIDA = path.join('src', 'tools', '_sondas', 'chamada-escondida.ts');
 const SONDA_DE_CONTROLE = path.join('src', 'tools', '_sondas', 'controle.ts');
 
-/**
- * As sondas vivem em memória, como as iscas da varredura: arquivo gravado em
- * `src/` que não compila deixa lixo quando o teste quebra no meio, e este em
- * particular **não compila de propósito**.
- */
 function sondas(): ArquivosEmMemoria {
   const importes = [
     "import type { FastifyInstance } from 'fastify';",

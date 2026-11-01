@@ -1,4 +1,3 @@
-/** O pedido da plaquinha no Postgres. */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -51,11 +50,6 @@ interface LinhaDaFila extends LinhaDaEntrega {
   readonly decided_at: Date | null;
 }
 
-/**
- * Os quatro campos da entrega, num lugar so: as duas projecoes -- a do tutor e a
- * da fila -- os leem igual, e duplicar a leitura seria o jeito de uma delas passar
- * a divergir.
- */
 function comoEntrega(linha: LinhaDaEntrega): {
   readonly passoDaEntrega: PassoDaEntrega;
   readonly codigoDeRastreio: string | null;
@@ -110,10 +104,8 @@ function comoPedidoNaFila(linha: LinhaDaFila): PedidoNaFilaDePlaquinhas {
   };
 }
 
-/** As quatro colunas da entrega, num fragmento so. */
 const COLUNAS_DA_ENTREGA = sql`r.delivery_state, r.tracking_code, r.shipped_at, r.delivered_at`;
 
-/** O PREDICADO DA CONTA DESABILITADA, e ele entra em TRES lugares. */
 const SOLICITANTE_ATIVO = sql<boolean>`conta_habilitada(r.requested_by)`;
 
 export function criarPedidoDePlaquinhaRepository(deps: {

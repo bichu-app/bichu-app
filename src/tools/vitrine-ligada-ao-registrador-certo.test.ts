@@ -1,11 +1,9 @@
-/** A VITRINE esta ligada ao registrador de intencao DELA, em `src/bin/api.ts`. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 const api = readFileSync('src/bin/api.ts', 'utf8');
 
-/** O bloco `new VitrineDeFotos({ ... */
 function blocoDaVitrine(): string {
   const inicio = api.indexOf('new VitrineDeFotos({');
   assert.ok(

@@ -1,4 +1,3 @@
-/** Porta de persistência do cadastro. */
 import type { Instant, PetId, UserId } from '../../../shared/types/brands.js';
 import type { TrechoRedigido } from '../../../shared/redaction/redigir.js';
 

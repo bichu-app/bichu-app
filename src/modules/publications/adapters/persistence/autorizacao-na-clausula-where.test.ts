@@ -1,7 +1,3 @@
-/**
- * AS ISCAS DE SQL DO MURAL: **o recorte de visibilidade está no `WHERE`, e o que
- * não pode sair não está no `SELECT`.**
- */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,10 +36,8 @@ const semBanco = new Kysely<Database>({
 
 const RECORTE = { limite: 20, curso: undefined } as const;
 
-/** As TRÊS consultas desta camada, para varrer em lote. */
 const ID_INTERNO = '018f3a2b-0000-7000-8000-0000000000cc';
 
-/** As SEIS consultas desta camada, para varrer em lote. */
 const TODAS = {
   minhas: () => construtorDasMinhasPublicacoes(semBanco, QUEM_OLHA, RECORTE),
   linha: () => construtorDaLinhaDoTempo(semBanco, QUEM_OLHA, RECORTE),
@@ -56,7 +50,6 @@ const TODAS = {
 
 const sqlDo = (nome: keyof typeof TODAS): string => TODAS[nome]().sql;
 
-/** As conferências de predicado, cada uma uma função sobre o TEXTO do SQL. */
 const CONFERENCIAS = {
   exigeAceite: (sql: string) => {
     assert.match(sql, /uc\.state = 'accepted'/, 'o predicado de ACEITE saiu do WHERE');
@@ -103,7 +96,6 @@ const CONFERENCIAS = {
   },
 } as const;
 
-/** Reprova se `conferencia` NÃO lançar sobre `textoMutado`. */
 function aMutacaoTemDeReprovar(
   conferencia: (sql: string) => void,
   textoMutado: string,
@@ -112,7 +104,6 @@ function aMutacaoTemDeReprovar(
   assert.throws(() => conferencia(textoMutado), queixa);
 }
 
-/** A LISTA DE SELECAO, cortada no `FROM` de topo -- e REPROVANDO se nao o achar. */
 function selecaoAteOTopo(sql: string): string {
   const corte = sql.toLowerCase().indexOf(' from "user_publications"');
   assert.ok(
@@ -329,7 +320,6 @@ void describe('o que o Mural NAO seleciona, e cada ausencia e uma regra', () => 
     }
   });
 
-  /** O SQL com as DUAS colunas do selo de validado apagadas. */
   const semAsColunasDoSelo = (sql: string): string =>
     sql.replaceAll('email_verified_at', 'selo_de_validado').replaceAll('phone_verified_at', 'selo_de_validado');
 

@@ -1,4 +1,3 @@
-/** Bloquear e denunciar, como caso de uso. */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { UserId } from '../../../shared/types/brands.js';

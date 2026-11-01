@@ -1,4 +1,3 @@
-/** ISCA — `marcarVista` GRAVA e SO DEPOIS conta, com o MESMO instante. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -23,7 +22,6 @@ interface Diario {
   cidadeDaContagem?: string | undefined;
 }
 
-/** Um relogio que ANDA a cada leitura. */
 function relogioQueAnda(diario: Diario): Clock {
   let proximo = PRIMEIRO;
   return {
@@ -36,7 +34,6 @@ function relogioQueAnda(diario: Diario): Clock {
   };
 }
 
-/** As quatro portas, dubladas. */
 function portasDeTeste(diario: Diario): DependenciasDosContadores {
   const marcadores: MarcadoresDeSecao = {
     ler: () => {

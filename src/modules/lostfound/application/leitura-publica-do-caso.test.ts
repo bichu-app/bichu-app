@@ -1,4 +1,3 @@
-/** A decisão 200 ou 410 da leitura pública do caso, sem servidor e sem banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -9,7 +8,6 @@ import type { CasoPublico, LeituraPublicaDoCaso } from '../ports/leitura-publica
 import { LeituraPublicaDoCasoService } from './leitura-publica-do-caso.js';
 
 const TOKEN = 'k3J9-share-token-opaco-0001';
-/** 2026-09-20T18:30:00.000Z */
 const VISTO_EM = 1_789_929_000_000 as Instant;
 const TUTOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 
@@ -102,7 +100,6 @@ void describe('leitura pública do caso: 200 ou 410', () => {
   });
 });
 
-/** O SEGUNDO 410 da página: `lost-case-reunited`, e só ele. */
 void describe('o reencontrado é o único dos cinco que ganha nome', () => {
   void it('o caso reencontrado agradece, e SEM next_action', async () => {
     const problema = await problemaDe(

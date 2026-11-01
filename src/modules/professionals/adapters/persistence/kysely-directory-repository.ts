@@ -1,4 +1,3 @@
-/** Persistencia do diretorio de `Perto`, em PostGIS. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
@@ -49,7 +48,6 @@ interface LinhaDaEntrada {
   logo_public_key: string | null;
 }
 
-/** As quatro colunas de endereco, **so na linha do DETALHE**. */
 interface LinhaDoEnderecoComercial {
   postal_code: string | null;
   street: string | null;
@@ -66,7 +64,6 @@ function comoEnderecoComercial(l: LinhaDoEnderecoComercial): EnderecoComercial {
   };
 }
 
-/** O ponto de referencia DESTE APARELHO de quem chama, valido, como subconsulta. */
 function pontoDeReferencia(chamador: UserId, familia: FamiliaDeSessao, agora: Instant) {
   return sql`(
     select reference_point
@@ -77,10 +74,8 @@ function pontoDeReferencia(chamador: UserId, familia: FamiliaDeSessao, agora: In
   )`;
 }
 
-/** O ponto de quem chama SEM aparelho conhecido: nenhum. */
 const SEM_PONTO = sql`null::geography`;
 
-/** O ponto que vale para esta chamada: o do aparelho, ou nenhum. */
 function pontoDoAparelho(
   chamador: UserId | undefined,
   familia: FamiliaDeSessao | undefined,
@@ -91,7 +86,6 @@ function pontoDoAparelho(
     : pontoDeReferencia(chamador, familia, agora);
 }
 
-/** As provas APROVADAS da entidade, como subconsulta agregada. */
 const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
   select array_agg(v.evidence_kind)
     from entity_verifications v
@@ -100,10 +94,6 @@ const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
      and v.decision = 'approved'
 )`;
 
-/**
- * A CHAVE DA DERIVADA de uma imagem da entrada, **so quando ela esta PRONTA**
- * (18/10/2026, com a liberacao das imagens do profissional no aplicativo).
- */
 function CHAVE_DA_DERIVADA(coluna: 'logo_image_id' | 'photo_image_id') {
   return sql<string | null>`(
   select c.public_key
@@ -113,7 +103,6 @@ function CHAVE_DA_DERIVADA(coluna: 'logo_image_id' | 'photo_image_id') {
 )`;
 }
 
-/** `EXISTS` de prova aprovada de documento. */
 const TEM_DOCUMENTO = sql<boolean>`EXISTS (
   select 1 from entity_verifications v
    where v.entity_id = professionals.id
@@ -122,7 +111,6 @@ const TEM_DOCUMENTO = sql<boolean>`EXISTS (
      and v.evidence_kind IN ('crmv', 'cnpj', 'document')
 )`;
 
-/** `EXISTS` de qualquer prova aprovada. */
 const TEM_ALGUMA_PROVA = sql<boolean>`EXISTS (
   select 1 from entity_verifications v
    where v.entity_id = professionals.id
@@ -130,11 +118,6 @@ const TEM_ALGUMA_PROVA = sql<boolean>`EXISTS (
      and v.decision = 'approved'
 )`;
 
-/**
- * A linha vira entrada. **A pontuacao entra por PARAMETRO e nao pela linha**, e a
- * separacao e deliberada: a lista a le na MESMA consulta da pagina (lateral sobre
- * `pontuacao_do_local`), e o detalhe a le na consulta propria que ja existia.
- */
 function comoEntrada(l: LinhaDaEntrada, pontuacao: PontuacaoDoLocal): EntradaDoDiretorio {
   const aprovadas: DecisaoDaVerificacao = 'approved';
   return {
@@ -199,13 +182,11 @@ export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio
   return consulta;
 }
 
-/** O recorte das avaliacoes que SAEM, num lugar so. */
 const AVALIACAO_VISIVEL = sql<boolean>`(
   professional_reviews.status = 'published'
   AND conta_habilitada(professional_reviews.author_user_id)
 )`;
 
-/** O estado da conta para AVALIAR, pela mesma regua de criar encontro. */
 const TEM_CANAL_VERIFICADO = (chamador: UserId) => sql<boolean>`EXISTS (
   SELECT 1 FROM users u
    WHERE u.id = ${chamador}::uuid
@@ -222,10 +203,6 @@ interface LinhaDaPontuacao {
   n5: string;
 }
 
-/**
- * `pontuacao_do_local` devolve `numeric` e `bigint`, que o driver entrega como
- * STRING.
- */
 function comoPontuacao(l: LinhaDaPontuacao | undefined): PontuacaoDoLocal {
   if (l === undefined) return PONTUACAO_VAZIA;
   const quantidade = Number(l.quantidade);
@@ -264,7 +241,6 @@ function comoAvaliacao(l: LinhaDaAvaliacao): AvaliacaoDoLocal {
   };
 }
 
-/** O `id` interno da entrada PUBLICADA com este slug, ou `undefined`. */
 async function idDoLocalPublicado(db: DbExecutor, slug: string): Promise<string | undefined> {
   const linha = await db
     .selectFrom('professionals')
@@ -279,19 +255,13 @@ function pontuacaoDe(db: DbExecutor, idDoLocal: string) {
   return sql<LinhaDaPontuacao>`SELECT * FROM pontuacao_do_local(${idDoLocal}::uuid)`.execute(db);
 }
 
-/** O nome da coluna interna que o lateral consome, e **so** ele. */
 const ID_PARA_O_LATERAL = 'id_do_lateral';
 
-/** A PONTUACAO DE CADA CARTAO, **na mesma consulta da pagina e DEPOIS do `LIMIT`**. */
 const PONTUACAO_DO_CARTAO = sql<LinhaDaPontuacao>`pontuacao_do_local(pagina.${sql.raw(
   ID_PARA_O_LATERAL,
 )})`.as('pontuacao');
 
 export function criarDirectoryRepository(db: Db, ids: IdGenerator): DirectoryRepository {
-  /**
-   * O `ref` publico da avaliacao: 128 bits de CSPRNG em base64url, 22 caracteres,
-   * exatamente o `CHECK` da migracao.
-   */
   const novoRef = (): string => Buffer.from(ids.random128()).toString('base64url');
 
   return {

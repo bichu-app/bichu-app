@@ -1,4 +1,3 @@
-/** Idempotência: o que se prova aqui é o EFEITO, não a chamada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { hashDeCorpo, iguaisEmTempoConstante } from '../crypto/digest.js';
@@ -40,7 +39,6 @@ import {
 const CHAVE = '018f3a2b-0000-7000-8000-000000000001';
 const OUTRA_CHAVE = '018f3a2b-0000-7000-8000-000000000002';
 const DONO = '018f3a2b-0000-7000-8000-00000000000a';
-/** Reservada é **ausência de status**, e não um status inventado. */
 const RESERVADA = null;
 
 function guardarStatus(status: number | null): number | null {
@@ -62,7 +60,6 @@ interface Linha {
   expiraEm: number;
 }
 
-/** Memória com as regras do adaptador: reserva antes, conflito por dono/rota/corpo. */
 function memoria(): Idempotencia {
   const linhas = new Map<string, Linha>();
   return {
@@ -108,7 +105,6 @@ function memoria(): Idempotencia {
   };
 }
 
-/** Handler que conta quantas vezes o efeito aconteceu de verdade. */
 function efeito(): { executar: () => Promise<RespostaGravada>; execucoes: () => number } {
   let vezes = 0;
   return {
@@ -276,7 +272,6 @@ void describe('quem é idempotente sai do contrato, não do julgamento de quem c
   });
 });
 
-/** O SQL da reserva, conferido sem banco. */
 void describe('SQL da reserva', () => {
   function bancoDeMentira(): Db {
     return new Kysely<Database>({
@@ -336,7 +331,6 @@ interface ConsultaCapturada {
   readonly parameters: readonly unknown[];
 }
 
-/** Decide as linhas devolvidas a partir da consulta e da ordem em que ela veio. */
 type RespostaDoBanco = (consulta: ConsultaCapturada, ordem: number) => readonly unknown[];
 
 function bancoQueCaptura(responder: RespostaDoBanco): {
@@ -381,7 +375,6 @@ function bancoQueCaptura(responder: RespostaDoBanco): {
   return { db, consultas };
 }
 
-/** Linha de `idempotency_keys` como o `select` de conferência a devolveria. */
 interface LinhaGravada {
   user_or_token_ref: string;
   endpoint: string;
@@ -417,7 +410,6 @@ function linhaCompativel(sobrescrita: Partial<LinhaGravada> = {}): LinhaGravada 
   };
 }
 
-/** Reserva perdida (o `insert` não devolve linha) e o `select` traz `linha`. */
 function bancoComReservaPerdida(linha: LinhaGravada | undefined): {
   db: Db;
   consultas: ConsultaCapturada[];

@@ -1,4 +1,3 @@
-/** A TRAVA DO COMUNICADO, conferida na DECLARACAO da rota. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -9,7 +8,6 @@ import {
   rotaDaJanelaDeDisparo,
 } from './admin-comunicado-routes.js';
 
-/** A forma LARGA da declaracao de rota. */
 interface RotaConferivel {
   readonly operationId: string;
   readonly method: string;

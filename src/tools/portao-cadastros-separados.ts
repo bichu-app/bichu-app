@@ -1,8 +1,3 @@
-/**
- * Portao dos cadastros separados: o codigo do painel nao cita tabela do app, e o
- * codigo do app nao cita tabela do painel (ADR-0027 item 20; D42 e P21 (c) de
- * `docs/04-seguranca.md` 22.11).
- */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 

@@ -1,4 +1,3 @@
-/** O serviço do cadastro, sem banco e sem relógio de parede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
@@ -157,10 +156,6 @@ void describe('cadastro do pet', () => {
 });
 
 void describe('códigos de referência inválidos', () => {
-  /**
-   * Cada ramo destes existe para que o erro seja `validation-failed` **com o nome do
-   * campo**, e não a violação de `CHECK` que o banco devolveria como 500.
-   */
   const casos: { nome: string; ausente: string; campo: string }[] = [
     { nome: 'espécie desconhecida', ausente: 'especieExiste', campo: 'species' },
     { nome: 'porte desconhecido', ausente: 'porteExiste', campo: 'size' },
@@ -312,26 +307,17 @@ void describe('cadastro do pet — pet de outro tutor', () => {
   });
 });
 
-/** A REDAÇÃO CRESCE O TEXTO, E O TETO É CONFERIDO DEPOIS DELA. */
 void describe('o teto de `care_notes` é conferido DEPOIS da redação', () => {
-  /**
-   * O teto destes casos. É `TETO_DE_CARE_NOTES`, e não o `maxLength` do contrato, de
-   * propósito: `application/` não lê disco (pureza do domínio, `eslint.config.mjs`),
-   * então quem prende este número ao `CHECK` da coluna é
-   * `adapters/persistence/teto-de-care-notes-vem-da-coluna.test.ts`.
-   */
   function tetoDaColuna(): number {
     return TETO_DE_CARE_NOTES;
   }
 
-  /** Nota de EXATAMENTE `teto` caracteres, com o trecho dentro. */
   function notaDe(teto: number, trecho: string): string {
     const nota = `nota ${trecho} ${'a'.repeat(teto - 6 - trecho.length)}`;
     assert.equal([...nota].length, teto, 'a montagem da nota errou o tamanho');
     return nota;
   }
 
-  /** O repositório que recusa como o Postgres recusa. */
   class RepositorioQueImitaOCheck extends RepositorioFalso {
     public readonly teto: number;
 

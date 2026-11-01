@@ -1,4 +1,3 @@
-/** As rotas da conexão entre pessoas (fatia F). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -71,7 +70,6 @@ export const rotaDoEncerramentoDeConexao = defineRoute({
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const DIRECAO_PADRAO: DirecaoDoPedido = 'received';
-/** Aresta é dado de duas pessoas: nada daqui entra em cache compartilhado. */
 const SEM_CACHE = 'private, no-store';
 
 export interface Autenticador {
@@ -100,7 +98,6 @@ interface QueryDasCaixas {
   readonly limit?: number;
 }
 
-/** A paginação da lista das próprias conexões. */
 interface PaginacaoSimples {
   readonly page?: number;
   readonly limit?: number;
@@ -155,10 +152,6 @@ export function registrarRotasDeConexao(
     account: async (request: FastifyRequest) => chamador(request, deps),
   };
 
-  /**
-   * Pedir. **O corpo carrega UMA das duas credenciais**, e o guarda de corpo fechado
-   * continua não sendo opcional.
-   */
   const corpoDoPedido = corpoDe(deps.contrato, rotaDoPedidoDeConexao.operationId);
   registrarRota(
     app,
@@ -183,7 +176,6 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** As duas caixas. `received` é o default: a tela abre no que espera decisão. */
   registrarRota(
     app,
     rotaDasCaixasDePedidos,
@@ -205,7 +197,6 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026). */
   registrarRota(
     app,
     rotaDasPropriasConexoes,
@@ -224,7 +215,6 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** Só números, e só da própria conta. */
   registrarRota(
     app,
     rotaDoResumoDeConexoes,
@@ -235,7 +225,6 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** Aceitar. **Sem aceite não há conexão**, e este é o único caminho que a cria. */
   registrarRota(
     app,
     rotaDoAceiteDeConexao,
@@ -247,7 +236,6 @@ export function registrarRotasDeConexao(
     },
   );
 
-  /** Recusar, cancelar ou desfazer. */
   registrarRota(
     app,
     rotaDoEncerramentoDeConexao,

@@ -1,4 +1,3 @@
-/** Isca do `errors[].field`: o 400 de corpo precisa dizer QUAL campo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';

@@ -1,4 +1,3 @@
-/** Rotas da conversa mediada, do lado de quem tem conta. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -125,10 +124,6 @@ export interface DependenciasDasRotasDeConversa {
   readonly assinarFoto: AssinadorDeFoto;
 }
 
-/**
- * MEMOIZADA por requisição: o teto por `conversation_participant` precisa do
- * chamador antes do handler, e o handler precisa do mesmo chamador.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeConversa,
@@ -162,7 +157,6 @@ function paginaDaQuery(request: FastifyRequest): Pagina {
   };
 }
 
-/** A janela da LISTA: a de [paginaDaQuery], mais o `q` do contrato. */
 function paginaDaListaDaQuery(request: FastifyRequest): PaginaDaLista {
   const { q } = request.query as { q?: string };
   const termo = typeof q === 'string' ? q.trim() : '';
@@ -172,7 +166,6 @@ function paginaDaListaDaQuery(request: FastifyRequest): PaginaDaLista {
   };
 }
 
-/** O balde do teto: a conversa E o participante, nunca um dos dois. */
 async function participanteDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeConversa,
@@ -187,7 +180,6 @@ async function participanteDoTeto(
   }
 }
 
-/** `account`, para a dimensão de casos distintos. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeConversa,
@@ -240,7 +232,6 @@ export async function comoResposta(
   };
 }
 
-/** A URL ASSINADA da foto da mensagem, ou `null`. */
 async function urlDaFoto(
   mensagem: MensagemGravada,
   assinar: AssinadorDeFoto,
@@ -286,7 +277,6 @@ export function registrarRotasDeConversas(
     },
   );
 
-  /** `POST /v1/me/conversations-seen` — 204. */
   registrarRota(
     app,
     rotaDeListaVista,
@@ -355,7 +345,6 @@ export function registrarRotasDeConversas(
     },
   );
 
-  /** `POST /v1/conversations/:conversationId/block` — 204, sem corpo. */
   registrarRota(
     app,
     rotaDeBloqueioDaConversa,
@@ -367,7 +356,6 @@ export function registrarRotasDeConversas(
     },
   );
 
-  /** `POST /v1/conversations/:conversationId/report` — 202 `Accepted`. */
   registrarRota(
     app,
     rotaDeDenunciaDaConversa,

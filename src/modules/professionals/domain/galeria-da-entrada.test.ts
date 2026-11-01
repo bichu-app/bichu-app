@@ -1,7 +1,3 @@
-/**
- * A GALERIA da entrada do diretorio, na camada de regra (cliente, 29/10/2026:
- * *"implemente a tabela de galeria entao"*).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

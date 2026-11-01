@@ -1,4 +1,3 @@
-/** A decisão "este evento derruba o endereço ou não" (BICHUS-13, critérios 7 e 9). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

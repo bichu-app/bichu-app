@@ -1,19 +1,9 @@
-/**
- * O padrao de endereco da aplicacao inteira: **a pessoa digita o endereco
- * completo, com `https://`**.
- */
 import type { ProblemFieldError } from '../http/problem.js';
 
-/** Controles de direcao: texto que se le ao contrario do que esta gravado. */
 const CONTROLE_BIDIRECIONAL = /[‪-‮⁦-⁩]/u;
 
-/** IPv4 literal, inclusive com zero a esquerda. */
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
-/**
- * Host que so existe dentro de uma rede: `localhost`, `.local`, `.internal`,
- * `.home.arpa` e nome sem ponto nenhum.
- */
 const HOST_LOCAL = /^(?:localhost|.*\.(?:local|internal|localdomain|home\.arpa))$/;
 
 /** O teto padrao. Quem precisa de outro passa o proprio. */

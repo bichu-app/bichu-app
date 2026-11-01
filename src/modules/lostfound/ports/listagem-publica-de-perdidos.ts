@@ -1,4 +1,3 @@
-/** Porta da **listagem pública de perdidos** (`listPublicLostPets`). */
 import type { EspecieDoCaso, PorteDoCaso } from './leitura-publica-do-caso.js';
 
 /** A janela de `period`, como o contrato a declara. */

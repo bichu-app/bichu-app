@@ -1,15 +1,9 @@
-/** Portao do `default` alcancavel no CORPO DA EDICAO. */
 import { parse as parseYaml } from 'yaml';
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
-/**
- * As operacoes que servem uma MUDANCA PARCIAL por `POST`, e por isso contam como
- * edicao embora a varredura por metodo nao as alcance.
- */
 const EDICOES_PARCIAIS_SERVIDAS_POR_POST: readonly string[] = ['changeAdminNetworkEventAccess'];
 
-/** O INVENTARIO DA DIVIDA: as edicoes que hoje alcancam `default` no contrato. */
 const PADRAO_INJETADO_ACEITO_HOJE: readonly string[] = [
   'updateNetworkEvent',
   'updateAdminNetworkEvent',
@@ -40,7 +34,6 @@ export interface ResultadoDoPortao {
   readonly violacoes: readonly string[];
 }
 
-/** O esquema do corpo JSON da operacao, sem resolver `$ref` (a varredura resolve). */
 function esquemaDoCorpo(operacao: Record<string, unknown>): Record<string, unknown> | undefined {
   const corpo = operacao['requestBody'];
   const conteudo = ehObjeto(corpo) ? corpo['content'] : undefined;
@@ -49,7 +42,6 @@ function esquemaDoCorpo(operacao: Record<string, unknown>): Record<string, unkno
   return ehObjeto(esquema) ? esquema : undefined;
 }
 
-/** Varre o esquema atras de `default`, resolvendo `$ref` transitivamente. */
 function varrer(
   no: unknown,
   trilha: string,

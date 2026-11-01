@@ -1,7 +1,3 @@
-/**
- * A politica assinada de envio direto de uma imagem de catalogo (ADR-0007 a letra,
- * ADR-0027 item 10).
- */
 import { problemas } from '../../../shared/http/errors.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import { chaveDoOriginalDeCatalogo } from '../domain/chave-de-objeto.js';

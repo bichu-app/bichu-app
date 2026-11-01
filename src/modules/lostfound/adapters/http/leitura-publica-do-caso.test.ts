@@ -1,4 +1,3 @@
-/** `GET /v1/public/lost-cases/{shareToken}` e `.../poster`, pela borda HTTP. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -39,10 +38,6 @@ const PLANTADOS: readonly ValorPlantado[] = [
   { rotulo: 'UUID do caso', valor: CASO_ID },
 ];
 
-/**
- * O caso legítimo, com os dados sensíveis plantados no texto livre, e as
- * propriedades a mais que uma porta descuidada carregaria.
- */
 function casoHostil(parcial: Partial<CasoPublico> = {}): CasoPublico {
   const legitimo: CasoPublico = {
     shareToken: TOKEN,
@@ -231,7 +226,6 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
   });
 
-  /** O CORPO REAL do agradecimento, medido pela rota e não pela camada de aplicação. */
   void it('caso REENCONTRADO: 410 em problem+json, agradecendo e sem next_action', async () => {
     const bancada = montar(() => casoHostil({ aberto: false, reencontrado: true }));
     const resposta = await pedir(bancada, URL_DO_CASO);
@@ -325,10 +319,6 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
   });
 });
 
-/**
- * O `type` que o contrato promete no 410 das duas operações, lido do exemplo de
- * `components/responses/LostCaseClosed`.
- */
 function slugDoCasoEncerrado(): string {
   const spec = carregarContrato('api/openapi.yaml').spec as {
     components?: { responses?: Record<string, { content?: Record<string, { examples?: Record<string, { value?: { type?: unknown } }> }> }> };
@@ -346,10 +336,6 @@ function declara(contrato: Contrato, operationId: string, status: number): boole
   return typeof respostas === 'object' && respostas !== null && String(status) in respostas;
 }
 
-/**
- * Todo status que as duas rotas emitem está declarado, e o 410 aponta para
- * `LostCaseClosed`.
- */
 void describe('os status que as rotas do caso emitem são os que o contrato declara', () => {
   const TOKEN_CURTO = 'curto';
 
@@ -398,10 +384,6 @@ void describe('os status que as rotas do caso emitem são os que o contrato decl
     }
   });
 
-  /**
-   * O 410 de cada operação aponta para a SUA resposta, e as duas são diferentes
-   * desde 28/10/2026.
-   */
   void it('cada operação aponta para a sua resposta, e o token desconhecido fica fundido nas duas', async () => {
     const contrato = carregarContrato('api/openapi.yaml');
     for (const [operationId, url, refEsperada] of [

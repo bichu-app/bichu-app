@@ -1,4 +1,3 @@
-/** BICHUS-178: o teto declarado passa a ser aplicado pelo REGISTRO da rota. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import Fastify from 'fastify';
@@ -31,7 +30,6 @@ function servidor(contador: RateLimitStore = contadorNovo()) {
   });
 }
 
-/** O slug de `type`, que é por onde o cliente decide (RFC 9457). */
 function tipoDe(corpo: string): string | undefined {
   try {
     const { type } = JSON.parse(corpo) as { type?: unknown };
@@ -50,7 +48,6 @@ void describe('critério 1: o registro aplica o teto sem o autor da rota chamar 
     rateLimit: [{ dimension: ['ip'], limit: 2, window: '1h', onExceed: 'deny_429' }],
   });
 
-  /** O handler não sabe que existe teto. */
   async function statusDasTres(contador: RateLimitStore): Promise<number[]> {
     const app = servidor(contador);
     registrarRota(app, rotaDeExemplo, {}, async (_request, reply) => reply.status(200).send({}));
@@ -201,10 +198,6 @@ void describe('critério 8: a tentativa válida não consome o contador de invá
     ],
   });
 
-  /**
-   * `?ok=1` responde 200; qualquer outra coisa lança `unauthenticated`, que é um dos
-   * tipos que significam credencial recusada.
-   */
   function bancada(contador: RateLimitStore) {
     const app = servidor(contador);
     registrarRota(app, rotaComInvalidas, {}, async (request, reply) => {

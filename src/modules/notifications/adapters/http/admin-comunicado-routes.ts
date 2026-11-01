@@ -1,7 +1,3 @@
-/**
- * `/v1/admin/broadcasts/...`: o COMUNICADO -- o unico aviso do produto com alcance
- * total.
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -11,10 +7,6 @@ import { atorAdministrativoDe } from '../../../../shared/http/superficie-adminis
 import type { Comunicado, JanelaDeDisparo, PaginaDeComunicados } from '../../domain/comunicado.js';
 import type { ComunicadosAdministrativos } from '../../application/comunicados-administrativos.js';
 
-/**
- * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
- * administrativas.
- */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -68,16 +60,11 @@ interface QueryDaLista {
   readonly limit?: number;
 }
 
-/**
- * `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave
- * (ADR-0027 item 20.2).
- */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;
 };
 
-/** Um comunicado, campo a campo, exatamente como `AdminBroadcast` o declara. */
 function comoResposta(c: Comunicado): Record<string, unknown> {
   return {
     ref: c.ref,

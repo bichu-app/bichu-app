@@ -1,4 +1,3 @@
-/** Gravação da trilha no esquema `audit`. */
 import { sql } from 'kysely';
 import { assumirPapel, type Db, type DbTransaction } from '../../../../shared/db/pool.js';
 import { hmacDeEnderecoIp } from '../../../../shared/crypto/digest.js';
@@ -32,12 +31,6 @@ function comoJson(valor: Record<string, unknown> | undefined): unknown {
   return valor === undefined ? null : valor;
 }
 
-/**
- * O tipo ja impede o evento incoerente; esta conferencia existe para o que chega
- * por conversao (`as`) ou por JavaScript sem tipo, e ela antecipa o que os dois
- * `CHECK` de `audit.events` recusariam, com uma mensagem que diz qual ator estava
- * errado.
- */
 function exigirAtorCoerente(evento: AuditEvent): void {
   const temUsuario = evento.actorUserId !== undefined;
   const temAdmin = evento.actorAdminId !== undefined;
@@ -51,7 +44,6 @@ function exigirAtorCoerente(evento: AuditEvent): void {
 
 type DependenciasDaGravacao = Pick<DependenciasDaTrilha, 'ids' | 'clock' | 'ipHmacKey'>;
 
-/** O `INSERT`, sob o papel que ja foi assumido por quem chama. */
 async function inserirEvento(
   trx: DbTransaction,
   deps: DependenciasDaGravacao,

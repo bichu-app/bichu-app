@@ -1,4 +1,3 @@
-/** Casos de uso da sessao do backoffice (ADR-0027 itens 2, 5, 8 e 20). */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { problemas } from '../../../shared/http/errors.js';
 import type { EscopoDeReautenticacaoAdministrativa } from '../../../shared/http/route-definition.js';
@@ -111,7 +110,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     session: etiqueta,
   });
 
-  /** Login recusado: vai para a trilha comum, porque nao ha escrita a acompanhar. */
   async function registrarLoginRecusado(
     contexto: ContextoDaRequisicao,
     motivo: string,
@@ -128,7 +126,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     });
   }
 
-  /** Senha errada de conta que existe (D44). */
   async function registrarSenhaErrada(conta: ContaAdministrativa, contexto: ContextoDaRequisicao): Promise<void> {
     const agora = deps.clock.now();
     const bloqueou = await deps.escrita.executar(async (trx) => {
@@ -194,10 +191,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     };
   }
 
-  /**
-   * D43, forma de 28/09: a senha certa que esta numa base de vazadas NAO tem
-   * resposta propria.
-   */
   function avisarSenhaVazada(conta: ContaAdministrativa, agora: Instant, contexto: ContextoDaRequisicao): void {
     void avisarTodosOsAdministradores(
       {
@@ -214,7 +207,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     );
   }
 
-  /** Um e-mail para CADA administrador ativo (D46, D61, D62). */
   async function avisarTodosOsAdministradores(
     mensagem: { readonly assunto: string; readonly corpo: string },
     ocorrencia: Record<string, unknown>,
@@ -236,10 +228,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     }
   }
 
-  /**
-   * D46: o dono da conta recebe um e-mail a cada sessao aberta, com o link "nao fui
-   * eu" do proprio painel (D62).
-   */
   async function avisarSessaoAberta(
     conta: ContaAdministrativa,
     sessionId: string,
@@ -388,10 +376,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
   return {
     ...porta,
 
-    /**
-     * `POST /v1/admin/auth/login`, na ordem do contrato depois do teto: desafio, senha
-     * (com o hash de descarte), conta ativa, base de vazadas, sessao.
-     */
     async entrar(entrada: EntradaDoLoginAdministrativo, contexto: ContextoDaRequisicao): Promise<SessaoAberta> {
       const nota = await deps.captcha.avaliar(entrada.captchaToken, ACAO_DO_CAPTCHA_ADMINISTRATIVO);
       if (nota === undefined || nota < NOTA_MINIMA_DO_CAPTCHA_ADMINISTRATIVO) {
@@ -493,7 +477,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       };
     },
 
-    /** `POST /v1/admin/auth/disavow` (D62). */
     async desautorizar(tokenBruto: string, contexto: ContextoDaRequisicao): Promise<void> {
       const agora = deps.clock.now();
       const alvo = await deps.escrita.executar(async (trx) => {
@@ -533,7 +516,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       );
     },
 
-    /** `GET /v1/admin/session`. */
     visaoDaSessao(sessao: SessaoAdministrativaConferida, valorDoCookie: string): VisaoDaSessaoAdministrativa {
       return visao(
         sessao.displayName,
@@ -560,11 +542,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       });
     },
 
-    /**
-     * `POST /v1/admin/auth/logout-all`: empurra
-     * `admin_accounts.sessions_invalid_before`, que a guarda le a cada requisicao, e
-     * revoga as linhas vivas.
-     */
     async sairDeTodas(sessao: SessaoAdministrativaConferida, contexto: ContextoDaRequisicao): Promise<void> {
       const agora = deps.clock.now();
       const conta = await deps.contas.buscarPorId(sessao.adminAccountId);
@@ -585,12 +562,6 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       });
     },
 
-    /**
-     * `POST /v1/admin/auth/reauth` (D40): confere a senha, ROTACIONA a sessao
-     * (identificador e anti-CSRF novos, mesmo instante da senha, mesmo teto) e abre
-     * uma janela de 5 minutos por escopo pedido, cada uma de uso unico e presa a
-     * sessao nova.
-     */
     async reautenticar(
       sessao: SessaoAdministrativaConferida,
       senha: string,

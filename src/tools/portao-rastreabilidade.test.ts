@@ -1,4 +1,3 @@
-/** Testes do portão da matriz de rastreabilidade (ADR-0027 item 18). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';

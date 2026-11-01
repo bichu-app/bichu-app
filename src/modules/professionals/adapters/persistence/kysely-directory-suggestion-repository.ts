@@ -1,4 +1,3 @@
-/** Persistencia da fila de sugestoes do diretorio. */
 import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 
@@ -21,12 +20,10 @@ import {
   TRABALHO_DE_IMAGEM_DE_CATALOGO,
 } from '../../../media/ports/imagem-de-catalogo.js';
 
-/** O que o `RETURNING` da funcao devolve. */
 interface LinhaDoRegistro {
   created_at: Date;
 }
 
-/** Uma linha de `indicacoes_do_autor(uuid)`. */
 interface LinhaDaMinhaIndicacao {
   ref: string;
   display_name: string;
@@ -63,10 +60,6 @@ function comoMinhaIndicacao(l: LinhaDaMinhaIndicacao): MinhaIndicacao {
   };
 }
 
-/**
- * A forma de UUID, para o `upload_id` que nao e UUID devolver "nao serve" em vez
- * de estourar como erro de banco.
- */
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -100,22 +93,12 @@ export function criarDirectorySuggestionRepository(
   ids: IdGenerator,
 ): DirectorySuggestionRepository {
   return {
-    /**
-     * Grava a indicacao -- e, quando ha logotipo, confirma o envio dele NA MESMA
-     * TRANSACAO (ADR-0027 item 10).
-     */
     async registrar(sugestao: SugestaoAGravar): Promise<RegistroDaSugestao> {
       const ref = randomBytes(16).toString('base64url');
       const logoUploadId = sugestao.logoUploadId;
       const fotos = sugestao.photoUploadIds;
-      /**
-       * O `id` da indicacao, sorteado AQUI e nao dentro de `gravar`: as linhas de
-       * `directory_suggestion_images` precisam dele para a chave estrangeira, e
-       * um segundo `ids.uuidv7()` daria um `id` diferente do que a funcao gravou.
-       */
       const idDaIndicacao = ids.uuidv7();
 
-      /** O `INSERT` da indicacao, pela funcao. */
       const gravar = async (
         executor: Db | DbTransaction,
         logoImageId: string | null,
@@ -148,20 +131,6 @@ export function criarDirectorySuggestionRepository(
         return { tipo: 'gravada', sugestao: { ref, createdAt: gravada.created_at } };
       };
 
-      /**
-       * Confirma UM envio e devolve o `catalog_images.id` que nasceu dele, ou
-       * `undefined` quando o envio NAO SERVE -- e os cinco casos sao o mesmo
-       * caso de proposito (inexistente, **de outra conta**, de outro proposito,
-       * vencido, **ja usado**), porque dizer qual deles ocorreu diria a quem
-       * adivinhou um `upload_id` se ele existe.
-       *
-       * **A conta esta na clausula `WHERE`, e nao num `if` depois da leitura:**
-       * um envio de outra pessoa nao e lido, entao nao ha o que comparar errado.
-       *
-       * `FOR UPDATE OF u` trava a linha do envio: duas indicacoes concorrentes
-       * com o mesmo `upload_id` serializam aqui, e a segunda ve
-       * `confirmed_at` preenchido.
-       */
       const confirmar = async (
         trx: DbTransaction,
         uploadId: string,
@@ -185,15 +154,6 @@ export function criarDirectorySuggestionRepository(
 
         const envio = r.rows[0];
         if (envio === undefined) return undefined;
-        /**
-         * **E AQUI QUE "JA USADO EM OUTRA INDICACAO" E RECUSADO**, e nao numa
-         * segunda consulta: usar um envio EXIGE confirma-lo, e a confirmacao e
-         * esta -- nao existe caminho que vincule a imagem a uma indicacao sem
-         * passar por aqui, porque o vinculo e gravado na MESMA transacao. Embaixo
-         * disso ainda ha o `UNIQUE` global de `directory_suggestion_images.
-         * image_id` e o `directory_suggestions_logotipo_unico`: se algum dia
-         * houver um segundo caminho, o banco recusa em vez de duplicar.
-         */
         if (envio.confirmed_at !== null) return undefined;
         if (envio.expires_at.getTime() <= Date.now()) return undefined;
 
@@ -225,7 +185,6 @@ export function criarDirectorySuggestionRepository(
         return imagemId;
       };
 
-      /** Sem logotipo E sem foto: uma instrucao, e transacao nenhuma. */
       if (logoUploadId === null && fotos.length === 0) return gravar(db, null);
 
       try {
@@ -236,12 +195,6 @@ export function criarDirectorySuggestionRepository(
           throw new EnvioNaoServe('logo_upload_id');
         }
 
-        /**
-         * As fotos NA ORDEM DO ARRAY, e o indice e a `position`: a `0` e a capa.
-         * O laco e sequencial de proposito -- cada volta trava a linha do envio,
-         * e `Promise.all` aqui abriria a porta a impasse entre duas indicacoes
-         * que mandassem os mesmos envios em ordens diferentes.
-         */
         const linhas: { suggestion_id: string; image_id: string; position: number }[] = [];
         for (const [position, uploadId] of fotos.entries()) {
           const imagemId = await confirmar(trx, uploadId, PROPOSITO_DA_FOTO_DA_INDICACAO);
@@ -253,22 +206,12 @@ export function criarDirectorySuggestionRepository(
 
         const gravada = await gravar(trx, logoImageId);
 
-        /**
-         * As fotos entram DEPOIS da funcao, com SQL comum e na MESMA transacao:
-         * elas moram em OUTRA tabela, que nao tem coluna proibida nenhuma, e por
-         * isso `directory_suggestions_registrar` nao ganhou um decimo quinto
-         * argumento (esta escrito no cabecalho da `20261030000002`, e e
-         * deliberado).
-         */
         if (linhas.length > 0) {
           await trx.insertInto('directory_suggestion_images').values(linhas).execute();
         }
         return gravada;
         });
       } catch (erro) {
-        // A sentinela volta a ser o tipo da porta DEPOIS do `ROLLBACK`. Qualquer
-        // outro erro -- 23514 do `CHECK` de posicao, 23505 do `UNIQUE` de
-        // `image_id`, queda de conexao -- sobe, porque nao e recusa de envio.
         if (erro instanceof EnvioNaoServe) return { tipo: 'envio_nao_serve', campo: erro.campo };
         throw erro;
       }

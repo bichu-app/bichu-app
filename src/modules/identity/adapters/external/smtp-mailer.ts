@@ -1,4 +1,3 @@
-/** Envio por SMTP, escrito à mão, e o transporte `log`. */
 import { createConnection, type Socket } from 'node:net';
 import type { Mailer, Mensagem } from '../../ports/mailer.js';
 import type { MailConfig } from '../../../../shared/config/app-config.js';
@@ -12,7 +11,6 @@ import { criarMailerDoPostmark } from './postmark-mailer.js';
 /** Reexportadas, e não redefinidas. */
 export { conferirDestinatario, conferirRemetente };
 
-/** Uma troca do protocolo: manda a linha, espera o código esperado. */
 async function dizer(
   socket: Socket,
   linha: string | null,

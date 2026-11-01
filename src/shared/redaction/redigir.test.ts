@@ -1,4 +1,3 @@
-/** Iscas da redação de canal mediado. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { redigirCanalMediado } from './redigir.js';

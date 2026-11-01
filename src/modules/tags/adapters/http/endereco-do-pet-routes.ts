@@ -1,7 +1,3 @@
-/**
- * As duas rotas de `/v1/pets/{petId}/delivery-address`: o endereco de entrega
- * guardado NO PET.
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -40,14 +36,8 @@ export interface DependenciasDoEnderecoDoPet {
   readonly contrato: Contrato;
 }
 
-/** O corpo, como o schema do contrato (`DeliveryAddress`) ja o validou. */
 type CorpoDoEnderecoDoPet = DeliveryAddressDoContrato;
 
-/**
- * MEMOIZADA por requisicao, pelo mesmo motivo de `endereco-guardado-routes.ts`: o
- * teto por `account` precisa do dono antes do handler, e o handler precisa do
- * mesmo dono.
- */
 function contaDoChamador(
   request: FastifyRequest,
   deps: DependenciasDoEnderecoDoPet,
@@ -64,11 +54,6 @@ function contaDoChamador(
   });
 }
 
-/**
- * `account` para o teto. Quem nao apresentou credencial valida nao tem balde de
- * conta -- a recusa dele e o 401 do handler, e nao um 429 que confundiria "sem
- * sessao" com "chamou demais".
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDoEnderecoDoPet,

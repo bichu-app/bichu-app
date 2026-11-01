@@ -1,7 +1,3 @@
-/**
- * O código da tag. O que se prova aqui é o **efeito de resolução**: dois textos
- * diferentes ou chegam no mesmo código canônico, ou não chegam em nenhum.
- */
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { describe, it } from 'node:test';
@@ -26,10 +22,8 @@ function deHex(hexadecimal: string): Uint8Array {
   return new Uint8Array(Buffer.from(hexadecimal, 'hex'));
 }
 
-/** Um código válido qualquer, com símbolo de verificação correto por construção. */
 const CANONICO = gerarCodigoDaTag(deHex('7c2f9a03b15e88d4c061'));
 
-/** O primeiro código gerado que contém o símbolo pedido. */
 function codigoQueContem(simbolo: string): string {
   for (let valor = 0; valor < 256; valor += 1) {
     const codigo = gerarCodigoDaTag(bytes(valor));
@@ -136,11 +130,6 @@ void describe('viés do descarte: o ponto em que um defeito seria permanente', (
     }
   });
 
-  /**
-   * 10 bytes com os 20 bits de prefixo escolhidos, e todo o resto escolhido à parte:
-   * `enchimento` mexe nos 55 bits de baixo e `descarte` nos 5 bits altos que a
-   * codificação joga fora.
-   */
   function comPrefixo(vinteBits: number, enchimento: number, descarte: number): Uint8Array {
     const b = new Uint8Array(BYTES_DO_GERADOR);
     b[0] = ((descarte & 0x1f) << 3) | ((vinteBits >>> 17) & 0x07);

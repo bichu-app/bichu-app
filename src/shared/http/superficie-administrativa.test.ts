@@ -1,7 +1,3 @@
-/**
- * A guarda do prefixo `/v1/admin`, sem banco (BICHUS-259, ADR-0027 itens 2, 3 e
- * 7).
- */
 import assert from 'node:assert/strict';
 import { AppError } from './errors.js';
 import { readFileSync } from 'node:fs';
@@ -87,7 +83,6 @@ interface Bancada {
   readonly app: RegistradorDeRotas;
   readonly recusas: MotivoDaRecusaDaGuarda[];
   readonly log: string[];
-  /** Quantas janelas foram consumidas e quantas devolvidas (QA bug 4). */
   readonly janelas: { consumidas: number; devolvidas: number };
 }
 

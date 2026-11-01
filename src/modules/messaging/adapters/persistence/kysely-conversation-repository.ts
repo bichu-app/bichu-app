@@ -1,4 +1,3 @@
-/** Persistência da conversa mediada. */
 import { sql, type RawBuilder } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -30,7 +29,6 @@ import type {
 interface LinhaDaConversa {
   id: string;
   found_report_id: string;
-  /** Nulo quando o achador nao tem conta, que e o caminho principal. */
   finder_user_id: string | null;
   case_id: string | null;
   pet_display_name: string;
@@ -96,32 +94,24 @@ function comoMensagem(linha: LinhaDaMensagem): MensagemGravada {
   };
 }
 
-/** A ULTIMA MENSAGEM da conversa, como subconsulta correlacionada. */
 const ULTIMA_MENSAGEM = (coluna: 'body' | 'created_at') => sql`(
         SELECT msg.${sql.raw(coluna)} FROM conversation_messages msg
         WHERE msg.conversation_id = conversations.id
         ORDER BY msg.created_at DESC, msg.id DESC LIMIT 1
       )`;
 
-/** A CHAVE DE ORDEM E DE CURSOR da lista: `coalesce(última mensagem, abertura)`. */
 const CHAVE_DA_ORDEM = sql`coalesce(${ULTIMA_MENSAGEM('created_at')}, conversations.opened_at)`;
 
-/** O recorte de `q`: nome do pet, ou nome de exibição do outro lado. */
 function comoLike(termo: string): string {
   return `%${termo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-/** **A CONTA DO OUTRO LADO**, derivada da mesma comparação que `papel_do_chamador`. */
 const CONTA_DO_OUTRO_LADO = (chamador: UserId) => sql`(CASE
         WHEN conversations.tutor_user_id = ${chamador}
         THEN conversations.finder_user_id
         ELSE conversations.tutor_user_id
       END)`;
 
-/**
- * **O PREDICADO DA EMENDA 3 (19/10/2026): existe conexão ACEITA entre quem chama e
- * `outro`?**
- */
 const CONEXAO_ACEITA_ENTRE = (chamador: UserId, outro: RawBuilder<unknown>) =>
   sql<boolean>`EXISTS (
         SELECT 1 FROM user_connections uc
@@ -243,7 +233,6 @@ export function construtorDaContagemDoChamador(
   return comTermo.clearSelect().clearOrderBy().select(sql<number | string>`count(*)`.as('n'));
 }
 
-/** O predicado de `q`, num lugar só: a lista e a contagem leem o mesmo. */
 function recorteDoTermo(termo: string) {
   const alvo = comoLike(termo);
   return sql<boolean>`(
@@ -356,10 +345,6 @@ export function construtorDaRetencao(
     .where('held_for_review_at', 'is', null);
 }
 
-/**
- * O id da conversa do token, como SUBCONSULTA, e nunca como valor que a aplicação
- * leu antes.
- */
 function idDaConversaDoToken(resumo: Uint8Array) {
   const janelaEmSegundos = JANELA_DE_AGRUPAMENTO_EM_MS / 1000;
   return sql<string>`(
@@ -486,10 +471,6 @@ function comoConversaDoAchador(linha: LinhaDaConversaDoAchador): ConversaDoAchad
 
 export function criarConversationRepository(db: Db): ConversationRepository {
   return {
-    /**
-     * `INSERT ... SELECT` a partir do pet: o tutor e o caso aberto são derivados
-     * dentro da própria escrita.
-     */
     async abrirPorAviso(abertura: AberturaPorAviso): Promise<void> {
       await sql`
         INSERT INTO conversations (id, found_report_id, pet_id, case_id, tutor_user_id, finder_user_id)
@@ -593,7 +574,6 @@ export function criarConversationRepository(db: Db): ConversationRepository {
       await construtorDoBloqueioDoAchador(db, resumo, agora).execute();
     },
 
-    /** O CONTADOR DO SINO (BICHUS-278). */
     async contarParaOSino(chamador): Promise<number> {
       const linha = await sql<{ n: number | string }>`
         SELECT count(*) AS n
@@ -619,7 +599,6 @@ export function criarConversationRepository(db: Db): ConversationRepository {
       return Number(n);
     },
 
-    /** A conta viu a área. **Não marca item nenhum**, e não recebe conversa. */
     async marcarListaVista(chamador, agora): Promise<void> {
       await sql`
         INSERT INTO conversation_list_views (user_id, seen_at)
@@ -628,7 +607,6 @@ export function criarConversationRepository(db: Db): ConversationRepository {
       `.execute(db);
     },
 
-    /** Este lado ABRIU a conversa. */
     async marcarConversaLida(conversa, chamador, agora): Promise<void> {
       await sql`
         INSERT INTO conversation_reads (conversation_id, role, last_read_at)
@@ -645,10 +623,6 @@ export function criarConversationRepository(db: Db): ConversationRepository {
       `.execute(db);
     },
 
-    /**
-     * `ON CONFLICT` sobre o índice parcial de denúncia aberta: a repetição do mesmo
-     * lado soma ao item de fila que já existe, em vez de abrir outro.
-     */
     async registrarDenuncia(denuncia: NovaDenuncia): Promise<void> {
       const quando = new Date(denuncia.agora);
       await sql`

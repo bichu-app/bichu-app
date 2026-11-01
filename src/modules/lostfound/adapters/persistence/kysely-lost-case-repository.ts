@@ -1,4 +1,3 @@
-/** Persistência do caso de perdido. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
@@ -63,7 +62,6 @@ function comoCaso(l: LinhaDoCaso): CasoGravado {
   };
 }
 
-/** As colunas da leitura do dono. */
 const COLUNAS = sql<LinhaDoCaso>`
   id, pet_id, status, last_seen_at,
   (last_seen_point IS NOT NULL) AS tem_ponto,
@@ -203,7 +201,6 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
       return linha === undefined ? null : comoCaso(linha);
     },
 
-    /** `PATCH /v1/lost-cases/{caseId}` — onde e quando, corrigidos. */
     async atualizarOndeEQuando(entrada: AtualizacaoDoCaso): Promise<CasoGravado | null> {
       const ponto =
         entrada.lat === undefined || entrada.lon === undefined
@@ -266,7 +263,6 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
       return linha === undefined ? null : comoCaso(linha);
     },
 
-    /** Reabre o caso encerrado por engano. */
     async reabrir(entrada): Promise<CasoGravado | null> {
       const r = await sql<LinhaDoCaso>`
         UPDATE lost_cases
@@ -314,7 +310,6 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
   };
 }
 
-/** As colunas do achado que viajam junto do candidato. */
 const COLUNAS_DO_ACHADO = [
   'found_reports.id as achado_id',
   'found_reports.origin as achado_origin',
@@ -367,16 +362,11 @@ interface LinhaDoCandidato {
   achado_created_at: Date;
 }
 
-/**
- * `matched_attributes` é `jsonb` e o driver pode entregá-lo como objeto ou como
- * texto.
- */
 function atributosQuePontuaram(bruto: Record<string, number> | string): readonly string[] {
   const objeto = typeof bruto === 'string' ? (JSON.parse(bruto) as Record<string, number>) : bruto;
   return Object.keys(objeto).filter((chave) => (objeto[chave] ?? 0) > 0);
 }
 
-/** A linha, com o estado como ele está no banco: os TRÊS valores. */
 function comoCandidatoDoCaso(l: LinhaDoCandidato): CandidatoDoCaso {
   return {
     id: l.id,
@@ -414,7 +404,6 @@ function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
   };
 }
 
-/** O RELATOR DO ACHADO AINDA TEM CONTA HABILITADA? */
 const RELATOR_HABILITADO = sql<boolean>`conta_habilitada(found_reports.reporter_user_id)`;
 
 /** A escrita da decisão, como consulta ainda não executada. */

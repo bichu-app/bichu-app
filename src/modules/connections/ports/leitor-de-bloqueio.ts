@@ -1,4 +1,3 @@
-/** O bloqueio, visto de fora — **lido, nunca escrito, por este módulo**. */
 import type { UserId } from '../../../shared/types/brands.js';
 
 export interface LeitorDeBloqueio {

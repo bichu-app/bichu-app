@@ -1,13 +1,8 @@
-/** A TABELA de comparacao de versao, e nao um caso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { compararVersoes, lerVersao } from './versao.js';
 
-/**
- * A tabela de ordem. `esperado` e o SINAL de `comparar(a, b)`: `-1` quando `a` e
- * mais antiga, `0` quando sao a mesma, `1` quando `a` e mais nova.
- */
 const ORDEM: readonly { a: string; b: string; esperado: -1 | 0 | 1; porque: string }[] = [
   { a: '1.10.0', b: '1.9.0', esperado: 1, porque: 'menor 10 e mais novo que menor 9' },
   { a: '1.9.0', b: '1.10.0', esperado: -1, porque: 'o mesmo, do outro lado' },
@@ -27,7 +22,6 @@ const ORDEM: readonly { a: string; b: string; esperado: -1 | 0 | 1; porque: stri
   { a: '9999.9999.9999', b: '9999.9999.9998', esperado: 1, porque: 'o teto ainda compara' },
 ];
 
-/** O que NAO e versao. Cada um devolve `undefined`, e `undefined` libera. */
 const NAO_E_VERSAO: readonly { bruta: string; porque: string }[] = [
   { bruta: '', porque: 'vazio' },
   { bruta: '1', porque: 'um componente' },

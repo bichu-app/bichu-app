@@ -1,4 +1,3 @@
-/** Implementação da porta `IdGenerator`. */
 import { randomBytes } from 'node:crypto';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { OpaqueToken } from '../types/brands.js';
@@ -6,10 +5,8 @@ import type { OpaqueToken } from '../types/brands.js';
 const VERSAO_7 = 0x70;
 const VARIANTE_RFC4122 = 0x80;
 
-/** Contador dedicado de 12 bits, o método 1 da RFC 9562 §6.2. */
 const LARGURA_DO_CONTADOR = 0x0fff;
 
-/** A semente ocupa só os 8 bits baixos: os 4 mais significativos nascem zerados. */
 const MASCARA_DA_SEMENTE = 0x00ff;
 
 let ultimoMilissegundo = -1;

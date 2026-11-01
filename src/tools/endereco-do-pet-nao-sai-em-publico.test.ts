@@ -1,7 +1,3 @@
-/**
- * O ENDERECO DE ENTREGA DO PET NAO SAI EM SUPERFICIE PUBLICA, NAO APARECE EM LISTA
- * E NAO E LIDO POR OUTRA CONTA — medido no CONTRATO e na CONSULTA.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -12,10 +8,8 @@ const CAMINHO_DO_REPOSITORIO =
   'src/modules/tags/adapters/persistence/kysely-endereco-do-pet.ts';
 const CAMINHO_DA_PORTA = 'src/modules/tags/ports/endereco-do-pet.ts';
 
-/** A tabela do endereco do pet. */
 const TABELA = 'pet_delivery_addresses';
 
-/** Os NOVE campos do endereco, pelos nomes que o contrato usa. */
 const CAMPOS_DO_ENDERECO = [
   'city',
   'complement',
@@ -28,7 +22,6 @@ const CAMPOS_DO_ENDERECO = [
   'street_number',
 ] as const;
 
-/** As duas operacoes que esta frente acrescentou. */
 const OPERACOES_NOVAS = ['getPetDeliveryAddress', 'putPetDeliveryAddress'] as const;
 
 interface OperacaoBruta {
@@ -56,7 +49,6 @@ function operacoes(): Map<string, OperacaoBruta> {
   return achadas;
 }
 
-/** As propriedades de um schema, resolvendo `allOf` um nivel. */
 function propriedadesDe(nome: string): readonly string[] {
   const schema = spec.components.schemas[nome] as
     | {
@@ -157,7 +149,6 @@ void describe('o endereço de entrega do pet não sai em público nem em lista',
 void describe('a consulta do endereço do pet carrega o dono e não lê em lista', () => {
   const repositorio = readFileSync(CAMINHO_DO_REPOSITORIO, 'utf8');
 
-  /** UMA FATIA POR SENTENÇA que vai ao banco. */
   const fatias = repositorio.split('.execute(deps.db)').slice(0, -1);
 
   void it('o corte da consulta é onde eu digo que é, e nenhuma fatia é cega', () => {

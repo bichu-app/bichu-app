@@ -1,4 +1,3 @@
-/** **ISCA (c): o teto de 150 recusa o 151º, e o CONTRAPESO é o 150º passar.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

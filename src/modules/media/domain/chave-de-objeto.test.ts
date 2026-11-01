@@ -1,7 +1,3 @@
-/**
- * O que se prova aqui é a **ausência** de identificador interno na chave pública,
- * e não o formato dela.
- */
 import assert from 'node:assert/strict';
 import { TETO_DE_BYTES_DO_ENVIO } from './derivadas.js';
 import { describe, it } from 'node:test';
@@ -96,10 +92,8 @@ void describe('tipos aceitos', () => {
   });
 });
 
-/** A extensão da derivada, que é o campo que VIRA CAMINHO (BICHUS-133). */
 const ALEATORIO = new Uint8Array(16).fill(42);
 
-/** A chave, ou `null` quando a geração recusou. */
 function chaveOuNada(variante: 'thumb' | 'card', extensao: string): string | null {
   try {
     return chaveDaDerivada(variante, ALEATORIO, extensao);
@@ -108,10 +102,6 @@ function chaveOuNada(variante: 'thumb' | 'card', extensao: string): string | nul
   }
 }
 
-/**
- * O primeiro segmento DEPOIS de resolver `..`, que é onde o objeto grava de
- * verdade.
- */
 function prefixoEfetivo(chave: string): string {
   return posix.normalize(chave).split('/').slice(0, 2).join('/');
 }
@@ -173,7 +163,6 @@ void describe('tipo da derivada — o que pode ser GRAVADO', () => {
   });
 });
 
-/** A marca, ou `null` quando a conferência recusou. */
 function chaveOuNulo(valor: string): string | null {
   try {
     return comoObjectKey(valor);
@@ -270,7 +259,6 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
   });
 });
 
-/** As formas de chave que entraram nesta entrega, e o que cada uma protege. */
 void describe('a variante `banner` e a derivada higienizada do achado', () => {
   const ALEATORIO = new Uint8Array(16).fill(7);
 
@@ -283,7 +271,6 @@ void describe('a variante `banner` e a derivada higienizada do achado', () => {
   void it('a variante fora da lista não monta chave nenhuma', () => {
     assert.throws(() =>
       // @ts-expect-error — é exatamente isto que a união fechada impede, e o
-      // teste existe para o dia em que alguém trocar o tipo por `string`.
       chaveDaDerivada('../../publico', ALEATORIO, 'jpeg', 'events'),
     );
   });

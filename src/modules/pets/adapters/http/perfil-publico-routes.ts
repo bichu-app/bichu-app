@@ -1,7 +1,3 @@
-/**
- * `GET /v1/public/pets/{slug}` (`getPublicPetBySlug`, BICHUS-45): o perfil público
- * do pet, que o site consome em `/@{slug}` (ADR-0028).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';

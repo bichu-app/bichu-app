@@ -1,4 +1,3 @@
-/** Persistência do achado avulso, em PostGIS. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
@@ -64,12 +63,6 @@ const PET_NOME = sql<string | null>`(
   SELECT p.name FROM pets p WHERE p.id = ${PET_ALVO} AND p.deleted_at IS NULL
 )`;
 
-/**
- * A capa pronta do pet. Mesmos quatro predicados de `kysely-tag-repository.ts` —
- * `is_primary`, `status = 'ready'`, não apagada —, porque as duas superfícies
- * endereçam o mesmo objeto e divergir aqui faria a plaquinha e o achado mostrarem
- * fotos diferentes do mesmo animal.
- */
 const PET_CHAVE_DA_FOTO = sql<string | null>`(
   SELECT f.card_key FROM pet_photos f
    WHERE f.pet_id = ${PET_ALVO}
@@ -77,7 +70,6 @@ const PET_CHAVE_DA_FOTO = sql<string | null>`(
    LIMIT 1
 )`;
 
-/** As colunas da leitura do relator. */
 const COLUNAS = sql<LinhaDoAchado>`
   id, origin, status, species, size,
   found_city, found_neighborhood, found_at,
@@ -624,7 +616,6 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
   };
 }
 
-/** O cursor, que é o instante do último item em base64url. */
 function codificarCursor(criadoEm: Date): string {
   return Buffer.from(String(criadoEm.getTime()), 'utf8').toString('base64url');
 }

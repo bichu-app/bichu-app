@@ -1,17 +1,3 @@
-/**
- * AS IMAGENS DA INDICACAO, COMO A FILA DO PAINEL AS VE (cliente, 29 e
- * 30/10/2026).
- *
- * **Por que este arquivo existe:** a `20261029000004` criou
- * `directory_suggestions.logo_image_id` e registrou, de proposito, que "hoje
- * ninguem le". O efeito pratico era que **o revisor aprovava ou recusava sem ver
- * o que foi enviado**, o que esvazia a propria fila -- a imagem e metade do que
- * se revisa numa indicacao de estabelecimento.
- *
- * O que se mede aqui e a REGRA da projecao, sem banco: o que vira URL, o que vira
- * nulo, o que NAO sai e a contagem que distingue "nenhuma foto" de "nenhuma ficou
- * pronta ainda".
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,10 +7,8 @@ import { projetarIndicacao, type IndicacaoNaFila } from './fila-de-indicacoes.js
 
 const CRIADA_EM = Date.UTC(2026, 9, 30, 12, 0, 0) as Instant;
 
-/** A base de mídia, como `src/bin/api.ts` a injeta de `MEDIA_PUBLIC_BASE_URL`. */
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
-/** Chaves de derivada na forma REAL: `categoria/variante/nome.ext`. */
 const THUMB_DA_LOGO = 'directory/thumb/ZmFrZS1sb2dvLXRodW1i.webp';
 const CARD = (n: number): string => `directory/card/Zm90by1kby1sb2NhbC0${String(n)}.webp`;
 
@@ -71,11 +55,6 @@ void describe('as imagens da indicacao na fila do painel', () => {
     assert.equal(projetada.photos_total, 4);
   });
 
-  /**
-   * A razao de `photos_total` EXISTIR, e nao um detalhe: sem ele o painel nao
-   * distingue "nao enviou nenhuma" de "enviou quatro e nenhuma ficou pronta
-   * ainda", que sao decisoes de revisao diferentes.
-   */
   void it('`photos_total` conta as NAO PRONTAS, e e por isso que ele nao e `photo_urls.length`', () => {
     const umaPronta = projetarIndicacao(
       naFila({ fotoCardKeys: [CARD(0)], fotosTotal: 4 }),
@@ -109,18 +88,9 @@ void describe('as imagens da indicacao na fila do painel', () => {
     const comLogo = projetarIndicacao(naFila({ logoThumbKey: THUMB_DA_LOGO }), URL_DE_MIDIA);
     assert.equal(comLogo.logo_url, `https://midia.invalido/${THUMB_DA_LOGO}`);
 
-    // Os tres casos chegam ao dominio como a MESMA coisa -- chave nula --, e e
-    // essa a razao de nao haver tres campos: sem logotipo, worker nao terminou,
-    // bytes recusados.
     assert.equal(projetarIndicacao(naFila({ logoThumbKey: null }), URL_DE_MIDIA).logo_url, null);
   });
 
-  /**
-   * A FORMA da chave e conferida por `urlDaDerivada`, o MESMO ajudante de
-   * `DirectoryEntrySummary.logo_url`. Chave que nao e de derivada publica vira
-   * NULO, e nao URL quebrada -- e, para as fotos, ela e simplesmente OMITIDA da
-   * lista, porque `photo_urls` nao aceita item nulo no contrato.
-   */
   void it('chave que NAO e de derivada publica nao vira URL: a logo vira nula e a foto sai da lista', () => {
     const original = 'directory/original/ZmFrZS1vcmlnaW5hbA.jpeg';
     assert.equal(projetarIndicacao(naFila({ logoThumbKey: original }), URL_DE_MIDIA).logo_url, null);
@@ -140,11 +110,6 @@ void describe('as imagens da indicacao na fila do painel', () => {
     );
   });
 
-  /**
-   * ADR-0010 item 6: nenhum UUID do banco sai em resposta, **sem excecao**. Esta
-   * fila passou a ler duas tabelas de imagem, e e exatamente o tipo de mudanca em
-   * que um `image_id` entra por descuido.
-   */
   void it('NENHUM identificador do banco sai na projecao -- so a URL da derivada', () => {
     const projetada = projetarIndicacao(
       naFila({ logoThumbKey: THUMB_DA_LOGO, fotoCardKeys: [CARD(0), CARD(1)], fotosTotal: 2 }),
@@ -159,7 +124,6 @@ void describe('as imagens da indicacao na fila do painel', () => {
       !/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(texto),
       `a projecao carrega um UUID: ${texto}`,
     );
-    // A metade positiva: o caso acima nao passa porque a projecao esta vazia.
     assert.equal(projetada.photo_urls.length, 2);
     assert.ok(projetada.logo_url !== null);
   });

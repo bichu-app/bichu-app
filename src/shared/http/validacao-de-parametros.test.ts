@@ -1,4 +1,3 @@
-/** Iscas da validação de parâmetros. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -14,7 +13,6 @@ const ROTA_DA_TAG = defineRoute({
   effects: [],
 });
 
-/** De proposito FORA do contrato: e o que o caso da rota inventada cobra. */
 const ROTA_INVENTADA = defineRoute({
   operationId: 'rotaQueNaoExisteNoContrato',
   method: 'get',
@@ -58,19 +56,13 @@ const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 const PREFIXO = '/v1';
 const BASE_DE_PROBLEMAS = 'https://problemas.invalid/problems/' as AbsoluteUrl;
 
-/** UUID bem formado que nenhum pet tem. */
 const UUID_INEXISTENTE = '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f';
-/** Os quatro jeitos de um id chegar torto que já apareceram de verdade. */
 const IDS_TORTOS = ['abc', 'undefined', '1', '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f-extra'];
 
 function contratoDoDisco(): Contrato {
   return carregarContrato(CAMINHO_DA_SPEC);
 }
 
-/**
- * Repositório que se comporta como o Postgres: id fora do formato de UUID vira
- * exceção, e não `null`.
- */
 class RepositorioQueImitaOPostgres implements PetRepository {
   readonly recebidos: string[] = [];
 
@@ -427,7 +419,6 @@ void describe('o contrato de verdade produz os schemas de verdade', () => {
   });
 });
 
-/** Uma cópia do contrato de verdade com UM status apagado de UMA operação. */
 function semOStatus(contrato: Contrato, operationId: string, status: string): Contrato {
   return {
     ...contrato,
@@ -457,7 +448,6 @@ function semOStatus(contrato: Contrato, operationId: string, status: string): Co
   };
 }
 
-/** A rota de verdade da intenção de foto, com o corpo que o contrato declara. */
 function registrarIntencaoDeFoto(escopo: RegistradorDeRotas, contrato: Contrato): void {
   registrarRota(
     escopo,
@@ -572,7 +562,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     }
   });
 
-  /** A isca do CORPO, que é a metade que o portão não tinha. */
   void it('operação que valida CORPO e não declara 400 derruba a subida', async () => {
     const contrato = contratoDoDisco();
     const semQuatrocentos = semOStatus(contrato, 'createPetPhotoUploadIntent', '400');
@@ -595,10 +584,6 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     }
   });
 
-  /**
-   * O lado permissivo, que é metade do valor de um portão: ele não pode passar a
-   * reprovar quem está certo.
-   */
   void it('a mesma rota, com o 400 declarado no contrato de verdade, APROVA', async () => {
     const contrato = contratoDoDisco();
     const app = criarServidor({

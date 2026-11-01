@@ -1,7 +1,3 @@
-/**
- * ISCA: o pedido de plaquinha de quem desabilitou a conta sai da fila do painel, e
- * sai dos TRES lugares de uma vez.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -20,7 +16,6 @@ import { criarPedidoDePlaquinhaRepository } from './kysely-pedido-de-plaquinha.j
 
 const REF = 'yjJwZ3hBc0RmR2hKa0xtTg';
 
-/** O predicado, como o compilador do Postgres o escreve. */
 const PREDICADO_DA_CONTA = /conta_habilitada\(\s*"?r"?\."?requested_by"?\s*\)/u;
 
 const SEM_O_PREDICADO =
@@ -28,7 +23,6 @@ const SEM_O_PREDICADO =
   'conta volta a aparecer nesta superficie, e a decisao do cliente de 17/10 e que conta ' +
   'desabilitada nao e mais encontrada em nenhuma pagina ou funcionalidade.';
 
-/** Kysely sem banco, com o compilador trocado por um que GUARDA o SQL. */
 function bancadaQueEspia(): { readonly db: Db; readonly compiladas: string[] } {
   const compiladas: string[] = [];
 

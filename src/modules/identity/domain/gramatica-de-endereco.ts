@@ -1,7 +1,3 @@
-/**
- * O que um endereço de e-mail não pode carregar — **uma definição só**, lida pela
- * borda e pelo fio.
- */
 const CARACTERE_PROIBIDO_NO_ENDERECO =
   // eslint-disable-next-line no-control-regex -- os controles são exatamente o alvo
   /[\u0000-\u0020\u007F-\u00A0\u1680\u2000-\u200D\u2028\u2029\u202F\u205F\u3000\uFEFF<>,;:"\\]/u;

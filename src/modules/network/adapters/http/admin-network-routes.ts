@@ -1,7 +1,3 @@
-/**
- * `/v1/admin/network/...`: a escrita administrativa da `Rede` e a fila de pedidos
- * (BICHUS-273 e BICHUS-292; ADR-0027 itens 7, 8, 11, 12 e 17).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -23,10 +19,6 @@ import type {
   Visibilidade,
 } from '../../domain/escrita-do-encontro.js';
 
-/**
- * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
- * administrativas.
- */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -35,10 +27,6 @@ const BALDE_DE_ESCRITA = {
   onExceed: 'deny_429',
 } as const satisfies RateLimitEntry;
 
-/**
- * D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de
- * evento.
- */
 const BALDE_DE_PUBLICACAO = {
   bucket: 'admin_publication',
   dimension: ['account'],

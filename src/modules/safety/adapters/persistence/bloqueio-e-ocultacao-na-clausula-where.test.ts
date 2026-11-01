@@ -1,4 +1,3 @@
-/** ISCAS (a), (c) e (e), lidas no SQL e no texto das migrações. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -22,7 +21,6 @@ function migracao(trecho: string): string {
   return readFileSync(join(MIGRACOES, arquivo), 'utf8');
 }
 
-/** O corpo de uma função SQL, do `CREATE FUNCTION` ao `$$` de fechamento. */
 function corpoDaFuncao(texto: string, nome: string): string {
   const inicio = texto.indexOf(`CREATE FUNCTION ${nome}`);
   assert.ok(inicio >= 0, `\`${nome}\` não está na migração`);

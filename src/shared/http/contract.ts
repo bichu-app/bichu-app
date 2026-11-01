@@ -1,4 +1,3 @@
-/** Carregamento de `api/openapi.yaml` em tempo de execução. */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
@@ -71,7 +70,6 @@ function resolverRef(spec: Record<string, unknown>, ref: string): unknown {
   return atual;
 }
 
-/** Vocabulário de OpenAPI que não é JSON Schema e confunde o validador. */
 const CHAVES_DESCARTADAS = new Set([
   'example',
   'examples',
@@ -83,10 +81,6 @@ const CHAVES_DESCARTADAS = new Set([
   'writeOnly',
 ]);
 
-/**
- * Palavras-chave cujo VALOR e um mapa de nomes escolhidos por quem escreveu o
- * contrato, e nao mais um schema com palavras-chave de OpenAPI.
- */
 const MAPAS_DE_NOMES = new Set([
   'properties',
   'patternProperties',
@@ -99,7 +93,6 @@ function paraJsonSchema(
   valor: unknown,
   spec: Record<string, unknown>,
   refsNoCaminho: ReadonlySet<string>,
-  /** O objeto recebido e um mapa de NOMES (ver `MAPAS_DE_NOMES`), nao um schema. */
   mapaDeNomes = false,
 ): unknown {
   if (Array.isArray(valor)) {
@@ -142,10 +135,6 @@ function paraJsonSchema(
   return saida;
 }
 
-/**
- * A chave que isenta uma palavra-chave do esquema de **borda**, declarada no
- * parâmetro e não dentro do `schema` dele.
- */
 const ISENCAO_DE_BORDA = 'x-nao-recusado-na-borda';
 
 function semAsPalavrasIsentas(
@@ -216,7 +205,6 @@ export function carregarContrato(caminho: string): Contrato {
   const semSecurity: string[] = [];
   const securityMalformado: string[] = [];
 
-  /** Resolve `$ref` de parâmetro e descarta o que não é um objeto de parâmetro. */
   const parametrosDe = (valor: unknown): Record<string, unknown>[] => {
     if (!Array.isArray(valor)) return [];
     const resolvidos: Record<string, unknown>[] = [];

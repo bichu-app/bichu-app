@@ -1,4 +1,3 @@
-/** A CAIXA DE NOTIFICACOES -- as iscas da camada de aplicacao. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -10,7 +9,6 @@ import type { CaixaDeNotificacoes } from '../ports/caixa-de-notificacoes.js';
 import { CaixaDeNotificacoesService } from './caixa-de-notificacoes-service.js';
 
 const DONO = 'c0ffee00-0000-4000-8000-000000000001' as UserId;
-/** A data do comunicado, por `comoData` sobre um `Instant`. */
 const DISPARADO_EM = comoData(Date.UTC(2026, 9, 20, 12, 0, 0) as Instant);
 const OUTRA_CONTA = 'c0ffee00-0000-4000-8000-000000000002' as UserId;
 
@@ -28,10 +26,6 @@ function paginaVazia(pagina: number, limite: number): PaginaDaCaixa {
   return { itens: [], pagina, limite, total: 0, naoLidos: 0 };
 }
 
-/**
- * O duble do porto. `marcarLidaDevolve` e o unico comportamento configuravel: e
- * ele que separa "achei" de "nao achei", que e a diferenca entre 204 e 404.
- */
 function dubleDaCaixa(
   opcoes: {
     marcarLidaDevolve?: boolean;

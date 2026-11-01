@@ -1,4 +1,3 @@
-/** A recusa de dimensao declarada pequena tem **uma fonte so**, e esta e a guarda. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,22 +8,12 @@ import {
   recusarDimensaoDeclaradaPequena,
 } from '../modules/media/ports/imagem-de-catalogo.js';
 
-/** A fonte. Caminho literal: renomear o arquivo reprova aqui, e nao em silencio. */
 const FONTE = 'src/modules/media/ports/imagem-de-catalogo.ts';
 
-/**
- * ESTE arquivo, excluido das duas varreduras -- e a exclusao e UMA, nomeada, e
- * conferida pelo controle positivo abaixo.
- */
 const ESTE_ARQUIVO = 'src/tools/dimensao-declarada-numa-fonte-so.test.ts';
 
-/** A frase do usuario. Quem a montar fora da fonte reprova. */
 const FRASE = /Mínimo de \$\{String\(/;
 
-/**
- * O bloco que foi reduzido: `dimensaoDeclaradaAbaixoDaMinima` + `DIMENSAO_MINIMA[`
- * juntos.
- */
 function montaARecusaNaMao(texto: string): boolean {
   return /dimensaoDeclaradaAbaixoDaMinima\(/.test(texto) && /DIMENSAO_MINIMA\[/.test(texto);
 }

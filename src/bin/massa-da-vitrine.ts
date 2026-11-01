@@ -1,4 +1,3 @@
-/** A massa fixa da vitrine da `Loja`: dez itens publicados, tres parceiros. */
 import type { CategoriaDaVitrine } from '../modules/store/domain/item-da-vitrine.js';
 
 export interface ParceiroSemeado {

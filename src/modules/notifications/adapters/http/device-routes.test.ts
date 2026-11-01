@@ -1,4 +1,3 @@
-/** As três rotas de `/me/devices` sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -28,11 +27,6 @@ const AGORA = 1_800_000_000_000 as Instant;
 const CAMINHO = '/me/devices';
 const TOKEN = 'fcm-token-do-aparelho-da-tutora' as TokenDeAparelho;
 
-/**
- * Registro em memória que **guarda por dono** e reproduz as três invariantes que o
- * banco impõe: um token uma conta, uma linha sem token por plataforma, e a
- * autorização no endereçamento.
- */
 function registro(): RegistroDeAparelhos & { readonly linhas: Map<string, Aparelho> } {
   const linhas = new Map<string, Aparelho>();
   let proximo = 0;
@@ -533,7 +527,6 @@ void describe('o teto declarado é o teto aplicado', () => {
   });
 });
 
-/** A SUBIDA, exercitada pelo caminho real. */
 function montarComBorda(contrato: Contrato): {
   app: RegistradorDeRotas;
   conferirParametros: () => void;
@@ -567,7 +560,6 @@ function montarComBorda(contrato: Contrato): {
   return { app, conferirParametros };
 }
 
-/** O contrato real, com o `400` de `deleteDevice` arrancado. */
 function semOQuatrocentosDoDelete(): Contrato {
   const real = carregarContrato('api/openapi.yaml');
   const operacoes = new Map(real.operacoes);

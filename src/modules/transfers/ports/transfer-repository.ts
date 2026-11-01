@@ -1,4 +1,3 @@
-/** Porta de persistencia da transferencia de pet. */
 import type { Instant, PetId, UserId } from '../../../shared/types/brands.js';
 import type {
   MotivoDoCancelamento,

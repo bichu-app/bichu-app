@@ -77,7 +77,6 @@ export interface ImagemDoEncontro {
   readonly textoAlternativo: string | null;
 }
 
-/** Os campos do item 17, na forma do fio. */
 interface CamposDoEncontroProjetados {
   readonly slug: string;
   readonly title: string;
@@ -118,7 +117,6 @@ interface CamposDoEncontroProjetados {
   readonly ticket_url: string | null;
   readonly instagram_handle: string | null;
   readonly instagram_url: string | null;
-  /** So existe quando `REGRA_DO_ENDERECO` e `publico`. */
   readonly street_address?: string | null;
 }
 
@@ -195,7 +193,6 @@ export function enderecoNaLeituraAberta(
   return regra === 'publico' ? { street_address: endereco } : {};
 }
 
-/** O rotulo temporal, sem olhar a publicacao. */
 function statusTemporal(
   encontro: EncontroDaRede,
   agora: Instant,
@@ -205,7 +202,6 @@ function statusTemporal(
   return agora <= encontro.endsAt ? 'happening' : 'ended';
 }
 
-/** Quanto o relogio de parede de `timeZone` esta a frente do UTC, em `instante`. */
 function deslocamentoDoFuso(instante: number, timeZone: string): number {
   const partes = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -246,7 +242,6 @@ export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): Stat
   return statusTemporal(encontro, agora);
 }
 
-/** Os campos comuns, campo a campo. */
 function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEncontroProjetados {
   const imagens = encontro.imagens.map((imagem) => ({
     url: imagem.url,

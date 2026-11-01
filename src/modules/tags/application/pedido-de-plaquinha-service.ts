@@ -1,4 +1,3 @@
-/** Os dois casos de uso do pedido da plaquinha: o do tutor e o do painel. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -24,7 +23,6 @@ import {
   transicaoDeEntregaPermitida,
 } from '../domain/entrega-da-plaquinha.js';
 
-/** 128 bits em base64url, a MESMA forma do `ref` do pedido de encontro. */
 function refDoPedido(ids: IdGenerator): string {
   return Buffer.from(ids.random128()).toString('base64url');
 }

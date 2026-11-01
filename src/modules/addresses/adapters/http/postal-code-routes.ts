@@ -1,7 +1,3 @@
-/**
- * `GET /v1/admin/postal-codes/:postalCode` -- **a borda da nossa unica busca de
- * CEP**.
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { problemas } from '../../../../shared/http/errors.js';
@@ -25,7 +21,6 @@ export interface DependenciasDaRotaDeCep {
   readonly cep: BuscaDeCep;
 }
 
-/** `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave. */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;

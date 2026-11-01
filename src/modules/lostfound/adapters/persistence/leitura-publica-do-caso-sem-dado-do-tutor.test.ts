@@ -1,7 +1,3 @@
-/**
- * A consulta da leitura pública do caso não lê dado do tutor, e o SQL compilado
- * prova isso.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -28,14 +24,12 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** O trecho entre `select` e o primeiro `from`: o que a consulta devolve. */
 function listaDeSaida(sql: string): string {
   const achado = /^select\s+([\s\S]*?)\s+from\s+"lost_cases"/i.exec(sql);
   assert.ok(achado !== null, `não achei a lista de saída. SQL compilado: ${sql}`);
   return achado[1] ?? '';
 }
 
-/** Colunas que não podem ser SAÍDA desta consulta. */
 const SAIDAS_PROIBIDAS: readonly RegExp[] = [
   /"lost_cases"\."id"/,
   /"pets"\."id"/,

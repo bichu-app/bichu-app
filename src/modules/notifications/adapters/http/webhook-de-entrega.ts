@@ -1,7 +1,3 @@
-/**
- * `POST /webhooks/postmark` — eventos de entrega do provedor de e-mail (BICHUS-13,
- * critérios 7 e 9; `api/openapi.yaml`, operação `postmarkWebhook`).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -31,7 +27,6 @@ export const rotaDoWebhookDeEntrega = defineRoute({
   ],
 });
 
-/** O nome do cabeçalho vem do esquema `webhookSignature` do contrato. */
 const CABECALHO_DA_ASSINATURA = 'x-postmark-signature';
 
 export interface DependenciasDoWebhookDeEntrega {
@@ -41,12 +36,10 @@ export interface DependenciasDoWebhookDeEntrega {
   readonly contrato: Contrato;
 }
 
-/** 401 do contrato ("Assinatura ausente ou invalida"). */
 function assinaturaRecusada(): AppError {
   return new AppError('unauthenticated', 'Assinatura ausente ou inválida');
 }
 
-/** A única autenticação desta rota. */
 function conferirAssinatura(request: FastifyRequest, segredo: Buffer): void {
   const bruto = request.headers[CABECALHO_DA_ASSINATURA];
   if (typeof bruto !== 'string' || bruto === '') throw assinaturaRecusada();
@@ -66,11 +59,6 @@ function texto(valor: unknown): string | undefined {
   return typeof valor === 'string' && valor !== '' ? valor : undefined;
 }
 
-/**
- * `DeliveredAt` do corpo. Data ilegível vira `undefined` em vez de derrubar o
- * evento: o campo é opcional no contrato e a informação que importa (`MessageID` e
- * `RecordType`) já chegou.
- */
 function instante(valor: unknown): Date | undefined {
   const bruto = texto(valor);
   if (bruto === undefined) return undefined;

@@ -1,4 +1,3 @@
-/** O `INSERT` da mensagem LIGA a chave da foto, em vez de cravar um literal. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {

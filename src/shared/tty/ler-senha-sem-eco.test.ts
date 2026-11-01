@@ -1,7 +1,3 @@
-/**
- * O leitor de senha do terminal, contra um terminal de mentira: o que importa aqui
- * e o que ele faz com os bytes, e isso nao precisa de pty.
- */
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { describe, it } from 'node:test';

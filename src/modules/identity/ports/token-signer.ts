@@ -1,4 +1,3 @@
-/** Emissão e verificação do token de acesso. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 export interface ClaimsDoAcesso {

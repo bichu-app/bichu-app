@@ -1,7 +1,3 @@
-/**
- * As palavras recusadas, agrupadas so para leitura humana: a moderacao junta tudo
- * num conjunto e nao distingue grupo.
- */
 const VULGARIDADE_SEXUAL: readonly string[] = [
   'porra',
   'caralho',
@@ -36,10 +32,8 @@ const XINGAMENTO: readonly string[] = [
   'panaca',
 ];
 
-/** Sigla de xingamento. Duas letras nao entram: colidem com inicial. */
 const SIGLA: readonly string[] = ['pqp', 'vtnc'];
 
-/** Injuria de orientacao, identidade e capacidade. */
 const DISCRIMINACAO: readonly string[] = [
   'viado',
   'boiola',
@@ -56,7 +50,6 @@ export const PALAVRAS_RECUSADAS: readonly string[] = [
   ...DISCRIMINACAO,
 ];
 
-/** A LISTA DE EXCECAO, e **ela vence o bloqueio**. */
 const NOME_PROPRIO: readonly string[] = [
   'pinto',
   'pintos',

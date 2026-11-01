@@ -1,7 +1,3 @@
-/**
- * P19, a metade do contrato: o portao contra o `api/openapi.yaml` de verdade, e as
- * iscas que ele precisa reprovar, cada uma pelo motivo dela.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

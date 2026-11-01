@@ -1,14 +1,11 @@
-/** REL-002: a anotação da janela de emissão não pode voltar a mentir. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { construtorDaJanelaDeEmissao } from './kysely-tag-repository.js';
 
-/** O tipo da coluna `mais_antiga` como o construtor a declara hoje. */
 type MaisAntiga = Awaited<
   ReturnType<ReturnType<typeof construtorDaJanelaDeEmissao>['executeTakeFirstOrThrow']>
 >['mais_antiga'];
 
-/** `true` só quando `null` cabe no tipo. */
 type NullCabeEmMaisAntiga = null extends MaisAntiga ? true : false;
 
 const A_ANOTACAO_ADMITE_NULO: NullCabeEmMaisAntiga = true;

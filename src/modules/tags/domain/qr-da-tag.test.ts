@@ -1,4 +1,3 @@
-/** O desenho do QR, e a medida que ele terá no papel. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { AbsoluteUrl, TagCodeCanonical } from '../../../shared/types/brands.js';
@@ -14,11 +13,9 @@ import {
 } from './qr-da-tag.js';
 import { formaImpressaDoCodigo, normalizarCodigoDaTag } from './tag-code.js';
 
-/** A base da tag nos testes: o **tamanho** da base de produção, não o nome dela. */
 const COMPRIMENTO_DA_BASE_DE_PRODUCAO = 21;
 const BASE_DA_TAG = 'https://tag.teste.inv' as AbsoluteUrl;
 
-/** Código de 16 caracteres com símbolo de verificação válido (BICHUS-154). */
 const CODIGO = normalizarCodigoDaTag('GQSM-0XHB-T4D9-G31S') as TagCodeCanonical;
 
 void describe('urlDaTag: uma função só para o QR e para o texto legível', () => {

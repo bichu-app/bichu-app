@@ -1,7 +1,3 @@
-/**
- * **A ISCA CENTRAL DO CAMINHO POR APELIDO: o pedido cobra os MESMOS predicados que
- * a leitura do perfil.**
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -33,7 +29,6 @@ const sqlDoPerfil = (): string =>
   construtorDoPerfilPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 const sqlDoAlvo = (): string => construtorDoAlvoPorApelido(semBanco, APELIDO, QUEM_CHAMA).sql;
 
-/** Os predicados que as DUAS consultas têm de cobrar, **cada um com nome próprio**. */
 const PREDICADOS = [
   {
     nome: 'conta_habilitada do lado OLHADO',
@@ -93,10 +88,6 @@ void describe('o pedido por apelido cobra os MESMOS predicados que a leitura do 
     });
   }
 
-  /**
-   * **A isca da isca.** Sem ela, os casos acima passariam por os dois SQL terem os
-   * predicados hoje — e não por a varredura saber reconhecer a falta de um.
-   */
   void it('ISCA: a varredura REPROVA quando um predicado falta numa das duas', () => {
     for (const { nome, re } of PREDICADOS) {
       const mutilado = sqlDoAlvo().replace(re, 'true');
@@ -109,10 +100,6 @@ void describe('o pedido por apelido cobra os MESMOS predicados que a leitura do 
     }
   });
 
-  /**
-   * O contrapeso de conjunto: as duas consultas têm de cobrar **a mesma quantidade**
-   * de predicados de autorização.
-   */
   void it('as duas consultas cobram a MESMA quantidade de predicados de autorizacao', () => {
     const contar = (sql: string): number =>
       [

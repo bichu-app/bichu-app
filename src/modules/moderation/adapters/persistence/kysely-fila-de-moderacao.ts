@@ -1,4 +1,3 @@
-/** Persistencia da FILA DE MODERACAO do painel. */
 import { sql } from 'kysely';
 
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
@@ -24,10 +23,8 @@ export interface DependenciasDaFilaDeModeracao {
   readonly trilha: TrilhaTransacional;
 }
 
-/** O PREDICADO, como expressao reusada nas TRES consultas. */
 const DENUNCIANTE_ATIVO = sql<boolean>`f.reporter_active`;
 
-/** As colunas do item AGREGADO, por nome. */
 const COLUNAS = sql`
   f.origin,
   f.target_ref,
@@ -86,11 +83,6 @@ function comoItem(l: LinhaDoItem): ItemDaFila {
   };
 }
 
-/**
- * LUGAR 2 do filtro: a LEITURA de um item. Responde pelas CINCO origens da
- * visao, e nao trava nada: nenhuma coluna `uuid` entra nesta consulta --
- * `f.target_ref` e texto nas cinco pernas.
- */
 async function lerItem(
   db: DbExecutor,
   origem: OrigemDaDenuncia,
@@ -109,16 +101,6 @@ async function lerItem(
   return linha === undefined ? null : comoItem(linha);
 }
 
-/**
- * O item TRAVADO, que e o primeiro passo de toda decisao.
- *
- * `null` quando o alvo nao existe -- e **inclusive quando ele nao pode
- * existir**: na origem `conversation` o alvo e `conversations.id`, que e
- * `uuid`, e `targetRef` sem forma de UUID satisfaz `ModerationTargetRef` sem
- * poder casar com linha nenhuma. Sem esta guarda o Postgres lancava `22P02` e
- * a rota respondia **500** (medido em 31/10/2026); com ela, a decisao segue o
- * mesmo caminho do alvo inexistente, que e 404.
- */
 async function lerItemTravado(
   db: DbExecutor,
   origem: OrigemDecidivel,
@@ -129,7 +111,6 @@ async function lerItemTravado(
   return lerItem(db, origem, targetRef, true);
 }
 
-/** A trava das denuncias ABERTAS do alvo, por origem. */
 async function travarDenuncias(
   db: DbExecutor,
   origem: OrigemDecidivel,
@@ -151,7 +132,6 @@ async function travarDenuncias(
        FOR UPDATE OF d`.execute(db);
 }
 
-/** Esconde o conteudo. **Exclusao logica, e nunca `DELETE`.** */
 async function removerConteudo(
   trx: DbTransaction,
   origem: OrigemDecidivel,
@@ -180,7 +160,6 @@ async function removerConteudo(
   return linha === undefined ? null : { id: linha.id, notaAntes: null };
 }
 
-/** Marca a decisao em TODAS as denuncias abertas do alvo, e devolve quantas. */
 async function resolverDenuncias(
   trx: DbTransaction,
   origem: OrigemDecidivel,

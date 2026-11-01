@@ -1,4 +1,3 @@
-/** As chaves de objeto, e por que as duas classes têm formas diferentes. */
 import type { ObjectKey } from '../../../shared/types/brands.js';
 import { TETO_DE_BYTES_DO_ENVIO } from './derivadas.js';
 
@@ -32,7 +31,6 @@ export function ehTipoDeDerivada(tipo: string): tipo is TipoDeDerivada {
   return (TIPOS_DE_DERIVADA as readonly string[]).includes(tipo);
 }
 
-/** O teto de tamanho da chave, que é o do armazenamento e não uma escolha nossa. */
 const LIMITE_DA_CHAVE = 1024;
 
 /**
@@ -64,10 +62,6 @@ function ehNomeDeDerivada(nome: string): boolean {
   return ponto > 0 && ponto < nome.length - 1;
 }
 
-/**
- * O conjunto de caracteres: os de base64url, mais a barra que separa segmentos e o
- * ponto da extensão.
- */
 const CARACTERES_DA_CHAVE = /^[A-Za-z0-9._/-]+$/;
 
 function recusarChave(valor: string, motivo: string): never {
@@ -126,10 +120,8 @@ export function comoObjectKey(valor: string): ObjectKey {
   return recusarChave(valor, 'forma que este sistema não escreve');
 }
 
-/** 128 bits. O piso das DUAS chaves, e a mesma recusa ruidosa para as duas. */
 const BYTES_DE_ALEATORIO = 16;
 
-/** O piso de entropia, exigido no mesmo lugar para as duas chaves. */
 function exigirAleatorioForte(qualChave: string, aleatorio: Uint8Array): void {
   if (aleatorio.length < BYTES_DE_ALEATORIO) {
     throw new Error(

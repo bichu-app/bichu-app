@@ -1,7 +1,3 @@
-/**
- * `GET /.well-known/jwks.json` e `GET /.well-known/openid-configuration`
- * (BICHUS-15, critério 2).
- */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { generateKeyPairSync } from 'node:crypto';
@@ -26,11 +22,6 @@ function gerarPem(): string {
 const PEM_ATIVA = gerarPem();
 const PEM_ROTACAO = gerarPem();
 
-/**
- * Ambiente mínimo para `loadAppConfig()` subir, no mesmo espírito de
- * `rs256-token-signer.test.ts`: os valores são descartáveis, o que importa é que
- * `token` sai daqui do mesmo jeito que sai no processo de produção.
- */
 function ambiente(): Record<string, string> {
   return {
     ENVIRONMENT: 'dev',
@@ -68,11 +59,6 @@ afterEach(() => {
   }
 });
 
-/**
- * Sobe só o suficiente para exercitar as duas rotas de descoberta: o servidor HTTP
- * de verdade (`criarServidor`) e `registrarRotasDeDescoberta` de verdade, sem
- * `main()`, sem banco, sem as outras rotas de identidade.
- */
 function subirApp() {
   for (const nome of CHAVES_DO_AMBIENTE) delete process.env[nome];
   for (const [nome, valor] of Object.entries(ambiente())) process.env[nome] = valor;
@@ -104,7 +90,6 @@ interface ChaveJwkNaResposta {
   readonly e: string;
 }
 
-/** Só os seis campos que `api/openapi.yaml` declara para uma chave do JWKS. */
 const CAMPOS_PUBLICOS_DA_CHAVE = ['alg', 'e', 'kid', 'kty', 'n', 'use'].sort();
 
 void describe('GET /.well-known/jwks.json (BICHUS-15, critério 2)', () => {

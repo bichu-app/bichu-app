@@ -1,7 +1,3 @@
-/**
- * O TIPO DE ENTIDADE NA FILA DE INDICACAO, na camada de regra (cliente,
- * 29/10/2026).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,7 +32,6 @@ function naFila(sobre: Partial<IndicacaoNaFila> = {}): IndicacaoNaFila {
   };
 }
 
-/** A base de mídia, como `src/bin/api.ts` a injeta. */
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
 void describe('o tipo de entidade na indicacao (cliente, 29/10/2026)', () => {

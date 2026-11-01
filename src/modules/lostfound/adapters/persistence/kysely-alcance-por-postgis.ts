@@ -1,4 +1,3 @@
-/** Quem o alerta alcança, em **uma** consulta PostGIS. */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
@@ -20,7 +19,6 @@ export interface LinhaDoAlcance {
   device_ids: string[];
 }
 
-/** Pede **uma linha a mais** que o teto, e é assim que `tetoAtingido` é honesto. */
 const LIMITE_DA_CONSULTA = TETO_DE_DESTINATARIOS + 1;
 
 /** A consulta de alcance, como consulta ainda não executada. */

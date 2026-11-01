@@ -1,7 +1,3 @@
-/**
- * Persistencia da sessao do backoffice (ADR-0027 item 2, apendice A.1), da janela
- * de reautenticacao administrativa (D40) e do "nao fui eu" (D62).
- */
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type { EscopoDeReautenticacaoAdministrativa } from '../../../shared/http/route-definition.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';

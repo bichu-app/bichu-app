@@ -1,4 +1,3 @@
-/** A projeção pública do caso (`PublicLostCase`) e o cartaz (`LostCasePoster`). */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import { rotuloDaArea } from './abertura-do-caso.js';
 import type { components } from '../../../shared/types/generated/api.js';
@@ -34,13 +33,11 @@ export function linksDoCaso(baseDaWeb: AbsoluteUrl, shareToken: string): LinksDo
   };
 }
 
-/** Texto do tutor, redigido. */
 function redigido(texto: string | null): string | null {
   if (texto === null) return null;
   return redigirCanalMediado(texto).texto;
 }
 
-/** O nome é obrigatório no contrato, então a redação nunca o transforma em nulo. */
 function nomeRedigido(nome: string): string {
   return redigirCanalMediado(nome).texto;
 }

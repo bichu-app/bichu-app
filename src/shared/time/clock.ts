@@ -1,4 +1,3 @@
-/** Relógio injetável. */
 import type { Instant } from '../types/brands.js';
 
 export interface Clock {

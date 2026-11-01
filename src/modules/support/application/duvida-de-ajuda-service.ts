@@ -1,4 +1,3 @@
-/** O caso de uso da duvida de ajuda: **aparar, conferir de novo, gravar**. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock } from '../../../shared/time/clock.js';
 import type { UserId } from '../../../shared/types/brands.js';
@@ -17,7 +16,6 @@ export interface DuvidaDeAjudaService {
   registrar(chamador: ChamadorDaAjuda, assunto: string, texto: string): Promise<void>;
 }
 
-/** Apara e cobra o piso **sobre o aparado**. */
 function aparado(
   valor: string,
   campo: string,

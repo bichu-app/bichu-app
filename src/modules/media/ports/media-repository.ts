@@ -1,4 +1,3 @@
-/** Porta de persistência da mídia. */
 import type { Instant, ObjectKey, PetId, UserId } from '../../../shared/types/brands.js';
 import type { Classe } from './object-storage.js';
 

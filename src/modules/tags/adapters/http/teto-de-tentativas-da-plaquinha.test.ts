@@ -1,7 +1,3 @@
-/**
- * O teto de tentativas invalidas de `GET /tags/{code}`, medido pela POSICAO da
- * recusa, na dimensao `finder_identity`.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -31,40 +27,23 @@ const PREFIXO_DA_API = '/v1';
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Da DECLARACAO, nunca escrito a mao: caminho errado vira 404 em silencio. */
 const RESOLUCAO = rotaDeResolucaoDaTag.path;
 
-/** O teto de tentativas INVALIDAS por identidade de achador, literal e com fonte. */
 const TETO_DE_INVALIDAS = 5;
 
-/**
- * O OUTRO teto de invalidas da MESMA rota, que torna a medicao por presenca
- * inutil.
- */
 const TETO_DE_INVALIDAS_POR_IP = 20;
 
-/** Dois aparelhos distintos atras do mesmo endereco. */
 const APARELHO_A = 'Mozilla/5.0 (Android 14; Pixel 7) AppleWebKit/537.36';
 const APARELHO_B = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)';
 const ENDERECO = '203.0.113.44';
 
-/** Quantos aparelhos distintos cabem no teto por IP antes de ele estourar. */
 const APARELHOS_ATE_O_TETO_DE_IP = TETO_DE_INVALIDAS_POR_IP / TETO_DE_INVALIDAS;
 
 function naoUsado(nome: string): never {
   throw new Error(`o duble nao implementa ${nome}: nenhum caso deste arquivo chega la`);
 }
 
-/**
- * Bancada nova a cada caso: contador em memoria zerado, e nenhum caso herda o
- * balde do anterior.
- */
 function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.now())): RegistradorDeRotas {
-  /**
-   * O duble e so o repositorio, e ele devolve `undefined` SEMPRE: e assim que
-   * `resolverPorCodigo` diz "nao existe plaquinha com este codigo", e o servico
-   * traduz isso em `tag-code-not-found` (`tag-service.ts`).
-   */
   const repositorio: TagRepository = {
     resolverPorCodigo: () => Promise.resolve(undefined),
     buscarContextoDoDono: () => naoUsado('buscarContextoDoDono'),
@@ -136,7 +115,6 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
   return app;
 }
 
-/** Um codigo VALIDO e diferente a cada tentativa. */
 function codigoValido(semente: number): string {
   return gerarCodigoDaTag(new Uint8Array(10).fill(semente));
 }

@@ -1,4 +1,3 @@
-/** ISCA (e): ACIMA DE 5 MB É RECUSADO NO SERVIDOR, ANTES DE ASSINAR. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarPreparadorDeEnvioDeCatalogo } from './preparar-envio-de-catalogo.js';

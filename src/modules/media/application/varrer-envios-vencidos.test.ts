@@ -1,4 +1,3 @@
-/** A varredura dos envios vencidos. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { varrerEnviosVencidos } from './varrer-envios-vencidos.js';

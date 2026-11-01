@@ -1,4 +1,3 @@
-/** O acesso de quem achou o pet e não tem conta (BICHUS-41), como regra. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 const DIA_EM_MS = 24 * 60 * 60 * 1000;

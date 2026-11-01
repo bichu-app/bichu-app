@@ -1,7 +1,3 @@
-/**
- * ISCA ESTRUTURAL: a foto e o nome do pet saem no achado de PLAQUINHA e de LINK, e
- * **não existe consulta** que os traga no achado avulso cruzado por semelhança.
- */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import {
@@ -26,10 +22,8 @@ const ACHADO = '018f3a2b-0000-7000-8000-00000000f001' as FoundReportId;
 const CASO = '018f3a2b-0000-7000-8000-00000000c001' as CaseId;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Toda consulta compilada nesta execução, na ordem. */
 let compiladas: string[] = [];
 
-/** Kysely que COMPILA e não executa, com o SQL capturado pelo log. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -44,7 +38,6 @@ const semBanco = new Kysely<Database>({
 
 const repositorio = criarFoundReportRepository(semBanco);
 
-/** Minúsculas: o compilador cita identificadores, e caixa não é a afirmação. */
 function tem(agulha: string): boolean {
   return compiladas.some((s) => s.toLowerCase().includes(agulha.toLowerCase()));
 }
@@ -53,7 +46,6 @@ function tudo(): string {
   return compiladas.join('\n---\n');
 }
 
-/** O SQL de UMA chamada, isolado. */
 async function sqlDe(chamada: () => Promise<unknown>): Promise<string> {
   compiladas = [];
   await chamada();
@@ -65,10 +57,8 @@ async function sqlDe(chamada: () => Promise<unknown>): Promise<string> {
   return compiladas.join('\n---\n').toLowerCase();
 }
 
-/** A leitura LIMPA: nenhuma junção em `pets` além da resolução do pet. */
 const leituraDoRelator = (): Promise<unknown> => repositorio.buscarDoRelator(ACHADO, DONO);
 
-/** O `INSERT ... RETURNING` do registro, medido SOZINHO. */
 const registroDoAchado = (): Promise<unknown> =>
   assert.rejects(() =>
     repositorio.criar({
@@ -97,7 +87,6 @@ beforeEach(() => {
   compiladas = [];
 });
 
-/** As cinco consultas que leem um achado e projetam a resposta. */
 async function compilarAsCincoLeituras(): Promise<void> {
   await assert.rejects(() =>
     repositorio.criar({

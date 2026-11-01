@@ -1,4 +1,3 @@
-/** Portão: o enum de erro do back-end não pode divergir de `x-problem-types`. */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import { STATUS_DO_PROBLEMA } from '../shared/types/generated/problem-types.js';

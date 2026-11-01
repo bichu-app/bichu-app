@@ -1,4 +1,3 @@
-/** A conexão entre pessoas: os estados, quem vê o quê, e a projeção para o app. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 /** O estado guardado na coluna. */

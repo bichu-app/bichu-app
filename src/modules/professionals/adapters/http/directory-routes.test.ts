@@ -1,4 +1,3 @@
-/** A rota do diretorio, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +20,6 @@ import type {
 } from '../../ports/directory-repository.js';
 import { registrarRotasDoDiretorio, rotaDoDiretorio } from './directory-routes.js';
 
-/** A montagem de URL de midia, pela porta. */
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
@@ -45,7 +43,6 @@ const ENTRADA: EntradaDoDiretorio = {
   pontuacao: PONTUACAO_VAZIA,
 };
 
-/** A MESMA entrada, mas com avaliacoes publicadas. */
 const ENTRADA_AVALIADA: EntradaDoDiretorio = {
   ...ENTRADA,
   slug: 'clinica-veterinaria-do-largo',
@@ -297,9 +294,7 @@ void describe('o teto da rota', () => {
   });
 });
 
-/** O teto da BUSCA, que e a parte que decide se ele serve para alguma coisa. */
 void describe('o teto da busca', () => {
-  /** `busca-001`, `busca-002`... */
   function termo(n: number): string {
     return `busca-${String(n).padStart(3, '0')}`;
   }
@@ -375,7 +370,6 @@ void describe('o parametro `q` chega ao recorte e volta para a tela', () => {
   });
 });
 
-/** Os quatro nomes que NAO podem sair sem conta, e por que cada um. */
 const PROIBIDOS_SEM_CONTA = [
   'phone_e164',
   'distance_m',

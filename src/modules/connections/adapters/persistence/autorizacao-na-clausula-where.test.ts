@@ -1,4 +1,3 @@
-/** **A autorização está na cláusula `WHERE`, e isto se prova lendo o SQL.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -47,7 +46,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Toda consulta desta camada, com os mesmos argumentos, para varrer em lote. */
 const TODAS = {
   contagens: () => construtorDasContagens(semBanco, CHAMADOR, AGORA),
   contagemDeConexoes: () => construtorDaContagemDeConexoes(semBanco, CHAMADOR),
@@ -160,10 +158,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
     });
   }
 
-  /**
-   * **O RECORTE POR QUEM CHAMA, nas duas leituras de LISTA** — e este caso nasceu de
-   * uma isca que não caiu.
-   */
   for (const nome of ['listaDasProprias', 'arestasPorApelido', 'pedidosRecebidos', 'pedidosEnviados'] as const) {
     void it(`\`${nome}\` cobra as DUAS pontas contra quem chama, no WHERE`, () => {
       const { sql } = TODAS[nome]();
@@ -177,11 +171,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
     });
   }
 
-  /**
-   * **ISCA do caso de cima.** Sem ela, aquele `assert.match` passaria por as
-   * consultas de hoje terem a forma certa — e não por a expressão saber reconhecer a
-   * forma errada.
-   */
   void it('ISCA: a conferencia do recorte REPROVA um `FROM` sem as duas pontas', () => {
     const semRecorte = semBanco
       .selectFrom('user_connections as c')
@@ -196,10 +185,6 @@ void describe('ISCA (e): `conta_habilitada` nos DOIS lados, em tudo', () => {
     );
   });
 
-  /**
-   * **`conta_habilitada` NA ARESTA, e não em qualquer subconsulta** — e este caso
-   * nasceu de uma isca que caiu pela metade.
-   */
   for (const nome of ['listaDasProprias', 'arestasPorApelido'] as const) {
     void it(`\`${nome}\` chama \`conta_habilitada\` sobre a ARESTA LIDA (alias \`c\`)`, () => {
       const { sql } = TODAS[nome]();
@@ -342,7 +327,6 @@ void describe('ISCA (f): nenhuma coluna de conta é PROJETADA', () => {
     });
   }
 
-  /** A lista FECHADA de apelidos de saída desta camada. */
   const APELIDOS_PERMITIDOS = new Set([
     'ref',
     'state',

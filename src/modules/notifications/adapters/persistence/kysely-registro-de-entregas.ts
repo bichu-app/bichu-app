@@ -1,7 +1,3 @@
-/**
- * `RegistroDeEntregas` sobre a tabela `notification_deliveries` (migração
- * 20260919000001).
- */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { EventoParaGravar, RegistroDeEntregas } from '../../ports/registro-de-entregas.js';

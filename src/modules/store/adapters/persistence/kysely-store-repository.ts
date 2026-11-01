@@ -1,4 +1,3 @@
-/** Persistencia da vitrine da `Loja`. */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import {
@@ -16,7 +15,6 @@ import type {
   StoreRepository,
 } from '../../ports/store-repository.js';
 
-/** O teto do vocabulario visivel (`StoreTagPage.items.maxItems`). */
 const TETO_DE_TAGS_VISIVEIS = 40;
 
 interface LinhaDoItem {
@@ -123,7 +121,6 @@ export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
   return consulta;
 }
 
-/** As colunas que a lista e o detalhe projetam. */
 const COLUNAS_DO_ITEM = [
   'i.id as id',
   'i.slug as slug',
@@ -147,7 +144,6 @@ const COLUNAS_DO_ITEM = [
 interface Complementos {
   readonly especies: ReadonlyMap<string, string[]>;
   readonly tags: ReadonlyMap<string, TagDaVitrine[]>;
-  /** So as PRONTAS, em ordem de `position`. */
   readonly imagens: ReadonlyMap<string, { chave: string; altText: string | null }[]>;
 }
 

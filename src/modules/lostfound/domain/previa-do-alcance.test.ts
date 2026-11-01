@@ -1,7 +1,3 @@
-/**
- * As quatro respostas honestas do alcance (BICHUS-202, BICHUS-20 critérios 5, 12 e
- * 14).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

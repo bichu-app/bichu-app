@@ -1,4 +1,3 @@
-/** `CaixaDeNotificacoes` sobre as funcoes SQL da migracao `20261018000020`. */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -19,7 +18,6 @@ interface LinhaDaCaixa {
   occurred_at: Date;
   lida: boolean;
   agrupados: number;
-  /** Nulo quando a linha nao tem destino. */
   destino: DestinoDoAviso | null;
   destino_ref: string | null;
   total_de_grupos: string;

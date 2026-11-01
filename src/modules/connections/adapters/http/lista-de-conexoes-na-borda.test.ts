@@ -1,7 +1,3 @@
-/**
- * `GET /v1/connections` **na borda**: o corpo que sai, o 401 sem conta, e a prova
- * de que **não existe endereço para a lista de outra pessoa**.
- */
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
@@ -120,11 +116,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     assert.equal(corpo.items[0]?.['handle'], 'bia-vet');
   });
 
-  /**
-   * **A ISCA DO CORPO, por conjunto EXATO de chaves.** Uma asserção que só negasse
-   * `connection_ref` passaria no dia em que alguém acrescentasse `public_ref`,
-   * `city` ou `showcase`.
-   */
   void it('ISCA: o corpo de cada pessoa e EXATAMENTE os cinco de `PersonSearchResult`', () => {
     const corpo = comoRespostaDaConexao(
       {
@@ -164,10 +155,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     );
   });
 
-  /**
-   * **ISCA do corpo**: sem ela, as duas de cima passariam por a projeção devolver
-   * pouco por acaso — e não por a varredura reconhecer uma chave nova.
-   */
   void it('ISCA: a varredura de chaves REPROVA um campo acrescentado depois', () => {
     const comVazamento = {
       ...comoRespostaDaConexao(
@@ -196,13 +183,11 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     assert.deepEqual(autenticacoes, [], 'o 401 vem ANTES de qualquer consulta');
   });
 
-  /** **ISCA DE VAZAMENTO ENTRE CONTAS, no protocolo.** */
   void it('ISCA DE VAZAMENTO: nao existe endereco para a lista de OUTRA pessoa', async () => {
     const { app } = await bancada();
     const cabecalhos = { authorization: 'Bearer t' };
 
     const CAMINHO_INVENTADO = '/v1/caminho-que-nunca-existiu';
-    /** O problema sem os dois campos que diferem por desenho. */
     const problemaDe = (corpo: string): Record<string, unknown> => {
       const problema = JSON.parse(corpo) as Record<string, unknown>;
       delete problema['correlation_id'];
@@ -240,10 +225,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
       assert.equal((JSON.parse(resposta.body) as { instance?: string }).instance, tentativa);
     }
 
-    /**
-     * **ISCA da isca**: duas chamadas ao MESMO caminho inventado também diferem no
-     * corpo byte a byte.
-     */
     const outraVez = await app.inject({
       method: 'GET',
       url: CAMINHO_INVENTADO,
@@ -258,11 +239,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     assert.deepEqual(problemaDe(outraVez.body), problemaDe(inexistente.body));
   });
 
-  /**
-   * **A rota não aceita filtro de pessoa**, e o contrato é quem recusa: o vigia de
-   * parâmetros instala o esquema da especificação, e `handle` não está entre os dois
-   * parâmetros declarados (`page` e `limit`).
-   */
   void it('a lista nao aceita `handle` nem `q`: nao ha filtro de pessoa', async () => {
     const { app } = await bancada();
     const resposta = await app.inject({
@@ -295,7 +271,6 @@ void describe('`GET /v1/connections`: a lista das PRÓPRIAS conexões na borda',
     assert.equal(acimaDoTeto.statusCode, 400, '`limit` acima de 20 e pedido malformado');
   });
 
-  /** Aresta é dado de duas pessoas: nada daqui entra em cache compartilhado. */
   void it('a resposta nao entra em cache compartilhado', async () => {
     const { app } = await bancada();
     const resposta = await app.inject({

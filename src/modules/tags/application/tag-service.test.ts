@@ -1,4 +1,3 @@
-/** As operações da tag. O que se prova aqui é o **efeito**, não a chamada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -38,13 +37,8 @@ const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const TAG = '018f3a2b-0000-7000-8000-0000000000dd' as TagId;
 
-/**
- * A forma IMPRESSA de um código válido: quatro grupos de quatro, com símbolo de
- * verificação correto.
- */
 const CODIGO = 'GQSM-0XHB-T4D9-G31S';
 
-/** O mesmo código na forma canônica: é o que o cifrado guarda e o que o QR leva. */
 const CODIGO_CANONICO = 'GQSM0XHBT4D9G31S';
 const AGORA = 1_800_000_000_000;
 
@@ -68,7 +62,6 @@ interface EstadoDoRepositorio {
   avisoRecente?: AvisoRecente;
   jaAvisou?: boolean;
   emissao?: ResultadoDaEmissao;
-  /** A tag que a reimpressão do QR encontra, quando o dono e o par batem. */
   reimpressao?: TagParaReimpressao;
 }
 
@@ -79,7 +72,6 @@ interface Contadores {
   avisosGravados: NovoAviso[];
   tagsEmitidas: NovaTag[];
   donoUsadoNaBusca: (UserId | undefined)[];
-  /** Os argumentos de CADA chamada de `buscarParaReimpressao`, na ordem. */
   buscasParaReimpressao: { petId: PetId; tagId: TagId; dono: UserId }[];
 }
 
@@ -173,10 +165,6 @@ function servico(estado: EstadoDoRepositorio) {
     encrypt: (texto) => Promise.resolve(new TextEncoder().encode(texto)),
     decrypt: (bytes) => Promise.resolve(new TextDecoder().decode(bytes)),
   };
-  /**
-   * O rasterizador não é exercitado aqui: a prova de que o PNG decodifica mora em
-   * `adapters/external/png-do-qr.test.ts`, com um leitor de verdade.
-   */
   const desenhosRasterizados: DesenhoDoQr[] = [];
   const rasterizador: RasterizadorDeQr = {
     paraPng: (desenho) => {
@@ -185,10 +173,6 @@ function servico(estado: EstadoDoRepositorio) {
     },
   };
 
-  /**
-   * BICHUS-43. A conversa mediada só nasce de um aviso, e este dublê é o que torna
-   * essa frase verificável deste lado: ele guarda o que `avisar` entrega.
-   */
   const conversasAbertas: Parameters<AberturaDeConversaPorAviso['aoRegistrarAviso']>[0][] = [];
   const conversaDoAviso: AberturaDeConversaPorAviso = {
     aoRegistrarAviso: (aviso) => {
@@ -197,10 +181,6 @@ function servico(estado: EstadoDoRepositorio) {
     },
   };
 
-  /**
-   * O QUE FOI PARA A FILA, e e o que torna verificavel a frase que faltava: escanear
-   * a plaquinha **enfileira a entrega do aviso ao tutor**.
-   */
   const trabalhosEnfileirados: { kind: string; payload: unknown }[] = [];
 
   return {
@@ -534,7 +514,6 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
   });
 });
 
-/** ISCA 3: a autorização da reimpressão do QR mora na cláusula `WHERE`. */
 void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por comparação', () => {
   const ATIVA: TagParaReimpressao = {
     status: 'active',
@@ -650,7 +629,6 @@ void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por compara�
   });
 });
 
-/** ISCA — O AVISO AO TUTOR SAI DA FILA, E SO QUANDO DEVE. */
 void describe('ISCA — escanear a plaquinha enfileira o aviso ao tutor', () => {
   void it('o aviso novo enfileira `tag.scan_notify` com o id do aviso gravado', async () => {
     const { tags, contadores, trabalhosEnfileirados } = servico({ tag: tagAtiva() });

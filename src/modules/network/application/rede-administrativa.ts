@@ -1,7 +1,3 @@
-/**
- * Os casos de uso da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292;
- * ADR-0027 itens 8, 12, 13 e 17).
- */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';

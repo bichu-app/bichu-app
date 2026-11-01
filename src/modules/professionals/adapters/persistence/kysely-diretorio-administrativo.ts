@@ -1,4 +1,3 @@
-/** Persistencia da escrita administrativa do diretorio de `Perto` (BICHUS-189). */
 import { sql } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
@@ -34,7 +33,6 @@ export interface DependenciasDoDiretorioAdministrativo {
   readonly imagens: RegistroDeImagemDeCatalogo;
 }
 
-/** `23505`, `unique_violation`, no indice de endereco publico do diretorio. */
 const VIOLACAO_DE_UNICIDADE = '23505';
 const INDICE_DA_ENTRADA = 'professionals_slug_unico';
 
@@ -50,7 +48,6 @@ async function comSlugTraduzido<T>(escrever: () => Promise<T>): Promise<T> {
   }
 }
 
-/** As provas APROVADAS da entidade, como subconsulta agregada. */
 const EVIDENCIAS_APROVADAS = sql<TipoDeEvidencia[] | null>`(
   select array_agg(v.evidence_kind)
     from entity_verifications v
@@ -84,10 +81,6 @@ interface LinhaDaEntrada {
   photo_status: string | null;
   photo_public_key: string | null;
   photo_rejection_reason: string | null;
-  /**
-   * A GALERIA (29/10/2026), como o `json_agg` da subconsulta a devolve, ja ordenada
-   * por `position`.
-   */
   images: readonly LinhaDaImagemDaGaleria[] | null;
   published_at: Date | null;
   created_at: Date;
@@ -95,7 +88,6 @@ interface LinhaDaEntrada {
   version: number;
 }
 
-/** Uma linha da galeria como o `json_build_object` da subconsulta a monta. */
 interface LinhaDaImagemDaGaleria {
   upload_id: string | null;
   image_id: string;
@@ -106,7 +98,6 @@ interface LinhaDaImagemDaGaleria {
   rejection_reason: string | null;
 }
 
-/** A imagem, ou `null` quando a entrada nao tem. */
 function comoImagem(
   status: string | null,
   publicKey: string | null,
@@ -183,7 +174,6 @@ const COLUNAS = [
   'professionals.version as version',
 ] as const;
 
-/** O estado da LOGO e da FOTO, por subconsulta e nao por `JOIN` (18/10/2026). */
 function imagemDa(coluna: 'logo_image_id' | 'photo_image_id', campo: 'status' | 'public_key' | 'rejection_reason') {
   return sql<string | null>`(
   select c.${sql.raw(campo)}
@@ -192,10 +182,6 @@ function imagemDa(coluna: 'logo_image_id' | 'photo_image_id', campo: 'status' | 
 )`;
 }
 
-/**
- * A GALERIA, por subconsulta (29/10/2026) -- e nao por `JOIN`, pelas DUAS razoes
- * de `imagemDa` somadas a uma terceira que so vale aqui.
- */
 const GALERIA_DA_ENTRADA = sql<readonly LinhaDaImagemDaGaleria[] | null>`(
   SELECT json_agg(json_build_object(
            'upload_id', c.upload_intent_id, 'image_id', c.id, 'position', i.position,
@@ -219,7 +205,6 @@ function consultaDeEntradas(db: DbExecutor) {
     .select(imagemDa('photo_image_id', 'rejection_reason').as('photo_rejection_reason'));
 }
 
-/** O recorte da listagem do painel. */
 function comRecorte<T extends { where: unknown }>(consulta: T, recorte: RecorteDeEntradas): T {
   let c = consulta as unknown as ReturnType<typeof consultaDeEntradas>;
   const busca = recorte.q?.trim();

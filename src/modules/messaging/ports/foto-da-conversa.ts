@@ -1,4 +1,3 @@
-/** A FOTO QUE ENTRA NA MENSAGEM, resolvida no instante do envio. */
 import type { ConversationId } from '../../../shared/types/brands.js';
 
 /** O desfecho da resolução. */

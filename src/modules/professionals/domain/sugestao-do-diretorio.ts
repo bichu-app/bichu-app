@@ -1,7 +1,3 @@
-/**
- * A sugestao de entrada do diretorio, como a comunidade a manda
- * (`suggestDirectoryEntry`): a conferencia pura, e nada alem dela.
- */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { errosDeModeracao } from '../../../shared/texto/moderacao.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
@@ -71,10 +67,8 @@ export interface CorpoDaSugestaoDoDiretorio {
   readonly photo_upload_ids?: readonly string[];
 }
 
-/** O campo do contato, nomeado como o contrato manda nomea-lo no `400`. */
 const CAMPO_DO_CONTATO = 'public_contact.value';
 
-/** O contato publico, conferido CONTRA O `kind` DECLARADO. */
 function errosDoContato(
   contato: ContatoPublicoSugerido,
   conferencias: ConferenciasDeTexto,

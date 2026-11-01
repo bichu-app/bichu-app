@@ -1,7 +1,3 @@
-/**
- * O repositorio da escrita administrativa da `Loja` em memoria, para os testes do
- * caso de uso e das rotas.
- */
 import { comoData } from '../../../../shared/time/clock.js';
 import type { Instant } from '../../../../shared/types/brands.js';
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
@@ -38,22 +34,14 @@ import {
   type TransacaoDoCatalogo,
 } from '../../ports/catalogo-administrativo.js';
 
-/** O item como o dublê o guarda: as ligacoes ficam fora, como no banco. */
 type ItemGuardado = Omit<
   ItemAdministrativo,
   'species' | 'tags' | 'imagens' | 'partner' | 'categoryLabel' | 'subcategoryLabel'
 > & {
-  /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
   readonly partnerId: string | null;
-  /**
-   * A coluna `store_items.target_host`, gravada na ESCRITA como no adaptador real:
-   * nula quando o host era o do proprio parceiro, e o subdominio quando o item mora
-   * num.
-   */
   readonly targetHost: string | null;
 };
 
-/** O vocabulario dos dois niveis que o dublê conhece. */
 const VOCABULARIO: ReadonlyMap<string, { label: string; subs: ReadonlyMap<string, string> }> =
   new Map([
     [

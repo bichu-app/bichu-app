@@ -1,4 +1,3 @@
-/** O ENDERECO DE ENTREGA GUARDADO NO PET. */
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 import type { EnderecoDeEntrega } from './pedido-de-plaquinha.js';
 

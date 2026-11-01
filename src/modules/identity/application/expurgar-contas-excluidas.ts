@@ -1,4 +1,3 @@
-/** O EXPURGO NÃO EXPURGA MAIS NADA, e esta função é inócua de propósito. */
 import type { Clock } from '../../../shared/time/clock.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { IdentityRepository } from '../ports/identity-repository.js';

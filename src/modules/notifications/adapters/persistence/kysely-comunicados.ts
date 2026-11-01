@@ -1,7 +1,3 @@
-/**
- * `RepositorioDeComunicados` sobre `notification_broadcasts` e a funcao
- * `comunicado_disparar` (migracao `20261018000020`).
- */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
@@ -39,7 +35,6 @@ function comoComunicado(l: LinhaDoComunicado): Comunicado {
   };
 }
 
-/** As colunas que saem, por nome. */
 const COLUNAS = sql`
   b.id, b.ref, b.title, b.body, b.dispatched_at, b.recipients_total,
   (SELECT a.display_name FROM admin_accounts a WHERE a.id = b.dispatched_by_admin)

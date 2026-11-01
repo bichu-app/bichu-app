@@ -1,7 +1,3 @@
-/**
- * O caso de uso do webhook de entrega: registrar o evento **uma vez** e, quando
- * ele for definitivo, marcar o endereço como não entregável.
- */
 import { decidir, type EventoDeEntrega } from '../domain/evento-de-entrega.js';
 import type { EventoParaGravar, RegistroDeEntregas } from '../ports/registro-de-entregas.js';
 

@@ -1,4 +1,3 @@
-/** BICHUS-278 -- quantos encontros entraram na agenda DEPOIS de um instante. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 export interface RecorteDeEventosNovos {

@@ -1,4 +1,3 @@
-/** Resposta de erro no formato Problem Details (RFC 9457). */
 import type { AbsoluteUrl } from '../types/brands.js';
 
 export { STATUS_DO_PROBLEMA } from '../types/generated/problem-types.js';

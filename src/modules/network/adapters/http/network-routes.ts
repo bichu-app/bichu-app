@@ -1,4 +1,3 @@
-/** As rotas da secao `Rede` no app (ADR-0025, ADR-0027 secao 12). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -181,7 +180,6 @@ export interface Autenticador {
   autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
 }
 
-/** Quem chama e de qual aparelho. */
 interface ChamadorDaRede {
   readonly userId: UserId;
   readonly familia: FamiliaDeSessao | undefined;
@@ -211,10 +209,6 @@ interface QueryDaAgenda {
   readonly q?: string;
   readonly city?: string;
   readonly when?: RecorteNoTempo;
-  /**
-   * A situacao CALCULADA. **Fora de `filtrosDaAgenda`, de proposito**: aquele objeto
-   * e espalhado nos DOIS recortes, e `listNearbyNetworkEvents` nao declara `status`.
-   */
   readonly status?: StatusDoEncontro;
   readonly sort?: string;
   readonly admission?: 'free' | 'paid';
@@ -232,7 +226,6 @@ interface QueryDosMeusPedidos {
   readonly limit?: number;
 }
 
-/** `listMyNetworkEvents`: a pagina e, desde 27/10/2026, `status`. */
 interface QueryDaPagina {
   readonly status?: StatusDoEncontro;
   readonly page?: number;
@@ -248,7 +241,6 @@ function aparado(valor: string | undefined): string | undefined {
   return t === undefined || t === '' ? undefined : t;
 }
 
-/** O recorte que de fato valeu, para a tela escrever. */
 function recortesAplicados(entradas: Record<string, string | undefined>): Record<string, string> {
   const aplicados: Record<string, string> = {};
   for (const [nome, valor] of Object.entries(entradas)) {
@@ -267,7 +259,6 @@ function filtrosDaAgenda(query: QueryDaAgenda) {
   };
 }
 
-/** O token do cabecalho, sem decidir nada sobre ele. */
 function tokenDaRequisicao(request: FastifyRequest): string | undefined {
   const cabecalho = request.headers.authorization;
   if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) return undefined;
@@ -275,7 +266,6 @@ function tokenDaRequisicao(request: FastifyRequest): string | undefined {
   return token === '' ? undefined : token;
 }
 
-/** MEMOIZADO: o teto por `account` e o manipulador precisam do mesmo dono. */
 function identidadeDoChamador(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -291,7 +281,6 @@ function identidadeDoChamador(
   });
 }
 
-/** So o dono, para as rotas que nao medem distancia. */
 async function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -299,7 +288,6 @@ async function chamadorAutenticado(
   return (await identidadeDoChamador(request, deps)).userId;
 }
 
-/** `account` para o teto. Sem credencial valida nao ha balde de conta. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -311,7 +299,6 @@ async function contaDoTeto(
   }
 }
 
-/** Quem escreve, para o caso de uso e para a trilha. */
 async function contextoDoAutor(
   request: FastifyRequest,
   deps: DependenciasDasRotasDaRede,
@@ -319,7 +306,6 @@ async function contextoDoAutor(
   return { userId: await chamadorAutenticado(request, deps), correlationId: request.id, ip: request.ip };
 }
 
-/** O pedido no vocabulario do app. */
 function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
   return {
     state: estadoDoPedidoNoApp(pedido.decisao, pedido.encontro, agora),
@@ -327,7 +313,6 @@ function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
   };
 }
 
-/** O 400 das regras de estado do pedido. */
 function recusaDoPedido(code: 'event_ended' | 'join_request_final') {
   return problemas.validacao(
     [{ field: 'eventSlug', code, message: code === 'event_ended' ? 'O encontro ja terminou.' : 'O pedido nao pode mais mudar.' }],
@@ -341,11 +326,6 @@ export function registrarRotasDaRede(
 ): void {
   const porConta = { resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) } };
 
-  /**
-   * Criar. **201 com o proprio encontro**, na mesma forma de `getNetworkEvent`: ele
-   * existe e ja esta em publico, e o app desenha a tela com o que recebeu em vez de
-   * pedir de novo.
-   */
   const corpoDaCriacao = corpoDe(deps.contrato, rotaDaCriacaoDeEncontro.operationId);
   registrarRota(
     app,
@@ -368,11 +348,6 @@ export function registrarRotasDaRede(
     },
   );
 
-  /**
-   * Editar o proprio. **O 404 de encontro alheio vem da clausula `WHERE`**
-   * (ADR-0021): esta borda nao sabe de quem e o encontro, e nao tem `if` que decida
-   * isso.
-   */
   const corpoDaEdicao = corpoDe(deps.contrato, rotaDaEdicaoDoEncontro.operationId);
   registrarRota(
     app,
@@ -397,7 +372,6 @@ export function registrarRotasDaRede(
     },
   );
 
-  /** Cancelar o proprio. Cancelar nao apaga: ver o caso de uso. */
   const corpoDoCancelamento = corpoDe(deps.contrato, rotaDoCancelamentoDoEncontro.operationId);
   registrarRota(
     app,
@@ -570,11 +544,6 @@ export function registrarRotasDaRede(
     },
   );
 
-  /**
-   * A lista do DONO. **A autoria esta na clausula `WHERE`** do repositorio
-   * (ADR-0021): esta borda nao tem parametro de autoria e nao tem `if` que decida de
-   * quem e o encontro -- nao existe forma de pedir a lista de outra pessoa.
-   */
   registrarRota(
     app,
     rotaDosMeusEncontros,
@@ -595,7 +564,6 @@ export function registrarRotasDaRede(
     },
   );
 
-  /** Um encontro meu, **com a versao no `ETag`**. */
   registrarRota(app, rotaDoMeuEncontro, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;

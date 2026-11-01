@@ -1,4 +1,3 @@
-/** Os dois gatilhos de `hold_for_review` (critérios 10, 11 e 17). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

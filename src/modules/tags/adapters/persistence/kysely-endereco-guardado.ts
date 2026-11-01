@@ -1,10 +1,8 @@
-/** O endereco de entrega guardado na conta, no Postgres. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { EnderecoGuardadoRepository } from '../../ports/endereco-guardado.js';
 import type { EnderecoDeEntrega } from '../../ports/pedido-de-plaquinha.js';
 
-/** As colunas do endereco, **nomeadas uma a uma**. */
 const COLUNAS_DO_ENDERECO = [
   'recipient_name',
   'recipient_phone',
@@ -29,7 +27,6 @@ interface LinhaDoEndereco {
   readonly state: string;
 }
 
-/** A linha para o tipo do dominio, **campo a campo**. */
 function comoEndereco(linha: LinhaDoEndereco): EnderecoDeEntrega {
   return {
     destinatario: linha.recipient_name,

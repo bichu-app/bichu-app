@@ -1,4 +1,3 @@
-/** A autorização da conversa está na cláusula `WHERE`, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -25,7 +24,6 @@ const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc' as ConversationId;
 const DESDE = 1_790_000_000_000 as Instant;
 const PAGINA = { limit: 20, depoisDe: undefined, termo: undefined };
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -35,7 +33,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Os dois predicados do chamador, como o compilador do Postgres os escreve. */
 const PREDICADO_DO_TUTOR = /"tutor_user_id"\s*=\s*\$(\d+)/g;
 const PREDICADO_DO_ACHADOR = /"finder_user_id"\s*=\s*\$(\d+)/g;
 
@@ -44,7 +41,6 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** **A cláusula `WHERE`, e nada antes dela.** */
 function clausulaWhere(sql: string): string {
   const corte = sql.indexOf(' where ');
   assert.ok(
@@ -73,7 +69,6 @@ void describe('o recorte da clausula WHERE', () => {
   });
 });
 
-/** TODOS os valores ligados às posições que aquele predicado ocupa NO `WHERE`. */
 function valoresLigadosA(predicado: RegExp, compilada: Compilada): unknown[] {
   const copia = new RegExp(predicado.source, 'g');
   const clausula = clausulaWhere(compilada.sql);
@@ -86,7 +81,6 @@ function valoresLigadosA(predicado: RegExp, compilada: Compilada): unknown[] {
   return valores;
 }
 
-/** O predicado do chamador existe NO `WHERE`, e TUDO que ele liga é o chamador. */
 function exigirChamadorNoWhere(compilada: Compilada, onde: string): void {
   const doTutor = valoresLigadosA(PREDICADO_DO_TUTOR, compilada);
   const doAchador = valoresLigadosA(PREDICADO_DO_ACHADOR, compilada);
@@ -178,7 +172,6 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
   });
 });
 
-/** Duas junções cuja quebra NÃO aparece em predicado nenhum. */
 void describe('a correlação entre as tabelas, e não só o predicado', () => {
   void it('as mensagens são correlacionadas À conversa, coluna contra coluna', () => {
     const { sql } = construtorDasMensagens(semBanco, CONVERSA, CHAMADOR, PAGINA).compile();

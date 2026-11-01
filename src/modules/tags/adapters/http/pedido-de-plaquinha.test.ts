@@ -1,4 +1,3 @@
-/** `POST /v1/pets/{petId}/tag-requests`: o pedido da plaquinha da coleira. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,29 +26,19 @@ import {
 const PREFIXO_DA_API = '/v1';
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
-/** O pet do dono: o duble devolve pedido para ele. */
 const MEU_PET = '018f3a2b-0000-7000-8000-0000000000c1' as PetId;
-/** Pet de outra pessoa: o duble devolve `undefined`, como o `WHERE` faria. */
 const PET_DE_OUTRO = '018f3a2b-0000-7000-8000-0000000000c9' as PetId;
 const TOKEN_DE_ACESSO = 'acesso-do-tutor';
 const SOLICITADO_EM = new Date('2026-10-17T12:00:00.000Z');
 
-/**
- * O `ref` que o servidor produz com o `random128` DESTA bancada, calculado aqui da
- * mesma forma que `refDoPedido` o calcula -- e nao copiado de uma saida observada.
- */
 const REF_GERADO = Buffer.from(new Uint8Array(16).fill(0x2b)).toString('base64url');
 
-/** Da DECLARACAO, nunca escrito a mao. */
 const PEDIDO = rotaDePedidoDePlaquinha.path;
 
-/** O teto por conta, literal e com fonte. */
 const TETO_POR_CONTA = 3;
 
-/** O teto de `notes` no contrato (`CollarTagRequestInput`). */
 const LIMITE_DA_OBSERVACAO = 500;
 
-/** Um endereco valido, no formato do contrato. */
 const ENDERECO_VALIDO = {
   recipient_name: 'Mariana Destinataria',
   recipient_phone: '+5511987654321',
@@ -62,7 +51,6 @@ const ENDERECO_VALIDO = {
   state: 'SP',
 } as const;
 
-/** Os sete obrigatorios. `complement` nao esta aqui, e e a unica excecao. */
 const CAMPOS_OBRIGATORIOS = [
   'recipient_name',
   'recipient_phone',
@@ -84,7 +72,6 @@ function naoUsado(nome: string): never {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Todo pedido que chegou ao repositorio, na ordem. */
   readonly criados: {
     readonly petId: PetId;
     readonly endereco: EnderecoDeEntrega;
@@ -92,7 +79,6 @@ interface Bancada {
   }[];
 }
 
-/** A entrega que o repositorio devolve. */
 const ENTREGA_NOVA = {
   passoDaEntrega: 'requested',
   codigoDeRastreio: null,
@@ -105,7 +91,6 @@ const ENTREGA_NOVA = {
 
 function bancada(
   contador: RateLimitStore = criarContadorEmMemoria(() => Date.now()),
-  /** O que `listarDoPet` devolve para o pet do chamador. */
   pedidosDoPet: readonly PedidoDoTutor[] = [],
   entrega: Pick<
     PedidoDoTutor,
@@ -175,7 +160,6 @@ function bancada(
   return { app, criados };
 }
 
-/** Marca de "NENHUM corpo foi enviado", e por que ela nao e `undefined`. */
 const SEM_CORPO = Symbol('sem corpo');
 
 function pedir(
@@ -191,7 +175,6 @@ function pedir(
   });
 }
 
-/** Os campos que o 400 de validacao nomeou. */
 function camposRecusados(body: string): string[] {
   const corpo = JSON.parse(body) as { errors?: { field?: string }[] };
   return (corpo.errors ?? []).map((e) => String(e.field));
@@ -295,7 +278,6 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     }
   });
 
-  /** O CEP COM MASCARA e recusado, e o CEP limpo e gravado como veio. */
   void it('5c. CEP com mascara e recusado e NOMEADO; o valido e gravado sem nada completar nada', async () => {
     const comMascara = bancada();
     const recusa = await pedir(
@@ -402,7 +384,6 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
   });
 });
 
-/** A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app. */
 void describe('GET /v1/pets/{petId}/tag-requests', () => {
   const UM_PEDIDO: readonly PedidoDoTutor[] = [
     {

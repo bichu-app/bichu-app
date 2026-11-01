@@ -1,4 +1,3 @@
-/** O caso de uso da FILA DE MODERACAO do painel (18/10/2026). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock } from '../../../shared/ports/index.js';

@@ -1,4 +1,3 @@
-/** Persistencia da FILA DE REVISAO das indicacoes do `Perto`. */
 import { sql } from 'kysely';
 
 import type { DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
@@ -19,7 +18,6 @@ import {
 
 export type DependenciasDaFilaDeIndicacoes = DependenciasDoDiretorioAdministrativo;
 
-/** O predicado da conta de quem indicou, como expressao reusada nas TRES consultas. */
 const AUTOR_ATIVO = sql<boolean>`indicacao_com_autor_ativo(s.id)`;
 
 /**
@@ -83,9 +81,7 @@ interface LinhaDaIndicacao {
   decline_reason: string | null;
   entry_slug: string | null;
   logo_thumb_key: string | null;
-  /** `json_agg`: o driver devolve array de texto. */
   foto_card_keys: readonly string[];
-  /** `count(*)`: o driver devolve `bigint` como numero, mas `Number()` nao custa. */
   fotos_total: string | number;
 }
 
@@ -112,7 +108,6 @@ function comoIndicacao(l: LinhaDaIndicacao): IndicacaoNaFila {
   };
 }
 
-/** LUGAR 2 do filtro: a leitura de UMA indicacao. */
 async function lerIndicacao(
   db: DbExecutor,
   ref: string,

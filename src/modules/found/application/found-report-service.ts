@@ -1,4 +1,3 @@
-/** As operações do achado avulso (BICHUS-35). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock, IdGenerator, JobQueue } from '../../../shared/ports/index.js';
 import type { FoundReportId, UserId } from '../../../shared/types/brands.js';
@@ -20,7 +19,6 @@ export const TETO_DE_FOTOS_POR_ACHADO = 3;
 /** O teto do envio da foto do achador: **5 MB, o mesmo de todos os caminhos**. */
 export const TETO_DE_BYTES_DA_FOTO_DO_ACHADO = TETO_DE_BYTES;
 
-/** Cinco minutos para enviar. */
 const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 300;
 
 /** O teto do contrato, que o servidor impõe em vez de confiar no cliente. */

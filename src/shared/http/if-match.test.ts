@@ -1,7 +1,3 @@
-/**
- * O `If-Match` que volta da borda (hml, 05/10): o `encode` do Caddy sufixa o
- * `ETag` com a codificacao, e o painel devolve o valor sufixado.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

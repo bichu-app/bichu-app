@@ -1,4 +1,3 @@
-/** Erro de aplicação, com o tipo do contrato junto. */
 import type { NextAction, ProblemFieldError, ProblemType } from './problem.js';
 import { STATUS_DO_PROBLEMA } from './problem.js';
 
@@ -7,18 +6,8 @@ interface AppErrorOptions {
   readonly nextAction?: NextAction;
   readonly errors?: readonly ProblemFieldError[];
   readonly retryAfterSeconds?: number;
-  /** Contexto interno para o log. */
   readonly cause?: unknown;
-  /**
-   * Cabeçalhos que o contrato declara na resposta deste problema, como o
-   * `WWW-Authenticate: Bearer` de `FinderLinkInvalid`.
-   */
   readonly cabecalhos?: Readonly<Record<string, string>>;
-  /**
-   * Divergência conhecida, e a única: `GET /v1/health` declara resposta **503** no
-   * contrato, e `x-problem-types` não tem nenhum tipo com status 503 — o mais
-   * próximo, `internal`, é 500.
-   */
   readonly statusDeIndisponibilidade?: 503;
 }
 

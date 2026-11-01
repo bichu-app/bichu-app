@@ -1,4 +1,3 @@
-/** O predicado de elegibilidade, e a distinção que ele NÃO pode perder. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -33,7 +32,6 @@ function aparelho(
   };
 }
 
-/** As seis combinações possíveis, e a resposta certa de cada uma. */
 const TABELA: readonly {
   permissao: PermissaoDePush;
   token: TokenDeAparelho | null;
