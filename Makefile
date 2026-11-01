@@ -601,7 +601,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # 28/09: `npm run lint` vivia so no `ci.yml`, e `eslint.config.mjs` tem DUAS
 # regras proprias -- `arquitetura/fronteira-de-modulo` e
 # `arquitetura/marca-so-pela-porta` -- que ninguem exercitava desde que a esteira
-# parou. Medido EM 28/09: 590 arquivos lintados, zero mensagens (hoje sao 845 --
+# parou. Medido EM 28/09: 590 arquivos lintados, zero mensagens (hoje e outro --
 # a contagem abaixo e a de agora). Lint que nao acha arquivo
 # aprova tudo calado, e por isso o numero de arquivos esta escrito aqui.
 #
@@ -656,14 +656,19 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # AS TRES CONTAGENS SAO DE ARVORE LIMPA, medidas em 31/10 neste worktree com
 # `eslint . -f json` e as duas somas (arquivos lintados e mensagens):
 #
-#   raiz    847 arquivos, 0 mensagens   16,6 - 19,9 s
+#   raiz    848 arquivos, 0 mensagens   16,6 - 19,9 s
 #   painel  143 arquivos, 0 mensagens    8,6 -  9,2 s
 #   site     47 arquivos, 0 mensagens    2,0 s (inclui o `astro sync`)
 #
-# `make verificar-lint` inteiro: 27,0 s. A contagem da raiz subiu de 845 para
-# 847 desde 30/10 porque a arvore cresceu -- e o numero esta escrito aqui
-# porque LINT QUE NAO ACHA ARQUIVO APROVA TUDO CALADO.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (847 arquivos), do painel (143) e do site (47), tres processos; `workspace/**` fora do escopo
+# `make verificar-lint` inteiro: 27,0 s. A contagem da raiz subiu de 845 (30/10)
+# para 848 porque a arvore cresceu -- e o numero esta escrito aqui porque LINT
+# QUE NAO ACHA ARQUIVO APROVA TUDO CALADO.
+#
+# E ELE SO VALE RECONTADO SOBRE A ARVORE MESCLADA. Este PR chegou afirmando 847,
+# medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
+# e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
+# travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (848 arquivos), do painel (143) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
