@@ -89,12 +89,29 @@ export function ErroDaFila({
  * rotulo vazio, e duas colunas vazias dariam chave repetida. As linhas entram
  * como `children`: a casca nao conhece o dominio e nao desenha linha.
  *
- * CUIDADO, defeito HERDADO e preservado de proposito: `LinhasCarregando`
- * desenha uma celula fixa MAIS uma por coluna recebida, e as tres filas lhe
- * passam o `colunas` inteiro -- o esqueleto sai com uma celula a mais que o
- * cabecalho. A familia LISTA usa a mesma peca passando so as colunas depois da
- * primeira. Esta casca repassa `colunas` sem mexer, porque consertar aqui
- * mudaria o que tres telas desenham; o numero de hoje esta preso em
+ * `colunas` SERVE A DOIS USOS COM CONTRATOS DIFERENTES, e e por isso que o
+ * `.slice(1)` abaixo mora aqui:
+ *
+ * - o CABECALHO quer a lista inteira -- um `<th>` por coluna;
+ * - `LinhasCarregando` desenha UMA CELULA FIXA (a da identidade, com miniatura
+ *   e duas tarjas) e MAIS uma por entrada de `colunas`, entao ela quer so as
+ *   colunas DEPOIS da primeira.
+ *
+ * Passar a lista inteira aos dois dava um esqueleto com uma celula a mais que o
+ * cabecalho, e a tabela saltava na troca do esqueleto pelo dado (corrigido em
+ * 01/11/2026; o defeito vinha da refatoracao da casca).
+ *
+ * O CONSERTO E AQUI, e nao nos outros dois lugares onde ele caberia:
+ *
+ * - NAO em `LinhasCarregando`: o contrato dela esta certo, e a familia LISTA
+ *   (8 telas) ja lhe passa o recorte certo. Mexer na peca moveria 8 telas
+ *   corretas para consertar 3;
+ * - NAO nos tres pontos de chamada: eles entregam UMA lista que esta casca usa
+ *   para os DOIS usos. Recortar la tiraria a primeira coluna do CABECALHO
+ *   tambem -- trocaria este defeito por um pior.
+ *
+ * Esta casca e o unico lugar que conhece os dois usos, entao e dela a traducao
+ * entre os dois contratos. O numero esta preso em
  * `admin/test/casca-de-fila.test.tsx`, no caso `o esqueleto so aparece
  * carregando`.
  */
@@ -119,7 +136,7 @@ export function TabelaDaFila({
         </tr>
       </thead>
       <tbody>
-        {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={colunas} />}
+        {estado.fase === 'carregando' && <LinhasCarregando linhas={5} colunas={colunas.slice(1)} />}
         {children}
       </tbody>
     </table>
