@@ -1,17 +1,3 @@
-/**
- * AS IMAGENS DA INDICACAO, so para OLHAR.
- *
- * Nada aqui envia, recorta, reordena ou remove: as `Galeria` e `CampoDeImagem`
- * do painel sao EDITORES -- exigem `enviar`, `aoMudar` e um `proposito`, e
- * carregam a maquina de estados do upload. Aqui as imagens ja existem, ja
- * passaram pelo worker e chegam como URL de derivada publica na resposta. Usar
- * o editor para mostrar o que nao se edita custaria a maquina de upload inteira
- * numa tela que so le.
- *
- * O que se REUSA sao as pecas certas: a classe `.thumb` do quadrado de 48 px da
- * lista de produtos, e o `Icone nome="image"` que os dois editores ja desenham
- * quando nao ha previa.
- */
 import { Icone } from '../componentes/Icone.tsx';
 import { imagensDa, type Indicacao } from './fila.ts';
 
@@ -47,8 +33,6 @@ export function ImagensDaIndicacao({ indicacao: i }: { indicacao: Indicacao }) {
       <h4 className="t-label c-sec ind-imgs-tit">Imagens enviadas</h4>
 
       {!temAlgo ? (
-        // SEM IMAGEM: caso legitimo e comum -- quem indica a clinica do bairro
-        // raramente tem o arquivo da logo dela. Dito com palavra, nao com buraco.
         <p className="ind-sem-img t-body-sm" data-cy="indicacao-sem-imagem">
           Esta indicação não tem imagens. Quem indica um profissional ou um
           estabelecimento raramente tem o arquivo da logo ou fotos do lugar — a
@@ -79,9 +63,6 @@ export function ImagensDaIndicacao({ indicacao: i }: { indicacao: Indicacao }) {
           )}
 
           {processando > 0 && (
-            // PROCESSANDO: `photos_total` maior que a lista. Dito na tela, com o
-            // numero -- o revisor precisa saber que falta imagem para ver, e nao
-            // que o lugar mandou pouco.
             <p className="ind-proc t-body-sm" data-cy="indicacao-processando">
               <Icone nome="schedule" tamanho="s20" />
               <span>

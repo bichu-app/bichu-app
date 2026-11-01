@@ -1,9 +1,4 @@
 ---
-// /verificar-email?token=...: o link do e-mail de confirmacao.
-// "GET nunca executa" (ADR-0028, item 2; SEC-005): varredor de antivirus e
-// previa de mensageiro abrem o link antes da pessoa. O GET mostra o botao, e a
-// confirmacao acontece no POST do formulario (confirmEmailVerification).
-// A sessao que o 200 devolve e descartada: o site nao guarda sessao (item 3).
 export const prerender = false;
 
 import Publica from '../layouts/Publica.astro';

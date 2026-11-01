@@ -1,7 +1,3 @@
-/**
- * Valor informativo do encontro pago (AdminEventPrice): centavos inteiros, `BRL`,
- * e unidade de lista fechada.
- */
 import { centavosDosDigitos, reaisDeCentavos } from '../../formato/dinheiro.ts';
 import { UNIDADES } from './rotulos.ts';
 import type { UnidadeDoValor } from './tipos.ts';

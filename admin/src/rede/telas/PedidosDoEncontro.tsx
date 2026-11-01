@@ -1,4 +1,3 @@
-/** 4 · Rede: pedidos para participar (25.5.2, UX 29.10, BO-10 e BO-11). */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
@@ -24,7 +23,6 @@ type Fila =
   | { fase: 'erro'; texto: string }
   | { fase: 'pronto'; itens: Pedido[]; total: number; pagina: number; carregandoMais: boolean };
 
-/** A fila carregada vale para uma chave (aba e versao); chave nova e 'carregando'. */
 type FilaDaChave = { chave: string } & Fila;
 
 function textoDoErroDaFila(falha: Falha): string {
@@ -122,11 +120,6 @@ export default function PedidosDoEncontro() {
     trocarDeAba(destino, true);
   }
 
-  /**
-   * Depois da decisao, a fila e as contagens mudam aqui mesmo, sem nova leitura:
-   * cada leitura da fila vai para a trilha e conta no teto de 300 linhas por hora
-   * (D56).
-   */
   function aplicarDecisao(antes: EstadoDoPedido, depois: Pedido) {
     setContagens((c) => ({
       ...c,

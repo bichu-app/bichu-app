@@ -1,7 +1,3 @@
-/**
- * O vocabulario da FILA DA PLAQUINHA DA COLEIRA no painel, e a maquina de estados
- * da entrega do lado da tela.
- */
 import type { Esquemas } from '../api/cliente.ts';
 import type { TipoDeSelo } from '../componentes/basicos.tsx';
 import { cepDosOitoDigitos } from '../formato/cep.ts';
@@ -125,4 +121,3 @@ export function enderecoEmLinhas(pedido: Pedido): readonly string[] {
 export function petDo(pedido: Pedido): string {
   return `${pedido.pet.display_name} · ${pedido.pet.species}`;
 }
-

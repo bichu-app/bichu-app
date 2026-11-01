@@ -1,7 +1,3 @@
-/**
- * O padrao de endereco do painel: **a pessoa digita o endereco completo, com
- * `https://`**.
- */
 import { configuracao } from '../config.ts';
 import { handleDoInstagram } from '../rede/dominio/links.ts';
 
@@ -9,10 +5,8 @@ const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const CONTROLE_BIDIRECIONAL = /[\u202A-\u202E\u2066-\u2069]/;
 
-/** A frase do endereco com espaco. */
 const SEM_ESPACO = 'Confira o endereço: ele não pode ter espaço.';
 
-/** Espaco (de qualquer largura) ou caractere de controle no texto. */
 function temEspacoOuControle(texto: string): boolean {
   return [...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 }

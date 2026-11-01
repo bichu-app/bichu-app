@@ -28,10 +28,6 @@ type Item = Esquemas['AdminStoreItem'];
 
 const POR_PAGINA = 20;
 
-/**
- * Chips de escolha unica (secao 25.5): `Preco vencido` e `price_status`, os outros
- * sao `publication_state`.
- */
 const CHIPS = [
   { valor: 'todos', rotulo: 'Todos' },
   { valor: 'published', rotulo: 'Publicados' },
@@ -40,10 +36,6 @@ const CHIPS = [
   { valor: 'vencido', rotulo: 'Preço vencido' },
 ] as const;
 
-/**
- * "Atualizados por ultimo" e o padrao da tela; `sort` do contrato em
- * `correspondencia_de_ordem` da matriz.
- */
 const ORDENS = [
   { valor: 'atualizado', rotulo: 'Atualizados por último' },
   { valor: 'nome', rotulo: 'Nome (A a Z)' },
@@ -63,7 +55,6 @@ function plural(n: number): string {
   return n === 1 ? 'produto' : 'produtos';
 }
 
-/** O `q` do contrato tem minimo de 2: uma letra so nao filtra. */
 function buscaEfetiva(q: string): string {
   const t = q.trim();
   return t.length >= 2 ? t : '';
@@ -109,7 +100,6 @@ export default function ListaDeProdutos() {
   const [avisoLocal, setAvisoLocal] = useState<{ tipo: 'ok' | 'erro'; texto: string }>();
   const [renovar, setRenovar] = useState<Item>();
   const [retirar, setRetirar] = useState<Item>();
-  /** O vocabulario dos dois niveis. */
   const [taxonomia, setTaxonomia] = useState<Taxonomia>();
 
   useEffect(() => {

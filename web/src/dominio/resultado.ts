@@ -1,7 +1,3 @@
-// O que a chamada a API devolveu, reduzido ao que a tela precisa para decidir.
-// Tres casos, e so tres: resposta de sucesso, problema (RFC 9457) e falha de
-// transporte (tempo esgotado ou rede). A tela decide por `slug`, que e o `type`
-// do problema depois de /problems/, nunca pelo texto e nunca so pelo status.
 import type { components } from '../api/generated/api.ts';
 import { TIPOS_DE_PROBLEMA, type TipoDeProblema } from '../api/generated/tipos-de-problema.ts';
 

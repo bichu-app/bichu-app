@@ -1,4 +1,3 @@
-/** O prefixo do Brasil. Usado quando o que foi digitado nao tem `+`. */
 export const DISCAGEM_DO_BRASIL = '55';
 
 export const DIGITOS_DO_FIXO = 8;

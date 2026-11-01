@@ -1,4 +1,3 @@
-/** As chamadas da Rede no backoffice, tipadas pelo contrato. */
 import type { ClienteDaApi } from '../../api/cliente.ts';
 import type {
   Encontro,

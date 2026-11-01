@@ -1,10 +1,3 @@
-/*
- * O que so a Rede usa, por cima de theme/componentes.css. Todo valor visual
- * sai de tokens.g.css. Larguras de coluna (Data 200, Status 184, 25.2) sao
- * constante de componente ate o pedido de token de 25.6, em rem.
- */
-
-/* Selos (25.3 e 25.5.2) */
 .selo-agendado {
   background: var(--bichu-cor-info-container);
   color: var(--bichu-cor-info);
@@ -23,7 +16,6 @@
   color: var(--bichu-cor-text-on-inverse);
 }
 
-/* Tabela */
 .colData {
   width: 12.5rem;
 }
@@ -62,7 +54,6 @@
   align-self: center;
 }
 
-/* Formulario */
 .voltar {
   align-self: flex-start;
 }
@@ -156,7 +147,6 @@
   height: auto;
 }
 
-/* Cabecalho do encontro na fila */
 .cabecalho {
   display: flex;
   flex-wrap: wrap;
@@ -171,7 +161,6 @@
   gap: var(--bichu-space-1);
 }
 
-/* Fila de pedidos */
 .fila {
   display: flex;
   flex-direction: column;
@@ -263,7 +252,6 @@
   color: var(--bichu-cor-text-secondary);
 }
 
-/* Descricao do encontro: varias linhas, cresce com o texto (sem barra de rolagem). */
 .areaQueCresce {
   min-height: 5.5rem;
   height: auto;

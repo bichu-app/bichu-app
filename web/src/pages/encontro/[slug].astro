@@ -1,51 +1,4 @@
 ---
-// /encontro/{slug}: a PAGINA PUBLICA DO ENCONTRO -- a nona rota publica do site
-// (emenda 4 do ADR-0017, decisao do cliente de 21/10/2026):
-//
-//   "Criar a pagina do encontro -- mesma forma do pet perdido: pagina publica no
-//    site + campo de link no contrato + um interruptor que ACENDE o link sem
-//    precisar de APK novo."
-//
-//   GET -> getNetworkEvent (GET /v1/network/events/{eventSlug})
-//
-// Renderizada no servidor a cada requisicao (ADR-0028, itens 1 e 2): o HTML ja
-// sai com o encontro, e a pagina funciona sem JavaScript. Nenhum script, nenhum
-// formulario: esta pagina **so le**.
-//
-// ====================================================================
-// QUEM ABRE ISTO NAO TEM CONTA, E E ISSO QUE FIXA O TETO
-// ====================================================================
-//
-// O link chega por WhatsApp, num grupo de bairro. Entao a pagina obedece ao teto
-// da **projecao publica**, e nao ao que o app logado ve:
-//
-//   - **NAO HA LOGRADOURO.** `street_address` sai so em
-//     `getNetworkEventLocation`, com `bearerAuth`, e o ADR-0027 item 21.2 diz
-//     que ele nunca sai "na agenda, no detalhe publico, no teaser nem nos
-//     detalhes do privado". Esta pagina chama `getNetworkEvent`, que e o detalhe
-//     publico: **o campo nao chega aqui**, e se um dia chegar, nao e desenhado.
-//     O que sai do lugar sao os quatro rotulos de `NetworkEventPlace` -- nome do
-//     lugar, bairro, cidade e UF --, e a pagina DIZ, em uma linha, que o
-//     endereco fica no aplicativo.
-//   - **NAO HA COORDENADA E NAO HA MAPA.** `NetworkEventPlace` nao tem `lat`,
-//     `lon` nem distancia em precisao nenhuma (ADR-0010 itens 4 e 5), e nao ha
-//     `<iframe>` de mapa nem link para mapa nesta pagina.
-//   - **NAO HA PESSOAS.** Nem quem organiza, nem quem vai, nem contagem: o
-//     contrato nao devolve nenhum campo com pessoas (ADR-0025 secao 3), e a
-//     `Rede` nao tem lista de presenca (ADR-0025).
-//   - **NAO HA IDENTIFICADOR INTERNO.** O endereco desta pagina e o `slug`, que
-//     o contrato declara como "o endereco publico do encontro. UUID nao sai
-//     nesta secao". Nenhum UUID atravessa (ADR-0010 item 6).
-//
-// ====================================================================
-// SEIS SITUACOES, UMA RESPOSTA
-// ====================================================================
-//
-// Encontro privado, cancelado, encerrado, retirado, em revisao e `slug` que
-// nunca existiu leem **a mesma tela**, com o mesmo 410. O porque esta em
-// `dominio/telas-do-encontro.ts`, onde a decisao mora e e testada: distinguir
-// contaria a um estranho o que a moderacao fez, ou que aquele `slug` existiu --
-// a regua do `lost-case-closed`.
 export const prerender = false;
 
 import Institucional from '../../layouts/Institucional.astro';
@@ -71,9 +24,6 @@ import { ENCONTRO as T, ROTULOS } from '../../conteudo/encontro.ts';
 
 const slug = Astro.params.slug ?? '';
 
-// `no-store`: o `status` do encontro e CALCULADO no servidor da API a cada
-// leitura (`upcoming` -> `happening` -> `ended`), e uma pagina guardada em cache
-// continuaria convidando para um encontro que acabou.
 Astro.response.headers.set('Cache-Control', 'no-store');
 
 let cliente: string | undefined;
@@ -91,24 +41,17 @@ const tela: TelaDoEncontro = telaDoEncontro(resposta satisfies Resultado<Encontr
 Astro.response.status = tela.http;
 if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
 
-// A capa e as fotos vem da midia publica (img.bichu.app), e so essa origem entra
-// na CSP. `fotoPermitida` descarta o que vier de outra origem: a CSP a
-// bloquearia, e uma imagem quebrada e pior que nenhuma.
 const midia = origemDaMidia(process.env.MEDIA_PUBLIC_BASE_URL);
 if (midia) Astro.csp?.insertDirective(`img-src 'self' ${midia}`);
 
 const e = tela.tela === 'encontro' ? tela.encontro : null;
 
-// Os textos derivados. Fora da marcacao de proposito: cada um tem um caso de
-// ausencia, e `{a ?? b}` espalhado pelo HTML e onde a ausencia passa calada.
 const regiao = e ? regiaoDoLugar(e.place) : '';
 const dia = e ? dataLonga(e.starts_at, e.time_zone) : null;
 const horario = e ? faixaDeHorario(e.starts_at, e.ends_at, e.time_zone) : null;
 const capa = e ? fotoPermitida(e.cover_banner_url ?? e.cover_image_url, midia) : null;
 const altDaCapa = e && e.images.length > 0 ? (e.images[0]?.alt_text ?? '') : '';
 
-// Só as fotos ALÉM da capa: repetir a capa na galeria é mostrar a mesma imagem
-// duas vezes na mesma rolagem.
 const galeria = e
   ? e.images
       .slice(1)
@@ -139,16 +82,6 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
   temBaixeApp
   indexar={false}
 >
-  {/*
-    `indexar={false}`: o encontro e EFEMERO. Uma pagina indexada hoje responde
-    410 depois do encontro, e o link que o cliente quer que circule e o que a
-    pessoa recebe no grupo, nao o que o buscador acha tres meses depois. Ligar a
-    indexacao e uma decisao do cliente, e e uma linha aqui.
-
-    O `og:title` e o `og:description` saem do `<Base>` com o TITULO DO ENCONTRO,
-    e e esse o ganho medido desta pagina: antes dela, o cartao de
-    pre-visualizacao no grupo de WhatsApp dizia "Pagina nao encontrada - Bichu".
-  */}
 
   {e && (
     <article class="encontro">
@@ -181,11 +114,6 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
             </li>
           </ul>
 
-          {/*
-            A frase que explica a AUSENCIA do endereco. Ela existe para que a
-            falta nao pareca defeito: sem ela, quem abre a pagina procura o
-            endereco, nao acha, e toca de novo.
-          */}
           <p class="nota-exemplo">{T.semEndereco}</p>
 
           {e.ticket_url && (
@@ -207,15 +135,7 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
               fetchpriority="high"
             />
           ) : (
-            /*
-              Sem capa a pagina NAO fica sem imagem: a ilustracao da folha entra
-              no lugar -- a MESMA de `/comunidade`, pelo mesmo componente. Um
-              encontro sem foto e comum (quem cadastra pela comunidade costuma
-              nao ter uma), e um bloco vazio aqui tiraria da pagina exatamente o
-              que faz alguem querer ir.
 
-              `alt=""`: ela e decorativa e redundante com o titulo ao lado.
-            */
             <Ilustracao recorte="encontro" alt="" principal />
           )}
         </div>
@@ -276,46 +196,7 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
           <div class="secao__cabecalho">
             <h2 class="titulo-secao" id="obs-titulo">{T.observacoes}</h2>
           </div>
-          {/*
-            Texto de quem organiza. Sai como TEXTO e nunca como marcacao: o
-            Astro escapa por padrao, e nao ha `set:html` nesta pagina.
 
-            ------------------------------------------------------------------
-            `texto-com-linhas` (cliente, 22/10/2026)
-            ------------------------------------------------------------------
-            Literal: *"O campo de observacoes da pagina de detalhes do evento,
-            deve aceitar quebras de linha, para nao deixar as informacoes todas
-            juntas"*.
-
-            **ERA ESTA PAGINA, E NAO O APP, e isto foi MEDIDO e nao deduzido.**
-            O caminho inteiro da quebra de linha foi conferido ponta a ponta:
-
-              - o campo que escreve aceita `\n` (`criar_encontro.dart`,
-                `linhas: 3` e sem `acaoDeTeclado`, entao a tecla de retorno
-                insere linha);
-              - o `.trim()` do envio tira so as pontas;
-              - o servidor nao a remove (`errosDasObservacoes` recusa contato e
-                pagamento e mede tamanho; nao mexe em controle que nao seja
-                bidirecional);
-              - o `CHECK` do banco e so de tamanho
-                (`char_length(btrim(notes)) BETWEEN 2 AND 500`);
-              - o app PINTA as linhas: sonda com tres linhas duras num `Text`
-                mediu quatro linhas de paragrafo e 72 dp de altura.
-
-            O que colapsava era o HTML, aqui: num `<p>` sem `white-space`, `\n`
-            e espaco em branco comum e o navegador junta tudo numa linha -- que
-            e exatamente "as informacoes todas juntas".
-
-            **`pre-line` e nao `pre`**: ele preserva a quebra e continua
-            colapsando o resto do espaco em branco E continua quebrando por
-            largura. `pre` manteria a indentacao do texto digitado e tiraria a
-            quebra automatica, o que daria rolagem horizontal no telefone.
-
-            **Classe propria e nao `white-space` em `.texto-grande`**: essa
-            classe e usada em nove lugares de texto editorial (home, sobre,
-            contato, comunidade...), e nenhum deles vem de campo digitado por
-            terceiro.
-          */}
           <p class="texto-grande texto-com-linhas">{e.notes}</p>
         </section>
       )}
@@ -341,7 +222,6 @@ const descricao = e ? T.descricao(e.title, regiao) : T.indisponivel.texto;
         </p>
       )}
 
-      {/* O segundo trabalho da pagina: o caminho para o aplicativo. */}
       <BaixeApp titulo={T.chamada.titulo} texto={T.chamada.texto} />
     </article>
   )}

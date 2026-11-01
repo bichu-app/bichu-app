@@ -1,4 +1,3 @@
-/** `Ajuda` — a fila das duvidas mandadas pelo botao `Ajuda` do aplicativo. */
 import { useCallback, useId, useState } from 'react';
 
 import { Selo } from '../componentes/basicos.tsx';
@@ -27,7 +26,6 @@ import {
   type SituacaoDaDuvida,
 } from './fila.ts';
 
-/** O dialogo com a duvida inteira. */
 function DialogoDaDuvida({ duvida, aoFechar }: { duvida: Duvida; aoFechar: () => void }) {
   const idDoCorpo = useId();
   return (
@@ -44,7 +42,6 @@ function DialogoDaDuvida({ duvida, aoFechar }: { duvida: Duvida; aoFechar: () =>
   );
 }
 
-/** O que a marcacao devolveu, para a tela dizer a verdade sobre a falha. */
 function mensagemDaFalha(status: number | undefined): string {
   if (status === 404) return 'Esta dúvida não está mais na fila: alguém marcou antes.';
   if (status === 429) return 'Muitas marcações em pouco tempo. Tente de novo em alguns minutos.';

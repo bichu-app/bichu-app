@@ -1,7 +1,3 @@
-/**
- * O desafio do login administrativo (D41): reCAPTCHA Enterprise, pontuacao, acao
- * `admin_login` (a mesma que o servidor confere).
- */
 import { configuracao } from '../config.ts';
 
 export const ACAO_DO_CAPTCHA = 'admin_login';

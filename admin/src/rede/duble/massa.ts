@@ -1,7 +1,3 @@
-/**
- * Massa do duble, tipada pelos schemas do contrato: se o contrato muda de forma,
- * isto deixa de compilar.
- */
 import type { Encontro, Pedido } from '../dominio/tipos.ts';
 
 const UUID = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;

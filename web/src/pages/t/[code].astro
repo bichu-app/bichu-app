@@ -1,13 +1,4 @@
 ---
-// /t/{code}: a pagina de quem achou o pet (F4). Renderizada no servidor a cada
-// requisicao (ADR-0028, itens 1 e 2): o HTML ja sai com o pet, e o aviso e um
-// <form method="post"> que funciona sem JavaScript (D31).
-//
-//   GET  -> resolveTagCode             (GET  /v1/tags/{code})
-//   POST -> createFoundReportFromTag   (POST /v1/tags/{code}/found-reports)
-//
-// Quem acha nunca ve telefone nem endereco do tutor: a pagina so mostra o que
-// `TagResolution` traz, e o contrato nao traz nenhum dos dois.
 export const prerender = false;
 
 import Publica from '../../layouts/Publica.astro';
@@ -47,9 +38,6 @@ const api = clienteDaApi(Astro.request, cliente);
 
 let aoAbrir: TelaAoAbrir | null = null;
 let aoAvisar: TelaAoAvisar | null = null;
-// A chave de idempotencia nasce quando o formulario e desenhado; num novo envio
-// depois de falha, a MESMA chave volta, e a API devolve o aviso original em vez
-// de avisar o tutor duas vezes.
 let chave: string = crypto.randomUUID();
 
 if (Astro.request.method === 'POST') {
@@ -74,7 +62,6 @@ const tela = aoAvisar ?? aoAbrir;
 if (!tela) throw new Error('sem tela');
 if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
 
-// A foto do pet vem da midia publica (img.bichu.app), e so essa origem entra na CSP.
 const midia = origemDaMidia(process.env.MEDIA_PUBLIC_BASE_URL);
 if (midia) Astro.csp?.insertDirective(`img-src 'self' ${midia}`);
 

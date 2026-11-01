@@ -1,4 +1,3 @@
-/** Apelidos dos tipos do contrato usados pela Rede. */
 import type { components, operations } from '../../api/generated/api.ts';
 
 type S = components['schemas'];

@@ -1,4 +1,3 @@
-/** Centavos, inteiro. O teto e o mesmo nas duas secoes: `R$ 1.000.000,00`. */
 export const CENTAVOS_MINIMO = 1;
 export const CENTAVOS_MAXIMO = 100_000_000;
 
@@ -12,7 +11,6 @@ export function centavosDosDigitos(inteiros: string, decimais: string): number |
   return centavos;
 }
 
-/** `"1234"` -> `"1.234"`. Ponto de milhar contado **da direita**. */
 function comMilhar(digitos: string): string {
   return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }

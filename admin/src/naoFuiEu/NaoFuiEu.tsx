@@ -1,7 +1,3 @@
-/**
- * "Nao fui eu" do painel (D62, ADR-0027 item 20.5): o e-mail de sessao aberta leva
- * `<painel>/nao-fui-eu#t=<token>`.
- */
 import { useMemo, useState } from 'react';
 
 import { criarClienteDaApi } from '../api/cliente.ts';

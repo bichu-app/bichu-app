@@ -1,14 +1,4 @@
-/* Linguagem do site institucional: direcao A do prototipo ("a folha"),
-   escolhida pelo cliente em 23/09. Formas organicas em Verde suave e Goiaba,
-   divisores ondulados, patinha como motivo, manuscrito so como acento.
-   Traduzido de base.css e estilo-a.css do prototipo, com todo valor vindo dos
-   tokens. O que o prototipo escrevia solto (Marfim, fonte manuscrita, raio
-   organico) nao existe em design/tokens.json e esta explicado no relatorio.
-   Pontos de quebra: 600 (medium), 905 (expanded), 1240 (large). */
-
 :root {
-  /* Composicoes de token, sem valor novo: o "cartao organico" do prototipo
-     (40 32 44 28) e a moldura solida do par. 5.1 (fatores moldura.*). */
   --forma-cartao: calc(var(--radius-xl) + var(--radius-lg)) calc(var(--radius-xl) + var(--radius-sm)) calc(var(--radius-xl) * 2) var(--radius-xl);
   --forma-cartao-b: calc(var(--radius-xl) + var(--radius-sm)) calc(var(--radius-xl) + var(--radius-lg)) var(--radius-xl) calc(var(--radius-xl) * 2);
   --forma-moldura:
@@ -19,7 +9,6 @@
   --onda: var(--space-12);
 }
 
-/* ---------- caixa de conteudo: margem da faixa, teto web.container.site-max ---------- */
 .cabecalho, .secao, .hero, .rodape {
   --margem: var(--web-grid-margem-compact);
   padding-inline: max(var(--margem), calc((100% - var(--web-container-site-max)) / 2));
@@ -28,7 +17,6 @@
 @media (min-width: 905px) { .cabecalho, .secao, .hero, .rodape { --margem: var(--web-grid-margem-expanded); } }
 @media (min-width: 1240px) { .cabecalho, .secao, .hero, .rodape { --margem: var(--web-grid-margem-large); } }
 
-/* ---------- cabecalho e navegacao (menu do celular sem JS, por <details>) ---------- */
 .cabecalho {
   position: relative; z-index: 10;
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-6);
@@ -76,7 +64,6 @@
 .nav-celular__painel .nav__lista { flex-direction: column; }
 .nav-celular__painel .nav__link { width: 100%; }
 
-/* ---------- secao ---------- */
 .secao { position: relative; padding-block: var(--space-16); }
 @media (min-width: 905px) { .secao { padding-block: calc(var(--space-16) * 1.5); } }
 .secao__cabecalho { position: relative; z-index: 1; display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); margin-bottom: var(--space-10); }
@@ -84,12 +71,10 @@
 .secao__sobretitulo { color: var(--cor-primary); }
 .secao--alternada { background: var(--butter-100); }
 .secao--comunidade { background: var(--cor-community-fill); }
-/* Sobre Verde suave a tinta e on-community-fill (regra 2 de design/marca/README.md). */
 .secao--comunidade, .secao--comunidade :is(h2, h3, .secao__lead, .secao__sobretitulo, .passo__texto, .instagram__lead, .link) { color: var(--cor-on-community-fill); }
 .secao--comunidade .botao--secundario { color: var(--cor-on-community-fill); border-color: var(--cor-on-community-fill); }
 .secao--comunidade .botao--secundario:hover { background: var(--sage-100); }
 
-/* ---------- ondas: UMA por transicao, na cor da faixa que comeca depois ---------- */
 .divisor-onda {
   display: block; height: var(--onda); margin-top: var(--space-8);
   background: var(--cor-community-fill);
@@ -110,16 +95,11 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .secao--alternada + .secao:not(.secao--alternada):not(.secao--comunidade),
 .secao--comunidade + .secao:not(.secao--alternada) { padding-top: calc(var(--space-16) + var(--onda)); }
 
-/* ---------- formas decorativas: nunca atras de texto ---------- */
 .blob { position: absolute; z-index: 0; pointer-events: none; display: block; mask-size: 100% 100%; mask-repeat: no-repeat; }
 .blob--1 { background: var(--cor-community-fill); mask-image: url("../assets/formas/blob-1.svg"); }
 .blob--2 { background: var(--cor-accent-fill); mask-image: url("../assets/formas/blob-2.svg"); }
 .blob--3 { background: var(--sage-100); mask-image: url("../assets/formas/blob-3.svg"); }
 
-/* ---------- manuscrito de acento: sempre decorativo e redundante (aria-hidden) ----------
-   O prototipo usava a fonte Kalam, do Google Fonts. Fonte web nao entra
-   (ADR-0028, item 7) e nao ha token de familia manuscrita: o acento sai na
-   familia da marca, em italico, com o sublinhado de pincel da folha. */
 .selo-manuscrito {
   position: relative; z-index: 1;
   width: fit-content;
@@ -139,7 +119,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 }
 @media (min-width: 905px) { .selo-manuscrito { font-size: var(--type-display-size); line-height: var(--type-display-line); } }
 
-/* frase sobre mancha (peca de campanha da folha) */
 .selo-frase {
   display: grid; place-items: center; text-align: center;
   width: calc(var(--space-16) * 4); aspect-ratio: 1.05; padding: var(--space-12);
@@ -150,7 +129,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   color: var(--cor-primary);
 }
 
-/* ---------- hero ---------- */
 .hero {
   position: relative; overflow: clip;
   display: grid; gap: var(--space-10);
@@ -177,7 +155,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 }
 .hero--sem-ilustracao { grid-template-columns: minmax(0, 1fr); padding-bottom: var(--space-10); }
 
-/* ilustracao recortada por forma organica: <picture> com mascara SVG do prototipo */
 .recorte { display: block; width: 100%; height: auto; object-fit: cover; }
 .recorte--tres-pessoas {
   aspect-ratio: 1360 / 740; object-position: 54.5% 42.3%;
@@ -194,17 +171,14 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   border-radius: var(--forma-moldura);
 }
 
-/* ---------- pilares ---------- */
 .pilares__lista { display: grid; gap: var(--space-6); }
 @media (min-width: 905px) { .pilares__lista { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pilar { display: grid; gap: var(--space-3); align-content: start; justify-items: start; padding: var(--space-8) var(--space-6); background: var(--cor-surface-sunken); border-radius: var(--forma-cartao); }
-/* Icone em circulo: 58% do circulo, centrado por grid (regra do cliente de 23/09). */
 .pilar__icone { box-sizing: border-box; width: calc(var(--space-16) * 1.5); height: calc(var(--space-16) * 1.5); padding: var(--space-5); object-fit: contain; border-radius: var(--radius-full); margin-bottom: var(--space-2); }
 .pilar--eventos .pilar__icone { background: var(--sage-100); }
 .pilar--profissionais .pilar__icone { background: var(--butter-100); }
 .pilar__texto { color: var(--cor-text-secondary); }
 
-/* ---------- passos ---------- */
 .passos { position: relative; z-index: 1; display: grid; gap: var(--space-6); margin-bottom: var(--space-10); }
 @media (min-width: 905px) { .passos { grid-template-columns: repeat(3, minmax(0, 1fr)); } .passos--quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1240px) { .passos--quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -218,7 +192,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .secao--comunidade .passo__icone { background: var(--cor-surface); }
 .passo__icone .icone { width: 58%; height: 58%; }
 .passo__texto { color: var(--cor-text-secondary); }
-/* passos numerados: a ordem e informacao, por isso o numero aparece */
 .passos--numerados { counter-reset: passo; }
 .passos--numerados .passo { counter-increment: passo; }
 .passos--numerados .passo__icone { background: var(--butter-100); }
@@ -230,7 +203,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   font-weight: var(--font-weight-bold); font-size: var(--type-label-size); font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Rede (faixa Verde suave) ---------- */
 .rede { padding-block: calc(var(--space-16) * 1.25) calc(var(--space-16) * 1.5); overflow-x: clip; }
 .rede .blob--3 { width: 70vw; height: 60vw; max-width: calc(var(--layout-coluna-max) * 1.4); max-height: calc(var(--layout-coluna-max) * 1.2); right: -20vw; top: 6%; opacity: .7; display: none; }
 @media (min-width: 905px) {
@@ -242,8 +214,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   .rede > .botao { justify-self: start; margin-top: var(--space-10); }
 }
 
-/* cartao ilustrado, no modelo "Evento no bairro" da folha (referencia/07).
-   O titulo na banda e on-accent-fill, nao a tinta da marca (par. 6.4.2). */
 .cartao-ilustrado {
   position: relative; z-index: 1;
   display: grid; width: min(100%, calc(var(--space-16) * 5.625));
@@ -266,17 +236,14 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   .cartao-ilustrado:hover { transform: translateY(calc(-1 * var(--space-1) / 2)); }
 }
 
-/* ---------- Instagram e grade de posts ---------- */
 .instagram { position: relative; z-index: 1; display: grid; gap: var(--space-8); margin-bottom: var(--space-10); }
 @media (min-width: 905px) { .instagram { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; } }
 .instagram__texto { display: grid; gap: var(--space-3); }
 .instagram__lead { color: var(--cor-text-secondary); }
 .grade-posts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); max-width: calc(var(--layout-coluna-max) * .94); }
 @media (min-width: 905px) { .grade-posts { gap: var(--space-4); } }
-/* a borda clara separa o chao Verde do post da faixa Verde */
 .grade-posts img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: var(--radius-xl); border: var(--border-thick) solid var(--cor-surface); }
 
-/* ---------- vantagens e garantias ---------- */
 .vantagens { padding-block: var(--space-16) calc(var(--space-16) * 1.25); }
 .vantagens__lista, .garantias__lista { display: grid; gap: var(--space-6); }
 @media (min-width: 905px) {
@@ -305,7 +272,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   mask: url("../assets/formas/trilha-patinhas.svg") center / contain no-repeat;
 }
 
-/* ---------- faixa de privacidade ---------- */
 .faixa-privacidade { display: grid; gap: var(--space-6); align-items: start; }
 @media (min-width: 905px) { .faixa-privacidade { grid-template-columns: auto minmax(0, 1fr); gap: var(--space-8); } }
 .faixa-privacidade__icone {
@@ -317,7 +283,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .faixa-privacidade__texto { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); }
 .faixa-privacidade__texto p { color: var(--cor-text-secondary); }
 
-/* ---------- chamada de profissionais ---------- */
 .chamada-profissionais {
   display: grid; gap: var(--space-6); align-items: center;
   margin-inline: var(--web-grid-margem-compact);
@@ -334,7 +299,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 }
 .chamada-profissionais__texto { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); }
 
-/* ---------- baixe o app e fale conosco ---------- */
 .baixe-app, .fale-conosco { display: grid; gap: var(--space-4); justify-items: start; }
 .baixe-app { justify-items: center; text-align: center; overflow: clip; padding-bottom: calc(var(--space-16) * 1.5); }
 .baixe-app > * { position: relative; z-index: 1; }
@@ -351,7 +315,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   .baixe-app::after { right: var(--space-4); transform: translateY(-50%) scaleX(-1); }
 }
 
-/* ---------- cartoes de exemplo (comunidade) ---------- */
 .cartao-evento, .cartao-profissional {
   position: relative; z-index: 1;
   display: grid; gap: var(--space-3); justify-items: start;
@@ -383,23 +346,19 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .estrelas { color: var(--cor-primary); letter-spacing: .1em; }
 .profissionais .selo-frase { margin-top: var(--space-4); }
 
-/* ---------- para profissionais: indicacao ---------- */
 .indicacao__conteudo { position: relative; z-index: 1; display: grid; gap: var(--space-6); justify-items: start; }
 @media (min-width: 905px) { .indicacao__conteudo { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-10); } }
 .indicacao__icone { box-sizing: border-box; width: calc(var(--space-16) * 1.5); height: calc(var(--space-16) * 1.5); padding: var(--space-5); border-radius: var(--radius-full); background: var(--butter-100); object-fit: contain; }
 .indicacao .secao__cabecalho, .sobre-porque .secao__cabecalho { margin-bottom: 0; }
 
-/* ---------- contato ---------- */
 .contato { padding-top: var(--space-4); }
 .contato__lista { display: grid; gap: var(--space-6); max-width: calc(var(--layout-coluna-max) * 1.5); }
 @media (min-width: 905px) { .contato__lista { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); } }
 .contato__item { display: grid; gap: var(--space-3); align-content: start; justify-items: start; padding: var(--space-6); background: var(--cor-surface-sunken); border-radius: var(--radius-xl); }
-/* rota de socorro: direta, sem forma decorativa; destaque so por borda e icone */
 .contato__item--socorro { border: var(--border-medium) solid var(--cor-primary); }
 .contato__icone { display: grid; place-items: center; width: var(--space-16); height: var(--space-16); border-radius: var(--radius-full); background: var(--cor-primary-container); color: var(--cor-primary); }
 .contato__icone .icone { width: 58%; height: 58%; }
 
-/* ---------- paginas legais ---------- */
 .legal { display: grid; gap: var(--space-6); max-width: var(--layout-coluna-max); }
 .legal__aviso {
   display: grid; gap: var(--space-1);
@@ -418,7 +377,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .legal__texto table { width: 100%; border-collapse: collapse; font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); overflow-wrap: anywhere; hyphens: auto; }
 .legal__texto :is(th, td) { text-align: start; vertical-align: top; padding: var(--space-2) var(--space-3); border-bottom: var(--border-hairline) solid var(--cor-outline); }
 
-/* ---------- rodape em Carmim ---------- */
 .rodape {
   position: relative;
   display: grid; gap: var(--space-8);
@@ -442,7 +400,6 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   mask: url("../assets/formas/patinha.svg") center / contain no-repeat;
 }
 
-/* ---------- /encontro/{slug}: a pagina publica do encontro ---------- */
 /* Emenda 4 do ADR-0017. Reusa `.hero--pagina`, `.secao`, `.cartao-evento__linha`,
    `.grade-posts` e `.recorte--encontro` do institucional; o que entra aqui e so
    o que nao existia. Tudo em token: `verify:valores-soltos` reprova literal. */
@@ -453,6 +410,4 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .lista-marcada { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); padding: 0; list-style: none; }
 .lista-marcada li { display: flex; gap: var(--space-2); align-items: flex-start; color: var(--cor-text-secondary); }
 .lista-marcada .icone { flex: none; color: var(--cor-primary); }
-/* A capa vem da midia publica e tem proporcao 16:9 (derivada de 1280 x 720).
-   `object-fit: cover` porque a derivada ja foi cortada no servidor. */
 .encontro .recorte--encontro { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }

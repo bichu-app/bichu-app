@@ -1,4 +1,3 @@
-/** O vocabulario da FILA DE DUVIDAS no painel. */
 import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';

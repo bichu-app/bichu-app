@@ -1,4 +1,3 @@
-/** 4 · Rede: lista (25.3 quadros 4.1 a 4.8, 25.5.2, UX 29.5 e 29.10). */
 import { useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
@@ -47,7 +46,6 @@ export default function ListaDeEncontros() {
       const r = await rede.listar(consultaDaLista(filtro, q, ordem, pagina, POR_PAGINA));
       return r.ok ? { itens: r.dados.items, total: r.dados.total } : undefined;
     },
-    // `chave` resume os filtros; `rede` e estavel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rede, chave],
   );

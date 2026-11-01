@@ -1,7 +1,3 @@
-/**
- * O caminho entre o painel e o documento de login `/entrar` (ADR-0027 item 5:
- * documento isolado, recarga completa nos dois sentidos).
- */
 export type MotivoDeEntrar = 'expirada' | 'saiu' | 'saiu_todas';
 
 const MOTIVOS: readonly MotivoDeEntrar[] = ['expirada', 'saiu', 'saiu_todas'];

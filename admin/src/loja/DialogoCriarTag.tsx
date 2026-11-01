@@ -16,12 +16,7 @@ type Tag = Esquemas['AdminStoreTag'];
 export const ALFABETO_DA_TAG = 'letras, números, espaço e os sinais & - ’ +';
 const RECUSA_DO_ALFABETO = `Use só ${ALFABETO_DA_TAG}.`;
 const RECUSA_DO_TAMANHO = 'Use de 2 a 24 caracteres.';
-/** Nao chamar de "caractere especial": `&` e apostrofo agora passam, invisivel nao. */
 const RECUSA_DO_INVISIVEL = 'Este nome tem caractere invisível. Apague o campo e digite o nome de novo.';
-/**
- * O `slug` derivado precisa de três caracteres; `N&D` dá `n-d` e cabe, `N` e `Pé`
- * não.
- */
 const RECUSA_DO_ENDERECO = 'Este nome não forma um endereço válido. Use pelo menos três letras, números ou hífens.';
 
 /**

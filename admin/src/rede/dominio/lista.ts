@@ -1,8 +1,3 @@
-/**
- * Lista de encontros: o filtro de escolha unica da tela traduzido nos parametros
- * de `listAdminNetworkEvents`, o selo de cada linha e os textos de contagem e de
- * sem resultado (UX 29.4 e 29.5).
- */
 import { dataEHora, hora } from './horario.ts';
 import type { Encontro, FiltrosDaLista, OrdemDaLista } from './tipos.ts';
 

@@ -35,10 +35,6 @@ export interface PropsDoCampoDeImagem {
   dataCy?: string;
 }
 
-/**
- * A previa local (`blob:`) do arquivo escolhido, ou `null` onde o ambiente nao
- * sabe criar uma.
- */
 function previaLocal(arquivo: File): string | null {
   try {
     return URL.createObjectURL(arquivo);
@@ -63,16 +59,10 @@ export function CampoDeImagem({
   const [recusa, setRecusa] = useState<string>();
   const [previa, setPrevia] = useState<string | null>(null);
   const [anuncio, setAnuncio] = useState('');
-  /**
-   * O arquivo ORIGINAL escolhido nesta sessao, e nunca o recortado: reenquadrar
-   * sobre o recorte anterior impediria afastar o zoom de novo e empilharia perda de
-   * qualidade a cada ajuste.
-   */
   const [original, setOriginal] = useState<File>();
   const [emRecorte, setEmRecorte] = useState<ImagemParaRecorte>();
   const seletor = useRef<HTMLInputElement>(null);
 
-  /** Troca a previa local e devolve o `blob:` anterior ao navegador. */
   function trocarPrevia(nova: string | null) {
     setPrevia((anterior) => {
       if (anterior?.startsWith('blob:')) {
@@ -86,10 +76,6 @@ export function CampoDeImagem({
     });
   }
 
-  /**
-   * A dimensao e o envio. Recebe o RECORTE quando houve um, e o arquivo cru quando
-   * nao.
-   */
   async function enviarEscolhido(arquivo: File) {
     const naoServe = await conferirDimensao(arquivo, proposito);
     if (naoServe) {
@@ -179,10 +165,6 @@ export function CampoDeImagem({
   const idDaAjuda = `${id}-ajuda`;
   const idDoErro = `${id}-erro`;
   const minima = DIMENSAO_MINIMA[proposito];
-  /**
-   * A orientacao fica SEMPRE em tela, e nao so quando algo da errado (pedido do
-   * cliente de 18/10/2026).
-   */
   const orientacao = `${ORIENTACAO_DE_TAMANHO} JPG, PNG ou WebP, com pelo menos ${String(minima.largura)} × ${String(minima.altura)} pixels.`;
 
   return (

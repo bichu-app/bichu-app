@@ -1,6 +1,4 @@
-/** Sessao do backoffice no navegador (ADR-0027 itens 2 e 3). */
 export interface EstrategiaDeSessao {
-  /** Ajusta a requisicao antes do envio. */
   prepararRequisicao(requisicao: Request): Request | Promise<Request>;
   /** Chamado quando a API responde 401. */
   aoPerderAutorizacao?(resposta: Response): void;

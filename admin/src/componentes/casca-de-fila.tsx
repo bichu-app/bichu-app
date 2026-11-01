@@ -1,35 +1,3 @@
-/**
- * A CASCA DAS TRES FILAS do painel, escrita UMA vez.
- *
- * Medido em 31/10/2026 com `jscpd 4.0.5 --min-lines 5` sobre `admin/src` (sem o
- * cliente gerado): 28 clones entre as listas e as filas, e o par
- * `FilaDeModeracao` <-> `FilaDePlaquinhas` respondia sozinho por 82 linhas em 6
- * blocos -- o maior par entre arquivos do painel. Olhando o codigo, e nao a
- * aparencia, o painel tem DUAS familias de tela com registros, e so uma delas
- * estava duplicada:
- *
- * - **FILA** (`FilaDeAjuda`, `FilaDeModeracao`, `FilaDePlaquinhas`): `cab`,
- *   `table.tabela`, aviso e falha em estado LOCAL da tela, `Nada por aqui` e um
- *   `Carregar mais` solto. As tres escreviam a MESMA casca: o cabecalho, o par
- *   de banners, o banner de erro com `Tentar de novo`, a tabela com o esqueleto
- *   de carga, o estado vazio e o rodape.
- * - **LISTA DE CADASTRO** (`ListaDeComunicados`, `ListaDeParceiros`,
- *   `ListaDeProdutos`, `ListaDeEntradas`, `ListaDeEncontros`,
- *   `FilaDeIndicacoes` -- que e uma lista apesar do nome): `pghead` com botao
- *   de criar, `tabwrap`, contagem em `aria-live`, `semres` e `rodape-lista`,
- *   com o aviso vindo da NAVEGACAO (`useAvisoDaNavegacao`). Essa familia NAO
- *   esta aqui de proposito: ver `admin/test/casca-de-fila.test.tsx`, secao (3).
- *
- * A busca, o filtro e a ordenacao continuam onde o padrao do projeto os quer --
- * no topo do CORPO da tela, nunca na barra do aplicativo --, e continuam em
- * `BarraDeListagem`. Esta casca nao desenha campo de busca nenhum: cada fila
- * monta a sua barra na ordem que ja tinha, e o teste confere que a barra vem
- * ANTES da tabela nas tres.
- *
- * NAO copie nada daqui para dentro de uma fila. A isca
- * `admin/test/casca-de-fila.test.tsx` reprova POR NOME quando uma copia privada
- * renasce, e ela mede a FONTE das tres.
- */
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { Banner, EstadoVazio, LinhasCarregando } from './basicos.tsx';

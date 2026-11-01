@@ -1,7 +1,3 @@
-/**
- * Tamanho como o servidor conta (`errosDeTexto`: `[...valor.trim()].length`) e
- * como o banco guarda: code points, e nao unidades UTF-16.
- */
 export function tamanhoComoOServidor(t: string): number {
   return [...t.trim()].length;
 }

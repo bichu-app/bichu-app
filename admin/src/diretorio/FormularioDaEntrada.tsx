@@ -244,7 +244,6 @@ export function validarEntrada(v: Valores): Partial<Record<Campo, string>> {
   return e;
 }
 
-/** A GALERIA como o corpo do contrato a quer (`DirectoryGalleryImagesInput`). */
 function imagensDoCorpo(v: Pick<Valores, 'imagens'>): Esquemas['CatalogImageInput'][] {
   return v.imagens
     .filter((im): im is ImagemDaGaleria & { uploadId: string } => typeof im.uploadId === 'string')
@@ -274,7 +273,6 @@ export function avisoDeImagensSemEnvio(v: Pick<Valores, 'imagens'>): string | nu
   return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam na entrada enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, as tira da entrada. Para mudar a galeria sem perdê-las, envie os mesmos arquivos de novo.`;
 }
 
-/** A assinatura da galeria, para o `PATCH` so mandar `images` quando ela mudou. */
 const assinaturaDaGaleria = (v: Pick<Valores, 'imagens'>): string =>
   JSON.stringify(v.imagens.map((im) => [im.chave, im.alt.trim()]));
 
@@ -300,10 +298,6 @@ export function paraRascunho(v: Valores): Valores {
   };
 }
 
-/**
- * O que a chave de imagem vale no `PATCH`, ou `undefined` quando ela nao deve
- * entrar no corpo.
- */
 function imagemParaOPatch(
   escolhido: string | null | undefined,
   gravada: Esquemas['AdminCatalogImage'] | null | undefined,
@@ -369,11 +363,8 @@ export default function FormularioDaEntrada() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [parametros] = useSearchParams();
-  /** DUPLICANDO: o `slug` da entrada FONTE, que vem de `?duplicarDe=`. */
   const duplicarDe = editando ? undefined : (parametros.get('duplicarDe') ?? undefined);
-  /** A chave do rascunho guardado, que **nao e so o `pathname`**. */
   const chaveDoRascunho = duplicarDe ? `${pathname}?duplicarDe=${duplicarDe}` : pathname;
-  /** O `slug` que esta carga vai LER, que nao e sempre o que ela vai EDITAR. */
   const slugParaCarregar = entrySlug ?? duplicarDe;
   const {
     chave: chaveDaCarga,
@@ -433,7 +424,6 @@ export default function FormularioDaEntrada() {
     });
   }
 
-  /** A busca de CEP, **pelo NOSSO endpoint**. */
   async function buscarEndereco(cep: string) {
     setBuscaDoCep('buscando');
     try {
@@ -467,7 +457,6 @@ export default function FormularioDaEntrada() {
     void navigate('/perto', aviso ? { state: { aviso } } : {});
   }
 
-  /** O texto aparado, ou `null` quando vazio. */
   function ou(valor: string): string | null {
     const texto = valor.trim();
     return texto === '' ? null : texto;
@@ -661,7 +650,6 @@ export default function FormularioDaEntrada() {
   }
 
   const lista = ORDEM.filter((c) => erros[c]).map((c) => ({ campo: c, rotulo: ROTULOS[c] }));
-  /** A situacao escolhida publica a entrada? */
   const cobraPublicacao = valores.situacao === 'published';
   const sujo =
     JSON.stringify({ ...valores, slugEditado: 0 }) !==
