@@ -190,7 +190,6 @@ class ApiClient {
     );
   }
 
-  /// Monta, envia e devolve a resposta INTEIRA, cabecalhos incluidos.
   Future<http.Response> _trocar(
     String metodo,
     String caminho, {
@@ -244,7 +243,6 @@ class ApiClient {
     return resposta;
   }
 
-  /// Manda a requisicao e le o corpo INTEIRO, sob **um** prazo so.
   Future<http.Response> _enviarELerOCorpo(http.BaseRequest requisicao) {
     return () async {
       final fluxo = await _cliente.send(requisicao);

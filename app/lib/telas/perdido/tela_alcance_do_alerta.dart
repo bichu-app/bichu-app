@@ -63,7 +63,6 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
   PreviaDoAlcance? _previa;
   MensagemDeErro? _erro;
 
-  /// A chave de idempotencia **da primeira tentativa**, e nao de cada uma.
   String? _chave;
 
   @override
@@ -97,7 +96,6 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
     }
   }
 
-  /// O estado de alcance que a tela desenha.
   EstadoDoAlcance get _estado =>
       _previa?.estado ?? EstadoDoAlcance.indisponivel;
 
@@ -305,7 +303,6 @@ class _Alcance extends StatelessWidget {
   final String? rotuloDaArea;
   final String nomeDoPet;
 
-  /// "num raio de 5 km da Vila Madalena", ou so "num raio de 5 km".
   String get _raio {
     final km = (raioEmMetros / 1000).round();
     final area = rotuloDaArea;

@@ -25,7 +25,6 @@ abstract final class QuandoNaLista {
   static String _hora(DateTime d) =>
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
-  /// `DateTime.weekday` e 1 para segunda e 7 para domingo.
   static String _diaDaSemana(DateTime d) => switch (d.weekday) {
     DateTime.monday => 'seg',
     DateTime.tuesday => 'ter',

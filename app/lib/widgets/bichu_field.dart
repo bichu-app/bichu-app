@@ -161,13 +161,11 @@ class BichuField extends StatelessWidget {
   }
 }
 
-/// Embala o campo com a faixa de `Concluir` **so quando ele e texto corrido**.
 Widget _comBarraDoTeclado({required bool textoCorrido, required Widget filho}) {
   if (!textoCorrido) return filho;
   return AcessorioDeTextoCorrido(child: filho);
 }
 
-/// Da ao campo sem rotulo visivel um nome acessivel, e nada mais.
 Widget _comNomeAcessivel({
   required String rotulo,
   required bool visivel,
@@ -179,7 +177,6 @@ Widget _comNomeAcessivel({
   );
 }
 
-/// Envolve o campo num `Focus` que so observa, quando ha quem observar.
 Widget _comAvisoDePerdaDeFoco({
   required Widget filho,
   VoidCallback? aoPerderFoco,

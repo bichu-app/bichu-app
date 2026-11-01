@@ -1,17 +1,3 @@
-/**
- * A CASCA dos formularios do painel, escrita UMA vez.
- *
- * Medido em 30/10/2026 com `jscpd 4.0.5 --min-lines 5` sobre `admin/src` (sem o
- * cliente gerado): 9,9% de clone textual nos `.tsx`, e o par
- * `FormularioDaEntrada` <-> `FormularioDeParceiro` respondia sozinho por 135
- * linhas em 10 blocos. Nao eram cinco formularios parecidos: era a MESMA casca
- * copiada cinco vezes -- rascunho de sessao, carga por chave, foco no resumo de
- * erros, link de voltar, banner de falha e rodape.
- *
- * NAO copie nada daqui para dentro de um formulario. A isca
- * `admin/test/casca-de-formulario.test.tsx` reprova POR NOME quando uma copia
- * privada renasce, e ela mede a FONTE de cada um dos cinco.
- */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 

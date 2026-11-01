@@ -57,9 +57,6 @@ class _PaginaDoComunicadoState extends State<PaginaDoComunicado> {
   ComunicadoDoBichu? _comunicado;
   String? _falha;
 
-  /// O mesmo sinalizador das outras telas que leem [Escopo]: ler um
-  /// `InheritedWidget` em `initState` estoura, e a tela abriria dizendo
-  /// "servidor fora" sem ter chamado nada.
   bool _iniciou = false;
 
   NotificacoesApi get _api =>
@@ -155,7 +152,6 @@ class _Texto extends StatelessWidget {
 
   final ComunicadoDoBichu comunicado;
 
-  /// `21/10/2026 às 9h05`, no fuso de quem le.
   String get _quando {
     final q = comunicado.disparadoEm.toLocal();
     final dia = q.day.toString().padLeft(2, '0');

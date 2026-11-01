@@ -1,7 +1,3 @@
-// Textos de /como-funciona, /para-profissionais, /sobre e /contato. Fonte:
-// secao "Prototipo v1", blocos P.3 a P.6, com a rodada 3. Onde ha decisao do
-// cliente, esta a versao segura.
-
 export const COMO_FUNCIONA = {
   titulo: 'Como funciona',
   descricao: 'O Bichu é a rede dos pets do seu bairro: cadastro do pet, eventos, profissionais indicados e a rede que procura quando ele some.',
@@ -11,7 +7,6 @@ export const COMO_FUNCIONA = {
     alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
   },
   passosTitulo: 'Os passos',
-  // P.3.2: ordem da home. O numero aparece porque a ordem e informacao.
   passos: [
     { icone: 'pets', titulo: 'A identidade do seu pet', texto: 'Você cadastra o pet no app com foto, sinais e cuidados.' },
     { icone: 'park', titulo: 'Eventos no bairro', texto: 'Eventos em praças e parques, criados pela equipe do Bichu e pela comunidade.' },
@@ -51,7 +46,6 @@ export const SOBRE = {
     lead: 'O Bichu é a rede dos pets: uma comunidade de tutores do mesmo bairro, para encontrar quem mora perto, trocar indicação e cuidar dos pets juntos.',
     alt: 'Ilustração de três mulheres com um cachorro e um gato numa praça.',
   },
-  // P.5.2 "Por que existe": versao segura, o bloco sai.
   naoFaz: {
     titulo: 'O que a gente não faz',
     texto: 'Não mostramos seu telefone nem seu endereço para quem acha o seu pet e não intermediamos recompensa. Recompensa é a porta do golpe do falso achador.',
@@ -64,7 +58,6 @@ export const CONTATO_PAGINA = {
   hero: { titulo: 'Contato', lead: 'Fale com a gente pelos canais abaixo.' },
   canaisTitulo: 'Canais',
   email: 'E-mail',
-  // Imprensa: versao segura, fica fora (P.6.2).
   socorro: {
     titulo: 'Achou um pet com a plaquinha do Bichu?',
     texto: 'Leia o QR com a câmera do celular e toque em "Avisar o tutor". Se o QR não ler, digite o endereço que está impresso na plaquinha. Não precisa escrever para a gente: o aviso chega direto ao tutor.',

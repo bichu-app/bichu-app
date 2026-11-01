@@ -1,10 +1,8 @@
-/** Os prazos da sessao vistos do navegador (D38, UX 29.2), sem chamada extra. */
 export const AVISO_DE_INATIVIDADE_MS = 2 * 60_000;
 export const AVISO_DO_TETO_MS = 10 * 60_000;
 export const FOLGA_DA_RENOVACAO_MS = 60_000;
 
 export interface Prazos {
-  /** Quanto tempo sem uso derruba a sessao. */
   duracaoDaInatividadeMs: number;
   /** Estimativa atual do fim por inatividade (epoch ms). */
   fimPorInatividade: number;
@@ -37,7 +35,6 @@ export function renovarPorUso(prazos: Prazos, agora: number): Prazos {
 export type SituacaoDosPrazos = 'normal' | 'aviso-de-inatividade' | 'aviso-do-teto' | 'vencida';
 
 export interface LeituraDosPrazos {
-  /** S.1: aos 28 min sem uso, o dialogo. */
   avisarInatividade: boolean;
   /** S.2: a 10 min do teto, o banner persistente. */
   avisarTeto: boolean;

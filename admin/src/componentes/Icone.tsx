@@ -2,10 +2,6 @@ import type { ReactElement } from 'react';
 
 import { LOCKUP, LOGO_HORIZONTAL, SIMBOLO_REDUZIDO } from './marca.g.ts';
 
-/**
- * Os icones provisorios do backoffice (06-design-system.md secao 25.7: saem quando
- * a biblioteca Material Symbols entrar).
- */
 const TRACOS = {
   search: (
     <>

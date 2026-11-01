@@ -101,10 +101,6 @@ export function Galeria({
   marca,
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
-  /**
-   * O enquadramento aberto. `chave` nao nula e um item que JA subiu e esta sendo
-   * reenquadrado; `indice` nao nulo e a troca de uma imagem recusada.
-   */
   const [recorte, setRecorte] = useState<{
     imagem: ImagemParaRecorte;
     original: File;
@@ -147,7 +143,6 @@ export function Galeria({
     }
   }
 
-  /** Troca a imagem da posicao `indice` por um envio novo, mantendo a descricao. */
   function substituir(indice: number, arquivo: File, original?: File) {
     const alvo = imagens[indice];
     if (!alvo) return;
@@ -179,10 +174,6 @@ export function Galeria({
     });
   }
 
-  /**
-   * UM arquivo abre o enquadramento (BICHUS-314); VARIOS sobem como sempre e cada um
-   * ganha o botao "Reenquadrar" no proprio item.
-   */
   async function enquadrarOuSubir(arquivo: File, indice: number | null) {
     if (!conferirArquivo(arquivo)) {
       const imagem = await lerImagem(arquivo);
@@ -216,7 +207,6 @@ export function Galeria({
     acrescentar(escolhidos);
   }
 
-  /** Reabre o enquadramento de um item que ja subiu, a partir do arquivo CRU. */
   async function reenquadrar(im: ImagemDaGaleria) {
     if (!im.original) return;
     const imagem = await lerImagem(im.original);
@@ -279,7 +269,6 @@ export function Galeria({
     focar('[data-adicionar]');
   }
 
-  /** "a imagem" para a escolha nova; "a imagem 3 de 5" para o reenquadramento. */
   function rotuloDoRecorte(chave: string | null): string {
     const i = chave === null ? -1 : imagens.findIndex((im) => im.chave === chave);
     return i < 0 ? 'a imagem' : `a imagem ${i + 1} de ${n}`;

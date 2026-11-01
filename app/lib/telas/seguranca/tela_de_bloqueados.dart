@@ -71,7 +71,6 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
     }
   }
 
-  /// Desbloqueia e **recarrega**, em vez de tirar a linha da lista na mão.
   Future<void> _desbloquear(String publicRef) async {
     if (_emCurso.contains(publicRef)) return;
     setState(() {
@@ -211,7 +210,6 @@ class _EstadoDosBloqueados extends State<TelaDeBloqueados> {
     );
   }
 
-  /// `dd/mm/aaaa`, montado aqui.
   static String _data(DateTime quando) {
     final local = quando.toLocal();
     final dia = local.day.toString().padLeft(2, '0');

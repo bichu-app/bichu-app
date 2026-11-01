@@ -8,7 +8,6 @@ const int minimoDoTokenDeConvite = 20;
 /// O teto do token, copiado de `maxLength` do contrato.
 const int maximoDoTokenDeConvite = 64;
 
-/// Os símbolos que base64url usa, e só eles.
 final RegExp _alfabetoDoToken = RegExp(r'^[A-Za-z0-9_-]+$');
 
 /// Extrai o token de convite de um QR lido, ou **nulo quando o conteúdo não tem

@@ -1,8 +1,3 @@
-/**
- * Duble das rotas `/v1/admin/network/*` e `/v1/admin/media/catalog-image-intents`,
- * escrito contra os tipos gerados do contrato enquanto o servidor de verdade nao
- * existe (`feat/backoffice-rede-admin`).
- */
 import { handleDoInstagram, recusaDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
 import { achadosNasObservacoes } from '../dominio/observacoes.ts';
 import type {
@@ -59,9 +54,7 @@ function problema(status: number, slug: string, title: string, errors?: Problema
   return json(status, { type: PROBLEMA + slug, title, status, ...(errors ? { errors } : {}) } satisfies Problema);
 }
 
-/** A versao como o If-Match deve chegar. */
 const versao = (e: Encontro) => `"${String(e.version)}"`;
-/** O ETag como a borda de hml o entrega: comprimido e sufixado (`"3-zstd"`). */
 const etag = (e: Encontro) => `"${String(e.version)}-zstd"`;
 
 function aleatorio(n: number): string {
@@ -98,7 +91,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   }
   recalcularPendentes();
 
-  /** Como o servidor: faltar `If-Match` responde 428. */
   function exigirIfMatch(req: Requisicao): Response | null {
     return req.cabecalhos['if-match'] ? null : problema(428, 'precondition-required', 'Falta a versao');
   }
@@ -124,10 +116,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     return null;
   }
 
-  /**
-   * Um recorte da regra do servidor (errosDoEndereco): link, e-mail ou telefone com
-   * DDD recusam; rua e CEP, nao.
-   */
   function recusaDeEndereco(endereco: unknown): Response | null {
     if (typeof endereco === 'string' && /https?:\/\/|www\.|@|\(?\d{2}\)?\s?9?\d{4}-?\d{4}/.test(endereco)) {
       return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'street_address', code: 'contact_or_payment_detected' }]);
@@ -135,10 +123,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     return null;
   }
 
-  /**
-   * Como o servidor: link e Instagram com a mesma regra do painel, mais a recusa
-   * forcada da opcao.
-   */
   function recusaDeLinks(corpo: { ticket_url?: string | null; instagram_url?: string | null }): Response | null {
     const forcada = recusaForcada;
     if (forcada && forcada.field in corpo) {

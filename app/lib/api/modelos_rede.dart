@@ -722,7 +722,6 @@ abstract class ConteudoDoEncontro {
       ];
 }
 
-/// Os campos de conteudo, lidos do mesmo jeito nas duas formas.
 Set<Porte> _portes(Object? bruto) {
   if (bruto is! List) return <Porte>{...Porte.values};
   final lidos = <Porte>{
@@ -741,7 +740,6 @@ List<EstruturaDoLocal> _estrutura(Object? bruto) {
   ];
 }
 
-/// Um link publico do encontro (`ticket_url`, `instagram_url`).
 Uri? _link(Object? bruto) {
   if (bruto is! String || bruto.trim().isEmpty) return null;
   final u = Uri.tryParse(bruto.trim());
@@ -1202,7 +1200,6 @@ class MeuPedido {
   }
 }
 
-/// Os campos de paginacao, lidos igual nas tres paginas.
 int _inteiro(Object? bruto, int padrao) => bruto is int ? bruto : padrao;
 
 Map<String, String> _filtros(Object? bruto) {

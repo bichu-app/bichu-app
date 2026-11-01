@@ -91,7 +91,6 @@ export function useListaPaginada<T>(
 
   const carregarMais = useCallback(() => setPaginaDe({ chave: chaveCompleta, n: pagina + 1 }), [chaveCompleta, pagina]);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
-  /** Troca um item no lugar, depois de uma acao na linha, sem recarregar a lista. */
   const substituir = useCallback((igual: (item: T) => boolean, novo: T) => {
     setResultado((r) => (r ? { ...r, itens: r.itens.map((i) => (igual(i) ? novo : i)) } : r));
   }, []);

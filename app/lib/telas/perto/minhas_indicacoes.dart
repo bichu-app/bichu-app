@@ -75,7 +75,6 @@ class _MinhasIndicacoesState extends State<MinhasIndicacoes>
   bool _carregandoMais = false;
   String? _falhaDeMais;
 
-  /// O estado APLICADO, e não o marcado na folha: é ele que foi para a rota.
   EstadoDaSugestao? _estado;
 
   DiretorioApi get _api => DiretorioApi(Escopo.of(context).api);

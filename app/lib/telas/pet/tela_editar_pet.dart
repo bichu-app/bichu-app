@@ -36,7 +36,6 @@ class TelaEditarPet extends StatefulWidget {
   State<TelaEditarPet> createState() => _TelaEditarPetState();
 }
 
-/// Em que pe esta a foto, do ponto de vista desta tela.
 enum _PassoDaFoto {
   /// Nada em curso. O que a tela mostra e o que o servidor tem.
   parada,
@@ -59,28 +58,21 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
   bool _salvando = false;
   MensagemDeErro? _faixa;
 
-  /// O pet **como o servidor o tem agora**, e nao como ele chegou.
   late Pet _pet = widget.pet;
 
-  /// A foto mudou no servidor desde que esta tela abriu?
   bool _fotoMudou = false;
 
   _PassoDaFoto _passoDaFoto = _PassoDaFoto.parada;
 
-  /// A foto que a pessoa ACABOU de escolher, enquanto a derivada nao existe.
   FotoLocal? _fotoEscolhida;
 
-  /// O recado do bloco da foto: informativo quase sempre.
   String? _recadoDaFoto;
 
-  /// O recado e um erro, ou so uma informacao?
   bool _recadoEhErro = false;
 
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
   bool _consultandoPermissao = true;
 
-  /// Ver o mesmo sinalizador em F1.4 e F1.6: `Escopo` e `InheritedWidget`, e
-  /// le-lo em `initState` e erro de framework.
   bool _iniciou = false;
 
   @override
@@ -106,7 +98,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     super.dispose();
   }
 
-  /// Rele o pet para pegar a lista de fotos que o servidor passou a ter.
   Future<void> _recarregarOPet() async {
     try {
       final fresco = await Escopo.of(context).pets.buscarPet(widget.pet.id);
@@ -121,7 +112,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     }
   }
 
-  /// Abre a folha com as duas origens e envia o que vier.
   Future<void> _trocarAFoto() async {
     if (_passoDaFoto != _PassoDaFoto.parada) return;
 
@@ -200,7 +190,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     await _enviar(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustar(CameraEGaleria camera, FotoLocal foto) =>
       ajustarAFoto(
         context,
@@ -237,7 +226,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     if (desfecho == DesfechoDoEnvio.enviada) await _recarregarOPet();
   }
 
-  /// Remover **sem substituir**, que e o que o servidor permite.
   Future<void> _removerAFoto() async {
     if (_passoDaFoto != _PassoDaFoto.parada) return;
     final capa = _pet.fotoDeCapa;
@@ -290,7 +278,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     await _recarregarOPet();
   }
 
-  /// O 409 de `deletePetPhoto`, tratado antes de o servidor emiti-lo.
   String _mensagemDaRemocao(FalhaDeChamada falha) {
     if (falha is FalhaDaApi &&
         (falha.problem.tipo == ProblemTipo.petSemFoto ||
@@ -305,7 +292,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     return MensagensDeErro.de(falha).texto;
   }
 
-  /// A camera pode funcionar neste aparelho, agora?
   bool get _cameraPodeFuncionar =>
       !_consultandoPermissao &&
       (_permissaoDaCamera == EstadoDaPermissao.concedida ||
@@ -352,7 +338,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
     }
   }
 
-  /// **Decide por `type`, nunca por status.**
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDaApi &&
         falha.problem.tipo == ProblemTipo.validacaoFalhou) {
@@ -441,8 +426,6 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
   }
 }
 
-/// De onde a foto vem. Local da folha, nao trafega e nao espelha lista do
-/// contrato.
 enum _Origem { camera, galeria }
 
 /// O bloco da foto: a foto atual, as acoes e o recado.
@@ -569,7 +552,6 @@ class _MolduraDaEdicao extends StatelessWidget {
   final FotoLocal? escolhida;
   final bool subindo;
 
-  /// O ponto focal das DUAS imagens desta moldura.
   static const Alignment _pontoFocal = Alignment(0, -1 / 3);
 
   @override
@@ -581,7 +563,6 @@ class _MolduraDaEdicao extends StatelessWidget {
     );
   }
 
-  /// O estado da moldura, decidido num lugar so.
   EstadoDaMoldura get _estado {
     if (escolhida != null) return EstadoDaMoldura.repouso;
     if (capa != null && !subindo) return EstadoDaMoldura.repouso;
@@ -590,7 +571,6 @@ class _MolduraDaEdicao extends StatelessWidget {
         : EstadoDaMoldura.vazio;
   }
 
-  /// A imagem que a moldura recebe, ou nulo nos estados sem imagem.
   Widget? _imagem() {
     final local = escolhida;
     if (local != null) {
@@ -631,7 +611,6 @@ class _MolduraDaEdicao extends StatelessWidget {
   }
 }
 
-/// Os textos da porta do endereco de entrega deste pet.
 abstract final class _TextosDoEnderecoDoPet {
   static const String rotulo = 'Endereco de entrega';
 

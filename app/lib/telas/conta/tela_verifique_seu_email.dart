@@ -38,9 +38,6 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
     super.dispose();
   }
 
-  /// A contagem e anunciada **duas vezes**, no inicio e no fim, e nao a cada
-  /// segundo: um cronometro falante a cada segundo torna a tela inutilizavel
-  /// com leitor de tela.
   void _iniciarContagem() {
     _contagem?.cancel();
     setState(() => _restante = _segundosDeEspera);
@@ -86,7 +83,6 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
     }
   }
 
-  /// `Continuar`: o fim do caminho de quem acabou de criar a conta.
   Future<void> _continuar() async {
     final destino = await Escopo.of(context).guarda.executarDepoisDoLogin();
     if (!mounted) return;

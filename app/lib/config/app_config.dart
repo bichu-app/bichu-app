@@ -131,7 +131,6 @@ class AppConfig {
     return v.isEmpty ? null : v;
   }
 
-  /// URL absoluta, ou nulo.
   static Uri? _uriOuNulo(String valor) {
     final v = _ouNulo(valor);
     if (v == null) return null;

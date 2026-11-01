@@ -24,8 +24,6 @@ class TelaDeDuvida extends StatefulWidget {
 }
 
 class _TelaDeDuvidaState extends State<TelaDeDuvida> {
-  /// Os mesmos tetos de `HelpRequestInput` e dos dois `CHECK` de
-  /// `help_requests`.
   static const int _tetoDoAssunto = 120;
   static const int _tetoDoTexto = 4000;
 
@@ -34,7 +32,6 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
   final ScrollController _rolagem = ScrollController();
   final FocusNode _focoDaConfirmacao = FocusNode();
 
-  /// Onde a faixa de recusa nasce, para `_levarAte` ter um alvo.
   final GlobalKey _alvoDaFaixa = GlobalKey();
 
   bool _enviando = false;
@@ -52,7 +49,6 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
     super.dispose();
   }
 
-  /// Traz a recusa para dentro da janela.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -66,7 +62,6 @@ class _TelaDeDuvidaState extends State<TelaDeDuvida> {
     });
   }
 
-  /// Confere **sobre o aparado**, que e o que o servidor vai gravar.
   bool _confereOsCampos() {
     final assunto = _assunto.text.trim();
     final texto = _texto.text.trim();

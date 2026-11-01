@@ -21,7 +21,6 @@ class CacheDeImagensNoAparelho {
 
   static const int tetoPadraoDeBytes = 32 * 1024 * 1024;
 
-  /// A pasta raiz, resolvida uma vez.
   Future<Directory>? _raiz;
 
   Future<Directory> _raizDoCache() {
@@ -98,8 +97,6 @@ class CacheDeImagensNoAparelho {
     }
   }
 
-  /// O DESPEJO: enquanto passar do teto, sai o arquivo com o carimbo mais
-  /// antigo.
   Future<void> _despejarAteCaber(Directory raiz) async {
     final arquivos = _arquivos(raiz);
     var total = arquivos.fold<int>(0, (soma, f) => soma + f.lengthSync());
@@ -152,7 +149,6 @@ class ChaveDeImagem {
     return ChaveDeImagem._(identidade: identidade, pronta: pronta, apelido: dono);
   }
 
-  /// O caminho da URL -- a chave do objeto.
   static String? _caminhoDe(String url) {
     if (url.isEmpty) return null;
     final uri = Uri.tryParse(url);

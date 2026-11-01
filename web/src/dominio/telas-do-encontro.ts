@@ -1,11 +1,3 @@
-// Qual tela `/encontro/{slug}` mostra, e como a data do encontro vira texto no
-// fuso DELE. Modulo puro: testado em milissegundos, sem navegador
-// (tests/unidade/telas-do-encontro.test.ts).
-//
-// A pagina e a NONA rota publica do site (emenda 4 do ADR-0017, decisao do
-// cliente de 21/10/2026). Ela e alcancavel por qualquer pessoa da internet, sem
-// conta, entao ela obedece ao teto da projecao publica -- e nao ao que o app
-// logado ve.
 import type { components } from '../api/generated/api.ts';
 import type { Resultado } from './resultado.ts';
 
@@ -56,11 +48,7 @@ export type TelaDoEncontro =
   | { tela: 'fora-do-ar'; http: 503 }
   | { tela: 'erro'; http: number; correlationId: string | null };
 
-/** O encontro que esta pagina mostra: publico, de pe e ainda nao terminado. */
 function mostravel(encontro: EncontroDaRede): EncontroPublico | null {
-  // `visibility` e a discriminante do `oneOf` do contrato. O teaser do privado
-  // nao tem lugar nem horario -- nao haveria pagina para desenhar com ele, e e
-  // por isso que esta checagem vem antes de qualquer outra.
   if (encontro.visibility !== 'public') return null;
   // Anotacao, e nao `as`: aqui o `if` acima JA estreitou a uniao do contrato
   // (`NetworkEvent = NetworkEventPublic | NetworkEventPrivateTeaser`) para o
@@ -81,15 +69,9 @@ export function telaDoEncontro(r: Resultado<EncontroDaRede>): TelaDoEncontro {
   }
   if (r.tipo === 'falha') return { tela: 'fora-do-ar', http: 503 };
   switch (r.slug) {
-    // As tres do contrato (inexistente, `pending_review`, `removed`) chegam
-    // todas como `not-found`, e saem como a MESMA tela das tres desta pagina.
     case 'not-found':
       return { tela: 'indisponivel', http: 410 };
     case 'validation-failed':
-      // `eventSlug` tem forma declarada (3 a 30), e parametro fora da forma
-      // responde 400. Para quem abriu um link torto o desfecho e o mesmo de um
-      // endereco que nao existe, e dizer "o endereco esta malformado" nao da a
-      // essa pessoa nenhuma saida que ela possa tomar.
       return { tela: 'indisponivel', http: 410 };
     case 'rate-limited':
       return { tela: 'espere', http: 429, esperaSegundos: r.esperaSegundos };
@@ -106,10 +88,6 @@ export function telaDoEncontro(r: Resultado<EncontroDaRede>): TelaDoEncontro {
       };
   }
 }
-
-// ---------------------------------------------------------------------------
-// O lugar, e o que dele e publico
-// ---------------------------------------------------------------------------
 
 /**
  * A linha do lugar: **nome do lugar, bairro, cidade e UF**, e nada mais fino.
@@ -134,10 +112,6 @@ export function linhaDoLugar(place: EncontroPublico['place']): string {
 export function regiaoDoLugar(place: EncontroPublico['place']): string {
   return `${place.neighborhood}, ${place.city} - ${place.state}`;
 }
-
-// ---------------------------------------------------------------------------
-// Data e hora, no fuso DO ENCONTRO
-// ---------------------------------------------------------------------------
 
 /**
  * A data por extenso, no fuso do encontro.
@@ -166,7 +140,6 @@ export function dataLonga(iso: string, timeZone: string): string | null {
   }
 }
 
-/** `9h` ou `9h30`, no fuso do encontro. */
 function hora(instante: Date, timeZone: string): string | null {
   try {
     const partes = new Intl.DateTimeFormat('pt-BR', {
@@ -207,16 +180,11 @@ export function faixaDeHorario(
   return h2 === null ? `A partir das ${h1}` : `Das ${h1} às ${h2}`;
 }
 
-// ---------------------------------------------------------------------------
-// Entrada
-// ---------------------------------------------------------------------------
-
 const UNIDADE: Record<string, string> = {
   per_pet: 'por pet',
   per_person: 'por pessoa',
   per_pair: 'por dupla (1 pessoa + 1 pet)',
   per_two_people: 'por dupla (2 pessoas)',
-  // Legado, ainda valido e exibido como "por pet" (ADR-0027 item 22.2).
   per_dog: 'por pet',
 };
 

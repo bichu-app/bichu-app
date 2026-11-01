@@ -1,7 +1,3 @@
-/**
- * O formulario aberto quando a sessao cai (UX 29.2): guardado no navegador e
- * devolvido quando a pessoa volta a mesma rota depois de entrar.
- */
 const PREFIXO = 'bichu-adm-rascunho:';
 
 function armazenamento(): Storage | undefined {

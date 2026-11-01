@@ -1,7 +1,3 @@
-// O mapa do site e o robots.txt (ADR-0028, item 11). Na v1 o mapa traz so o
-// institucional: `/p/` e `/@` estao fora da v1, e `listPublicLostPets` ainda
-// nao existe. Termos e Privacidade ficam fora enquanto forem rascunho (noindex).
-
 export const PAGINAS_INDEXAVEIS = ['/', '/comunidade', '/como-funciona', '/para-profissionais', '/sobre', '/contato'] as const;
 
 /** Producao e so o host canonico; em qualquer outro host nao ha mapa (ADR-0029). */

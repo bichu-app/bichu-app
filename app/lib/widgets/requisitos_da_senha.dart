@@ -83,7 +83,6 @@ class RequisitosDaSenha extends StatelessWidget {
     }
   }
 
-  /// A cor do estado, **sempre de token**.
   static Color _cor(EstadoDaRegra estado, BichuCores cores) {
     switch (estado) {
       case EstadoDaRegra.aguardando:
@@ -95,7 +94,6 @@ class RequisitosDaSenha extends StatelessWidget {
     }
   }
 
-  /// A frase que o leitor de tela le, montada dos estados.
   static String _rotulo(Map<RegraDeSenha, EstadoDaRegra> estados) {
     final atendidas = <String>[
       for (final e in estados.entries)

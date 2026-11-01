@@ -20,10 +20,6 @@ import {
 
 const POR_PAGINA = 50;
 
-/**
- * Busca, filtro e ordenacao **no topo do corpo da tela**, e nunca na barra do app:
- * e o padrao de listagem do projeto, e e o mesmo da `Loja` e da `Rede`.
- */
 const PADROES = { q: '', atividade: 'todas', situacao: 'todas', ordem: 'name' };
 
 const CHIPS = [
@@ -48,7 +44,6 @@ function plural(n: number) {
   return n === 1 ? 'entrada' : 'entradas';
 }
 
-/** Cidade e UF numa celula. */
 function lugarDa(entrada: Entrada): string {
   const partes = [entrada.city, entrada.state].filter((p): p is string => typeof p === 'string' && p !== '');
   return partes.length === 0 ? '—' : partes.join(' · ');

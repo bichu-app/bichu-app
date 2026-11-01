@@ -1,6 +1,3 @@
-// Telas de /verificar-email e /redefinir-senha, decididas pelo `type`.
-// "GET nunca executa" (ADR-0028, item 2; SEC-005): o GET mostra a pagina e o
-// botao, e a acao acontece no POST do formulario.
 import type { Resultado } from './resultado.ts';
 
 type Comum =
@@ -11,8 +8,6 @@ type Comum =
 
 function comum(r: Extract<Resultado<unknown>, { tipo: 'problema' }>): Comum {
   switch (r.slug) {
-    // Um texto so para vencido, usado e invalido (UX 7.6.1): distinguir contaria
-    // a um estranho se aquele token existiu.
     case 'verification-token-expired':
       return { tela: 'expirado', http: 410 };
     case 'rate-limited':
@@ -23,8 +18,6 @@ function comum(r: Extract<Resultado<unknown>, { tipo: 'problema' }>): Comum {
       return { tela: 'erro', http: r.status >= 400 && r.status < 600 ? r.status : 502, correlationId: r.problema?.correlation_id ?? null };
   }
 }
-
-// ---------------------------------------------------------------- e-mail
 
 export type TelaDoEmail =
   | { tela: 'confirmar'; http: 200 }
@@ -37,12 +30,9 @@ export function telaAoConfirmarEmail(r: Resultado<unknown>): TelaDoEmail {
   if (r.tipo === 'ok') return { tela: 'confirmado', http: 200 };
   if (r.tipo === 'falha') return { tela: 'nao-confirmou', http: 503 };
   if (r.slug === null && r.problema === null && r.status >= 500) return { tela: 'nao-confirmou', http: 503 };
-  // Token fora do formato (400 validation-failed) e o mesmo link invalido.
   if (r.slug === 'validation-failed') return { tela: 'expirado', http: 400 };
   return comum(r);
 }
-
-// ---------------------------------------------------------------- senha
 
 /** Codigos de `errors[].code` do 422 `weak-password` e do 400 de senha (UX 23.7). */
 export type CodigoDeSenha = 'too_short' | 'too_long' | 'blank' | 'similar_to_identity' | 'breached' | 'desconhecido';
@@ -79,7 +69,6 @@ function codigoDaSenha(erros: unknown): CodigoDeSenha {
 /** POST /v1/auth/password-reset/confirm (confirmPasswordReset). */
 export function telaAoSalvarSenha(r: Resultado<unknown>): TelaDaSenha {
   if (r.tipo === 'ok') return { tela: 'alterada', http: 200 };
-  // "Nunca enfileirar este POST" (UX C.5): a falha diz que nada mudou, e a pessoa tenta de novo.
   if (r.tipo === 'falha') return { tela: 'nao-salvou', http: 503 };
   if (r.slug === null && r.problema === null && r.status >= 500) return { tela: 'nao-salvou', http: 503 };
   if (r.slug === 'weak-password') return { tela: 'formulario-com-erro', http: 422, codigo: codigoDaSenha(r.problema?.errors) };

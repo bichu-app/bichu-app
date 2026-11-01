@@ -1,7 +1,3 @@
-/**
- * A FILA DA PLAQUINHA DA COLEIRA no painel: atender, recusar e, agora, ACOMPANHAR
- * A ENTREGA.
- */
 import { useCallback, useId, useRef, useState } from 'react';
 
 import { Banner, Selo } from '../componentes/basicos.tsx';
@@ -37,10 +33,6 @@ import {
   type Pedido,
 } from './fila.ts';
 
-/**
- * Os padroes da lista, constante de modulo porque `useParametrosDaLista` o exige
- * estavel.
- */
 const PADROES = { status: 'pending', passo: '', busca: '' };
 
 const COLUNAS = ['Pet', 'Entrega', 'Rastreio', 'Pedido em', 'Ações'];
@@ -54,10 +46,6 @@ function mensagemDaFalha(status: number | undefined): string {
   return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
 }
 
-/**
- * O dialogo da ENTREGA: o passo e o codigo de rastreio, numa confirmacao so -- que
- * e como o cliente pediu, numa frase so.
- */
 function DialogoDaEntrega({
   pedido,
   acao,
@@ -218,12 +206,6 @@ export default function FilaDePlaquinhas() {
     buscar,
   );
 
-  /**
-   * A BUSCA E LOCAL, sobre a pagina carregada, e a escolha e declarada: o contrato
-   * de `listAdminCollarTagRequests` nao tem `q`, e inventar um aqui faria a tela
-   * mandar um parametro que o servidor ignora -- que e pior que nao ter busca,
-   * porque parece funcionar.
-   */
   const itens = busca === ''
     ? estado.itens
     : estado.itens.filter(

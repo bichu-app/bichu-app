@@ -657,7 +657,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # `eslint . -f json` e as duas somas (arquivos lintados e mensagens):
 #
 #   raiz    848 arquivos, 0 mensagens   16,6 - 19,9 s
-#   painel  143 arquivos, 0 mensagens    8,6 -  9,2 s
+#   painel  145 arquivos, 0 mensagens    8,6 -  9,2 s
 #   site     47 arquivos, 0 mensagens    2,0 s (inclui o `astro sync`)
 #
 # `make verificar-lint` inteiro: 27,0 s. A contagem da raiz subiu de 845 (30/10)
@@ -668,7 +668,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (848 arquivos), do painel (143) e do site (47), tres processos; `workspace/**` fora do escopo
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (848 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
@@ -677,7 +677,7 @@ verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da rai
 # A ausencia de `admin/node_modules` REPROVA nomeando a receita, em vez de sair
 # 127 ("eslint: command not found") parecendo defeito de codigo. Mesma doutrina
 # do portao de segredos: nao conseguir conferir nao e aprovacao.
-verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (143 arquivos; a raiz ignora `admin/**` e nao tem como lintar)
+verificar-lint-do-painel: ## ESLint do backoffice, com o tsconfig dele (145 arquivos; a raiz ignora `admin/**` e nao tem como lintar)
 	@test -d admin/node_modules || { \
 	  echo "admin/node_modules ausente: o lint do painel NAO RODOU. Rode \`cd admin && npm ci\`."; \
 	  echo "Isto nao e aprovacao -- a raiz ignora \`admin/**\` e ninguem mais confere o painel aqui."; \

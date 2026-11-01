@@ -28,7 +28,6 @@ class ConviteDePasskey extends StatefulWidget {
 class _ConviteDePasskeyState extends State<ConviteDePasskey> {
   bool _emAndamento = false;
 
-  /// GRAVA A RECUSA FORMAL e fecha.
   Future<void> _naoQuero() async {
     await Escopo.of(context).passkeyNesteAparelho.registrarRecusa();
     if (!mounted) return;

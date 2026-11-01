@@ -138,7 +138,6 @@ class _Controles extends StatelessWidget {
   final VoidCallback? aoAnterior;
   final VoidCallback? aoProxima;
 
-  /// Ate cinco fotos o indicador e de pontos.
   static const int _maximoDePontos = 5;
 
   @override

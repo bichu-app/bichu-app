@@ -54,7 +54,6 @@ abstract final class FonteDeTiles {
   static void restaurar() => construir = _osm;
 }
 
-/// Imagem que falha na hora: o build nao declarou de onde vem o mapa.
 class _SemFonteDeTiles extends ImageProvider<_SemFonteDeTiles> {
   const _SemFonteDeTiles();
 
@@ -124,8 +123,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
   final FocusNode _focoDoBotao = FocusNode();
   bool _focarBotaoQuandoPronto = false;
 
-  /// A geometria dos tiles depende da largura; ela e medida no primeiro
-  /// `LayoutBuilder` e a carga comeca dali.
   double? _larguraCarregada;
 
   @override

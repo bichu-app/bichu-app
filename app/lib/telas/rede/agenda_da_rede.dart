@@ -70,7 +70,6 @@ class AgendaDaRede extends StatefulWidget {
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
 }
 
-/// Um cartao da lista: o encontro e o que so a lista sabe dele.
 class _ItemDaAgenda {
   const _ItemDaAgenda(this.encontro, {this.distancia});
   final EncontroDaRede encontro;
@@ -90,11 +89,9 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   List<_ItemDaAgenda> _itens = const <_ItemDaAgenda>[];
 
-  /// O ESTADO QUE ATRAVESSA A IDA E VOLTA (BICHUS-316).
   final PreservacaoDaListagem _preservacao =
       PreservacaoDaListagem(teto: tetoDeItensPreservadosComCapa);
 
-  /// A pergunta que os cartoes na tela respondem.
   String get _assinaturaDaListagem => assinaturaDaListagem(
         pergunta: <String, String>{
           'termo': _recorte.termo ?? '',
@@ -109,7 +106,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         referencia: _referenciaDaConta,
       );
 
-  /// A localizacao de referencia da conta -- o gatilho que ninguem lembraria.
   String? get _referenciaDaConta {
     final regiao = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
     if (regiao == null) return null;
@@ -124,7 +120,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   int _pagina = 1;
   String _ordemEfetiva = OrdemDaRede.proximos.codigo;
 
-  /// As distancias ja medidas, por `slug`, DESACOPLADAS da pagina da agenda.
   final Map<String, int?> _medidas = <String, int?>{};
   String? _assinaturaDasMedidas;
   int _paginaDasMedidas = 0;
@@ -138,16 +133,13 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
   final TextEditingController _buscaControlador = TextEditingController();
 
-  /// A CIDADE DO APARELHO, pela mesma peca que `Pets` usa.
   CidadeDoAparelho? _cidadeDoAparelho;
 
-  /// A FOLHA decidiu a cidade, e por isso a derivada nao manda mais.
   bool _folhaDecidiuACidade = false;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
 
-  /// Cada carga ganha um numero; resposta de carga velha e descartada.
   int _geracao = 0;
 
   @override
@@ -176,7 +168,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     _agendarCarga();
   }
 
-  /// Cria o resolvedor de cidade e **dispara a resolucao de abertura**.
   void _criarAResolucaoDaCidade() {
     if (_cidadeDoAparelho != null) return;
     final resolvedor = CidadeDoAparelho.doEscopo(context)
@@ -191,17 +182,14 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
-  /// A caixa e a frase dela dependem do resolvedor; `setState` vazio basta.
   void _aResolucaoAndou() {
     if (!mounted) return;
     setState(() {});
   }
 
-  /// A CIDADE QUE VALE AGORA, e e ela que vai para `city` na rota.
   String? get _cidadeEmUso =>
       _folhaDecidiuACidade ? _recorte.cidade : _cidadeDoAparelho?.cidade;
 
-  /// O TOQUE em `Usar minha localização`.
   Future<void> _usarMinhaLocalizacao() async {
     final resolvedor = _cidadeDoAparelho;
     if (resolvedor == null) return;
@@ -224,20 +212,15 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     });
   }
 
-  /// O recorte de tempo EFETIVO.
   QuandoDaRede get _quandoEfetivo => _recorte.quando ?? QuandoDaRede.aVir;
 
-  /// A lista esta nos eventos que ja passaram (o que era a aba `Encerrados`).
   bool get _encerrados => _quandoEfetivo == QuandoDaRede.passados;
 
-  /// A lista esta na agenda do que vem (o que era a aba `Próximos`).
   bool get _naAgendaDoQueVem => !_encerrados;
 
-  /// Ha regiao cadastrada no perfil (`Me.reference_area`).
   bool get _temRegiao =>
       Escopo.of(context).sessao.usuario?.regiaoDeReferencia != null;
 
-  /// Carrega a primeira pagina do recorte, ou a seguinte com [maisUma].
   Future<void> _carregar({bool maisUma = false}) async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
@@ -365,8 +348,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     _medidasEsgotadas = false;
   }
 
-  /// Pede paginas de distancias ate cobrir os [slugs] da tela, no maximo tres
-  /// por vez.
   Future<void> _garantirMedidas(
     RedeApi rede,
     RecorteDaRede recorte,
@@ -409,13 +390,11 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     _carregar();
   }
 
-  /// **`_trocarAba` SAIU com as abas (19/10/2026).**
   bool get _podeMedir =>
       Escopo.of(context).sessao.logado && _temRegiao && _naAgendaDoQueVem;
 
   bool get _temMais => _itens.length < _total;
 
-  /// O TOQUE NO CARTAO, e a decisao de sessao mora AQUI (20/10/2026).
   void _tocarNoCartao(_ItemDaAgenda item, {required bool logado}) {
     final slug = item.encontro.slug;
     if (!logado) {
@@ -506,7 +485,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
-  /// A busca. **Aplicada no toque, e nunca na tecla.**
   ControleDeBusca _controleDeBusca() {
     return ControleDeBusca(
       controlador: _buscaControlador,
@@ -521,7 +499,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
-  /// Copia o recorte trocando so o que foi passado.
   RecorteDaRede _recorteCom({
     Object? termo = const _Nada(),
     Object? quando = const _Nada(),
@@ -638,7 +615,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return ControleDeFiltro(grupos: grupos);
   }
 
-  /// **Todos os grupos E a ordem de uma vez, no `Aplicar`.**
   void _aplicarAFolha(EscolhaDaFolha escolha) {
     final filtros = escolha.filtros;
     Object? v(String chave, Object? Function(String?) de) =>
@@ -713,10 +689,6 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     );
   }
 
-  /// O corpo. **[logado] e PARAMETRO e nao `Escopo.of(context)`**: quem decide
-  /// o estado desenhado e o `AnimatedBuilder` do `build`, e ler a sessao de
-  /// novo aqui abriria a porta para o corpo discordar da casca no quadro em que
-  /// a sessao muda.
   List<Widget> _corpo({required bool logado}) {
     if (_fase == _Fase.carregando) {
       return <Widget>[

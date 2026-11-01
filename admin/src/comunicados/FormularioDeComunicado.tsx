@@ -232,7 +232,6 @@ export default function FormularioDeComunicado() {
   );
 }
 
-/** A confirmacao do disparo: a consequencia escrita em paragrafos, e nada mais. */
 function DialogoDeDisparo({
   titulo,
   alcance,

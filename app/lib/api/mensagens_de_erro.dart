@@ -340,7 +340,6 @@ abstract final class MensagensDeErro {
     return de(falha);
   }
 
-  /// A frase do `409 contact-channel-unverified`, pela situacao de quem chama.
   static String _canalNaoVerificado(AcaoEmCurso? acaoEmCurso) =>
       switch (acaoEmCurso) {
         AcaoEmCurso.avisarPetPerdido => canalNaoVerificadoParaAvisar,
@@ -350,7 +349,6 @@ abstract final class MensagensDeErro {
         null => canalNaoVerificadoSemSituacao,
       };
 
-  /// `pet-limit-reached`, 409 (UX 12.6).
   static MensagemDeErro _limiteDePets(Problem problem) {
     final limite = problem.inteiro('limit') ?? problem.inteiro('pet_limit');
     final abertura = limite == null
@@ -363,7 +361,6 @@ abstract final class MensagensDeErro {
     );
   }
 
-  /// `community-event-limit-reached`, 409 (ADR-0025 emenda 3).
   static MensagemDeErro _limiteDeEncontros(Problem problem) {
     final limite = problem.inteiro('limit');
     final abertura = limite == null

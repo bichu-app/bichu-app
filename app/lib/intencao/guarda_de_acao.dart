@@ -120,9 +120,6 @@ class GuardaDeAcao {
   final Map<AcaoDeIntencao, AcaoExecutavel> _acoes;
   final DateTime Function() _agora;
 
-  /// Manda o defeito para o canal que a observabilidade escuta (Sentry,
-  /// ADR-0008), que é o mesmo caminho do `registrarSaidaNoCanalPadrao` da
-  /// sessão.
   void _relatar(
     Object erro,
     StackTrace pilha,

@@ -165,7 +165,6 @@ class TelaSugerirProfissional extends StatefulWidget {
 
 enum _Fase { preenchendo, enviando, recebida }
 
-/// O primeiro impedimento, ou nulo.
 enum _Impedimento {
   semConta(TelaSugerirProfissional.entreParaIndicar),
   semEmailConfirmado(TelaSugerirProfissional.semEmailConfirmado),
@@ -191,19 +190,14 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   final TextEditingController _contato = TextEditingController();
   final TextEditingController _recado = TextEditingController();
 
-  /// A sigla do estado escolhida na lista de 27, ou nulo.
   String? _uf;
 
   AtividadeDoDiretorio? _atividade;
 
-  /// O TIPO DE ENTIDADE escolhido.
   TipoDeEntidade _tipoDeEntidade = TipoDeEntidade.profissional;
 
   TipoDeContatoPublico? _tipoDeContato;
 
-  /// O BLOCO DE CEP COMPARTILHADO -- `formulario/bloco_de_cep.dart`, o mesmo
-  /// das outras cinco telas que tem CEP. **O campo de CEP mora nele**, e o que
-  /// se digita nele VIAJA no corpo como `postal_code`.
   late final BlocoDeCep _cepBloco = BlocoDeCep(
     atualizar: setState,
     montado: () => mounted,
@@ -219,40 +213,22 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     ),
   );
 
-  /// Os tres desfechos da busca, nos textos DESTA tela.
   static const TextosDaBuscaDeCep _textosDaBusca = TextosDaBuscaDeCep(
     indisponivel: TelaSugerirProfissional.buscaIndisponivel,
   );
 
-  /// A imagem que a pessoa escolheu no aparelho.
   FotoLocal? _logotipoEscolhido;
 
-  /// O `upload_id` de um logotipo cujos **bytes ja estao no armazenamento** e
-  /// que ainda nao foi confirmado, ou nulo.
   String? _uploadDoLogotipo;
 
   bool _enviandoOLogotipo = false;
 
-  /// As FOTOS DO ESTABELECIMENTO que já subiram, **na ordem em que a pessoa as
-  /// pôs**. A primeira é a capa, e não há campo de capa separado: duas formas
-  /// de dizer qual é a capa é o defeito, e não o recurso.
-  ///
-  /// **Só entra aqui o que já tem `upload_id`.** Uma lista de "escolhidas" e
-  /// outra de "enviadas" divergiriam na primeira falha de rede, e a tela
-  /// mostraria prévia de imagem que o corpo não vai confirmar.
   final List<_FotoDoLugar> _fotosDoLugar = <_FotoDoLugar>[];
 
   bool _enviandoFotoDoLugar = false;
 
-  /// A foto cujos bytes estão **subindo agora**, para a prévia provisória.
-  ///
-  /// "Apresentar como vai ficar" foi palavra do cliente, e a derivada do
-  /// servidor não existe nesse instante: sem ela, a pessoa escolhe a foto, a
-  /// folha de recorte fecha e a tela não muda em nada.
   FotoLocal? _fotoDoLugarSubindo;
 
-  /// Comeca em `negada` como nas outras telas de foto: `negada` e o estado em
-  /// que ainda da para PEDIR, e e o unico seguro de supor antes de perguntar.
   EstadoDaPermissao _permissaoDaCamera = EstadoDaPermissao.negada;
 
   _Fase _fase = _Fase.preenchendo;
@@ -282,20 +258,16 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
         _errosDeCampo = const <String, String>{};
       });
 
-  /// O erro daquele campo sai, porque a busca de CEP acabou de preenche-lo.
   void _esquecerOErroDoCampo(String chave) {
     _errosDeCampo = <String, String>{..._errosDeCampo}..remove(chave);
   }
 
-  /// O estado da camera, lido **antes** de a pessoa tocar em nada.
   Future<void> _lerAPermissaoDaCamera() async {
     final estado = await Escopo.of(context).camera.estadoDaCamera();
     if (!mounted) return;
     setState(() => _permissaoDaCamera = estado);
   }
 
-  /// `Tirar foto`. Pede a permissao quando ainda da para pedir, e desiste
-  /// calada quando nao da -- a faixa de ajustes ja esta na tela nesse caso.
   Future<void> _tirarOLogotipo() async {
     final camera = Escopo.of(context).camera;
     var estado = _permissaoDaCamera;
@@ -321,7 +293,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     await _escolheuOLogotipo(ajustado);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
   Future<FotoLocal?> _ajustarOLogotipo(
     CameraEGaleria camera,
     FotoLocal foto,
@@ -337,8 +308,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   Future<void> _abrirOsAjustes() =>
       Escopo.of(context).camera.abrirAjustesDoSistema();
 
-  /// O logotipo escolhido **JA SOBE**, e a previa aparece antes de o servidor
-  /// dizer qualquer coisa.
   Future<void> _escolheuOLogotipo(FotoLocal foto) async {
     final recusa =
         recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
@@ -387,20 +356,7 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     });
   }
 
-  // =========================================================================
-  // AS FOTOS DO ESTABELECIMENTO
-  //
-  // **A AQUISICAO MORA NESTE ARQUIVO, e isso e decisao e nao acidente.** O
-  // portao de exaustividade do recorte
-  // (`app/test/telas/recorte_em_todo_upload_test.dart`) conta ARQUIVOS sob
-  // `app/lib/telas` que chamam `tirarFoto`/`escolherDaGaleria` e exige que cada
-  // um chame `ajustarAFoto`; o mapa `pontos` dele nomeia ESTE arquivo como
-  // "logotipo da indicacao". Mover a aquisicao para uma peca compartilhada
-  // tiraria o ponto de upload do arquivo que o cliente reconhece. A peca
-  // compartilhada (`widgets/faixa_de_imagens.dart`) por isso so DESENHA.
-  // =========================================================================
 
-  /// `Tirar foto` da faixa. Mesma negociacao de permissao do logotipo.
   Future<void> _tirarAFotoDoLugar() async {
     final camera = Escopo.of(context).camera;
     var estado = _permissaoDaCamera;
@@ -426,12 +382,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     await _escolheuAFotoDoLugar(ajustada);
   }
 
-  /// O RECORTE, entre "a pessoa escolheu" e o envio.
-  ///
-  /// **`fotoDaIndicacao` e nao `logoDaIndicacao`**: esta e a faixa 16:9 do topo
-  /// da ficha (`DERIVADAS_DA_FOTO_DO_LOCAL`, variante `banner`), e nao o
-  /// quadrado da marca. Enquadrar no quadrado da logo cortaria exatamente o que
-  /// a faixa existe para mostrar.
   Future<FotoLocal?> _ajustarAFotoDoLugar(
     CameraEGaleria camera,
     FotoLocal foto,
@@ -444,8 +394,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
         titulo: 'Ajuste a foto do lugar',
       );
 
-  /// A foto escolhida **JA SOBE**, como o logotipo ja faz, e so entra na faixa
-  /// quando os bytes chegaram.
   Future<void> _escolheuAFotoDoLugar(FotoLocal foto) async {
     final recusa =
         recusaDeTipoDaFoto(foto.tipoDeConteudo, tiposDeFotoAceitosSemHeic);
@@ -453,10 +401,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
       setState(() => _erro = MensagemDeErro(texto: recusa));
       return;
     }
-    // **O teto e conferido AQUI tambem, e nao so no botao desabilitado.** Um
-    // toque que escapasse pela janela entre o envio e o `setState` pediria uma
-    // quinta assinatura, e cada assinatura e uma autorizacao de escrita que
-    // nao se desfaz.
     if (_fotosDoLugar.length >= FaixaDeImagens.maximoDoContrato) return;
 
     setState(() {
@@ -477,18 +421,10 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
 
     setState(() {
       _enviandoFotoDoLugar = false;
-      // **A previa provisoria SAI em todos os desfechos.** No caminho que deu
-      // certo ela e substituida pela linha definitiva; nos dois que falharam
-      // ela tem de desaparecer, senao a tela promete uma foto que o corpo nao
-      // vai confirmar -- e prometer e nao cumprir e pior que nao oferecer.
       _fotoDoLugarSubindo = null;
       switch (desfecho) {
         case DesfechoDoEnvio.enviada:
           final id = destino.uploadId;
-          // `uploadId` nulo com desfecho `enviada` nao acontece pelo contrato
-          // de `EnvioParaConfirmarDepois`; a guarda existe para que, se
-          // acontecesse, a faixa NAO ganhasse uma previa sem identificador --
-          // seria prometer uma imagem que o corpo nao confirma.
           if (id != null && id.isNotEmpty) {
             _fotosDoLugar.add(_FotoDoLugar(foto: foto, uploadId: id));
           } else {
@@ -508,8 +444,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     });
   }
 
-  /// Troca a ordem de duas fotos. **A primeira e a capa**, entao mover para o
-  /// topo e o jeito de escolher a capa.
   void _moverAFotoDoLugar(int de, int para) {
     if (de < 0 || de >= _fotosDoLugar.length) return;
     if (para < 0 || para >= _fotosDoLugar.length) return;
@@ -519,8 +453,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     });
   }
 
-  /// Tira a foto da faixa. **Nao cancela o envio**: nao ha rota de cancelamento
-  /// de intencao no contrato, e o varredor recolhe o objeto em dez minutos.
   void _removerAFotoDoLugar(int indice) {
     if (indice < 0 || indice >= _fotosDoLugar.length) return;
     setState(() => _fotosDoLugar.removeAt(indice));
@@ -626,7 +558,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     }
   }
 
-  /// Os campos que o `400` nomeou, pela frase do servidor.
   static Map<String, String> _camposRecusados(FalhaDaApi falha) {
     final mapa = <String, String>{};
     for (final campo in falha.problem.campos) {
@@ -750,9 +681,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   aoAbrirAjustes: _abrirOsAjustes,
                 ),
                 const SizedBox(height: BichuEspaco.e6),
-                // **DEPOIS do logotipo, e campo SEPARADO dele.** O cliente
-                // nomeou as duas ausencias em duas mensagens, como duas
-                // coisas: a marca e a faixa do topo da ficha.
                 FaixaDeImagens(
                   imagens: _fotosDoLugar
                       .map((f) => f.foto)
@@ -760,10 +688,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
                   subindo: _fotoDoLugarSubindo,
                   enviando: _enviandoFotoDoLugar,
                   permissao: _permissaoDaCamera,
-                  // **O aviso dos ajustes JA ESTA na tela**, no bloco do
-                  // logotipo acima. Dois avisos iguais dao dois botoes
-                  // `Abrir os ajustes`, indistinguiveis para quem usa leitor
-                  // de tela -- e foi assim que o caso do logotipo reprovou.
                   mostrarAvisoDeAjustes: false,
                   textos: const TextosDaFaixaDeImagens(
                     titulo: TelaSugerirProfissional.tituloDasFotos,
@@ -931,7 +855,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     );
   }
 
-  /// O recibo. **Diz que foi para conferencia, e nao que foi publicado.**
   Widget _recibo(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
@@ -976,8 +899,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
     );
   }
 
-  /// A SAIDA DA FAIXA DE ERRO: o rotulo que o servidor manda tem de levar a
-  /// algum lugar.
   VoidCallback? _saidaDoErro(BuildContext context, MensagemDeErro mensagem) {
     if (mensagem.acao == null) return null;
     final rota = mensagem.rotaDaAcao;
@@ -993,11 +914,6 @@ class _TelaSugerirProfissionalState extends State<TelaSugerirProfissional> {
   }
 }
 
-/// Uma FOTO DO ESTABELECIMENTO que **ja esta no armazenamento**.
-///
-/// A previa e o `upload_id` andam juntos de proposito: uma lista de previas e
-/// outra de identificadores divergiriam na primeira remocao, e a tela mostraria
-/// uma imagem cujo identificador foi para outro lugar do corpo.
 @immutable
 class _FotoDoLugar {
   const _FotoDoLugar({required this.foto, required this.uploadId});

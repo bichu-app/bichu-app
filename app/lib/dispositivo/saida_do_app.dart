@@ -60,11 +60,8 @@ class SaidaDoAparelho extends SaidaDoApp {
 
   static const MethodChannel _calendario = MethodChannel('app.bichu/calendario');
 
-  /// O sistema em uso, por [defaultTargetPlatform] e **nao** por
-  /// `Platform.isIOS`.
   static bool get _ehIOS => defaultTargetPlatform == TargetPlatform.iOS;
 
-  /// Tenta os destinos **em ordem**, e para no primeiro que abrir.
   static Future<bool> _abrirOPrimeiroQueResponder(List<Uri> destinos) async {
     for (final destino in destinos) {
       try {

@@ -67,7 +67,6 @@ class TelaDoPetDaTag extends StatelessWidget {
     return 'O tutor está procurando $nome desde ${_comoData(desde)}.';
   }
 
-  /// `dd/mm`, sem depender de `intl`.
   static String _comoData(DateTime quando) {
     final local = quando.toLocal();
     final dia = local.day.toString().padLeft(2, '0');
@@ -164,7 +163,6 @@ class TelaDoPetDaTag extends StatelessWidget {
     );
   }
 
-  /// A foto do pet, ou nada.
   List<Widget> _foto(TagResolvida tag) {
     final url = tag.fotoUrl;
     if (url == null || url.trim().isEmpty) return const <Widget>[];
@@ -321,7 +319,6 @@ class _CartaoDeManejo extends StatelessWidget {
   }
 }
 
-/// Em que pe esta o aviso ao tutor.
 enum _EstadoDoAviso { pronto, enviando, avisado, naFila, falhou }
 
 /// O botao `Avisar o tutor` e os quatro desfechos dele.
@@ -383,16 +380,13 @@ class _AvisoAoTutor extends StatefulWidget {
 }
 
 class _AvisoAoTutorState extends State<_AvisoAoTutor> {
-  /// A chave da ACAO. Ver o cabecalho da classe.
   final String _chave = ApiClient.novaChaveDeIdempotencia();
 
-  /// O recado que vira `client_note`.
   final TextEditingController _recado = TextEditingController();
 
   _EstadoDoAviso _estado = _EstadoDoAviso.pronto;
   String? _erro;
 
-  /// **Se a ENTREGA ao tutor foi enfileirada**, lido de `owner_notified`.
   bool? _entregaSaiu;
 
   @override

@@ -90,8 +90,6 @@ class OportunidadesDeAviso {
   /// `ignore:` de lint onde nao ha nada para ignorar.
   final DepositoDeOportunidades deposito;
 
-  /// Cache de leitura. O arquivo e lido uma vez por processo; dali em diante a
-  /// verdade esta aqui e no disco, gravados juntos.
   Set<OportunidadeDeAviso>? _gastas;
 
   /// O conjunto do que ja foi gasto.

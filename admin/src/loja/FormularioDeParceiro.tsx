@@ -34,7 +34,6 @@ interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
-  /** O endereco COMPLETO do site, com `https://` (padrao do cliente de 17/10/2026). */
   site: string;
   ordem: string;
   ativo: boolean;

@@ -78,22 +78,6 @@ class CredencialDoAparelhoReal implements CredencialDoAparelho {
   @override
   Future<bool> suportaCredencial() async {
     try {
-      // `canAuthenticate` e a propria pergunta do pacote `passkeys` 2.23.1, e
-      // nao uma heuristica nossa sobre versao de sistema.
-      //
-      // **A SUPRESSAO DA DEPRECIACAO E DELIBERADA, e a troca nao e de uma
-      // linha.** O substituto que o pacote indica (`PasskeyAvailability`, em
-      // `availability.dart`) **nao e agnostico de plataforma**: ele expoe
-      // `android()`, `iOS()`, `web()` e `windows()` separados, cada um com
-      // tipo de retorno proprio, e usa-lo exigiria trazer deteccao de
-      // plataforma para esta porta e tratar quatro formas diferentes de
-      // resposta -- para responder a MESMA pergunta booleana. O metodo
-      // depreciado continua existindo e funcionando no 2.23.1, que e a versao
-      // travada no `pubspec`.
-      //
-      // Quando o pacote subir de versao e remove-lo, o conserto e aqui, num
-      // lugar so: a porta devolve `Future<bool>` e nenhuma tela sabe como ela
-      // chegou nesse booleano.
       // ignore: deprecated_member_use
       return await _autenticador.canAuthenticate();
     } on Object {
@@ -195,7 +179,6 @@ class CredencialDoAparelhoReal implements CredencialDoAparelho {
     }
   }
 
-  /// Traduz a excecao do pacote no motivo que o registro guarda.
   static MotivoDaIndisponibilidade _motivoDe(AuthenticatorException erro) {
     return switch (erro) {
       DomainNotAssociatedException() =>

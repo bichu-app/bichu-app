@@ -1,4 +1,3 @@
-/** Oito digitos, sem mascara. */
 export const DIGITOS_DO_CEP = 8;
 
 /** O maximo que a mascara ocupa: `05435-000`. */

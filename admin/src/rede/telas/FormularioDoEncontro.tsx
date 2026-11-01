@@ -1,4 +1,3 @@
-/** 4 · Rede: formulario (25.3 quadros 4.9 a 4.13, 25.5.2, UX 29.5 e 29.10). */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
@@ -58,7 +57,6 @@ import { etagDe, useRede } from '../usarRede.ts';
 
 const AJUDA_DAS_FOTOS = `JPG, PNG ou WebP, até ${LIMITE_EM_MB} MB cada, com pelo menos ${String(DIMENSAO_MINIMA.network_event.largura)} × ${String(DIMENSAO_MINIMA.network_event.altura)} pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.`;
 
-/** O id do elemento que recebe o foco pelo resumo de erros. */
 function idDoCampo(campo: Campo): string {
   if (campo.startsWith('alt-')) return `fotos-${campo}`;
   if (campo === 'fotos') return 'fotos';
@@ -82,7 +80,6 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   portes: 'Portes aceitos',
 };
 
-/** Erro que o servidor devolveu, no campo da tela. */
 const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   title: 'titulo',
   summary: 'resumo',
@@ -245,10 +242,6 @@ export default function FormularioDoEncontro() {
     else tratarFalha(r.falha, 'salvar as alterações');
   }
 
-  /**
-   * Patch primeiro; depois mudanca e acesso, cada um com a versao da resposta
-   * anterior.
-   */
   async function executarComMotivo(plano: PlanoDeEdicao, motivo: string): Promise<ResultadoDaAcao> {
     if (!encontro || !etag) return { ok: false, mensagem: 'Recarregue a página e tente de novo.' };
     let slug = encontro.slug;
@@ -564,10 +557,6 @@ export default function FormularioDoEncontro() {
   );
 }
 
-/**
- * Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os
- * toca.
- */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
   const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
   return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };
@@ -605,10 +594,6 @@ function CampoDeDataEHora({ id, rotulo, valor, aoMudar, erro }: { id: string; ro
   );
 }
 
-/**
- * Descricao do encontro (`summary`, ate 200): area de varias linhas que cresce com
- * o texto, com contador.
- */
 function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-resumo';
   const area = useRef<HTMLTextAreaElement>(null);
@@ -648,7 +633,6 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
   );
 }
 
-/** Endereco por extenso (`place.street_address`), opcional. */
 function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-endereco';
   return (
@@ -680,7 +664,6 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
   );
 }
 
-/** `instagram_url`: a URL COMPLETA do perfil (padrao de 17/10). */
 function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-instagram';
   const handle = valor.trim() ? handleDoInstagram(valor) : null;

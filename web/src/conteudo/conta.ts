@@ -1,8 +1,3 @@
-// Textos de /verificar-email e /redefinir-senha. Fonte: UX 7.6.1 (C.5), 9.2,
-// 12.6 e 23.7, com as correcoes de .jarvis/site-microcopy-revisada.md, secoes
-// 2 e 3 (frames 232:*, 233:*). Onde o frame corrigido diverge do print, vale o
-// texto corrigido.
-
 export const VERIFICAR_EMAIL = {
   tituloDaPagina: 'Confirmar e-mail',
   descricaoDaPagina: 'Confirme o e-mail da sua conta no Bichu.',
@@ -13,7 +8,6 @@ export const VERIFICAR_EMAIL = {
   confirmadoTitulo: 'E-mail confirmado.',
   confirmadoTexto: 'Pode voltar para o app do Bichu.',
   expiradoTitulo: 'Este link expirou.',
-  // 233:160 (celular) e 233:254 (desktop): o texto muda com o aparelho, sem botao no desktop.
   expiradoTextoToque: 'Por segurança, o link de confirmação vale 24 horas. Peça um novo pelo app, em Perfil.',
   expiradoTextoMouse: 'Por segurança, o link de confirmação vale 24 horas. Abra o app do Bichu no celular e peça um novo em Perfil.',
   naoConfirmouTitulo: 'Não conseguimos confirmar agora.',
@@ -26,14 +20,12 @@ export const REDEFINIR_SENHA = {
   descricaoDaPagina: 'Crie uma senha nova para a sua conta no Bichu.',
   titulo: 'Criar uma senha nova',
   campo: 'Senha',
-  // Versao B da UX 23.3, pedida pelo cliente em 19/09 (a frase da senha curta saiu).
   regra: 'Pelo menos 10 caracteres.',
   mostrar: 'Mostrar a senha',
   esconder: 'Esconder a senha',
   botao: 'Salvar a senha nova',
   enviando: 'Salvando…',
   abaixoDoBotao: 'Ao salvar, você sai de todos os aparelhos onde entrou.',
-  // UX 23.7: a frase sai do `errors[].code`, nunca do texto do servidor.
   erros: {
     too_short: 'A senha precisa de pelo menos 10 caracteres.',
     too_long: 'Cabe até 256 caracteres.',
@@ -48,11 +40,8 @@ export const REDEFINIR_SENHA = {
   naoConferiuTitulo: 'Não conseguimos conferir o seu link.',
   naoConferiuTexto: 'Confira a conexão e tente de novo. Nada mudou na sua conta.',
   expiradoTitulo: 'Este link expirou.',
-  // C.5 tem o botao "Pedir um link novo", que na web nao tem destino na v1
-  // (pedir o link e `requestPasswordReset`, feito pelo app em C.4). O texto diz onde.
   expiradoTexto: 'Por segurança, o link vale 30 minutos. Peça um novo no app do Bichu, em Esqueci minha senha, e ele chega em seguida.',
   alteradaTitulo: 'Senha alterada.',
-  // O botao "Entrar" do print nao tem destino na web: entrar e no app.
   alteradaTexto: 'Você já pode entrar no app com a senha nova. Avisamos por e-mail que ela mudou; se não foi você, responda aquele e-mail.',
 };
 

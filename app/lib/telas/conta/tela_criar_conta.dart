@@ -27,12 +27,10 @@ import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/requisitos_da_senha.dart';
 import '../../widgets/saida_da_tela.dart';
 
-/// A recusa de criar conta sem ter o que registrar como aceite.
 const String _semVersaoDosTermos =
     'Não conseguimos registrar o aceite dos termos nesta versão do app. '
     'Sem esse registro a conta não pode ser criada.';
 
-/// A cobranca do aceite, quando ha o que registrar e a caixa esta desmarcada.
 const String _aceiteObrigatorio =
     'Para criar a conta, aceite os termos de uso e a política de privacidade.';
 
@@ -55,10 +53,8 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   final TextEditingController _senha = TextEditingController();
   final FocusNode _focoDoEmail = FocusNode();
 
-  /// Existe por uma razao so: **levar a pessoa ate a recusa**.
   final ScrollController _rolagem = ScrollController();
 
-  /// Os tres alvos de recusa, para a tela conseguir levar a pessoa ate eles.
   final GlobalKey _alvoDoNome = GlobalKey();
   final GlobalKey _alvoDoApelido = GlobalKey();
   final GlobalKey _alvoDoNascimento = GlobalKey();
@@ -77,7 +73,6 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   String? _erroDoAceite;
   MensagemDeErro? _faixa;
 
-  /// Traz o alvo da recusa para dentro da dobra.
   void _levarAte(GlobalKey alvo) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final contexto = alvo.currentContext;
@@ -103,7 +98,6 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     super.dispose();
   }
 
-  /// A recusa do apelido **com as tres sugestoes coladas**.
   String _comSugestoes(String recusa) {
     final List<String> saidas = IdentificadorDoApelido.sugestoes(_apelido.text);
     if (saidas.isEmpty) return recusa;
@@ -253,9 +247,6 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     setState(() => _faixa = MensagensDeErro.de(falha));
   }
 
-  /// Conferencia ao sair do campo: o erro aparece quando a pessoa termina de
-  /// escrever, e nao a cada tecla (`leandro@g` seria erro durante toda a
-  /// digitacao).
   void _conferirOEmailAoSair() {
     final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
     if (erro == _erroDoEmail) return;

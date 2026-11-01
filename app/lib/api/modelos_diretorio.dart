@@ -811,7 +811,6 @@ class DetalheDoLocal {
     );
   }
 
-  /// `kinds` do contrato, com o `kind` singular como RESERVA.
   static List<AtividadeDoDiretorio> _atividadesDoJson(
     Map<String, dynamic> json,
   ) {

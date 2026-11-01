@@ -25,9 +25,6 @@ class _TelaAcompanharPlaquinhaState extends State<TelaAcompanharPlaquinha> {
   bool _carregando = true;
   String? _falha;
 
-  /// O mesmo sinalizador de `TelaSolicitarPlaquinha` e das outras telas que
-  /// leem `Escopo`: ler um `InheritedWidget` em `initState` estoura
-  /// `dependOnInheritedWidgetOfExactType ...
   bool _iniciou = false;
 
   @override

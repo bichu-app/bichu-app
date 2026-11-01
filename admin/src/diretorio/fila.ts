@@ -1,4 +1,3 @@
-/** O vocabulario da FILA DE INDICACOES, em arquivo proprio. */
 import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
@@ -53,7 +52,6 @@ export function lugarDa(i: Indicacao): string {
  * "nao enviou nenhuma" de "enviou quatro e nenhuma ficou pronta".
  */
 export interface ImagensDaIndicacao {
-  /** A derivada `thumb` do logotipo, ou nula -- a fila nao distingue os 3 casos. */
   readonly logo: string | null;
   /** So as `ready`. Pode ser vazia com `processando` maior que zero. */
   readonly prontas: readonly string[];
@@ -65,8 +63,6 @@ export interface ImagensDaIndicacao {
 
 export function imagensDa(i: Indicacao): ImagensDaIndicacao {
   const prontas = i.photo_urls;
-  // `Math.max` porque o painel nao pode produzir "-1 processando" se o total
-  // vier menor que a lista; o contrato nao promete isso, a tela nao supoe.
   const processando = Math.max(0, i.photos_total - prontas.length);
   const logo = i.logo_url ?? null;
   return { logo, prontas, processando, temAlgo: logo !== null || prontas.length > 0 || processando > 0 };

@@ -164,7 +164,6 @@ class BlocoDeCep {
   /// A linha de desfecho tem o que mostrar?
   bool get temDesfecho => _buscando || _resultado != null;
 
-  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
   String _jaBuscado = '';
 
   /// Nenhuma busca aconteceu e nenhum CEP foi dado como ja buscado.
@@ -234,10 +233,6 @@ class BlocoDeCep {
     destino.aoPreencher?.call(chave);
   }
 
-  /// A SIGLA, e **so quando ela e uma das 27**.
-  ///
-  /// Este `if` e o conserto de 30/10/2026: tres das seis telas punham no
-  /// formulario o que a base de CEP mandasse, de duas letras.
   void _escolherOEstado(String ufDaBusca) {
     final String? sigla = siglaDeEstadoValida(ufDaBusca);
     if (sigla == null) return;

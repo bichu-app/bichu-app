@@ -60,7 +60,6 @@ class IconeDaBarra extends StatelessWidget {
 
   final DesenhoDoIcone desenho;
 
-  /// A tinta, pela ordem que o componente manda.
   Color _tinta(BuildContext context) =>
       IconTheme.of(context).color ?? BichuColors.of(context).cores.textPrimary;
 

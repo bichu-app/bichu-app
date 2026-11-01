@@ -9,7 +9,6 @@ import estilos from './comunicados.module.css';
 import { plural, POR_PAGINA, quandoFoi, type Comunicado } from './dominio.ts';
 import { CAMINHO_DO_NOVO } from './rotas.tsx';
 
-/** A chave da lista paginada, constante de MODULO. */
 const CHAVE = 'comunicados';
 
 /** O REGISTRO PERMANENTE dos comunicados disparados. */

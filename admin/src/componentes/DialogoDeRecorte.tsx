@@ -18,7 +18,6 @@ import {
   type Janela,
 } from './recorte-de-imagem.ts';
 
-/** A largura em pixeis do desenho do palco. */
 const LARGURA_DO_PALCO = 560;
 
 export interface PropsDoDialogoDeRecorte {

@@ -1,7 +1,3 @@
-/**
- * O formulario do encontro como dado: estado, validacao de conveniencia e a
- * montagem dos corpos do contrato.
- */
 import { campoDoInstante, dataCurta, faixaDeHorario, FUSO_PADRAO, instanteDoCampo } from './horario.ts';
 import { achadosNasObservacoes, ERRO_DAS_OBSERVACOES } from './observacoes.ts';
 import type {
@@ -44,7 +40,6 @@ export const LIMITE_DO_MOTIVO = 280;
 export type EstadoDaFoto = 'enviando' | 'erro' | 'enviada' | 'processing' | 'ready' | 'rejected';
 
 export interface FotoDoFormulario {
-  /** Chave local e estavel da miniatura, para o React e para o foco. */
   chave: string;
   estado: EstadoDaFoto;
   uploadId?: string;
@@ -220,11 +215,6 @@ export interface ErroDeCampo {
 
 export type Modo = 'novo' | 'editar';
 
-/**
- * As duas contagens moram em `./texto.ts`, que nao tem nenhum `import`, para que a
- * suite da raiz possa importa-las e provar, caso a caso, que elas contam igual ao
- * servidor (`src/modules/network/domain/paridade-com-o-backoffice.test.ts`).
- */
 export { cortarEmCodePoints, tamanhoComoOServidor } from './texto.ts';
 
 const entre = (t: string, min: number, max: number) => {

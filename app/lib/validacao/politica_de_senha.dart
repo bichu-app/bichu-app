@@ -131,7 +131,6 @@ abstract final class PoliticaDeSenha {
   }
 }
 
-/// Semelhanca com e-mail e nome, na forma normalizada.
 bool _pareceComIdentidade(
   String senha, {
   required String email,
@@ -147,7 +146,6 @@ bool _pareceComIdentidade(
   return candidatos.any((item) => alvo.contains(item) || item.contains(alvo));
 }
 
-/// A forma sobre a qual a comparacao acontece.
 String _normalizarParaComparacao(String valor) {
   final minusculo = valor.toLowerCase();
   final buffer = StringBuffer();
@@ -157,7 +155,6 @@ String _normalizarParaComparacao(String valor) {
   return buffer.toString().replaceAll(RegExp('[^a-z0-9]'), '');
 }
 
-/// Letra base para cada forma acentuada que o `NFKD` decompoe.
 const Map<String, String> _dobras = <String, String>{
   'a': 'àáâãäåāăą',
   'c': 'çćĉċč',
@@ -180,7 +177,6 @@ const Map<String, String> _dobras = <String, String>{
   'z': 'źżž',
 };
 
-/// [_dobras] invertido, montado uma vez.
 final Map<String, String> _semDiacritico = <String, String>{
   for (final entrada in _dobras.entries)
     for (final acentuada in entrada.value.split('')) acentuada: entrada.key,

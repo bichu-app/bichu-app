@@ -131,9 +131,6 @@ class _AlcanceDoCaso extends StatelessWidget {
   final CasoDePerdido caso;
   final String nomeDoPet;
 
-  /// O texto de cada estado. `queued` e `desconhecido` caem no mesmo ramo de
-  /// `unavailable` de propósito: os três significam "não há número para
-  /// mostrar".
   String get _texto {
     final alerta = caso.alerta;
     final km = (alerta.raioEmMetros / 1000).round();

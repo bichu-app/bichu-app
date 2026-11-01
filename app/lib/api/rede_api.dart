@@ -37,18 +37,6 @@ class RedeApi {
       if (terminaEm != null) 'ends_at': terminaEm.toUtc().toIso8601String(),
       if (observacoes != null && observacoes.isNotEmpty)
         'notes': observacoes,
-      // **`image_upload_ids`, e NUNCA `cover_image`.** O aplicativo novo manda
-      // a lista inclusive com uma imagem so; mandar os dois e `400`
-      // (`code: cover_and_images_both_sent`), porque duas formas de dizer qual
-      // e a capa no mesmo corpo e o defeito, e nao uma conveniencia. Quem e a
-      // capa e a POSICAO na lista.
-      //
-      // `cover_image` continua no contrato porque o APK que esta no aparelho
-      // agora e o unico que o manda -- tira-lo seria
-      // `request-property-removed`. Esta funcao e do aplicativo NOVO.
-      //
-      // **SO QUANDO HA PELO MENOS UMA, e nunca `[]` nem `null`**: o esquema e
-      // `minItems: 1`.
       if (imagens != null && imagens.isNotEmpty) 'image_upload_ids': imagens,
     };
   }
@@ -223,12 +211,9 @@ class RedeApi {
     }
   }
 
-  /// O `slug` vem da resposta do servidor: vai codificado, como os ids das
-  /// outras rotas do app.
   static String _caminho(String slug) =>
       '/network/events/${Uri.encodeComponent(slug)}';
 
-  /// O caminho da leitura do DONO.
   static String _caminhoDoMeu(String slug) =>
       '/network/my-events/${Uri.encodeComponent(slug)}';
 }
