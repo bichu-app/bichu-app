@@ -5,11 +5,17 @@ import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
+import { problemas } from '../../../../shared/http/errors.js';
+import { ehOrigemDecidivel, ORIGENS_DECIDIVEIS } from '../../domain/fila-de-moderacao.js';
 import type {
   FilaDeModeracao,
   MotivoDaDecisao,
 } from '../../application/fila-de-moderacao.js';
-import type { EstadoDaFila, OrigemDaDenuncia } from '../../domain/fila-de-moderacao.js';
+import type {
+  EstadoDaFila,
+  OrigemDaDenuncia,
+  OrigemDecidivel,
+} from '../../domain/fila-de-moderacao.js';
 
 /** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas do painel. */
 const BALDE_DE_ESCRITA = {
@@ -84,9 +90,58 @@ function parametro(request: FastifyRequest, nome: string): string {
   return (request.params as Record<string, string>)[nome] ?? '';
 }
 
-/** A origem, como o contrato a validou. */
+/**
+ * A origem da LEITURA, como o contrato a validou.
+ *
+ * O `enum` do caminho **e** conferido antes de chegar aqui:
+ * `validacao-de-parametros.ts` instala o schema de `params` do contrato em
+ * toda rota registrada, e valor fora dos cinco responde `400` sem entrar nesta
+ * funcao (medido em 31/10/2026: `origin=banana` da `400 validation-failed`).
+ * O que o contrato NAO podia conferir e quais dos cinco esta casa sabe
+ * decidir.
+ */
 function origemDe(request: FastifyRequest): OrigemDaDenuncia {
   return parametro(request, 'origin') as OrigemDaDenuncia;
+}
+
+/**
+ * **A origem da DECISAO, estreitada aqui e em nenhum outro lugar.**
+ *
+ * ===========================================================================
+ * POR QUE `400` E NAO `404`, E POR QUE NAO 501
+ * ===========================================================================
+ * `profile`, `photo` e `publication` APARECEM na fila: a visao
+ * `fila_de_moderacao` tem as cinco pernas, `listAdminModerationReports`
+ * devolve o item e `getAdminModerationReport` o le -- as tres coisas medidas
+ * em 31/10 com uma denuncia de perfil de verdade. Responder `404` na decisao
+ * diria "nao existe" sobre um item que a tela ao lado mostra, que e pior que
+ * dizer o que de fato acontece: a decisao desta origem nao esta construida.
+ *
+ * `501` nao entra porque **nenhuma das tres operacoes o declara**, e
+ * responder status que o contrato nao promete e o mesmo tipo de divergencia
+ * que esta tarefa conserta. `400 validation-failed` e declarado nas tres, e o
+ * `code` de `ProblemFieldError` e cadeia livre no contrato -- nao ha mudanca
+ * de contrato nenhuma aqui.
+ *
+ * **O que esta recusa NAO decide**: se as tres ganham implementacao ou se
+ * `ModerationOrigin` encolhe para duas. Encolher apaga capacidade prometida a
+ * quatro consumidores, e e decisao do cliente.
+ */
+function origemDecidivelDe(request: FastifyRequest): OrigemDecidivel {
+  const bruto = parametro(request, 'origin');
+  if (ehOrigemDecidivel(bruto)) return bruto;
+  throw problemas.validacao(
+    [
+      {
+        field: 'origin',
+        code: 'origin_not_supported',
+        message:
+          `A fila ainda não decide a origem \`${bruto}\`. As decisões valem para ` +
+          `\`${ORIGENS_DECIDIVEIS.join('` e `')}\`.`,
+      },
+    ],
+    'Esta origem aparece na fila para leitura, e a decisão dela não está construída.',
+  );
 }
 
 interface QueryDaFila {
@@ -136,7 +191,7 @@ export function registrarRotasDaFilaDeModeracao(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const item = await fila.remover(
         atorAdministrativoDe(request),
-        origemDe(request),
+        origemDecidivelDe(request),
         parametro(request, 'targetRef'),
         request.body as MotivoDaDecisao,
       );
@@ -151,7 +206,7 @@ export function registrarRotasDaFilaDeModeracao(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const item = await fila.descartar(
         atorAdministrativoDe(request),
-        origemDe(request),
+        origemDecidivelDe(request),
         parametro(request, 'targetRef'),
         request.body as MotivoDaDecisao,
       );

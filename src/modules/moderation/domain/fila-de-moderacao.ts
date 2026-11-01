@@ -4,13 +4,74 @@ import type { DecisaoDaModeracao } from '../../../shared/db/schema.js';
 
 export type { DecisaoDaModeracao };
 
-/** De onde a denuncia veio. */
-export type OrigemDaDenuncia = 'review' | 'conversation';
+/**
+ * De onde a denuncia veio -- **os CINCO valores de `ModerationOrigin`**.
+ *
+ * A visao `fila_de_moderacao` tem cinco pernas de `UNION ALL` (migracao
+ * `20261018000032`), e a LEITURA responde pelas cinco: a fila lista denuncia
+ * de perfil, de foto e de publicacao, e `getAdminModerationReport` devolve
+ * cada uma. Por isso este tipo tem cinco, e nao dois: ele e o tipo do que o
+ * painel LE.
+ */
+export type OrigemDaDenuncia = 'review' | 'conversation' | 'profile' | 'photo' | 'publication';
 
-export const ORIGENS: readonly OrigemDaDenuncia[] = ['review', 'conversation'];
+export const ORIGENS: readonly OrigemDaDenuncia[] = [
+  'review',
+  'conversation',
+  'profile',
+  'photo',
+  'publication',
+];
 
 export function ehOrigem(valor: string): valor is OrigemDaDenuncia {
   return (ORIGENS as readonly string[]).includes(valor);
+}
+
+/**
+ * **As origens que `src/` sabe DECIDIR**, que sao duas.
+ *
+ * ===========================================================================
+ * POR QUE O TIPO E SEPARADO, E NAO UM `if` NO MEIO DO CAMINHO
+ * ===========================================================================
+ * Decidir exige tres coisas que a leitura nao exige: travar as denuncias
+ * abertas do alvo, esconder o conteudo na tabela DELE, e marcar a resolucao.
+ * As tres existem para `professional_reviews` e para `conversations`, e nao
+ * existem para `profile_reports`, `photo_reports` nem `publication_reports`.
+ *
+ * Ate 31/10/2026 isso era um `else`: tudo que nao fosse `review` caia no ramo
+ * da conversa, que compara `targetRef` com uma coluna `uuid`. Como
+ * `subject_ref`, `image_public_key` e `publication_ref` nao sao UUID, o
+ * Postgres lancava `22P02` e as duas decisoes respondiam **500** a um valor que
+ * o proprio contrato declara valido -- medido pela rota em 31/10.
+ *
+ * Com dois tipos, a mesma troca nao compila: `removerConteudo` e
+ * `resolverDenuncias` recebem `OrigemDecidivel`, e quem tiver uma
+ * `OrigemDaDenuncia` na mao precisa estreita-la na BORDA, onde ha status HTTP
+ * para responder. O comentario que pedia cuidado virou erro de compilacao.
+ */
+export type OrigemDecidivel = 'review' | 'conversation';
+
+export const ORIGENS_DECIDIVEIS: readonly OrigemDecidivel[] = ['review', 'conversation'];
+
+export function ehOrigemDecidivel(valor: string): valor is OrigemDecidivel {
+  return (ORIGENS_DECIDIVEIS as readonly string[]).includes(valor);
+}
+
+/** A forma de um UUID, as oito-quatro-quatro-quatro-doze em hexadecimal. */
+const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * **`targetRef` tem a forma de UUID?**
+ *
+ * `ModerationTargetRef` aceita de 20 a 64 simbolos de `[A-Za-z0-9_-]`, e uma
+ * cadeia opaca de 22 simbolos satisfaz o contrato sem ser UUID. Na origem
+ * `conversation` o alvo e `conversations.id`, que E `uuid`: comparar os dois
+ * fazia o Postgres lancar `22P02` e a rota responder 500 a um `targetRef` que
+ * o contrato declara valido. Alvo de forma impossivel nao existe, e nao
+ * existir e 404.
+ */
+export function temFormaDeUuid(valor: string): boolean {
+  return FORMA_DE_UUID.test(valor);
 }
 
 /** O recorte da fila: na fila, ou ja decidida. */

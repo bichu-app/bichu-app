@@ -6,6 +6,7 @@ import type {
   EstadoDaFila,
   ItemDaFila,
   OrigemDaDenuncia,
+  OrigemDecidivel,
 } from '../domain/fila-de-moderacao.js';
 
 export interface RecorteDaFila {
@@ -32,13 +33,23 @@ export interface AlvoRemovido {
   readonly notaAntes: number | null;
 }
 
+/**
+ * A transacao da DECISAO. Toda assinatura aqui pede `OrigemDecidivel`, e nao
+ * `OrigemDaDenuncia`: as tres origens que o contrato declara e `src/` nao
+ * decide (`profile`, `photo`, `publication`) nao chegam a este ponto, e e o
+ * compilador que garante -- nao um comentario.
+ */
 export interface TransacaoDaModeracao {
-  /** O item com trava de linha nas denuncias dele. */
-  itemPorAlvo(origem: OrigemDaDenuncia, targetRef: string): Promise<ItemDaFila | null>;
+  /**
+   * O item com trava de linha nas denuncias dele. `null` quando o alvo nao
+   * existe -- inclusive quando ele NAO PODE existir, como `targetRef` sem
+   * forma de UUID na origem `conversation`.
+   */
+  itemPorAlvo(origem: OrigemDecidivel, targetRef: string): Promise<ItemDaFila | null>;
 
   /** Esconde o conteudo: **exclusao logica, nunca `DELETE`**. */
   removerConteudo(
-    origem: OrigemDaDenuncia,
+    origem: OrigemDecidivel,
     targetRef: string,
     motivo: string,
     agora: Instant,
@@ -49,7 +60,7 @@ export interface TransacaoDaModeracao {
    * quantas foram, com o carimbo que gravou.
    */
   resolverDenuncias(
-    origem: OrigemDaDenuncia,
+    origem: OrigemDecidivel,
     targetRef: string,
     decisao: DecisaoDaModeracao,
     motivo: string,
@@ -63,5 +74,6 @@ export interface TransacaoDaModeracao {
 export interface FilaDeModeracaoRepository {
   emTransacao<T>(trabalho: (tx: TransacaoDaModeracao) => Promise<T>): Promise<T>;
   listar(recorte: RecorteDaFila): Promise<PaginaDaFila>;
+  /** A LEITURA, que responde pelas CINCO origens da visao. */
   itemPorAlvo(origem: OrigemDaDenuncia, targetRef: string): Promise<ItemDaFila | null>;
 }
