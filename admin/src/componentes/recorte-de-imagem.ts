@@ -41,8 +41,12 @@ export interface Enquadramento {
 export const ENQUADRAMENTO_INICIAL: Enquadramento = { escala: ESCALA_MINIMA, centroX: 0.5, centroY: 0.5 };
 
 /**
- * A regiao enquadrada, na MESMA forma de `ImageCrop` no contrato: fracoes de 0 a
- * 1.
+ * A regiao enquadrada, em fracoes de 0 a 1 da imagem ja rotacionada.
+ *
+ * **Ela nao sai do navegador**: o painel recorta nos bytes antes de enviar, e o
+ * contrato nao tem campo de regiao. Havia um schema `ImageCrop` com esta forma,
+ * e ele SAIU em 31/10/2026 por decisao do cliente -- o servidor nunca leu
+ * regiao de ninguem.
  */
 export interface Regiao {
   readonly x: number;

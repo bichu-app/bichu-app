@@ -28,20 +28,6 @@ export interface PedidoDeDerivada {
   readonly escada: readonly number[];
   /** O teto de bytes. O adaptador desce a escada até caber. */
   readonly tetoDeBytes: number;
-  /** A região que a PESSOA enquadrou, quando ela enquadrou alguma. */
-  readonly recorte?: RegiaoDoRecorte;
-}
-
-/** A região escolhida, em FRAÇÕES de 0 a 1 do original **já rotacionado**. */
-export interface RegiaoDoRecorte {
-  /** Borda esquerda, 0 a 1. */
-  readonly x: number;
-  /** Borda de cima, 0 a 1. */
-  readonly y: number;
-  /** Largura, maior que 0 e até 1. */
-  readonly w: number;
-  /** Altura, maior que 0 e até 1. */
-  readonly h: number;
 }
 
 export interface Derivada {

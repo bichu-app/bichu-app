@@ -1,5 +1,3 @@
-import type { RegiaoDoRecorte } from '../ports/image-processor.js';
-
 /** 5 MB (5 MiB, 5 242 880 bytes). */
 export const TETO_DE_BYTES_DO_ENVIO = 5 * 1024 * 1024;
 
@@ -104,42 +102,6 @@ export const DERIVADA_DA_FOTO_DO_ACHADO: EspecificacaoDaDerivada = {
   altura: 1126,
   porte: 'grande',
 };
-
-/**
- * A região escolhida, adaptada à proporção de uma derivada SECUNDÁRIA.
- * @param regiao A região escolhida, em frações do original já rotacionado.
- * @param proporcaoAlvo Largura dividida por altura da derivada secundária.
- * @param proporcaoDoOriginal Largura dividida por altura do original já
- * rotacionado.
- */
-export function regiaoNaProporcao(
-  regiao: RegiaoDoRecorte,
-  proporcaoAlvo: number,
-  proporcaoDoOriginal: number,
-): RegiaoDoRecorte {
-  const alvoEmFracao = proporcaoAlvo / proporcaoDoOriginal;
-  let w = regiao.w;
-  let h = regiao.h;
-  if (regiao.w / regiao.h > alvoEmFracao) h = regiao.w / alvoEmFracao;
-  else w = regiao.h * alvoEmFracao;
-
-  if (w > 1) {
-    w = 1;
-    h = w / alvoEmFracao;
-  }
-  if (h > 1) {
-    h = 1;
-    w = h * alvoEmFracao;
-  }
-
-  const centro = (c: number, lado: number) => Math.min(Math.max(c - lado / 2, 0), 1 - lado);
-  return {
-    x: centro(regiao.x + regiao.w / 2, w),
-    y: centro(regiao.y + regiao.h / 2, h),
-    w,
-    h,
-  };
-}
 
 /** A escada que o porte pede. */
 export function escadaDo(porte: EspecificacaoDaDerivada['porte']): readonly number[] {
