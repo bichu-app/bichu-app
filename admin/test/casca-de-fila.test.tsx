@@ -174,22 +174,24 @@ describe('(1) a tabela da fila', () => {
   });
 
   /**
-   * ALFINETE DE UM DEFEITO HERDADO, e nao um comportamento desejado.
+   * O DEFEITO QUE ESTE CASO PRENDIA, consertado em 01/11/2026.
    *
    * `LinhasCarregando` desenha UMA celula fixa (a do `prod`) MAIS uma por
-   * coluna recebida, e as tres filas lhe passam o `COLUNAS` inteiro: o
-   * esqueleto sai com uma celula a mais que o cabecalho. A familia LISTA usa a
-   * mesma peca certo, passando so as colunas DEPOIS da primeira
-   * (`['w-preco', 'w-upd', …]`).
+   * coluna recebida. A casca passava o `colunas` inteiro, que e o que o
+   * CABECALHO quer, e o esqueleto saia com uma celula a mais que ele -- a
+   * tabela saltava na troca do esqueleto pelo dado.
    *
-   * O comentario de `ajuda/fila.ts` afirma o contrario -- *"o esqueleto nunca
-   * desenha um numero de colunas diferente do da tabela"* --, e ele esta
-   * errado. A refatoracao NAO conserta isso de proposito: seria mudar o que
-   * tres telas desenham, e o conserto e de `LinhasCarregando` ou dos tres
-   * pontos de chamada, com o cliente na mesa. Este caso prende o numero de
-   * hoje, para que o conserto seja um ato deliberado e nao uma deriva.
+   * O conserto foi em `TabelaDaFila`, que repassa `colunas.slice(1)`: a peca
+   * esta certa (a familia LISTA, 8 telas, ja lhe passava o recorte certo) e os
+   * tres pontos de chamada tambem estao (eles entregam UMA lista que a casca
+   * usa para os DOIS usos -- recortar la tiraria a primeira coluna do
+   * cabecalho). O argumento inteiro esta em `casca-de-fila.tsx`.
+   *
+   * ESTE CASO E A ISCA: ele mede as DUAS contagens na mesma tabela, e e por
+   * isso que a asercao do cabecalho esta aqui e nao em outro caso. Devolver o
+   * `colunas` inteiro a `LinhasCarregando` reprova nele.
    */
-  it('o esqueleto so aparece carregando (e herda a celula a mais: colunas + 1)', () => {
+  it('o esqueleto so aparece carregando, com as celulas do cabecalho', () => {
     const carregando = comRota(
       <TabelaDaFila colunas={COLUNAS} estado={estadoDe({ fase: 'carregando' })}>
         {null}
@@ -197,7 +199,12 @@ describe('(1) a tabela da fila', () => {
     );
     const esqueleto = carregando.container.querySelectorAll('tr[aria-hidden="true"]');
     expect(esqueleto).toHaveLength(5);
-    expect(esqueleto[0]?.querySelectorAll('td')).toHaveLength(COLUNAS.length + 1);
+    expect(
+      esqueleto[0]?.querySelectorAll('td'),
+      'REPROVA: o esqueleto nao desenha o numero de celulas do cabecalho. ' +
+        '`LinhasCarregando` ja desenha a celula da identidade por conta dela, ' +
+        'entao a casca lhe passa `colunas.slice(1)` -- nunca a lista inteira.',
+    ).toHaveLength(COLUNAS.length);
     expect(screen.getAllByRole('columnheader')).toHaveLength(COLUNAS.length);
     carregando.unmount();
 

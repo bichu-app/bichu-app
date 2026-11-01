@@ -20,13 +20,15 @@ export const VAZIO_DA_ABA = {
 } as const satisfies Record<SituacaoDaDuvida, string>;
 
 /**
- * As colunas da tabela. Serve a DOIS usos: o cabecalho e o esqueleto de carga.
+ * As colunas da tabela, na ordem do cabecalho -- a lista INTEIRA, e e assim que
+ * `TabelaDaFila` a quer.
  *
- * Medido em 31/10/2026: o esqueleto sai com UMA CELULA A MAIS que o cabecalho,
- * porque `LinhasCarregando` desenha uma celula fixa antes de percorrer
- * `colunas`. Este comentario dizia o contrario. O numero esta preso em
- * `admin/test/casca-de-fila.test.tsx`; o conserto e de `LinhasCarregando` ou
- * dos pontos de chamada das tres filas, e nao foi feito aqui.
+ * A casca e que faz o recorte para o esqueleto de carga (`colunas.slice(1)`),
+ * porque `LinhasCarregando` desenha a primeira celula por conta dela. O
+ * esqueleto saiu com uma celula a mais que o cabecalho ate 01/11/2026; o
+ * argumento de onde aquilo foi consertado esta em
+ * `componentes/casca-de-fila.tsx`, e o numero esta preso em
+ * `admin/test/casca-de-fila.test.tsx`.
  */
 export const COLUNAS = ['Assunto', 'Dúvida', 'Quando', 'Situação', ''];
 
