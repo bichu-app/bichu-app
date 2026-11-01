@@ -4,10 +4,12 @@ import { sql } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { Instant } from '../../../../shared/types/brands.js';
+import { temFormaDeUuid } from '../../domain/fila-de-moderacao.js';
 import type {
   DecisaoDaModeracao,
   ItemDaFila,
   OrigemDaDenuncia,
+  OrigemDecidivel,
 } from '../../domain/fila-de-moderacao.js';
 import type {
   AlvoRemovido,
@@ -84,16 +86,17 @@ function comoItem(l: LinhaDoItem): ItemDaFila {
   };
 }
 
-/** LUGAR 2 do filtro: a LEITURA de um item. */
+/**
+ * LUGAR 2 do filtro: a LEITURA de um item. Responde pelas CINCO origens da
+ * visao, e nao trava nada: nenhuma coluna `uuid` entra nesta consulta --
+ * `f.target_ref` e texto nas cinco pernas.
+ */
 async function lerItem(
   db: DbExecutor,
   origem: OrigemDaDenuncia,
   targetRef: string,
-  travar: boolean,
   apenasAbertas: boolean,
 ): Promise<ItemDaFila | null> {
-  if (travar) await travarDenuncias(db, origem, targetRef);
-
   const r = await sql<LinhaDoItem>`
     SELECT ${COLUNAS}
       FROM fila_de_moderacao f
@@ -106,10 +109,30 @@ async function lerItem(
   return linha === undefined ? null : comoItem(linha);
 }
 
+/**
+ * O item TRAVADO, que e o primeiro passo de toda decisao.
+ *
+ * `null` quando o alvo nao existe -- e **inclusive quando ele nao pode
+ * existir**: na origem `conversation` o alvo e `conversations.id`, que e
+ * `uuid`, e `targetRef` sem forma de UUID satisfaz `ModerationTargetRef` sem
+ * poder casar com linha nenhuma. Sem esta guarda o Postgres lancava `22P02` e
+ * a rota respondia **500** (medido em 31/10/2026); com ela, a decisao segue o
+ * mesmo caminho do alvo inexistente, que e 404.
+ */
+async function lerItemTravado(
+  db: DbExecutor,
+  origem: OrigemDecidivel,
+  targetRef: string,
+): Promise<ItemDaFila | null> {
+  if (origem === 'conversation' && !temFormaDeUuid(targetRef)) return null;
+  await travarDenuncias(db, origem, targetRef);
+  return lerItem(db, origem, targetRef, true);
+}
+
 /** A trava das denuncias ABERTAS do alvo, por origem. */
 async function travarDenuncias(
   db: DbExecutor,
-  origem: OrigemDaDenuncia,
+  origem: OrigemDecidivel,
   targetRef: string,
 ): Promise<void> {
   if (origem === 'review') {
@@ -131,7 +154,7 @@ async function travarDenuncias(
 /** Esconde o conteudo. **Exclusao logica, e nunca `DELETE`.** */
 async function removerConteudo(
   trx: DbTransaction,
-  origem: OrigemDaDenuncia,
+  origem: OrigemDecidivel,
   targetRef: string,
   motivo: string,
   agora: Instant,
@@ -160,7 +183,7 @@ async function removerConteudo(
 /** Marca a decisao em TODAS as denuncias abertas do alvo, e devolve quantas. */
 async function resolverDenuncias(
   trx: DbTransaction,
-  origem: OrigemDaDenuncia,
+  origem: OrigemDecidivel,
   targetRef: string,
   decisao: DecisaoDaModeracao,
   motivo: string,
@@ -198,7 +221,7 @@ export function criarFilaDeModeracaoRepository(
     emTransacao: (trabalho) =>
       db.transaction().execute((trx) => {
         const transacao: TransacaoDaModeracao = {
-          itemPorAlvo: (origem, ref) => lerItem(trx, origem, ref, true, true),
+          itemPorAlvo: (origem, ref) => lerItemTravado(trx, origem, ref),
           removerConteudo: (origem, ref, motivo, agora) =>
             removerConteudo(trx, origem, ref, motivo, agora),
           resolverDenuncias: (origem, ref, decisao, motivo, agora) =>
@@ -243,6 +266,6 @@ export function criarFilaDeModeracaoRepository(
       };
     },
 
-    itemPorAlvo: (origem, ref) => lerItem(db, origem, ref, false, false),
+    itemPorAlvo: (origem, ref) => lerItem(db, origem, ref, false),
   };
 }

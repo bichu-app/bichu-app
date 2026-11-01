@@ -1,7 +1,8 @@
 /** O vocabulario da FILA DE DUVIDAS no painel. */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
+import { dataCurta, usePendentesDaFila } from '../componentes/casca-de-fila.tsx';
 
 export type Duvida = Esquemas['AdminHelpRequest'];
 export type SituacaoDaDuvida = Esquemas['AdminHelpRequestStatus'];
@@ -20,8 +21,13 @@ export const VAZIO_DA_ABA = {
 } as const satisfies Record<SituacaoDaDuvida, string>;
 
 /**
- * As colunas da tabela. Serve a DOIS usos -- o cabecalho e o `LinhasCarregando`
- * --, entao o esqueleto nunca desenha um numero de colunas diferente do da tabela.
+ * As colunas da tabela. Serve a DOIS usos: o cabecalho e o esqueleto de carga.
+ *
+ * Medido em 31/10/2026: o esqueleto sai com UMA CELULA A MAIS que o cabecalho,
+ * porque `LinhasCarregando` desenha uma celula fixa antes de percorrer
+ * `colunas`. Este comentario dizia o contrario. O numero esta preso em
+ * `admin/test/casca-de-fila.test.tsx`; o conserto e de `LinhasCarregando` ou
+ * dos pontos de chamada das tres filas, e nao foi feito aqui.
  */
 export const COLUNAS = ['Assunto', 'Dúvida', 'Quando', 'Situação', ''];
 
@@ -36,11 +42,6 @@ export function atendimentoDe(duvida: Duvida): string | undefined {
   if (duvida.status !== 'attended') return undefined;
   const quem = duvida.attended_by ?? 'Conta sem nome de exibição';
   return `${quem} · ${dataCurta(duvida.attended_at)}`;
-}
-
-export function dataCurta(iso: string | null | undefined): string {
-  if (iso === null || iso === undefined || iso === '') return '—';
-  return new Date(iso).toLocaleDateString('pt-BR');
 }
 
 /** O comeco do texto, para a linha da tabela. */
@@ -58,8 +59,6 @@ export function casaComABusca(duvida: Duvida, busca: string): boolean {
 
 /** A contagem do aviso do menu: quantas duvidas estao ABERTAS. */
 export function useDuvidasPendentes(api: ClienteDaApi, versao = 0): number | undefined {
-  const [pendentes, setPendentes] = useState<number>();
-
   const buscar = useCallback(
     async (sinal: AbortSignal) => {
       const { data } = await api.GET('/admin/help-requests', {
@@ -70,16 +69,5 @@ export function useDuvidasPendentes(api: ClienteDaApi, versao = 0): number | und
     },
     [api],
   );
-
-  useEffect(() => {
-    const controle = new AbortController();
-    void buscar(controle.signal)
-      .then((n) => {
-        if (!controle.signal.aborted && n !== undefined) setPendentes(n);
-      })
-      .catch(() => undefined);
-    return () => controle.abort();
-  }, [buscar, versao]);
-
-  return pendentes;
+  return usePendentesDaFila(buscar, versao);
 }

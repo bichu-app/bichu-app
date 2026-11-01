@@ -1,7 +1,8 @@
 /** O vocabulario da FILA DE INDICACOES, em arquivo proprio. */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
+import { usePendentesDaFila } from '../componentes/casca-de-fila.tsx';
 
 export type Indicacao = Esquemas['AdminDirectorySuggestion'];
 export type EstadoDaIndicacao = Esquemas['DirectorySuggestionState'];
@@ -84,8 +85,6 @@ export function marcaDasFotos(i: Indicacao): string {
 
 /** A CONTAGEM DO AVISO do item do menu. */
 export function useIndicacoesPendentes(api: ClienteDaApi, versao = 0): number | undefined {
-  const [pendentes, setPendentes] = useState<number>();
-
   const buscar = useCallback(
     async (sinal: AbortSignal) => {
       const { data } = await api.GET('/admin/directory/suggestions', {
@@ -96,16 +95,5 @@ export function useIndicacoesPendentes(api: ClienteDaApi, versao = 0): number | 
     },
     [api],
   );
-
-  useEffect(() => {
-    const controle = new AbortController();
-    void buscar(controle.signal)
-      .then((n) => {
-        if (!controle.signal.aborted && n !== undefined) setPendentes(n);
-      })
-      .catch(() => undefined);
-    return () => controle.abort();
-  }, [buscar, versao]);
-
-  return pendentes;
+  return usePendentesDaFila(buscar, versao);
 }

@@ -1,8 +1,9 @@
 /** O vocabulario da FILA DE MODERACAO no painel, em pasta propria. */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import type { TipoDeSelo } from '../componentes/basicos.tsx';
+import { usePendentesDaFila } from '../componentes/casca-de-fila.tsx';
 
 export type Item = Esquemas['AdminModerationItem'];
 export type Origem = Esquemas['ModerationOrigin'];
@@ -112,16 +113,8 @@ export function notaDe(item: Item): string {
   return item.rating === null || item.rating === undefined ? '—' : `${item.rating}★`;
 }
 
-/** A data como o painel a escreve. */
-export function dataCurta(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pt-BR');
-}
-
 /** A CONTAGEM DO AVISO do item do menu. */
 export function useDenunciasPendentes(api: ClienteDaApi, versao = 0): number | undefined {
-  const [pendentes, setPendentes] = useState<number>();
-
   const buscar = useCallback(
     async (sinal: AbortSignal) => {
       const { data } = await api.GET('/admin/moderation/reports', {
@@ -132,16 +125,5 @@ export function useDenunciasPendentes(api: ClienteDaApi, versao = 0): number | u
     },
     [api],
   );
-
-  useEffect(() => {
-    const controle = new AbortController();
-    void buscar(controle.signal)
-      .then((n) => {
-        if (!controle.signal.aborted && n !== undefined) setPendentes(n);
-      })
-      .catch(() => undefined);
-    return () => controle.abort();
-  }, [buscar, versao]);
-
-  return pendentes;
+  return usePendentesDaFila(buscar, versao);
 }

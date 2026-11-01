@@ -14,6 +14,7 @@ import {
   type EstadoDaFila,
   type ItemProjetado,
   type OrigemDaDenuncia,
+  type OrigemDecidivel,
 } from '../domain/fila-de-moderacao.js';
 import type { FilaDeModeracaoRepository, TransacaoDaModeracao } from '../ports/fila-de-moderacao.js';
 
@@ -91,8 +92,14 @@ export class FilaDeModeracao {
     return projetarItem(item);
   }
 
-  /** **Remove o conteudo do ar** (exclusao logica) e resolve as denuncias. */
-  async remover(autor: Autor, origem: OrigemDaDenuncia, targetRef: string, corpo: MotivoDaDecisao) {
+  /**
+   * **Remove o conteudo do ar** (exclusao logica) e resolve as denuncias.
+   *
+   * `OrigemDecidivel` e nao `OrigemDaDenuncia`: quem estreita e a BORDA, que e
+   * onde ha status HTTP para responder a origem que o contrato declara e esta
+   * casa nao decide.
+   */
+  async remover(autor: Autor, origem: OrigemDecidivel, targetRef: string, corpo: MotivoDaDecisao) {
     const motivo = this.motivoConferido(corpo);
 
     return this.deps.repositorio.emTransacao(async (tx: TransacaoDaModeracao) => {
@@ -136,7 +143,7 @@ export class FilaDeModeracao {
   /** **Descarta a denuncia, tambem com motivo. */
   async descartar(
     autor: Autor,
-    origem: OrigemDaDenuncia,
+    origem: OrigemDecidivel,
     targetRef: string,
     corpo: MotivoDaDecisao,
   ) {
@@ -180,7 +187,7 @@ export class FilaDeModeracao {
   /** A leitura travada, com os dois juizos de "ainda da para decidir". */
   private static async itemAberto(
     tx: TransacaoDaModeracao,
-    origem: OrigemDaDenuncia,
+    origem: OrigemDecidivel,
     targetRef: string,
   ) {
     const item = await tx.itemPorAlvo(origem, targetRef);
