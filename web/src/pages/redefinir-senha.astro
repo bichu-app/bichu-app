@@ -1,9 +1,4 @@
 ---
-// /redefinir-senha?token=...: C.5, a pagina que cria a senha nova (UX 7.6.1).
-//   GET  -> checkPasswordResetToken  (o 410 aparece ANTES de a pessoa digitar)
-//   POST -> confirmPasswordReset     (nunca enfileirado; falha diz que nada mudou)
-// A senha digitada nunca volta no HTML da resposta: depois de um erro, o campo
-// vem vazio. Refletir senha em pagina e deixa-la em cache e historico.
 export const prerender = false;
 
 import Publica from '../layouts/Publica.astro';
@@ -36,7 +31,6 @@ if (Astro.request.method === 'POST') {
   );
   tela = telaAoSalvarSenha(r);
 } else if (!token) {
-  // Sem token nao ha link para conferir: e o mesmo "link invalido" do 410.
   tela = { tela: 'expirado', http: 400 };
 } else {
   const r = await executar(() => api.GET('/public/password-reset/{token}', { params: { path: { token } } }));

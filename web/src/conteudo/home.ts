@@ -1,14 +1,9 @@
-// Textos da Home (index.html do prototipo, direcao A). Fonte:
-// .jarvis/site-microcopy-revisada.md, secao "Prototipo v1", blocos P.1.1 a P.1.8,
-// com a rodada 3. Onde havia [DECISAO DO CLIENTE], esta a versao segura.
-
 export const HOME = {
   titulo: 'Bichu',
   descricao: 'Bichu é a rede dos pets: eventos no bairro e profissionais indicados e avaliados pela comunidade.',
 
   hero: {
     titulo: 'A rede dos pets.',
-    // P.1.1: a frase manuscrita trocou para a assinatura da marca.
     manuscrito: 'Pets conectam pessoas.',
     lead: 'Uma comunidade de tutores do mesmo bairro: eventos com os pets e profissionais indicados e avaliados por quem mora perto.',
     alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
@@ -40,7 +35,6 @@ export const HOME = {
       { icone: 'park', titulo: 'Eventos no bairro', texto: 'Passeios e eventos em praças e parques. O lugar aparece pelo nome da praça e do bairro, sem mapa.' },
       { icone: 'photo_library', titulo: 'Galeria do evento', texto: 'As fotos ficam na página do evento, sem o nome de quem enviou.' },
     ],
-    // P.1.3: versao segura, sem a linha do bairro.
     cartao: { titulo: 'Evento no bairro', href: '/comunidade#eventos' },
     botao: { href: '/comunidade', texto: 'Conhecer a comunidade' },
   },
@@ -79,7 +73,6 @@ export const HOME = {
 
   baixeApp: {
     titulo: 'Entre na rede com o seu pet.',
-    // P.1.7: versao segura.
     texto: 'Cadastre seu pet em poucos minutos.',
   },
 } as const;

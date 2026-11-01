@@ -1,4 +1,3 @@
-/** Os campos do painel que tem forma propria: valor em reais e e-mail. */
 import type { Ref } from 'react';
 
 import { CampoDeTexto } from './basicos.tsx';

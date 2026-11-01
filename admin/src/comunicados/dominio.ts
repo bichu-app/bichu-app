@@ -1,7 +1,3 @@
-/**
- * O dominio do COMUNICADO (broadcast): a mensagem que o painel manda para a caixa
- * de notificacoes de todo mundo.
- */
 import type { Esquemas } from '../api/cliente.ts';
 import { tipoDoProblema } from '../api/problema.ts';
 

@@ -1,5 +1,4 @@
 ---
-// Paginas institucionais (direcao A do prototipo). Estaticas, sem JavaScript.
 import Base from './Base.astro';
 import Cabecalho from '../componentes/Cabecalho.astro';
 import Rodape from '../componentes/Rodape.astro';
@@ -17,7 +16,6 @@ interface Props {
   indexar?: boolean;
 }
 const { titulo, descricao, atual, temBaixeApp = false, indexar = true } = Astro.props;
-// A previa de link (og:image) do institucional: a ilustracao da home, 1200 x 630.
 const previa = await getImage({ src: imagemPrevia, width: 1200, height: 630, fit: 'cover', format: 'jpeg', quality: 80 });
 ---
 <Base

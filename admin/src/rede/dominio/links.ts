@@ -1,4 +1,3 @@
-/** Barril dos links do encontro. */
 export {
   handleDoInstagram,
   LIMITE_DO_LINK_DO_CONVITE,

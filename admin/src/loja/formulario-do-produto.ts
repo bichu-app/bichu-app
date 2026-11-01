@@ -1,7 +1,3 @@
-/**
- * A regra do formulario de produto, fora do componente (conveniencia de UX: a
- * autoridade e o servidor).
- */
 import type { Esquemas } from '../api/cliente.ts';
 import { descricaoAceitavel, precisaDeDescricao, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
 import {
@@ -186,10 +182,6 @@ function preco(v: ValoresDoProduto): Esquemas['AdminPriceInput'] | undefined {
   return { amount, currency: 'BRL', checked_at: v.consultadoEm };
 }
 
-/**
- * A galeria como o corpo a manda: **a ordem da lista E a ordem das imagens**, e a
- * primeira e a capa.
- */
 function imagensDoCorpo(v: ValoresDoProduto): Esquemas['StoreCatalogImageInput'][] {
   return v.imagens
     .filter((im): im is ImagemDaGaleria & { uploadId: string } => typeof im.uploadId === 'string')
@@ -359,7 +351,6 @@ export function errosDoServidor(erros: { field: string; code: string }[], contex
   return { erros: e, tagsRecusadas };
 }
 
-/** O texto de cada recusa do servidor no campo do link. */
 const MENSAGEM_DO_LINK: Record<string, string> = {
   url_not_https: 'O link precisa começar com https://.',
   url_has_credentials: 'Tire o usuário e a senha do endereço antes de salvar.',

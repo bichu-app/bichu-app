@@ -1,5 +1,3 @@
-// Frases montadas a partir dos campos do contrato. O site so mostra o que a API
-// devolve (ADR-0028, item 3): campo ausente nao vira texto inventado.
 import type { ResolucaoDaTag } from './telas-da-tag.ts';
 
 type Pet = ResolucaoDaTag['pet'];
@@ -56,4 +54,3 @@ export function espera(segundos: number | null): string | null {
   const horas = Math.ceil(minutos / 60);
   return horas === 1 ? '1 hora' : `${horas} horas`;
 }
-

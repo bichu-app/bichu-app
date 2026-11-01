@@ -1,6 +1,3 @@
-// Textos de /comunidade (comunidade.html do prototipo). Fonte: secao
-// "Prototipo v1", blocos P.2.1 a P.2.8, versao segura onde ha decisao do cliente.
-
 export const COMUNIDADE = {
   titulo: 'Comunidade',
   descricao: 'Eventos na praça com os pets do bairro e profissionais indicados e avaliados por quem mora perto.',
@@ -25,7 +22,6 @@ export const COMUNIDADE = {
       nota: 'Exemplo ilustrativo',
       data: 'Sábado, 9h',
       titulo: 'Evento de cachorros na praça',
-      // P.2.2: versao segura, exemplo generico que nao coincide com lugar real.
       lugar: 'Praça do Coreto · seu bairro',
       origem: 'Criado pela equipe do Bichu',
       galeria: 'Fotos do evento',

@@ -26,14 +26,12 @@ body {
   overflow-x: clip;
 }
 
-/* ---------- foco: um so, visivel em qualquer fundo (focus.width, focus.offset) ---------- */
 :focus-visible {
   outline: var(--focus-width) solid var(--cor-focus-ring);
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
 }
 
-/* ---------- tipografia ---------- */
 h1, h2, h3, h4 { color: var(--cor-text-primary); }
 .titulo-display {
   font-family: var(--type-display-lg-family);
@@ -81,7 +79,6 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
   text-transform: uppercase;
 }
 
-/* ---------- icone: SVG embutido, cor do texto em volta ---------- */
 .icone {
   width: var(--icon-size-default);
   height: var(--icon-size-default);
@@ -89,7 +86,6 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
   fill: currentColor;
 }
 
-/* ---------- pular para o conteudo ---------- */
 .pular-para-conteudo {
   position: absolute; left: var(--space-4); top: var(--space-4);
   z-index: 100;
@@ -104,7 +100,6 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
 }
 .pular-para-conteudo:focus { transform: none; }
 
-/* ---------- botoes: alvo de 48, estados completos ---------- */
 .botao {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   min-height: var(--target-min);
@@ -118,14 +113,12 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
   transition: background-color var(--motion-fast) var(--easing-standard);
 }
 .botao:focus-visible { border-radius: var(--radius-full); }
-/* Manteiga e a cor de acao da folha. O texto sobre ela e sempre on-action-fill. */
 .botao--primario { background: var(--cor-action-fill); color: var(--cor-on-action-fill); }
 .botao--primario:hover { background: var(--cor-action-fill-pressed); }
 .botao--secundario { background: transparent; color: var(--cor-primary); border-color: var(--cor-primary); }
 .botao--secundario:hover { background: var(--cor-primary-container); }
 .botao--largo { width: 100%; min-height: var(--target-critico); }
 .botao[aria-disabled="true"], .botao:disabled { background: var(--cor-disabled-surface); color: var(--cor-on-disabled); border-color: transparent; cursor: not-allowed; }
-/* Enviando: o rotulo continua visivel (componente Botao), e o giro so aparece com JS. */
 .botao[aria-busy="true"] { cursor: progress; }
 .botao__giro { display: none; }
 .botao[aria-busy="true"] .botao__giro { display: block; }
@@ -134,7 +127,6 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
 }
 @keyframes girar { to { transform: rotate(1turn); } }
 
-/* ---------- link de texto ---------- */
 .link {
   display: inline-flex; align-items: center; gap: var(--space-2);
   min-height: var(--target-min);
@@ -144,7 +136,6 @@ h1, h2, h3, h4 { color: var(--cor-text-primary); }
 }
 .link:hover { text-decoration-thickness: var(--border-thick); }
 
-/* ---------- texto so para leitor de tela ---------- */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;

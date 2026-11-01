@@ -75,14 +75,9 @@ const CONFLITO = 'Alguém alterou este produto enquanto você editava, e nada fo
 
 interface RascunhoDoProduto {
   valores: ValoresDoProduto;
-  /** O ETag da leitura em que a pessoa estava editando. */
   etag?: string;
 }
 
-/**
- * Todos os parceiros ativos, pagina por pagina (o `limit` do contrato vai ate
- * 100).
- */
 async function carregarParceirosAtivos(api: ClienteDaApi, sinal: AbortSignal): Promise<Parceiro[] | undefined> {
   const todos: Parceiro[] = [];
   for (let page = 1; page <= 50; page += 1) {
@@ -94,10 +89,6 @@ async function carregarParceirosAtivos(api: ClienteDaApi, sinal: AbortSignal): P
   return todos;
 }
 
-/**
- * O que vai para o rascunho da sessao: sem arquivo e sem previa local, que nao
- * sobrevivem a recarga.
- */
 function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   return {
     ...v,
@@ -107,7 +98,6 @@ function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   };
 }
 
-/** A frase da opcao vazia do segundo select, e ela diz QUAL dos tres estados e. */
 function rotuloVazioDaSubcategoria(taxonomia: Taxonomia | undefined, categoria: string): string {
   if (categoria === '') return 'Escolha a categoria primeiro';
   if (subcategoriasDaCategoria(taxonomia, categoria).length === 0) {
@@ -233,7 +223,6 @@ export default function FormularioDeProduto() {
   const sujo = fase === 'pronto' && comparavel(valores) !== comparavel(base);
   const publicado = item?.publication_state === 'published';
 
-  /** A regua de cada botao (pedido do cliente de 17/10/2026). */
   const reguaDa = (acao: Acao): ReguaDoProduto => (acao === 'rascunho' ? 'rascunho' : 'publicacao');
 
   const erros: ErrosDoProduto = tentouSalvar
@@ -753,7 +742,6 @@ export default function FormularioDeProduto() {
   );
 }
 
-/** Chip de tag (aria-pressed). */
 function ChipDeTag({
   rotulo,
   marcada,

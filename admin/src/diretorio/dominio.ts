@@ -1,4 +1,3 @@
-/** O vocabulario e as regras locais do diretorio de `Perto`, num lugar so. */
 import type { Esquemas } from '../api/cliente.ts';
 
 export type Entrada = Esquemas['AdminDirectoryEntry'];

@@ -1,4 +1,3 @@
-/** O que vai para o contrato: o texto aparado, **na caixa que a pessoa escreveu**. */
 export function emailParaEnvio(bruto: string): string {
   return bruto.trim();
 }

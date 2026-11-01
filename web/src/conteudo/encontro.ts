@@ -1,22 +1,4 @@
-// Os textos de `/encontro/{slug}`, a pagina publica do encontro (emenda 4 do
-// ADR-0017, decisao do cliente de 21/10/2026).
-//
-// Num arquivo so, e nao espalhados pelo `.astro`, pelo mesmo motivo dos outros
-// `conteudo/`: microcopy que mora no meio da marcacao e microcopy que ninguem
-// revisa. `tests/unidade/textos.test.ts` varre este diretorio.
-//
-// ## A VOZ AQUI E A DO SITE, e nao a do app
-//
-// O app e "Serio": ele e ferramenta de quem ja esta dentro. O site e a folha de
-// identidade -- ilustracao, blob, manuscrito, patinha --, porque quem chega
-// nele ainda nao conhece o Bichu. Esta pagina e o caso extremo dessa diferenca:
-// ela e aberta por alguem que recebeu um link num grupo de WhatsApp e nunca
-// ouviu falar do produto, e ela tem **dois trabalhos**: fazer a pessoa querer ir
-// ao encontro, e mostrar o caminho para o aplicativo.
-
-/** Os rotulos dos enums do contrato, com as palavras EXATAS do aplicativo. */
 export const ROTULOS = {
-  /** `NetworkEventDogAge`. */
   idade: {
     any: 'Qualquer idade',
     from_4_months: 'A partir de 4 meses',
@@ -47,18 +29,6 @@ export const ROTULOS = {
 } as const;
 
 export const ENCONTRO = {
-  /**
-   * O titulo da aba e do cartao de pre-visualizacao. **Leva o titulo do
-   * encontro**, porque e esse cartao que aparece no grupo de WhatsApp -- e era
-   * exatamente ele que, antes desta pagina existir, dizia "Pagina nao
-   * encontrada - Bichu".
-   *
-   * **Sem a marca aqui.** `Base.astro` monta `${titulo} · Bichu` por conta
-   * dela, e por um instante esta funcao tambem a acrescentava: o `og:title`
-   * medido saiu `Passeio matinal na Benedito Calixto · Bichu · Bichu`. O
-   * defeito e pequeno e aparece no lugar mais visivel que esta pagina tem --
-   * o cartao no grupo de WhatsApp, que e o motivo de ela existir.
-   */
   tituloDaAba: (titulo: string) => titulo,
   descricao: (titulo: string, regiao: string) =>
     `${titulo} — um encontro de tutores e pets em ${regiao}. Veja os detalhes no Bichu.`,

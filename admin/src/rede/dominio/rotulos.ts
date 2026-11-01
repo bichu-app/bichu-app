@@ -1,4 +1,3 @@
-/** Rotulos de tela para os valores de lista fechada do contrato. */
 import type {
   Estrutura,
   EstadoDoPedido,

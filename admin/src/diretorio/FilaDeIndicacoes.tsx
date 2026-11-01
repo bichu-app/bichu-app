@@ -1,4 +1,3 @@
-/** A FILA DE INDICACOES do `Perto`, no painel: o menu que faltava. */
 import { useCallback, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -37,7 +36,6 @@ import { ImagensDaIndicacao, LogoDaIndicacao } from './ImagensDaIndicacao.tsx';
 
 const POR_PAGINA = 50;
 
-/** `padroes` e constante de modulo porque `useParametrosDaLista` o exige estavel. */
 const PADROES = { aba: 'pending' };
 
 const ehAba = (v: string): v is EstadoDaIndicacao => (ABAS as readonly string[]).includes(v);
@@ -52,7 +50,6 @@ const SELO_DA_ABA = {
   declined: 'retirado',
 } as const satisfies Record<EstadoDaIndicacao, 'rascunho' | 'publicado' | 'retirado'>;
 
-/** O instante, curto, no fuso de quem le. */
 function quando(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
@@ -331,7 +328,6 @@ export default function FilaDeIndicacoes() {
 
 type Resultado = { ok: true } | { ok: false; mensagem: string };
 
-/** A tela decide pelo STATUS, nunca pelo texto do servidor. */
 function mensagemDoErro(status: number, erro: unknown): string {
   const codigos = (erro as { errors?: { code?: string }[] } | undefined)?.errors ?? [];
   if (codigos.some((e) => e.code === 'suggestion_not_pending')) {
@@ -343,10 +339,6 @@ function mensagemDoErro(status: number, erro: unknown): string {
   return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
 }
 
-/**
- * A aprovacao: o endereco publico da entrada e, quando o contato indicado nao e
- * telefone, o telefone comercial.
- */
 function DialogoDeAprovacao({
   indicacao: i,
   aoAprovar,
@@ -484,7 +476,6 @@ function DialogoDeAprovacao({
   );
 }
 
-/** A recusa, com motivo obrigatorio. */
 function DialogoDeRecusa({
   indicacao: i,
   aoRecusar,

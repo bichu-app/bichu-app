@@ -1,7 +1,3 @@
-/**
- * O texto de tela para cada falha do cliente (regra de 12.4 da UX: o que houve e o
- * que fazer).
- */
 import { ERRO_DAS_OBSERVACOES } from '../dominio/observacoes.ts';
 import { esperaPorExtenso, type Falha } from './redeApi.ts';
 

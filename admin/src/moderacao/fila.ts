@@ -1,4 +1,3 @@
-/** O vocabulario da FILA DE MODERACAO no painel, em pasta propria. */
 import { useCallback } from 'react';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
@@ -42,7 +41,6 @@ export const SELO_DA_DECISAO = {
   dismissed: 'inativo',
 } as const satisfies Record<Decisao, TipoDeSelo>;
 
-/** Os motivos da denuncia, nas palavras de quem modera. */
 const MOTIVOS: Record<string, string> = {
   spam: 'Spam',
   offensive: 'Ofensivo',

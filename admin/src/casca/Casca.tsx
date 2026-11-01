@@ -20,13 +20,8 @@ interface ItemDaNavegacao {
 
 const eSubDaLoja = (c: string) => c.startsWith('/loja/parceiros') || c.startsWith('/loja/tags');
 
-/** O mesmo arranjo de `eSubDaLoja`: o item pai nao fica aceso quando o filho esta. */
 const ehSubDoPerto = (c: string) => c.startsWith('/perto/indicacoes');
 
-/**
- * A secao Rede e de outra frente (feat/backoffice-telas-rede): aqui so o item da
- * navegacao, que leva a `/rede`.
- */
 const ITENS: ItemDaNavegacao[] = [
   { para: '/loja', rotulo: 'Loja', icone: 'storefront', ativo: (c) => (c === '/loja' || c.startsWith('/loja/')) && !eSubDaLoja(c) },
   { para: '/loja/parceiros', rotulo: 'Parceiros', icone: 'open', sub: true, ativo: (c) => c.startsWith('/loja/parceiros') },
@@ -40,7 +35,6 @@ const ITENS: ItemDaNavegacao[] = [
   { para: '/comunicados', rotulo: 'Comunicados', icone: 'info', ativo: (c) => c === '/comunicados' || c.startsWith('/comunicados/') },
 ];
 
-/** O numero ao lado do item do menu, ou `undefined`. */
 function avisoDoItem(
   para: string,
   indicacoes: number | undefined,

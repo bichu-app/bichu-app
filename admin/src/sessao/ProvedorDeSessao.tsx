@@ -201,7 +201,6 @@ export function ProvedorDeSessao({
   );
 }
 
-/** S.1: aos 28 min sem uso. */
 function AvisoDeInatividade({ aoSair, aoContinuar }: { aoSair: () => void; aoContinuar: () => Promise<void> }) {
   const [renovando, setRenovando] = useState(false);
   return (
