@@ -1,7 +1,3 @@
-/**
- * Monta o aviso que a vítima do reuso de refresh recebe por e-mail, e emite a
- * credencial do "Não fui eu" que vai dentro dele.
- */
 import type { AvisoAoTitular } from './dependencies.js';
 import type { IdentityRepository } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
@@ -13,7 +9,6 @@ import type { AbsoluteUrl, Instant, TokenHash, UserId } from '../../../shared/ty
 export type { RegistrarOcorrencia } from './dependencies.js';
 import type { RegistrarOcorrencia } from './dependencies.js';
 
-/** Sete dias, e o número é maior que o dos outros dois links de propósito. */
 const VALIDADE_DO_DISAVOW_EM_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface DependenciasDoAvisoDeReuso {

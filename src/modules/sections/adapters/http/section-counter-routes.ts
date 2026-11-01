@@ -1,4 +1,3 @@
-/** As DUAS rotas dos contadores das abas `Pets` e `Rede` (BICHUS-278). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -46,7 +45,6 @@ export interface DependenciasDasRotasDosContadores {
   readonly contrato: Contrato;
 }
 
-/** A resposta, campo a campo e nunca por espalhamento. */
 function comoResposta(contadores: ContadoresDeSecao): Record<string, unknown> {
   return {
     lost_pets_new: contadores.perdidosNovos,
@@ -55,10 +53,6 @@ function comoResposta(contadores: ContadoresDeSecao): Record<string, unknown> {
   };
 }
 
-/**
- * MEMOIZADA por requisicao, como nas rotas da caixa: o teto por `account` precisa
- * do dono antes do handler, e o handler precisa do mesmo dono.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDosContadores,

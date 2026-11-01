@@ -1,4 +1,3 @@
-/** O que o cadastro precisa saber sobre foto, e **nada além**. */
 import type { PetId } from '../../../shared/types/brands.js';
 
 export type StatusDaFoto = 'processing' | 'ready' | 'rejected';

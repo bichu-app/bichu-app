@@ -1,4 +1,3 @@
-/** A mensagem de abertura (critério 2), e o que ela **não** deixa passar. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -6,7 +5,6 @@ import { comoData } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import { primeiraMensagemDoSistema } from './primeira-mensagem.js';
 
-/** 22/09/2026, 15h30 em São Paulo (18:30Z). */
 const emIso = (texto: string): Date => comoData(Date.parse(texto) as Instant);
 
 const ESCANEADO = emIso('2026-09-22T18:30:00.000Z');

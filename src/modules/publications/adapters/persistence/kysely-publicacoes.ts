@@ -1,4 +1,3 @@
-/** A persistência do Mural. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
@@ -29,21 +28,14 @@ import type {
 /** O propósito desta esteira, **tipado** por `PropositoDaImagem`. */
 export const PROPOSITO_DA_PUBLICACAO: PropositoDaImagem = 'user_publication';
 
-/** Só foto `ready` sai na linha do tempo: em `processing` ela carrega o EXIF. */
 const FOTO_PRONTA = 'ready' as const;
 
-/** O propósito da foto ÚNICA da pessoa — a do autor, pela Emenda 5. */
 const PROPOSITO_DA_FOTO_DE_PESSOA: PropositoDaImagem = 'user_photo';
 
-/**
- * **O SELO DE VALIDADO do autor**, derivado no SQL a partir do alias `a`
- * (`users`), que as tres leituras de autor deste arquivo já têm.
- */
 const CANAL_VERIFICADO_DO_AUTOR = canalDeContatoConfirmadoNoSql('a');
 
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A forma do endereço público, a mesma que o `CHECK` do banco cobra. */
 const FORMA_DE_REF = /^[A-Za-z0-9_-]{22}$/;
 
 interface LinhaDaMinhaPublicacao {
@@ -64,7 +56,6 @@ interface LinhaDoComentario {
   readonly handle: string | null;
   readonly display_name: string;
   readonly autor_thumb_key: string | null;
-  /** O selo de validado do autor. */
   readonly canal_verificado: boolean;
   readonly minha: boolean;
 }
@@ -77,18 +68,14 @@ interface LinhaDaLinhaDoTempo {
   readonly public_key: string | null;
   readonly handle: string | null;
   readonly display_name: string;
-  /** A `thumb` 176 da foto do AUTOR (Emenda 5). */
   readonly autor_thumb_key: string | null;
-  /** O selo de validado do autor. */
   readonly canal_verificado: boolean;
   readonly minha: boolean;
-  /** `count(*)` do Postgres e `bigint`, e o driver o entrega como **CADEIA**. */
   readonly like_count: string;
   readonly comment_count: string;
   readonly liked_by_me: boolean;
 }
 
-/** O par `(created_at, public_ref)` estritamente ANTERIOR ao cursor. */
 function antesDoCursor(curso: CursoDaLinhaDoTempo) {
   return sql<boolean>`(p.created_at, p.public_ref) < (${comoData(curso.antesDe)}::timestamptz, ${curso.ref})`;
 }
@@ -379,7 +366,6 @@ function comoPublicacaoNaLinha(linha: LinhaDaLinhaDoTempo): PublicacaoNaLinha {
   };
 }
 
-/** Corta a linha extra e escreve o cursor da última mantida. */
 function paginar<L, T>(
   linhas: readonly L[],
   limite: number,
@@ -395,7 +381,6 @@ function paginar<L, T>(
   };
 }
 
-/** O envio do DONO, com trava de linha. */
 async function envioDaPublicacaoDoDono(
   trx: DbExecutor,
   uploadId: string,
@@ -504,7 +489,6 @@ export async function gravarPublicacaoNaTransacao(
   };
 }
 
-/** O `id` interno da publicacao visivel a quem chama, ou `undefined`. */
 async function alvoVisivel(
   executor: DbExecutor,
   ref: string,
@@ -516,7 +500,6 @@ async function alvoVisivel(
   return rows[0]?.id;
 }
 
-/** A contagem de curtidas, lida das LINHAS, mais `liked_by_me`. */
 async function contarCurtidas(
   executor: DbExecutor,
   publicacaoId: string,
@@ -535,7 +518,6 @@ async function contarCurtidas(
   };
 }
 
-/** A contagem de comentarios VIVOS, lida das LINHAS. */
 async function contarComentarios(executor: DbExecutor, publicacaoId: string): Promise<number> {
   const { rows } = await sql<{ readonly total: string }>`
     SELECT count(*) AS total
@@ -546,7 +528,6 @@ async function contarComentarios(executor: DbExecutor, publicacaoId: string): Pr
   return Number(rows[0]?.total ?? '0');
 }
 
-/** O autor de um comentario recem-criado: apelido, nome e a `thumb` da foto. */
 async function autorDoComentario(
   executor: DbExecutor,
   quem: UserId,

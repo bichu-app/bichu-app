@@ -1,4 +1,3 @@
-/** O trabalho que torna uma foto utilizável (critérios 14, 18 e 19 de BICHUS-87). */
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import type { ObjectKey } from '../../../shared/types/brands.js';
 import type { Derivada } from '../ports/image-processor.js';
@@ -13,7 +12,6 @@ import {
 import type { MediaRepository } from '../ports/media-repository.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
-/** O texto que vai para a tela, por motivo. */
 const TEXTO_DA_RECUSA: Record<MotivoDeRecusa | 'imagem_pequena_demais', string> = {
   formato_nao_aceito: 'Esse arquivo não é uma foto que a gente consiga abrir.',
   imagem_grande_demais: 'Essa foto é grande demais. Escolha outra ou tire uma nova.',

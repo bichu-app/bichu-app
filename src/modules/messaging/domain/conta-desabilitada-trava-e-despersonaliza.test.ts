@@ -1,4 +1,3 @@
-/** ISCA: conta desabilitada trava a conversa nos DOIS sentidos e perde o nome. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -27,7 +26,6 @@ const NOMES: NomesDaConversa = {
   chaveDaFotoDoOutro: null,
 };
 
-/** A lista FECHADA de campos de um participante. */
 const CHAVES_DO_PARTICIPANTE = ['displayName', 'handle', 'photoKey', 'role'];
 
 const PASSOU_A_TRAVA =

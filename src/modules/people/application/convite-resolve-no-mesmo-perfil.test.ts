@@ -1,7 +1,3 @@
-/**
- * As ISCAS da **resolução do convite**: ela devolve o **perfil**, e convite
- * inválido, vencido ou revogado **não distingue qual dos três**.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -30,7 +26,6 @@ const ANA_VISIVEL: PessoaVisivel = {
   canalVerificado: false,
 };
 
-/** Monta o serviço. */
 function montar(opcoes: { conviteResolve: boolean; pessoaExiste?: boolean }) {
   const perfis: PerfilDePessoaRepository = {
     perfilPorApelido: (apelido: string) =>
@@ -79,10 +74,6 @@ function respostaInteira(erro: AppError): Record<string, unknown> {
 }
 
 void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', () => {
-  /**
-   * **O CONTRAPESO.** Sem ele, as iscas de indistinguibilidade abaixo passariam num
-   * mundo em que resolver convite nunca funciona.
-   */
   void it('CONTRAPESO: convite valido devolve o perfil de quem emitiu', async () => {
     const servico = montar({ conviteResolve: true });
     const perfil = await servico.porConvite(QUEM_OLHA, 'um-token-valido');
@@ -92,11 +83,6 @@ void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', (
     assert.equal(perfil.connectionsCount, 7);
   });
 
-  /**
-   * **A tela de destino tem de saber o que o botão diz.** `connection_state` é o que
-   * decide entre "adicionar", "pedido enviado" e "conectado" — e ele vem de graça
-   * porque esta operação **reusa** `porApelido` em vez de projetar de novo.
-   */
   void it('o perfil resolvido carrega `connection_state`, que e o que o botao le', async () => {
     const servico = montar({ conviteResolve: true });
     const perfil = await servico.porConvite(QUEM_OLHA, 'um-token-valido');
@@ -104,10 +90,6 @@ void describe('convite resolvido devolve O PERFIL, e nao um recorte parecido', (
     assert.equal(perfil.connectionRef, null);
   });
 
-  /**
-   * A afirmação de que é **a mesma** projeção, medida pela igualdade dos dois
-   * caminhos — e não por inspeção de código.
-   */
   void it('o perfil por CONVITE e o perfil por APELIDO sao IDENTICOS', async () => {
     const servico = montar({ conviteResolve: true });
     const porConvite = await servico.porConvite(QUEM_OLHA, 'um-token-valido');
@@ -160,10 +142,6 @@ void describe('ISCA: convite invalido, VENCIDO e REVOGADO nao se distinguem', ()
     }
   });
 
-  /**
-   * **A fusão vai além do convite**: o 404 do convite que não resolve e o 404 da
-   * pessoa que não existe para quem olha são o mesmo.
-   */
   void it('ISCA: convite que nao resolve e PESSOA invisivel dao a MESMA resposta', async () => {
     const conviteMorto = montar({ conviteResolve: false });
     const pessoaInvisivel = montar({ conviteResolve: true, pessoaExiste: false });

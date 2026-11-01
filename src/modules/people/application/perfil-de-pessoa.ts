@@ -1,4 +1,3 @@
-/** O caso de uso do **perfil de outra pessoa** (fatia G). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';

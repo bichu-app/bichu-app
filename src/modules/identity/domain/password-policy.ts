@@ -1,4 +1,3 @@
-/** Política de senha, alinhada ao NIST SP 800-63B (ADR-0003). */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 
 export const TAMANHO_MINIMO = 10;
@@ -17,7 +16,6 @@ function normalizarParaComparacao(valor: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
-/** Semelhança com e-mail e nome. */
 function pareceComIdentidade(senha: string, contexto: ContextoDaSenha): boolean {
   const alvo = normalizarParaComparacao(senha);
   if (alvo.length === 0) return false;

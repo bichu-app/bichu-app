@@ -1,4 +1,3 @@
-/** `TETO_DE_CARE_NOTES` é o `CHECK` da coluna, lido do disco. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -6,11 +5,6 @@ import { describe, it } from 'node:test';
 
 import { TETO_DE_CARE_NOTES } from '../../application/pet-service.js';
 
-/**
- * O `<= n` de `pets_care_notes_tamanho`, procurado em TODA migração em vez de num
- * nome de arquivo fixo: migração renomeada derruba a leitura por caminho, e
- * derrubar é o certo — aprovar por ausência de dado é o defeito desta isca.
- */
 function tetoDaColuna(): number {
   const pasta = resolve(process.cwd(), 'migrations');
   const achados: { arquivo: string; teto: number }[] = [];

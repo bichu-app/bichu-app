@@ -1,7 +1,3 @@
-/**
- * ISCA (e): **a denúncia de publicação usa a que JÁ EXISTE, e desde 20/10/2026 ela
- * confere o alvo.**
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -32,7 +28,6 @@ const semBanco = new Kysely<Database>({
 
 const alvo = () => construtorDoAlvoDaPublicacao(semBanco, REF, CHAMADOR);
 
-/** A conferência, como função, para a isca de mutação chamar a MESMA. */
 const CONFERENCIAS = {
   exigeConexaoAceita: (sql: string) => {
     assert.match(sql, /from user_connections uc/i, 'o predicado de conexao saiu do WHERE');

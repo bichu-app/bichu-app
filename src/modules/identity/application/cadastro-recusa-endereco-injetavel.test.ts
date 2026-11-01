@@ -1,4 +1,3 @@
-/** A ordem dos acontecimentos no cadastro (BICHUS-198, critérios 2, 3 e 4). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +20,6 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/** O endereço do relato da issue. */
 const ENDERECO_DO_RELATO = 'a@b.test;x';
 
 function naoDeveriaTerChegado(nome: string): never {
@@ -33,7 +31,6 @@ function naoDeveriaTerChegado(nome: string): never {
   });
 }
 
-/** Toda porta de escrita e de leitura recusa: o caminho não pode chegar a nenhuma. */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return new (class extends RepositorioQueRecusaTudo {
     override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
@@ -118,7 +115,6 @@ async function recusaDe(email: string): Promise<AppError> {
 }
 
 void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
-  /** ISCA do critério 2, e a que reproduz o relato da issue. */
   void it('`a@b.test;x` não chega a tocar o repositório nem o mailer', async () => {
     const erro = await recusaDe(ENDERECO_DO_RELATO);
 
@@ -129,7 +125,6 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     ]);
   });
 
-  /** A classe inteira, e não só o `;` do relato. */
   void it('toda a classe de gramática é recusada com 400 no cadastro, e nenhuma escreve', async () => {
     const perigosos: readonly (readonly [string, string])[] = [
       ['ponto e vírgula', 'a@b.test;x'],
@@ -153,10 +148,6 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     }
   });
 
-  /**
-   * ISCA do critério 4. Endereço é dado pessoal e mensagem de erro vai para o log —
-   * uma recusa que vazasse o endereço trocaria um defeito por outro.
-   */
   void it('nem a mensagem nem o corpo do problema carregam o endereço recusado', async () => {
     const erro = await recusaDe('tutora.silva@exemplo.test;bcc@mal.test');
     const tudoQueSai = JSON.stringify({
@@ -172,10 +163,6 @@ void describe('BICHUS-198 — o cadastro recusa antes de criar a conta', () => {
     assert.doesNotMatch(tudoQueSai, /@/, 'nenhum pedaço de endereço');
   });
 
-  /**
-   * A outra metade do critério 5, vista de cima: a borda não pode ficar mais rígida
-   * que o fio.
-   */
   void it('endereço legítimo continua passando da borda para dentro', async () => {
     const bancada = montar();
     await assert.rejects(

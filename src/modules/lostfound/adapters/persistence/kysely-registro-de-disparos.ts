@@ -1,4 +1,3 @@
-/** A persistência do disparo: `alert_dispatches` e `alert_recipients`. */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';

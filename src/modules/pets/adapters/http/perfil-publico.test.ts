@@ -1,4 +1,3 @@
-/** `GET /v1/public/pets/{slug}`, pela borda HTTP (BICHUS-45). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

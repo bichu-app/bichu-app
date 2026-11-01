@@ -1,4 +1,3 @@
-/** ISCA (d): **OS TRÊS TETOS RECUSAM O EXCEDENTE, COM CONTRAPESO NO LIMITE EXATO.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -16,7 +15,6 @@ import {
 
 const contrato = carregarContrato(resolve(process.cwd(), 'api/openapi.yaml'));
 
-/** As entradas de teto de uma rota, no tipo da porta. */
 function tetos(rota: { readonly rateLimit: readonly unknown[] }): readonly RateLimitEntry[] {
   return rota.rateLimit as readonly RateLimitEntry[];
 }

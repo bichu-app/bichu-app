@@ -1,4 +1,3 @@
-/** A gravação da derivada recusa content-type que não seja de imagem (BICHUS-133). */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';

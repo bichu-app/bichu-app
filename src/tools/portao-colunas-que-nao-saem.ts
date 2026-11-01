@@ -1,17 +1,11 @@
-/**
- * Portão de saída: coluna marcada como "nunca sai do servidor" não aparece em
- * resposta nenhuma, nem em código que monta resposta.
- */
 import { parse as parseYaml } from 'yaml';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 export const VERSAO_DO_PORTAO = '1.0.0';
 
-/** A marca que promove uma coluna a "não sai". */
 const MARCA = /nunca sai do servidor/i;
 
-/** Extrai `COMMENT ON COLUMN <tabela>.<coluna> IS '<corpo>'`. */
 const COMENTARIO_DE_COLUNA = /COMMENT\s+ON\s+COLUMN\s+([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\s+IS\s*'((?:[^']|'')*)'/gi;
 
 export interface ColunaQueNaoSai {
@@ -186,7 +180,6 @@ export function inspecionarFontes(
   return achados;
 }
 
-/** Arquivos que **podem** citar o nome, porque eles são a regra e não a violação. */
 const DISPENSADOS: readonly string[][] = [
   ['src', 'tools', 'portao-colunas-que-nao-saem.ts'],
   ['src', 'tools', 'portao-colunas-que-nao-saem.test.ts'],

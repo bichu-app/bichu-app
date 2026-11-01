@@ -1,4 +1,3 @@
-/** O pedido do OBJETO FISICO da plaquinha da coleira. */
 import type { AdminAccountId, PetId, UserId } from '../../../shared/types/brands.js';
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 

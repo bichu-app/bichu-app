@@ -1,4 +1,3 @@
-/** O bloqueio de marcar como perdido, e o aviso de cadastro incompleto. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {

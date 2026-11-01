@@ -1,4 +1,3 @@
-/** A porta do módulo de bloqueio e denúncia. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
 /** O endereço público e opaco de uma pessoa (`users.public_ref`). */

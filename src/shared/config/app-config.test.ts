@@ -1,7 +1,3 @@
-/**
- * Testes da subida da configuração, com foco na promessa de **"Sempre duas
- * chaves"** do `GET /.well-known/jwks.json` (BICHUS-124, critério 2).
- */
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, it } from 'node:test';
@@ -26,7 +22,6 @@ function gerarPem(): string {
 const PEM_ATIVA = gerarPem();
 const PEM_ROTACAO = gerarPem();
 
-/** Ambiente mínimo para `loadAppConfig()` chegar até a leitura das chaves. */
 function ambienteCompleto(): Record<string, string> {
   return {
     ENVIRONMENT: 'dev',
@@ -66,7 +61,6 @@ const CHAVES_DO_AMBIENTE = [
 ];
 const ORIGINAL = new Map(CHAVES_DO_AMBIENTE.map((nome) => [nome, process.env[nome]]));
 
-/** Aplica o ambiente do caso. */
 function aplicar(ambiente: Record<string, string | undefined>): void {
   for (const nome of CHAVES_DO_AMBIENTE) {
     const valor = ambiente[nome];
@@ -197,7 +191,6 @@ void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
   });
 });
 
-/** `PUSH_TRANSPORT` e `FCM_PROJECT` (ADR-0008). */
 void describe('PUSH_TRANSPORT: valor desconhecido não sobe, e `log` não vira envio real', () => {
   void it('recusa na subida, citando o valor visto E os dois aceitos', () => {
     aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'firebase' });
@@ -259,7 +252,6 @@ void describe('PUSH_TRANSPORT: valor desconhecido não sobe, e `log` não vira e
   });
 });
 
-/** As bases que o ADR-0017 item 2 separou de `PUBLIC_BASE_URL`. */
 void describe('TAG_BASE_URL e WEB_BASE_URL: a separação que registra o irreversível', () => {
   void it('sem TAG_BASE_URL a subida morre citando TAG_BASE_URL', () => {
     aplicar({ ...ambienteCompleto(), TAG_BASE_URL: undefined });
@@ -314,7 +306,6 @@ void describe('TAG_BASE_URL e WEB_BASE_URL: a separação que registra o irrever
   });
 });
 
-/** `TAG_CODE_INDEX_KEY`: a chave do índice cego (ADR-0004, Emenda 1, §3.1). */
 void describe('TAG_CODE_INDEX_KEY: índice cego ausente não degrada, derruba a subida', () => {
   void it('ausente: a subida morre citando a variável', () => {
     aplicar({ ...ambienteCompleto(), TAG_CODE_INDEX_KEY: undefined });

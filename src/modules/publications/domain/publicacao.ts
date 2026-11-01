@@ -124,10 +124,6 @@ export interface CursoDaLinhaDoTempo {
   readonly ref: string;
 }
 
-/**
- * O separador. `|` não aparece em base64url nem em ISO-8601, então não escapa
- * nada.
- */
 const SEPARADOR_DO_CURSOR = '|';
 
 export function escreverCursor(curso: CursoDaLinhaDoTempo): string {

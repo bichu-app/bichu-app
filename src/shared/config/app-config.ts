@@ -1,4 +1,3 @@
-/** Configuração da aplicação, lida uma vez na subida. */
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { boolEnv, optionalEnv, requireEnv } from './env.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';
@@ -120,7 +119,6 @@ export interface MailConfig {
   readonly apiToken: string | undefined;
 }
 
-/** Armazenamento de objeto compatível com S3 (ADR-0007). */
 function dialetoDeAssinaturaEnv(): 'amz' | 'goog' {
   const valor = optionalEnv('OBJECT_STORAGE_SIGNATURE_DIALECT') ?? 'amz';
   if (valor !== 'amz' && valor !== 'goog') {
@@ -185,7 +183,6 @@ export const PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS =
   (MAIOR_OBJETO_TRAFEGADO_BYTES / VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO) * MILISSEGUNDO_POR_SEGUNDO +
   PRAZO_CURTO_DO_ARMAZENAMENTO_MS;
 
-/** Prazo em milissegundos, inteiro e positivo, ou o padrão quando ausente. */
 function milissegundosEnv(nome: string, padrao: number): number {
   const bruto = optionalEnv(nome);
   if (bruto === undefined) return padrao;
@@ -198,7 +195,6 @@ function milissegundosEnv(nome: string, padrao: number): number {
   return Number(bruto.trim());
 }
 
-/** Aceita PEM cru ou PEM em base64. */
 function lerPem(bruto: string, nomeDaVariavel: string): string {
   const texto = bruto.includes('-----BEGIN')
     ? bruto
@@ -212,7 +208,6 @@ function lerPem(bruto: string, nomeDaVariavel: string): string {
   return texto;
 }
 
-/** Recebe o `kid` e o PEM ja lidos, e nao o sufixo para monta-los. */
 function carregarChave(
   kid: string | undefined,
   pem: string | undefined,
@@ -230,7 +225,6 @@ function carregarChave(
   return { kid, privateKey, publicKey: createPublicKey(privateKey) };
 }
 
-/** Onde a chave de rotação deixa de ser conveniência e passa a ser obrigação. */
 function exigeChaveDeRotacao(environment: string): boolean {
   return ehAmbienteHospedado(environment);
 }
@@ -279,12 +273,10 @@ function carregarToken(environment: string): TokenConfig {
   };
 }
 
-/** Recebe o VALOR ja exigido, e nao o nome da variavel. */
 function urlAbsoluta(valor: string): AbsoluteUrl {
   return valor.replace(/\/+$/, '') as AbsoluteUrl;
 }
 
-/** Base pública de página, conferida na FORMA e não só aparada. */
 function baseDePaginaPublica(valor: string, nome: string): AbsoluteUrl {
   const aparada = valor.trim().replace(/\/+$/, '');
   let url: URL;
@@ -314,18 +306,15 @@ function baseDePaginaPublica(valor: string, nome: string): AbsoluteUrl {
   return aparada as AbsoluteUrl;
 }
 
-/** Os dois últimos rótulos do host. */
 function dominioRegistravel(host: string): string {
   const rotulos = host.split('.');
   return rotulos.length <= 2 ? host : rotulos.slice(-2).join('.');
 }
 
-/** Onde o projeto do FCM deixa de ser conveniência e passa a ser obrigação. */
 function exigeProjetoDoFcm(transporte: 'fcm' | 'log'): boolean {
   return transporte === 'fcm';
 }
 
-/** O transporte do push, e o projeto quando ele for usado. */
 function carregarPush(): PushConfig {
   const transporteBruto = optionalEnv('PUSH_TRANSPORT') ?? 'log';
   if (transporteBruto !== 'fcm' && transporteBruto !== 'log') {

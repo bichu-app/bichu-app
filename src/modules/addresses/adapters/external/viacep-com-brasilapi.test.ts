@@ -1,14 +1,8 @@
-/**
- * ISCAS DA BUSCA DE CEP DO SERVIDOR -- **escritas e NAO rodadas** nesta entrega,
- * por regra do cliente de 18/10/2026 (sem suite unitaria, sem integracao, sem
- * `make verificar`).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { criarBuscaDeCep } from './viacep-com-brasilapi.js';
 
-/** Uma resposta de rede falsa, sem tocar em `globalThis.fetch`. */
 function resposta(status: number, corpo: unknown, comoTexto = false): Response {
   return {
     status,

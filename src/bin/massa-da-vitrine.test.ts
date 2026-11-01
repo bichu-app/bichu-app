@@ -1,4 +1,3 @@
-/** As regras que a massa da vitrine precisa respeitar, afirmadas sem subir banco. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -13,10 +12,6 @@ import {
   enderecoNoParceiro,
 } from '../modules/store/domain/item-da-vitrine.js';
 
-/**
- * Copiado do `CHECK` da migracao, e nao importado: duas copias divergem, e e a
- * divergencia que este teste existe para acusar.
- */
 const FORMATO_DO_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 void describe('a massa cabe nos CHECK da migracao', () => {

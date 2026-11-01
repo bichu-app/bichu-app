@@ -1,7 +1,3 @@
-/**
- * As conferencias de texto que este modulo **nao reimplementa**, recebidas como
- * porta.
- */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 
 export interface ConferenciasDeTexto {

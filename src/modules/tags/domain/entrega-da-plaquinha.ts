@@ -1,7 +1,3 @@
-/**
- * A MAQUINA DE ESTADOS DA ENTREGA da plaquinha, e o saneamento do codigo de
- * rastreio.
- */
 import type {
   DecisaoDoPedidoDePlaquinha,
   PassoAlcancavelDoPedido,
@@ -13,7 +9,6 @@ export const TAMANHO_MAXIMO_DO_RASTREIO = 64;
 /** O piso. Tres simbolos nao e formato de transportadora: e "nao e vazio". */
 export const TAMANHO_MINIMO_DO_RASTREIO = 3;
 
-/** As transicoes permitidas, escritas como DADO e nao como cadeia de `if`. */
 const TRANSICOES: ReadonlyMap<PassoDaEntrega, readonly PassoDaEntrega[]> = new Map([
   ['requested', ['in_transit'] as const],
   ['in_transit', ['in_transit', 'arrived'] as const],

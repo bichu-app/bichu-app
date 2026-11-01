@@ -1,4 +1,3 @@
-/** A conversa de quem achou o pet e não tem conta (BICHUS-41). */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken, iguaisEmTempoConstante } from '../../../shared/crypto/digest.js';
 import { redigirCanalMediado, type TrechoRedigido } from '../../../shared/redaction/redigir.js';
@@ -282,7 +281,6 @@ function estadoDe(conversa: ConversaDoAchador): EstadoDaConversa {
   });
 }
 
-/** Campo a campo: o `id` e a chave de objeto da mensagem ficam para trás. */
 function paraOAchador(mensagem: MensagemGravada): MensagemParaOAchador {
   return {
     senderRole: mensagem.senderRole,

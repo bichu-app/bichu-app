@@ -1,4 +1,3 @@
-/** Persistência do aparelho e do token de push (BICHUS-91). */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { Aparelho, RegistroDeAparelho } from '../domain/aparelho.js';
 import type { TokenDeAparelho } from './push-sender.js';

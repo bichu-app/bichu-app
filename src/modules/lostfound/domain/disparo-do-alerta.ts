@@ -1,4 +1,3 @@
-/** O disparo do alerta de 5 km: as decisões, separadas do encanamento. */
 import type { AlcanceCalculado } from '../ports/alcance-do-alerta.js';
 import type { Instant } from '../../../shared/types/brands.js';
 

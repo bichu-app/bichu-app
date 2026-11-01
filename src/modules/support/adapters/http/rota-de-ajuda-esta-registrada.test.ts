@@ -1,4 +1,3 @@
-/** ISCA — a rota da duvida de ajuda esta REGISTRADA, e nao so declarada. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -254,11 +253,6 @@ void describe('ISCA: a rota da duvida de ajuda responde', () => {
 });
 
 void describe('ISCA: a fila administrativa das duvidas responde', () => {
-  /**
-   * O DEFEITO QUE ESTE BLOCO EXISTE PARA IMPEDIR e o do passkey: servidor, contrato
-   * e entitlement no lugar, **nenhuma porta de interface**, banco com zero
-   * credenciais e nenhum portao acusando.
-   */
   const PAGINA = {
     itens: [
       {
@@ -288,7 +282,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
   const ORIGEM = 'https://painel.exemplo.test';
 
-  /** A sessao administrativa de mentira, com o papel que a rota exige. */
   const SESSAO = {
     sessionId: 'sessao-de-teste',
     adminAccountId: 'conta-admin-de-teste',
@@ -319,7 +312,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
     return app;
   }
 
-  /** Os cabecalhos que o painel de verdade manda: a superficie e o cookie. */
   const DO_PAINEL = {
     [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
     cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,
@@ -417,7 +409,6 @@ void describe('ISCA: a fila administrativa das duvidas responde', () => {
 
 void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () => {
   const ORIGEM_DA_ESCRITA = 'https://painel.exemplo.test';
-  /** O token anti-CSRF, e o HASH dele na sessao. */
   const TOKEN_ANTI_CSRF = 'token-anti-csrf-de-teste';
   const ATENDIDA: DuvidaNaFila = {
     ref: 'AAAAAAAAAAAAAAAAAAAAAA',
@@ -468,7 +459,6 @@ void describe('ISCA: marcar a duvida como atendida (cliente, 30/10/2026)', () =>
     return app;
   }
 
-  /** O painel manda superficie, cookie, Origin e o token anti-CSRF. */
   const DA_ESCRITA = {
     [CABECALHO_DA_SUPERFICIE]: VALOR_DA_SUPERFICIE_ADMINISTRATIVA,
     cookie: `${COOKIE_DA_SESSAO_ADMINISTRATIVA}=valor-de-teste`,

@@ -1,4 +1,3 @@
-/** `registrarIntencaoDaVitrineDoUsuario` grava o proposito que RECEBEU. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -17,7 +16,6 @@ import type { Database } from '../../../../shared/db/schema.js';
 import { registrarIntencaoDaVitrineDoUsuario } from './kysely-imagem-de-catalogo.js';
 
 const DONA = 'a1b2c3d4-0000-7000-8000-000000000001';
-/** O `upload_id` e a chave que a medicao de 18/10/2026 leu da tabela. */
 const UPLOAD = '01a151f1-5d7f-708d-97fb-97d65d8f733c';
 const CHAVE = 'people/original/p9XabsiTMBuCmRst9SW_Lw';
 
@@ -26,7 +24,6 @@ interface ConsultaCapturada {
   readonly parameters: readonly unknown[];
 }
 
-/** Kysely com o compilador REAL do Postgres e um driver que captura. */
 function bancoQueCaptura(): { db: Db; consultas: ConsultaCapturada[] } {
   const consultas: ConsultaCapturada[] = [];
 

@@ -1,4 +1,3 @@
-/** A implementação de [LeitorDeConexao] — **a porta que os outros módulos usam**. */
 import { estadoNoApp } from '../domain/conexao.js';
 import type { EstadoNoApp } from '../domain/conexao.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
@@ -28,7 +27,6 @@ export function criarLeitorDeConexao(repositorio: ConnectionsRepository): Leitor
       return { estado, ref: aresta.ref };
     },
 
-    /** **O estado por apelido, para a página inteira da busca** (22/10/2026). */
     async estadosPorApelido(
       quemOlha: UserId,
       apelidos: readonly string[],

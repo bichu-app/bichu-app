@@ -1,4 +1,3 @@
-/** `GET /v1/directory/entries` — a secao `Perto`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -53,15 +52,10 @@ export const rotaPublicaDoDiretorio = defineRoute({
   ],
 });
 
-/** Os mesmos defaults que o contrato declara. */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const ORDEM_PADRAO: OrdemDoDiretorio = 'distance';
 
-/**
- * A ordem da rota publica, **e ela nao e um default**: nao ha `sort` no contrato
- * dela para a tela escolher.
- */
 const ORDEM_SEM_CONTA: OrdemDoDiretorio = 'name';
 
 export interface Autenticador {
@@ -101,7 +95,6 @@ interface QueryDoDiretorio {
   readonly limit?: number;
 }
 
-/** A query da rota publica: a mesma, **menos `sort`**. */
 type QueryPublicaDoDiretorio = Omit<QueryDoDiretorio, 'sort'>;
 
 /** MEMOIZADA: o teto por `account` e o manipulador precisam do mesmo dono. */
@@ -144,7 +137,6 @@ export async function contaDoTeto(
   }
 }
 
-/** O recorte que de fato valeu, para a tela poder escreve-lo. */
 function filtrosAplicados(query: QueryDoDiretorio): Record<string, string> {
   const filtros: Record<string, string> = {};
   if (query.q !== undefined) filtros['q'] = query.q;

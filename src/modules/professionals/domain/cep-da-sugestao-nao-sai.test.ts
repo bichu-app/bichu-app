@@ -1,4 +1,3 @@
-/** **O CEP da sugestao e guardado para quem REVISA, e nunca sai.** */
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
@@ -32,7 +31,6 @@ const CORPO: CorpoDaSugestaoDoDiretorio = {
   public_contact: { kind: 'phone', value: '+5511999999999' },
 };
 
-/** O detector nao e importavel deste modulo (ver `sugestao-do-diretorio.test.ts`). */
 const CONFERENCIAS: ConferenciasDeTexto = {
   errosDeTextoDeUsuario: () => [],
   handleDoInstagram: (valor) => valor.replace('@', ''),
@@ -156,10 +154,6 @@ void describe('ISCA — o CEP NAO sai em resposta', () => {
     );
   });
 
-  /**
-   * `ehOperacaoSemConta` NAO e opcional aqui, e a ausencia dele era o defeito deste
-   * caso.
-   */
   void it('nenhuma resposta ALCANCAVEL SEM CONTA declara o CEP', () => {
     const semConta = [...contrato.operacoes.values()].filter(ehOperacaoSemConta);
     assert.ok(

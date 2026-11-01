@@ -1,4 +1,3 @@
-/** `POST /v1/pets/{petId}/tag-requests`: o tutor pede a plaquinha da coleira. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -56,7 +55,6 @@ function petIdDoCaminho(request: FastifyRequest): PetId {
   return petId as PetId;
 }
 
-/** `account` para o teto. Sem credencial valida nao ha balde de conta. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDoPedidoDePlaquinha,
@@ -68,13 +66,11 @@ async function contaDoTeto(
   }
 }
 
-/** O corpo, como o schema do contrato ja o validou. */
 interface CorpoDoPedido {
   readonly delivery_address: DeliveryAddressDoContrato;
   readonly notes?: string;
 }
 
-/** `CollarTagRequest` como o contrato o declara. */
 function comoCollarTagRequest(pedido: PedidoDoTutor): Record<string, unknown> {
   return {
     ref: pedido.ref,

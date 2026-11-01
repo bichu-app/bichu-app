@@ -1,7 +1,3 @@
-/**
- * A transferencia de pet: as quatro camadas do contrato, e a decisao que nem a
- * BICHUS-66 nem a BICHUS-21 tinham previsto.
- */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { comoIso } from '../../../shared/time/clock.js';
@@ -54,7 +50,6 @@ export interface DependenciasDeTransferencia {
   readonly baseDaWeb: string;
 }
 
-/** Normaliza o endereco **antes** de qualquer conferencia ou comparacao. */
 function normalizarEmail(valor: string): string {
   return valor.trim().toLowerCase();
 }

@@ -1,7 +1,3 @@
-/**
- * ISCA (c): a denuncia de quem desabilitou a conta sai da fila de moderacao, e sai
- * dos TRES lugares de uma vez -- da LISTAGEM, da LEITURA e da CONTAGEM.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -21,7 +17,6 @@ import { criarFilaDeModeracaoRepository } from './kysely-fila-de-moderacao.js';
 
 const ALVO = 'yjJwZ3hBc0RmR2hKa0xtTg';
 
-/** O predicado, como o compilador do Postgres o escreve. */
 const PREDICADO = /"?f"?\."?reporter_active"?/u;
 
 const SEM_O_PREDICADO =
@@ -29,14 +24,12 @@ const SEM_O_PREDICADO =
   'aparecer nesta superficie, e a decisao do cliente de 17/10 e que conta desabilitada nao e ' +
   'mais encontrada em nenhuma pagina ou funcionalidade.';
 
-/** A trilha nao e exercitada por nenhum caso deste arquivo: so leitura. */
 const TRILHA_NAO_CHAMADA: TrilhaTransacional = {
   recordIn: () => {
     throw new Error('nenhum caso deste arquivo escreve: a trilha nao devia ser chamada.');
   },
 };
 
-/** Kysely sem banco, com o compilador trocado por um que GUARDA o SQL. */
 function bancadaQueEspia(): { readonly db: Db; readonly compiladas: string[] } {
   const compiladas: string[] = [];
 

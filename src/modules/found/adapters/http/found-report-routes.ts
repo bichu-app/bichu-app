@@ -1,4 +1,3 @@
-/** Rotas do achado avulso (BICHUS-35). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -79,7 +78,6 @@ export interface DependenciasDasRotasDeAchado {
   readonly baseDeMidia: AbsoluteUrl;
 }
 
-/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
 function relatorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeAchado,
@@ -95,7 +93,6 @@ function relatorAutenticado(
   });
 }
 
-/** `account` para o teto. Sem credencial válida não há balde de conta. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeAchado,
@@ -107,7 +104,6 @@ async function contaDoTeto(
   }
 }
 
-/** `found_report` para o teto da foto. */
 function achadoDoTeto(request: FastifyRequest): string | undefined {
   const corpo = request.body as { found_report_id?: unknown } | undefined;
   const id = corpo?.found_report_id;
@@ -120,7 +116,6 @@ function achadoDoCaminho(request: FastifyRequest): FoundReportId {
   return foundReportId as FoundReportId;
 }
 
-/** A data de "quando eu achei", vinda como ISO. */
 function instanteDeAchado(bruto: unknown): Instant {
   const ms = typeof bruto === 'string' ? Date.parse(bruto) : Number.NaN;
   if (Number.isNaN(ms)) {
@@ -129,7 +124,6 @@ function instanteDeAchado(bruto: unknown): Instant {
   return ms as Instant;
 }
 
-/** `FoundReport`, campo a campo como o contrato o declara. */
 function comoResposta(achado: AchadoGravado, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   return {
     id: achado.id,

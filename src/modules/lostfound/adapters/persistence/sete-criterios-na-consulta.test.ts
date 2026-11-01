@@ -1,4 +1,3 @@
-/** Os sete critérios do ADR-0006 estão na consulta, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +23,6 @@ import { construtorDoAlcance } from './kysely-alcance-por-postgis.js';
 const TUTOR = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -43,7 +41,6 @@ function sqlDoAlcance(): string {
   }).compile(semBanco).sql;
 }
 
-/** Espaço em branco não é informação: o construtor indenta, a regex não deve. */
 function normalizado(): string {
   return sqlDoAlcance().replace(/\s+/g, ' ').trim();
 }
@@ -243,7 +240,6 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 });
 
-/** O valor LIGADO em cada `$n`, e não só a existência do predicado. */
 function parametroDa(regex: RegExp): unknown {
   const { sql, parameters } = construtorDoAlcance({
     centro: { lat: -23.56, lon: -46.68 },
@@ -343,7 +339,6 @@ void describe('cada cláusula liga o valor CERTO, e não um valor qualquer', () 
 });
 
 void describe('o predicado do aparelho diz a mesma coisa nos quatro lugares', () => {
-  /** A migração do aparelho, lida do disco. */
   function migracaoDoAparelho(): string {
     const dir = 'migrations';
     const nome = readdirSync(dir).find((f) => f.includes('aparelho-e-token-de-push'));

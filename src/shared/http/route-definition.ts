@@ -93,33 +93,22 @@ export interface RateLimitEntry {
 type NonEmpty<T> = readonly [T, ...T[]];
 
 interface RouteBase {
-  /** Mesmo `operationId` da especificação. */
   readonly operationId: string;
   readonly method: 'get' | 'post' | 'put' | 'patch' | 'delete';
   readonly path: string;
-  /** `challenge` não pode ser usado aqui: não há quem responda ao desafio. */
   readonly noChallenge?: true;
   readonly reauthScope?: ReauthScope;
-  /** `x-admin-roles` do contrato: o papel minimo da operacao administrativa. */
   readonly adminRoles?: NonEmpty<PapelAdministrativo>;
-  /**
-   * A unica rota do prefixo administrativo que dispensa sessao: o login (`security:
-   * []` no contrato).
-   */
   readonly adminPublic?: true;
-  /** `x-audit` do contrato. Obrigatorio em toda escrita administrativa. */
   readonly audit?: DeclaracaoDeTrilha;
-  /** `x-admin-reauth-scope` do contrato. */
   readonly adminReauthScope?: EscopoDeReautenticacaoAdministrativa;
 }
 
-/** Tem efeito fora do processo: teto é OBRIGATÓRIO. */
 interface RouteWithEffects extends RouteBase {
   readonly effects: NonEmpty<Effect>;
   readonly rateLimit: NonEmpty<RateLimitEntry>;
 }
 
-/** Sem efeito: teto é opcional. */
 interface RouteWithoutEffects extends RouteBase {
   readonly effects: readonly [];
   readonly rateLimit?: readonly RateLimitEntry[];

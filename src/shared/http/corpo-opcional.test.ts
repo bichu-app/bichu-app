@@ -1,4 +1,3 @@
-/** As três recusas de `corpoAusenteEhCorpoVazio`, contra o contrato de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

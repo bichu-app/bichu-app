@@ -1,4 +1,3 @@
-/** Persistência da localização de referência do tutor. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { LocalizacaoDeReferencia } from '../domain/localizacao-de-referencia.js';
 

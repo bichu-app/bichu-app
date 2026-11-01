@@ -1,4 +1,3 @@
-/** `ComandoDeContas` em Postgres (ADR-0027 item 20.3). */
 import { sql } from 'kysely';
 
 import type { Db, DbTransaction } from '../../../../shared/db/pool.js';

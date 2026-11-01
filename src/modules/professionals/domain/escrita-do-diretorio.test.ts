@@ -1,4 +1,3 @@
-/** A regra da escrita do diretorio, sem banco, sem servidor e sem Docker. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -38,7 +37,6 @@ const COMPLETA: EntradaAdministrativa = {
   neighborhood: 'Vila Mariana',
   logo: null,
   photo: null,
-  /** A GALERIA (29/10/2026). Vazia: a publicacao nao cobra imagem nenhuma. */
   imagens: [],
   postalCode: null,
   street: null,

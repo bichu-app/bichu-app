@@ -1,4 +1,3 @@
-/** A atualizacao do perfil **nao deixa a conta ficar sem nome**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -54,14 +53,9 @@ function conta(displayName: string | null): Conta {
 interface Bancada {
   readonly servico: ReturnType<typeof criarAuthService>;
   readonly eventos: AuditEvent[];
-  /** O que `atualizarPerfil` recebeu. */
   readonly gravados: CamposDoPerfil[];
 }
 
-/**
- * `nomeAtual` e o estado da conta ANTES do PATCH: `null` e a conta sem nome, que e
- * o estado das 2 contas de homologacao.
- */
 function montar(nomeAtual: string | null): Bancada {
   const eventos: AuditEvent[] = [];
   const gravados: CamposDoPerfil[] = [];
@@ -133,7 +127,6 @@ function montar(nomeAtual: string | null): Bancada {
   return { servico, eventos, gravados };
 }
 
-/** Atualiza e devolve a recusa, ou reprova se foi aceito. */
 async function recusaDe(
   nomeAtual: string | null,
   campos: CamposDoPerfil,
@@ -154,11 +147,6 @@ async function recusaDe(
 }
 
 void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/2026)', () => {
-  /**
-   * ISCA (a). Desligada: tirando o `nomeDeExibicaoAparado` do caminho de
-   * `atualizarMeuPerfil`, este caso reprova em `atualizarPerfil` -- que e
-   * literalmente o nome sendo apagado.
-   */
   void it('`display_name` VAZIO no corpo é recusado, e nada é escrito', async () => {
     const erro = await recusaDe('Marina', { displayName: '' }, '`display_name` vazio');
 
@@ -169,7 +157,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /** `null` é o "apagar" explícito do repositório, e ele também cai. */
   void it('`display_name: null` é recusado, e nada é escrito', async () => {
     const erro = await recusaDe('Marina', { displayName: null }, '`display_name` nulo');
 
@@ -179,7 +166,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /** O caso que escapa do schema. */
   void it('`display_name` SÓ COM ESPAÇO é recusado, e nada é escrito', async () => {
     const erro = await recusaDe(
       'Marina',
@@ -193,7 +179,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /** A metade 2 da regra: quem NAO tem nome e omite o campo nao atualiza. */
   void it('conta SEM nome que omite `display_name` não atualiza nada mais', async () => {
     const erro = await recusaDe(
       null,
@@ -211,7 +196,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     ]);
   });
 
-  /** A conta que JÁ tem nome segue podendo mexer em outro campo sozinho. */
   void it('conta COM nome atualiza outro campo sem reenviar o nome', async () => {
     const bancada = montar('Marina');
 
@@ -229,7 +213,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     );
   });
 
-  /** ISCA (b) — O CONTRAPESO. */
   void it('atualizar COM nome passa, e o que vai ao banco é o nome aparado', async () => {
     const bancada = montar('Marina');
 
@@ -254,10 +237,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     );
   });
 
-  /**
-   * ISCA (c) — A QUE PROTEGE CONTRA O BECO, e a razao de este arquivo existir em vez
-   * de duas linhas dentro de outro.
-   */
   void it('conta SEM nome CONSEGUE preencher o nome e salvar: não há beco', async () => {
     const bancada = montar(null);
 
@@ -276,10 +255,6 @@ void describe('a atualizacao do perfil exige nome (decisão do cliente de 18/10/
     assert.equal(atualizada.displayName, 'Marina Prado');
   });
 
-  /**
-   * E a saida vale junto com os outros campos, que e como a tela de `Meus dados`
-   * salva de verdade: um `PATCH` com tudo o que mudou.
-   */
   void it('conta SEM nome salva o nome junto com os outros campos', async () => {
     const bancada = montar(null);
 

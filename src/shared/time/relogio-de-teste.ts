@@ -1,4 +1,3 @@
-/** Relógio parado, para teste. */
 import type { Clock } from './clock.js';
 import type { Instant } from '../types/brands.js';
 

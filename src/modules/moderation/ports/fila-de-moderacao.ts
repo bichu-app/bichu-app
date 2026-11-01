@@ -1,4 +1,3 @@
-/** A porta da FILA DE MODERACAO do painel. */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type {

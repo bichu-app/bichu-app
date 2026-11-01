@@ -1,4 +1,3 @@
-/** A rota do botao `Ajuda` do menu do usuario (29/10/2026). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -31,10 +30,6 @@ export interface DependenciasDasRotasDeAjuda {
   readonly contrato: Contrato;
 }
 
-/**
- * MEMOIZADA por requisicao, como nas rotas dos contadores: o teto por `account`
- * precisa do dono ANTES do handler, e o handler precisa do mesmo dono.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeAjuda,

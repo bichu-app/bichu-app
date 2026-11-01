@@ -1,8 +1,3 @@
-/**
- * A autorizacao de envio do LOGOTIPO DA INDICACAO (pedido do cliente, 29/10/2026:
- * *"nao tem o campo do logotipo para o usuario subir e indicar o
- * estabelecimento"*).
- */
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {

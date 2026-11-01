@@ -1,4 +1,3 @@
-/** ISCA — O TRABALHO `tag.scan_notify`: os dois canais, e o que cada um diz. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

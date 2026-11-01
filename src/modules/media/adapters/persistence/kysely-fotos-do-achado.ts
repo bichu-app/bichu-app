@@ -1,4 +1,3 @@
-/** A leitura e a escrita da higiene da foto do achado, em `upload_intents`. */
 import { sql } from 'kysely';
 
 import type { DbExecutor } from '../../../../shared/db/pool.js';
@@ -19,7 +18,6 @@ interface LinhaDeEnvio {
   readonly sanitize_status: StatusDaHigiene;
 }
 
-/** O segmento de dono da chave do original. */
 function donoDaChave(chave: string): string | null {
   const segmentos = chave.split('/');
   if (segmentos.length !== 4 || segmentos[0] !== 'found-reports' || segmentos[2] !== 'original') {

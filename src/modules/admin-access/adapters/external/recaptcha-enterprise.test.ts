@@ -1,14 +1,9 @@
-/** O adaptador do reCAPTCHA Enterprise, sem rede: o `fetch` e um dublê. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { captchaNaoConfigurado } from '../../ports/verificador-de-captcha.js';
 import { criarVerificadorDeCaptcha, type Buscar } from './recaptcha-enterprise.js';
 
-/**
- * O endereco EXATO do token (29/09: a forma `service-account/token` respondia 404
- * na VM e passava aqui, porque o duble respondia a qualquer URL com `metadata`).
- */
 const METADADOS_EXATO =
   'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
 

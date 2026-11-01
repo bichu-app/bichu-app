@@ -1,4 +1,3 @@
-/** A trava de ambiente do `seed`, e a massa que ele grava. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

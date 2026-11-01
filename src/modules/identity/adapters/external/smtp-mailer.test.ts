@@ -1,4 +1,3 @@
-/** As quatro defesas de injeção do `smtp-mailer` (BICHUS-130 e BICHUS-131). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -12,7 +11,6 @@ import {
 import type { MailConfig } from '../../../../shared/config/app-config.js';
 import type { Mensagem } from '../../ports/mailer.js';
 
-/** Um caractere pelo ponto de código. */
 const ch = (cp: number): string => String.fromCodePoint(cp);
 
 const CR = ch(0x0d);
@@ -25,7 +23,6 @@ const NEL = ch(0x85);
 const SEPARADOR_DE_LINHA = ch(0x2028);
 const SEPARADOR_DE_PARAGRAFO = ch(0x2029);
 
-/** Configuração descartável. */
 const CONFIG: MailConfig = {
   transport: 'smtp',
   host: 'mail',
@@ -48,15 +45,10 @@ function mensagem(campos: Partial<Mensagem>): Mensagem {
   };
 }
 
-/** O protocolo separa linha por `\r\n`, então é assim que a mensagem é lida. */
 function linhasDe(bruta: string): string[] {
   return bruta.split(CRLF);
 }
 
-/**
- * O bloco de cabeçalhos vai até a primeira linha vazia — é ela que, no protocolo,
- * marca onde o cabeçalho acaba e o corpo começa.
- */
 function cabecalhosDe(bruta: string): string[] {
   const linhas = linhasDe(bruta);
   const vazia = linhas.indexOf('');
@@ -64,7 +56,6 @@ function cabecalhosDe(bruta: string): string[] {
   return linhas.slice(0, vazia);
 }
 
-/** O que sobra depois da linha em branco, sem o terminador final. */
 function corpoDe(bruta: string): string[] {
   const linhas = linhasDe(bruta);
   return linhas.slice(linhas.indexOf('') + 1, -1);
@@ -78,16 +69,11 @@ function valorDo(bruta: string, nome: string): string | undefined {
 
 const CABECALHOS_ESPERADOS = ['From', 'To', 'Reply-To', 'Subject', 'MIME-Version', 'Content-Type'];
 
-/** Nenhum cabeçalho além dos que o código escreve. */
 function conferirQueNenhumCabecalhoApareceu(bruta: string): void {
   const nomes = cabecalhosDe(bruta).map((l) => l.slice(0, l.indexOf(':')));
   assert.deepEqual(nomes, CABECALHOS_ESPERADOS);
 }
 
-/**
- * O caso de injeção pelo endereço, escrito uma vez: ele tem que ser recusado, e a
- * recusa não pode virar texto montado com cabeçalho a mais.
- */
 function conferirQueRecusaSemMontar(para: string, motivo: RegExp): void {
   assert.throws(() => montarMensagem(CONFIG, mensagem({ para })), motivo);
   let bruta: string | undefined;

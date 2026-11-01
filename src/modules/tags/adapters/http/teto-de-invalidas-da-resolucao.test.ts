@@ -1,7 +1,3 @@
-/**
- * Os DOIS tetos de tentativa inválida de `GET /v1/tags/:code`, medidos pela
- * posição da recusa.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -22,22 +18,15 @@ import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.j
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-/** O endereço do atacante. O MESMO nas duas medições: o teto é por IP. */
 const ENDERECO = '198.51.100.7';
 
-/**
- * Os números que `api/openapi.yaml` declara em `resolveTagCode`, repetidos aqui de
- * propósito.
- */
 const TETO_POR_IDENTIDADE = 5;
 const TETO_POR_ENDERECO = 20;
 
-/** Instante fixo: 22/09/2026 12:05:00 UTC. */
 const AGORA = Date.UTC(2026, 8, 22, 12, 5, 0);
 const FALTAM_NA_JANELA_DE_10_MIN = 300;
 const FALTAM_NA_JANELA_DE_1_HORA = 3300;
 
-/** Códigos bem formados que não existem. */
 function codigoInexistente(semente: number): string {
   const bytes = new Uint8Array(10);
   bytes[0] = semente & 0xff;
@@ -46,7 +35,6 @@ function codigoInexistente(semente: number): string {
   return gerarCodigoDaTag(bytes);
 }
 
-/** As dependências que os resolvedores de produção exigem. */
 function dependenciasDeTeste(): DependenciasDasRotasDeTag {
   return {
     tags: {
@@ -97,10 +85,6 @@ function tipoDe(corpo: string): string | undefined {
   }
 }
 
-/**
- * Um palpite. `userAgent` é parâmetro porque é ele que decide de qual dos dois
- * tetos este arquivo está falando.
- */
 async function adivinhar(
   app: ReturnType<typeof servidor>,
   semente: number,
@@ -119,10 +103,6 @@ async function adivinhar(
   };
 }
 
-/**
- * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`, depois
- * de a resposta sair.
- */
 async function adivinharEmSerie(
   app: ReturnType<typeof servidor>,
   quantas: number,

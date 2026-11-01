@@ -1,4 +1,3 @@
-/** Corpo ausente em operação cujo contrato declara `requestBody` **opcional**. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Contrato } from './contract.js';

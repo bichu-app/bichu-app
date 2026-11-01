@@ -1,7 +1,3 @@
-/**
- * O **escopo** das duas escritas em massa da identidade, provado sobre o SQL
- * compilado.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -22,7 +18,6 @@ import {
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -37,17 +32,14 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** O predicado do dono como a BICHUS-92 o procura. */
 const PREDICADO_DO_DONO = /"user_id"\s*=\s*\$(\d+)/;
 
-/** O valor realmente ligado à posição `$n` que o predicado do dono ocupa. */
 function donoLigadoAoPredicado(compilada: Compilada): unknown {
   const achado = PREDICADO_DO_DONO.exec(compilada.sql);
   if (achado === null) return undefined;
   return compilada.parameters[Number(achado[1]) - 1];
 }
 
-/** A cláusula `WHERE` inteira, do `where` até o fim do alcance da instrução. */
 function clausulaWhere(sqlCompilado: string): string {
   const inicio = sqlCompilado.indexOf(' where ');
   assert.notEqual(
@@ -62,16 +54,10 @@ function clausulaWhere(sqlCompilado: string): string {
 
 interface EscopoEsperado {
   readonly tabela: string;
-  /** A cláusula inteira, texto exato. */
   readonly where: string;
-  /** Valor esperado em cada `$n`, na ordem, incluindo os do `SET`. */
   readonly parametros: readonly unknown[];
 }
 
-/**
- * Prende o alcance de um `UPDATE` sem `id`: o verbo, a tabela, a cláusula `WHERE`
- * inteira e todo valor ligado.
- */
 function conferirEscopo(compilada: Compilada, esperado: EscopoEsperado): void {
   assert.ok(
     compilada.sql.startsWith(`update "${esperado.tabela}" set `),
@@ -161,7 +147,6 @@ void describe('a invalidação de tokens pendentes para na conta', () => {
 });
 
 void describe('ISCA: a conferência de escopo REPROVA as escritas largas demais', () => {
-  /** Como a revogação em massa é escrita quando está certa. */
   const CERTA = {
     tabela: 'refresh_tokens',
     where: '"user_id" = $3 and "revoked_at" is null',

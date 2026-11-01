@@ -1,4 +1,3 @@
-/** `/v1/admin/tag-requests`: a fila dos pedidos da plaquinha da coleira. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
@@ -15,7 +14,6 @@ import type {
 import { comoDeliveryAddress } from './endereco-de-entrega-no-contrato.js';
 import type { FilaDePlaquinhasAdministrativa } from '../../application/pedido-de-plaquinha-service.js';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas do painel. */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -86,7 +84,6 @@ export interface DependenciasDaFilaDePlaquinhas {
 }
 
 const PAGINA_INICIAL = 1;
-/** 50, e nao 100: o mesmo tamanho da outra fila do painel. */
 const TAMANHO_PADRAO = 50;
 
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
@@ -100,23 +97,16 @@ function parametro(request: FastifyRequest, nome: string): string {
 
 interface QueryDaFila {
   readonly status?: DecisaoDoPedidoDePlaquinha;
-  /** O passo da entrega. COMBINA com `status`: os dois sao eixos diferentes. */
   readonly delivery_state?: PassoDaEntrega;
   readonly page?: number;
   readonly limit?: number;
 }
 
-/** O corpo de `updateAdminCollarTagRequestDelivery`, como o schema o validou. */
 interface CorpoDaEntrega {
   readonly delivery_state: PassoAlcancavelDoPedido;
-  /**
-   * Ausente, texto ou `null`, e os tres sao pedidos diferentes -- manter, definir e
-   * apagar.
-   */
   readonly tracking_code?: string | null;
 }
 
-/** `AdminCollarTagRequest` como o contrato o declara. */
 function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<string, unknown> {
   return {
     ref: pedido.ref,

@@ -1,7 +1,3 @@
-/**
- * ISCA — a contagem de perdidos novos conta O QUE A ABA `Pets` MOSTRA, e o
- * marcador ZERA.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

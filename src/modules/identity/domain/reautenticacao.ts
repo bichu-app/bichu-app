@@ -1,4 +1,3 @@
-/** Regras da janela de reautenticação. */
 import type { Instant } from '../../../shared/types/brands.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 

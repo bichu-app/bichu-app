@@ -1,4 +1,3 @@
-/** ISCA (a): A VITRINE NÃO SAI PARA NINGUÉM ALÉM DO DONO — medido NO CONTRATO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -10,22 +9,15 @@ const spec = parseYaml(texto) as {
   components: { schemas: Record<string, unknown> };
 };
 
-/** Os esquemas da vitrine que carregam FOTO. */
 const ESQUEMAS_DE_LEITURA = ['MyShowcase', 'ShowcasePhoto', 'PersonShowcasePhoto'] as const;
 
-/** As operações que podem carregar vitrine, **por nome**. */
 const OPERACOES_COM_VITRINE = [
   'get /me/showcase',
   'get /people/{handle}',
-  /** **20/10/2026, decisão do cliente: a tela de destino do link e do QR.** */
   'post /connection-invites/resolution',
   'put /me/showcase',
 ] as const;
 
-/**
- * Os schemas alcançáveis a partir de um bloco, seguindo `$ref` **em
- * profundidade**.
- */
 function schemasAlcancados(bloco: unknown): Set<string> {
   const vistos = new Set<string>();
   const fila: unknown[] = [bloco];
@@ -45,7 +37,6 @@ function schemasAlcancados(bloco: unknown): Set<string> {
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
-/** Toda operação do contrato, com o caminho e o método. */
 function operacoes(): { caminho: string; metodo: string; op: Record<string, unknown> }[] {
   const saida: { caminho: string; metodo: string; op: Record<string, unknown> }[] = [];
   for (const [caminho, item] of Object.entries(spec.paths)) {
@@ -59,7 +50,6 @@ function operacoes(): { caminho: string; metodo: string; op: Record<string, unkn
   return saida;
 }
 
-/** O chamador desta operação tem conta? */
 function ehDeQuemNaoTemConta(op: Record<string, unknown>): boolean {
   const security = op['security'];
   if (!Array.isArray(security)) return false;

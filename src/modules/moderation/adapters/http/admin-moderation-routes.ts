@@ -1,4 +1,3 @@
-/** `/v1/admin/moderation/reports`: a FILA DE MODERACAO do painel. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
@@ -17,7 +16,6 @@ import type {
   OrigemDecidivel,
 } from '../../domain/fila-de-moderacao.js';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as escritas do painel. */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -78,7 +76,6 @@ export interface DependenciasDasRotasDeModeracao {
 }
 
 const PAGINA_INICIAL = 1;
-/** 50, o mesmo tamanho das outras filas do painel. */
 const TAMANHO_PADRAO = 50;
 
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
@@ -90,43 +87,10 @@ function parametro(request: FastifyRequest, nome: string): string {
   return (request.params as Record<string, string>)[nome] ?? '';
 }
 
-/**
- * A origem da LEITURA, como o contrato a validou.
- *
- * O `enum` do caminho **e** conferido antes de chegar aqui:
- * `validacao-de-parametros.ts` instala o schema de `params` do contrato em
- * toda rota registrada, e valor fora dos cinco responde `400` sem entrar nesta
- * funcao (medido em 31/10/2026: `origin=banana` da `400 validation-failed`).
- * O que o contrato NAO podia conferir e quais dos cinco esta casa sabe
- * decidir.
- */
 function origemDe(request: FastifyRequest): OrigemDaDenuncia {
   return parametro(request, 'origin') as OrigemDaDenuncia;
 }
 
-/**
- * **A origem da DECISAO, estreitada aqui e em nenhum outro lugar.**
- *
- * ===========================================================================
- * POR QUE `400` E NAO `404`, E POR QUE NAO 501
- * ===========================================================================
- * `profile`, `photo` e `publication` APARECEM na fila: a visao
- * `fila_de_moderacao` tem as cinco pernas, `listAdminModerationReports`
- * devolve o item e `getAdminModerationReport` o le -- as tres coisas medidas
- * em 31/10 com uma denuncia de perfil de verdade. Responder `404` na decisao
- * diria "nao existe" sobre um item que a tela ao lado mostra, que e pior que
- * dizer o que de fato acontece: a decisao desta origem nao esta construida.
- *
- * `501` nao entra porque **nenhuma das tres operacoes o declara**, e
- * responder status que o contrato nao promete e o mesmo tipo de divergencia
- * que esta tarefa conserta. `400 validation-failed` e declarado nas tres, e o
- * `code` de `ProblemFieldError` e cadeia livre no contrato -- nao ha mudanca
- * de contrato nenhuma aqui.
- *
- * **O que esta recusa NAO decide**: se as tres ganham implementacao ou se
- * `ModerationOrigin` encolhe para duas. Encolher apaga capacidade prometida a
- * quatro consumidores, e e decisao do cliente.
- */
 function origemDecidivelDe(request: FastifyRequest): OrigemDecidivel {
   const bruto = parametro(request, 'origin');
   if (ehOrigemDecidivel(bruto)) return bruto;

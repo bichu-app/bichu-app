@@ -1,4 +1,3 @@
-/** As tres rotas da `Rede`, sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -44,7 +43,6 @@ import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
-/** O contrato de VERDADE: a isca da autoria o le, e nao um objeto inline. */
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
@@ -96,24 +94,19 @@ const PRIVADO: EncontroDaRede = {
 interface Cenario {
   readonly contador?: RateLimitStore;
   readonly estadoDaConta?: EstadoDaContaParaCriar;
-  /** `undefined` e "nao e seu OU nao existe" -- o mesmo caso, de proposito. */
   readonly meuEncontro?: EncontroDoAutor | undefined;
-  /** A capa como a leitura do DONO a entrega. */
   readonly capaDoDono?: CapaDoMeuEncontro | undefined;
   readonly versaoMudou?: boolean;
   readonly capaNaoServe?: boolean;
-  /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
   readonly encontro?: EncontroDaRede | undefined;
   readonly local?: LocalDoEncontro | undefined;
   readonly pedido?: DesfechoDoPedido;
   readonly desistencia?: DesfechoDaDesistencia;
   readonly detalhes?: EncontroDaRede | undefined;
   readonly temRegiao?: boolean;
-  /** `site_page_availability` diz que a pagina publica do encontro existe? */
   readonly paginaDoEncontroPublicada?: boolean;
 }
 
-/** `WEB_BASE_URL` do teste. */
 const BASE_DA_WEB = 'https://site.exemplo.invalid/' as AbsoluteUrl;
 
 const recortesVistos: RecorteDaAgenda[] = [];
@@ -121,7 +114,6 @@ const locaisPedidos: string[] = [];
 const gravados: NovoEncontroDaComunidade[] = [];
 const mudancas: MudancaDoEncontroDaComunidade[] = [];
 const cancelamentos: string[] = [];
-/** A versao que o `UPDATE` do cancelamento comparou: o `If-Match` que chegou. */
 const versoesDoCancelamento: number[] = [];
 const capasPedidas: string[] = [];
 const capasDefinidas: (string | null)[] = [];
@@ -130,29 +122,24 @@ const recortesDosMeus: RecorteDosMeusEncontros[] = [];
 const meusEncontrosPedidos: { slug: string; chamador: string }[] = [];
 const trilhaDeTeste: AuditEvent[] = [];
 
-/** Um `upload_id` com forma de UUID, que e o que o contrato exige. */
 const ENVIO = '018f3a2b-0000-7000-8000-0000000000c1';
-/** Os outros quatro envios, para a lista de ate quatro imagens (29/10/2026). */
 const OUTRO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c2';
 const TERCEIRO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c3';
 const QUARTO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c4';
 const QUINTO_ENVIO = '018f3a2b-0000-7000-8000-0000000000c5';
 
-/** A capa que entrou: o caminho comum da lista do dono. */
 const CAPA_PRONTA: CapaDoMeuEncontro = {
   estado: 'ready',
   url: 'https://midia.exemplo.invalid/capa-1024.jpg',
   motivoDaRecusa: null,
 };
 
-/** A capa RECUSADA, com o motivo que o servidor devolve. */
 const CAPA_RECUSADA: CapaDoMeuEncontro = {
   estado: 'rejected',
   url: null,
   motivoDaRecusa: 'A imagem precisa ter pelo menos 600 x 600 pixels.',
 };
 
-/** O encontro da propria conta, ainda no futuro. */
 const MEU_ENCONTRO: EncontroDoAutor = {
   id: '018f3a2b-0000-7000-8000-0000000000ee',
   versao: 1,
@@ -161,7 +148,6 @@ const MEU_ENCONTRO: EncontroDoAutor = {
   endsAt: (AGORA + UMA_HORA * 27) as Instant,
 };
 
-/** `IdGenerator` so com o que esta rota usa; o resto nao e chamado aqui. */
 const idsDeTeste = {
   uuidv7: () => '018f3a2b-0000-7000-8000-0000000000ee',
   opaqueToken: () => {
@@ -178,10 +164,8 @@ function repositorio(cenario: Cenario): NetworkRepository {
     if (base === undefined) return undefined;
     return cancelado ? { ...base, publicacao: 'cancelled' } : base;
   };
-  /** O dono, pela MESMA regra de `encontroDoAutor`: `undefined` e o 404. */
   const dono = (): EncontroDoAutor | undefined =>
     'meuEncontro' in cenario ? cenario.meuEncontro : MEU_ENCONTRO;
-  /** A capa do dono. O default e `ready`: o caminho comum e a capa que entrou. */
   const capaDoCenario = (): CapaDoMeuEncontro | null =>
     'capaDoDono' in cenario ? (cenario.capaDoDono ?? null) : CAPA_PRONTA;
 
@@ -250,7 +234,6 @@ function repositorio(cenario: Cenario): NetworkRepository {
   };
 }
 
-/** O dobre da transacao da comunidade. */
 function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): TransacaoDaComunidade {
   return {
     encontroDoAutor: (slug) => {
@@ -279,13 +262,6 @@ function transacaoDeTeste(cenario: Cenario, aoCancelar: () => void = () => {}): 
       capasPedidas.push(entrada.uploadId);
       return Promise.resolve(cenario.capaNaoServe === true ? undefined : 'imagem-da-capa');
     },
-    /**
-     * `definirCapa` virou `definirImagens` em 30/10/2026, com `image_upload_ids`:
-     * o dublê registra `null` para a lista VAZIA (que é o que `cover_image: null`
-     * virou) e o `alt_text` de cada imagem quando há imagens, **que é o mesmo que
-     * ele registrava antes** -- por isso os dois casos da capa continuam valendo
-     * sem uma linha mudada.
-     */
     definirImagens: (_id, imagens) => {
       if (imagens.length === 0) capasDefinidas.push(null);
       else for (const imagem of imagens) capasDefinidas.push(imagem.altText);
@@ -892,11 +868,6 @@ void describe('a capa, que e publica', () => {
     assert.deepEqual(capasDefinidas, ['Cães correndo na grama']);
   });
 
-  /**
-   * ATE QUATRO IMAGENS (cliente, 29/10/2026: *"nas indicacoes de estabelecimento
-   * e eventos so esta sendo possivel enviar uma imagem no app, devemos deixar
-   * enviar ate 4 imagens"*).
-   */
   void it('ISCA: `image_upload_ids` confirma as QUATRO, na ORDEM, e a primeira e a capa', async () => {
     capasPedidas.length = 0;
     capasDefinidas.length = 0;
@@ -936,11 +907,6 @@ void describe('a capa, que e publica', () => {
     assert.deepEqual(capasDefinidas, [null]);
   });
 
-  /**
-   * **OS DOIS JUNTOS SAO `400`**, e nao uma precedencia: duas formas de dizer qual
-   * e a capa no mesmo corpo e o defeito, e qualquer regra ("a lista ganha", "a
-   * capa ganha") seria comportamento que ninguem pediu e que a tela nao mostra.
-   */
   void it('ISCA: `cover_image` E `image_upload_ids` no mesmo corpo e 400 `cover_and_images_both_sent`', async () => {
     capasPedidas.length = 0;
     capasDefinidas.length = 0;
@@ -966,11 +932,6 @@ void describe('a capa, que e publica', () => {
     assert.deepEqual(capasDefinidas, []);
   });
 
-  /**
-   * CONTRAPESO do caso acima: a recusa e dos DOIS juntos, e nao de
-   * `image_upload_ids` existir. Sem este caso, um servidor que recusasse
-   * `image_upload_ids` sempre passaria no de cima.
-   */
   void it('CONTRAPESO: `cover_image` SOZINHO continua funcionando -- o APK publicado so manda ele', async () => {
     capasPedidas.length = 0;
     capasDefinidas.length = 0;
@@ -1164,7 +1125,6 @@ void describe('o autor administra o proprio encontro: cancelar', () => {
 const URL_DOS_MEUS = '/network/my-events';
 const URL_DO_MEU = `/network/my-events/${SLUG}`;
 
-/** As sete propriedades de `MyNetworkEvent`, e nenhuma outra. */
 const PROPRIEDADES_DO_MEU = ['cover', 'ends_at', 'slug', 'starts_at', 'status', 'time_zone', 'title'];
 
 void describe('a lista do dono: `Perfil` > `Meus eventos`', () => {

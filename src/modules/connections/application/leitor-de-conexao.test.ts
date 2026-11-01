@@ -1,8 +1,3 @@
-/**
- * `criarLeitorDeConexao`: **a primeira implementação de
- * `connections/ports/conexao.ts`**, e os casos que provam que ela projeta o estado
- * pela regra do domínio em vez de uma cópia dela.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -99,11 +94,6 @@ void describe('criarLeitorDeConexao', () => {
     assert.equal(await leitor.estaConectado(ANA, CARLA), false);
   });
 
-  /**
-   * **A porta tem QUATRO métodos desde 22/10/2026, e eram três.**
-   * `estadosPorApelido` entrou com a decisão do cliente que autorizou a lista das
-   * próprias conexões, e ela serve ao estado do par nos resultados da busca.
-   */
   void it('ISCA -- a porta NAO oferece escrita NEM a lista, e nao ha como alcancar o repositorio', () => {
     const { leitor } = bancada();
     assert.deepEqual(Object.keys(leitor).sort(), [

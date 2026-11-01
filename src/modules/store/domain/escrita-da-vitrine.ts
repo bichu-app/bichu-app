@@ -1,7 +1,3 @@
-/**
- * As regras da escrita administrativa da `Loja` (ADR-0027 item 14), sem banco e
- * sem servidor.
- */
 import { comoData } from '../../../shared/time/clock.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { Instant } from '../../../shared/types/brands.js';
@@ -201,10 +197,6 @@ export function hojeUtc(agora: Instant): string {
   return comoData(agora).toISOString().slice(0, 10);
 }
 
-/**
- * IPv4 em quatro partes decimais, ou IPv6 entre colchetes, que e como o `URL` do
- * WHATWG devolve `hostname`.
- */
 function ehIpLiteral(hostname: string): boolean {
   return hostname.startsWith('[') || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
 }
@@ -462,7 +454,6 @@ export interface ItemAdministrativoProjetado {
   readonly version: number;
 }
 
-/** A galeria como o painel a ve (`AdminCatalogGalleryImage`). */
 function projetarImagens(
   item: ItemAdministrativo,
   urlDeMidia: (chave: string) => string,
@@ -532,13 +523,8 @@ export const TETO_DE_IMAGENS_POR_ITEM = 8;
 /** O teto da "Descricao" do produto (`store_items.summary`), em caracteres. */
 export const TETO_DA_DESCRICAO_DO_ITEM = 3000;
 
-/** Mesmo formato de `Slug` no contrato e de `store_tags_slug_formato` no banco. */
 const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
-/**
- * O que a normalizacao trata como espaco: o espaco que alguem digita -- barra de
- * espaco, tabulacao, quebra de linha -- e os separadores de espaco Unicode.
- */
 const ESPACO_DO_ROTULO = '[\\t\\n\\v\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000]';
 const ESPACO_NAS_PONTAS = new RegExp(`^(?:${ESPACO_DO_ROTULO})+|(?:${ESPACO_DO_ROTULO})+$`, 'gu');
 const ESPACO_REPETIDO = new RegExp(`(?:${ESPACO_DO_ROTULO})+`, 'gu');
@@ -572,18 +558,9 @@ export const MAXIMO_DO_ROTULO_DE_TAG = 24;
  */
 export const MINIMO_DO_ROTULO_DE_TAG = 2;
 
-/**
- * Caractere invisivel ou de controle: controle C0/C1, formato (marca de direcao
- * bidirecional, juntor de largura zero, BOM) e separador de linha e paragrafo.
- */
 const INVISIVEL_OU_DE_CONTROLE =
   /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
 
-/**
- * O alfabeto do rotulo: letra (com acento e cedilha, em NFC ou em NFD, por isso
- * `\p{M}`), digito, espaco, e a pontuacao que nome de marca usa -- `&`, hifen,
- * apostrofo reto ou curvo, e `+`.
- */
 const ALFABETO_DO_ROTULO = /^[\p{L}\p{M}\p{N} &'\u2019+-]+$/u;
 
 /**

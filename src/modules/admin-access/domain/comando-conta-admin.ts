@@ -1,7 +1,3 @@
-/**
- * As regras do comando `conta-admin` (ADR-0027 item 20.3; D43, D51, D61, D63), sem
- * banco, sem terminal e sem rede.
- */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import {
   TAMANHO_MAXIMO_DE_SENHA,
@@ -78,7 +74,6 @@ export type ResultadoDaInterpretacao =
   | { readonly tipo: 'ajuda' }
   | { readonly tipo: 'recusa'; readonly codigo: CodigoDeSaida; readonly mensagem: string };
 
-/** Nome de opcao com cara de senha. */
 const OPCAO_DE_SENHA = /^(?:--?(?:senha|password|passwd|pass|pwd|secret|segredo|nova-senha)|-p)(?:=|$)/i;
 
 const OPCOES_COM_VALOR = new Set(['--email', '--nome', '--operador']);

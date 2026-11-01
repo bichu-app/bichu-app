@@ -1,7 +1,3 @@
-/**
- * As rotas da escrita administrativa da `Rede` e da fila de pedidos, montadas
- * DENTRO da guarda do prefixo `/v1/admin`, sem banco (BICHUS-273 e BICHUS-292).
- */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';

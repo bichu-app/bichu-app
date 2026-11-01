@@ -1,14 +1,9 @@
 export type FormatoReal = 'jpeg' | 'png' | 'webp' | 'heic';
 
-/**
- * Cada assinatura é `{ deslocamento, bytes }`, porque nem todo formato começa no
- * byte zero: HEIC e o `ftyp` do contêiner ISO-BMFF começam no byte 4.
- */
 interface Assinatura {
   readonly formato: FormatoReal;
   readonly deslocamento: number;
   readonly bytes: readonly number[];
-  /** Conferência extra depois da assinatura, quando ela não basta. */
   readonly confirma?: (b: Buffer) => boolean;
 }
 

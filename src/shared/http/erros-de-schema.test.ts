@@ -1,4 +1,3 @@
-/** `campoDoErro` e `camposDoSchema`: o 400 de validação diz **qual** campo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -14,7 +13,6 @@ import type { AbsoluteUrl } from '../types/brands.js';
 
 const UM_PET = '018f3a2b-0000-7000-8000-0000000000bb';
 
-/** O endereço válido do contrato. */
 const ENDERECO: Record<string, unknown> = {
   recipient_name: 'Mariana Destinataria',
   recipient_phone: '+5511987654321',
@@ -141,7 +139,6 @@ void describe('camposDoSchema: o lote', () => {
   });
 });
 
-/** A ponte com a realidade. */
 void describe('o formato do achado é o que o Ajv realmente entrega', () => {
   async function recusar(
     payload: Record<string, unknown>,

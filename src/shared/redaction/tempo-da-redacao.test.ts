@@ -1,25 +1,14 @@
-/** A isca de tempo do canal mediado. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { assegurarSuperficiePublica } from '../../modules/notifications/domain/conteudo-do-push.js';
 import { redigirCanalMediado } from './redigir.js';
 
-/**
- * 50.000 caracteres. O contrato corta em 1.000 (`body`) e 280 (`care_notes`),
- * então esta entrada nunca chega ao manipulador hoje.
- */
 const TAMANHO = 50_000;
 
-/** Teto da redação. Ver o cabeçalho para as duas folgas medidas. */
 const TETO_DA_REDACAO_EM_MS = 200;
 
-/** Teto da porteira do push, que não canoniza nada e por isso é muito menor. */
 const TETO_DO_PUSH_EM_MS = 50;
 
-/**
- * Cada caso é um pior caso CONSTRUÍDO: casa quase tudo e falha no fim, que é a
- * forma que faz o motor refazer a tentativa a partir de cada posição.
- */
 const PIORES_CASOS: ReadonlyArray<{ nome: string; texto: string; desligado: string }> = [
   {
     nome: 'e-mail sem fim: local longo, domínio de rótulos e falha no último caractere',
@@ -48,16 +37,10 @@ const PIORES_CASOS: ReadonlyArray<{ nome: string; texto: string; desligado: stri
   },
 ];
 
-/** Orçamento de tempo das REPETIÇÕES de um caso, em milissegundos. */
 const ORCAMENTO_DAS_REPETICOES_EM_MS = 1_000;
-/** No mínimo três amostras (o critério antigo), no máximo quinze. */
 const AMOSTRAS_MINIMAS = 3;
 const AMOSTRAS_MAXIMAS = 15;
 
-/**
- * A menor amostra. Para cedo em dois casos: já há ao menos três amostras e a menor
- * está dentro do teto (passou), ou o orçamento acabou (o que houver decide).
- */
 function menorTempoEmMs(executar: () => void, teto: number): number {
   executar();
   let menor = Number.POSITIVE_INFINITY;
@@ -74,7 +57,6 @@ function menorTempoEmMs(executar: () => void, teto: number): number {
   return menor;
 }
 
-/** Ocupa a CPU por `ms` milissegundos: simula trabalho, e nao espera. */
 function ocupar(ms: number): void {
   const fim = process.hrtime.bigint() + BigInt(Math.round(ms * 1e6));
   while (process.hrtime.bigint() < fim) {

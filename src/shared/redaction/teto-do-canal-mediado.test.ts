@@ -1,4 +1,3 @@
-/** A isca do TETO do contrato, que é a outra metade de `tempo-da-redacao.test.ts`. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -7,10 +6,6 @@ import { parse as parseYaml } from 'yaml';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
-/**
- * Cada entrada é um teto que a redação do canal mediado depende de continuar
- * existindo, com o caminho exato dentro do contrato.
- */
 const TETOS_QUE_ALIMENTAM_A_REDACAO: ReadonlyArray<{
   readonly operacao: string;
   readonly caminho: readonly string[];

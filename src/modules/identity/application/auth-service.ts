@@ -1,4 +1,3 @@
-/** Casos de uso de conta e sessão. */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import { verificarDataDeNascimento } from '../../../shared/idade/idade-minima.js';
@@ -42,19 +41,13 @@ import { projetarFotoDoPerfil, type FotoProjetada } from '../domain/resposta-do-
 import type { Mensagem } from '../ports/mailer.js';
 import { comoIso } from '../../../shared/time/clock.js';
 
-/** Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006. */
 type MotivoDeRevogacaoEmMassa = Extract<
   MotivoDeRevogacao,
   'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
-/**
- * O teto do nome de exibicao, igual ao `maxLength` de `display_name` no contrato
- * (`RegisterRequest` e `MeUpdate`, os dois com 80).
- */
 const LIMITE_DO_NOME = 80;
 
-/** A recusa do nome de exibicao, para o cadastro e a atualizacao nao divergirem. */
 function nomeDeExibicaoAparado(bruto: string | null | undefined): string {
   const aparado = (bruto ?? '').trim();
   if (aparado.length === 0) {
@@ -101,12 +94,10 @@ export interface Autenticado {
   readonly sid?: string | undefined;
 }
 
-/** O resumo do token, na forma em que ele é persistido: **32 bytes**. */
 function comoTokenHash(valor: string): TokenHash {
   return hashDeToken(valor) as TokenHash;
 }
 
-/** Quanto vale cada token. Os números vêm das histórias, não daqui. */
 const VALIDADE_EM_MS: Record<PropositoDoToken, number> = {
   email_verify: 24 * 60 * 60 * 1000,
   email_change: 24 * 60 * 60 * 1000,
@@ -120,7 +111,6 @@ const VALIDADE_EM_MS: Record<PropositoDoToken, number> = {
  */
 export const PRAZO_DE_EXPURGO_EM_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** O corpo de cada e-mail que carrega um token, num lugar só. */
 function montarMensagemDoToken(
   proposito: PropositoDoToken,
   email: string,
@@ -200,12 +190,10 @@ export function montarAvisoDeTrocaConcluida(
 }
 
 export function criarAuthService(deps: DependenciasDeIdentidade) {
-  /** A foto desta conta, já com a URL montada, para `SessionResponse.user.photo`. */
   async function fotoDaSessao(dono: UserId): Promise<FotoProjetada | null> {
     return projetarFotoDoPerfil(await deps.repositorio.fotoDoPerfil(dono), deps.urlDeMidia);
   }
 
-  /** Gera o token, guarda o HASH, e manda o valor em claro pelo e-mail. */
   async function emitirEEnviarToken(
     userId: UserId,
     email: string,
@@ -241,7 +229,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     );
   }
 
-  /** O envio de verificação do CADASTRO, e o que ele engole. */
   async function enviarVerificacaoDoCadastro(
     conta: Conta,
     contexto: ContextoDaRequisicao,
@@ -262,7 +249,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
-  /** Manda um aviso e **não deixa a falha dele derrubar a operação**. */
   async function avisarSemDerrubar(
     mensagem: Mensagem,
     userId: UserId,
@@ -289,10 +275,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
-  /**
-   * A outra metade de {@link solicitarTrocaDeEmail}: o token de troca foi
-   * apresentado, e agora a conta muda de endereço.
-   */
   async function concluirTrocaDeEmail(
     hash: TokenHash,
     agora: Instant,
@@ -336,7 +318,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     return atualizada;
   }
 
-  /** Emite o par de tokens de uma **família nova**. */
   async function barreiraAtualDe(userId: UserId): Promise<Instant> {
     const conta = await deps.repositorio.buscarContaPorId(userId);
     return conta?.sessionsInvalidBefore ?? (0 as Instant);
@@ -375,7 +356,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     };
   }
 
-  /** As TRÊS metades da revogação em massa, num lugar só. */
   async function derrubarTodasAsSessoes(
     userId: UserId,
     motivo: MotivoDeRevogacaoEmMassa,
@@ -406,7 +386,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     });
   }
 
-  /** O aviso que NÃO pode derrubar o efeito que ele anuncia. */
   async function avisarSemDerrubarOEfeito(
     mensagem: Mensagem,
     contexto: { readonly evento: string; readonly correlationId: string },
@@ -430,7 +409,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     }
   }
 
-  /** A TRAVA DO NOME, numa função só, para os DOIS atos de `PATCH /v1/me`. */
   async function exigirNomeJaCadastrado(
     userId: UserId,
     nomeNoCorpo: string | null | undefined,
@@ -572,7 +550,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
-    /** Abre sessão para quem já provou posse de uma **credencial digital** (passkey). */
     async entrarComCredencialDigital(
       userId: UserId,
       continuarConectado: boolean,
@@ -596,7 +573,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
-    /** A família a que um token de renovação pertence, **sem consumi-lo**. */
     async familiaDoRefresh(refreshApresentado: string): Promise<string | undefined> {
       const armazenado = await deps.repositorio.buscarRefreshPorHash(
         comoTokenHash(refreshApresentado),
@@ -604,7 +580,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return armazenado?.familyId;
     },
 
-    /** Rotação obrigatória: cada refresh vale **uma** vez. */
     async renovar(
       refreshApresentado: string,
       contexto: ContextoDaRequisicao,
@@ -713,10 +688,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       );
     },
 
-    /**
-     * Encerra a sessão **daquele aparelho**, revogando no servidor a família de
-     * refresh apresentada (ADR-0002, emenda 1).
-     */
     async sair(
       autenticado: Autenticado,
       refreshApresentado: string,
@@ -750,10 +721,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /**
-     * Verifica o token de acesso e, **em toda requisição**, confere o `iat` contra
-     * `sessions_invalid_before` (SEC-006).
-     */
     async autenticar(tokenBruto: string): Promise<Autenticado> {
       const agora = deps.clock.now();
       const resultado = deps.assinador.verificar(tokenBruto, agora);
@@ -775,14 +742,12 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       };
     },
 
-    /** O perfil da conta, com o que falta e o que isso impede. */
     async meuPerfil(userId: UserId): Promise<Conta> {
       const conta = await deps.repositorio.buscarContaPorId(userId);
       if (conta === undefined) throw problemas.naoAutenticado();
       return conta;
     },
 
-    /** Atualiza o perfil. **Não aceita e-mail** (SEC-003). */
     async atualizarMeuPerfil(
       userId: UserId,
       campos: CamposDoPerfil,
@@ -820,15 +785,12 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return conta;
     },
 
-    /** A trava do nome, exposta para a ROTA cobrá-la antes do primeiro ato. */
     exigirNomeJaCadastrado,
 
-    /** A foto do perfil desta conta, para a resposta `Me`. */
     async minhaFoto(userId: UserId): Promise<FotoDoPerfil | null> {
       return deps.repositorio.fotoDoPerfil(userId);
     },
 
-    /** Troca ou TIRA a foto do perfil (cliente, 18/10/2026). */
     async trocarMinhaFoto(
       userId: UserId,
       uploadId: string | null,
@@ -866,7 +828,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return conta;
     },
 
-    /** Pede o link de verificação. */
     async solicitarVerificacaoDeEmail(
       email: string,
       contexto: ContextoDaRequisicao,
@@ -877,7 +838,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await emitirEEnviarToken(conta.id, conta.email, 'email_verify', contexto);
     },
 
-    /** Confirma o e-mail. O token é consumido **atomicamente**. */
     async confirmarVerificacaoDeEmail(
       tokenBruto: string,
       contexto: ContextoDaRequisicao,
@@ -930,7 +890,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return projetarSessao(conta, par, agora, await fotoDaSessao(conta.id));
     },
 
-    /** Pede a troca do e-mail da conta. */
     async solicitarTrocaDeEmail(
       userId: UserId,
       novoEmailBruto: string,
@@ -1006,7 +965,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       }
     },
 
-    /** Pede o link de redefinição. */
     async solicitarRedefinicaoDeSenha(
       email: string,
       contexto: ContextoDaRequisicao,
@@ -1016,7 +974,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await emitirEEnviarToken(conta.id, conta.email, 'password_reset', contexto);
     },
 
-    /** Só confere, sem consumir. */
     async conferirTokenDeRedefinicao(tokenBruto: string): Promise<void> {
       const valido = await deps.repositorio.conferirTokenDeVerificacao(
         comoTokenHash(tokenBruto),
@@ -1026,7 +983,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       if (valido === undefined) throw problemas.tokenDeVerificacaoVencido();
     },
 
-    /** Redefine a senha. */
     async confirmarRedefinicaoDeSenha(
       tokenBruto: string,
       senhaNova: string,
@@ -1077,7 +1033,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /** Os cinco gatilhos do SEC-006 passam por aqui, e ela faz **duas** coisas. */
     async invalidarTodasAsSessoes(
       userId: UserId,
       motivo: MotivoDeRevogacaoEmMassa,
@@ -1086,7 +1041,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await derrubarTodasAsSessoes(userId, motivo, contexto, deps.clock.now());
     },
 
-    /** "Sair de todos os aparelhos" — o segundo verbo da emenda 1 do ADR-0002. */
     async sairDeTodosOsAparelhos(
       autenticado: Autenticado,
       contexto: ContextoDaRequisicao,
@@ -1106,10 +1060,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /**
-     * **Abre a janela de reautenticação.** A única operação do sistema que confere a
-     * senha de alguém já autenticado (critério 10 da BICHUS-48).
-     */
     async reautenticar(
       autenticado: Autenticado,
       senha: string,
@@ -1165,10 +1115,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       };
     },
 
-    /**
-     * **Consome a janela, ou recusa.** É o que a borda chama antes de deixar qualquer
-     * das seis operações destrutivas rodar.
-     */
     async consumirReautenticacao(
       autenticado: Autenticado,
       tokenApresentado: string | undefined,
@@ -1219,7 +1165,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /** Troca a senha de quem está autenticado, conferindo a senha atual. */
     async trocarSenha(
       autenticado: Autenticado,
       senhaAtual: string,
@@ -1281,7 +1226,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /** `DELETE /v1/me` — a exclusão de conta, gatilho 3 do SEC-006. */
     async excluirMinhaConta(
       autenticado: Autenticado,
       contexto: ContextoDaRequisicao,
@@ -1327,7 +1271,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       );
     },
 
-    /** O "Nao fui eu" — gatilho 4 do SEC-006, e o único alcançável sem conta. */
     async recusarSessaoAvisada(
       tokenApresentado: string,
       contexto: ContextoDaRequisicao,

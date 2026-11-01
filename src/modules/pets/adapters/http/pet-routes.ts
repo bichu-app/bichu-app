@@ -1,4 +1,3 @@
-/** Rotas do cadastro do pet. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -85,7 +84,6 @@ interface CorpoDoPet {
   sinpatinhas_id?: string | null;
 }
 
-/** Ausente e nulo são a mesma coisa aqui: "não informado". */
 function ouNulo<T>(valor: T | null | undefined): T | null {
   return valor === undefined ? null : valor;
 }
@@ -110,7 +108,6 @@ function comoEntrada(corpo: CorpoDoPet): EntradaDoPet {
   };
 }
 
-/** A visão do dono, campo a campo. */
 function comoRespostaDoPet(
   pet: PetGravado,
   fotos: readonly FotoResumida[],
@@ -151,10 +148,6 @@ function comoRespostaDoPet(
   };
 }
 
-/**
- * MEMOIZADA por requisição: o teto por `account` precisa do dono antes do handler,
- * e o handler precisa do mesmo dono.
- */
 function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDePet,
@@ -171,10 +164,6 @@ function donoAutenticado(
   });
 }
 
-/**
- * `account` para o teto. Quem não apresentou credencial válida não tem balde de
- * conta — a recusa dele é o 401 do handler, não um 429.
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDePet,
@@ -278,7 +267,6 @@ export function registrarRotasDePets(
   );
 }
 
-/** O gravado de volta na forma do corpo, para a fusão do `PATCH`. */
 function comoCorpo(pet: PetGravado): CorpoDoPet {
   return {
     name: pet.name,

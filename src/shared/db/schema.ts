@@ -1,4 +1,3 @@
-/** Modelo de persistência tipado (Kysely). */
 import type { ColumnType, Generated, Selectable } from 'kysely';
 
 type CriadoEm = ColumnType<Date, Date | string | undefined, never>;
@@ -1699,26 +1698,15 @@ export interface PublicationCommentsTable {
   deleted_at: Date | null;
 }
 
-/** As colunas que as tres tabelas de denuncia desta fatia compartilham. */
 interface DenunciaDaComunidade {
   id: string;
-  /**
-   * Quem denunciou. SEM A MARCA do portao de saida, pela mesma decisao de
-   * `professional_review_reports.reporter_user_id`: `src/` precisa dela no `WHERE`
-   * para a ocultacao imediata, para os tetos e para recusar a denuncia do proprio
-   * conteudo.
-   */
   reporter_user_id: string;
-  /** Relato opcional. Nao e o motivo: e contexto sobre o motivo escolhido. */
   detail: string | null;
-  /** Quantas vezes a MESMA pessoa denunciou o MESMO alvo nesta linha aberta. */
   repeat_count: Generated<number>;
   created_at: Generated<Date>;
   last_reported_at: Generated<Date>;
-  /** Nulo e "na fila". Escrito por quem modera. */
   resolved_at: Date | null;
   resolution: DecisaoDaModeracao | null;
-  /** O motivo da decisao, para quem auditar. */
   resolution_reason: string | null;
 }
 

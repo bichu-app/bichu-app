@@ -31,10 +31,6 @@ function nomeDoRef(ref: string): string | undefined {
   return /^#\/components\/schemas\/(.+)$/.exec(ref)?.[1];
 }
 
-/**
- * Os schemas nomeados alcancados a partir de `raiz`, e se o publico foi alcancado
- * fora de um `oneOf` que tambem tem o teaser.
- */
 function alcancados(
   raiz: unknown,
   esquemas: Objeto,

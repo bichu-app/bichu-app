@@ -1,4 +1,3 @@
-/** Portão da suíte limpa. */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -16,7 +15,6 @@ export interface QueixaDeScript {
   readonly motivo: string;
 }
 
-/** Reconhece uma etapa que de fato apaga o diretório de saída. */
 function ehEtapaDeLimpeza(etapa: string): boolean {
   const texto = etapa.trim();
   const alvo = DIRETORIO_DE_TESTES_COMPILADOS;
@@ -27,7 +25,6 @@ function ehEtapaDeLimpeza(etapa: string): boolean {
   return removeComRm || limpaComTsc;
 }
 
-/** Reconhece a etapa que ESCREVE em `dist/_tests`. */
 function ehEtapaQueCompila(etapa: string): boolean {
   return (
     /(^|\s)tsc(\s|$)/.test(etapa) &&
@@ -35,7 +32,6 @@ function ehEtapaQueCompila(etapa: string): boolean {
   );
 }
 
-/** Quebra o comando do script nas etapas encadeadas por `&&`. */
 function etapasDo(comando: string): string[] {
   return comando.split('&&').map((parte) => parte.trim());
 }

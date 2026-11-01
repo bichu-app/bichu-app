@@ -1,4 +1,3 @@
-/** `GET /pets/:petId/lost-case-preview` sobre um Fastify de verdade (BICHUS-202). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -27,37 +26,25 @@ const BASE_DA_WEB = 'https://bichu.test' as AbsoluteUrl;
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
-/** O pet é do `DONO`. O `OUTRO_TUTOR` sabe o UUID dele e tenta mesmo assim. */
 const PET_DO_DONO = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
-/** Não é de ninguém. O 404 dele precisa ser indistinguível do 404 do pet alheio. */
 const PET_INEXISTENTE = '018f3a2b-0000-7000-8000-0000000000dd' as PetId;
 
-/** O token é o próprio UUID do chamador: o autenticador deste arquivo é trivial. */
 function comoToken(userId: UserId): string {
   return `Bearer ${userId}`;
 }
 
 interface Cenario {
-  /** O interruptor de `site_page_availability`. */
   readonly paginasPublicadas?: boolean;
-  /** O que `AlcanceDoAlerta` responde. */
   readonly contagem?: number | null;
   readonly temFotoPronta?: boolean;
   readonly temCanalVerificado?: boolean;
   readonly petJaTemCasoAberto?: boolean;
   readonly areaDeReferencia?: { city?: string; neighborhood?: string };
   readonly contador?: RateLimitStore;
-  /**
-   * **A isca da autorização.** Com `true`, o dobre do repositório para de olhar o
-   * dono — é o equivalente exato de tirar `owner_user_id = :dono` da cláusula
-   * `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
-   */
   readonly autorizacaoDesligada?: boolean;
-  /** O caso que `buscarDoTutor` devolve ao DONO. */
   readonly casoDoDono?: CasoGravado;
 }
 
-/** O repositório, com a autorização **dentro da consulta**. */
 function repositorio(cenario: Cenario): LostCaseRepository {
   const naoUsado = (): never => {
     throw new Error('A prévia não escreve nem lê caso: este método não devia ser chamado.');
@@ -93,7 +80,6 @@ function repositorio(cenario: Cenario): LostCaseRepository {
   };
 }
 
-/** `n` destinatários, com um aparelho cada. */
 function destinatariosDeTeste(n: number): { usuario: UserId; aparelhos: string[] }[] {
   return Array.from({ length: n }, (_, i) => ({
     usuario: `018f3a2b-0000-7000-8000-${String(i).padStart(12, '0')}` as UserId,
@@ -101,7 +87,6 @@ function destinatariosDeTeste(n: number): { usuario: UserId; aparelhos: string[]
   }));
 }
 
-/** O registro de disparos, em memória. */
 function disparosDeTeste(): RegistroDeDisparos {
   return {
     abrir: (entrada) =>
@@ -122,7 +107,6 @@ function disparosDeTeste(): RegistroDeDisparos {
   };
 }
 
-/** A fila, em memória. */
 function filaDeTeste(): JobQueue {
   return {
     enqueue: () => Promise.resolve('018f3a2b-0000-7000-8000-00000000f11a'),
@@ -211,7 +195,6 @@ async function pedir(
   };
 }
 
-/** O slug de `type` do Problem Details. */
 function tipoDe(corpo: Record<string, unknown>): string | undefined {
   const { type } = corpo;
   return typeof type === 'string' ? type.slice(type.lastIndexOf('/') + 1) : undefined;
@@ -324,7 +307,6 @@ void describe('ISCA 1 — autorização na cláusula WHERE, 404 e nunca 403 (ADR
     assert.notEqual(status, 200);
   });
 
-  /** A prova de que os três casos acima medem alguma coisa. */
   void it('ISCA: com a autorização fora da consulta, o pet alheio responde 200', async () => {
     const app = servidor({ autorizacaoDesligada: true });
     const { status } = await pedir(app, { como: OUTRO_TUTOR });
@@ -340,7 +322,6 @@ void describe('ISCA 1 — autorização na cláusula WHERE, 404 e nunca 403 (ADR
 });
 
 void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7)', () => {
-  /** Busca por FORMA e não por nome de campo. */
   const FORMATO_DE_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
   void it('o corpo do 200 não contém nada com forma de UUID', async () => {
@@ -355,11 +336,6 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
     );
   });
 
-  /**
-   * O corpo do 404 carrega DOIS valores com forma de UUID por desenho do servidor, e
-   * nenhum deles é identificador interno: `correlation_id`, que é gerado por
-   * requisição, e `instance`, que é o caminho que o próprio chamador pediu.
-   */
   void it('o 404 do pet alheio é idêntico ao 404 do pet inexistente', async () => {
     const app = servidor();
     const alheio = await pedir(app, { como: OUTRO_TUTOR });
@@ -399,7 +375,6 @@ void describe('ISCA 2 — nenhum UUID interno na resposta (ADR-0010, itens 6 e 7
 });
 
 void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => {
-  /** O teto que o contrato declara para `previewLostCaseReach`, por conta. */
   const TETO_POR_CONTA = 30;
 
   async function statusAteEstourar(contador: RateLimitStore): Promise<number[]> {
@@ -443,7 +418,6 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
     assert.equal(tipoDe(JSON.parse(ultima.body) as Record<string, unknown>), 'rate-limited');
   });
 
-  /** A prova de que o caso acima mede limite, e não a capacidade de contar até 31. */
   void it('ISCA: com o contador desligado a 31ª passa, e o caso acima reprova', async () => {
     const status = await statusAteEstourar(criarContadorDesligado());
 
@@ -456,11 +430,6 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
   });
 });
 
-/**
- * Os links que a resposta do caso entrega ao tutor apontam para as páginas do
- * site, nos caminhos do ADR-0017: `/p/{shareToken}` é a página do caso, e
- * `/c/{finderToken}` é a CONVERSA de quem avisou sem conta.
- */
 void describe('getLostCase: os links do caso apontam para as páginas do site', () => {
   void it('share_url é /p/{shareToken} e poster_url é /cartaz/{shareToken}', async () => {
     const caso: CasoGravado = {
@@ -494,7 +463,6 @@ void describe('getLostCase: os links do caso apontam para as páginas do site', 
     assert.equal(corpo['poster_url'], `${BASE_DA_WEB}/cartaz/${caso.shareToken}`);
   });
 
-  /** O OUTRO LADO DO MESMO INTERRUPTOR, e ele e o que protege o produto hoje. */
   void it('com a pagina NAO publicada, share_url e poster_url nao saem', async () => {
     const caso: CasoGravado = {
       id: '018f3a2b-0000-7000-8000-0000000000ef' as CaseId,

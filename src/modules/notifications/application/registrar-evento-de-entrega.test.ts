@@ -1,4 +1,3 @@
-/** A idempotência do webhook de entrega (BICHUS-13, critérios 7 e 9). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -11,10 +10,6 @@ interface RegistroDeMentira extends RegistroDeEntregas {
   readonly suprimidos: string[];
 }
 
-/**
- * O dobre HONESTO: reproduz o índice único `(message_id, record_type)` da migração
- * 20260919000001.
- */
 function registroFiel(enderecosConhecidos: readonly string[] = []): RegistroDeMentira {
   const vistos = new Set<string>();
   const gravados: EventoParaGravar[] = [];
@@ -40,7 +35,6 @@ function registroFiel(enderecosConhecidos: readonly string[] = []): RegistroDeMe
   };
 }
 
-/** O dobre QUEBRADO, que é a isca: aceita a mesma chave quantas vezes vierem. */
 function registroQueIgnoraConflito(enderecos: readonly string[] = []): RegistroDeMentira {
   const fiel = registroFiel(enderecos);
   return {

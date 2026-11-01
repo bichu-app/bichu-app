@@ -1,4 +1,3 @@
-/** O corpo das duas rotas de `tags` que leem corpo, validado **pelo contrato**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -52,7 +51,6 @@ interface Bancada {
   readonly registros: Registros;
 }
 
-/** O teto que **o contrato** declara para um campo de corpo. */
 function tetoDeTexto(contrato: Contrato, operationId: string, campo: string): number {
   const schema = contrato.requestBodySchema(operationId);
   const propriedades = schema?.['properties'];

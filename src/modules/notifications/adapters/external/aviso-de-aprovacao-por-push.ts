@@ -1,7 +1,3 @@
-/**
- * A entrega do aviso de pedido aprovado (Rede, ADR-0027 item 17) a cada aparelho
- * da conta, pelo mesmo remetente e a mesma porteira do alerta.
- */
 import { montarAvisoDePedidoAprovado, VazamentoNoPushError } from '../../domain/conteudo-do-push.js';
 import { PushNaoEnviadoError, type PushSender, type TokenDeAparelho } from '../../ports/push-sender.js';
 import type { RegistroDeAparelhos } from '../../ports/registro-de-aparelhos.js';

@@ -1,8 +1,3 @@
-/**
- * A autorizacao de envio da FOTO DO PROPRIO USUARIO (cliente, 18/10/2026, nas
- * palavras dele: *"coloque um campo para o usuario cadastrar sua propria foto e um
- * selo na foto dele, se ele estiver validado"*).
- */
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';

@@ -1,4 +1,3 @@
-/** O PAPEL DE QUEM CHAMA SAI NA CONVERSA (`Conversation.viewer_role`, 27/10/2026). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -63,7 +62,6 @@ const responder = (papel: PapelHumano): Promise<Record<string, unknown>> =>
     Promise.resolve('https://privado.invalid/x' as AbsoluteUrl),
   );
 
-/** A projeção dos participantes como o chamador [papel] a recebe, em texto. */
 function projecaoVistaPor(papel: PapelHumano, conexaoAceita: boolean): string {
   return JSON.stringify(
     participantesVisiveis({

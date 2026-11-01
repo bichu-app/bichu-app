@@ -1,4 +1,3 @@
-/** A transferencia de pet, medida sem banco, sem servidor e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -38,7 +37,6 @@ const TRANSFER = '018f0000-0000-7000-8000-0000000000b1' as TransferId;
 const EMAIL_TUTOR = 'tutor@exemplo.com.br';
 const EMAIL_DESTINO = 'destino@exemplo.com.br';
 
-/** O banco de mentira, e ele e uma MAQUINA DE ESTADO de verdade. */
 interface Mundo {
   petsDoTutor: Map<PetId, UserId>;
   petsComCasoAberto: Set<PetId>;

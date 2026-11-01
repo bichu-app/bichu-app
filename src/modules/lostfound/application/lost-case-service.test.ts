@@ -1,4 +1,3 @@
-/** O serviço do caso de perdido. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
@@ -42,29 +41,18 @@ const RELATOR = '018f3a2b-0000-7000-8000-0000000000f2' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 const ONTEM = (1_800_000_000_000 - 24 * 3600 * 1000) as Instant;
 
-/** O estado que o banco teria: quem existe, de quem é, e o que já está aberto. */
 interface EstadoDoRepositorio {
-  /** O que a consulta única de abertura responde. */
   abertura?: Partial<EstadoDoPetParaAbertura>;
-  /** Um caso já gravado, com o dono dele. */
   caso?: { readonly dono: UserId; readonly gravado: CasoGravado };
-  /** Pets que o índice único `lost_cases_um_aberto_por_pet` já cobre. */
   petsComCasoAbertoNoIndice?: PetId[];
-  /** A area de referencia em texto do tutor, que so sai no caminho sem centro. */
   areaDeReferencia?: { city?: string; neighborhood?: string };
-  /** O que a porta `AlcanceDoAlerta` responde. */
   contagemDeAlcance?: number | null;
-  /** Um candidato de `match_candidates`, com o dono do CASO dele. */
   candidato?: {
     readonly dono: UserId;
     readonly casoAberto?: boolean;
     readonly status: 'suggested' | DecisaoDoCandidato;
     readonly decididoPor?: UserId;
   };
-  /**
-   * Quando o último alerta deste caso **saiu**, para o critério 7 do ADR-0006 (um
-   * disparo por caso a cada 24 h).
-   */
   ultimoEnvio?: Instant;
 }
 
@@ -79,19 +67,14 @@ interface Registro {
     agora: Instant;
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
-  /** O que o servico pediu ao repositorio ao REABRIR, dono incluido. */
   readonly reabriu: { caso: CaseId; dono: UserId; agora: Instant }[];
-  /** BICHUS-66: os pets cuja transferencia viva o servico mandou cancelar. */
   readonly transferenciasCanceladas: PetId[];
-  /** O que o serviço pediu ao repositório ao decidir, dono incluído. */
   readonly decidiu: { caso: CaseId; candidato: string; dono: UserId; decisao: string }[];
-  /** As conversas que a decisão mandou abrir. */
   readonly conversasAbertas: Parameters<
     AberturaDeConversaPorCorrespondencia['aoConfirmarCorrespondencia']
   >[0][];
   readonly conferiuAbertura: { pet: PetId; dono: UserId }[];
   readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
-  /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
   readonly contou: { centro: CentroDoAlcance; raio: number; excluiu: UserId }[];
   readonly disparosAbertos: DisparoGravado[];
   readonly enfileirados: { kind: JobKind; payload: unknown }[];
@@ -214,10 +197,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(encerrado);
     },
 
-    /**
-     * A reabertura, com os MESMOS quatro predicados que o `WHERE` do `UPDATE` carrega
-     * — e não um `if` a mais nem um a menos.
-     */
     reabrir: (entrada) => {
       registro.reabriu.push({ ...entrada });
       if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
@@ -244,7 +223,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(reaberto);
     },
 
-    /** A decisão, com o mesmo `WHERE` que o SQL carrega. */
     decidirCandidato: (entrada) => {
       registro.decidiu.push({
         caso: entrada.caso,
@@ -263,10 +241,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(candidatoGravado(entrada.decisao));
     },
 
-    /**
-     * `PATCH` com o mesmo `WHERE` do `UPDATE` de verdade: `id`, `dono` e `status =
-     * 'open'`.
-     */
     atualizarOndeEQuando: (entrada) => {
       if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
         return Promise.resolve(null);
@@ -289,10 +263,6 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(atualizado);
     },
 
-    /**
-     * A listagem com o dono na junção, como o SQL a carrega: candidato de caso de
-     * outro tutor não chega a esta camada para ser descartado por um `if`.
-     */
     candidatosDoCaso: (caso, dono) => {
       const c = estado.candidato;
       if (c === undefined || caso !== CASO || c.dono !== dono) return Promise.resolve([]);
@@ -414,7 +384,6 @@ function servico(estado: EstadoDoRepositorio = {}): {
   };
 }
 
-/** O candidato como o repositório o devolve depois de decidido. */
 function candidatoGravado(status: DecisaoDoCandidato): CandidatoDecidido {
   return {
     id: CANDIDATO,
@@ -463,10 +432,6 @@ async function capturar(executar: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a operação não recusou, e deveria ter recusado');
 }
 
-/**
- * Usada nas asserções de vazamento: o formato de um UUID, de um telefone e de um
- * CEP.
- */
 const COORDENADA = /-?\d{1,3}\.\d{3,}/;
 const TELEFONE = /(\+55|\(?\d{2}\)?[\s-]?)?9?\d{4}[\s-]?\d{4}/;
 
@@ -730,7 +695,6 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
   });
 });
 
-/** A prévia do alcance (BICHUS-202). */
 void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () => {
   void it('o caso aberto avisa o modulo de transferencia, com o pet certo', async () => {
     const { casos, registro } = servico();
@@ -908,7 +872,6 @@ void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro in
   });
 });
 
-/** A decisão humana sobre o candidato (BICHUS-86, critérios 4, 5 e 12). */
 void describe('a decisão do candidato', () => {
   const contextoDoDono = chamador(DONO);
 
@@ -1063,7 +1026,6 @@ void describe('a decisão do candidato', () => {
   });
 });
 
-/** O contexto do dono, o mesmo molde das suítes de cima. */
 const contextoDoTutor = chamador(DONO);
 
 void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () => {

@@ -1,4 +1,3 @@
-/** O registro do achado: o que ele exige, e o que ele nunca deriva. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,7 +15,6 @@ import type { Instant } from '../../../shared/types/brands.js';
 const AGORA = 1_800_000_000_000 as Instant;
 const DIA = 24 * 60 * 60 * 1000;
 
-/** Avenida Paulista, 1578. Qualquer ponto do Brasil serve. */
 const PAULISTA = { lat: -23.5614, lon: -46.656 };
 
 function achado(ajustes: Partial<AchadoAvulso> = {}): AchadoAvulso {

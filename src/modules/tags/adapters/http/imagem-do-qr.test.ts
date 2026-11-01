@@ -1,7 +1,3 @@
-/**
- * `GET /v1/pets/{petId}/tags/{tagId}/qr.png` e o `qr_png_url` da emissão, pela
- * borda inteira.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import * as jsqrModulo from 'jsqr';
@@ -29,7 +25,6 @@ import type { Autenticador } from '../../ports/autenticador.js';
 import type { TagParaReimpressao, TagRepository } from '../../ports/tag-repository.js';
 import { registrarRotasDeTags, type DependenciasDasRotasDeTag } from './tag-routes.js';
 
-/** Ver a nota de interoperabilidade em `domain/qr-da-tag.test.ts`. */
 type Decodificador = (
   pixels: Uint8ClampedArray,
   largura: number,
@@ -53,15 +48,12 @@ function naoUsado(nome: string): never {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Quais argumentos chegaram à consulta vinculada, em ordem. */
   readonly buscas: { petId: PetId; tagId: TagId; dono: UserId }[];
-  /** A conferência de subida. */
   readonly conferirParametros: () => void;
 }
 
 function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
   const buscas: { petId: PetId; tagId: TagId; dono: UserId }[] = [];
-  /** O cifrado que a EMISSÃO gravou. */
   let cifradoGravado: Uint8Array | undefined;
 
   const repositorio: TagRepository = {

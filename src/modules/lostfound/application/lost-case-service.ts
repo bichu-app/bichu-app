@@ -1,4 +1,3 @@
-/** As operações do caso de perdido. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
@@ -134,7 +133,6 @@ export interface ContextoDoChamador {
   readonly ip: string | undefined;
 }
 
-/** O bloqueio vira o problema que a tela sabe explicar. */
 function problemaDoBloqueio(bloqueio: Bloqueio): ReturnType<typeof problemas.naoEncontrado> {
   switch (bloqueio) {
     case 'contact_channel_unverified':
@@ -494,7 +492,6 @@ export class LostCaseService {
   }
 }
 
-/** O cursor da próxima página de candidatos, ou `null`. */
 function proximoDosCandidatos(
   items: readonly CandidatoDoCaso[],
   limite: number,

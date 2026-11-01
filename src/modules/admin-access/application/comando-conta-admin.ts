@@ -1,7 +1,3 @@
-/**
- * O comando `conta-admin` (ADR-0027 item 20.3), sem banco, sem terminal e sem rede
- * proprios: tudo chega por porta, e o teste troca todas.
- */
 import { timingSafeEqual } from 'node:crypto';
 
 import { comoIso, type Clock } from '../../../shared/time/clock.js';
@@ -70,12 +66,10 @@ async function confirmou(interacao: Interacao, pergunta: string): Promise<boolea
   return false;
 }
 
-/** Iguais em tamanho e em conteudo, em tempo constante no conteudo. */
 function mesmaSenha(primeira: Buffer, segunda: Buffer): boolean {
   return primeira.length === segunda.length && timingSafeEqual(primeira, segunda);
 }
 
-/** Pede a senha duas vezes e devolve o PHC, ou o codigo de recusa. */
 async function senhaDefinida(
   email: string,
   deps: DependenciasDoComandoContaAdmin,
@@ -133,10 +127,6 @@ async function senhaDefinida(
   }
 }
 
-/**
- * Regra 5 do item 20.3: um e-mail para CADA administrador ativo, e no `criar`
- * tambem para o dono do endereco novo.
- */
 async function avisar(
   deps: DependenciasDoComandoContaAdmin,
   mensagem: { readonly assunto: string; readonly corpo: string },

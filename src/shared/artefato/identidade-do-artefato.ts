@@ -1,4 +1,3 @@
-/** Identidade do build, calculada A PARTIR DO PRÓPRIO ARTEFATO. */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,15 +11,9 @@ export interface IdentidadeDoArtefato {
   readonly commit: string | null;
 }
 
-/**
- * O que entra no resumo. Lista fechada e explícita: varrer a raiz inteira faria o
- * resumo mudar com qualquer arquivo que alguém deixasse ao lado, e um
- * identificador que muda sozinho não identifica nada.
- */
 const ARVORES = [{ caminho: 'dist', extensao: '.js' }] as const;
 const ARQUIVOS = ['api/openapi.yaml', 'package.json'] as const;
 
-/** Diretório de RASCUNHO: nome começando com `_`, em qualquer nível de `dist`. */
 function ehRascunho(nome: string): boolean {
   return nome.startsWith('_');
 }

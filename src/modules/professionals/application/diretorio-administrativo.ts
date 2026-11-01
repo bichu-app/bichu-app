@@ -1,7 +1,3 @@
-/**
- * O caso de uso da escrita administrativa do diretorio de `Perto` (BICHUS-189;
- * ADR-0027).
- */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import { lerIfMatch } from '../../../shared/http/if-match.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
@@ -96,7 +92,6 @@ function faltaVersao(): AppError {
   return new AppError('precondition-required', 'Falta a versão que você leu');
 }
 
-/** 428 antes de qualquer leitura, e 412 para o que nao e uma versao. */
 function versaoExigida(ifMatch: string | string[] | undefined): number {
   const lida = lerIfMatch(ifMatch);
   if (lida.tipo === 'ausente') throw faltaVersao();
@@ -104,7 +99,6 @@ function versaoExigida(ifMatch: string | string[] | undefined): number {
   return lida.versao;
 }
 
-/** Traduz a violacao de unicidade do adaptador para o 409 do contrato. */
 async function comSlugLivre<T>(escrever: () => Promise<T>): Promise<T> {
   try {
     return await escrever();
@@ -114,7 +108,6 @@ async function comSlugLivre<T>(escrever: () => Promise<T>): Promise<T> {
   }
 }
 
-/** So os campos que mudaram, nos dois lados. */
 function diferenca(
   antes: Record<string, unknown>,
   depois: Record<string, unknown>,
@@ -130,7 +123,6 @@ function diferenca(
   return { before, after };
 }
 
-/** A forma dos campos que VIERAM, e so deles. */
 function errosDaForma(campos: {
   display_name?: string | undefined;
   about?: string | null | undefined;
@@ -185,7 +177,6 @@ function errosDaForma(campos: {
   return erros;
 }
 
-/** A forma da GALERIA (cliente, 29/10/2026). */
 function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined): ProblemFieldError[] {
   if (imagens === undefined) return [];
   const erros: ProblemFieldError[] = [];
@@ -210,7 +201,6 @@ function errosDaGaleria(imagens: readonly ImagemDeGaleriaDoCorpo[] | undefined):
   return erros;
 }
 
-/** O texto aparado, ou `null` quando ele apaga o campo. */
 function aparado(valor: string | null | undefined): string | null | undefined {
   if (valor === undefined) return undefined;
   if (valor === null) return null;

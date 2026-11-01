@@ -1,7 +1,3 @@
-/**
- * O aviso do achador sem conta é alcançado pelo RESUMO do token, no `WHERE`
- * (BICHUS-41).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createHash } from 'node:crypto';

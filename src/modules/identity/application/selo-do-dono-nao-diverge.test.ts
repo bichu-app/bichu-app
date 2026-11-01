@@ -1,4 +1,3 @@
-/** **O SELO QUE O DONO VÊ DE SI É O MESMO QUE OS OUTROS VEEM DELE.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -33,7 +32,6 @@ function conta(mudanca: Partial<Conta> = {}): Conta {
   };
 }
 
-/** As duas projeções de `Me`, com o mesmo nome que o contrato usa. */
 const PROJECOES: ReadonlyArray<{
   readonly nome: string;
   readonly montar: (c: Conta) => Record<string, unknown>;
@@ -48,10 +46,6 @@ const PROJECOES: ReadonlyArray<{
   },
 ];
 
-/**
- * A MESMA tabela de `canal-de-contato-confirmado.test.ts`, e a terceira linha é a
- * razão de ser desta tarefa.
- */
 const TABELA: ReadonlyArray<{
   readonly nome: string;
   readonly emailVerifiedAt: Date | null;

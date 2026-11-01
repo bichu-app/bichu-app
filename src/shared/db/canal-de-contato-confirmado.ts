@@ -1,4 +1,3 @@
-/** **A RÉGUA DE "CANAL DE CONTATO CONFIRMADO", NUMA FONTE SÓ.** */
 import { sql, type RawBuilder } from 'kysely';
 
 /** Os apelidos de `users` que as consultas deste repositório usam. */

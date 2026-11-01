@@ -1,64 +1,3 @@
-/**
- * **A fiação que um teste exige tem de existir nas DUAS pilhas -- e no lugar
- * ESTREITO** (BICHUS-319).
- *
- * ===========================================================================
- * DUAS REPROVAÇÕES DE ESTEIRA MORAM NESTE ARQUIVO, E ELAS ENSINAM COISAS
- * DIFERENTES
- * ===========================================================================
- * `tests/integration/rastro-de-toda-escrita-administrativa.test.ts` exercita as
- * 34 escritas administrativas do contrato, e uma delas é
- * `POST /admin/auth/login`. Ela só é exercitável com o desafio de
- * desenvolvimento local ligado -- sem ele a rota chama o reCAPTCHA Enterprise
- * de verdade e responde 403 `captcha-rejected`.
- *
- * **Execução 124430445974 -- 877 de 878.** A variável foi posta no
- * `environment:` do serviço `api` de `infra/integracao/compose.integracao.yaml`
- * e na bancada passou, 878 de 878. O job `integracao` **não usa aquele
- * arquivo**: ele sobe o `compose.yaml` da RAIZ. Duas pilhas, duas fiações, e só
- * uma ligada. Lição: *onde a bancada mede não é onde a esteira mede.*
- *
- * **Execução 124436463888 -- o alvo `prod` morreu pelo motivo errado.** A
- * correção escreveu a variável no `.env` do job. Medido depois: **treze** passos
- * daquele job tocam aquele arquivo, e um deles -- `o alvo de producao constroi,
- * e morre pelo motivo certo` -- faz `docker run --env-file .env -e
- * NODE_ENV=production`. A guarda `recusaDoCaptchaDeDesenvolvimento` fez
- * exatamente o que promete e derrubou o alvo `prod` na PRESENÇA da variável,
- * antes de ele alcançar o gerenciador de segredos; o portão recusou com razão,
- * porque passo que aprova qualquer morte não prova nada. Lição: *o diagnóstico
- * estava certo e a forma era larga demais.*
- *
- * ===========================================================================
- * A FORMA QUE ESTE ARQUIVO PROTEGE
- * ===========================================================================
- * O valor alcança UM processo: a api que o passo `sobe a pilha inteira, do
- * zero` cria.
- *
- * - `compose.yaml` declara, **só no serviço `api`**,
- *   `CAPTCHA_DESENVOLVIMENTO_LOCAL: ${CAPTCHA_DESENVOLVIMENTO_LOCAL:-}` -- o
- *   encanamento, VAZIO por padrão. Vazio a guarda trata como ausente, então
- *   `make up`, a homologação e produção seguem com o verificador de verdade;
- * - a esteira liga no `env:` **daquele passo**, e não no `.env` do job;
- * - a pilha efêmera dos worktrees liga no `environment:` do seu próprio `api`.
- *
- * E o `.env` do job fica LIMPO -- é o que o caso "nenhum passo escreve a
- * variável no `.env`" existe para manter.
- *
- * ===========================================================================
- * POR QUE AQUI, E NÃO NUM PORTÃO DE DOCKER
- * ===========================================================================
- * Este arquivo roda na suíte UNITÁRIA, no job `codigo`, que é `needs` do job
- * `integracao`. A divergência passa a reprovar em segundos e pelo nome, antes
- * de a esteira gastar vinte minutos subindo pilha para descobrir pela via de um
- * 403 que fala de captcha, ou de um alvo `prod` que morre no lugar errado.
- *
- * ## O que NÃO está aqui
- *
- * Que a variável é SEGURA é conferido por
- * `recusa-do-captcha-de-desenvolvimento.test.ts` (as quatro iscas de 28/09): a
- * API RECUSA SUBIR com ela fora de `dev`/host local. Aquela guarda não foi
- * tocada -- foi ela que pegou a segunda reprovação.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -75,13 +14,9 @@ import { VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO, recusaDoCaptchaDeDesenvolviment
 const COMPOSE_DA_RAIZ = 'compose.yaml';
 const COMPOSE_EFEMERO = 'infra/integracao/compose.integracao.yaml';
 const WORKFLOW = '.github/workflows/ci.yml';
-/** O job da esteira que sobe pilha e roda a suíte de integração. */
 const JOB_DA_INTEGRACAO = 'integracao';
-/** O passo que CRIA a api do job: é o `env:` dele que liga o desafio. */
 const PASSO_DA_SUBIDA = 'sobe a pilha inteira, do zero';
-/** O passo que o `.env` largo quebrou, nomeado para a mensagem não ser abstrata. */
 const PASSO_DO_ALVO_PROD = 'o alvo de producao constroi, e morre pelo motivo certo';
-/** A forma exata do encanamento: presente e VAZIO por padrão. */
 const ENCANAMENTO = `\${${VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO}:-}`;
 
 function ler(caminho: string): string {
@@ -137,7 +72,6 @@ function passoChamado(nome: string): PassoDaEsteira {
   return passo;
 }
 
-/** As variáveis que o `.env` da esteira herda do exemplo, por nome. */
 function variaveisDoExemplo(): Record<string, string> {
   const mapa: Record<string, string> = {};
   for (const linha of ler('.env.example').split('\n')) {
@@ -161,8 +95,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
   });
 
   void it('o `worker` NÃO recebe o desafio: ele não atende login', () => {
-    // Hoje ele não tem `environment:` nenhum, que é a forma mais forte de não
-    // receber. O caso aceita as duas: sem bloco, ou com bloco e sem a chave.
     const ambiente = servicoDe(COMPOSE_DA_RAIZ, 'worker')['environment'];
     const valor = ehObjeto(ambiente) ? ambiente[VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO] : undefined;
     assert.equal(
@@ -200,8 +132,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
         `com o valor que o código exige. Sem isso, \`POST /admin/auth/login\` cai no ` +
         `reCAPTCHA Enterprise de verdade na esteira -- a reprovação de 877 de 878.`,
     );
-    // O `env:` tem de estar no passo que CRIA a api. Posto em outro, o valor
-    // não alcança processo nenhum e este arquivo aprovaria uma fiação morta.
     const roteiro = typeof passo.run === 'string' ? passo.run : '';
     assert.ok(
       /docker compose[^\n]*\bup\b/.test(roteiro),
@@ -228,8 +158,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
         `com razão -- foi a execução 124436463888. O valor mora no \`env:\` do passo ` +
         `\`${PASSO_DA_SUBIDA}\`, não no arquivo.`,
     );
-    // Controle positivo da varredura: se nenhum passo tivesse `run`, o filtro
-    // acima casaria zero por vacuidade e aprovaria sem medir.
     assert.ok(
       passos.filter((p) => typeof p.run === 'string').length > 5,
       `o job \`${JOB_DA_INTEGRACAO}\` quase não tem passo com \`run\`: a varredura acima ` +
@@ -272,9 +200,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
   });
 
   void it('vazio é tratado como AUSENTE: é o que o padrão do encanamento depende', () => {
-    // `${VAR:-}` entrega string VAZIA ao container, e não a ausência da chave.
-    // Se a guarda recusasse por vazio, `make up` e a homologação pararia de
-    // subir -- o encanamento inteiro depende deste comportamento.
     assert.equal(
       recusaDoCaptchaDeDesenvolvimento({
         ENVIRONMENT: 'prod',
@@ -294,8 +219,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
     assert.equal(captchaDeDesenvolvimentoLigado(VALOR_QUE_LIGA_O_CAPTCHA_DE_DESENVOLVIMENTO), true);
     assert.equal(captchaDeDesenvolvimentoLigado('sim'), false);
     assert.equal(captchaDeDesenvolvimentoLigado(undefined), false);
-    // Se este caso passasse com host hospedado, os três de cima estariam
-    // medindo a presença da variável e não a regra.
     const recusa = recusaDoCaptchaDeDesenvolvimento({
       ...variaveisDoExemplo(),
       NODE_ENV: 'development',
@@ -309,9 +232,6 @@ void describe('BICHUS-319: o desafio de desenvolvimento do login, ligado nas dua
   });
 
   void it('o token que o painel manda é o que o verificador local aprova', () => {
-    // Os dois lados do mesmo acordo: o painel (`admin/src/entrar/captcha.ts`)
-    // envia este token, e o verificador local aprova este token. O caso do
-    // portão de rastro manda o mesmo, e é por isso que ele existe aqui.
     assert.equal(TOKEN_DE_DESENVOLVIMENTO, 'desenvolvimento-sem-chave-de-captcha');
   });
 });

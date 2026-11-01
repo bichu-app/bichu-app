@@ -1,12 +1,7 @@
-/** A fiação das três bases em `src/bin/api.ts`, conferida por TEXTO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-/**
- * Lido do diretório de trabalho, que é a raiz do repositório — a mesma convenção
- * de `OPENAPI_SPEC_PATH`.
- */
 const CAMINHO = 'src/bin/api.ts';
 
 function fiacao(): string {

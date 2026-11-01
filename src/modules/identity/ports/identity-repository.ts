@@ -1,4 +1,3 @@
-/** O que o módulo `identity` exige da persistência. */
 import type { Instant, TokenHash, UserId } from '../../../shared/types/brands.js';
 import type { ReauthScope } from '../../../shared/http/route-definition.js';
 import type { MotivoDaRecusa } from '../domain/reautenticacao.js';

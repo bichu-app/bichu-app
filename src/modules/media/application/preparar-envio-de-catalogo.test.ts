@@ -1,8 +1,3 @@
-/**
- * A intencao de envio de imagem de catalogo (ADR-0027 item 10): SVG e tipo fora da
- * lista recusados, teto de 5 MiB, e a politica assinada no bucket privado com a
- * chave de 128 bits do catalogo.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

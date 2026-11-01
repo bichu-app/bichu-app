@@ -1,7 +1,3 @@
-/**
- * O cadastro **exige data de nascimento e 16 anos completos**, e a exigência é do
- * servidor.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -18,16 +14,10 @@ import { criarAuthService } from './auth-service.js';
 const SENHA_BOA = 'coleira-azul-do-bidu-2026';
 const EMAIL = 'marina@exemplo.com.br';
 
-/**
- * `INSTANTE_FIXO` é 2026-09-11, 09:00 em São Paulo (12:00 UTC) — conferido com
- * `Intl`, não suposto.
- */
 const HOJE_EM_SAO_PAULO = '2026-09-11';
 
-/** 16 anos exatos no dia de `INSTANTE_FIXO`: é o aniversário. */
 const DATA_DE_NASCIMENTO_16_EXATOS = '2010-09-11';
 
-/** Um dia a menos de vida: 15 anos e 364 dias em `INSTANTE_FIXO`. */
 const DATA_DE_NASCIMENTO_15_E_364 = '2010-09-12';
 
 const CONTEXTO: ContextoDaRequisicao = {
@@ -45,7 +35,6 @@ function naoDeveriaTerChegado(nome: string): never {
   });
 }
 
-/** Toda porta recusa, dizendo o nome do método. */
 function repositorioQueRecusaTudo(): IdentityRepository {
   return {
     criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
@@ -78,7 +67,6 @@ function repositorioQueRecusaTudo(): IdentityRepository {
   };
 }
 
-/** A conta recém-criada, **sem data de nascimento nenhuma**. */
 function contaRecemCriada(): Conta {
   return {
     id: 'a1b2c3d4-0000-7000-8000-000000000001' as UserId,
@@ -104,14 +92,9 @@ interface Bancada {
   readonly servico: ReturnType<typeof criarAuthService>;
   readonly eventos: AuditEvent[];
   readonly mensagens: Mensagem[];
-  /** O que `criarContaLocal` recebeu, quando o repositório aceita. */
   readonly recebidas: NovaConta[];
 }
 
-/**
- * `aceitandoEscrita` liga o caminho inteiro do cadastro: ele existe **só** para o
- * contrapeso.
- */
 function montar(aceitandoEscrita = false, instante: Instant = INSTANTE_FIXO): Bancada {
   const eventos: AuditEvent[] = [];
   const mensagens: Mensagem[] = [];
@@ -191,7 +174,6 @@ function montar(aceitandoEscrita = false, instante: Instant = INSTANTE_FIXO): Ba
   return { servico, eventos, mensagens, recebidas };
 }
 
-/** Cadastra com a data dada e devolve a recusa, ou reprova se foi aceito. */
 async function recusaComData(
   nascimento: unknown,
   rotulo: string,
@@ -215,7 +197,6 @@ async function recusaComData(
   });
 }
 
-/** O erro do campo `birth_date` dentro de um `AppError` de validação. */
 function erroDoCampo(erro: AppError): { field?: string; code?: string; message?: string } {
   const detalhes = erro as unknown as {
     errors?: readonly { field?: string; code?: string; message?: string }[];
@@ -229,7 +210,6 @@ function erroDoCampo(erro: AppError): { field?: string; code?: string; message?:
 }
 
 void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', () => {
-  /** ISCA (a1), a borda de BAIXO. */
   void it('15 anos e 364 dias é recusado', async () => {
     const erro = await recusaComData(
       DATA_DE_NASCIMENTO_15_E_364,
@@ -246,7 +226,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     );
   });
 
-  /** ISCA (a2), a borda de CIMA, e ela é um CONTRAPESO da (a1). */
   void it('16 anos exatos, no dia do aniversário, PASSA e grava', async () => {
     const bancada = montar(true);
 
@@ -269,12 +248,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     );
   });
 
-  /**
-   * ISCA (b). Desligada: apagando a guarda `depoisDeHoje` de
-   * `verificarDataDeNascimento`, este caso reprova — e uma data no futuro passaria a
-   * produzir idade negativa, que é menor que 16 e seria recusada pelo outro caminho
-   * com a mensagem errada ("você não tem 16 anos" para quem digitou 2030).
-   */
   void it('data no futuro é recusada, e não confundida com idade', async () => {
     const erro = await recusaComData('2030-01-01', 'uma data de nascimento no futuro');
 
@@ -288,10 +261,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     );
   });
 
-  /**
-   * ISCA (c). O campo AUSENTE, chamando a aplicação direto — que é o caminho de quem
-   * não passa pelo schema.
-   */
   void it('cadastro SEM o campo é recusado, chamando a aplicação direto', async () => {
     const erro = await recusaComData(undefined, 'cadastro sem o campo de data de nascimento');
 
@@ -299,7 +268,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     assert.equal(erroDoCampo(erro).code, 'required');
   });
 
-  /** O mesmo buraco que o `" "` do nome: a chave VEIO, e não tem data dentro. */
   void it('string vazia e espaço em branco são recusados como ausência', async () => {
     for (const vazio of ['', '   ']) {
       const erro = await recusaComData(vazio, `data de nascimento ${JSON.stringify(vazio)}`);
@@ -307,26 +275,16 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     }
   });
 
-  /**
-   * A data que não existe no calendário passa pela forma `YYYY-MM-DD` e precisa
-   * morrer na volta de `Date.UTC`.
-   */
   void it('data que não existe no calendário é recusada, e não normalizada', async () => {
     const erro = await recusaComData('2010-02-30', '30 de fevereiro');
     assert.equal(erroDoCampo(erro).code, 'invalid');
   });
 
-  /** O ano absurdo, que é a mesma regra do `CHECK` da migração `20261018000021`. */
   void it('ano antes de 1900 é recusado como fora de faixa', async () => {
     const erro = await recusaComData('1203-04-05', 'um ano absurdo');
     assert.equal(erroDoCampo(erro).code, 'out_of_range');
   });
 
-  /**
-   * ISCA DO FUSO. Desligada: trocando `FUSO_DO_PRODUTO` por `'UTC'` em
-   * `idade-minima.ts`, este caso reprova — porque em UTC já é dia 11 e a pessoa "já
-   * fez" 16 anos, enquanto em São Paulo ainda é dia 10 e ela não fez.
-   */
   void it('o fuso do produto decide o dia: 23h de São Paulo não antecipa o aniversário', async () => {
     const vesperaEmSaoPaulo = Date.UTC(2026, 8, 11, 2, 0, 0) as Instant;
 
@@ -339,10 +297,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     assert.equal(erroDoCampo(erro).code, 'too_young');
   });
 
-  /**
-   * E o contrapeso do fuso: três horas depois, já é dia 11 em São Paulo, e a MESMA
-   * data de nascimento passa.
-   */
   void it('o fuso do produto decide o dia: 00h01 de São Paulo já é o aniversário', async () => {
     const aniversarioEmSaoPaulo = Date.UTC(2026, 8, 11, 3, 1, 0) as Instant;
     const bancada = montar(true, aniversarioEmSaoPaulo);
@@ -364,7 +318,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     );
   });
 
-  /** CONTRAPESO GERAL: a data de nascimento **não volta na sessão**. */
   void it('a data de nascimento NÃO aparece na resposta do cadastro', async () => {
     const bancada = montar(true);
 
@@ -385,11 +338,6 @@ void describe('o cadastro exige 16 anos (decisão do cliente de 18/10/2026)', ()
     );
   });
 
-  /**
-   * E o `HOJE_EM_SAO_PAULO` da cabeceira deste arquivo não é um palpite: se
-   * `INSTANTE_FIXO` mudar, as bordas acima deixam de ser bordas e os casos ficariam
-   * verdes medindo outra coisa.
-   */
   void it('INSTANTE_FIXO continua sendo o dia que as bordas assumem', () => {
     const dia = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Sao_Paulo',

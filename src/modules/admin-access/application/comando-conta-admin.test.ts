@@ -1,4 +1,3 @@
-/** O comando `conta-admin` com portas de teste: sem banco, sem terminal e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

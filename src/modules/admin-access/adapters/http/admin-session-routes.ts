@@ -1,4 +1,3 @@
-/** As rotas da sessao administrativa (ADR-0027 item 5), em `/v1/admin`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
@@ -91,7 +90,6 @@ export interface DependenciasDasRotasDaSessaoAdministrativa {
   readonly contrato: Contrato;
 }
 
-/** O e-mail do corpo, normalizado e em HMAC, como na rota de login do app. */
 const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   const corpo = (request.body ?? {}) as { email?: unknown };
   if (typeof corpo.email !== 'string' || corpo.email === '') return undefined;
@@ -99,7 +97,6 @@ const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   return normalizado === '' ? undefined : sigilo.hmac(`admin-email:${normalizado}`);
 };
 
-/** A conta da sessao que a guarda conferiu. */
 const contaDaSessao: ResolvedorDeDimensao = (request) => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;

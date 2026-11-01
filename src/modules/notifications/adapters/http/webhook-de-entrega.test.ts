@@ -1,7 +1,3 @@
-/**
- * `POST /webhooks/postmark` sobre um Fastify de verdade (BICHUS-13, critérios 7 e
- * 9).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -13,18 +9,15 @@ import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
 import { registrarRotaDoWebhookDeEntrega } from './webhook-de-entrega.js';
 import type { EventoParaGravar, RegistroDeEntregas } from '../../ports/registro-de-entregas.js';
 
-/** 32 bytes, que é o piso que `app-config.ts` impõe. */
 const SEGREDO = 'segredo-de-teste-com-32-bytes!!!';
 const TUTOR = 'tutor@exemplo.invalid';
 
-/** Nada de `localhost` nesta bancada: o portão de portabilidade varre `src/`. */
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
   readonly gravados: EventoParaGravar[];
   readonly suprimidos: string[];
-  /** Só o que a NOSSA rota mandou para o log. */
   readonly logs: unknown[];
 }
 
@@ -74,7 +67,6 @@ function subirApp(opcoes: { segredoDoServidor?: string } = {}): Bancada {
   return { app, gravados, suprimidos, logs };
 }
 
-/** O mesmo corpo sem um dos campos, para exercitar o que o contrato torna opcional. */
 function semACchave(corpo: Record<string, unknown>, chave: string): Record<string, unknown> {
   return Object.fromEntries(Object.entries(corpo).filter(([nome]) => nome !== chave));
 }
@@ -91,7 +83,6 @@ function devolucao(extra: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
-/** Executa a chamada registrando o que **a nossa rota** manda para o log. */
 function ehLogDoFastify(dados: unknown): boolean {
   if (typeof dados !== 'object' || dados === null) return false;
   return 'req' in dados || 'res' in dados;

@@ -1,4 +1,3 @@
-/** O PAINEL E O SERVIDOR DAO A MESMA RESPOSTA, CASO A CASO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -117,15 +116,9 @@ const INSTAGRAMS = [
   '@org!',
 ];
 
-/**
- * O teto e o piso com que o painel chama o servidor para o campo `summary`
- * (`validar` em `admin/src/rede/dominio/formulario.ts`: de 2 a 200 code points,
- * pedido de 01/10).
- */
 const MINIMO_DO_RESUMO = 2;
 const LIMITE_DO_RESUMO = 200;
 
-/** Os casos de code point do antigo `dominio.test.ts` do painel. */
 const CODE_POINTS = [
   '🐶'.repeat(200),
   '🐶'.repeat(201),

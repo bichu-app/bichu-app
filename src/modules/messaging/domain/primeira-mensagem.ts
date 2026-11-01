@@ -1,4 +1,3 @@
-/** A primeira mensagem da conversa, que é do sistema (critério 2). */
 import { redigirCanalMediado, type TrechoRedigido } from '../../../shared/redaction/redigir.js';
 
 /** O fuso em que "hoje às <hora>" é escrito. */
@@ -25,7 +24,6 @@ export interface MensagemDoSistema {
 
 const DOIS_DIGITOS = (n: number): string => String(n).padStart(2, '0');
 
-/** As partes de data e hora de um instante, no fuso de exibição. */
 function partesNoFuso(instante: Date): { dia: string; mes: string; hora: string; minuto: string } {
   const formatador = new Intl.DateTimeFormat('pt-BR', {
     timeZone: FUSO_DE_EXIBICAO,

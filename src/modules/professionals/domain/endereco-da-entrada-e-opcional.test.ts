@@ -1,7 +1,3 @@
-/**
- * ISCA DA REGRA QUE O CLIENTE *NAO* MUDOU -- **escrita e NAO rodada** nesta
- * entrega (sem suite unitaria, por regra dele de 18/10/2026).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -19,10 +15,6 @@ const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}
 
 const NASCEU_EM = Date.UTC(2026, 9, 18, 12, 0, 0) as Instant;
 
-/**
- * Um autonomo publicavel: tem nome, endereco publico, cidade, UF e telefone, e
- * **nenhuma rua**.
- */
 const AUTONOMO: EntradaAdministrativa = {
   slug: 'passeios-da-bia',
   kinds: ['walker'],
@@ -34,7 +26,6 @@ const AUTONOMO: EntradaAdministrativa = {
   neighborhood: 'Sumarezinho',
   logo: null,
   photo: null,
-  /** A GALERIA (29/10/2026). Vazia: a publicacao nao cobra imagem nenhuma. */
   imagens: [],
   postalCode: null,
   street: null,

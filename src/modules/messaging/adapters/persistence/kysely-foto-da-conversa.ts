@@ -1,17 +1,14 @@
-/** [FotoDaConversa] sobre Postgres. */
 import type { Db } from '../../../../shared/db/pool.js';
 import { ESPECIES_DO_ACHADO } from '../../../media/ports/fotos-do-achado.js';
 import type { FotoDaConversa, FotoParaAMensagem } from '../../ports/foto-da-conversa.js';
 import type { ConversationId } from '../../../../shared/types/brands.js';
 
-/** O que as duas consultas trazem. */
 interface LinhaDaHigiene {
   sanitize_status: 'pendente' | 'pronta' | 'recusada' | 'ausente';
   sanitized_key: string | null;
   sanitize_rejection_reason: string | null;
 }
 
-/** O estado da higiene traduzido no desfecho da porta. */
 function comoFoto(linha: LinhaDaHigiene | undefined): FotoParaAMensagem {
   if (linha === undefined) return { situacao: 'nao-encontrada' };
   switch (linha.sanitize_status) {

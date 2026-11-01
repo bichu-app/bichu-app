@@ -1,7 +1,3 @@
-/**
- * **A guarda do prefixo `/v1/admin`, uma vez so** (ADR-0027 itens 1, 2, 3 e 7;
- * D33, D36, D37 e D39 de `docs/04-seguranca.md`).
- */
 import type {
   FastifyPluginCallback,
   FastifyReply,
@@ -106,11 +102,9 @@ export interface OpcoesDaSuperficieAdministrativa {
 
 declare module 'fastify' {
   interface FastifyInstance {
-    /** So existe dentro do escopo aberto por `escoparRotasAdministrativas`. */
     superficieAdministrativa?: OpcoesDaSuperficieAdministrativa;
   }
   interface FastifyRequest {
-    /** Preenchida pela guarda, antes de qualquer gancho da rota. */
     sessaoAdministrativa?: SessaoAdministrativaConferida;
   }
 }

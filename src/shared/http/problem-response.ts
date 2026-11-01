@@ -1,4 +1,3 @@
-/** Serialização do `Problem` para o formato do contrato. */
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { AppError } from './errors.js';
 import type { ProblemType } from './problem.js';

@@ -1,4 +1,3 @@
-/** O token de push não atravessa a borda de saída, em resposta nenhuma. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,10 +14,8 @@ import { carregarContrato, type Contrato } from '../../../../shared/http/contrac
 const CAMINHO_DA_SPEC = 'api/openapi.yaml';
 const CAMINHO_DA_ROTA = 'src/modules/notifications/adapters/http/device-routes.ts';
 
-/** `push_token text` na migração, com ou sem espaço, em qualquer arquivo. */
 const COLUNA_DE_TOKEN = /^\s*(push_token)\s+text\b/gim;
 
-/** O nome da coluna do token, lido do disco. */
 function colunasDeToken(): readonly string[] {
   const diretorio = 'migrations';
   const achadas: string[] = [];
@@ -33,7 +30,6 @@ function colunasDeToken(): readonly string[] {
   return achadas;
 }
 
-/** As respostas do contrato, embrulhadas na forma que `inspecionarContrato` lê. */
 function respostasComoSpec(contrato: Contrato): Record<string, unknown> {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const operacao of contrato.operacoes.values()) {

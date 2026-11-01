@@ -1,10 +1,8 @@
-/** A varredura dos envios que ninguém confirmou (critério 13 de `BICHUS-87`). */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { MediaRepository } from '../ports/media-repository.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 import { eDoAchado } from '../ports/fotos-do-achado.js';
 
-/** Quantas por rodada. */
 const POR_RODADA = 50;
 
 export interface DependenciasDaVarredura {

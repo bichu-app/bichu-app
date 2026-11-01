@@ -1,7 +1,3 @@
-/**
- * A rota da **busca de pessoas**: `GET /people` (decisão do cliente de
- * 20/10/2026).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -32,7 +28,6 @@ export const rotaDaBuscaDePessoas = defineRoute({
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 
-/** Pessoa é dado de pessoa: nada daqui entra em cache compartilhado. */
 const SEM_CACHE = 'private, no-store';
 
 export interface Autenticador {
@@ -59,7 +54,6 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   return cabecalho.slice(prefixo.length);
 }
 
-/** Quem chama, **resolvido UMA vez por requisição**. */
 async function chamador(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeBusca,

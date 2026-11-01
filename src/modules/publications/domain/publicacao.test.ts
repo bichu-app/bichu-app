@@ -1,4 +1,3 @@
-/** A forma do que se publica, e o cursor da linha do tempo. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,7 +15,6 @@ import {
 const REF = 'AaBbCcDdEeFfGgHhIiJjKk';
 const ENVIO = '018f7c1e-7a2b-7c3d-9e4f-000000000001';
 
-/** Os campos recusados, em `campo:codigo`, para comparar sem ordem de prosa. */
 function recusasDe(pedida: Parameters<typeof conferirPublicacaoPedida>[0]): string[] {
   const saida = conferirPublicacaoPedida(pedida);
   return 'recusas' in saida ? saida.recusas.map((r) => `${r.field}:${r.code}`).sort() : [];

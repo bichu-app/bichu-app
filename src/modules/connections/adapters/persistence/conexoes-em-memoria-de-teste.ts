@@ -1,4 +1,3 @@
-/** O repositório de conexão **em memória**, para teste de comportamento. */
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import {
   arestaMorta,
@@ -30,7 +29,6 @@ interface LinhaEmMemoria {
   pedinte: UserId;
   destinatario: UserId;
   estado: EstadoGuardado;
-  /** De onde o pedido NASCEU, como a coluna `origin` guarda. */
   origem: OrigemDoPedido;
   pedidoEm: number;
   expiraEm: number;
@@ -122,11 +120,6 @@ export function conexoesEmMemoria(
 
     contarConexoes: (pessoa: UserId) => Promise.resolve(contarConexoesDe(pessoa)),
 
-    /**
-     * Os DOIS sinais do contador de convidados, no mesmo recorte da consulta de
-     * verdade: aresta aceita com esta conta no DESTINO e origem de convite, **e** quem
-     * pediu com pet de foto pronta.
-     */
     contarConvidadosQueEntraram: (pessoa: UserId) =>
       Promise.resolve(
         linhas.filter(
@@ -246,7 +239,6 @@ export function conexoesEmMemoria(
       });
     },
 
-    /** **As PRÓPRIAS conexões aceitas** (cliente, 22/10/2026). */
     conexoes: (quemChama: UserId, recorte: RecorteDeConexoes): Promise<PaginaDeConexoes> => {
       const todas = linhas
         .filter((l) => l.estado === 'accepted' && viva(l))
@@ -272,7 +264,6 @@ export function conexoesEmMemoria(
       });
     },
 
-    /** As arestas entre quem chama e uma lista de apelidos (22/10/2026). */
     arestasPorApelido: (
       quemChama: UserId,
       apelidos: readonly string[],

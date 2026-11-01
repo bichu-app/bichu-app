@@ -1,4 +1,3 @@
-/** A porta do VOCABULARIO dos dois niveis da categoria do produto. */
 import type { CategoriaDaVitrine, EspecieDoItem, SubcategoriaDaVitrine } from '../domain/item-da-vitrine.js';
 
 /**

@@ -1,4 +1,3 @@
-/** As SEIS rotas de bloquear e denunciar. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -91,7 +90,6 @@ function tokenDaRequisicao(request: FastifyRequest): string | undefined {
   return token === '' ? undefined : token;
 }
 
-/** MEMOIZADO: o teto por `account` e o manipulador precisam do mesmo dono. */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeSeguranca,
@@ -103,7 +101,6 @@ function chamadorAutenticado(
   });
 }
 
-/** `account` para o teto. Sem credencial válida não há balde de conta. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeSeguranca,
@@ -115,7 +112,6 @@ async function contaDoTeto(
   }
 }
 
-/** O IP vai EM CLARO: a porta da trilha o transforma em HMAC (SEC-010). */
 async function autorDoAto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeSeguranca,
@@ -127,7 +123,6 @@ async function autorDoAto(
   };
 }
 
-/** O `400` de denunciar o próprio conteúdo, um `code` por alvo. */
 const CAMPO_E_CODIGO: Record<AlvoDaDenuncia, { field: string; code: string; message: string }> = {
   profile: {
     field: 'userRef',
@@ -146,17 +141,11 @@ const CAMPO_E_CODIGO: Record<AlvoDaDenuncia, { field: string; code: string; mess
   },
 };
 
-/**
- * Perfil é dado de duas pessoas, e esta lista é dado de quem chama: nada em cache
- * compartilhado.
- */
 const SEM_CACHE = 'private, no-store';
 
-/** O teto de página do contrato, COPIADO de lá (`MyBlockPage.limit`). */
 const LIMITE_PADRAO = 20;
 const LIMITE_MAXIMO = 20;
 
-/** `page` e `limit` da consulta, com o padrão e o teto do contrato. */
 function paginaPedida(request: FastifyRequest): { page: number; limit: number } {
   const consulta = (request.query ?? {}) as Record<string, unknown>;
   const inteiro = (valor: unknown): number | undefined => {

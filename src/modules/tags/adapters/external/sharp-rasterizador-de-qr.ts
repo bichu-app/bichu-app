@@ -1,4 +1,3 @@
-/** O rasterizador do QR, com `sharp`. */
 import sharp from 'sharp';
 import type { DesenhoDoQr } from '../../domain/qr-da-tag.js';
 import type { RasterizadorDeQr } from '../../ports/rasterizador-de-qr.js';

@@ -1,7 +1,3 @@
-/**
- * QA bug 6 (28/09): o 401 do login do painel dizia "Se esqueceu a senha, da para
- * criar uma nova", o texto do app.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';

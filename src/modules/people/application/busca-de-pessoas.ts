@@ -1,4 +1,3 @@
-/** O caso de uso da **busca de pessoas** (decisão do cliente de 20/10/2026). */
 import type { Clock } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { LeitorDeConexao } from '../../connections/ports/conexao.js';

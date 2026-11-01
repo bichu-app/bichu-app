@@ -1,4 +1,3 @@
-/** **A FOTO DA PESSOA VIAJA NA SESSÃO, e não só em `getMe`.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -8,10 +7,8 @@ import type { Conta, FotoDoPerfil } from '../ports/identity-repository.js';
 import { projetarFotoDoPerfil, projetarMeuPerfil } from '../domain/resposta-do-perfil.js';
 import { projetarConta, projetarSessao, type ParDeTokens } from './session-view.js';
 
-/** A MESMA função que a composição monta de `MEDIA_PUBLIC_BASE_URL`. */
 const URL_DE_MIDIA = (chave: string): string => `https://midia.bichu.test/${chave}`;
 
-/** A derivada `card`, como o worker a grava: `people/card/` + bits aleatórios. */
 const CHAVE_DA_FOTO = 'people/card/9f8e7d6c5b4a3210.jpeg';
 const URL_DA_FOTO = `https://midia.bichu.test/${CHAVE_DA_FOTO}`;
 

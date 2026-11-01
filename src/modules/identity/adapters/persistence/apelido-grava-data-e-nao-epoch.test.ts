@@ -1,4 +1,3 @@
-/** `handles.claimed_at` recebe `Date`, e **nunca o `Instant` cru**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -18,7 +17,6 @@ import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import { criarIdentityRepository } from './kysely-identity-repository.js';
 
 const DONO = 'a1b2c3d4-0000-7000-8000-000000000001' as UserId;
-/** O mesmo instante da medicao de 18/10/2026, para o numero do relato aparecer. */
 const AGORA = 1_792_376_135_079 as Instant;
 
 interface ConsultaCapturada {
@@ -26,7 +24,6 @@ interface ConsultaCapturada {
   readonly parameters: readonly unknown[];
 }
 
-/** Kysely com o compilador REAL do Postgres e um driver que captura. */
 function bancoQueCaptura(linhaDaConta: Record<string, unknown>): {
   db: Db;
   consultas: ConsultaCapturada[];
@@ -66,7 +63,6 @@ function bancoQueCaptura(linhaDaConta: Record<string, unknown>): {
   return { db, consultas };
 }
 
-/** A linha que os `SELECT` deste caminho devolvem. */
 const LINHA_DA_CONTA: Record<string, unknown> = {
   id: DONO,
   email: 'marina@exemplo.com.br',
@@ -95,7 +91,6 @@ const ids = {
   random80: () => new Uint8Array(10),
 };
 
-/** O `INSERT INTO handles` entre as consultas capturadas. */
 function insercaoDoApelido(consultas: readonly ConsultaCapturada[]): ConsultaCapturada {
   const achada = consultas.find((c) => /insert\s+into\s+"handles"/i.test(c.sql));
   assert.ok(

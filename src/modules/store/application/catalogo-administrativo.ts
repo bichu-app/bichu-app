@@ -1,7 +1,3 @@
-/**
- * Os casos de uso da escrita administrativa da `Loja` (BICHUS-266 e BICHUS-267;
- * ADR-0027 itens 8, 10 e 14).
- */
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
@@ -202,7 +198,6 @@ function faltaVersao(): AppError {
   return new AppError('precondition-required', 'Falta a versão que você leu');
 }
 
-/** 428 antes de qualquer leitura, e 412 para o que nao e uma versao. */
 function versaoExigida(ifMatch: string | string[] | undefined): number {
   const lida = lerIfMatch(ifMatch);
   if (lida.tipo === 'ausente') throw faltaVersao();
@@ -228,12 +223,10 @@ function errosDoPreco(preco: PrecoDoCorpo | null | undefined, agora: Instant): P
   return [];
 }
 
-/** Os campos do parceiro como a trilha os grava. */
 function retratoDoParceiro(p: ParceiroAdministrativo): Record<string, unknown> {
   return { slug: p.slug, name: p.name, host: p.host, active: p.active, sort_order: p.sortOrder };
 }
 
-/** Os campos do item como a trilha os grava. */
 function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
   return {
     slug: i.slug,
@@ -259,11 +252,6 @@ function retratoDaTag(t: TagAdministrativa): Record<string, unknown> {
   return { slug: t.slug, label: t.label, active: t.active };
 }
 
-/**
- * Destino sem parceiro. O banco guarda so o CAMINHO e compoe o endereco com o host
- * do parceiro: sem parceiro nao ha contra o que conferir o link, nem como le-lo de
- * volta depois.
- */
 function destinoSemParceiro(): ProblemFieldError {
   return {
     field: 'target_url',
@@ -278,10 +266,6 @@ function tagDesconhecida(): AppError {
   ]);
 }
 
-/**
- * O que o corpo diz de especie, tags e imagens, conferido antes de abrir a
- * transacao.
- */
 function errosDaGaleriaEDaEspecie(corpo: {
   readonly species?: readonly string[] | undefined;
   readonly tag_slugs?: readonly string[] | undefined;
@@ -323,7 +307,6 @@ function errosDaGaleriaEDaEspecie(corpo: {
   return erros;
 }
 
-/** So os campos que mudaram, nos dois lados. */
 function diferenca(
   antes: Record<string, unknown>,
   depois: Record<string, unknown>,
@@ -981,7 +964,6 @@ function vocabularioCheio(): AppError {
   ]);
 }
 
-/** Traduz a violacao de unicidade do adaptador para o 409 do contrato. */
 async function comSlugLivre<T>(escrever: () => Promise<T>): Promise<T> {
   try {
     return await escrever();

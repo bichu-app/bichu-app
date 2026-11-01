@@ -1,4 +1,3 @@
-/** Todas as rotas declaradas no código, conferidas contra o contrato. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -110,21 +109,14 @@ const MODULOS: readonly Record<string, unknown>[] = [
   vereditoDeVersao,
 ];
 
-/**
- * As operacoes de `/admin/` que o contrato ja declara e que ainda nao tem rota
- * (ADR-0027: a `Loja`, a `Rede` e a intencao de envio de imagem sao de outras
- * fatias).
- */
 const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
 ];
 
-/** As operacoes que a BORDA serve, e nao a aplicacao. */
 const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
   'wellKnownAssetLinks',
   'wellKnownAppleAppSiteAssociation',
 ];
 
-/** As operacoes que o contrato declara e que NAO TEM CODIGO NENHUM. */
 const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   'requestDataExport',
   'updatePetPublicProfile',
@@ -147,12 +139,10 @@ function rotasDeclaradas(): RouteDefinition[] {
   return MODULOS.flatMap((modulo) => Object.values(modulo).filter(ehRota));
 }
 
-/** `/pets/:petId` na forma do contrato. */
 function comoNoContrato(caminho: string): string {
   return caminho.replace(/:([^/]+)/g, '{$1}');
 }
 
-/** Os campos que uma entrada de `x-rate-limit` pode ter no contrato. */
 const CAMPOS_DA_ENTRADA_DO_CONTRATO: ReadonlySet<string> = new Set([
   'dimension',
   'counts',
@@ -164,7 +154,6 @@ const CAMPOS_DA_ENTRADA_DO_CONTRATO: ReadonlySet<string> = new Set([
   'note',
 ]);
 
-/** A forma comparavel de uma entrada de teto. */
 interface EntradaComparavel {
   readonly dimension: readonly unknown[];
   readonly counts: unknown;
@@ -175,7 +164,6 @@ interface EntradaComparavel {
   readonly onExceed: unknown;
 }
 
-/** A entrada do contrato na forma comparavel. */
 function doContratoParaComparacao(entrada: Record<string, unknown>): EntradaComparavel {
   const appliesTo = entrada['applies_to'];
   return {
@@ -189,7 +177,6 @@ function doContratoParaComparacao(entrada: Record<string, unknown>): EntradaComp
   };
 }
 
-/** A entrada da rota na mesma forma. */
 function daDeclaracaoParaComparacao(entrada: RateLimitEntry): EntradaComparavel {
   return {
     dimension: [...entrada.dimension],

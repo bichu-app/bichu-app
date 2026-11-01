@@ -1,7 +1,3 @@
-/**
- * **De onde um pedido de conexão pode nascer — e é aqui que a regra do cliente
- * vira arquitetura.**
- */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { OrigemDoPedido } from '../domain/conexao.js';
 

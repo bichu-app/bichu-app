@@ -1,4 +1,3 @@
-/** A decisao do painel sobre o pedido da plaquinha. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -25,16 +24,10 @@ const ID_INTERNO = '018f3a2b-0000-7000-8000-0000000000e1';
 const REF = 'yjJwZ3hBc0RmR2hKa0xtTg';
 const REF_DESCONHECIDO = 'bmFvRXhpc3RlRXN0ZVJlZkFx';
 
-/** O nome do solicitante, que NUNCA deve aparecer em lugar nenhum. */
 const NOME_DE_QUEM_PEDIU = 'Mariana Solicitante';
 
-/** O codigo de rastreio das iscas da entrega. */
 const RASTREIO = 'XQ771230045BR';
 
-/**
- * O endereco do pedido. **Cada valor e unico neste arquivo**, para a varredura da
- * isca 2b nao casar com outra coisa por acidente.
- */
 const ENDERECO = {
   destinatario: 'Mariana Destinataria',
   telefone: '+5511987654321',
@@ -82,11 +75,8 @@ function naoUsado(nome: string): never {
 
 interface Bancada {
   readonly fila: FilaDePlaquinhasAdministrativa;
-  /** Os eventos que a unidade de trabalho gravou. */
   readonly eventos: AuditEvent[];
-  /** As decisoes que chegaram ao repositorio. */
   readonly decisoes: { readonly id: string; readonly decisao: string }[];
-  /** As ENTREGAS que chegaram ao repositorio. */
   readonly entregas: {
     readonly id: string;
     readonly passo: PassoDaEntrega;

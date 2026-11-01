@@ -1,8 +1,3 @@
-/**
- * O ENDERECO DE ENTREGA GUARDADO NA CONTA NAO SAI EM SUPERFICIE PUBLICA, NAO
- * APARECE EM LISTA E NAO E LIDO POR OUTRA CONTA — medido no CONTRATO e na
- * CONSULTA.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -14,10 +9,8 @@ const CAMINHO_DO_REPOSITORIO =
 const CAMINHO_DA_PORTA = 'src/modules/tags/ports/endereco-guardado.ts';
 const CAMINHO_DAS_ROTAS = 'src/modules/tags/adapters/http/endereco-guardado-routes.ts';
 
-/** A tabela do endereço guardado. */
 const TABELA = 'user_delivery_addresses';
 
-/** Os NOVE campos do endereço, pelos nomes que o contrato usa. */
 const CAMPOS_DO_ENDERECO = [
   'city',
   'complement',
@@ -55,7 +48,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/** Resolve um `$ref` interno pela SEÇÃO que ele nomeia. */
 function resolver(ref: string): unknown {
   const secoes: Record<string, Record<string, unknown> | undefined> = {
     schemas: spec.components.schemas,
@@ -81,7 +73,6 @@ function resolver(ref: string): unknown {
   return secao[casado[2] ?? ''];
 }
 
-/** Todo nome de propriedade alcançável a partir de um nó do contrato. */
 function propriedadesAlcancaveis(no: unknown, vistos: Set<string> = new Set()): Set<string> {
   const achadas = new Set<string>();
   const descer = (valor: unknown): void => {
@@ -120,10 +111,8 @@ function propriedadesAlcancaveis(no: unknown, vistos: Set<string> = new Set()): 
   return achadas;
 }
 
-/** OS DOIS CAMPOS QUE DISTINGUEM A RESIDÊNCIA DE UM ENDEREÇO PÚBLICO. */
 const MARCADORES_DA_RESIDENCIA = ['recipient_name', 'street_number'] as const;
 
-/** O endereço é alcançável DE DENTRO de um array, a partir deste nó? */
 function enderecoSobArray(no: unknown, vistos: Set<string> = new Set()): boolean {
   if (Array.isArray(no)) return no.some((item) => enderecoSobArray(item, vistos));
   if (!ehObjeto(no)) return false;
@@ -172,10 +161,6 @@ function todasAsOperacoes(): Operacao[] {
   return operacoes;
 }
 
-/**
- * Alcançável SEM conta: `security: []` (ninguém precisa de token) ou uma
- * alternativa vazia na lista (o token é opcional).
- */
 function alcancaOEndereco(op: OperacaoBruta): boolean {
   const achadas = propriedadesAlcancaveis(op);
   return MARCADORES_DA_RESIDENCIA.every((campo) => achadas.has(campo));
@@ -332,7 +317,6 @@ void describe('o endereço guardado não sai em superfície pública (contrato)'
 void describe('o endereço guardado é lido só pelo dono (consulta e porta)', () => {
   const repositorio = readFileSync(CAMINHO_DO_REPOSITORIO, 'utf8');
 
-  /** AS FATIAS, e é aqui que este portão declara ONDE ELE CORTA. */
   const fatias = repositorio.split('await this.db').slice(1);
 
   void it('o corte da consulta é onde eu digo que é, e nenhuma fatia é cega', () => {

@@ -1,7 +1,3 @@
-/**
- * `/v1/admin/directory/suggestions/...`: a FILA DE REVISAO das indicacoes do
- * `Perto` (18/10/2026).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -15,10 +11,6 @@ import type {
   RecusaDaIndicacao,
 } from '../../application/fila-de-indicacoes.js';
 
-/**
- * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
- * administrativas.
- */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -74,10 +66,6 @@ export interface DependenciasDasRotasDaFilaDeIndicacoes {
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 50;
 
-/**
- * `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave
- * (ADR-0027 item 20.2).
- */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;

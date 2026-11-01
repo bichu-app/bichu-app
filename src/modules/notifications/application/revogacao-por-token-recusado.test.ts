@@ -1,4 +1,3 @@
-/** O critério 4: o FCM recusou o token, o aparelho sai, e os outros continuam. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -30,7 +29,6 @@ function aparelho(id: string, token: TokenDeAparelho): Aparelho {
   };
 }
 
-/** Registro em memória com **dois aparelhos da mesma conta**. */
 function montar(): {
   servico: RegistroDeAparelhosService;
   linhas: Map<string, Aparelho>;

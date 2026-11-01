@@ -1,7 +1,3 @@
-/**
- * O QUE `LogotipoDaIndicacao.autorizar` FAZ, medido -- e o que ele NAO deixa
- * passar.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -25,13 +21,8 @@ const CHAVE = comoObjectKey('directory/original/0192a3b40000700080000000000000cc
 const EXPIRA_EM = 1_770_000_000_000 as Instant;
 const TETO_DE_BYTES = 6_000_000;
 
-/**
- * O executor injetado, com uma MARCA: a asercao da identidade e por referencia, e
- * um objeto vazio dos dois lados passaria por `deepEqual` sem provar nada.
- */
 const DB = { marcaDoExecutorInjetado: 'o-de-quem-chama' } as unknown as DbExecutor;
 
-/** O corpo que PASSA, do qual cada caso muda uma coisa so. */
 const CORPO_BOM: CorpoDaIntencaoDoLogotipo = {
   content_type: 'image/png',
   byte_size: 180_000,
@@ -53,7 +44,6 @@ interface IntencaoGravada {
 function bancada() {
   const assinaturas: { contentType: string; byteSize: number; proposito: PropositoDaImagem }[] = [];
   const gravadas: IntencaoGravada[] = [];
-  /** A ordem das duas chamadas, que e o que mede o "ANTES". */
   const ordem: ('assinar' | 'gravar')[] = [];
 
   const envios: PreparadorDeEnvioDeCatalogo = {

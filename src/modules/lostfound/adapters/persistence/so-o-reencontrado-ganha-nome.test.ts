@@ -1,7 +1,3 @@
-/**
- * SÓ O REENCONTRADO GANHA NOME: os outros quatro motivos do 410 público continuam
- * fundidos.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -10,14 +6,8 @@ import type { Instant } from '../../../../shared/types/brands.js';
 import { casoDaLinha, type LinhaDoCasoPublico } from './kysely-leitura-publica-do-caso.js';
 
 const TOKEN = 'k3J9-share-token-opaco-0001';
-/** 2026-09-20T18:30:00.000Z */
 const VISTO_EM = 1_789_929_000_000 as Instant;
 
-/**
- * Uma linha da consulta. O pet nasce **de pé** -- vivo, não excluído, não
- * arquivado --, porque o estado hostil de cada caso é escrito por extenso em quem
- * o usa, e não herdado do molde.
- */
 function linha(parcial: Partial<LinhaDoCasoPublico> = {}): LinhaDoCasoPublico {
   return {
     share_token: TOKEN,
@@ -42,7 +32,6 @@ function linha(parcial: Partial<LinhaDoCasoPublico> = {}): LinhaDoCasoPublico {
   };
 }
 
-/** Os três jeitos de o ANIMAL não estar de pé, mais o jeito de estar. */
 const CONDICOES_DO_PET: readonly { rotulo: string; linha: Partial<LinhaDoCasoPublico> }[] = [
   { rotulo: 'pet de pé', linha: {} },
   { rotulo: 'pet EXCLUÍDO', linha: { pet_excluido: true } },
@@ -50,7 +39,6 @@ const CONDICOES_DO_PET: readonly { rotulo: string; linha: Partial<LinhaDoCasoPub
   { rotulo: 'pet ARQUIVADO', linha: { pet_status: 'archived' } },
 ];
 
-/** Os desfechos de caso que chegam ao 410. */
 type DesfechoDoCaso = LinhaDoCasoPublico['status'];
 
 const DESFECHOS_ENCERRADOS: readonly DesfechoDoCaso[] = [
@@ -59,7 +47,6 @@ const DESFECHOS_ENCERRADOS: readonly DesfechoDoCaso[] = [
   'closed_false_alarm',
 ];
 
-/** O único par (desfecho, pet) que a decisão do cliente autoriza a falar. */
 const O_PAR_QUE_FALA: { desfecho: DesfechoDoCaso; pet: string } = {
   desfecho: 'closed_reunited',
   pet: 'pet de pé',

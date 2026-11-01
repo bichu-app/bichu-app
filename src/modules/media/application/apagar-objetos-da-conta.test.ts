@@ -1,7 +1,3 @@
-/**
- * SEC-020, a metade que roda sem infraestrutura: o apagamento de objeto pede as
- * chaves ANTES e apaga no balde CERTO.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -13,13 +9,11 @@ import { criarApagadorDeObjetosDaConta } from './apagar-objetos-da-conta.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 
-/** Uma pedida de apagamento, como o balde a veria chegar. */
 interface Apagado {
   readonly classe: Classe;
   readonly chave: ObjectKey;
 }
 
-/** Um armazenamento que **guarda o que foi pedido**, e não um espião de chamada. */
 function baldeDeMentira(quebrado = false): ObjectStorage & { readonly apagados: Apagado[] } {
   const apagados: Apagado[] = [];
   return {
@@ -53,7 +47,6 @@ function repositorioCom(objetos: readonly ObjetoDaConta[]): {
   };
 }
 
-/** As três de uma foto de pet confirmada. */
 const OS_TRES_DE_UMA_FOTO: readonly ObjetoDaConta[] = [
   { classe: 'privado', chave: comoObjectKey('pets/pet-1/original/aaaa') },
   { classe: 'publico', chave: comoObjectKey('card/bbbb.webp') },

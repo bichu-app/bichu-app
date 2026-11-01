@@ -1,4 +1,3 @@
-/** BICHUS-42 — o que só um teste de unidade prova na troca de e-mail. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -60,7 +59,6 @@ class RepositorioDaTroca extends RepositorioQueRecusaTudo {
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly pedidosGravados: { userId: UserId; novoEmail: string }[] = [];
 
-  /** `dono` é a conta que já ocupa o endereço novo, ou `undefined` se ele está livre. */
   constructor(private readonly dono: Conta | undefined) {
     super();
   }

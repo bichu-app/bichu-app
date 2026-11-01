@@ -1,4 +1,3 @@
-/** Os casos de uso da escrita administrativa da `Loja`, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -815,10 +814,6 @@ void describe('escrita administrativa da Loja', () => {
   });
 });
 
-/**
- * Os DOIS NIVEIS da categoria (decisao do cliente de 17/10/2026: "dois niveis, com
- * subcategorias como a petlove").
- */
 void describe('categoria e subcategoria, os dois niveis', () => {
   let m: ReturnType<typeof montar>;
   beforeEach(async () => {

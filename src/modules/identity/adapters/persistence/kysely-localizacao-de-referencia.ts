@@ -1,4 +1,3 @@
-/** Persistência da localização de referência, em PostGIS. */
 import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';

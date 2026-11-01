@@ -26,7 +26,6 @@ export function atingiuTetoDaConta(estado: EstadoParaAbertura): boolean {
   return estado.casosAbertosDaConta >= TETO_DE_CASOS_ABERTOS_POR_CONTA;
 }
 
-/** Onde o pet foi visto. Uma das duas, nunca nenhuma. */
 import { rotuloDaArea as rotuloDeAreaCompartilhado } from '../../../shared/lugar/rotulo-de-area.js';
 
 export interface OndeFoiVisto {

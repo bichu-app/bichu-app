@@ -1,4 +1,3 @@
-/** Dependências de teto para cenário de teste. */
 import { dependenciasDoTeto, type DependenciasDoTeto } from './aplicacao-de-teto.js';
 import { criarContadorEmMemoria } from './rate-limit.js';
 import type { RateLimitStore } from '../ports/rate-limit-store.js';

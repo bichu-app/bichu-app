@@ -1,8 +1,3 @@
-/**
- * A fiacao da base de senhas vazadas do login do painel em `src/bin/api.ts`,
- * conferida por TEXTO, pelo mesmo motivo de `fiacao-das-bases.test.ts`: nada de
- * `api.ts` e carregado por teste, e a fiacao e o arquivo.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';

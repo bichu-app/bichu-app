@@ -1,22 +1,14 @@
-/** Portao do contrato administrativo (ADR-0027 item 7, regras 1 a 3; D37). */
 import { parse as parseYaml } from 'yaml';
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 const SEGUROS: ReadonlySet<string> = new Set(['get']);
 const PREFIXO = '/admin/';
-/**
- * A lista fechada de `superficie-administrativa.ts`, repetida aqui e nao
- * importada: o portao le o contrato por conta propria.
- */
 const SEM_SESSAO: ReadonlySet<string> = new Set(['openAdminSession', 'disavowAdminSessionAlert']);
-/** As que conferem senha. Definir senha nenhuma operacao define (D61). */
 const RECEBEM_SENHA: ReadonlySet<string> = new Set(['openAdminSession', 'reauthenticateAdmin']);
 const PROBLEMA_BANIDO = 'password-reset-required';
 const ESQUEMAS_ADMINISTRATIVOS = ['adminSession', 'adminCsrf', 'adminReauth'];
-/** Verbos de acao que descrevem leitura, e nao mudanca de estado. */
 const VERBOS_DE_LEITURA: ReadonlySet<string> = new Set(['listed', 'read']);
 
-/** A operacao declara o teto por linhas devolvidas (D56)? */
 function contaLinhasDevolvidas(tetos: unknown): boolean {
   return Array.isArray(tetos) && tetos.some((t) => ehObjeto(t) && t['counts'] === 'rows_returned');
 }
@@ -53,7 +45,6 @@ export interface ResultadoDoPortao {
   readonly violacoes: readonly string[];
 }
 
-/** O esquema do corpo JSON da operacao, com `$ref` local resolvido um nivel. */
 function esquemaDoCorpo(spec: Record<string, unknown>, operacao: Record<string, unknown>): Record<string, unknown> | undefined {
   const corpo = operacao['requestBody'];
   const conteudo = ehObjeto(corpo) ? corpo['content'] : undefined;

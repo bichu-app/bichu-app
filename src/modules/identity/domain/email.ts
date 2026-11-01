@@ -1,4 +1,3 @@
-/** Normalização de e-mail. */
 import { motivoDaRecusaDeEndereco } from './gramatica-de-endereco.js';
 
 export const TAMANHO_MAXIMO_DE_EMAIL = 254;

@@ -1,4 +1,3 @@
-/** O caso de uso da vitrine passa ao registro o MESMO proposito que assinou. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -15,9 +14,7 @@ const DONA = 'a1b2c3d4-0000-7000-8000-000000000001' as UserId;
 const UPLOAD = '01a151f1-5d7f-708d-97fb-97d65d8f733c';
 
 interface Medicao {
-  /** Os propositos com que a politica foi ASSINADA, na ordem. */
   readonly assinados: string[];
-  /** Os propositos que foram ao REGISTRO, na ordem. */
   readonly registrados: string[];
 }
 
@@ -44,7 +41,6 @@ async function autorizar(): Promise<Medicao> {
     },
   } as PreparadorDeEnvioDeCatalogo;
 
-  /** A vitrine vazia: `listar` serve ao teto de nove, e nada mais. */
   const vitrine = {
     listar: () => Promise.resolve([]),
   } as unknown as VitrineRepository;
@@ -70,7 +66,6 @@ async function autorizar(): Promise<Medicao> {
   return { assinados, registrados };
 }
 
-/** A chave que o preparador de verdade produziria para este propósito. */
 function chaveDeTeste(proposito: string): ObjectKey {
   return comoObjectKey(`${proposito === PROPOSITO_DA_VITRINE ? 'people' : 'events'}/original/p9Xab`);
 }

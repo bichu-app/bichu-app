@@ -1,4 +1,3 @@
-/** A porta da **busca de pessoas** (decisão do cliente de 20/10/2026). */
 import type { UserId } from '../../../shared/types/brands.js';
 
 /** Uma pessoa como a busca a entrega: **quatro campos, e nada mais**. */

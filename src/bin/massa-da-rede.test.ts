@@ -1,4 +1,3 @@
-/** As regras que a massa da `Rede` precisa respeitar, afirmadas sem subir banco. */
 import assert from 'node:assert/strict';
 import { redigirCanalMediado } from '../shared/redaction/redigir.js';
 import { describe, it } from 'node:test';
@@ -14,11 +13,8 @@ import {
   momentoDoEncontro,
 } from './massa-da-rede.js';
 
-/** Copiado do `CHECK`, e nao importado. */
 const FORMATO_DO_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
-/** `network_events_uf_tem_duas_letras`. */
 const FORMATO_DA_UF = /^[A-Z]{2}$/;
-/** `network_events_fuso_tem_forma_iana`. */
 const FORMA_IANA = /^[A-Za-z]+\/[A-Za-z_]+$/;
 
 const TETO_DO_TITULO = 120;
@@ -27,7 +23,6 @@ const TETO_DO_LUGAR = 80;
 const TETO_DO_BAIRRO = 60;
 const TETO_DA_CIDADE = 60;
 
-/** Um `hoje` fixo, para as contas deste arquivo nao dependerem do relogio. */
 const HOJE = new Date('2026-09-23T15:30:00.000Z');
 
 function comprimido(texto: string): number {

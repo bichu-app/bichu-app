@@ -1,4 +1,3 @@
-/** A porta da vitrine de fotos do usuário. */
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey, UserId } from '../../../shared/types/brands.js';
 import type { StatusDaFoto } from '../../media/ports/media-repository.js';

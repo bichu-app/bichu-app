@@ -1,7 +1,3 @@
-/**
- * `admin_sessions`, `admin_reauth_tokens` e `admin_session_alerts` em Postgres
- * (ADR-0027, apendice A.1 e item 20).
- */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { AdminAccountId, Instant } from '../../../../shared/types/brands.js';
 import type {
@@ -9,7 +5,6 @@ import type {
   SessaoComConta,
 } from '../../ports/sessao-administrativa-repository.js';
 
-/** O teto de `user_agent` na migracao. */
 const TAMANHO_MAXIMO_DO_USER_AGENT = 512;
 
 export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativaRepository {

@@ -1,4 +1,3 @@
-/** **ISCA (c): A LISTA DE BLOQUEADOS NÃO MOSTRA MAIS DO QUE FOI DECIDIDO.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

@@ -1,4 +1,3 @@
-/** A lista de conversas ordena pela ULTIMA MENSAGEM, e o SQL compilado prova. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -34,7 +33,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** Do primeiro ` order by ` em diante. */
 function clausulaOrderBy(sql: string): string {
   const corte = sql.indexOf(' order by ');
   assert.ok(
@@ -45,7 +43,6 @@ function clausulaOrderBy(sql: string): string {
   return sql.slice(corte);
 }
 
-/** Do primeiro ` where ` ate o ` order by `, que e onde o cursor mora. */
 function clausulaWhere(sql: string): string {
   const inicio = sql.indexOf(' where ');
   assert.ok(
@@ -84,7 +81,6 @@ void describe('os recortes de clausula', () => {
   });
 });
 
-/** A chave que o `ORDER BY` (ou o cursor) usa, com os espacos colapsados. */
 function semEspaco(texto: string): string {
   return texto.replace(/\s+/g, ' ').trim();
 }

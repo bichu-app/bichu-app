@@ -1,7 +1,3 @@
-/**
- * O trabalho que torna uma imagem de catalogo servivel (ADR-0027 item 10), na
- * mesma ordem de `processar-foto.ts`, e pelos mesmos motivos:
- */
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import { chaveDaDerivada } from '../domain/chave-de-objeto.js';
 import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js';
@@ -27,7 +23,6 @@ import {
 import type { ObjectKey } from '../../../shared/types/brands.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
-/** As derivadas por proposito, do PONTO UNICO (`domain/derivadas.ts`). */
 const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaDerivada[]>> = {
   network_event: DERIVADAS_DO_ENCONTRO,
   store_item: DERIVADAS_DO_PRODUTO,
@@ -41,7 +36,6 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   user_publication: DERIVADAS_DA_PUBLICACAO,
 };
 
-/** O texto que o painel mostra, por motivo. */
 const TEXTO_DA_RECUSA: Record<MotivoDeRecusa, string> = {
   formato_nao_aceito: 'Esse arquivo não é uma imagem JPEG, PNG ou WebP.',
   imagem_grande_demais: 'Essa imagem é grande demais. Reduza e envie de novo.',

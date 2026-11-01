@@ -1,4 +1,3 @@
-/** A projeção do perfil público do pet (`PublicPetProfile`). */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { components } from '../../../shared/types/generated/api.js';
 import type { AbsoluteUrl } from '../../../shared/types/brands.js';

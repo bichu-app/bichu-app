@@ -1,7 +1,3 @@
-/**
- * Comparador de destinos: o que PODE divergir está numa lista fechada, e só isso
- * pode ter divergido.
- */
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 
@@ -77,7 +73,6 @@ function achatar(valor: unknown, prefixo = ''): Map<string, string> {
   return plano;
 }
 
-/** Campos que a comparação exige que EXISTAM nos dois lados. */
 const CAMPOS_OBRIGATORIOS = ['status', 'version', 'build.artifact', 'build.commit'];
 
 export interface ResultadoDaComparacao {

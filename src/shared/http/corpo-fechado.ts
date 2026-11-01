@@ -1,7 +1,3 @@
-/**
- * `additionalProperties: false` no contrato **não fecha o corpo em tempo de
- * execução**, e este arquivo é a correção.
- */
 import type { FastifyRequest, preValidationHookHandler } from 'fastify';
 
 import { problemas } from './errors.js';
@@ -11,7 +7,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/** Monta o guarda a partir do schema do contrato. */
 function desconhecidosDe(
   schema: Record<string, unknown>,
   corpo: unknown,

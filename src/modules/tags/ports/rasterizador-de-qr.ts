@@ -1,4 +1,3 @@
-/** Porta do rasterizador do QR. */
 import type { DesenhoDoQr } from '../domain/qr-da-tag.js';
 
 export interface RasterizadorDeQr {

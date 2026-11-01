@@ -1,4 +1,3 @@
-/** BICHUS-278 -- o marcador de "ja vi" de cada area com contador. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { SecaoComContador } from '../../../shared/db/schema.js';
 

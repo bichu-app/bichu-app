@@ -1,4 +1,3 @@
-/** Validação de parâmetro de caminho e de query string, vinda do contrato. */
 import type { FastifySchema } from 'fastify';
 import type { RegistradorDeRotas } from './registrar-rota.js';
 import type { Contrato, EsquemasDeParametros } from './contract.js';
@@ -6,7 +5,6 @@ import { AppError, problemas } from './errors.js';
 import { caminhoDoContrato } from './idempotency.js';
 import { campoDoSchema, type ErroDeSchema } from './erros-de-schema.js';
 
-/** **A decisão de status, e o único lugar que a contém.** */
 function problemaDeParametroMalformado(
   erros: readonly ErroDeSchema[],
   tiposDeProblema: ReadonlyMap<string, string>,
@@ -30,7 +28,6 @@ function problemaDeParametroMalformado(
   return problemas.validacao(campos, 'Confira os valores do endereço da requisição.');
 }
 
-/** Um schema de parâmetro que **não consegue recusar nada**. */
 function podeRecusar(schemaDoParametro: unknown): boolean {
   if (typeof schemaDoParametro !== 'object' || schemaDoParametro === null) return false;
   const chaves = Object.keys(schemaDoParametro);
@@ -72,7 +69,6 @@ export function vigiarParametrosDasRotas(
   const comSchemaProprio: string[] = [];
   const semQuatrocentos: string[] = [];
   let cobertas = 0;
-  /** Quantas rotas registradas instalaram esquema de corpo. */
   let corposConferidos = 0;
 
   app.addHook('onRoute', (rota) => {

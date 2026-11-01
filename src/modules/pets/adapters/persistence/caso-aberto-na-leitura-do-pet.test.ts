@@ -1,4 +1,3 @@
-/** `Pet.open_case_id` SAI DA CONSULTA, e o SQL compilado prova isso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -15,10 +14,6 @@ import { construtorDaLeituraDoDono } from './kysely-pet-repository.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 
-/**
- * O mesmo arranjo de `autorizacao-na-clausula-where.test.ts`: compila, não
- * executa.
- */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -28,7 +23,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** A subconsulta de `open_case_id`, como o compilador do Postgres a escreve. */
 const SUBCONSULTA_DO_CASO =
   /\(select\s+"lost_cases"\."id"\s+from\s+"lost_cases"\s+where\s+[^)]*\)\s+as\s+"open_case_id"/;
 

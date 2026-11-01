@@ -1,7 +1,3 @@
-/**
- * ISCA: o encontro de quem desabilitou a conta sai da agenda, e sai de TODAS as
- * superfícies da Rede de uma vez.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -29,7 +25,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** O predicado, como o compilador do Postgres o escreve. */
 const PREDICADO_DO_AUTOR = /encontro_com_autor_ativo\(\s*"?e"?\."?id"?\s*\)/;
 
 const SEM_O_PREDICADO =

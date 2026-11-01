@@ -1,11 +1,9 @@
-/** A isca do critério 5 da BICHUS-198, e a única que não envelhece. */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { emailTemFormaValida } from './email.js';
 import { conferirDestinatario } from '../adapters/external/smtp-mailer.js';
 
-/** O fio recusa levantando; a borda recusa devolvendo `false`. */
 function oFioRecusa(endereco: string): boolean {
   try {
     conferirDestinatario(endereco);
@@ -19,16 +17,11 @@ function aBordaRecusa(endereco: string): boolean {
   return !emailTemFormaValida(endereco);
 }
 
-/** As posições em que o caractere é injetado. */
 const MOLDES = [
   { nome: 'parte local', montar: (ch: string): string => `a${ch}@b.test` },
   { nome: 'domínio', montar: (ch: string): string => `a@b${ch}.test` },
 ] as const;
 
-/**
- * A única regra que é da borda e não do fio, e ela é de estrutura, não de
- * gramática de transporte: um endereço tem **um** `@`.
- */
 const ARROBA = 0x40;
 
 void describe('BICHUS-198 — a borda e o fio recusam a mesma classe', () => {

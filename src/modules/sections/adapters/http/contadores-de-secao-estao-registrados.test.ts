@@ -1,4 +1,3 @@
-/** ISCA — as DUAS rotas dos contadores estao REGISTRADAS, e nao so declaradas. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,7 +16,6 @@ import type { SecaoComContador } from '../../ports/marcadores-de-secao.js';
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 
-/** Numeros DIFERENTES entre si e diferentes de zero, de proposito. */
 const CONTAGEM: ContadoresDeSecao = {
   perdidosNovos: 3,
   eventosNovos: 7,

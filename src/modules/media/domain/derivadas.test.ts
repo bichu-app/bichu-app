@@ -1,7 +1,3 @@
-/**
- * O PONTO ÚNICO de configuração do tratamento de imagem, e o que estes casos
- * protegem não é o valor de hoje — é o fato de haver **um** valor.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

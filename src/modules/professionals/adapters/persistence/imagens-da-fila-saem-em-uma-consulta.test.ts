@@ -1,11 +1,3 @@
-/**
- * ISCA — as imagens da indicacao saem na MESMA consulta da pagina da fila, e o
- * numero de consultas **nao cresce com o numero de linhas**.
- *
- * O precedente medido e `pontuacao-da-listagem-sai-em-uma-consulta.test.ts`: a
- * fila e paginada em ate 20 linhas, e uma leitura de imagem por indicacao seriam
- * 21 consultas numa pagina.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,13 +9,10 @@ import {
   type DependenciasDaFilaDeIndicacoes,
 } from './kysely-fila-de-indicacoes.js';
 
-/** A consulta da PAGINA, reconhecida por uma coluna da projecao dela. */
 const DA_PAGINA = (sql: string): boolean => sql.includes('AS foto_card_keys');
 
-/** Qualquer consulta que toque a tabela das fotos. */
 const TOCA_AS_FOTOS = (sql: string): boolean => sql.includes('directory_suggestion_images');
 
-/** Uma linha da pagina, com as colunas da indicacao E as TRES de imagem. */
 function linha(n: number): Record<string, unknown> {
   return {
     ref: `ref-${String(n)}`,
@@ -43,8 +32,6 @@ function linha(n: number): Record<string, unknown> {
     entry_slug: null,
     logo_thumb_key: `directory/thumb/bG9nby0${String(n)}.webp`,
     foto_card_keys: [`directory/card/Zm90by0${String(n)}.webp`],
-    // MAIOR que o tamanho da lista de proposito: e a contagem de TODAS as
-    // linhas, prontas ou nao.
     fotos_total: String(n % 4),
   };
 }
@@ -54,11 +41,6 @@ interface Medicao {
   readonly consultas: readonly string[];
 }
 
-/**
- * As dependencias que `listar` NAO exercita: `trilha` e `imagens` so sao usadas
- * dentro de `emTransacao`, e um dublê que as implementasse aqui faria o caso
- * medir o dublê.
- */
 const DEPS_SEM_TRANSACAO = {} as unknown as Omit<DependenciasDaFilaDeIndicacoes, 'db'>;
 
 async function listar(linhas: number): Promise<Medicao> {
@@ -84,7 +66,6 @@ void describe('ISCA: as imagens da fila de indicacoes', () => {
         'E o N+1: uma leitura de imagem por indicacao. As tres projecoes de imagem ' +
         `tem de sair da consulta da pagina. SQL: ${vinte.consultas.join(' ||| ')}`,
     );
-    // Contagem, pagina e pendentes: as TRES que a fila ja emitia antes das imagens.
     assert.equal(vinte.consultas.length, 3, `SQL: ${vinte.consultas.join(' ||| ')}`);
     assert.equal(vinte.pagina.itens.length, 20);
   });
@@ -117,12 +98,6 @@ void describe('ISCA: as imagens da fila de indicacoes', () => {
     );
   });
 
-  /**
-   * O recorte e medido DENTRO do pedaco de SQL de cada projecao, e nao no texto
-   * inteiro da consulta: `c.status = 'ready'` aparece tambem na subconsulta da
-   * LOGO, e procura-lo na consulta toda aprova mesmo com o filtro das fotos
-   * apagado -- foi o que a primeira versao deste caso fez, e a planta nao a pegou.
-   */
   void it('`foto_card_keys` filtra as `ready` DENTRO da propria subconsulta', async () => {
     const { consultas } = await listar(20);
     const pagina = consultas.find(DA_PAGINA) ?? '';
@@ -143,11 +118,6 @@ void describe('ISCA: as imagens da fila de indicacoes', () => {
     );
   });
 
-  /**
-   * A contagem NAO pode juntar com `catalog_images`: a juncao faria perder a foto
-   * cuja imagem o varredor apagou, e e justamente essa diferenca que o painel usa
-   * para dizer "ainda processando" em vez de "sem fotos".
-   */
   void it('`fotos_total` conta as LINHAS da tabela, sem juntar com `catalog_images`', async () => {
     const { consultas } = await listar(20);
     const pagina = consultas.find(DA_PAGINA) ?? '';

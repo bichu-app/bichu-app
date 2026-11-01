@@ -1,4 +1,3 @@
-/** Persistência do perfil público do pet, pelo `slug`. */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { LeituraDoPerfilPublico, PerfilPublicoDoPet } from '../../ports/perfil-publico.js';
 

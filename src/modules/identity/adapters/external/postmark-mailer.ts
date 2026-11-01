@@ -1,27 +1,15 @@
-/**
- * Envio pelo Postmark, por HTTP, e o único transporte que entrega a gente de
- * verdade (ADR-0009).
- */
 import type { Mailer, Mensagem } from '../../ports/mailer.js';
 import type { MailConfig } from '../../../../shared/config/app-config.js';
 import { conferirDestinatario, limparAssunto } from './defesas-de-cabecalho.js';
 
-/** O endereço da API de envio do Postmark. */
 const ENDERECO_DA_API = 'https://api.postmarkapp.com/email';
 
-/** O stream transacional, separado do de divulgação. */
 const STREAM_TRANSACIONAL = 'outbound';
 
-/** Até quando se espera a resposta do provedor. */
 const PRAZO_DA_CHAMADA_MS = 10_000;
 
-/**
- * O código que o Postmark devolve quando o destinatário está na lista de
- * supressão.
- */
 const CODIGO_DE_DESTINATARIO_INATIVO = 406;
 
-/** O recorte que este arquivo usa da resposta do Postmark. */
 interface RespostaDoPostmark {
   readonly ErrorCode?: unknown;
   readonly Message?: unknown;
@@ -41,7 +29,6 @@ export function montarCorpoDaApi(config: MailConfig, m: Mensagem): Record<string
   };
 }
 
-/** A única função que toca no token. */
 function montarCabecalhos(apiToken: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -50,7 +37,6 @@ function montarCabecalhos(apiToken: string): Record<string, string> {
   };
 }
 
-/** Lê a resposta e decide entre seguir e levantar erro. */
 function conferirResposta(status: number, corpo: RespostaDoPostmark): void {
   const codigo = typeof corpo.ErrorCode === 'number' ? corpo.ErrorCode : null;
   const recado = typeof corpo.Message === 'string' ? corpo.Message : '';

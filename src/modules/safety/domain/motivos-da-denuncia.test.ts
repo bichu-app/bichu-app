@@ -1,7 +1,3 @@
-/**
- * ISCA (f): **MOTIVO FORA DA LISTA FECHADA É RECUSADO** — e isso inclui o motivo
- * que existe em OUTRA lista.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

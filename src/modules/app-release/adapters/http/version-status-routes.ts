@@ -1,4 +1,3 @@
-/** `GET /v1/app/version-status` (`getAppVersionStatus`): o veredito de versao. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -17,7 +16,6 @@ export interface DependenciasDoVereditoDeVersao {
   readonly politica: LeituraDaPoliticaDeVersao;
 }
 
-/** A query string, com os tipos do contrato. */
 interface QueryDaVersao {
   readonly platform?: PlataformaDoApp | undefined;
   readonly version?: string | undefined;

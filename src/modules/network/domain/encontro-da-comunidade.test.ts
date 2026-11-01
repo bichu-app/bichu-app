@@ -1,7 +1,3 @@
-/**
- * As regras da proposta de encontro pela comunidade (ADR-0025 emenda 3), sem banco
- * e sem servidor.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

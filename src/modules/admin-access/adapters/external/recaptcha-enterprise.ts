@@ -1,4 +1,3 @@
-/** O reCAPTCHA Enterprise do login administrativo (D41), por HTTP, sem SDK. */
 import {
   captchaNaoConfigurado,
   type VerificadorDeCaptcha,

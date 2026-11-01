@@ -1,4 +1,3 @@
-/** Testes do portão de saída (ADR-0011, emenda 1, seção 4). */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';

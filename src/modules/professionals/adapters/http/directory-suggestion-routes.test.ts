@@ -1,7 +1,3 @@
-/**
- * `POST /directory/suggestions`, sobre um Fastify de verdade e com o CONTRATO de
- * verdade.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -51,13 +47,10 @@ const CORPO_VALIDO = {
 
 interface Cenario {
   readonly contador?: RateLimitStore;
-  /** Campos que o detector de texto deve recusar, com o `code` de D59. */
   readonly recusarTexto?: readonly string[];
-  /** A conta que chama tem canal de contato verificado? */
   readonly validada?: boolean;
 }
 
-/** O que o repositorio recebeu, por cenario. */
 let gravadas: SugestaoAGravar[] = [];
 let trilhaDeTeste: AuditEvent[] = [];
 
@@ -75,7 +68,6 @@ function repositorio(): DirectorySuggestionRepository {
   };
 }
 
-/** Quais contas o servidor considera VALIDADAS, por cenario. */
 let consultasDeCanal: UserId[] = [];
 
 function canal(cenario: Cenario): CanalDeContatoDoChamador {
@@ -87,7 +79,6 @@ function canal(cenario: Cenario): CanalDeContatoDoChamador {
   };
 }
 
-/** Ver o cabecalho: o detector de verdade nao e importavel daqui. */
 function conferencias(cenario: Cenario): ConferenciasDeTexto {
   return {
     errosDeTextoDeUsuario: (campo): ProblemFieldError[] =>
@@ -469,7 +460,6 @@ void describe('a trilha: `directory_suggestion.submitted`', () => {
   });
 });
 
-/** A ISCA DA TRAVA DE CONTA VALIDADA (regra do cliente, dita duas vezes). */
 void describe('ISCA: so conta VALIDADA sugere, e a recusa e do SERVIDOR', () => {
   void it('conta valida e NAO validada, chamando a rota direto, recebe 409 `contact-channel-unverified`', async () => {
     const app = servidor({ validada: false });
@@ -520,7 +510,6 @@ void describe('ISCA: so conta VALIDADA sugere, e a recusa e do SERVIDOR', () => 
   });
 });
 
-/** A MODERACAO DE PALAVRAS, medida **pela rota** e nao pelo dominio. */
 void describe('ISCA: a moderacao de palavras vale CHAMANDO A API DIRETO', () => {
   void it('xingamento em `display_name` responde 400 e NAO grava na fila', async () => {
     const resposta = await sugerir(servidor(), {

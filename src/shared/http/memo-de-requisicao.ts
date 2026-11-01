@@ -1,4 +1,3 @@
-/** Memória por requisição, para o trabalho que passou a acontecer duas vezes. */
 const memorias = new WeakMap<object, Map<string, Promise<unknown>>>();
 
 export function memoDaRequisicao<T>(

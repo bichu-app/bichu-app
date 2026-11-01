@@ -1,4 +1,3 @@
-/** ISCAS (b) e (c) do perfil de outra pessoa, medidas **NO CONTRATO**. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -31,7 +30,6 @@ function operacaoDoPerfil(): Operacao {
   return op;
 }
 
-/** Toda operação da etiqueta `people`, com caminho e método. */
 function operacoesDePessoa(): { caminho: string; metodo: string; op: Operacao }[] {
   const achadas: { caminho: string; metodo: string; op: Operacao }[] = [];
   for (const [caminho, item] of Object.entries(spec.paths)) {
@@ -43,7 +41,6 @@ function operacoesDePessoa(): { caminho: string; metodo: string; op: Operacao }[
   return achadas;
 }
 
-/** Os schemas alcançáveis a partir de um bloco, seguindo `$ref` em profundidade. */
 function schemasAlcancados(bloco: unknown): Set<string> {
   const vistos = new Set<string>();
   const fila: unknown[] = [bloco];
@@ -66,7 +63,6 @@ function propriedadesDe(nome: string): string[] {
   return Object.keys(schema.properties ?? {});
 }
 
-/** Toda propriedade alcançável a partir de `PersonProfile`, de todos os schemas. */
 function todasAsPropriedadesDoPerfil(): string[] {
   const nomes = ['PersonProfile', ...schemasAlcancados(spec.components.schemas['PersonProfile'])];
   return nomes.flatMap((nome) => {
@@ -77,7 +73,6 @@ function todasAsPropriedadesDoPerfil(): string[] {
 
 void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', () => {
 
-  /** **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.** */
   void it('a etiqueta `people` tem TRES operacoes, e a lista e exata', () => {
     assert.deepEqual(
       operacoesDePessoa()
@@ -95,7 +90,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  /** As três operações de `people` exigem conta, **sem alternativa vazia**. */
   void it('as TRES operacoes de `people` exigem conta, sem alternativa vazia', () => {
     for (const { metodo, caminho, op } of operacoesDePessoa()) {
       const seguranca = op.security ?? [];
@@ -124,11 +118,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  /**
-   * **ESTE CASO MUDOU EM 20/10/2026.** Ele cobrava que não existisse caminho
-   * `/people` sem apelido, porque *"coleção de pessoas é enumeração, e não existe
-   * busca de pessoas neste produto"*.
-   */
   void it('os caminhos `/people` sao EXATAMENTE dois: a colecao e o apelido', () => {
     const caminhos = Object.keys(spec.paths)
       .filter((caminho) => caminho.startsWith('/people'))
@@ -143,11 +132,6 @@ void describe('o perfil de outra pessoa nao expoe pet nem timeline (contrato)', 
     );
   });
 
-  /**
-   * **A busca existe, e os freios dela são parte da decisão.** Sem este caso, a
-   * mudança acima teria aberto a coleção sem nada cobrar o que o cliente pediu junto
-   * com ela.
-   */
   void it('a colecao `/people` SO existe com busca: sem `q` ela nao lista ninguem', () => {
     const busca = spec.paths['/people']?.get as
       | { parameters?: readonly { name?: string; required?: boolean; schema?: { minLength?: number } }[] }

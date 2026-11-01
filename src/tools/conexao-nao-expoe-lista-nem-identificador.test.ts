@@ -1,8 +1,3 @@
-/**
- * **ISCA (b): A LISTA DE CONEXÕES DE TERCEIRO NÃO APARECE A NINGUÉM.** E **ISCA
- * (f): nenhum identificador interno sai em resposta.** As duas medidas **no
- * contrato**, que é onde elas podem ser provadas por omissão.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -41,7 +36,6 @@ function operacoesDaConexao(): { caminho: string; metodo: string; operacao: Oper
   return achadas;
 }
 
-/** Os nomes de schema que a família da conexão alcança, seguindo `$ref`. */
 function schemasAlcancados(nomes: readonly string[]): Set<string> {
   const vistos = new Set<string>();
   const fila = [...nomes];
@@ -58,7 +52,6 @@ function schemasAlcancados(nomes: readonly string[]): Set<string> {
   return vistos;
 }
 
-/** As raízes da família da conexão. */
 const DA_CONEXAO = [
   'Connection',
   'ConnectionPerson',
@@ -67,11 +60,6 @@ const DA_CONEXAO = [
   'ConnectedPersonPage',
 ];
 
-/**
- * **As operações que a etiqueta `connections` tem, e as leituras que ela
- * permite.** Fechadas as duas, e o número é o mecanismo: é ele que faz uma
- * operação nova ser vista por alguém antes de nascer.
- */
 const AS_SEIS = [
   'acceptConnection',
   'endConnection',
@@ -81,18 +69,12 @@ const AS_SEIS = [
   'requestConnection',
 ];
 
-/** As leituras (`GET`) que a etiqueta permite. */
 const LEITURAS_PERMITIDAS = [
   'listMyConnectionRequests',
   'getMyConnectionSummary',
   'listMyConnections',
 ];
 
-/**
- * **Os cinco campos que uma pessoa mostra numa LISTA desta casa** — os de
- * `PersonSearchResult`, decididos em 20/10/2026 e emendados em 21/10/2026 (a
- * foto).
- */
 const CINCO_DA_LISTA = [
   'connections_count',
   'display_name',
@@ -101,16 +83,9 @@ const CINCO_DA_LISTA = [
   'photo_icon_url',
 ];
 
-/** Nomes de parâmetro de caminho que endereçam **uma pessoa**. */
 const ENDERECAM_PESSOA = ['handle', 'userRef', 'personRef', 'publicRef', 'nickname', 'userId'];
 
 void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nenhum', () => {
-  /**
-   * **SEIS desde 22/10/2026, e eram CINCO.** O número subiu por uma decisão do
-   * cliente, nomeada na constante [AS_SEIS], e não por alguém ter afrouxado a
-   * conferência: ela continua sendo igualdade de conjunto, então a SÉTIMA reprova
-   * exatamente como a sexta reprovava ontem.
-   */
   void it('são exatamente SEIS operações com a etiqueta `connections`', () => {
     const ids = operacoesDaConexao()
       .map(({ operacao }) => operacao.operationId ?? '')
@@ -118,7 +93,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     assert.deepEqual(ids, AS_SEIS);
   });
 
-  /** **ESTE CASO MUDOU EM 22/10/2026, POR DECISÃO DO CLIENTE.** */
   void it('`GET /connections` é `listMyConnections`, a lista do PRÓPRIO DONO', () => {
     assert.equal(
       spec.paths['/connections']?.get?.operationId,
@@ -129,10 +103,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     );
   });
 
-  /**
-   * **As LEITURAS da etiqueta são TRÊS, nomeadas** — e eram duas até 22/10/2026,
-   * quando `listMyConnections` entrou por decisão do cliente.
-   */
   void it('toda leitura de conexão está na lista FECHADA de três', () => {
     const leituras = operacoesDaConexao().filter(({ metodo }) => metodo === 'get');
     assert.equal(leituras.length, 3, 'são três leituras: as duas de 19/10 e a de 22/10');
@@ -146,7 +116,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     }
   });
 
-  /** **O caso que sustenta a metade NÃO emendada da decisão.** */
   void it('nenhuma operação de conexão é endereçada a uma PESSOA', () => {
     for (const { caminho, metodo, operacao } of operacoesDaConexao()) {
       for (const parametro of operacao.parameters ?? []) {
@@ -167,12 +136,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     }
   });
 
-  /**
-   * **`ConnectedPersonPage` tem UMA porta, e esta é a conferência mais forte do
-   * arquivo.** As duas de cima olham a etiqueta e o parâmetro; esta olha a FORMA:
-   * onde quer que no contrato apareça uma página de pessoas conectadas, a operação
-   * que a devolve tem de ser `listMyConnections`.
-   */
   void it('`ConnectedPersonPage` sai por `listMyConnections` e por mais nenhuma operação', () => {
     const portas: string[] = [];
     for (const [caminho, item] of Object.entries(spec.paths)) {
@@ -191,13 +154,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     );
   });
 
-  /**
-   * **DUAS coleções desde 22/10/2026, e eram UMA.** As duas são nomeadas, e as
-   * razões são diferentes: a de pedidos existe porque "pedido recebido" é um dos
-   * três caminhos que o desenho reconhece como relação, e sem saber quem pediu não
-   * se decide nada; a de conexões aceitas existe porque **o cliente a pediu em
-   * 22/10/2026**.
-   */
   void it('as coleções da família são DUAS, nomeadas: pedidos e as próprias conexões', () => {
     const colecoes = [...schemasAlcancados(DA_CONEXAO)]
       .filter((nome) => {
@@ -211,7 +167,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     assert.deepEqual(colecoes, ['ConnectedPersonPage', 'ConnectionRequestPage']);
   });
 
-  /** **O recorte da lista é o MESMO da busca, e isto é o que o torna medido.** */
   void it('`ConnectedPerson` mostra exatamente os cinco campos de `PersonSearchResult`', () => {
     const daLista = Object.keys(spec.components.schemas.ConnectedPerson?.properties ?? {}).sort();
     const daBusca = Object.keys(spec.components.schemas.PersonSearchResult?.properties ?? {}).sort();
@@ -230,7 +185,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     }
   });
 
-  /** `ConnectedPerson` não carrega `ref` de aresta**: desfazer não mora na lista. */
   void it('a lista não traz `ref` de aresta nem `connection_state`', () => {
     const propriedades = Object.keys(spec.components.schemas.ConnectedPerson?.properties ?? {});
     for (const proibido of ['ref', 'connection_ref', 'connection_state', 'public_ref']) {
@@ -252,10 +206,6 @@ void describe('ISCA (b): não existe lista de conexões DE TERCEIRO em lugar nen
     ]);
   });
 
-  /**
-   * **A ISCA DA LISTA DE TERCEIRO, e ela é o caso que prova que o ajuste de
-   * 22/10/2026 não desligou nada.**
-   */
   void it('ISCA: a varredura REPROVA uma lista de conexões DE TERCEIRO injetada', () => {
     const deTerceiro: Operacao = {
       operationId: 'listPersonConnections',
@@ -401,7 +351,6 @@ void describe('nenhuma superfície de conexão é alcançável sem conta', () =>
     }
   });
 
-  /** **A busca de pessoas existe desde 20/10/2026, e este caso continua certo.** */
   void it('nenhuma operação de conexão aceita parâmetro de busca de pessoa', () => {
     const PROIBIDOS = ['q', 'handle', 'nickname', 'name', 'display_name', 'user', 'email', 'phone'];
     for (const { caminho, metodo, operacao } of operacoesDaConexao()) {
@@ -418,7 +367,6 @@ void describe('nenhuma superfície de conexão é alcançável sem conta', () =>
     }
   });
 
-  /** **ESTE CASO MUDOU EM 20/10/2026, POR DECISÃO DO CLIENTE.** */
   void it('o corpo do pedido aceita DUAS credenciais, e exatamente uma por vez', () => {
     const convite = spec.components.schemas.ConnectionInvite as {
       properties?: Record<string, unknown>;
@@ -452,10 +400,6 @@ void describe('nenhuma superfície de conexão é alcançável sem conta', () =>
     );
   });
 
-  /**
-   * **ISCA do caso de cima**: sem ela, aquele caso passaria por o contrato ter a
-   * forma certa hoje — e não por ele saber reconhecer a forma errada.
-   */
   void it('ISCA: a conferência REPROVA uma terceira credencial no corpo do pedido', () => {
     const comVazamento = {
       ...spec.components.schemas.ConnectionInvite,

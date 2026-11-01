@@ -1,4 +1,3 @@
-/** **O CORPO que as rotas do Mural devolvem, medido na projeção.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

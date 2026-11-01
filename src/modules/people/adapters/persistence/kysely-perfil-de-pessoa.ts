@@ -1,4 +1,3 @@
-/** A persistência do perfil de outra pessoa. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
@@ -14,10 +13,8 @@ import type {
   PessoaVisivel,
 } from '../../ports/perfil-de-pessoa-repository.js';
 
-/** O propósito da esteira da vitrine. */
 const PROPOSITO_DA_VITRINE: PropositoDaImagem = 'user_showcase';
 
-/** Só foto `ready` sai para terceiro. */
 const FOTO_PRONTA = 'ready' as const;
 
 interface LinhaDoPerfil {
@@ -26,7 +23,6 @@ interface LinhaDoPerfil {
   readonly public_ref: string;
   readonly display_name: string | null;
   readonly pets_count: string | number;
-  /** O selo de validado. Ver o comentário do `SELECT` no construtor. */
   readonly canal_verificado: boolean;
 }
 

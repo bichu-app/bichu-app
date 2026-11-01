@@ -1,4 +1,3 @@
-/** Porta de persistência do caso de perdido. */
 import type {
   CaseId,
   FoundReportId,

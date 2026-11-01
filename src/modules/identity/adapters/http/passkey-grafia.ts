@@ -1,4 +1,3 @@
-/** A resposta das duas operações de `options` na grafia do CONTRATO. */
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
@@ -9,10 +8,6 @@ export type OpcoesDeCadastroDoContrato = components['schemas']['PasskeyRegistrat
 export type OpcoesDeEntradaDoContrato = components['schemas']['PasskeyAuthenticationOptions'];
 type DescritorDoContrato = components['schemas']['PasskeyDescriptor'];
 
-/**
- * A falha é de MANUTENÇÃO, nunca de quem chama: toda ela nasce de a biblioteca ter
- * devolvido coisa diferente do que este arquivo mapeia.
- */
 function divergencia(campo: string, esperado: string, recebido: unknown): Error {
   return new Error(
     `A opção de passkey '${campo}' veio ${JSON.stringify(recebido)} do ` +
@@ -28,7 +23,6 @@ function exigido<T>(campo: string, valor: T | undefined, esperado: string): T {
   return valor;
 }
 
-/** O descritor na grafia do contrato. */
 function descritor(indice: number, bruto: { readonly id: string; readonly type?: string }): DescritorDoContrato {
   if (bruto.type !== undefined && bruto.type !== 'public-key') {
     throw divergencia(`exclude_credentials[${String(indice)}].type`, "'public-key'", bruto.type);

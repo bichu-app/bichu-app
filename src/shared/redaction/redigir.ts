@@ -12,7 +12,6 @@ export interface ResultadoDaRedacao {
   retirados: TrechoRedigido[];
 }
 
-/** O que substitui o trecho. */
 const MARCA: Record<TrechoRedigido['kind'], string> = {
   phone: '[telefone removido]',
   email: '[e-mail removido]',
@@ -27,10 +26,8 @@ const DICA: Record<TrechoRedigido['kind'], string> = {
   external_link: 'um link externo',
 };
 
-/** Pontos de código que não desenham nada e servem para partir uma sequência. */
 const LARGURA_ZERO = /[\u200b-\u200f\u2060-\u2064\ufeff\u00ad]/u;
 
-/** Homóglifos: o que parece ASCII na tela e não é. */
 const HOMOGLIFOS: Record<string, string> = {
   '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
   '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
@@ -44,28 +41,21 @@ const HOMOGLIFOS: Record<string, string> = {
   '·': '.', '•': '.', '․': '.',
 };
 
-/** Palavra de número para dígito. */
 const NUMERO_POR_EXTENSO: Record<string, string> = {
   zero: '0', um: '1', uma: '1', dois: '2', duas: '2', tres: '3',
   quatro: '4', cinco: '5', seis: '6', meia: '6', sete: '7',
   oito: '8', nove: '9',
 };
 
-/** `@` e `.` escritos por extenso, o disfarce mais comum de e-mail e de link. */
 const SIMBOLO_POR_EXTENSO: Record<string, string> = {
   arroba: '@',
   ponto: '.',
 };
 
-/** Uma unidade de texto: um pedaço do ORIGINAL e a forma canônica dele. */
 interface Unidade {
   inicio: number;
   fim: number;
   canonico: string;
-  /**
-   * Verdadeiro quando esta unidade nasceu de uma PALAVRA que virou símbolo (`arroba`
-   * → `@`, `ponto` → `.`).
-   */
   deSimbolo?: boolean;
 }
 
@@ -73,10 +63,6 @@ function tirarAcento(texto: string): string {
   return texto.normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
-/**
- * Quebra o original em unidades e devolve, junto, a forma canônica inteira e o
- * mapa de cada posição canônica para a unidade que a originou.
- */
 function canonizar(original: string): {
   canonico: string;
   mapa: number[];
@@ -152,22 +138,14 @@ interface Achado {
   kind: TrechoRedigido['kind'];
 }
 
-/** Telefone: 8 a 13 dígitos com separador qualquer entre eles. */
 const TELEFONE = /(?:\+?55[\s.-]*)?(?:\(?\d{2}\)?[\s.-]*)?\d(?:[\s.()-]*\d){7,12}/g;
-/**
- * E-mail. O olhar-para-trás na frente não é refinamento de casamento: é o que
- * torna o custo linear, e sem ele o resto desta expressão não adianta.
- */
 const EMAIL = /(?<![a-z0-9._%+-])[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/g;
-/** Link. O olhar-para-trás está **só** no segundo ramo, e de propósito. */
 const LINK =
   /(?:https?:\/\/|www\.)[^\s]+|(?<![a-z0-9-])[a-z0-9-]+\.(?:com|net|org|br|me|io|app|link|gg)(?:\.br)?(?:\/[^\s]*)?/g;
 const CEP = /\d{5}-?\d{3}/g;
-/** Endereço: a palavra de logradouro seguida do resto, com o número opcional. */
 const LOGRADOURO =
   /\b(?:rua|r\.|av|av\.|avenida|alameda|al\.|travessa|tv\.|rodovia|rod\.|estrada)\s+[^,.;\n]{1,60}(?:,?\s*(?:n[o°º.]?\s*)?\d{1,6}\b)?/g;
 
-/** Ponto de encontro: só vira endereço **com número**. */
 const PONTO_DE_ENCONTRO =
   /\b(?:praca|largo|viela|quadra|qd\.?)\s+[^,.;\n]{1,60}?,?\s*(?:n[o°º.]?\s*)?\d{1,6}\b/g;
 

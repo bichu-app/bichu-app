@@ -1,4 +1,3 @@
-/** Persistencia da escrita administrativa da `Loja` (BICHUS-266 e BICHUS-267). */
 import { sql } from 'kysely';
 import type { Db, DbTransaction, DbExecutor } from '../../../../shared/db/pool.js';
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
@@ -43,13 +42,11 @@ export interface DependenciasDoCatalogoAdministrativo {
   readonly imagens: RegistroDeImagemDeCatalogo;
 }
 
-/** `23505`, `unique_violation`, nos dois indices de endereco publico. */
 const VIOLACAO_DE_UNICIDADE = '23505';
 const INDICE_DO_PARCEIRO = 'store_partners_slug_unico';
 const INDICE_DO_ITEM = 'store_items_slug_unico';
 const INDICE_DA_TAG = 'store_tags_slug_unico';
 
-/** A chave da trava de transacao do teto de 40 tags ativas. */
 const TRAVA_DO_VOCABULARIO = 2_700_016;
 
 function comSlugTraduzido<T>(recurso: 'store_partner' | 'store_item' | 'store_tag', indice: string) {
@@ -123,7 +120,6 @@ interface LinhaDoItem {
   title: string;
   summary: string | null;
   category: CategoriaDaVitrine | null;
-  /** Nulo junto com `category`: sem codigo a juncao nao encontra rotulo. */
   category_label: string | null;
   subcategory: string | null;
   subcategory_label: string | null;
@@ -147,11 +143,6 @@ interface ComplementosDoItem {
   readonly imagens: ReadonlyMap<string, ImagemDoItem[]>;
 }
 
-/**
- * Especie, tags e galeria dos itens, em TRES consultas para qualquer numero de
- * itens: a listagem do painel tem ate cem linhas, e uma consulta por linha seria o
- * N+1 que o padrao de qualidade proibe.
- */
 async function complementosDosItens(db: DbExecutor, ids: readonly string[]): Promise<ComplementosDoItem> {
   if (ids.length === 0) return { especies: new Map(), tags: new Map(), imagens: new Map() };
   const [especies, tags, imagens] = await Promise.all([

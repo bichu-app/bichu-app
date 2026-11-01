@@ -1,7 +1,3 @@
-/**
- * As ISCAS do perfil de outra pessoa, medidas no CASO DE USO e na PROJEÇÃO do
- * corpo — **as duas**, e não uma.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -22,7 +18,6 @@ const MARINA = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 const BASE_DE_MIDIA = 'https://midia.exemplo/derivadas' as AbsoluteUrl;
 
-/** O nome do pet e a chave da foto dele existem SÓ aqui, como literais de controle. */
 const NOME_DO_PET = 'Bidu-o-terceiro';
 
 const MARINA_VISIVEL: PessoaVisivel = {
@@ -34,10 +29,6 @@ const MARINA_VISIVEL: PessoaVisivel = {
   canalVerificado: true,
 };
 
-/**
- * `comoObjectKey` e nao `as ObjectKey`: a marca sai da PORTA de `media`, e o `as`
- * seria a documentacao falsa que a regra `marca-so-pela-porta` recusa.
- */
 const TRES_FOTOS: readonly FotoDoPerfilDeOutraPessoa[] = [
   {
     gradeKey: comoObjectKey('people/thumb/um.jpg'),
@@ -58,18 +49,10 @@ const TRES_FOTOS: readonly FotoDoPerfilDeOutraPessoa[] = [
 
 interface Bancada {
   readonly servico: PerfilDePessoa;
-  /** Quantas vezes o caso de uso PEDIU a vitrine. */
   readonly pedidosDeVitrine: { total: number };
-  /** Quantas vezes o caso de uso perguntou a aresta. */
   readonly perguntasDeAresta: { total: number };
 }
 
-/**
- * `null` e nao `undefined` para "pessoa invisivel", e a escolha nao e estilo:
- * passar `undefined` a um parametro com valor padrao USA O PADRAO, e a primeira
- * versao deste arquivo fez exatamente isso -- a isca (d) media uma bancada em que
- * a pessoa estava visivel e passava vacuamente.
- */
 function bancada(
   pessoa: PessoaVisivel | null = MARINA_VISIVEL,
   aresta: ArestaVivaDoPar | undefined = undefined,
@@ -115,7 +98,6 @@ async function corpoDe(b: Bancada): Promise<Record<string, unknown>> {
   return comoResposta(await b.servico.porApelido(QUEM_OLHA, 'marina-vet'), BASE_DE_MIDIA);
 }
 
-/** O texto do corpo, para as iscas que procuram literal de controle. */
 async function textoDoCorpo(b: Bancada): Promise<string> {
   return JSON.stringify(await corpoDe(b));
 }

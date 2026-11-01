@@ -1,7 +1,3 @@
-/**
- * A FILA DE REVISAO das indicacoes do `Perto`, do lado do dominio: o tipo que o
- * servidor carrega, a projecao que o painel ve, e a unica regra de transicao.
- */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { urlDaDerivada, type TipoDeEntidade, type TipoDeProfissional } from './entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from './sugestao-do-diretorio.js';

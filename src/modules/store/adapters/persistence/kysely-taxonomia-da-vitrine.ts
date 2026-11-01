@@ -1,4 +1,3 @@
-/** Leitura do vocabulario dos dois niveis, com cache em processo. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { EspecieDoItem } from '../../domain/item-da-vitrine.js';
 import type {

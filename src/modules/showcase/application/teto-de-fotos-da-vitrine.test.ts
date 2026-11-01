@@ -1,4 +1,3 @@
-/** ISCA (b, parte do serviço): A VITRINE CHEIA NÃO GANHA A DÉCIMA AUTORIZAÇÃO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { VitrineDeFotos } from './vitrine-de-fotos-service.js';

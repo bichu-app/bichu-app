@@ -1,4 +1,3 @@
-/** Iscas do corpo do 429: a mensagem do teto **não pode voltar a mentir**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -11,11 +10,9 @@ import type { AbsoluteUrl } from '../types/brands.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-/** Toda palavra que afirma **por onde** a contagem acontece. */
 const AFIRMA_A_DIMENSAO =
   /aparelho|dispositivo|celular|smartphone|\brede\b|\bip\b|endere[çc]o|wi-?fi|conex[ãa]o|navegador/i;
 
-/** O prazo vago que o `Retry-After` da própria resposta contradizia. */
 const PRAZO_VAGO = /\binstantes?\b|\bem breve\b|\bmais tarde\b|\bdaqui a pouco\b|\blogo mais\b/i;
 
 interface CorpoDoProblema {
@@ -33,12 +30,10 @@ function servidor() {
   });
 }
 
-/** O que saiu pelo fio: corpo desserializado e cabeçalhos, nada reconstruído. */
 interface RespostaLida {
   readonly status: number;
   readonly corpo: CorpoDoProblema;
   readonly retryAfter: string | undefined;
-  /** Título e detalhe juntos: as duas frases que a pessoa lê na tela. */
   readonly texto: string;
 }
 
@@ -65,7 +60,6 @@ async function estourar(
   }
 }
 
-/** `requestPasswordReset`: 3 por hora por e-mail, `deny_429`. */
 function pedidoDeRedefinicao(app: ReturnType<typeof servidor>): void {
   registrarRota(
     app,
@@ -79,7 +73,6 @@ function pedidoDeRedefinicao(app: ReturnType<typeof servidor>): void {
   );
 }
 
-/** `createFoundReportPhotoUploadIntent`: 3 por aviso, `lifetime`. */
 function intencaoDeFotoDoAchado(app: ReturnType<typeof servidor>): void {
   registrarRota(
     app,

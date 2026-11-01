@@ -1,7 +1,3 @@
-/**
- * O comportamento da conexão, ponta a ponta no caso de uso, com as quatro iscas
- * que não se respondem lendo SQL:
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -24,13 +20,8 @@ import type {
 } from '../ports/convite-de-conexao.js';
 import { ConexaoEntrePessoas, type ContextoDoChamador } from './conexao-entre-pessoas.js';
 
-/**
- * **Um resolvedor que não resolve nada**, e ele é um dublê de teste — não a fiação
- * de produção.
- */
 const nadaResolve: ResolvedorDeConvite = { resolver: () => Promise.resolve(undefined) };
 
-/** O mesmo, para o caminho por apelido. */
 const nenhumApelidoResolve: ResolvedorDeApelido = {
   resolver: () => Promise.resolve(undefined),
 };
@@ -60,14 +51,9 @@ interface Montagem {
 
 function montar(opcoes: {
   convitePara?: UserId;
-  /** O alvo que o APELIDO resolve, para o caminho aberto em 20/10/2026. */
   apelidoPara?: UserId;
   bloqueado?: boolean;
   agora?: Instant;
-  /**
-   * Quem tem pet com foto `ready` -- o segundo sinal do contador de convidados
-   * (21/10/2026).
-   */
   comPetComFotoPronta?: readonly UserId[];
 } = {}): Montagem {
   const comFoto = opcoes.comPetComFotoPronta ?? [];
@@ -151,7 +137,6 @@ async function erroDe(acao: () => Promise<unknown>): Promise<AppError> {
   throw new Error('a ação não falhou, e era o que o teste media');
 }
 
-/** **O ESCOPO DESTE BLOCO MUDOU EM 20/10/2026.** */
 void describe('sem credencial que resolva, não nasce aresta — e o 404 é um só', () => {
   void it('token que não resolve responde 404, qualquer que seja o token', async () => {
     const { servico, bancada } = montar();
@@ -180,7 +165,6 @@ void describe('sem credencial que resolva, não nasce aresta — e o 404 é um s
     assert.equal(a.problemType, 'not-found');
   });
 
-  /** **O caminho por apelido cria aresta, e grava `people_search`.** */
   void it('apelido que resolve CRIA a aresta, com `origin: people_search`', async () => {
     const { servico, bancada, trilha } = montar({ apelidoPara: ANA });
     const conexao = await servico.pedirPorApelido(contexto(BIA), 'ana-do-bairro');
@@ -191,7 +175,6 @@ void describe('sem credencial que resolva, não nasce aresta — e o 404 é um s
     assert.equal(registrada?.metadata?.origin, 'people_search');
   });
 
-  /** O mesmo pelo convite, para os dois caminhos ficarem medidos lado a lado. */
   void it('token que resolve CRIA a aresta, com `origin: invite_link`', async () => {
     const { servico, bancada } = montar({ convitePara: ANA });
     const conexao = await servico.pedir(contexto(BIA), 'um-token-que-resolve');

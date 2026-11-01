@@ -1,4 +1,3 @@
-/** A autorização está na cláusula `WHERE`, e o SQL compilado prova isso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -22,7 +21,6 @@ const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const ACHADO = '018f3a2b-0000-7000-8000-00000000f001' as FoundReportId;
 const AGORA = 1_800_000_000_000 as Instant;
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -32,10 +30,8 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** O predicado do dono, com o número do parâmetro capturado. */
 const PREDICADO_DO_DONO = /"reporter_user_id"\s*=\s*\$(\d+)/;
 
-/** A REGRA DE AUTORIZAÇÃO DESTE MÓDULO, em uma frase: */
 const COLUNA_DO_DONO = 'found_reports"."reporter_user_id';
 
 interface Compilada {
@@ -43,7 +39,6 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** Confere que o predicado existe **e** que o valor ligado à posição dele é o dono. */
 function exigirDonoNoWhere(
   compilada: Compilada,
   onde: string,

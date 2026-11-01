@@ -30,10 +30,6 @@ export const CHAVES_PROIBIDAS_EM_RESPOSTA_PUBLICA: ReadonlySet<string> = new Set
   'last_seen_state',
 ]);
 
-/**
- * O único UUID legítimo em corpo público: o `correlation_id` do Problem Details,
- * que identifica a REQUISIÇÃO no log e existe para a pessoa citar ao suporte.
- */
 const CAMPOS_COM_UUID_LEGITIMO: ReadonlySet<string> = new Set(['correlation_id']);
 
 const FORMA_DE_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;

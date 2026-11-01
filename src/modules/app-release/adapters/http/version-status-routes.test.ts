@@ -1,7 +1,3 @@
-/**
- * `GET /v1/app/version-status` sobre um Fastify de verdade, com o esquema de
- * parametro vindo DO CONTRATO.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -25,7 +21,6 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const AGORA = 1_800_000_000_000;
 const LOJA = 'https://play.google.com/store/apps/details?id=app.bichu';
 
-/** A politica vazia: as duas colunas nulas, como a migracao a semeia. */
 const DESLIGADA: PoliticaDeVersao = {
   minimumVersion: null,
   recommendedVersion: null,
@@ -33,10 +28,8 @@ const DESLIGADA: PoliticaDeVersao = {
 };
 
 interface Cenario {
-  /** `null` significa LINHA AUSENTE (a porta devolve `undefined`). */
   readonly politica?: PoliticaDeVersao | null;
   readonly contador?: RateLimitStore;
-  /** Quando verdadeiro, a leitura LANCA -- o banco fora. */
   readonly bancoFora?: boolean;
 }
 

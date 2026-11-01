@@ -1,4 +1,3 @@
-/** A regra dos dois campos de raça. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { conferirRaca, ehCodigoOutro, rotuloDaRaca } from './breed.js';

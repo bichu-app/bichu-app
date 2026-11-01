@@ -1,7 +1,3 @@
-/**
- * As duas rotas do aviso para quem avisou sem conta (BICHUS-41; a emenda 3 do
- * ADR-0017 as lista também sob a BICHUS-72).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';

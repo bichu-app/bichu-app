@@ -1,4 +1,3 @@
-/** A porta de ESCRITA da fila de sugestoes do diretorio. */
 import type { TipoDeEntidade, TipoDeProfissional } from '../domain/entrada-do-diretorio.js';
 import type { TipoDeContatoPublico } from '../domain/sugestao-do-diretorio.js';
 import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';

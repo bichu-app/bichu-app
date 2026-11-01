@@ -1,7 +1,3 @@
-/**
- * O token do achador sem conta, como as seis operações de `finderToken` o recebem
- * (BICHUS-41).
- */
 import type { FastifyRequest } from 'fastify';
 
 import { problemas } from './errors.js';

@@ -1,4 +1,3 @@
-/** O disparo, orquestrado: o que ele grava, o que ele manda, e o que ele recusa. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -36,14 +35,12 @@ interface Cenario {
   disparo?: DisparoGravado | null;
   ultimoEnvio?: Instant | null;
   alcance?: AlcanceCalculado | null;
-  /** A consulta ESTOURA, em vez de devolver `null`. */
   alcanceEstoura?: boolean;
 }
 
 function montar(cenario: Cenario = {}) {
   const conclusoes: ConclusaoDoDisparo[] = [];
   const avisos: AvisoDeVizinhanca[] = [];
-  /** A ordem entre gravar e mandar. */
   const linhaDoTempo: string[] = [];
 
   const contexto: ContextoDoCaso | null =

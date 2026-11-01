@@ -1,7 +1,3 @@
-/**
- * `POST /v1/lost-cases/:caseId/reopen` (`reopenLostCase`) — a ROTA que o contrato
- * prometia e que não existia.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -28,12 +24,10 @@ const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const CASO = '018f3a2b-0000-7000-8000-0000000000ee' as CaseId;
 
-/** O relógio da bancada. Um instante fixo: a janela é medida contra ele. */
 const AGORA = 1_800_000_000_000;
 const UM_DIA = 24 * 3_600_000;
 const SETE_DIAS = 7 * UM_DIA;
 
-/** O caso ENCERRADO, com o prazo de reabertura que `encerrar` grava. */
 function casoEncerrado(prazoDaqui: number): CasoGravado {
   return {
     id: CASO,
@@ -59,7 +53,6 @@ interface Bancada {
   readonly trilhado: () => readonly AuditEvent[];
 }
 
-/** O repositório da bancada, DERIVADO do `WHERE` do `UPDATE` real. */
 function repositorioDeMemoria(
   inicial: CasoGravado,
   { dono = DONO, petTemOutroCasoAberto = false }: { dono?: UserId; petTemOutroCasoAberto?: boolean } = {},

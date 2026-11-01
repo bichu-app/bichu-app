@@ -1,7 +1,3 @@
-/**
- * As regras da escrita administrativa da `Rede` (BICHUS-273 e BICHUS-292; ADR-0027
- * itens 12, 13 e 17, apendice A.4 a A.6), sem banco e sem servidor.
- */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import {
@@ -128,7 +124,6 @@ export const DIAS_DE_RETENCAO_DO_PEDIDO = 30;
 
 const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
-/** U+202A a U+202E e U+2066 a U+2069: invertem a ordem de exibicao do texto. */
 const CONTROLE_BIDIRECIONAL = /[‪-‮⁦-⁩]/u;
 
 /**
@@ -172,29 +167,14 @@ export function normalizarParaConferencia(texto: string): { base: string; letras
   return { base, letras };
 }
 
-/**
- * Nome de dominio de primeiro nivel que um link encurtado ou uma pagina de perfil
- * usa.
- */
 const TLD = 'com|net|org|br|me|io|ly|ee|app|link|gg|co|info|site|online|store|shop|xyz|tv|to|bio|page|sh|cc|gd|in|us|so|ai|dev|click|live|social|pay|money|bank|digital|vip|top|club|ws|biz|tk|ml|ga|cf|gq';
 
-/**
- * Token com cara de dominio, com ou sem caminho: `algo.tld`, `algo.tld/abc`, `algo
- * .
- */
 const DOMINIO = new RegExp(`(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\s?\\.\\s?(?:${TLD})(?![a-z0-9])`);
-/** Qualquer `algo.algo/caminho`, mesmo com TLD fora da lista. */
 const DOMINIO_COM_CAMINHO = /[a-z0-9-]+\.[a-z]{2,}\/\S+/;
-/** Perfil em rede social: `@usuario`. */
 const ARROBA = /(?:^|[^a-z0-9])@[a-z0-9_.]{2,}/;
 
-/** Pagamento pela palavra, na forma `letras`. */
 const PAGAMENTO_POR_PALAVRA = /\b(?:pix(?!el|ot|ar)|picpay|pic\s?pay|mercado\s?pago|nubank|paypal|pagseguro|chave\s+aleatoria)\b/;
 
-/**
- * Pagamento pelo numero, na forma `base`: CPF, CNPJ, chave aleatoria e dados
- * bancarios.
- */
 const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
   /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/,
   /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,
@@ -204,11 +184,6 @@ const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
   /\bbanco\s*[.:]?\s*\d{3}\b/,
 ];
 
-/**
- * Data de calendario nos dois formatos que a equipe escreve: `dd.mm.aaaa` e
- * `dd/mm/aaaa`, dia 1 a 31 (com ou sem zero), mes 1 a 12, ano 19xx ou 20xx, sem
- * digito colado antes nem depois (nem separador seguido de digito).
- */
 const DATA_DE_CALENDARIO = /(?<!\d)(?<!\d[./])(?:0?[1-9]|[12]\d|3[01])([./])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}(?!\d)(?![./]\d)/g;
 
 export function semDatas(texto: string): string {
@@ -266,15 +241,9 @@ export function temContatoOuPagamentoSemEndereco(valor: string): boolean {
   return contato || pagamento;
 }
 
-/**
- * Telefone com DDD, nas formas em que se escreve: `(11) 91234-5678`, `+55 11 91234
- * 5678`, `11 3456-7890` e os 10 ou 11 digitos colados.
- */
 const TELEFONE_COM_DDD =
   /(?<!\d)(?:(?:\+?55[\s.-]?)?\(\d{2}\)[\s.-]?9?\d{4}[\s.-]?\d{4}|\+?55[\s.-]?\d{2}[\s.-]?9?\d{4}[\s.-]?\d{4}|\d{2}[\s.-]?9?\d{4}[\s.-]\d{4}|\d{10,11})(?!\d)/;
-/** E-mail, na forma `base`. */
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/;
-/** Link: esquema, `www.` ou dominio COLADO (`loja.com.br`). */
 const LINK = new RegExp(`https?:\\/\\/|\\bwww\\.|(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\.(?:${TLD})(?:\\.[a-z]{2})?(?![a-z0-9.])`);
 
 /**
@@ -299,15 +268,7 @@ export function errosDoEndereco(campo: string, valor: string): ProblemFieldError
   return [];
 }
 
-/**
- * Host que nao e endereco publico na internet: loopback, rede local, nome sem
- * ponto.
- */
 const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan|home|home\.arpa|corp|test|invalid|example)$/;
-/**
- * IPv4 literal, inclusive com zero a esquerda; o IPv6 literal chega entre
- * colchetes.
- */
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 export const TETO_DO_LINK_DE_INGRESSO = 500;

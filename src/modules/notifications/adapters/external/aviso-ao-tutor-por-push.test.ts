@@ -1,4 +1,3 @@
-/** ISCA — O PUSH DO AVISO AO TUTOR, E O QUE ELE NAO PODE CARREGAR. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -58,7 +57,6 @@ function aviso(parcial: Partial<AvisoAoTutorParaEntrega> = {}): AvisoAoTutorPara
   };
 }
 
-/** As formas que nao podem aparecer no fio. */
 const FORMAS_DE_LUGAR: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   { nome: 'logradouro', regex: /\b(?:rua|avenida|av\.|alameda|travessa|rodovia|estrada|pra[cç]a)\b/iu },
   { nome: 'coordenada', regex: /-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/u },

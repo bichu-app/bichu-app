@@ -1,4 +1,3 @@
-/** Porta de persistência do achado. */
 import type { FoundReportId, CaseId, Instant, ObjectKey, UserId } from '../../../shared/types/brands.js';
 import type { AchadoGravado } from '../domain/registro-de-achado.js';
 import type { Especie, Par, Porte, Sexo, Sugestao } from '../domain/cruzamento.js';

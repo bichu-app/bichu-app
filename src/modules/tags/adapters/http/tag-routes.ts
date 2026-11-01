@@ -1,4 +1,3 @@
-/** Rotas do código da tag. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -131,10 +130,8 @@ export interface DependenciasDasRotasDeTag {
   readonly baseDaApi: string;
 }
 
-/** Prefixo de versão da API. */
 const PREFIXO_DA_API = '/v1';
 
-/** O endereço da imagem do QR, montado a partir da **própria rota**. */
 function enderecoDaImagemDoQr(
   deps: DependenciasDasRotasDeTag,
   petId: PetId,
@@ -146,22 +143,16 @@ function enderecoDaImagemDoQr(
   return `${deps.baseDaApi}${PREFIXO_DA_API}${caminho}`;
 }
 
-/** Chamador que passou pelo token. */
 interface ChamadorComConta extends Chamador {
   readonly userId: UserId;
 }
 
-/** Higiene da rota pública (ADR-0004). */
 function aplicarHigieneDaRotaPublica(reply: FastifyReply): void {
   void reply.header('X-Robots-Tag', 'noindex, nofollow');
   void reply.header('Referrer-Policy', 'no-referrer');
   void reply.header('Cache-Control', 'no-store');
 }
 
-/**
- * Autenticação **opcional**, para as duas operações que aceitam chamador sem
- * conta.
- */
 async function chamadorOpcional(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeTag,
@@ -210,7 +201,6 @@ function montarChamador(
   };
 }
 
-/** `PetTag` como o contrato o declara. */
 function comoPetTag(tag: TagDoTutor): Record<string, unknown> {
   return {
     id: tag.id,
@@ -246,10 +236,6 @@ export function resolvedoresDaTag(deps: DependenciasDasRotasDeTag): {
   };
 }
 
-/**
- * `account` para o teto. Sem credencial válida não há balde de conta, e a recusa
- * vem do manipulador — o teto não é o lugar de responder 401.
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeTag,

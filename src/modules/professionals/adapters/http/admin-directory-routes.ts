@@ -1,7 +1,3 @@
-/**
- * `/v1/admin/directory/...`: a escrita administrativa do diretorio de `Perto`
- * (BICHUS-189; ADR-0027).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -17,10 +13,6 @@ import type {
 } from '../../domain/escrita-do-diretorio.js';
 import type { OrdemDoDiretorioAdministrativo } from '../../ports/diretorio-administrativo.js';
 
-/**
- * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
- * administrativas.
- */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -76,10 +68,6 @@ const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 50;
 const ORDEM_PADRAO: OrdemDoDiretorioAdministrativo = 'name';
 
-/**
- * `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem chave
- * (ADR-0027 item 20.2).
- */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;
@@ -104,7 +92,6 @@ interface QueryDeEntradas {
   readonly limit?: number;
 }
 
-/** O recorte que de fato valeu, para a tela poder escreve-lo. */
 function filtrosAplicados(query: QueryDeEntradas): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();

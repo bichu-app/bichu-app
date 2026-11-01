@@ -1,10 +1,3 @@
-/**
- * O QUE `FotoDaIndicacao.autorizar` FAZ, medido -- e o que ele NAO deixa passar.
- *
- * Espelho de `logotipo-da-indicacao.test.ts`, com as DUAS diferencas que sao a
- * razao de a rota existir separada: o proposito e `directory_suggestion_photo` e
- * a minima e 600 x 600 e nao 256 x 256.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -29,10 +22,8 @@ const CHAVE = comoObjectKey('directory/original/0192a3b40000700080000000000000cc
 const EXPIRA_EM = 1_770_000_000_000 as Instant;
 const TETO_DE_BYTES = 6_000_000;
 
-/** O executor injetado, com uma MARCA: a asercao da identidade e por referencia. */
 const DB = { marcaDoExecutorInjetado: 'o-de-quem-chama' } as unknown as DbExecutor;
 
-/** O corpo que PASSA, do qual cada caso muda uma coisa so. */
 const CORPO_BOM: CorpoDaIntencaoDaFoto = {
   content_type: 'image/jpeg',
   byte_size: 900_000,
@@ -54,7 +45,6 @@ interface IntencaoGravada {
 function bancada() {
   const assinaturas: { contentType: string; byteSize: number; proposito: PropositoDaImagem }[] = [];
   const gravadas: IntencaoGravada[] = [];
-  /** A ordem das duas chamadas, que e o que mede o "ANTES". */
   const ordem: ('assinar' | 'gravar')[] = [];
 
   const envios: PreparadorDeEnvioDeCatalogo = {
@@ -103,12 +93,6 @@ void describe('FotoDaIndicacao.autorizar', () => {
     assert.equal(gravadas[0]?.purpose, PROPOSITO_DA_FOTO_DA_INDICACAO);
   });
 
-  /**
-   * A FRONTEIRA, e nao cosmetica: `directory_photo` e o proposito do PAINEL, que
-   * `AdminDirectoryEntryInput.photo_upload_id` aceita em
-   * `professionals.photo_image_id` -- a superficie publica. Um proposito so para
-   * os dois deixaria a foto de uma indicacao NAO APROVADA chegar ao `Perto`.
-   */
   void it('NAO assina `directory_photo` (painel) nem `directory_suggestion_logo` (logo)', async () => {
     const { caso, assinaturas, gravadas } = bancada();
 
@@ -157,10 +141,6 @@ void describe('FotoDaIndicacao.autorizar', () => {
     assert.deepEqual(ordem, ['assinar', 'gravar']);
   });
 
-  /**
-   * A MINIMA E 600 E NAO 256, e este caso mede exatamente essa diferenca: 512 x
-   * 512 e o tamanho em que o LOGOTIPO passa, e aqui ele tem de reprovar.
-   */
   void it('a minima e 600 x 600, e 512 x 512 -- que passa no logotipo -- reprova aqui', async () => {
     assert.deepEqual(DIMENSAO_MINIMA[PROPOSITO_DA_FOTO_DA_INDICACAO], {
       largura: 600,

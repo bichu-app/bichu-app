@@ -1,8 +1,3 @@
-/**
- * `/v1/admin/store/...` e `/v1/admin/media/catalog-image-intents`: a escrita
- * administrativa da `Loja` (BICHUS-266 e BICHUS-267; ADR-0027 itens 7, 8, 10, 11 e
- * 14).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
@@ -28,10 +23,6 @@ import type {
 } from '../../application/catalogo-administrativo.js';
 import type { OrdemDoPainel } from '../../ports/catalogo-administrativo.js';
 
-/**
- * D52: 120 escritas em 10 minutos por conta, somadas todas as escritas
- * administrativas.
- */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -40,10 +31,6 @@ const BALDE_DE_ESCRITA = {
   onExceed: 'deny_429',
 } as const satisfies RateLimitEntry;
 
-/**
- * D52: 30 publicacoes por hora por conta, somadas publicacao de item e criacao de
- * evento.
- */
 const BALDE_DE_PUBLICACAO = {
   bucket: 'admin_publication',
   dimension: ['account'],
@@ -197,12 +184,10 @@ export interface DependenciasDasRotasDaLojaAdministrativa {
   readonly contrato: Contrato;
 }
 
-/** Os mesmos defaults que o contrato declara (`AdminPage`, `AdminLimit`, `sort`). */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 50;
 const ORDEM_PADRAO: OrdemDoPainel = 'curadoria';
 
-/** A conta do teto sai da sessao que a guarda pendurou. */
 const contaDoTeto = (request: FastifyRequest): string | undefined => {
   const conta = request.sessaoAdministrativa?.adminAccountId;
   return conta === undefined ? undefined : `admin:${conta}`;

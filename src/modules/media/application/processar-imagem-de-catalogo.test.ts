@@ -1,4 +1,3 @@
-/** O processamento da imagem de catalogo, sem armazenamento nem banco. */
 import assert from 'node:assert/strict';
 import { FORMATO_DAS_DERIVADAS } from '../domain/derivadas.js';
 import { describe, it } from 'node:test';

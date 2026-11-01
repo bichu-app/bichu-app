@@ -1,4 +1,3 @@
-/** A porta que o webhook de entrega enxerga do banco. */
 import type { TipoDeEventoDeEntrega } from '../domain/evento-de-entrega.js';
 
 export interface EventoParaGravar {

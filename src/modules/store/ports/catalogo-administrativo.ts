@@ -1,4 +1,3 @@
-/** A porta da escrita administrativa da `Loja` (ADR-0027 item 14). */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type {
   ConfirmacaoDeCatalogo,

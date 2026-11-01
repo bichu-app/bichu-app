@@ -1,4 +1,3 @@
-/** A porta do COMUNICADO. */
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type {
   Comunicado,

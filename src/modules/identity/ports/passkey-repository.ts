@@ -1,4 +1,3 @@
-/** O que os casos de uso de passkey exigem do armazenamento. */
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { PropositoDoDesafio, RazaoDaRevogacao } from '../domain/passkey.js';
 

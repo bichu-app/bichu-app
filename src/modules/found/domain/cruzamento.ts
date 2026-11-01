@@ -34,7 +34,6 @@ export const PESOS = {
 
 export type Atributo = keyof typeof PESOS;
 
-/** Os quatro que sobrevivem quando falta coordenada e o peso é redistribuído. */
 const ATRIBUTOS_SEM_PROXIMIDADE: readonly Atributo[] = ['porte', 'cor', 'raca', 'tempo'];
 
 /** Como o produto trata "sem raça definida". */
@@ -162,11 +161,6 @@ export function pontuarPorte(a: Porte | null, b: Porte | null): number {
   return Math.abs(ordem.indexOf(a) - ordem.indexOf(b)) === 1 ? 0.5 : 0;
 }
 
-/**
- * Grupos cromáticos. "Mesmo grupo 0,5" precisa de uma definição de grupo, e a
- * seção 4.10 não a dá — então ela está aqui, derivada dos códigos de
- * `reference-data`, e é o único ponto deste arquivo que não está escrito lá.
- */
 const GRUPOS_CROMATICOS: readonly (readonly string[])[] = [
   ['preto', 'cinza'],
   ['branco', 'creme', 'bege'],

@@ -1,7 +1,3 @@
-/**
- * A GALERIA DO PARCEIRO no caso de uso (cliente, 29/10/2026: *"implemente a tabela
- * de galeria entao"*), sem banco, sem servidor e sem Docker.
- */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -39,17 +35,12 @@ const AUTOR: Autor = {
 
 const URL_DE_MIDIA = (chave: string): string => `https://midia.invalido/${chave}`;
 
-/**
- * Cidade, UF e telefone, que a CRIACAO passou a cobrar em 29/10/2026 (a entrada
- * nasce `published`).
- */
 const COMPLETA_PARA_PUBLICAR = {
   city: 'São Paulo',
   state: 'SP',
   phone_e164: '+551130612200',
 } as const;
 
-/** Um envio aberto, do proposito certo, que ainda nao venceu. */
 function envioAberto(id: string, purpose: PropositoDaImagem = 'directory_gallery'): EnvioDeCatalogo {
   return {
     id,
@@ -94,17 +85,12 @@ function entradaSemeada(): EntradaAdministrativa {
 interface Memoria {
   readonly repositorio: DiretorioAdministrativoRepository;
   readonly linhas: Map<string, EntradaAdministrativa>;
-  /** A galeria gravada por entrada, como `substituirImagens` a deixou. */
   readonly galerias: Map<string, readonly ImagemDaGaleriaNaPosicao[]>;
-  /** Os envios por `upload_id`. */
   readonly envios: Map<string, EnvioDeCatalogo>;
-  /** As confirmacoes pedidas, em ordem: e a prova de que a imagem foi criada. */
   readonly confirmacoes: ConfirmacaoDeCatalogo[];
-  /** O dono de cada `catalog_images.id` que ja esta em alguma galeria. */
   readonly donosDeImagem: Map<string, string>;
   readonly trilha: AuditEvent[];
   gravou: boolean;
-  /** A ORDEM dos efeitos, para provar que a galeria vem depois do `UPDATE`. */
   readonly ordem: string[];
 }
 
@@ -146,10 +132,6 @@ function repositorioEmMemoria(): Memoria {
     },
   };
 
-  /**
-   * A entrada com a galeria que `substituirImagens` deixou, como o `SELECT` a
-   * devolveria.
-   */
   function comGaleria(id: string): EntradaAdministrativa {
     const linha = linhas.get(id);
     if (linha === undefined) throw new Error(`${id} nao existe no dobre`);
@@ -258,7 +240,6 @@ beforeEach(() => {
   });
 });
 
-/** O `code` de campo da recusa, ou `undefined` quando o erro nao e de validacao. */
 function codigoDoCampo(erro: unknown, campo: string): string | undefined {
   if (!(erro instanceof AppError)) return undefined;
   return erro.errors?.find((e) => e.field === campo)?.code;

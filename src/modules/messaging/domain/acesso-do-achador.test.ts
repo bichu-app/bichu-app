@@ -1,4 +1,3 @@
-/** A validade do token do achador, o cursor sem id e a forma do token. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

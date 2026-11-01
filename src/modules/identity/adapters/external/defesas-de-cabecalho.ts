@@ -1,7 +1,3 @@
-/**
- * As defesas de cabeçalho de e-mail, num lugar só, porque agora há **dois**
- * transportes que entregam.
- */
 import type { MailConfig } from '../../../../shared/config/app-config.js';
 import { motivoDaRecusaDeEndereco } from '../../domain/gramatica-de-endereco.js';
 
@@ -13,7 +9,6 @@ export function conferirDestinatario(para: string): void {
   }
 }
 
-/** Tudo que fecha uma linha de cabeçalho. */
 const QUEBRAS_DE_LINHA_NO_ASSUNTO = new Set([
   0x0a,
   0x0d,

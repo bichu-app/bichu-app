@@ -1,4 +1,3 @@
-/** A regra do **apelido (`@`)**, exercitada nas bordas. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,7 +15,6 @@ import {
   verificarApelido,
 } from './apelido.js';
 
-/** O erro do campo `handle` dentro de um `AppError` de validação. */
 function codigoDaRecusa(executar: () => unknown): string {
   try {
     executar();
@@ -33,7 +31,6 @@ function codigoDaRecusa(executar: () => unknown): string {
 }
 
 void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', () => {
-  /** AS DUAS BORDAS DA FAIXA, que é onde o erro mora. */
   void it('a borda de BAIXO: 4 caracteres recusa, 5 passa', () => {
     assert.equal(codigoDaRecusa(() => verificarApelido('abcd')), 'too_short');
     assert.equal(verificarApelido('abcde'), 'abcde');
@@ -49,7 +46,6 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
     assert.equal(codigoDaRecusa(() => verificarApelido(vinteEUm)), 'too_long');
   });
 
-  /** O teto de 20 é do NORMALIZADO, e o plano afirma que ele é idêntico ao digitado. */
   void it('normalizado e digitado têm o MESMO comprimento, sempre', () => {
     for (const bruto of ['MARIA-SILVA', 'Maria-Silva', 'abcdefghij0123456789', 'MaRiA-01']) {
       assert.equal(
@@ -79,7 +75,6 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
     }
   });
 
-  /** A forma exportada é a que o contrato e a tela repetem. */
   void it('FORMA_DO_APELIDO é o regex que os três lugares carregam', () => {
     assert.equal(
       FORMA_DO_APELIDO.source,
@@ -93,7 +88,6 @@ void describe('o apelido: a faixa é 5 a 20, e é a MESMA dos três lugares', ()
 });
 
 void describe('o esqueleto: parecidos não coexistem', () => {
-  /** O INVARIANTE DO PLANO, e o que ele custou. */
   void it('@maria-silva, @mariasilva e @mar1a-silva são o MESMO apelido', () => {
     const esperado = 'marlasllva';
     assert.equal(esqueletoDoApelido('maria-silva'), esperado);
@@ -107,11 +101,6 @@ void describe('o esqueleto: parecidos não coexistem', () => {
     assert.equal(esqueletoDoApelido('5e3'), 'see');
   });
 
-  /**
-   * PARIDADE COM O BANCO. As saídas da direita vieram de `SELECT
-   * handle_esqueleto(...)` rodado contra o Postgres 16 em `BEGIN/ROLLBACK`, e não de
-   * ler a função daqui.
-   */
   void it('bate caractere a caractere com handle_esqueleto do Postgres', () => {
     const medidoNoBanco: ReadonlyArray<readonly [string, string]> = [
       ['bichu', 'blchu'],
@@ -132,7 +121,6 @@ void describe('o esqueleto: parecidos não coexistem', () => {
 });
 
 void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o esqueleto', () => {
-  /** A ISCA QUE O PLANO PEDE, e ela precisa das DUAS regras ao mesmo tempo. */
   void it('@B1CHU-suporte é recusado', () => {
     assert.equal(codigoDaRecusa(() => verificarApelido('B1CHU-suporte')), 'reserved');
   });
@@ -153,10 +141,6 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
     assert.equal(codigoDaRecusa(() => verificarApelido('m0derador')), 'reserved');
   });
 
-  /**
-   * CONTRAPESO. Sem ele, `apelidoEhReservado` passando a devolver `true` para tudo
-   * deixaria todos os casos acima verdes.
-   */
   void it('apelido comum NÃO é reservado', () => {
     for (const bom of ['maria-silva', 'leandro-p', 'bidu-2026', 'joana-vet']) {
       assert.equal(apelidoEhReservado(bom), false, `"${bom}" não é reservado`);
@@ -164,10 +148,6 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
     }
   });
 
-  /**
-   * A lista daqui e a carregada em `handles` pela migração precisam continuar
-   * iguais.
-   */
   void it('a lista tem 52 palavras e 51 esqueletos, e a migração carrega 51 linhas', () => {
     assert.equal(
       RESERVADAS.length,
@@ -202,7 +182,6 @@ void describe('as reservadas: `bichu` é CONTÉM, e a conferência é sobre o es
 });
 
 void describe('a disponibilidade é do banco, e a tradução é daqui', () => {
-  /** ISCA: a violação de unicidade vira `code: 'taken'`. */
   void it('o 23505 de handles vira recusa de campo com `taken`', () => {
     const doPostgres = {
       code: '23505',
@@ -233,11 +212,6 @@ void describe('a disponibilidade é do banco, e a tradução é daqui', () => {
     assert.ok(recusa instanceof AppError);
   });
 
-  /**
-   * CONTRAPESO, e ele é o que importa mais neste grupo: engolir erro de banco
-   * desconhecido faria um defeito de escrita virar "apelido indisponível" para
-   * sempre, e ninguém procuraria a causa real.
-   */
   void it('erro que NÃO é de apelido passa adiante', () => {
     assert.equal(
       recusaDeApelidoTomado({
@@ -253,11 +227,6 @@ void describe('a disponibilidade é do banco, e a tradução é daqui', () => {
 });
 
 void describe('as três sugestões, que substituem o parágrafo de apoio', () => {
-  /**
-   * Elas existem porque **não há rota de disponibilidade**: sem conferência a cada
-   * tecla, a pessoa só descobre no envio, e a mitigação que não custa nada é
-   * oferecer saídas.
-   */
   void it('são três, e todas passam na própria forma', () => {
     for (const curto of ['ana', 'leo', 'ze', 'maria-silva']) {
       const sugestoes = sugestoesDeApelido(curto);
@@ -276,7 +245,6 @@ void describe('as três sugestões, que substituem o parágrafo de apoio', () =>
     }
   });
 
-  /** Entrada que não sobra nada ainda precisa gerar três saídas válidas. */
   void it('entrada impossível ainda gera três sugestões', () => {
     for (const impossivel of ['', '...', '---', 'Á']) {
       const sugestoes = sugestoesDeApelido(impossivel);
@@ -287,10 +255,6 @@ void describe('as três sugestões, que substituem o parágrafo de apoio', () =>
     }
   });
 
-  /**
-   * O teto é respeitado pelas sugestões: sugerir 21 caracteres seria oferecer o que
-   * a própria recusa acabou de negar.
-   */
   void it('nenhuma sugestão passa do teto', () => {
     const longo = 'abcdefghij0123456789';
     for (const sugestao of sugestoesDeApelido(longo)) {

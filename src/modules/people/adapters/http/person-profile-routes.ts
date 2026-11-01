@@ -1,7 +1,3 @@
-/**
- * As rotas do **perfil de outra pessoa**: `GET /people/{handle}` (fatia G,
- * 19/10/2026) e `POST /connection-invites/resolution` (20/10/2026).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -44,10 +40,6 @@ export const rotaDaResolucaoDeConvite = defineRoute({
   ],
 });
 
-/**
- * Perfil é dado de duas pessoas (a relação entra nele): nada em cache
- * compartilhado.
- */
 const SEM_CACHE = 'private, no-store';
 
 export interface Autenticador {
@@ -74,7 +66,6 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   return cabecalho.slice(prefixo.length);
 }
 
-/** Quem chama, **resolvido UMA vez por requisição**. */
 async function chamador(
   request: FastifyRequest,
   deps: DependenciasDasRotasDePessoa,
@@ -85,7 +76,6 @@ async function chamador(
   });
 }
 
-/** Uma foto da vitrine como `PersonShowcasePhoto` a declara: **três campos**. */
 function comoRespostaDaFoto(
   foto: FotoDoPerfilDeOutraPessoa,
   baseDeMidia: AbsoluteUrl,
@@ -140,10 +130,6 @@ export function registrarRotasDePessoa(
     },
   );
 
-  /**
-   * **A tela de destino do link e do QR.** Resolve o token no perfil de quem emitiu,
-   * e a resposta é a **mesma** `PersonProfile` da rota acima.
-   */
   const corpoDaResolucao = corpoDe(deps.contrato, rotaDaResolucaoDeConvite.operationId);
   registrarRota(
     app,

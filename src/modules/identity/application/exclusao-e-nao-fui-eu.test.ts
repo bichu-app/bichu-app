@@ -1,4 +1,3 @@
-/** Os gatilhos 3 e 4 do SEC-006, provados pela ORDEM e pelo EFEITO. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -41,7 +40,6 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/** O resumo do link, pela MESMA funcao que a producao usa. */
 function hashDe(valor: string): TokenHash {
   return hashDeToken(valor) as TokenHash;
 }
@@ -67,7 +65,6 @@ function contaViva(): Conta {
   };
 }
 
-/** Sinal de falha do banco, para as iscas de ordem. */
 class BancoCaiu extends Error {
   constructor(public readonly onde: string) {
     super(`banco indisponível em ${onde}`);
@@ -82,7 +79,6 @@ interface LinhaDeRefresh {
 }
 
 interface LinhaDeToken {
-  /** `TokenHash` e `Buffer` desde 19/10: a comparacao e `.equals`, nunca `===`. */
   hash: TokenHash;
   proposito: PropositoDoToken;
   enviadoPara: string;
@@ -90,12 +86,10 @@ interface LinhaDeToken {
   consumidoEm: Instant | null;
 }
 
-/** A recusa deste arquivo, pelo nome da porta. */
 function naoUsado(nome: string): never {
   throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
 }
 
-/** Um pedaço do banco que se comporta como o banco. */
 class BancoDeMentira extends RepositorioQueRecusaTudo {
   override fotoDoPerfil(): Promise<FotoDoPerfil | null> {
     return Promise.resolve(null);
@@ -105,11 +99,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
     return naoUsado(nome);
   }
 
-  /**
-   * Recusa com mensagem PRÓPRIA, e não a genérica: a varredura de expurgo é do
-   * worker, e um caso deste arquivo que chegasse aqui estaria exercitando outra
-   * coisa.
-   */
   override contasAExpurgar(): never {
     throw new Error('contasAExpurgar: é do worker, não do serviço');
   }
@@ -122,7 +111,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   public readonly tokens: LinhaDeToken[] = [];
   public marcada: { status: string; deletedAt: Instant } | undefined;
   public tokensInvalidados = 0;
-  /** Nome do método que deve falhar nesta rodada. */
   public quebrar: string | undefined;
 
   private conferirInterruptor(onde: string): void {
@@ -237,7 +225,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   }
 }
 
-/** O cadastro de push como um CONJUNTO de linhas, e não um espião de chamada. */
 interface CadastroDePushDeMentira {
   readonly linhas: Set<string>;
   readonly removerPushDaConta: () => Promise<number>;
@@ -262,7 +249,6 @@ interface Bancada {
   readonly mensagens: Mensagem[];
   readonly eventos: AuditEvent[];
   readonly registros: { dados: Record<string, unknown>; mensagem: string }[];
-  /** Faz o próximo `mailer.enviar` estourar. */
   derrubarOMailer: () => void;
 }
 
@@ -609,10 +595,6 @@ void describe('"Não fui eu" (BICHUS-215, critério 4 — gatilho 4 do SEC-006)'
   });
 });
 
-/**
- * SEC-019 depois de 17/10: "não fui eu" apaga o cadastro de push; a EXCLUSÃO DE
- * CONTA, NÃO.
- */
 const AINDA_RECEBE_APOS =
   'o aparelho continuaria recebendo alerta de pet perdido: a sessão caiu e a linha de ' +
   '`user_devices` ficou, com o token e a permissão intactos. É o SEC-019.';

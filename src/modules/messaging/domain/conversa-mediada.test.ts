@@ -1,4 +1,3 @@
-/** A mediação, como regra. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -67,11 +66,6 @@ void describe('o nome de exibição é o primeiro termo, nunca o sobrenome', () 
   });
 });
 
-/**
- * A bancada de quem **não é conexão aceita**, que é o estado normal da conversa de
- * achado: os dois campos da emenda 3 chegam nulos, como a consulta os entrega a
- * quem não tem aresta `accepted` com o outro lado.
- */
 const SEM_CONEXAO = {
   nomeDoTutor: 'Leandro Panegassi',
   nomeDoAchador: 'Ana Paula Ribeiro',
@@ -82,7 +76,6 @@ const SEM_CONEXAO = {
   chaveDaFotoDoOutro: null,
 } as const;
 
-/** A lista FECHADA de campos de um participante. */
 const CHAVES_DO_PARTICIPANTE = ['displayName', 'handle', 'photoKey', 'role'];
 
 void describe('o participante que sai não permite deduzir nada do outro lado', () => {

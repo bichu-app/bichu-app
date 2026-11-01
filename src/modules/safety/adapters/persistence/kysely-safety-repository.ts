@@ -1,4 +1,3 @@
-/** Bloqueio e denúncia, no banco. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';
@@ -12,7 +11,6 @@ import type {
   SafetyRepository,
 } from '../../ports/safety-repository.js';
 
-/** Resolve o endereço público numa conta **visível para quem chama**. */
 async function contaVisivelPara(
   db: Kysely<Database>,
   ref: RefPublicoDaPessoa,
@@ -28,7 +26,6 @@ async function contaVisivelPara(
   return linha?.id;
 }
 
-/** Uma linha crua da lista de quem eu bloqueei. */
 interface LinhaDeBloqueio {
   readonly public_ref: string;
   readonly handle: string | null;

@@ -1,4 +1,3 @@
-/** JWT RS256, assinado e verificado com `node:crypto`. */
 import { constants, createSign, createVerify, type KeyObject } from 'node:crypto';
 import type { SigningKey, TokenConfig } from '../../../../shared/config/app-config.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
@@ -48,7 +47,6 @@ function conferirAssinatura(dados: string, assinatura: string, chave: KeyObject)
   }
 }
 
-/** Material público no formato JWK, montado do próprio `KeyObject`. */
 function paraJwk(chave: SigningKey): ChavePublicaJwk {
   const jwk = chave.publicKey.export({ format: 'jwk' }) as { n?: string; e?: string };
   if (jwk.n === undefined || jwk.e === undefined) {

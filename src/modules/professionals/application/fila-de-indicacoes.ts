@@ -1,4 +1,3 @@
-/** O caso de uso da FILA DE REVISAO das indicacoes do `Perto` (18/10/2026). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';

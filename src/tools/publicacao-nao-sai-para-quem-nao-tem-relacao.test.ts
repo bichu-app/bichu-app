@@ -1,7 +1,3 @@
-/**
- * ISCA (b), METADE DO CONTRATO: **a publicação não sai para quem não tem relação
- * com o autor — medido NO CONTRATO, por omissão.**
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -15,7 +11,6 @@ const spec = parseYaml(texto) as {
 
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
-/** Os esquemas que carregam PUBLICAÇÃO. */
 const ESQUEMAS_DE_LEITURA = [
   'Publication',
   'PublicationPage',
@@ -29,7 +24,6 @@ const ESQUEMAS_DE_LEITURA = [
   'PublicationCommentCreated',
 ] as const;
 
-/** As operações que podem carregar publicação, **por nome**. */
 const OPERACOES_COM_PUBLICACAO = new Set([
   'get /timeline',
   'get /me/publications',
@@ -38,10 +32,6 @@ const OPERACOES_COM_PUBLICACAO = new Set([
   'post /publications/{publicationRef}/comments',
 ]);
 
-/**
- * Os schemas alcançáveis a partir de um bloco, seguindo `$ref` **em
- * profundidade**.
- */
 function schemasAlcancados(bloco: unknown): Set<string> {
   const vistos = new Set<string>();
   const fila: unknown[] = [bloco];
@@ -71,7 +61,6 @@ function schemasAlcancados(bloco: unknown): Set<string> {
   return vistos;
 }
 
-/** Onde, na árvore inteira do contrato, existe uma propriedade com este nome. */
 function caminhosDaPropriedade(raiz: unknown, campo: string): string[] {
   const achados: string[] = [];
   const andar = (no: unknown, caminho: string): void => {

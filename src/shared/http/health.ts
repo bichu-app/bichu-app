@@ -1,4 +1,3 @@
-/** Sonda de saúde. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from './route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from './registrar-rota.js';

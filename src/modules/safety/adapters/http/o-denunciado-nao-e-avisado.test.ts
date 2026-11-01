@@ -1,4 +1,3 @@
-/** ISCA (b): **O DENUNCIADO NÃO RECEBE NADA E NÃO DESCOBRE PELA RESPOSTA.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,7 +11,6 @@ import {
 
 const MODULO = join('src', 'modules', 'safety');
 
-/** Todo `.ts` do módulo, menos este arquivo — que nomeia os proibidos de propósito. */
 function arquivosDoModulo(dir = MODULO): readonly string[] {
   const achados: string[] = [];
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -24,7 +22,6 @@ function arquivosDoModulo(dir = MODULO): readonly string[] {
   return achados;
 }
 
-/** O arquivo SEM COMENTÁRIO, que é o que a varredura olha. */
 function semComentario(texto: string): readonly { linha: number; codigo: string }[] {
   const linhas = texto.split('\n');
   const limpas: { linha: number; codigo: string }[] = [];
@@ -55,7 +52,6 @@ function semComentario(texto: string): readonly { linha: number; codigo: string 
   return limpas;
 }
 
-/** Onde o nome proibido aparece NO CÓDIGO, com arquivo e linha. */
 function ocorrencias(nomes: readonly string[], arquivos: readonly string[]): readonly string[] {
   const achados: string[] = [];
   for (const arquivo of arquivos) {

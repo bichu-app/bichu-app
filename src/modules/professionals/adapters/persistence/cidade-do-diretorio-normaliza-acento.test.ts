@@ -1,7 +1,3 @@
-/**
- * O filtro de cidade do diretorio compara SEM ACENTO, e a resposta continua
- * devolvendo a cidade COM acento.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -44,19 +40,16 @@ const RECORTE_COM_CIDADE: RecorteDoDiretorio = {
   city: 'Sao Paulo',
 };
 
-/** O SQL dos PREDICADOS da listagem. */
 function sqlDaListagem(recorte: RecorteDoDiretorio): string {
   return construtorDaListagem(semBanco, recorte).select(['slug']).compile().sql;
 }
 
-/** O trecho depois do primeiro `where`: os predicados, e nada mais. */
 function clausulaWhere(sql: string): string {
   const achado = /\swhere\s([\s\S]*)$/i.exec(sql);
   assert.ok(achado?.[1] !== undefined, `SQL sem clausula where: ${sql}`);
   return achado[1];
 }
 
-/** Uma entrada publicada em `São Paulo`, com o til e a maiuscula. */
 const ENTRADA_DE_SAO_PAULO: EntradaDoDiretorio = {
   slug: 'hospital-mais-pet',
   kinds: ['clinic'],

@@ -1,7 +1,6 @@
 /** Dez minutos, em segundos. */
 export const VALIDADE_DA_URL_DA_FOTO_EM_SEGUNDOS = 600;
 
-/** A SUPERFICIE DO ACHADOR SEM CONTA NAO SERVE CHAVE QUE CARREGA IDENTIFICADOR. */
 const DONO_SEM_IDENTIFICADOR = 'sem-conta';
 
 /** `true` quando a chave pode ser servida a quem NAO tem conta. */

@@ -1,4 +1,3 @@
-/** A persistência da **busca de pessoas**. */
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Database } from '../../../../shared/db/schema.js';

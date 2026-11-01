@@ -1,7 +1,3 @@
-/**
- * `PATCH /v1/lost-cases/:caseId` **não reescreve `share_to_public_list`** quando o
- * corpo não o traz (BICHUS-278).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -31,11 +27,9 @@ const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const PET_DO_DONO = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const CASO = '018f3a2b-0000-7000-8000-0000000000ee' as CaseId;
 
-/** O instante do relógio da bancada. */
 const AGORA = 1_800_000_000_000;
 const VISTO_EM = new Date(AGORA - 3_600_000).toISOString();
 
-/** O caso como ele está gravado **antes** da edição: fora da lista pública. */
 const CASO_FORA_DA_LISTA: CasoGravado = {
   id: CASO,
   petId: PET_DO_DONO,
@@ -54,7 +48,6 @@ const CASO_FORA_DA_LISTA: CasoGravado = {
   closureNote: null,
 };
 
-/** O que `atualizarOndeEQuando` recebeu. */
 interface Espiao {
   readonly recebido: () => AtualizacaoDoCaso | undefined;
   readonly repositorio: LostCaseRepository;

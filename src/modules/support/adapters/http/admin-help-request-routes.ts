@@ -1,4 +1,3 @@
-/** A FILA DAS DUVIDAS, lida pelo painel (29/10/2026). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -15,12 +14,9 @@ import type { FilaDeAjudaAdministrativa } from '../../application/fila-de-ajuda-
 const ADMIN = ['admin'] as const;
 
 const PAGINA_INICIAL = 1;
-/** 50, como as outras duas filas do painel. */
 const TAMANHO_PADRAO = 50;
-/** Sem filtro vem a fila ABERTA: o trabalho que espera. */
 const SITUACAO_PADRAO: SituacaoDaDuvida = 'open';
 
-/** D52: 120 escritas em 10 minutos por conta, somadas todas as do painel. */
 const BALDE_DE_ESCRITA = {
   bucket: 'admin_write',
   dimension: ['account'],
@@ -63,14 +59,12 @@ function parametro(request: FastifyRequest, nome: string): string {
   return (request.params as Record<string, string>)[nome] ?? '';
 }
 
-/** Le um inteiro da consulta, e **nao confia na coercao do framework**. */
 function inteiroDaConsulta(valor: number | string | undefined, padrao: number): number {
   if (valor === undefined) return padrao;
   const numero = typeof valor === 'number' ? valor : Number.parseInt(valor, 10);
   return Number.isFinite(numero) ? numero : padrao;
 }
 
-/** A resposta, campo a campo e nunca por espalhamento. */
 function comoResposta(duvida: DuvidaNaFila): Record<string, unknown> {
   return {
     ref: duvida.ref,

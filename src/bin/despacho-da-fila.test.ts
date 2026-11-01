@@ -1,4 +1,3 @@
-/** TODO TIPO DE TRABALHO QUE ALGUEM ENFILEIRA TEM DE TER TRATADOR NO WORKER. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,7 +18,6 @@ function ler(caminho: string): string {
   }
 }
 
-/** Todo `.ts` de produção de `src/`. */
 function arquivosDeProducao(raiz = 'src'): string[] {
   const achados: string[] = [];
   for (const nome of readdirSync(raiz)) {
@@ -34,7 +32,6 @@ function arquivosDeProducao(raiz = 'src'): string[] {
   return achados;
 }
 
-/** Os tipos declarados na união `JobKind`, lidos da porta da fila. */
 function tiposDeclarados(): string[] {
   const porta = ler(DA_PORTA_DA_FILA);
   const uniao = porta.slice(
@@ -51,11 +48,6 @@ function tiposDeclarados(): string[] {
   return tipos;
 }
 
-/**
- * As constantes exportadas que dão nome a um tipo de trabalho (`export const
- * TRABALHO_DE_X = 'media.y'`), para alcançar quem enfileira e quem despacha pelo
- * NOME em vez do literal.
- */
 function constantesPorTipo(fontes: readonly string[]): Map<string, string> {
   const mapa = new Map<string, string>();
   for (const caminho of fontes) {

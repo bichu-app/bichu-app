@@ -1,4 +1,3 @@
-/** Normalização Unicode e a conferência de endereço: a ordem é a defesa inteira. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -11,10 +10,6 @@ function ponto(cp: number): string {
   return `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`;
 }
 
-/**
- * Os pontos de código que a conferência **aceita** e que a normalização transforma
- * em algo que ela **recusaria**.
- */
 function perigososSobNormalizacao(): { cp: number; forma: string; vira: string }[] {
   const achados: { cp: number; forma: string; vira: string }[] = [];
   for (let cp = 0; cp <= 0x10ffff; cp++) {

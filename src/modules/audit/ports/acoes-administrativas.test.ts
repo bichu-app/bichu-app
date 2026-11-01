@@ -1,7 +1,3 @@
-/**
- * As acoes da trilha administrativa contra o `x-audit` do contrato, e a montagem
- * do evento.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
@@ -11,10 +7,6 @@ import type { AdminAccountId } from '../../../shared/types/brands.js';
 import { ACOES_ADMINISTRATIVAS } from './audit-log.js';
 import { eventoAdministrativo } from './trilha-administrativa.js';
 
-/**
- * As duas acoes que o item 8 do ADR-0027 manda gravar e que nao sao escrita de
- * operacao nenhuma: o login recusado e a recusa da guarda do prefixo.
- */
 const ACOES_SEM_OPERACAO = ['admin.session.denied', 'admin.guard.denied'];
 
 function acoesDoContrato(): string[] {

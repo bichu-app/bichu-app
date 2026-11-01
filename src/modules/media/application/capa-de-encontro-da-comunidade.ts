@@ -1,4 +1,3 @@
-/** A autorizacao de envio da CAPA do encontro da comunidade (ADR-0025 emenda 3). */
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import type { UserId } from '../../../shared/types/brands.js';

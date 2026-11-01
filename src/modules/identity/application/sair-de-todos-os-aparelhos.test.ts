@@ -1,7 +1,3 @@
-/**
- * "Sair de todos os aparelhos" — o gatilho que a BICHUS-125 existe para construir,
- * provado pelo EFEITO e não pela chamada.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -43,7 +39,6 @@ const CONTEXTO: ContextoDaRequisicao = {
   userAgent: 'Bichu/1.0 (iPhone)',
 };
 
-/** Relógio que anda quando o caso mandar. */
 function relogioQueAnda(inicio: Instant = INSTANTE_FIXO): Clock & {
   avancar: (ms: number) => void;
 } {
@@ -66,14 +61,11 @@ function geradorSequencial(): IdGenerator {
   };
 }
 
-/** Um `refresh_tokens` de mentira que se comporta como a tabela. */
 interface Linha {
   id: string;
   userId: UserId;
   familyId: string;
-  /** `TokenHash` e `Buffer` desde 19/10: a comparacao e `.equals`, nunca `===`. */
   tokenHash: TokenHash;
-  /** BICHUS-77: `renovar()` compara este valor com a barreira da conta. */
   issuedAt: Instant;
   expiresAt: Instant;
   absoluteExpiresAt: Instant;
@@ -83,7 +75,6 @@ interface Linha {
   revokedReason: MotivoDeRevogacao | null;
 }
 
-/** A recusa deste arquivo, pelo nome da porta. */
 function naoUsado(nome: string): never {
   throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
 }
@@ -130,7 +121,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
     };
   }
 
-  /** As linhas que o "sair de todos" tem de alcançar. */
   get vivas(): Linha[] {
     return this.linhas.filter((l) => l.revokedAt === null);
   }
@@ -237,7 +227,6 @@ class BancoDeMentira extends RepositorioQueRecusaTudo {
   }
 }
 
-/** O cadastro de aparelhos como uma TABELA de mentira, e não um espião. */
 class CadastroDeAparelhosDeMentira {
   private readonly linhas = new Map<string, { dono: UserId; pushToken: string }>();
 
@@ -245,14 +234,12 @@ class CadastroDeAparelhosDeMentira {
     this.linhas.set(id, { dono, pushToken });
   }
 
-  /** O que a composição injeta em `removerPushDaConta`. */
   removerPushDaConta = (dono: UserId): Promise<number> => {
     const alvos = [...this.linhas.entries()].filter(([, linha]) => linha.dono === dono);
     for (const [id] of alvos) this.linhas.delete(id);
     return Promise.resolve(alvos.length);
   };
 
-  /** A leitura que decide os casos: a linha ainda está lá? */
   continuariaRecebendo(id: string): boolean {
     return this.linhas.has(id);
   }
@@ -262,7 +249,6 @@ class CadastroDeAparelhosDeMentira {
   }
 }
 
-/** O texto da reprovação diz o RISCO, e não o número. */
 const AINDA_RECEBE =
   'o aparelho continuaria recebendo alerta de pet perdido. A sessão caiu e a linha de ' +
   '`user_devices` ficou, com `push_token` e `push_permission = granted` intactos: quem ' +
@@ -278,10 +264,6 @@ interface Bancada {
   readonly mensagens: Mensagem[];
 }
 
-/**
- * `pushQuebrado` existe para UM caso: o que prova que a falha do passo 3 propaga
- * em vez de virar sucesso silencioso.
- */
 async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada> {
   const relogio = relogioQueAnda();
   const banco = new BancoDeMentira(await gerarHashDeSenha(SENHA));
@@ -289,10 +271,6 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
   const eventos: AuditEvent[] = [];
   const mensagens: Mensagem[] = [];
 
-  /**
-   * O assinador guarda o `iat` que emitiu e o devolve na verificação, com o mesmo
-   * `Math.floor` do emissor real.
-   */
   const claimsPorToken = new Map<string, ClaimsDoAcesso>();
   const assinador: TokenSigner = {
     emitir(sub: UserId, agora: Instant, jti: string) {
@@ -354,7 +332,6 @@ async function montar(opcoes: { pushQuebrado?: boolean } = {}): Promise<Bancada>
   return { servico, banco, aparelhos, relogio, eventos, mensagens };
 }
 
-/** Dois aparelhos no cadastro de push: o que foi levado e o que ficou. */
 const APARELHO_ROUBADO = 'aparelho-roubado';
 const APARELHO_DE_CASA = 'aparelho-de-casa';
 
@@ -363,7 +340,6 @@ function comDoisAparelhosNoPush(b: Bancada): void {
   b.aparelhos.registrar(APARELHO_DE_CASA, TUTORA, 'fcm-do-tablet-de-casa');
 }
 
-/** Entra de verdade, pelo caminho da senha. */
 async function entrarNoAparelho(b: Bancada): Promise<{ acesso: string; refresh: string }> {
   const sessao = await b.servico.entrar(
     { email: EMAIL, password: SENHA, staySignedIn: false },
@@ -618,7 +594,6 @@ void describe('redefinição de senha (BICHUS-125): a barreira era metade do tra
   });
 });
 
-/** O SEC-019: os caminhos de revogação em massa apagam o cadastro de push. */
 void describe('SEC-019: revogar sessão apaga o endereço de entrega do push', () => {
   void it('"sair de todos os aparelhos" tira o aparelho ROUBADO do cadastro de push', async () => {
     const b = await montar();

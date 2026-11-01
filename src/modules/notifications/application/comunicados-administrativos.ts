@@ -1,4 +1,3 @@
-/** O COMUNICADO, do lado da aplicacao -- as tres operacoes do painel. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { EscritaAuditada } from '../../audit/ports/audit-log.js';
 import { eventoAdministrativo } from '../../audit/ports/trilha-administrativa.js';

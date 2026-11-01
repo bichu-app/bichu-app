@@ -1,4 +1,3 @@
-/** Regras de sessão. Puras: nada aqui conhece banco, HTTP nem relógio do sistema. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 export interface JanelasDeSessao {

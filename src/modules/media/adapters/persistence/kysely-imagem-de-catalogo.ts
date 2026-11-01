@@ -1,7 +1,3 @@
-/**
- * A persistencia da intencao de envio de imagem de catalogo (ADR-0027 item 10,
- * apendice A.3).
- */
 import type { DbExecutor } from '../../../../shared/db/pool.js';
 import type { PropositoDaImagemDeCatalogo } from '../../../../shared/db/schema.js';
 import type { ObjectKey } from '../../../../shared/types/brands.js';

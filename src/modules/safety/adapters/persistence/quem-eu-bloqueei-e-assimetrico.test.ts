@@ -1,4 +1,3 @@
-/** **ISCA (a): A LISTA TRAZ QUEM EU BLOQUEEI, E NÃO TRAZ QUEM ME BLOQUEOU.** */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

@@ -1,4 +1,3 @@
-/** A porta de persistência da conversa mediada. */
 import type { TrechoRedigido } from '../../../shared/redaction/redigir.js';
 import type { CasoDaConversa } from '../domain/acesso-do-achador.js';
 import type { Papel } from '../domain/conversa-mediada.js';

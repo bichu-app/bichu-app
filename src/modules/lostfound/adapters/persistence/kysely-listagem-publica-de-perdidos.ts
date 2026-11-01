@@ -1,4 +1,3 @@
-/** Persistência da **listagem pública de perdidos** (`listPublicLostPets`). */
 import { sql, type ExpressionBuilder, type SqlBool } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Database, StatusDoPet } from '../../../../shared/db/schema.js';
@@ -11,10 +10,8 @@ import {
   type RecorteDePerdidos,
 } from '../../ports/listagem-publica-de-perdidos.js';
 
-/** Pet nesses estados não tem mais caso público, mesmo com o caso aberto. */
 const STATUS_DE_PET_SEM_CASO_PUBLICO: readonly StatusDoPet[] = ['deceased', 'archived'];
 
-/** Quantas horas cada janela do contrato vale. */
 const HORAS_DA_JANELA: Readonly<Record<JanelaDePerdidos, number>> = {
   '24h': 24,
   '7d': 24 * 7,

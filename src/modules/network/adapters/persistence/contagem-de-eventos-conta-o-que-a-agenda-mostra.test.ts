@@ -1,4 +1,3 @@
-/** ISCA — a contagem de encontros novos conta O QUE A AGENDA MOSTRA. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

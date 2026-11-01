@@ -1,7 +1,3 @@
-/**
- * Critério 2 da BICHUS-178: *"teste ou portão que tenta registrar uma rota
- * contornando a aplicação e reprova se conseguir"*.
- */
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -25,11 +21,6 @@ const ISCA_NOME_IMPROVAVEL = dentroDeSrc('nome-improvavel.ts');
 const ISCA_COLCHETE = dentroDeSrc('acesso-por-colchete.ts');
 const CONTROLE_NEGATIVO = dentroDeSrc('so-prosa.ts');
 
-/**
- * As iscas reproduzem o `register` prefixado de `api.ts` letra por letra, sem
- * anotar o tipo do escopo: é o framework que o infere, e era exatamente por aí que
- * o registro clandestino passava.
- */
 const ISCAS: ArquivosEmMemoria = new Map([
   [
     ISCA_ESCOPO,
@@ -173,7 +164,6 @@ void describe('portão do registro de rota', () => {
   });
 });
 
-/** BICHUS-217: a barreira de tipo passa a ter isca. */
 void describe('a barreira de tipo do RegistradorDeRotas', () => {
   const barreira = medirBarreiraDeTipo(raiz);
 

@@ -1,4 +1,3 @@
-/** O portão de vigência, e **a isca que prova que ele sabe reprovar**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

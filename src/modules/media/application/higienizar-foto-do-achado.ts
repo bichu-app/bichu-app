@@ -1,4 +1,3 @@
-/** A HIGIENE DA FOTO DO ACHADO — e o que ela conserta é um vazamento de GPS. */
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import { comoData } from '../../../shared/time/clock.js';
 import { chaveDaFotoHigienizada } from '../domain/chave-de-objeto.js';
@@ -14,10 +13,6 @@ import type {
 } from '../ports/fotos-do-achado.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
-/**
- * O texto do motivo. Vai para a coluna e, no dia em que a conversa servir a foto,
- * para a tela de quem enviou — nunca é código de erro.
- */
 const TEXTO_DA_RECUSA: Record<MotivoDeRecusa, string> = {
   formato_nao_aceito: 'Esse arquivo não é uma foto que a gente consiga abrir.',
   imagem_grande_demais: 'Essa foto é grande demais. Escolha outra ou tire uma nova.',
@@ -45,7 +40,6 @@ export type ResultadoDaHigiene =
   /** Já higienizada antes: o trabalho foi reentregue depois de um reinício. */
   | { readonly tipo: 'ignorada'; readonly envioId: string };
 
-/** APAGA O ORIGINAL, que é a cópia que carrega a coordenada de GPS. */
 async function descartarOriginalComGps(
   deps: DependenciasDaHigiene,
   foto: FotoDoAchadoParaHigienizar,

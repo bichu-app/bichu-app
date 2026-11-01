@@ -1,14 +1,11 @@
-/** **PORTÃO: A RÉGUA DE "VALIDADO" NÃO VOLTA A SER COPIADA.** */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-/** A FONTE ÚNICA. O único arquivo onde a condição pode aparecer em código. */
 const FONTE = join('src', 'shared', 'db', 'canal-de-contato-confirmado.ts');
 
-/** O que a varredura NÃO conta como cópia, e cada exclusão tem motivo: */
 function ehIsento(caminho: string): boolean {
   return (
     caminho === FONTE ||
@@ -27,13 +24,11 @@ function arquivosTs(raiz: string): string[] {
   return achados;
 }
 
-/** Uma linha é **prosa** quando o texto dela começa com `*`, `/*` ou `//`. */
 function ehProsa(linha: string): boolean {
   const t = linha.trim();
   return t.startsWith('*') || t.startsWith('/*') || t.startsWith('//');
 }
 
-/** O par de colunas na mesma linha de código é a assinatura da cópia. */
 function copiasEmCodigo(caminho: string): number[] {
   const linhas = readFileSync(caminho, 'utf8').split('\n');
   const achadas: number[] = [];

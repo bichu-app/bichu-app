@@ -1,20 +1,11 @@
-/**
- * A busca de CEP contra servico publico: **ViaCEP principal, BrasilAPI de
- * reserva**.
- */
 import type {
   BuscaDeCep,
   EnderecoDoCep,
   RespostaDaBuscaDeCep,
 } from '../../ports/busca-de-cep.js';
 
-/** **Principal, por pedido do cliente de 17/10** (*"pode implementar o via cep"*). */
 const VIA_CEP = 'https://viacep.com.br/ws';
 
-/**
- * Reserva, consultada **so quando a principal falha, nao responde ou diz que o CEP
- * nao existe**.
- */
 const BRASIL_API = 'https://brasilapi.com.br/api/cep/v2';
 
 /** Quatro segundos, **por servico**. */
@@ -22,10 +13,6 @@ export const PRAZO_POR_SERVICO_MS = 4_000;
 
 const SO_DIGITOS = /[^0-9]/g;
 
-/**
- * `''` para qualquer coisa que nao seja texto: numero, nulo e objeto nao sao
- * endereco.
- */
 function texto(valor: unknown): string {
   return typeof valor === 'string' ? valor.trim() : '';
 }
@@ -34,7 +21,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/** Endereco completo o bastante para valer, ou `null`. */
 function enderecoValido(bruto: EnderecoDoCep): EnderecoDoCep | null {
   if (bruto.city === '' || bruto.state.length !== 2) return null;
   return bruto;
@@ -50,7 +36,6 @@ export function criarBuscaDeCep(opcoes: OpcoesDaBuscaDeCep = {}): BuscaDeCep {
   const chamar = opcoes.buscarNaRede ?? globalThis.fetch;
   const prazoMs = opcoes.prazoMs ?? PRAZO_POR_SERVICO_MS;
 
-  /** Roda uma tentativa e **engole tudo o que der errado**. */
   const tentar = async (
     tentativa: () => Promise<RespostaDaBuscaDeCep | null>,
   ): Promise<RespostaDaBuscaDeCep | null> => {

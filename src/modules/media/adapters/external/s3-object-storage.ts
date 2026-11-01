@@ -1,4 +1,3 @@
-/** Armazenamento de objeto pela API S3, com assinatura V4 escrita aqui. */
 import { createHash, createHmac } from 'node:crypto';
 import type {
   AutorizacaoDeEnvio,
@@ -21,11 +20,8 @@ interface Dialeto {
   readonly prefixoDaChave: string;
   readonly servico: string;
   readonly terminador: string;
-  /** Prefixo dos cabecalhos e campos de formulario, minusculo. */
   readonly campo: string;
-  /** Prefixo dos parametros da URL assinada. */
   readonly parametro: string;
-  /** O formulario exige criptografia no servidor declarada? */
   readonly exigeCriptografiaNoFormulario: boolean;
 }
 
@@ -52,7 +48,6 @@ const DIALETOS: Readonly<Record<DialetoDeAssinatura, Dialeto>> = {
 
 const SERVICO = 's3';
 
-/** `20260918T120000Z` e `20260918`, os dois formatos que a V4 exige. */
 function carimbos(agora: Date): { longo: string; curto: string } {
   const longo = agora.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   return { longo, curto: longo.slice(0, 8) };
@@ -66,15 +61,10 @@ function sha256Hex(dado: Buffer | string): string {
   return createHash('sha256').update(dado).digest('hex');
 }
 
-/** A cadeia de derivação da V4: data, região, serviço, `aws4_request`. */
 function chaveDeAssinatura(d: Dialeto, secret: string, dataCurta: string, regiao: string): Buffer {
   return hmac(hmac(hmac(hmac(`${d.prefixoDaChave}${secret}`, dataCurta), regiao), d.servico), d.terminador);
 }
 
-/**
- * `AbortSignal.timeout` rejeita com `DOMException` de nome `TimeoutError`, no
- * `fetch` e também na leitura do corpo que ele já tinha começado.
- */
 function ehEstouroDePrazo(erro: unknown): boolean {
   return erro instanceof Error && erro.name === 'TimeoutError';
 }
@@ -84,7 +74,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
   const ALGORITMO = d.algoritmo;
   const escopoDe = (curto: string): string => `${curto}/${config.region}/${d.servico}/${d.terminador}`;
   const chaveDe = (curto: string): Buffer => chaveDeAssinatura(d, config.secretAccessKey, curto, config.region);
-  /** Roda a chamada inteira — pedido E leitura da resposta — sob um prazo só. */
   const comPrazo = async <T>(
     operacao: OperacaoDeRede,
     prazoMs: number,
@@ -101,7 +90,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
   const bucketDa = (classe: Classe): string =>
     classe === 'privado' ? config.bucketPrivate : config.bucketPublic;
 
-  /** O endereço do bucket. */
   const baseDoBucket = (classe: Classe, paraOCliente = false): URL => {
     const bucket = bucketDa(classe);
     const endpoint = paraOCliente ? (config.publicEndpoint ?? config.endpoint) : config.endpoint;
@@ -121,7 +109,6 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     return url;
   };
 
-  /** Assina um pedido comum (cabeçalho `Authorization`). */
   const assinar = (
     metodo: string,
     url: URL,

@@ -1,4 +1,3 @@
-/** A tradução do desfecho da higiene no problema que a pessoa recebe. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { FotoParaAMensagem } from '../ports/foto-da-conversa.js';
 

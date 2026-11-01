@@ -1,8 +1,3 @@
-/**
- * `help_requests` -- a duvida que o tutor manda pelo botao `Ajuda` (migracao
- * `20261029000010`, 29/10/2026; o estado de atendida veio na `20261030000001`,
- * 30/10/2026).
- */
 import { eventoAdministrativo } from '../../../audit/ports/trilha-administrativa.js';
 import type { AtorAdministrativo } from '../../../audit/ports/trilha-administrativa.js';
 import type { EscritaAuditada } from '../../../audit/ports/audit-log.js';
@@ -18,7 +13,6 @@ import type {
   SituacaoDaDuvida,
 } from '../../ports/duvidas-de-ajuda.js';
 
-/** A forma da linha que as duas leituras projetam, e so ela. */
 interface LinhaDaFila {
   ref: string;
   subject: string;
@@ -41,10 +35,6 @@ function comoDuvida(linha: LinhaDaFila): DuvidaNaFila {
   };
 }
 
-/**
- * A declaracao da trilha, a MESMA do `x-audit` da rota e de
- * `ACOES_ADMINISTRATIVAS`.
- */
 const TRILHA = { action: 'admin.help_request.attended', resourceKind: 'help_request' } as const;
 
 /**
@@ -141,17 +131,6 @@ export function criarDuvidasDeAjuda(
       };
     },
 
-    /**
-     * **SO MARCA O QUE ESTAVA ABERTO, e so grava trilha quando marcou.**
-     *
-     * O `UPDATE` tem `attended_at IS NULL` no `WHERE`, entao a segunda chamada
-     * nao troca quem marcou nem quando -- e o que o contrato promete. O que
-     * nao se media era a TRILHA: a segunda chamada respondia `200` e gravava
-     * uma linha com `before.status: 'attended'` e `after.status: 'attended'`,
-     * e o `ref` inexistente respondia `404` e gravava a dele, com um
-     * `resource_id` que nao existe. As duas poluiam `audit.events`, que e a
-     * unica prova de quem fez o que no painel.
-     */
     async marcarAtendida(
       ator: AtorAdministrativo,
       ref: string,
@@ -181,20 +160,12 @@ export function criarDuvidasDeAjuda(
             .executeTakeFirst();
           const duvida = linha === undefined ? undefined : comoDuvida(linha);
 
-          // Zero linha atualizada quer dizer uma de duas coisas, e nenhuma
-          // delas e uma mudanca: o `ref` nao existe (a rota traduz `undefined`
-          // para 404) ou ela JA estava atendida (a rota responde 200 com a
-          // linha como esta).
           if (Number(marcadas.numUpdatedRows) === 0) throw new NadaMudou(duvida);
 
           return {
             resultado: duvida,
             evento: eventoAdministrativo(TRILHA, ator, {
               resourceId: ref,
-              // `open` sem condicional: a linha so nasce quando a transicao
-              // ACONTECEU, e antes dela a duvida estava aberta. O ternario
-              // anterior era o proprio defeito escrito -- ele admitia que a
-              // linha podia nascer de uma chamada que nao mudou nada.
               before: { status: 'open' },
               after: { status: 'attended' },
             }),

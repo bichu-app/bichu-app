@@ -1,4 +1,3 @@
-/** O outro lado de `EntregaDoAlerta`: avisar um vizinho por push. */
 import {
   montarMensagemDePush,
   VazamentoNoPushError,
@@ -11,7 +10,6 @@ import type {
   ResultadoDaEntrega,
 } from '../../../lostfound/ports/entrega-do-alerta.js';
 
-/** Código da espécie em palavra, para "Um **cão** sumiu perto de você". */
 const ESPECIE_POR_EXTENSO: Readonly<Record<string, string>> = {
   dog: 'cão',
   cat: 'gato',

@@ -1,7 +1,3 @@
-/**
- * Critérios 6 e 7 da BICHUS-178: `RATE_LIMIT_DRIVER=disabled` só é legítimo em
- * `dev`.
- */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 

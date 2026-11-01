@@ -1,4 +1,3 @@
-/** A porta da secao `Rede`. */
 import type { EncontroDaRede, PontoDoEncontro, StatusDoEncontro } from '../domain/encontro-da-rede.js';
 import type {
   MudancaDoEncontroDaComunidade,

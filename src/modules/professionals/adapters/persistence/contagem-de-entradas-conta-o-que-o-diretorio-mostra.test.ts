@@ -1,7 +1,3 @@
-/**
- * ISCA — a contagem de entradas novas do diretorio conta O QUE A SUB-ABA
- * `Comunidade` MOSTRA, e nenhuma entrada publicada fica invisivel.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

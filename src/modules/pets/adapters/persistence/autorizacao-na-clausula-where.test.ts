@@ -1,7 +1,3 @@
-/**
- * A autorização do cadastro do pet está na cláusula `WHERE`, e o SQL compilado
- * prova isso.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -46,7 +42,6 @@ const DADOS: DadosDoPet = {
   sinpatinhasId: null,
 };
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -56,10 +51,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/**
- * O predicado do dono, como o compilador do Postgres o escreve: `"owner_user_id" =
- * $n`, com ou sem o `"pets".` na frente.
- */
 const PREDICADO_DO_DONO = /"owner_user_id"\s*=\s*\$(\d+)/;
 
 interface Compilada {
@@ -67,7 +58,6 @@ interface Compilada {
   readonly parameters: readonly unknown[];
 }
 
-/** O valor REALMENTE ligado à posição que o predicado do dono ocupa. */
 function donoLigadoAoPredicado(compilada: Compilada): unknown {
   const achado = PREDICADO_DO_DONO.exec(compilada.sql);
   assert.ok(

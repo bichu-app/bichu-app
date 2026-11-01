@@ -1,4 +1,3 @@
-/** Idempotência por cabeçalho `Idempotency-Key` (BICHUS-31, critérios 11 a 13). */
 import { sql } from 'kysely';
 import type { RegistradorDeRotas } from './registrar-rota.js';
 import type { Db } from '../db/pool.js';
@@ -9,10 +8,6 @@ import { AppError, problemas } from './errors.js';
 
 const VALIDADE_EM_HORAS = 24;
 
-/**
- * A reserva grava `response_status = NULL`, e não um número de fora do domínio da
- * coluna.
- */
 const RESERVADA = null;
 
 export interface RespostaGravada {
@@ -156,7 +151,6 @@ const CABECALHO_DE_IDEMPOTENCIA = 'idempotency-key';
 /** O contrato declara `Idempotency-Key` nesta operação, e como. */
 export type ExigenciaDeIdempotencia = 'ausente' | 'opcional' | 'obrigatoria';
 
-/** `format: uuid` do contrato. */
 const FORMATO_DE_CHAVE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parametroResolvido(

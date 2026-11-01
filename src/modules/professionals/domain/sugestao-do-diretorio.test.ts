@@ -1,4 +1,3 @@
-/** A conferencia pura da sugestao do diretorio. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +20,6 @@ interface ChamadaDoDetector {
   readonly maximo: number;
 }
 
-/** O dobro das conferencias injetadas. */
 function conferenciasDobradas(opcoes: {
   readonly recusar?: readonly string[];
   readonly chamadas?: ChamadaDoDetector[];

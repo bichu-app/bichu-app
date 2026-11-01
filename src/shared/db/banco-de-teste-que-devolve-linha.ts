@@ -1,4 +1,3 @@
-/** Um `Kysely` de mentira que **DEVOLVE LINHA** e guarda o SQL compilado. */
 import {
   Kysely,
   PostgresAdapter,

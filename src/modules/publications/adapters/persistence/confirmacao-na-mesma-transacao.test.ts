@@ -1,7 +1,3 @@
-/**
- * ISCA (d), METADE DO SERVIDOR: **a foto da publicação é confirmada na MESMA
- * transação da escrita, e a publicação ABANDONADA não confirma nada.**
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -21,7 +17,6 @@ interface Operacao {
   readonly valores?: Record<string, unknown>;
 }
 
-/** O envio que a `SELECT` do dublê devolve. */
 interface EnvioDoDuble {
   readonly id: string;
   readonly expires_at: Date;
@@ -29,7 +24,6 @@ interface EnvioDoDuble {
   readonly catalog_image_id: string | null;
 }
 
-/** Um executor de banco de MENTIRA, encadeável como o Kysely, que só registra. */
 function executorQueRegistra(registro: Operacao[], envio: EnvioDoDuble | undefined): DbExecutor {
   const executor: Record<string, unknown> = {};
   const encadear = (acao: string, tabela: string) => {

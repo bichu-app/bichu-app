@@ -1,13 +1,10 @@
-/** O schema de corpo do contrato tem **uma fonte só**, e esta é a guarda. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-/** A declaração que não pode voltar a existir fora da fonte. */
 const DECLARACAO_LOCAL = /\bfunction\s+corpoDe\s*\(\s*contrato\s*:\s*Contrato\b/;
 
-/** A fonte. O caminho é literal de propósito: renomear o arquivo reprova aqui. */
 const FONTE = 'src/shared/http/contract.ts';
 
 function todosOsFontes(raiz: string): readonly string[] {

@@ -1,7 +1,3 @@
-/**
- * QA, 28/09: o desafio de desenvolvimento do login do painel so sobe na pilha
- * local.
- */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 

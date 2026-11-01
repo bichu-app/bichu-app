@@ -1,7 +1,3 @@
-/**
- * O portao do padrao injetado na edicao contra o contrato real, e contra uma isca
- * por regra.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -56,10 +52,6 @@ void describe('portao do padrao injetado na edicao', () => {
     assert.ok(edicoesConferidas >= 5, `so ${String(edicoesConferidas)} edicoes com corpo JSON`);
   });
 
-  /**
-   * O inventario da divida nao e uma lista de nomes: cada linha dela existe porque
-   * ha um `default` ALCANCAVEL do corpo daquela operacao.
-   */
   void it('a divida de hoje e exatamente a que foi medida, com a trilha ate cada default', () => {
     const { alcancados } = conferirPadraoInjetadoNaEdicao(TEXTO);
     const porOperacao = new Map<string, string[]>();

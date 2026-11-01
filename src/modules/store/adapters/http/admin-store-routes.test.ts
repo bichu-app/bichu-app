@@ -1,7 +1,3 @@
-/**
- * As rotas da escrita administrativa da `Loja`, montadas DENTRO da guarda do
- * prefixo `/v1/admin`, sem banco (BICHUS-266 e BICHUS-267).
- */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';

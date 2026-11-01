@@ -1,7 +1,3 @@
-/**
- * **A RÉGUA DO CANAL DE CONTATO, nas duas formas, presa à MESMA tabela de
- * verdade.**
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -14,7 +10,6 @@ import { bancoDeMentira } from './banco-de-teste-que-devolve-linha.js';
 
 const EM = new Date('2026-10-21T12:00:00.000Z');
 
-/** As quatro contas possíveis, e o que a régua responde sobre cada uma. */
 const TABELA: ReadonlyArray<{
   readonly nome: string;
   readonly emailVerifiedAt: Date | null;
@@ -27,7 +22,6 @@ const TABELA: ReadonlyArray<{
   { nome: 'os dois', emailVerifiedAt: EM, phoneVerifiedAt: EM, confirmado: true },
 ];
 
-/** A expressão canônica, escrita à mão, por apelido. */
 function textoCanonico(apelido: string): string {
   return `(${apelido}.email_verified_at IS NOT NULL OR ${apelido}.phone_verified_at IS NOT NULL)`;
 }

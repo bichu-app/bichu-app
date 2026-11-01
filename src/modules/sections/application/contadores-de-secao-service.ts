@@ -1,4 +1,3 @@
-/** BICHUS-278 -- o servico dos contadores das abas `Pets` e `Rede`. */
 import type { Clock } from '../../../shared/time/clock.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { ContagemDePerdidosNovos } from '../../lostfound/ports/contagem-de-perdidos-novos.js';
@@ -31,11 +30,6 @@ export interface ContadoresDeSecaoService {
 export function criarContadoresDeSecaoService(
   deps: DependenciasDosContadores,
 ): ContadoresDeSecaoService {
-  /**
-   * As tres contagens, **em paralelo**: sao tres consultas independentes, e
-   * serializa-las triplicaria a espera do primeiro desenho da barra sem economizar
-   * consulta nenhuma.
-   */
   async function compor(
     chamador: UserId,
     agora: Instant,

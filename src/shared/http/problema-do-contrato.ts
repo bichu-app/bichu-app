@@ -1,4 +1,3 @@
-/** O status e o `type` de um problema, lidos do CONTRATO, para os testes. */
 import { carregarContrato, type Contrato } from './contract.js';
 
 export interface ProblemaDeclarado {

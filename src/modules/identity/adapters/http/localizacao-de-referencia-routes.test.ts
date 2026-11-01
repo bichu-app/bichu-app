@@ -1,4 +1,3 @@
-/** As três rotas de `/me/location` sobre um Fastify de verdade. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -25,13 +24,10 @@ const OUTRO = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
 const CAMINHO = '/me/location';
 
-/** Repositório em memória que **guarda por dono**. */
 const APARELHO_UNICO = '018f3a2b-0000-7000-8000-00000000d001';
 
-/** O tablet da MESMA pessoa: outro aparelho, outra família. */
 const TABLET = '018f3a2b-0000-7000-8000-00000000d002';
 
-/** A chave do dublê: o mesmo par que é chave primária da tabela. */
 function chave(dono: string, familia: string): string {
   return `${dono}\u0000${familia}`;
 }
@@ -61,9 +57,7 @@ function repositorio(): LocalizacaoDeReferenciaRepository & {
 interface Cenario {
   readonly contador?: RateLimitStore;
   readonly agora?: Instant;
-  /** SEC-021: o `sid` que o autenticador devolve. */
   readonly sid?: string | null;
-  /** O mesmo repositório em duas montagens. */
   readonly repositorioCompartilhado?: ReturnType<typeof repositorio>;
 }
 

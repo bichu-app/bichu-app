@@ -1,4 +1,3 @@
-/** O que os bytes dizem, contra o que o cliente declarou. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { formatoRealDe } from './numeros-magicos.js';

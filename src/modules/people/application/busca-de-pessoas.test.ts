@@ -1,7 +1,3 @@
-/**
- * As ISCAS da **busca de pessoas**: o piso de três caracteres, o campo vazio que
- * não lista ninguém, e o recorte do resultado.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -26,15 +22,12 @@ const MARINA: PessoaEncontrada = {
   photoKey: 'u/ab/cdef0123456789/thumb.jpg',
 };
 
-/** A mesma pessoa SEM foto pronta -- o caso em que a chave sai nula. */
 const MARINA_SEM_FOTO: PessoaEncontrada = { ...MARINA, photoKey: null };
 
-/** A raiz de midia da bancada. */
 const MIDIA = 'https://midia.exemplo.test' as AbsoluteUrl;
 
 interface Bancada {
   readonly servico: BuscaDePessoas;
-  /** Os termos com que a PORTA foi chamada. */
   readonly termos: string[];
 }
 
@@ -49,7 +42,6 @@ function montar(resultado: readonly PessoaEncontrada[] = [MARINA]): Bancada {
   return { servico: new BuscaDePessoas({ busca, conexoes: SEM_ARESTA, clock: RELOGIO }), termos };
 }
 
-/** **A porta de conexão sem nenhuma aresta** — o estado de todo mundo é `none`. */
 const SEM_ARESTA: LeitorDeConexao = {
   estaConectado: () => Promise.resolve(false),
   contarConexoes: () => Promise.resolve(0),
@@ -59,7 +51,6 @@ const SEM_ARESTA: LeitorDeConexao = {
 
 const RELOGIO: Clock = { now: () => 0 as Instant };
 
-/** Uma bancada cujo leitor devolve os estados pedidos, por apelido. */
 function comEstados(
   resultado: readonly PessoaEncontrada[],
   estados: ReadonlyMap<string, EstadoNoApp>,
@@ -94,10 +85,6 @@ void describe('o piso de tres caracteres da busca de pessoas', () => {
     assert.deepEqual(termos, []);
   });
 
-  /**
-   * **O CONTRAPESO.** Sem ele, todos os casos acima passariam num mundo em que a
-   * busca nunca busca — e esse defeito se disfarça de segurança.
-   */
   void it('CONTRAPESO: consulta de TRES caracteres BUSCA, e devolve o resultado', async () => {
     const { servico, termos } = montar();
     const pagina = await servico.buscar(QUEM_BUSCA, 'mar', 1, 20);
@@ -125,12 +112,6 @@ void describe('o piso de tres caracteres da busca de pessoas', () => {
 });
 
 void describe('campo vazio NUNCA lista ninguem', () => {
-  /**
-   * **O contrapeso desta isca é ela mesma na direção oposta:** ela é o caso que
-   * impede alguém de "melhorar" a busca devolvendo todos quando não há termo — que é
-   * como uma listagem de pessoas entraria neste produto, apresentada como
-   * conveniência de tela.
-   */
   void it('ISCA: `q` AUSENTE nao lista ninguem, e nao consulta', async () => {
     const { servico, termos } = montar();
     const pagina = await servico.buscar(QUEM_BUSCA, undefined, 1, 20);
@@ -153,11 +134,6 @@ void describe('campo vazio NUNCA lista ninguem', () => {
     assert.deepEqual(termos, []);
   });
 
-  /**
-   * A afirmação **estrutural**, e ela é mais forte que as três de cima: não é que a
-   * busca sem termo devolva vazio — é que a chamada que listaria todos **não é
-   * exprimível**, porque `buscar` exige `termo: string`.
-   */
   void it('a porta de persistencia NAO aceita busca sem termo (afirmacao de tipo)', () => {
     const assinatura = `buscar(termo: string, ...)`;
     assert.match(
@@ -170,11 +146,6 @@ void describe('campo vazio NUNCA lista ninguem', () => {
 });
 
 void describe('o resultado da busca devolve nome, as duas contagens e a foto -- e NADA mais', () => {
-  /**
-   * **A isca do recorte**, e ela é por **conjunto exato de chaves** e não por "não
-   * contém foto": uma asserção que só negasse `photo` passaria no dia em que alguém
-   * acrescentasse `photo_url`, `avatar`, `city` ou `public_ref`.
-   */
   void it('ISCA: o conjunto de chaves e EXATAMENTE seis', () => {
     const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     assert.deepEqual(
@@ -256,7 +227,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     }
   });
 
-  /** **ESTA ISCA PERDEU UM ITEM EM 22/10/2026, E SÓ UM.** */
   void it('ISCA: NAO sai recorte geografico, contato nem `ref` de aresta', () => {
     const corpo = comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA);
     for (const proibido of [
@@ -282,10 +252,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     }
   });
 
-  /**
-   * **O contrapeso da troca**: `connection_state` saiu da lista de proibidos, e este
-   * caso é o que o cobra no lugar.
-   */
   void it('o estado da conexao SAI, com os quatro valores e NUNCA `declined`', async () => {
     const servico = comEstados(
       [MARINA],
@@ -302,7 +268,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     );
   });
 
-  /** **A ISCA DO `none`, e ela é a que guarda a recusa silenciosa.** */
   void it('ISCA: apelido sem aresta vira `none`, e `declined` nao e exprimivel', async () => {
     const servico = comEstados([MARINA], new Map<string, EstadoNoApp>());
     const pagina = await servico.buscar(QUEM_BUSCA, 'marina', 1, 20);
@@ -320,7 +285,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     }
   });
 
-  /** **UMA consulta de estado para a página inteira**, e não uma por resultado. */
   void it('ISCA: o estado da pagina custa UMA pergunta, e nao uma por pessoa', async () => {
     let perguntas = 0;
     let apelidosPerguntados: readonly string[] = [];
@@ -351,11 +315,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     assert.deepEqual([...apelidosPerguntados], [MARINA.handle, 'bia-tutora']);
   });
 
-  /**
-   * **Página vazia não pergunta estado nenhum**, e isto não é otimização: é a mesma
-   * propriedade que o resto deste arquivo mede para o piso de três caracteres — a
-   * consulta **não acontece**.
-   */
   void it('ISCA: consulta abaixo do piso nao pergunta estado ao modulo de conexao', async () => {
     let perguntas = 0;
     const servico = new BuscaDePessoas({
@@ -378,7 +337,6 @@ void describe('o resultado da busca devolve nome, as duas contagens e a foto -- 
     assert.equal(perguntas, 0, 'sem resultado nao ha estado a perguntar');
   });
 
-  /** Sem esta isca, as de cima passariam por a projecao devolver pouco por acaso. */
   void it('ISCA: a varredura de chaves REPROVA um campo acrescentado depois', () => {
     const comVazamento = {
       ...comoRespostaDaPessoa({ ...MARINA, estadoDaConexao: 'none' }, MIDIA),

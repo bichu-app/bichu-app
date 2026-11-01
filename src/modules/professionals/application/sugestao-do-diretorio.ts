@@ -1,7 +1,3 @@
-/**
- * O caso de uso de `suggestDirectoryEntry`: a comunidade sugere uma entrada do
- * diretorio, e a sugestao entra na FILA DE REVISAO.
- */
 import { problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
@@ -40,7 +36,6 @@ export interface DependenciasDaSugestaoDoDiretorio {
   readonly canal: CanalDeContatoDoChamador;
 }
 
-/** O texto como ele vai para o banco: aparado, e nunca vazio por causa disso. */
 function aparado(valor: string | undefined): string | null {
   const texto = valor?.trim();
   return texto === undefined || texto === '' ? null : texto;
@@ -102,10 +97,6 @@ export class SugestaoDoDiretorio {
         has_note: corpo.note !== undefined,
         has_postal_code: corpo.postal_code !== undefined,
         has_logo: corpo.logo_upload_id !== undefined,
-        /**
-         * QUANTAS fotos do estabelecimento vieram, e nao quais: a trilha nao
-         * guarda `upload_id`, pelo mesmo motivo que `has_logo` e booleano.
-         */
         photo_count: (corpo.photo_upload_ids ?? []).length,
         review_status: 'pending',
       },

@@ -1,7 +1,3 @@
-/**
- * A porta de leitura PUBLICA da vitrine: a lista, o detalhe e as tags do filtro
- * (ADR-0027 item 16).
- */
 import type {
   CategoriaDaVitrine,
   EspecieDoItem,

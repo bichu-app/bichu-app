@@ -1,4 +1,3 @@
-/** `GET /v1/public/reference-data` — espécie, raça, porte e cor. */
 import { casaIfNoneMatch } from '../../../../shared/http/if-match.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';

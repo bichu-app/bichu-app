@@ -1,4 +1,3 @@
-/** O aviso ao TUTOR de que alguem escaneou a plaquinha do pet dele. */
 import type { UserId } from '../../../shared/types/brands.js';
 
 /** O tipo do trabalho na fila, o mesmo de `JobKind` (`shared/ports/job-queue.ts`). */

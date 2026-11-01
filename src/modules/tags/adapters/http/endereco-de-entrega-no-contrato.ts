@@ -1,7 +1,3 @@
-/**
- * `DeliveryAddress` do contrato para [EnderecoDeEntrega] do dominio, e de volta --
- * **uma traducao so, nas duas direcoes**.
- */
 import type { EnderecoDeEntrega } from '../../ports/pedido-de-plaquinha.js';
 
 /** `DeliveryAddress` como o schema do contrato ja o validou. */

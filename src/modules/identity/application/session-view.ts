@@ -1,4 +1,3 @@
-/** Projeção da sessão e da conta para a resposta. */
 import type { Instant } from '../../../shared/types/brands.js';
 import type { Conta } from '../ports/identity-repository.js';
 import type { FotoProjetada } from '../domain/resposta-do-perfil.js';

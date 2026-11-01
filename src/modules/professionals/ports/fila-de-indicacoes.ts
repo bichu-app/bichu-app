@@ -1,4 +1,3 @@
-/** A porta da FILA DE REVISAO das indicacoes do `Perto`. */
 import type { IndicacaoNaFila, RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type { Pagina, TransacaoDoDiretorio } from './diretorio-administrativo.js';

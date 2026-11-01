@@ -1,8 +1,3 @@
-/**
- * A consulta da listagem pública de perdidos não lê id interno nem dado do tutor,
- * e **os quatro predicados de publicação estão lá** — o SQL compilado prova as
- * duas coisas.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -31,7 +26,6 @@ const semBanco = new Kysely<Database>({
 
 const AGORA = new Date('2026-10-18T12:00:00.000Z');
 
-/** O recorte MÍNIMO: só a cidade, que é o único obrigatório do contrato. */
 const RECORTE_MINIMO: RecorteDePerdidos = {
   conjunto: 'aberto',
   cidade: 'São Paulo',
@@ -42,10 +36,6 @@ const RECORTE_MINIMO: RecorteDePerdidos = {
 
 const RECORTE_COM_JANELA: RecorteDePerdidos = { ...RECORTE_MINIMO, janela: '30d' };
 
-/**
- * O recorte em que a tela de fato ABRE desde 19/10/2026: **sem cidade e sem
- * janela**.
- */
 const RECORTE_SEM_CIDADE: RecorteDePerdidos = {
   conjunto: 'aberto',
   pagina: 1,
@@ -61,21 +51,18 @@ const RECORTE_CHEIO: RecorteDePerdidos = {
   termo: 'Mel',
 };
 
-/** O trecho entre `select` e o primeiro `from`: o que a consulta devolve. */
 function listaDeSaida(sql: string): string {
   const achado = /^select\s+([\s\S]*?)\s+from\s+"lost_cases"/i.exec(sql);
   assert.ok(achado !== null, `não achei a lista de saída. SQL compilado: ${sql}`);
   return achado[1] ?? '';
 }
 
-/** Só a cláusula `WHERE` do SQL compilado. */
 function clausulaWhere(sql: string): string {
   const achado = /\swhere\s([\s\S]*)$/i.exec(sql);
   assert.ok(achado !== null, `não achei o \`WHERE\`. SQL compilado: ${sql}`);
   return achado[1] ?? '';
 }
 
-/** A consulta da PÁGINA, com a lista de colunas que de fato sai. */
 function sqlDaPagina(recorte: RecorteDePerdidos): string {
   return construtorDaListagemPublicaDePerdidos(semBanco, recorte)
     .select([
@@ -94,7 +81,6 @@ function sqlDaPagina(recorte: RecorteDePerdidos): string {
     .compile().sql;
 }
 
-/** Colunas que não podem ser SAÍDA desta consulta. */
 const SAIDAS_PROIBIDAS: readonly RegExp[] = [
   /"lost_cases"\."id"/,
   /"pets"\."id"/,
@@ -217,7 +203,6 @@ void describe('os quatro predicados de publicação estão no `WHERE`', () => {
 });
 
 void describe('a ausência de `period` é janela ABERTA, e não 30 dias', () => {
-  /** ISCA: a prova de ponta desta camada. */
   void it('ISCA: recorte sem janela não compila predicado de `last_seen_at`', () => {
     const onde = clausulaWhere(sqlDaPagina(RECORTE_MINIMO));
     assert.doesNotMatch(
@@ -234,10 +219,6 @@ void describe('a ausência de `period` é janela ABERTA, e não 30 dias', () => 
     );
   });
 
-  /**
-   * ISCA (a) no nível do SQL: o pedido do cliente de 19/10/2026 (*"o campo cidade do
-   * filtro da página pet não deve ser obrigatório"*).
-   */
   void it('ISCA: recorte sem cidade não compila predicado de `last_seen_city`', () => {
     const onde = clausulaWhere(sqlDaPagina(RECORTE_SEM_CIDADE));
     assert.doesNotMatch(
@@ -254,7 +235,6 @@ void describe('a ausência de `period` é janela ABERTA, e não 30 dias', () => 
     );
   });
 
-  /** A ORDEM NÃO SE PROVA NESTE ARQUIVO, E ISSO FOI MEDIDO. */
   void it('ISCA: a consulta não toca coordenada nem função geoespacial', () => {
     for (const [rotulo, recorte] of [
       ['sem cidade', RECORTE_SEM_CIDADE],

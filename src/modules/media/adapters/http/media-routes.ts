@@ -1,4 +1,3 @@
-/** Rotas da foto. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -113,7 +112,6 @@ export interface DependenciasDasRotasDeMidia {
   readonly baseDeMidia: AbsoluteUrl;
 }
 
-/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
 function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeMidia,
@@ -129,7 +127,6 @@ function donoAutenticado(
   });
 }
 
-/** `account` para o teto. Sem credencial válida não há balde de conta. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeMidia,
@@ -147,7 +144,6 @@ function petIdDoCaminho(request: FastifyRequest): PetId {
   return petId as PetId;
 }
 
-/** A foto como o contrato a declara. */
 function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<string, unknown> {
   const url = (chave: string | null): string | null =>
     chave === null ? null : `${baseDeMidia.replace(/\/$/, '')}/${chave}`;
@@ -163,7 +159,6 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
   };
 }
 
-/** `UploadIntent`, do contrato. */
 function comoAutorizacao(
   uploadId: string,
   autorizacao: {

@@ -1,4 +1,3 @@
-/** O que o worker le para emitir o aviso ao tutor do pet escaneado. */
 import type { DbExecutor } from '../../../../shared/db/pool.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { LeituraDoAvisoAoTutor } from '../../ports/aviso-ao-tutor.js';

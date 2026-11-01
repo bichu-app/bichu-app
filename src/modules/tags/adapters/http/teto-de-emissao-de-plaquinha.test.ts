@@ -1,7 +1,3 @@
-/**
- * O teto de emissao de plaquinhas de `POST /pets/{petId}/tags`, medido pela
- * POSICAO da recusa, na dimensao `pet`.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -41,10 +37,8 @@ const PET_A = '018f3a2b-0000-7000-8000-0000000000c1' as PetId;
 const PET_B = '018f3a2b-0000-7000-8000-0000000000c2' as PetId;
 const TOKEN_DE_ACESSO = 'acesso-do-tutor';
 
-/** Da DECLARACAO, nunca escrito a mao. */
 const EMISSAO = rotaDeEmissaoDeTag.path;
 
-/** O teto de emissoes por pet, literal e com fonte. */
 const TETO_POR_PET = 10;
 
 function naoUsado(nome: string): never {
@@ -53,7 +47,6 @@ function naoUsado(nome: string): never {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Toda emissao que chegou ao repositorio, na ordem. */
   readonly emitidas: NovaTag[];
 }
 

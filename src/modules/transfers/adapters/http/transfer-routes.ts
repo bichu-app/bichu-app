@@ -1,4 +1,3 @@
-/** Rotas da transferencia de pet (BICHUS-66). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -89,7 +88,6 @@ export interface DependenciasDasRotasDeTransferencia {
   readonly clock: Clock;
 }
 
-/** A visao do tutor. `PetTransfer` do contrato, campo a campo. */
 function comoRespostaDaTransferencia(t: TransferenciaGravada): Record<string, unknown> {
   return {
     id: t.id,
@@ -103,10 +101,6 @@ function comoRespostaDaTransferencia(t: TransferenciaGravada): Record<string, un
   };
 }
 
-/**
- * A visao publica. `TransferCancelView`, e o contrato e explicito sobre o que NAO
- * esta aqui: sem `pet_id`, sem `transfer_id` e sem o e-mail do destinatario.
- */
 function comoVisaoDeCancelamento(
   t: TransferenciaPorTokenDeCancelamento,
 ): Record<string, unknown> {
@@ -133,7 +127,6 @@ function donoAutenticado(
   });
 }
 
-/** Quem nao apresentou credencial valida nao tem balde de conta: a recusa e 401. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeTransferencia,

@@ -1,4 +1,3 @@
-/** As regras da escrita administrativa da `Loja`, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -26,7 +25,6 @@ import {
 } from './escrita-da-vitrine.js';
 import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
 
-/** `https://` montado em duas partes. */
 const HTTPS = 'https:' + '//';
 const HTTP = 'http:' + '//';
 import { projetarItem } from './item-da-vitrine.js';
@@ -535,10 +533,6 @@ void describe('o vocabulario de tags', () => {
   });
 });
 
-/**
- * A classificacao em dois niveis (decisao do cliente de 17/10/2026: "dois niveis,
- * com subcategorias como a petlove").
- */
 void describe('a classificacao em dois niveis', () => {
   const ACHOU_TUDO = {
     categoriaAtiva: true,
@@ -617,7 +611,6 @@ void describe('a classificacao em dois niveis', () => {
   });
 });
 
-/** Os rotulos resolvidos chegam a projecao do painel, do jeito que a tabela os tem. */
 void describe('os dois niveis na projecao do painel', () => {
   void it('o codigo e o rotulo saem lado a lado, nos dois niveis', () => {
     const projetado = projetarItemAdministrativo(item(), AGORA, URL_DE_MIDIA);

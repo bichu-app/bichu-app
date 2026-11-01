@@ -1,4 +1,3 @@
-/** A base de senhas vazadas de hoje nao existe, e a porta diz isso (D43). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

@@ -1,4 +1,3 @@
-/** A cifra do código da tag. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarSecretCipher } from './aes-gcm-secret-cipher.js';

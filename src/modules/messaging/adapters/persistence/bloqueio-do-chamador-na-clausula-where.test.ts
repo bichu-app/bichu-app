@@ -1,7 +1,3 @@
-/**
- * **O bloqueio do lado COM CONTA carrega o chamador no `WHERE`**, e o papel sai do
- * SQL — não de quem chama.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -34,7 +30,6 @@ function bloqueio(chamador: UserId = CHAMADOR) {
   return construtorDoBloqueioDoChamador(semBanco, CONVERSA, chamador, AGORA).compile();
 }
 
-/** O `CASE` que deriva o papel. */
 const PAPEL_DERIVADO =
   /case when "tutor_user_id" = \$\d+ then 'tutor' else 'finder' end/i;
 

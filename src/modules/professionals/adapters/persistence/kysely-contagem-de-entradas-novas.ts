@@ -1,7 +1,3 @@
-/**
- * A contagem de entradas novas do diretorio (BICHUS-278), **sobre o construtor da
- * propria listagem**.
- */
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';

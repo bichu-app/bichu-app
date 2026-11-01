@@ -1,4 +1,3 @@
-/** Porta da trilha de auditoria. */
 import type { DbTransaction } from '../../../shared/db/pool.js';
 import type { AdminAccountId, UserId } from '../../../shared/types/brands.js';
 

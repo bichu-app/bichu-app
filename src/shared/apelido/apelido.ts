@@ -1,4 +1,3 @@
-/** A regra do **apelido (`@`)**, num lugar só. */
 import { problemas } from '../http/errors.js';
 
 /** A forma do apelido: **5 a 20**, minúsculas latinas, dígitos e hífen. */
@@ -10,10 +9,6 @@ export const MINIMO_DO_APELIDO = 5;
 /** O teto da faixa. Do normalizado — que é idêntico ao digitado, ver o topo. */
 export const MAXIMO_DO_APELIDO = 20;
 
-/**
- * O mapa dos parecidos, **por GRUPO**, igual ao `translate` de `handle_esqueleto`
- * na migração `20261018000021`.
- */
 const PARECIDOS: ReadonlyMap<string, string> = new Map([
   ['0', 'o'],
   ['1', 'l'],
@@ -78,10 +73,8 @@ export const RESERVADAS: readonly string[] = [
   'undefined',
 ];
 
-/** A palavra cuja regra é **CONTÉM**, e não igualdade. */
 const CONTIDA_PROIBIDA = 'bichu';
 
-/** O campo, como o contrato o nomeia. */
 const CAMPO = 'handle';
 
 /** O apelido normalizado: minúsculo e aparado, e nada mais. */

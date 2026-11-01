@@ -1,4 +1,3 @@
-/** Testes do conteúdo do push (ADR-0008 + ADR-0010). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -10,7 +9,6 @@ import {
 } from './conteudo-do-push.js';
 import { montarAvisoDePedidoAprovado } from './conteudo-do-push.js';
 
-/** Valores que existem no banco e que NÃO podem sair. */
 const TELEFONE = '(11) 98888-7777';
 const ENDERECO = 'Rua Harmonia, 123';
 const EMAIL = 'tutor@exemplo.com.br';
@@ -20,7 +18,6 @@ const USUARIO_ID = '018f7c21-9999-7888-8777-666655554444';
 const CEP = '01310-100';
 const COORDENADA = '-23.5505,-46.6333';
 
-/** O `share_token` opaco: o único identificador que PODE sair (ADR-0010 item 6). */
 const TOKEN_PUBLICO = 'k7QpZr3XmBvNs2Td';
 
 function contexto(ajuste: Partial<ContextoDoAviso> = {}): ContextoDoAviso {
@@ -82,7 +79,6 @@ void describe('nenhum dado sensível entra no payload', () => {
 });
 
 void describe('a porteira reprova cada forma proibida (as iscas)', () => {
-  /** Liga o defeito e exige reprovação, dizendo QUAL padrão pegou. */
   function exigirReprovacao(
     nomeDoCaso: string,
     montar: () => unknown,

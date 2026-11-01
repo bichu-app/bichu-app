@@ -1,13 +1,8 @@
-/** O desafio do login administrativo NA PILHA LOCAL (QA, 28/09). */
 import type { VerificadorDeCaptcha } from '../../ports/verificador-de-captcha.js';
 
 export const VALOR_QUE_LIGA_O_CAPTCHA_DE_DESENVOLVIMENTO = 'aprovar-token-de-desenvolvimento';
 /** O mesmo de `TOKEN_DE_DESENVOLVIMENTO` em `admin/src/entrar/captcha.ts`. */
 export const TOKEN_DE_DESENVOLVIMENTO = 'desenvolvimento-sem-chave-de-captcha';
-/**
- * Acima do limiar de D41 (0,5), e longe do teto: e uma nota de teste, nao de
- * confianca.
- */
 const NOTA_DE_DESENVOLVIMENTO = 0.9;
 
 export function captchaDeDesenvolvimentoLigado(valor: string | undefined): boolean {

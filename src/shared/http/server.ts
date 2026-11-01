@@ -1,4 +1,3 @@
-/** Borda HTTP: correlação, formato de erro e limite de chamadas. */
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyReply,
@@ -37,7 +36,6 @@ export interface OpcoesDoServidor {
   readonly destinoDoLog?: { write(linha: string): void };
 }
 
-/** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
 function correlacaoDeEntrada(cabecalho: unknown): string | undefined {
   if (typeof cabecalho !== 'string') return undefined;
   const formato = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -50,7 +48,6 @@ function ehErroDoFastify(
   return typeof erro === 'object' && erro !== null && 'message' in erro;
 }
 
-/** Traduz o erro do framework para o vocabulário do contrato. */
 function traduzir(erro: unknown): AppError {
   if (erro instanceof AppError) return erro;
   if (!ehErroDoFastify(erro)) return problemas.interno(erro);

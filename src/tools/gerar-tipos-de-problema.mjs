@@ -1,7 +1,3 @@
-/**
- * Gera `src/shared/types/generated/problem-types.ts` a partir de `x-problem-types`
- * de `api/openapi.yaml`.
- */
 import { readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { parse as parseYaml } from 'yaml';

@@ -1,7 +1,3 @@
-/**
- * O adaptador do Postmark (ADR-0009), o único transporte que entrega a gente de
- * verdade.
- */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
@@ -9,7 +5,6 @@ import { criarMailerDoPostmark, montarCorpoDaApi } from './postmark-mailer.js';
 import { criarMailer } from './smtp-mailer.js';
 import type { MailConfig } from '../../../../shared/config/app-config.js';
 
-/** O token DESTA BANCADA. Ele não autentica em lugar nenhum e não é segredo. */
 const TOKEN_DA_BANCADA = 'token-de-bancada-que-nao-autentica-e-nao-pode-vazar';
 
 const CONFIG: MailConfig = {
@@ -43,7 +38,6 @@ afterEach(() => {
   globalThis.fetch = FETCH_ORIGINAL;
 });
 
-/** Troca o `fetch` por um dublê que grava a chamada e devolve o que o caso mandar. */
 function interceptar(status: number, corpoDaResposta: unknown): ChamadaGravada[] {
   const chamadas: ChamadaGravada[] = [];
   globalThis.fetch = ((url: string, opcoes: RequestInit): Promise<Response> => {
@@ -214,7 +208,6 @@ void describe('a chamada ao provedor', () => {
   });
 });
 
-/** O vazamento do token, que é a isca do ADR-0022 neste arquivo. */
 void describe('ISCA de vazamento: o token nao aparece em erro nem em log', () => {
   void it('nenhuma recusa carrega o token do provedor nem o endereco do tutor', async () => {
     const original = { log: console.log, info: console.info, warn: console.warn, error: console.error };

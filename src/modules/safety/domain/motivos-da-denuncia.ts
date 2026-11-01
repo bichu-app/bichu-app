@@ -1,4 +1,3 @@
-/** AS TRES LISTAS FECHADAS DE MOTIVO -- e por que sao tres, e nao uma. */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 
 /** Denúncia de PERFIL: sobre quem a pessoa é. */

@@ -1,4 +1,3 @@
-/** Testes das regras de sessão (BICHUS-15). */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Instant } from '../../../shared/types/brands.js';
@@ -90,7 +89,6 @@ void describe('revogação imediata por sessions_invalid_before (SEC-006)', () =
   });
 });
 
-/** A barreira da conta recém-criada. */
 void describe('barreira de sessão da conta recém-criada', () => {
   void it('o token emitido NO MESMO SEGUNDO da criação vale', () => {
     const criacao = 1_789_734_320_734 as Instant;
@@ -119,7 +117,6 @@ void describe('barreira de sessão da conta recém-criada', () => {
   });
 });
 
-/** A emissão que espera a virada do segundo (BICHUS-132). */
 void describe('emissão que espera a virada do segundo (BICHUS-132)', () => {
   const emSegundos = (instante: number): number => Math.floor(instante / 1000);
 
@@ -173,11 +170,9 @@ void describe('emissão que espera a virada do segundo (BICHUS-132)', () => {
   });
 });
 
-/** A barreira que a revogação grava (SEC-006, duas revogações no mesmo segundo). */
 void describe('instanteDeRevogacao(): a barreira alcança o `iat` empurrado', () => {
   const emSegundos = (instante: number): number => Math.floor(instante / 1000);
 
-  /** Virada exata, para a aritmética ficar legível. */
   const VIRADA = 1_789_734_320_000 as Instant;
   const PRIMEIRA = (VIRADA + 288) as Instant;
   const LOGIN = (VIRADA + 400) as Instant;
@@ -221,9 +216,7 @@ void describe('instanteDeRevogacao(): a barreira alcança o `iat` empurrado', ()
   });
 });
 
-/** A barreira do lado do refresh (BICHUS-77 critério 5). */
 void describe('refreshFoiRevogado(): SEC-006 do lado do refresh', () => {
-  /** A redefinição caiu 734 ms depois da virada do segundo. */
   const REDEFINIDA_EM = 1_789_734_320_734 as Instant;
 
   void it('recusa o refresh nascido antes da barreira, mesmo por 1 ms', () => {

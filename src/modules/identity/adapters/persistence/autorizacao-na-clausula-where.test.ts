@@ -1,4 +1,3 @@
-/** A autorização está na cláusula `WHERE`, e o SQL compilado prova isso. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
@@ -14,10 +13,8 @@ import {
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
-/** SEC-021: a sessão de aparelho, que entra no WHERE ao lado do dono. */
 const FAMILIA = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-0000000000f1');
 
-/** Kysely sem banco: ele compila a consulta e não a executa. */
 const semBanco = new Kysely<Database>({
   dialect: {
     createAdapter: () => new PostgresAdapter(),
@@ -27,7 +24,6 @@ const semBanco = new Kysely<Database>({
   },
 });
 
-/** O predicado do dono, como o compilador do Postgres o escreve: `"user_id" = $n`. */
 const PREDICADO_DO_DONO = /"user_id"\s*=\s*\$\d+/;
 
 interface Compilada {

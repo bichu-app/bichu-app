@@ -1,4 +1,3 @@
-/** DESLIGADO EM 17/10. NINGUÉM CHAMA ESTA FUNÇÃO PARA APAGAR NADA. */
 import type { UserId } from '../../../shared/types/brands.js';
 import type { MediaRepository } from '../ports/media-repository.js';
 import type { ObjectStorage } from '../ports/object-storage.js';

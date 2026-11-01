@@ -1,4 +1,3 @@
-/** A localização de referência do tutor: quantização e validade. */
 import type { Instant } from '../../../shared/types/brands.js';
 
 /** O lado da célula como ele SAI na resposta (`UserLocation.precision_m`). */
@@ -7,7 +6,6 @@ export const PRECISAO_EM_METROS = 100;
 /** Passo da grade, em graus. */
 export const PASSO_DA_GRADE_EM_GRAUS = 0.001;
 
-/** Casas decimais que o passo implica. */
 const FATOR_DA_GRADE = Math.round(1 / PASSO_DA_GRADE_EM_GRAUS);
 
 /** 30 dias (ADR-0010, tabela de retenção). */

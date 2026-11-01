@@ -1,4 +1,3 @@
-/** As operações do cadastro do pet. */
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import { problemas } from '../../../shared/http/errors.js';

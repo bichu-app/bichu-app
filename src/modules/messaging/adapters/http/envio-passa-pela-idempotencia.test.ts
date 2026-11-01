@@ -1,4 +1,3 @@
-/** O envio de mensagem passa pela idempotência DE VERDADE. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -28,11 +27,6 @@ const OUTRA_CONVERSA = '018f3a2b-0000-7000-8000-0000000000dd';
 const CONTA = '018f3a2b-0000-7000-8000-0000000000aa';
 const CHAVE = '9f0b6a2e-4d1c-4f2a-9b3e-7c5d8a1f0e42';
 
-/**
- * A tabela `idempotency_keys` em memória, com as três regras que importam aqui:
- * devolve a resposta gravada, recusa a chave usada para outro pedido, e nunca
- * deixa o efeito rodar duas vezes para a mesma reserva concluída.
- */
 function idempotenciaEmMemoria(): Idempotencia {
   const linhas = new Map<string, { resumo: string; dono: string; gravada?: RespostaGravada }>();
   return {
@@ -64,7 +58,6 @@ function idempotenciaEmMemoria(): Idempotencia {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Quantas vezes o SERVIÇO foi chamado. */
   readonly envios: () => number;
 }
 

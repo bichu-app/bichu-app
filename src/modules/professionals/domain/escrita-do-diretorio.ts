@@ -1,4 +1,3 @@
-/** A regra de uma escrita administrativa de entrada do diretorio de `Perto`. */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import { atividadePrincipal } from './entrada-do-diretorio.js';
@@ -219,10 +218,6 @@ export function errosDaFalta(faltas: readonly FaltaParaPublicar[]): ProblemField
   }));
 }
 
-/**
- * O valor que vale depois da edicao: o do corpo quando ele veio, o gravado quando
- * nao veio.
- */
 function valorResultante(doCorpo: string | null | undefined, gravado: string | null): string | null {
   return doCorpo === undefined ? gravado : doCorpo;
 }

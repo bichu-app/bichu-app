@@ -1,7 +1,3 @@
-/**
- * A entrega do aviso `tagEscaneada` a cada aparelho do TUTOR, pelo mesmo remetente
- * e a mesma porteira do alerta de vizinhanca.
- */
 import {
   montarMensagemDePush,
   VazamentoNoPushError,

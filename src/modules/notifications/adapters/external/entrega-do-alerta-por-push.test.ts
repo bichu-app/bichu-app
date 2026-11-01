@@ -1,4 +1,3 @@
-/** O envio do alerta a um vizinho: o token é resolvido AGORA, e o morto é revogado. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -28,7 +27,6 @@ function aviso(extra: Partial<AvisoDeVizinhanca> = {}): AvisoDeVizinhanca {
 }
 
 interface Cenario {
-  /** O que `enderecoDeEnvio` devolve, por identificador de aparelho. */
   enderecos?: Map<string, TokenDeAparelho | null>;
   desfecho?: ResultadoDoEnvio;
   erroDoEnvio?: Error;

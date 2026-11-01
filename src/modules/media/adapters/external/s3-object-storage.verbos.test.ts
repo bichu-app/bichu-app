@@ -1,4 +1,3 @@
-/** Os verbos do armazenamento: `getSignedReadUrl`, `head`, `get`, `put`, `delete`. */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';

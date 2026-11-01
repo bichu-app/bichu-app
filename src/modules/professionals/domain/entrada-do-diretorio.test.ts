@@ -1,4 +1,3 @@
-/** A projecao da entrada e a derivacao do selo, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,7 +16,6 @@ import {
   type VerificacaoDaEntidade,
 } from './nivel-de-verificacao.js';
 
-/** A montagem de URL de midia, pela porta. */
 const URL_DE_MIDIA = (chave: string): string => `https://img.bichu.test/${chave}`;
 
 function entrada(ajustes: Partial<EntradaDoDiretorio> = {}): EntradaDoDiretorio {
@@ -264,7 +262,6 @@ void describe('a projecao publica da entrada', () => {
   });
 });
 
-/** O TIPO DE ENTIDADE, eixo proprio (`20261018000012`). */
 void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
   void it('a ONG projeta organization, e a atividade dela continua sendo a atividade', () => {
     const projetada = projetarEntrada(entrada({ entityKind: 'organization', kinds: ['clinic'] }), URL_DE_MIDIA);
@@ -285,10 +282,6 @@ void describe('o tipo de entidade e eixo SEPARADO da atividade', () => {
   });
 });
 
-/**
- * O ENDERECO COMERCIAL (cliente, 21/10/2026): *"o endereco completo do
- * profissional"*, para a pessoa tocar e abrir o aplicativo de mapas.
- */
 void describe('o endereco comercial da entrada', () => {
   void it('os quatro campos atravessam como GRAVADOS, sem compor e sem normalizar', () => {
     const projetado = projetarEnderecoComercial({

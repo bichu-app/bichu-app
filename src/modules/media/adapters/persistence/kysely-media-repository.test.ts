@@ -1,4 +1,3 @@
-/** A prova de que a chave que SAI do banco passa pela porta. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,7 +16,6 @@ import type { Database } from '../../../../shared/db/schema.js';
 import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 import { criarMediaRepository } from './kysely-media-repository.js';
 
-/** Um `Db` que compila a consulta de verdade e devolve as linhas combinadas. */
 function bancoQueDevolve(...lotes: readonly (readonly unknown[])[]): Db {
   const fila = [...lotes];
 
@@ -65,10 +63,6 @@ const ORIGINAL_BOA = `pets/${PET}/original/KioqKioqKioqKioqKioqKg`;
 const THUMB_BOA = 'thumb/KioqKioqKioqKioqKioqKg.webp';
 const CARD_BOA = 'card/KioqKioqKioqKioqKioqKg.webp';
 
-/**
- * A linha que uma importação, uma migração ou uma correção manual em produção
- * consegue gravar — nenhuma delas passa pelo domínio.
- */
 const CHAVE_TORTA = 'card/../../etc/senha';
 
 function linhaDeFoto(sobrescrever: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
@@ -87,7 +81,6 @@ function linhaDeFoto(sobrescrever: Partial<Record<string, unknown>> = {}): Recor
 const RECUSA = /Chave de objeto recusada/;
 
 void describe('a chave que volta do banco passa por `comoObjectKey`', () => {
-  /** Os três da mesma linha, um a um. */
   for (const coluna of ['original_key', 'thumb_key', 'card_key'] as const) {
     void it(`RECUSA a leitura quando \`${coluna}\` atravessa o caminho`, async () => {
       const repo = criarMediaRepository(

@@ -1,7 +1,3 @@
-/**
- * ISCA: o encontro CANCELADO desce para depois do ativo, nas DUAS listas, e o
- * recorte por situação usa o rótulo CALCULADO e não a coluna crua.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -45,7 +41,6 @@ function meus(extra: Partial<RecorteDosMeusEncontros> = {}): RecorteDosMeusEncon
   return { chamador: CHAMADOR, agora: AGORA, page: 1, limit: 20, ...extra };
 }
 
-/** O `ORDER BY` compilado, sem o resto da consulta. */
 function ordemDe(sql: string): string {
   const i = sql.lastIndexOf('order by');
   assert.notEqual(
@@ -57,7 +52,6 @@ function ordemDe(sql: string): string {
   return sql.slice(i);
 }
 
-/** A marca da chave do cancelado no `ORDER BY`. */
 const CHAVE_DO_CANCELADO = /case when \(\s*"?e"?\."?publication_status"? = 'cancelled'[\s\S]*?coalesce/i;
 
 void describe('o cancelado desce para depois do ativo nas duas listas', () => {

@@ -1,4 +1,3 @@
-/** `section_list_views` -- o marcador de "ja vi" por area (BICHUS-278). */
 import type { Db } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';

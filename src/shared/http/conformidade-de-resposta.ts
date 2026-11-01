@@ -8,7 +8,6 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
 }
 
-/** `pubKeyCredParams` -> `pub_key_cred_params`. */
 function emSnakeCase(nome: string): string {
   return nome.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 }

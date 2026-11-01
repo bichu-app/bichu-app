@@ -1,7 +1,3 @@
-/**
- * Maior atraso que um temporizador de Node aceita sem estourar o inteiro de 32
- * bits e reagendar para 1 ms.
- */
 const ATRASO_MAXIMO_DE_TEMPORIZADOR = 2_147_483_647;
 
 export interface VidaDoProcesso {

@@ -1,7 +1,3 @@
-/**
- * O teto de tentativa inválida de `POST /v1/auth/refresh`, que **não responde
- * 429** — e é por isso que ele precisava de um caso diferente de todos os outros.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -17,26 +13,14 @@ import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.j
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
-/** O endereço de onde vem a enxurrada. */
 const ENDERECO = '203.0.113.44';
 
-/**
- * O número que `api/openapi.yaml` declara em `refreshSession`, repetido aqui de
- * propósito: lê-lo de `rotaDeRenovacao.rateLimit` seria comparar a declaração
- * consigo mesma.
- */
 const TETO_DE_INVALIDAS = 500;
 
-/**
- * A outra entrada `log_and_alert` da MESMA rota, que torna a medição por presença
- * inútil.
- */
 const TETO_GERAL_DE_CHAMADAS = 2000;
 
-/** A mensagem exata que `aplicarNaEntrada` registra para a entrada de invalidas. */
 const MENSAGEM_DE_INVALIDAS = 'teto de tentativas invalidas atingido';
 
-/** Instante fixo: 22/09/2026 12:05:00 UTC, com folga dentro da janela de 1 h. */
 const AGORA = Date.UTC(2026, 8, 22, 12, 5, 0);
 
 interface EventoRegistrado {
@@ -44,7 +28,6 @@ interface EventoRegistrado {
   readonly mensagem: string;
 }
 
-/** A bancada. O `log` é espião porque neste teto ele é a ÚNICA saída observável. */
 function bancada(contador: RateLimitStore): {
   app: ReturnType<typeof criarServidor>;
   registrados: EventoRegistrado[];
@@ -87,10 +70,6 @@ async function renovarComTokenForjado(
   return resposta.statusCode;
 }
 
-/**
- * EM SÉRIE, de propósito: a contagem da inválida acontece em `onResponse`, depois
- * de a resposta sair.
- */
 async function enxurrada(
   app: ReturnType<typeof criarServidor>,
   quantas: number,

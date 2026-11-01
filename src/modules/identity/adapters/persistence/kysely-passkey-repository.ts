@@ -1,4 +1,3 @@
-/** Persistência das credenciais digitais (passkey). */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import type { RazaoDaRevogacao } from '../../domain/passkey.js';

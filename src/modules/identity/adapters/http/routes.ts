@@ -1,4 +1,3 @@
-/** Rotas de conta e sessão. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import {
@@ -266,7 +265,6 @@ export interface DependenciasDasRotas {
   readonly urlDeMidia: (chave: string) => string;
 }
 
-/** Higiene da rota que carrega token na URL. */
 function aplicarHigieneDeTokenNaUrl(reply: FastifyReply): void {
   void reply.header('X-Robots-Tag', 'noindex, nofollow');
   void reply.header('Referrer-Policy', 'no-referrer');
@@ -291,7 +289,6 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   return token;
 }
 
-/** `email` para o teto, **resumido**, nunca em claro. */
 const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   const corpo = (request.body ?? {}) as { email?: unknown };
   if (typeof corpo.email !== 'string' || corpo.email === '') return undefined;
@@ -299,17 +296,12 @@ const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   return normalizado === '' ? undefined : sigilo.hmac(`email:${normalizado}`);
 };
 
-/** Autenticação MEMOIZADA por requisição. */
 function autenticado(request: FastifyRequest, deps: DependenciasDasRotas): Promise<Autenticado> {
   return memoDaRequisicao(request, 'identity:autenticado', () =>
     deps.auth.autenticar(tokenDoCabecalho(request)),
   );
 }
 
-/**
- * `account` para o teto: o id da conta, ou `undefined` para quem não apresentou
- * credencial válida.
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotas,
@@ -325,7 +317,6 @@ export function registrarRotasDeIdentidade(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotas,
 ): void {
-  /** O perfil como o contrato o declara, campo a campo. */
   const comoRespostaDoPerfil = (conta: Conta, foto: FotoDoPerfil | null): Record<string, unknown> =>
     projetarMeuPerfil(conta, foto, deps.urlDeMidia);
 
@@ -544,7 +535,6 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  /** Sair **deste** aparelho (ADR-0002, emenda 1). */
   registrarRota(
     app,
     rotaDeLogout,
@@ -560,7 +550,6 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  /** Sem corpo, e é a decisão. */
   registrarRota(
     app,
     rotaDeLogoutTotal,
@@ -607,7 +596,6 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  /** O token viaja no caminho porque vem de um link de e-mail, e isso é inevitável. */
   registrarRota(
     app,
     rotaDoNaoFuiEu,

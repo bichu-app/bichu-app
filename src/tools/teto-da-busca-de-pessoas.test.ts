@@ -1,7 +1,3 @@
-/**
- * A ISCA DO **TETO DE CONSULTAS DA BUSCA DE PESSOAS**: ele existe, é por conta, e
- * **reprova quando desligado**.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -65,11 +61,6 @@ void describe('o teto de consultas da busca de pessoas', () => {
     assert.ok((daBusca?.limit ?? 0) > 0, 'teto sem numero nao e teto');
   });
 
-  /**
-   * **O caso mais importante deste arquivo.** A dimensão `q` resolve para uma
-   * **marca constante** (`MARCA_DE_BUSCA`), nunca para o termo — e por isso ela
-   * sozinha não separa conta nenhuma: todas somariam no mesmo balde.
-   */
   void it('ISCA -- o teto da busca e POR CONTA: `q` sozinha somaria todo mundo', () => {
     for (const teto of tetosDe('searchPeople')) {
       const dim = teto.dimension ?? [];
@@ -103,10 +94,6 @@ void describe('o teto de consultas da busca de pessoas', () => {
     );
   });
 
-  /**
-   * **A isca da isca.** Sem ela, os casos acima passariam por o contrato estar certo
-   * hoje — e não por a conferência saber reconhecer um teto desligado.
-   */
   void it('ISCA: a conferencia REPROVA um teto removido e um teto sem `account`', () => {
     const originais = tetosDe('searchPeople');
 

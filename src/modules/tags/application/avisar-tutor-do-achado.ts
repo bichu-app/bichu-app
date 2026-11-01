@@ -1,7 +1,3 @@
-/**
- * O trabalho `tag.scan_notify`, no worker: avisar o tutor de que alguem escaneou a
- * plaquinha do pet dele.
- */
 import type { Mailer, Mensagem } from '../../identity/ports/mailer.js';
 import type {
   AvisoAoTutorParaEntrega,
@@ -69,7 +65,6 @@ export async function avisarTutorDoAchado(
   return { tipo: 'avisado', email, ...entrega };
 }
 
-/** O e-mail, sem derrubar o trabalho. */
 async function enviarRedeDeSeguranca(
   deps: DependenciasDoAvisoAoTutor,
   aviso: AvisoAoTutorParaEntrega,

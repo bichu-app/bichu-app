@@ -1,4 +1,3 @@
-/** Quem o alerta alcança — e, por consequência, quantos. */
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 

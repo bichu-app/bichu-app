@@ -1,4 +1,3 @@
-/** As três rotas de `/v1/me/devices`. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -54,7 +53,6 @@ interface CorpoDoRegistro {
   os_version?: string;
 }
 
-/** A resposta, campo a campo, exatamente como `Device` a declara. */
 function comoResposta(aparelho: Aparelho): Record<string, unknown> {
   return {
     id: aparelho.id,
@@ -65,10 +63,6 @@ function comoResposta(aparelho: Aparelho): Record<string, unknown> {
   };
 }
 
-/**
- * MEMOIZADA por requisição, pelo mesmo motivo das rotas de localização: o teto por
- * `account` precisa do dono antes do handler, e o handler precisa do mesmo dono.
- */
 function chamadorAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeAparelho,
@@ -85,11 +79,6 @@ function chamadorAutenticado(
   });
 }
 
-/**
- * `account` para o teto. Quem não apresentou credencial válida não tem balde de
- * conta — a recusa dele é o 401 do handler, e não um 429 que confundiria "sem
- * sessão" com "chamou demais".
- */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeAparelho,
@@ -101,7 +90,6 @@ async function contaDoTeto(
   }
 }
 
-/** Campo opcional de texto do corpo, como o domínio o quer. */
 function textoOuNulo(valor: string | undefined): string | null {
   return valor === undefined || valor === '' ? null : valor;
 }

@@ -1,4 +1,3 @@
-/** Testes da identidade do artefato. */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, renameSync } from 'node:fs';
@@ -12,7 +11,6 @@ import {
 
 const temporarios: string[] = [];
 
-/** Artefato mínimo em disco, com a mesma forma do que existe dentro da imagem. */
 function montarArtefato(): string {
   const raiz = mkdtempSync(join(tmpdir(), 'bichu-artefato-'));
   temporarios.push(raiz);

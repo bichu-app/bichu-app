@@ -1,4 +1,3 @@
-/** Aplicação do teto de chamada declarado em `x-rate-limit`. */
 import { createHmac } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
@@ -92,7 +91,6 @@ export function dependenciasDoTeto(entrada: {
   };
 }
 
-/** `counts` que a porta sabe contar. */
 function ehContagemDeRequisicoes(entrada: RateLimitEntry): boolean {
   return entrada.counts === undefined || entrada.counts === 'requests';
 }
@@ -172,12 +170,6 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
       return hmac(`${partes[0] ?? ''}.${partes[1] ?? ''}.${partes[2] ?? ''}.0/24`);
     },
     origin: (request) => primeiroValor(request.headers['origin']),
-    /**
-     * **A marca constante, nunca o termo.** O raciocínio inteiro está na declaração de
-     * `q` em `DIMENSOES_CONHECIDAS`; aqui fica a consequência que se lê no código:
-     * `MARCA_DE_BUSCA` não depende de `busca`, então a chave do balde é a mesma para
-     * todo termo, e variar o termo não zera contagem nenhuma.
-     */
     q: (request) => {
       const busca = (request.query as { q?: unknown } | undefined)?.q;
       return typeof busca === 'string' && busca.trim() !== '' ? MARCA_DE_BUSCA : undefined;
@@ -198,7 +190,6 @@ export function montarChave(
   return `${dono}:${entrada.dimension.join('+')}@${politica}${sufixo}|${valores.join('|')}`;
 }
 
-/** `on_exceed` decide o que acontece ao estourar, e só `deny_429` recusa. */
 function recusa(entrada: RateLimitEntry): boolean {
   return entrada.onExceed === 'deny_429';
 }
@@ -208,11 +199,6 @@ export interface ResultadoDaAplicacao {
   readonly erro?: AppError;
 }
 
-/**
- * O 429 sai pelo construtor canônico de `errors.ts`, e não por um `AppError`
- * montado aqui: título, `detail` e `type` do 429 já são contrato, e uma segunda
- * redação deles divergiria da primeira sem nada acusar.
- */
 function erroDeTeto(entrada: RateLimitEntry, segundos: number | undefined): AppError {
   if (ehJanelaVitalicia(entrada.window)) return problemas.limiteSemReabertura();
   return problemas.limiteDeChamadas(segundos ?? 1);
@@ -276,7 +262,6 @@ export async function contarTentativaInvalida(
   }
 }
 
-/** Resolve todos os valores da dimensão composta. */
 async function resolverValores(
   entrada: RateLimitEntry,
   request: FastifyRequest,

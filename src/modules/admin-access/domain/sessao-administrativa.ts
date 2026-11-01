@@ -1,7 +1,3 @@
-/**
- * As regras da sessao do backoffice (ADR-0027 itens 2 e 20; D35, D37, D38 e D62 de
- * `docs/04-seguranca.md`), sem banco, sem HTTP e sem relogio proprio.
- */
 import { createHmac } from 'node:crypto';
 
 import type { Instant } from '../../../shared/types/brands.js';

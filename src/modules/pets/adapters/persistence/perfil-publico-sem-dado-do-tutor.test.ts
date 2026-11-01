@@ -1,7 +1,3 @@
-/**
- * A consulta do perfil público não lê dado do tutor nem id interno, e filtra no
- * `WHERE`, e o SQL compilado prova as duas coisas.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -30,7 +26,6 @@ function compilada(): { sql: string; parameters: readonly unknown[] } {
   return construtorDoPerfilPublico(semBanco, SLUG).compile();
 }
 
-/** O trecho entre o primeiro `select` e o `from "pets"` da consulta de fora. */
 function listaDeSaida(sql: string): string {
   const achado = /^select\s+([\s\S]*?)\s+from\s+"pets"/i.exec(sql);
   assert.ok(achado !== null, `não achei a lista de saída. SQL compilado: ${sql}`);

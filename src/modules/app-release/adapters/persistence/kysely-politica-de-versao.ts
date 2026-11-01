@@ -1,4 +1,3 @@
-/** Leitura da politica de versao, por chave primaria. */
 import type { Db } from '../../../../shared/db/pool.js';
 import type {
   LeituraDaPoliticaDeVersao,

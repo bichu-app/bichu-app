@@ -1,4 +1,3 @@
-/** Persistencia da transferencia de pet. */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type {
   ConviteResolvido,
@@ -23,10 +22,8 @@ import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js'
  */
 export const ESTADOS_VIVOS = ['pending_acceptance', 'accepted'] as const;
 
-/** O que substitui o resumo do convite quando ele e consumido. */
 const RESUMO_QUEIMADO = Buffer.alloc(32);
 
-/** As colunas da visao do tutor, num lugar so: cinco consultas usam a lista. */
 const COLUNAS = [
   'pet_transfers.id',
   'pet_transfers.pet_id',
@@ -41,7 +38,6 @@ const COLUNAS = [
   'pet_transfers.cancellation_reason',
 ] as const;
 
-/** As mesmas colunas sem o prefixo da tabela, para `RETURNING`. */
 const COLUNAS_DE_RETORNO = [
   'id',
   'pet_id',
@@ -185,7 +181,6 @@ export function construtorDaRevogacaoDasTags(db: DbExecutor, pet: string, agora:
     .where('status', '=', 'active');
 }
 
-/** Ha caso de perdido ABERTO para este pet? */
 async function temCasoAberto(trx: DbExecutor, pet: string): Promise<boolean> {
   const caso = await trx
     .selectFrom('lost_cases')

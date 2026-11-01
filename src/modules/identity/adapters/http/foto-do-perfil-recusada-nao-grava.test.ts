@@ -1,4 +1,3 @@
-/** `PATCH /v1/me` que recusa por falta de nome **nao grava a foto**. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -23,7 +22,6 @@ import { registrarRotasDeIdentidade, type DependenciasDasRotas } from './routes.
 
 const DONA = 'a1b2c3d4-0000-7000-8000-000000000001' as UserId;
 const TOKEN = 'acesso-da-dona';
-/** O `upload_id` da medicao de 18/10/2026. */
 const UPLOAD = '01a151f1-5e6a-70da-935c-3d6998208ec1';
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 
@@ -50,9 +48,7 @@ function conta(displayName: string | null): Conta {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Os `upload_id` que `trocarFotoDoPerfil` recebeu. */
   readonly fotosTrocadas: (string | null)[];
-  /** O que `atualizarPerfil` recebeu. */
   readonly camposGravados: CamposDoPerfil[];
 }
 

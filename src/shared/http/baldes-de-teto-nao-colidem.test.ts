@@ -1,4 +1,3 @@
-/** Duas entradas de teto declaradas na mesma dimensão são DOIS baldes. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -7,10 +6,8 @@ import { carregarContrato } from './contract.js';
 import { inicioDaJanela, janelaEmSegundos } from './rate-limit.js';
 import type { RateLimitEntry } from './route-definition.js';
 
-/** As entradas saem do CONTRATO, e não de uma cópia aqui. */
 const CONTRATO = carregarContrato('api/openapi.yaml');
 
-/** O mesmo recorte de `entradasAplicaveis`: o que a borda de fato conta. */
 function aplicaveisDoContrato(bruto: readonly Record<string, unknown>[]): RateLimitEntry[] {
   const entradas: RateLimitEntry[] = [];
   for (const cru of bruto) {
@@ -54,10 +51,6 @@ void describe('duas entradas na mesma dimensão são dois baldes', () => {
     });
   }
 
-  /**
-   * Varredura que não varre nada APROVA por falta do que checar, e foi assim que o
-   * portão anterior ficou verde por semanas.
-   */
   void it('a varredura tem o que varrer', () => {
     assert.ok(
       COM_DUAS_OU_MAIS.length >= 5,
@@ -65,7 +58,6 @@ void describe('duas entradas na mesma dimensão são dois baldes', () => {
     );
   });
 
-  /** A premissa do defeito, medida e não suposta. */
   void it('os inícios de `1h` e `24h` coincidem na primeira hora do dia UTC', () => {
     const naPrimeiraHora = Date.parse('2026-09-29T00:30:00Z');
     assert.equal(
@@ -80,11 +72,6 @@ void describe('duas entradas na mesma dimensão são dois baldes', () => {
     );
   });
 
-  /**
-   * ISCA. Sem ela, os casos acima passariam numa `montarChave` que devolvesse a
-   * dimensão e mais nada de distinto — bastaria o limite entrar no nome por
-   * acidente.
-   */
   void it('ISCA — duas entradas idênticas são o MESMO balde', () => {
     const entrada: RateLimitEntry = {
       dimension: ['account'],

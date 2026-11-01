@@ -1,7 +1,3 @@
-/**
- * ISCA (d): A VARREDURA DE VENCIDOS NÃO APAGA A FOTO DA VITRINE — e a prova é a
- * confirmação estar na MESMA TRANSAÇÃO da escrita.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { DbExecutor } from '../../../../shared/db/pool.js';
@@ -12,7 +8,6 @@ const DONO = 'a0000000-0000-7000-8000-000000000001' as UserId;
 const ENVIO = '018f7c1e-7a2b-7c3d-9e4f-000000000001';
 const AGORA = Date.parse('2026-10-18T12:00:00Z') as Instant;
 
-/** Uma operação registrada: o que foi feito, em que tabela, e por qual executor. */
 interface Operacao {
   readonly acao: string;
   readonly tabela: string;
@@ -20,7 +15,6 @@ interface Operacao {
   readonly valores?: Record<string, unknown>;
 }
 
-/** Um executor de banco de MENTIRA, encadeável como o Kysely, que só registra. */
 function executorQueRegistra(registro: Operacao[]): DbExecutor {
   const executor: Record<string, unknown> = {};
   const encadear = (acao: string, tabela: string) => {

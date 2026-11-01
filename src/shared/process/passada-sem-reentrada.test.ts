@@ -1,10 +1,8 @@
-/** A guarda de reentrada, medida sem servidor, sem banco e sem rede. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { criarPassadaSemReentrada } from './passada-sem-reentrada.js';
 
-/** Uma promessa que só resolve quando o teste quiser. */
 function represada(): { promessa: Promise<void>; liberar: () => void } {
   let liberar = (): void => {};
   const promessa = new Promise<void>((resolve) => {

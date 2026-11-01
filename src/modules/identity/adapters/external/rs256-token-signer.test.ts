@@ -1,7 +1,3 @@
-/**
- * O que o token de acesso promete a quem não é o nosso app (BICHUS-15, critérios 1
- * e 5).
- */
 import assert from 'node:assert/strict';
 import { constants, createSign, createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, it } from 'node:test';
@@ -12,7 +8,6 @@ import { criarTokenSigner } from './rs256-token-signer.js';
 
 const QUINZE_MINUTOS_EM_SEGUNDOS = 15 * 60;
 
-/** O UUIDv7 interno de uma conta. */
 const USUARIO = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const AGORA = 1_789_128_000_000 as Instant;
 const EMISSOR = 'https://api.bichu.test';
@@ -29,7 +24,6 @@ function gerarPem(): string {
 const PEM_ATIVA = gerarPem();
 const PEM_ROTACAO = gerarPem();
 
-/** Ambiente mínimo para a configuração subir. */
 function ambiente(): Record<string, string> {
   return {
     ENVIRONMENT: 'dev',
@@ -80,7 +74,6 @@ interface PartesDoToken {
   readonly assinatura: Buffer;
 }
 
-/** Abre o token SEM usar o verificador: o que se prova é o que está no fio. */
 function abrir(token: string): PartesDoToken {
   const partes = token.split('.');
   assert.equal(partes.length, 3, 'um JWT tem três partes');
@@ -95,7 +88,6 @@ function abrir(token: string): PartesDoToken {
   };
 }
 
-/** A familia de refresh que emitiu o token (ADR-0002, emenda 1). */
 const FAMILIA = 'fam-de-teste-0001';
 
 void describe('token de acesso emitido (BICHUS-15, critério 1)', () => {
@@ -186,7 +178,6 @@ void describe('verificação do token de acesso (BICHUS-15, critério 5)', () =>
   });
 });
 
-/** `sid` no token de acesso (ADR-0002, emenda 1). */
 void describe('`sid` no token de acesso (ADR-0002, emenda 1)', () => {
   void it('todo token emitido carrega o `sid` da família que o emitiu', () => {
     const config = configuracaoDoToken();

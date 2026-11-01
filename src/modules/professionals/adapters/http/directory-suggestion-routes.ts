@@ -1,7 +1,3 @@
-/**
- * `/v1/directory/suggestions` — a comunidade SUGERE uma entrada do `Perto`
- * (`POST`), e ve as indicacoes que ela mesma fez (`GET`).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
@@ -33,11 +29,9 @@ export const rotaDasMinhasIndicacoes = defineRoute({
 
 const SEM_CACHE = 'private, no-store';
 
-/** Os padroes de paginacao, COPIADOS do contrato (`default: 1`, `default: 20`). */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 
-/** O que o contrato aceita em `query`, e so isso. */
 interface QueryDasMinhasIndicacoes {
   readonly state?: RevisaoDaIndicacao;
   readonly page?: number;

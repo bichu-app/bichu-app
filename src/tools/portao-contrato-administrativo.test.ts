@@ -1,7 +1,3 @@
-/**
- * O portao do contrato administrativo contra o contrato real, e contra uma isca
- * por regra.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';

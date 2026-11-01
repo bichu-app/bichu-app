@@ -1,4 +1,3 @@
-/** O serviço da conversa mediada. */
 import { problemas } from '../../../shared/http/errors.js';
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import { comoData } from '../../../shared/time/clock.js';
@@ -404,7 +403,6 @@ function sinaisDe(conversa: ConversaDoChamador): SinaisDeEstado {
   };
 }
 
-/** O cursor da lista sai da CHAVE DA ORDEM, que é por onde ela ordena. */
 function proximoDaLista(
   conversas: readonly ConversaDoChamador[],
   limite: number,
@@ -418,7 +416,6 @@ function proximoDaLista(
   });
 }
 
-/** Só há próxima página quando a atual encheu. */
 function proximoCursor(mensagens: readonly MensagemGravada[], limite: number): string | null {
   if (mensagens.length < limite) return null;
   const ultima = mensagens[mensagens.length - 1];
@@ -426,7 +423,6 @@ function proximoCursor(mensagens: readonly MensagemGravada[], limite: number): s
   return codificarCursor({ criadaEm: ultima.createdAt, id: ultima.id });
 }
 
-/** Correlação e IP, quando existem. */
 function comoOrigem(chamador: Chamador): { correlationId?: string; actorIp?: string } {
   return {
     ...(chamador.correlationId === undefined ? {} : { correlationId: chamador.correlationId }),

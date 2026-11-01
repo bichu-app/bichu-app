@@ -1,7 +1,3 @@
-/**
- * BICHUS-278 -- quantos casos de perdido entraram na lista publica DEPOIS de um
- * instante.
- */
 import type { Instant } from '../../../shared/types/brands.js';
 
 export interface RecorteDePerdidosNovos {

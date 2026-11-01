@@ -1,4 +1,3 @@
-/** As operações da foto (BICHUS-87). */
 import { problemas } from '../../../shared/http/errors.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import {
@@ -10,7 +9,6 @@ import type { FotoDoPet, MediaRepository } from '../ports/media-repository.js';
 import type { AutorizacaoDeEnvio, ObjectStorage } from '../ports/object-storage.js';
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 
-/** Cinco minutos para enviar, e o número vem do critério 22 de `BICHUS-87`. */
 const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 300;
 
 export interface DependenciasDeMidia {

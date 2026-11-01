@@ -1,4 +1,3 @@
-/** Rotas da credencial digital (passkey). */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -89,10 +88,6 @@ function tokenDoCabecalho(request: FastifyRequest): string {
   return token;
 }
 
-/**
- * Autenticação MEMOIZADA por requisição, com a MESMA chave de `routes.ts`
- * (`identity:autenticado`).
- */
 function autenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDePasskey,

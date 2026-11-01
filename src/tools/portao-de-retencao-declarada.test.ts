@@ -1,7 +1,3 @@
-/**
- * O portão da retenção declarada contra o repositório real e contra as iscas que
- * ele precisa reprovar (`autoTeste`).
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

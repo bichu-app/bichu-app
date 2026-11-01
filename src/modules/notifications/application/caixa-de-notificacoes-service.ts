@@ -1,4 +1,3 @@
-/** A CAIXA DE NOTIFICACOES, do lado da aplicacao. */
 import { problemas } from '../../../shared/http/errors.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import {

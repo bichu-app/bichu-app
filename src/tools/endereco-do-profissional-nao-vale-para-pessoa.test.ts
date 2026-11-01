@@ -1,4 +1,3 @@
-/** O ENDERECO COMERCIAL SAI; O ENDERECO DE PESSOA NAO — medido NO CONTRATO. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
@@ -10,14 +9,12 @@ const spec = parseYaml(contrato) as {
   components: { schemas: Record<string, { properties?: Record<string, unknown> }> };
 };
 
-/** As quatro colunas de endereco de `professionals` (`20261018000001`). */
 const AS_QUATRO = ['postal_code', 'street', 'street_number', 'complement'] as const;
 
 function propriedadesDe(esquema: string): string[] {
   return Object.keys(spec.components.schemas[esquema]?.properties ?? {});
 }
 
-/** Todo schema de componente que declara ALGUM dos quatro, com quais. */
 function esquemasComEndereco(): Record<string, string[]> {
   const achados: Record<string, string[]> = {};
   for (const [nome, esquema] of Object.entries(spec.components.schemas)) {

@@ -1,4 +1,3 @@
-/** Persistencia da secao `Rede`. */
 import { randomBytes } from 'node:crypto';
 import { sql, type Expression, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
@@ -40,7 +39,6 @@ import type { Instant } from '../../../../shared/types/brands.js';
 /** Os estados de publicacao que as leituras enxergam. */
 export const VISIVEL: readonly PublicacaoVisivel[] = ['published', 'cancelled'];
 
-/** A ordem das listas fechadas, a mesma dos `enum` do contrato. */
 const ORDEM_DA_ESTRUTURA = [
   'level_ground_or_ramp',
   'accessible_restroom',
@@ -90,14 +88,9 @@ interface LinhaDoEncontro {
   accepted_sizes: string[];
   amenities: string[];
   bring_items: string[];
-  /**
-   * `k` = `public_key` (1024), `t` = `thumb_key` (480), `b` = `banner_key` (1280),
-   * `a` = `alt_text`.
-   */
   images: { k: string; t: string | null; b: string | null; a: string | null }[] | null;
 }
 
-/** As colunas do encontro, nomeadas uma a uma, mais as tres listas. */
 function colunasDoEncontro() {
   return [
     'e.slug as slug',
@@ -145,7 +138,6 @@ function colunasDoEncontro() {
   ] as const;
 }
 
-/** A capa **com o estado dela**, para a lista do DONO (19/10/2026). */
 function capaDoDono() {
   return sql<{ s: 'processing' | 'ready' | 'rejected'; k: string | null; r: string | null } | null>`(
     SELECT json_build_object('s', c.status, 'k', c.public_key, 'r', c.rejection_reason)
@@ -159,7 +151,6 @@ type LinhaDaCapaDoDono = {
   readonly capa_do_dono: { s: 'processing' | 'ready' | 'rejected'; k: string | null; r: string | null } | null;
 };
 
-/** A linha da capa do dono na forma da porta. */
 function comoCapaDoDono(
   linha: LinhaDaCapaDoDono,
   urlDeMidia: (chave: string) => string,
@@ -178,7 +169,6 @@ export function escaparCuringas(termo: string): string {
   return termo.replace(/\\/g, '\\\\').replace(/[%_]/g, (c) => `\\${c}`);
 }
 
-/** Aprovacao da propria conta, para a clausula `WHERE`. */
 function aprovado(chamador: string): Expression<SqlBool> {
   return sql<SqlBool>`EXISTS (
     SELECT 1 FROM network_event_join_requests j
@@ -187,7 +177,6 @@ function aprovado(chamador: string): Expression<SqlBool> {
 
 type Consulta = ReturnType<typeof consultaBase>;
 
-/** O PONTO UNICO DA REDE, e desde 17/10 ele carrega o autor. */
 function consultaBase(db: DbExecutor) {
   return db
     .selectFrom('network_events as e')
@@ -195,19 +184,15 @@ function consultaBase(db: DbExecutor) {
     .where(sql<SqlBool>`encontro_com_autor_ativo(e.id)`);
 }
 
-/** 23:59:59 do dia local do encontro, no fuso dele, como instante. */
 const FIM_DO_DIA_DO_CANCELADO = sql`(((e.starts_at AT TIME ZONE e.time_zone)::date + time '23:59:59') AT TIME ZONE e.time_zone)`;
 
-/** Ate quando o cancelado AINDA SE CHAMA cancelado, em SQL. */
 const FIM_DO_CANCELADO = sql`COALESCE(e.ends_at, ${FIM_DO_DIA_DO_CANCELADO})`;
 
-/** O encontro esta ROTULADO `cancelled` agora -- e nao "foi cancelado um dia". */
 function rotuladoCancelado(agora: Date) {
   return sql<SqlBool>`(e.publication_status = 'cancelled'
     AND ${agora}::timestamptz <= ${FIM_DO_CANCELADO})`;
 }
 
-/** A SITUACAO CALCULADA, em SQL: a traducao fiel de `statusDoEncontro`. */
 function situacaoCalculada(agora: Date) {
   return sql<string>`(CASE
     WHEN ${rotuladoCancelado(agora)} THEN 'cancelled'
@@ -218,23 +203,16 @@ function situacaoCalculada(agora: Date) {
   END)`;
 }
 
-/** A chave de ordem que DESCE o cancelado para depois do ativo. */
 function chaveDoCancelado(agora: Date) {
   return sql`(CASE WHEN ${rotuladoCancelado(agora)} THEN 1 ELSE 0 END)`;
 }
 
-/** O sabado do fim de semana corrente ou proximo, no fuso do encontro. */
 function sabadoDoFimDeSemana(agora: Date) {
   const hoje = sql`(${agora}::timestamptz AT TIME ZONE e.time_zone)::date`;
   return sql`(${hoje} + (CASE WHEN extract(isodow FROM ${hoje}) = 7 THEN -1
                               ELSE 6 - extract(isodow FROM ${hoje})::int END))`;
 }
 
-/**
- * O recorte no tempo. Os tres originais sao o complemento exato do rotulo temporal
- * do dominio; os tres novos (ADR-0027 12.14) sao calculados no fuso de cada
- * encontro, pelo banco.
- */
 function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora: Date): Consulta {
   switch (when) {
     case 'upcoming':
@@ -277,7 +255,6 @@ function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora
   }
 }
 
-/** Os recortes que tocam campo oculto do privado, TODOS aqui (P19 item 4). */
 function recorteOculto(consulta: Consulta, recorte: Omit<RecorteDaAgenda, 'sort' | 'when' | 'agora' | 'page' | 'limit'>): Consulta {
   let c = consulta;
   const termo = recorte.q?.trim();
@@ -371,7 +348,6 @@ export function construtorDoLocal(db: DbExecutor, slug: string, chamador: string
     ]);
 }
 
-/** A regiao de referencia VALIDA **deste aparelho** de quem chama, como em `Perto`. */
 function regiaoDaConta(chamador: string, familia: FamiliaDeSessao, agora: Date) {
   return sql`(SELECT u.reference_point FROM user_reference_locations u
                WHERE u.user_id = ${chamador}::uuid
@@ -379,7 +355,6 @@ function regiaoDaConta(chamador: string, familia: FamiliaDeSessao, agora: Date) 
                  AND u.expires_at > ${agora}::timestamptz)`;
 }
 
-/** A regiao que vale para esta chamada: a do aparelho, ou nenhuma. */
 function regiaoDoAparelho(chamador: string, familia: FamiliaDeSessao | undefined, agora: Date) {
   return familia === undefined
     ? sql`null::geography`
@@ -684,7 +659,6 @@ export class KyselyNetworkRepository implements NetworkRepository {
   }
 }
 
-/** A transacao das escritas da comunidade. */
 function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): TransacaoDaComunidade {
   return {
     async encontroDoAutor(slug, chamador) {
@@ -812,11 +786,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
       }
     },
 
-    /**
-     * Confirma o envio da capa, na MESMA transacao da escrita do encontro (ADR-0027
-     * item 10): uma imagem confirmada para um encontro que depois nao foi gravado
-     * ficaria `processing` para sempre.
-     */
     async capaDoEnvio(entrada) {
       const r = await sql<{
         id: string;
@@ -870,16 +839,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
       return imagemId;
     },
 
-    /**
-     * Apaga e reescreve as imagens do encontro, **na ordem do array**: o indice e
-     * a `position`, e a `0` e a capa. UMA instrucao de `INSERT` para as quatro, e
-     * nao uma por imagem.
-     *
-     * O `DELETE` antes continua sendo o desenho (e o mesmo de
-     * `substituirImagens` da entrada do diretorio): a lista e a verdade inteira, e
-     * nao um delta. `network_event_images_ordem_unica` e DIFERIDA, entao a
-     * reescrita passa pelos estados intermediarios sem colidir.
-     */
     async definirImagens(eventoId, imagens) {
       await trx.deleteFrom('network_event_images').where('event_id', '=', eventoId).execute();
       if (imagens.length === 0) return;
@@ -898,7 +857,6 @@ function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): T
   };
 }
 
-/** O pedido NAO desistido da conta, num privado visivel. */
 async function lerPedido(
   db: DbExecutor,
   slug: string,
@@ -924,7 +882,6 @@ function comoPedido(linha: LinhaDoPedido, urlDeMidia: (chave: string) => string)
   };
 }
 
-/** A linha do banco na forma do dominio. */
 function comoEncontro(
   linha: LinhaDoEncontro,
   urlDeMidia: (chave: string) => string,
@@ -985,10 +942,6 @@ export function criarNetworkRepository(
   return new KyselyNetworkRepository(db, ids, urlDeMidia, baseDoInstagram);
 }
 
-/**
- * O `slug` do encontro da comunidade: o derivado do titulo, depois o derivado com
- * sufixo curto, e dez tentativas no total.
- */
 async function inserirComSlugLivre(
   trx: DbTransaction,
   novo: NovoEncontroDaComunidade,
@@ -1004,7 +957,6 @@ async function inserirComSlugLivre(
   throw new SlugDoEncontroOcupado();
 }
 
-/** `false` quando o `slug` ja estava ocupado: nada e gravado, e nada levanta. */
 async function inserirLinhaDoEncontro(
   trx: DbTransaction,
   novo: NovoEncontroDaComunidade,

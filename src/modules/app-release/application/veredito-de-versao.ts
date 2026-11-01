@@ -1,4 +1,3 @@
-/** O VEREDITO: a unica funcao que decide se o aplicativo fecha. */
 import { compararVersoes } from '../domain/versao.js';
 import type { PoliticaDeVersao } from '../ports/politica-de-versao.js';
 

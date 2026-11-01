@@ -1,7 +1,3 @@
-/**
- * Rotas públicas do caso, pelo `share_token` (BICHUS-76): a página do caso
- * (`getPublicLostCase`) e o cartaz (`getLostCasePoster`).
- */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -37,11 +33,6 @@ function aplicarHigieneDaRotaPublica(reply: FastifyReply): void {
   void reply.header('Cache-Control', 'no-store');
 }
 
-/**
- * O token do caminho. Ausente vira o mesmo 410 do token desconhecido: as duas
- * operações não declaram 404, e segmento vazio é só mais um token que não leva a
- * caso nenhum.
- */
 function tokenDoCaminho(request: FastifyRequest): string {
   const { shareToken } = request.params as { shareToken?: unknown };
   if (typeof shareToken !== 'string' || shareToken === '') throw problemas.casoPublicoEncerrado();

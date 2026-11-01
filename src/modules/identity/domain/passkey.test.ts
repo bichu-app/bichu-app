@@ -1,4 +1,3 @@
-/** As regras puras da credencial digital, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 

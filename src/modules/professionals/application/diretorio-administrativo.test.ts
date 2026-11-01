@@ -1,4 +1,3 @@
-/** O caso de uso da escrita administrativa do diretorio, sem banco e sem servidor. */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
@@ -66,11 +65,8 @@ function entradaSemeada(): EntradaAdministrativa {
 interface Memoria {
   readonly repositorio: DiretorioAdministrativoRepository;
   readonly trilha: AuditEvent[];
-  /** Liga a falha da trilha, para provar que a escrita e desfeita. */
   trilhaFalha: boolean;
-  /** As entradas por `id`. */
   readonly linhas: Map<string, EntradaAdministrativa>;
-  /** O ultimo `commit` aconteceu? */
   gravou: boolean;
 }
 
@@ -232,7 +228,6 @@ async function tipoDoErro(trabalho: () => Promise<unknown>): Promise<string> {
   }
 }
 
-/** O CORPO MINIMO DE UMA CRIACAO QUE PUBLICA (cliente, 29/10/2026). */
 const COMPLETA_PARA_PUBLICAR = {
   city: 'São Paulo',
   state: 'SP',
@@ -523,7 +518,6 @@ void describe('listar', () => {
   });
 });
 
-/** O TIPO DE ENTIDADE na escrita do painel (`20261018000012`). */
 void describe('o tipo de entidade na escrita administrativa', () => {
   void it('cadastrar ONG grava organization, e a atividade fica separada', async () => {
     const criada = await diretorio.criarEntrada(AUTOR, {

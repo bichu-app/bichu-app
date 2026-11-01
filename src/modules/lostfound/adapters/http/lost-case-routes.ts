@@ -1,4 +1,3 @@
-/** Rotas do caso de perdido. */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
@@ -139,14 +138,12 @@ export interface DependenciasDasRotasDeCaso {
   readonly paginas: DisponibilidadeDaPagina;
 }
 
-/** O `petId` do caminho, ou `undefined` quando ele não veio utilizável. */
 function petIdDoCaminho(request: FastifyRequest): PetId | undefined {
   const { petId } = request.params as { petId?: unknown };
   if (typeof petId !== 'string' || petId === '') return undefined;
   return petId as PetId;
 }
 
-/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
 function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeCaso,
@@ -163,7 +160,6 @@ function donoAutenticado(
   });
 }
 
-/** `account` para o teto de abertura de caso. */
 async function contaDoTeto(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeCaso,
@@ -175,7 +171,6 @@ async function contaDoTeto(
   }
 }
 
-/** A data de "visto pela última vez", vinda como ISO. */
 function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
   const ms = typeof bruto === 'string' ? Date.parse(bruto) : Number.NaN;
   if (Number.isNaN(ms)) {
@@ -191,14 +186,12 @@ function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
   return ms as Instant;
 }
 
-/** O `caseId` do caminho, ou `undefined` quando ele não veio utilizável. */
 function caseIdDoCaminho(request: FastifyRequest): CaseId | undefined {
   const { caseId } = request.params as { caseId?: unknown };
   if (typeof caseId !== 'string' || caseId === '') return undefined;
   return caseId as CaseId;
 }
 
-/** A janela da lista de candidatos. */
 function paginaDeCandidatosDaQuery(request: FastifyRequest): PaginaDeCandidatos {
   const { cursor, limit } = request.query as { cursor?: string; limit?: number | string };
   const posicao = decodificarCursorDeCandidato(cursor);
@@ -208,7 +201,6 @@ function paginaDeCandidatosDaQuery(request: FastifyRequest): PaginaDeCandidatos 
   };
 }
 
-/** `AlertDispatch`, a partir da linha do disparo. */
 function comoRespostaDoAlerta(
   caso: CasoGravado,
   alerta: DisparoGravado | null,
@@ -229,13 +221,11 @@ function comoRespostaDoAlerta(
   };
 }
 
-/** Quais endereços públicos deste caso podem SAIR na resposta. */
 interface LinksQuePodemSair {
   readonly caso: boolean;
   readonly cartaz: boolean;
 }
 
-/** O corpo de `LostCase`, lendo o interruptor das páginas antes de montá-lo. */
 async function corpoDoCaso(
   deps: DependenciasDasRotasDeCaso,
   casoComAlerta: CasoComAlerta,
@@ -280,7 +270,6 @@ function comoRespostaDoCaso(
   };
 }
 
-/** O centro do raio, vindo da consulta. */
 const FAIXA_DE_LATITUDE = { min: -34, max: 6 } as const;
 const FAIXA_DE_LONGITUDE = { min: -74, max: -32 } as const;
 
@@ -329,7 +318,6 @@ function centroDaConsulta(request: FastifyRequest): CentroDoAlcance | undefined 
   return centroDe(lat, lon);
 }
 
-/** `LostCaseReachPreview`, campo a campo como o contrato declara. */
 function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
   return {
     reach_status: previa.estadoDoAlcance,
@@ -340,7 +328,6 @@ function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
   };
 }
 
-/** `MatchCandidate`, campo a campo como o contrato declara. */
 function comoRespostaDoCandidato(candidato: CandidatoDoCaso): Record<string, unknown> {
   return {
     id: candidato.id,
@@ -459,7 +446,6 @@ export function registrarRotasDeCasos(
     return reply.status(200).send(await corpoDoCaso(deps, caso));
   });
 
-  /** `PATCH /v1/lost-cases/:caseId`. */
   registrarRota(
     app,
     rotaDeAtualizacaoDoCaso,
@@ -500,7 +486,6 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /** `POST /v1/lost-cases/:caseId/alerts` — 202, e não 201. */
   registrarRota(
     app,
     rotaDeReenvioDoAlerta,
@@ -524,7 +509,6 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /** `GET /v1/lost-cases/:caseId/candidates` — a lista que faltava. */
   registrarRota(
     app,
     rotaDeCandidatosDoCaso,
@@ -575,7 +559,6 @@ export function registrarRotasDeCasos(
     },
   );
 
-  /** `POST /v1/lost-cases/:caseId/reopen` — o desfazer do encerramento. */
   registrarRota(
     app,
     rotaDeReabertura,

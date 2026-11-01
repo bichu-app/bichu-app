@@ -1,7 +1,3 @@
-/**
- * "Contar mais" e a foto, para quem avisou sem conta (BICHUS-41, e as duas
- * operações que a emenda 3 do ADR-0017 põe na BICHUS-72).
- */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken, iguaisEmTempoConstante } from '../../../shared/crypto/digest.js';
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
@@ -21,10 +17,8 @@ import type {
 } from '../ports/conversa-do-achador.js';
 import { TETO_DE_BYTES_DA_FOTO_DO_ACHADO, TETO_DE_FOTOS_POR_ACHADO } from './found-report-service.js';
 
-/** Cinco minutos para enviar, o mesmo número das outras intenções de foto. */
 const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 300;
 
-/** O mesmo teto da coluna `finder_display_name` e do contrato. */
 const TAMANHO_MAXIMO_DO_NOME = 60;
 
 export interface EntradaDeEnriquecimento {
