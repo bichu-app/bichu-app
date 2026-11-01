@@ -9,7 +9,9 @@ export async function limparPedidos(request: APIRequestContext) {
   await request.delete(`${MOCK}/__mock/pedidos`);
 }
 export async function pedidos(request: APIRequestContext): Promise<Pedido[]> {
-  return (await request.get(`${MOCK}/__mock/pedidos`)).json();
+  // `.json()` do Playwright devolve `Promise<any>`; a assercao e o unico lugar
+  // onde a forma do que o mock registra e declarada.
+  return (await request.get(`${MOCK}/__mock/pedidos`)).json() as Promise<Pedido[]>;
 }
 
 /** Nenhuma chamada do site saiu do contrato (o mock registra caminho fora do contrato como erro). */

@@ -67,7 +67,10 @@ const CODIGOS: readonly CodigoDeSenha[] = ['too_short', 'too_long', 'blank', 'si
 
 function codigoDaSenha(erros: unknown): CodigoDeSenha {
   if (!Array.isArray(erros)) return 'desconhecido';
-  const doCampo = erros.find((e) => e && typeof e === 'object' && (e as { field?: unknown }).field === 'new_password')
+  // `: unknown` e o ponto: `Array.isArray` estreita para `any[]`, e sem a
+  // anotacao este `find` entrega `any` -- que atravessa as duas conferencias
+  // abaixo sem o compilador ter nada a dizer.
+  const doCampo: unknown = erros.find((e) => e && typeof e === 'object' && (e as { field?: unknown }).field === 'new_password')
     ?? erros.find((e) => e && typeof e === 'object' && typeof (e as { code?: unknown }).code === 'string');
   const codigo = (doCampo as { code?: unknown } | undefined)?.code;
   return typeof codigo === 'string' && (CODIGOS as readonly string[]).includes(codigo) ? (codigo as CodigoDeSenha) : 'desconhecido';

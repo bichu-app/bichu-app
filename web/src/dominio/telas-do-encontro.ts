@@ -62,7 +62,11 @@ function mostravel(encontro: EncontroDaRede): EncontroPublico | null {
   // nao tem lugar nem horario -- nao haveria pagina para desenhar com ele, e e
   // por isso que esta checagem vem antes de qualquer outra.
   if (encontro.visibility !== 'public') return null;
-  const publico = encontro as EncontroPublico;
+  // Anotacao, e nao `as`: aqui o `if` acima JA estreitou a uniao do contrato
+  // (`NetworkEvent = NetworkEventPublic | NetworkEventPrivateTeaser`) para o
+  // publico, entao a assercao que estava aqui nao mudava tipo nenhum. A
+  // anotacao diz a mesma coisa e e CONFERIDA -- `as` nao confere nada.
+  const publico: EncontroPublico = encontro;
   if (publico.status === 'cancelled' || publico.status === 'ended') return null;
   return publico;
 }

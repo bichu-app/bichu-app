@@ -64,7 +64,7 @@ function publico(ajustes: Partial<EncontroPublico> = {}): EncontroPublico {
     instagram_handle: null,
     instagram_url: null,
     ...ajustes,
-  } as EncontroPublico;
+  };
 }
 
 const ok = (dados: EncontroDaRede): Resultado<EncontroDaRede> => ({ tipo: 'ok', status: 200, dados });
@@ -146,9 +146,9 @@ test('ISCA -- as SEIS situacoes dao exatamente a MESMA tela e o MESMO status', (
   const seis = [
     // 1, 2, 3: `slug` inexistente, `pending_review` e `removed` -- o contrato
     // ja os colapsa num 404 unico, e e esse 404 que chega aqui.
-    telaDoEncontro(problema(404, 'not-found') as Resultado<EncontroDaRede>),
-    telaDoEncontro(problema(404, 'not-found') as Resultado<EncontroDaRede>),
-    telaDoEncontro(problema(404, 'not-found') as Resultado<EncontroDaRede>),
+    telaDoEncontro(problema(404, 'not-found')),
+    telaDoEncontro(problema(404, 'not-found')),
+    telaDoEncontro(problema(404, 'not-found')),
     // 4, 5, 6: privado, cancelado e encerrado -- decisao desta pagina.
     telaDoEncontro(ok(teaser)),
     telaDoEncontro(ok(publico({ status: 'cancelled' }))),
@@ -165,7 +165,7 @@ test('ISCA -- as SEIS situacoes dao exatamente a MESMA tela e o MESMO status', (
 
 test('o `slug` malformado tambem cai na tela unica', () => {
   // `eventSlug` tem forma declarada (3 a 30), e parametro fora da forma da 400.
-  const tela = telaDoEncontro(problema(400, 'validation-failed') as Resultado<EncontroDaRede>);
+  const tela = telaDoEncontro(problema(400, 'validation-failed'));
   assert.equal(tela.tela, 'indisponivel');
   assert.equal(tela.http, 410);
 });
@@ -173,12 +173,12 @@ test('o `slug` malformado tambem cai na tela unica', () => {
 test('teto de chamada, erro interno e transporte tem telas proprias', () => {
   // Estes NAO entram na tela unica: eles nao dizem nada sobre o encontro, e
   // dizem algo que a pessoa pode usar -- esperar, ou tentar de novo.
-  const espere = telaDoEncontro(problema(429, 'rate-limited', {}, '30') as Resultado<EncontroDaRede>);
+  const espere = telaDoEncontro(problema(429, 'rate-limited', {}, '30'));
   assert.equal(espere.tela, 'espere');
   assert.equal(espere.tela === 'espere' && espere.esperaSegundos, 30);
   assert.equal(telaDoEncontro(problema(500, 'internal') as Resultado<EncontroDaRede>).tela, 'fora-do-ar');
   assert.equal(telaDoEncontro({ tipo: 'falha', motivo: 'tempo' }).tela, 'fora-do-ar');
-  const erro = telaDoEncontro(problema(418, 'desconhecido', { correlation_id: 'abc' }) as Resultado<EncontroDaRede>);
+  const erro = telaDoEncontro(problema(418, 'desconhecido', { correlation_id: 'abc' }));
   assert.equal(erro.tela, 'erro');
 });
 

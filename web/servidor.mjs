@@ -1,4 +1,3 @@
-/* global process, URL, performance */
 // Servidor minimo do site (ADR-0028, item 7). Tres responsabilidades, e so
 // elas:
 //

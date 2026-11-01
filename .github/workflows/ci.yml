@@ -2312,6 +2312,20 @@ jobs:
         working-directory: web
         run: npm run check
 
+      # O LINT DO SITE (31/10/2026). Ele nao existia: `web/**` era ignorado pelo
+      # `eslint.config.mjs` da raiz e o site nao tinha eslint em lugar nenhum --
+      # nem config, nem `devDependency`, nem script, nem passo aqui. Diferente
+      # do painel (PR #129), onde o buraco era SO local porque o job `admin` ja
+      # rodava o lint de la, este era buraco dos dois lados: nenhum job tocava.
+      #
+      # 47 arquivos, zero mensagens em arvore limpa. `npm run lint` do site e
+      # `astro sync && eslint .`, e o sync e exigencia medida: sem `web/.astro/`
+      # (gerado, nunca versionado) o `astro:middleware` nao resolve e o lint
+      # inventa 9 erros em `src/middleware.ts`.
+      - name: lint do site
+        working-directory: web
+        run: npm run lint
+
       - name: testes de unidade do site
         working-directory: web
         run: npm run test:unidade
