@@ -763,6 +763,71 @@ class _Conteudo extends StatelessWidget {
           _CartaoDeTexto(titulo: 'Cuidados', texto: pet.cuidados),
         ],
 
+        // =====================================================================
+        // OS TRES CAMPOS DE 02/11/2026 NA FICHA (castracao, chip, RG Animal)
+        //
+        // Eles entraram no cadastro e na edicao no mesmo dia e a ficha nao os
+        // mostrava: quem preenchia so reencontrava o valor reabrindo a edicao.
+        //
+        // **CADA UM E UM BLOCO PROPRIO, e nenhum deles entra em
+        // `CartaoDePet.atributosDe`.** Aquele texto pinta o cartao do pet em
+        // TODA lista, e "Castrado" ao lado do nome do animal poria dado de
+        // saude num lugar que o cliente nao escolheu -- alem de ser mudanca
+        // visual em telas que este pedido nao toca.
+        //
+        // **CAMPO SEM VALOR NAO VIRA LINHA VAZIA**, e a defesa e dupla:
+        // `_CartaoDeTexto` sem `vazio` devolve `SizedBox.shrink()`, e o `if`
+        // de cada bloco tira TAMBEM o respiro de cima. Sem o `if` a ficha de
+        // um pet sem nenhum dos tres ganharia tres espacos em branco entre
+        // `Cuidados` e as acoes -- invisivel na revisao e visivel no aparelho.
+        //
+        // **`Prefiro nao informar` NAO APARECE AQUI: o nulo omite o bloco.**
+        // A assimetria com o cadastro, onde a terceira opcao nasce
+        // selecionada, e deliberada. No cadastro ela e um CONTROLE diante de
+        // uma pergunta, e nascer marcada evita gravar `false` por omissao; na
+        // ficha ela seria uma AFIRMACAO sobre o animal, lida por quem abriu a
+        // pagina. E `neutered` nulo nao distingue "o tutor escolheu nao
+        // informar" de "o tutor nunca viu a pergunta": os pets cadastrados
+        // antes de 02/11/2026 estao todos no segundo caso e sao a MAIORIA.
+        // Escrever `Prefiro nao informar` na ficha deles publicaria resposta
+        // que ninguem deu, que e o mesmo defeito de gravar `false`. A terceira
+        // opcao existe para o tutor RECUSAR a pergunta, e recusa nao tem o que
+        // exibir.
+        //
+        // **NEM MASCARA NEM FORMATACAO nos dois numeros**, por decisao escrita
+        // na migracao de 17/09 (*"SEM validacao automatica: o SinPatinhas nao
+        // tem API publica"*): a ficha mostra o que foi guardado, byte a byte.
+        // Formatar aqui faria a ficha discordar do campo da edicao.
+        //
+        // A ACESSIBILIDADE E A DOS VIZINHOS, sem anuncio proprio: o titulo de
+        // `_CartaoDeTexto` ja e `Semantics(header: true)`, igual a `Sinais
+        // particulares` e a `Cuidados`, e o leitor de tela percorre os tres
+        // blocos novos como percorre aqueles dois.
+        // =====================================================================
+        if (pet.castrado != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          _CartaoDeTexto(
+            titulo: TextosDoDetalhe.rotuloDaCastracao,
+            texto: Castracao.de(pet.castrado).rotulo,
+          ),
+        ],
+
+        if (pet.chip != null && pet.chip!.isNotEmpty) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          _CartaoDeTexto(
+            titulo: TextosDoDetalhe.rotuloDoChip,
+            texto: pet.chip,
+          ),
+        ],
+
+        if (pet.rgAnimal != null && pet.rgAnimal!.isNotEmpty) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          _CartaoDeTexto(
+            titulo: TextosDoDetalhe.rotuloDoRgAnimal,
+            texto: pet.rgAnimal,
+          ),
+        ],
+
         const SizedBox(height: BichuEspaco.e8),
         _AcaoEmTexto(rotulo: TextosDoDetalhe.editar, aoTocar: aoEditar),
         const SizedBox(height: BichuEspaco.e4),

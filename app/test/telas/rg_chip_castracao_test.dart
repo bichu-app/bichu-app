@@ -134,6 +134,28 @@ Future<void> _abrirAEdicao(
   await tocar(tester, find.text(TextosDoDetalhe.editar));
 }
 
+/// Abre a FICHA do pet (T.1), sem entrar na edicao.
+Future<void> _abrirAFicha(
+  WidgetTester tester, {
+  Map<String, dynamic>? pet,
+}) async {
+  await abrirOPerfil(tester, rede: _rede(_Registro(), pet: pet));
+  await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
+  await tester.pumpAndSettle();
+}
+
+/// Uma tela de celular (400 dp) bem **alta**, para a ficha inteira ficar
+/// montada.
+///
+/// Obrigatoria nas iscas de AUSENCIA: num `ListView` o que esta fora da janela
+/// nao e construido, e um `findsNothing` ficaria verde por rolagem em vez de
+/// por regra. O mesmo recurso de `ordem_do_detalhe_do_pet_test.dart`.
+void _telaDeFichaInteira(WidgetTester tester) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(400, 4000);
+  addTearDown(tester.view.reset);
+}
+
 Future<void> _salvarAEdicao(WidgetTester tester) async {
   await rolarAte(tester, find.text(TextosDoDetalhe.salvar));
   await tocar(tester, find.text(TextosDoDetalhe.salvar));
@@ -625,6 +647,166 @@ void main() {
         corpo['sinpatinhas_id'],
         'RG-998',
         reason: 'REPROVA: salvar sem mexer apagou o RG Animal do pet.',
+      );
+    });
+  });
+
+  // =========================================================================
+  // A FICHA MOSTRA OS TRES (02/11/2026, o fecho do mesmo pedido)
+  //
+  // A classe de defeito numero 7: **campo que entra e nao aparece**. Os tres
+  // existiam no cadastro e na edicao e a ficha nao os desenhava, entao quem
+  // preenchia so reencontrava o valor reabrindo a edicao.
+  //
+  // Os casos daqui medem com a TELA ALTA de `_telaDeFichaInteira`, e isso e
+  // obrigatorio nas iscas de AUSENCIA: num `ListView` o que esta fora da
+  // janela nao e construido, e um `findsNothing` ficaria verde por rolagem em
+  // vez de por regra.
+  // =========================================================================
+  group('a ficha do pet MOSTRA os tres campos', () {
+    testWidgets('preenchidos, os tres aparecem com o rotulo do cadastro',
+        (tester) async {
+      _telaDeFichaInteira(tester);
+      await _abrirAFicha(
+        tester,
+        pet: petDoContrato()
+          ..addAll(<String, dynamic>{
+            'neutered': true,
+            'microchip_number': '982000123456789',
+            'sinpatinhas_id': 'BR-2026/abc 12',
+          }),
+      );
+
+      // CONTROLE POSITIVO, e ele vem PRIMEIRO: esta pagina tem estado de
+      // carregando, de falha e de pet fora da conta, e em nenhum deles bloco
+      // nenhum existe. Sem provar que a FICHA abriu, os `findsOne` abaixo
+      // mediriam a tela errada.
+      expect(
+        find.text(TextosDoDetalhe.rotuloDosSinais),
+        findsOne,
+        reason: 'REPROVA: a ficha nao abriu (o bloco de sinais, que ela '
+            'sempre desenha, nao esta na tela). Nada do que vem depois mede '
+            'o que este caso quer medir.',
+      );
+
+      expect(
+        find.text(TextosDoDetalhe.rotuloDaCastracao),
+        findsOne,
+        reason: 'REPROVA: a ficha nao tem o bloco da castracao.',
+      );
+      expect(
+        find.text(Castracao.castrado.rotulo),
+        findsOne,
+        reason: 'REPROVA: o bloco da castracao existe e nao diz `Castrado`. '
+            'O valor de `neutered` nesta resposta e `true`.',
+      );
+      expect(
+        find.text(TextosDoDetalhe.rotuloDoChip),
+        findsOne,
+        reason: 'REPROVA: a ficha nao tem o bloco do numero do chip.',
+      );
+      expect(
+        find.text('982000123456789'),
+        findsOne,
+        reason: 'REPROVA: o numero do chip nao aparece COMO FOI GUARDADO. '
+            'Mascara e formatacao estao proibidas pela migracao de 17/09.',
+      );
+      expect(
+        find.text(TextosDoDetalhe.rotuloDoRgAnimal),
+        findsOne,
+        reason: 'REPROVA: a ficha nao tem o bloco do RG Animal.',
+      );
+      expect(
+        find.text('BR-2026/abc 12'),
+        findsOne,
+        reason: 'REPROVA: o RG Animal nao aparece como foi digitado.',
+      );
+    });
+
+    testWidgets('`neutered` FALSO diz `Nao castrado`, e nao omite o bloco',
+        (tester) async {
+      // `false` e resposta, e a tentacao e trata-lo como ausencia -- um
+      // `if (pet.castrado == true)` passaria em tudo acima e apagaria a ficha
+      // de todo pet nao castrado.
+      _telaDeFichaInteira(tester);
+      await _abrirAFicha(
+        tester,
+        pet: petDoContrato()..addAll(<String, dynamic>{'neutered': false}),
+      );
+
+      expect(find.text(TextosDoDetalhe.rotuloDaCastracao), findsOne);
+      expect(
+        find.text(Castracao.naoCastrado.rotulo),
+        findsOne,
+        reason: 'REPROVA: `neutered: false` nao virou `Nao castrado` na '
+            'ficha. Falso e RESPOSTA, e nao ausencia de resposta.',
+      );
+    });
+
+    testWidgets('ISCA — sem valor, nenhum dos tres vira linha na ficha',
+        (tester) async {
+      // **A regra que importa mais que o layout.** Nulo e string vazia NAO
+      // aparecem: nada de rotulo com um traco, nada de `nao informado`.
+      _telaDeFichaInteira(tester);
+      await _abrirAFicha(tester);
+
+      // CONTROLE POSITIVO DA AUSENCIA: a ficha inteira esta montada, e a
+      // prova e que o ULTIMO widget dela esta na tela. Sem isto um
+      // `findsNothing` ficaria verde so por o bloco estar fora da janela.
+      expect(
+        find.text(TextosDoDetalhe.excluir),
+        findsOne,
+        reason: 'REPROVA: a ficha nao esta inteira na tela (a acao de '
+            'excluir, que e a ultima dela, nao aparece). As ausencias abaixo '
+            'nao provariam nada: elas mediriam rolagem, e nao regra.',
+      );
+
+      for (final rotulo in <String>[
+        TextosDoDetalhe.rotuloDaCastracao,
+        TextosDoDetalhe.rotuloDoChip,
+        TextosDoDetalhe.rotuloDoRgAnimal,
+      ]) {
+        expect(
+          find.text(rotulo),
+          findsNothing,
+          reason: 'REPROVA: `$rotulo` virou bloco na ficha de um pet que nao '
+              'tem o campo. Campo vazio nao vira linha vazia.',
+        );
+      }
+    });
+
+    testWidgets('ISCA — `Prefiro nao informar` NAO aparece na ficha',
+        (tester) async {
+      // A decisao de 02/11/2026, e ela e assimetrica em relacao ao cadastro
+      // DE PROPOSITO. No cadastro a terceira opcao nasce selecionada porque
+      // la ela e um controle diante de uma pergunta; na ficha seria uma
+      // afirmacao sobre o animal. E `neutered` nulo nao distingue "o tutor
+      // escolheu nao informar" de "o tutor nunca viu a pergunta" -- e os pets
+      // cadastrados antes de 02/11/2026 sao todos do segundo caso.
+      _telaDeFichaInteira(tester);
+      await _abrirAFicha(
+        tester,
+        pet: petDoContrato()..addAll(<String, dynamic>{'neutered': null}),
+      );
+
+      expect(
+        find.text(TextosDoDetalhe.excluir),
+        findsOne,
+        reason: 'REPROVA: a ficha nao esta inteira na tela. A ausencia '
+            'abaixo mediria rolagem.',
+      );
+      expect(
+        find.text(Castracao.naoInformou.rotulo),
+        findsNothing,
+        reason: 'REPROVA: a ficha escreveu `${Castracao.naoInformou.rotulo}` '
+            'para um pet com `neutered` nulo. Isso publica resposta que '
+            'ninguem deu -- o mesmo defeito de gravar `false`.',
+      );
+      expect(
+        find.text(TextosDoDetalhe.rotuloDaCastracao),
+        findsNothing,
+        reason: 'REPROVA: o bloco da castracao ficou na ficha sem nada para '
+            'dizer.',
       );
     });
   });

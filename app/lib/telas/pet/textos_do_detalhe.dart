@@ -197,6 +197,37 @@ abstract final class TextosDoDetalhe {
 
   static const String adicionarSinais = 'Adicionar sinais';
 
+  // =========================================================================
+  // OS TRES CAMPOS DE 02/11/2026 **NA FICHA**
+  //
+  // Castracao, numero do chip e RG Animal entraram no cadastro e na edicao
+  // no mesmo dia, e a ficha nao os mostrava: quem preenchia so reencontrava
+  // o valor reabrindo a edicao.
+  //
+  // **Os tres rotulos sao os MESMOS do cadastro, e isso e deliberado.** Quem
+  // digitou `Numero do chip` num formulario procura essa palavra na ficha; um
+  // sinonimo aqui seria um segundo nome para o mesmo campo, e a pessoa teria
+  // de descobrir sozinha que sao a mesma coisa. Por isso eles apontam para
+  // `TextosDoCadastro` em vez de repetir a cadeia -- repetir criaria o lugar
+  // onde as duas redacoes divergem calado.
+  //
+  // **NAO HA TEXTO DE AUSENCIA para nenhum dos tres.** Diferente de
+  // `semSinais`, que convida a preencher o campo que a tela sempre desenha,
+  // campo sem valor aqui nao vira linha nenhuma. Um `Numero do chip: —` na
+  // ficha de todo pet sem chip seria tres cobrancas numa tela que nao pede
+  // nada, e o cliente nao pediu obrigatoriedade em nenhum dos tres.
+  // =========================================================================
+
+  /// `neutered` na ficha. O rotulo do BLOCO, nao da opcao: a palavra que a
+  /// pessoa le dentro do bloco e o `rotulo` da propria [Castracao].
+  static const String rotuloDaCastracao = TextosDoCadastro.rotuloDaCastracao;
+
+  /// `microchip_number` na ficha.
+  static const String rotuloDoChip = TextosDoCadastro.rotuloDoChip;
+
+  /// `sinpatinhas_id` na ficha.
+  static const String rotuloDoRgAnimal = TextosDoCadastro.rotuloDoRgAnimal;
+
   static String semTag(String nome) =>
       '${_o(nome)} ainda não tem tag na coleira.';
 
