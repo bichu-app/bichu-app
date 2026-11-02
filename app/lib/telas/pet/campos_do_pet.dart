@@ -357,6 +357,30 @@ class CamposDeIdentificacaoState extends State<CamposDeIdentificacao> {
               OpcaoSegmentada<Sexo>(valor: sexo, rotulo: sexo.rotulo),
           ],
         ),
+        const SizedBox(height: BichuEspaco.e6),
+        // `neutered` fica AQUI, colado em `sex`, e nao no bloco de sinais.
+        // Os dois sao o mesmo tipo de fato sobre o corpo do animal, sao
+        // vizinhos na propria tabela (`pets.sex` e `pets.neutered`, linhas 59
+        // e 61) e usam a mesma peca de escolha unica -- sao lidos como par, e
+        // separa-los poria uma pergunta sobre o animal duas telas depois da
+        // outra. Chip e RG Animal, que sao DOCUMENTO e nao corpo, ficam no
+        // bloco de sinais, onde a tabela tambem os poe.
+        //
+        // [selecionado] e nao-anulavel aqui de proposito: o grupo SEMPRE tem
+        // posicao, e a posicao inicial e `Prefiro nao informar`, que grava
+        // nulo. Escolher qualquer opcao -- inclusive voltar para a terceira --
+        // e um toque, porque o nao informado e um valor da lista e nao a
+        // ausencia de selecao.
+        GrupoSegmentado<Castracao>(
+          rotulo: TextosDoCadastro.rotuloDaCastracao,
+          selecionado: rascunho.castracao,
+          aoSelecionar: (escolha) =>
+              _rascunho.atualizar(() => _rascunho.castracao = escolha),
+          opcoes: <OpcaoSegmentada<Castracao>>[
+            for (final opcao in Castracao.values)
+              OpcaoSegmentada<Castracao>(valor: opcao, rotulo: opcao.rotulo),
+          ],
+        ),
       ],
     );
   }
@@ -381,6 +405,10 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
       TextEditingController(text: widget.rascunho.sinaisParticulares);
   late final TextEditingController _cuidados =
       TextEditingController(text: widget.rascunho.cuidados);
+  late final TextEditingController _chip =
+      TextEditingController(text: widget.rascunho.chip);
+  late final TextEditingController _rgAnimal =
+      TextEditingController(text: widget.rascunho.rgAnimal);
 
   DadosDeReferencia? _referencia;
 
@@ -398,6 +426,8 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
   void dispose() {
     _sinais.dispose();
     _cuidados.dispose();
+    _chip.dispose();
+    _rgAnimal.dispose();
     super.dispose();
   }
 
@@ -422,6 +452,11 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
     rascunho.atualizar(() {
       rascunho.sinaisParticulares = _sinais.text.trim();
       rascunho.cuidados = _cuidados.text.trim();
+      // O que o interruptor decide e se o numero VAI (ver
+      // `RascunhoDePet.chipParaEnvio`); o digitado e guardado dos dois
+      // lados, para desligar sem querer nao apagar o que foi escrito.
+      rascunho.chip = _chip.text.trim();
+      rascunho.rgAnimal = _rgAnimal.text.trim();
     });
     return true;
   }
@@ -467,7 +502,103 @@ class CamposDeSinaisState extends State<CamposDeSinais> {
         ),
         const SizedBox(height: BichuEspaco.e6),
         _BlocoDeCuidados(nome: nome, controlador: _cuidados),
+        const SizedBox(height: BichuEspaco.e6),
+        // Chip e RG Animal ficam no MESMO bloco de `distinctive_marks` e
+        // `care_notes`, que e onde a tabela tambem os poe: sao os campos
+        // opcionais de documento do animal, todos sem obrigatoriedade e
+        // nenhum deles bloqueando o cadastro.
+        _InterruptorDeChip(
+          ligado: rascunho.temChip,
+          aoTrocar: (ligado) =>
+              setState(() => rascunho.atualizar(() => rascunho.temChip = ligado)),
+        ),
+        if (rascunho.temChip) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          BichuField(
+            rotulo: TextosDoCadastro.rotuloDoChip,
+            opcional: true,
+            controlador: _chip,
+            ajuda: TextosDoCadastro.ajudaDoChip,
+            // `limite` vira `maxLength` no campo: o teto do banco e cobrado
+            // AQUI, e nao esperando o 400. Sem mascara e sem formatador --
+            // o numero e livre por decisao escrita na migracao.
+            limite: TextosDoCadastro.limiteDoChip,
+            acaoDeTeclado: TextInputAction.next,
+          ),
+        ],
+        const SizedBox(height: BichuEspaco.e6),
+        BichuField(
+          rotulo: TextosDoCadastro.rotuloDoRgAnimal,
+          opcional: true,
+          controlador: _rgAnimal,
+          // A ajuda e a de 17/09, ja escrita e nunca usada por tela
+          // nenhuma. Ela e que diz que o campo e opcional, e por isso nao foi
+          // reescrita.
+          ajuda: TextosDoCadastro.ajudaDoRgAnimal,
+          limite: TextosDoCadastro.limiteDoRgAnimal,
+        ),
       ],
+    );
+  }
+}
+
+/// O interruptor "tem chip?", que **revela** o campo do numero.
+///
+/// Desligado quer dizer "nao tem numero para digitar", e e a mesma gravacao
+/// de "nao sei": nulo. Nao ha terceira opcao aqui como ha em [Castracao]
+/// porque nao ha terceiro estado no banco -- `microchip_number` so sabe
+/// guardar numero ou nada, e um animal sem chip e um animal cujo tutor nao
+/// sabe o numero gravam a mesma coisa. Dar tres posicoes a um campo de duas
+/// seria inventar distincao que nada le.
+class _InterruptorDeChip extends StatelessWidget {
+  const _InterruptorDeChip({required this.ligado, required this.aoTrocar});
+
+  final bool ligado;
+  final ValueChanged<bool> aoTrocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return Semantics(
+      toggled: ligado,
+      label: '${TextosDoCadastro.rotuloDoTemChip} '
+          '${TextosDoCadastro.explicacaoDoTemChip}',
+      excludeSemantics: true,
+      onTap: () => aoTrocar(!ligado),
+      child: InkWell(
+        onTap: () => aoTrocar(!ligado),
+        borderRadius: BorderRadius.circular(BichuRaio.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      TextosDoCadastro.rotuloDoTemChip,
+                      style: textos.labelLarge,
+                    ),
+                    const SizedBox(height: BichuEspaco.e1),
+                    Text(
+                      TextosDoCadastro.explicacaoDoTemChip,
+                      style: textos.bodySmall?.copyWith(
+                        color: cores.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: BichuEspaco.e3),
+              Switch(value: ligado, onChanged: aoTrocar),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

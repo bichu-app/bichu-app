@@ -68,6 +68,9 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
             sexo: rascunho.sexo,
             sinaisParticulares: rascunho.sinaisParticulares,
             cuidados: rascunho.cuidados,
+            castrado: rascunho.castracao.valor,
+            chip: rascunho.chipParaEnvio,
+            rgAnimal: rascunho.rgAnimalParaEnvio,
           );
       if (!mounted) return;
       context.pushReplacement(

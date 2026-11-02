@@ -66,6 +66,53 @@ enum Sexo {
   }
 }
 
+/// Local: as tres respostas que a TELA oferece para `neutered`, que no
+/// contrato e um `boolean` anulavel dentro de `PetInput` -- e nao uma lista
+/// fechada com nome proprio na spec.
+///
+/// **Por isso ele e `Local:` e nao leva ponteiro de contrato.** Um enum Dart
+/// ancorado num booleano reprovaria em `ancora-sem-lista-fechada`, e o
+/// ponteiro nao e o que faz este enum estar certo -- o que faz e [valor]
+/// cobrir os tres estados que a coluna tem
+/// (`migrations/20260917000006_pets.sql:61`, anulavel). Nao acrescente
+/// ponteiro "para ficar igual aos vizinhos": o portao de conformidade
+/// reprovaria, e ja reprovou uma vez porque esta prosa citava o caminho
+/// entre acentos graves e o leitor do portao o leu como ancora de verdade.
+///
+/// **O nulo e UMA DAS TRES, e nao a falta das outras duas.** `neutered` e
+/// anulavel, entao "nao informado" e um estado que existe de verdade, e um
+/// interruptor de duas posicoes gravaria `false` para quem nunca respondeu --
+/// inventar resposta e pior que nao ter o campo. Com [naoInformou] na lista, o
+/// nao informado deixa de ser um branco e passa a ser uma ESCOLHA, e por isso
+/// pode nascer selecionado sem inventar nada: e literalmente o estado do pet
+/// antes de alguem responder.
+///
+/// E o mesmo desenho de [Sexo], que resolve o desconhecido com o VALOR
+/// `unknown` em vez de com ausencia. O rotulo de [naoInformou] e palavra do
+/// cliente (02/11/2026) e nao deve ser reescrito.
+enum Castracao {
+  castrado(true, 'Castrado'),
+  naoCastrado(false, 'Não castrado'),
+  naoInformou(null, 'Prefiro não informar');
+
+  const Castracao(this.valor, this.rotulo);
+
+  /// O que vai em `neutered`. Nulo em [naoInformou], **por desenho**.
+  final bool? valor;
+
+  final String rotulo;
+
+  /// A opcao que corresponde ao que o servidor devolveu. Total por
+  /// construcao: `null` cai em [naoInformou], que e o estado inicial do
+  /// controle, e nao ha quarto valor possivel num booleano anulavel.
+  static Castracao de(bool? valor) {
+    for (final c in Castracao.values) {
+      if (c.valor == valor) return c;
+    }
+    return Castracao.naoInformou;
+  }
+}
+
 /// Uma opcao de lista fechada: codigo que cruza, rotulo que a pessoa le.
 class OpcaoDeReferencia {
   const OpcaoDeReferencia({
@@ -257,6 +304,9 @@ class Pet {
     this.segundaCorCodigo,
     this.sexo,
     this.sinaisParticulares,
+    this.castrado,
+    this.chip,
+    this.rgAnimal,
   });
 
   final String id;
@@ -310,6 +360,22 @@ class Pet {
   /// `distinctive_marks`, ate 500 caracteres no contrato.
   final String? sinaisParticulares;
 
+  /// `neutered`. **Tres estados, e o nulo e um deles**: nulo e "nao
+  /// informado", e nao "nao castrado". Quem desenha a tela usa
+  /// [Castracao.de] para nao ter de lembrar disso.
+  final bool? castrado;
+
+  /// `microchip_number`, 1 a 20 caracteres no contrato. Vazio nunca chega
+  /// aqui: o banco recusa string vazia (`CHECK ... BETWEEN 1 AND 20`), e
+  /// quem nao tem chip tem nulo.
+  final String? chip;
+
+  /// `sinpatinhas_id`, 1 a 40 caracteres no contrato: o RG Animal do
+  /// registro federal. **Guardado como veio**, sem validacao de formato --
+  /// o SinPatinhas nao tem API publica, e recusar formato que nao se conhece
+  /// recusaria numero verdadeiro.
+  final String? rgAnimal;
+
   /// A foto que o cartao pinta: a principal quando exibivel, senao a primeira
   /// exibivel que existir.
   FotoDoPet? get fotoDeCapa {
@@ -361,6 +427,9 @@ class Pet {
       sexo: Sexo.de(json['sex'] as String?),
       sinaisParticulares: json['distinctive_marks'] as String?,
       cuidados: json['care_notes'] as String?,
+      castrado: json['neutered'] as bool?,
+      chip: json['microchip_number'] as String?,
+      rgAnimal: json['sinpatinhas_id'] as String?,
       redacoesDeCuidados:
           (json['care_notes_redactions'] as List<dynamic>? ?? const <dynamic>[])
               .whereType<Map<String, dynamic>>()

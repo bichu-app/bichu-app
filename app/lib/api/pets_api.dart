@@ -45,6 +45,9 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     Sexo? sexo,
     String? sinaisParticulares,
     String? cuidados,
+    bool? castrado,
+    String? chip,
+    String? rgAnimal,
   }) async {
     final json = await _api.post(
       '/pets',
@@ -66,6 +69,14 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
         if (sinaisParticulares != null && sinaisParticulares.isNotEmpty)
           'distinctive_marks': sinaisParticulares,
         if (cuidados != null && cuidados.isNotEmpty) 'care_notes': cuidados,
+        // `neutered` so entra no corpo quando HOUVE resposta. Nulo aqui e
+        // "nao informado", e `POST` com a chave ausente e a unica forma de
+        // criar o pet sem responder -- mandar `false` por omissao gravaria
+        // resposta que ninguem deu.
+        'neutered': ?castrado,
+        if (chip != null && chip.isNotEmpty) 'microchip_number': chip,
+        if (rgAnimal != null && rgAnimal.isNotEmpty)
+          'sinpatinhas_id': rgAnimal,
       },
     );
     return Pet.doJson(json);
@@ -91,6 +102,9 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     Sexo? sexo,
     String? sinaisParticulares,
     String? cuidados,
+    bool? castrado,
+    String? chip,
+    String? rgAnimal,
   }) async {
     String? semVazio(String? valor) {
       if (valor == null) return null;
@@ -112,6 +126,13 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
         'sex': sexo?.valor,
         'distinctive_marks': semVazio(sinaisParticulares),
         'care_notes': semVazio(cuidados),
+        // No `PATCH` a chave vai SEMPRE, inclusive nula: o corpo e um
+        // `PetInput` inteiro, entao omitir `neutered` nao preservaria o valor
+        // anterior. Nulo explicito e o que faz voltar a "nao informado" ser
+        // possivel -- e o que preserva o nao informado de quem nunca mexeu.
+        'neutered': castrado,
+        'microchip_number': semVazio(chip),
+        'sinpatinhas_id': semVazio(rgAnimal),
       },
     );
     return Pet.doJson(json);
