@@ -11,6 +11,7 @@ import type {
 
 import {
   aplicarNaEntrada,
+  conferirAcoesDeExcesso,
   contarTentativaInvalida,
   inventariarNaoAplicaveis,
   resolvedoresGenericos,
@@ -276,6 +277,7 @@ export function registrarRota<const T extends RouteDefinition>(
   const deps = tetoDe(app);
   const superficie = app.superficieAdministrativa;
   exigirFronteiraAdministrativa(rota, superficie);
+  conferirAcoesDeExcesso(rota);
   if (superficie !== undefined) anotarMetodoDaSuperficie(superficie, rota);
   if (opcoes.config !== undefined && 'metodoNaoPermitido' in opcoes.config) {
     throw new Error(

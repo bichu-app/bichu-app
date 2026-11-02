@@ -143,12 +143,40 @@ interface Resposta {
   readonly retryAfter: string | null;
 }
 
+/**
+ * Cada conta de apoio nasce de um CLIENTE diferente.
+ *
+ * O PREPARO deste arquivo (cadastrar, e pedir a redefinição) passa por
+ * `registerUser` (5/h por IP) e por `requestPasswordReset` (10/h por IP), e
+ * desde a degeneração do ADR-0020 (camada 2) esses tetos recusam de verdade.
+ * Criar as `ALEM_DO_TETO` contas de `127.0.0.1` fazia o preparo bater num teto
+ * do PEDIDO — e este arquivo mede o teto da CONFIRMAÇÃO.
+ *
+ * As chamadas sob medição continuam SEM `ip`, portanto todas do mesmo
+ * endereço: é exatamente o que a afirmação central precisa ("do mesmo IP").
+ *
+ * O /24 e que precisa variar, e nao so o endereco: o cadastro tem teto por IP
+ * (5/h) E por /24 (30/h), e este arquivo abre DUAS dezenas de contas em cada
+ * cenario. A faixa do terceiro octeto aqui e `198.18.70..189`, larga o
+ * bastante para os dois cenarios e sem encostar nas de
+ * `reautenticacao-pelo-http` (`10..39`) nem de `troca-de-email` (`40..69`).
+ */
+const PRIMEIRO_24 = 70;
+let clientesDeApoio = 0;
+
+function ipDeContaNova(): string {
+  const faixa = PRIMEIRO_24 + clientesDeApoio;
+  clientesDeApoio += 1;
+  return `198.18.${String(faixa)}.1`;
+}
+
 async function chamar(
   caminho: string,
-  opcoes: { metodo: 'POST'; corpo?: unknown },
+  opcoes: { metodo: 'POST'; corpo?: unknown; ip?: string },
 ): Promise<Resposta> {
   const cabecalhos: Record<string, string> = { accept: 'application/json' };
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json';
+  if (opcoes.ip !== undefined) cabecalhos['x-forwarded-for'] = opcoes.ip;
 
   const resposta = await fetch(`${base}${PREFIXO_DA_API}${caminho}`, {
     method: opcoes.metodo,
@@ -192,6 +220,7 @@ async function contaNovaComTokenDeEmail(rotulo: string): Promise<string> {
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
     corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
+    ip: ipDeContaNova(),
   });
   assert.equal(
     cadastro.status,
@@ -219,9 +248,12 @@ async function contaNovaComTokenDeEmail(rotulo: string): Promise<string> {
 /** Cadastra, pede a redefinicao e devolve o token do link do e-mail. */
 async function contaNovaComTokenDeRedefinicao(rotulo: string): Promise<string> {
   const email = `reset-${rotulo}-${randomUUID().slice(0, 8)}@${DOMINIO_DE_TESTE}`;
+  /** O MESMO cliente cadastra e pede a redefinição, como uma pessoa faria. */
+  const ipDoCliente = ipDeContaNova();
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
     corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
+    ip: ipDoCliente,
   });
   assert.equal(
     cadastro.status,
@@ -232,7 +264,11 @@ async function contaNovaComTokenDeRedefinicao(rotulo: string): Promise<string> {
   contas.push((cadastro.corpo as { user: { id: string } }).user.id as UserId);
 
   const antes = caixaDeEntrada.length;
-  const pedido = await chamar(PEDIDO_DE_REDEFINICAO, { metodo: 'POST', corpo: { email } });
+  const pedido = await chamar(PEDIDO_DE_REDEFINICAO, {
+    metodo: 'POST',
+    corpo: { email },
+    ip: ipDoCliente,
+  });
   assert.equal(
     pedido.status,
     202,
