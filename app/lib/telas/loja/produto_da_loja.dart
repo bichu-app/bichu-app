@@ -224,8 +224,25 @@ class _TelaDoProdutoState extends State<TelaDoProduto> {
       ),
       if (item.destinoExterno case final Uri destino) ...<Widget>[
         const SizedBox(height: BichuEspaco.e6),
+        // A INDICACAO VEM ACIMA DO BOTAO, no mesmo bloco, e nao numa faixa
+        // nova: a declaracao precisa estar onde a pessoa toca, e nesta pagina
+        // o toque e este botao. A vitrine carrega a MESMA redacao no convite.
+        // A redacao e unica -- `VitrineDaLoja.avisoDeComissaoPorIndicacao` --,
+        // e e la que esta escrito por que ela fala em `podem`.
         _Margem(
-          child: BotaoDeSaidaDaLoja(item: item, destino: destino),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                VitrineDaLoja.avisoDeComissaoPorIndicacao,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: BichuColors.of(context).cores.textSecondary,
+                ),
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              BotaoDeSaidaDaLoja(item: item, destino: destino),
+            ],
+          ),
         ),
       ],
     ];

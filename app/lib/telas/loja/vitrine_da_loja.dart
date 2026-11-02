@@ -60,6 +60,50 @@ class VitrineDaLoja extends StatefulWidget {
   static const String rotuloDoCupom = 'Cupom de desconto';
   static const String codigoDoCupom = 'bichu';
 
+  /// A INDICACAO QUE A LOJA PRECISA DECLARAR, e ela tem de ser verdadeira NOS
+  /// DOIS ESTADOS -- com comissao e sem comissao.
+  ///
+  /// **POR QUE A FRASE DIZ `podem` E NAO `recebemos`.** Em 02/11/2026 o
+  /// cliente decidiu que a Loja e vitrine de lojas externas pelo programa de
+  /// afiliados delas, e nenhum link da vitrine rende comissao AINDA. No dia em
+  /// que o primeiro render, ninguem vai voltar a esta linha para reescrever a
+  /// frase -- entao ela declara a REGRA e nao o estado. "Recebemos comissao"
+  /// seria falso hoje; "nao recebemos nada" ficaria falso no dia do primeiro
+  /// link. As duas metades da frase sao verdadeiras nos dois estados: a
+  /// primeira porque e modal, e a segunda porque quem define o valor e o
+  /// parceiro, com ou sem indicacao nossa.
+  ///
+  /// NAO PROMETE MECANISMO: sem percentual, sem nome de rede de afiliados, e
+  /// sem dizer que a indicacao mexe no que a pessoa paga (nao mexe).
+  ///
+  /// **A CLAUSULA INTEIRA MORA NOS TERMOS**, item 13 de
+  /// `web/src/conteudo/juridico/termos.md`. Esta frase existe porque quem toca
+  /// em `Compre agora` nao leu os termos, e declaracao enterrada em texto
+  /// legal nao alcanca quem clica.
+  ///
+  /// **ELA MORA AQUI E E DESENHADA NA PAGINA DO PRODUTO**
+  /// (`produto_da_loja.dart`), acima do botao de saida. A redacao fica nesta
+  /// classe porque e aqui que vivem os textos da `Loja` inteira.
+  ///
+  /// **POR QUE ELA NAO ESTA NA VITRINE, E ISSO FOI MEDIDO E NAO ESCOLHIDO.**
+  /// O lugar natural seria o bloco `_ConviteComCupom`, a peca que JA esta
+  /// desenhada no topo da vitrine. Nao cabe: o bloco tem teto de 88 dp
+  /// APROVADO PELO CLIENTE (`loja_cupom_chamativo_test.dart`, grupo `o bloco
+  /// do convite cabe no orcamento da dobra`), hoje custa 72 dp, e sobram 16 --
+  /// menos que uma linha de `bodySmall`. Com a frase ali, o bloco estourou o
+  /// teto nas duas larguras (375 e 412 dp) e ainda derrubou
+  /// `loja_carrossel_nao_sai_test`, empurrando o cartao para fora do alcance
+  /// do toque. O proprio caso diz o que fazer: *"se a peca precisa de mais
+  /// espaco, a conversa e com o cliente: o teto nao se sobe para o teste ficar
+  /// verde"*. Entao a vitrine e PERGUNTA FECHADA para ele, e nao conserto meu.
+  ///
+  /// **NAO E O AVISO DE 17/10.** `avisoDeQueNaoSomosOVendedor` saiu da tela
+  /// por pedido do cliente e TRES casos reprovam se ele voltar; esta e outra
+  /// afirmacao, e ela nao recria nenhuma faixa de aviso.
+  static const String avisoDeComissaoPorIndicacao =
+      'Alguns links da Loja podem render comissão ao Bichu. Quem paga a '
+      'comissão é o parceiro, e ela não muda o que você paga.';
+
   /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
   static String fimDaLista(int total) => total == 1
       ? 'Você viu o único produto da vitrine.'
