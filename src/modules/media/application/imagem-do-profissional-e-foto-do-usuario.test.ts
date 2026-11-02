@@ -139,13 +139,17 @@ void describe('(b) a derivada sai em JPEG, no tamanho alvo de cada propósito', 
     assert.notEqual(CATEGORIA_DO_PROPOSITO['user_photo'], CATEGORIA_DO_PROPOSITO['directory_photo']);
   });
 
-  void it('a dimensão mínima de cada propósito está declarada e é menor que a maior derivada', () => {
+  // "NAO MAIOR" e nao "menor": desde 02/11/2026 o piso da foto do local E a
+  // maior derivada (`banner` 1280 x 720), por decisao do cliente. Ele era
+  // 600 x 600 -- o numero da LOGO, que e quadrada -- e a moldura da foto e
+  // 16:9, entao o piso nao era alcancavel pelo proprio recorte do painel.
+  void it('a dimensão mínima de cada propósito está declarada e não é maior que a maior derivada', () => {
     for (const proposito of NOVOS) {
       const minima = DIMENSAO_MINIMA[proposito];
       assert.ok(minima.largura > 0 && minima.altura > 0, proposito);
     }
     assert.deepEqual(DIMENSAO_MINIMA['directory_logo'], { largura: 256, altura: 256 });
-    assert.deepEqual(DIMENSAO_MINIMA['directory_photo'], { largura: 600, altura: 600 });
+    assert.deepEqual(DIMENSAO_MINIMA['directory_photo'], { largura: 1280, altura: 720 });
     assert.deepEqual(DIMENSAO_MINIMA['user_photo'], { largura: 300, altura: 300 });
   });
 });

@@ -32,21 +32,49 @@ export type Proposito = Esquemas['AdminCatalogImageIntentInput']['purpose'];
 /**
  * As minimas do contrato (`AdminCatalogImageIntentInput`): 800 x 800 na Loja, 600
  * x 600 no encontro (01/10), e desde 18/10/2026 a logo e a foto do diretorio --
- * 256 x 256 na logo, que e quadrada e pequena, e 600 x 600 na foto da fachada ou
- * do ambiente.
+ * 256 x 256 na logo, que e quadrada e pequena.
+ *
+ * ## A FOTO E A GALERIA DO LOCAL SAO 1280 x 720 DESDE 02/11/2026
+ *
+ * Eram 600 x 600, o numero da LOGO, que e QUADRADA -- e os dois propositos sao
+ * enquadrados em 16:9 (`PROPORCAO_DA_MOLDURA`). Uma faixa 16:9 so alcanca 600
+ * de altura com 1067 de largura, entao o piso velho era uma **regra
+ * impossivel**: o cliente escolheu uma foto de 1028 de largura, o recorte saiu
+ * com 578 de altura e a tela recusou por um numero que o proprio recorte nao
+ * conseguia entregar.
+ *
+ * 1280 x 720 e o tamanho da MAIOR derivada do servidor (`banner`), escolhido
+ * pelo cliente em 02/11/2026: no piso nada e ampliado.
+ *
+ * O caso que impede o proximo vazamento de numero esta em
+ * `test/recorte-de-imagem.test.ts`: **todo proposito com moldura tem de ter o
+ * piso alcancavel nessa moldura**. `network_event` ainda nao tem, e isso espera
+ * decisao do cliente.
  */
 export const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: number }> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
   directory_logo: { largura: 256, altura: 256 },
-  directory_photo: { largura: 600, altura: 600 },
-  directory_gallery: { largura: 600, altura: 600 },
+  directory_photo: { largura: 1280, altura: 720 },
+  directory_gallery: { largura: 1280, altura: 720 },
 };
 
+/**
+ * A recusa COMO O OPERADOR A LE, e ela nao fala "16:9": o cliente perdeu tempo
+ * exatamente aqui. A frase antiga era *"A imagem precisa ter pelo menos 600 ×
+ * 600 pixels. Esta tem 1028 × 578. Escolha outra imagem."* -- ela dava um
+ * numero e um impasse, sem dizer por que a foto grande que ele escolheu virou
+ * um recorte pequeno, nem o que fazer.
+ *
+ * Agora ela diz **o que fazer**: foto maior, e que o enquadramento corta (e o
+ * zoom corta mais). Os numeros saem de [DIMENSAO_MINIMA], proposito a
+ * proposito, e nunca escritos a mao.
+ */
 function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {
   const m = DIMENSAO_MINIMA[proposito];
   const base = `A imagem precisa ter pelo menos ${String(m.largura)} × ${String(m.altura)} pixels.`;
-  return dimensao ? `${base} Esta tem ${String(dimensao.width)} × ${String(dimensao.height)}. Escolha outra imagem.` : `${base} Escolha outra imagem.`;
+  const saida = 'Escolha uma foto maior: o enquadramento corta a imagem, e dar zoom corta mais ainda.';
+  return dimensao ? `${base} Esta tem ${String(dimensao.width)} × ${String(dimensao.height)}. ${saida}` : `${base} ${saida}`;
 }
 
 /**

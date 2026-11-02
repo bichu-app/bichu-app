@@ -7,7 +7,7 @@
  * |---|---|
  * | arquivo acima de 5 MB e recusado **antes** de qualquer chamada | tirar o `conferirArquivo` de `CampoDeImagem` |
  * | a orientacao de 5 MB e a minima ficam SEMPRE em tela | mover a orientacao para dentro do `if` de erro |
- * | a minima da logo e 256 x 256 e a da foto 600 x 600 | mudar `DIMENSAO_MINIMA` |
+ * | a minima da logo e 256 x 256 e a da foto 1280 x 720 | mudar `DIMENSAO_MINIMA` |
  * | o envio pede a politica com o proposito do campo | trocar o proposito, ou escrever um segundo caminho de envio |
  * | campo INTOCADO nao entra no `PATCH` | mandar `logo_upload_id` sempre |
  * | remover a gravada manda `null` | mandar `undefined`, ou omitir a chave |
@@ -99,9 +99,13 @@ function preencherOsTresDaPublicacao() {
 }
 
 describe('tamanho e dimensao dos dois campos novos', () => {
-  it('a minima da logo e 256 x 256, e a da foto do local 600 x 600', () => {
+  // A foto do local era 600 x 600 -- o numero da LOGO, que e QUADRADA -- e virou
+  // 1280 x 720 em 02/11/2026 (decisao do cliente): a moldura dela e 16:9, e um
+  // piso quadrado numa moldura deitada nao e alcancavel. A regra que pega a
+  // classe inteira esta em `test/recorte-de-imagem.test.ts`.
+  it('a minima da logo e 256 x 256, e a da foto do local 1280 x 720', () => {
     expect(DIMENSAO_MINIMA.directory_logo).toEqual({ largura: 256, altura: 256 });
-    expect(DIMENSAO_MINIMA.directory_photo).toEqual({ largura: 600, altura: 600 });
+    expect(DIMENSAO_MINIMA.directory_photo).toEqual({ largura: 1280, altura: 720 });
   });
 
   it('ISCA (a): arquivo acima do teto e recusado pelo `conferirArquivo`, com o teto derivado dos bytes', () => {
@@ -126,7 +130,7 @@ describe('logo e foto no formulario da entrada', () => {
       await screen.findByText('Envie uma imagem de até 5 MB. JPG, PNG ou WebP, com pelo menos 256 × 256 pixels.'),
     ).toBeVisible();
     expect(
-      screen.getByText('Envie uma imagem de até 5 MB. JPG, PNG ou WebP, com pelo menos 600 × 600 pixels.'),
+      screen.getByText('Envie uma imagem de até 5 MB. JPG, PNG ou WebP, com pelo menos 1280 × 720 pixels.'),
     ).toBeVisible();
     // E a orientacao DESCREVE o campo, em vez de ser texto solto ao lado dele.
     const campo = screen.getByLabelText('Logo');

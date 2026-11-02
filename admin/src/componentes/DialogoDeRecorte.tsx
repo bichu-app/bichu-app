@@ -163,7 +163,7 @@ export function DialogoDeRecorte({ imagem, proposito, rotulo, aoConfirmar, aoFec
       {curta && (
         <span className="help err" id={idDoAviso}>
           <Icone nome="error" tamanho="s20" />O recorte precisa de pelo menos {minima.largura} × {minima.altura} pixels.
-          Diminua o zoom ou escolha outra imagem.
+          Diminua o zoom, ou escolha uma foto maior.
         </span>
       )}
 
