@@ -64,13 +64,35 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
 /** O teto do envio, reexportado do PONTO ÚNICO (`domain/derivadas.ts`). */
 export const TETO_DE_BYTES_DO_CATALOGO = TETO_DE_BYTES_DO_ENVIO;
 
-/** A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`). */
+/**
+ * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`).
+ *
+ * ## O piso tem a proporcao da moldura, ou e inalcancavel
+ *
+ * `directory_photo` e `directory_gallery` passaram de 600 x 600 para
+ * **1280 x 720** em 02/11/2026, por decisao do cliente. Os dois sao
+ * enquadrados em 16:9 no painel (a moldura sai de `DERIVADAS_DA_FOTO_DO_LOCAL`
+ * e de `DERIVADAS_DO_ENCONTRO`), e 600 x 600 e um piso QUADRADO: uma faixa
+ * 16:9 so alcanca 600 de altura com 1067 de largura, entao a regra nao podia
+ * ser cumprida pelo proprio recorte do produto -- o cliente mandou uma foto de
+ * 1028 de largura, o recorte saiu com 578 de altura e foi recusado. O numero
+ * 600 era o da LOGO, que e quadrada, e vazou para a foto em 18/10/2026.
+ *
+ * 1280 x 720 e o tamanho da MAIOR derivada (`banner`): no piso nada e
+ * ampliado. E mais exigente em largura, e o custo foi aceito.
+ *
+ * **`network_event` continua em 600 x 600 com o defeito identico**, e isso nao
+ * e descuido: a decisao de 02/11/2026 foi sobre a foto do estabelecimento, e
+ * estender por conta propria seria decidir no lugar do cliente. O caso
+ * `o piso de todo propósito com moldura é alcançável NA moldura dele`
+ * (`admin/test/recorte-de-imagem.test.ts`) carrega essa pendencia escrita.
+ */
 export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
   directory_logo: { largura: 256, altura: 256 },
-  directory_photo: { largura: 600, altura: 600 },
-  directory_gallery: { largura: 600, altura: 600 },
+  directory_photo: { largura: 1280, altura: 720 },
+  directory_gallery: { largura: 1280, altura: 720 },
   directory_suggestion_logo: { largura: 256, altura: 256 },
   directory_suggestion_photo: { largura: 600, altura: 600 },
   user_photo: { largura: 300, altura: 300 },

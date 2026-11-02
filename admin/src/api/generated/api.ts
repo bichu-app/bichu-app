@@ -3981,11 +3981,18 @@ export interface paths {
          *     vencido ou ja usado em OUTRA indicacao e recusado com `400`
          *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
          *
-         *     Dimensao minima **600 x 600**, a mesma de `directory_photo` e da capa do
-         *     encontro: a derivada `banner` e 1280 x 720 e `sharp` nao amplia.
-         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
-         *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
-         *     worker, nos bytes.
+         *     Dimensao minima **600 x 600**, a mesma da capa do encontro: a derivada
+         *     `banner` e 1280 x 720 e `sharp` nao amplia. `width`/`height` sao
+         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
+         *
+         *     **Ela JA NAO e a de `directory_photo`**, que passou a 1280 x 720 em
+         *     02/11/2026. A diferenca e de superficie e nao de descuido: a foto do
+         *     PAINEL e enquadrada em 16:9 antes de subir, e um piso quadrado numa
+         *     moldura deitada e inalcancavel (a razao inteira esta em
+         *     `AdminCatalogImageIntentInput.purpose`); esta rota e do APLICATIVO, que
+         *     manda a foto como ela esta e nao declara `width`/`height`. Alinhar os
+         *     dois pisos e decisao do cliente, e ele decidiu sobre a foto do painel.
          *
          *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
          *     dez minutos e o varredor a recolhe; indicacao sem foto do
@@ -14726,9 +14733,38 @@ export interface components {
              *     `directory_logo` e `directory_photo` entraram em 18/10/2026, com a
              *     logo e a foto do profissional recomendado. Sao DOIS propositos e nao
              *     um: a logo e quadrada e pequena (minima 256 x 256, derivadas 512 x
-             *     512 e 176 x 176), e a foto e da fachada ou do ambiente (minima 600 x
-             *     600, derivadas 1280 x 720 e 1024 x 576). Confirmar um no campo do
-             *     outro e `400 upload_not_usable`.
+             *     512 e 176 x 176), e a foto e da fachada ou do ambiente (minima
+             *     **1280 x 720**, derivadas 1280 x 720 e 1024 x 576). Confirmar um no
+             *     campo do outro e `400 upload_not_usable`.
+             *
+             *     ## O PISO DA FOTO E 1280 x 720 DESDE 02/11/2026, E A RAZAO E ARITMETICA
+             *
+             *     Ele era 600 x 600 -- o numero da LOGO, que e quadrada --, e isso era
+             *     uma **regra impossivel**: o painel enquadra a foto do local em 16:9
+             *     (`PROPORCAO_DA_MOLDURA`, que sai da geometria de
+             *     `DERIVADAS_DA_FOTO_DO_LOCAL`), e uma faixa 16:9 so alcanca 600 de
+             *     altura com 1067 de largura. O cliente relatou o defeito assim:
+             *     *"na recomendacao dos estabelecimentos, o upload da foto esta
+             *     diminuindo a foto para 578, mas o minimo sao 600px e esta
+             *     bloqueando eu publicar"*.
+             *
+             *     O maior recorte de proporcao `r` que cabe numa imagem `W x H` e
+             *     `min(W, H·r) x min(H, W/r)`, e ele so alcanca `W x H` quando
+             *     `W/H = r`. **Um piso quadrado numa moldura deitada nao e
+             *     alcancavel**, e o contrato ainda se contradizia: a menor derivada
+             *     declarada aqui tem 576 de altura, menos do que os 600 que a entrada
+             *     exigia -- o produto entregava 576 e recusava 578.
+             *
+             *     **1280 x 720 e o tamanho da MAIOR derivada** (`banner`), escolhido
+             *     pelo cliente em 02/11/2026 entre ele, 1024 x 576 e tirar o 16:9:
+             *     no piso nada e ampliado (`sharp` nao amplia). E mais exigente em
+             *     largura do que o piso anterior, e o custo foi aceito em voz alta --
+             *     a troca e **mensagem honesta em vez de regra impossivel**. Uma foto
+             *     de 1028 x 578 continua recusada, e esta certo: ela e pequena para a
+             *     faixa do topo da ficha.
+             *
+             *     A regra geral, para o proximo proposito: **piso com a proporcao da
+             *     moldura, ou piso inalcancavel.**
              *
              *     **`directory_gallery` entrou em 29/10/2026** (decisao do cliente,
              *     verbatim: *"implemente a tabela de galeria entao"*), com a galeria
@@ -14738,8 +14774,13 @@ export interface components {
              *     aquele e a foto UNICA do lugar, com duas derivadas (`banner` 1280 x
              *     720 e `card` 1024 x 576), e este sao as da GALERIA, que pedem
              *     tambem a miniatura de 480 x 360 que a faixa da galeria desenha --
-             *     exatamente as tres derivadas do encontro da `Rede`. Minima 600 x
-             *     600, a mesma de `network_event` e de `directory_photo`.
+             *     exatamente as tres derivadas do encontro da `Rede`. Minima
+             *     **1280 x 720**, a mesma de `directory_photo` e pelo mesmo motivo:
+             *     a galeria tambem e enquadrada em 16:9 no painel, e a maior derivada
+             *     dela tambem e `banner` 1280 x 720. **Ela JA NAO e a de
+             *     `network_event`**, que continua em 600 x 600 com o mesmo defeito
+             *     aritmetico, a espera de decisao do cliente -- a de 02/11/2026 foi
+             *     sobre a foto do estabelecimento, nao sobre a capa do encontro.
              *
              *     **`user_photo` nao esta aqui, de proposito**: a foto da propria
              *     pessoa e autorizada por `createMyPhotoUploadIntent`, com conta do
@@ -14757,8 +14798,10 @@ export interface components {
              *     17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
              *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
              *     cliente de 01/10; antes, 1600 x 900), 256 x 256 para
-             *     `directory_logo` e 600 x 600 para `directory_photo` e
-             *     `directory_gallery`. Duas conferencias: a
+             *     `directory_logo` e **1280 x 720** para `directory_photo` e
+             *     `directory_gallery` (cliente, 02/11/2026: antes eram 600 x 600, que
+             *     e um piso QUADRADO numa moldura 16:9 e por isso inalcancavel -- a
+             *     razao inteira esta em `purpose`). Duas conferencias: a
              *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
              *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
              *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
