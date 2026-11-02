@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
-import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
+import type { OnExceed, RateLimitEntry, RouteDefinition } from './route-definition.js';
 import type { RateLimitStore } from '../ports/rate-limit-store.js';
 import { ehJanelaVitalicia, janelaEmSegundos } from './rate-limit.js';
 import { problemas, type AppError } from './errors.js';
@@ -162,12 +162,32 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
   };
   return {
     ip: (request) => hmac(request.ip),
+    /**
+     * **O rótulo do /24 vai por `hmacDeValor`, e NÃO por `hmacDeIp`.**
+     *
+     * `hmacDeIp` reduz o que recebe com `reduzirEnderecoIp` antes de digerir, e
+     * `198.18.100.0/24` não é endereço: a função cai no ramo final e devolve a
+     * constante `'desconhecido'`. Passando por ali, TODO /24 do produto virava
+     * a MESMA chave, e o teto de `ip_24` deixava de ser por faixa para ser um
+     * balde global da operação -- o `ip_24` de 30/h do cadastro era um teto de
+     * 30 cadastros por hora no produto inteiro, e não por faixa.
+     *
+     * Medido na suíte de integração: a 31a conta de apoio era recusada, cada
+     * uma vindo de um /24 diferente. Ficava invisível porque as entradas de
+     * `ip_24` declaram `challenge` ou `log_and_alert`, que não recusavam nada.
+     *
+     * `hmacDeValor` usa a MESMA chave de pseudonimização e não reduz de novo,
+     * então a faixa continua fora do balde em claro (SEC-010) e cada /24 ganha
+     * a chave que o nome da dimensão promete.
+     */
     ip_24: (request) => {
       const ip = request.ip;
       if (typeof ip !== 'string' || !ip.includes('.')) return undefined;
       const partes = ip.split('.');
       if (partes.length !== 4) return undefined;
-      return hmac(`${partes[0] ?? ''}.${partes[1] ?? ''}.${partes[2] ?? ''}.0/24`);
+      return deps.hmacDeValor(
+        `ip24:${partes[0] ?? ''}.${partes[1] ?? ''}.${partes[2] ?? ''}.0/24`,
+      );
     },
     origin: (request) => primeiroValor(request.headers['origin']),
     q: (request) => {
@@ -190,8 +210,115 @@ export function montarChave(
   return `${dono}:${entrada.dimension.join('+')}@${politica}${sufixo}|${valores.join('|')}`;
 }
 
-function recusa(entrada: RateLimitEntry): boolean {
-  return entrada.onExceed === 'deny_429';
+/**
+ * O que a ação de `on_exceed` faz com a requisição que ESTOUROU o teto.
+ *
+ * A fonte é a coluna "Aceita e grava?" da tabela de `on_exceed` em
+ * `info.description` de `api/openapi.yaml`: a ação que aceita e grava só muda o
+ * que se registra, notifica, agrupa, enfileira ou serve do cache — a requisição
+ * é atendida. A ação que NÃO aceita tira do chamador o que ele pediu.
+ */
+export type SemanticaDoExcesso = 'recusa' | 'observa';
+
+/**
+ * A classificação das ações, uma a uma, contra aquela tabela.
+ *
+ * **O `Record<OnExceed, …>` é o portão de compilação:** ação nova no vocabulário
+ * sem classificação aqui não compila, e por isso não consegue nascer como
+ * liberação silenciosa. Era exatamente esse o defeito — `on_exceed` declarado e
+ * não implementado virava "pode passar" sem nada acusar.
+ */
+export const SEMANTICA_DO_EXCESSO: Readonly<Record<OnExceed, SemanticaDoExcesso>> = {
+  /** "responde do cache": o chamador recebe resposta, de outra fonte. */
+  serve_cache: 'observa',
+  /**
+   * "sim, com desafio reCAPTCHA v3 na proxima carga" — MAS a requisição sem
+   * `X-Captcha-Token` não tem carga seguinte onde o desafio caiba, e o contrato
+   * fecha a lacuna: **`challenge` degenera em `deny_429` com `Retry-After`
+   * naquela requisicao** (ADR-0020, camada 2). Logo, recusa — condicionada ao
+   * cabeçalho, e é `temCaptcha` quem lê a condição.
+   */
+  challenge: 'recusa',
+  log_and_alert: 'observa',
+  group_notification: 'observa',
+  notify_once_and_review: 'observa',
+  notify_owner: 'observa',
+  /** "sim, **nao notifica ninguem**, e abre revisao humana": aceita e grava. */
+  hold_for_review: 'observa',
+  accept_and_deduplicate: 'observa',
+  /** "sim, o recurso e criado"; o que fica retido é o disparo, não o pedido. */
+  accept_and_defer_dispatch: 'observa',
+  raise_queue_priority: 'observa',
+  /** "**nao**: recusa com `Retry-After`". */
+  deny_429: 'recusa',
+};
+
+/**
+ * As ações que recusam e que ESTE arquivo sabe recusar.
+ *
+ * O conjunto existe para ser comparado com `SEMANTICA_DO_EXCESSO` em
+ * `conferirAcoesDeExcesso`: enquanto os dois lados concordam, nenhuma rota
+ * declara freio que a borda não aplica.
+ */
+export const ACOES_QUE_RECUSAM_IMPLEMENTADAS: ReadonlySet<OnExceed> = new Set<OnExceed>([
+  'deny_429',
+  'challenge',
+]);
+
+/** O cabeçalho do desafio antiabuso, como o contrato o declara. */
+export const CABECALHO_DE_CAPTCHA = 'x-captcha-token';
+
+/** Há desafio respondido nesta requisição? */
+function temCaptcha(request: FastifyRequest): boolean {
+  const apresentado = request.headers[CABECALHO_DE_CAPTCHA];
+  return typeof apresentado === 'string' && apresentado.trim() !== '';
+}
+
+/**
+ * `on_exceed` decide o que acontece ao estourar.
+ *
+ * `deny_429` recusa sempre. `challenge` recusa QUANDO não há desafio para pedir:
+ * é a degeneração do ADR-0020, e a razão dela está escrita no contrato —
+ * "desafiar quem nao tem como responder e recusar sem dizer quando voltar".
+ * Havendo `X-Captcha-Token`, o desafio tem onde ser cobrado e o pedido é
+ * atendido (camada 1). As demais ações aceitam e gravam, então não recusam.
+ */
+function recusa(entrada: RateLimitEntry, request: FastifyRequest): boolean {
+  if (SEMANTICA_DO_EXCESSO[entrada.onExceed] !== 'recusa') return false;
+  if (entrada.onExceed === 'challenge') return !temCaptcha(request);
+  return true;
+}
+
+/**
+ * Reprova a SUBIDA quando a rota declara freio que a borda não aplica.
+ *
+ * O portão de compilação acima cobre a ação que ninguém classificou; este cobre
+ * a ação classificada como `recusa` que ninguém implementou. Reprova nomeando a
+ * rota e a ação, porque "não consegui aplicar" nunca é "aprovei".
+ */
+export function conferirAcoesDeExcesso(
+  rota: RouteDefinition,
+  implementadas: ReadonlySet<OnExceed> = ACOES_QUE_RECUSAM_IMPLEMENTADAS,
+): void {
+  for (const entrada of entradasAplicaveis(rota)) {
+    if (SEMANTICA_DO_EXCESSO[entrada.onExceed] !== 'recusa') continue;
+    if (!implementadas.has(entrada.onExceed)) {
+      throw new Error(
+        `Rota ${rota.operationId}: \`on_exceed: '${entrada.onExceed}'\` recusa, segundo a tabela ` +
+          'de `on_exceed` do contrato, e a borda nao sabe aplicar essa recusa. Teto declarado e ' +
+          'nao aplicado seria liberacao silenciosa: implemente a recusa em `aplicacao-de-teto.ts` ' +
+          'e inclua a acao em `ACOES_QUE_RECUSAM_IMPLEMENTADAS`, ou declare uma acao que observa.',
+      );
+    }
+    if (entrada.onExceed === 'challenge' && rota.noChallenge === true) {
+      throw new Error(
+        `Rota ${rota.operationId}: \`on_exceed: 'challenge'\` numa operacao com ` +
+          '`x-no-challenge: true`. Chamada em segundo plano nao tem quem responda ao desafio, ' +
+          'entao o challenge degenera em recusa e o efeito real e a sessao morrer em silencio ' +
+          '(contrato, tabela de `on_exceed`). Essas operacoes levam `log_and_alert`.',
+      );
+    }
+  }
 }
 
 export interface ResultadoDaAplicacao {
@@ -226,7 +353,7 @@ export async function aplicarNaEntrada(
           { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
           'teto de tentativas invalidas atingido',
         );
-        if (recusa(entrada)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
+        if (recusa(entrada, request)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
       }
       continue;
     }
@@ -237,7 +364,7 @@ export async function aplicarNaEntrada(
         { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
         'teto de chamada atingido',
       );
-      if (recusa(entrada)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
+      if (recusa(entrada, request)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
     }
   }
   return {};

@@ -155,14 +155,44 @@ function enderecoNovo(rotulo: string): string {
   return `troca-${rotulo}-${randomUUID().slice(0, 8)}@${DOMINIO_DE_TESTE}`;
 }
 
+/**
+ * Cada conta de apoio nasce de um CLIENTE diferente.
+ *
+ * `registerUser` declara 5 cadastros por hora por IP e 30 por /24, e desde a
+ * degeneração do ADR-0020 (camada 2) esses tetos recusam de verdade. A bancada
+ * criava todas as contas de `127.0.0.1`, que é o que nenhum conjunto de
+ * clientes reais faz: sem isto, o arquivo passaria a medir a ausência de IP
+ * distinto na bancada, e não a troca de e-mail.
+ *
+ * O /24 e que precisa variar, e nao so o endereco: o cadastro tem teto por IP
+ * (5/h) E por /24 (30/h). A faixa do terceiro octeto deste arquivo e
+ * `198.18.40..69`, e ela nao encosta nas de `reautenticacao-pelo-http`
+ * (`10..39`) nem de `teto-das-confirmacoes-por-link` (`70..189`).
+ */
+const PRIMEIRO_24 = 40;
+let clientesDeApoio = 0;
+
+function ipDeContaNova(): string {
+  const faixa = PRIMEIRO_24 + clientesDeApoio;
+  clientesDeApoio += 1;
+  return `198.18.${String(faixa)}.1`;
+}
+
 async function chamar(
   caminho: string,
-  opcoes: { metodo: 'GET' | 'POST' | 'PUT'; corpo?: unknown; token?: string; reauth?: string },
+  opcoes: {
+    metodo: 'GET' | 'POST' | 'PUT';
+    corpo?: unknown;
+    token?: string;
+    reauth?: string;
+    ip?: string;
+  },
 ): Promise<{ status: number; corpo: unknown }> {
   const cabecalhos: Record<string, string> = { accept: 'application/json' };
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json';
   if (opcoes.token !== undefined) cabecalhos['authorization'] = `Bearer ${opcoes.token}`;
   if (opcoes.reauth !== undefined) cabecalhos[CABECALHO_DE_REAUTENTICACAO] = opcoes.reauth;
+  if (opcoes.ip !== undefined) cabecalhos['x-forwarded-for'] = opcoes.ip;
 
   const resposta = await fetch(`${base}${PREFIXO_DA_API}${caminho}`, {
     method: opcoes.metodo,
@@ -184,6 +214,7 @@ async function criarTutor(rotulo: string): Promise<Tutor> {
   const cadastro = await chamar('/auth/register', {
     metodo: 'POST',
     corpo: { email, password: SENHA, display_name: 'Conta de Teste', birth_date: '1990-01-01' },
+    ip: ipDeContaNova(),
   });
   assert.equal(
     cadastro.status,

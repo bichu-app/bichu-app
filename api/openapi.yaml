@@ -363,8 +363,10 @@ x-rate-limit-vocabulary:
     deny_429: recusa com `Retry-After`. Unico valor que nao aceita
 
 # DIVIDA REGISTRADA EM 23/09/2026 (BICHUS-41). O limitador do servico
-# (`src/shared/http/aplicacao-de-teto.ts`) conta e recusa so `deny_429`. Tres
-# valores acima estao DECLARADOS e NAO sao aplicados por ele:
+# (`src/shared/http/aplicacao-de-teto.ts`) recusa `deny_429` e, desde a correcao
+# da degeneracao do ADR-0020 (camada 2), `challenge` sem `X-Captcha-Token` -- que
+# e o caso do app, e que antes atendia o estouro do teto do login em silencio.
+# Tres valores acima estao DECLARADOS e NAO sao aplicados por ele:
 #
 #   serve_cache            resolveTagCode, getFinderConversation,
 #                          previewLostCaseReach, getLostCasePoster,
