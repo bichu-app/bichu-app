@@ -41,6 +41,16 @@ IntencaoPendente intencaoDeCadastrarPet(
         'segunda_cor': rascunho.segundaCorCodigo,
         'sinais_particulares': rascunho.sinaisParticulares,
         'cuidados': rascunho.cuidados,
+        // Sem estas tres chaves, a sessao que cai no meio do cadastro
+        // devolveria o rascunho SEM o que foi respondido aqui, e o pet
+        // nasceria com nao informado depois de a pessoa ter informado.
+        // `castracao` viaja pelo NOME da opcao e nao pelo booleano, porque
+        // nulo no envelope nao distingue "nao informou" de "chave que a
+        // versao anterior nao escrevia".
+        'castracao': rascunho.castracao.name,
+        'tem_chip': rascunho.temChip,
+        'chip': rascunho.chip,
+        'rg_animal': rascunho.rgAnimal,
       },
       fotos: <FotoDaIntencao>[
         if (foto != null)
@@ -53,6 +63,18 @@ IntencaoPendente intencaoDeCadastrarPet(
       posicaoNaTela: PosicaoNaTela(rolagem: rolagem, passo: passo),
     ),
   );
+}
+
+/// A opcao de castracao guardada no envelope, pelo nome.
+///
+/// Envelope sem a chave -- gravado por uma versao anterior do app -- cai em
+/// [Castracao.naoInformou], que e o mesmo estado de quem nao respondeu. Nao
+/// ha valor a inventar: o que falta nao e `false`.
+Castracao _castracaoDoEnvelope(String? nome) {
+  for (final c in Castracao.values) {
+    if (c.name == nome) return c;
+  }
+  return Castracao.naoInformou;
 }
 
 /// Reconstrói o rascunho do assistente a partir do envelope.
@@ -71,7 +93,11 @@ RascunhoDePet rascunhoDoEnvelope(IntencaoPendente intencao) {
     ..corPrincipalCodigo = texto('cor_principal')
     ..segundaCorCodigo = texto('segunda_cor')
     ..sinaisParticulares = texto('sinais_particulares') ?? ''
-    ..cuidados = texto('cuidados') ?? '';
+    ..cuidados = texto('cuidados') ?? ''
+    ..castracao = _castracaoDoEnvelope(texto('castracao'))
+    ..temChip = campos['tem_chip'] as bool? ?? false
+    ..chip = texto('chip') ?? ''
+    ..rgAnimal = texto('rg_animal') ?? '';
 
   final fotos = intencao.rascunho.fotos;
   if (fotos.isNotEmpty) {

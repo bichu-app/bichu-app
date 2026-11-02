@@ -321,6 +321,9 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
         sexo: _rascunho.sexo,
         sinaisParticulares: _rascunho.sinaisParticulares,
         cuidados: _rascunho.cuidados,
+        castrado: _rascunho.castracao.valor,
+        chip: _rascunho.chipParaEnvio,
+        rgAnimal: _rascunho.rgAnimalParaEnvio,
       );
       if (!mounted) return;
       context.pop(atualizado);

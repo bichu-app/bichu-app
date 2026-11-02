@@ -137,6 +137,37 @@ abstract final class TextosDoCadastro {
       'funciona sem ele. O Bichu só guarda o número — não consulta, não valida '
       'e não altera nada lá.';
 
+  /// Limite de `sinpatinhas_id` no contrato e no banco (1 a 40). Cobrado NA
+  /// TELA, e nao deixado para o servidor recusar: o campo e livre de formato,
+  /// mas o tamanho e conhecido.
+  static const int limiteDoRgAnimal = 40;
+
+  /// `neutered`. O rotulo do GRUPO das tres opcoes; os rotulos das opcoes
+  /// moram em [Castracao], junto do valor de fio de cada uma.
+  ///
+  /// **Nao pode ser `Castrado`**, que e o rotulo de uma das opcoes: rotulo de
+  /// grupo igual a rotulo de opcao deixa `find.text` ambiguo no teste e, pior,
+  /// faz o leitor de tela anunciar a mesma palavra duas vezes sem dizer qual
+  /// e a pergunta. E substantivo como `Sexo` e `Porte`, os vizinhos.
+  static const String rotuloDaCastracao = 'Castração';
+
+  /// `microchip_number`: o interruptor que REVELA o campo do numero.
+  static const String rotuloDoTemChip = 'Tem chip?';
+
+  static const String explicacaoDoTemChip =
+      'O microchip é um implante do tamanho de um grão de arroz, com um '
+      'número que a clínica ou a prefeitura registra. Se você não sabe, '
+      'deixe desligado.';
+
+  static const String rotuloDoChip = 'Número do chip';
+
+  static const String ajudaDoChip =
+      'O número que está na carteirinha ou no cadastro da clínica. O Bichu só '
+      'guarda o número — não consulta e não valida em lugar nenhum.';
+
+  /// Limite de `microchip_number` no contrato e no banco (1 a 20).
+  static const int limiteDoChip = 20;
+
   static const String cadastrar = 'Cadastrar';
 
   /// UX F1.6, item 1. O Figma diz "A Nina está cadastrada"; o UX reescreveu a
