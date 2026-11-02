@@ -1102,7 +1102,7 @@ void main() {
           reason: 'REPROVA: a folha nao oferece o reencontro como ESCOLHA.',
         );
         expect(
-          find.text('Encerrei a busca sem encontrar'),
+          find.text('Encerrar a busca'),
           findsOneWidget,
           reason: 'REPROVA: a folha nao oferece desfecho diferente de '
               '`reunited`. `not_found` existe no contrato e era inalcancavel '
@@ -1235,7 +1235,7 @@ void main() {
         );
 
         await tocar(tester, find.text('Encontrei meu pet'));
-        await tocar(tester, find.text('Encerrei a busca sem encontrar'));
+        await tocar(tester, find.text('Encerrar a busca'));
 
         // Sem reencontro NAO ha canal a perguntar: o contrato diz que
         // `reunion_channel` "so faz sentido com `outcome: reunited`".
@@ -1316,7 +1316,7 @@ void main() {
         await tocar(tester, find.text('Nina está de volta'));
         await tocar(tester, find.text('Alguém leu a plaquinha'));
         // E agora muda de ideia.
-        await tocar(tester, find.text('Encerrei a busca sem encontrar'));
+        await tocar(tester, find.text('Encerrar a busca'));
         await tocar(tester, find.text('Encerrar o caso'));
 
         expect(

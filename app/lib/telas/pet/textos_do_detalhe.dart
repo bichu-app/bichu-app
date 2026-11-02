@@ -131,8 +131,13 @@ abstract final class TextosDoDetalhe {
   /// **Nao e o mesmo que cancelar a folha**, e os dois textos tem de deixar
   /// isso claro lado a lado: `naoEncontreiAinda` fecha a folha e o caso
   /// CONTINUA aberto; esta opcao ENCERRA o caso sem reencontro.
-  static const String desfechoNaoEncontrado =
-      'Encerrei a busca sem encontrar';
+  ///
+  /// O TEXTO E DO CLIENTE, 01/11/2026. Era `Encerrei a busca sem encontrar`, e
+  /// ele o trocou por ACAO em vez de relato de estado, porque a forma antiga
+  /// comecava igual ao botao de cancelar (`Ainda nao encontrei`) e fazia o
+  /// oposto dele: quem lesse rapido tirava o proprio pet da lista publica
+  /// querendo dizer que ainda nao o achou.
+  static const String desfechoNaoEncontrado = 'Encerrar a busca';
 
   /// O rotulo do grupo do canal, que so aparece com `reunited` escolhido.
   ///
