@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'modelos.dart';
+import 'reautenticacao.dart';
 
 /// As operacoes de `/v1/auth` do contrato.
 class AuthApi {
@@ -91,6 +92,29 @@ class AuthApi {
       corpo: <String, dynamic>{'token': token},
     );
     return Sessao.doJson(json);
+  }
+
+  /// `POST /auth/reauth`: abre a janela de uma operacao destrutiva.
+  ///
+  /// E a UNICA operacao do sistema que confere a senha de quem ja esta
+  /// autenticado, e as seis operacoes destrutivas do contrato passam por ela.
+  /// Concentrar aqui e desenho: a senha trafega para um endereco em vez de
+  /// seis, e o teto contra forca bruta existe num lugar so.
+  ///
+  /// A senha NAO e guardada em nenhum lugar depois da chamada, e o token
+  /// devolvido tambem nao: ver [JanelaDeReautenticacao].
+  ///
+  /// Recusa com `invalid-credentials` quando a senha nao confere, e com
+  /// `rate-limited` quando um dos dois tetos da conta estourou.
+  Future<JanelaDeReautenticacao> reautenticar({
+    required String senha,
+    required EscopoDeReautenticacao escopo,
+  }) async {
+    final json = await _api.post(
+      '/auth/reauth',
+      corpo: <String, dynamic>{'password': senha, 'scope': escopo.valor},
+    );
+    return JanelaDeReautenticacao.doJson(json);
   }
 
   /// `POST /auth/password-reset`.

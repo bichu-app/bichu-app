@@ -1,6 +1,7 @@
 import '../roteamento/rotas.dart';
 import 'falhas.dart';
 import 'problem.dart';
+import 'reautenticacao.dart';
 
 /// O que a tela mostra quando algo falha.
 class MensagemDeErro {
@@ -9,6 +10,7 @@ class MensagemDeErro {
     this.acao,
     this.proximaAcao,
     this.rotaDaAcao,
+    this.escopoDeSenha,
   });
 
   /// A frase que a pessoa le.
@@ -23,6 +25,27 @@ class MensagemDeErro {
   /// O endereco **dentro do app** para onde [acao] leva, quando a saida e uma
   /// navegacao simples e nao uma operacao.
   final String? rotaDaAcao;
+
+  /// A finalidade da folha de senha, quando [acao] e confirmar a senha.
+  ///
+  /// ## Por que isto nao e um `next_action`
+  ///
+  /// O `next_action` do contrato tem cinco valores e nenhum deles e *confirme
+  /// a senha*: o servidor nao manda `next_action` nenhum em
+  /// `reauthentication-required`, e inventar um sexto valor no app seria
+  /// escrever no fio uma palavra que o contrato nao tem.
+  ///
+  /// E tambem nao e [rotaDaAcao]: a folha de senha nao e uma tela com
+  /// endereco, e ela volta para quem a chamou com a janela destrutiva na mao.
+  ///
+  /// Ele vem de quem CHAMA, e nao do corpo da resposta, porque e a operacao em
+  /// curso que sabe a sua finalidade -- a recusa de `DELETE /v1/me` e a de
+  /// `POST /v1/auth/logout-all` chegam com o mesmo `type`, e um token emitido
+  /// para a finalidade errada e recusado com 401 pela operacao seguinte.
+  /// Quando quem chama nao diz o escopo, este campo fica nulo e a faixa nao
+  /// oferece a confirmacao: rotulo que nao sabe para onde vai e pior que
+  /// rotulo nenhum.
+  final EscopoDeReautenticacao? escopoDeSenha;
 }
 
 /// Local: qual situacao de tela estava em curso quando a recusa chegou,
@@ -177,6 +200,7 @@ abstract final class MensagensDeErro {
     bool podeEnfileirar = false,
     bool codigoDigitado = false,
     AcaoEmCurso? acaoEmCurso,
+    EscopoDeReautenticacao? escopoDeSenha,
   }) {
     return switch (falha) {
       FalhaDeConexao() => MensagemDeErro(
@@ -187,7 +211,7 @@ abstract final class MensagensDeErro {
           acao: tentarDeNovo,
         ),
       FalhaDaApi(:final problem) =>
-          _daApi(problem, codigoDigitado, acaoEmCurso),
+          _daApi(problem, codigoDigitado, acaoEmCurso, escopoDeSenha),
       FalhaDeEnderecoRecusado() => const MensagemDeErro(
           texto: servidorFora,
           acao: tentarDeNovo,
@@ -199,6 +223,7 @@ abstract final class MensagensDeErro {
     Problem problem, [
     bool codigoDigitado = false,
     AcaoEmCurso? acaoEmCurso,
+    EscopoDeReautenticacao? escopoDeSenha,
   ]) {
     final saida = problem.proximaAcao;
 
@@ -248,10 +273,15 @@ abstract final class MensagensDeErro {
               'e tente de novo.',
           acao: recarregar,
         ),
-      ProblemTipo.reautenticacaoNecessaria => const MensagemDeErro(
+      // A acao `Confirmar` LEVA A FOLHA DE SENHA, e nao a lugar nenhum: ela
+      // ficou ligada em `saidaDaMensagem`, pelo `escopoDeSenha`. Sem escopo o
+      // rotulo nao sai, porque `/auth/reauth` exige a finalidade no corpo e
+      // uma folha que a adivinhasse emitiria token para a operacao errada.
+      ProblemTipo.reautenticacaoNecessaria => MensagemDeErro(
           texto: 'Confirme sua senha. Esta ação não pode ser desfeita, então '
               'pedimos a senha de novo.',
-          acao: 'Confirmar',
+          acao: escopoDeSenha == null ? null : 'Confirmar',
+          escopoDeSenha: escopoDeSenha,
         ),
       ProblemTipo.naoAutenticado => const MensagemDeErro(
           texto: '',
