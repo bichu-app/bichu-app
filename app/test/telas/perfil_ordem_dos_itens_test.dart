@@ -73,11 +73,17 @@ import '../api/pets_api_listar_test.dart' show petDoContrato;
 ///
 /// `Meus pets` e o rotulo da secao (`MeusPets.titulo`); `Conta` e o cabecalho
 /// do grupo de menu; as tres ultimas sao os itens, na ordem.
+///
+/// **A SEXTA LINHA ENTROU EM 02/11/2026**: `Excluir a conta`, a folha da LGPD
+/// (art. 18), ACIMA de `Sair da conta` e nao abaixo -- *"o sair da conta deve
+/// ser sempre a ultima opcao do menu"* continua literal, e e por isso que a
+/// linha nova entra na penultima posicao e nao na ultima.
 const List<String> ordemDecididaDoPerfil = <String>[
   MeusPets.titulo,
   'Conta',
   'Meus dados',
   'Escanear uma tag',
+  'Excluir a conta',
   'Sair da conta',
 ];
 
@@ -234,11 +240,17 @@ void exigirSairPorUltimo(
 
 void main() {
   group('a ordem decidida e a segunda fonte da verdade', () {
-    test('tem as cinco linhas, e `Sair da conta` e a ultima', () {
+    test('tem as seis linhas, e `Sair da conta` e a ultima', () {
+      // **CINCO VIROU SEIS EM 02/11/2026, e a linha nova TEM ENDERECO.** O
+      // cliente mediu que a exclusao da conta nao era alcancavel no app --
+      // defeito de LGPD, art. 18 --, e `Excluir a conta` entrou no `Perfil`
+      // como folha inferior. Ela entrou na PENULTIMA posicao de proposito: a
+      // decisao de 18/10/2026 sobre `Sair da conta` ser a ultima opcao do menu
+      // nao foi reaberta, e `exigirSairPorUltimo` continua cobrando a cauda.
       expect(
         ordemDecididaDoPerfil.length,
-        5,
-        reason: 'REPROVA: a ordem decidida saiu de 5 linhas e foi para '
+        6,
+        reason: 'REPROVA: a ordem decidida saiu de 6 linhas e foi para '
             '${ordemDecididaDoPerfil.length}. Encolher a lista e a forma mais '
             'facil de fazer um caso de ordem passar sem arrumar a tela.',
       );
@@ -266,7 +278,7 @@ void main() {
   });
 
   group('ISCA A — a ordem na tela, medida em coordenada', () {
-    testWidgets('as cinco linhas descem na ordem decidida', (tester) async {
+    testWidgets('as seis linhas descem na ordem decidida', (tester) async {
       _superficieAlta(tester);
       await _abrirOPerfil(tester);
 

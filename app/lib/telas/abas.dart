@@ -249,6 +249,7 @@ class AbaPerfil extends StatelessWidget {
               rotulo: TelaDeDuvida.titulo,
               aoTocar: () => context.push(Rotas.ajuda),
             ),
+            const _ItemDeExcluirAConta(),
             _ItemDeSair(sessao: sessao),
             const CarimboDoBuild(),
           ],
@@ -425,6 +426,151 @@ class _FolhaDeSair extends StatelessWidget {
               aoTocar: () => Navigator.of(context).pop(false),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// OS TEXTOS DA EXCLUSAO DA CONTA, num lugar so.
+///
+/// Eles sao as palavras do CONTRATO e nao as minhas: `DELETE /v1/me`
+/// (`deleteMyAccount`) declara *"Exclusao logica imediata, expurgo definitivo
+/// em 30 dias. Casos abertos sao encerrados e as tags, revogadas."*. Nenhum
+/// prazo, nenhum efeito e nenhuma ressalva daqui foi inventada: o que o
+/// contrato nao declara, a folha nao promete.
+abstract final class TextosDaExclusaoDaConta {
+  /// O rotulo do item de menu, e e o MESMO do inventario de sub-destinos
+  /// (`RegistroDeSubDestinos`, UX 27.5.5) -- a gaveta nomeava `Excluir a
+  /// conta` desde o inicio e nunca teve tela do outro lado.
+  static const String rotulo = 'Excluir a conta';
+
+  static const String titulo = 'Excluir a sua conta?';
+
+  /// `irreversible_write` em `x-effects` virado em frase.
+  static const String semVolta = 'Não dá para desfazer.';
+
+  static const String prazo =
+      'A sua conta sai do ar na hora. O apagamento definitivo dos seus '
+      'dados acontece 30 dias depois.';
+
+  static const String casos =
+      'Os casos de pet perdido que estiverem em aberto são encerrados.';
+
+  static const String plaquinhas =
+      'As plaquinhas dos seus pets são revogadas: o QR delas para de abrir a '
+      'página do pet.';
+
+  /// **POR QUE A ACAO ESTA DESLIGADA, escrito para quem le e nao para quem
+  /// programa.** A rota exige a senha de novo (`security: bearerAuth` +
+  /// `reauth`, escopo `account_deletion`), e o app NAO TEM esse passo: nenhuma
+  /// das seis rotas de `x-reauth-scope` e consumida hoje. Deixar o botao vivo
+  /// renderia `401 reauthentication-required` em cima de uma acao destrutiva,
+  /// que e a pior tela possivel para este pedido.
+  static const String aindaNao =
+      'Ainda não dá para concluir por aqui: excluir a conta exige confirmar '
+      'a sua senha, e essa confirmação ainda não existe no app.';
+
+  static const String agoraNao = 'Agora não';
+}
+
+/// `Excluir a conta` — a folha inferior destrutiva do `Perfil`.
+///
+/// **O ITEM FICA TOCAVEL de proposito, e so a acao final esta desligada**: a
+/// UX 27.5.5 declara `Excluir a conta` como folha inferior desde o inicio, e
+/// um caminho que nao abre nada esconde da pessoa o que vai acontecer com os
+/// dados dela. A folha diz as consequencias e diz por que o ultimo toque nao
+/// esta disponivel.
+///
+/// **NAO ESTA NA GAVETA, e a escolha e medida**: a gaveta de secoes esta
+/// OCULTA por decisao do cliente de 19/10/2026 (*"vamos ocultar o menu por
+/// enquanto"*), entao pendurar a exclusao nela seria declara-la alcancavel
+/// sem que ela fosse. O `Perfil` e alcancavel de TODA raiz de secao pelo
+/// `AvatarDaConta` do `leading` da barra de topo
+/// (`casca_com_abas.dart`), e e por isso que o item mora aqui, ao lado de
+/// `Sair da conta`.
+///
+/// **ELA VEM ACIMA DE `Sair da conta`, e nao abaixo**: o cliente foi literal em
+/// 18/10/2026 -- *"o sair da conta deve ser sempre a ultima opcao do menu"* --,
+/// e ha portao de COORDENADA cobrando isso (`exigirSairPorUltimo`, em
+/// `perfil_ordem_dos_itens_test.dart`). Por baixo do `Sair` nao entra bloco
+/// nenhum, nem este.
+class _ItemDeExcluirAConta extends StatelessWidget {
+  const _ItemDeExcluirAConta();
+
+  @override
+  Widget build(BuildContext context) {
+    return ItemDeMenu(
+      rotulo: TextosDaExclusaoDaConta.rotulo,
+      critico: true,
+      aoTocar: () {
+        showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (context) => const _FolhaDeExcluirAConta(),
+        );
+      },
+    );
+  }
+}
+
+class _FolhaDeExcluirAConta extends StatelessWidget {
+  const _FolhaDeExcluirAConta();
+
+  @override
+  Widget build(BuildContext context) {
+    final textos = Theme.of(context).textTheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(BichuEspaco.e6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                TextosDaExclusaoDaConta.titulo,
+                style: textos.titleLarge,
+              ),
+              const SizedBox(height: BichuEspaco.e2),
+              Text(
+                TextosDaExclusaoDaConta.prazo,
+                style: textos.bodyLarge,
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              Text(
+                TextosDaExclusaoDaConta.casos,
+                style: textos.bodyLarge,
+              ),
+              const SizedBox(height: BichuEspaco.e2),
+              Text(
+                TextosDaExclusaoDaConta.plaquinhas,
+                style: textos.bodyLarge,
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              Text(
+                TextosDaExclusaoDaConta.semVolta,
+                style: textos.bodyLarge,
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+              const FaixaDeAviso(
+                peso: PesoDaFaixa.informativo,
+                texto: TextosDaExclusaoDaConta.aindaNao,
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+              const BotaoPrimario(
+                rotulo: TextosDaExclusaoDaConta.rotulo,
+                critico: true,
+                aoTocar: null,
+              ),
+              const SizedBox(height: BichuEspaco.e3),
+              BotaoSecundario(
+                rotulo: TextosDaExclusaoDaConta.agoraNao,
+                aoTocar: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
         ),
       ),
     );

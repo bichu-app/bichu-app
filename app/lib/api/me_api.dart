@@ -142,6 +142,34 @@ class MeApi implements IntencaoDeFotoDoUsuario {
     return EnderecoDeEntrega.doJson(json)!;
   }
 
+  /// `DELETE /v1/me` (`deleteMyAccount`): o pedido de exclusao da conta da
+  /// LGPD, art. 18.
+  ///
+  /// **A ROTA NAO TEM CORPO, e a ausencia e de desenho**: a senha vai para
+  /// `POST /v1/auth/reauth`, que devolve o `reauth_token`, e so o cabecalho
+  /// chega aqui. O contrato diz por que: concentrar a verificacao num endpoint
+  /// so poe a senha num lugar, o limite de forca bruta num lugar, e evita
+  /// `DELETE` com corpo, que proxy e biblioteca tratam de formas diferentes.
+  ///
+  /// **`security` E `bearerAuth` MAIS `reauth`**, no escopo
+  /// `account_deletion`. Por isso [tokenDeReautenticacao] e OBRIGATORIO: sem
+  /// ele o servidor responde `401` com `reauthentication-required`, e um
+  /// parametro opcional aqui seria uma falha desenhada. O token e de uso
+  /// unico, vale 5 minutos, e um token de OUTRO escopo tambem responde `401` --
+  /// nao `403` --, porque a janela daquela finalidade simplesmente nao foi
+  /// aberta.
+  ///
+  /// **Responde `202`, e nao `200`**: o que o servidor aceita e o PEDIDO. Pelo
+  /// contrato, a exclusao logica e imediata, o expurgo definitivo acontece em
+  /// 30 dias, os casos em aberto sao encerrados e as tags, revogadas. Nada
+  /// disso e do app: o servidor agenda, encerra e revoga.
+  ///
+  /// O teto e de **3 pedidos por 24 h** por conta, com `deny_429` -- recusa de
+  /// verdade, entao a quarta tentativa volta como falha de limite.
+  Future<void> excluirMinhaConta({required String tokenDeReautenticacao}) async {
+    await _api.delete('/me', tokenDeReautenticacao: tokenDeReautenticacao);
+  }
+
   /// `POST /v1/media/my-photo-intents` (`createMyPhotoUploadIntent`).
   @override
   Future<Map<String, dynamic>> intencaoDeFotoDoUsuario({
