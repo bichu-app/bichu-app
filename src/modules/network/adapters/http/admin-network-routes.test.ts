@@ -51,6 +51,7 @@ function sessao(id: 'admin' | 'tutor', csrf: string, papeis: readonly string[]):
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
+  readonly rede: RedeAdministrativa;
   readonly estado: () => EstadoDaRede;
   readonly semear: (ajuste: (e: EstadoDaRede) => void) => void;
   readonly avisos: { assunto: string; linhas: readonly string[] }[];
@@ -122,7 +123,7 @@ function bancada(): Bancada {
       rotas.registrarRotasDaRedeAdministrativa(adm, { rede, contrato });
     });
   });
-  return Object.assign(b, { app, estado, semear, avisos, janelas });
+  return Object.assign(b, { app, rede, estado, semear, avisos, janelas });
 }
 
 type Metodo = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -728,5 +729,108 @@ void describe('a fila de pedidos (D53 a D56)', () => {
   void it('pedido inexistente: 404', async () => {
     const r = await chamar(b, 'POST', '/admin/network/join-requests/refQueNaoExisteXXXXXXXX/approval');
     assert.equal(r.status, 404);
+  });
+});
+
+/**
+ * ISCA (02/11): o Ajv que o Fastify monta tem `useDefaults: true`, e o contrato
+ * declara `default` em `NetworkEventVisibility`, `NetworkEventAcceptedSizes`,
+ * `NetworkEventDogAge` e `AdminNetworkEventAdmissionInput.kind`. Sem tirar o
+ * `default` do schema do CORPO, o Ajv ESCREVE esses valores no corpo recebido e
+ * a edicao grava o que ninguem mandou -- no caso da visibilidade, tornando
+ * publico um encontro privado e entregando o lugar a quem nao foi aprovado.
+ */
+void describe('ISCA (02/11): a edicao administrativa da Rede nao recebe valor que ninguem mandou', () => {
+  let b: Bancada;
+  beforeEach(() => {
+    b = bancada();
+  });
+
+  const PAGO = { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } as const;
+
+  void it('encontro PRIVADO que muda so a condicao de acesso continua PRIVADO', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    assert.equal(criado.status, 201, criado.bruto);
+    assert.equal(criado.corpo['visibility'], 'private');
+    const slug = String(criado.corpo['slug']);
+
+    const mudado = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: { reason: 'O organizador passou a cobrar.', admission: PAGO },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(mudado.status, 200, mudado.bruto);
+    assert.equal(
+      mudado.corpo['visibility'],
+      'private',
+      'mudar so a condicao de acesso tornou PUBLICO um encontro privado: o lugar foi entregue a quem nao foi aprovado',
+    );
+    assert.deepEqual(mudado.corpo['admission'], PAGO);
+    assert.equal(mudado.corpo['slug'], slug, 'o slug mudou sem a visibilidade mudar');
+
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['visibility'], 'private');
+    const registro = b.estado().trilha.find((t) => t.action === 'admin.network_event.access_changed');
+    assert.equal(
+      (registro?.after as { visibility?: unknown } | undefined)?.visibility,
+      'private',
+      'a trilha registrou a visibilidade que ninguem mandou',
+    );
+  });
+
+  void it('corpo de mudanca de acesso com so `reason` e recusado na borda, e nada muda', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    const slug = String(criado.corpo['slug']);
+
+    const r = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: { reason: 'Sem dizer o que muda.' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(r.status, 400, r.bruto);
+    assert.deepEqual(codigos(r.corpo), ['minProperties'], r.bruto);
+
+    const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
+    assert.equal(lido.corpo['visibility'], 'private', 'um corpo que nao muda nada mudou a visibilidade');
+    assert.equal(lido.etag, criado.etag, 'a versao andou sem ninguem mandar mudanca');
+    assert.ok(!acoesNaTrilha(b).includes('admin.network_event.access_changed'));
+    assert.equal(b.avisos.length, 1, 'saiu aviso de mudanca de acesso que ninguem pediu');
+  });
+
+  void it('`nothing_to_change`: o ramo da aplicacao que a borda nunca alcanca, por `minProperties: 2`', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    const slug = String(criado.corpo['slug']);
+    const autor = { adminAccountId: ADMIN_ID, sessao: '0011223344556677' };
+
+    await assert.rejects(
+      () => b.rede.mudarAcesso(autor, slug, '"1"', { reason: 'Sem dizer o que muda.' }),
+      (erro: unknown) => {
+        const campos = (erro as { errors?: { code: string }[] }).errors ?? [];
+        assert.deepEqual(
+          campos.map((c) => c.code),
+          ['nothing_to_change'],
+          JSON.stringify(campos),
+        );
+        return true;
+      },
+    );
+    assert.ok(!acoesNaTrilha(b).includes('admin.network_event.access_changed'));
+  });
+
+  void it('PATCH que muda so o titulo nao redefine os portes aceitos nem a idade dos caes', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, accepted_sizes: ['P'], dog_age: 'from_1_year' },
+    });
+    assert.equal(criado.status, 201, criado.bruto);
+    assert.deepEqual(criado.corpo['accepted_sizes'], ['P']);
+    assert.equal(criado.corpo['dog_age'], 'from_1_year');
+    const slug = String(criado.corpo['slug']);
+
+    const alterado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { title: 'Caminhada no parque, de manha' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(alterado.status, 200, alterado.bruto);
+    assert.equal(alterado.corpo['title'], 'Caminhada no parque, de manha');
+    assert.deepEqual(alterado.corpo['accepted_sizes'], ['P'], 'corrigir o titulo redefiniu os portes aceitos');
+    assert.equal(alterado.corpo['dog_age'], 'from_1_year', 'corrigir o titulo redefiniu a idade dos caes');
   });
 });

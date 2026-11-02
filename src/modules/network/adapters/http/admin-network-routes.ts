@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { corpoDe, type Contrato } from '../../../../shared/http/contract.js';
+import { corpoSemPadroes } from '../../../../shared/http/sem-padroes.js';
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
@@ -225,7 +226,7 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(
     app,
     rotaDeCriarEncontro,
-    { schema: { body: corpoDe(contrato, rotaDeCriarEncontro.operationId) }, resolvedores },
+    { schema: { body: corpoSemPadroes(corpoDe(contrato, rotaDeCriarEncontro.operationId)) }, resolvedores },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const criado = await rede.criarEncontro(atorAdministrativoDe(request), request.body as CorpoDeEncontro);
       return reply.status(201).header('ETag', criado.etag).send(criado.recurso);
@@ -240,7 +241,7 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(
     app,
     rotaDeAlterarEncontro,
-    { schema: { body: corpoDe(contrato, rotaDeAlterarEncontro.operationId) }, resolvedores },
+    { schema: { body: corpoSemPadroes(corpoDe(contrato, rotaDeAlterarEncontro.operationId)) }, resolvedores },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const alterado = await rede.alterarEncontro(
         atorAdministrativoDe(request),
@@ -260,7 +261,7 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(
     app,
     rotaDeMoverEncontro,
-    { schema: { body: corpoDe(contrato, rotaDeMoverEncontro.operationId) }, resolvedores },
+    { schema: { body: corpoSemPadroes(corpoDe(contrato, rotaDeMoverEncontro.operationId)) }, resolvedores },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const movido = await rede.moverEncontro(
         atorAdministrativoDe(request),
@@ -275,7 +276,7 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(
     app,
     rotaDeCancelarEncontro,
-    { schema: { body: corpoDe(contrato, rotaDeCancelarEncontro.operationId) }, resolvedores },
+    { schema: { body: corpoSemPadroes(corpoDe(contrato, rotaDeCancelarEncontro.operationId)) }, resolvedores },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const cancelado = await rede.cancelarEncontro(
         atorAdministrativoDe(request),
@@ -290,7 +291,7 @@ export function registrarRotasDaRedeAdministrativa(
   registrarRota(
     app,
     rotaDeMudarAcesso,
-    { schema: { body: corpoDe(contrato, rotaDeMudarAcesso.operationId) }, resolvedores },
+    { schema: { body: corpoSemPadroes(corpoDe(contrato, rotaDeMudarAcesso.operationId)) }, resolvedores },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const mudado = await rede.mudarAcesso(
         atorAdministrativoDe(request),
