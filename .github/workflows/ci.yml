@@ -1754,9 +1754,15 @@ jobs:
   #      imagem pelo compose, iscas de build, pilha isolada, restricoes no
   #      runtime e a sonda D33/D34/D41/D48 com eco no lugar da API.
   #
-  # NAO PUBLICA EM REGISTRY, pelo mesmo motivo da API e do site: o mecanismo de
-  # hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo 7), o
-  # repositorio vai para o host e o compose constroi la.
+  # NAO PUBLICA EM REGISTRY, pelo mesmo motivo da API e do site: quem publica e
+  # `infra/cd/construir-imagem.sh`, rodado do laptop, e o host puxa por DIGEST
+  # (`infra/cd/implantar.sh`). A esteira so verifica.
+  #
+  # O MOTIVO ANTIGO ERA OUTRO, e ficou errado: ate 02/11/2026 este comentario
+  # dizia que o repositorio ia para o host e o compose construia la, citando o
+  # passo 7 do roteiro. Aquele mecanismo CAIU -- construir na VM tirou o hml do
+  # ar em 27/10/2026 -- e o passo 7 foi reescrito. A conclusao (a esteira nao
+  # publica) continua valendo; so a razao mudou.
   #
   # SEM FILTRO DE CAMINHO: `skipped` e o que o `portao` recusa. Sem
   # `admin/package.json` o job REPROVA, e e para reprovar: o backoffice nao tem
@@ -2267,10 +2273,15 @@ jobs:
   # sobe com as MESMAS restricoes que o compose declara, porque restricao que so
   # vale no YAML e restricao que ninguem viu funcionar.
   #
-  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica. O
-  # mecanismo de hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo
-  # 7): o repositorio vai para o host e o compose constroi la. Inventar registry
-  # so para o site daria dois mecanismos de implantacao para uma maquina so.
+  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica.
+  # Quem publica e `infra/cd/construir-imagem.sh`, rodado do laptop, e o host
+  # puxa por DIGEST (`infra/cd/implantar.sh`). Publicar daqui daria dois
+  # mecanismos de implantacao para uma maquina so.
+  #
+  # O MOTIVO ANTIGO ERA OUTRO, e ficou errado: ate 02/11/2026 este comentario
+  # dizia que o repositorio ia para o host e o compose construia la, citando o
+  # passo 7 do roteiro. Construir na VM tirou o hml do ar em 27/10/2026, e o
+  # passo 7 foi reescrito. A conclusao nao mudou; a razao mudou.
   #
   # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
   # que o `portao` recusa.
