@@ -78,6 +78,85 @@ describe('a moldura, por propósito', () => {
   });
 });
 
+/**
+ * ## O PISO TEM DE SER ALCANÇÁVEL NA PROPORÇÃO QUE A MOLDURA FORÇA
+ *
+ * O defeito de 02/11/2026, nas palavras do cliente: *"na recomendação dos
+ * estabelecimentos, o upload da foto está diminuindo a foto para 578, mas o
+ * mínimo são 600px e está bloqueando eu publicar"*. A moldura de
+ * `directory_photo` é 16:9 e o piso era 600 × 600, que é QUADRADO: uma faixa
+ * 16:9 só alcança 600 de altura com 1067 de largura, então a foto de 1028 de
+ * largura saía com 578 e era recusada por uma regra que o próprio recorte
+ * não conseguia cumprir.
+ *
+ * **Nada comparava o piso com a proporção**, e foi por isso que o número da
+ * logo (que É quadrada) vazou para a foto em 18/10/2026 e atravessou
+ * typecheck, eslint e a suíte inteira. Este é o caso que faltava, e ele vale
+ * para a CLASSE: todo propósito com proporção forçada, e todo propósito novo.
+ *
+ * A aritmética, de uma vez: o maior recorte de proporção `r` que cabe numa
+ * imagem `W × H` é `min(W, H·r) × min(H, W/r)`. Para ele alcançar `W × H` é
+ * preciso `W/H = r`. Ou seja: **o piso tem a proporção da moldura, ou é
+ * inalcançável** -- não existe piso quadrado numa moldura deitada.
+ */
+describe('o piso, contra a proporção da moldura', () => {
+  /** O maior recorte que a moldura do propósito tira de uma imagem NO piso dele. */
+  function recorteDeUmaImagemNoPiso(proposito: Proposito) {
+    const piso = DIMENSAO_MINIMA[proposito];
+    const imagem = { largura: piso.largura, altura: piso.altura };
+    return tamanhoDoEnvio(emPixeis(imagem, PROPORCAO_DA_MOLDURA[proposito]));
+  }
+
+  function pisoInalcancavel(proposito: Proposito): boolean {
+    const piso = DIMENSAO_MINIMA[proposito];
+    const saida = recorteDeUmaImagemNoPiso(proposito);
+    return saida.largura < piso.largura || saida.altura < piso.altura;
+  }
+
+  /**
+   * **`network_event` espera DECISÃO DO CLIENTE, e não zelo meu.** Ele tem o
+   * defeito idêntico -- moldura 16:9 com piso 600 × 600 -- e em 02/11/2026 o
+   * cliente decidiu sobre a foto do ESTABELECIMENTO, com as três opções na
+   * mesa; a capa do encontro não estava na mesa, e consertá-la aqui seria
+   * decidir no lugar dele. A linha sai desta lista no dia em que ele decidir,
+   * e até lá o defeito está escrito em código, e não só num relatório.
+   */
+  const PISO_INALCANCAVEL_ESPERANDO_DECISAO: readonly Proposito[] = ['network_event'];
+
+  it('o piso de todo propósito com moldura é alcançável NA moldura dele', () => {
+    const comMoldura = (Object.keys(PROPORCAO_DA_MOLDURA) as Proposito[]).filter(
+      (p) => PROPORCAO_DA_MOLDURA[p] !== null,
+    );
+    // O filtro prova que casou antes de a contagem valer: filtro vazio aprovaria tudo.
+    expect(comMoldura).toEqual(['network_event', 'directory_logo', 'directory_photo', 'directory_gallery']);
+
+    expect(comMoldura.filter(pisoInalcancavel)).toEqual(PISO_INALCANCAVEL_ESPERANDO_DECISAO);
+  });
+
+  it('a foto e a galeria do local: o piso É a faixa 1280 × 720, e o recorte nele passa inteiro', () => {
+    for (const proposito of ['directory_photo', 'directory_gallery'] as const) {
+      expect(DIMENSAO_MINIMA[proposito]).toEqual({ largura: 1280, altura: 720 });
+      // 1280 x 720 é a MAIOR derivada (`banner`): no piso nada é ampliado.
+      expect(recorteDeUmaImagemNoPiso(proposito)).toEqual({ largura: 1280, altura: 720 });
+    }
+  });
+
+  it('a foto de 1028 × 578 do cliente continua recusada, e agora por uma regra alcançável', () => {
+    // O que a tela dele fez: 1028 de largura, moldura 16:9, altura 578.
+    const recorte = tamanhoDoEnvio(emPixeis({ largura: 1028, altura: 1028 }, PROPORCAO_DA_MOLDURA.directory_photo));
+    expect(recorte).toEqual({ largura: 1028, altura: 578 });
+    expect(recorte.largura).toBeLessThan(DIMENSAO_MINIMA.directory_photo.largura);
+    // E 1067 x 600, que o piso velho dizia bastar, também não basta para a faixa.
+    expect(600).toBeLessThan(DIMENSAO_MINIMA.directory_photo.altura);
+  });
+
+  it('`network_event` está medido, e não suposto: 600 × 600 em 16:9 sai com 338 de altura', () => {
+    expect(PROPORCAO_DA_MOLDURA.network_event).toBe(16 / 9);
+    expect(DIMENSAO_MINIMA.network_event).toEqual({ largura: 600, altura: 600 });
+    expect(recorteDeUmaImagemNoPiso('network_event')).toEqual({ largura: 600, altura: 338 });
+  });
+});
+
 describe('zoom e posição', () => {
   it('o zoom estreita a região pela escala, nos dois lados, e a proporção não muda', () => {
     const um = emPixeis(RETRATO, 1);
