@@ -283,7 +283,7 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .faixa-privacidade__texto { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); }
 .faixa-privacidade__texto p { color: var(--cor-text-secondary); }
 
-.chamada-profissionais {
+.chamada-profissionais, .chamada-loja {
   display: grid; gap: var(--space-6); align-items: center;
   margin-inline: var(--web-grid-margem-compact);
   padding: var(--space-10) var(--space-6);
@@ -291,20 +291,22 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   border-radius: calc(var(--radius-xl) * 2) calc(var(--radius-xl) + var(--radius-lg)) calc(var(--radius-xl) * 2 + var(--radius-sm)) calc(var(--radius-xl) + var(--radius-md));
 }
 @media (min-width: 905px) {
-  .chamada-profissionais {
+  .chamada-profissionais, .chamada-loja {
     grid-template-columns: minmax(0, 1fr) auto;
     margin-inline: max(var(--web-grid-margem-large), calc((100% - var(--web-container-site-max)) / 2));
     padding: var(--space-12);
   }
 }
-.chamada-profissionais__texto { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); }
+.chamada-profissionais__texto, .chamada-loja__texto { display: grid; gap: var(--space-3); max-width: var(--layout-coluna-max); }
+.chamada-loja { background: var(--sage-100); }
+@media (min-width: 905px) { .chamada-loja { grid-template-columns: minmax(0, 1fr); } }
+.chamada-loja__ressalva { color: var(--cor-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
 
 .baixe-app, .fale-conosco { display: grid; gap: var(--space-4); justify-items: start; }
 .baixe-app { justify-items: center; text-align: center; overflow: clip; padding-bottom: calc(var(--space-16) * 1.5); }
 .baixe-app > * { position: relative; z-index: 1; }
 .baixe-app p, .fale-conosco p { color: var(--cor-text-secondary); max-width: var(--layout-coluna-max); }
-.em-breve-lojas { font-weight: var(--font-weight-semibold); }
-.baixe-app .em-breve-lojas { color: var(--cor-text-primary); }
+.baixe-app .lojas { justify-content: center; }
 @media (min-width: 905px) {
   .baixe-app::before, .baixe-app::after {
     content: ""; position: absolute; top: 50%; width: calc(var(--space-16) * 2.8); aspect-ratio: 1; transform: translateY(-50%); pointer-events: none;

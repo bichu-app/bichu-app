@@ -18,15 +18,30 @@ export const CONTATO = {
   },
 };
 
+// DECISAO DO CLIENTE, 02/11/2026: os dois icones das lojas no site, SEM "em
+// breve" e SEM link. Eu mostrei que icone sem ressalva se le como "ja
+// disponivel" quando nenhum dos dois esta publicado, e ele escolheu assim.
+//
+// ARTE: a arte oficial da App Store e do Google Play NAO existe em design/, e
+// marca de terceiro tem regra de uso -- nada foi baixado da internet. Ate a arte
+// chegar, o selo leva o NOME POR EXTENSO, no desenho do site.
+//
+// Sem link, o selo e FIGURA e nao acao: Lojas.astro nao usa <a> nem <button>.
 export const LOJAS = {
-  emBreve: 'Em breve na App Store e no Google Play.',
+  rotuloDoGrupo: 'Lojas de aplicativos',
+  itens: [
+    { chave: 'app-store', nome: 'App Store' },
+    { chave: 'google-play', nome: 'Google Play' },
+  ],
 };
 
 export const NAVEGACAO = {
   rotulo: 'Principal',
   pular: 'Pular para o conteúdo',
   menu: 'Menu',
-  acao: 'Em breve nas lojas',
+  // 02/11/2026: sem ressalva de disponibilidade, pela mesma decisao que tirou o
+  // "em breve" dos selos. Leva a secao que mostra os dois selos.
+  acao: 'Baixar o app',
   links: [
     { href: '/comunidade', texto: 'Comunidade' },
     { href: '/como-funciona', texto: 'Como funciona' },
@@ -44,7 +59,7 @@ export const RODAPE = {
         { href: '/comunidade', texto: 'Comunidade' },
         { href: '/como-funciona', texto: 'Como funciona' },
         { href: '/para-profissionais', texto: 'Para profissionais' },
-        { href: '/#baixe-app', texto: 'Em breve nas lojas' },
+        { href: '/#baixe-app', texto: 'Baixar o app' },
       ],
     },
     {

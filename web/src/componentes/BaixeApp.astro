@@ -1,10 +1,10 @@
 ---
-import EmBreveLojas from './EmBreveLojas.astro';
+import Lojas from './Lojas.astro';
 interface Props { titulo: string; texto?: string }
 const { titulo, texto } = Astro.props;
 ---
 <section class="secao baixe-app" id="baixe-app" aria-labelledby="baixe-titulo">
   <h2 class="titulo-secao" id="baixe-titulo">{titulo}</h2>
   {texto && <p class="texto-grande">{texto}</p>}
-  <EmBreveLojas />
+  <Lojas />
 </section>

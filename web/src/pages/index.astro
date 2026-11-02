@@ -7,7 +7,7 @@ import Passos from '../componentes/Passos.astro';
 import Instagram from '../componentes/Instagram.astro';
 import CartaoIlustrado from '../componentes/CartaoIlustrado.astro';
 import BaixeApp from '../componentes/BaixeApp.astro';
-import EmBreveLojas from '../componentes/EmBreveLojas.astro';
+import Lojas from '../componentes/Lojas.astro';
 import iconeEncontros from '../assets/marca/icone-pilar-encontros.svg';
 import iconeProximidade from '../assets/marca/icone-pilar-proximidade.svg';
 import type { NomeDoSimbolo } from '../icones/simbolos.ts';
@@ -23,7 +23,7 @@ const icones = { eventos: iconeEncontros, profissionais: iconeProximidade };
       <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
       <Manuscrito>{T.hero.manuscrito}</Manuscrito>
       <p class="hero__lead">{T.hero.lead}</p>
-      <EmBreveLojas />
+      <Lojas />
     </div>
     <div class="hero__ilustracao">
       <Ilustracao recorte="tres-pessoas" alt={T.hero.alt} principal />
@@ -81,6 +81,14 @@ const icones = { eventos: iconeEncontros, profissionais: iconeProximidade };
     <div class="faixa-privacidade__texto">
       <h2 class="titulo-secao" id="privacidade-titulo">{T.privacidade.titulo}</h2>
       <p class="texto-grande">{T.privacidade.texto}</p>
+    </div>
+  </section>
+
+  <section class="secao chamada-loja" aria-labelledby="loja-titulo">
+    <div class="chamada-loja__texto">
+      <h2 class="titulo-secao" id="loja-titulo">{T.loja.titulo}</h2>
+      <p class="texto-grande">{T.loja.texto}</p>
+      <p class="chamada-loja__ressalva">{T.loja.ressalva}</p>
     </div>
   </section>
 
