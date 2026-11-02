@@ -1,11 +1,11 @@
 export const HOME = {
   titulo: 'Bichu',
-  descricao: 'Bichu é a rede dos pets: eventos no bairro e profissionais indicados e avaliados pela comunidade.',
+  descricao: 'Bichu é a comunidade dos pets: publique os momentos do seu pet, converse com quem você conhece, encontre os pets do bairro na praça e, quando um se perde, a rede ajuda a achar.',
 
   hero: {
     titulo: 'A rede dos pets.',
     manuscrito: 'Pets conectam pessoas.',
-    lead: 'Uma comunidade de tutores do mesmo bairro: eventos com os pets e profissionais indicados e avaliados por quem mora perto.',
+    lead: 'Publique os momentos do seu pet, converse com quem você conhece, encontre os pets do bairro na praça e os profissionais que os vizinhos indicam. E, quando um pet se perde, a rede ajuda a achar.',
     alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
   },
 
@@ -40,8 +40,18 @@ export const HOME = {
   },
 
   vantagens: {
-    titulo: 'Vantagens de estar na rede',
+    titulo: 'O que você faz no Bichu',
     itens: [
+      {
+        icone: 'photo_camera',
+        titulo: 'Publique os momentos do seu pet',
+        texto: 'No Mural, uma foto e um texto curto. Você escolhe o que publicar, e descreve a foto para quem usa leitor de tela.',
+      },
+      {
+        icone: 'group',
+        titulo: 'Converse com quem você conhece',
+        texto: 'A conexão começa por um pedido, e a conversa abre depois que a outra pessoa aceita. Ninguém conversa com você sem o seu aceite.',
+      },
       {
         icone: 'qr_code_2',
         titulo: 'Identidade com QR na coleira',
@@ -63,6 +73,12 @@ export const HOME = {
   privacidade: {
     titulo: 'Quem acha seu pet avisa você. E nunca vê seu telefone nem seu endereço.',
     texto: 'O aviso chega pelo Bichu, sem exigir conta de quem achou, e a conversa também acontece pelo Bichu. Telefone e endereço ficam de fora.',
+  },
+
+  loja: {
+    titulo: 'A Loja do Bichu, com cupom de desconto.',
+    texto: 'Ajude a mantermos o Bichu gratuito e ainda ganhe descontos comprando em nossas lojas parceiras.',
+    ressalva: 'A vitrine é escolhida a dedo pela equipe do Bichu e leva ao site da loja parceira. A compra é feita no site do parceiro: o Bichu não é o vendedor e não controla preço, estoque nem entrega.',
   },
 
   profissionais: {

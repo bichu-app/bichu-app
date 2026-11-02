@@ -1,0 +1,13 @@
+---
+// Os dois icones das lojas (cliente, 02/11/2026). Sem link enquanto o app nao
+// esta publicado, e por isso FIGURA e nao acao: <a> sem destino ou <button> sem
+// efeito produzem clique morto. Nada aqui recebe foco nem cursor de ponteiro.
+import { LOJAS } from '../conteudo/comum.ts';
+---
+<ul class="lojas" aria-label={LOJAS.rotuloDoGrupo}>
+  {LOJAS.itens.map((loja) => (
+    <li class={`loja loja--${loja.chave}`}>
+      <span class="loja__nome">{loja.nome}</span>
+    </li>
+  ))}
+</ul>

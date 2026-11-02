@@ -75,10 +75,9 @@ export const ENCONTRO = {
   /**
    * O caminho para o aplicativo, que e o segundo trabalho da pagina.
    *
-   * **Sem link de loja e sem selo**, pela regra 1 da revisao de microcopy do
-   * site: o app nao esta publicado, e `EmBreveLojas` e quem diz isso num lugar
-   * so. No dia em que houver endereco de loja, ele entra la e esta pagina
-   * ganha o botao sem mudar uma palavra.
+   * **Com os icones das lojas e sem link** (cliente, 02/11/2026): `Lojas` e quem
+   * desenha os dois selos num lugar so. No dia em que houver endereco de loja,
+   * ele entra la e esta pagina nao muda uma palavra.
    */
   chamada: {
     titulo: 'Os encontros acontecem no Bichu',

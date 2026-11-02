@@ -7,7 +7,7 @@ import Icone from '../../componentes/Icone.astro';
 import BotaoEnviar from '../../componentes/BotaoEnviar.astro';
 import RegistrarAchado from '../../componentes/RegistrarAchado.astro';
 import ProcurarCodigo from '../../componentes/ProcurarCodigo.astro';
-import EmBreveLojas from '../../componentes/EmBreveLojas.astro';
+import Lojas from '../../componentes/Lojas.astro';
 import ScriptDeEnvio from '../../componentes/ScriptDeEnvio.astro';
 import { clienteDaApi, executar } from '../../api/chamar.ts';
 import { telaAoAbrir, telaAoAvisar, type TelaAoAbrir, type TelaAoAvisar } from '../../dominio/telas-da-tag.ts';
@@ -115,7 +115,7 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
       <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
       <div class="caixa convite-app">
         <p>{TAG.conviteApp}</p>
-        <EmBreveLojas />
+        <Lojas />
       </div>
     </>
   )}

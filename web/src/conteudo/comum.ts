@@ -18,8 +18,21 @@ export const CONTATO = {
   },
 };
 
+// DECISAO DO CLIENTE, 02/11/2026: os dois icones das lojas no site, SEM "em
+// breve" e SEM link. Eu mostrei que icone sem ressalva se le como "ja
+// disponivel" quando nenhum dos dois esta publicado, e ele escolheu assim.
+//
+// ARTE: a arte oficial da App Store e do Google Play NAO existe em design/, e
+// marca de terceiro tem regra de uso -- nada foi baixado da internet. Ate a arte
+// chegar, o selo leva o NOME POR EXTENSO, no desenho do site.
+//
+// Sem link, o selo e FIGURA e nao acao: Lojas.astro nao usa <a> nem <button>.
 export const LOJAS = {
-  emBreve: 'Em breve na App Store e no Google Play.',
+  rotuloDoGrupo: 'Lojas de aplicativos',
+  itens: [
+    { chave: 'app-store', nome: 'App Store' },
+    { chave: 'google-play', nome: 'Google Play' },
+  ],
 };
 
 export const NAVEGACAO = {

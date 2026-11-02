@@ -3,7 +3,11 @@ import { test, expect } from '@playwright/test';
 
 const PAGINAS = ['/', '/comunidade', '/como-funciona', '/para-profissionais', '/sobre', '/contato', '/termos', '/privacidade'];
 
-test('nenhum link sem destino, nenhum selo de loja e o texto "Em breve" no lugar', async ({ page }) => {
+// O que este caso garantia antes de 02/11/2026: que a promessa de plataforma
+// estava VISIVEL, na forma da frase "Em breve na App Store e no Google Play.".
+// O cliente trocou a frase pelos DOIS icones, sem "em breve" e sem link, e a
+// cobertura continua: o que tem de estar visivel agora sao os dois selos.
+test('nenhum link sem destino, e os dois icones das lojas presentes e nao clicaveis', async ({ page }) => {
   for (const rota of PAGINAS) {
     await page.goto(rota);
     await expect(page.locator('a[href="#"], a:not([href])'), rota).toHaveCount(0);
@@ -11,7 +15,14 @@ test('nenhum link sem destino, nenhum selo de loja e o texto "Em breve" no lugar
     await expect(page.getByRole('link', { name: 'Em breve nas lojas' }).first(), rota).toBeAttached();
   }
   await page.goto('/');
-  await expect(page.getByText('Em breve na App Store e no Google Play.').first()).toBeVisible();
+  const lojas = page.getByRole('list', { name: 'Lojas de aplicativos' }).first();
+  await expect(lojas).toBeVisible();
+  await expect(lojas.getByText('App Store', { exact: true })).toBeVisible();
+  await expect(lojas.getByText('Google Play', { exact: true })).toBeVisible();
+  // Sem endereco de loja, um selo clicavel produz clique morto: nem <a> nem <button>.
+  await expect(lojas.locator('a, button')).toHaveCount(0);
+  // E a frase que saiu nao volta por descuido.
+  await expect(page.getByText('Em breve na App Store e no Google Play.')).toHaveCount(0);
 });
 
 test('decisoes do cliente: sem Grupos, sem pontos, rodape com Instagram e e-mail', async ({ page }) => {
