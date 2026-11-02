@@ -412,6 +412,23 @@ const AUSENCIAS_ACEITAS = new Map([
   // -- 2 que so declaram tipo: o compilado sai `export {};` ------------------
   ['src/modules/identity/ports/passkey-repository.ts', SO_TIPO],
   ['src/modules/tags/ports/endereco-do-pet.ts', SO_TIPO],
+  // AS DUAS DA INTEGRACAO DAS ONZE PRs DE 02/11/2026, e o cliente conferiu os
+  // dois arquivos antes de autorizar em vez de aceitar a medicao de quem
+  // integrou. `people/ports/lista-da-regiao-repository.ts` (48 linhas, do
+  // #148) declara `PessoaDaRegiao`, `PaginaDaListaDaRegiao` e a interface
+  // `ListaDaRegiaoRepository`; `shared/autorizacao/leitor-de-evidencias-de-
+  // canal.ts` (31 linhas, do #149) declara a interface
+  // `LeitorDeEvidenciasDeCanal`. E so isso nos dois: varredura por `const`,
+  // `function`, `class`, `let`, `var`, `enum`, `=>` e `return` nao achou
+  // NENHUMA construcao executavel, e o compilado de cada um e exatamente
+  // `export {};` mais a linha de sourcemap -- 65 e 68 bytes. Conferido arquivo
+  // a arquivo, como as outras, e nao por prefixo: um `src/modules/**/ports/**`
+  // seria uma linha a menos e dispensaria de antemao toda porta FUTURA,
+  // inclusive a que alguem escrever amanha ja com codigo de verdade dentro.
+  // O #148 e o #149 nao as acrescentaram aqui porque cada um typechecava e
+  // cobria sozinho; a ausencia so aparece quando os dois estao na mesma arvore.
+  ['src/modules/people/ports/lista-da-regiao-repository.ts', SO_TIPO],
+  ['src/shared/autorizacao/leitor-de-evidencias-de-canal.ts', SO_TIPO],
   // -- 2 que emitem codigo e so o ponto de entrada carrega -------------------
   //
   // MEDIDO arquivo por arquivo, e nao deduzido do diretorio: o UNICO importador

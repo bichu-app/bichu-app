@@ -718,7 +718,21 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # mesmo motivo do paragrafo acima, e quem o travou nao recontou depois da
 # mescla seguinte. As outras duas contagens NAO mudaram: painel 145, site 47,
 # as tres com zero mensagens.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (860 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+# RECONTADO EM 02/11/2026 SOBRE A ARVORE DA INTEGRACAO DAS ONZE PRs, DEPOIS DA
+# ULTIMA EDICAO -- a unica hora em que este numero vale. Os lados chegaram com 860
+# (a base `origin/development` em bb72bf8b), 864 (#148), 853 (#147) e 851 (#146):
+# QUATRO numeros de QUATRO ARVORES DIFERENTES. Nenhum foi escolhido e os deltas
+# NAO foram somados; a prosa de cada lado esta preservada acima, verbatim.
+# A medicao: `npx eslint . -f json` nas TRES arvores, contando as entradas do
+# relatorio -- raiz 870, painel 145, site 47, com ZERO erros e ZERO avisos nos
+# tres. Painel e site NAO se moveram. O #153 ficou fora do lote e os 870 foram
+# MEDIDOS nesta arvore, nao deduzidos do lote de doze: `abas.dart` ja estava na
+# contagem da base, entao sair do lote nao mexeu no numero de ARQUIVOS -- mas
+# isso foi conferido depois de medir, e nao usado como atalho para nao medir.
+# A recontagem foi feita num worktree FORA do repositorio: com worktree dentro,
+# `eslint .` estoura o heap varrendo os GB dos worktrees das outras frentes, e o
+# numero nunca chega a sair.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (870 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

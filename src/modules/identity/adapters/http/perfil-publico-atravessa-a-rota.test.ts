@@ -40,6 +40,20 @@ function conta(displayName: string | null, apelido: string | null, perfilPublico
     pendingEmail: null,
     emailDeliverable: true,
     publicProfileEnabled: perfilPublico,
+    // A INTEGRACAO DAS ONZE PRs (02/11/2026) e quem acrescenta esta linha, e nao
+    // o #149 que escreveu o resto deste fixture. `acceptedTermsVersion` virou
+    // membro OBRIGATORIO de `Conta` no #146, e este e o UNICO arquivo de fixture
+    // que o #146 nao podia atualizar: ele NASCEU no #149 (`git ls-tree -r
+    // bde496ea` o lista, e a base nao o tem), entao o #146 nunca o viu. Cada PR
+    // typechecava sozinho; so a uniao dos dois quebra -- e a mescla DELE foi
+    // LIMPA, porque so um lado tinha o arquivo, que e a classe de defeito que
+    // `nao houve conflito` nao detecta.
+    // Os outros 17 fixtures de `Conta` da arvore mesclada dizem
+    // `acceptedTermsVersion: null`, todos, porque o #146 passou por eles: isto
+    // segue o precedente e nao decide nada. `null` e tambem o estado certo aqui,
+    // porque o caso mede o PERFIL PUBLICO atravessando a rota e a conta de teste
+    // nao tem aceite de termos registrado.
+    acceptedTermsVersion: null,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,
     createdAt: dataFixa(INSTANTE_FIXO),
