@@ -51,6 +51,7 @@
 #   sh infra/verificacao/verificar-apk.sh              # compila e confere
 #   sh infra/verificacao/verificar-apk.sh --autoteste  # so as iscas, sem compilar
 #   sh infra/verificacao/verificar-apk.sh --conferir <apk>  # confere um APK ja pronto
+#   sh infra/verificacao/verificar-apk.sh --imprimir-versao-dos-termos
 #
 # Saida: 0 aprovado, 1 reprovado. Rode da RAIZ do repositorio.
 set -eu
@@ -73,7 +74,61 @@ PISO_BYTES=1048576
 # diferente precisar ser compilado.
 API_BASE_URL="${API_BASE_URL:-https://hml.bichu.app}"
 ENVIRONMENT="${ENVIRONMENT:-hml}"
-TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"
+# A VERSAO DOS TERMOS NAO E ESCRITA AQUI, E ISSO NAO E ARRUMACAO.
+#
+# CICATRIZ MEDIDA EM 01/11/2026. Esta linha era
+# `TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"` -- um literal. O site publicava
+# outro: `'Versão 0.3 de 23/09/2026'`, em `web/src/conteudo/legal.ts`. **17/09
+# contra 23/09**, dois literais em dois arquivos, mantidos iguais por
+# coincidencia e ja divergidos.
+#
+# Isto NAO e cosmetico. Este valor vai em `accepted_terms_version` no cadastro
+# (`app/lib/api/auth_api.dart` -> `POST /v1/auth/register` -> coluna
+# `users.accepted_terms_version`, migracao `20260917000001`), ou seja: o
+# consentimento gravado no banco apontava para uma versao que NUNCA esteve no
+# ar. `2026-09-17` e a data em que os ADR-0001..0013 foram escritos, e nao a de
+# nenhum texto legal publicado.
+#
+# E nao era so no texto deste script. MEDIDO no APK de homologacao
+# `bichu-hml-d03d1a6c-31-10.apk`: `2026-09-17` aparece 1x em cada um dos tres
+# `lib/<abi>/libapp.so`, com a string de controle `hml.bichu.app` presente. O
+# binario distribuido carregava o valor errado.
+#
+# POR QUE A FONTE E O SITE: o aplicativo nao carrega copia do texto legal -- ele
+# manda o usuario ler no site, pelas `TERMS_URL` e `PRIVACY_URL` logo abaixo.
+# Quem publica o texto aceito e o site, entao a versao e identidade do que o
+# site publica, e este build e um CONSUMIDOR dela.
+#
+# A sobrescrita por ambiente continua existindo (um alvo diferente pode precisar
+# dela), e por isso ela NAO e silenciosa: `conferir_versao_dos_termos` abaixo
+# roda antes do build e reprova quando o valor resolvido aqui nao e o que o site
+# publica -- nomeando os dois.
+FONTE_DA_VERSAO_LEGAL="web/src/conteudo/versao-legal.json"
+PORTAO_DA_VERSAO_LEGAL="infra/verificacao/verificar-versao-dos-termos.mjs"
+if [ -n "${TERMS_VERSION:-}" ]; then
+  # Veio do ambiente. Fica, e o portao decide se podia.
+  :
+else
+  [ -f "$FONTE_DA_VERSAO_LEGAL" ] || {
+    echo "REPROVA: nao existe $FONTE_DA_VERSAO_LEGAL, que e a FONTE UNICA da versao dos termos. Sem ela este script voltaria a inventar um literal, que e o defeito medido em 01/11/2026" >&2
+    exit 1
+  }
+  # `python3` e nao `grep`/`sed`: o arquivo e JSON, e ja ha dependencia dura de
+  # python3 aqui (`verificar_versao_no_apk.py`). Reconhecer JSON por expressao
+  # regular e como o portao volta a aprovar lixo.
+  TERMS_VERSION=$(python3 -c 'import json, sys; d = json.load(open(sys.argv[1], encoding="utf-8")); v = d.get("publicadaEm"); sys.stdout.write(v if isinstance(v, str) else "")' "$FONTE_DA_VERSAO_LEGAL") || {
+    echo "REPROVA: nao consegui ler \`publicadaEm\` de $FONTE_DA_VERSAO_LEGAL. Enquanto esse valor nao sai de um lugar so, o aceite grava uma versao e o site publica outra" >&2
+    exit 1
+  }
+  # `$(...)` ESCONDE o estado de saida quando usado dentro de `${VAR:-...}`, e
+  # por isso a leitura esta num `if` e nao numa expansao: valor vazio aqui
+  # viraria `accepted_terms_version` vazio, e o portao do binario procuraria a
+  # cadeia vazia -- que esta em qualquer binario, e aprovaria sempre.
+  [ -n "$TERMS_VERSION" ] || {
+    echo "REPROVA: \`publicadaEm\` de $FONTE_DA_VERSAO_LEGAL veio VAZIO. O aceite seria gravado sem versao, e a conferencia do valor no binario aprovaria qualquer pacote" >&2
+    exit 1
+  }
+fi
 TERMS_URL="${TERMS_URL:-https://bichu.app/termos}"
 PRIVACY_URL="${PRIVACY_URL:-https://bichu.app/privacidade}"
 # O COMMIT QUE GEROU O BINARIO (26/10/2026). A chave e a MESMA que o
@@ -223,6 +278,7 @@ conferir_versao_no_binario() {
     --versao "$BUILD_NAME" \
     --controle "$controle" \
     --mapa "$MAPA" \
+    --valor-dos-termos "$TERMS_VERSION" \
     --chave APP_VERSION \
     --chave API_BASE_URL \
     --chave ENVIRONMENT \
@@ -230,6 +286,35 @@ conferir_versao_no_binario() {
     --chave TERMS_URL \
     --chave PRIVACY_URL \
     --chave BUILD_COMMIT
+}
+
+# ---------------------------------------------------------------------------
+# A VERSAO DOS TERMOS, ANTES DE GASTAR UM BUILD.
+#
+# A conferencia do valor no binario (acima) pega a CONSEQUENCIA: ela abre o
+# pacote e cobra que `$TERMS_VERSION` esteja lá dentro. Mas ela compara o
+# binario com o que ESTE script resolveu -- e se o que este script resolveu nao
+# e o que o site publica, ela aprova um APK que grava aceite de uma versao que
+# nunca esteve no ar. Foi exatamente esse o estado medido em 01/11/2026: o
+# portao do binario aprovava `2026-09-17` com folga, porque ele era o valor
+# esperado; errado era o valor esperado.
+#
+# Entao a igualdade com o site e conferida AQUI, no texto, antes do build:
+# reprovar na leitura custa milissegundos, e descobrir a mesma coisa depois
+# custa o build inteiro. O portao recebe o valor JA RESOLVIDO (com a
+# sobrescrita por ambiente aplicada), e nao vai busca-lo de novo: o que
+# interessa e o valor que ESTA execucao vai estampar no pacote.
+# ---------------------------------------------------------------------------
+conferir_versao_dos_termos() {
+  [ -f "$PORTAO_DA_VERSAO_LEGAL" ] || {
+    echo "REPROVA: nao existe $PORTAO_DA_VERSAO_LEGAL. Sem ele nada compara a versao que o aceite grava com a versao que o site publica, e as duas ja divergiram uma vez (17/09 contra 23/09, medido em 01/11/2026)" >&2
+    return 1
+  }
+  command -v node >/dev/null 2>&1 || {
+    echo "REPROVA: \`node\` nao existe nesta maquina, e o portao da versao dos termos e um modulo Node. Pular a conferencia por falta de ferramenta e aprovar por vazio" >&2
+    return 1
+  }
+  node "$PORTAO_DA_VERSAO_LEGAL" --versao-do-app "$TERMS_VERSION"
 }
 
 # ---------------------------------------------------------------------------
@@ -556,6 +641,17 @@ autoteste() {
 
 # ---------------------------------------------------------------------------
 
+# `--imprimir-versao-dos-termos`: imprime o valor que o comando de build vai
+# passar em `--dart-define=TERMS_VERSION`, com a sobrescrita por ambiente ja
+# aplicada. Existe para que `verificar-versao-dos-termos.mjs` OBSERVE a
+# resolucao de verdade em vez de reconhecer esta linha por expressao regular --
+# um portao que le o texto do script aprova no dia em que o texto mudar de forma
+# sem mudar de efeito, e reprova no dia inverso.
+if [ "${1:-}" = "--imprimir-versao-dos-termos" ]; then
+  printf '%s\n' "$TERMS_VERSION"
+  exit 0
+fi
+
 if [ "${1:-}" = "--autoteste" ]; then
   autoteste
   exit 0
@@ -571,6 +667,17 @@ if [ "${1:-}" = "--conferir" ]; then
     echo "REPROVA: \`--conferir\` sem caminho de APK. Sem alvo nao ha o que medir" >&2
     exit 1
   fi
+  # `conferir_versao_dos_termos` NAO entra aqui, e isso e escolha e nao
+  # esquecimento: `--conferir` responde "o que ESTE pacote carrega dentro", e
+  # um pacote antigo carrega legitimamente a versao de termos do dia em que foi
+  # compilado. Cobrar a arvore de hoje contra um binario de outra semana
+  # reprovaria por divergencia de DATA, e nao de defeito. A igualdade com o site
+  # e cobrada onde ela decide algo: no caminho de build, antes de compilar.
+  #
+  # O valor dos termos continua sendo MEDIDO dentro do pacote tambem aqui, por
+  # `conferir_versao_no_binario`, contra o `$TERMS_VERSION` que este script
+  # resolveu -- entao apontar `--conferir` para um APK antigo reprova de
+  # proposito, e e assim que se ve o que o artefato ja distribuido carrega.
   conferir_literalidade "$0"
   conferir_apk "$alvo_dado"
   conferir_versao_no_binario "$alvo_dado"
@@ -586,6 +693,7 @@ command -v unzip >/dev/null 2>&1 || {
 # antes do build no workflow: reprovar na leitura do comando custa milissegundos,
 # e descobrir a mesma coisa depois custa o build inteiro.
 conferir_literalidade "$0"
+conferir_versao_dos_termos
 
 echo "compilando o APK de release de $ENVIRONMENT, versao $BUILD_NAME (de $PUBSPEC)..."
 

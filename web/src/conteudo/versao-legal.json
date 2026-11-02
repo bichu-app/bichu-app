@@ -1,0 +1,5 @@
+{
+  "_leia": "FONTE UNICA da identidade da versao dos textos legais. Quem mexe aqui muda DUAS coisas ao mesmo tempo, de proposito: o que o site publica no aviso de Termos e Privacidade, e o que o aplicativo grava em `accepted_terms_version` quando alguem aceita. Antes de mexer leia o cabecalho de legal.ts. Mexer so aqui e o conserto; mexer em qualquer um dos dois lados REPROVA no portao `make verificar-versao-dos-termos`.",
+  "rotulo": "0.3",
+  "publicadaEm": "2026-09-23"
+}

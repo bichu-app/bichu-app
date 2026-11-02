@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-lint-do-painel verificar-lint-do-site verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-versao-dos-termos verificar-versao-dos-termos-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste gerar-icones-da-barra fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-segredos-do-gerenciador verificar-segredos-do-gerenciador-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -287,6 +287,21 @@ verificar-commit-de-build: ## BICHUS-210/211: o `make` exporta BUILD_COMMIT com 
 
 verificar-commit-de-build-autoteste: ## BICHUS-216: cada caso do portao do commit reprova pela regra dele (nao usa docker)
 	python3 infra/verificacao/verificar_commit_de_build.py --autoteste --raiz .
+
+# A VERSAO DOS TERMOS. Medido em 01/11/2026: o site publicava `Versão 0.3 de
+# 23/09/2026` e o comando de build do aplicativo passava
+# `TERMS_VERSION=2026-09-17` -- dois literais em dois arquivos, mantidos iguais
+# por coincidencia e ja divergidos. Esse valor vai para
+# `users.accepted_terms_version`, entao o aceite gravado no banco apontava para
+# uma versao que nunca esteve no ar. A fonte unica passou a ser
+# `web/src/conteudo/versao-legal.json`, e estes dois alvos sao o que impede a
+# volta. O portao NAO opina sobre qual versao e a certa: o texto e rascunho
+# pendente de revisao juridica, e isso e decisao do cliente.
+verificar-versao-dos-termos: ## a versao que o aceite grava e a MESMA que o site publica (fonte unica); nomeia as duas quando divergem
+	node infra/verificacao/verificar-versao-dos-termos.mjs
+
+verificar-versao-dos-termos-autoteste: ## cada isca do portao da versao dos termos reprova pela regra dela, mais os dois controles positivos
+	node infra/verificacao/verificar-versao-dos-termos.mjs --autoteste
 
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname, migracao e as iscas (positivas e negativas)
 	python3 infra/verificacao/verificar_portabilidade.py
@@ -656,19 +671,25 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # AS TRES CONTAGENS SAO DE ARVORE LIMPA, medidas em 31/10 neste worktree com
 # `eslint . -f json` e as duas somas (arquivos lintados e mensagens):
 #
-#   raiz    848 arquivos, 0 mensagens   16,6 - 19,9 s
+#   raiz    849 arquivos, 0 mensagens   16,6 - 19,9 s
 #   painel  145 arquivos, 0 mensagens    8,6 -  9,2 s
 #   site     47 arquivos, 0 mensagens    2,0 s (inclui o `astro sync`)
 #
 # `make verificar-lint` inteiro: 27,0 s. A contagem da raiz subiu de 845 (30/10)
-# para 848 porque a arvore cresceu -- e o numero esta escrito aqui porque LINT
-# QUE NAO ACHA ARQUIVO APROVA TUDO CALADO.
+# para 848 porque a arvore cresceu, e de 848 para 849 em 01/11/2026 com
+# `infra/verificacao/verificar-versao-dos-termos.mjs` -- e o numero esta escrito
+# aqui porque LINT QUE NAO ACHA ARQUIVO APROVA TUDO CALADO.
+#
+# `web/src/conteudo/versao-legal.json`, do mesmo conserto, NAO mexeu na contagem
+# do site: ele continua em 47, porque o eslint de `web/` nao linta `.json`. O
+# numero foi RECONTADO, e nao deduzido -- as tres contagens de 01/11 saem de
+# `eslint . -f json` nas tres arvores, depois da ultima edicao.
 #
 # E ELE SO VALE RECONTADO SOBRE A ARVORE MESCLADA. Este PR chegou afirmando 847,
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (848 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (849 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque
@@ -826,7 +847,7 @@ verificar-segredos-do-gerenciador-autoteste: ## as iscas do portao de segredos r
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-segredos-do-gerenciador-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-backoffice-contrato verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-suite-integracao-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-segredos-do-gerenciador-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-versao-dos-termos-autoteste verificar-versao-dos-termos verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-backoffice-contrato verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
