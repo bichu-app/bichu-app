@@ -382,10 +382,20 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.acaoNaTela,
         estado: EstadoDoSubDestino.existe,
       ),
+      // **CONSTRUIDA EM 02/11/2026** (defeito de LGPD, art. 18): ela saiu de
+      // `planejada` porque a folha EXISTE -- `_ItemDeExcluirAConta` e
+      // `_FolhaDeExcluirAConta`, em `telas/abas.dart`, no fim do corpo da aba
+      // `Perfil`, logo abaixo de `Sair da conta`. A folha diz as consequencias nas
+      // palavras do contrato (exclusao logica imediata, expurgo em 30 dias,
+      // casos encerrados, tags revogadas); o TOQUE FINAL continua desligado,
+      // porque `DELETE /v1/me` exige `reauth` no escopo `account_deletion` e o
+      // app nao tem fluxo de reautenticacao -- nenhuma das seis rotas de
+      // `x-reauth-scope` e consumida hoje. A entrada NAO depende desta gaveta,
+      // que esta oculta desde 19/10/2026.
       SubDestino(
         rotulo: 'Excluir a conta',
         forma: FormaDoSubDestino.folhaInferior,
-        estado: EstadoDoSubDestino.planejada,
+        estado: EstadoDoSubDestino.existe,
       ),
     ],
   };
