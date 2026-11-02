@@ -531,18 +531,47 @@ só recusa rodar onde ele não existe.
 
 **Correção de estado em 19/09, e ela é importante o bastante para parar aqui.**
 A tabela acima prescreve `https://bichu.app` e `https://img.bichu.app`, que é o
-destino depois do passo 9. **Hoje o passo 9 não aconteceu:** o apex continua nos
-quatro registros A da Squarespace, e o que a VM atende de fato é
-`https://hml.bichu.app` e `https://img-hml.bichu.app`, conferido por `curl` na
-mesma data. Enquanto for assim, uma base apontada para `https://bichu.app` na VM
-faz o cartaz e o link do e-mail levarem à página de estacionamento de outra
-empresa.
+destino depois do passo 9. O que a VM atende de fato é `https://hml.bichu.app` e
+`https://img-hml.bichu.app`.
+
+> **O DNS do apex mudou desde então, e a frase que estava aqui envelheceu
+> (medido em 02/11/2026).** Este parágrafo dizia que "o apex continua nos quatro
+> registros A da Squarespace". **Medição de 02/11/2026:** `bichu.app` tem **um**
+> registro A, `35.247.247.16` — o **mesmo** IP que `hml.bichu.app`,
+> `admin-hml.bichu.app`, `img.bichu.app` e `tag.bichu.app`. Conferido em dois
+> resolvedores (`1.1.1.1` e `8.8.8.8`), com controle positivo da consulta num
+> nome de terceiro.
+>
+> **O que esta medição NÃO diz, e por isso não está escrito aqui:** quem
+> controla o apex hoje, e **o que** ele serve. A medição foi de DNS, não de
+> conteúdo — nenhum `curl` foi feito no apex. A conclusão antiga (que uma base
+> apontada para o apex levaria "à página de estacionamento de outra empresa")
+> apoiava-se na premissa que acabou de cair, e **não** foi substituída por outra
+> afirmação: as duas coisas ficam **A VERIFICAR**. As outras menções a
+> Squarespace neste documento (passo 9 e a verificação do passo 11) continuam
+> como estavam, pelo mesmo motivo: trocá-las exigiria medir o que ninguém mediu.
+>
+> **A cautela operacional continua valendo, e não depende da premissa:** não
+> aponte `PUBLIC_BASE_URL` nem `MEDIA_PUBLIC_BASE_URL` para o apex nesta VM
+> antes de alguém medir o que o apex serve. Base errada no cartaz e no link do
+> e-mail é o tipo de erro que chega ao usuário, e, no caso da tag, é
+> irreversível (ADR-0004).
 
 **E `tag.bichu.app` é pior do que isso, porque nem existe.** O nome foi decidido
 em 19/09 e ainda não tem registro de DNS: um QR gerado com ele hoje não abre
 nada em telefone nenhum, e diferente de todo o resto desta tabela, isso não se
 conserta trocando uma variável depois — o que está prensado está prensado
-(ADR-0004). A regra, então, é de uma linha só: **nesta VM não se imprime tag.**
+(ADR-0004).
+
+> **A VERIFICAR (02/11/2026): a premissa "não tem registro de DNS" também
+> envelheceu.** Na mesma medição acima, `tag.bichu.app` resolve para
+> `35.247.247.16`. Isso **não** libera imprimir tag: resolver não é servir, e
+> ninguém mediu o que esse host responde nem se a rota da tag existe lá. **A
+> regra abaixo fica como está** até alguém medir o conteúdo — e, por ser
+> irreversível, ela é a única desta página que não se afrouxa por premissa
+> caída.
+
+A regra, então, é de uma linha só: **nesta VM não se imprime tag.**
 Antes de gerar **qualquer** código, conferir os valores no host:
 
 ```bash
