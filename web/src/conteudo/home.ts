@@ -1,11 +1,11 @@
 export const HOME = {
   titulo: 'Bichu',
-  descricao: 'Bichu é a comunidade dos pets: publique os momentos do seu pet, converse com quem você conhece, encontre os pets do bairro na praça e, quando um se perde, a rede ajuda a achar.',
+  descricao: 'Bichu é a comunidade dos pets: publique os momentos do seu pet, conecte-se com os tutores do bairro, encontre os pets na praça e, quando um se perde, a rede ajuda a achar.',
 
   hero: {
     titulo: 'A rede dos pets.',
     manuscrito: 'Pets conectam pessoas.',
-    lead: 'Publique os momentos do seu pet, converse com quem você conhece, encontre os pets do bairro na praça e os profissionais que os vizinhos indicam. E, quando um pet se perde, a rede ajuda a achar.',
+    lead: 'Publique os momentos do seu pet, conecte-se com os tutores do bairro, encontre os pets na praça e os profissionais que os vizinhos indicam. E, quando um pet se perde, a rede ajuda a achar.',
     alt: 'Ilustração de três pessoas abraçadas a um cachorro e a um gato, com árvores e prédios ao fundo.',
   },
 
@@ -49,8 +49,8 @@ export const HOME = {
       },
       {
         icone: 'group',
-        titulo: 'Converse com quem você conhece',
-        texto: 'A conexão começa por um pedido, e a conversa abre depois que a outra pessoa aceita. Ninguém conversa com você sem o seu aceite.',
+        titulo: 'Conecte-se com os tutores do bairro',
+        texto: 'Você pede conexão, a outra pessoa aceita. Sem conexão, o perfil dela mostra o nome, quantos pets tem e quantas conexões. Depois do aceite, você vê as fotos e as publicações dela.',
       },
       {
         icone: 'qr_code_2',

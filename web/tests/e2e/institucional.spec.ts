@@ -31,6 +31,14 @@ test('decisoes do cliente: sem Grupos, sem pontos, rodape com Instagram e e-mail
     const texto = (await page.locator('main').textContent()) ?? '';
     expect(texto, rota).not.toMatch(/\bGrupos?\b/);
     expect(texto, rota).not.toMatch(/\bpontos\b/i);
+    // TODA conversa deste produto nasce de um aviso de plaquinha e de mais nada:
+    // `migrations/20260922000012_conversa-mediada.sql` faz `found_report_id` NOT
+    // NULL e UNIQUE, e o contrato nao declara `POST /conversations` -- sob
+    // `/conversations` so existe o `get`. Conversa entre pessoas NAO EXISTE, e o
+    // site nao pode convidar para ela. A conversa do ACHADO continua podendo ser
+    // dita, e por isso o que se proibe e o convite, nao a palavra.
+    expect(texto, rota).not.toMatch(/\bConverse\b/i);
+    expect(texto, rota).not.toMatch(/convers\w+\s+com\s+quem/i);
     const rodape = page.locator('footer');
     await expect(rodape.getByRole('link', { name: /Instagram do Bichu/ })).toHaveAttribute('href', 'https://www.instagram.com/bichu.app/');
     await expect(rodape.getByRole('link', { name: /oi@bichu\.app/ })).toHaveAttribute('href', 'mailto:oi@bichu.app');
