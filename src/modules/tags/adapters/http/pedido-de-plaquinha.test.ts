@@ -149,7 +149,19 @@ function bancada(
   void app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotaDePedidoDePlaquinha(escopo, {
-        pedidos: new PedidoDePlaquinhaService({ repositorio, ids }),
+        pedidos: new PedidoDePlaquinhaService({
+          repositorio,
+          ids,
+          // SEM evidencia nenhuma, de proposito: a exigencia dos dois canais
+          // nasceu com o interruptor DESLIGADO, e estes casos continuarem
+          // verdes com a conta mais despida possivel e o que prova a inercia.
+          // A exigencia tem bancada propria em
+          // `plaquinha-exige-os-dois-canais.test.ts`.
+          evidencias: {
+            evidenciasDaConta: () =>
+              Promise.resolve({ emailVerifiedAt: null, phoneVerifiedAt: null }),
+          },
+        }),
         autenticador,
         contrato: carregarContrato('api/openapi.yaml'),
       });

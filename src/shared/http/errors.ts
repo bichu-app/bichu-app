@@ -257,6 +257,22 @@ export const problemas = {
       nextAction: 'verify_email',
     }),
 
+  /**
+   * 409. Pedir a plaquinha exige e-mail **E** telefone confirmados (cliente,
+   * 02/11/2026).
+   *
+   * **HOJE NÃO É ALCANÇÁVEL:** a exigência nasceu com
+   * `EXIGENCIA_DOS_DOIS_CANAIS_EM_VIGOR` desligado, porque não existe validação
+   * de telefone neste produto — e com ela em vigor hoje ninguém pediria
+   * plaquinha, que é o produto físico que a operação vende.
+   */
+  osDoisCanaisNaoVerificadosParaPlaquinha: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail e seu telefone', {
+      detail:
+        'A plaquinha vai pelo correio até o seu endereço. Confirme o e-mail e o telefone para a gente conseguir falar com você sobre a entrega.',
+      nextAction: 'verify_email',
+    }),
+
   /** 409. Avaliar um local do diretório exige canal de contato verificado. */
   canalDeContatoNaoVerificadoParaAvaliar: (): AppError =>
     new AppError('contact-channel-unverified', 'Confirme seu e-mail para avaliar', {

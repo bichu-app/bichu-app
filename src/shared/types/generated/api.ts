@@ -2453,7 +2453,29 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Bloqueia a outra parte */
+        /**
+         * Bloqueia a outra parte
+         * @description **O CLIENTE DECIDIU RETIRAR ESTA OPERACAO EM 02/11/2026**, literal: *"o
+         *     achador nao deve bloquear e nem denunciar, ele nao tem conta, nao tem que
+         *     interagir, ele e praticamente um usuario anonimo."* Foi-lhe oferecido
+         *     manter so a denuncia, e ele escolheu tirar as duas.
+         *
+         *     A razao e de desenho: esta rota e autenticada pelo **token do achador**,
+         *     entao quem bloqueia/denuncia aqui e o ACHADOR -- nao o tutor se defendendo
+         *     dele --, e gerenciar relacao ou abrir fila de moderacao e ato de quem tem
+         *     conta.
+         *
+         *     **ELA CONTINUA NO AR, e isso nao e descuido.** Remove-la reprova o portao
+         *     de compatibilidade com `api-path-removed-without-deprecation` em nivel
+         *     **ERR** (medido com `oasdiff v1.32.1` contra a base), e afrouxar ou
+         *     dispensar o portao esta fora de questao. A saida honesta pode ser esta
+         *     rota passar a **responder recusa** em vez de deixar de existir -- decisao
+         *     do cliente, pendente.
+         *
+         *     **A lacuna ja esta fechada pelo outro lado:** o TUTOR denuncia a mesma
+         *     conversa por `reportConversation`, que tem o achador como alvo e nao exige
+         *     verificacao.
+         */
         post: operations["blockFinderConversation"];
         delete?: never;
         options?: never;
@@ -2470,7 +2492,29 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Denuncia abuso */
+        /**
+         * Denuncia abuso
+         * @description **O CLIENTE DECIDIU RETIRAR ESTA OPERACAO EM 02/11/2026**, literal: *"o
+         *     achador nao deve bloquear e nem denunciar, ele nao tem conta, nao tem que
+         *     interagir, ele e praticamente um usuario anonimo."* Foi-lhe oferecido
+         *     manter so a denuncia, e ele escolheu tirar as duas.
+         *
+         *     A razao e de desenho: esta rota e autenticada pelo **token do achador**,
+         *     entao quem bloqueia/denuncia aqui e o ACHADOR -- nao o tutor se defendendo
+         *     dele --, e gerenciar relacao ou abrir fila de moderacao e ato de quem tem
+         *     conta.
+         *
+         *     **ELA CONTINUA NO AR, e isso nao e descuido.** Remove-la reprova o portao
+         *     de compatibilidade com `api-path-removed-without-deprecation` em nivel
+         *     **ERR** (medido com `oasdiff v1.32.1` contra a base), e afrouxar ou
+         *     dispensar o portao esta fora de questao. A saida honesta pode ser esta
+         *     rota passar a **responder recusa** em vez de deixar de existir -- decisao
+         *     do cliente, pendente.
+         *
+         *     **A lacuna ja esta fechada pelo outro lado:** o TUTOR denuncia a mesma
+         *     conversa por `reportConversation`, que tem o achador como alvo e nao exige
+         *     verificacao.
+         */
         post: operations["reportFinderConversation"];
         delete?: never;
         options?: never;
@@ -16282,7 +16326,7 @@ export interface components {
          *     **O que o booleano prova e UM CANAL DE CONTATO CONFIRMADO, e o rotulo da
          *     tela nao pode prometer mais que isso.** Ele e
          *     `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a
-         *     MESMA regua dos quatro 409 `contact-channel-unverified`; e **na pratica
+         *     MESMA regua dos 409 `contact-channel-unverified` que exigem UM canal; e **na pratica
          *     e e-mail**, porque nada em `src/` grava `phone_verified_at` -- a coluna
          *     existe e so e zerada. Por isso o nome acessivel do selo diz "e-mail
          *     confirmado", e **nunca** "verificado", "confiavel" nem "confirmado pela
@@ -19523,6 +19567,36 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            /**
+             * @description **Sem os DOIS canais verificados** (`contact-channel-unverified`):
+             *     pedir a plaquinha exige e-mail **E** telefone confirmados (cliente,
+             *     02/11/2026: *"outra coisa que o usuario tambem nao consegue fazer se
+             *     ele nao tiver o e-mail e o telefone validado e solicitar a criacao da
+             *     tag que enviamos para o endereco dele"*).
+             *
+             *     **ESTA RESPOSTA NAO E ALCANCAVEL EM 02/11/2026, e isso e proposital.**
+             *     A exigencia nasceu com o interruptor
+             *     `EXIGENCIA_DOS_DOIS_CANAIS_EM_VIGOR` DESLIGADO
+             *     (`src/shared/autorizacao/matriz-de-capacidades.ts`), porque **nao
+             *     existe validacao de telefone neste produto**: nada grava
+             *     `users.phone_verified_at`, nao ha provedor de SMS e nao ha operacao
+             *     para isso neste contrato. Com a exigencia em vigor hoje, NINGUEM
+             *     pediria plaquinha -- nem quem confirmou o e-mail --, e a plaquinha e
+             *     o produto fisico que a operacao vende.
+             *
+             *     Ela esta declarada agora para que o dia de ligar a exigencia nao seja
+             *     tambem o dia de mudar o contrato, e para que o aplicativo saiba
+             *     desenhar a recusa antes de ela existir. **Enquanto o interruptor
+             *     estiver desligado, nenhum pedido recebe este status.**
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

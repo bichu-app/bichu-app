@@ -1,8 +1,5 @@
 import { problemas } from '../../../shared/http/errors.js';
-import {
-  nivelDoCanalConfirmado,
-  recusaPorNivel,
-} from '../../../shared/autorizacao/matriz-de-capacidades.js';
+import { recusaPorExigenciaDeCanal } from '../../../shared/autorizacao/matriz-de-capacidades.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
@@ -64,16 +61,15 @@ export class SugestaoDoDiretorio {
      * consulta, com a mesma regua em SQL -- o que mudou e quem decide o que
      * fazer com a resposta.
      *
-     * `recusaPorNivel` e nao `recusaDaCapacidade` porque este caso de uso **nao
+     * `recusaPorExigenciaDeCanal` e nao `recusaDaCapacidade` porque este caso de uso **nao
      * tem `clock`**, e a ausencia dele esta escrita como decisao em
      * `DependenciasDaSugestaoDoDiretorio`. A porta sem relogio LANCA se um dia
      * `recomendar_profissional` entrar na regra dos 15 dias, em vez de deixar o
      * prazo de fora calado.
      */
-    const recusa = recusaPorNivel(
-      'recomendar_profissional',
-      nivelDoCanalConfirmado(await this.deps.canal.temCanalVerificado(autor.userId)),
-    );
+    const recusa = recusaPorExigenciaDeCanal('recomendar_profissional', {
+      canalConfirmado: await this.deps.canal.temCanalVerificado(autor.userId),
+    });
     if (recusa !== null) {
       throw problemas.canalDeContatoNaoVerificadoParaSugestao();
     }

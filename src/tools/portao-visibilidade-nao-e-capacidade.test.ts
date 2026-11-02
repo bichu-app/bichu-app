@@ -43,7 +43,7 @@ function apenasCodigo(caminho: string): string {
 void describe('visibilidade e capacidade nao se tocam (cliente, 02/11/2026)', () => {
   void it('ISCA DA ISCA: a varredura ENXERGA os dois arquivos e o que eles declaram', () => {
     assert.ok(
-      apenasCodigo(MATRIZ).includes('NIVEL_EXIGIDO'),
+      apenasCodigo(MATRIZ).includes('EXIGENCIA_DE_CANAL'),
       'a varredura nao achou a matriz na propria matriz: ela nao mede nada',
     );
     assert.ok(

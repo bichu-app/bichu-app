@@ -136,6 +136,7 @@ import {
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { criarDirectorySuggestionRepository } from '../modules/professionals/adapters/persistence/kysely-directory-suggestion-repository.js';
 import { criarCanalDeContatoDoChamador } from '../modules/professionals/adapters/persistence/kysely-canal-verificado-do-chamador.js';
+import { criarLeitorDeEvidenciasDeCanal } from '../shared/db/canal-de-contato-confirmado.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDoDiretorioAdministrativo } from '../modules/professionals/adapters/http/admin-directory-routes.js';
 import { registrarRotasDeSeguranca } from '../modules/safety/adapters/http/safety-routes.js';
@@ -421,6 +422,8 @@ export async function main(): Promise<void> {
   };
 
   verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
+
+  const evidenciasDeCanal = criarLeitorDeEvidenciasDeCanal(db);
 
   const conversas = new ConversationService({
     repositorio: criarConversationRepository(db),
@@ -729,6 +732,7 @@ export async function main(): Promise<void> {
   const pedidosDePlaquinha = new PedidoDePlaquinhaService({
     repositorio: repositorioDePedidosDePlaquinha,
     ids,
+    evidencias: evidenciasDeCanal,
   });
   const filaDePlaquinhas = new FilaDePlaquinhasAdministrativa({
     repositorio: repositorioDePedidosDePlaquinha,

@@ -1,7 +1,6 @@
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
-  nivelDoCanalConfirmado,
   recusaDaCapacidade,
   TELEFONE_SEM_VALIDACAO_POSSIVEL,
 } from '../../../shared/autorizacao/matriz-de-capacidades.js';
@@ -75,17 +74,20 @@ export function bloqueiosParaCriarEncontro(
     'cadastrar_evento',
     {
       /**
-       * O repositorio ja derivou a regua em SQL com
-       * `canalDeContatoConfirmadoNoSql`; `nivelDoCanalConfirmado` e a traducao
-       * nomeada daquele booleano para o nivel, e nao um ternario escrito aqui.
+       * **`SoADisjuncao`, e e a verdade sobre o que este ponto mediu:** o
+       * repositorio derivou a regua em SQL com `canalDeContatoConfirmadoNoSql` e
+       * trouxe o booleano, nao as duas datas. `cadastrar_evento` exige
+       * `qualquer_canal`, que e exatamente essa disjuncao -- e se um dia ela
+       * passar a exigir os dois canais, a matriz LANCA aqui em vez de decidir
+       * sobre dado que ninguem mediu.
        */
-      nivel: nivelDoCanalConfirmado(estado.temCanalVerificado),
+      canais: { canalConfirmado: estado.temCanalVerificado },
       telefone: TELEFONE_SEM_VALIDACAO_POSSIVEL,
     },
     agora,
   );
   if (recusa === null) return [];
-  return recusa === 'nivel_insuficiente'
+  return recusa === 'canal_de_contato_nao_verificado'
     ? ['contact_channel_unverified']
     : ['phone_unverified_deadline'];
 }
