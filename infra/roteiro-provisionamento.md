@@ -389,65 +389,135 @@ gcloud compute ssh bichu-hml --project=bichu-app-508914 \
 
 ---
 
-### Passo 7 — O artefato e o ambiente de homologação
+### Passo 7 — Construir e PUBLICAR as imagens aqui, e mandar só a release
 
-O `compose.yaml` é o artefato, e é o **mesmo** dos dois destinos. O que muda é
-o arquivo de ambiente — é isso que torna a portabilidade do critério 12 um fato
-verificável em vez de uma frase.
+O `compose.yaml` é o artefato de configuração, e é o **mesmo** dos dois destinos.
+O que muda é o arquivo de ambiente — é isso que torna a portabilidade do
+critério 12 um fato verificável em vez de uma frase.
 
-**Antes do `scp`, limpe na VM os três diretórios que o código apaga, e não só
-acrescenta.** `scp --recurse` copia por cima e nunca remove: um arquivo que saiu
-do repositório continua em `~/bichu/src`, e o `tsc` do build o compila; uma
-migração renumerada (a de 28/09 trocou `20260923000001/6/7/9` por
-`20260928000001` a `20260928000005`) continua em `~/bichu/migrations` com o nome
-antigo, e o migrador a aplica de novo ou morre no `checkOrder`. `admin/` pelo
-mesmo motivo. O `rm` é só destes três, e nunca do `~/bichu` inteiro: o `.env`
-do host mora lá e não tem cópia em lugar nenhum.
+**As imagens são construídas AQUI, publicadas no Artifact Registry, e a VM as
+puxa por digest.** Nada de código-fonte na VM, nada de build na VM. Quem faz
+isso são dois scripts, e eles são a única forma suportada:
+
+| Script | O que faz |
+|---|---|
+| `infra/cd/construir-imagem.sh` | constrói UMA imagem (ou reaproveita a que já existe para a mesma **árvore**), publica no registro, e imprime `ref=` (o digest), `arvore=`, `commit=` e `plataforma=` |
+| `infra/cd/implantar.sh` | roda **na VM**, puxa por digest, confere árvore/plataforma/commit, sobe o serviço e confere que o container de pé roda aquele digest |
+
+#### O que este passo deixou de ser, a data, e a queda que ele causou
+
+> **Até 27/10/2026 este passo era `scp` do código-fonte e `docker compose build`
+> NA VM.** A lista do `scp` levava `src/`, `migrations/`, `admin/`, `web/`,
+> `package.json`, `tsconfig.json` e o `Dockerfile`, e o passo 8 construía lá.
+>
+> **Em 27/10 isso tirou o hml do ar.** Construir na VM concorre pela memória da
+> e2-small com a pilha que está servindo: o build estourou a máquina e derrubou
+> o que estava de pé. Não foi azar de um dia — é o que esse procedimento faz
+> sempre que o build e a pilha disputam a mesma memória, e a e2-small não tem
+> folga para os dois (ADR-0028, ADR-0029).
+>
+> **E ele tinha um segundo defeito, mais velho e mais silencioso.** `scp
+> --recurse` copia por cima e nunca remove: arquivo que saiu do repositório
+> continuava na VM e o `tsc` o compilava; migração renumerada continuava com o
+> nome antigo e o migrador a aplicava de novo ou morria no `checkOrder`. Por
+> isso o procedimento antigo precisava de um `rm -rf -- ./src ./migrations
+> ./admin` antes de cada cópia — um `rm -rf` na mão, no host, ao lado do `.env`
+> que não tem cópia em lugar nenhum. Em 22/09 a lista do `scp` não levava `src/`
+> e o build na VM reconstruiu, **com toda a aparência de sucesso, o código que
+> já estava na máquina** (de 19/09): a esteira ficou verde, a imagem subiu, a
+> sonda respondeu, e a alteração simplesmente não estava lá.
+>
+> **Está escrito aqui para ninguém ressuscitá-lo.** Imagem construída aqui e
+> promovida por digest não tem nenhum dos dois defeitos: o build não disputa
+> memória com a pilha, e o conteúdo da imagem é o da árvore que a construiu,
+> conferido dentro do artefato.
+
+#### 7.1 — O commit e a árvore saem DAQUI
+
+`~/bichu` na VM **não é um repositório Git** e nunca foi: não existe `.git` lá.
+O commit e a árvore saem desta máquina, onde o repositório existe, e viajam como
+valor — nunca como "o que estiver na VM".
 
 ```bash
-gcloud compute ssh bichu-hml --project=bichu-app-508914 \
-  --zone=southamerica-east1-a --tunnel-through-iap \
-  --command 'cd ~/bichu && rm -rf -- ./src ./migrations ./admin && ls'
+COMMIT=$(git rev-parse HEAD)
+ARVORE=$(git rev-parse 'HEAD^{tree}')
+echo "commit=$COMMIT arvore=$ARVORE"
+# A arvore precisa estar LIMPA: `git status --porcelain` vazio. Arvore suja
+# publica uma imagem que nenhum commit descreve.
+test -z "$(git status --porcelain)" || echo "REPROVA: arvore suja, nao publique daqui"
+```
 
+#### 7.2 — Construir e publicar
+
+```bash
+export REGISTRO=southamerica-east1-docker.pkg.dev/bichu-app-508914/bichu
+# A chave de SITE do reCAPTCHA entra por NOME, lida do ambiente: o valor nunca
+# aparece em argv, em log nem em historico. O script RECUSA construir `admin/`
+# sem ela, porque o painel sairia com o login recusando "captcha indisponivel".
+set -a; . .env; set +a
+
+bash infra/cd/construir-imagem.sh bichu-app       .            prod
+bash infra/cd/construir-imagem.sh bichu-migrador  .            migrador
+bash infra/cd/construir-imagem.sh bichu-web       web
+bash infra/cd/construir-imagem.sh bichu-admin-web admin
+bash infra/cd/construir-imagem.sh bichu-edge      infra/caddy
+```
+
+Cada chamada imprime quatro linhas. **Guarde `ref=` e `arvore=` de cada uma: é
+o plano.** `commit=` é informativo (ele alimenta a sonda de `/v1/health` e o
+histórico); desde 02/11/2026 **quem autoriza o deploy é a árvore, não o commit**
+— o porquê está em `divergencia_de_arvore`, em `infra/cd/implantar.sh`.
+
+**A plataforma é explícita e não se herda do ambiente.** O script passa
+`--platform linux/amd64` e codifica a arquitetura na tag da árvore. Isso conserta
+um defeito medido em 02/11: sem `--platform`, nesta máquina (arm64) ele publicava
+**arm64 em silêncio**, e o portão aprovava porque lia o commit rodando o
+contêiner sob emulação — e, por causa do chaveamento pela árvore, aquela imagem
+arm64 seria **reaproveitada indefinidamente**. O portão novo mede a arquitetura
+no **blob de configuração** da imagem, que é o único lugar que não se engana sob
+emulação. Para outro destino, `PLATAFORMA=<os>/<arch>`; nunca
+`DOCKER_DEFAULT_PLATFORM`.
+
+**Verificação, e ela não custa nada porque o próprio script já a faz:** toda
+saída tem `ref=...@sha256:...` (digest, nunca rótulo móvel), `arvore=` igual à
+do passo 7.1, e `plataforma=linux/amd64`. Divergência aí é reprovação, não aviso.
+
+#### 7.3 — A release, que é o que viaja
+
+A VM precisa de dois arquivos que **não** vão dentro das imagens: o
+`compose.yaml` e a configuração da borda (o `Caddyfile` é **montado**, de
+propósito — trocar uma regra de borda é recriar o container, sem reconstruir
+imagem). Eles viajam numa release, e só eles.
+
+```bash
+tar -czf "/tmp/release-$COMMIT.tar.gz" compose.yaml infra/caddy/Caddyfile infra/caddy/well-known
 gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
-  --tunnel-through-iap --recurse \
-  ./compose.yaml ./Dockerfile ./Makefile ./migrations ./infra ./api \
-  ./package.json ./package-lock.json ./tsconfig.json ./tsconfig.build.json ./src \
-  ./admin \
-  bichu-hml:~/bichu/
+  --tunnel-through-iap "/tmp/release-$COMMIT.tar.gz" bichu-hml:/home/leandropanegassi/bichu/.cd/releases/
 ```
 
-`./admin` entrou em 28/09 com o backoffice (ADR-0027): sem ele o
-`docker compose build admin-web` reconstrói o painel que já estava na VM, ou
-reprova no `package.json` ausente. O `admin/node_modules` e o `admin/dist`
-locais não precisam ir (o build faz `npm ci` e gera o pacote dentro da imagem);
-se estiverem na árvore, apague-os antes ou aceite o tempo de cópia.
+**Repare no caminho, e ele não é `~`.** O login do `gcloud compute ssh` é
+`oi_bichu_app`, e a pilha mora em `/home/leandropanegassi/bichu` — `~/bichu`
+resolve para `/home/oi_bichu_app/bichu`, onde a pilha **não** está. Todo comando
+deste roteiro na VM leva `BICHU_DIR=/home/leandropanegassi/bichu`. O
+`implantar.sh` **recusa** rodar num diretório que não tenha `compose.yaml` e
+`.env`, nomeando os candidatos que encontra: ele não adivinha, porque implantar
+no diretório errado não dá erro — dá um deploy que ninguém está olhando.
 
-**As cinco últimas entradas dessa lista são uma correção de 22/09, e vale dizer
-o que a falta delas fazia.** Até aqui a lista copiava a receita do build e não o
-que ele constrói: `compose.yaml`, `Dockerfile` e `Makefile` viajavam, e
-`package.json`, `package-lock.json`, `tsconfig.json`, `tsconfig.build.json` e
-`src/` ficavam. O `docker build` do passo 8 então reconstruía, com toda a
-aparência de sucesso, **o código que já estava na máquina** — em 22/09, o
-`~/bichu/src` da VM era de 19/09. O sintoma é o pior possível: a esteira fica
-verde, a imagem sobe, a sonda responde, e a alteração simplesmente não está lá.
-É a forma exata de "as alterações não entraram", e ela não acusa em lugar
-nenhum. Copiar o código-fonte é o que torna o build do passo 8 um build do que
-foi pedido.
-
-**Verificação, e ela é de uma linha:** o que chegou na VM é tão novo quanto o
-que saiu daqui.
+**Verificação:** a release chegou e tem o que precisa.
 
 ```bash
 gcloud compute ssh bichu-hml --project=bichu-app-508914 \
   --zone=southamerica-east1-a --tunnel-through-iap \
-  --command 'find ~/bichu/src ~/bichu/package.json -newermt "-1 hour" | head -1'
-# precisa imprimir ALGUMA coisa. Vazio significa que o scp nao trouxe codigo
-# e que o passo 8 vai reconstruir o que ja estava la.
+  --command "tar -tzf /home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz"
+# precisa listar compose.yaml E infra/caddy/Caddyfile. Lista vazia ou sem um
+# dos dois e falha: o `implantar.sh` reprova nos dois casos, nomeando o que faltou.
 ```
+
+#### 7.4 — O `.env` do host, que é do operador e o CD não cria
 
 No host, o `.env` de homologação a partir do `.env.example`, com as diferenças
-que importam:
+que importam. **O `implantar.sh` não lê nem escreve este arquivo** (ADR-0022): ele
+só recusa rodar onde ele não existe.
 
 | Variável | Valor na VM | Por quê |
 |---|---|---|
@@ -493,54 +563,100 @@ docker compose run --rm --no-deps -e TAG_CODE_KEY= api node dist/bin/api.js
 
 ---
 
-### Passo 8 — Subir a pilha e testar **POR IP**, com o certificado ainda desligado
+### Passo 8 — Implantar na VM **por digest**, com as URLs sempre por NOME
 
 Esta é a linha que a ordem de 16.1 protege, e a razão de o roteiro existir.
 
-**Antes de subir, o commit — e ele precisa vir escrito na linha de comando.**
-`~/bichu` na VM **não é um repositório Git**: o `scp` do passo 7 copia arquivos,
-não histórico, e não existe `.git` lá. O `Makefile` preenche `BUILD_COMMIT` com
-`git rev-parse --verify HEAD 2>/dev/null`, que fora de um repositório devolve
-**vazio, sem erro**. O `Dockerfile` reprova o build vazio (BICHUS-210), então
-isso não passa em silêncio no build; mas qualquer caminho que contorne o
-`Makefile` produz o estado que a sonda mostra hoje: `/v1/health` respondendo
-`commit: null`, que é a pergunta "essa correção já está no ar?" ficando sem
-resposta justamente quando ela é feita.
+Nada é construído aqui. A VM puxa o digest que o passo 7.2 imprimiu, confere a
+**árvore** dentro da imagem, confere a **plataforma** no blob de configuração,
+sobe o serviço e confere que o container que ficou de pé roda **aquele** digest.
 
-Pegue o valor **nesta máquina**, onde o repositório existe, e leve-o na linha:
+#### As URLs vão por NOME, e nunca pelo IP
+
+> **Até 27/10/2026 este passo mandava subir com `PUBLIC_BASE_URL="http://$IP"` e
+> `MEDIA_PUBLIC_BASE_URL="http://$IP:3001"`.** Isso **quebra o MinIO**: ele
+> **assina a URL com o host pelo qual ele se conhece**, então uma base apontada
+> para o IP produz assinatura que não fecha com o host pelo qual o cliente
+> chega, e o erro que aparece é de assinatura — não diz que é de host, e manda
+> procurar na credencial. Testar a pilha por IP parecia prudente e custou dias de
+> diagnóstico no lugar errado.
+>
+> As bases ficam com o valor do `.env` do host, que é por nome. Quem testa por
+> IP é a sonda da borda (abaixo), que bate na porta publicada sem mexer em base
+> nenhuma — e é justamente o que ela precisa fazer.
+
+`TAG_BASE_URL` e `WEB_BASE_URL` também não entram em linha de comando, e isso é
+ainda mais sério: o endereço do QR fica no plástico, e a máquina troca de IP
+quando alguém a recria. A aplicação recusa subir com `TAG_BASE_URL` e
+`WEB_BASE_URL` em domínios registráveis diferentes (ADR-0017 item 2), o que
+também acusaria um IP copiado para lá por distração.
+
+#### 8.1 — A api (migrador + api + worker)
+
+O worker **para antes** de migrar (ADR-0029 seção 2): com ele de pé a migração
+soma 256 MB à pilha inteira e passa da máquina, e o worker parado não perde nada
+porque o trabalho está na tabela `jobs`.
 
 ```bash
-COMMIT=$(git rev-parse HEAD)     # AQUI, no repositorio. Nao na VM.
-echo "$COMMIT"
+VM="gcloud compute ssh bichu-hml --project=bichu-app-508914 --zone=southamerica-east1-a --tunnel-through-iap"
+
+$VM --command "cd /home/leandropanegassi/bichu && \
+  BICHU_DIR=/home/leandropanegassi/bichu \
+  ACAO=implantar SERVICO=api \
+  COMMIT=$COMMIT \
+  REF_APP=<ref= do bichu-app> ARVORE_APP=<arvore= do bichu-app> \
+  REF_MIGRADOR=<ref= do bichu-migrador> ARVORE_MIGRADOR=<arvore= do bichu-migrador> \
+  RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+  bash infra/cd/implantar.sh"
 ```
 
-Na VM, com o `PUBLIC_BASE_URL` apontando para o **IP**, e não para o domínio:
+#### 8.2 — Site, backoffice, mídia e borda, um por vez
 
 ```bash
-BUILD_COMMIT="$COMMIT" docker compose build
-BUILD_COMMIT="$COMMIT" \
-PUBLIC_BASE_URL="http://$IP" MEDIA_PUBLIC_BASE_URL="http://$IP:3001" \
-  docker compose up -d --wait
+# web, admin, midia: a mesma forma, trocando SERVICO/REF/ARVORE
+$VM --command "cd /home/leandropanegassi/bichu && \
+  BICHU_DIR=/home/leandropanegassi/bichu \
+  ACAO=implantar SERVICO=web COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+  RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+  bash infra/cd/implantar.sh"
 ```
 
-`BUILD_COMMIT` entra nas **duas** linhas de propósito. Ele é argumento de build
-e não variável de runtime (a correção de 22/09 no `compose.yaml`, seção
-`environment` do `api`), e o `up` reconstrói o que estiver desatualizado: sem
-ele na segunda linha, um `up` que decida reconstruir cai no `${BUILD_COMMIT:-}`
-vazio e o `Dockerfile` reprova no meio da subida.
+**`SERVICO=midia` entrou em 02/11/2026, e o motivo é medido.** O leitor da mídia
+pública usa a **mesma imagem** da api (`bichu-app`, outro comando), mas não tinha
+nome no CD — então nenhum caminho o alcançava. Resultado: em 02/11 o
+`bichu-midia-1` rodava `bichu-app:local` carimbado em **d5c382dc, de 27/10**,
+seis dias atrás, enquanto api e worker seguiam adiante. A borda depende dele
+(`depends_on: midia`). O `implantar.sh` agora **avisa** quando a api vai adiante
+e o `midia` não está sob o CD, e **reprova** quando ele está sob o CD num digest
+diferente: metade do backend num commit e metade em outro não é estado que
+alguém escolheu.
 
-**`TAG_BASE_URL` e `WEB_BASE_URL` NÃO entram nesta linha, e isso é deliberado.**
-Testar a pilha por IP é legítimo; codificar um IP dentro de um QR não é — o
-endereço fica no plástico e a máquina troca de IP quando alguém a recria. As
-duas continuam com o valor do `.env`, e a aplicação recusa subir com elas em
-domínios diferentes um do outro (ADR-0017 item 2), o que também acusaria um
-`TAG_BASE_URL="http://$IP"` copiado para cá por distração.
+**Antes de aplicar qualquer um deles, veja o plano sem executá-lo:**
 
-Repare que `up` sem `--profile dev` já exclui o Mailpit, e que `depends_on` de
-`objeto_init` com `service_completed_successfully` é o que impede `--wait` de
-ler a saída esperada daquele contêiner como erro.
+```bash
+ACAO=conferir-plano SERVICO=midia COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+  RELEASE=<tar> BICHU_DIR=/home/leandropanegassi/bichu bash infra/cd/implantar.sh
+# Nao puxa, nao sobe, nao grava nada, e nao precisa de docker: imprime o
+# digest, a arvore, a linha que iria para o compose.override.yaml, os seis
+# passos na ordem, e o que NAO seria tocado.
+```
 
-**Verificação em três camadas, porque elas falham de jeitos diferentes:**
+A borda é a última, e tem três cuidados que um CD genérico erra: o `Caddyfile`
+é montado (então o que se compara é imagem **+** hash da configuração), recriá-la
+derruba todos os hosts e zera o contador de taxa (em memória), e o site precisa
+estar saudável **antes** (ADR-0028: senão o apex dá 502). `implantar.sh` trata os
+três; ela só é recriada quando imagem **ou** configuração mudam.
+
+```bash
+$VM --command "cd /home/leandropanegassi/bichu && \
+  BICHU_DIR=/home/leandropanegassi/bichu \
+  ACAO=implantar SERVICO=borda COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+  HOST_SONDA=hml.bichu.app \
+  RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+  bash infra/cd/implantar.sh"
+```
+
+#### 8.3 — Verificação em quatro camadas, porque elas falham de jeitos diferentes
 
 ```bash
 # 1. os limites de memória VALEM. `deploy.resources` fora do Swarm é ignorado
@@ -549,44 +665,55 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}'
 # a coluna de limite precisa mostrar 640MiB no db e 448MiB no worker,
 # e NÃO a memória total da máquina
 
-# 2. as migrações aplicadas batem com as que existem em disco
+# 2. as migrações aplicadas batem com as que a IMAGEM do migrador conhece.
+#    O `implantar.sh` já faz esta comparação e reprova nos dois sentidos
+#    (migração da imagem que não aplicou; migração aplicada que a imagem não
+#    conhece). A conferência é com a LISTA, nunca com um número fixo: número
+#    fixo aqui vira mentira na próxima migração e ninguém percebe.
 docker compose logs migracao | tail -5
-esperado=$(find migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
-aplicadas=$(docker compose exec -T db psql -U bichu -d bichu -tAc 'select count(*) from pgmigrations')
-test "$esperado" = "$aplicadas" || echo "REPROVA: $esperado em disco, $aplicadas aplicadas"
-# a comparação é com a CONTAGEM DE ARQUIVOS: número fixo aqui vira mentira na
-# próxima migração, e ninguém percebe porque a conferência continua verde
 
-# 3. a borda responde o que o contrato promete, PELA PORTA PUBLICADA
+# 3. a borda responde o que o contrato promete, PELA PORTA PUBLICADA.
+#    AQUI o IP é legítimo: a sonda bate na porta, não configura base nenhuma.
 python3 infra/verificacao/verificar_borda_local.py "http://$IP" .
 
 # 4. o artefato NO AR e o commit que voce pediu -- nao um qualquer, e nao nulo
-node infra/verificacao/verificar-commit-no-health.mjs "http://$IP" "$COMMIT"
+node infra/verificacao/verificar-commit-no-health.mjs "https://hml.bichu.app" "$COMMIT"
 ```
 
-A quarta é a que fecha o buraco do passo 7, e ela não custa nada porque já
-existe: `verificar-commit-no-health.mjs` (BICHUS-210) reprova `null`, `''` e
-rótulo móvel (`latest`, `HEAD`, `unknown`), e **compara o commit que a sonda
-reporta com o commit passado como segundo argumento**, dizendo os dois valores
-quando diferem. Sem o segundo argumento ela só confere que há um valor, e é
-exatamente a metade que deixa passar o artefato velho: uma imagem construída de
-um `src/` de três dias atrás reporta um commit perfeitamente bem-formado.
-
-Passe sempre o `$COMMIT`. A verificação também tem alvo no `Makefile`
+A quarta é a que fecha o buraco de 22/09, e ela não custa nada porque já existe:
+`verificar-commit-no-health.mjs` (BICHUS-210) reprova `null`, `''` e rótulo móvel
+(`latest`, `HEAD`, `unknown`), e **compara o commit que a sonda reporta com o
+commit passado como segundo argumento**, dizendo os dois valores quando diferem.
+Sem o segundo argumento ela só confere que há um valor, e é exatamente a metade
+que deixa passar o artefato velho: uma imagem construída de um `src/` de três
+dias atrás reporta um commit perfeitamente bem-formado. **Passe sempre o
+`$COMMIT`.** Ela também tem alvo no `Makefile`
 (`make verificar-commit-de-build`) e roda as próprias iscas antes de consultar a
 rede: se ela perder a capacidade de reprovar, falha em vez de aprovar.
 
 A terceira é a que pega a família de defeito que nenhuma leitura de arquivo
-pega: **a regra escrita e não valendo**. Foi exatamente o que houve em 17/09 —
-o `Caddyfile` tinha os dois blocos de associação e `/srv/well-known` não estava
+pega: **a regra escrita e não valendo**. Foi exatamente o que houve em 17/09 — o
+`Caddyfile` tinha os dois blocos de associação e `/srv/well-known` não estava
 montado, e o `file_server` respondia 404 com `Content-Type: application/json`,
-um 404 que parece um arquivo. Sonda batida de dentro do contêiner não pega
-isso: por dentro o serviço servia `/.well-known/jwks.json` com 200 o tempo
-inteiro.
+um 404 que parece um arquivo. Sonda batida de dentro do contêiner não pega isso:
+por dentro o serviço servia `/.well-known/jwks.json` com 200 o tempo inteiro.
 
 **Não siga para a Parte B enquanto esta terceira verificação não imprimir
 `APROVADO`.** Os dois avisos sobre lista vazia são esperados até os insumos da
 Apple e do APK chegarem (ver adiante); qualquer `REPROVA` não é.
+
+#### 8.4 — As iscas do CD, e elas rodam ANTES de qualquer subida
+
+```bash
+ACAO=autoteste bash infra/cd/implantar.sh   # as funcoes puras, sem docker
+bash infra/cd/isca-digest-errado.sh         # o caminho real, com registro local
+```
+
+A segunda publica imagens mínimas num registro descartável e confere que árvore
+errada, imagem sem carimbo de árvore, plano sem árvore e plataforma errada
+**reprovam nomeando o motivo**, e que o **reaproveitamento legítimo** (outro
+commit, mesma árvore) e a plataforma certa **passam**. Portão que reprova tudo
+não verifica nada: cada reprovação ali tem controle positivo do lado.
 
 ---
 
@@ -717,29 +844,38 @@ curl -sI https://bichu.app/.well-known/apple-app-site-association \
 
 ---
 
-### Passo 11.1 — `admin.bichu.app`, o backoffice (ADR-0027)
+### Passo 11.1 — `admin-hml.bichu.app`, o backoffice (ADR-0027)
 
-> **Em qual máquina.** Pelo ADR-0029, homologação e produção ficam em VMs
-> separadas: `admin.bichu.app` aponta para `bichu-prod`, e homologação ganha o
-> seu host próprio (sugestão: `admin-hml.bichu.app`, com `ADMIN_HOSTS` da
-> `bichu-hml` apontando para ele). Em 23/09 `bichu-prod` **não existe**
-> (`gcloud compute instances list` lista só `bichu-hml`); os passos abaixo valem
-> igual nas duas, trocando o nome.
+> **Em qual máquina, e qual nome.** Pelo ADR-0029, homologação e produção ficam
+> em VMs separadas: `admin.bichu.app` é o nome de **produção** (`bichu-prod`), e
+> homologação tem o seu próprio, `admin-hml.bichu.app`. Em 23/09 `bichu-prod`
+> **não existe** (`gcloud compute instances list` lista só `bichu-hml`); os
+> passos abaixo valem igual nas duas, trocando o nome.
+>
+> **Corrigido em 02/11/2026.** Este passo prescrevia `admin.bichu.app` em tudo —
+> no `ADMIN_HOSTS` e nas seis linhas da verificação. Medido no mesmo dia:
+> `admin.bichu.app` **não resolve** em DNS (`dig +short` volta vazio), enquanto
+> `admin-hml.bichu.app`, `hml.bichu.app`, `midia-hml.bichu.app` e `bichu.app`
+> resolvem todos para o IP da `bichu-hml` — ou seja, o vazio é ausência de
+> registro, e não falha de consulta. O `ADMIN_HOSTS` efetivo na VM é
+> `admin-hml.bichu.app`. Seguir o documento ao pé da letra punha no `.env` um
+> nome que não existe, e o Caddy ficaria tentando emitir certificado por HTTP-01
+> para um host que ninguém resolve.
 
 O backoffice é o container `admin-web`, atrás da mesma borda, na mesma origem
-que `/v1/admin/*`. A borda passou a ser imagem própria (plugin de taxa, emenda 2
-do ADR-0016), então este passo **constrói** a borda no host, e não só a recria.
+que `/v1/admin/*`. A borda é imagem própria (plugin de taxa, emenda 2 do
+ADR-0016), e desde 27/10/2026 **ela não é construída no host**: as duas imagens
+vêm do registro, pelo passo 7, e a VM as puxa por digest.
 
 **Ordem que não se inverte: configuração, depois DNS.** O certificado sai por
 HTTP-01, e o Caddy só tenta emitir para nome que esteja num bloco. Nome no DNS
 sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
 `http://` para diagnosticar.
 
-1. Com os arquivos atualizados no host pelo passo 7 (limpeza e `scp`, que
-   levam `admin/`), no `.env`:
+1. Com a release do passo 7.3 no host, no `.env`:
 
    ```bash
-   ADMIN_HOSTS=https://admin.bichu.app
+   ADMIN_HOSTS=https://admin-hml.bichu.app   # em producao: https://admin.bichu.app
    # A chave de SITE do reCAPTCHA Enterprise, publica, e build arg do admin-web
    # (sem ela o login do painel recusa). O mesmo valor de CAPTCHA_SITE_KEY.
    VITE_CAPTCHA_SITE_KEY=<chave de site do reCAPTCHA>
@@ -758,11 +894,27 @@ sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
    echo "$COMMIT"
    ```
 
-   Na VM, com esse valor:
+   As duas imagens são construídas **aqui** e publicadas (passo 7.2), e a VM as
+   puxa por digest. Nada de `docker compose build` na VM: em 27/10/2026 construir
+   na VM tirou o hml do ar, porque o build disputa a memória da e2-small com a
+   pilha que está servindo.
 
    ```bash
-   BUILD_COMMIT="$COMMIT" docker compose build edge admin-web
-   docker compose up -d --no-deps admin-web edge
+   # AQUI
+   bash infra/cd/construir-imagem.sh bichu-admin-web admin        # exige VITE_CAPTCHA_SITE_KEY
+   bash infra/cd/construir-imagem.sh bichu-edge      infra/caddy
+
+   # NA VM, uma por vez, o painel antes da borda
+   $VM --command "cd /home/leandropanegassi/bichu && BICHU_DIR=/home/leandropanegassi/bichu \
+     ACAO=implantar SERVICO=admin COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+     RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+     bash infra/cd/implantar.sh"
+   $VM --command "cd /home/leandropanegassi/bichu && BICHU_DIR=/home/leandropanegassi/bichu \
+     ACAO=implantar SERVICO=borda COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+     HOST_SONDA=hml.bichu.app \
+     RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+     bash infra/cd/implantar.sh"
+
    docker compose run --rm --no-deps --entrypoint caddy edge list-modules --skip-standard
    # esperado: um único módulo não-padrão, http.handlers.rate_limit
    ```
@@ -800,48 +952,59 @@ sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
 reconstruir a imagem e recriar só ele. Guardar a imagem que está no ar ANTES,
 com o commit dela, é o que torna o retorno um comando só:
 
-```bash
-docker image tag bichu-admin-web:local bichu-admin-web:anterior   # ponto de retorno
-docker run --rm --entrypoint cat bichu-admin-web:anterior /etc/bichu/commit; echo
-# local: COMMIT=$(git rev-parse HEAD), limpeza de admin/ e scp do passo 7
-BUILD_COMMIT="$COMMIT" docker compose build admin-web
-docker compose up -d --no-deps admin-web
-docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # o commit novo
-```
-
-A borda só é reconstruída quando `infra/caddy/Dockerfile` muda; mudança só no
-Caddyfile é `docker compose up -d --no-deps --force-recreate edge`, que derruba
-as conexões de todos os hosts por alguns segundos.
-
-**Retorno (rollback)**, em segundos e sem rede:
+O ponto de retorno não é mais uma tag local: **é o histórico do CD.** Cada
+`implantar` empilha uma linha em `.cd/historico`, e `reverter` desempilha — duas
+reversões voltam duas implantações (Z → Y → X), e não alternam entre as duas
+últimas.
 
 ```bash
-docker image tag bichu-admin-web:anterior bichu-admin-web:local
-docker compose up -d --no-deps --force-recreate admin-web
-docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # = o commit anterior
+# avançar: o mesmo comando do item 2 acima, com o ref/arvore novos
+# conferir o que esta de pe:
+docker run --rm --entrypoint cat "$(docker compose images -q admin-web)" /etc/bichu/commit; echo
 ```
 
-Se o problema for da borda (Caddyfile), o retorno é, **na máquina local**,
-`git show <commit anterior>:infra/caddy/Caddyfile > Caddyfile.anterior`, o
-`scp` desse arquivo para `~/bichu/infra/caddy/Caddyfile` na VM,
-e recriar o `edge`: a VM não tem Git para fazer o `checkout` lá. Retirar o backoffice do
-ar inteiro sem tocar nos outros hosts: `ADMIN_HOSTS=http://admin.localhost` no
-`.env` e recriar o `edge` (o nome some da borda; o registro DNS pode ficar).
+A borda só muda de imagem quando `infra/caddy/Dockerfile` muda; mudança só no
+Caddyfile viaja na release e o `implantar.sh` recria a borda sozinho quando
+imagem **ou** hash da configuração mudam — e **não** recria quando os dois são
+iguais aos de pé, porque recriar derruba as conexões de todos os hosts e zera o
+contador de taxa (que é em memória).
+
+**Retorno (rollback)**, sem rede nova e sem build:
+
+```bash
+$VM --command "cd /home/leandropanegassi/bichu && BICHU_DIR=/home/leandropanegassi/bichu \
+  ACAO=reverter SERVICO=admin bash infra/cd/implantar.sh"
+# e, para a borda, SERVICO=borda: ela volta pela release guardada em
+# .cd/releases/<commit>.tar, de onde sai o Caddyfile anterior. Nao ha `git show`
+# nem `scp` no caminho: a VM nao tem Git, e a release e o que guarda a
+# configuracao de cada implantacao.
+```
+
+Retirar o backoffice do ar inteiro sem tocar nos outros hosts continua sendo
+`ADMIN_HOSTS=http://admin.localhost` no `.env` e recriar o `edge` (o nome some da
+borda; o registro DNS pode ficar).
 
 O retorno é testado em homologação antes da primeira implantação de produção:
-implantar um commit, voltar, e conferir o commit servido pelos dois comandos
-`cat /etc/bichu/commit` acima.
+implantar um commit, voltar, e conferir o commit servido. E as iscas do CD
+(passo 8.4) rodam antes de qualquer subida: elas provam que digest de outra
+árvore reprova e que o reaproveitamento legítimo passa.
 
 **Verificação:**
 
 ```bash
-dig +short admin.bichu.app @1.1.1.1          # = IP de bichu-prod, e só ele
-dig +short AAAA admin.bichu.app @1.1.1.1     # vazio
-docker compose logs edge | grep -i 'admin.bichu.app' | grep -i 'certificate obtained'
-curl -sSI https://admin.bichu.app/ | grep -iE '^(HTTP|strict-transport|content-security|x-robots|cache-control)'
+# O NOME E O DE HOMOLOGACAO. `admin.bichu.app` nao resolve (medido em 02/11) e
+# e o nome de producao; em `bichu-prod`, troque ADMIN por `admin.bichu.app`.
+ADMIN=admin-hml.bichu.app
+dig +short "$ADMIN" @1.1.1.1          # = o IP desta VM, e só ele
+dig +short AAAA "$ADMIN" @1.1.1.1     # vazio
+# CONTROLE POSITIVO da consulta: um nome que SABIDAMENTE resolve. Sem ele, um
+# `dig` vazio nao distingue "nao existe" de "nao consegui perguntar".
+dig +short hml.bichu.app @1.1.1.1     # precisa imprimir o IP
+docker compose logs edge | grep -i "$ADMIN" | grep -i 'certificate obtained'
+curl -sSI "https://$ADMIN/" | grep -iE '^(HTTP|strict-transport|content-security|x-robots|cache-control)'
 # 200, HSTS, CSP sem unsafe-* e sem google, X-Robots-Tag noindex, no-store
-curl -sSI https://admin.bichu.app/v1/health | head -1        # 404: o host admin não é a API inteira
-for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://admin.bichu.app/v1/admin/auth/login; done; echo
+curl -sSI "https://$ADMIN/v1/health" | head -1        # 404: o host admin não é a API inteira
+for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST "https://$ADMIN/v1/admin/auth/login"; done; echo
 # os dez primeiros NÃO são 429; o 11º é 429 (espere 1 min antes de repetir)
 ```
 
@@ -1153,22 +1316,33 @@ docker compose exec -T db psql -U bichu -d bichu -c "
 Decisão do cliente de 23/09/2026 e ADR-0028: o site (institucional e páginas
 públicas) é um container Astro com renderização no servidor, **nesta mesma
 VM**, em **imagem separada** da API (`web/Dockerfile`), atrás da mesma borda.
-O mecanismo de implantação é o do passo 7, e não outro: os arquivos vão para o
-host e o compose constrói lá. Não há registry no caminho, nem para a API nem
-para o site.
+O mecanismo de implantação é o dos passos 7 e 8, e não outro: a imagem é
+construída **aqui**, publicada no registro e puxada **por digest** pela VM.
+
+> **Corrigido em 27/10/2026.** Este trecho dizia "os arquivos vão para o host e o
+> compose constrói lá. Não há registry no caminho" — e mandava `scp ./web` mais
+> `docker compose build web` na VM. Há registry no caminho desde que `infra/cd/`
+> entrou, e construir na VM tirou o hml do ar em 27/10, porque o build disputa a
+> memória da e2-small com a pilha que está servindo.
 
 **Implantar ou atualizar o site** (não toca API, banco nem borda):
 
 ```bash
-gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
-  --tunnel-through-iap --recurse ./web bichu-hml:~/bichu/
-# no host, em ~/bichu, com o commit de que os arquivos saíram:
-BUILD_COMMIT=<sha> docker compose build web
-docker compose up -d --no-deps --wait web
+# AQUI
+bash infra/cd/construir-imagem.sh bichu-web web      # imprime ref= e arvore=
+
+# NA VM. `BICHU_DIR` e obrigatorio: o login do ssh e `oi_bichu_app`, e a pilha
+# mora em /home/leandropanegassi/bichu -- `~/bichu` resolve para o `~` errado.
+$VM --command "cd /home/leandropanegassi/bichu && BICHU_DIR=/home/leandropanegassi/bichu \
+  ACAO=implantar SERVICO=web COMMIT=$COMMIT REF=<ref=> ARVORE=<arvore=> \
+  RELEASE=/home/leandropanegassi/bichu/.cd/releases/release-$COMMIT.tar.gz \
+  bash infra/cd/implantar.sh"
 ```
 
-`--wait` é a metade que importa: a borda só pode passar a mandar um host para
-o `web` depois de ele estar saudável. Na ordem contrária o host responde 502.
+A espera por saudável é a metade que importa, e o `implantar.sh` a faz: a borda
+só pode passar a mandar um host para o `web` depois de ele estar saudável. Na
+ordem contrária o host responde 502. Ele também reprova quando o serviço não
+declara `healthcheck`: sem sonda, "subiu" não quer dizer nada.
 
 **`BORDA_RESTO_DA_APP=site` no `.env` do host é OBRIGATÓRIA enquanto
 `WEB_BASE_URL` e `PUBLIC_BASE_URL` forem o mesmo host.** Em homologação os dois

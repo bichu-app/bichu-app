@@ -46,7 +46,11 @@ caso() {
   # ela cega para ESTE defeito. Cada isca declara o que a saida precisa dizer.
   while IFS= read -r trecho; do
     case "$trecho" in ''|'#'*) continue ;; esac
-    if ! printf '%s' "$saida" | grep -qF -- "$trecho"; then
+    # `<<<` e nao `printf | grep -qF`: sob `pipefail`, o `grep -q` sai no
+    # primeiro casamento e o EPIPE do produtor vira falha do pipeline -- aqui
+    # com `!` na frente, o que produzia reprovacao FANTASMA, dizendo que a saida
+    # nao menciona um trecho que ela menciona. (02/11/2026.)
+    if ! grep -qF -- "$trecho" <<<"$saida"; then
       echo "$saida"
       echo "REPROVA: '$nome' recusou, mas a saida nao menciona '$trecho'. Pode estar recusando por outro motivo, e nao por este defeito" >&2
       exit 1
