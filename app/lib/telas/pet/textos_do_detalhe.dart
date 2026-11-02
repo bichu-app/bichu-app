@@ -107,6 +107,73 @@ abstract final class TextosDoDetalhe {
   /// O rotulo de cancelar, nesta folha.
   static const String naoEncontreiAinda = 'Ainda não encontrei';
 
+  // =========================================================================
+  // O DESFECHO E O CANAL DO REENCONTRO
+  //
+  // **A REDACAO DESTE BLOCO PRECISA DE REVISAO DO CLIENTE.** Ela nao veio de
+  // decisao dele: veio da necessidade de a folha PERGUNTAR o que o contrato
+  // ja aceitava e a tela nunca mandou. Os VALORES de fio nao sao escolha
+  // minha -- sao os cinco de `#/components/schemas/LostCaseClosure/properties/
+  // reunion_channel` e os tres de `.../outcome`, espelhados em
+  // `CanalDoReencontro` e `DesfechoDoCaso` (`app/lib/api/modelos_caso.dart`).
+  // O que eu escolhi foi so o TEXTO que a pessoa le, e escolhi o mais sobrio
+  // que da -- sem exclamacao, sem festa e sem culpa.
+  // =========================================================================
+
+  /// O rotulo do grupo do desfecho.
+  static const String perguntaDoDesfecho = 'O que aconteceu?';
+
+  /// `reunited`: o unico desfecho que conta no numerador da metrica.
+  static String desfechoReencontrado(String nome) => '${_o(nome)} está de volta';
+
+  /// `not_found`: a busca terminou sem o animal.
+  ///
+  /// **Nao e o mesmo que cancelar a folha**, e os dois textos tem de deixar
+  /// isso claro lado a lado: `naoEncontreiAinda` fecha a folha e o caso
+  /// CONTINUA aberto; esta opcao ENCERRA o caso sem reencontro.
+  static const String desfechoNaoEncontrado =
+      'Encerrei a busca sem encontrar';
+
+  /// O rotulo do grupo do canal, que so aparece com `reunited` escolhido.
+  ///
+  /// **E esta pergunta que faz a metrica de reencontro ser atribuivel a um
+  /// canal.** Sem ela `reunion_channel` chega nulo ao banco, e foi o que
+  /// aconteceu em todo o dado medido ate 20/10/2026.
+  static String perguntaDoCanal(String nome) => 'Como ${_o(nome)} voltou?';
+
+  /// `tag_scan`.
+  static const String canalPelaTag = 'Alguém leu a plaquinha';
+
+  /// `bichu_alert`.
+  static const String canalPeloAlerta = 'Pelo alerta do Bichu';
+
+  /// `poster_or_link`.
+  static const String canalPeloCartazOuLink = 'Pelo cartaz ou pelo link';
+
+  /// `on_my_own`.
+  static const String canalPorContaPropria = 'Por conta própria';
+
+  /// `other`.
+  static const String canalOutro = 'De outra forma';
+
+  /// A explicacao de por que o botao de confirmar esta desligado.
+  ///
+  /// **O contrato NAO exige `reunion_channel`** (`required: [outcome]`), entao
+  /// quem barra o encerramento sem canal e a FOLHA, e nao o servidor. Barrar
+  /// aqui e a escolha deliberada: mudar o contrato ricocheteia em quatro
+  /// consumidores, e o campo nulo e justamente o defeito que esta folha
+  /// conserta.
+  static const String faltaResponder =
+      'Responda as duas perguntas para encerrar o caso.';
+
+  /// O que a tela diz depois de o caso encerrar SEM reencontro.
+  ///
+  /// `casoEncerrado` diz *"está de volta"*, e dizer isso a quem acabou de
+  /// marcar `not_found` seria a tela celebrar o que nao houve.
+  static String casoEncerradoSemEncontrar(String nome) =>
+      'O caso ${_de(nome)} foi encerrado. As conversas abertas não recebem '
+      'mais mensagem.';
+
   /// `Reabrir o caso`: o desfazer que o contrato prometia e nao existia.
   static const String reabrirOCaso = 'Reabrir o caso';
 

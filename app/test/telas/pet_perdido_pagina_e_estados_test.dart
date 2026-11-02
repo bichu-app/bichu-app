@@ -268,14 +268,41 @@ Future<void> _abrirODetalhe(
   await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
 }
 
-/// Toca em `Encontrei meu pet` e **CONFIRMA na folha**.
+/// Toca em `Encontrei meu pet` e **RESPONDE AS DUAS PERGUNTAS** na folha.
 ///
 /// A folha e obrigatoria desde o trabalho da reabertura: o toque no botao abre
 /// a confirmacao, e o `POST` so sai do botao de dentro dela. Os casos que
 /// medem o encerramento passam por aqui; o grupo da folha mede a folha em si.
-Future<void> _encerrarConfirmando(WidgetTester tester) async {
+///
+/// **AS DUAS PERGUNTAS NAO SAO ENFEITE DESTE AJUDANTE.** Antes de 01/11/2026 a
+/// folha era um `Sim`/`Nao`: o desfecho ia CHUMBADO em `reencontrado` e
+/// `reunion_channel` nao ia nunca -- a metrica de reencontro por canal nao
+/// tinha como existir, porque o campo chegava nulo ao banco em 100% dos casos.
+/// Agora o botao de confirmar fica DESLIGADO ate as duas estarem respondidas, e
+/// e por isso que este ajudante toca em tres lugares e nao em dois.
+Future<void> _encerrarConfirmando(
+  WidgetTester tester, {
+  String desfecho = 'Nina está de volta',
+  String? canal = 'Alguém leu a plaquinha',
+}) async {
   await tocar(tester, find.text('Encontrei meu pet'));
+  await tocar(tester, find.text(desfecho));
+  if (canal != null) await tocar(tester, find.text(canal));
   await tocar(tester, find.text('Encerrar o caso'));
+}
+
+/// O botao de confirmar da folha, para medir se ele esta LIGADO.
+///
+/// `onPressed == null` e a medida, e nao a aparencia: um botao que parecesse
+/// desligado e agisse seria o pior dos dois mundos.
+bool _confirmarEstaLigado(WidgetTester tester) {
+  final botao = tester.widget<FilledButton>(
+    find.ancestor(
+      of: find.text('Encerrar o caso'),
+      matching: find.byType(FilledButton),
+    ),
+  );
+  return botao.onPressed != null;
 }
 
 void main() {
@@ -990,6 +1017,318 @@ void main() {
           findsNothing,
           reason: 'REPROVA: a tela afirma, depois do encerramento, que quem '
               'estava ajudando foi avisado. Nada foi enviado a ninguem.',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // GRUPO 8B — O DESFECHO E O CANAL DO REENCONTRO
+  //
+  // O DEFEITO, MEDIDO EM 01/11/2026: `_encontreiMeuPet` chamava
+  //
+  //     escopo.casos.encerrarCaso(caseId: caseId,
+  //                               desfecho: DesfechoDoCaso.reencontrado)
+  //
+  // com o desfecho CHUMBADO e **sem `canal`**. `CanalDoReencontro` existia em
+  // `app/lib/api/modelos_caso.dart` com os cinco valores do contrato e tinha
+  // ZERO uso em tela nenhuma -- medido por varredura de `app/lib` e
+  // `app/test`: as unicas tres mencoes eram a propria declaracao do enum e o
+  // parametro opcional de `CasosApi.encerrarCaso`.
+  //
+  // A CONSEQUENCIA NAO ERA COSMETICA. `reunion_channel` e, nas palavras do
+  // contrato, "o que torna a metrica de reencontro atribuivel a um canal" --
+  // e o proprio `openapi.yaml` ja registrava o efeito, no parametro `set` de
+  // `listPublicLostPets`: *"o enum existe em `LostCaseClosure` e nenhuma tela
+  // o preenche: medido em 20/10/2026, esta nulo em todo o dado"*. A metrica de
+  // "um reencontro em cada tres casos" por canal nao tinha como existir,
+  // porque o canal nunca chegava ao banco.
+  //
+  // O CONTRATO JA ACEITAVA OS DOIS, e por isso o conserto NAO o toca:
+  // `closeLostCase` recebe `LostCaseClosure`, que declara `outcome`
+  // (`reunited`/`not_found`/`false_alarm`) e `reunion_channel`
+  // (`tag_scan`/`bichu_alert`/`poster_or_link`/`on_my_own`/`other`), e o
+  // servidor grava os dois (`closure_channel` em `lost_cases`, via
+  // `kysely-lost-case-repository.ts`). Faltava SO a tela.
+  //
+  // QUEM BARRA O ENCERRAMENTO SEM CANAL E A FOLHA, E NAO O SERVIDOR, e a
+  // escolha e deliberada: `LostCaseClosure` declara `required: [outcome]`, e
+  // tornar `reunion_channel` obrigatorio no contrato ricocheteia em quatro
+  // consumidores (app, painel, site, backend). A folha nao deixa avancar; o
+  // contrato continua como estava.
+  //
+  // `false_alarm` NAO entra nesta folha, e a ausencia e medida e nao
+  // esquecimento: o contrato o oferece "somente quando o caso tem menos de 6
+  // horas e nenhum aviso ou candidato", e `CasoDePerdido`
+  // (`app/lib/api/modelos_caso.dart`) nao carrega `candidate_count` nem
+  // `unread_message_count` -- a tela nao tem como avaliar a condicao. Oferecer
+  // sem a condicao contrariaria o contrato; carregar os campos e outra
+  // historia, com decisao de produto propria.
+  //
+  // PARA VER REPROVANDO (o replante do defeito): em
+  // `tela_detalhe_do_pet.dart`, troque a chamada de volta por
+  // `desfecho: DesfechoDoCaso.reencontrado` sem `canal:`. Os tres casos de
+  // canal deste grupo e o controle positivo de `not_found` ficam vermelhos.
+  // Replantado e medido em 01/11/2026: 4 reprovaram, 0 falso-verde.
+  //
+  // **A medida e a arvore montada e O CORPO ENVIADO**, nunca o texto do
+  // codigo: uma varredura de fonte casaria com a mencao ao proprio mecanismo
+  // dentro deste comentario.
+  // -------------------------------------------------------------------------
+  group('o encerramento pergunta o desfecho E o canal, e manda os dois', () {
+    testWidgets(
+      'ISCA — a folha PERGUNTA o desfecho, e nao assume `reencontrado`',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+
+        expect(
+          find.text('O que aconteceu?'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao pergunta o desfecho. Ele ia chumbado '
+              'em `reunited`, e o contrato chama o desfecho de "instrumento de '
+              'medicao do produto": um caso que terminou sem o animal entrava '
+              'na metrica como reencontro.',
+        );
+        expect(
+          find.text('Nina está de volta'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao oferece o reencontro como ESCOLHA.',
+        );
+        expect(
+          find.text('Encerrei a busca sem encontrar'),
+          findsOneWidget,
+          reason: 'REPROVA: a folha nao oferece desfecho diferente de '
+              '`reunited`. `not_found` existe no contrato e era inalcancavel '
+              'pelo aplicativo.',
+        );
+        // `false_alarm` fica FORA, e a ausencia e deliberada: ver o cabecalho.
+        expect(
+          registro.encerramentos,
+          isEmpty,
+          reason: 'REPROVA: o `POST` saiu antes de alguem escolher o desfecho.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA NEGATIVA — `reencontrado` SEM canal nao avanca, e nada e enviado',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+        await tocar(tester, find.text('Nina está de volta'));
+
+        expect(
+          _confirmarEstaLigado(tester),
+          isFalse,
+          reason: 'REPROVA: o botao de encerrar esta LIGADO com o canal em '
+              'branco. O contrato nao exige `reunion_channel` '
+              '(`required: [outcome]`), entao quem o cobra e esta folha -- e '
+              'se ela nao cobrar, o campo volta a chegar nulo ao banco, que e '
+              'o defeito inteiro.',
+        );
+
+        // E o toque no botao desligado nao burla a falta: medido, e nao
+        // deduzido de `onPressed`.
+        await tocar(tester, find.text('Encerrar o caso'));
+        expect(
+          registro.encerramentos,
+          isEmpty,
+          reason: 'REPROVA: o `POST` saiu sem canal. Um encerramento '
+              '`reunited` com `reunion_channel` nulo e exatamente o dado que '
+              'apaga a metrica de reencontro por canal.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — escolhido o canal, ele VAI NO CORPO como `reunion_channel`',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+        );
+
+        await _encerrarConfirmando(tester, canal: 'Pelo alerta do Bichu');
+
+        expect(
+          registro.encerramentos,
+          hasLength(1),
+          reason: 'REPROVA: responder as duas perguntas nao encerrou o caso.',
+        );
+        expect(
+          registro.encerramentos.single['outcome'],
+          'reunited',
+          reason: 'REPROVA: o desfecho enviado nao e o escolhido na folha.',
+        );
+        expect(
+          registro.encerramentos.single['reunion_channel'],
+          'bichu_alert',
+          reason: 'REPROVA: o canal escolhido na folha nao chegou ao corpo. '
+              '`reunion_channel` e, no contrato, "o que torna a metrica de '
+              'reencontro atribuivel a um canal" -- e ele estava nulo em todo '
+              'o dado porque nenhuma tela o preenchia.',
+        );
+      },
+    );
+
+    // OS CINCO VALORES DE FIO, UM A UM. Nao e zelo: um unico canal ligado
+    // passaria o caso acima e deixaria os outros quatro chumbados em silencio,
+    // que e a mesma classe de defeito que este grupo conserta.
+    for (final (String rotulo, String valor) in <(String, String)>[
+      ('Alguém leu a plaquinha', 'tag_scan'),
+      ('Pelo alerta do Bichu', 'bichu_alert'),
+      ('Pelo cartaz ou pelo link', 'poster_or_link'),
+      ('Por conta própria', 'on_my_own'),
+      ('De outra forma', 'other'),
+    ]) {
+      testWidgets(
+        'ISCA — `$rotulo` vai no corpo como `$valor`',
+        (tester) async {
+          final registro = _Registro();
+          await _abrirODetalhe(
+            tester,
+            registro: registro,
+            primeiro: _petPerdido(),
+            depois: petDoContrato(),
+          );
+
+          await _encerrarConfirmando(tester, canal: rotulo);
+
+          expect(
+            registro.encerramentos.single['reunion_channel'],
+            valor,
+            reason: 'REPROVA: `$rotulo` nao chegou como `$valor`. Os cinco '
+                'valores vem de `CanalDoReencontro`, que espelha '
+                '`#/components/schemas/LostCaseClosure/properties/'
+                'reunion_channel`: um rotulo ligado ao valor errado grava a '
+                'metrica em outro canal, e isso nao da para distinguir depois.',
+          );
+        },
+      );
+    }
+
+    testWidgets(
+      'CONTROLE POSITIVO — `not_found` e aceito, e vai SEM `reunion_channel`',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+        await tocar(tester, find.text('Encerrei a busca sem encontrar'));
+
+        // Sem reencontro NAO ha canal a perguntar: o contrato diz que
+        // `reunion_channel` "so faz sentido com `outcome: reunited`".
+        expect(
+          _confirmarEstaLigado(tester),
+          isTrue,
+          reason: 'REPROVA: `not_found` escolhido e o botao segue desligado. A '
+              'folha estaria cobrando um canal que o contrato nao quer para '
+              'este desfecho, e o caminho de quem nao encontrou o animal '
+              'ficaria sem saida.',
+        );
+        expect(
+          find.text('Alguém leu a plaquinha'),
+          findsNothing,
+          reason: 'REPROVA: a folha pergunta o canal do reencontro para um '
+              'caso que terminou SEM reencontro.',
+        );
+
+        await tocar(tester, find.text('Encerrar o caso'));
+
+        expect(
+          registro.encerramentos.single['outcome'],
+          'not_found',
+          reason: 'REPROVA: o desfecho enviado nao e `not_found`. Era o '
+              'caminho que o chumbo fechava: toda saida da folha gravava '
+              '`reunited`, inclusive a de quem nao encontrou.',
+        );
+        expect(
+          registro.encerramentos.single.containsKey('reunion_channel'),
+          isFalse,
+          reason: 'REPROVA: o corpo leva `reunion_channel` com `not_found`. O '
+              'campo contradiz o proprio desfecho, e o servidor o descarta -- '
+              'mandar e pedir para um dos dois lados mudar de opiniao.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — sem desfecho escolhido o botao esta desligado',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+
+        expect(
+          _confirmarEstaLigado(tester),
+          isFalse,
+          reason: 'REPROVA: a folha abre com o encerramento JA liberado. Um '
+              'desfecho com valor inicial e o chumbo de volta, agora com cara '
+              'de escolha.',
+        );
+        expect(
+          find.textContaining('Responda as duas perguntas'),
+          findsOneWidget,
+          reason: 'REPROVA: o botao esta desligado e a folha nao diz por que. '
+              'Controle desligado sem explicacao e beco sem saida.',
+        );
+      },
+    );
+
+    testWidgets(
+      'ISCA — trocar `reencontrado` por `not_found` LIMPA o canal escolhido',
+      (tester) async {
+        final registro = _Registro();
+        await _abrirODetalhe(
+          tester,
+          registro: registro,
+          primeiro: _petPerdido(),
+          depois: petDoContrato(),
+        );
+
+        await tocar(tester, find.text('Encontrei meu pet'));
+        await tocar(tester, find.text('Nina está de volta'));
+        await tocar(tester, find.text('Alguém leu a plaquinha'));
+        // E agora muda de ideia.
+        await tocar(tester, find.text('Encerrei a busca sem encontrar'));
+        await tocar(tester, find.text('Encerrar o caso'));
+
+        expect(
+          registro.encerramentos.single['outcome'],
+          'not_found',
+        );
+        expect(
+          registro.encerramentos.single.containsKey('reunion_channel'),
+          isFalse,
+          reason: 'REPROVA: o canal escolhido ANTES da troca de desfecho '
+              'sobreviveu e foi enviado com `not_found`. Estado que a tela '
+              'guarda e nao limpa e como um campo invisivel marcado.',
         );
       },
     );

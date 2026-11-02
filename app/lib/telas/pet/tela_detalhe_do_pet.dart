@@ -19,6 +19,7 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/folha_destrutiva.dart';
+import '../../widgets/grupo_segmentado.dart';
 import '../../widgets/moldura.dart';
 import '../../widgets/qr_da_plaquinha.dart';
 import '../../widgets/saida_da_tela.dart';
@@ -235,7 +236,8 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     final caseId = pet.idDoCasoAberto;
     if (caseId == null || caseId.isEmpty) return;
 
-    if (!await _confirmarEncerramento(pet)) return;
+    final escolha = await _confirmarEncerramento(pet);
+    if (escolha == null) return;
     if (!mounted) return;
 
     final escopo = Escopo.of(context);
@@ -248,7 +250,8 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     try {
       encerrado = await escopo.casos.encerrarCaso(
         caseId: caseId,
-        desfecho: DesfechoDoCaso.reencontrado,
+        desfecho: escolha.desfecho,
+        canal: escolha.canal,
       );
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
@@ -270,7 +273,12 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     escopo.cacheDeMeusPets.limpar();
 
     if (!mounted) return;
-    anunciar(context, TextosDoDetalhe.casoEncerrado(pet.nome));
+    anunciar(
+      context,
+      escolha.desfecho == DesfechoDoCaso.reencontrado
+          ? TextosDoDetalhe.casoEncerrado(pet.nome)
+          : TextosDoDetalhe.casoEncerradoSemEncontrar(pet.nome),
+    );
     setState(() {
       _casoEncerradoAgora = encerrado;
       _erroAoReabrir = null;
@@ -291,8 +299,14 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
     }
   }
 
-  Future<bool> _confirmarEncerramento(Pet pet) async {
-    final confirmou = await showModalBottomSheet<bool>(
+  /// Abre a folha e devolve **o desfecho e o canal**, ou `null` se desistiu.
+  ///
+  /// Devolvia `bool`, e o `true` virava `DesfechoDoCaso.reencontrado` CHUMBADO
+  /// com `canal` nenhum na chamada abaixo -- o defeito que apagava a metrica
+  /// central do produto: `reunion_channel` nunca chegava ao banco, e a razao
+  /// de `reunited` existir e ser atribuivel a um canal.
+  Future<EscolhaDoEncerramento?> _confirmarEncerramento(Pet pet) async {
+    return showModalBottomSheet<EscolhaDoEncerramento>(
       context: context,
       showDragHandle: true,
       useSafeArea: true,
@@ -305,9 +319,13 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
         rotuloAcessivelDeConfirmar:
             TextosDoDetalhe.confirmarEncerramentoAcessivel(pet.nome),
         rotuloDeCancelar: TextosDoDetalhe.naoEncontreiAinda,
+        perguntaDoDesfecho: TextosDoDetalhe.perguntaDoDesfecho,
+        rotuloDeReencontrado: TextosDoDetalhe.desfechoReencontrado(pet.nome),
+        rotuloDeNaoEncontrado: TextosDoDetalhe.desfechoNaoEncontrado,
+        perguntaDoCanal: TextosDoDetalhe.perguntaDoCanal(pet.nome),
+        faltaResponder: TextosDoDetalhe.faltaResponder,
       ),
     );
-    return confirmou ?? false;
   }
 
   Future<void> _reabrirOCaso(CasoDePerdido caso) async {
@@ -873,7 +891,38 @@ class _AcaoEmTexto extends StatelessWidget {
 }
 
 /// A FOLHA DE CONFIRMACAO do encerramento do caso (11.9, sem o 11.9.1).
-class _FolhaDoEncerramento extends StatelessWidget {
+/// O que a folha de encerramento devolve: **o desfecho e o canal**.
+///
+/// Os dois juntos num tipo so, e nao dois retornos, porque e assim que a
+/// combinacao impossivel nao existe: `canal` so e preenchido com
+/// `DesfechoDoCaso.reencontrado`, que e o que o contrato diz do campo
+/// (*"so faz sentido com `outcome: reunited`"*).
+@immutable
+class EscolhaDoEncerramento {
+  const EscolhaDoEncerramento({required this.desfecho, this.canal});
+
+  final DesfechoDoCaso desfecho;
+
+  /// `reunion_channel`. Nulo quando o desfecho nao e reencontro.
+  final CanalDoReencontro? canal;
+}
+
+/// Os cinco canais, **na ordem em que a folha os oferece**, com o texto que a
+/// pessoa le.
+///
+/// Os VALORES de fio vem de `CanalDoReencontro`, que espelha o contrato: esta
+/// lista escolhe ordem e redacao, nunca valor. A ordem comeca pelo que o
+/// produto construiu (a plaquinha e o alerta) e termina em `other`.
+const List<(CanalDoReencontro, String)> _canaisDaFolha =
+    <(CanalDoReencontro, String)>[
+  (CanalDoReencontro.pelaTag, TextosDoDetalhe.canalPelaTag),
+  (CanalDoReencontro.peloAlerta, TextosDoDetalhe.canalPeloAlerta),
+  (CanalDoReencontro.peloCartazOuLink, TextosDoDetalhe.canalPeloCartazOuLink),
+  (CanalDoReencontro.porContaPropria, TextosDoDetalhe.canalPorContaPropria),
+  (CanalDoReencontro.outro, TextosDoDetalhe.canalOutro),
+];
+
+class _FolhaDoEncerramento extends StatefulWidget {
   const _FolhaDoEncerramento({
     required this.titulo,
     required this.corpo,
@@ -881,6 +930,11 @@ class _FolhaDoEncerramento extends StatelessWidget {
     required this.rotuloDeConfirmar,
     required this.rotuloAcessivelDeConfirmar,
     required this.rotuloDeCancelar,
+    required this.perguntaDoDesfecho,
+    required this.rotuloDeReencontrado,
+    required this.rotuloDeNaoEncontrado,
+    required this.perguntaDoCanal,
+    required this.faltaResponder,
   });
 
   final String titulo;
@@ -896,6 +950,64 @@ class _FolhaDoEncerramento extends StatelessWidget {
 
   final String rotuloDeCancelar;
 
+  /// O rotulo do grupo do desfecho.
+  final String perguntaDoDesfecho;
+
+  final String rotuloDeReencontrado;
+  final String rotuloDeNaoEncontrado;
+
+  /// O rotulo do grupo do canal, que so aparece com reencontro escolhido.
+  final String perguntaDoCanal;
+
+  /// O que explica o botao desligado.
+  final String faltaResponder;
+
+  @override
+  State<_FolhaDoEncerramento> createState() => _FolhaDoEncerramentoState();
+}
+
+class _FolhaDoEncerramentoState extends State<_FolhaDoEncerramento> {
+  DesfechoDoCaso? _desfecho;
+  CanalDoReencontro? _canal;
+
+  /// **NAO ha valor inicial, e isso e o conserto.**
+  ///
+  /// Um `_desfecho` que nascesse `reencontrado` seria o chumbo de volta, agora
+  /// com cara de escolha; e um `_canal` com valor inicial gravaria um canal que
+  /// ninguem apontou, que e pior que o nulo de hoje -- nulo se ve, canal errado
+  /// nao.
+  bool get _completo {
+    switch (_desfecho) {
+      case null:
+        return false;
+      case DesfechoDoCaso.reencontrado:
+        return _canal != null;
+      case DesfechoDoCaso.naoEncontrado:
+      case DesfechoDoCaso.abertoPorEngano:
+        return true;
+    }
+  }
+
+  void _escolherDesfecho(DesfechoDoCaso qual) {
+    setState(() {
+      _desfecho = qual;
+      // Trocar para um desfecho sem reencontro LIMPA o canal: mandar
+      // `reunion_channel` com `not_found` contradiz o proprio campo.
+      if (qual != DesfechoDoCaso.reencontrado) _canal = null;
+    });
+  }
+
+  void _confirmar() {
+    final desfecho = _desfecho;
+    if (desfecho == null || !_completo) return;
+    Navigator.of(context).pop(
+      EscolhaDoEncerramento(
+        desfecho: desfecho,
+        canal: desfecho == DesfechoDoCaso.reencontrado ? _canal : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -905,7 +1017,7 @@ class _FolhaDoEncerramento extends StatelessWidget {
       scopesRoute: true,
       namesRoute: true,
       explicitChildNodes: true,
-      label: titulo,
+      label: widget.titulo,
       child: SingleChildScrollView(
         child: Padding(
           padding: EdgeInsets.only(
@@ -920,14 +1032,14 @@ class _FolhaDoEncerramento extends StatelessWidget {
               Semantics(
                 header: true,
                 child: Text(
-                  titulo,
+                  widget.titulo,
                   style: textos.titleLarge?.copyWith(color: cores.textPrimary),
                 ),
               ),
               const SizedBox(height: BichuEspaco.e3),
-              Text(corpo, style: textos.bodyMedium),
+              Text(widget.corpo, style: textos.bodyMedium),
               const SizedBox(height: BichuEspaco.e3),
-              ...oQueAcontece.map(
+              ...widget.oQueAcontece.map(
                 (item) => Padding(
                   padding: const EdgeInsets.only(bottom: BichuEspaco.e2),
                   child: Row(
@@ -944,28 +1056,78 @@ class _FolhaDoEncerramento extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: BichuEspaco.e4),
+
+              // A PRIMEIRA PERGUNTA: o desfecho, que antes era chumbado.
+              GrupoSegmentado<DesfechoDoCaso>(
+                rotulo: widget.perguntaDoDesfecho,
+                selecionado: _desfecho,
+                aoSelecionar: _escolherDesfecho,
+                opcoes: <OpcaoSegmentada<DesfechoDoCaso>>[
+                  OpcaoSegmentada<DesfechoDoCaso>(
+                    valor: DesfechoDoCaso.reencontrado,
+                    rotulo: widget.rotuloDeReencontrado,
+                  ),
+                  OpcaoSegmentada<DesfechoDoCaso>(
+                    valor: DesfechoDoCaso.naoEncontrado,
+                    rotulo: widget.rotuloDeNaoEncontrado,
+                  ),
+                ],
+              ),
+
+              // A SEGUNDA PERGUNTA, e ela so existe com reencontro escolhido:
+              // o contrato diz que `reunion_channel` "so faz sentido com
+              // `outcome: reunited`".
+              if (_desfecho == DesfechoDoCaso.reencontrado) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e4),
+                GrupoSegmentado<CanalDoReencontro>(
+                  rotulo: widget.perguntaDoCanal,
+                  selecionado: _canal,
+                  aoSelecionar: (canal) => setState(() => _canal = canal),
+                  opcoes: <OpcaoSegmentada<CanalDoReencontro>>[
+                    for (final (canal, rotulo) in _canaisDaFolha)
+                      OpcaoSegmentada<CanalDoReencontro>(
+                        valor: canal,
+                        rotulo: rotulo,
+                      ),
+                  ],
+                ),
+              ],
+
+              if (!_completo) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e3),
+                Text(
+                  widget.faltaResponder,
+                  style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+                ),
+              ],
+
               const SizedBox(height: BichuEspaco.e6),
 
               SizedBox(
                 width: double.infinity,
                 height: BichuAlvoDeToque.critico,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: Text(rotuloDeCancelar),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(widget.rotuloDeCancelar),
                 ),
               ),
               const SizedBox(height: BichuEspaco.e4),
               Semantics(
                 button: true,
-                label: rotuloAcessivelDeConfirmar,
+                enabled: _completo,
+                label: widget.rotuloAcessivelDeConfirmar,
                 excludeSemantics: true,
-                onTap: () => Navigator.of(context).pop(true),
+                onTap: _completo ? _confirmar : null,
                 child: SizedBox(
                   width: double.infinity,
                   height: BichuAlvoDeToque.min,
                   child: FilledButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(rotuloDeConfirmar, style: textos.labelLarge),
+                    onPressed: _completo ? _confirmar : null,
+                    child: Text(
+                      widget.rotuloDeConfirmar,
+                      style: textos.labelLarge,
+                    ),
                   ),
                 ),
               ),

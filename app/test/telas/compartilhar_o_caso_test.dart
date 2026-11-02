@@ -484,6 +484,15 @@ void main() {
         expect(find.text('Compartilhar'), findsOneWidget, reason: 'CONTROLE.');
 
         await tocar(tester, find.text('Encontrei meu pet'));
+        // AS DUAS PERGUNTAS DA FOLHA (01/11/2026): o desfecho e o canal do
+        // reencontro. O botao de confirmar fica DESLIGADO ate as duas estarem
+        // respondidas -- antes a folha era um `Sim`/`Nao`, com o desfecho
+        // chumbado em `reunited` e `reunion_channel` nunca enviado. Este
+        // arquivo nao mede a folha (quem mede e o grupo 8B de
+        // `pet_perdido_pagina_e_estados_test.dart`): ele precisa ATRAVESSAR a
+        // folha para chegar ao 200 do encerramento, que e o que ele mede.
+        await tocar(tester, find.text('Nina está de volta'));
+        await tocar(tester, find.text('Alguém leu a plaquinha'));
         await tocar(tester, find.text('Encerrar o caso'));
 
         expect(
