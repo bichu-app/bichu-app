@@ -11,7 +11,13 @@ export const rotaDoPerfilPublico = defineRoute({
   method: 'get',
   path: '/public/pets/:slug',
   effects: [],
-  rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'challenge' }],
+  /**
+   * 01/11/2026: era `challenge`. Sem verificador do desafio, `challenge`
+   * degenera em recusa (ADR-0020, camada 2) — e recusa em leitura pública é
+   * porta fechada em quem não atacou nada. `ip` é FAIXA /24, e não endereço.
+   * OBSERVA até o cliente decidir; nota de 01/11/2026 em `api/openapi.yaml`.
+   */
+  rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'log_and_alert' }],
 });
 
 export interface DependenciasDoPerfilPublico {

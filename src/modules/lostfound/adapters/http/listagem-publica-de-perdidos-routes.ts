@@ -12,9 +12,16 @@ export const rotaDaListagemDePerdidos = defineRoute({
   path: '/public/lost-pets',
   effects: ['expensive_query'],
   rateLimit: [
-    { dimension: ['ip'], limit: 120, window: '1h', onExceed: 'challenge' },
-    { dimension: ['ip'], limit: 600, window: '24h', onExceed: 'challenge' },
-    { dimension: ['ip', 'q'], limit: 30, window: '1h', onExceed: 'challenge' },
+    /**
+     * 01/11/2026: as três eram `challenge`. Sem verificador do desafio,
+     * `challenge` degenera em recusa (ADR-0020, camada 2), e esta é a lista
+     * pública de pets perdidos: recusar quem procura um animal é o oposto do
+     * que o teto existe para proteger. `ip` é FAIXA /24, e não endereço.
+     * OBSERVAM até o cliente decidir; nota de 01/11/2026 em `api/openapi.yaml`.
+     */
+    { dimension: ['ip'], limit: 120, window: '1h', onExceed: 'log_and_alert' },
+    { dimension: ['ip'], limit: 600, window: '24h', onExceed: 'log_and_alert' },
+    { dimension: ['ip', 'q'], limit: 30, window: '1h', onExceed: 'log_and_alert' },
   ],
 });
 

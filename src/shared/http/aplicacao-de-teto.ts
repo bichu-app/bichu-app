@@ -70,6 +70,11 @@ export interface DependenciasDoTeto {
   readonly hmacDeIp: (ip: string | undefined) => Buffer | null;
   /** HMAC de um identificador qualquer, com a MESMA chave (`IP_HMAC_KEY`). */
   readonly hmacDeValor: (valor: string) => string;
+  /**
+   * Existe verificador do desafio para esta rota? Ausente significa "em
+   * nenhuma superfície", que é o estado de hoje: ver `VerificadorDeDesafio`.
+   */
+  readonly desafioVerificavelEm?: VerificadorDeDesafio;
   readonly log: (evento: Record<string, unknown>, mensagem: string) => void;
 }
 
@@ -81,6 +86,11 @@ export function dependenciasDoTeto(entrada: {
   readonly contador: RateLimitStore;
   readonly chaveDeHmac: Buffer;
   readonly log: (evento: Record<string, unknown>, mensagem: string) => void;
+  /**
+   * Só quem LIGA um verificador do desafio passa isto. Ausente, `challenge`
+   * recusa, que é o estado de hoje na superfície do app.
+   */
+  readonly desafioVerificavelEm?: VerificadorDeDesafio;
 }): DependenciasDoTeto {
   return {
     contador: entrada.contador,
@@ -88,6 +98,9 @@ export function dependenciasDoTeto(entrada: {
     hmacDeValor: (valor) =>
       createHmac('sha256', entrada.chaveDeHmac).update(valor, 'utf8').digest('base64url'),
     log: entrada.log,
+    ...(entrada.desafioVerificavelEm === undefined
+      ? {}
+      : { desafioVerificavelEm: entrada.desafioVerificavelEm }),
   };
 }
 
@@ -265,14 +278,25 @@ export const ACOES_QUE_RECUSAM_IMPLEMENTADAS: ReadonlySet<OnExceed> = new Set<On
   'challenge',
 ]);
 
-/** O cabeçalho do desafio antiabuso, como o contrato o declara. */
-export const CABECALHO_DE_CAPTCHA = 'x-captcha-token';
-
-/** Há desafio respondido nesta requisição? */
-function temCaptcha(request: FastifyRequest): boolean {
-  const apresentado = request.headers[CABECALHO_DE_CAPTCHA];
-  return typeof apresentado === 'string' && apresentado.trim() !== '';
-}
+/**
+ * **A condição é a existência do VERIFICADOR, e não a presença do cabeçalho.**
+ *
+ * O contrato diz que `challenge` degenera em `deny_429` quando **não há desafio
+ * para pedir**. Ler isso como "o cliente mandou `x-captcha-token`?" transforma o
+ * freio num pedido de licença: `X-Captcha-Token: x` desligaria o teto do login,
+ * e freio que o atacante desliga com um cabeçalho não é freio. Cabeçalho
+ * presente não é desafio respondido — é uma string, e ninguém a verifica.
+ *
+ * A condição certa é medível e não opinativa: existe verificador do desafio
+ * NESTA superfície? Hoje, em todo o `src/`, o único leitor de `x-captcha-token`
+ * é `admin-access/adapters/http/admin-session-routes.ts` — o login do painel.
+ * Portanto não há verificador na superfície do app, e `challenge` recusa lá.
+ *
+ * Ausente, este predicado significa "nenhuma superfície verifica", que é o
+ * estado de hoje. Quando o captcha do app entrar, quem o ligar passa o
+ * predicado e a regra muda sozinha, sem reescrever a condição.
+ */
+export type VerificadorDeDesafio = (rota: RouteDefinition) => boolean;
 
 /**
  * `on_exceed` decide o que acontece ao estourar.
@@ -280,12 +304,21 @@ function temCaptcha(request: FastifyRequest): boolean {
  * `deny_429` recusa sempre. `challenge` recusa QUANDO não há desafio para pedir:
  * é a degeneração do ADR-0020, e a razão dela está escrita no contrato —
  * "desafiar quem nao tem como responder e recusar sem dizer quando voltar".
- * Havendo `X-Captcha-Token`, o desafio tem onde ser cobrado e o pedido é
- * atendido (camada 1). As demais ações aceitam e gravam, então não recusam.
+ *
+ * Quem responde "há desafio para pedir?" é `VerificadorDeDesafio`, pela
+ * EXISTÊNCIA do verificador na superfície — nunca pela presença do cabeçalho,
+ * que o cliente escolhe. Sem verificador ligado, `challenge` recusa, e é esse o
+ * estado de hoje na superfície do app.
+ *
+ * As demais ações aceitam e gravam, então não recusam.
  */
-function recusa(entrada: RateLimitEntry, request: FastifyRequest): boolean {
+function recusa(
+  entrada: RateLimitEntry,
+  rota: RouteDefinition,
+  deps: DependenciasDoTeto,
+): boolean {
   if (SEMANTICA_DO_EXCESSO[entrada.onExceed] !== 'recusa') return false;
-  if (entrada.onExceed === 'challenge') return !temCaptcha(request);
+  if (entrada.onExceed === 'challenge') return deps.desafioVerificavelEm?.(rota) !== true;
   return true;
 }
 
@@ -353,7 +386,7 @@ export async function aplicarNaEntrada(
           { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
           'teto de tentativas invalidas atingido',
         );
-        if (recusa(entrada, request)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
+        if (recusa(entrada, rota, deps)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
       }
       continue;
     }
@@ -364,7 +397,7 @@ export async function aplicarNaEntrada(
         { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
         'teto de chamada atingido',
       );
-      if (recusa(entrada, request)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
+      if (recusa(entrada, rota, deps)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
     }
   }
   return {};

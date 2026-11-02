@@ -383,6 +383,33 @@ x-rate-limit-vocabulary:
 # ir para producao, ou no primeiro incidente de abuso numa delas. Esta lista
 # e mantida a mao; ao pagar um item, tire a operacao daqui.
 
+# LEITURA PUBLICA REBAIXADA PARA OBSERVADORA EM 01/11/2026.
+#
+# `challenge` so freia de verdade onde existe VERIFICADOR do desafio, e no app
+# nao existe: o unico leitor de `x-captcha-token` em todo o `src/` e
+# `admin-session-routes.ts`. Logo, pela degeneracao do ADR-0020 (camada 2),
+# `challenge` nessas rotas e `deny_429` com outro nome -- e `deny_429` numa
+# leitura publica e porta fechada na cara de quem nao atacou nada.
+#
+# Pesa mais que isso: a dimensao `ip` e, por `reduzirEnderecoIp` (SEC-010), uma
+# FAIXA /24, e nao um endereco. Entao 40/h "por IP" e 40/h por faixa, alcancavel
+# numa faixa de CGNAT movel sem ataque nenhum. O caso pior e
+# `createFoundReportFromTag`: e o achador avisando que encontrou o pet, e recusar
+# ali contraria o invariante nº 1 ("nenhum aviso ao tutor e descartado por
+# limite") -- o mesmo motivo pelo qual a BORDA nao aplica teto de operacao.
+#
+# Enquanto o cliente nao decidir rota por rota, estas seis OBSERVAM:
+#
+#   resolveTagCode              createFoundReportFromTag
+#   listPublicLostPets          listPublicDirectoryEntries
+#   getPublicPetBySlug          getPublicLostCase
+#
+# O mecanismo que impede o silencio continua valendo para elas: quem declarar
+# aqui uma acao que RECUSA e nao a implementar na borda derruba a subida
+# (`conferirAcoesDeExcesso`). O que esta suspenso e o NUMERO virar recusa, nao a
+# honestidade da declaracao. Decisao do cliente: frear (`deny_429`, assumindo o
+# 429) ou seguir observando.
+
 x-problem-types:
   # `type` e sempre `https://{dominio}/problems/<slug>` e o cliente decide por
   # ele, nunca pelo texto. Esta lista e fechada: tipo novo entra aqui antes de
@@ -3969,7 +3996,7 @@ paths:
         - dimension: [ip]
           limit: 300
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
           note: "nunca 429 para codigo valido"
         - dimension: [ip_24]
           limit: 2000
@@ -4174,11 +4201,11 @@ paths:
         - dimension: [ip, code]
           limit: 5
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip]
           limit: 40
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip_24]
           limit: 200
           window: 1h
@@ -8481,15 +8508,15 @@ paths:
         - dimension: [ip]
           limit: 120
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip]
           limit: 600
           window: 24h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip, q]
           limit: 30
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
           note: "busca por texto tem teto proprio"
       parameters:
         - name: case_state
@@ -8725,15 +8752,15 @@ paths:
         - dimension: [ip]
           limit: 120
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip]
           limit: 600
           window: 24h
-          on_exceed: challenge
+          on_exceed: log_and_alert
         - dimension: [ip, q]
           limit: 30
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
           note: "busca por texto tem teto proprio, como na listagem publica de perdidos"
       parameters:
         - name: q
@@ -8801,7 +8828,7 @@ paths:
         - dimension: [ip]
           limit: 60
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
       responses:
         '200':
           description: Perfil publico.
@@ -8854,7 +8881,7 @@ paths:
         - dimension: [ip]
           limit: 120
           window: 1h
-          on_exceed: challenge
+          on_exceed: log_and_alert
       responses:
         '200':
           description: Caso aberto.

@@ -54,7 +54,14 @@ export const rotaDeResolucaoDaTag = defineRoute({
   effects: ['irreversible_write'],
   rateLimit: [
     { dimension: ['ip', 'code'], limit: 30, window: '1h', onExceed: 'serve_cache' },
-    { dimension: ['ip'], limit: 300, window: '1h', onExceed: 'challenge' },
+    /**
+     * 01/11/2026: era `challenge`. Sem verificador do desafio, `challenge`
+     * degenera em recusa (ADR-0020, camada 2) — e recusa em leitura pública é
+     * porta fechada em quem não atacou nada. Lembrando que `ip` é FAIXA /24, e
+     * não endereço. OBSERVA até o cliente decidir rota por rota; o motivo
+     * inteiro está na nota de 01/11/2026 em `api/openapi.yaml`.
+     */
+    { dimension: ['ip'], limit: 300, window: '1h', onExceed: 'log_and_alert' },
     { dimension: ['ip_24'], limit: 2000, window: '1h', onExceed: 'log_and_alert' },
     { dimension: ['code'], limit: 100, window: '24h', onExceed: 'notify_owner' },
     {
@@ -111,8 +118,17 @@ export const rotaDeAvisoPelaTag = defineRoute({
       window: '24h',
       onExceed: 'notify_once_and_review',
     },
-    { dimension: ['ip', 'code'], limit: 5, window: '1h', onExceed: 'challenge' },
-    { dimension: ['ip'], limit: 40, window: '1h', onExceed: 'challenge' },
+    /**
+     * 01/11/2026: as duas eram `challenge`, e esta é a rota em que recusar é o
+     * PIOR desfecho do produto — o achador avisando que encontrou o pet. Recusa
+     * aqui contraria o invariante nº 1 do contrato ("nenhum aviso ao tutor é
+     * descartado por limite"), que é o mesmo motivo pelo qual a BORDA não
+     * aplica teto de operação. E 40/h "por IP" é 40/h por FAIXA /24, alcançável
+     * numa faixa de CGNAT móvel sem ataque nenhum. OBSERVAM até o cliente
+     * decidir; nota de 01/11/2026 em `api/openapi.yaml`.
+     */
+    { dimension: ['ip', 'code'], limit: 5, window: '1h', onExceed: 'log_and_alert' },
+    { dimension: ['ip'], limit: 40, window: '1h', onExceed: 'log_and_alert' },
     { dimension: ['ip_24'], limit: 200, window: '1h', onExceed: 'log_and_alert' },
   ],
 });

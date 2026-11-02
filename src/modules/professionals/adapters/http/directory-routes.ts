@@ -46,9 +46,16 @@ export const rotaPublicaDoDiretorio = defineRoute({
   path: '/public/directory-entries',
   effects: ['expensive_query'],
   rateLimit: [
-    { dimension: ['ip'], limit: 120, window: '1h', onExceed: 'challenge' },
-    { dimension: ['ip'], limit: 600, window: '24h', onExceed: 'challenge' },
-    { dimension: ['ip', 'q'], limit: 30, window: '1h', onExceed: 'challenge' },
+    /**
+     * 01/11/2026: as três eram `challenge`. Sem verificador do desafio,
+     * `challenge` degenera em recusa (ADR-0020, camada 2) — e recusa em leitura
+     * pública é porta fechada em quem não atacou nada. `ip` é FAIXA /24, e não
+     * endereço, então 30 buscas/h são 30 por faixa. OBSERVAM até o cliente
+     * decidir rota por rota; nota de 01/11/2026 em `api/openapi.yaml`.
+     */
+    { dimension: ['ip'], limit: 120, window: '1h', onExceed: 'log_and_alert' },
+    { dimension: ['ip'], limit: 600, window: '24h', onExceed: 'log_and_alert' },
+    { dimension: ['ip', 'q'], limit: 30, window: '1h', onExceed: 'log_and_alert' },
   ],
 });
 

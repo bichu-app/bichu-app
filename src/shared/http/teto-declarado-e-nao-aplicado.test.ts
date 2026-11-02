@@ -8,10 +8,17 @@
  * freio nenhum, com os números certos declarados na rota.
  *
  * O contrato já havia decidido o que fazer: a tabela de `on_exceed` em
- * `info.description` diz que a requisição sem `X-Captcha-Token` não tem carga
- * seguinte onde o desafio caiba, e que por isso **`challenge` degenera em
- * `deny_429` com `Retry-After` naquela requisicao** (ADR-0020, camada 2). O que
+ * `info.description` diz que **`challenge` degenera em `deny_429` com
+ * `Retry-After`** quando não há desafio para pedir (ADR-0020, camada 2). O que
  * faltava era o código da degeneração.
+ *
+ * **E a condição dela é a existência do VERIFICADOR, não a presença do
+ * cabeçalho.** A primeira versão deste conserto leu "requisição sem
+ * `X-Captcha-Token`" literalmente, e com isso `X-Captcha-Token: x` desligava o
+ * teto do login: um freio que o atacante desliga com um cabeçalho. Cabeçalho
+ * que ninguém verifica não é desafio. As iscas abaixo cobram as duas direções —
+ * nenhum valor do cabeçalho atravessa, e havendo verificador o pedido é
+ * atendido.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -25,10 +32,18 @@ import { criarContadorEmMemoria } from './rate-limit.js';
 import { tetoDeTeste } from './teto-de-teste.js';
 import {
   ACOES_QUE_RECUSAM_IMPLEMENTADAS,
-  CABECALHO_DE_CAPTCHA,
   SEMANTICA_DO_EXCESSO,
   conferirAcoesDeExcesso,
+  dependenciasDoTeto,
 } from './aplicacao-de-teto.js';
+import { CHAVE_DE_HMAC_DE_TESTE } from './teto-de-teste.js';
+
+/**
+ * O cabeçalho do desafio antiabuso. Ele mora AQUI, e não no despachante, porque
+ * o despachante não o consulta: quem decide é a existência do verificador. As
+ * iscas deste arquivo existem para provar essa indiferença.
+ */
+const CABECALHO_DE_CAPTCHA = 'x-captcha-token';
 import type { OnExceed } from './route-definition.js';
 import type { ResolvedorDeDimensao, Sigilo } from './aplicacao-de-teto.js';
 import { rotaDeLogin } from '../../modules/identity/adapters/http/routes.js';
@@ -169,32 +184,93 @@ void describe('isca 3: controle, ação que só OBSERVA não recusa nem derruba 
   });
 });
 
-void describe('a camada 1 do ADR-0020: sem recusa pela ausência do token', () => {
+void describe('o freio não se desliga por cabeçalho', () => {
   /**
-   * Quem apresenta o desafio tem onde responder a ele, então o pedido é
-   * atendido e o desafio se cobra na carga seguinte. A degeneração existe para
-   * quem NÃO tem essa carga, e não para transformar o teto em muro para todos.
+   * A isca que faltava na primeira versão deste arquivo.
+   *
+   * Eu havia lido a degeneração do ADR-0020 como "não há `X-Captcha-Token` na
+   * requisição", e com isso `X-Captcha-Token: x` desligava o teto do login. A
+   * condição do contrato é "não há desafio PARA PEDIR", e cabeçalho que ninguém
+   * verifica não é desafio: é uma string que o atacante escolhe.
    */
-  void it('`challenge` COM `X-Captcha-Token` atende o estouro', async () => {
-    const { status } = await statusDasTres('challenge', {
-      [CABECALHO_DE_CAPTCHA]: 'token-do-recaptcha',
-    });
-    assert.deepEqual(
-      status,
-      [200, 200, 200],
-      'o desafio respondido foi tratado como desafio ausente',
-    );
-  });
-
-  void it('token vazio ou só espaço é ausência de token', async () => {
-    for (const valor of ['', '   ']) {
+  void it('nenhum valor de `X-Captcha-Token` atravessa o teto', async () => {
+    for (const valor of ['token-do-recaptcha', 'x', '', '   ', 'Bearer qualquer-coisa']) {
       const { status } = await statusDasTres('challenge', { [CABECALHO_DE_CAPTCHA]: valor });
       assert.deepEqual(
         status,
         [200, 200, 429],
-        `o cabeçalho ${JSON.stringify(valor)} passou por desafio respondido`,
+        `\`X-Captcha-Token: ${valor}\` desligou o freio: o teto virou pedido de licença`,
       );
     }
+  });
+
+  void it('a decisão não lê o cabeçalho: com e sem ele, o resultado é o mesmo', async () => {
+    const semCabecalho = await statusDasTres('challenge');
+    const comCabecalho = await statusDasTres('challenge', {
+      [CABECALHO_DE_CAPTCHA]: 'token-do-recaptcha',
+    });
+    assert.deepEqual(comCabecalho.status, semCabecalho.status);
+  });
+});
+
+void describe('a condição é o VERIFICADOR, e não o cabeçalho', () => {
+  /**
+   * O outro lado da isca: a regra não é "challenge sempre recusa", é "recusa
+   * onde não há verificador". Havendo verificador ligado para a rota, o desafio
+   * tem onde ser cobrado e o pedido é atendido (camada 1 do ADR-0020) — sem
+   * reescrever a condição no dia em que o captcha do app entrar.
+   *
+   * Hoje nenhuma superfície liga o predicado, e o único leitor de
+   * `x-captcha-token` em `src/` é o login do painel.
+   */
+  async function statusComVerificador(
+    verifica: boolean,
+  ): Promise<readonly number[]> {
+    const rota = rotaCom('challenge');
+    const app = criarServidor({
+      problemBaseUrl: BASE_DE_PROBLEMA,
+      isProduction: false,
+      teto: dependenciasDoTeto({
+        contador: criarContadorEmMemoria(() => Date.now()),
+        chaveDeHmac: CHAVE_DE_HMAC_DE_TESTE,
+        log: () => {},
+        desafioVerificavelEm: () => verifica,
+      }),
+      bodyLimitBytes: 1_048_576,
+    });
+    registrarRota(app, rota, {}, async (_request, reply) => reply.status(200).send({}));
+    const status: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const resposta = await app.inject({
+        method: 'POST',
+        url: rota.path,
+        headers: { 'x-forwarded-for': IP },
+      });
+      status.push(resposta.statusCode);
+    }
+    await app.close();
+    return status;
+  }
+
+  void it('COM verificador na superfície, `challenge` atende o estouro', async () => {
+    assert.deepEqual(
+      await statusComVerificador(true),
+      [200, 200, 200],
+      'havendo quem cobre o desafio, o pedido devia ser atendido',
+    );
+  });
+
+  void it('SEM verificador, `challenge` recusa', async () => {
+    assert.deepEqual(await statusComVerificador(false), [200, 200, 429]);
+  });
+
+  void it('predicado AUSENTE é o mesmo que não haver verificador', async () => {
+    const { status } = await statusDasTres('challenge');
+    assert.deepEqual(
+      status,
+      [200, 200, 429],
+      'sem predicado, o padrão tem de ser recusar -- o contrário seria liberar por omissão',
+    );
   });
 });
 

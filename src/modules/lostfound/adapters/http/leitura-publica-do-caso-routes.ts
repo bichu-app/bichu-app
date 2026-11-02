@@ -11,7 +11,14 @@ export const rotaDoCasoPublico = defineRoute({
   method: 'get',
   path: '/public/lost-cases/:shareToken',
   effects: [],
-  rateLimit: [{ dimension: ['ip'], limit: 120, window: '1h', onExceed: 'challenge' }],
+  /**
+   * 01/11/2026: era `challenge`. Sem verificador do desafio, `challenge`
+   * degenera em recusa (ADR-0020, camada 2), e esta é a página que o tutor
+   * compartilha para achar o pet: recusar quem abriu o link derruba justamente
+   * a divulgação. `ip` é FAIXA /24, e não endereço. OBSERVA até o cliente
+   * decidir; nota de 01/11/2026 em `api/openapi.yaml`.
+   */
+  rateLimit: [{ dimension: ['ip'], limit: 120, window: '1h', onExceed: 'log_and_alert' }],
 });
 
 export const rotaDoCartaz = defineRoute({
