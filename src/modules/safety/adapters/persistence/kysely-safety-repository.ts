@@ -1,5 +1,6 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
+import { audienciaDaPublicacao } from '../../../../shared/db/audiencia-da-publicacao.js';
 import type { Database } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
@@ -91,18 +92,7 @@ export function construtorDoAlvoDaPublicacao(
     .select(['p.id as id', 'p.author_user_id as autor', 'p.body as corpo'])
     .where('p.public_ref', '=', refDaPublicacao)
     .where('p.deleted_at', 'is', null)
-    .where(
-      sql<boolean>`(
-        p.author_user_id = ${chamador}::uuid
-        OR EXISTS (
-          SELECT 1 FROM user_connections uc
-           WHERE uc.state = 'accepted'
-             AND ((uc.requester_user_id = p.author_user_id AND uc.addressee_user_id = ${chamador}::uuid)
-               OR (uc.requester_user_id = ${chamador}::uuid AND uc.addressee_user_id = p.author_user_id))
-             AND conta_habilitada(uc.requester_user_id)
-             AND conta_habilitada(uc.addressee_user_id))
-      )`,
-    )
+    .where(audienciaDaPublicacao('p.author_user_id', chamador))
     .where(sql<boolean>`NOT bloqueio_entre(p.author_user_id, ${chamador}::uuid)`)
     .compile();
 }

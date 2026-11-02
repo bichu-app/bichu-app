@@ -192,6 +192,7 @@ Future<void> _montar(
           child: CorpoDoMural(
             leitura: MuralApi(api),
             interacao: MuralApi(api),
+            canalConfirmado: true,
             // **`aoDenunciar` TEM de vir**, e nao e enfeite do arranjo: sem
             // ele `_menu` devolve `SizedBox.shrink()` (menu sem opcao nao
             // nasce), e os casos do alvo de toque ficariam verdes por nao

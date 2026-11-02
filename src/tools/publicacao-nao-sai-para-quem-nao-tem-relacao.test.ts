@@ -122,7 +122,13 @@ void describe('ISCA (b): a publicacao sai em DUAS operacoes, e em mais nenhuma',
       intrusas,
       [],
       'operacao nova carregando publicacao. Antes de existir, ela passa pela Emenda 2 do ' +
-        'ADR-0010: "timeline, publicacao, curtida, contador" nao saem para quem nao e conexao',
+        'ADR-0010: "timeline, publicacao, curtida, contador" nao saem no PERFIL de quem ' +
+        'nao e conexao (`getPersonProfile`). ATUALIZADO EM 02/11/2026: a audiencia da ' +
+        'propria linha do tempo deixou de ser conexao aceita e passou a ser canal de ' +
+        'contato confirmado nas duas pontas (decisao do cliente), e a Emenda 2 NAO foi ' +
+        'contrariada -- ela fala do perfil, e nenhum campo de publicacao entrou la. O que ' +
+        'esta lista fechada cobra continua inteiro: publicacao nao sai em superficie ' +
+        'publica, nem sem conta, nem por rota avulsa.',
     );
   });
 

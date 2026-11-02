@@ -205,7 +205,11 @@ Future<List<http.Request>> montarOCartao(
       theme: BichuTheme.claro,
       home: Scaffold(
         body: SingleChildScrollView(
-          child: CorpoDoMural(leitura: MuralApi(api), interacao: MuralApi(api)),
+          child: CorpoDoMural(
+          leitura: MuralApi(api),
+          interacao: MuralApi(api),
+          canalConfirmado: true,
+        ),
         ),
       ),
     ),

@@ -124,10 +124,26 @@ function apelidoDaMassa(): string {
   return `massateste${String(contador).padStart(2, '0')}-${refPublica().slice(0, 6).toLowerCase()}`;
 }
 
+/**
+ * A conta da massa, **VERIFICADA** -- e o `email_verified_at` entrou em
+ * 02/11/2026, nao por zelo.
+ *
+ * A decisao do cliente daquele dia abriu a audiencia do Mural e passou a cobrar
+ * canal de contato confirmado das DUAS pontas. `listPublicationComments`
+ * resolve a publicacao por `construtorDaPublicacaoVisivel`, que carrega essa
+ * audiencia: **com a massa nao verificada, a publicacao deixa de existir para
+ * qualquer leitor e todos os casos deste arquivo passam a medir 404** em vez de
+ * medir a foto do autor do comentario, que e o que eles existem para medir.
+ *
+ * A verificacao e, portanto, PRE-CONDICAO deste arquivo e nao o seu assunto. O
+ * assunto -- Emenda 5 item 2, a foto so entre conexoes aceitas -- nao mudou, e e
+ * por isso que os casos abaixo continuam valendo palavra por palavra.
+ */
 async function criarConta(nome: string): Promise<UserId> {
   const id = randomUUID() as UserId;
   await cliente.query(
-    'INSERT INTO users (id, email, display_name, public_ref) VALUES ($1, $2, $3, $4)',
+    `INSERT INTO users (id, email, display_name, public_ref, email_verified_at)
+     VALUES ($1, $2, $3, $4, now())`,
     [id, `comentario-${id}@${DOMINIO_DE_TESTE}`, nome, refPublica()],
   );
   contasCriadas.push(id);

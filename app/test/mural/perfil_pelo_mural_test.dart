@@ -176,7 +176,11 @@ Future<void> _montarOCartao(
     tester,
     Scaffold(
       body: SingleChildScrollView(
-        child: CorpoDoMural(leitura: MuralApi(api), interacao: MuralApi(api)),
+        child: CorpoDoMural(
+          leitura: MuralApi(api),
+          interacao: MuralApi(api),
+          canalConfirmado: true,
+        ),
       ),
     ),
   );

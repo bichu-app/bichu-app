@@ -161,6 +161,7 @@ Future<void> _montarOMural(
             key: ValueKey<int>(_montagem),
             leitura: api,
             interacao: api,
+            canalConfirmado: true,
           ),
         ),
       ),

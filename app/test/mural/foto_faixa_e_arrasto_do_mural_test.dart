@@ -494,7 +494,7 @@ void main() {
         // vazio que a pessoa puxa para ver se chegou algo.
         final pedidos = await abrirOMural(tester, itens: 0);
         expect(
-          find.text(CorpoDoMural.tituloSemConexao),
+          find.text(CorpoDoMural.tituloSemPublicacao),
           findsOneWidget,
           reason:
               'REPROVA NA ANCORA: o Mural vazio nao desenhou o estado vazio, '
@@ -799,7 +799,7 @@ void main() {
           itens: 0,
         );
         expect(
-          find.text(CorpoDoMural.tituloSemConexao),
+          find.text(CorpoDoMural.tituloSemPublicacao),
           findsOneWidget,
           reason: 'REPROVA NA ANCORA: o estado vazio nao apareceu.',
         );

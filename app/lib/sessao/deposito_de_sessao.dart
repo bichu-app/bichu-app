@@ -65,6 +65,11 @@ class DepositoNoChaveiro implements DepositoDeSessao {
         'id': sessao.usuario.id,
         'email': sessao.usuario.email,
         'email_verified': sessao.usuario.emailVerificado,
+        // GRAVADO DESDE 02/11/2026, e nao e zelo: a audiencia do Mural passou a
+        // depender deste sinal, e sem gravar ele voltava `false` a cada
+        // reinicio -- o estado vazio pediria "confirme seu contato" a quem ja
+        // confirmou, que e pior que vazio mudo.
+        'contact_channel_verified': sessao.usuario.canalConfirmado,
         'pending_email': sessao.usuario.emailPendente,
         'email_deliverable': sessao.usuario.emailEntregavel,
         'display_name': sessao.usuario.nome,

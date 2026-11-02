@@ -1347,9 +1347,17 @@ export interface paths {
          *     tempo de outra pessoa a foto em `processing` simplesmente nao sai, e e
          *     por isso que `Publication` nao tem campo de estado nenhum.
          *
-         *     **Ela nao depende de conexao.** Quem nao tem conexao nenhuma ve aqui
-         *     tudo o que publicou -- e e esta operacao que distingue, na tela, "nao
-         *     tenho conexao" de "ninguem publicou".
+         *     **Ela nao depende de conexao, e nao depende da verificacao.** Quem nao
+         *     tem conexao nenhuma, e quem nao confirmou canal de contato, ve aqui tudo
+         *     o que publicou.
+         *
+         *     ATUALIZADO EM 02/11/2026: ela continua sendo o sinal que o aplicativo usa
+         *     para distinguir os estados vazios, mas **os estados vazios agora sao
+         *     TRES**, e nao dois. Com a audiencia aberta, "nao tenho conexao" deixou de
+         *     ser causa de Mural vazio; entraram "ninguem publicou ainda" e **"eu nao
+         *     confirmei meu canal de contato"**, que e a unica das tres que a pessoa
+         *     resolve sozinha -- e por isso e a unica que o estado vazio aponta com um
+         *     caminho (`verifyMyEmail`).
          */
         get: operations["listMyPublications"];
         put?: never;
@@ -1502,35 +1510,72 @@ export interface paths {
          * @description O que o cliente pediu em 19/10/2026: *"a secao de timeline, onde as
          *     publicacoes dos usuarios que ele segue e sao amigos apareca"*.
          *
-         *     **O recorte, por extenso: as publicacoes VIVAS de quem e CONEXAO ACEITA
-         *     de quem chama, mais as de quem chama.** Mais recente primeiro.
+         *     **ATUALIZADO EM 02/11/2026, decisao do cliente, e esta operacao foi a que
+         *     mudou.** O motivo dito por ele: *"no comeco nao havera volume e a secao
+         *     ficaria parada"*. A audiencia deixou de ser conexao aceita.
+         *
+         *     **O recorte, por extenso: as publicacoes VIVAS de quem tem CANAL DE
+         *     CONTATO CONFIRMADO, para quem tambem tem, mais as de quem chama.** Mais
+         *     recente primeiro. Conexao **nao** entra: duas pessoas sem relacao nenhuma
+         *     se veem, desde que as duas estejam verificadas.
+         *
+         *     **A trava da verificacao e NOVA, e ela e das DUAS pontas.** Antes de
+         *     02/11/2026 o sinal `contact_channel_verified` era lido e exibido como
+         *     selo, e nao filtrava nada. Ele passou a filtrar porque abrir o Mural para
+         *     a base inteira abre o vetor de spam no mesmo movimento, e esta foi a
+         *     leitura que o cliente escolheu entre quatro. Consequencia que o desenho
+         *     assume: **quem nao confirmou canal de contato ve o Mural VAZIO**, e o
+         *     estado vazio do aplicativo tem de dizer isso e oferecer
+         *     `verifyMyEmail` -- vazio mudo aqui e o mesmo problema que a decisao quis
+         *     resolver.
+         *
+         *     **A DECISAO E TEMPORARIA, e quem a desfaz e o cliente** -- conforme a base
+         *     cresce e as pessoas passam a ter conexoes. O interruptor e
+         *     `MURAL_SO_ENTRE_CONEXOES`, em
+         *     `src/shared/db/audiencia-da-publicacao.ts`: **uma linha**, e ela volta a
+         *     regra antiga nas tres consultas de uma vez.
          *
          *     As proprias entram porque, sem elas, publicar e voltar ao Mural
          *     entregaria o estado vazio -- a pessoa nao veria o que acabou de escrever
          *     na tela em que escreveu.
          *
-         *     **A quem NAO tem relacao com o autor, a publicacao NAO EXISTE.** Nao ha
-         *     ramo, `CASE` nem segunda consulta que mostre publicacao de estranho: o
-         *     predicado e um `EXISTS` sobre `user_connections` com `state = 'accepted'`
-         *     nos dois sentidos do par, somado a `conta_habilitada` das duas pontas,
+         *     **A quem a audiencia nao alcanca, a publicacao NAO EXISTE.** Nao ha
+         *     ramo, `CASE` nem segunda consulta: o predicado e `conta_habilitada` do
+         *     autor E de quem olha, somado ao canal de contato confirmado dos dois
+         *     (`email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a
+         *     mesma regua do selo e dos quatro 409 `contact-channel-unverified`), mais
          *     `NOT bloqueio_entre` e `NOT publicacao_ocultada_para_quem_denunciou`, e
          *     **tudo isso esta na clausula `WHERE` da consulta** (ADR-0021). Chamar a
          *     consulta de um caminho novo devolve lista vazia, e nao a linha do tempo
          *     de outra pessoa.
          *
+         *     **`conta_habilitada` SOBREVIVEU A ABERTURA, e por escrito.** Ate
+         *     02/11/2026 ela vinha de dentro do `EXISTS` das conexoes, sobre as duas
+         *     pontas do par; tirar o `EXISTS` sem reintroduzi-la devolveria ao Mural as
+         *     contas desabilitadas. Ela e cobrada sobre o autor E sobre quem olha.
+         *
+         *     **BLOQUEIO E DENUNCIA FICAM, e agora importam mais.** Com a audiencia por
+         *     conexao, o bloqueio entre duas pessoas sem relacao nunca era alcancado --
+         *     a conexao ja filtrava antes dele. Aberta a audiencia, `NOT
+         *     bloqueio_entre` passa a ser a **unica** protecao entre duas pessoas sem
+         *     relacao nenhuma, e `reportPublication` passa a ser a defesa de quem
+         *     recebe spam de estranho. Os dois sao seguranca, e nao alcance: o
+         *     interruptor que volta a regra antiga nao os toca.
+         *
          *     **"SEGUIR" NAO ENTRA NESTA OPERACAO.** O cliente decidiu, em 18/10,
          *     "os dois, conexao e seguir"; seguir assimetrico e objeto novo (tabela,
          *     operacoes e a lista "quem me segue", que o portao
          *     `conexao-nao-expoe-lista-nem-identificador.test.ts` nomeia num caso
-         *     proprio). Esta operacao e inteiramente sobre CONEXAO ACEITA, que e o que
-         *     a Emenda 2 do ADR-0010 ja sustenta, e nenhum campo dela precisa mudar
-         *     quando seguir chegar: o recorte ganha uma perna no `WHERE`, e nada mais.
+         *     proprio). Nenhum campo desta operacao precisa mudar quando seguir
+         *     chegar: o recorte ganha uma perna no `WHERE`, e nada mais.
          *
-         *     **A EMENDA 2 DO ADR-0010 NAO E CONTRARIADA.** Ela diz que timeline,
-         *     publicacao e curtida **nao saem no perfil de quem nao e conexao**
-         *     (`getPersonProfile`), e isso continua valendo literalmente: nenhum
-         *     campo desta operacao aparece la, e esta operacao nao mostra nada de
-         *     quem nao e conexao aceita.
+         *     **A EMENDA 2 DO ADR-0010 NAO E CONTRARIADA, e isso foi conferido em
+         *     02/11/2026.** Ela diz que timeline, publicacao e curtida **nao saem no
+         *     perfil de quem nao e conexao** (`getPersonProfile`), e isso continua
+         *     valendo literalmente: nenhum campo desta operacao aparece la, e abrir a
+         *     audiencia DAQUI nao acrescenta nada lá. As 29 ADRs foram varridas e
+         *     **nenhuma ancora "mural so para conexoes"**: a unica mencao liga o Mural
+         *     a CONTA, e nao a conexao (ADR-0010, sobre o achador sem conta).
          *
          *     **O AUTOR SAI SEM FOTO**, e a ausencia e deliberada. A Emenda 3 do
          *     ADR-0010 abriu `photo_icon_url` em `Conversation.participants[]` *"e em
@@ -7904,8 +7949,9 @@ export interface paths {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -7966,8 +8012,9 @@ export interface paths {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -8052,8 +8099,9 @@ export interface paths {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
                 /**
@@ -8097,7 +8145,7 @@ export interface paths {
          *     um substituto dela.
          *
          *     **Quem nao esta em nenhum dos dois caminhos nao atinge linha.** Terceiro
-         *     que e conexao aceita chega ate o `UPDATE` (ele VE a publicacao) e sai com
+         *     que a audiencia alcanca chega ate o `UPDATE` (ele VE a publicacao) e sai com
          *     zero linhas afetadas: comentario de terceiro em publicacao alheia,
          *     endereco inexistente e comentario ja apagado sao o MESMO `404` --
          *     **nunca `403`**.
@@ -8130,8 +8178,9 @@ export interface paths {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -16417,9 +16466,17 @@ export interface components {
          *     (ADR-0006: nao ha geocodificacao) e **NAO HA VISIBILIDADE A ESCOLHER**.
          *     A ultima e decisao do cliente, literal: *"se elas forem amigas nao tem
          *     problema, o que nao pode e ser publico, sem ter nenhum relacionamento"*
-         *     -- a visibilidade e UMA, conexao aceita, e um seletor com uma opcao nao e
-         *     uma escolha. `additionalProperties: false` e o que impede qualquer dos
-         *     tres de entrar sem ninguem decidir.
+         *     -- a visibilidade e UMA, e um seletor com uma opcao nao e uma escolha.
+         *     `additionalProperties: false` e o que impede qualquer dos tres de entrar
+         *     sem ninguem decidir.
+         *
+         *     **O QUE "UMA" SIGNIFICA MUDOU EM 02/11/2026, e o numero nao.** A
+         *     visibilidade era "conexao aceita" e passou a ser "quem tem canal de
+         *     contato confirmado", por decisao do cliente -- no comeco nao havera
+         *     volume e a secao ficaria parada. **Continua sem seletor**, porque
+         *     continua sendo UMA: quem publica nao escolhe audiencia, nem antes nem
+         *     agora, e a frase dele acima segue atendida pelo lado que importa -- nada
+         *     aqui e publico nem alcancavel sem conta.
          */
         PublicationInput: {
             /**
@@ -16586,13 +16643,28 @@ export interface components {
          *     foto, algo bem parecido com o instagram"*, e a emenda NOMEIA esta
          *     superficie.
          *
-         *     **O predicado da Emenda 3 nao foi relaxado: ele e satisfeito por
-         *     CONSTRUCAO aqui.** A clausula `WHERE` de `getMyTimeline` so devolve
-         *     publicacao cujo autor e quem chama ou e conexao `accepted` dele -- entao
-         *     todo autor que aparece ja esta dentro do conjunto que a Emenda 3
-         *     autoriza. A conversa precisou de predicado explicito porque ela PODE ter
-         *     do outro lado quem nao e conexao (o achador sem conta); o Mural nao tem
-         *     esse outro lado.
+         *     **O predicado da Emenda 3 nao foi relaxado -- e desde 02/11/2026 ele e
+         *     EXPLICITO, e nao mais satisfeito por construcao.** Ate aquela data a
+         *     clausula `WHERE` de `getMyTimeline` so devolvia publicacao cujo autor era
+         *     quem chama ou conexao `accepted` dele, entao todo autor que aparecia ja
+         *     estava dentro do conjunto que a Emenda 3 autoriza, e repetir o predicado
+         *     no `JOIN` da foto era duplicacao que um caso de teste proibia.
+         *
+         *     **A abertura da audiencia desfez essa construcao**, e por isso o
+         *     predicado de conexao aceita passou a morar, por escrito, no `JOIN` da
+         *     foto do autor -- em `kysely-publicacoes.ts`, via `fotoDoAutorVisivel`.
+         *     A razao e a segunda das tres da Emenda 5: *o golpe do falso achador e
+         *     praticado por ESTRANHO, e estranho nao e `accepted` -- "a consulta que
+         *     traria a foto dele nao existe"*. Abrir a audiencia fez essa consulta
+         *     existir, e deixar a foto passar junto estenderia foto de pessoa a
+         *     estranho **por analogia**, que e o que a emenda proibe fazer sem nomear a
+         *     superficie.
+         *
+         *     **Entao, desde 02/11/2026: a publicacao de quem nao e conexao APARECE, e
+         *     sai com `photo_icon_url: null`.** O que sai do autor estranho e `handle`,
+         *     `display_name` e o selo. Abrir a foto tambem e decisao do cliente, esta no
+         *     relatorio da frente que abriu a audiencia, e no dia em que ele disser sim
+         *     o predicado some do `JOIN` -- e nada mais.
          *
          *     **O "por CONSTRUCAO" vale no MURAL, e nao onde este schema for
          *     reusado.** Em `PublicationComment.author` a pessoa e o autor do
@@ -16708,9 +16780,12 @@ export interface components {
         };
         /**
          * @description Uma publicacao na linha do tempo. **Ela so existe nesta resposta para
-         *     quem e conexao aceita do autor, ou para o proprio autor** -- o recorte
-         *     mora na clausula `WHERE` da consulta (ADR-0021), e nao num campo desta
-         *     forma.
+         *     quem a audiencia alcanca, ou para o proprio autor** -- o recorte mora na
+         *     clausula `WHERE` da consulta (ADR-0021), e nao num campo desta forma.
+         *
+         *     ATUALIZADO EM 02/11/2026 (decisao do cliente): a audiencia era CONEXAO
+         *     ACEITA e passou a ser CANAL DE CONTATO CONFIRMADO NAS DUAS PONTAS. O
+         *     proprio autor ve a sua publicacao sempre, verificado ou nao.
          */
         Publication: {
             /** @description O endereco opaco. E ele que `reportPublication` recebe, e e ele o `target_ref` da fila do painel. */
@@ -16759,9 +16834,13 @@ export interface components {
             liked_by_me: boolean;
         };
         /**
-         * @description A linha do tempo, mais recente primeiro. `items: []` quando quem chama
-         *     nao tem conexao nenhuma **e** nao publicou nada: os dois estados devolvem
-         *     a mesma lista, e e o aplicativo que os distingue.
+         * @description A linha do tempo, mais recente primeiro. `items: []` quando a audiencia
+         *     de quem chama nao alcanca nada **e** ele nao publicou nada.
+         *
+         *     ATUALIZADO EM 02/11/2026: a causa mais comum de lista vazia deixou de ser
+         *     "nao tenho conexao" e passou a ser **"nao confirmei meu canal de
+         *     contato"** -- quem nao confirmou nao ve nada de ninguem. E o aplicativo
+         *     que distingue os estados, e so esse tem caminho de saida.
          */
         PublicationPage: {
             items: components["schemas"]["Publication"][];
@@ -17695,8 +17774,9 @@ export interface components {
          *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
          *     Linha orfa em `publication_reports` nao e mais possivel, e
          *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-         *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-         *     mesmo, responde `404` -- e nunca `403`.
+         *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+         *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+         *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
          */
         PublicationRef: string;
     };
@@ -19149,8 +19229,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -19213,10 +19294,14 @@ export interface operations {
         requestBody?: never;
         responses: {
             /**
-             * @description A linha do tempo. `items: []` quando quem chama nao tem conexao
-             *     nenhuma **e** nao publicou nada -- os dois estados devolvem a mesma
-             *     lista vazia, e e o aplicativo que os distingue com
-             *     `getMyConnectionSummary` e `listMyPublications`.
+             * @description A linha do tempo. `items: []` em TRES estados desde 02/11/2026, e
+             *     eles devolvem a mesma lista vazia: **quem chama nao confirmou canal
+             *     de contato** (e entao nao ve nada de ninguem), ninguem publicou
+             *     ainda, ou tudo o que havia esta fora por bloqueio e denuncia. E o
+             *     aplicativo que os distingue, com `Me.contact_channel_verified` e
+             *     `listMyPublications` -- e o primeiro e o unico que a pessoa resolve
+             *     sozinha, entao e o unico cujo estado vazio oferece caminho
+             *     (`verifyMyEmail`).
              */
             200: {
                 headers: {
@@ -25516,8 +25601,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -25553,8 +25639,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -25593,8 +25680,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -25629,8 +25717,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };
@@ -25670,8 +25759,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
                 /**
@@ -25714,8 +25804,9 @@ export interface operations {
                  *     migracao `20261020000002`), e com ela a chave estrangeira que faltava.
                  *     Linha orfa em `publication_reports` nao e mais possivel, e
                  *     `reportPublication` passou a conferir o alvo: publicacao inexistente,
-                 *     apagada, de quem nao e conexao aceita de quem chama, ou de quem chama
-                 *     mesmo, responde `404` -- e nunca `403`.
+                 *     apagada, fora da audiencia de quem chama (desde 02/11/2026 a audiencia e
+                 *     o canal de contato confirmado das duas pontas, e nao mais a conexao
+                 *     aceita), ou de quem chama mesmo, responde `404` -- e nunca `403`.
                  */
                 publicationRef: components["parameters"]["PublicationRef"];
             };

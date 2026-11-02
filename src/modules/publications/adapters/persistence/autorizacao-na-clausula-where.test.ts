@@ -73,6 +73,45 @@ const CONFERENCIAS = {
       'as duas pontas da aresta precisam estar habilitadas',
     );
   },
+  exigeCanalConfirmadoDoAUTOR: (sql: string) => {
+    assert.match(
+      sql,
+      /SELECT 1 FROM users u WHERE u\.id = p\.author_user_id AND \(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\)/,
+      'o AUTOR nao verificado voltou a aparecer: a audiencia de 02/11/2026 cobra o canal de contato confirmado de quem publica',
+    );
+  },
+  exigeCanalConfirmadoDeQUEMOLHA: (sql: string) => {
+    assert.match(
+      sql,
+      /SELECT 1 FROM users u WHERE u\.id = \$\d+::uuid AND \(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\)/,
+      'QUEM OLHA nao verificado voltou a ver o Mural: a audiencia de 02/11/2026 cobra as DUAS pontas, e nao so o autor',
+    );
+  },
+  exigeContaHabilitadaDoAutorEDeQuemOlha: (sql: string) => {
+    assert.match(
+      sql,
+      /conta_habilitada\(p\.author_user_id\)/,
+      'conta DESABILITADA do autor voltou ao Mural: antes de 02/11/2026 a conferencia vinha de dentro do `EXISTS` das conexoes, e tirar o `EXISTS` sem reintroduzi-la a perde em silencio',
+    );
+    assert.match(
+      sql,
+      /conta_habilitada\(\$\d+::uuid\)/,
+      'a conta desabilitada de QUEM OLHA voltou a enxergar o Mural: o `EXISTS` antigo reprovava a ponta dela, e esta frente nao afrouxa isso',
+    );
+  },
+  exigeAPernaDoProprioAutor: (sql: string) => {
+    assert.match(
+      sql,
+      /p\.author_user_id = \$\d+::uuid\s*\n?\s*OR/,
+      'a perna do PROPRIO autor saiu: quem publica deixaria de ver o que publicou, e era o estado vazio que a decisao de 02/11/2026 quis resolver',
+    );
+  },
+  negaConexaoNaAudiencia: (where: string) => {
+    assert.ok(
+      !/user_connections/i.test(where),
+      'a audiencia voltou a depender de `user_connections`: a decisao do cliente de 02/11/2026 abriu o Mural para toda a base verificada, e o interruptor que a desfaz e `MURAL_SO_ENTRE_CONEXOES`, nao uma copia do predicado aqui',
+    );
+  },
   negaBloqueio: (sql: string) => {
     assert.match(
       sql,
@@ -115,6 +154,36 @@ function selecaoAteOTopo(sql: string): string {
   return sql.slice(0, corte);
 }
 
+/**
+ * A CLAUSULA `WHERE` DE TOPO, **sem os `JOIN`s**.
+ *
+ * Ela existe por uma cicatriz de 02/11/2026. As conferencias de audiencia
+ * casavam texto no SQL INTEIRO, e quando a audiencia deixou de usar
+ * `user_connections` elas continuaram verdes -- porque o `JOIN` da foto do autor
+ * passou a carregar o predicado de conexao, e era ELE que estava sendo medido.
+ * Um caso que passa pelo motivo errado e pior que um caso que reprova.
+ *
+ * O corte e por PROFUNDIDADE DE PARENTESE, e nao pelo primeiro ` where `: as
+ * subconsultas da lista de selecao e dos `JOIN`s tem `where` proprio, e cortar
+ * no primeiro mediria a subconsulta.
+ */
+function clausulaWhereDeTopo(sql: string): string {
+  const corte = sql.toLowerCase().indexOf(' from "user_publications"');
+  assert.ok(corte > 0, `nao achei o \`FROM\` de topo neste SQL: ${sql}`);
+  let profundidade = 0;
+  for (let i = corte; i < sql.length; i += 1) {
+    const caractere = sql[i];
+    if (caractere === '(') profundidade += 1;
+    else if (caractere === ')') profundidade -= 1;
+    else if (profundidade === 0 && sql.slice(i, i + 7).toLowerCase() === ' where ') {
+      return sql.slice(i + 7);
+    }
+  }
+  return assert.fail(
+    `nao achei a clausula \`WHERE\` de topo (profundidade zero) neste SQL: ${sql}`,
+  );
+}
+
 void describe('o corte da lista de selecao', () => {
   void it('REPROVA quando o `FROM` de topo nao esta no SQL', () => {
     assert.throws(
@@ -140,40 +209,91 @@ void describe('o corte da lista de selecao', () => {
 });
 
 void describe('o recorte da LINHA DO TEMPO mora na clausula WHERE', () => {
-  void it('ISCA (b) -- exige CONEXAO ACEITA, nos DOIS sentidos do par', () => {
+  void it('ISCA (b) -- a audiencia NAO depende mais de conexao: decisao do cliente de 02/11/2026', () => {
+    const where = clausulaWhereDeTopo(sqlDo('linha'));
+    CONFERENCIAS.negaConexaoNaAudiencia(where);
+    assert.ok(
+      !/uc\.state = 'accepted'/.test(where),
+      'o aceite voltou a cobrar a audiencia no WHERE da linha do tempo',
+    );
+  });
+
+  void it('ISCA (b) -- quem NAO esta verificado NAO ve, e quem NAO esta verificado NAO aparece', () => {
+    const where = clausulaWhereDeTopo(sqlDo('linha'));
+    CONFERENCIAS.exigeCanalConfirmadoDoAUTOR(where);
+    CONFERENCIAS.exigeCanalConfirmadoDeQUEMOLHA(where);
+  });
+
+  void it('ISCA (b) -- a MUTACAO reprova: a verificacao do AUTOR removida', () => {
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.exigeCanalConfirmadoDoAUTOR,
+      clausulaWhereDeTopo(sqlDo('linha')).replace(
+        'SELECT 1 FROM users u WHERE u.id = p.author_user_id AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)',
+        'SELECT 1',
+      ),
+      'a conferencia nao enxerga a verificacao do autor removida: o Mural aceitaria publicacao de conta nao verificada, que e o vetor de spam que a leitura escolhida fecha',
+    );
+  });
+
+  void it('ISCA (b) -- a MUTACAO reprova: a verificacao de QUEM OLHA removida', () => {
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.exigeCanalConfirmadoDeQUEMOLHA,
+      clausulaWhereDeTopo(sqlDo('linha')).replace(
+        /SELECT 1 FROM users u WHERE u\.id = \$\d+::uuid AND \(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\)/,
+        'SELECT 1',
+      ),
+      'a conferencia nao enxerga a verificacao de quem olha removida: a audiencia e das DUAS pontas',
+    );
+  });
+
+  void it('ISCA (b) -- conta DESABILITADA nao aparece, e a MUTACAO de cada ponta reprova', () => {
+    const where = clausulaWhereDeTopo(sqlDo('linha'));
+    CONFERENCIAS.exigeContaHabilitadaDoAutorEDeQuemOlha(where);
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.exigeContaHabilitadaDoAutorEDeQuemOlha,
+      where.replace('conta_habilitada(p.author_user_id)', 'true'),
+      'a conferencia nao enxerga `conta_habilitada` do AUTOR removida -- a perda silenciosa que tirar o `EXISTS` das conexoes provoca',
+    );
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.exigeContaHabilitadaDoAutorEDeQuemOlha,
+      where.replace(/conta_habilitada\(\$\d+::uuid\)/, 'true'),
+      'a conferencia nao enxerga `conta_habilitada` de QUEM OLHA removida',
+    );
+  });
+
+  void it('ISCA (b) -- a PROPRIA publicacao aparece sempre ao autor, verificado ou nao', () => {
+    const where = clausulaWhereDeTopo(sqlDo('linha'));
+    CONFERENCIAS.exigeAPernaDoProprioAutor(where);
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.exigeAPernaDoProprioAutor,
+      where.replace(/p\.author_user_id = \$\d+::uuid\s*\n?\s*OR/, 'false OR'),
+      'a conferencia nao enxerga a perna do proprio autor removida',
+    );
+  });
+
+  void it('ISCA (b) -- O DEFEITO REPLANTADO: o filtro de conexao de volta na audiencia reprova PELO NOME', () => {
+    const comODefeitoDeVolta = clausulaWhereDeTopo(sqlDo('linha')).replace(
+      /conta_habilitada\(p\.author_user_id\)/,
+      "EXISTS (SELECT 1 FROM user_connections uc WHERE uc.state = 'accepted')",
+    );
+    aMutacaoTemDeReprovar(
+      CONFERENCIAS.negaConexaoNaAudiencia,
+      comODefeitoDeVolta,
+      'a conferencia nao enxerga o filtro de conexao replantado na audiencia: ela nao mede nada, e a regra de 02/11/2026 poderia ser desfeita sem ninguem notar',
+    );
+  });
+
+  void it('ISCA (b) -- a FOTO do autor continua exigindo CONEXAO ACEITA, e ela mora no JOIN', () => {
     const sql = sqlDo('linha');
-    assert.match(sql, /exists \(/i, 'o predicado de conexao saiu do WHERE');
-    assert.match(sql, /from user_connections uc/i);
-    CONFERENCIAS.exigeAceite(sql);
-    CONFERENCIAS.exigeOsDoisSentidosDoPar(sql);
-    CONFERENCIAS.exigeContaHabilitadaNasDuasPontas(sql);
-  });
-
-  void it('ISCA (b) -- a MUTACAO reprova: `pending` no lugar de `accepted`', () => {
-    aMutacaoTemDeReprovar(
-      CONFERENCIAS.exigeAceite,
-      sqlDo('linha').replace("uc.state = 'accepted'", "uc.state = 'pending'"),
-      'a conferencia de ACEITE nao enxerga `pending` no lugar dele: ela nao mede nada',
-    );
-  });
-
-  void it('ISCA (b) -- a MUTACAO reprova: UM sentido do par removido', () => {
-    const mutado = sqlDo('linha').replace(
-      /OR \(uc\.requester_user_id = \$\d+::uuid AND uc\.addressee_user_id = p\.author_user_id\)/,
-      '',
-    );
-    aMutacaoTemDeReprovar(
-      CONFERENCIAS.exigeOsDoisSentidosDoPar,
-      mutado,
-      'a conferencia nao enxerga a falta de um sentido do par: quem pediu passaria a decidir quem ve',
-    );
-  });
-
-  void it('ISCA (b) -- a MUTACAO reprova: `conta_habilitada` de UMA ponta removida', () => {
-    aMutacaoTemDeReprovar(
-      CONFERENCIAS.exigeContaHabilitadaNasDuasPontas,
-      sqlDo('linha').replace('conta_habilitada(uc.addressee_user_id)', 'true'),
-      'a conferencia nao enxerga a ponta desabilitada',
+    const where = clausulaWhereDeTopo(sql);
+    const juncoes = sql.slice(0, sql.length - where.length);
+    CONFERENCIAS.exigeAceite(juncoes);
+    CONFERENCIAS.exigeOsDoisSentidosDoPar(juncoes);
+    CONFERENCIAS.exigeContaHabilitadaNasDuasPontas(juncoes);
+    assert.match(
+      juncoes,
+      /fa\.thumb_key IS NOT NULL/,
+      'o predicado de conexao tem de estar no JOIN DA FOTO, e nao em outra juncao',
     );
   });
 
@@ -262,7 +382,7 @@ void describe('o que o Mural NAO seleciona, e cada ausencia e uma regra', () => 
     );
   });
 
-  void it('EMENDA 5 -- o JOIN da foto NAO tem predicado de conexao, e a ausencia e a regra', () => {
+  void it('EMENDA 5 -- o JOIN da foto EXIGE conexao aceita, e desde 02/11/2026 a PRESENCA e a regra', () => {
     const sql = sqlDo('linha');
     const inicio = sql.indexOf('left join "catalog_images" as "fa"');
     assert.ok(
@@ -281,10 +401,18 @@ void describe('o que o Mural NAO seleciona, e cada ausencia e uma regra', () => 
       'o recorte engoliu o JOIN da imagem da PUBLICACAO: o caso mediria os dois juntos',
     );
     assert.ok(
-      !joinDaFoto.includes('user_connections'),
-      'o JOIN da foto repete o predicado de conexao: ele ja esta no WHERE, e duas copias ' +
-        'sao dois lugares onde uma correcao pode faltar',
+      joinDaFoto.includes('user_connections'),
+      'o JOIN da foto PERDEU o predicado de conexao. Ate 02/11/2026 a ausencia era a ' +
+        'regra, porque o `WHERE` da linha do tempo so devolvia conexao aceita e o ' +
+        'predicado era satisfeito POR CONSTRUCAO. A decisao do cliente de 02/11/2026 ' +
+        'abriu a audiencia, a construcao deixou de satisfazer, e a foto do autor ' +
+        'passaria a sair para ESTRANHO -- exatamente a razao 2 da Emenda 5 do ' +
+        'ADR-0010, o golpe do falso achador, que diz que "a consulta que traria a ' +
+        'foto dele nao existe".',
     );
+    CONFERENCIAS.exigeAceite(joinDaFoto);
+    CONFERENCIAS.exigeOsDoisSentidosDoPar(joinDaFoto);
+    CONFERENCIAS.exigeContaHabilitadaNasDuasPontas(joinDaFoto);
   });
 
   void it('EMENDA 5 -- `minhas` continua SEM ler foto de pessoa: item 8 da emenda', () => {
@@ -493,19 +621,40 @@ void describe('CONTRAPESOS -- sem eles as iscas de omissao passariam no vazio', 
 void describe('CURTIR E COMENTAR -- o recorte e UM, e a contagem sai das LINHAS', () => {
   void it('ISCA -- `construtorDaPublicacaoVisivel` tem o recorte INTEIRO, e as cinco escritas o usam', () => {
     const sql = sqlDo('alvo');
-    CONFERENCIAS.exigeAceite(sql);
-    CONFERENCIAS.exigeOsDoisSentidosDoPar(sql);
-    CONFERENCIAS.exigeContaHabilitadaNasDuasPontas(sql);
+    CONFERENCIAS.exigeCanalConfirmadoDoAUTOR(sql);
+    CONFERENCIAS.exigeCanalConfirmadoDeQUEMOLHA(sql);
+    CONFERENCIAS.exigeContaHabilitadaDoAutorEDeQuemOlha(sql);
+    CONFERENCIAS.exigeAPernaDoProprioAutor(sql);
     CONFERENCIAS.negaBloqueio(sql);
     CONFERENCIAS.negaOQueQuemOlhaDenunciou(sql);
     CONFERENCIAS.negaApagada(sql);
   });
 
-  void it('ISCA -- a MUTACAO reprova: `pending` no recorte do alvo', () => {
+  void it('ISCA -- o alvo tem O MESMO recorte da LINHA DO TEMPO, e e por isso que nao ha 404 no que o Mural mostra', () => {
+    const daLinha = clausulaWhereDeTopo(sqlDo('linha'));
+    const doAlvo = clausulaWhereDeTopo(sqlDo('alvo'));
+    const audiencia = /\(\s*p\.author_user_id = \$\d+::uuid[\s\S]*?phone_verified_at IS NOT NULL\)\)\s*\)/;
+    const naLinha = audiencia.exec(daLinha);
+    const noAlvo = audiencia.exec(doAlvo);
+    assert.ok(naLinha !== null, `nao achei a audiencia no WHERE da linha do tempo: ${daLinha}`);
+    assert.ok(noAlvo !== null, `nao achei a audiencia no WHERE do alvo: ${doAlvo}`);
+    assert.equal(
+      naLinha[0].replace(/\$\d+/g, '$N'),
+      noAlvo[0].replace(/\$\d+/g, '$N'),
+      'a audiencia do alvo DIVERGIU da audiencia da linha do tempo: uma superficie ' +
+        'mostraria a publicacao e a outra devolveria 404 na curtida, no comentario e ' +
+        'na denuncia da MESMA linha',
+    );
+  });
+
+  void it('ISCA -- a MUTACAO reprova: a verificacao removida do recorte do alvo', () => {
     aMutacaoTemDeReprovar(
-      CONFERENCIAS.exigeAceite,
-      sqlDo('alvo').replace("uc.state = 'accepted'", "uc.state = 'pending'"),
-      'a conferencia do alvo nao mede o aceite: curtir e comentar passariam a alcancar pendente',
+      CONFERENCIAS.exigeCanalConfirmadoDoAUTOR,
+      sqlDo('alvo').replace(
+        'SELECT 1 FROM users u WHERE u.id = p.author_user_id AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)',
+        'SELECT 1',
+      ),
+      'a conferencia do alvo nao mede a verificacao: curtir, comentar e denunciar passariam a alcancar publicacao de conta nao verificada',
     );
   });
 

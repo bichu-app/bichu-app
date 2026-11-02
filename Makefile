@@ -697,6 +697,15 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # arvore mesclada: 864. A conta fecha nos dois sentidos -- a base do perfil
 # publico mede 857 (e nao os 856 que a linha dele dizia, que ja estava um atras),
 # e a listagem acrescenta 7 arquivos de raiz.
+# PROSA PRESERVADA DO LADO mural/abre-audiencia-verificados (PR #147): a linha dele dizia `ESLint da raiz (853 arquivos)`, e o bloco que ele escreveu vem a seguir, VERBATIM e sem reembrulhar. NENHUM LADO FOI ESCOLHIDO e os deltas NAO FORAM SOMADOS -- os numeros sao de ARVORES DIFERENTES, e o desta integracao e RECONTADO com `eslint . -f json` DEPOIS DA ULTIMA das onze mesclas.
+# A CONTAGEM DA RAIZ FOI RECALCULADA EM 02/11/2026, e o numero escrito estava
+# DEFASADO antes desta frente: media 853 com `npx eslint . -f json` contando
+# `"filePath"`, e esta frente acrescenta DOIS arquivos
+# (`src/shared/db/audiencia-da-publicacao.ts` e
+# `tests/integration/mural-aberto-entre-verificados.test.ts`) -- entao a base ja
+# era 851 e nao 849. Nenhum arquivo foi apagado (`git status` sem `D`), e por
+# isso a subtracao vale. Painel e site foram MEDIDOS do mesmo jeito e NAO se
+# moveram: 145 e 47.
 verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (860 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
