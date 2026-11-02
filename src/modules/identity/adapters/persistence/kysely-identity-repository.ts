@@ -70,7 +70,6 @@ type LinhaDeConta = Pick<
   | 'reference_neighborhood'
   | 'reference_city'
   | 'reference_state'
-  | 'region_listing_opted_in_at'
   | 'pending_email'
   | 'deleted_at'
 >;
@@ -87,7 +86,6 @@ const COLUNAS_DA_CONTA = [
   'reference_neighborhood',
   'reference_city',
   'reference_state',
-  'region_listing_opted_in_at',
   'pending_email',
   'email_deliverable',
   'status',
@@ -115,7 +113,6 @@ function paraConta(linha: LinhaSelecionada): Conta {
     referenceNeighborhood: linha.reference_neighborhood,
     referenceCity: linha.reference_city,
     referenceState: linha.reference_state,
-    regionListingOptedInAt: linha.region_listing_opted_in_at,
     pendingEmail: linha.pending_email,
     emailDeliverable: linha.email_deliverable,
     status: linha.status,
@@ -280,27 +277,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       }
 
       if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
-
-      // A ADESAO `aparecer na lista da minha regiao` (cliente, 02/11/2026).
-      //
-      // **Fora do mapa acima de propósito**: o mapa copia valor de campo para
-      // coluna, e aqui o campo é um booleano e a coluna é um instante. `true`
-      // grava o relógio DA REQUISIÇÃO (`agora`), e não `now()` do banco, pela
-      // mesma razão de todo o resto deste repositório: um relógio por camada
-      // são dois relógios.
-      //
-      // **`false` apaga, e desligar vale na hora**: a listagem lê
-      // `region_listing_opted_in_at IS NOT NULL` na consulta, a cada
-      // requisição, e a resposta dela sai com `private, no-store`.
-      //
-      // **Ligar DE NOVO quem já ligou reescreve o instante**, e isso é
-      // deliberado: a coluna responde "desde quando a escolha vale", e um
-      // `PATCH` com `true` é a escolha sendo feita outra vez.
-      if (campos.regionListingOptIn !== undefined) {
-        mudancas['region_listing_opted_in_at'] = campos.regionListingOptIn
-          ? new Date(Number(agora))
-          : null;
-      }
 
       const apelidoNovo = campos.handle;
       if (apelidoNovo === undefined) {

@@ -59,7 +59,6 @@ function contaAtiva(): Conta {
     referenceNeighborhood: null,
     referenceCity: null,
     referenceState: null,
-    regionListingOptedInAt: null,
     pendingEmail: null,
     emailDeliverable: true,
     status: 'active',

@@ -23,17 +23,6 @@ export interface MeView {
   pending_profile_fields: CampoPendente[];
   can_open_lost_case: boolean;
   contact_channel_verified: boolean;
-  /**
-   * A adesão `aparecer na lista da minha região` (cliente, 02/11/2026).
-   *
-   * **Ela está nas DUAS projeções de `Me` de propósito**, e não só em
-   * `projetarMeuPerfil`: `SessionResponse.user` aponta para o MESMO schema do
-   * contrato, e um campo presente numa projeção e ausente na outra é a união
-   * duplicada que `tsc` não pega — o campo é opcional no contrato, então a
-   * ausência passaria calada até alguém notar que entrar na conta devolve um
-   * `Me` diferente de `getMe`.
-   */
-  region_listing_opt_in: boolean;
   created_at: string;
   /** A FOTO DA PRÓPRIA PESSOA, a mesma que `getMe` devolve. */
   photo: FotoProjetada | null;
@@ -84,7 +73,6 @@ export function projetarConta(conta: Conta, foto: FotoProjetada | null): MeView 
     pending_profile_fields: pendentes,
     can_open_lost_case: canalDeContatoConfirmado(conta),
     contact_channel_verified: canalDeContatoConfirmado(conta),
-    region_listing_opt_in: conta.regionListingOptedInAt !== null,
     created_at: conta.createdAt.toISOString(),
     photo: foto,
   };

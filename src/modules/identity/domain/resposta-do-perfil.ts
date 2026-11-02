@@ -55,17 +55,6 @@ export function projetarMeuPerfil(
       : null,
     pending_profile_fields: camposPendentesDoPerfil(conta),
     can_open_lost_case: podeAbrirCasoDePerdido(conta),
-    // A ADESAO `aparecer na lista da minha regiao` (cliente, 02/11/2026).
-    //
-    // **O BOOLEANO, e nunca o instante.** A coluna guarda QUANDO a pessoa
-    // ligou; a tela só precisa do estado do interruptor, e a data de uma
-    // decisão de privacidade não é material de tela.
-    //
-    // **É o DONO que lê este campo, e só ele**: `RegionPerson` não o traz, e
-    // nenhuma superfície de terceiro o declara — quem está na lista está por
-    // ter ligado, e repetir a escolha para estranhos não informa nada que a
-    // presença na lista não diga.
-    region_listing_opt_in: conta.regionListingOptedInAt !== null,
     contact_channel_verified: canalDeContatoConfirmado(conta),
     created_at: conta.createdAt.toISOString(),
   };

@@ -15886,42 +15886,6 @@ components:
         can_open_lost_case:
           type: boolean
           description: Falso quando nenhum canal de contato esta verificado.
-        region_listing_opt_in:
-          type: boolean
-          default: false
-          description: |
-            **A ADESAO `aparecer na lista da minha regiao`** -- decisao do
-            cliente de 02/11/2026, que escolheu, entre duas perguntas fechadas,
-            que **so quem optar aparece** na listagem de usuarios da mesma
-            regiao, com a adesao **DESLIGADA por padrao**. Ele recusou listar
-            todo mundo sabendo que a lista comeca menor.
-
-            **`false` e o estado de toda conta que existe hoje e de toda conta
-            nova**, e nao um default de tipo: a coluna
-            `users.region_listing_opted_in_at` nasce `NULL` para todas, e a
-            lista nasce VAZIA. Ligar e `PATCH /v1/me` com
-            `region_listing_opt_in: true`.
-
-            **O booleano, e nunca o instante.** A coluna guarda QUANDO a pessoa
-            ligou -- a pergunta que uma adesao revogavel faz depois --, mas a
-            TELA so precisa do estado do interruptor, e a data de uma decisao de
-            privacidade nao e material de tela.
-
-            **So o DONO le este campo**, e nao ha superficie de terceiro que o
-            devolva: `RegionPerson` nao o traz, porque quem esta na lista esta
-            por ter ligado, e repetir a escolha para estranhos nao informa nada
-            que a presenca na lista nao diga.
-
-            **Ligar nao basta para aparecer**: os outros predicados continuam
-            valendo -- canal de contato confirmado, conta habilitada, sem
-            bloqueio, e **regiao de referencia preenchida** (sem
-            `reference_city` e `reference_state` nao ha regiao com que casar, e
-            a pendencia `reference_area` de `pending_profile_fields` e o que a
-            tela usa para dizer isso).
-
-            **Desligar vale na hora:** o predicado e lido na consulta, a cada
-            requisicao, e a resposta da listagem sai com
-            `Cache-Control: private, no-store`.
         created_at: { type: string, format: date-time }
 
     MeUpdate:
@@ -15976,22 +15940,6 @@ components:
             neighborhood: { type: string, maxLength: 80 }
             city: { type: string, maxLength: 80 }
             state: { type: string, minLength: 2, maxLength: 2 }
-        # A ADESAO `aparecer na lista da minha regiao` (cliente, 02/11/2026).
-        #
-        # Opcional como todo campo de `PATCH`: ausente significa "nao mexer".
-        # **E `nullable: false` de proposito** -- a adesao tem DOIS estados e
-        # nao tres, e `null` abriria um terceiro ("sem opiniao") que nenhuma
-        # tela sabe desenhar e que a coluna nao distingue de `false`.
-        #
-        # **`true` grava o instante, `false` o apaga**, e os dois valem na hora:
-        # a listagem le o predicado na consulta, sem cache.
-        #
-        # **Ela nao e condicionada aqui**: ligar a adesao sem regiao de
-        # referencia e sem canal confirmado e aceito, e a pessoa simplesmente
-        # nao aparece. Recusar o `PATCH` nesse caso faria o produto discutir com
-        # quem acabou de escolher aparecer -- e a ordem em que alguem completa o
-        # cadastro nao e assunto deste campo.
-        region_listing_opt_in: { type: boolean }
 
     Device:
       type: object

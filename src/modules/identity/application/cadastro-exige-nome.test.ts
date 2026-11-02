@@ -55,7 +55,6 @@ function contaRecemCriada(displayName: string | null): Conta {
     referenceNeighborhood: null,
     referenceCity: null,
     referenceState: null,
-    regionListingOptedInAt: null,
     pendingEmail: null,
     emailDeliverable: true,
     status: 'active',

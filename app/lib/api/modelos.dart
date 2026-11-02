@@ -58,7 +58,6 @@ class Usuario {
     required this.canalConfirmado,
     required this.pendencias,
     required this.podeAbrirCaso,
-    this.naListaDaRegiao = false,
     this.nome,
     this.emailPendente,
     this.emailEntregavel = true,
@@ -88,18 +87,6 @@ class Usuario {
   /// Falso quando nenhum canal de contato esta verificado.
   final bool podeAbrirCaso;
 
-  /// `region_listing_opt_in`: **a adesão `aparecer na lista da minha região`**
-  /// (cliente, 02/11/2026), que ele escolheu que nasce DESLIGADA.
-  ///
-  /// **É o próprio dono que lê isto**, e é com ele que a tela da lista explica
-  /// o vazio e oferece o interruptor — sem chamar a rota da listagem. Nenhuma
-  /// superfície de terceiro traz este campo.
-  ///
-  /// **Ligar não basta para aparecer**: os outros predicados continuam valendo,
-  /// e o que falta primeiro é a região — [RegiaoDeReferencia], que a pendência
-  /// [PendenciaDeCadastro.regiaoDeReferencia] acusa.
-  final bool naListaDaRegiao;
-
   /// A regiao cadastrada pelo tutor, quando ha uma.
   final RegiaoDeReferencia? regiaoDeReferencia;
 
@@ -124,7 +111,6 @@ class Usuario {
           .whereType<PendenciaDeCadastro>()
           .toList(growable: false),
       podeAbrirCaso: json['can_open_lost_case'] as bool? ?? false,
-      naListaDaRegiao: json['region_listing_opt_in'] as bool? ?? false,
       regiaoDeReferencia: RegiaoDeReferencia.doJson(
         json['reference_area'] as Map<String, dynamic>?,
       ),

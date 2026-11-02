@@ -15,15 +15,6 @@ export interface Conta {
   readonly referenceNeighborhood: string | null;
   readonly referenceCity: string | null;
   readonly referenceState: string | null;
-  /**
-   * QUANDO esta conta ligou a adesão `aparecer na lista da minha região`
-   * (cliente, 02/11/2026), ou `null` para "nunca ligou".
-   *
-   * **O instante mora aqui e o contrato devolve um booleano**
-   * (`Me.region_listing_opt_in`): a tela só precisa do estado do interruptor, e
-   * a data de uma decisão de privacidade não é material de tela.
-   */
-  readonly regionListingOptedInAt: Date | null;
   readonly pendingEmail: string | null;
   readonly emailDeliverable: boolean;
   readonly status: 'active' | 'suspended' | 'deletion_requested';
@@ -61,18 +52,6 @@ export interface CamposDoPerfil {
   readonly referenceNeighborhood?: string | null | undefined;
   readonly referenceCity?: string | null | undefined;
   readonly referenceState?: string | null | undefined;
-  /**
-   * A adesão `aparecer na lista da minha região` (cliente, 02/11/2026).
-   *
-   * **Booleano aqui e instante na coluna**: `true` grava o instante do relógio
-   * da requisição, `false` apaga. Ausente é "não mexer", como todo campo deste
-   * `PATCH`.
-   *
-   * **Não é condicionada**: ligar sem região de referência e sem canal de
-   * contato confirmado é aceito, e a pessoa simplesmente não aparece — recusar
-   * aqui faria o produto discutir com quem acabou de escolher aparecer.
-   */
-  readonly regionListingOptIn?: boolean | undefined;
 }
 
 export type PropositoDoToken =
