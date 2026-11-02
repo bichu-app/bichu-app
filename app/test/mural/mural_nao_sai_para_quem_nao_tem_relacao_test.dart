@@ -120,6 +120,7 @@ Future<List<http.Request>> montarOMural(
   List<Map<String, dynamic>> minhas = const <Map<String, dynamic>>[],
   void Function(PublicacaoDaLinha)? aoDenunciar,
   Future<void> Function(PublicacaoDaLinha)? aoApagar,
+  bool canalConfirmado = true,
 }) async {
   AppConfig.limparParaTeste();
   final capturado = <http.Request>[];
@@ -139,6 +140,7 @@ Future<List<http.Request>> montarOMural(
             // para qualquer rota, e os casos de CAMINHO nao teriam o que medir.
             leitura: MuralApi(api),
             interacao: MuralApi(api),
+            canalConfirmado: canalConfirmado,
             aoDenunciar: aoDenunciar,
             aoApagar: aoApagar,
           ),
@@ -178,7 +180,7 @@ void main() {
     expect(find.textContaining('Marina'), findsNothing);
     // O estado vazio aparece, e ele e o de "sem conexao": `minhas` tambem veio
     // vazia.
-    expect(find.text(CorpoDoMural.tituloSemConexao), findsOneWidget);
+    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsOneWidget);
 
     // E as DUAS leituras sairam, e so elas.
     expect(caminhos(capturado), <String>[
@@ -217,7 +219,7 @@ void main() {
     expect(find.text('Marina'), findsOneWidget);
     expect(find.text('Joana'), findsOneWidget);
     // E o estado vazio NAO aparece quando ha itens.
-    expect(find.text(CorpoDoMural.tituloSemConexao), findsNothing);
+    expect(find.text(CorpoDoMural.tituloSemVerificacao), findsNothing);
     expect(find.text(CorpoDoMural.tituloSemPublicacao), findsNothing);
   });
 
@@ -621,26 +623,45 @@ Future<void> leitura() async {
 
   // =========================================================================
   // (5) OS DOIS ESTADOS VAZIOS SAO DIFERENTES
+  //
+  // ATUALIZADO EM 02/11/2026 (decisao do cliente). A audiencia do Mural deixou
+  // de ser conexao aceita e passou a ser canal de contato confirmado nas DUAS
+  // pontas, entao "nao tenho conexao" deixou de ser causa de Mural vazio. A
+  // causa nova e "eu nao confirmei meu contato" -- e e a unica das duas que a
+  // pessoa resolve sozinha, por isso e a unica que oferece caminho.
   // =========================================================================
 
   testWidgets(
-      'ISCA — sem conexao E sem publicacao propria, o texto diz COMECE PELAS '
-      'CONEXOES', (tester) async {
-    // ISCA: em `CorpoDoMural.build`, fixar `_tenhoPublicacao` em `true`. Os
-    // dois estados colapsam num e a tela passa a dizer "quando as suas conexoes
-    // publicarem" a quem nao tem conexao nenhuma -- prometendo algo de
-    // ninguem. Este caso reprova pelo nome.
-    await montarOMural(tester);
-    expect(find.text(CorpoDoMural.tituloSemConexao), findsOneWidget);
+      'ISCA — quem NAO confirmou o contato ve o motivo e o CAMINHO, e nao um '
+      'vazio mudo', (tester) async {
+    // ISCA: em `CorpoDoMural.build`, trocar `if (!widget.canalConfirmado)` por
+    // `if (false)`. A tela volta a dizer "as publicacoes ficam aqui" a quem o
+    // servidor esta filtrando -- o vazio mudo que a decisao de 02/11/2026 quis
+    // resolver, agora com causa nova. Este caso reprova pelo nome.
+    await montarOMural(tester, canalConfirmado: false);
+    expect(find.text(CorpoDoMural.tituloSemVerificacao), findsOneWidget);
     expect(find.text(CorpoDoMural.tituloSemPublicacao), findsNothing);
+    // A SAIDA existe, e e um toque: estado vazio sem caminho e beco.
+    expect(find.text(CorpoDoMural.confirmarEmail), findsOneWidget);
   });
 
   testWidgets(
-      'ISCA — com publicacao PROPRIA e linha vazia, o texto diz que as '
-      'publicacoes APARECEM aqui', (tester) async {
-    // A distincao sai de `listMyPublications`, que NAO depende de conexao. Sem
-    // a segunda leitura os dois estados ficam indistinguiveis, e a tela escolhe
-    // a frase errada em metade dos casos.
+      'ISCA — quem ESTA verificado e com linha vazia ve que as publicacoes '
+      'APARECEM aqui, e nao que falta confirmar', (tester) async {
+    // O contrapeso do caso acima: sem ele, fixar o ramo da verificacao em
+    // `true` passaria verde e todo mundo veria "confirme o seu e-mail".
+    await montarOMural(tester, canalConfirmado: true);
+    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsOneWidget);
+    expect(find.text(CorpoDoMural.tituloSemVerificacao), findsNothing);
+  });
+
+  testWidgets(
+      'ISCA — com publicacao PROPRIA e linha vazia, a segunda leitura ainda '
+      'sai: e ela que reagenda a foto em processamento', (tester) async {
+    // `listMyPublications` deixou de escolher o texto do vazio em 02/11/2026,
+    // mas NAO deixou de ser chamada: e dela que sai o reagendamento da leitura
+    // enquanto a foto esta em `processing`. Este caso cobra a chamada, para que
+    // remover a escolha do texto nao leve a leitura junto.
     final capturado = await montarOMural(
       tester,
       minhas: <Map<String, dynamic>>[
@@ -652,9 +673,6 @@ Future<void> leitura() async {
         },
       ],
     );
-    expect(find.text(CorpoDoMural.tituloSemPublicacao), findsOneWidget);
-    expect(find.text(CorpoDoMural.tituloSemConexao), findsNothing);
-    // E a segunda leitura saiu de verdade.
     expect(caminhos(capturado), contains('GET /v1/me/publications'));
   });
 
@@ -665,7 +683,7 @@ Future<void> leitura() async {
     await montarOMural(tester);
     for (final promessa in <String>['avisa', 'avisamos', 'notific', 'alerta']) {
       expect(
-        CorpoDoMural.explicacaoSemConexao.toLowerCase().contains(promessa),
+        CorpoDoMural.explicacaoSemVerificacao.toLowerCase().contains(promessa),
         isFalse,
         reason: 'o estado vazio promete aviso ("$promessa"), e nao ha aviso',
       );

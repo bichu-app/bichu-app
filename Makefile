@@ -689,7 +689,15 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (849 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+# A CONTAGEM DA RAIZ FOI RECALCULADA EM 02/11/2026, e o numero escrito estava
+# DEFASADO antes desta frente: media 853 com `npx eslint . -f json` contando
+# `"filePath"`, e esta frente acrescenta DOIS arquivos
+# (`src/shared/db/audiencia-da-publicacao.ts` e
+# `tests/integration/mural-aberto-entre-verificados.test.ts`) -- entao a base ja
+# era 851 e nao 849. Nenhum arquivo foi apagado (`git status` sem `D`), e por
+# isso a subtracao vale. Painel e site foram MEDIDOS do mesmo jeito e NAO se
+# moveram: 145 e 47.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (853 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

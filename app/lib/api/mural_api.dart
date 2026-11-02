@@ -11,7 +11,13 @@ class MuralApi
 
   final ApiClient _cliente;
 
-  /// A linha do tempo: as publicacoes de quem e conexao aceita, mais as minhas.
+  /// A linha do tempo: as publicacoes de quem tem CANAL DE CONTATO CONFIRMADO,
+  /// mais as minhas.
+  ///
+  /// ATUALIZADO EM 02/11/2026 (decisao do cliente): era "de quem e conexao
+  /// aceita". Conexao nao decide mais a audiencia -- duas pessoas sem relacao
+  /// se veem, desde que as duas estejam verificadas. Quem NAO confirmou canal
+  /// de contato recebe `items: []`, e e a tela que explica isso.
   @override
   Future<PaginaDaLinhaDoTempo> linhaDoTempo({String? cursor}) async {
     return PaginaDaLinhaDoTempo.doJson(
@@ -22,8 +28,14 @@ class MuralApi
     );
   }
 
-  /// As minhas publicacoes. **Nao depende de conexao nenhuma**: e ela que
-  /// distingue, na tela, "nao tenho conexao" de "ninguem publicou".
+  /// As minhas publicacoes. **Nao depende de conexao nem de verificacao**: quem
+  /// nao confirmou canal de contato ve aqui tudo o que publicou.
+  ///
+  /// ATUALIZADO EM 02/11/2026: ela deixou de ser o sinal que distingue os
+  /// estados vazios do Mural. Com a audiencia aberta, a propria publicacao
+  /// entra na linha do tempo de todo jeito (a perna do proprio autor), entao
+  /// lista vazia ja significa "nada a mostrar" -- e o que a tela precisa saber
+  /// e se EU estou verificado (`Me.contact_channel_verified`).
   @override
   Future<PaginaDasMinhasPublicacoes> minhasPublicacoes({String? cursor}) async {
     return PaginaDasMinhasPublicacoes.doJson(

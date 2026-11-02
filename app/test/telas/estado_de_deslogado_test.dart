@@ -534,10 +534,10 @@ void main() {
 
       // A MICROCOPY, por extenso e com acento — e nao comparada com a
       // constante que a produz.
-      expect(find.text('O Mural é das suas conexões'), findsOneWidget);
+      expect(find.text('O Mural é da comunidade'), findsOneWidget);
       expect(
         frasesDoConvite(tester).join(' | '),
-        contains('Entre para ver o que as suas conexões publicam'),
+        contains('Entre para ver o que a comunidade publica'),
       );
       // AS DUAS PORTAS: quem nunca entrou ve as duas.
       expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
@@ -661,7 +661,7 @@ void main() {
       // A saida que existe continua existindo.
       expect(find.widgetWithText(BotaoPrimario, 'Entrar'), findsOneWidget);
       expect(
-        find.text('O Mural é das suas conexões'),
+        find.text('O Mural é da comunidade'),
         findsNothing,
         reason: 'REPROVA: a tela esta explicando a secao a quem ja estava '
             'dentro dela.',

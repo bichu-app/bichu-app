@@ -28,10 +28,26 @@ class CorpoDoMural extends StatefulWidget {
   const CorpoDoMural({
     required this.leitura,
     required this.interacao,
+    required this.canalConfirmado,
     super.key,
     this.aoDenunciar,
     this.aoApagar,
   });
+
+  /// O CANAL DE CONTATO CONFIRMADO **de quem olha** (`Me.contact_channel_
+  /// verified`), e ele serve a UMA coisa: escolher o estado vazio.
+  ///
+  /// Desde a decisao do cliente de 02/11/2026 o Mural mostra a publicacao de
+  /// toda a base, **desde que as duas pontas estejam verificadas**. Quem nao
+  /// confirmou canal de contato recebe lista vazia do servidor, e sem este
+  /// sinal a tela diria "ninguem publicou" a quem o servidor esta filtrando --
+  /// um vazio mudo, que e o problema que a decisao quis resolver.
+  ///
+  /// **A autorizacao NAO mora aqui.** Ela mora na clausula `WHERE` da consulta
+  /// (ADR-0021); isto e so o texto da tela. E e **obrigatorio** de proposito:
+  /// um padrao `true` faria todo ponto de montagem novo esquecer o estado vazio
+  /// sem reprovar nada.
+  final bool canalConfirmado;
 
   /// A leitura, por interface ESTREITA: esta tela nao alcanca `publicar` nem
   /// `apagar` por aqui.
@@ -46,17 +62,35 @@ class CorpoDoMural extends StatefulWidget {
   /// Apaga a PROPRIA publicacao.
   final Future<void> Function(PublicacaoDaLinha)? aoApagar;
 
-  static const String tituloSemConexao = 'Comece pelas suas conexões';
-  static const String explicacaoSemConexao =
-      'O Mural mostra o que as suas conexões publicam. Você ainda não tem '
-      'nenhuma — e também pode publicar, que aparece aqui para elas.';
+  /// O VAZIO DE QUEM NAO CONFIRMOU O CONTATO -- **o unico dos tres que a
+  /// pessoa resolve sozinha, e por isso o unico que oferece caminho.**
+  ///
+  /// Ele existe por causa da decisao do cliente de 02/11/2026: o Mural passou a
+  /// mostrar a publicacao de toda a base, e a cobrar canal de contato
+  /// confirmado das DUAS pontas. Quem nao confirmou nao ve nada de ninguem, e
+  /// dizer "ninguem publicou" a essa pessoa seria mentir sobre a causa.
+  static const String tituloSemVerificacao = 'Confirme o seu e-mail para ver o Mural';
+  static const String explicacaoSemVerificacao =
+      'O Mural mostra o que a comunidade publica, e para entrar nele é '
+      'preciso ter o contato confirmado — de quem publica e de quem lê. '
+      'Você continua podendo publicar: o que é seu aparece aqui sempre.';
 
-  /// A SAIDA do vazio sem conexao, e **a unica acao que este estado tem**.
-  static const String buscarPessoas = 'Buscar usuários';
+  /// A SAIDA do vazio sem verificacao, e **a unica acao que este estado tem**.
+  static const String confirmarEmail = 'Confirmar o meu e-mail';
 
   static const String tituloSemPublicacao = 'As publicações ficam aqui';
   static const String explicacaoSemPublicacao =
-      'Quando as suas conexões publicarem, as publicações aparecem aqui.';
+      'Quando a comunidade publicar, as publicações aparecem aqui.';
+
+  /// A SAIDA do vazio sem publicacao.
+  ///
+  /// Ela ficou, e a razao mudou. Antes de 02/11/2026 este botao era a saida de
+  /// "nao tenho conexao", porque conexao era o que trazia publicacao. Hoje
+  /// conexao nao decide mais a audiencia -- mas o pedido do cliente e um Mural
+  /// *"onde as pessoas possam se conectar"*, e com a lista vazia nao existe
+  /// post de onde chegar ao perfil de alguem. Sem este botao, o unico estado em
+  /// que descobrir gente e mais necessario seria o unico sem caminho para isso.
+  static const String buscarPessoas = 'Buscar usuários';
 
   /// O rotulo da foto para quem usa leitor de tela **quando quem publicou nao
   /// escreveu uma descricao**.
@@ -78,8 +112,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
   Future<void> aoArrastarParaAtualizar() => _carregar();
 
   List<PublicacaoDaLinha>? _linha;
-
-  bool _tenhoPublicacao = false;
 
   bool _carregando = true;
   MensagemDeErro? _faixa;
@@ -198,7 +230,6 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
       if (!mounted) return;
       setState(() {
         _linha = linha.itens;
-        _tenhoPublicacao = minhas.itens.isNotEmpty;
         _carregando = false;
         _faltaConta = false;
       });
@@ -265,20 +296,34 @@ class _CorpoDoMuralState extends State<CorpoDoMural>
     }
 
     if (linha.isEmpty) {
+      // DOIS VAZIOS AQUI, e o terceiro ja saiu acima (`_faltaConta`, o convite
+      // de quem nao tem conta).
+      //
+      // A ORDEM E A REGRA: desde 02/11/2026 quem nao confirmou o contato nao ve
+      // nada de ninguem, entao a falta de verificacao explica o vazio INTEIRO.
+      // Quem publicou e nao verificou nem chega aqui -- a propria publicacao
+      // sempre entra na linha pela perna do proprio autor. Perguntar "ja
+      // publicou?" antes de "esta verificado?" diria "ninguem publicou" a quem
+      // o servidor esta filtrando, que e o vazio mudo que a decisao resolveu.
+      if (!widget.canalConfirmado) {
+        return EstadoVazio(
+          titulo: CorpoDoMural.tituloSemVerificacao,
+          explicacao: CorpoDoMural.explicacaoSemVerificacao,
+          acao: BotaoPrimario(
+            rotulo: CorpoDoMural.confirmarEmail,
+            icone: Icons.mark_email_read_outlined,
+            aoTocar: () => context.push(Rotas.verifiqueSeuEmail),
+          ),
+        );
+      }
       return EstadoVazio(
-        titulo: _tenhoPublicacao
-            ? CorpoDoMural.tituloSemPublicacao
-            : CorpoDoMural.tituloSemConexao,
-        explicacao: _tenhoPublicacao
-            ? CorpoDoMural.explicacaoSemPublicacao
-            : CorpoDoMural.explicacaoSemConexao,
-        acao: _tenhoPublicacao
-            ? null
-            : BotaoPrimario(
-                rotulo: CorpoDoMural.buscarPessoas,
-                icone: Icons.person_search_outlined,
-                aoTocar: () => context.go(Rotas.redeNaBuscaDePessoas),
-              ),
+        titulo: CorpoDoMural.tituloSemPublicacao,
+        explicacao: CorpoDoMural.explicacaoSemPublicacao,
+        acao: BotaoPrimario(
+          rotulo: CorpoDoMural.buscarPessoas,
+          icone: Icons.person_search_outlined,
+          aoTocar: () => context.go(Rotas.redeNaBuscaDePessoas),
+        ),
       );
     }
 

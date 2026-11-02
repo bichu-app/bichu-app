@@ -136,6 +136,12 @@ class _AbaMuralState extends State<AbaMural> {
             key: ValueKey<int>(_publicacoes),
             leitura: porta,
             interacao: porta,
+            // A REGUA AQUI E `canalConfirmado`, e NAO `emailVerificado` de
+            // `podeCriarNaComunidade` acima. As duas quase sempre coincidem, e
+            // a que decide o estado vazio tem de ser a MESMA que o servidor usa
+            // para filtrar a audiencia desde 02/11/2026:
+            // `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`.
+            canalConfirmado: sessao.usuario?.canalConfirmado ?? false,
           );
         }(),
       ],

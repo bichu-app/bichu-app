@@ -120,9 +120,15 @@ void main() {
       });
     }
     // O MURAL VAZIO, que é o estado que o caso (c) precisa: a linha é
-    // `GET /v1/timeline` e o discriminador de "tenho publicação" é
-    // `GET /v1/me/publications`. Os dois vazios produzem o ramo
-    // `tituloSemConexao`, que é o único com saída.
+    // `GET /v1/timeline`, e `GET /v1/me/publications` continua saindo porque é
+    // dela que vem o reagendamento da foto em processamento.
+    //
+    // ATUALIZADO EM 02/11/2026: o ramo do vazio deixou de ser escolhido por
+    // "tenho publicação" e passou a ser escolhido pela MINHA verificação
+    // (`Me.contact_channel_verified`), porque a audiência do Mural passou a
+    // cobrar canal de contato confirmado das duas pontas. Os dois ramos têm
+    // saída: `confirmarEmail` para quem não confirmou, `buscarPessoas` para
+    // quem confirmou e ainda não tem o que ver.
     if (caminho.endsWith('/timeline') ||
         caminho.endsWith('/me/publications')) {
       return _json(_vazia());

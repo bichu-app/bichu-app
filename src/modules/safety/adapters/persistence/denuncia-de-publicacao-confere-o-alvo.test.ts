@@ -29,18 +29,40 @@ const semBanco = new Kysely<Database>({
 const alvo = () => construtorDoAlvoDaPublicacao(semBanco, REF, CHAMADOR);
 
 const CONFERENCIAS = {
-  exigeConexaoAceita: (sql: string) => {
-    assert.match(sql, /from user_connections uc/i, 'o predicado de conexao saiu do WHERE');
-    assert.match(sql, /uc\.state = 'accepted'/, 'pendente nao e aceite');
+  /**
+   * A AUDIENCIA, e ela e a MESMA da linha do tempo -- por decisao do cliente de
+   * 02/11/2026, as duas pontas VERIFICADAS no lugar da conexao aceita.
+   *
+   * Este arquivo mede o alvo da DENUNCIA, e com a audiencia aberta ele deixou de
+   * ser detalhe: a denuncia e a defesa de quem recebe spam de estranho, e uma
+   * defesa que responde 404 no que o Mural mostra nao e defesa.
+   */
+  exigeAudienciaVerificada: (sql: string) => {
     assert.match(
       sql,
-      /uc\.requester_user_id = p\.author_user_id AND uc\.addressee_user_id = \$\d+::uuid/,
-      'um sentido do par saiu',
+      /SELECT 1 FROM users u WHERE u\.id = p\.author_user_id AND \(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\)/,
+      'a verificacao do AUTOR saiu do recorte do alvo da denuncia',
     );
     assert.match(
       sql,
-      /uc\.requester_user_id = \$\d+::uuid AND uc\.addressee_user_id = p\.author_user_id/,
-      'o OUTRO sentido do par saiu',
+      /SELECT 1 FROM users u WHERE u\.id = \$\d+::uuid AND \(u\.email_verified_at IS NOT NULL OR u\.phone_verified_at IS NOT NULL\)/,
+      'a verificacao de QUEM DENUNCIA saiu do recorte do alvo: a audiencia e das DUAS pontas',
+    );
+    assert.match(
+      sql,
+      /conta_habilitada\(p\.author_user_id\)/,
+      'conta DESABILITADA do autor voltou a ser alvo alcancavel',
+    );
+    assert.match(
+      sql,
+      /conta_habilitada\(\$\d+::uuid\)/,
+      'a conta desabilitada de quem denuncia voltou a alcancar o alvo',
+    );
+  },
+  negaConexaoNaAudiencia: (sql: string) => {
+    assert.ok(
+      !/user_connections/i.test(sql),
+      'o alvo da denuncia voltou a depender de `user_connections`, e DIVERGIU da linha do tempo: o Mural mostraria a publicacao do estranho e a denuncia dela responderia 404',
     );
   },
   negaBloqueio: (sql: string) => {
@@ -52,33 +74,52 @@ const CONFERENCIAS = {
 } as const;
 
 void describe('ISCA (e): a denuncia de publicacao confere o alvo, com o recorte da leitura', () => {
-  void it('ISCA (e) -- exige CONEXAO ACEITA nos dois sentidos, com as contas habilitadas', () => {
+  void it('ISCA (e) -- exige AS DUAS PONTAS VERIFICADAS, com as contas habilitadas', () => {
     const { sql } = alvo();
-    CONFERENCIAS.exigeConexaoAceita(sql);
-    assert.match(
-      sql,
-      /conta_habilitada\(uc\.requester_user_id\)[\s\S]*conta_habilitada\(uc\.addressee_user_id\)/,
+    CONFERENCIAS.exigeAudienciaVerificada(sql);
+    CONFERENCIAS.negaConexaoNaAudiencia(sql);
+  });
+
+  void it('ISCA (e) -- a MUTACAO reprova: a verificacao do AUTOR removida', () => {
+    assert.throws(
+      () =>
+        CONFERENCIAS.exigeAudienciaVerificada(
+          alvo().sql.replace(
+            'SELECT 1 FROM users u WHERE u.id = p.author_user_id AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)',
+            'SELECT 1',
+          ),
+        ),
+      'a conferencia da audiencia nao mede a verificacao do autor',
     );
   });
 
-  void it('ISCA (e) -- a MUTACAO reprova: `pending` no lugar de `accepted`', () => {
+  void it('ISCA (e) -- a MUTACAO reprova: `conta_habilitada` do autor removida', () => {
     assert.throws(
-      () => CONFERENCIAS.exigeConexaoAceita(alvo().sql.replace("uc.state = 'accepted'", "uc.state = 'pending'")),
-      'a conferencia de aceite nao mede nada',
+      () =>
+        CONFERENCIAS.exigeAudienciaVerificada(
+          alvo().sql.replace('conta_habilitada(p.author_user_id)', 'true'),
+        ),
+      'a conferencia nao enxerga a conta desabilitada: a perda silenciosa de tirar o `EXISTS` das conexoes',
     );
   });
 
-  void it('ISCA (e) -- a MUTACAO reprova: o `EXISTS` inteiro removido', () => {
+  void it('ISCA (e) -- O DEFEITO REPLANTADO: o filtro de conexao de volta no alvo reprova PELO NOME', () => {
     assert.throws(
-      () => CONFERENCIAS.exigeConexaoAceita(alvo().sql.replace(/EXISTS \([\s\S]*?\)\)/, 'true')),
-      'a conferencia nao enxerga o recorte inteiro removido: a denuncia voltaria a ser oraculo de existencia',
+      () =>
+        CONFERENCIAS.negaConexaoNaAudiencia(
+          alvo().sql.replace(
+            'conta_habilitada(p.author_user_id)',
+            "EXISTS (SELECT 1 FROM user_connections uc WHERE uc.state = 'accepted')",
+          ),
+        ),
+      'a conferencia nao enxerga o filtro de conexao replantado: o alvo da denuncia poderia divergir da linha do tempo sem ninguem notar',
     );
   });
 
   void it('ISCA (e) -- a perna do PROPRIO AUTOR existe, e e ela que torna `eu_mesmo` alcancavel', () => {
     assert.match(
       alvo().sql,
-      /p\.author_user_id = \$\d+::uuid\s*\n?\s*or exists/i,
+      /p\.author_user_id = \$\d+::uuid\s*\n?\s*OR\b/,
       'a perna do proprio autor saiu da consulta do alvo: `eu_mesmo` voltou a ser codigo morto',
     );
   });

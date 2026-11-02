@@ -1,6 +1,10 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import {
+  audienciaDaPublicacao,
+  fotoDoAutorVisivel,
+} from '../../../../shared/db/audiencia-da-publicacao.js';
 import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
 import type { Database } from '../../../../shared/db/schema.js';
 import { comoData } from '../../../../shared/time/clock.js';
@@ -135,7 +139,8 @@ export function construtorDaLinhaDoTempo(
         .onRef('fa.id', '=', 'a.photo_image_id')
         .on('fa.purpose', '=', PROPOSITO_DA_FOTO_DE_PESSOA)
         .on('fa.status', '=', FOTO_PRONTA)
-        .on(sql<boolean>`fa.thumb_key IS NOT NULL`),
+        .on(sql<boolean>`fa.thumb_key IS NOT NULL`)
+        .on(fotoDoAutorVisivel('p.author_user_id', quemOlha)),
     )
     .leftJoin('catalog_images as c', (junta) =>
       junta
@@ -170,18 +175,7 @@ export function construtorDaLinhaDoTempo(
                               AND pl.user_id = ${quemOlha}::uuid)`.as('liked_by_me'),
     )
     .where('p.deleted_at', 'is', null)
-    .where(
-      sql<boolean>`(
-        p.author_user_id = ${quemOlha}::uuid
-        OR EXISTS (
-          SELECT 1 FROM user_connections uc
-           WHERE uc.state = 'accepted'
-             AND ((uc.requester_user_id = p.author_user_id AND uc.addressee_user_id = ${quemOlha}::uuid)
-               OR (uc.requester_user_id = ${quemOlha}::uuid AND uc.addressee_user_id = p.author_user_id))
-             AND conta_habilitada(uc.requester_user_id)
-             AND conta_habilitada(uc.addressee_user_id))
-      )`,
-    )
+    .where(audienciaDaPublicacao('p.author_user_id', quemOlha))
     .where(sql<boolean>`NOT bloqueio_entre(p.author_user_id, ${quemOlha}::uuid)`)
     .where(
       sql<boolean>`NOT publicacao_ocultada_para_quem_denunciou(p.public_ref, ${quemOlha}::uuid)`,
@@ -220,18 +214,7 @@ export function construtorDaPublicacaoVisivel(
     .select('p.id as id')
     .where('p.public_ref', '=', ref)
     .where('p.deleted_at', 'is', null)
-    .where(
-      sql<boolean>`(
-        p.author_user_id = ${quemOlha}::uuid
-        OR EXISTS (
-          SELECT 1 FROM user_connections uc
-           WHERE uc.state = 'accepted'
-             AND ((uc.requester_user_id = p.author_user_id AND uc.addressee_user_id = ${quemOlha}::uuid)
-               OR (uc.requester_user_id = ${quemOlha}::uuid AND uc.addressee_user_id = p.author_user_id))
-             AND conta_habilitada(uc.requester_user_id)
-             AND conta_habilitada(uc.addressee_user_id))
-      )`,
-    )
+    .where(audienciaDaPublicacao('p.author_user_id', quemOlha))
     .where(sql<boolean>`NOT bloqueio_entre(p.author_user_id, ${quemOlha}::uuid)`)
     .where(
       sql<boolean>`NOT publicacao_ocultada_para_quem_denunciou(p.public_ref, ${quemOlha}::uuid)`,
@@ -258,18 +241,7 @@ export function construtorDosComentarios(
         .on('fa.purpose', '=', PROPOSITO_DA_FOTO_DE_PESSOA)
         .on('fa.status', '=', FOTO_PRONTA)
         .on(sql<boolean>`fa.thumb_key IS NOT NULL`)
-        .on(
-          sql<boolean>`(
-        k.author_user_id = ${quemOlha}::uuid
-        OR EXISTS (
-          SELECT 1 FROM user_connections uc
-           WHERE uc.state = 'accepted'
-             AND ((uc.requester_user_id = k.author_user_id AND uc.addressee_user_id = ${quemOlha}::uuid)
-               OR (uc.requester_user_id = ${quemOlha}::uuid AND uc.addressee_user_id = k.author_user_id))
-             AND conta_habilitada(uc.requester_user_id)
-             AND conta_habilitada(uc.addressee_user_id))
-      )`,
-        ),
+        .on(fotoDoAutorVisivel('k.author_user_id', quemOlha)),
     )
     .select([
       'k.public_ref as ref',

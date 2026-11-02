@@ -1177,7 +1177,7 @@ void main() {
 
       // A MESMA busca dos `findsNothing` de cima tem de achar aqui.
       expect(find.byType(ConviteParaEntrar), findsOneWidget);
-      expect(find.text('O Mural é das suas conexões'), findsOneWidget);
+      expect(find.text('O Mural é da comunidade'), findsOneWidget);
 
       // E E O DE TELA CHEIA, e nao a folha: aqui o muro e da lista inteira.
       // Sem esta linha o contrapeso ficaria verde com a folha, que e o desenho

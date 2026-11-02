@@ -114,18 +114,25 @@ enum SecaoComConta {
   /// `GET /v1/people` — a aba `Usuarios` da `Rede`.
   buscaDePessoas(
     titulo: 'Encontre quem você já conhece',
+    // ATUALIZADO EM 02/11/2026: o texto prometia que o Mural mostra o que as
+    // CONEXOES publicam, e a audiencia deixou de ser por conexao. A promessa
+    // desta tela continua sendo a BUSCA e o pedido de conexao, que e o que ela
+    // faz -- o Mural entrou aqui so como ganho, e o ganho mudou de forma.
     ganho: 'Entre para buscar os seus vizinhos pelo nome ou pelo apelido e '
-        'pedir conexão. O Mural mostra o que as suas conexões publicam, e as '
-        'suas publicações aparecem para elas.',
+        'pedir conexão. No Mural você acompanha o que a comunidade publica, e '
+        'as suas publicações aparecem lá também.',
     retomada: 'Entre de novo para buscar usuários.',
   ),
 
   /// `GET /v1/timeline` — a linha do tempo do `Mural`.
+  // ATUALIZADO EM 02/11/2026 (decisao do cliente): a audiencia do Mural deixou
+  // de ser conexao aceita e passou a ser canal de contato confirmado nas duas
+  // pontas. O texto antigo prometia "as suas conexoes", e virou falso.
   mural(
-    titulo: 'O Mural é das suas conexões',
-    ganho: 'Entre para ver o que as suas conexões publicam. As suas '
-        'publicações aparecem para os usuários com quem você se conectou, e '
-        'não para quem não é conexão.',
+    titulo: 'O Mural é da comunidade',
+    ganho: 'Entre para ver o que a comunidade publica. As suas publicações '
+        'aparecem para quem tem o contato confirmado, e nunca em página '
+        'pública nem para quem não tem conta.',
     retomada: 'Entre de novo para ver o Mural.',
   ),
 
