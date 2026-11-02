@@ -39,7 +39,9 @@ export const NAVEGACAO = {
   rotulo: 'Principal',
   pular: 'Pular para o conteúdo',
   menu: 'Menu',
-  acao: 'Em breve nas lojas',
+  // 02/11/2026: sem ressalva de disponibilidade, pela mesma decisao que tirou o
+  // "em breve" dos selos. Leva a secao que mostra os dois selos.
+  acao: 'Baixar o app',
   links: [
     { href: '/comunidade', texto: 'Comunidade' },
     { href: '/como-funciona', texto: 'Como funciona' },
@@ -57,7 +59,7 @@ export const RODAPE = {
         { href: '/comunidade', texto: 'Comunidade' },
         { href: '/como-funciona', texto: 'Como funciona' },
         { href: '/para-profissionais', texto: 'Para profissionais' },
-        { href: '/#baixe-app', texto: 'Em breve nas lojas' },
+        { href: '/#baixe-app', texto: 'Baixar o app' },
       ],
     },
     {

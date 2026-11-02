@@ -1,12 +1,23 @@
 export const COMUNIDADE = {
   titulo: 'Comunidade',
-  descricao: 'Eventos na praça com os pets do bairro e profissionais indicados e avaliados por quem mora perto.',
+  descricao: 'No Bichu, a comunidade publica os momentos dos pets, conversa, se encontra nas praças do bairro e indica os profissionais em quem confia.',
 
   hero: {
     sobretitulo: 'Comunidade',
     titulo: 'Os pets do bairro e as pessoas que cuidam deles.',
-    lead: 'No Bichu, a comunidade se encontra na praça e indica os profissionais em quem confia, sem mostrar o endereço de ninguém.',
+    lead: 'No Bichu, a comunidade publica os momentos dos pets, conversa, se encontra nas praças do bairro e indica os profissionais em quem confia. Nenhum evento mostra o endereço de ninguém.',
     alt: 'Ilustração de três mulheres fazendo carinho num cachorro numa praça, com um gato ao lado, bandeirinhas, árvores e prédios ao fundo.',
+  },
+
+  mural: {
+    sobretitulo: 'Mural',
+    titulo: 'No Mural, o dia a dia dos pets da comunidade.',
+    lead: 'É por aqui que a comunidade se fala entre um evento e outro: o que o seu pet aprontou hoje, e a conversa com quem você conectou.',
+    passos: [
+      { icone: 'photo_camera', titulo: 'Publique um momento', texto: 'Um texto curto e, se você quiser, uma foto. A foto mostra o que estiver nela: envie só o que você aceita que outras pessoas vejam.' },
+      { icone: 'person_add', titulo: 'Peça conexão', texto: 'Você pede, a outra pessoa aceita. Dá para se conectar com quem você conheceu num evento do bairro, por um convite, ou procurando a pessoa no Bichu.' },
+      { icone: 'group', titulo: 'Converse pelo Bichu', texto: 'A conversa abre depois do aceite, e acontece pelo Bichu. Ninguém conversa com você sem o seu aceite.' },
+    ],
   },
 
   eventos: {

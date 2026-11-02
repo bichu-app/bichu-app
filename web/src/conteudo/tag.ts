@@ -53,6 +53,8 @@ export const TAG = {
 
 export const REGISTRAR_ACHADO = {
   titulo: 'Se você está com um animal agora, não precisa do código.',
-  semDestino: 'Registrar um pet achado sem plaquinha vai ser pelo app do Bichu, que chega em breve na App Store e no Google Play.',
+  // Aqui "em breve" NAO era ressalva de loja: e o fato de que registrar achado
+  // sem plaquinha ainda nao existe. O fato fica; a formula das lojas sai.
+  semDestino: 'Registrar um pet achado sem plaquinha vai ser pelo app do Bichu. Por aqui, ainda não dá.',
   botao: 'Registrar que achei um pet',
 };

@@ -12,7 +12,7 @@ test('nenhum link sem destino, e os dois icones das lojas presentes e nao clicav
     await page.goto(rota);
     await expect(page.locator('a[href="#"], a:not([href])'), rota).toHaveCount(0);
     await expect(page.locator('a[href*="apps.apple.com"], a[href*="play.google.com"]'), rota).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Em breve nas lojas' }).first(), rota).toBeAttached();
+    await expect(page.getByRole('link', { name: 'Baixar o app' }).first(), rota).toBeAttached();
   }
   await page.goto('/');
   const lojas = page.getByRole('list', { name: 'Lojas de aplicativos' }).first();
