@@ -25,6 +25,7 @@ function conta(mudanca: Partial<Conta> = {}): Conta {
     referenceState: null,
     pendingEmail: null,
     emailDeliverable: true,
+    publicProfileEnabled: false,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,
     createdAt: comoData(Date.UTC(2026, 9, 1, 12, 0, 0) as Instant),

@@ -7,6 +7,14 @@ import {
   errosDoNomeDoLugar,
   TETO_DE_ENCONTROS_ATIVOS,
 } from './encontro-da-comunidade.js';
+import type { Instant } from '../../../shared/types/brands.js';
+
+/**
+ * O instante da medicao. Ele e exigido desde 02/11/2026, quando a decisao do
+ * bloqueio passou a sair da matriz de capacidades -- que aplica a regra dos 15
+ * dias do telefone, e por isso compara o relogio.
+ */
+const AGORA = Date.UTC(2026, 10, 2, 12, 0, 0) as Instant;
 
 const codigos = (nome: string): string[] =>
   errosDoNomeDoLugar('place.place_name', nome).map((e) => e.code);
@@ -80,11 +88,11 @@ void describe('place_name nao aceita endereco embutido', () => {
 void describe('quem pode criar, e quantos', () => {
   void it('ISCA: sem canal verificado o bloqueio existe; com canal, nao', () => {
     assert.deepEqual(
-      bloqueiosParaCriarEncontro({ temCanalVerificado: false, encontrosAtivos: 0 }),
+      bloqueiosParaCriarEncontro({ temCanalVerificado: false, encontrosAtivos: 0 }, AGORA),
       ['contact_channel_unverified'],
     );
     assert.deepEqual(
-      bloqueiosParaCriarEncontro({ temCanalVerificado: true, encontrosAtivos: 0 }),
+      bloqueiosParaCriarEncontro({ temCanalVerificado: true, encontrosAtivos: 0 }, AGORA),
       [],
     );
   });

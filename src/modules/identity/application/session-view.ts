@@ -23,6 +23,11 @@ export interface MeView {
   pending_profile_fields: CampoPendente[];
   can_open_lost_case: boolean;
   contact_channel_verified: boolean;
+  /**
+   * O perfil publico desta conta (cliente, 02/11/2026). **Visibilidade, e nao
+   * permissao** -- `modules/people/domain/perfil-publico-de-pessoa.ts`.
+   */
+  public_profile_enabled: boolean;
   created_at: string;
   /** A FOTO DA PRÓPRIA PESSOA, a mesma que `getMe` devolve. */
   photo: FotoProjetada | null;
@@ -73,6 +78,7 @@ export function projetarConta(conta: Conta, foto: FotoProjetada | null): MeView 
     pending_profile_fields: pendentes,
     can_open_lost_case: canalDeContatoConfirmado(conta),
     contact_channel_verified: canalDeContatoConfirmado(conta),
+    public_profile_enabled: conta.publicProfileEnabled,
     created_at: conta.createdAt.toISOString(),
     photo: foto,
   };

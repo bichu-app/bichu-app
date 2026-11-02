@@ -88,6 +88,7 @@ const COLUNAS_DA_CONTA = [
   'reference_state',
   'pending_email',
   'email_deliverable',
+  'public_profile_enabled',
   'status',
   'sessions_invalid_before',
   'created_at',
@@ -95,6 +96,7 @@ const COLUNAS_DA_CONTA = [
 
 interface LinhaSelecionada extends LinhaDeConta {
   email_deliverable: boolean;
+  public_profile_enabled: boolean;
   status: 'active' | 'suspended' | 'deletion_requested';
   sessions_invalid_before: Date;
   created_at: Date;
@@ -115,6 +117,7 @@ function paraConta(linha: LinhaSelecionada): Conta {
     referenceState: linha.reference_state,
     pendingEmail: linha.pending_email,
     emailDeliverable: linha.email_deliverable,
+    publicProfileEnabled: linha.public_profile_enabled,
     status: linha.status,
     sessionsInvalidBefore: linha.sessions_invalid_before.getTime() as Instant,
     createdAt: linha.created_at,
@@ -269,6 +272,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         referenceNeighborhood: 'reference_neighborhood',
         referenceCity: 'reference_city',
         referenceState: 'reference_state',
+        publicProfileEnabled: 'public_profile_enabled',
       } as const;
 
       for (const [campo, coluna] of Object.entries(mapa)) {

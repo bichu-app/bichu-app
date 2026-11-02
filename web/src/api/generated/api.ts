@@ -9060,41 +9060,37 @@ export interface components {
             /** @description Falso quando nenhum canal de contato esta verificado. */
             can_open_lost_case: boolean;
             /**
-             * @description **A ADESAO `aparecer na lista da minha regiao`** -- decisao do
-             *     cliente de 02/11/2026, que escolheu, entre duas perguntas fechadas,
-             *     que **so quem optar aparece** na listagem de usuarios da mesma
-             *     regiao, com a adesao **DESLIGADA por padrao**. Ele recusou listar
-             *     todo mundo sabendo que a lista comeca menor.
+             * @description **O PERFIL PUBLICO DESTA CONTA ESTA LIGADO?** (cliente, 02/11/2026:
+             *     *"desligado por padrao e o usuario habilita"*.)
              *
-             *     **`false` e o estado de toda conta que existe hoje e de toda conta
-             *     nova**, e nao um default de tipo: a coluna
-             *     `users.region_listing_opted_in_at` nasce `NULL` para todas, e a
-             *     lista nasce VAZIA. Ligar e `PATCH /v1/me` com
-             *     `region_listing_opt_in: true`.
+             *     **E VISIBILIDADE, E NAO PERMISSAO**, e ele foi explicito: *"nao tem
+             *     relacao com permissoes dentro do sistema, apenas de visibilidade"*.
+             *     Ligar isto nao verifica a conta, nao a promove de nivel e nao libera
+             *     nada -- nem cadastrar evento, nem recomendar profissional, nem nada
+             *     que dependa de canal de contato confirmado. Quem decide o que a
+             *     conta PODE FAZER e a matriz de capacidades
+             *     (`src/shared/autorizacao/matriz-de-capacidades.ts`), e este campo
+             *     **nao entra nela**. O que ele faz e deixar o perfil e os posts da
+             *     pessoa aparecerem para outras pessoas.
              *
-             *     **O booleano, e nunca o instante.** A coluna guarda QUANDO a pessoa
-             *     ligou -- a pergunta que uma adesao revogavel faz depois --, mas a
-             *     TELA so precisa do estado do interruptor, e a data de uma decisao de
-             *     privacidade nao e material de tela.
+             *     **Sai apenas para o DONO**, aqui e em `SessionResponse.user`: nenhum
+             *     schema de terceiro o declara. Para terceiro a visibilidade nao e um
+             *     campo a ser lido, e a consequencia de uma consulta que ja a
+             *     respeitou.
              *
-             *     **So o DONO le este campo**, e nao ha superficie de terceiro que o
-             *     devolva: `RegionPerson` nao o traz, porque quem esta na lista esta
-             *     por ter ligado, e repetir a escolha para estranhos nao informa nada
-             *     que a presenca na lista nao diga.
+             *     **Ligar exige apelido**: `GET /v1/people/{handle}` e a unica rota
+             *     que serve o perfil de uma pessoa, e perfil publico sem apelido e um
+             *     perfil sem endereco. `updateMe` com `public_profile_enabled: true`
+             *     numa conta sem `handle` e `400`
+             *     (`code: public_profile_requires_handle`), e o banco impede o estado
+             *     de todo modo (`users_perfil_publico_exige_apelido`).
              *
-             *     **Ligar nao basta para aparecer**: os outros predicados continuam
-             *     valendo -- canal de contato confirmado, conta habilitada, sem
-             *     bloqueio, e **regiao de referencia preenchida** (sem
-             *     `reference_city` e `reference_state` nao ha regiao com que casar, e
-             *     a pendencia `reference_area` de `pending_profile_fields` e o que a
-             *     tela usa para dizer isso).
-             *
-             *     **Desligar vale na hora:** o predicado e lido na consulta, a cada
-             *     requisicao, e a resposta da listagem sai com
-             *     `Cache-Control: private, no-store`.
+             *     **NAO e o que decide sozinho quem aparece em listagem de pessoas.**
+             *     A regra que o cliente refinou em 02/11/2026 e **foto + perfil
+             *     publico**, e este campo e metade dela.
              * @default false
              */
-            region_listing_opt_in: boolean;
+            public_profile_enabled: boolean;
             /** Format: date-time */
             created_at?: string;
         };
@@ -9115,13 +9111,13 @@ export interface components {
             photo_upload_id?: string | null;
             handle?: components["schemas"]["Handle"];
             phone_e164?: string;
+            public_profile_enabled?: boolean;
             reference_area?: {
                 postal_code?: string;
                 neighborhood?: string;
                 city?: string;
                 state?: string;
             };
-            region_listing_opt_in?: boolean;
         };
         Device: {
             /** Format: uuid */
