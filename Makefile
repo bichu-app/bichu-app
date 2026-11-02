@@ -689,7 +689,14 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # medido quando foi escrito; as mesclas do painel e da moderacao entraram depois
 # e o numero virou 848 antes de ele ser mesclado. Mesma regra dos outros valores
 # travados deste repositorio: recontar DEPOIS da ultima mudanca, nunca escolher.
-verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (A-RECONTAR arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
+#
+# 02/11/2026: DOIS lados mexeram nesta linha ao mesmo tempo e o git conflitou --
+# a listagem da regiao trazia 857 e o perfil publico de pessoa trazia 856, os
+# dois saindo de 849. **Somar os deltas seria palpite**, e foi recontado na
+# arvore mesclada: 864. A conta fecha nos dois sentidos -- a base do perfil
+# publico mede 857 (e nao os 856 que a linha dele dizia, que ja estava um atras),
+# e a listagem acrescenta 7 arquivos de raiz.
+verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (864 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 
 # Separado para poder ser rodado sozinho por quem so mexeu no painel, e porque

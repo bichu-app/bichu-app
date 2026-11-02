@@ -1,22 +1,40 @@
-// A LISTAGEM DE USUÁRIOS DA MESMA REGIÃO (cliente, 02/11/2026), por ADESÃO
-// EXPLÍCITA — e os quatro estados de tela que ela tem.
+// A LISTAGEM DE USUÁRIOS DA MESMA REGIÃO (cliente, 02/11/2026) — e os estados
+// de tela que ela tem, UM POR MOTIVO.
 //
 // O pedido dele foi *"trazer a listagem de usuarios que estao na mesma regiao
 // dele e que as pessoas podem adicionar"*, e as duas perguntas fechadas que
 // foram postas antes de escrever qualquer coisa foram decididas por ele:
 //
-//   1. **só quem optar aparece**, com a adesão DESLIGADA por padrão. Ele
-//      recusou listar todo mundo sabendo que a lista começa menor;
+//   1. **só quem optar aparece**, e ele recusou listar todo mundo sabendo que a
+//      lista começa menor;
 //   2. **o piso de 3 caracteres da busca FICA** — `searchPeople` não muda.
+//
+// ## O QUE `ADERIR` SIGNIFICA, DEPOIS DO REFINAMENTO DELE
+//
+// A primeira versão desta frente tinha adesão própria
+// (`users.region_listing_opted_in_at`). O cliente refinou a definição: *"o
+// aderir é apenas referente a criar um perfil público e que o perfil dela e os
+// posts podem aparecer para outras pessoas"*, e **o que coloca a pessoa na
+// listagem é foto + perfil público**.
+//
+// Com isso a adesão própria e `users.public_profile_enabled` seriam DUAS
+// adesões para o mesmo ato, e ficou UMA — a do perfil público. **Esta tela
+// perdeu o interruptor próprio e passou a ler a regra de três condições**, na
+// ordem do servidor: perfil público, depois foto, depois apelido.
 //
 // ## O que cada caso deste arquivo mede
 //
-//   (a) **quem NÃO aderiu vê o MOTIVO e a SAÍDA, e não um vazio mudo** — é a
-//       mesma lição que o Mural aberto deixou hoje. A tela explica e oferece o
-//       botão de ligar, e **não chega a chamar a rota**: a conta de quem olha
-//       já explica o vazio, e gastar o teto de 60/h para receber uma página
-//       vazia que a própria conta explicava seria desperdício com um nome
-//       melhor;
+//   (a) **quem está com o perfil público DESLIGADO vê o MOTIVO e a SAÍDA, e
+//       não um vazio mudo** — é a mesma lição que o Mural aberto deixou. A tela
+//       explica e oferece o botão de ligar, e **não chega a chamar a rota**: a
+//       conta de quem olha já explica o vazio, e gastar o teto de 60/h para
+//       receber uma página vazia que a própria conta explicava seria
+//       desperdício com um nome melhor;
+//  (a2) **quem ligou o perfil e não tem FOTO vê OUTRA coisa** — a foto é
+//       metade da regra, e oferecer "ligar o perfil" a quem já ligou seria
+//       mandar a pessoa fazer o que ela já fez;
+//  (a3) **quem não tem APELIDO vê a terceira** — sem apelido o perfil não tem
+//       endereço;
 //   (b) **quem não tem CIDADE vê outra coisa** — sem região não há com o que
 //       casar, e mandá-lo ligar a adesão seria a saída errada;
 //   (c) **ligar o interruptor daqui FUNCIONA e traz a lista** — o par positivo
@@ -50,6 +68,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 const String _urlBase = 'https://api.exemplo.test';
+
+/// A URL de `Me.photo.url`, que o servidor só preenche com a foto em `ready`.
+const String _urlDaFoto = 'https://midia.exemplo.test/u/ab/cdef/card.jpg';
 
 http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
   return http.Response(
@@ -85,8 +106,8 @@ Map<String, dynamic> _pagina(List<Map<String, dynamic>> itens) {
   };
 }
 
-/// O corpo de `Me`, para o `PATCH` que liga a adesão.
-Map<String, dynamic> _me({required bool naLista}) {
+/// O corpo de `Me`, para o `PATCH` que liga o perfil público.
+Map<String, dynamic> _me({required bool perfilPublico}) {
   return <String, dynamic>{
     'id': '018f3a2b-0000-7000-8000-0000000000aa',
     'email': 'eu@exemplo.invalid',
@@ -95,7 +116,9 @@ Map<String, dynamic> _me({required bool naLista}) {
     'display_name': 'Eu Mesmo',
     'pending_profile_fields': <String>[],
     'can_open_lost_case': true,
-    'region_listing_opt_in': naLista,
+    'public_profile_enabled': perfilPublico,
+    'handle': 'eu-mesmo',
+    'photo': <String, dynamic>{'status': 'ready', 'url': _urlDaFoto},
     'reference_area': <String, dynamic>{
       'postal_code': '05435-000',
       'neighborhood': 'Vila Madalena',
@@ -147,8 +170,15 @@ class _ListaComSessao extends StatelessWidget {
   }
 }
 
+/// A conta de quem olha.
+///
+/// **Os três parâmetros da regra entram SEPARADOS de propósito**: é o que deixa
+/// cada estado de tela ser montado por si, em vez de um booleano só que fundiria
+/// os três motivos num e deixaria dois deles sem caso.
 Usuario _usuario({
-  required bool naLista,
+  required bool perfilPublico,
+  bool comFoto = true,
+  String? apelido = 'eu-mesmo',
   String? cidade = 'São Paulo',
   String? uf = 'SP',
 }) {
@@ -159,7 +189,11 @@ Usuario _usuario({
     canalConfirmado: true,
     pendencias: const <PendenciaDeCadastro>[],
     podeAbrirCaso: true,
-    naListaDaRegiao: naLista,
+    perfilPublicoLigado: perfilPublico,
+    apelido: apelido,
+    // `Me.photo.url` só vem preenchida com a foto em `ready` — então nulo aqui
+    // reproduz junto "não tem", "está processando" e "foi recusada".
+    fotoUrl: comFoto ? _urlDaFoto : null,
     nome: 'Eu Mesmo',
     regiaoDeReferencia: (cidade == null && uf == null)
         ? null
@@ -182,7 +216,7 @@ Future<void> _montar(
     final caminho = pedido.url.path;
     if (caminho.endsWith('/region/people')) return _json(_pagina(itens));
     if (caminho.endsWith('/me') && pedido.method == 'PATCH') {
-      return _json(_me(naLista: true));
+      return _json(_me(perfilPublico: true));
     }
     if (caminho.endsWith('/connections') && pedido.method == 'POST') {
       return _json(<String, dynamic>{
@@ -220,11 +254,11 @@ Future<void> _montar(
 
 void main() {
   testWidgets(
-    'ISCA (a): quem NAO aderiu ve o MOTIVO e a SAIDA, e a rota nem e chamada',
+    'ISCA (a): perfil publico DESLIGADO ve o MOTIVO e a SAIDA, e a rota nem e chamada',
     (tester) async {
       await _montar(
         tester,
-        usuario: _usuario(naLista: false),
+        usuario: _usuario(perfilPublico: false),
         itens: <Map<String, dynamic>>[_pessoa(apelido: 'ana-vizinha', nome: 'Ana')],
       );
 
@@ -236,7 +270,7 @@ void main() {
             'vazio sem causa.',
       );
       expect(
-        find.textContaining('Enquanto você não escolher, você não aparece e '
+        find.textContaining('Enquanto você não ligar o seu, você não aparece e '
             'não vê quem apareceu.'),
         findsOneWidget,
         reason: 'REPROVA: a RECIPROCIDADE não está dita em voz alta. Ela é a '
@@ -245,7 +279,7 @@ void main() {
             'como defeito.',
       );
       expect(
-        find.widgetWithText(BotaoPrimario, 'Aparecer na lista'),
+        find.widgetWithText(BotaoPrimario, 'Ligar o meu perfil público'),
         findsOneWidget,
         reason: 'REPROVA: a SAÍDA não está na tela. Explicar sem oferecer o '
             'botão deixa a pessoa sem o que fazer.',
@@ -263,11 +297,86 @@ void main() {
   );
 
   testWidgets(
-    'ISCA (b): quem nao tem CIDADE ve outra coisa, e nao o convite a aderir',
+    'ISCA (a2): com o perfil LIGADO e SEM FOTO, a tela cobra a FOTO',
     (tester) async {
       await _montar(
         tester,
-        usuario: _usuario(naLista: true, cidade: null, uf: null),
+        usuario: _usuario(perfilPublico: true, comFoto: false),
+        itens: <Map<String, dynamic>>[_pessoa(apelido: 'ana-vizinha', nome: 'Ana')],
+      );
+
+      expect(
+        find.text('Falta a sua foto'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela não cobrou a foto. Ela é METADE da regra que o '
+            'cliente definiu (*"o que coloca a pessoa na listagem é foto + '
+            'perfil público"*), e sem este estado a pessoa liga o perfil, '
+            'continua fora da lista e não tem como saber por que.',
+      );
+      expect(
+        find.widgetWithText(BotaoPrimario, 'Ligar o meu perfil público'),
+        findsNothing,
+        reason: 'REPROVA: a tela ofereceu ligar um perfil público que já está '
+            'ligado — é mandar a pessoa fazer o que ela já fez.',
+      );
+      expect(
+        _listagens,
+        0,
+        reason: 'REPROVA: a rota foi chamada sem foto. A resposta seria vazia, '
+            'e a conta de quem olha já explicava.',
+      );
+    },
+  );
+
+  testWidgets(
+    'ISCA (a3): com perfil e foto e SEM APELIDO, a tela cobra o APELIDO',
+    (tester) async {
+      await _montar(
+        tester,
+        usuario: _usuario(perfilPublico: true, apelido: null),
+        itens: <Map<String, dynamic>>[_pessoa(apelido: 'ana-vizinha', nome: 'Ana')],
+      );
+
+      expect(
+        find.text('Falta o seu apelido'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela não cobrou o apelido. Sem apelido o perfil não '
+            'tem endereço, e aparecer numa listagem sem endereço é oferecer um '
+            'link que não abre.',
+      );
+      expect(_listagens, 0);
+    },
+  );
+
+  testWidgets(
+    'A ORDEM DOS MOTIVOS E A DO CLIENTE: perfil publico ANTES da foto',
+    (tester) async {
+      // Falta tudo: nem perfil, nem foto, nem apelido. A tela tem de cobrar UMA
+      // coisa, e a PRIMEIRA — mandar resolver três pendências de uma vez é pior
+      // do que mandar resolver a primeira, e a ordem é a de
+      // `motivoDeNaoAparecerNaListagem` no servidor.
+      await _montar(
+        tester,
+        usuario: _usuario(perfilPublico: false, comFoto: false, apelido: null),
+      );
+
+      expect(find.text('Você ainda não aparece nesta lista'), findsOneWidget);
+      expect(
+        find.text('Falta a sua foto'),
+        findsNothing,
+        reason: 'REPROVA: a tela cobrou duas coisas de uma vez, ou cobrou a '
+            'segunda antes da primeira. A ordem é a do cliente.',
+      );
+      expect(find.text('Falta o seu apelido'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'ISCA (b): quem nao tem CIDADE ve outra coisa, e nao o convite a ligar',
+    (tester) async {
+      await _montar(
+        tester,
+        usuario: _usuario(perfilPublico: true, cidade: null, uf: null),
         itens: <Map<String, dynamic>>[_pessoa(apelido: 'ana-vizinha', nome: 'Ana')],
       );
 
@@ -281,7 +390,10 @@ void main() {
       expect(
         find.text('Você ainda não aparece nesta lista'),
         findsNothing,
-        reason: 'REPROVA: a tela ofereceu ligar uma adesão que já está ligada.',
+        reason: 'REPROVA: a tela ofereceu ligar um perfil público que já está '
+            'ligado. **A região vem ANTES da regra de aparecer de propósito**: '
+            'sem cidade não há lista nenhuma a mostrar, e mandar a pessoa ligar '
+            'o perfil não a aproxima de ver alguém.',
       );
       expect(
         _listagens,
@@ -292,29 +404,33 @@ void main() {
     },
   );
 
-  testWidgets('ISCA (c): ligar daqui FUNCIONA e a lista aparece', (tester) async {
+  testWidgets('ISCA (c): ligar o perfil daqui FUNCIONA e a lista aparece',
+      (tester) async {
     await _montar(
       tester,
-      usuario: _usuario(naLista: false),
+      usuario: _usuario(perfilPublico: false),
       itens: <Map<String, dynamic>>[
         _pessoa(apelido: 'ana-vizinha', nome: 'Ana Vizinha'),
       ],
     );
 
-    await tester.tap(find.widgetWithText(BotaoPrimario, 'Aparecer na lista'));
+    await tester.tap(
+      find.widgetWithText(BotaoPrimario, 'Ligar o meu perfil público'),
+    );
     await tester.pumpAndSettle();
 
     expect(
-      corpos.any((c) => c.contains('"region_listing_opt_in":true')),
+      corpos.any((c) => c.contains('"public_profile_enabled":true')),
       isTrue,
-      reason: 'REPROVA: o botão não gravou a adesão. O corpo enviado foi: '
-          '$corpos',
+      reason: 'REPROVA: o botão não ligou o perfil público. **E ele tem de usar '
+          'o caminho de escrita que já existe** (`PATCH /v1/me`, do #149) e não '
+          'uma operação nova. O corpo enviado foi: $corpos',
     );
     expect(
       find.text('Ana Vizinha'),
       findsOneWidget,
-      reason: 'REPROVA: ligar a adesão não trouxe a lista. Sem esta metade, o '
-          'caso (a) passaria numa tela que nunca lista nada.',
+      reason: 'REPROVA: ligar o perfil público não trouxe a lista. Sem esta '
+          'metade, o caso (a) passaria numa tela que nunca lista nada.',
     );
     expect(
       find.text('Usuários da sua região'),
@@ -335,7 +451,7 @@ void main() {
       // e nao porque ela escreveu um quinto desenho de botao.
       await _montar(
         tester,
-        usuario: _usuario(naLista: true),
+        usuario: _usuario(perfilPublico: true),
         itens: <Map<String, dynamic>>[
           _pessoa(apelido: 'ja-conexao', nome: 'Já Conexão', estado: 'connected'),
         ],
@@ -361,7 +477,7 @@ void main() {
     (tester) async {
       await _montar(
         tester,
-        usuario: _usuario(naLista: true),
+        usuario: _usuario(perfilPublico: true),
         itens: <Map<String, dynamic>>[
           _pessoa(apelido: 'ana-vizinha', nome: 'Ana Vizinha', estado: 'none'),
         ],
@@ -383,7 +499,7 @@ void main() {
       (tester) async {
     await _montar(
       tester,
-      usuario: _usuario(naLista: true),
+      usuario: _usuario(perfilPublico: true),
       itens: <Map<String, dynamic>>[
         _pessoa(apelido: 'ana-vizinha', nome: 'Ana Vizinha'),
       ],
@@ -412,7 +528,7 @@ void main() {
 
   testWidgets('quem ADERIU e esta sozinho ve que esta sozinho, e nao um vazio mudo',
       (tester) async {
-    await _montar(tester, usuario: _usuario(naLista: true));
+    await _montar(tester, usuario: _usuario(perfilPublico: true));
 
     expect(
       find.text('Ninguém por aqui ainda'),
@@ -424,13 +540,14 @@ void main() {
     expect(
       find.textContaining('Você já aparece na lista da sua cidade.'),
       findsOneWidget,
-      reason: 'REPROVA: a tela não confirmou que a adesão está de pé, e quem '
-          'vê um vazio assume que falhou em ligar.',
+      reason: 'REPROVA: a tela não confirmou que o perfil público está de pé, e '
+          'quem vê um vazio assume que falhou em ligar.',
     );
     expect(
-      find.widgetWithText(BotaoPrimario, 'Aparecer na lista'),
+      find.widgetWithText(BotaoPrimario, 'Ligar o meu perfil público'),
       findsNothing,
-      reason: 'REPROVA: a tela ofereceu ligar uma adesão que já está ligada.',
+      reason: 'REPROVA: a tela ofereceu ligar um perfil público que já está '
+          'ligado.',
     );
   });
 
@@ -441,4 +558,39 @@ void main() {
     expect(find.byType(CartaoDePessoaEncontrada), findsNothing);
     expect(find.text('Você ainda não aparece nesta lista'), findsNothing);
   });
+
+  testWidgets(
+    'TIRAR A FOTO TIRA DA LISTA, e a tela nao fica com a lista velha',
+    (tester) async {
+      // **A consequência que ninguém escolheu de propósito**, e é por isso que
+      // ela tem caso: a foto é metade da regra, então quem tirar a própria foto
+      // sai da lista junto. O defeito que este caso impede é a lista ANTERIOR
+      // continuar desenhada — o produto mentindo sobre uma escolha de
+      // privacidade.
+      await _montar(
+        tester,
+        usuario: _usuario(perfilPublico: true),
+        itens: <Map<String, dynamic>>[
+          _pessoa(apelido: 'ana-vizinha', nome: 'Ana Vizinha'),
+        ],
+      );
+      expect(
+        find.text('Ana Vizinha'),
+        findsOneWidget,
+        reason: 'o par positivo falhou: a lista não apareceu nem com tudo no lugar',
+      );
+
+      conta.value = _usuario(perfilPublico: true, comFoto: false);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Ana Vizinha'),
+        findsNothing,
+        reason: 'REPROVA: a lista anterior ficou na tela depois de a foto sair. '
+            'A pessoa deixou de aparecer para os outros, e a tela continuou '
+            'mostrando os outros para ela.',
+      );
+      expect(find.text('Falta a sua foto'), findsOneWidget);
+    },
+  );
 }

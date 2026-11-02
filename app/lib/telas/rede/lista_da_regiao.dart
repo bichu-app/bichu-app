@@ -49,11 +49,11 @@ class ListaDaRegiao extends StatefulWidget {
   /// A conta de quem olha, ou nulo quando não há sessão.
   ///
   /// **É daqui que vem o motivo do vazio**, e não do servidor: a resposta é
-  /// página vazia para quem não aderiu, e distinguir os casos no servidor seria
-  /// o oráculo que diz *"existe gente aí, mas não para você"*.
+  /// página vazia para quem não apareceria na lista, e distinguir os casos no
+  /// servidor seria o oráculo que diz *"existe gente aí, mas não para você"*.
   final Usuario? usuario;
 
-  /// Repõe a conta na sessão depois de ligar a adesão.
+  /// Repõe a conta na sessão depois de ligar o perfil público.
   final Future<void> Function(Usuario) aoAtualizarOUsuario;
 
   final void Function(String apelido) aoAbrirOPerfil;
@@ -69,10 +69,28 @@ class ListaDaRegiao extends StatefulWidget {
   /// A reciprocidade está dita em voz alta: quem não aparece não vê. É a
   /// recomendação desta frente, e o cliente pode revertê-la.
   static const String explicacaoSemAdesao =
-      'Esta lista mostra quem mora na sua cidade e escolheu aparecer nela. '
-      'Enquanto você não escolher, você não aparece e não vê quem apareceu.';
+      'Esta lista mostra quem mora na sua cidade, ligou o perfil público e tem '
+      'foto. Enquanto você não ligar o seu, você não aparece e não vê quem '
+      'apareceu.';
 
-  static const String ligarAAdesao = 'Aparecer na lista';
+  static const String ligarAAdesao = 'Ligar o meu perfil público';
+
+  static const String tituloSemFoto = 'Falta a sua foto';
+
+  /// **A foto é metade da regra**, e a tela diz isso em vez de deixar a pessoa
+  /// ligar o perfil público e não entender por que continua fora.
+  static const String explicacaoSemFoto =
+      'O seu perfil público já está ligado. Para aparecer nesta lista você '
+      'também precisa de uma foto no perfil — é ela que deixa outros usuários '
+      'reconhecerem você.';
+
+  static const String irParaOsMeusDados = 'Abrir Meus dados';
+
+  static const String tituloSemApelido = 'Falta o seu apelido';
+
+  static const String explicacaoSemApelido =
+      'O seu perfil público precisa de um apelido para ter endereço. Escolha um '
+      'em Meus dados.';
 
   static const String tituloSemRegiao = 'Falta a sua cidade';
 
@@ -85,12 +103,12 @@ class ListaDaRegiao extends StatefulWidget {
 
   static const String explicacaoSemNinguem =
       'Você já aparece na lista da sua cidade. Ninguém mais da sua cidade '
-      'escolheu aparecer até agora.';
+      'tem perfil público com foto até agora.';
 
   static const String carregando = 'Carregando usuários da sua região';
 
   static const String ondeDesligar =
-      'Para sair da lista, desligue em Meus dados.';
+      'Para sair da lista, desligue o perfil público em Meus dados.';
 
   @override
   State<ListaDaRegiao> createState() => _EstadoDaListaDaRegiao();
@@ -109,7 +127,13 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
   bool _ligando = false;
   bool _pedida = false;
 
-  bool get _aderiu => widget.usuario?.naListaDaRegiao ?? false;
+  /// **Apareceria na lista?** — perfil público ligado, foto pronta e apelido.
+  /// A regra e a ordem são do servidor; ver
+  /// `Usuario.motivoDeNaoAparecerNaListagem`.
+  bool get _apareceria => widget.usuario?.apareceriaNaListagem ?? false;
+
+  MotivoDeNaoAparecer? get _motivo =>
+      widget.usuario?.motivoDeNaoAparecerNaListagem;
 
   bool get _temRegiao =>
       widget.usuario?.regiaoDeReferencia?.cidade != null &&
@@ -121,14 +145,16 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
     _pedirSePuder();
   }
 
-  /// **ENTRAR NA CONTA, LIGAR OU DESLIGAR A ADESÃO INVALIDAM A LISTA.** Sem
-  /// isto, desligar em `Meus dados` deixaria a lista anterior na tela, o que
-  /// faria o produto mentir sobre uma escolha de privacidade.
+  /// **ENTRAR NA CONTA, E QUALQUER MUDANÇA NO QUE FAZ APARECER, INVALIDAM A
+  /// LISTA.** Sem isto, desligar o perfil público em `Meus dados` — ou tirar a
+  /// foto — deixaria a lista anterior na tela, o que faria o produto mentir
+  /// sobre uma escolha de privacidade.
   @override
   void didUpdateWidget(ListaDaRegiao anterior) {
     super.didUpdateWidget(anterior);
     final mudou =
-        anterior.usuario?.naListaDaRegiao != widget.usuario?.naListaDaRegiao ||
+        anterior.usuario?.motivoDeNaoAparecerNaListagem !=
+                widget.usuario?.motivoDeNaoAparecerNaListagem ||
         anterior.usuario?.id != widget.usuario?.id;
     if (!mudou) return;
     _pedida = false;
@@ -144,7 +170,7 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
   /// teto de 60/h por conta não é gasto para receber uma página vazia que a
   /// conta de quem olha já explicava.
   void _pedirSePuder() {
-    if (!_aderiu || !_temRegiao) {
+    if (!_apareceria || !_temRegiao) {
       _fase = _Fase.lista;
       return;
     }
@@ -204,9 +230,14 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
     }
   }
 
-  /// Liga a adesão daqui. **Desligar não está nesta tela de propósito**: o
-  /// interruptor mora em `Meus dados`, e duas portas de desligar seriam dois
-  /// lugares onde uma pode faltar.
+  /// Liga **o perfil público** daqui, pelo caminho de escrita que já existe
+  /// (`PATCH /v1/me`) — e não por uma operação nova.
+  ///
+  /// **Só liga, e não desliga.** O interruptor que desliga é o do perfil
+  /// público, e ele é assunto da tela de perfil: duas portas de desligar seriam
+  /// dois lugares onde uma pode faltar. **O custo disso está registrado no
+  /// relatório desta frente**: enquanto a tela de perfil não tiver o
+  /// interruptor, o aplicativo liga e não desliga.
   Future<void> _ligar() async {
     if (_ligando) return;
     setState(() {
@@ -214,7 +245,7 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
       _textoDaFalha = null;
     });
     try {
-      final dados = await widget.me.atualizar(naListaDaRegiao: true);
+      final dados = await widget.me.atualizar(perfilPublico: true);
       await widget.aoAtualizarOUsuario(dados.usuario);
       if (!mounted) return;
       setState(() => _ligando = false);
@@ -259,20 +290,42 @@ class _EstadoDaListaDaRegiao extends State<ListaDaRegiao> {
       ];
     }
 
-    if (!_aderiu) {
-      return <Widget>[
-        const SizedBox(height: BichuEspaco.e8),
-        EstadoVazio(
-          titulo: ListaDaRegiao.tituloSemAdesao,
-          explicacao: ListaDaRegiao.explicacaoSemAdesao,
-          acao: BotaoPrimario(
-            rotulo: ListaDaRegiao.ligarAAdesao,
-            carregando: _ligando,
-            aoTocar: () => unawaited(_ligar()),
+    // **UM ESTADO POR MOTIVO, e a ordem é a do servidor**: perfil público,
+    // depois foto, depois apelido. Mandar a pessoa resolver três pendências de
+    // uma vez é pior do que mandar resolver a primeira.
+    switch (_motivo) {
+      case MotivoDeNaoAparecer.perfilPublicoDesligado:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e8),
+          EstadoVazio(
+            titulo: ListaDaRegiao.tituloSemAdesao,
+            explicacao: ListaDaRegiao.explicacaoSemAdesao,
+            acao: BotaoPrimario(
+              rotulo: ListaDaRegiao.ligarAAdesao,
+              carregando: _ligando,
+              aoTocar: () => unawaited(_ligar()),
+            ),
           ),
-        ),
-        ..._avisoDaFalha(),
-      ];
+          ..._avisoDaFalha(),
+        ];
+      case MotivoDeNaoAparecer.semFotoPronta:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e8),
+          const EstadoVazio(
+            titulo: ListaDaRegiao.tituloSemFoto,
+            explicacao: ListaDaRegiao.explicacaoSemFoto,
+          ),
+        ];
+      case MotivoDeNaoAparecer.semApelido:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e8),
+          const EstadoVazio(
+            titulo: ListaDaRegiao.tituloSemApelido,
+            explicacao: ListaDaRegiao.explicacaoSemApelido,
+          ),
+        ];
+      case null:
+        break;
     }
 
     switch (_fase) {

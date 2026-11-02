@@ -1,3 +1,5 @@
+import { sql, type RawBuilder } from 'kysely';
+
 /**
  * **O PERFIL PUBLICO DA PESSOA E VISIBILIDADE, E NAO CAPACIDADE.**
  *
@@ -102,4 +104,70 @@ export function apareceNaListagem(estado: EstadoDoPerfilDePessoa): boolean {
  */
 export function ligarPerfilPublicoExigeApelido(conta: { readonly handle: string | null }): boolean {
   return conta.handle === null;
+}
+
+// ---------------------------------------------------------------------------
+// A MESMA REGRA, COMO EXPRESSAO DE SQL
+// ---------------------------------------------------------------------------
+//
+// **POR QUE A REGRA PRECISA DAS DUAS FORMAS, NO MESMO ARQUIVO**
+//
+// `motivoDeNaoAparecerNaListagem` recebe o estado JA EM MEMORIA, e serve a
+// `updateMe` e a TELA -- que tem a conta na mao e precisam do MOTIVO para
+// dizer a pessoa o que fazer.
+//
+// A LISTAGEM nao tem a conta em memoria: ela filtra dezenas de milhares de
+// linhas no banco, e `listPeopleInMyRegion` cobra a regra na clausula `WHERE`
+// (ADR-0021). Carregar as contas para filtrar em TypeScript seria trazer a
+// tabela para a aplicacao para jogar quase tudo fora -- e, pior, tiraria a
+// autorizacao do `WHERE`, que e onde ela nao pode ser esquecida.
+//
+// **Entao as duas formas moram AQUI, e nao uma em cada lugar.** O precedente e
+// `shared/db/canal-de-contato-confirmado.ts`, que esta prosa ja cita acima: a
+// regua de "validado" tem a forma de SQL (`canalDeContatoConfirmadoNoSql`) e a
+// de TypeScript (`canalDeContatoConfirmado`) no MESMO arquivo, exatamente para
+// que nao existam duas definicoes de uma regua.
+//
+// **E A SINCRONIA DAS DUAS TEM PORTAO**, em
+// `perfil-publico-nas-duas-formas.test.ts`: ele cobra que as TRES condicoes
+// aparecam nas duas formas, e reprova quando uma ganha ou perde condicao que a
+// outra nao tem. Sem ele, duas formas no mesmo arquivo seriam so duas
+// definicoes com menos distancia entre elas.
+
+/** Os apelidos de `users` que as consultas desta regra usam. */
+export type ApelidoDeUsuariosNoPerfilPublico = 'eu' | 'u';
+
+/**
+ * **A regra `foto + perfil publico` COMO EXPRESSAO DE SQL**, sobre o apelido de
+ * `users` que a consulta ja tem.
+ *
+ * As TRES condicoes sao as MESMAS de [motivoDeNaoAparecerNaListagem], e na
+ * mesma ordem -- o que esta forma nao tem e o MOTIVO, porque uma clausula
+ * `WHERE` nao conversa com a pessoa:
+ *
+ *  1. `public_profile_enabled` -- o interruptor, `false` por padrao;
+ *  2. foto da propria pessoa em `ready` -- `processing` e `rejected` nao valem,
+ *     e o predicado e o MESMO de `kysely-busca-de-pessoas.ts`
+ *     (`purpose = 'user_photo' AND status = 'ready'`);
+ *  3. apelido nao nulo -- sem apelido o perfil nao tem endereco, e aparecer
+ *     numa listagem sem endereco e oferecer um link que nao abre. O `CHECK`
+ *     `users_perfil_publico_exige_apelido` ja impede o estado no banco, e este
+ *     predicado nao depende de ele impedir, pela mesma razao que a forma de
+ *     TypeScript nao depende.
+ *
+ * **`EXISTS` e nao `JOIN` na foto**, e a escolha e medida: um `JOIN` com
+ * `catalog_images` multiplicaria a linha da pessoa por imagem e exigiria
+ * `DISTINCT` -- e `DISTINCT` numa consulta de listagem e o que esconde um
+ * defeito de duplicacao em vez de o acusar.
+ */
+export function apareceNaListagemNoSql<T = boolean>(
+  apelido: ApelidoDeUsuariosNoPerfilPublico,
+): RawBuilder<T> {
+  const t = sql.raw(apelido);
+  return sql<T>`(${t}.public_profile_enabled
+    AND ${t}.handle IS NOT NULL
+    AND EXISTS (SELECT 1 FROM catalog_images foto
+                 WHERE foto.id = ${t}.photo_image_id
+                   AND foto.purpose = 'user_photo'
+                   AND foto.status = 'ready'))`;
 }

@@ -4,8 +4,17 @@
  *
  * Decisão do cliente de 02/11/2026, e as duas escolhas dele:
  *
- *  1. **só quem optar aparece**, com a adesão DESLIGADA por padrão;
+ *  1. **só quem optar aparece**, e ele recusou listar todo mundo sabendo que a
+ *     lista começa menor;
  *  2. **o piso de 3 caracteres da busca FICA** — `searchPeople` não muda.
+ *
+ * **O QUE `ADERIR` SIGNIFICA, DEPOIS DO REFINAMENTO DELE**: *"o aderir é apenas
+ * referente a criar um perfil público e que o perfil dela e os posts podem
+ * aparecer para outras pessoas"*, e **o que coloca a pessoa na listagem é foto
+ * + perfil público**. Esta frente não tem adesão própria: ela LÊ a regra de
+ * `shared/perfil-publico/perfil-publico-de-pessoa.ts`. Por isso os casos 2 e 3
+ * afirmam a PRESENÇA daquele predicado e não a redação dele — a redação é
+ * cobrada lá, por `perfil-publico-nas-duas-formas.test.ts`.
  *
  * Este arquivo lê o SQL **compilado** e não executa nada: ele prova *onde* cada
  * predicado mora. O irmão de integração
@@ -30,6 +39,9 @@ import {
   PostgresIntrospector,
   PostgresQueryCompiler,
 } from 'kysely';
+
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import type { Database } from '../../../../shared/db/schema.js';
 import type { UserId } from '../../../../shared/types/brands.js';
@@ -110,23 +122,87 @@ void describe('os SETE predicados da listagem da região', () => {
     );
   });
 
-  void it('2. ADERIU: a decisão 1 do cliente está no WHERE e não num filtro de borda', () => {
+  void it('2. APARECE: foto + perfil publico, e a regra VEM da peca compartilhada', () => {
+    const sql = sqlDaLista();
     assert.match(
-      sqlDaLista(),
-      /"u"\."region_listing_opted_in_at" is not null/i,
-      'sem este predicado a listagem lista TODO MUNDO da cidade — exatamente o que o ' +
-        'cliente recusou em 02/11/2026, sabendo que a lista começa menor',
+      sql,
+      /"?u"?\.public_profile_enabled/i,
+      'o interruptor do perfil público saiu do WHERE: sem ele a listagem lista TODO ' +
+        'MUNDO da cidade, que é exatamente o que o cliente recusou',
+    );
+    assert.match(
+      sql,
+      /foto\.purpose = 'user_photo'[\s\S]*foto\.status = 'ready'/i,
+      'a FOTO saiu do WHERE. Ela é METADE da regra que o cliente definiu em 02/11/2026 ' +
+        '(*"o que coloca a pessoa na listagem é foto + perfil público"*), e sem ela a ' +
+        'listagem contraria a decisão enquanto parece obedecê-la',
+    );
+    assert.match(
+      sql,
+      /"?u"?\.handle IS NOT NULL/i,
+      'o APELIDO saiu do WHERE: sem apelido o perfil não tem endereço, e aparecer numa ' +
+        'listagem sem endereço é oferecer um link que não abre',
+    );
+    assert.match(
+      sql,
+      /foto\.id = "?u"?\.photo_image_id/i,
+      'o `EXISTS` da foto não está amarrado à conta da linha: ele ficaria verdadeiro ' +
+        'para qualquer foto `ready` do catálogo, e TODA conta com perfil público ' +
+        'apareceria sem ter foto nenhuma',
     );
   });
 
-  void it('3. RECIPROCIDADE: quem não aparece não vê (recomendação, reversível NESTA linha)', () => {
-    assert.match(
-      sqlDaLista(),
-      /"eu"\."region_listing_opted_in_at" is not null/i,
-      'a reciprocidade saiu. Ela é a RECOMENDAÇÃO desta frente e não uma decisão do ' +
-        'cliente — ele decidiu quem APARECE. Tirá-la é uma linha, e o custo de tirá-la ' +
-        'é que quem quer só raspar o catálogo deixa de pôr o próprio nome nele',
+  void it('2b. a regra NAO esta reescrita aqui: ela vem de `shared/perfil-publico/`', () => {
+    // **Este caso mede a FONTE, e não o texto do SQL** — e é ele que impede o
+    // defeito que consolidou esta frente: duas definições de "aparece". Um
+    // predicado reescrito à mão aqui produziria o MESMO SQL, e os casos acima
+    // continuariam verdes.
+    // **O caminho sai de `process.cwd()` e NÃO de `import.meta.url`**: a suíte
+    // roda o JavaScript compilado de `dist/_tests/`, e um caminho relativo ao
+    // módulo aponta para lá -- onde o `.ts` não existe. Medido: a primeira
+    // versão deste caso reprovou com `ENOENT`, que é o desfecho certo (um
+    // portão que não consegue ler reprova), mas pelo motivo errado.
+    const CAMINHO = 'src/modules/people/adapters/persistence/kysely-lista-da-regiao.ts';
+    const fonte = readFileSync(resolve(process.cwd(), CAMINHO), 'utf8');
+    // CONTROLE POSITIVO: leu o arquivo certo, e não um vazio.
+    assert.ok(
+      fonte.includes('construtorDaListaDaRegiao'),
+      `li \`${CAMINHO}\` e não achei a função que ele define. O caminho mudou, e as duas ` +
+        'conferências abaixo passariam sobre o arquivo errado.',
     );
+    assert.match(
+      fonte,
+      /import \{ apareceNaListagemNoSql \} from '[^']*shared\/perfil-publico\/perfil-publico-de-pessoa\.js'/,
+      'o adaptador deixou de importar a regra compartilhada. A regra de quem APARECE tem ' +
+        'UMA fonte, e duas definições dela foi o defeito que fez esta frente ser ' +
+        'consolidada: a adesão própria desta listagem e `users.public_profile_enabled` ' +
+        'eram DUAS chaves para a mesma porta.',
+    );
+    const semProsa = fonte.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(
+      !semProsa.includes('public_profile_enabled'),
+      'o nome da coluna do perfil público aparece em CÓDIGO deste adaptador: o predicado ' +
+        'foi reescrito aqui em vez de vir da peça compartilhada.',
+    );
+  });
+
+  void it('3. RECIPROCIDADE: a MESMA regra para quem CHAMA (reversivel NESTA linha)', () => {
+    const sql = sqlDaLista();
+    assert.match(
+      sql,
+      /"?eu"?\.public_profile_enabled/i,
+      'a reciprocidade saiu. Ela é a RECOMENDAÇÃO desta frente e não uma decisão do ' +
+        'cliente — ele decidiu quem APARECE, e a pergunta segue aberta com ele. Tirá-la ' +
+        'é UMA linha, e o custo de tirá-la é que quem quer só raspar o catálogo deixa de ' +
+        'pôr o próprio nome nele',
+    );
+    assert.match(
+      sql,
+      /foto\.id = "?eu"?\.photo_image_id/i,
+      'a reciprocidade cobra MENOS de quem chama do que de quem é listado: ela é a MESMA ' +
+        'expressão com o outro apelido, e não uma segunda redação da regra',
+    );
+    assert.match(sql, /"?eu"?\.handle IS NOT NULL/i);
   });
 
   void it('4. VERIFICADO nos DOIS lados, pela MESMA régua do selo', () => {
@@ -201,24 +277,34 @@ void describe('os SETE predicados da listagem da região', () => {
 });
 
 void describe('o que a listagem NÃO faz', () => {
-  void it('NÃO há foto: nenhuma derivada, nenhuma chave, nenhuma imagem de catálogo', () => {
+  void it('a foto e criterio de ENTRADA e NAO conteudo de SAIDA', () => {
     const sql = sqlDaLista();
-    for (const agulha of [
-      'catalog_images',
-      'photo_image_id',
-      'thumb_key',
-      'public_key',
-      'photo_key',
-      'user_photo',
-    ]) {
+    const corte = sql.toLowerCase().indexOf(' from "handles"');
+    const selecao = sql.slice(0, corte);
+
+    // ENTRADA: a foto está no WHERE, e é metade da regra do cliente.
+    assert.match(
+      sql,
+      /EXISTS \(SELECT 1 FROM catalog_images foto/i,
+      'a foto saiu do critério de entrada: a regra é foto + perfil público',
+    );
+
+    // SAÍDA: nenhuma derivada e nenhuma chave de imagem na lista de seleção.
+    for (const agulha of ['thumb_key', 'public_key', 'photo_key', 'photo_icon_url']) {
       assert.ok(
-        !sql.includes(agulha),
-        `\`${agulha}\` entrou na consulta da listagem. O motivo NÃO é a emenda 5 item 2 ` +
+        !selecao.includes(agulha),
+        `\`${agulha}\` entrou na RESPOSTA da listagem. O motivo NÃO é a emenda 5 item 2 ` +
           '(que o cliente emendou em 21/10/2026, e a busca TEM foto desde então): é o ' +
           'argumento com que a foto ENTROU na busca — os três freios dela garantem que ' +
-          'quem vê a foto já sabe aproximadamente quem procura, e esta lista é folhear',
+          'quem vê a foto já sabe aproximadamente quem procura, e esta lista é folhear. ' +
+          '**Ter foto é o que deixa entrar; servi-la é outra decisão.**',
       );
     }
+    assert.ok(
+      !/catalog_images/i.test(selecao),
+      '`catalog_images` entrou na LISTA DE SELEÇÃO: a imagem é lida para decidir quem ' +
+        'entra, e não para sair na resposta',
+    );
   });
 
   void it('NÃO há termo de busca: a decisão 2 do cliente, e nem há parâmetro por onde entrar', () => {

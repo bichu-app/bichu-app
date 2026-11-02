@@ -4786,7 +4786,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Usuarios da MESMA regiao que aderiram a aparecer na lista
+         * Usuarios da MESMA regiao com perfil publico e foto
          * @description **A listagem de usuarios da mesma regiao**, decisao do cliente de
          *     02/11/2026: *"trazer a listagem de usuarios que estao na mesma regiao
          *     dele e que as pessoas podem adicionar"*.
@@ -4821,34 +4821,42 @@ export interface paths {
          *     | Filtro | Por que |
          *     |---|---|
          *     | **cidade e estado iguais** aos de quem chama | e a listagem que o cliente pediu, e o recorte dela |
-         *     | **aderiu** (`region_listing_opted_in_at IS NOT NULL`) | a decisao 1 do cliente: so quem optar aparece, e a adesao nasce DESLIGADA |
+         *     | **aparece**: perfil publico LIGADO + FOTO pronta + apelido | a decisao 1 do cliente, na forma que ele refinou em 02/11/2026: *"o aderir e apenas referente a criar um perfil publico"*, e *"o que coloca a pessoa na listagem e foto + perfil publico"*. O predicado **vem de `shared/perfil-publico/perfil-publico-de-pessoa.ts`** e nao esta reescrito aqui: ele e o MESMO que `updateMe` e a tela usam, na outra forma |
          *     | **canal de contato confirmado** | `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a MESMA regua do selo (`shared/db/canal-de-contato-confirmado.ts`), numa fonte so |
          *     | **conta habilitada**, dos DOIS lados | decisao de 17/10/2026: conta desabilitada *"nao e mais encontrada em nenhuma pagina ou funcionalidade"* |
          *     | **sem bloqueio entre as duas**, nos DOIS sentidos | `bloqueio_entre` e simetrica de proposito: sem a simetria, quem foi bloqueado continuaria vendo quem o bloqueou |
          *     | **perfil que quem olha denunciou nao aparece** | o mesmo predicado da busca, pela mesma razao |
          *     | **quem chama nao aparece para si mesmo** | a conta nao se conecta consigo mesma, e o unico botao de um item e `Pedir conexao` |
          *
-         *     **A ADESAO E REVOGAVEL, E DESLIGAR VALE NA HORA.** O predicado e lido na
-         *     consulta, a cada requisicao: nao ha cache, e a resposta sai com
-         *     `Cache-Control: private, no-store`. Liga, aparece na proxima leitura;
-         *     desliga, sai dela.
+         *     **E REVOGAVEL, E DESLIGAR VALE NA HORA.** O predicado e lido na consulta,
+         *     a cada requisicao: nao ha cache, e a resposta sai com
+         *     `Cache-Control: private, no-store`. Ligar o perfil publico faz a pessoa
+         *     aparecer na proxima leitura; desligar a tira dela. **E tirar a FOTO tem
+         *     o mesmo efeito**, porque a foto e metade da regra -- e isso vale dito,
+         *     porque e consequencia que ninguem escolheu de proposito: quem tirar a
+         *     propria foto sai da lista junto.
          *
          *     ## PAGINA VAZIA, E NUNCA 403
          *
-         *     **Quem nao aderiu recebe pagina vazia** -- a reciprocidade e parte do
-         *     desenho (ver o comentario acima, que a registra como RECOMENDACAO
-         *     reversivel). E pagina vazia, e nao 403, pela mesma razao da busca:
-         *     distinguir "nao ha ninguem" de "ha, mas nao para voce" seria o oraculo
-         *     que nenhuma destas superficies pode ser.
+         *     **Quem nao apareceria na lista recebe pagina vazia** -- a reciprocidade
+         *     e parte do desenho (ver o comentario acima, que a registra como
+         *     RECOMENDACAO reversivel, com a pergunta ainda aberta com o cliente). E
+         *     pagina vazia, e nao 403, pela mesma razao da busca: distinguir "nao ha
+         *     ninguem" de "ha, mas nao para voce" seria o oraculo que nenhuma destas
+         *     superficies pode ser.
          *
          *     **A tela nao fica muda com isso**, e e o ponto: ela nao pergunta o
-         *     motivo ao servidor -- `Me.region_listing_opt_in` e
-         *     `Me.pending_profile_fields` sao dados do PROPRIO DONO, entao a tela
-         *     explica e oferece o interruptor **sem chegar a chamar esta rota**.
+         *     motivo ao servidor -- `Me.public_profile_enabled`, `Me.photo.status`,
+         *     `Me.handle` e `Me.reference_area` sao dados do PROPRIO DONO, entao a tela
+         *     diz QUAL das quatro coisas falta e oferece a saida **sem chegar a chamar
+         *     esta rota**. A ordem em que ela as resolve e a de
+         *     `motivoDeNaoAparecerNaListagem`, que e a do cliente: mandar tirar quatro
+         *     pendencias de uma vez e pior do que mandar tirar a primeira.
          *
-         *     O vazio funde, de proposito, quatro situacoes: quem chama nao aderiu;
-         *     quem chama nao tem regiao de referencia; ninguem mais na regiao aderiu; e
-         *     os que aderiram nao existem para quem chama (conta desabilitada, par
+         *     O vazio funde, de proposito, estas situacoes: quem chama nao apareceria
+         *     (perfil publico desligado, sem foto pronta ou sem apelido); quem chama
+         *     nao tem regiao de referencia; ninguem mais na regiao apareceria; e os que
+         *     apareceriam nao existem para quem chama (conta desabilitada, par
          *     bloqueado, perfil denunciado).
          *
          *     ## `adicionar` NAO E UMA ACAO NOVA
@@ -13166,6 +13174,12 @@ export interface components {
          * @description Uma pessoa como a **LISTAGEM DA PROPRIA REGIAO** a entrega (cliente,
          *     02/11/2026): **cinco campos, e nada mais**.
          *
+         *     **Quem esta aqui tem foto, e a foto nao esta aqui.** As duas coisas
+         *     convivem porque a foto e **criterio de ENTRADA e nao conteudo de
+         *     SAIDA**: ter foto pronta e metade da regra que o cliente definiu
+         *     (*"o que coloca a pessoa na listagem e foto + perfil publico"*), e
+         *     servi-la numa lista que se folheia e outra decisao -- a de baixo.
+         *
          *     **E `PersonSearchResult` MENOS A FOTO**, e os cinco que ficam sao os
          *     mesmos, com os mesmos motivos -- `display_name` pela emenda 2 do
          *     ADR-0010, as duas contagens pela mesma emenda e pelo plano 4-B,
@@ -13204,7 +13218,7 @@ export interface components {
          *     |---|---|
          *     | **foto** | ver acima: os tres freios da busca nao existem nesta lista |
          *     | **cidade, estado, bairro** | a unica regiao em jogo e a de QUEM CHAMA, e ela ja volta em `Me.reference_area`. A de cada pessoa da lista seria o item 1 do ADR-0010 saindo por porta nova, e `searchPeople` ja registra `cidade, bairro` entre o que nao sai |
-         *     | **a adesao** | quem esta na lista esta por ter ligado; devolver o campo seria repetir, para terceiro, uma escolha de privacidade que so interessa ao dono (`Me.region_listing_opt_in`) |
+         *     | **o perfil publico, e a foto** | quem esta na lista esta por ter LIGADO o perfil publico e por TER foto -- as duas coisas sao criterio de ENTRADA, e repeti-las como campo diria a terceiro uma escolha de privacidade que so interessa ao dono (`Me.public_profile_enabled`). A foto em particular: ela e o que deixa a pessoa entrar, e nao sai -- ver acima |
          *     | `public_ref` | a mesma razao da busca: AQUELA tela hospeda denunciar e bloquear, e esta nao hospeda nenhuma das tres -- referencia publica sem uso e superficie de graca |
          *     | `connection_ref` | `ref` de aresta e o que deixa DESFAZER, e desfazer mora no perfil -- nao numa lista que se rola com o polegar |
          *     | qualquer UUID | ADR-0010 item 6 |
@@ -13262,23 +13276,25 @@ export interface components {
          *     **`items` vazio e `total: 0` sao a resposta para QUATRO situacoes
          *     diferentes**, e a fusao e deliberada:
          *
-         *     1. **quem chama nao aderiu** -- a reciprocidade e parte do desenho (ver
-         *        o comentario acima de `listPeopleInMyRegion`, que a registra como
-         *        recomendacao reversivel);
+         *     1. **quem chama nao apareceria na lista** -- perfil publico desligado,
+         *        sem foto pronta, ou sem apelido. A reciprocidade e parte do desenho
+         *        (ver o comentario acima de `listPeopleInMyRegion`, que a registra como
+         *        RECOMENDACAO reversivel, com a pergunta aberta com o cliente);
          *     2. **quem chama nao tem regiao de referencia** -- `texto_para_busca` e
          *        `STRICT`, entao cidade nula nao casa nada, sem nenhum `if`;
-         *     3. ninguem mais na regiao aderiu;
-         *     4. os que aderiram **nao existem para quem chama** (conta desabilitada,
-         *        par bloqueado, perfil que quem chama denunciou).
+         *     3. ninguem mais na regiao apareceria;
+         *     4. os que apareceriam **nao existem para quem chama** (conta
+         *        desabilitada, par bloqueado, perfil que quem chama denunciou).
          *
          *     **A fusao nao deixa a tela muda**, e e isso que a torna aceitavel: a
          *     tela nao descobre o motivo pelo servidor -- ela ja o tem.
-         *     `Me.region_listing_opt_in` responde a 1 e `Me.pending_profile_fields`
-         *     responde a 2, os dois dados do PROPRIO DONO, e e com eles que a tela
-         *     explica e oferece o interruptor **sem chegar a chamar esta rota**. As
-         *     situacoes 3 e 4 e que ficam fundidas de verdade, e e a mesma fusao da
-         *     busca, pela mesma razao: distinguir "nao ha ninguem" de "ha, mas nao
-         *     para voce" seria o oraculo que nenhuma destas superficies pode ser.
+         *     `Me.public_profile_enabled`, `Me.photo.status` e `Me.handle` respondem a
+         *     1 e `Me.reference_area` responde a 2, todos dados do PROPRIO DONO, e e
+         *     com eles que a tela diz qual das quatro coisas falta e oferece a saida
+         *     **sem chegar a chamar esta rota**. As situacoes 3 e 4 e que ficam
+         *     fundidas de verdade, e e a mesma fusao da busca, pela mesma razao:
+         *     distinguir "nao ha ninguem" de "ha, mas nao para voce" seria o oraculo
+         *     que nenhuma destas superficies pode ser.
          */
         RegionPeoplePage: {
             items: components["schemas"]["RegionPerson"][];
@@ -22440,8 +22456,9 @@ export interface operations {
         responses: {
             /**
              * @description A pagina de usuarios da mesma regiao. **Vazia** quando quem chama
-             *     nao aderiu, quando quem chama nao tem regiao de referencia, e quando
-             *     ninguem na regiao aderiu ou existe para quem chama.
+             *     nao apareceria na lista (perfil publico desligado, sem foto pronta ou
+             *     sem apelido), quando quem chama nao tem regiao de referencia, e
+             *     quando ninguem na regiao apareceria ou existe para quem chama.
              */
             200: {
                 headers: {

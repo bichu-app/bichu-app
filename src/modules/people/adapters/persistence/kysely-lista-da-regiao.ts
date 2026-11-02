@@ -1,6 +1,7 @@
 import { sql, type CompiledQuery, type Kysely } from 'kysely';
 
 import { canalDeContatoConfirmadoNoSql } from '../../../../shared/db/canal-de-contato-confirmado.js';
+import { apareceNaListagemNoSql } from '../../../../shared/perfil-publico/perfil-publico-de-pessoa.js';
 import type { Database } from '../../../../shared/db/schema.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type {
@@ -24,10 +25,12 @@ interface LinhaDaRegiao {
  * `construtorDaBuscaDePessoas`: autorização que filtra depois de a linha sair do
  * banco é autorização que alguém pode esquecer de chamar.
  *
- * **NÃO HÁ `photo_key` NESTA CONSULTA**, e a ausência é o desenho: a busca
+ * **NÃO HÁ `photo_key` NESTA CONSULTA, E A PESSOA TEM FOTO** -- e as duas coisas
+ * convivem. Ter foto pronta é uma das TRÊS condições para APARECER (é metade da
+ * regra que o cliente definiu em 02/11/2026), e a foto em si não SAI. A busca
  * carrega a foto porque os três freios dela garantem que quem a vê já sabe quem
  * procura; esta lista é folhear, e com foto seria o catálogo de rostos que o
- * plano 4-B recusou.
+ * plano 4-B recusou. **A foto é critério de ENTRADA, não conteúdo de SAÍDA.**
  *
  * **NÃO HÁ TERMO, e não existe parâmetro por onde um entrar**: a decisão 2 do
  * cliente é que a busca não muda, e um `q` aqui seria uma segunda busca sem os
@@ -85,16 +88,33 @@ export function construtorDaListaDaRegiao(
         sql<boolean>`texto_para_busca(u.reference_state) = texto_para_busca(eu.reference_state)`,
       )
 
-      // 2. ADERIU. A decisão 1 do cliente: só quem optar aparece, e a adesão
-      //    nasce DESLIGADA. Revogável -- o predicado é lido a cada requisição.
-      .where('u.region_listing_opted_in_at', 'is not', null)
+      // 2. APARECE: **FOTO + PERFIL PÚBLICO**, a regra que o cliente definiu em
+      //    02/11/2026 refinando a adesão que ele decidira antes -- *"o aderir é
+      //    apenas referente a criar um perfil público e que o perfil dela e os
+      //    posts podem aparecer para outras pessoas"*.
+      //
+      //    **A regra NÃO está escrita aqui, e isso é o ponto.** Ela vem de
+      //    `shared/perfil-publico/perfil-publico-de-pessoa.ts`, do MESMO arquivo
+      //    que guarda a forma de TypeScript que `updateMe` e a tela usam.
+      //    Reescrever o predicado aqui daria duas definições de "aparece" -- e
+      //    foi exatamente a duplicação de uma adesão que fez esta frente ser
+      //    consolidada. `perfil-publico-nas-duas-formas.test.ts` cobra que as
+      //    duas formas digam as MESMAS três condições.
+      //
+      //    As três, para quem lê daqui: interruptor ligado, foto própria em
+      //    `ready`, e apelido não nulo (sem apelido o perfil não tem endereço).
+      .where(apareceNaListagemNoSql('u'))
 
       // 3. RECIPROCIDADE: quem não aparece na lista não vê a lista.
-      //    **É a RECOMENDAÇÃO desta frente, e é reversível nesta linha** -- o
-      //    cliente decidiu quem APARECE, e não quem VÊ. O argumento é o dos
-      //    outros freios: sem ela, quem quer só raspar o catálogo não paga
-      //    nada. O custo, dito: é um pedágio para folhear.
-      .where('eu.region_listing_opted_in_at', 'is not', null)
+      //    **É a RECOMENDAÇÃO desta frente, e é reversível NESTA LINHA** -- o
+      //    cliente decidiu quem APARECE, e não quem VÊ, e a pergunta segue
+      //    aberta com ele. O argumento é o dos outros freios: sem ela, quem quer
+      //    só raspar o catálogo não paga nada. O custo, dito: é um pedágio para
+      //    folhear.
+      //
+      //    **É a MESMA expressão do predicado 2, com o outro apelido** -- e não
+      //    uma segunda redação da regra para o lado de quem chama.
+      .where(apareceNaListagemNoSql('eu'))
 
       // 4. VERIFICADO, nos dois lados. A MESMA régua do selo, numa fonte só
       //    (`shared/db/canal-de-contato-confirmado.ts`): e-mail OU telefone.

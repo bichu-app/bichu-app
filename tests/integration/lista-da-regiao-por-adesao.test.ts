@@ -1,14 +1,24 @@
 /**
  * **`GET /v1/region/people` CONTRA POSTGRES DE VERDADE** — a listagem de
- * usuários da mesma região, por ADESÃO EXPLÍCITA (cliente, 02/11/2026:
- * *"trazer a listagem de usuarios que estao na mesma regiao dele e que as
- * pessoas podem adicionar"*).
+ * usuários da mesma região (cliente, 02/11/2026: *"trazer a listagem de
+ * usuarios que estao na mesma regiao dele e que as pessoas podem adicionar"*).
  *
  * As duas escolhas dele, entre perguntas fechadas:
  *
- *  1. **só quem optar aparece**, com a adesão DESLIGADA por padrão. Ele recusou
- *     listar todo mundo **sabendo que a lista começa menor**;
+ *  1. **só quem optar aparece**, e ele recusou listar todo mundo **sabendo que
+ *     a lista começa menor**;
  *  2. **o piso de 3 caracteres da busca FICA** — `searchPeople` não muda.
+ *
+ * ## O QUE `ADERIR` SIGNIFICA, E POR QUE ESTE ARQUIVO MEDE TRÊS COLUNAS
+ *
+ * O cliente refinou a definição depois: *"o aderir é apenas referente a criar
+ * um perfil público e que o perfil dela e os posts podem aparecer para outras
+ * pessoas"*, e **o que coloca a pessoa na listagem é foto + perfil público**.
+ *
+ * Então não há adesão própria desta listagem. O que a consulta cobra são as
+ * TRÊS condições de `shared/perfil-publico/perfil-publico-de-pessoa.ts`:
+ * `public_profile_enabled`, foto própria em `ready`, e apelido não nulo — e é
+ * por isso que a massa daqui escreve as três, e as revoga uma a uma.
  *
  * ## Por que este arquivo é de integração, e o que o irmão unitário não alcança
  *
@@ -20,7 +30,7 @@
  * |---|---|
  * | `texto_para_busca(...)` dos DOIS lados | é função do banco, `IMMUTABLE STRICT`. A **propagação do nulo** — cidade nula não casa nada — é semântica de SQL, e nenhum tipo a acusa |
  * | duas junções de `users` (`u` e `eu`) | o alias `eu` vive numa `sql` template. Se não alcançasse, o erro é `42P01` em execução |
- * | `region_listing_opted_in_at` | a coluna é da migração `20261102000001`. Um `tsc` verde sobre um banco sem a coluna é `42703` em execução |
+ * | `public_profile_enabled` e o `EXISTS` da foto | a coluna é da migração `20261102000002`, e o `EXISTS` correlaciona `catalog_images` com `users` DENTRO de uma `sql` template. Um `tsc` verde sobre um banco sem a coluna é `42703` em execução, e um `EXISTS` que não alcançasse o alias seria `42P01` |
  *
  * **Nenhum portão deste repositório confere o CORPO da resposta** (nem o
  * validador de contrato, que só olha o corpo da REQUISIÇÃO), então a única
@@ -96,6 +106,7 @@ let porte: string;
 
 const contasCriadas: UserId[] = [];
 const apelidosCriados: string[] = [];
+const imagensCriadas: string[] = [];
 
 /** 22 símbolos, que é a forma que `users_public_ref_forma` cobra. */
 function refPublica(): string {
@@ -106,19 +117,36 @@ interface Semeadura {
   readonly nome: string | null;
   readonly cidade?: string | null;
   readonly uf?: string | null;
-  /** Aderiu a aparecer na lista? **O padrão é NÃO**, como a decisão do cliente. */
+  /**
+   * Perfil público ligado? **O padrão é NÃO**, como a decisão do cliente
+   * (`public_profile_enabled` nasce `false`).
+   */
   readonly aderiu?: boolean;
+  /**
+   * Tem foto própria em `ready`? O padrão é SIM, para que os casos que medem
+   * OUTRA coisa não precisem de foto explícita.
+   *
+   * **A foto é METADE da regra**, e é por isso que ela é parâmetro: sem poder
+   * tirá-la, a metade da regra ficaria sem caso.
+   */
+  readonly comFoto?: boolean;
+  /** Tem apelido? O padrão é SIM. Sem apelido o perfil não tem endereço. */
+  readonly comApelido?: boolean;
   /** Canal de contato confirmado? O padrão é SIM, para o caso medir uma coisa só. */
   readonly verificado?: boolean;
 }
 
 async function criarConta(base: string, s: Semeadura): Promise<UserId> {
   const id = randomUUID() as UserId;
+  // **A ORDEM NÃO É ARBITRÁRIA**: `users_perfil_publico_exige_apelido` é um
+  // `CHECK` de tabela, então `public_profile_enabled = true` só passa com
+  // `handle` já preenchido. A conta nasce com o perfil DESLIGADO, o apelido
+  // entra depois, e o perfil é ligado por último.
   await cliente.query(
     `INSERT INTO users
        (id, email, display_name, public_ref, email_verified_at,
-        reference_city, reference_state, region_listing_opted_in_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        reference_city, reference_state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       id,
       `regiao-${id}@${DOMINIO_DE_TESTE}`,
@@ -127,12 +155,54 @@ async function criarConta(base: string, s: Semeadura): Promise<UserId> {
       (s.verificado ?? true) ? new Date(Number(AGORA)) : null,
       s.cidade === undefined ? CIDADE : s.cidade,
       s.uf === undefined ? UF : s.uf,
-      (s.aderiu ?? false) ? new Date(Number(AGORA)) : null,
     ],
   );
   contasCriadas.push(id);
-  await darApelido(id, base);
+  if (s.comApelido ?? true) await darApelido(id, base);
+  if (s.comFoto ?? true) await darFoto(id);
+  if (s.aderiu ?? false) await adesao(id, true);
   return id;
+}
+
+/**
+ * A foto da PRÓPRIA pessoa, **em `ready`** — metade da regra de aparecer.
+ *
+ * `purpose = 'user_photo' AND status = 'ready'` é o predicado exato que
+ * `apareceNaListagemNoSql` cobra, e é o mesmo de `kysely-busca-de-pessoas.ts`.
+ */
+async function darFoto(conta: UserId): Promise<void> {
+  const id = randomUUID();
+  await cliente.query(
+    `INSERT INTO catalog_images (id, purpose, status, public_key, thumb_key)
+     VALUES ($1, 'user_photo', 'ready', $2, $3)`,
+    [id, `card/${id}-512.jpg`, `thumb/${id}-176.jpg`],
+  );
+  await cliente.query('UPDATE users SET photo_image_id = $1 WHERE id = $2', [id, conta]);
+  imagensCriadas.push(id);
+}
+
+/**
+ * A foto que **não está pronta** — `processing`.
+ *
+ * Existe para o caso do estado intermediário: o predicado é `status = 'ready'`,
+ * e sem uma foto neste estado o caso mediria só "não tem foto nenhuma", que é
+ * outro estado. É a mesma régua de `abertura-do-caso.ts`: foto que ainda não
+ * serve a superfície pública não é foto para quem olha.
+ */
+async function darFotoNaoPronta(conta: UserId): Promise<void> {
+  const id = randomUUID();
+  await cliente.query(
+    `INSERT INTO catalog_images (id, purpose, status, public_key, thumb_key)
+     VALUES ($1, 'user_photo', 'processing', $2, NULL)`,
+    [id, `card/${id}-512.jpg`],
+  );
+  await cliente.query('UPDATE users SET photo_image_id = $1 WHERE id = $2', [id, conta]);
+  imagensCriadas.push(id);
+}
+
+/** Tira o ponteiro da foto da conta. **Não apaga a imagem do catálogo.** */
+async function tirarAFoto(conta: UserId): Promise<void> {
+  await cliente.query('UPDATE users SET photo_image_id = NULL WHERE id = $1', [conta]);
 }
 
 /**
@@ -167,10 +237,16 @@ async function darApelido(conta: UserId, base: string): Promise<string> {
   return apelido;
 }
 
-/** Liga ou desliga a adesão. **É esta escrita que prova a revogação.** */
+/**
+ * Liga ou desliga **o perfil público**. É esta escrita que prova a revogação.
+ *
+ * `users_perfil_publico_exige_apelido` recusa ligar sem apelido, e é de
+ * propósito: o `CHECK` é a garantia, e o servidor recusa antes com o campo
+ * nomeado.
+ */
 async function adesao(conta: UserId, ligada: boolean): Promise<void> {
-  await cliente.query('UPDATE users SET region_listing_opted_in_at = $1 WHERE id = $2', [
-    ligada ? new Date(Number(AGORA)) : null,
+  await cliente.query('UPDATE users SET public_profile_enabled = $1 WHERE id = $2', [
+    ligada,
     conta,
   ]);
 }
@@ -294,6 +370,54 @@ function apelidos(corpo: Record<string, unknown>): readonly string[] {
   return pessoas(corpo).map((p) => p.handle);
 }
 
+/**
+ * **O CONJUNTO INTEIRO, percorrendo as páginas** — e não a primeira página.
+ *
+ * ## Por que ele existe, e o defeito que ele conserta
+ *
+ * As assertivas deste arquivo são de PRESENÇA e de AUSÊNCIA numa cidade, e a
+ * página é de 20. Enquanto a massa semeava poucas contas que APARECIAM, a
+ * primeira página continha todas e ler só ela funcionava **por acidente**.
+ *
+ * Quando a regra passou a ser `foto + perfil público`, a massa deste arquivo
+ * passou a criar foto para quase toda conta — e o número de contas que
+ * aparecem na cidade cruzou 20. Três controles positivos reprovaram de uma vez
+ * (`VERIFICADO de QUEM OLHA`, `BLOQUEIO`, `QUEM OLHA NÃO APARECE PARA SI
+ * MESMO`) **afirmando a ordem errada**: eles diziam *"a conta não apareceu"*
+ * quando o que faltava era a PÁGINA. Medido em 02/11/2026.
+ *
+ * Ler o conjunto inteiro tira a classe toda: nenhum caso deste arquivo volta a
+ * depender de quantas contas os casos ANTERIORES semearam.
+ *
+ * **O teto de voltas não é enfeite**: sem ele, um `total` que não feche com o
+ * que a página devolve viraria laço infinito, e um arquivo de integração
+ * pendurado é pior do que um que reprova.
+ */
+async function todas(quemChama: UserId): Promise<readonly PessoaDoCorpo[]> {
+  const acumulado: PessoaDoCorpo[] = [];
+  let pagina = 1;
+  const MAXIMO_DE_VOLTAS = 20;
+  for (let volta = 0; volta < MAXIMO_DE_VOLTAS; volta += 1) {
+    const r = await listar(quemChama, `?page=${pagina}&limit=20`);
+    assert.equal(r.status, 200, `a página ${pagina} não respondeu 200`);
+    const desta = pessoas(r.corpo);
+    acumulado.push(...desta);
+    const total = r.corpo['total'] as number;
+    if (acumulado.length >= total || desta.length === 0) return acumulado;
+    pagina += 1;
+  }
+  assert.fail(
+    `passei de ${MAXIMO_DE_VOLTAS} páginas sem fechar o total. Ou a massa cresceu além do ` +
+      'que este ajudante prevê, ou `total` discorda do que a página devolve -- e a ' +
+      'segunda hipótese é um defeito do produto, não do teste.',
+  );
+}
+
+/** Os apelidos do conjunto INTEIRO, percorrendo as páginas. */
+async function apelidosDeTodas(quemChama: UserId): Promise<readonly string[]> {
+  return (await todas(quemChama)).map((p) => p.handle);
+}
+
 before(async () => {
   assert.ok(
     CONEXAO !== undefined && CONEXAO !== '',
@@ -318,10 +442,40 @@ before(async () => {
 });
 
 after(async () => {
-  // A ORDEM NÃO É ARBITRÁRIA: `handles.user_id` é `ON DELETE SET NULL` e
-  // `handles_pessoa_tem_dono` proíbe `kind = 'pessoa'` sem dono. E
-  // `users.handle` é FK para `handles.handle`, então a coluna sai PRIMEIRO.
+  // **O FECHAMENTO VAI EM `finally`, e isso conserta um defeito medido.**
+  //
+  // Na primeira rodada desta consolidação a limpeza lançou no meio, `cliente.end()`
+  // e `banco.close()` nunca rodaram, e os descritores abertos deixaram
+  // `node --test` **PENDURADO** -- a suíte inteira ficou 16 minutos sem imprimir
+  // linha, com os 67 arquivos já executados. Uma limpeza que falha tem de
+  // reprovar o arquivo, e não pendurar a suíte de todos.
+  try {
+    await limpar();
+  } finally {
+    await cliente.end();
+    await banco.close();
+  }
+});
+
+async function limpar(): Promise<void> {
+  // A ORDEM NÃO É ARBITRÁRIA, e são QUATRO restrições que a ditam:
+  //
+  //  1. **`users_perfil_publico_exige_apelido`** (`NOT public_profile_enabled
+  //     OR handle IS NOT NULL`): o perfil público sai ANTES do apelido.
+  //     Descoberto em execução nesta consolidação — tirar o apelido primeiro
+  //     recusa com `23514` em toda conta que ligou o perfil, e a limpeza
+  //     derrubava o arquivo com os 920 casos já verdes;
+  //  2. `users.handle` é FK para `handles.handle`: a coluna sai antes da linha
+  //     de `handles`;
+  //  3. `handles_pessoa_tem_dono` proíbe `kind = 'pessoa'` sem dono, e
+  //     `handles.user_id` é `ON DELETE SET NULL`: o apelido sai antes da conta;
+  //  4. `users.photo_image_id` referencia `catalog_images`: o ponteiro sai
+  //     antes da imagem.
   if (contasCriadas.length > 0) {
+    await cliente.query(
+      'UPDATE users SET public_profile_enabled = false WHERE id = ANY($1::uuid[])',
+      [contasCriadas],
+    );
     await cliente.query('UPDATE users SET handle = NULL WHERE id = ANY($1::uuid[])', [
       contasCriadas,
     ]);
@@ -330,11 +484,17 @@ after(async () => {
     await cliente.query('DELETE FROM handles WHERE handle = ANY($1::citext[])', [apelidosCriados]);
   }
   if (contasCriadas.length > 0) {
+    // O ponteiro sai PRIMEIRO: `users.photo_image_id` referencia
+    // `catalog_images`, e apagar a imagem antes violaria a chave.
+    await cliente.query('UPDATE users SET photo_image_id = NULL WHERE id = ANY($1::uuid[])', [
+      contasCriadas,
+    ]);
     await cliente.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [contasCriadas]);
   }
-  await cliente.end();
-  await banco.close();
-});
+  if (imagensCriadas.length > 0) {
+    await cliente.query('DELETE FROM catalog_images WHERE id = ANY($1::uuid[])', [imagensCriadas]);
+  }
+}
 
 void describe('a listagem da região: o CONTROLE POSITIVO', () => {
   void it('quem aderiu VÊ quem aderiu na mesma cidade, com os cinco campos', async () => {
@@ -346,13 +506,14 @@ void describe('a listagem da região: o CONTROLE POSITIVO', () => {
 
     const r = await listar(eu);
     assert.equal(r.status, 200);
+    const todosOsApelidos = await apelidosDeTodas(eu);
     assert.ok(
-      apelidos(r.corpo).includes(`vizinha-ade-${SUFIXO}`),
+      todosOsApelidos.includes(`vizinha-ade-${SUFIXO}`),
       'a vizinha que ADERIU não apareceu. Sem este caso, todos os negativos deste ' +
         'arquivo passariam numa consulta que devolve vazio para tudo.',
     );
 
-    const dela = pessoas(r.corpo).find((p) => p.handle === `vizinha-ade-${SUFIXO}`);
+    const dela = (await todas(eu)).find((p) => p.handle === `vizinha-ade-${SUFIXO}`);
     assert.ok(dela !== undefined);
     assert.equal(dela.display_name, 'Ana Vizinha');
     assert.equal(dela.pets_count, 2, 'a contagem de pets não veio do banco');
@@ -382,43 +543,149 @@ void describe('a listagem da região: o CONTROLE POSITIVO', () => {
   });
 });
 
-void describe('A ADESÃO É REVOGÁVEL, E DESLIGAR VALE NA HORA', () => {
+void describe('É REVOGÁVEL, E DESLIGAR VALE NA HORA', () => {
   void it('liga: aparece. desliga: NÃO aparece mais. liga de novo: volta', async () => {
     const eu = await criarConta('eu-revoga', { nome: 'Eu Revoga', aderiu: true });
     const ela = await criarConta('ela-revoga', { nome: 'Ela Revoga', aderiu: false });
     const alvo = `ela-revoga-${SUFIXO}`;
 
-    const desligada = await listar(eu);
     assert.ok(
-      !apelidos(desligada.corpo).includes(alvo),
-      'a adesão nasce DESLIGADA (decisão do cliente), e quem não ligou não aparece',
+      !(await apelidosDeTodas(eu)).includes(alvo),
+      'o perfil público nasce DESLIGADO (decisão do cliente), e quem não ligou não aparece',
     );
 
     await adesao(ela, true);
-    const ligada = await listar(eu);
     assert.ok(
-      apelidos(ligada.corpo).includes(alvo),
-      'ligar a adesão não a fez aparecer: o predicado não está sendo lido na consulta',
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'ligar o perfil público não a fez aparecer: o predicado não está sendo lido na consulta',
     );
 
     await adesao(ela, false);
-    const revogada = await listar(eu);
     assert.ok(
-      !apelidos(revogada.corpo).includes(alvo),
-      'DESLIGAR NÃO VALEU: a pessoa continuou na lista depois de revogar a adesão. ' +
-        'O predicado é lido na consulta a cada requisição, e a resposta sai `no-store` ' +
-        'justamente para que não haja onde uma lista velha sobreviver.',
+      !(await apelidosDeTodas(eu)).includes(alvo),
+      'DESLIGAR NÃO VALEU: a pessoa continuou na lista depois de desligar o perfil ' +
+        'público. O predicado é lido na consulta a cada requisição, e a resposta sai ' +
+        '`no-store` justamente para que não haja onde uma lista velha sobreviver.',
     );
 
     await adesao(ela, true);
     assert.ok(
-      apelidos((await listar(eu)).corpo).includes(alvo),
-      'religar não a trouxe de volta: a revogação apagou mais do que a escolha',
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'religar não a trouxe de volta: desligar apagou mais do que a escolha',
     );
   });
 
-  void it('RECIPROCIDADE: quem NÃO aderiu recebe página vazia (recomendação reversível)', async () => {
-    const eu = await criarConta('eu-sem-adesao', { nome: 'Eu Sem Adesão', aderiu: false });
+  void it('TIRAR A FOTO tira da lista, e repor devolve', async () => {
+    // **A consequência que ninguém escolheu de propósito, e por isso ela tem
+    // caso**: a foto é metade da regra (*"o que coloca a pessoa na listagem é
+    // foto + perfil público"*), então quem tirar a própria foto sai da lista
+    // sem ter mexido no perfil público.
+    const eu = await criarConta('eu-foto-rev', { nome: 'Eu Foto', aderiu: true });
+    const ela = await criarConta('ela-foto-rev', { nome: 'Ela Foto', aderiu: true });
+    const alvo = `ela-foto-rev-${SUFIXO}`;
+
+    assert.ok(
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'o par positivo falhou: ela não apareceu nem com perfil público e foto',
+    );
+
+    await tirarAFoto(ela);
+    assert.ok(
+      !(await apelidosDeTodas(eu)).includes(alvo),
+      'tirar a FOTO não a tirou da lista. A regra é foto + perfil público, e uma ' +
+        'listagem que ignora a foto contraria a decisão do cliente enquanto parece ' +
+        'obedecê-la.',
+    );
+
+    await darFoto(ela);
+    assert.ok(
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'repor a foto não a trouxe de volta',
+    );
+  });
+
+  void it('FOTO EM `processing` NÃO vale, e `ready` vale', async () => {
+    const eu = await criarConta('eu-proc', { nome: 'Eu Processando', aderiu: true });
+    const ela = await criarConta('ela-proc', {
+      nome: 'Ela Processando',
+      aderiu: true,
+      comFoto: false,
+    });
+    const alvo = `ela-proc-${SUFIXO}`;
+
+    await darFotoNaoPronta(ela);
+    assert.ok(
+      !(await apelidosDeTodas(eu)).includes(alvo),
+      'foto em `processing` deixou a pessoa entrar na lista. O predicado é ' +
+        "`status = 'ready'`, e é a mesma régua de `abertura-do-caso.ts`: foto que ainda " +
+        'não serve a superfície pública não é foto para quem olha.',
+    );
+
+    await darFoto(ela);
+    assert.ok(
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'o par positivo falhou: com a foto em `ready` ela tinha de aparecer, e sem esta ' +
+        'metade o caso acima passaria numa consulta que recusa toda foto',
+    );
+  });
+
+  void it('RECIPROCIDADE pela FOTO: quem perde a foto deixa de VER a lista', async () => {
+    // A reciprocidade é a MESMA expressão com o outro apelido, e este caso é o
+    // que prova que ela cobra as TRÊS condições de quem chama -- e não só o
+    // interruptor.
+    const eu = await criarConta('eu-rec-foto', { nome: 'Eu Recíproco', aderiu: true });
+    await criarConta('outra-rec', { nome: 'Outra Recíproca', aderiu: true });
+    const alvo = `outra-rec-${SUFIXO}`;
+
+    assert.ok((await apelidosDeTodas(eu)).includes(alvo), 'o par positivo falhou');
+
+    await tirarAFoto(eu);
+    assert.equal(
+      (await todas(eu)).length,
+      0,
+      'quem perdeu a própria foto continuou VENDO a lista. A reciprocidade cobra as três ' +
+        'condições dos dois lados, e não só o interruptor de quem chama.',
+    );
+
+    await darFoto(eu);
+    assert.ok(
+      (await apelidosDeTodas(eu)).includes(alvo),
+      'repor a foto não devolveu a lista a quem chama',
+    );
+  });
+
+  void it('SEM APELIDO não aparece, e o `CHECK` do banco não é o que mede isto', async () => {
+    const eu = await criarConta('eu-apelido', { nome: 'Eu Apelido', aderiu: true });
+    await criarConta('tem-apelido', { nome: 'Tem Apelido', aderiu: true });
+    // Conta SEM apelido: ela não pode nem ligar o perfil público
+    // (`users_perfil_publico_exige_apelido`), então o estado "perfil ligado e
+    // sem apelido" é inalcançável pelo banco -- e o predicado o cobra de todo
+    // modo, pela mesma razão que a forma de TypeScript o cobra: ele não depende
+    // de o banco impedir.
+    const semApelido = await criarConta('sem-apelido', {
+      nome: 'Sem Apelido',
+      comApelido: false,
+    });
+
+    const vistos = await apelidosDeTodas(eu);
+    assert.ok(vistos.includes(`tem-apelido-${SUFIXO}`), 'o par positivo falhou');
+    assert.ok(
+      !vistos.some((a) => a.startsWith('sem-apelido')),
+      'uma conta sem apelido apareceu na lista',
+    );
+
+    // E a garantia do banco existe, medida: ligar sem apelido é recusado.
+    await assert.rejects(
+      () => adesao(semApelido, true),
+      /users_perfil_publico_exige_apelido/,
+      'o `CHECK` do banco não recusou ligar o perfil público sem apelido. Ele é a ' +
+        'garantia; a recusa do servidor é a mensagem -- e sem a garantia o estado sem ' +
+        'endereço passaria a ser alcançável.',
+    );
+  });
+
+  void it('RECIPROCIDADE: quem NÃO apareceria recebe pagina vazia (recomendacao reversivel)', async () => {
+    const eu = await criarConta('eu-sem-adesao', { nome: 'Eu Sem Perfil', aderiu: false });
     await criarConta('tem-adesao', { nome: 'Tem Adesão', aderiu: true });
 
     const vazia = await listar(eu);
@@ -427,14 +694,14 @@ void describe('A ADESÃO É REVOGÁVEL, E DESLIGAR VALE NA HORA', () => {
     assert.equal(pessoas(vazia.corpo).length, 0);
     assert.equal(vazia.corpo['total'], 0);
 
-    // E O PAR, na mesma massa: ligando a MINHA adesão, a lista aparece. Sem esta
-    // metade, o caso acima passaria numa consulta que devolve vazio para tudo.
+    // E O PAR, na mesma massa: ligando o MEU perfil público, a lista aparece.
+    // Sem esta metade, o caso acima passaria numa consulta que devolve vazio
+    // para tudo.
     await adesao(eu, true);
-    const cheia = await listar(eu);
     assert.ok(
-      apelidos(cheia.corpo).includes(`tem-adesao-${SUFIXO}`),
-      'ligar a MINHA adesão não me deu a lista: o predicado de reciprocidade não é o que ' +
-        'está filtrando, e o vazio acima vinha de outro lugar',
+      (await apelidosDeTodas(eu)).includes(`tem-adesao-${SUFIXO}`),
+      'ligar o MEU perfil público não me deu a lista: o predicado de reciprocidade não é ' +
+        'o que está filtrando, e o vazio acima vinha de outro lugar',
     );
   });
 });
@@ -450,8 +717,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     });
     await criarConta('outro-estado', { nome: 'Outro Estado', aderiu: true, uf: OUTRA_UF });
 
-    const r = await listar(eu);
-    const vistos = apelidos(r.corpo);
+    const vistos = await apelidosDeTodas(eu);
     assert.ok(vistos.includes(`mesma-cidade-${SUFIXO}`), 'a conta da MESMA região não apareceu');
     assert.ok(
       !vistos.includes(`outra-cidade-${SUFIXO}`),
@@ -473,21 +739,20 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     const eu = await criarConta('eu-com-cidade', { nome: 'Eu Com Cidade', aderiu: true });
     await criarConta('com-cidade', { nome: 'Com Cidade', aderiu: true });
 
-    const minha = await listar(eu);
+    const minha = await apelidosDeTodas(eu);
     assert.ok(
-      apelidos(minha.corpo).includes(`com-cidade-${SUFIXO}`),
+      minha.includes(`com-cidade-${SUFIXO}`),
       'o par positivo falhou: a lista está vazia por outro motivo',
     );
     assert.ok(
-      !apelidos(minha.corpo).includes(`sem-cidade-${SUFIXO}`),
+      !minha.includes(`sem-cidade-${SUFIXO}`),
       'quem não tem cidade apareceu. `texto_para_busca` é STRICT: nulo devolve nulo, e ' +
         '`NULL = NULL` não é verdadeiro — este caso mede essa propagação, que nenhum ' +
         'tipo do TypeScript acusa',
     );
 
-    const dela = await listar(semCidade);
     assert.equal(
-      pessoas(dela.corpo).length,
+      (await todas(semCidade)).length,
       0,
       'quem não tem região de referência recebeu alguém: sem cidade não há com o que casar',
     );
@@ -498,7 +763,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     await criarConta('nao-verif', { nome: 'Não Verificado', aderiu: true, verificado: false });
     await criarConta('sim-verif', { nome: 'Sim Verificado', aderiu: true });
 
-    const vistos = apelidos((await listar(eu)).corpo);
+    const vistos = await apelidosDeTodas(eu);
     assert.ok(vistos.includes(`sim-verif-${SUFIXO}`), 'o par positivo falhou');
     assert.ok(
       !vistos.includes(`nao-verif-${SUFIXO}`),
@@ -516,7 +781,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     await criarConta('tem-verif-par', { nome: 'Tem Verificado', aderiu: true });
 
     assert.equal(
-      pessoas((await listar(eu)).corpo).length,
+      (await todas(eu)).length,
       0,
       'uma conta não verificada leu a lista: a régua vale nos DOIS lados',
     );
@@ -524,7 +789,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     // O PAR: verificando a MINHA conta, a lista aparece.
     await cliente.query('UPDATE users SET email_verified_at = now() WHERE id = $1', [eu]);
     assert.ok(
-      apelidos((await listar(eu)).corpo).includes(`tem-verif-par-${SUFIXO}`),
+      (await apelidosDeTodas(eu)).includes(`tem-verif-par-${SUFIXO}`),
       'verificar a minha conta não me deu a lista: o vazio acima vinha de outro lugar',
     );
   });
@@ -534,18 +799,18 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     const dela = await criarConta('sera-desab', { nome: 'Será Desabilitada', aderiu: true });
     const alvo = `sera-desab-${SUFIXO}`;
 
-    assert.ok(apelidos((await listar(eu)).corpo).includes(alvo), 'o par positivo falhou');
+    assert.ok((await apelidosDeTodas(eu)).includes(alvo), 'o par positivo falhou');
 
     await desabilitar(dela);
     assert.ok(
-      !apelidos((await listar(eu)).corpo).includes(alvo),
+      !(await apelidosDeTodas(eu)).includes(alvo),
       'conta desabilitada apareceu. Decisão de 17/10/2026: ela *não é mais encontrada em ' +
         'nenhuma página ou funcionalidade*, e ser listado é literalmente ser encontrado',
     );
 
     await reabilitar(dela);
     assert.ok(
-      apelidos((await listar(eu)).corpo).includes(alvo),
+      (await apelidosDeTodas(eu)).includes(alvo),
       'reabilitar não a trouxe de volta: o predicado não é `deleted_at`',
     );
   });
@@ -555,12 +820,12 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     await criarConta('outra-habil', { nome: 'Outra Habilitada', aderiu: true });
 
     assert.ok(
-      apelidos((await listar(eu)).corpo).includes(`outra-habil-${SUFIXO}`),
+      (await apelidosDeTodas(eu)).includes(`outra-habil-${SUFIXO}`),
       'o par positivo falhou',
     );
     await desabilitar(eu);
     assert.equal(
-      pessoas((await listar(eu)).corpo).length,
+      (await todas(eu)).length,
       0,
       'conta desabilitada leu a lista: `conta_habilitada` entra nos DOIS lados',
     );
@@ -572,14 +837,14 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     const euBloqueio = await criarConta('eu-bloqueei', { nome: 'Eu Bloqueei', aderiu: true });
     const meBloqueou = await criarConta('me-bloqueou', { nome: 'Me Bloqueou', aderiu: true });
 
-    const antes = apelidos((await listar(eu)).corpo);
+    const antes = await apelidosDeTodas(eu);
     assert.ok(antes.includes(`eu-bloqueei-${SUFIXO}`), 'o par positivo falhou (sentido 1)');
     assert.ok(antes.includes(`me-bloqueou-${SUFIXO}`), 'o par positivo falhou (sentido 2)');
 
     const b1 = await bloquear(eu, euBloqueio);
     const b2 = await bloquear(meBloqueou, eu);
 
-    const depois = apelidos((await listar(eu)).corpo);
+    const depois = await apelidosDeTodas(eu);
     assert.ok(
       !depois.includes(`eu-bloqueei-${SUFIXO}`),
       'quem EU bloqueei continuou na minha lista',
@@ -593,7 +858,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
 
     await desbloquear(b1);
     await desbloquear(b2);
-    const voltou = apelidos((await listar(eu)).corpo);
+    const voltou = await apelidosDeTodas(eu);
     assert.ok(voltou.includes(`eu-bloqueei-${SUFIXO}`), 'desbloquear não devolveu (sentido 1)');
     assert.ok(voltou.includes(`me-bloqueou-${SUFIXO}`), 'desbloquear não devolveu (sentido 2)');
   });
@@ -602,7 +867,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     const eu = await criarConta('eu-nao-vejo', { nome: 'Eu Não Me Vejo', aderiu: true });
     await criarConta('outra-me-vejo', { nome: 'Outra', aderiu: true });
 
-    const vistos = apelidos((await listar(eu)).corpo);
+    const vistos = await apelidosDeTodas(eu);
     assert.ok(vistos.includes(`outra-me-vejo-${SUFIXO}`), 'o par positivo falhou');
     assert.ok(
       !vistos.includes(`eu-nao-vejo-${SUFIXO}`),
@@ -616,9 +881,7 @@ void describe('os outros predicados, cada um com o seu PAR', () => {
     const conectada = await criarConta('conectada-est', { nome: 'Conectada', aderiu: true });
     await ligarConexao(eu, conectada, 'accepted');
 
-    const dela = pessoas((await listar(eu)).corpo).find(
-      (p) => p.handle === `conectada-est-${SUFIXO}`,
-    );
+    const dela = (await todas(eu)).find((p) => p.handle === `conectada-est-${SUFIXO}`);
     assert.ok(dela !== undefined, 'a conexão aceita saiu da lista: aceitar não tira ninguém dela');
     assert.equal(
       dela.connection_state,
@@ -674,7 +937,10 @@ void describe('a paginação, e o total que a acompanha', () => {
     await criarConta('ord-z', { nome: 'Aab Ordem', aderiu: true });
     await criarConta('ord-a', { nome: 'Aaa Ordem', aderiu: true });
 
-    const nomes = pessoas((await listar(eu)).corpo)
+    // **A ORDEM É MEDIDA SOBRE O CONJUNTO INTEIRO**, e não sobre a primeira
+    // página: `Aaa`/`Aab` caem no topo sob qualquer colação, mas amarrar o caso
+    // à página foi exatamente o defeito que este arquivo já teve duas vezes.
+    const nomes = (await todas(eu))
       .map((p) => p.display_name)
       .filter((n): n is string => n !== null && n.endsWith(' Ordem'));
     assert.deepEqual(
