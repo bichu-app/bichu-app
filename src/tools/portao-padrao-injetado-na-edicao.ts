@@ -4,6 +4,19 @@ const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 
 const EDICOES_PARCIAIS_SERVIDAS_POR_POST: readonly string[] = ['changeAdminNetworkEventAccess'];
 
+/**
+ * As edicoes cujo CORPO, no contrato, ainda alcanca um `default`. A dispensa e do
+ * CONTRATO, nao da rota: este portao le `api/openapi.yaml` e nao sabe o que o
+ * transporte faz. Desde 02/11/2026 as quatro passam o corpo por
+ * `corpoSemPadroes` antes de entregar o schema ao Fastify, entao o `default` do
+ * contrato nao chega mais ao corpo recebido. Quem mede isso sao casos de
+ * comportamento, e nao esta lista: `admin-network-routes.test.ts`
+ * (`ISCA (02/11)`) para as duas da Rede administrativa e
+ * `a-edicao-nao-republica-o-caso.test.ts` para `updateLostCase`.
+ * `updateNetworkEvent` esta protegido na rota e ainda SEM caso que o meca.
+ * Tirar um nome daqui sem tirar o `default` do contrato faz este portao
+ * reprovar, e `NetworkEventVisibility` tem quatro consumidores.
+ */
 const PADRAO_INJETADO_ACEITO_HOJE: readonly string[] = [
   'updateNetworkEvent',
   'updateAdminNetworkEvent',
