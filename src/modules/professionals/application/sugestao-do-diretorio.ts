@@ -1,4 +1,5 @@
 import { problemas } from '../../../shared/http/errors.js';
+import { recusaPorExigenciaDeCanal } from '../../../shared/autorizacao/matriz-de-capacidades.js';
 import type { UserId } from '../../../shared/types/brands.js';
 import type { RevisaoDaIndicacao } from '../domain/fila-de-indicacoes.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
@@ -48,7 +49,28 @@ export class SugestaoDoDiretorio {
     autor: AutorDaSugestao,
     corpo: CorpoDaSugestaoDoDiretorio,
   ): Promise<ReciboDaSugestao> {
-    if (!(await this.deps.canal.temCanalVerificado(autor.userId))) {
+    /**
+     * **A DECISAO SAI DA MATRIZ DE CAPACIDADES, e nao desta linha.**
+     *
+     * Antes de 02/11/2026 o nivel exigido por *"recomendar profissionais"* era o
+     * `if` acima: a regra estava num modulo, e saber o que cada nivel libera
+     * exigia abrir seis arquivos. O cliente pos a tabela em UM lugar, e
+     * `NIVEL_EXIGIDO.recomendar_profissional` e esse lugar.
+     *
+     * **A leitura nao mudou:** `temCanalVerificado` continua sendo a mesma
+     * consulta, com a mesma regua em SQL -- o que mudou e quem decide o que
+     * fazer com a resposta.
+     *
+     * `recusaPorExigenciaDeCanal` e nao `recusaDaCapacidade` porque este caso de uso **nao
+     * tem `clock`**, e a ausencia dele esta escrita como decisao em
+     * `DependenciasDaSugestaoDoDiretorio`. A porta sem relogio LANCA se um dia
+     * `recomendar_profissional` entrar na regra dos 15 dias, em vez de deixar o
+     * prazo de fora calado.
+     */
+    const recusa = recusaPorExigenciaDeCanal('recomendar_profissional', {
+      canalConfirmado: await this.deps.canal.temCanalVerificado(autor.userId),
+    });
+    if (recusa !== null) {
       throw problemas.canalDeContatoNaoVerificadoParaSugestao();
     }
 

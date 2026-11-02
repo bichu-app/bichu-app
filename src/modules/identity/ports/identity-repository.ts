@@ -17,6 +17,12 @@ export interface Conta {
   readonly referenceState: string | null;
   readonly pendingEmail: string | null;
   readonly emailDeliverable: boolean;
+  /**
+   * O perfil publico desta conta esta ligado? (cliente, 02/11/2026). **E
+   * visibilidade, nao permissao**: ver
+   * `modules/people/domain/perfil-publico-de-pessoa.ts`.
+   */
+  readonly publicProfileEnabled: boolean;
   readonly status: 'active' | 'suspended' | 'deletion_requested';
   readonly sessionsInvalidBefore: Instant;
   readonly createdAt: Date;
@@ -52,6 +58,14 @@ export interface CamposDoPerfil {
   readonly referenceNeighborhood?: string | null | undefined;
   readonly referenceCity?: string | null | undefined;
   readonly referenceState?: string | null | undefined;
+  /**
+   * O perfil publico, ligado pela propria pessoa (cliente, 02/11/2026:
+   * *"desligado por padrao e o usuario habilita"*). Ausente nao mexe.
+   *
+   * **Nao anulavel**: o estado tem dois valores, e `null` seria um terceiro sem
+   * significado decidido.
+   */
+  readonly publicProfileEnabled?: boolean | undefined;
 }
 
 export type PropositoDoToken =

@@ -1,4 +1,8 @@
 import { problemas } from '../../../shared/http/errors.js';
+import {
+  recusaPorPrazoDoTelefone,
+  TELEFONE_SEM_VALIDACAO_POSSIVEL,
+} from '../../../shared/autorizacao/matriz-de-capacidades.js';
 import { comoIso } from '../../../shared/time/clock.js';
 import type { AuditAction, AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock } from '../../../shared/ports/index.js';
@@ -63,6 +67,14 @@ function recusaLegivel(code: string, field: string): never {
     daily_limit_reached: 'Você já enviou os pedidos de hoje. Tente amanhã.',
     connection_resting: 'Esse pedido foi feito há pouco tempo. Espere um pouco antes de pedir de novo.',
     connection_exists: 'Vocês já têm uma conexão ou um pedido em andamento.',
+    /**
+     * A REGRA DOS 15 DIAS (cliente, 02/11/2026: *"telefone não validado em 15
+     * dias — bloqueado para publicar novos eventos e adicionar novos
+     * usuários"*). **Hoje inalcançável**, e os dois motivos estão escritos em
+     * `shared/autorizacao/matriz-de-capacidades.ts`. O texto existe desde já
+     * porque bloqueio sem frase é um erro sem explicação.
+     */
+    phone_unverified_deadline: 'Valide seu telefone para continuar adicionando pessoas.',
   };
   throw problemas.validacao([{ field, code, message: mensagens[code] ?? 'Não foi possível agora.' }]);
 }
@@ -102,6 +114,35 @@ export class ConexaoEntrePessoas {
     campo: string,
   ): Promise<ConexaoProjetada> {
     const agora = this.deps.clock.now();
+
+    /**
+     * **O GANCHO DA REGRA DOS 15 DIAS, E ELE ESTA INERTE DE PROPOSITO.**
+     *
+     * O cliente nomeou *"adicionar novos usuarios"* como uma das duas
+     * capacidades que o prazo do telefone bloqueia (02/11/2026), e `criarPedido`
+     * e o tronco comum dos dois caminhos de pedido -- por convite e por apelido
+     * --, entao e aqui que a regra morde quando ligar.
+     *
+     * **`recusaPorPrazoDoTelefone` e nao `recusaDaCapacidade`** porque este
+     * tronco nao conhece o canal de contato de quem pede, e nao vou fabricar um:
+     * `NIVEL_EXIGIDO.pedir_conexao` e `nao_verificado`, entao nao ha nivel a
+     * conferir aqui, e passar um booleano inventado seria plantar o defeito de
+     * amanha -- no dia em que a capacidade subisse de nivel, este ponto passaria
+     * a recusar todo mundo por causa do valor fabricado, e nao da matriz.
+     *
+     * **HOJE NAO RECUSA NINGUEM**, por duas razoes independentes e as duas
+     * escritas em `matriz-de-capacidades.ts`: o interruptor
+     * `PRAZO_DO_TELEFONE_LIGADO` esta desligado, e o estado do telefone e
+     * `TELEFONE_SEM_VALIDACAO_POSSIVEL` -- nenhum usuario deste produto tem como
+     * validar telefone, e nada no repositorio escreve `users.phone_verified_at`.
+     */
+    const prazo = recusaPorPrazoDoTelefone(
+      'pedir_conexao',
+      TELEFONE_SEM_VALIDACAO_POSSIVEL,
+      agora,
+    );
+    if (prazo !== null) recusaLegivel('phone_unverified_deadline', campo);
+
     if (alvo === contexto.userId) throw problemas.naoEncontrado();
     if (await this.deps.bloqueios.existeBloqueioEntre(contexto.userId, alvo)) {
       throw problemas.naoEncontrado();

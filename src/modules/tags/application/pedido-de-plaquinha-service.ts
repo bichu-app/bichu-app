@@ -1,4 +1,6 @@
 import { problemas } from '../../../shared/http/errors.js';
+import { recusaPorExigenciaDeCanal } from '../../../shared/autorizacao/matriz-de-capacidades.js';
+import type { LeitorDeEvidenciasDeCanal } from '../../../shared/autorizacao/leitor-de-evidencias-de-canal.js';
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import { comoData } from '../../../shared/time/clock.js';
@@ -33,6 +35,15 @@ export class PedidoDePlaquinhaService {
     private readonly deps: {
       readonly repositorio: PedidoDePlaquinhaRepository;
       readonly ids: IdGenerator;
+      /**
+       * As DUAS evidencias de canal de quem pede (cliente, 02/11/2026).
+       *
+       * **Precisa das duas, e nao do booleano da regua:** a exigencia e
+       * conjuncao (`os_dois_canais`), e de "tem algum canal" nao sai "tem os
+       * dois". A matriz LANCA se receber a disjuncao, em vez de decidir sobre
+       * dado que este ponto nao mediu.
+       */
+      readonly evidencias: LeitorDeEvidenciasDeCanal;
     },
   ) {}
 
@@ -46,6 +57,35 @@ export class PedidoDePlaquinhaService {
     endereco: EnderecoDeEntrega,
     observacao: string | null,
   ): Promise<PedidoDoTutor> {
+    /**
+     * **A EXIGENCIA DOS DOIS CANAIS, E ELA NASCE INERTE** (cliente, 02/11/2026:
+     * *"outra coisa que o usuario tambem nao consegue fazer se ele nao tiver o
+     * e-mail e o telefone validado e solicitar a criacao da tag que enviamos
+     * para o endereco dele"*).
+     *
+     * **HOJE ESTA CHAMADA NAO RECUSA NINGUEM**, e isso e proposital:
+     * `EXIGENCIA_DOS_DOIS_CANAIS_EM_VIGOR` esta `false`. Leia o comentario
+     * daquela constante antes de ligar -- em resumo: nada neste repositorio
+     * grava `users.phone_verified_at`, entao com a exigencia em vigor **NINGUEM
+     * conseguiria pedir plaquinha, nem quem confirmou o e-mail**, e a plaquinha
+     * e o produto FISICO que o cliente vende. Nao e inconveniencia: e parar a
+     * venda.
+     *
+     * **A trava esta AQUI e nao ausente** porque o dia de ligar a exigencia tem
+     * de ser o dia de trocar UM booleano, e nao o dia de descobrir onde a regra
+     * deveria morar. A leitura das evidencias acontece de verdade desde hoje --
+     * o que esta desligado e a consequencia dela.
+     *
+     * **Ela nao e a regra dos 15 dias**, e a diferenca importa: esta IMPEDE
+     * ENTRAR sem as duas evidencias, e o prazo BLOQUEIA quem ja esta dentro.
+     * Interruptores separados, por isso.
+     */
+    const evidencias = await this.deps.evidencias.evidenciasDaConta(solicitante);
+    if (evidencias === undefined) throw problemas.naoEncontrado();
+    if (recusaPorExigenciaDeCanal('solicitar_plaquinha', evidencias) !== null) {
+      throw problemas.osDoisCanaisNaoVerificadosParaPlaquinha();
+    }
+
     const pedido = await this.deps.repositorio.criarOuDevolverPendente({
       id: this.deps.ids.uuidv7(),
       ref: refDoPedido(this.deps.ids),

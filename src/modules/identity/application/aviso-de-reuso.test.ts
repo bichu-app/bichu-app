@@ -35,6 +35,7 @@ function contaDaVitima(): Conta {
     referenceState: 'SP',
     pendingEmail: null,
     emailDeliverable: true,
+    publicProfileEnabled: false,
     status: 'active',
     sessionsInvalidBefore: 0 as Instant,
     createdAt: dataFixa(),

@@ -58,6 +58,7 @@ function contaAtiva(sessionsInvalidBefore: Instant): Conta {
     referenceState: null,
     pendingEmail: null,
     emailDeliverable: true,
+    publicProfileEnabled: false,
     status: 'active',
     sessionsInvalidBefore,
     createdAt: dataFixa(1),

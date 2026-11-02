@@ -57,6 +57,7 @@ function contaRecemCriada(displayName: string | null): Conta {
     referenceState: null,
     pendingEmail: null,
     emailDeliverable: true,
+    publicProfileEnabled: false,
     status: 'active',
     sessionsInvalidBefore: INSTANTE_FIXO,
     createdAt: dataFixa(INSTANTE_FIXO),

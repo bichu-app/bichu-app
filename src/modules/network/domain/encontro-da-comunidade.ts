@@ -1,6 +1,10 @@
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
+  recusaDaCapacidade,
+  TELEFONE_SEM_VALIDACAO_POSSIVEL,
+} from '../../../shared/autorizacao/matriz-de-capacidades.js';
+import {
   errosDeTexto,
   normalizarParaConferencia,
   temContatoOuPagamento,
@@ -14,8 +18,20 @@ import {
  */
 export const TETO_DE_ENCONTROS_ATIVOS = 3;
 
-/** O bloqueio, no vocabulario que a tela sabe explicar. */
-export type BloqueioParaCriarEncontro = 'contact_channel_unverified';
+
+/**
+ * O bloqueio, no vocabulario que a tela sabe explicar.
+ *
+ * `phone_unverified_deadline` e o bloqueio da REGRA DOS 15 DIAS (cliente,
+ * 02/11/2026) e **hoje nao e alcancavel**: nenhuma conta tem como validar
+ * telefone, e o interruptor de `matriz-de-capacidades.ts` esta desligado. Ele
+ * esta declarado porque o tipo e o que faz o `switch` da tela parar de compilar
+ * no dia em que a regra ligar -- bloqueio novo sem texto na tela seria um erro
+ * sem explicacao.
+ */
+export type BloqueioParaCriarEncontro =
+  | 'contact_channel_unverified'
+  | 'phone_unverified_deadline';
 
 /**
  * O estado da conta para a criacao, lido numa consulta so, com a autorizacao na
@@ -28,10 +44,52 @@ export interface EstadoParaCriarEncontro {
   readonly encontrosAtivos: number;
 }
 
+/**
+ * **A DECISAO SAI DA MATRIZ DE CAPACIDADES, e nao daqui.**
+ *
+ * Antes de 02/11/2026 esta funcao era a propria regra (`temCanalVerificado ? []
+ * : [...]`), e o nivel exigido por *"cadastrar eventos"* estava escrito nela, num
+ * modulo. O cliente pos a tabela de niveis em UM lugar, e a matriz e esse lugar:
+ * `NIVEL_EXIGIDO.cadastrar_evento` e a fonte, e esta funcao traduz o motivo no
+ * vocabulario que ESTA tela sabe explicar.
+ *
+ * **O prazo do telefone chega aqui de graca**, e e deliberado: `cadastrar_evento`
+ * e uma das duas capacidades que o cliente pos na regra dos 15 dias, e e
+ * `recusaDaCapacidade` que a aplica. Hoje ela nao bloqueia ninguem -- o
+ * interruptor esta desligado e o estado do telefone e
+ * `TELEFONE_SEM_VALIDACAO_POSSIVEL` --, e os dois motivos estao escritos em
+ * `matriz-de-capacidades.ts`.
+ *
+ * `agora` e parametro OBRIGATORIO e nao um relogio lido aqui dentro: a regra de
+ * prazo o compara, e funcao que le o relogio sozinha nao tem como ser medida em
+ * prazo vencido. Obrigatorio e nao com padrao porque padrao de tempo e um valor
+ * que um dia alguem aceita sem notar -- e, com padrao, o chamador que esquecesse
+ * de passar o instante mediria o prazo contra a epoca.
+ */
 export function bloqueiosParaCriarEncontro(
   estado: EstadoParaCriarEncontro,
+  agora: Instant,
 ): BloqueioParaCriarEncontro[] {
-  return estado.temCanalVerificado ? [] : ['contact_channel_unverified'];
+  const recusa = recusaDaCapacidade(
+    'cadastrar_evento',
+    {
+      /**
+       * **`SoADisjuncao`, e e a verdade sobre o que este ponto mediu:** o
+       * repositorio derivou a regua em SQL com `canalDeContatoConfirmadoNoSql` e
+       * trouxe o booleano, nao as duas datas. `cadastrar_evento` exige
+       * `qualquer_canal`, que e exatamente essa disjuncao -- e se um dia ela
+       * passar a exigir os dois canais, a matriz LANCA aqui em vez de decidir
+       * sobre dado que ninguem mediu.
+       */
+      canais: { canalConfirmado: estado.temCanalVerificado },
+      telefone: TELEFONE_SEM_VALIDACAO_POSSIVEL,
+    },
+    agora,
+  );
+  if (recusa === null) return [];
+  return recusa === 'canal_de_contato_nao_verificado'
+    ? ['contact_channel_unverified']
+    : ['phone_unverified_deadline'];
 }
 
 export function atingiuTetoDeEncontros(estado: EstadoParaCriarEncontro): boolean {

@@ -3837,6 +3837,31 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            **Sem os DOIS canais verificados** (`contact-channel-unverified`):
+            pedir a plaquinha exige e-mail **E** telefone confirmados (cliente,
+            02/11/2026: *"outra coisa que o usuario tambem nao consegue fazer se
+            ele nao tiver o e-mail e o telefone validado e solicitar a criacao da
+            tag que enviamos para o endereco dele"*).
+
+            **ESTA RESPOSTA NAO E ALCANCAVEL EM 02/11/2026, e isso e proposital.**
+            A exigencia nasceu com o interruptor
+            `EXIGENCIA_DOS_DOIS_CANAIS_EM_VIGOR` DESLIGADO
+            (`src/shared/autorizacao/matriz-de-capacidades.ts`), porque **nao
+            existe validacao de telefone neste produto**: nada grava
+            `users.phone_verified_at`, nao ha provedor de SMS e nao ha operacao
+            para isso neste contrato. Com a exigencia em vigor hoje, NINGUEM
+            pediria plaquinha -- nem quem confirmou o e-mail --, e a plaquinha e
+            o produto fisico que a operacao vende.
+
+            Ela esta declarada agora para que o dia de ligar a exigencia nao seja
+            tambem o dia de mudar o contrato, e para que o aplicativo saiba
+            desenhar a recusa antes de ela existir. **Enquanto o interruptor
+            estiver desligado, nenhum pedido recebe este status.**
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
     get:
       operationId: listCollarTagRequests
@@ -4663,6 +4688,27 @@ paths:
   /finder/conversation/block:
     post:
       operationId: blockFinderConversation
+      description: |
+        **O CLIENTE DECIDIU RETIRAR ESTA OPERACAO EM 02/11/2026**, literal: *"o
+        achador nao deve bloquear e nem denunciar, ele nao tem conta, nao tem que
+        interagir, ele e praticamente um usuario anonimo."* Foi-lhe oferecido
+        manter so a denuncia, e ele escolheu tirar as duas.
+
+        A razao e de desenho: esta rota e autenticada pelo **token do achador**,
+        entao quem bloqueia/denuncia aqui e o ACHADOR -- nao o tutor se defendendo
+        dele --, e gerenciar relacao ou abrir fila de moderacao e ato de quem tem
+        conta.
+
+        **ELA CONTINUA NO AR, e isso nao e descuido.** Remove-la reprova o portao
+        de compatibilidade com `api-path-removed-without-deprecation` em nivel
+        **ERR** (medido com `oasdiff v1.32.1` contra a base), e afrouxar ou
+        dispensar o portao esta fora de questao. A saida honesta pode ser esta
+        rota passar a **responder recusa** em vez de deixar de existir -- decisao
+        do cliente, pendente.
+
+        **A lacuna ja esta fechada pelo outro lado:** o TUTOR denuncia a mesma
+        conversa por `reportConversation`, que tem o achador como alvo e nao exige
+        verificacao.
       tags: [conversations]
       x-effects: []
       x-rate-limit:
@@ -4681,6 +4727,27 @@ paths:
   /finder/conversation/report:
     post:
       operationId: reportFinderConversation
+      description: |
+        **O CLIENTE DECIDIU RETIRAR ESTA OPERACAO EM 02/11/2026**, literal: *"o
+        achador nao deve bloquear e nem denunciar, ele nao tem conta, nao tem que
+        interagir, ele e praticamente um usuario anonimo."* Foi-lhe oferecido
+        manter so a denuncia, e ele escolheu tirar as duas.
+
+        A razao e de desenho: esta rota e autenticada pelo **token do achador**,
+        entao quem bloqueia/denuncia aqui e o ACHADOR -- nao o tutor se defendendo
+        dele --, e gerenciar relacao ou abrir fila de moderacao e ato de quem tem
+        conta.
+
+        **ELA CONTINUA NO AR, e isso nao e descuido.** Remove-la reprova o portao
+        de compatibilidade com `api-path-removed-without-deprecation` em nivel
+        **ERR** (medido com `oasdiff v1.32.1` contra a base), e afrouxar ou
+        dispensar o portao esta fora de questao. A saida honesta pode ser esta
+        rota passar a **responder recusa** em vez de deixar de existir -- decisao
+        do cliente, pendente.
+
+        **A lacuna ja esta fechada pelo outro lado:** o TUTOR denuncia a mesma
+        conversa por `reportConversation`, que tem o achador como alvo e nao exige
+        verificacao.
       tags: [conversations]
       x-effects: [human_work]
       x-rate-limit:
@@ -15667,6 +15734,38 @@ components:
         can_open_lost_case:
           type: boolean
           description: Falso quando nenhum canal de contato esta verificado.
+        public_profile_enabled:
+          type: boolean
+          default: false
+          description: |
+            **O PERFIL PUBLICO DESTA CONTA ESTA LIGADO?** (cliente, 02/11/2026:
+            *"desligado por padrao e o usuario habilita"*.)
+
+            **E VISIBILIDADE, E NAO PERMISSAO**, e ele foi explicito: *"nao tem
+            relacao com permissoes dentro do sistema, apenas de visibilidade"*.
+            Ligar isto nao verifica a conta, nao a promove de nivel e nao libera
+            nada -- nem cadastrar evento, nem recomendar profissional, nem nada
+            que dependa de canal de contato confirmado. Quem decide o que a
+            conta PODE FAZER e a matriz de capacidades
+            (`src/shared/autorizacao/matriz-de-capacidades.ts`), e este campo
+            **nao entra nela**. O que ele faz e deixar o perfil e os posts da
+            pessoa aparecerem para outras pessoas.
+
+            **Sai apenas para o DONO**, aqui e em `SessionResponse.user`: nenhum
+            schema de terceiro o declara. Para terceiro a visibilidade nao e um
+            campo a ser lido, e a consequencia de uma consulta que ja a
+            respeitou.
+
+            **Ligar exige apelido**: `GET /v1/people/{handle}` e a unica rota
+            que serve o perfil de uma pessoa, e perfil publico sem apelido e um
+            perfil sem endereco. `updateMe` com `public_profile_enabled: true`
+            numa conta sem `handle` e `400`
+            (`code: public_profile_requires_handle`), e o banco impede o estado
+            de todo modo (`users_perfil_publico_exige_apelido`).
+
+            **NAO e o que decide sozinho quem aparece em listagem de pessoas.**
+            A regra que o cliente refinou em 02/11/2026 e **foto + perfil
+            publico**, e este campo e metade dela.
         created_at: { type: string, format: date-time }
 
     MeUpdate:
@@ -15714,6 +15813,23 @@ components:
         handle:
           $ref: '#/components/schemas/Handle'
         phone_e164: { type: string, pattern: '^\+55\d{10,11}$' }
+        # **O PERFIL PUBLICO, LIGADO PELA PROPRIA PESSOA** (cliente,
+        # 02/11/2026: *"desligado por padrao e o usuario habilita"*).
+        #
+        # Opcional como todo campo de `PATCH`: ausente significa "nao mexer".
+        # **`nullable: false`** -- o estado tem dois valores e nao tres, e um
+        # `null` aqui seria um terceiro sem significado decidido.
+        #
+        # **E VISIBILIDADE e nao permissao** (*"nao tem relacao com permissoes
+        # dentro do sistema, apenas de visibilidade"*): ligar nao libera
+        # capacidade nenhuma. Ver `Me.public_profile_enabled`.
+        #
+        # `true` numa conta SEM `handle` e `400`
+        # (`code: public_profile_requires_handle`), porque
+        # `GET /v1/people/{handle}` e a unica forma de alcancar o perfil.
+        # **No MESMO PATCH que escolhe o apelido, passa**: o apelido e gravado
+        # antes, e a conferencia le o estado depois da escrita.
+        public_profile_enabled: { type: boolean }
         reference_area:
           type: object
           properties:
@@ -24583,7 +24699,7 @@ components:
         **O que o booleano prova e UM CANAL DE CONTATO CONFIRMADO, e o rotulo da
         tela nao pode prometer mais que isso.** Ele e
         `email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`, a
-        MESMA regua dos quatro 409 `contact-channel-unverified`; e **na pratica
+        MESMA regua dos 409 `contact-channel-unverified` que exigem UM canal; e **na pratica
         e e-mail**, porque nada em `src/` grava `phone_verified_at` -- a coluna
         existe e so e zerada. Por isso o nome acessivel do selo diz "e-mail
         confirmado", e **nunca** "verificado", "confiavel" nem "confirmado pela
