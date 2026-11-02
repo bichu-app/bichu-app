@@ -23,6 +23,14 @@ export interface Conta {
    * `modules/people/domain/perfil-publico-de-pessoa.ts`.
    */
   readonly publicProfileEnabled: boolean;
+  /**
+   * A versão dos termos que esta conta TEM registrada, ou `null`.
+   *
+   * É o valor CORRENTE da trilha `terms_acceptances`. **Não é a versão
+   * exigida**: quem a decide é o binário do aplicativo
+   * (`--dart-define=TERMS_VERSION`), e a comparação acontece no aparelho.
+   */
+  readonly acceptedTermsVersion: string | null;
   readonly status: 'active' | 'suspended' | 'deletion_requested';
   readonly sessionsInvalidBefore: Instant;
   readonly createdAt: Date;
@@ -170,6 +178,21 @@ export interface IdentityRepository {
   fotoDoPerfil(id: UserId): Promise<FotoDoPerfil | null>;
   /** Troca ou TIRA a foto do perfil, numa transacao so. */
   trocarFotoDoPerfil(id: UserId, uploadId: string | null, agora: Instant): Promise<Conta | undefined>;
+  /**
+   * APENDA uma linha na trilha `terms_acceptances` e aponta o valor corrente
+   * de `users` para ela, **na mesma transação**.
+   *
+   * Não apaga nem corrige aceite anterior: a trilha de consentimento é a
+   * prova de quando a pessoa concordou com o quê. `versao` chega já conferida
+   * contra vazio e espaço — e, se escapar, `version NOT NULL` com o `CHECK`
+   * `terms_acceptances_versao_nao_vazia` recusa no Postgres.
+   */
+  registrarAceiteDosTermos(
+    userId: UserId,
+    versao: string,
+    agora: Instant,
+  ): Promise<boolean>;
+
   buscarContaPorEmail(email: string): Promise<Conta | undefined>;
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined>;
 

@@ -25,6 +25,7 @@ import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'api/passkeys_api.dart';
 import 'api/sonda_de_conexao.dart';
+import 'api/termos_api.dart';
 import 'api/versao_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
@@ -58,6 +59,7 @@ import 'sessao/fiacao_do_passkey.dart';
 import 'sessao/deposito_de_sessao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'telas/atualizacao/portao_de_versao.dart';
+import 'telas/conta/portao_de_aceite_dos_termos.dart';
 import 'theme/bichu_theme.dart';
 import 'widgets/imagem_em_cache.dart';
 
@@ -208,6 +210,8 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
 
   late final VersaoApi _versao;
 
+  late final TermosApi _termos;
+
   @override
   void initState() {
     super.initState();
@@ -223,6 +227,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     );
     _auth = AuthApi(_api);
     _versao = VersaoApi(_api);
+    _termos = TermosApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
     _conexoes = ConexoesApi(_api);
@@ -456,7 +461,18 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
               versaoApi: _versao,
               versaoDoApp: widget.config.versaoDoApp,
               sonda: SondaDeConexao(_api),
-              child: filho ?? const SizedBox.shrink(),
+              // O PORTAO DO ACEITE POR DENTRO DO DE VERSAO, e a ordem e
+              // deliberada: APK bloqueado por versao minima nao pede aceite,
+              // porque a pessoa nao tem como usar o aplicativo nem aceitando --
+              // e dois recados em cima do outro nao dao saida para nenhum.
+              child: PortaoDeAceiteDosTermos(
+                termosApi: _termos,
+                tokenValido: _sessao.tokenValido,
+                versaoExigida: widget.config.versaoDosTermos,
+                urlDosTermos: widget.config.urlDosTermos,
+                urlDaPrivacidade: widget.config.urlDaPrivacidade,
+                child: filho ?? const SizedBox.shrink(),
+              ),
             ),
           );
         },

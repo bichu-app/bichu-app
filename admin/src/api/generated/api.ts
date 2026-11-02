@@ -636,6 +636,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/terms-acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Registra o aceite dos termos de quem JA tem conta
+         * @description **APENDA, e nunca sobrescreve.** Cada chamada insere uma linha em
+         *     `terms_acceptances`, onde `version` e `NOT NULL`; as colunas
+         *     `users.accepted_terms_version` e `users.accepted_terms_at` passam a
+         *     apontar para o aceite mais recente, e a trilha guarda todos. Aceite
+         *     anterior **nao e apagado nem corrigido**: a trilha de consentimento e a
+         *     prova de quando a pessoa concordou com o que.
+         *
+         *     POR QUE ESTA ROTA EXISTE. Ate 01/11/2026 `accepted_terms_version` so era
+         *     gravada em `registerUser`, no `INSERT` da conta. Quem ja tinha conta nao
+         *     tinha **nenhuma** porta para registrar aceite de texto novo -- e
+         *     funcionalidade inalcancavel equivale a funcionalidade que nao existe.
+         *
+         *     **O SERVIDOR NAO DECIDE QUAL VERSAO E EXIGIDA, e nao confere a que
+         *     chega.** Ele grava o que o aplicativo manda, como `registerUser` ja faz.
+         *     Quem decide e o binario (`--dart-define=TERMS_VERSION`, derivado de
+         *     `web/src/conteudo/versao-legal.json`), e o portao
+         *     `make verificar-versao-dos-termos` e o que impede o binario de mandar
+         *     valor que o site nao publica. Conferencia aqui mudaria a fronteira: a
+         *     versao exigida passaria a morar no servidor, que e outro desenho e nao
+         *     foi decidido.
+         *
+         *     O que o servidor RECUSA e o aceite que nao identifica texto nenhum:
+         *     ausente, vazio ou so espaco -- que e o defeito medido em 01/11/2026 (36
+         *     de 37 registros locais sem versao).
+         */
+        put: operations["recordTermsAcceptance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/data-export": {
         parameters: {
             query?: never;
@@ -9192,6 +9235,35 @@ export interface components {
              * @default false
              */
             public_profile_enabled: boolean;
+            /**
+             * @description **A versao dos termos que esta conta TEM registrada**, ou `null`
+             *     quando nao ha nenhuma. E `users.accepted_terms_version`, o valor
+             *     corrente da trilha `terms_acceptances`.
+             *
+             *     ENTROU EM 01/11/2026, e e o campo que o mecanismo de recoleta le.
+             *     Antes dele `accepted_terms_version` entrava em `registerUser` e
+             *     **nao saia em resposta nenhuma** (medido resolvendo `$ref` sobre o
+             *     contrato inteiro): o aplicativo gravava o aceite e nunca mais
+             *     conseguia saber o que havia gravado -- logo nao tinha como
+             *     distinguir "ja aceitou o texto de hoje" de "nao aceitou nada", e
+             *     qualquer pedido de aceite novo apareceria para todo mundo em todo
+             *     arranque.
+             *
+             *     **ESTE CAMPO NAO DIZ QUAL VERSAO E EXIGIDA, e a distincao e a
+             *     fronteira do desenho.** Ele devolve um FATO gravado. Quem decide
+             *     qual versao e exigida continua sendo o BINARIO do aplicativo
+             *     (`--dart-define=TERMS_VERSION`, derivado da fonte unica
+             *     `web/src/conteudo/versao-legal.json`), e a comparacao acontece no
+             *     aparelho. O servidor dizer a versao exigida seria outro desenho,
+             *     com outra consequencia -- o aparelho passaria a obedecer a quem
+             *     publica o texto, sem atualizar o aplicativo -- e isso **nao foi
+             *     decidido**.
+             *
+             *     A consequencia medida do desenho que esta de pe, dita em voz alta:
+             *     aparelho com APK antigo exige a versao antiga, entao a recoleta
+             *     alcanca quem atualizar o aplicativo, e so.
+             */
+            accepted_terms_version?: string | null;
             /** Format: date-time */
             created_at?: string;
         };
@@ -18626,6 +18698,40 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    recordTermsAcceptance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description A MESMA cadeia de `RegisterRequest.accepted_terms_version` e
+                     *     de `Me.accepted_terms_version`: a versao publicada, em
+                     *     `AAAA-MM-DD`. `minLength: 1` aqui e o schema recusando `""`;
+                     *     o servidor recusa o valor so com espaco, que passa por
+                     *     `minLength` e nao identifica documento nenhum.
+                     */
+                    accepted_terms_version: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Aceite registrado, com a versao, numa linha nova da trilha. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     requestDataExport: {
         parameters: {
             query?: never;
@@ -20988,28 +21094,6 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
-            /**
-             * @description **Sem canal de contato verificado** (`contact-channel-unverified`):
-             *     a conversa GERAL entre pessoas exige e-mail ou telefone confirmado
-             *     (cliente, 02/11/2026: *"enviar mensagens a usuarios, se o perfil nao
-             *     estiver verificado, ele nao pode... mas nao para ficar conversando
-             *     entre amigos"*).
-             *
-             *     **A CONVERSA DO ACHADO NAO TEM ESTE 409**, e a diferenca e
-             *     deliberada: `getFinderConversation` e `postFinderMessage` ficam
-             *     LIVRES do inicio ao fim, porque e essa conversa que devolve o pet --
-             *     e a superficie do achador e por token e alcanca quem nao tem conta.
-             *     `blockConversation` e `reportConversation` tambem **nao** tem este
-             *     409: defender-se nao se condiciona a verificacao.
-             */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     markMyConversationsSeen: {
@@ -21029,28 +21113,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            /**
-             * @description **Sem canal de contato verificado** (`contact-channel-unverified`):
-             *     a conversa GERAL entre pessoas exige e-mail ou telefone confirmado
-             *     (cliente, 02/11/2026: *"enviar mensagens a usuarios, se o perfil nao
-             *     estiver verificado, ele nao pode... mas nao para ficar conversando
-             *     entre amigos"*).
-             *
-             *     **A CONVERSA DO ACHADO NAO TEM ESTE 409**, e a diferenca e
-             *     deliberada: `getFinderConversation` e `postFinderMessage` ficam
-             *     LIVRES do inicio ao fim, porque e essa conversa que devolve o pet --
-             *     e a superficie do achador e por token e alcanca quem nao tem conta.
-             *     `blockConversation` e `reportConversation` tambem **nao** tem este
-             *     409: defender-se nao se condiciona a verificacao.
-             */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     getConversation: {
@@ -21079,28 +21141,6 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /**
-             * @description **Sem canal de contato verificado** (`contact-channel-unverified`):
-             *     a conversa GERAL entre pessoas exige e-mail ou telefone confirmado
-             *     (cliente, 02/11/2026: *"enviar mensagens a usuarios, se o perfil nao
-             *     estiver verificado, ele nao pode... mas nao para ficar conversando
-             *     entre amigos"*).
-             *
-             *     **A CONVERSA DO ACHADO NAO TEM ESTE 409**, e a diferenca e
-             *     deliberada: `getFinderConversation` e `postFinderMessage` ficam
-             *     LIVRES do inicio ao fim, porque e essa conversa que devolve o pet --
-             *     e a superficie do achador e por token e alcanca quem nao tem conta.
-             *     `blockConversation` e `reportConversation` tambem **nao** tem este
-             *     409: defender-se nao se condiciona a verificacao.
-             */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     postConversationMessage: {
@@ -21165,13 +21205,7 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /**
-             * @description **Sem canal de contato verificado** (`contact-channel-unverified`):
-             *     a conversa GERAL entre pessoas exige e-mail ou telefone confirmado
-             *     (cliente, 02/11/2026). `postFinderMessage`, a mensagem do ACHADOR,
-             *     **nao tem esta causa** -- aquela conversa e livre do inicio ao fim,
-             *     porque e ela que devolve o pet.
-             *
-             *     Ou a foto anexada nao esta pronta para entrar na conversa:
+             * @description A foto anexada nao esta pronta para entrar na conversa:
              *     `photo-not-ready` (higiene em andamento, tente de novo),
              *     `photo-rejected` (os bytes nao servem, escolha outra) ou
              *     `upload-not-received` (os bytes nunca chegaram). A mensagem

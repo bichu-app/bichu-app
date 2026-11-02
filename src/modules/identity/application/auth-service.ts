@@ -777,6 +777,58 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       };
     },
 
+    /**
+     * A RECOLETA: registra o aceite de quem JÁ tinha conta.
+     *
+     * **Não confere qual versão chegou, e isso é a fronteira do desenho.** Quem
+     * decide a versão exigida é o binário do aplicativo
+     * (`--dart-define=TERMS_VERSION`, derivado de
+     * `web/src/conteudo/versao-legal.json`); o portão
+     * `make verificar-versao-dos-termos` é o que impede o binário de mandar
+     * valor que o site não publica. Conferir aqui mudaria a versão exigida de
+     * lugar — ela passaria a morar no servidor —, que é outro desenho e não foi
+     * decidido.
+     *
+     * O que ele RECUSA é o aceite que não identifica texto nenhum: vazio ou só
+     * espaço. `minLength: 1` do contrato já barra `""`; `"   "` passa por ele e
+     * é o caso desta linha. Era esse o defeito medido em 01/11/2026 — 36 de 37
+     * registros locais com `accepted_terms_version` nula —, e o caminho novo
+     * tem de ser incapaz de reproduzi-lo.
+     */
+    async registrarAceiteDosTermos(
+      userId: UserId,
+      versaoCrua: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const versao = versaoCrua.trim();
+      if (versao === '') {
+        throw problemas.validacao(
+          [
+            {
+              field: 'accepted_terms_version',
+              code: 'required',
+              message: 'Informe a versão dos termos aceita.',
+            },
+          ],
+          'Aceite sem versão não identifica o texto aceito, e não prova consentimento nenhum.',
+        );
+      }
+
+      const agora = deps.clock.now();
+      const gravou = await deps.repositorio.registrarAceiteDosTermos(userId, versao, agora);
+      if (!gravou) throw problemas.naoAutenticado();
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.terms_accepted',
+        resourceKind: 'user',
+        resourceId: userId,
+      });
+    },
+
     async meuPerfil(userId: UserId): Promise<Conta> {
       const conta = await deps.repositorio.buscarContaPorId(userId);
       if (conta === undefined) throw problemas.naoAutenticado();

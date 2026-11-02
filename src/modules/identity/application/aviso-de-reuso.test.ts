@@ -34,6 +34,7 @@ function contaDaVitima(): Conta {
     referenceCity: 'São Paulo',
     referenceState: 'SP',
     pendingEmail: null,
+    acceptedTermsVersion: null,
     emailDeliverable: true,
     publicProfileEnabled: false,
     status: 'active',

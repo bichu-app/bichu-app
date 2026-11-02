@@ -706,6 +706,18 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # era 851 e nao 849. Nenhum arquivo foi apagado (`git status` sem `D`), e por
 # isso a subtracao vale. Painel e site foram MEDIDOS do mesmo jeito e NAO se
 # moveram: 145 e 47.
+# PROSA PRESERVADA DO LADO trabalho/recoleta-aceite-termos (PR #146): a linha dele dizia `ESLint da raiz (851 arquivos)`, e o bloco que ele escreveu vem a seguir, VERBATIM e sem reembrulhar. NENHUM LADO FOI ESCOLHIDO e os deltas NAO FORAM SOMADOS -- os numeros sao de ARVORES DIFERENTES, e o desta integracao e RECONTADO com `eslint . -f json` DEPOIS DA ULTIMA das onze mesclas.
+#
+# 849 -> 851 EM 01-02/11/2026 (recoleta do aceite dos termos), e a aritmetica NAO
+# fecha por +1 de proposito: a entrega acrescenta UM arquivo lintavel na raiz
+# (`tests/integration/recoleta-do-aceite-dos-termos.test.ts`), e a base media
+# 850 e nao os 849 escritos aqui. MEDIDO, e nao deduzido: `eslint . -f json` na
+# arvore de trabalho devolve 851 arquivos e zero mensagens, e dos 851 caminhos
+# EXATAMENTE UM nao existe em `git ls-tree -r --name-only 92ca2342` -- o do
+# arquivo novo. Ou seja: 849 ja estava velho de um antes desta entrega, pelo
+# mesmo motivo do paragrafo acima, e quem o travou nao recontou depois da
+# mescla seguinte. As outras duas contagens NAO mudaram: painel 145, site 47,
+# as tres com zero mensagens.
 verificar-lint: verificar-lint-do-painel verificar-lint-do-site ## ESLint da raiz (860 arquivos), do painel (145) e do site (47), tres processos; `workspace/**` fora do escopo
 	npm run lint
 

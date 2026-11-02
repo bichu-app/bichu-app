@@ -57,6 +57,26 @@ export interface UsersTable {
   deleted_at: Date | null;
 }
 
+/**
+ * A TRILHA DO ACEITE DOS TERMOS (migração `20261101000001`): uma linha por
+ * aceite, **só `INSERT`**.
+ *
+ * `users.accepted_terms_version`/`_at` continuam sendo o valor CORRENTE, e um
+ * `UPDATE` neles apagaria o aceite anterior. A memória mora aqui, e `version`
+ * é `NOT NULL` — o defeito medido em 01/11/2026 era aceite gravado SEM versão
+ * (36 de 37 registros locais), e nesta tabela o Postgres recusa produzi-lo.
+ */
+export interface TermsAcceptancesTable {
+  /** UUID gerado pela aplicação. */
+  id: string;
+  user_id: string;
+  /** A versão aceita, em `AAAA-MM-DD`. **Nunca nula e nunca vazia.** */
+  version: string;
+  accepted_at: Generated<Date>;
+  /** `signup` no cadastro, `recollection` na recoleta de quem já tinha conta. */
+  source: 'signup' | 'recollection';
+}
+
 /** O espaço de nomes do `@`, **compartilhado** entre pessoa, pet e reservadas. */
 export interface HandlesTable {
   /** `citext`: `@Leandro` e `@leandro` não coexistem, e quem garante é a chave. */
@@ -1811,6 +1831,7 @@ export interface Database {
   user_connections: UserConnectionsTable;
   connection_invites: ConnectionInvitesTable;
   users: UsersTable;
+  terms_acceptances: TermsAcceptancesTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;
   alert_dispatches: AlertDispatchesTable;

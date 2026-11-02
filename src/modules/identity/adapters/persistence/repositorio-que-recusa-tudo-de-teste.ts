@@ -29,6 +29,12 @@ export abstract class RepositorioQueRecusaTudo implements IdentityRepository {
     return this.recusar('trocarFotoDoPerfil', argumentos);
   }
 
+  registrarAceiteDosTermos(
+    ...argumentos: Argumentos<'registrarAceiteDosTermos'>
+  ): Retorno<'registrarAceiteDosTermos'> {
+    return this.recusar('registrarAceiteDosTermos', argumentos);
+  }
+
   buscarContaPorEmail(...argumentos: Argumentos<'buscarContaPorEmail'>): Retorno<'buscarContaPorEmail'> {
     return this.recusar('buscarContaPorEmail', argumentos);
   }
